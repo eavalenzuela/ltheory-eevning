@@ -1,11 +1,18 @@
-cmake_minimum_required (VERSION 3.0)
+cmake_minimum_required (VERSION 3.5)
 project(LTheory)
 
 find_package(OpenGL REQUIRED)
 
 # force SFML to build as a static lib to minimize pain
 set(BUILD_SHARED_LIBS FALSE CACHE BOOL "" FORCE)
+# static SFML gets linked into the shared liblt, so it must be PIC
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+# audio goes through FMOD, so skip SFML's (and its openal/flac/vorbis deps)
+set(SFML_BUILD_AUDIO FALSE CACHE BOOL "" FORCE)
+# SFML 2.5 declares an old cmake minimum that CMake 4 rejects
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 add_subdirectory(ext/SFML)
+unset(CMAKE_POLICY_VERSION_MINIMUM)
 
 function (configure_output_dir target)
   set_target_properties (${target} PROPERTIES
@@ -88,10 +95,13 @@ elseif(MAC)
 
 elseif(LINUX)
 
+  # use the system freetype (same one SFML links) rather than extbin's copy
+  find_package(Freetype REQUIRED)
+
   set(LINK_LIBRARIES
       dl
       # enet
-      freetype
+      ${FREETYPE_LIBRARIES}
       sfml-graphics
       sfml-network
       sfml-system
@@ -105,10 +115,21 @@ elseif(LINUX)
 
   elseif(ARCH_64)
 
-    set(LINK_LIBRARIES ${LINK_LIBRARIES} fmodex64 fmodevent64)
-    link_directories(${PROJECT_SOURCE_DIR}/extbin/linux64)
+    # The FMOD libs have no SONAME and fmodevent64 depends on the versioned
+    # fmodex64 filename, so link the versioned files by exact name. They're
+    # copied next to the binaries (found via $ORIGIN) rather than linking out
+    # of extbin/linux64, whose stale libfreetype would shadow the system one.
+    set(FMOD_LIBS libfmodevent64-4.44.24.so libfmodex64-4.44.24.so)
+    foreach(X ${FMOD_LIBS})
+      file(COPY ${PROJECT_SOURCE_DIR}/extbin/linux64/${X}
+           DESTINATION ${CMAKE_SOURCE_DIR}/bin)
+      set(LINK_LIBRARIES ${LINK_LIBRARIES} -l:${X})
+    endforeach(X)
+    link_directories(${CMAKE_SOURCE_DIR}/bin)
 
   endif()
+
+  set(CMAKE_BUILD_RPATH "$ORIGIN")
 
 endif()
 
@@ -171,11 +192,6 @@ if(WINDOWS)
 
 else()
 
-  # Gold linker
-  if (LINUX)
-    set(CMAKE_LINKER "/usr/bin/gold")
-  endif()
-
   # No exception handling 
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions")
 
@@ -185,13 +201,15 @@ else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g")
 
   # Enable lots of warnings
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pedantic -Wall -Wextra -Werror")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pedantic -Wall -Wextra")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-invalid-offsetof")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-const-variable")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-function")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-variable")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-tautological-compare")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-copy")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-ignored-qualifiers")
 
   # Stop on errors
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wfatal-errors")

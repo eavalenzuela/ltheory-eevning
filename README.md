@@ -6,6 +6,14 @@ This is the (old) C++ implementation of Limit Theory, the Limit Theory Engine (L
 
 Although LT was developed for both Windows and Linux (indeed, primarily developed on Linux), I have only resurrected the Windows build. If you would like to get it working on Linux, you're on your own...although it shouldn't be too difficult.
 
+## Linux
+
+The 64-bit Linux build works (tested on Ubuntu with GCC 15, CMake 4.2, Mesa). In place of Visual Studio, install a compiler and the libraries SFML and LT need, e.g. on Debian/Ubuntu:
+
+- `sudo apt install build-essential cmake python3 git-lfs libglew-dev libglu1-mesa-dev libfreetype-dev libx11-dev libxrandr-dev libudev-dev libgl-dev`
+
+Then follow the same steps below from a regular terminal (`python3 configure.py`, `python3 configure.py build`, `python3 configure.py run war`). The executable is `bin/launch`, and the FMOD libraries are copied next to it at configure time.
+
 # Prerequisites
 
 To build Limit Theory, you'll need a few standard developer tools. All of them are available to download for free.
