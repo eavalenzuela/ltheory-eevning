@@ -10,7 +10,7 @@ local Messages = require("@lt/Widget/Messages")
 
 local Sockets = {}
 
-local ObjectInfoWindow = ltsl("Widget/ObjectInfo:CreateWindow")
+local ObjectInfo = require("@lt/Widget/ObjectInfo")
 
 type ActivateGroup = { type: "ActivateGroup", index: number }
 
@@ -50,7 +50,7 @@ local function socket(player: Player, object: Object): Widget
         if mounts:HasMore() then
           shown = mounts:Get()
         end
-        w:SendUp(Messages.AddWidget(ObjectInfoWindow(player, shown)))
+        w:SendUp(Messages.AddWidget(ObjectInfo.Create(player, shown)))
       end
       if w.focusMouse and Mouse_RightPressed() then
         active = not active

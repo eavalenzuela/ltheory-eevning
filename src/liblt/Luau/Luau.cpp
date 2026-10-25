@@ -558,7 +558,9 @@ namespace {
   /* Calls                                                               */
 
   /* One overload with its parameter kinds worked out in advance. */
-  const uint kMaxParams = 10;
+  /* The most parameters a bound function can have (DeclareFunction's
+     limit). */
+  const uint kMaxParams = 24;
 
   struct Overload {
     FunctionT* fn;
@@ -685,6 +687,8 @@ namespace {
     }
 
     String message = s.str();
+    if (message.empty())
+      message = "no overload of " + c.name + " could be called with these arguments";
     luaL_where(L, 1);
     lua_pushlstring(L, message.data(), message.size());
     lua_concat(L, 2);

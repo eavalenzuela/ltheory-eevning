@@ -21,12 +21,14 @@ local function bar(label: string, minValue: number, maxValue: number): Widget
       local value = tonumber(Messages.GetLabel(w, label)) or minValue
       local range = math.max(1, maxValue - minValue)
       local t = (value - minValue) / range
-      local markerWidth = math.max(8, w.size.x / (maxValue - minValue + 1))
+      -- One slot per value, the marker centred on its slot; capped so a
+      -- range with few values doesn't get a huge marker
+      local markerWidth = math.clamp(w.size.x / (maxValue - minValue + 1), 8, 24)
       local c = if w.focusMouse then Colors.Secondary else Colors.Primary
       Glyph_Draw(box, w.pos + vector.create(0, 0.5 * w.size.y), vector.create(w.size.x, 1), c, 1)
       Glyph_Draw(marker,
-        vector.create(w.pos.x + t * (w.size.x - markerWidth), w.pos.y),
-        vector.create(markerWidth, 0.5 * w.size.y), 2 * c, 1)
+        vector.create(w.pos.x + 0.5 * markerWidth + t * (w.size.x - markerWidth), w.pos.y),
+        vector.create(markerWidth / 1.6, 0.5 * w.size.y), 2 * c, 1)
     end,
     PostUpdate = function(_, w: Widget)
       if w.focusMouse and Mouse_LeftDown() then

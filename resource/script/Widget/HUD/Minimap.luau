@@ -8,7 +8,7 @@ local Messages = require("@lt/Widget/Messages")
 
 local Minimap = {}
 
-local MapCreate = ltsl("Widget/Map:Create")
+local Map = require("@lt/Widget/Map")
 
 local VIEW_DISTANCE = 1000   -- in object radii
 local DISTANCE_SCALE = 5000
@@ -72,7 +72,7 @@ function Minimap.Create(player: Player): Widget
           map:Delete()
           map = nil
         else
-          local window = MapCreate(player, player:GetPiloting():GetSystem())
+          local window = Map.Create(player, player:GetPiloting():GetSystem())
           map = window
           w:SendUp(Messages.AddWidget(window))
         end

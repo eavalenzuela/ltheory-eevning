@@ -18,8 +18,8 @@ export type Mine = { type: "Mine", object: Object }
 
 type Action = { type: "WorldAction", action: string }
 
-local MarketCreate = ltsl("Widget/Object/Market:Create")
-local ShootFireworks = ltsl("Object/Firework:ShootFrom")
+local Market = require("@lt/Widget/Object/Market")
+local Firework = require("@lt/Object/Firework")
 
 local function option(menu: Widget, name: string, icon: Icon, message: any): Widget
   local button = Widget_Luau(Widget_Create(), {
@@ -79,7 +79,7 @@ local function menu(player: Player, object: Object): Widget
         player:AddLog(`Docking at {object:GetName()}`)
         Sound_Play("ui/targetacquired.ogg", 0.2)
       elseif act == "fireworks" then
-        ShootFireworks(object)
+        Firework.ShootFrom(object)
       elseif act == "jump" then
         ship:SetPos(object:GetPos() - (1.5 * object:GetRadius() + 1000) * ship:GetLook())
       elseif act == "target" then
@@ -91,7 +91,7 @@ local function menu(player: Player, object: Object): Widget
           Sound_Play("ui/targetacquired.ogg", 0.2)
         end
       elseif act == "trade" then
-        w:SendUp(Messages.AddWidget(MarketCreate(player, object)))
+        w:SendUp(Messages.AddWidget(Market.Create(player, object)))
       end
       -- "comm", "owner" and "info" did nothing in LTSL either
     end,

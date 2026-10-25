@@ -1,8 +1,7 @@
 --!strict
 -- Station services, shown while the player is docked at a station with a
--- market. Luau port of Widget/HUD/Station.lts; the HUD creates it with
--- (Luau_CreateWidget "@lt/Widget/HUD/Station" player). The market and
--- fitting windows are still LTSL, opened through ltsl().
+-- market (Luau port of Widget/HUD/Station.lts): market, fitting, deposit
+-- cargo into your hangar, undock.
 
 local Button = require("@lt/Widget/Button")
 local Components = require("@lt/Widget/Components")
@@ -10,8 +9,8 @@ local Fonts = require("@lt/Fonts")
 local Messages = require("@lt/Widget/Messages")
 local Widgets = require("@lt/Widgets")
 
-local MarketCreate = ltsl("Widget/Object/Market:Create")
-local FittingCreate = ltsl("Widget/Fitting:Create")
+local Market = require("@lt/Widget/Object/Market")
+local Fitting = require("@lt/Widget/Fitting")
 
 -- What the panel's buttons send up when pressed
 type Action = { action: "market" | "fitting" | "deposit" | "undock" }
@@ -90,8 +89,8 @@ function StationPanel.Receive(self: StationPanel, widget: Widget, message: any)
   local action = (message :: Action).action
   if action == "market" or action == "fitting" then
     local window = if action == "market"
-      then MarketCreate(self.player, station)
-      else FittingCreate(self.player, station)
+      then Market.Create(self.player, station)
+      else Fitting.Create(self.player, station)
     widget:SendUp(Messages.AddWidget(window))
   elseif action == "deposit" then
     local moved = ship:TransferCargo(station:GetStorageLocker(self.player))

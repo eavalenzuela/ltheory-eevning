@@ -8,7 +8,7 @@ local Messages = require("@lt/Widget/Messages")
 
 local Miniscanner = {}
 
-local ScannerCreate = ltsl("Widget/Scanner:Create")
+local Scanner = require("@lt/Widget/Scanner")
 
 local RESOLUTION = 64
 
@@ -65,7 +65,7 @@ function Miniscanner.Create(player: Player, object: Object): Widget
           scanner:Delete()
           scanner = nil
         else
-          local window = ScannerCreate(player, object)
+          local window = Scanner.Create(player, object)
           scanner = window
           w:SendUp(Messages.AddWidget(window))
         end

@@ -9,8 +9,8 @@ local Messages = require("@lt/Widget/Messages")
 
 local MenuBar = {}
 
-local BrowserCreate = ltsl("Widget/Browser:Create")
-local ObjectInfoWindow = ltsl("Widget/ObjectInfo:CreateWindow")
+local Browser = require("@lt/Widget/Browser")
+local ObjectInfo = require("@lt/Widget/ObjectInfo")
 
 local ring = Glyph_Arc(0, 1, 0.01, 1, 1, 0, 1)
 
@@ -51,7 +51,7 @@ function MenuBar.Create(player: Player): Widget
           info:Delete()
           info = nil
         else
-          local window = BrowserCreate(ObjectInfoWindow(player, player))
+          local window = Browser.Create(ObjectInfo.Create(player, player))
           info = window
           w:SendUp(Messages.AddWidget(window))
         end

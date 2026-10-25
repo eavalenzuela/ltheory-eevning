@@ -9,7 +9,7 @@ local Messages = require("@lt/Widget/Messages")
 
 local ObjectBadge = {}
 
-local ObjectInfoWindow = ltsl("Widget/ObjectInfo:CreateWindow")
+local ObjectInfo = require("@lt/Widget/ObjectInfo")
 
 function ObjectBadge.Create(player: Player, object: Object, _fancy: boolean): Widget
   local info: Widget? = nil
@@ -39,7 +39,7 @@ function ObjectBadge.Create(player: Player, object: Object, _fancy: boolean): Wi
           info:Delete()
           info = nil
         else
-          local window = ObjectInfoWindow(player, object)
+          local window = ObjectInfo.Create(player, object)
           info = window
           w:SendUp(Messages.AddWidget(window))
         end
