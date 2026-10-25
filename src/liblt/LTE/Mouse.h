@@ -29,6 +29,12 @@ namespace LTE {
   LT_API void Mouse_SetPressed(MouseButton button, bool pressed);
   LT_API void Mouse_SetScrollDelta(float ds);
 
+  /* Synthetic mode ignores the real mouse; state changes only through the
+     setters (used by the launcher's test harness). */
+  LT_API bool Mouse_IsSynthetic();
+
+  LT_API void Mouse_SetSynthetic(bool synthetic);
+
   LT_API void Mouse_Update();
   LT_API void Mouse_UpdatePos(V2I const& p);
 

@@ -26,6 +26,14 @@ namespace LTE {
 
   LT_API void Keyboard_Update(bool hasFocus);
 
+  /* Synthetic mode ignores the real keyboard; keys change only through
+     Keyboard_SetDown (used by the launcher's test harness). */
+  LT_API bool Keyboard_IsSynthetic();
+
+  LT_API void Keyboard_SetDown(Key key, bool down);
+
+  LT_API void Keyboard_SetSynthetic(bool synthetic);
+
   inline bool Keyboard_Alt() {
     return Keyboard_Down(Key_LAlt) || Keyboard_Down(Key_RAlt);
   }

@@ -15,6 +15,9 @@ struct Program {
 
   virtual void OnInitialize() = 0;
   virtual void OnUpdate() = 0;
+
+  /* Called after the frame is drawn, just before it is presented. */
+  virtual void OnPreDisplay() {}
 };
 
 LT_API bool Program_InStaticSection();

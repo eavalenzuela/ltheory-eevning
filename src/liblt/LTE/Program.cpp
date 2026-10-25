@@ -61,6 +61,8 @@ void Program::Execute() {
 
     Module_UpdateGlobal();
 
+    OnPreDisplay();
+
     FRAME("Display")
       window->Display();
     Window_Pop();

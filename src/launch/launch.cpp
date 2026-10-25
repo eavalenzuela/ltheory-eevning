@@ -1,3 +1,5 @@
+#include "Harness.h"
+
 #include "Module/PhysicsEngine.h"
 #include "Module/SoundEngine.h"
 
@@ -6,8 +8,8 @@
 #include "LTE/Program.h"
 #include "LTE/OS.h"
 #include "LTE/Renderer.h"
+#include "LTE/Screenshot.h"
 #include "LTE/Script.h"
-#include "LTE/Texture2D.h"
 #include "LTE/Window.h"
 
 // #define TIME_LTSL_COMPILE
@@ -24,17 +26,22 @@ struct Launcher : public Program {
   Data instance;
   Module physicsEngine;
   Module soundEngine;
+  Harness& harness;
 
-  Launcher(String const& appName) : appName(appName) {
+  Launcher(String const& appName, V2U const& size, Harness& harness) :
+    appName(appName),
+    harness(harness)
+  {
     if (!OS_IsDir("resource"))
       OS_ChangeDir("../");
-    window = Window_Create("App Launcher", V2U(1920, 1080), true, false);
+    window = Window_Create("App Launcher", size, true, false);
     window->SetSync(false);
     Renderer_Initialize();
   }
 
   void OnInitialize() {
     Launch();
+    harness.Start();
   }
 
   void Launch() {
@@ -89,8 +96,11 @@ struct Launcher : public Program {
   }
 
   void OnUpdate() {
+    if (!harness.Update())
+      harness.quit = true;
+
     if (Keyboard_Pressed(Key_F1))
-      SaveScreenshot();
+      Screenshot_Request("");
     if (Keyboard_Pressed(Key_F2))
       Profiler_Auto(1.0f);
 
@@ -115,26 +125,71 @@ struct Launcher : public Program {
       soundEngine->Update();
   }
 
-  void SaveScreenshot() {
-    String prefix = OS_GetUserDataPath() + "screenshot/";
-    OS_CreatePath(prefix);
-    for (uint i = 0;; ++i) {
-      String path = prefix + ToString(i) + ".png";
-      if (!OS_FileExists(path)) {
-        Texture_ScreenCapture()->SaveTo(path);
-        return;
-      }
-    }
+  void OnPreDisplay() {
+    Screenshot_Flush();
+    if (harness.quit)
+      deleted = true;
   }
 };
 
+void Usage() {
+  printf(
+    "Usage: launch APP [options]\n"
+    "  --do COMMANDS    run harness commands (see src/launch/Harness.h),\n"
+    "                   separated by ';'\n"
+    "  --script FILE    run harness commands from FILE\n"
+    "  --out DIR        write screenshots to DIR (default cache/screenshot)\n"
+    "  --scale N        shrink screenshots by an integer factor\n"
+    "  --size WxH       window size (default 1920x1080)\n"
+    "  --timeout S      end a harness run after S seconds (default 300)\n");
+}
+
 int main(int argc, char const* argv[]) {
-  if (argc != 2) {
-    printf("ERROR: Launcher expects one argument (application name)\n");
-    return 0;
+  if (argc < 2 || argv[1][0] == '-') {
+    Usage();
+    return argc < 2 ? 0 : 1;
   }
 
-  Launcher(argv[1]).Execute();
+  V2U size(1920, 1080);
+  Harness harness;
+  for (int i = 2; i < argc; ++i) {
+    String opt = argv[i];
+    if (i + 1 >= argc) {
+      printf("ERROR: %s needs a value\n", opt.c_str());
+      Usage();
+      return 1;
+    }
+    String value = argv[++i];
+    if (opt == "--do")
+      harness.Load(value);
+    else if (opt == "--script") {
+      if (!harness.LoadFile(value)) {
+        printf("ERROR: Cannot read harness script %s\n", value.c_str());
+        return 1;
+      }
+    }
+    else if (opt == "--out")
+      Screenshot_SetDirectory(value);
+    else if (opt == "--scale")
+      Screenshot_SetDownscale((uint)Max(1, atoi(value.c_str())));
+    else if (opt == "--size") {
+      uint w, h;
+      if (sscanf(value.c_str(), "%ux%u", &w, &h) != 2) {
+        printf("ERROR: --size expects WxH\n");
+        return 1;
+      }
+      size = V2U(w, h);
+    }
+    else if (opt == "--timeout")
+      harness.timeout = (float)atof(value.c_str());
+    else {
+      printf("ERROR: Unknown option %s\n", opt.c_str());
+      Usage();
+      return 1;
+    }
+  }
+
+  Launcher(argv[1], size, harness).Execute();
   return 0;
 }
 

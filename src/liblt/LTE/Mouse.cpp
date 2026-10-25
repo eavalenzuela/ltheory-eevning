@@ -17,6 +17,7 @@ namespace {
     float lastClickInterval;
     float scrollDelta;
     float idleTime;
+    bool synthetic;
 
     Timer downTimer[MouseButton_SIZE];
     bool down[MouseButton_SIZE];
@@ -30,7 +31,8 @@ namespace {
       lastX(0),
       lastY(0),
       scrollDelta(0),
-      idleTime(0)
+      idleTime(0),
+      synthetic(false)
     {
       for (MouseButton i = 0; i < MouseButton_SIZE; ++i) {
         down[i] = false;
@@ -89,6 +91,8 @@ namespace LTE {
   }
 
   DefineFunction(Mouse_GetPosImmediate) {
+    if (gMouse.synthetic)
+      return V2((float)gMouse.x, (float)gMouse.y);
     sf::Vector2i p = sf::Mouse::getPosition(
       *(sf::RenderWindow*)Window_Get()->GetImplData());
     return V2((float)p.x, (float)p.y);
@@ -109,9 +113,19 @@ namespace LTE {
   void Mouse_SetPos(V2 const& v) {
     gMouse.x = (int)v.x;
     gMouse.y = (int)v.y;
+    if (gMouse.synthetic)
+      return;
     sf::Mouse::setPosition(
       sf::Vector2i(gMouse.x, gMouse.y),
       *(sf::RenderWindow*)Window_Get()->GetImplData());
+  }
+
+  bool Mouse_IsSynthetic() {
+    return gMouse.synthetic;
+  }
+
+  void Mouse_SetSynthetic(bool synthetic) {
+    gMouse.synthetic = synthetic;
   }
 
   void Mouse_SetPressed(MouseButton button, bool pressed) {

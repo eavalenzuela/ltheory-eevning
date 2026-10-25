@@ -130,6 +130,19 @@ namespace {
     void Update() {
       sf::Event e;
       while (impl.pollEvent(e)) {
+        /* The test harness drives input itself; drop real input events so
+           someone using the desktop can't disturb a run. */
+        if (Mouse_IsSynthetic() && (
+              e.type == sf::Event::MouseButtonPressed ||
+              e.type == sf::Event::MouseButtonReleased ||
+              e.type == sf::Event::MouseMoved ||
+              e.type == sf::Event::MouseWheelMoved))
+          continue;
+        if (Keyboard_IsSynthetic() && (
+              e.type == sf::Event::KeyPressed ||
+              e.type == sf::Event::TextEntered))
+          continue;
+
         if (e.type == sf::Event::Resized) {
           float w = (float)e.size.width;
           float h = (float)e.size.height;

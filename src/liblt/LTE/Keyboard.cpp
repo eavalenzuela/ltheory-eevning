@@ -119,17 +119,20 @@ namespace {
   struct Keyboard {
     bool down[Key_SIZE];
     bool downLast[Key_SIZE];
+    bool synthDown[Key_SIZE];
     Vector<uchar> chars;
     Vector<Key> pressed;
     bool blocked;
     bool blockedLast;
+    bool synthetic;
 
     Keyboard() :
       blocked(false),
-      blockedLast(false)
+      blockedLast(false),
+      synthetic(false)
     {
       for (Key key = 0; key < Key_SIZE; ++key) {
-        down[key] = downLast[key] = false;
+        down[key] = downLast[key] = synthDown[key] = false;
       }
     }
 
@@ -196,13 +199,30 @@ namespace LTE {
     for (Key key = 0; key < Key_SIZE; ++key) {
       gKeyboard.downLast[key] = gKeyboard.down[key];
       
-      if (gKeyboard.downLast[key])
+      if (gKeyboard.synthetic)
+        gKeyboard.down[key] = gKeyboard.synthDown[key];
+      else if (gKeyboard.downLast[key])
         gKeyboard.down[key] = hasFocus &&
           sf::Keyboard::isKeyPressed(Key_LTE_to_SFML(key));
     }
 
     gKeyboard.chars.clear();
     gKeyboard.pressed.clear();
+  }
+
+  bool Keyboard_IsSynthetic() {
+    return gKeyboard.synthetic;
+  }
+
+  void Keyboard_SetDown(Key key, bool down) {
+    if (down && !gKeyboard.down[key])
+      gKeyboard.pressed.push(key);
+    gKeyboard.synthDown[key] = down;
+    gKeyboard.down[key] = down;
+  }
+
+  void Keyboard_SetSynthetic(bool synthetic) {
+    gKeyboard.synthetic = synthetic;
   }
 
   const char* Key_Name(Key key) {
