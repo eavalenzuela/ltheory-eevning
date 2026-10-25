@@ -48,6 +48,14 @@ function RadialList.Create(radius: number, widget: Widget): Widget
       w.minSize = vector.create(radius, radius)
     end,
     PostPosition = function(_, w: Widget)
+      -- Keep the whole ring and its options on screen (the clip region is
+      -- the window during layout)
+      local margin = radius + 24
+      local low, high = ClipRegion_GetMin() + vector.create(margin, margin), ClipRegion_GetMax() - vector.create(margin, margin)
+      if high.x > low.x and high.y > low.y then
+        w.pos = vector.clamp(w.pos, low, high)
+      end
+
       local children = w:GetChildren()
       local count = children:Size()
       local i = 0

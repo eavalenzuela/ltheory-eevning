@@ -77,6 +77,20 @@ LTSL creates a Luau widget with `Luau_CreateWidget "@lt/Path" arg`, which calls 
 
 `Widget/HUD/Station.luau` is the example: the station panel, created by the LTSL HUD.
 
+## Object scripts
+
+`object:AddScript(script)` attaches a Luau table to an object.
+- `script:Update(object)` runs every frame; returning `false` removes the script.
+- `script:Receive(object, message)` gets the object's messages.
+
+`Widget/Handling.luau` uses this for the ship's flight controls and chase camera.
+
+## Messages
+
+`Widget/Messages.luau` defines the message tables (`Messages.AddWidget(w)`, `Messages.Refresh()`, ...).
+- `Messages.Is(message, "AddWidget")` matches either a Luau message or the LTSL `MessageAddWidget` type, so Luau receivers work with unported LTSL senders.
+- Query messages (`Messages.GetLabel`, `Messages.GetObject`) are answered by setting a field on the message.
+
 ## Known gaps
 
 - **Engine call cost:** method calls cost about 0.05 µs, on par with LTSL; operators on engine values cost about 0.13 µs, because each allocates its result. Pure script code is about 10x faster than LTSL. `bin/launch luau_bench` measures each kind of call.

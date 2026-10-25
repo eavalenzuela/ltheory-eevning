@@ -121,7 +121,7 @@ type App
 
 
     # Set up the UI
-    ui.Add (Widget/HUD:Create player)
+    ui.Add (Luau_CreateWidget "@lt/Widget/HUD" player)
 
   function Void Update ()
     if Key_T.Pressed Shader_RecompileAll

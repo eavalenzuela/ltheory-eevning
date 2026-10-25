@@ -1923,6 +1923,48 @@ FreeFunction(Widget, Luau_CreateWidget,
   return result ? result : Widget_Create();
 }
 
+bool Luau_IsValue(Data const& value) {
+  return value.type == LuauValueType();
+}
+
+namespace {
+  /* Push script.method and script; false if there's no such method. */
+  bool PushScriptMethod(lua_State* L, Data const& script, char const* method) {
+    LuauValue const& value = *(LuauValue const*)script.data;
+    if (!value || value->state != L)
+      return false;
+    lua_getref(L, value->ref);
+    lua_getfield(L, -1, method);
+    if (!lua_isfunction(L, -1)) {
+      lua_pop(L, 2);
+      return false;
+    }
+    lua_insert(L, -2);
+    return true;
+  }
+}
+
+bool Luau_ObjectScriptUpdate(Data const& script, Data const& object) {
+  lua_State* L = gL;
+  if (!L || !PushScriptMethod(L, script, "Update"))
+    return false;
+  Push(L, Type_Get<Data>().t, &object);
+  if (!Luau_Call(2, 1))
+    return false;
+  bool alive = !(lua_type(L, -1) == LUA_TBOOLEAN && !lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  return alive;
+}
+
+void Luau_ObjectScriptReceive(Data const& script, Data const& object, Data const& message) {
+  lua_State* L = gL;
+  if (!L || !PushScriptMethod(L, script, "Receive"))
+    return;
+  Push(L, Type_Get<Data>().t, &object);
+  Push(L, Type_Get<Data>().t, &message);
+  Luau_Call(3, 0);
+}
+
 String Luau_GenerateDefinitions() {
   InitKinds();
   DefinitionWriter writer;

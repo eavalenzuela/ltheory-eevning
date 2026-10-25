@@ -7,6 +7,7 @@
 local Button = require("@lt/Widget/Button")
 local Components = require("@lt/Widget/Components")
 local Fonts = require("@lt/Fonts")
+local Messages = require("@lt/Widget/Messages")
 local Widgets = require("@lt/Widgets")
 
 local MarketCreate = ltsl("Widget/Object/Market:Create")
@@ -88,11 +89,10 @@ function StationPanel.Receive(self: StationPanel, widget: Widget, message: any)
 
   local action = (message :: Action).action
   if action == "market" or action == "fitting" then
-    local add = ltsl_new("Widget/Messages:MessageAddWidget")
-    add.widget = if action == "market"
+    local window = if action == "market"
       then MarketCreate(self.player, station)
       else FittingCreate(self.player, station)
-    widget:SendUp(add)
+    widget:SendUp(Messages.AddWidget(window))
   elseif action == "deposit" then
     local moved = ship:TransferCargo(station:GetStorageLocker(self.player))
     if moved > 0 then

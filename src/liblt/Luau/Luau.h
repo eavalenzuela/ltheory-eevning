@@ -38,6 +38,13 @@ LT_API bool Luau_Require(String const& module);
    false. */
 LT_API bool Luau_Call(int nargs, int nresults);
 
+/* Object scripts (Object_AddScript) written in Luau: a table whose
+   Update(object) runs every frame (returning false removes it) and whose
+   Receive(object, message) gets the object's messages. */
+LT_API bool Luau_IsValue(Data const& value);
+LT_API bool Luau_ObjectScriptUpdate(Data const& script, Data const& object);
+LT_API void Luau_ObjectScriptReceive(Data const& script, Data const& object, Data const& message);
+
 /* Luau type definitions for every bound function and engine type, for the
    checker (tools: luaucheck). */
 LT_API String Luau_GenerateDefinitions();
