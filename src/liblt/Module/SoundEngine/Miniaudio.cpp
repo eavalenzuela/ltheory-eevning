@@ -16,13 +16,16 @@
 
 #include "miniaudio.h"
 
+#include <vector>
+
 const float kDistanceScale = 50.0f;
 const float kMaxDistance = 100000.0f;
 const float kVelocityScale = 1.0f / 50.0f;
 
-/* Encoded files larger than this are decoded on the fly, per instance, rather
-   than fully decoded up front. (miniaudio's MA_SOUND_FLAG_STREAM can't be used:
-   streams always open files through the VFS, ignoring registered data.) */
+/* Files up to this size are decoded once and shared by every instance; larger
+   ones (long ambient loops) are decoded on the fly by a decoder per instance.
+   (miniaudio's own MA_SOUND_FLAG_DECODE / STREAM don't apply to data handed
+   to it from memory, which is how files arrive via Location_Resource.) */
 const size_t kDecodeThreshold = 1 << 20;
 const String kDefaultSoundPath = "sound/";
 
@@ -48,9 +51,33 @@ namespace {
     void SetVolume(float volume) {}
   };
 
+  /* A sound file, either decoded once to shared PCM (registered with the
+     resource manager under its path) or kept encoded for per-instance
+     decoders. */
+  struct Source {
+    Array<uchar>* encoded;
+    std::vector<float> pcm;
+    ma_encoding_format format;
+
+    Source() : encoded(nullptr), format(ma_encoding_format_unknown) {}
+    ~Source() { delete encoded; }
+  };
+
+  /* Hint the decoder so it doesn't probe every format first. */
+  ma_encoding_format FormatFromPath(String const& path) {
+    size_t dot = path.rfind('.');
+    String ext = dot == String::npos ? String() : String(path.substr(dot));
+    if (ext == ".ogg")
+      return ma_encoding_format_vorbis;
+    if (ext == ".wav")
+      return ma_encoding_format_wav;
+    return ma_encoding_format_unknown;
+  }
+
   struct SoundImpl : public SoundT {
     ma_sound sound;
     ma_audio_buffer* buffer;
+    ma_decoder* decoder;
     /* The owning engine's registry of live sounds; null once released. */
     Vector<SoundImpl*>* live;
     float volume;
@@ -61,6 +88,7 @@ namespace {
 
     SoundImpl() :
       buffer(nullptr),
+      decoder(nullptr),
       live(nullptr),
       volume(1),
       pan(0),
@@ -83,6 +111,11 @@ namespace {
         ma_audio_buffer_uninit(buffer);
         delete buffer;
         buffer = nullptr;
+      }
+      if (decoder) {
+        ma_decoder_uninit(decoder);
+        delete decoder;
+        decoder = nullptr;
       }
     }
 
@@ -207,9 +240,9 @@ namespace {
     bool initialized;
     V3D camPos;
 
-    /* Encoded file data registered with miniaudio's resource manager, which
-       doesn't copy it. Null entries mark files that failed to load. */
-    Map<String, Array<uchar>*> sources;
+    /* Loaded sound files by path. Null entries mark files that failed to
+       load, so they're reported once and then play as silence. */
+    Map<String, Source*> sources;
 
     Vector<SoundImpl*> live;
     Vector<Sound2DInstance*> sounds2D;
@@ -241,7 +274,7 @@ namespace {
       if (initialized)
         ma_engine_uninit(&engine);
 
-      for (Map<String, Array<uchar>*>::iterator it = sources.begin();
+      for (Map<String, Source*>::iterator it = sources.begin();
            it != sources.end(); ++it)
         delete it->second;
     }
@@ -304,37 +337,72 @@ namespace {
       }
     }
 
-    /* Load and register a sound file on first use. Missing or unreadable
-       files are reported once and then play as silence. */
-    bool LoadSource(String const& path) {
-      Array<uchar>** cached = sources.get(path);
+    /* Load a sound file on first use. Missing or undecodable files are
+       reported once and then play as silence. */
+    Source* LoadSource(String const& path) {
+      Source** cached = sources.get(path);
       if (cached)
-        return *cached != nullptr;
+        return *cached;
 
       sources[path] = nullptr;
       Location location = Location_Resource(path);
       if (!location->Exists()) {
         Log_Warning("SoundEngine (miniaudio) -- missing sound " + path);
-        return false;
+        return nullptr;
       }
 
       AutoPtr< Array<uchar> > data = location->Read();
       if (!data) {
         Log_Warning("SoundEngine (miniaudio) -- failed to read sound " + path);
-        return false;
+        return nullptr;
       }
 
-      if (ma_resource_manager_register_encoded_data(
-            ma_engine_get_resource_manager(&engine),
-            path.c_str(), data->data(), data->size()) != MA_SUCCESS)
+      Source* source = new Source;
+      source->format = FormatFromPath(path);
+      if (data->size() > kDecodeThreshold) {
+        source->encoded = data.t;
+        data.t = nullptr;
+        sources[path] = source;
+        return source;
+      }
+
+      ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 0, 0);
+      config.encodingFormat = source->format;
+      ma_decoder decoder;
+      if (ma_decoder_init_memory(data->data(), data->size(), &config, &decoder)
+            != MA_SUCCESS)
       {
-        Log_Warning("SoundEngine (miniaudio) -- failed to register sound " + path);
-        return false;
+        Log_Warning("SoundEngine (miniaudio) -- failed to decode sound " + path);
+        delete source;
+        return nullptr;
       }
 
-      sources[path] = data.t;
-      data.t = nullptr;
-      return true;
+      ma_uint32 channels = decoder.outputChannels;
+      ma_uint64 frames = 0;
+      ma_uint64 read = 0;
+      const ma_uint64 kChunk = 16384;
+      do {
+        source->pcm.resize((size_t)((frames + kChunk) * channels));
+        ma_decoder_read_pcm_frames(&decoder, &source->pcm[frames * channels], kChunk, &read);
+        frames += read;
+      } while (read == kChunk);
+      source->pcm.resize((size_t)(frames * channels));
+      ma_uint32 sampleRate = decoder.outputSampleRate;
+      ma_decoder_uninit(&decoder);
+
+      if (frames == 0 ||
+          ma_resource_manager_register_decoded_data(
+            ma_engine_get_resource_manager(&engine), path.c_str(),
+            source->pcm.data(), frames, ma_format_f32, channels, sampleRate)
+            != MA_SUCCESS)
+      {
+        Log_Warning("SoundEngine (miniaudio) -- failed to decode sound " + path);
+        delete source;
+        return nullptr;
+      }
+
+      sources[path] = source;
+      return source;
     }
 
     SoundImpl* CreateSound(
@@ -343,24 +411,39 @@ namespace {
       bool looped)
     {
       String path = kDefaultSoundPath + file;
-      if (!LoadSource(path))
+      Source* source = LoadSource(path);
+      if (!source)
         return nullptr;
 
-      Array<uchar>*& data = *sources.get(path);
-      ma_uint32 flags = data->size() > kDecodeThreshold ? 0 : MA_SOUND_FLAG_DECODE;
-      if (!spatialized)
-        flags |= MA_SOUND_FLAG_NO_SPATIALIZATION;
-
+      ma_uint32 flags = spatialized ? 0 : MA_SOUND_FLAG_NO_SPATIALIZATION;
       SoundImpl* s = new SoundImpl;
-      if (ma_sound_init_from_file(&engine, path.c_str(), flags,
-            nullptr, nullptr, &s->sound) != MA_SUCCESS)
-      {
-        /* Forget the file so it plays as silence without warning again. */
-        Log_Warning("SoundEngine (miniaudio) -- failed to decode sound " + path);
-        ma_resource_manager_unregister_data(
-          ma_engine_get_resource_manager(&engine), path.c_str());
-        delete data;
-        data = nullptr;
+      ma_result result;
+
+      if (source->encoded) {
+        ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 0, 0);
+        config.encodingFormat = source->format;
+        s->decoder = new ma_decoder;
+        result = ma_decoder_init_memory(
+          source->encoded->data(), source->encoded->size(), &config, s->decoder);
+        if (result == MA_SUCCESS)
+          result = ma_sound_init_from_data_source(
+            &engine, s->decoder, flags, nullptr, &s->sound);
+        else {
+          delete s->decoder;
+          s->decoder = nullptr;
+        }
+      } else {
+        result = ma_sound_init_from_file(
+          &engine, path.c_str(), flags, nullptr, nullptr, &s->sound);
+      }
+
+      if (result != MA_SUCCESS) {
+        Log_Warning("SoundEngine (miniaudio) -- failed to play sound " + path);
+        if (s->decoder) {
+          ma_decoder_uninit(s->decoder);
+          delete s->decoder;
+          s->decoder = nullptr;
+        }
         delete s;
         return nullptr;
       }
