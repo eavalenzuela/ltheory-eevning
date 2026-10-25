@@ -2,6 +2,8 @@
 
 This is the (old) C++ implementation of Limit Theory, the Limit Theory Engine (LTE), and the Limit Theory Scripting Language (LTSL), written from 2012 to 2015. While this code is dated compared to the newer C/Lua LT, it is arguably meatier in gameplay implementation.
 
+In this fork the LTSL scripts have been replaced by [Luau](https://luau.org) scripts; see `docs/luau.md`.
+
 # Requirements
 
 Although LT was developed for both Windows and Linux (indeed, primarily developed on Linux), I have only resurrected the Windows build. If you would like to get it working on Linux, you're on your own...although it shouldn't be too difficult.
@@ -56,19 +58,13 @@ This runs CMake to generate the build files. Then, to compile,
 
 This invokes compilation. It will take a while.
 
-## Running an LTSL App
+## Running an App
 
-If the compilation is successful, you now have `bin/launch.exe`, which is the main executable. This program launches an LTSL script. The intention was for Limit Theory (and all mods) to be broken into many LTSL scripts, which would then implement the gameplay, using script functions exposed by the underlying engine.
+If the compilation is successful, you now have `bin/launch` (`bin/launch.exe` on Windows), the main executable. It runs a script app: `resource/script/App/<name>.luau`.
 
-To launch an LTSL script, you can again use the python helper:
+- `python configure.py run <app name>` or `bin/launch <app name>`
 
-- `python configure.py run <script_name_without_extension>`
-
-All top-level scripts are in the `resource/script/App` directory. So you can do, for example:
-
-- `python configure.py run war`
-
-To run the app 'war.lts', which is an AI skirmish test. Many of the apps are broken or incomplete, but some work enough to allow you to fly around in a system.
+`ltheory` is the game. The others are demos and tools, for example `war` (an AI skirmish), `dogfight`, `rails` (warp rails), `observatory` (a battle seen from a free camera), `model` (generated ships, stations and asteroids), `platemesh` (a model editor) and `map`. Ctrl+Tab opens the developer panel in ltheory and most of the demos.
 
 # Example of the Entire Process
 

@@ -49,7 +49,7 @@ Key names are the engine's `Key_*` names without the prefix, matched without reg
 
 ## From scripts
 
-LTSL code can request a screenshot at a meaningful moment with `Screenshot "name"`, for example right after a test script docks. It uses the same directory and timing as `shot`.
+A script can request a screenshot at a meaningful moment with `Screenshot("name")`, for example right after a test script docks. It uses the same directory and timing as `shot`.
 
 ## Notes
 

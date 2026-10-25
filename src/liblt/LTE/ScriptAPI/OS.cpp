@@ -1,3 +1,4 @@
+#include "LTE/Array.h"
 #include "LTE/Function.h"
 #include "LTE/Location.h"
 #include "LTE/OS.h"
@@ -34,4 +35,14 @@ FreeFunction(String, File_Read,
   if (!location->Exists())
     return "";
   return location->ReadAscii();
+}
+
+FreeFunction(bool, File_Write,
+  "Write 'contents' to the file located at 'path', replacing it; return "
+  "whether the write succeeded",
+  String, path,
+  String, contents)
+{
+  Array<uchar> data(contents.size(), (uchar const*)contents.c_str());
+  return Location_File(path)->Write(data);
 }

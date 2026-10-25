@@ -1,16 +1,29 @@
 # Luau scripting
 
-Luau (typed Lua, `ext/luau`, pinned to 0.742) is replacing LTSL as the game's scripting language. Both run side by side during the migration. A Luau app or module can call LTSL code, and LTSL can create Luau widgets.
+Luau (typed Lua, `ext/luau`, pinned to 0.742) is the game's scripting language. Every script in `resource/script` is Luau; the last LTSL scripts were ported or retired in 2026-10. The engine still contains the LTSL compiler, and loads an `.lts` app or engine hook when no `.luau` one exists (see [LTSL interop](#ltsl-interop)).
 
 ## Running
 
 - An app is `resource/script/App/<name>.luau`, run with `bin/launch <name>`.
   - It returns a table. `Initialize` runs once and `Update` every frame, each called as a method.
-  - If both an `.luau` and an `.lts` file exist for a name, the `.luau` one runs.
+  - An app without `Update` ends after `Initialize`, for run-once tools such as `prime` and `font`.
   - A script error prints a traceback and ends the app.
 - Modules load with `require("@lt/Path/Name")`, which resolves to `resource/script/Path/Name.luau`. The result is cached.
 
-`App/luau_gameplay.luau` is the Luau port of `test_gameplay`; it is the reference example.
+`App/test_gameplay.luau` (mine, dock, trade, refit, with no input needed) is the reference example.
+
+### Shared modules for apps
+
+| Module | Use |
+| --- | --- |
+| `AppShell` | `return AppShell.Create(function() return rootWidget end)` makes an app around one root widget: Ctrl+Tab toggles the developer panel, T recompiles shaders. Most demos use it. |
+| `SceneView` | The space demos' game view (camera, SMAA, dither, UI composited in), plus the shared time step (H for 20x) and P to pause. |
+| `Widget/Desktop` | A full-screen root over a random screenshot that opens windows and context menus sent up to it. |
+| `Widget/DevPanel` | The developer panel (`DevPanel.Toggle(ui, shown)`). |
+| `Texture/Filters` | GPU image filters (blur, levels, color grade, ...). |
+| `Int` | 32-bit wraparound helpers for reproducing LTSL's numbers (see below). |
+
+`File_Read(path)` and `File_Write(path, contents)` read and write text files relative to the working directory; `App/life.luau` saves and loads with them.
 
 ## The engine API
 
@@ -41,7 +54,7 @@ Every engine function registered through the reflection system is available with
 
 ```sh
 bin/luaucheck                     # every .luau under resource/script
-bin/luaucheck resource/script/App/luau_gameplay.luau
+bin/luaucheck resource/script/App/test_gameplay.luau
 ```
 
 It does three things:
@@ -58,14 +71,17 @@ It catches misspelled methods, wrong argument types, wrong argument counts and u
 
 **Editors:** `.luaurc` sets strict mode and the `@lt` alias. For luau-lsp, add `resource/script/engine.d.luau` as a definitions file. Also raise its `LuauTarjanChildLimit` FInt (`luaucheck` uses 1000000), because the engine API is larger than the analyzer's default budget.
 
-## Calling LTSL during the migration
+## LTSL interop
+
+No LTSL scripts ship, but the bridges remain for loading old `.lts` code (for example from the original repository):
 
 | Call | Effect |
 | --- | --- |
-| `ltsl("Widget/Components:AlignCenter")` | An LTSL function as a callable. Its arguments are checked against the LTSL parameter types at runtime. |
-| `ltsl_new("Widget/Messages:MessageAddWidget")` | An LTSL type instance, with fields zeroed; LTSL default values are not applied. |
+| `ltsl("Path:Function")` | An LTSL function as a callable. Its arguments are checked against the LTSL parameter types at runtime. |
+| `ltsl_new("Path:Type")` | An LTSL type instance, with fields zeroed; LTSL default values are not applied. |
+| `Luau_CreateWidget "@lt/Path" arg` (in LTSL) | Calls the Luau module's `Create(arg)` and returns the widget. |
 
-Both are untyped for the checker. Port the LTSL helpers a module depends on to remove them.
+The Luau-side values are untyped for the checker.
 
 ## Widgets
 
@@ -73,9 +89,7 @@ Both are untyped for the checker. Port the LTSL helpers a module depends on to r
 - Its methods receive the widget's events, each with the widget as the first argument: `PreUpdate`, `PostUpdate`, `PreDraw`, `PostDraw`, `PrePosition`, `PostPosition`, `Create`, `Destroy`, `CaptureFocus`, `CreateChildren` (returns `{ Widget }`), `Receive(widget, message)`, `GetName`, `GetHash`.
 - Messages sent with `widget:SendUp(...)` can be plain Luau tables.
 
-LTSL creates a Luau widget with `Luau_CreateWidget "@lt/Path" arg`, which calls the module's `Create(arg)`.
-
-For example, the LTSL apps `hud`, `handling` and `war` create the Luau HUD this way (`Luau_CreateWidget "@lt/Widget/HUD" player`).
+Give a widget a `GetName` that returns its label so the screenshot harness can `find` it (buttons, toggles and windows do).
 
 ## Object scripts
 
@@ -104,12 +118,12 @@ Engine values that take a script object also take a Luau table:
 ## Messages
 
 `Widget/Messages.luau` defines the message tables (`Messages.AddWidget(w)`, `Messages.Refresh()`, ...).
-- `Messages.Is(message, "AddWidget")` matches either a Luau message or the LTSL `MessageAddWidget` type, so Luau receivers work with unported LTSL senders.
+- `Messages.Is(message, "AddWidget")` tests a message's type. It also matches the LTSL `MessageAddWidget` type, for LTSL senders.
 - Query messages (`Messages.GetLabel`, `Messages.GetObject`) are answered by setting a field on the message.
 
 ## Known gaps
 
 - **Engine call cost:** method calls cost about 0.05 µs, on par with LTSL; operators on engine values cost about 0.13 µs, because each allocates its result. Pure script code is about 10x faster than LTSL. `bin/launch luau_bench` measures each kind of call.
 - **Vector precision:** `vector` is single precision, so positions lose precision far from the origin (about 3 cm at 300 km).
-- **Untyped LTSL boundary:** `ltsl()` / `ltsl_new()` values are untyped.
+- **No script threads:** Luau runs on the main thread only. The binder's caches and the VM are not thread-safe, so the engine's `Thread_Create` works only for LTSL functions. (`App/threads.lts`, the LTSL thread demo, was retired for this reason.)
 - **No sandboxing:** scripts are not sandboxed (not needed; they are part of the game).

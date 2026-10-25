@@ -7,10 +7,9 @@ local Colors = require("@lt/Colors")
 local Components = require("@lt/Widget/Components")
 local Icons = require("@lt/Icons")
 local Messages = require("@lt/Widget/Messages")
+local RandomScreenshot = require("@lt/Texture/RandomScreenshot")
 
 local Desktop = {}
-
-local RandomScreenshot = ltsl("Texture/RandomScreenshot:Get")
 
 export type Options = {
   backdrop: vector?,          -- panel color behind the texture
@@ -21,7 +20,7 @@ export type Options = {
 
 function Desktop.Create(content: Widget, options: Options?): Widget
   local opts: Options = options or {}
-  local texture: Texture = RandomScreenshot()
+  local texture = RandomScreenshot.Get()
   local root = Widget_Luau(Widget_Create(), {
     CreateChildren = function(): { Widget }
       return { content }

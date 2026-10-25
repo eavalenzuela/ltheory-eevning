@@ -6,6 +6,7 @@
 -- it); right-click a station to Dock or Trade. Ctrl+Tab toggles the
 -- developer panel; hold H to run the simulation 20x faster.
 
+local DevPanel = require("@lt/Widget/DevPanel")
 local HUD = require("@lt/Widget/HUD")
 
 local UNIVERSE_SEED = 39
@@ -14,8 +15,6 @@ local PIRATE_INTERVAL = 120
 local MAX_PIRATES = 2
 -- Weapon value is 10x its DPS; the starter ship has 120 health
 local MAX_PIRATE_WEAPON_VALUE = 100
-
-local DevPanelCreate = ltsl("Widget/DevPanel:Create")
 
 -- The starter ship: weapons plus a transfer unit for mining
 local function createStarterShip(): Object
@@ -291,15 +290,7 @@ end
 
 function App:Update()
   if Key_Control() and Key_Pressed(Key_Tab()) then
-    local panel = devPanel
-    if panel then
-      panel:Delete()
-      devPanel = nil
-    else
-      local shown = Widget_Layer(Compositor_Basic(0.1, 0.1, vector.create(0.4, 0.5, 0.75)), Mesh_Quad(), 1, DevPanelCreate())
-      devPanel = shown
-      ui:Add(shown)
-    end
+    devPanel = DevPanel.Toggle(ui, devPanel)
   end
   ui:Update()
   ui:Draw()
