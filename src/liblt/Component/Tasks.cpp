@@ -35,6 +35,13 @@ FreeFunction(TaskInstance*, Object_GetCurrentTask,
   return (TaskInstance*)object->GetCurrentTask();
 } FunctionAlias(Object_GetCurrentTask, GetCurrentTask);
 
+FreeFunction(bool, Object_HasTask,
+  "Return whether 'object' has an active task",
+  Object, object)
+{
+  return object->GetCurrentTask() != nullptr;
+} FunctionAlias(Object_HasTask, HasTask);
+
 VoidFreeFunction(Object_PushTask,
   "Push 'task' to 'object's task stack",
   Object, object,

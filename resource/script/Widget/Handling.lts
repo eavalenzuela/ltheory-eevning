@@ -51,7 +51,18 @@ type HandlingScript
       up = (Normalize (Mix up upTarget 1.0 - (ExpDecay dt 0.05)))
       look = (Normalize (Mix look lookTarget 1.0 - (ExpDecay dt 0.5)))
 
-    self.Broadcast (MessageThrustLinear thrust)
+    # Autopilot: while the ship runs a task (docking, approaching a rock),
+    # leave flying to the task; manual thrust takes back control
+    var autopilot self.HasTask
+    if autopilot && thrust.Length > 0.0
+      self.ClearTasks
+      autopilot = false
+    if autopilot
+      look = self.GetLook
+      lookTarget = look
+
+    if (! autopilot)
+      self.Broadcast (MessageThrustLinear thrust)
 
     desc "Shake"
       var shake 1.0 - (ExpDecay self.GetSpeed 1000.0)
@@ -63,7 +74,8 @@ type HandlingScript
       torque.z = (Dot transform.look (Cross transform.up up))
       torque -= self.GetVelocityAngular / 2.0
       # self.Broadcast (MessageThrustAngular torque torque.Length)
-      self.SetLook (Mix self.GetLook look 1.0 - (ExpDecay dt 0.5))
+      if (! autopilot)
+        self.SetLook (Mix self.GetLook look 1.0 - (ExpDecay dt 0.5))
 
     desc "Update Camera"
       var cam Camera_Get
@@ -107,7 +119,21 @@ type HandlingScript
       cam.SetRigidity 1000.0
 
     desc "Update Aim"
-      target.Broadcast (MessageTargetPosition targetPos)
+      # Aim weapons at the cursor; transfer units are aimed by whatever is
+      # using them (e.g. mining), which this would otherwise override
+      switch
+        target == self
+          for it self.GetSockets it.HasMore it.Advance
+            var module it.Get
+            if module.IsNotNull
+              var mining false
+              for c module.GetChildren c.HasMore c.Advance
+                if c.Get.IsTransferUnit
+                  mining = true
+              if (! mining)
+                module.Broadcast (MessageTargetPosition targetPos)
+        otherwise
+          target.Broadcast (MessageTargetPosition targetPos)
 
     desc "States"
       if boosting

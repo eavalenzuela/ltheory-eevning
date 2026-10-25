@@ -1,5 +1,19 @@
 function Float ViewDistance () 1000.0
 
+# Asteroids are too numerous to mark system-wide; show the ones within reach
+function Float MineableViewDistance () 20000.0
+
+function Bool IsMarked (Object object Camera camera)
+  switch
+    object.HasComponentMineable
+      (Length camera.GetPos - object.GetPos) < MineableViewDistance
+    otherwise
+      object.HasComponentInterior ||
+        object.HasComponentNavigable ||
+          object.HasComponentPilotable ||
+            object.HasComponentResources ||
+              object.IsCustom
+
 type WorldObjects
   Player player
   Bool visible true
@@ -10,13 +24,7 @@ type WorldObjects
       var camera Camera_Get
       for it player.GetSystem.GetInteriorObjects it.HasMore it.Advance
         var object it.Get
-        if
-          object.HasComponentInterior ||
-            object.HasComponentNavigable ||
-              object.HasComponentPilotable ||
-                object.HasComponentResources ||
-                  object.IsCustom
-
+        if (IsMarked object camera)
           var viewDistance ViewDistance * object.GetRadius
           if (Camera_CanSee object viewDistance)
             l += (WorldObject:Create player object)

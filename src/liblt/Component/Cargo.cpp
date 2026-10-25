@@ -88,7 +88,10 @@ FreeFunction(Quantity, Object_GetCapacity,
   "Return the total cargo capacity of 'object'",
   Object, object)
 {
-  return object->GetCapability().Storage;
+  /* The cargo component's capacity is what AddItem enforces; a ship's live
+     Storage capability is 0, which made every hold look full. */
+  ComponentCargo* cargo = object->GetCargo();
+  return cargo ? (Quantity)cargo->capacity : object->GetCapability().Storage;
 } FunctionAlias(Object_GetCapacity, GetCapacity);
 
 FreeFunction(Quantity, Object_GetItemCount,

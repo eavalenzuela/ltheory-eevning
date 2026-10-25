@@ -169,7 +169,9 @@ function Void Init (Object self)
         for resourceIndex 0 resourceIndex < self.GetResourceCount resourceIndex.++
           var ore (self.GetResource resourceIndex)
           var bidVolume (demandRng.Int 200 1000)
-          var bidPrice (Max 1 (cast Int ore.GetValue * (demandRng.Float 0.8 1.1)))
+          # Through Int and Float: Quantity * Float truncates the float first
+          var oreValue (cast Float (cast Int ore.GetValue))
+          var bidPrice (Max 1 (cast Int oreValue * (demandRng.Float 0.8 1.1)))
           station.AddMarketBuyOrder manager ore bidVolume bidPrice
 
       zone.SetName self.GetName + " Field #" + (zoneIndex + 1)
