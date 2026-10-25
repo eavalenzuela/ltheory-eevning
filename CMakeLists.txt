@@ -14,6 +14,12 @@ set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 add_subdirectory(ext/SFML)
 unset(CMAKE_POLICY_VERSION_MINIMUM)
 
+# Luau scripting (static, PIC like SFML). The CLI gives luau-analyze, the
+# type checker that scripts are checked with.
+set(LUAU_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LUAU_BUILD_CLI ON CACHE BOOL "" FORCE)
+add_subdirectory(ext/luau)
+
 function (configure_output_dir target)
   set_target_properties (${target} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin"
@@ -65,7 +71,9 @@ include_directories(src/liblt
   include
   include/FreeType
   ext/SFML/include
-  ext/miniaudio)
+  ext/miniaudio
+  ext/luau/VM/include
+  ext/luau/Compiler/include)
 
 # Get ext libraries
 if(WINDOWS)
@@ -120,8 +128,13 @@ set(LINK_LIBRARIES ${LINK_LIBRARIES} ${OPENGL_LIBRARIES})
 # Build shared libary
 file(GLOB_RECURSE LIBLT_SRC src/liblt/*.cpp)
 add_library(lt SHARED ${LIBLT_SRC} ext/miniaudio/miniaudio.c)
-target_link_libraries(lt ${LINK_LIBRARIES} ${EXTLIB})
+target_link_libraries(lt ${LINK_LIBRARIES} ${EXTLIB} Luau.VM Luau.Compiler)
 configure_output_dir(lt)
+
+# Luau reports script errors by throwing; the binding layer is built with
+# exceptions so they unwind through it properly (the rest of liblt isn't)
+file(GLOB LIBLT_LUAU_SRC src/liblt/Luau/*.cpp)
+set_source_files_properties(${LIBLT_LUAU_SRC} PROPERTIES COMPILE_FLAGS "-fexceptions")
 
 # Post-build step to copy DLLs to bin folder
 if (MSVC)
@@ -144,6 +157,13 @@ foreach(TARGET ${TARGETS})
   configure_output_dir(${TARGET})
 
 endforeach(TARGET)
+
+# luaucheck: type-checks Luau scripts against definitions generated from the
+# engine's reflection (C++17, with exceptions, like Luau's analysis library)
+add_executable(luaucheck src/luaucheck/luaucheck.cpp)
+target_link_libraries(luaucheck lt Luau.Analysis)
+set_source_files_properties(src/luaucheck/luaucheck.cpp PROPERTIES COMPILE_FLAGS "-std=c++17 -fexceptions")
+configure_output_dir(luaucheck)
 
 # Link dynamic targets to the shared lib
 foreach(TARGET ${TARGETS})

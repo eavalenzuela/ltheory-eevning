@@ -1,0 +1,6 @@
+{
+  "languageMode": "strict",
+  "aliases": {
+    "lt": "resource/script"
+  }
+}

@@ -1,3 +1,6 @@
 [submodule "ext/SFML"]
 	path = ext/SFML
 	url = https://github.com/SFML/SFML.git
+[submodule "ext/luau"]
+	path = ext/luau
+	url = https://github.com/luau-lang/luau.git

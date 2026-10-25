@@ -1,4 +1,9 @@
+/* Luau's header first: the engine defines an 'error' macro. */
+#include "lua.h"
+
 #include "Harness.h"
+
+#include "Luau/Luau.h"
 
 #include "Module/PhysicsEngine.h"
 #include "Module/SoundEngine.h"
@@ -27,10 +32,13 @@ struct Launcher : public Program {
   Module physicsEngine;
   Module soundEngine;
   Harness& harness;
+  /* Registry reference to a Luau app's table; 0 for LTSL apps. */
+  int luauApp;
 
   Launcher(String const& appName, V2U const& size, Harness& harness) :
     appName(appName),
-    harness(harness)
+    harness(harness),
+    luauApp(0)
   {
     if (!OS_IsDir("resource"))
       OS_ChangeDir("../");
@@ -52,6 +60,11 @@ struct Launcher : public Program {
     if (!soundEngine) {
       printf("WARNING: Audio unavailable, continuing without sound\n");
       soundEngine = SoundEngine_Null();
+    }
+
+    if (Luau_HasModule("App/" + appName)) {
+      LaunchLuau();
+      return;
     }
 
     Script_ClearCache();
@@ -95,6 +108,41 @@ struct Launcher : public Program {
       deleted = true;
   }
 
+  /* A Luau app is a module returning a table; its Initialize runs once and
+     its Update every frame, each called as a method. A script error prints
+     a traceback and ends the app. */
+  void LaunchLuau() {
+    luauApp = 0;
+    Luau_Reset();
+    lua_State* L = Luau_GetState();
+    if (!Luau_Require("App/" + appName)) {
+      deleted = true;
+      return;
+    }
+    if (!lua_istable(L, -1)) {
+      printf("ERROR: App/%s.luau must return a table\n", appName.c_str());
+      lua_pop(L, 1);
+      deleted = true;
+      return;
+    }
+    luauApp = lua_ref(L, -1);
+    lua_pop(L, 1);
+    if (!CallLuau("Initialize"))
+      deleted = true;
+  }
+
+  bool CallLuau(char const* method) {
+    lua_State* L = Luau_GetState();
+    lua_getref(L, luauApp);
+    lua_getfield(L, -1, method);
+    if (lua_isnil(L, -1)) {
+      lua_pop(L, 2);
+      return true;
+    }
+    lua_insert(L, -2);
+    return Luau_Call(1, 0);
+  }
+
   void OnUpdate() {
     if (!harness.Update())
       harness.quit = true;
@@ -115,6 +163,11 @@ struct Launcher : public Program {
 
     if (Keyboard_Pressed(Key_F5))
       Launch();
+
+    if (luauApp && !CallLuau("Update")) {
+      deleted = true;
+      return;
+    }
 
     if (update)
       update->VoidCall(0, instance);

@@ -70,3 +70,12 @@ Vector<Function> const& Function_Find(String const& name) {
 Vector<Function> const& Function_GetList() {
   return GetFunctionList();
 }
+
+Vector<String> Function_GetNames() {
+  Vector<String> names;
+  Map<String, Vector<Function> > const& m = GetFunctionMap();
+  for (Map<String, Vector<Function> >::const_iterator it = m.begin();
+       it != m.end(); ++it)
+    names.push(it->first);
+  return names;
+}

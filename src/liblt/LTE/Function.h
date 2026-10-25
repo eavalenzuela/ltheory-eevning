@@ -38,6 +38,9 @@ LT_API void Function_AddAlias(String const& source, String const& alias);
 LT_API Vector<Function> const& Function_Find(String const& name);
 LT_API Vector<Function> const& Function_GetList();
 
+/* Every registered name, including aliases. */
+LT_API Vector<String> Function_GetNames();
+
 #define DefineConversion(Name, SourceType, DestType)                           \
   LT_API void Name(SourceType const&, DestType&);                              \
                                                                                \
