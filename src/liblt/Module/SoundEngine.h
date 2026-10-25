@@ -29,7 +29,7 @@ struct SoundEngine : public ModuleT {
 };
 
 LT_API SoundEngine* GetSoundEngine();
-LT_API SoundEngine* SoundEngine_Fmod();
+LT_API SoundEngine* SoundEngine_Miniaudio();
 LT_API SoundEngine* SoundEngine_Null();
 
 inline Sound Sound_Play2D(

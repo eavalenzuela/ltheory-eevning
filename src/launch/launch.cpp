@@ -41,7 +41,11 @@ struct Launcher : public Program {
     physicsEngine = nullptr;
     soundEngine = nullptr;
     physicsEngine = CreatePhysicsEngine();
-    soundEngine = SoundEngine_Fmod();
+    soundEngine = SoundEngine_Miniaudio();
+    if (!soundEngine) {
+      printf("WARNING: Audio unavailable, continuing without sound\n");
+      soundEngine = SoundEngine_Null();
+    }
 
     Script_ClearCache();
 

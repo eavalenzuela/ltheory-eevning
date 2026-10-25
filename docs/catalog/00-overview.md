@@ -25,12 +25,12 @@ It was produced in October 2026, right after the codebase was revived on Linux. 
 | Launcher (only executable) | `src/launch/launch.cpp` | 130 lines |
 | Game content in LTSL: apps, system recipes, hull generators, all UI screens | `resource/script/` (141 files) | ~10.5k lines |
 | Game C++: world model, items, AI tasks, components | `src/liblt/Game`, `Component`, `AI` | ~21.7k lines |
-| Engine modules: physics, sound (FMOD), scheduler | `src/liblt/Module`, `Audio` | ~2.3k lines |
+| Engine modules: physics, sound (miniaudio since Oct 2026; was FMOD), scheduler | `src/liblt/Module`, `Audio` | ~2.3k lines |
 | UI framework (C++ core) | `src/liblt/UI` | ~3.1k lines |
 | Engine (LTE): scripting runtime, renderer, core, math, geometry | `src/liblt/LTE`, `Volume`, `CodeGen`, `ThirdParty` | ~44.7k lines |
 | Shaders (`.jsl`, GLSL 1.20) | `resource/shader/` (169 files) | ~6.4k lines |
 | Data: name grammars, unused tech-tree notes | `resource/gamedata/` | 53 files |
-| Assets: fonts (open licences), sounds, FMOD music banks, textures | `resource/` | ~360 MB |
+| Assets: fonts (open licences), sounds, FMOD music banks (now unplayable), textures | `resource/` | ~360 MB |
 
 ```
  bin/launch <app> ─── loads resource/script/App/<app>.lts, calls Main, then Initialize once
@@ -53,7 +53,7 @@ It was produced in October 2026, right after the codebase was revived on Linux. 
  │  PlateMesh / SDF / marching-cubes meshing · math (double positions)       │
  │  containers & intrusive refcounting · scheduler · Location I/O            │
  └───────────────▲───────────────────────────────────────────────────────────┘
-          SFML 2.5.1 (window/input/threads) · GLEW · FreeType · FMOD Ex 4.44
+          SFML 2.5.1 (window/input/threads) · GLEW · FreeType · miniaudio 0.11.21 (was FMOD Ex 4.44)
 ```
 
 Key facts that shape every decision:
@@ -175,7 +175,7 @@ Effort to reach a solid EVE-like single-player version on *this* codebase: **S**
 
 | Risk | Impact | Section |
 |---|---|---|
-| **FMOD Ex 4.44**: proprietary, discontinued; the launcher can't start without it | Licensing blocker for any shipped build; replace with miniaudio/SoLoud/OpenAL Soft (the `SoundEngine` interface is small) | 05 §7, 07 §5 |
+| ~~**FMOD Ex 4.44**: proprietary, discontinued; the launcher can't start without it~~ | **Resolved (Oct 2026):** replaced by vendored miniaudio + stb_vorbis (public domain) behind the same `SoundEngine` interface. Missing sound files and missing audio devices are no longer fatal. The 4 FMOD music banks (`resource/music/*.fev/.fsb`) can no longer be played | 05 §7, 07 §5 |
 | **LTSL silently drops lines that fail to compile**, often with no message and never a line number | The biggest day-to-day productivity cost; several "features" are silently off (`#` also comments out whole blocks) | 01 §6, 07 §1 |
 | **Single-system simulation + no save + no fixed timestep** | Blocks a persistent EVE-like galaxy; deep changes to a tightly coupled world model | 04 §6, 07 §8 |
 | **World model coupled to GPU, audio and scripts** | Can't simulate headless or off-screen without refactoring constructors | 04 §7 |
@@ -189,7 +189,7 @@ Effort to reach a solid EVE-like single-player version on *this* codebase: **S**
 
 ### (a) Grow this codebase into the game
 **For:** a great deal already works together: a living-looking system, a real market, procedural everything, a distinctive visual style, and fast iteration (hot reload, scripted UI). The first playable loop is cheap (§6).
-**Against:** the expensive EVE pillars (galaxy simulation, save/load, industry, missions) need deep work in a world model that is tightly coupled and was frozen mid-refactor. You'd own a custom engine and language with no community or tooling, legacy GL, unsafe threading, and an FMOD dependency that has to be replaced either way.
+**Against:** the expensive EVE pillars (galaxy simulation, save/load, industry, missions) need deep work in a world model that is tightly coupled and was frozen mid-refactor. You'd own a custom engine and language with no community or tooling, legacy GL, and unsafe threading. (The FMOD dependency has since been replaced.)
 
 ### (b) Take the designs into a new game
 Carry over, roughly in order of value (details in each section's assessment):
@@ -206,7 +206,7 @@ Leave behind:
 - the component-mixin object model (use a real ECS)
 - the containers, math, RNG and profiler (use std/GLM/Tracy)
 - the C++ renderer framework
-- FMOD Ex and the uncleared assets
+- the uncleared assets (FMOD Ex is already gone)
 - probably LTSL itself: the reflection idea is worth keeping; the language is not
 
 ### Recommendation
@@ -221,7 +221,7 @@ Mostly from 04 §8a, 05 §9 and 07 §8a:
 1. **Prerequisites (C++, small):**
    - Advance `Universe::age`.
    - Throttle `ComponentEconomy::Run` to run every N seconds instead of every frame.
-   - Fix the FMOD init flags (`&` → `|`) and fall back to the Null sound engine on error.
+   - ~~Fix the FMOD init flags and fall back to the Null sound engine on error.~~ Done: FMOD was replaced by miniaudio, with a Null fallback.
    - Add line numbers and the disabled "no matching overload" messages to LTSL errors.
 2. **Mining:** uncomment the transfer unit in `ltheory.lts`, and give the starting hull more cargo.
 3. **Docking:** add a "Dock" radial action (`PushTask (Task_Dock station)`) and an undock action.
@@ -240,7 +240,7 @@ Collected from all sections. Several are one-liners.
 | Bug | Where | Section |
 |---|---|---|
 | `Universe::age` never advances (timestamps, knowledge expiry) | `Game/Universe.cpp` | 04, 05 |
-| FMOD init flags ANDed (=0); any FMOD error is fatal; no Null fallback | `Module/SoundEngine/Fmod.cpp`, `launch.cpp` | 05 |
+| ~~FMOD init flags ANDed (=0); any FMOD error is fatal; no Null fallback~~ (fixed: FMOD replaced by miniaudio) | `Module/SoundEngine/Miniaudio.cpp`, `launch.cpp` | 05 |
 | `GetOutput` typo hides Produce/Pirate/Spawn outputs from the planner | `Game/Task/*.cpp` | 04, 05 |
 | `TaskBuy` never bids; `Transport` withdraw/deposit commented out; `Pirate` never re-targets | `Game/Task/` | 05 |
 | Economy rebuilt every frame (O(stations² × items)) | `Component/Economy.cpp` | 04, 05 |

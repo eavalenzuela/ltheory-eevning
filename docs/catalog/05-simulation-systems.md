@@ -192,6 +192,8 @@ So the "planner" is **random sampling, then a greedy profitability threshold, wi
 
 ### 2.7 Audio
 
+> **Update (Oct 2026):** the FMOD Ex backend described below has been replaced by `Module/SoundEngine/Miniaudio.cpp` (vendored miniaudio 0.11.21 + stb_vorbis, public domain) behind the same `SoundEngine`/`SoundT` interface. The script API is unchanged. Missing files and missing audio devices are no longer fatal (the launcher falls back to the Null engine). Pitch is now relative to each file's own sample rate. `MusicEngine` and the FMOD music-bank code were deleted. This section is kept as a record of the original design.
+
 **Runtime sound (`Module/SoundEngine*`)**
 - `SoundEngine` is an abstract module on a push/pop global stack. `launch.cpp` hard-codes `SoundEngine_Fmod()`. There is no fallback to `SoundEngine_Null()`.
 - FMOD Ex setup (`Fmod.cpp`):

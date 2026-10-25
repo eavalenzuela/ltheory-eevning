@@ -5,7 +5,6 @@
 
 #include "LTE/Reference.h"
 
-struct MusicEngine;
 struct PhysicsEngine;
 struct Scheduler;
 struct SoundEngine;

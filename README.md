@@ -12,7 +12,7 @@ The 64-bit Linux build works (tested on Ubuntu with GCC 15, CMake 4.2, Mesa). In
 
 - `sudo apt install build-essential cmake python3 git-lfs libglew-dev libglu1-mesa-dev libfreetype-dev libx11-dev libxrandr-dev libudev-dev libgl-dev`
 
-Then follow the same steps below from a regular terminal (`python3 configure.py`, `python3 configure.py build`, `python3 configure.py run war`). The executable is `bin/launch`, and the FMOD libraries are copied next to it at configure time.
+Then follow the same steps below from a regular terminal (`python3 configure.py`, `python3 configure.py build`, `python3 configure.py run war`). The executable is `bin/launch`. Audio goes through the vendored miniaudio (`ext/miniaudio/`), so no extra audio libraries are needed. If no audio device is available, the game runs silently.
 
 # Prerequisites
 

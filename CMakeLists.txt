@@ -7,7 +7,7 @@ find_package(OpenGL REQUIRED)
 set(BUILD_SHARED_LIBS FALSE CACHE BOOL "" FORCE)
 # static SFML gets linked into the shared liblt, so it must be PIC
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-# audio goes through FMOD, so skip SFML's (and its openal/flac/vorbis deps)
+# audio goes through miniaudio, so skip SFML's (and its openal/flac/vorbis deps)
 set(SFML_BUILD_AUDIO FALSE CACHE BOOL "" FORCE)
 # SFML 2.5 declares an old cmake minimum that CMake 4 rejects
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
@@ -64,7 +64,8 @@ endif()
 include_directories(src/liblt
   include
   include/FreeType
-  ext/SFML/include)
+  ext/SFML/include
+  ext/miniaudio)
 
 # Get ext libraries
 if(WINDOWS)
@@ -81,8 +82,6 @@ elseif(MAC)
 
   set(LINK_LIBRARIES
     # enet
-      fmodex
-      fmodevent
       freetype
       GLEW
       sfml-graphics
@@ -106,29 +105,12 @@ elseif(LINUX)
       sfml-network
       sfml-system
       sfml-window
-      GLEW)
+      GLEW
+      # miniaudio (it dlopens the audio backends itself)
+      pthread
+      m)
 
-  if(ARCH_32)
-
-    set(LINK_LIBRARIES ${LINK_LIBRARIES} fmodex fmodevent)
-    link_directories(${PROJECT_SOURCE_DIR}/extbin/linux32)
-
-  elseif(ARCH_64)
-
-    # The FMOD libs have no SONAME and fmodevent64 depends on the versioned
-    # fmodex64 filename, so link the versioned files by exact name. They're
-    # copied next to the binaries (found via $ORIGIN) rather than linking out
-    # of extbin/linux64, whose stale libfreetype would shadow the system one.
-    set(FMOD_LIBS libfmodevent64-4.44.24.so libfmodex64-4.44.24.so)
-    foreach(X ${FMOD_LIBS})
-      file(COPY ${PROJECT_SOURCE_DIR}/extbin/linux64/${X}
-           DESTINATION ${CMAKE_SOURCE_DIR}/bin)
-      set(LINK_LIBRARIES ${LINK_LIBRARIES} -l:${X})
-    endforeach(X)
-    link_directories(${CMAKE_SOURCE_DIR}/bin)
-
-  endif()
-
+  # launch finds liblt.so next to it
   set(CMAKE_BUILD_RPATH "$ORIGIN")
 
 endif()
@@ -137,7 +119,7 @@ set(LINK_LIBRARIES ${LINK_LIBRARIES} ${OPENGL_LIBRARIES})
 
 # Build shared libary
 file(GLOB_RECURSE LIBLT_SRC src/liblt/*.cpp)
-add_library(lt SHARED ${LIBLT_SRC})
+add_library(lt SHARED ${LIBLT_SRC} ext/miniaudio/miniaudio.c)
 target_link_libraries(lt ${LINK_LIBRARIES} ${EXTLIB})
 configure_output_dir(lt)
 
@@ -196,7 +178,7 @@ else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions")
 
   # Enable C++0x features
-  add_definitions("-std=c++0x")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
 
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g")
 
