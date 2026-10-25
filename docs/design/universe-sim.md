@@ -2,7 +2,7 @@
 
 The universe simulation produces the activity a single-player EVE-like game has to fake: wars, trade, ownership changes, prices that move. EVE gets this from thousands of players; here the game has to do it.
 
-Status: design agreed at the level of the proposal and decisions below. The parts under "Design details" are proposals to confirm or adjust. Nothing is implemented yet.
+Status: the proposal, decisions and design details below are agreed (2026-10-25). A headless prototype implements them (see "Prototype"); its war balance is the main open tuning question.
 
 ## Proposal (as written by the designer)
 
@@ -40,18 +40,21 @@ Status: design agreed at the level of the proposal and decisions below. The part
 | Economy depth | **Individual goods** (ores, components, ships, ...), not an abstract capacity number |
 | Information | **No fog of war between factions** at the simulation level |
 | Layer boundary | The simulation doesn't control the in-system simulation directly. It changes the universe state, and the state determines what the in-system simulation shows when the player enters a system |
-| Resolution where the player is | **Physical.** Fleets, traders and so on arriving or leaving warp in and out, as pirates already do |
+| Resolution where the player is | **Physical.** Fleets, traders and so on arriving or leaving warp in and out, as pirates already do. The abstract combat model applies only to systems the player is not in |
+| Jumps | **6 ticks (1 minute) per gate jump** |
+| Commitment | Ships and goods are locked once in an action. **Cancelling a submitted action is itself an action** and unlocks them |
 
-## Design details (proposed)
+## Design details
 
 ### Space and movement
 - The galaxy is a graph of systems joined by gates, generated from the universe seed with LT's existing region packing and spanning-tree links.
-- A fleet's journey is a chain of **per-jump timers** (one per gate hop, length from the distance), not one long timer. A fleet is therefore always in a system or on a known edge.
+- A fleet's journey is a chain of **per-jump timers, 6 ticks each**, not one long timer. A fleet is therefore always in a system or on a known edge.
 - **Interception needs no special action:** a fleet moves to a system on the enemy's route. Combat happens whenever hostile fleets are in the same system on the same tick (or at a station they're attacking).
 
 ### Actions and timers
 - Every action is an entity in the state with an owner, a kind, an end tick and its parameters (fleet composition, cargo, target).
 - **Reservation at submission:** ships, goods and credits committed to an action are locked immediately, so two actions submitted in the same phase can't spend the same fleet.
+- **Cancelling** is an action a faction submits. It unlocks the reserved ships and goods; a moving fleet stops at the next system it reaches.
 - **Interruption:** an action can be cancelled or modified by another resolving action (a fleet destroyed en route, a convoy intercepted, a station captured mid-build). The chance and outcome depend on the action and its factors.
 - **Same-tick ordering:** within the resolve phase, all movement completes first, then all combat at each location is resolved together, then the remaining actions (build, trade, ...) resolve. Ties are broken deterministically (by action id), never by evaluation order.
 
@@ -88,13 +91,14 @@ Status: design agreed at the level of the proposal and decisions below. The part
 
 ## Open questions
 
-1. **What flows back from the physical layer.** Proposal: while the player is in system X,
-   - changes to X in the universe state are pushed into the physical simulation (arrivals warp in, departures warp out, ownership changes update station owners);
-   - physical events in X are written back to the state (ships destroyed, trades made, cargo moved);
-   - a timer resolving in X (such as a battle) is resolved physically instead of with the abstract model, and the result is written back when it ends.
-2. Time while the game is closed: frozen, or simulated forward on load?
-3. How the player's own assets and actions enter the state as a participant: kills, trades, owned ships, and later owned stations.
-4. Starting set of factions and goods for the first version.
+**The physical layer (agreed).** While the player is in system X:
+- changes to X in the universe state are pushed into the physical simulation (arrivals warp in, departures warp out, ownership changes update station owners);
+- physical events in X are written back to the state (ships destroyed, trades made, cargo moved);
+- a timer resolving in X (such as a battle) is resolved physically instead of with the abstract model, and the result is written back when it ends.
+
+1. Time while the game is closed: frozen, or simulated forward on load?
+2. How the player's own assets and actions enter the state as a participant: kills, trades, owned ships, and later owned stations.
+3. Starting set of factions and goods: the prototype proposes one in `resource/script/Sim/Data.luau`, for the designer to adjust.
 
 ## First implementation step
 
@@ -104,6 +108,38 @@ A **headless simulation runner** in Luau, with no rendering:
 - Print a news feed (wars, captures, convoys lost) and stats over time: territory, fleet sizes, stock and prices by station.
 
 This shows whether the dynamics are stable and interesting before anything is rendered. After it come materializing the current system from the state, the physical write-back, and save/load.
+
+## Prototype
+
+`resource/script/Sim/` implements the simulation in pure Luau, with no engine objects:
+
+| Module | Contents |
+|---|---|
+| `Data.luau` | **The content and tuning:** goods, station kinds and recipes, ship classes, factions and personalities, timing, combat and relations constants |
+| `Galaxy.luau` | The Describe step: positions, gates (spanning tree plus extra links), stations, precomputed routes |
+| `State.luau` | The universe state (the save file with the seed), the timer heap, the initial setup |
+| `Market.luau` | Station prices from stock, the offer index |
+| `Combat.luau` | Lanchester battles |
+| `Actions.luau` | Move, convoy, build, siege, cancel |
+| `Ai.luau` | Faction decisions for the action and reaction phases |
+| `Sim.luau` | The tick: resolve, action, reaction |
+| `Rng.luau` | Deterministic random streams |
+
+Run it with `bin/launch simrun` (`App/simrun.luau` sets the seed, size and length). It prints a report every 2500 ticks and writes the full news feed to `cache/sim_news.txt`.
+
+**Results (seed 1, 400 systems, 20,000 ticks ≈ 55 game hours):**
+- **Performance:** about 5 ms per tick, roughly 1/2000 of the 10 s budget. A full run takes about 90 s.
+- **Determinism:** the same seed gives identical results.
+- **Economy:** stable. About 13,500 convoys per 2,500 ticks. Prices settle by station, and ore piles up against refinery capacity.
+- **Expansion:** the whole galaxy is claimed within about 14 game hours, with territories of 57 to 116 systems.
+- **Pirates:** they raid and ambush convoys and lose dens to faction attacks.
+- **Wars:** they start once borders meet and land runs out, but they end in a stalemate (5 sieges and 4 captures over the run, no peace).
+
+**Open tuning and design questions from the prototype:**
+1. **War balance.** Defenders are strong: station defence plus relief arriving within the 20-tick siege. Meanwhile border friction outweighs war exhaustion, so wars start, freeze and never end. This needs design decisions on war goals, peace terms and how attackers mass forces.
+2. **Credits.** They concentrate in some factions (around 800k) while others hover near zero. Credits have few uses beyond building ships and buying from other factions.
+3. **Expansion pace.** The galaxy fills in under a day. EVE keeps large NPC and unclaimed regions, so independent systems might resist claims.
+4. **Pirate growth.** Pirate credits pile up with nothing to spend them on, and lost dens are never replaced.
 
 ## What LT supplies
 

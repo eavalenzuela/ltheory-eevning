@@ -1,0 +1,604 @@
+--!strict
+-- The universe simulation. Each tick has three phases:
+--   1. resolve: timers due this tick complete (jumps, battles, captures,
+--      convoys, ships built), stations produce, and every period upkeep,
+--      taxes and relations update
+--   2. action: every faction reviews the state and submits actions
+--   3. reaction: every faction responds to the others' actions in progress
+-- Battles outside the player's system use the abstract combat model.
+
+local Actions = require("@lt/Sim/Actions")
+local Ai = require("@lt/Sim/Ai")
+local Combat = require("@lt/Sim/Combat")
+local Data = require("@lt/Sim/Data")
+local Galaxy = require("@lt/Sim/Galaxy")
+local Market = require("@lt/Sim/Market")
+local Rng = require("@lt/Sim/Rng")
+local State = require("@lt/Sim/State")
+
+local Sim = {}
+
+function Sim.New(seed: number, systemCount: number): State.State
+  return State.New(Galaxy.Describe(seed, systemCount), seed)
+end
+
+local function name(state: State.State, faction: number?): string
+  return if faction then state.factions[faction].name else "independents"
+end
+
+local function systemName(state: State.State, system: number): string
+  return state.galaxy.systems[system].name
+end
+
+local function shift(state: State.State, a: number, b: number, amount: number)
+  local fa, fb = state.factions[a], state.factions[b]
+  if fa.pirate or fb.pirate then
+    return
+  end
+  fa.relations[b] += amount
+  fb.relations[a] += amount
+end
+
+----------------------------------------------------------------- Battles
+
+-- Sends a beaten fleet back where it came from, or to a friendly
+-- neighbour; destroys it if there's nowhere to go
+local function retreat(state: State.State, fleet: State.Fleet)
+  local at = fleet.system :: number
+  local options = { fleet.last }
+  for _, n in state.galaxy.systems[at].neighbors do
+    if state.systems[n].owner == fleet.owner then
+      table.insert(options, n)
+    end
+  end
+  for _, n in state.galaxy.systems[at].neighbors do
+    table.insert(options, n)
+  end
+  for _, dest in options do
+    if dest ~= at and not State.Hostile(state, fleet.owner, state.systems[dest].owner) then
+      if Actions.Move(state, fleet, dest, "retreat") then
+        return
+      end
+    end
+  end
+  State.Disband(state, fleet)
+end
+
+-- Ends a fleet's action because of a battle
+local function interrupt(state: State.State, fleet: State.Fleet)
+  local id = fleet.action
+  if id then
+    local action = state.actions[id]
+    if action then
+      Actions.Finish(state, action)
+    end
+    fleet.action = nil
+  end
+end
+
+local function fight(state: State.State, system: number, a: number, b: number, assault: boolean)
+  local owner = state.systems[system].owner
+  local sideA = State.IdleFleets(state, system, a)
+  local sideB = State.IdleFleets(state, system, b)
+  -- Fleets mid-action count too
+  for _, id in state.systems[system].fleets do
+    local fleet = state.fleets[id]
+    if fleet and fleet.action ~= nil then
+      if fleet.owner == a then table.insert(sideA, fleet) end
+      if fleet.owner == b then table.insert(sideB, fleet) end
+    end
+  end
+  -- Stations defend their owner against an assault
+  local defA = if assault and owner == a then State.StationDefense(state, system) else 0
+  local defB = if assault and owner == b then State.StationDefense(state, system) else 0
+  local strengthA = Combat.Strength(sideA) + defA
+  local strengthB = Combat.Strength(sideB) + defB
+  if (#sideA == 0 and defA == 0) or (#sideB == 0 and defB == 0) then
+    return
+  end
+  local rng = Rng.For(state.seed, state.tick, system, a, b)
+  local aWins, lossA, lossB = Combat.Fight(rng, strengthA, strengthB)
+  -- Static defence soaks part of its side's losses
+  local fleetShareA = if strengthA > 0 then Combat.Strength(sideA) / strengthA else 0
+  local fleetShareB = if strengthB > 0 then Combat.Strength(sideB) / strengthB else 0
+  local lostA = Combat.ApplyLosses(rng, sideA, lossA * (if aWins then fleetShareA else 1))
+  local lostB = Combat.ApplyLosses(rng, sideB, lossB * (if aWins then 1 else fleetShareB))
+  state.factions[a].losses += lostA
+  state.factions[b].losses += lostB
+  State.Count(state, "battles")
+  State.Count(state, "ships lost", lostA + lostB)
+  shift(state, a, b, -5)
+
+  local winner, loser = if aWins then a else b, if aWins then b else a
+  local losers = if aWins then sideB else sideA
+  local cargo = 0
+  for _, fleet in losers do
+    for good, n in fleet.cargo do
+      cargo += n * Data.GoodById[good].base
+    end
+    fleet.cargo = {}
+  end
+  if cargo > 0 then
+    State.Count(state, "convoys lost")
+    if state.factions[winner].pirate then
+      state.factions[winner].credits += 0.5 * cargo
+    end
+  end
+  if lostA + lostB >= 6 or cargo > 0 then
+    local what = if cargo > 0 then ` (cargo worth {math.floor(cargo)} lost)` else ""
+    State.Log(state, "battle", `{name(state, winner)} beat {name(state, loser)} at {systemName(state, system)}: `
+      .. `{lostA + lostB} ships lost{what}`)
+  end
+
+  -- Clear the dead; the beaten retreat
+  for _, list in { sideA, sideB } do
+    for _, fleet in list do
+      if State.ShipCount(fleet) == 0 then
+        interrupt(state, fleet)
+        State.Disband(state, fleet)
+      end
+    end
+  end
+  for _, fleet in losers do
+    if fleet.alive then
+      interrupt(state, fleet)
+      retreat(state, fleet)
+    end
+  end
+end
+
+-- Fights between hostile parties in a system some fleet arrived in
+local function battles(state: State.State, system: number, arrivals: { State.Action })
+  local owner = state.systems[system].owner
+  local present: { number } = {}
+  local seen: { [number]: boolean } = {}
+  for _, id in state.systems[system].fleets do
+    local fleet = state.fleets[id]
+    if fleet and not seen[fleet.owner] then
+      seen[fleet.owner] = true
+      table.insert(present, fleet.owner)
+    end
+  end
+  -- An attack or raid also fights the system's stations
+  local assaulted: { [number]: boolean } = {}
+  for _, action in arrivals do
+    local final = action.step == #(action.path :: { number })
+    if final and (action.intent == "attack" or action.intent == "raid") and State.Hostile(state, action.owner, owner) then
+      assaulted[action.owner] = true
+      if owner and not seen[owner] then
+        seen[owner] = true
+        table.insert(present, owner)
+      end
+    end
+  end
+  -- A siege counts as an assault too, so the stations back a relief force
+  for _, id in state.systems[system].fleets do
+    local fleet = state.fleets[id]
+    local action = if fleet and fleet.action then state.actions[fleet.action] else nil
+    if action and action.kind == "siege" then
+      assaulted[action.owner] = true
+    end
+  end
+  table.sort(present)
+  for i = 1, #present do
+    for j = i + 1, #present do
+      local a, b = present[i], present[j]
+      if State.Hostile(state, a, b) then
+        local assault = (owner == a and assaulted[b] == true) or (owner == b and assaulted[a] == true)
+        fight(state, system, a, b, assault)
+      end
+    end
+  end
+end
+
+------------------------------------------------------------- Arrivals
+
+local function hostilesPresent(state: State.State, system: number, owner: number): boolean
+  for _, id in state.systems[system].fleets do
+    local fleet = state.fleets[id]
+    if fleet and State.Hostile(state, owner, fleet.owner) then
+      return true
+    end
+  end
+  return false
+end
+
+local function capture(state: State.State, system: number, faction: number)
+  local old = state.systems[system].owner
+  state.systems[system].owner = faction
+  for _, id in state.galaxy.systems[system].stations do
+    local station = state.stations[id]
+    local building = station.building
+    if building then
+      local action = state.actions[building]
+      if action then
+        Actions.Finish(state, action)
+      end
+      station.building = nil
+    end
+    if station.kind == "den" and not state.factions[faction].pirate then
+      station.destroyed = true
+    end
+  end
+  if old then
+    shift(state, faction, old, -15)
+  end
+  State.Count(state, "captures")
+  State.Log(state, "capture", `{name(state, faction)} captured {systemName(state, system)} from {name(state, old)}`)
+end
+
+local function raid(state: State.State, system: number, fleet: State.Fleet)
+  local loot = 0
+  for _, id in state.galaxy.systems[system].stations do
+    local station = state.stations[id]
+    for good, n in station.stock do
+      local k = 0.25 * n
+      station.stock[good] = n - k
+      loot += k * Data.GoodById[good].base
+    end
+  end
+  state.factions[fleet.owner].credits += 0.5 * loot
+  State.Count(state, "raids")
+  State.Log(state, "raid", `{name(state, fleet.owner)} raided {systemName(state, system)} `
+    .. `({name(state, state.systems[system].owner)}), goods worth {math.floor(loot)}`)
+end
+
+local function arrived(state: State.State, action: State.Action, fleet: State.Fleet)
+  local system = fleet.system :: number
+  local owner = state.systems[system].owner
+  local intent = action.intent
+  if action.kind == "convoy" then
+    Actions.ConvoyArrived(state, action, fleet)
+    return
+  end
+  Actions.Finish(state, action)
+  if intent == "attack" then
+    if State.Hostile(state, fleet.owner, owner) and not hostilesPresent(state, system, fleet.owner) then
+      if Actions.Siege(state, fleet) then
+        State.Log(state, "siege", `{name(state, fleet.owner)} lays siege to {systemName(state, system)} ({name(state, owner)})`)
+      end
+    end
+  elseif intent == "claim" then
+    if owner == nil and not hostilesPresent(state, system, fleet.owner) then
+      state.systems[system].owner = fleet.owner
+      State.Count(state, "claims")
+      State.Log(state, "claim", `{name(state, fleet.owner)} claimed {systemName(state, system)}`)
+    end
+  elseif intent == "raid" then
+    if not hostilesPresent(state, system, fleet.owner) then
+      raid(state, system, fleet)
+    end
+  end
+end
+
+------------------------------------------------------------- Production
+
+local function produce(state: State.State, station: State.Station)
+  local kind = Data.StationById[station.kind]
+  local owner = state.systems[station.system].owner
+  local resources = state.galaxy.systems[station.system].resources
+  local makes = Market.Profile(station.kind).makes
+  for _, recipe in kind.recipes do
+    local full = false
+    for good in recipe.outputs do
+      if (station.stock[good] or 0) >= makes[good] * Data.CAP_CYCLES then
+        full = true
+      end
+    end
+    if not full then
+      local fraction = 1
+      for good, n in recipe.inputs do
+        fraction = math.min(fraction, (station.stock[good] or 0) / n)
+      end
+      for good, n in recipe.inputs do
+        station.stock[good] = (station.stock[good] or 0) - n * fraction
+      end
+      local rate = if kind.extractor then math.max(fraction, Data.EXTRACTOR_IDLE) else fraction
+      for good, n in recipe.outputs do
+        local richness = if kind.extractor and resources[good] then resources[good] else 1
+        station.stock[good] = (station.stock[good] or 0) + n * rate * richness
+      end
+      if kind.tax and owner and not state.factions[owner].pirate then
+        state.factions[owner].credits += kind.tax * fraction
+        State.Count(state, "taxes", kind.tax * fraction)
+      end
+    end
+  end
+end
+
+------------------------------------------------------------- Periodic
+
+-- Shared gate links between each pair of factions, and which factions
+-- still have unclaimed neighbours to expand into
+local function borders(state: State.State): ({ [number]: { [number]: number } }, { [number]: boolean })
+  local links: { [number]: { [number]: number } } = {}
+  local room: { [number]: boolean } = {}
+  for _, f in state.factions do
+    links[f.id] = {}
+  end
+  for _, system in state.systems do
+    local a = system.owner
+    for _, n in state.galaxy.systems[system.id].neighbors do
+      local b = state.systems[n].owner
+      if a and b and b ~= a then
+        links[a][b] = (links[a][b] or 0) + 1
+      elseif a and b == nil then
+        room[a] = true
+      end
+    end
+  end
+  return links, room
+end
+
+local function period(state: State.State)
+  -- Upkeep
+  for _, fleet in state.fleets do
+    local faction = state.factions[fleet.owner]
+    if not faction.pirate then
+      for _, class in Data.Ships do
+        faction.credits -= (fleet.ships[class.id] or 0) * class.upkeep
+      end
+    end
+  end
+  -- Relations: drift back toward the baseline; friction along shared
+  -- borders, worse for the aggressive, eased by the sociable and doubled
+  -- for a faction with nowhere left to expand; weariness from war losses
+  local links, room = borders(state)
+  for _, a in state.factions do
+    for _, b in state.factions do
+      if a.id < b.id and not a.pirate and not b.pirate and a.alive and b.alive then
+        local r = a.relations[b.id]
+        local drift = math.clamp(a.baseline[b.id] - r, -Data.DRIFT, Data.DRIFT)
+        local aggressive = (a.traits.aggressive + b.traits.aggressive) / 2
+        local sociable = (a.traits.sociable + b.traits.sociable) / 2
+        local hunger = if room[a.id] and room[b.id] then 1 else Data.LAND_HUNGER
+        local friction = -(links[a.id][b.id] or 0) * Data.FRICTION * aggressive * (1 - 0.7 * sociable) * hunger
+        local weariness = if a.war[b.id] then Data.EXHAUSTION + 0.3 * (a.losses + b.losses) else 0
+        r += drift + friction + weariness
+        a.relations[b.id], b.relations[a.id] = r, r
+        if not a.war[b.id] and r < Data.WAR_BELOW then
+          a.war[b.id], b.war[a.id] = true, true
+          State.Count(state, "wars declared")
+          State.Log(state, "war", `{a.name} and {b.name} are at war`)
+        elseif a.war[b.id] and r > Data.PEACE_ABOVE then
+          a.war[b.id], b.war[a.id] = false, false
+          State.Count(state, "peace treaties")
+          State.Log(state, "peace", `{a.name} and {b.name} made peace`)
+        end
+      end
+    end
+  end
+  -- Eliminations
+  local held: { [number]: number } = {}
+  for _, system in state.systems do
+    if system.owner then
+      held[system.owner] = (held[system.owner] or 0) + 1
+    end
+  end
+  for _, f in state.factions do
+    if f.alive and not f.pirate and (held[f.id] or 0) == 0 then
+      f.alive = false
+      State.Log(state, "eliminated", `{f.name} has been eliminated`)
+      for _, fleet in state.fleets do
+        if fleet.owner == f.id then
+          interrupt(state, fleet)
+          State.Disband(state, fleet)
+        end
+      end
+    end
+    f.losses = 0
+  end
+end
+
+------------------------------------------------------------------ Tick
+
+local function resolve(state: State.State)
+  state.phase = "resolve"
+  local arrivals: { State.Action } = {}
+  local bySystem: { [number]: { State.Action } } = {}
+  local touched: { number } = {}
+  local builds: { State.Action } = {}
+  local sieges: { State.Action } = {}
+  for _, id in State.PopDue(state, state.tick) do
+    local action = state.actions[id]
+    if action and not action.done then
+      if action.kind == "build" then
+        table.insert(builds, action)
+      elseif action.kind == "siege" then
+        table.insert(sieges, action)
+      else
+        local fleet = state.fleets[action.fleet :: number]
+        if fleet and fleet.alive then
+          local dest = (action.path :: { number })[action.step :: number]
+          State.Arrive(state, fleet, dest)
+          table.insert(arrivals, action)
+          if not bySystem[dest] then
+            bySystem[dest] = {}
+            table.insert(touched, dest)
+          end
+          table.insert(bySystem[dest], action)
+        else
+          Actions.Finish(state, action)
+        end
+      end
+    end
+  end
+
+  -- 1. Battles where fleets arrived
+  table.sort(touched)
+  for _, system in touched do
+    battles(state, system, bySystem[system])
+  end
+
+  -- 2. Moves continue, or complete what they set out to do
+  for _, action in arrivals do
+    if not action.done then
+      local fleet = state.fleets[action.fleet :: number]
+      if not fleet or not fleet.alive then
+        Actions.Finish(state, action)
+      elseif action.cancelled then
+        Actions.Finish(state, action)
+      elseif (action.step :: number) < #(action.path :: { number }) then
+        action.step = (action.step :: number) + 1
+        Actions.Depart(state, action, fleet)
+      else
+        arrived(state, action, fleet)
+      end
+    end
+  end
+
+  -- 3. Sieges complete if the besiegers still hold the system
+  for _, action in sieges do
+    if not action.done then
+      local fleet = state.fleets[action.fleet :: number]
+      local system = action.target :: number
+      Actions.Finish(state, action)
+      if fleet and fleet.alive and fleet.system == system and State.Hostile(state, fleet.owner, state.systems[system].owner)
+        and not hostilesPresent(state, system, fleet.owner) then
+        capture(state, system, fleet.owner)
+      end
+    end
+  end
+
+  -- 4. Ships finished
+  for _, action in builds do
+    local station = state.stations[action.station :: number]
+    station.building = nil
+    Actions.Finish(state, action)
+    if state.systems[station.system].owner == action.owner and not station.destroyed then
+      local ship = action.ship :: string
+      local role: "war" | "trade" = if ship == "hauler" then "trade" else "war"
+      local fleet = if role == "war" then State.IdleFleets(state, station.system, action.owner, role)[1] else nil
+      if fleet then
+        fleet.ships[ship] = (fleet.ships[ship] or 0) + 1
+        fleet.fuel += 10
+        fleet.munitions += 2
+      else
+        State.NewFleet(state, action.owner, station.system, role, { [ship] = 1 })
+      end
+      State.Count(state, `built {ship}`)
+    end
+  end
+
+  -- 5. Production
+  for _, station in state.stations do
+    if not station.destroyed and state.tick >= station.nextCycle then
+      station.nextCycle += Data.CYCLE_TICKS
+      produce(state, station)
+    end
+  end
+
+  -- 6. Upkeep, taxes, relations
+  if state.tick > 0 and state.tick % Data.PERIOD_TICKS == 0 then
+    period(state)
+  end
+end
+
+-- Merges idle war fleets of the same owner in each system
+local function consolidate(state: State.State)
+  for _, system in state.systems do
+    if #system.fleets > 1 then
+      local keep: { [string]: State.Fleet } = {}
+      for _, id in table.clone(system.fleets) do
+        local fleet = state.fleets[id]
+        -- Haulers stay separate, so each can run its own convoy
+        if fleet and fleet.action == nil and fleet.role == "war" then
+          local key = `{fleet.owner}:{fleet.role}`
+          local into = keep[key]
+          if into then
+            for class, n in fleet.ships do
+              into.ships[class] = (into.ships[class] or 0) + n
+            end
+            into.fuel += fleet.fuel
+            into.munitions += fleet.munitions
+            for good, n in fleet.cargo do
+              into.cargo[good] = (into.cargo[good] or 0) + n
+            end
+            State.Disband(state, fleet)
+          else
+            keep[key] = fleet
+          end
+        end
+      end
+    end
+  end
+end
+
+function Sim.Tick(state: State.State)
+  resolve(state)
+  consolidate(state)
+  local census = Ai.Census(state)
+  local index = Market.Index(state)
+  state.phase = "action"
+  for _, faction in state.factions do
+    Ai.ActionPhase(state, faction, census[faction.id], index)
+  end
+  state.phase = "reaction"
+  for _, faction in state.factions do
+    Ai.ReactionPhase(state, faction, census[faction.id])
+  end
+  state.tick += 1
+end
+
+------------------------------------------------------------------ Stats
+
+export type FactionStats = {
+  name: string,
+  systems: number,
+  frigates: number,
+  cruisers: number,
+  haulers: number,
+  credits: number,
+  wars: { string },
+  alive: boolean,
+}
+
+function Sim.Stats(state: State.State): { FactionStats }
+  local stats: { FactionStats } = {}
+  for _, f in state.factions do
+    local wars = {}
+    for other, atWar in f.war do
+      if atWar and not state.factions[other].pirate and state.factions[other].alive then
+        table.insert(wars, state.factions[other].name)
+      end
+    end
+    table.sort(wars)
+    stats[f.id] = { name = f.name, systems = 0, frigates = 0, cruisers = 0, haulers = 0,
+      credits = f.credits, wars = wars, alive = f.alive }
+  end
+  for _, system in state.systems do
+    if system.owner then
+      stats[system.owner].systems += 1
+    end
+  end
+  for _, fleet in state.fleets do
+    local s = stats[fleet.owner]
+    s.frigates += fleet.ships.frigate or 0
+    s.cruisers += fleet.ships.cruiser or 0
+    s.haulers += fleet.ships.hauler or 0
+  end
+  return stats
+end
+
+-- Total stock of each good, and its average price where it is traded
+function Sim.Economy(state: State.State): { { good: string, stock: number, price: number } }
+  local rows = {}
+  for _, good in Data.Goods do
+    local stock, priceSum, priceCount = 0, 0, 0
+    for _, station in state.stations do
+      stock += station.stock[good.id] or 0
+      local p = Market.BuyPrice(station, good.id) or Market.SellPrice(station, good.id)
+      if p then
+        priceSum += p
+        priceCount += 1
+      end
+    end
+    for _, fleet in state.fleets do
+      stock += fleet.cargo[good.id] or 0
+    end
+    table.insert(rows, { good = good.name, stock = stock, price = if priceCount > 0 then priceSum / priceCount else 0 })
+  end
+  return rows
+end
+
+return Sim
