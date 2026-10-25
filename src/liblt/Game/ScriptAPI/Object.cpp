@@ -1,6 +1,7 @@
 #include "Game/Common.h"
 #include "Game/Object.h"
 #include "Game/Player.h"
+#include "Game/Universe.h"
 
 #include "LTE/Function.h"
 #include "LTE/Renderable.h"
@@ -183,6 +184,9 @@ VoidFreeFunction(Object_Update,
   Object, object,
   float, dt)
 {
+  /* Every app drives its world with one of these per frame, so this is
+     where the universe clock advances. */
+  Universe_Advance(dt);
   UpdateState state(dt, true);
   object->Update(state);
 } FunctionAlias(Object_Update, Update);

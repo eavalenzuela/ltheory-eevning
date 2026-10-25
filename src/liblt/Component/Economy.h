@@ -15,7 +15,12 @@ AutoClass(ComponentEconomy,
   Vector<Item>, items,
   Vector<Task>, tasks)
 
-  ComponentEconomy() {}
+  /* Game time since the cache was last rebuilt. */
+  float sinceRebuild;
+
+  ComponentEconomy() :
+    sinceRebuild(0)
+    {}
 
   Item GetItem() const {
     return items.size() ? items.random() : nullptr;

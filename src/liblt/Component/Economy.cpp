@@ -11,6 +11,10 @@
 #include "LTE/Map.h"
 #include "LTE/StackFrame.h"
 
+/* Rebuilding the cache is O(markets^2 * items), and the world it summarizes
+   changes slowly, so refresh it periodically rather than every frame. */
+const float kRebuildInterval = 2.0f;
+
 namespace {
   void CacheItem(
     ComponentEconomy* economy,
@@ -96,7 +100,12 @@ namespace {
   }
 }
 
-void ComponentEconomy::Run(ObjectT* self, UpdateState&) {
+void ComponentEconomy::Run(ObjectT* self, UpdateState& state) {
+  sinceRebuild += state.dt;
+  if (sinceRebuild < kRebuildInterval && tasks.size())
+    return;
+  sinceRebuild = 0;
+
   SFRAME("Economy Caching");
   static HashSet<HashT> itemSet;
   itemSet.clear();

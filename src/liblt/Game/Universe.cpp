@@ -38,6 +38,16 @@ Time Universe_Age() {
   return universe ? universe->age : 0;
 }
 
+void Universe_Advance(float dt) {
+  Universe* universe = Universe_Get();
+  if (!universe || dt <= 0)
+    return;
+  universe->ageRemainder += (double)dt * kTimeScale;
+  Time whole = (Time)universe->ageRemainder;
+  universe->age += whole;
+  universe->ageRemainder -= (double)whole;
+}
+
 DefineFunction(Object_Universe) {
   Reference<UniverseImpl> self = new UniverseImpl;
   RNG rg = RNG_MTG(args.seed);

@@ -24,15 +24,21 @@ typedef ObjectWrapper
 struct Universe : public UniverseBaseT {
   uint depth;
   Time age;
+  /* Sub-tick remainder carried between Universe_Advance calls. */
+  double ageRemainder;
   Distribution<Item> colonyTypes;
   Vector<Object> loadedRegions;
   Item currencyBasis;
 
   Universe() :
-    age(0)
+    age(0),
+    ageRemainder(0)
     {}
 };
 
 LT_API Universe* Universe_Get();
+
+/* Advance the active universe's clock by 'dt' seconds. */
+LT_API void Universe_Advance(float dt);
 
 #endif
