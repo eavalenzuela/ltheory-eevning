@@ -20,6 +20,9 @@ namespace LTE {
 
   LT_API void Keyboard_ModifyString(String& str, int& cursor);
 
+  /* The characters typed this frame. */
+  LT_API String Keyboard_GetText();
+
   LT_API bool Keyboard_Pressed(Key key);
 
   LT_API bool Keyboard_Released(Key key);

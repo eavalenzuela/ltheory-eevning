@@ -46,6 +46,12 @@ VoidFreeFunction(Keyboard_ModifyString,
   Keyboard_ModifyString(Mutable(s), Mutable(cursor));
 }
 
+FreeFunctionNoParams(String, Keyboard_GetText,
+  "Return the characters typed this frame")
+{
+  return Keyboard_GetText();
+}
+
 FreeFunction(bool, Key_Pressed,
   "Return whether 'key' was pressed this frame",
   Key, key)
