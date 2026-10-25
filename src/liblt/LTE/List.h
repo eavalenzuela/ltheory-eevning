@@ -126,6 +126,10 @@ struct List : public NullBase<List<T> > {
   }
 
   FIELDS {
+    /* No instance (e.g. a compile-time field lookup): these containers have
+       no fixed-offset fields to report. */
+    if (!addr)
+      return;
     List* self = (List*)addr;
     static Type subType = Type_Get(*(T const**)0);
 

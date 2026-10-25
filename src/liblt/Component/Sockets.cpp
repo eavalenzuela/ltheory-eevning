@@ -119,7 +119,18 @@ FreeFunction(Item, Object_Unplug,
 
   for (uint i = 0; i < sockets->instances.size(); ++i) {
     if (sockets->instances[i] == module) {
+      /* Weapons and transfer units are plugged into a generic turret; the
+         item to hand back is the module in the turret, not the turret. */
       Item type = module->GetSupertype();
+      Pointer<ComponentSockets> inner = module->GetSockets();
+      if (inner) {
+        for (uint j = 0; j < inner->instances.size(); ++j) {
+          if (inner->instances[j]) {
+            type = inner->instances[j]->GetSupertype();
+            break;
+          }
+        }
+      }
       sockets->Unplug(object, i);
       return type;
     }

@@ -185,6 +185,10 @@ struct Array : public NullBase<Array<T> > {
   }
 
   FIELDS {
+    /* No instance (e.g. a compile-time field lookup): these containers have
+       no fixed-offset fields to report. */
+    if (!addr)
+      return;
     Array* self = (Array*)addr;
     size_t oldSize = self->size();
     size_t sz = oldSize;

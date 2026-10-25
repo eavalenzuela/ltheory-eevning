@@ -20,6 +20,7 @@
 #include "Game/Attribute/Sound.h"
 #include "Game/Attribute/Speed.h"
 #include "Game/Attribute/Uses.h"
+#include "Game/Attribute/Value.h"
 
 #include "LTE/AutoClass.h"
 
@@ -46,8 +47,9 @@ typedef
   < Attribute_Sound
   < Attribute_Speed
   < Attribute_Uses
+  < Attribute_Value
   < ItemWrapper<ItemType_WeaponType>
-  > > > > > > > > > > > > > > > > >
+  > > > > > > > > > > > > > > > > > >
   WeaponTypeBase;
 
 AutoClassDerived(WeaponType, WeaponTypeBase,

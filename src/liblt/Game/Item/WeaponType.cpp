@@ -236,5 +236,9 @@ DefineFunction(Item_WeaponType) {
 
   self->capability = Capability_Attack(self->GetDPS());
 
+  /* Value was never set (so weapons sold for next to nothing); price
+     weapons by their damage output. */
+  self->value = (Quantity)Max(1.0f, Sigfigs(10.0f * self->GetDPS(), 2));
+
   return self;
 }

@@ -107,10 +107,12 @@ void ComponentMarket::Run(ObjectT* self, UpdateState& state) {
         Object const& locker = self->GetStorageLocker(bid->owner);
         locker->AddItem(d.item, tradeVolume);
 
-        /* Make sure to refund the buyer if the transaction occurred at a
-         * lower price (since their funds are already in escrow) */
+        /* Refund the buyer the difference on the units just traded, if the
+         * trade happened below their bid (their funds are in escrow at the
+         * bid price). Only these units: the rest of the order stays open, and
+         * refunding its escrow too created credits from nothing. */
         if (tradePrice < bid->price)
-          bid->owner->AddCredits(bid->price * bid->volume - totalPrice);
+          bid->owner->AddCredits((bid->price - tradePrice) * tradeVolume);
 
         ask->volume -= tradeVolume;
         ask->filledVolume += tradeVolume;

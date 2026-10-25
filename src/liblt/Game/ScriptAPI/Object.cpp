@@ -198,6 +198,17 @@ FreeFunction(Position, Object_GetCenter,
   return object->GetCenter();
 } FunctionAlias(Object_GetCenter, GetCenter);
 
+FreeFunction(bool, Object_Dock,
+  "Dock 'docker' inside 'station' immediately, and return whether 'station' accepts docking",
+  Object, station,
+  Object, docker)
+{
+  if (!station->GetDockable())
+    return false;
+  station->Dock(docker);
+  return true;
+} FunctionAlias(Object_Dock, Dock);
+
 FreeFunction(bool, Object_Undock,
   "Undock 'object' from the station it is docked in, and return whether it was docked",
   Object, object)

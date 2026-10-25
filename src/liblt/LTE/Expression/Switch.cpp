@@ -104,6 +104,10 @@ namespace LTE {
     for (size_t i = 1; i < list->GetSize(); ++i) {
       StringList const& sub = list->Get(i);
       String const& value = sub->Get(0)->GetValue();
+
+      /* A comment between cases is not a case. */
+      if (value == "#")
+        continue;
       
       if (value == "otherwise") {
         if (defaultExpression) {
