@@ -79,8 +79,7 @@ LTSL creates a Luau widget with `Luau_CreateWidget "@lt/Path" arg`, which calls 
 
 ## Known gaps
 
-- **Engine call overhead:** an engine call costs about 0.19 µs, versus 0.06 µs in LTSL. This comes from method lookup and overload resolution on every call. Pure script code is about 10x faster than LTSL.
-  - Planned fixes: userdata tags instead of metatable checks, the `__namecall` fast path, and caching resolved overloads.
+- **Engine call cost:** method calls cost about 0.05 µs, on par with LTSL; operators on engine values cost about 0.13 µs, because each allocates its result. Pure script code is about 10x faster than LTSL. `bin/launch luau_bench` measures each kind of call.
 - **Vector precision:** `vector` is single precision, so positions lose precision far from the origin (about 3 cm at 300 km).
 - **Untyped LTSL boundary:** `ltsl()` / `ltsl_new()` values are untyped.
 - **No sandboxing:** scripts are not sandboxed (not needed; they are part of the game).
