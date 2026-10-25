@@ -9,10 +9,15 @@ type StationPanel
   Object station Object
 
   function Object DockedAt ()
-    var container player.GetPiloting.GetContainer
+    # Null-safe: apps like 'hud' show the HUD for a player whose ship may not
+    # be placed in the world
     var result Object
-    if container.HasComponentDockable && container.HasComponentMarket
-      result = container
+    var ship player.GetPiloting
+    if ship.IsNotNull
+      var container ship.GetContainer
+      if container.IsNotNull
+        if container.HasComponentDockable && container.HasComponentMarket
+          result = container
     result
 
   function List CreateChildren (Widget self)

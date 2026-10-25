@@ -2,7 +2,7 @@ function Float ViewDistance () 1000.0
 
 type WorldObjects
   Player player
-  Bool visible false
+  Bool visible true
 
   function List CreateChildren (Widget self)
     var l List

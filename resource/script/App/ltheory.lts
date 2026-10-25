@@ -65,7 +65,7 @@ type App
     player.Pilot ship
     player.SetName "SuperSpaceSquirrel"
 
-    player.AddLog "Right-click an asteroid and choose Mine; right-click a station to Dock or Trade"
+    player.AddLog "Right-click an asteroid and choose Mine; right-click a station to Dock or Trade (G hides markers)"
     player.AddLog "Docked, use the station panel to sell ore, buy modules and refit"
 
     Sound_PlayLooped "system/ambiance/089.wav" 0.05

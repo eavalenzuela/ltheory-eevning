@@ -22,7 +22,7 @@ function Data Main ()
     self.system = self.system.GetInteriorObjects.Get
 
   for it self.system.GetInteriorObjects it.HasMore it.Advance
-    if it.Get.GetOwner
+    if it.Get.GetOwner.IsNotNull
       self.player = it.Get.GetOwner
 
   var ship self.player.GetPiloting
