@@ -1,10 +1,15 @@
 type MessageComm
+type MessageDock
 type MessageFireworks
 type MessageInfo
 type MessageJumpTo
 type MessageOwner
 type MessageTarget
 type MessageTrade
+
+# Sent up to the app, which owns the mining state
+type MessageMine
+  Object object
 
 type MenuOption
   Icon icon
@@ -46,6 +51,12 @@ type WorldObjectMenu
     if object.HasComponentMarket
       l += (CreateMenuOption self "Trade" Icons:Trade MessageTrade)
 
+    if object.HasComponentDockable
+      l += (CreateMenuOption self "Dock" Icons:Station MessageDock)
+
+    if object.HasComponentMineable
+      l += (CreateMenuOption self "Mine" Icons:Cargo (MessageMine object))
+
     l += (CreateMenuOption self "[DEV] Jump To" Icons:JumpTo MessageJumpTo)
     l += (CreateMenuOption self "[DEV] Fireworks!" Icons:Assets MessageFireworks)
     l += (CreateMenuOption self "Information" Icons:QuestionMark MessageInfo)
@@ -56,6 +67,15 @@ type WorldObjectMenu
     switch
       (data.IsType "MessageComm")
         ref msg (cast MessageComm data)
+
+      (data.IsType "MessageDock")
+        player.GetPiloting.ClearTasks
+        player.GetPiloting.PushTask (Task_Dock object)
+        player.AddLog "Docking at " + object.GetName
+        Sound_Play "ui/targetacquired.ogg" 0.2
+
+      (data.IsType "MessageMine")
+        self.SendUp data
 
       (data.IsType "MessageFireworks")
         Object/Firework:ShootFrom object

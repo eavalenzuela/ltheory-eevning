@@ -163,6 +163,15 @@ function Void Init (Object self)
           storage.AddItem item volume
           station.AddMarketSellOrder manager item volume price
 
+        # Standing demand for the system's ores, so mining pays. A separate
+        # RNG keeps the rest of the generated system unchanged.
+        var demandRng (RNG_MTG self.GetSeed + zoneIndex + 1)
+        for resourceIndex 0 resourceIndex < self.GetResourceCount resourceIndex.++
+          var ore (self.GetResource resourceIndex)
+          var bidVolume (demandRng.Int 200 1000)
+          var bidPrice (Max 1 (cast Int ore.GetValue * (demandRng.Float 0.8 1.1)))
+          station.AddMarketBuyOrder manager ore bidVolume bidPrice
+
       zone.SetName self.GetName + " Field #" + (zoneIndex + 1)
       self.AddInterior zone
       pois += (POI pos scale)

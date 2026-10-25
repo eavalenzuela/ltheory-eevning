@@ -63,6 +63,11 @@ type HUDGroup
             Components:Padding 8 8
               HUD/MenuBar:Create player
 
+      l +=
+        Components:AlignTopCenter
+          Components:Margin (Vec2 0 80) 32
+            HUD/Station:Create player
+
     l
 
   function Void PreDraw (Widget self)

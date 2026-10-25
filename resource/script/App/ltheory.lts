@@ -1,10 +1,37 @@
 function Int UniverseSeed ()
   39
 
+function Float MiningReach () 4000.0
+function Float PirateInterval () 90.0
+function Int MaxPirates () 2
+
+# The starter ship: weapons plus a transfer unit for mining
+function Object CreateStarterShip ()
+  var shipType (Item_ShipType 20000 55 1 1 1 1 1 1)
+  var ship shipType.Instantiate
+  ship.Plug (Item_TransferUnitType 1 1 1 1 1 1)
+  var weapon (Item_WeaponType 46)
+  while (ship.Plug weapon) 0
+  ship
+
+function Int CargoCount (Object ship)
+  var n 0
+  for it ship.GetCargo it.HasMore it.Advance
+    n += (cast Int it.GetQuantity)
+  n
+
 type App
   Object universe
+  Object system
+  Object homeStation
   Player player
   Camera camera
+  Object miningTarget
+  Int minedSinceReport 0
+  Int lastCargo 0
+  Float reportTimer 0.0
+  Float pirateTimer 0.0
+  List pirates List
 
   function Void Create (Widget self)
     # Create the camera
@@ -13,28 +40,22 @@ type App
 
     # Create the universe
     universe = (Object_Universe UniverseSeed 0)
-    var system universe
+    system = universe
     while (! system.IsSystem)
       system = system.GetInteriorObjects.Get
 
     var rng (RNG_MTG 0)
-    var shipType (Item_ShipType 20000 55 1 1 1 1 1 1)
-    var ship shipType.Instantiate
+    var ship CreateStarterShip
 
-    var station Object
     for it system.GetInteriorObjects it.HasMore it.Advance
       if it.Get.HasComponentDockable
-        station = it.Get
-        
+        homeStation = it.Get
+
     switch
-      station.IsNotNull
-        ship.SetPos station.GetPos + 10000.0 * rng.Sphere
+      homeStation.IsNotNull
+        ship.SetPos homeStation.GetPos + 10000.0 * rng.Sphere
       otherwise
         ship.SetPos 100000.0 * rng.Sphere
-
-    var weapon (Item_WeaponType 46)
-    # ship.Plug (Item_TransferUnitType 1 1 1 1 1 1)
-    while (ship.Plug weapon) 0
     system.AddInterior ship
 
     # Create the player
@@ -43,6 +64,9 @@ type App
     player.AddAsset ship
     player.Pilot ship
     player.SetName "SuperSpaceSquirrel"
+
+    player.AddLog "Right-click an asteroid and choose Mine; right-click a station to Dock or Trade"
+    player.AddLog "Docked, use the station panel to sell ore, buy modules and refit"
 
     Sound_PlayLooped "system/ambiance/089.wav" 0.05
 
@@ -60,6 +84,104 @@ type App
 
     l
 
+  function Void Receive (Widget self Data data)
+    if (data.IsType "MessageMine")
+      ref msg (cast Widget/HUD/WorldObject:MessageMine data)
+      switch
+        miningTarget == msg.object
+          miningTarget = Object
+          player.AddLog "Stopped mining"
+        otherwise
+          miningTarget = msg.object
+          lastCargo = (CargoCount player.GetPiloting)
+          minedSinceReport = 0
+          player.AddLog "Mining " + msg.object.GetName + "; yield is best from the right side of the rock"
+
+  # Fire every transfer unit on the ship at the mining target
+  function Void FireMiners (Object ship)
+    for it ship.GetSockets it.HasMore it.Advance
+      var module it.Get
+      if module.IsNotNull
+        var mining false
+        for c module.GetChildren c.HasMore c.Advance
+          if c.Get.IsTransferUnit
+            mining = true
+        if mining
+          module.Broadcast MessageFire
+          module.Broadcast (MessageTargetPosition miningTarget.GetCenter)
+
+  function Void UpdateMining (Float dt)
+    var ship player.GetPiloting
+    if miningTarget.IsNotNull
+      if ship.GetContainer != miningTarget.GetContainer
+        miningTarget = Object
+        player.AddLog "Stopped mining"
+
+    if miningTarget.IsNotNull
+      var reach (Length miningTarget.GetCenter - ship.GetPos) - miningTarget.GetRadius
+      if reach < MiningReach
+        this.FireMiners ship
+
+      var cargo (CargoCount ship)
+      minedSinceReport += cargo - lastCargo
+      lastCargo = cargo
+      reportTimer += dt
+      if reportTimer > 5.0
+        reportTimer = 0.0
+        switch
+          reach >= MiningReach
+            player.AddLog "Too far to mine; move closer to " + miningTarget.GetName
+          minedSinceReport > 0
+            player.AddLog "Mined " + minedSinceReport + " ore (cargo " + cargo + ")"
+          otherwise
+            player.AddLog "No yield; try another side of the rock"
+        minedSinceReport = 0
+
+      if ship.GetUsedCapacity >= 0.98 * ship.GetCapacity
+        miningTarget = Object
+        player.AddLog "Cargo hold full; dock at a station to sell"
+
+  # Keep a couple of hostile pirates hunting the player
+  function Void UpdatePirates (Float dt)
+    var ship player.GetPiloting
+    var alive List
+    for i 0 i < pirates.Size i.++
+      var pirate (cast Object (pirates.Get i))
+      if pirate.GetHealth > 0
+        alive += pirate
+    pirates = alive
+
+    pirateTimer += dt
+    if pirateTimer > PirateInterval && pirates.Size < MaxPirates && ship.GetContainer == system
+      pirateTimer = 0.0
+      var rng (RNG_MTG Int_Random)
+      var pirateType (Item_ShipType 15000 rng.Int 1 1 1 1 1 1)
+      var weapon (Item_WeaponType rng.Int)
+      for i 0 i < 2 i.++
+        var pirate pirateType.Instantiate
+        pirate.Plug weapon
+        pirate.SetName "Pirate"
+        pirate.SetPos ship.GetPos + (rng.Float 3000.0 5000.0) * rng.Direction
+        pirate.PushTask (Task_Destroy ship)
+        system.AddInterior pirate
+        pirates += pirate
+      player.AddLog "Pirates detected nearby!"
+      Sound_Play "ui/targetacquired.ogg" 0.3
+
+  # A destroyed ship is replaced by a fresh starter ship at the home station
+  function Void UpdateRespawn (Widget self)
+    var ship player.GetPiloting
+    if ship.GetHealth <= 0 && homeStation.IsNotNull
+      var newShip CreateStarterShip
+      system.AddInterior newShip
+      homeStation.Dock newShip
+      player.AddAsset newShip
+      player.Pilot newShip
+      miningTarget = Object
+      lastCargo = 0
+      player.AddLog "Your ship was destroyed. A replacement waits at " + homeStation.GetName
+      self.Rebuild
+
   function Void PreUpdate (Widget self)
     camera.SetTarget player.GetPiloting
 
@@ -76,10 +198,18 @@ type App
         target = it.Get
       if target.IsNotNull
         target.Send (MessageStopUsing player.GetPiloting)
-    
-    var container player.GetPiloting.GetContainer
+
     var dt (Min 0.1 FrameTimer_Get)
     if Key_H.Down dt *= 20.0
+
+    this.UpdateMining dt
+    this.UpdatePirates dt
+    this.UpdateRespawn self
+
+    # While docked, keep simulating the whole system, not just the station
+    var container player.GetPiloting.GetContainer
+    if container.HasComponentDockable
+      container = container.GetContainer
     container.Update dt
 
 function Data Main ()

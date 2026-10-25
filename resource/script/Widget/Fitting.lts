@@ -1,0 +1,96 @@
+type MessageFit
+  Item item
+
+type MessageUnplug
+  Object module
+
+function Bool IsFittable (Item item)
+  item.IsWeaponType || item.IsTransferUnitType
+
+# The weapon or transfer unit a turret socket holds (null if none)
+function Object TurretPayload (Object module)
+  var payload Object
+  for c module.GetChildren c.HasMore c.Advance
+    if c.Get.IsWeapon || c.Get.IsTransferUnit
+      payload = c.Get
+  payload
+
+function Widget Row (String label Widget button)
+  Components:Expand
+    Components:Padding (Vec2 8 4) 4
+      Widgets:ListH2 16
+        Components:MinSize (Vec2 280 0)
+          Components:AlignLeftCenter
+            Widgets:Text Fonts:Default label 15.0 1.0
+        Components:MinSize (Vec2 96 0)
+          button
+
+type FittingList
+  Player player
+  Object station
+
+  function List CreateChildren (Widget self)
+    var l List
+    var ship player.GetPiloting
+    var locker (station.GetStorageLocker player)
+
+    l +=
+      Components:AlignLeftCenter
+        Widgets:Text Fonts:Subheading "INSTALLED ON " + ship.GetName.UpperCase 15.0 0.5
+
+    var installed 0
+    for it ship.GetSockets it.HasMore it.Advance
+      var module it.Get
+      if module.IsNotNull
+        var payload (TurretPayload module)
+        if payload.IsNotNull
+          installed += 1
+          l += (Row payload.GetName (Button:Create (MessageUnplug module) "REMOVE" 14.0))
+    if installed == 0
+      l += (Row "(nothing removable installed)" Widget)
+
+    l +=
+      Components:AlignLeftCenter
+        Widgets:Text Fonts:Subheading "IN YOUR HANGAR AT " + station.GetName.UpperCase 15.0 0.5
+
+    var available 0
+    for it locker.GetCargo it.HasMore it.Advance
+      var item it.GetItem
+      if (IsFittable item)
+        available += 1
+        l += (Row item.GetName + " x" + it.GetQuantity (Button:Create (MessageFit item) "FIT" 14.0))
+    if available == 0
+      l += (Row "(no weapons or transfer units; buy some at the market)" Widget)
+    l
+
+  function Void Receive (Widget self Data data)
+    var ship player.GetPiloting
+    var locker (station.GetStorageLocker player)
+    switch
+      (data.IsType "MessageFit")
+        ref msg (cast MessageFit data)
+        switch
+          (ship.Plug msg.item)
+            locker.RemoveItem msg.item 1
+            player.AddLog "Fitted " + msg.item.GetName
+            Sound_Play "ui/elementselect.wav" 0.2
+          otherwise
+            player.AddLog "No free slot for " + msg.item.GetName
+        self.Rebuild
+
+      (data.IsType "MessageUnplug")
+        ref msg (cast MessageUnplug data)
+        var item (ship.Unplug msg.module)
+        if item.IsNotNull
+          locker.AddItem item 1
+          player.AddLog "Removed " + item.GetName + " to your hangar"
+          Sound_Play "ui/elementselect.wav" 0.2
+        self.Rebuild
+
+function Widget Create (Player player Object station)
+  Widget/Window:Create
+    "Fitting"
+    Components:Padding 16 16
+      ListV 4
+        Custom Widget
+          FittingList player station

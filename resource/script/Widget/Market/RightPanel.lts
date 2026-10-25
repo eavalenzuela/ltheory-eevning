@@ -4,6 +4,9 @@ type MessageBuy
 type MessageSell
   Item item
 
+type MessageWithdraw
+  Item item
+
 type BuyWindow
   Player player
   Object market
@@ -44,7 +47,7 @@ type ItemPanel
               Button:Create (MessageSell item) "SELL" 16.0
           Components:Expand
             Components:GreedyX
-              Button:Create 0 "DETAILS" 16.0
+              Button:Create (MessageWithdraw item) "WITHDRAW" 16.0
     l
 
   function Void Receive (Widget self Data data)
@@ -53,6 +56,22 @@ type ItemPanel
         ref message (cast Messages:UnselectItem data)
         if item == message.item
           self.Delete
+
+      # Move this item from your hangar here into your ship's cargo
+      (data.IsType "MessageWithdraw")
+        var ship player.GetPiloting
+        switch
+          ship.GetContainer == market
+            var locker (market.GetStorageLocker player)
+            var moved (locker.TransferItem ship item 1000000)
+            switch
+              moved > 0
+                player.AddLog "Moved " + moved + " " + item.GetName + " to your cargo hold"
+              otherwise
+                player.AddLog "None in your hangar, or no room in your cargo hold"
+            self.SendUp Messages:MessageRefresh
+          otherwise
+            player.AddLog "Dock at " + market.GetName + " to withdraw items"
 
 function Widget CreateItemPanel (Player player Object market Item item)
   Components:Expand
