@@ -14,6 +14,7 @@
 #include "LTE/Map.h"
 #include "LTE/Type.h"
 #include "LTE/V3.h"
+#include "LTE/V4.h"
 #include "LTE/Vector.h"
 
 #include "UI/Widget.h"
@@ -76,6 +77,8 @@ namespace {
     Kind_Int,
     Kind_Real,
     Kind_String,
+    Kind_Vec2F,
+    Kind_Vec2D,
     Kind_Vec3F,
     Kind_Vec3D,
     Kind_Data,
@@ -123,6 +126,8 @@ namespace {
     AddKind<float>(Kind_Real);
     AddKind<double>(Kind_Real);
     AddKind<String>(Kind_String);
+    AddKind<V2F>(Kind_Vec2F);
+    AddKind<V2D>(Kind_Vec2D);
     AddKind<V3F>(Kind_Vec3F);
     AddKind<V3D>(Kind_Vec3D);
     AddKind<Data>(Kind_Data);
@@ -275,6 +280,16 @@ namespace {
         lua_pushlstring(L, s.data(), s.size());
         return 1;
       }
+      case Kind_Vec2F: {
+        V2F const& v = *(V2F const*)p;
+        lua_pushvector(L, v.x, v.y, 0);
+        return 1;
+      }
+      case Kind_Vec2D: {
+        V2D const& v = *(V2D const*)p;
+        lua_pushvector(L, (float)v.x, (float)v.y, 0);
+        return 1;
+      }
       case Kind_Vec3F: {
         V3F const& v = *(V3F const*)p;
         lua_pushvector(L, v.x, v.y, v.z);
@@ -384,6 +399,12 @@ namespace {
         return lt == LUA_TNUMBER ? Match_Exact : Match_None;
       case Kind_String:
         return lt == LUA_TSTRING ? Match_Exact : Match_None;
+      case Kind_Vec2F:
+      case Kind_Vec2D:
+        /* A number is a uniform 2D value, as in LTSL ("MinSize 36"). */
+        if (lt == LUA_TVECTOR)
+          return Match_Exact;
+        return lt == LUA_TNUMBER ? Match_Convert : Match_None;
       case Kind_Vec3F:
       case Kind_Vec3D:
         return lt == LUA_TVECTOR ? Match_Exact : Match_None;
@@ -434,6 +455,21 @@ namespace {
       case Kind_Vec3D: {
         float const* v = lua_tovector(L, idx);
         *(V3D*)out = V3D(v[0], v[1], v[2]);
+        return;
+      }
+      case Kind_Vec2F:
+      case Kind_Vec2D: {
+        double x, y;
+        if (lua_type(L, idx) == LUA_TVECTOR) {
+          float const* v = lua_tovector(L, idx);
+          x = v[0];
+          y = v[1];
+        } else
+          x = y = lua_tonumber(L, idx);
+        if (info.kind == Kind_Vec2F)
+          *(V2F*)out = V2F((float)x, (float)y);
+        else
+          *(V2D*)out = V2D(x, y);
         return;
       }
       case Kind_Data: {
@@ -1463,6 +1499,8 @@ namespace {
         case Kind_Int: return "int";
         case Kind_Real: return "number";
         case Kind_String: return "string";
+        case Kind_Vec2F:
+        case Kind_Vec2D:
         case Kind_Vec3F:
         case Kind_Vec3D: return "vector";
         case Kind_Data: return "any";
@@ -1473,6 +1511,9 @@ namespace {
 
     /* The type a script may pass for parameter type 't'. */
     String ParamType(TypeT* t) {
+      Kind kind = GetInfo(t).kind;
+      if (kind == Kind_Vec2F || kind == Kind_Vec2D)
+        return "vector | number";
       String scalar = ScalarName(t);
       if (!scalar.empty())
         return scalar;
@@ -1828,6 +1869,16 @@ namespace {
         return;
       if (lua_isstring(gL, -1))
         out = lua_tostring(gL, -1);
+      lua_pop(gL, 1);
+    }
+
+    /* Returns a Vec4f: inner x, inner y, outer x, outer y. */
+    void GetPadding(Widget const& self, V4& out) {
+      if (!Call("GetPadding", self, nullptr, 1))
+        return;
+      Box* box = ToBox(gL, -1);
+      if (box && box->type == Type_Get<V4>().t)
+        out = *(V4*)BoxData(box);
       lua_pop(gL, 1);
     }
   };

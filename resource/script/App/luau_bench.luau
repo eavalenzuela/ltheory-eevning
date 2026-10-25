@@ -16,7 +16,7 @@ end
 function App:Initialize()
   local ship = Item_ShipType(20000, 55, 1, 1, 1, 1, 1, 1):Instantiate()
   local pos = vector.create(1, 2, 3)
-  local v = New.Vec2()
+  local v = New.Vec4f()
   v.x = 3
 
   time("method, no args (GetRadius)", function()
@@ -44,14 +44,14 @@ function App:Initialize()
     end
   end)
 
-  time("field read (Vec2.x)", function()
+  time("field read (Vec4f.x)", function()
     local sum = 0
     for _ = 1, N do
       sum += v.x
     end
   end)
 
-  time("operator (Vec2 + Vec2)", function()
+  time("operator (Vec4f + Vec4f)", function()
     for _ = 1, N do
       local _w = v + v
     end
