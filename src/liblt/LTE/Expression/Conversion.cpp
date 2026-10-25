@@ -68,7 +68,10 @@ namespace {
     }
 
     void* GetLValue(Environment& env) const {
-      return ((Data*)statement->GetLValue(env))->data;
+      /* The source may be a temporary (e.g. a function result), in which case
+         there is no lvalue and the caller must Evaluate instead. */
+      Data* source = (Data*)statement->GetLValue(env);
+      return source ? source->data : nullptr;
     }
 
     Type GetType() const {

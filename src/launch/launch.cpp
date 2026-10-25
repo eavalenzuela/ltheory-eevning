@@ -59,6 +59,14 @@ struct Launcher : public Program {
       return;
     }
 
+    /* Only script-defined types carry a ScriptType in their aux data. */
+    if (!main->returnType->GetAux().data) {
+      printf("ERROR: Launcher expects %s:Main to return a script type (got %s)\n",
+        appName.c_str(), main->returnType->name.c_str());
+      deleted = true;
+      return;
+    }
+
     /* NOTE : We have to raw cast here due to issues with the usual
               .Convert<ScriptType>. Due to a major design flaw in the Type
               system, Type_Get<T> returns different static storage in the exe

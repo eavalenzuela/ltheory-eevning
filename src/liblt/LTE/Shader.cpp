@@ -28,7 +28,9 @@ namespace {
   typedef Reference<struct ProgramObjectT> ProgramObject;
   typedef Map<String, ShaderObject> ShaderMap;
   typedef Map<String, ProgramObject> ProgramMap;
-  typedef Map<char const*, int> LocationCache;
+  /* Keyed by contents, not pointer: names from scripts live in temporary
+     buffers that get reused, so pointer keys alias different uniforms. */
+  typedef Map<String, int> LocationCache;
 
   GL_Program gActiveProgram = GL_NullProgram;
   Pointer<ShaderT> gActiveShader;
