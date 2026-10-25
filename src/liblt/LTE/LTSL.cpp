@@ -10,11 +10,15 @@ namespace {
     {
       Vector<String> parts;
       String_Split(parts, value, '.');
+      uint line = list->line;
       StringList newList = new StringListAtom(parts[0]);
-      for (size_t i = 1; i < parts.size(); ++i)
-        newList = new StringListList(Vector<StringList>(
-          new StringListAtom(parts[i]),
-          newList));
+      newList->line = line;
+      for (size_t i = 1; i < parts.size(); ++i) {
+        StringList part = new StringListAtom(parts[i]);
+        part->line = line;
+        newList = new StringListList(Vector<StringList>(part, newList));
+        newList->line = line;
+      }
 
       list = newList;
     }
@@ -32,10 +36,12 @@ namespace {
     StringListList* l = (StringListList*)list.t;
     for (int i = 0; i + 2 < (int)l->elements.size(); ++i) {
       if (IsBinaryOp(l->elements[i + 1], ops)) {
+        uint line = StringList_GetLine(l->elements[i]);
         l->elements[i] = new StringListList(Vector<StringList>(
           l->elements[i + 1],
           l->elements[i],
           l->elements[i + 2]));
+        l->elements[i]->line = line;
         l->elements.eraseIndex(i + 1);
         l->elements.eraseIndex(i + 1);
         i--;

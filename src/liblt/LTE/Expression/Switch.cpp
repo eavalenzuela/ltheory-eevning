@@ -4,6 +4,7 @@
 #include "LTE/Environment.h"
 #include "LTE/Pool.h"
 #include "LTE/ProgramLog.h"
+#include "LTE/Script.h"
 #include "LTE/StringList.h"
 #include "LTE/Vector.h"
 
@@ -119,13 +120,23 @@ namespace LTE {
 
         Expression predicate = Expression_Compile(sub->Get(0), env);
         if (!predicate) {
-          Log_Message("switch -- case predicate did not compile");
+          Log_Message(Stringize() | "'" | env.script->name | "' line "
+            | StringList_GetLine(sub) | " -- switch case predicate did not compile");
           continue;
         }
 
         Expression statement = Expression_Block(sub, env, 1);
         if (!statement) {
-          Log_Message("switch -- case statement did not compile");
+          /* A case whose body is entirely commented out is deliberate. */
+          bool allComments = true;
+          for (size_t j = 1; j < sub->GetSize() && allComments; ++j) {
+            StringList const& s = sub->Get(j);
+            allComments = !s->IsAtom() && s->GetSize()
+              && s->Get(0)->IsAtom() && s->Get(0)->GetValue() == "#";
+          }
+          if (!allComments)
+            Log_Message(Stringize() | "'" | env.script->name | "' line "
+              | StringList_GetLine(sub) | " -- switch case statement did not compile");
           continue;
         }
 
@@ -135,7 +146,11 @@ namespace LTE {
     }
 
     if (!expressions.size()) {
-      Log_Message("switch -- cond has no inner expressions");
+      /* Every case was commented out or failed: only 'otherwise' remains. */
+      if (defaultExpression)
+        return defaultExpression;
+      Log_Message(Stringize() | "'" | env.script->name | "' line "
+        | StringList_GetLine(list) | " -- switch has no cases");
       return nullptr;
     }
 

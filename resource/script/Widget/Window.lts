@@ -47,7 +47,9 @@ type WidgetWindow
   function Void PostDraw (Widget self)
     ClipRegion_Pop
 
-  function Void PrePosition (Widget self)
+  # Never worked: WidgetWindow has no 'size' or 'pos' fields, so both
+  # statements failed to compile and this was always a no-op
+  # function Void PrePosition (Widget self)
     self.minSize = size
     self.pos = pos
 

@@ -40,7 +40,7 @@ type SliderBar
       var c Cursor_Get
       var t (c.x - self.pos.x) / self.size.x
       var value (cast Int (Mix (cast Float minValue) (cast Float maxValue + 1) t)
-      vlaue = (Clamp value minvalue maxValue)
+      value = (Clamp value minValue maxValue)
       self.SendUp (SliderSet value)
 
 type Slider

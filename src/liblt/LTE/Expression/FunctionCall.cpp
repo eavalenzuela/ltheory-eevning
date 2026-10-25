@@ -108,10 +108,39 @@ namespace {
     }
   };
 
+  String ArgumentSignature(Vector<Type> const& types) {
+    String sig = "(";
+    for (size_t i = 0; i < types.size(); ++i) {
+      if (i) sig += ", ";
+      sig += types[i]->GetAliasName();
+    }
+    return sig + ")";
+  }
+
+  /* Only called in detail mode, after a failure, so it may be verbose. */
+  void LogCandidates(Vector<Function> const& candidates, size_t paramCount) {
+    const size_t kMaxListed = 8;
+    size_t listed = 0, total = 0;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+      if (candidates[i]->paramCount != paramCount)
+        continue;
+      total++;
+      if (listed < kMaxListed) {
+        Log_Message(Stringize() | "    candidate: " | candidates[i]->GetSignature());
+        listed++;
+      }
+    }
+    if (total > listed)
+      Log_Message(Stringize() | "    ... and " | (total - listed) | " more");
+    if (!total)
+      Log_Message(Stringize() | "    (no candidates take " | paramCount | " arguments)");
+  }
+
   Function OverloadResolution(
     String const& name,
     Vector<Function> const& candidates,
-    Vector<Expression>& expressions)
+    Vector<Expression>& expressions,
+    bool detail)
   {
     Vector<Type> types;
     for (size_t i = 0; i < expressions.size(); ++i)
@@ -147,21 +176,11 @@ namespace {
     }
 
     if (matches.isEmpty()) {
-#if 0
-      String sig = "(";
-      for (size_t i = 0; i < types.size(); ++i) {
-        if (i) sig += ", ";
-        sig += types[i]->GetAliasName();
+      if (detail) {
+        Log_Message(Stringize()
+          | "functioncall -- no match for " | name | ArgumentSignature(types));
+        LogCandidates(candidates, types.size());
       }
-      sig += ")";
-
-      Log_Error(Stringize() | "Could not match call to " | name | sig);
-
-      Log_Error("Candidates are:");
-      for (size_t i = 0; i < candidates.size(); ++i)
-        Log_Error(candidates[i]->GetSignature());
-#endif
-
       return nullptr;
     }
 
@@ -170,20 +189,13 @@ namespace {
       if (matches[1].order > matches[0].order)
         return matches[0].fn;
 
-#if 0
-      Log_Error(Stringize()
-        | "Ambiguous function call to " | name | " arguments are:");
-      for (size_t i = 0; i < types.size(); ++i)
-        Log_Error(Stringize() | "  " | types[i]->GetAliasName());
-
-      Log_Error("Matching candidates are:");
-      for (size_t i = 0; i < matches.size(); ++i) {
-        FunctionMatch const& match = matches[i];
-        Log_Error(Stringize()
-          | "(With " | match.order | " implicit conversions) "
-          | match.fn->GetSignature());
+      if (detail) {
+        Log_Message(Stringize()
+          | "functioncall -- ambiguous call to " | name | ArgumentSignature(types));
+        for (size_t i = 0; i < matches.size() && matches[i].order == matches[0].order; ++i)
+          Log_Message(Stringize() | "    candidate (" | matches[i].order
+            | " implicit conversions): " | matches[i].fn->GetSignature());
       }
-#endif
       return nullptr;
     }
   }
@@ -235,7 +247,7 @@ namespace LTE {
       args.push(e);
     }
 
-    Function fn = OverloadResolution(name, candidates, args);
+    Function fn = OverloadResolution(name, candidates, args, env.detail);
     if (!fn) {
       if (env.detail)
         Log_Message(Stringize()

@@ -41,11 +41,14 @@ namespace LTE {
     Vector<ScriptType> context;
     Map<String, Stack<Variable> > variables;
     int registers;
+    /* Number of compile errors reported so far. */
+    int errors;
     bool hasErrors;
     bool detail;
 
     CompileEnvironment() :
       registers(0),
+      errors(0),
       hasErrors(false),
       detail(false)
       {}

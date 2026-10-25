@@ -66,6 +66,14 @@ namespace {
     return new StringListList(elements);
   }
 
+  void SetLine(StringList const& list, uint line) {
+    if (list->line)
+      return;
+    list->line = line;
+    for (size_t i = 0; i < list->GetSize() && !list->IsAtom(); ++i)
+      SetLine(list->Get(i), line);
+  }
+
   StringList StringList_ParseBlock(Tokenizer& tokenizer, uint indent) {
     Vector<StringList> elements;
     Vector<StringList> current;
@@ -73,6 +81,7 @@ namespace {
     while (tokenizer.HasMore()) {
       current.clear();
       size_t cursor = tokenizer.GetCursor();
+      uint lineNumber = tokenizer.GetLine();
       String line = tokenizer.ReadLine();
       if (line.containsOnly(kWhitespace))
         continue;
@@ -86,8 +95,10 @@ namespace {
       /* Parse the current line. */ {
         StringList list = StringList_ParseLine(line);
         StringListList* l = (StringListList*)list.t;
-        for (size_t i = 0; i < l->elements.size(); ++i)
+        for (size_t i = 0; i < l->elements.size(); ++i) {
+          SetLine(l->elements[i], lineNumber);
           current.push(l->elements[i]);
+        }
       }
 
       /* Parse inner block. */ {
@@ -106,8 +117,11 @@ namespace {
 
       if (current.size() == 1 && current[0]->IsAtom())
         elements.push(current[0]);
-      else
-        elements.push(new StringListList(current));
+      else {
+        StringList statement = new StringListList(current);
+        statement->line = lineNumber;
+        elements.push(statement);
+      }
     }
     return new StringListList(elements);
   }
@@ -116,6 +130,19 @@ namespace {
 StringList StringList_Create(String const& source) {
   Tokenizer tokenizer(source);
   return StringList_ParseBlock(tokenizer, 0);
+}
+
+uint StringList_GetLine(StringList const& list) {
+  if (!list)
+    return 0;
+  if (list->line || list->IsAtom())
+    return list->line;
+  for (size_t i = 0; i < list->GetSize(); ++i) {
+    uint line = StringList_GetLine(list->Get(i));
+    if (line)
+      return line;
+  }
+  return 0;
 }
 
 StringList StringList_Load(Location const& location) {

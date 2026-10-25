@@ -10,6 +10,11 @@
 struct StringListT : public RefCounted {
   BASE_TYPE(StringListT)
 
+  /* Source line this node came from (1-based), or 0 if unknown. */
+  uint line;
+
+  StringListT() : line(0) {}
+
   virtual StringList Clone() const = 0;
 
   virtual StringList Get(size_t index) const {
@@ -93,6 +98,8 @@ AutoClassDerived(StringListList, StringListT,
 };
 
 LT_API StringList StringList_Create(String const& data);
+/* The node's source line, falling back to its first descendant's. */
+LT_API uint StringList_GetLine(StringList const& list);
 LT_API StringList StringList_Load(Location const& location);
 LT_API void StringList_Print(StringList const& list);
 

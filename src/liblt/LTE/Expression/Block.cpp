@@ -3,12 +3,38 @@
 #include "LTE/AutoClass.h"
 #include "LTE/Environment.h"
 #include "LTE/Pool.h"
+#include "LTE/Script.h"
 #include "LTE/StringList.h"
 #include "LTE/Vector.h"
 
 #include "LTE/Debug.h"
 
+#include <iostream>
+
 namespace {
+  bool IsComment(StringList const& statement) {
+    return !statement->IsAtom()
+        && statement->GetSize()
+        && statement->Get(0)->IsAtom()
+        && statement->Get(0)->GetValue() == "#";
+  }
+
+  /* Statements that legitimately compile to nothing: comments, declarations
+     (which register themselves), and statements with a commented-out body. */
+  bool IsIntentionallyEmpty(StringList const& statement) {
+    if (statement->IsAtom() || !statement->GetSize())
+      return false;
+    if (IsComment(statement))
+      return true;
+    String const& head = statement->Get(0)->GetValue();
+    if (head == "function" || head == "type")
+      return true;
+    for (size_t i = 1; i < statement->GetSize(); ++i)
+      if (IsComment(statement->Get(i)))
+        return true;
+    return false;
+  }
+
   AutoClassDerived(ExpressionBlock, ExpressionT,
     Vector<Expression>, expressions,
     Array<Type>, types,
@@ -101,9 +127,26 @@ namespace LTE {
     Vector<String> localNames;
 
     for (size_t i = startIndex; i < list->GetSize(); ++i) {
-      Expression e = Expression_Compile(list->Get(i), env, &localNames);
+      StringList const& statement = list->Get(i);
+
+      /* Report each failing statement on its own, rather than only the first
+         failure in the whole function. (Not during the detailed re-compile
+         of an already-reported failure, which would repeat everything.) */
+      bool report = !env.detail;
+      bool hadErrors = env.hasErrors;
+      int errors = env.errors;
+      if (report)
+        env.hasErrors = false;
+      Expression e = Expression_Compile(statement, env, &localNames);
+      env.hasErrors = hadErrors || env.hasErrors;
+
       if (e)
         expressions.push(e);
+      else if (report && env.errors == errors && !IsIntentionallyEmpty(statement) && env.script)
+        std::cout << "'" << env.script->name << "' line "
+                  << StringList_GetLine(statement)
+                  << " -- statement did not compile and was dropped: "
+                  << statement->GetString() << std::endl;
     }
 
     Vector<Type> locals;

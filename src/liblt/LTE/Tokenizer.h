@@ -26,6 +26,15 @@ namespace LTE {
       return cursor;
     }
 
+    /* 1-based line number of the cursor. */
+    uint GetLine() const {
+      uint line = 1;
+      for (size_t i = 0; i < cursor && i < data.size(); ++i)
+        if (data[i] == '\n')
+          line++;
+      return line;
+    }
+
     char Peek() const {
       return data[cursor];
     }
@@ -124,10 +133,8 @@ namespace LTE {
           escaped = false;
 
         if (!literal) {
-          if (ignore.contains(c)) {
-            cursor++;
+          if (ignore.contains(c))
             continue;
-          }
 
           if (scopeOpen.contains(c)) {
             emit = scope > 0;

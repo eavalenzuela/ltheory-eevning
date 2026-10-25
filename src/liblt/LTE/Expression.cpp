@@ -18,7 +18,30 @@ namespace LTE {
     Evaluate(returnValue, env);
   }
 
+  Expression Expression_CompileImpl(
+    StringList const& list,
+    CompileEnvironment& env,
+    Vector<String>* locals);
+
   Expression Expression_Compile(
+    StringList const& list,
+    CompileEnvironment& env,
+    Vector<String>* locals)
+  {
+    /* In detail mode (diagnosing a failure), compile each sub-expression
+       quietly first, so only the attempts of parts that actually fail are
+       logged, not every alternative tried on the way to a success. */
+    if (env.detail) {
+      env.detail = false;
+      Expression e = Expression_CompileImpl(list, env, locals);
+      env.detail = true;
+      if (e)
+        return e;
+    }
+    return Expression_CompileImpl(list, env, locals);
+  }
+
+  Expression Expression_CompileImpl(
     StringList const& list,
     CompileEnvironment& env,
     Vector<String>* locals)
@@ -140,8 +163,10 @@ namespace LTE {
 
     if (!env.hasErrors) {
       env.hasErrors = true;
+      env.errors++;
       env.detail = true;
-      std::cout << "'" << env.script->name << "' -- failed to compile ";
+      std::cout << "'" << env.script->name << "' line "
+                << StringList_GetLine(list) << " -- failed to compile ";
       StringList_Print(list);
       std::cout << std::endl;
       Expression_Compile(list, env, locals);
