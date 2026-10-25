@@ -216,6 +216,8 @@ Leave behind:
 
 ## 6. Suggested first milestone: fly → mine → dock → sell → buy → fit
 
+> **Status (Oct 2026): done on branch `milestone-1`, except ship purchase (deferred: switching ships means rebinding the HUD and flight controls).** Mining needed two engine fixes: asteroid collision meshes only existed once drawn, and per-frame yields truncated to zero. The work also fixed a market escrow bug that created credits, and gave weapons a value. It adds LTSL line-numbered errors, a station panel, a fitting window, ore demand, pirates and respawn. `App/test_gameplay.lts` checks the loop end to end. The fixed-timestep port is still open.
+
 Mostly from 04 §8a, 05 §9 and 07 §8a:
 
 1. **Prerequisites (C++, small):**
