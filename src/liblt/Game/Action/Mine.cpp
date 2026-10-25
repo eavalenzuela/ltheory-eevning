@@ -31,7 +31,12 @@ namespace {
       rate *= (float)mine->quantity;
       rate *= 0.25f;
 
-      Quantity quantity = Min(mine->quantity, (Quantity)rate);
+      /* Round stochastically: truncating made the usual small per-frame
+         yields (well under one unit) always zero, so nothing was ever mined. */
+      Quantity quantity = (Quantity)rate;
+      if (Rand() < rate - (float)quantity)
+        quantity++;
+      quantity = Min(mine->quantity, quantity);
       root->AddItem(mine->item, quantity);
       mine->quantity -= quantity;
 

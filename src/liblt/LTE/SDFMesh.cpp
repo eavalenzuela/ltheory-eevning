@@ -129,8 +129,13 @@ namespace {
     }
 
     Mesh GetCollisionMesh() const {
-      Mesh const& m = collisionLevel.mesh;
-      return m ? m->Clone() : nullptr;
+      /* Raycasts (e.g. mining beams) need collision geometry whether or not
+         this mesh has been drawn yet, so load on demand here too. Otherwise
+         rays pass straight through asteroids nobody has looked at. */
+      Mutable(this)->Load();
+      while (!collisionLevel.mesh)
+        Scheduler_Get()->Flush();
+      return collisionLevel.mesh->Clone();
     }
 
     short GetVersion() const {

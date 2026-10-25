@@ -107,3 +107,22 @@ FreeFunction(bool, SocketsIterator_HasMore,
     iterator.object->GetSockets() &&
     iterator.index < iterator.object->GetSockets()->instances.size();
 } FunctionAlias(SocketsIterator_HasMore, HasMore);
+
+FreeFunction(Item, Object_Unplug,
+  "Remove 'module' from whichever of 'object's sockets holds it, and return its item type (null if it wasn't plugged into 'object')",
+  Object, object,
+  Object, module)
+{
+  Pointer<ComponentSockets> sockets = object->GetSockets();
+  if (!sockets || !module)
+    return nullptr;
+
+  for (uint i = 0; i < sockets->instances.size(); ++i) {
+    if (sockets->instances[i] == module) {
+      Item type = module->GetSupertype();
+      sockets->Unplug(object, i);
+      return type;
+    }
+  }
+  return nullptr;
+} FunctionAlias(Object_Unplug, Unplug);

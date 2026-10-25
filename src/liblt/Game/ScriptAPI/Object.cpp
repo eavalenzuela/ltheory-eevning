@@ -191,6 +191,24 @@ VoidFreeFunction(Object_Update,
   object->Update(state);
 } FunctionAlias(Object_Update, Update);
 
+FreeFunction(Position, Object_GetCenter,
+  "Return the world-space center of 'object's bounding box",
+  Object, object)
+{
+  return object->GetCenter();
+} FunctionAlias(Object_GetCenter, GetCenter);
+
+FreeFunction(bool, Object_Undock,
+  "Undock 'object' from the station it is docked in, and return whether it was docked",
+  Object, object)
+{
+  ObjectT* container = object->GetContainer();
+  if (!container || !container->GetDockable())
+    return false;
+  container->Undock(object);
+  return true;
+} FunctionAlias(Object_Undock, Undock);
+
 VoidFreeFunction(Object_Send,
   "Send 'message' to 'object'",
   Object, object,
