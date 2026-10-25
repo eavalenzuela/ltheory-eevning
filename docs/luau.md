@@ -75,12 +75,41 @@ Both are untyped for the checker. Port the LTSL helpers a module depends on to r
 
 LTSL creates a Luau widget with `Luau_CreateWidget "@lt/Path" arg`, which calls the module's `Create(arg)`.
 
-`Widget/HUD/Station.luau` is the example: the station panel, created by the LTSL HUD.
+For example, the LTSL apps `hud`, `handling` and `war` create the Luau HUD this way (`Luau_CreateWidget "@lt/Widget/HUD" player`).
+
+## Object scripts
+
+`object:AddScript(script)` attaches a Luau table to an object.
+- `script:Update(object)` runs every frame; returning `false` removes the script.
+- `script:Receive(object, message)` gets the object's messages.
+
+`Widget/Handling.luau` uses this for the ship's flight controls and chase camera.
+
+## Scripts the engine calls
+
+The engine calls a few script functions by path. Examples: `Icons:Person`, `Item/ShipType/Generate:Main` (hull generation), `Object/WarpNode:Init` and `Object/System:Init`.
+- These calls go through `Script_Call<R>("Path:Function", args...)` (`src/liblt/Luau/ScriptCall.h`).
+- It calls the module's function if `Path.luau` exists, and otherwise the LTSL function in `Path.lts`. The choice is cached per path.
+- All of these hooks now have Luau versions. To move another one, write the `.luau` module; the C++ call site doesn't change.
+
+Engine values that take a script object also take a Luau table:
+- `Object_Custom(table)` attaches the table as an object script.
+- `Warp_Custom(table)` makes a warp from `table:GetDelta(point)`, which returns a vector.
+
+**Reproducing LTSL's numbers:** generators such as the hull and system scripts must give the same result for the same seed. LTSL wraps ints silently (overflow, and int to uint conversion), but the Luau binder rejects out-of-range values. `Int.luau` has three helpers for these ports:
+- `Int.Signed` and `Int.Unsigned` wrap a value like the C++ conversion.
+- `Int.Float32` rounds like LTSL's single-precision `Float`, for arithmetic that is truncated to an integer afterwards.
+- Keep the random draws in the LTSL order, including draws whose results are unused.
+
+## Messages
+
+`Widget/Messages.luau` defines the message tables (`Messages.AddWidget(w)`, `Messages.Refresh()`, ...).
+- `Messages.Is(message, "AddWidget")` matches either a Luau message or the LTSL `MessageAddWidget` type, so Luau receivers work with unported LTSL senders.
+- Query messages (`Messages.GetLabel`, `Messages.GetObject`) are answered by setting a field on the message.
 
 ## Known gaps
 
-- **Engine call overhead:** an engine call costs about 0.19 µs, versus 0.06 µs in LTSL. This comes from method lookup and overload resolution on every call. Pure script code is about 10x faster than LTSL.
-  - Planned fixes: userdata tags instead of metatable checks, the `__namecall` fast path, and caching resolved overloads.
+- **Engine call cost:** method calls cost about 0.05 µs, on par with LTSL; operators on engine values cost about 0.13 µs, because each allocates its result. Pure script code is about 10x faster than LTSL. `bin/launch luau_bench` measures each kind of call.
 - **Vector precision:** `vector` is single precision, so positions lose precision far from the origin (about 3 cm at 300 km).
 - **Untyped LTSL boundary:** `ltsl()` / `ltsl_new()` values are untyped.
 - **No sandboxing:** scripts are not sandboxed (not needed; they are part of the game).

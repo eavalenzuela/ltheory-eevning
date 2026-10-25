@@ -24,6 +24,7 @@
 #include "Component/Tasks.h"
 
 #include "LTE/Math.h"
+#include "Luau/ScriptCall.h"
 
 const uint kTrailLength = 64;
 
@@ -89,6 +90,6 @@ DERIVED_IMPLEMENT(Ship)
 DefineFunction(Object_Ship) {
   Reference<Ship> self = new Ship;
   self->SetSupertype(args.type);
-  ScriptFunction_Load("Object/Ship:Init")->VoidCall(0, DataRef((Object)self));
+  Script_CallVoid("Object/Ship:Init", (Object)self);
   return self;
 }

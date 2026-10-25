@@ -17,6 +17,7 @@
 #include "Game/Attribute/Value.h"
 
 #include "LTE/Script.h"
+#include "Luau/ScriptCall.h"
 
 typedef
     Attribute_Capability
@@ -53,7 +54,7 @@ DERIVED_IMPLEMENT(TransferUnitType)
 DefineFunction(Item_TransferUnitType) {
   static Renderable renderable;
   if (!renderable)
-    ScriptFunction_Load("Item/TransferUnitType:Generate")->Call(renderable);
+    renderable = Script_Call<Renderable>("Item/TransferUnitType:Generate");
 
   Mass mass = Constant_ValueToMass(args.value, args.compactness);
   float powerDrain = Constant_ValueToPowerDrain(args.value, args.efficiency);

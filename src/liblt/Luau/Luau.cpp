@@ -4,6 +4,7 @@
 #include "luacode.h"
 
 #include "Luau.h"
+#include "ScriptCall.h"
 
 #include "LTE/AutoClass.h"
 #include "LTE/Data.h"
@@ -14,6 +15,7 @@
 #include "LTE/Map.h"
 #include "LTE/Type.h"
 #include "LTE/V3.h"
+#include "LTE/V4.h"
 #include "LTE/Vector.h"
 
 #include "UI/Widget.h"
@@ -28,6 +30,7 @@
 #include <limits>
 #include <list>
 #include <map>
+#include <unordered_map>
 #include <set>
 #include <sstream>
 #include <string>
@@ -42,7 +45,9 @@
 
 namespace {
   lua_State* gL = nullptr;
-  int gBoxMeta = 0;
+  /* Boxes are tagged userdata: identifying one is a tag compare, and the
+     tag carries their metatable and destructor. */
+  const int kBoxTag = 1;
 
   /* A Luau value (a table, a function) carried through the engine as Data,
      e.g. a script-defined widget message passed along with SendUp. It comes
@@ -73,6 +78,8 @@ namespace {
     Kind_Int,
     Kind_Real,
     Kind_String,
+    Kind_Vec2F,
+    Kind_Vec2D,
     Kind_Vec3F,
     Kind_Vec3D,
     Kind_Data,
@@ -88,8 +95,8 @@ namespace {
   /* Doubles hold every integer up to 2^53 exactly. */
   const double kMaxExactInt = 9007199254740992.0;
 
-  std::map<TypeT*, TypeInfo>& GetKinds() {
-    static std::map<TypeT*, TypeInfo> kinds;
+  std::unordered_map<TypeT*, TypeInfo>& GetKinds() {
+    static std::unordered_map<TypeT*, TypeInfo> kinds;
     return kinds;
   }
 
@@ -120,6 +127,8 @@ namespace {
     AddKind<float>(Kind_Real);
     AddKind<double>(Kind_Real);
     AddKind<String>(Kind_String);
+    AddKind<V2F>(Kind_Vec2F);
+    AddKind<V2D>(Kind_Vec2D);
     AddKind<V3F>(Kind_Vec3F);
     AddKind<V3D>(Kind_Vec3D);
     AddKind<Data>(Kind_Data);
@@ -128,7 +137,7 @@ namespace {
   }
 
   TypeInfo GetInfo(TypeT* t) {
-    std::map<TypeT*, TypeInfo>::const_iterator it = GetKinds().find(t);
+    std::unordered_map<TypeT*, TypeInfo>::const_iterator it = GetKinds().find(t);
     if (it != GetKinds().end())
       return it->second;
     TypeInfo box = { Kind_Box, false, 0 };
@@ -236,24 +245,17 @@ namespace {
   void PushBox(lua_State* L, TypeT* t, void const* src) {
     if (!t->construct || !t->assign)
       luaL_error(L, "engine type %s cannot be held by a script", TypeName(t).c_str());
-    void* ud = lua_newuserdatadtor(L, kBoxHeader + t->size, BoxDestructor);
+    void* ud = lua_newuserdatataggedwithmetatable(L, kBoxHeader + t->size, kBoxTag);
     Box* box = (Box*)ud;
     box->type = nullptr;
     t->Construct(BoxData(box));
     box->type = t;
     if (src)
       t->Assign(src, BoxData(box));
-    lua_getref(L, gBoxMeta);
-    lua_setmetatable(L, -2);
   }
 
   Box* ToBox(lua_State* L, int idx) {
-    if (lua_type(L, idx) != LUA_TUSERDATA || !lua_getmetatable(L, idx))
-      return nullptr;
-    lua_getref(L, gBoxMeta);
-    bool ours = lua_rawequal(L, -1, -2);
-    lua_pop(L, 2);
-    return ours ? (Box*)lua_touserdata(L, idx) : nullptr;
+    return (Box*)lua_touserdatatagged(L, idx, kBoxTag);
   }
 
   /* ------------------------------------------------------------------ */
@@ -277,6 +279,16 @@ namespace {
       case Kind_String: {
         String const& s = *(String const*)p;
         lua_pushlstring(L, s.data(), s.size());
+        return 1;
+      }
+      case Kind_Vec2F: {
+        V2F const& v = *(V2F const*)p;
+        lua_pushvector(L, v.x, v.y, 0);
+        return 1;
+      }
+      case Kind_Vec2D: {
+        V2D const& v = *(V2D const*)p;
+        lua_pushvector(L, (float)v.x, (float)v.y, 0);
         return 1;
       }
       case Kind_Vec3F: {
@@ -371,8 +383,7 @@ namespace {
   }
 
   /* How well the script value at 'idx' fits engine type 't'. */
-  int Match(lua_State* L, int idx, TypeT* t, char const** why = nullptr) {
-    TypeInfo info = GetInfo(t);
+  int Match(lua_State* L, int idx, TypeT* t, TypeInfo const& info, char const** why = nullptr) {
     int lt = lua_type(L, idx);
     switch (info.kind) {
       case Kind_Bool:
@@ -389,6 +400,12 @@ namespace {
         return lt == LUA_TNUMBER ? Match_Exact : Match_None;
       case Kind_String:
         return lt == LUA_TSTRING ? Match_Exact : Match_None;
+      case Kind_Vec2F:
+      case Kind_Vec2D:
+        /* A number is a uniform 2D value, as in LTSL ("MinSize 36"). */
+        if (lt == LUA_TVECTOR)
+          return Match_Exact;
+        return lt == LUA_TNUMBER ? Match_Convert : Match_None;
       case Kind_Vec3F:
       case Kind_Vec3D:
         return lt == LUA_TVECTOR ? Match_Exact : Match_None;
@@ -421,10 +438,13 @@ namespace {
     return Match_None;
   }
 
+  int Match(lua_State* L, int idx, TypeT* t, char const** why = nullptr) {
+    return Match(L, idx, t, GetInfo(t), why);
+  }
+
   /* Write the script value at 'idx' into 'out', a constructed 't'. Only
      called after Match accepted it. */
-  void Read(lua_State* L, int idx, TypeT* t, void* out) {
-    TypeInfo info = GetInfo(t);
+  void Read(lua_State* L, int idx, TypeT* t, TypeInfo const& info, void* out) {
     switch (info.kind) {
       case Kind_Bool:
       case Kind_Int:
@@ -436,6 +456,21 @@ namespace {
       case Kind_Vec3D: {
         float const* v = lua_tovector(L, idx);
         *(V3D*)out = V3D(v[0], v[1], v[2]);
+        return;
+      }
+      case Kind_Vec2F:
+      case Kind_Vec2D: {
+        double x, y;
+        if (lua_type(L, idx) == LUA_TVECTOR) {
+          float const* v = lua_tovector(L, idx);
+          x = v[0];
+          y = v[1];
+        } else
+          x = y = lua_tonumber(L, idx);
+        if (info.kind == Kind_Vec2F)
+          *(V2F*)out = V2F((float)x, (float)y);
+        else
+          *(V2D*)out = V2D(x, y);
         return;
       }
       case Kind_Data: {
@@ -504,6 +539,10 @@ namespace {
     }
   }
 
+  void Read(lua_State* L, int idx, TypeT* t, void* out) {
+    Read(L, idx, t, GetInfo(t), out);
+  }
+
   String DescribeArg(lua_State* L, int idx) {
     Box* box = ToBox(L, idx);
     if (box)
@@ -519,15 +558,52 @@ namespace {
   /* ------------------------------------------------------------------ */
   /* Calls                                                               */
 
+  /* One overload with its parameter kinds worked out in advance. */
+  /* The most parameters a bound function can have (DeclareFunction's
+     limit). */
+  const uint kMaxParams = 24;
+
+  struct Overload {
+    FunctionT* fn;
+    uint paramCount;
+    bool selfFirst;
+    TypeT* types[kMaxParams];
+    TypeInfo infos[kMaxParams];
+    TypeT* returnType;
+    TypeInfo returnInfo;
+  };
+
   /* The overloads one script-visible name can resolve to. 'owner' is the
      box type for methods, whose member functions take it as 'self'. */
   struct Candidates {
     String name;
     TypeT* owner;
     Vector<Function> functions;
+    std::vector<Overload> overloads;
     int closureRef;
 
     Candidates() : owner(nullptr), closureRef(0) {}
+
+    void Prepare() {
+      overloads.clear();
+      for (size_t i = 0; i < functions.size(); ++i) {
+        FunctionT* fn = functions[i];
+        if (fn->paramCount > kMaxParams)
+          continue;
+        Overload o;
+        o.fn = fn;
+        o.paramCount = fn->paramCount;
+        o.selfFirst = fn->paramCount > 0 && !fn->params[0].type;
+        for (uint p = 0; p < fn->paramCount; ++p) {
+          o.types[p] = fn->params[p].type;
+          if (o.types[p])
+            o.infos[p] = GetInfo(o.types[p]);
+        }
+        o.returnType = fn->returnType;
+        o.returnInfo = GetInfo(fn->returnType);
+        overloads.push_back(o);
+      }
+    }
   };
 
   /* Candidates live for the whole run; the list keeps addresses stable. */
@@ -540,17 +616,17 @@ namespace {
     return i == 0 && !fn->params[0].type;
   }
 
-  int MatchCall(lua_State* L, Candidates const& c, FunctionT const* fn, int argc) {
-    if ((int)fn->paramCount != argc)
+  int MatchCall(lua_State* L, Candidates const& c, Overload const& o, int argc) {
+    if ((int)o.paramCount != argc)
       return Match_None;
     int score = 0;
-    for (uint i = 0; i < fn->paramCount; ++i) {
+    for (uint i = 0; i < o.paramCount; ++i) {
       int m;
-      if (IsSelfParam(fn, i)) {
+      if (i == 0 && o.selfFirst) {
         Box* box = ToBox(L, 1);
         m = (box && box->type == c.owner) ? Match_Exact : Match_None;
       } else
-        m = Match(L, (int)i + 1, fn->params[i].type);
+        m = Match(L, (int)i + 1, o.types[i], o.infos[i]);
       if (m == Match_None)
         return Match_None;
       score += m;
@@ -558,14 +634,16 @@ namespace {
     return score;
   }
 
-  FunctionT* Resolve(lua_State* L, Candidates const& c, int argc) {
-    FunctionT* best = nullptr;
+  Overload const* Resolve(lua_State* L, Candidates const& c, int argc) {
+    Overload const* best = nullptr;
     int bestScore = 0;
-    for (size_t i = 0; i < c.functions.size(); ++i) {
-      FunctionT* fn = c.functions[i];
-      int score = MatchCall(L, c, fn, argc);
+    for (size_t i = 0; i < c.overloads.size(); ++i) {
+      Overload const& o = c.overloads[i];
+      int score = MatchCall(L, c, o, argc);
+      if (score == Match_Exact)
+        return &o;
       if (score != Match_None && (!best || score < bestScore)) {
-        best = fn;
+        best = &o;
         bestScore = score;
       }
     }
@@ -610,70 +688,100 @@ namespace {
     }
 
     String message = s.str();
+    if (message.empty())
+      message = "no overload of " + c.name + " could be called with these arguments";
     luaL_where(L, 1);
     lua_pushlstring(L, message.data(), message.size());
     lua_concat(L, 2);
     lua_error(L);
   }
 
-  /* Temporaries for one call, released even when a script error unwinds. */
+  /* Temporaries for one call, in a stack buffer when they fit, released
+     even when a script error unwinds. */
   struct CallFrame {
-    std::vector<std::pair<TypeT*, void*> > owned;
+    struct Temp {
+      TypeT* type;
+      void* p;
+      bool heap;
+    };
+
+    alignas(16) char storage[512];
+    size_t used;
+    Temp temps[kMaxParams + 1];
+    uint count;
+
+    CallFrame() : used(0), count(0) {}
 
     void* Own(TypeT* t) {
-      void* p = t->Allocate();
-      owned.push_back(std::make_pair(t, p));
-      return p;
+      Temp& temp = temps[count++];
+      temp.type = t;
+      size_t align = t->alignment ? t->alignment : 1;
+      size_t offset = (used + align - 1) & ~(align - 1);
+      if (align <= 16 && offset + t->size <= sizeof(storage)) {
+        temp.p = storage + offset;
+        temp.heap = false;
+        used = offset + t->size;
+        t->Construct(temp.p);
+      } else {
+        temp.p = t->Allocate();
+        temp.heap = true;
+      }
+      return temp.p;
     }
 
     ~CallFrame() {
-      for (size_t i = owned.size(); i-- > 0;)
-        owned[i].first->Deallocate(owned[i].second);
+      for (uint i = count; i-- > 0;) {
+        if (temps[i].heap)
+          temps[i].type->Deallocate(temps[i].p);
+        else
+          temps[i].type->Destruct(temps[i].p);
+      }
     }
   };
 
-  int Invoke(lua_State* L, Candidates const& c, FunctionT* fn) {
+  int Invoke(lua_State* L, Overload const& o) {
     CallFrame frame;
-    std::vector<void*> argv(fn->paramCount + 1, nullptr);
+    void* argv[kMaxParams + 1];
 
-    for (uint i = 0; i < fn->paramCount; ++i) {
+    for (uint i = 0; i < o.paramCount; ++i) {
       int idx = (int)i + 1;
-      if (IsSelfParam(fn, i)) {
-        argv[i] = BoxData(ToBox(L, idx));
+      Box* box = ToBox(L, idx);
+      if (i == 0 && o.selfFirst) {
+        argv[i] = BoxData(box);
         continue;
       }
 
       /* An exact box is passed in place, so functions that modify their
          argument (Vector Append, ...) modify the script's value. */
-      TypeT* t = fn->params[i].type;
-      Box* box = ToBox(L, idx);
+      TypeT* t = o.types[i];
       if (box && box->type == t)
         argv[i] = BoxData(box);
       else {
         argv[i] = frame.Own(t);
-        Read(L, idx, t, argv[i]);
+        Read(L, idx, t, o.infos[i], argv[i]);
       }
     }
 
-    TypeT* rt = fn->returnType;
-    if (!rt || GetInfo(rt).kind == Kind_Void) {
-      fn->call(argv.data(), nullptr);
+    if (o.returnInfo.kind == Kind_Void) {
+      o.fn->call(argv, nullptr);
       return 0;
     }
 
-    void* result = frame.Own(rt);
-    fn->call(argv.data(), result);
-    return Push(L, rt, result);
+    void* result = frame.Own(o.returnType);
+    o.fn->call(argv, result);
+    return Push(L, o.returnType, result);
+  }
+
+  int Call(lua_State* L, Candidates const& c) {
+    int argc = lua_gettop(L);
+    Overload const* o = Resolve(L, c, argc);
+    if (!o)
+      NoOverload(L, c, argc);
+    return Invoke(L, *o);
   }
 
   int Dispatch(lua_State* L) {
-    Candidates const& c =
-      *(Candidates const*)lua_touserdata(L, lua_upvalueindex(1));
-    int argc = lua_gettop(L);
-    FunctionT* fn = Resolve(L, c, argc);
-    if (!fn)
-      NoOverload(L, c, argc);
-    return Invoke(L, c, fn);
+    return Call(L, *(Candidates const*)lua_touserdata(L, lua_upvalueindex(1)));
   }
 
   void PushDispatcher(lua_State* L, Candidates& c) {
@@ -717,6 +825,7 @@ namespace {
     if (c.functions.size()) {
       GetCandidateStore().push_back(c);
       result = &GetCandidateStore().back();
+      result->Prepare();
     }
     cache[name] = result;
     return result;
@@ -755,6 +864,7 @@ namespace {
     if (c.functions.size()) {
       GetCandidateStore().push_back(c);
       result = &GetCandidateStore().back();
+      result->Prepare();
     }
     cache[key] = result;
     return result;
@@ -783,38 +893,125 @@ namespace {
     return false;
   }
 
-  int Box_Index(lua_State* L) {
-    Box* box = ToBox(L, 1);
-    char const* key = luaL_checkstring(L, 2);
+  /* What a key names on a box type, resolved once per (type, atom). Field
+     offsets are cached only for fields inside the struct (or its pointee);
+     container mappers that point into heap storage go through reflection
+     every time. */
+  struct Member {
+    enum Kind { Unresolved, None, Field, PointeeField, DynamicField, Method };
+    Kind kind;
+    size_t offset;
+    TypeT* type;
+    Candidates* method;
+
+    Member() : kind(Unresolved), offset(0), type(nullptr), method(nullptr) {}
+  };
+
+  Member const& ResolveMember(Box* box, char const* key, int atom) {
+    static std::unordered_map<TypeT*, std::vector<Member> > tables;
+    static Member uncached;
+
+    /* Through a null reference the pointee's fields are invisible, so a
+       resolution made then must not be cached. */
+    bool nullRef = IsNullable(box->type) && !*(void**)BoxData(box);
+
+    Member* member = &uncached;
+    if (atom >= 0 && !nullRef) {
+      std::vector<Member>& table = tables[box->type];
+      if ((size_t)atom >= table.size())
+        table.resize(atom + 64);
+      member = &table[atom];
+      if (member->kind != Member::Unresolved)
+        return *member;
+    }
+    *member = Member();
 
     FieldType field;
-    if (FindBoxField(box, key, field))
-      return Push(L, field.type, field.address) ? 1 : (lua_pushnil(L), 1);
+    if (FindBoxField(box, key, field)) {
+      char* data = (char*)BoxData(box);
+      char* address = (char*)field.address;
+      TypeT* t = box->type;
+      member->type = field.type.t;
+      if (address >= data && address + field.type->size <= data + t->size) {
+        member->kind = Member::Field;
+        member->offset = address - data;
+      } else if (IsNullable(t) && *(char**)data && t->GetPointeeType()) {
+        char* target = *(char**)data;
+        size_t size = t->GetPointeeType()->size;
+        if (address >= target && address + field.type->size <= target + size) {
+          member->kind = Member::PointeeField;
+          member->offset = address - target;
+        } else
+          member->kind = Member::DynamicField;
+      } else
+        member->kind = Member::DynamicField;
+      return *member;
+    }
 
-    Candidates* c = MethodCandidates(box->type, key);
-    if (c) {
-      PushDispatcher(L, *c);
+    member->method = MethodCandidates(box->type, key);
+    member->kind = member->method ? Member::Method : Member::None;
+    return *member;
+  }
+
+  /* The address of the field 'member' names in 'box', or null. */
+  void* MemberAddress(Box* box, Member const& member, char const* key) {
+    char* data = (char*)BoxData(box);
+    switch (member.kind) {
+      case Member::Field:
+        return data + member.offset;
+      case Member::PointeeField: {
+        char* target = *(char**)data;
+        return target ? target + member.offset : nullptr;
+      }
+      case Member::DynamicField: {
+        FieldType field;
+        return FindBoxField(box, key, field) ? field.address : nullptr;
+      }
+      default:
+        return nullptr;
+    }
+  }
+
+  int Box_Index(lua_State* L) {
+    Box* box = ToBox(L, 1);
+    int atom = -1;
+    char const* key = lua_tostringatom(L, 2, &atom);
+    if (!key)
+      luaL_error(L, "%s fields are named by strings", TypeName(box->type).c_str());
+
+    Member const& member = ResolveMember(box, key, atom);
+    if (member.kind == Member::Method) {
+      PushDispatcher(L, *member.method);
       return 1;
     }
 
-    luaL_error(L, "%s has no field or method '%s'", TypeName(box->type).c_str(), key);
-    return 0;
+    void* address = MemberAddress(box, member, key);
+    if (!address) {
+      if (member.kind == Member::PointeeField)
+        luaL_error(L, "field '%s' of a null %s", key, TypeName(box->type).c_str());
+      luaL_error(L, "%s has no field or method '%s'", TypeName(box->type).c_str(), key);
+    }
+    return Push(L, member.type, address) ? 1 : (lua_pushnil(L), 1);
   }
 
   int Box_NewIndex(lua_State* L) {
     Box* box = ToBox(L, 1);
-    char const* key = luaL_checkstring(L, 2);
+    int atom = -1;
+    char const* key = lua_tostringatom(L, 2, &atom);
+    if (!key)
+      luaL_error(L, "%s fields are named by strings", TypeName(box->type).c_str());
 
-    FieldType field;
-    if (!FindBoxField(box, key, field))
+    Member const& member = ResolveMember(box, key, atom);
+    void* address = MemberAddress(box, member, key);
+    if (!address)
       luaL_error(L, "%s has no field '%s'", TypeName(box->type).c_str(), key);
 
     char const* why = nullptr;
-    if (Match(L, 3, field.type, &why) == Match_None)
+    if (Match(L, 3, member.type, &why) == Match_None)
       luaL_error(L, "field '%s' of %s: expected %s, got %s%s%s",
-        key, TypeName(box->type).c_str(), TypeName(field.type).c_str(),
+        key, TypeName(box->type).c_str(), TypeName(member.type).c_str(),
         DescribeArg(L, 3).c_str(), why ? " - " : "", why ? why : "");
-    Read(L, 3, field.type, field.address);
+    Read(L, 3, member.type, address);
     return 0;
   }
 
@@ -836,12 +1033,12 @@ namespace {
     }
 
     Candidates* c = FreeCandidates("==");
-    FunctionT* fn = c ? Resolve(L, *c, 2) : nullptr;
-    if (!fn) {
+    Overload const* o = c ? Resolve(L, *c, 2) : nullptr;
+    if (!o) {
       lua_pushboolean(L, false);
       return 1;
     }
-    return Invoke(L, *c, fn);
+    return Invoke(L, *o);
   }
 
   int Operator(lua_State* L, char const* name, int argc) {
@@ -852,10 +1049,77 @@ namespace {
       none.name = name;
       NoOverload(L, none, argc);
     }
-    FunctionT* fn = Resolve(L, *c, argc);
-    if (!fn)
-      NoOverload(L, *c, argc);
-    return Invoke(L, *c, fn);
+    return Call(L, *c);
+  }
+
+  /* obj:Method(...) goes through __namecall, which gets the method name as
+     an interned atom: methods are cached per box type in a vector indexed
+     by atom, so a call costs an array lookup instead of a string-keyed one
+     plus fetching a closure. */
+  std::unordered_map<std::string, int16_t>& GetAtoms() {
+    static std::unordered_map<std::string, int16_t> atoms;
+    return atoms;
+  }
+
+  std::vector<String>& GetAtomNames() {
+    static std::vector<String> names;
+    return names;
+  }
+
+  int16_t UserAtom(lua_State*, char const* s, size_t len) {
+    std::string name(s, len);
+    std::unordered_map<std::string, int16_t>::const_iterator it = GetAtoms().find(name);
+    if (it != GetAtoms().end())
+      return it->second;
+    if (GetAtomNames().size() >= 32000)
+      return -1;
+    int16_t atom = (int16_t)GetAtomNames().size();
+    GetAtoms()[name] = atom;
+    GetAtomNames().push_back(name);
+    return atom;
+  }
+
+  /* Per box type: atom -> candidates (null: no such method), resolved on
+     first use. */
+  struct MethodTable {
+    std::vector<Candidates*> methods;
+    std::vector<bool> resolved;
+  };
+
+  Candidates* MethodByAtom(TypeT* t, int atom) {
+    static std::unordered_map<TypeT*, MethodTable> tables;
+    static TypeT* lastType = nullptr;
+    static MethodTable* lastTable = nullptr;
+
+    MethodTable* table = lastTable;
+    if (t != lastType) {
+      table = &tables[t];
+      lastType = t;
+      lastTable = table;
+    }
+    if ((size_t)atom >= table->methods.size()) {
+      table->methods.resize(GetAtomNames().size() + 64, nullptr);
+      table->resolved.resize(table->methods.size(), false);
+    }
+    if (!table->resolved[atom]) {
+      table->methods[atom] = MethodCandidates(t, GetAtomNames()[atom]);
+      table->resolved[atom] = true;
+    }
+    return table->methods[atom];
+  }
+
+  int Box_Namecall(lua_State* L) {
+    int atom = -1;
+    char const* name = lua_namecallatom(L, &atom);
+    Box* box = ToBox(L, 1);
+    if (!box || !name)
+      luaL_error(L, "bad method call");
+    Candidates* c = atom >= 0
+      ? MethodByAtom(box->type, atom)
+      : MethodCandidates(box->type, name);
+    if (!c)
+      luaL_error(L, "%s has no method '%s'", TypeName(box->type).c_str(), name);
+    return Call(L, *c);
   }
 
   int Box_Add(lua_State* L) { return Operator(L, "+", 2); }
@@ -890,10 +1154,12 @@ namespace {
     lua_setfield(L, -2, "__lt");
     lua_pushcfunction(L, Box_Le, "__le");
     lua_setfield(L, -2, "__le");
+    lua_pushcfunction(L, Box_Namecall, "__namecall");
+    lua_setfield(L, -2, "__namecall");
     lua_pushstring(L, "engine value");
     lua_setfield(L, -2, "__metatable");
-    gBoxMeta = lua_ref(L, -1);
-    lua_pop(L, 1);
+    lua_setuserdatametatable(L, kBoxTag);
+    lua_setuserdatadtor(L, kBoxTag, BoxDestructor);
   }
 
   /* ------------------------------------------------------------------ */
@@ -1122,6 +1388,7 @@ namespace {
   lua_State* CreateState() {
     InitKinds();
     lua_State* L = luaL_newstate();
+    lua_callbacks(L)->useratom = UserAtom;
     luaL_openlibs(L);
     lua_newtable(L);
     lua_setfield(L, LUA_REGISTRYINDEX, "_LT_MODULES");
@@ -1237,6 +1504,8 @@ namespace {
         case Kind_Int: return "int";
         case Kind_Real: return "number";
         case Kind_String: return "string";
+        case Kind_Vec2F:
+        case Kind_Vec2D:
         case Kind_Vec3F:
         case Kind_Vec3D: return "vector";
         case Kind_Data: return "any";
@@ -1247,6 +1516,9 @@ namespace {
 
     /* The type a script may pass for parameter type 't'. */
     String ParamType(TypeT* t) {
+      Kind kind = GetInfo(t).kind;
+      if (kind == Kind_Vec2F || kind == Kind_Vec2D)
+        return "vector | number";
       String scalar = ScalarName(t);
       if (!scalar.empty())
         return scalar;
@@ -1604,6 +1876,16 @@ namespace {
         out = lua_tostring(gL, -1);
       lua_pop(gL, 1);
     }
+
+    /* Returns a Vec4f: inner x, inner y, outer x, outer y. */
+    void GetPadding(Widget const& self, V4& out) {
+      if (!Call("GetPadding", self, nullptr, 1))
+        return;
+      Box* box = ToBox(gL, -1);
+      if (box && box->type == Type_Get<V4>().t)
+        out = *(V4*)BoxData(box);
+      lua_pop(gL, 1);
+    }
   };
 }
 
@@ -1644,6 +1926,144 @@ FreeFunction(Widget, Luau_CreateWidget,
     }
   }
   return result ? result : Widget_Create();
+}
+
+bool Luau_IsValue(Data const& value) {
+  return value.type == LuauValueType();
+}
+
+namespace {
+  /* Push script.method and script; false if there's no such method. */
+  bool PushScriptMethod(lua_State* L, Data const& script, char const* method) {
+    LuauValue const& value = *(LuauValue const*)script.data;
+    if (!value || value->state != L)
+      return false;
+    lua_getref(L, value->ref);
+    lua_getfield(L, -1, method);
+    if (!lua_isfunction(L, -1)) {
+      lua_pop(L, 2);
+      return false;
+    }
+    lua_insert(L, -2);
+    return true;
+  }
+}
+
+bool Luau_ObjectScriptUpdate(Data const& script, Data const& object) {
+  lua_State* L = gL;
+  if (!L || !PushScriptMethod(L, script, "Update"))
+    return false;
+  Push(L, Type_Get<Data>().t, &object);
+  if (!Luau_Call(2, 1))
+    return false;
+  bool alive = !(lua_type(L, -1) == LUA_TBOOLEAN && !lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  return alive;
+}
+
+bool Luau_CallMethodV3(Data const& value, char const* method, V3 const& arg, V3& result) {
+  lua_State* L = gL;
+  if (!L || !PushScriptMethod(L, value, method))
+    return false;
+  lua_pushvector(L, arg.x, arg.y, arg.z);
+  if (!Luau_Call(2, 1))
+    return false;
+  bool ok = lua_isvector(L, -1);
+  if (ok) {
+    float const* v = lua_tovector(L, -1);
+    result = V3(v[0], v[1], v[2]);
+  }
+  lua_pop(L, 1);
+  return ok;
+}
+
+void Luau_ObjectScriptReceive(Data const& script, Data const& object, Data const& message) {
+  lua_State* L = gL;
+  if (!L || !PushScriptMethod(L, script, "Receive"))
+    return;
+  Push(L, Type_Get<Data>().t, &object);
+  Push(L, Type_Get<Data>().t, &message);
+  Luau_Call(3, 0);
+}
+
+namespace {
+  /* Where a script function lives, decided once per name. */
+  struct ScriptTarget {
+    bool luau;
+    String module;
+    String function;
+    ScriptFunction ltsl;
+
+    ScriptTarget() : luau(false) {}
+  };
+
+  ScriptTarget& GetScriptTarget(String const& path) {
+    static std::map<String, ScriptTarget> targets;
+    std::map<String, ScriptTarget>::iterator it = targets.find(path);
+    if (it != targets.end())
+      return it->second;
+    ScriptTarget& target = targets[path];
+    size_t colon = path.find(':');
+    target.module = path.substr(0, colon);
+    target.function = colon == String::npos ? String() : String(path.substr(colon + 1));
+    target.luau = Luau_HasModule(target.module);
+    if (!target.luau)
+      target.ltsl = ScriptFunction_Load(path);
+    return target;
+  }
+}
+
+bool Script_Invoke(
+  String const& path,
+  TypeT* returnType,
+  void* returnValue,
+  uint argc,
+  TypeT* const* argTypes,
+  void* const* args)
+{
+  ScriptTarget& target = GetScriptTarget(path);
+  bool wantsResult = returnType && GetInfo(returnType).kind != Kind_Void;
+
+  if (!target.luau) {
+    ScriptFunction const& fn = target.ltsl;
+    if (!fn)
+      return false;
+    /* LTSL assigns its result, so it needs somewhere to put it. */
+    void* result = returnValue;
+    bool temporary = !result && fn->returnType && fn->returnType->allocate;
+    if (temporary)
+      result = fn->returnType->Allocate();
+    fn->Call(result, (void**)args);
+    if (temporary)
+      fn->returnType->Deallocate(result);
+    return true;
+  }
+
+  lua_State* L = Luau_GetState();
+  if (!Luau_Require(target.module))
+    return false;
+  lua_getfield(L, -1, target.function.c_str());
+  lua_remove(L, -2);
+  if (!lua_isfunction(L, -1)) {
+    printf("LUAU ERROR: %s has no function '%s'\n", target.module.c_str(), target.function.c_str());
+    lua_pop(L, 1);
+    return false;
+  }
+  for (uint i = 0; i < argc; ++i)
+    Push(L, argTypes[i], args[i]);
+  if (!Luau_Call((int)argc, wantsResult ? 1 : 0))
+    return false;
+
+  if (wantsResult) {
+    char const* why = nullptr;
+    if (Match(L, -1, returnType, &why) != Match_None)
+      Read(L, -1, returnType, returnValue);
+    else
+      printf("LUAU ERROR: %s returned %s, expected %s\n",
+        path.c_str(), DescribeArg(L, -1).c_str(), TypeName(returnType).c_str());
+    lua_pop(L, 1);
+  }
+  return true;
 }
 
 String Luau_GenerateDefinitions() {

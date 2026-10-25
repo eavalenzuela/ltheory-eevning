@@ -7,7 +7,7 @@ type HUDApp
 
   function List CreateChildren (Widget self)
     var l List
-    l += (Widget/HUD:Create player)
+    l += (Luau_CreateWidget "@lt/Widget/HUD" player)
     l
 
   function Void PreDraw (Widget self)

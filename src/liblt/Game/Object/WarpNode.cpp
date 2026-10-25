@@ -20,6 +20,7 @@
 #include "LTE/Model.h"
 
 #include "LTE/Debug.h"
+#include "Luau/ScriptCall.h"
 
 const float kPadding = 5;
 const float kRailForce = 2.0f * 2048;
@@ -249,9 +250,7 @@ namespace {
 
     void Exit(Passenger const& passenger) {
       passenger.object->Send(MessageEjected());
-      static ScriptFunction ejectPassenger =
-        ScriptFunction_Load("Object/WarpNode:EjectPassenger");
-      ejectPassenger->VoidCall(0, DataRef(passenger.object));
+      Script_CallVoid("Object/WarpNode:EjectPassenger", passenger.object);
       Free(passenger.slot);
     }
 
@@ -299,9 +298,6 @@ namespace {
     }
 
     void Update(float dt) {
-      static ScriptFunction updatePassenger =
-        ScriptFunction_Load("Object/WarpNode:UpdatePassenger");
-
       /* Apply forces to passengers. */
       for (int i = 0; i < (int)passengers.size(); ++i) {
         Passenger& passenger = passengers[i];
@@ -312,7 +308,7 @@ namespace {
         V3 toTarget = targetPos - pos;
         V3 dir = Normalize(toTarget);
 
-        updatePassenger->VoidCall(0, DataRef(object));
+        Script_CallVoid("Object/WarpNode:UpdatePassenger", object);
 
         /* Apply force toward next node. */
         float railForce = kRailForce;
@@ -453,6 +449,6 @@ DefineFunction(Object_WarpNode) {
   Reference<WarpNode> self = new WarpNode;
   self->Initialize();
   self->SetName("Warp Node");
-  ScriptFunction_Load("Object/WarpNode:Init")->VoidCall(0, DataRef((Object)self));
+  Script_CallVoid("Object/WarpNode:Init", (Object)self);
   return self;
 }

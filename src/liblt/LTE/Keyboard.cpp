@@ -180,6 +180,13 @@ namespace LTE {
     }
   }
 
+  String Keyboard_GetText() {
+    String text;
+    for (size_t i = 0; i < gKeyboard.chars.size(); ++i)
+      text += (char)gKeyboard.chars[i];
+    return text;
+  }
+
   bool Keyboard_Pressed(Key key) {
     if (gKeyboard.blockedLast)
       return false;

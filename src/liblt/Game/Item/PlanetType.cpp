@@ -21,6 +21,7 @@
 #include "LTE/Texture2D.h"
 
 #include "UI/Glyphs.h"
+#include "Luau/ScriptCall.h"
 
 const float kOuterScale = 1.025f;
 const uint kMeshQuality = 50;
@@ -136,7 +137,7 @@ DefineFunction(Item_PlanetType) { AUTO_FRAME;
   Reference<PlanetType> self = new PlanetType;
   self->docks.push(Bound3(V3(-1), V3(1)));
   self->dockCapacity = -1;
-  ScriptFunction_Load("Icons:Planet")->Call(self->icon);
+  self->icon = Script_Call<Icon>("Icons:Planet");
   self->name = "Planet";
   self->scale = 100000;
   self->seed = args.seed;

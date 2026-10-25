@@ -16,6 +16,7 @@
 #include "LTE/RNG.h"
 #include "LTE/Script.h"
 #include "LTE/Tuple.h"
+#include "Luau/ScriptCall.h"
 
 const uint kMaxChildren = 1;//4;
 const uint kPlanetCount = 1;
@@ -150,7 +151,7 @@ DefineFunction(Object_Region) {
         thisType.seed = rng->GetInt();
         object = Object_System(thisType);
         object->GetResources()->elements = resources;
-        ScriptFunction_Load("Object/System:Init")->VoidCall(0, object);
+        Script_CallVoid("Object/System:Init", object);
       }
 
       object->SetPos(child.pos);

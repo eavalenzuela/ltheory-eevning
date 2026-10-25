@@ -12,6 +12,8 @@
 
 #include "LTE/Script.h"
 
+#include "Luau/Luau.h"
+
 #include "UI/Widget.h"
 
 typedef ObjectWrapper
@@ -69,6 +71,14 @@ DERIVED_IMPLEMENT(ObjectCustom)
 
 DefineFunction(Object_Custom) {
   Reference<ObjectCustom> self = new ObjectCustom;
+
+  /* A Luau object: its Update(object) runs as an object script. */
+  if (Luau_IsValue(args.data)) {
+    self->instance = args.data;
+    self->AddScript(args.data);
+    return self;
+  }
+
   ScriptType const& type = args.data.type->GetAux().Convert<ScriptType>();
   self->instance = args.data;
   self->getWidget = type->GetFunction("GetWidget");

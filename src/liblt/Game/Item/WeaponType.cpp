@@ -20,6 +20,7 @@
 #include "LTE/VectorMap.h"
 
 #include "UI/Glyphs.h"
+#include "Luau/ScriptCall.h"
 
 DERIVED_IMPLEMENT(WeaponType)
 
@@ -146,7 +147,7 @@ Object WeaponType::Instantiate(ObjectT* parent) {
 DefineFunction(Item_WeaponType) {
   static Renderable renderable;
   if (!renderable)
-    ScriptFunction_Load("Item/WeaponType:Generate")->Call(renderable);
+    renderable = Script_Call<Renderable>("Item/WeaponType:Generate");
 
   RNG rng = RNG_MTG(args.id);
   Reference<WeaponType> self = new WeaponType;

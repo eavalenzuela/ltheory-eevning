@@ -127,7 +127,7 @@ type App
     passes.Append (RenderPass_SMAA)
     passes.Append (RenderPass_PostFilter "post/dither.jsl")
     l += (Widget_Rendered passes)
-    l += (Widget/HUD:Create player)
+    l += (Luau_CreateWidget "@lt/Widget/HUD" player)
     l
 
   function Void PreUpdate (Widget self)

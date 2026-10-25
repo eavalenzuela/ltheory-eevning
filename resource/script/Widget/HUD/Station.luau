@@ -1,26 +1,16 @@
 --!strict
 -- Station services, shown while the player is docked at a station with a
--- market. Luau port of Widget/HUD/Station.lts; the HUD creates it with
--- (Luau_CreateWidget "@lt/Widget/HUD/Station" player). Layout helpers still
--- live in LTSL and are called through ltsl().
+-- market (Luau port of Widget/HUD/Station.lts): market, fitting, deposit
+-- cargo into your hangar, undock.
 
-local AlignCenter = ltsl("Widget/Components:AlignCenter")
-local Expand = ltsl("Widget/Components:Expand")
-local GreedyX = ltsl("Widget/Components:GreedyX")
-local Padding = ltsl("Widget/Components:Padding")
-local ListH4 = ltsl("Widgets:ListH4")
-local Text = ltsl("Widgets:Text")
-local Button = ltsl("Widget/Button:Create")
-local Subheading = ltsl("Fonts:Subheading")
-local MarketCreate = ltsl("Widget/Object/Market:Create")
-local FittingCreate = ltsl("Widget/Fitting:Create")
+local Button = require("@lt/Widget/Button")
+local Components = require("@lt/Widget/Components")
+local Fonts = require("@lt/Fonts")
+local Messages = require("@lt/Widget/Messages")
+local Widgets = require("@lt/Widgets")
 
-local function vec2(x: number, y: number): Vec2
-  local v = New.Vec2()
-  v.x = x
-  v.y = y
-  return v
-end
+local Market = require("@lt/Widget/Object/Market")
+local Fitting = require("@lt/Widget/Fitting")
 
 -- What the panel's buttons send up when pressed
 type Action = { action: "market" | "fitting" | "deposit" | "undock" }
@@ -59,13 +49,13 @@ function StationPanel.CreateChildren(self: StationPanel, widget: Widget): { Widg
   end
 
   local white = vector.create(1, 1, 1)
-  table.insert(children,
-    AlignCenter(Text(Subheading(), `DOCKED AT {string.upper(station:GetName())}`, 16, white)))
+  table.insert(children, Components.AlignCenter(
+    Widgets.Text(Fonts.Subheading(), `DOCKED AT {string.upper(station:GetName())}`, 16, white)))
 
   local function button(action: Action, label: string): Widget
-    return Expand(GreedyX(Button(action, label, 14)))
+    return Components.Expand(Components.GreedyX(Button.Create(action, label, 14)))
   end
-  table.insert(children, Expand(ListH4(8,
+  table.insert(children, Components.Expand(Widgets.ListH(8,
     button({ action = "market" }, "MARKET"),
     button({ action = "fitting" }, "FITTING"),
     button({ action = "deposit" }, "DEPOSIT CARGO"),
@@ -98,11 +88,10 @@ function StationPanel.Receive(self: StationPanel, widget: Widget, message: any)
 
   local action = (message :: Action).action
   if action == "market" or action == "fitting" then
-    local add = ltsl_new("Widget/Messages:MessageAddWidget")
-    add.widget = if action == "market"
-      then MarketCreate(self.player, station)
-      else FittingCreate(self.player, station)
-    widget:SendUp(add)
+    local window = if action == "market"
+      then Market.Create(self.player, station)
+      else Fitting.Create(self.player, station)
+    widget:SendUp(Messages.AddWidget(window))
   elseif action == "deposit" then
     local moved = ship:TransferCargo(station:GetStorageLocker(self.player))
     if moved > 0 then
@@ -120,7 +109,8 @@ end
 
 local function Create(player: Player): Widget
   local panel = Widget_Luau(Widget_Create(), StationPanel.new(player))
-  return Padding(vec2(16, 8), vec2(16, 8), Widget_ListVertical(8, panel))
+  local inset = vector.create(16, 8)
+  return Components.Padding(inset, inset, Widget_ListVertical(8, panel))
 end
 
 return {

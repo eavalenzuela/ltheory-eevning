@@ -79,7 +79,7 @@ type App
       enemy.PushTask (Task_Destroy ship)
 
     # Set up the UI
-    ui.Add (Widget/HUD:Create player)
+    ui.Add (Luau_CreateWidget "@lt/Widget/HUD" player)
 
   function Void Update ()
     if Key_T.Pressed

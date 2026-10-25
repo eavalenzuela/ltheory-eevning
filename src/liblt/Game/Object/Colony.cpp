@@ -39,6 +39,7 @@
 #include "LTE/Texture2D.h"
 
 #include "UI/Widget.h"
+#include "Luau/ScriptCall.h"
 
 const uint kTerrainQuality = 750;
 const float kTerrainScale = 50000;
@@ -185,10 +186,7 @@ AutoClassDerived(Colony, ColonyBaseT,
   }
 
   Widget GetWidget(Player const& self) {
-    Widget widget;
-    ScriptFunction_Load("Object/Widget/Colony:Create")
-      ->Call(widget, self, (Object)this);
-    return widget;
+    return Script_Call<Widget>("Object/Widget/Colony:Create", self, (Object)this);
   }
 
   void Initialize() {
@@ -263,6 +261,6 @@ DefineFunction(Object_Colony) {
   self->SetSupertype(args.type);
   self->Initialize();
   self->PushTask(args.type->GetTask());
-  ScriptFunction_Load("Object/Colony:Init")->VoidCall(0, DataRef((Object)self));
+  Script_CallVoid("Object/Colony:Init", (Object)self);
   return self;
 }
