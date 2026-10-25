@@ -168,12 +168,12 @@ namespace {
           GL_Finish();
           x += jobSize;
 
-          /* NOTE : This is a bit scary...if the first job terminates really
-                    quickly, it seems like we may overestimate our capacity. We
-                    should probably implement something to make sure the jobSize
-                    scales up slowly rather than all at once. */
-          float elapsed = timer.GetElapsed();
-          jobSize = Min(Max((uint)((float)jobSize * (maxJobTime / elapsed)), 1U), resolution);
+          /* Scale the next job toward maxJobTime, but at most double it: a
+             tiny first job finishes almost instantly and would otherwise
+             extrapolate straight to the entire face in one job. */
+          float elapsed = Max(timer.GetElapsed(), 1e-4f);
+          float scale = Min(maxJobTime / elapsed, 2.0f);
+          jobSize = Min(Max((uint)((float)jobSize * scale), 1U), resolution);
         }
 
         Renderer_PopColorBuffer(0);

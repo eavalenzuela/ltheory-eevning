@@ -9,6 +9,12 @@
 #include "Renderer.h"
 #include "Shader.h"
 #include "Texture2D.h"
+#include "GL.h"
+#include "Math.h"
+
+/* Max vertex-surfel pairs evaluated per occlusion draw call. Roughly 30ms on
+   a mid-range dGPU, leaving lots of headroom under driver GPU timeouts. */
+const double kOcclusionJobWork = 2e9;
 
 namespace {
   AutoClass(Plate,
@@ -173,7 +179,22 @@ DefineFunction(Mesh_ComputeOcclusion) {
     ("vPointBuffer", vPointBuffer)
     ("vNormalBuffer", vNormalBuffer);
   Renderer_SetShader(*shader);
-  Renderer_DrawFSQ();
+
+  /* Every texel loops over every surfel, so a large ship mesh is ~1e11 pairs
+     and takes seconds as a single draw -- long enough to trip the driver's
+     GPU timeout (and a GPU reset) on slower hardware. Draw it in bands of rows
+     sized to a fixed work budget, finishing each before submitting the next. */
+  uint rowsPerJob =
+    Max((uint)(kOcclusionJobWork / ((double)vDim * sDim * sDim)), 1U);
+
+  Renderer_PushBlendMode(BlendMode::Disabled);
+  Renderer_PushZBuffer(false);
+  for (uint y = 0; y < (uint)vDim; y += rowsPerJob) {
+    Renderer_DrawFSQPart(0, y, vDim, Min(rowsPerJob, (uint)vDim - y));
+    GL_Finish();
+  }
+  Renderer_PopZBuffer();
+  Renderer_PopBlendMode();
   occlusionBuffer->Unbind();
 
   /* Write result to mesh. */
