@@ -34,6 +34,8 @@ Each screenshot is written as `<out>/<name>.png`, and the launcher prints `SCREE
 | `key NAME` | Press and release a key; takes two frames |
 | `keydown NAME` / `keyup NAME` | Hold or release a key |
 | `type TEXT` | Enter TEXT as typed characters |
+| `find NAME` | Move the cursor onto the visible widget named NAME (exact match first, then substring, ignoring case), choosing the one nearest the cursor; waits up to 10 s for it to appear. World markers are named after their object, radial options by action (`Dock`, `Mine`) |
+| `widgets [TEXT]` | Print the visible named widgets (containing TEXT) with their centres |
 | `echo TEXT` | Print `HARNESS TEXT` |
 | `quit` | Exit after the current frame (and its screenshots) |
 

@@ -20,16 +20,23 @@
      keydown NAME        hold a key
      keyup NAME          release a key
      type TEXT           enter TEXT as typed characters
+     find NAME           move the cursor to the centre of the visible widget
+                         named NAME (exact match, else substring, ignoring
+                         case) nearest the cursor; waits up to 10 s for one
+     widgets [TEXT]      print the named visible widgets (containing TEXT)
      echo TEXT           print TEXT
      quit                exit the app */
 
 #include "LTE/Keyboard.h"
+#include "LTE/Math.h"
 #include "LTE/Mouse.h"
 #include "LTE/Screenshot.h"
 #include "LTE/String.h"
 #include "LTE/Timer.h"
 #include "LTE/Vector.h"
+#include "UI/Interface.h"
 
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -48,6 +55,7 @@ struct Harness {
   Vector<MouseButton> buttonsToRelease;
   bool active;
   bool quit;
+  float findUntil;
 
   Harness() :
     next(0),
@@ -55,7 +63,8 @@ struct Harness {
     waitFrames(0),
     timeout(300),
     active(false),
-    quit(false)
+    quit(false),
+    findUntil(-1)
     {}
 
   void Load(String const& text) {
@@ -123,6 +132,38 @@ struct Harness {
     for (size_t i = from; i < words.size(); ++i)
       result += (i > from ? " " : "") + words[i];
     return result;
+  }
+
+  static String Lower(String s) {
+    for (size_t i = 0; i < s.size(); ++i)
+      s[i] = (char)tolower((uchar)s[i]);
+    return s;
+  }
+
+  /* The visible widget named 'name' (exact matches beat substring matches)
+     that is nearest the cursor, so repeated finds track the same widget. */
+  static bool FindWidget(String const& name, InterfaceWidgetInfo& result) {
+    Vector<InterfaceWidgetInfo> widgets;
+    Interface_GetNamedWidgets(widgets);
+    String target = Lower(name);
+    V2 cursor = Mouse_GetPos();
+    bool found = false;
+    bool exact = false;
+    float best = 0;
+    for (size_t i = 0; i < widgets.size(); ++i) {
+      String n = Lower(widgets[i].name);
+      bool isExact = n == target;
+      if (!isExact && (exact || n.find(target) == String::npos))
+        continue;
+      float d = Length(widgets[i].pos + widgets[i].size / 2.0f - cursor);
+      if (!found || (isExact && !exact) || d < best) {
+        result = widgets[i];
+        best = d;
+        found = true;
+        exact = isExact;
+      }
+    }
+    return found;
   }
 
   void Fail(Vector<String> const& words, char const* why) {
@@ -217,6 +258,44 @@ struct Harness {
         String text = Rest(c, 1);
         for (size_t i = 0; i < text.size(); ++i)
           Keyboard_AddText((uchar)text[i]);
+      }
+
+      else if (op == "find" && c.size() >= 2) {
+        String name = Rest(c, 1);
+        InterfaceWidgetInfo w;
+        if (FindWidget(name, w)) {
+          V2 center = w.pos + w.size / 2.0f;
+          Mouse_UpdatePos(V2I((int)center.x, (int)center.y));
+          printf("HARNESS found '%s' at %d %d\n",
+            w.name.c_str(), (int)center.x, (int)center.y);
+          fflush(stdout);
+          findUntil = -1;
+        } else {
+          if (findUntil < 0)
+            findUntil = now + 10.0f;
+          if (now < findUntil) {
+            /* Retry this command next frame. */
+            next--;
+            return true;
+          }
+          findUntil = -1;
+          Fail(c, "no visible widget with that name");
+        }
+      }
+
+      else if (op == "widgets") {
+        String filter = Lower(Rest(c, 1));
+        Vector<InterfaceWidgetInfo> widgets;
+        Interface_GetNamedWidgets(widgets);
+        for (size_t i = 0; i < widgets.size(); ++i) {
+          if (Lower(widgets[i].name).find(filter) == String::npos)
+            continue;
+          V2 center = widgets[i].pos + widgets[i].size / 2.0f;
+          printf("HARNESS widget '%s' at %d %d (%dx%d)\n",
+            widgets[i].name.c_str(), (int)center.x, (int)center.y,
+            (int)widgets[i].size.x, (int)widgets[i].size.y);
+        }
+        fflush(stdout);
       }
 
       else if (op == "echo") {

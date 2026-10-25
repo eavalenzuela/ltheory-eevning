@@ -15,13 +15,26 @@
 #include "LTE/Window.h"
 
 namespace {
+  struct InterfaceImpl;
+
+  Vector<InterfaceImpl*>& GetLiveInterfaces() {
+    static Vector<InterfaceImpl*> live;
+    return live;
+  }
+
   struct InterfaceImpl : public InterfaceT {
     String name;
     Vector<Widget> widgets;
 
-    InterfaceImpl(String const& name) : name(name) {}
+    InterfaceImpl(String const& name) : name(name) {
+      GetLiveInterfaces().push(this);
+    }
 
     ~InterfaceImpl() {
+      Vector<InterfaceImpl*>& live = GetLiveInterfaces();
+      for (size_t i = 0; i < live.size(); ++i)
+        if (live[i] == this)
+          live.eraseIndex(i--);
       Clear();
     }
 
@@ -79,6 +92,30 @@ namespace {
     }
   };
 
+  void CollectNamed(
+    Widget const& widget,
+    float alpha,
+    Vector<InterfaceWidgetInfo>& out)
+  {
+    if (widget->deleted)
+      return;
+    alpha *= widget->alpha;
+    if (alpha <= 0.01f)
+      return;
+    if (widget->size.x > 0 && widget->size.y > 0) {
+      String name = widget->GetName();
+      if (name.size()) {
+        InterfaceWidgetInfo info;
+        info.name = name;
+        info.pos = widget->pos;
+        info.size = widget->size;
+        out.push(info);
+      }
+    }
+    for (size_t i = 0; i < widget->children.size(); ++i)
+      CollectNamed(widget->children[i], alpha, out);
+  }
+
   struct RenderPassInterface : public RenderPassT {
     Interface interface;
     Shader compositor;
@@ -125,4 +162,11 @@ DefineFunction(Interface_Create) {
 
 DefineFunction(RenderPass_Interface) {
   return new RenderPassInterface(args.interface);
+}
+
+void Interface_GetNamedWidgets(Vector<InterfaceWidgetInfo>& out) {
+  Vector<InterfaceImpl*> const& live = GetLiveInterfaces();
+  for (size_t i = 0; i < live.size(); ++i)
+    for (size_t j = 0; j < live[i]->widgets.size(); ++j)
+      CollectNamed(live[i]->widgets[j], 1.0f, out);
 }
