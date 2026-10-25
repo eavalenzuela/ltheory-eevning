@@ -35,7 +35,8 @@ type DrawApp
       lines += (Line downPos Cursor_Get)
       down = false
 
-    if Mouse_RightDown
+    # Right-drag grows new lines off existing ones, so it needs at least one
+    if Mouse_RightDown && (lines.Size > 0)
       var rng (RNG_MTG Int_Random)
       var index (rng.Int lines.Size)
       var p1

@@ -20,7 +20,6 @@ type ImageEditor
 
   function Void Create (Widget self)
     if true
-      var tex2 (Texture_LoadFrom (Location_File "data/screenshot/10.png"))
       var min (Texture/Filters:CircleMin 12 image)
       var max (Texture/Filters:CircleMax 8 image)
       image = min

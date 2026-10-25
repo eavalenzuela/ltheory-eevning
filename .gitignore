@@ -2,3 +2,6 @@
 bin/
 build/
 cache/
+# written by the font and image apps
+/test.bmp
+/newImage.png

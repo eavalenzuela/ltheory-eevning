@@ -5,9 +5,12 @@ type MyJob
       sum += i
     sum
 
-function Widget Main ()
-  var thread (Thread_Create MyJob "Main")
-  while (! thread.IsFinished)
-    0
-  @ "Result: " (Int thread.GetResult)
-  Widget
+type Threads
+  function Void Initialize ()
+    var thread (Thread_Create MyJob "Main")
+    while (! thread.IsFinished)
+      0
+    @ "Result: " (cast Int thread.GetResult)
+
+function Threads Main ()
+  Threads

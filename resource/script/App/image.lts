@@ -7,7 +7,7 @@ type App
           Widget/ImageEditor:Create
             ?
               false (Texture_LoadFrom (Location_File "1.png"))
-              true
+              false
                 Texture_LoadFrom (Location_File "data/screenshot/29.png")
               otherwise (Texture/RandomScreenshot:Get)
             "image.png"

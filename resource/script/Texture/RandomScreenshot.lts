@@ -1,16 +1,12 @@
 function Texture Get ()
-  var path "/home/josh/Dropbox/lt/screenshot"
-  while path.IsDirectory
-    path += "/"
-    var contents path.ListDir
-    var selection (contents.Get (Int_Random contents.Size))
-    path += selection
+  # A random screenshot from the folder the launcher's F1 key saves to, or the
+  # splash image if there aren't any yet
+  var dir "cache/screenshot/"
+  var path "resource/texture/splash.png"
+  if dir.IsDirectory
+    var contents dir.ListDir
+    if contents.Size > 0
+      path = dir + (contents.Get (Int_Random contents.Size))
 
-  switch
-    true
-      Texture_LoadFrom
-        Location_File path
-    otherwise
-      Texture/Filters:Artistic
-        Texture_LoadFrom
-          Location_File path
+  Texture_LoadFrom
+    Location_File path
