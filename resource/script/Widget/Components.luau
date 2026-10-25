@@ -10,6 +10,7 @@
 
 local Colors = require("@lt/Colors")
 local Fonts = require("@lt/Fonts")
+local Messages = require("@lt/Widget/Messages")
 
 local Components = {}
 
@@ -425,10 +426,7 @@ function Components.ContextMenu(menu: Widget, widget: Widget): Widget
         local shown = Components.Positioned(Cursor_Get(), Widget_Stack(Widget_Create()))
         shown:AddChild(menu)
         popup = shown
-        -- The HUD (still LTSL) expects its own message type
-        local message = ltsl_new("Widget/Messages:MessageAddContextMenu")
-        message.widget = shown
-        w:SendUp(message)
+        w:SendUp(Messages.AddContextMenu(shown))
       end
       if visible and not Mouse_RightDown() then
         visible = false

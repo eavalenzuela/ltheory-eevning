@@ -1,5 +1,0 @@
-type MinSize
-  Vec2 size
-
-  function Void PrePosition (Widget self)
-    self.minSize = (Max size self.minSize)

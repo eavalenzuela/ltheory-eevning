@@ -46,7 +46,7 @@ end
 
 -- An icon button with a text label beside it
 function IconButton.CreateText(onPress: any, icon: Icon, text: string): Widget
-  return Components.CaptureMouse(Widget_ListHorizontal(8, Widget_Luau(Widget_Create(), behavior(onPress, function(w, focus)
+  local button = behavior(onPress, function(w, focus)
     local r = w.size.y
     local c = color(focus)
     local center = w:LeftCenter() + vector.create(0.5 * r, 0)
@@ -57,7 +57,11 @@ function IconButton.CreateText(onPress: any, icon: Icon, text: string): Widget
     if focus then
       Glyph_Draw(ring, center, 0.5 * r, c, 1)
     end
-  end))))
+  end) :: any
+  button.GetName = function(): string
+    return text
+  end
+  return Components.CaptureMouse(Widget_ListHorizontal(8, Widget_Luau(Widget_Create(), button)))
 end
 
 return IconButton

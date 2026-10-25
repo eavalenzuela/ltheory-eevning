@@ -1,4 +1,0 @@
-type Named
-  String name
-
-  function String GetName () name

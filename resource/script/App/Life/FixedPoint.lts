@@ -1,3 +1,0 @@
-type FixedPoint
-  Int index
-  (Array Int) sequence (Array Int)

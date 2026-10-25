@@ -109,8 +109,9 @@ struct Launcher : public Program {
   }
 
   /* A Luau app is a module returning a table; its Initialize runs once and
-     its Update every frame, each called as a method. A script error prints
-     a traceback and ends the app. */
+     its Update every frame, each called as a method. An app without Update
+     ends after Initialize, like an LTSL app. A script error prints a
+     traceback and ends the app. */
   void LaunchLuau() {
     luauApp = 0;
     Luau_Reset();
@@ -125,9 +126,12 @@ struct Launcher : public Program {
       deleted = true;
       return;
     }
+    lua_getfield(L, -1, "Update");
+    bool hasUpdate = !lua_isnil(L, -1);
+    lua_pop(L, 1);
     luauApp = lua_ref(L, -1);
     lua_pop(L, 1);
-    if (!CallLuau("Initialize"))
+    if (!CallLuau("Initialize") || !hasUpdate)
       deleted = true;
   }
 

@@ -1,5 +1,0 @@
-type Greedy
-  Vec2 greed
-
-  function Void PrePosition (Widget self)
-    self.greed = greed
