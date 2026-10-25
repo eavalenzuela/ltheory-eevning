@@ -66,7 +66,7 @@ type HUDGroup
       l +=
         Components:AlignTopCenter
           Components:Margin (Vec2 0 80) 32
-            HUD/Station:Create player
+            Luau_CreateWidget "@lt/Widget/HUD/Station" player
 
     l
 
