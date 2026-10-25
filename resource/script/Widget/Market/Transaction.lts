@@ -140,9 +140,13 @@ type TransactionWindow
           minimum = (Min minimum count)
           maximum = (Min maximum count)
 
+      # Selling starts at everything you have; buying at one
+      var start minimum
+      if (! buying)
+        start = maximum
       l +=
         Components:Expand
-          Widget/Slider:Create "quantity" minimum maximum
+          Widget/Slider:CreateAt "quantity" minimum maximum start
 
     desc "Buttons"
       l +=

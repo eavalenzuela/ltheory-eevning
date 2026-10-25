@@ -28,6 +28,8 @@ struct SoundEngine : public ModuleT {
     bool looped) = 0;
 };
 
+/* Null when no engine exists, e.g. while the program shuts down and widgets
+   play their close sounds. */
 LT_API SoundEngine* GetSoundEngine();
 LT_API SoundEngine* SoundEngine_Miniaudio();
 LT_API SoundEngine* SoundEngine_Null();
@@ -37,7 +39,8 @@ inline Sound Sound_Play2D(
   float volume = 0.5f,
   bool looped = false)
 {
-  return GetSoundEngine()->Play2D(name, volume, looped);
+  SoundEngine* engine = GetSoundEngine();
+  return engine ? engine->Play2D(name, volume, looped) : nullptr;
 }
 
 inline Sound Sound_Play3D(
@@ -48,8 +51,10 @@ inline Sound Sound_Play3D(
   float distanceDiv = 1,
   bool looped = false)
 {
-  return GetSoundEngine()->Play3D(
-    name, carrier, offset, volume, distanceDiv, looped);
+  SoundEngine* engine = GetSoundEngine();
+  return engine
+    ? engine->Play3D(name, carrier, offset, volume, distanceDiv, looped)
+    : nullptr;
 }
 
 #endif

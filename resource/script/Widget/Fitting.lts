@@ -45,7 +45,9 @@ type FittingList
         var payload (TurretPayload module)
         if payload.IsNotNull
           installed += 1
-          l += (Row payload.GetName (Button:Create (MessageUnplug module) "REMOVE" 14.0))
+          # The item type's name; the object itself is just "Weapon"
+          var itemType payload.GetSupertype
+          l += (Row itemType.GetName (Button:Create (MessageUnplug module) "REMOVE" 14.0))
     if installed == 0
       l += (Row "(nothing removable installed)" Widget)
 

@@ -102,3 +102,8 @@ function Widget Create (String label Int minValue Int maxValue)
   ListH 0
     Custom Widget
       Slider label minValue maxValue minValue
+
+function Widget CreateAt (String label Int minValue Int maxValue Int value)
+  ListH 0
+    Custom Widget
+      Slider label minValue maxValue value

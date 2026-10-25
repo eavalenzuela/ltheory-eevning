@@ -88,6 +88,8 @@ type HUDLayer
   Widget layerHUD Widget
   Widget layerWorld Widget
   Bool visible true
+  # Windows opened through MessageAddWidget, oldest first, for Escape
+  List windows List
 
   function List CreateChildren (Widget self)
     var l List
@@ -114,11 +116,13 @@ type HUDLayer
 
       (data.IsType "MessageAddWidget")
         ref msg (cast Widget/Messages:MessageAddWidget data)
-        layerHUD.AddChild
+        var window
           Components:Expand
             Components:AlignCenter
               Components:Margin 128 128
                 msg.widget
+        layerHUD.AddChild window
+        windows += window
 
   function Void PostDraw (Widget self)
     var c 2.0 * Colors:Primary
@@ -132,8 +136,20 @@ type HUDLayer
       Draw cursor Cursor_Get 12 c self.alpha
 
   function Void PostUpdate (Widget self)
+    # Escape closes the most recent window; with none open, the game menu
     if self.focusKey && Key_Escape.Pressed
-      self.AddChild GameMenu:Create
+      var open List
+      for i 0 i < windows.Size i.++
+        var w (cast Widget (windows.Get i))
+        if w.HasParent
+          open += w
+      windows = open
+      switch
+        windows.Size > 0
+          var top (cast Widget (windows.Get windows.Size - 1))
+          top.Delete
+        otherwise
+          self.AddChild GameMenu:Create
 
 function Widget Create (Player player)
   Components:Expand

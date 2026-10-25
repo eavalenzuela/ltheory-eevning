@@ -4,6 +4,8 @@ type Element
   Item item
   Bool selected false
 
+  function String GetName () item.GetName
+
   function Void Destroy (Widget self)
     if selected
       self.SendUp (Messages:UnselectItem item)

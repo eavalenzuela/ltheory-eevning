@@ -4,6 +4,9 @@ type Button
   Float size
   Bool focus false
 
+  # Named by its label, so tooling (and tooltips) can find it
+  function String GetName () text
+
   function List CreateChildren (Widget self)
     var l List
     var c (? (self.focusMouse (Vec3 0)) (otherwise (Vec3 1)))

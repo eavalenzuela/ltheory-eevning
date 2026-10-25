@@ -26,6 +26,5 @@ void SoundEngine::Push() {
 }
 
 SoundEngine* GetSoundEngine() {
-  LTE_ASSERT(gSoundEngine.size());
-  return gSoundEngine.back();
+  return gSoundEngine.size() ? gSoundEngine.back() : nullptr;
 }

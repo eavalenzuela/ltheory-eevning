@@ -15,6 +15,37 @@
 
 #include "LTE/Debug.h"
 
+/* Warp: legs longer than kWarpMinDistance are covered EVE-style. The ship
+   aligns toward the destination under normal thrust, then moves along the
+   leg on a smooth ease-in/out curve and drops out kWarpExitDistance from
+   the destination's surface, from where normal flight takes over. */
+const Distance kWarpMinDistance = 10000;
+const Distance kWarpExitDistance = 2000;
+const float kWarpMaxAlignTime = 5;
+const float kWarpMinTime = 3;
+const float kWarpMaxTime = 12;
+
+/* Path cost of flying, in metres of normal flight: warp legs cost about as
+   much as the time they take (aligning plus warping) would at cruise. */
+const float kWarpAlignCost = 4000;
+const float kCruiseSpeed = 400;
+
+float WarpDuration(double length) {
+  return Clamp(0.4f * Sqrt((float)(length / 1000.0)), kWarpMinTime, kWarpMaxTime);
+}
+
+float FlightCost(double distance) {
+  if (distance < kWarpMinDistance)
+    return (float)distance;
+  return kWarpAlignCost + kCruiseSpeed * WarpDuration(distance);
+}
+
+enum WarpPhase {
+  WarpPhase_None,
+  WarpPhase_Align,
+  WarpPhase_Warp
+};
+
 namespace {
   typedef Reference<struct PathNodeT> PathNode;
 
@@ -86,7 +117,7 @@ namespace {
           if (i == j)
             continue;
           PathNode const& other = nodes[j];
-          node->edges.push(Edge(other, Length(other->pos - node->pos)));
+          node->edges.push(Edge(other, FlightCost(Length(other->pos - node->pos))));
         }
 
         /* Using special nodes. */
@@ -141,10 +172,20 @@ namespace {
 
   AutoClass(TaskGotoInstance,
     Path, path,
-    bool, flying)
+    bool, flying,
+    int, warpPhase,
+    float, warpTime,
+    float, warpDuration,
+    Position, warpStart,
+    Position, warpEnd)
 
     TaskGotoInstance() :
-      flying(true)
+      flying(true),
+      warpPhase(WarpPhase_None),
+      warpTime(0),
+      warpDuration(0),
+      warpStart(0),
+      warpEnd(0)
       {}
 
     void Advance() {
@@ -159,8 +200,61 @@ namespace {
     void Reset() {
       path = nullptr;
       flying = true;
+      warpPhase = WarpPhase_None;
     }
   };
+
+  /* Drive a warp toward 'node'; returns true while the warp is handling the
+     ship's movement this frame. */
+  bool UpdateWarp(
+    Object const& self,
+    TaskGotoInstance& it,
+    Object const& node,
+    float dt)
+  {
+    V3D toNode = (V3D)(node->GetCenter() - self->GetPos());
+    double distance = Length(toNode);
+    double exitDistance = node->GetRadius() + kWarpExitDistance;
+
+    if (it.warpPhase == WarpPhase_None) {
+      if (distance - exitDistance < kWarpMinDistance)
+        return false;
+      it.warpPhase = WarpPhase_Align;
+      it.warpTime = 0;
+    }
+
+    V3 dir = (V3)(toNode / Max(distance, 1.0));
+
+    if (it.warpPhase == WarpPhase_Align) {
+      it.warpTime += dt;
+      V3 velocity = self->GetVelocity();
+      float speed = Length(velocity);
+      bool aligned = speed > 0.25f * self->GetTopSpeed()
+        && Dot(velocity / Max(speed, 1e-3f), dir) > 0.95f;
+
+      if (!aligned && it.warpTime < kWarpMaxAlignTime) {
+        /* Normal flight toward the node does the aligning. */
+        return false;
+      }
+
+      it.warpPhase = WarpPhase_Warp;
+      it.warpTime = 0;
+      it.warpStart = self->GetPos();
+      it.warpEnd = node->GetCenter() - (Position)(dir * (float)exitDistance);
+      double length = Length((V3D)(it.warpEnd - it.warpStart));
+      it.warpDuration = WarpDuration(length);
+    }
+
+    /* Warping. */
+    it.warpTime += dt;
+    float t = Saturate(it.warpTime / it.warpDuration);
+    float s = t * t * (3 - 2 * t);
+    self->SetPos(it.warpStart + (Position)((V3D)(it.warpEnd - it.warpStart) * (double)s));
+    self->SetLook(Normalize((V3)(it.warpEnd - it.warpStart)));
+    if (t >= 1)
+      it.warpPhase = WarpPhase_None;
+    return true;
+  }
 
   AutoClassDerived(TaskGoto, TaskT, Task_Goto_Args, args)
     DERIVED_TYPE_EX(TaskGoto)
@@ -252,6 +346,9 @@ namespace {
 
         /* Move toward the next node. */ {
           Object nextNode = it.GetNext();
+          if (nextNode && UpdateWarp(self, it, nextNode, dt))
+            return;
+
           if (nextNode) {
             self->Broadcast(MessageBoost());
             self->GetMotionControl()->elements.push(
