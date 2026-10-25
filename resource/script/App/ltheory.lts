@@ -54,7 +54,6 @@ type App
     passes.Append (RenderPass_Clear (Vec4 0.0))
     passes.Append (RenderPass_Camera camera)
     passes.Append (RenderPass_SMAA)
-    passes.Append (RenderPass_Interface ui)
     passes.Append (RenderPass_PostFilter "post/dither.jsl")
     l += (Widget_Rendered passes)
     l += (Widget/HUD:Create player)
