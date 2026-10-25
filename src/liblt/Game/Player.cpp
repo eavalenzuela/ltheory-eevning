@@ -4,6 +4,7 @@
 #include "Component/Pilotable.h"
 
 #include "Game/Tasks.h"
+#include "Luau/ScriptCall.h"
 
 AutoClassDerived(PlayerImpl, PlayerT,
   bool, isHuman)
@@ -16,9 +17,7 @@ AutoClassDerived(PlayerImpl, PlayerT,
   }
 
   Icon GetIcon() const {
-    Icon icon;
-    ScriptFunction_Load("Icons:Person")->Call(icon);
-    return icon;
+    return Script_Call<Icon>("Icons:Person");
   }
 
   Health GetMaxHealth() const {

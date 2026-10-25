@@ -6,8 +6,7 @@ local Components = require("@lt/Widget/Components")
 local Desktop = require("@lt/Widget/Desktop")
 local FrameInfo = require("@lt/Widget/Dev/FrameInfo")
 local Map = require("@lt/Widget/Map")
-
-local InitSystem = ltsl("Object/System:Init")
+local System = require("@lt/Object/System")
 
 local App = {}
 local system: Object
@@ -15,7 +14,7 @@ local ui: Interface
 
 function App:Initialize()
   system = Object_System(vector.create(15.012, 15.012, 15.012), 1340)
-  InitSystem(system)
+  System.Init(system)
 
   local player: Player? = nil
   local objects = system:GetInteriorObjects()

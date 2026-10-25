@@ -75,7 +75,7 @@ Both are untyped for the checker. Port the LTSL helpers a module depends on to r
 
 LTSL creates a Luau widget with `Luau_CreateWidget "@lt/Path" arg`, which calls the module's `Create(arg)`.
 
-`Widget/HUD/Station.luau` is the example: the station panel, created by the LTSL HUD.
+For example, the LTSL apps `hud`, `handling` and `war` create the Luau HUD this way (`Luau_CreateWidget "@lt/Widget/HUD" player`).
 
 ## Object scripts
 
@@ -84,6 +84,22 @@ LTSL creates a Luau widget with `Luau_CreateWidget "@lt/Path" arg`, which calls 
 - `script:Receive(object, message)` gets the object's messages.
 
 `Widget/Handling.luau` uses this for the ship's flight controls and chase camera.
+
+## Scripts the engine calls
+
+The engine calls a few script functions by path. Examples: `Icons:Person`, `Item/ShipType/Generate:Main` (hull generation), `Object/WarpNode:Init` and `Object/System:Init`.
+- These calls go through `Script_Call<R>("Path:Function", args...)` (`src/liblt/Luau/ScriptCall.h`).
+- It calls the module's function if `Path.luau` exists, and otherwise the LTSL function in `Path.lts`. The choice is cached per path.
+- All of these hooks now have Luau versions. To move another one, write the `.luau` module; the C++ call site doesn't change.
+
+Engine values that take a script object also take a Luau table:
+- `Object_Custom(table)` attaches the table as an object script.
+- `Warp_Custom(table)` makes a warp from `table:GetDelta(point)`, which returns a vector.
+
+**Reproducing LTSL's numbers:** generators such as the hull and system scripts must give the same result for the same seed. LTSL wraps ints silently (overflow, and int to uint conversion), but the Luau binder rejects out-of-range values. `Int.luau` has three helpers for these ports:
+- `Int.Signed` and `Int.Unsigned` wrap a value like the C++ conversion.
+- `Int.Float32` rounds like LTSL's single-precision `Float`, for arithmetic that is truncated to an integer afterwards.
+- Keep the random draws in the LTSL order, including draws whose results are unused.
 
 ## Messages
 

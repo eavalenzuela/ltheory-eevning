@@ -4,6 +4,7 @@
 #include "luacode.h"
 
 #include "Luau.h"
+#include "ScriptCall.h"
 
 #include "LTE/AutoClass.h"
 #include "LTE/Data.h"
@@ -1960,6 +1961,22 @@ bool Luau_ObjectScriptUpdate(Data const& script, Data const& object) {
   return alive;
 }
 
+bool Luau_CallMethodV3(Data const& value, char const* method, V3 const& arg, V3& result) {
+  lua_State* L = gL;
+  if (!L || !PushScriptMethod(L, value, method))
+    return false;
+  lua_pushvector(L, arg.x, arg.y, arg.z);
+  if (!Luau_Call(2, 1))
+    return false;
+  bool ok = lua_isvector(L, -1);
+  if (ok) {
+    float const* v = lua_tovector(L, -1);
+    result = V3(v[0], v[1], v[2]);
+  }
+  lua_pop(L, 1);
+  return ok;
+}
+
 void Luau_ObjectScriptReceive(Data const& script, Data const& object, Data const& message) {
   lua_State* L = gL;
   if (!L || !PushScriptMethod(L, script, "Receive"))
@@ -1967,6 +1984,86 @@ void Luau_ObjectScriptReceive(Data const& script, Data const& object, Data const
   Push(L, Type_Get<Data>().t, &object);
   Push(L, Type_Get<Data>().t, &message);
   Luau_Call(3, 0);
+}
+
+namespace {
+  /* Where a script function lives, decided once per name. */
+  struct ScriptTarget {
+    bool luau;
+    String module;
+    String function;
+    ScriptFunction ltsl;
+
+    ScriptTarget() : luau(false) {}
+  };
+
+  ScriptTarget& GetScriptTarget(String const& path) {
+    static std::map<String, ScriptTarget> targets;
+    std::map<String, ScriptTarget>::iterator it = targets.find(path);
+    if (it != targets.end())
+      return it->second;
+    ScriptTarget& target = targets[path];
+    size_t colon = path.find(':');
+    target.module = path.substr(0, colon);
+    target.function = colon == String::npos ? String() : String(path.substr(colon + 1));
+    target.luau = Luau_HasModule(target.module);
+    if (!target.luau)
+      target.ltsl = ScriptFunction_Load(path);
+    return target;
+  }
+}
+
+bool Script_Invoke(
+  String const& path,
+  TypeT* returnType,
+  void* returnValue,
+  uint argc,
+  TypeT* const* argTypes,
+  void* const* args)
+{
+  ScriptTarget& target = GetScriptTarget(path);
+  bool wantsResult = returnType && GetInfo(returnType).kind != Kind_Void;
+
+  if (!target.luau) {
+    ScriptFunction const& fn = target.ltsl;
+    if (!fn)
+      return false;
+    /* LTSL assigns its result, so it needs somewhere to put it. */
+    void* result = returnValue;
+    bool temporary = !result && fn->returnType && fn->returnType->allocate;
+    if (temporary)
+      result = fn->returnType->Allocate();
+    fn->Call(result, (void**)args);
+    if (temporary)
+      fn->returnType->Deallocate(result);
+    return true;
+  }
+
+  lua_State* L = Luau_GetState();
+  if (!Luau_Require(target.module))
+    return false;
+  lua_getfield(L, -1, target.function.c_str());
+  lua_remove(L, -2);
+  if (!lua_isfunction(L, -1)) {
+    printf("LUAU ERROR: %s has no function '%s'\n", target.module.c_str(), target.function.c_str());
+    lua_pop(L, 1);
+    return false;
+  }
+  for (uint i = 0; i < argc; ++i)
+    Push(L, argTypes[i], args[i]);
+  if (!Luau_Call((int)argc, wantsResult ? 1 : 0))
+    return false;
+
+  if (wantsResult) {
+    char const* why = nullptr;
+    if (Match(L, -1, returnType, &why) != Match_None)
+      Read(L, -1, returnType, returnValue);
+    else
+      printf("LUAU ERROR: %s returned %s, expected %s\n",
+        path.c_str(), DescribeArg(L, -1).c_str(), TypeName(returnType).c_str());
+    lua_pop(L, 1);
+  }
+  return true;
 }
 
 String Luau_GenerateDefinitions() {

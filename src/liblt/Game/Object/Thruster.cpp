@@ -31,6 +31,7 @@
 #include "LTE/RenderStyle.h"
 #include "LTE/ShaderInstance.h"
 #include "LTE/View.h"
+#include "Luau/ScriptCall.h"
 
 const float kTrailLengthMult = 8;
 const float kAcceleration = 1;
@@ -204,6 +205,6 @@ Object Object_Thruster(Item const& type, ObjectT* parent) {
   Reference<Thruster> self = new Thruster;
   self->SetSupertype(type);
   self->Drawable.renderable = (Renderable)(new Thruster::RenderComponent(self));
-  ScriptFunction_Load("Object/Thruster:Init")->VoidCall(0, DataRef((Object)self));
+  Script_CallVoid("Object/Thruster:Init", (Object)self);
   return self;
 }

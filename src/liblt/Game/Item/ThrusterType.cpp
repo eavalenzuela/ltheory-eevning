@@ -19,6 +19,7 @@
 #include "LTE/Script.h"
 
 #include "UI/Glyphs.h"
+#include "Luau/ScriptCall.h"
 
 const float kThrustMult = 100;
 
@@ -62,7 +63,7 @@ DERIVED_IMPLEMENT(ThrusterType)
 DefineFunction(Item_ThrusterType) {
   static Renderable renderable;
   if (!renderable)
-    ScriptFunction_Load("Item/ThrusterType:Generate")->Call(renderable);
+    renderable = Script_Call<Renderable>("Item/ThrusterType:Generate");
 
   Mass mass = Constant_ValueToMass(args.value, args.compactness);
   Health integrity = Constant_ValueToIntegrity(args.value, args.integrity);

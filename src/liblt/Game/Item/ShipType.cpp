@@ -28,6 +28,7 @@
 #include "UI/Glyphs.h"
 
 #include "Game/Renderables.h"
+#include "Luau/ScriptCall.h"
 
 const uint kThrusterAttempts = 10;
 const uint kTurretAttempts = 100;
@@ -216,9 +217,7 @@ DefineFunction(Item_ShipType) { AUTO_FRAME;
   int generatorCount = (int)(rng->GetFloat(1, 2) + logScale);
   int interiorCount = 2 * (int)(logScale / Log(10.0f));
 
-  Script_Reload("Item/ShipType/Generate");
-  ScriptFunction_Load("Item/ShipType/Generate:Main")
-    ->Call(self->renderable, self->scale, (int)rng->GetInt());
+  self->renderable = Script_Call<Renderable>("Item/ShipType/Generate:Main", self->scale, (int)rng->GetInt());
 
   /* Sockets. */ {
     Vector<Socket> sockets;

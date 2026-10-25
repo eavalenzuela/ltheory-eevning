@@ -12,6 +12,7 @@
 #include "LTE/Script.h"
 
 #include "UI/Glyphs.h"
+#include "Luau/ScriptCall.h"
 
 typedef
     Attribute_Icon
@@ -40,7 +41,7 @@ DERIVED_IMPLEMENT(ScannerType)
 
 DefineFunction(Item_ScannerType) {
   Reference<ScannerType> self = new ScannerType;
-  ScriptFunction_Load("Icons:Scanner")->Call(self->icon);
+  self->icon = Script_Call<Icon>("Icons:Scanner");
   self->metatype = Item_ScannerType_Args(args);
   self->name = "Scanner";
   self->powerDrain = 1.0f;

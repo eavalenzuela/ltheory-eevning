@@ -17,6 +17,7 @@
 #include "LTE/SDFMesh.h"
 #include "LTE/ShaderInstance.h"
 #include "LTE/StackFrame.h"
+#include "Luau/ScriptCall.h"
 
 DERIVED_IMPLEMENT(StationType)
 
@@ -41,7 +42,7 @@ DefineFunction(Item_StationType) { AUTO_FRAME;
 
   self->docks.push(Bound3(V3(-1) + dockOffset, V3(1) + dockOffset));
 
-  ScriptFunction_Load("Icons:Station")->Call(self->icon);
+  self->icon = Script_Call<Icon>("Icons:Station");
 
   self->integrity = integrity;
 
@@ -57,9 +58,7 @@ DefineFunction(Item_StationType) { AUTO_FRAME;
 
   self->scale = Constant_MassToScale(mass);
 
-  PlateMesh pm;
-  ScriptFunction_Load("Item/StationType/Generate:Main")
-    ->Call(pm, (int)rg->GetInt());
+  PlateMesh pm = Script_Call<PlateMesh>("Item/StationType/Generate:Main", (int)rg->GetInt());
   Mesh mesh = pm->GetMesh();
   Mesh_ComputeOcclusion(mesh);
   self->renderable = (Renderable)Model_Create()->Add(mesh, Material_Metal());

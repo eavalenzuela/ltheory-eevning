@@ -18,6 +18,7 @@
 #include "LTE/ShaderInstance.h"
 
 #include "UI/Icon.h"
+#include "Luau/ScriptCall.h"
 
 namespace {
   Renderable GetWormholeModel() {
@@ -63,9 +64,7 @@ AutoClassDerived(Wormhole, WormholeBaseT,
   }
 
   Icon GetIcon() const {
-    Icon icon;
-    ScriptFunction_Load("Icons:Wormhole")->Call(icon);
-    return icon;
+    return Script_Call<Icon>("Icons:Wormhole");
   }
 
   Signature GetSignature() const {

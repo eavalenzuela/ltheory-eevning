@@ -45,6 +45,10 @@ LT_API bool Luau_IsValue(Data const& value);
 LT_API bool Luau_ObjectScriptUpdate(Data const& script, Data const& object);
 LT_API void Luau_ObjectScriptReceive(Data const& script, Data const& object, Data const& message);
 
+/* Call value:method(arg) on a Luau value carried as Data, expecting a
+   vector back (e.g. a custom warp's GetDelta); false if it failed. */
+LT_API bool Luau_CallMethodV3(Data const& value, char const* method, V3 const& arg, V3& result);
+
 /* Luau type definitions for every bound function and engine type, for the
    checker (tools: luaucheck). */
 LT_API String Luau_GenerateDefinitions();

@@ -14,6 +14,7 @@
 #include "LTE/Transform.h"
 
 #include "UI/Glyphs.h"
+#include "Luau/ScriptCall.h"
 
 const Icon kIcon = Icon_Create()
   ->Add(Glyph_Box(V2(0, 0.8f), V2(1, 0.2f), 1, 1))
@@ -38,7 +39,7 @@ AutoClassDerivedEmpty(TurretType, TurretTypeBase)
   Renderable const& GetRenderable() const {
     static Renderable renderable;
     if (!renderable)
-      ScriptFunction_Load("Item/TurretType:Generate")->Call(renderable);
+      renderable = Script_Call<Renderable>("Item/TurretType:Generate");
     return renderable;
   }
 
