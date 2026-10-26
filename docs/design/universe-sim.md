@@ -42,6 +42,8 @@ Status: the proposal, decisions and design details below are agreed (2026-10-25)
 | Layer boundary | The simulation doesn't control the in-system simulation directly. It changes the universe state, and the state determines what the in-system simulation shows when the player enters a system |
 | Resolution where the player is | **Physical.** Fleets, traders and so on arriving or leaving warp in and out, as pirates already do. The abstract combat model applies only to systems the player is not in |
 | Jumps | **6 ticks (1 minute) per gate jump** |
+| War cooldowns | **A faction can't declare a new war within 24 real-time hours of declaring another, nor within 24 hours of one of its wars ending** |
+| Coalitions | **Other factions tend to ally against a larger aggressor in a war** |
 | Pirate stations | **Pirates pay to have stations (dens) constructed**, and then carry the same station upkeep as everyone else |
 | Actions per tick | **No limit.** A faction can submit any number of actions in each phase (builds, convoys, claims, attacks, defence); only its ships, goods and credits constrain it |
 | Commitment | Ships and goods are locked once in an action. **Cancelling a submitted action is itself an action** and unlocks them |
@@ -146,26 +148,24 @@ Run it with `bin/launch simrun` (`App/simrun.luau` sets the seed, size and lengt
   - Warships are only built from a working-capital reserve, and only when income covers their upkeep.
 - **Income.** Habitat taxes plus a 3% industry tax on the value of everything produced, both paid to the owning faction.
 - **Pirate stations.** Pirates pay to have dens constructed. A construct action sends an escort to an empty independent system far from faction space; the den is built after 60 ticks if the escort still holds the site. Pirates pay the same sovereignty and ship upkeep as factions, and their dens consume maintenance goods. Since nobody trades with them, they supply those goods by raiding: looted maintenance goods go to the nearest den and the rest is fenced for credits. Built stations are recorded in the state, because the galaxy description is regenerated from the seed.
+- **War cooldowns and coalitions.** Each war has a declarer. A faction can't declare war within 24 hours (8,640 ticks) of its last declaration or of one of its wars ending. While an aggressor is more than 1.2 times as powerful (war fleet plus territory) as its victim, the other factions' relations with it fall, in proportion to its dominance, and rise with the victim. Once they cross the war threshold, those factions join the war against the aggressor, as declarers themselves.
+- **Budget discipline.**
+  - New ships are only built when income covers running costs by 10% plus the ship's upkeep (a minimum of six haulers excepted).
+  - A faction running a deficit with less than 15 periods of runway scraps ships until costs fall to 90% of income.
 - **Ending wars.** A side is exhausted when it has less than two periods of running costs left, or its war fleet has fallen below half its strength at the start of the war. The exhausted side **sues for peace**: it cedes up to two border systems (besieged ones first) and pays 30% of its credits. If both are exhausted, the peace is white. A 10-hour truce follows.
 
-**Results (seed 1, 400 systems, 20,000 ticks ≈ 55 game hours):**
-- **Performance:** about 5 ms per tick, roughly 1/2000 of the 10 s budget. A full run takes about 110 s. The same seed gives identical results.
-- **Economy:** stable and growing.
-  - About 10,000 convoys per 2,500 ticks.
-  - Station maintenance met at about 83% for both factions and independents.
-  - Trade with independents roughly balanced, about 0.7–1 million credits each way per window.
-  - No systems lost to arrears.
-- **Expansion:** gradual. 106 claims; 88 independent systems remain at the end.
-- **Fleets:** sized by income. A rich aggressive faction keeps about 200 cruisers, while two others decommission down to a few frigates.
-- **War:** one full cycle, late in the run.
-  1. The Iron Kestrel Union declares war on the Halcyon Accord.
-  2. Kestrel launches assaults at 3:1 (260 against 45) and captures two systems through sieges.
-  3. Halcyon sues for peace, ceding two systems and paying about 64,000 credits.
+**Results (galaxy seed 1, history seed 1, 400 systems, 40,000 ticks ≈ 4.6 game days):**
+- **Performance:** about 4.5 ms per tick; a run takes about 3 minutes. The same two seeds replay identically.
+- **Economy:** stable throughout. Station maintenance met at about 75% for factions and 60% for independents, no systems lost to arrears, and every faction alive. Pirates hold at 9 dens and about 55 frigates.
+- **Wars:**
+  1. The Iron Kestrel Union, the largest power (about 80 systems), declares war on Meridian, which sues for peace within an hour.
+  2. Kestrel's next declaration comes exactly 24 hours after that war ended.
+  3. Halcyon joins a coalition against Kestrel; both Meridian and Halcyon later sue for peace, each ceding a system.
 
 **Open questions from the prototype:**
-1. **Pacing.** Wars arrive late, once expansion runs out of room; there was one war in 55 hours. More wars would come from stronger border friction or earlier land hunger.
-2. **Pirate strength.** With dens they can build and an upkeep to pay, pirates grow to the 12-den cap and about 100 frigates. Their raids then wear the factions' economies down late in a run (station maintenance falls from about 76% to 54%). The den cap, raid size and hunting pressure need tuning.
-3. **Fleet planning.** Factions keep large fleets until they are down to a few periods of runway, then scrap them all at once. They should size fleets to their long-run income instead.
+1. **Coalitions need teeth.** Coalition members are often poor and have no fleets, so joining a war against a dominant aggressor changes little. Options: allies defend each other's systems, coalition members pool forces, or aggressors pay an economic penalty (trade embargoes).
+2. **Economic snowball.** The strongest economy grows its territory and fleet the most, and the others hover near zero credits. Catch-up mechanics might be needed (for example, upkeep that rises faster than linearly with size).
+3. **Pirate strength.** This is now in check (9 dens), but it is worth watching across seeds.
 
 ## What LT supplies
 

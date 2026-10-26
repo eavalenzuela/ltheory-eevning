@@ -489,13 +489,17 @@ local function mostRemote(state: State.State, faction: State.Faction): number?
   return pick
 end
 
--- Scraps idle warships (cruisers first, keeping one frigate per fleet)
--- until maintenance falls by 'saving' credits per period
+-- Scraps idle ships (cruisers, then frigates keeping one per fleet, then
+-- haulers beyond six) until maintenance falls by 'saving' credits per period
 local function decommission(state: State.State, faction: State.Faction, saving: number)
   local fleets = {}
+  local haulers = 0
   for _, fleet in state.fleets do
-    if fleet.owner == faction.id and fleet.role == "war" and fleet.action == nil then
+    if fleet.owner == faction.id and fleet.action == nil then
       table.insert(fleets, fleet)
+    end
+    if fleet.owner == faction.id then
+      haulers += fleet.ships.hauler or 0
     end
   end
   table.sort(fleets, function(a, b)
@@ -504,15 +508,24 @@ local function decommission(state: State.State, faction: State.Faction, saving: 
     return a.id < b.id
   end)
   local saved, scrapped = 0, 0
-  for _, id in { "cruiser", "frigate" } do
+  for _, id in { "cruiser", "frigate", "hauler" } do
     local class = Data.ShipById[id]
     for _, fleet in fleets do
-      local keep = if id == "frigate" then 1 else 0
-      while saved < saving and (fleet.ships[id] or 0) > keep do
+      local keep = if id == "frigate" and fleet.role == "war" then 1 else 0
+      while saved < saving and (fleet.ships[id] or 0) > keep and (id ~= "hauler" or haulers > 6) do
         fleet.ships[id] -= 1
         saved += class.upkeep
         scrapped += 1
+        if id == "hauler" then
+          haulers -= 1
+        end
       end
+    end
+  end
+  -- Fleets scrapped down to nothing are gone
+  for _, fleet in fleets do
+    if State.ShipCount(fleet) == 0 then
+      State.Disband(state, fleet)
     end
   end
   if scrapped > 0 then
@@ -563,7 +576,7 @@ local function pay(state: State.State)
         end
       end
       if f.income < f.costs and f.credits < f.costs * Data.DECOMMISSION_RUNWAY then
-        decommission(state, f, f.costs - f.income)
+        decommission(state, f, f.costs - 0.9 * math.max(0, f.income))
       end
       if f.arrears > 0 then
         -- Unpaid crews desert
@@ -620,6 +633,8 @@ end
 
 local function makePeace(state: State.State, a: State.Faction, b: State.Faction)
   a.war[b.id], b.war[a.id] = false, false
+  a.declared[b.id], b.declared[a.id] = nil, nil
+  a.lastWarEnded, b.lastWarEnded = state.tick, state.tick
   a.relations[b.id], b.relations[a.id] = Data.AFTER_PEACE, Data.AFTER_PEACE
   local until_ = state.tick + Data.TRUCE_PERIODS * Data.PERIOD_TICKS
   a.truce[b.id], b.truce[a.id] = until_, until_
@@ -628,9 +643,62 @@ local function makePeace(state: State.State, a: State.Faction, b: State.Faction)
   State.Count(state, "peace treaties")
 end
 
+-- A faction may declare war if it hasn't declared one, or had one end,
+-- within the cooldown
+local function canDeclare(state: State.State, f: State.Faction): boolean
+  return state.tick - f.lastDeclared >= Data.WAR_COOLDOWN and state.tick - f.lastWarEnded >= Data.WAR_COOLDOWN
+end
+
 local function period(state: State.State)
   pay(state)
   local strength = warStrength(state)
+
+  -- Power: war fleet plus territory
+  local held: { [number]: number } = {}
+  for _, system in state.systems do
+    if system.owner then
+      held[system.owner] = (held[system.owner] or 0) + 1
+    end
+  end
+  local power: { [number]: number } = {}
+  local total, count = 0, 0
+  for _, f in state.factions do
+    power[f.id] = strength[f.id] + 3 * (held[f.id] or 0)
+    if f.alive and not f.pirate then
+      total += power[f.id]
+      count += 1
+    end
+  end
+  local average = if count > 0 then total / count else 1
+
+  -- An aggressor clearly stronger than the faction it attacked
+  local function bully(f: State.Faction): boolean
+    for other, declared in f.declared do
+      if declared and f.war[other] and power[f.id] > Data.AGGRESSOR_RATIO * power[other] then
+        return true
+      end
+    end
+    return false
+  end
+
+  -- Coalitions: the others fear a strong aggressor and side with its victim
+  for _, a in state.factions do
+    if a.alive and not a.pirate then
+      for victim, declared in a.declared do
+        if declared and a.war[victim] and power[a.id] > Data.AGGRESSOR_RATIO * power[victim] then
+          local fear = Data.FEAR * power[a.id] / (2 * average)
+          for _, c in state.factions do
+            if c.alive and not c.pirate and c.id ~= a.id and c.id ~= victim and not c.war[victim] then
+              c.relations[a.id] -= fear
+              a.relations[c.id] = c.relations[a.id]
+              c.relations[victim] += Data.SOLIDARITY
+              state.factions[victim].relations[c.id] = c.relations[victim]
+            end
+          end
+        end
+      end
+    end
+  end
 
   -- Relations: drift back toward the baseline; friction along shared
   -- borders, worse for the aggressive, eased by the sociable and doubled
@@ -650,10 +718,27 @@ local function period(state: State.State)
 
         if not a.war[b.id] then
           if r < Data.WAR_BELOW and state.tick >= (a.truce[b.id] or 0) then
-            a.war[b.id], b.war[a.id] = true, true
-            a.warStart[b.id], b.warStart[a.id] = strength[a.id], strength[b.id]
-            State.Count(state, "wars declared")
-            State.Log(state, "war", `{a.name} and {b.name} are at war`)
+            -- The declarer: a faction joining a coalition against a strong
+            -- aggressor, otherwise the more aggressive of the two
+            local bullyA, bullyB = bully(a), bully(b)
+            local declarer = if bullyB and not bullyA then a
+              elseif bullyA and not bullyB then b
+              elseif a.traits.aggressive >= b.traits.aggressive then a
+              else b
+            local target = if declarer == a then b else a
+            if canDeclare(state, declarer) then
+              a.war[b.id], b.war[a.id] = true, true
+              a.warStart[b.id], b.warStart[a.id] = strength[a.id], strength[b.id]
+              declarer.declared[target.id] = true
+              declarer.lastDeclared = state.tick
+              State.Count(state, "wars declared")
+              if bully(target) then
+                State.Count(state, "coalition wars")
+                State.Log(state, "war", `{declarer.name} joins the coalition against {target.name}`)
+              else
+                State.Log(state, "war", `{declarer.name} declares war on {target.name}`)
+              end
+            end
           end
         else
           -- Wars end when a side runs out of resources
@@ -675,15 +760,15 @@ local function period(state: State.State)
     end
   end
 
-  -- Eliminations
-  local held: { [number]: number } = {}
+  -- Eliminations (peace terms may have moved systems since 'held')
+  local remaining: { [number]: number } = {}
   for _, system in state.systems do
     if system.owner then
-      held[system.owner] = (held[system.owner] or 0) + 1
+      remaining[system.owner] = (remaining[system.owner] or 0) + 1
     end
   end
   for _, f in state.factions do
-    if f.alive and not f.pirate and (held[f.id] or 0) == 0 then
+    if f.alive and not f.pirate and (remaining[f.id] or 0) == 0 then
       f.alive = false
       State.Log(state, "eliminated", `{f.name} has been eliminated`)
       for _, fleet in state.fleets do
@@ -896,7 +981,8 @@ function Sim.Stats(state: State.State): { FactionStats }
     local wars = {}
     for other, atWar in f.war do
       if atWar and not state.factions[other].pirate and state.factions[other].alive then
-        table.insert(wars, state.factions[other].name)
+        -- '*' marks a war this faction declared
+        table.insert(wars, state.factions[other].name .. (if f.declared[other] then "*" else ""))
       end
     end
     table.sort(wars)

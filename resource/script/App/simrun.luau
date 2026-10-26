@@ -11,8 +11,8 @@ local Sim = require("@lt/Sim/Sim")
 local GALAXY_SEED = 1
 local HISTORY_SEED: number? = nil -- nil: a fresh history each run; set it to replay one
 local SYSTEMS = 400
-local TICKS = 20000          -- 10 s each: 20000 ticks is about 55 hours of game time
-local REPORT_EVERY = 2500
+local TICKS = 40000          -- 10 s each: 40000 ticks is about 4.6 days of game time
+local REPORT_EVERY = 5000
 
 local function gameTime(tick: number): string
   local minutes = tick * 10 // 60

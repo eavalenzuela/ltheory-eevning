@@ -65,6 +65,9 @@ export type Faction = {
   lastCredits: number,         -- credits after paying the last period's costs
   truce: { [number]: number }, -- no war with this faction before this tick
   warStart: { [number]: number }, -- own war strength when each war began
+  declared: { [number]: boolean }, -- wars this faction declared (it is the aggressor)
+  lastDeclared: number,        -- tick of its last declaration of war
+  lastWarEnded: number,        -- tick one of its wars last ended
   plan: Plan?,                 -- the attack being prepared
 }
 
@@ -388,6 +391,9 @@ function State.New(galaxy: Galaxy.Galaxy, seed: number, history: number): State
       lastCredits = if def.pirate then Data.PIRATE_CREDITS else Data.STARTING_CREDITS,
       truce = {},
       warStart = {},
+      declared = {},
+      lastDeclared = -Data.WAR_COOLDOWN,
+      lastWarEnded = -Data.WAR_COOLDOWN,
       plan = nil,
     })
     if def.pirate then

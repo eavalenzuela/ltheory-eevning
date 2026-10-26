@@ -129,7 +129,8 @@ Data.PIRATE_FRIGATE_CREDITS = 250
 Data.PIRATE_CREDITS = 40000  -- pirates' starting war chest (raids pay irregularly)
 Data.DEN_CREDITS = 15000     -- what pirates pay to have a den constructed
 Data.CONSTRUCT_TICKS = 60    -- construction time; the escort must hold the site
-Data.MAX_DENS = 12
+Data.MAX_DENS = 9
+Data.PIRATES_PER_DEN = 6     -- frigates pirates keep per den
 
 --------------------------------------------------------------- Combat
 
@@ -175,7 +176,8 @@ Data.INDEPENDENT_CREDITS = 20000 -- an independent system's starting treasury; i
                                  -- earn only by selling goods (they collect no taxes)
 Data.EXPAND_RESERVE = 20     -- periods of running costs a faction keeps before expanding
 Data.BUILD_RESERVE = 30      -- periods of running costs a faction keeps (working capital for trade) before building warships or stations
-Data.DECOMMISSION_RUNWAY = 5 -- a faction running a deficit scraps ships once it has fewer periods of costs left than this
+Data.DECOMMISSION_RUNWAY = 15 -- a faction running a deficit scraps ships once it has fewer periods of costs left than this
+Data.BUDGET_MARGIN = 1.1     -- income must cover running costs by this much before new ships are built
 
 -- Peace: a side at war is exhausted when it has less than RUNWAY periods
 -- of running costs left, or its war fleet is below STRENGTH of what it was
@@ -188,5 +190,17 @@ Data.CEDED_SYSTEMS = 2
 Data.REPARATIONS = 0.3
 Data.TRUCE_PERIODS = 60      -- 10 hours
 Data.AFTER_PEACE = -20       -- relations right after a peace
+
+-- War cooldowns, in ticks of 10 real seconds: a faction can't declare war
+-- within this long of declaring another, or of one of its wars ending
+Data.WAR_COOLDOWN = 8640     -- 24 hours
+
+-- Coalitions: while an aggressor is this much more powerful than the
+-- faction it attacked, the others' relations with it fall (fear, scaled by
+-- its dominance) and rise with its victim (solidarity), until they join
+-- the war against it
+Data.AGGRESSOR_RATIO = 1.2
+Data.FEAR = 3                -- per period, at twice the average power
+Data.SOLIDARITY = 1          -- per period
 
 return Data

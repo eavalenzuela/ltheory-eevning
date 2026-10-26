@@ -150,10 +150,14 @@ local function buildShips(state: State.State, faction: State.Faction, c: Census)
       local station = state.stations[id]
       if station.kind == "shipyard" and station.building == nil and not station.destroyed then
         local ship: string? = nil
-        if c.haulers < wantHaulers then
+        -- Only build what the budget can carry (a few haulers regardless)
+        local function affordable(class: string): boolean
+          return faction.income > faction.costs * Data.BUDGET_MARGIN + Data.ShipById[class].upkeep
+        end
+        if c.haulers < 6 or (c.haulers < wantHaulers and affordable("hauler")) then
           ship = "hauler"
         elseif c.warStrength < wantStrength and faction.credits > faction.costs * Data.BUILD_RESERVE
-          and faction.income > faction.costs + Data.ShipById.cruiser.upkeep then
+          and affordable("cruiser") then
           ship = "cruiser"
           for good, n in Data.ShipById.cruiser.cost do
             if (station.stock[good] or 0) < n then
@@ -527,7 +531,7 @@ local function piratesAct(state: State.State, faction: State.Faction, c: Census)
   for _, home in homes do
     for _, id in state.galaxy.systems[home].stations do
       local station = state.stations[id]
-      if station.kind == "den" and fleetShips < 8 * #homes then
+      if station.kind == "den" and fleetShips < Data.PIRATES_PER_DEN * #homes then
         if Actions.Build(state, station, "frigate", Data.PIRATE_FRIGATE_CREDITS) then
           fleetShips += 1
         end
