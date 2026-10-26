@@ -42,6 +42,7 @@ Status: the proposal, decisions and design details below are agreed (2026-10-25)
 | Layer boundary | The simulation doesn't control the in-system simulation directly. It changes the universe state, and the state determines what the in-system simulation shows when the player enters a system |
 | Resolution where the player is | **Physical.** Fleets, traders and so on arriving or leaving warp in and out, as pirates already do. The abstract combat model applies only to systems the player is not in |
 | Jumps | **6 ticks (1 minute) per gate jump** |
+| Pirate stations | **Pirates pay to have stations (dens) constructed**, and then carry the same station upkeep as everyone else |
 | Actions per tick | **No limit.** A faction can submit any number of actions in each phase (builds, convoys, claims, attacks, defence); only its ships, goods and credits constrain it |
 | Commitment | Ships and goods are locked once in an action. **Cancelling a submitted action is itself an action** and unlocks them |
 | Ending wars | **Wars end on lack of resources, with negotiated terms.** A side runs out of credits or loses most of its fleet, then sues for peace and cedes systems or pays |
@@ -83,8 +84,9 @@ Status: the proposal, decisions and design details below are agreed (2026-10-25)
 - Pirates are a faction whose goal is raiding convoys and weakly held systems. Independent traders and miners are convoys and operations owned by minor factions.
 
 ### Determinism and persistence
-- The RNG for every roll is seeded from (universe seed, tick, action id), so the same save replays identically.
-- **The universe state is the save file:** the universe seed plus the state (ownership, stock, prices, relations, fleets, active timers, player assets). Everything procedural (system layouts, hulls, item stats) is regenerated from seeds and never stored.
+- **Two seeds.** The **galaxy seed** fixes the layout, stations, names and starting setup, so a galaxy can be shared. The **history seed** drives every roll during play (combat, resistance, desertion). It is picked fresh for each new game, so the same galaxy unfolds differently each time, and it is stored in the state.
+- Each roll's stream is derived from (history seed, tick, ids), so a run replays exactly from its two seeds. This is used for tuning and debugging.
+- **The universe state is the save file:** the galaxy seed plus the state, including the history seed (ownership, stock, prices, relations, fleets, active timers, player assets). Everything procedural (system layouts, hulls, item stats) is regenerated from seeds and never stored.
 
 ### Generation and the two layers
 - System generation splits into two parts:
@@ -143,6 +145,7 @@ Run it with `bin/launch simrun` (`App/simrun.luau` sets the seed, size and lengt
   - A faction running a deficit decommissions ships first.
   - Warships are only built from a working-capital reserve, and only when income covers their upkeep.
 - **Income.** Habitat taxes plus a 3% industry tax on the value of everything produced, both paid to the owning faction.
+- **Pirate stations.** Pirates pay to have dens constructed. A construct action sends an escort to an empty independent system far from faction space; the den is built after 60 ticks if the escort still holds the site. Pirates pay the same sovereignty and ship upkeep as factions, and their dens consume maintenance goods. Since nobody trades with them, they supply those goods by raiding: looted maintenance goods go to the nearest den and the rest is fenced for credits. Built stations are recorded in the state, because the galaxy description is regenerated from the seed.
 - **Ending wars.** A side is exhausted when it has less than two periods of running costs left, or its war fleet has fallen below half its strength at the start of the war. The exhausted side **sues for peace**: it cedes up to two border systems (besieged ones first) and pays 30% of its credits. If both are exhausted, the peace is white. A 10-hour truce follows.
 
 **Results (seed 1, 400 systems, 20,000 ticks ≈ 55 game hours):**
@@ -161,8 +164,8 @@ Run it with `bin/launch simrun` (`App/simrun.luau` sets the seed, size and lengt
 
 **Open questions from the prototype:**
 1. **Pacing.** Wars arrive late, once expansion runs out of room; there was one war in 55 hours. More wars would come from stronger border friction or earlier land hunger.
-2. **Pirate growth.** Pirate credits pile up with nothing to spend them on, and lost dens are never replaced.
-3. **Fleet swings.** Factions overbuild cruisers, then decommission them. Smoother fleet planning would make fleet sizes steadier.
+2. **Pirate strength.** With dens they can build and an upkeep to pay, pirates grow to the 12-den cap and about 100 frigates. Their raids then wear the factions' economies down late in a run (station maintenance falls from about 76% to 54%). The den cap, raid size and hunting pressure need tuning.
+3. **Fleet planning.** Factions keep large fleets until they are down to a few periods of runway, then scrap them all at once. They should size fleets to their long-run income instead.
 
 ## What LT supplies
 

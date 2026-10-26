@@ -8,7 +8,8 @@
 local Ai = require("@lt/Sim/Ai")
 local Sim = require("@lt/Sim/Sim")
 
-local SEED = 1
+local GALAXY_SEED = 1
+local HISTORY_SEED: number? = nil -- nil: a fresh history each run; set it to replay one
 local SYSTEMS = 400
 local TICKS = 20000          -- 10 s each: 20000 ticks is about 55 hours of game time
 local REPORT_EVERY = 2500
@@ -22,19 +23,19 @@ local function pad(s: string, n: number): string
   return s .. string.rep(" ", math.max(0, n - #s))
 end
 
-local HEADLINES = { capture = true, war = true, peace = true, eliminated = true, lapse = true, assault = true }
+local HEADLINES = { capture = true, war = true, peace = true, eliminated = true, lapse = true, construct = true }
 
 return {
   Initialize = function()
     local started = os.clock()
-    local state = Sim.New(SEED, SYSTEMS)
+    local state = Sim.New(GALAXY_SEED, SYSTEMS, HISTORY_SEED)
     local stations = #state.galaxy.stations
     local links = 0
     for _, system in state.galaxy.systems do
       links += #system.neighbors
     end
-    print(`galaxy: {SYSTEMS} systems, {links // 2} gate links, {stations} stations; generated in `
-      .. `{string.format("%.2f", os.clock() - started)} s`)
+    print(`galaxy seed {state.seed}, history seed {state.history}: {SYSTEMS} systems, {links // 2} gate links, `
+      .. `{stations} stations; generated in {string.format("%.2f", os.clock() - started)} s`)
 
     local lastCounters: { [string]: number } = {}
     local newsSeen = 0

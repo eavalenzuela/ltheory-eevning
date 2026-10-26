@@ -18,8 +18,12 @@ local State = require("@lt/Sim/State")
 
 local Sim = {}
 
-function Sim.New(seed: number, systemCount: number): State.State
-  return State.New(Galaxy.Describe(seed, systemCount), seed)
+-- A new universe. 'galaxySeed' fixes the galaxy and starting setup;
+-- 'historySeed' drives the rolls during play and is picked fresh when
+-- not given.
+function Sim.New(galaxySeed: number, systemCount: number, historySeed: number?): State.State
+  local history = historySeed or Rng.Int(Rng.For(os.time(), math.floor(os.clock() * 1000000)), 2147483647)
+  return State.New(Galaxy.Describe(galaxySeed, systemCount), galaxySeed, history)
 end
 
 local function name(state: State.State, faction: number?): string
@@ -76,6 +80,31 @@ local function interrupt(state: State.State, fleet: State.Fleet)
   end
 end
 
+-- Pirates keep looted maintenance goods at their nearest den and fence
+-- the rest; returns the credits the loot fetched
+local function stash(state: State.State, pirate: number, near: number, good: string, amount: number): number
+  if Data.MAINTENANCE[good] then
+    local best: State.Station? = nil
+    local bestHops = math.huge
+    for _, system in state.systems do
+      if system.owner == pirate then
+        for _, id in state.galaxy.systems[system.id].stations do
+          local station = state.stations[id]
+          local d = state.galaxy.hops[near][system.id]
+          if station.kind == "den" and not station.destroyed and d < bestHops then
+            best, bestHops = station, d
+          end
+        end
+      end
+    end
+    if best then
+      best.stock[good] = (best.stock[good] or 0) + amount
+      return 0
+    end
+  end
+  return 0.5 * amount * Data.GoodById[good].base
+end
+
 local function fight(state: State.State, system: number, a: number, b: number, assault: boolean)
   local owner = state.systems[system].owner
   local sideA = State.IdleFleets(state, system, a)
@@ -96,7 +125,7 @@ local function fight(state: State.State, system: number, a: number, b: number, a
   if (#sideA == 0 and defA == 0) or (#sideB == 0 and defB == 0) then
     return
   end
-  local rng = Rng.For(state.seed, state.tick, system, a, b)
+  local rng = Rng.For(state.history, state.tick, system, a, b)
   local aWins, lossA, lossB = Combat.Fight(rng, strengthA, strengthB)
   -- Static defence soaks part of its side's losses
   local fleetShareA = if strengthA > 0 then Combat.Strength(sideA) / strengthA else 0
@@ -112,17 +141,18 @@ local function fight(state: State.State, system: number, a: number, b: number, a
   local winner, loser = if aWins then a else b, if aWins then b else a
   local losers = if aWins then sideB else sideA
   local cargo = 0
+  local pirateWon = state.factions[winner].pirate
   for _, fleet in losers do
     for good, n in fleet.cargo do
       cargo += n * Data.GoodById[good].base
+      if pirateWon then
+        state.factions[winner].credits += stash(state, winner, system, good, n)
+      end
     end
     fleet.cargo = {}
   end
   if cargo > 0 then
     State.Count(state, "convoys lost")
-    if state.factions[winner].pirate then
-      state.factions[winner].credits += 0.5 * cargo
-    end
   end
   if lostA + lostB >= 6 or cargo > 0 then
     local what = if cargo > 0 then ` (cargo worth {math.floor(cargo)} lost)` else ""
@@ -160,7 +190,7 @@ local function resist(state: State.State, system: number, faction: number)
   if defense <= 0 or #side == 0 then
     return
   end
-  local rng = Rng.For(state.seed, state.tick, system, faction, 0)
+  local rng = Rng.For(state.history, state.tick, system, faction, 0)
   local won, loss = Combat.Fight(rng, Combat.Strength(side), defense)
   local lost = Combat.ApplyLosses(rng, side, loss)
   state.factions[faction].losses += lost
@@ -287,9 +317,9 @@ local function raid(state: State.State, system: number, fleet: State.Fleet)
       local k = 0.25 * n
       station.stock[good] = n - k
       loot += k * Data.GoodById[good].base
+      state.factions[fleet.owner].credits += stash(state, fleet.owner, system, good, k)
     end
   end
-  state.factions[fleet.owner].credits += 0.5 * loot
   State.Count(state, "raids")
   State.Log(state, "raid", `{name(state, fleet.owner)} raided {systemName(state, system)} `
     .. `({name(state, state.systems[system].owner)}), goods worth {math.floor(loot)}`)
@@ -323,6 +353,11 @@ local function arrived(state: State.State, action: State.Action, fleet: State.Fl
     if not hostilesPresent(state, system, fleet.owner) then
       raid(state, system, fleet)
     end
+  elseif intent == "construct" then
+    if owner == nil and #state.galaxy.systems[system].stations == 0 and not hostilesPresent(state, system, fleet.owner)
+      and Actions.Construct(state, fleet, "den", Data.DEN_CREDITS) then
+      State.Log(state, "construct", `{name(state, fleet.owner)} begin building a den at {systemName(state, system)}`)
+    end
   end
 end
 
@@ -335,7 +370,7 @@ local function produce(state: State.State, station: State.Station)
   local makes = Market.Profile(station.kind).makes
   -- Maintenance first, drawn from this station, then the others in its
   -- system; a station short of it works at reduced strength
-  if station.kind ~= "den" then
+  do
     local others = state.galaxy.systems[station.system].stations
     local total, count = 0, 0
     for good, n in Data.MAINTENANCE do
@@ -504,9 +539,11 @@ local function pay(state: State.State)
     end
   end
   for _, f in state.factions do
-    if f.alive and not f.pirate then
+    if f.alive then
       local sov = (systems[f.id] or 0) * Data.SOV_PER_SYSTEM + (stations[f.id] or 0) * Data.SOV_PER_STATION
-      f.income = f.credits - f.lastCredits
+      local earned = f.credits - f.lastCredits
+      f.income = if state.tick <= Data.PERIOD_TICKS then earned
+        else f.income + Data.INCOME_SMOOTHING * (earned - f.income)
       f.costs = sov + (maintenance[f.id] or 0)
       f.credits -= f.costs
       f.lastCredits = f.credits
@@ -525,12 +562,12 @@ local function pay(state: State.State)
           State.Log(state, "lapse", `{f.name} lost control of {systemName(state, lost)}: unpaid upkeep`)
         end
       end
-      if f.income < f.costs and f.credits < f.costs * Data.BUILD_RESERVE then
+      if f.income < f.costs and f.credits < f.costs * Data.DECOMMISSION_RUNWAY then
         decommission(state, f, f.costs - f.income)
       end
       if f.arrears > 0 then
         -- Unpaid crews desert
-        local rng = Rng.For(state.seed, state.tick, f.id, 1)
+        local rng = Rng.For(state.history, state.tick, f.id, 1)
         local deserted = 0
         for _, fleet in state.fleets do
           if fleet.owner == f.id then
@@ -674,7 +711,7 @@ local function resolve(state: State.State)
     if action and not action.done then
       if action.kind == "build" then
         table.insert(builds, action)
-      elseif action.kind == "siege" then
+      elseif action.kind == "siege" or action.kind == "construct" then
         table.insert(sieges, action)
       else
         local fleet = state.fleets[action.fleet :: number]
@@ -717,14 +754,23 @@ local function resolve(state: State.State)
     end
   end
 
-  -- 3. Sieges complete if the besiegers still hold the system
+  -- 3. Sieges and constructions complete if the fleet still holds the system
   for _, action in sieges do
     if not action.done then
       local fleet = state.fleets[action.fleet :: number]
       local system = action.target :: number
       Actions.Finish(state, action)
       local owner = state.systems[system].owner
-      if fleet and fleet.alive and fleet.system == system and not hostilesPresent(state, system, fleet.owner) then
+      if action.kind == "construct" then
+        if fleet and fleet.alive and fleet.system == system and owner == nil
+          and not hostilesPresent(state, system, fleet.owner) then
+          State.BuildStation(state, system, action.structure :: string)
+          transfer(state, system, fleet.owner)
+          State.Count(state, "stations constructed")
+          State.Log(state, "construct", `{name(state, fleet.owner)} completed a {Data.StationById[action.structure :: string].name} `
+            .. `at {systemName(state, system)}`)
+        end
+      elseif fleet and fleet.alive and fleet.system == system and not hostilesPresent(state, system, fleet.owner) then
         if owner == nil then
           claim(state, system, fleet.owner)
         elseif State.Hostile(state, fleet.owner, owner) then

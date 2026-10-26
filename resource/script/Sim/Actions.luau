@@ -12,7 +12,7 @@ local State = require("@lt/Sim/State")
 
 local Actions = {}
 
-local function newAction(state: State.State, owner: number, kind: "move" | "convoy" | "build" | "siege"): State.Action
+local function newAction(state: State.State, owner: number, kind: "move" | "convoy" | "build" | "siege" | "construct"): State.Action
   local action: State.Action = {
     id = State.NewId(state),
     owner = owner,
@@ -151,6 +151,27 @@ function Actions.Siege(state: State.State, fleet: State.Fleet): State.Action?
   action.intent = "siege"
   action.target = system
   action.due = state.tick + Data.SIEGE_TICKS
+  fleet.action = action.id
+  State.Schedule(state, action)
+  return action
+end
+
+-- Pays to have a station of 'kind' constructed where the fleet is; it is
+-- built if the fleet still holds the site when the timer completes
+function Actions.Construct(state: State.State, fleet: State.Fleet, kind: string, credits: number): State.Action?
+  local system = fleet.system
+  local faction = state.factions[fleet.owner]
+  if system == nil or fleet.action ~= nil or faction.credits < credits then
+    return nil
+  end
+  faction.credits -= credits
+  local action = newAction(state, fleet.owner, "construct")
+  action.fleet = fleet.id
+  action.intent = "construct"
+  action.target = system
+  action.structure = kind
+  action.credits = credits
+  action.due = state.tick + Data.CONSTRUCT_TICKS
   fleet.action = action.id
   State.Schedule(state, action)
   return action
@@ -324,7 +345,7 @@ function Actions.Cancel(state: State.State, owner: number, id: number): boolean
     end
     station.building = nil
     Actions.Finish(state, action)
-  elseif action.kind == "siege" then
+  elseif action.kind == "siege" or action.kind == "construct" then
     Actions.Finish(state, action)
   else
     action.cancelled = true

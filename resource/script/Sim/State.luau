@@ -1,7 +1,9 @@
 --!strict
--- The universe state: everything that changes. Together with the universe
--- seed it is the save file; the galaxy description is regenerated from
--- the seed. State.New sets up a new universe: faction territories, pirate
+-- The universe state: everything that changes. With the galaxy seed it is
+-- the save file; the galaxy description is regenerated from that seed.
+-- The history seed (stored here) drives every roll made during play, so
+-- each new game in the same galaxy unfolds differently, while any run can
+-- be replayed exactly from its two seeds. State.New sets up a new universe: faction territories, pirate
 -- dens, starting stocks, fleets and relations.
 
 local Data = require("@lt/Sim/Data")
@@ -59,7 +61,7 @@ export type Faction = {
   capital: number?,
   arrears: number,             -- periods in a row it couldn't pay its costs
   costs: number,               -- running costs last period
-  income: number,              -- net income last period, before running costs
+  income: number,              -- average net income per period, before running costs
   lastCredits: number,         -- credits after paying the last period's costs
   truce: { [number]: number }, -- no war with this faction before this tick
   warStart: { [number]: number }, -- own war strength when each war began
@@ -73,7 +75,7 @@ export type Plan = { kind: "attack" | "claim", target: number, staging: number, 
 export type Action = {
   id: number,
   owner: number,
-  kind: "move" | "convoy" | "build" | "siege",
+  kind: "move" | "convoy" | "build" | "siege" | "construct",
   submitted: number,
   phase: "action" | "reaction" | "resolve",
   due: number,
@@ -93,9 +95,10 @@ export type Action = {
   quantity: number?,
   claimed: boolean?,           -- still holds a pickup reservation
   expected: boolean?,          -- still holds a delivery reservation
-  -- build
+  -- build / construct
   station: number?,
   ship: string?,
+  structure: string?,          -- station kind being constructed
   reserved: Stock?,
   credits: number?,
 }
@@ -103,7 +106,8 @@ export type Action = {
 export type Event = { tick: number, kind: string, text: string }
 
 export type State = {
-  seed: number,
+  seed: number,                -- galaxy seed: layout, stations and starting setup
+  history: number,             -- history seed: every roll made during play
   tick: number,
   phase: "resolve" | "action" | "reaction",
   galaxy: Galaxy.Galaxy,
@@ -119,6 +123,7 @@ export type State = {
   counters: { [string]: number },
   reacted: { [string]: boolean },
   pending: { [string]: number? },            -- goods claimed by convoys under way, by station and good
+  built: { { system: number, kind: string } }, -- stations constructed after generation (part of the save)
 }
 
 function State.NewId(state: State): number
@@ -287,10 +292,8 @@ local function stationProfile(kind: string): ({ [string]: number }, { [string]: 
   for good, n in demand do
     wants[good] = (wants[good] or 0) + n
   end
-  if kind ~= "den" then
-    for good, n in Data.MAINTENANCE do
-      wants[good] = (wants[good] or 0) + n * Data.MAINTENANCE_CYCLES
-    end
+  for good, n in Data.MAINTENANCE do
+    wants[good] = (wants[good] or 0) + n * Data.MAINTENANCE_CYCLES
   end
   return wants, makes
 end
@@ -340,10 +343,11 @@ local function pickCapitals(galaxy: Galaxy.Galaxy, rng: Rng.Rng, count: number):
   return capitals
 end
 
-function State.New(galaxy: Galaxy.Galaxy, seed: number): State
+function State.New(galaxy: Galaxy.Galaxy, seed: number, history: number): State
   local rng = Rng.For(seed, 2)
   local state: State = {
     seed = seed,
+    history = history,
     tick = 0,
     phase = "resolve",
     galaxy = galaxy,
@@ -359,6 +363,7 @@ function State.New(galaxy: Galaxy.Galaxy, seed: number): State
     counters = {},
     reacted = {},
     pending = {},
+    built = {},
   }
   for _, desc in galaxy.systems do
     state.systems[desc.id] = { id = desc.id, owner = nil, fleets = {}, credits = Data.INDEPENDENT_CREDITS }
@@ -370,7 +375,7 @@ function State.New(galaxy: Galaxy.Galaxy, seed: number): State
       name = def.name,
       traits = def.traits,
       pirate = def.pirate == true,
-      credits = if def.pirate then 2000 else Data.STARTING_CREDITS,
+      credits = if def.pirate then Data.PIRATE_CREDITS else Data.STARTING_CREDITS,
       relations = {},
       war = {},
       baseline = {},
@@ -380,7 +385,7 @@ function State.New(galaxy: Galaxy.Galaxy, seed: number): State
       arrears = 0,
       costs = 0,
       income = 0,
-      lastCredits = if def.pirate then 2000 else Data.STARTING_CREDITS,
+      lastCredits = if def.pirate then Data.PIRATE_CREDITS else Data.STARTING_CREDITS,
       truce = {},
       warStart = {},
       plan = nil,
@@ -489,6 +494,7 @@ function State.New(galaxy: Galaxy.Galaxy, seed: number): State
     if spaced then
       table.insert(dens, r.id)
       state.systems[r.id].owner = state.pirates
+      state.factions[state.pirates].capital = state.factions[state.pirates].capital or r.id
       Galaxy.AddStation(galaxy, r.id, "den")
     end
   end
@@ -513,6 +519,28 @@ function State.New(galaxy: Galaxy.Galaxy, seed: number): State
     State.NewFleet(state, state.pirates, den, "war", { frigate = 4 })
   end
   return state
+end
+
+-- Adds a station constructed during play. It goes into the galaxy
+-- description and is recorded in state.built, since the description is
+-- regenerated from the seed on load.
+function State.BuildStation(state: State, system: number, kind: string): Station
+  local id = Galaxy.AddStation(state.galaxy, system, kind)
+  local station: Station = {
+    id = id,
+    system = system,
+    kind = kind,
+    stock = {},
+    nextCycle = state.tick + Data.CYCLE_TICKS,
+    maintained = 1,
+  }
+  -- A new station starts with a little maintenance stock
+  for good, n in Data.MAINTENANCE do
+    station.stock[good] = n * 10
+  end
+  state.stations[id] = station
+  table.insert(state.built, { system = system, kind = kind })
+  return station
 end
 
 ------------------------------------------------------------- Queries

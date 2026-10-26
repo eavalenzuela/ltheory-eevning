@@ -534,6 +534,42 @@ local function piratesAct(state: State.State, faction: State.Faction, c: Census)
       end
     end
   end
+  -- Expand: pay for a new den in an empty independent system far from
+  -- faction space, escorted by a few frigates
+  local building = false
+  for _, action in state.actions do
+    if action.owner == faction.id and action.intent == "construct" then
+      building = true
+    end
+  end
+  if not building and #homes < Data.MAX_DENS and faction.costs > 0
+    and faction.credits > Data.DEN_CREDITS + faction.costs * Data.BUILD_RESERVE then
+    local site, siteScore = 0, 0
+    local escort: State.Fleet? = nil
+    for _, system in state.systems do
+      if system.owner == nil and #state.galaxy.systems[system.id].stations == 0 then
+        -- Distance to the nearest faction system
+        local remote = math.huge
+        for _, other in state.systems do
+          local owner = other.owner
+          if owner and not state.factions[owner].pirate then
+            remote = math.min(remote, hops(state, system.id, other.id))
+          end
+        end
+        for _, fleet in c.idleWar do
+          if available(fleet) and (fleet.ships.frigate or 0) >= 4 and hops(state, fleet.system :: number, system.id) <= 8
+            and remote > siteScore then
+            site, siteScore, escort = system.id, remote, fleet
+          end
+        end
+      end
+    end
+    local e = escort
+    if e and site > 0 then
+      Actions.Move(state, State.Split(state, e, { frigate = 3 }), site, "construct")
+    end
+  end
+
   for _, fleet in c.idleWar do
     if not available(fleet) then
       continue

@@ -126,6 +126,10 @@ for _, class in Data.Ships do
 end
 
 Data.PIRATE_FRIGATE_CREDITS = 250
+Data.PIRATE_CREDITS = 40000  -- pirates' starting war chest (raids pay irregularly)
+Data.DEN_CREDITS = 15000     -- what pirates pay to have a den constructed
+Data.CONSTRUCT_TICKS = 60    -- construction time; the escort must hold the site
+Data.MAX_DENS = 12
 
 --------------------------------------------------------------- Combat
 
@@ -153,6 +157,7 @@ Data.Factions = {
 Data.TERRITORY = 40          -- systems each faction starts with
 Data.PIRATE_DENS = 6
 Data.STARTING_CREDITS = 100000
+Data.INCOME_SMOOTHING = 0.2  -- weight of the latest period in a faction's income average
 Data.WAR_BELOW = -50         -- relations below this lead to war
 Data.DRIFT = 0.5             -- per period, back toward the pair's baseline
 Data.FRICTION = 1.5          -- per period and shared border link, scaled by aggression
@@ -169,7 +174,8 @@ Data.INDEPENDENT_DEFENSE = 1 -- multiplier on an independent system's station de
 Data.INDEPENDENT_CREDITS = 20000 -- an independent system's starting treasury; independents
                                  -- earn only by selling goods (they collect no taxes)
 Data.EXPAND_RESERVE = 20     -- periods of running costs a faction keeps before expanding
-Data.BUILD_RESERVE = 30      -- periods of running costs a faction keeps (working capital for trade) before building warships
+Data.BUILD_RESERVE = 30      -- periods of running costs a faction keeps (working capital for trade) before building warships or stations
+Data.DECOMMISSION_RUNWAY = 5 -- a faction running a deficit scraps ships once it has fewer periods of costs left than this
 
 -- Peace: a side at war is exhausted when it has less than RUNWAY periods
 -- of running costs left, or its war fleet is below STRENGTH of what it was
