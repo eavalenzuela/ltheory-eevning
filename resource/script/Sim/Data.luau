@@ -126,6 +126,7 @@ for _, class in Data.Ships do
 end
 
 Data.PIRATE_FRIGATE_CREDITS = 250
+Data.EMERGENCY_HAULER_CREDITS = 1500 -- a hauler bought outright by a faction with too few to supply its shipyards
 Data.PIRATE_CREDITS = 40000  -- pirates' starting war chest (raids pay irregularly)
 Data.DEN_CREDITS = 15000     -- what pirates pay to have a den constructed
 Data.CONSTRUCT_TICKS = 60    -- construction time; the escort must hold the site
@@ -152,10 +153,13 @@ Data.Factions = {
   { name = "Halcyon Accord", traits = { aggressive = 0.2, greedy = 0.4, sociable = 0.9, lawless = 0.1 } },
   { name = "Drovan Syndicate", traits = { aggressive = 0.6, greedy = 0.8, sociable = 0.3, lawless = 0.7 } },
   { name = "Meridian Directorate", traits = { aggressive = 0.5, greedy = 0.5, sociable = 0.4, lawless = 0.1 } },
+  { name = "Ashen Covenant", traits = { aggressive = 0.7, greedy = 0.3, sociable = 0.4, lawless = 0.4 } },
+  { name = "Talmar Free Cities", traits = { aggressive = 0.2, greedy = 0.7, sociable = 0.8, lawless = 0.2 } },
+  { name = "Corvane Hegemony", traits = { aggressive = 0.8, greedy = 0.6, sociable = 0.2, lawless = 0.2 } },
   { name = "Pirates", pirate = true, traits = { aggressive = 1, greedy = 1, sociable = 0, lawless = 1 } },
 } :: { FactionDef }
 
-Data.TERRITORY = 40          -- systems each faction starts with
+Data.TERRITORY = 25          -- systems each faction starts with (8 factions: half the galaxy)
 Data.PIRATE_DENS = 6
 Data.STARTING_CREDITS = 100000
 Data.INCOME_SMOOTHING = 0.2  -- weight of the latest period in a faction's income average

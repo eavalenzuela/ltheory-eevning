@@ -299,13 +299,27 @@ function Actions.Build(state: State.State, station: State.Station, ship: string,
     if state.factions[owner].credits < class.credits then
       return nil
     end
+    -- Materials come from any station in the shipyard's system
+    local others = state.galaxy.systems[station.system].stations
     for good, n in class.cost do
-      if (station.stock[good] or 0) < n then
+      local available = 0
+      for _, id in others do
+        available += state.stations[id].stock[good] or 0
+      end
+      if available < n then
         return nil
       end
     end
     for good, n in class.cost do
-      station.stock[good] -= n
+      local need = n
+      for _, id in others do
+        local other = state.stations[id]
+        local k = math.min(need, other.stock[good] or 0)
+        if k > 0 then
+          other.stock[good] -= k
+          need -= k
+        end
+      end
       reserved[good] = n
     end
     state.factions[owner].credits -= class.credits

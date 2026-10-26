@@ -165,7 +165,12 @@ local function buildShips(state: State.State, faction: State.Faction, c: Census)
             end
           end
         end
-        if ship and Actions.Build(state, station, ship) then
+        local built = ship and Actions.Build(state, station, ship :: string)
+        -- Too few haulers to even supply the shipyard: buy one outright
+        if not built and ship == "hauler" and c.haulers < 6 then
+          built = Actions.Build(state, station, "hauler", Data.EMERGENCY_HAULER_CREDITS)
+        end
+        if ship and built then
           if ship == "hauler" then c.haulers += 1 else c.warStrength += Data.ShipById[ship].quality end
         end
       end

@@ -162,10 +162,24 @@ Run it with `bin/launch simrun` (`App/simrun.luau` sets the seed, size and lengt
   2. Kestrel's next declaration comes exactly 24 hours after that war ended.
   3. Halcyon joins a coalition against Kestrel; both Meridian and Halcyon later sue for peace, each ceding a system.
 
+**With eight factions** (25 starting systems each; galaxy seed 1, history seed 1, 40,000 ticks):
+- **Military snowball contained:**
+  - Coalitions form repeatedly against the Iron Kestrel Union, which twice has to sue for peace and pay reparations.
+  - It holds at 24–29 systems instead of reaching 80.
+  - There are 10 wars and 10 peaces, spaced by the 24-hour cooldown.
+- **Economies fragile:** five of the eight factions collapse to a single system through arrears.
+  - Small factions run at about 45% station maintenance, with few haulers and almost no warships.
+  - Broke factions join coalitions and sue for peace within minutes, because they are already exhausted when they join.
+
+Two fixes went in for this:
+- **Shipyards draw materials from their whole system.**
+- **Emergency haulers:** a faction with fewer than six haulers can buy one for credits alone. Without this, losing every hauler deadlocked a faction, since its shipyards were supplied by hauler.
+
 **Open questions from the prototype:**
-1. **Coalitions need teeth.** Coalition members are often poor and have no fleets, so joining a war against a dominant aggressor changes little. Options: allies defend each other's systems, coalition members pool forces, or aggressors pay an economic penalty (trade embargoes).
-2. **Economic snowball.** The strongest economy grows its territory and fleet the most, and the others hover near zero credits. Catch-up mechanics might be needed (for example, upkeep that rises faster than linearly with size).
-3. **Pirate strength.** This is now in check (9 dens), but it is worth watching across seeds.
+1. **Small-faction economies.** Factions with about 25 systems can't sustain themselves. Suspects: fixed overheads (starting fleets, upkeep) that don't scale with territory, and pirate attrition on thin logistics. Factions should also not declare or join wars while already exhausted.
+2. **Coalitions need teeth.** Coalition members are often poor and have no fleets, so joining a war against a dominant aggressor changes little. Options: allies defend each other's systems, coalition members pool forces, or aggressors pay an economic penalty (trade embargoes).
+3. **Economic snowball.** The strongest economy grows its territory and fleet the most, and the others hover near zero credits. Catch-up mechanics might be needed (for example, upkeep that rises faster than linearly with size).
+4. **Pirate strength.** This is now in check (9 dens), but it is worth watching across seeds.
 
 ## What LT supplies
 
