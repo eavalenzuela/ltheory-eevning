@@ -42,6 +42,7 @@ Status: the proposal, decisions and design details below are agreed (2026-10-25)
 | Layer boundary | The simulation doesn't control the in-system simulation directly. It changes the universe state, and the state determines what the in-system simulation shows when the player enters a system |
 | Resolution where the player is | **Physical.** Fleets, traders and so on arriving or leaving warp in and out, as pirates already do. The abstract combat model applies only to systems the player is not in |
 | Jumps | **6 ticks (1 minute) per gate jump** |
+| Actions per tick | **No limit.** A faction can submit any number of actions in each phase (builds, convoys, claims, attacks, defence); only its ships, goods and credits constrain it |
 | Commitment | Ships and goods are locked once in an action. **Cancelling a submitted action is itself an action** and unlocks them |
 | Ending wars | **Wars end on lack of resources, with negotiated terms.** A side runs out of credits or loses most of its fleet, then sues for peace and cedes systems or pays |
 | Defences | **Planets and stations defend strongly.** Attackers only attack at **3:1 odds or better** |
