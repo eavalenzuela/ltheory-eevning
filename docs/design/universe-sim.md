@@ -42,6 +42,7 @@ Status: the proposal, decisions and design details below are agreed (2026-10-25)
 | Layer boundary | The simulation doesn't control the in-system simulation directly. It changes the universe state, and the state determines what the in-system simulation shows when the player enters a system |
 | Resolution where the player is | **Physical.** Fleets, traders and so on arriving or leaving warp in and out, as pirates already do. The abstract combat model applies only to systems the player is not in |
 | Jumps | **6 ticks (1 minute) per gate jump** |
+| Starting position | **Each faction starts with one home system around a self-sufficient homeworld**, with no missing key resources, so each faction is stable on its own; growth comes from claiming |
 | War cooldowns | **A faction can't declare a new war within 24 real-time hours of declaring another, nor within 24 hours of one of its wars ending** |
 | Coalitions | **Other factions tend to ally against a larger aggressor in a war** |
 | Pirate stations | **Pirates pay to have stations (dens) constructed**, and then carry the same station upkeep as everyone else |
@@ -174,6 +175,15 @@ Run it with `bin/launch simrun` (`App/simrun.luau` sets the seed, size and lengt
 Two fixes went in for this:
 - **Shipyards draw materials from their whole system.**
 - **Emergency haulers:** a faction with fewer than six haulers can buy one for credits alone. Without this, losing every hauler deadlocked a faction, since its shipyards were supplied by hauler.
+
+**Homeworld starts** (one self-sufficient home system each; planets have unlimited storage):
+- **Two fixes:**
+  - **Storage caps were too coarse.** A recipe stopped entirely when any one output was full, which also stopped its tax. Recipes now produce whatever outputs have room, and taxes are always paid.
+  - **Planets have unlimited storage.**
+- **With 8 factions over 4.6 days:**
+  - **Stable:** every faction survives, nobody loses a system to arrears, and there are 127 claims.
+  - **Poor:** by day 5 every faction is near zero credits and has scrapped its fleets, and there are no wars.
+- **Cause: a logistics trap.** Station maintenance is met at only about 40%, which cuts taxes. The budget rule then blocks the haulers that would raise it.
 
 **Open questions from the prototype:**
 1. **Small-faction economies.** Factions with about 25 systems can't sustain themselves. Suspects: fixed overheads (starting fleets, upkeep) that don't scale with territory, and pirate attrition on thin logistics. Factions should also not declare or join wars while already exhausted.

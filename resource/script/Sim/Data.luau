@@ -46,6 +46,7 @@ export type StationKind = {
   name: string,
   recipes: { Recipe },
   extractor: boolean?,         -- produces at a reduced rate without inputs
+  planet: boolean?,            -- a planet: unlimited storage
   resource: string?,           -- system resource that scales output
   tax: number?,
   demand: { [string]: number }?,
@@ -63,7 +64,7 @@ Data.Stations = {
       { inputs = { ferrite = 40 }, outputs = { alloy = 12 } },
       { inputs = { ice = 30 }, outputs = { fuel = 12 } },
     } },
-  { id = "agri", name = "Agricultural World", extractor = true, defense = 20, weight = 1.5,
+  { id = "agri", name = "Agricultural World", extractor = true, planet = true, defense = 20, weight = 1.5,
     recipes = { { inputs = { fuel = 1 }, outputs = { food = 40 } } } },
   { id = "plating", name = "Plating Works", defense = 15, weight = 1,
     recipes = { { inputs = { alloy = 10 }, outputs = { plating = 5 } } } },
@@ -73,11 +74,16 @@ Data.Stations = {
     recipes = { { inputs = { alloy = 6, fuel = 4 }, outputs = { munitions = 10 } } } },
   { id = "goods", name = "Goods Factory", defense = 15, weight = 1.5,
     recipes = { { inputs = { alloy = 2, silicate = 6, food = 2 }, outputs = { domestic = 12 } } } },
-  { id = "habitat", name = "Habitat", tax = 80, defense = 25, weight = 1.5,
+  { id = "habitat", name = "Habitat", planet = true, tax = 80, defense = 25, weight = 1.5,
     recipes = { { inputs = { food = 10, electronics = 1, domestic = 2 }, outputs = {} } } },
   { id = "shipyard", name = "Shipyard", defense = 40, weight = 0,
     recipes = {}, demand = { plating = 60, electronics = 40, fuel = 60, munitions = 60 } },
   { id = "den", name = "Pirate Den", defense = 30, weight = 0, recipes = {} },
+  -- A faction's capital planet: a little of every key good with no
+  -- inputs, a large population tax and strong defences
+  { id = "homeworld", name = "Homeworld", extractor = true, planet = true, tax = 300, defense = 60, weight = 0,
+    recipes = { { inputs = {}, outputs = { food = 30, fuel = 12, domestic = 12, alloy = 8, plating = 3,
+      electronics = 2, munitions = 4 } } } },
 } :: { StationKind }
 
 Data.StationById = {} :: { [string]: StationKind }
@@ -95,7 +101,8 @@ Data.INDUSTRY_TAX = 0.03     -- share of each cycle's output value paid to the o
 
 Data.TARGET_CYCLES = 8       -- input stock a station wants, in cycles
 Data.KEEP_CYCLES = 2         -- output stock a station holds back from sale
-Data.CAP_CYCLES = 20         -- output storage, in cycles
+Data.CAP_CYCLES = 20         -- output storage of orbital stations, in cycles (planets have no limit;
+                             -- for them it is only the reference for pricing)
 Data.EXTRACTOR_IDLE = 0.25   -- extractor output without inputs
 
 ----------------------------------------------------------- Ship classes
@@ -159,9 +166,11 @@ Data.Factions = {
   { name = "Pirates", pirate = true, traits = { aggressive = 1, greedy = 1, sociable = 0, lawless = 1 } },
 } :: { FactionDef }
 
-Data.TERRITORY = 25          -- systems each faction starts with (8 factions: half the galaxy)
+Data.TERRITORY = 1           -- systems each faction starts with: its home system
 Data.PIRATE_DENS = 6
-Data.STARTING_CREDITS = 100000
+Data.STARTING_CREDITS = 50000
+Data.HOME_FLEET = { frigate = 8, cruiser = 2 } :: { [string]: number }
+Data.STARTING_HAULERS = 4
 Data.INCOME_SMOOTHING = 0.2  -- weight of the latest period in a faction's income average
 Data.WAR_BELOW = -50         -- relations below this lead to war
 Data.DRIFT = 0.5             -- per period, back toward the pair's baseline

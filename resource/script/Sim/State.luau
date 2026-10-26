@@ -436,7 +436,7 @@ function State.New(galaxy: Galaxy.Galaxy, seed: number, history: number): State
     local cap = capitals[i]
     state.systems[cap].owner = f.id
     f.capital = cap
-    for _, kind in { "shipyard", "habitat", "refinery" } do
+    for _, kind in { "homeworld", "shipyard" } do
       if not Galaxy.HasStation(galaxy, cap, kind) then
         Galaxy.AddStation(galaxy, cap, kind)
       end
@@ -509,16 +509,11 @@ function State.New(galaxy: Galaxy.Galaxy, seed: number, history: number): State
     addStationState(state, desc, rng)
   end
 
-  -- Starting fleets: a home fleet at the capital, garrisons, haulers
+  -- Starting fleets: a home fleet and a few haulers at the capital
   for i, f in empires do
-    State.NewFleet(state, f.id, capitals[i], "war", { frigate = 12, cruiser = 3 })
-    for k, s in frontiers[i] do
-      if k > 1 and k % 4 == 0 then
-        State.NewFleet(state, f.id, s, "war", { frigate = 3 })
-      end
-    end
-    for k = 1, 10 do
-      State.NewFleet(state, f.id, frontiers[i][(k * 3) % #frontiers[i] + 1], "trade", { hauler = 1 })
+    State.NewFleet(state, f.id, capitals[i], "war", table.clone(Data.HOME_FLEET))
+    for _ = 1, Data.STARTING_HAULERS do
+      State.NewFleet(state, f.id, capitals[i], "trade", { hauler = 1 })
     end
   end
   for _, den in dens do

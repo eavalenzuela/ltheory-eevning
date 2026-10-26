@@ -400,27 +400,55 @@ local function produce(state: State.State, station: State.Station)
   end
   local readiness = Data.UNMAINTAINED + (1 - Data.UNMAINTAINED) * station.maintained
   for _, recipe in kind.recipes do
-    local full = false
+    -- Run unless every output is already at capacity (a recipe that pays
+    -- tax or makes nothing always runs)
+    local function capacity(good: string): number
+      return if kind.planet then math.huge else makes[good] * Data.CAP_CYCLES
+    end
+    local room, outputs = false, 0
     for good in recipe.outputs do
-      if (station.stock[good] or 0) >= makes[good] * Data.CAP_CYCLES then
-        full = true
+      outputs += 1
+      if (station.stock[good] or 0) < capacity(good) then
+        room = true
       end
     end
-    if not full then
+    if room or outputs == 0 or kind.tax then
+      -- Inputs come from any station in the system, this one first
+      local others = state.galaxy.systems[station.system].stations
       local fraction = 1
       for good, n in recipe.inputs do
-        fraction = math.min(fraction, (station.stock[good] or 0) / n)
+        local available = 0
+        for _, id in others do
+          available += state.stations[id].stock[good] or 0
+        end
+        fraction = math.min(fraction, available / n)
       end
       for good, n in recipe.inputs do
-        station.stock[good] = (station.stock[good] or 0) - n * fraction
+        local need = n * fraction
+        local own = math.min(need, station.stock[good] or 0)
+        station.stock[good] = (station.stock[good] or 0) - own
+        need -= own
+        for _, id in others do
+          if need <= 0 then
+            break
+          end
+          local other = state.stations[id]
+          local k = math.min(need, other.stock[good] or 0)
+          other.stock[good] = (other.stock[good] or 0) - k
+          need -= k
+        end
       end
       local rate = if kind.extractor then math.max(fraction, Data.EXTRACTOR_IDLE) else fraction
       local value = 0
       for good, n in recipe.outputs do
-        local richness = if kind.extractor and resources[good] then resources[good] else 1
-        local made = n * rate * richness * readiness
-        station.stock[good] = (station.stock[good] or 0) + made
-        value += made * Data.GoodById[good].base
+        local cap = capacity(good)
+        local have = station.stock[good] or 0
+        if have < cap then
+          local richness = if kind.extractor and resources[good] then resources[good] else 1
+          local made = math.min(n * rate * richness * readiness, cap - have)
+          station.stock[good] = have + made
+          value += made * Data.GoodById[good].base
+        end
       end
       -- Industry tax on what was made (only factions levy taxes)
       local levy = value * Data.INDUSTRY_TAX
