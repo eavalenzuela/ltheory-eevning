@@ -20,12 +20,14 @@ export type Station = {
   nextCycle: number,
   building: number?,           -- action id of a ship under construction
   destroyed: boolean?,
+  maintained: number,          -- share of its maintenance goods it got last cycle
 }
 
 export type System = {
   id: number,
   owner: number?,              -- faction id; nil for independent systems
   fleets: { number },          -- fleets present (not in transit)
+  credits: number,             -- an independent system's treasury
 }
 
 export type Fleet = {
@@ -54,7 +56,18 @@ export type Faction = {
   baseline: { [number]: number },
   losses: number,              -- ships lost this period
   alive: boolean,
+  capital: number?,
+  arrears: number,             -- periods in a row it couldn't pay its costs
+  costs: number,               -- running costs last period
+  income: number,              -- net income last period, before running costs
+  lastCredits: number,         -- credits after paying the last period's costs
+  truce: { [number]: number }, -- no war with this faction before this tick
+  warStart: { [number]: number }, -- own war strength when each war began
+  plan: Plan?,                 -- the attack being prepared
 }
+
+-- An attack or claim being prepared: fleets muster at 'staging', next to 'target'
+export type Plan = { kind: "attack" | "claim", target: number, staging: number, since: number }
 
 -- Fields beyond the common ones depend on the kind
 export type Action = {
@@ -274,6 +287,11 @@ local function stationProfile(kind: string): ({ [string]: number }, { [string]: 
   for good, n in demand do
     wants[good] = (wants[good] or 0) + n
   end
+  if kind ~= "den" then
+    for good, n in Data.MAINTENANCE do
+      wants[good] = (wants[good] or 0) + n * Data.MAINTENANCE_CYCLES
+    end
+  end
   return wants, makes
 end
 State.StationProfile = stationProfile
@@ -293,6 +311,7 @@ local function addStationState(state: State, desc: Galaxy.StationDesc, rng: Rng.
     kind = desc.kind,
     stock = stock,
     nextCycle = Rng.Int(rng, Data.CYCLE_TICKS),
+    maintained = 1,
   }
 end
 
@@ -342,7 +361,7 @@ function State.New(galaxy: Galaxy.Galaxy, seed: number): State
     pending = {},
   }
   for _, desc in galaxy.systems do
-    state.systems[desc.id] = { id = desc.id, owner = nil, fleets = {} }
+    state.systems[desc.id] = { id = desc.id, owner = nil, fleets = {}, credits = Data.INDEPENDENT_CREDITS }
   end
 
   for i, def in Data.Factions do
@@ -357,6 +376,14 @@ function State.New(galaxy: Galaxy.Galaxy, seed: number): State
       baseline = {},
       losses = 0,
       alive = true,
+      capital = nil,
+      arrears = 0,
+      costs = 0,
+      income = 0,
+      lastCredits = if def.pirate then 2000 else Data.STARTING_CREDITS,
+      truce = {},
+      warStart = {},
+      plan = nil,
     })
     if def.pirate then
       state.pirates = i
@@ -397,6 +424,7 @@ function State.New(galaxy: Galaxy.Galaxy, seed: number): State
   for i, f in empires do
     local cap = capitals[i]
     state.systems[cap].owner = f.id
+    f.capital = cap
     for _, kind in { "shipyard", "habitat", "refinery" } do
       if not Galaxy.HasStation(galaxy, cap, kind) then
         Galaxy.AddStation(galaxy, cap, kind)
@@ -517,7 +545,8 @@ function State.StationDefense(state: State, system: number): number
   for _, id in state.galaxy.systems[system].stations do
     local station = state.stations[id]
     if not station.destroyed then
-      total += Data.StationById[station.kind].defense
+      local readiness = Data.UNMAINTAINED + (1 - Data.UNMAINTAINED) * station.maintained
+      total += Data.StationById[station.kind].defense * readiness
     end
   end
   return total

@@ -45,6 +45,11 @@ function Actions.Finish(state: State.State, action: State.Action)
   end
   action.done = true
   state.actions[action.id] = nil
+  -- Reactions to it no longer need remembering
+  state.reacted[`ambush:{action.id}`] = nil
+  for _, f in state.factions do
+    state.reacted[`defend:{f.id}:{action.id}`] = nil
+  end
   local fleet = if action.fleet then state.fleets[action.fleet] else nil
   if fleet and fleet.action == action.id then
     fleet.action = nil
@@ -168,10 +173,16 @@ local function unload(state: State.State, action: State.Action, fleet: State.Fle
   local station = state.stations[action.to :: number]
   local amount = fleet.cargo[good] or 0
   local price = Market.BuyPrice(station, good) or Data.GoodById[good].base * 0.5
-  local buyer = state.systems[station.system].owner
+  local system = state.systems[station.system]
+  local buyer = system.owner
   local value = amount * price
   if buyer and buyer ~= fleet.owner then
     value = math.min(value, math.max(0, state.factions[buyer].credits))
+  elseif buyer == nil then
+    -- Independents pay from their treasury
+    value = math.min(value, math.max(0, system.credits))
+    system.credits -= value
+    State.Count(state, "sales to independents", value)
   end
   Actions.Pay(state, buyer, fleet.owner, value)
   station.stock[good] = (station.stock[good] or 0) + amount
@@ -198,6 +209,10 @@ local function load(state: State.State, action: State.Action, fleet: State.Fleet
     return
   end
   Actions.Pay(state, fleet.owner, seller, amount * price)
+  if seller == nil then
+    state.systems[station.system].credits += amount * price
+    State.Count(state, "purchases from independents", amount * price)
+  end
   station.stock[good] -= amount
   fleet.cargo[good] = (fleet.cargo[good] or 0) + amount
   action.stage = "deliver"

@@ -43,6 +43,12 @@ Status: the proposal, decisions and design details below are agreed (2026-10-25)
 | Resolution where the player is | **Physical.** Fleets, traders and so on arriving or leaving warp in and out, as pirates already do. The abstract combat model applies only to systems the player is not in |
 | Jumps | **6 ticks (1 minute) per gate jump** |
 | Commitment | Ships and goods are locked once in an action. **Cancelling a submitted action is itself an action** and unlocks them |
+| Ending wars | **Wars end on lack of resources, with negotiated terms.** A side runs out of credits or loses most of its fleet, then sues for peace and cedes systems or pays |
+| Defences | **Planets and stations defend strongly.** Attackers only attack at **3:1 odds or better** |
+| Independents | **Independent systems and stations resist claims** |
+| Sovereignty upkeep | **Every system and structure costs credits to maintain.** A faction that can't pay eventually loses control of systems. This gives credits a purpose |
+| Ship maintenance | **Ships cost credits to maintain** (repairs, crew salaries), so large fleets are expensive |
+| Station maintenance | **Stations and planets also need goods to run** (food, domestic goods, fuel). Independents must buy what they can't produce, which spends their credits and routes money to the factions that supply them |
 
 ## Design details
 
@@ -127,19 +133,35 @@ This shows whether the dynamics are stable and interesting before anything is re
 
 Run it with `bin/launch simrun` (`App/simrun.luau` sets the seed, size and length). It prints a report every 2500 ticks and writes the full news feed to `cache/sim_news.txt`.
 
-**Results (seed 1, 400 systems, 20,000 ticks ≈ 55 game hours):**
-- **Performance:** about 5 ms per tick, roughly 1/2000 of the 10 s budget. A full run takes about 90 s.
-- **Determinism:** the same seed gives identical results.
-- **Economy:** stable. About 13,500 convoys per 2,500 ticks. Prices settle by station, and ore piles up against refinery capacity.
-- **Expansion:** the whole galaxy is claimed within about 14 game hours, with territories of 57 to 116 systems.
-- **Pirates:** they raid and ambush convoys and lose dens to faction attacks.
-- **Wars:** they start once borders meet and land runs out, but they end in a stalemate (5 sieges and 4 captures over the run, no peace).
+**How the agreed rules are implemented:**
+- **Defence and attack odds.** Stations defend strongly (10–40 each). Attackers prepare: they pick an enemy border system they can take at **3:1** against its stations plus any relief that can arrive within the siege. They muster fleets at an adjacent staging system and launch when the gathered force is enough. A win starts a **siege timer** (20 ticks); the system falls if the besiegers still hold it at the end.
+- **Independents resist.** A claim fights the system's own defences at the same odds, then **pacifies** it with the same siege timer. Independents keep a treasury and **earn only by selling goods**; they collect no taxes.
+- **Maintenance in goods.** Every station consumes food, fuel and domestic goods each cycle, drawn from any station in its system. A station short of them produces and defends at reduced strength (down to half). Independents import what they lack, which routes money to the factions that supply them.
+- **Maintenance in credits.** Each faction pays sovereignty upkeep (per system and per station) and ship maintenance every period.
+  - A faction in arrears loses its most remote system each period after a grace period, and its crews desert.
+  - A faction running a deficit decommissions ships first.
+  - Warships are only built from a working-capital reserve, and only when income covers their upkeep.
+- **Income.** Habitat taxes plus a 3% industry tax on the value of everything produced, both paid to the owning faction.
+- **Ending wars.** A side is exhausted when it has less than two periods of running costs left, or its war fleet has fallen below half its strength at the start of the war. The exhausted side **sues for peace**: it cedes up to two border systems (besieged ones first) and pays 30% of its credits. If both are exhausted, the peace is white. A 10-hour truce follows.
 
-**Open tuning and design questions from the prototype:**
-1. **War balance.** Defenders are strong: station defence plus relief arriving within the 20-tick siege. Meanwhile border friction outweighs war exhaustion, so wars start, freeze and never end. This needs design decisions on war goals, peace terms and how attackers mass forces.
-2. **Credits.** They concentrate in some factions (around 800k) while others hover near zero. Credits have few uses beyond building ships and buying from other factions.
-3. **Expansion pace.** The galaxy fills in under a day. EVE keeps large NPC and unclaimed regions, so independent systems might resist claims.
-4. **Pirate growth.** Pirate credits pile up with nothing to spend them on, and lost dens are never replaced.
+**Results (seed 1, 400 systems, 20,000 ticks ≈ 55 game hours):**
+- **Performance:** about 5 ms per tick, roughly 1/2000 of the 10 s budget. A full run takes about 110 s. The same seed gives identical results.
+- **Economy:** stable and growing.
+  - About 10,000 convoys per 2,500 ticks.
+  - Station maintenance met at about 83% for both factions and independents.
+  - Trade with independents roughly balanced, about 0.7–1 million credits each way per window.
+  - No systems lost to arrears.
+- **Expansion:** gradual. 106 claims; 88 independent systems remain at the end.
+- **Fleets:** sized by income. A rich aggressive faction keeps about 200 cruisers, while two others decommission down to a few frigates.
+- **War:** one full cycle, late in the run.
+  1. The Iron Kestrel Union declares war on the Halcyon Accord.
+  2. Kestrel launches assaults at 3:1 (260 against 45) and captures two systems through sieges.
+  3. Halcyon sues for peace, ceding two systems and paying about 64,000 credits.
+
+**Open questions from the prototype:**
+1. **Pacing.** Wars arrive late, once expansion runs out of room; there was one war in 55 hours. More wars would come from stronger border friction or earlier land hunger.
+2. **Pirate growth.** Pirate credits pile up with nothing to spend them on, and lost dens are never replaced.
+3. **Fleet swings.** Factions overbuild cruisers, then decommission them. Smoother fleet planning would make fleet sizes steadier.
 
 ## What LT supplies
 

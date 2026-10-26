@@ -26,6 +26,7 @@ Data.Goods = {
   { id = "plating", name = "Hull Plating", base = 120 },
   { id = "electronics", name = "Electronics", base = 150 },
   { id = "munitions", name = "Munitions", base = 60 },
+  { id = "domestic", name = "Domestic Goods", base = 50 },
 } :: { Good }
 
 Data.GoodById = {} :: { [string]: Good }
@@ -53,34 +54,44 @@ export type StationKind = {
 }
 
 Data.Stations = {
-  { id = "mine", name = "Mining Outpost", extractor = true, defense = 2, weight = 3,
+  { id = "mine", name = "Mining Outpost", extractor = true, defense = 10, weight = 3,
     recipes = { { inputs = { food = 2, fuel = 1 }, outputs = { ferrite = 30, silicate = 20 } } } },
-  { id = "harvester", name = "Ice Harvester", extractor = true, resource = "ice", defense = 2, weight = 1.5,
+  { id = "harvester", name = "Ice Harvester", extractor = true, resource = "ice", defense = 10, weight = 1.5,
     recipes = { { inputs = { food = 2 }, outputs = { ice = 40 } } } },
-  { id = "refinery", name = "Refinery", defense = 3, weight = 2,
+  { id = "refinery", name = "Refinery", defense = 15, weight = 2,
     recipes = {
       { inputs = { ferrite = 40 }, outputs = { alloy = 12 } },
       { inputs = { ice = 30 }, outputs = { fuel = 12 } },
     } },
-  { id = "agri", name = "Agricultural World", extractor = true, defense = 3, weight = 1.5,
+  { id = "agri", name = "Agricultural World", extractor = true, defense = 20, weight = 1.5,
     recipes = { { inputs = { fuel = 1 }, outputs = { food = 40 } } } },
-  { id = "plating", name = "Plating Works", defense = 3, weight = 1,
+  { id = "plating", name = "Plating Works", defense = 15, weight = 1,
     recipes = { { inputs = { alloy = 10 }, outputs = { plating = 5 } } } },
-  { id = "fab", name = "Electronics Fab", defense = 3, weight = 1,
+  { id = "fab", name = "Electronics Fab", defense = 15, weight = 1,
     recipes = { { inputs = { silicate = 20, alloy = 4 }, outputs = { electronics = 4 } } } },
-  { id = "armory", name = "Munitions Plant", defense = 4, weight = 0.8,
+  { id = "armory", name = "Munitions Plant", defense = 20, weight = 0.8,
     recipes = { { inputs = { alloy = 6, fuel = 4 }, outputs = { munitions = 10 } } } },
-  { id = "habitat", name = "Habitat", tax = 40, defense = 5, weight = 1.5,
-    recipes = { { inputs = { food = 10, electronics = 1 }, outputs = {} } } },
-  { id = "shipyard", name = "Shipyard", defense = 8, weight = 0,
+  { id = "goods", name = "Goods Factory", defense = 15, weight = 1.5,
+    recipes = { { inputs = { alloy = 2, silicate = 6, food = 2 }, outputs = { domestic = 12 } } } },
+  { id = "habitat", name = "Habitat", tax = 80, defense = 25, weight = 1.5,
+    recipes = { { inputs = { food = 10, electronics = 1, domestic = 2 }, outputs = {} } } },
+  { id = "shipyard", name = "Shipyard", defense = 40, weight = 0,
     recipes = {}, demand = { plating = 60, electronics = 40, fuel = 60, munitions = 60 } },
-  { id = "den", name = "Pirate Den", defense = 6, weight = 0, recipes = {} },
+  { id = "den", name = "Pirate Den", defense = 30, weight = 0, recipes = {} },
 } :: { StationKind }
 
 Data.StationById = {} :: { [string]: StationKind }
 for _, kind in Data.Stations do
   Data.StationById[kind.id] = kind
 end
+
+-- Every station consumes these each cycle to run (crew, power, upkeep),
+-- drawing on any station in its system. A station short of them works and
+-- defends at reduced strength.
+Data.MAINTENANCE = { food = 0.5, fuel = 0.3, domestic = 0.3 } :: { [string]: number }
+Data.UNMAINTAINED = 0.5      -- output and defence of a station with no maintenance
+Data.MAINTENANCE_CYCLES = 40 -- maintenance stock a station keeps, in cycles
+Data.INDUSTRY_TAX = 0.03     -- share of each cycle's output value paid to the owner
 
 Data.TARGET_CYCLES = 8       -- input stock a station wants, in cycles
 Data.KEEP_CYCLES = 2         -- output stock a station holds back from sale
@@ -97,15 +108,15 @@ export type ShipClass = {
   cost: { [string]: number },
   credits: number,             -- labour and fittings, on top of the goods
   buildTicks: number,
-  upkeep: number,              -- credits per period
+  upkeep: number,              -- maintenance (repairs, crew) in credits per period
 }
 
 Data.Ships = {
-  { id = "frigate", name = "Frigate", quality = 1, cargo = 0, buildTicks = 30, upkeep = 4, credits = 300,
+  { id = "frigate", name = "Frigate", quality = 1, cargo = 0, buildTicks = 30, upkeep = 6, credits = 300,
     cost = { plating = 4, electronics = 2, fuel = 3 } },
-  { id = "cruiser", name = "Cruiser", quality = 4, cargo = 0, buildTicks = 90, upkeep = 12, credits = 1200,
+  { id = "cruiser", name = "Cruiser", quality = 4, cargo = 0, buildTicks = 90, upkeep = 18, credits = 1200,
     cost = { plating = 14, electronics = 8, fuel = 8 } },
-  { id = "hauler", name = "Hauler", quality = 0.1, cargo = 120, buildTicks = 45, upkeep = 2, credits = 300,
+  { id = "hauler", name = "Hauler", quality = 0.1, cargo = 120, buildTicks = 45, upkeep = 3, credits = 300,
     cost = { plating = 6, electronics = 2, fuel = 4 } },
 } :: { ShipClass }
 
@@ -119,6 +130,7 @@ Data.PIRATE_FRIGATE_CREDITS = 250
 --------------------------------------------------------------- Combat
 
 Data.COMBAT_SPREAD = 0.25    -- each side's strength is rolled within +-25%
+Data.ATTACK_ODDS = 3         -- attack (or claim) only with this much strength over the defence
 Data.RETREAT_AT = 0.6        -- the loser retreats after losing this share
 Data.ROUT_RATIO = 3          -- a loser this much weaker is destroyed
 Data.NO_MUNITIONS = 0.5      -- strength multiplier without munitions
@@ -141,11 +153,34 @@ Data.Factions = {
 Data.TERRITORY = 40          -- systems each faction starts with
 Data.PIRATE_DENS = 6
 Data.STARTING_CREDITS = 100000
-Data.WAR_BELOW = -50         -- relations below this are war
+Data.WAR_BELOW = -50         -- relations below this lead to war
 Data.DRIFT = 0.5             -- per period, back toward the pair's baseline
 Data.FRICTION = 1.5          -- per period and shared border link, scaled by aggression
 Data.LAND_HUNGER = 2         -- friction multiplier for a faction with nowhere left to expand
-Data.EXHAUSTION = 0.6        -- per period at war, toward peace
-Data.PEACE_ABOVE = -20       -- wars end when relations recover past this
+
+-- Sovereignty: every owned system and station costs credits per period.
+-- A faction that can't pay builds up arrears; past the grace period it
+-- loses its most remote system each period, and its crews desert.
+Data.SOV_PER_SYSTEM = 6
+Data.SOV_PER_STATION = 2
+Data.ARREARS_GRACE = 6       -- periods in arrears before systems are lost
+Data.DESERTION = 0.05        -- share of ships lost per period in arrears
+Data.INDEPENDENT_DEFENSE = 1 -- multiplier on an independent system's station defence
+Data.INDEPENDENT_CREDITS = 20000 -- an independent system's starting treasury; independents
+                                 -- earn only by selling goods (they collect no taxes)
+Data.EXPAND_RESERVE = 20     -- periods of running costs a faction keeps before expanding
+Data.BUILD_RESERVE = 30      -- periods of running costs a faction keeps (working capital for trade) before building warships
+
+-- Peace: a side at war is exhausted when it has less than RUNWAY periods
+-- of running costs left, or its war fleet is below STRENGTH of what it was
+-- when the war began. The exhausted side sues for peace and cedes up to
+-- CEDED border systems plus a share of its credits; if both are
+-- exhausted the peace is white. A truce follows.
+Data.EXHAUSTED_RUNWAY = 2
+Data.EXHAUSTED_STRENGTH = 0.5
+Data.CEDED_SYSTEMS = 2
+Data.REPARATIONS = 0.3
+Data.TRUCE_PERIODS = 60      -- 10 hours
+Data.AFTER_PEACE = -20       -- relations right after a peace
 
 return Data

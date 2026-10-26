@@ -107,6 +107,30 @@ local function detach(state: State.State, fleet: State.Fleet, ships: { [string]:
   return fleet
 end
 
+-- Ships from 'fleet' worth at least 'needed' in strength, cruisers first,
+-- keeping two frigates behind in an owned system; nil if it can't spare
+-- that much
+local function sparing(state: State.State, fleet: State.Fleet, needed: number): { [string]: number }?
+  local system = fleet.system :: number
+  local keep = if state.systems[system].owner == fleet.owner then 2 else 0
+  local take: { [string]: number } = {}
+  local strength = 0
+  local mult = if fleet.munitions < State.ShipCount(fleet) then Data.NO_MUNITIONS else 1
+  for _, id in { "cruiser", "frigate" } do
+    local class = Data.ShipById[id]
+    local spare = (fleet.ships[id] or 0) - (if id == "frigate" then keep else 0)
+    local k = 0
+    while k < spare and strength < needed do
+      k += 1
+      strength += class.quality * mult
+    end
+    if k > 0 then
+      take[id] = k
+    end
+  end
+  return if strength >= needed then take else nil
+end
+
 ------------------------------------------------------------- Shipbuilding
 
 local function buildShips(state: State.State, faction: State.Faction, c: Census)
@@ -114,9 +138,13 @@ local function buildShips(state: State.State, faction: State.Faction, c: Census)
   for _, atWar in faction.war do
     if atWar then wars += 1 end
   end
-  local wantHaulers = math.max(4, c.stations // 5)
+  local wantHaulers = math.max(6, c.stations // 3)
   -- Enough to garrison and keep expanding the territory, more for the aggressive and at war
   local wantStrength = 2 * #c.systems * (0.6 + 0.8 * faction.traits.aggressive) + 30 * math.max(0, wars - 1)
+  -- Keep building while a prepared attack or claim lacks the strength
+  if faction.plan then
+    wantStrength = math.max(wantStrength, c.warStrength + 20)
+  end
   for _, system in c.systems do
     for _, id in state.galaxy.systems[system].stations do
       local station = state.stations[id]
@@ -124,7 +152,8 @@ local function buildShips(state: State.State, faction: State.Faction, c: Census)
         local ship: string? = nil
         if c.haulers < wantHaulers then
           ship = "hauler"
-        elseif c.warStrength < wantStrength then
+        elseif c.warStrength < wantStrength and faction.credits > faction.costs * Data.BUILD_RESERVE
+          and faction.income > faction.costs + Data.ShipById.cruiser.upkeep then
           ship = "cruiser"
           for good, n in Data.ShipById.cruiser.cost do
             if (station.stock[good] or 0) < n then
@@ -145,47 +174,72 @@ end
 local PICKUP_RANGE = 8
 local DELIVERY_RANGE = 12
 
+local SELLER_CANDIDATES = 6
+local BUYER_CANDIDATES = 12
+
+-- The best few offers within 'range' of 'at', by price (cheapest sellers
+-- or best-paying buyers)
+local function nearby(state: State.State, faction: State.Faction, offers: { Market.Offer }, at: number,
+  range: number, cheapest: boolean, limit: number): { Market.Offer }
+  local list = {}
+  for _, offer in offers do
+    local system = state.stations[offer.station].system
+    if offer.amount > 0 and hops(state, at, system) <= range and not isEnemy(state, faction, state.systems[system].owner) then
+      table.insert(list, offer)
+    end
+  end
+  table.sort(list, function(a, b)
+    if a.price ~= b.price then
+      if cheapest then return a.price < b.price end
+      return a.price > b.price
+    end
+    return a.station < b.station
+  end)
+  while #list > limit do
+    table.remove(list)
+  end
+  return list
+end
+
 -- Sends idle haulers on the most profitable run per jump within reach
 local function trade(state: State.State, faction: State.Faction, c: Census, index: Market.Index)
-  local sent = 0
+  local sent, evaluated = 0, 0
   for _, fleet in c.idleTrade do
-    if sent >= 4 then
+    if sent >= 4 or evaluated >= 8 then
       break
     end
     if not available(fleet) then
       continue
     end
+    evaluated += 1
     local at = fleet.system :: number
     local room = Actions.Capacity(fleet)
     local best: { from: Market.Offer, to: Market.Offer, good: string, amount: number }? = nil
     local bestRate = 10
     for _, good in Data.Goods do
       local offers = index[good.id]
-      for _, seller in offers.sellers do
-        local sellerSystem = state.stations[seller.station].system
-        local toSeller = hops(state, at, sellerSystem)
-        if toSeller <= PICKUP_RANGE and seller.amount > 0 then
+      local sellers = nearby(state, faction, offers.sellers, at, PICKUP_RANGE, true, SELLER_CANDIDATES)
+      if #sellers > 0 then
+        local buyers = nearby(state, faction, offers.buyers, at, PICKUP_RANGE + DELIVERY_RANGE, false, BUYER_CANDIDATES)
+        for _, seller in sellers do
+          local sellerSystem = state.stations[seller.station].system
           local sellerOwner = state.systems[sellerSystem].owner
-          if not isEnemy(state, faction, sellerOwner) then
-            for _, buyer in offers.buyers do
-              local buyerSystem = state.stations[buyer.station].system
-              local route = hops(state, sellerSystem, buyerSystem)
-              if route <= DELIVERY_RANGE and buyer.amount > 0 and buyer.price > seller.price then
-                local buyerOwner = state.systems[buyerSystem].owner
-                if not isEnemy(state, faction, buyerOwner) then
-                  local amount = math.min(room, seller.amount, buyer.amount)
-                  local margin = buyer.price - seller.price
-                  -- Supplying your own stations is worth more than the margin alone
-                  if buyerOwner == faction.id then
-                    margin += 0.2 * good.base
-                  end
-                  local affordable = sellerOwner == faction.id or faction.credits >= amount * seller.price
-                  local rate = amount * margin / (toSeller + route + 1)
-                  if affordable and rate > bestRate then
-                    bestRate = rate
-                    best = { from = seller, to = buyer, good = good.id, amount = amount }
-                  end
-                end
+          local toSeller = hops(state, at, sellerSystem)
+          for _, buyer in buyers do
+            local buyerSystem = state.stations[buyer.station].system
+            local route = hops(state, sellerSystem, buyerSystem)
+            if buyer.station ~= seller.station and route <= DELIVERY_RANGE and buyer.price > seller.price then
+              local amount = math.min(room, seller.amount, buyer.amount)
+              local margin = buyer.price - seller.price
+              -- Supplying your own stations is worth more than the margin alone
+              if state.systems[buyerSystem].owner == faction.id then
+                margin += 0.2 * good.base
+              end
+              local affordable = sellerOwner == faction.id or faction.credits >= amount * seller.price
+              local rate = amount * margin / (toSeller + route + 1)
+              if affordable and rate > bestRate then
+                bestRate = rate
+                best = { from = seller, to = buyer, good = good.id, amount = amount }
               end
             end
           end
@@ -206,6 +260,10 @@ end
 ------------------------------------------------------------- Expansion
 
 local function expand(state: State.State, faction: State.Faction, c: Census)
+  -- Every system adds sovereignty upkeep: only expand with a reserve
+  if faction.credits < faction.costs * Data.EXPAND_RESERVE then
+    return
+  end
   local claiming = 0
   for _ in c.claims do
     claiming += 1
@@ -234,19 +292,33 @@ local function expand(state: State.State, faction: State.Faction, c: Census)
     if claiming >= maxClaims then
       break
     end
-    -- The nearest fleet that can spare a ship sends one to stake the claim
+    -- Independents resist: send enough to win at the attack odds
+    local needed = math.max(1, Data.ATTACK_ODDS * State.StationDefense(state, target) * Data.INDEPENDENT_DEFENSE)
     local pick: State.Fleet? = nil
+    local ships: { [string]: number }? = nil
     for _, fleet in c.idleWar do
-      if available(fleet) and State.ShipCount(fleet) >= 2
+      if available(fleet) and hops(state, fleet.system :: number, target) <= 20
         and (pick == nil or hops(state, fleet.system :: number, target) < hops(state, (pick :: State.Fleet).system :: number, target)) then
-        pick = fleet
+        local spare = sparing(state, fleet, needed)
+        if spare then
+          pick, ships = fleet, spare
+        end
       end
     end
-    if pick then
-      local party = detach(state, pick, if (pick.ships.frigate or 0) > 0 then { frigate = 1 } else { cruiser = 1 })
+    if pick and ships then
+      local party = State.Split(state, pick, ships)
       if Actions.Move(state, party, target, "claim") then
         c.claims[target] = true
         claiming += 1
+      end
+    elseif faction.plan == nil then
+      -- No fleet can spare enough on its own: gather a force next to it
+      for _, system in c.systems do
+        if table.find(state.galaxy.systems[system].neighbors, target) then
+          faction.plan = { kind = "claim", target = target, staging = system, since = state.tick }
+          State.Log(state, "plan", `{faction.name} gathers a force to claim {state.galaxy.systems[target].name}`)
+          break
+        end
       end
     end
   end
@@ -279,48 +351,115 @@ end
 
 -------------------------------------------------------------------- War
 
+-- A system's defence against an attack: its stations plus the owner's war
+-- fleets close enough to relieve a siege
+local function defenseOf(state: State.State, target: number): number
+  local owner = state.systems[target].owner
+  local defense = State.StationDefense(state, target)
+  local reach = Data.SIEGE_TICKS // Data.JUMP_TICKS + 1
+  for _, fleet in state.fleets do
+    if fleet.owner == owner and fleet.role == "war" and fleet.system
+      and hops(state, fleet.system :: number, target) <= reach then
+      defense += Combat.FleetStrength(fleet)
+    end
+  end
+  return defense
+end
+
+local MUSTER_RANGE = 15
+local PLAN_PATIENCE = 360    -- ticks to gather a force before giving up (1 hour)
+
+-- Attacks are prepared: pick an enemy border system that can be taken at
+-- the attack odds, gather fleets at a staging system next to it, and
+-- launch when the gathered force is strong enough
 local function attack(state: State.State, faction: State.Faction, c: Census)
+  local plan = faction.plan
+  if plan then
+    local p = plan :: State.Plan
+    local targetOwner = state.systems[p.target].owner
+    local valid = if p.kind == "claim" then targetOwner == nil else isEnemy(state, faction, targetOwner)
+    if not valid or state.systems[p.staging].owner ~= faction.id then
+      faction.plan = nil
+      return
+    end
+    local need = if p.kind == "claim"
+      then math.max(1, Data.ATTACK_ODDS * State.StationDefense(state, p.target) * Data.INDEPENDENT_DEFENSE)
+      else Data.ATTACK_ODDS * defenseOf(state, p.target)
+    local here = State.IdleFleets(state, p.staging, faction.id, "war")
+    local strength = Combat.Strength(here)
+    if strength >= need then
+      for _, fleet in here do
+        Actions.Move(state, detach(state, fleet), p.target, p.kind)
+      end
+      faction.plan = nil
+      State.Log(state, "assault", `{faction.name} launches {if p.kind == "claim" then "a claim on" else "an assault on"} `
+        .. `{state.galaxy.systems[p.target].name} ({math.floor(strength)} against {math.floor(need / Data.ATTACK_ODDS)})`)
+      return
+    end
+    -- Call in more: fleets already on the way count
+    local projected = strength
+    for _, action in state.actions do
+      if action.owner == faction.id and action.intent == "muster" and action.target == p.staging then
+        projected += Combat.FleetStrength(state.fleets[action.fleet :: number])
+      end
+    end
+    local candidates = {}
+    for _, fleet in c.idleWar do
+      if available(fleet) and fleet.system ~= p.staging and hops(state, fleet.system :: number, p.staging) <= MUSTER_RANGE then
+        table.insert(candidates, fleet)
+      end
+    end
+    table.sort(candidates, function(a, b)
+      local da, db = hops(state, a.system :: number, p.staging), hops(state, b.system :: number, p.staging)
+      if da ~= db then return da < db end
+      return a.id < b.id
+    end)
+    for _, fleet in candidates do
+      if projected >= need then
+        break
+      end
+      local party = detach(state, fleet)
+      if Actions.Move(state, party, p.staging, "muster") then
+        projected += Combat.FleetStrength(party)
+      end
+    end
+    if projected < need and state.tick - p.since > PLAN_PATIENCE then
+      faction.plan = nil
+    end
+    return
+  end
+
   local limit = 1 + math.floor(2 * faction.traits.aggressive)
   if c.attacks >= limit then
     return
   end
+  local available_ = 0
+  for _, fleet in c.idleWar do
+    if available(fleet) then
+      available_ += Combat.FleetStrength(fleet)
+    end
+  end
+  local best: State.Plan? = nil
+  local bestScore = 0
   local seen: { [number]: boolean } = {}
-  local best: { target: number, fleet: State.Fleet, score: number }? = nil
   for _, system in c.systems do
     for _, target in state.galaxy.systems[system].neighbors do
-      local owner = state.systems[target].owner
-      if not seen[target] and isEnemy(state, faction, owner) then
+      if not seen[target] and isEnemy(state, faction, state.systems[target].owner) then
         seen[target] = true
-        -- The garrison, the stations, and whatever could relieve a siege in time
-        local defense = State.StationDefense(state, target)
-        local reach = Data.SIEGE_TICKS // Data.JUMP_TICKS + 1
-        for _, fleet in state.fleets do
-          if fleet.owner == owner and fleet.role == "war" and fleet.system
-            and hops(state, fleet.system :: number, target) <= reach then
-            defense += Combat.FleetStrength(fleet)
-          end
-        end
-        local value = 10 * #state.galaxy.systems[target].stations
-        for _, fleet in c.idleWar do
-          if available(fleet) then
-            local distance = hops(state, fleet.system :: number, target)
-            local strength = Combat.FleetStrength(fleet) * (0.8 + 0.4 * faction.traits.aggressive)
-            if distance <= 5 and strength >= 1.3 * defense then
-              local score = value - 2 * distance
-              if best == nil or score > (best :: any).score then
-                best = { target = target, fleet = fleet, score = score }
-              end
-            end
+        local defense = defenseOf(state, target)
+        if available_ >= Data.ATTACK_ODDS * defense then
+          local score = (10 * #state.galaxy.systems[target].stations + 5) / (defense + 1)
+          if score > bestScore then
+            bestScore = score
+            best = { kind = "attack", target = target, staging = system, since = state.tick }
           end
         end
       end
     end
   end
   if best then
-    local b = best :: { target: number, fleet: State.Fleet, score: number }
-    if Actions.Move(state, detach(state, b.fleet), b.target, "attack") then
-      c.attacks += 1
-    end
+    faction.plan = best
+    State.Log(state, "plan", `{faction.name} prepares an assault on {state.galaxy.systems[best.target].name}`)
   end
 end
 
@@ -336,8 +475,14 @@ local function review(state: State.State, faction: State.Faction)
   table.sort(ids)
   for _, id in ids do
     local action = state.actions[id]
-    if (action.intent == "attack" or action.intent == "siege") and not action.cancelled
-      and not isEnemy(state, faction, state.systems[action.target :: number].owner) then
+    local owner = if action.target then state.systems[action.target :: number].owner else nil
+    -- A siege of an independent system is a claim being pacified: it only
+    -- lapses if someone else takes the system first
+    local stale = if action.intent == "siege" and owner == nil then false
+      elseif action.intent == "siege" then not isEnemy(state, faction, owner)
+      elseif action.intent == "attack" then not isEnemy(state, faction, owner)
+      else false
+    if stale and not action.cancelled then
       Actions.Cancel(state, faction.id, id)
     elseif action.kind == "convoy" and not action.cancelled then
       local dest = state.stations[action.to :: number].system
@@ -554,26 +699,35 @@ end
 
 --------------------------------------------------------------- Phases
 
+-- Seconds spent in each decision, accumulated (for profiling)
+Ai.Timing = {} :: { [string]: number }
+
+local function timed<A...>(name: string, f: (A...) -> (), ...: A...)
+  local started = os.clock()
+  f(...)
+  Ai.Timing[name] = (Ai.Timing[name] or 0) + os.clock() - started
+end
+
 function Ai.ActionPhase(state: State.State, faction: State.Faction, c: Census, index: Market.Index)
   if not faction.alive then
     return
   end
   if faction.pirate then
-    piratesAct(state, faction, c)
+    timed("pirates", piratesAct, state, faction, c)
     return
   end
-  buildShips(state, faction, c)
+  timed("build", buildShips, state, faction, c)
   local slot = (state.tick + faction.id) % 6
   if slot % 3 == 0 then
-    trade(state, faction, c, index)
+    timed("trade", trade, state, faction, c, index)
   end
   if slot == 1 then
-    review(state, faction)
-    expand(state, faction, c)
+    timed("review", review, state, faction)
+    timed("expand", expand, state, faction, c)
   elseif slot == 2 then
-    huntPirates(state, faction, c)
+    timed("hunt", huntPirates, state, faction, c)
   elseif slot == 4 then
-    attack(state, faction, c)
+    timed("attack", attack, state, faction, c)   -- also follows up prepared claims
   end
 end
 

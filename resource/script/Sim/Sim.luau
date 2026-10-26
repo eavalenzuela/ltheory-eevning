@@ -147,9 +147,49 @@ local function fight(state: State.State, system: number, a: number, b: number, a
   end
 end
 
+-- A claim on an independent system fights its stations first
+local function resist(state: State.State, system: number, faction: number)
+  local defense = State.StationDefense(state, system) * Data.INDEPENDENT_DEFENSE
+  local side = State.IdleFleets(state, system, faction)
+  for _, id in state.systems[system].fleets do
+    local fleet = state.fleets[id]
+    if fleet and fleet.owner == faction and fleet.action ~= nil then
+      table.insert(side, fleet)
+    end
+  end
+  if defense <= 0 or #side == 0 then
+    return
+  end
+  local rng = Rng.For(state.seed, state.tick, system, faction, 0)
+  local won, loss = Combat.Fight(rng, Combat.Strength(side), defense)
+  local lost = Combat.ApplyLosses(rng, side, loss)
+  state.factions[faction].losses += lost
+  State.Count(state, "battles")
+  State.Count(state, "ships lost", lost)
+  if not won then
+    State.Log(state, "battle", `{systemName(state, system)}'s independents drove off {name(state, faction)} ({lost} ships lost)`)
+  end
+  for _, fleet in side do
+    if State.ShipCount(fleet) == 0 then
+      interrupt(state, fleet)
+      State.Disband(state, fleet)
+    elseif not won then
+      interrupt(state, fleet)
+      retreat(state, fleet)
+    end
+  end
+end
+
 -- Fights between hostile parties in a system some fleet arrived in
 local function battles(state: State.State, system: number, arrivals: { State.Action })
   local owner = state.systems[system].owner
+  if owner == nil then
+    for _, action in arrivals do
+      if action.intent == "claim" and action.step == #(action.path :: { number }) then
+        resist(state, system, action.owner)
+      end
+    end
+  end
   local present: { number } = {}
   local seen: { [number]: boolean } = {}
   for _, id in state.systems[system].fleets do
@@ -203,8 +243,9 @@ local function hostilesPresent(state: State.State, system: number, owner: number
   return false
 end
 
-local function capture(state: State.State, system: number, faction: number)
-  local old = state.systems[system].owner
+-- Hands a system to 'faction' (nil: it becomes independent), cancelling
+-- ships under construction there
+local function transfer(state: State.State, system: number, faction: number?)
   state.systems[system].owner = faction
   for _, id in state.galaxy.systems[system].stations do
     local station = state.stations[id]
@@ -216,15 +257,26 @@ local function capture(state: State.State, system: number, faction: number)
       end
       station.building = nil
     end
-    if station.kind == "den" and not state.factions[faction].pirate then
+    if station.kind == "den" and (faction == nil or not state.factions[faction].pirate) then
       station.destroyed = true
     end
   end
+end
+
+local function capture(state: State.State, system: number, faction: number)
+  local old = state.systems[system].owner
+  transfer(state, system, faction)
   if old then
     shift(state, faction, old, -15)
   end
   State.Count(state, "captures")
   State.Log(state, "capture", `{name(state, faction)} captured {systemName(state, system)} from {name(state, old)}`)
+end
+
+local function claim(state: State.State, system: number, faction: number)
+  transfer(state, system, faction)
+  State.Count(state, "claims")
+  State.Log(state, "claim", `{name(state, faction)} claimed {systemName(state, system)}`)
 end
 
 local function raid(state: State.State, system: number, fleet: State.Fleet)
@@ -260,9 +312,12 @@ local function arrived(state: State.State, action: State.Action, fleet: State.Fl
     end
   elseif intent == "claim" then
     if owner == nil and not hostilesPresent(state, system, fleet.owner) then
-      state.systems[system].owner = fleet.owner
-      State.Count(state, "claims")
-      State.Log(state, "claim", `{name(state, fleet.owner)} claimed {systemName(state, system)}`)
+      -- A defended system has to be pacified: held for a siege's length
+      if State.StationDefense(state, system) > 0 then
+        Actions.Siege(state, fleet)
+      else
+        claim(state, system, fleet.owner)
+      end
     end
   elseif intent == "raid" then
     if not hostilesPresent(state, system, fleet.owner) then
@@ -278,6 +333,37 @@ local function produce(state: State.State, station: State.Station)
   local owner = state.systems[station.system].owner
   local resources = state.galaxy.systems[station.system].resources
   local makes = Market.Profile(station.kind).makes
+  -- Maintenance first, drawn from this station, then the others in its
+  -- system; a station short of it works at reduced strength
+  if station.kind ~= "den" then
+    local others = state.galaxy.systems[station.system].stations
+    local total, count = 0, 0
+    for good, n in Data.MAINTENANCE do
+      local available = 0
+      for _, id in others do
+        available += state.stations[id].stock[good] or 0
+      end
+      local share = math.min(1, available / n)
+      total += share
+      count += 1
+      -- Consume what's there, from this station first
+      local need = n * share
+      local own = math.min(need, station.stock[good] or 0)
+      station.stock[good] = (station.stock[good] or 0) - own
+      need -= own
+      for _, id in others do
+        if need <= 0 then
+          break
+        end
+        local other = state.stations[id]
+        local k = math.min(need, other.stock[good] or 0)
+        other.stock[good] = (other.stock[good] or 0) - k
+        need -= k
+      end
+    end
+    station.maintained = total / count
+  end
+  local readiness = Data.UNMAINTAINED + (1 - Data.UNMAINTAINED) * station.maintained
   for _, recipe in kind.recipes do
     local full = false
     for good in recipe.outputs do
@@ -294,13 +380,23 @@ local function produce(state: State.State, station: State.Station)
         station.stock[good] = (station.stock[good] or 0) - n * fraction
       end
       local rate = if kind.extractor then math.max(fraction, Data.EXTRACTOR_IDLE) else fraction
+      local value = 0
       for good, n in recipe.outputs do
         local richness = if kind.extractor and resources[good] then resources[good] else 1
-        station.stock[good] = (station.stock[good] or 0) + n * rate * richness
+        local made = n * rate * richness * readiness
+        station.stock[good] = (station.stock[good] or 0) + made
+        value += made * Data.GoodById[good].base
       end
-      if kind.tax and owner and not state.factions[owner].pirate then
-        state.factions[owner].credits += kind.tax * fraction
-        State.Count(state, "taxes", kind.tax * fraction)
+      -- Industry tax on what was made (only factions levy taxes)
+      local levy = value * Data.INDUSTRY_TAX
+      if owner and not state.factions[owner].pirate then
+        state.factions[owner].credits += levy
+        State.Count(state, "industry tax", levy)
+      end
+      local tax = (kind.tax or 0) * fraction * readiness
+      if tax > 0 and owner and not state.factions[owner].pirate then
+        state.factions[owner].credits += tax
+        State.Count(state, "taxes", tax)
       end
     end
   end
@@ -330,19 +426,178 @@ local function borders(state: State.State): ({ [number]: { [number]: number } },
   return links, room
 end
 
-local function period(state: State.State)
-  -- Upkeep
+local function warStrength(state: State.State): { [number]: number }
+  local strength: { [number]: number } = {}
+  for _, f in state.factions do
+    strength[f.id] = 0
+  end
   for _, fleet in state.fleets do
-    local faction = state.factions[fleet.owner]
-    if not faction.pirate then
-      for _, class in Data.Ships do
-        faction.credits -= (fleet.ships[class.id] or 0) * class.upkeep
+    if fleet.role == "war" then
+      strength[fleet.owner] += Combat.FleetStrength(fleet)
+    end
+  end
+  return strength
+end
+
+-- The owned system farthest from the capital (not the capital itself)
+local function mostRemote(state: State.State, faction: State.Faction): number?
+  local capital = faction.capital
+  local pick, pickD = nil, -1
+  for _, system in state.systems do
+    if system.owner == faction.id and system.id ~= capital then
+      local d = if capital then state.galaxy.hops[capital][system.id] else 0
+      if d > pickD then
+        pick, pickD = system.id, d
       end
     end
   end
+  return pick
+end
+
+-- Scraps idle warships (cruisers first, keeping one frigate per fleet)
+-- until maintenance falls by 'saving' credits per period
+local function decommission(state: State.State, faction: State.Faction, saving: number)
+  local fleets = {}
+  for _, fleet in state.fleets do
+    if fleet.owner == faction.id and fleet.role == "war" and fleet.action == nil then
+      table.insert(fleets, fleet)
+    end
+  end
+  table.sort(fleets, function(a, b)
+    local sa, sb = State.ShipCount(a), State.ShipCount(b)
+    if sa ~= sb then return sa > sb end
+    return a.id < b.id
+  end)
+  local saved, scrapped = 0, 0
+  for _, id in { "cruiser", "frigate" } do
+    local class = Data.ShipById[id]
+    for _, fleet in fleets do
+      local keep = if id == "frigate" then 1 else 0
+      while saved < saving and (fleet.ships[id] or 0) > keep do
+        fleet.ships[id] -= 1
+        saved += class.upkeep
+        scrapped += 1
+      end
+    end
+  end
+  if scrapped > 0 then
+    State.Count(state, "ships decommissioned", scrapped)
+    State.Log(state, "decommission", `{faction.name} decommissions {scrapped} ships to balance its budget`)
+  end
+end
+
+-- Sovereignty and ship maintenance; arrears cost systems and crews
+local function pay(state: State.State)
+  local systems: { [number]: number } = {}
+  local stations: { [number]: number } = {}
+  for _, system in state.systems do
+    local owner = system.owner
+    if owner then
+      systems[owner] = (systems[owner] or 0) + 1
+      stations[owner] = (stations[owner] or 0) + #state.galaxy.systems[system.id].stations
+    end
+  end
+  local maintenance: { [number]: number } = {}
+  for _, fleet in state.fleets do
+    for _, class in Data.Ships do
+      maintenance[fleet.owner] = (maintenance[fleet.owner] or 0) + (fleet.ships[class.id] or 0) * class.upkeep
+    end
+  end
+  for _, f in state.factions do
+    if f.alive and not f.pirate then
+      local sov = (systems[f.id] or 0) * Data.SOV_PER_SYSTEM + (stations[f.id] or 0) * Data.SOV_PER_STATION
+      f.income = f.credits - f.lastCredits
+      f.costs = sov + (maintenance[f.id] or 0)
+      f.credits -= f.costs
+      f.lastCredits = f.credits
+      State.Count(state, "sovereignty upkeep", sov)
+      State.Count(state, "ship maintenance", maintenance[f.id] or 0)
+      if f.credits < 0 then
+        f.arrears += 1
+      else
+        f.arrears = 0
+      end
+      if f.arrears > Data.ARREARS_GRACE then
+        local lost = mostRemote(state, f)
+        if lost then
+          transfer(state, lost, nil)
+          State.Count(state, "systems lost to arrears")
+          State.Log(state, "lapse", `{f.name} lost control of {systemName(state, lost)}: unpaid upkeep`)
+        end
+      end
+      if f.income < f.costs and f.credits < f.costs * Data.BUILD_RESERVE then
+        decommission(state, f, f.costs - f.income)
+      end
+      if f.arrears > 0 then
+        -- Unpaid crews desert
+        local rng = Rng.For(state.seed, state.tick, f.id, 1)
+        local deserted = 0
+        for _, fleet in state.fleets do
+          if fleet.owner == f.id then
+            deserted += Combat.ApplyLosses(rng, { fleet }, Data.DESERTION)
+          end
+        end
+        State.Count(state, "ships deserted", deserted)
+      end
+    end
+  end
+end
+
+-- The exhausted side cedes its border systems (those under siege first)
+-- and a share of its credits
+local function negotiate(state: State.State, winner: State.Faction, loser: State.Faction)
+  local besieged: { [number]: boolean } = {}
+  for _, action in state.actions do
+    if action.kind == "siege" and action.owner == winner.id then
+      besieged[action.target :: number] = true
+    end
+  end
+  local candidates: { number } = {}
+  for _, system in state.systems do
+    if system.owner == loser.id and system.id ~= loser.capital then
+      for _, n in state.galaxy.systems[system.id].neighbors do
+        if state.systems[n].owner == winner.id then
+          table.insert(candidates, system.id)
+          break
+        end
+      end
+    end
+  end
+  table.sort(candidates, function(a, b)
+    local sa, sb = besieged[a] == true, besieged[b] == true
+    if sa ~= sb then return sa end
+    local na, nb = #state.galaxy.systems[a].stations, #state.galaxy.systems[b].stations
+    if na ~= nb then return na > nb end
+    return a < b
+  end)
+  local ceded = {}
+  for i = 1, math.min(Data.CEDED_SYSTEMS, #candidates) do
+    transfer(state, candidates[i], winner.id)
+    table.insert(ceded, systemName(state, candidates[i]))
+  end
+  local reparations = math.max(0, loser.credits) * Data.REPARATIONS
+  Actions.Pay(state, loser.id, winner.id, reparations)
+  local terms = if #ceded > 0 then "cedes " .. table.concat(ceded, ", ") else "cedes nothing"
+  State.Log(state, "peace", `{loser.name} sues {winner.name} for peace: {terms}, pays {math.floor(reparations)} credits`)
+end
+
+local function makePeace(state: State.State, a: State.Faction, b: State.Faction)
+  a.war[b.id], b.war[a.id] = false, false
+  a.relations[b.id], b.relations[a.id] = Data.AFTER_PEACE, Data.AFTER_PEACE
+  local until_ = state.tick + Data.TRUCE_PERIODS * Data.PERIOD_TICKS
+  a.truce[b.id], b.truce[a.id] = until_, until_
+  if a.plan and state.systems[a.plan.target].owner == b.id then a.plan = nil end
+  if b.plan and state.systems[b.plan.target].owner == a.id then b.plan = nil end
+  State.Count(state, "peace treaties")
+end
+
+local function period(state: State.State)
+  pay(state)
+  local strength = warStrength(state)
+
   -- Relations: drift back toward the baseline; friction along shared
   -- borders, worse for the aggressive, eased by the sociable and doubled
-  -- for a faction with nowhere left to expand; weariness from war losses
+  -- for a faction with nowhere left to expand
   local links, room = borders(state)
   for _, a in state.factions do
     for _, b in state.factions do
@@ -353,21 +608,36 @@ local function period(state: State.State)
         local sociable = (a.traits.sociable + b.traits.sociable) / 2
         local hunger = if room[a.id] and room[b.id] then 1 else Data.LAND_HUNGER
         local friction = -(links[a.id][b.id] or 0) * Data.FRICTION * aggressive * (1 - 0.7 * sociable) * hunger
-        local weariness = if a.war[b.id] then Data.EXHAUSTION + 0.3 * (a.losses + b.losses) else 0
-        r += drift + friction + weariness
+        r += drift + friction
         a.relations[b.id], b.relations[a.id] = r, r
-        if not a.war[b.id] and r < Data.WAR_BELOW then
-          a.war[b.id], b.war[a.id] = true, true
-          State.Count(state, "wars declared")
-          State.Log(state, "war", `{a.name} and {b.name} are at war`)
-        elseif a.war[b.id] and r > Data.PEACE_ABOVE then
-          a.war[b.id], b.war[a.id] = false, false
-          State.Count(state, "peace treaties")
-          State.Log(state, "peace", `{a.name} and {b.name} made peace`)
+
+        if not a.war[b.id] then
+          if r < Data.WAR_BELOW and state.tick >= (a.truce[b.id] or 0) then
+            a.war[b.id], b.war[a.id] = true, true
+            a.warStart[b.id], b.warStart[a.id] = strength[a.id], strength[b.id]
+            State.Count(state, "wars declared")
+            State.Log(state, "war", `{a.name} and {b.name} are at war`)
+          end
+        else
+          -- Wars end when a side runs out of resources
+          local function exhausted(f: State.Faction, other: number): boolean
+            return f.credits < f.costs * Data.EXHAUSTED_RUNWAY
+              or strength[f.id] < Data.EXHAUSTED_STRENGTH * (f.warStart[other] or 0)
+          end
+          local ea, eb = exhausted(a, b.id), exhausted(b, a.id)
+          if ea and eb then
+            makePeace(state, a, b)
+            State.Log(state, "peace", `{a.name} and {b.name}, both exhausted, make a white peace`)
+          elseif ea or eb then
+            local winner, loser = if ea then b else a, if ea then a else b
+            negotiate(state, winner, loser)
+            makePeace(state, a, b)
+          end
         end
       end
     end
   end
+
   -- Eliminations
   local held: { [number]: number } = {}
   for _, system in state.systems do
@@ -453,9 +723,13 @@ local function resolve(state: State.State)
       local fleet = state.fleets[action.fleet :: number]
       local system = action.target :: number
       Actions.Finish(state, action)
-      if fleet and fleet.alive and fleet.system == system and State.Hostile(state, fleet.owner, state.systems[system].owner)
-        and not hostilesPresent(state, system, fleet.owner) then
-        capture(state, system, fleet.owner)
+      local owner = state.systems[system].owner
+      if fleet and fleet.alive and fleet.system == system and not hostilesPresent(state, system, fleet.owner) then
+        if owner == nil then
+          claim(state, system, fleet.owner)
+        elseif State.Hostile(state, fleet.owner, owner) then
+          capture(state, system, fleet.owner)
+        end
       end
     end
   end
@@ -524,19 +798,34 @@ local function consolidate(state: State.State)
   end
 end
 
+-- Seconds spent in each part of the tick, accumulated (for profiling)
+Sim.Timing = {} :: { [string]: number }
+
+local function timed(part: string, started: number): number
+  local now = os.clock()
+  Sim.Timing[part] = (Sim.Timing[part] or 0) + (now - started)
+  return now
+end
+
 function Sim.Tick(state: State.State)
+  local t = os.clock()
   resolve(state)
+  t = timed("resolve", t)
   consolidate(state)
   local census = Ai.Census(state)
+  t = timed("census", t)
   local index = Market.Index(state)
+  t = timed("market index", t)
   state.phase = "action"
   for _, faction in state.factions do
     Ai.ActionPhase(state, faction, census[faction.id], index)
+    t = timed(if faction.pirate then "action: pirates" else "action: factions", t)
   end
   state.phase = "reaction"
   for _, faction in state.factions do
     Ai.ReactionPhase(state, faction, census[faction.id])
   end
+  timed("reaction", t)
   state.tick += 1
 end
 
@@ -549,6 +838,8 @@ export type FactionStats = {
   cruisers: number,
   haulers: number,
   credits: number,
+  costs: number,
+  arrears: number,
   wars: { string },
   alive: boolean,
 }
@@ -564,7 +855,7 @@ function Sim.Stats(state: State.State): { FactionStats }
     end
     table.sort(wars)
     stats[f.id] = { name = f.name, systems = 0, frigates = 0, cruisers = 0, haulers = 0,
-      credits = f.credits, wars = wars, alive = f.alive }
+      credits = f.credits, costs = f.costs, arrears = f.arrears, wars = wars, alive = f.alive }
   end
   for _, system in state.systems do
     if system.owner then
