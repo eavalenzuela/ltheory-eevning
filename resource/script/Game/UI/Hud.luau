@@ -365,7 +365,7 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
         running = r
       end
     end
-    local active = module.weapon ~= nil or module.repair ~= nil or module.boost ~= nil
+    local active = module.weapon ~= nil or module.repair ~= nil or module.boost ~= nil or module.miner ~= nil
     Im.Panel(bx, y, width, 46)
     local hot, clicked = Im.Row(bx, y, width, 46, running ~= nil)
     Im.Text(shorten(module.name, 18), bx + 8, y + 5, 13, if active then Im.TEXT else Im.DIM)
@@ -375,9 +375,13 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
         elseif module.weapon.clip > 0 then `{item.rounds} rounds`
         else shorten(Types.Info(item.charge).name, 18)
     end
+    if module.miner then
+      note = if running then "mining" else "idle"
+    end
     if running then
       local duration = if module.weapon then module.weapon.duration
         elseif module.repair then module.repair.duration
+        elseif module.miner then module.miner.duration
         else module.boostDuration or 1
       bar(bx + 8, y + 38, width - 16, 3, duration - math.max(0, running.next - now), duration, Im.ACCENT)
       if running.stopping then
@@ -388,7 +392,7 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
     if clicked and active then
       if running then
         Session.Do(session, { kind = "DeactivateModule", actor = 0, item = item.id })
-      elseif module.weapon then
+      elseif module.weapon or module.miner then
         -- at the selected target if it is locked, else the first locked one
         local target = 0
         local chosen = lockOf(ball, session.selected)
@@ -528,8 +532,8 @@ local function drawDocked(session: Session.Session, game: Core.Game, player: Cor
     line += 24
   end
   for index, item in hangar do
-    if index > 9 then
-      Im.Text(`and {#hangar - 9} more`, right, line, 13, Im.DIM)
+    if index > 11 then
+      Im.Text(`and {#hangar - 11} more`, right, line, 13, Im.DIM)
       line += 24
       break
     end
@@ -544,6 +548,11 @@ local function drawDocked(session: Session.Session, game: Core.Game, player: Cor
       local weapon = weaponFor(game, ship, item)
       if Im.Button("Load", right + 286, line, 54, 22, weapon ~= nil) and weapon then
         Session.Do(session, { kind = "LoadCharge", actor = 0, item = weapon.id, other = item.id })
+      end
+    elseif info.category == "ore" then
+      local can = Session.CanDo(session, { kind = "Reprocess", actor = 0, item = item.id })
+      if Im.Button("Refine", right + 286, line, 54, 22, can) then
+        Session.Do(session, { kind = "Reprocess", actor = 0, item = item.id })
       end
     end
     local toHold = Session.CanDo(session, { kind = "MoveItems", actor = 0, item = item.id, to = "cargo" })

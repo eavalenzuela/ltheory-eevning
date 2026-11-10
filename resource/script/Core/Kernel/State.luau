@@ -204,6 +204,10 @@ export type State = {
   pilotIds: { number },
   spawned: { [number]: number },  -- by grid: the tick pirates last appeared there
   peaceful: boolean,      -- no pirates come (for tests, and for sightseeing)
+  -- Asteroids that have been mined, by id: the units left, and the tick
+  -- mining began (they grow back some hours later). A rock not listed is whole.
+  rocks: { [number]: { left: number, since: number } },
+  rockIds: { number },
   grids: { [number]: Grid },
   gridIds: { number },
   player: { ship: number, home: number },

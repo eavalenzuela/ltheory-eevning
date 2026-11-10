@@ -91,7 +91,7 @@ suite:Case("undocking leaves the station at full speed, clear of its surface", f
   t.eq(event.station, station)
   local ball = me(game)
   t.near(speed(ball), ball.maxVelocity, 1e-6)
-  t.ok(gap(game, station) > Constants.UNDOCK_DISTANCE, "it appeared inside the undock distance")
+  t.near(gap(game, station), Constants.UNDOCK_DISTANCE, 1e-3, "it appears the undock distance off the surface")
   t.eq(ball.grid, station, "it is on the station's grid")
   t.eq({ Core.Validate(game, { kind = "Undock", actor = ball.id }) }, { false, "not docked" } :: { any })
 end)

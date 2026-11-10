@@ -19,7 +19,9 @@ local Constants = require("@lt/Core/Data/Constants")
 local Dogma = require("@lt/Core/Dogma")
 local Gunnery = require("@lt/Core/Tactical/Gunnery")
 local Items = require("@lt/Core/Assets/Items")
+local Mining = require("@lt/Core/Tactical/Mining")
 local Modules = require("@lt/Core/Data/Modules")
+local Ores = require("@lt/Core/Data/Ores")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -124,6 +126,19 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
         return false, "nothing loaded"
       end
       return true
+    elseif module.miner then
+      local lock = findLock(ball, command.target or 0)
+      local rock = Space.Object(state, command.target or 0)
+      if lock == nil or not lock.locked then
+        return false, "no locked target"
+      elseif rock == nil or rock.kind ~= "asteroid" then
+        return false, "not an asteroid"
+      elseif Mining.Left(state, rock) <= 0 then
+        return false, "that asteroid is mined out"
+      elseif Space.Gap(ball :: any, rock :: any) > module.miner.range then
+        return false, "out of mining range"
+      end
+      return true
     elseif module.repair or module.boost then
       return true
     end
@@ -156,8 +171,9 @@ function Combat.Apply(state: State.State, command: State.Command, events: { Even
     local item = state.items[command.item :: number]
     local module = Modules.byId[item.type]
     table.insert(ball.vitals.running, {
-      item = item.id, target = if module.weapon then command.target :: number else 0,
-      next = now(state), stopping = false, cycles = 0,
+      item = item.id, target = if module.weapon or module.miner then command.target :: number else 0,
+      -- A weapon fires at once; a mining laser delivers at the end of its cycle.
+      next = now(state) + (if module.miner then module.miner.duration else 0), stopping = false, cycles = 0,
     })
     if module.boost then
       Vitals.Refresh(state, ball)
@@ -337,6 +353,41 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
         fireTurret(state, ball, running, item, weapon, target, hits, events)
       end
       running.next += weapon.duration
+
+    elseif module.miner then
+      local miner = module.miner
+      local lock = findLock(ball, running.target)
+      local rock = Space.Object(state, running.target)
+      if lock == nil or not lock.locked or rock == nil then
+        stop(state, ball, index, "target lost", events)
+        return false
+      elseif Space.Gap(ball :: any, rock :: any) > miner.range then
+        stop(state, ball, index, "out of mining range", events)
+        return false
+      elseif v.capacitor < miner.capacitor then
+        stop(state, ball, index, "capacitor empty", events)
+        return false
+      end
+      -- As much as the cycle yields, the rock has left and the hold takes.
+      local ore = Ores.byId[rock.variety]
+      local free = Vitals.Stats(state, state.ships[ball.id], v).cargo - Items.CargoUsed(state, ball.id)
+      local units = math.min(math.floor(miner.volume / ore.volume), math.floor((free + 1e-9) / ore.volume))
+      if units <= 0 then
+        stop(state, ball, index, "the hold is full", events)
+        return false
+      end
+      units = Mining.Take(state, rock, units)
+      v.capacitor -= miner.capacitor
+      if units > 0 then
+        Items.Add(state, ore.id, units, ball.id, "cargo")
+        table.insert(events, { kind = "Mined", ball = ball.id, item = item.id, rock = rock.id, ore = ore.id, units = units })
+      end
+      if Mining.Left(state, rock) <= 0 then
+        table.insert(events, { kind = "RockDepleted", rock = rock.id })
+        stop(state, ball, index, "the asteroid is mined out", events)
+        return false
+      end
+      running.next += miner.duration
 
     elseif module.repair then
       local repair = module.repair

@@ -18,7 +18,9 @@ local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
 local Dogma = require("@lt/Core/Dogma")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Industry = require("@lt/Core/Assets/Industry")
 local Items = require("@lt/Core/Assets/Items")
+local Mining = require("@lt/Core/Tactical/Mining")
 local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Ships = require("@lt/Core/Data/Ships")
@@ -42,7 +44,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 4
+Core.SAVE_VERSION = 5
 
 -- A new game: a galaxy, and the player's first ship docked at a station
 -- in system 1.
@@ -69,6 +71,8 @@ function Core.New(options: Options): Game
     pilotIds = {},
     spawned = {},
     peaceful = options.peaceful == true,
+    rocks = {},
+    rockIds = {},
     grids = {},
     gridIds = {},
     player = { ship = 0, home = 0 },
@@ -92,7 +96,8 @@ function Core.New(options: Options): Game
   Items.Equip(state, ship.id, "autocannon.small", "ammo.emp")
   Items.Equip(state, ship.id, "autocannon.small", "ammo.emp")
   for _, kit in { { "ammo.emp", 600 }, { "ammo.fusion", 400 }, { "shield.extender.small", 1 }, { "afterburner.1mn", 1 },
-    { "armor.repairer.small", 1 }, { "laser.pulse.small", 1 }, { "crystal.multifrequency", 1 } } :: { { any } } do
+    { "armor.repairer.small", 1 }, { "laser.pulse.small", 1 }, { "crystal.multifrequency", 1 },
+    { "miner.small", 1 } } :: { { any } } do
     Items.Add(state, kit[1], kit[2], home.id, "hangar")
   end
   return { state = state, events = {} }
@@ -102,6 +107,7 @@ end
 local ASSET_COMMANDS = { Fit = true, Unfit = true, LoadCharge = true, MoveItems = true }
 local COMBAT_COMMANDS = { LockTarget = true, UnlockTarget = true, ActivateModule = true, DeactivateModule = true }
 local AFTERMATH_COMMANDS = { Loot = true, Repair = true }
+local INDUSTRY_COMMANDS = { Reprocess = true }
 
 local function validate(state: State.State, command: State.Command): (boolean, string?)
   if ASSET_COMMANDS[command.kind] then
@@ -110,6 +116,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Combat.Validate(state, command)
   elseif AFTERMATH_COMMANDS[command.kind] then
     return Aftermath.Validate(state, command)
+  elseif INDUSTRY_COMMANDS[command.kind] then
+    return Industry.Validate(state, command)
   end
   return Space.Validate(state, command)
 end
@@ -158,6 +166,8 @@ function Core.Step(game: Game)
       Combat.Apply(state, command, game.events)
     elseif ok and AFTERMATH_COMMANDS[command.kind] then
       Aftermath.Apply(state, command, game.events)
+    elseif ok and INDUSTRY_COMMANDS[command.kind] then
+      Industry.Apply(state, command, game.events)
     elseif ok then
       Space.Apply(state, command, game.events)
     else
@@ -168,6 +178,7 @@ function Core.Step(game: Game)
   Pirates.Think(state, game.events)
   Space.Decide(state, game.events)
   Aftermath.Step(state, game.events)
+  Mining.Step(state)
 end
 
 -- The events since the last call, oldest first.
@@ -249,7 +260,8 @@ function Query.Overview(game: Game): { Entry }
   local entries: { Entry } = {}
   for _, object in Space.Describe(state, me.system).objects do
     local onGrid = me.grid ~= 0 and object.site == me.grid
-    if onGrid or object.kind ~= "asteroid" then
+    local gone = object.kind == "asteroid" and Mining.Left(state, object) <= 0
+    if (onGrid or object.kind ~= "asteroid") and not gone then
       local entry: Entry = { id = object.id, kind = object.kind :: string, name = object.name,
         distance = Space.Gap(me :: any, object :: any), onGrid = onGrid, variety = object.variety }
       table.insert(entries, entry)

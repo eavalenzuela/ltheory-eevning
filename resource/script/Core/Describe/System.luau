@@ -15,6 +15,7 @@
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Names = require("@lt/Core/Describe/Names")
+local Ores = require("@lt/Core/Data/Ores")
 local Rng = require("@lt/Core/Kernel/Rng")
 
 local System = {}
@@ -34,7 +35,7 @@ export type Object = {
   -- The grid anchor it sits on: itself for a station, gate or belt, its
   -- belt for an asteroid, 0 for the sun, planets and moons.
   site: number,
-  variety: string,    -- planet type, station type, star class; "" if none
+  variety: string,    -- planet type, station type, star class, an asteroid's ore; "" if none
   to: number,         -- a gate's destination system; 0 otherwise
 }
 
@@ -115,9 +116,11 @@ function System.Describe(galaxy: Galaxy.Galaxy, id: number): Description
       for r = 1, rocks do
         local along = start + (r / rocks) * math.pi * Rng.Float(rng, 0.9, 1.1)
         local out = Rng.Float(rng, 10000, 20000)
-        local rock = add("asteroid", `Asteroid {r}`,
+        -- Each rock is one ore, and is named for it.
+        local ore = Ores.Pick(Rng.Next(rng))
+        local rock = add("asteroid", ore.name,
           x + out * math.cos(along), y + Rng.Float(rng, -4000, 4000), z + out * math.sin(along),
-          Rng.Float(rng, 150, 900), belt.id, "rock")
+          Rng.Float(rng, 150, 900), belt.id, ore.id)
         rock.site = belt.id
       end
     end

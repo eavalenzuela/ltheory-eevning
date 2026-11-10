@@ -52,6 +52,10 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `A module stopped: {event.reason}`)
   elseif kind == "Looted" and event.ship == mine then
     Session.Say(session, if event.left > 0 then `Looted {event.taken}; {event.left} would not fit` else `Looted {event.taken}`)
+  elseif kind == "Mined" and event.ball == mine then
+    Session.Say(session, `Mined {event.units} units of ore`)
+  elseif kind == "Reprocessed" and event.ship == mine then
+    Session.Say(session, `Refined {event.units} units of ore`)
   elseif kind == "LockLost" and event.ball == mine and tostring(event.reason) ~= "unlocked" then
     Session.Say(session, `Lock lost: {event.reason}`)
   end

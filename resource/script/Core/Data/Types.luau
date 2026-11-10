@@ -3,13 +3,14 @@
 -- commodity or a packaged hull.
 
 local Modules = require("@lt/Core/Data/Modules")
+local Ores = require("@lt/Core/Data/Ores")
 
 local Types = {}
 
 export type Info = {
   id: string,
   name: string,
-  category: "module" | "charge" | "goods",
+  category: "module" | "charge" | "goods" | "ore" | "mineral",
   volume: number,     -- m3 per unit
   basePrice: number,  -- credits per unit
 }
@@ -21,6 +22,13 @@ for _, m in Modules.list do
 end
 for _, c in Modules.charges do
   byId[c.id] = { id = c.id, name = c.name, category = "charge", volume = c.volume, basePrice = c.basePrice }
+end
+
+for _, ore in Ores.list do
+  byId[ore.id] = { id = ore.id, name = ore.name, category = "ore", volume = ore.volume, basePrice = ore.basePrice }
+end
+for _, mineral in Ores.minerals do
+  byId[mineral.id] = { id = mineral.id, name = mineral.name, category = "mineral", volume = mineral.volume, basePrice = mineral.basePrice }
 end
 
 -- Things that are only carried and sold.

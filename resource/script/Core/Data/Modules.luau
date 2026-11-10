@@ -42,6 +42,13 @@ export type Repair = {
   capacitor: number,        -- GJ per cycle
 }
 
+export type Miner = {
+  volume: number,           -- m3 of ore per cycle
+  duration: number,         -- s; the ore arrives at the end of each cycle
+  capacitor: number,        -- GJ per cycle
+  range: number,            -- m
+}
+
 export type ModuleType = {
   id: string,
   name: string,
@@ -55,6 +62,7 @@ export type ModuleType = {
   -- at most one of these makes it something a pilot switches on:
   weapon: Weapon?,
   repair: Repair?,
+  miner: Miner?,
   boost: { Modifier }?,     -- applies while running
   boostDuration: number?,   -- s per cycle, with 'boost'
   boostCapacitor: number?,  -- GJ per cycle
@@ -111,6 +119,13 @@ local modules: { ModuleType } = {
     cpu = 26, powergrid = 5, volume = 5, basePrice = 12000, passive = {},
     weapon = { family = "missile", duration = 9, capacitor = 0, damageMultiplier = 1.0,
       optimal = 0, falloff = 0, tracking = 0, clip = 30, reload = 30 },
+  },
+
+  -- Mining
+  {
+    id = "miner.small", name = "Mining Laser", slot = "high", hardpoint = "turret",
+    cpu = 60, powergrid = 2, volume = 5, basePrice = 15000, passive = {},
+    miner = { volume = 40, duration = 60, capacitor = 60, range = 10000 },
   },
 
   -- Shield
