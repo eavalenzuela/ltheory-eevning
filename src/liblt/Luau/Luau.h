@@ -42,6 +42,12 @@ LT_API bool Luau_Call(int nargs, int nresults);
    exits with a failure status when this is not zero. */
 LT_API int Luau_GetErrorCount();
 
+/* Run a piece of Luau source in the app's VM, as a console would: an
+   expression's values are printed ("1 + 1" prints 2), a statement just
+   runs. Returns false, after printing the error, if it does not compile
+   or raises. */
+LT_API bool Luau_Eval(String const& code);
+
 /* Object scripts (Object_AddScript) written in Luau: a table whose
    Update(object) runs every frame (returning false removes it) and whose
    Receive(object, message) gets the object's messages. */

@@ -1,6 +1,9 @@
 /* Luau's header first: the engine defines an 'error' macro. */
 #include "lua.h"
 
+#include <poll.h>
+#include <unistd.h>
+
 #include "Harness.h"
 
 #include "Luau/Luau.h"
@@ -29,11 +32,38 @@ struct Launcher : public Program {
      separately (Luau_GetErrorCount); either makes the exit status 1. */
   bool failed;
 
+  /* --console: lines typed in the terminal are run as Luau. */
+  bool console;
+  String consoleLine;
+
+  /* Run whatever complete lines have arrived on stdin, without waiting. */
+  void PollConsole() {
+    struct pollfd fd = { 0, POLLIN, 0 };
+    while (poll(&fd, 1, 0) > 0 && (fd.revents & (POLLIN | POLLHUP))) {
+      char buffer[1024];
+      ssize_t n = read(0, buffer, sizeof(buffer));
+      if (n <= 0) {
+        console = false;
+        return;
+      }
+      for (ssize_t i = 0; i < n; ++i) {
+        if (buffer[i] != '\n') {
+          consoleLine += buffer[i];
+          continue;
+        }
+        if (consoleLine.size())
+          Luau_Eval(consoleLine);
+        consoleLine = "";
+      }
+    }
+  }
+
   Launcher(String const& appName, V2U const& size, Harness& harness) :
     appName(appName),
     harness(harness),
     luauApp(0),
-    failed(false)
+    failed(false),
+    console(false)
   {
     if (!OS_IsDir("resource"))
       OS_ChangeDir("../");
@@ -127,6 +157,9 @@ struct Launcher : public Program {
     if (Keyboard_Pressed(Key_F5))
       Launch();
 
+    if (console)
+      PollConsole();
+
     if (luauApp && !CallLuau("Update")) {
       deleted = true;
       return;
@@ -158,6 +191,8 @@ void Usage() {
     "  --fixed-step HZ  advance the app's clock by exactly 1/HZ s per frame and\n"
     "                   seed the random generator, so a run repeats exactly;\n"
     "                   'wait S' then lasts S*HZ frames\n"
+    "  --console        read Luau from the terminal while the app runs: type a\n"
+    "                   line and it is run in the app's VM, values printed\n"
     "  --no-present     draw every frame but never show it; screenshots still\n"
     "                   work, and the desktop cannot slow the run down\n"
     "  --selftest KIND  fail on purpose once the engine is up, to prove that\n"
@@ -175,10 +210,15 @@ int main(int argc, char const* argv[]) {
   String selftest;
   float fixedHz = 0;
   bool present = true;
+  bool console = false;
   for (int i = 2; i < argc; ++i) {
     String opt = argv[i];
     if (opt == "--no-present") {
       present = false;
+      continue;
+    }
+    if (opt == "--console") {
+      console = true;
       continue;
     }
     if (i + 1 >= argc) {
@@ -234,6 +274,11 @@ int main(int argc, char const* argv[]) {
 
   if (!present)
     launcher.window->SetPresent(false);
+  launcher.console = console;
+  if (console) {
+    printf("console: type Luau and press Enter; it runs in the app's VM\n");
+    fflush(stdout);
+  }
 
   /* A repeatable run: the same time step every frame, and the same random
      numbers (Program seeds rand() from the clock). */

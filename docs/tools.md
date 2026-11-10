@@ -36,6 +36,7 @@ The current prototype fails the sweep on every seed (credits and fleets trend to
 
 | Command | What it does |
 |---|---|
+| `bin/launch APP --console` | A Luau prompt in the terminal that started the app: type a line, it runs in the app's VM. The harness command `lua CODE` does the same from a script. |
 | `script/goldens [NAME ...]` | Runs the golden-screenshot scenarios and compares each with its stored image. |
 | `script/goldens --update [NAME ...]` | Stores this run's screenshots as the golden images. |
 

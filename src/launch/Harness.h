@@ -25,7 +25,13 @@
                          case) nearest the cursor; waits up to 10 s for one
      widgets [TEXT]      print the named visible widgets (containing TEXT)
      echo TEXT           print TEXT
+     lua CODE            run CODE as Luau in the app's VM and print what an
+                         expression returns; an error fails the run. CODE
+                         cannot contain ';' (it separates commands) or '#'
+                         (it starts a comment)
      quit                exit the app */
+
+#include "Luau/Luau.h"
 
 #include "LTE/Keyboard.h"
 #include "LTE/Math.h"
@@ -320,6 +326,11 @@ struct Harness {
       else if (op == "echo") {
         printf("HARNESS %s\n", Rest(c, 1).c_str());
         fflush(stdout);
+      }
+
+      else if (op == "lua" && c.size() >= 2) {
+        if (!Luau_Eval(Rest(c, 1)))
+          Fail(c, "the Luau code raised an error");
       }
 
       else if (op == "quit") {

@@ -2042,6 +2042,52 @@ bool Luau_Call(int nargs, int nresults) {
   return true;
 }
 
+bool Luau_Eval(String const& code) {
+  lua_State* L = Luau_GetState();
+  lua_CompileOptions options;
+  memset(&options, 0, sizeof(options));
+  options.optimizationLevel = 1;
+  options.debugLevel = 1;
+
+  /* Try the text as an expression first, so that a value typed at the
+     console is printed; otherwise it is a statement. */
+  bool loaded = false;
+  for (int attempt = 0; attempt < 2 && !loaded; ++attempt) {
+    String source = attempt == 0 ? String("return " + code) : code;
+    size_t size = 0;
+    char* bytecode = luau_compile(source.data(), source.size(), &options, &size);
+    int status = luau_load(L, "=console", bytecode, size, 0);
+    free(bytecode);
+    if (status == 0)
+      loaded = true;
+    else if (attempt == 0)
+      lua_pop(L, 1);
+    else {
+      printf("LUAU ERROR: %s\n", lua_tostring(L, -1));
+      fflush(stdout);
+      lua_pop(L, 1);
+      luauErrorCount++;
+      return false;
+    }
+  }
+
+  int base = lua_gettop(L);
+  if (!Luau_Call(0, LUA_MULTRET))
+    return false;
+  int top = lua_gettop(L);
+  for (int i = base; i <= top; ++i) {
+    size_t length = 0;
+    char const* text = luaL_tolstring(L, i, &length);
+    printf("%s%.*s", i > base ? "\t" : "", (int)length, text);
+    lua_pop(L, 1);
+  }
+  if (top >= base)
+    printf("\n");
+  fflush(stdout);
+  lua_settop(L, base - 1);
+  return true;
+}
+
 bool Luau_Require(String const& module) {
   lua_State* L = Luau_GetState();
   lua_getglobal(L, "require");
