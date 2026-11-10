@@ -52,7 +52,7 @@ end)
 suite:Case("a hull's sheet says what the data says", function(t)
   local hull = Ships.byId["frigate.lancer"]
   local sheet = assert(Facts.Of("frigate.lancer"))
-  t.eq(sheet.kind, "Vessari frigate")
+  t.eq(sheet.kind, "Kethri frigate")
   t.eq(find(sheet, "Slots (high / mid / low)"), `{hull.highs} / {hull.mids} / {hull.lows}`)
   t.eq(find(sheet, "Top speed"), `{hull.maxVelocity} m/s`)
   t.ok(find(sheet, "Frigates") ~= nil, "it should say which skill flies it")

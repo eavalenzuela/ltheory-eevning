@@ -241,10 +241,14 @@ suite:Case("every human warship can carry a full rack of its own faction's weapo
           local powergrid = turrets * turret.powergrid + launchers * launcher.powergrid
           t.ok(cpu <= 0.8 * hull.cpu, `{hull.id}: its weapons take {cpu} of {hull.cpu} cpu`)
           t.ok(powergrid <= 0.8 * hull.powergrid, `{hull.id}: its weapons take {powergrid} of {hull.powergrid} MW`)
-          -- and the next size up is beyond it
+          -- and the same rack a size up is beyond it (the whole rack: on a
+          -- hull that is mostly launchers, the one gun alone proves nothing)
           if size < 3 then
             local bigger = assert(Modules.byId[`{SHORT[faction.weapon]}.{NAME[size + 1]}`])
-            t.ok(hull.turrets == 0 or hull.turrets * bigger.powergrid > hull.powergrid, `{hull.id} could carry {bigger.id}`)
+            local biggerLauncher = assert(Modules.byId[LAUNCHER[size + 1]])
+            local cpuUp = turrets * bigger.cpu + launchers * biggerLauncher.cpu
+            local powergridUp = turrets * bigger.powergrid + launchers * biggerLauncher.powergrid
+            t.ok(cpuUp > hull.cpu or powergridUp > hull.powergrid, `{hull.id} could carry its rack a size up`)
           end
         end
       end

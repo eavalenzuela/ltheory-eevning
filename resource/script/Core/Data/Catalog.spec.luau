@@ -41,7 +41,7 @@ suite:Case("hulls are set out by faction, frigate first", function(t)
   local listing = Catalog.Listing("ship")
   t.eq(listing[1].header, Factions.list[1].name)
   local first = assert(listing[2].info)
-  t.eq(first.id, "frigate.lancer")
+  t.eq(first.id, "frigate.javelin")
   local headings: { string } = {}
   for _, entry in listing do
     if entry.header then

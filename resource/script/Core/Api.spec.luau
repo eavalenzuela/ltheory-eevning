@@ -348,6 +348,20 @@ suite:Case("a save from the version before still opens", function(t)
   t.ok(markets > 0)
   local old, oldLength = Codec.Encode(file)
   t.eq(Core.Hash(Core.Load(old, oldLength)), Core.Hash(game))
+  -- Version 9 had the Kethri's missile frigate, the Spindle, which is now
+  -- the Vessari Javelin: whatever was one comes through as the other.
+  local renamed = Codec.Decode(data, length)
+  renamed.saveVersion = 9
+  local item = 0
+  for id, held in renamed.state.items do
+    if held.type == "ammo.emp" then
+      item = id
+    end
+  end
+  t.ok(item ~= 0, "the starting hangar has rounds in it to turn into a hull")
+  renamed.state.items[item].type = "frigate.spindle"
+  old, oldLength = Codec.Encode(renamed)
+  t.eq(Core.Load(old, oldLength).state.items[item].type, "frigate.javelin")
   -- one from before any migration is still refused
   file.saveVersion = 3
   old, oldLength = Codec.Encode(file)

@@ -77,7 +77,7 @@ local types: { ShipType } = {
   },
   -- Lasers and armour.
   {
-    id = "frigate.lancer", name = "Vessari Lancer", class = "frigate", lineage = "vessari", basePrice = 420000, volume = 2500,
+    id = "frigate.lancer", name = "Kethri Lancer", class = "frigate", lineage = "kethri", basePrice = 420000, volume = 2500,
     mass = 1190000, inertia = 3.0, maxVelocity = 345, warpSpeed = 5, radius = 42,
     shield = 390, armor = 520, hull = 360, shieldRecharge = 625,
     shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 37,

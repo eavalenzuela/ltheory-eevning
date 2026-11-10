@@ -60,12 +60,17 @@ export type Faction = {
 Factions.list = {
   -- The four human factions.
   {
-    id = "vessari", name = "Vessari", kind = "human", style = "slab", weapon = "laser", launchers = 0, tank = "armor",
-    note = "Lasers and armour. Broad, plated hulls that give ground slowly and never run out of ammunition.",
+    -- (After the project owner's first sketch, 2026-11-10: mercantilists,
+    -- blocky utilitarian ships, "think Minmatar": exposed conduits, heavy
+    -- armour, missiles, engine nacelles. The guns on the hardpoints that
+    -- are not launchers are projectile ones by that likeness; the sketch
+    -- does not say.)
+    id = "vessari", name = "Vessari", kind = "human", style = "slab", weapon = "projectile", launchers = 0.7, tank = "armor",
+    note = "Missiles and heavy armour. Blocky, hard-working hulls with their conduits bare and their engines out on struts: a merchant people's ships, built to be hit and keep flying.",
     paint = { primary = { 0.72, 0.58, 0.30 }, secondary = { 0.22, 0.20, 0.18 }, glow = { 1.0, 0.75, 0.35 } },
-    shield = 0.85, armor = 1.25, hull = 1.0, velocity = 0.95, mass = 1.05, cpu = 0.95, powergrid = 1.1, capacitor = 1.15,
-    lockRange = 1.0, cargo = 1.0, price = 1, mids = -1, lows = 1, hardpoints = 0,
-    hulls = { frigate = "Lancer", destroyer = "Halberd", cruiser = "Cuirass", battleship = "Bastion", industrial = "Caravan" },
+    shield = 0.8, armor = 1.35, hull = 1.05, velocity = 0.92, mass = 1.1, cpu = 1.1, powergrid = 0.95, capacitor = 0.9,
+    lockRange = 1.1, cargo = 1.15, price = 1, mids = -1, lows = 1, hardpoints = 0,
+    hulls = { frigate = "Javelin", destroyer = "Halberd", cruiser = "Cuirass", battleship = "Bastion", industrial = "Caravan" },
   },
   {
     id = "talmar", name = "Talmar", kind = "human", style = "blade", weapon = "projectile", launchers = 0.35, tank = "shield",
@@ -84,12 +89,14 @@ Factions.list = {
     hulls = { frigate = "Mastiff", destroyer = "Boar", cruiser = "Aurochs", battleship = "Mammoth", industrial = "Ox" },
   },
   {
-    id = "kethri", name = "Kethri", kind = "human", style = "lattice", weapon = "laser", launchers = 0.7, tank = "shield",
-    note = "Missiles at long range, behind deep shields. Open-framed hulls that see far and are fragile once the shields are down.",
+    -- (Lasers and armour by the project owner's decision, 2026-11-10,
+    -- when the Vessari took missiles. The rest is still a placeholder.)
+    id = "kethri", name = "Kethri", kind = "human", style = "lattice", weapon = "laser", launchers = 0, tank = "armor",
+    note = "Lasers and armour. Open-framed hulls with deep capacitors that see far, hold their range and never run out of ammunition.",
     paint = { primary = { 0.24, 0.30, 0.46 }, secondary = { 0.80, 0.80, 0.84 }, glow = { 0.55, 0.60, 1.0 } },
-    shield = 1.3, armor = 0.75, hull = 0.9, velocity = 1.0, mass = 0.97, cpu = 1.15, powergrid = 0.95, capacitor = 1.0,
-    lockRange = 1.3, cargo = 1.0, price = 1, mids = 1, lows = -1, hardpoints = 0,
-    hulls = { frigate = "Spindle", destroyer = "Gantry", cruiser = "Trellis", battleship = "Spire", industrial = "Lighter" },
+    shield = 0.85, armor = 1.25, hull = 1.0, velocity = 0.97, mass = 1.03, cpu = 0.95, powergrid = 1.1, capacitor = 1.15,
+    lockRange = 1.2, cargo = 1.0, price = 1, mids = -1, lows = 1, hardpoints = 0,
+    hulls = { frigate = "Lancer", destroyer = "Gantry", cruiser = "Trellis", battleship = "Spire", industrial = "Lighter" },
   },
 
   -- The pirates. Every hull of theirs began as one of the four above:

@@ -49,7 +49,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 9
+Core.SAVE_VERSION = 10
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -63,6 +63,33 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
         edge.loss = 0
       end
     end
+  end,
+  -- 10: the Kethri took lasers and armour and the Vessari missiles, so
+  -- the Kethri's frigate is the Lancer (the same hull as before under
+  -- another flag) and the missile frigate, which was the Kethri Spindle,
+  -- is the Vessari Javelin. A Spindle in a save becomes a Javelin, and
+  -- its blueprint likewise. (The Javelin has a mid slot fewer and a low
+  -- slot more: a Spindle with every mid slot filled comes through with a
+  -- module the fitting screen has no row for.)
+  [9] = function(state: any)
+    local renamed = { ["frigate.spindle"] = "frigate.javelin", ["blueprint.frigate.spindle"] = "blueprint.frigate.javelin" }
+    local function walk(t: any)
+      local moved: { any } = {}
+      for key, value in t do
+        if type(value) == "table" then
+          walk(value)
+        elseif type(value) == "string" and renamed[value] then
+          t[key] = renamed[value]
+        end
+        if type(key) == "string" and renamed[key] then
+          table.insert(moved, key)
+        end
+      end
+      for _, key in moved do
+        t[renamed[key]], t[key] = t[key], nil
+      end
+    end
+    walk(state)
   end,
 }
 
