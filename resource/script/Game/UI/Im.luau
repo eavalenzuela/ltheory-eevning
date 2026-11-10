@@ -154,6 +154,21 @@ function Im.Link(label: string, x: number, y: number, size: number, color: vecto
   return scripted or (hot and pressed)
 end
 
+-- A bare area that can be clicked, for something that draws itself:
+-- whether the cursor is on it, and whether it was just clicked. 'id' is
+-- its name for a script (Im.Press).
+function Im.Area(id: string, x: number, y: number, w: number, h: number, enabled: boolean): (boolean, boolean)
+  if seenNow[id] == nil or enabled then
+    seenNow[id] = enabled
+  end
+  local scripted = enabled and pressNow == id
+  if scripted then
+    pressNow = nil
+  end
+  local hot = inside(x, y, w, h)
+  return hot, scripted or (enabled and hot and pressed)
+end
+
 -- A button that stays lit while 'on': a tab, or one of a set of choices.
 function Im.Toggle(label: string, x: number, y: number, w: number, h: number, on: boolean, id: string?): boolean
   local clicked = Im.Button(label, x, y, w, h, true, id)

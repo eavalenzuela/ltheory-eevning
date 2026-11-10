@@ -330,6 +330,22 @@ suite:Case("a file that is not a save is refused", function(t)
   t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
 end)
 
+suite:Case("a fit's offence is what its loaded guns come to", function(t)
+  local game = newGame()
+  local ship = Core.Query.Player(game).ship
+  local offence = Core.Query.Offence(game, ship)
+  -- the starter ship: two small autocannons, loaded
+  t.ok(offence.volley > 0 and offence.dps > 0, "loaded guns do damage")
+  t.ok(offence.dps < offence.volley, "an autocannon takes more than a second a shot")
+  t.near(offence.kinds[1] + offence.kinds[2] + offence.kinds[3] + offence.kinds[4], offence.dps, 1e-9)
+  t.ok(offence.range > 500, "they reach somewhere")
+  -- with nothing loaded they do none
+  for _, item in Core.Query.Fitted(game, ship) do
+    item.charge = ""
+  end
+  t.eq(Core.Query.Offence(game, ship).dps, 0)
+end)
+
 suite:Case("a save from the version before still opens", function(t)
   -- Version 8 had no count of goods lost to piracy in its markets. Make
   -- such a save from a new one and load it.

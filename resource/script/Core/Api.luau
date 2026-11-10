@@ -389,6 +389,11 @@ function Query.Stats(game: Game, ship: number): Dogma.Stats
   return Items.ShipStats(game.state, ship)
 end
 
+-- What a ship's weapons come to with what is loaded in them.
+function Query.Offence(game: Game, ship: number): Items.Offence
+  return Items.Offence(game.state, ship)
+end
+
 -- CPU and powergrid a ship's fit uses.
 function Query.FittingUse(game: Game, ship: number): (number, number)
   local cpu, powergrid = 0, 0

@@ -79,6 +79,33 @@ function Items.ShipStats(state: State.State, ship: number): Dogma.Stats
   return Dogma.Ship(Ships.byId[state.ships[ship].type], Items.Fit(state, ship, nil), Items.Levels(state, ship))
 end
 
+-- What a ship's weapons come to on paper with what is loaded in them:
+-- damage a volley and damage a second, the second split by kind (EM,
+-- thermal, kinetic, explosive), and how far the longest of them reaches
+-- (a turret's optimal range and falloff, a missile's flight).
+export type Offence = { volley: number, dps: number, kinds: { number }, range: number }
+
+function Items.Offence(state: State.State, ship: number): Offence
+  local fit = Items.Fit(state, ship, nil)
+  local levels = Items.Levels(state, ship)
+  local out: Offence = { volley = 0, dps = 0, kinds = { 0, 0, 0, 0 }, range = 0 }
+  for _, item in Items.Fitted(state, ship) do
+    if Modules.byId[item.type].weapon and item.charge ~= "" then
+      local weapon = Dogma.Weapon(fit, item.type, levels)
+      local charge = Modules.chargeById[item.charge]
+      for index = 1, 4 do
+        local hit = charge.damage[index] * weapon.damageMultiplier
+        out.volley += hit
+        out.dps += hit / weapon.duration
+        out.kinds[index] += hit / weapon.duration
+      end
+      out.range = math.max(out.range, if weapon.optimal > 0 then weapon.optimal * charge.rangeMultiplier + weapon.falloff
+        else charge.velocity * charge.flightTime)
+    end
+  end
+  return out
+end
+
 -- Cubic metres in a ship's hold.
 function Items.CargoUsed(state: State.State, ship: number): number
   local used = 0

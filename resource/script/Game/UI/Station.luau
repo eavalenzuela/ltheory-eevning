@@ -134,65 +134,265 @@ local function weaponFor(game: Core.Game, ship: number, charge: State.Item): Sta
   return other
 end
 
-local function drawFitting(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
+-- The fitting screen is set out as EVE's is. In the middle is the ship,
+-- turning, inside a wheel of its slots: high slots along the top, mid
+-- slots down the right, low slots along the bottom, and on the left two
+-- arcs that fill as the fit uses the hull's CPU and powergrid. A slot
+-- shows what is fitted in it, and inside the wheel what a weapon is
+-- loaded with. To the right is what the fit comes to: capacitor,
+-- offence, defence layer by layer with what each resists, targeting,
+-- navigation. To the left are the hangar and the hold, to fit from.
+
+local RING = 150          -- from the middle of the wheel to the middle of a slot
+local SLOT = 36
+
+-- Where each rack sits on the wheel, in turns (0 is to the right, a
+-- quarter is straight down): the middle of its arc, and how much of the
+-- wheel it may take.
+local RACKS: { { any } } = {
+  { "high", "High", 0.75, 0.32 },
+  { "mid", "Mid", 0.02, 0.20 },
+  { "low", "Low", 0.28, 0.28 },
+}
+
+local EM, THERMAL, KINETIC, EXPLOSIVE = vector.create(0.35, 0.62, 1.0), vector.create(1.0, 0.40, 0.30),
+  vector.create(0.72, 0.74, 0.78), vector.create(1.0, 0.70, 0.25)
+local KINDS = { EM, THERMAL, KINETIC, EXPLOSIVE }
+local CPU_COLOR, GRID_COLOR = vector.create(0.40, 0.75, 1.0), vector.create(1.0, 0.62, 0.25)
+local OVER = vector.create(1.0, 0.25, 0.2)
+
+local function onWheel(cx: number, cy: number, radius: number, turn: number): (number, number)
+  local angle = 2 * math.pi * turn
+  return cx + radius * math.cos(angle), cy + radius * math.sin(angle)
+end
+
+-- An arc of a ring round (cx, cy), from one turn to another.
+local function arc(cx: number, cy: number, inner: number, outer: number, from: number, to: number, color: vector, alpha: number)
+  if to > from then
+    WidgetRenderer_DrawPanelRadial(vector.create(cx, cy), inner, outer, ((from + to) / 2) % 1, to - from, color, alpha, alpha, 0)
+  end
+end
+
+-- A gauge along an arc: how much of 'capacity' is 'used'. It fills from
+-- 'from' toward 'to', whichever way round that is.
+local function gauge(cx: number, cy: number, from: number, to: number, used: number, capacity: number, color: vector)
+  arc(cx, cy, RING - 9, RING + 9, math.min(from, to), math.max(from, to), Im.DIM, 0.3)
+  local share = math.min(1, if capacity > 0 then used / capacity else 0)
+  local reached = from + (to - from) * share
+  arc(cx, cy, RING - 9, RING + 9, math.min(from, reached), math.max(from, reached), if used > capacity then OVER else color, 0.95)
+end
+
+local turning = 0
+
+local function drawWheel(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, cx: number, cy: number,
+  preview: Renderable?)
   local ship = player.ship
+  local hull = player.hull
   local stats = Core.Query.Stats(game, ship)
-
-  -- The ship and what it comes to with this fit.
-  local left = x + 16
-  local line = y + 78
-  ItemIcon.Draw(player.hull.id, left, line - 4, 24)
-  Im.Heading(string.upper(player.hull.name), left + 32, line, 16, Im.TEXT)
-  if Im.Button("Info", left + 396, line - 4, 54, 22, true, `Info:{player.hull.id}`) then
-    Info.Open(player.hull.id)
-  end
-  line += 26
   local cpu, powergrid = Core.Query.FittingUse(game, ship)
-  local facts = {
-    string.format("CPU %.0f / %.0f tf     Powergrid %.0f / %.0f MW", cpu, stats.cpu, powergrid, stats.powergrid),
-    string.format("Shield %.0f   Armor %.0f   Hull %.0f", stats.shield, stats.armor, stats.hull),
-    string.format("Speed %.0f m/s   Align %.1f s   Capacitor %.0f GJ", stats.maxVelocity, 1.3863 * stats.tau, stats.capacitor),
-  }
-  for _, fact in facts do
-    Im.Text(fact, left, line, 14, Im.DIM)
-    line += 20
+
+  -- The ship, turning.
+  WidgetRenderer_DrawPanelRadial(vector.create(cx, cy), 0, RING - 28, 0, 1, vector.create(0.02, 0.03, 0.045), 0.9, 0.9, 0)
+  if preview then
+    turning += 0.25 * FrameTimer_Get()
+    local bound = preview:GetBound()
+    local size = bound.upper - bound.lower
+    local fov = math.rad(0.02)
+    local distance = math.max(size.x, size.y, size.z) * 0.47 / math.tan(0.5 * fov)
+    local from = vector.normalize(vector.create(math.cos(turning), 0.42, math.sin(turning))) * distance
+    local side = 2 * (RING - 44)
+    WidgetRenderer_DrawRenderable(preview, Transform_Identity(), from, -1 * vector.normalize(from), vector.create(0, 1, 0), fov,
+      vector.create(cx - side / 2, cy - side / 2), vector.create(side, side), vector.create(0.55, 0.80, 1.0), 0.95, turning)
+  else
+    ItemIcon.Draw(hull.id, cx - 40, cy - 40, 80)
   end
 
-  line += 10
-  Im.Heading("FITTED", left, line, 16, Im.DIM)
-  line += 24
-  local racks = { { "high", "High", player.hull.highs }, { "mid", "Mid", player.hull.mids }, { "low", "Low", player.hull.lows } } :: { { any } }
-  for _, rack in racks do
-    local bySlot: { [number]: State.Item } = {}
-    for _, item in Core.Query.Items(game, ship, rack[1]) do
-      bySlot[item.slot] = item
+  -- The rim the slots sit on.
+  arc(cx, cy, RING - 1, RING + 1, 0, 1, Im.DIM, 0.22)
+
+  -- What the fit takes of the hull's CPU and powergrid, on the left.
+  gauge(cx, cy, 0.505, 0.570, cpu, stats.cpu, CPU_COLOR)
+  gauge(cx, cy, 0.495, 0.430, powergrid, stats.powergrid, GRID_COLOR)
+
+  -- The slots.
+  local hint = ""
+  local fitted: { [string]: { [number]: State.Item } } = { high = {}, mid = {}, low = {} }
+  local turretsUsed, launchersUsed = 0, 0
+  for _, item in Core.Query.Fitted(game, ship) do
+    fitted[item.place][item.slot] = item
+    local hardpoint = Modules.byId[item.type].hardpoint
+    if hardpoint == "turret" then
+      turretsUsed += 1
+    elseif hardpoint == "launcher" then
+      launchersUsed += 1
     end
-    for slot = 1, rack[3] do
-      local item = bySlot[slot]
-      Im.Text(`{rack[2]} {slot}`, left, line + 3, 13, Im.DIM)
+  end
+  local counts = { high = hull.highs, mid = hull.mids, low = hull.lows }
+  for _, rack in RACKS do
+    local name: string, label: string, middle: number, span: number = rack[1], rack[2], rack[3], rack[4]
+    local count = counts[name]
+    local pitch = math.min(0.047, span / math.max(1, count))
+    -- (its name, inside the wheel at the start of its arc)
+    local lx, ly = onWheel(cx, cy, RING - 4, middle - pitch * (count + 1) / 2 - 0.004)
+    Im.Text(string.upper(label), lx - Im.TextWidth(string.upper(label), 10) / 2, ly - 6, 10, Im.DIM)
+    for slot = 1, count do
+      local turn = middle + (slot - (count + 1) / 2) * pitch
+      local sx, sy = onWheel(cx, cy, RING, turn)
+      local left, top = sx - SLOT / 2, sy - SLOT / 2
+      local item = fitted[name][slot]
       if item then
         local module = Modules.byId[item.type]
-        ItemIcon.Draw(item.type, left + 56, line + 1, 20)
-        Info.Name(item.type, module.name, left + 82, line + 3, 14, Im.TEXT)
-        if module.weapon then
-          local loaded = if item.charge == "" then "nothing loaded"
-            elseif module.weapon.clip > 0 then `{Types.Info(item.charge).name} x{item.rounds}`
-            else Types.Info(item.charge).name
-          Im.Text(shorten(loaded, 20), left + 262, line + 3, 13, if item.charge == "" then Im.WARN else Im.DIM)
+        local hot, clicked = Im.Area(`Info:{item.type}`, left, top, SLOT, SLOT, true)
+        ItemIcon.Draw(item.type, left, top, SLOT)
+        if hot then
+          Im.Fill(left, top, SLOT, SLOT, Im.ACCENT, 0.18)
+          hint = `{label} {slot}:  {module.name}`
         end
-        if Im.Button("Unfit", left + 396, line, 54, 22, true, `Unfit:{rack[1]}{slot}`) then
+        if clicked then
+          Info.Open(item.type)
+        end
+        -- what it is loaded with, inside the wheel
+        if module.weapon then
+          local ix, iy = onWheel(cx, cy, RING - 36, turn)
+          if item.charge ~= "" then
+            ItemIcon.Draw(item.charge, ix - 10, iy - 10, 20)
+            if hot or Im.Inside(ix - 10, iy - 10, 20, 20) then
+              hint = `{label} {slot}:  {module.name},  {Types.Info(item.charge).name}`
+                .. (if module.weapon.clip > 0 then ` x{item.rounds}` else "")
+            end
+          else
+            WidgetRenderer_DrawPanel(vector.create(ix - 10, iy - 10), vector.create(20, 20), Im.WARN, 0.15, 0.6, 3)
+            if hot then
+              hint ..= ",  nothing loaded"
+            end
+          end
+        end
+        -- taking it out: the corner away from the middle
+        local ux, uy = onWheel(sx, sy, SLOT * 0.62, turn)
+        local unfitHot, unfit = Im.Area(`Unfit:{name}{slot}`, ux - 8, uy - 8, 16, 16, true)
+        WidgetRenderer_DrawPanel(vector.create(ux - 8, uy - 8), vector.create(16, 16),
+          if unfitHot then OVER else vector.create(0.07, 0.12, 0.17), 0.9, 1, 8)
+        Glyph_Draw(Glyph_Line(vector.create(-1, -1), vector.create(1, 1), 1, 1), vector.create(ux, uy), 3, Im.TEXT, 0.9)
+        Glyph_Draw(Glyph_Line(vector.create(-1, 1), vector.create(1, -1), 1, 1), vector.create(ux, uy), 3, Im.TEXT, 0.9)
+        if unfitHot then
+          hint = `Take the {module.name} out`
+        end
+        if unfit then
           Session.Do(session, { kind = "Unfit", actor = 0, item = item.id })
         end
       else
-        Im.Text("empty", left + 56, line + 3, 14, Im.DIM, 0.6)
+        WidgetRenderer_DrawPanel(vector.create(left, top), vector.create(SLOT, SLOT), vector.create(0.22, 0.32, 0.42), 0.18, 0.75, 5)
+        if Im.Inside(left, top, SLOT, SLOT) then
+          hint = `{label} {slot}:  empty`
+        end
       end
-      line += 26
     end
   end
 
-  -- The hangar and the hold.
-  local right = x + 490
-  line = y + 78
+  -- Hardpoints, as pips: lit for each one in use.
+  local function pips(label: string, used: number, total: number, px: number, py: number)
+    Im.Text(label, px, py, 11, Im.DIM)
+    for index = 1, total do
+      WidgetRenderer_DrawPanel(vector.create(px + 66 + (index - 1) * 11, py + 3), vector.create(7, 7),
+        if index <= used then Im.ACCENT else Im.DIM, if index <= used then 1 else 0.2, if index <= used then 1 else 0.5, 3)
+    end
+  end
+  pips("TURRETS", turretsUsed, hull.turrets, cx - RING - 14, cy - RING - 44)
+  pips("LAUNCHERS", launchersUsed, hull.launchers, cx - RING - 14, cy - RING - 28)
+
+  -- Under the wheel: what the gauges say, and what the cursor is on.
+  local below = cy + RING + 48
+  local cpuText = string.format("CPU  %.0f / %.0f tf", cpu, stats.cpu)
+  local gridText = string.format("Powergrid  %.0f / %.0f MW", powergrid, stats.powergrid)
+  Im.Fill(cx - 170, below + 3, 8, 8, CPU_COLOR, 1)
+  Im.Text(cpuText, cx - 156, below, 13, if cpu > stats.cpu then OVER else Im.TEXT)
+  Im.Fill(cx + 8, below + 3, 8, 8, GRID_COLOR, 1)
+  Im.Text(gridText, cx + 22, below, 13, if powergrid > stats.powergrid then OVER else Im.TEXT)
+  if hint ~= "" then
+    Im.Text(hint, cx - Im.TextWidth(hint, 13) / 2, below + 20, 13, Im.ACCENT)
+  end
+end
+
+-- A heading of the column of figures, and the y of its first line.
+local function block(title: string, x: number, y: number, width: number): number
+  Im.Text(title, x, y, 11, Im.ACCENT, 0.9)
+  Im.Fill(x, y + 15, width, 1, Im.DIM, 0.35)
+  return y + 20
+end
+
+local function figure(label: string, value: string, x: number, y: number, width: number): number
+  Im.Text(label, x, y, 13, Im.DIM)
+  Im.TextRight(value, x + width, y, 13, Im.TEXT)
+  return y + 19
+end
+
+-- What the fit comes to, down the right.
+local function drawFigures(game: Core.Game, player: Core.PlayerInfo, x: number, y: number, width: number)
+  local stats = Core.Query.Stats(game, player.ship)
+  local offence = Core.Query.Offence(game, player.ship)
+
+  local line = block("CAPACITOR", x, y, width)
+  line = figure("Capacity", string.format("%.0f GJ", stats.capacitor), x, line, width)
+  line = figure("Recharges in", Format.Duration(stats.capacitorRecharge), x, line, width)
+
+  line = block("OFFENCE", x, line + 8, width)
+  line = figure("Damage a second", string.format("%.1f", offence.dps), x, line, width)
+  line = figure("A volley", string.format("%.0f", offence.volley), x, line, width)
+  if offence.dps > 0 then
+    -- how it divides between the four kinds of damage
+    local at = x
+    for index, color in KINDS do
+      local share = offence.kinds[index] / offence.dps
+      Im.Fill(at, line + 4, width * share, 6, color, 0.9)
+      at += width * share
+    end
+    line += 16
+    line = figure("Reaches", Format.Distance(offence.range), x, line, width)
+  end
+
+  -- Each layer: what it has, and what it stops of each kind of damage.
+  line = block("DEFENCE", x, line + 8, width)
+  local effective = 0
+  for _, layer in { { "Shield", "shield" }, { "Armour", "armor" }, { "Hull", "hull" } } do
+    local points = stats[layer[2]]
+    Im.Text(layer[1], x, line, 13, Im.DIM)
+    Im.TextRight(string.format("%.0f", points), x + 104, line, 13, Im.TEXT)
+    local through = 0
+    for index, color in KINDS do
+      local resonance = stats[`{layer[2]}Resonance.{index}`]
+      through += resonance / 4
+      local cell = x + 114 + (index - 1) * ((width - 114) / 4)
+      local cellWidth = (width - 114) / 4 - 3
+      Im.Fill(cell, line + 2, cellWidth, 13, color, 0.14)
+      Im.Fill(cell, line + 2, cellWidth * (1 - resonance), 13, color, 0.55)
+      local text = string.format("%.0f", (1 - resonance) * 100)
+      Im.Text(text, cell + (cellWidth - Im.TextWidth(text, 11)) / 2, line + 2, 11, Im.TEXT)
+    end
+    effective += points / through
+    line += 19
+  end
+  line = figure("Effective", string.format("%.0f HP", effective), x, line + 2, width)
+
+  line = block("TARGETING", x, line + 8, width)
+  line = figure("Lock range", Format.Distance(stats.lockRange), x, line, width)
+  line = figure("Scan resolution", string.format("%.0f mm", stats.scanResolution), x, line, width)
+  line = figure("Signature", string.format("%.0f m", stats.signature), x, line, width)
+
+  line = block("NAVIGATION", x, line + 8, width)
+  line = figure("Top speed", string.format("%.0f m/s", stats.maxVelocity), x, line, width)
+  line = figure("Aligns in", string.format("%.1f s", 1.3863 * stats.tau), x, line, width)
+  figure("Warp speed", string.format("%.1f AU/s", stats.warpSpeed), x, line, width)
+end
+
+local function drawFitting(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number,
+  preview: Renderable?)
+  local ship = player.ship
+  local stats = Core.Query.Stats(game, ship)
+
+  -- The hangar, to fit from, and the hold.
+  local left = x + 16
+  local columnWidth = 284
+  local line = y + 78
   -- (set out as the market is: modules, then charges, and so on)
   local hangar = table.clone(Core.Query.Items(game, player.docked, "hangar"))
   table.sort(hangar, function(a: State.Item, b: State.Item): boolean
@@ -201,70 +401,79 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
     end
     return a.id < b.id
   end)
-  Im.Heading(`HANGAR  {#hangar}`, right, line, 16, Im.DIM)
+  Im.Heading(`HANGAR  {#hangar}`, left, line, 16, Im.DIM)
   line += 24
   if #hangar == 0 then
-    Im.Text("nothing here", right, line, 14, Im.DIM, 0.6)
+    Im.Text("nothing here", left, line, 14, Im.DIM, 0.6)
   end
-  local visible = 11
-  local first = Im.Scroll("hangar", right - 4, line, 438, visible * 26, #hangar, visible)
+  local visible = 12
+  local first = Im.Scroll("hangar", left - 4, line, columnWidth, visible * 24, #hangar, visible)
   for row = 1, visible do
     local item = hangar[row + first]
     if item == nil then
       break
     end
     local info = Types.Info(item.type)
-    local untrained = Core.Query.Untrained(game, item.type)
-    ItemIcon.Draw(item.type, right, line + 1, 20)
-    Info.Name(item.type, shorten(info.name, 26), right + 26, line + 3, 14, Im.TEXT)
-    Im.Text(`x{item.quantity}`, right + 30 + Im.TextWidth(shorten(info.name, 26), 14), line + 3, 14, Im.DIM)
+    local name = shorten(info.name, 18)
+    ItemIcon.Draw(item.type, left, line + 1, 20)
+    Info.Name(item.type, name, left + 26, line + 3, 13, Im.TEXT)
+    Im.Text(`x{item.quantity}`, left + 30 + Im.TextWidth(name, 13), line + 3, 12, Im.DIM)
     if info.category == "module" then
       local can = Session.CanDo(session, { kind = "Fit", actor = 0, item = item.id })
-      if untrained then
-        Im.TextRight(untrained, right + 280, line + 5, 11, Im.WARN)
-      end
-      if Im.Button("Fit", right + 286, line, 54, 22, can, `Fit:{item.type}`) then
+      if Im.Button("Fit", left + 178, line, 46, 21, can, `Fit:{item.type}`) then
         Session.Do(session, { kind = "Fit", actor = 0, item = item.id })
       end
     elseif info.category == "charge" then
       local weapon = weaponFor(game, ship, item)
-      if Im.Button("Load", right + 286, line, 54, 22, weapon ~= nil, `Load:{item.type}`) and weapon then
+      if Im.Button("Load", left + 178, line, 46, 21, weapon ~= nil, `Load:{item.type}`) and weapon then
         Session.Do(session, { kind = "LoadCharge", actor = 0, item = weapon.id, other = item.id })
       end
     elseif info.category == "ore" then
       local can = Session.CanDo(session, { kind = "Reprocess", actor = 0, item = item.id })
-      if Im.Button("Refine", right + 286, line, 54, 22, can, `Refine:{item.type}`) then
+      if Im.Button("Refine", left + 178, line, 46, 21, can, `Refine:{item.type}`) then
         Session.Do(session, { kind = "Reprocess", actor = 0, item = item.id })
       end
     end
     local toHold = Session.CanDo(session, { kind = "MoveItems", actor = 0, item = item.id, to = "cargo" })
-    if Im.Button("To hold", right + 346, line, 78, 22, toHold, `ToHold:{item.type}`) then
+    if Im.Button("Hold", left + 228, line, 46, 21, toHold, `ToHold:{item.type}`) then
       Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "cargo" })
     end
-    line += 26
+    line += 24
   end
 
-  line = y + 78 + 24 + visible * 26 + 10
-  Im.Heading(string.format("HOLD  %.1f / %.0f m3", Core.Query.CargoUsed(game, ship), stats.cargo), right, line, 16, Im.DIM)
+  line = y + 78 + 24 + visible * 24 + 8
+  Im.Heading(string.format("HOLD  %.1f / %.0f m3", Core.Query.CargoUsed(game, ship), stats.cargo), left, line, 16, Im.DIM)
   line += 24
   local hold = Core.Query.Items(game, ship, "cargo")
   if #hold == 0 then
-    Im.Text("empty", right, line, 14, Im.DIM, 0.6)
+    Im.Text("empty", left, line, 14, Im.DIM, 0.6)
   end
   for index, item in hold do
-    if index > 4 then
-      Im.Text(`and {#hold - 4} more`, right, line, 13, Im.DIM)
+    if index > 3 then
+      Im.Text(`and {#hold - 3} more`, left, line, 13, Im.DIM)
       break
     end
-    local held = Types.Info(item.type).name
-    ItemIcon.Draw(item.type, right, line + 1, 20)
-    Info.Name(item.type, held, right + 26, line + 3, 14, Im.TEXT)
-    Im.Text(`x{item.quantity}`, right + 30 + Im.TextWidth(held, 14), line + 3, 14, Im.DIM)
-    if Im.Button("To hangar", right + 326, line, 98, 22, true, `ToHangar:{item.type}`) then
+    local held = shorten(Types.Info(item.type).name, 18)
+    ItemIcon.Draw(item.type, left, line + 1, 20)
+    Info.Name(item.type, held, left + 26, line + 3, 13, Im.TEXT)
+    Im.Text(`x{item.quantity}`, left + 30 + Im.TextWidth(held, 13), line + 3, 12, Im.DIM)
+    if Im.Button("Hangar", left + 214, line, 60, 21, true, `ToHangar:{item.type}`) then
       Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "hangar" })
     end
-    line += 26
+    line += 24
   end
+
+  -- The ship: its name over the wheel.
+  local cx, cy = x + 480, y + 296
+  local title = string.upper(player.hull.name)
+  ItemIcon.Draw(player.hull.id, cx + RING - 150, y + 74, 22)
+  Im.Heading(title, cx + RING - 122, y + 77, 15, Im.TEXT)
+  if Im.Button("Info", cx + RING - 28, y + 74, 46, 21, true, `Info:{player.hull.id}`) then
+    Info.Open(player.hull.id)
+  end
+  drawWheel(session, game, player, cx, cy, preview)
+
+  drawFigures(game, player, x + 672, y + 76, 252)
 end
 
 -- ---------------------------------------------------------------------
@@ -787,7 +996,9 @@ end
 
 -- ---------------------------------------------------------------------
 
-function Station.Draw(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
+-- 'preview' is the model of the player's hull, for the fitting screen
+-- to show.
+function Station.Draw(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number, preview: Renderable?)
   local width, height = Station.WIDTH, Station.HEIGHT
   local ship = player.ship
   local station = Core.Query.Body(game, player.docked)
@@ -811,7 +1022,7 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
   elseif tab == "Wallet" then
     drawWallet(game, x, y)
   else
-    drawFitting(session, game, player, x, y)
+    drawFitting(session, game, player, x, y, preview)
   end
 
   -- What a pilot does here, whatever the tab.

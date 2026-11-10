@@ -130,6 +130,17 @@ local function makeShip(type: string, radius: number): Object
   return item:Instantiate()
 end
 
+-- The model of a hull type of this radius, for the interface to draw.
+function Scene.Preview(type: string, radius: number): Renderable
+  local item: Item? = hullItems[type]
+  if not item then
+    local made = Item_ShipType((radius / 0.0675) ^ 2, HULL_SEED[type] or 55, 1, 1, 1, 1, 1, 1)
+    hullItems[type] = made
+    item = made
+  end
+  return (item :: Item):GetRenderable()
+end
+
 local function makeStatic(object: SystemData.Object): Object
   local made: Object
   if object.kind == "asteroid" then
