@@ -18,6 +18,10 @@
 -- are taken. When a pass is complete it copies the request to
 -- cache/viewer/done.txt.
 --
+-- A scripted run can hold one view still instead, by name, with nothing
+-- read from those files: Viewer.Show('gallery'). The golden images of
+-- the bodies and of the effects are taken that way (test/golden).
+--
 -- cache/viewer/params.txt, if it exists, overrides settings for every
 -- view, one a line: a name from the kind being looked at (Planet.kinds)
 -- and a number (seaLevel 0.5), or three for a colour
@@ -47,6 +51,8 @@ type View = {
   -- For a view of weapons firing in place of a body: one row to a
   -- weapon, each fired this long before the picture is taken.
   fire: { Fire }?,
+  -- For a view of several bodies at once, in rows of four.
+  gallery: { { kind: string, seed: number } }?,
 }
 
 type Fire = { type: string, age: number, outcome: string, struck: string, flight: number? }
@@ -122,6 +128,17 @@ table.insert(VIEWS, { name = "fx-2-landing", kind = "fx", seed = 1, eye = STAGE,
 table.insert(VIEWS, { name = "fx-3-landing-close", kind = "fx", seed = 1, eye = vector.create(380, 0, 520), look = vector.create(560, 0, 0),
   light = DAY, radius = 1, fire = firing(LANDING, "hit") })
 table.insert(VIEWS, { name = "fx-4-miss", kind = "fx", seed = 1, eye = STAGE, look = CENTRE, light = DAY, radius = 1, fire = firing(LANDING, "miss") })
+-- (from as near as takes the whole stage in: the golden image of the
+-- effects, where they cover the most pixels)
+table.insert(VIEWS, { name = "fx-5-landing-near", kind = "fx", seed = 1, eye = vector.create(0, 0, 800), look = CENTRE, light = DAY, radius = 1,
+  fire = firing(LANDING, "hit") })
+
+-- One of everything, for a single picture of how the bodies look.
+table.insert(VIEWS, { name = "gallery", kind = "gallery", seed = 0, eye = vector.create(0, 0, 9.6), look = CENTRE, light = DAY,
+  gallery = {
+    { kind = "temperate", seed = 1 }, { kind = "ocean", seed = 2 }, { kind = "barren", seed = 1 }, { kind = "moon", seed = 1 },
+    { kind = "ice", seed = 2 }, { kind = "lava", seed = 1 }, { kind = "gas", seed = 5 }, { kind = "star-orange", seed = 1 },
+  } })
 
 -- A star as the game draws one from five radii off: 120 km across at
 -- 600 km, so that the far side of its corona is past the renderer's
@@ -170,19 +187,31 @@ return AppShell.Create(function(): Widget
     interior:Advance()
   end
 
-  local world: Planet.World? = nil
-  local body: Object? = nil
+  local worlds: { Planet.World } = {}
+  local stage: { Object } = {}    -- what stands in the scene for the view
   local fx: Effects.Fx? = nil
-  local built = ""          -- the kind and seed of the world now standing
+  local built = ""          -- what the stage was built for
   local index = 0           -- the view being taken; 0 when idle
+  local held: View? = nil   -- a view being held still (Viewer.Show)
   local frames = 0
   local request = readRequest()
   local params: Planet.Tweaks = {}
   local views: { View } = VIEWS
 
+  -- A body of a kind: a planet's, or "star-" and a class of star.
+  local function make(kind: string, seed: number, tweaks: Planet.Tweaks, resolution: number?): Object
+    local class = string.match(kind, "^star%-(%a+)$")
+    if class then
+      return Star.New(class, seed, tweaks)
+    end
+    local planet = Planet.New(kind, seed, resolution, tweaks)
+    table.insert(worlds, planet)
+    return planet.body
+  end
+
   local function setUp(v: View)
     local tweaks = table.clone(params)
-    local key = `{v.kind}:{v.seed}:{v.radius or RADIUS}`
+    local key = `{v.name}:{v.kind}:{v.seed}:{v.radius or RADIUS}`
     if v.set then
       for name, value in v.set do
         tweaks[name] = value
@@ -197,7 +226,7 @@ return AppShell.Create(function(): Widget
     if fire then
       -- Fire each row's weapon the right time ago, and play the time
       -- since, so that what has landed has flashed.
-      local stage = Effects.New(system)
+      local effects = Effects.New(system)
       local where: { [number]: vector } = {}
       local longest = 0
       for row, shot in fire do
@@ -210,40 +239,45 @@ return AppShell.Create(function(): Widget
       while now <= 0 do
         for row, shot in fire do
           if math.abs(now + shot.age) < 0.005 then
-            Effects.Fire(stage, shot.type, 2 * row - 1, 2 * row, 20, 20, shot.outcome, shot.flight or 0, shot.struck, now)
+            -- (between two ships the size of cruisers)
+            Effects.Fire(effects, shot.type, 2 * row - 1, 2 * row, 40, 40, shot.outcome, shot.flight or 0, shot.struck, now)
           end
         end
-        Effects.Update(stage, now, where)
+        Effects.Update(effects, now, where)
         now += 0.01
       end
-      fx = stage
-      key = `fx:{v.name}`
+      fx = effects
     end
-    if built ~= key or body == nil then
-      if body then
-        Object_Delete(body)
+    if built ~= key or #stage == 0 then
+      for _, object in stage do
+        Object_Delete(object)
       end
-      local class = string.match(v.kind, "^star%-(%a+)$")
-      local made: Object
+      table.clear(stage)
+      table.clear(worlds)
+      local radius = v.radius or RADIUS
       if fire then
         -- (something for the camera to be told to look at)
-        made, world = Object_Scenery({}), nil
-      elseif class then
-        made, world = Star.New(class, v.seed, tweaks), nil
+        table.insert(stage, Object_Scenery({}))
+      elseif v.gallery then
+        for at, item in v.gallery do
+          local made = make(item.kind, item.seed, tweaks, 512)
+          made:SetPos(vector.create(((at - 1) % 4 - 1.5) * 2.8, (0.5 - (at - 1) // 4) * 2.8, 0) * radius)
+          table.insert(stage, made)
+        end
       else
-        local planet = Planet.New(v.kind, v.seed, nil, tweaks)
-        made, world = planet.body, planet
+        table.insert(stage, make(v.kind, v.seed, tweaks, nil))
       end
-      local radius = v.radius or RADIUS
-      made:SetScale(vector.create(radius, radius, radius))
-      system:AddInterior(made)
-      camera:SetTarget(made)
-      body, built = made, key
+      for _, object in stage do
+        object:SetScale(vector.create(radius, radius, radius))
+        system:AddInterior(object)
+      end
+      camera:SetTarget(stage[1])
+      built = key
     end
-    if world then
-      -- (judged in white light: the scene's own star is whatever colour
-      -- its system rolled)
-      local white = params.whiteLight
+    -- (judged in white light: the scene's own star is whatever colour
+    -- its system rolled)
+    local white = params.whiteLight
+    for _, world in worlds do
       Planet.Set(world, "whiteLight", if type(white) == "number" then white else 1)
     end
     if lamp then
@@ -272,17 +306,40 @@ return AppShell.Create(function(): Widget
   end
   begin()
 
+  _G.Viewer = {
+    -- Hold the view called 'name' still, as its kind's own settings make
+    -- it. False if there is none.
+    Show = function(name: string): boolean
+      for _, v in VIEWS do
+        if v.name == name then
+          params = {}
+          built = ""
+          index = 0
+          held = v
+          setUp(v)
+          return true
+        end
+      end
+      return false
+    end,
+  }
+
   return Widget_Stack(Widget_Luau(Widget_Create(), {
     CreateChildren = function(): { Widget }
       return { view }
     end,
     PreUpdate = function()
-      if index > 0 then
-        local v = views[index]
+      local showing = held or (if index > 0 then views[index] else nil)
+      if showing then
         -- (the camera's "relative" position is a place in the scene)
-        camera:SetRelativePos(v.eye * (v.radius or RADIUS))
-        camera:SetRelativeLookAt(v.look * (v.radius or RADIUS))
+        camera:SetRelativePos(showing.eye * (showing.radius or RADIUS))
+        camera:SetRelativeLookAt(showing.look * (showing.radius or RADIUS))
         camera:SetRigidity(60)
+      end
+      if held then
+        frames += 1
+      elseif index > 0 then
+        local v = views[index]
         frames += 1
         if frames == SETTLE then
           Screenshot_Save(v.name)

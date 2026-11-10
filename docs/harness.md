@@ -58,6 +58,8 @@ Key names are the engine's `Key_*` names without the prefix, matched without reg
 
 `script/goldens` runs the scenarios in `test/golden/scenarios.txt` under `--fixed-step 60 --no-present` and compares each screenshot with its stored image in `test/golden/`. A scenario passes when at most 0.5% of pixels differ by more than 24 of 255 in any channel, which absorbs dithering noise and nothing else. On a failure the new screenshot and a difference image are left in `cache/golden/`. After an intended visual change, look at the new image and run `script/goldens --update NAME`.
 
+What the tolerance lets through: a change to a few labels is a few hundred pixels, well inside the budget, so renamed items do not fail a scene (three game scenes went stale that way before 2026-11-10 and still passed). When a scene's differing share creeps up from zero, look at why and take the image again (`script/goldens --update NAME`), so that the budget is kept for noise.
+
 ## From scripts
 
 A script can request a screenshot at a meaningful moment with `Screenshot("name")`, for example right after a test script docks. It uses the same directory and timing as `shot`.
