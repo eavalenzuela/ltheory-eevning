@@ -29,6 +29,9 @@
                          expression returns; an error fails the run. CODE
                          cannot contain ';' (it separates commands) or '#'
                          (it starts a comment)
+     until EXPR          wait until the Luau expression EXPR is true, checking
+                         every frame; fails the run after 120 s (of app time
+                         under --fixed-step). The same limits on EXPR as lua
      quit                exit the app */
 
 #include "Luau/Luau.h"
@@ -71,6 +74,8 @@ struct Harness {
      instead of S seconds of real time, so a run is repeatable. */
   float fixedStep;
   float findUntil;
+  /* Frames spent on the current 'until' command. */
+  uint untilFrames;
 
   Harness() :
     next(0),
@@ -81,7 +86,8 @@ struct Harness {
     quit(false),
     failed(false),
     fixedStep(0),
-    findUntil(-1)
+    findUntil(-1),
+    untilFrames(0)
     {}
 
   void Load(String const& text) {
@@ -331,6 +337,23 @@ struct Harness {
       else if (op == "lua" && c.size() >= 2) {
         if (!Luau_Eval(Rest(c, 1)))
           Fail(c, "the Luau code raised an error");
+      }
+
+      else if (op == "until" && c.size() >= 2) {
+        int truth = Luau_EvalTruth(Rest(c, 1));
+        if (truth < 0)
+          Fail(c, "the Luau expression raised an error");
+        else if (truth == 0) {
+          /* Give up after 120 s: of app time under a fixed step, else
+             roughly that at 60 frames a second. */
+          float perFrame = fixedStep > 0 ? fixedStep : 1.0f / 60.0f;
+          if (++untilFrames * perFrame < 120.0f) {
+            next--;
+            return true;
+          }
+          Fail(c, "still false after 120 s");
+        }
+        untilFrames = 0;
       }
 
       else if (op == "quit") {

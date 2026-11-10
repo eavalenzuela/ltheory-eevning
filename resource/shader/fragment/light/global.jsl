@@ -67,7 +67,12 @@ void main() {
     vec3 V = normalize(p - eye);
     vec3 R = normalize(reflect(V, N));
     vec3 L = normalize(starPos);
-    // light += color * cookTorrance(L, p, N, pow2(roughness), 1.0);
+
+    /* Direct sunlight. Without it a hull is lit only by the sky and reads
+       as a silhouette. There are no shadows yet, so the far side of an
+       object is simply the side facing away. */
+    float NL = saturate(dot(N, L));
+    light += color * NL * (1.5 + 0.5 * min(8.0, cookTorrance(L, p, N, pow2(max(roughness, 0.08)), 1.0)));
 #if 0
     light += 8.0 * toLinear(texLod(envMap, R, mix(0.0, 8.0, roughness)).xyz);
 #else

@@ -48,6 +48,11 @@ LT_API int Luau_GetErrorCount();
    or raises. */
 LT_API bool Luau_Eval(String const& code);
 
+/* Evaluate a Luau expression in the app's VM and report its truth: 1 for
+   a true value, 0 for false or nil, -1 (after printing the error) if it
+   does not compile or raises. */
+LT_API int Luau_EvalTruth(String const& code);
+
 /* Object scripts (Object_AddScript) written in Luau: a table whose
    Update(object) runs every frame (returning false removes it) and whose
    Receive(object, message) gets the object's messages. */

@@ -2088,6 +2088,31 @@ bool Luau_Eval(String const& code) {
   return true;
 }
 
+int Luau_EvalTruth(String const& code) {
+  lua_State* L = Luau_GetState();
+  lua_CompileOptions options;
+  memset(&options, 0, sizeof(options));
+  options.optimizationLevel = 1;
+  options.debugLevel = 1;
+  String source = "return " + code;
+  size_t size = 0;
+  char* bytecode = luau_compile(source.data(), source.size(), &options, &size);
+  int status = luau_load(L, "=console", bytecode, size, 0);
+  free(bytecode);
+  if (status != 0) {
+    printf("LUAU ERROR: %s\n", lua_tostring(L, -1));
+    fflush(stdout);
+    lua_pop(L, 1);
+    luauErrorCount++;
+    return -1;
+  }
+  if (!Luau_Call(0, 1))
+    return -1;
+  int truth = lua_toboolean(L, -1) ? 1 : 0;
+  lua_pop(L, 1);
+  return truth;
+}
+
 bool Luau_Require(String const& module) {
   lua_State* L = Luau_GetState();
   lua_getglobal(L, "require");
