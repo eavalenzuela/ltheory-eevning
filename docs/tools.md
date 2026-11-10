@@ -43,7 +43,7 @@ bin/launch game --console                    # then type: GameDebug.Order("Undoc
 bin/launch game --no-present --fixed-step 60 --script test/scenario/flight.txt
 ```
 
-`test/scenario/flight.txt` is the M1 flight loop as a harness script; `script/check` runs it.
+`test/scenario/flight.txt` (the M1 flight loop) and `test/scenario/combat.txt` (the M2 loop: fit, fight, loot, lose the ship, get home) are harness scripts; `script/check` runs both. For fights, `GameDebug` also has `Lock(what)`, `Locked()`, `Fire()`, `Count(kind)`, `Hold(type)`, `Fitted(type)`, `Condition()`, `Wallet()`, `Hull()`, `Peaceful(on)` and `SelfDestruct()`.
 
 ## Looking at the game
 

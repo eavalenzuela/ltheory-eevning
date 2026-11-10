@@ -18,7 +18,8 @@ Scope note: this is years of work for a human team. Sizes below are relative, no
 | M0 Solid ground | Done 2026-11-09, with two items moved (below). `script/check --soak` passes. |
 | M1 Space | Exit tests pass (2026-11-10); polish items open (below). `bin/launch game` plays it. |
 | S1 Economy kernel | Done 2026-11-10: `Core/Strategic/Economy`, 13 specs on toy graphs. |
-| M2 onward, S2 onward | Not started. |
+| M2 Ships | Rules done and playable (2026-11-10); content, effects and tools open (below). |
+| M3 onward, S2 onward | Not started. |
 
 **M1 as built.** The Core flies the loop headless (`Core/Api.spec.luau`): undock, align and warp on schedule (a frigate covers 20 AU in 22 s), approach, orbit, keep at range, jump, dock. The game app shows it: grid objects at true size, planets and moons in scaled space, sunlit hulls, brackets, overview, selected-item orders, navigation bar, time controls, save and load. `script/check` flies it through the app, including a save in mid-warp that reloads to the same state hash. Fifty jumps leave memory flat.
 
@@ -34,6 +35,20 @@ Scope note: this is years of work for a human team. Sizes below are relative, no
 - Three engine behaviours to know: the camera's "relative" position is absolute; generated models are not centred on their origin; a ship whose scale is changed after creation is not drawn (hulls are generated at size instead).
 - Metal had no direct sunlight; adding it (R1) was a two-line shader change and the largest visual gain so far.
 - The tick is integrate, apply commands, decide. Each ball stores the velocity it steers toward, so the state at a tick fixes the next second of flight and the view never has to correct itself.
+
+**M2 as built.** In the Core: hull and module data, the attribute engine with stacking penalties (`Core/Dogma`), items in hangars, holds and racks with fitting rules (`Core/Assets/Items`), locking, module cycles, turret and missile formulas, layered damage, capacitor and recharge (`Tactical/Gunnery`, `Tactical/Combat`), and what follows a fight: wrecks, loot, bounties, insurance, the capsule and repairs (`Tactical/Aftermath`). Pirates arrive at belts and fight with the same orders a player gives (`Tactical/Pirates`). The formulas are checked against hand-computed numbers and fights are played headless (hit rate and damage per shot match the formula over 170 shots). In the game: a fitting screen while docked; ship status, module rack, target list, lock and loot orders in space. `test/scenario/combat.txt` plays it through the app: fit by clicking, fight a pirate, collect the bounty, loot the tag, lose the ship, get home in the capsule.
+
+**M2 items still open:**
+- Content: 5 hulls, 20 modules and 9 charges so far, of the planned two lineages of frigates and destroyers and about 60 modules. Pirates come one or two at a time and are all scouts.
+- Effects: a shot is a line drawn on the interface and an explosion is the engine's stock one. Turrets do not track or fire, there are no impact effects per layer, and a wreck is a lump of rock (E9, F1 to F20).
+- UI: no drag and drop, no item information window, the tank readout is bars rather than a wheel.
+- Tools: no balance report, effect previewer or hull gallery yet.
+- `App/ltheory.luau` and the old C++ gameplay are still in the tree (E14).
+
+**What M2 found:**
+- A weapon that cannot reach its target is the common beginner's death: pirates spawn outside a starter ship's targeting range, and a pilot who does nothing until they arrive loses. The scripted scenario had to learn to wait for range.
+- A ship cannot orbit tighter than its speed and agility allow: an afterburning frigate told to orbit at 600 m settles kilometres out, which is right, and makes close orbits a property of the hull rather than of the order.
+- Resolving a tick's shots together before applying damage costs nothing and removes any advantage from ship id order.
 
 **What S1 found:**
 - The first flow rule had its own deadlock: a node starved to zero could never be resupplied. The blockade test caught it. Flows now close a price gap exactly on the true curve.
