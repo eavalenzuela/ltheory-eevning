@@ -49,7 +49,22 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 8
+Core.SAVE_VERSION = 9
+
+-- MIGRATIONS[n] turns the state of a version n save into version n + 1.
+-- Load applies them in turn, so a save from any version listed here
+-- still opens.
+local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 9: a market keeps count of goods lost to piracy (none, in a station).
+  [8] = function(state: any)
+    for _, market in state.markets do
+      market.lost = table.create(#market.classes, 0)
+      for _, edge in market.edges do
+        edge.loss = 0
+      end
+    end
+  end,
+}
 
 -- A new game: a galaxy, and the player's first ship docked at a station
 -- in system 1.
@@ -237,7 +252,12 @@ function Core.Load(data: buffer, length: number?): Game
   if type(file) ~= "table" or file.format ~= "ltheory-eevning save" then
     error("Core.Load: this is not a save file", 0)
   end
-  if file.saveVersion ~= Core.SAVE_VERSION then
+  local version = file.saveVersion
+  while type(version) == "number" and version < Core.SAVE_VERSION and MIGRATIONS[version] do
+    MIGRATIONS[version](file.state)
+    version += 1
+  end
+  if version ~= Core.SAVE_VERSION then
     error(`Core.Load: the save is version {tostring(file.saveVersion)}; this build reads version {Core.SAVE_VERSION}`, 0)
   end
   return { state = file.state, events = {} }

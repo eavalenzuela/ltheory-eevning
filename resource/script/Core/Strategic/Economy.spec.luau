@@ -388,4 +388,29 @@ suite:Case("a lone trader makes a steady, modest living from the gaps the flows 
   leak(t, econ)
 end)
 
+suite:Case("what pirates take on a lane, or from a stock, is lost to both ends and kept in the books", function(t)
+  local econ = transitOnly()
+  local a = Economy.AddNode(econ, "A", 0)
+  local b = Economy.AddNode(econ, "B", 0)
+  Economy.SetStock(econ, a, 1, 400)
+  Economy.SetStock(econ, b, 1, 100)
+  local edge = Economy.AddEdge(econ, a, b, 400, 0.05)
+  t.eq(econ.edges[edge].loss, 0, "a lane loses nothing unless told to")
+  econ.edges[edge].loss = 0.1
+  run(econ, 50)
+  local held = econ.nodes[a].stock[1] + econ.nodes[b].stock[1]
+  t.ok(econ.moved[1] > 50)
+  t.near(econ.lost[1], 0.1 * econ.moved[1], 1e-9, "a tenth of what was carried")
+  t.near(held, 500 - econ.lost[1], 1e-9)
+  -- the gap still closes to the cost of trade, and never past it
+  local gap = (Economy.Price(econ, b, 1) - Economy.Price(econ, a, 1)) / 10
+  t.ok(gap >= 0.05 - 1e-9 and gap < 0.06, `the gap is {gap}`)
+  -- a raid: taken by force, nobody paid, no more than is there
+  local before = econ.lost[1]
+  t.near(Economy.Take(econ, a, 1, 30), 30, 1e-12)
+  t.near(Economy.Take(econ, a, 1, 1e9), econ.lost[1] - before - 30, 1e-9)
+  t.eq(econ.nodes[a].stock[1], 0)
+  leak(t, econ)
+end)
+
 return suite

@@ -24,6 +24,7 @@
 --             bulk: cheap heavy goods do not travel far): conductance * excess
 --             gap per hour in value, and never more than would close the
 --             gap (so prices approach each other and cannot overshoot)
+--             (An edge may also lose a share of what it carries: piracy.)
 --   anchor    a few nodes sell and buy near par at a limited rate; they
 --             are the economy's boundary, and how much passes through
 --             them is watched (a healthy economy barely uses them)
@@ -79,6 +80,7 @@ export type Edge = {
                         -- relative price gap beyond the cost
   cost: number,         -- the gap, as a fraction of par, that trade must beat
   open: boolean,
+  loss: number,         -- the share of what is carried that never arrives (piracy)
 }
 
 export type Economy = {
@@ -99,6 +101,7 @@ export type Economy = {
   bought: { number },     -- taken out through Buy
   sold: { number },       -- put in through Sell
   moved: { number },      -- carried along edges (not a source or sink)
+  lost: { number },       -- lost on the way, or taken from a stock by force
 }
 
 local PRICE_MIN, PRICE_MAX = 0.25, 4
@@ -128,6 +131,7 @@ function Economy.New(classes: { Class }, recipes: { Recipe }): Economy
     classes = classes, recipes = recipes, nodes = {}, edges = {}, hours = 0, steps = 0,
     initial = zeros(n), produced = zeros(n), consumed = zeros(n), used = zeros(n),
     anchorIn = zeros(n), anchorOut = zeros(n), bought = zeros(n), sold = zeros(n), moved = zeros(n),
+    lost = zeros(n),
   }
 end
 
@@ -176,7 +180,7 @@ function Economy.AddNode(econ: Economy, name: string, population: number,
 end
 
 function Economy.AddEdge(econ: Economy, a: number, b: number, conductance: number, cost: number): number
-  table.insert(econ.edges, { a = a, b = b, conductance = conductance, cost = cost, open = true })
+  table.insert(econ.edges, { a = a, b = b, conductance = conductance, cost = cost, open = true, loss = 0 })
   return #econ.edges
 end
 
@@ -259,6 +263,16 @@ function Economy.Buy(econ: Economy, node: number, class: number, quantity: numbe
     econ.bought[class] += quantity
   end
   return cost
+end
+
+-- Take up to 'quantity' out of a node's stock by force (a raid): nobody
+-- is paid. Returns how much was there to take.
+function Economy.Take(econ: Economy, node: number, class: number, quantity: number): number
+  local stock = econ.nodes[node].stock
+  local taken = math.clamp(quantity, 0, stock[class])
+  stock[class] -= taken
+  econ.lost[class] += taken
+  return taken
 end
 
 -- Put goods into a node's stock; returns what they fetched.
@@ -456,6 +470,7 @@ local function flow(econ: Economy, edge: Edge, rows: { { number } }, bulks: { nu
   local a, b = econ.nodes[edge.a], econ.nodes[edge.b]
   local aRow, bRow = rows[edge.a], rows[edge.b]
   local reach = edge.conductance * dt
+  local kept = 1 - edge.loss
   for g = 1, #aRow do
     local ra, rb = aRow[g], bRow[g]
     local cost = edge.cost * bulks[g]
@@ -475,10 +490,14 @@ local function flow(econ: Economy, edge: Edge, rows: { { number } }, bulks: { nu
           -- stock, or a long step). Move what just closes the gap.
           amount = closing(toTarget, toStock, fromTarget, fromStock, cost, amount)
         end
+        -- (What pirates take on the way is lost to both ends. The gap
+        -- then closes a little less than was worked out, never more.)
+        local arrived = amount * kept
         from.stock[g] = fromStock - amount
-        to.stock[g] = toStock + amount
+        to.stock[g] = toStock + arrived
         econ.moved[g] += amount
-        local fromRatio, toRatio = ratioAt(fromTarget, fromStock - amount), ratioAt(toTarget, toStock + amount)
+        econ.lost[g] += amount - arrived
+        local fromRatio, toRatio = ratioAt(fromTarget, fromStock - amount), ratioAt(toTarget, toStock + arrived)
         if ra > rb then
           bRow[g], aRow[g] = fromRatio, toRatio
         else
@@ -546,7 +565,7 @@ function Economy.Residual(econ: Economy): { number }
       held += node.stock[g]
     end
     residual[g] = held - (econ.initial[g] + econ.produced[g] + econ.anchorIn[g] + econ.sold[g]
-      - econ.consumed[g] - econ.used[g] - econ.anchorOut[g] - econ.bought[g])
+      - econ.consumed[g] - econ.used[g] - econ.anchorOut[g] - econ.bought[g] - econ.lost[g])
   end
   return residual
 end

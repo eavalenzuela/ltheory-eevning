@@ -3,6 +3,7 @@
 -- engine: undock, warp, approach, orbit, keep at range, jump, dock, and a
 -- save taken in the middle of a warp.
 
+local Codec = require("@lt/Core/Persist/Codec")
 local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
 local Motion = require("@lt/Core/Tactical/Motion")
@@ -327,6 +328,32 @@ suite:Case("a file that is not a save is refused", function(t)
   local game = newGame()
   local data, length = Core.Save(game)
   t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
+end)
+
+suite:Case("a save from the version before still opens", function(t)
+  -- Version 8 had no count of goods lost to piracy in its markets. Make
+  -- such a save from a new one and load it.
+  local game = newGame()
+  -- (a station's market exists once somebody has looked at it)
+  Core.Query.Quote(game, Core.Query.Player(game).docked, "ore.ferrite")
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  t.eq(file.saveVersion, Core.SAVE_VERSION)
+  file.saveVersion = 8
+  local markets = 0
+  for _, market in file.state.markets do
+    market.lost = nil
+    markets += 1
+  end
+  t.ok(markets > 0)
+  local old, oldLength = Codec.Encode(file)
+  t.eq(Core.Hash(Core.Load(old, oldLength)), Core.Hash(game))
+  -- one from before any migration is still refused
+  file.saveVersion = 3
+  old, oldLength = Codec.Encode(file)
+  t.fails(function()
+    Core.Load(old, oldLength)
+  end)
 end)
 
 return suite
