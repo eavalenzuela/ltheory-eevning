@@ -380,8 +380,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       local boom = Object_Explosion(0, 0, 3)
       container:AddInterior(boom)
       boom:SetPos(at)
-      Effects.Burst(fx, at, vector.create(1.0, 0.70, 0.35), 260, 1, 0.9, scene.time)
-      Effects.Burst(fx, at, vector.create(1.0, 0.95, 0.85), 120, 0, 0.35, scene.time)
+      Effects.Explode(fx, at, event.radius or 25, scene.time)
     end
   end
   -- A mining laser's beam, for as long as the module runs: begun again

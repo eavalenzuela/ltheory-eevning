@@ -152,6 +152,8 @@ local function take(fx: Fx, name: string, streak: boolean): Piece
   Model_AddShell(model, mesh, shader)
   local object = Object_Scenery({})
   Object_SetRenderable(object, model)
+  -- (nothing to see until it is first placed)
+  object:SetScale(vector.create(0, 0, 0))
   fx.container:AddInterior(object)
   local piece = { object = object, shader = shader, pool = name }
   table.insert(fx.made, piece)
@@ -193,9 +195,11 @@ local function paint(piece: Piece, color: vector, fade: number, age: number)
   ShaderInstance_SetFloat(piece.shader, "fxAge", age)
 end
 
--- A flash on a body, 'offset' from its centre.
-function Effects.Flash(fx: Fx, on: number, offset: vector, color: vector, size: number, ring: number, life: number, now: number)
-  local piece = take(fx, "fx_flash.jsl", false)
+-- A flash on a body, 'offset' from its centre. 'fire' makes it a ball of
+-- fire in place of a point of light.
+function Effects.Flash(fx: Fx, on: number, offset: vector, color: vector, size: number, ring: number, life: number, now: number,
+  fire: boolean?)
+  local piece = take(fx, if fire then "fx_fire.jsl" else "fx_flash.jsl", false)
   fx.seed += 1
   ShaderInstance_SetFloat(piece.shader, "fxRing", ring)
   ShaderInstance_SetFloat(piece.shader, "fxSeed", fx.seed * 1.7)
@@ -267,8 +271,37 @@ end
 
 -- A flash at a place in the scene, on no body (something has blown up
 -- and is not there to be on).
-function Effects.Burst(fx: Fx, at: vector, color: vector, size: number, ring: number, life: number, now: number)
-  Effects.Flash(fx, 0, at, color, size, ring, life, now)
+function Effects.Burst(fx: Fx, at: vector, color: vector, size: number, ring: number, life: number, now: number, fire: boolean?)
+  Effects.Flash(fx, 0, at, color, size, ring, life, now, fire)
+end
+
+-- A number from 0 to 1 that follows from 'n' and looks like chance.
+local function dice(n: number): number
+  return (math.sin(n * 12.9898) * 43758.5453) % 1
+end
+
+-- A ship of radius 'radius' blows up at 'at': a white flash, a fireball
+-- with a ring thrown out from it, smaller blasts through the hull for a
+-- moment after, and a glow that lingers. A bigger ship makes a bigger
+-- explosion, of more blasts, that takes longer over it.
+function Effects.Explode(fx: Fx, at: vector, radius: number, now: number)
+  local slow = math.clamp(math.sqrt(radius / 25), 0.8, 2.6)
+  -- the flash, and the ring it throws out
+  Effects.Burst(fx, at, vector.create(1.0, 0.96, 0.88), 3.0 * radius, 0, 0.20 * slow, now)
+  Effects.Burst(fx, at, vector.create(1.0, 0.70, 0.36), 6.0 * radius, 1, 0.70 * slow, now)
+  -- the fireball
+  Effects.Burst(fx, at, vector.create(1.0, 0.62, 0.22), 4.2 * radius, 0, 1.3 * slow, now, true)
+  local blasts = math.clamp(math.floor(2 + radius / 14), 2, 9)
+  for blast = 1, blasts do
+    fx.seed += 1
+    local n = fx.seed
+    local offset = vector.create(dice(n) - 0.5, dice(n + 0.31) - 0.5, dice(n + 0.67) - 0.5) * (1.8 * radius)
+    local color = if blast % 2 == 0 then vector.create(1.0, 0.78, 0.36) else vector.create(1.0, 0.50, 0.18)
+    Effects.Burst(fx, at + offset, color, (1.0 + 1.4 * dice(n + 0.5)) * radius, 0, 0.55 * slow,
+      now + (0.06 + 0.60 * dice(n + 0.11)) * slow, true)
+  end
+  -- and what smoulders after
+  Effects.Burst(fx, at, vector.create(0.85, 0.30, 0.10), 3.4 * radius, 0, 2.4 * slow, now + 0.25 * slow, true)
 end
 
 -- Place everything for this frame. 'where' gives each body's place in

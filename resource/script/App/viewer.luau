@@ -51,6 +51,9 @@ type View = {
   -- For a view of weapons firing in place of a body: one row to a
   -- weapon, each fired this long before the picture is taken.
   fire: { Fire }?,
+  -- For a view of ships blowing up: a row to each radius, and along
+  -- the row the explosion at each of these ages.
+  explode: { radii: { number }, ages: { number } }?,
   -- For a view of several bodies at once, in rows of four.
   gallery: { { kind: string, seed: number } }?,
 }
@@ -132,6 +135,10 @@ table.insert(VIEWS, { name = "fx-4-miss", kind = "fx", seed = 1, eye = STAGE, lo
 -- effects, where they cover the most pixels)
 table.insert(VIEWS, { name = "fx-5-landing-near", kind = "fx", seed = 1, eye = vector.create(0, 0, 800), look = CENTRE, light = DAY, radius = 1,
   fire = firing(LANDING, "hit") })
+
+-- A frigate, a cruiser and a battleship blowing up, at four moments.
+table.insert(VIEWS, { name = "fx-6-explosions", kind = "fx", seed = 1, eye = vector.create(0, 0, 5200), look = CENTRE, light = DAY, radius = 1,
+  explode = { radii = { 25, 90, 250 }, ages = { 0.06, 0.3, 0.8, 1.8 } } })
 
 -- One of everything, for a single picture of how the bodies look.
 table.insert(VIEWS, { name = "gallery", kind = "gallery", seed = 0, eye = vector.create(0, 0, 9.6), look = CENTRE, light = DAY,
@@ -248,6 +255,18 @@ return AppShell.Create(function(): Widget
       end
       fx = effects
     end
+    local explode = v.explode
+    if explode then
+      local effects = Effects.New(system)
+      for row, radius in explode.radii do
+        for column, age in explode.ages do
+          local at = vector.create((column - (#explode.ages + 1) / 2) * 2300, ((#explode.radii + 1) / 2 - row) * 1700, 0)
+          Effects.Explode(effects, at, radius, -age)
+        end
+      end
+      Effects.Update(effects, 0, {})
+      fx = effects
+    end
     if built ~= key or #stage == 0 then
       for _, object in stage do
         Object_Delete(object)
@@ -255,7 +274,7 @@ return AppShell.Create(function(): Widget
       table.clear(stage)
       table.clear(worlds)
       local radius = v.radius or RADIUS
-      if fire then
+      if fire or explode then
         -- (something for the camera to be told to look at)
         table.insert(stage, Object_Scenery({}))
       elseif v.gallery then

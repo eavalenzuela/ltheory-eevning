@@ -56,7 +56,7 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   local ship = state.ships[id]
   local hull = Ships.byId[ship.type]
   table.insert(events, { kind = "BallDestroyed", ball = id, by = by, name = ball.name, system = ball.system,
-    x = ball.x, y = ball.y, z = ball.z })
+    x = ball.x, y = ball.y, z = ball.z, radius = ball.radius })
 
   if hull.class ~= "capsule" then
     local wreck: State.Wreck = {
