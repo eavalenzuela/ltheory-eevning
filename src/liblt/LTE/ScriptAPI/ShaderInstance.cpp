@@ -1,6 +1,4 @@
 #include "LTE/Function.h"
-
-#include <cstring>
 #include "LTE/ShaderInstance.h"
 #include "LTE/Texture2D.h"
 
@@ -12,24 +10,6 @@ FreeFunction(ShaderInstance, ShaderInstance_Clone,
 {
   return instance->Clone();
 } FunctionAlias(ShaderInstance_Clone, Clone);
-
-VoidFreeFunction(ShaderInstance_SetState,
-  "Add a render state to 'instance' by name: BlendModeAdditive, BlendModeAlpha, BlendModeDisabled, CullModeBackface, CullModeDisabled, ZBufferOn, ZBufferOff, ZWritableOn or ZWritableOff",
-  ShaderInstance, instance,
-  String, state)
-{
-  char const* name = state;
-  if (!strcmp(name, "BlendModeAdditive")) instance->SetState(RenderStateSwitch_BlendModeAdditive);
-  else if (!strcmp(name, "BlendModeAlpha")) instance->SetState(RenderStateSwitch_BlendModeAlpha);
-  else if (!strcmp(name, "BlendModeDisabled")) instance->SetState(RenderStateSwitch_BlendModeDisabled);
-  else if (!strcmp(name, "CullModeBackface")) instance->SetState(RenderStateSwitch_CullModeBackface);
-  else if (!strcmp(name, "CullModeDisabled")) instance->SetState(RenderStateSwitch_CullModeDisabled);
-  else if (!strcmp(name, "ZBufferOn")) instance->SetState(RenderStateSwitch_ZBufferOn);
-  else if (!strcmp(name, "ZBufferOff")) instance->SetState(RenderStateSwitch_ZBufferOff);
-  else if (!strcmp(name, "ZWritableOn")) instance->SetState(RenderStateSwitch_ZWritableOn);
-  else if (!strcmp(name, "ZWritableOff")) instance->SetState(RenderStateSwitch_ZWritableOff);
-  else error("ShaderInstance_SetState: unknown render state");
-} FunctionAlias(ShaderInstance_SetState, SetState);
 
 VoidFreeFunction(ShaderInstance_SetFloat,
   "Set the float variable 'name' in 'instance' to 'value'",

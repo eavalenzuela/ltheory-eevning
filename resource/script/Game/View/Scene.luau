@@ -21,7 +21,6 @@
 
 local Clock = require("@lt/Game/Clock")
 local Constants = require("@lt/Core/Data/Constants")
-local Bodies = require("@lt/Game/View/Bodies")
 local Core = require("@lt/Core/Api")
 local Motion = require("@lt/Core/Tactical/Motion")
 local Session = require("@lt/Game/Session")
@@ -37,7 +36,6 @@ export type Scene = {
   system: number,                     -- the system shown; 0 before the first frame
   container: Object?,
   star: Object?,
-  sun: Bodies.Star?,      -- the star as it is seen: its face and corona
   key: string,                        -- which grid the scene is built for
   ox: number,                         -- the scene origin, in system space
   oy: number,
@@ -71,12 +69,6 @@ Scene.SHOT_SECONDS = 0.35
 -- Bodies beyond the renderer's reach are drawn this far away.
 local FAR = 600000
 
--- A system's class of star (Describe/System), as a kind the star shaders
--- have settings for (Game/View/StarTypes).
-local STAR_KIND: { [string]: string } = {
-  red = "m_dwarf", orange = "k_type", yellow = "sol", white = "f_type", blue = "a_type",
-}
-
 -- How a hull type looks, until hulls have their own generator specs: the
 -- seed of the old generator. Its size comes from the hull's radius. The
 -- generator sizes a hull by its "value" (radius grows as the square root;
@@ -91,7 +83,7 @@ local hullItems: { [string]: Item } = {}
 
 function Scene.New(camera: Camera): Scene
   return {
-    camera = camera, system = 0, container = nil, star = nil, sun = nil, key = "",
+    camera = camera, system = 0, container = nil, star = nil, key = "",
     ox = 0, oy = 0, oz = 0, eyeX = 0, eyeY = 0, eyeZ = 0,
     proxies = {}, celestials = {}, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6,
@@ -156,7 +148,6 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
   end
   scene.focus = nil
   scene.star = nil
-  scene.sun = nil
   scene.key = ""
   scene.system = system
 
@@ -171,14 +162,7 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
   end
 
   for _, object in Core.Query.Objects(game, system) do
-    if object.kind == "sun" then
-      -- The star to look at. (The engine's own star object, above, is
-      -- only the light.)
-      local sun = Bodies.NewStar(STAR_KIND[object.variety] or "sol", object.seed)
-      container:AddInterior(sun.face)
-      container:AddInterior(sun.corona)
-      scene.sun = sun
-    elseif object.kind == "planet" or object.kind == "moon" then
+    if object.kind == "planet" or object.kind == "moon" then
       local body = Item_PlanetType(object.seed):Instantiate()
       body:SetName(object.name)
       container:AddInterior(body)
@@ -373,15 +357,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         star:SetPos(vector.create(ex + dx * out, ey + dy * out, ez + dz * out))
       end
       local shrink = FAR / math.max(distance, FAR)
-      local at = vector.create(ex + dx * shrink, ey + dy * shrink, ez + dz * shrink)
-      scene.screen[object.id] = at
-      -- Its disc and corona, drawn like a planet: brought in to where the
-      -- renderer can reach and shrunk to cover the same angle.
-      local sun = scene.sun
-      if sun then
-        Bodies.PlaceStar(sun, at, object.radius * shrink)
-        Bodies.TickStar(sun, scene.time)
-      end
+      scene.screen[object.id] = vector.create(ex + dx * shrink, ey + dy * shrink, ez + dz * shrink)
     elseif not scene.screen[object.id] and object.kind ~= "asteroid" then
       -- Somewhere to warp to: a station, gate or belt on another grid.
       local shrink = FAR / math.max(distance, FAR)

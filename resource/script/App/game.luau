@@ -150,27 +150,6 @@ function Debug.Zoom(zoom: number, yaw: number?, pitch: number?)
   scene.pitch = pitch or scene.pitch
 end
 
--- Swing the camera round to look past the ship at something:
--- GameDebug.LookAt('sun'), GameDebug.LookAt('planet'). False if there is
--- no such thing in view of the overview.
-function Debug.LookAt(what: string, zoom: number?): boolean
-  local entry = find(what)
-  local at = if entry then scene.screen[entry.id] else nil
-  local focus = scene.focus
-  if at == nil or focus == nil then
-    return false
-  end
-  -- The camera sits on the far side of the ship from what it looks at.
-  local away = vector.normalize(focus:GetPos() - at)
-  -- (a little above the line through the ship, or the ship would hide it)
-  scene.pitch = math.clamp(math.acos(math.clamp(away.y, -1, 1)) - 0.16, 0.05, math.pi - 0.05)
-  scene.yaw = math.atan2(away.z, away.x)
-  if zoom then
-    scene.zoom, scene.zoomTarget = zoom, zoom
-  end
-  return true
-end
-
 -- Remember the state's hash under a name; Same compares two of them.
 -- A scripted run uses these to prove that a reloaded save plays out to
 -- the same state.
