@@ -1,4 +1,5 @@
 --!strict
+--!native
 -- The background economy: stocks and prices of commodity classes at each
 -- system, production and consumption there, and goods flowing along the
 -- gates toward where they are dear. (docs/roadmap.md §6.)
@@ -19,7 +20,8 @@
 --             inputs are) * (how profitable it is here: full speed at
 --             its par margin, stopped at no margin)
 --   flow      along an open edge, from the cheaper end to the dearer,
---             once the gap exceeds the edge's cost: conductance * excess
+--             once the gap exceeds the edge's cost (times the class's
+--             bulk: cheap heavy goods do not travel far): conductance * excess
 --             gap per hour in value, and never more than would close the
 --             gap (so prices approach each other and cannot overshoot)
 --   anchor    a few nodes sell and buy near par at a limited rate; they
@@ -42,6 +44,10 @@ export type Class = {
   par: number,      -- credits per unit when stock is on target
   cover: number,    -- hours of throughput a node aims to hold
   need: number,     -- units a unit of population consumes per hour at par
+  -- How costly it is to haul for what it is worth: an edge's cost is
+  -- multiplied by this. Ore is bulky for its price and electronics are
+  -- not. 1 if absent.
+  bulk: number?,
 }
 
 export type Amount = { class: number, amount: number }
@@ -61,6 +67,8 @@ export type Node = {
   target: { number },   -- by class index; fixed by what the node is
   anchor: { number },   -- by class index: units per hour it trades per unit of
                         -- relative price gap from par; 0 for none
+  taste: { number },    -- by class index: how much of a class its people use,
+                        -- relative to the class's 'need' (1 for most)
   met: number,          -- share of its population's needs met last step
 }
 
@@ -94,7 +102,8 @@ export type Economy = {
 }
 
 local PRICE_MIN, PRICE_MAX = 0.25, 4
-local CONSUMPTION_ELASTICITY = 0.5
+-- (Consumption falls with the square root of the price: an elasticity of
+-- a half, written into 'consume' as a square root.)
 -- A facility needs this many hours of inputs in stock to run flat out.
 local INPUT_HOURS = 2
 -- The share of its remaining gap an anchor may close in one step.
@@ -127,7 +136,7 @@ end
 local function targets(econ: Economy, node: Node): { number }
   local rate = zeros(#econ.classes)
   for g, class in econ.classes do
-    rate[g] = node.population * class.need
+    rate[g] = node.population * class.need * node.taste[g]
   end
   for _, facility in node.facilities do
     local recipe = econ.recipes[facility.recipe]
@@ -145,12 +154,13 @@ local function targets(econ: Economy, node: Node): { number }
   return target
 end
 
--- Add a node; its stocks start on target. Returns its id.
+-- Add a node; its stocks start on target. Returns its id. 'taste', if
+-- given, scales what its people use of each class.
 function Economy.AddNode(econ: Economy, name: string, population: number,
-  facilities: { { recipe: number, capacity: number } }?): number
+  facilities: { { recipe: number, capacity: number } }?, taste: { number }?): number
   local node: Node = {
     id = #econ.nodes + 1, name = name, population = population, facilities = {},
-    stock = {}, target = {}, anchor = zeros(#econ.classes), met = 1,
+    stock = {}, target = {}, anchor = zeros(#econ.classes), taste = taste or table.create(#econ.classes, 1), met = 1,
   }
   local given: { { recipe: number, capacity: number } } = facilities or {}
   for _, f in given do
@@ -192,12 +202,6 @@ function Economy.Price(econ: Economy, node: number, class: number): number
   local stock = n.stock[class]
   local ratio = if stock <= 0 then PRICE_MAX else math.clamp(n.target[class] / stock, PRICE_MIN, PRICE_MAX)
   return econ.classes[class].par * ratio
-end
-
-local function price(econ: Economy, n: Node, g: number): number
-  local stock = n.stock[g]
-  local ratio = if stock <= 0 then PRICE_MAX else math.clamp(n.target[g] / stock, PRICE_MIN, PRICE_MAX)
-  return econ.classes[g].par * ratio
 end
 
 -- Price as a multiple of par, for a target and a stock.
@@ -267,63 +271,112 @@ end
 
 -- ---------------------------------------------------------------------
 -- The step
+--
+-- A node's prices are worked out once, as multiples of par, when its
+-- turn comes: its facilities, its people and its anchor all act on the
+-- prices the step began with. They are worked out again once the node
+-- is done, for the flows, which keep them current as goods move.
 
-local function ramp(x: number): number
-  return math.clamp(x, 0, 1)
+-- Fill 'row' with a node's prices as multiples of par.
+local function ratios(node: Node, row: { number })
+  local target, stock = node.target, node.stock
+  for g = 1, #target do
+    local held = stock[g]
+    row[g] = if held <= 0 then PRICE_MAX else math.clamp(target[g] / held, PRICE_MIN, PRICE_MAX)
+  end
 end
 
-local function produce(econ: Economy, node: Node, dt: number)
-  for _, facility in node.facilities do
-    local recipe = econ.recipes[facility.recipe]
-    -- How well stocked the inputs are, and what a run costs and earns at
-    -- this node's prices. Labour is whatever makes the margin come out at
-    -- the recipe's own when every price is at par.
-    local supplied = 1
-    local inputValue, inputPar, outputValue, outputPar = 0, 0, 0, 0
-    for _, input in recipe.inputs do
-      local class = econ.classes[input.class]
-      supplied = math.min(supplied, ramp(node.stock[input.class] / (facility.capacity * input.amount * INPUT_HOURS)))
-      inputValue += input.amount * price(econ, node, input.class)
-      inputPar += input.amount * class.par
+-- A recipe laid out for the inner loop: its inputs' and outputs' classes
+-- and amounts as flat lists, and what a run pays in labour (whatever
+-- makes its margin come out at the recipe's own when every price is at
+-- par).
+type Flat = {
+  inClass: { number }, inAmount: { number }, outClass: { number }, outAmount: { number },
+  labour: number, margin: number,
+}
+
+local function flatten(econ: Economy): { Flat }
+  local flats: { Flat } = table.create(#econ.recipes)
+  for at, recipe in econ.recipes do
+    local flat: Flat = { inClass = {}, inAmount = {}, outClass = {}, outAmount = {}, labour = 0, margin = recipe.margin }
+    local inputPar, outputPar = 0, 0
+    for index, input in recipe.inputs do
+      flat.inClass[index], flat.inAmount[index] = input.class, input.amount
+      inputPar += input.amount * econ.classes[input.class].par
     end
-    for _, output in recipe.outputs do
-      outputValue += output.amount * price(econ, node, output.class)
+    for index, output in recipe.outputs do
+      flat.outClass[index], flat.outAmount[index] = output.class, output.amount
       outputPar += output.amount * econ.classes[output.class].par
     end
-    local labour = outputPar / (1 + recipe.margin) - inputPar
-    local profit = outputValue / (inputValue + labour) - 1
-    local activity = facility.capacity * supplied * ramp(profit / recipe.margin)
+    flat.labour = outputPar / (1 + recipe.margin) - inputPar
+    flats[at] = flat
+  end
+  return flats
+end
+
+-- 'worth' is the node's price of each class in credits (par times the
+-- row), worked out once for all its facilities.
+local function produce(econ: Economy, node: Node, worth: { number }, flats: { Flat }, dt: number)
+  local stock, used, produced = node.stock, econ.used, econ.produced
+  local facilities = node.facilities
+  for f = 1, #facilities do
+    local facility = facilities[f]
+    local flat = flats[facility.recipe]
+    local inClass, inAmount, outClass, outAmount = flat.inClass, flat.inAmount, flat.outClass, flat.outAmount
+    local capacity = facility.capacity
+    -- How well stocked the inputs are, and what a run costs and earns at
+    -- this node's prices.
+    local supplied = 1
+    local inputValue, outputValue = 0, 0
+    for i = 1, #inClass do
+      local g, amount = inClass[i], inAmount[i]
+      supplied = math.min(supplied, stock[g] / (capacity * amount * INPUT_HOURS))
+      inputValue += amount * worth[g]
+    end
+    for i = 1, #outClass do
+      outputValue += outAmount[i] * worth[outClass[i]]
+    end
+    local profit = outputValue / (inputValue + flat.labour) - 1
+    local activity = capacity * math.clamp(supplied, 0, 1) * math.clamp(profit / flat.margin, 0, 1)
     -- Never use more of an input than is there.
-    for _, input in recipe.inputs do
-      activity = math.min(activity, node.stock[input.class] / (input.amount * dt))
+    for i = 1, #inClass do
+      activity = math.min(activity, stock[inClass[i]] / (inAmount[i] * dt))
     end
     facility.activity = activity
-    for _, input in recipe.inputs do
-      local amount = activity * input.amount * dt
-      node.stock[input.class] -= amount
-      econ.used[input.class] += amount
-    end
-    for _, output in recipe.outputs do
-      local amount = activity * output.amount * dt
-      node.stock[output.class] += amount
-      econ.produced[output.class] += amount
+    if activity > 0 then
+      local scale = activity * dt
+      for i = 1, #inClass do
+        local g, amount = inClass[i], scale * inAmount[i]
+        stock[g] -= amount
+        used[g] += amount
+      end
+      for i = 1, #outClass do
+        local g, amount = outClass[i], scale * outAmount[i]
+        stock[g] += amount
+        produced[g] += amount
+      end
     end
   end
 end
 
-local function consume(econ: Economy, node: Node, dt: number)
-  if node.population <= 0 then
+local function consume(econ: Economy, node: Node, row: { number }, dt: number)
+  local population = node.population
+  if population <= 0 then
     node.met = 1
     return
   end
+  local classes, stock, taste, consumed = econ.classes, node.stock, node.taste, econ.consumed
   local wanted, got = 0, 0
-  for g, class in econ.classes do
-    if class.need > 0 then
-      local base = node.population * class.need * dt
-      local want = base * (price(econ, node, g) / class.par) ^ -CONSUMPTION_ELASTICITY
-      local amount = math.min(want, node.stock[g])
-      node.stock[g] -= amount
-      econ.consumed[g] += amount
+  for g = 1, #classes do
+    local class = classes[g]
+    local need = class.need * taste[g]
+    if need > 0 then
+      local base = population * need * dt
+      -- (the price to the power of minus the elasticity, which is a half)
+      local want = base / math.sqrt(row[g])
+      local amount = math.min(want, stock[g])
+      stock[g] -= amount
+      consumed[g] += amount
       wanted += base * class.par
       got += math.min(amount, base) * class.par
     end
@@ -331,83 +384,149 @@ local function consume(econ: Economy, node: Node, dt: number)
   node.met = if wanted > 0 then got / wanted else 1
 end
 
-local function anchor(econ: Economy, node: Node, dt: number)
+local function anchor(econ: Economy, node: Node, row: { number }, dt: number)
+  local stock, target = node.stock, node.target
   for g, rate in node.anchor do
     if rate > 0 then
-      local class = econ.classes[g]
-      local gap = price(econ, node, g) / class.par - 1
+      local gap = row[g] - 1
       -- Dear here: the anchor sells in. Cheap here: it buys out. Never
       -- past the point where the price would cross par.
       local amount = rate * gap * dt
-      local limit = node.target[g] - node.stock[g]
+      local limit = target[g] - stock[g]
       if amount > 0 then
         amount = math.min(amount, math.max(0, limit) * ALPHA)
-        node.stock[g] += amount
+        stock[g] += amount
         econ.anchorIn[g] += amount
       else
         amount = math.min(-amount, math.max(0, -limit) * ALPHA)
-        node.stock[g] -= amount
+        stock[g] -= amount
         econ.anchorOut[g] += amount
       end
     end
   end
 end
 
-local function flow(econ: Economy, edge: Edge, dt: number)
+-- The gap between two ends of an edge, in multiples of par, left after
+-- 'amount' has moved from one to the other.
+local function gapAfter(toTarget: number, toStock: number, fromTarget: number, fromStock: number, cost: number,
+  amount: number): number
+  return ratioAt(toTarget, toStock + amount) - ratioAt(fromTarget, fromStock - amount) - cost
+end
+
+-- The amount, no more than 'most', that moved from one end to the other
+-- leaves their prices exactly the edge's cost apart. Where both prices
+-- stay on the sloping part of the curve that is the root of a quadratic:
+--
+--   Tt / (St + x) - Tf / (Sf - x) = k
+--   k x^2 + (k (St - Sf) - Tt - Tf) x + (Tt Sf - Tf St - k St Sf) = 0
+--
+-- Otherwise (a price pinned at the ceiling or the floor) it is found by
+-- halving.
+local function closing(toTarget: number, toStock: number, fromTarget: number, fromStock: number, cost: number,
+  most: number): number
+  local a = cost
+  local b = cost * (toStock - fromStock) - toTarget - fromTarget
+  local c = toTarget * fromStock - fromTarget * toStock - cost * toStock * fromStock
+  local root = b * b - 4 * a * c
+  if root >= 0 and toStock > 0 then
+    local x = 2 * c / (-b + math.sqrt(root))
+    if x > 0 and x <= most then
+      local toRatio, fromRatio = toTarget / (toStock + x), fromTarget / (fromStock - x)
+      if toRatio > PRICE_MIN and toRatio < PRICE_MAX and fromRatio > PRICE_MIN and fromRatio < PRICE_MAX then
+        return x
+      end
+    end
+  end
+  local low, high = 0, most
+  for _ = 1, 30 do
+    local middle = (low + high) / 2
+    if gapAfter(toTarget, toStock, fromTarget, fromStock, cost, middle) > 0 then
+      low = middle
+    else
+      high = middle
+    end
+  end
+  return low
+end
+
+local function flow(econ: Economy, edge: Edge, rows: { { number } }, bulks: { number }, dt: number)
   if not edge.open then
     return
   end
   local a, b = econ.nodes[edge.a], econ.nodes[edge.b]
-  for g, class in econ.classes do
-    local ra, rb = ratioAt(a.target[g], a.stock[g]), ratioAt(b.target[g], b.stock[g])
-    local from, to = a, b
-    if ra > rb then
-      from, to = b, a
-    end
-    local fromTarget, toTarget = from.target[g], to.target[g]
-    local fromStock, toStock = from.stock[g], to.stock[g]
-    -- The gap, in multiples of par, left after moving 'amount'.
-    local function gapAfter(amount: number): number
-      return ratioAt(toTarget, toStock + amount) - ratioAt(fromTarget, fromStock - amount) - edge.cost
-    end
-    local gap = gapAfter(0)
-    if gap > 0 and fromStock > 0 then
-      local amount = math.min(edge.conductance * gap * dt / class.par, fromStock)
-      if gapAfter(amount) < 0 then
-        -- That much would carry the prices past each other. Move what
-        -- just closes the gap instead (found by halving; this only
-        -- happens where a stock is thin or the step is long).
-        local low, high = 0, amount
-        for _ = 1, 30 do
-          local middle = (low + high) / 2
-          if gapAfter(middle) > 0 then
-            low = middle
-          else
-            high = middle
-          end
-        end
-        amount = low
+  local aRow, bRow = rows[edge.a], rows[edge.b]
+  local reach = edge.conductance * dt
+  for g = 1, #aRow do
+    local ra, rb = aRow[g], bRow[g]
+    local cost = edge.cost * bulks[g]
+    -- Most classes on most edges are within the cost of each other, and
+    -- nothing moves.
+    local gap = math.abs(ra - rb) - cost
+    if gap > 0 then
+      local from, to = a, b
+      if ra > rb then
+        from, to = b, a
       end
-      from.stock[g] = fromStock - amount
-      to.stock[g] = toStock + amount
-      econ.moved[g] += amount
+      local fromStock, toStock, fromTarget, toTarget = from.stock[g], to.stock[g], from.target[g], to.target[g]
+      if fromStock > 0 then
+        local amount = math.min(reach * gap / econ.classes[g].par, fromStock)
+        if gapAfter(toTarget, toStock, fromTarget, fromStock, cost, amount) < 0 then
+          -- That much would carry the prices past each other (a thin
+          -- stock, or a long step). Move what just closes the gap.
+          amount = closing(toTarget, toStock, fromTarget, fromStock, cost, amount)
+        end
+        from.stock[g] = fromStock - amount
+        to.stock[g] = toStock + amount
+        econ.moved[g] += amount
+        local fromRatio, toRatio = ratioAt(fromTarget, fromStock - amount), ratioAt(toTarget, toStock + amount)
+        if ra > rb then
+          bRow[g], aRow[g] = fromRatio, toRatio
+        else
+          aRow[g], bRow[g] = fromRatio, toRatio
+        end
+      end
     end
   end
 end
 
+-- Each node's prices during a step. Not state: every row is filled in
+-- afresh before it is read. Kept between steps only to spare the memory
+-- of making four hundred lists a step.
+local scratch: { { number } } = {}
+
 -- Advance the economy by 'hours' of game time.
 function Economy.Step(econ: Economy, hours: number)
-  for _, node in econ.nodes do
-    produce(econ, node, hours)
-    consume(econ, node, hours)
-    anchor(econ, node, hours)
+  local classes = econ.classes
+  local flats = flatten(econ)
+  local worth: { number } = table.create(#classes, 0)
+  local bulks: { number } = table.create(#classes, 1)
+  for g, class in classes do
+    bulks[g] = class.bulk or 1
+  end
+  local rows = scratch
+  for id, node in econ.nodes do
+    local row = rows[id]
+    -- (another economy, with other classes, may have used it last)
+    if row == nil or #row ~= #classes then
+      row = table.create(#classes, 1)
+      rows[id] = row
+    end
+    ratios(node, row)
+    for g = 1, #classes do
+      worth[g] = classes[g].par * row[g]
+    end
+    produce(econ, node, worth, flats, hours)
+    consume(econ, node, row, hours)
+    anchor(econ, node, row, hours)
+    ratios(node, row)
+    rows[id] = row
   end
   -- Edges are settled one after another, each seeing the last one's
   -- effect, so that several flows into one node cannot jointly overshoot.
   -- Always in the same order: reversing it on alternate steps was tried
   -- and makes prices jitter with a period of two steps.
   for _, edge in econ.edges do
-    flow(econ, edge, hours)
+    flow(econ, edge, rows, bulks, hours)
   end
   econ.hours += hours
   econ.steps += 1

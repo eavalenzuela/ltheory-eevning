@@ -19,6 +19,8 @@ Everything here runs from the repository root after `python3 configure.py build`
 | Command | What it does |
 |---|---|
 | `bin/ltcore Tool/specs [FILTER]` | Runs every `*.spec.luau` under `Core`, `Sim` and `Tool`. |
+| `bin/ltcore Tool/econrun [--galaxy N] [--days N] [--out DIR] [--detail 1]` | Runs the galaxy's economy (400 systems, 30 game days by default) and prints a verdict on each of `Tool/EconProbe`'s measures. `--detail 1` adds every class's price level, every step's use and how people fare by security. `--goods 1` and `--atlas 1` print the goods table and who has what. Options such as `--haul`, `--jump`, `--slack`, `--source` override the atlas's settings for one run. |
+| `script/econsweep [--seeds N] [--days N]` | `econrun` on 16 seeds at once, with a scorecard of every measure by seed. The exit test of roadmap stage S2; part of `script/check --soak`. |
 | `bin/ltcore Tool/simrun [--galaxy N] [--history N] [--systems N] [--ticks N]` | Runs the universe sim and prints the final state hash and the time per tick. `--reload-every N` saves and loads the state every N ticks; the hash must not change. `--out DIR` records time series and judges the run against thresholds. |
 | `bin/ltcore Tool/simdiverge [--galaxy N] [--history N]` | Finds the first tick and the first fields where a reloaded run differs from one kept in memory. |
 

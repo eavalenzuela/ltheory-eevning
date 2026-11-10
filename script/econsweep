@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# script/econsweep: run the galaxy's economy over several seeds at once
+# and judge every run against the thresholds in Tool/EconProbe.
+#
+#   script/econsweep [--seeds N] [--days N] [--systems N] [--jobs N] [--out DIR]
+#   script/econsweep --rescore DIR [--seeds N]     print the scorecard of an earlier sweep
+#
+# Defaults: 16 seeds (galaxy seed 1..N), 30 game days, 400 systems, half
+# as many jobs as CPUs (so that the time a step takes is measured on an
+# unloaded core), output under cache/econ/sweep-<time>/. Each seed gets a
+# directory with series.csv (a row a game hour) and result.txt. The
+# scorecard printed at the end (and saved as scorecard.txt) has a row per
+# check and a column per seed. Exits 1 if any check failed on any seed.
+#
+# This is the exit test of roadmap stage S2.
+
+set -u
+cd "$(dirname "$0")/.."
+
+seeds=16
+days=30
+systems=400
+jobs=$(( ($(nproc) + 1) / 2 ))
+out="cache/econ/sweep-$(date +%Y%m%d-%H%M%S)"
+rescore=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --rescore) rescore=1; out=$2 ;;
+    --seeds) seeds=$2 ;;
+    --days) days=$2 ;;
+    --systems) systems=$2 ;;
+    --jobs) jobs=$2 ;;
+    --out) out=$2 ;;
+    *) echo "usage: script/econsweep [--seeds N] [--days N] [--systems N] [--jobs N] [--out DIR]"; exit 2 ;;
+  esac
+  shift 2
+done
+
+if [ ! -x bin/ltcore ]; then
+  echo "script/econsweep: bin/ltcore is missing; run python3 configure.py build"
+  exit 2
+fi
+if [ "$rescore" -eq 0 ]; then
+  mkdir -p "$out"
+  echo "econsweep: $seeds seeds, $days days, $systems systems, $jobs at a time -> $out"
+  start=$SECONDS
+  seq 1 "$seeds" | xargs -P "$jobs" -I{} sh -c \
+    "bin/ltcore Tool/econrun --galaxy {} --days $days --systems $systems --out '$out/seed-{}' > '$out/seed-{}.log' 2>&1"
+  echo "econsweep: runs finished in $((SECONDS - start)) s"
+fi
+
+# The scorecard: one row per check, one column per seed, then how many
+# seeds passed it. A check line is "check=name|value|limit|ok".
+missing=0
+for s in $(seq 1 "$seeds"); do
+  if [ ! -s "$out/seed-$s/result.txt" ]; then
+    echo "econsweep: seed $s gave no result; see $out/seed-$s.log"
+    missing=1
+  fi
+done
+[ "$missing" -eq 1 ] && exit 1
+
+awk -F'|' -v seeds="$seeds" '
+  FNR == 1 { seed++ }
+  /^check=/ {
+    check = substr($1, 7)
+    if (!(check in order)) { order[check] = ++n; name[n] = check; limit[n] = $3 }
+    value[order[check], seed] = $2
+    status[order[check], seed] = $4
+    if ($4 == "ok") passed[order[check]]++; else failed++
+  }
+  END {
+    printf "%-34s", "check"
+    for (s = 1; s <= seeds; s++) printf " %6s", "s" s
+    printf "  %s\n", "passed"
+    for (i = 1; i <= n; i++) {
+      printf "%-34s", name[i]
+      for (s = 1; s <= seeds; s++)
+        printf " %5.3f%s", value[i, s], (status[i, s] == "ok" ? " " : "!")
+      printf "  %d/%d  (%s)\n", passed[i] + 0, seeds, limit[i]
+    }
+    printf "\n%s\n", (failed > 0 ? failed " check(s) failed (marked !)" : "all checks passed")
+    exit (failed > 0 ? 1 : 0)
+  }
+' $(for s in $(seq 1 "$seeds"); do echo "$out/seed-$s/result.txt"; done) | tee "$out/scorecard.txt"
+exit "${PIPESTATUS[0]}"

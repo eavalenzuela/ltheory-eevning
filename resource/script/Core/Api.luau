@@ -49,7 +49,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 7
+Core.SAVE_VERSION = 8
 
 -- A new game: a galaxy, and the player's first ship docked at a station
 -- in system 1.

@@ -3,7 +3,7 @@
 #
 #   script/check            run everything except the soak
 #   script/check --fast     skip the steps that open a window
-#   script/check --soak     also run the determinism soak (about 2 minutes)
+#   script/check --soak     also run the soaks (about 6 minutes)
 #
 # Steps:
 #   types       bin/luaucheck: every script, strict mode
@@ -29,6 +29,8 @@
 #   soak-N      (--soak) the 400-system simulation, run in memory and run
 #               with a save and load every 97 ticks, must not differ over
 #               6000 ticks, for each of eight seeds in parallel
+#   econ-sweep  (--soak) script/econsweep: the galaxy's economy must pass
+#               every threshold on 16 seeds over 30 game days
 #
 # The planted failures matter as much as the real checks: they prove that
 # a failure cannot be reported as success. Exits 0 only if every step did
@@ -134,6 +136,8 @@ if [ "$soak" -eq 1 ]; then
       echo
     fi
   done
+  # The galaxy's economy, judged on 16 seeds over 30 game days.
+  step econ-sweep 0 script/econsweep --out "$log/econ"
 fi
 
 printf '%s' "$summary"

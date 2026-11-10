@@ -20,7 +20,8 @@ Scope note: this is years of work for a human team. Sizes below are relative, no
 | S1 Economy kernel | Done 2026-11-10: `Core/Strategic/Economy`, 13 specs on toy graphs. |
 | M2 Ships | Rules done and playable (2026-11-10); content, effects and tools open (below). |
 | M3 One-system economy | Exit tests pass (2026-11-10); menus, research and content open (below). |
-| M4 onward, S2 onward | Not started. |
+| S2 Galaxy-scale economy | Done 2026-11-10: `script/econsweep` passes on 16 seeds over 30 game days. |
+| M4 onward, S3 onward | Not started. |
 
 **M1 as built.** The Core flies the loop headless (`Core/Api.spec.luau`): undock, align and warp on schedule (a frigate covers 20 AU in 22 s), approach, orbit, keep at range, jump, dock. The game app shows it: grid objects at true size, planets and moons in scaled space, sunlit hulls, brackets, overview, selected-item orders, navigation bar, time controls, save and load. `script/check` flies it through the app, including a save in mid-warp that reloads to the same state hash. Fifty jumps leave memory flat.
 
@@ -70,6 +71,33 @@ Two unattended tests are the exit. `Core/Loop.spec.luau` plays the whole loop he
 - Skills that gate the starter kit make a first lesson without a tutorial: three of the modules in the first hangar are a minute's training away, and a second mining laser needs CPU Management 2.
 - The interface is a frame behind the game, so a scripted run that presses a button the moment the state changes finds it still greyed out. Scripts wait for the button itself (`until GameDebug.Press(...)`).
 - Jobs and blueprints live at a station. The scripted pilot docked at the nearest station instead of home and found nothing to build with: which is right, and is what an assets view is for.
+
+**S2 as built.** `Core/Data/Goods` is 27 classes of goods in seven tiers and the 28 steps that make them; every price is rolled up from inputs, labour and a 15% margin. `Core/Strategic/Atlas` turns a galaxy into an economy: eight powers grown from homeworlds with the far fifth of systems unclaimed, security falling with distance from home, population, resources, and industry sized to what the galaxy's people use plus 35% slack. `Tool/econrun` runs it and `Tool/EconProbe` judges it on thirteen measures; `script/econsweep` does that for 16 seeds over 30 game days, and `script/check --soak` includes it. All 240 verdicts pass:
+
+| Measure | 16 seeds | Limit |
+|---|---|---|
+| Needs met, by head | 0.942 to 0.962 | at least 0.92 |
+| Needs met, worst-served tenth of systems | 0.890 to 0.918 | at least 0.75 |
+| Price level against normal | 1.05 to 1.10 | 0.85 to 1.2 |
+| Share of supply through homeworld anchors | 1.1% to 2.5% | at most 10% |
+| The class anchors supply most | 6% to 12% | at most 25% |
+| Industry in use | 0.67 to 0.71 | 0.5 to 0.95 |
+| Stocks at the price ceiling or floor | none | at most 2%, 5% |
+| Lanes that would pay a trader 5% a jump | 48% to 65% | at least 10% |
+| Lanes short of haulage | 0.3% to 0.5% | at most 3% |
+| Time a simulation tick | 0.4 ms | at most 1 ms |
+
+The limits are the opening proposals from §6 made concrete; two were replaced during the work, and why is below. A trader's 5% is before their own costs and risk, and is mostly bulky raw material in lawless space.
+
+**What S2 found:**
+- The design ran at galaxy scale on the first attempt: books balanced, nothing starved, prices settled. What took the work was how well supplied people are, and each fix was to the model, not the limit.
+- A lane's cost is a share of the goods' price, so at first hauling ore cost the same share as hauling electronics. Frontier mines sat idle behind a few lawless jumps while homeworld anchors supplied a third of the rare ore, ice and gas. Classes now carry a bulk: raw materials cost 1.6 times a lane's rate, finished goods 0.6.
+- Industry has to cluster. With every stage placed by population alone, each stage sat several jumps from the last and finished goods ran 17% over normal. Placing half of each step's capacity where its inputs are made brought that to 7% and let the anchors be confined to the goods people use: raw materials and parts now come only from space, and anchors supply 2% of everything instead of 6%.
+- Small works matter. Dropping the facilities that are under a thousandth of a step's capacity made people 2% worse supplied to save 10% of the time.
+- Homeworld anchors that sell raw materials hide the problem they solve. The run without them is what showed that frontier capacity was stranded.
+- The limit on "lanes that would pay a trader" started as a band. Its upper end was measuring nothing: it is replaced by "lanes short of haulage", which is what an economy whose flows have failed would show.
+- Goods cross one lane a step, so the one-minute step is the speed of trade, not only a cost. Longer steps stay stable but supply people less well (30-minute steps: needs met 0.93).
+- The scripts were running three times slower than they should. The VM was never told that the built-in functions are not replaced, so every `math.sqrt` was a table lookup and a full call. Both hosts now say so, compile with inlining, and compile modules marked `--!native` to machine code. The economy went from 12.7 ms a step to 1.9; all specs, scenarios and goldens are unchanged.
 
 **What S1 found:**
 - The first flow rule had its own deadlock: a node starved to zero could never be resupplied. The blockade test caught it. Flows now close a price gap exactly on the true curve.
