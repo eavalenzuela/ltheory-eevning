@@ -12,8 +12,4 @@ DeclareFunction(Compositor_Basic, Compositor,
   float, lines,
   V3, gradeBlue)
 
-DeclareFunction(Compositor_Custom, Compositor,
-  Compositor, base,
-  Data, data)
-
 #endif

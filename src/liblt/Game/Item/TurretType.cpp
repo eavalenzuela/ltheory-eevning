@@ -8,7 +8,6 @@
 
 #include "LTE/Array.h"
 #include "LTE/Model.h"
-#include "LTE/Script.h"
 #include "LTE/SDFs.h"
 #include "LTE/SDFMesh.h"
 #include "LTE/Transform.h"

@@ -5,10 +5,6 @@
 
 #include "LTE/DeclareFunction.h"
 
-DeclareFunction(Widget_Custom, Widget,
-  Widget, widget,
-  Data, data)
-
 DeclareFunction(Widget_Dynamic, Widget,
   Widget, widget)
 

@@ -1,25 +1,9 @@
 #include "../Warps.h"
 
 #include "LTE/AutoClass.h"
-#include "LTE/Script.h"
+#include "LTE/Data.h"
 #include "LTE/V3.h"
 #include "Luau/Luau.h"
-
-namespace {
-  AutoClassDerived(WarpCustom, WarpT,
-    Data, instance,
-    ScriptFunction, getDelta)
-    DERIVED_TYPE_EX(WarpCustom)
-
-    WarpCustom() {}
-
-    V3 GetDelta(V3 const& p) const {
-      V3 result;
-      getDelta->VoidCall(&result, instance, p);
-      return result;
-    }
-  };
-}
 
 namespace {
   /* A Luau object with GetDelta(point) -> vector. */
@@ -38,15 +22,10 @@ namespace {
 }
 
 DefineFunction(Warp_Custom) {
-  if (Luau_IsValue(args.data)) {
-    Reference<WarpLuau> self = new WarpLuau;
-    self->instance = args.data;
-    return self;
-  }
+  if (!Luau_IsValue(args.data))
+    error("Warp_Custom expects a Luau table");
 
-  ScriptType type = args.data.type->GetAux().Convert<ScriptType>();
-  Reference<WarpCustom> self = new WarpCustom;
+  Reference<WarpLuau> self = new WarpLuau;
   self->instance = args.data;
-  self->getDelta = type->GetFunction("GetDelta");
   return self;
 }

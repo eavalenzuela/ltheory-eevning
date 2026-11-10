@@ -5,7 +5,6 @@
 
 #include "LTE/Function.h"
 #include "LTE/Renderable.h"
-#include "LTE/Script.h"
 #include "LTE/Transform.h"
 
 #include "UI/Widget.h"

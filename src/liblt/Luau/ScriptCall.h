@@ -4,10 +4,12 @@
 #include "Luau/Luau.h"
 #include "LTE/Type.h"
 
-/* Calling script functions from the engine by name ("Object/System:Init").
-   If resource/script/Object/System.luau exists the Luau module's function
-   is called, otherwise the LTSL one, so scripts can move to Luau one at a
-   time. Arguments are passed by type through the bindings' marshalling. */
+/* Calling script functions from the engine by name ("Object/System:Init"):
+   the function Init of the Luau module resource/script/Object/System.luau.
+   If the module or the function is missing, an error is printed and the
+   call returns false (Script_Call then returns a default-constructed
+   result). Arguments are passed by type through the bindings'
+   marshalling. */
 
 LT_API bool Script_Invoke(
   String const& path,

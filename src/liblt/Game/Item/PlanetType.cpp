@@ -15,7 +15,6 @@
 #include "LTE/Meshes.h"
 #include "LTE/Model.h"
 #include "LTE/RNG.h"
-#include "LTE/Script.h"
 #include "LTE/ShaderInstance.h"
 #include "LTE/StackFrame.h"
 #include "LTE/Texture2D.h"

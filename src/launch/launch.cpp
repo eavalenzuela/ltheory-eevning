@@ -14,25 +14,14 @@
 #include "LTE/OS.h"
 #include "LTE/Renderer.h"
 #include "LTE/Screenshot.h"
-#include "LTE/Script.h"
 #include "LTE/Window.h"
-
-// #define TIME_LTSL_COMPILE
-
-#ifdef TIME_LTSL_COMPILE
-#include "LTE/Debug.h"
-#include "LTE/Timer.h"
-#endif
 
 struct Launcher : public Program {
   String appName;
-  ScriptFunction initialize;
-  ScriptFunction update;
-  Data instance;
   Module physicsEngine;
   Module soundEngine;
   Harness& harness;
-  /* Registry reference to a Luau app's table; 0 for LTSL apps. */
+  /* Registry reference to the app's table; 0 until it has started. */
   int luauApp;
 
   /* Set when the app could not be started. Script errors are counted
@@ -67,58 +56,20 @@ struct Launcher : public Program {
       soundEngine = SoundEngine_Null();
     }
 
-    if (Luau_HasModule("App/" + appName)) {
-      LaunchLuau();
-      return;
-    }
-
-    Script_ClearCache();
-
-#ifdef TIME_LTSL_COMPILE
-    Timer timer;
-#endif
-    ScriptFunction main = ScriptFunction_Load("App/" + appName + ":Main");
-#ifdef TIME_LTSL_COMPILE
-    dbg | "LTSL Compile Time: " | timer.GetElapsed() | endl;
-#endif
-
-    if (!main) {
-      printf("ERROR: Launcher failed to load script %s\n", appName.c_str());
+    if (!Luau_HasModule("App/" + appName)) {
+      printf("ERROR: no app resource/script/App/%s.luau\n", appName.c_str());
       failed = true;
       deleted = true;
       return;
     }
 
-    /* Only script-defined types carry a ScriptType in their aux data. */
-    if (!main->returnType->GetAux().data) {
-      printf("ERROR: Launcher expects %s:Main to return a script type (got %s)\n",
-        appName.c_str(), main->returnType->name.c_str());
-      failed = true;
-      deleted = true;
-      return;
-    }
-
-    /* NOTE : We have to raw cast here due to issues with the usual
-              .Convert<ScriptType>. Due to a major design flaw in the Type
-              system, Type_Get<T> returns different static storage in the exe
-              vs the dll, so type equality comparisons fail when they shouldn't.
-              I am not going to fix this right now. */
-    ScriptType app = *(ScriptType*)main->returnType->GetAux().data;
-    initialize = app->GetFunction("Initialize");
-    update = app->GetFunction("Update");
-    instance.Construct(app->type);
-    main->VoidCall(instance.data);
-
-    if (initialize)
-      initialize->VoidCall(0, instance);
-    if (!update)
-      deleted = true;
+    LaunchLuau();
   }
 
-  /* A Luau app is a module returning a table; its Initialize runs once and
-     its Update every frame, each called as a method. An app without Update
-     ends after Initialize, like an LTSL app. A script error prints a
-     traceback and ends the app. */
+  /* An app is a Luau module returning a table; its Initialize runs once
+     and its Update every frame, each called as a method. An app without
+     Update ends after Initialize. A script error prints a traceback and
+     ends the app. */
   void LaunchLuau() {
     luauApp = 0;
     Luau_Reset();
@@ -166,7 +117,6 @@ struct Launcher : public Program {
 
     if (Keyboard_Pressed(Key_W) && Keyboard_Control()) {
       deleted = true;
-      instance.Clear();
       return;
     }
 
@@ -180,9 +130,6 @@ struct Launcher : public Program {
       deleted = true;
       return;
     }
-
-    if (update)
-      update->VoidCall(0, instance);
 
     if (physicsEngine)
       physicsEngine->Update();

@@ -16,7 +16,6 @@
 #include "Game/Attribute/Scale.h"
 #include "Game/Attribute/Value.h"
 
-#include "LTE/Script.h"
 #include "Luau/ScriptCall.h"
 
 typedef

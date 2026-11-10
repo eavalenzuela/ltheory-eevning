@@ -13,9 +13,6 @@ DeclareFunctionArgBind(Task_Buy, Task,
   Quantity, quantity,
   Task, task)
 
-DeclareFunction(Task_Custom, Task,
-  Data, data)
-
 DeclareFunctionArgBind(Task_Destroy, Task,
   Object, target)
 

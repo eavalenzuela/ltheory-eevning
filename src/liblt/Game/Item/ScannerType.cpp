@@ -9,8 +9,6 @@
 #include "Game/Attribute/Range.h"
 #include "Game/Attribute/Value.h"
 
-#include "LTE/Script.h"
-
 #include "UI/Glyphs.h"
 #include "Luau/ScriptCall.h"
 

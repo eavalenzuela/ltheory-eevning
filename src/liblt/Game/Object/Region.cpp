@@ -14,7 +14,6 @@
 #include "LTE/Hash.h"
 #include "LTE/Pool.h"
 #include "LTE/RNG.h"
-#include "LTE/Script.h"
 #include "LTE/Tuple.h"
 #include "Luau/ScriptCall.h"
 

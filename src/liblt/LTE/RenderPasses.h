@@ -18,9 +18,6 @@ DeclareFunction(RenderPass_Bloom, RenderPass,
 DeclareFunction(RenderPass_BloomLight, RenderPass,
   int, radius)
 
-DeclareFunction(RenderPass_CustomFilter, RenderPass,
-  Data, data)
-
 DeclareFunctionNoParams(RenderPass_MotionBlur, RenderPass)
 
 DeclareFunction(RenderPass_PostFilter, RenderPass,

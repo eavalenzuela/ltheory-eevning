@@ -20,7 +20,6 @@
 #include "LTE/PlateMesh.h"
 #include "LTE/RNG.h"
 #include "LTE/Ray.h"
-#include "LTE/Script.h"
 #include "LTE/SDFs.h"
 #include "LTE/SDFMesh.h"
 #include "LTE/StackFrame.h"

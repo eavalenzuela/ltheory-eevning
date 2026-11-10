@@ -8,6 +8,7 @@
 
 #include "Game/Player.h"
 
+#include "LTE/Array.h"
 #include "LTE/Math.h"
 
 const int kSamples = 1024;

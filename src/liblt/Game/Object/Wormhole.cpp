@@ -12,7 +12,6 @@
 #include "LTE/Meshes.h"
 #include "LTE/Model.h"
 #include "LTE/Pool.h"
-#include "LTE/Script.h"
 #include "LTE/SDFMesh.h"
 #include "LTE/SDFs.h"
 #include "LTE/ShaderInstance.h"

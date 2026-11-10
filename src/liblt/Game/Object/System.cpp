@@ -20,7 +20,6 @@
 #include "LTE/Math.h"
 #include "LTE/Renderable.h"
 #include "LTE/RNG.h"
-#include "LTE/Script.h"
 #include "LTE/StackFrame.h"
 #include "LTE/View.h"
 

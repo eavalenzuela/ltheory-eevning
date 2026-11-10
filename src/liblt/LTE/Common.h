@@ -146,12 +146,8 @@ namespace LTE {
   struct Patch;
   struct String;
 
-  typedef Reference<struct ExpressionT> Expression;
   typedef Reference<struct JobT> Job;
   typedef Reference<struct LocationT> Location;
-  typedef Reference<struct ScriptT> Script;
-  typedef Reference<struct ScriptFunctionT> ScriptFunction;
-  typedef Reference<struct ScriptTypeT> ScriptType;
 
   /* Function. */
   template <class ValueType, class ArgType> struct Generic;

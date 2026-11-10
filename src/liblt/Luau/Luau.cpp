@@ -11,8 +11,6 @@
 #include "LTE/Data.h"
 #include "LTE/Function.h"
 #include "LTE/Pool.h"
-#include "LTE/Script.h"
-#include "LTE/ScriptFunction.h"
 #include "LTE/Map.h"
 #include "LTE/Type.h"
 #include "LTE/V3.h"
@@ -1240,69 +1238,6 @@ namespace {
     return 1;
   }
 
-  /* ltsl("Widget/Components:AlignCenter")(...) calls an LTSL function, for
-     code that still lives in LTSL during the migration. Arguments are
-     checked against its parameter types like engine calls. */
-  int Ltsl_Call(lua_State* L) {
-    ScriptFunctionT* fn = (ScriptFunctionT*)lua_touserdata(L, lua_upvalueindex(1));
-    int argc = lua_gettop(L);
-    if (argc != (int)fn->parameters.size())
-      luaL_error(L, "%s expects %d argument(s), got %d",
-        fn->name.c_str(), (int)fn->parameters.size(), argc);
-
-    CallFrame frame;
-    std::vector<void*> argv(fn->parameters.size() + 1, nullptr);
-    for (int i = 0; i < argc; ++i) {
-      TypeT* t = fn->parameters[i].type;
-      char const* why = nullptr;
-      if (Match(L, i + 1, t, &why) == Match_None)
-        luaL_error(L, "argument %d ('%s') of %s: expected %s, got %s%s%s",
-          i + 1, fn->parameters[i].name.c_str(), fn->name.c_str(),
-          TypeName(t).c_str(), DescribeArg(L, i + 1).c_str(),
-          why ? " - " : "", why ? why : "");
-      Box* box = ToBox(L, i + 1);
-      if (box && box->type == t)
-        argv[i] = BoxData(box);
-      else {
-        argv[i] = frame.Own(t);
-        Read(L, i + 1, t, argv[i]);
-      }
-    }
-
-    TypeT* rt = fn->returnType;
-    if (!rt || GetInfo(rt).kind == Kind_Void || !rt->allocate) {
-      fn->Call(nullptr, argv.data());
-      return 0;
-    }
-    void* result = frame.Own(rt);
-    fn->Call(result, argv.data());
-    return Push(L, rt, result);
-  }
-
-  int Ltsl_Get(lua_State* L) {
-    String path = luaL_checkstring(L, 1);
-    static std::map<String, ScriptFunction> cache;
-    ScriptFunction& fn = cache[path];
-    if (!fn)
-      fn = ScriptFunction_Load(path);
-    if (!fn)
-      luaL_error(L, "ltsl: no LTSL function '%s'", path.c_str());
-    lua_pushlightuserdata(L, fn.t);
-    lua_pushcclosure(L, Ltsl_Call, path.c_str(), 1);
-    return 1;
-  }
-
-  /* ltsl_new("Widget/Messages:MessageAddWidget"): an instance of an LTSL
-     type (fields zeroed; LTSL default values are not applied). */
-  int Ltsl_New(lua_State* L) {
-    String path = luaL_checkstring(L, 1);
-    ScriptType type = ScriptType_Load(path);
-    if (!type || !type->type)
-      luaL_error(L, "ltsl_new: no LTSL type '%s'", path.c_str());
-    PushBox(L, type->type.t, nullptr);
-    return 1;
-  }
-
   int New_Create(lua_State* L) {
     PushBox(L, (TypeT*)lua_touserdata(L, lua_upvalueindex(1)), nullptr);
     return 1;
@@ -1315,10 +1250,6 @@ namespace {
     lua_pushcfunction(L, Lt_TypeOf, "typeof");
     lua_setfield(L, -2, "typeof");
     lua_setglobal(L, "lt");
-    lua_pushcfunction(L, Ltsl_Get, "ltsl");
-    lua_setglobal(L, "ltsl");
-    lua_pushcfunction(L, Ltsl_New, "ltsl_new");
-    lua_setglobal(L, "ltsl_new");
   }
 
   /* ------------------------------------------------------------------ */
@@ -1703,11 +1634,7 @@ namespace {
           << "declare lt: {\n"
           << "  new: (typeName: string) -> any,\n"
           << "  typeof: (value: any) -> string,\n"
-          << "}\n\n"
-          << "-- Call an LTSL function (\"Script/Path:Function\"); untyped\n"
-          << "declare function ltsl(path: string): (...any) -> any\n"
-          << "-- An instance of an LTSL type (\"Script/Path:Type\"); untyped\n"
-          << "declare function ltsl_new(path: string): any\n\n";
+          << "}\n\n";
 
       std::ostringstream globals;
       std::swap(out, globals);
@@ -1794,8 +1721,7 @@ namespace {
 namespace {
   /* A widget component whose events are methods of a Luau object:
      obj:PreUpdate(widget), obj:CreateChildren(widget) -> { Widget },
-     obj:Receive(widget, data), ... - the Luau counterpart of LTSL's
-     Custom widgets. */
+     obj:Receive(widget, data), ... */
   AutoClassDerived(WidgetLuau, WidgetComponentT,
     LuauValue, instance)
     DERIVED_TYPE_EX(WidgetLuau)
@@ -1989,12 +1915,12 @@ void Luau_ObjectScriptReceive(Data const& script, Data const& object, Data const
 }
 
 namespace {
-  /* Where a script function lives, decided once per name. */
+  /* Where a script function lives, decided once per name. 'luau' is
+     whether its module exists. */
   struct ScriptTarget {
     bool luau;
     String module;
     String function;
-    ScriptFunction ltsl;
 
     ScriptTarget() : luau(false) {}
   };
@@ -2010,7 +1936,8 @@ namespace {
     target.function = colon == String::npos ? String() : String(path.substr(colon + 1));
     target.luau = Luau_HasModule(target.module);
     if (!target.luau)
-      target.ltsl = ScriptFunction_Load(path);
+      printf("LUAU ERROR: no script %s for '%s'\n",
+        ModulePath(target.module).c_str(), path.c_str());
     return target;
   }
 }
@@ -2026,20 +1953,8 @@ bool Script_Invoke(
   ScriptTarget& target = GetScriptTarget(path);
   bool wantsResult = returnType && GetInfo(returnType).kind != Kind_Void;
 
-  if (!target.luau) {
-    ScriptFunction const& fn = target.ltsl;
-    if (!fn)
-      return false;
-    /* LTSL assigns its result, so it needs somewhere to put it. */
-    void* result = returnValue;
-    bool temporary = !result && fn->returnType && fn->returnType->allocate;
-    if (temporary)
-      result = fn->returnType->Allocate();
-    fn->Call(result, (void**)args);
-    if (temporary)
-      fn->returnType->Deallocate(result);
-    return true;
-  }
+  if (!target.luau)
+    return false;
 
   lua_State* L = Luau_GetState();
   if (!Luau_Require(target.module))

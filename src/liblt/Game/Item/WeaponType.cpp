@@ -15,7 +15,6 @@
 #include "LTE/Math.h"
 #include "LTE/Meshes.h"
 #include "LTE/RNG.h"
-#include "LTE/Script.h"
 #include "LTE/V4.h"
 #include "LTE/VectorMap.h"
 
