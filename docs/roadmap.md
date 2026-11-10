@@ -19,7 +19,8 @@ Scope note: this is years of work for a human team. Sizes below are relative, no
 | M1 Space | Exit tests pass (2026-11-10); polish items open (below). `bin/launch game` plays it. |
 | S1 Economy kernel | Done 2026-11-10: `Core/Strategic/Economy`, 13 specs on toy graphs. |
 | M2 Ships | Rules done and playable (2026-11-10); content, effects and tools open (below). |
-| M3 onward, S2 onward | Not started. |
+| M3 One-system economy | Exit tests pass (2026-11-10); menus, research and content open (below). |
+| M4 onward, S2 onward | Not started. |
 
 **M1 as built.** The Core flies the loop headless (`Core/Api.spec.luau`): undock, align and warp on schedule (a frigate covers 20 AU in 22 s), approach, orbit, keep at range, jump, dock. The game app shows it: grid objects at true size, planets and moons in scaled space, sunlit hulls, brackets, overview, selected-item orders, navigation bar, time controls, save and load. `script/check` flies it through the app, including a save in mid-warp that reloads to the same state hash. Fifty jumps leave memory flat.
 
@@ -49,6 +50,26 @@ Scope note: this is years of work for a human team. Sizes below are relative, no
 - A weapon that cannot reach its target is the common beginner's death: pirates spawn outside a starter ship's targeting range, and a pilot who does nothing until they arrive loses. The scripted scenario had to learn to wait for range.
 - A ship cannot orbit tighter than its speed and agility allow: an afterburning frigate told to orbit at 600 m settles kilometres out, which is right, and makes close orbits a property of the hull rather than of the order.
 - Resolving a tick's shots together before applying damage costs nothing and removes any advantage from ship id order.
+
+**M3 as built.** In the Core: mining lasers that deliver a cycle's ore, four ores, belts that regrow, and refining (`Tactical/Mining`, `Assets/Industry`); a market at every station with trades at once, standing orders with escrow, a broker's fee, sales tax and trade history (`Assets/Market`, on the S1 kernel); hulls to buy, assemble and board (`Assets/Hangar`); a blueprint for every module, charge and hull, and timed manufacturing jobs; 25 skills that gate hulls and modules or improve the ship, mining, refining, building and trading, learned from books and trained through a queue (`Data/Skills`, `Character/Training`); a wallet journal. In the game: the docked screen has tabs for fitting, market, industry, skills, ships and wallet (`Game/UI/Station`).
+
+Two unattended tests are the exit. `Core/Loop.spec.luau` plays the whole loop headless with nothing handed to it: a new pilot mines, refines, builds 13,900 rounds, sells them by standing order, trains, fits a second mining laser, and is aboard a Lancer after 2.9 game hours. `test/scenario/economy.txt` plays each link through the game's own screens: mine a hold, refine, build from the blueprint, sell by order, buy and assemble a Lancer, find it cannot be flown, train Frigates 2, board it. (There the hull's price is granted; earning it is the headless test's job. The roadmap asked for a destroyer, and there are none yet, so the hull is the Lancer.)
+
+**M3 items still open:**
+- Main menu, new game, load and settings screens: the game still starts straight into a new game, with quick save and load on the docked screen.
+- Blueprint research and copies; jobs cannot be cancelled.
+- Skills: 25 of the planned 40. There are no attributes or implants, and training speed is the same for everyone.
+- Market screen: no depth view or history chart; history is the last three days as text. An order's price cannot be changed, only cancelled.
+- No assets view across stations: what is in another station's hangar can only be seen there.
+- View: a mining laser has no beam, and every ore looks the same.
+- The station markets stand alone: each has a fixed normal stock that an unsimulated wider world restores at a quarter of the gap an hour. S2 and S4 replace this with stocks that flow between systems.
+
+**What M3 found:**
+- The first order rule had an exploit. An order that fills while the station "would pay at least that" lets a trader buy one unit in a thin market, wait for the wider world to restock, and sell it back higher, for nothing. The rule that holds prices each fill off the stretch of the price curve that unit covers: then any path that returns the stock to where it began gains at most the two spreads, which the fees exceed. A spec plays three round trips with the best skills and requires a loss every time.
+- Market depth has to be set against what one pilot produces. At the first setting a lone miner pushed a station's ore price to a third within a few hours, and an ammunition line could sell 300 rounds an hour. Raw materials and ammunition are now deep markets; modules and hulls stay thin, so selling a third hull to one station is slow.
+- Skills that gate the starter kit make a first lesson without a tutorial: three of the modules in the first hangar are a minute's training away, and a second mining laser needs CPU Management 2.
+- The interface is a frame behind the game, so a scripted run that presses a button the moment the state changes finds it still greyed out. Scripts wait for the button itself (`until GameDebug.Press(...)`).
+- Jobs and blueprints live at a station. The scripted pilot docked at the nearest station instead of home and found nothing to build with: which is right, and is what an assets view is for.
 
 **What S1 found:**
 - The first flow rule had its own deadlock: a node starved to zero could never be resupplied. The blockade test caught it. Flows now close a price gap exactly on the true curve.

@@ -13,8 +13,11 @@
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Core = require("@lt/Core/Api")
 local Hud = require("@lt/Game/UI/Hud")
+local Im = require("@lt/Game/UI/Im")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
+local Station = require("@lt/Game/UI/Station")
+local Wallet = require("@lt/Core/Assets/Wallet")
 
 local App = {}
 
@@ -23,11 +26,11 @@ local scene: Scene.Scene
 local ui: Interface
 
 -- The nearest thing on the overview of a kind ("belt", "station", ...)
--- or whose name contains the text.
+-- or whose name contains the text; "home" is the pilot's home station.
 local function find(what: string): Core.Entry?
   local entries = Core.Query.Overview(session.game)
   for _, entry in entries do
-    if entry.kind == what then
+    if entry.kind == what or (what == "home" and entry.id == session.game.state.player.home) then
       return entry
     end
   end
@@ -266,6 +269,40 @@ function Debug.Fire(): number
   return started
 end
 
+-- Start every mining laser on the first locked target. Returns how many
+-- were switched on.
+function Debug.Mine(): number
+  local ship = session.game.state.player.ship
+  local ball = Core.Query.Ball(session.game, ship)
+  local started = 0
+  if ball then
+    for _, lock in ball.vitals.locks do
+      if lock.locked then
+        for _, item in Core.Query.Fitted(session.game, ship) do
+          if item.type == "miner.small"
+            and Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id, target = lock.target }) then
+            started += 1
+          end
+        end
+        break
+      end
+    end
+  end
+  return started
+end
+
+-- How many modules are running.
+function Debug.Running(): number
+  local ball = Core.Query.Ball(session.game, session.game.state.player.ship)
+  return if ball then #ball.vitals.running else 0
+end
+
+-- How many ships the pilot keeps at the station docked at.
+function Debug.Ships(): number
+  local player = Core.Query.Player(session.game)
+  return if player.docked ~= 0 then #Core.Query.Ships(session.game, player.docked) else 0
+end
+
 -- How many things of a kind are on the overview ("ship", "wreck", ...).
 function Debug.Count(kind: string): number
   local count = 0
@@ -334,6 +371,89 @@ function Debug.TimeScale(scale: number)
   session.clock.scale = scale
 end
 
+-- Press a button of the interface by name, as a click would: its label
+-- ("UNDOCK", "Market") or, for one of several alike, its id
+-- ("Fit:miner.small", "Train:frigates", "BuyNow"). False if there is no
+-- such button on screen yet, or it is greyed out; a scripted run waits
+-- for it with "until GameDebug.Press('...')", since the screen is a
+-- frame behind the game.
+function Debug.Press(name: string): boolean
+  return Im.Press(name)
+end
+
+-- Why a button cannot be pressed: for a script that has given up waiting.
+function Debug.WhyNot(name: string): string
+  local there, enabled = Im.Has(name)
+  return if enabled then "it can be" elseif there then "greyed out" else "not on screen"
+end
+
+-- Whether a button is on screen and can be pressed.
+function Debug.CanPress(name: string): boolean
+  local _, enabled = Im.Has(name)
+  return enabled
+end
+
+-- Type a number into a field by name ("Quantity", "SellPrice", "Runs").
+function Debug.Enter(name: string, value: number)
+  Im.Enter(name, value)
+end
+
+-- Open the market at an item type, or the industry tab at a blueprint.
+function Debug.Market(type: string): boolean
+  return Station.Choose(type)
+end
+
+function Debug.Blueprint(type: string): boolean
+  return Station.Blueprint(type)
+end
+
+function Debug.Tab(): string
+  return Station.Tab()
+end
+
+-- How many of an item type are in the hangar of the station docked at
+-- (the home station, when in space).
+function Debug.Hangar(type: string): number
+  local player = Core.Query.Player(session.game)
+  local station = if player.docked ~= 0 then player.docked else session.game.state.player.home
+  for _, item in Core.Query.Items(session.game, station, "hangar") do
+    if item.type == type then
+      return item.quantity
+    end
+  end
+  return 0
+end
+
+-- The level of a skill; -1 if it has not been learned.
+function Debug.Skill(id: string): number
+  return session.game.state.skills[id] or -1
+end
+
+-- How many levels are queued to train, jobs are running, orders stand.
+function Debug.Training(): number
+  return #Core.Query.Training(session.game)
+end
+
+function Debug.Jobs(): number
+  return #Core.Query.Jobs(session.game, nil)
+end
+
+function Debug.Orders(): number
+  return #Core.Query.Orders(session.game, nil)
+end
+
+-- How full the hold is, as a share.
+function Debug.HoldFull(): number
+  local ship = session.game.state.player.ship
+  return Core.Query.CargoUsed(session.game, ship) / math.max(1, Core.Query.Stats(session.game, ship).cargo)
+end
+
+-- A cheat, for scripted runs that test something other than earning:
+-- credits from nowhere, entered in the journal as such.
+function Debug.Grant(credits: number)
+  Wallet.Pay(session.game.state, credits, "cheat", session.game.events)
+end
+
 function Debug.Hash(): string
   return Core.Hash(session.game)
 end
@@ -368,7 +488,7 @@ function App:Initialize()
     end,
     PreUpdate = function()
       local frame = math.min(0.1, FrameTimer_Get())
-      if Key_Pressed(Key_P()) then
+      if Key_Pressed(Key_P()) and not Im.Typing() then
         session.clock.paused = not session.clock.paused
       end
       if Key_Pressed(Key_F9()) then

@@ -1,0 +1,829 @@
+--!strict
+-- The interface while docked: the ship's fit, the market, industry,
+-- skills, the ships kept here and the wallet, a tab each.
+--
+-- Drawn every frame with Game/UI/Im. It reads the Core through queries
+-- and acts on it only through the Session. Every button has a name a
+-- script can press it by (Im.Press): its label, or the id given here.
+
+local Blueprints = require("@lt/Core/Data/Blueprints")
+local Constants = require("@lt/Core/Data/Constants")
+local Core = require("@lt/Core/Api")
+local Format = require("@lt/Game/Format")
+local Im = require("@lt/Game/UI/Im")
+local Modules = require("@lt/Core/Data/Modules")
+local Ores = require("@lt/Core/Data/Ores")
+local Session = require("@lt/Game/Session")
+local Ships = require("@lt/Core/Data/Ships")
+local Skills = require("@lt/Core/Data/Skills")
+local State = require("@lt/Core/Kernel/State")
+local Types = require("@lt/Core/Data/Types")
+
+local Station = {}
+
+Station.WIDTH = 940
+Station.HEIGHT = 600
+
+local TABS = { "Fitting", "Market", "Industry", "Skills", "Ships", "Wallet" }
+local tab = "Fitting"
+
+-- The market: the category listed, the type shown, and what is entered.
+local CATEGORIES: { { string } } = {
+  { "module", "Modules" }, { "charge", "Charges" }, { "ship", "Ships" }, { "ore", "Ore" }, { "mineral", "Minerals" },
+  { "blueprint", "Blueprints" }, { "skillbook", "Skill books" }, { "goods", "Goods" },
+}
+local category = "module"
+local chosen = ""
+local quantity = 1
+local sellPrice, buyPrice = 0, 0    -- 0: the best price that fills now
+
+-- Industry: the blueprint shown and the runs entered.
+local blueprintChosen = ""
+local runs = 1
+
+local GOOD = vector.create(0.45, 0.85, 0.55)
+
+-- ---------------------------------------------------------------------
+-- Small pieces
+
+local function shorten(text: string, limit: number): string
+  return if #text > limit then string.sub(text, 1, limit - 1) .. "." else text
+end
+
+-- A type's stack in a station's hangar, and how many it holds.
+local function inHangar(game: Core.Game, station: number, type: string): (State.Item?, number)
+  for _, item in Core.Query.Items(game, station, "hangar") do
+    if item.type == type then
+      return item, item.quantity
+    end
+  end
+  return nil, 0
+end
+
+local listed: { [string]: { Types.Info } } = {}
+
+-- The types of a category, by name.
+local function typesIn(wanted: string): { Types.Info }
+  local list = listed[wanted]
+  if list == nil then
+    list = {}
+    for _, id in Types.Ids() do
+      local info = Types.Info(id)
+      if info.category == wanted then
+        table.insert(list, info)
+      end
+    end
+    table.sort(list, function(a: Types.Info, b: Types.Info): boolean
+      if a.name ~= b.name then
+        return a.name < b.name
+      end
+      return a.id < b.id
+    end)
+    listed[wanted] = list
+  end
+  return list
+end
+
+-- Show a tab, as clicking it would: for scripted runs.
+function Station.Show(name: string): boolean
+  for _, known in TABS do
+    if known == name then
+      tab = name
+      return true
+    end
+  end
+  return false
+end
+
+function Station.Tab(): string
+  return tab
+end
+
+-- Open the market at a type, as clicking through to it would.
+function Station.Choose(type: string): boolean
+  local info = Types.Get(type)
+  if info == nil then
+    return false
+  end
+  tab = "Market"
+  category = info.category
+  if chosen ~= type then
+    chosen = type
+    quantity = 1
+    sellPrice, buyPrice = 0, 0
+  end
+  return true
+end
+
+-- Open the industry tab at a blueprint, as clicking its row would.
+function Station.Blueprint(type: string): boolean
+  if Blueprints.byId[type] == nil then
+    return false
+  end
+  tab = "Industry"
+  if blueprintChosen ~= type then
+    blueprintChosen = type
+    runs = 1
+  end
+  return true
+end
+
+-- ---------------------------------------------------------------------
+-- Fitting: the fit, the hangar and the hold
+
+-- The fitted weapon a charge stack would be loaded into: one of its
+-- family that is empty, else one holding something else.
+local function weaponFor(game: Core.Game, ship: number, charge: State.Item): State.Item?
+  local family = Modules.chargeById[charge.type].family
+  local other: State.Item? = nil
+  for _, item in Core.Query.Fitted(game, ship) do
+    local weapon = Modules.byId[item.type].weapon
+    if weapon and weapon.family == family then
+      if item.charge == "" then
+        return item
+      elseif item.charge ~= charge.type and other == nil then
+        other = item
+      end
+    end
+  end
+  return other
+end
+
+local function drawFitting(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
+  local ship = player.ship
+  local stats = Core.Query.Stats(game, ship)
+
+  -- The ship and what it comes to with this fit.
+  local left = x + 16
+  local line = y + 78
+  Im.Heading(string.upper(player.hull.name), left, line, 16, Im.TEXT)
+  line += 26
+  local cpu, powergrid = Core.Query.FittingUse(game, ship)
+  local facts = {
+    string.format("CPU %.0f / %.0f tf     Powergrid %.0f / %.0f MW", cpu, stats.cpu, powergrid, stats.powergrid),
+    string.format("Shield %.0f   Armor %.0f   Hull %.0f", stats.shield, stats.armor, stats.hull),
+    string.format("Speed %.0f m/s   Align %.1f s   Capacitor %.0f GJ", stats.maxVelocity, 1.3863 * stats.tau, stats.capacitor),
+  }
+  for _, fact in facts do
+    Im.Text(fact, left, line, 14, Im.DIM)
+    line += 20
+  end
+
+  line += 10
+  Im.Heading("FITTED", left, line, 16, Im.DIM)
+  line += 24
+  local racks = { { "high", "High", player.hull.highs }, { "mid", "Mid", player.hull.mids }, { "low", "Low", player.hull.lows } } :: { { any } }
+  for _, rack in racks do
+    local bySlot: { [number]: State.Item } = {}
+    for _, item in Core.Query.Items(game, ship, rack[1]) do
+      bySlot[item.slot] = item
+    end
+    for slot = 1, rack[3] do
+      local item = bySlot[slot]
+      Im.Text(`{rack[2]} {slot}`, left, line + 3, 13, Im.DIM)
+      if item then
+        local module = Modules.byId[item.type]
+        Im.Text(module.name, left + 56, line + 3, 14, Im.TEXT)
+        if module.weapon then
+          local loaded = if item.charge == "" then "nothing loaded"
+            elseif module.weapon.clip > 0 then `{Types.Info(item.charge).name} x{item.rounds}`
+            else Types.Info(item.charge).name
+          Im.Text(loaded, left + 250, line + 3, 13, if item.charge == "" then Im.WARN else Im.DIM)
+        end
+        if Im.Button("Unfit", left + 396, line, 54, 22, true, `Unfit:{rack[1]}{slot}`) then
+          Session.Do(session, { kind = "Unfit", actor = 0, item = item.id })
+        end
+      else
+        Im.Text("empty", left + 56, line + 3, 14, Im.DIM, 0.6)
+      end
+      line += 26
+    end
+  end
+
+  -- The hangar and the hold.
+  local right = x + 490
+  line = y + 78
+  local hangar = Core.Query.Items(game, player.docked, "hangar")
+  Im.Heading(`HANGAR  {#hangar}`, right, line, 16, Im.DIM)
+  line += 24
+  if #hangar == 0 then
+    Im.Text("nothing here", right, line, 14, Im.DIM, 0.6)
+  end
+  local visible = 11
+  local first = Im.Scroll("hangar", right - 4, line, 438, visible * 26, #hangar, visible)
+  for row = 1, visible do
+    local item = hangar[row + first]
+    if item == nil then
+      break
+    end
+    local info = Types.Info(item.type)
+    local untrained = Core.Query.Untrained(game, item.type)
+    Im.Text(`{shorten(info.name, 30)}  x{item.quantity}`, right, line + 3, 14, Im.TEXT)
+    if info.category == "module" then
+      local can = Session.CanDo(session, { kind = "Fit", actor = 0, item = item.id })
+      if untrained then
+        Im.TextRight(untrained, right + 280, line + 5, 11, Im.WARN)
+      end
+      if Im.Button("Fit", right + 286, line, 54, 22, can, `Fit:{item.type}`) then
+        Session.Do(session, { kind = "Fit", actor = 0, item = item.id })
+      end
+    elseif info.category == "charge" then
+      local weapon = weaponFor(game, ship, item)
+      if Im.Button("Load", right + 286, line, 54, 22, weapon ~= nil, `Load:{item.type}`) and weapon then
+        Session.Do(session, { kind = "LoadCharge", actor = 0, item = weapon.id, other = item.id })
+      end
+    elseif info.category == "ore" then
+      local can = Session.CanDo(session, { kind = "Reprocess", actor = 0, item = item.id })
+      if Im.Button("Refine", right + 286, line, 54, 22, can, `Refine:{item.type}`) then
+        Session.Do(session, { kind = "Reprocess", actor = 0, item = item.id })
+      end
+    end
+    local toHold = Session.CanDo(session, { kind = "MoveItems", actor = 0, item = item.id, to = "cargo" })
+    if Im.Button("To hold", right + 346, line, 78, 22, toHold, `ToHold:{item.type}`) then
+      Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "cargo" })
+    end
+    line += 26
+  end
+
+  line = y + 78 + 24 + visible * 26 + 10
+  Im.Heading(string.format("HOLD  %.1f / %.0f m3", Core.Query.CargoUsed(game, ship), stats.cargo), right, line, 16, Im.DIM)
+  line += 24
+  local hold = Core.Query.Items(game, ship, "cargo")
+  if #hold == 0 then
+    Im.Text("empty", right, line, 14, Im.DIM, 0.6)
+  end
+  for index, item in hold do
+    if index > 4 then
+      Im.Text(`and {#hold - 4} more`, right, line, 13, Im.DIM)
+      break
+    end
+    Im.Text(`{Types.Info(item.type).name}  x{item.quantity}`, right, line + 3, 14, Im.TEXT)
+    if Im.Button("To hangar", right + 326, line, 98, 22, true, `ToHangar:{item.type}`) then
+      Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "hangar" })
+    end
+    line += 26
+  end
+end
+
+-- ---------------------------------------------------------------------
+-- Market
+
+local function drawOrders(session: Session.Session, game: Core.Game, station: number, x: number, y: number, width: number)
+  local orders = Core.Query.Orders(game, nil)
+  Im.Heading(`MY ORDERS  {#orders}`, x, y, 16, Im.DIM)
+  if #orders == 0 then
+    Im.Text("No standing orders. Place one from an item's page.", x, y + 30, 14, Im.DIM, 0.8)
+    return
+  end
+  local line = y + 28
+  local visible = 16
+  local first = Im.Scroll("orders", x - 4, line, width, visible * 26, #orders, visible)
+  for row = 1, visible do
+    local order = orders[row + first]
+    if order == nil then
+      break
+    end
+    local here = order.station == station
+    local where = Core.Query.Body(game, order.station)
+    Im.Text(if order.side == "sell" then "SELL" else "BUY", x, line + 4, 12, if order.side == "sell" then Im.WARN else GOOD)
+    Im.Text(`{shorten(Types.Info(order.type).name, 28)}  x{Format.Whole(order.quantity)}`, x + 44, line + 3, 14, Im.TEXT)
+    Im.TextRight(`at {Format.Credits(order.price)}`, x + 420, line + 3, 14, Im.TEXT)
+    Im.Text(if here then "here" else shorten(if where then where.name else "?", 22), x + 436, line + 4, 12, Im.DIM)
+    if Im.Button("Cancel", x + width - 80, line, 72, 22, here, `CancelOrder:{row + first}`) then
+      Session.Do(session, { kind = "CancelOrder", actor = 0, order = order.id })
+    end
+    line += 26
+  end
+end
+
+local function drawMarket(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
+  local station = player.docked
+  local top = y + 78
+
+  -- What to list.
+  for index, entry in CATEGORIES do
+    if Im.Toggle(entry[2], x + 16, top + (index - 1) * 30, 118, 26, category == entry[1], `Category:{entry[1]}`) then
+      category = entry[1]
+    end
+  end
+  if Im.Toggle("My orders", x + 16, top + #CATEGORIES * 30 + 12, 118, 26, category == "orders", "Category:orders") then
+    category = "orders"
+  end
+
+  local listX = x + 146
+  if category == "orders" then
+    drawOrders(session, game, station, listX + 4, top, 774)
+    return
+  end
+
+  -- The types of the category, with what the station asks for one.
+  local list = typesIn(category)
+  local rowHeight = 22
+  local visible = 20
+  Im.Text("ITEM", listX + 8, top, 12, Im.DIM)
+  Im.TextRight("ASKS", listX + 296, top, 12, Im.DIM)
+  local first = Im.Scroll("market", listX, top + 18, 304, visible * rowHeight, #list, visible)
+  for row = 1, visible do
+    local info = list[row + first]
+    if info == nil then
+      break
+    end
+    local rowY = top + 18 + (row - 1) * rowHeight
+    local _, clicked = Im.Row(listX, rowY, 300, rowHeight, chosen == info.id)
+    local quote = Core.Query.Quote(game, station, info.id)
+    local color = if quote.ask then Im.TEXT else Im.DIM
+    Im.Text(shorten(info.name, 30), listX + 8, rowY + 3, 13, color)
+    Im.TextRight(if quote.ask then Format.Whole(math.ceil(quote.ask)) else "none", listX + 296, rowY + 3, 13, color)
+    if clicked then
+      Station.Choose(info.id)
+    end
+  end
+
+  -- The type chosen.
+  local dx = x + 470
+  local info = Types.Get(chosen)
+  if info == nil then
+    Im.Text("Choose an item to see its prices.", dx, top + 4, 14, Im.DIM, 0.8)
+    return
+  end
+  local quote = Core.Query.Quote(game, station, chosen)
+  local stack, have = inHangar(game, station, chosen)
+  local tax, fee = Core.Query.Fees(game)
+  Im.Heading(shorten(info.name, 34), dx, top - 4, 20, Im.TEXT)
+  local line = top + 28
+  local untrained = Core.Query.Untrained(game, chosen)
+  Im.Text(string.format("%s m3 a unit", tostring(info.volume)), dx, line, 13, Im.DIM)
+  if untrained then
+    Im.Text(untrained, dx + 130, line, 13, Im.WARN)
+  end
+  line += 26
+  Im.Text("The station asks", dx, line, 14, Im.DIM)
+  Im.Text(if quote.ask then Format.Price(quote.ask) else "nothing: it has none", dx + 150, line, 14, Im.TEXT)
+  Im.TextRight(`{Format.Whole(quote.stock)} in stock`, dx + 446, line, 14, Im.DIM)
+  line += 22
+  Im.Text("and bids", dx, line, 14, Im.DIM)
+  Im.Text(Format.Price(quote.bid), dx + 150, line, 14, Im.TEXT)
+  Im.TextRight(`{Format.Whole(have)} in your hangar`, dx + 446, line, 14, if have > 0 then Im.TEXT else Im.DIM)
+  line += 36
+
+  -- A trade at once.
+  Im.Text("Quantity", dx, line + 5, 14, Im.DIM)
+  quantity = Im.Number("Quantity", quantity, dx + 80, line, 100, 26)
+  for index, preset in { 1, 10, 100, 1000 } do
+    if Im.Button(Format.Whole(preset), dx + 190 + (index - 1) * 52, line, 48, 26, true, `Quantity:{preset}`) then
+      quantity = preset
+    end
+  end
+  if Im.Button("All", dx + 398, line, 48, 26, have > 0, "Quantity:all") then
+    quantity = have
+  end
+  line += 36
+  local whole = quantity >= 1
+  local cost = if whole then Core.Query.BuyCost(game, station, chosen, quantity) else nil
+  local canBuy, whyNot = Session.CanDo(session, { kind = "BuyNow", actor = 0, type = chosen, quantity = quantity })
+  if Im.Button(if cost then `Buy now   {Format.Credits(cost)}` else "Buy now", dx, line, 218, 30, canBuy, "BuyNow") then
+    Session.Do(session, { kind = "BuyNow", actor = 0, type = chosen, quantity = quantity })
+  end
+  local canSell = stack ~= nil and whole and quantity <= have
+  local value = if canSell then Core.Query.SellValue(game, station, chosen, quantity) else 0
+  if Im.Button(if canSell then `Sell now   {Format.Credits(value)}` else "Sell now", dx + 228, line, 218, 30, canSell, "SellNow")
+    and stack then
+    Session.Do(session, { kind = "SellNow", actor = 0, item = stack.id, quantity = quantity })
+  end
+  line += 34
+  if not canBuy and whole then
+    Im.Text(tostring(whyNot), dx, line, 12, Im.WARN)
+  end
+  line += 26
+
+  -- Standing orders.
+  Im.Heading("STANDING ORDERS", dx, line, 14, Im.DIM)
+  Im.TextRight(string.format("broker %.1f%%   sales tax %.1f%%", fee * 100, tax * 100), dx + 446, line + 2, 12, Im.DIM)
+  line += 26
+  local bestSell = math.max(1, math.floor(quote.sellAt))
+  local sellAt = if sellPrice > 0 then sellPrice else bestSell
+  Im.Text("Sell at", dx, line + 5, 14, Im.DIM)
+  local enteredSell = Im.Number("SellPrice", sellAt, dx + 80, line, 100, 26)
+  if enteredSell ~= sellAt then
+    sellPrice = enteredSell
+    sellAt = enteredSell
+  end
+  local sellOrder: State.Command = { kind = "PlaceOrder", actor = 0, to = "sell", item = if stack then stack.id else 0,
+    quantity = quantity, price = sellAt }
+  if Im.Button("Place sell order", dx + 190, line, 256, 26, stack ~= nil and Session.CanDo(session, sellOrder), "PlaceSell") then
+    Session.Do(session, sellOrder)
+  end
+  line += 28
+  Im.Text(if sellAt <= quote.sellAt then `fills at once, at the pace of the station's customers`
+    else `waits: customers pay up to {Format.Whole(bestSell)} now`, dx + 80, line, 12, if sellAt <= quote.sellAt then GOOD else Im.DIM)
+  line += 24
+  local bestBuy = if quote.buyAt then math.ceil(quote.buyAt) else math.ceil(quote.bid)
+  local buyAt = if buyPrice > 0 then buyPrice else bestBuy
+  Im.Text("Buy at", dx, line + 5, 14, Im.DIM)
+  local enteredBuy = Im.Number("BuyPrice", buyAt, dx + 80, line, 100, 26)
+  if enteredBuy ~= buyAt then
+    buyPrice = enteredBuy
+    buyAt = enteredBuy
+  end
+  local buyOrder: State.Command = { kind = "PlaceOrder", actor = 0, to = "buy", type = chosen, quantity = quantity, price = buyAt }
+  if Im.Button("Place buy order", dx + 190, line, 256, 26, (Session.CanDo(session, buyOrder)), "PlaceBuy") then
+    Session.Do(session, buyOrder)
+  end
+  line += 28
+  local fillsNow = quote.buyAt ~= nil and buyAt >= quote.buyAt
+  Im.Text(if fillsNow then `fills at once, at the pace of the station's customers`
+    else `waits: sellers take {Format.Whole(bestBuy)} or more now`, dx + 80, line, 12, if fillsNow then GOOD else Im.DIM)
+  line += 30
+
+  -- What has traded here lately.
+  Im.Heading("TRADED HERE", dx, line, 14, Im.DIM)
+  line += 24
+  local history = Core.Query.History(game, station, chosen)
+  if #history == 0 then
+    Im.Text("nothing yet", dx, line, 13, Im.DIM, 0.7)
+  end
+  for index = #history, math.max(1, #history - 2), -1 do
+    local day = history[index]
+    Im.Text(`day {day.day + 1}`, dx, line, 13, Im.DIM)
+    Im.Text(`{Format.Whole(day.volume)} units`, dx + 80, line, 13, Im.TEXT)
+    Im.TextRight(`average {Format.Price(day.value / math.max(1, day.volume))}`, dx + 446, line, 13, Im.TEXT)
+    line += 20
+  end
+end
+
+-- ---------------------------------------------------------------------
+-- Industry
+
+local function drawIndustry(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
+  local station = player.docked
+  local top = y + 78
+  local left = x + 16
+  local hangar = Core.Query.Items(game, station, "hangar")
+
+  -- Blueprints here.
+  local blueprints: { State.Item } = {}
+  local ores: { State.Item } = {}
+  for _, item in hangar do
+    if Blueprints.byId[item.type] then
+      table.insert(blueprints, item)
+    elseif Ores.byId[item.type] then
+      table.insert(ores, item)
+    end
+  end
+  Im.Heading(`BLUEPRINTS HERE  {#blueprints}`, left, top, 16, Im.DIM)
+  local line = top + 26
+  if #blueprints == 0 then
+    Im.Text("None. The market sells them, under Blueprints.", left, line, 14, Im.DIM, 0.8)
+  end
+  local visible = 9
+  local first = Im.Scroll("blueprints", left - 4, line, 434, visible * 24, #blueprints, visible)
+  for row = 1, visible do
+    local item = blueprints[row + first]
+    if item == nil then
+      break
+    end
+    local blueprint = Blueprints.byId[item.type]
+    local rowY = line + (row - 1) * 24
+    local _, clicked = Im.Row(left - 4, rowY, 430, 24, blueprintChosen == item.type)
+    Im.Text(shorten(Types.Info(blueprint.product).name, 34), left + 4, rowY + 4, 14, Im.TEXT)
+    Im.TextRight(`makes {blueprint.perRun} a run`, left + 418, rowY + 5, 12, Im.DIM)
+    if clicked then
+      blueprintChosen = item.type
+      runs = 1
+    end
+  end
+
+  -- Ore to refine.
+  line = top + 26 + visible * 24 + 16
+  Im.Heading(`ORE HERE  {#ores}`, left, line, 16, Im.DIM)
+  line += 26
+  if #ores == 0 then
+    Im.Text("None. Mine some at a belt and bring it back.", left, line, 14, Im.DIM, 0.8)
+  end
+  for index, item in ores do
+    if index > 5 then
+      break
+    end
+    Im.Text(`{Types.Info(item.type).name}  x{Format.Whole(item.quantity)}`, left + 4, line + 3, 14, Im.TEXT)
+    local can = Session.CanDo(session, { kind = "Reprocess", actor = 0, item = item.id })
+    if Im.Button("Refine", left + 348, line, 70, 22, can, `Refine:{item.type}`) then
+      Session.Do(session, { kind = "Reprocess", actor = 0, item = item.id })
+    end
+    line += 26
+  end
+
+  -- The job the chosen blueprint would be.
+  local dx = x + 470
+  line = top
+  local chosenItem = inHangar(game, station, blueprintChosen)
+  local plan = if chosenItem then Core.Query.JobPlan(game, station, blueprintChosen, math.max(1, runs)) else nil
+  if plan == nil or chosenItem == nil then
+    Im.Heading("NEW JOB", dx, line, 16, Im.DIM)
+    Im.Text("Choose a blueprint.", dx, line + 28, 14, Im.DIM, 0.8)
+    line += 200
+  else
+    local product = Types.Info(plan.blueprint.product)
+    Im.Heading("NEW JOB", dx, line, 16, Im.DIM)
+    line += 26
+    Im.Text("Runs", dx, line + 5, 14, Im.DIM)
+    runs = Im.Number("Runs", runs, dx + 80, line, 100, 26)
+    -- as many runs as the minerals here allow
+    local most = 100
+    for _, m in plan.blueprint.materials do
+      local _, have = inHangar(game, station, m.type)
+      most = math.min(most, have // m.quantity)
+    end
+    for index, preset in { 1, 10 } do
+      if Im.Button(tostring(preset), dx + 190 + (index - 1) * 52, line, 48, 26, true, `Runs:{preset}`) then
+        runs = preset
+      end
+    end
+    if Im.Button(`Most ({most})`, dx + 294, line, 100, 26, most >= 1, "Runs:most") then
+      runs = most
+    end
+    line += 36
+    Im.Text(`Makes {Format.Whole(plan.quantity)} x {product.name}`, dx, line, 14, Im.TEXT)
+    line += 24
+    for _, m in plan.materials do
+      local enough = m.have >= m.need
+      Im.Text(Types.Info(m.type).name, dx + 12, line, 14, Im.DIM)
+      Im.TextRight(Format.Whole(m.need), dx + 240, line, 14, if enough then Im.TEXT else Im.WARN)
+      Im.TextRight(`{Format.Whole(m.have)} here`, dx + 446, line, 13, if enough then Im.DIM else Im.WARN)
+      line += 20
+    end
+    line += 6
+    Im.Text(`Takes {Format.Duration(plan.seconds)}`, dx, line, 14, Im.TEXT)
+    Im.TextRight(`fee {Format.Credits(plan.fee)}`, dx + 446, line, 14, Im.TEXT)
+    line += 28
+    local job: State.Command = { kind = "StartJob", actor = 0, item = chosenItem.id, quantity = runs }
+    local can, whyNot = Session.CanDo(session, job)
+    if Im.Button("Start job", dx, line, 160, 30, can, "StartJob") then
+      Session.Do(session, job)
+    end
+    if not can then
+      Im.Text(tostring(whyNot), dx + 172, line + 8, 13, Im.WARN)
+    end
+    line += 48
+  end
+
+  -- Jobs running, here and elsewhere.
+  local jobs = Core.Query.Jobs(game, nil)
+  line = math.max(line, top + 250)
+  Im.Heading(`JOBS  {#jobs} / {Core.Query.JobSlots(game)}`, dx, line, 16, Im.DIM)
+  line += 26
+  if #jobs == 0 then
+    Im.Text("Nothing is being built.", dx, line, 14, Im.DIM, 0.8)
+  end
+  for index, job in jobs do
+    if index > 6 then
+      break
+    end
+    local where = Core.Query.Body(game, job.station)
+    local remaining = job.ends - game.state.tick
+    Im.Text(`{Format.Whole(job.quantity)} x {shorten(Types.Info(job.product).name, 26)}`, dx, line, 14, Im.TEXT)
+    Im.TextRight(Format.Duration(remaining * Constants.TICK), dx + 446, line, 14, Im.TEXT)
+    line += 18
+    Im.Text(if job.station == station then "here" else shorten(if where then where.name else "?", 30), dx, line, 12, Im.DIM)
+    local span = math.max(1, job.ends - job.started)
+    Im.Fill(dx + 150, line + 5, 296, 4, Im.DIM, 0.25)
+    Im.Fill(dx + 150, line + 5, 296 * math.clamp(1 - remaining / span, 0, 1), 4, Im.ACCENT, 0.95)
+    line += 24
+  end
+end
+
+-- ---------------------------------------------------------------------
+-- Skills
+
+local function drawSkills(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
+  local station = player.docked
+  local top = y + 78
+  local left = x + 16
+  local skills = Core.Query.Skills(game)
+  local known = 0
+  for _, info in skills do
+    if info.level >= 0 then
+      known += 1
+    end
+  end
+  Im.Heading(`SKILLS  {known} of {#skills}`, left, top, 16, Im.DIM)
+  local rowHeight = 23
+  local visible = 19
+  local line = top + 26
+  local first = Im.Scroll("skills", left - 4, line, 600, visible * rowHeight, #skills, visible)
+  for row = 1, visible do
+    local info = skills[row + first]
+    if info == nil then
+      break
+    end
+    local skill = info.skill
+    local rowY = line + (row - 1) * rowHeight
+    Im.Row(left - 4, rowY, 596, rowHeight, false)
+    Im.Text(skill.name, left, rowY + 4, 14, if info.level >= 0 then Im.TEXT else Im.DIM)
+    for level = 1, Skills.MAX_LEVEL do
+      local px = left + 178 + (level - 1) * 13
+      if level <= info.level then
+        Im.Fill(px, rowY + 7, 10, 10, Im.ACCENT, 0.95)
+      elseif level <= info.queued then
+        Im.Fill(px, rowY + 7, 10, 10, Im.ACCENT, 0.4)
+      else
+        Im.Fill(px, rowY + 7, 10, 10, Im.DIM, 0.25)
+      end
+    end
+    Im.Text(shorten(skill.note, 37), left + 252, rowY + 5, 12, Im.DIM)
+    local bx = left + 504
+    if info.level < 0 then
+      local book = inHangar(game, station, Skills.Book(skill.id))
+      if book then
+        local can = Session.CanDo(session, { kind = "LearnSkill", actor = 0, item = book.id })
+        if Im.Button("Learn", bx, rowY + 1, 84, 21, can, `Learn:{skill.id}`) then
+          Session.Do(session, { kind = "LearnSkill", actor = 0, item = book.id })
+        end
+      elseif Im.Button("Buy book", bx, rowY + 1, 84, 21, true, `Book:{skill.id}`) then
+        Station.Choose(Skills.Book(skill.id))
+      end
+    elseif info.queued < Skills.MAX_LEVEL then
+      local can = Session.CanDo(session, { kind = "TrainSkill", actor = 0, type = skill.id })
+      if Im.Button(`Train {info.queued + 1}`, bx, rowY + 1, 84, 21, can, `Train:{skill.id}`) then
+        Session.Do(session, { kind = "TrainSkill", actor = 0, type = skill.id })
+      end
+    else
+      Im.Text(if info.level >= Skills.MAX_LEVEL then "mastered" else "queued", bx + 14, rowY + 5, 12, Im.DIM)
+    end
+  end
+
+  -- The queue.
+  local dx = x + 628
+  local queue = Core.Query.Training(game)
+  Im.Heading(`TRAINING  {#queue} / {Skills.QUEUE_LENGTH}`, dx, top, 16, Im.DIM)
+  line = top + 26
+  if #queue == 0 then
+    Im.Text("Nothing is training.", dx, line, 14, Im.WARN)
+    Im.Text("Training goes on while you fly.", dx, line + 20, 12, Im.DIM)
+  end
+  for index, entry in queue do
+    Im.Text(`{shorten(Skills.byId[entry.skill].name, 20)} {entry.level}`, dx, line + 2, 14, if index == 1 then Im.TEXT else Im.DIM)
+    Im.TextRight(Format.Duration(entry.left), dx + 262, line + 2, 13, if index == 1 then Im.TEXT else Im.DIM)
+    if Im.Button("x", dx + 272, line, 24, 20, true, `CancelTraining:{index}`) then
+      Session.Do(session, { kind = "CancelTraining", actor = 0, quantity = index })
+    end
+    line += 22
+    if index == 1 then
+      Im.Fill(dx, line, 262, 4, Im.DIM, 0.25)
+      Im.Fill(dx, line, 262 * math.clamp(1 - entry.left / math.max(1, entry.seconds), 0, 1), 4, Im.ACCENT, 0.95)
+      line += 12
+    end
+  end
+end
+
+-- ---------------------------------------------------------------------
+-- Ships
+
+local function drawShips(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
+  local station = player.docked
+  local top = y + 78
+  local left = x + 16
+  local ships = Core.Query.Ships(game, station)
+  Im.Heading(`YOUR SHIPS HERE  {#ships}`, left, top, 16, Im.DIM)
+  local line = top + 28
+  for index, ship in ships do
+    if index > 8 then
+      Im.Text(`and {#ships - 8} more`, left, line, 13, Im.DIM)
+      line += 26
+      break
+    end
+    local hull = Ships.byId[ship.type]
+    local aboard = ship.id == player.ship
+    Im.Text(ship.name, left, line + 4, 15, Im.TEXT)
+    Im.Text(hull.name, left + 220, line + 5, 13, Im.DIM)
+    Im.Text(`{#Core.Query.Fitted(game, ship.id)} modules fitted`, left + 420, line + 5, 13, Im.DIM)
+    if aboard then
+      Im.Text("you are aboard", left + 620, line + 5, 13, GOOD)
+    else
+      local board: State.Command = { kind = "BoardShip", actor = 0, target = ship.id }
+      local can, whyNot = Session.CanDo(session, board)
+      if Im.Button("Board", left + 620, line, 90, 26, can, `Board:{index}`) then
+        Session.Do(session, board)
+      end
+      if not can then
+        Im.Text(tostring(whyNot), left + 722, line + 6, 13, Im.WARN)
+      end
+    end
+    line += 32
+  end
+
+  line += 16
+  Im.Heading("HULLS IN THE HANGAR", left, line, 16, Im.DIM)
+  line += 28
+  local any = false
+  for _, item in Core.Query.Items(game, station, "hangar") do
+    local hull = Ships.byId[item.type]
+    if hull then
+      any = true
+      Im.Text(`{hull.name}  x{item.quantity}`, left, line + 4, 15, Im.TEXT)
+      local untrained = Core.Query.Untrained(game, item.type)
+      if untrained then
+        Im.Text(`to fly it: {untrained}`, left + 420, line + 5, 13, Im.WARN)
+      end
+      if Im.Button("Assemble", left + 620, line, 90, 26, true, `Assemble:{item.type}`) then
+        Session.Do(session, { kind = "Assemble", actor = 0, item = item.id })
+      end
+      line += 32
+    end
+  end
+  if not any then
+    Im.Text("None. The market sells hulls, under Ships; a bought hull is assembled here.", left, line, 14, Im.DIM, 0.8)
+  end
+end
+
+-- ---------------------------------------------------------------------
+-- Wallet
+
+local function drawWallet(game: Core.Game, x: number, y: number)
+  local top = y + 78
+  local left = x + 16
+  local journal = Core.Query.Journal(game)
+  Im.Heading("BALANCE", left, top, 16, Im.DIM)
+  Im.Heading(Format.Credits(game.state.wallet), left + 110, top - 4, 22, Im.TEXT)
+  local line = top + 40
+  Im.Text("WHEN", left, line, 12, Im.DIM)
+  Im.Text("WHAT", left + 150, line, 12, Im.DIM)
+  Im.TextRight("AMOUNT", left + 600, line, 12, Im.DIM)
+  Im.TextRight("BALANCE", left + 780, line, 12, Im.DIM)
+  line += 20
+  if #journal == 0 then
+    Im.Text("Nothing has been paid or earned yet.", left, line, 14, Im.DIM, 0.8)
+  end
+  local visible = 18
+  local first = Im.Scroll("journal", left - 4, line, 900, visible * 22, #journal, visible)
+  for row = 1, visible do
+    -- newest first
+    local entry = journal[#journal - (row + first) + 1]
+    if entry == nil then
+      break
+    end
+    local rowY = line + (row - 1) * 22
+    Im.Text(Format.Clock(entry.tick), left, rowY + 3, 13, Im.DIM)
+    Im.Text(entry.reason, left + 150, rowY + 3, 14, Im.TEXT)
+    Im.TextRight((if entry.amount >= 0 then "+" else "") .. Format.Whole(entry.amount), left + 600, rowY + 3, 14,
+      if entry.amount >= 0 then GOOD else Im.WARN)
+    Im.TextRight(Format.Whole(entry.balance), left + 780, rowY + 3, 14, Im.DIM)
+  end
+end
+
+-- ---------------------------------------------------------------------
+
+function Station.Draw(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
+  local width, height = Station.WIDTH, Station.HEIGHT
+  local ship = player.ship
+  local station = Core.Query.Body(game, player.docked)
+  Im.Panel(x, y, width, height)
+  Im.Heading("DOCKED", x + 16, y + 12, 16, Im.DIM)
+  Im.Heading(if station then shorten(station.name, 32) else "?", x + 16, y + 36, 17, Im.TEXT)
+  for index, name in TABS do
+    if Im.Toggle(name, x + 364 + (index - 1) * 94, y + 18, 90, 28, tab == name) then
+      tab = name
+    end
+  end
+
+  if tab == "Market" then
+    drawMarket(session, game, player, x, y)
+  elseif tab == "Industry" then
+    drawIndustry(session, game, player, x, y)
+  elseif tab == "Skills" then
+    drawSkills(session, game, player, x, y)
+  elseif tab == "Ships" then
+    drawShips(session, game, player, x, y)
+  elseif tab == "Wallet" then
+    drawWallet(game, x, y)
+  else
+    drawFitting(session, game, player, x, y)
+  end
+
+  -- What a pilot does here, whatever the tab.
+  local bottom = y + height - 44
+  if Im.Button("UNDOCK", x + 16, bottom, 120, 28, true) then
+    Session.Order(session, "Undock")
+  end
+  local canRepair = Session.CanDo(session, { kind = "Repair", actor = 0 })
+  local shipRecord = game.state.ships[ship]
+  local damaged = shipRecord.armorDamage + shipRecord.hullDamage > 0
+  local label = if damaged then `Repair  {Core.Query.RepairCost(game)} cr` else "No damage"
+  if Im.Button(label, x + 146, bottom, 170, 28, canRepair, "Repair") then
+    Session.Do(session, { kind = "Repair", actor = 0 })
+  end
+  local training = Core.Query.Training(game)
+  if #training > 0 then
+    local now = training[1]
+    Im.Text(`Training {Skills.byId[now.skill].name} {now.level}: {Format.Duration(now.left)}`, x + 332, bottom + 7, 13, Im.DIM)
+  else
+    Im.Text("No skill in training", x + 332, bottom + 7, 13, Im.WARN)
+  end
+  if Im.Button("Save", x + width - 176, bottom, 76, 28, true) then
+    Session.Save(session, "quick")
+  end
+  if Im.Button("Load", x + width - 92, bottom, 76, 28, true) then
+    Session.Load(session, "quick")
+  end
+end
+
+return Station

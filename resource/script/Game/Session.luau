@@ -5,8 +5,10 @@
 
 local Clock = require("@lt/Game/Clock")
 local Core = require("@lt/Core/Api")
+local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local Types = require("@lt/Core/Data/Types")
 
 local Session = {}
 
@@ -58,6 +60,14 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `Refined {event.units} units of ore`)
   elseif kind == "LockLost" and event.ball == mine and tostring(event.reason) ~= "unlocked" then
     Session.Say(session, `Lock lost: {event.reason}`)
+  elseif kind == "SkillTrained" then
+    Session.Say(session, `{Skills.byId[event.skill].name} trained to level {event.level}`)
+  elseif kind == "SkillLearned" then
+    Session.Say(session, `Learned {Skills.byId[event.skill].name}: it can be trained now`)
+  elseif kind == "JobDone" then
+    Session.Say(session, `Built: {event.quantity} x {Types.Info(event.product).name}`)
+  elseif kind == "ShipAssembled" then
+    Session.Say(session, "The hull is assembled: board it from the Ships tab")
   end
 end
 

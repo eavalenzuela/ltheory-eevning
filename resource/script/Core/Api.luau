@@ -382,6 +382,16 @@ function Query.SellValue(game: Game, station: number, type: string, quantity: nu
   return Market.SellValue(game.state, station, type, quantity)
 end
 
+-- The sales tax and broker's fee the pilot pays, as shares.
+function Query.Fees(game: Game): (number, number)
+  return Market.Tax(game.state), Market.Fee(game.state)
+end
+
+-- The wallet's journal, oldest first.
+function Query.Journal(game: Game): { State.Entry }
+  return game.state.journal
+end
+
 function Query.Orders(game: Game, station: number?): { State.Order }
   return Market.Orders(game.state, station)
 end

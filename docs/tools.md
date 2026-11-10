@@ -43,7 +43,9 @@ bin/launch game --console                    # then type: GameDebug.Order("Undoc
 bin/launch game --no-present --fixed-step 60 --script test/scenario/flight.txt
 ```
 
-`test/scenario/flight.txt` (the M1 flight loop) and `test/scenario/combat.txt` (the M2 loop: fit, fight, loot, lose the ship, get home) are harness scripts; `script/check` runs both. For fights, `GameDebug` also has `Lock(what)`, `Locked()`, `Fire()`, `Count(kind)`, `Hold(type)`, `Fitted(type)`, `Condition()`, `Wallet()`, `Hull()`, `Peaceful(on)` and `SelfDestruct()`.
+`test/scenario/flight.txt` (the M1 flight loop), `test/scenario/combat.txt` (the M2 loop: fit, fight, loot, lose the ship, get home) and `test/scenario/economy.txt` (the M3 loop: mine, refine, build, sell by order, buy a hull, train, board) are harness scripts; `script/check` runs all three.
+
+A script works the station screens by pressing buttons by name, which runs the same code a click does. A button's name is its label (`UNDOCK`, `Market`, `Skills`) or, where several look alike, an id: `Fit:<type>`, `Unfit:<rack><slot>`, `ToHangar:<type>`, `Refine:<type>`, `Train:<skill>`, `Learn:<skill>`, `Board:<n>`, `Assemble:<type>`, `BuyNow`, `SellNow`, `PlaceSell`, `PlaceBuy`, `StartJob`, `Runs:most`, `Quantity:100`. The screen is a frame behind the game, so wait for the button rather than asserting it: `until GameDebug.Press('Fit:miner.small')`. `GameDebug.CanPress(name)` and `WhyNot(name)` say whether a button is live; `Enter(field, n)` types into a number field (`Quantity`, `SellPrice`, `BuyPrice`, `Runs`); `Market(type)` and `Blueprint(type)` open the market or industry tab at a row. For the economy there are also `Hangar(type)`, `Skill(id)`, `Training()`, `Jobs()`, `Orders()`, `Ships()`, `HoldFull()`, `Mine()`, `Running()` and the cheat `Grant(credits)`, which is entered in the wallet journal as a cheat. `Order(kind, 'home')` means the pilot's home station. For fights, `GameDebug` also has `Lock(what)`, `Locked()`, `Fire()`, `Count(kind)`, `Hold(type)`, `Fitted(type)`, `Condition()`, `Wallet()`, `Hull()`, `Peaceful(on)` and `SelfDestruct()`.
 
 ## Looking at the game
 

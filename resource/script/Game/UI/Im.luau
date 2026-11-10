@@ -19,6 +19,21 @@ local cursor = vector.create(0, 0)
 local pressed = false
 local double = false
 
+-- Buttons drawn this frame and last, by name, with whether they were
+-- enabled: so that a script can press one by name (Im.Press).
+local seen: { [string]: boolean } = {}
+local seenNow: { [string]: boolean } = {}
+local pressNow: string? = nil
+local pressNext: string? = nil
+
+-- The number field being typed into, and what a script has put in one.
+local focus = ""
+local typed = ""
+local entered: { [string]: number } = {}
+
+-- How far each scrolling list is scrolled, by name.
+local scrolls: { [string]: number } = {}
+
 Im.TEXT = vector.create(0.82, 0.86, 0.9)
 Im.DIM = vector.create(0.5, 0.55, 0.6)
 Im.ACCENT = Colors.Primary
@@ -29,6 +44,34 @@ function Im.Begin()
   cursor = Cursor_Get()
   pressed = Mouse_LeftPressed()
   double = Mouse_DoubleClicked()
+  seen, seenNow = seenNow, {}
+  pressNow, pressNext = pressNext, nil
+end
+
+-- Press a button by name on the next frame, as a click would: for
+-- scripted runs. A button's name is its 'id', or its label if it has
+-- none. Returns false if no such button was drawn enabled last frame.
+function Im.Press(name: string): boolean
+  if seen[name] ~= true then
+    return false
+  end
+  pressNext = name
+  return true
+end
+
+-- Whether a button of that name was drawn last frame, and enabled.
+function Im.Has(name: string): (boolean, boolean)
+  return seen[name] ~= nil, seen[name] == true
+end
+
+-- Put a value in a number field by name: for scripted runs.
+function Im.Enter(name: string, value: number)
+  entered[name] = value
+end
+
+-- Whether a number field has the keyboard.
+function Im.Typing(): boolean
+  return focus ~= ""
 end
 
 function Im.Cursor(): vector
@@ -78,15 +121,97 @@ function Im.Fill(x: number, y: number, w: number, h: number, color: vector, alph
 end
 
 -- A button; true on the frame it is clicked. A disabled one is drawn
--- dimmed and never clicks.
-function Im.Button(label: string, x: number, y: number, w: number, h: number, enabled: boolean): boolean
+-- dimmed and never clicks. Give an 'id' where the label alone does not
+-- say which button it is (one of a row of "Buy" buttons).
+function Im.Button(label: string, x: number, y: number, w: number, h: number, enabled: boolean, id: string?): boolean
+  local name = id or label
+  if seenNow[name] == nil or enabled then
+    seenNow[name] = enabled
+  end
+  local scripted = enabled and pressNow == name
+  if scripted then
+    pressNow = nil
+  end
   local hot = enabled and inside(x, y, w, h)
-  local base = if hot then vector.create(0.1, 0.3, 0.45) else vector.create(0.07, 0.12, 0.17)
+  local base = if hot or scripted then vector.create(0.1, 0.3, 0.45) else vector.create(0.07, 0.12, 0.17)
   WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), base, 0.9, if enabled then 1 else 0.45, 4)
   local size = math.min(15, h - 8)
   Im.Text(label, x + (w - Im.TextWidth(label, size)) / 2, y + (h - size) / 2 - 1, size,
     if enabled then Im.TEXT else Im.DIM, if enabled then 1 else 0.6)
-  return hot and pressed
+  return scripted or (hot and pressed)
+end
+
+-- A button that stays lit while 'on': a tab, or one of a set of choices.
+function Im.Toggle(label: string, x: number, y: number, w: number, h: number, on: boolean, id: string?): boolean
+  local clicked = Im.Button(label, x, y, w, h, true, id)
+  if on then
+    Im.Fill(x, y + h - 3, w, 3, Im.ACCENT, 0.95)
+  end
+  return clicked
+end
+
+-- A field holding a whole number of at most nine digits. Click it and
+-- type; Return or a click elsewhere finishes. Returns the number it
+-- holds now.
+function Im.Number(name: string, value: number, x: number, y: number, w: number, h: number): number
+  local set = entered[name]
+  if set then
+    entered[name] = nil
+    value = set
+    if focus == name then
+      focus = ""
+    end
+  end
+  local hot = inside(x, y, w, h)
+  if pressed then
+    if hot then
+      focus = name
+      typed = if value > 0 then tostring(value) else ""
+    elseif focus == name then
+      focus = ""
+    end
+  end
+  if focus == name then
+    for digit in string.gmatch(Keyboard_GetText(), "%d") do
+      if #typed < 9 then
+        typed ..= digit
+      end
+    end
+    if Key_Pressed(Key_BackSpace()) then
+      typed = string.sub(typed, 1, -2)
+    end
+    if Key_Pressed(Key_Return()) then
+      focus = ""
+    end
+    value = tonumber(typed) or 0
+  end
+  local focused = focus == name
+  WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), vector.create(0.02, 0.03, 0.04), 0.95, 1, 3)
+  if focused then
+    Im.Fill(x, y + h - 2, w, 2, Im.ACCENT, 0.95)
+  end
+  local size = math.min(15, h - 8)
+  local text = if focused then typed .. "_" else tostring(value)
+  Im.TextRight(text, x + w - 8, y + (h - size) / 2 - 1, size, Im.TEXT)
+  return value
+end
+
+-- The first row to draw of a scrolling list of 'count' rows of which
+-- 'visible' fit, moved by the wheel while the cursor is over the list.
+function Im.Scroll(name: string, x: number, y: number, w: number, h: number, count: number, visible: number): number
+  local at = scrolls[name] or 0
+  if inside(x, y, w, h) then
+    at -= 3 * Mouse_GetScrollDelta()
+  end
+  at = math.clamp(math.floor(at + 0.5), 0, math.max(0, count - visible))
+  scrolls[name] = at
+  if count > visible then
+    -- a thumb down the right edge
+    local track = h - 4
+    local size = math.max(16, track * visible / count)
+    Im.Fill(x + w - 3, y + 2 + (track - size) * at / (count - visible), 3, size, Im.DIM, 0.6)
+  end
+  return at
 end
 
 -- A list row; returns whether the cursor is on it, whether it was just

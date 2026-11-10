@@ -20,6 +20,9 @@
 #   game-combat the game app plays the M2 loop (test/scenario/combat.txt):
 #               fit a module, fight the pirate at a belt, loot its wreck,
 #               lose the ship and get home in the capsule
+#   game-economy  the game app plays the M3 loop through its station screens
+#               (test/scenario/economy.txt): mine, refine, build ammunition,
+#               sell it by standing order, buy a hull, train for it, board it
 #   goldens     script/goldens: screenshots of the stored scenes must match
 #               their images
 #   goldens-fail  two made-up images that differ must be reported as differing
@@ -104,6 +107,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/flight.txt
   step game-combat 0 timeout 600 bin/launch game --no-present --fixed-step 60 --timeout 500 \
     --script test/scenario/combat.txt
+  step game-economy 0 timeout 600 bin/launch game --no-present --fixed-step 60 --timeout 500 \
+    --script test/scenario/economy.txt
   step goldens 0 script/goldens
 fi
 step goldens-fail 1 script/goldens --planted

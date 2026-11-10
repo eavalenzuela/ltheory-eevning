@@ -2,7 +2,7 @@
 -- The interface. In space: brackets on everything in view, shots drawn
 -- between ships, the overview, the selected item and its orders, locked
 -- targets, the ship's condition, its module rack and the navigation bar.
--- Docked: the ship's fit, the hangar and the hold.
+-- Docked: the station's screens (Game/UI/Station).
 --
 -- One widget draws all of it every frame (Game/UI/Im). It reads the Core
 -- through queries and acts on it only through the Session.
@@ -17,6 +17,7 @@ local Modules = require("@lt/Core/Data/Modules")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
 local State = require("@lt/Core/Kernel/State")
+local Station = require("@lt/Game/UI/Station")
 local Types = require("@lt/Core/Data/Types")
 
 local Hud = {}
@@ -445,163 +446,6 @@ local function drawClock(session: Session.Session, x: number, y: number)
 end
 
 -- ---------------------------------------------------------------------
--- Docked: the fit, the hangar and the hold
-
--- The fitted weapon a charge stack would be loaded into: one of its
--- family that is empty, else one holding something else.
-local function weaponFor(game: Core.Game, ship: number, charge: State.Item): State.Item?
-  local family = Modules.chargeById[charge.type].family
-  local other: State.Item? = nil
-  for _, item in Core.Query.Fitted(game, ship) do
-    local weapon = Modules.byId[item.type].weapon
-    if weapon and weapon.family == family then
-      if item.charge == "" then
-        return item
-      elseif item.charge ~= charge.type and other == nil then
-        other = item
-      end
-    end
-  end
-  return other
-end
-
-local function drawDocked(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
-  local width, height = 940, 600
-  local ship = player.ship
-  local station = Core.Query.Body(game, player.docked)
-  local stats = Core.Query.Stats(game, ship)
-  Im.Panel(x, y, width, height)
-  Im.Heading("DOCKED", x + 16, y + 12, 16, Im.DIM)
-  Im.Heading(if station then station.name else "?", x + 16, y + 34, 22, Im.TEXT)
-
-  -- The ship and what it comes to with this fit.
-  local left = x + 16
-  local line = y + 78
-  Im.Heading(string.upper(player.hull.name), left, line, 16, Im.TEXT)
-  line += 26
-  local cpu, powergrid = Core.Query.FittingUse(game, ship)
-  local facts = {
-    string.format("CPU %.0f / %.0f tf     Powergrid %.0f / %.0f MW", cpu, stats.cpu, powergrid, stats.powergrid),
-    string.format("Shield %.0f   Armor %.0f   Hull %.0f", stats.shield, stats.armor, stats.hull),
-    string.format("Speed %.0f m/s   Align %.1f s   Capacitor %.0f GJ", stats.maxVelocity, 1.3863 * stats.tau, stats.capacitor),
-  }
-  for _, fact in facts do
-    Im.Text(fact, left, line, 14, Im.DIM)
-    line += 20
-  end
-
-  line += 10
-  Im.Heading("FITTED", left, line, 16, Im.DIM)
-  line += 24
-  local racks = { { "high", "High", player.hull.highs }, { "mid", "Mid", player.hull.mids }, { "low", "Low", player.hull.lows } } :: { { any } }
-  for _, rack in racks do
-    local bySlot: { [number]: State.Item } = {}
-    for _, item in Core.Query.Items(game, ship, rack[1]) do
-      bySlot[item.slot] = item
-    end
-    for slot = 1, rack[3] do
-      local item = bySlot[slot]
-      Im.Text(`{rack[2]} {slot}`, left, line + 3, 13, Im.DIM)
-      if item then
-        local module = Modules.byId[item.type]
-        Im.Text(module.name, left + 56, line + 3, 14, Im.TEXT)
-        if module.weapon then
-          local loaded = if item.charge == "" then "nothing loaded"
-            elseif module.weapon.clip > 0 then `{Types.Info(item.charge).name} x{item.rounds}`
-            else Types.Info(item.charge).name
-          Im.Text(loaded, left + 250, line + 3, 13, if item.charge == "" then Im.WARN else Im.DIM)
-        end
-        if Im.Button("Unfit", left + 396, line, 54, 22, true) then
-          Session.Do(session, { kind = "Unfit", actor = 0, item = item.id })
-        end
-      else
-        Im.Text("empty", left + 56, line + 3, 14, Im.DIM, 0.6)
-      end
-      line += 26
-    end
-  end
-
-  -- The hangar and the hold.
-  local right = x + 490
-  line = y + 78
-  Im.Heading("HANGAR", right, line, 16, Im.DIM)
-  line += 24
-  local hangar = Core.Query.Items(game, player.docked, "hangar")
-  if #hangar == 0 then
-    Im.Text("nothing here", right, line, 14, Im.DIM, 0.6)
-    line += 24
-  end
-  for index, item in hangar do
-    if index > 11 then
-      Im.Text(`and {#hangar - 11} more`, right, line, 13, Im.DIM)
-      line += 24
-      break
-    end
-    local info = Types.Info(item.type)
-    Im.Text(`{info.name}  x{item.quantity}`, right, line + 3, 14, Im.TEXT)
-    if info.category == "module" then
-      local can = Session.CanDo(session, { kind = "Fit", actor = 0, item = item.id })
-      if Im.Button("Fit", right + 286, line, 54, 22, can) then
-        Session.Do(session, { kind = "Fit", actor = 0, item = item.id })
-      end
-    elseif info.category == "charge" then
-      local weapon = weaponFor(game, ship, item)
-      if Im.Button("Load", right + 286, line, 54, 22, weapon ~= nil) and weapon then
-        Session.Do(session, { kind = "LoadCharge", actor = 0, item = weapon.id, other = item.id })
-      end
-    elseif info.category == "ore" then
-      local can = Session.CanDo(session, { kind = "Reprocess", actor = 0, item = item.id })
-      if Im.Button("Refine", right + 286, line, 54, 22, can) then
-        Session.Do(session, { kind = "Reprocess", actor = 0, item = item.id })
-      end
-    end
-    local toHold = Session.CanDo(session, { kind = "MoveItems", actor = 0, item = item.id, to = "cargo" })
-    if Im.Button("To hold", right + 346, line, 78, 22, toHold) then
-      Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "cargo" })
-    end
-    line += 26
-  end
-
-  line += 10
-  Im.Heading(string.format("HOLD  %.1f / %.0f m3", Core.Query.CargoUsed(game, ship), stats.cargo), right, line, 16, Im.DIM)
-  line += 24
-  local hold = Core.Query.Items(game, ship, "cargo")
-  if #hold == 0 then
-    Im.Text("empty", right, line, 14, Im.DIM, 0.6)
-  end
-  for index, item in hold do
-    if index > 6 then
-      Im.Text(`and {#hold - 6} more`, right, line, 13, Im.DIM)
-      break
-    end
-    Im.Text(`{Types.Info(item.type).name}  x{item.quantity}`, right, line + 3, 14, Im.TEXT)
-    if Im.Button("To hangar", right + 326, line, 98, 22, true) then
-      Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "hangar" })
-    end
-    line += 26
-  end
-
-  -- What a pilot does here.
-  local bottom = y + height - 44
-  if Im.Button("UNDOCK", x + 16, bottom, 120, 28, true) then
-    Session.Order(session, "Undock")
-  end
-  local canRepair = Session.CanDo(session, { kind = "Repair", actor = 0 })
-  local shipRecord = game.state.ships[ship]
-  local damaged = shipRecord.armorDamage + shipRecord.hullDamage > 0
-  local label = if damaged then `Repair  {Core.Query.RepairCost(game)} cr` else "No damage"
-  if Im.Button(label, x + 146, bottom, 170, 28, canRepair) then
-    Session.Do(session, { kind = "Repair", actor = 0 })
-  end
-  if Im.Button("Save", x + width - 176, bottom, 76, 28, true) then
-    Session.Save(session, "quick")
-  end
-  if Im.Button("Load", x + width - 92, bottom, 76, 28, true) then
-    Session.Load(session, "quick")
-  end
-end
-
--- ---------------------------------------------------------------------
 
 function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
   -- Expanded, so that it covers the window: a bare widget has no size.
@@ -651,7 +495,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         drawNavigation(session, ball, navX, bottom - 86, 520)
         drawStatus(ball, navX - 232, bottom - 120)
       else
-        drawDocked(session, game, player, left + (w.size.x - 940) / 2, top + 130)
+        Station.Draw(session, game, player, left + (w.size.x - Station.WIDTH) / 2, top + 130)
       end
       drawClock(session, left + 24, bottom - 54)
       overInterface = Im.over

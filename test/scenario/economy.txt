@@ -1,0 +1,122 @@
+# The M3 loop, played through the game app's own screens (script/check
+# runs it):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/economy.txt
+#
+# Fit a mining laser, mine a hold of ore, refine it, build ammunition from
+# the starter blueprint, sell it through a standing order, buy a combat
+# frigate's hull, find it cannot be flown, train for it, and board it.
+#
+# Buttons are pressed by name (GameDebug.Press), which runs the same code
+# a click does. "until GameDebug.Press(...)" waits for the button to be
+# there and live, then presses it. The price of the hull is granted:
+# earning it takes hours of game time, and the headless Loop spec is what
+# proves it can be done.
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+
+# Fitting: a mining laser in place of one gun.
+until GameDebug.Press('Unfit:high1')
+until GameDebug.Fitted('autocannon.small') == 1
+until GameDebug.Press('Fit:miner.small')
+until GameDebug.Fitted('miner.small') == 1
+
+# A laser needs a skill the pilot has not trained: its Fit button is grey.
+frames 3
+lua assert(not GameDebug.CanPress('Fit:laser.pulse.small'), 'an untrained pilot should not be able to fit a laser')
+
+# Mine.
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua GameDebug.TimeScale(30)
+lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+lua assert(GameDebug.Order('Approach', 'Ferrite', 4000), 'no ferrite in this belt')
+until GameDebug.Distance('Ferrite') < 9000
+lua assert(GameDebug.Lock('Ferrite'), 'the lock was refused')
+until GameDebug.Locked() > 0
+lua assert(GameDebug.Mine() == 1, 'the mining laser did not start')
+until GameDebug.Running() == 1
+until GameDebug.HoldFull() > 0.99 or GameDebug.Running() == 0
+lua assert(GameDebug.Hold('ore.ferrite') >= 400, 'less than a cycle of ore was mined')
+
+# Home, where the blueprint is.
+lua assert(GameDebug.Order('Dock', 'home'), 'dock was refused')
+until GameDebug.Docked()
+lua GameDebug.TimeScale(1)
+
+# Ore from the hold to the hangar, then refine it.
+until GameDebug.Press('Fitting')
+frames 3
+until GameDebug.Press('ToHangar:ore.ferrite')
+until GameDebug.Hangar('ore.ferrite') >= 400
+until GameDebug.Press('Industry')
+frames 3
+until GameDebug.Press('Refine:ore.ferrite')
+until GameDebug.Hangar('mineral.iron') >= 500
+
+# Build as many runs of EMP rounds as the minerals allow.
+lua assert(GameDebug.Blueprint('blueprint.ammo.emp'))
+frames 3
+until GameDebug.Press('Runs:most')
+frames 2
+until GameDebug.Press('StartJob')
+until GameDebug.Jobs() == 1
+lua assert(GameDebug.Hangar('blueprint.ammo.emp') == 0, 'the blueprint should be in the job')
+lua GameDebug.TimeScale(30)
+until GameDebug.Jobs() == 0
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Hangar('ammo.emp') >= 700, 'the job delivered no rounds')
+lua assert(GameDebug.Hangar('blueprint.ammo.emp') == 1, 'the blueprint did not come back')
+
+# Sell a hundred of them through a standing order at the price offered.
+lua assert(GameDebug.Market('ammo.emp'))
+frames 3
+lua GameDebug.Enter('Quantity', 100)
+frames 2
+lua _G.before = GameDebug.Wallet()
+until GameDebug.Press('PlaceSell')
+until GameDebug.Orders() == 1
+lua assert(GameDebug.Wallet() < _G.before, 'the broker was not paid')
+lua GameDebug.TimeScale(30)
+until GameDebug.Orders() == 0
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Wallet() > _G.before + 1800, 'the order did not pay')
+
+# Buy a Lancer's hull and assemble it.
+lua GameDebug.Grant(500000)
+wait 1.5
+lua assert(GameDebug.Market('frigate.lancer'))
+frames 3
+until GameDebug.Press('BuyNow')
+until GameDebug.Hangar('frigate.lancer') == 1
+until GameDebug.Press('Ships')
+frames 3
+until GameDebug.Press('Assemble:frigate.lancer')
+until GameDebug.Ships() == 2
+
+# It cannot be flown yet. Train Frigates to level 2, then board it.
+frames 3
+lua assert(not GameDebug.CanPress('Board:2'), 'an untrained pilot should not be able to board a Lancer')
+until GameDebug.Press('Skills')
+frames 3
+lua assert(GameDebug.Skill('frigates') == 1)
+until GameDebug.Press('Train:frigates')
+until GameDebug.Training() == 1
+lua GameDebug.TimeScale(60)
+until GameDebug.Skill('frigates') == 2
+lua GameDebug.TimeScale(1)
+until GameDebug.Press('Ships')
+frames 3
+until GameDebug.Press('Board:2')
+until GameDebug.Hull() == 'frigate.lancer'
+
+# And it flies.
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+
+echo economy scenario passed
+quit
