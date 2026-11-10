@@ -11,6 +11,8 @@
 -- multiplies the resonance, which is why two 25% hardeners give less
 -- than 50%.
 
+local Yards = require("@lt/Core/Data/Yards")
+
 export type ShipType = {
   id: string,
   name: string,
@@ -48,6 +50,8 @@ export type ShipType = {
   lockRange: number,      -- m
   maxTargets: number,
   cargo: number,          -- m3
+  -- Skills a pilot needs to board it. (Where absent, Data/Skills says.)
+  requires: { { skill: string, level: number } }?,
 }
 
 local SHIELD = { 1.0, 0.8, 0.6, 0.5 }
@@ -58,7 +62,7 @@ local types: { ShipType } = {
   -- The ship every pilot starts with, and gets again for nothing after
   -- losing one.
   {
-    id = "frigate.courier", name = "Kestrel Courier", class = "frigate", lineage = "", basePrice = 30000, volume = 2500,
+    id = "frigate.courier", name = "Courier", class = "frigate", lineage = "", basePrice = 30000, volume = 2500,
     mass = 1100000, inertia = 3.2, maxVelocity = 360, warpSpeed = 5, radius = 40,
     shield = 350, armor = 300, hull = 300, shieldRecharge = 625,
     shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 38,
@@ -78,7 +82,7 @@ local types: { ShipType } = {
   },
   -- Projectiles, missiles and shields.
   {
-    id = "frigate.harrier", name = "Talmar Harrier", class = "frigate", lineage = "talmar", basePrice = 400000, volume = 2500,
+    id = "frigate.harrier", name = "Talmar Rapier", class = "frigate", lineage = "talmar", basePrice = 400000, volume = 2500,
     mass = 1067000, inertia = 3.22, maxVelocity = 375, warpSpeed = 5, radius = 40,
     shield = 500, armor = 380, hull = 330, shieldRecharge = 625,
     shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 35,
@@ -106,6 +110,106 @@ local types: { ShipType } = {
     scanResolution = 100, lockRange = 20000, maxTargets = 2, cargo = 0,
   },
 }
+
+-- ---------------------------------------------------------------------
+-- The yards' lines
+--
+-- Every yard builds a hull of each class. A class has a standard hull
+-- (below); a yard's is that, times the yard's character (Data/Yards):
+-- so a Vessari hull has more armour than its class and a Talmar one is
+-- faster, from frigate to battleship. The two frigates written out
+-- above are their yards' own; the rest are made here.
+
+type Standard = {
+  price: number, volume: number, mass: number, inertia: number, velocity: number, warp: number, radius: number,
+  shield: number, armor: number, hull: number, recharge: number, signature: number,
+  cpu: number, powergrid: number, highs: number, mids: number, lows: number, hardpoints: number,
+  capacitor: number, capacitorRecharge: number, scan: number, lock: number, targets: number, cargo: number,
+  skill: string, level: number,
+}
+
+local CLASS: { [string]: Standard } = {
+  frigate = { price = 400000, volume = 2500, mass = 1150000, inertia = 3.1, velocity = 355, warp = 5, radius = 42,
+    shield = 440, armor = 440, hull = 350, recharge = 625, signature = 37, cpu = 135, powergrid = 44,
+    highs = 3, mids = 3, lows = 3, hardpoints = 3, capacitor = 340, capacitorRecharge = 185,
+    scan = 620, lock = 25000, targets = 4, cargo = 135, skill = "frigates", level = 2 },
+  destroyer = { price = 1500000, volume = 5000, mass = 1700000, inertia = 2.7, velocity = 265, warp = 4.5, radius = 75,
+    shield = 850, armor = 850, hull = 750, recharge = 800, signature = 72, cpu = 200, powergrid = 85,
+    highs = 7, mids = 3, lows = 3, hardpoints = 6, capacitor = 700, capacitorRecharge = 270,
+    scan = 480, lock = 40000, targets = 6, cargo = 380, skill = "destroyers", level = 1 },
+  cruiser = { price = 9000000, volume = 10000, mass = 11500000, inertia = 0.5, velocity = 215, warp = 3, radius = 150,
+    shield = 2300, armor = 2300, hull = 2100, recharge = 1250, signature = 125, cpu = 380, powergrid = 900,
+    highs = 5, mids = 4, lows = 5, hardpoints = 4, capacitor = 1500, capacitorRecharge = 480,
+    scan = 290, lock = 55000, targets = 6, cargo = 450, skill = "cruisers", level = 1 },
+  battleship = { price = 150000000, volume = 50000, mass = 100000000, inertia = 0.13, velocity = 115, warp = 2, radius = 400,
+    shield = 7200, armor = 7200, hull = 7000, recharge = 2500, signature = 400, cpu = 620, powergrid = 13000,
+    highs = 8, mids = 5, lows = 6, hardpoints = 7, capacitor = 5500, capacitorRecharge = 1100,
+    scan = 110, lock = 85000, targets = 7, cargo = 700, skill = "battleships", level = 1 },
+  industrial = { price = 750000, volume = 20000, mass = 11000000, inertia = 1.0, velocity = 130, warp = 4.5, radius = 180,
+    shield = 1000, armor = 1100, hull = 1500, recharge = 900, signature = 180, cpu = 210, powergrid = 65,
+    highs = 2, mids = 3, lows = 3, hardpoints = 1, capacitor = 520, capacitorRecharge = 300,
+    scan = 150, lock = 30000, targets = 2, cargo = 4600, skill = "industrials", level = 1 },
+}
+
+-- To two figures or so: nobody quotes a hull's armour to the hit point.
+local function round(x: number): number
+  local step = if x >= 100000 then 10000 elseif x >= 10000 then 500 elseif x >= 1000 then 50 elseif x >= 100 then 5 else 1
+  return math.floor(x / step + 0.5) * step
+end
+
+for _, yard in Yards.list do
+  for _, class in Yards.CLASSES do
+    local id = `{class}.{string.lower(yard.hulls[class])}`
+    local written = false
+    for _, t in types do
+      if t.lineage == yard.id and t.class == class then
+        written = true
+      end
+    end
+    if not written then
+      local s = CLASS[class]
+      local launchers = if class == "industrial" then 0 else math.floor(s.hardpoints * yard.launchers + 0.5)
+      table.insert(types, {
+        id = id, name = `{yard.name} {yard.hulls[class]}`, class = class, lineage = yard.id,
+        basePrice = s.price, volume = s.volume,
+        mass = round(s.mass * yard.mass), inertia = s.inertia, maxVelocity = round(s.velocity * yard.velocity),
+        warpSpeed = s.warp, radius = s.radius,
+        shield = round(s.shield * yard.shield), armor = round(s.armor * yard.armor), hull = round(s.hull * yard.hull),
+        shieldRecharge = s.recharge, shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL,
+        signature = s.signature,
+        cpu = round(s.cpu * yard.cpu), powergrid = round(s.powergrid * yard.powergrid),
+        highs = s.highs, mids = s.mids + yard.mids, lows = s.lows + yard.lows,
+        turrets = s.hardpoints - launchers, launchers = launchers,
+        capacitor = round(s.capacitor * yard.capacitor), capacitorRecharge = s.capacitorRecharge,
+        scanResolution = s.scan, lockRange = round(s.lock * yard.lockRange), maxTargets = s.targets,
+        cargo = round(s.cargo * (if class == "industrial" then yard.cargo else 1)),
+        requires = { { skill = s.skill, level = s.level } },
+      })
+    end
+  end
+end
+
+-- Hulls no yard owns: anyone builds them.
+table.insert(types, {
+  id = "frigate.prospector", name = "Prospector", class = "frigate", lineage = "", basePrice = 180000, volume = 2500,
+  mass = 1300000, inertia = 3.4, maxVelocity = 300, warpSpeed = 5, radius = 44,
+  shield = 380, armor = 320, hull = 420, shieldRecharge = 625,
+  shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 42,
+  cpu = 160, powergrid = 30, highs = 2, mids = 2, lows = 2, turrets = 2, launchers = 0,
+  capacitor = 380, capacitorRecharge = 180,
+  scanResolution = 500, lockRange = 20000, maxTargets = 3, cargo = 480,
+  requires = { { skill = "mining", level = 2 } },
+})
+table.insert(types, {
+  id = "barge.quarry", name = "Quarry Barge", class = "barge", lineage = "", basePrice = 6000000, volume = 15000,
+  mass = 9000000, inertia = 0.9, maxVelocity = 110, warpSpeed = 3.5, radius = 160,
+  shield = 1800, armor = 1500, hull = 2600, shieldRecharge = 1100,
+  shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 160,
+  cpu = 320, powergrid = 160, highs = 3, mids = 2, lows = 2, turrets = 3, launchers = 0,
+  capacitor = 1400, capacitorRecharge = 420,
+  scanResolution = 200, lockRange = 25000, maxTargets = 3, cargo = 3500,
+  requires = { { skill = "mining", level = 4 }, { skill = "industrials", level = 1 } },
+})
 
 local Ships = { list = types, byId = {} :: { [string]: ShipType } }
 

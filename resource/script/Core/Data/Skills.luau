@@ -11,6 +11,7 @@
 -- the pilot is doing.
 
 local Modules = require("@lt/Core/Data/Modules")
+local Ships = require("@lt/Core/Data/Ships")
 
 export type Need = { skill: string, level: number }
 
@@ -40,6 +41,12 @@ end
 local skills: { Skill } = {
   -- Ships
   { id = "frigates", name = "Frigates", rank = 2, start = 1, requires = {}, note = "Level 2 to fly combat frigates." },
+  { id = "destroyers", name = "Destroyers", rank = 3, start = -1, requires = { { skill = "frigates", level = 3 } },
+    note = "Level 1 to fly destroyers." },
+  { id = "cruisers", name = "Cruisers", rank = 5, start = -1, requires = { { skill = "destroyers", level = 3 } },
+    note = "Level 1 to fly cruisers." },
+  { id = "battleships", name = "Battleships", rank = 8, start = -1, requires = { { skill = "cruisers", level = 4 } },
+    note = "Level 1 to fly battleships." },
   { id = "industrials", name = "Industrials", rank = 3, start = -1, requires = { { skill = "frigates", level = 2 } },
     note = "To fly haulers." },
   { id = "navigation", name = "Navigation", rank = 1, start = 0, requires = {}, bonus = ship("maxVelocity", 0.05),
@@ -124,7 +131,13 @@ local NEEDS: { [string]: { Need } } = {
 }
 
 function Skills.Needs(type: string): { Need }
-  return NEEDS[type] or {}
+  local listed = NEEDS[type]
+  if listed then
+    return listed
+  end
+  -- A hull made from its yard's line says what it needs itself.
+  local hull = Ships.byId[type]
+  return if hull and hull.requires then hull.requires else {}
 end
 
 -- The first need a pilot with these skill levels does not meet, if any.
