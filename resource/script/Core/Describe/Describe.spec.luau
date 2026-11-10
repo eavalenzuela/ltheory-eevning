@@ -84,7 +84,7 @@ suite:Case("systems are laid out sanely at astronomical scale", function(t)
         t.eq(belt.kind, "belt")
         t.eq(object.site, belt.id)
         local d = math.sqrt((object.x - belt.x) ^ 2 + (object.y - belt.y) ^ 2 + (object.z - belt.z) ^ 2)
-        t.ok(d > 15000 and d < 45000, `{where} is {d} m from its belt`)
+        t.ok(d > 9000 and d < 22000, `{where} is {d} m from its belt`)
       elseif object.kind == "moon" then
         local planet = byId[object.parent]
         local d = math.sqrt((object.x - planet.x) ^ 2 + (object.y - planet.y) ^ 2 + (object.z - planet.z) ^ 2)

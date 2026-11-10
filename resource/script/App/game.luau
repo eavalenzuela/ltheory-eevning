@@ -24,8 +24,14 @@ local ui: Interface
 -- The nearest thing on the overview of a kind ("belt", "station", ...)
 -- or whose name contains the text.
 local function find(what: string): Core.Entry?
-  for _, entry in Core.Query.Overview(session.game) do
-    if entry.kind == what or string.find(string.lower(entry.name), string.lower(what), 1, true) then
+  local entries = Core.Query.Overview(session.game)
+  for _, entry in entries do
+    if entry.kind == what then
+      return entry
+    end
+  end
+  for _, entry in entries do
+    if string.find(string.lower(entry.name), string.lower(what), 1, true) then
       return entry
     end
   end
@@ -54,6 +60,23 @@ function Debug.Select(what: string): boolean
   local entry = find(what)
   session.selected = if entry then entry.id else 0
   return entry ~= nil
+end
+
+-- The name of what is selected, or "".
+function Debug.Selected(): string
+  local body = Core.Query.Body(session.game, session.selected)
+  return if body then body.name else ""
+end
+
+-- What the ship is doing: its mode, or "warp", "align", "docked".
+function Debug.Doing(): string
+  local ball = Core.Query.Ball(session.game, session.game.state.player.ship)
+  if ball == nil then
+    return "docked"
+  elseif ball.warp then
+    return ball.warp.stage
+  end
+  return ball.mode
 end
 
 function Debug.InSpace(): boolean

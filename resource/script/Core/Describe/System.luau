@@ -108,16 +108,16 @@ function System.Describe(galaxy: Galaxy.Galaxy, id: number): Description
       local x, y, z = around(planet.x, planet.y, planet.z, radius * Rng.Float(rng, 4, 9))
       local belt = add("belt", `{planet.name} - Asteroid Belt {b}`, x, y, z, 0, planet.id, "")
       belt.site = belt.id
-      -- Rocks along an arc about 30 km out from the belt's centre, which
+      -- Rocks along an arc 10 to 20 km out from the belt's centre, which
       -- is where a ship warping to the belt arrives.
       local start = Rng.Float(rng, 0, 2 * math.pi)
       local rocks = 24 + Rng.Int(rng, 17)
       for r = 1, rocks do
         local along = start + (r / rocks) * math.pi * Rng.Float(rng, 0.9, 1.1)
-        local out = Rng.Float(rng, 22000, 38000)
+        local out = Rng.Float(rng, 10000, 20000)
         local rock = add("asteroid", `Asteroid {r}`,
-          x + out * math.cos(along), y + Rng.Float(rng, -6000, 6000), z + out * math.sin(along),
-          Rng.Float(rng, 40, 320), belt.id, "rock")
+          x + out * math.cos(along), y + Rng.Float(rng, -4000, 4000), z + out * math.sin(along),
+          Rng.Float(rng, 150, 900), belt.id, "rock")
         rock.site = belt.id
       end
     end
