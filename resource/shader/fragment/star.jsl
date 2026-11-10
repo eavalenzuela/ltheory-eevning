@@ -1,0 +1,67 @@
+/* The face of a star, on a sphere: boiling granulation in three
+   colours, dark spots, and a limb that darkens toward the edge.
+
+   From the star shader of zk_dev_tools (star_designer/star.frag), which
+   drew a star as a flat disc and faked the sphere; here the sphere is
+   real, so the noise is sampled on its surface and the limb comes from
+   the angle to the eye. The corona and what leaps off the limb are
+   starcorona.jsl, on a shell around this. */
+
+#include frag.jsl
+#include math.jsl
+#include color.jsl
+#include noise.jsl
+#include lighting.jsl
+#include zknoise.jsl
+
+FRAG_IN vec3 normal;
+FRAG_IN vec3 position;
+
+uniform float clock;
+uniform float brightness;
+uniform vec3 colorHot;
+uniform vec3 colorMid;
+uniform vec3 colorCool;
+uniform float limbDarken;
+uniform float granulationScale;
+uniform int granulationOctaves;
+uniform float granulationStrength;
+uniform float granulationSpeed;
+uniform float spotDensity;
+uniform float spotSize;
+uniform float spotIntensity;
+uniform vec3 spotColor;
+uniform float breatheRate;
+uniform float breatheAmp;
+uniform vec3 starSeed;
+
+void main() {
+  PREPASS
+
+  vec3 n = normalize(vertpos);
+  vec3 N = normalize(normal);
+  float facing = max(0.0, dot(N, normalize(eye - position)));
+  float breathe = sin(clock * breatheRate * 6.2831853) * breatheAmp;
+
+  /* Granulation: cool lanes, the mean surface, hot cells. */
+  vec3 p = n * granulationScale + starSeed + vec3(0.0, 0.0, clock * granulationSpeed);
+  float gran = zk_fbm(p, granulationOctaves, 0.55) * 0.5 + 0.5;
+  float t = mix(0.5, gran, granulationStrength);
+  vec3 base = t < 0.5
+    ? mix(colorCool, colorMid, t * 2.0)
+    : mix(colorMid, colorHot, (t - 0.5) * 2.0);
+
+  /* Spots, which drift far more slowly than the granulation boils. */
+  vec3 sp = n * spotDensity + starSeed * 1.7 + vec3(0.0, 0.0, clock * granulationSpeed * 0.05);
+  float spot = 1.0 - smoothstep(spotSize * 0.5, spotSize, zk_worley(sp));
+  base = mix(base, spotColor, spot * spotIntensity);
+
+  base *= mix(1.0, 0.4 + 0.6 * facing, clamp(limbDarken, 0.0, 1.0));
+  base *= 1.0 + breathe * 0.15;
+
+  outputAlbedo(brightness * base);
+  outputAlpha(1.0);
+  outputNormal(N);
+  outputMaterial(MATERIAL_NOSHADE);
+  outputRoughness(0.0);
+}

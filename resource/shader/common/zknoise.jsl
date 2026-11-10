@@ -1,0 +1,78 @@
+/* Gradient and cell noise sampled in three dimensions, so that a sphere
+   can be textured without a seam: ported from the noise library of
+   zk_dev_tools (lib/noise.glsl), which the star and planet shaders that
+   came from there are written against. Names carry a prefix to keep
+   clear of noise.jsl. */
+
+vec3 zk_hash3(vec3 p) {
+  p = vec3(dot(p, vec3(127.1, 311.7,  74.7)),
+           dot(p, vec3(269.5, 183.3, 246.1)),
+           dot(p, vec3(113.5, 271.9, 124.6)));
+  return -1.0 + 2.0 * fract(sin(p) * 43758.5453);
+}
+
+/* Perlin noise, about -1 to 1. */
+float zk_perlin(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = fract(p);
+  vec3 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  float n000 = dot(zk_hash3(i + vec3(0.0, 0.0, 0.0)), f - vec3(0.0, 0.0, 0.0));
+  float n100 = dot(zk_hash3(i + vec3(1.0, 0.0, 0.0)), f - vec3(1.0, 0.0, 0.0));
+  float n010 = dot(zk_hash3(i + vec3(0.0, 1.0, 0.0)), f - vec3(0.0, 1.0, 0.0));
+  float n110 = dot(zk_hash3(i + vec3(1.0, 1.0, 0.0)), f - vec3(1.0, 1.0, 0.0));
+  float n001 = dot(zk_hash3(i + vec3(0.0, 0.0, 1.0)), f - vec3(0.0, 0.0, 1.0));
+  float n101 = dot(zk_hash3(i + vec3(1.0, 0.0, 1.0)), f - vec3(1.0, 0.0, 1.0));
+  float n011 = dot(zk_hash3(i + vec3(0.0, 1.0, 1.0)), f - vec3(0.0, 1.0, 1.0));
+  float n111 = dot(zk_hash3(i + vec3(1.0, 1.0, 1.0)), f - vec3(1.0, 1.0, 1.0));
+  return mix(
+    mix(mix(n000, n100, u.x), mix(n010, n110, u.x), u.y),
+    mix(mix(n001, n101, u.x), mix(n011, n111, u.x), u.y),
+    u.z);
+}
+
+/* Octaves of it, each twice as fine and 'persistence' as strong. */
+float zk_fbm(vec3 p, int octaves, float persistence) {
+  float sum = 0.0;
+  float amp = 1.0;
+  float total = 0.0;
+  for (int i = 0; i < 16; i++) {
+    if (i >= octaves) break;
+    sum += amp * zk_perlin(p);
+    total += amp;
+    amp *= persistence;
+    p *= 2.0;
+  }
+  return sum / max(total, 0.0001);
+}
+
+/* The same with creases: 0 to 1, sharp ridges at 1. */
+float zk_ridged(vec3 p, int octaves, float persistence) {
+  float sum = 0.0;
+  float amp = 1.0;
+  float total = 0.0;
+  for (int i = 0; i < 16; i++) {
+    if (i >= octaves) break;
+    sum += amp * (1.0 - abs(zk_perlin(p)));
+    total += amp;
+    amp *= persistence;
+    p *= 2.0;
+  }
+  return sum / max(total, 0.0001);
+}
+
+/* Distance to the nearest of a scatter of points, one a unit cell. */
+float zk_worley(vec3 p) {
+  vec3 cell = floor(p);
+  vec3 frac = fract(p);
+  float nearest = 1.5;
+  for (int z = -1; z <= 1; z++) {
+    for (int y = -1; y <= 1; y++) {
+      for (int x = -1; x <= 1; x++) {
+        vec3 neighbor = vec3(float(x), float(y), float(z));
+        vec3 jitter = zk_hash3(cell + neighbor) * 0.5 + 0.5;
+        nearest = min(nearest, length(neighbor + jitter - frac));
+      }
+    }
+  }
+  return nearest;
+}

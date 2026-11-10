@@ -1,0 +1,92 @@
+/* What surrounds a star: the corona, flares and prominences. Drawn on a
+   shell around the star and added to what is behind it.
+
+   The shell is only something to draw on. For each point of it, the
+   line of sight is taken past the star, and how far from the star's
+   centre that line passes (in star radii) and at what angle round the
+   disc decide the light: so the corona looks the same from every side,
+   as the flat original in zk_dev_tools (star_designer/star.frag) did. */
+
+#include frag.jsl
+#include math.jsl
+#include color.jsl
+#include noise.jsl
+#include lighting.jsl
+#include zknoise.jsl
+
+FRAG_IN vec3 position;
+FRAG_IN vec3 origin;
+FRAG_IN vec3 scale;
+
+uniform float clock;
+uniform float brightness;
+/* The shell is this many star radii across the middle. */
+uniform float shellRadii;
+uniform float granulationSpeed;
+uniform float coronaRadius;
+uniform float coronaStrength;
+uniform vec3 coronaColor;
+uniform float coronaFalloff;
+uniform float coronaNoiseScale;
+uniform float coronaNoiseStrength;
+uniform float coronaPulseRate;
+uniform float coronaPulseAmp;
+uniform float breatheRate;
+uniform float breatheAmp;
+uniform float flareDensity;
+uniform float flareIntensity;
+uniform float flareExtent;
+uniform float flareSpeed;
+uniform vec3 flareColor;
+uniform float prominenceDensity;
+uniform float prominenceIntensity;
+uniform float prominenceExtent;
+uniform float prominenceSpeed;
+uniform float prominenceBend;
+uniform vec3 prominenceColor;
+uniform vec3 starSeed;
+
+/* A ring of bursts standing on the limb. 'arc' 0 gives spikes that fade
+   outward (flares); 1 gives loops that rise, bend and return
+   (prominences). */
+float shellLayer(float r, float theta, float density, float speed, float extent, vec3 seed, float arc, float bend) {
+  float h = clamp((r - 1.0) / max(extent, 0.0001), 0.0, 1.0);
+  float lean = zk_fbm(vec3(cos(theta) * 1.3, sin(theta) * 1.3, 0.0) + seed, 2, 0.5);
+  float around = theta + bend * sin(h * 3.14159265) * lean * arc;
+  vec3 q = vec3(cos(around), sin(around), clock * speed) * density + seed;
+  float burst = smoothstep(0.55, 0.85, zk_fbm(q, 3, 0.55) * 0.5 + 0.5);
+  float fade = max(0.0, 1.0 - h);
+  float bell = pow(4.0 * h * (1.0 - h), 0.6);
+  return burst * mix(fade * fade, bell, arc);
+}
+
+void main() {
+  vec3 V = normalize(position - eye);
+  vec3 toCentre = origin - eye;
+  vec3 w = (eye + V * dot(toCentre, V)) - origin;
+  float r = length(w) / (scale.x / shellRadii);
+  if (r <= 1.0)
+    discard;
+
+  vec3 right = normalize(cross(V, vec3(0.0, 1.0, 0.0)));
+  vec3 up = cross(right, V);
+  float theta = atan(dot(w, up), dot(w, right));
+  vec2 dir = vec2(cos(theta), sin(theta));
+
+  float breathe = sin(clock * breatheRate * 6.2831853) * breatheAmp;
+  float pulse = sin(clock * coronaPulseRate * 6.2831853) * coronaPulseAmp;
+  float reach = coronaRadius * (1.0 + pulse * 0.10);
+
+  float t = (r - 1.0) / max(reach - 1.0, 0.0001);
+  float falloff = pow(1.0 - clamp(t, 0.0, 1.0), max(coronaFalloff, 0.0001));
+  vec3 cp = vec3(dir, r * 0.5) * coronaNoiseScale + starSeed * 2.3 + vec3(0.0, 0.0, clock * granulationSpeed * 0.3);
+  float wisp = mix(1.0, zk_fbm(cp, 4, 0.55) * 0.5 + 0.5, clamp(coronaNoiseStrength, 0.0, 1.0));
+  vec3 rgb = coronaColor * falloff * wisp * coronaStrength * (1.0 + breathe * 0.25);
+
+  rgb += flareColor * flareIntensity *
+    shellLayer(r, theta, flareDensity, flareSpeed, flareExtent, starSeed, 0.0, 0.0);
+  rgb += prominenceColor * prominenceIntensity *
+    shellLayer(r, theta, prominenceDensity, prominenceSpeed, prominenceExtent, starSeed + vec3(3.7, 1.9, 5.1), 1.0, prominenceBend);
+
+  RETURN(vec4(brightness * rgb, 1.0));
+}

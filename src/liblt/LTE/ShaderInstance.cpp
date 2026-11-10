@@ -173,6 +173,8 @@ ShaderInstance ShaderInstanceT::Clone() const {
   while (next) {
     *prev = new Cell(*next);
     prev = &(*prev)->next.t;
+    /* (Without this, cloning an instance with any render state never ended.) */
+    next = next->next;
   }
   *prev = nullptr;
 
