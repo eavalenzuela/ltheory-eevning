@@ -205,8 +205,8 @@ else()
   # No exception handling 
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions")
 
-  # Enable C++0x features
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+  # C++17 (was C++0x until the LTSL runtime was retired)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
 
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g")
 
