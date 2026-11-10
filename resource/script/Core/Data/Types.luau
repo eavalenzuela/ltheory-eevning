@@ -4,13 +4,14 @@
 
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
+local Ships = require("@lt/Core/Data/Ships")
 
 local Types = {}
 
 export type Info = {
   id: string,
   name: string,
-  category: "module" | "charge" | "goods" | "ore" | "mineral",
+  category: "module" | "charge" | "goods" | "ore" | "mineral" | "ship",
   volume: number,     -- m3 per unit
   basePrice: number,  -- credits per unit
 }
@@ -31,6 +32,14 @@ for _, mineral in Ores.minerals do
   byId[mineral.id] = { id = mineral.id, name = mineral.name, category = "mineral", volume = mineral.volume, basePrice = mineral.basePrice }
 end
 
+-- A hull, packaged: bought and sold like anything else, and assembled
+-- into a ship at a station. (Nobody sells capsules.)
+for _, hull in Ships.list do
+  if hull.class ~= "capsule" then
+    byId[hull.id] = { id = hull.id, name = hull.name, category = "ship", volume = hull.volume, basePrice = hull.basePrice }
+  end
+end
+
 -- Things that are only carried and sold.
 local goods: { Info } = {
   -- Proof of a pirate killed. Worth a bounty to whoever collects them.
@@ -39,6 +48,19 @@ local goods: { Info } = {
 }
 for _, g in goods do
   byId[g.id] = g
+end
+
+-- Every type id, in order: the order markets list them in.
+local ids: { string } = {}
+
+function Types.Ids(): { string }
+  if #ids == 0 then
+    for id in byId do
+      table.insert(ids, id)
+    end
+    table.sort(ids)
+  end
+  return ids
 end
 
 function Types.Get(id: string): Info?

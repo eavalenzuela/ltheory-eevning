@@ -170,6 +170,12 @@ function Economy.AddEdge(econ: Economy, a: number, b: number, conductance: numbe
   return #econ.edges
 end
 
+-- Set the stock a node aims to hold of a class, overriding what its
+-- population and facilities imply (a station's market has neither).
+function Economy.SetTarget(econ: Economy, node: number, class: number, target: number)
+  econ.nodes[node].target[class] = target
+end
+
 -- Set a node's stock of a class, as part of setting a scene up (it
 -- counts as starting stock, not as goods created).
 function Economy.SetStock(econ: Economy, node: number, class: number, amount: number)

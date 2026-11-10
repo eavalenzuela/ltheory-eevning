@@ -3,6 +3,7 @@
 -- the rules know is in here, and nothing else is consulted, so the state
 -- is the save and its hash identifies it.
 
+local Economy = require("@lt/Core/Strategic/Economy")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Motion = require("@lt/Core/Tactical/Motion")
 local System = require("@lt/Core/Describe/System")
@@ -180,8 +181,29 @@ export type Command = {
   item: number?,      -- the item acted on
   other: number?,     -- a second item (the charge, when loading a weapon)
   quantity: number?,
-  to: string?,        -- "cargo" or "hangar"
+  to: string?,        -- "cargo" or "hangar"; for an order, "buy" or "sell"
+  type: string?,      -- an item type, when there is no item yet (buying)
+  price: number?,     -- credits per unit, for a limit order
+  order: number?,     -- an order's id
 }
+
+-- A standing offer at a station's market. A sell order's goods and a buy
+-- order's credits are held in escrow until it fills or is cancelled.
+export type Order = {
+  id: number,
+  station: number,
+  side: "buy" | "sell",
+  type: string,
+  quantity: number,   -- still to fill
+  price: number,      -- credits per unit
+  placed: number,     -- tick
+}
+
+-- One day's trade in a type at a station.
+export type TradeDay = { day: number, volume: number, value: number }
+
+-- A line in the wallet's journal.
+export type Entry = { tick: number, amount: number, reason: string, balance: number }
 
 export type State = {
   galaxySeed: number,     -- layout; a galaxy can be shared by its seed
@@ -195,6 +217,15 @@ export type State = {
   items: { [number]: Item },
   itemIds: { number },
   wallet: number,         -- the player's credits
+  journal: { Entry },     -- the wallet's recent history, oldest first
+  -- Each station's market, made the first time it is needed: what the
+  -- station itself will sell and buy, as a one-node economy.
+  markets: { [number]: Economy.Economy },
+  marketIds: { number },
+  orders: { [number]: Order },
+  orderIds: { number },
+  -- trades[station][type]: recent days of trade, oldest first
+  trades: { [number]: { [string]: { TradeDay } } },
   balls: { [number]: Ball },
   ballIds: { number },
   missiles: { Missile },  -- in flight, oldest first

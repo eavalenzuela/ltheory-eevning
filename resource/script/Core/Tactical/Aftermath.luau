@@ -19,6 +19,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Types = require("@lt/Core/Data/Types")
+local Wallet = require("@lt/Core/Assets/Wallet")
 
 local Aftermath = {}
 
@@ -33,10 +34,7 @@ local STARTER = "frigate.courier"
 Aftermath.LOOT_RANGE = LOOT_RANGE
 
 local function pay(state: State.State, amount: number, reason: string, events: { Event })
-  if amount ~= 0 then
-    state.wallet += amount
-    table.insert(events, { kind = "WalletChanged", amount = amount, reason = reason, balance = state.wallet })
-  end
+  Wallet.Pay(state, amount, reason, events)
 end
 
 local function forget(state: State.State, ship: number)
@@ -117,9 +115,24 @@ function Aftermath.Step(state: State.State, events: { Event })
   if ship.docked ~= 0 and Ships.byId[ship.type].class == "capsule" then
     local station = ship.docked
     forget(state, ship.id)
-    local fresh = Space.NewShip(state, STARTER, "Courier", "player", station)
-    state.player.ship = fresh.id
-    table.insert(events, { kind = "ShipGranted", ship = fresh.id, station = station })
+    -- If the pilot keeps a ship here they are put in it; otherwise the
+    -- station gives them a starter.
+    local own: State.Ship? = nil
+    for _, id in state.shipIds do
+      local other = state.ships[id]
+      if other.owner == "player" and other.docked == station then
+        own = other
+        break
+      end
+    end
+    if own then
+      state.player.ship = own.id
+      table.insert(events, { kind = "ShipBoarded", ship = own.id, from = ship.id })
+    else
+      local fresh = Space.NewShip(state, STARTER, "Courier", "player", station)
+      state.player.ship = fresh.id
+      table.insert(events, { kind = "ShipGranted", ship = fresh.id, station = station })
+    end
   end
   for index = #state.wreckIds, 1, -1 do
     local wreck = state.wrecks[state.wreckIds[index]]

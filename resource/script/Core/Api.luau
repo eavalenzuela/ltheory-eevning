@@ -18,8 +18,10 @@ local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
 local Dogma = require("@lt/Core/Dogma")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Hangar = require("@lt/Core/Assets/Hangar")
 local Industry = require("@lt/Core/Assets/Industry")
 local Items = require("@lt/Core/Assets/Items")
+local Market = require("@lt/Core/Assets/Market")
 local Mining = require("@lt/Core/Tactical/Mining")
 local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
@@ -44,7 +46,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 5
+Core.SAVE_VERSION = 6
 
 -- A new game: a galaxy, and the player's first ship docked at a station
 -- in system 1.
@@ -62,6 +64,12 @@ function Core.New(options: Options): Game
     items = {},
     itemIds = {},
     wallet = 0,
+    journal = {},
+    markets = {},
+    marketIds = {},
+    orders = {},
+    orderIds = {},
+    trades = {},
     balls = {},
     ballIds = {},
     missiles = {},
@@ -108,6 +116,8 @@ local ASSET_COMMANDS = { Fit = true, Unfit = true, LoadCharge = true, MoveItems 
 local COMBAT_COMMANDS = { LockTarget = true, UnlockTarget = true, ActivateModule = true, DeactivateModule = true }
 local AFTERMATH_COMMANDS = { Loot = true, Repair = true }
 local INDUSTRY_COMMANDS = { Reprocess = true }
+local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true }
+local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
 
 local function validate(state: State.State, command: State.Command): (boolean, string?)
   if ASSET_COMMANDS[command.kind] then
@@ -118,6 +128,10 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Aftermath.Validate(state, command)
   elseif INDUSTRY_COMMANDS[command.kind] then
     return Industry.Validate(state, command)
+  elseif MARKET_COMMANDS[command.kind] then
+    return Market.Validate(state, command)
+  elseif HANGAR_COMMANDS[command.kind] then
+    return Hangar.Validate(state, command)
   end
   return Space.Validate(state, command)
 end
@@ -168,6 +182,10 @@ function Core.Step(game: Game)
       Aftermath.Apply(state, command, game.events)
     elseif ok and INDUSTRY_COMMANDS[command.kind] then
       Industry.Apply(state, command, game.events)
+    elseif ok and MARKET_COMMANDS[command.kind] then
+      Market.Apply(state, command, game.events)
+    elseif ok and HANGAR_COMMANDS[command.kind] then
+      Hangar.Apply(state, command, game.events)
     elseif ok then
       Space.Apply(state, command, game.events)
     else
@@ -179,6 +197,7 @@ function Core.Step(game: Game)
   Space.Decide(state, game.events)
   Aftermath.Step(state, game.events)
   Mining.Step(state)
+  Market.Step(state, game.events)
 end
 
 -- The events since the last call, oldest first.
@@ -331,6 +350,34 @@ end
 -- The chance a fitted turret would hit a target now, or nil.
 function Query.HitChance(game: Game, ship: number, item: number, target: number): number?
   return Combat.HitChance(game.state, ship, item, target)
+end
+
+-- What a station's market asks and bids for a type, and how many it has.
+function Query.Quote(game: Game, station: number, type: string): Market.Quote
+  return Market.Quote(game.state, station, type)
+end
+
+-- What buying a quantity at once would cost (nil if the station has not
+-- that many), and what selling it at once would bring after tax.
+function Query.BuyCost(game: Game, station: number, type: string, quantity: number): number?
+  return Market.BuyCost(game.state, station, type, quantity)
+end
+
+function Query.SellValue(game: Game, station: number, type: string, quantity: number): number
+  return Market.SellValue(game.state, station, type, quantity)
+end
+
+function Query.Orders(game: Game, station: number?): { State.Order }
+  return Market.Orders(game.state, station)
+end
+
+function Query.History(game: Game, station: number, type: string): { State.TradeDay }
+  return Market.History(game.state, station, type)
+end
+
+-- The player's ships docked at a station.
+function Query.Ships(game: Game, station: number): { State.Ship }
+  return Hangar.Ships(game.state, station)
 end
 
 -- A body by id (a ship in space or a described object), or nil.
