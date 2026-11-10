@@ -1,0 +1,31 @@
+/* The vertex shader of a flash: a square that faces the eye, centred on
+   the object. The mesh is a square in x and z from -1 to 1; the object's
+   x scale is its half-size, which is kept to at least 'fxMin' of its
+   distance from the eye. */
+
+#include vert.jsl
+#include math.jsl
+
+uniform vec3 eye;
+uniform float fxMin;
+
+VERT_OUT vec3 position;
+
+void main() {
+  VS_PROLOGUE;
+
+  vec3 centre = (WORLD * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+  float size = length((WORLD * vec4(1.0, 0.0, 0.0, 0.0)).xyz);
+  vec3 toEye = eye - centre;
+  vec3 forward = normalize(toEye);
+  vec3 up = normalize(ortho(forward));
+  vec3 right = cross(forward, up);
+  float s = max(size, fxMin * length(toEye));
+
+  worldPos = vec4(centre + (right * vp.x + up * vp.z) * s, 1.0);
+  gl_Position = PROJ * (VIEW * worldPos);
+  linearDepth = gl_Position.z;
+  gl_Position.z = LogDepth(gl_Position.z, gl_Position.w);
+  position = worldPos.xyz;
+  vertpos = vp.xyz;
+}

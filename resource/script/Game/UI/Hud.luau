@@ -158,37 +158,6 @@ end
 -- ---------------------------------------------------------------------
 -- In space
 
-local function drawShots(scene: Scene.Scene)
-  for _, shot in scene.shots do
-    local from, to = onScreen(scene, shot.from), onScreen(scene, shot.to)
-    if from and to then
-      local age = scene.time - shot.born
-      if shot.family == "missile" then
-        -- a dot travelling to the target, then a flash there
-        if shot.outcome == "launched" and age < shot.flight then
-          local at = from + (to - from) * (age / shot.flight)
-          Glyph_Draw(Glyph_Circle(at, 3, 1, 1), 0, 1, ARMOR, 1)
-        elseif shot.outcome == "launched" then
-          Glyph_Draw(Glyph_Ring(to, 10 + 40 * (age - shot.flight), 1, 1, 0), 0, 1, ARMOR, 1 - (age - shot.flight) / Scene.SHOT_SECONDS)
-        end
-      else
-        local fade = 1 - age / Scene.SHOT_SECONDS
-        local color = if shot.family == "laser" then HULL else CAPACITOR
-        if shot.outcome == "miss" then
-          -- past the target, to one side
-          local past = to + (to - from) * 0.15 + vector.create(18, -14)
-          Glyph_Draw(Glyph_Line(from, past, 1, 1), 0, 1, color, 0.35 * fade)
-        else
-          Glyph_Draw(Glyph_Line(from, to, 1, 1), 0, 1, color, fade)
-          if shot.outcome == "wreck" then
-            Glyph_Draw(Glyph_Ring(to, 14, 1, 1, 0), 0, 1, Colors.White, fade)
-          end
-        end
-      end
-    end
-  end
-end
-
 local function drawBrackets(session: Session.Session, scene: Scene.Scene, entries: { Core.Entry }, w: Widget,
   ball: State.Ball?)
   local cursor = Im.Cursor()
@@ -464,7 +433,6 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       -- answer to "is the cursor over a panel".
       overInterface = wasOver
       if ball then
-        drawShots(scene)
         drawBrackets(session, scene, entries, w, ball)
       end
 

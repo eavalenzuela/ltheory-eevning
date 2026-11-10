@@ -24,6 +24,7 @@
 -- (rockPale 0.6 0.5 0.4).
 
 local AppShell = require("@lt/AppShell")
+local Effects = require("@lt/Game/View/Effects")
 local Planet = require("@lt/Game/View/Planet")
 local Star = require("@lt/Game/View/Star")
 local SceneView = require("@lt/SceneView")
@@ -43,7 +44,12 @@ type View = {
   light: vector,          -- the direction the light comes from
   set: { [string]: number }?,
   radius: number?,        -- how big to make the body, if not RADIUS
+  -- For a view of weapons firing in place of a body: one row to a
+  -- weapon, each fired this long before the picture is taken.
+  fire: { Fire }?,
 }
+
+type Fire = { type: string, age: number, outcome: string, struck: string, flight: number? }
 
 local FRONT = vector.create(0, 0.15, 2.7)
 local NEAR = vector.create(0.25, 0.35, 1.32)
@@ -94,6 +100,29 @@ for _, class in { "yellow", "orange", "red", "white", "blue" } do
   table.insert(VIEWS, { name = `{kind}-2-near`, kind = kind, seed = 1, eye = FRONT, look = CENTRE, light = DAY })
   table.insert(VIEWS, { name = `{kind}-3-close`, kind = kind, seed = 1, eye = NEAR, look = CLOSE, light = DAY })
 end
+-- Weapons firing, left to right over 1200 m, a row to each: in flight,
+-- and as they land (on a shield, on armour, on the hull, and a miss).
+local ROWS = { "laser.pulse.small", "laser.beam.medium", "autocannon.small", "artillery.medium", "blaster.small",
+  "railgun.medium", "launcher.light", "miner.small" }
+local STRUCK = { "shield", "armor", "hull", "shield", "armor", "hull", "armor", "" }
+local IN_FLIGHT = { 0.10, 0.35, 0.22, 0.30, 0.40, 0.12, 1.3, 0.25 }
+local LANDING = { 0.16, 0.50, 0.36, 0.56, 0.72, 0.30, 2.15, 0.40 }
+local function firing(ages: { number }, outcome: string): { Fire }
+  local out: { Fire } = {}
+  for row, type in ROWS do
+    local how: string = if type == "launcher.light" and outcome ~= "miss" then "launched" else outcome
+    local shot: Fire = { type = type, age = ages[row], outcome = how, struck = STRUCK[row], flight = 2.0 }
+    table.insert(out, shot)
+  end
+  return out
+end
+local STAGE = vector.create(0, 0, 1500)
+table.insert(VIEWS, { name = "fx-1-flight", kind = "fx", seed = 1, eye = STAGE, look = CENTRE, light = DAY, radius = 1, fire = firing(IN_FLIGHT, "hit") })
+table.insert(VIEWS, { name = "fx-2-landing", kind = "fx", seed = 1, eye = STAGE, look = CENTRE, light = DAY, radius = 1, fire = firing(LANDING, "hit") })
+table.insert(VIEWS, { name = "fx-3-landing-close", kind = "fx", seed = 1, eye = vector.create(380, 0, 520), look = vector.create(560, 0, 0),
+  light = DAY, radius = 1, fire = firing(LANDING, "hit") })
+table.insert(VIEWS, { name = "fx-4-miss", kind = "fx", seed = 1, eye = STAGE, look = CENTRE, light = DAY, radius = 1, fire = firing(LANDING, "miss") })
+
 -- A star as the game draws one from five radii off: 120 km across at
 -- 600 km, so that the far side of its corona is past the renderer's
 -- reach.
@@ -143,6 +172,7 @@ return AppShell.Create(function(): Widget
 
   local world: Planet.World? = nil
   local body: Object? = nil
+  local fx: Effects.Fx? = nil
   local built = ""          -- the kind and seed of the world now standing
   local index = 0           -- the view being taken; 0 when idle
   local frames = 0
@@ -159,13 +189,46 @@ return AppShell.Create(function(): Widget
         key ..= `:{name}={value}`
       end
     end
+    if fx then
+      Effects.Clear(fx, false)
+      fx = nil
+    end
+    local fire = v.fire
+    if fire then
+      -- Fire each row's weapon the right time ago, and play the time
+      -- since, so that what has landed has flashed.
+      local stage = Effects.New(system)
+      local where: { [number]: vector } = {}
+      local longest = 0
+      for row, shot in fire do
+        local y = (#fire / 2 - row + 0.5) * 95
+        where[2 * row - 1] = vector.create(-600, y, 0)
+        where[2 * row] = vector.create(600, y, 0)
+        longest = math.max(longest, shot.age)
+      end
+      local now = -longest
+      while now <= 0 do
+        for row, shot in fire do
+          if math.abs(now + shot.age) < 0.005 then
+            Effects.Fire(stage, shot.type, 2 * row - 1, 2 * row, 20, 20, shot.outcome, shot.flight or 0, shot.struck, now)
+          end
+        end
+        Effects.Update(stage, now, where)
+        now += 0.01
+      end
+      fx = stage
+      key = `fx:{v.name}`
+    end
     if built ~= key or body == nil then
       if body then
         Object_Delete(body)
       end
       local class = string.match(v.kind, "^star%-(%a+)$")
       local made: Object
-      if class then
+      if fire then
+        -- (something for the camera to be told to look at)
+        made, world = Object_Scenery({}), nil
+      elseif class then
         made, world = Star.New(class, v.seed, tweaks), nil
       else
         local planet = Planet.New(v.kind, v.seed, nil, tweaks)

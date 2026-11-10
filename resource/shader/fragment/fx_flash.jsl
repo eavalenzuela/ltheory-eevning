@@ -1,0 +1,30 @@
+/* A flash: where a shot lands, or the mouth of a gun. A white point in a
+   glow of its colour, with a few short rays. As it ages (fxAge from 0
+   to 1) it swells a little and is gone; 'fxRing' above 0 throws a ring
+   outward as it goes (a shield struck, a warhead). (Additive, on a
+   square from -1 to 1 in x and z.) */
+
+#include frag.jsl
+#include math.jsl
+
+uniform vec3 fxColor;
+uniform float fxFade;
+uniform float fxAge;
+uniform float fxRing;
+uniform float fxSeed;
+
+void main() {
+  vec2 p = vertpos.xz;
+  float r = length(p);
+  float swell = mix(0.55, 1.0, sqrt(fxAge));
+  float q = r / swell;
+
+  float point = 1.8 * exp(-q * 11.0);
+  float glow = 0.5 * exp(-q * 3.6);
+  float angle = atan(p.y, p.x);
+  float rays = pow(abs(sin(angle * 2.5 + fxSeed)), 28.0) * exp(-q * 2.2) * 0.7 * (1.0 - fxAge);
+  float ring = fxRing * exp(-pow2((r - 0.15 - 0.75 * fxAge) * 14.0)) * (1.0 - fxAge);
+
+  float a = (point + glow + rays + ring) * (1.0 - smoothstep(0.85, 1.0, r)) * fxFade;
+  RETURN(vec4(mix(fxColor, vec3(1.0), saturate(point)), 1.0) * a);
+}

@@ -1,0 +1,40 @@
+/* The vertex shader of a streak of light (a beam, a tracer, a trail): a
+   strip along the object's own z, from 0 to 1, that turns about that
+   axis to face the eye.
+
+   The mesh is a square in x and z (x from -1 to 1 across, z along). The
+   object's scale gives the half-width (x) and the length (z). A streak
+   far from the eye is kept at least 'fxMin' of its distance wide, at
+   each end separately, or a beam to a target ten kilometres off would
+   thin to nothing on the way. */
+
+#include vert.jsl
+#include math.jsl
+
+uniform vec3 eye;
+uniform float fxMin;
+
+VERT_OUT vec3 position;
+VERT_OUT vec3 scale;
+
+void main() {
+  VS_PROLOGUE;
+
+  vec3 axis = (WORLD * vec4(0.0, 0.0, 1.0, 0.0)).xyz;
+  float len = length(axis);
+  float halfWidth = length((WORLD * vec4(1.0, 0.0, 0.0, 0.0)).xyz);
+  vec3 base = (WORLD * vec4(0.0, 0.0, vp.z, 1.0)).xyz;
+  vec3 toEye = eye - base;
+  vec3 side = normalize(cross(axis / max(len, 1e-6), normalize(toEye)));
+  float w = max(halfWidth, fxMin * length(toEye));
+
+  worldPos = vec4(base + side * vp.x * w, 1.0);
+  /* (how many widths long it is here, for the fragment shader) */
+  scale = vec3(w, 1.0, len);
+
+  gl_Position = PROJ * (VIEW * worldPos);
+  linearDepth = gl_Position.z;
+  gl_Position.z = LogDepth(gl_Position.z, gl_Position.w);
+  position = worldPos.xyz;
+  vertpos = vp.xyz;
+}

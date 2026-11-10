@@ -22,6 +22,7 @@
 local Clock = require("@lt/Game/Clock")
 local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
+local Effects = require("@lt/Game/View/Effects")
 local Planet = require("@lt/Game/View/Planet")
 local Star = require("@lt/Game/View/Star")
 local Motion = require("@lt/Core/Tactical/Motion")
@@ -57,15 +58,13 @@ export type Scene = {
   warpLeft: number,                   -- metres still to go
   warpSeconds: number,                -- and seconds
   time: number,                       -- seconds the scene has been running, for effects
-  shots: { Shot },                    -- recent shots, for the interface to draw
+  fx: Effects.Fx?,                    -- weapon fire and the like, in this system's container
+  mining: { [number]: number },       -- when each mining module's beam was last begun, by its item
 }
 
 -- A shot to show: who at whom, how it went, and when (scene time). A
 -- missile takes 'flight' seconds to arrive; anything else is instant.
-export type Shot = { from: number, to: number, family: string, outcome: string, born: number, flight: number }
 
--- How long a shot stays on screen after it lands, in seconds.
-Scene.SHOT_SECONDS = 0.35
 
 
 -- Bodies beyond the renderer's reach are drawn this far away, or a
@@ -101,7 +100,7 @@ function Scene.New(camera: Camera): Scene
     ox = 0, oy = 0, oz = 0, eyeX = 0, eyeY = 0, eyeZ = 0,
     proxies = {}, celestials = {}, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6,
-    warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, shots = {},
+    warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
   }
 end
 
@@ -160,6 +159,10 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
   if scene.container then
     Object_Delete(scene.container)
   end
+  if scene.fx then
+    Effects.Clear(scene.fx, true)
+  end
+  table.clear(scene.mining)
   scene.focus = nil
   scene.star = nil
   scene.key = ""
@@ -167,6 +170,7 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
 
   local container = Object_System(vector.create(0, 0, 0), game.state.galaxySeed * 7919 + system)
   scene.container = container
+  scene.fx = Effects.New(container)
   local interior = container:GetInteriorObjects()
   while interior:HasMore() do
     if interior:Get():IsStar() then
@@ -202,6 +206,15 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
       end
     end
   end
+end
+
+-- What to draw for a shot whose weapon is not known, by its family.
+local FALLBACK: { [string]: string } = { laser = "laser.pulse", projectile = "autocannon", hybrid = "blaster", missile = "launcher" }
+
+-- Which of a ship's layers a shot lands on.
+local function struck(ball: State.Ball): string
+  local vitals = ball.vitals
+  return if vitals.shield > 1 then "shield" elseif vitals.armor > 1 then "armor" else "hull"
 end
 
 -- Where a ball is 'since' seconds after the state's tick, and its velocity.
@@ -352,21 +365,39 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     end
   end
 
-  -- What just happened, as effects.
+  -- What just happened, as effects (Game/View/Effects).
+  local fx = scene.fx :: Effects.Fx
   for _, event in session.events do
     if event.kind == "Shot" then
-      table.insert(scene.shots, { from = event.from, to = event.to, family = event.family, outcome = event.outcome,
-        born = scene.time, flight = event.flight or 0 })
+      local from, to = state.balls[event.from], state.balls[event.to]
+      if from and to then
+        local item = state.items[event.item]
+        Effects.Fire(fx, if item then item.type else FALLBACK[event.family] or "autocannon", from.id, to.id, from.radius, to.radius,
+          event.outcome, event.flight or 0, struck(to), scene.time)
+      end
     elseif event.kind == "BallDestroyed" and event.system == player.system and grid ~= 0 then
+      local at = vector.create(event.x - scene.ox, event.y - scene.oy, event.z - scene.oz)
       local boom = Object_Explosion(0, 0, 3)
       container:AddInterior(boom)
-      boom:SetPos(vector.create(event.x - scene.ox, event.y - scene.oy, event.z - scene.oz))
+      boom:SetPos(at)
+      Effects.Burst(fx, at, vector.create(1.0, 0.70, 0.35), 260, 1, 0.9, scene.time)
+      Effects.Burst(fx, at, vector.create(1.0, 0.95, 0.85), 120, 0, 0.35, scene.time)
     end
   end
-  for index = #scene.shots, 1, -1 do
-    local shot = scene.shots[index]
-    if scene.time - shot.born > shot.flight + Scene.SHOT_SECONDS then
-      table.remove(scene.shots, index)
+  -- A mining laser's beam, for as long as the module runs: begun again
+  -- each time the last one is nearly out.
+  for _, id in state.ballIds do
+    local ball = state.balls[id]
+    if scene.screen[id] and ball.system == player.system then
+      for _, running in ball.vitals.running do
+        local item = state.items[running.item]
+        local rock = if running.target ~= 0 then Core.Query.Body(game, running.target) else nil
+        if item and rock and string.sub(item.type, 1, 5) == "miner" and scene.screen[running.target]
+          and scene.time - (scene.mining[running.item] or -1) > 0.42 then
+          scene.mining[running.item] = scene.time
+          Effects.Fire(fx, item.type, id, running.target, ball.radius, rock.radius, "hit", 0, "", scene.time)
+        end
+      end
     end
   end
 
@@ -428,6 +459,8 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       Star_SetFlareDepth(scene.star, if sine < FLARE_UNDER then out * (1 - sine) * 0.98 else 0)
     end
   end
+
+  Effects.Update(fx, scene.time, scene.screen)
 
   scene.focus = scene.proxies[if me then player.ship else player.docked]
 end

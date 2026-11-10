@@ -1,0 +1,26 @@
+/* A bolt in flight: a tracer round, a shell, a slug of plasma. Brightest
+   at its head (uv.y of 1) and trailing off behind. 'fxBlunt' fattens
+   the head into a ball (plasma) where 0 leaves a needle (a tracer).
+   (Additive.) */
+
+#include frag.jsl
+#include math.jsl
+
+uniform vec3 fxColor;
+uniform float fxFade;
+uniform float fxBlunt;
+
+void main() {
+  float x = abs(2.0 * uv.x - 1.0);
+  float y = uv.y;
+
+  float head = exp(-(1.0 - y) * mix(7.0, 3.0, fxBlunt));
+  float core = exp(-x * mix(22.0, 7.0, fxBlunt * head));
+  float glow = 0.45 * exp(-x * 5.0);
+  float tail = 1.0 - exp(-y * 7.0);
+  float edge = 1.0 - smoothstep(0.6, 1.0, x);
+  float nose = 1.0 - smoothstep(0.93, 1.0, y);
+
+  float a = (1.6 * core + glow) * (0.10 + head) * tail * edge * nose * fxFade;
+  RETURN(vec4(mix(fxColor, vec3(1.0), saturate(core * head)), 1.0) * a);
+}

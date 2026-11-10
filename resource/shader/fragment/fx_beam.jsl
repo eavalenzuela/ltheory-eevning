@@ -1,0 +1,27 @@
+/* A beam of light between two points: a white-hot line down the middle
+   of a glow of the beam's colour, wavering a little along its length,
+   and fading in at its ends. (Additive. uv.x runs across, uv.y along.) */
+
+#include frag.jsl
+#include math.jsl
+
+FRAG_IN vec3 scale;
+
+uniform vec3 fxColor;
+uniform float fxFade;       /* how bright, 0 to 1 */
+uniform float fxAge;        /* seconds since it began */
+
+void main() {
+  float x = abs(2.0 * uv.x - 1.0);
+  float y = uv.y;
+  float along = y * scale.z / max(scale.x, 1e-3);
+
+  float core = exp(-x * 24.0);
+  float glow = 0.55 * exp(-x * 7.0) + 0.16 * exp(-x * 2.4);
+  float waver = 0.86 + 0.14 * sin(along * 0.11 - fxAge * 46.0) * sin(along * 0.043 + fxAge * 19.0);
+  float ends = (1.0 - exp(-y * 90.0)) * (1.0 - exp(-(1.0 - y) * 40.0));
+  float edge = 1.0 - smoothstep(0.6, 1.0, x);
+
+  float a = (1.5 * core + glow * waver) * ends * edge * fxFade;
+  RETURN(vec4(mix(fxColor, vec3(1.0), saturate(1.4 * core)), 1.0) * a);
+}
