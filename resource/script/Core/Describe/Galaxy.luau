@@ -1,11 +1,9 @@
 --!strict
 -- The galaxy as data: systems on a map and the gates between them.
 -- Describe is a pure function of the galaxy seed. Nothing here creates an
--- engine object; the layout inside each system is Describe/System.
---
--- (The strategic prototype has its own Sim/Galaxy with stations and
--- routes for 400 systems. The two merge when the strategic layer moves
--- into the Core.)
+-- engine object; the layout inside each system is Describe/System. Who
+-- lives where and what is made there is Strategic/Atlas; distances in
+-- jumps are Strategic/Routes.
 
 local Names = require("@lt/Core/Describe/Names")
 local Rng = require("@lt/Core/Kernel/Rng")

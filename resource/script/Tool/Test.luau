@@ -1,6 +1,6 @@
 --!strict
 -- A small test kit for engine-free code. A spec file is a module named
--- Something.spec.luau under Core, Sim or Tool that returns a suite:
+-- Something.spec.luau under Core or Tool that returns a suite:
 --
 --   local Test = require("@lt/Tool/Test")
 --   local suite = Test.Suite("Rng")

@@ -3,8 +3,8 @@
 --
 --   bin/ltcore Tool/specs [FILTER] [--file MODULE] [--list]
 --
--- With no arguments it finds every *.spec.luau under resource/script/Core,
--- Sim and Tool and runs all of their cases. FILTER keeps the cases whose
+-- With no arguments it finds every *.spec.luau under resource/script/Core
+-- and Tool and runs all of their cases. FILTER keeps the cases whose
 -- "suite: case" name contains it. --file runs one module by name instead
 -- of searching (it need not end in .spec). --list prints the case names
 -- without running them. The exit status is 1 if any case failed or no
@@ -13,7 +13,7 @@
 local Test = require("@lt/Tool/Test")
 
 local ROOT = "resource/script/"
-local SEARCH = { "Core", "Sim", "Tool" }
+local SEARCH = { "Core", "Tool" }
 
 local function find(dir: string, out: { string })
   for _, name in Host.ListDir(ROOT .. dir) do
