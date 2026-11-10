@@ -16,7 +16,29 @@ Scope note: this is years of work for a human team. Sizes below are relative, no
 | Milestone | State |
 |---|---|
 | M0 Solid ground | Done 2026-11-09, with two items moved (below). `script/check --soak` passes. |
-| M1 onward, track S1 onward | Not started. |
+| M1 Space | Exit tests pass (2026-11-10); polish items open (below). `bin/launch game` plays it. |
+| S1 Economy kernel | Done 2026-11-10: `Core/Strategic/Economy`, 13 specs on toy graphs. |
+| M2 onward, S2 onward | Not started. |
+
+**M1 as built.** The Core flies the loop headless (`Core/Api.spec.luau`): undock, align and warp on schedule (a frigate covers 20 AU in 22 s), approach, orbit, keep at range, jump, dock. The game app shows it: grid objects at true size, planets and moons in scaled space, sunlit hulls, brackets, overview, selected-item orders, navigation bar, time controls, save and load. `script/check` flies it through the app, including a save in mid-warp that reloads to the same state hash. Fifty jumps leave memory flat.
+
+**M1 items still open** (none blocks M2):
+- UI toolkit depth: the interface is immediate-mode on the existing draw calls (`Game/UI/Im`), which carries the overview and brackets. Not yet done: batched text drawing in C++ (U1), sortable columns, context menus, a window manager, hotkeys.
+- Camera: orbit only. Tracking and tactical cameras are not built.
+- Warp looks like a wider field of view and a banner; no tunnel or streak effect yet (F21, F22). Gates use a station model (W8).
+- The scene still uses the engine's old System and Ship objects as props. A lean scene container and proxy type (E6, E10) and the scaled-space depth pass (E8) wait until they are needed: the script-side version works at this scale.
+- The old demo apps and `ltheory` are still in the tree.
+
+**What M1 found:**
+- The view needs no C++ for ship motion at this scale. Placing a few hundred ships from Luau each frame costs well under a millisecond, so the kinematic mode (E4) is deferred.
+- Three engine behaviours to know: the camera's "relative" position is absolute; generated models are not centred on their origin; a ship whose scale is changed after creation is not drawn (hulls are generated at size instead).
+- Metal had no direct sunlight; adding it (R1) was a two-line shader change and the largest visual gain so far.
+- The tick is integrate, apply commands, decide. Each ball stores the velocity it steers toward, so the state at a tick fixes the next second of flight and the view never has to correct itself.
+
+**What S1 found:**
+- The first flow rule had its own deadlock: a node starved to zero could never be resupplied. The blockade test caught it. Flows now close a price gap exactly on the true curve.
+- Idle stock has honest hysteresis: goods nobody at a node uses stay there if carrying them back is not worth the trip. Working markets return to the same prices after a blockade.
+- A lone trader on thin lanes profits every day at about a 30% margin: the rent that capacity-limited routes were meant to leave.
 
 **Moved out of M0:**
 - The in-game console overlay and its cheats (spawn, give item, set skill, teleport, advance time) need the Core's ships, items and skills and the new UI toolkit, so they land in M1–M2. M0 delivers the plumbing: `bin/launch APP --console` (a Luau prompt in the terminal) and the harness command `lua CODE`.
