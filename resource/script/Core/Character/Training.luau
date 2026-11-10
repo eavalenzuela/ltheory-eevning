@@ -1,0 +1,172 @@
+--!strict
+-- Learning skills and training them (Data/Skills says what they are).
+--
+-- A pilot knows a skill once it has been learned from its book, and then
+-- trains it a level at a time. Levels wait in a queue; the first is in
+-- training, and takes its time whatever the pilot is doing. Taking the
+-- level in training out of the queue loses the time spent on it.
+
+local Constants = require("@lt/Core/Data/Constants")
+local Items = require("@lt/Core/Assets/Items")
+local Skills = require("@lt/Core/Data/Skills")
+local State = require("@lt/Core/Kernel/State")
+local Vitals = require("@lt/Core/Tactical/Vitals")
+
+local Training = {}
+
+export type Event = { [string]: any }
+
+local BOOK = "book."
+
+-- The skill a book teaches, if the item type is a skill book.
+function Training.BookSkill(type: string): Skills.Skill?
+  if string.sub(type, 1, #BOOK) ~= BOOK then
+    return nil
+  end
+  return Skills.byId[string.sub(type, #BOOK + 1)]
+end
+
+-- The level a skill will be at once everything queued for it is trained;
+-- -1 if the pilot does not know it.
+function Training.QueuedLevel(state: State.State, skill: string): number
+  local level = state.skills[skill] or -1
+  for _, entry in state.training do
+    if entry.skill == skill then
+      level = math.max(level, entry.level)
+    end
+  end
+  return level
+end
+
+local function ticksFor(entry: { skill: string, level: number }): number
+  return math.ceil(Skills.TrainingSeconds(Skills.byId[entry.skill], entry.level) / Constants.TICK)
+end
+
+export type Queued = {
+  skill: string,
+  level: number,
+  seconds: number,    -- the whole of this level
+  left: number,       -- until it is trained, counting what is queued before it
+}
+
+-- The queue with its times, first in training first.
+function Training.Queue(state: State.State): { Queued }
+  local queue: { Queued } = {}
+  local done = (state.tick - state.trainingStarted) * Constants.TICK
+  local before = 0
+  for _, entry in state.training do
+    local seconds = ticksFor(entry) * Constants.TICK
+    before += seconds
+    table.insert(queue, { skill = entry.skill, level = entry.level, seconds = seconds, left = before - done })
+  end
+  return queue
+end
+
+function Training.Validate(state: State.State, command: State.Command): (boolean, string?)
+  local ship = state.ships[command.actor]
+  if ship == nil or ship.owner ~= "player" then
+    return false, "no such ship"
+  end
+  local kind = command.kind
+
+  if kind == "LearnSkill" then
+    if ship.docked == 0 then
+      return false, "not docked"
+    end
+    local item = state.items[command.item or 0]
+    if item == nil or item.holder ~= ship.docked or item.place ~= "hangar" then
+      return false, "that is not in the hangar here"
+    end
+    local skill = Training.BookSkill(item.type)
+    if skill == nil then
+      return false, "that is not a skill book"
+    elseif state.skills[skill.id] ~= nil then
+      return false, "already known"
+    end
+    local missing = Skills.Missing(skill.requires, state.skills)
+    if missing then
+      return false, Skills.Describe(missing)
+    end
+    return true
+
+  elseif kind == "TrainSkill" then
+    local skill = Skills.byId[command.type or ""]
+    if skill == nil then
+      return false, "no such skill"
+    elseif state.skills[skill.id] == nil then
+      return false, "learn it from its book first"
+    elseif Training.QueuedLevel(state, skill.id) >= Skills.MAX_LEVEL then
+      return false, "nothing more to train"
+    elseif #state.training >= Skills.QUEUE_LENGTH then
+      return false, "the training queue is full"
+    end
+    return true
+
+  elseif kind == "CancelTraining" then
+    if state.training[command.quantity or 0] == nil then
+      return false, "no such entry in the queue"
+    end
+    return true
+  end
+  return false, `unknown command '{kind}'`
+end
+
+function Training.Apply(state: State.State, command: State.Command, events: { Event })
+  local kind = command.kind
+  if kind == "LearnSkill" then
+    local item = state.items[command.item :: number]
+    local skill = Training.BookSkill(item.type) :: Skills.Skill
+    Items.Take(state, item, 1)
+    state.skills[skill.id] = 0
+    table.insert(events, { kind = "SkillLearned", skill = skill.id })
+
+  elseif kind == "TrainSkill" then
+    local skill = command.type :: string
+    if #state.training == 0 then
+      state.trainingStarted = state.tick
+    end
+    local level = Training.QueuedLevel(state, skill) + 1
+    table.insert(state.training, { skill = skill, level = level })
+    table.insert(events, { kind = "TrainingQueued", skill = skill, level = level })
+
+  elseif kind == "CancelTraining" then
+    local index = command.quantity :: number
+    local skill = state.training[index].skill
+    -- The later levels of the same skill cannot be trained without it.
+    for at = #state.training, index, -1 do
+      if state.training[at].skill == skill then
+        table.remove(state.training, at)
+      end
+    end
+    if index == 1 then
+      state.trainingStarted = state.tick
+    end
+    table.insert(events, { kind = "TrainingCancelled", skill = skill })
+  end
+end
+
+-- Each tick: the level in training is finished if its time is up, and the
+-- next begins where it ended.
+function Training.Step(state: State.State, events: { Event })
+  while true do
+    local first = state.training[1]
+    if first == nil then
+      return
+    end
+    local ticks = ticksFor(first)
+    if state.tick - state.trainingStarted < ticks then
+      return
+    end
+    state.skills[first.skill] = first.level
+    table.remove(state.training, 1)
+    state.trainingStarted += ticks
+    table.insert(events, { kind = "SkillTrained", skill = first.skill, level = first.level })
+    -- A skill that makes the ship better does so at once, in space too.
+    local ball = state.balls[state.player.ship]
+    if ball then
+      Vitals.Refresh(state, ball)
+    end
+  end
+end
+
+return Training

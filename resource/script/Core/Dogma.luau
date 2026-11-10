@@ -15,6 +15,7 @@
 
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
+local Skills = require("@lt/Core/Data/Skills")
 
 local Dogma = {}
 
@@ -24,6 +25,9 @@ export type Fitted = { type: string, running: boolean }
 
 -- A ship's attributes by name: "shield", "maxVelocity", "armorResonance.2", ...
 export type Stats = { [string]: number }
+
+-- A pilot's skill levels by skill id.
+export type Levels = { [string]: number }
 
 -- The weight of the n-th strongest of several stacking effects (n from 0).
 function Dogma.Penalty(n: number): number
@@ -70,9 +74,21 @@ local function resolve(base: number, p: Pending): number
   return value
 end
 
--- The modifiers of a fit that apply to 'on' (and, for weapons, 'family').
-local function gather(fitted: { Fitted }, on: string, family: string?): { [string]: Pending }
+-- The modifiers of a fit, and of the pilot's skills, that apply to 'on'
+-- (and, for weapons, 'family'). A skill's bonus is its value times its
+-- level, and is never penalised.
+local function gather(fitted: { Fitted }, on: string, family: string?, levels: Levels?): { [string]: Pending }
   local pending: { [string]: Pending } = {}
+  if levels then
+    -- in the skill list's order, so the arithmetic is the same every time
+    for _, skill in Skills.list do
+      local bonus = skill.bonus
+      local level = levels[skill.id] or 0
+      if bonus and level > 0 and bonus.on == on and (on == "ship" or bonus.family == family) then
+        pendingFor(pending, bonus.attribute).plain *= 1 + bonus.value * level
+      end
+    end
+  end
   for _, f in fitted do
     local module = Modules.byId[f.type]
     for _, modifier in module.passive do
@@ -95,8 +111,9 @@ local RESONANCES = { "shieldResonance", "armorResonance", "hullResonance" }
 local PLAIN = { "mass", "inertia", "maxVelocity", "warpSpeed", "radius", "shield", "armor", "hull", "shieldRecharge",
   "signature", "cpu", "powergrid", "capacitor", "capacitorRecharge", "scanResolution", "lockRange", "maxTargets", "cargo" }
 
--- A ship's attributes with this fit.
-function Dogma.Ship(hull: Ships.ShipType, fitted: { Fitted }): Stats
+-- A ship's attributes with this fit, flown by a pilot with these skills
+-- (none, for a ship nobody trained to fly).
+function Dogma.Ship(hull: Ships.ShipType, fitted: { Fitted }, levels: Levels?): Stats
   local base: Stats = {}
   local source = hull :: any
   for _, name in PLAIN do
@@ -107,7 +124,7 @@ function Dogma.Ship(hull: Ships.ShipType, fitted: { Fitted }): Stats
       base[`{name}.{index}`] = source[name][index]
     end
   end
-  local pending = gather(fitted, "ship", nil)
+  local pending = gather(fitted, "ship", nil, levels)
   local stats: Stats = {}
   for name, value in base do
     local p = pending[name]
@@ -119,9 +136,9 @@ function Dogma.Ship(hull: Ships.ShipType, fitted: { Fitted }): Stats
 end
 
 -- A weapon module's statistics on a ship with this fit.
-function Dogma.Weapon(fitted: { Fitted }, type: string): Modules.Weapon
+function Dogma.Weapon(fitted: { Fitted }, type: string, levels: Levels?): Modules.Weapon
   local weapon = assert(Modules.byId[type].weapon, `{type} is not a weapon`)
-  local pending = gather(fitted, "weapons", weapon.family)
+  local pending = gather(fitted, "weapons", weapon.family, levels)
   local out = table.clone(weapon) :: any
   for name, p in pending do
     out[name] = resolve(out[name], p)
@@ -130,7 +147,7 @@ function Dogma.Weapon(fitted: { Fitted }, type: string): Modules.Weapon
 end
 
 -- Whether a hull can carry these modules at once; if not, why not.
-function Dogma.Check(hull: Ships.ShipType, types: { string }): (boolean, string?)
+function Dogma.Check(hull: Ships.ShipType, types: { string }, levels: Levels?): (boolean, string?)
   local slots = { high = 0, mid = 0, low = 0 }
   local hardpoints = { turret = 0, launcher = 0 }
   local cpu, powergrid = 0, 0
@@ -159,7 +176,7 @@ function Dogma.Check(hull: Ships.ShipType, types: { string }): (boolean, string?
   elseif hardpoints.launcher > hull.launchers then
     return false, "no free launcher hardpoint"
   end
-  local stats = Dogma.Ship(hull, fitted)
+  local stats = Dogma.Ship(hull, fitted, levels)
   if cpu > stats.cpu then
     return false, string.format("not enough CPU (%.0f of %.0f tf)", cpu, stats.cpu)
   elseif powergrid > stats.powergrid then

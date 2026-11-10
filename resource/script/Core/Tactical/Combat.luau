@@ -265,7 +265,7 @@ function Combat.HitChance(state: State.State, ship: number, item: number, target
   if module == nil or module.weapon == nil or module.weapon.family == "missile" then
     return nil
   end
-  return turretChance(state, ball, fitted, Dogma.Weapon(Vitals.Fit(state, ball), fitted.type), body)
+  return turretChance(state, ball, fitted, Dogma.Weapon(Vitals.Fit(state, ball), fitted.type, Items.Levels(state, ball.id)), body)
 end
 
 -- One shot from a turret: the dice, and the damage if it lands.
@@ -323,7 +323,7 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
     end
 
     if module.weapon then
-      local weapon = Dogma.Weapon(Vitals.Fit(state, ball), item.type)
+      local weapon = Dogma.Weapon(Vitals.Fit(state, ball), item.type, Items.Levels(state, ball.id))
       local lock = findLock(ball, running.target)
       local target = Space.Body(state, running.target)
       if lock == nil or not lock.locked or target == nil then
@@ -371,7 +371,10 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       -- As much as the cycle yields, the rock has left and the hold takes.
       local ore = Ores.byId[rock.variety]
       local free = Vitals.Stats(state, state.ships[ball.id], v).cargo - Items.CargoUsed(state, ball.id)
-      local units = math.min(math.floor(miner.volume / ore.volume), math.floor((free + 1e-9) / ore.volume))
+      -- A practised miner gets 5% more for each level after the first.
+      local levels = Items.Levels(state, ball.id)
+      local skilled = 1 + 0.05 * math.max(0, (if levels then levels.mining or 0 else 0) - 1)
+      local units = math.min(math.floor(miner.volume * skilled / ore.volume), math.floor((free + 1e-9) / ore.volume))
       if units <= 0 then
         stop(state, ball, index, "the hold is full", events)
         return false

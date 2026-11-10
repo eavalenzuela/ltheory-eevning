@@ -1,12 +1,24 @@
 --!strict
--- Making things out of other things, at a station: for now, refining ore
--- into minerals.
+-- Making things out of other things, at a station: refining ore into
+-- minerals, and building from blueprints.
+--
+-- A manufacturing job takes a blueprint, the minerals for its runs and a
+-- fee, and some time. When the time is up the product and the blueprint
+-- appear in the hangar of the station the job ran at, whether or not the
+-- pilot is there. A pilot runs a couple of jobs at once.
 
+local Blueprints = require("@lt/Core/Data/Blueprints")
+local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
 local Ores = require("@lt/Core/Data/Ores")
 local State = require("@lt/Core/Kernel/State")
+local Types = require("@lt/Core/Data/Types")
+local Wallet = require("@lt/Core/Assets/Wallet")
 
 local Industry = {}
+
+-- The most runs one job can be for.
+Industry.MAX_RUNS = 100
 
 export type Event = { [string]: any }
 
@@ -28,18 +40,91 @@ local function inHangar(state: State.State, command: State.Command): (State.Item
   return item, nil
 end
 
+-- The share of an ore's minerals the pilot recovers: 3% more for each
+-- level of Reprocessing.
+function Industry.RefineYield(state: State.State): number
+  return Ores.REFINE_YIELD + 0.03 * math.max(0, state.skills.refining or 0)
+end
+
 -- What refining a stack of ore gives: the units used, and the minerals.
-function Industry.RefineOutput(type: string, quantity: number): (number, { { mineral: string, amount: number } })
+function Industry.RefineOutput(type: string, quantity: number, yield: number?): (number, { { mineral: string, amount: number } })
   local ore = Ores.byId[type]
   local batches = quantity // Ores.BATCH
+  local share = yield or Ores.REFINE_YIELD
   local out = {}
   for _, yield in ore.yields do
-    local amount = math.floor(batches * yield.amount * Ores.REFINE_YIELD)
+    local amount = math.floor(batches * yield.amount * share + 1e-9)
     if amount > 0 then
       table.insert(out, { mineral = yield.mineral, amount = amount })
     end
   end
   return batches * Ores.BATCH, out
+end
+
+-- ---------------------------------------------------------------------
+-- Manufacturing
+
+-- How many of a type are in a station's hangar.
+function Industry.Have(state: State.State, station: number, type: string): number
+  local have = 0
+  for _, item in Items.In(state, station, "hangar") do
+    if item.type == type then
+      have += item.quantity
+    end
+  end
+  return have
+end
+
+-- Jobs the pilot can run at once: one more for each level of Mass
+-- Production.
+function Industry.JobSlots(state: State.State): number
+  return Blueprints.JOB_SLOTS + math.max(0, state.skills["mass.production"] or 0)
+end
+
+-- How long a job of so many runs takes: 4% less for each level of
+-- Industry.
+function Industry.JobSeconds(state: State.State, blueprint: Blueprints.Blueprint, runs: number): number
+  return math.ceil(blueprint.seconds * runs * (1 - 0.04 * math.max(0, state.skills.industry or 0)))
+end
+
+-- What the station charges to run it.
+function Industry.JobFee(blueprint: Blueprints.Blueprint, runs: number): number
+  return math.ceil(Blueprints.JOB_FEE * Types.Info(blueprint.product).basePrice * blueprint.perRun * runs)
+end
+
+export type Plan = {
+  blueprint: Blueprints.Blueprint,
+  runs: number,
+  quantity: number,     -- units it would make
+  seconds: number,
+  fee: number,
+  materials: { { type: string, need: number, have: number } },
+}
+
+-- What a job of so many runs at a station would take, and what of it is
+-- in the hangar there.
+function Industry.Plan(state: State.State, station: number, blueprint: Blueprints.Blueprint, runs: number): Plan
+  local materials = {}
+  for _, m in blueprint.materials do
+    table.insert(materials, { type = m.type, need = m.quantity * runs, have = Industry.Have(state, station, m.type) })
+  end
+  return {
+    blueprint = blueprint, runs = runs, quantity = blueprint.perRun * runs,
+    seconds = Industry.JobSeconds(state, blueprint, runs), fee = Industry.JobFee(blueprint, runs),
+    materials = materials,
+  }
+end
+
+-- The jobs running, optionally at one station, oldest first.
+function Industry.Jobs(state: State.State, station: number?): { State.Job }
+  local found = {}
+  for _, id in state.jobIds do
+    local job = state.jobs[id]
+    if station == nil or job.station == station then
+      table.insert(found, job)
+    end
+  end
+  return found
 end
 
 function Industry.Validate(state: State.State, command: State.Command): (boolean, string?)
@@ -54,6 +139,30 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
       return false, `refining takes at least {Ores.BATCH} units`
     end
     return true
+
+  elseif command.kind == "StartJob" then
+    local blueprint = Blueprints.byId[item.type]
+    if blueprint == nil then
+      return false, "that is not a blueprint"
+    end
+    local runs = command.quantity or 1
+    if runs < 1 or runs % 1 ~= 0 or runs > Industry.MAX_RUNS then
+      return false, `a job is for 1 to {Industry.MAX_RUNS} runs`
+    elseif (state.skills.industry or 0) < 1 then
+      return false, "needs Industry 1"
+    elseif #state.jobIds >= Industry.JobSlots(state) then
+      return false, "every job slot is in use"
+    end
+    local plan = Industry.Plan(state, item.holder, blueprint, runs)
+    for _, m in plan.materials do
+      if m.have < m.need then
+        return false, `needs {m.need - m.have} more {Types.Info(m.type).name}`
+      end
+    end
+    if plan.fee > state.wallet then
+      return false, "not enough credits for the fee"
+    end
+    return true
   end
   return false, `unknown command '{command.kind}'`
 end
@@ -63,12 +172,52 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
   local item = state.items[command.item :: number]
   if command.kind == "Reprocess" then
     local type = item.type
-    local used, minerals = Industry.RefineOutput(type, item.quantity)
+    local used, minerals = Industry.RefineOutput(type, item.quantity, Industry.RefineYield(state))
     Items.Take(state, item, used)
     for _, m in minerals do
       Items.Add(state, m.mineral, m.amount, ship.docked, "hangar")
     end
     table.insert(events, { kind = "Reprocessed", ship = ship.id, ore = type, units = used, minerals = minerals })
+
+  elseif command.kind == "StartJob" then
+    local station = ship.docked
+    local plan = Industry.Plan(state, station, Blueprints.byId[item.type], command.quantity or 1)
+    for _, m in plan.materials do
+      local left = m.need
+      for _, stack in Items.In(state, station, "hangar") do
+        if left > 0 and stack.type == m.type then
+          local take = math.min(left, stack.quantity)
+          Items.Take(state, stack, take)
+          left -= take
+        end
+      end
+    end
+    -- The blueprint is in the job until it is done.
+    Items.Take(state, item, 1)
+    Wallet.Pay(state, -plan.fee, "manufacturing fee", events)
+    local job: State.Job = {
+      id = State.NewId(state), station = station, blueprint = plan.blueprint.id, runs = plan.runs,
+      product = plan.blueprint.product, quantity = plan.quantity,
+      started = state.tick, ends = state.tick + math.ceil(plan.seconds / Constants.TICK),
+    }
+    state.jobs[job.id] = job
+    table.insert(state.jobIds, job.id)
+    table.insert(events, { kind = "JobStarted", job = job.id, product = job.product, quantity = job.quantity, ends = job.ends })
+  end
+end
+
+-- Each tick: a job whose time is up delivers its product, and its
+-- blueprint, to the hangar it ran at.
+function Industry.Step(state: State.State, events: { Event })
+  for _, id in table.clone(state.jobIds) do
+    local job = state.jobs[id]
+    if job.ends <= state.tick then
+      Items.Add(state, job.product, job.quantity, job.station, "hangar")
+      Items.Add(state, job.blueprint, 1, job.station, "hangar")
+      state.jobs[id] = nil
+      State.RemoveId(state.jobIds, id)
+      table.insert(events, { kind = "JobDone", job = id, product = job.product, quantity = job.quantity, station = job.station })
+    end
   end
 end
 

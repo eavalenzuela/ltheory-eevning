@@ -13,6 +13,7 @@
 -- effect at the start of the next tick.
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
+local Blueprints = require("@lt/Core/Data/Blueprints")
 local Codec = require("@lt/Core/Persist/Codec")
 local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
@@ -26,9 +27,11 @@ local Mining = require("@lt/Core/Tactical/Mining")
 local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Ships = require("@lt/Core/Data/Ships")
+local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local System = require("@lt/Core/Describe/System")
+local Training = require("@lt/Core/Character/Training")
 
 local Core = {}
 
@@ -46,7 +49,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 6
+Core.SAVE_VERSION = 7
 
 -- A new game: a galaxy, and the player's first ship docked at a station
 -- in system 1.
@@ -63,6 +66,11 @@ function Core.New(options: Options): Game
     shipIds = {},
     items = {},
     itemIds = {},
+    skills = Skills.Starting(),
+    training = {},
+    trainingStarted = 0,
+    jobs = {},
+    jobIds = {},
     wallet = 0,
     journal = {},
     markets = {},
@@ -99,13 +107,13 @@ function Core.New(options: Options): Game
   state.player.home = home.id
   state.wallet = 5000
 
-  -- A starter fit and a few things to try in the hangar. (Until there is
-  -- a market, this and loot are where items come from.)
+  -- A starter fit and a few things to try in the hangar: some of them
+  -- need a skill trained first, and the blueprint needs minerals.
   Items.Equip(state, ship.id, "autocannon.small", "ammo.emp")
   Items.Equip(state, ship.id, "autocannon.small", "ammo.emp")
   for _, kit in { { "ammo.emp", 600 }, { "ammo.fusion", 400 }, { "shield.extender.small", 1 }, { "afterburner.1mn", 1 },
     { "armor.repairer.small", 1 }, { "laser.pulse.small", 1 }, { "crystal.multifrequency", 1 },
-    { "miner.small", 1 } } :: { { any } } do
+    { "miner.small", 1 }, { "blueprint.ammo.emp", 1 } } :: { { any } } do
     Items.Add(state, kit[1], kit[2], home.id, "hangar")
   end
   return { state = state, events = {} }
@@ -115,7 +123,8 @@ end
 local ASSET_COMMANDS = { Fit = true, Unfit = true, LoadCharge = true, MoveItems = true }
 local COMBAT_COMMANDS = { LockTarget = true, UnlockTarget = true, ActivateModule = true, DeactivateModule = true }
 local AFTERMATH_COMMANDS = { Loot = true, Repair = true }
-local INDUSTRY_COMMANDS = { Reprocess = true }
+local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true }
+local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true }
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true }
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
 
@@ -132,6 +141,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Market.Validate(state, command)
   elseif HANGAR_COMMANDS[command.kind] then
     return Hangar.Validate(state, command)
+  elseif TRAINING_COMMANDS[command.kind] then
+    return Training.Validate(state, command)
   end
   return Space.Validate(state, command)
 end
@@ -186,6 +197,8 @@ function Core.Step(game: Game)
       Market.Apply(state, command, game.events)
     elseif ok and HANGAR_COMMANDS[command.kind] then
       Hangar.Apply(state, command, game.events)
+    elseif ok and TRAINING_COMMANDS[command.kind] then
+      Training.Apply(state, command, game.events)
     elseif ok then
       Space.Apply(state, command, game.events)
     else
@@ -198,6 +211,8 @@ function Core.Step(game: Game)
   Aftermath.Step(state, game.events)
   Mining.Step(state)
   Market.Step(state, game.events)
+  Industry.Step(state, game.events)
+  Training.Step(state, game.events)
 end
 
 -- The events since the last call, oldest first.
@@ -378,6 +393,51 @@ end
 -- The player's ships docked at a station.
 function Query.Ships(game: Game, station: number): { State.Ship }
   return Hangar.Ships(game.state, station)
+end
+
+export type SkillInfo = {
+  skill: Skills.Skill,
+  level: number,      -- -1 if the pilot has not learned it
+  queued: number,     -- the level it will reach when the queue is done
+}
+
+-- Every skill, in the order the data lists them, with what the pilot
+-- knows of it.
+function Query.Skills(game: Game): { SkillInfo }
+  local found: { SkillInfo } = {}
+  for _, skill in Skills.list do
+    table.insert(found, { skill = skill, level = game.state.skills[skill.id] or -1,
+      queued = Training.QueuedLevel(game.state, skill.id) })
+  end
+  return found
+end
+
+-- The training queue with its times; the first entry is in training.
+function Query.Training(game: Game): { Training.Queued }
+  return Training.Queue(game.state)
+end
+
+-- Why the pilot cannot use a hull or module yet ("needs Frigates 2"), or
+-- nil if they can.
+function Query.Untrained(game: Game, type: string): string?
+  local missing = Skills.Missing(Skills.Needs(type), game.state.skills)
+  return if missing then Skills.Describe(missing) else nil
+end
+
+-- The manufacturing jobs running, optionally at one station.
+function Query.Jobs(game: Game, station: number?): { State.Job }
+  return Industry.Jobs(game.state, station)
+end
+
+function Query.JobSlots(game: Game): number
+  return Industry.JobSlots(game.state)
+end
+
+-- What running a blueprint so many times at a station would take, or nil
+-- if the type is not a blueprint.
+function Query.JobPlan(game: Game, station: number, type: string, runs: number): Industry.Plan?
+  local blueprint = Blueprints.byId[type]
+  return if blueprint then Industry.Plan(game.state, station, blueprint, runs) else nil
 end
 
 -- A body by id (a ship in space or a described object), or nil.

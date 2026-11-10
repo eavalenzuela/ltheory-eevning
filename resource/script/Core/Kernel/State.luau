@@ -202,6 +202,19 @@ export type Order = {
 -- One day's trade in a type at a station.
 export type TradeDay = { day: number, volume: number, value: number }
 
+-- A manufacturing job: it ends at a tick and its product then appears in
+-- the hangar of the station it runs at.
+export type Job = {
+  id: number,
+  station: number,
+  blueprint: string,
+  runs: number,
+  product: string,
+  quantity: number,   -- units it will make
+  started: number,
+  ends: number,
+}
+
 -- A line in the wallet's journal.
 export type Entry = { tick: number, amount: number, reason: string, balance: number }
 
@@ -216,6 +229,13 @@ export type State = {
   shipIds: { number },    -- ascending, like every id list here
   items: { [number]: Item },
   itemIds: { number },
+  -- The skills the pilot knows, with their levels, and the levels queued
+  -- to train: the first is in training since 'trainingStarted'.
+  skills: { [string]: number },
+  training: { { skill: string, level: number } },
+  trainingStarted: number,
+  jobs: { [number]: Job },
+  jobIds: { number },
   wallet: number,         -- the player's credits
   journal: { Entry },     -- the wallet's recent history, oldest first
   -- Each station's market, made the first time it is needed: what the

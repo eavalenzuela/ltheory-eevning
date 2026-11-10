@@ -2,16 +2,18 @@
 -- One place to ask about any kind of item: a module, a charge, later a
 -- commodity or a packaged hull.
 
+local Blueprints = require("@lt/Core/Data/Blueprints")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Ships = require("@lt/Core/Data/Ships")
+local Skills = require("@lt/Core/Data/Skills")
 
 local Types = {}
 
 export type Info = {
   id: string,
   name: string,
-  category: "module" | "charge" | "goods" | "ore" | "mineral" | "ship",
+  category: "module" | "charge" | "goods" | "ore" | "mineral" | "ship" | "blueprint" | "skillbook",
   volume: number,     -- m3 per unit
   basePrice: number,  -- credits per unit
 }
@@ -37,6 +39,18 @@ end
 for _, hull in Ships.list do
   if hull.class ~= "capsule" then
     byId[hull.id] = { id = hull.id, name = hull.name, category = "ship", volume = hull.volume, basePrice = hull.basePrice }
+  end
+end
+
+for _, blueprint in Blueprints.list do
+  byId[blueprint.id] = { id = blueprint.id, name = blueprint.name, category = "blueprint", volume = 0.01,
+    basePrice = blueprint.basePrice }
+end
+-- A book for every skill a pilot does not start with.
+for _, skill in Skills.list do
+  if skill.start < 0 then
+    byId[Skills.Book(skill.id)] = { id = Skills.Book(skill.id), name = skill.name .. " (skill book)", category = "skillbook",
+      volume = 0.01, basePrice = 25000 * skill.rank }
   end
 end
 

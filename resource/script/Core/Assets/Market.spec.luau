@@ -54,19 +54,20 @@ end
 
 suite:Case("a station asks a little over the going price and bids a little under", function(t)
   local game, home = newGame()
-  -- Iron: base 4 credits, with tens of thousands in stock, so one unit
-  -- barely moves the price and the gap is the 2% spread each way.
+  -- Iron: base 4 credits, with a million and a half in stock, so one
+  -- unit barely moves the price and the gap is the 2% spread each way.
   local iron = Core.Query.Quote(game, home, "mineral.iron")
-  t.eq(iron.stock, 75000)
+  t.eq(iron.stock, 1500000)
   t.near(assert(iron.ask), 4 * 1.02, 0.001)
   t.near(iron.bid, 4 * 0.98, 0.001)
-  -- A module: a dozen in stock, so the first one off the shelf is dearer
-  -- than normal: 12 * ln(12/11) of base, plus the spread.
-  local extender = Core.Query.Quote(game, home, "shield.extender.small")
-  t.eq(extender.stock, 12)
-  t.near(assert(extender.ask), 7000 * 12 * math.log(12 / 11) * 1.02, 0.01)
-  t.near(extender.bid, 7000 * 12 * math.log(13 / 12) * 0.98, 0.01)
-  t.ok(assert(extender.ask) > extender.bid)
+  -- A hull: ten in stock, so the first one off the shelf is dearer than
+  -- normal: 10 * ln(10/9) of base, plus the spread.
+  local lancer = Core.Query.Quote(game, home, "frigate.lancer")
+  t.eq(lancer.stock, 10)
+  t.near(assert(lancer.ask), 420000 * 10 * math.log(10 / 9) * 1.02, 0.01)
+  t.near(lancer.bid, 420000 * 10 * math.log(11 / 10) * 0.98, 0.01)
+  t.ok(assert(lancer.ask) > lancer.bid)
+  t.eq(Core.Query.Quote(game, home, "shield.extender.small").stock, 40)
 end)
 
 suite:Case("different kinds of station value things differently", function(t)
@@ -91,17 +92,17 @@ end)
 
 suite:Case("buying takes the price for each unit in turn, and the price rises behind it", function(t)
   local game, home = newGame()
-  game.state.wallet = 1000000
-  local before = assert(Core.Query.Quote(game, home, "shield.extender.small").ask)
-  local cost = assert(Core.Query.BuyCost(game, home, "shield.extender.small", 6))
-  -- half the shelf: 12 * ln(12/6) of base each way round, plus spread
-  t.eq(cost, math.ceil(7000 * 12 * math.log(2) * 1.02))
-  t.ok(cost > 6 * before, "six cost more than six times the first")
-  order(t, game, { kind = "BuyNow", actor = 0, type = "shield.extender.small", quantity = 6 })
-  t.eq(game.state.wallet, 1000000 - cost)
-  t.eq(hangar(game, "shield.extender.small"), 7, "six bought and the one from the starter kit")
-  t.ok(assert(Core.Query.Quote(game, home, "shield.extender.small").ask) > 1.8 * before, "and the next is dearer still")
-  t.eq(refused(game, { kind = "BuyNow", actor = 0, type = "shield.extender.small", quantity = 7 }), "the station has not that many")
+  game.state.wallet = 10000000
+  local before = assert(Core.Query.Quote(game, home, "frigate.lancer").ask)
+  local cost = assert(Core.Query.BuyCost(game, home, "frigate.lancer", 5))
+  -- half the shelf: 10 * ln(10/5) of base each way round, plus spread
+  t.eq(cost, math.ceil(420000 * 10 * math.log(2) * 1.02))
+  t.ok(cost > 5 * before, "five cost more than five times the first")
+  order(t, game, { kind = "BuyNow", actor = 0, type = "frigate.lancer", quantity = 5 })
+  t.eq(game.state.wallet, 10000000 - cost)
+  t.eq(hangar(game, "frigate.lancer"), 5)
+  t.ok(assert(Core.Query.Quote(game, home, "frigate.lancer").ask) > 1.8 * before, "and the next is dearer still")
+  t.eq(refused(game, { kind = "BuyNow", actor = 0, type = "frigate.lancer", quantity = 6 }), "the station has not that many")
   game.state.wallet = 10
   t.eq(refused(game, { kind = "BuyNow", actor = 0, type = "shield.extender.small", quantity = 1 }), "not enough credits")
   t.eq(refused(game, { kind = "BuyNow", actor = 0, type = "no.such.thing", quantity = 1 }), "no such item type")
@@ -110,23 +111,26 @@ end)
 
 suite:Case("selling pays the going price less tax, and buying back costs more", function(t)
   local game, home = newGame()
-  local ore = Items.Add(game.state, "ore.ferrite", 5000, home, "hangar")
-  local value = Core.Query.SellValue(game, home, "ore.ferrite", 5000)
-  -- 50,000 normally in stock; 5,000 more pushes the price down as they go
-  t.eq(value, math.floor(6 * 50000 * math.log(55000 / 50000) * 0.98 * 0.98))
+  local ore = Items.Add(game.state, "ore.ferrite", 100000, home, "hangar")
+  local value = Core.Query.SellValue(game, home, "ore.ferrite", 100000)
+  -- a million normally in stock; a tenth more pushes the price down as
+  -- they go
+  t.eq(value, math.floor(6 * 1000000 * math.log(1.1) * 0.98 * 0.98))
+  -- a hold of 1,800 hardly moves it: within half a percent of the bid
+  t.ok(Core.Query.SellValue(game, home, "ore.ferrite", 1800) > 1800 * 6 * 0.98 * 0.98 * 0.995)
   local wallet = game.state.wallet
-  order(t, game, { kind = "SellNow", actor = 0, item = ore.id, quantity = 5000 })
+  order(t, game, { kind = "SellNow", actor = 0, item = ore.id, quantity = 100000 })
   t.eq(game.state.wallet, wallet + value)
   t.eq(hangar(game, "ore.ferrite"), 0)
-  local back = assert(Core.Query.BuyCost(game, home, "ore.ferrite", 5000))
+  local back = assert(Core.Query.BuyCost(game, home, "ore.ferrite", 100000))
   t.ok(back > value * 1.05, `sold for {value}, would cost {back} to buy back`)
   t.eq(refused(game, { kind = "SellNow", actor = 0, item = 12345 }), "that is not in the hangar here")
 end)
 
 suite:Case("a market drifts back to normal when left alone", function(t)
   local game, home = newGame()
-  game.state.wallet = 1000000
-  order(t, game, { kind = "BuyNow", actor = 0, type = "mineral.titanium", quantity = 2500 })
+  game.state.wallet = 10000000
+  order(t, game, { kind = "BuyNow", actor = 0, type = "mineral.titanium", quantity = 50000 })
   local dear = assert(Core.Query.Quote(game, home, "mineral.titanium").ask)
   t.ok(dear > 60 * 1.9, "half the stock gone, the price about doubles")
   minutes(game, 60)
@@ -141,7 +145,8 @@ suite:Case("a sell order waits for its price, then fills a little each minute", 
   local state = game.state
   local ore = Items.Add(state, "mineral.copper", 3000, home, "hangar")
   local wallet = state.wallet
-  -- Copper bids just under 22. Ask 23: nobody pays that yet.
+  -- The station asks 22.44 for copper. Ask 23: its customers buy from
+  -- the station instead.
   order(t, game, { kind = "PlaceOrder", actor = 0, to = "sell", item = ore.id, quantity = 3000, price = 23 })
   t.eq(hangar(game, "mineral.copper"), 0, "the copper is in escrow")
   t.eq(state.wallet, wallet - math.ceil(23 * 3000 * 0.03), "less the broker's fee")
@@ -150,44 +155,202 @@ suite:Case("a sell order waits for its price, then fills a little each minute", 
   t.eq({ placed[1].side, placed[1].type, placed[1].quantity, placed[1].price } :: { any },
     { "sell", "mineral.copper", 3000, 23 } :: { any })
   minutes(game, 10)
-  t.eq(placed[1].quantity, 3000, "nothing fills while the station would pay less")
+  t.eq(placed[1].quantity, 3000, "nothing fills while the station asks less")
 
   -- A shortage: someone buys a third of the station's copper.
-  state.wallet += 500000
-  order(t, game, { kind = "BuyNow", actor = 0, type = "mineral.copper", quantity = 4500 })
-  t.ok(Core.Query.Quote(game, home, "mineral.copper").bid > 23)
+  state.wallet += 5000000
+  order(t, game, { kind = "BuyNow", actor = 0, type = "mineral.copper", quantity = 90000 })
+  t.ok(assert(Core.Query.Quote(game, home, "mineral.copper").ask) > 23)
   wallet = state.wallet
   minutes(game, 1)
   local first = 3000 - placed[1].quantity
-  -- a tenth of normal stock an hour: 13,636 * 0.1 / 60 = 22 a minute
-  t.eq(first, 22)
-  t.eq(state.wallet, wallet + math.floor(22 * 23 * 0.98), "paid at the order's price, less tax")
-  minutes(game, 600)
-  t.ok(#Core.Query.Orders(game, home) == 0 or placed[1].quantity < 3000 - 22, "it keeps filling")
+  -- a tenth of normal stock an hour: 272,727 * 0.1 / 60 = 454.5 a minute
+  t.ok(first == 454 or first == 455, `{first} filled in the first minute`)
+  t.eq(state.wallet, wallet + math.floor(first * 23 * 0.98), "paid at the order's price, less tax")
+  minutes(game, 10)
+  t.eq(#Core.Query.Orders(game, home), 0, "it keeps filling until it is gone")
   local history = Core.Query.History(game, home, "mineral.copper")
   t.eq(#history, 1)
-  t.ok(history[1].volume >= 4500 + 22)
+  t.eq(history[1].volume, 90000 + 3000)
 end)
 
 suite:Case("a buy order holds its credits and fills when the price comes down to it", function(t)
   local game, home = newGame()
   local state = game.state
   state.wallet = 100000
-  -- Iron asks about 4.08. Offer 3 for 2,000.
-  order(t, game, { kind = "PlaceOrder", actor = 0, to = "buy", type = "mineral.iron", quantity = 2000, price = 3 })
-  t.eq(state.wallet, 100000 - 6000 - 180, "the price in escrow, and the fee")
+  -- The station bids 3.92 for iron. Offer 3 for 6,000: nobody sells for
+  -- that while the station pays more.
+  order(t, game, { kind = "PlaceOrder", actor = 0, to = "buy", type = "mineral.iron", quantity = 6000, price = 3 })
+  t.eq(state.wallet, 100000 - 18000 - 540, "the price in escrow, and the fee")
   minutes(game, 5)
   t.eq(hangar(game, "mineral.iron"), 0)
   -- A glut: the station is sold far more iron than it wants.
-  local glut = Items.Add(state, "mineral.iron", 60000, home, "hangar")
-  order(t, game, { kind = "SellNow", actor = 0, item = glut.id, quantity = 60000 })
-  t.ok(assert(Core.Query.Quote(game, home, "mineral.iron").ask) < 3)
+  local glut = Items.Add(state, "mineral.iron", 600000, home, "hangar")
+  order(t, game, { kind = "SellNow", actor = 0, item = glut.id, quantity = 600000 })
+  t.ok(Core.Query.Quote(game, home, "mineral.iron").bid < 3)
   minutes(game, 1)
-  -- 75,000 * 0.1 / 60 = 125 a minute
-  t.eq(hangar(game, "mineral.iron"), 125)
+  -- 1,500,000 * 0.1 / 60 = 2,500 a minute
+  t.eq(hangar(game, "mineral.iron"), 2500)
   minutes(game, 20)
-  t.eq(hangar(game, "mineral.iron"), 2000)
+  t.eq(hangar(game, "mineral.iron"), 6000)
   t.eq(#Core.Query.Orders(game, home), 0, "a filled order is gone")
+end)
+
+suite:Case("an order earns the spread a trade at once gives away, at the pace of the station's customers", function(t)
+  local game, home = newGame()
+  local state = game.state
+  local quote = Core.Query.Quote(game, home, "ammo.emp")
+  t.near(assert(quote.ask), 20.4, 1e-3)
+  t.near(quote.bid, 19.6, 1e-3)
+  t.near(quote.sellAt, 20.4, 1e-3)
+  t.near(assert(quote.buyAt), 19.6, 1e-3)
+  local ammo = stack(game, "ammo.emp")
+  local atOnce = Core.Query.SellValue(game, home, "ammo.emp", 500)
+  t.ok(atOnce < 500 * 19.6 * 0.98, "selling 500 at once takes the bid, less tax, and pushes it down")
+  -- Asking 20 undercuts the station's 20.40.
+  order(t, game, { kind = "PlaceOrder", actor = 0, to = "sell", item = ammo.id, quantity = 500, price = 20 })
+  local wallet = state.wallet
+  local placed = Core.Query.Orders(game, home)[1]
+  minutes(game, 1)
+  -- the station normally holds 150,000 rounds: 15,000 an hour, 250 a
+  -- minute
+  t.eq(placed.quantity, 250)
+  minutes(game, 1)
+  t.eq(#Core.Query.Orders(game, home), 0)
+  t.eq(state.wallet, wallet + 2 * math.floor(250 * 20 * 0.98))
+  t.ok(state.wallet - wallet > atOnce)
+end)
+
+suite:Case("orders for the same thing share the customers, first placed first; rare things sell rarely", function(t)
+  local game, home = newGame()
+  local state = game.state
+  state.wallet = 100000
+  local ammo = stack(game, "ammo.emp")
+  order(t, game, { kind = "PlaceOrder", actor = 0, to = "sell", item = ammo.id, quantity = 30, price = 20 })
+  order(t, game, { kind = "PlaceOrder", actor = 0, to = "sell", item = ammo.id, quantity = 300, price = 19 })
+  local orders = Core.Query.Orders(game, home)
+  local second = orders[2]
+  minutes(game, 1)
+  t.eq(#Core.Query.Orders(game, home), 1, "the first, of 30, is filled")
+  t.eq(second.quantity, 80, "and the second got the other 220 of the minute's 250")
+
+  -- A station normally holds 40 of a module: its customers take four an
+  -- hour, not one a minute. (Priced low, so only the customers limit it.)
+  local extenders = Items.Add(state, "shield.extender.small", 5, home, "hangar")
+  order(t, game, { kind = "PlaceOrder", actor = 0, to = "sell", item = extenders.id, quantity = 6, price = 4000 })
+  local slow = Core.Query.Orders(game, home)[2]
+  minutes(game, 45)
+  t.eq(slow.quantity, 3, "three in three quarters of an hour")
+  minutes(game, 45)
+  t.eq(slow.quantity, 0, "six in an hour and a half")
+  t.eq(#Core.Query.Orders(game, home), 0)
+end)
+
+suite:Case("a thin market moves against an order: one hull more than a station wants is a lot", function(t)
+  local game, home = newGame()
+  local state = game.state
+  state.wallet = 1000000
+  local quote = Core.Query.Quote(game, home, "frigate.lancer")
+  -- ten on the shelves at 420,000: the eleventh is worth less, and the
+  -- tenth, to someone who wants it gone from them, more
+  t.near(quote.sellAt, 420000 * 10 * math.log(11 / 10) * 1.02, 0.01)
+  t.near(assert(quote.buyAt), 420000 * 10 * math.log(10 / 9) * 0.98, 0.01)
+  t.ok(quote.sellAt < 410000 and assert(quote.buyAt) > 430000)
+  local hulls = Items.Add(state, "frigate.lancer", 3, home, "hangar")
+  order(t, game, { kind = "PlaceOrder", actor = 0, to = "sell", item = hulls.id, quantity = 3,
+    price = math.floor(quote.sellAt) - 500 })
+  local placed = Core.Query.Orders(game, home)[1]
+  minutes(game, 300)
+  t.eq(placed.quantity, 2, "one sells; the next waits for the wider world to take up the first")
+  minutes(game, 3000)
+  t.ok(placed.quantity < 2, "which it does, in time")
+end)
+
+-- Cancel every order and trade at once back to holding 'want' of a type:
+-- what a trader is left with is then all in the wallet.
+local function settle(t: Test.Context, game: Core.Game, type: string, want: number)
+  for _, placed in Core.Query.Orders(game, game.state.player.home) do
+    order(t, game, { kind = "CancelOrder", actor = 0, order = placed.id })
+  end
+  local over = hangar(game, type) - want
+  if over > 0 then
+    order(t, game, { kind = "SellNow", actor = 0, item = stack(game, type).id, quantity = over })
+  elseif over < 0 then
+    order(t, game, { kind = "BuyNow", actor = 0, type = type, quantity = -over })
+  end
+end
+
+suite:Case("buying and selling the same thing at one station never pays, however skilled the trader", function(t)
+  local lots: { { any } } = { { "mineral.copper", 100 }, { "shield.extender.small", 1 }, { "ammo.emp", 200 }, { "frigate.lancer", 1 } }
+  local START = 10000000
+  local boughtByOrder, soldByOrder = 0, 0
+  for _, skilled in { false, true } do
+    for _, lot in lots do
+      local type: string, quantity: number = lot[1], lot[2]
+      local game, home = newGame()
+      local state = game.state
+      if skilled then
+        state.skills.accounting, state.skills["broker.relations"] = 5, 5
+      end
+      state.wallet = START
+      local had = hangar(game, type)
+
+      -- At once: buy, then sell back.
+      order(t, game, { kind = "BuyNow", actor = 0, type = type, quantity = quantity })
+      order(t, game, { kind = "SellNow", actor = 0, item = stack(game, type).id, quantity = quantity })
+      t.ok(state.wallet < START, `{type}: a round trip at once made {state.wallet - START}`)
+      minutes(game, 1200)
+
+      -- With orders, at the best prices that fill. Three ways: sell back
+      -- straight away into the price the buying pushed up; sell back
+      -- once the wider world has restocked the station; and buy and
+      -- sell at the same time. Whatever has not traded by the end is
+      -- cancelled and settled at once, so the wallet tells the whole
+      -- story. (The skilled trader only: the other pays more in fees
+      -- for the same trades.)
+      local waits: { number } = if skilled then { 0, 1200, -1 } else {}
+      for _, wait in waits do
+        state.wallet = START
+        local quote = Core.Query.Quote(game, home, type)
+        order(t, game, { kind = "PlaceOrder", actor = 0, to = "buy", type = type, quantity = quantity,
+          price = math.ceil(assert(quote.buyAt)) })
+        local bought = Core.Query.Orders(game, home)[1]
+        local sold: State.Order
+        if wait < 0 then
+          local spare = Items.Add(state, type, quantity, home, "hangar")
+          order(t, game, { kind = "PlaceOrder", actor = 0, to = "sell", item = spare.id, quantity = quantity,
+            price = math.floor(quote.sellAt) })
+          sold = Core.Query.Orders(game, home)[2]
+          minutes(game, 1200)
+          boughtByOrder += quantity - bought.quantity
+          soldByOrder += quantity - sold.quantity
+          settle(t, game, type, had + quantity)
+          Items.Take(state, stack(game, type), quantity)
+        else
+          minutes(game, 600)
+          if wait == 0 then
+            t.eq(bought.quantity, 0, `{type}: the buy order filled`)
+          end
+          boughtByOrder += quantity - bought.quantity
+          minutes(game, wait)
+          if hangar(game, type) > had then
+            quote = Core.Query.Quote(game, home, type)
+            order(t, game, { kind = "PlaceOrder", actor = 0, to = "sell", item = stack(game, type).id,
+              quantity = hangar(game, type) - had, price = math.floor(quote.sellAt) })
+            local orders = Core.Query.Orders(game, home)
+            sold = orders[#orders]
+            local asked = sold.quantity
+            minutes(game, 1200)
+            soldByOrder += asked - sold.quantity
+          end
+          settle(t, game, type, had)
+        end
+        t.ok(state.wallet < START, `{type}, skilled {tostring(skilled)}, wait {wait}: orders made {state.wallet - START}`)
+        minutes(game, 1200)
+      end
+    end
+  end
+  t.ok(boughtByOrder > 500 and soldByOrder > 500, `orders bought {boughtByOrder} and sold {soldByOrder}`)
 end)
 
 suite:Case("cancelling an order returns what it held, but not the fee", function(t)
@@ -252,6 +415,9 @@ suite:Case("a hull can be bought, assembled, boarded and flown", function(t)
   local lancer = ships[2]
   t.eq({ lancer.type, lancer.docked, lancer.owner } :: { any }, { "frigate.lancer", home, "player" } :: { any })
   t.eq(refused(game, { kind = "BoardShip", actor = 0, target = first }), "already aboard")
+  t.eq(refused(game, { kind = "BoardShip", actor = 0, target = lancer.id }), "needs Frigates 2",
+    "a new pilot has not trained for a combat frigate")
+  state.skills.frigates = 2
   order(t, game, { kind = "BoardShip", actor = 0, target = lancer.id })
   t.eq(state.player.ship, lancer.id)
   t.ok(state.ships[first] ~= nil, "the old ship stays in the hangar, guns and all")
@@ -266,6 +432,7 @@ end)
 suite:Case("a pilot who docks a capsule where they keep a ship is put in that ship", function(t)
   local game, home = newGame()
   local state = game.state
+  state.skills.frigates = 2
   local spare = Space.NewShip(state, "frigate.harrier", "Spare", "player", home)
   Core.Submit(game, { kind = "Undock", actor = state.player.ship })
   Core.Step(game)
@@ -281,6 +448,27 @@ suite:Case("a pilot who docks a capsule where they keep a ship is put in that sh
   Core.Step(game)
   t.eq(state.player.ship, spare.id)
   t.eq(#Core.Query.Ships(game, home), 1, "and no starter ship is handed out")
+end)
+
+suite:Case("but not in a ship they have not trained to fly: then the station gives a starter", function(t)
+  local game, home = newGame()
+  local state = game.state
+  local spare = Space.NewShip(state, "frigate.harrier", "Spare", "player", home)
+  Core.Submit(game, { kind = "Undock", actor = state.player.ship })
+  Core.Step(game)
+  local Aftermath = require("@lt/Core/Tactical/Aftermath")
+  Aftermath.Destroy(state, state.player.ship, 0, game.events)
+  Core.Submit(game, { kind = "Dock", actor = state.player.ship, target = home })
+  for _ = 1, 600 do
+    Core.Step(game)
+    if Core.Query.Player(game).docked ~= 0 then
+      break
+    end
+  end
+  Core.Step(game)
+  t.ok(state.player.ship ~= spare.id)
+  t.eq(Core.Query.Player(game).hull.id, "frigate.courier")
+  t.eq(#Core.Query.Ships(game, home), 2, "the Harrier waits in the hangar")
 end)
 
 suite:Case("markets are plain data and survive a save", function(t)

@@ -6,8 +6,13 @@ local Test = require("@lt/Tool/Test")
 
 local suite = Test.Suite("Items")
 
+-- A new game whose pilot has trained what the starter kit needs.
 local function newGame(): Core.Game
-  return Core.New({ galaxySeed = 1, historySeed = 1 })
+  local game = Core.New({ galaxySeed = 1, historySeed = 1 })
+  for _, skill in { "propulsion", "lasers", "repair.systems" } do
+    game.state.skills[skill] = 1
+  end
+  return game
 end
 
 -- The first stack of a type in the player's home hangar.

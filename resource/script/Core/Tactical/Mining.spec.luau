@@ -122,6 +122,14 @@ suite:Case("a mining laser delivers a cycle's ore when the cycle ends", function
   t.eq(hold(game, "ore.ferrite"), 800)
 end)
 
+suite:Case("a practised miner brings in 5% more a level after the first", function(t)
+  local game, _, rock, laser = atRock(t, "ore.ferrite")
+  game.state.skills.mining = 4
+  order(t, game, { kind = "ActivateModule", actor = 0, item = laser.id, target = rock })
+  local mined = stepUntil(game, "Mined", 70)
+  t.eq(mined.units, 460)
+end)
+
 suite:Case("mining stops when the hold is full, and takes only what fits", function(t)
   local game, _, rock, laser = atRock(t, "ore.ferrite")
   -- 180 m3 hold: leave room for 25 m3, less than a cycle's 40.

@@ -16,6 +16,7 @@ local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
+local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Types = require("@lt/Core/Data/Types")
@@ -115,12 +116,13 @@ function Aftermath.Step(state: State.State, events: { Event })
   if ship.docked ~= 0 and Ships.byId[ship.type].class == "capsule" then
     local station = ship.docked
     forget(state, ship.id)
-    -- If the pilot keeps a ship here they are put in it; otherwise the
-    -- station gives them a starter.
+    -- If the pilot keeps a ship here that they can fly they are put in
+    -- it; otherwise the station gives them a starter.
     local own: State.Ship? = nil
     for _, id in state.shipIds do
       local other = state.ships[id]
-      if other.owner == "player" and other.docked == station then
+      if other.owner == "player" and other.docked == station
+        and Skills.Missing(Skills.Needs(other.type), state.skills) == nil then
         own = other
         break
       end

@@ -21,7 +21,7 @@ function Vitals.Stats(state: State.State, ship: State.Ship, vitals: State.Vitals
       running[r.item] = true
     end
   end
-  return Dogma.Ship(Ships.byId[ship.type], Items.Fit(state, ship.id, running))
+  return Dogma.Ship(Ships.byId[ship.type], Items.Fit(state, ship.id, running), Items.Levels(state, ship.id))
 end
 
 -- The fit as the attribute engine wants it, with what is running.

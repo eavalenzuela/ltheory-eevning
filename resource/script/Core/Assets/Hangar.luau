@@ -4,6 +4,7 @@
 
 local Items = require("@lt/Core/Assets/Items")
 local Ships = require("@lt/Core/Data/Ships")
+local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 
@@ -44,6 +45,10 @@ function Hangar.Validate(state: State.State, command: State.Command): (boolean, 
       return false, "that ship is not here"
     elseif other.id == ship.id then
       return false, "already aboard"
+    end
+    local missing = Skills.Missing(Skills.Needs(other.type), state.skills)
+    if missing then
+      return false, Skills.Describe(missing)
     end
     return true
   end

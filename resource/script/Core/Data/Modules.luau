@@ -232,8 +232,11 @@ local modules: { ModuleType } = {
   },
 }
 
+-- A round costs 20; a crystal, which is never used up, as much as a
+-- hundred and fifty of them.
 local function turretCharge(id: string, name: string, family: string, damage: { number }, range: number): ChargeType
-  return { id = id, name = name, family = family, volume = if family == "laser" then 1 else 0.0025, basePrice = 20,
+  return { id = id, name = name, family = family, volume = if family == "laser" then 1 else 0.0025,
+    basePrice = if family == "laser" then 3000 else 20,
     damage = damage, rangeMultiplier = range, velocity = 0, flightTime = 0, explosionRadius = 0, explosionVelocity = 0 }
 end
 

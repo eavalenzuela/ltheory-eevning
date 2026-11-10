@@ -13,6 +13,7 @@
 local Dogma = require("@lt/Core/Dogma")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
+local Skills = require("@lt/Core/Data/Skills")
 local State = require("@lt/Core/Kernel/State")
 local Types = require("@lt/Core/Data/Types")
 
@@ -68,9 +69,14 @@ function Items.Fit(state: State.State, ship: number, running: { [number]: boolea
   return fit
 end
 
+-- The skills that bear on a ship: the pilot's, if it is the player's.
+function Items.Levels(state: State.State, ship: number): Dogma.Levels?
+  return if state.ships[ship].owner == "player" then state.skills else nil
+end
+
 -- A ship's attributes with its present fit, nothing running.
 function Items.ShipStats(state: State.State, ship: number): Dogma.Stats
-  return Dogma.Ship(Ships.byId[state.ships[ship].type], Items.Fit(state, ship, nil))
+  return Dogma.Ship(Ships.byId[state.ships[ship].type], Items.Fit(state, ship, nil), Items.Levels(state, ship))
 end
 
 -- Cubic metres in a ship's hold.
@@ -203,12 +209,16 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
     elseif item.slot > 0 then
       return false, "already fitted"
     end
+    local missing = Skills.Missing(Skills.Needs(item.type), state.skills)
+    if missing then
+      return false, Skills.Describe(missing)
+    end
     local types = {}
     for _, fitted in Items.Fitted(state, ship.id) do
       table.insert(types, fitted.type)
     end
     table.insert(types, item.type)
-    return Dogma.Check(hull, types)
+    return Dogma.Check(hull, types, Items.Levels(state, ship.id))
 
   elseif kind == "Unfit" then
     if item.slot == 0 or item.holder ~= ship.id then
