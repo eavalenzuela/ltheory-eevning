@@ -63,7 +63,7 @@ for _, charge in Modules.charges do
   add(charge.id, charge.name, "charge", charge.basePrice, perRun, 60)
 end
 for _, hull in Ships.list do
-  if hull.class ~= "capsule" then
+  if hull.class ~= "capsule" and not hull.restricted then
     add(hull.id, hull.name, "ship", hull.basePrice, 1, 600 + hull.basePrice // 200)
   end
 end

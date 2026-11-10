@@ -11,13 +11,13 @@
 -- multiplies the resonance, which is why two 25% hardeners give less
 -- than 50%.
 
-local Yards = require("@lt/Core/Data/Yards")
+local Factions = require("@lt/Core/Data/Factions")
 
 export type ShipType = {
   id: string,
   name: string,
   class: string,
-  lineage: string,        -- whose yards build it; "" for none
+  lineage: string,        -- the faction whose design it is (Data/Factions); "" for none
   basePrice: number,      -- credits; what insurance and loot values start from
   volume: number,         -- m3, assembled
   -- movement
@@ -52,6 +52,11 @@ export type ShipType = {
   cargo: number,          -- m3
   -- Skills a pilot needs to board it. (Where absent, Data/Skills says.)
   requires: { { skill: string, level: number } }?,
+  -- Not sold on an ordinary market, and with no blueprint to be had
+  -- there: a pirate's hull, or an alien one.
+  restricted: boolean?,
+  -- A pirate hull: the hull it was made out of.
+  donor: string?,
 }
 
 local SHIELD = { 1.0, 0.8, 0.6, 0.5 }
@@ -112,13 +117,13 @@ local types: { ShipType } = {
 }
 
 -- ---------------------------------------------------------------------
--- The yards' lines
+-- The factions' lines
 --
--- Every yard builds a hull of each class. A class has a standard hull
--- (below); a yard's is that, times the yard's character (Data/Yards):
--- so a Vessari hull has more armour than its class and a Talmar one is
--- faster, from frigate to battleship. The two frigates written out
--- above are their yards' own; the rest are made here.
+-- Every faction has a hull of each class. A class has a standard hull
+-- (below); a faction's is that, times the faction's character
+-- (Data/Factions): so a Vessari hull has more armour than its class and
+-- a Talmar one is faster, from frigate to battleship. The two frigates
+-- written out above are their factions' own; the rest are made here.
 
 type Standard = {
   price: number, volume: number, mass: number, inertia: number, velocity: number, warp: number, radius: number,
@@ -157,9 +162,13 @@ local function round(x: number): number
   return math.floor(x / step + 0.5) * step
 end
 
-for _, yard in Yards.list do
-  for _, class in Yards.CLASSES do
-    local id = `{class}.{string.lower(yard.hulls[class])}`
+local function hullId(faction: Factions.Faction, class: string): string
+  return `{class}.{string.lower((string.gsub(faction.hulls[class], "[^%a]", "")))}`
+end
+
+for _, yard in Factions.list do
+  for _, class in Factions.CLASSES do
+    local id = hullId(yard, class)
     local written = false
     for _, t in types do
       if t.lineage == yard.id and t.class == class then
@@ -168,28 +177,41 @@ for _, yard in Yards.list do
     end
     if not written then
       local s = CLASS[class]
-      local launchers = if class == "industrial" then 0 else math.floor(s.hardpoints * yard.launchers + 0.5)
+      local hardpoints = s.hardpoints + (if class == "industrial" then 0 else yard.hardpoints)
+      local launchers = if class == "industrial" then 0 else math.floor(hardpoints * yard.launchers + 0.5)
+      -- (a pirate hull: the human hull of this class it was made out of,
+      -- which is in the list already, the human factions coming first)
+      local donor: string? = nil
+      if yard.donors then
+        for _, t in types do
+          if t.lineage == yard.donors[class] and t.class == class then
+            donor = t.id
+          end
+        end
+      end
       table.insert(types, {
         id = id, name = `{yard.name} {yard.hulls[class]}`, class = class, lineage = yard.id,
-        basePrice = s.price, volume = s.volume,
+        basePrice = round(s.price * yard.price), volume = s.volume,
         mass = round(s.mass * yard.mass), inertia = s.inertia, maxVelocity = round(s.velocity * yard.velocity),
         warpSpeed = s.warp, radius = s.radius,
         shield = round(s.shield * yard.shield), armor = round(s.armor * yard.armor), hull = round(s.hull * yard.hull),
         shieldRecharge = s.recharge, shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL,
         signature = s.signature,
         cpu = round(s.cpu * yard.cpu), powergrid = round(s.powergrid * yard.powergrid),
-        highs = s.highs, mids = s.mids + yard.mids, lows = s.lows + yard.lows,
-        turrets = s.hardpoints - launchers, launchers = launchers,
+        highs = math.max(s.highs, hardpoints), mids = math.max(1, s.mids + yard.mids), lows = math.max(1, s.lows + yard.lows),
+        turrets = hardpoints - launchers, launchers = launchers,
         capacitor = round(s.capacitor * yard.capacitor), capacitorRecharge = s.capacitorRecharge,
         scanResolution = s.scan, lockRange = round(s.lock * yard.lockRange), maxTargets = s.targets,
         cargo = round(s.cargo * (if class == "industrial" then yard.cargo else 1)),
         requires = { { skill = s.skill, level = s.level } },
+        restricted = if yard.kind ~= "human" then true else nil,
+        donor = donor,
       })
     end
   end
 end
 
--- Hulls no yard owns: anyone builds them.
+-- Hulls no faction owns: anyone builds them.
 table.insert(types, {
   id = "frigate.prospector", name = "Prospector", class = "frigate", lineage = "", basePrice = 180000, volume = 2500,
   mass = 1300000, inertia = 3.4, maxVelocity = 300, warpSpeed = 5, radius = 44,

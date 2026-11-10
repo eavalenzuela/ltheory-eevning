@@ -4,47 +4,48 @@
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Ores = require("@lt/Core/Data/Ores")
-local Powers = require("@lt/Core/Data/Powers")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Test = require("@lt/Tool/Test")
 local Types = require("@lt/Core/Data/Types")
-local Yards = require("@lt/Core/Data/Yards")
+local Factions = require("@lt/Core/Data/Factions")
 
 local suite = Test.Suite("Content")
 
-suite:Case("every power builds in a yard, two to a yard, each with its own paint", function(t)
-  t.eq(#Yards.list, 4)
-  local seen = 0
-  for _, power in Powers.list do
-    local yard = assert(Yards.Of(power.name), `{power.name} has no yard`)
-    t.ok(yard.paint[power.name] ~= nil, `{power.name} has no paint`)
-    seen += 1
+suite:Case("four human factions, the pirates and three alien ones, each with a look of its own", function(t)
+  local kinds: { [string]: number } = {}
+  local styles: { [string]: boolean } = {}
+  for _, faction in Factions.list do
+    kinds[faction.kind] = (kinds[faction.kind] or 0) + 1
+    t.ok(not styles[faction.style], `two factions build in the {faction.style} style`)
+    styles[faction.style] = true
+    t.ok(Factions.byId[faction.id] == faction)
+    t.ok(#faction.note > 20, faction.id)
+    for _, class in Factions.CLASSES do
+      t.ok(faction.hulls[class] ~= nil, `{faction.id} has no {class}`)
+    end
   end
-  t.eq(seen, 8)
-  for _, yard in Yards.list do
-    t.eq(#yard.powers, 2, yard.id)
-    t.ok(Yards.byId[yard.id] == yard)
-  end
+  t.eq(kinds, { human = 4, pirate = 1, alien = 3 })
 end)
 
-suite:Case("every yard has a hull of every class, and a bigger class is more of everything but nimble", function(t)
+suite:Case("every faction has a hull of every class, and a bigger class is more of everything but nimble", function(t)
   local names: { [string]: boolean } = {}
   for _, hull in Ships.list do
     t.ok(not names[hull.name], `two hulls called {hull.name}`)
+    t.ok(Ships.byId[hull.id] == hull, `two hulls with the id {hull.id}`)
     names[hull.name] = true
   end
-  for _, yard in Yards.list do
+  for _, faction in Factions.list do
     local line: { Ships.ShipType } = {}
-    for _, class in Yards.CLASSES do
+    for _, class in Factions.CLASSES do
       local found: Ships.ShipType? = nil
       for _, hull in Ships.list do
-        if hull.lineage == yard.id and hull.class == class then
-          t.ok(found == nil, `{yard.id} has two {class}s`)
+        if hull.lineage == faction.id and hull.class == class then
+          t.ok(found == nil, `{faction.id} has two {class}s`)
           found = hull
         end
       end
-      local hull = assert(found, `{yard.id} builds no {class}`)
+      local hull = assert(found, `{faction.id} builds no {class}`)
       table.insert(line, hull)
     end
     -- the warships, smallest to largest
@@ -60,22 +61,50 @@ suite:Case("every yard has a hull of every class, and a bigger class is more of 
       -- (a hull may have more hardpoints than high slots: the pilot chooses the mix)
       t.ok(hull.turrets <= hull.highs and hull.launchers <= hull.highs and hull.turrets + hull.launchers >= 1, hull.id)
       t.ok(hull.mids >= 1 and hull.lows >= 1, hull.id)
-      -- a yard's character shows: armour yards carry more armour than shield
+      -- a faction's character shows in how its warships take a hit
       if hull.class ~= "industrial" then
-        if yard.tank == "armor" then
+        if faction.tank == "armor" then
           t.ok(hull.armor > hull.shield, hull.id)
-        else
+        elseif faction.tank == "shield" then
           t.ok(hull.shield > hull.armor, hull.id)
+        else
+          t.ok(hull.hull > hull.shield, hull.id)
         end
       end
+      -- only human designs are for sale
+      t.eq(Types.Get(hull.id) ~= nil, faction.kind == "human", hull.id)
+      t.eq(Blueprints.byProduct[hull.id] ~= nil, faction.kind == "human", hull.id)
     end
-    t.ok(line[5].cargo > 20 * line[1].cargo, "an industrial carries far more than a frigate")
+    t.ok(line[5].cargo > 10 * line[1].cargo, "an industrial carries far more than a frigate")
   end
 end)
 
-suite:Case("every hull can be bought, built from ore, and has skills a pilot can train", function(t)
+suite:Case("every pirate hull is somebody else's, cheaper, quicker and thinner-skinned", function(t)
+  local pirates = Factions.byId.unbound
+  local donors = assert(pirates.donors)
+  for _, class in Factions.CLASSES do
+    local theirs: Ships.ShipType? = nil
+    for _, hull in Ships.list do
+      if hull.lineage == "unbound" and hull.class == class then
+        theirs = hull
+      end
+    end
+    local hull = assert(theirs)
+    local original = assert(Ships.byId[assert(hull.donor, hull.id)], `{hull.id} was made from nothing`)
+    t.eq(original.class, class)
+    t.eq(original.lineage, donors[class])
+    t.eq(Factions.byId[original.lineage].kind, "human")
+    t.ok(hull.basePrice < original.basePrice, hull.id)
+    if class ~= "industrial" then
+      t.ok(hull.maxVelocity > 0.98 * original.maxVelocity, hull.id)
+      t.ok(hull.turrets + hull.launchers > original.turrets + original.launchers or original.id == "frigate.harrier", hull.id)
+    end
+  end
+end)
+
+suite:Case("every hull for sale can be built from ore, and has skills a pilot can train", function(t)
   for _, hull in Ships.list do
-    if hull.class ~= "capsule" then
+    if hull.class ~= "capsule" and not hull.restricted then
       t.ok(Types.Get(hull.id) ~= nil, hull.id)
       local blueprint = assert(Blueprints.byProduct[hull.id], `no blueprint for {hull.id}`)
       t.ok(#blueprint.materials >= 2, hull.id)

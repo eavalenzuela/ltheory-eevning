@@ -37,7 +37,7 @@ end
 -- A hull, packaged: bought and sold like anything else, and assembled
 -- into a ship at a station. (Nobody sells capsules.)
 for _, hull in Ships.list do
-  if hull.class ~= "capsule" then
+  if hull.class ~= "capsule" and not hull.restricted then
     byId[hull.id] = { id = hull.id, name = hull.name, category = "ship", volume = hull.volume, basePrice = hull.basePrice }
   end
 end
