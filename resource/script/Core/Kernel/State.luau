@@ -1,0 +1,125 @@
+--!strict
+-- The game state: one tree of plain data (docs/design/core.md). Everything
+-- the rules know is in here, and nothing else is consulted, so the state
+-- is the save and its hash identifies it.
+
+local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Motion = require("@lt/Core/Tactical/Motion")
+local System = require("@lt/Core/Describe/System")
+
+local State = {}
+
+-- A ship as a thing that exists: docked or in space. While it is in space
+-- it also has a Ball with the same id.
+export type Ship = {
+  id: number,
+  type: string,     -- Data/Ships id
+  name: string,
+  docked: number,   -- station id, or 0 in space
+}
+
+-- What a ship means to do when it gets within range of 'target'.
+export type Intent = { kind: "dock" | "jump", target: number }
+
+export type Warp = {
+  stage: "align" | "warp",
+  target: number,     -- the body warped to, for the record
+  tx: number,         -- the point it will arrive at
+  ty: number,
+  tz: number,
+  -- set on entering warp:
+  startTick: number,
+  fx: number,         -- where it entered warp
+  fy: number,
+  fz: number,
+  ux: number,         -- unit direction of travel
+  uy: number,
+  uz: number,
+  plan: Motion.WarpPlan?,
+}
+
+export type Mode = "stop" | "goto" | "approach" | "orbit" | "keep" | "align"
+
+-- A ship in space. Positions are metres in system space, star at the
+-- origin; velocities m/s.
+export type Ball = {
+  id: number,
+  kind: "ship",
+  name: string,
+  system: number,
+  grid: number,       -- the grid it is on; 0 while in warp
+  x: number,
+  y: number,
+  z: number,
+  vx: number,
+  vy: number,
+  vz: number,
+  radius: number,
+  maxVelocity: number,
+  tau: number,        -- seconds; see Tactical/Motion
+  warpSpeed: number,  -- AU/s
+  mode: Mode,
+  target: number,     -- for approach, orbit, keep; else 0
+  range: number,      -- metres between surfaces, for the same
+  dx: number,         -- goto, align: unit direction. orbit: unit normal of
+  dy: number,         -- the orbit's plane
+  dz: number,
+  warp: Warp?,
+  intent: Intent?,
+}
+
+-- A grid that is not anchored to a station, gate or belt: made where a
+-- ship arrived in open space (those anchored to a site use the site's id).
+export type Grid = { id: number, system: number, x: number, y: number, z: number }
+
+export type Command = {
+  kind: string,
+  actor: number,
+  target: number?,
+  range: number?,
+  x: number?,
+  y: number?,
+  z: number?,
+}
+
+export type State = {
+  galaxySeed: number,     -- layout; a galaxy can be shared by its seed
+  historySeed: number,    -- every roll made during play
+  tick: number,
+  nextId: number,
+  galaxy: Galaxy.Galaxy,
+  systems: { [number]: System.Description },  -- the systems described so far
+  ships: { [number]: Ship },
+  shipIds: { number },    -- ascending, like every id list here
+  balls: { [number]: Ball },
+  ballIds: { number },
+  grids: { [number]: Grid },
+  gridIds: { number },
+  player: { ship: number, home: number },
+  queue: { Command },     -- submitted, to be applied at the next tick
+}
+
+function State.NewId(state: State): number
+  local id = state.nextId
+  state.nextId += 1
+  return id
+end
+
+-- Remove 'id' from an ascending list of ids.
+function State.RemoveId(ids: { number }, id: number)
+  local lo, hi = 1, #ids
+  while lo <= hi do
+    local mid = (lo + hi) // 2
+    local v = ids[mid]
+    if v == id then
+      table.remove(ids, mid)
+      return
+    elseif v < id then
+      lo = mid + 1
+    else
+      hi = mid - 1
+    end
+  end
+end
+
+return State
