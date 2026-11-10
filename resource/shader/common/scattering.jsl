@@ -9,6 +9,9 @@ FRAG_IN vec3 scale;
 uniform float atmoDensity;
 uniform vec3 atmoTint;
 uniform vec3 wavelength;
+/* 1 to light the air with plain white light whatever colour the star is
+   (for judging a planet's own colours); 0, the star's light. */
+uniform float whiteLight;
 
 const float kAtmoDensityMult = 50.0;
 const float kAtmoScale = 0.025;
@@ -50,7 +53,7 @@ vec4 shadeAtmosphere(
   }
 
   color *= kAtmoDensityMult * atmoDensity * kRcpSamples * length(far - near) / kAtmoScale;
-  color *= atmoTint * starColor;
+  color *= atmoTint * mix(starColor, vec3(1.0), whiteLight);
   float d = dot(rd, starDir);
   float rayPhase = 1.0 - occlusion;
   float miePhase = (1.0 - sqrt(occlusion)) * hgPhase(d, 0.75);

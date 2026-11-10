@@ -20,3 +20,12 @@ VoidFreeFunction(Model_Add,
 {
   model->Add(geometry, shaderInstance);
 } FunctionAlias(Model_Add, Add);
+
+VoidFreeFunction(Model_AddShell,
+  "Add 'geometry' to 'model' with shader 'shaderInstance', as something drawn but not solid (an atmosphere, a glow)",
+  Model, model,
+  Geometry, geometry,
+  ShaderInstance, shaderInstance)
+{
+  model->Add(geometry, shaderInstance, false);
+} FunctionAlias(Model_AddShell, AddShell);

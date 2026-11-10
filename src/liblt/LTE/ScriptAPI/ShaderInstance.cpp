@@ -1,6 +1,7 @@
 #include "LTE/Function.h"
 
 #include <cstring>
+#include "LTE/DrawState.h"
 #include "LTE/ShaderInstance.h"
 #include "LTE/Texture2D.h"
 
@@ -30,6 +31,13 @@ VoidFreeFunction(ShaderInstance_SetState,
   else if (!strcmp(name, "ZWritableOff")) instance->SetState(RenderStateSwitch_ZWritableOff);
   else error("ShaderInstance_SetState: unknown render state");
 } FunctionAlias(ShaderInstance_SetState, SetState);
+
+VoidFreeFunction(ShaderInstance_Link,
+  "Give 'instance' the values every shader drawn in a scene gets (the eye, the star, the fog)",
+  ShaderInstance, instance)
+{
+  DrawState_Link(instance);
+} FunctionAlias(ShaderInstance_Link, Link);
 
 VoidFreeFunction(ShaderInstance_SetFloat,
   "Set the float variable 'name' in 'instance' to 'value'",

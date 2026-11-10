@@ -1,0 +1,56 @@
+/* The lie of the land of a temperate world, drawn once into a cube map
+   for world.jsl to dress and light.
+
+   Everything about such a world follows from its heights, so the height
+   is where the care goes: continents that are broad shapes with ragged
+   edges, mountain chains that run along some of them and not others,
+   hills everywhere a little, and a sea floor that shelves away from the
+   coasts. Where the sea comes to is not decided here: the same heights
+   with a higher sea are a world of islands.
+
+   Channels: x height (0 to 1), y how wet the climate is (0 to 1),
+   z cloud (0 to 1, before any choice of how much sky is covered),
+   w how mountainous the ground is (0 to 1). */
+
+#include frag.jsl
+#include math.jsl
+#include cube.jsl
+#include worldnoise.jsl
+
+uniform float seed;
+
+void main() {
+  vec3 p = GetCubePosition(uv, false);
+  vec3 s = vec3(seed * 1.31, seed * 2.17, seed * 0.73);
+
+  /* Continents: broad noise, pushed about so that coasts wander. */
+  vec3 q = p + 0.28 * wn_drift(p * 1.4 + s);
+  float broad = wn_fbm(q * 1.15 + s, 6, 0.52) * 0.5 + 0.5;
+  float coastal = wn_fbm(q * 5.0 + s.zxy, 5, 0.5) * 0.06;
+  float land = smoothstep(0.42, 0.60, broad + coastal);
+
+  /* Mountain chains: ridges, but only in belts. */
+  float belts = smoothstep(0.50, 0.72, wn_fbm(q * 1.9 + s.yzx + 40.0, 4, 0.5) * 0.5 + 0.5);
+  float ranges = wn_ridges(q * 3.4 + s + 80.0, 7, 0.55);
+  float mountains = belts * land * ranges;
+
+  float hills = wn_fbm(q * 9.0 + s + 120.0, 6, 0.55) * 0.5 + 0.5;
+
+  /* The sea floor falls away from the land; the land rises from the
+     coast to its interior, with hills on it and mountains above. */
+  float height = mix(0.10 + 0.30 * broad, 0.44 + 0.10 * land + 0.05 * hills, land) + 0.42 * mountains * mountains + 0.10 * mountains;
+
+  /* Climate: wet near the equator and in the temperate belts, dry in
+     between, and drier inland and behind mountains. */
+  float lat = abs(p.y);
+  float belt = 0.55 + 0.35 * cos(lat * 9.0) - 0.25 * smoothstep(0.15, 0.45, lat) * (1.0 - smoothstep(0.45, 0.70, lat));
+  float wet = clamp(belt + 0.45 * wn_fbm(q * 2.6 + s + 200.0, 5, 0.5) - 0.25 * belts, 0.0, 1.0);
+
+  /* Weather: long curled bands, broken up at the edges. */
+  vec3 c = p + 0.55 * wn_drift(p * 1.1 + s + 300.0);
+  c += 0.12 * wn_drift(c * 4.0 + s + 340.0);
+  float bands = wn_fbm(vec3(c.x, c.y * 2.2, c.z) * 2.2 + s + 400.0, 7, 0.58) * 0.5 + 0.5;
+  float cloud = clamp(bands + 0.10 * wn_fbm(c * 18.0, 4, 0.5), 0.0, 1.0);
+
+  RETURN(vec4(clamp(height, 0.0, 1.0), wet, cloud, clamp(mountains, 0.0, 1.0)));
+}

@@ -1,0 +1,67 @@
+/* Noise for building worlds: smooth gradient noise in three dimensions
+   and the sums of it that make terrain. (noise.jsl's hash is built on a
+   sine of large numbers, which shows as streaks at the scale of a
+   planet; this one is not.) */
+
+#ifndef common_worldnoise
+#define common_worldnoise
+
+vec3 wn_hash(vec3 p) {
+  p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+  p += dot(p, p.yxz + 33.33);
+  return fract((p.xxy + p.yxx) * p.zyx) * 2.0 - 1.0;
+}
+
+/* Gradient noise, about -1 to 1. */
+float wn_noise(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = fract(p);
+  vec3 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  return 1.2 * mix(
+    mix(mix(dot(wn_hash(i + vec3(0.0, 0.0, 0.0)), f - vec3(0.0, 0.0, 0.0)),
+            dot(wn_hash(i + vec3(1.0, 0.0, 0.0)), f - vec3(1.0, 0.0, 0.0)), u.x),
+        mix(dot(wn_hash(i + vec3(0.0, 1.0, 0.0)), f - vec3(0.0, 1.0, 0.0)),
+            dot(wn_hash(i + vec3(1.0, 1.0, 0.0)), f - vec3(1.0, 1.0, 0.0)), u.x), u.y),
+    mix(mix(dot(wn_hash(i + vec3(0.0, 0.0, 1.0)), f - vec3(0.0, 0.0, 1.0)),
+            dot(wn_hash(i + vec3(1.0, 0.0, 1.0)), f - vec3(1.0, 0.0, 1.0)), u.x),
+        mix(dot(wn_hash(i + vec3(0.0, 1.0, 1.0)), f - vec3(0.0, 1.0, 1.0)),
+            dot(wn_hash(i + vec3(1.0, 1.0, 1.0)), f - vec3(1.0, 1.0, 1.0)), u.x), u.y), u.z);
+}
+
+/* Octaves of it: each twice as fine and 'gain' as strong. About -1 to 1. */
+float wn_fbm(vec3 p, int octaves, float gain) {
+  float sum = 0.0, amp = 1.0, total = 0.0;
+  for (int i = 0; i < 12; i++) {
+    if (i >= octaves) break;
+    sum += amp * wn_noise(p);
+    total += amp;
+    amp *= gain;
+    p = p * 2.03 + vec3(17.1, 3.7, 9.2);
+  }
+  return sum / total;
+}
+
+/* Ridges: sharp crests where the noise crosses zero, each octave
+   strongest where the one before it was high, so that ranges have spurs
+   and plains stay plain. 0 to 1. */
+float wn_ridges(vec3 p, int octaves, float gain) {
+  float sum = 0.0, amp = 1.0, total = 0.0, carry = 1.0;
+  for (int i = 0; i < 12; i++) {
+    if (i >= octaves) break;
+    float n = 1.0 - abs(wn_noise(p));
+    n *= n;
+    sum += amp * n * carry;
+    total += amp;
+    carry = clamp(n * 1.6, 0.0, 1.0);
+    amp *= gain;
+    p = p * 2.07 + vec3(5.3, 11.9, 1.4);
+  }
+  return sum / total;
+}
+
+/* Three independent slow noises, for pushing a point about. */
+vec3 wn_drift(vec3 p) {
+  return vec3(wn_fbm(p, 4, 0.5), wn_fbm(p + vec3(31.4, 7.9, 12.6), 4, 0.5), wn_fbm(p + vec3(4.4, 23.8, 51.2), 4, 0.5));
+}
+
+#endif
