@@ -17,6 +17,9 @@
 #   game-flight the game app flies the M1 loop (test/scenario/flight.txt):
 #               undock, warp, orbit, jump, dock, and a save taken in mid-warp
 #               that must play out to the same state when loaded
+#   game-combat the game app plays the M2 loop (test/scenario/combat.txt):
+#               fit a module, fight the pirate at a belt, loot its wreck,
+#               lose the ship and get home in the capsule
 #   goldens     script/goldens: screenshots of the stored scenes must match
 #               their images
 #   goldens-fail  two made-up images that differ must be reported as differing
@@ -99,6 +102,8 @@ if [ "$fast" -eq 0 ]; then
   step launch-assert 134 timeout 120 bin/launch selftest/pass --selftest assert
   step game-flight 0 timeout 600 bin/launch game --no-present --fixed-step 60 --timeout 500 \
     --script test/scenario/flight.txt
+  step game-combat 0 timeout 600 bin/launch game --no-present --fixed-step 60 --timeout 500 \
+    --script test/scenario/combat.txt
   step goldens 0 script/goldens
 fi
 step goldens-fail 1 script/goldens --planted

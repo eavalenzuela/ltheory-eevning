@@ -33,6 +33,30 @@ function Session.Say(session: Session, text: string)
   session.messageTick = session.game.state.tick
 end
 
+-- Tell the player about an event that concerns them.
+function Session.Notice(session: Session, event: Space.Event)
+  local mine = session.game.state.player.ship
+  local kind = event.kind
+  if kind == "CommandRejected" then
+    Session.Say(session, `{event.command}: {tostring(event.reason)}`)
+  elseif kind == "PiratesArrived" then
+    Session.Say(session, if event.count == 1 then "A pirate has arrived" else `{event.count} pirates have arrived`)
+  elseif kind == "WalletChanged" then
+    local sign = if event.amount >= 0 then "+" else "-"
+    Session.Say(session, `{sign}{math.abs(event.amount)} credits ({event.reason})`)
+  elseif kind == "Ejected" then
+    Session.Say(session, "Your ship is lost. You are in your capsule: warp to a station")
+  elseif kind == "ShipGranted" or kind == "Respawned" then
+    Session.Say(session, "You have been given a new ship")
+  elseif kind == "ModuleStopped" and event.ball == mine and event.reason ~= "switched off" then
+    Session.Say(session, `A module stopped: {event.reason}`)
+  elseif kind == "Looted" and event.ship == mine then
+    Session.Say(session, if event.left > 0 then `Looted {event.taken}; {event.left} would not fit` else `Looted {event.taken}`)
+  elseif kind == "LockLost" and event.ball == mine and tostring(event.reason) ~= "unlocked" then
+    Session.Say(session, `Lock lost: {event.reason}`)
+  end
+end
+
 -- Take the ticks that are due this frame.
 function Session.Update(session: Session, frameSeconds: number)
   session.events = {}
@@ -40,9 +64,7 @@ function Session.Update(session: Session, frameSeconds: number)
     Core.Step(session.game)
     for _, event in Core.TakeEvents(session.game) do
       table.insert(session.events, event)
-      if event.kind == "CommandRejected" then
-        Session.Say(session, `{event.command}: {tostring(event.reason)}`)
-      end
+      Session.Notice(session, event)
     end
   end
 end
@@ -56,6 +78,22 @@ function Session.Order(session: Session, kind: string, target: number?, range: n
     Session.Say(session, `{kind}: {tostring(reason)}`)
   end
   return ok
+end
+
+-- Give any command; the player's ship is filled in as the actor.
+function Session.Do(session: Session, command: State.Command): boolean
+  command.actor = session.game.state.player.ship
+  local ok, reason = Core.Submit(session.game, command)
+  if not ok then
+    Session.Say(session, `{command.kind}: {tostring(reason)}`)
+  end
+  return ok
+end
+
+-- Whether a command would be accepted now.
+function Session.CanDo(session: Session, command: State.Command): (boolean, string?)
+  command.actor = session.game.state.player.ship
+  return Core.Validate(session.game, command)
 end
 
 -- Whether an order would be accepted now, and if not, why not.

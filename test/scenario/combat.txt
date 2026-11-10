@@ -1,0 +1,59 @@
+# The M2 loop, played through the game app (script/check runs it):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/combat.txt
+#
+# Fit a module by clicking in the fitting screen, undock, go to a belt, wait
+# for the pirate that turns up there, lock it, orbit and open fire, loot its
+# wreck, then lose the ship, fly the capsule home and be given a new one.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Fitted('autocannon.small') == 2, 'the starter ship has two autocannons')
+
+# The Fit button on the third hangar row, the shield extender (1920x1080).
+click Left 1293 295
+wait 1
+lua assert(GameDebug.Fitted('shield.extender.small') == 1, 'clicking Fit did not fit the extender')
+
+# UNDOCK, at the foot of the fitting screen.
+click Left 566 700
+until GameDebug.InSpace()
+
+lua GameDebug.TimeScale(4)
+lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+until GameDebug.Count('ship') > 0
+lua assert(GameDebug.Count('ship') == 1, 'this seed brings one pirate')
+
+# It starts out of targeting range and comes to us.
+until GameDebug.Distance('ship') < 18000
+lua assert(GameDebug.Lock('ship'), 'the lock was refused')
+until GameDebug.Locked() > 0
+lua assert(GameDebug.Order('Orbit', 'ship', 1500), 'orbit was refused')
+lua assert(GameDebug.Fire() == 2, 'both guns should open fire')
+
+until GameDebug.Count('wreck') > 0
+lua assert(GameDebug.Hull() == 'frigate.courier', 'the player lost the fight')
+lua assert(GameDebug.Count('ship') == 0, 'the pirate is still there')
+lua assert(GameDebug.Wallet() == 11000, 'the bounty was not paid')
+
+lua assert(GameDebug.Order('Approach', 'wreck', 500), 'approach was refused')
+until GameDebug.Distance('wreck') < 2000
+lua assert(GameDebug.Order('Loot', 'wreck'), 'loot was refused')
+wait 1
+lua assert(GameDebug.Hold('tag.pirate') == 1, 'the pirate tag was not looted')
+lua assert(GameDebug.Count('wreck') == 0, 'an emptied wreck should be gone')
+
+# Lose the ship. Insurance pays, and the capsule can get home.
+lua GameDebug.SelfDestruct()
+wait 0.5
+lua assert(GameDebug.Hull() == 'capsule', 'the pilot should be in a capsule')
+lua assert(GameDebug.Wallet() == 23000, 'insurance was not paid')
+lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused')
+until GameDebug.Docked()
+wait 0.5
+lua assert(GameDebug.Hull() == 'frigate.courier', 'docking in a capsule should give a new ship')
+
+echo combat scenario passed
+quit

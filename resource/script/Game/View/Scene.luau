@@ -54,7 +54,17 @@ export type Scene = {
   warp: number,                       -- 0 out of warp, rising to 1 in the middle of one
   warpLeft: number,                   -- metres still to go
   warpSeconds: number,                -- and seconds
+  time: number,                       -- seconds the scene has been running, for effects
+  shots: { Shot },                    -- recent shots, for the interface to draw
 }
+
+-- A shot to show: who at whom, how it went, and when (scene time). A
+-- missile takes 'flight' seconds to arrive; anything else is instant.
+export type Shot = { from: number, to: number, family: string, outcome: string, born: number, flight: number }
+
+-- How long a shot stays on screen after it lands, in seconds.
+Scene.SHOT_SECONDS = 0.35
+
 
 -- Bodies beyond the renderer's reach are drawn this far away.
 local FAR = 600000
@@ -77,7 +87,7 @@ function Scene.New(camera: Camera): Scene
     ox = 0, oy = 0, oz = 0, eyeX = 0, eyeY = 0, eyeZ = 0,
     proxies = {}, celestials = {}, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6,
-    warp = 0, warpLeft = 0, warpSeconds = 0,
+    warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, shots = {},
   }
 end
 
@@ -283,10 +293,47 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       scene.proxies[id] = nil
     end
   end
+  -- Wrecks on the grid: a lump of rubble, until wrecks have a look of
+  -- their own.
+  if grid ~= 0 then
+    for _, id in state.wreckIds do
+      local wreck = state.wrecks[id]
+      if wreck.system == player.system and wreck.grid == grid then
+        local at = vector.create(wreck.x - scene.ox, wreck.y - scene.oy, wreck.z - scene.oz)
+        if not scene.proxies[id] then
+          local rubble = Object_Asteroid(id % 100000)
+          local size = wreck.radius * 0.6
+          rubble:SetScale(vector.create(size, size, size))
+          container:AddInterior(rubble)
+          rubble:SetPos(at)
+          scene.proxies[id] = rubble
+        end
+        scene.screen[id] = at
+      end
+    end
+  end
   for id, proxy in scene.proxies do
-    if id >= Constants.FIRST_DYNAMIC_ID and state.balls[id] == nil then
+    if id >= Constants.FIRST_DYNAMIC_ID and state.balls[id] == nil and state.wrecks[id] == nil then
       Object_Delete(proxy)
       scene.proxies[id] = nil
+    end
+  end
+
+  -- What just happened, as effects.
+  for _, event in session.events do
+    if event.kind == "Shot" then
+      table.insert(scene.shots, { from = event.from, to = event.to, family = event.family, outcome = event.outcome,
+        born = scene.time, flight = event.flight or 0 })
+    elseif event.kind == "BallDestroyed" and event.system == player.system and grid ~= 0 then
+      local boom = Object_Explosion(0, 0, 3)
+      container:AddInterior(boom)
+      boom:SetPos(vector.create(event.x - scene.ox, event.y - scene.oy, event.z - scene.oz))
+    end
+  end
+  for index = #scene.shots, 1, -1 do
+    local shot = scene.shots[index]
+    if scene.time - shot.born > shot.flight + Scene.SHOT_SECONDS then
+      table.remove(scene.shots, index)
     end
   end
 
@@ -357,6 +404,7 @@ end
 
 -- Advance the engine's own effects (lights, trails, particles).
 function Scene.Update(scene: Scene, frameSeconds: number)
+  scene.time += frameSeconds
   local container = scene.container
   if container then
     container:Update(frameSeconds)

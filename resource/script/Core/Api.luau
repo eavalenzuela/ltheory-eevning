@@ -16,8 +16,10 @@ local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Codec = require("@lt/Core/Persist/Codec")
 local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
+local Dogma = require("@lt/Core/Dogma")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
+local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
@@ -276,6 +278,47 @@ function Query.Overview(game: Game): { Entry }
     return a.id < b.id
   end)
   return entries
+end
+
+-- What a holder (a ship, a station's hangar, a wreck) has, optionally in
+-- one place only.
+function Query.Items(game: Game, holder: number, place: string?): { State.Item }
+  return Items.In(game.state, holder, place)
+end
+
+-- A ship's fitted modules, rack by rack.
+function Query.Fitted(game: Game, ship: number): { State.Item }
+  return Items.Fitted(game.state, ship)
+end
+
+-- A ship's attributes with its present fit (nothing running).
+function Query.Stats(game: Game, ship: number): Dogma.Stats
+  return Items.ShipStats(game.state, ship)
+end
+
+-- CPU and powergrid a ship's fit uses.
+function Query.FittingUse(game: Game, ship: number): (number, number)
+  local cpu, powergrid = 0, 0
+  for _, item in Items.Fitted(game.state, ship) do
+    local module = Modules.byId[item.type]
+    cpu += module.cpu
+    powergrid += module.powergrid
+  end
+  return cpu, powergrid
+end
+
+function Query.CargoUsed(game: Game, ship: number): number
+  return Items.CargoUsed(game.state, ship)
+end
+
+-- What repairing the player's docked ship would cost.
+function Query.RepairCost(game: Game): number
+  return Aftermath.RepairCost(game.state, game.state.ships[game.state.player.ship])
+end
+
+-- The chance a fitted turret would hit a target now, or nil.
+function Query.HitChance(game: Game, ship: number, item: number, target: number): number?
+  return Combat.HitChance(game.state, ship, item, target)
 end
 
 -- A body by id (a ship in space or a described object), or nil.

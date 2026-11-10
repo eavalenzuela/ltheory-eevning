@@ -10,6 +10,7 @@
 --   bin/launch game --console
 --   bin/launch game --do "lua GameDebug.Order('Undock'); until GameDebug.InSpace(); ..."
 
+local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Core = require("@lt/Core/Api")
 local Hud = require("@lt/Game/UI/Hud")
 local Scene = require("@lt/Game/View/Scene")
@@ -222,6 +223,105 @@ local function autopilot()
       jumpFrom = player.system
       Session.Order(session, "Jump", gate.id)
     end
+  end
+end
+
+-- Lock the nearest thing matching 'what'.
+function Debug.Lock(what: string): boolean
+  return Debug.Order("LockTarget", what)
+end
+
+-- How many targets are locked (not merely being locked).
+function Debug.Locked(): number
+  local ball = Core.Query.Ball(session.game, session.game.state.player.ship)
+  local count = 0
+  if ball then
+    for _, lock in ball.vitals.locks do
+      if lock.locked then
+        count += 1
+      end
+    end
+  end
+  return count
+end
+
+-- Open fire with every weapon on the first locked target. Returns how
+-- many were switched on.
+function Debug.Fire(): number
+  local ship = session.game.state.player.ship
+  local ball = Core.Query.Ball(session.game, ship)
+  local started = 0
+  if ball then
+    for _, lock in ball.vitals.locks do
+      if lock.locked then
+        for _, item in Core.Query.Fitted(session.game, ship) do
+          if Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id, target = lock.target }) then
+            started += 1
+          end
+        end
+        break
+      end
+    end
+  end
+  return started
+end
+
+-- How many things of a kind are on the overview ("ship", "wreck", ...).
+function Debug.Count(kind: string): number
+  local count = 0
+  for _, entry in Core.Query.Overview(session.game) do
+    if entry.kind == kind then
+      count += 1
+    end
+  end
+  return count
+end
+
+function Debug.Wallet(): number
+  return session.game.state.wallet
+end
+
+-- The id of the hull the player is flying: "frigate.courier", "capsule", ...
+function Debug.Hull(): string
+  return Core.Query.Player(session.game).hull.id
+end
+
+-- How many of an item type are in the hold.
+function Debug.Hold(type: string): number
+  for _, item in Core.Query.Items(session.game, session.game.state.player.ship, "cargo") do
+    if item.type == type then
+      return item.quantity
+    end
+  end
+  return 0
+end
+
+-- The ship's shield, armour and hull as shares of full, or nothing docked.
+function Debug.Condition(): (number, number, number)
+  local ball = Core.Query.Ball(session.game, session.game.state.player.ship)
+  if ball == nil then
+    return 1, 1, 1
+  end
+  local v = ball.vitals
+  return v.shield / v.shieldMax, v.armor / v.armorMax, v.hull / v.hullMax
+end
+
+-- How many modules of a type are fitted.
+function Debug.Fitted(type: string): number
+  local count = 0
+  for _, item in Core.Query.Fitted(session.game, session.game.state.player.ship) do
+    if item.type == type then
+      count += 1
+    end
+  end
+  return count
+end
+
+-- Destroy the player's own ship, as if it had been shot down.
+function Debug.SelfDestruct()
+  local ship = session.game.state.player.ship
+  if Core.Query.Ball(session.game, ship) then
+    Aftermath.Destroy(session.game.state, ship, 0, session.game.events)
   end
 end
 
