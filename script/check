@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# script/check: one command that says whether the tree is healthy.
+#
+#   script/check            run everything
+#   script/check --fast     skip the steps that open a window
+#
+# Steps:
+#   types       bin/luaucheck: every script, strict mode
+#   boundary    an engine call planted in an engine-free directory must be
+#               rejected by the type checker
+#   specs       bin/ltcore Tool/specs: the engine-free test suites
+#   specs-fail  a planted failing suite must make the runner exit non-zero
+#   launch-*    bin/launch must exit 0 for a clean app, 1 for a script
+#               error, and with 128 + the signal for a crash or a failed
+#               assertion
+#
+# The planted failures matter as much as the real checks: they prove that
+# a failure cannot be reported as success. Exits 0 only if every step did
+# what it should. Build first (python3 configure.py build).
+
+set -u
+cd "$(dirname "$0")/.."
+
+fast=0
+for arg in "$@"; do
+  case "$arg" in
+    --fast) fast=1 ;;
+    *) echo "usage: script/check [--fast]"; exit 2 ;;
+  esac
+done
+
+# The discrete GPU, where this machine has one; harmless elsewhere.
+: "${DRI_PRIME:=1}"
+export DRI_PRIME
+
+log=$(mktemp -d)
+planted=resource/script/Tool/_planted_engine_call.luau
+trap 'rm -rf "$log" "$planted"' EXIT
+
+failures=0
+summary=""
+
+# step NAME EXPECTED-STATUS COMMAND...
+step() {
+  local name=$1 expected=$2
+  shift 2
+  local start=$SECONDS
+  "$@" >"$log/$name.log" 2>&1
+  local status=$?
+  local took=$((SECONDS - start))
+  if [ "$status" -eq "$expected" ]; then
+    summary+=$(printf '  ok    %-13s %3ds\n' "$name" "$took")$'\n'
+  else
+    failures=$((failures + 1))
+    summary+=$(printf '  FAIL  %-13s %3ds  exit %d, expected %d\n' "$name" "$took" "$status" "$expected")$'\n'
+    echo "---- $name: exit $status, expected $expected ----"
+    tail -n 40 "$log/$name.log"
+    echo
+  fi
+}
+
+for tool in bin/luaucheck bin/ltcore bin/launch; do
+  if [ ! -x "$tool" ]; then
+    echo "script/check: $tool is missing; run python3 configure.py build"
+    exit 2
+  fi
+done
+
+step types 0 bin/luaucheck
+
+cat >"$planted" <<'LUAU'
+--!strict
+-- Written by script/check and deleted afterwards: engine-free code may not
+-- call the engine, so this must fail the type check.
+return Object_Universe(1, 0)
+LUAU
+step boundary 1 bin/luaucheck --no-generate "$planted"
+rm -f "$planted"
+
+step specs 0 bin/ltcore Tool/specs
+step specs-fail 1 bin/ltcore Tool/specs --file Tool/selftest/failing.planted
+
+if [ "$fast" -eq 0 ]; then
+  step launch-pass 0 timeout 120 bin/launch selftest/pass
+  step launch-error 1 timeout 120 bin/launch selftest/error
+  step launch-segv 139 timeout 120 bin/launch selftest/pass --selftest segv
+  step launch-assert 134 timeout 120 bin/launch selftest/pass --selftest assert
+fi
+
+printf '%s' "$summary"
+if [ "$failures" -gt 0 ]; then
+  echo "check: $failures step(s) failed"
+  exit 1
+fi
+echo "check: all steps passed$([ "$fast" -eq 1 ] && echo ' (window steps skipped)')"

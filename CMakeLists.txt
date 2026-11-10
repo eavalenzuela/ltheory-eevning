@@ -165,6 +165,14 @@ target_link_libraries(luaucheck lt Luau.Analysis)
 set_source_files_properties(src/luaucheck/luaucheck.cpp PROPERTIES COMPILE_FLAGS "-std=c++17 -fexceptions")
 configure_output_dir(luaucheck)
 
+# ltcore: runs engine-free Luau modules (the game core, its tests and tools)
+# with no window and no engine. Links only the Luau VM and compiler.
+add_executable(ltcore src/ltcore/ltcore.cpp)
+target_include_directories(ltcore PRIVATE ${PROJECT_SOURCE_DIR}/src/liblt)
+target_link_libraries(ltcore Luau.VM Luau.Compiler)
+set_source_files_properties(src/ltcore/ltcore.cpp PROPERTIES COMPILE_FLAGS "-std=c++17 -fexceptions")
+configure_output_dir(ltcore)
+
 # Link dynamic targets to the shared lib
 foreach(TARGET ${TARGETS})
 

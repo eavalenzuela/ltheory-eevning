@@ -183,14 +183,14 @@ The strategic sim (track S) is engine-free, so it is rebuilt headless in paralle
 
 ### M0 — Solid ground (M)
 - Failures become visible: script errors, asserts and crashes exit non-zero (E1).
-- `bin/ltcore`, the windowless Core host (E2); the Core type-check boundary (E3); a test kit with assertions; one `bin/check` command running type check, Core tests, replays and harness scenarios.
+- `bin/ltcore`, the windowless Core host (E2); the Core type-check boundary (E3); a test kit with assertions; one `script/check` command running type check, Core tests, replays and harness scenarios.
 - Golden-screenshot runner (T6), with a fixed-timestep harness flag and a seeded global RNG.
 - Determinism groundwork on the prototype: ordered containers replace hash iteration; the save–load–continue hash test.
 - Sim instruments (S0): ledger, recorder, seed sweep, HTML report.
 - Dev console (Luau prompt) with cheats: spawn, give item, set skill, teleport, advance time.
 - Remove LTSL and dead subsystems; C++17 (E13).
 - Write `docs/design/core.md` (the conventions in §3) and the type-database skeleton shared by both tracks.
-- **Exit:** `bin/check` passes, and fails with a non-zero status on a planted script error, a planted failing assertion and a planted segfault; the prototype sim runs in `ltcore` on 8 seeds in parallel; the save–load–continue hash test passes.
+- **Exit:** `script/check` passes, and fails with a non-zero status on a planted script error, a planted failing assertion and a planted segfault; the prototype sim runs in `ltcore` on 8 seeds in parallel; the save–load–continue hash test passes.
 
 ### M1 — Space: undock, warp, orbit, dock (XL)
 - **Core:** kernel and persistence with the round-trip test first; two or three AU-scale systems described as data (star, planets, moons, belts, stations, gates); grids and balls; all navigation commands (stop, go to direction, approach, orbit, keep at range, align, warp to, dock, undock, jump); clock with pause and acceleration; event stream.
@@ -453,7 +453,7 @@ Music has no source today (the FMOD banks are unplayable). Drop your own tracks 
 | Tool | Purpose | When |
 |---|---|---|
 | Headless Core host | Run Core tests, soaks and reports with no window | M0 |
-| Test kit and `bin/check` | Assertions; type check + Core tests + harness scenarios in one command; non-zero exit on any failure | M0 |
+| Test kit and `script/check` | Assertions; type check + Core tests + harness scenarios in one command; non-zero exit on any failure | M0 |
 | Replay recorder | Record the command journal; replay to a state hash; the regression net for every Core system | M1 |
 | Save inspector | Dump and diff saves as text | M1 |
 | Dev console and cheats | Luau prompt in game; spawn, give, set skill, teleport, advance time | M0 |
@@ -508,7 +508,7 @@ Double-entry ledger; recorder to CSV; state hash; seed sweep across processes; b
 
 ## 15. Verification
 
-- **One command:** `bin/check` runs the strict type check (with the Core boundary), Core unit tests and replays in `bin/ltcore`, harness scenarios with assertions, and golden screenshots. Any failure exits non-zero.
+- **One command:** `script/check` runs the strict type check (with the Core boundary), Core unit tests and replays in `bin/ltcore`, harness scenarios with assertions, and golden screenshots. Any failure exits non-zero.
 - **Per milestone:** the exit tests in §5, each a scripted scenario or headless run.
 - **Sim:** the toy-graph suite, seed-sweep thresholds, and a ledger residual of zero.
 - **Visuals:** harness screenshots (`bin/launch APP --do … --out DIR`, `DRI_PRIME=1`) read directly; galleries and screens on fixture data under golden tests.
@@ -517,7 +517,7 @@ Double-entry ledger; recorder to CSV; state hash; seed sweep across processes; b
 ## 16. First steps
 
 1. Work happens on branch `eve-core`, branched from `universe-sim-design` so the sim prototype comes along.
-2. M0 in this order: E1 → E2 and E3 → test kit and `bin/check` → determinism round-trip on the prototype → S0 instruments → T6 → dev console → E13 → `docs/design/core.md`.
+2. M0 in this order: E1 → E2 and E3 → test kit and `script/check` → determinism round-trip on the prototype → S0 instruments → T6 → dev console → E13 → `docs/design/core.md`.
 
 **Files touched first:** `src/liblt/LTE/OS.cpp`, `src/launch/launch.cpp`, `src/luaucheck/luaucheck.cpp`, `CMakeLists.txt`, new `src/ltcore/`, `resource/script/Sim/{Sim,State,Ai}.luau`, `resource/script/App/simrun.luau`, new `resource/script/Core/`, `docs/`.
 

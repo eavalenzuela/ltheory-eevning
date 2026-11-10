@@ -4,6 +4,7 @@
 #include "luacode.h"
 
 #include "Luau.h"
+#include "LuauHost.h"
 #include "ScriptCall.h"
 
 #include "LTE/AutoClass.h"
@@ -1394,6 +1395,7 @@ namespace {
     lua_setfield(L, LUA_REGISTRYINDEX, "_LT_MODULES");
     lua_pushcfunction(L, Require, "require");
     lua_setglobal(L, "require");
+    LuauHost::Register(L, 0, 0, false);
     CreateBoxMetatable(L);
     BindHelpers(L);
     BindFunctions(L);

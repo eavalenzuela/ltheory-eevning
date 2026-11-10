@@ -8,7 +8,13 @@
    tooling, then checks the given scripts, or every .luau file under
    resource/script, in strict mode. --no-generate checks against an
    existing FILE instead (for debugging the definitions). "@lt/Path" requires resolve to
-   resource/script/Path.luau, as at runtime. Exits non-zero on any error. */
+   resource/script/Path.luau, as at runtime. Exits non-zero on any error.
+
+   Scripts under resource/script/Core, Sim and Tool are the engine-free
+   part of the game: they must also run in bin/ltcore, which has no engine.
+   They are checked against the built-ins and the Host table only
+   (resource/script/host.d.luau), so a call into the engine from there is a
+   type error. Everything else sees the engine API and Host. */
 
 #include "Luau/BuiltinDefinitions.h"
 #include "Luau/Common.h"
@@ -82,6 +88,21 @@ namespace {
     }
   };
 
+  /* Directories under the script root that may not use the engine. */
+  const char* kEngineFreeRoots[] = { "Core/", "Sim/", "Tool/" };
+
+  bool IsEngineFree(std::string const& file) {
+    std::string root = std::string(kScriptRoot) + "/";
+    size_t at = file.find(root);
+    if (at == std::string::npos)
+      return false;
+    std::string rest = file.substr(at + root.size());
+    for (const char* dir : kEngineFreeRoots)
+      if (rest.compare(0, strlen(dir), dir) == 0)
+        return true;
+    return false;
+  }
+
   void Report(Luau::Frontend const& frontend, Luau::TypeError const& error) {
     std::string message;
     if (const Luau::SyntaxError* syntax = Luau::get_if<Luau::SyntaxError>(&error.data))
@@ -148,13 +169,42 @@ int main(int argc, char** argv) {
         Report(frontend, error);
     return 2;
   }
-  Luau::freeze(frontend.globals.globalTypes);
+
+  /* Host is available everywhere; the engine-free environment has nothing
+     else beyond the built-ins. */
+  std::string hostPath = std::string(kScriptRoot) + "/host.d.luau";
+  std::optional<std::string> hostDefs = ReadFile(hostPath);
+  if (!hostDefs) {
+    fprintf(stderr, "luaucheck: cannot read %s\n", hostPath.c_str());
+    return 2;
+  }
+  Luau::Frontend coreFrontend(&resolver, &config, options);
+  Luau::registerBuiltinGlobals(coreFrontend, coreFrontend.globals);
+  for (Luau::Frontend* f : { &frontend, &coreFrontend }) {
+    Luau::LoadDefinitionFileResult host = f->loadDefinitionFile(
+      f->globals, f->globals.globalScope, *hostDefs, "@host", false);
+    if (!host.success) {
+      fprintf(stderr, "luaucheck: %s is invalid:\n", hostPath.c_str());
+      for (auto const& error : host.parseResult.errors)
+        fprintf(stderr, "  %s:%d: %s\n", hostPath.c_str(),
+          error.getLocation().begin.line + 1, error.getMessage().c_str());
+      if (host.module)
+        for (auto const& error : host.module->errors)
+          Report(*f, error);
+      return 2;
+    }
+    Luau::freeze(f->globals.globalTypes);
+  }
 
   size_t errors = 0;
+  size_t engineFree = 0;
   for (std::string const& file : files) {
-    Luau::CheckResult result = frontend.check(file);
+    bool core = IsEngineFree(file);
+    engineFree += core ? 1 : 0;
+    Luau::Frontend& checker = core ? coreFrontend : frontend;
+    Luau::CheckResult result = checker.check(file);
     for (auto const& error : result.errors) {
-      Report(frontend, error);
+      Report(checker, error);
       errors++;
     }
     for (auto const& warning : result.lintResult.warnings)
@@ -163,6 +213,7 @@ int main(int argc, char** argv) {
         warning.text.c_str());
   }
 
-  printf("luaucheck: %zu file(s), %zu error(s)\n", files.size(), errors);
+  printf("luaucheck: %zu file(s), %zu of them engine-free, %zu error(s)\n",
+    files.size(), engineFree, errors);
   return errors ? 1 : 0;
 }
