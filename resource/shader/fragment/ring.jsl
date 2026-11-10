@@ -1,0 +1,61 @@
+/* The rings of a planet: a flat sheet in the plane of its equator, seen
+   by the light it scatters.
+
+   From the side the star is on they shine by reflected light; from the
+   other they are seen by the light that comes through them, so the thin
+   parts glow and the dense ones are dark. The planet's shadow lies
+   across them. Seen nearly edge on they are thicker to look through.
+
+   Drawn on a square in the body's own x and z, in planet radii, with
+   alpha blending and from both sides. */
+
+#include frag.jsl
+#include math.jsl
+#include color.jsl
+#include lighting.jsl
+#include scattering.jsl
+#include rings.jsl
+
+FRAG_IN vec3 normal;
+FRAG_IN vec3 position;
+FRAG_IN vec3 axisX;
+FRAG_IN vec3 axisY;
+FRAG_IN vec3 axisZ;
+
+uniform float ringInner;
+uniform float ringOuter;
+uniform float ringSeed;
+uniform float ringOpacity;
+uniform vec3 ringPale;
+uniform vec3 ringDark;
+
+vec3 toBody(vec3 v) {
+  return vec3(dot(v, axisX), dot(v, axisY), dot(v, axisZ));
+}
+
+void main() {
+  vec3 p = vec3(vertpos.x, 0.0, vertpos.z);
+  float r = length(p);
+  float density = ringAt(r, ringInner, ringOuter, ringSeed);
+  if (density < 0.004) discard;
+
+  vec3 L = toBody(normalize(starPos - position));
+  vec3 V = toBody(normalize(eye - position));
+
+  /* The planet's shadow: does the way to the star pass through the globe? */
+  float toward = dot(p, L);
+  float miss = sqrt(max(dot(p, p) - toward * toward, 0.0));
+  float shadow = toward < 0.0 ? 1.0 - smoothstep(0.985, 1.015, miss) : 0.0;
+
+  /* Which side is lit, and which is looked at. */
+  float t = (r - ringInner) / (ringOuter - ringInner);
+  vec3 tint = mix(ringDark, ringPale, saturate(0.5 + 1.2 * wn_noise(vec3(t * 3.0 + ringSeed, 2.2, 7.7))));
+  float lit = L.y * V.y > 0.0
+    ? 0.45 + 0.55 * sqrt(abs(L.y))
+    : (0.16 + 0.60 * exp(-3.5 * density)) * (1.0 - exp(-8.0 * density));
+  vec3 sun = mix(starColor, vec3(1.0), whiteLight);
+  vec3 color = tint * (0.55 + 0.45 * density) * sun * lit * (1.0 - 0.96 * shadow);
+
+  float alpha = 1.0 - exp(-density * ringOpacity / max(abs(V.y), 0.07));
+  RETURN(vec4(color, alpha));
+}

@@ -59,6 +59,20 @@ VoidFreeFunction(Object_SetLook,
   object->SetLook(look);
 } FunctionAlias(Object_SetLook, SetLook);
 
+VoidFreeFunction(Object_SetAxes,
+  "Turn 'object' so that it faces along 'look' with 'up' above it",
+  Object, object,
+  V3, look,
+  V3, up)
+{
+  V3 l = Normalize(look);
+  V3 u = Normalize(up - l * Dot(up, l));
+  Transform& transform = object->GetOrientation()->GetTransformW();
+  transform.look = l;
+  transform.up = u;
+  transform.right = Cross(u, l);
+} FunctionAlias(Object_SetAxes, SetAxes);
+
 VoidFreeFunction(Object_SetPos,
   "Move 'object' to 'position'",
   Object, object,

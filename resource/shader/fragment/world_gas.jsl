@@ -19,11 +19,16 @@
 #include scattering.jsl
 #include worldnoise.jsl
 #include globemap.jsl
+#include rings.jsl
 
 uniform vec3 bandDark;
 uniform vec3 bandPale;
 uniform vec3 bandStorm;
 uniform vec3 bandPole;
+/* Its rings, if it has any (ringOuter above 0): they shade the globe. */
+uniform float ringInner;
+uniform float ringOuter;
+uniform float ringSeed;
 
 void main() {
   PREPASS
@@ -51,6 +56,17 @@ void main() {
   float day = smoothstep(-0.12, 0.55, ndl) * (0.45 + 0.55 * saturate(ndl));
   float rim = pow(saturate(dot(sphere, -V)), 0.45);
   float lit = day * rim;
+
+  /* The shadow of its rings: where the way to the star crosses the plane
+     of the equator inside them. */
+  if (ringOuter > 0.0) {
+    vec3 Lb = toBody(L);
+    float t = abs(Lb.y) > 1e-4 ? -dir.y / Lb.y : -1.0;
+    if (t > 0.0) {
+      vec3 q = dir + t * Lb;
+      lit *= 1.0 - 0.8 * ringAt(length(q.xz), ringInner, ringOuter, ringSeed);
+    }
+  }
 
   vec3 sun = mix(starColor, vec3(1.0), whiteLight);
   sun *= mix(vec3(1.0, 0.45, 0.22), vec3(1.0), smoothstep(-0.10, 0.30, ndl));

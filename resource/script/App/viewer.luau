@@ -77,6 +77,10 @@ local VIEWS: { View } = {
   { name = "gas-6-seed4", kind = "gas", seed = 4, eye = FRONT, look = CENTRE, light = DAY },
   { name = "gas-7-seed5", kind = "gas", seed = 5, eye = FRONT, look = CENTRE, light = SIDE },
   { name = "gas-8-close", kind = "gas", seed = 5, eye = NEAR, look = CLOSE, light = DAY },
+  { name = "rings-1-day", kind = "gas", seed = 1, eye = vector.create(0, 1.6, 6.5), look = CENTRE, light = DAY, set = { rings = 1 } },
+  { name = "rings-2-side", kind = "gas", seed = 3, eye = vector.create(0, 1.2, 6.5), look = CENTRE, light = SIDE, set = { rings = 1 } },
+  { name = "rings-3-under", kind = "gas", seed = 4, eye = vector.create(1.5, -1.4, 6), look = CENTRE, light = DAY, set = { rings = 1 } },
+  { name = "rings-4-near", kind = "gas", seed = 5, eye = vector.create(0.6, 0.5, 2.6), look = CENTRE, light = DAY, set = { rings = 1 } },
 }
 for _, kind in { "moon", "barren", "ice", "icemoon", "lava", "gas" } do
   for _, view in four(kind) do

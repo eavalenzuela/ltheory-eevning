@@ -1,0 +1,24 @@
+/* The rings of a planet: how much there is of them at each distance from
+   its axis. Shared by the shader that draws the rings (ring.jsl) and the
+   shader of the globe they throw their shadow on. */
+
+#ifndef common_rings
+#define common_rings
+
+#include worldnoise.jsl
+
+/* How dense the rings are 'r' planet radii from the axis, 0 to 1: broad
+   bands, finer ones within them, a few clean gaps, and nothing inside
+   'inner' or beyond 'outer'. */
+float ringAt(float r, float inner, float outer, float seed) {
+  float t = (r - inner) / (outer - inner);
+  if (t <= 0.0 || t >= 1.0) return 0.0;
+  float d = 0.55 + 1.1 * wn_noise(vec3(t * 5.0 + seed, seed * 0.7, 3.1))
+    + 0.8 * wn_noise(vec3(t * 19.0 + seed, 1.7, seed))
+    + 0.45 * wn_noise(vec3(t * 67.0, seed, 9.3));
+  float gap = 1.0 - smoothstep(0.0, 0.03, abs(wn_noise(vec3(t * 6.0 + seed * 3.0, 5.5, seed)) - 0.22));
+  d = clamp(d, 0.0, 1.0) * (1.0 - 0.95 * gap);
+  return d * smoothstep(0.0, 0.05, t) * smoothstep(1.0, 0.93, t);
+}
+
+#endif

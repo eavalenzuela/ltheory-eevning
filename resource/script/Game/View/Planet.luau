@@ -29,11 +29,15 @@ export type Kind = {
   -- weights scattering.jsl gives each), and the colour of its glow.
   sky: { number },
   tint: { number },
+  -- The colours of its rings, if worlds of this kind can have rings
+  -- (two in five then do, by their seeds).
+  rings: { pale: { number }, dark: { number } }?,
 }
 
 -- Settings to use in place of a kind's own, by name: a number for one of
--- its 'generate' or 'settings' (or for "atmoDensity"), three for one of
--- its 'colors' (or for "atmoTint"). A name the kind does not have is
+-- its 'generate' or 'settings' (or for "atmoDensity"; "rings", 1 or 0, to
+-- give it rings or not; "tilt", degrees), three for one of its 'colors'
+-- (or for "atmoTint"). A name the kind does not have is
 -- given to its shader all the same, or, if it starts "gen.", to its
 -- generator: for trying a setting out before it is in the table.
 export type Tweaks = { [string]: number | { number } }
@@ -44,6 +48,7 @@ export type World = {
   body: Object,
   surface: ShaderInstance,
   air: ShaderInstance?,
+  ring: ShaderInstance?,
   map: CubeMap,
 }
 
@@ -173,6 +178,7 @@ Planet.kinds = {
         bandPole = { 0.30, 0.22, 0.30 }, atmoTint = { 1.0, 0.7, 0.75 } },
     },
     air = 0.22, sky = GREY_SKY, tint = WHITE,
+    rings = { pale = { 0.86, 0.80, 0.70 }, dark = { 0.46, 0.40, 0.34 } },
   },
 } :: { [string]: Kind }
 
@@ -231,6 +237,16 @@ function Planet.New(kindId: string, seed: number, resolution: number?, tweaks: T
       ShaderInstance_SetVec3(surface, name, color(name, value))
     end
   end
+  -- Rings: a sheet in the plane of the equator, from 'inner' to 'outer'
+  -- planet radii. The globe's shader is told of them, for their shadow.
+  local rings = kind.rings
+  local ringed = rings ~= nil and number("rings", if (seed // 3) % 5 < 2 then 1 else 0) > 0
+  local inner = 1.25 + 0.30 * ((seed // 11) % 100) / 100
+  local outer = inner + 0.55 + 0.75 * ((seed // 1009) % 100) / 100
+  ShaderInstance_SetFloat(surface, "ringInner", inner)
+  ShaderInstance_SetFloat(surface, "ringOuter", if ringed then outer else 0)
+  ShaderInstance_SetFloat(surface, "ringSeed", seed % 100 + 0.5)
+
   local model = Model_Create()
   local shaders = { surface }
   local air: ShaderInstance? = nil
@@ -267,11 +283,36 @@ function Planet.New(kindId: string, seed: number, resolution: number?, tweaks: T
     local shell = Mesh_SetU(Mesh_ReverseWinding(Mesh_Scale(Mesh_BoxSphere(50, true), vector.create(AIR, AIR, AIR))), 1)
     Model_AddShell(model, shell, air)
   end
+  local ring: ShaderInstance? = nil
+  if ringed and rings then
+    local made = ShaderInstance_Create(Shader_Create("globe.jsl", "ring.jsl"))
+    ShaderInstance_SetFloat(made, "ringInner", inner)
+    ShaderInstance_SetFloat(made, "ringOuter", outer)
+    ShaderInstance_SetFloat(made, "ringSeed", seed % 100 + 0.5)
+    ShaderInstance_SetFloat(made, "ringOpacity", number("ringOpacity", 1.6))
+    ShaderInstance_SetVec3(made, "ringPale", vec(rings.pale))
+    ShaderInstance_SetVec3(made, "ringDark", vec(rings.dark))
+    ShaderInstance_SetFloat(made, "whiteLight", 0)
+    ShaderInstance_SetState(made, "BlendModeAlpha")
+    ShaderInstance_SetState(made, "ZWritableOff")
+    ShaderInstance_SetState(made, "CullModeDisabled")
+    ShaderInstance_Link(made)
+    -- (the counts are of vertices a side: 2 is one square)
+    local sheet = Mesh_Plane(vector.create(-outer, 0, -outer), vector.create(2 * outer, 0, 0), vector.create(0, 0, 2 * outer), 2, 2)
+    Model_AddShell(model, sheet, made)
+    ring = made
+  end
   -- (scenery: drawn, and no part of the physical world. As an ordinary
   -- object a body this size costs milliseconds a frame: Object_Scenery.)
   local body = Object_Scenery({})
   Object_SetRenderable(body, model)
-  return { kind = kindId, seed = seed, body = body, surface = surface, air = air, map = map }
+  -- Its axis leans, by an angle and toward a side that follow from its
+  -- seed; a ringed world leans enough for its rings to be seen.
+  local lean = math.rad(number("tilt", if ringed then 12 + 18 * ((seed // 37) % 100) / 100 else 24 * ((seed // 37) % 100) / 100))
+  local toward = math.rad((seed // 53) % 360)
+  Object_SetAxes(body, vector.create(-math.sin(toward), 0, math.cos(toward)),
+    vector.create(math.sin(lean) * math.cos(toward), math.cos(lean), math.sin(lean) * math.sin(toward)))
+  return { kind = kindId, seed = seed, body = body, surface = surface, air = air, ring = ring, map = map }
 end
 
 -- Change one of a world's shader settings (a name from its kind's
@@ -281,6 +322,9 @@ function Planet.Set(world: World, name: string, value: number)
   ShaderInstance_SetFloat(world.surface, name, value)
   if world.air and (name == "atmoDensity" or name == "whiteLight") then
     ShaderInstance_SetFloat(world.air, name, value)
+  end
+  if world.ring and name == "whiteLight" then
+    ShaderInstance_SetFloat(world.ring, name, value)
   end
 end
 
