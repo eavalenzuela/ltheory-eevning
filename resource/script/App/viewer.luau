@@ -2,16 +2,26 @@
 -- The viewer: one window that goes through a list of views of a body
 -- and saves a picture of each, and does it again whenever asked.
 --
---   bin/launch viewer --no-present --scale 2 --out cache/viewer/shots
+--   script/viewer start [FILTER]     open it and take the views
+--   script/viewer again [FILTER]     reload the shaders, take them again
+--   script/viewer sheet PREFIX       the pictures side by side
+--   script/viewer stop
 --
 -- It is for working on how things look without opening a window per
--- picture: it is started once, can be minimised, and stays. To have it
--- reload every shader and take the pictures again, change the contents
--- of cache/viewer/request.txt (any text; a counter will do). It prints
--- "VIEWER DONE n" when a pass is complete.
+-- picture: it is started once, can be minimised, and stays. Shaders and
+-- settings are reloaded on every pass; a change to a script needs it
+-- started again.
+--
+-- How it is told what to do (script/viewer does this): it takes its
+-- views again whenever the contents of cache/viewer/request.txt change.
+-- If that has a second word, only views with that word in their names
+-- are taken. When a pass is complete it copies the request to
+-- cache/viewer/done.txt.
 --
 -- cache/viewer/params.txt, if it exists, overrides settings for every
--- view: one "name value" a line (seaLevel 0.5), from Planet.TEMPERATE.
+-- view, one a line: a name from the kind being looked at (Planet.kinds)
+-- and a number (seaLevel 0.5), or three for a colour
+-- (rockPale 0.6 0.5 0.4).
 
 local AppShell = require("@lt/AppShell")
 local Planet = require("@lt/Game/View/Planet")
@@ -21,9 +31,11 @@ local RADIUS = 1000
 local SETTLE = 20       -- frames between setting a view up and saving it
 local REQUEST = "cache/viewer/request.txt"
 local PARAMS = "cache/viewer/params.txt"
+local DONE = "cache/viewer/done.txt"
 
 type View = {
   name: string,
+  kind: string,
   seed: number,
   eye: vector,            -- where the camera is, in planet radii from its centre
   look: vector,           -- what it looks at, likewise
@@ -32,28 +44,42 @@ type View = {
 }
 
 local FRONT = vector.create(0, 0.15, 2.7)
+local NEAR = vector.create(0.25, 0.35, 1.32)
 local CENTRE = vector.create(0, 0, 0)
 local DAY = vector.create(-0.45, 0.35, 0.82)
 local SIDE = vector.create(-0.98, 0.15, 0.12)
 
 local VIEWS: { View } = {
-  { name = "temperate-1-day", seed = 1, eye = FRONT, look = CENTRE, light = DAY },
-  { name = "temperate-2-terminator", seed = 1, eye = FRONT, look = CENTRE, light = SIDE },
-  { name = "temperate-3-limb", seed = 1, eye = vector.create(0.2, 0.5, 1.75), look = vector.create(0.55, 0.62, 0), light = SIDE },
-  { name = "temperate-4-close", seed = 1, eye = vector.create(0.25, 0.35, 1.32), look = vector.create(0.1, 0.2, 0), light = DAY },
-  { name = "temperate-5-seed2", seed = 2, eye = FRONT, look = CENTRE, light = DAY },
-  { name = "temperate-6-seed3", seed = 3, eye = FRONT, look = CENTRE, light = DAY },
-  { name = "temperate-7-islands", seed = 1, eye = FRONT, look = CENTRE, light = DAY, set = { seaLevel = 0.56 } },
-  { name = "temperate-8-dry", seed = 1, eye = FRONT, look = CENTRE, light = DAY, set = { seaLevel = 0.36, cloudCover = 0.3 } },
+  { name = "temperate-1-day", kind = "temperate", seed = 1, eye = FRONT, look = CENTRE, light = DAY },
+  { name = "temperate-2-terminator", kind = "temperate", seed = 1, eye = FRONT, look = CENTRE, light = SIDE },
+  { name = "temperate-3-limb", kind = "temperate", seed = 1, eye = vector.create(0.2, 0.5, 1.75), look = vector.create(0.55, 0.62, 0), light = SIDE },
+  { name = "temperate-4-close", kind = "temperate", seed = 1, eye = NEAR, look = vector.create(0.1, 0.2, 0), light = DAY },
+  { name = "moon-1-day", kind = "moon", seed = 1, eye = FRONT, look = CENTRE, light = DAY },
+  { name = "moon-2-terminator", kind = "moon", seed = 1, eye = FRONT, look = CENTRE, light = SIDE },
+  { name = "moon-3-close", kind = "moon", seed = 1, eye = NEAR, look = vector.create(0.1, 0.2, 0), light = SIDE },
+  { name = "moon-4-seed2", kind = "moon", seed = 2, eye = FRONT, look = CENTRE, light = SIDE },
+  { name = "barren-1-day", kind = "barren", seed = 1, eye = FRONT, look = CENTRE, light = DAY },
+  { name = "barren-2-terminator", kind = "barren", seed = 1, eye = FRONT, look = CENTRE, light = SIDE },
+  { name = "barren-3-close", kind = "barren", seed = 1, eye = NEAR, look = vector.create(0.1, 0.2, 0), light = SIDE },
+  { name = "barren-4-seed2", kind = "barren", seed = 2, eye = FRONT, look = CENTRE, light = DAY },
 }
 
--- "name value" lines of a file, as a table.
-local function readParams(): { [string]: number }
-  local out: { [string]: number } = {}
+-- The settings in the params file.
+local function readParams(): Planet.Tweaks
+  local out: Planet.Tweaks = {}
   local ok, text = pcall(File_Read, PARAMS)
   if ok and type(text) == "string" then
-    for name, value in string.gmatch(text, "([%a%.]+)%s+([%-%d%.]+)") do
-      out[name] = tonumber(value) or 0
+    for line in string.gmatch(text, "[^\n]+") do
+      local name = string.match(line, "^%s*([%a%.]+)")
+      local numbers: { number } = {}
+      for word in string.gmatch(line, "%s([%-%d%.]+)") do
+        table.insert(numbers, tonumber(word) or 0)
+      end
+      if name and #numbers == 1 then
+        out[name] = numbers[1]
+      elseif name and #numbers == 3 then
+        out[name] = numbers
+      end
     end
   end
   return out
@@ -80,32 +106,36 @@ return AppShell.Create(function(): Widget
   end
 
   local world: Planet.World? = nil
-  local built = -1          -- the seed of the world now standing; -1 for none
+  local built = ""          -- the kind and seed of the world now standing
   local index = 0           -- the view being taken; 0 when idle
   local frames = 0
-  local passes = 0
   local request = readRequest()
-  local params: { [string]: number } = {}
+  local params: Planet.Tweaks = {}
+  local views: { View } = VIEWS
 
   local function setUp(v: View)
-    if built ~= v.seed or world == nil then
+    local tweaks = table.clone(params)
+    local key = `{v.kind}:{v.seed}`
+    if v.set then
+      for name, value in v.set do
+        tweaks[name] = value
+        key ..= `:{name}={value}`
+      end
+    end
+    if built ~= key or world == nil then
       if world then
         Object_Delete(world.body)
       end
-      local made = Planet.NewTemperate(v.seed)
+      local made = Planet.New(v.kind, v.seed, nil, tweaks)
       made.body:SetScale(vector.create(RADIUS, RADIUS, RADIUS))
       system:AddInterior(made.body)
       camera:SetTarget(made.body)
-      world, built = made, v.seed
-    end
-    local w = world :: Planet.World
-    for name, value in Planet.TEMPERATE do
-      local override: { [string]: number } = v.set or {}
-      Planet.Set(w, name, override[name] or params[name] or value)
+      world, built = made, key
     end
     -- (judged in white light: the scene's own star is whatever colour
     -- its system rolled)
-    Planet.Set(w, "whiteLight", params.whiteLight or 1)
+    local white = params.whiteLight
+    Planet.Set(world :: Planet.World, "whiteLight", if type(white) == "number" then white else 1)
     if lamp then
       lamp:SetPos(vector.normalize(v.light) * 500000)
     end
@@ -115,9 +145,19 @@ return AppShell.Create(function(): Widget
   local function begin()
     Shader_RecompileAll()
     params = readParams()
-    built = -1
+    local filter = string.match(request, "^%S+%s+(%S+)")
+    views = {}
+    for _, v in VIEWS do
+      if filter == nil or string.find(v.name, filter, 1, true) then
+        table.insert(views, v)
+      end
+    end
+    if #views == 0 then
+      views = VIEWS
+    end
+    built = ""
     index = 1
-    setUp(VIEWS[1])
+    setUp(views[1])
   end
   begin()
 
@@ -127,7 +167,7 @@ return AppShell.Create(function(): Widget
     end,
     PreUpdate = function()
       if index > 0 then
-        local v = VIEWS[index]
+        local v = views[index]
         -- (the camera's "relative" position is a place in the scene)
         camera:SetRelativePos(v.eye * RADIUS)
         camera:SetRelativeLookAt(v.look * RADIUS)
@@ -137,12 +177,11 @@ return AppShell.Create(function(): Widget
           Screenshot_Save(v.name)
         elseif frames > SETTLE + 1 then
           index += 1
-          if index > #VIEWS then
+          if index > #views then
             index = 0
-            passes += 1
-            print(`VIEWER DONE {passes}`)
+            File_Write(DONE, request)
           else
-            setUp(VIEWS[index])
+            setUp(views[index])
           end
         end
       else

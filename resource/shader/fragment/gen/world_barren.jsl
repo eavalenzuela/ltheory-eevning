@@ -1,0 +1,124 @@
+/* The lie of the land of a world of bare rock: an airless planet, or a
+   moon. Drawn once into a cube map for world_rock.jsl to light.
+
+   Such a world is read at three scales. From far off, by its two tones:
+   pale highland, and dark plains where old basins were flooded and have
+   lain smooth since. Nearer, by its craters, which come in every size,
+   few great and many small; the great ones are shallow for their width,
+   flat-floored, with a peak in the middle, and the old ones are worn
+   nearly away, while a few new ones are sharp and have thrown bright
+   rays across the ground round them. And on some, by canyons.
+
+   Heights are true to scale, so that the shadows they throw are: the
+   map's x is 0.5 at the mean level, and SCALE of it is one planet
+   radius. (world_rock.jsl's 'relief' of 1 / SCALE draws the ground as it
+   is; more than that exaggerates it.)
+
+   Channels: x height, y how dark the ground is (0 pale highland, 1 dark
+   plain), z fine mottling (0 to 1), w bright ejecta round a new crater
+   (0 to 1). */
+
+#include frag.jsl
+#include math.jsl
+#include cube.jsl
+#include worldnoise.jsl
+
+uniform float seed;
+uniform float craters;      /* how heavily cratered, 0 to 1 */
+uniform float plains;       /* how much of it is dark plain, 0 to 1 */
+uniform float rifts;        /* how much it is cut by canyons, 0 to 1 */
+
+const float SCALE = 12.0;
+
+/* Craters of one range of sizes: at most one to a cell of a grid of
+   'cells' to the radius. 'steep' is their depth over their radius;
+   'floorAt' how far down the flat floor of a big one lies, as a share of
+   the bowl's depth (1 for a plain bowl); 'keep' how much of an old one
+   is left here. Adds to the height (in planet radii) and to the
+   brightness of fresh ejecta. */
+void craterLayer(vec3 p, float cells, float chance, float steep, float floorAt, float keep,
+                 inout float height, inout float bright) {
+  vec3 cell = floor(p * cells);
+  vec3 offset = vec3(seed * 1.7 + cells, seed * 0.31, cells * 3.1);
+  for (int z = -1; z <= 1; z++) {
+    for (int y = -1; y <= 1; y++) {
+      for (int x = -1; x <= 1; x++) {
+        vec3 id = cell + vec3(float(x), float(y), float(z));
+        vec3 h = wn_hash(id + offset) * 0.5 + 0.5;
+        if (h.x > chance) continue;
+        /* A crater belongs to the surface: only cells the surface passes
+           near have one, and its centre is brought onto the surface. (It
+           moves by under 0.35 of a cell, and nothing of it reaches past
+           0.8 of one, so the cells searched are all that matter.) */
+        vec3 c = (id + 0.5 + 0.35 * wn_hash(id + offset + 17.0)) / cells;
+        if (abs(length(c) - 1.0) * cells > 0.35) continue;
+        c = normalize(c);
+        float radius = mix(0.09, 0.36, h.y * h.y) / cells;
+        float dist = length(p - c);
+        float d = dist / radius;
+        float age = h.z;                  /* 1 new, 0 as old as the ground */
+        if (d < 2.2) {
+          float profile;
+          if (d < 1.0) {
+            profile = max(d * d - 1.0, -floorAt) + 0.22 * smoothstep(0.45, 1.0, d);
+            profile += 0.45 * (1.0 - floorAt) * exp(-d * d * 30.0);
+          } else {
+            profile = 0.22 * exp(-3.0 * (d - 1.0)) * (1.0 - smoothstep(1.6, 2.2, d));
+          }
+          float worn = mix(0.22, 1.0, age * age) * mix(smoothstep(0.55, 0.85, age), 1.0, keep);
+          height += steep * radius * worn * profile;
+        }
+        if (age > 0.88) {
+          float young = (age - 0.88) / 0.12;
+          vec3 v = (p - c) / max(dist, 1e-5);
+          float streak = smoothstep(0.10, 0.55, wn_noise(v * 6.0 + h * 50.0));
+          float reach = 1.0 - smoothstep(radius, 0.8 / cells, dist);
+          float halo = 1.0 - smoothstep(0.9, 2.0, d);
+          bright = max(bright, young * max(halo, streak * reach * reach));
+        }
+      }
+    }
+  }
+}
+
+void main() {
+  vec3 p = GetCubePosition(uv, false);
+  vec3 s = vec3(seed * 1.31, seed * 2.17, seed * 0.73);
+  vec3 q = p + 0.15 * wn_drift(p * 1.5 + s);
+
+  /* Dark plains: the low ground of a few great basins. */
+  float low = -wn_fbm(q * 1.1 + s + 60.0, 5, 0.5);
+  float edge = mix(0.30, -0.10, plains);
+  /* (their shores are ragged, and fade out over a little distance) */
+  float plain = smoothstep(edge, edge + 0.11, low + 0.05 * wn_fbm(q * 7.0 + s, 5, 0.6));
+
+  float rolling = wn_fbm(q * 2.2 + s, 7, 0.55);
+  /* (tone varies across provinces as well as from place to place) */
+  float mottle = saturate(0.5 + 0.9 * wn_fbm(q * 4.5 + s + 7.0, 4, 0.55) + 0.5 * wn_fbm(q * 30.0 + s + 7.0, 4, 0.6));
+  float ground = 0.012 * rolling * (1.0 - 0.8 * plain) - 0.006 * plain;
+
+  /* Canyons: along the creases of a slow noise, in the parts of the
+     world that have them. */
+  float cut = 0.0;
+  if (rifts > 0.0) {
+    float where = smoothstep(0.0, 0.2, wn_fbm(q * 0.8 + s + 33.0, 3, 0.5));
+    float crease = wn_ridges(q * 1.6 + s + 9.0, 6, 0.5);
+    cut = rifts * where * (1.0 - plain) * smoothstep(0.74, 0.88, crease);
+    ground -= 0.012 * cut;
+  }
+
+  /* The plains are younger than the highland: what fell before they
+     were laid is buried. */
+  float keep = 1.0 - 0.9 * plain;
+  float dents = 0.0;
+  float bright = 0.0;
+  craterLayer(p, 1.7, 0.30 * craters, 0.10, 0.35, keep, dents, bright);
+  craterLayer(p, 3.6, 0.45 * craters, 0.14, 0.50, keep, dents, bright);
+  craterLayer(p, 7.5, 0.60 * craters, 0.22, 0.75, keep, dents, bright);
+  craterLayer(p, 16.0, 0.75 * craters, 0.32, 1.0, keep, dents, bright);
+  craterLayer(p, 34.0, 0.85 * craters, 0.40, 1.0, keep, dents, bright);
+  craterLayer(p, 70.0, 0.90 * craters, 0.40, 1.0, keep, dents, bright);
+
+  float height = 0.5 + SCALE * (ground + dents);
+  RETURN(vec4(clamp(height, 0.0, 1.0), max(plain, 0.5 * cut), mottle, clamp(bright, 0.0, 1.0)));
+}

@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# script/viewer: the one window for judging how bodies look
+# (App/viewer.luau). It opens once, can be minimised, and stays; every
+# picture after that is taken in it. Shaders and cache/viewer/params.txt
+# are reloaded on every pass; a change to a script needs stop and start.
+#
+#   script/viewer start [FILTER]   open the window and take the views
+#   script/viewer again [FILTER]   reload, and take them again
+#   script/viewer sheet PREFIX     cache/viewer/sheet-PREFIX.png: the
+#                                  pictures named PREFIX*, side by side
+#   script/viewer stop             close the window
+#
+# With a FILTER only the views with that word in their names are taken.
+# Pictures land in cache/viewer/shots. start and again wait for the pass
+# to finish, and fail if the viewer dies or takes over ten minutes.
+set -u
+cd "$(dirname "$0")/.."
+DIR=cache/viewer
+CMD="bin/launch viewer --no-present --fixed-step 60 --scale 2 --out $DIR/shots"
+
+running() { pgrep -xf "$CMD" > /dev/null; }
+
+# Ask for a pass and wait for it.
+ask() {
+  local count=0
+  [ -f "$DIR/request.txt" ] && count=$(cut -d' ' -f1 "$DIR/request.txt")
+  local request="$((count + 1))${1:+ $1}"
+  rm -f "$DIR/done.txt"
+  printf '%s' "$request" > "$DIR/request.txt"
+  "${2:-true}"
+  for _ in $(seq 600); do
+    if [ "$(cat "$DIR/done.txt" 2> /dev/null)" = "$request" ]; then
+      echo "viewer: pass $request done"
+      return 0
+    fi
+    if ! running; then
+      echo "viewer: it is not running; see $DIR/log.txt" >&2
+      grep -iE "error|assert|failed" "$DIR/log.txt" | tail -20 >&2
+      return 1
+    fi
+    sleep 1
+  done
+  echo "viewer: no answer in ten minutes" >&2
+  return 1
+}
+
+launch() {
+  DRI_PRIME=1 setsid nohup $CMD > "$DIR/log.txt" 2>&1 < /dev/null &
+  sleep 2
+}
+
+case "${1:-}" in
+  start)
+    if running; then
+      echo "viewer: already open" >&2
+      exit 1
+    fi
+    mkdir -p "$DIR/shots"
+    ask "${2:-}" launch
+    ;;
+  again)
+    if ! running; then
+      echo "viewer: not open (script/viewer start)" >&2
+      exit 1
+    fi
+    ask "${2:-}"
+    ;;
+  stop)
+    pkill -xf "$CMD" || echo "viewer: not open"
+    ;;
+  sheet)
+    python3 - "$DIR" "${2:?script/viewer sheet PREFIX}" << 'PY'
+import glob, sys
+from PIL import Image
+folder, prefix = sys.argv[1], sys.argv[2]
+names = sorted(glob.glob(f"{folder}/shots/{prefix}*.png"))
+if not names:
+    sys.exit(f"viewer: no pictures named {prefix}*")
+shots = [Image.open(name).convert("RGB") for name in names]
+w, h = shots[0].size
+columns = 2 if len(shots) > 1 else 1
+rows = (len(shots) + columns - 1) // columns
+sheet = Image.new("RGB", (columns * (w + 4) + 4, rows * (h + 4) + 4), "black")
+for i, shot in enumerate(shots):
+    sheet.paste(shot, (4 + (i % columns) * (w + 4), 4 + (i // columns) * (h + 4)))
+out = f"{folder}/sheet-{prefix}.png"
+sheet.save(out)
+print(out)
+PY
+    ;;
+  *)
+    sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+    exit 2
+    ;;
+esac

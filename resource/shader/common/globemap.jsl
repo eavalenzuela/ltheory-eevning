@@ -1,0 +1,85 @@
+/* What the shaders of a globe drawn from a cube map share (a planet, a
+   moon): the body's own frame, its heights, the slope of its ground and
+   the shadow its high ground throws.
+
+   The map is looked up by direction in the body's frame; the light and
+   the eye are in the world's. vertex/globe.jsl hands over the body's
+   axes as they lie in the world, so that one can be taken to the other
+   however the body is turned.
+
+   Heights are the map's x, 0 to 1. 'relief' is how high the whole of
+   that range stands, in planet radii: a slope is relief times the change
+   of height over the angle crossed. */
+
+#ifndef common_globemap
+#define common_globemap
+
+FRAG_IN vec3 normal;
+FRAG_IN vec3 position;
+FRAG_IN vec3 origin;
+FRAG_IN vec3 axisX;
+FRAG_IN vec3 axisY;
+FRAG_IN vec3 axisZ;
+
+uniform samplerCube planetMap;
+uniform float relief;
+
+/* A colour as it should look on a screen, in linear light. */
+vec3 lin(vec3 c) {
+  return pow(c, vec3(2.2));
+}
+
+vec3 toBody(vec3 v) {
+  return vec3(dot(v, axisX), dot(v, axisY), dot(v, axisZ));
+}
+
+vec3 toWorld(vec3 v) {
+  return v.x * axisX + v.y * axisY + v.z * axisZ;
+}
+
+float heightAt(vec3 dir) {
+  return textureCube(planetMap, dir).x;
+}
+
+/* East and north at a place on the globe. */
+void groundFrame(vec3 dir, out vec3 east, out vec3 north) {
+  east = normalize(cross(vec3(0.0, 1.0, 0.0), dir) + vec3(1e-5, 0.0, 0.0));
+  north = cross(dir, east);
+}
+
+/* How fast the height rises eastward (x) and northward (y) there, per
+   radian, measured across 'step' radians either way. */
+vec2 groundSlope(vec3 dir, vec3 east, vec3 north, float step) {
+  float de = heightAt(normalize(dir + step * east)) - heightAt(normalize(dir - step * east));
+  float dn = heightAt(normalize(dir + step * north)) - heightAt(normalize(dir - step * north));
+  return vec2(de, dn) / (2.0 * step);
+}
+
+/* How much of the star's light reaches the ground at 'dir', where the
+   height is h: 1 in the open, 0 behind higher ground. 'L' is the way to
+   the star in the body's frame. Looks 'reach' radians toward it.
+
+   A ray toward the star climbs away from the ground it leaves, the
+   faster the higher the star stands, and the ground curves away beneath
+   it besides; whatever stands above the ray on the way shades the place.
+   Past the terminator the ray starts downward, so the night side is in
+   the globe's own shadow, and a peak just beyond the terminator is lit. */
+float groundShadow(vec3 dir, float h, vec3 L, float reach) {
+  float up = dot(dir, L);
+  vec3 along = L - dir * up;
+  float level = length(along);
+  if (level < 1e-4) return 1.0;
+  along /= level;
+  float climb = up / level;
+  float lit = 1.0;
+  for (int i = 1; i <= 7; i++) {
+    float f = float(i) / 7.0;
+    float t = reach * f * f;
+    float ray = climb * t + 0.5 * t * t;
+    float ground = relief * (heightAt(normalize(dir + t * along)) - h);
+    lit = min(lit, 1.0 - smoothstep(0.0, 0.010 * relief + 0.02 * t, ground - ray));
+  }
+  return lit;
+}
+
+#endif

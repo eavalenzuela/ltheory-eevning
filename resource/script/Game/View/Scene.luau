@@ -73,6 +73,7 @@ local FAR = 600000
 -- The size of a living world's cube map in the game: smaller than the
 -- viewer's, since a system may hold several (about 28 MB each).
 local WORLD_MAP = 768
+local MOON_MAP = 512
 
 -- How a hull type looks, until hulls have their own generator specs: the
 -- seed of the old generator. Its size comes from the hull's radius. The
@@ -169,12 +170,13 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
   for _, object in Core.Query.Objects(game, system) do
     if object.kind == "planet" or object.kind == "moon" then
       local body: Object
-      if object.kind == "planet" and (object.variety == "temperate" or object.variety == "ocean") then
-        -- A living world, built from its own heights (Game/View/Planet).
-        -- An ocean world is the same thing with the sea higher.
-        local world = Planet.NewTemperate(object.seed, WORLD_MAP)
-        Planet.Set(world, "seaLevel", if object.variety == "ocean" then 0.58 else 0.46)
-        body = world.body
+      -- The kinds built from their own heights (Game/View/Planet); the
+      -- rest are still the engine's old planet.
+      local kind = if object.kind == "moon" then (if object.variety == "barren" then "moon" else "")
+        elseif Planet.kinds[object.variety] then object.variety
+        else ""
+      if kind ~= "" then
+        body = Planet.New(kind, object.seed, if object.kind == "moon" then MOON_MAP else WORLD_MAP).body
       else
         body = Item_PlanetType(object.seed):Instantiate()
       end

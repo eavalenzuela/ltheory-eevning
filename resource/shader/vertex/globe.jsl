@@ -1,0 +1,44 @@
+/* The vertex shader of a globe drawn from a cube map (a planet, a moon):
+   npm.jsl, and the body's own axes as they lie in the world, so that the
+   fragment shader can take the light into the body's frame and its
+   normals out of it however the body is turned (common/globemap.jsl). */
+
+#include vert.jsl
+
+VERT_OUT vec3 normal;
+VERT_OUT vec3 position;
+VERT_OUT vec4 ndcPos;
+
+VERT_OUT vec3 vertposscaled;
+VERT_OUT vec3 origin;
+VERT_OUT vec3 scale;
+VERT_OUT vec3 axisX;
+VERT_OUT vec3 axisY;
+VERT_OUT vec3 axisZ;
+
+void main() {
+  VS_PROLOGUE;
+
+  vec3 x = (WORLD * vec4(1, 0, 0, 0)).xyz;
+  vec3 y = (WORLD * vec4(0, 1, 0, 0)).xyz;
+  vec3 z = (WORLD * vec4(0, 0, 1, 0)).xyz;
+  scale = vec3(length(x), length(y), length(z));
+  axisX = x / scale.x;
+  axisY = y / scale.y;
+  axisZ = z / scale.z;
+
+  origin = (WORLD * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+
+  gl_Position = WVP * vp;
+  linearDepth = gl_Position.z;
+  gl_Position.z = LogDepth(gl_Position.z, gl_Position.w);
+
+  position = worldPos.xyz;
+  ndcPos = gl_Position;
+
+  normal = normalize((WORLDIT * vn).xyz);
+
+  vertpos = vp.xyz;
+  vertnormal = vn.xyz;
+  vertposscaled = vertpos * scale;
+}

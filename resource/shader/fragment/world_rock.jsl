@@ -1,0 +1,74 @@
+/* A world of bare rock, lit hard: an airless planet, or a moon.
+
+   Its look is its relief. With no air to fill the shade, what the star
+   does not strike is black: crater bowls fill with shadow toward the
+   terminator and their far walls catch the light, and the line between
+   day and night is ragged with it. Under a high star the relief goes
+   and the tones of the ground are what is seen: pale highland, dark
+   plain, the bright splash round a new crater, frost at the poles of
+   some.
+
+   Dust scatters light back the way it came, so the disc of such a world
+   seen with the star behind the eye is evenly bright to its edge, and
+   not shaded like a ball.
+
+   If the world has a little air (atmoDensity above 0), its haze is
+   added. Colours are in linear light. */
+
+#include frag.jsl
+#include math.jsl
+#include color.jsl
+#include lighting.jsl
+#include scattering.jsl
+#include worldnoise.jsl
+#include globemap.jsl
+
+uniform vec3 rockPale;
+uniform vec3 rockDark;
+uniform vec3 rockFresh;
+/* How far toward a pole frost begins (0 equator, 1 pole); above 1, none. */
+uniform float frostLine;
+
+void main() {
+  PREPASS
+
+  vec3 dir = normalize(vertpos);
+  vec3 L = toBody(normalize(starPos - position));
+  vec3 V = normalize(position - eye);
+  vec4 map = textureCube(planetMap, dir);
+
+  vec3 east, north;
+  groundFrame(dir, east, north);
+  vec2 slope = relief * groundSlope(dir, east, north, 0.0014);
+
+  /* Grain finer than the map holds, so that ground seen close is not
+     smooth; gone where a pixel covers more than a grain of it. */
+  float near = 1.0 - smoothstep(0.0012, 0.0040, length(fwidth(dir)));
+  vec2 grain = near * vec2(wn_fbm(dir * 240.0, 3, 0.6), wn_fbm(dir * 240.0 + 31.7, 3, 0.6));
+  vec3 N = normalize(dir - (slope.x + 0.10 * grain.x) * east - (slope.y + 0.10 * grain.y) * north);
+
+  vec3 albedo = mix(rockPale, rockDark, map.y) * (0.84 + 0.32 * map.z);
+  albedo = mix(albedo, rockFresh, 0.6 * map.w * (1.0 - 0.4 * map.y));
+  float frost = smoothstep(frostLine, frostLine + 0.05, abs(dir.y) + 0.08 * (map.z - 0.5));
+  albedo = mix(albedo, vec3(0.86, 0.88, 0.90), frost);
+  albedo = lin(albedo);
+
+  float ndl = saturate(dot(N, L));
+  float ndv = saturate(dot(N, toBody(-V)));
+  float dusty = min(1.3, 2.0 * ndl / (ndl + ndv + 1e-3));
+  float lit = mix(ndl, dusty, 0.55) * groundShadow(dir, map.x, L, 0.035);
+
+  vec3 sun = mix(starColor, vec3(1.0), whiteLight);
+  /* (a little starlight, so that the night side is not a hole) */
+  vec3 color = albedo * (sun * lit + 0.002);
+
+  if (atmoDensity > 0.0) {
+    color += getScattering(origin, eye, V, length(position - eye)).xyz;
+  }
+
+  outputAlbedo(color);
+  outputAlpha(1.0);
+  outputNormal(toWorld(N));
+  outputMaterial(MATERIAL_NOSHADE);
+  outputRoughness(0.0);
+}
