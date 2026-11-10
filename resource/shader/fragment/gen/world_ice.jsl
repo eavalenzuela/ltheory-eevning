@@ -1,0 +1,92 @@
+/* The lie of the land of a world of ice: a frozen planet, or an icy
+   moon. Drawn once into a cube map for world_rock.jsl to light.
+
+   A shell of ice over something that moves is young and smooth, and
+   what marks it is where it has broken. Great cracks run for a quarter
+   of the way round the globe and cross one another, each a pair of low
+   ridges with a trough between, stained by what has welled up through
+   it. Between them the ice is crazed with fine cracks. In places the
+   shell has broken up altogether into a jumble of rafts, darker and
+   rougher than the plains. Craters are few and shallow: the ice does
+   not keep them.
+
+   Heights are to the scale of world_barren.jsl (0.5 the mean level,
+   SCALE of the map's range one planet radius), with the ridges some ten
+   times their true height, since ice this flat would show nothing.
+
+   Channels: x height, y how stained the ice is (0 clean, 1 the dark of
+   a crack), z mottling (0 to 1), w fresh frost (0 to 1). */
+
+#include frag.jsl
+#include math.jsl
+#include cube.jsl
+#include worldnoise.jsl
+#include worldcraters.jsl
+
+uniform float seed;
+uniform float cracks;       /* how much of it the great cracks cross, 0 to 1 */
+uniform float chaos;        /* how much of it is broken ground, 0 to 1 */
+uniform float craters;      /* how cratered, 0 to 1 */
+
+const float SCALE = 12.0;
+const int LINES = 30;
+
+void main() {
+  vec3 p = GetCubePosition(uv, false);
+  vec3 s = vec3(seed * 1.31, seed * 2.17, seed * 0.73);
+  /* (bent a little, so that no crack is a perfect circle) */
+  vec3 q = normalize(p + 0.07 * wn_drift(p * 2.0 + s) + 0.012 * wn_drift(p * 9.0 + s));
+
+  /* The great cracks: each lies along the circle in which a plane cuts
+     the globe, for the part of the way round where a slow noise of its
+     own is high. */
+  float stain = 0.0;
+  float ridges = 0.0;
+  for (int i = 0; i < LINES; i++) {
+    float n = float(i);
+    vec3 a = wn_hash(vec3(n * 7.3 + seed, n * 1.9 + 3.0, seed * 3.1 + n));
+    vec3 b = wn_hash(vec3(seed * 0.7 + n, n * 5.1 + 2.0, n * 0.37 + seed)) * 0.5 + 0.5;
+    if (b.z > cracks) continue;
+    vec3 normal = normalize(a + vec3(1e-3));
+    float offset = 0.6 * (b.x - 0.5);
+    float width = mix(0.004, 0.020, b.y * b.y * b.y);
+    float part = smoothstep(-0.08, 0.06, wn_noise(q * 1.2 + a * 10.0));
+    float across = abs(dot(q, normal) - offset) / width;
+    if (across > 1.6) continue;
+    float flank = smoothstep(1.5, 0.9, across) * smoothstep(0.25, 0.7, across);
+    float trough = 1.0 - smoothstep(0.0, 0.45, across);
+    ridges += part * width * (0.10 * flank - 0.10 * trough);
+    stain = max(stain, part * (1.0 - smoothstep(0.35, 1.2, across)) * mix(0.55, 1.0, b.x));
+  }
+
+  /* Fine cracks everywhere, along the creases of a noise. */
+  float crazed = smoothstep(0.78, 0.92, wn_ridges(q * 7.0 + s, 5, 0.55));
+  float hair = smoothstep(0.80, 0.93, wn_ridges(q * 22.0 + s + 5.0, 4, 0.55));
+
+  /* Broken ground: rafts of old shell, tilted, in a darker matrix. */
+  float limit = mix(0.36, 0.02, chaos);
+  float broken = smoothstep(limit, limit + 0.12, wn_fbm(q * 1.9 + s + 20.0, 5, 0.55) + 0.05 * wn_fbm(q * 14.0 + s, 4, 0.6));
+  /* (rafts of every size: the scatter is itself pushed about) */
+  vec3 rafts = wn_cells((q + 0.012 * wn_drift(q * 11.0 + s)) * 40.0 + s);
+  float matrix = (1.0 - smoothstep(0.02, 0.20, rafts.y - rafts.x)) * (0.55 + 0.45 * rafts.z);
+
+  float rolling = wn_fbm(q * 2.6 + s, 6, 0.5);
+  float mottle = saturate(0.5 + 0.9 * wn_fbm(q * 4.0 + s + 7.0, 4, 0.55) + 0.4 * wn_fbm(q * 34.0 + s, 4, 0.6));
+  /* Frost lies fresh over some provinces, and on the rafts. */
+  float frost = smoothstep(0.05, 0.30, wn_fbm(q * 2.9 + s + 77.0, 5, 0.55));
+
+  float ground = 0.004 * rolling + ridges - 0.0008 * crazed - 0.0004 * hair
+    + broken * (0.0020 * (rafts.z - 0.5) - 0.0015 * matrix);
+
+  float dents = 0.0;
+  float bright = 0.0;
+  craterLayer(p, seed, 7.5, 0.5 * craters, 0.10, 0.7, 1.0, dents, bright);
+  craterLayer(p, seed, 16.0, 0.6 * craters, 0.16, 1.0, 1.0, dents, bright);
+  craterLayer(p, seed, 34.0, 0.7 * craters, 0.20, 1.0, 1.0, dents, bright);
+
+  stain = max(stain, max(0.45 * crazed, 0.25 * hair));
+  stain = max(stain, broken * (0.25 + 0.5 * matrix));
+
+  float height = 0.5 + SCALE * (ground + dents);
+  RETURN(vec4(clamp(height, 0.0, 1.0), saturate(stain), mottle, saturate(max(bright, 0.7 * frost * (1.0 - stain)))));
+}

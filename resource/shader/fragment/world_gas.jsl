@@ -1,0 +1,66 @@
+/* A gas giant: the top of a deep atmosphere, coloured in bands.
+
+   The map gives the tone of the cloud and what is in it (gen/
+   world_gas.jsl); three colours make that a planet: the dark of its
+   belts, the pale of its zones, and a third that its storms are and
+   that some of its belts have in them. Toward the poles the bands fade
+   into haze.
+
+   There is no ground to catch the light, only cloud and the air over
+   it: day shades softly into night, and the disc darkens toward its
+   edge, where the eye looks through more of the air.
+
+   Colours are in linear light. */
+
+#include frag.jsl
+#include math.jsl
+#include color.jsl
+#include lighting.jsl
+#include scattering.jsl
+#include worldnoise.jsl
+#include globemap.jsl
+
+uniform vec3 bandDark;
+uniform vec3 bandPale;
+uniform vec3 bandStorm;
+uniform vec3 bandPole;
+
+void main() {
+  PREPASS
+
+  vec3 dir = normalize(vertpos);
+  vec3 sphere = normalize(normal);
+  vec3 L = normalize(starPos - position);
+  vec3 V = normalize(position - eye);
+  vec4 map = textureCube(planetMap, dir);
+
+  /* (finer than the map holds: streaks along the bands) */
+  float near = 1.0 - smoothstep(0.0012, 0.0040, length(fwidth(dir)));
+  float fine = near * wn_fbm(vec3(dir.x, dir.y * 9.0, dir.z) * 70.0, 3, 0.6);
+
+  float tone = map.x + 0.10 * (map.y - 0.5) + 0.05 * fine;
+  vec3 cloud = mix(bandDark, bandPale, smoothstep(0.22, 0.78, tone));
+  cloud = mix(cloud, bandStorm, 0.40 * map.w * (1.0 - smoothstep(0.45, 0.80, tone)));
+  cloud *= 0.88 + 0.24 * map.y + 0.08 * fine;
+  /* (a storm takes the third colour, but keeps the bands wound into it) */
+  cloud = mix(cloud, bandStorm * (0.55 + 0.75 * smoothstep(0.25, 0.85, tone)), map.z * 0.7);
+  cloud = mix(cloud, bandPole, 0.75 * smoothstep(0.72, 0.97, abs(dir.y) + 0.04 * (map.y - 0.5)));
+  vec3 albedo = lin(cloud);
+
+  float ndl = dot(sphere, L);
+  float day = smoothstep(-0.12, 0.55, ndl) * (0.45 + 0.55 * saturate(ndl));
+  float rim = pow(saturate(dot(sphere, -V)), 0.45);
+  float lit = day * rim;
+
+  vec3 sun = mix(starColor, vec3(1.0), whiteLight);
+  sun *= mix(vec3(1.0, 0.45, 0.22), vec3(1.0), smoothstep(-0.10, 0.30, ndl));
+  vec3 color = albedo * sun * lit;
+
+  color += getScattering(origin, eye, V, length(position - eye)).xyz;
+
+  outputAlbedo(color);
+  outputAlpha(1.0);
+  outputNormal(sphere);
+  outputMaterial(MATERIAL_NOSHADE);
+  outputRoughness(0.0);
+}

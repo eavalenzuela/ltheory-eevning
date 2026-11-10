@@ -1,0 +1,72 @@
+/* A world of lava: black crust lit by its star, and fire that lights
+   itself.
+
+   The crust is lit as bare rock is (world_rock.jsl), relief and thrown
+   shadow and all. The lava is not lit: it glows by its own heat, from
+   the dull red of a crack to the yellow of a running sea, on the night
+   side as on the day, and reddens the ground near it. Under a high star
+   the glow is a tint; at night it is all there is to see.
+
+   Colours are in linear light. */
+
+#include frag.jsl
+#include math.jsl
+#include color.jsl
+#include lighting.jsl
+#include scattering.jsl
+#include worldnoise.jsl
+#include globemap.jsl
+
+uniform vec3 crustDark;
+uniform vec3 crustPale;
+uniform float glow;         /* how bright the lava is */
+
+/* The colour of something hot, from just glowing (0) to running lava (1). */
+vec3 heatColor(float t) {
+  vec3 c = vec3(0.55, 0.02, 0.0) * smoothstep(0.0, 0.30, t);
+  c = mix(c, vec3(1.0, 0.22, 0.02), smoothstep(0.22, 0.60, t));
+  c = mix(c, vec3(1.0, 0.72, 0.28), smoothstep(0.62, 1.0, t));
+  return c;
+}
+
+void main() {
+  PREPASS
+
+  vec3 dir = normalize(vertpos);
+  vec3 L = toBody(normalize(starPos - position));
+  vec3 V = normalize(position - eye);
+  vec4 map = textureCube(planetMap, dir);
+
+  vec3 east, north;
+  groundFrame(dir, east, north);
+  vec2 slope = relief * groundSlope(dir, east, north, 0.0014);
+  float near = 1.0 - smoothstep(0.0012, 0.0040, length(fwidth(dir)));
+  vec2 grain = near * vec2(wn_fbm(dir * 240.0, 3, 0.6), wn_fbm(dir * 240.0 + 31.7, 3, 0.6));
+  vec3 N = normalize(dir - (slope.x + 0.10 * grain.x) * east - (slope.y + 0.10 * grain.y) * north);
+
+  /* (finer than the map holds: the lava's surface seethes) */
+  float heat = saturate(map.y * (1.0 + 0.35 * near * wn_fbm(dir * 150.0, 3, 0.6)));
+  float molten = smoothstep(0.35, 0.8, heat);
+
+  vec3 albedo = lin(mix(crustDark, crustPale, map.z)) * (1.0 - molten);
+  float ndl = saturate(dot(N, L));
+  float ndv = saturate(dot(N, toBody(-V)));
+  float lit = mix(ndl, min(1.3, 2.0 * ndl / (ndl + ndv + 1e-3)), 0.3) * groundShadow(dir, map.x, L, 0.035);
+  vec3 sun = mix(starColor, vec3(1.0), whiteLight);
+  vec3 color = albedo * (sun * lit + 0.002);
+
+  /* The fire, and its light on the crust about it. */
+  color += glow * lin(heatColor(heat)) * (0.25 + 2.2 * heat * heat);
+  color += glow * albedo * lin(vec3(1.0, 0.30, 0.06)) * 1.6 * map.w;
+  color += glow * lin(vec3(1.0, 0.25, 0.04)) * 0.035 * map.w;
+
+  if (atmoDensity > 0.0) {
+    color += getScattering(origin, eye, V, length(position - eye)).xyz;
+  }
+
+  outputAlbedo(color);
+  outputAlpha(1.0);
+  outputNormal(toWorld(N));
+  outputMaterial(MATERIAL_NOSHADE);
+  outputRoughness(0.0);
+}

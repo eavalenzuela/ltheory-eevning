@@ -1,0 +1,102 @@
+/* The face of a gas giant, drawn once into a cube map for world_gas.jsl
+   to colour and light.
+
+   Nothing on it is ground. What is seen is the top of its cloud, drawn
+   out by its spin into bands that run round it: a few broad belts and
+   zones, with finer bands inside them. The bands do not run straight:
+   the flow wanders, and where two bands rub, the edge between them
+   curls into eddies and trails. Here and there a storm, an oval that
+   the bands part to flow round, turns in place.
+
+   Channels: x the tone of the cloud (0 the dark of a belt, 1 the pale
+   of a zone), y streaks and eddies within the bands (0 to 1), z storm
+   (0 none, 1 its heart), w how much of the planet's third colour the
+   band has in it (0 to 1). */
+
+#include frag.jsl
+#include math.jsl
+#include cube.jsl
+#include worldnoise.jsl
+
+uniform float seed;
+uniform float bands;        /* about how many bands there are from pole to pole */
+uniform float turbulence;   /* how churned they are, 0 to 1 */
+uniform float storms;       /* how stormy, 0 to 1 */
+
+const int SPOTS = 9;
+
+/* The tone of the band at a latitude (as the sine of it, -1 to 1):
+   broad belts with fairly sharp edges, and finer bands across them. */
+float bandAt(float y, vec3 s) {
+  float k = 0.5 * bands;
+  float broad = smoothstep(-0.16, 0.16, wn_noise(vec3(y * k, s.x, s.y))) * 2.0 - 1.0;
+  return 0.50 * broad + 0.32 * wn_noise(vec3(y * k * 2.7, s.z, s.x)) + 0.20 * wn_noise(vec3(y * k * 6.3, s.y, s.z));
+}
+
+void main() {
+  vec3 p = GetCubePosition(uv, false);
+  vec3 s = vec3(seed * 1.31, seed * 2.17, seed * 0.73);
+
+  /* Storms first: the bands are pushed aside by them, and what is
+     inside one is wound up: 'turned' is the place whose cloud has been
+     carried to this one. */
+  vec3 turned = p;
+  float storm = 0.0;
+  float collar = 0.0;
+  float push = 0.0;
+  for (int i = 0; i < SPOTS; i++) {
+    float n = float(i);
+    vec3 a = wn_hash(vec3(n * 3.7 + seed, n * 9.1 + 1.0, seed * 2.3 + n));
+    vec3 b = wn_hash(vec3(seed * 0.9 + n, n * 4.3 + 6.0, n * 0.61 + seed)) * 0.5 + 0.5;
+    if (b.z > storms) continue;
+    /* (storms keep to the middle latitudes) */
+    vec3 c = normalize(vec3(a.x, 0.7 * a.y, a.z) + vec3(1e-3));
+    float size = mix(0.045, 0.21, b.x * b.x * b.x);
+    vec3 east = normalize(cross(vec3(0.0, 1.0, 0.0), c));
+    vec3 north = cross(c, east);
+    /* (an oval, about twice as long as it is high, with a ragged edge) */
+    vec2 d = vec2(dot(p - c, east), dot(p - c, north) * 1.8) / size;
+    float r = length(d) * (1.0 + 0.10 * wn_noise(p * 30.0 + a * 9.0));
+    if (r > 3.0 || dot(p, c) < 0.0) continue;
+    float inside = 1.0 - smoothstep(0.55, 1.0, r);
+    /* Within it the cloud is wound round the middle, the more turns the
+       nearer the middle. */
+    float wind = 1.0 - smoothstep(0.0, 1.35, r);
+    float angle = (b.y > 0.5 ? 7.0 : -7.0) * wind * wind;
+    vec3 v = turned - c * dot(turned, c);
+    turned = normalize(c * dot(turned, c) + v * cos(angle) + cross(c, v) * sin(angle));
+    float strength = mix(0.5, 0.9, b.y);
+    storm = max(storm, strength * inside);
+    collar = max(collar, strength * smoothstep(0.6, 1.0, r) * (1.0 - smoothstep(1.0, 1.5, r)));
+    /* Round it the bands part to let it by. */
+    push += sign(d.y) * size * 0.5 * exp(-0.8 * r * r) * (1.0 - inside);
+  }
+
+  /* The flow wanders, and what it carries is drawn out along the lines
+     of latitude: what would be a blob is a streak. (Pushed about twice
+     over, the second push following the first, so that it curls.) */
+  vec3 w = vec3(turned.x, turned.y * 4.0, turned.z);
+  vec3 first = wn_drift(w * 2.2 + s);
+  vec3 w2 = w + 0.40 * turbulence * first;
+  vec3 second = wn_drift(w2 * 6.5 + s + 40.0);
+  float y = turned.y + push + turbulence * (0.050 * first.y + 0.022 * second.y);
+
+  /* Where the tone changes fastest, two bands rub: the edge between
+     them is thrown into curls there. */
+  float rub = saturate(abs(bandAt(y + 0.012, s) - bandAt(y - 0.012, s)) * 5.0);
+  vec3 curl = wn_drift(vec3(w2.x, y * 7.0, w2.z) * 11.0 + s + 23.0);
+  y += turbulence * rub * 0.030 * curl.y;
+  float tone = bandAt(y, s);
+  vec3 e = vec3(w2.x, y * 4.0, w2.z) + 0.10 * turbulence * second;
+  float eddies = wn_fbm(e * 13.0 + s + 80.0, 5, 0.6);
+  float streaks = wn_fbm(vec3(w2.x, y * 26.0, w2.z) * 4.0 + s + 11.0, 5, 0.55);
+  tone += turbulence * rub * 0.40 * eddies - 0.30 * collar;
+  /* (a storm's own cloud, in streaks that the winding makes arms of) */
+  tone = mix(tone, 1.6 * wn_fbm(vec3(turned.x, turned.y * 7.0, turned.z) * 8.0 + s + 55.0, 4, 0.6), saturate(storm * 1.2));
+
+  /* Some belts have the planet's third colour in them. */
+  float third = smoothstep(0.05, 0.40, wn_noise(vec3(y * bands * 0.31 + 7.0, s.y, s.x)) + 0.25 * eddies * rub);
+
+  float detail = saturate(0.5 + 0.9 * streaks + 0.7 * rub * eddies);
+  RETURN(vec4(saturate(0.5 + 1.15 * tone), detail, storm, third));
+}

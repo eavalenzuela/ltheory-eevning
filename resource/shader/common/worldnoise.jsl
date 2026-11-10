@@ -64,4 +64,31 @@ vec3 wn_drift(vec3 p) {
   return vec3(wn_fbm(p, 4, 0.5), wn_fbm(p + vec3(31.4, 7.9, 12.6), 4, 0.5), wn_fbm(p + vec3(4.4, 23.8, 51.2), 4, 0.5));
 }
 
+/* Cells: a scatter of points, about one to a unit of space. x is the
+   distance to the nearest, y to the next nearest (y - x is small along
+   the walls between cells), z a number of the nearest's own, 0 to 1. */
+vec3 wn_cells(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = fract(p);
+  float d1 = 8.0, d2 = 8.0, id = 0.0;
+  for (int z = -1; z <= 1; z++) {
+    for (int y = -1; y <= 1; y++) {
+      for (int x = -1; x <= 1; x++) {
+        vec3 n = vec3(float(x), float(y), float(z));
+        vec3 h = wn_hash(i + n);
+        vec3 c = n + 0.5 + 0.45 * h - f;
+        float d = dot(c, c);
+        if (d < d1) {
+          d2 = d1;
+          d1 = d;
+          id = h.x * 0.5 + 0.5;
+        } else if (d < d2) {
+          d2 = d;
+        }
+      }
+    }
+  }
+  return vec3(sqrt(d1), sqrt(d2), id);
+}
+
 #endif

@@ -47,22 +47,40 @@ local FRONT = vector.create(0, 0.15, 2.7)
 local NEAR = vector.create(0.25, 0.35, 1.32)
 local CENTRE = vector.create(0, 0, 0)
 local DAY = vector.create(-0.45, 0.35, 0.82)
+-- (The light may not come from in front of the camera: the engine's
+-- star in view whites the picture out. A night side is seen across the
+-- terminator.)
 local SIDE = vector.create(-0.98, 0.15, 0.12)
+
+local CLOSE = vector.create(0.1, 0.2, 0)
+
+-- Four views of a kind: by day, across the terminator, close to, and
+-- another seed (which, for a kind that comes in several colourings, is
+-- another of those).
+local function four(kind: string): { View }
+  return {
+    { name = `{kind}-1-day`, kind = kind, seed = 1, eye = FRONT, look = CENTRE, light = DAY },
+    { name = `{kind}-2-terminator`, kind = kind, seed = 1, eye = FRONT, look = CENTRE, light = SIDE },
+    { name = `{kind}-3-close`, kind = kind, seed = 1, eye = NEAR, look = CLOSE, light = SIDE },
+    { name = `{kind}-4-seed2`, kind = kind, seed = 2, eye = FRONT, look = CENTRE, light = DAY },
+  }
+end
 
 local VIEWS: { View } = {
   { name = "temperate-1-day", kind = "temperate", seed = 1, eye = FRONT, look = CENTRE, light = DAY },
   { name = "temperate-2-terminator", kind = "temperate", seed = 1, eye = FRONT, look = CENTRE, light = SIDE },
   { name = "temperate-3-limb", kind = "temperate", seed = 1, eye = vector.create(0.2, 0.5, 1.75), look = vector.create(0.55, 0.62, 0), light = SIDE },
-  { name = "temperate-4-close", kind = "temperate", seed = 1, eye = NEAR, look = vector.create(0.1, 0.2, 0), light = DAY },
-  { name = "moon-1-day", kind = "moon", seed = 1, eye = FRONT, look = CENTRE, light = DAY },
-  { name = "moon-2-terminator", kind = "moon", seed = 1, eye = FRONT, look = CENTRE, light = SIDE },
-  { name = "moon-3-close", kind = "moon", seed = 1, eye = NEAR, look = vector.create(0.1, 0.2, 0), light = SIDE },
-  { name = "moon-4-seed2", kind = "moon", seed = 2, eye = FRONT, look = CENTRE, light = SIDE },
-  { name = "barren-1-day", kind = "barren", seed = 1, eye = FRONT, look = CENTRE, light = DAY },
-  { name = "barren-2-terminator", kind = "barren", seed = 1, eye = FRONT, look = CENTRE, light = SIDE },
-  { name = "barren-3-close", kind = "barren", seed = 1, eye = NEAR, look = vector.create(0.1, 0.2, 0), light = SIDE },
-  { name = "barren-4-seed2", kind = "barren", seed = 2, eye = FRONT, look = CENTRE, light = DAY },
+  { name = "temperate-4-close", kind = "temperate", seed = 1, eye = NEAR, look = CLOSE, light = DAY },
+  { name = "gas-5-seed3", kind = "gas", seed = 3, eye = FRONT, look = CENTRE, light = DAY },
+  { name = "gas-6-seed4", kind = "gas", seed = 4, eye = FRONT, look = CENTRE, light = DAY },
+  { name = "gas-7-seed5", kind = "gas", seed = 5, eye = FRONT, look = CENTRE, light = SIDE },
+  { name = "gas-8-close", kind = "gas", seed = 5, eye = NEAR, look = CLOSE, light = DAY },
 }
+for _, kind in { "moon", "barren", "ice", "icemoon", "lava", "gas" } do
+  for _, view in four(kind) do
+    table.insert(VIEWS, view)
+  end
+end
 
 -- The settings in the params file.
 local function readParams(): Planet.Tweaks

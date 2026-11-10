@@ -22,6 +22,7 @@
 #include math.jsl
 #include cube.jsl
 #include worldnoise.jsl
+#include worldcraters.jsl
 
 uniform float seed;
 uniform float craters;      /* how heavily cratered, 0 to 1 */
@@ -29,57 +30,6 @@ uniform float plains;       /* how much of it is dark plain, 0 to 1 */
 uniform float rifts;        /* how much it is cut by canyons, 0 to 1 */
 
 const float SCALE = 12.0;
-
-/* Craters of one range of sizes: at most one to a cell of a grid of
-   'cells' to the radius. 'steep' is their depth over their radius;
-   'floorAt' how far down the flat floor of a big one lies, as a share of
-   the bowl's depth (1 for a plain bowl); 'keep' how much of an old one
-   is left here. Adds to the height (in planet radii) and to the
-   brightness of fresh ejecta. */
-void craterLayer(vec3 p, float cells, float chance, float steep, float floorAt, float keep,
-                 inout float height, inout float bright) {
-  vec3 cell = floor(p * cells);
-  vec3 offset = vec3(seed * 1.7 + cells, seed * 0.31, cells * 3.1);
-  for (int z = -1; z <= 1; z++) {
-    for (int y = -1; y <= 1; y++) {
-      for (int x = -1; x <= 1; x++) {
-        vec3 id = cell + vec3(float(x), float(y), float(z));
-        vec3 h = wn_hash(id + offset) * 0.5 + 0.5;
-        if (h.x > chance) continue;
-        /* A crater belongs to the surface: only cells the surface passes
-           near have one, and its centre is brought onto the surface. (It
-           moves by under 0.35 of a cell, and nothing of it reaches past
-           0.8 of one, so the cells searched are all that matter.) */
-        vec3 c = (id + 0.5 + 0.35 * wn_hash(id + offset + 17.0)) / cells;
-        if (abs(length(c) - 1.0) * cells > 0.35) continue;
-        c = normalize(c);
-        float radius = mix(0.09, 0.36, h.y * h.y) / cells;
-        float dist = length(p - c);
-        float d = dist / radius;
-        float age = h.z;                  /* 1 new, 0 as old as the ground */
-        if (d < 2.2) {
-          float profile;
-          if (d < 1.0) {
-            profile = max(d * d - 1.0, -floorAt) + 0.22 * smoothstep(0.45, 1.0, d);
-            profile += 0.45 * (1.0 - floorAt) * exp(-d * d * 30.0);
-          } else {
-            profile = 0.22 * exp(-3.0 * (d - 1.0)) * (1.0 - smoothstep(1.6, 2.2, d));
-          }
-          float worn = mix(0.22, 1.0, age * age) * mix(smoothstep(0.55, 0.85, age), 1.0, keep);
-          height += steep * radius * worn * profile;
-        }
-        if (age > 0.88) {
-          float young = (age - 0.88) / 0.12;
-          vec3 v = (p - c) / max(dist, 1e-5);
-          float streak = smoothstep(0.10, 0.55, wn_noise(v * 6.0 + h * 50.0));
-          float reach = 1.0 - smoothstep(radius, 0.8 / cells, dist);
-          float halo = 1.0 - smoothstep(0.9, 2.0, d);
-          bright = max(bright, young * max(halo, streak * reach * reach));
-        }
-      }
-    }
-  }
-}
 
 void main() {
   vec3 p = GetCubePosition(uv, false);
@@ -112,12 +62,12 @@ void main() {
   float keep = 1.0 - 0.9 * plain;
   float dents = 0.0;
   float bright = 0.0;
-  craterLayer(p, 1.7, 0.30 * craters, 0.10, 0.35, keep, dents, bright);
-  craterLayer(p, 3.6, 0.45 * craters, 0.14, 0.50, keep, dents, bright);
-  craterLayer(p, 7.5, 0.60 * craters, 0.22, 0.75, keep, dents, bright);
-  craterLayer(p, 16.0, 0.75 * craters, 0.32, 1.0, keep, dents, bright);
-  craterLayer(p, 34.0, 0.85 * craters, 0.40, 1.0, keep, dents, bright);
-  craterLayer(p, 70.0, 0.90 * craters, 0.40, 1.0, keep, dents, bright);
+  craterLayer(p, seed, 1.7, 0.30 * craters, 0.10, 0.35, keep, dents, bright);
+  craterLayer(p, seed, 3.6, 0.45 * craters, 0.14, 0.50, keep, dents, bright);
+  craterLayer(p, seed, 7.5, 0.60 * craters, 0.22, 0.75, keep, dents, bright);
+  craterLayer(p, seed, 16.0, 0.75 * craters, 0.32, 1.0, keep, dents, bright);
+  craterLayer(p, seed, 34.0, 0.85 * craters, 0.40, 1.0, keep, dents, bright);
+  craterLayer(p, seed, 70.0, 0.90 * craters, 0.40, 1.0, keep, dents, bright);
 
   float height = 0.5 + SCALE * (ground + dents);
   RETURN(vec4(clamp(height, 0.0, 1.0), max(plain, 0.5 * cut), mottle, clamp(bright, 0.0, 1.0)));

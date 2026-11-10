@@ -172,10 +172,8 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
       local body: Object
       -- The kinds built from their own heights (Game/View/Planet); the
       -- rest are still the engine's old planet.
-      local kind = if object.kind == "moon" then (if object.variety == "barren" then "moon" else "")
-        elseif Planet.kinds[object.variety] then object.variety
-        else ""
-      if kind ~= "" then
+      local kind = Planet.KindOf(object.kind, object.variety)
+      if kind then
         body = Planet.New(kind, object.seed, if object.kind == "moon" then MOON_MAP else WORLD_MAP).body
       else
         body = Item_PlanetType(object.seed):Instantiate()
