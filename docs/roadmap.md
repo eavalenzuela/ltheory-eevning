@@ -11,6 +11,27 @@
 
 Scope note: this is years of work for a human team. Sizes below are relative, not calendar estimates.
 
+## Status
+
+| Milestone | State |
+|---|---|
+| M0 Solid ground | Done 2026-11-09, with two items moved (below). `script/check --soak` passes. |
+| M1 onward, track S1 onward | Not started. |
+
+**Moved out of M0:**
+- The in-game console overlay and its cheats (spawn, give item, set skill, teleport, advance time) need the Core's ships, items and skills and the new UI toolkit, so they land in M1–M2. M0 delivers the plumbing: `bin/launch APP --console` (a Luau prompt in the terminal) and the harness command `lua CODE`.
+- "Ordered containers replace hash iteration" was done for fleets and actions, which is where the sim actually diverged. The prototype's other map loops are left for S1–S3, where that code is rewritten; the soak guards them meanwhile.
+
+**What M0 found:**
+- The sim did depend on map order: one seed in five gave a different history after a save and load (a battle at tick 3961 assigned losses to different fleets). After the fix, eight seeds match over 6,000 ticks with a reload every 97.
+- The prototype fails the new sweep on all eight seeds: faction credits fall at about 130% of their level per game day, warships likewise, and station maintenance is about 45% met. That is the baseline the new economy has to beat (`script/simsweep`, `script/simreport`).
+- This machine gives the engine an OpenGL 4.6 compatibility context, so instancing and newer GLSL can be mixed in without a renderer port (E11, E12).
+- A 1.8 MB sim state saves and loads in about 130 ms in Luau. Fine for autosave on dock or jump; a C encoder is the fallback if it ever hitches.
+- With the screen asleep the desktop holds each buffer swap for about 460 ms, which cuts any window to two frames a second. Scripted runs use `--no-present`.
+- The engine builds as C++17 and the LTSL runtime is gone (about 4,700 lines).
+
+The commands are listed in `docs/tools.md`; the rules for Core code are in `docs/design/core.md`.
+
 ## 1. Context
 
 The repo is the revived Limit Theory engine with a one-system prototype on top (`App/ltheory.luau`: fly, mine, dock, sell, buy, fit, two pirates, respawn) and an unconnected headless faction sim (`resource/script/Sim/`, branch `universe-sim-design`). The goal is a single-player, offline game whose systems roughly match EVE Online. Work stalled when the sim's hauler-level economy kept collapsing and the direction was reopened.
