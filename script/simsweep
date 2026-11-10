@@ -3,6 +3,7 @@
 # and judge every run against the thresholds in Tool/SimProbe.
 #
 #   script/simsweep [--seeds N] [--ticks N] [--systems N] [--jobs N] [--out DIR]
+#   script/simsweep --rescore DIR [--seeds N]     print the scorecard of an earlier sweep
 #
 # Defaults: 8 seeds (galaxy seed = history seed = 1..N), 40000 ticks
 # (about 4.6 game days), 400 systems, one job per CPU, output under
@@ -19,8 +20,10 @@ ticks=40000
 systems=400
 jobs=$(nproc)
 out="cache/sim/sweep-$(date +%Y%m%d-%H%M%S)"
+rescore=0
 while [ $# -gt 0 ]; do
   case "$1" in
+    --rescore) rescore=1; out=$2 ;;
     --seeds) seeds=$2 ;;
     --ticks) ticks=$2 ;;
     --systems) systems=$2 ;;
@@ -35,23 +38,26 @@ if [ ! -x bin/ltcore ]; then
   echo "script/simsweep: bin/ltcore is missing; run python3 configure.py build"
   exit 2
 fi
-mkdir -p "$out"
-
-echo "simsweep: $seeds seeds, $ticks ticks, $systems systems, $jobs at a time -> $out"
-start=$SECONDS
-seq 1 "$seeds" | xargs -P "$jobs" -I{} sh -c \
-  "bin/ltcore Tool/simrun --galaxy {} --history {} --ticks $ticks --systems $systems --out '$out/seed-{}' > '$out/seed-{}.log' 2>&1"
-echo "simsweep: runs finished in $((SECONDS - start)) s"
+if [ "$rescore" -eq 0 ]; then
+  mkdir -p "$out"
+  echo "simsweep: $seeds seeds, $ticks ticks, $systems systems, $jobs at a time -> $out"
+  start=$SECONDS
+  seq 1 "$seeds" | xargs -P "$jobs" -I{} sh -c \
+    "bin/ltcore Tool/simrun --galaxy {} --history {} --ticks $ticks --systems $systems --out '$out/seed-{}' > '$out/seed-{}.log' 2>&1"
+  echo "simsweep: runs finished in $((SECONDS - start)) s"
+fi
 
 # The scorecard: one row per check, one column per seed, then how many
 # seeds passed it.
-awk -F'[=|]' -v seeds="$seeds" '
+# A check line is "check=name|value|limit|ok" (the limit may contain "=").
+awk -F'|' -v seeds="$seeds" '
   FNR == 1 { seed++ }
-  $1 == "check" {
-    if (!($2 in order)) { order[$2] = ++n; name[n] = $2; limit[n] = $4 }
-    value[order[$2], seed] = $3
-    status[order[$2], seed] = $5
-    if ($5 == "ok") passed[order[$2]]++; else failed++
+  /^check=/ {
+    check = substr($1, 7)
+    if (!(check in order)) { order[check] = ++n; name[n] = check; limit[n] = $3 }
+    value[order[check], seed] = $2
+    status[order[check], seed] = $4
+    if ($4 == "ok") passed[order[check]]++; else failed++
   }
   END {
     printf "%-36s", "check"

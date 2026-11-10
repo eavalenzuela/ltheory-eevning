@@ -1,0 +1,539 @@
+#!/usr/bin/env python3
+"""script/simreport: turn a simulation sweep into one HTML page.
+
+    script/simreport DIR
+
+DIR is a sweep directory written by script/simsweep (seed-N/result.txt and
+seed-N/series.csv per seed). Writes DIR/report.html: the scorecard of every
+check on every seed, and for the chosen seed the time series behind it.
+The page is self-contained; open it in a browser.
+
+Chart conventions (kept on purpose): one y-axis per chart; two series at
+most share a plot, more are drawn as small multiples in one colour; every
+chart has a table view and a hover readout; pass and fail are an icon and
+a word, never colour alone.
+"""
+
+import csv
+import json
+import os
+import sys
+
+TICKS_PER_DAY = 8640
+MAX_POINTS = 240
+
+
+def read_result(path):
+    info, checks = {}, []
+    with open(path) as f:
+        for line in f:
+            line = line.rstrip("\n")
+            if line.startswith("check="):
+                name, value, limit, status = line[6:].split("|")
+                checks.append({"name": name, "value": float(value), "limit": limit, "ok": status == "ok"})
+            elif "=" in line:
+                key, value = line.split("=", 1)
+                info[key] = value
+    return info, checks
+
+
+def read_series(path):
+    """{series: {key: [values]}} and the tick of each sample, thinned to MAX_POINTS."""
+    ticks, index, data = [], {}, {}
+    with open(path, newline="") as f:
+        for row in csv.DictReader(f):
+            tick = int(row["tick"])
+            if tick not in index:
+                index[tick] = len(ticks)
+                ticks.append(tick)
+            values = data.setdefault(row["series"], {}).setdefault(row["key"], [])
+            while len(values) < index[tick]:
+                values.append(None)
+            values.append(float(row["value"]))
+    step = max(1, -(-len(ticks) // MAX_POINTS))
+    keep = list(range(0, len(ticks), step))
+    if keep and keep[-1] != len(ticks) - 1:
+        keep.append(len(ticks) - 1)
+
+    def thin(values):
+        return [round(values[i], 4) if i < len(values) and values[i] is not None else None for i in keep]
+
+    return {
+        "days": [round(ticks[i] / TICKS_PER_DAY, 4) for i in keep],
+        "series": {s: {k: thin(v) for k, v in keys.items()} for s, keys in data.items()},
+    }
+
+
+def main():
+    if len(sys.argv) != 2:
+        print(__doc__)
+        return 2
+    root = sys.argv[1]
+    seeds = sorted(
+        (int(name[5:]) for name in os.listdir(root)
+         if name.startswith("seed-") and os.path.isfile(os.path.join(root, name, "result.txt"))))
+    if not seeds:
+        print(f"simreport: no seed-N/result.txt under {root}")
+        return 2
+
+    runs = {}
+    for seed in seeds:
+        info, checks = read_result(os.path.join(root, f"seed-{seed}", "result.txt"))
+        run = read_series(os.path.join(root, f"seed-{seed}", "series.csv"))
+        run["info"], run["checks"] = info, checks
+        runs[str(seed)] = run
+
+    first = runs[str(seeds[0])]["info"]
+    data = {
+        "name": os.path.basename(os.path.normpath(root)),
+        "seeds": seeds,
+        "ticks": int(first.get("ticks", 0)),
+        "systems": int(first.get("systems", 0)),
+        "runs": runs,
+    }
+    # "</" must not appear inside a script element.
+    payload = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
+    out = os.path.join(root, "report.html")
+    with open(out, "w") as f:
+        f.write(PAGE.replace("/*DATA*/null", payload))
+    print(f"simreport: wrote {out} ({os.path.getsize(out) // 1024} KB, {len(seeds)} seeds)")
+    return 0
+
+
+PAGE = r"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulation sweep</title>
+<style>
+.viz-root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6; --series-2: #eb6834;
+  --good: #0ca30c; --critical: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --series-2: #d95926;
+  }
+}
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19;
+  --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --series-2: #d95926;
+}
+html, body { margin: 0; }
+body.viz-root {
+  background: var(--page); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 22px; margin: 0 0 4px; font-weight: 600; }
+h2 { font-size: 16px; margin: 36px 0 4px; font-weight: 600; }
+p.lead, p.note { color: var(--text-secondary); margin: 0 0 16px; max-width: 76ch; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { font-weight: 600; color: var(--text-secondary); }
+th:first-child, td:first-child { text-align: left; white-space: normal; }
+tr:last-child td { border-bottom: 0; }
+td .limit { color: var(--text-muted); display: block; font-size: 12px; }
+.status { display: inline-flex; align-items: center; gap: 4px; }
+.status svg { width: 14px; height: 14px; flex: none; }
+.status.ok svg { color: var(--good); } .status.fail svg { color: var(--critical); }
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 28px 0 16px;
+  position: sticky; top: 0; background: var(--page); padding: 8px 0; z-index: 2; }
+.filters span { color: var(--text-secondary); }
+.filters button, .toggle {
+  font: inherit; color: var(--text-primary); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer;
+}
+.filters button[aria-pressed="true"] { border-color: var(--text-primary); font-weight: 600; }
+.filters button:hover, .toggle:hover { background: var(--grid); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.tile .label { color: var(--text-secondary); font-size: 13px; }
+.tile .value { font-size: 26px; font-weight: 600; margin: 2px 0; }
+.tile .limit { color: var(--text-muted); font-size: 12px; }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
+.multiples { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+figure { margin: 0; min-width: 0; }
+figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+figcaption .title { font-weight: 600; }
+figcaption .sub { color: var(--text-secondary); font-size: 12px; display: block; font-weight: 400; }
+.toggle { font-size: 12px; padding: 2px 8px; flex: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--text-secondary); font-size: 12px; margin-bottom: 4px; }
+.legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 6px; border-radius: 1px; }
+.plot { position: relative; outline: none; }
+.plot:focus-visible { box-shadow: 0 0 0 2px var(--series-1); border-radius: 4px; }
+.plot svg { display: block; width: 100%; height: auto; overflow: visible; }
+.plot text { fill: var(--text-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.plot text.end { fill: var(--text-secondary); }
+.tip {
+  position: absolute; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  white-space: nowrap; display: none; z-index: 1;
+}
+.tip .when { color: var(--text-secondary); margin-bottom: 2px; }
+.tip .row { display: flex; align-items: center; gap: 6px; }
+.tip .row i { width: 10px; height: 2px; border-radius: 1px; flex: none; }
+.tip .row b { font-weight: 600; }
+.tip .row span { color: var(--text-secondary); }
+.tableview { max-height: 260px; overflow: auto; font-size: 12px; }
+</style>
+</head>
+<body class="viz-root">
+<main>
+  <h1 id="title"></h1>
+  <p class="lead" id="lead"></p>
+
+  <h2>Scorecard</h2>
+  <p class="note">Each check on each seed. A run passes only if every check does. The limits are opening proposals to be calibrated.</p>
+  <div class="card scroll"><table id="scorecard"></table></div>
+
+  <div class="filters" id="filters" role="group" aria-label="Seed"><span>Seed</span></div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <h2>Totals</h2>
+  <p class="note">All factions together, pirates left out. Time is in game days.</p>
+  <div class="charts" id="totals"></div>
+
+  <h2>Credits by faction</h2>
+  <p class="note">One panel per faction on a shared scale, so heights compare across panels.</p>
+  <div class="multiples" id="credits"></div>
+
+  <h2>Systems owned by faction</h2>
+  <p class="note">Shared scale.</p>
+  <div class="multiples" id="systems"></div>
+
+  <h2>Average price by good</h2>
+  <p class="note">Each panel has its own scale: goods differ too much in price to share one. Read the shape, not the height across panels.</p>
+  <div class="multiples" id="prices"></div>
+</main>
+<script id="data" type="application/json">/*DATA*/null</script>
+<script>
+"use strict";
+const DATA = JSON.parse(document.getElementById("data").textContent);
+const SVG = "http://www.w3.org/2000/svg";
+
+function el(tag, attrs, text) {
+  const node = document.createElement(tag);
+  for (const k in attrs || {}) node.setAttribute(k, attrs[k]);
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+function svg(tag, attrs) {
+  const node = document.createElementNS(SVG, tag);
+  for (const k in attrs || {}) node.setAttribute(k, attrs[k]);
+  return node;
+}
+
+// 1,284 / 12.9K / 4.2M; small values keep two decimals.
+function compact(v) {
+  if (v === null || v === undefined) return "–";
+  const a = Math.abs(v);
+  if (a >= 1e6) return (v / 1e6).toFixed(a >= 1e7 ? 0 : 1) + "M";
+  if (a >= 1e4) return (v / 1e3).toFixed(a >= 1e5 ? 0 : 1) + "K";
+  if (a >= 100 || Number.isInteger(v)) return Math.round(v).toLocaleString("en-US");
+  return v.toFixed(2);
+}
+function dayLabel(d) {
+  const day = Math.floor(d), minutes = Math.round((d - day) * 1440);
+  return "day " + (day + 1) + " " + String(Math.floor(minutes / 60) % 24).padStart(2, "0") + ":" +
+    String(minutes % 60).padStart(2, "0");
+}
+
+// Round tick positions covering [0, max] (or [min, max] when min < 0).
+function niceTicks(min, max, count) {
+  if (max <= min) max = min + 1;
+  const raw = (max - min) / count, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw);
+  const ticks = [];
+  // From the tick at or below min to the tick at or above max, so no
+  // value falls outside the axis.
+  const last = Math.ceil(max / step - 1e-9) * step;
+  for (let v = Math.floor(min / step + 1e-9) * step; v <= last + step * 1e-9; v += step) ticks.push(+v.toFixed(10));
+  return ticks;
+}
+
+function statusNode(ok) {
+  const span = el("span", { class: "status " + (ok ? "ok" : "fail") });
+  const icon = svg("svg", { viewBox: "0 0 16 16", "aria-hidden": "true" });
+  icon.appendChild(svg("path", ok
+    ? { d: "M3 8.5l3.2 3.2L13 4.8", fill: "none", stroke: "currentColor", "stroke-width": 2.2, "stroke-linecap": "round", "stroke-linejoin": "round" }
+    : { d: "M4 4l8 8M12 4l-8 8", fill: "none", stroke: "currentColor", "stroke-width": 2.2, "stroke-linecap": "round" }));
+  span.appendChild(icon);
+  span.appendChild(document.createTextNode(ok ? "Pass" : "Fail"));
+  return span;
+}
+
+/* A line chart.
+   spec: { title, sub, days, series: [{name, values, color}], yMax?, yMin?, threshold?: {value, label},
+           compact?: bool } */
+function lineChart(parent, spec) {
+  const fig = el("figure", { class: "card" });
+  const cap = el("figcaption");
+  const head = el("span", { class: "title" }, spec.title);
+  if (spec.sub) head.appendChild(el("span", { class: "sub" }, spec.sub));
+  cap.appendChild(head);
+  const toggle = el("button", { class: "toggle", type: "button", "aria-pressed": "false" }, "Table");
+  cap.appendChild(toggle);
+  fig.appendChild(cap);
+
+  if (spec.series.length > 1) {
+    const legend = el("div", { class: "legend" });
+    for (const s of spec.series) {
+      const item = el("span");
+      const key = el("i"); key.style.background = s.color;
+      item.appendChild(key); item.appendChild(document.createTextNode(s.name));
+      legend.appendChild(item);
+    }
+    fig.appendChild(legend);
+  }
+
+  const W = spec.compact ? 300 : 520, H = spec.compact ? 150 : 250;
+  const m = { l: 46, r: spec.compact ? 12 : 64, t: 10, b: 24 };
+  const days = spec.days, n = days.length;
+  let lo = 0, hi = 0;
+  for (const s of spec.series) for (const v of s.values) if (v !== null) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  if (spec.threshold) hi = Math.max(hi, spec.threshold.value);
+  if (spec.yMax !== undefined) hi = Math.max(hi, spec.yMax);
+  if (spec.yMin !== undefined) lo = Math.min(lo, spec.yMin);
+  const yt = niceTicks(lo, hi, spec.compact ? 2 : 4);
+  lo = yt[0]; hi = yt[yt.length - 1];
+  const x = i => m.l + (W - m.l - m.r) * (days[i] - days[0]) / Math.max(1e-9, days[n - 1] - days[0]);
+  const y = v => H - m.b - (H - m.t - m.b) * (v - lo) / (hi - lo);
+
+  const plot = el("div", { class: "plot", tabindex: "0", role: "img",
+    "aria-label": spec.title + ". Use the arrow keys to read values, or open the table." });
+  const root = svg("svg", { viewBox: `0 0 ${W} ${H}` });
+  for (const v of yt) {
+    root.appendChild(svg("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v),
+      stroke: v === 0 ? "var(--axis)" : "var(--grid)", "stroke-width": 1 }));
+    const label = svg("text", { x: m.l - 6, y: y(v) + 4, "text-anchor": "end" });
+    label.textContent = compact(v); root.appendChild(label);
+  }
+  const lastDay = Math.floor(days[n - 1]);
+  for (let d = Math.floor(days[0]); d <= lastDay; d += Math.max(1, Math.ceil(lastDay / 6))) {
+    const px = Math.max(m.l, m.l + (W - m.l - m.r) * (d - days[0]) / Math.max(1e-9, days[n - 1] - days[0]));
+    const label = svg("text", { x: px, y: H - 6, "text-anchor": "middle" });
+    label.textContent = "day " + (d + 1); root.appendChild(label);
+  }
+  if (spec.threshold) {
+    const ty = y(spec.threshold.value);
+    root.appendChild(svg("line", { x1: m.l, x2: W - m.r, y1: ty, y2: ty, stroke: "var(--text-muted)",
+      "stroke-width": 1, "stroke-dasharray": "4 3" }));
+    const label = svg("text", { x: W - m.r, y: ty - 4, "text-anchor": "end" });
+    label.textContent = spec.threshold.label; root.appendChild(label);
+  }
+
+  const ends = [];
+  for (const s of spec.series) {
+    let d = "", pen = false, last = -1;
+    s.values.forEach((v, i) => {
+      if (v === null) { pen = false; return; }
+      d += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1);
+      pen = true; last = i;
+    });
+    if (spec.series.length === 1 && last >= 0) {
+      root.appendChild(svg("path", { d: d + `L${x(last).toFixed(1)} ${y(lo)}L${x(0).toFixed(1)} ${y(lo)}Z`,
+        fill: s.color, opacity: 0.10, stroke: "none" }));
+    }
+    root.appendChild(svg("path", { d, fill: "none", stroke: s.color, "stroke-width": 2,
+      "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    if (last >= 0) ends.push({ s, px: x(last), py: y(s.values[last]), v: s.values[last] });
+  }
+  // End dots, and end labels where they do not collide.
+  ends.sort((a, b) => a.py - b.py);
+  ends.forEach((e, i) => {
+    root.appendChild(svg("circle", { cx: e.px, cy: e.py, r: 4, fill: e.s.color, stroke: "var(--surface-1)", "stroke-width": 2 }));
+    const crowded = (i > 0 && e.py - ends[i - 1].py < 14) || (i < ends.length - 1 && ends[i + 1].py - e.py < 14);
+    if (!spec.compact && !crowded) {
+      const label = svg("text", { x: e.px + 8, y: e.py + 4, class: "end" });
+      label.textContent = compact(e.v); root.appendChild(label);
+    }
+  });
+
+  const hair = svg("line", { y1: m.t, y2: H - m.b, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden" });
+  root.appendChild(hair);
+  const dots = spec.series.map(s => {
+    const c = svg("circle", { r: 4, fill: s.color, stroke: "var(--surface-1)", "stroke-width": 2, visibility: "hidden" });
+    root.appendChild(c); return c;
+  });
+  plot.appendChild(root);
+  const tip = el("div", { class: "tip" });
+  plot.appendChild(tip);
+  fig.appendChild(plot);
+
+  let at = n - 1;
+  function show(i) {
+    at = Math.max(0, Math.min(n - 1, i));
+    const px = x(at);
+    hair.setAttribute("x1", px); hair.setAttribute("x2", px); hair.setAttribute("visibility", "visible");
+    tip.replaceChildren(el("div", { class: "when" }, dayLabel(days[at])));
+    spec.series.forEach((s, k) => {
+      const v = s.values[at];
+      if (v === null) { dots[k].setAttribute("visibility", "hidden"); return; }
+      dots[k].setAttribute("cx", px); dots[k].setAttribute("cy", y(v)); dots[k].setAttribute("visibility", "visible");
+      const row = el("div", { class: "row" });
+      const key = el("i"); key.style.background = s.color;
+      row.appendChild(key); row.appendChild(el("b", {}, compact(v))); row.appendChild(el("span", {}, s.name));
+      tip.appendChild(row);
+    });
+    tip.style.display = "block";
+    const box = plot.getBoundingClientRect(), scale = box.width / W;
+    const left = px * scale + 12;
+    tip.style.left = (left + tip.offsetWidth > box.width ? px * scale - tip.offsetWidth - 12 : left) + "px";
+    tip.style.top = (m.t * scale) + "px";
+  }
+  function hide() {
+    hair.setAttribute("visibility", "hidden"); tip.style.display = "none";
+    dots.forEach(c => c.setAttribute("visibility", "hidden"));
+  }
+  plot.addEventListener("pointermove", ev => {
+    const box = plot.getBoundingClientRect();
+    const px = (ev.clientX - box.left) / box.width * W;
+    let best = 0, dist = Infinity;
+    for (let i = 0; i < n; i++) { const d = Math.abs(x(i) - px); if (d < dist) { dist = d; best = i; } }
+    show(best);
+  });
+  plot.addEventListener("pointerleave", hide);
+  plot.addEventListener("focus", () => show(at));
+  plot.addEventListener("blur", hide);
+  plot.addEventListener("keydown", ev => {
+    if (ev.key === "ArrowLeft") { show(at - 1); ev.preventDefault(); }
+    if (ev.key === "ArrowRight") { show(at + 1); ev.preventDefault(); }
+  });
+
+  // The table view: the same numbers, every few samples.
+  const view = el("div", { class: "tableview scroll" });
+  view.hidden = true;
+  const table = el("table"), headRow = el("tr");
+  headRow.appendChild(el("th", {}, "Time"));
+  for (const s of spec.series) headRow.appendChild(el("th", {}, s.name));
+  table.appendChild(headRow);
+  const every = Math.max(1, Math.ceil(n / 40));
+  for (let i = 0; i < n; i += every) {
+    const tr = el("tr");
+    tr.appendChild(el("td", {}, dayLabel(days[i])));
+    for (const s of spec.series) tr.appendChild(el("td", {}, compact(s.values[i])));
+    table.appendChild(tr);
+  }
+  view.appendChild(table);
+  fig.appendChild(view);
+  toggle.addEventListener("click", () => {
+    const on = view.hidden;
+    view.hidden = !on; plot.hidden = on;
+    toggle.setAttribute("aria-pressed", String(on));
+    toggle.textContent = on ? "Chart" : "Table";
+  });
+
+  parent.appendChild(fig);
+}
+
+function renderScorecard() {
+  const table = document.getElementById("scorecard");
+  const head = el("tr");
+  head.appendChild(el("th", {}, "Check"));
+  for (const seed of DATA.seeds) head.appendChild(el("th", {}, "Seed " + seed));
+  head.appendChild(el("th", {}, "Passed"));
+  table.appendChild(head);
+  const checks = DATA.runs[DATA.seeds[0]].checks;
+  checks.forEach((check, i) => {
+    const tr = el("tr");
+    const name = el("td", {}, check.name);
+    name.appendChild(el("span", { class: "limit" }, check.limit));
+    tr.appendChild(name);
+    let passed = 0;
+    for (const seed of DATA.seeds) {
+      const c = DATA.runs[seed].checks[i];
+      const td = el("td", {}, compact(c.value) + " ");
+      td.appendChild(statusNode(c.ok));
+      if (c.ok) passed++;
+      tr.appendChild(td);
+    }
+    tr.appendChild(el("td", {}, passed + " of " + DATA.seeds.length));
+    table.appendChild(tr);
+  });
+}
+
+function renderSeed(seed) {
+  const run = DATA.runs[seed], S = run.series, days = run.days;
+  const one = "var(--series-1)", two = "var(--series-2)";
+
+  const tiles = document.getElementById("tiles");
+  tiles.replaceChildren();
+  for (const c of run.checks) {
+    const tile = el("div", { class: "card tile" });
+    tile.appendChild(el("div", { class: "label" }, c.name));
+    tile.appendChild(el("div", { class: "value" }, compact(c.value)));
+    tile.appendChild(statusNode(c.ok));
+    tile.appendChild(el("div", { class: "limit" }, "limit: " + c.limit));
+    tiles.appendChild(tile);
+  }
+
+  const totals = document.getElementById("totals");
+  totals.replaceChildren();
+  lineChart(totals, { title: "Faction credits", sub: "Sum of all faction treasuries", days,
+    series: [{ name: "Credits", values: S.total["faction credits"], color: one }] });
+  lineChart(totals, { title: "Ships", sub: "Warships and haulers in faction fleets", days,
+    series: [{ name: "Warships", values: S.total["warships"], color: one },
+             { name: "Haulers", values: S.total["haulers"], color: two }] });
+  lineChart(totals, { title: "Station maintenance met", sub: "Share of the goods stations need that they got", days,
+    yMax: 1, threshold: { value: 0.85, label: "target 0.85" },
+    series: [{ name: "Faction stations", values: S.total["maintenance met (factions)"], color: one },
+             { name: "Independent stations", values: S.total["maintenance met (independents)"], color: two }] });
+  lineChart(totals, { title: "Independent treasury", sub: "Credits held by unclaimed systems", days,
+    series: [{ name: "Credits", values: S.total["independent treasury"], color: one }] });
+
+  function multiples(id, group, shared) {
+    const parent = document.getElementById(id);
+    parent.replaceChildren();
+    let max = 0;
+    if (shared) for (const k in group) for (const v of group[k]) if (v !== null) max = Math.max(max, v);
+    for (const k of Object.keys(group).sort()) {
+      lineChart(parent, { title: k, days, compact: true, yMax: shared ? max : undefined,
+        series: [{ name: k, values: group[k], color: one }] });
+    }
+  }
+  multiples("credits", S.credits, true);
+  multiples("systems", S.systems, true);
+  multiples("prices", S.price, false);
+
+  for (const b of document.querySelectorAll("#filters button"))
+    b.setAttribute("aria-pressed", String(b.dataset.seed === String(seed)));
+}
+
+// report.html#dark or #light forces a theme; otherwise the system setting decides.
+if (location.hash === "#dark" || location.hash === "#light")
+  document.documentElement.dataset.theme = location.hash.slice(1);
+document.getElementById("title").textContent = "Simulation sweep: " + DATA.name;
+document.getElementById("lead").textContent =
+  DATA.seeds.length + " seeds, " + DATA.ticks.toLocaleString("en-US") + " ticks each (" +
+  (DATA.ticks / 8640).toFixed(1) + " game days), " + DATA.systems + " systems.";
+renderScorecard();
+const filters = document.getElementById("filters");
+for (const seed of DATA.seeds) {
+  const b = el("button", { type: "button", "aria-pressed": "false" }, String(seed));
+  b.dataset.seed = String(seed);
+  b.addEventListener("click", () => renderSeed(seed));
+  filters.appendChild(b);
+}
+renderSeed(DATA.seeds[0]);
+</script>
+</body>
+</html>
+"""
+
+if __name__ == "__main__":
+    sys.exit(main())
