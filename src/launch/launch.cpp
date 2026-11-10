@@ -35,10 +35,15 @@ struct Launcher : public Program {
   /* Registry reference to a Luau app's table; 0 for LTSL apps. */
   int luauApp;
 
+  /* Set when the app could not be started. Script errors are counted
+     separately (Luau_GetErrorCount); either makes the exit status 1. */
+  bool failed;
+
   Launcher(String const& appName, V2U const& size, Harness& harness) :
     appName(appName),
     harness(harness),
-    luauApp(0)
+    luauApp(0),
+    failed(false)
   {
     if (!OS_IsDir("resource"))
       OS_ChangeDir("../");
@@ -79,6 +84,7 @@ struct Launcher : public Program {
 
     if (!main) {
       printf("ERROR: Launcher failed to load script %s\n", appName.c_str());
+      failed = true;
       deleted = true;
       return;
     }
@@ -87,6 +93,7 @@ struct Launcher : public Program {
     if (!main->returnType->GetAux().data) {
       printf("ERROR: Launcher expects %s:Main to return a script type (got %s)\n",
         appName.c_str(), main->returnType->name.c_str());
+      failed = true;
       deleted = true;
       return;
     }
@@ -123,6 +130,7 @@ struct Launcher : public Program {
     if (!lua_istable(L, -1)) {
       printf("ERROR: App/%s.luau must return a table\n", appName.c_str());
       lua_pop(L, 1);
+      failed = true;
       deleted = true;
       return;
     }
@@ -198,7 +206,9 @@ void Usage() {
     "  --out DIR        write screenshots to DIR (default cache/screenshot)\n"
     "  --scale N        shrink screenshots by an integer factor\n"
     "  --size WxH       window size (default 1920x1080)\n"
-    "  --timeout S      end a harness run after S seconds (default 300)\n");
+    "  --timeout S      end a harness run after S seconds (default 300)\n"
+    "  --selftest KIND  fail on purpose once the engine is up, to prove that\n"
+    "                   failures reach the exit status: segv or assert\n");
 }
 
 int main(int argc, char const* argv[]) {
@@ -209,6 +219,7 @@ int main(int argc, char const* argv[]) {
 
   V2U size(1920, 1080);
   Harness harness;
+  String selftest;
   for (int i = 2; i < argc; ++i) {
     String opt = argv[i];
     if (i + 1 >= argc) {
@@ -239,6 +250,13 @@ int main(int argc, char const* argv[]) {
     }
     else if (opt == "--timeout")
       harness.timeout = (float)atof(value.c_str());
+    else if (opt == "--selftest") {
+      if (value != "segv" && value != "assert") {
+        printf("ERROR: --selftest expects segv or assert\n");
+        return 1;
+      }
+      selftest = value;
+    }
     else {
       printf("ERROR: Unknown option %s\n", opt.c_str());
       Usage();
@@ -246,7 +264,34 @@ int main(int argc, char const* argv[]) {
     }
   }
 
-  Launcher(argv[1], size, harness).Execute();
+  Launcher launcher(argv[1], size, harness);
+
+  /* Planted failures, raised after the engine has installed its signal
+     handlers, so the check script can prove a crash is not reported as
+     success. */
+  if (selftest == "segv") {
+    volatile int* null = 0;
+    *null = 1;
+  }
+  if (selftest == "assert")
+    LTE_ASSERT(selftest.size() == 0);
+
+  launcher.Execute();
+
+  /* The exit status is what a test runner sees: 0 only when the app
+     started, no script raised an error and every harness command worked.
+     Crashes and failed assertions exit from the signal handlers in OS.cpp
+     with 128 + the signal number. */
+  int errors = Luau_GetErrorCount();
+  if (launcher.failed || harness.failed || errors > 0) {
+    printf("FAILED:%s%s", launcher.failed ? " app did not start;" : "",
+      harness.failed ? " harness command failed or timed out;" : "");
+    if (errors > 0)
+      printf(" %d script error(s);", errors);
+    printf("\n");
+    fflush(stdout);
+    return 1;
+  }
   return 0;
 }
 

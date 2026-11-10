@@ -38,6 +38,10 @@ LT_API bool Luau_Require(String const& module);
    false. */
 LT_API bool Luau_Call(int nargs, int nresults);
 
+/* Number of script errors reported since the process started. The launcher
+   exits with a failure status when this is not zero. */
+LT_API int Luau_GetErrorCount();
+
 /* Object scripts (Object_AddScript) written in Luau: a table whose
    Update(object) runs every frame (returning false removes it) and whose
    Receive(object, message) gets the object's messages. */

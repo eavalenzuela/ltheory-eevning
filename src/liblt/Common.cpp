@@ -55,7 +55,7 @@ void LTE_ASSERT_FAILURE(const char* file, int line, const char* statement) {
     stream << "CONTINUE to continue, CANCEL to exit, TRY AGAIN to break.\n";
     int result = MessageBoxA(NULL, stream.str().c_str(), "LT Engine Error", MB_CANCELTRYCONTINUE);
     if (result == IDCANCEL)
-      exit(0);
+      exit(1);
     else if (result == IDTRYAGAIN)
       __debugbreak();
   #else
@@ -71,7 +71,7 @@ void LTE_ASSERT_FAILURE(const char* file, int line, const char* statement) {
   stream << "this crash.\n\nSorry for the inconvenience, and thanks in advance for your ";
   stream << "assistance in making the game more stable!";
   OS_MessageBox("LT Engine Error", stream.str().c_str());
-  exit(0);
+  exit(1);
 
 #endif
 }

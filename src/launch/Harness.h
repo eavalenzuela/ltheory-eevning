@@ -55,6 +55,10 @@ struct Harness {
   Vector<MouseButton> buttonsToRelease;
   bool active;
   bool quit;
+
+  /* Set by a command that could not be carried out, and by a timeout. The
+     launcher turns it into a failure exit status. */
+  bool failed;
   float findUntil;
 
   Harness() :
@@ -64,6 +68,7 @@ struct Harness {
     timeout(300),
     active(false),
     quit(false),
+    failed(false),
     findUntil(-1)
     {}
 
@@ -168,6 +173,8 @@ struct Harness {
 
   void Fail(Vector<String> const& words, char const* why) {
     printf("HARNESS ERROR: '%s': %s\n", Rest(words, 0).c_str(), why);
+    fflush(stdout);
+    failed = true;
   }
 
   /* Called at the start of each frame's update, after real input has been
@@ -187,6 +194,8 @@ struct Harness {
     float now = clock.GetElapsed();
     if (now > timeout) {
       printf("HARNESS timeout after %.0f s\n", timeout);
+      fflush(stdout);
+      failed = true;
       return false;
     }
 

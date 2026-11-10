@@ -33,15 +33,31 @@
 
 #endif
 
+/* A process that dies on a signal reports 128 + the signal number, as a
+   shell would, so scripts and test runners can tell a crash from a clean
+   exit. _exit skips static destructors, which may not survive a crash. */
+static void ExitOnSignal(int value) {
+  fflush(stdout);
+  fflush(stderr);
+#ifdef LIBLT_WINDOWS
+  exit(128 + value);
+#else
+  _exit(128 + value);
+#endif
+}
+
 void IntHandler(int value) {
   StackFrame_Print();
-  exit(0);
+  ExitOnSignal(value);
 }
 
 void SegHandler(int value) {
-  error("Access Violation");
+  /* Restore the default action first: a second fault while reporting this
+     one then ends the process instead of re-entering the handler. */
+  signal(SIGSEGV, SIG_DFL);
+  printf("\nAccess Violation\n");
   StackFrame_Print();
-  exit(0);
+  ExitOnSignal(value);
 }
 
 #ifdef LIBLT_WINDOWS

@@ -2102,6 +2102,12 @@ bool Luau_HasModule(String const& module) {
   return (bool)file;
 }
 
+static int luauErrorCount = 0;
+
+int Luau_GetErrorCount() {
+  return luauErrorCount;
+}
+
 bool Luau_Call(int nargs, int nresults) {
   lua_State* L = Luau_GetState();
   int base = lua_gettop(L) - nargs;
@@ -2113,6 +2119,7 @@ bool Luau_Call(int nargs, int nresults) {
     printf("LUAU ERROR: %s\n", lua_tostring(L, -1));
     fflush(stdout);
     lua_pop(L, 1);
+    luauErrorCount++;
     return false;
   }
   return true;
