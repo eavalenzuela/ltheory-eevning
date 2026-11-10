@@ -23,6 +23,13 @@ export type Session = {
 
 local SAVE_DIR = "save"
 
+-- How far above its surface a warp to a planet, a moon or the sun ends
+-- when the order gives no range, in the body's radii. (The Core takes a
+-- range of 0 at its word, and a warp to the surface of a planet ends
+-- with the planet a wall across the view. At one radius up, a planet
+-- spans a third of the sky.)
+local STANDOFF: { [string]: number } = { planet = 1, moon = 1.5, sun = 4 }
+
 function Session.New(galaxySeed: number, historySeed: number): Session
   return {
     game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed }),
@@ -86,6 +93,13 @@ end
 -- Give the player's ship an order. Returns whether it was accepted; if
 -- not, the reason is shown.
 function Session.Order(session: Session, kind: string, target: number?, range: number?): boolean
+  if kind == "WarpTo" and target and (range or 0) == 0 then
+    local body = Core.Query.Body(session.game, target)
+    local standoff = if body then STANDOFF[body.kind] else nil
+    if body and standoff then
+      range = standoff * body.radius
+    end
+  end
   local command: State.Command = { kind = kind, actor = session.game.state.player.ship, target = target, range = range }
   local ok, reason = Core.Submit(session.game, command)
   if not ok then

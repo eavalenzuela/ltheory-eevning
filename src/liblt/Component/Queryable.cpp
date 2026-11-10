@@ -125,7 +125,7 @@ struct ComponentQueryableImpl {
 
   void TraverseObject(ObjectT* o) {
     ComponentBoundingBox* bb = o->GetBoundingBox();
-    if (bb && bb->inSpatialGrid != 0) {
+    if (bb && bb->inSpatialGrid != 0 && bb->inSpatialGrid != kOutOfSpatialGrid) {
       size_t level = 0;
 
       /* Movable objects are eligible to be put in special partitions to

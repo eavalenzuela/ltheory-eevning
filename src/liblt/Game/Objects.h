@@ -27,6 +27,9 @@ DeclareFunction(Object_Colony, Object,
 DeclareFunction(Object_Custom, Object,
   Data, data)
 
+DeclareFunction(Object_Scenery, Object,
+  Data, data)
+
 DeclareFunctionNoParams(Object_DustFlecks, Object)
 
 LT_API Object Object_Dynamic(Generic<Renderable, void> const& renderable);
