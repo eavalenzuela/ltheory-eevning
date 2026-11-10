@@ -358,6 +358,70 @@ for index, launcher in LAUNCHERS do
   })
 end
 
+-- Fittings by size: the small ones are written out above, and a medium
+-- and a large are each of those, scaled for a cruiser and a battleship.
+local FITTINGS: { { any } } = {
+  { "shield.extender.small", "shield.extender", "shield.operation" },
+  { "shield.booster.small", "shield.booster", "shield.operation" },
+  { "armor.plate.200mm", "armor.plate", "hull.upgrades" },
+  { "armor.repairer.small", "armor.repairer", "repair.systems" },
+  { "afterburner.1mn", "afterburner", "propulsion" },
+  { "capacitor.battery.small", "capacitor.battery", "engineering" },
+}
+local FIT_AMOUNT = { 1, 3.2, 9 }
+local FIT_MASS = { 1, 10, 100 }
+local FIT_CPU = { 1, 1.6, 2.4 }
+local FIT_POWERGRID = { 1, 15, 180 }
+local FIT_PRICE = { 1, 8, 60 }
+local FIT_CYCLE = { 1, 1.5, 2.25 }
+local FIT_CAPACITOR = { 1, 3, 8.5 }
+
+local function scaled(list: { Modifier }, size: number): { Modifier }
+  local out: { Modifier } = {}
+  for _, m in list do
+    local value = m.value
+    if m.op == "add" then
+      value *= if m.attribute == "mass" then FIT_MASS[size] elseif m.attribute == "signature" then size else FIT_AMOUNT[size]
+    end
+    table.insert(out, { on = m.on, family = m.family, attribute = m.attribute, op = m.op, value = value, stack = m.stack })
+  end
+  return out
+end
+
+for _, fitting in FITTINGS do
+  local small: ModuleType? = nil
+  for _, m in modules do
+    if m.id == fitting[1] then
+      small = m
+    end
+  end
+  local base = assert(small)
+  for size = 2, 3 do
+    local repair = base.repair
+    table.insert(modules, {
+      id = `{fitting[2]}.{SIZE_NAME[size]}`, name = (string.gsub(base.name, "Small", SIZE_TITLE[size])),
+      slot = base.slot, hardpoint = base.hardpoint,
+      cpu = math.floor(base.cpu * FIT_CPU[size] + 0.5), powergrid = math.floor(base.powergrid * FIT_POWERGRID[size] + 0.5),
+      volume = base.volume * (size * size - size), basePrice = base.basePrice * FIT_PRICE[size],
+      passive = scaled(base.passive, size),
+      repair = if repair then { layer = repair.layer, amount = repair.amount * FIT_AMOUNT[size],
+        duration = repair.duration * FIT_CYCLE[size], capacitor = repair.capacitor * FIT_CAPACITOR[size] } else nil,
+      boost = if base.boost then scaled(base.boost, size) else nil,
+      boostDuration = base.boostDuration,
+      boostCapacitor = if base.boostCapacitor then base.boostCapacitor * FIT_CAPACITOR[size] else nil,
+      requires = { { skill = fitting[3], level = size + 1 } },
+    })
+  end
+end
+
+-- What a mining barge carries.
+table.insert(modules, {
+  id = "miner.strip", name = "Strip Miner", slot = "high", hardpoint = "turret",
+  cpu = 80, powergrid = 40, volume = 25, basePrice = 400000, passive = {},
+  miner = { volume = 200, duration = 120, capacitor = 180, range = 12000 },
+  requires = { { skill = "mining", level = 4 } },
+})
+
 -- Ammunition by size. The small charges are written out above; the
 -- medium and large ones are those, larger. And what the hybrids fire.
 table.insert(charges, turretCharge("charge.plasma", "Plasma Charge", "hybrid", { 0, 6, 5, 0 }, 0.5))

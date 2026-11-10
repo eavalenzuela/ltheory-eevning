@@ -70,7 +70,7 @@ end
 -- and ammunition are deep markets: the pilot is one of many who mine and
 -- shoot, and a hold of ore should not move the price much.
 local function normalStock(info: Types.Info): number
-  if info.category == "ore" or info.category == "mineral" then
+  if info.category == "ore" or info.category == "mineral" or info.category == "component" then
     return math.max(100, math.floor(6000000 / info.basePrice))
   elseif info.category == "charge" then
     return math.max(100, math.floor(3000000 / info.basePrice))

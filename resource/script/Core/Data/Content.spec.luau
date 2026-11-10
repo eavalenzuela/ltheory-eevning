@@ -3,6 +3,7 @@
 -- make sense, and that everything in them can be flown and built.
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
+local Components = require("@lt/Core/Data/Components")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Ships = require("@lt/Core/Data/Ships")
@@ -12,6 +13,31 @@ local Types = require("@lt/Core/Data/Types")
 local Factions = require("@lt/Core/Data/Factions")
 
 local suite = Test.Suite("Content")
+
+-- Can this be had from ore: a mineral some ore yields, or a component
+-- whose own blueprint takes only such things?
+local function fromOre(type: string): boolean
+  for _, ore in Ores.list do
+    for _, yield in ore.yields do
+      if yield.mineral == type then
+        return true
+      end
+    end
+  end
+  if Components.byId[type] == nil then
+    return false
+  end
+  local blueprint = Blueprints.byProduct[type]
+  if blueprint == nil then
+    return false
+  end
+  for _, material in blueprint.materials do
+    if Components.byId[material.type] or not fromOre(material.type) then
+      return false
+    end
+  end
+  return true
+end
 
 suite:Case("four human factions, the pirates and three alien ones, each with a look of its own", function(t)
   local kinds: { [string]: number } = {}
@@ -109,16 +135,29 @@ suite:Case("every hull for sale can be built from ore, and has skills a pilot ca
       t.ok(Types.Get(hull.id) ~= nil, hull.id)
       local blueprint = assert(Blueprints.byProduct[hull.id], `no blueprint for {hull.id}`)
       t.ok(#blueprint.materials >= 2, hull.id)
+      -- A hull is components and minerals together, and every one of
+      -- them comes, in the end, out of a rock.
+      local components, minerals = 0, 0
       for _, material in blueprint.materials do
-        local mined = false
-        for _, ore in Ores.list do
-          for _, yield in ore.yields do
-            mined = mined or yield.mineral == material.type
+        t.ok(material.quantity >= 1)
+        if Components.byId[material.type] then
+          components += 1
+        else
+          minerals += 1
+        end
+        t.ok(fromOre(material.type), `{material.type} in {blueprint.id} comes from no ore`)
+      end
+      t.ok(components >= 5 and minerals >= 3, `{hull.id} is built of {components} components and {minerals} minerals`)
+      local function takes(mineral: string): boolean
+        for _, material in blueprint.materials do
+          if material.type == mineral then
+            return true
           end
         end
-        t.ok(mined, `{material.type} in {blueprint.id} comes from no ore`)
-        t.ok(material.quantity >= 1)
+        return false
       end
+      t.eq(takes("mineral.cobalt"), hull.class == "cruiser" or hull.class == "barge" or hull.class == "battleship", hull.id)
+      t.eq(takes("mineral.iridium"), hull.class == "battleship", hull.id)
       for _, need in Skills.Needs(hull.id) do
         t.ok(Skills.byId[need.skill] ~= nil, `{hull.id} needs an unknown skill {need.skill}`)
         t.ok(need.level >= 1 and need.level <= Skills.MAX_LEVEL)
@@ -211,6 +250,81 @@ suite:Case("every human warship can carry a full rack of its own faction's weapo
       end
     end
   end
+end)
+
+suite:Case("components are made from minerals, and modules from components and minerals", function(t)
+  t.eq(#Components.list, 8)
+  for _, component in Components.list do
+    t.ok(Types.Info(component.id).category == "component")
+    t.ok(fromOre(component.id), `{component.id} cannot be made from ore`)
+    local share = 0
+    for _, part in component.mix do
+      share += part
+    end
+    t.near(share, 1, 1e-9, component.id)
+  end
+  local hullShare = 0
+  for _, part in Components.HULL do
+    t.ok(Components.byId[part[1]] ~= nil)
+    hullShare += part[2]
+  end
+  t.near(hullShare, 1, 1e-9)
+  for _, module in Modules.list do
+    local blueprint = assert(Blueprints.byProduct[module.id], module.id)
+    local components, minerals = 0, 0
+    for _, material in blueprint.materials do
+      if Components.byId[material.type] then
+        components += 1
+      else
+        minerals += 1
+      end
+      t.ok(fromOre(material.type), `{material.type} in {blueprint.id}`)
+    end
+    t.ok(components >= 1 and minerals >= 2, module.id)
+  end
+  -- what is fired is still made straight from minerals
+  for _, charge in Modules.charges do
+    for _, material in assert(Blueprints.byProduct[charge.id]).materials do
+      t.ok(Components.byId[material.type] == nil, charge.id)
+    end
+  end
+  -- the rare ores are found only in lawless space
+  local safe, wild = 0, 0
+  for step = 0, 999 do
+    local roll = (step + 0.5) / 1000
+    if Ores.Pick(roll).share == 0 then
+      safe += 1
+    end
+    if Ores.Pick(roll, true).share == 0 then
+      wild += 1
+    end
+  end
+  t.eq(safe, 0)
+  t.ok(wild >= 130 and wild <= 150, `{wild} rocks in a thousand`)
+end)
+
+suite:Case("fittings come in three sizes, each for a larger ship than the last", function(t)
+  for _, family in { "shield.extender", "shield.booster", "armor.plate", "armor.repairer", "afterburner", "capacitor.battery" } do
+    local medium = assert(Modules.byId[family .. ".medium"])
+    local large = assert(Modules.byId[family .. ".large"])
+    t.ok(large.powergrid > 5 * medium.powergrid and large.basePrice > medium.basePrice, family)
+    t.ok(string.find(medium.name, "Medium") ~= nil and string.find(large.name, "Large") ~= nil, medium.name)
+    t.ok(#Skills.Needs(large.id) == 1 and Skills.byId[Skills.Needs(large.id)[1].skill] ~= nil, family)
+    -- a cruiser can power a medium one and not a large; a battleship can power a large
+    t.ok(medium.powergrid < 0.3 * Ships.byId["cruiser.cuirass"].powergrid, family)
+    t.ok(large.powergrid > Ships.byId["cruiser.cuirass"].powergrid or family == "capacitor.battery" or family == "shield.extender"
+      or family == "shield.booster", family)
+    t.ok(large.powergrid < 0.3 * Ships.byId["battleship.bastion"].powergrid, family)
+  end
+  t.ok(assert(Modules.byId["armor.plate.large"]).passive[1].value > 8 * 520 - 1)
+  t.ok(assert(assert(Modules.byId["shield.booster.large"]).repair).amount > 8 * 26)
+  -- the barge carries three strip miners, each worth several mining lasers
+  local barge, strip = Ships.byId["barge.quarry"], Modules.byId["miner.strip"]
+  t.ok(3 * strip.cpu <= barge.cpu and 3 * strip.powergrid <= barge.powergrid and barge.turrets == 3)
+  local small = assert(Modules.byId["miner.small"].miner)
+  local big = assert(strip.miner)
+  t.ok(big.volume / big.duration > 2 * small.volume / small.duration)
+  t.ok(strip.powergrid > Ships.byId["frigate.prospector"].powergrid, "a frigate cannot power one")
 end)
 
 return suite

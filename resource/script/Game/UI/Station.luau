@@ -29,7 +29,7 @@ local tab = "Fitting"
 
 -- The market: the category listed, the type shown, and what is entered.
 local CATEGORIES: { { string } } = {
-  { "module", "Modules" }, { "charge", "Charges" }, { "ship", "Ships" }, { "ore", "Ore" }, { "mineral", "Minerals" },
+  { "module", "Modules" }, { "charge", "Charges" }, { "ship", "Ships" }, { "ore", "Ore" }, { "mineral", "Minerals" }, { "component", "Components" },
   { "blueprint", "Blueprints" }, { "skillbook", "Skill books" }, { "goods", "Goods" },
 }
 local category = "module"

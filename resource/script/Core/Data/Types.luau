@@ -3,6 +3,7 @@
 -- commodity or a packaged hull.
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
+local Components = require("@lt/Core/Data/Components")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Ships = require("@lt/Core/Data/Ships")
@@ -13,7 +14,7 @@ local Types = {}
 export type Info = {
   id: string,
   name: string,
-  category: "module" | "charge" | "goods" | "ore" | "mineral" | "ship" | "blueprint" | "skillbook",
+  category: "module" | "charge" | "goods" | "ore" | "mineral" | "component" | "ship" | "blueprint" | "skillbook",
   volume: number,     -- m3 per unit
   basePrice: number,  -- credits per unit
 }
@@ -32,6 +33,11 @@ for _, ore in Ores.list do
 end
 for _, mineral in Ores.minerals do
   byId[mineral.id] = { id = mineral.id, name = mineral.name, category = "mineral", volume = mineral.volume, basePrice = mineral.basePrice }
+end
+
+for _, component in Components.list do
+  byId[component.id] = { id = component.id, name = component.name, category = "component", volume = component.volume,
+    basePrice = component.basePrice }
 end
 
 -- A hull, packaged: bought and sold like anything else, and assembled

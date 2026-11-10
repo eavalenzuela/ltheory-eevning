@@ -6,7 +6,6 @@ local Core = require("@lt/Core/Api")
 local Industry = require("@lt/Core/Assets/Industry")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
-local Ores = require("@lt/Core/Data/Ores")
 local State = require("@lt/Core/Kernel/State")
 local Test = require("@lt/Tool/Test")
 local Types = require("@lt/Core/Data/Types")
@@ -56,21 +55,23 @@ local function stepUntil(game: Core.Game, kind: string, limit: number): ({ [stri
   error(`no {kind} within {limit} ticks`, 2)
 end
 
-suite:Case("everything fitted, fired or flown has a blueprint, and its minerals cost about 60% of the product", function(t)
+suite:Case("everything fitted, fired, flown or built into it has a blueprint, and its materials cost about 60% of it", function(t)
   local count = 0
   for _, id in Types.Ids() do
     local info = Types.Info(id)
-    if info.category == "module" or info.category == "charge" or info.category == "ship" then
+    if info.category == "module" or info.category == "charge" or info.category == "ship" or info.category == "component" then
       local blueprint = assert(Blueprints.byProduct[id], `no blueprint for {id}`)
       count += 1
       t.eq(Types.Info(blueprint.id).category, "blueprint")
       local cost = 0
       for _, m in blueprint.materials do
         t.ok(m.quantity >= 1 and m.quantity % 1 == 0)
-        cost += m.quantity * Ores.mineralById[m.type].basePrice
+        -- (a mineral or a component, at its own price)
+        cost += m.quantity * Types.Info(m.type).basePrice
       end
       local share = cost / (info.basePrice * blueprint.perRun)
-      t.ok(share > 0.55 and share < 0.65, `{id}: materials are {share} of the product's price`)
+      -- (whole components make a cheap thing's bill a little lumpy)
+      t.ok(share > 0.5 and share < 0.7, `{id}: materials are {share} of the product's price`)
       t.eq(blueprint.basePrice, info.basePrice * blueprint.perRun * 10)
     end
   end

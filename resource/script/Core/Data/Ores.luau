@@ -17,6 +17,7 @@ export type Ore = {
   basePrice: number,    -- credits per unit
   share: number,        -- how common its rocks are in an ordinary belt
   -- minerals per 100 units at perfect yield
+  wild: number?,          -- its share of the rocks in lawless space, if it is found only there
   yields: { { mineral: string, amount: number } },
 }
 
@@ -25,6 +26,10 @@ local minerals: { Mineral } = {
   { id = "mineral.silicon", name = "Silicon", volume = 0.01, basePrice = 8 },
   { id = "mineral.copper", name = "Copper", volume = 0.01, basePrice = 22 },
   { id = "mineral.titanium", name = "Titanium", volume = 0.01, basePrice = 60 },
+  -- Found only where space is not safe. Cruisers need the first;
+  -- battleships both.
+  { id = "mineral.cobalt", name = "Cobalt", volume = 0.01, basePrice = 140 },
+  { id = "mineral.iridium", name = "Iridium", volume = 0.01, basePrice = 420 },
 }
 
 local ores: { Ore } = {
@@ -36,6 +41,11 @@ local ores: { Ore } = {
     yields = { { mineral = "mineral.copper", amount = 120 }, { mineral = "mineral.iron", amount = 80 } } },
   { id = "ore.titanite", name = "Titanite", volume = 0.6, basePrice = 34, share = 0.03,
     yields = { { mineral = "mineral.titanium", amount = 90 }, { mineral = "mineral.copper", amount = 60 } } },
+  -- No belt in safe space has these (their share there is nothing).
+  { id = "ore.cobaltite", name = "Cobaltite", volume = 0.8, basePrice = 70, share = 0, wild = 0.10,
+    yields = { { mineral = "mineral.cobalt", amount = 80 }, { mineral = "mineral.titanium", amount = 40 } } },
+  { id = "ore.iridite", name = "Iridite", volume = 1.2, basePrice = 160, share = 0, wild = 0.04,
+    yields = { { mineral = "mineral.iridium", amount = 60 }, { mineral = "mineral.cobalt", amount = 40 } } },
 }
 
 local Ores = {
@@ -61,11 +71,21 @@ function Ores.RockUnits(radius: number): number
   return math.floor(radius * 40)
 end
 
--- The ore of a rock, from a roll in [0, 1).
-function Ores.Pick(roll: number): Ore
+-- The ore of a rock, from a roll in [0, 1). In lawless space ('wild')
+-- the rare ores take their share, out of the commonest's.
+function Ores.Pick(roll: number, wild: boolean?): Ore
   local sum = 0
-  for _, ore in ores do
-    sum += ore.share
+  if wild then
+    for _, ore in ores do
+      sum += ore.wild or 0
+      if roll < sum then
+        return ore
+      end
+    end
+  end
+  local rare = sum
+  for index, ore in ores do
+    sum += if index == 1 then ore.share - rare else ore.share
     if roll < sum then
       return ore
     end
