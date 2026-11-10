@@ -18,6 +18,19 @@ export type Ship = {
   docked: number,   -- station id, or 0 in space
 }
 
+-- A stack of items of one type in one place. A fitted module is a stack
+-- of one, in a rack ("high", "mid" or "low") at a slot.
+export type Item = {
+  id: number,
+  type: string,       -- Data/Types id
+  quantity: number,
+  holder: number,     -- the ship it is in or on, or the station whose hangar it is in
+  place: "hangar" | "cargo" | "high" | "mid" | "low",
+  slot: number,       -- within its rack, from 1; 0 unless fitted
+  charge: string,     -- for a fitted weapon: the charge type loaded, or ""
+  rounds: number,     -- and the shots left in the clip
+}
+
 -- What a ship means to do when it gets within range of 'target'.
 export type Intent = { kind: "dock" | "jump", target: number }
 
@@ -86,6 +99,10 @@ export type Command = {
   x: number?,
   y: number?,
   z: number?,
+  item: number?,      -- the item acted on
+  other: number?,     -- a second item (the charge, when loading a weapon)
+  quantity: number?,
+  to: string?,        -- "cargo" or "hangar"
 }
 
 export type State = {
@@ -97,6 +114,9 @@ export type State = {
   systems: { [number]: System.Description },  -- the systems described so far
   ships: { [number]: Ship },
   shipIds: { number },    -- ascending, like every id list here
+  items: { [number]: Item },
+  itemIds: { number },
+  wallet: number,         -- the player's credits
   balls: { [number]: Ball },
   ballIds: { number },
   grids: { [number]: Grid },

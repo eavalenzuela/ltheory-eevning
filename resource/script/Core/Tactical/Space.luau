@@ -12,6 +12,7 @@
 -- thinks of them: 0 means touching.
 
 local Constants = require("@lt/Core/Data/Constants")
+local Items = require("@lt/Core/Assets/Items")
 local Motion = require("@lt/Core/Tactical/Motion")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
@@ -151,11 +152,12 @@ end
 -- Ships entering and leaving space
 
 local function addBall(state: State.State, ship: State.Ship, system: number, x: number, y: number, z: number): State.Ball
-  local hull = Ships.byId[ship.type]
+  -- What it flies like comes from its hull and its fit.
+  local stats = Items.ShipStats(state, ship.id)
   local ball: State.Ball = {
     id = ship.id, kind = "ship", name = ship.name, system = system, grid = 0,
     x = x, y = y, z = z, vx = 0, vy = 0, vz = 0, tvx = 0, tvy = 0, tvz = 0,
-    radius = hull.radius, maxVelocity = hull.maxVelocity, tau = Ships.TimeConstant(hull), warpSpeed = hull.warpSpeed,
+    radius = stats.radius, maxVelocity = stats.maxVelocity, tau = stats.tau, warpSpeed = stats.warpSpeed,
     mode = "stop", target = 0, range = 0, dx = 0, dy = 0, dz = 0,
   }
   state.balls[ball.id] = ball

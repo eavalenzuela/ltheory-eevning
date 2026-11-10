@@ -15,6 +15,7 @@
 local Codec = require("@lt/Core/Persist/Codec")
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Items = require("@lt/Core/Assets/Items")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -35,7 +36,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 1
+Core.SAVE_VERSION = 2
 
 -- A new game: a galaxy, and the player's first ship docked at a station
 -- in system 1.
@@ -50,6 +51,9 @@ function Core.New(options: Options): Game
     systems = {},
     ships = {},
     shipIds = {},
+    items = {},
+    itemIds = {},
+    wallet = 0,
     balls = {},
     ballIds = {},
     grids = {},
@@ -68,19 +72,50 @@ function Core.New(options: Options): Game
   local ship = Space.NewShip(state, "frigate.courier", "Courier", home.id)
   state.player.ship = ship.id
   state.player.home = home.id
-  return { state = state, events = {} }
+  state.wallet = 5000
+
+  -- A starter fit and a few things to try in the hangar. (Until there is
+  -- a market, this and loot are where items come from.)
+  local game: Game = { state = state, events = {} }
+  local function fit(type: string, charge: string?, rounds: number?)
+    local stack = Items.Add(state, type, 1, home.id, "hangar")
+    Items.Apply(state, { kind = "Fit", actor = ship.id, item = stack.id }, game.events)
+    if charge then
+      local fitted = Items.Fitted(state, ship.id)
+      local rounds_ = Items.Add(state, charge, rounds or 1, home.id, "hangar")
+      Items.Apply(state, { kind = "LoadCharge", actor = ship.id, item = fitted[#fitted].id, other = rounds_.id }, game.events)
+    end
+  end
+  fit("autocannon.small", "ammo.emp", 120)
+  fit("autocannon.small", "ammo.emp", 120)
+  for _, kit in { { "ammo.emp", 600 }, { "ammo.fusion", 400 }, { "shield.extender.small", 1 }, { "afterburner.1mn", 1 },
+    { "armor.repairer.small", 1 }, { "laser.pulse.small", 1 }, { "crystal.multifrequency", 1 } } :: { { any } } do
+    Items.Add(state, kit[1], kit[2], home.id, "hangar")
+  end
+  game.events = {}
+  return game
+end
+
+-- Which module carries out a kind of command.
+local ASSET_COMMANDS = { Fit = true, Unfit = true, LoadCharge = true, MoveItems = true }
+
+local function validate(state: State.State, command: State.Command): (boolean, string?)
+  if ASSET_COMMANDS[command.kind] then
+    return Items.Validate(state, command)
+  end
+  return Space.Validate(state, command)
 end
 
 -- Whether a command could be carried out now, and if not, why not. Does
 -- not change anything; the UI uses it to grey out actions.
 function Core.Validate(game: Game, command: State.Command): (boolean, string?)
-  return Space.Validate(game.state, command)
+  return validate(game.state, command)
 end
 
 -- Queue a command for the next tick. Returns false and a reason if it
 -- cannot be carried out now (it is then not queued).
 function Core.Submit(game: Game, command: State.Command): (boolean, string?)
-  local ok, reason = Space.Validate(game.state, command)
+  local ok, reason = validate(game.state, command)
   if ok then
     table.insert(game.state.queue, command)
   end
@@ -99,8 +134,10 @@ function Core.Step(game: Game)
   local queue = state.queue
   state.queue = {}
   for _, command in queue do
-    local ok, reason = Space.Validate(state, command)
-    if ok then
+    local ok, reason = validate(state, command)
+    if ok and ASSET_COMMANDS[command.kind] then
+      Items.Apply(state, command, game.events)
+    elseif ok then
       Space.Apply(state, command, game.events)
     else
       table.insert(game.events, { kind = "CommandRejected", command = command.kind, actor = command.actor, reason = reason })
