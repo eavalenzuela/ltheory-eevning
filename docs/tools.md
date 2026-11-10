@@ -32,6 +32,19 @@ Everything here runs from the repository root after `python3 configure.py build`
 
 The current prototype fails the sweep on every seed (credits and fleets trend to zero, station maintenance about 45% met). That is the known result the economy redesign in `docs/roadmap.md` §6 exists to fix; the sweep is how the new economy will be judged.
 
+## The game
+
+`bin/launch game` runs the game: the Core shown by the engine (`resource/script/App/game.luau`, `resource/script/Game/`). Left-drag turns the camera and the wheel zooms; click a bracket or an overview row to select, then use the orders on the selected-item panel. P pauses, F9 saves to `save/quick/`, F10 loads it.
+
+`GameDebug` is a global table for the console and for scripted runs: `Order(kind, what, range)`, `Select(what)`, `Docked()`, `InSpace()`, `InWarp()`, `Idle()`, `System()`, `Distance(what)`, `TargetGap()`, `Doing()`, `TimeScale(n)`, `Zoom(radii, yaw, pitch)`, `Save(slot)`, `Load(slot)`, `Hash()`, `Mark(name)` and `Same(a, b)`, `Jumps(n)` and `JumpsLeft()`, `Memory()`, `Vram()`. `what` is a kind (`"belt"`, `"station"`, `"gate"`, `"asteroid"`, `"planet"`) or part of a name, and means the nearest match.
+
+```sh
+bin/launch game --console                    # then type: GameDebug.Order("Undock")
+bin/launch game --no-present --fixed-step 60 --script test/scenario/flight.txt
+```
+
+`test/scenario/flight.txt` is the M1 flight loop as a harness script; `script/check` runs it.
+
 ## Looking at the game
 
 | Command | What it does |

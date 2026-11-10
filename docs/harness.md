@@ -42,6 +42,8 @@ Each screenshot is written as `<out>/<name>.png`, and the launcher prints `SCREE
 | `widgets [TEXT]` | Print the visible named widgets (containing TEXT) with their centres |
 | `echo TEXT` | Print `HARNESS TEXT` |
 | `lua CODE` | Run CODE as Luau in the app's VM; an expression's values are printed, and an error fails the run. CODE cannot contain `;` (it separates commands) or `#` (it starts a comment) |
+| `until EXPR` | Wait until the Luau expression EXPR is true, checking every frame; fails the run when patience runs out (120 s, of app time under `--fixed-step`) |
+| `patience S` | Make later `until` commands wait up to S seconds |
 | `quit` | Exit after the current frame (and its screenshots) |
 
 Key names are the engine's `Key_*` names without the prefix, matched without regard to case: `A`–`Z`, `N0`–`N9` (digit row), `NP0`–`NP9`, `F1`–`F15`, `Space`, `Return`, `Escape`, `Tab`, `BackSpace`, `LShift`, `LControl`, `LAlt`, `Up`, `Down`, `Left`, `Right`, and so on (see `KEY_X` in `src/liblt/LTE/Common.h`).

@@ -32,6 +32,7 @@
      until EXPR          wait until the Luau expression EXPR is true, checking
                          every frame; fails the run after 120 s (of app time
                          under --fixed-step). The same limits on EXPR as lua
+     patience S          make later 'until' commands wait up to S seconds
      quit                exit the app */
 
 #include "Luau/Luau.h"
@@ -74,8 +75,9 @@ struct Harness {
      instead of S seconds of real time, so a run is repeatable. */
   float fixedStep;
   float findUntil;
-  /* Frames spent on the current 'until' command. */
+  /* Frames spent on the current 'until' command, and how long it may take. */
   uint untilFrames;
+  float patience;
 
   Harness() :
     next(0),
@@ -87,7 +89,8 @@ struct Harness {
     failed(false),
     fixedStep(0),
     findUntil(-1),
-    untilFrames(0)
+    untilFrames(0),
+    patience(120)
     {}
 
   void Load(String const& text) {
@@ -344,17 +347,20 @@ struct Harness {
         if (truth < 0)
           Fail(c, "the Luau expression raised an error");
         else if (truth == 0) {
-          /* Give up after 120 s: of app time under a fixed step, else
-             roughly that at 60 frames a second. */
+          /* Give up after 'patience' seconds: of app time under a fixed
+             step, else roughly that at 60 frames a second. */
           float perFrame = fixedStep > 0 ? fixedStep : 1.0f / 60.0f;
-          if (++untilFrames * perFrame < 120.0f) {
+          if (++untilFrames * perFrame < patience) {
             next--;
             return true;
           }
-          Fail(c, "still false after 120 s");
+          Fail(c, "still false when patience ran out");
         }
         untilFrames = 0;
       }
+
+      else if (op == "patience" && c.size() == 2)
+        patience = (float)atof(c[1].c_str());
 
       else if (op == "quit") {
         quit = true;

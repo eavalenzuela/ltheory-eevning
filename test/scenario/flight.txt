@@ -1,0 +1,46 @@
+# The M1 flight loop, played through the game app (script/check runs it):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/flight.txt
+#
+# Undock by clicking the button, warp to a belt, orbit a rock, jump to the
+# next system and dock. A save is taken in mid-warp. Afterwards it is
+# loaded and played out again, and must end in the same state. Any
+# assertion that fails, or any 'until' that never comes true, fails the run.
+# (A semicolon separates commands even inside a comment, so none here.)
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+
+# The UNDOCK button of the station panel (1920x1080 window).
+click Left 794 96
+until GameDebug.InSpace()
+
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+lua assert(GameDebug.Distance('belt') < 100, 'warping to 0 did not arrive at the belt')
+
+lua assert(GameDebug.Order('Orbit', 'asteroid', 5000), 'orbit was refused')
+wait 45
+lua assert(math.abs(GameDebug.TargetGap() - 5000) < 500, 'the orbit is not holding 5 km')
+
+lua assert(GameDebug.Order('Jump', 'gate'), 'jump was refused')
+until GameDebug.InWarp()
+wait 0.5
+lua assert(GameDebug.Save('check'), 'could not save')
+until GameDebug.System() ~= 1
+lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused')
+until GameDebug.Docked()
+lua GameDebug.Mark('straight')
+
+lua assert(GameDebug.Load('check'), 'the save did not load')
+lua assert(GameDebug.InWarp() and GameDebug.System() == 1, 'the save was taken in warp in the first system')
+until GameDebug.System() ~= 1
+lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused after loading')
+until GameDebug.Docked()
+lua GameDebug.Mark('reloaded')
+lua assert(GameDebug.Same('straight', 'reloaded'), 'the reloaded save played out to a different state')
+
+echo flight scenario passed
+quit

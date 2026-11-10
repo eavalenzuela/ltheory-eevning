@@ -99,6 +99,18 @@ function Debug.Idle(): boolean
   return ball ~= nil and ball.warp == nil and ball.intent == nil
 end
 
+-- Metres between the ship and whatever it is approaching, orbiting or
+-- keeping at range; a huge number if nothing.
+function Debug.TargetGap(): number
+  local ball = Core.Query.Ball(session.game, session.game.state.player.ship)
+  local target = if ball then Core.Query.Body(session.game, ball.target) else nil
+  if ball == nil or target == nil then
+    return math.huge
+  end
+  local centres = math.sqrt((ball.x - target.x) ^ 2 + (ball.y - target.y) ^ 2 + (ball.z - target.z) ^ 2)
+  return math.max(0, centres - ball.radius - target.radius)
+end
+
 function Debug.System(): number
   return Core.Query.Player(session.game).system
 end
@@ -132,6 +144,85 @@ function Debug.Zoom(zoom: number, yaw: number?, pitch: number?)
   scene.zoom, scene.zoomTarget = zoom, zoom
   scene.yaw = yaw or scene.yaw
   scene.pitch = pitch or scene.pitch
+end
+
+-- Remember the state's hash under a name; Same compares two of them.
+-- A scripted run uses these to prove that a reloaded save plays out to
+-- the same state.
+local marks: { [string]: string } = {}
+
+function Debug.Mark(name: string)
+  marks[name] = `{Core.Hash(session.game)} at tick {session.game.state.tick}`
+  print(`mark {name}: {marks[name]}`)
+end
+
+function Debug.Same(a: string, b: string): boolean
+  return marks[a] ~= nil and marks[a] == marks[b]
+end
+
+-- Megabytes of memory the process holds (resident set), from /proc.
+function Debug.Memory(): number
+  local statm = Host.ReadFile("/proc/self/statm")
+  if statm == nil then
+    return 0
+  end
+  local pages = tonumber(string.match(buffer.tostring(statm), "^%d+ (%d+)"))
+  return if pages then pages * 4096 / 1e6 else 0
+end
+
+-- Megabytes of video memory in use on each graphics card, as the driver
+-- reports it (all processes, not only this one), highest first.
+function Debug.Vram(): (number, number)
+  local used: { number } = {}
+  for card = 0, 3 do
+    local data = Host.ReadFile(`/sys/class/drm/card{card}/device/mem_info_vram_used`)
+    if data then
+      table.insert(used, (tonumber(string.match(buffer.tostring(data), "%d+")) or 0) / 1e6)
+    end
+  end
+  table.sort(used, function(a: number, b: number): boolean
+    return a > b
+  end)
+  return used[1] or 0, used[2] or 0
+end
+
+-- Jump through the nearest gate 'count' times, one after another, to
+-- exercise leaving and entering systems. JumpsLeft counts down to 0.
+local jumpsLeft = 0
+local jumpFrom = 0
+
+function Debug.Jumps(count: number)
+  jumpsLeft = count
+  jumpFrom = 0
+end
+
+function Debug.JumpsLeft(): number
+  return jumpsLeft
+end
+
+local function autopilot()
+  if jumpsLeft <= 0 then
+    return
+  end
+  local player = Core.Query.Player(session.game)
+  if player.docked ~= 0 then
+    Session.Order(session, "Undock")
+    return
+  end
+  if jumpFrom ~= 0 and player.system ~= jumpFrom then
+    jumpsLeft -= 1
+    jumpFrom = 0
+    local vram = Debug.Vram()
+    print(string.format("jumped to system %d; %d to go; memory %.0f MB; video memory %.0f MB",
+      player.system, jumpsLeft, Debug.Memory(), vram))
+  end
+  if jumpsLeft > 0 and jumpFrom == 0 and Debug.Idle() and #session.game.state.queue == 0 then
+    local gate = find("gate")
+    if gate then
+      jumpFrom = player.system
+      Session.Order(session, "Jump", gate.id)
+    end
+  end
 end
 
 function Debug.TimeScale(scale: number)
@@ -181,6 +272,7 @@ function App:Initialize()
       if Key_Pressed(Key_F10()) then
         Session.Load(session, "quick")
       end
+      autopilot()
       Session.Update(session, frame)
       Scene.Sync(scene, session)
       Scene.UpdateCamera(scene, frame, not Hud.CursorOverInterface())
