@@ -10,8 +10,9 @@ wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
 lua assert(GameDebug.Fitted('autocannon.small') == 2, 'the starter ship has two autocannons')
 
-# The Fit button on the third hangar row, the shield extender (1920x1080).
-click Left 1293 295
+# The Fit button on the second hangar row, the shield extender (1920x1080).
+# (The hangar is set out by kind: lasers, then shields.)
+click Left 1293 269
 wait 1
 lua assert(GameDebug.Fitted('shield.extender.small') == 1, 'clicking Fit did not fit the extender')
 

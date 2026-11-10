@@ -17,6 +17,7 @@ local Im = require("@lt/Game/UI/Im")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
 local Station = require("@lt/Game/UI/Station")
+local Info = require("@lt/Game/UI/Info")
 local Wallet = require("@lt/Core/Assets/Wallet")
 
 local App = {}
@@ -427,6 +428,11 @@ function Debug.Enter(name: string, value: number)
 end
 
 -- Open the market at an item type, or the industry tab at a blueprint.
+-- Open the information window on a type of item ("frigate.lancer").
+function Debug.Info(type: string): boolean
+  return Info.Open(type)
+end
+
 function Debug.Market(type: string): boolean
   return Station.Choose(type)
 end

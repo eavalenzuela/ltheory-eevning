@@ -7,10 +7,13 @@
 -- script can press it by (Im.Press): its label, or the id given here.
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
+local Catalog = require("@lt/Core/Data/Catalog")
 local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
+local Info = require("@lt/Game/UI/Info")
+local ItemIcon = require("@lt/Game/UI/ItemIcon")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Session = require("@lt/Game/Session")
@@ -60,30 +63,6 @@ local function inHangar(game: Core.Game, station: number, type: string): (State.
   return nil, 0
 end
 
-local listed: { [string]: { Types.Info } } = {}
-
--- The types of a category, by name.
-local function typesIn(wanted: string): { Types.Info }
-  local list = listed[wanted]
-  if list == nil then
-    list = {}
-    for _, id in Types.Ids() do
-      local info = Types.Info(id)
-      if info.category == wanted then
-        table.insert(list, info)
-      end
-    end
-    table.sort(list, function(a: Types.Info, b: Types.Info): boolean
-      if a.name ~= b.name then
-        return a.name < b.name
-      end
-      return a.id < b.id
-    end)
-    listed[wanted] = list
-  end
-  return list
-end
-
 -- Show a tab, as clicking it would: for scripted runs.
 function Station.Show(name: string): boolean
   for _, known in TABS do
@@ -111,6 +90,12 @@ function Station.Choose(type: string): boolean
     chosen = type
     quantity = 1
     sellPrice, buyPrice = 0, 0
+    -- (bring its row into the list, a little way down from the top)
+    for index, entry in Catalog.Listing(category) do
+      if entry.info and entry.info.id == type then
+        Im.ScrollTo("market", index - 4)
+      end
+    end
   end
   return true
 end
@@ -156,7 +141,11 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
   -- The ship and what it comes to with this fit.
   local left = x + 16
   local line = y + 78
-  Im.Heading(string.upper(player.hull.name), left, line, 16, Im.TEXT)
+  ItemIcon.Draw(player.hull.id, left, line - 4, 24)
+  Im.Heading(string.upper(player.hull.name), left + 32, line, 16, Im.TEXT)
+  if Im.Button("Info", left + 396, line - 4, 54, 22, true, `Info:{player.hull.id}`) then
+    Info.Open(player.hull.id)
+  end
   line += 26
   local cpu, powergrid = Core.Query.FittingUse(game, ship)
   local facts = {
@@ -183,12 +172,13 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
       Im.Text(`{rack[2]} {slot}`, left, line + 3, 13, Im.DIM)
       if item then
         local module = Modules.byId[item.type]
-        Im.Text(module.name, left + 56, line + 3, 14, Im.TEXT)
+        ItemIcon.Draw(item.type, left + 56, line + 1, 20)
+        Info.Name(item.type, module.name, left + 82, line + 3, 14, Im.TEXT)
         if module.weapon then
           local loaded = if item.charge == "" then "nothing loaded"
             elseif module.weapon.clip > 0 then `{Types.Info(item.charge).name} x{item.rounds}`
             else Types.Info(item.charge).name
-          Im.Text(loaded, left + 250, line + 3, 13, if item.charge == "" then Im.WARN else Im.DIM)
+          Im.Text(shorten(loaded, 20), left + 262, line + 3, 13, if item.charge == "" then Im.WARN else Im.DIM)
         end
         if Im.Button("Unfit", left + 396, line, 54, 22, true, `Unfit:{rack[1]}{slot}`) then
           Session.Do(session, { kind = "Unfit", actor = 0, item = item.id })
@@ -203,7 +193,14 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
   -- The hangar and the hold.
   local right = x + 490
   line = y + 78
-  local hangar = Core.Query.Items(game, player.docked, "hangar")
+  -- (set out as the market is: modules, then charges, and so on)
+  local hangar = table.clone(Core.Query.Items(game, player.docked, "hangar"))
+  table.sort(hangar, function(a: State.Item, b: State.Item): boolean
+    if a.type ~= b.type then
+      return Catalog.Before(a.type, b.type)
+    end
+    return a.id < b.id
+  end)
   Im.Heading(`HANGAR  {#hangar}`, right, line, 16, Im.DIM)
   line += 24
   if #hangar == 0 then
@@ -218,7 +215,9 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
     end
     local info = Types.Info(item.type)
     local untrained = Core.Query.Untrained(game, item.type)
-    Im.Text(`{shorten(info.name, 30)}  x{item.quantity}`, right, line + 3, 14, Im.TEXT)
+    ItemIcon.Draw(item.type, right, line + 1, 20)
+    Info.Name(item.type, shorten(info.name, 26), right + 26, line + 3, 14, Im.TEXT)
+    Im.Text(`x{item.quantity}`, right + 30 + Im.TextWidth(shorten(info.name, 26), 14), line + 3, 14, Im.DIM)
     if info.category == "module" then
       local can = Session.CanDo(session, { kind = "Fit", actor = 0, item = item.id })
       if untrained then
@@ -257,7 +256,10 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
       Im.Text(`and {#hold - 4} more`, right, line, 13, Im.DIM)
       break
     end
-    Im.Text(`{Types.Info(item.type).name}  x{item.quantity}`, right, line + 3, 14, Im.TEXT)
+    local held = Types.Info(item.type).name
+    ItemIcon.Draw(item.type, right, line + 1, 20)
+    Info.Name(item.type, held, right + 26, line + 3, 14, Im.TEXT)
+    Im.Text(`x{item.quantity}`, right + 30 + Im.TextWidth(held, 14), line + 3, 14, Im.DIM)
     if Im.Button("To hangar", right + 326, line, 98, 22, true, `ToHangar:{item.type}`) then
       Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "hangar" })
     end
@@ -316,26 +318,34 @@ local function drawMarket(session: Session.Session, game: Core.Game, player: Cor
     return
   end
 
-  -- The types of the category, with what the station asks for one.
-  local list = typesIn(category)
+  -- The types of the category, group by group under headings
+  -- (Data/Catalog), with what the station asks for one.
+  local list = Catalog.Listing(category)
   local rowHeight = 22
   local visible = 20
   Im.Text("ITEM", listX + 8, top, 12, Im.DIM)
   Im.TextRight("ASKS", listX + 296, top, 12, Im.DIM)
   local first = Im.Scroll("market", listX, top + 18, 304, visible * rowHeight, #list, visible)
   for row = 1, visible do
-    local info = list[row + first]
-    if info == nil then
+    local entry = list[row + first]
+    if entry == nil then
       break
     end
     local rowY = top + 18 + (row - 1) * rowHeight
-    local _, clicked = Im.Row(listX, rowY, 300, rowHeight, chosen == info.id)
-    local quote = Core.Query.Quote(game, station, info.id)
-    local color = if quote.ask then Im.TEXT else Im.DIM
-    Im.Text(shorten(info.name, 30), listX + 8, rowY + 3, 13, color)
-    Im.TextRight(if quote.ask then Format.Whole(math.ceil(quote.ask)) else "none", listX + 296, rowY + 3, 13, color)
-    if clicked then
-      Station.Choose(info.id)
+    local info = entry.info
+    if info then
+      local _, clicked = Im.Row(listX, rowY, 300, rowHeight, chosen == info.id)
+      local quote = Core.Query.Quote(game, station, info.id)
+      local color = if quote.ask then Im.TEXT else Im.DIM
+      ItemIcon.Draw(info.id, listX + 6, rowY + 2, 18)
+      Im.Text(shorten(info.name, 28), listX + 30, rowY + 3, 13, color)
+      Im.TextRight(if quote.ask then Format.Whole(math.ceil(quote.ask)) else "none", listX + 296, rowY + 3, 13, color)
+      if clicked then
+        Station.Choose(info.id)
+      end
+    else
+      Im.Text(string.upper(entry.header or ""), listX + 6, rowY + 6, 11, Im.ACCENT, 0.9)
+      Im.Fill(listX + 6, rowY + rowHeight - 2, 290, 1, Im.DIM, 0.3)
     end
   end
 
@@ -349,7 +359,11 @@ local function drawMarket(session: Session.Session, game: Core.Game, player: Cor
   local quote = Core.Query.Quote(game, station, chosen)
   local stack, have = inHangar(game, station, chosen)
   local tax, fee = Core.Query.Fees(game)
-  Im.Heading(shorten(info.name, 34), dx, top - 4, 20, Im.TEXT)
+  ItemIcon.Draw(chosen, dx, top - 6, 28)
+  Im.Heading(shorten(info.name, 28), dx + 36, top - 4, 20, Im.TEXT)
+  if Im.Button("Info", dx + 392, top - 4, 54, 22, true, `Info:{chosen}`) then
+    Info.Open(chosen)
+  end
   local line = top + 28
   local untrained = Core.Query.Untrained(game, chosen)
   Im.Text(string.format("%s m3 a unit", tostring(info.volume)), dx, line, 13, Im.DIM)
@@ -694,7 +708,8 @@ local function drawShips(session: Session.Session, game: Core.Game, player: Core
     local hull = Ships.byId[ship.type]
     local aboard = ship.id == player.ship
     Im.Text(ship.name, left, line + 4, 15, Im.TEXT)
-    Im.Text(hull.name, left + 220, line + 5, 13, Im.DIM)
+    ItemIcon.Draw(hull.id, left + 192, line + 2, 20)
+    Info.Name(hull.id, hull.name, left + 220, line + 5, 13, Im.DIM)
     Im.Text(`{#Core.Query.Fitted(game, ship.id)} modules fitted`, left + 420, line + 5, 13, Im.DIM)
     if aboard then
       Im.Text("you are aboard", left + 620, line + 5, 13, GOOD)

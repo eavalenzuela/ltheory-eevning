@@ -13,6 +13,7 @@ local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
+local Info = require("@lt/Game/UI/Info")
 local Modules = require("@lt/Core/Data/Modules")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
@@ -463,7 +464,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         drawNavigation(session, ball, navX, bottom - 86, 520)
         drawStatus(ball, navX - 232, bottom - 120)
       else
-        Station.Draw(session, game, player, left + (w.size.x - Station.WIDTH) / 2, top + 130)
+        local stationX = left + (w.size.x - Station.WIDTH) / 2
+        Station.Draw(session, game, player, stationX, top + 130)
+        Info.Draw(stationX + Station.WIDTH + 12, top + 130)
       end
       drawClock(session, left + 24, bottom - 54)
       overInterface = Im.over

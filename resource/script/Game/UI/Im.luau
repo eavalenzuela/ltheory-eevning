@@ -141,6 +141,19 @@ function Im.Button(label: string, x: number, y: number, w: number, h: number, en
   return scripted or (hot and pressed)
 end
 
+-- Text that can be clicked, lit while the cursor is on it; true on the
+-- frame it is clicked. 'id' is its name for a script (Im.Press).
+function Im.Link(label: string, x: number, y: number, size: number, color: vector, id: string): boolean
+  seenNow[id] = true
+  local scripted = pressNow == id
+  if scripted then
+    pressNow = nil
+  end
+  local hot = inside(x, y, Im.TextWidth(label, size), size + 5)
+  Im.Text(label, x, y, size, if hot or scripted then Im.ACCENT else color)
+  return scripted or (hot and pressed)
+end
+
 -- A button that stays lit while 'on': a tab, or one of a set of choices.
 function Im.Toggle(label: string, x: number, y: number, w: number, h: number, on: boolean, id: string?): boolean
   local clicked = Im.Button(label, x, y, w, h, true, id)
@@ -212,6 +225,11 @@ function Im.Scroll(name: string, x: number, y: number, w: number, h: number, cou
     Im.Fill(x + w - 3, y + 2 + (track - size) * at / (count - visible), 3, size, Im.DIM, 0.6)
   end
   return at
+end
+
+-- Put a scrolling list at a row (0: its top).
+function Im.ScrollTo(name: string, at: number)
+  scrolls[name] = at
 end
 
 -- A list row; returns whether the cursor is on it, whether it was just
