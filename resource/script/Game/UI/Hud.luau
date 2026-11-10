@@ -268,6 +268,15 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         Im.Text(session.message, left + 24, top + 78, 16, Im.WARN)
       end
 
+      if scene.warp > 0 and ball and ball.warp then
+        local target = Core.Query.Body(game, ball.warp.target)
+        local cx = left + w.size.x / 2
+        local title = "WARP DRIVE ACTIVE"
+        Im.Heading(title, cx - 118, top + 120, 26, Im.ACCENT)
+        local line = `{if target then target.name else "?"}   {Format.Distance(scene.warpLeft)}   {math.ceil(scene.warpSeconds)} s`
+        Im.Text(line, cx - Im.TextWidth(line, 16) / 2, top + 154, 16, Im.TEXT)
+      end
+
       local panelWidth = 372
       local panelX = right - panelWidth - 16
       if ball then

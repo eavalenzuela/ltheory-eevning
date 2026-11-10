@@ -51,6 +51,9 @@ export type Scene = {
   pitch: number,
   zoom: number,                       -- camera distance, in focus radii
   zoomTarget: number,
+  warp: number,                       -- 0 out of warp, rising to 1 in the middle of one
+  warpLeft: number,                   -- metres still to go
+  warpSeconds: number,                -- and seconds
 }
 
 -- Bodies beyond the renderer's reach are drawn this far away.
@@ -74,6 +77,7 @@ function Scene.New(camera: Camera): Scene
     ox = 0, oy = 0, oz = 0, eyeX = 0, eyeY = 0, eyeZ = 0,
     proxies = {}, celestials = {}, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6,
+    warp = 0, warpLeft = 0, warpSeconds = 0,
   }
 end
 
@@ -185,9 +189,21 @@ function Scene.Sync(scene: Scene, session: Session.Session)
 
   -- Where the player is, and which grid to show.
   local grid = 0
+  scene.warp = 0
   if me then
     scene.eyeX, scene.eyeY, scene.eyeZ = ballAt(me, state.tick, since)
     grid = me.grid
+    local warp = me.warp
+    if warp and warp.stage == "warp" then
+      -- How deep into the warp, for the camera: eased in over the first
+      -- second and a half and out over the last two.
+      local plan = warp.plan :: Motion.WarpPlan
+      local elapsed = (state.tick - warp.startTick) * Constants.TICK + since
+      local travelled = Motion.WarpAt(plan, elapsed)
+      scene.warp = math.clamp(math.min(elapsed / 1.5, (plan.total - elapsed) / 2), 0, 1)
+      scene.warpLeft = plan.distance - travelled
+      scene.warpSeconds = math.max(0, plan.total - elapsed)
+    end
   else
     local station = objects[player.docked % Constants.STRUCTURE_ID_SPAN]
     scene.eyeX, scene.eyeY, scene.eyeZ = station.x, station.y, station.z
@@ -334,6 +350,9 @@ function Scene.UpdateCamera(scene: Scene, frameSeconds: number, input: boolean)
   camera:SetRelativePos(center + look * (scene.zoom * focus:GetRadius()))
   camera:SetRelativeLookAt(center)
   camera:SetRigidity(100000)
+  -- In warp the view opens out.
+  local eased = scene.warp * scene.warp * (3 - 2 * scene.warp)
+  camera:SetFov(62 + 30 * eased)
 end
 
 -- Advance the engine's own effects (lights, trails, particles).
