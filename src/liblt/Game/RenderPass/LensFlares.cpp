@@ -115,7 +115,9 @@ namespace {
             0.5f * (projMin + projMax).GetXY(),
             0.5f * (projMax - projMin).GetXY(),
             light->color,
-            Min((float)projected.z, state->view->zFar),
+            light->flareDepth > 0
+              ? light->flareDepth
+              : Min((float)projected.z, state->view->zFar),
             light);
 
           flares.push(flare);

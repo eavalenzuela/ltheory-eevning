@@ -1,0 +1,80 @@
+/* The face of a star.
+
+   A star is a disc of light, brightest in the middle and dimmer and
+   redder toward its edge, where the eye looks slantwise into its cooler
+   upper layers. Across it runs the grain of its convection: bright cells
+   with dark lanes between them, fine on a hot star and coarse on a cool
+   one. A cool star is spotted too: dark patches in belts either side of
+   its equator, with brighter ground round them.
+
+   Nothing lights it, and its brightness runs well above what a screen
+   can show: the bloom takes the excess for glare.
+
+   The engine draws a flare for the star's light, which lies far beyond
+   this disc, and hides the flare when something is in front of the
+   light. The disc is such a thing; whoever draws it says how far off
+   the flare is to be taken to be (Star_SetFlareDepth), so that the disc
+   hides the flare only when it is meant to. */
+
+#include frag.jsl
+#include math.jsl
+#include color.jsl
+#include lighting.jsl
+#include worldnoise.jsl
+
+FRAG_IN vec3 normal;
+FRAG_IN vec3 position;
+
+uniform vec3 starTint;      /* its colour, as it should look on a screen */
+uniform float grain;        /* convection cells across its radius */
+uniform float spots;        /* how spotted, 0 to 1 */
+uniform float glare;        /* how bright the middle of the disc is */
+uniform float seed;
+
+void main() {
+  PREPASS
+
+  vec3 dir = normalize(vertpos);
+  vec3 sphere = normalize(normal);
+  vec3 V = normalize(position - eye);
+  float mu = saturate(dot(sphere, -V));
+  vec3 s = vec3(seed * 1.31, seed * 2.17, seed * 0.73);
+
+  /* Detail smaller than a pixel is left out: it would only shimmer. */
+  float size = length(fwidth(dir));
+  float fine = 1.0 - smoothstep(0.25, 0.9, size * grain);
+  float coarse = 1.0 - smoothstep(0.15, 0.6, size * 4.0);
+
+  /* Convection: cells of two sizes, pushed out of shape, each a little
+     brighter or dimmer than the next, with narrow dark lanes between;
+     and a slower mottling of many cells together. */
+  vec3 warped = dir + 0.030 * wn_drift(dir * 5.0 + s) + 0.25 / grain * wn_drift(dir * grain * 0.9 + s);
+  vec3 cells = wn_cells(warped * grain + s);
+  vec3 small = wn_cells(warped * grain * 2.3 + s + 31.0);
+  float cell = 0.6 * smoothstep(0.0, 0.20, cells.y - cells.x) * (0.6 + 0.4 * cells.z)
+    + 0.4 * smoothstep(0.0, 0.22, small.y - small.x) * (0.6 + 0.4 * small.z);
+  float mottle = wn_fbm(dir * grain * 0.16 + s, 4, 0.55);
+
+  /* Spots: an umbra inside a penumbra, in belts either side of the
+     equator, and bright ground round them. */
+  float belt = smoothstep(0.85, 0.45, abs(dir.y)) * smoothstep(0.02, 0.12, abs(dir.y));
+  float active = wn_fbm(dir * 3.2 + s + 20.0, 5, 0.6) + 0.04 * wn_fbm(dir * 30.0 + s, 3, 0.6);
+  float limit = mix(0.50, 0.16, spots);
+  float penumbra = coarse * belt * smoothstep(limit, limit + 0.035, active);
+  float umbra = coarse * belt * smoothstep(limit + 0.05, limit + 0.085, active);
+  float bright = coarse * belt * smoothstep(limit - 0.16, limit - 0.02, active) * (1.0 - penumbra);
+
+  float light = 1.0 + fine * 0.30 * (cell - 0.55) + coarse * 0.20 * mottle + 0.22 * bright;
+  light *= 1.0 - 0.50 * penumbra - 0.35 * umbra;
+
+  /* Dimmer and redder to the edge. */
+  vec3 tint = pow(starTint, vec3(2.2));
+  vec3 edge = tint * vec3(1.0, 0.62, 0.38);
+  vec3 color = mix(edge, tint, pow(mu, 0.55)) * (0.52 + 0.48 * mu) * light * glare;
+
+  outputAlbedo(color);
+  outputAlpha(1.0);
+  outputNormal(sphere);
+  outputMaterial(MATERIAL_NOSHADE);
+  outputRoughness(0.0);
+}

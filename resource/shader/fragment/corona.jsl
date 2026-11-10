@@ -1,0 +1,50 @@
+/* The corona of a star: the glow round its disc, drawn on a shell some
+   radii out (the shader is given additive blending).
+
+   What a pixel of the shell shows depends on how near the line of sight
+   through it passes to the star: bright against the edge of the disc,
+   falling away fast at first and then slowly. The outer part is not
+   even: it stands out in streamers, which are a noise of the direction
+   in which the line of sight passes the star, so that they run straight
+   out from it. Across the disc itself there is only a thin veil.
+
+   'scale' is the star's radius (the shell's mesh is 'reach' times the
+   size of the star's). */
+
+#include frag.jsl
+#include math.jsl
+#include color.jsl
+#include lighting.jsl
+#include worldnoise.jsl
+
+FRAG_IN vec3 normal;
+FRAG_IN vec3 position;
+FRAG_IN vec3 origin;
+FRAG_IN vec3 scale;
+
+uniform vec3 starTint;
+uniform float reach;        /* the shell's radius, in star radii */
+uniform float corona;       /* how bright */
+uniform float seed;
+
+void main() {
+  vec3 rd = normalize(position - eye);
+  vec3 toCentre = origin - eye;
+  float along = max(dot(toCentre, rd), 0.0);
+  /* (from the star's centre to the point of the line of sight nearest it) */
+  vec3 nearest = eye + rd * along - origin;
+  float b = length(nearest) / scale.x;
+  vec3 around = nearest / max(length(nearest), 1e-6);
+
+  float h = max(b - 1.0, 0.0);
+  float inner = exp(-h * 7.0);
+  float streamers = saturate(0.55 + 1.6 * wn_fbm(around * 2.6 + seed, 4, 0.6) + 0.5 * wn_fbm(around * 11.0 + seed, 3, 0.6));
+  float outer = 0.30 * exp(-h * 1.5) * streamers * streamers;
+
+  float glow = inner + outer;
+  glow *= 1.0 - smoothstep(0.5 * reach, 0.97 * reach, b);
+  glow *= mix(0.12, 1.0, smoothstep(0.86, 1.02, b));
+
+  vec3 tint = mix(starTint, vec3(1.0), 0.35 * inner);
+  RETURN(vec4(tint * corona * glow, 1.0));
+}

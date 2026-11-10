@@ -22,11 +22,18 @@ struct Light : public LightBaseT {
   float visibility;
   bool flare;
 
+  /* How far off the light's flare is taken to be, when deciding whether
+   * something is in front of it and hides it; 0 for as far as the light
+   * is. (A star's light stands far beyond the disc that is drawn for the
+   * star, and its flare is not to be hidden by that disc.) */
+  float flareDepth;
+
   Light() :
     color(1),
     radius(1),
     visibility(1),
-    flare(true)
+    flare(true),
+    flareDepth(0)
     {}
 
   FIELDS {

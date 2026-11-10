@@ -25,6 +25,7 @@
 
 local AppShell = require("@lt/AppShell")
 local Planet = require("@lt/Game/View/Planet")
+local Star = require("@lt/Game/View/Star")
 local SceneView = require("@lt/SceneView")
 
 local RADIUS = 1000
@@ -35,12 +36,13 @@ local DONE = "cache/viewer/done.txt"
 
 type View = {
   name: string,
-  kind: string,
+  kind: string,           -- a kind of planet (Planet.kinds), or "star-" and a class of star
   seed: number,
   eye: vector,            -- where the camera is, in planet radii from its centre
   look: vector,           -- what it looks at, likewise
   light: vector,          -- the direction the light comes from
   set: { [string]: number }?,
+  radius: number?,        -- how big to make the body, if not RADIUS
 }
 
 local FRONT = vector.create(0, 0.15, 2.7)
@@ -81,6 +83,18 @@ for _, kind in { "moon", "barren", "ice", "icemoon", "lava", "gas" } do
     table.insert(VIEWS, view)
   end
 end
+-- A star of each class: from well off, with its whole corona, and near.
+for _, class in { "yellow", "orange", "red", "white", "blue" } do
+  local kind = `star-{class}`
+  table.insert(VIEWS, { name = `{kind}-1-far`, kind = kind, seed = 1, eye = vector.create(0, 0.6, 9), look = CENTRE, light = DAY })
+  table.insert(VIEWS, { name = `{kind}-2-near`, kind = kind, seed = 1, eye = FRONT, look = CENTRE, light = DAY })
+  table.insert(VIEWS, { name = `{kind}-3-close`, kind = kind, seed = 1, eye = NEAR, look = CLOSE, light = DAY })
+end
+-- A star as the game draws one from five radii off: 120 km across at
+-- 600 km, so that the far side of its corona is past the renderer's
+-- reach.
+table.insert(VIEWS, { name = "star-red-4-as-in-game", kind = "star-red", seed = 1, eye = vector.create(0, 0.3, 5),
+  look = CENTRE, light = DAY, radius = 120000 })
 
 -- The settings in the params file.
 local function readParams(): Planet.Tweaks
@@ -124,6 +138,7 @@ return AppShell.Create(function(): Widget
   end
 
   local world: Planet.World? = nil
+  local body: Object? = nil
   local built = ""          -- the kind and seed of the world now standing
   local index = 0           -- the view being taken; 0 when idle
   local frames = 0
@@ -133,29 +148,40 @@ return AppShell.Create(function(): Widget
 
   local function setUp(v: View)
     local tweaks = table.clone(params)
-    local key = `{v.kind}:{v.seed}`
+    local key = `{v.kind}:{v.seed}:{v.radius or RADIUS}`
     if v.set then
       for name, value in v.set do
         tweaks[name] = value
         key ..= `:{name}={value}`
       end
     end
-    if built ~= key or world == nil then
-      if world then
-        Object_Delete(world.body)
+    if built ~= key or body == nil then
+      if body then
+        Object_Delete(body)
       end
-      local made = Planet.New(v.kind, v.seed, nil, tweaks)
-      made.body:SetScale(vector.create(RADIUS, RADIUS, RADIUS))
-      system:AddInterior(made.body)
-      camera:SetTarget(made.body)
-      world, built = made, key
+      local class = string.match(v.kind, "^star%-(%a+)$")
+      local made: Object
+      if class then
+        made, world = Star.New(class, v.seed, tweaks), nil
+      else
+        local planet = Planet.New(v.kind, v.seed, nil, tweaks)
+        made, world = planet.body, planet
+      end
+      local radius = v.radius or RADIUS
+      made:SetScale(vector.create(radius, radius, radius))
+      system:AddInterior(made)
+      camera:SetTarget(made)
+      body, built = made, key
     end
-    -- (judged in white light: the scene's own star is whatever colour
-    -- its system rolled)
-    local white = params.whiteLight
-    Planet.Set(world :: Planet.World, "whiteLight", if type(white) == "number" then white else 1)
+    if world then
+      -- (judged in white light: the scene's own star is whatever colour
+      -- its system rolled)
+      local white = params.whiteLight
+      Planet.Set(world, "whiteLight", if type(white) == "number" then white else 1)
+    end
     if lamp then
-      lamp:SetPos(vector.normalize(v.light) * 500000)
+      -- (far enough off to be behind the camera whatever the body's size)
+      lamp:SetPos(vector.normalize(v.light) * math.max(500000, 20 * (v.radius or RADIUS)))
     end
     frames = 0
   end
@@ -187,8 +213,8 @@ return AppShell.Create(function(): Widget
       if index > 0 then
         local v = views[index]
         -- (the camera's "relative" position is a place in the scene)
-        camera:SetRelativePos(v.eye * RADIUS)
-        camera:SetRelativeLookAt(v.look * RADIUS)
+        camera:SetRelativePos(v.eye * (v.radius or RADIUS))
+        camera:SetRelativeLookAt(v.look * (v.radius or RADIUS))
         camera:SetRigidity(60)
         frames += 1
         if frames == SETTLE then
@@ -203,8 +229,11 @@ return AppShell.Create(function(): Widget
           end
         end
       else
+        -- Nothing to do: wait to be asked, without drawing flat out (it
+        -- would take the graphics card from whatever else is running).
+        Thread_SleepMS(100)
         frames += 1
-        if frames % 30 == 0 then
+        if frames % 3 == 0 then
           local now = readRequest()
           if now ~= request then
             request = now

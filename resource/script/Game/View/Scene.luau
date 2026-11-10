@@ -23,6 +23,7 @@ local Clock = require("@lt/Game/Clock")
 local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
 local Planet = require("@lt/Game/View/Planet")
+local Star = require("@lt/Game/View/Star")
 local Motion = require("@lt/Core/Tactical/Motion")
 local Session = require("@lt/Game/Session")
 local State = require("@lt/Core/Kernel/State")
@@ -67,8 +68,15 @@ export type Shot = { from: number, to: number, family: string, outcome: string, 
 Scene.SHOT_SECONDS = 0.35
 
 
--- Bodies beyond the renderer's reach are drawn this far away.
+-- Bodies beyond the renderer's reach are drawn this far away, or a
+-- little farther to stand behind a nearer one, but never past FARTHEST
+-- (the renderer draws nothing beyond a million).
 local FAR = 600000
+local FARTHEST = 950000
+
+-- The sun has its flare while its disc spans less than this (the sine of
+-- the angle its radius spans: about a degree and a half).
+local FLARE_UNDER = 0.026
 
 -- The size of a living world's cube map in the game: smaller than the
 -- viewer's, since a system may hold several (about 28 MB each).
@@ -181,6 +189,17 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
       body:SetName(object.name)
       container:AddInterior(body)
       scene.celestials[object.id] = body
+    elseif object.kind == "sun" then
+      -- The sun's disc and corona. Its light, and the flare drawn for
+      -- that, are the engine's star, which takes the colour of the
+      -- star's class.
+      local body = Star.New(object.variety, object.seed)
+      body:SetName(object.name)
+      container:AddInterior(body)
+      scene.celestials[object.id] = body
+      if scene.star then
+        Star_SetColor(scene.star, Star.Light(object.variety))
+      end
     end
   end
 end
@@ -351,31 +370,62 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     end
   end
 
-  -- Planets and moons in scaled space; the sun as a direction.
+  -- The sun, the planets and the moons in scaled space: each drawn in
+  -- its true direction, near enough for the renderer to reach, and
+  -- shrunk to span the angle it truly spans.
+  --
+  -- They cannot all be drawn at one distance: of two that overlap on the
+  -- screen the larger would then hide the smaller whichever was in
+  -- front, and a moon crossing the face of its planet would vanish. So
+  -- they are taken nearest first, and each is put far enough out that
+  -- the side of it facing the eye lies beyond the limb of the one
+  -- before.
   local ex, ey, ez = scene.eyeX - scene.ox, scene.eyeY - scene.oy, scene.eyeZ - scene.oz
+  local bodies: { { object: SystemData.Object, distance: number } } = {}
   for _, object in objects do
     local dx, dy, dz = object.x - scene.eyeX, object.y - scene.eyeY, object.z - scene.eyeZ
     local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
-    if object.kind == "planet" or object.kind == "moon" then
-      local shrink = math.min(1, FAR / distance)
-      local body = scene.celestials[object.id]
-      local at = vector.create(ex + dx * shrink, ey + dy * shrink, ez + dz * shrink)
-      body:SetPos(at)
-      local radius = object.radius * shrink
-      body:SetScale(vector.create(radius, radius, radius))
-      scene.screen[object.id] = at
-    elseif object.kind == "sun" then
-      local star = scene.star
-      if star and distance > 0 then
+    if object.kind == "planet" or object.kind == "moon" or object.kind == "sun" then
+      table.insert(bodies, { object = object, distance = distance })
+      if object.kind == "sun" and scene.star and distance > 0 then
+        -- (the light itself, far off in the sun's direction, so that it
+        -- falls on every body from nearly the right side)
         local out = 60000000 / distance
-        star:SetPos(vector.create(ex + dx * out, ey + dy * out, ez + dz * out))
+        scene.star:SetPos(vector.create(ex + dx * out, ey + dy * out, ez + dz * out))
       end
-      local shrink = FAR / math.max(distance, FAR)
-      scene.screen[object.id] = vector.create(ex + dx * shrink, ey + dy * shrink, ez + dz * shrink)
     elseif not scene.screen[object.id] and object.kind ~= "asteroid" then
       -- Somewhere to warp to: a station, gate or belt on another grid.
       local shrink = FAR / math.max(distance, FAR)
       scene.screen[object.id] = vector.create(ex + dx * shrink, ey + dy * shrink, ez + dz * shrink)
+    end
+  end
+  table.sort(bodies, function(a, b)
+    if a.distance ~= b.distance then
+      return a.distance < b.distance
+    end
+    return a.object.id < b.object.id
+  end)
+  local limb = 0      -- how far off the limb of the body before lies
+  for _, placed in bodies do
+    local object, distance = placed.object, math.max(placed.distance, 1)
+    -- (the sine of the angle its radius spans)
+    local sine = math.min(object.radius / distance, 0.999)
+    local out = math.min(math.max(math.min(distance, FAR), limb / (1 - sine)), FARTHEST)
+    limb = out * math.sqrt(1 - sine * sine) * 1.002
+    local shrink = out / distance
+    local at = vector.create(ex + (object.x - scene.eyeX) * shrink, ey + (object.y - scene.eyeY) * shrink,
+      ez + (object.z - scene.eyeZ) * shrink)
+    local body = scene.celestials[object.id]
+    body:SetPos(at)
+    local radius = object.radius * shrink
+    body:SetScale(vector.create(radius, radius, radius))
+    scene.screen[object.id] = at
+    if object.kind == "sun" and scene.star then
+      -- The flare is the glare of a star too small to show a face. It
+      -- is taken to lie just this side of the disc, so that a planet in
+      -- front of the sun hides it and the disc does not; once the disc
+      -- is big enough to see, the flare is left behind it, and goes.
+      Star_SetFlareDepth(scene.star, if sine < FLARE_UNDER then out * (1 - sine) * 0.98 else 0)
     end
   end
 
