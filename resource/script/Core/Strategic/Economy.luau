@@ -20,9 +20,8 @@
 --             its par margin, stopped at no margin)
 --   flow      along an open edge, from the cheaper end to the dearer,
 --             once the gap exceeds the edge's cost: conductance * excess
---             gap per hour in value, never more than half of what would
---             close the gap (so prices approach each other and cannot
---             overshoot)
+--             gap per hour in value, and never more than would close the
+--             gap (so prices approach each other and cannot overshoot)
 --   anchor    a few nodes sell and buy near par at a limited rate; they
 --             are the economy's boundary, and how much passes through
 --             them is watched (a healthy economy barely uses them)
@@ -98,10 +97,12 @@ local PRICE_MIN, PRICE_MAX = 0.25, 4
 local CONSUMPTION_ELASTICITY = 0.5
 -- A facility needs this many hours of inputs in stock to run flat out.
 local INPUT_HOURS = 2
--- The share of the gap-closing quantity a flow may move in one step.
+-- The share of its remaining gap an anchor may close in one step.
 local ALPHA = 0.5
--- No node aims to hold less than this many credits' worth of a class.
-local TARGET_FLOOR_VALUE = 200
+-- No node aims to hold less than this many credits' worth of a class: a
+-- system that neither makes nor uses something still has some on sale.
+-- (A thin stock makes a twitchy price: a hold or two would swing it.)
+local TARGET_FLOOR_VALUE = 2000
 -- What a trader pays over, or gets under, the curve.
 Economy.SPREAD = 0.02
 
@@ -191,6 +192,11 @@ local function price(econ: Economy, n: Node, g: number): number
   local stock = n.stock[g]
   local ratio = if stock <= 0 then PRICE_MAX else math.clamp(n.target[g] / stock, PRICE_MIN, PRICE_MAX)
   return econ.classes[g].par * ratio
+end
+
+-- Price as a multiple of par, for a target and a stock.
+local function ratioAt(target: number, stock: number): number
+  return if stock <= 0 then PRICE_MAX else math.clamp(target / stock, PRICE_MIN, PRICE_MAX)
 end
 
 -- The value of the goods between two stock levels, low to high, along
@@ -347,19 +353,37 @@ local function flow(econ: Economy, edge: Edge, dt: number)
   end
   local a, b = econ.nodes[edge.a], econ.nodes[edge.b]
   for g, class in econ.classes do
-    local pa, pb = price(econ, a, g), price(econ, b, g)
-    local from, to, low, high = a, b, pa, pb
-    if pa > pb then
-      from, to, low, high = b, a, pb, pa
+    local ra, rb = ratioAt(a.target[g], a.stock[g]), ratioAt(b.target[g], b.stock[g])
+    local from, to = a, b
+    if ra > rb then
+      from, to = b, a
     end
-    local gap = (high - low) / class.par - edge.cost
-    if gap > 0 and from.stock[g] > 0 then
-      -- How much would close the gap to the edge's cost, from how fast
-      -- each end's price moves with its stock (dp/dS = -p/S).
-      local closing = gap * class.par / (low / from.stock[g] + high / math.max(to.stock[g], 1e-9))
-      local amount = math.min(edge.conductance * gap * dt / class.par, ALPHA * closing, from.stock[g])
-      from.stock[g] -= amount
-      to.stock[g] += amount
+    local fromTarget, toTarget = from.target[g], to.target[g]
+    local fromStock, toStock = from.stock[g], to.stock[g]
+    -- The gap, in multiples of par, left after moving 'amount'.
+    local function gapAfter(amount: number): number
+      return ratioAt(toTarget, toStock + amount) - ratioAt(fromTarget, fromStock - amount) - edge.cost
+    end
+    local gap = gapAfter(0)
+    if gap > 0 and fromStock > 0 then
+      local amount = math.min(edge.conductance * gap * dt / class.par, fromStock)
+      if gapAfter(amount) < 0 then
+        -- That much would carry the prices past each other. Move what
+        -- just closes the gap instead (found by halving; this only
+        -- happens where a stock is thin or the step is long).
+        local low, high = 0, amount
+        for _ = 1, 30 do
+          local middle = (low + high) / 2
+          if gapAfter(middle) > 0 then
+            low = middle
+          else
+            high = middle
+          end
+        end
+        amount = low
+      end
+      from.stock[g] = fromStock - amount
+      to.stock[g] = toStock + amount
       econ.moved[g] += amount
     end
   end
@@ -373,17 +397,11 @@ function Economy.Step(econ: Economy, hours: number)
     anchor(econ, node, hours)
   end
   -- Edges are settled one after another, each seeing the last one's
-  -- effect, in an order that reverses every step so that neither end of
-  -- the list is favoured.
-  local count = #econ.edges
-  if econ.steps % 2 == 0 then
-    for i = 1, count do
-      flow(econ, econ.edges[i], hours)
-    end
-  else
-    for i = count, 1, -1 do
-      flow(econ, econ.edges[i], hours)
-    end
+  -- effect, so that several flows into one node cannot jointly overshoot.
+  -- Always in the same order: reversing it on alternate steps was tried
+  -- and makes prices jitter with a period of two steps.
+  for _, edge in econ.edges do
+    flow(econ, edge, hours)
   end
   econ.hours += hours
   econ.steps += 1
