@@ -3,6 +3,7 @@
 -- make sense, and that everything in them can be flown and built.
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
+local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
@@ -130,6 +131,84 @@ suite:Case("every hull for sale can be built from ore, and has skills a pilot ca
   for _, id in { "destroyers", "cruisers", "battleships" } do
     for _, need in Skills.byId[id].requires do
       t.ok(Skills.byId[need.skill] ~= nil)
+    end
+  end
+end)
+
+suite:Case("every weapon takes ammunition of its own size and no other; larger reaches further and tracks worse", function(t)
+  local weapons = 0
+  for _, module in Modules.list do
+    local weapon = module.weapon
+    if weapon then
+      weapons += 1
+      local fits = 0
+      for _, charge in Modules.charges do
+        if charge.family == weapon.family and charge.size == weapon.size then
+          fits += 1
+        end
+      end
+      t.ok(fits >= 3, `{module.id} has {fits} kinds of ammunition`)
+      t.ok(#Skills.Needs(module.id) >= 1, `{module.id} needs no skill`)
+      for _, need in Skills.Needs(module.id) do
+        t.ok(Skills.byId[need.skill] ~= nil, `{module.id} needs an unknown skill {need.skill}`)
+      end
+    end
+  end
+  t.eq(weapons, 6 * 3 + 3, "six forms of turret and a launcher, in three sizes")
+  for _, form in { "laser.pulse", "laser.beam", "autocannon", "artillery", "blaster", "railgun" } do
+    local small, medium, large = Modules.byId[form .. ".small"], Modules.byId[form .. ".medium"], Modules.byId[form .. ".large"]
+    for _, pair in { { small, medium }, { medium, large } } do
+      local a, b = assert(pair[1].weapon), assert(pair[2].weapon)
+      t.ok(b.optimal > a.optimal and b.tracking < a.tracking, pair[2].id)
+      t.ok(pair[2].powergrid > 5 * pair[1].powergrid and pair[2].basePrice > pair[1].basePrice, pair[2].id)
+    end
+  end
+  -- a charge a size up carries more, of the same kind
+  for _, charge in Modules.charges do
+    local bigger = Modules.chargeById[charge.id .. ".medium"]
+    if bigger then
+      local largest = assert(Modules.chargeById[charge.id .. ".large"])
+      t.eq(bigger.size, 2)
+      t.eq(largest.size, 3)
+      for index, amount in charge.damage do
+        t.ok(bigger.damage[index] >= amount and largest.damage[index] >= bigger.damage[index], bigger.id)
+      end
+      t.ok(Blueprints.byProduct[bigger.id] ~= nil and Blueprints.byProduct[largest.id] ~= nil)
+    end
+  end
+  for _, size in { "light", "heavy", "cruise" } do
+    for _, kind in { "em", "thermal", "kinetic", "explosive" } do
+      t.ok(Modules.chargeById[`missile.{size}.{kind}`] ~= nil, `no {kind} {size} missile`)
+    end
+  end
+end)
+
+suite:Case("every human warship can carry a full rack of its own faction's weapons, at its own size", function(t)
+  local SHORT = { laser = "laser.pulse", projectile = "autocannon", hybrid = "blaster" }
+  local SIZE = { frigate = 1, destroyer = 1, cruiser = 2, battleship = 3 }
+  local NAME = { "small", "medium", "large" }
+  local LAUNCHER = { "launcher.light", "launcher.heavy", "launcher.cruise" }
+  for _, faction in Factions.list do
+    if faction.kind == "human" then
+      for _, hull in Ships.list do
+        local size = SIZE[hull.class]
+        if hull.lineage == faction.id and size then
+          local turret = assert(Modules.byId[`{SHORT[faction.weapon]}.{NAME[size]}`])
+          local launcher = assert(Modules.byId[LAUNCHER[size]])
+          -- as many of each as it has hardpoints and high slots for, launchers first
+          local launchers = math.min(hull.launchers, hull.highs)
+          local turrets = math.min(hull.turrets, hull.highs - launchers)
+          local cpu = turrets * turret.cpu + launchers * launcher.cpu
+          local powergrid = turrets * turret.powergrid + launchers * launcher.powergrid
+          t.ok(cpu <= 0.8 * hull.cpu, `{hull.id}: its weapons take {cpu} of {hull.cpu} cpu`)
+          t.ok(powergrid <= 0.8 * hull.powergrid, `{hull.id}: its weapons take {powergrid} of {hull.powergrid} MW`)
+          -- and the next size up is beyond it
+          if size < 3 then
+            local bigger = assert(Modules.byId[`{SHORT[faction.weapon]}.{NAME[size + 1]}`])
+            t.ok(hull.turrets == 0 or hull.turrets * bigger.powergrid > hull.powergrid, `{hull.id} could carry {bigger.id}`)
+          end
+        end
+      end
     end
   end
 end)

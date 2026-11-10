@@ -57,6 +57,11 @@ local skills: { Skill } = {
   -- Guns and missiles
   { id = "projectiles", name = "Projectile Turrets", rank = 1, start = 1, requires = {}, note = "To fit autocannons." },
   { id = "lasers", name = "Laser Turrets", rank = 1, start = 0, requires = {}, note = "Level 1 to fit lasers." },
+  { id = "hybrids", name = "Hybrid Turrets", rank = 1, start = -1, requires = {}, note = "Level 1 to fit blasters and railguns." },
+  { id = "medium.weapons", name = "Medium Weapons", rank = 3, start = -1, requires = { { skill = "weapon.upgrades", level = 2 } },
+    note = "Level 1 to fit medium turrets and heavy launchers." },
+  { id = "large.weapons", name = "Large Weapons", rank = 5, start = -1, requires = { { skill = "medium.weapons", level = 3 } },
+    note = "Level 1 to fit large turrets and cruise launchers." },
   { id = "missiles", name = "Missile Launchers", rank = 1, start = 0, requires = {}, note = "Level 1 to fit launchers." },
   { id = "rapid.firing", name = "Rapid Firing", rank = 2, start = -1, requires = { { skill = "projectiles", level = 2 } },
     bonus = weapons("projectile", "duration", -0.04), note = "Autocannons fire 4% faster a level." },
@@ -135,9 +140,13 @@ function Skills.Needs(type: string): { Need }
   if listed then
     return listed
   end
-  -- A hull made from its yard's line says what it needs itself.
+  -- A hull or a module made from a table says what it needs itself.
   local hull = Ships.byId[type]
-  return if hull and hull.requires then hull.requires else {}
+  if hull and hull.requires then
+    return hull.requires
+  end
+  local module = Modules.byId[type]
+  return if module and module.requires then module.requires else {}
 end
 
 -- The first need a pilot with these skill levels does not meet, if any.

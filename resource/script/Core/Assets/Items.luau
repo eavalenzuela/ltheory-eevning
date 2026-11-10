@@ -147,7 +147,8 @@ function Items.Equip(state: State.State, ship: number, type: string, charge: str
   }
   if charge then
     local weapon = assert(module.weapon, `{type} takes no charge`)
-    assert(Modules.chargeById[charge] and Modules.chargeById[charge].family == weapon.family, `{charge} does not fit {type}`)
+    assert(Modules.chargeById[charge] and Modules.chargeById[charge].family == weapon.family
+      and Modules.chargeById[charge].size == weapon.size, `{charge} does not fit {type}`)
     item.charge = charge
     item.rounds = weapon.clip
   end
@@ -240,7 +241,7 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
       return false, chargeWhy
     end
     local chargeType = Modules.chargeById[charge.type]
-    if chargeType == nil or chargeType.family ~= module.weapon.family then
+    if chargeType == nil or chargeType.family ~= module.weapon.family or chargeType.size ~= module.weapon.size then
       return false, "that does not fit this weapon"
     end
     return true
