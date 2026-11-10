@@ -25,6 +25,11 @@ struct WindowT : public RefCounted {
   virtual void SetFullscreen() = 0;
   virtual void SetIcon(Texture2D const& icon) = 0;
   virtual void SetPosition(V2I const& p) = 0;
+
+  /* Whether Display shows the finished frame (the default) or only
+     finishes it. Not presenting keeps a scripted run independent of the
+     desktop, which may hold back a window it is not showing. */
+  virtual void SetPresent(bool present) = 0;
   virtual void SetSync(bool sync) = 0;
 
   virtual void Update() = 0;

@@ -14,6 +14,9 @@
 #   launch-*    bin/launch must exit 0 for a clean app, 1 for a script
 #               error, and with 128 + the signal for a crash or a failed
 #               assertion
+#   goldens     script/goldens: screenshots of four scenes must match their
+#               stored images
+#   goldens-fail  two made-up images that differ must be reported as differing
 #   soak-N      (--soak) the 400-system simulation, run in memory and run
 #               with a save and load every 97 ticks, must not differ over
 #               6000 ticks, for each of eight seeds in parallel
@@ -91,7 +94,9 @@ if [ "$fast" -eq 0 ]; then
   step launch-error 1 timeout 120 bin/launch selftest/error
   step launch-segv 139 timeout 120 bin/launch selftest/pass --selftest segv
   step launch-assert 134 timeout 120 bin/launch selftest/pass --selftest assert
+  step goldens 0 script/goldens
 fi
+step goldens-fail 1 script/goldens --planted
 
 if [ "$soak" -eq 1 ]; then
   # Seed 2 is the one that used to diverge (fleet losses depended on map

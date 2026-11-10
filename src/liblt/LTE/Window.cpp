@@ -1,4 +1,5 @@
 #include "Window.h"
+#include "GL.h"
 
 #include "Array.h"
 #include "Keyboard.h"
@@ -42,6 +43,7 @@ namespace {
     uint bpp;
     bool captureMouse;
     bool hasFocus;
+    bool present;
 
     WindowImpl(
         String const& title,
@@ -52,7 +54,8 @@ namespace {
       size(size),
       bpp(32),
       captureMouse(false),
-      hasFocus(true)
+      hasFocus(true),
+      present(true)
     {
       viewport = Viewport_Create(0, size, 1, true);
       impl.create(
@@ -76,7 +79,10 @@ namespace {
     }
 
     void Display() {
-      impl.display();
+      if (present)
+        impl.display();
+      else
+        glFinish();
     }
 
     void* GetImplData() {
@@ -121,6 +127,10 @@ namespace {
 
     void SetPosition(V2I const& p) {
       impl.setPosition(sf::Vector2i(p.x, p.y));
+    }
+
+    void SetPresent(bool present) {
+      this->present = present;
     }
 
     void SetSync(bool sync) {

@@ -5,6 +5,7 @@
 
 #include "Luau/Luau.h"
 
+#include "Module/FrameTimer.h"
 #include "Module/PhysicsEngine.h"
 #include "Module/SoundEngine.h"
 
@@ -154,6 +155,11 @@ void Usage() {
     "  --scale N        shrink screenshots by an integer factor\n"
     "  --size WxH       window size (default 1920x1080)\n"
     "  --timeout S      end a harness run after S seconds (default 300)\n"
+    "  --fixed-step HZ  advance the app's clock by exactly 1/HZ s per frame and\n"
+    "                   seed the random generator, so a run repeats exactly;\n"
+    "                   'wait S' then lasts S*HZ frames\n"
+    "  --no-present     draw every frame but never show it; screenshots still\n"
+    "                   work, and the desktop cannot slow the run down\n"
     "  --selftest KIND  fail on purpose once the engine is up, to prove that\n"
     "                   failures reach the exit status: segv or assert\n");
 }
@@ -167,8 +173,14 @@ int main(int argc, char const* argv[]) {
   V2U size(1920, 1080);
   Harness harness;
   String selftest;
+  float fixedHz = 0;
+  bool present = true;
   for (int i = 2; i < argc; ++i) {
     String opt = argv[i];
+    if (opt == "--no-present") {
+      present = false;
+      continue;
+    }
     if (i + 1 >= argc) {
       printf("ERROR: %s needs a value\n", opt.c_str());
       Usage();
@@ -197,6 +209,13 @@ int main(int argc, char const* argv[]) {
     }
     else if (opt == "--timeout")
       harness.timeout = (float)atof(value.c_str());
+    else if (opt == "--fixed-step") {
+      fixedHz = (float)atof(value.c_str());
+      if (fixedHz <= 0) {
+        printf("ERROR: --fixed-step expects a rate in Hz, such as 60\n");
+        return 1;
+      }
+    }
     else if (opt == "--selftest") {
       if (value != "segv" && value != "assert") {
         printf("ERROR: --selftest expects segv or assert\n");
@@ -212,6 +231,17 @@ int main(int argc, char const* argv[]) {
   }
 
   Launcher launcher(argv[1], size, harness);
+
+  if (!present)
+    launcher.window->SetPresent(false);
+
+  /* A repeatable run: the same time step every frame, and the same random
+     numbers (Program seeds rand() from the clock). */
+  if (fixedHz > 0) {
+    FrameTimer_SetFixedStep(1.0f / fixedHz);
+    harness.fixedStep = 1.0f / fixedHz;
+    srand(1);
+  }
 
   /* Planted failures, raised after the engine has installed its signal
      handlers, so the check script can prove a crash is not reported as

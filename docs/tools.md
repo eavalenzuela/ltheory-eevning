@@ -34,4 +34,9 @@ The current prototype fails the sweep on every seed (credits and fleets trend to
 
 ## Looking at the game
 
+| Command | What it does |
+|---|---|
+| `script/goldens [NAME ...]` | Runs the golden-screenshot scenarios and compares each with its stored image. |
+| `script/goldens --update [NAME ...]` | Stores this run's screenshots as the golden images. |
+
 `bin/launch APP --do "COMMANDS" --out DIR` drives an app with scripted input and saves screenshots; see `docs/harness.md`.

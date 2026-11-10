@@ -19,6 +19,9 @@ Each screenshot is written as `<out>/<name>.png`, and the launcher prints `SCREE
 | `--scale N` | Shrink screenshots by an integer factor (2 gives 960x540 from 1080p) |
 | `--size WxH` | Window size (default 1920x1080) |
 | `--timeout S` | Quit a harness run after S seconds (default 300) |
+| `--fixed-step HZ` | Advance the app's clock by exactly 1/HZ s per frame and seed the random generator, so a run repeats; `wait S` then lasts S×HZ frames |
+| `--no-present` | Draw every frame but never show it. Screenshots still work, and a desktop that holds back a hidden window (a locked or sleeping screen can cut it to two frames a second) cannot slow the run |
+| `--selftest KIND` | Fail on purpose (`segv` or `assert`) to prove failures reach the exit status |
 
 ## Commands
 
@@ -45,7 +48,11 @@ Key names are the engine's `Key_*` names without the prefix, matched without reg
 
 - **Real input:** while the harness runs, real mouse and keyboard input to the window is ignored, so using the desktop does not disturb the run. If the commands end without `quit`, the harness prints `HARNESS done, real input restored` and hands control back.
 - **Cursor:** the harness moves the app's cursor, not the OS pointer. Screenshots therefore mark the app's cursor with a small magenta crosshair.
-- **Errors:** a bad command prints `HARNESS ERROR: ...` and the run continues.
+- **Errors:** a bad command prints `HARNESS ERROR: ...` and the run continues, but the launcher then exits with status 1. A timeout and a script error do the same. Status 0 means the app started, no script raised an error and every command worked.
+
+## Golden screenshots
+
+`script/goldens` runs the scenarios in `test/golden/scenarios.txt` under `--fixed-step 60 --no-present` and compares each screenshot with its stored image in `test/golden/`. A scenario passes when at most 0.5% of pixels differ by more than 24 of 255 in any channel, which absorbs dithering noise and nothing else. On a failure the new screenshot and a difference image are left in `cache/golden/`. After an intended visual change, look at the new image and run `script/goldens --update NAME`.
 
 ## From scripts
 

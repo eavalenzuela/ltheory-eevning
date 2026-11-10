@@ -59,6 +59,11 @@ struct Harness {
   /* Set by a command that could not be carried out, and by a timeout. The
      launcher turns it into a failure exit status. */
   bool failed;
+
+  /* Seconds per frame under --fixed-step, else 0. With a fixed step
+     "wait S" lasts S seconds of app time (a whole number of frames)
+     instead of S seconds of real time, so a run is repeatable. */
+  float fixedStep;
   float findUntil;
 
   Harness() :
@@ -69,6 +74,7 @@ struct Harness {
     active(false),
     quit(false),
     failed(false),
+    fixedStep(0),
     findUntil(-1)
     {}
 
@@ -211,7 +217,11 @@ struct Harness {
       String const& op = c[0];
 
       if (op == "wait" && c.size() == 2) {
-        waitUntil = now + (float)atof(c[1].c_str());
+        float seconds = (float)atof(c[1].c_str());
+        if (fixedStep > 0)
+          waitFrames = (uint)Max(1.0f, seconds / fixedStep + 0.5f);
+        else
+          waitUntil = now + seconds;
         return true;
       }
 

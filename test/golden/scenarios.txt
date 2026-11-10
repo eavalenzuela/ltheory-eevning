@@ -1,0 +1,13 @@
+# Golden-screenshot scenarios for script/goldens.
+#
+#   NAME | APP | HARNESS COMMANDS
+#
+# The commands must save a screenshot called "golden" and end with "quit".
+# Under --fixed-step, "wait S" is S*60 frames. Keep scenarios short, and
+# prefer scenes that do not depend on AI decisions or particle effects:
+# those are the parts most likely to drift for reasons that are not bugs.
+
+ui          | ui          | wait 4; shot golden; quit
+model       | model       | wait 4; shot golden; quit
+ltheory     | ltheory     | wait 8; shot golden; quit
+station     | test_station | wait 6; shot golden; quit

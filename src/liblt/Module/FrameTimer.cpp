@@ -10,8 +10,10 @@ namespace {
     float ema01;
     float ema1;
     float ema10;
+    float fixedStep;
 
     FrameTimerModule() :
+      fixedStep(0),
       dt(0),
       ema01(0),
       ema1(0),
@@ -23,7 +25,7 @@ namespace {
     }
 
     void Update() {
-      dt = timer.GetElapsed();
+      dt = fixedStep > 0 ? fixedStep : timer.GetElapsed();
       ema01 = Mix(ema01, dt, 1.0 - Exp(-dt / 0.5f));
       ema1 = Mix(ema1, dt, 1.0 - Exp(-dt));
       ema10 = Mix(ema10, dt, 1.0 - Exp(-dt / 10.0f));
@@ -39,6 +41,10 @@ namespace {
     }
     return module;
   }
+}
+
+void FrameTimer_SetFixedStep(float dt) {
+  FrameTimer_GetModule()->fixedStep = dt;
 }
 
 DefineFunction(FrameTimer_Get) {

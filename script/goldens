@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""script/goldens: golden-screenshot regression.
+
+    script/goldens [NAME ...]            run scenarios and compare with their golden images
+    script/goldens --update [NAME ...]   write this run's screenshots as the golden images
+    script/goldens --planted             compare two made-up images that differ; must exit 1
+
+Scenarios are listed in test/golden/scenarios.txt, one per line:
+
+    NAME | APP | HARNESS COMMANDS
+
+The commands must save a screenshot called "golden" and end with "quit".
+Each scenario runs as
+
+    bin/launch APP --fixed-step 60 --no-present --scale 2 --out <tmp> --do "COMMANDS"
+
+--fixed-step makes every frame advance the app's clock by exactly 1/60 s
+and seeds the global random generator, so a run draws the same frames
+every time; "wait S" then means S*60 frames, not S seconds of real time.
+--no-present draws each frame without showing it, so a desktop that holds
+back a hidden window cannot slow the run.
+
+A scenario passes when at most 0.5% of its pixels differ from the golden
+image by more than 24 (of 255) in any channel. That tolerance absorbs
+driver-level noise (dithering, the odd anti-aliased edge) and nothing
+else: a moved widget or a changed colour fails. On failure the new
+screenshot and a difference image (changed pixels in magenta) are left in
+cache/golden/ to look at. Exits 1 if any scenario failed.
+"""
+
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+from PIL import Image, ImageChops
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+GOLDEN = os.path.join(ROOT, "test", "golden")
+OUT = os.path.join(ROOT, "cache", "golden")
+CHANNEL_TOLERANCE = 24
+PIXEL_BUDGET = 0.005
+
+
+def scenarios():
+    found = []
+    with open(os.path.join(GOLDEN, "scenarios.txt")) as f:
+        for number, line in enumerate(f, 1):
+            line = line.split("#", 1)[0].strip()
+            if not line:
+                continue
+            parts = [p.strip() for p in line.split("|")]
+            if len(parts) != 3:
+                sys.exit(f"test/golden/scenarios.txt:{number}: expected NAME | APP | COMMANDS")
+            found.append(tuple(parts))
+    return found
+
+
+def run(app, commands, out):
+    env = dict(os.environ)
+    env.setdefault("DRI_PRIME", "1")
+    result = subprocess.run(
+        [os.path.join(ROOT, "bin", "launch"), app, "--fixed-step", "60", "--no-present", "--scale", "2",
+         "--out", out, "--timeout", "240", "--do", commands],
+        cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    return result.returncode, result.stdout
+
+
+def compare(new_path, golden_path, diff_path):
+    """Returns (ok, message). Writes a difference image when not ok."""
+    new = Image.open(new_path).convert("RGB")
+    golden = Image.open(golden_path).convert("RGB")
+    if new.size != golden.size:
+        return False, f"size {new.size[0]}x{new.size[1]}, golden is {golden.size[0]}x{golden.size[1]}"
+    # The largest channel difference of each pixel, as one grey image.
+    r, g, b = ImageChops.difference(new, golden).split()
+    worst = ImageChops.lighter(ImageChops.lighter(r, g), b)
+    mask = worst.point(lambda v: 255 if v > CHANNEL_TOLERANCE else 0)
+    changed = mask.histogram()[255]
+    share = changed / (new.size[0] * new.size[1])
+    if share <= PIXEL_BUDGET:
+        return True, f"{share:.3%} of pixels differ"
+    faded = Image.blend(new, Image.new("RGB", new.size, (0, 0, 0)), 0.6)
+    faded.paste(Image.new("RGB", new.size, (255, 0, 255)), mask=mask)
+    faded.save(diff_path)
+    return False, f"{share:.2%} of pixels differ (budget {PIXEL_BUDGET:.1%})"
+
+
+def planted():
+    """A comparison that must fail: an image against a copy with a block of
+    4% of its pixels changed. Proves the comparison can say no."""
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Image.linear_gradient("L").resize((200, 200)).convert("RGB")
+        changed = base.copy()
+        changed.paste((255, 0, 255), (20, 20, 60, 60))
+        a, b = os.path.join(tmp, "a.png"), os.path.join(tmp, "b.png")
+        base.save(a)
+        changed.save(b)
+        same, _ = compare(a, a, os.path.join(tmp, "same.diff.png"))
+        ok, message = compare(b, a, os.path.join(tmp, "diff.png"))
+        if same and not ok:
+            print(f"  FAIL  planted          {message} (as it should)")
+            return 1
+        print("  goldens: the planted difference was NOT detected")
+        return 0
+
+
+def main():
+    args = sys.argv[1:]
+    if args == ["--planted"]:
+        return planted()
+    update = "--update" in args
+    names = [a for a in args if not a.startswith("--")]
+    unknown = [a for a in args if a.startswith("--") and a != "--update"]
+    if unknown:
+        print(__doc__)
+        return 2
+    chosen = [s for s in scenarios() if not names or s[0] in names]
+    missing = set(names) - {s[0] for s in chosen}
+    if missing:
+        sys.exit(f"goldens: no scenario named {', '.join(sorted(missing))}")
+    if not chosen:
+        sys.exit("goldens: test/golden/scenarios.txt lists no scenarios")
+    os.makedirs(OUT, exist_ok=True)
+
+    failed = 0
+    for name, app, commands in chosen:
+        golden_path = os.path.join(GOLDEN, name + ".png")
+        with tempfile.TemporaryDirectory() as tmp:
+            status, output = run(app, commands, tmp)
+            shot = os.path.join(tmp, "golden.png")
+            if status != 0 or not os.path.exists(shot):
+                failed += 1
+                why = f"exit {status}" if status != 0 else "no screenshot called 'golden'"
+                print(f"  FAIL  {name:<16} {app} did not finish cleanly ({why})")
+                print("        " + "\n        ".join(output.strip().splitlines()[-8:]))
+                continue
+            if update:
+                shutil.copyfile(shot, golden_path)
+                print(f"  wrote {name:<16} test/golden/{name}.png")
+                continue
+            if not os.path.exists(golden_path):
+                failed += 1
+                shutil.copyfile(shot, os.path.join(OUT, name + ".new.png"))
+                print(f"  FAIL  {name:<16} no golden image; see cache/golden/{name}.new.png, "
+                      f"then script/goldens --update {name}")
+                continue
+            ok, message = compare(shot, golden_path, os.path.join(OUT, name + ".diff.png"))
+            if ok:
+                print(f"  ok    {name:<16} {message}")
+            else:
+                failed += 1
+                shutil.copyfile(shot, os.path.join(OUT, name + ".new.png"))
+                print(f"  FAIL  {name:<16} {message}; see cache/golden/{name}.new.png and {name}.diff.png")
+
+    if update:
+        return 0
+    print(f"goldens: {len(chosen) - failed} of {len(chosen)} scenario(s) match" if failed
+          else f"goldens: all {len(chosen)} scenario(s) match")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
