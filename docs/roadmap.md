@@ -22,7 +22,22 @@ Scope note: this is years of work for a human team. Sizes below are relative, no
 | M3 One-system economy | Exit tests pass (2026-11-10); menus, research and content open (below). |
 | S2 Galaxy-scale economy | Done 2026-11-10: `script/econsweep` passes on 16 seeds over 30 game days. |
 | S3 Faction layer | Done 2026-11-10: `script/factionsweep` passes on 32 seeds over 30 game days. The prototype in `Sim/` is retired. |
-| M4 onward, S4 onward | Not started. |
+| M4 onward, S4 onward | Not started. Parked behind the content pass (below). |
+| Content pass | In progress since 2026-11-10. |
+
+**Direction since 2026-11-10: content and visuals first.** After S3 the choice was between wiring the simulation into the game (M4) and a visual and content pass; the content pass was chosen, with this reason: simulating an economy of abstract goods before the things themselves exist is backwards. The game should first have the ships, stations, planets, resources, blueprints and weapons that an economy is made of, power by power. `Core/Strategic` is parked as it stands. When it is taken up again it is to run on the real item database, not on 27 abstract classes.
+
+A related question, answered no for now: splitting the game into a server and a client so that the simulation can run on another machine. The whole strategic simulation costs about half a millisecond per ten-second tick, which is a few thousandths of a percent of one core; drawing is the heavy part and has to stay local. The Core already takes commands and gives events and runs with no window (`bin/ltcore`), so the split stays cheap to make if another reason for it appears (a universe that runs while the game is closed, say).
+
+The pass, in order. Each step ends in something to look at (a gallery sheet read as a screenshot and kept as a golden image) or a spec.
+
+| Step | What | State |
+|---|---|---|
+| C1 The item database | Four yards (styles of shipbuilding), two powers each. Each yard's line of hulls from frigate to battleship and an industrial; civilian and mining hulls. Turrets of three families and launchers, in three sizes, with their charges. Tank, propulsion and capacitor modules in three sizes. Ores by how safe the space is, and their minerals. A blueprint and skill requirements for everything. Original names throughout (the first items borrowed some). A spec that every item can be made from ore and every hull fitted. | Started |
+| C2 Hulls | A hull grammar in script on the engine's plate meshes: a silhouette per yard and class, paint per power. A gallery app with every hull on one sheet. The game draws each hull as itself. | |
+| C3 Places | Stations by kind (trade hub, shipyard, refinery, mining outpost, habitat, fortress, pirate den) in each yard's style; a gate that looks like a gate; six kinds of planet; asteroids that show their ore. Sheets for each. | |
+| C4 Fights and work | Weapons that fire what they are (beam, bolt, slug, missile), hits by layer, explosions by size, wrecks that are wrecks, a mining beam. | |
+| C5 The interface for it | Item icons, an information window with attributes, the market and hangar grouped by kind, a ship tree by yard. | |
 
 **M1 as built.** The Core flies the loop headless (`Core/Api.spec.luau`): undock, align and warp on schedule (a frigate covers 20 AU in 22 s), approach, orbit, keep at range, jump, dock. The game app shows it: grid objects at true size, planets and moons in scaled space, sunlit hulls, brackets, overview, selected-item orders, navigation bar, time controls, save and load. `script/check` flies it through the app, including a save in mid-warp that reloads to the same state hash. Fifty jumps leave memory flat.
 
