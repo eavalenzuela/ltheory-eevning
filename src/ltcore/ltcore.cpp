@@ -22,6 +22,7 @@
    same results in both. */
 
 #include "lua.h"
+#include "Luau/CodeGen.h"
 #include "lualib.h"
 #include "luacode.h"
 
@@ -70,7 +71,8 @@ namespace {
 
     lua_CompileOptions options;
     memset(&options, 0, sizeof(options));
-    options.optimizationLevel = 1;
+    /* Level 2 inlines small local functions, which the rules are full of. */
+    options.optimizationLevel = 2;
     options.debugLevel = 1;
     size_t size = 0;
     char* bytecode = luau_compile(source.data(), source.size(), &options, &size);
@@ -79,6 +81,15 @@ namespace {
     free(bytecode);
     if (status != 0)
       lua_error(L);
+    /* A module that starts with --!native is compiled to machine code
+       (the hot loops of the economy; everything else is interpreted).
+       LT_NATIVE_REPORT=1 says what became of each. */
+    if (Luau::CodeGen::isSupported()) {
+      Luau::CodeGen::CompilationResult result =
+        Luau::CodeGen::compile(L, -1, Luau::CodeGen::CodeGen_OnlyNativeModules);
+      if (getenv("LT_NATIVE_REPORT") && result.result != Luau::CodeGen::CodeGenCompilationResult::NotNativeModule)
+        printf("native: %s: %s\n", path.c_str(), Luau::CodeGen::toString(result.result).c_str());
+    }
 
     lua_call(L, 0, 1);
     if (lua_isnil(L, -1)) {
@@ -140,12 +151,19 @@ int main(int argc, char const* argv[]) {
   setvbuf(stdout, 0, _IOLBF, 0);
 
   lua_State* L = luaL_newstate();
+  if (Luau::CodeGen::isSupported())
+    Luau::CodeGen::create(L);
   luaL_openlibs(L);
   lua_newtable(L);
   lua_setfield(L, LUA_REGISTRYINDEX, "_LT_MODULES");
   lua_pushcfunction(L, Require, "require");
   lua_setglobal(L, "require");
   LuauHost::Register(L, argc - 2, argv + 2, true);
+  /* A promise that nothing replaces the built-in globals from here on:
+     with it the VM resolves math.sqrt and the like when a module loads
+     and calls them directly, which is several times faster. (Modules may
+     still add globals of their own.) */
+  lua_setsafeenv(L, LUA_GLOBALSINDEX, true);
 
   lua_getglobal(L, "require");
   lua_pushstring(L, argv[1]);

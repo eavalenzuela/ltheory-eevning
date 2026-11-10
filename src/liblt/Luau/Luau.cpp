@@ -2,6 +2,7 @@
 #include "lua.h"
 #include "lualib.h"
 #include "luacode.h"
+#include "Luau/CodeGen.h"
 
 #include "Luau.h"
 #include "LuauHost.h"
@@ -1289,7 +1290,9 @@ namespace {
 
     lua_CompileOptions options;
     memset(&options, 0, sizeof(options));
-    options.optimizationLevel = 1;
+    /* Level 2 inlines small local functions; bin/ltcore compiles the
+       same way, so the two hosts run the same code. */
+    options.optimizationLevel = 2;
     options.debugLevel = 1;
     size_t size = 0;
     char* bytecode = luau_compile(source.data(), source.size(), &options, &size);
@@ -1298,6 +1301,10 @@ namespace {
     free(bytecode);
     if (status != 0)
       lua_error(L);
+    /* A module that starts with --!native is compiled to machine code,
+       as bin/ltcore does, so the two hosts run the same thing. */
+    if (Luau::CodeGen::isSupported())
+      Luau::CodeGen::compile(L, -1, Luau::CodeGen::CodeGen_OnlyNativeModules);
 
     lua_call(L, 0, 1);
     if (lua_isnil(L, -1)) {
@@ -1320,6 +1327,8 @@ namespace {
   lua_State* CreateState() {
     InitKinds();
     lua_State* L = luaL_newstate();
+    if (Luau::CodeGen::isSupported())
+      Luau::CodeGen::create(L);
     lua_callbacks(L)->useratom = UserAtom;
     luaL_openlibs(L);
     lua_newtable(L);
@@ -1331,6 +1340,11 @@ namespace {
     BindHelpers(L);
     BindFunctions(L);
     BindNew(L);
+    /* A promise that nothing replaces a built-in or engine global from
+       here on: with it the VM resolves them when a module loads and
+       calls the built-ins directly, which is several times faster.
+       (Scripts may still add globals of their own, as GameDebug does.) */
+    lua_setsafeenv(L, LUA_GLOBALSINDEX, true);
     return L;
   }
 }

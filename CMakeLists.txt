@@ -128,7 +128,7 @@ set(LINK_LIBRARIES ${LINK_LIBRARIES} ${OPENGL_LIBRARIES})
 # Build shared libary
 file(GLOB_RECURSE LIBLT_SRC src/liblt/*.cpp)
 add_library(lt SHARED ${LIBLT_SRC} ext/miniaudio/miniaudio.c)
-target_link_libraries(lt ${LINK_LIBRARIES} ${EXTLIB} Luau.VM Luau.Compiler)
+target_link_libraries(lt ${LINK_LIBRARIES} ${EXTLIB} Luau.VM Luau.Compiler Luau.CodeGen)
 configure_output_dir(lt)
 
 # Luau reports script errors by throwing; the binding layer is built with
@@ -166,10 +166,11 @@ set_source_files_properties(src/luaucheck/luaucheck.cpp PROPERTIES COMPILE_FLAGS
 configure_output_dir(luaucheck)
 
 # ltcore: runs engine-free Luau modules (the game core, its tests and tools)
-# with no window and no engine. Links only the Luau VM and compiler.
+# with no window and no engine. Links only the Luau VM, compiler and native
+# code generator.
 add_executable(ltcore src/ltcore/ltcore.cpp)
 target_include_directories(ltcore PRIVATE ${PROJECT_SOURCE_DIR}/src/liblt)
-target_link_libraries(ltcore Luau.VM Luau.Compiler)
+target_link_libraries(ltcore Luau.VM Luau.Compiler Luau.CodeGen)
 set_source_files_properties(src/ltcore/ltcore.cpp PROPERTIES COMPILE_FLAGS "-std=c++17 -fexceptions")
 configure_output_dir(ltcore)
 

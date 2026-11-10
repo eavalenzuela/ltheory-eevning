@@ -10,6 +10,15 @@ The sim prototype in `resource/script/Sim/` predates these rules and is being mo
 - The same code runs in the engine and in `bin/ltcore`, which links only the Luau VM. If it runs in `ltcore`, it cannot depend on a window, the GPU or the engine.
 - `Host` is for the edges: reading and writing save files, tools, timing a benchmark. Rules never call it.
 
+## How the scripts are run
+
+Both hosts compile every module the same way, so the same code gives the same result in the engine and in `bin/ltcore`:
+
+- **Built-in and engine globals are never replaced.** The hosts promise the VM this, and in return it resolves `math.sqrt` and the like when a module loads and calls them directly (several times faster). A script may add a global of its own (`GameDebug`), but must not assign to `math`, `string`, `table`, `print`, `require` or anything the engine binds.
+- **Small local functions are inlined** (optimisation level 2). Tracebacks still give lines.
+- **A module whose first lines include `--!native` is compiled to machine code.** Use it for a hot loop of arithmetic over tables (`Core/Strategic/Economy` is the one so far), not by default: it costs memory and load time. `LT_NATIVE_REPORT=1 bin/ltcore ...` says what became of each such module. Native code gives the same results as the interpreter; the specs and scenarios are the check.
+- **Transient scratch is not state.** A module may keep working memory between calls to spare allocation, as the economy keeps its price rows, only if every value is written before it is read on each call.
+
 ## State
 
 - **Plain data only.** Booleans, numbers, strings, and tables of those keyed by numbers or strings. No functions, metatables, engine values, vectors or buffers in state.
