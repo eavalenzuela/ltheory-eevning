@@ -23,6 +23,7 @@ local function newAction(state: State.State, owner: number, kind: "move" | "conv
     done = false,
   }
   state.actions[action.id] = action
+  table.insert(state.actionIds, action.id)
   State.Count(state, `submitted {kind}`)
   return action
 end
@@ -45,6 +46,7 @@ function Actions.Finish(state: State.State, action: State.Action)
   end
   action.done = true
   state.actions[action.id] = nil
+  State.RemoveId(state.actionIds, action.id)
   -- Reactions to it no longer need remembering
   state.reacted[`ambush:{action.id}`] = nil
   for _, f in state.factions do

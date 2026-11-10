@@ -42,7 +42,7 @@ function Ai.Census(state: State.State): { Census }
     end
   end
   local ids = {}
-  for id in state.fleets do
+  for _, id in table.clone(state.fleetIds) do
     table.insert(ids, id)
   end
   table.sort(ids)
@@ -59,7 +59,7 @@ function Ai.Census(state: State.State): { Census }
     end
   end
   local actionIds = {}
-  for id in state.actions do
+  for _, id in table.clone(state.actionIds) do
     table.insert(actionIds, id)
   end
   table.sort(actionIds)
@@ -366,7 +366,7 @@ local function defenseOf(state: State.State, target: number): number
   local owner = state.systems[target].owner
   local defense = State.StationDefense(state, target)
   local reach = Data.SIEGE_TICKS // Data.JUMP_TICKS + 1
-  for _, fleet in state.fleets do
+  for fleet in State.EachFleet(state) do
     if fleet.owner == owner and fleet.role == "war" and fleet.system
       and hops(state, fleet.system :: number, target) <= reach then
       defense += Combat.FleetStrength(fleet)
@@ -407,7 +407,7 @@ local function attack(state: State.State, faction: State.Faction, c: Census)
     end
     -- Call in more: fleets already on the way count
     local projected = strength
-    for _, action in state.actions do
+    for action in State.EachAction(state) do
       if action.owner == faction.id and action.intent == "muster" and action.target == p.staging then
         projected += Combat.FleetStrength(state.fleets[action.fleet :: number])
       end
@@ -476,7 +476,8 @@ end
 -- hostile, convoys whose delivery station became hostile
 local function review(state: State.State, faction: State.Faction)
   local ids = {}
-  for id, action in state.actions do
+  for action in State.EachAction(state) do
+    local id = action.id
     if action.owner == faction.id then
       table.insert(ids, id)
     end
@@ -527,7 +528,7 @@ end
 local function piratesAct(state: State.State, faction: State.Faction, c: Census)
   local homes = dens(state)
   local fleetShips = 0
-  for _, fleet in state.fleets do
+  for fleet in State.EachFleet(state) do
     if fleet.owner == faction.id then
       fleetShips += State.ShipCount(fleet)
     end
@@ -546,7 +547,7 @@ local function piratesAct(state: State.State, faction: State.Faction, c: Census)
   -- Expand: pay for a new den in an empty independent system far from
   -- faction space, escorted by a few frigates
   local building = false
-  for _, action in state.actions do
+  for action in State.EachAction(state) do
     if action.owner == faction.id and action.intent == "construct" then
       building = true
     end
@@ -622,7 +623,8 @@ end
 -- Ambush loaded convoys on their way
 local function ambush(state: State.State, faction: State.Faction, c: Census)
   local ids = {}
-  for id, action in state.actions do
+  for action in State.EachAction(state) do
+    local id = action.id
     if action.kind == "convoy" and action.stage == "deliver" and action.owner ~= faction.id then
       table.insert(ids, id)
     end
@@ -664,7 +666,8 @@ end
 
 local function defend(state: State.State, faction: State.Faction, c: Census)
   local ids = {}
-  for id, action in state.actions do
+  for action in State.EachAction(state) do
+    local id = action.id
     if (action.intent == "attack" or action.intent == "raid" or action.intent == "siege") and action.owner ~= faction.id
       and state.systems[action.target :: number].owner == faction.id then
       table.insert(ids, id)

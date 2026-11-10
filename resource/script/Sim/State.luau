@@ -120,6 +120,12 @@ export type State = {
   stations: { Station },
   fleets: { [number]: Fleet },
   actions: { [number]: Action },
+  -- The ids in 'fleets' and 'actions', ascending. Rules loop over these
+  -- (through EachFleet and EachAction), never over the maps themselves:
+  -- the order a map yields its keys depends on how it was filled, so it
+  -- changes when a state is saved and loaded.
+  fleetIds: { number },
+  actionIds: { number },
   timers: { { due: number, id: number } },   -- min-heap on (due, id)
   nextId: number,
   news: { Event },
@@ -128,6 +134,66 @@ export type State = {
   pending: { [string]: number? },            -- goods claimed by convoys under way, by station and good
   built: { { system: number, kind: string } }, -- stations constructed after generation (part of the save)
 }
+
+-- Remove 'id' from an ascending list of ids.
+function State.RemoveId(ids: { number }, id: number)
+  local lo, hi = 1, #ids
+  while lo <= hi do
+    local mid = (lo + hi) // 2
+    local v = ids[mid]
+    if v == id then
+      table.remove(ids, mid)
+      return
+    elseif v < id then
+      lo = mid + 1
+    else
+      hi = mid - 1
+    end
+  end
+end
+
+-- The fleets in id order, for `for fleet in State.EachFleet(state) do`.
+-- It walks a copy of the id list, so the body may create and disband
+-- fleets: a fleet disbanded before its turn is skipped, and one created
+-- during the loop is not visited.
+function State.EachFleet(state: State): () -> Fleet?
+  local ids = table.clone(state.fleetIds)
+  local fleets = state.fleets
+  local i = 0
+  return function(): Fleet?
+    while true do
+      i += 1
+      local id = ids[i]
+      if id == nil then
+        return nil
+      end
+      local fleet = fleets[id]
+      if fleet then
+        return fleet
+      end
+    end
+  end
+end
+
+-- The actions in id order; the same rules as EachFleet.
+function State.EachAction(state: State): () -> Action?
+  local ids = table.clone(state.actionIds)
+  local actions = state.actions
+  local i = 0
+  return function(): Action?
+    while true do
+      i += 1
+      local id = ids[i]
+      if id == nil then
+        return nil
+      end
+      local action = actions[id]
+      if action then
+        return action
+      end
+    end
+  end
+end
 
 function State.NewId(state: State): number
   state.nextId += 1
@@ -229,6 +295,7 @@ function State.NewFleet(state: State, owner: number, system: number, role: "war"
   fleet.fuel = 10 * n
   fleet.munitions = 2 * n
   state.fleets[fleet.id] = fleet
+  table.insert(state.fleetIds, fleet.id)
   table.insert(state.systems[system].fleets, fleet.id)
   return fleet
 end
@@ -255,6 +322,7 @@ function State.Disband(state: State, fleet: Fleet)
   State.Leave(state, fleet)
   fleet.alive = false
   state.fleets[fleet.id] = nil
+  State.RemoveId(state.fleetIds, fleet.id)
 end
 
 -- Moves 'ships' out of 'fleet' into a new fleet at the same system
@@ -360,6 +428,8 @@ function State.New(galaxy: Galaxy.Galaxy, seed: number, history: number): State
     stations = {},
     fleets = {},
     actions = {},
+    fleetIds = {},
+    actionIds = {},
     timers = {},
     nextId = 0,
     news = {},

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # script/check: one command that says whether the tree is healthy.
 #
-#   script/check            run everything
+#   script/check            run everything except the soak
 #   script/check --fast     skip the steps that open a window
+#   script/check --soak     also run the determinism soak (about 2 minutes)
 #
 # Steps:
 #   types       bin/luaucheck: every script, strict mode
@@ -13,6 +14,9 @@
 #   launch-*    bin/launch must exit 0 for a clean app, 1 for a script
 #               error, and with 128 + the signal for a crash or a failed
 #               assertion
+#   soak-N      (--soak) the 400-system simulation, run in memory and run
+#               with a save and load every 97 ticks, must not differ over
+#               6000 ticks, for each of eight seeds in parallel
 #
 # The planted failures matter as much as the real checks: they prove that
 # a failure cannot be reported as success. Exits 0 only if every step did
@@ -22,10 +26,12 @@ set -u
 cd "$(dirname "$0")/.."
 
 fast=0
+soak=0
 for arg in "$@"; do
   case "$arg" in
     --fast) fast=1 ;;
-    *) echo "usage: script/check [--fast]"; exit 2 ;;
+    --soak) soak=1 ;;
+    *) echo "usage: script/check [--fast] [--soak]"; exit 2 ;;
   esac
 done
 
@@ -85,6 +91,29 @@ if [ "$fast" -eq 0 ]; then
   step launch-error 1 timeout 120 bin/launch selftest/error
   step launch-segv 139 timeout 120 bin/launch selftest/pass --selftest segv
   step launch-assert 134 timeout 120 bin/launch selftest/pass --selftest assert
+fi
+
+if [ "$soak" -eq 1 ]; then
+  # Seed 2 is the one that used to diverge (fleet losses depended on map
+  # order); the rest widen the net. All eight run at once.
+  seeds="1 2 3 4 5 6 7 8"
+  start=$SECONDS
+  for seed in $seeds; do
+    bin/ltcore Tool/simdiverge --galaxy "$seed" --history "$seed" >"$log/soak-$seed.log" 2>&1 &
+  done
+  wait
+  took=$((SECONDS - start))
+  for seed in $seeds; do
+    if grep -q "^simdiverge: no difference" "$log/soak-$seed.log"; then
+      summary+=$(printf '  ok    %-13s %3ds\n' "soak-$seed" "$took")$'\n'
+    else
+      failures=$((failures + 1))
+      summary+=$(printf '  FAIL  %-13s %3ds  the reloaded run differs\n' "soak-$seed" "$took")$'\n'
+      echo "---- soak-$seed ----"
+      tail -n 45 "$log/soak-$seed.log"
+      echo
+    fi
+  done
 fi
 
 printf '%s' "$summary"

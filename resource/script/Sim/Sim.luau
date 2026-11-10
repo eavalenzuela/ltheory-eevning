@@ -494,7 +494,7 @@ local function warStrength(state: State.State): { [number]: number }
   for _, f in state.factions do
     strength[f.id] = 0
   end
-  for _, fleet in state.fleets do
+  for fleet in State.EachFleet(state) do
     if fleet.role == "war" then
       strength[fleet.owner] += Combat.FleetStrength(fleet)
     end
@@ -522,7 +522,7 @@ end
 local function decommission(state: State.State, faction: State.Faction, saving: number)
   local fleets = {}
   local haulers = 0
-  for _, fleet in state.fleets do
+  for fleet in State.EachFleet(state) do
     if fleet.owner == faction.id and fleet.action == nil then
       table.insert(fleets, fleet)
     end
@@ -574,7 +574,7 @@ local function pay(state: State.State)
     end
   end
   local maintenance: { [number]: number } = {}
-  for _, fleet in state.fleets do
+  for fleet in State.EachFleet(state) do
     for _, class in Data.Ships do
       maintenance[fleet.owner] = (maintenance[fleet.owner] or 0) + (fleet.ships[class.id] or 0) * class.upkeep
     end
@@ -610,7 +610,7 @@ local function pay(state: State.State)
         -- Unpaid crews desert
         local rng = Rng.For(state.history, state.tick, f.id, 1)
         local deserted = 0
-        for _, fleet in state.fleets do
+        for fleet in State.EachFleet(state) do
           if fleet.owner == f.id then
             deserted += Combat.ApplyLosses(rng, { fleet }, Data.DESERTION)
           end
@@ -625,7 +625,7 @@ end
 -- and a share of its credits
 local function negotiate(state: State.State, winner: State.Faction, loser: State.Faction)
   local besieged: { [number]: boolean } = {}
-  for _, action in state.actions do
+  for action in State.EachAction(state) do
     if action.kind == "siege" and action.owner == winner.id then
       besieged[action.target :: number] = true
     end
@@ -799,7 +799,7 @@ local function period(state: State.State)
     if f.alive and not f.pirate and (remaining[f.id] or 0) == 0 then
       f.alive = false
       State.Log(state, "eliminated", `{f.name} has been eliminated`)
-      for _, fleet in state.fleets do
+      for fleet in State.EachFleet(state) do
         if fleet.owner == f.id then
           interrupt(state, fleet)
           State.Disband(state, fleet)
@@ -1022,7 +1022,7 @@ function Sim.Stats(state: State.State): { FactionStats }
       stats[system.owner].systems += 1
     end
   end
-  for _, fleet in state.fleets do
+  for fleet in State.EachFleet(state) do
     local s = stats[fleet.owner]
     s.frigates += fleet.ships.frigate or 0
     s.cruisers += fleet.ships.cruiser or 0
@@ -1044,7 +1044,7 @@ function Sim.Economy(state: State.State): { { good: string, stock: number, price
         priceCount += 1
       end
     end
-    for _, fleet in state.fleets do
+    for fleet in State.EachFleet(state) do
       stock += fleet.cargo[good.id] or 0
     end
     table.insert(rows, { good = good.name, stock = stock, price = if priceCount > 0 then priceSum / priceCount else 0 })
