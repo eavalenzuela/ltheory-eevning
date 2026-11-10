@@ -34,6 +34,13 @@ local function find(what: string): Core.Entry?
       return entry
     end
   end
+  -- A whole name before a part of one: "Merear II" is the planet, not
+  -- its asteroid belt.
+  for _, entry in entries do
+    if string.lower(entry.name) == string.lower(what) then
+      return entry
+    end
+  end
   for _, entry in entries do
     if string.find(string.lower(entry.name), string.lower(what), 1, true) then
       return entry

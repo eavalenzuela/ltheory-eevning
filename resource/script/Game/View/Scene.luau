@@ -22,6 +22,7 @@
 local Clock = require("@lt/Game/Clock")
 local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
+local Planet = require("@lt/Game/View/Planet")
 local Motion = require("@lt/Core/Tactical/Motion")
 local Session = require("@lt/Game/Session")
 local State = require("@lt/Core/Kernel/State")
@@ -68,6 +69,10 @@ Scene.SHOT_SECONDS = 0.35
 
 -- Bodies beyond the renderer's reach are drawn this far away.
 local FAR = 600000
+
+-- The size of a living world's cube map in the game: smaller than the
+-- viewer's, since a system may hold several (about 28 MB each).
+local WORLD_MAP = 768
 
 -- How a hull type looks, until hulls have their own generator specs: the
 -- seed of the old generator. Its size comes from the hull's radius. The
@@ -163,7 +168,16 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
 
   for _, object in Core.Query.Objects(game, system) do
     if object.kind == "planet" or object.kind == "moon" then
-      local body = Item_PlanetType(object.seed):Instantiate()
+      local body: Object
+      if object.kind == "planet" and (object.variety == "temperate" or object.variety == "ocean") then
+        -- A living world, built from its own heights (Game/View/Planet).
+        -- An ocean world is the same thing with the sea higher.
+        local world = Planet.NewTemperate(object.seed, WORLD_MAP)
+        Planet.Set(world, "seaLevel", if object.variety == "ocean" then 0.58 else 0.46)
+        body = world.body
+      else
+        body = Item_PlanetType(object.seed):Instantiate()
+      end
       body:SetName(object.name)
       container:AddInterior(body)
       scene.celestials[object.id] = body
