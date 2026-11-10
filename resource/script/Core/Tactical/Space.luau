@@ -154,7 +154,7 @@ local function addBall(state: State.State, ship: State.Ship, system: number, x: 
   local hull = Ships.byId[ship.type]
   local ball: State.Ball = {
     id = ship.id, kind = "ship", name = ship.name, system = system, grid = 0,
-    x = x, y = y, z = z, vx = 0, vy = 0, vz = 0,
+    x = x, y = y, z = z, vx = 0, vy = 0, vz = 0, tvx = 0, tvy = 0, tvz = 0,
     radius = hull.radius, maxVelocity = hull.maxVelocity, tau = Ships.TimeConstant(hull), warpSpeed = hull.warpSpeed,
     mode = "stop", target = 0, range = 0, dx = 0, dy = 0, dz = 0,
   }
@@ -431,15 +431,43 @@ local function stepWarp(state: State.State, ball: State.Ball, warp: State.Warp, 
   ball.vx, ball.vy, ball.vz = warp.ux * speed, warp.uy * speed, warp.uz * speed
 end
 
--- Advance every ship by one tick.
-function Space.Step(state: State.State, events: { Event })
+-- A tick has two halves, with the commands applied between them
+-- (Core.Step):
+--
+--   Integrate  finish the second that just passed: every ship flies it
+--              toward the target velocity it was given a tick ago.
+--   Decide     act on where ships now are (dock, jump, enter warp) and
+--              give each its target velocity for the second to come.
+--
+-- So a command takes effect at a tick boundary, and the state after a
+-- tick fixes the next second of every ship's flight.
+
+-- Fly every ship through the second that has just passed.
+function Space.Integrate(state: State.State, events: { Event })
+  local landed = false
+  for _, id in state.ballIds do
+    local ball = state.balls[id]
+    local warp = ball.warp
+    if warp and warp.stage == "warp" then
+      stepWarp(state, ball, warp, events)
+      landed = landed or ball.warp == nil
+    else
+      ball.x, ball.y, ball.z, ball.vx, ball.vy, ball.vz = Motion.Step(
+        ball.x, ball.y, ball.z, ball.vx, ball.vy, ball.vz, ball.tvx, ball.tvy, ball.tvz, ball.tau, Constants.TICK)
+    end
+  end
+  if landed then
+    pruneGrids(state)
+  end
+end
+
+-- Act on where ships are, and steer them for the coming second.
+function Space.Decide(state: State.State, events: { Event })
   local regrid = false
   for _, id in table.clone(state.ballIds) do
     local ball = state.balls[id]
     local warp = ball.warp
     if warp and warp.stage == "warp" then
-      stepWarp(state, ball, warp, events)
-      regrid = regrid or ball.warp == nil
       continue
     end
 
@@ -452,21 +480,17 @@ function Space.Step(state: State.State, events: { Event })
       if Space.Gap(ball :: any, target :: any) <= limit then
         if intent.kind == "dock" then
           dock(state, ball, target.id, events)
-        else
-          jump(state, ball, target, events)
+          regrid = true
+          continue
         end
+        jump(state, ball, target, events)
         regrid = true
-        continue
       elseif warp == nil and (ball.mode ~= "approach" or ball.target ~= target.id) then
         setMode(ball, "approach", target.id, 0)
       end
     end
 
-    local tx, ty, tz = targetVelocity(state, ball)
-    ball.x, ball.y, ball.z, ball.vx, ball.vy, ball.vz = Motion.Step(
-      ball.x, ball.y, ball.z, ball.vx, ball.vy, ball.vz, tx, ty, tz, ball.tau, Constants.TICK)
-
-    if warp then
+    if warp and ball.warp == warp then
       -- Aligning: enter warp once moving the right way fast enough.
       local speed = math.sqrt(ball.vx ^ 2 + ball.vy ^ 2 + ball.vz ^ 2)
       local along = ball.vx * ball.dx + ball.vy * ball.dy + ball.vz * ball.dz
@@ -478,9 +502,11 @@ function Space.Step(state: State.State, events: { Event })
         warp.ux, warp.uy, warp.uz = ux, uy, uz
         warp.plan = Motion.PlanWarp(distance, ball.warpSpeed, ball.maxVelocity)
         ball.grid = 0
+        ball.tvx, ball.tvy, ball.tvz = 0, 0, 0
         regrid = true
         table.insert(events, { kind = "WarpStarted", ball = ball.id, target = warp.target,
           duration = (warp.plan :: Motion.WarpPlan).total })
+        continue
       end
     elseif ball.grid ~= 0 then
       -- Flown off the edge of its grid?
@@ -490,6 +516,8 @@ function Space.Step(state: State.State, events: { Event })
         regrid = true
       end
     end
+
+    ball.tvx, ball.tvy, ball.tvz = targetVelocity(state, ball)
   end
   if regrid then
     pruneGrids(state)

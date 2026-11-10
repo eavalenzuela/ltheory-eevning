@@ -87,12 +87,15 @@ function Core.Submit(game: Game, command: State.Command): (boolean, string?)
   return ok, reason
 end
 
--- Advance one tick: apply the queued commands in order, then move
--- everything. A queued command that has stopped being valid (an earlier
--- one docked the ship, say) is dropped with a CommandRejected event.
+-- Advance one tick: fly every ship through the second that just passed,
+-- apply the queued commands in order, then steer every ship for the
+-- second to come (Tactical/Space). A queued command that has stopped
+-- being valid (an earlier one docked the ship, say) is dropped with a
+-- CommandRejected event.
 function Core.Step(game: Game)
   local state = game.state
   state.tick += 1
+  Space.Integrate(state, game.events)
   local queue = state.queue
   state.queue = {}
   for _, command in queue do
@@ -103,7 +106,7 @@ function Core.Step(game: Game)
       table.insert(game.events, { kind = "CommandRejected", command = command.kind, actor = command.actor, reason = reason })
     end
   end
-  Space.Step(state, game.events)
+  Space.Decide(state, game.events)
 end
 
 -- The events since the last call, oldest first.

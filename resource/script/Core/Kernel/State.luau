@@ -54,6 +54,12 @@ export type Ball = {
   vx: number,
   vy: number,
   vz: number,
+  -- The velocity it steers toward until the next tick, decided at this
+  -- one. With position and velocity it fixes the coming second of flight
+  -- exactly (Motion.Step), which is what lets the view draw between ticks.
+  tvx: number,
+  tvy: number,
+  tvz: number,
   radius: number,
   maxVelocity: number,
   tau: number,        -- seconds; see Tactical/Motion

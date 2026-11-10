@@ -102,8 +102,9 @@ suite:Case("from rest a ship enters warp after its align time and arrives on sch
   local belt = nearest(t, game, "belt")
   order(t, game, "WarpTo", belt.id, 0)
   local started, alignTicks = stepUntil(t, game, "WarpStarted", 20)
-  -- 75% of top speed takes 1.386 time constants: 4.88 s, so 5 whole ticks.
-  t.eq(alignTicks, math.ceil(Motion.TimeToSpeed(ball.tau, Constants.WARP_ALIGN_SPEED) / Constants.TICK))
+  -- The order takes effect at the next tick. From then, 75% of top speed
+  -- takes 1.386 time constants: 4.88 s, so 5 whole ticks.
+  t.eq(alignTicks, 1 + math.ceil(Motion.TimeToSpeed(ball.tau, Constants.WARP_ALIGN_SPEED) / Constants.TICK))
   t.eq(ball.grid, 0, "in warp a ship is on no grid")
   t.eq({ Core.Validate(game, { kind = "Stop", actor = ball.id }) }, { false, "in warp" } :: { any })
   local _, warpTicks = stepUntil(t, game, "WarpEnded", 200)
@@ -283,6 +284,39 @@ suite:Case("a save taken in mid-warp reloads and finishes identically", function
   order(t, loaded, "Dock", nearest(t, loaded, "station").id)
   stepUntil(t, loaded, "Docked", 4000)
   t.eq(Core.Hash(loaded), Core.Hash(straight))
+end)
+
+suite:Case("the state at a tick fixes the next second of flight", function(t)
+  -- What the view relies on to draw between ticks: from a ball's position,
+  -- velocity and target velocity (or its warp plan) the next tick's
+  -- position follows exactly, whatever the ship is doing.
+  local game = newGame()
+  undockAndStop(t, game)
+  order(t, game, "WarpTo", nearest(t, game, "belt").id, 0)
+  local checked, warping = 0, 0
+  local function checkTicks(n: number)
+    for _ = 1, n do
+      local ball = me(game)
+      local x, y, z
+      local warp = ball.warp
+      if warp and warp.stage == "warp" then
+        local plan = assert(warp.plan)
+        local d = Motion.WarpAt(plan, (game.state.tick + 1 - warp.startTick) * Constants.TICK)
+        x, y, z = warp.fx + warp.ux * d, warp.fy + warp.uy * d, warp.fz + warp.uz * d
+        warping += 1
+      else
+        x, y, z = Motion.Step(ball.x, ball.y, ball.z, ball.vx, ball.vy, ball.vz,
+          ball.tvx, ball.tvy, ball.tvz, ball.tau, Constants.TICK)
+      end
+      Core.Step(game)
+      t.eq({ ball.x, ball.y, ball.z }, { x, y, z }, `tick {game.state.tick}`)
+      checked += 1
+    end
+  end
+  checkTicks(40)
+  order(t, game, "Orbit", nearest(t, game, "asteroid").id, 3000)
+  checkTicks(200)
+  t.ok(warping > 5 and checked == 240, "the run covered warp and sub-warp flight")
 end)
 
 suite:Case("a file that is not a save is refused", function(t)
