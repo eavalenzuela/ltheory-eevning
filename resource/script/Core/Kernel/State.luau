@@ -15,7 +15,60 @@ export type Ship = {
   id: number,
   type: string,     -- Data/Ships id
   name: string,
+  owner: string,    -- "player", or the faction that flies it
   docked: number,   -- station id, or 0 in space
+  -- Armour and hull points missing. Damage stays with a ship until it is
+  -- repaired; shields and capacitor refill by themselves.
+  armorDamage: number,
+  hullDamage: number,
+}
+
+-- A target being locked, or locked. Times are game seconds (tick * TICK).
+export type Lock = { target: number, done: number, locked: boolean }
+
+-- A module that is switched on. It cycles at 'next', again and again
+-- until told to stop, it runs out of what it needs, or loses its target.
+export type Running = {
+  item: number,       -- the fitted module
+  target: number,     -- 0 for modules that act on their own ship
+  next: number,       -- game seconds of its next cycle
+  stopping: boolean,  -- stop at the next cycle
+  cycles: number,     -- how many it has run, for the dice
+}
+
+-- A ship's condition and what bears on a fight. The maxima and
+-- resonances come from hull and fit (Core/Dogma) and are refreshed when a
+-- module that changes them starts or stops.
+export type Vitals = {
+  shield: number,
+  armor: number,
+  hull: number,
+  capacitor: number,
+  shieldMax: number,
+  armorMax: number,
+  hullMax: number,
+  capacitorMax: number,
+  shieldRecharge: number,
+  capacitorRecharge: number,
+  signature: number,
+  scanResolution: number,
+  lockRange: number,
+  maxTargets: number,
+  shieldResonance: { number },
+  armorResonance: { number },
+  hullResonance: { number },
+  locks: { Lock },          -- in the order they were asked for
+  running: { Running },     -- in the order they were switched on
+}
+
+-- A missile in flight: it lands at 'impact' and does its damage then.
+export type Missile = {
+  from: number,
+  to: number,
+  item: number,
+  charge: string,
+  damage: { number },
+  impact: number,
 }
 
 -- A stack of items of one type in one place. A fitted module is a stack
@@ -85,6 +138,7 @@ export type Ball = {
   dz: number,
   warp: Warp?,
   intent: Intent?,
+  vitals: Vitals,
 }
 
 -- A grid that is not anchored to a station, gate or belt: made where a
@@ -119,6 +173,7 @@ export type State = {
   wallet: number,         -- the player's credits
   balls: { [number]: Ball },
   ballIds: { number },
+  missiles: { Missile },  -- in flight, oldest first
   grids: { [number]: Grid },
   gridIds: { number },
   player: { ship: number, home: number },

@@ -18,6 +18,7 @@ local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
 local System = require("@lt/Core/Describe/System")
+local Vitals = require("@lt/Core/Tactical/Vitals")
 
 local Space = {}
 
@@ -159,6 +160,7 @@ local function addBall(state: State.State, ship: State.Ship, system: number, x: 
     x = x, y = y, z = z, vx = 0, vy = 0, vz = 0, tvx = 0, tvy = 0, tvz = 0,
     radius = stats.radius, maxVelocity = stats.maxVelocity, tau = stats.tau, warpSpeed = stats.warpSpeed,
     mode = "stop", target = 0, range = 0, dx = 0, dy = 0, dz = 0,
+    vitals = Vitals.New(state, ship),
   }
   state.balls[ball.id] = ball
   -- Ships are made and launched in any order, so keep the list sorted.
@@ -174,6 +176,14 @@ end
 local function removeBall(state: State.State, ball: State.Ball)
   state.balls[ball.id] = nil
   State.RemoveId(state.ballIds, ball.id)
+end
+
+Space.RemoveBall = removeBall
+
+-- Put a ship into space at a point, at rest (an NPC arriving, a test).
+function Space.Launch(state: State.State, ship: State.Ship, system: number, x: number, y: number, z: number): State.Ball
+  ship.docked = 0
+  return addBall(state, ship, system, x, y, z)
 end
 
 local function unit(x: number, y: number, z: number): (number, number, number, number)
@@ -209,6 +219,7 @@ local function undock(state: State.State, ship: State.Ship, events: { Event })
 end
 
 local function dock(state: State.State, ball: State.Ball, station: number, events: { Event })
+  Vitals.Store(state.ships[ball.id], ball)
   removeBall(state, ball)
   state.ships[ball.id].docked = station
   table.insert(events, { kind = "BallRemoved", ball = ball.id, reason = "docked" })
@@ -505,6 +516,12 @@ function Space.Decide(state: State.State, events: { Event })
         warp.plan = Motion.PlanWarp(distance, ball.warpSpeed, ball.maxVelocity)
         ball.grid = 0
         ball.tvx, ball.tvy, ball.tvz = 0, 0, 0
+        -- Locks and running modules do not survive entering warp.
+        ball.vitals.locks = {}
+        if #ball.vitals.running > 0 then
+          ball.vitals.running = {}
+          Vitals.Refresh(state, ball)
+        end
         regrid = true
         table.insert(events, { kind = "WarpStarted", ball = ball.id, target = warp.target,
           duration = (warp.plan :: Motion.WarpPlan).total })
@@ -530,9 +547,10 @@ end
 -- Making ships
 
 -- A new ship docked at 'station'.
-function Space.NewShip(state: State.State, type: string, name: string, station: number): State.Ship
+function Space.NewShip(state: State.State, type: string, name: string, owner: string, station: number): State.Ship
   assert(Ships.byId[type], `no ship type '{type}'`)
-  local ship: State.Ship = { id = State.NewId(state), type = type, name = name, docked = station }
+  local ship: State.Ship = { id = State.NewId(state), type = type, name = name, owner = owner, docked = station,
+    armorDamage = 0, hullDamage = 0 }
   state.ships[ship.id] = ship
   table.insert(state.shipIds, ship.id)
   return ship

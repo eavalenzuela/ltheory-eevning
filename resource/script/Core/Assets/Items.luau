@@ -115,6 +115,41 @@ function Items.Take(state: State.State, item: State.Item, quantity: number)
   end
 end
 
+-- Fit a new module straight onto a ship, loaded if a charge is named:
+-- how a ship that was never in a hangar gets its fit (a new game's
+-- starter ship, a pirate). Raises if the hull cannot carry it.
+function Items.Equip(state: State.State, ship: number, type: string, charge: string?): State.Item
+  local module = assert(Modules.byId[type], `no module '{type}'`)
+  local hull = Ships.byId[state.ships[ship].type]
+  local types = { type }
+  local taken: { [number]: boolean } = {}
+  for _, fitted in Items.Fitted(state, ship) do
+    table.insert(types, fitted.type)
+    if fitted.place == module.slot then
+      taken[fitted.slot] = true
+    end
+  end
+  local ok, why = Dogma.Check(hull, types)
+  assert(ok, `{type} does not fit a {hull.name}: {tostring(why)}`)
+  local slot = 1
+  while taken[slot] do
+    slot += 1
+  end
+  local item: State.Item = {
+    id = State.NewId(state), type = type, quantity = 1, holder = ship, place = module.slot,
+    slot = slot, charge = "", rounds = 0,
+  }
+  if charge then
+    local weapon = assert(module.weapon, `{type} takes no charge`)
+    assert(Modules.chargeById[charge] and Modules.chargeById[charge].family == weapon.family, `{charge} does not fit {type}`)
+    item.charge = charge
+    item.rounds = weapon.clip
+  end
+  state.items[item.id] = item
+  table.insert(state.itemIds, item.id)
+  return item
+end
+
 -- ---------------------------------------------------------------------
 -- Orders
 

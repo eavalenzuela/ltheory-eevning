@@ -13,6 +13,7 @@
 -- effect at the start of the next tick.
 
 local Codec = require("@lt/Core/Persist/Codec")
+local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
@@ -36,7 +37,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 2
+Core.SAVE_VERSION = 3
 
 -- A new game: a galaxy, and the player's first ship docked at a station
 -- in system 1.
@@ -56,6 +57,7 @@ function Core.New(options: Options): Game
     wallet = 0,
     balls = {},
     ballIds = {},
+    missiles = {},
     grids = {},
     gridIds = {},
     player = { ship = 0, home = 0 },
@@ -69,41 +71,52 @@ function Core.New(options: Options): Game
     end
   end
   assert(home, "the first system has no station")
-  local ship = Space.NewShip(state, "frigate.courier", "Courier", home.id)
+  local ship = Space.NewShip(state, "frigate.courier", "Courier", "player", home.id)
   state.player.ship = ship.id
   state.player.home = home.id
   state.wallet = 5000
 
   -- A starter fit and a few things to try in the hangar. (Until there is
   -- a market, this and loot are where items come from.)
-  local game: Game = { state = state, events = {} }
-  local function fit(type: string, charge: string?, rounds: number?)
-    local stack = Items.Add(state, type, 1, home.id, "hangar")
-    Items.Apply(state, { kind = "Fit", actor = ship.id, item = stack.id }, game.events)
-    if charge then
-      local fitted = Items.Fitted(state, ship.id)
-      local rounds_ = Items.Add(state, charge, rounds or 1, home.id, "hangar")
-      Items.Apply(state, { kind = "LoadCharge", actor = ship.id, item = fitted[#fitted].id, other = rounds_.id }, game.events)
-    end
-  end
-  fit("autocannon.small", "ammo.emp", 120)
-  fit("autocannon.small", "ammo.emp", 120)
+  Items.Equip(state, ship.id, "autocannon.small", "ammo.emp")
+  Items.Equip(state, ship.id, "autocannon.small", "ammo.emp")
   for _, kit in { { "ammo.emp", 600 }, { "ammo.fusion", 400 }, { "shield.extender.small", 1 }, { "afterburner.1mn", 1 },
     { "armor.repairer.small", 1 }, { "laser.pulse.small", 1 }, { "crystal.multifrequency", 1 } } :: { { any } } do
     Items.Add(state, kit[1], kit[2], home.id, "hangar")
   end
-  game.events = {}
-  return game
+  return { state = state, events = {} }
 end
 
 -- Which module carries out a kind of command.
 local ASSET_COMMANDS = { Fit = true, Unfit = true, LoadCharge = true, MoveItems = true }
+local COMBAT_COMMANDS = { LockTarget = true, UnlockTarget = true, ActivateModule = true, DeactivateModule = true }
 
 local function validate(state: State.State, command: State.Command): (boolean, string?)
   if ASSET_COMMANDS[command.kind] then
     return Items.Validate(state, command)
+  elseif COMBAT_COMMANDS[command.kind] then
+    return Combat.Validate(state, command)
   end
   return Space.Validate(state, command)
+end
+
+-- A ship is gone: it leaves space, and everything aboard goes with it.
+-- The player wakes at home in a fresh starter ship.
+local function destroy(state: State.State, id: number, by: number, events: { Space.Event })
+  local ball = state.balls[id]
+  table.insert(events, { kind = "BallDestroyed", ball = id, by = by, name = ball.name, system = ball.system,
+    x = ball.x, y = ball.y, z = ball.z })
+  Space.RemoveBall(state, ball)
+  for _, item in Items.In(state, id, nil) do
+    Items.Take(state, item, item.quantity)
+  end
+  state.ships[id] = nil
+  State.RemoveId(state.shipIds, id)
+  if id == state.player.ship then
+    local fresh = Space.NewShip(state, "frigate.courier", "Courier", "player", state.player.home)
+    state.player.ship = fresh.id
+    table.insert(events, { kind = "Respawned", ship = fresh.id, station = state.player.home })
+  end
 end
 
 -- Whether a command could be carried out now, and if not, why not. Does
@@ -123,20 +136,30 @@ function Core.Submit(game: Game, command: State.Command): (boolean, string?)
 end
 
 -- Advance one tick: fly every ship through the second that just passed,
--- apply the queued commands in order, then steer every ship for the
--- second to come (Tactical/Space). A queued command that has stopped
+-- resolve the fighting of that second (Tactical/Combat), apply the queued
+-- commands in order, then steer every ship for the second to come
+-- (Tactical/Space). A queued command that has stopped
 -- being valid (an earlier one docked the ship, say) is dropped with a
 -- CommandRejected event.
 function Core.Step(game: Game)
   local state = game.state
   state.tick += 1
   Space.Integrate(state, game.events)
+  local killers = Combat.Step(state, game.events)
+  for _, id in table.clone(state.ballIds) do
+    local by = killers[id]
+    if by then
+      destroy(state, id, by, game.events)
+    end
+  end
   local queue = state.queue
   state.queue = {}
   for _, command in queue do
     local ok, reason = validate(state, command)
     if ok and ASSET_COMMANDS[command.kind] then
       Items.Apply(state, command, game.events)
+    elseif ok and COMBAT_COMMANDS[command.kind] then
+      Combat.Apply(state, command, game.events)
     elseif ok then
       Space.Apply(state, command, game.events)
     else
