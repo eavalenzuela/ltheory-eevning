@@ -2,7 +2,28 @@
 
 The universe simulation produces the activity a single-player EVE-like game has to fake: wars, trade, ownership changes, prices that move. EVE gets this from thousands of players; here the game has to do it.
 
-Status: the proposal, decisions and design details below are agreed (2026-10-25). A headless prototype implements them (see "Prototype"); its war balance is the main open tuning question.
+Status: the proposal, decisions and design details below were agreed on 2026-10-25 and a headless prototype implements them (see "Prototype"). On 2026-11-09 the economy was redesigned as stocks and flows and several decisions changed; see "Changes of 2026-11-09" directly below and `docs/roadmap.md` §6 for the current design. The rest of this document describes the prototype as built.
+
+## Changes of 2026-11-09
+
+The faction and timer layer stands. The hauler-level economy is replaced: each system is one market node with stock and prices for about 28 commodity classes, goods flow along gates when the price gap exceeds the per-jump cost, and money lives only with actors (factions, pirates, corporations, the player).
+
+| Decision below | Now |
+|---|---|
+| Individual goods | Real stocks and prices for ~28 classes; individual item types are derived from them |
+| Prices at each station | Per system; station orders are derived for display |
+| Trade is a convoy action | True for strategic consignments only; bulk trade is flow |
+| Pirates as fleets hunting haulers | A pressure field per system; fleets only for raids and den building |
+| Coalitions | Three tiers (embargo, subsidy, military) plus a readiness gate: nobody joins while exhausted |
+| Wars end when resources run out | Propose and evaluate, with terms from a war score |
+| Siege timer of 20 ticks | About an hour, in stages, so the player can reach the fight |
+| Sovereignty and ship upkeep | Superlinear and distance-weighted; ships are mothballed before any are scrapped; a lapse takes the lowest-control system |
+| Station maintenance in goods | Consumption acts through prosperity with floors; independents have no treasury |
+| Time while the game is closed (open question 1) | Frozen. "Wait until" while docked covers the legitimate use |
+| Everything procedural is regenerated from seeds and never stored | System descriptions are stored in the save; only visuals are regenerated, so a generator edit cannot break a save |
+| A tick's work is spread across frames by a coroutine | The tick runs whole, or in fixed stages keyed to the tactical tick. Slicing by wall clock breaks determinism once the tactical layer writes back |
+
+Unchanged: 400+ systems, the 10 s tick, no fog between factions, physical resolution where the player is, 6 ticks per jump, homeworld starts, the 24 h war cooldown (8,640 ticks of sim time, binding the player too), no action limit, commitment and cancel-as-action, 3:1 odds, the two seeds.
 
 ## Proposal (as written by the designer)
 

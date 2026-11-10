@@ -1,5 +1,7 @@
 # Limit Theory (old): codebase catalog and EVE roadmap
 
+> **Superseded in part (2026-11-09).** The roadmap is now [`docs/roadmap.md`](../roadmap.md). Sections 3 to 6 below (the gap table, the two paths, the first milestone) are kept as history only. The catalog also predates the Luau port, so script paths ending in `.lts` are now `.luau`, and several "not working" items (mining, docking, fitting, respawn, the universe clock, the per-frame economy rebuild) have since been fixed. The descriptions of the C++ engine still hold.
+
 This catalog records what exists in this repository, how well it works, and how it maps onto the target: **a single-player game modelled on EVE Online**. There are two ways to get there: grow this codebase into that game, or take it apart and carry its best ideas into a new one.
 
 It was produced in October 2026, right after the codebase was revived on Linux. Seven reviewers each read one subsystem. Almost everything comes from reading the code. The only runtime evidence is the smoke test of all 27 apps, the GPU-reset investigation and the bug fixes made in the same session. Claims the authors couldn't confirm are marked **(unverified)** in the section files.
