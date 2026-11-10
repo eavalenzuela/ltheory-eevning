@@ -2,7 +2,7 @@
 
 The universe simulation produces the activity a single-player EVE-like game has to fake: wars, trade, ownership changes, prices that move. EVE gets this from thousands of players; here the game has to do it.
 
-Status: the proposal, decisions and design details below were agreed on 2026-10-25 and a headless prototype implements them (see "Prototype"). On 2026-11-09 the economy was redesigned as stocks and flows and several decisions changed; see "Changes of 2026-11-09" directly below and `docs/roadmap.md` §6 for the current design. The rest of this document describes the prototype as built.
+Status: the proposal, decisions and design details below were agreed on 2026-10-25 and a headless prototype implemented them (see "Prototype"). On 2026-11-09 the economy was redesigned as stocks and flows and several decisions changed; see "Changes of 2026-11-09" directly below and `docs/roadmap.md` §6 for the current design. On 2026-11-10 the faction layer was rebuilt on that economy as `resource/script/Core/Strategic/` and the prototype was removed from the tree; see "The faction layer as rebuilt". The rest of this document describes the prototype as it was, for the record.
 
 ## Changes of 2026-11-09
 
@@ -24,6 +24,38 @@ The faction and timer layer stands. The hauler-level economy is replaced: each s
 | A tick's work is spread across frames by a coroutine | The tick runs whole, or in fixed stages keyed to the tactical tick. Slicing by wall clock breaks determinism once the tactical layer writes back |
 
 Unchanged: 400+ systems, the 10 s tick, no fog between factions, physical resolution where the player is, 6 ticks per jump, homeworld starts, the 24 h war cooldown (8,640 ticks of sim time, binding the player too), no action limit, commitment and cancel-as-action, 3:1 odds, the two seeds.
+
+## The faction layer as rebuilt (2026-11-10)
+
+`resource/script/Core/Strategic/` is the simulation now. Every number it is tuned by is in `Core/Data/Powers.luau`.
+
+| Module | Contents |
+|---|---|
+| `Economy`, `Atlas` | The galaxy's economy and who lives where (stage S2) |
+| `World` | The state: powers, systems, fleets, timers, wars, the ledger. A new world starts at the founding, each power on its homeworld |
+| `Orders` | What a government can order: moves, ships built, laid up and brought back, supplies and kits bought, a system let go |
+| `Battle` | Rounds of fighting, and sieges in stages |
+| `Order` | Pirate pressure, control, security, and what they do to the lanes |
+| `Fiscal` | The levy, the costs, arrears |
+| `Diplomacy` | Relations, war, coalitions, peace |
+| `Raiders` | The pirates' money, dens and raids |
+| `Mind` | How a government decides |
+| `Sim` | The tick |
+
+What changed from the decisions below, beyond the table above:
+
+| Decision below | As built |
+|---|---|
+| Attackers attack only at 3:1 or better | 3:1 over a system's own defences, plus a margin over the fleet its owner can bring (smaller for a bold power). At 3:1 over everything nobody of similar size ever attacked |
+| Wars begin when relations fall low enough | Low relations make a war possible; a power declares one only when it judges its fleet a match for the other's. Relations are also knocked about by random incidents between neighbours, so histories differ |
+| Truce of 10 hours | Two days for both sides, three for a side that gained by the peace, so that one neighbour is not ground down war after war |
+| Sovereignty cost per system and station | Per system, rising with distance from the capital and with the square of the number held. A power also gives up, at peace, a system that costs it far more than it brings |
+| Planets and stations defend strongly | A system's defences follow its population; a homeworld's are ten times that. A power can lose its provinces and keep its heart |
+| Pirates pay station upkeep like everyone else | Pirates pay for dens, recruits and crews from a cut of what piracy takes on the lanes and from raid loot. Dens have no goods upkeep |
+| Battles resolve when a fleet arrives | A battle is fought in rounds, a minute each, for as long as enemies share a system |
+| Reaction phase | No separate phase: each government thinks once a minute, and its defensive decisions take their turn with the rest |
+
+Everything else in the decision table stands as built: 400 systems, the 10 s tick, no fog between powers, six ticks a jump, homeworld starts, the one-day war cooldown, cancel-as-order, coalitions against a larger aggressor, independents that resist claims, upkeep for systems and ships.
 
 ## Proposal (as written by the designer)
 
@@ -144,7 +176,7 @@ This shows whether the dynamics are stable and interesting before anything is re
 
 ## Prototype
 
-`resource/script/Sim/` implements the simulation in pure Luau, with no engine objects:
+(Removed from the tree on 2026-11-10; the branch `universe-sim-design` has it.) `resource/script/Sim/` implemented the simulation in pure Luau, with no engine objects:
 
 | Module | Contents |
 |---|---|

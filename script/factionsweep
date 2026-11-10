@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# script/factionsweep: the strategic simulation (Tool/factionrun: the
+# powers, their wars and the pirates on the galaxy's economy) on 32
+# seeds over 30 game days, judged against the thresholds in
+# Tool/FactionProbe. The exit test of roadmap stage S3. Options are
+# script/sweep's:
+#
+#   script/factionsweep [--seeds N] [--days N] [--systems N] [--jobs N] [--out DIR]
+#   script/factionsweep --rescore DIR [--seeds N]
+exec "$(dirname "$0")/sweep" Tool/factionrun faction --seeds 32 "$@"

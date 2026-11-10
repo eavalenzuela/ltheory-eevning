@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# script/sweep: run one of the windowless simulation tools over several
+# seeds at once and print a scorecard of its verdicts.
+#
+#   script/sweep TOOL NAME [--seeds N] [--days N] [--systems N] [--jobs N] [--out DIR]
+#   script/sweep TOOL NAME --rescore DIR [--seeds N]     print the scorecard of an earlier sweep
+#
+# TOOL is a module for bin/ltcore that takes --galaxy, --days, --systems
+# and --out and writes result.txt there, a line "check=name|value|limit|ok"
+# per verdict (Tool/econrun, Tool/factionrun). NAME labels the output.
+# script/econsweep and script/factionsweep call this with their defaults.
+#
+# Defaults: 16 seeds (galaxy seed 1..N), 30 game days, 400 systems, half
+# as many jobs as CPUs (so that the time a step takes is measured on an
+# unloaded core), output under cache/NAME/sweep-<time>/. Each seed gets a
+# directory with what the tool wrote and a log beside it. The scorecard
+# printed at the end (and saved as scorecard.txt) has a row per check and
+# a column per seed. Exits 1 if any check failed on any seed.
+
+set -u
+cd "$(dirname "$0")/.."
+
+if [ $# -lt 2 ]; then
+  echo "usage: script/sweep TOOL NAME [--seeds N] [--days N] [--systems N] [--jobs N] [--out DIR]"
+  exit 2
+fi
+tool=$1
+name=$2
+shift 2
+
+seeds=16
+days=30
+systems=400
+jobs=$(( ($(nproc) + 1) / 2 ))
+out="cache/$name/sweep-$(date +%Y%m%d-%H%M%S)"
+rescore=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --rescore) rescore=1; out=$2 ;;
+    --seeds) seeds=$2 ;;
+    --days) days=$2 ;;
+    --systems) systems=$2 ;;
+    --jobs) jobs=$2 ;;
+    --out) out=$2 ;;
+    *) echo "usage: script/sweep TOOL NAME [--seeds N] [--days N] [--systems N] [--jobs N] [--out DIR]"; exit 2 ;;
+  esac
+  shift 2
+done
+
+if [ ! -x bin/ltcore ]; then
+  echo "script/sweep: bin/ltcore is missing; run python3 configure.py build"
+  exit 2
+fi
+if [ "$rescore" -eq 0 ]; then
+  mkdir -p "$out"
+  echo "$name sweep: $seeds seeds, $days days, $systems systems, $jobs at a time -> $out"
+  start=$SECONDS
+  seq 1 "$seeds" | xargs -P "$jobs" -I{} sh -c \
+    "bin/ltcore $tool --galaxy {} --days $days --systems $systems --out '$out/seed-{}' > '$out/seed-{}.log' 2>&1"
+  echo "$name sweep: runs finished in $((SECONDS - start)) s"
+fi
+
+# The scorecard: one row per check, one column per seed, then how many
+# seeds passed it.
+missing=0
+for s in $(seq 1 "$seeds"); do
+  if [ ! -s "$out/seed-$s/result.txt" ]; then
+    echo "$name sweep: seed $s gave no result; see $out/seed-$s.log"
+    missing=1
+  fi
+done
+[ "$missing" -eq 1 ] && exit 1
+
+awk -F'|' -v seeds="$seeds" '
+  FNR == 1 { seed++ }
+  /^check=/ {
+    check = substr($1, 7)
+    if (!(check in order)) { order[check] = ++n; name[n] = check; limit[n] = $3 }
+    value[order[check], seed] = $2
+    status[order[check], seed] = $4
+    if ($4 == "ok") passed[order[check]]++; else failed++
+  }
+  END {
+    printf "%-38s", "check"
+    for (s = 1; s <= seeds; s++) printf " %6s", "s" s
+    printf "  %s\n", "passed"
+    for (i = 1; i <= n; i++) {
+      printf "%-38s", name[i]
+      for (s = 1; s <= seeds; s++) {
+        v = value[i, s]
+        printf (v >= 100 || v == int(v) ? " %5.0f%s" : " %5.3f%s"), v, (status[i, s] == "ok" ? " " : "!")
+      }
+      printf "  %d/%d  (%s)\n", passed[i] + 0, seeds, limit[i]
+    }
+    printf "\n%s\n", (failed > 0 ? failed " check(s) failed (marked !)" : "all checks passed")
+    exit (failed > 0 ? 1 : 0)
+  }
+' $(for s in $(seq 1 "$seeds"); do echo "$out/seed-$s/result.txt"; done) | tee "$out/scorecard.txt"
+exit "${PIPESTATUS[0]}"

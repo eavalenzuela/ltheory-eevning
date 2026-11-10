@@ -3,7 +3,7 @@
 #
 #   script/check            run everything except the soak
 #   script/check --fast     skip the steps that open a window
-#   script/check --soak     also run the soaks (about 6 minutes)
+#   script/check --soak     also run the soaks (about 25 minutes)
 #
 # Steps:
 #   types       bin/luaucheck: every script, strict mode
@@ -26,11 +26,17 @@
 #   goldens     script/goldens: screenshots of the stored scenes must match
 #               their images
 #   goldens-fail  two made-up images that differ must be reported as differing
-#   soak-N      (--soak) the 400-system simulation, run in memory and run
-#               with a save and load every 97 ticks, must not differ over
-#               6000 ticks, for each of eight seeds in parallel
-#   econ-sweep  (--soak) script/econsweep: the galaxy's economy must pass
-#               every threshold on 16 seeds over 30 game days
+#   soak-N      (--soak) the 400-system strategic simulation, run in
+#               memory and run with a save and load every 97 ticks, must
+#               not differ over 40,000 ticks (four and a half game days,
+#               wars included), for each of eight seeds in
+#               parallel
+#   econ-sweep  (--soak) script/econsweep: the galaxy's economy, with
+#               fixed borders, must pass every threshold on 16 seeds over
+#               30 game days
+#   faction-sweep  (--soak) script/factionsweep: the powers, their wars
+#               and the pirates on that economy must pass every threshold
+#               on 32 seeds over 30 game days
 #
 # The planted failures matter as much as the real checks: they prove that
 # a failure cannot be reported as success. Exits 0 only if every step did
@@ -116,12 +122,12 @@ fi
 step goldens-fail 1 script/goldens --planted
 
 if [ "$soak" -eq 1 ]; then
-  # Seed 2 is the one that used to diverge (fleet losses depended on map
-  # order); the rest widen the net. All eight run at once.
+  # Eight histories at once. (In the prototype one seed in five diverged:
+  # fleet losses depended on the order a map gave its keys.)
   seeds="1 2 3 4 5 6 7 8"
   start=$SECONDS
   for seed in $seeds; do
-    bin/ltcore Tool/simdiverge --galaxy "$seed" --history "$seed" >"$log/soak-$seed.log" 2>&1 &
+    bin/ltcore Tool/simdiverge --galaxy "$seed" --history "$seed" --ticks 40000 >"$log/soak-$seed.log" 2>&1 &
   done
   wait
   took=$((SECONDS - start))
@@ -136,8 +142,10 @@ if [ "$soak" -eq 1 ]; then
       echo
     fi
   done
-  # The galaxy's economy, judged on 16 seeds over 30 game days.
+  # The galaxy's economy, judged on 16 seeds over 30 game days; then the
+  # powers on top of it, on 32.
   step econ-sweep 0 script/econsweep --out "$log/econ"
+  step faction-sweep 0 script/factionsweep --out "$log/faction"
 fi
 
 printf '%s' "$summary"

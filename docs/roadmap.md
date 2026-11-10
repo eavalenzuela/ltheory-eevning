@@ -21,7 +21,8 @@ Scope note: this is years of work for a human team. Sizes below are relative, no
 | M2 Ships | Rules done and playable (2026-11-10); content, effects and tools open (below). |
 | M3 One-system economy | Exit tests pass (2026-11-10); menus, research and content open (below). |
 | S2 Galaxy-scale economy | Done 2026-11-10: `script/econsweep` passes on 16 seeds over 30 game days. |
-| M4 onward, S3 onward | Not started. |
+| S3 Faction layer | Done 2026-11-10: `script/factionsweep` passes on 32 seeds over 30 game days. The prototype in `Sim/` is retired. |
+| M4 onward, S4 onward | Not started. |
 
 **M1 as built.** The Core flies the loop headless (`Core/Api.spec.luau`): undock, align and warp on schedule (a frigate covers 20 AU in 22 s), approach, orbit, keep at range, jump, dock. The game app shows it: grid objects at true size, planets and moons in scaled space, sunlit hulls, brackets, overview, selected-item orders, navigation bar, time controls, save and load. `script/check` flies it through the app, including a save in mid-warp that reloads to the same state hash. Fifty jumps leave memory flat.
 
@@ -99,6 +100,54 @@ The limits are the opening proposals from §6 made concrete; two were replaced d
 - Goods cross one lane a step, so the one-minute step is the speed of trade, not only a cost. Longer steps stay stable but supply people less well (30-minute steps: needs met 0.93).
 - The scripts were running three times slower than they should. The VM was never told that the built-in functions are not replaced, so every `math.sqrt` was a table lookup and a full call. Both hosts now say so, compile with inlining, and compile modules marked `--!native` to machine code. The economy went from 12.7 ms a step to 1.9; all specs, scenarios and goldens are unchanged.
 
+**S3 as built.** `Core/Strategic` now holds the whole strategic simulation, on the S2 economy, and `Core/Data/Powers` every number it is tuned by. A world starts at the founding: eight powers on their homeworlds, everything else independent, pirate dens in the far reaches.
+- **Money** (`Fiscal`): a power's only income is a levy on what its people spend, in proportion to how well they are supplied and how firmly it holds them. It pays for holding systems (more with distance from the capital, and as the square of how many it holds), policing, crews, and the fuel and ammunition its fleets use, bought on the market where each fleet lies. Hulls and fittings are bought on the capital's market at its prices. Every credit that moves is in a double-entry ledger with a reason.
+- **Fleets** (`Orders`, `Battle`): a minute a jump; nobody slips past an enemy fleet. A battle is fought a round a minute by the square law, and a side under half of what it faces pulls out. A siege is three stages over an hour (cut off, defences fought down, occupied); claiming an independent system is the same, shorter, and takes construction kits. A fleet abroad lives on a day's supplies.
+- **Order** (`Order`, `Raiders`): piracy is a pressure in every system, raised by dens and lawlessness and pushed down by policing and garrisons. With the owner's control it gives each system's security, which sets what its lanes cost, what pirates take on them and how much they carry; war, an embargo or a siege closes a lane. The pirates' organisation lives on a cut of that and on raids, and spends it on bands and new dens.
+- **Diplomacy**: relations settle where traits and borders put them and are knocked about by random incidents; a war starts when relations are bad and one side judges it can win. A power that attacks a clearly weaker one while well above average frightens the rest into embargo, then subsidy, then war. Peace is proposed and judged by one function whoever proposes: terms follow a score of what was taken and lost, and each side signs sooner the wearier it is.
+- **Government** (`Mind`): budget, build, expand, attack, defend, hunt dens. It acts only through the orders a player ruling a power would have.
+
+`Tool/factionrun` runs it and `Tool/FactionProbe` judges it; `script/factionsweep` does that for 32 seeds over 30 game days (in `script/check --soak`, with a save-and-load soak of eight histories over four and a half days). All 640 verdicts pass:
+
+| Measure | 32 seeds | Limit |
+|---|---|---|
+| Powers alive at the end | 8 of 8, every seed | at least 6 of 8 |
+| Largest power's share of systems | 9% to 19% | at most 45% |
+| Power-time in arrears | none | at most 5% |
+| People living under a power | 80% to 91% | at least 70% |
+| Systems claimed | 48% to 66% | 35% to 90% |
+| Wars declared in 30 days | 8 to 59 | at least 2 |
+| Power-time at war | 1.6% to 16% | 1% to 60% |
+| Systems taken or ceded in war | 16 to 118 | shown, not judged |
+| Warning of a capture, median | 72 to 84 minutes | at least 45 minutes |
+| Needs met, by head | 0.938 to 0.961 | at least 0.88 |
+| Price level against normal | 1.05 to 1.10 | 0.85 to 1.3 |
+| Goods lost to pirates, share of trade | 0.16% to 0.41% | 0.05% to 2% |
+| Books: credits and goods | no residual | none |
+| Time a tick | 0.4 to 0.9 ms (eight runs at once) | at most 5 ms |
+
+The first three are the roadmap's thresholds; the rest are mine, to catch a dead or a broken galaxy. Three runs of 90 game days (seeds 1, 5, 6) end with all eight powers alive; the largest holds 15% of the systems and up to 35% of the people, and in two of the three a power has been cut back to its homeworld.
+
+**S3 items still open:**
+- Over 90 days power still concentrates, slowly: one power comes to hold up to a third of the people, and a loser can be cut back to its homeworld, where it survives. A power that is eliminated never returns, and a beaten one recovers only by its own income. There is no revolt or liberation.
+- Coalition members fight side by side but not together: each plans its own attacks and defends only its own systems.
+- Governments keep their free fleets at the capital. Nothing is garrisoned for long, and nothing escorts anything.
+- Sieges are of systems; there are no structures to shoot yet, and industry is not damaged by war.
+- The warning the roadmap asked for was "a median near 45 minutes". It is about 78: a siege alone is an hour. The check is "at least 45".
+- The HTML report was written for the prototype's series and went with it. `factionrun --out` writes the new series as CSV; a report on them is to do.
+- The parity test (an NPC power driven only through the player's interface) is stage S8. The interface exists; the test does not.
+
+**What S3 found:**
+- The civil economy is about a thousand times a power's budget: the galaxy's people spend 61 million credits an hour, and a power lives on about 50,000. Anything defined as a share of trade swamps the powers. The first pirates took 2% of trade at the price of the goods and were forty times richer than every power together in two days; the organisation now gets a small cut and a raid carries off what its ships can hold.
+- Spending rules have to rank investments. The first governments put every spare credit into frigates the moment it arrived and never saved the price of a claim; expansion ran at a tenth of the planned pace until claims could earmark money the yards may not touch.
+- An empire has a natural size, and it is set by the cost of holding systems. With that cost linear in the number held, one power took two others' homeworlds and reached 85 systems in a month, profitably. With it rising as the square, and with conquests on another living power's ground paying half, the largest power in any of 32 seeds holds 19% of the map, and what a war takes tends to drift back afterwards.
+- Relations that only drift settle. Under the first rule each pair came to rest at a level its border set, usually just above the threshold of war: two seeds in eight had no war in thirty days, the rest had the same pairs fighting daily. Random incidents between neighbours, a declaration that needs a judgement of strength as well as bad blood, and longer truces gave every seed wars and none a forever war.
+- Three to one over everything means nobody of similar size ever attacks. The rule that works is three to one over a system's own defences plus a margin over the fleet its owner can bring; a bold power takes a smaller margin and sometimes loses the battle, which is where most ships are lost.
+- A power must not start a war it has nothing to do in. Under the first rule (declare when relations are bad and the fleet is a match) one power declared on the same neighbour six times in a month and never fired a shot: it faced that neighbour across a system neither owned and had nothing next door to attack. A government now declares only if it can see a system it could take, and can attack across one empty system.
+- A homeworld is two fifths of a power's people. While it could be taken like any system, losing it ended a power in all but name. Its defences are now ten times a system's of its size.
+- Ownership at the start is the original decision (homeworlds only), not S2's settled map. The powers fill their natural parts of the map in about two days, and about half the systems, the poor far ones, stay independent: they cost a distant empire more than they bring, and would pay a small local power.
+- The save had one shared table in it (the atlas and the economy both held each system's tastes), which the codec refuses. The reload test found it on its first run.
+
 **What S1 found:**
 - The first flow rule had its own deadlock: a node starved to zero could never be resupplied. The blockade test caught it. Flows now close a price gap exactly on the true curve.
 - Idle stock has honest hysteresis: goods nobody at a node uses stay there if carrying them back is not worth the trip. Working markets return to the same prices after a blockade.
@@ -110,7 +159,7 @@ The limits are the opening proposals from §6 made concrete; two were replaced d
 
 **What M0 found:**
 - The sim did depend on map order: one seed in five gave a different history after a save and load (a battle at tick 3961 assigned losses to different fleets). After the fix, eight seeds match over 6,000 ticks with a reload every 97.
-- The prototype fails the new sweep on all eight seeds: faction credits fall at about 130% of their level per game day, warships likewise, and station maintenance is about 45% met. That is the baseline the new economy has to beat (`script/simsweep`, `script/simreport`).
+- The prototype fails the new sweep on all eight seeds: faction credits fall at about 130% of their level per game day, warships likewise, and station maintenance is about 45% met. That is the baseline the new economy has to beat (`script/simsweep` and `script/simreport`, both retired with the prototype in S3).
 - This machine gives the engine an OpenGL 4.6 compatibility context, so instancing and newer GLSL can be mixed in without a renderer port (E11, E12).
 - A 1.8 MB sim state saves and loads in about 130 ms in Luau. Fine for autosave on dock or jump; a C encoder is the fallback if it ever hitches.
 - With the screen asleep the desktop holds each buffer swap for about 460 ms, which cuts any window to two frames a second. Scripted runs use `--no-present`.
@@ -414,7 +463,7 @@ Everything else in the decision table stands: 400+ systems, 10 s tick, no fog be
 | S7 Content hooks (M5) | M | Several offer kinds within 5 jumps of a random position ≥ 90% of the time; no reward drawn from the world account |
 | S8 Corporation to sovereignty (M7–M8) | L | The parity test passes headless |
 
-**Salvage from `resource/script/Sim/`:** keep `Rng`, `Galaxy` (extend), `Combat` (add stepped battles); refactor `State`, `Actions`, `Ai`; rewrite `Market` and the content in `Data`; split `Sim` into tick orchestration plus economy, fiscal and diplomacy modules.
+**Salvage from `resource/script/Sim/`** (done in S3; see Status)**:** keep `Rng`, `Galaxy` (extend), `Combat` (add stepped battles); refactor `State`, `Actions`, `Ai`; rewrite `Market` and the content in `Data`; split `Sim` into tick orchestration plus economy, fiscal and diplomacy modules.
 
 ## 7. Engine work, in dependency order
 

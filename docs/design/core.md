@@ -2,11 +2,11 @@
 
 The Core is the authoritative game: all state and all rules. It lives in `resource/script/Core/`, is written in strict Luau, calls nothing in the engine, and is deterministic. The engine is its view. `docs/roadmap.md` §3 gives the reasons; this document is the set of rules that code in the Core follows.
 
-The sim prototype in `resource/script/Sim/` predates these rules and is being moved under them (roadmap §6). `resource/script/Tool/` holds engine-free tools and the test kit; it follows the boundary rule but is not game state.
+The strategic simulation (`Core/Strategic`) follows them too; the prototype it replaced is gone from the tree. `resource/script/Tool/` holds engine-free tools and the test kit; it follows the boundary rule but is not game state.
 
 ## The boundary
 
-- Code under `Core/`, `Sim/` and `Tool/` sees the Luau built-ins and the `Host` table, nothing else. `bin/luaucheck` checks those directories against `resource/script/host.d.luau` only, so an engine call there is a type error.
+- Code under `Core/` and `Tool/` sees the Luau built-ins and the `Host` table, nothing else. `bin/luaucheck` checks those directories against `resource/script/host.d.luau` only, so an engine call there is a type error.
 - The same code runs in the engine and in `bin/ltcore`, which links only the Luau VM. If it runs in `ltcore`, it cannot depend on a window, the GPU or the engine.
 - `Host` is for the edges: reading and writing save files, tools, timing a benchmark. Rules never call it.
 
@@ -38,7 +38,7 @@ The state after a tick is a function of the state before it and the commands app
 - **Transcendental functions** (`exp`, `pow`, `sin`) are deterministic for one build on one machine, which is what this project needs. Do not expect two different machines to agree bit for bit.
 
 Two tools enforce this:
-- `Sim/Determinism.spec.luau` and `script/check --soak` run a history in memory and again with a save and load every so often; the final hashes must match.
+- `Core/Strategic/Sim.spec.luau` and `script/check --soak` run a history in memory and again with a save and load every so often; the final hashes must match.
 - `bin/ltcore Tool/simdiverge` finds the first tick and the first fields where they do not.
 
 ## Commands in, events out

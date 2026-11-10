@@ -7,9 +7,12 @@
 -- From that it builds the galaxy's economy (Strategic/Economy): a node a
 -- system, an edge a gate.
 --
--- Ownership here is fixed: eight powers, each grown outward from a
--- homeworld, with the far reaches unclaimed. (Wars that move the
--- borders are the faction layer's business.)
+-- Ownership here is each power's natural part of the map: eight powers,
+-- each grown outward from a homeworld, with the far reaches unclaimed.
+-- It decides where people live and what is made where, and it is who
+-- owns what when the economy is run on its own (Tool/econrun). In the
+-- strategic world (Strategic/World) the powers start on their homeworlds
+-- alone and who owns what is theirs to settle.
 --
 -- Industry is sized, not rolled: the atlas works out how much of
 -- everything the galaxy's people use, and how much of every stage that
@@ -20,6 +23,7 @@
 local Economy = require("@lt/Core/Strategic/Economy")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Goods = require("@lt/Core/Data/Goods")
+local Powers = require("@lt/Core/Data/Powers")
 local Rng = require("@lt/Core/Kernel/Rng")
 
 local Atlas = {}
@@ -87,9 +91,6 @@ Atlas.ANCHOR = 1.5
 -- (For experiments: let the anchors trade raw materials and parts too.)
 Atlas.ANCHOR_ALL = false
 
-local FACTION_NAMES = { "Vessari Compact", "Talmar League", "Orun Hegemony", "Sable Concord", "Kethri Union",
-  "Dominion of Ash", "Meridian Trust", "Halcyon Reach" }
-
 -- Jumps from 'source' to every system.
 local function hopsFrom(galaxy: Galaxy.Galaxy, source: number): { number }
   local dist: { number } = table.create(#galaxy.systems, -1)
@@ -155,7 +156,7 @@ function Atlas.Describe(galaxy: Galaxy.Galaxy, seed: number): Atlas
 
   local factions: { Faction } = {}
   for id, home in homes do
-    table.insert(factions, { id = id, name = FACTION_NAMES[id], home = home })
+    table.insert(factions, { id = id, name = Powers.list[id].name, home = home })
   end
 
   local systems: { SystemInfo } = {}
@@ -321,7 +322,8 @@ end
 function Atlas.Economy(galaxy: Galaxy.Galaxy, atlas: Atlas): Economy.Economy
   local econ = Economy.New(Goods.Classes(), Goods.Recipes())
   for id, info in atlas.systems do
-    local node = Economy.AddNode(econ, galaxy.systems[id].name, info.population, info.facilities, info.taste)
+    -- (its own copy of the tastes: the atlas and the economy are saved side by side)
+    local node = Economy.AddNode(econ, galaxy.systems[id].name, info.population, info.facilities, table.clone(info.taste))
     assert(node == id)
     -- A homeworld's own vast economy, which is not otherwise simulated,
     -- sells and buys the things people use near their normal prices.

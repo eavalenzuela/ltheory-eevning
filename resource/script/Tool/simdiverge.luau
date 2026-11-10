@@ -1,5 +1,6 @@
 --!strict
--- Finds where a save and load changes the course of the simulation:
+-- Finds where a save and load changes the course of the strategic
+-- simulation (Core/Strategic/Sim):
 --
 --   bin/ltcore Tool/simdiverge [--galaxy N] [--history N] [--systems N]
 --                              [--ticks N] [--reload-every N]
@@ -13,10 +14,10 @@
 -- the order the keys come out in. Exits 0 if the copies never differ.
 
 local Codec = require("@lt/Core/Persist/Codec")
-local Sim = require("@lt/Sim/Sim")
-local State = require("@lt/Sim/State")
+local Sim = require("@lt/Core/Strategic/Sim")
+local World = require("@lt/Core/Strategic/World")
 
-local function reload(state: State.State): (State.State, string)
+local function reload(state: World.World): (World.World, string)
   local data, length = Codec.Encode(state)
   return Codec.Decode(data, length), Codec.Hash(data, length)
 end
