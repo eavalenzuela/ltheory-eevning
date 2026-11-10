@@ -10,6 +10,8 @@
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
+# Flight is the subject here, so no pirates.
+lua GameDebug.Peaceful(true)
 
 # The UNDOCK button of the station panel (1920x1080 window).
 click Left 794 96

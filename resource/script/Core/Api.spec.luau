@@ -12,8 +12,9 @@ local Test = require("@lt/Tool/Test")
 
 local suite = Test.Suite("Flight")
 
+-- Flight is the subject here, so no pirates.
 local function newGame(): Core.Game
-  return Core.New({ galaxySeed = 1, historySeed = 1 })
+  return Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
 end
 
 local function me(game: Core.Game): State.Ball
@@ -259,7 +260,7 @@ suite:Case("the same orders give the same game", function(t)
   jumpAndDock(t, a, nil)
   jumpAndDock(t, b, nil)
   t.eq(Core.Hash(a), Core.Hash(b))
-  local other = Core.New({ galaxySeed = 1, historySeed = 2 })
+  local other = Core.New({ galaxySeed = 1, historySeed = 2, peaceful = true })
   jumpAndDock(t, other, nil)
   t.ok(Core.Hash(other) ~= Core.Hash(a), "a different history seed changes where the jump arrives")
 end)

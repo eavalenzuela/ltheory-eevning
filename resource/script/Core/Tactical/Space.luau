@@ -59,11 +59,15 @@ function Space.Object(state: State.State, id: number): System.Object?
   return if description then description.objects[id % SPAN] else nil
 end
 
--- Anything in space by id: a ship's ball or a described object.
+-- Anything in space by id: a ship's ball, a wreck or a described object.
 function Space.Body(state: State.State, id: number): Body?
   local ball = state.balls[id]
   if ball then
     return ball :: any
+  end
+  local wreck = state.wrecks[id]
+  if wreck then
+    return wreck :: any
   end
   return Space.Object(state, id) :: any
 end
@@ -74,7 +78,26 @@ function Space.SystemOf(state: State.State, id: number): number
   if ball then
     return ball.system
   end
+  local wreck = state.wrecks[id]
+  if wreck then
+    return wreck.system
+  end
   return if id < Constants.FIRST_DYNAMIC_ID then id // SPAN else 0
+end
+
+-- The grid a body is on: a ball's or a wreck's own, a described object's
+-- site, or 0.
+function Space.GridOf(state: State.State, id: number): number
+  local ball = state.balls[id]
+  if ball then
+    return ball.grid
+  end
+  local wreck = state.wrecks[id]
+  if wreck then
+    return wreck.grid
+  end
+  local object = Space.Object(state, id)
+  return if object then object.site else 0
 end
 
 function Space.Distance(a: Body, b: Body): number
@@ -139,6 +162,9 @@ local function pruneGrids(state: State.State)
   local used: { [number]: boolean } = {}
   for _, id in state.ballIds do
     used[state.balls[id].grid] = true
+  end
+  for _, id in state.wreckIds do
+    used[state.wrecks[id].grid] = true
   end
   for i = #state.gridIds, 1, -1 do
     local id = state.gridIds[i]

@@ -9,7 +9,7 @@ local Types = {}
 export type Info = {
   id: string,
   name: string,
-  category: "module" | "charge",
+  category: "module" | "charge" | "goods",
   volume: number,     -- m3 per unit
   basePrice: number,  -- credits per unit
 }
@@ -21,6 +21,16 @@ for _, m in Modules.list do
 end
 for _, c in Modules.charges do
   byId[c.id] = { id = c.id, name = c.name, category = "charge", volume = c.volume, basePrice = c.basePrice }
+end
+
+-- Things that are only carried and sold.
+local goods: { Info } = {
+  -- Proof of a pirate killed. Worth a bounty to whoever collects them.
+  { id = "tag.pirate", name = "Pirate Tag", category = "goods", volume = 0.1, basePrice = 4000 },
+  { id = "scrap.metal", name = "Scrap Metal", category = "goods", volume = 0.5, basePrice = 60 },
+}
+for _, g in goods do
+  byId[g.id] = g
 end
 
 function Types.Get(id: string): Info?

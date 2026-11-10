@@ -225,6 +225,11 @@ local function autopilot()
   end
 end
 
+-- No pirates come while this is on.
+function Debug.Peaceful(on: boolean)
+  session.game.state.peaceful = on
+end
+
 function Debug.TimeScale(scale: number)
   session.clock.scale = scale
 end

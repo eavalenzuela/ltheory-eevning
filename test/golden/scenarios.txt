@@ -12,4 +12,4 @@ model       | model       | wait 4; shot golden; quit
 ltheory     | ltheory     | wait 8; shot golden; quit
 station     | test_station | wait 6; shot golden; quit
 game-docked | game        | wait 3; lua GameDebug.Zoom(4, 0.6, 1.25); wait 1; shot golden; quit
-game-belt   | game        | wait 2; lua GameDebug.Order('Undock'); until GameDebug.InSpace(); lua GameDebug.TimeScale(8); lua GameDebug.Order('WarpTo', 'belt'); until GameDebug.InWarp(); until GameDebug.Idle(); lua GameDebug.Order('Orbit', 'asteroid', 5000); lua GameDebug.Zoom(14, 1.0, 1.2); wait 8; shot golden; quit
+game-belt   | game        | wait 2; lua GameDebug.Peaceful(true); lua GameDebug.Order('Undock'); until GameDebug.InSpace(); lua GameDebug.TimeScale(8); lua GameDebug.Order('WarpTo', 'belt'); until GameDebug.InWarp(); until GameDebug.Idle(); lua GameDebug.Order('Orbit', 'asteroid', 5000); lua GameDebug.Zoom(14, 1.0, 1.2); wait 8; shot golden; quit

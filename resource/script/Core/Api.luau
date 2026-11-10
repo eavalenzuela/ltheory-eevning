@@ -12,11 +12,13 @@
 -- since they were last taken. Commands are queued in the state and take
 -- effect at the start of the next tick.
 
+local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Codec = require("@lt/Core/Persist/Codec")
 local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
+local Pirates = require("@lt/Core/Tactical/Pirates")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -33,11 +35,12 @@ export type Options = {
   galaxySeed: number,
   historySeed: number,
   systems: number?,   -- default 3
+  peaceful: boolean?, -- no pirates; default false
 }
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 3
+Core.SAVE_VERSION = 4
 
 -- A new game: a galaxy, and the player's first ship docked at a station
 -- in system 1.
@@ -58,6 +61,12 @@ function Core.New(options: Options): Game
     balls = {},
     ballIds = {},
     missiles = {},
+    wrecks = {},
+    wreckIds = {},
+    pilots = {},
+    pilotIds = {},
+    spawned = {},
+    peaceful = options.peaceful == true,
     grids = {},
     gridIds = {},
     player = { ship = 0, home = 0 },
@@ -90,33 +99,17 @@ end
 -- Which module carries out a kind of command.
 local ASSET_COMMANDS = { Fit = true, Unfit = true, LoadCharge = true, MoveItems = true }
 local COMBAT_COMMANDS = { LockTarget = true, UnlockTarget = true, ActivateModule = true, DeactivateModule = true }
+local AFTERMATH_COMMANDS = { Loot = true, Repair = true }
 
 local function validate(state: State.State, command: State.Command): (boolean, string?)
   if ASSET_COMMANDS[command.kind] then
     return Items.Validate(state, command)
   elseif COMBAT_COMMANDS[command.kind] then
     return Combat.Validate(state, command)
+  elseif AFTERMATH_COMMANDS[command.kind] then
+    return Aftermath.Validate(state, command)
   end
   return Space.Validate(state, command)
-end
-
--- A ship is gone: it leaves space, and everything aboard goes with it.
--- The player wakes at home in a fresh starter ship.
-local function destroy(state: State.State, id: number, by: number, events: { Space.Event })
-  local ball = state.balls[id]
-  table.insert(events, { kind = "BallDestroyed", ball = id, by = by, name = ball.name, system = ball.system,
-    x = ball.x, y = ball.y, z = ball.z })
-  Space.RemoveBall(state, ball)
-  for _, item in Items.In(state, id, nil) do
-    Items.Take(state, item, item.quantity)
-  end
-  state.ships[id] = nil
-  State.RemoveId(state.shipIds, id)
-  if id == state.player.ship then
-    local fresh = Space.NewShip(state, "frigate.courier", "Courier", "player", state.player.home)
-    state.player.ship = fresh.id
-    table.insert(events, { kind = "Respawned", ship = fresh.id, station = state.player.home })
-  end
 end
 
 -- Whether a command could be carried out now, and if not, why not. Does
@@ -136,8 +129,9 @@ function Core.Submit(game: Game, command: State.Command): (boolean, string?)
 end
 
 -- Advance one tick: fly every ship through the second that just passed,
--- resolve the fighting of that second (Tactical/Combat), apply the queued
--- commands in order, then steer every ship for the second to come
+-- resolve the fighting of that second (Tactical/Combat) and what follows
+-- from it (Tactical/Aftermath), apply the queued commands in order, let
+-- the pirates give theirs, then steer every ship for the second to come
 -- (Tactical/Space). A queued command that has stopped
 -- being valid (an earlier one docked the ship, say) is dropped with a
 -- CommandRejected event.
@@ -149,7 +143,7 @@ function Core.Step(game: Game)
   for _, id in table.clone(state.ballIds) do
     local by = killers[id]
     if by then
-      destroy(state, id, by, game.events)
+      Aftermath.Destroy(state, id, by, game.events)
     end
   end
   local queue = state.queue
@@ -160,13 +154,18 @@ function Core.Step(game: Game)
       Items.Apply(state, command, game.events)
     elseif ok and COMBAT_COMMANDS[command.kind] then
       Combat.Apply(state, command, game.events)
+    elseif ok and AFTERMATH_COMMANDS[command.kind] then
+      Aftermath.Apply(state, command, game.events)
     elseif ok then
       Space.Apply(state, command, game.events)
     else
       table.insert(game.events, { kind = "CommandRejected", command = command.kind, actor = command.actor, reason = reason })
     end
   end
+  Pirates.Populate(state, game.events)
+  Pirates.Think(state, game.events)
   Space.Decide(state, game.events)
+  Aftermath.Step(state, game.events)
 end
 
 -- The events since the last call, oldest first.
@@ -259,6 +258,14 @@ function Query.Overview(game: Game): { Entry }
     if id ~= me.id and ball.system == me.system and ball.grid == me.grid and me.grid ~= 0 then
       local entry: Entry = { id = id, kind = ball.kind :: string, name = ball.name,
         distance = Space.Gap(me :: any, ball :: any), onGrid = true, variety = state.ships[id].type }
+      table.insert(entries, entry)
+    end
+  end
+  for _, id in state.wreckIds do
+    local wreck = state.wrecks[id]
+    if wreck.system == me.system and wreck.grid == me.grid and me.grid ~= 0 then
+      local entry: Entry = { id = id, kind = "wreck", name = wreck.name,
+        distance = Space.Gap(me :: any, wreck :: any), onGrid = true, variety = "" }
       table.insert(entries, entry)
     end
   end

@@ -19,7 +19,7 @@ type Arena = { game: Core.Game, me: State.Ball, foe: State.Ball }
 -- 'distance' metres away (between surfaces), also at rest.
 local function arena(hull: string, fit: { { string } }, foeHull: string, foeFit: { { string } }, distance: number,
   historySeed: number?): Arena
-  local game = Core.New({ galaxySeed = 1, historySeed = historySeed or 1 })
+  local game = Core.New({ galaxySeed = 1, historySeed = historySeed or 1, peaceful = true })
   local state = game.state
   -- Swap the starter ship for the one under test.
   local old = state.player.ship
@@ -362,22 +362,17 @@ suite:Case("docking keeps the damage; the shield comes back", function(t)
   t.eq(again.vitals.shield, again.vitals.shieldMax, "the shield is full again")
 end)
 
-suite:Case("when the player's ship is destroyed they wake at home in a new one", function(t)
-  local a = arena("frigate.courier", {}, "frigate.lancer", { { "laser.pulse.small", "crystal.multifrequency" },
-    { "laser.pulse.small", "crystal.multifrequency" }, { "laser.pulse.small", "crystal.multifrequency" } }, 1500)
-  local old = a.me.id
-  Core.Submit(a.game, { kind = "LockTarget", actor = a.foe.id, target = old })
-  stepUntil(a, "LockCompleted", 30)
-  for _, laser in Items.Fitted(a.game.state, a.foe.id) do
-    Core.Submit(a.game, { kind = "ActivateModule", actor = a.foe.id, item = laser.id, target = old })
+suite:Case("a ship destroyed takes its locks and everything aboard with it", function(t)
+  local a = arena("frigate.courier", CANNONS, "frigate.courier", {}, 1500)
+  local foe = a.foe.id
+  Items.Add(a.game.state, "ammo.emp", 50, foe, "cargo")
+  lockFoe(t, a)
+  for _, cannon in modules(a) do
+    order(t, a, { kind = "ActivateModule", actor = 0, item = cannon.id, target = foe })
   end
-  local respawned = stepUntil(a, "Respawned", 400)
-  local player = Core.Query.Player(a.game)
-  t.ok(player.ship ~= old)
-  t.eq(player.ship, respawned.ship)
-  t.eq(player.docked, a.game.state.player.home)
-  t.eq(player.hull.id, "frigate.courier")
-  t.eq(a.game.state.ships[old], nil)
+  stepUntil(a, "BallDestroyed", 300)
+  t.eq(#Items.In(a.game.state, foe, nil), 0)
+  t.eq(a.game.state.ships[foe], nil)
 end)
 
 suite:Case("the same seeds give the same fight, and a save in mid-fight carries on unchanged", function(t)

@@ -141,6 +141,30 @@ export type Ball = {
   vitals: Vitals,
 }
 
+-- What is left of a destroyed ship: it stays where the ship died, holds
+-- whatever survived (as items whose holder is the wreck), and fades.
+export type Wreck = {
+  id: number,
+  kind: "wreck",
+  name: string,
+  system: number,
+  grid: number,
+  x: number,
+  y: number,
+  z: number,
+  radius: number,
+  expires: number,    -- the tick it disappears
+}
+
+-- A ship flown by the game rather than the player: what it is doing.
+export type Pilot = {
+  ship: number,
+  range: number,      -- how far from its prey it likes to fight
+  prey: number,       -- the ship it is after, or 0
+  home: number,       -- the grid it was spawned on
+  alone: number,      -- ticks since the player was last on its grid
+}
+
 -- A grid that is not anchored to a station, gate or belt: made where a
 -- ship arrived in open space (those anchored to a site use the site's id).
 export type Grid = { id: number, system: number, x: number, y: number, z: number }
@@ -174,6 +198,12 @@ export type State = {
   balls: { [number]: Ball },
   ballIds: { number },
   missiles: { Missile },  -- in flight, oldest first
+  wrecks: { [number]: Wreck },
+  wreckIds: { number },
+  pilots: { [number]: Pilot },  -- by ship id
+  pilotIds: { number },
+  spawned: { [number]: number },  -- by grid: the tick pirates last appeared there
+  peaceful: boolean,      -- no pirates come (for tests, and for sightseeing)
   grids: { [number]: Grid },
   gridIds: { number },
   player: { ship: number, home: number },
