@@ -39,7 +39,7 @@ bin/launch game --console                    # then type: GameDebug.Order("Undoc
 bin/launch game --no-present --fixed-step 60 --script test/scenario/flight.txt
 ```
 
-`test/scenario/flight.txt` (the M1 flight loop), `test/scenario/combat.txt` (the M2 loop: fit, fight, loot, lose the ship, get home) and `test/scenario/economy.txt` (the M3 loop: mine, refine, build, sell by order, buy a hull, train, board) are harness scripts; `script/check` runs all three.
+`test/scenario/flight.txt` (the M1 flight loop), `test/scenario/combat.txt` (the M2 loop: fit, fight, loot, lose the ship, get home) and `test/scenario/economy.txt` (the M3 loop: mine, refine, build, sell by order, buy a hull, train, board) are harness scripts; `script/check` runs all three, and `test/scenario/pace.txt`, which fails if the game draws under thirty frames a second just outside the home station (a picture cannot show a slow frame: time one whenever something is added to the scene).
 
 In the game, `GameDebug.LookAt('sun')` (or any name the overview knows) swings the camera to look just past the ship at it.
 

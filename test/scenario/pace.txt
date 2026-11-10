@@ -1,0 +1,16 @@
+# The game must draw fast enough: 240 frames just outside the home
+# station, with every planet and moon of the system built, in under eight
+# seconds (thirty a second). It draws some 270 a second on the machine
+# this was written on.
+#
+# It is here because nothing else shows a slow frame. Sixteen planets
+# made as movable objects once cost 140 ms a frame, each of them a dot on
+# the screen, and every picture of them looked right.
+lua GameDebug.Order('Undock')
+until GameDebug.InSpace()
+frames 30
+lua _G.paceStart = os.clock()
+frames 240
+lua print('pace', math.floor(240 / (os.clock() - _G.paceStart)), 'frames a second')
+lua assert(os.clock() - _G.paceStart < 8, 'the game is drawing under 30 frames a second')
+quit
