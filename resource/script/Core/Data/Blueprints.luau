@@ -135,6 +135,9 @@ for _, module in Modules.list do
     table.insert(Blueprints.list, blueprint)
     Blueprints.byId[blueprint.id] = blueprint
     Blueprints.byProduct[module.id] = blueprint
+  elseif module.meta then
+    -- (a custom make is nobody's to build: there are no drawings for it)
+    continue
   elseif module.tech == 2 and module.base then
     -- A tech 2 module is built of the plain one, and of what makes the
     -- difference: components and the rare minerals. Its blueprint is

@@ -239,6 +239,12 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
   sheet.kind = if weapon then `{SIZES[weapon.size]} {if module.hardpoint == "launcher" then "launcher" else "turret"}`
     elseif module.hardpoint ~= "" then `{slot} {module.hardpoint}`
     else `{slot} module`
+  -- (a make of another module: what it is the make of, and how it is come by)
+  if module.meta and module.base then
+    sheet.note = `The {nameOf(module.base)} as somebody has worked it over: a little better, easier to fit, and no harder to use. Nobody sells or builds one. They are found in pirates' wrecks and in their stores.`
+  elseif module.tech == 2 and module.base then
+    sheet.note = `The tech 2 make of the {nameOf(module.base)}: better, and harder to fit and to use. Nobody sells one. Its blueprint is invented from the plain one's.`
+  end
 
   if weapon then
     local to = section(sheet, "Weapon")

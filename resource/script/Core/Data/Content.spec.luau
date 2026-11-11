@@ -239,8 +239,8 @@ suite:Case("every weapon takes ammunition of its own size and no other; larger r
   local weapons = 0
   for _, module in Modules.list do
     local weapon = module.weapon
-    -- (the plain ones: each has a tech 2 make, which is its own case)
-    if weapon and module.tech ~= 2 then
+    -- (the plain ones: each has a custom and a tech 2 make, which are their own cases)
+    if weapon and module.tech ~= 2 and module.meta == nil then
       weapons += 1
       local fits = 0
       for _, charge in Modules.charges do
@@ -336,6 +336,10 @@ suite:Case("components are made from minerals, and modules from components and m
   end
   t.near(hullShare, 1, 1e-9)
   for _, module in Modules.list do
+    -- (a custom make is found and not built: its own case)
+    if module.meta then
+      continue
+    end
     local blueprint = assert(Blueprints.byProduct[module.id], module.id)
     if module.slot == "rig" then
       -- (a rig is made of what is salvaged, and nothing else: three kinds, twenty pieces)
@@ -414,7 +418,7 @@ suite:Case("every weapon, repairer, extender, plate and mining laser has a tech 
       -- No station has one to sell, nor its blueprint.
       t.eq({ Types.Info(module.id).scarce, Types.Info("blueprint." .. module.id).scarce, Blueprints.byProduct[module.id].invented } :: { any },
         { true, true, true } :: { any })
-    else
+    elseif module.meta == nil then
       -- (what only a drone carries is nobody's to buy either)
       t.eq({ module.base, Types.Info(module.id).scarce } :: { any }, { nil, if module.internal then true else nil } :: { any })
       t.ok(not module.internal or Modules.Improved(module.id) == nil, "a drone's own module has a tech 2 make")
@@ -425,6 +429,45 @@ suite:Case("every weapon, repairer, extender, plate and mining laser has a tech 
   t.ok(Modules.Improved("web.stasis") == nil and Modules.Improved("rig.shield") == nil)
   t.eq({ Modules.SizeOf(Modules.byId["autocannon.medium.ii"]), Modules.SizeOf(Modules.byId["shield.extender.large"]),
     Modules.SizeOf(Modules.byId["miner.small"]) }, { 2, 3, 1 })
+end)
+
+suite:Case("the same modules have a custom make, between the plain one and tech 2: a little better, easier to fit, and only ever found", function(t)
+  local customs = 0
+  for _, module in Modules.list do
+    if module.meta then
+      customs += 1
+      local base = Modules.byId[module.base :: string]
+      local better = assert(Modules.Improved(base.id), `{base.id} has a custom make and no tech 2 make`)
+      t.eq({ module.id, module.name, module.slot, module.hardpoint, module.tech } :: { any },
+        { base.id .. ".custom", base.name .. " Custom", base.slot, base.hardpoint, nil } :: { any })
+      t.eq(Modules.Custom(base.id), module)
+      t.ok(Modules.Custom(module.id) == nil and Modules.Improved(module.id) == nil, "a custom make has no better make of its own")
+      -- Easier to fit than the plain one, and worth more; less than tech 2 in what it does.
+      t.ok(module.cpu <= base.cpu and module.powergrid <= base.powergrid and module.cpu >= 1 and module.powergrid >= 1, module.id)
+      t.ok(module.cpu < base.cpu or module.powergrid < base.powergrid or base.cpu + base.powergrid <= 2, module.id)
+      t.eq(module.basePrice, base.basePrice * 3)
+      if module.weapon and base.weapon and better.weapon then
+        t.near(module.weapon.damageMultiplier, base.weapon.damageMultiplier * 1.1, 1e-9)
+        t.ok(module.weapon.damageMultiplier < better.weapon.damageMultiplier)
+        t.eq({ module.weapon.family, module.weapon.size } :: { any }, { base.weapon.family, base.weapon.size } :: { any })
+      elseif module.repair and base.repair and better.repair then
+        t.near(module.repair.amount, base.repair.amount * 1.125, 1e-9)
+        t.ok(module.repair.amount < better.repair.amount)
+      elseif module.miner and base.miner and better.miner then
+        t.near(module.miner.volume, base.miner.volume * 1.125, 1e-9)
+        t.ok(module.miner.volume < better.miner.volume)
+      end
+      -- No more skill than the plain one.
+      t.eq(Skills.Needs(module.id), Skills.Needs(base.id))
+      -- Nobody sells one, and there are no drawings for it.
+      t.eq({ Types.Info(module.id).scarce, Blueprints.byProduct[module.id], Types.Get("blueprint." .. module.id) } :: { any },
+        { true, nil, nil } :: { any })
+    end
+  end
+  -- One for every module that has a tech 2 make.
+  t.eq(customs, 21 + 4 * 3 + 2)
+  t.ok(Modules.Custom("web.stasis") == nil and Modules.Custom("autocannon.small.ii") == nil)
+  t.eq(Modules.SizeOf(Modules.byId["autocannon.medium.custom"]), 2)
 end)
 
 suite:Case("fittings come in three sizes, each for a larger ship than the last", function(t)

@@ -137,7 +137,9 @@ local function loot(state: State.State, rng: Rng.Rng, wreck: number, rich: numbe
   end
   Items.Add(state, "scrap.metal", math.floor((8 + Rng.Int(rng, 30)) * rich), wreck, "cargo")
   -- Now and then something that was fitted, or the drawings for it.
-  -- (a plain one: the tech 2 make of anything is nobody's to find)
+  -- (a plain one, or somebody's custom make of it: the tech 2 make of
+  -- anything is nobody's to find. And there are no drawings for a
+  -- custom make: those are the plain one's.)
   if Rng.Chance(rng, 0.5) then
     local module = Modules.list[Rng.Int(rng, #Modules.list) + 1]
     if module.tech == 2 and module.base then
@@ -145,7 +147,25 @@ local function loot(state: State.State, rng: Rng.Rng, wreck: number, rich: numbe
     elseif module.internal then
       module = Modules.byId["miner.small"]
     end
-    Items.Add(state, if Rng.Chance(rng, 0.15) then "blueprint." .. module.id else module.id, 1, wreck, "cargo")
+    local drawings = Rng.Chance(rng, 0.15)
+    Items.Add(state, if drawings then "blueprint." .. (if module.meta and module.base then module.base else module.id) else module.id, 1,
+      wreck, "cargo")
+  end
+end
+
+-- The modules there is a custom make of, worked out once.
+local customs: { Modules.ModuleType } = {}
+for _, module in Modules.list do
+  if module.meta then
+    table.insert(customs, module)
+  end
+end
+
+-- So many custom makes, of whatever, into a wreck: what a pack keeps of
+-- the best it has taken.
+local function prizes(state: State.State, rng: Rng.Rng, wreck: number, count: number)
+  for _ = 1, count do
+    Items.Add(state, customs[Rng.Int(rng, #customs) + 1].id, 1, wreck, "cargo")
   end
 end
 
@@ -248,6 +268,9 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
         loot(state, rng, wreck, rich)
         Items.Add(state, "tag.pirate", 2 * rich, wreck, "cargo")
         Items.Add(state, "ammo.fusion", 500 * rich, wreck, "cargo")
+        -- (a den's stores have a custom make of something, and a
+        -- stronghold's three)
+        prizes(state, rng, wreck, 1 + 2 * deep)
       end
     end
   end

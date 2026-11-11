@@ -31,6 +31,10 @@ export type Event = { [string]: any }
 local WRECK_LIFETIME = 7200  -- ticks: two hours
 local LOOT_RANGE = 2500
 local DROP_CHANCE = 0.5
+-- The chance that what survives of a pirate's fitted module is the
+-- custom make of it (Data/Modules), where there is one.
+local CUSTOM_CHANCE = 0.2
+Aftermath.CUSTOM_CHANCE = CUSTOM_CHANCE
 local INSURANCE = 0.4        -- of the hull's base price, paid without asking
 local STARTER = "frigate.courier"
 
@@ -81,7 +85,11 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
         end
       end
       if Rng.Chance(rng, DROP_CHANCE) then
-        Items.Add(state, item.type, item.quantity, wreck.id, "cargo")
+        -- (a pirate's own guns and fittings are now and then better than they look)
+        local fitted = item.place == "high" or item.place == "mid" or item.place == "low"
+        local custom = if ship.owner == "pirates" and fitted then Modules.Custom(item.type) else nil
+        local found = if custom and Rng.Chance(rng, CUSTOM_CHANCE) then custom.id else item.type
+        Items.Add(state, found, item.quantity, wreck.id, "cargo")
       end
     end
     if ship.owner == "pirates" then

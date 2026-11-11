@@ -7,8 +7,8 @@
 # which wants the Invention skill. With the skill, it is begun: the
 # datacores and the blueprint go into the laboratory, and half an hour on
 # the blueprint is back, with a tech 2 one beside it if it came off.
-# Then a frigate's blueprint is put to the same work, and a tech 2
-# frigate is flown.
+# Then a frigate's blueprint is put to the same work, a custom make of a
+# gun is fitted, and a tech 2 frigate is flown.
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
@@ -44,6 +44,17 @@ lua assert(GameDebug.Give('datacore', 1))
 until GameDebug.Press('Invent')
 until GameDebug.Jobs() == 1
 lua assert(GameDebug.Hangar('datacore') == 0, 'the eight datacores should be used')
+
+# A custom make of a module, as a pirate's wreck now and then has, goes
+# where the plain one does, and wants no more skill than a new pilot has.
+lua assert(GameDebug.Give('autocannon.small.custom', 1))
+until GameDebug.Press('Fitting')
+until GameDebug.Tab() == 'Fitting'
+frames 3
+until GameDebug.Press('Unfit:high2')
+until GameDebug.Fitted('autocannon.small') == 1
+until GameDebug.Press('Fit:autocannon.small.custom')
+until GameDebug.Fitted('autocannon.small.custom') == 1
 
 # A tech 2 hull is the hull it was made from, to look at and to arm: its
 # gun and its two racks are on it, a pair of mounts each.

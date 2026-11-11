@@ -194,6 +194,10 @@ function Skills.Needs(type: string): { Need }
     end
     return needs
   end
+  -- A custom make wants no more than the plain one.
+  if better and better.meta and better.base then
+    return Skills.Needs(better.base)
+  end
   -- A tech 2 hull wants what the plain one does, as a tech 2 module does.
   local rebuilt = Ships.byId[type]
   if rebuilt and rebuilt.tech == 2 and rebuilt.base then

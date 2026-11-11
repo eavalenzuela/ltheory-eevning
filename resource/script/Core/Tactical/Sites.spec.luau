@@ -5,6 +5,7 @@ local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
+local Modules = require("@lt/Core/Data/Modules")
 local Mining = require("@lt/Core/Tactical/Mining")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Space = require("@lt/Core/Tactical/Space")
@@ -205,11 +206,16 @@ suite:Case("a den has the pirates' stores, and a tougher pack than the belts of 
     if wreck.grid == site.id then
       stores += 1
       t.eq(wreck.name, "Pirate Stores")
-      local tags = 0
+      local tags, customs = 0, 0
       for _, item in Items.In(state, id, "cargo") do
         tags += if item.type == "tag.pirate" then item.quantity else 0
+        local module = Modules.byId[item.type]
+        customs += if module and module.meta then item.quantity else 0
+        t.ok(module == nil or module.tech ~= 2, "a den's stores had a tech 2 module")
       end
       t.ok(tags >= 2)
+      -- (and something the pack took that is better than it looks: a custom make)
+      t.ok(customs >= 1, "a den's stores should have a custom module")
     end
   end
   t.eq(stores, 1)
@@ -308,14 +314,17 @@ suite:Case("a den's stores, emptied, now and then give away a stronghold a jump 
         local place = assert(Space.Object(state, stronghold.id))
         t.ok(string.sub(place.name, 1, 17) == "Pirate Stronghold" and trail.name == place.name)
         -- Its stores hold three times what a den's would there.
-        local tags = 0
+        local tags, customs = 0, 0
         for _, id in state.wreckIds do
           if state.wrecks[id].grid == stronghold.id then
             for _, item in Items.In(state, id, "cargo") do
               tags += if item.type == "tag.pirate" then item.quantity else 0
+              local module = Modules.byId[item.type]
+              customs += if module and module.meta then item.quantity else 0
             end
           end
         end
+        t.ok(customs >= 3, `a stronghold's stores had {customs} custom modules`)
         local band = Galaxy.Band(state.galaxy.systems[least].security)
         t.eq(tags, 2 * 3 * (if band == "secure" then 1 elseif band == "low" then 2 else 4))
         -- And it leads nowhere further, however often it is asked.

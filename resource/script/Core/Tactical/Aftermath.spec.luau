@@ -4,6 +4,7 @@
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Core = require("@lt/Core/Api")
 local Items = require("@lt/Core/Assets/Items")
+local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -160,6 +161,61 @@ suite:Case("about half of what a ship carried survives it", function(t)
   for _, id in state.itemIds do
     t.ok(state.wrecks[state.items[id].holder] ~= nil or state.items[id].holder < 2e9 and state.ships[state.items[id].holder] ~= nil
       or state.items[id].holder == state.player.home, "an item with no holder")
+  end
+end)
+
+suite:Case("what survives of a pirate's fitted module is now and then the custom make of it, and nobody else's ever is", function(t)
+  local game = inSpace(true)
+  local state = game.state
+  local ball = me(game)
+  -- Three hundred scouts, destroyed by nobody: each has small autocannons fitted, which have a custom make.
+  local plain, custom, others = 0, 0, 0
+  for i = 1, 300 do
+    local scout = Pirates.Spawn(state, Pirates.SCOUT, ball.system, ball.x + 1000 * i, ball.y, ball.z, ball.grid)
+    local fitted = 0
+    for _, item in Items.Fitted(state, scout.id) do
+      fitted += if Modules.Custom(item.type) then 1 else 0
+    end
+    assert(fitted > 0, "a scout has nothing fitted that has a custom make")
+    Aftermath.Destroy(state, scout.id, 0, game.events)
+    local wreck = state.wreckIds[#state.wreckIds]
+    for _, item in Items.In(state, wreck, "cargo") do
+      local module = Modules.byId[item.type]
+      if module and module.meta then
+        custom += item.quantity
+        t.ok(Modules.byId[module.base :: string] ~= nil)
+      elseif module and Modules.Custom(item.type) then
+        plain += item.quantity
+      elseif module then
+        others += item.quantity
+      end
+      t.ok(module == nil or module.tech ~= 2, "a pirate's wreck had a tech 2 module")
+    end
+  end
+  -- A fifth of what survives that could be.
+  t.ok(custom > 0 and plain > 0, `{custom} custom and {plain} plain modules in three hundred wrecks`)
+  t.near(custom / (custom + plain), Aftermath.CUSTOM_CHANCE, 0.07)
+  -- A ship that is not a pirate's leaves what it had, as it was: fitted, or carried.
+  for i = 1, 200 do
+    local ship = Space.NewShip(state, "frigate.courier", "Dummy", "nobody", 0)
+    Items.Equip(state, ship.id, "autocannon.small", "ammo.emp")
+    Space.Launch(state, ship, ball.system, ball.x - 1000 * i, ball.y, ball.z)
+    Aftermath.Destroy(state, ship.id, 0, game.events)
+    for _, item in Items.In(state, state.wreckIds[#state.wreckIds], "cargo") do
+      t.ok(item.type ~= "autocannon.small.custom", "a ship that was nobody's left a custom module")
+    end
+  end
+  -- And what a pirate only carried is not worked over either.
+  for i = 1, 200 do
+    local scout = Pirates.Spawn(state, Pirates.SCOUT, ball.system, ball.x, ball.y + 1000 * i, ball.z, ball.grid)
+    for _, item in Items.Fitted(state, scout.id) do
+      Items.Take(state, item, item.quantity)
+    end
+    Items.Add(state, "armor.repairer.small", 1, scout.id, "cargo")
+    Aftermath.Destroy(state, scout.id, 0, game.events)
+    for _, item in Items.In(state, state.wreckIds[#state.wreckIds], "cargo") do
+      t.ok(item.type ~= "armor.repairer.small.custom", "a module in a pirate's hold came out custom")
+    end
   end
 end)
 

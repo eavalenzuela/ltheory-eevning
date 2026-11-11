@@ -114,6 +114,10 @@ export type ModuleType = {
   -- which nobody sells: it is invented and built (Assets/Industry).
   tech: number?,
   base: string?,
+  -- 1 for a custom make: the module 'base' as somebody has worked it
+  -- over, a little better and easier to fit. Nobody sells one or builds
+  -- one: they are found in wrecks (Tactical/Aftermath, Tactical/Sites).
+  meta: number?,
 }
 
 export type ChargeType = {
@@ -665,31 +669,45 @@ end
 -- one: its blueprint is invented from the plain module's in a
 -- laboratory, and it is built of the plain module and of minerals that
 -- safe space does not have (Data/Blueprints, Assets/Industry).
-local TECH2 = { damage = 1.2, amount = 1.25, fitting = 1.15, price = 8 }
+--
+-- And between the plain make and tech 2, the custom make of each of the
+-- same modules: one that somebody has worked over. A tenth more damage,
+-- or an eighth more of what it mends, holds or cuts, for a tenth less
+-- CPU and powergrid, and no more skill than the plain one. Nobody
+-- sells or builds these: a pirate's wreck now and then has the custom
+-- make of what the pirate had fitted, and their stores have some.
+type Better = { id: string, name: string, damage: number, amount: number, fitting: number, price: number, tech: number?, meta: number? }
+local TECH2: Better = { id = ".ii", name = " II", damage = 1.2, amount = 1.25, fitting = 1.15, price = 8, tech = 2 }
+local CUSTOM: Better = { id = ".custom", name = " Custom", damage = 1.1, amount = 1.125, fitting = 0.9, price = 3, meta = 1 }
 for _, base in table.clone(modules) do
   local buffer = string.sub(base.id, 1, 15) == "shield.extender" or string.sub(base.id, 1, 11) == "armor.plate"
   if (base.weapon or base.repair or base.miner or buffer) and not base.internal then
     local weapon, repair, miner = base.weapon, base.repair, base.miner
-    local passive: { Modifier } = {}
-    for _, m in base.passive do
-      -- (what it holds is more; what it weighs and shows is the same)
-      local more = m.op == "add" and (m.attribute == "shield" or m.attribute == "armor")
-      table.insert(passive, { on = m.on, family = m.family, attribute = m.attribute, op = m.op,
-        value = if more then m.value * TECH2.amount else m.value, stack = m.stack })
+    for _, make in { CUSTOM, TECH2 } do
+      local passive: { Modifier } = {}
+      for _, m in base.passive do
+        -- (what it holds is more; what it weighs and shows is the same)
+        local more = m.op == "add" and (m.attribute == "shield" or m.attribute == "armor")
+        table.insert(passive, { on = m.on, family = m.family, attribute = m.attribute, op = m.op,
+          value = if more then m.value * make.amount else m.value, stack = m.stack })
+      end
+      table.insert(modules, {
+        id = base.id .. make.id, name = base.name .. make.name, slot = base.slot, hardpoint = base.hardpoint,
+        -- (what takes more to fit takes a whole unit more, and what takes less, a whole unit less)
+        cpu = math.max(1, if make.fitting < 1 then math.floor(base.cpu * make.fitting) else math.ceil(base.cpu * make.fitting)),
+        powergrid = math.max(1, if make.fitting < 1 then math.floor(base.powergrid * make.fitting)
+          else math.ceil(base.powergrid * make.fitting)),
+        volume = base.volume, basePrice = base.basePrice * make.price, passive = passive,
+        weapon = if weapon then { family = weapon.family, duration = weapon.duration, capacitor = weapon.capacitor,
+          damageMultiplier = weapon.damageMultiplier * make.damage, optimal = weapon.optimal, falloff = weapon.falloff,
+          tracking = weapon.tracking, clip = weapon.clip, reload = weapon.reload, size = weapon.size } else nil,
+        repair = if repair then { layer = repair.layer, amount = repair.amount * make.amount, duration = repair.duration,
+          capacitor = repair.capacitor } else nil,
+        miner = if miner then { volume = miner.volume * make.amount, duration = miner.duration, capacitor = miner.capacitor,
+          range = miner.range } else nil,
+        tech = make.tech, meta = make.meta, base = base.id,
+      })
     end
-    table.insert(modules, {
-      id = base.id .. ".ii", name = base.name .. " II", slot = base.slot, hardpoint = base.hardpoint,
-      cpu = math.ceil(base.cpu * TECH2.fitting), powergrid = math.ceil(base.powergrid * TECH2.fitting),
-      volume = base.volume, basePrice = base.basePrice * TECH2.price, passive = passive,
-      weapon = if weapon then { family = weapon.family, duration = weapon.duration, capacitor = weapon.capacitor,
-        damageMultiplier = weapon.damageMultiplier * TECH2.damage, optimal = weapon.optimal, falloff = weapon.falloff,
-        tracking = weapon.tracking, clip = weapon.clip, reload = weapon.reload, size = weapon.size } else nil,
-      repair = if repair then { layer = repair.layer, amount = repair.amount * TECH2.amount, duration = repair.duration,
-        capacitor = repair.capacitor } else nil,
-      miner = if miner then { volume = miner.volume * TECH2.amount, duration = miner.duration, capacitor = miner.capacitor,
-        range = miner.range } else nil,
-      tech = 2, base = base.id,
-    })
   end
 end
 
@@ -708,6 +726,12 @@ end
 function Modules.Improved(id: string): ModuleType?
   local better = Modules.byId[id .. ".ii"]
   return if better and better.tech == 2 then better else nil
+end
+
+-- The custom make of a module, if it has one.
+function Modules.Custom(id: string): ModuleType?
+  local better = Modules.byId[id .. ".custom"]
+  return if better and better.meta then better else nil
 end
 
 -- A module's size, 1 to 3: its weapon's, or what its name says.
