@@ -54,7 +54,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 13
+Core.SAVE_VERSION = 14
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -112,6 +112,20 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   [12] = function(state: any)
     state.colonies = state.colonies or {}
     state.colonyIds = state.colonyIds or {}
+  end,
+  -- 14: a system has a security, and a pirate's bounty is its own. The
+  -- galaxy of an older save is given its securities, and its pirates
+  -- the bounty they had by the old rule (a fifth of the hull's price).
+  -- (Its belts are as they were described: the rare ores are in the
+  -- lawless belts of a new game.)
+  [13] = function(state: any)
+    Galaxy.Secure(state.galaxy)
+    for _, pilot in state.pilots do
+      local ship = state.ships[pilot.ship]
+      local hull = if ship then Ships.byId[ship.type] else nil
+      pilot.bounty = pilot.bounty or (if hull then math.floor(hull.basePrice * 0.2) else 0)
+      pilot.tags = pilot.tags or 1
+    end
   end,
 }
 
@@ -349,6 +363,7 @@ export type PlayerInfo = {
   docked: number,     -- station id, or 0
   system: number,
   systemName: string,
+  security: number,   -- of the system: 1 where a pilot starts, 0 where nobody keeps order
 }
 
 function Query.Player(game: Game): PlayerInfo
@@ -357,8 +372,18 @@ function Query.Player(game: Game): PlayerInfo
   local system = if ship.docked ~= 0 then Space.SystemOf(state, ship.docked) else state.balls[ship.id].system
   return {
     ship = ship.id, shipName = ship.name, hull = Ships.byId[ship.type], docked = ship.docked,
-    system = system, systemName = state.galaxy.systems[system].name,
+    system = system, systemName = state.galaxy.systems[system].name, security = state.galaxy.systems[system].security,
   }
+end
+
+-- How safe a system is, and which of the three kinds of space that
+-- makes it ("secure", "low" or "lawless"). Nothing for no such system.
+function Query.Security(game: Game, system: number): (number?, Galaxy.Band?)
+  local node = game.state.galaxy.systems[system]
+  if node == nil then
+    return nil, nil
+  end
+  return node.security, Galaxy.Band(node.security)
 end
 
 export type Entry = {

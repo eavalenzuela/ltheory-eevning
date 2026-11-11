@@ -519,6 +519,34 @@ function Debug.Tower(): (string, number, number)
   return if not status.anchored then "anchoring" elseif status.lit then "lit" else "dark", status.fuel, online
 end
 
+-- How safe the system the pilot is in is, and which kind of space that
+-- makes it ("secure", "low" or "lawless").
+function Debug.Security(): (number, string)
+  local player = Core.Query.Player(session.game)
+  local _, band = Core.Query.Security(session.game, player.system)
+  return player.security, band or ""
+end
+
+-- The pirates on the pilot's grid: how many, and how many of them fly
+-- a hull of the pirates' own that the scene shows as that hull, with
+-- what it has fitted standing on its hardpoints.
+function Debug.Pirates(): (number, number)
+  local state = session.game.state
+  local me = state.balls[state.player.ship]
+  local count, drawn = 0, 0
+  for _, id in state.pilotIds do
+    local ball = state.balls[id]
+    if me and ball and ball.system == me.system and ball.grid == me.grid then
+      count += 1
+      local hull = Ships.byId[state.ships[id].type]
+      if hull.lineage == "unbound" and Hull.Build(hull.id, true) ~= nil and Scene.Arms(scene, id) > 0 then
+        drawn += 1
+      end
+    end
+  end
+  return count, drawn
+end
+
 -- Open the colonies window on a planet (a kind or part of a name, as
 -- for Order), or on the pilot's first colony.
 function Debug.Colony(what: string?): boolean

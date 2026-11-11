@@ -165,6 +165,8 @@ export type Pilot = {
   prey: number,       -- the ship it is after, or 0
   home: number,       -- the grid it was spawned on
   alone: number,      -- ticks since the player was last on its grid
+  bounty: number,     -- credits paid to whoever kills it
+  tags: number,       -- pirate tags its wreck holds
 }
 
 -- A grid that is not anchored to a station, gate or belt: made where a

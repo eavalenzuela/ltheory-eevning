@@ -42,6 +42,10 @@ local TAGS: { [string]: string } = {
   station = "STA", gate = "GAT", ship = "SHP", wreck = "WRK",
 }
 
+-- The three kinds of space (Describe/Galaxy), as the pilot is told.
+local BANDS: { [string]: string } = { secure = "SECURE SPACE", low = "LOW SECURITY", lawless = "LAWLESS SPACE" }
+local SAFE = vector.create(0.45, 0.85, 0.55)
+
 local SHIELD = vector.create(0.35, 0.65, 1.0)
 local ARMOR = vector.create(0.95, 0.75, 0.3)
 local HULL = vector.create(0.85, 0.35, 0.3)
@@ -248,7 +252,17 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
   local entry: Core.Entry = selected
   Im.Heading(string.upper(entry.name), x + 12, y + 8, 16, Im.TEXT)
   local what = if entry.variety ~= "" and entry.kind ~= "ship" then `{entry.variety} {entry.kind}` else entry.kind
-  Im.Text(what, x + 12, y + 32, 14, Im.DIM)
+  local tone = Im.DIM
+  if entry.kind == "gate" then
+    -- (a gate says what kind of space is on the other side of it)
+    local gate: any = Core.Query.Body(session.game, entry.id)
+    local _, band = Core.Query.Security(session.game, if gate then gate.to else 0)
+    if band then
+      what = `gate to {string.lower(BANDS[band])}`
+      tone = if band == "secure" then SAFE elseif band == "low" then Im.WARN else HULL
+    end
+  end
+  Im.Text(what, x + 12, y + 32, 14, tone)
   Im.TextRight(Format.Distance(entry.distance), x + width - 12, y + 32, 14, Im.TEXT)
 
   local targeted = lockOf(ball, entry.id) ~= nil
@@ -467,10 +481,14 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
 
       -- Where we are and what we have.
       Im.Heading(string.upper(player.systemName), left + 24, top + 18, 30, Im.TEXT)
-      Im.Text(`{player.shipName}  -  {player.hull.name}`, left + 24, top + 54, 15, Im.DIM)
-      Im.Text(`{game.state.wallet} credits`, left + 24, top + 76, 15, Im.DIM)
+      -- (how safe it is here: what comes to a belt follows from it)
+      local _, band = Core.Query.Security(game, player.system)
+      Im.Text(string.format("%s  %.1f", BANDS[band or "secure"], player.security), left + 24, top + 51, 13,
+        if band == "secure" then SAFE elseif band == "low" then Im.WARN else HULL)
+      Im.Text(`{player.shipName}  -  {player.hull.name}`, left + 24, top + 68, 15, Im.DIM)
+      Im.Text(`{game.state.wallet} credits`, left + 24, top + 87, 15, Im.DIM)
       if session.message ~= "" and game.state.tick - session.messageTick < 10 then
-        Im.Text(session.message, left + 24, top + 102, 16, Im.WARN)
+        Im.Text(session.message, left + 24, top + 107, 16, Im.WARN)
       end
 
       if scene.warp > 0 and ball and ball.warp then

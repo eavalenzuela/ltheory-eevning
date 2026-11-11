@@ -1,0 +1,54 @@
+# Out of secure space, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/lawless.txt
+#
+# Space is safest where a pilot starts. Through the gate order is thin,
+# and a belt brings a pack of raiders, not a scout. Through the next
+# nobody keeps order at all: the packs have cruisers in them, and the
+# belts have the rare ores. The pirates fly hulls of their own, which
+# the scene must draw as those hulls with their weapons on them. A new
+# pilot's Courier is no match for any of it: it looks, and gets away.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(select(2, GameDebug.Security()) == 'secure', 'a pilot starts where order is kept')
+lua assert(GameDebug.Security() == 1)
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua GameDebug.TimeScale(8)
+
+# Low security.
+lua assert(GameDebug.Order('Jump', 'Kesis'), 'the jump out of secure space was refused')
+until GameDebug.System() == 2
+until GameDebug.Idle()
+lua assert(select(2, GameDebug.Security()) == 'low', 'the system next door should be low security')
+lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+until GameDebug.Count('ship') >= 2
+frames 5
+lua assert(GameDebug.Pirates() >= 2, 'a belt in low security should bring a pack')
+lua assert(select(2, GameDebug.Pirates()) == GameDebug.Pirates(), 'a pirate is not drawn as a hull of the pirates\' own with its weapons on it')
+lua print('low security:', GameDebug.Pirates(), 'pirates,', GameDebug.Distance('ship'), 'm off')
+
+# Lawless space.
+lua assert(GameDebug.Order('Jump', 'Noranor'), 'the jump into lawless space was refused')
+until GameDebug.System() == 3
+until GameDebug.Idle()
+lua assert(select(2, GameDebug.Security()) == 'lawless', 'two jumps out should be lawless')
+lua assert(GameDebug.Security() == 0)
+lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+until GameDebug.Count('ship') >= 3
+frames 5
+lua assert(select(2, GameDebug.Pirates()) == GameDebug.Pirates(), 'a pirate in lawless space is not drawn as its own hull')
+lua assert(GameDebug.Distance('Cobaltite') < 1e9 or GameDebug.Distance('Iridite') < 1e9, 'a lawless belt should have rare ore')
+
+# And away, to the one station there is here.
+lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused')
+until GameDebug.Docked()
+lua assert(GameDebug.Hull() == 'frigate.courier', 'the pilot did not get away')
+
+echo lawless scenario passed
+quit

@@ -56,6 +56,7 @@ local STARS = { "yellow", "orange", "red", "white", "blue" }
 function System.Describe(galaxy: Galaxy.Galaxy, id: number): Description
   local node = galaxy.systems[id]
   local rng = Rng.For(galaxy.seed, id, 2001)
+  local wild = Galaxy.Band(node.security) == "lawless"
   local objects: { Object } = {}
 
   local function add(kind: Kind, name: string, x: number, y: number, z: number, radius: number,
@@ -116,8 +117,9 @@ function System.Describe(galaxy: Galaxy.Galaxy, id: number): Description
       for r = 1, rocks do
         local along = start + (r / rocks) * math.pi * Rng.Float(rng, 0.9, 1.1)
         local out = Rng.Float(rng, 10000, 20000)
-        -- Each rock is one ore, and is named for it.
-        local ore = Ores.Pick(Rng.Next(rng))
+        -- Each rock is one ore, and is named for it. The rare ores are
+        -- only where nobody keeps order.
+        local ore = Ores.Pick(Rng.Next(rng), wild)
         local rock = add("asteroid", ore.name,
           x + out * math.cos(along), y + Rng.Float(rng, -4000, 4000), z + out * math.sin(along),
           Rng.Float(rng, 150, 900), belt.id, ore.id)

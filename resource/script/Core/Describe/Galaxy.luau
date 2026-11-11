@@ -16,7 +16,56 @@ export type SystemNode = {
   x: number,              -- light years on the map
   y: number,
   neighbors: { number },  -- ids of systems one jump away, ascending
+  -- How safe it is, from 1 (where a pilot starts) to 0 (lawless):
+  -- Galaxy.Secure. What comes to a belt or waits at a gate follows
+  -- from it (Tactical/Pirates), and what ore the belts have
+  -- (Describe/System).
+  security: number,
 }
+
+-- The three kinds of space a security figure makes.
+export type Band = "secure" | "low" | "lawless"
+
+function Galaxy.Band(security: number): Band
+  return if security >= 0.7 then "secure" elseif security >= 0.3 then "low" else "lawless"
+end
+
+-- Give every system its security: 1 at the first system, falling with
+-- the jumps from it, to nothing a little over half way to the farthest.
+-- The farthest system of a galaxy of three or more is always lawless,
+-- so the smallest galaxy still has somewhere that is.
+--
+-- (A stand-in: when the strategic layer joins the game a system's
+-- security is what its owner's control and the pirates' pressure make
+-- it, Strategic/Order.)
+function Galaxy.Secure(galaxy: Galaxy)
+  local systems = galaxy.systems
+  local jumps: { number } = table.create(#systems, -1)
+  local queue = { 1 }
+  jumps[1] = 0
+  local farthest, most = 1, 0
+  local at = 1
+  while at <= #queue do
+    local id = queue[at]
+    at += 1
+    if jumps[id] > most or (jumps[id] == most and id > farthest) then
+      farthest, most = id, jumps[id]
+    end
+    for _, neighbor in systems[id].neighbors do
+      if jumps[neighbor] < 0 then
+        jumps[neighbor] = jumps[id] + 1
+        table.insert(queue, neighbor)
+      end
+    end
+  end
+  local span = math.max(2, math.ceil(most * 0.6))
+  for id, system in systems do
+    system.security = math.max(0, 1 - math.max(0, jumps[id]) / span)
+  end
+  if #systems >= 3 then
+    systems[farthest].security = 0
+  end
+end
 
 export type Galaxy = {
   seed: number,
@@ -55,7 +104,7 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
       name = Names.System(rng)
     end
     used[name] = true
-    systems[id] = { id = id, name = name, x = x, y = y, neighbors = {} }
+    systems[id] = { id = id, name = name, x = x, y = y, neighbors = {}, security = 1 }
   end
 
   local function link(a: number, b: number)
@@ -95,7 +144,9 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
     table.sort(system.neighbors)
   end
 
-  return { seed = seed, systems = systems }
+  local galaxy: Galaxy = { seed = seed, systems = systems }
+  Galaxy.Secure(galaxy)
+  return galaxy
 end
 
 return Galaxy

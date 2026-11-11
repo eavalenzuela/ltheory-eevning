@@ -55,6 +55,7 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   local ball = state.balls[id]
   local ship = state.ships[id]
   local hull = Ships.byId[ship.type]
+  local pilot: State.Pilot? = state.pilots[id]
   table.insert(events, { kind = "BallDestroyed", ball = id, by = by, name = ball.name, system = ball.system,
     x = ball.x, y = ball.y, z = ball.z, radius = ball.radius })
 
@@ -80,7 +81,7 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
       end
     end
     if ship.owner == "pirates" then
-      Items.Add(state, "tag.pirate", 1, wreck.id, "cargo")
+      Items.Add(state, "tag.pirate", if pilot then math.max(1, pilot.tags) else 1, wreck.id, "cargo")
       Items.Add(state, "scrap.metal", 1 + Rng.Int(Rng.For(state.historySeed, state.tick, id, 77), 5), wreck.id, "cargo")
     end
     table.insert(events, { kind = "WreckAdded", wreck = wreck.id, of = id })
@@ -91,8 +92,10 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   Space.RemoveBall(state, ball)
   forget(state, id)
 
+  -- (a bounty is on the pilot, not the hull: a scout in a patched frigate
+  -- is worth a scout's)
   if ship.owner == "pirates" and by == state.player.ship then
-    pay(state, math.floor(hull.basePrice * 0.2), "bounty", events)
+    pay(state, if pilot then pilot.bounty else math.floor(hull.basePrice * 0.2), "bounty", events)
   end
   if wasPlayer and hull.class ~= "capsule" then
     pay(state, math.floor(hull.basePrice * INSURANCE), "insurance", events)

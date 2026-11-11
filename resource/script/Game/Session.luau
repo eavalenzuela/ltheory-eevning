@@ -84,6 +84,15 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{Types.Info(event.module).name} anchored: it will be online shortly`)
   elseif kind == "ModuleUnanchored" then
     Session.Say(session, `{Types.Info(event.module).name} unanchored: it is in the hangar`)
+  elseif kind == "Jumped" and event.ship == mine then
+    -- (say so when the kind of space changes: what waits at a belt does)
+    local _, was = Core.Query.Security(session.game, event.from)
+    local _, now = Core.Query.Security(session.game, event.to)
+    if now and now ~= was then
+      Session.Say(session, if now == "lawless" then "Lawless space: nobody keeps order here"
+        elseif now == "low" then "Low security: order is thin here"
+        else "Secure space")
+    end
   elseif kind == "ColonyDeployed" then
     local body = Core.Query.Body(session.game, event.planet)
     Session.Say(session, `A colony is founded on {if body then body.name else "the planet"}`)

@@ -96,4 +96,51 @@ suite:Case("systems are laid out sanely at astronomical scale", function(t)
   end
 end)
 
+suite:Case("space is safest where a pilot starts, and every galaxy of three or more has somewhere lawless", function(t)
+  for seed = 1, 20 do
+    for _, count in { 1, 2, 3, 8, 40 } do
+      local galaxy = Galaxy.Describe(seed, count)
+      t.eq(galaxy.systems[1].security, 1)
+      local lawless = 0
+      for _, system in galaxy.systems do
+        t.ok(system.security >= 0 and system.security <= 1, `seed {seed}: a security of {system.security}`)
+        lawless += if Galaxy.Band(system.security) == "lawless" then 1 else 0
+        -- (it never rises by more than a band's worth in one jump out of safety:
+        -- no neighbour of the first system is lawless unless the galaxy is tiny)
+      end
+      if count >= 3 then
+        t.ok(lawless >= 1, `seed {seed}, {count} systems: nowhere is lawless`)
+      end
+      if count >= 2 then
+        t.ok(lawless < count, `seed {seed}, {count} systems: everywhere is lawless`)
+      end
+    end
+  end
+  t.eq({ Galaxy.Band(1), Galaxy.Band(0.7), Galaxy.Band(0.5), Galaxy.Band(0.29), Galaxy.Band(0) } :: { any },
+    { "secure", "secure", "low", "lawless", "lawless" } :: { any })
+end)
+
+suite:Case("the rare ores are in the belts of lawless space and nowhere else", function(t)
+  local wild, tame = 0, 0
+  for seed = 1, 12 do
+    local galaxy = Galaxy.Describe(seed, 3)
+    for id = 1, 3 do
+      local lawless = Galaxy.Band(galaxy.systems[id].security) == "lawless"
+      for _, object in System.Describe(galaxy, id).objects do
+        if object.kind == "asteroid" then
+          local rare = object.variety == "ore.cobaltite" or object.variety == "ore.iridite"
+          if lawless then
+            wild += if rare then 1 else 0
+            tame += if rare then 0 else 1
+          else
+            t.ok(not rare, `seed {seed}: {object.variety} in a system of security {galaxy.systems[id].security}`)
+          end
+        end
+      end
+    end
+  end
+  t.ok(wild > 20, `only {wild} rocks of rare ore in twelve lawless systems`)
+  t.ok(tame > wild, "lawless belts are mostly rare ore")
+end)
+
 return suite
