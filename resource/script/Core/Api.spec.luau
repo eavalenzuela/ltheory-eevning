@@ -386,4 +386,53 @@ suite:Case("a save from the version before still opens", function(t)
   end)
 end)
 
+suite:Case("a save from before item types were added keeps each type's own market figures", function(t)
+  -- A market keeps its figures by a type's place among all the types.
+  -- Make a save as it would have been before the structures were items:
+  -- its markets without them, and so with every later type a place up.
+  local game = newGame()
+  local station = Core.Query.Player(game).docked
+  t.ok(Core.Submit(game, { kind = "BuyNow", actor = game.state.player.ship, type = "ore.titanite", quantity = 50 }))
+  Core.Step(game)
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  local removed = 0
+  for _, market in file.state.markets do
+    for index = #market.classes, 1, -1 do
+      local id: string = market.classes[index].id
+      if string.sub(id, 1, 6) == "tower." or string.sub(id, 1, 6) == "array." or string.sub(id, 1, 5) == "fuel." then
+        removed += 1
+        table.remove(market.classes, index)
+        for _, name in { "initial", "produced", "consumed", "used", "anchorIn", "anchorOut", "bought", "sold", "moved", "lost" } do
+          table.remove(market[name], index)
+        end
+        for _, name in { "stock", "target", "anchor", "taste" } do
+          table.remove(market.nodes[1][name], index)
+        end
+      end
+    end
+  end
+  t.ok(removed > 10, "the save had no structures in its market to take out")
+  local old, oldLength = Codec.Encode(file)
+  local loaded = Core.Load(old, oldLength)
+  -- Every type that was there has the figures it had, the ore that was
+  -- bought among them, and the types that were not there start as new.
+  for _, type in { "ore.titanite", "ore.ferrite", "mineral.iron", "ammo.emp", "frigate.courier", "shield.extender.small",
+    "tag.pirate", "blueprint.ammo.emp" } do
+    local now, was = Core.Query.Quote(loaded, station, type), Core.Query.Quote(game, station, type)
+    t.eq({ now.stock, now.bid, now.ask } :: { any }, { was.stock, was.bid, was.ask } :: { any })
+  end
+  local fresh = Core.Query.Quote(Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true }), station, "fuel.block")
+  local fuel = Core.Query.Quote(loaded, station, "fuel.block")
+  t.eq({ fuel.stock, fuel.ask } :: { any }, { fresh.stock, fresh.ask } :: { any })
+  t.ok(fuel.stock > 0)
+  -- (and a save of today's is not touched by loading it)
+  t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
+  -- (and the game goes on from the old one)
+  t.ok(Core.Submit(loaded, { kind = "BuyNow", actor = loaded.state.player.ship, type = "fuel.block", quantity = 10 }))
+  for _ = 1, 20 do
+    Core.Step(loaded)
+  end
+end)
+
 return suite

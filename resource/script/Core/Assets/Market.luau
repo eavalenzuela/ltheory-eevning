@@ -108,21 +108,17 @@ function Market.Index(type: string): number?
   return indexOf[type]
 end
 
--- A station's market, made on first use.
-function Market.For(state: State.State, station: number): Economy.Economy
-  local existing = state.markets[station]
-  if existing then
-    return existing
-  end
-  local object = assert(Space.Object(state, station), "no such station")
-  local tastes = TASTES[object.variety] or {}
+-- A market as it is on the day it opens: every type there is, at its
+-- normal stock, valued as a station of that kind values it.
+local function open(name: string, variety: string): Economy.Economy
+  local tastes = TASTES[variety] or {}
   local classes: { Economy.Class } = {}
   for _, id in Types.Ids() do
     local info = Types.Info(id)
     table.insert(classes, { id = id, par = info.basePrice * (tastes[info.category] or 1), cover = 0, need = 0 })
   end
   local econ = Economy.New(classes, {})
-  local node = Economy.AddNode(econ, object.name, 0)
+  local node = Economy.AddNode(econ, name, 0)
   for index, id in Types.Ids() do
     local normal = normalStock(Types.Info(id))
     Economy.SetTarget(econ, node, index, normal)
@@ -130,6 +126,65 @@ function Market.For(state: State.State, station: number): Economy.Economy
     -- The wider world restores a quarter of a shortfall an hour.
     econ.nodes[node].anchor[index] = normal * 0.25
   end
+  return econ
+end
+
+-- What a market keeps for each type, by the type's place among them all.
+local BY_TYPE = { "initial", "produced", "consumed", "used", "anchorIn", "anchorOut", "bought", "sold", "moved", "lost" }
+local OF_NODE = { "stock", "target", "anchor", "taste" }
+
+-- Set the markets of a save out by the types there are now.
+--
+-- A market keeps its figures by a type's place among all the types, and
+-- the game grows: a save from before a type was added (or from after one
+-- was dropped) has its markets set out by a list that is no longer the
+-- list. Each such market is opened afresh and given back every figure
+-- it had for a type that is still there, so a type keeps its own stock
+-- and a new type starts at its normal one. A market already set out by
+-- today's list is not touched. (Core.Load does this for every save.)
+function Market.Reconcile(state: State.State)
+  local ids = Types.Ids()
+  for _, station in state.marketIds do
+    local old = state.markets[station]
+    local same = #old.classes == #ids
+    for index, class in old.classes do
+      same = same and class.id == ids[index]
+    end
+    if not same then
+      local object = Space.Object(state, station)
+      local fresh = open(old.nodes[1].name, if object then object.variety else "")
+      local was: { [string]: number } = {}
+      for index, class in old.classes do
+        was[class.id] = index
+      end
+      local from, to = old :: any, fresh :: any
+      for index, id in ids do
+        local before = was[id]
+        if before then
+          fresh.classes[index] = old.classes[before]
+          for _, name in BY_TYPE do
+            to[name][index] = from[name][before]
+          end
+          for _, name in OF_NODE do
+            to.nodes[1][name][index] = from.nodes[1][name][before]
+          end
+        end
+      end
+      fresh.hours, fresh.steps = old.hours, old.steps
+      fresh.nodes[1].met = old.nodes[1].met
+      state.markets[station] = fresh
+    end
+  end
+end
+
+-- A station's market, made on first use.
+function Market.For(state: State.State, station: number): Economy.Economy
+  local existing = state.markets[station]
+  if existing then
+    return existing
+  end
+  local object = assert(Space.Object(state, station), "no such station")
+  local econ = open(object.name, object.variety)
   state.markets[station] = econ
   local at = #state.marketIds + 1
   while at > 1 and state.marketIds[at - 1] > station do
