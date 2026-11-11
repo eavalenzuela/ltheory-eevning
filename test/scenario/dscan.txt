@@ -1,0 +1,78 @@
+# The directional scanner, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/dscan.txt
+#
+# Out of the station, two wrecks are given: one fifty kilometres off,
+# and one half an astronomical unit beyond it on the same line, which
+# no overview shows. The scanner's directional side, all round and as far
+# as it reaches, has both. A cone has to be pointed at something:
+# pointed at the near wreck it has both (the far one is that way), and
+# pointed at the sun it has neither. All round at a tenth of an
+# astronomical unit it has the near one alone.
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('Stop'))
+wait 3
+lua assert(GameDebug.Wreck(false, 50000), 'no wreck could be made')
+lua assert(GameDebug.Wreck(false, 7.5e10), 'no wreck could be made far off')
+frames 5
+lua assert(GameDebug.Count('wreck') == 1, 'the far wreck should not be on the overview')
+
+until GameDebug.Press('Scanner')
+frames 3
+until GameDebug.Press('Scanner:directional')
+frames 3
+lua assert(select(2, GameDebug.Sighted()) == 0, 'nothing is scanned until Scan is pressed')
+
+# All round, fourteen astronomical units.
+until GameDebug.Press('Dscan:scan')
+until select(2, GameDebug.Sighted()) == 1
+lua print('dscan, all round at 14 AU:', GameDebug.Sighted())
+lua assert(GameDebug.Sighted('Wreck') == 2, 'both wrecks should be on it')
+lua assert(select(3, GameDebug.Sighted('Wreck')) == 1, 'and one of them is not on the overview')
+lua _G.all = GameDebug.Sighted()
+
+# A cone has to be pointed at something.
+lua GameDebug.Select('nothing of this name')
+until GameDebug.Press('Dscan:angle:10')
+frames 3
+lua assert(not GameDebug.CanPress('Dscan:scan'), 'a cone with nothing to point at should not scan')
+
+# Pointed at the near wreck, it has both: the far one is that way.
+lua assert(GameDebug.Select('wreck'))
+frames 3
+until GameDebug.Press('Dscan:scan')
+until select(2, GameDebug.Sighted()) == 2
+lua assert(GameDebug.Sighted('Wreck') == 2, 'a cone pointed at the near wreck should have the far one too')
+lua assert(GameDebug.Sighted() <= _G.all, 'a cone should have no more than all round has')
+
+# Pointed at the sun, it has neither: they are not that way.
+lua assert(GameDebug.Select('sun'))
+frames 3
+until GameDebug.Press('Dscan:scan')
+until select(2, GameDebug.Sighted()) == 3
+lua assert(GameDebug.Sighted('Wreck') == 0, 'a cone pointed away from the wrecks should have neither')
+
+# All round again, a tenth of an astronomical unit: the near wreck, and
+# no more than the long scan had.
+until GameDebug.Press('Dscan:angle:360')
+frames 3
+until GameDebug.Press('Dscan:range:0.1')
+frames 3
+until GameDebug.Press('Dscan:scan')
+until select(2, GameDebug.Sighted()) == 4
+lua print('dscan, all round at 0.1 AU:', GameDebug.Sighted())
+lua assert(GameDebug.Sighted('Wreck') == 1, 'a short scan should have the near wreck alone')
+lua assert(GameDebug.Sighted() <= _G.all, 'a short scan should have no more than a long one')
+
+# The other side of the window is as it was.
+until GameDebug.Press('Scanner:signals')
+frames 3
+lua assert(GameDebug.CanPress('Scan'), 'the signals side should have its Scan')
+
+echo dscan scenario passed
+quit

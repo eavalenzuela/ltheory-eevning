@@ -22,6 +22,7 @@ local Dogma = require("@lt/Core/Dogma")
 local Hud = require("@lt/Game/UI/Hud")
 local Hull = require("@lt/Game/View/Hull")
 local Im = require("@lt/Game/UI/Im")
+local Scanner = require("@lt/Game/UI/Scanner")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
 local Settings = require("@lt/Game/Settings")
@@ -604,14 +605,16 @@ end
 -- A cheat, for a wreck to work on without a fight: a pirate scout from
 -- nowhere, a kilometre off the pilot's ship, destroyed by nobody.
 -- With 'sealed' its hold is sealed, as a derelict's is, and has to be
--- hacked. Returns false if the pilot is not in space.
-function Debug.Wreck(sealed: boolean?): boolean
+-- hacked. With 'far' it is that many metres off instead (far enough,
+-- and it is off the pilot's grid). Returns false if the pilot is not in
+-- space.
+function Debug.Wreck(sealed: boolean?, far: number?): boolean
   local state = session.game.state
   local me = state.balls[state.player.ship]
   if me == nil then
     return false
   end
-  local scout = Pirates.Spawn(state, Pirates.SCOUT, me.system, me.x + 1000, me.y, me.z, me.grid)
+  local scout = Pirates.Spawn(state, Pirates.SCOUT, me.system, me.x + (far or 1000), me.y, me.z, me.grid)
   Aftermath.Destroy(state, scout.id, 0, session.game.events)
   if sealed then
     state.wrecks[state.wreckIds[#state.wreckIds]].locked = true
@@ -704,6 +707,21 @@ end
 function Debug.Probes(): (number, number)
   local _, _, probes = Core.Query.Sites(session.game)
   return probes.here, probes.carried
+end
+
+-- The directional scanner's last scan: how many things it had whose
+-- name has 'name' in it (all of them, with no name), how many scans
+-- have been made, and how many of those things are off the pilot's grid.
+function Debug.Sighted(name: string?): (number, number, number)
+  local sightings, scans = Scanner.Sightings()
+  local count, off = 0, 0
+  for _, sighting in sightings do
+    if name == nil or string.find(sighting.name, name, 1, true) then
+      count += 1
+      off += if sighting.onGrid then 0 else 1
+    end
+  end
+  return count, scans, off
 end
 
 -- The scanner: how many sites the system has, how many of them are

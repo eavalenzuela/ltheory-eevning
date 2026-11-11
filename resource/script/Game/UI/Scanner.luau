@@ -1,14 +1,21 @@
 --!strict
--- The scanner window: what the ship's scanner shows of the system, the
--- signals it has not resolved yet, and the scanning of them.
+-- The scanner window. It has two sides. "Signals": what the ship's
+-- scanner shows of the system, the signals it has not resolved yet, the
+-- scanning of them and the probes. "Directional": the directional
+-- scanner (Core/Tactical/Dscan), which says what ships and wrecks are
+-- within a range, all round or in a cone pointed at what is selected.
 --
 -- Open in space, from the Scan button on the overview. Drawn every
 -- frame with Game/UI/Im; it reads the Core through queries and acts on
 -- it only through the Session. Its buttons' names, for a script
--- (Im.Press): "Scanner:close", "Scan", and "SiteWarp:<n>" for the nth
--- site listed.
+-- (Im.Press): "Scanner:close", "Scanner:signals", "Scanner:directional";
+-- "Scan", "Probe:launch", "Probe:recall" and "SiteWarp:<n>" for the nth
+-- site listed; "Dscan:scan", "Dscan:angle:<degrees>" (360, 90, 30, 10)
+-- and "Dscan:range:<AU>" (14, 5, 1, 0.1).
 
+local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
+local Dscan = require("@lt/Core/Tactical/Dscan")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
 local Session = require("@lt/Game/Session")
@@ -23,6 +30,18 @@ local GOOD = vector.create(0.45, 0.85, 0.55)
 local KINDS: { [string]: string } = { combat = "pirate den", ore = "hidden belt", relic = "derelict" }
 
 local open = false
+local side: "signals" | "directional" = "signals"
+
+-- The directional scanner: how it is set, and what its last scan had
+-- (a scan is of a moment: the list stands until the next one).
+local angle, range = 360, 14
+local sightings: { Core.Sighting } = {}
+local scans = 0             -- how many have been made
+local scannedTick = -1      -- the tick of the last
+local scannedIn = 0         -- and the system it was made in
+local scannedHow = ""       -- and how it was set
+
+local ROWS = 9
 
 function Scanner.Open()
   open = true
@@ -36,6 +55,74 @@ function Scanner.IsOpen(): boolean
   return open
 end
 
+-- What the last directional scan had, and how many scans have been made.
+function Scanner.Sightings(): ({ Core.Sighting }, number)
+  return sightings, scans
+end
+
+local function drawDirectional(session: Session.Session, x: number, y: number, width: number, height: number)
+  local game = session.game
+  local state = game.state
+  local left, right = x + 16, x + width - 16
+  local system = Core.Query.Player(game).system
+  -- (a list from another system, or from before a game was loaded, is nobody's)
+  if scannedTick > state.tick or (scannedIn ~= 0 and scannedIn ~= system) then
+    sightings, scannedTick, scannedIn, scannedHow = {}, -1, 0, ""
+  end
+  local toward = if session.selected ~= 0 then session.selected else nil
+  local body = if toward then Core.Query.Body(game, toward) else nil
+  Im.Text("Pointed at", left, y + 48, 13, Im.DIM)
+  Im.Text(if body then body.name else "nothing: select something to point a cone at", left + 84, y + 48, 13, if body then Im.TEXT else Im.DIM)
+  Im.Text("Cone", left, y + 79, 13, Im.DIM)
+  for index, degrees in Dscan.ANGLES do
+    local label = if degrees == 360 then "all round" else `{degrees} deg`
+    if Im.Toggle(label, left + 84 + (index - 1) * 88, y + 72, 82, 26, angle == degrees, `Dscan:angle:{degrees}`) then
+      angle = degrees
+    end
+  end
+  Im.Text("Range", left, y + 111, 13, Im.DIM)
+  for index, reach in Dscan.RANGES do
+    if Im.Toggle(`{reach} AU`, left + 84 + (index - 1) * 88, y + 104, 82, 26, range == reach, `Dscan:range:{reach}`) then
+      range = reach
+    end
+  end
+  local _, can, whyNot = Core.Query.Directional(game, toward, angle, range * Constants.AU)
+  if Im.Button("Scan", left, y + 140, 110, 28, can, "Dscan:scan") then
+    sightings = Core.Query.Directional(game, toward, angle, range * Constants.AU)
+    scans += 1
+    scannedTick, scannedIn = state.tick, system
+    scannedHow = if angle == 360 then `all round, {range} AU` else `{angle} deg at {if body then body.name else "?"}, {range} AU`
+  end
+  if not can then
+    Im.Text(tostring(whyNot), left + 122, y + 147, 13, Im.DIM)
+  elseif scannedTick >= 0 then
+    local age = math.floor((state.tick - scannedTick) * Constants.TICK)
+    Im.Text(`{#sightings} found, {if age <= 0 then "now" else `{age} s ago`}`, left + 122, y + 147, 13, GOOD)
+    Im.TextRight(scannedHow, right, y + 148, 11, Im.DIM)
+  else
+    Im.Text("ready", left + 122, y + 147, 13, GOOD)
+  end
+
+  local line = y + 180
+  if scannedTick >= 0 and #sightings == 0 then
+    Im.Text("Nothing there.", left, line, 13, Im.DIM, 0.8)
+  end
+  for index, sighting in sightings do
+    if index > ROWS then
+      Im.Text(`and {#sightings - ROWS} more: narrow the range or the cone`, left, line + 2, 12, Im.DIM)
+      break
+    end
+    Im.Text(sighting.name, left, line, 14, Im.TEXT)
+    Im.Text(sighting.type, left + 210, line + 1, 13, Im.DIM)
+    if sighting.onGrid then
+      Im.TextRight("here", right, line + 1, 12, GOOD)
+    end
+    line += 22
+  end
+  Im.Text("It says what is there and not where: that is worked out by", left, y + height - 46, 12, Im.DIM, 0.8)
+  Im.Text("narrowing the range, and the cone on what is selected.", left, y + height - 30, 12, Im.DIM, 0.8)
+end
+
 function Scanner.Draw(session: Session.Session, x: number, y: number)
   if not open then
     return
@@ -47,6 +134,16 @@ function Scanner.Draw(session: Session.Session, x: number, y: number)
   Im.Heading("SCANNER", left, y + 12, 16, Im.DIM)
   if Im.Button("x", x + width - 38, y + 10, 24, 24, true, "Scanner:close") then
     open = false
+    return
+  end
+  if Im.Toggle("Signals", left + 108, y + 8, 84, 26, side == "signals", "Scanner:signals") then
+    side = "signals"
+  end
+  if Im.Toggle("Directional", left + 196, y + 8, 104, 26, side == "directional", "Scanner:directional") then
+    side = "directional"
+  end
+  if side == "directional" then
+    drawDirectional(session, x, y, width, height)
     return
   end
   local sites, wait, probes = Core.Query.Sites(game)

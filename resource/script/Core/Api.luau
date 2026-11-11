@@ -20,6 +20,7 @@ local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
 local Dogma = require("@lt/Core/Dogma")
 local Drones = require("@lt/Core/Tactical/Drones")
+local Dscan = require("@lt/Core/Tactical/Dscan")
 local Factions = require("@lt/Core/Data/Factions")
 local Fleet = require("@lt/Core/Tactical/Fleet")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
@@ -1010,6 +1011,17 @@ function Query.Hack(game: Game): HackStatus?
   end
   return { wreck = hack.wreck, name = if wreck then wreck.name else "", width = hack.width, height = hack.height,
     coherence = hack.coherence, most = hack.most, strength = hack.strength, start = hack.start, nodes = nodes }
+end
+
+-- The directional scanner (Tactical/Dscan): the ships and wrecks within
+-- 'range' metres of the pilot's ship, all round ('angle' 360) or in a
+-- cone of 'angle' degrees pointed at 'toward'; and whether the scan
+-- could be made, with why not if it could not.
+export type Sighting = Dscan.Sighting
+function Query.Directional(game: Game, toward: number?, angle: number, range: number): ({ Sighting }, boolean, string?)
+  local ship = game.state.player.ship
+  local ok, why = Dscan.Can(game.state, ship, toward, angle)
+  return Dscan.Scan(game.state, ship, toward, angle, range), ok, why
 end
 
 -- The places the pilot has marked, in the order they were.
