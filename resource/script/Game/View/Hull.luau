@@ -751,13 +751,27 @@ local function falchion(b: Builder)
   lobe(b, TRIM, v(0, -0.04, 1.71), v(0.06, 0.05, 0.07))
 end
 
--- The Claymore, a battleship: a cathedral in a cloud. A great long
--- lobe with a lobe along each flank and a keel lobe under it, a second
--- tier on its back, a dome on that with blisters ringing it like a
--- halo, and three spires; six engines.
+-- The Claymore, a battleship: a cathedral in a cloud, with a sword for
+-- a prow. A great long lobe with a lobe along each flank and a keel
+-- lobe under it, a second tier on its back, a dome on that with
+-- blisters ringing it like a halo, and three spires; six engines. Out
+-- ahead of it a long blade, flat and level, narrowing to its point,
+-- with a guard across where it leaves the hull. (The blade at the
+-- project owner's word: the first nose was a fat lobe, and "looks like
+-- a blimp".)
 local function claymore(b: Builder)
   lobe(b, PLATING, v(0, 0, 0), v(0.50, 0.36, 2.00))
-  lobe(b, PLATING, v(0, -0.03, 2.20), v(0.30, 0.24, 0.60))
+  -- the blade, in three lengths, each narrower and thinner; a ridge
+  -- down the middle of it; and the guard
+  lobe(b, PLATING, v(0, -0.02, 2.40), v(0.56, 0.075, 0.86))
+  lobe(b, PATCH, v(0, -0.02, 3.30), v(0.42, 0.058, 0.72))
+  lobe(b, PLATING, v(0, -0.02, 4.00), v(0.24, 0.042, 0.52))
+  lobe(b, TRIM, v(0, 0.045, 3.00), v(0.055, 0.032, 1.30))
+  lobe(b, TRIM, v(0, -0.085, 3.00), v(0.055, 0.032, 1.30))
+  lobe(b, PATCH, v(0, -0.01, 1.90), v(0.92, 0.11, 0.16))
+  for _, side in { -1, 1 } do
+    lobe(b, TRIM, v(side * 0.94, -0.01, 1.90), v(0.08, 0.09, 0.12))
+  end
   lobe(b, PLATING, v(0, -0.40, 0.20), v(0.26, 0.16, 0.90))
   lobe(b, PATCH, v(0, 0.40, -0.40), v(0.34, 0.22, 1.00))
   for _, side in { -1, 1 } do
@@ -782,24 +796,32 @@ local function claymore(b: Builder)
   spire(b, v(0, 0.82, -0.60), 1.10, 0.03)
   blisters(b, v(0, 0, 0), v(0.50, 0.36, 2.00), 22, 0.075, 13)
   blisters(b, v(0, -0.40, 0.20), v(0.26, 0.16, 0.90), 6, 0.06, 14)
-  lobe(b, TRIM, v(0, -0.03, 2.79), v(0.08, 0.07, 0.09))
 end
 
--- The Packet, a hauler: a fat cumulus. A round belly with a cargo sac
--- bulging from it fore and aft on each side, a little bridge lobe on
--- top, and two engines.
+-- The Packet, a hauler, as a packet boat is: a slim hull that carries
+-- its parcels where they can be seen. A slender spine with the bridge
+-- at its bow and the engines at its stern, and under it, in a row like
+-- pearls on a string, four round cargo globes, each with a band round
+-- it. (The second drawing: the first was a heap of fat lobes, and the
+-- project owner called it ugly.)
 local function packet(b: Builder)
-  lobe(b, PLATING, v(0, -0.05, 0), v(0.52, 0.46, 0.85))
-  for _, side in { -1, 1 } do
-    lobe(b, PATCH, v(side * 0.48, -0.06, 0.34), v(0.22, 0.28, 0.30))
-    lobe(b, PLATING, v(side * 0.50, -0.08, -0.34), v(0.21, 0.26, 0.30))
-    thruster(b, v(side * 0.24, -0.02, -0.92), 0.18, 0.12)
-    block(b, TRIM, v(side * 0.70, -0.06, 0.34), v(0.012, 0.10, 0.12), nil, 0.9)
+  lobe(b, PLATING, v(0, 0.30, 0.00), v(0.15, 0.12, 1.12))
+  lobe(b, PLATING, v(0, 0.28, 1.14), v(0.10, 0.085, 0.24))
+  lobe(b, PATCH, v(0, 0.40, 0.78), v(0.10, 0.065, 0.19))
+  block(b, GLOW, v(0, 0.415, 0.965), v(0.065, 0.018, 0.010), nil, 0.6)
+  lobe(b, TRIM, v(0, 0.28, 1.37), v(0.035, 0.03, 0.045))
+  for index, z in { 0.74, 0.25, -0.24, -0.73 } do
+    lobe(b, if index % 2 == 0 then PATCH else PLATING, v(0, -0.12, z), v(0.27, 0.27, 0.225))
+    block(b, TRIM, v(0, -0.12, z), v(0.276, 0.022, 0.230), nil, 0.9)
+    -- (the neck each one hangs by)
+    lobe(b, PLATING, v(0, 0.17, z), v(0.07, 0.06, 0.09))
   end
-  lobe(b, PATCH, v(0, 0.40, 0.52), v(0.16, 0.10, 0.22))
-  block(b, GLOW, v(0, 0.42, 0.735), v(0.10, 0.022, 0.010), nil, 0.6)
-  blisters(b, v(0, -0.05, 0), v(0.52, 0.46, 0.85), 12, 0.07, 21)
-  lobe(b, PLATING, v(0, -0.10, 0.90), v(0.20, 0.18, 0.16))
+  for _, side in { -1, 1 } do
+    thruster(b, v(side * 0.11, 0.31, -1.12), 0.17, 0.085)
+    ports(b, v(side * 0.152, 0.32, -0.60), v(side * 0.152, 0.32, 0.60), 8, 0.010)
+  end
+  thruster(b, v(0, 0.12, -1.06), 0.12, 0.06)
+  blisters(b, v(0, 0.30, 0.00), v(0.15, 0.12, 1.12), 6, 0.03, 21)
 end
 
 -- A mount: a place on the hull where a weapon can stand. Where it is,
@@ -934,7 +956,8 @@ local designs: { [string]: Design } = {
   },
   ["industrial.packet"] = {
     faction = "talmar", draw = packet, sheets = 7.0,
-    turrets = { over(v(0, 0.50, 0.52), v(0, -0.51, 0.0)) },
+    -- (its one gun on the spine's back, and under a cargo globe)
+    turrets = { over(v(0, 0.42, 0.10), v(0, -0.39, 0.25)) },
     launchers = {},
     fit = { "autocannon.small" },
   },
