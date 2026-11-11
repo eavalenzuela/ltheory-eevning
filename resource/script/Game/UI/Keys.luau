@@ -5,6 +5,7 @@
 --   Q approach    W orbit       E keep at range   A align
 --   S warp to     D dock, jump  L lock, unlock    Space stop
 --   Tab the next hostile ship   M the map         F1 to F12 the rack
+--   C the camera follows what is selected (and again, lets it go)
 --
 -- (the manner of EVE's, where they are its own. Not yet: a screen to
 -- change them.)
@@ -17,7 +18,7 @@ local Im = require("@lt/Game/UI/Im")
 local Keys = {}
 
 local CODES: { [string]: () -> number } = {
-  Q = Key_Q, W = Key_W, E = Key_E, A = Key_A, S = Key_S, D = Key_D, L = Key_L, M = Key_M,
+  Q = Key_Q, W = Key_W, E = Key_E, A = Key_A, S = Key_S, D = Key_D, L = Key_L, M = Key_M, C = Key_C,
   Space = Key_Space, Tab = Key_Tab,
   F1 = Key_F1, F2 = Key_F2, F3 = Key_F3, F4 = Key_F4, F5 = Key_F5, F6 = Key_F6,
   F7 = Key_F7, F8 = Key_F8, F9 = Key_F9, F10 = Key_F10, F11 = Key_F11, F12 = Key_F12,

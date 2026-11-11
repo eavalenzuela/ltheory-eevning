@@ -95,6 +95,9 @@ export type Scene = {
   pitch: number,
   zoom: number,                       -- camera distance, in focus radii
   zoomTarget: number,
+  -- What the camera keeps in view past the ship (the id of something on
+  -- the grid), or 0: it looks where it was last left.
+  tracking: number,
   warp: number,                       -- 0 out of warp, rising to 1 in the middle of one
   warpLeft: number,                   -- metres still to go
   warpSeconds: number,                -- and seconds
@@ -150,7 +153,7 @@ function Scene.New(camera: Camera): Scene
     camera = camera, system = 0, container = nil, star = nil, key = "",
     ox = 0, oy = 0, oz = 0, eyeX = 0, eyeY = 0, eyeZ = 0,
     proxies = {}, celestials = {}, screen = {}, focus = nil,
-    yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6,
+    yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6, tracking = 0,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
     wreckage = {}, works = {}, standing = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0,
   }
@@ -1026,6 +1029,12 @@ function Scene.Sync(scene: Scene, session: Session.Session)
   scene.focus = scene.proxies[if me then player.ship else player.docked]
 end
 
+-- Have the camera keep something in view past the ship (by its id),
+-- or with 0 or nothing, stop.
+function Scene.Track(scene: Scene, id: number?)
+  scene.tracking = id or 0
+end
+
 -- Orbit the camera around the focus. 'input' is false while the cursor is
 -- over the interface.
 function Scene.UpdateCamera(scene: Scene, frameSeconds: number, input: boolean)
@@ -1039,7 +1048,31 @@ function Scene.UpdateCamera(scene: Scene, frameSeconds: number, input: boolean)
       local delta = Cursor_GetDelta()
       scene.yaw -= 0.008 * delta.x
       scene.pitch = math.clamp(scene.pitch - 0.008 * delta.y, 0.08, math.pi - 0.08)
+      -- (a hand on the camera takes it back from whatever it was following)
+      if delta.x ~= 0 or delta.y ~= 0 then
+        scene.tracking = 0
+      end
     end
+  end
+  -- Following something: the camera swings round, a little each frame,
+  -- to sit on the far side of the ship from it, a little above the line
+  -- through the two so that the ship does not hide it.
+  local followed: vector? = if scene.tracking ~= 0 then scene.screen[scene.tracking] else nil
+  if followed then
+    local away = focus:GetPos() - followed
+    if vector.magnitude(away) > 1 then
+      away = vector.normalize(away)
+      local pitch = math.clamp(math.acos(math.clamp(away.y, -1, 1)) - 0.16, 0.05, math.pi - 0.05)
+      local yaw = math.atan2(away.z, away.x)
+      local ease = 1 - Float_ExpDecay(frameSeconds, 0.25)
+      -- (round the short way)
+      local turn = (yaw - scene.yaw + math.pi) % (2 * math.pi) - math.pi
+      scene.yaw += turn * ease
+      scene.pitch += (pitch - scene.pitch) * ease
+    end
+  elseif scene.tracking ~= 0 then
+    -- (it has gone from the grid, or the ship has)
+    scene.tracking = 0
   end
   scene.zoom += (scene.zoomTarget - scene.zoom) * (1 - Float_ExpDecay(frameSeconds, 0.12))
   local look = vector.create(

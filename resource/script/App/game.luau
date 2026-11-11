@@ -915,6 +915,12 @@ function Debug.Guide(step: string?): (number, number, boolean)
   return count, #rows, done
 end
 
+-- What the camera is following (the id of something on the grid, or
+-- 0), and where it is looking from: its yaw and pitch.
+function Debug.Tracking(): (number, number, number)
+  return scene.tracking, scene.yaw, scene.pitch
+end
+
 -- Press a key by its name ("Q", "Space", "Tab", "F1": Game/UI/Keys), as
 -- a pilot at the keyboard would. False if there is no such key.
 function Debug.Key(name: string): boolean

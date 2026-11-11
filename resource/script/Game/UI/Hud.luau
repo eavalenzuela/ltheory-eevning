@@ -631,6 +631,13 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             session.selected = if after ~= 0 then after else first
           end
         end
+        -- C has the camera follow what is selected, and again lets it go.
+        if Keys.Pressed("C") then
+          Scene.Track(scene, if scene.tracking == session.selected then 0 else session.selected)
+        end
+        if scene.tracking ~= 0 and scene.tracking == session.selected then
+          Im.TextRight("camera following (C)", panelX + panelWidth - 12, top + 2, 11, Im.ACCENT)
+        end
         drawSelected(session, entries, ball, panelX, top + 16, panelWidth)
         drawOverview(session, entries, panelX, top + 182, panelWidth, math.min(600, bottom - top - 272))
         drawRack(session, game, ball, left + w.size.x / 2, bottom - 140)

@@ -40,6 +40,14 @@ until GameDebug.Pirates() >= 1
 lua GameDebug.TimeScale(2)
 lua GameDebug.Key('Tab')
 until GameDebug.Selected() == 'Pirate Scout'
+# C has the camera follow it: it swings round from where it was.
+lua _G.yaw = select(2, GameDebug.Tracking())
+lua GameDebug.Key('C')
+until GameDebug.Tracking() ~= 0
+frames 40
+lua assert(select(2, GameDebug.Tracking()) ~= _G.yaw, 'the camera did not swing round to follow the pirate')
+lua GameDebug.Key('C')
+until GameDebug.Tracking() == 0
 lua GameDebug.Key('Q')
 until GameDebug.Doing() == 'approach'
 until GameDebug.Distance('Pirate') < 9000
