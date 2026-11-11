@@ -84,6 +84,14 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{Types.Info(event.module).name} anchored: it will be online shortly`)
   elseif kind == "ModuleUnanchored" then
     Session.Say(session, `{Types.Info(event.module).name} unanchored: it is in the hangar`)
+  elseif kind == "ColonyDeployed" then
+    local body = Core.Query.Body(session.game, event.planet)
+    Session.Say(session, `A colony is founded on {if body then body.name else "the planet"}`)
+  elseif kind == "ExtractionEnded" then
+    local body = Core.Query.Body(session.game, event.planet)
+    Session.Say(session, `{if body then body.name else "A colony"}: an extractor has finished its programme`)
+  elseif kind == "Exported" then
+    Session.Say(session, `Took up {event.quantity} x {Types.Info(event.type).name}: {event.tax} credits export tax`)
   elseif kind == "StarbaseDark" then
     local body = Core.Query.Body(session.game, event.station)
     Session.Say(session, `{if body then body.name else "Your starbase"} is out of fuel: it is dark`)

@@ -11,7 +11,9 @@
 --   bin/launch game --do "lua GameDebug.Order('Undock'); until GameDebug.InSpace(); ..."
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
+local Colony = require("@lt/Game/UI/Colony")
 local Core = require("@lt/Core/Api")
+local Planets = require("@lt/Core/Data/Planets")
 local Dogma = require("@lt/Core/Dogma")
 local Hud = require("@lt/Game/UI/Hud")
 local Hull = require("@lt/Game/View/Hull")
@@ -515,6 +517,42 @@ function Debug.Tower(): (string, number, number)
     online += if module.online then 1 else 0
   end
   return if not status.anchored then "anchoring" elseif status.lit then "lit" else "dark", status.fuel, online
+end
+
+-- Open the colonies window on a planet (a kind or part of a name, as
+-- for Order), or on the pilot's first colony.
+function Debug.Colony(what: string?): boolean
+  local entry = if what then find(what) else nil
+  if what and entry == nil then
+    return false
+  end
+  Colony.Open(if entry then entry.id else nil)
+  return true
+end
+
+-- The raw material that is the planet in the colonies window's nth
+-- deposit, and what a processor makes of it: "" if it has not so many.
+function Debug.Deposit(n: number): (string, string)
+  local deposit = Core.Query.Deposits(session.game, Colony.Showing())[n]
+  return if deposit then deposit.raw else "", if deposit then Planets.productOf[deposit.raw].id else ""
+end
+
+-- The colony in the colonies window: how many facilities it has, how
+-- many of them are working, and how many of a type are in its store.
+-- Nothing (-1) if the planet shown has no colony.
+function Debug.Colonised(type: string?): (number, number, number)
+  local status = Core.Query.Colony(session.game, Colony.Showing())
+  if status == nil then
+    return -1, 0, 0
+  end
+  local working, stored = 0, 0
+  for _, facility in status.facilities do
+    working += if facility.working then 1 else 0
+  end
+  for _, held in status.store do
+    stored += if held.type == type then held.quantity else 0
+  end
+  return #status.facilities, working, stored
 end
 
 -- A cheat, for scripted runs that test something other than earning:

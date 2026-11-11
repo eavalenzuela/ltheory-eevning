@@ -6,6 +6,7 @@ local Blueprints = require("@lt/Core/Data/Blueprints")
 local Components = require("@lt/Core/Data/Components")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
+local Planets = require("@lt/Core/Data/Planets")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Structures = require("@lt/Core/Data/Structures")
@@ -15,7 +16,8 @@ local Types = {}
 export type Info = {
   id: string,
   name: string,
-  category: "module" | "charge" | "goods" | "ore" | "mineral" | "component" | "ship" | "blueprint" | "skillbook" | "structure",
+  category: "module" | "charge" | "goods" | "ore" | "mineral" | "component" | "ship" | "blueprint" | "skillbook" | "structure"
+    | "planetary",
   volume: number,     -- m3 per unit
   basePrice: number,  -- credits per unit
 }
@@ -59,6 +61,18 @@ for _, module in Structures.modules do
 end
 byId[Structures.FUEL.id] = { id = Structures.FUEL.id, name = Structures.FUEL.name, category = "structure",
   volume = Structures.FUEL.volume, basePrice = Structures.FUEL.basePrice }
+
+-- What a colony takes out of a planet and makes of it, and the command
+-- centre a colony starts from.
+for _, raw in Planets.raws do
+  byId[raw.id] = { id = raw.id, name = raw.name, category = "planetary", volume = raw.volume, basePrice = raw.basePrice }
+end
+for _, product in Planets.products do
+  byId[product.id] = { id = product.id, name = product.name, category = "planetary", volume = product.volume,
+    basePrice = product.basePrice }
+end
+byId[Planets.CENTRE.id] = { id = Planets.CENTRE.id, name = Planets.CENTRE.name, category = "structure",
+  volume = Planets.CENTRE.volume, basePrice = Planets.CENTRE.basePrice }
 
 for _, blueprint in Blueprints.list do
   byId[blueprint.id] = { id = blueprint.id, name = blueprint.name, category = "blueprint", volume = 0.01,

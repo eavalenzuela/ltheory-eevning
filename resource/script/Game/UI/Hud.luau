@@ -7,6 +7,7 @@
 -- One widget draws all of it every frame (Game/UI/Im). It reads the Core
 -- through queries and acts on it only through the Session.
 
+local Colony = require("@lt/Game/UI/Colony")
 local Colors = require("@lt/Colors")
 local Components = require("@lt/Widget/Components")
 local Constants = require("@lt/Core/Data/Constants")
@@ -269,6 +270,7 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     { label = "Align", kind = "AlignTo" },
     if entry.kind == "gate" then { label = "Jump", kind = "Jump" }
       elseif entry.kind == "moon" then { label = "Anchor tower", kind = "AnchorTower" }
+      elseif entry.kind == "planet" then { label = "Colony", kind = "Colony" }
       else { label = "Dock", kind = "Dock" },
     if targeted then { label = "Unlock", kind = "UnlockTarget" } else { label = "Lock", kind = "LockTarget" },
     { label = "Loot", kind = "Loot" },
@@ -281,6 +283,11 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
       local command: State.Command = { kind = "AnchorTower", actor = 0, item = tower, target = entry.id }
       if Im.Button(order.label, bx, by, buttonWidth, 26, (Session.CanDo(session, command))) then
         Session.Do(session, command)
+      end
+    elseif order.kind == "Colony" then
+      -- (what a planet has, the colony there, and the putting down of one)
+      if Im.Button(order.label, bx, by, buttonWidth, 26, true) then
+        Colony.Open(entry.id)
       end
     else
       local can = Session.Can(session, order.kind, entry.id, order.range)
@@ -490,6 +497,15 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         Info.Draw(stationX + Station.WIDTH + 12, top + 130)
       end
       drawClock(session, left + 24, bottom - 54)
+      -- Colonies are run from anywhere, in space or docked.
+      if Im.Button("Colonies", left + 246, bottom - 54, 96, 34, true) then
+        if Colony.IsOpen() then
+          Colony.Close()
+        else
+          Colony.Open()
+        end
+      end
+      Colony.Draw(session, left + 16, top + 130)
       overInterface = Im.over
     end,
   }))

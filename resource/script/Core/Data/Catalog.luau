@@ -11,6 +11,7 @@
 local Factions = require("@lt/Core/Data/Factions")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
+local Planets = require("@lt/Core/Data/Planets")
 local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
 
@@ -20,7 +21,8 @@ local Catalog = {}
 export type Entry = { header: string?, info: Types.Info? }
 
 -- The order the categories come in where they are mixed (a hangar).
-Catalog.CATEGORIES = { "module", "charge", "ship", "structure", "ore", "mineral", "component", "blueprint", "skillbook", "goods" }
+Catalog.CATEGORIES = { "module", "charge", "ship", "structure", "ore", "mineral", "planetary", "component", "blueprint", "skillbook",
+  "goods" }
 
 local categoryOrder: { [string]: number } = {}
 for index, category in Catalog.CATEGORIES do
@@ -85,8 +87,12 @@ function Catalog.Group(id: string): (string, number, number)
       return "Control towers", 1, tower.size
     elseif Structures.moduleById[id] then
       return "Structure modules", 2, 0
+    elseif id == Planets.CENTRE.id then
+      return "Colonies", 4, 0
     end
     return "Fuel", 3, 0
+  elseif category == "planetary" then
+    return if Planets.rawById[id] then "Raw materials" else "Processed materials", if Planets.rawById[id] then 1 else 2, 0
   elseif category == "blueprint" then
     local product = string.sub(id, #"blueprint." + 1)
     local made = Types.Get(product)

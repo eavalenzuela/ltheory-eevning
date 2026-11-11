@@ -1,0 +1,81 @@
+# A colony on a planet, set up and worked through the game app's own
+# screens (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/colony.txt
+#
+# Buy a command centre, carry it to a planet in the starter ship, put it
+# down from orbit, raise an extractor and a processor on what the planet
+# has, start a programme, and take what is made up into the hold. Only
+# the price of it all is granted.
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Grant(400000)
+wait 1.5
+
+# The colonies window opens anywhere, and says how a colony is begun.
+until GameDebug.Press('Colonies')
+frames 3
+lua assert(GameDebug.Colonised() == -1, 'a new pilot has no colony')
+until GameDebug.Press('Colony:close')
+
+# The market sells the command centre, under Structures. It goes in a
+# frigate's hold.
+lua assert(GameDebug.Market('colony.command'))
+frames 3
+until GameDebug.Press('BuyNow')
+until GameDebug.Hangar('colony.command') == 1
+until GameDebug.Press('Fitting')
+frames 3
+until GameDebug.Press('ToHold:colony.command')
+until GameDebug.Hold('colony.command') == 1
+
+# To a planet.
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua GameDebug.TimeScale(30)
+lua _G.warped = GameDebug.Order('WarpTo', 'planet')
+until not _G.warped or GameDebug.InWarp()
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+
+# The planet's panel opens the window on it: what it has, and no colony.
+lua assert(GameDebug.Select('planet'), 'no planet to select')
+frames 3
+until GameDebug.Press('Colony')
+frames 3
+lua assert(GameDebug.Colonised() == -1, 'there should be no colony here yet')
+lua _G.raw, _G.product = GameDebug.Deposit(1)
+lua assert(_G.raw ~= '' and _G.product ~= '', 'the planet has nothing to take')
+lua assert(not GameDebug.CanPress('Extractor:' .. _G.raw), 'nothing is raised where there is no colony')
+
+# Put the centre down, and raise an extractor and a processor.
+until GameDebug.Press('Colony:deploy')
+until GameDebug.Colonised() == 0
+lua assert(GameDebug.Hold('colony.command') == 0, 'the command centre is still in the hold')
+lua _G.before = GameDebug.Wallet()
+until GameDebug.Press('Extractor:' .. _G.raw)
+until GameDebug.Colonised() == 1
+until GameDebug.Press('Processor:' .. _G.product)
+until GameDebug.Colonised() == 2
+lua assert(GameDebug.Wallet() == _G.before - 120000, 'an extractor and a processor cost 45,000 and 75,000')
+
+# Nothing comes up until the extractor is given a programme.
+lua assert(select(2, GameDebug.Colonised()) == 0, 'an extractor should wait for its programme')
+until GameDebug.Press('Programme:1:4')
+until select(2, GameDebug.Colonised()) >= 1
+lua GameDebug.TimeScale(60)
+until select(3, GameDebug.Colonised(_G.product)) >= 10
+lua GameDebug.TimeScale(1)
+
+# What is made is taken up into the hold, for a tax.
+frames 3
+lua _G.before = GameDebug.Wallet()
+until GameDebug.Press('Take:' .. _G.product)
+until GameDebug.Hold(_G.product) >= 10
+lua assert(select(3, GameDebug.Colonised(_G.product)) == 0, 'what was taken up is still in the store')
+lua assert(GameDebug.Wallet() < _G.before, 'no export tax was paid')
+
+echo colony scenario passed
+quit

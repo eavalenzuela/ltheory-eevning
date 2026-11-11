@@ -29,6 +29,8 @@ local Pirates = require("@lt/Core/Tactical/Pirates")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
+local Colonies = require("@lt/Core/Assets/Colonies")
+local Planets = require("@lt/Core/Data/Planets")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
 local Stations = require("@lt/Core/Assets/Stations")
@@ -52,7 +54,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 12
+Core.SAVE_VERSION = 13
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -106,6 +108,11 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
     state.starbases = state.starbases or {}
     state.starbaseIds = state.starbaseIds or {}
   end,
+  -- 13: planets can be worked. A save from before has no colonies.
+  [12] = function(state: any)
+    state.colonies = state.colonies or {}
+    state.colonyIds = state.colonyIds or {}
+  end,
 }
 
 -- A new game: a galaxy, and the player's first ship docked at a station
@@ -137,6 +144,8 @@ function Core.New(options: Options): Game
     trades = {},
     starbases = {},
     starbaseIds = {},
+    colonies = {},
+    colonyIds = {},
     balls = {},
     ballIds = {},
     missiles = {},
@@ -182,6 +191,7 @@ local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true }
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
 local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true }
+local COLONY_COMMANDS = { DeployColony = true, BuildFacility = true, RemoveFacility = true, StartExtraction = true, Export = true }
 
 local function validate(state: State.State, command: State.Command): (boolean, string?)
   -- (first, whether the station it is given at has the module for it)
@@ -203,6 +213,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Hangar.Validate(state, command)
   elseif STARBASE_COMMANDS[command.kind] then
     return Starbases.Validate(state, command)
+  elseif COLONY_COMMANDS[command.kind] then
+    return Colonies.Validate(state, command)
   elseif TRAINING_COMMANDS[command.kind] then
     return Training.Validate(state, command)
   end
@@ -261,6 +273,8 @@ function Core.Step(game: Game)
       Hangar.Apply(state, command, game.events)
     elseif ok and STARBASE_COMMANDS[command.kind] then
       Starbases.Apply(state, command, game.events)
+    elseif ok and COLONY_COMMANDS[command.kind] then
+      Colonies.Apply(state, command, game.events)
     elseif ok and TRAINING_COMMANDS[command.kind] then
       Training.Apply(state, command, game.events)
     elseif ok then
@@ -276,6 +290,7 @@ function Core.Step(game: Game)
   Mining.Step(state)
   Market.Step(state, game.events)
   Starbases.Step(state, game.events)
+  Colonies.Step(state, game.events)
   Industry.Step(state, game.events)
   Training.Step(state, game.events)
 end
@@ -565,6 +580,84 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
     tower = Structures.towerById[starbase.tower], mine = ship ~= nil and ship.owner == starbase.owner,
     anchored = Starbases.Anchored(state, starbase), wait = math.max(0, starbase.ready - state.tick) * Constants.TICK, lit = lit,
     fuel = starbase.fuel, hours = Starbases.Hours(starbase), powergrid = powergrid, cpu = cpu, modules = modules,
+  }
+end
+
+-- What a planet has to take, and how rich it is in each: for any planet
+-- of a described system, colony or none. None for anything else.
+function Query.Deposits(game: Game, planet: number): { Planets.Deposit }
+  local object = Space.Object(game.state, planet)
+  return if object and object.kind == "planet" then Planets.Deposits(object.variety, object.seed) else {}
+end
+
+-- The planets the player has a colony on, in the order of their ids.
+function Query.Colonies(game: Game): { number }
+  local state = game.state
+  local ship = state.ships[state.player.ship]
+  local found: { number } = {}
+  for _, id in state.colonyIds do
+    if ship and state.colonies[id].owner == ship.owner then
+      table.insert(found, id)
+    end
+  end
+  return found
+end
+
+-- A colony, by the id of its planet: how it stands. Nil if the planet
+-- has none.
+export type FacilityStatus = {
+  id: number,
+  kind: string,
+  what: string,
+  working: boolean,   -- an extractor on a programme, a processor with a batch in hand
+  left: number,       -- seconds its programme has to run, or its batch
+  rate: number,       -- units an extractor's next cycle brings up
+}
+export type ColonyStatus = {
+  planet: number,
+  name: string,
+  variety: string,
+  mine: boolean,
+  powergrid: number,  -- drawn by its facilities
+  cpu: number,
+  room: number,       -- of its store, m3
+  used: number,
+  near: boolean,      -- the player's ship is near enough to take goods up
+  deposits: { Planets.Deposit },
+  facilities: { FacilityStatus },
+  -- (what the player's ship could take of each now: Colonies.Fits)
+  store: { { type: string, quantity: number, fits: number } },
+}
+function Query.Colony(game: Game, planet: number): ColonyStatus?
+  local state = game.state
+  local colony = state.colonies[planet]
+  local object = Space.Object(state, planet)
+  if colony == nil or object == nil then
+    return nil
+  end
+  local ship = state.ships[state.player.ship]
+  local powergrid, cpu = Colonies.Draw(colony)
+  local room, used = Colonies.Room(colony)
+  local near = ship ~= nil and Colonies.Near(state, ship.id, planet)
+  local facilities: { FacilityStatus } = {}
+  for _, pin in colony.pins do
+    local extractor = pin.kind == "extractor"
+    local working = if extractor then pin.ends > 0 else pin.next > 0
+    table.insert(facilities, {
+      id = pin.id, kind = pin.kind, what = pin.what, working = working,
+      left = if working then math.max(0, (if extractor then pin.ends else pin.next) - state.tick) * Constants.TICK else 0,
+      rate = if extractor and working then Planets.Yield(Planets.Richness(object.seed, pin.what), pin.cycle) else 0,
+    })
+  end
+  local store = {}
+  for _, stored in colony.store do
+    table.insert(store, { type = stored.type, quantity = stored.quantity,
+      fits = if near and ship then Colonies.Fits(state, ship.id, colony, stored.type) else 0 })
+  end
+  return {
+    planet = planet, name = object.name, variety = object.variety, mine = ship ~= nil and ship.owner == colony.owner,
+    powergrid = powergrid, cpu = cpu, room = room, used = used, near = near,
+    deposits = Planets.Deposits(object.variety, object.seed), facilities = facilities, store = store,
   }
 end
 

@@ -13,6 +13,7 @@
 local Components = require("@lt/Core/Data/Components")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
+local Planets = require("@lt/Core/Data/Planets")
 local Ships = require("@lt/Core/Data/Ships")
 local Structures = require("@lt/Core/Data/Structures")
 
@@ -65,17 +66,23 @@ end
 
 local Blueprints = { list = {} :: { Blueprint }, byId = {} :: { [string]: Blueprint }, byProduct = {} :: { [string]: Blueprint } }
 
+-- What a part costs: a component, or something made on a planet.
+local function priceOf(part: string): number
+  local component = Components.byId[part]
+  return if component then component.basePrice else Planets.productById[part].basePrice
+end
+
 -- 'mix' is how the mineral part of the cost is split; 'parts', if
--- given, the components that take COMPONENT_SHARE of it first.
+-- given, the components (and what is made on planets) that take
+-- COMPONENT_SHARE of it first.
 local function add(product: string, name: string, mix: { [string]: number }, basePrice: number, perRun: number, seconds: number,
   parts: { { any } }?)
   local materials = {}
   local budget = MATERIAL_SHARE * basePrice * perRun
   if parts then
     for _, part in parts do
-      local component = Components.byId[part[1]]
-      local quantity = math.max(1, math.floor(COMPONENT_SHARE * budget * part[2] / component.basePrice + 0.5))
-      table.insert(materials, { type = component.id, quantity = quantity })
+      local quantity = math.max(1, math.floor(COMPONENT_SHARE * budget * part[2] / priceOf(part[1]) + 0.5))
+      table.insert(materials, { type = part[1], quantity = quantity })
     end
     budget *= 1 - COMPONENT_SHARE
   end
@@ -121,14 +128,25 @@ for _, hull in Ships.list do
 end
 
 -- Structures: a tower as a big hull is built, its modules as lesser
--- ones, and fuel by the forty.
+-- ones, and fuel by the forty. What stays in space for years is built
+-- of what planets give as well as of what hulls are: a third of a
+-- structure's parts are alloys, ceramics and polymers, and half of what
+-- goes into fuel is isotopes, water and catalysts (Data/Planets).
+local STRUCTURE: { { any } } = { { "planet.alloys", 0.17 }, { "planet.ceramics", 0.09 }, { "planet.polymers", 0.07 } }
+for _, part in Components.HULL do
+  table.insert(STRUCTURE, { part[1], part[2] * 0.67 })
+end
+local FUEL: { { any } } = { { "planet.isotopes", 0.5 }, { "planet.water", 0.3 }, { "planet.catalysts", 0.2 } }
 for _, tower in Structures.towers do
-  add(tower.id, tower.name, MIX.cruiser, tower.basePrice, 1, math.min(72000, 600 + tower.basePrice // 200), Components.HULL)
+  add(tower.id, tower.name, MIX.cruiser, tower.basePrice, 1, math.min(72000, 600 + tower.basePrice // 200), STRUCTURE)
 end
 for _, module in Structures.modules do
-  add(module.id, module.name, MIX.ship, module.basePrice, 1, math.min(72000, 600 + module.basePrice // 200), Components.HULL)
+  add(module.id, module.name, MIX.ship, module.basePrice, 1, math.min(72000, 600 + module.basePrice // 200), STRUCTURE)
 end
-add(Structures.FUEL.id, Structures.FUEL.name, MIX.charge, Structures.FUEL.basePrice, 40, 120)
+add(Structures.FUEL.id, Structures.FUEL.name, MIX.charge, Structures.FUEL.basePrice, 40, 120, FUEL)
+-- (a command centre is built as a small hull is, of nothing a colony
+-- makes: the first one has to come from somewhere)
+add(Planets.CENTRE.id, Planets.CENTRE.name, MIX.ship, Planets.CENTRE.basePrice, 1, 600, Components.HULL)
 
 -- Jobs a pilot can run at once before any skill adds more.
 Blueprints.JOB_SLOTS = 2

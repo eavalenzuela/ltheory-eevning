@@ -41,7 +41,7 @@ local dockedAt = 0    -- the station the screen was last drawn for
 -- The market: the category listed, the type shown, and what is entered.
 local CATEGORIES: { { string } } = {
   { "module", "Modules" }, { "charge", "Charges" }, { "ship", "Ships" }, { "structure", "Structures" }, { "ore", "Ore" }, { "mineral", "Minerals" },
-  { "component", "Components" },
+  { "planetary", "Planetary" }, { "component", "Components" },
   { "blueprint", "Blueprints" }, { "skillbook", "Skill books" }, { "goods", "Goods" },
 }
 local category = "module"

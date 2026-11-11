@@ -14,6 +14,7 @@ local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
+local Planets = require("@lt/Core/Data/Planets")
 local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
 
@@ -373,6 +374,42 @@ function Facts.Of(type: string): Sheet?
     end
     local market = section(sheet, "Trade")
     row(market, "Base price", `{whole(blueprint.basePrice)} cr`)
+  elseif category == "planetary" then
+    local raw, product = Planets.rawById[type], Planets.productById[type]
+    if raw then
+      sheet.kind = "Raw material"
+      sheet.note = "Brought up out of a planet by a colony's extractors. Bulky and worth little until it is processed."
+      local on = section(sheet, "Found on")
+      for _, variety in { "temperate", "ocean", "barren", "lava", "ice", "gas" } do
+        for _, has in Planets.DEPOSITS[variety] do
+          if has == type then
+            row(on, `{string.upper(string.sub(variety, 1, 1))}{string.sub(variety, 2)} planets`, "by extractor")
+          end
+        end
+      end
+      local made = Planets.productOf[type]
+      if made then
+        row(section(sheet, "Processed into"), made.name, `{whole(made.output)} from {whole(made.input)}`, made.id)
+      end
+    elseif product then
+      sheet.kind = "Processed material"
+      sheet.note = "Made on a planet by a colony's processors, and fetched from orbit."
+      row(section(sheet, "Processed from"), nameOf(product.from), `{whole(product.input)} make {whole(product.output)}`, product.from)
+      row(section(sheet, "Use"), "Called for by", `{usedIn(type)} blueprints`)
+    end
+    trade(sheet, type)
+  elseif category == "structure" and type == Planets.CENTRE.id then
+    sheet.kind = "Command centre"
+    sheet.note = "The start of a colony. Put down on a planet from orbit, it powers the extractors, processors and storage raised round it."
+    local has = section(sheet, "Supplies")
+    row(has, "Powergrid", `{whole(Planets.CENTRE.powergrid)} MW`)
+    row(has, "CPU", `{whole(Planets.CENTRE.cpu)} tf`)
+    row(has, "Room", `{whole(Planets.CENTRE.room)} m3`)
+    local raise = section(sheet, "Facilities")
+    for _, facility in Planets.facilities do
+      row(raise, facility.name, `{whole(facility.powergrid)} MW, {whole(facility.cpu)} tf, {whole(facility.cost)} cr`)
+    end
+    trade(sheet, type)
   elseif category == "structure" then
     local tower, anchored = Structures.towerById[type], Structures.moduleById[type]
     if tower then

@@ -186,6 +186,9 @@ export type Command = {
   type: string?,      -- an item type, when there is no item yet (buying)
   price: number?,     -- credits per unit, for a limit order
   order: number?,     -- an order's id
+  what: string?,      -- what a colony's facility is set on or set to make
+  pin: number?,       -- a colony's facility, by its number there
+  hours: number?,     -- the length of an extractor's programme
 }
 
 -- A standing offer at a station's market. A sell order's goods and a buy
@@ -218,6 +221,20 @@ export type Job = {
 
 -- A line in the wallet's journal.
 export type Entry = { tick: number, amount: number, reason: string, balance: number }
+
+-- A facility of a colony (Assets/Colonies): its number there, what kind
+-- it is ("extractor", "processor" or "storage"), and what it is set on
+-- (an extractor's raw material) or set to make (a processor's product).
+-- An extractor's programme ends at tick 'ends' (0: it has none) and its
+-- next cycle is at 'next', 'cycle' cycles in. A processor with a batch
+-- in hand delivers it at 'next' (0: it has none).
+export type Pin = { id: number, kind: string, what: string, ends: number, next: number, cycle: number }
+
+export type Stored = { type: string, quantity: number }
+
+-- A colony on a planet: whose it is, its facilities, and what its
+-- store holds (in the order of the types' ids).
+export type Colony = { planet: number, owner: string, pins: { Pin }, pinSeq: number, store: { Stored } }
 
 -- A module anchored at a pilot's starbase: its Data/Structures id, and
 -- the tick it is online from.
@@ -266,6 +283,8 @@ export type State = {
   trades: { [number]: { [string]: { TradeDay } } },
   starbases: { [number]: Starbase },  -- by the id of the station the tower is
   starbaseIds: { number },
+  colonies: { [number]: Colony },     -- by the id of the planet
+  colonyIds: { number },
   balls: { [number]: Ball },
   ballIds: { number },
   missiles: { Missile },  -- in flight, oldest first
