@@ -28,6 +28,7 @@ local Station = require("@lt/Game/UI/Station")
 local Info = require("@lt/Game/UI/Info")
 local Menu = require("@lt/Game/UI/Menu")
 local Items = require("@lt/Core/Assets/Items")
+local Keys = require("@lt/Game/UI/Keys")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
@@ -882,6 +883,12 @@ function Debug.Spare(type: string, module: string?): boolean
     Items.Add(state, "ammo.emp", 2000, ship.id, "cargo")
   end
   return true
+end
+
+-- Press a key by its name ("Q", "Space", "Tab", "F1": Game/UI/Keys), as
+-- a pilot at the keyboard would. False if there is no such key.
+function Debug.Key(name: string): boolean
+  return Keys.Press(name)
 end
 
 -- What the nth hired pilot is doing ("following", "mining", "taking

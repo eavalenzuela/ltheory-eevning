@@ -16,6 +16,7 @@ local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
 local Info = require("@lt/Game/UI/Info")
+local Keys = require("@lt/Game/UI/Keys")
 local Map = require("@lt/Game/UI/Map")
 local Menu = require("@lt/Game/UI/Menu")
 local Modules = require("@lt/Core/Data/Modules")
@@ -256,6 +257,12 @@ local function drawOverview(session: Session.Session, entries: { Core.Entry }, x
   end
 end
 
+-- The key each order to the ship has, given at what is selected (Game/UI/Keys).
+local ORDER_KEYS: { [string]: string } = {
+  Approach = "Q", Orbit = "W", KeepAtRange = "E", AlignTo = "A", WarpTo = "S", Dock = "D", Jump = "D",
+  LockTarget = "L", UnlockTarget = "L",
+}
+
 local function drawSelected(session: Session.Session, entries: { Core.Entry }, ball: State.Ball, x: number, y: number, width: number)
   local selected: Core.Entry? = nil
   for _, entry in entries do
@@ -330,7 +337,9 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
       end
     else
       local can = Session.Can(session, order.kind, entry.id, order.range)
-      if Im.Button(order.label, bx, by, buttonWidth, 26, can) then
+      local key = ORDER_KEYS[order.kind]
+      local pressed = key ~= nil and Keys.Pressed(key) and can
+      if Im.Button(order.label, bx, by, buttonWidth, 26, can) or pressed then
         Session.Order(session, order.kind, entry.id, order.range)
       end
     end
@@ -404,8 +413,15 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
       end
     end
     local active = module.weapon ~= nil or module.repair ~= nil or module.boost ~= nil or module.miner ~= nil
+      or module.hex ~= nil or module.salvager ~= nil
     Im.Panel(bx, y, width, 46)
     local hot, clicked = Im.Row(bx, y, width, 46, running ~= nil)
+    -- (and by its key: F1 for the first of the rack)
+    local key = Keys.Rack(index)
+    if key and active then
+      Im.TextRight(key, bx + width - 6, y + 5, 11, Im.DIM)
+      clicked = Keys.Pressed(key) or clicked
+    end
     Im.Text(shorten(module.name, 18), bx + 8, y + 5, 13, if active then Im.TEXT else Im.DIM)
     local note = if not active then "passive" else ""
     if module.weapon then
@@ -483,7 +499,8 @@ local function drawNavigation(session: Session.Session, ball: State.Ball, x: num
     Im.Text(if ball.vitals.damp < 1 then "DAMPENED" else "PAINTED", x + 310, y + 12, 13, Im.WARN)
   end
   local inWarp = ball.warp ~= nil and ball.warp.stage == "warp"
-  if Im.Button("STOP", x + width - 92, y + 8, 80, 24, not inWarp) then
+  local stop = Keys.Pressed("Space") and not inWarp
+  if Im.Button("STOP", x + width - 92, y + 8, 80, 24, not inWarp) or stop then
     Session.Order(session, "Stop")
   end
 end
@@ -557,6 +574,21 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       if ball then
         local navX = left + (w.size.x - 520) / 2
         drawTargets(session, game, ball, left + 300, top + 16)
+        -- Tab picks out the next ship that would fire on the pilot, nearest
+        -- first and round again.
+        if Keys.Pressed("Tab") then
+          local first, after, passed = 0, 0, false
+          for _, entry in entries do
+            if entry.hostile and entry.onGrid then
+              first = if first == 0 then entry.id else first
+              after = if passed and after == 0 then entry.id else after
+            end
+            passed = passed or entry.id == session.selected
+          end
+          if first ~= 0 then
+            session.selected = if after ~= 0 then after else first
+          end
+        end
         drawSelected(session, entries, ball, panelX, top + 16, panelWidth)
         drawOverview(session, entries, panelX, top + 182, panelWidth, math.min(600, bottom - top - 272))
         drawRack(session, game, ball, left + w.size.x / 2, bottom - 140)
@@ -591,7 +623,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           Scanner.Close()
         end
       end
-      if Im.Button("Map", left + 408, bottom - 54, 56, 34, true) then
+      if Im.Button("Map", left + 408, bottom - 54, 56, 34, true) or Keys.Pressed("M") then
         if Map.IsOpen() then
           Map.Close()
         else
@@ -715,6 +747,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       end
       -- (the map goes over everything else)
       Map.Draw(session, left, top, w.size.x, w.size.y)
+      Keys.EndFrame()
       overInterface = Im.over
     end,
   }))

@@ -1,0 +1,58 @@
+# Flying by the keyboard, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/keys.txt
+#
+# A webifier is given and fitted, and after that nothing in space is
+# clicked: Space stops the ship, S warps to what is selected, Tab picks
+# out the pirate, Q closes with it, L locks it, F1 to F3 switch on the
+# two guns and the webifier (which the rack would not switch on by a
+# click before this), and D docks at the station selected.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Give('web.stasis', 1))
+lua GameDebug.Train('electronics', 2)
+lua GameDebug.Train('propulsion.jamming', 1)
+frames 3
+until GameDebug.Press('Fit:web.stasis')
+until GameDebug.Fitted('web.stasis') == 1
+
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 5
+lua assert(GameDebug.Doing() == 'goto', 'a ship leaves a station under way')
+lua assert(GameDebug.Key('Space') and not GameDebug.Key('Nonesuch'))
+until GameDebug.Doing() == 'stop'
+
+lua assert(GameDebug.Select('belt'), 'no belt on the overview')
+lua GameDebug.Key('S')
+lua GameDebug.TimeScale(8)
+until GameDebug.InWarp()
+until GameDebug.Idle()
+
+until GameDebug.Pirates() >= 1
+lua GameDebug.TimeScale(2)
+lua GameDebug.Key('Tab')
+until GameDebug.Selected() == 'Pirate Scout'
+lua GameDebug.Key('Q')
+until GameDebug.Doing() == 'approach'
+until GameDebug.Distance('Pirate') < 9000
+lua GameDebug.Key('L')
+until GameDebug.Locked() > 0
+lua GameDebug.Key('F1')
+lua GameDebug.Key('F2')
+lua GameDebug.Key('F3')
+until GameDebug.Running() == 3
+until GameDebug.Held('target') < 0.5
+lua GameDebug.TimeScale(4)
+until GameDebug.Pirates() == 0
+lua assert(GameDebug.Hull() == 'frigate.courier', 'the player lost the fight')
+
+lua assert(GameDebug.Select('station'), 'no station on the overview')
+lua GameDebug.Key('D')
+lua GameDebug.TimeScale(8)
+until GameDebug.Docked()
+lua GameDebug.TimeScale(1)
+
+echo keys scenario passed
+quit
