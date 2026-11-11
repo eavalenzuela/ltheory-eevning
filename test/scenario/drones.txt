@@ -33,13 +33,13 @@ lua assert(not GameDebug.CanPress('Drones:launch'), 'a Courier controls one dron
 
 # The pirate comes, and the drone goes for it with the Courier.
 lua GameDebug.TimeScale(8)
-until GameDebug.Count('ship') >= 2
+until GameDebug.Pirates() >= 1
 until GameDebug.Distance('Pirate') < 9000
 lua assert(GameDebug.Lock('Pirate'), 'the lock was refused')
 until GameDebug.Locked() > 0
 lua GameDebug.TimeScale(2)
 lua assert(GameDebug.Fire() == 2, 'both guns should open fire')
-until GameDebug.Count('ship') == 1
+until GameDebug.Pirates() == 0
 lua GameDebug.TimeScale(1)
 lua assert(GameDebug.Hull() == 'frigate.courier', 'the player lost the fight')
 lua assert(GameDebug.Drones() == 1, 'the drone should still be out')

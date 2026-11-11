@@ -27,13 +27,25 @@ end
 local function count(state: State.State): (number, number)
   local haulers, patrols = 0, 0
   for _, id in state.trafficIds do
-    if state.traffic[id].kind == "patrol" then
+    local kind = state.traffic[id].kind
+    if kind == "patrol" then
       patrols += 1
-    else
+    elseif kind == "in" or kind == "out" then
       haulers += 1
     end
   end
   return haulers, patrols
+end
+
+-- The ships of the traffic of a kind.
+local function ofKind(state: State.State, kind: string): { number }
+  local found: { number } = {}
+  for _, id in state.trafficIds do
+    if state.traffic[id].kind == kind then
+      table.insert(found, id)
+    end
+  end
+  return found
 end
 
 -- Put the pilot's ship in space in a system (the flight is Space's to test).
@@ -78,6 +90,8 @@ suite:Case("a game with no traffic has none, and a secure system fills up to wha
       t.eq({ ship.owner, hull.lineage } :: { any }, { "vessari", "vessari" } :: { any })
       t.ok(hull.class == "frigate" or hull.class == "destroyer")
       t.ok(#Items.Fitted(state, id) >= 3, "a patrol ship should be armed")
+    elseif record.kind == "miner" or record.kind == "home" then
+      t.eq({ hull.class, ship.owner } :: { any }, { "frigate", "civilian" } :: { any })
     else
       t.eq(hull.class, "industrial")
       t.ok(ship.owner == "vessari" or ship.owner == "civilian")
@@ -228,6 +242,112 @@ suite:Case("a save from before there was traffic opens as a game that has it", f
   t.eq({ loaded.state.trafficOn, loaded.state.player.marked, #loaded.state.trafficIds } :: { any }, { true, 0, 0 } :: { any })
   steps(loaded, 300)
   t.ok(#loaded.state.trafficIds >= 1)
+end)
+
+suite:Case("where order is kept there are miners at the belts, who cut rock and take it home", function(t)
+  local game = busy()
+  local state = game.state
+  -- (the pilot sits docked at home, in a homeworld's system)
+  local seen: { [number]: boolean } = {}
+  local most, mined, home = 0, 0, 0
+  for _ = 1, 1500 do
+    Core.Step(game)
+    local miners = ofKind(state, "miner")
+    most = math.max(most, #miners + #ofKind(state, "home"))
+    for _, id in miners do
+      seen[id] = true
+      local ball = state.balls[id]
+      local record = state.traffic[id]
+      t.eq({ state.ships[id].type, state.ships[id].owner, #Items.Fitted(state, id) } :: { any }, { "frigate.prospector", "civilian", 2 } :: { any })
+      t.ok(ball == nil or ball.grid == 0 or ball.grid == record.goal or ball.intent ~= nil, "a miner is somewhere other than its belt")
+      mined = math.max(mined, Items.CargoUsed(state, id))
+    end
+    home = math.max(home, #ofKind(state, "home"))
+  end
+  t.ok(most >= 1 and most <= Traffic.MINERS.secure, `{most} miners about at once`)
+  t.ok(mined > 100, `no miner had more than {mined} m3 of ore aboard`)
+  t.ok(home >= 1, "no miner ever went home with a full hold")
+  -- The rocks are the worse for it.
+  t.ok(#state.rockIds > 0)
+  -- One that is shot at goes home at once.
+  local miners = ofKind(state, "miner")
+  if #miners > 0 then
+    local ball = state.balls[miners[1]]
+    ball.vitals.shield = 0
+    steps(game, 2)
+    t.eq(state.traffic[miners[1]].kind, "home")
+  end
+end)
+
+suite:Case("in secure space the police come for a marked pilot, follow them, and go when the mark has lapsed", function(t)
+  local game = busy()
+  local state = game.state
+  move(game, 1)
+  local me = state.balls[state.player.ship]
+  steps(game, 60)
+  t.eq(#ofKind(state, "police"), 0)
+  state.player.marked = state.tick + 300
+  local arrived = 0
+  for _ = 1, 2 * Traffic.INTERVAL do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      arrived += if event.kind == "PoliceArrived" then event.count else 0
+    end
+    -- (the first pair is enough to look at: a tick for them to see the pilot)
+    if arrived > 0 then
+      Core.Step(game)
+      break
+    end
+  end
+  local lawmen = ofKind(state, "police")
+  t.ok(arrived >= 2 and #lawmen == arrived, `{arrived} police arrived`)
+  for _, id in lawmen do
+    local ball = state.balls[id]
+    t.eq({ ball.grid, state.ships[id].owner } :: { any }, { me.grid, state.galaxy.systems[1].owner } :: { any })
+    t.ok(state.pilots[id] ~= nil, "a police ship is not fighting the marked pilot")
+    t.ok(Space.Distance(ball :: any, me :: any) < 15000)
+  end
+  -- No more than four of them, however long it goes on.
+  steps(game, 8 * Traffic.INTERVAL)
+  t.ok(#ofKind(state, "police") <= Traffic.POLICE + 2, `{#ofKind(state, "police")} police about`)
+  -- The pilot moves a long way off in the system: they come after.
+  me.x += 4e7
+  Space.AssignGrid(state, me)
+  local followed = false
+  for _ = 1, 300 do
+    Core.Step(game)
+    for _, id in ofKind(state, "police") do
+      local ball = state.balls[id]
+      followed = followed or (ball ~= nil and ball.grid == me.grid and me.grid ~= 0)
+    end
+    state.player.marked = math.max(state.player.marked, state.tick + 60)
+    if followed then
+      break
+    end
+  end
+  t.ok(followed or state.balls[me.id] == nil, "the police did not follow the pilot")
+  -- When the mark has lapsed they go.
+  if state.balls[me.id] then
+    state.player.marked = state.tick
+    steps(game, 3)
+    t.eq(#ofKind(state, "police"), 0)
+  end
+end)
+
+suite:Case("nobody comes for a marked pilot where order is thin", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true, traffic = true, systems = 3 })
+  local state = game.state
+  local low = 0
+  for id, node in state.galaxy.systems do
+    if Galaxy.Band(node.security) == "low" then
+      low = id
+    end
+  end
+  t.ok(low ~= 0)
+  move(game, low)
+  state.player.marked = state.tick + 600
+  steps(game, 6 * Traffic.INTERVAL)
+  t.eq(#ofKind(state, "police"), 0)
 end)
 
 return suite

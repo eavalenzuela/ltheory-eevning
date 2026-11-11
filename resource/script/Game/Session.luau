@@ -153,6 +153,8 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `Job taken: {event.title}`)
   elseif kind == "MissionCompleted" then
     Session.Say(session, string.format("Job done: +%d credits, standing %.1f", event.reward, event.standing))
+  elseif kind == "PoliceArrived" then
+    Session.Say(session, "The police are here, and they are here for you")
   elseif kind == "Marked" then
     Session.Say(session, "You have fired on a ship that is no pirate's: the patrols will fire on you")
   elseif kind == "ColonyDeployed" then

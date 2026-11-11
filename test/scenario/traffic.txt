@@ -2,15 +2,17 @@
 #
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/traffic.txt
 #
-# A homeworld's system is busy: haulers come and go at its stations and
-# its faction's patrols stand at its gate. They are nobody's enemy until
-# a pilot makes them one. Firing on one marks the pilot, the patrol on
-# the grid turns on them, and so do the batteries of a station.
+# A homeworld's system is busy: haulers come and go at its stations,
+# miners work its belts and its faction's patrols stand at its gate.
+# They are nobody's enemy until a pilot makes them one. Firing on one
+# marks the pilot, the patrol on the grid turns on them, the police
+# arrive, and the batteries of a station fire on them too.
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
 lua GameDebug.TimeScale(8)
 until GameDebug.Traffic() >= 3
+until select(5, GameDebug.Traffic()) >= 1
 lua assert(GameDebug.Pirates() == 0, 'traffic is not pirates')
 
 # At the gate there is a patrol, and it leaves a pilot alone.
@@ -36,6 +38,7 @@ lua GameDebug.TimeScale(1)
 lua assert(GameDebug.Fire() >= 1, 'no weapon opened fire')
 until GameDebug.Marked()
 until select(3, GameDebug.Traffic()) >= 1
+until select(4, GameDebug.Traffic()) >= 2
 lua assert(GameDebug.Standing('vessari') < 0, 'firing on a patrol should cost standing with its faction')
 
 # A marked pilot is not safe at a station either: its batteries fire on

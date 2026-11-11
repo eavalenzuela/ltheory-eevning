@@ -42,9 +42,9 @@
 
 local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
+local Digger = require("@lt/Core/Tactical/Digger")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Mend = require("@lt/Core/Tactical/Mend")
-local Mining = require("@lt/Core/Tactical/Mining")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Names = require("@lt/Core/Describe/Names")
@@ -150,19 +150,6 @@ local function nearestStation(state: State.State, me: State.Ball): System.Object
   return best
 end
 
--- The mining lasers a ship has fitted.
-local function miners(state: State.State, ship: number): { State.Item }
-  local found: { State.Item } = {}
-  if state.ships[ship] then
-    for _, item in Items.Fitted(state, ship) do
-      if Modules.byId[item.type].miner then
-        table.insert(found, item)
-      end
-    end
-  end
-  return found
-end
-
 -- The hired pilots a "mine here" would set to work: those (or the one
 -- named) on the player's grid whose ship has a mining laser.
 local function diggers(state: State.State, only: State.Wingman?): { State.Wingman }
@@ -172,7 +159,7 @@ local function diggers(state: State.State, only: State.Wingman?): { State.Wingma
     local wing = state.fleet[id]
     local ball = state.balls[wing.ship]
     if (only == nil or only == wing) and lead and ball and ball.system == lead.system and ball.grid == lead.grid
-      and #miners(state, wing.ship) > 0 then
+      and #Digger.Lasers(state, wing.ship) > 0 then
       table.insert(found, wing)
     end
   end
@@ -484,7 +471,7 @@ end
 -- Somebody after the fleet at the belt sends them in early.
 local function work(state: State.State, wing: State.Wingman, ship: State.Ship, events: { Event })
   local post, base = Space.Object(state, wing.post), Space.Object(state, wing.base)
-  if post == nil or base == nil or #miners(state, ship.id) == 0 then
+  if post == nil or base == nil or #Digger.Lasers(state, ship.id) == 0 then
     wing.order = "stay"
     return
   end
@@ -524,69 +511,11 @@ local function work(state: State.State, wing: State.Wingman, ship: State.Ship, e
     return
   end
 
-  -- At the belt.
-  local lasers = miners(state, ship.id)
-  local function goIn()
+  -- At the belt: somebody after the fleet sends them in, and so does a
+  -- full hold or a belt with nothing left (Tactical/Digger).
+  if Pirates.Hunting(state, me) ~= 0 or not Digger.Work(state, me, post, events) then
     me.vitals.locks = {}
     give(state, { kind = "Dock", actor = ship.id, target = base.id }, events)
-  end
-  if Pirates.Hunting(state, me) ~= 0 then
-    goIn()
-    return
-  end
-  for _, item in lasers do
-    if running(me, item.id) then
-      return
-    end
-  end
-  -- Nothing is cutting: the hold is full, the rock is gone, or it is time to begin.
-  local capacity = Items.ShipStats(state, ship.id).cargo
-  local used = Items.CargoUsed(state, ship.id)
-  if capacity - used < math.max(2, 0.03 * capacity) then
-    goIn()
-    return
-  end
-  local reach = math.huge
-  for _, item in lasers do
-    reach = math.min(reach, (Modules.byId[item.type].miner :: Modules.Miner).range)
-  end
-  local rock: System.Object?, least = nil, math.huge
-  for _, object in Space.Describe(state, system).objects do
-    if object.kind == "asteroid" and object.site == post.id and Mining.Left(state, object) > 0 then
-      local far = Space.Distance(object :: any, me :: any)
-      if far < least then
-        rock, least = object, far
-      end
-    end
-  end
-  if rock == nil then
-    -- The belt is mined out: in with what there is, or wait for it to grow back.
-    if used > 0.03 * capacity then
-      goIn()
-    elseif me.mode ~= "stop" then
-      give(state, { kind = "Stop", actor = ship.id }, events)
-    end
-    return
-  end
-  if Space.Gap(me :: any, rock :: any) > reach * 0.8 then
-    if not (me.mode == "approach" and me.target == rock.id) then
-      give(state, { kind = "Approach", actor = ship.id, target = rock.id, range = reach * 0.5 }, events)
-    end
-    return
-  end
-  local locked, targeted = false, false
-  for _, lock in me.vitals.locks do
-    if lock.target == rock.id then
-      targeted, locked = true, lock.locked
-    end
-  end
-  if not targeted then
-    me.vitals.locks = {}
-    give(state, { kind = "LockTarget", actor = ship.id, target = rock.id }, events)
-  elseif locked then
-    for _, item in lasers do
-      give(state, { kind = "ActivateModule", actor = ship.id, item = item.id, target = rock.id }, events)
-    end
   end
 end
 

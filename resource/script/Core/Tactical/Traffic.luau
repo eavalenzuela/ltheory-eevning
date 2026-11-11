@@ -14,15 +14,23 @@
 -- been there, and is taken away again when it docks or reaches the gate
 -- it was making for. Nothing follows it to the next system.
 --
+-- And where order is kept there are miners at the belts: a mining
+-- frigate or two cutting rock (the rocks are the worse for it), which
+-- go in to a station when their holds are full, when a pirate turns
+-- up, or when somebody shoots at them.
+--
 -- A pilot who fires on anybody but a pirate is marked for a quarter of
 -- an hour (Combat does the marking). While that lasts, a patrol that
--- shares a grid with them fights them, as a pirate would.
+-- shares a grid with them fights them, as a pirate would. And in secure
+-- space the police come: within a quarter of a minute a pair of the
+-- faction's destroyers arrives wherever the marked pilot is, and more
+-- after them, up to four, which follow the pilot about the system and
+-- go when the mark has lapsed.
 --
 -- (A stand-in, like the pirates' rules: when the strategic layer joins
--- the game, who is about is who its trade and its navies send. Not yet:
--- police that come, guns on the stations, anybody remembering what a
--- pilot did once the mark has lapsed, miners at the belts.)
+-- the game, who is about is who its trade and its navies send.)
 
+local Digger = require("@lt/Core/Tactical/Digger")
 local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
@@ -48,8 +56,14 @@ Traffic.LAWLESS = 0.15
 -- Haulers and patrol ships a system has about at once, by how safe it is.
 Traffic.HAULERS = { secure = 5, low = 2, lawless = 1 } :: { [string]: number }
 Traffic.PATROLS = { secure = 2, low = 1, lawless = 0 } :: { [string]: number }
+-- Miners at the belts, likewise.
+Traffic.MINERS = { secure = 2, low = 1, lawless = 0 } :: { [string]: number }
+-- Police ships that come for a marked pilot in secure space, at most.
+Traffic.POLICE = 4
 -- Ticks a pilot stays marked after firing on somebody who is no pirate.
 Traffic.MARKED = 900
+-- What a miner flies, and cuts with.
+local MINER, LASER = "frigate.prospector", "miner.small"
 -- What anybody flies.
 local CIVILIAN = "industrial.hauler"
 -- What a hauler may have aboard, for whoever takes it.
@@ -208,6 +222,78 @@ local function patrol(state: State.State, system: number, rng: Rng.Rng, events: 
   order(state, { kind = "Orbit", actor = ship.id, target = site.id, range = 6000 }, events)
 end
 
+-- Put a miner at one of the system's belts (not one that is on nobody's
+-- chart), if there is a station for it to go home to.
+local function miner(state: State.State, system: number, rng: Rng.Rng, events: { Event })
+  local belts: { System.Object } = {}
+  local home = false
+  for _, object in Space.Describe(state, system).objects do
+    if object.kind == "belt" and state.sites[object.id] == nil then
+      table.insert(belts, object)
+    elseif object.kind == "station" and state.starbases[object.id] == nil then
+      home = true
+    end
+  end
+  if #belts == 0 or not home then
+    return
+  end
+  local belt = belts[Rng.Int(rng, #belts) + 1]
+  local ship = Space.NewShip(state, MINER, "Miner", "civilian", 0)
+  Items.Equip(state, ship.id, LASER, nil)
+  Items.Equip(state, ship.id, LASER, nil)
+  local x, y, z = near(rng, belt, 6000, 16000)
+  local ball = Space.Launch(state, ship, system, x, y, z)
+  table.insert(events, { kind = "BallAdded", ball = ball.id })
+  enlist(state, ship, "miner", belt.id, system)
+end
+
+-- The station nearest a ship, of those anybody may dock at.
+local function nearestStation(state: State.State, ball: State.Ball): System.Object?
+  local best: System.Object?, least = nil, math.huge
+  for _, object in Space.Describe(state, ball.system).objects do
+    if object.kind == "station" and state.starbases[object.id] == nil then
+      local far = Space.Distance(object :: any, ball :: any)
+      if far < least then
+        best, least = object, far
+      end
+    end
+  end
+  return best
+end
+
+-- Whether a pirate is on a ship's grid.
+local function pirateNear(state: State.State, ball: State.Ball): boolean
+  for _, id in state.pilotIds do
+    local other = state.balls[id]
+    if other and other.system == ball.system and other.grid == ball.grid and state.ships[id].owner == "pirates" then
+      return true
+    end
+  end
+  return false
+end
+
+-- The police: two destroyers of the system's faction (frigates, if it
+-- has no destroyer), out of warp a few kilometres from the marked pilot.
+local function police(state: State.State, mine: State.Ball, rng: Rng.Rng, events: { Event }): number
+  local faction = Factions.byId[state.galaxy.systems[mine.system].owner]
+  local kind = if faction then patrolKind(faction, "destroyer") or patrolKind(faction, "frigate") else nil
+  if faction == nil or kind == nil then
+    return 0
+  end
+  for _ = 1, 2 do
+    local ship = Space.NewShip(state, kind.hull, `{faction.name} Police`, faction.id, 0)
+    Pirates.Equip(state, ship, kind)
+    local angle = Rng.Float(rng, 0, 2 * math.pi)
+    local out = Rng.Float(rng, 7000, 11000)
+    local ball = Space.Launch(state, ship, mine.system, mine.x + out * math.cos(angle), mine.y + Rng.Float(rng, -1500, 1500),
+      mine.z + out * math.sin(angle))
+    table.insert(events, { kind = "BallAdded", ball = ball.id })
+    enlist(state, ship, "police", 0, mine.system)
+  end
+  table.insert(events, { kind = "PoliceArrived", count = 2, faction = faction.id })
+  return 2
+end
+
 -- Once a tick: see to the ships there are, and now and then bring
 -- another.
 function Traffic.Step(state: State.State, events: { Event })
@@ -220,7 +306,7 @@ function Traffic.Step(state: State.State, events: { Event })
   -- (a pilot the system's faction thinks ill enough of is fought on
   -- sight, mark or no mark: Assets/Standings)
   local marked = state.tick < state.player.marked or Standings.Hostile(state, state.galaxy.systems[system].owner)
-  local haulers, patrols = 0, 0
+  local haulers, patrols, miners, lawmen = 0, 0, 0, 0
   for _, id in table.clone(state.trafficIds) do
     local record = state.traffic[id]
     local ship = state.ships[id]
@@ -231,6 +317,45 @@ function Traffic.Step(state: State.State, events: { Event })
       State.RemoveId(state.trafficIds, id)
     elseif record.system ~= system then
       remove(state, id, "left", events)
+    elseif record.kind == "miner" then
+      miners += 1
+      if ball and ball.warp == nil and ball.intent == nil then
+        -- At the belt it cuts rock (Tactical/Digger). A full hold, a belt
+        -- with nothing left, a pirate, or somebody's fire sends it home:
+        -- from then on it is a ship coming in to dock, like any other.
+        local post = Space.Object(state, record.goal)
+        local hurt = ball.vitals.shield < 0.6 * ball.vitals.shieldMax
+        if post == nil or ball.grid ~= post.id or hurt or pirateNear(state, ball) or not Digger.Work(state, ball, post, events) then
+          local station = nearestStation(state, ball)
+          if station then
+            ball.vitals.locks = {}
+            record.kind, record.goal, record.born = "home", station.id, state.tick
+            order(state, { kind = "Dock", actor = id, target = station.id }, events)
+          else
+            remove(state, id, "left", events)
+          end
+        end
+      end
+    elseif record.kind == "police" then
+      local fighting = state.pilots[id] ~= nil
+      local sees = marked and mine ~= nil and ball ~= nil and mine.grid == ball.grid and mine.grid ~= 0
+      lawmen += if sees then 1 else 0
+      if sees and not fighting then
+        state.pilots[id] = { ship = id, range = 2500, prey = 0, home = 0, alone = 0, bounty = 0, tags = 0 }
+        State.InsertId(state.pilotIds, id)
+      elseif not marked then
+        -- (it is over: they go)
+        remove(state, id, "left", events)
+      elseif not sees and mine and ball and ball.warp == nil and mine.grid ~= 0 then
+        -- The pilot has gone somewhere else in the system: after them.
+        if fighting then
+          state.pilots[id] = nil
+          State.RemoveId(state.pilotIds, id)
+          ball.vitals.locks = {}
+          ball.vitals.running = {}
+        end
+        order(state, { kind = "WarpTo", actor = id, target = mine.id, range = 8000 }, events)
+      end
     elseif record.kind == "patrol" then
       patrols += 1
       local fighting = state.pilots[id] ~= nil
@@ -249,8 +374,13 @@ function Traffic.Step(state: State.State, events: { Event })
         end
       end
     else
-      haulers += 1
-      if ship.docked ~= 0 and record.kind == "in" then
+      -- (a miner going "home" docks as a hauler coming "in" does)
+      if record.kind == "home" then
+        miners += 1
+      else
+        haulers += 1
+      end
+      if ship.docked ~= 0 and (record.kind == "in" or record.kind == "home") then
         remove(state, id, "docked", events)
       elseif ball and ball.warp == nil and ball.intent == nil then
         if ball.grid == record.goal and record.kind == "out" then
@@ -282,6 +412,13 @@ function Traffic.Step(state: State.State, events: { Event })
   end
   if patrols < Traffic.PATROLS[band] then
     patrol(state, system, rng, events)
+  end
+  if miners < Traffic.MINERS[band] and state.galaxy.systems[system].owner ~= "" then
+    miner(state, system, rng, events)
+  end
+  -- The police, for a marked pilot in secure space: wherever they are.
+  if marked and mine and mine.grid ~= 0 and band == "secure" and lawmen < Traffic.POLICE then
+    police(state, mine, rng, events)
   end
 end
 

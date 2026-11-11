@@ -556,20 +556,24 @@ function Debug.Pirates(): (number, number)
 end
 
 -- The other ships about: how many the system has, how many of them are
--- on the pilot's grid, and how many ships on the overview would fire on
--- the pilot.
-function Debug.Traffic(): (number, number, number)
+-- on the pilot's grid, how many ships on the overview would fire on
+-- the pilot, how many of the police have come, and how many miners
+-- there are (at a belt or going home).
+function Debug.Traffic(): (number, number, number, number, number)
   local state = session.game.state
   local me = state.balls[state.player.ship]
-  local near, hostile = 0, 0
+  local near, hostile, police, miners = 0, 0, 0, 0
   for _, id in state.trafficIds do
     local ball = state.balls[id]
+    local kind = state.traffic[id].kind
     near += if me and ball and ball.grid == me.grid then 1 else 0
+    police += if kind == "police" then 1 else 0
+    miners += if kind == "miner" or kind == "home" then 1 else 0
   end
   for _, entry in Core.Query.Overview(session.game) do
     hostile += if entry.hostile then 1 else 0
   end
-  return #state.trafficIds, near, hostile
+  return #state.trafficIds, near, hostile, police, miners
 end
 
 -- Two cheats, for scripted runs that test something other than buying

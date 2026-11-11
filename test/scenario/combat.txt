@@ -27,19 +27,19 @@ lua GameDebug.TimeScale(4)
 lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
 until GameDebug.InWarp()
 until GameDebug.Idle()
-until GameDebug.Count('ship') > 0
-lua assert(GameDebug.Count('ship') == 1, 'this seed brings one pirate')
+until GameDebug.Pirates() > 0
+lua assert(GameDebug.Pirates() == 1, 'this seed brings one pirate')
 
 # It starts out of targeting range and comes to us.
-until GameDebug.Distance('ship') < 18000
-lua assert(GameDebug.Lock('ship'), 'the lock was refused')
+until GameDebug.Distance('Pirate') < 18000
+lua assert(GameDebug.Lock('Pirate'), 'the lock was refused')
 until GameDebug.Locked() > 0
-lua assert(GameDebug.Order('Orbit', 'ship', 1500), 'orbit was refused')
+lua assert(GameDebug.Order('Orbit', 'Pirate', 1500), 'orbit was refused')
 lua assert(GameDebug.Fire() == 2, 'both guns should open fire')
 
 until GameDebug.Count('wreck') > 0
 lua assert(GameDebug.Hull() == 'frigate.courier', 'the player lost the fight')
-lua assert(GameDebug.Count('ship') == 0, 'the pirate is still there')
+lua assert(GameDebug.Pirates() == 0, 'the pirate is still there')
 lua assert(GameDebug.Wallet() == 11000, 'the bounty was not paid')
 
 lua assert(GameDebug.Order('Approach', 'wreck', 500), 'approach was refused')

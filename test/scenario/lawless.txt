@@ -25,11 +25,11 @@ lua assert(select(2, GameDebug.Security()) == 'low', 'the system next door shoul
 lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
 until GameDebug.InWarp()
 until GameDebug.Idle()
-until GameDebug.Count('ship') >= 2
+until GameDebug.Pirates() >= 2
 frames 5
 lua assert(GameDebug.Pirates() >= 2, 'a belt in low security should bring a pack')
 lua assert(select(2, GameDebug.Pirates()) == GameDebug.Pirates(), 'a pirate is not drawn as a hull of the pirates\' own with its weapons on it')
-lua print('low security:', GameDebug.Pirates(), 'pirates,', GameDebug.Distance('ship'), 'm off')
+lua print('low security:', GameDebug.Pirates(), 'pirates,', GameDebug.Distance('Pirate'), 'm off')
 
 # Lawless space.
 lua assert(GameDebug.Order('Jump', 'Noranor'), 'the jump into lawless space was refused')
@@ -40,7 +40,7 @@ lua assert(GameDebug.Security() == 0)
 lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
 until GameDebug.InWarp()
 until GameDebug.Idle()
-until GameDebug.Count('ship') >= 3
+until GameDebug.Pirates() >= 3
 frames 5
 lua assert(select(2, GameDebug.Pirates()) == GameDebug.Pirates(), 'a pirate in lawless space is not drawn as its own hull')
 lua assert(GameDebug.Distance('Cobaltite') < 1e9 or GameDebug.Distance('Iridite') < 1e9, 'a lawless belt should have rare ore')

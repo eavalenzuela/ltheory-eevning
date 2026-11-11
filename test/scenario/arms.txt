@@ -25,9 +25,9 @@ lua GameDebug.TimeScale(4)
 lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
 until GameDebug.InWarp()
 until GameDebug.Idle()
-until GameDebug.Count('ship') > 0
-until GameDebug.Distance('ship') < 18000
-lua assert(GameDebug.Lock('ship'), 'the lock was refused')
+until GameDebug.Pirates() > 0
+until GameDebug.Distance('Pirate') < 18000
+lua assert(GameDebug.Lock('Pirate'), 'the lock was refused')
 until GameDebug.Locked() > 0
 lua assert(GameDebug.Fire() == 4, 'all four weapons should open fire')
 lua GameDebug.TimeScale(1)

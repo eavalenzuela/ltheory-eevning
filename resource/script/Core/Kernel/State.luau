@@ -183,7 +183,9 @@ export type Pilot = {
 }
 
 -- A ship of the traffic: a hauler coming "in" to dock at 'goal' or going
--- "out" to the gate 'goal', or a "patrol" on station at 'goal'. It
+-- "out" to the gate 'goal', a "patrol" on station at 'goal', a "miner"
+-- at the belt 'goal' (going "home" to the station 'goal' when it has
+-- done), or one of the "police" come for a marked pilot. It
 -- belongs to the system it was made in, and 'wait' counts its last
 -- moments at a gate.
 export type Traffic = { ship: number, kind: string, goal: number, system: number, born: number, wait: number }
