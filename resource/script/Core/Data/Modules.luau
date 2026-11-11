@@ -98,6 +98,10 @@ export type ModuleType = {
   boostCapacitor: number?,  -- GJ per cycle
   hex: Hex?,
   salvager: Salvager?,
+  -- A cloak: while it runs (it is a 'boost', which is what slows the
+  -- ship) nobody can target the ship, and anything that comes within
+  -- 'reach' metres of it switches it off.
+  cloak: { reach: number }?,
   -- Skills a pilot needs to fit it. (Where absent, Data/Skills says.)
   requires: { { skill: string, level: number } }?,
   -- 2 for a tech 2 module: the improved make of the module 'base',
@@ -288,6 +292,20 @@ local modules: { ModuleType } = {
     cpu = 30, powergrid = 1, volume = 5, basePrice = 40000, passive = {},
     hex = { kind = "jam", range = 25000, strength = 0.35, duration = 10, capacitor = 14 },
     requires = { { skill = "electronic.warfare", level = 3 } },
+  },
+
+  -- Not being seen. While it runs the ship cannot be targeted, and what
+  -- had it targeted loses it; it flies at a quarter of its speed, can
+  -- lock nothing and switch nothing else on, and may still warp. It
+  -- cannot be switched on while anybody has the ship targeted, nor
+  -- within two kilometres of anything, and anything that comes that
+  -- near switches it off.
+  {
+    id = "cloak.device", name = "Cloaking Device", slot = "high", hardpoint = "",
+    cpu = 30, powergrid = 1, volume = 5, basePrice = 250000, passive = {},
+    boost = { ship("maxVelocity", "mul", 0.25) }, boostDuration = 5, boostCapacitor = 2,
+    cloak = { reach = 2000 },
+    requires = { { skill = "cloaking", level = 1 } },
   },
 
   -- Mending somebody else: shield or armour put back on another ship,

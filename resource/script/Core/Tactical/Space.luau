@@ -15,6 +15,7 @@ local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
 local Motion = require("@lt/Core/Tactical/Motion")
 local Rng = require("@lt/Core/Kernel/Rng")
+local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
 local System = require("@lt/Core/Describe/System")
@@ -598,10 +599,18 @@ function Space.Decide(state: State.State, events: { Event })
         warp.plan = Motion.PlanWarp(distance, ball.warpSpeed, ball.maxVelocity)
         ball.grid = 0
         ball.tvx, ball.tvy, ball.tvz = 0, 0, 0
-        -- Locks and running modules do not survive entering warp.
+        -- Locks and running modules do not survive entering warp (a
+        -- cloak does: a ship can warp unseen).
         ball.vitals.locks = {}
         if #ball.vitals.running > 0 then
-          ball.vitals.running = {}
+          local kept: { State.Running } = {}
+          for _, running in ball.vitals.running do
+            local item = state.items[running.item]
+            if item and Modules.byId[item.type].cloak then
+              table.insert(kept, running)
+            end
+          end
+          ball.vitals.running = kept
           Vitals.Refresh(state, ball)
         end
         regrid = true

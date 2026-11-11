@@ -273,6 +273,12 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     row(to, "Range", metres(salvager.range))
     row(to, "Capacitor a cycle", `{plain(salvager.capacitor)} GJ every {seconds(salvager.duration)}`)
   end
+  if module.cloak then
+    local to = section(sheet, "Cloak")
+    row(to, "While it runs", "the ship cannot be targeted, and can target nothing")
+    row(to, "Switched off by", `anything within {metres(module.cloak.reach)}`)
+    row(to, "Cannot be switched on", "while anybody has the ship targeted")
+  end
   if module.hex then
     local hex = module.hex
     local titles: { [string]: string } = { web = "Stasis web", scramble = "Warp disruption", paint = "Target painting",

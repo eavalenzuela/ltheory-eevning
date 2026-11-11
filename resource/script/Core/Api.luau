@@ -686,6 +686,11 @@ function Query.RepairCost(game: Game): number
   return Aftermath.RepairCost(game.state, game.state.ships[game.state.player.ship])
 end
 
+-- Whether a ship is cloaked: nobody can target it.
+function Query.Cloaked(game: Game, ship: number): boolean
+  return Combat.Cloaked(game.state, ship)
+end
+
 -- The chance a fitted turret would hit a target now, or nil.
 function Query.HitChance(game: Game, ship: number, item: number, target: number): number?
   return Combat.HitChance(game.state, ship, item, target)

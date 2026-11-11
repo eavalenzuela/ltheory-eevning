@@ -139,6 +139,10 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "PilotLeft" then
     Session.Say(session, if (event.reason :: string) == "unpaid" then `{event.name} could not be paid and has left: their ship is at your home station`
       else `{event.name} has been let go`)
+  elseif kind == "Cloaked" and event.ball == mine then
+    Session.Say(session, "Cloaked: nobody can target you, and you can target nobody")
+  elseif kind == "Decloaked" and event.ball == mine then
+    Session.Say(session, `Decloaked: too near {event.by}`)
   elseif kind == "Jammed" and event.ball == mine then
     Session.Say(session, "Jammed: your locks are broken")
   elseif kind == "Held" and event.ball == mine then

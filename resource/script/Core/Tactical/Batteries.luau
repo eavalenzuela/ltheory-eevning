@@ -17,6 +17,7 @@
 -- battery's own range and tracking, a starbase's batteries waiting to
 -- come online.)
 
+local Combat = require("@lt/Core/Tactical/Combat")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
@@ -65,7 +66,7 @@ function Batteries.Fire(state: State.State, events: { Event }): { Hit }
     local ship = state.ships[id]
     if ball.system == me.system and ball.grid == me.grid and ship and Ships.byId[ship.type].class ~= "capsule"
       and (ship.owner == "pirates" or (marked and id == me.id))
-      and not (ball.warp and ball.warp.stage == "warp")
+      and not (ball.warp and ball.warp.stage == "warp") and not Combat.Cloaked(state, id)
       and Space.Distance(ball :: any, station :: any) <= Batteries.RANGE then
       table.insert(targets, id)
     end

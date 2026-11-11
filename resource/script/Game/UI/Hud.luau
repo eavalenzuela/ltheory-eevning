@@ -454,6 +454,9 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
     if module.salvager then
       note = if running then "salvaging" else "idle"
     end
+    if module.cloak then
+      note = if running then "cloaked" else "idle"
+    end
     if running then
       local duration = if module.weapon then module.weapon.duration
         elseif module.repair then module.repair.duration
@@ -513,6 +516,10 @@ local function drawNavigation(session: Session.Session, ball: State.Ball, x: num
   end
   if ball.vitals.paint > 1 or ball.vitals.damp < 1 then
     Im.Text(if ball.vitals.damp < 1 then "DAMPENED" else "PAINTED", x + 310, y + 12, 13, Im.WARN)
+  end
+  -- (and whether anybody can see the ship at all)
+  if Core.Query.Cloaked(game, ball.id) then
+    Im.Text("CLOAKED", x + 400, y + 12, 13, Im.ACCENT)
   end
   local inWarp = ball.warp ~= nil and ball.warp.stage == "warp"
   local stop = Keys.Pressed("Space") and not inWarp

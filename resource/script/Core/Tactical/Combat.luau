@@ -73,9 +73,54 @@ end
 
 -- Whether 'target' can be locked or kept locked by 'ball': there, in the
 -- same place, and within range.
+-- The cloak a ship has running, if it has one: the fitted module's item.
+local function cloakOf(state: State.State, ball: State.Ball): State.Item?
+  for _, running in ball.vitals.running do
+    local item = state.items[running.item]
+    if item and Modules.byId[item.type].cloak then
+      return item
+    end
+  end
+  return nil
+end
+
+-- Whether a ship is cloaked: nobody can target it.
+function Combat.Cloaked(state: State.State, id: number): boolean
+  local ball = state.balls[id]
+  return ball ~= nil and cloakOf(state, ball) ~= nil
+end
+
+-- What is within 'reach' of a ship on its grid, if anything: another
+-- ship, a wreck, a station, a gate or a rock. (A cloak does not work
+-- that near anything.) Its name.
+local function crowding(state: State.State, ball: State.Ball, reach: number): string?
+  for _, id in state.ballIds do
+    local other = state.balls[id]
+    if id ~= ball.id and other.system == ball.system and other.grid == ball.grid and Space.Gap(ball :: any, other :: any) <= reach then
+      return other.name
+    end
+  end
+  for _, id in state.wreckIds do
+    local wreck = state.wrecks[id]
+    if wreck.system == ball.system and wreck.grid == ball.grid and Space.Gap(ball :: any, wreck :: any) <= reach then
+      return wreck.name
+    end
+  end
+  if ball.grid ~= 0 then
+    for _, object in Space.Describe(state, ball.system).objects do
+      local kind: string = object.kind
+      if (object.site == ball.grid or object.id == ball.grid) and (kind == "station" or kind == "gate" or kind == "asteroid")
+        and Space.Gap(ball :: any, object :: any) <= reach then
+        return object.name
+      end
+    end
+  end
+  return nil
+end
+
 local function lockable(state: State.State, ball: State.Ball, target: number): (boolean, string?)
   local body = Space.Body(state, target)
-  if body == nil or target == ball.id then
+  if body == nil or target == ball.id or Combat.Cloaked(state, target) then
     return false, "no such target"
   elseif Space.SystemOf(state, target) ~= ball.system then
     return false, "target is in another system"
@@ -104,6 +149,10 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
     return false, "in warp"
   end
   local kind = command.kind
+  -- (a cloaked ship does nothing but fly, and switch its cloak off)
+  if (kind == "LockTarget" or kind == "ActivateModule") and cloakOf(state, ball) then
+    return false, "cloaked"
+  end
 
   if kind == "LockTarget" then
     local target = command.target or 0
@@ -125,6 +174,19 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
     local module = Modules.byId[item.type]
     if findRunning(ball, item.id) then
       return false, "already running"
+    end
+    if module.cloak then
+      for _, id in state.ballIds do
+        local other = state.balls[id]
+        if id ~= ball.id and other.system == ball.system and other.grid == ball.grid and findLock(other, ball.id) then
+          return false, "somebody has you targeted"
+        end
+      end
+      local near = crowding(state, ball, module.cloak.reach)
+      if near then
+        return false, `too near {near} to cloak`
+      end
+      return true
     end
     if module.weapon then
       local lock = findLock(ball, command.target or 0)
@@ -200,6 +262,11 @@ function Combat.Apply(state: State.State, command: State.Command, events: { Even
   elseif kind == "ActivateModule" then
     local item = state.items[command.item :: number]
     local module = Modules.byId[item.type]
+    if module.cloak then
+      -- Everything else goes off, and every lock is let go.
+      ball.vitals.running, ball.vitals.locks = {}, {}
+      table.insert(events, { kind = "Cloaked", ball = ball.id })
+    end
     table.insert(ball.vitals.running, {
       item = item.id,
       target = if module.weapon or module.miner or module.hex or module.salvager then command.target :: number else 0,
@@ -664,6 +731,37 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
       end
       if held then
         table.insert(events, { kind = "Held", ball = id, web = web, scrambled = scrambled })
+      end
+    end
+  end
+
+  -- The cloaked: one that something has come too near is cloaked no
+  -- longer, and nobody keeps a lock on one that still is.
+  local hidden: { [number]: boolean } = {}
+  local any = false
+  for _, id in state.ballIds do
+    local ball = state.balls[id]
+    local cloak = cloakOf(state, ball)
+    if cloak then
+      local near = crowding(state, ball, (Modules.byId[cloak.type].cloak :: any).reach)
+      if near then
+        local _, index = findRunning(ball, cloak.id)
+        stop(state, ball, index, `too near {near}`, events)
+        table.insert(events, { kind = "Decloaked", ball = id, by = near })
+      else
+        hidden[id] = true
+        any = true
+      end
+    end
+  end
+  if any then
+    for _, id in state.ballIds do
+      local ball = state.balls[id]
+      for at = #ball.vitals.locks, 1, -1 do
+        local target = ball.vitals.locks[at].target
+        if hidden[target] then
+          Combat.DropLock(state, ball, target, "cloaked", events)
+        end
       end
     end
   end

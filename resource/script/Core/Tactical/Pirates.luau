@@ -267,7 +267,8 @@ local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
   local best: State.Ball?, least = nil, math.huge
   local drone: State.Ball?, droneLeast = nil, math.huge
   local function consider(other: State.Ball?, small: boolean)
-    if other == nil or other.system ~= ball.system or other.grid ~= ball.grid then
+    -- (what is cloaked is not there to be gone for)
+    if other == nil or other.system ~= ball.system or other.grid ~= ball.grid or Combat.Cloaked(state, other.id) then
       return
     end
     local far = Space.Distance(other :: any, ball :: any)
@@ -324,7 +325,7 @@ function Pirates.Think(state: State.State, events: { Event })
 
     -- Prey: a ship of the pilot's side, if one is here and worth shooting.
     local prey: State.Ball? = state.balls[pilot.prey]
-    if prey == nil or prey.system ~= ball.system or prey.grid ~= ball.grid then
+    if prey == nil or prey.system ~= ball.system or prey.grid ~= ball.grid or Combat.Cloaked(state, prey.id) then
       prey = pickPrey(state, ball)
       pilot.prey = if prey then prey.id else 0
     end

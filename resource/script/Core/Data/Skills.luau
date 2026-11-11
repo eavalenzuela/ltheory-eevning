@@ -54,6 +54,9 @@ local skills: { Skill } = {
   -- Getting in another ship's way
   { id = "electronic.warfare", name = "Electronic Warfare", rank = 3, start = -1, requires = { { skill = "electronics", level = 2 } },
     note = "To fit painters and dampeners (1), neutralisers (2) and jammers (3)." },
+  -- Not being seen
+  { id = "cloaking", name = "Cloaking", rank = 4, start = -1, requires = { { skill = "electronics", level = 3 } },
+    note = "Level 1 to fit a cloaking device." },
   -- Holding things
   { id = "propulsion.jamming", name = "Propulsion Jamming", rank = 3, start = -1, requires = { { skill = "electronics", level = 2 } },
     note = "Level 1 to fit a stasis webifier or a warp disruptor." },
