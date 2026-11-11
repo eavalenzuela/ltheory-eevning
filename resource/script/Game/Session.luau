@@ -90,6 +90,9 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `Built: {event.quantity} x {Types.Info(event.product).name}`)
   elseif kind == "ResearchDone" then
     Session.Say(session, `Research done: {Types.Info(event.blueprint).name}, {event.what} level {event.level}`)
+  elseif kind == "InventionDone" then
+    Session.Say(session, if event.success then `Invented: {Types.Info(event.product).name} is in the hangar`
+      else `The invention came to nothing: {Types.Info(event.blueprint).name} is back in the hangar`)
   elseif kind == "ShipAssembled" then
     Session.Say(session, "The hull is assembled: board it from the Ships tab")
   elseif kind == "StarbaseAnchored" then

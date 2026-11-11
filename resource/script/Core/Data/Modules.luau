@@ -100,6 +100,10 @@ export type ModuleType = {
   salvager: Salvager?,
   -- Skills a pilot needs to fit it. (Where absent, Data/Skills says.)
   requires: { { skill: string, level: number } }?,
+  -- 2 for a tech 2 module: the improved make of the module 'base',
+  -- which nobody sells: it is invented and built (Assets/Industry).
+  tech: number?,
+  base: string?,
 }
 
 export type ChargeType = {
@@ -608,6 +612,41 @@ for index, sized in MISSILE_SIZES do
   end
 end
 
+-- Tech 2: the improved make of every weapon, repairer, shield
+-- extender, armour plate and mining laser. A fifth more damage, or a
+-- quarter more of what it mends, holds or cuts, for a seventh more CPU
+-- and powergrid and a good deal more skill (Data/Skills). Nobody sells
+-- one: its blueprint is invented from the plain module's in a
+-- laboratory, and it is built of the plain module and of minerals that
+-- safe space does not have (Data/Blueprints, Assets/Industry).
+local TECH2 = { damage = 1.2, amount = 1.25, fitting = 1.15, price = 8 }
+for _, base in table.clone(modules) do
+  local buffer = string.sub(base.id, 1, 15) == "shield.extender" or string.sub(base.id, 1, 11) == "armor.plate"
+  if base.weapon or base.repair or base.miner or buffer then
+    local weapon, repair, miner = base.weapon, base.repair, base.miner
+    local passive: { Modifier } = {}
+    for _, m in base.passive do
+      -- (what it holds is more; what it weighs and shows is the same)
+      local more = m.op == "add" and (m.attribute == "shield" or m.attribute == "armor")
+      table.insert(passive, { on = m.on, family = m.family, attribute = m.attribute, op = m.op,
+        value = if more then m.value * TECH2.amount else m.value, stack = m.stack })
+    end
+    table.insert(modules, {
+      id = base.id .. ".ii", name = base.name .. " II", slot = base.slot, hardpoint = base.hardpoint,
+      cpu = math.ceil(base.cpu * TECH2.fitting), powergrid = math.ceil(base.powergrid * TECH2.fitting),
+      volume = base.volume, basePrice = base.basePrice * TECH2.price, passive = passive,
+      weapon = if weapon then { family = weapon.family, duration = weapon.duration, capacitor = weapon.capacitor,
+        damageMultiplier = weapon.damageMultiplier * TECH2.damage, optimal = weapon.optimal, falloff = weapon.falloff,
+        tracking = weapon.tracking, clip = weapon.clip, reload = weapon.reload, size = weapon.size } else nil,
+      repair = if repair then { layer = repair.layer, amount = repair.amount * TECH2.amount, duration = repair.duration,
+        capacitor = repair.capacitor } else nil,
+      miner = if miner then { volume = miner.volume * TECH2.amount, duration = miner.duration, capacitor = miner.capacitor,
+        range = miner.range } else nil,
+      tech = 2, base = base.id,
+    })
+  end
+end
+
 local Modules = {
   list = modules,
   byId = {} :: { [string]: ModuleType },
@@ -617,6 +656,20 @@ local Modules = {
 
 for _, m in modules do
   Modules.byId[m.id] = m
+end
+
+-- The tech 2 make of a module, if it has one.
+function Modules.Improved(id: string): ModuleType?
+  local better = Modules.byId[id .. ".ii"]
+  return if better and better.tech == 2 then better else nil
+end
+
+-- A module's size, 1 to 3: its weapon's, or what its name says.
+function Modules.SizeOf(module: ModuleType): number
+  if module.weapon then
+    return module.weapon.size
+  end
+  return if string.find(module.id, "large", 1, true) then 3 elseif string.find(module.id, "medium", 1, true) then 2 else 1
 end
 
 -- Whether a module is one that mends another ship (a remote shield

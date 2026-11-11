@@ -130,11 +130,20 @@ local function open(name: string, variety: string): Economy.Economy
   local econ = Economy.New(classes, {})
   local node = Economy.AddNode(econ, name, 0)
   for index, id in Types.Ids() do
-    local normal = normalStock(Types.Info(id))
-    Economy.SetTarget(econ, node, index, normal)
-    Economy.SetStock(econ, node, index, normal)
-    -- The wider world restores a quarter of a shortfall an hour.
-    econ.nodes[node].anchor[index] = normal * 0.25
+    local info = Types.Info(id)
+    local normal = normalStock(info)
+    if info.scarce then
+      -- Nobody brings these: a station has what pilots have sold it,
+      -- would like a few, and pays well while it has none.
+      Economy.SetTarget(econ, node, index, 4)
+      Economy.SetStock(econ, node, index, 0)
+      econ.nodes[node].anchor[index] = 0
+    else
+      Economy.SetTarget(econ, node, index, normal)
+      Economy.SetStock(econ, node, index, normal)
+      -- The wider world restores a quarter of a shortfall an hour.
+      econ.nodes[node].anchor[index] = normal * 0.25
+    end
   end
   return econ
 end

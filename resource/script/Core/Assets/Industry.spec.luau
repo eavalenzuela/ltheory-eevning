@@ -342,4 +342,85 @@ suite:Case("research wants a laboratory, and is in the save", function(t)
   t.eq({ Industry.Researched(loaded.state, "blueprint.ammo.emp") }, { 0, 1 })
 end)
 
+suite:Case("invention works out a tech 2 blueprint from a plain one, for datacores, and may come to nothing", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local home = state.player.home
+  state.wallet = 10000000
+  -- What has no tech 2 make cannot be invented from. (Rounds have none.)
+  local rounds = assert(inHangar(game, "blueprint.ammo.emp"))
+  t.eq(Industry.InventionPlan(state, Blueprints.byId["blueprint.ammo.emp"]), nil)
+  t.eq(refused(game, { kind = "StartResearch", actor = 0, item = rounds.id, what = "invent" }), "there is no tech 2 make of that to invent")
+  -- A small autocannon has: two datacores, half an hour, three chances in ten.
+  local plain = Items.Add(state, "blueprint.autocannon.small", 1, home, "hangar")
+  local invent: State.Command = { kind = "StartResearch", actor = 0, item = plain.id, what = "invent" }
+  local plan = assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.autocannon.small"]))
+  t.eq({ plan.product, plan.blueprint, plan.datacores, plan.seconds } :: { any },
+    { "autocannon.small.ii", "blueprint.autocannon.small.ii", 2, 1800 } :: { any })
+  t.near(plan.chance, 0.3, 1e-9)
+  t.eq(assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.artillery.large"])).datacores, 8)
+  t.eq(refused(game, invent), "needs Invention 1")
+  state.skills.invention = 2
+  t.near(assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.autocannon.small"])).chance, 0.4, 1e-9)
+  t.eq(refused(game, invent), "needs 2 more Datacore")
+  Items.Add(state, Industry.DATACORE, 1, home, "hangar")
+  t.eq(refused(game, invent), "needs 1 more Datacore")
+  -- Try it until one comes off and one does not: each takes its datacores and fee, and gives the plain blueprint back.
+  Items.Add(state, Industry.DATACORE, 99, home, "hangar")
+  local won, lost = 0, 0
+  for attempt = 1, 30 do
+    local wallet, cores = state.wallet, hangar(game, Industry.DATACORE)
+    order(t, game, { kind = "StartResearch", actor = 0, item = stack(game, "blueprint.autocannon.small").id, what = "invent" })
+    t.eq({ wallet - state.wallet, cores - hangar(game, Industry.DATACORE), hangar(game, "blueprint.autocannon.small") },
+      { plan.fee, 2, 0 })
+    local had = hangar(game, "blueprint.autocannon.small.ii")
+    local event, ticks = stepUntil(game, "InventionDone", 2000)
+    t.ok(ticks >= 1790 and ticks <= 1800, `an invention took {ticks} ticks`)
+    t.eq({ event.blueprint, event.product } :: { any }, { "blueprint.autocannon.small", "blueprint.autocannon.small.ii" } :: { any })
+    t.eq(hangar(game, "blueprint.autocannon.small"), 1)
+    t.eq(hangar(game, "blueprint.autocannon.small.ii") - had, if event.success then 1 else 0)
+    won += if event.success then 1 else 0
+    lost += if event.success then 0 else 1
+    if won > 0 and lost > 0 and attempt >= 12 then
+      break
+    end
+  end
+  t.ok(won >= 1 and lost >= 1, `{won} inventions came off and {lost} did not`)
+  t.ok(won <= lost + 3, `at four chances in ten, {won} of {won + lost} came off`)
+
+  -- What was invented builds the tech 2 module: of the plain one, components and the rare minerals.
+  local made = Blueprints.byId["blueprint.autocannon.small.ii"]
+  t.eq({ made.materials[1].type, made.materials[1].quantity } :: { any }, { "autocannon.small", 1 } :: { any })
+  local rare = 0
+  for _, material in made.materials do
+    Items.Add(state, material.type, material.quantity, home, "hangar")
+    rare += if material.type == "mineral.cobalt" or material.type == "mineral.iridium" or material.type == "mineral.titanium" then 1 else 0
+  end
+  t.eq(rare, 3)
+  order(t, game, { kind = "StartJob", actor = 0, item = stack(game, made.id).id, quantity = 1 })
+  local built = stepUntil(game, "JobDone", 5000)
+  t.eq({ built.product, hangar(game, "autocannon.small.ii"), hangar(game, "autocannon.small") } :: { any },
+    { "autocannon.small.ii", 1, 0 } :: { any })
+  -- It wants more of the skill than the plain one to fit.
+  local item = stack(game, "autocannon.small.ii")
+  t.eq(refused(game, { kind = "Fit", actor = 0, item = item.id }), "needs Projectile Turrets 4")
+end)
+
+suite:Case("nobody sells a tech 2 module, its blueprint or a datacore, and a station that has none buys them dear", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local home = state.player.home
+  state.wallet = 100000000
+  for _, type in { "autocannon.small.ii", "blueprint.autocannon.small.ii", "datacore" } do
+    local quote = Core.Query.Quote(game, home, type)
+    t.eq(quote.stock, 0, type)
+    t.eq(refused(game, { kind = "BuyNow", actor = 0, type = type, quantity = 1 }) ~= "(accepted)", true, type)
+    -- (what a pilot brings is bought for more than its base price, there being none)
+    Items.Add(state, type, 1, home, "hangar")
+    t.ok(Core.Query.SellValue(game, home, type, 1) > Types.Info(type).basePrice, type)
+  end
+  -- The plain module is for sale as it always was.
+  t.ok(Core.Query.Quote(game, home, "autocannon.small").stock > 0)
+end)
+
 return suite

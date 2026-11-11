@@ -873,6 +873,20 @@ local function drawIndustry(session: Session.Session, game: Core.Game, player: C
         end
       end
       line += 34
+      -- (and the inventing of its tech 2 make, where there is one)
+      local invention = research.invention
+      if invention then
+        local invent: State.Command = { kind = "StartResearch", actor = 0, item = chosenItem.id, what = "invent" }
+        local canInvent, whyNotInvent = Session.CanDo(session, invent)
+        if Im.Button("Invent tech 2", dx, line, 150, 26, canInvent, "Invent") then
+          Session.Do(session, invent)
+        end
+        Im.Text(string.format("%d datacores, %s, %d%% chance", invention.datacores, Format.Duration(invention.seconds),
+          math.floor(invention.chance * 100 + 0.5)), dx + 156, line - 1, 12, Im.DIM)
+        Im.Text(if canInvent then Format.Credits(invention.fee) else shorten(tostring(whyNotInvent), 44), dx + 156, line + 13, 12,
+          if canInvent then Im.DIM else Im.WARN)
+        line += 34
+      end
     end
   end
 

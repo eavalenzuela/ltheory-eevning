@@ -94,8 +94,12 @@ local function loot(state: State.State, rng: Rng.Rng, wreck: number, rich: numbe
   end
   Items.Add(state, "scrap.metal", math.floor((8 + Rng.Int(rng, 30)) * rich), wreck, "cargo")
   -- Now and then something that was fitted, or the drawings for it.
+  -- (a plain one: the tech 2 make of anything is nobody's to find)
   if Rng.Chance(rng, 0.5) then
     local module = Modules.list[Rng.Int(rng, #Modules.list) + 1]
+    if module.tech == 2 and module.base then
+      module = Modules.byId[module.base]
+    end
     Items.Add(state, if Rng.Chance(rng, 0.15) then "blueprint." .. module.id else module.id, 1, wreck, "cargo")
   end
 end
@@ -182,6 +186,10 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
         x + Rng.Float(rng, -6000, 6000), y + Rng.Float(rng, -1500, 1500), z + Rng.Float(rng, -6000, 6000),
         Rng.Float(rng, 50, 140), expires)
       loot(state, rng, wreck, rich)
+      -- (a derelict has what an invention is worked out from: Assets/Industry)
+      if kind == "relic" then
+        Items.Add(state, "datacore", (1 + Rng.Int(rng, 2)) * rich, wreck, "cargo")
+      end
       if kind == "combat" then
         loot(state, rng, wreck, rich)
         Items.Add(state, "tag.pirate", 2 * rich, wreck, "cargo")

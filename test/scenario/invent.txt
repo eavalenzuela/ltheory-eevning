@@ -1,0 +1,34 @@
+# Invention, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/invent.txt
+#
+# A small autocannon's blueprint and two datacores are given. On the
+# Industry tab the blueprint offers the inventing of its tech 2 make,
+# which wants the Invention skill. With the skill, it is begun: the
+# datacores and the blueprint go into the laboratory, and half an hour on
+# the blueprint is back, with a tech 2 one beside it if it came off.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Give('blueprint.autocannon.small', 1) and GameDebug.Give('datacore', 2))
+lua GameDebug.Grant(100000)
+frames 3
+lua assert(GameDebug.Blueprint('blueprint.autocannon.small'), 'no such blueprint')
+until GameDebug.Tab() == 'Industry'
+frames 3
+lua assert(not GameDebug.CanPress('Invent'), 'inventing should want its skill')
+lua GameDebug.Train('invention', 1)
+until GameDebug.Press('Invent')
+until GameDebug.Jobs() == 1
+lua assert(GameDebug.Hangar('datacore') == 0, 'the datacores should be used')
+lua assert(GameDebug.Hangar('blueprint.autocannon.small') == 0, 'the blueprint should be in the laboratory')
+lua GameDebug.TimeScale(60)
+patience 300
+until GameDebug.Jobs() == 0
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Hangar('blueprint.autocannon.small') == 1, 'the blueprint should be back')
+lua print('tech 2 blueprints invented:', GameDebug.Hangar('blueprint.autocannon.small.ii'))
+lua assert(GameDebug.Hangar('blueprint.autocannon.small.ii') <= 1)
+
+echo invent scenario passed
+quit

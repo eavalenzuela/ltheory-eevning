@@ -178,7 +178,8 @@ suite:Case("every weapon takes ammunition of its own size and no other; larger r
   local weapons = 0
   for _, module in Modules.list do
     local weapon = module.weapon
-    if weapon then
+    -- (the plain ones: each has a tech 2 make, which is its own case)
+    if weapon and module.tech ~= 2 then
       weapons += 1
       local fits = 0
       for _, charge in Modules.charges do
@@ -285,7 +286,12 @@ suite:Case("components are made from minerals, and modules from components and m
       t.eq({ #blueprint.materials, pieces }, { 3, 20 })
     else
       local components, minerals = 0, 0
-      for _, material in blueprint.materials do
+      for index, material in blueprint.materials do
+        if module.tech == 2 and index == 1 then
+          -- (a tech 2 module is built of the plain one, which is built of ore)
+          t.eq({ material.type, material.quantity } :: { any }, { module.base, 1 } :: { any })
+          continue
+        end
         if Components.byId[material.type] then
           components += 1
         else
@@ -315,6 +321,47 @@ suite:Case("components are made from minerals, and modules from components and m
   end
   t.eq(safe, 0)
   t.ok(wild >= 130 and wild <= 150, `{wild} rocks in a thousand`)
+end)
+
+suite:Case("every weapon, repairer, extender, plate and mining laser has a tech 2 make: better, dearer to fit, and nobody's to buy", function(t)
+  local improved = 0
+  for _, module in Modules.list do
+    if module.tech == 2 then
+      improved += 1
+      local base = Modules.byId[module.base :: string]
+      t.eq({ module.id, module.name, module.slot, module.hardpoint } :: { any },
+        { base.id .. ".ii", base.name .. " II", base.slot, base.hardpoint } :: { any })
+      t.eq(Modules.Improved(base.id), module)
+      t.ok(module.cpu >= base.cpu and module.powergrid >= base.powergrid and module.basePrice == base.basePrice * 8)
+      if module.weapon and base.weapon then
+        t.near(module.weapon.damageMultiplier, base.weapon.damageMultiplier * 1.2, 1e-9)
+        t.eq({ module.weapon.family, module.weapon.size } :: { any }, { base.weapon.family, base.weapon.size } :: { any })
+      elseif module.repair and base.repair then
+        t.near(module.repair.amount, base.repair.amount * 1.25, 1e-9)
+      elseif module.miner and base.miner then
+        t.near(module.miner.volume, base.miner.volume * 1.25, 1e-9)
+      end
+      -- More skill than the plain one, and never less than four of it.
+      local needs, plain = Skills.Needs(module.id), Skills.Needs(base.id)
+      t.ok(#needs >= 1 and #needs >= #plain)
+      for index, need in needs do
+        t.ok(need.level >= 4 and need.level <= 5 and Skills.byId[need.skill] ~= nil)
+        if plain[index] then
+          t.ok(need.skill == plain[index].skill and need.level > plain[index].level, module.id)
+        end
+      end
+      -- No station has one to sell, nor its blueprint.
+      t.eq({ Types.Info(module.id).scarce, Types.Info("blueprint." .. module.id).scarce, Blueprints.byProduct[module.id].invented } :: { any },
+        { true, true, true } :: { any })
+    else
+      t.eq({ module.base, Types.Info(module.id).scarce } :: { any }, { nil, nil } :: { any })
+    end
+  end
+  -- 21 weapons, 2 repairers, an extender and a plate in three sizes each, and two mining lasers.
+  t.eq(improved, 21 + 4 * 3 + 2)
+  t.ok(Modules.Improved("web.stasis") == nil and Modules.Improved("rig.shield") == nil)
+  t.eq({ Modules.SizeOf(Modules.byId["autocannon.medium.ii"]), Modules.SizeOf(Modules.byId["shield.extender.large"]),
+    Modules.SizeOf(Modules.byId["miner.small"]) }, { 2, 3, 1 })
 end)
 
 suite:Case("fittings come in three sizes, each for a larger ship than the last", function(t)

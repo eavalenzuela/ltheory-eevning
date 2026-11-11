@@ -112,6 +112,8 @@ local skills: { Skill } = {
   { id = "industry", name = "Industry", rank = 1, start = 1, requires = {}, note = "To run manufacturing jobs; 4% quicker a level." },
   { id = "mass.production", name = "Mass Production", rank = 2, start = -1, requires = { { skill = "industry", level = 3 } },
     note = "One more job at a time a level." },
+  { id = "invention", name = "Invention", rank = 4, start = -1, requires = { { skill = "industry", level = 3 } },
+    note = "Level 1 to invent a tech 2 blueprint; 5% likelier to succeed a level." },
   { id = "accounting", name = "Accounting", rank = 3, start = -1, requires = {}, note = "Sales tax a tenth lower a level." },
   { id = "broker.relations", name = "Broker Relations", rank = 2, start = -1, requires = {}, note = "Broker's fee a tenth lower a level." },
 }
@@ -157,10 +159,30 @@ local NEEDS: { [string]: { Need } } = {
   ["mwd.5mn"] = { { skill = "propulsion", level = 3 } },
 }
 
+-- The needs of the tech 2 make of each module, worked out once.
+local improved: { [string]: { Need } } = {}
+
 function Skills.Needs(type: string): { Need }
   local listed = NEEDS[type]
   if listed then
     return listed
+  end
+  -- A tech 2 module wants what the plain one does, three levels higher
+  -- (and never less than four of anything).
+  local better = Modules.byId[type]
+  if better and better.tech == 2 and better.base then
+    local needs = improved[type]
+    if needs == nil then
+      needs = {}
+      for _, need in Skills.Needs(better.base) do
+        table.insert(needs, { skill = need.skill, level = math.clamp(need.level + 3, 4, 5) })
+      end
+      if #needs == 0 then
+        table.insert(needs, { skill = "engineering", level = 4 })
+      end
+      improved[type] = needs
+    end
+    return needs
   end
   -- A hull or a module made from a table says what it needs itself.
   local hull = Ships.byId[type]

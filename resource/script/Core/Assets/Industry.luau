@@ -10,7 +10,9 @@
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
+local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
+local Rng = require("@lt/Core/Kernel/Rng")
 local State = require("@lt/Core/Kernel/State")
 local Types = require("@lt/Core/Data/Types")
 local Wallet = require("@lt/Core/Assets/Wallet")
@@ -117,6 +119,35 @@ function Industry.ResearchPlan(state: State.State, blueprint: Blueprints.Bluepri
   }
 end
 
+-- Invention: working out, in a laboratory, the tech 2 make of what a
+-- blueprint builds. It takes datacores (found in derelicts), a fee and
+-- a while, more of each the bigger the module, and may come to nothing:
+-- three chances in ten, and one in twenty more for each level of the
+-- Invention skill. The blueprint it starts from is given back either
+-- way, and a success leaves a blueprint for the tech 2 module beside it,
+-- for good.
+Industry.DATACORE = "datacore"
+Industry.INVENT_CHANCE = 0.3
+Industry.INVENT_SKILL = 0.05
+
+export type InventionPlan = { product: string, blueprint: string, datacores: number, seconds: number, fee: number, chance: number }
+
+-- What inventing from a blueprint would take and make, or nil if what
+-- it builds has no tech 2 make.
+function Industry.InventionPlan(state: State.State, blueprint: Blueprints.Blueprint): InventionPlan?
+  local better = Modules.Improved(blueprint.product)
+  local made = if better then Blueprints.byProduct[better.id] else nil
+  if better == nil or made == nil then
+    return nil
+  end
+  local size = Modules.SizeOf(better)
+  return {
+    product = better.id, blueprint = made.id, datacores = 2 ^ size, seconds = 1800 * size,
+    fee = math.ceil(better.basePrice * 0.05),
+    chance = math.min(1, Industry.INVENT_CHANCE + Industry.INVENT_SKILL * math.max(0, state.skills.invention or 0)),
+  }
+end
+
 -- How long a job of so many runs takes: 4% less for each level of
 -- Industry, and less again for what has been researched of it.
 function Industry.JobSeconds(state: State.State, blueprint: Blueprints.Blueprint, runs: number): number
@@ -209,6 +240,27 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
     local blueprint = Blueprints.byId[item.type]
     if blueprint == nil then
       return false, "that is not a blueprint"
+    elseif command.what == "invent" then
+      local plan = Industry.InventionPlan(state, blueprint)
+      if plan == nil then
+        return false, "there is no tech 2 make of that to invent"
+      elseif (state.skills.invention or 0) < 1 then
+        return false, "needs Invention 1"
+      elseif #state.jobIds >= Industry.JobSlots(state) then
+        return false, "every job slot is in use"
+      end
+      local have = 0
+      for _, stack in Items.In(state, item.holder, "hangar") do
+        if stack.type == Industry.DATACORE then
+          have += stack.quantity
+        end
+      end
+      if have < plan.datacores then
+        return false, `needs {plan.datacores - have} more Datacore`
+      elseif plan.fee > state.wallet then
+        return false, "not enough credits for the fee"
+      end
+      return true
     elseif command.what ~= "material" and command.what ~= "time" then
       return false, "research is into materials or into time"
     end
@@ -264,6 +316,30 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
     table.insert(state.jobIds, job.id)
     table.insert(events, { kind = "JobStarted", job = job.id, product = job.product, quantity = job.quantity, ends = job.ends })
 
+  elseif command.kind == "StartResearch" and command.what == "invent" then
+    local blueprint = Blueprints.byId[item.type]
+    local plan = Industry.InventionPlan(state, blueprint) :: InventionPlan
+    local station = ship.docked
+    local left = plan.datacores
+    for _, stack in Items.In(state, station, "hangar") do
+      if left > 0 and stack.type == Industry.DATACORE then
+        local take = math.min(left, stack.quantity)
+        Items.Take(state, stack, take)
+        left -= take
+      end
+    end
+    -- The blueprint is in the laboratory until it is done.
+    Items.Take(state, item, 1)
+    Wallet.Pay(state, -plan.fee, "invention fee", events)
+    -- (the job carries the blueprint it hopes to make as its product)
+    local job: State.Job = {
+      id = State.NewId(state), station = station, blueprint = blueprint.id, runs = 0, product = plan.blueprint, quantity = 1,
+      research = "invent", started = state.tick, ends = state.tick + math.ceil(plan.seconds / Constants.TICK),
+    }
+    state.jobs[job.id] = job
+    table.insert(state.jobIds, job.id)
+    table.insert(events, { kind = "ResearchStarted", job = job.id, blueprint = blueprint.id, what = "invent", ends = job.ends })
+
   elseif command.kind == "StartResearch" then
     local blueprint = Blueprints.byId[item.type]
     local plan = Industry.ResearchPlan(state, blueprint, command.what :: string) :: ResearchPlan
@@ -289,7 +365,18 @@ function Industry.Step(state: State.State, events: { Event })
       Items.Add(state, job.blueprint, 1, job.station, "hangar")
       state.jobs[id] = nil
       State.RemoveId(state.jobIds, id)
-      if job.research ~= "" then
+      if job.research == "invent" then
+        -- It comes off, or it does not: the roll is the job's own, and
+        -- the chance is what the pilot's skill makes it when it ends.
+        local plan = Industry.InventionPlan(state, Blueprints.byId[job.blueprint])
+        local chance = if plan then plan.chance else 0
+        local success = Rng.Chance(Rng.For(state.historySeed, job.id, 91), chance)
+        if success then
+          Items.Add(state, job.product, 1, job.station, "hangar")
+        end
+        table.insert(events, { kind = "InventionDone", job = id, blueprint = job.blueprint, product = job.product,
+          success = success, station = job.station })
+      elseif job.research ~= "" then
         -- What was learned is the pilot's from now on.
         local known = state.research[job.blueprint] or { material = 0, time = 0 }
         if job.research == "material" then

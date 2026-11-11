@@ -21,12 +21,16 @@ export type Info = {
     | "planetary" | "drone",
   volume: number,     -- m3 per unit
   basePrice: number,  -- credits per unit
+  -- No station has it to sell unless a pilot sold it there: a tech 2
+  -- module, an invented blueprint, a datacore.
+  scarce: boolean?,
 }
 
 local byId: { [string]: Info } = {}
 
 for _, m in Modules.list do
-  byId[m.id] = { id = m.id, name = m.name, category = "module", volume = m.volume, basePrice = m.basePrice }
+  byId[m.id] = { id = m.id, name = m.name, category = "module", volume = m.volume, basePrice = m.basePrice,
+    scarce = if m.tech == 2 then true else nil }
 end
 for _, c in Modules.charges do
   byId[c.id] = { id = c.id, name = c.name, category = "charge", volume = c.volume, basePrice = c.basePrice }
@@ -82,7 +86,7 @@ end
 
 for _, blueprint in Blueprints.list do
   byId[blueprint.id] = { id = blueprint.id, name = blueprint.name, category = "blueprint", volume = 0.01,
-    basePrice = blueprint.basePrice }
+    basePrice = blueprint.basePrice, scarce = blueprint.invented }
 end
 -- A book for every skill a pilot does not start with.
 for _, skill in Skills.list do
@@ -105,6 +109,9 @@ local goods: { Info } = {
   -- What a courier job gives a pilot to carry (Assets/Missions): a cubic
   -- metre a unit, and worth nothing to anybody but who it is for.
   { id = "cargo.sealed", name = "Sealed Cargo", category = "goods", volume = 1, basePrice = 1 },
+  -- What an invention is worked out from (Assets/Industry): found in
+  -- derelicts (Tactical/Sites), and nowhere to be bought.
+  { id = "datacore", name = "Datacore", category = "goods", volume = 0.1, basePrice = 30000, scarce = true },
 }
 for _, g in goods do
   byId[g.id] = g

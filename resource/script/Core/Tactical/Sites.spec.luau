@@ -138,6 +138,14 @@ suite:Case("a derelict has hulls to loot, and is gone when they are empty", func
     if state.wrecks[id].grid == site.id then
       table.insert(hulls, id)
       t.ok(#Items.In(state, id, "cargo") >= 3, "a derelict hull with next to nothing aboard")
+      -- Each has a datacore or two (what an invention is worked out from),
+      -- and nothing of the tech 2 make, which is nobody's to find.
+      local datacores = 0
+      for _, item in Items.In(state, id, "cargo") do
+        datacores += if item.type == "datacore" then item.quantity else 0
+        t.ok(string.sub(item.type, -3) ~= ".ii", `a derelict had a {item.type} aboard`)
+      end
+      t.ok(datacores >= 1 and datacores <= 2, `{datacores} datacores in a derelict hull where order is kept`)
     end
   end
   t.ok(#hulls >= 2 and #hulls <= 3)

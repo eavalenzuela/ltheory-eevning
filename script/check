@@ -61,6 +61,8 @@
 #               ore brought in to the station while the player sits docked
 #   game-keys   flying by the keyboard (test/scenario/keys.txt): stop, warp,
 #               pick out a pirate, lock, fire and web it, dock, by keys alone
+#   game-invent  invention (test/scenario/invent.txt): a tech 2 blueprint
+#               tried for from a plain one and two datacores
 #   game-pace   the game app must draw at least thirty frames a second just
 #               outside the home station (test/scenario/pace.txt)
 #   goldens     script/goldens: screenshots of the stored scenes must match
@@ -189,6 +191,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/miner.txt
   step game-keys 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/keys.txt
+  step game-invent 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
+    --script test/scenario/invent.txt
   step game-pace 0 timeout 200 bin/launch game --no-present --fixed-step 60 --timeout 150 \
     --script test/scenario/pace.txt
   step goldens 0 script/goldens

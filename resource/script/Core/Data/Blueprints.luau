@@ -26,6 +26,8 @@ export type Blueprint = {
   seconds: number,          -- per run
   materials: { { type: string, quantity: number } },  -- per run
   basePrice: number,        -- of the blueprint itself
+  -- Nobody sells it: it is invented from another (Assets/Industry).
+  invented: boolean?,
 }
 
 local MATERIAL_SHARE = 0.6
@@ -43,6 +45,9 @@ local MIX: { [string]: { [string]: number } } = {
     ["mineral.cobalt"] = 0.15 },
   battleship = { ["mineral.iron"] = 0.35, ["mineral.silicon"] = 0.1, ["mineral.copper"] = 0.15, ["mineral.titanium"] = 0.15,
     ["mineral.cobalt"] = 0.15, ["mineral.iridium"] = 0.1 },
+  -- What a tech 2 module has over the plain one is made of what only
+  -- lawless space has.
+  tech2 = { ["mineral.titanium"] = 0.4, ["mineral.cobalt"] = 0.4, ["mineral.iridium"] = 0.2 },
 }
 
 -- The components a module is built around, by what it is, as shares of
@@ -130,6 +135,16 @@ for _, module in Modules.list do
     table.insert(Blueprints.list, blueprint)
     Blueprints.byId[blueprint.id] = blueprint
     Blueprints.byProduct[module.id] = blueprint
+  elseif module.tech == 2 and module.base then
+    -- A tech 2 module is built of the plain one, and of what makes the
+    -- difference: components and the rare minerals. Its blueprint is
+    -- not for sale.
+    local base = Modules.byId[module.base]
+    add(module.id, module.name, MIX.tech2, module.basePrice - base.basePrice, 1, 600 + module.basePrice // 100, moduleParts(module))
+    local blueprint = Blueprints.byProduct[module.id]
+    table.insert(blueprint.materials, 1, { type = base.id, quantity = 1 })
+    blueprint.basePrice = module.basePrice * 10
+    blueprint.invented = true
   else
     add(module.id, module.name, MIX.module, module.basePrice, 1, 120 + module.basePrice // 100, moduleParts(module))
   end

@@ -1063,7 +1063,10 @@ end
 -- What the pilot has researched of a blueprint (levels of material and
 -- of time saving), and what the next level of each would take (nil when
 -- there is none). Nothing for no such blueprint.
-export type ResearchStatus = { material: number, time: number, nextMaterial: Industry.ResearchPlan?, nextTime: Industry.ResearchPlan? }
+-- And what inventing the tech 2 make of what it builds would take (nil
+-- when there is none to invent).
+export type ResearchStatus = { material: number, time: number, nextMaterial: Industry.ResearchPlan?, nextTime: Industry.ResearchPlan?,
+  invention: Industry.InventionPlan? }
 function Query.Research(game: Game, type: string): ResearchStatus?
   local blueprint = Blueprints.byId[type]
   if blueprint == nil then
@@ -1074,6 +1077,7 @@ function Query.Research(game: Game, type: string): ResearchStatus?
     material = material, time = time,
     nextMaterial = Industry.ResearchPlan(game.state, blueprint, "material"),
     nextTime = Industry.ResearchPlan(game.state, blueprint, "time"),
+    invention = Industry.InventionPlan(game.state, blueprint),
   }
 end
 
