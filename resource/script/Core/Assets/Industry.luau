@@ -14,6 +14,7 @@ local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Rng = require("@lt/Core/Kernel/Rng")
 local State = require("@lt/Core/Kernel/State")
+local Ships = require("@lt/Core/Data/Ships")
 local Types = require("@lt/Core/Data/Types")
 local Wallet = require("@lt/Core/Assets/Wallet")
 
@@ -127,6 +128,10 @@ end
 -- way, and a success leaves a blueprint for the tech 2 module beside it,
 -- for good.
 Industry.DATACORE = "datacore"
+-- How big a thing a hull of a class is to invent, where a small module
+-- is 1 and a large one 3: it sets the datacores (two, doubled for each
+-- step) and the time.
+Industry.HULL_SIZE = { frigate = 3, destroyer = 4, industrial = 4, barge = 4, cruiser = 5, battleship = 6 } :: { [string]: number }
 Industry.INVENT_CHANCE = 0.3
 Industry.INVENT_SKILL = 0.05
 
@@ -135,15 +140,18 @@ export type InventionPlan = { product: string, blueprint: string, datacores: num
 -- What inventing from a blueprint would take and make, or nil if what
 -- it builds has no tech 2 make.
 function Industry.InventionPlan(state: State.State, blueprint: Blueprints.Blueprint): InventionPlan?
-  local better = Modules.Improved(blueprint.product)
-  local made = if better then Blueprints.byProduct[better.id] else nil
-  if better == nil or made == nil then
+  local module = Modules.Improved(blueprint.product)
+  local hull = Ships.Improved(blueprint.product)
+  local id = if module then module.id elseif hull then hull.id else ""
+  local made = Blueprints.byProduct[id]
+  if made == nil then
     return nil
   end
-  local size = Modules.SizeOf(better)
+  -- (a hull is a bigger thing to work out than any module)
+  local size = if module then Modules.SizeOf(module) elseif hull then Industry.HULL_SIZE[hull.class] or 3 else 1
   return {
-    product = better.id, blueprint = made.id, datacores = 2 ^ size, seconds = 1800 * size,
-    fee = math.ceil(better.basePrice * 0.05),
+    product = id, blueprint = made.id, datacores = 2 ^ size, seconds = 1800 * size,
+    fee = math.ceil(Types.Info(id).basePrice * 0.05),
     chance = math.min(1, Industry.INVENT_CHANCE + Industry.INVENT_SKILL * math.max(0, state.skills.invention or 0)),
   }
 end

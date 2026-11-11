@@ -53,7 +53,8 @@ end
 -- into a ship at a station. (Nobody sells capsules.)
 for _, hull in Ships.list do
   if hull.class ~= "capsule" and not hull.restricted then
-    byId[hull.id] = { id = hull.id, name = hull.name, category = "ship", volume = hull.volume, basePrice = hull.basePrice }
+    byId[hull.id] = { id = hull.id, name = hull.name, category = "ship", volume = hull.volume, basePrice = hull.basePrice,
+      scarce = if hull.tech == 2 then true else nil }
   end
 end
 

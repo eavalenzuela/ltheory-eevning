@@ -6,6 +6,7 @@ local Core = require("@lt/Core/Api")
 local Industry = require("@lt/Core/Assets/Industry")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
+local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
 local Stations = require("@lt/Core/Assets/Stations")
 local Test = require("@lt/Tool/Test")
@@ -404,6 +405,72 @@ suite:Case("invention works out a tech 2 blueprint from a plain one, for datacor
   -- It wants more of the skill than the plain one to fit.
   local item = stack(game, "autocannon.small.ii")
   t.eq(refused(game, { kind = "Fit", actor = 0, item = item.id }), "needs Projectile Turrets 4")
+end)
+
+suite:Case("a tech 2 hull is invented from the plain hull's blueprint, built of the plain hull, and wants more skill to board", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local home = state.player.home
+  state.wallet = 1000000000
+  state.skills.invention = 5
+  -- A hull is a bigger thing to work out than a module: eight datacores for a frigate, and on up.
+  local plan = assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.frigate.javelin"]))
+  local better = Ships.byId["frigate.javelin.ii"]
+  t.eq({ plan.product, plan.blueprint, plan.datacores, plan.seconds, plan.fee } :: { any },
+    { "frigate.javelin.ii", "blueprint.frigate.javelin.ii", 8, 5400, math.ceil(better.basePrice * 0.05) } :: { any })
+  t.near(plan.chance, 0.55, 1e-9)
+  t.eq({ assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.destroyer.halberd"])).datacores,
+    assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.cruiser.cuirass"])).datacores,
+    assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.battleship.bastion"])).datacores,
+    assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.barge.quarry"])).datacores }, { 16, 32, 64, 16 })
+  -- (the starter hull has no tech 2 make, nor has a tech 2 hull one of its own)
+  t.eq(Industry.InventionPlan(state, Blueprints.byId["blueprint.frigate.courier"]), nil)
+  t.eq(Industry.InventionPlan(state, Blueprints.byId["blueprint.frigate.javelin.ii"]), nil)
+
+  Items.Add(state, "blueprint.frigate.javelin", 1, home, "hangar")
+  Items.Add(state, Industry.DATACORE, 200, home, "hangar")
+  local tries = 0
+  while hangar(game, "blueprint.frigate.javelin.ii") == 0 and tries < 20 do
+    tries += 1
+    order(t, game, { kind = "StartResearch", actor = 0, item = stack(game, "blueprint.frigate.javelin").id, what = "invent" })
+    local event, ticks = stepUntil(game, "InventionDone", 6000)
+    t.ok(ticks >= 5390 and ticks <= 5400, `inventing a frigate took {ticks} ticks`)
+    t.eq(event.product, "blueprint.frigate.javelin.ii")
+  end
+  t.eq(hangar(game, "blueprint.frigate.javelin.ii"), 1, `nothing came of {tries} tries`)
+  t.eq(hangar(game, Industry.DATACORE), 200 - 8 * tries)
+
+  -- Built of the plain hull and of what makes the difference. Without the plain hull, nothing.
+  local made = Blueprints.byId["blueprint.frigate.javelin.ii"]
+  for index, material in made.materials do
+    if index > 1 then
+      Items.Add(state, material.type, material.quantity, home, "hangar")
+    end
+  end
+  local build: State.Command = { kind = "StartJob", actor = 0, item = stack(game, made.id).id, quantity = 1 }
+  t.eq(refused(game, build), "needs 1 more Vessari Javelin")
+  Items.Add(state, "frigate.javelin", 1, home, "hangar")
+  order(t, game, build)
+  local built = stepUntil(game, "JobDone", 80000)
+  t.eq({ built.product, hangar(game, "frigate.javelin.ii"), hangar(game, "frigate.javelin") } :: { any }, { "frigate.javelin.ii", 1, 0 } :: { any })
+
+  -- Assembled, it is a ship; boarding it wants the frigate skill at five.
+  order(t, game, { kind = "Assemble", actor = 0, item = stack(game, "frigate.javelin.ii").id })
+  local ships = Core.Query.Ships(game, home)
+  local ship = ships[#ships]
+  t.eq(ship.type, "frigate.javelin.ii")
+  state.skills.frigates = 4
+  t.eq(refused(game, { kind = "BoardShip", actor = 0, target = ship.id }), "needs Frigates 5")
+  state.skills.frigates = 5
+  order(t, game, { kind = "BoardShip", actor = 0, target = ship.id })
+  t.eq(Core.Query.Player(game).hull.id, "frigate.javelin.ii")
+  -- More of it than the plain hull, bare.
+  local plain = Ships.byId["frigate.javelin"]
+  local stats = Items.ShipStats(state, ship.id)
+  t.ok(stats.cpu > 1.15 * Items.ShipStats(state, ships[1].id).cpu or stats.cpu > plain.cpu, "a tech 2 hull should have more to fit with")
+  t.eq({ better.lows - plain.lows + better.mids - plain.mids, better.turrets, better.launchers }, { 1, plain.turrets, plain.launchers })
+  -- Insured for what it is worth, which is eight of the plain hull.
+  t.eq(better.basePrice, 8 * plain.basePrice)
 end)
 
 suite:Case("nobody sells a tech 2 module, its blueprint or a datacore, and a station that has none buys them dear", function(t)

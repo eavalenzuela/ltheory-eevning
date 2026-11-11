@@ -67,7 +67,8 @@ suite:Case("every faction has a hull of every class, and a bigger class is more 
     for _, class in Factions.CLASSES do
       local found: Ships.ShipType? = nil
       for _, hull in Ships.list do
-        if hull.lineage == faction.id and hull.class == class then
+        -- (the plain hulls: the tech 2 makes of them are their own case)
+        if hull.lineage == faction.id and hull.class == class and hull.tech ~= 2 then
           t.ok(found == nil, `{faction.id} has two {class}s`)
           found = hull
         end
@@ -129,9 +130,69 @@ suite:Case("every pirate hull is somebody else's, cheaper, quicker and thinner-s
   end
 end)
 
+suite:Case("every hull of a human line, and each mining hull, has a tech 2 make: tougher, roomier, built of the plain hull, and nobody's to buy", function(t)
+  local improved = 0
+  for _, hull in Ships.list do
+    local faction = Factions.byId[hull.lineage]
+    if hull.tech == 2 then
+      improved += 1
+      local base = Ships.byId[hull.base :: string]
+      t.eq({ hull.id, hull.name, hull.class, hull.lineage } :: { any }, { base.id .. ".ii", base.name .. " II", base.class, base.lineage } :: { any })
+      t.eq(Ships.Improved(base.id), hull)
+      t.ok(base.tech == nil and Ships.Improved(hull.id) == nil, "a tech 2 hull has no tech 2 make of its own")
+      -- The same hull to look at and to arm: its hardpoints, its size, its drones.
+      t.eq({ hull.turrets, hull.launchers, hull.highs, hull.radius, hull.mass, hull.drones, hull.bay } :: { any },
+        { base.turrets, base.launchers, base.highs, base.radius, base.mass, base.drones, base.bay } :: { any })
+      -- More of it to shoot through, and less of every shot gets through.
+      t.ok(hull.shield > 1.25 * base.shield and hull.armor > 1.25 * base.armor and hull.hull > 1.25 * base.hull, hull.id)
+      for index = 1, 4 do
+        t.near(hull.shieldResonance[index], base.shieldResonance[index] * 0.75, 1e-9)
+        t.near(hull.armorResonance[index], base.armorResonance[index] * 0.75, 1e-9)
+        t.eq(hull.hullResonance[index], base.hullResonance[index])
+      end
+      -- More to fit with, and one slot more: low on a hull that is more armour than shield, else mid.
+      t.ok(hull.cpu > 1.15 * base.cpu and hull.powergrid > 1.15 * base.powergrid and hull.capacitor > 1.15 * base.capacitor, hull.id)
+      t.eq({ hull.mids - base.mids, hull.lows - base.lows }, if base.armor >= base.shield then { 0, 1 } else { 1, 0 }, hull.id)
+      t.ok(hull.maxVelocity >= base.maxVelocity and hull.lockRange > base.lockRange and hull.scanResolution > base.scanResolution)
+      -- What carries, carries half as much again; a warship's hold is as it was.
+      local carrier = base.class == "industrial" or base.id == "frigate.prospector" or base.id == "barge.quarry"
+      t.near(hull.cargo / base.cargo, if carrier then 1.5 else 1, 0.03, hull.id)
+      t.eq(hull.basePrice, base.basePrice * 8)
+      -- More skill than the plain one, and never less than four of it.
+      local needs, plain = Skills.Needs(hull.id), Skills.Needs(base.id)
+      t.ok(#needs >= 1 and #needs == #plain, hull.id)
+      for index, need in needs do
+        t.ok(need.level >= 4 and need.level <= 5 and need.skill == plain[index].skill and need.level > plain[index].level, hull.id)
+      end
+      -- No station has one to sell, nor its blueprint; it is built of the plain hull, components and what lawless space has.
+      local blueprint = assert(Blueprints.byProduct[hull.id], `no blueprint for {hull.id}`)
+      t.eq({ Types.Info(hull.id).scarce, Types.Info(blueprint.id).scarce, blueprint.invented } :: { any }, { true, true, true } :: { any })
+      t.eq({ blueprint.materials[1].type, blueprint.materials[1].quantity } :: { any }, { base.id, 1 } :: { any })
+      local rare, components = 0, 0
+      for index, material in blueprint.materials do
+        if index > 1 then
+          t.ok(fromOre(material.type), `{material.type} in {blueprint.id} comes from no ore`)
+          components += if Components.byId[material.type] then 1 else 0
+          rare += if material.type == "mineral.iridium" or material.type == "mineral.cobalt" then 1 else 0
+        end
+      end
+      t.ok(components >= 5 and rare == 2, `{hull.id} is built of {components} components and {rare} rare minerals`)
+    else
+      -- (and every hull that should have one, has)
+      local should = hull.id == "frigate.prospector" or hull.id == "barge.quarry"
+        or (faction ~= nil and faction.kind == "human" and not hull.restricted)
+      t.eq(Ships.Improved(hull.id) ~= nil, should, hull.id)
+      t.eq(Types.Get(hull.id) == nil or Types.Info(hull.id).scarce == nil, true, hull.id)
+    end
+  end
+  -- Four lines of five hulls, and the two that mine.
+  t.eq(improved, 4 * 5 + 2)
+  t.ok(Ships.Improved("frigate.courier") == nil and Ships.Improved("industrial.hauler") == nil and Ships.Improved("capsule") == nil)
+end)
+
 suite:Case("every hull for sale can be built from ore, and has skills a pilot can train", function(t)
   for _, hull in Ships.list do
-    if hull.class ~= "capsule" and not hull.restricted then
+    if hull.class ~= "capsule" and not hull.restricted and hull.tech ~= 2 then
       t.ok(Types.Get(hull.id) ~= nil, hull.id)
       local blueprint = assert(Blueprints.byProduct[hull.id], `no blueprint for {hull.id}`)
       t.ok(#blueprint.materials >= 2, hull.id)

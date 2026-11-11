@@ -6,6 +6,7 @@ local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Items = require("@lt/Core/Assets/Items")
 local Missions = require("@lt/Core/Assets/Missions")
+local Ships = require("@lt/Core/Data/Ships")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -256,16 +257,26 @@ suite:Case("a finished job earns loyalty points, and a faction's store sells for
   t.ok((submit(game, { kind = "RedeemLoyalty", actor = 0, type = "implant.shield" })))
   t.eq(state.loyalty[faction], 300 - 120)
   local store = Missions.Store(faction)
-  local blueprints, foreign = 0, 0
+  local blueprints, foreign, hulls = 0, 0, 0
   for _, stock in store do
-    if string.sub(stock.type, 1, 10) == "blueprint." then
+    local made = string.sub(stock.type, #"blueprint." + 1)
+    if string.sub(stock.type, 1, 10) == "blueprint." and Ships.byId[made] then
+      -- (a tech 2 hull of the faction's own line: for a pilot it thinks well of, and not for points alone)
+      hulls += 1
+      local hull = Ships.byId[made]
+      t.eq({ hull.tech, hull.lineage, stock.standing, stock.points, stock.credits } :: { any },
+        { 2, faction, 3, Missions.HULL_POINTS[hull.class], hull.basePrice // 20 } :: { any })
+    elseif string.sub(stock.type, 1, 10) == "blueprint." then
       blueprints += 1
       t.eq({ stock.standing, stock.credits }, { 2, 0 })
       foreign += if string.find(stock.type, "laser", 1, true) or string.find(stock.type, "blaster", 1, true) then 1 else 0
     end
   end
-  -- (the Vessari's are projectile guns and missiles: six kinds of gun and three launchers)
-  t.eq({ faction, blueprints, foreign } :: { any }, { "vessari", 9, 0 } :: { any })
+  -- (the Vessari's are projectile guns and missiles: six kinds of gun and three launchers; and their five hulls)
+  t.eq({ faction, blueprints, foreign, hulls } :: { any }, { "vessari", 9, 0, 5 } :: { any })
+  state.standings[faction] = 2.5
+  t.eq(refused(game, { kind = "RedeemLoyalty", actor = 0, type = "blueprint.frigate.javelin.ii" }), "needs a standing of 3 with them")
+  state.standings[faction] = 1
   t.eq(refused(game, { kind = "RedeemLoyalty", actor = 0, type = "blueprint.autocannon.small.ii" }), "needs a standing of 2 with them")
   state.standings[faction] = 2
   state.loyalty[faction] = 100000

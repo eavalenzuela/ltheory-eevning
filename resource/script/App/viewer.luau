@@ -157,7 +157,8 @@ local HULL_VIEWS: { { any } } = {
   { "6-close", vector.create(0.55, 0.30, 0.80), vector.create(0.05, 0.05, 0.30) },
 }
 for _, type in Hull.Types() do
-  local short = string.match(type, "%.(%a+)$") or type
+  -- ("javelin" for frigate.javelin, and "javelin-ii" for its tech 2 make)
+  local short = (string.gsub(string.match(type, "^%a+%.(.+)$") or type, "%.", "-"))
   for _, view in HULL_VIEWS do
     local eye: vector = view[2]
     table.insert(VIEWS, { name = `hull-{short}-{view[1]}`, kind = `hull-{type}`, seed = 1, eye = eye, look = view[3],
@@ -170,7 +171,7 @@ end
 local WRECKS = Hull.Types()
 table.insert(WRECKS, "")
 for _, type in WRECKS do
-  local short = if type == "" then "plain" else string.match(type, "%.(%a+)$") or type
+  local short = if type == "" then "plain" else (string.gsub(string.match(type, "^%a+%.(.+)$") or type, "%.", "-"))
   for _, view in { HULL_VIEWS[1], HULL_VIEWS[2] } do
     local eye: vector = view[2]
     table.insert(VIEWS, { name = `wreck-{short}-{view[1]}`, kind = `wreck-{type}`, seed = 1, eye = eye * 1.25, look = view[3],

@@ -160,7 +160,17 @@ for _, charge in Modules.charges do
   add(charge.id, charge.name, MIX.charge, charge.basePrice, perRun, 60)
 end
 for _, hull in Ships.list do
-  if hull.class ~= "capsule" and not hull.restricted then
+  local plain = if hull.tech == 2 and hull.base then Ships.byId[hull.base] else nil
+  if plain then
+    -- A tech 2 hull is built of the plain one, and of what makes the
+    -- difference: hull components and the rare minerals. Its blueprint
+    -- is not for sale.
+    add(hull.id, hull.name, MIX.tech2, hull.basePrice - plain.basePrice, 1, math.min(72000, 600 + hull.basePrice // 200), Components.HULL)
+    local blueprint = Blueprints.byProduct[hull.id]
+    table.insert(blueprint.materials, 1, { type = plain.id, quantity = 1 })
+    blueprint.basePrice = hull.basePrice * 10
+    blueprint.invented = true
+  elseif hull.class ~= "capsule" and not hull.restricted then
     local mix = if hull.class == "battleship" then MIX.battleship
       elseif hull.class == "cruiser" or hull.class == "barge" then MIX.cruiser
       else MIX.ship

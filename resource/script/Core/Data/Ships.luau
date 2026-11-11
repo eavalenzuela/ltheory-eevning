@@ -67,6 +67,10 @@ export type ShipType = {
   restricted: boolean?,
   -- A pirate hull: the hull it was made out of.
   donor: string?,
+  -- 2 for a tech 2 hull: the improved make of the hull 'base', which it
+  -- is built from (below).
+  tech: number?,
+  base: string?,
 }
 
 local SHIELD = { 1.0, 0.8, 0.6, 0.5 }
@@ -288,6 +292,58 @@ table.insert(types, {
   requires = { { skill = "drones", level = 2 } }, restricted = true, rigs = 0, drones = 0,
 })
 
+-- ---------------------------------------------------------------------
+-- Tech 2
+--
+-- The improved make of every hull of a human faction's line, and of
+-- the two mining hulls: the same hull, rebuilt. It takes more of a
+-- beating (three tenths more shield, armour and hull, and a quarter
+-- less of every kind of damage gets through its shield and armour), has
+-- a fifth more CPU, powergrid and capacitor to fit with, one slot more
+-- (a low slot on a hull that is more armour than shield, else a mid),
+-- sees farther and locks faster; and a hull that is for carrying
+-- carries half as much again. It wants a good deal more skill
+-- (Data/Skills). Nobody sells one: its blueprint is invented from the
+-- plain hull's, and it is built of the plain hull and of what lawless
+-- space has (Data/Blueprints, Assets/Industry).
+local TECH2 = { price = 8, layers = 1.3, resonance = 0.75, fitting = 1.2, velocity = 1.05, lock = 1.2, scan = 1.15, cargo = 1.5 }
+
+local function tougher(resonance: { number }): { number }
+  local out: { number } = {}
+  for index, share in resonance do
+    out[index] = share * TECH2.resonance
+  end
+  return out
+end
+
+for _, base in table.clone(types) do
+  local yard = Factions.byId[base.lineage]
+  local mining = base.id == "frigate.prospector" or base.id == "barge.quarry"
+  if ((yard ~= nil and yard.kind == "human") or mining) and not base.restricted then
+    local carrier = base.class == "industrial" or mining
+    local armoured = base.armor >= base.shield
+    table.insert(types, {
+      id = base.id .. ".ii", name = base.name .. " II", class = base.class, lineage = base.lineage,
+      basePrice = base.basePrice * TECH2.price, volume = base.volume,
+      mass = base.mass, inertia = base.inertia, maxVelocity = round(base.maxVelocity * TECH2.velocity),
+      warpSpeed = base.warpSpeed, radius = base.radius,
+      shield = round(base.shield * TECH2.layers), armor = round(base.armor * TECH2.layers), hull = round(base.hull * TECH2.layers),
+      shieldRecharge = base.shieldRecharge, shieldResonance = tougher(base.shieldResonance),
+      armorResonance = tougher(base.armorResonance), hullResonance = base.hullResonance,
+      signature = base.signature,
+      cpu = round(base.cpu * TECH2.fitting), powergrid = round(base.powergrid * TECH2.fitting),
+      highs = base.highs, mids = base.mids + (if armoured then 0 else 1), lows = base.lows + (if armoured then 1 else 0),
+      turrets = base.turrets, launchers = base.launchers,
+      capacitor = round(base.capacitor * TECH2.fitting), capacitorRecharge = base.capacitorRecharge,
+      scanResolution = round(base.scanResolution * TECH2.scan), lockRange = round(base.lockRange * TECH2.lock),
+      maxTargets = base.maxTargets,
+      cargo = if carrier then round(base.cargo * TECH2.cargo) else base.cargo,
+      drones = base.drones, bay = base.bay, rigs = base.rigs, calibration = base.calibration,
+      tech = 2, base = base.id,
+    })
+  end
+end
+
 local Ships = { list = types, byId = {} :: { [string]: ShipType } }
 
 Ships.RIGS = 3
@@ -303,6 +359,12 @@ for _, t in types do
   t.drones = t.drones or Ships.DRONES[t.class] or 0
   t.bay = t.bay or Ships.BAY[t.class] or 0
   t.calibration = t.calibration or Ships.CALIBRATION
+end
+
+-- The tech 2 make of a hull, if it has one.
+function Ships.Improved(id: string): ShipType?
+  local better = Ships.byId[id .. ".ii"]
+  return if better and better.tech == 2 then better else nil
 end
 
 -- Seconds; see the note on agility above.

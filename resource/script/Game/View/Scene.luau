@@ -185,7 +185,7 @@ local function makeShip(type: string, radius: number, pirate: boolean): Object
   end
   local item: Item? = hullItems[type]
   if not item then
-    local made = Item_ShipType((radius / 0.0675) ^ 2, HULL_SEED[type] or 55, 1, 1, 1, 1, 1, 1)
+    local made = Item_ShipType((radius / 0.0675) ^ 2, HULL_SEED[type] or HULL_SEED[(string.gsub(type, "%.ii$", ""))] or 55, 1, 1, 1, 1, 1, 1)
     hullItems[type] = made
     return made:Instantiate()
   end
@@ -200,7 +200,7 @@ function Scene.Preview(type: string, radius: number): Renderable | Model
   end
   local item: Item? = hullItems[type]
   if not item then
-    local made = Item_ShipType((radius / 0.0675) ^ 2, HULL_SEED[type] or 55, 1, 1, 1, 1, 1, 1)
+    local made = Item_ShipType((radius / 0.0675) ^ 2, HULL_SEED[type] or HULL_SEED[(string.gsub(type, "%.ii$", ""))] or 55, 1, 1, 1, 1, 1, 1)
     hullItems[type] = made
     item = made
   end

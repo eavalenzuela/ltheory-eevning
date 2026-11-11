@@ -67,7 +67,9 @@ function Catalog.Group(id: string): (string, number, number)
   local hull = Ships.byId[id]
   if hull then
     local faction = Factions.byId[hull.lineage]
-    return if faction then faction.name else "Civilian", if faction then factionOrder[faction.id] else 99, CLASSES[hull.class] or 9
+    -- (a tech 2 hull comes straight after the hull it is the improved make of)
+    return if faction then faction.name else "Civilian", if faction then factionOrder[faction.id] else 99,
+      (CLASSES[hull.class] or 9) + (if hull.tech == 2 then 0.5 else 0)
   end
   local info = Types.Get(id)
   local category = if info then info.category else ""

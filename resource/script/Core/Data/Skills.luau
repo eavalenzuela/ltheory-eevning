@@ -194,6 +194,19 @@ function Skills.Needs(type: string): { Need }
     end
     return needs
   end
+  -- A tech 2 hull wants what the plain one does, as a tech 2 module does.
+  local rebuilt = Ships.byId[type]
+  if rebuilt and rebuilt.tech == 2 and rebuilt.base then
+    local needs = improved[type]
+    if needs == nil then
+      needs = {}
+      for _, need in Skills.Needs(rebuilt.base) do
+        table.insert(needs, { skill = need.skill, level = math.clamp(need.level + 3, 4, 5) })
+      end
+      improved[type] = needs
+    end
+    return needs
+  end
   -- A hull or a module made from a table says what it needs itself.
   local hull = Ships.byId[type]
   if hull and hull.requires then

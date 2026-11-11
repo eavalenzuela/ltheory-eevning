@@ -188,6 +188,8 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
   local faction = Factions.byId[hull.lineage]
   sheet.kind = if faction then `{faction.name} {hull.class}` else string.upper(string.sub(hull.class, 1, 1)) .. string.sub(hull.class, 2)
   sheet.note = if hull.donor then `Made over from the {nameOf(hull.donor)}.`
+    elseif hull.tech == 2 and hull.base then
+      `The tech 2 make of the {nameOf(hull.base)}: the same hull rebuilt to take more and fit more. Nobody sells one. Its blueprint is invented from the plain hull's, and it is built of the plain hull.`
     elseif faction then faction.note
     else ""
 

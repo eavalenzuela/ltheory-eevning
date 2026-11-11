@@ -84,7 +84,8 @@ local FITTINGS = {
 -- A faction's hull of a class, if it has one.
 local function hullOf(faction: string, class: string): string?
   for _, hull in Ships.list do
-    if hull.lineage == faction and hull.class == class then
+    -- (the plain hull: a patrol does not fly its faction's tech 2)
+    if hull.lineage == faction and hull.class == class and hull.tech ~= 2 then
       return hull.id
     end
   end

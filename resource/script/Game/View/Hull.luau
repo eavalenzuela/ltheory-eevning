@@ -1475,6 +1475,27 @@ for _, hull in Ships.list do
   end
 end
 
+-- Tech 2 hulls. Each is the hull it is the improved make of
+-- (Core/Data/Ships): the same shape with the same hardpoints, repainted.
+-- Its plating is dark, most of the way to black; its patches, its
+-- markings and its lights are as they were, and it is kept cleaner.
+local function rebuilt(look: Look): Look
+  local p = look.plating
+  return {
+    plating = { p[1] * 0.42 + 0.02, p[2] * 0.42 + 0.02, p[3] * 0.42 + 0.03 }, patch = look.patch, frame = look.frame,
+    glow = look.glow, trim = look.trim, fire = look.fire, wear = look.wear * 0.6, rust = look.rust * 0.4,
+    sheets = look.sheets, mottle = look.mottle, lights = look.lights,
+  }
+end
+
+for _, hull in Ships.list do
+  local base: Design? = if hull.tech == 2 and hull.base then designs[hull.base] else nil
+  if base and designs[hull.id] == nil then
+    designs[hull.id] = { faction = base.faction, draw = base.draw, sheets = base.sheets,
+      look = rebuilt(base.look or Hull.looks[base.faction]), turrets = base.turrets, launchers = base.launchers, fit = base.fit }
+  end
+end
+
 -- ---------------------------------------------------------------------
 
 export type Built = {

@@ -52,6 +52,7 @@ local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
 local System = require("@lt/Core/Describe/System")
+local Ships = require("@lt/Core/Data/Ships")
 local Types = require("@lt/Core/Data/Types")
 local Wallet = require("@lt/Core/Assets/Wallet")
 
@@ -362,8 +363,10 @@ export type Stock = { type: string, points: number, credits: number, standing: n
 
 local stores: { [string]: { Stock } } = {}
 
--- A faction's store: a datacore, the implants, and the blueprints of
--- the tech 2 makes of its own kinds of weapon.
+-- A faction's store: a datacore, the implants, the blueprints of the
+-- tech 2 makes of its own kinds of weapon, and, for a pilot it thinks
+-- well of, those of the tech 2 makes of its own hulls.
+Missions.HULL_POINTS = { frigate = 600, destroyer = 900, industrial = 900, cruiser = 1800, battleship = 3600 } :: { [string]: number }
 function Missions.Store(faction: string): { Stock }
   local made = stores[faction]
   if made then
@@ -381,6 +384,13 @@ function Missions.Store(faction: string): { Stock }
       local blueprint = Blueprints.byProduct[module.id]
       if module.tech == 2 and module.weapon and families[module.weapon.family] and blueprint then
         table.insert(stock, { type = blueprint.id, points = math.ceil(module.basePrice / 400), credits = 0, standing = 2 })
+      end
+    end
+    for _, hull in Ships.list do
+      local blueprint = Blueprints.byProduct[hull.id]
+      local points = Missions.HULL_POINTS[hull.class]
+      if hull.tech == 2 and hull.lineage == faction and blueprint and points then
+        table.insert(stock, { type = blueprint.id, points = points, credits = hull.basePrice // 20, standing = 3 })
       end
     end
   end
