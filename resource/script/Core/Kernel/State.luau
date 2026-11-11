@@ -279,9 +279,12 @@ export type Site = { id: number, system: number, kind: string, code: string, str
 -- 'need' of 'type' to the station 'to'), or a "supply" order (bring
 -- 'need' of 'type' to 'station'). 'key' is the offer it was (station,
 -- day and place in the list), and 'id' is 0 until a pilot has taken it.
+-- 'agent' is who at the station gives it, and 'loyalty' the points it
+-- is worth with their faction beside the pay.
 export type Mission = {
   id: number, key: string, kind: string, station: number, faction: string, system: number, need: number, done: number,
   type: string, to: number, reward: number, standing: number, taken: number,
+  agent: string, loyalty: number,
 }
 
 -- What a pilot has researched of a blueprint: levels of each kind.
@@ -386,6 +389,9 @@ export type State = {
   missionsTaken: { string },
   missionsDone: number,
   standings: { [string]: number },
+  -- Loyalty points with each faction, earned by its jobs and spent at
+  -- its stations (a faction not here has none).
+  loyalty: { [string]: number },
   -- Sites (Tactical/Sites) by the id of their place, in the order they
   -- came; when each system's are next looked at, and which systems have
   -- had any (by system id); and the tick the ship's scanner is free.

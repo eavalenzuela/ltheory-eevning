@@ -889,6 +889,21 @@ function Debug.Spare(type: string, module: string?): boolean
   return true
 end
 
+-- The pilot's loyalty points with the faction whose station they are
+-- docked at (0 in space). Given a number, a cheat: they are set to it.
+function Debug.Loyalty(points: number?): number
+  local state = session.game.state
+  local docked = state.ships[state.player.ship].docked
+  if docked == 0 then
+    return 0
+  end
+  local faction = state.galaxy.systems[docked // 10000].nearest
+  if points then
+    state.loyalty[faction] = points
+  end
+  return state.loyalty[faction] or 0
+end
+
 -- The guide: how many of its steps the pilot has done, of how many, and
 -- whether a step named ("undock", "kill": Core/Character/Guide) is done.
 function Debug.Guide(step: string?): (number, number, boolean)

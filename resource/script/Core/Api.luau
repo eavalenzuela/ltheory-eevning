@@ -69,7 +69,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 29
+Core.SAVE_VERSION = 30
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -261,6 +261,17 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   [28] = function(state: any)
     state.implants = state.implants or {}
   end,
+  -- 30: jobs have agents and earn loyalty points, and lapse after three
+  -- days. A job of a save from before is from nobody and earns none,
+  -- and its three days begin now.
+  [29] = function(state: any)
+    state.loyalty = state.loyalty or {}
+    for _, mission in state.missions do
+      mission.agent = mission.agent or ""
+      mission.loyalty = mission.loyalty or 0
+      mission.taken = state.tick
+    end
+  end,
 }
 
 -- A new game: a galaxy, and the player's first ship docked at a station
@@ -288,6 +299,7 @@ function Core.New(options: Options): Game
     missionsTaken = {},
     missionsDone = 0,
     standings = {},
+    loyalty = {},
     sites = {},
     siteIds = {},
     sitesDue = {},
@@ -368,7 +380,7 @@ local SITE_COMMANDS = { Scan = true }
 local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones = true }
 local IMPLANT_COMMANDS = { PlugImplant = true, UnplugImplant = true }
 local FLEET_COMMANDS = { HirePilot = true, AssignShip = true, DismissPilot = true, FleetOrder = true }
-local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true }
+local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true, RedeemLoyalty = true }
 local COLONY_COMMANDS = { DeployColony = true, BuildFacility = true, RemoveFacility = true, StartExtraction = true, Export = true }
 
 local function validate(state: State.State, command: State.Command): (boolean, string?)
@@ -486,6 +498,7 @@ function Core.Step(game: Game)
     end
   end
   Sites.Step(state, game.events)
+  Missions.Step(state, game.events)
   Standings.Step(state)
   Pirates.Populate(state, game.events)
   Traffic.Step(state, game.events)
@@ -1075,27 +1088,42 @@ end
 -- at offers (none in space), the jobs the pilot has taken, each with
 -- whether it can be finished where they are now (and if not, why not),
 -- and their standing with the faction whose station it is.
-export type MissionStatus = { mission: State.Mission, title: string, ready: boolean, why: string }
-export type MissionsStatus = { offers: { MissionStatus }, inHand: { MissionStatus }, faction: string, standing: number, done: number }
+-- (And a job in hand's seconds left; the pilot's loyalty points with
+-- that faction; and what its store has, with whether each can be had
+-- now and if not, why not.)
+export type MissionStatus = { mission: State.Mission, title: string, ready: boolean, why: string, left: number }
+export type StoreRow = { stock: Missions.Stock, name: string, can: boolean, why: string }
+export type MissionsStatus = { offers: { MissionStatus }, inHand: { MissionStatus }, faction: string, standing: number, done: number,
+  loyalty: number, store: { StoreRow } }
 function Query.Missions(game: Game): MissionsStatus
   local state = game.state
   local ship = state.ships[state.player.ship]
   local offers: { MissionStatus } = {}
-  local faction, standing = "", 0
+  local faction, standing, loyalty = "", 0, 0
+  local store: { StoreRow } = {}
   if ship.docked ~= 0 then
     for _, offer in Missions.Offers(state, ship.docked) do
-      table.insert(offers, { mission = offer, title = Missions.Title(offer), ready = false, why = "" })
+      table.insert(offers, { mission = offer, title = Missions.Title(offer), ready = false, why = "", left = 0 })
     end
     local node = state.galaxy.systems[Space.SystemOf(state, ship.docked)]
     faction = if Factions.byId[node.nearest] then Factions.byId[node.nearest].name else ""
     standing = Missions.Standing(state, node.nearest)
+    loyalty = state.loyalty[node.nearest] or 0
+    if state.starbases[ship.docked] == nil then
+      for _, stock in Missions.Store(node.nearest) do
+        local can, why = validate(state, { kind = "RedeemLoyalty", actor = ship.id, type = stock.type, quantity = 1 })
+        table.insert(store, { stock = stock, name = Types.Info(stock.type).name, can = can, why = why or "" })
+      end
+    end
   end
   local inHand: { MissionStatus } = {}
   for _, mission in Missions.InHand(state) do
     local ready, why = Missions.Ready(state, ship, mission)
-    table.insert(inHand, { mission = mission, title = Missions.Title(mission), ready = ready, why = why or "" })
+    table.insert(inHand, { mission = mission, title = Missions.Title(mission), ready = ready, why = why or "",
+      left = Missions.Left(state, mission) })
   end
-  return { offers = offers, inHand = inHand, faction = faction, standing = standing, done = state.missionsDone }
+  return { offers = offers, inHand = inHand, faction = faction, standing = standing, done = state.missionsDone,
+    loyalty = loyalty, store = store }
 end
 
 -- What the pilot has researched of a blueprint (levels of material and

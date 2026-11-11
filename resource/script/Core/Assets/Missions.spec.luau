@@ -204,4 +204,115 @@ suite:Case("a job abandoned costs standing, and jobs are in the save", function(
   t.eq(#Core.Query.Missions(before).offers, 3)
 end)
 
+suite:Case("a job comes from an agent, the same people at a station every day, and is worth loyalty points beside its pay", function(t)
+  local game = newGame()
+  local state = game.state
+  local home = state.player.home
+  local today = Missions.Offers(state, home)
+  local names: { string } = {}
+  for slot, offer in today do
+    t.ok(#offer.agent > 4, "a job from nobody")
+    t.eq(offer.agent, Missions.Agent(state, home, slot))
+    t.eq(offer.loyalty, math.max(1, offer.reward // Missions.LOYALTY))
+    table.insert(names, offer.agent)
+  end
+  t.ok(names[1] ~= names[2] and names[2] ~= names[3])
+  for _ = 1, 86400 do
+    Core.Step(game)
+  end
+  for slot, offer in Missions.Offers(state, home) do
+    t.eq(offer.agent, names[slot], "tomorrow's job should come from the same agent")
+  end
+end)
+
+suite:Case("a finished job earns loyalty points, and a faction's store sells for them what its standing allows", function(t)
+  local game, mission = taken(t, "supply")
+  local state = game.state
+  local home = state.player.home
+  local faction = mission.faction
+  state.wallet = 100000000
+  -- Nothing to spend yet.
+  t.eq(refused(game, { kind = "RedeemLoyalty", actor = 0, type = "datacore" }), "needs 50 loyalty points")
+  t.eq(refused(game, { kind = "RedeemLoyalty", actor = 0, type = "mineral.iron" }), "this station's store has no such thing")
+  Items.Add(state, mission.type, mission.need, home, "hangar")
+  t.ok((submit(game, { kind = "CompleteMission", actor = 0, target = mission.id })))
+  t.eq(state.loyalty[faction], mission.loyalty)
+  local status = Core.Query.Missions(game)
+  t.eq({ status.loyalty, #status.store > 10 } :: { any }, { mission.loyalty, true } :: { any })
+  -- A datacore for fifty points and five thousand credits, to anybody in good standing.
+  state.loyalty[faction] = 400
+  local wallet = state.wallet
+  t.ok((submit(game, { kind = "RedeemLoyalty", actor = 0, type = "datacore", quantity = 2 })))
+  t.eq({ state.loyalty[faction], wallet - state.wallet }, { 300, 10000 })
+  local cores = 0
+  for _, item in Items.In(state, home, "hangar") do
+    cores += if item.type == "datacore" then item.quantity else 0
+  end
+  t.eq(cores, 2)
+  -- An implant wants a standing of 1, and a blueprint of 2 (and only of the faction's own kinds of weapon).
+  state.standings[faction] = 0.5
+  t.eq(refused(game, { kind = "RedeemLoyalty", actor = 0, type = "implant.shield" }), "needs a standing of 1 with them")
+  state.standings[faction] = 1
+  t.ok((submit(game, { kind = "RedeemLoyalty", actor = 0, type = "implant.shield" })))
+  t.eq(state.loyalty[faction], 300 - 120)
+  local store = Missions.Store(faction)
+  local blueprints, foreign = 0, 0
+  for _, stock in store do
+    if string.sub(stock.type, 1, 10) == "blueprint." then
+      blueprints += 1
+      t.eq({ stock.standing, stock.credits }, { 2, 0 })
+      foreign += if string.find(stock.type, "laser", 1, true) or string.find(stock.type, "blaster", 1, true) then 1 else 0
+    end
+  end
+  -- (the Vessari's are projectile guns and missiles: six kinds of gun and three launchers)
+  t.eq({ faction, blueprints, foreign } :: { any }, { "vessari", 9, 0 } :: { any })
+  t.eq(refused(game, { kind = "RedeemLoyalty", actor = 0, type = "blueprint.autocannon.small.ii" }), "needs a standing of 2 with them")
+  state.standings[faction] = 2
+  state.loyalty[faction] = 100000
+  t.ok((submit(game, { kind = "RedeemLoyalty", actor = 0, type = "blueprint.autocannon.small.ii" })))
+  t.ok(state.loyalty[faction] < 100000)
+  -- With somebody who thinks ill of the pilot there is nothing to be had.
+  state.standings[faction] = -1
+  t.eq(refused(game, { kind = "RedeemLoyalty", actor = 0, type = "datacore" }), "needs a standing of 0 with them")
+end)
+
+suite:Case("a job kept more than three days lapses, at the cost of having given it up", function(t)
+  local game, mission = taken(t, "bounty")
+  local state = game.state
+  local faction = mission.faction
+  t.near(Missions.Left(state, mission), 3 * 86400, 2)
+  for _ = 1, Missions.LIMIT - 120 do
+    Core.Step(game)
+  end
+  t.eq(#state.missionIds, 1)
+  t.ok(Core.Query.Missions(game).inHand[1].left <= 180)
+  local before = Missions.Standing(state, faction)
+  local lapsed = false
+  for _ = 1, 400 do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      lapsed = lapsed or (event.kind == "MissionExpired" and event.mission == mission.id)
+    end
+  end
+  t.ok(lapsed, "nobody said the job had lapsed")
+  t.eq(#state.missionIds, 0)
+  t.ok(Missions.Standing(state, faction) < before - mission.standing, "a lapsed job should cost standing")
+  -- An older save's jobs have no agent and earn no points, and their three days begin when it is opened.
+  local other, held = taken(t, "bounty")
+  for _ = 1, 5000 do
+    Core.Step(other)
+  end
+  local data, length = Core.Save(other)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 29
+  file.state.loyalty = nil
+  for _, each in file.state.missions do
+    each.agent, each.loyalty = nil, nil
+  end
+  local old, oldLength = Codec.Encode(file)
+  local loaded = Core.Load(old, oldLength)
+  local kept = loaded.state.missions[held.id]
+  t.eq({ kept.agent, kept.loyalty, kept.taken, loaded.state.loyalty } :: { any }, { "", 0, loaded.state.tick, {} } :: { any })
+end)
+
 return suite

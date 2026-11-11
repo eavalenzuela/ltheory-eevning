@@ -167,7 +167,12 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "MissionAccepted" then
     Session.Say(session, `Job taken: {event.title}`)
   elseif kind == "MissionCompleted" then
-    Session.Say(session, string.format("Job done: +%d credits, standing %.1f", event.reward, event.standing))
+    Session.Say(session, string.format("Job done: +%d credits, +%d loyalty points, standing %.1f", event.reward, event.loyalty or 0,
+      event.standing))
+  elseif kind == "MissionExpired" then
+    Session.Say(session, `A job has lapsed: {event.title}. It was kept too long`)
+  elseif kind == "LoyaltyRedeemed" then
+    Session.Say(session, `{Types.Info(event.type).name} is in the hangar: {event.left} loyalty points left`)
   elseif kind == "PoliceArrived" then
     Session.Say(session, "The police are here, and they are here for you")
   elseif kind == "Marked" then

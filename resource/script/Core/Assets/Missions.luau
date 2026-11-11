@@ -21,14 +21,32 @@
 -- runs from -10 to 10, and each point adds 3% to what that faction's
 -- stations pay for a job.
 --
--- (A first version of the roadmap's agents. Not yet: agents as people,
--- jobs made from what the simulation needs, a place made for a job,
--- loyalty points, time limits, standing mattering to anything else.)
+-- Each job comes from somebody: a station has three agents, by name,
+-- and each has one job a day. A job in hand has to be finished within
+-- three days of being taken; one that is not lapses, at the cost in
+-- standing of having given it up.
+--
+-- A finished job also earns loyalty points with the faction, a point
+-- for every four hundred credits of its pay, and a faction's stations
+-- have a store where they are spent (with some credits beside): on
+-- datacores, on implants, and on the blueprints of the tech 2 makes of
+-- the faction's own kinds of weapon, which are otherwise only to be
+-- invented. What a store will let a pilot have follows from their
+-- standing: datacores for anybody it does not think ill of, implants
+-- at a standing of 1, blueprints at 2.
+--
+-- (A first version of the roadmap's agents. Not yet: agents with a
+-- standing of their own, jobs made from what the simulation needs, a
+-- place made for a job.)
 
 local Constants = require("@lt/Core/Data/Constants")
 local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Blueprints = require("@lt/Core/Data/Blueprints")
+local Implants = require("@lt/Core/Data/Implants")
 local Items = require("@lt/Core/Assets/Items")
+local Modules = require("@lt/Core/Data/Modules")
+local Names = require("@lt/Core/Describe/Names")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
@@ -44,6 +62,10 @@ export type Event = { [string]: any }
 Missions.OFFERS = 3
 Missions.IN_HAND = 5
 Missions.CRATE = "cargo.sealed"
+-- Credits of a job's pay to a loyalty point.
+Missions.LOYALTY = 400
+-- Ticks a job in hand may be kept before it lapses: three days.
+Missions.LIMIT = 3 * math.ceil(86400 / Constants.TICK)
 -- Ticks in the day a station's offers last.
 local DAY = math.ceil(86400 / Constants.TICK)
 -- What a pirate killed for a bounty job is worth, by how safe the
@@ -76,6 +98,12 @@ local function stations(state: State.State, system: number): { System.Object }
   return found
 end
 
+-- Who at a station gives its nth job of the day: the same person every
+-- day, for as long as the galaxy lasts.
+function Missions.Agent(state: State.State, station: number, slot: number): string
+  return Names.Person(Rng.For(state.galaxySeed, station, slot, 71))
+end
+
 -- The key of an offer: its station, day and place in the list.
 local function keyOf(station: number, day: number, slot: number): string
   return `{station}:{day}:{slot}`
@@ -100,6 +128,7 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
       local mission: State.Mission = {
         id = 0, key = key, kind = "bounty", station = station, faction = node.nearest, system = system, need = 1, done = 0,
         type = "", to = station, reward = 0, standing = 0.1, taken = 0,
+        agent = Missions.Agent(state, station, slot), loyalty = 0,
       }
       local roll = Rng.Int(rng, 3)
       -- (a neighbour's station, for a courier run that is a jump)
@@ -133,6 +162,7 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         mission.reward = math.floor(mission.need * Types.Info(mission.type).basePrice * 1.5 * bonus)
         mission.standing = 0.1
       end
+      mission.loyalty = math.max(1, mission.reward // Missions.LOYALTY)
       table.insert(offers, mission)
     end
   end
@@ -199,7 +229,22 @@ function Missions.Validate(state: State.State, command: State.Command): (boolean
     return false, "not docked"
   end
   local kind = command.kind
-  if kind == "AcceptMission" then
+  if kind == "RedeemLoyalty" then
+    local offer, faction = Missions.Stocked(state, ship.docked, command.type or "")
+    local quantity = command.quantity or 1
+    if offer == nil then
+      return false, "this station's store has no such thing"
+    elseif quantity < 1 or quantity % 1 ~= 0 then
+      return false, "how many?"
+    elseif Standings.Of(state, faction) < offer.standing then
+      return false, `needs a standing of {offer.standing} with them`
+    elseif (state.loyalty[faction] or 0) < offer.points * quantity then
+      return false, `needs {offer.points * quantity} loyalty points`
+    elseif state.wallet < offer.credits * quantity then
+      return false, "not enough credits"
+    end
+    return true
+  elseif kind == "AcceptMission" then
     for _, offer in Missions.Offers(state, ship.docked) do
       if offer.key == command.what then
         if #state.missionIds >= Missions.IN_HAND then
@@ -233,7 +278,18 @@ end
 function Missions.Apply(state: State.State, command: State.Command, events: { Event })
   local ship = state.ships[command.actor]
   local kind = command.kind
-  if kind == "AcceptMission" then
+  if kind == "RedeemLoyalty" then
+    local offer, faction = Missions.Stocked(state, ship.docked, command.type :: string)
+    local quantity = command.quantity or 1
+    if offer then
+      state.loyalty[faction] = (state.loyalty[faction] or 0) - offer.points * quantity
+      Wallet.Pay(state, -offer.credits * quantity, "loyalty store", events)
+      Items.Add(state, offer.type, quantity, ship.docked, "hangar")
+      table.insert(events, { kind = "LoyaltyRedeemed", type = offer.type, quantity = quantity, faction = faction,
+        points = offer.points * quantity, left = state.loyalty[faction] })
+    end
+    return
+  elseif kind == "AcceptMission" then
     for _, offer in Missions.Offers(state, ship.docked) do
       if offer.key == command.what then
         offer.id = State.NewId(state)
@@ -263,10 +319,11 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
     end
     Wallet.Pay(state, mission.reward, "mission reward", events)
     standing(state, mission.faction, mission.standing)
+    state.loyalty[mission.faction] = (state.loyalty[mission.faction] or 0) + mission.loyalty
     close(state, mission)
     state.missionsDone += 1
     table.insert(events, { kind = "MissionCompleted", mission = mission.id, title = Missions.Title(mission), reward = mission.reward,
-      faction = mission.faction, standing = Missions.Standing(state, mission.faction) })
+      faction = mission.faction, standing = Missions.Standing(state, mission.faction), loyalty = mission.loyalty })
   elseif kind == "AbandonMission" then
     -- (a courier's cargo goes back, as much of it as is to hand)
     if mission.kind == "courier" then
@@ -276,6 +333,75 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
     close(state, mission)
     table.insert(events, { kind = "MissionAbandoned", mission = mission.id, title = Missions.Title(mission) })
   end
+end
+
+-- Once a minute: a job kept past its time lapses, as if it had been
+-- given up.
+function Missions.Step(state: State.State, events: { Event })
+  if state.tick % 60 ~= 0 then
+    return
+  end
+  for _, id in table.clone(state.missionIds) do
+    local mission = state.missions[id]
+    if state.tick - mission.taken > Missions.LIMIT then
+      standing(state, mission.faction, -2 * mission.standing)
+      close(state, mission)
+      table.insert(events, { kind = "MissionExpired", mission = mission.id, title = Missions.Title(mission) })
+    end
+  end
+end
+
+-- The seconds a job in hand has left before it lapses.
+function Missions.Left(state: State.State, mission: State.Mission): number
+  return math.max(0, Missions.LIMIT - (state.tick - mission.taken)) * Constants.TICK
+end
+
+-- What a faction's store lets a pilot have, for so many loyalty points
+-- and so many credits, at a standing of at least so much.
+export type Stock = { type: string, points: number, credits: number, standing: number }
+
+local stores: { [string]: { Stock } } = {}
+
+-- A faction's store: a datacore, the implants, and the blueprints of
+-- the tech 2 makes of its own kinds of weapon.
+function Missions.Store(faction: string): { Stock }
+  local made = stores[faction]
+  if made then
+    return made
+  end
+  local own = Factions.byId[faction]
+  local stock: { Stock } = {}
+  if own and own.kind == "human" then
+    table.insert(stock, { type = "datacore", points = 50, credits = 5000, standing = 0 })
+    for _, implant in Implants.list do
+      table.insert(stock, { type = implant.id, points = 120 * implant.slot, credits = Implants.Price(implant) // 2, standing = 1 })
+    end
+    local families: { [string]: boolean } = { [own.weapon] = true, missile = own.launchers >= 0.3 }
+    for _, module in Modules.list do
+      local blueprint = Blueprints.byProduct[module.id]
+      if module.tech == 2 and module.weapon and families[module.weapon.family] and blueprint then
+        table.insert(stock, { type = blueprint.id, points = math.ceil(module.basePrice / 400), credits = 0, standing = 2 })
+      end
+    end
+  end
+  stores[faction] = stock
+  return stock
+end
+
+-- What a station's store has of a type, and whose store it is. Nothing
+-- at a pilot's own starbase, or for a type it does not keep.
+function Missions.Stocked(state: State.State, station: number, type: string): (Stock?, string)
+  local object = Space.Object(state, station)
+  if object == nil or object.kind ~= "station" or state.starbases[station] then
+    return nil, ""
+  end
+  local faction = state.galaxy.systems[Space.SystemOf(state, station)].nearest
+  for _, stock in Missions.Store(faction) do
+    if stock.type == type then
+      return stock, faction
+    end
+  end
+  return nil, faction
 end
 
 -- The name of the faction a job is for.
