@@ -112,6 +112,8 @@ function Session.Notice(session: Session, event: Space.Event)
     end
   elseif kind == "BatteryFired" and event.to == mine then
     Session.Say(session, "The station's batteries are firing on you")
+  elseif kind == "Salvaged" and event.ball == mine then
+    Session.Say(session, `Salvaged: {event.pieces} {if event.pieces == 1 then "piece" else "pieces"} brought off`)
   elseif kind == "Held" and event.ball == mine then
     Session.Say(session, if event.scrambled and event.web < 1 then "Webbed and warp scrambled: you are held"
       elseif event.scrambled then "Warp scrambled: you cannot warp"

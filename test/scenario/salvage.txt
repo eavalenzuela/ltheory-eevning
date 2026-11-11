@@ -1,0 +1,43 @@
+# Salvaging, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/salvage.txt
+#
+# A salvager goes on the starter Courier in place of one gun (the module
+# and the skill for it are given), and strips a wreck (which is given
+# too: the fight for one is the combat scenario's). What comes off is in
+# the hold. The wreck had a pirate's tag aboard, so it waits to be
+# looted, and cannot be salvaged twice.
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Give('salvager.small', 1))
+lua GameDebug.Train('salvaging', 5)
+frames 3
+until GameDebug.Press('Unfit:high2')
+until GameDebug.Fitted('autocannon.small') == 1
+until GameDebug.Press('Fit:salvager.small')
+until GameDebug.Fitted('salvager.small') == 1
+
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('Stop'))
+wait 3
+lua assert(GameDebug.Wreck(), 'no wreck could be made')
+frames 5
+lua assert(GameDebug.Count('wreck') == 1, 'the wreck is not on the overview')
+
+lua assert(GameDebug.Salvage() == 1, 'the salvager did not start')
+lua GameDebug.TimeScale(8)
+until GameDebug.Hold('salvage.plates') + GameDebug.Hold('salvage.circuits') + GameDebug.Hold('salvage.conduits') >= 2
+lua GameDebug.TimeScale(1)
+frames 5
+lua assert(GameDebug.Salvage() == 0, 'a wreck should not be salvaged twice')
+
+# It had a tag aboard: it is still there to loot.
+lua assert(GameDebug.Count('wreck') == 1, 'a wreck with something aboard should wait to be looted')
+lua assert(GameDebug.Order('Loot', 'wreck'), 'loot was refused')
+until GameDebug.Hold('tag.pirate') == 1
+
+echo salvage scenario passed
+quit

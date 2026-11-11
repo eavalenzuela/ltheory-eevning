@@ -161,6 +161,7 @@ export type Wreck = {
   radius: number,
   hull: string,       -- the Data/Ships id of the ship it was ("" in a save from before this was kept)
   expires: number,    -- the tick it disappears
+  salvaged: boolean,  -- a salvager has had what the hull itself was worth
 }
 
 -- A ship flown by the game rather than the player: what it is doing.

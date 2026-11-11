@@ -64,6 +64,7 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     local wreck: State.Wreck = {
       id = State.NewId(state), kind = "wreck", name = ball.name .. " Wreck", system = ball.system, grid = ball.grid,
       x = ball.x, y = ball.y, z = ball.z, radius = ball.radius, hull = ship.type, expires = state.tick + WRECK_LIFETIME,
+      salvaged = false,
     }
     state.wrecks[wreck.id] = wreck
     table.insert(state.wreckIds, wreck.id)

@@ -260,6 +260,13 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     row(to, if repair.layer == "shield" then "Shield restored" else "Armour repaired", `{plain(repair.amount)} HP every {seconds(repair.duration)}`)
     row(to, "Capacitor a cycle", `{plain(repair.capacitor)} GJ`)
   end
+  if module.salvager then
+    local salvager = module.salvager
+    local to = section(sheet, "Salvaging")
+    row(to, "Chance a cycle", `{plain(salvager.chance * 100)}%, and 10% more a level of Salvaging`)
+    row(to, "Range", metres(salvager.range))
+    row(to, "Capacitor a cycle", `{plain(salvager.capacitor)} GJ every {seconds(salvager.duration)}`)
+  end
   if module.hex then
     local hex = module.hex
     local to = section(sheet, if hex.kind == "web" then "Stasis web" else "Warp disruption")

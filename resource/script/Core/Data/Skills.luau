@@ -39,6 +39,9 @@ local function weapons(family: string, attribute: string, perLevel: number): Mod
 end
 
 local skills: { Skill } = {
+  -- Picking over what is left
+  { id = "salvaging", name = "Salvaging", rank = 3, start = -1, requires = {},
+    note = "Level 1 to fit a salvager. 10% likelier to bring something off each cycle a level." },
   -- Holding things
   { id = "propulsion.jamming", name = "Propulsion Jamming", rank = 3, start = -1, requires = { { skill = "electronics", level = 2 } },
     note = "Level 1 to fit a stasis webifier or a warp disruptor." },

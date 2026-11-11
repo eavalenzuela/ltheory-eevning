@@ -62,6 +62,15 @@ export type Hex = {
   capacitor: number,        -- GJ per cycle
 }
 
+-- A salvager works on a wreck: each cycle may bring off what is still
+-- worth having of the hull itself ('chance', before any skill).
+export type Salvager = {
+  range: number,            -- m
+  duration: number,         -- s per cycle
+  capacitor: number,        -- GJ per cycle
+  chance: number,
+}
+
 export type ModuleType = {
   id: string,
   name: string,
@@ -80,6 +89,7 @@ export type ModuleType = {
   boostDuration: number?,   -- s per cycle, with 'boost'
   boostCapacitor: number?,  -- GJ per cycle
   hex: Hex?,
+  salvager: Salvager?,
   -- Skills a pilot needs to fit it. (Where absent, Data/Skills says.)
   requires: { { skill: string, level: number } }?,
 }
@@ -215,6 +225,15 @@ local modules: { ModuleType } = {
       weapons("laser", "optimal", 1.10), weapons("projectile", "optimal", 1.10),
       weapons("laser", "falloff", 1.20), weapons("projectile", "falloff", 1.20),
     },
+  },
+
+  -- What is left of a ship is worth something to whoever takes the
+  -- trouble (Tactical/Combat; what comes off is Data/Types' salvage).
+  {
+    id = "salvager.small", name = "Salvager", slot = "high", hardpoint = "",
+    cpu = 20, powergrid = 1, volume = 5, basePrice = 40000, passive = {},
+    salvager = { range = 5000, duration = 10, capacitor = 18, chance = 0.3 },
+    requires = { { skill = "salvaging", level = 1 } },
   },
 
   -- Holding another ship: slowing it, and keeping it out of warp. (One

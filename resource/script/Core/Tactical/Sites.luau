@@ -104,7 +104,7 @@ local function addWreck(state: State.State, name: string, system: number, grid: 
   expires: number): number
   local wreck: State.Wreck = {
     id = State.NewId(state), kind = "wreck", name = name, system = system, grid = grid, x = x, y = y, z = z, radius = radius,
-    hull = "", expires = expires,
+    hull = "", expires = expires, salvaged = false,
   }
   state.wrecks[wreck.id] = wreck
   table.insert(state.wreckIds, wreck.id)

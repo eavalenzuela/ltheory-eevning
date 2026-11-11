@@ -30,6 +30,9 @@ local Vitals = require("@lt/Core/Tactical/Vitals")
 
 local Combat = {}
 
+-- What a salvager brings off a wreck (Data/Types).
+local SALVAGE = { "salvage.plates", "salvage.circuits", "salvage.conduits" }
+
 -- Ticks a pilot stays marked after firing on somebody who is no pirate
 -- (Tactical/Traffic.MARKED: a quarter of an hour).
 local MARKED = 900
@@ -144,6 +147,17 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
         return false, "out of mining range"
       end
       return true
+    elseif module.salvager then
+      -- (a wreck needs no lock: it is not going anywhere)
+      local wreck = state.wrecks[command.target or 0]
+      if wreck == nil or wreck.system ~= ball.system then
+        return false, "that is not a wreck"
+      elseif wreck.salvaged then
+        return false, "that wreck has been salvaged"
+      elseif Space.Gap(ball :: any, wreck :: any) > module.salvager.range then
+        return false, "out of range"
+      end
+      return true
     elseif module.hex then
       local lock = findLock(ball, command.target or 0)
       local target = state.balls[command.target or 0]
@@ -187,9 +201,11 @@ function Combat.Apply(state: State.State, command: State.Command, events: { Even
     local item = state.items[command.item :: number]
     local module = Modules.byId[item.type]
     table.insert(ball.vitals.running, {
-      item = item.id, target = if module.weapon or module.miner or module.hex then command.target :: number else 0,
+      item = item.id,
+      target = if module.weapon or module.miner or module.hex or module.salvager then command.target :: number else 0,
       -- A weapon fires at once; a mining laser delivers at the end of its cycle.
-      next = now(state) + (if module.miner then module.miner.duration else 0), stopping = false, cycles = 0,
+      next = now(state) + (if module.miner then module.miner.duration elseif module.salvager then module.salvager.duration else 0),
+      stopping = false, cycles = 0,
     })
     if module.boost then
       Vitals.Refresh(state, ball)
@@ -419,6 +435,49 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
         return false
       end
       running.next += miner.duration
+
+    elseif module.salvager then
+      local salvager = module.salvager
+      local wreck = state.wrecks[running.target]
+      if wreck == nil or wreck.salvaged then
+        stop(state, ball, index, "nothing left to salvage", events)
+        return false
+      elseif Space.Gap(ball :: any, wreck :: any) > salvager.range then
+        stop(state, ball, index, "out of range", events)
+        return false
+      elseif v.capacitor < salvager.capacitor then
+        stop(state, ball, index, "capacitor empty", events)
+        return false
+      end
+      v.capacitor -= salvager.capacitor
+      running.next += salvager.duration
+      -- Each cycle may be the one: likelier with skill at it.
+      local levels = Items.Levels(state, ball.id)
+      local chance = salvager.chance + 0.1 * (if levels then math.max(0, levels.salvaging or 0) else 0)
+      local rng = Rng.For(state.historySeed, state.tick, ball.id, item.id, 61)
+      if Rng.Chance(rng, chance) then
+        -- The bigger the hull, the more of it there is to bring off.
+        local pieces = 1 + math.floor(wreck.radius / 40)
+        local got: { [string]: number } = {}
+        for _ = 1, pieces do
+          local type = SALVAGE[Rng.Int(rng, #SALVAGE) + 1]
+          got[type] = (got[type] or 0) + 1
+        end
+        for _, type in SALVAGE do
+          if got[type] then
+            Items.Add(state, type, got[type], ball.id, "cargo")
+          end
+        end
+        wreck.salvaged = true
+        -- (a wreck with nothing aboard is gone once it has been stripped;
+        -- one with something aboard waits for it to be taken)
+        if #Items.In(state, wreck.id, "cargo") == 0 then
+          wreck.expires = state.tick
+        end
+        table.insert(events, { kind = "Salvaged", ball = ball.id, wreck = wreck.id, pieces = pieces })
+        stop(state, ball, index, "salvaged", events)
+        return false
+      end
 
     elseif module.hex then
       -- (what it does to its target is worked out for everybody at once,

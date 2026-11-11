@@ -16,6 +16,7 @@ local Colony = require("@lt/Game/UI/Colony")
 local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Planets = require("@lt/Core/Data/Planets")
+local Pirates = require("@lt/Core/Tactical/Pirates")
 local Dogma = require("@lt/Core/Dogma")
 local Hud = require("@lt/Game/UI/Hud")
 local Hull = require("@lt/Game/View/Hull")
@@ -585,6 +586,35 @@ end
 
 function Debug.Train(skill: string, level: number)
   session.game.state.skills[skill] = level
+end
+
+-- A cheat, for a wreck to work on without a fight: a pirate scout from
+-- nowhere, a kilometre off the pilot's ship, destroyed by nobody.
+-- Returns false if the pilot is not in space.
+function Debug.Wreck(): boolean
+  local state = session.game.state
+  local me = state.balls[state.player.ship]
+  if me == nil then
+    return false
+  end
+  local scout = Pirates.Spawn(state, Pirates.SCOUT, me.system, me.x + 1000, me.y, me.z, me.grid)
+  Aftermath.Destroy(state, scout.id, 0, session.game.events)
+  return true
+end
+
+-- Switch every salvager on, on the nearest wreck. Returns how many started.
+function Debug.Salvage(): number
+  local wreck = find("wreck")
+  local started = 0
+  if wreck then
+    session.selected = wreck.id
+    for _, item in Core.Query.Fitted(session.game, session.game.state.player.ship) do
+      if Modules.byId[item.type].salvager and Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id, target = wreck.id }) then
+        started += 1
+      end
+    end
+  end
+  return started
 end
 
 -- How a ship is held (Tactical/Combat): the share of its top speed a

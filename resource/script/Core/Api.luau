@@ -64,7 +64,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 20
+Core.SAVE_VERSION = 21
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -189,6 +189,15 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       ball.vitals.web = ball.vitals.web or 1
       if ball.vitals.scrambled == nil then
         ball.vitals.scrambled = false
+      end
+    end
+  end,
+  -- 21: a wreck can be salvaged, once. No wreck of a save from before
+  -- has been.
+  [20] = function(state: any)
+    for _, wreck in state.wrecks do
+      if wreck.salvaged == nil then
+        wreck.salvaged = false
       end
     end
   end,

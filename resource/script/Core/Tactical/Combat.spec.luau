@@ -513,4 +513,67 @@ suite:Case("a raider carries a warp disruptor, and a pilot it catches cannot war
   t.eq(refused(a, { kind = "WarpTo", actor = 0, target = planet }), "(accepted)")
 end)
 
+-- ---------------------------------------------------------------------
+-- Salvaging
+
+suite:Case("a salvager strips a wreck, once, in as many cycles as luck and skill allow", function(t)
+  local a = arena("frigate.courier", { { "salvager.small" } }, "frigate.courier", {}, 2000)
+  local state = a.game.state
+  local salvager = modules(a)[1]
+  -- A ship is not a wreck. Destroy it (nobody's kill) and it is.
+  t.eq(refused(a, { kind = "ActivateModule", actor = 0, item = salvager.id, target = a.foe.id }), "that is not a wreck")
+  Aftermath.Destroy(state, a.foe.id, 0, a.game.events)
+  local wreck = state.wrecks[state.wreckIds[#state.wreckIds]]
+  for _, item in Items.In(state, wreck.id, "cargo") do
+    Items.Take(state, item, item.quantity)
+  end
+  order(t, a, { kind = "ActivateModule", actor = 0, item = salvager.id, target = wreck.id })
+  local capacitor = a.me.vitals.capacitor
+  local done, cycles = stepUntil(a, "Salvaged", 400)
+  t.eq({ done.ball, done.wreck } :: { any }, { a.me.id, wreck.id } :: { any })
+  t.ok(cycles >= 10, "a salvager should take a cycle at the least")
+  t.ok(a.me.vitals.capacitor < capacitor or cycles > 60, "salvaging should cost capacitor")
+  -- What came off is in the hold, as much as the hull was big.
+  local pieces = 0
+  for _, item in Items.In(state, a.me.id, "cargo") do
+    t.ok(string.sub(item.type, 1, 8) == "salvage.", `{item.type} came off a wreck`)
+    pieces += item.quantity
+  end
+  t.eq(pieces, 1 + math.floor(wreck.radius / 40))
+  t.eq(pieces, done.pieces)
+  -- It has stopped, the wreck (which had nothing aboard) is gone, and there is no second helping.
+  t.eq(#a.me.vitals.running, 0)
+  Core.Step(a.game)
+  t.eq(state.wrecks[wreck.id], nil)
+end)
+
+suite:Case("a wreck with something aboard stays to be looted after it is salvaged, and skill makes salvaging quicker", function(t)
+  local function cyclesFor(skill: number, seeds: number): number
+    local total = 0
+    for seed = 1, seeds do
+      local a = arena("frigate.courier", { { "salvager.small" } }, "frigate.courier", {}, 2000, seed)
+      local state = a.game.state
+      state.skills.salvaging = skill
+      Aftermath.Destroy(state, a.foe.id, 0, a.game.events)
+      local wreck = state.wrecks[state.wreckIds[#state.wreckIds]]
+      Items.Add(state, "scrap.metal", 5, wreck.id, "cargo")
+      order(t, a, { kind = "ActivateModule", actor = 0, item = modules(a)[1].id, target = wreck.id })
+      local _, ticks = stepUntil(a, "Salvaged", 600)
+      total += ticks
+      -- (still there, and marked)
+      Core.Step(a.game)
+      t.ok(state.wrecks[wreck.id] ~= nil and wreck.salvaged, "a wreck with cargo should outlast its salvaging")
+      t.eq(refused(a, { kind = "ActivateModule", actor = 0, item = modules(a)[1].id, target = wreck.id }), "that wreck has been salvaged")
+    end
+    return total
+  end
+  local green, practised = cyclesFor(1, 12), cyclesFor(5, 12)
+  t.ok(practised < green, `{practised} ticks with Salvaging 5 against {green} with Salvaging 1`)
+  -- Out of reach it is refused.
+  local a = arena("frigate.courier", { { "salvager.small" } }, "frigate.courier", {}, 9000)
+  Aftermath.Destroy(a.game.state, a.foe.id, 0, a.game.events)
+  local far = a.game.state.wreckIds[#a.game.state.wreckIds]
+  t.eq(refused(a, { kind = "ActivateModule", actor = 0, item = modules(a)[1].id, target = far }), "out of range")
+end)
+
 return suite

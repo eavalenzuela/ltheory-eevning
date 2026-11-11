@@ -416,11 +416,15 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
     if module.hex then
       note = if running then "holding" else "idle"
     end
+    if module.salvager then
+      note = if running then "salvaging" else "idle"
+    end
     if running then
       local duration = if module.weapon then module.weapon.duration
         elseif module.repair then module.repair.duration
         elseif module.miner then module.miner.duration
         elseif module.hex then module.hex.duration
+        elseif module.salvager then module.salvager.duration
         else module.boostDuration or 1
       bar(bx + 8, y + 38, width - 16, 3, duration - math.max(0, running.next - now), duration, Im.ACCENT)
       if running.stopping then
@@ -431,6 +435,9 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
     if clicked and active then
       if running then
         Session.Do(session, { kind = "DeactivateModule", actor = 0, item = item.id })
+      elseif module.salvager then
+        -- (on the wreck that is selected: a wreck needs no lock)
+        Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id, target = session.selected })
       elseif module.weapon or module.miner or module.hex then
         -- at the selected target if it is locked, else the first locked one
         local target = 0
