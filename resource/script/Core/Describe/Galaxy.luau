@@ -5,6 +5,7 @@
 -- lives where and what is made there is Strategic/Atlas; distances in
 -- jumps are Strategic/Routes.
 
+local Factions = require("@lt/Core/Data/Factions")
 local Names = require("@lt/Core/Describe/Names")
 local Rng = require("@lt/Core/Kernel/Rng")
 
@@ -16,10 +17,17 @@ export type SystemNode = {
   x: number,              -- light years on the map
   y: number,
   neighbors: { number },  -- ids of systems one jump away, ascending
-  -- How safe it is, from 1 (where a pilot starts) to 0 (lawless):
-  -- Galaxy.Secure. What comes to a belt or waits at a gate follows
-  -- from it (Tactical/Pirates), and what ore the belts have
-  -- (Describe/System).
+  -- Whose it is (Galaxy.Claim): the id of a human faction
+  -- (Data/Factions), or "" for space nobody holds.
+  owner: string,
+  -- The faction whose homeworld is nearest, holder or not: whose towers
+  -- the stations there are, and whose ships come by.
+  nearest: string,
+  home: boolean,          -- it is a faction's homeworld
+  hops: number,           -- jumps to the nearest homeworld
+  -- How safe it is, from 1 (a homeworld) to 0 (space nobody holds).
+  -- What comes to a belt or waits at a gate follows from it
+  -- (Tactical/Pirates), and what ore the belts have (Describe/System).
   security: number,
 }
 
@@ -30,41 +38,141 @@ function Galaxy.Band(security: number): Band
   return if security >= 0.7 then "secure" elseif security >= 0.3 then "low" else "lawless"
 end
 
--- Give every system its security: 1 at the first system, falling with
--- the jumps from it, to nothing a little over half way to the farthest.
--- The farthest system of a galaxy of three or more is always lawless,
--- so the smallest galaxy still has somewhere that is.
---
--- (A stand-in: when the strategic layer joins the game a system's
--- security is what its owner's control and the pirates' pressure make
--- it, Strategic/Order.)
-function Galaxy.Secure(galaxy: Galaxy)
-  local systems = galaxy.systems
-  local jumps: { number } = table.create(#systems, -1)
-  local queue = { 1 }
-  jumps[1] = 0
-  local farthest, most = 1, 0
+-- The share of a galaxy's systems that some faction holds.
+Galaxy.CLAIMED = 0.7
+-- A faction for every this many systems, up to the four there are.
+Galaxy.SYSTEMS_A_FACTION = 10
+
+-- Jumps from 'source' to every system.
+local function hopsFrom(systems: { SystemNode }, source: number): { number }
+  local hops: { number } = table.create(#systems, -1)
+  hops[source] = 0
+  local queue = { source }
   local at = 1
   while at <= #queue do
     local id = queue[at]
     at += 1
-    if jumps[id] > most or (jumps[id] == most and id > farthest) then
-      farthest, most = id, jumps[id]
-    end
     for _, neighbor in systems[id].neighbors do
-      if jumps[neighbor] < 0 then
-        jumps[neighbor] = jumps[id] + 1
+      if hops[neighbor] < 0 then
+        hops[neighbor] = hops[id] + 1
         table.insert(queue, neighbor)
       end
     end
   end
-  local span = math.max(2, math.ceil(most * 0.6))
-  for id, system in systems do
-    system.security = math.max(0, 1 - math.max(0, jumps[id]) / span)
+  return hops
+end
+
+-- Say whose each system is, and so how safe.
+--
+-- The human factions have a homeworld each: the first faction's is the
+-- first system, where a pilot starts, and each next one's is as far as
+-- can be from those already chosen. A small galaxy has fewer factions.
+-- The systems nearest a homeworld are its faction's, seven in ten of
+-- them all told; the rest, the farthest from anybody, nobody holds.
+-- Security is 1 at a homeworld and falls with the jumps from it, never
+-- below "low" in space somebody holds, and is nothing in space nobody
+-- does. So the smallest galaxy that has three systems has one of each
+-- kind of space.
+--
+-- (The aliens are not on the map yet: where they live is not settled.
+-- And who holds what does not change: when the strategic layer joins
+-- the game, ownership and security are what its powers make them.)
+function Galaxy.Claim(galaxy: Galaxy)
+  local systems = galaxy.systems
+  local count = #systems
+  local humans: { string } = {}
+  for _, faction in Factions.list do
+    if faction.kind == "human" then
+      table.insert(humans, faction.id)
+    end
   end
-  if #systems >= 3 then
-    systems[farthest].security = 0
+  local wanted = math.clamp(count // Galaxy.SYSTEMS_A_FACTION, 1, #humans)
+  local hops = hopsFrom(systems, 1)
+  local nearest: { number } = table.create(count, 1)
+  local homes = 1
+  while homes < wanted do
+    local best, most = 1, -1
+    for id = 1, count do
+      if hops[id] > most then
+        best, most = id, hops[id]
+      end
+    end
+    homes += 1
+    for id, far in hopsFrom(systems, best) do
+      if far < hops[id] then
+        hops[id] = far
+        nearest[id] = homes
+      end
+    end
   end
+
+  -- The nearest to a homeworld first, and of those as near, the lower id.
+  local order: { number } = {}
+  for id = 1, count do
+    order[id] = id
+  end
+  table.sort(order, function(a: number, b: number): boolean
+    if hops[a] ~= hops[b] then
+      return hops[a] < hops[b]
+    end
+    return a < b
+  end)
+  local claimed = math.max(1, math.floor(count * Galaxy.CLAIMED))
+  local reach = hops[order[claimed]]
+  for rank, id in order do
+    local system = systems[id]
+    local held = rank <= claimed
+    system.owner = if held then humans[nearest[id]] else ""
+    system.nearest = humans[nearest[id]]
+    system.hops = hops[id]
+    system.home = hops[id] == 0
+    system.security = if held then math.max(0.3, 1 - hops[id] / (reach + 1)) else 0
+  end
+end
+
+-- What a jump into a system counts for when the safest way is wanted,
+-- beside the jump itself: nothing where order is kept, a little where
+-- it is thin, and a great deal where there is none, so that a route
+-- goes through lawless space only when there is no other way, and then
+-- through as little of it as it can.
+local RISK: { [string]: number } = { secure = 0, low = 2, lawless = 30 }
+
+-- The way from one system to another: the systems in order, both ends
+-- included (one system, if they are the same). The fewest jumps, or
+-- with 'safest' the least dangerous way. Of ways as good, the one
+-- through the lower-numbered systems.
+function Galaxy.Route(galaxy: Galaxy, from: number, to: number, safest: boolean?): { number }
+  local systems = galaxy.systems
+  assert(systems[from] and systems[to], "no such system")
+  local count = #systems
+  local cost: { number } = table.create(count, math.huge)
+  local before: { number } = table.create(count, 0)
+  local done: { boolean } = table.create(count, false)
+  cost[from] = 0
+  for _ = 1, count do
+    local at, least = 0, math.huge
+    for id = 1, count do
+      if not done[id] and cost[id] < least then
+        at, least = id, cost[id]
+      end
+    end
+    if at == 0 or at == to then
+      break
+    end
+    done[at] = true
+    for _, neighbor in systems[at].neighbors do
+      local step = 1 + (if safest then RISK[Galaxy.Band(systems[neighbor].security)] else 0)
+      if least + step < cost[neighbor] then
+        cost[neighbor] = least + step
+        before[neighbor] = at
+      end
+    end
+  end
+  local route: { number } = { to }
+  while route[1] ~= from do
+    table.insert(route, 1, before[route[1]])
+  end
+  return route
 end
 
 export type Galaxy = {
@@ -104,7 +212,7 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
       name = Names.System(rng)
     end
     used[name] = true
-    systems[id] = { id = id, name = name, x = x, y = y, neighbors = {}, security = 1 }
+    systems[id] = { id = id, name = name, x = x, y = y, neighbors = {}, owner = "", nearest = "", home = false, hops = 0, security = 1 }
   end
 
   local function link(a: number, b: number)
@@ -145,7 +253,7 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
   end
 
   local galaxy: Galaxy = { seed = seed, systems = systems }
-  Galaxy.Secure(galaxy)
+  Galaxy.Claim(galaxy)
   return galaxy
 end
 

@@ -1,0 +1,57 @@
+# A galaxy of forty systems, the star map and the autopilot, in the game
+# app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/galaxy.txt
+#
+# Begin a game in a galaxy of forty. A pilot starts at the first
+# faction's homeworld. Open the map, set the farthest system that can be
+# reached without entering lawless space as the destination, by the
+# safest way, switch the autopilot on, and be flown there: out of the
+# station, gate after gate, with every system on the way built and
+# thrown away again.
+
+wait 2
+lua GameDebug.NewGame(5, 40)
+frames 5
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Galaxy() == 40, 'the galaxy should have forty systems')
+lua assert(select(2, GameDebug.Galaxy()) == 'Vessari', 'a pilot starts in the first faction\'s space')
+lua assert(GameDebug.Security() == 1, 'a pilot starts at a homeworld')
+lua assert(GameDebug.Docked())
+
+# The map, and somewhere far to go.
+until GameDebug.Press('Map')
+frames 3
+lua assert(GameDebug.CanPress('Map:close'), 'the map did not open')
+lua assert(not GameDebug.CanPress('Autopilot'), 'with nowhere to go there is no autopilot to switch on')
+lua _G.far, _G.jumps, _G.id = GameDebug.Far()
+lua print('going to', _G.far, 'which is', _G.jumps, 'jumps off')
+lua assert(_G.jumps >= 4, 'a galaxy of forty should have somewhere four jumps off that is not lawless')
+lua assert(GameDebug.Destination(_G.far, true) == _G.jumps)
+frames 3
+until GameDebug.Press('Map:autopilot')
+until GameDebug.Autopilot()
+until GameDebug.Press('Map:close')
+
+# The autopilot undocks and flies the route. It never enters lawless space.
+lua GameDebug.TimeScale(16)
+until GameDebug.InSpace()
+patience 400
+until GameDebug.System() ~= 1
+lua assert(select(2, GameDebug.Security()) ~= 'lawless', 'the safest way went through lawless space')
+lua assert(GameDebug.Destination() == _G.jumps - 1, 'a jump on, the route should be a jump shorter')
+until not GameDebug.Autopilot()
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.System() == _G.id, 'the autopilot stopped somewhere else')
+lua assert(GameDebug.Destination() == -1, 'on arrival there is nowhere left to go')
+lua print('arrived in', _G.far, 'which is', select(2, GameDebug.Galaxy()), 'space, security', (GameDebug.Security()))
+
+# An order by hand takes the ship back from the autopilot.
+lua assert(GameDebug.Destination(1) > 0)
+lua assert(GameDebug.Autopilot(true))
+frames 3
+lua assert(GameDebug.Order('Stop'))
+lua assert(not GameDebug.Autopilot(), 'an order by hand should switch the autopilot off')
+
+echo galaxy scenario passed
+quit

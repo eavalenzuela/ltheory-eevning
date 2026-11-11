@@ -38,6 +38,8 @@
 #   game-menu   the menus and save slots (test/scenario/menu.txt): a new
 #               game from a seed, saved, loaded and deleted through the
 #               menus, and the assets window
+#   game-galaxy  a galaxy of forty systems (test/scenario/galaxy.txt): the
+#               star map, a destination, and the autopilot flying there
 #   game-pace   the game app must draw at least thirty frames a second just
 #               outside the home station (test/scenario/pace.txt)
 #   goldens     script/goldens: screenshots of the stored scenes must match
@@ -144,6 +146,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/lawless.txt
   step game-menu 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/menu.txt
+  step game-galaxy 0 timeout 700 bin/launch game --no-present --fixed-step 60 --timeout 600 \
+    --script test/scenario/galaxy.txt
   step game-pace 0 timeout 200 bin/launch game --no-present --fixed-step 60 --timeout 150 \
     --script test/scenario/pace.txt
   step goldens 0 script/goldens

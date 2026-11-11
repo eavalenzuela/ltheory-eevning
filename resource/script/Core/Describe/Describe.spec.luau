@@ -1,6 +1,7 @@
 --!strict
 local Codec = require("@lt/Core/Persist/Codec")
 local Constants = require("@lt/Core/Data/Constants")
+local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local System = require("@lt/Core/Describe/System")
 local Test = require("@lt/Tool/Test")
@@ -141,6 +142,118 @@ suite:Case("the rare ores are in the belts of lawless space and nowhere else", f
   end
   t.ok(wild > 20, `only {wild} rocks of rare ore in twelve lawless systems`)
   t.ok(tame > wild, "lawless belts are mostly rare ore")
+end)
+
+suite:Case("the human factions share out most of a galaxy from a homeworld each, and nobody holds the rest", function(t)
+  local humans: { string } = {}
+  for _, faction in Factions.list do
+    if faction.kind == "human" then
+      table.insert(humans, faction.id)
+    end
+  end
+  for seed = 1, 8 do
+    for _, count in { 3, 12, 40, 200 } do
+      local galaxy = Galaxy.Describe(seed, count)
+      local factions = math.clamp(count // Galaxy.SYSTEMS_A_FACTION, 1, #humans)
+      local homes: { [string]: number } = {}
+      local held: { [string]: number } = {}
+      local claimed = 0
+      for _, system in galaxy.systems do
+        t.ok(table.find(humans, system.nearest) ~= nil, `seed {seed}: system {system.id} is nearest nobody`)
+        if system.home then
+          t.eq(system.hops, 0)
+          t.eq(system.security, 1)
+          t.eq(homes[system.owner], nil)
+          homes[system.owner] = system.id
+        end
+        if system.owner ~= "" then
+          claimed += 1
+          t.eq(system.owner, system.nearest)
+          t.ok(system.security >= 0.3, `seed {seed}: held space with a security of {system.security}`)
+          held[system.owner] = (held[system.owner] or 0) + 1
+        else
+          t.eq(system.security, 0)
+        end
+      end
+      t.eq(claimed, math.floor(count * Galaxy.CLAIMED))
+      -- (the first factions of the list, the first of them at the first system)
+      for index = 1, #humans do
+        if index <= factions then
+          t.ok(homes[humans[index]] ~= nil, `seed {seed}, {count} systems: {humans[index]} has no homeworld`)
+          t.ok(held[humans[index]] >= 2 or count < 12, `seed {seed}, {count} systems: {humans[index]} holds only its homeworld`)
+        else
+          t.eq(homes[humans[index]], nil)
+        end
+      end
+      t.eq(homes[humans[1]], 1)
+      -- (and nobody's homeworld is next door to another's)
+      if factions > 1 then
+        for _, system in galaxy.systems do
+          if system.home then
+            for _, neighbor in system.neighbors do
+              t.ok(not galaxy.systems[neighbor].home, `seed {seed}, {count} systems: two homeworlds a jump apart`)
+            end
+          end
+        end
+      end
+      -- security never rises going away from home
+      for _, system in galaxy.systems do
+        for _, neighbor in system.neighbors do
+          local other = galaxy.systems[neighbor]
+          if other.hops > system.hops then
+            t.ok(other.security <= system.security, `seed {seed}: it gets safer going away from home`)
+          end
+        end
+      end
+    end
+  end
+end)
+
+suite:Case("a route is the fewest jumps, or the safest way", function(t)
+  for seed = 1, 6 do
+    local galaxy = Galaxy.Describe(seed, 60)
+    local systems = galaxy.systems
+    -- Jumps from the first system, and jumps from it without entering
+    -- lawless space (-1: there is no such way).
+    local function hops(lawless: boolean): { number }
+      local found: { number } = table.create(#systems, -1)
+      found[1] = 0
+      local queue = { 1 }
+      local at = 1
+      while at <= #queue do
+        local id = queue[at]
+        at += 1
+        for _, neighbor in systems[id].neighbors do
+          if found[neighbor] < 0 and (lawless or Galaxy.Band(systems[neighbor].security) ~= "lawless") then
+            found[neighbor] = found[id] + 1
+            table.insert(queue, neighbor)
+          end
+        end
+      end
+      return found
+    end
+    local any, kept = hops(true), hops(false)
+    for to = 1, #systems do
+      for _, safest in { false, true } do
+        local route = Galaxy.Route(galaxy, 1, to, safest)
+        t.eq({ route[1], route[#route] }, { 1, to })
+        local wild = 0
+        for index = 2, #route do
+          t.ok(table.find(systems[route[index - 1]].neighbors, route[index]) ~= nil, `seed {seed}: a route jumps where there is no gate`)
+          wild += if Galaxy.Band(systems[route[index]].security) == "lawless" then 1 else 0
+        end
+        if not safest then
+          t.eq(#route - 1, any[to])
+        elseif kept[to] >= 0 then
+          t.eq(wild, 0)
+        end
+        t.ok(#route - 1 >= any[to])
+      end
+    end
+    t.eq(Galaxy.Route(galaxy, 5, 5), { 5 })
+    -- (and it is the same way every time it is asked for)
+    t.eq(Galaxy.Route(galaxy, 2, 57, true), Galaxy.Route(galaxy, 2, 57, true))
+  end
 end)
 
 return suite

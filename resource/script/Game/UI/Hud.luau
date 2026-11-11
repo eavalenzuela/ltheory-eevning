@@ -16,6 +16,7 @@ local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
 local Info = require("@lt/Game/UI/Info")
+local Map = require("@lt/Game/UI/Map")
 local Menu = require("@lt/Game/UI/Menu")
 local Modules = require("@lt/Core/Data/Modules")
 local Scene = require("@lt/Game/View/Scene")
@@ -492,7 +493,8 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Im.Heading(string.upper(player.systemName), left + 24, top + 18, 30, Im.TEXT)
       -- (how safe it is here: what comes to a belt follows from it)
       local _, band = Core.Query.Security(game, player.system)
-      Im.Text(string.format("%s  %.1f", BANDS[band or "secure"], player.security), left + 24, top + 51, 13,
+      local whose = if player.owner ~= "" then string.upper(player.owner) else "UNCLAIMED"
+      Im.Text(string.format("%s  -  %s  %.1f", whose, BANDS[band or "secure"], player.security), left + 24, top + 51, 13,
         if band == "secure" then SAFE elseif band == "low" then Im.WARN else HULL)
       Im.Text(`{player.shipName}  -  {player.hull.name}`, left + 24, top + 68, 15, Im.DIM)
       Im.Text(`{game.state.wallet} credits`, left + 24, top + 87, 15, Im.DIM)
@@ -543,8 +545,28 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           Colony.Close()
         end
       end
+      if Im.Button("Map", left + 438, bottom - 54, 70, 34, true) then
+        if Map.IsOpen() then
+          Map.Close()
+        else
+          Map.Open()
+        end
+      end
       Colony.Draw(session, left + 16, top + 130)
       Assets.Draw(session, left + 16, top + 130)
+      -- Where the pilot means to go, and the autopilot's switch: at the
+      -- foot of the screen, by the buttons, whatever else is open.
+      if session.destination ~= 0 then
+        local route = Session.Route(session)
+        local name = game.state.galaxy.systems[session.destination].name
+        Im.Text(`To {name}: {math.max(0, #route - 1)} {if #route == 2 then "jump" else "jumps"}`, left + 524, bottom - 44, 14, Im.ACCENT)
+        if Im.Toggle(if session.autopilot then "Autopilot on" else "Autopilot", left + 700, bottom - 54, 120, 34, session.autopilot,
+          "Autopilot") then
+          session.autopilot = not session.autopilot
+        end
+      end
+      -- (the map goes over everything else)
+      Map.Draw(session, left, top, w.size.x, w.size.y)
       overInterface = Im.over
     end,
   }))

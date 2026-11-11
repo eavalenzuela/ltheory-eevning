@@ -18,6 +18,7 @@ local Codec = require("@lt/Core/Persist/Codec")
 local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
 local Dogma = require("@lt/Core/Dogma")
+local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Hangar = require("@lt/Core/Assets/Hangar")
 local Industry = require("@lt/Core/Assets/Industry")
@@ -55,7 +56,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 14
+Core.SAVE_VERSION = 15
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -120,13 +121,20 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- (Its belts are as they were described: the rare ores are in the
   -- lawless belts of a new game.)
   [13] = function(state: any)
-    Galaxy.Secure(state.galaxy)
+    Galaxy.Claim(state.galaxy)
     for _, pilot in state.pilots do
       local ship = state.ships[pilot.ship]
       local hull = if ship then Ships.byId[ship.type] else nil
       pilot.bounty = pilot.bounty or (if hull then math.floor(hull.basePrice * 0.2) else 0)
       pilot.tags = pilot.tags or 1
     end
+  end,
+  -- 15: a system is somebody's, or nobody's, and its security follows
+  -- from that. The galaxy of an older save is shared out as a new one's
+  -- is. (The stations of a system far from the first homeworld become
+  -- its own faction's.)
+  [14] = function(state: any)
+    Galaxy.Claim(state.galaxy)
   end,
 }
 
@@ -364,7 +372,8 @@ export type PlayerInfo = {
   docked: number,     -- station id, or 0
   system: number,
   systemName: string,
-  security: number,   -- of the system: 1 where a pilot starts, 0 where nobody keeps order
+  security: number,   -- of the system: 1 at a homeworld, 0 where nobody keeps order
+  owner: string,      -- the name of the faction whose system it is; "" if nobody's
 }
 
 function Query.Player(game: Game): PlayerInfo
@@ -374,6 +383,7 @@ function Query.Player(game: Game): PlayerInfo
   return {
     ship = ship.id, shipName = ship.name, hull = Ships.byId[ship.type], docked = ship.docked,
     system = system, systemName = state.galaxy.systems[system].name, security = state.galaxy.systems[system].security,
+    owner = if Factions.byId[state.galaxy.systems[system].owner] then Factions.byId[state.galaxy.systems[system].owner].name else "",
   }
 end
 

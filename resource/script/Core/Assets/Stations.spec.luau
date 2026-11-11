@@ -3,6 +3,7 @@
 -- module for.
 
 local Core = require("@lt/Core/Api")
+local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Stations = require("@lt/Core/Assets/Stations")
 local Structures = require("@lt/Core/Data/Structures")
@@ -95,6 +96,28 @@ suite:Case("a ship in space is not refused for want of a station's module", func
   end
   t.ok(Stations.Validate(game.state, { kind = "LoadCharge", actor = player.ship, item = 0 }))
   t.ok(Stations.Validate(game.state, { kind = "BuyNow", actor = player.ship, type = "ammo.emp", quantity = 1 }))
+end)
+
+suite:Case("a station's tower is of the faction whose homeworld is nearest", function(t)
+  local game = Core.New({ galaxySeed = 3, historySeed = 1, systems = 40, peaceful = true })
+  local state = game.state
+  local seen: { [string]: boolean } = {}
+  for system = 1, 40 do
+    local node = state.galaxy.systems[system]
+    for _, object in Space.Describe(state, system).objects do
+      if object.kind == "station" then
+        local makeup = assert(Stations.Makeup(state, object.id))
+        t.eq(Structures.towerById[makeup.tower].faction, node.nearest)
+        seen[node.nearest] = true
+      end
+    end
+  end
+  for _, faction in { "vessari", "talmar", "orun", "kethri" } do
+    t.ok(seen[faction], `no station of the {faction} in a galaxy of forty`)
+  end
+  -- (and a pilot still starts at a station that has everything, in the first faction's space)
+  t.eq(state.galaxy.systems[1].owner, "vessari")
+  t.eq(Core.Query.Player(game).owner, "Vessari")
 end)
 
 return suite

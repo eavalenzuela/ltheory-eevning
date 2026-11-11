@@ -23,9 +23,6 @@ local Structures = require("@lt/Core/Data/Structures")
 
 local Stations = {}
 
--- Whose towers the stations are, until the game says whose a system is.
-local OWNER = "vessari"
-
 -- The station a new pilot starts at: the first station of system 1.
 function Stations.Starter(state: State.State): number
   for _, object in Space.Describe(state, 1).objects do
@@ -48,7 +45,10 @@ function Stations.Makeup(state: State.State, id: number): Structures.Makeup?
   if starbase then
     return Starbases.Makeup(starbase)
   end
-  return Structures.Makeup(object.variety, object.radius, OWNER, id == Stations.Starter(state))
+  -- (its tower is of the faction whose homeworld is nearest: a station in
+  -- space nobody holds was still built by somebody)
+  local faction = state.galaxy.systems[Space.SystemOf(state, id)].nearest
+  return Structures.Makeup(object.variety, object.radius, faction, id == Stations.Starter(state))
 end
 
 -- Whether a station has a module that gives a service.

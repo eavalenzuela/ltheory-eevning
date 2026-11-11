@@ -13,6 +13,7 @@
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Colony = require("@lt/Game/UI/Colony")
 local Core = require("@lt/Core/Api")
+local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Planets = require("@lt/Core/Data/Planets")
 local Dogma = require("@lt/Core/Dogma")
 local Hud = require("@lt/Game/UI/Hud")
@@ -596,6 +597,65 @@ function Debug.Menu(which: string?): string
   return Menu.Page()
 end
 
+-- Begin a new game, of a seed and so many systems (three if not said),
+-- as the menu's New game does.
+function Debug.NewGame(seed: number, systems: number?)
+  Session.Restart(session, seed, seed, systems)
+end
+
+-- Set where the pilot means to go: a system by name or number. Returns
+-- the jumps there by the way chosen (-1: no such system). With no
+-- argument, the jumps left to where they already mean to go (-1: nowhere).
+function Debug.Destination(what: (string | number)?, safest: boolean?): number
+  local systems = session.game.state.galaxy.systems
+  if what ~= nil then
+    local found = 0
+    for id, system in systems do
+      if id == what or (type(what) == "string" and string.lower(system.name) == string.lower(what)) then
+        found = id
+      end
+    end
+    if found == 0 then
+      return -1
+    end
+    session.destination = found
+    session.safest = safest == true
+  end
+  return #Session.Route(session) - 1
+end
+
+-- Switch the autopilot on or off, and say whether it is on.
+function Debug.Autopilot(on: boolean?): boolean
+  if on ~= nil then
+    session.autopilot = on and session.destination ~= 0
+  end
+  return session.autopilot
+end
+
+-- The system farthest (in jumps, by the safest way) from where the
+-- pilot is that is not lawless: its name, how many jumps it is, and its
+-- number. Somewhere to send an autopilot.
+function Debug.Far(): (string, number, number)
+  local galaxy = session.game.state.galaxy
+  local here = Core.Query.Player(session.game).system
+  local best, most = here, 0
+  for id, system in galaxy.systems do
+    if system.security >= 0.3 then
+      local jumps = #Galaxy.Route(galaxy, here, id, true) - 1
+      if jumps > most then
+        best, most = id, jumps
+      end
+    end
+  end
+  return galaxy.systems[best].name, most, best
+end
+
+-- How many systems the galaxy has, and the name of the faction whose
+-- the pilot's is ("" if nobody's).
+function Debug.Galaxy(): (number, string)
+  return #session.game.state.galaxy.systems, Core.Query.Player(session.game).owner
+end
+
 -- The seed of the galaxy being played.
 function Debug.Seed(): number
   return session.game.state.galaxySeed
@@ -707,6 +767,7 @@ function App:Initialize()
         end
       end
       autopilot()
+      Session.Autopilot(session)
       Session.Update(session, frame)
       -- Docking saves the game, for a person: a script's runs are short
       -- and many, and are not anybody's to come back to.

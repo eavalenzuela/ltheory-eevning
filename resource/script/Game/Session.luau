@@ -5,6 +5,7 @@
 
 local Clock = require("@lt/Game/Clock")
 local Core = require("@lt/Core/Api")
+local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -19,6 +20,12 @@ export type Session = {
   events: { Space.Event },    -- the events of the ticks taken this frame
   message: string,            -- the last thing worth telling the player
   messageTick: number,
+  -- Where the pilot means to go: a system, or 0. With 'autopilot' the
+  -- ship flies there itself, gate by gate, by the fewest jumps or (with
+  -- 'safest') the least dangerous way (Galaxy.Route).
+  destination: number,
+  autopilot: boolean,
+  safest: boolean,
   -- Which game this is, counting from 1: it goes up when the running
   -- game is replaced by a save or by a new one, so that whoever keeps
   -- something made for the last game (the scene) knows to make it again.
@@ -40,6 +47,7 @@ function Session.New(galaxySeed: number, historySeed: number): Session
   return {
     game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed }),
     clock = Clock.New(), selected = 0, events = {}, message = "", messageTick = 0, epoch = 1,
+    destination = 0, autopilot = false, safest = false,
   }
 end
 
@@ -125,9 +133,68 @@ function Session.Update(session: Session, frameSeconds: number)
   end
 end
 
+-- The way from where the pilot is to where they mean to go: the systems
+-- in order, the first the one they are in. Empty with nowhere to go.
+function Session.Route(session: Session): { number }
+  local galaxy = session.game.state.galaxy
+  if session.destination == 0 or galaxy.systems[session.destination] == nil then
+    return {}
+  end
+  return Galaxy.Route(galaxy, Core.Query.Player(session.game).system, session.destination, session.safest)
+end
+
+-- The autopilot's turn, once a frame: when the ship has nothing to do,
+-- it is sent through the next gate of the route. It undocks to set off,
+-- and stops when it is there. Any order the pilot gives by hand takes
+-- the ship back (Session.Order).
+function Session.Autopilot(session: Session)
+  if not session.autopilot then
+    return
+  end
+  local game = session.game
+  local player = Core.Query.Player(game)
+  if session.destination == 0 or player.system == session.destination then
+    if session.destination ~= 0 then
+      Session.Say(session, `Autopilot: arrived in {player.systemName}`)
+    end
+    session.autopilot, session.destination = false, 0
+    return
+  end
+  if #game.state.queue > 0 then
+    return
+  end
+  local command: State.Command? = nil
+  if player.docked ~= 0 then
+    command = { kind = "Undock", actor = player.ship }
+  else
+    local ball = Core.Query.Ball(game, player.ship)
+    if ball and ball.warp == nil and ball.intent == nil then
+      local next = Session.Route(session)[2]
+      for _, object in Core.Query.Objects(game, player.system) do
+        if object.kind == "gate" and object.to == next then
+          command = { kind = "Jump", actor = player.ship, target = object.id }
+        end
+      end
+      if command == nil then
+        session.autopilot = false
+        Session.Say(session, "Autopilot: no gate leads that way")
+      end
+    end
+  end
+  if command then
+    local ok, reason = Core.Submit(game, command)
+    if not ok then
+      session.autopilot = false
+      Session.Say(session, `Autopilot: {tostring(reason)}`)
+    end
+  end
+end
+
 -- Give the player's ship an order. Returns whether it was accepted; if
--- not, the reason is shown.
+-- not, the reason is shown. (An order given by hand takes the ship back
+-- from the autopilot.)
 function Session.Order(session: Session, kind: string, target: number?, range: number?): boolean
+  session.autopilot = false
   if kind == "WarpTo" and target and (range or 0) == 0 then
     local body = Core.Query.Body(session.game, target)
     local standoff = if body then STANDOFF[body.kind] else nil
@@ -238,12 +305,14 @@ function Session.Delete(slot: string): boolean
   return Host.Remove(`{SAVE_DIR}/{slot}/state.bin`)
 end
 
--- Replace the running game with a new one.
-function Session.Restart(session: Session, galaxySeed: number, historySeed: number)
-  session.game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed })
+-- Replace the running game with a new one, of so many systems (three,
+-- if nobody says).
+function Session.Restart(session: Session, galaxySeed: number, historySeed: number, systems: number?)
+  session.game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, systems = systems })
   session.selected = 0
   session.events = { { kind = "Loaded" } }
   session.epoch += 1
+  session.destination, session.autopilot = 0, false
   session.clock.pending = 0
   session.clock.paused = false
   session.clock.scale = 1
@@ -267,6 +336,7 @@ function Session.Load(session: Session, slot: string): boolean
   session.selected = 0
   session.events = { { kind = "Loaded" } }
   session.epoch += 1
+  session.destination, session.autopilot = 0, false
   session.clock.pending = 0
   Session.Say(session, `Loaded {SAVE_DIR}/{slot}`)
   return true

@@ -28,6 +28,7 @@ local SLOTS = { "save 1", "save 2", "save 3", "save 4", "save 5" }
 local page = ""
 local root = "main"       -- where Back goes
 local seed = 1
+local size = 40           -- systems in a new galaxy
 local wasPaused = false   -- the clock, before the pause menu stopped it
 local saves: { Session.SaveInfo } = {}
 
@@ -110,6 +111,7 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
   -- (the game behind is dimmed, so the menu is what there is to read)
   Im.Fill(left, top, width, height, vector.create(0, 0, 0), 0.45)
   Im.Panel(x, y, w, h)
+  Im.Fill(x, y, w, h, vector.create(0.02, 0.03, 0.045), 0.9)
   local cx = x + w / 2
   local function button(label: string, row: number, enabled: boolean, id: string): boolean
     return Im.Button(label, cx - 130, y + 96 + row * 44, 260, 34, enabled, id)
@@ -155,17 +157,24 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
     end
   elseif page == "new" then
     Im.Heading("NEW GAME", cx - 72, y + 26, 26, Im.TEXT)
-    Im.Text("A galaxy is made from its seed: the same seed, the same galaxy.", x + 40, y + 84, 13, Im.DIM)
-    Im.Text("Seed", x + 120, y + 127, 14, Im.DIM)
-    seed = math.max(1, math.floor(Im.Number("Seed", seed, x + 180, y + 120, 120, 28)))
-    if Im.Button("Random", x + 312, y + 120, 100, 28, true, "Menu:random") then
+    Im.Text("A galaxy is made from its seed: the same seed and size, the same galaxy.", x + 40, y + 80, 13, Im.DIM)
+    Im.Text("Seed", x + 120, y + 117, 14, Im.DIM)
+    seed = math.max(1, math.floor(Im.Number("Seed", seed, x + 190, y + 110, 120, 28)))
+    if Im.Button("Random", x + 322, y + 110, 100, 28, true, "Menu:random") then
       seed = math.floor(Host.Time()) % 99991 + 1
     end
-    if Im.Button("Start", cx - 130, y + 190, 260, 34, true, "Menu:start") then
-      Session.Restart(session, seed, seed)
+    Im.Text("Systems", x + 120, y + 155, 14, Im.DIM)
+    size = math.clamp(math.floor(Im.Number("Systems", size, x + 190, y + 148, 120, 28)), 3, 400)
+    for index, preset in { 3, 40, 120, 400 } do
+      if Im.Button(tostring(preset), x + 322 + (index - 1) * 46, y + 148, 42, 28, true, `Systems:{preset}`) then
+        size = preset
+      end
+    end
+    if Im.Button("Start", cx - 130, y + 206, 260, 34, true, "Menu:start") then
+      Session.Restart(session, seed, seed, size)
       close(session, false)
     end
-    if Im.Button("Back", cx - 130, y + 234, 260, 34, true, "Menu:back") then
+    if Im.Button("Back", cx - 130, y + 250, 260, 34, true, "Menu:back") then
       page = root
     end
   elseif page == "load" then
