@@ -190,6 +190,10 @@ for index, eye in { vector.create(0.5, 0.25, 2.7), vector.create(-1.7, 1.0, 2.1)
   table.insert(VIEWS, { name = `base-towers-talmar-{index}`, kind = "towers:talmar", seed = 1, eye = eye, look = vector.create(-0.15, 0, 0),
     light = vector.create(1.5, 1.6, 2.5) })
 end
+for index, eye in { vector.create(0.5, 0.25, 2.7), vector.create(-1.7, 1.0, 2.1) } do
+  table.insert(VIEWS, { name = `base-towers-orun-{index}`, kind = "towers:orun", seed = 1, eye = eye, look = vector.create(-0.15, 0, 0),
+    light = vector.create(1.5, 1.6, 2.5) })
+end
 for index, eye in { vector.create(0.5, 1.1, 2.9), vector.create(-1.9, 0.8, -2.4) } do
   table.insert(VIEWS, { name = `base-modules-{index}`, kind = "modules", seed = 1, eye = eye, look = vector.create(0, -0.1, 0),
     light = if index == 1 then vector.create(1.5, 1.8, 2.5) else vector.create(-2.0, 1.8, -1.5) })

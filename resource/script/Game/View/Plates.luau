@@ -13,8 +13,9 @@
 
 local Plates = {}
 
--- The parts a plate can be: the whole number of its tag.
-Plates.PLATING, Plates.PATCH, Plates.FRAME, Plates.GLOW, Plates.TRIM = 0, 1, 2, 3, 4
+-- The parts a plate can be: the whole number of its tag. (FIRE is an
+-- engine's throat where its fire is not the colour of its lights.)
+Plates.PLATING, Plates.PATCH, Plates.FRAME, Plates.GLOW, Plates.TRIM, Plates.FIRE = 0, 1, 2, 3, 4, 5
 
 -- How a thing is painted and how worn it is.
 export type Look = {
@@ -23,6 +24,7 @@ export type Look = {
   frame: { number },
   glow: { number },
   trim: { number },
+  fire: { number }?,    -- the colour of its engines' fire, where that is not 'glow'; 'glow' if not said
   wear: number,
   rust: number,
   sheets: number,       -- sheets of plating to a unit of the model
@@ -82,7 +84,7 @@ local function add(b: Builder, mesh: PlateMesh, part: number, center: vector, ha
   local patch = b.patch
   if patch then
     local kind = math.floor(part)
-    if kind ~= Plates.GLOW and math.max(half.x, half.y, half.z) < b.fine and dice(b, 11) < patch * 0.30 then
+    if kind ~= Plates.GLOW and kind ~= Plates.FIRE and math.max(half.x, half.y, half.z) < b.fine and dice(b, 11) < patch * 0.30 then
       return
     end
     if kind == Plates.PLATING and dice(b, 12) < patch * 0.40 then
@@ -97,7 +99,7 @@ local function add(b: Builder, mesh: PlateMesh, part: number, center: vector, ha
   local tag = part + tone
   local ruin = b.ruin
   if ruin then
-    if math.floor(part) == Plates.GLOW then
+    if math.floor(part) == Plates.GLOW or math.floor(part) == Plates.FIRE then
       return
     end
     local size = math.max(half.x, half.y, half.z)
@@ -357,6 +359,7 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
   ShaderInstance_SetVec3(skin, "paintFrame", color(look.frame))
   ShaderInstance_SetVec3(skin, "paintGlow", color(look.glow))
   ShaderInstance_SetVec3(skin, "paintTrim", color(look.trim))
+  ShaderInstance_SetVec3(skin, "paintFire", color(look.fire or look.glow))
   ShaderInstance_SetFloat(skin, "wear", look.wear)
   ShaderInstance_SetFloat(skin, "rust", look.rust)
   ShaderInstance_SetFloat(skin, "sheets", sheets or look.sheets)

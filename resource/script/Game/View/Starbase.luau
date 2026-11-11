@@ -669,11 +669,166 @@ local function talmarLarge(b: Builder)
   end)
 end
 
+-- ---------------------------------------------------------------------
+-- The Orun towers. (The project owner's draft for the Confederation:
+-- no two things of theirs designed by the same group, red and gold
+-- highlights, a lot of antenna masts; and of the first hulls drawn the
+-- one they liked best by far was a ship of two hulls side by side.) So
+-- a tower of theirs is not one mass but several long hulls standing on
+-- end beside each other, joined by girders, with the control house
+-- hung between them: two for the small one, three round an open middle
+-- for the medium, and for the large a great one with four lesser ones
+-- about it. Each hull steps in to a red cap at both ends, as nothing
+-- anchored may look as if it stood on the ground; each has a gold band;
+-- and each size is in its builders' own paint.
+
+-- An aerial: a thin pole from 'foot' the way 'toward' points, with
+-- cross-pieces, a red band at its foot and a gold tip.
+local function aerial(b: Builder, foot: vector, height: number, toward: vector)
+  local dir = vector.normalize(toward)
+  local side = vector.cross(dir, v(0, 0, 1))
+  if vector.magnitude(side) < 0.3 then
+    side = vector.cross(dir, v(1, 0, 0))
+  end
+  side = vector.normalize(side)
+  local top = foot + dir * height
+  local thick = math.max(0.006, height * 0.018)
+  beam(b, FRAME, foot, top, thick, 0.1)
+  beam(b, FRAME, foot, foot + dir * (height * 0.22), thick * 1.7, 0.1)
+  beam(b, TRIM, foot + dir * (height * 0.22), foot + dir * (height * 0.27), thick * 1.8, 0.1)
+  for index, share in { 0.48, 0.66, 0.84 } do
+    local at = foot + dir * (height * share)
+    local reach = height * (0.20 - 0.045 * index)
+    beam(b, FRAME, at - side * reach, at + side * reach, thick * 0.6, 0.1)
+  end
+  block(b, PATCH, top, v(thick * 1.6, thick * 1.6, thick * 1.6), nil, 0.5)
+end
+
+-- A hull standing on end at 'at' (its x and z), from 'low' to 'high':
+-- a long box 'wide' to a side that steps in twice at each end to a red
+-- cap, with a gold band round it 'band' of the way up, two frames, and
+-- 'ports' lit ports up the face that looks 'out'. An aerial stands on
+-- each end of it.
+local function spar(b: Builder, at: vector, low: number, high: number, wide: number, out: vector, ports: number, band: number)
+  local mid, half = (low + high) / 2, (high - low) / 2
+  local x, z = at.x, at.z
+  block(b, PLATING, v(x, mid, z), v(wide, half * 0.74, wide), nil, 0.10)
+  for _, way in { 1, -1 } do
+    block(b, PLATING, v(x, mid + way * half * 0.82, z), v(wide * 0.74, half * 0.09, wide * 0.74), nil, 0.16)
+    block(b, PLATING, v(x, mid + way * half * 0.94, z), v(wide * 0.50, half * 0.045, wide * 0.50), nil, 0.2)
+    block(b, TRIM, v(x, mid + way * half * 0.992, z), v(wide * 0.40, half * 0.008, wide * 0.40), nil, 0.2)
+    block(b, FRAME, v(x, mid + way * half * 0.42, z), v(wide * 1.04, half * 0.012, wide * 1.04), nil, 0.1)
+    aerial(b, v(x, mid + way * half, z), half * (if way > 0 then 0.42 else 0.30), v(out.x * 0.12, way, out.z * 0.12))
+  end
+  block(b, PATCH, v(x, low + (high - low) * band, z), v(wide * 1.03, half * 0.022, wide * 1.03), nil, 0.1)
+  for index = 1, ports do
+    local y = mid + ((index - 0.5) / ports - 0.5) * half * 1.2
+    block(b, GLOW, v(x + out.x * wide * 1.005, y, z + out.z * wide * 1.005),
+      v(0.004 + math.abs(out.z) * wide * 0.16, half * 0.014, 0.004 + math.abs(out.x) * wide * 0.16), nil, 0.3)
+  end
+end
+
+-- Small: two hulls side by side, a girder between them above and
+-- below, and the house between them at the waist under a red roof.
+local function orunSmall(b: Builder)
+  for _, side in { -1, 1 } do
+    spar(b, v(side * 0.27, 0, 0), -0.95, 0.95, 0.11, v(side, 0, 0), 6, 0.80)
+    aerial(b, v(side * 0.38, 0.34, 0), 0.36, v(side, 0.35, 0))
+    aerial(b, v(side * 0.38, -0.40, 0.04), 0.26, v(side, -0.4, 0.2))
+  end
+  truss(b, v(-0.17, 0.56, 0), v(0.17, 0.56, 0), 0.12, 2)
+  truss(b, v(-0.17, -0.56, 0), v(0.17, -0.56, 0), 0.12, 2)
+  block(b, PLATING, v(0, 0.02, 0), v(0.16, 0.14, 0.18), nil, 0.12)
+  block(b, GLOW, v(0, 0.07, 0.182), v(0.11, 0.018, 0.004), nil, 0.3)
+  block(b, GLOW, v(0, 0.07, -0.182), v(0.11, 0.018, 0.004), nil, 0.3)
+  block(b, TRIM, v(0, 0.168, 0), v(0.165, 0.010, 0.185), nil, 0.12)
+  block(b, PATCH, v(0, -0.128, 0), v(0.165, 0.010, 0.185), nil, 0.12)
+  aerial(b, v(0.06, 0.18, 0.10), 0.52, v(0.05, 1, 0.1))
+  aerial(b, v(-0.07, 0.18, -0.08), 0.38, v(-0.1, 1, -0.1))
+  aerial(b, v(0, 0.02, 0.18), 0.34, v(0, 0.2, 1))
+  aerial(b, v(0.04, -0.14, -0.06), 0.36, v(0.05, -1, -0.1))
+end
+
+-- Medium: three hulls round an open middle, no two at the same height,
+-- a ring of girders round them above and below, and the house hung in
+-- the middle on a strut from each.
+local function orunMedium(b: Builder)
+  local posts: { vector } = {}
+  for index = 0, 2 do
+    local around = index * 2 * math.pi / 3 + math.pi / 2
+    local out = v(math.cos(around), 0, math.sin(around))
+    local shift = (index - 1) * 0.20
+    posts[index + 1] = out * 0.42
+    spar(b, out * 0.42, -1.35 + shift, 1.35 + shift, 0.13, out, 8, 0.78)
+    beam(b, FRAME, out * 0.30 + v(0, 0.02, 0), out * 0.17 + v(0, 0.02, 0), 0.03, 0.2)
+    aerial(b, out * 0.555 + v(0, 0.45 + shift, 0), 0.40, out + v(0, 0.35, 0))
+    aerial(b, out * 0.555 + v(0, -0.55 + shift, 0), 0.30, out + v(0, -0.4, 0))
+  end
+  for index = 1, 3 do
+    local from, to = posts[index], posts[index % 3 + 1]
+    local inset = (to - from) * 0.22
+    truss(b, from + inset + v(0, 0.78, 0), to - inset + v(0, 0.78, 0), 0.14, 3)
+    truss(b, from + inset + v(0, -0.78, 0), to - inset + v(0, -0.78, 0), 0.14, 3)
+  end
+  -- the house: a block and the same turned an eighth, lit all round
+  block(b, PLATING, v(0, 0.02, 0), v(0.17, 0.15, 0.17), nil, 0.12)
+  block(b, PLATING, v(0, 0.02, 0), v(0.17, 0.13, 0.17), v(math.pi / 4, 0, 0), 0.12)
+  windows(b, v(0, 0.07, 0), 0.174, 3, 0.016)
+  block(b, PATCH, v(0, 0.178, 0), v(0.175, 0.010, 0.175), nil, 0.12)
+  block(b, TRIM, v(0, -0.138, 0), v(0.175, 0.010, 0.175), nil, 0.12)
+  for index, lean in { v(0.06, 1, 0.04), v(-0.08, 1, 0.02), v(0.02, 1, -0.09), v(-0.03, 1, 0.08) } do
+    aerial(b, v(lean.x * 1.6, 0.19, lean.z * 1.6), 0.74 - 0.12 * index, lean)
+  end
+  aerial(b, v(0.05, -0.15, 0.03), 0.52, v(0.04, -1, 0.03))
+  aerial(b, v(-0.06, -0.15, -0.04), 0.36, v(-0.06, -1, -0.05))
+end
+
+-- Large: a great hull in the middle and four lesser ones about it, two
+-- of them set high and two low, each joined to the middle one by a
+-- wing of deck and two girders; the house a collar round the middle
+-- hull's waist, lit all round under a gold roof.
+local function orunLarge(b: Builder)
+  spar(b, v(0, 0, 0), -2.10, 2.10, 0.24, v(0, 0, 1), 0, 0.84)
+  for index = 0, 3 do
+    local around = index * math.pi / 2
+    local out = v(math.cos(around), 0, math.sin(around))
+    local shift = if index % 2 == 0 then 0.38 else -0.38
+    local at = out * 0.72
+    spar(b, at, -1.25 + shift, 1.25 + shift, 0.14, out, 8, 0.80)
+    truss(b, out * 0.24 + v(0, shift + 0.72, 0), out * 0.58 + v(0, shift + 0.72, 0), 0.20, 2)
+    truss(b, out * 0.24 + v(0, shift - 0.72, 0), out * 0.58 + v(0, shift - 0.72, 0), 0.20, 2)
+    block(b, PLATING, out * 0.41 + v(0, shift, 0), v(0.03 + math.abs(out.x) * 0.15, 0.50, 0.03 + math.abs(out.z) * 0.15), nil, 0.08)
+    aerial(b, out * 0.865 + v(0, shift + 0.30, 0), 0.50, out + v(0, 0.3, 0))
+    aerial(b, out * 0.865 + v(0, shift - 0.45, 0), 0.36, out + v(0, -0.4, 0))
+    -- (ports up the faces of the middle hull that show between the others)
+    local between = v(math.cos(around + math.pi / 4), 0, math.sin(around + math.pi / 4))
+    aerial(b, between * 0.36 + v(0, 0.12, 0), 0.60, between + v(0, 0.25, 0))
+  end
+  block(b, PLATING, v(0, 0, 0), v(0.34, 0.13, 0.34), v(math.pi / 4, 0, 0), 0.12)
+  windows(b, v(0, 1.30, 0), 0.243, 4, 0.020)
+  windows(b, v(0, -1.30, 0), 0.243, 4, 0.020)
+  block(b, PATCH, v(0, 0.14, 0), v(0.345, 0.012, 0.345), v(math.pi / 4, 0, 0), 0.12)
+  block(b, TRIM, v(0, -0.14, 0), v(0.345, 0.012, 0.345), v(math.pi / 4, 0, 0), 0.12)
+  for index, lean in { v(0.10, 1, 0.06), v(-0.12, 1, 0.04), v(0.04, 1, -0.13), v(-0.05, 1, 0.12), v(0.13, 1, -0.05) } do
+    aerial(b, v(lean.x * 1.2, 1.96, lean.z * 1.2), 0.95 - 0.11 * index, lean)
+  end
+  for index, lean in { v(0.10, -1, 0.05), v(-0.09, -1, -0.08), v(0.02, -1, 0.12) } do
+    aerial(b, v(lean.x * 1.2, -1.96, lean.z * 1.2), 0.70 - 0.12 * index, lean)
+  end
+end
+
 export type Made = { model: Model, radius: number }
 
 local TOWERS: { [string]: { (b: Builder) -> () } } = {
   vessari = { vessariSmall, vessariMedium, vessariLarge },
   talmar = { talmarSmall, talmarMedium, talmarLarge },
+  orun = { orunSmall, orunMedium, orunLarge },
+}
+-- A faction whose towers are not all in the one paint: each size in its
+-- builders' own (the Orun's, as their hulls are).
+local PAINTS: { [string]: { Plates.Look } } = {
+  orun = { Hull.OrunPaint({ 0.58, 0.58, 0.55 }, 0.35, 0.10), Hull.OrunPaint({ 0.18, 0.19, 0.21 }, 0.50, 0.15),
+    Hull.OrunPaint({ 0.24, 0.27, 0.31 }, 0.50, 0.25) },
 }
 -- The factions whose towers are drawn lying along z and stood up.
 local LYING: { [string]: boolean } = { talmar = true }
@@ -699,7 +854,8 @@ end
 function Starbase.Tower(faction: string, size: number): Made
   local designs = TOWERS[faction] or TOWERS.vessari
   local owner = if TOWERS[faction] then faction else "vessari"
-  return finish(`tower.{owner}.{size}`, designs[size], Hull.looks[owner], 4.5 + 2.5 * size, 0.11)
+  local paints = PAINTS[owner]
+  return finish(`tower.{owner}.{size}`, designs[size], if paints then paints[size] else Hull.looks[owner], 4.5 + 2.5 * size, 0.11)
 end
 
 -- A faction's tower of a size as a thing to put in a scene (Raise): its

@@ -895,9 +895,13 @@ local function orun(plating: { number }, wear: number, rust: number): Look
   return {
     plating = plating, patch = { 0.74, 0.52, 0.13 }, frame = { 0.13, 0.13, 0.14 }, glow = { 1.0, 0.84, 0.50 },
     trim = { 0.62, 0.09, 0.07 }, wear = wear, rust = rust, sheets = 3.4, lights = 0.25,
+    -- (their lights are warm and their engines burn blue: the owner's ruling)
+    fire = { 0.40, 0.66, 1.0 },
   }
 end
 Hull.looks.orun = orun({ 0.36, 0.37, 0.39 }, 0.45, 0.20)
+-- (for what else of theirs is painted by its builders: Game/View/Starbase)
+Hull.OrunPaint = orun
 
 -- An aerial: a thin pole from 'foot' the way 'toward' points (up, if
 -- not said), with two cross-pieces and a gold tip.
@@ -937,7 +941,7 @@ end
 local function burner(b: Builder, center: vector, length: number, wide: number, high: number)
   block(b, PLATING, center, v(wide, high, length), nil, 0.10)
   block(b, FRAME, center + v(0, 0, -length * 0.92), v(wide * 0.90, high * 0.90, length * 0.14), nil, 0.2)
-  block(b, GLOW, center + v(0, 0, -length * 1.05), v(wide * 0.68, high * 0.68, length * 0.03), nil, 0.3)
+  block(b, Plates.FIRE, center + v(0, 0, -length * 1.05), v(wide * 0.68, high * 0.68, length * 0.03), nil, 0.3)
   exhaust(center + v(0, 0, -length * 1.09), math.min(wide, high) * 0.68)
 end
 
@@ -1480,7 +1484,7 @@ export type Built = {
   launchers: { Hardpoint },
   fit: { string },
   engines: { Exhaust }, -- where its engines' fire leaves it
-  glow: { number },     -- and the colour of that fire
+  glow: { number },     -- and the colour of that fire (the look's 'fire', or its 'glow')
   lower: vector,        -- the corners of the box it fills
   upper: vector,
 }
@@ -1536,7 +1540,7 @@ function Hull.Build(type: string, pirate: boolean?): Built?
     end
   end
   local result: Built = { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = design.turrets,
-    launchers = design.launchers, fit = design.fit, engines = table.clone(exhausts), glow = look.glow,
+    launchers = design.launchers, fit = design.fit, engines = table.clone(exhausts), glow = look.fire or look.glow,
     lower = lower, upper = upper }
   built[key] = result
   return result

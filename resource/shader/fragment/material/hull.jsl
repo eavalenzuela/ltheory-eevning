@@ -3,7 +3,8 @@
 
    Every plate carries a number in its v: the whole part says which paint
    it has (0 the hull's plating, 1 the plates that have been patched in,
-   2 bare structure, 3 something lit from within, 4 trim), and the
+   2 bare structure, 3 something lit from within, 4 trim, 5 the throat
+   of an engine, lit the colour of its fire), and the
    fraction is the plate's own, so that no two plates are quite the same
    tone and their seams and rust do not line up. Its u is how open the
    place is to the sky (the occlusion baked into the mesh).
@@ -30,6 +31,7 @@ uniform vec3 paintPatch;
 uniform vec3 paintFrame;
 uniform vec3 paintGlow;
 uniform vec3 paintTrim;
+uniform vec3 paintFire;
 uniform float wear;         /* how far the paint is worn off, 0 to 1 */
 uniform float rust;         /* how rusted, 0 to 1 */
 uniform float sheets;       /* sheets of plating to a unit of the hull */
@@ -70,9 +72,9 @@ void main() {
   vec3 p = vertpos;
   vec3 n = normalize(vertnormal);
 
-  if (part > 2.5 && part < 3.5) {
-    /* Lit from within: an engine's throat, a row of ports. */
-    outputAlbedo(lin(paintGlow) * (2.2 + 1.2 * wn_noise(p * 9.0)));
+  if ((part > 2.5 && part < 3.5) || part > 4.5) {
+    /* Lit from within: a row of ports, or an engine's throat. */
+    outputAlbedo(lin(part > 4.5 ? paintFire : paintGlow) * (2.2 + 1.2 * wn_noise(p * 9.0)));
     outputAlpha(1.0);
     outputNormal(normalize(normal));
     outputMaterial(MATERIAL_NOSHADE);
