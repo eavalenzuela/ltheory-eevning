@@ -19,9 +19,15 @@ export type Session = {
   events: { Space.Event },    -- the events of the ticks taken this frame
   message: string,            -- the last thing worth telling the player
   messageTick: number,
+  -- Which game this is, counting from 1: it goes up when the running
+  -- game is replaced by a save or by a new one, so that whoever keeps
+  -- something made for the last game (the scene) knows to make it again.
+  epoch: number,
 }
 
-local SAVE_DIR = "save"
+-- Where saves are kept. A script's saves go somewhere of their own, so
+-- that a test never writes over a save somebody is playing from.
+local SAVE_DIR = if Host.scripted then "cache/test-saves" else "save"
 
 -- How far above its surface a warp to a planet, a moon or the sun ends
 -- when the order gives no range, in the body's radii. (The Core takes a
@@ -33,7 +39,7 @@ local STANDOFF: { [string]: number } = { planet = 1, moon = 1.5, sun = 4 }
 function Session.New(galaxySeed: number, historySeed: number): Session
   return {
     game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed }),
-    clock = Clock.New(), selected = 0, events = {}, message = "", messageTick = 0,
+    clock = Clock.New(), selected = 0, events = {}, message = "", messageTick = 0, epoch = 1,
   }
 end
 
@@ -158,17 +164,90 @@ function Session.Can(session: Session, kind: string, target: number?, range: num
   return Core.Validate(session.game, { kind = kind, actor = session.game.state.player.ship, target = target, range = range })
 end
 
+-- What a save says of itself without being opened: where the pilot was,
+-- in what, with how much, how far into the game, and when it was made
+-- (seconds since 1970; 0 if the save does not say).
+export type SaveInfo = {
+  slot: string, system: string, ship: string, docked: boolean, wallet: number, tick: number, time: number,
+}
+
 -- Save to save/<slot>/state.bin, by way of a temporary file so a crash
--- cannot leave half a save.
-function Session.Save(session: Session, slot: string): boolean
+-- cannot leave half a save, with a few lines beside it (meta.txt) for
+-- the list of saves to show. 'quiet' says nothing to the player.
+function Session.Save(session: Session, slot: string, quiet: boolean?): boolean
   local dir = `{SAVE_DIR}/{slot}`
-  if not Host.MakeDir(dir) then
+  if not (Host.MakeDir(SAVE_DIR) and Host.MakeDir(dir)) then
     return false
   end
   local data, length = Core.Save(session.game)
   local ok = Host.WriteFile(dir .. "/state.tmp", data, length) and Host.Rename(dir .. "/state.tmp", dir .. "/state.bin")
-  Session.Say(session, if ok then `Saved to {dir}` else `Could not save to {dir}`)
+  if ok then
+    local player = Core.Query.Player(session.game)
+    local meta = `system={player.systemName}\nship={player.hull.name}\ndocked={if player.docked ~= 0 then 1 else 0}\n`
+      .. `wallet={session.game.state.wallet}\ntick={session.game.state.tick}\ntime={math.floor(Host.Time())}\n`
+    Host.WriteFile(dir .. "/meta.txt", meta)
+  end
+  if not quiet then
+    Session.Say(session, if ok then `Saved to {dir}` else `Could not save to {dir}`)
+  end
   return ok
+end
+
+-- The saves there are, the newest first.
+function Session.Saves(): { SaveInfo }
+  local found: { SaveInfo } = {}
+  for _, name in Host.ListDir(SAVE_DIR) do
+    if string.sub(name, -1) == "/" then
+      local slot = string.sub(name, 1, -2)
+      if Host.Exists(`{SAVE_DIR}/{slot}/state.bin`) then
+        local info: SaveInfo = { slot = slot, system = "", ship = "", docked = false, wallet = 0, tick = 0, time = 0 }
+        local meta = Host.ReadFile(`{SAVE_DIR}/{slot}/meta.txt`)
+        if meta then
+          for key: string, value: string in string.gmatch(buffer.tostring(meta), "(%w+)=([^\n]*)") :: any do
+            if key == "system" then
+              info.system = value
+            elseif key == "ship" then
+              info.ship = value
+            elseif key == "docked" then
+              info.docked = value == "1"
+            elseif key == "wallet" then
+              info.wallet = tonumber(value) or 0
+            elseif key == "tick" then
+              info.tick = tonumber(value) or 0
+            elseif key == "time" then
+              info.time = tonumber(value) or 0
+            end
+          end
+        end
+        table.insert(found, info)
+      end
+    end
+  end
+  table.sort(found, function(a: SaveInfo, b: SaveInfo): boolean
+    if a.time ~= b.time then
+      return a.time > b.time
+    end
+    return a.slot < b.slot
+  end)
+  return found
+end
+
+-- Throw a save away.
+function Session.Delete(slot: string): boolean
+  Host.Remove(`{SAVE_DIR}/{slot}/meta.txt`)
+  return Host.Remove(`{SAVE_DIR}/{slot}/state.bin`)
+end
+
+-- Replace the running game with a new one.
+function Session.Restart(session: Session, galaxySeed: number, historySeed: number)
+  session.game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed })
+  session.selected = 0
+  session.events = { { kind = "Loaded" } }
+  session.epoch += 1
+  session.clock.pending = 0
+  session.clock.paused = false
+  session.clock.scale = 1
+  session.message = ""
 end
 
 -- Replace the running game with a save. Returns false if there is none
@@ -187,6 +266,7 @@ function Session.Load(session: Session, slot: string): boolean
   session.game = loaded
   session.selected = 0
   session.events = { { kind = "Loaded" } }
+  session.epoch += 1
   session.clock.pending = 0
   Session.Say(session, `Loaded {SAVE_DIR}/{slot}`)
   return true

@@ -104,6 +104,7 @@ export type Scene = {
   wreckage: { [number]: Wrecked },    -- the pieces of each wreck on the grid
   works: { [number]: { Object } },    -- what stands round each station's tower: its modules, their guns, its field
   standing: { [number]: string },     -- what a pilot's starbase was made of when it was put up here
+  epoch: number,                      -- the game (Session's 'epoch') the scene was made for
   docked: boolean,                    -- the pilot is docked: the camera is on the station
   zoomAway: number,                   -- the zoom there was before docking, to go back to
   arms: { [number]: Armed },          -- what is on the hardpoints of each ship of our own design
@@ -150,7 +151,7 @@ function Scene.New(camera: Camera): Scene
     proxies = {}, celestials = {}, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
-    wreckage = {}, works = {}, standing = {}, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0,
+    wreckage = {}, works = {}, standing = {}, epoch = 1, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0,
   }
 end
 
@@ -662,6 +663,14 @@ function Scene.Sync(scene: Scene, session: Session.Session)
   local state = game.state
   local since = Clock.SinceTick(session.clock)
   local player = Core.Query.Player(game)
+  -- (another game, from a save or begun anew: nothing made for the last
+  -- one stands, though it be the same system by number)
+  if session.epoch ~= scene.epoch then
+    scene.epoch = session.epoch
+    scene.system = 0
+    scene.key = ""
+    scene.docked = false
+  end
   if player.system ~= scene.system then
     enterSystem(scene, game, player.system)
   end

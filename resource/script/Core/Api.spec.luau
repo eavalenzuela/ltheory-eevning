@@ -6,6 +6,9 @@
 local Codec = require("@lt/Core/Persist/Codec")
 local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
+local Items = require("@lt/Core/Assets/Items")
+local Ships = require("@lt/Core/Data/Ships")
+local Types = require("@lt/Core/Data/Types")
 local Motion = require("@lt/Core/Tactical/Motion")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -433,6 +436,51 @@ suite:Case("a save from before item types were added keeps each type's own marke
   for _ = 1, 20 do
     Core.Step(loaded)
   end
+end)
+
+suite:Case("what the pilot owns is listed place by place, the hold and where they are first", function(t)
+  local game = newGame()
+  local state = game.state
+  local home = state.player.home
+  local assets = Core.Query.Assets(game)
+  t.eq(#assets, 1)
+  local here = assets[1]
+  t.eq({ here.station, here.here, here.system, #here.ships, here.ships[1].id } :: { any },
+    { home, true, 1, 1, state.player.ship } :: { any })
+  t.eq(#here.items, #Core.Query.Items(game, home, "hangar"))
+  local worth = Ships.byId["frigate.courier"].basePrice
+  for _, item in here.items do
+    worth += item.quantity * Types.Info(item.type).basePrice
+  end
+  t.eq(here.worth, worth)
+  t.ok(here.volume > 0)
+
+  -- Something in the hold, something left at another station, and away.
+  local rounds = Items.Add(state, "ammo.emp", 50, state.player.ship, "cargo")
+  local other = 0
+  for _, object in Core.Query.Objects(game, 1) do
+    if object.kind == "station" and object.id ~= home and other == 0 then
+      other = object.id
+    end
+  end
+  t.ok(other ~= 0, "the first system has only one station")
+  Items.Add(state, "ore.ferrite", 300, other, "hangar")
+  assets = Core.Query.Assets(game)
+  t.eq({ #assets, assets[1].station, assets[2].station, assets[3].station }, { 3, 0, home, other })
+  t.eq({ assets[1].here, assets[2].here, assets[3].here }, { true, true, false })
+  t.eq({ assets[1].items[1].id, assets[1].volume } :: { any }, { rounds.id, 50 * Types.Info("ammo.emp").volume } :: { any })
+  t.eq({ #assets[3].ships, #assets[3].items, assets[3].worth }, { 0, 1, 300 * Types.Info("ore.ferrite").basePrice })
+  -- (fitted modules are the ship's, not a stack somewhere)
+  for _, place in assets do
+    for _, item in place.items do
+      t.eq(item.slot, 0)
+    end
+  end
+  order(t, game, "Undock")
+  Core.Step(game)
+  assets = Core.Query.Assets(game)
+  t.eq({ assets[1].station, assets[2].station, assets[2].here } :: { any }, { 0, home, false } :: { any })
+  t.eq(#assets[2].ships, 0)
 end)
 
 return suite

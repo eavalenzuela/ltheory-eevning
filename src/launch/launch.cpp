@@ -105,6 +105,15 @@ struct Launcher : public Program {
     luauApp = 0;
     Luau_Reset();
     lua_State* L = Luau_GetState();
+    /* Tell the app whether a harness is driving it (Host.scripted): an
+       app that opens on a menu for a person goes straight to work for a
+       script. */
+    lua_getglobal(L, "Host");
+    if (lua_istable(L, -1)) {
+      lua_pushboolean(L, harness.commands.size() > 0);
+      lua_setfield(L, -2, "scripted");
+    }
+    lua_pop(L, 1);
     if (!Luau_Require("App/" + appName)) {
       deleted = true;
       return;

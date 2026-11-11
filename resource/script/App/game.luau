@@ -22,6 +22,7 @@ local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
 local Station = require("@lt/Game/UI/Station")
 local Info = require("@lt/Game/UI/Info")
+local Menu = require("@lt/Game/UI/Menu")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
@@ -583,6 +584,23 @@ function Debug.Colonised(type: string?): (number, number, number)
   return #status.facilities, working, stored
 end
 
+-- The menus: open the opening one or the one in play, as a person would
+-- get them (a script starts in the game, not at the menu), and say
+-- which page is up ("" for none).
+function Debug.Menu(which: string?): string
+  if which == "main" then
+    Menu.OpenMain(session)
+  elseif which == "pause" and not Menu.IsOpen() then
+    Menu.Toggle(session)
+  end
+  return Menu.Page()
+end
+
+-- The seed of the galaxy being played.
+function Debug.Seed(): number
+  return session.game.state.galaxySeed
+end
+
 -- A cheat, for scripted runs that test something other than earning:
 -- credits from nowhere, entered in the journal as such.
 function Debug.Grant(credits: number)
@@ -657,6 +675,11 @@ function App:Initialize()
   session = Session.New(1, 1)
   scene = Scene.New(camera)
   _G.GameDebug = Debug
+  -- A person is given the menu, over a new game that stands still
+  -- behind it. A script goes straight into that game.
+  if not Host.scripted then
+    Menu.OpenMain(session)
+  end
 
   local root = Widget_Stack(Widget_Luau(Widget_Create(), {
     CreateChildren = function(): { Widget }
@@ -669,17 +692,31 @@ function App:Initialize()
     end,
     PreUpdate = function()
       local frame = math.min(0.1, FrameTimer_Get())
-      if Key_Pressed(Key_P()) and not Im.Typing() then
-        session.clock.paused = not session.clock.paused
+      if Key_Pressed(Key_Escape()) then
+        Menu.Toggle(session)
       end
-      if Key_Pressed(Key_F9()) then
-        Session.Save(session, "quick")
-      end
-      if Key_Pressed(Key_F10()) then
-        Session.Load(session, "quick")
+      if not Menu.IsOpen() then
+        if Key_Pressed(Key_P()) and not Im.Typing() then
+          session.clock.paused = not session.clock.paused
+        end
+        if Key_Pressed(Key_F9()) then
+          Session.Save(session, "quick")
+        end
+        if Key_Pressed(Key_F10()) then
+          Session.Load(session, "quick")
+        end
       end
       autopilot()
       Session.Update(session, frame)
+      -- Docking saves the game, for a person: a script's runs are short
+      -- and many, and are not anybody's to come back to.
+      if not Host.scripted then
+        for _, event in session.events do
+          if event.kind == "Docked" and event.ship == session.game.state.player.ship then
+            Session.Save(session, "auto", true)
+          end
+        end
+      end
       Scene.Sync(scene, session)
       Scene.UpdateCamera(scene, frame, not Hud.CursorOverInterface())
       Scene.Update(scene, frame)

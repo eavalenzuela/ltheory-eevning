@@ -7,6 +7,7 @@
 -- One widget draws all of it every frame (Game/UI/Im). It reads the Core
 -- through queries and acts on it only through the Session.
 
+local Assets = require("@lt/Game/UI/Assets")
 local Colony = require("@lt/Game/UI/Colony")
 local Colors = require("@lt/Colors")
 local Components = require("@lt/Widget/Components")
@@ -15,6 +16,7 @@ local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
 local Info = require("@lt/Game/UI/Info")
+local Menu = require("@lt/Game/UI/Menu")
 local Modules = require("@lt/Core/Data/Modules")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
@@ -302,6 +304,7 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
       -- (what a planet has, the colony there, and the putting down of one)
       if Im.Button(order.label, bx, by, buttonWidth, 26, true) then
         Colony.Open(entry.id)
+        Assets.Close()
       end
     else
       local can = Session.Can(session, order.kind, entry.id, order.range)
@@ -465,6 +468,12 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
     PostDraw = function(_, w: Widget)
       local wasOver = overInterface
       Im.Begin()
+      -- A menu is all there is while it is up.
+      if Menu.IsOpen() then
+        Menu.Draw(session, w.pos.x, w.pos.y, w.size.x, w.size.y)
+        overInterface = true
+        return
+      end
       local game = session.game
       local player = Core.Query.Player(game)
       local ball = Core.Query.Ball(game, player.ship)
@@ -515,15 +524,27 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         Info.Draw(stationX + Station.WIDTH + 12, top + 130)
       end
       drawClock(session, left + 24, bottom - 54)
-      -- Colonies are run from anywhere, in space or docked.
+      -- Colonies are run from anywhere, in space or docked, and what
+      -- the pilot owns can be looked over from anywhere. The two windows
+      -- take the same place: opening one closes the other.
       if Im.Button("Colonies", left + 246, bottom - 54, 96, 34, true) then
         if Colony.IsOpen() then
           Colony.Close()
         else
           Colony.Open()
+          Assets.Close()
+        end
+      end
+      if Im.Button("Assets", left + 348, bottom - 54, 84, 34, true) then
+        if Assets.IsOpen() then
+          Assets.Close()
+        else
+          Assets.Open()
+          Colony.Close()
         end
       end
       Colony.Draw(session, left + 16, top + 130)
+      Assets.Draw(session, left + 16, top + 130)
       overInterface = Im.over
     end,
   }))

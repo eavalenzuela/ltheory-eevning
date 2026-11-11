@@ -37,6 +37,7 @@ local Stations = require("@lt/Core/Assets/Stations")
 local Structures = require("@lt/Core/Data/Structures")
 local System = require("@lt/Core/Describe/System")
 local Training = require("@lt/Core/Character/Training")
+local Types = require("@lt/Core/Data/Types")
 
 local Core = {}
 
@@ -520,6 +521,75 @@ end
 -- The player's ships docked at a station.
 function Query.Ships(game: Game, station: number): { State.Ship }
   return Hangar.Ships(game.state, station)
+end
+
+-- What the player owns, place by place: the hold of the ship flown
+-- (station 0), then every station with something of the pilot's in its
+-- hangar, the one docked at first and the rest by system and station.
+export type AssetsAt = {
+  station: number,      -- 0 for the hold
+  name: string,
+  system: number,
+  systemName: string,
+  here: boolean,        -- the pilot is docked there (or it is the hold)
+  ships: { State.Ship },
+  items: { State.Item },
+  volume: number,       -- of the items, m3
+  worth: number,        -- of items and hulls, at base prices
+}
+function Query.Assets(game: Game): { AssetsAt }
+  local state = game.state
+  local me = state.ships[state.player.ship]
+  local places: { [number]: AssetsAt } = {}
+  local order: { number } = {}
+  local function at(station: number): AssetsAt
+    local place = places[station]
+    if place == nil then
+      local object = Space.Object(state, station)
+      local system = if object then Space.SystemOf(state, station) else Query.Player(game).system
+      place = {
+        station = station, name = if object then object.name else `{me.name}: hold`, system = system,
+        systemName = state.galaxy.systems[system].name, here = station == 0 or station == me.docked,
+        ships = {}, items = {}, volume = 0, worth = 0,
+      }
+      places[station] = place
+      table.insert(order, station)
+    end
+    return place
+  end
+  for _, id in state.itemIds do
+    local item = state.items[id]
+    local hold = item.holder == me.id and item.place == "cargo"
+    if hold or (item.place == "hangar" and Space.Object(state, item.holder) ~= nil) then
+      local place = at(if hold then 0 else item.holder)
+      local info = Types.Info(item.type)
+      table.insert(place.items, item)
+      place.volume += item.quantity * info.volume
+      place.worth += item.quantity * info.basePrice
+    end
+  end
+  for _, id in state.shipIds do
+    local ship = state.ships[id]
+    if ship.owner == me.owner and ship.docked ~= 0 then
+      local place = at(ship.docked)
+      table.insert(place.ships, ship)
+      place.worth += Ships.byId[ship.type].basePrice
+    end
+  end
+  table.sort(order, function(a: number, b: number): boolean
+    local pa, pb = places[a], places[b]
+    if pa.here ~= pb.here then
+      return pa.here
+    elseif (a == 0) ~= (b == 0) then
+      return a == 0
+    end
+    return a < b
+  end)
+  local found: { AssetsAt } = {}
+  for _, station in order do
+    table.insert(found, places[station])
+  end
+  return found
 end
 
 export type SkillInfo = {

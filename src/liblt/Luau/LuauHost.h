@@ -230,6 +230,9 @@ namespace LuauHost {
     lua_setfield(L, -2, "args");
     lua_pushboolean(L, headless);
     lua_setfield(L, -2, "headless");
+    /* (the launcher sets this when a harness is driving the app) */
+    lua_pushboolean(L, false);
+    lua_setfield(L, -2, "scripted");
     lua_setglobal(L, "Host");
   }
 }

@@ -1,0 +1,80 @@
+# The menus, the save slots and the assets window, in the game app
+# (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/menu.txt
+#
+# A person is given the opening menu and a script is not, so the menu is
+# asked for here. Begin a new game from a seed, save it from the menu in
+# play, go back to the opening menu, load the save, look the assets
+# over, and throw the save away. (A script's saves are kept under
+# cache/, apart from anybody's own.)
+
+wait 2
+lua assert(GameDebug.Menu() == '', 'a script starts in the game, not at the menu')
+lua assert(GameDebug.Seed() == 1)
+
+# The opening menu: a new game, from a seed.
+lua assert(GameDebug.Menu('main') == 'main')
+frames 3
+lua assert(not GameDebug.CanPress('UNDOCK'), 'nothing of the game is drawn behind a menu')
+until GameDebug.Press('Menu:new')
+frames 3
+lua GameDebug.Enter('Seed', 7)
+frames 3
+until GameDebug.Press('Menu:start')
+until GameDebug.Menu() == ''
+lua assert(GameDebug.Seed() == 7, 'the new game is not of the seed asked for')
+lua assert(GameDebug.Docked() and GameDebug.Tick() < 100, 'a new game starts docked, at the beginning')
+lua assert(GameDebug.Hangar('ammo.emp') == 600, 'a new game has the starting kit')
+
+# Into space, and a save from the menu in play, which stops the clock.
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+wait 2
+lua assert(GameDebug.Menu('pause') == 'pause')
+frames 3
+lua _G.tick = GameDebug.Tick()
+until GameDebug.Press('Menu:save')
+frames 3
+until GameDebug.Press('Save:save 5')
+frames 3
+lua assert(GameDebug.CanPress('Save:save 5'), 'the slot should be there to write over')
+until GameDebug.Press('Menu:back')
+frames 30
+lua assert(GameDebug.Tick() == _G.tick, 'the game went on behind the menu')
+until GameDebug.Press('Menu:resume')
+until GameDebug.Menu() == ''
+wait 3
+lua assert(GameDebug.Tick() > _G.tick, 'the game did not go on after the menu')
+
+# Back at the opening menu the save can be gone on from, or loaded by name.
+lua assert(GameDebug.Menu('main') == 'main')
+frames 3
+lua assert(GameDebug.CanPress('Menu:continue'), 'with a save there is something to continue')
+until GameDebug.Press('Menu:load')
+frames 3
+until GameDebug.Press('Load:save 5')
+until GameDebug.Menu() == ''
+lua assert(GameDebug.Seed() == 7 and GameDebug.InSpace(), 'the save did not bring the game back')
+lua assert(GameDebug.Tick() >= _G.tick and GameDebug.Tick() < _G.tick + 3, 'the save is not from when it was made')
+
+# What the pilot owns, from anywhere: here, the hangar left behind.
+until GameDebug.Press('Assets')
+frames 3
+lua assert(GameDebug.CanPress('Assets:close'), 'the assets window did not open')
+until GameDebug.Press('Colonies')
+frames 3
+lua assert(not GameDebug.CanPress('Assets:close'), 'the colonies window should take the assets window\'s place')
+until GameDebug.Press('Colony:close')
+
+# And the save is thrown away.
+lua assert(GameDebug.Menu('pause') == 'pause')
+frames 3
+until GameDebug.Press('Menu:load')
+frames 3
+until GameDebug.Press('Delete:save 5')
+frames 3
+lua assert(not GameDebug.CanPress('Load:save 5'), 'the deleted save is still listed')
+
+echo menu scenario passed
+quit

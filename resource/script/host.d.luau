@@ -8,6 +8,10 @@ declare Host: {
   args: { string },
   -- True under bin/ltcore, false inside the engine.
   headless: boolean,
+  -- True when a harness is driving the app (bin/launch APP --do or
+  -- --script): an app that opens on a menu for a person goes straight to
+  -- work for a script.
+  scripted: boolean,
 
   ReadFile: (path: string) -> buffer?,
   WriteFile: (path: string, data: buffer | string, length: number?) -> boolean,
