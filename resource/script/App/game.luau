@@ -568,6 +568,16 @@ function Debug.Traffic(): (number, number, number)
   return #state.trafficIds, near, hostile
 end
 
+-- What a faction ("vessari", "talmar", ...) thinks of the pilot.
+function Debug.Standing(faction: string): number
+  for _, row in Core.Query.Standings(session.game) do
+    if row.faction == faction then
+      return row.standing
+    end
+  end
+  return 0
+end
+
 -- The scanner: how many sites the system has, how many of them are
 -- found, and the name of the first found one of a kind ("ore", "relic",
 -- "combat"; "" if there is none).

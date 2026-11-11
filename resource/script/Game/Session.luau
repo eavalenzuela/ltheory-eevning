@@ -5,6 +5,7 @@
 
 local Clock = require("@lt/Game/Clock")
 local Core = require("@lt/Core/Api")
+local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
@@ -115,6 +116,10 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, if event.found > 0 then `Scan: {event.found} found` .. (if event.signals > 0 then `, {event.signals} still to resolve` else "")
       elseif event.signals > 0 then `Scan: {event.signals} {if event.signals == 1 then "signal" else "signals"}, nearer`
       else "Scan: nothing new")
+  elseif kind == "StandingChanged" and event.by < 0 then
+    local faction = Factions.byId[event.faction]
+    Session.Say(session, string.format("%s standing %.1f: now %.1f%s", if faction then faction.name else "?", event.by, event.standing,
+      if event.standing <= -5 then " (their patrols will fire on you)" else ""))
   elseif kind == "MissionAccepted" then
     Session.Say(session, `Job taken: {event.title}`)
   elseif kind == "MissionCompleted" then

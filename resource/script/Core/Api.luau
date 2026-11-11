@@ -36,6 +36,7 @@ local Space = require("@lt/Core/Tactical/Space")
 local Colonies = require("@lt/Core/Assets/Colonies")
 local Planets = require("@lt/Core/Data/Planets")
 local Starbases = require("@lt/Core/Assets/Starbases")
+local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
 local Stations = require("@lt/Core/Assets/Stations")
 local Structures = require("@lt/Core/Data/Structures")
@@ -377,6 +378,7 @@ function Core.Step(game: Game)
     end
   end
   Sites.Step(state, game.events)
+  Standings.Step(state)
   Pirates.Populate(state, game.events)
   Traffic.Step(state, game.events)
   Pirates.Think(state, game.events)
@@ -592,7 +594,10 @@ end
 
 -- The sales tax and broker's fee the pilot pays, as shares.
 function Query.Fees(game: Game): (number, number)
-  return Market.Tax(game.state), Market.Fee(game.state)
+  -- (as the station the pilot is docked at charges them, if they are docked)
+  local docked = game.state.ships[game.state.player.ship].docked
+  local station: number? = if docked ~= 0 then docked else nil
+  return Market.Tax(game.state, station), Market.Fee(game.state, station)
 end
 
 -- The wallet's journal, oldest first.
@@ -789,6 +794,20 @@ function Query.Sites(game: Game): ({ SiteStatus }, number)
     })
   end
   return found, math.max(0, state.scanReady - state.tick) * Constants.TICK
+end
+
+-- What each human faction thinks of the pilot, in the order of the
+-- factions: from -10 to 10, and whether its patrols fight them on sight.
+export type StandingStatus = { faction: string, name: string, standing: number, hostile: boolean }
+function Query.Standings(game: Game): { StandingStatus }
+  local found: { StandingStatus } = {}
+  for _, faction in Factions.list do
+    if faction.kind == "human" then
+      table.insert(found, { faction = faction.id, name = faction.name, standing = Standings.Of(game.state, faction.id),
+        hostile = Standings.Hostile(game.state, faction.id) })
+    end
+  end
+  return found
 end
 
 -- The jobs to be had and in hand: what the station the pilot is docked

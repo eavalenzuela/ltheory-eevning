@@ -24,6 +24,7 @@ local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Space = require("@lt/Core/Tactical/Space")
+local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
 local Vitals = require("@lt/Core/Tactical/Vitals")
 
@@ -190,6 +191,8 @@ function Combat.Apply(state: State.State, command: State.Command, events: { Even
     if victim and shooter and victim.owner ~= "pirates" and victim.owner ~= shooter.owner then
       if state.tick >= state.player.marked then
         table.insert(events, { kind = "Marked", owner = victim.owner })
+        -- (and whoever minds remembers it: Assets/Standings)
+        Standings.Change(state, Standings.Minds(state, victim.owner, ball.system), Standings.MARKED, events)
       end
       state.player.marked = state.tick + MARKED
     end

@@ -18,6 +18,7 @@ local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
+local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
 local Types = require("@lt/Core/Data/Types")
 local Wallet = require("@lt/Core/Assets/Wallet")
@@ -94,6 +95,16 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
 
   -- (a bounty is on the pilot, not the hull: a scout in a patched frigate
   -- is worth a scout's)
+  -- What the factions make of it (Assets/Standings): a ship of theirs, or
+  -- anybody's in their space, destroyed by the pilot is held against
+  -- them, and a pirate destroyed in their space is to the pilot's credit.
+  if by == state.player.ship and ship.owner ~= "player" then
+    if ship.owner == "pirates" then
+      Standings.Change(state, state.galaxy.systems[ball.system].owner, Standings.PIRATE)
+    elseif state.traffic[id] then
+      Standings.Change(state, Standings.Minds(state, ship.owner, ball.system), Standings.KILLED, events)
+    end
+  end
   if ship.owner == "pirates" and by == state.player.ship then
     pay(state, if pilot then pilot.bounty else math.floor(hull.basePrice * 0.2), "bounty", events)
     -- (and it counts toward any bounty job the pilot has for this system)

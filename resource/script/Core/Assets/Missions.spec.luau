@@ -118,10 +118,12 @@ suite:Case("a bounty job counts the pirates the pilot destroys in its system, an
   end
   t.eq(mission.done, mission.need)
   local wallet = state.wallet
+  -- (the pirates destroyed have earned a little standing already)
+  local thought = Missions.Standing(state, "vessari")
   t.ok((submit(game, { kind = "CompleteMission", actor = 0, target = mission.id })))
   t.eq(state.wallet - wallet, mission.reward)
   t.eq(#state.missionIds, 0)
-  t.near(Missions.Standing(state, "vessari"), mission.standing, 1e-9)
+  t.near(Missions.Standing(state, "vessari") - thought, mission.standing, 1e-9)
   t.eq(state.missionsDone, 1)
   -- (standing makes the next job pay better)
   state.tick += 86400

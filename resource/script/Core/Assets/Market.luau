@@ -40,6 +40,7 @@
 local Economy = require("@lt/Core/Strategic/Economy")
 local Items = require("@lt/Core/Assets/Items")
 local Space = require("@lt/Core/Tactical/Space")
+local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
 local Types = require("@lt/Core/Data/Types")
 local Wallet = require("@lt/Core/Assets/Wallet")
@@ -58,12 +59,16 @@ local TICKS_PER_DAY = 86400
 
 -- The player's sales tax and broker's fee, each a tenth lower for every
 -- level of the skill for it.
-function Market.Tax(state: State.State): number
+-- (At a station, both also follow from what its faction thinks of the
+-- pilot: Assets/Standings.)
+function Market.Tax(state: State.State, station: number?): number
   return Market.SALES_TAX * (1 - 0.1 * math.max(0, state.skills.accounting or 0))
+    * (if station then Standings.Fees(state, station) else 1)
 end
 
-function Market.Fee(state: State.State): number
+function Market.Fee(state: State.State, station: number?): number
   return Market.BROKER_FEE * (1 - 0.1 * math.max(0, state.skills["broker.relations"] or 0))
+    * (if station then Standings.Fees(state, station) else 1)
 end
 
 -- How much a station normally holds of a type, in units. Raw materials
@@ -232,7 +237,7 @@ end
 -- What selling 'quantity' at once would bring in all, after tax.
 function Market.SellValue(state: State.State, station: number, type: string, quantity: number): number
   local revenue = Economy.SellRevenue(Market.For(state, station), 1, assert(Market.Index(type)), quantity)
-  return math.floor(revenue * (1 - Market.Tax(state)))
+  return math.floor(revenue * (1 - Market.Tax(state, station)))
 end
 
 local function record(state: State.State, station: number, type: string, units: number, value: number)
@@ -322,7 +327,7 @@ function Market.Validate(state: State.State, command: State.Command): (boolean, 
     local price = command.price or 0
     if price <= 0 or price % 1 ~= 0 then
       return false, "no such price"
-    elseif math.ceil(price * quantity * (1 + Market.Fee(state))) > state.wallet then
+    elseif math.ceil(price * quantity * (1 + Market.Fee(state, station))) > state.wallet then
       return false, "not enough credits"
     end
     return true
@@ -340,7 +345,7 @@ function Market.Validate(state: State.State, command: State.Command): (boolean, 
       local price = command.price or 0
       if price <= 0 or price % 1 ~= 0 then
         return false, "no such price"
-      elseif math.ceil(price * quantity * Market.Fee(state)) > state.wallet then
+      elseif math.ceil(price * quantity * Market.Fee(state, station)) > state.wallet then
         return false, "not enough credits for the broker"
       end
     end
@@ -384,7 +389,7 @@ function Market.Apply(state: State.State, command: State.Command, events: { Even
     local type = item.type
     local quantity = command.quantity or item.quantity
     local gross = Economy.Sell(econ, 1, Market.Index(type) :: number, quantity)
-    local net = math.floor(gross * (1 - Market.Tax(state)))
+    local net = math.floor(gross * (1 - Market.Tax(state, station)))
     Items.Take(state, item, quantity)
     Wallet.Pay(state, net, "market sale", events)
     record(state, station, type, quantity, math.floor(gross))
@@ -399,12 +404,12 @@ function Market.Apply(state: State.State, command: State.Command, events: { Even
       order = { id = State.NewId(state), station = station, side = "sell", type = item.type, quantity = quantity,
         price = price, placed = state.tick }
       Items.Take(state, item, quantity)
-      Wallet.Pay(state, -math.ceil(price * quantity * Market.Fee(state)), "broker's fee", events)
+      Wallet.Pay(state, -math.ceil(price * quantity * Market.Fee(state, station)), "broker's fee", events)
     else
       local quantity = command.quantity :: number
       order = { id = State.NewId(state), station = station, side = "buy", type = command.type :: string,
         quantity = quantity, price = price, placed = state.tick }
-      Wallet.Pay(state, -math.ceil(price * quantity * Market.Fee(state)), "broker's fee", events)
+      Wallet.Pay(state, -math.ceil(price * quantity * Market.Fee(state, station)), "broker's fee", events)
       Wallet.Pay(state, -price * quantity, "buy order escrow", events)
     end
     state.orders[order.id] = order
@@ -469,7 +474,7 @@ local function fill(state: State.State, order: State.Order, econ: Economy.Econom
     return 0
   end
   if order.side == "sell" then
-    Wallet.Pay(state, math.floor(value * (1 - Market.Tax(state))), "sell order filled", events)
+    Wallet.Pay(state, math.floor(value * (1 - Market.Tax(state, order.station))), "sell order filled", events)
   else
     Items.Add(state, order.type, units, order.station, "hangar")
   end

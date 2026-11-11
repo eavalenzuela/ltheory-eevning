@@ -36,6 +36,7 @@ lua GameDebug.TimeScale(1)
 lua assert(GameDebug.Fire() >= 1, 'no weapon opened fire')
 until GameDebug.Marked()
 until select(3, GameDebug.Traffic()) >= 1
+lua assert(GameDebug.Standing('vessari') < 0, 'firing on a patrol should cost standing with its faction')
 
 # A marked pilot is not safe at a station either: its batteries fire on
 # them. (If the patrol gets the Courier first, that is an answer too.)

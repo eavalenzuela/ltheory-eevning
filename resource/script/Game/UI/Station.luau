@@ -55,6 +55,7 @@ local blueprintChosen = ""
 local runs = 1
 
 local GOOD = vector.create(0.45, 0.85, 0.55)
+local HOSTILE = vector.create(0.85, 0.35, 0.3)
 
 -- ---------------------------------------------------------------------
 -- Small pieces
@@ -1046,6 +1047,19 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
       Im.Text(tostring(whyNot), left + 100, line + 46, 12, Im.WARN)
     end
     line += 84
+  end
+
+  -- What every faction thinks of the pilot (it is their stations' fees,
+  -- their jobs' pay and, at the worst, their patrols' guns).
+  line = y + 78 + 30 + 3 * 84 + 4
+  Im.Heading("STANDINGS", left, line, 14, Im.DIM)
+  for index, row in Core.Query.Standings(game) do
+    local sx = left + (index - 1) * 110
+    Im.Text(row.name, sx, line + 24, 13, Im.DIM)
+    Im.Text(string.format("%.1f", row.standing), sx, line + 42, 15, if row.hostile then HOSTILE elseif row.standing < 0 then Im.WARN else Im.TEXT)
+    if row.hostile then
+      Im.Text("hostile", sx + 44, line + 44, 12, HOSTILE)
+    end
   end
 
   line = y + 78

@@ -30,6 +30,7 @@ local Pirates = require("@lt/Core/Tactical/Pirates")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
+local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
 local System = require("@lt/Core/Describe/System")
 
@@ -216,7 +217,9 @@ function Traffic.Step(state: State.State, events: { Event })
   end
   local mine = state.balls[me.id]
   local system = if mine then mine.system else Space.SystemOf(state, me.docked)
-  local marked = state.tick < state.player.marked
+  -- (a pilot the system's faction thinks ill enough of is fought on
+  -- sight, mark or no mark: Assets/Standings)
+  local marked = state.tick < state.player.marked or Standings.Hostile(state, state.galaxy.systems[system].owner)
   local haulers, patrols = 0, 0
   for _, id in table.clone(state.trafficIds) do
     local record = state.traffic[id]

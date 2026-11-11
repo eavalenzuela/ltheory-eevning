@@ -31,6 +31,7 @@ local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Space = require("@lt/Core/Tactical/Space")
+local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
 local System = require("@lt/Core/Describe/System")
 local Types = require("@lt/Core/Data/Types")
@@ -60,9 +61,9 @@ function Missions.Title(mission: State.Mission): string
   return `Supply: {mission.need} {Types.Info(mission.type).name}`
 end
 
--- A pilot's standing with a faction, from -10 to 10.
+-- A pilot's standing with a faction, from -10 to 10 (Assets/Standings).
 function Missions.Standing(state: State.State, faction: string): number
-  return state.standings[faction] or 0
+  return Standings.Of(state, faction)
 end
 
 local function stations(state: State.State, system: number): { System.Object }
@@ -226,7 +227,7 @@ local function close(state: State.State, mission: State.Mission)
 end
 
 local function standing(state: State.State, faction: string, change: number)
-  state.standings[faction] = math.clamp(Missions.Standing(state, faction) + change, -10, 10)
+  Standings.Change(state, faction, change)
 end
 
 function Missions.Apply(state: State.State, command: State.Command, events: { Event })
