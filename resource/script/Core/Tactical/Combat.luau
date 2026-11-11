@@ -144,6 +144,17 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
         return false, "out of mining range"
       end
       return true
+    elseif module.hex then
+      local lock = findLock(ball, command.target or 0)
+      local target = state.balls[command.target or 0]
+      if lock == nil or not lock.locked then
+        return false, "no locked target"
+      elseif target == nil then
+        return false, "that is not a ship"
+      elseif Space.Gap(ball :: any, target :: any) > module.hex.range then
+        return false, "out of range"
+      end
+      return true
     elseif module.repair or module.boost then
       return true
     end
@@ -176,7 +187,7 @@ function Combat.Apply(state: State.State, command: State.Command, events: { Even
     local item = state.items[command.item :: number]
     local module = Modules.byId[item.type]
     table.insert(ball.vitals.running, {
-      item = item.id, target = if module.weapon or module.miner then command.target :: number else 0,
+      item = item.id, target = if module.weapon or module.miner or module.hex then command.target :: number else 0,
       -- A weapon fires at once; a mining laser delivers at the end of its cycle.
       next = now(state) + (if module.miner then module.miner.duration else 0), stopping = false, cycles = 0,
     })
@@ -409,6 +420,25 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       end
       running.next += miner.duration
 
+    elseif module.hex then
+      -- (what it does to its target is worked out for everybody at once,
+      -- at the end of the tick: here it only has to keep running)
+      local hex = module.hex
+      local lock = findLock(ball, running.target)
+      local target = state.balls[running.target]
+      if lock == nil or not lock.locked or target == nil then
+        stop(state, ball, index, "target lost", events)
+        return false
+      elseif Space.Gap(ball :: any, target :: any) > hex.range then
+        stop(state, ball, index, "out of range", events)
+        return false
+      elseif v.capacitor < hex.capacitor then
+        stop(state, ball, index, "capacitor empty", events)
+        return false
+      end
+      v.capacitor -= hex.capacitor
+      running.next += hex.duration
+
     elseif module.repair then
       local repair = module.repair
       if v.capacitor < repair.capacitor then
@@ -510,6 +540,39 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
     end
   end
   state.missiles = flying
+
+  -- Who is held: the strongest webifier running on each ship, and
+  -- whether a disruptor is. A ship whose lot has changed is told, has
+  -- its speed set to match, and if it was getting ready to warp, is not.
+  local webs: { [number]: number } = {}
+  local scrambles: { [number]: boolean } = {}
+  for _, id in state.ballIds do
+    for _, running in state.balls[id].vitals.running do
+      local item = state.items[running.item]
+      local hex = if item then Modules.byId[item.type].hex else nil
+      if hex and state.balls[running.target] then
+        if hex.kind == "web" then
+          webs[running.target] = math.min(webs[running.target] or 1, hex.strength)
+        else
+          scrambles[running.target] = true
+        end
+      end
+    end
+  end
+  for _, id in state.ballIds do
+    local ball = state.balls[id]
+    local v = ball.vitals
+    local web, scrambled = webs[id] or 1, scrambles[id] == true
+    if v.web ~= web or v.scrambled ~= scrambled then
+      v.web, v.scrambled = web, scrambled
+      Vitals.Refresh(state, ball)
+      if scrambled and ball.warp and ball.warp.stage ~= "warp" then
+        ball.warp = nil
+        ball.intent = nil
+      end
+      table.insert(events, { kind = "Held", ball = id, web = web, scrambled = scrambled })
+    end
+  end
 
   local killers: { [number]: number } = {}
   for _, hit in hits do

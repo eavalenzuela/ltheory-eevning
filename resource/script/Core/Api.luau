@@ -64,7 +64,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 19
+Core.SAVE_VERSION = 20
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -181,6 +181,16 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
     state.sitesDue = state.sitesDue or {}
     state.sitesSeen = state.sitesSeen or {}
     state.scanReady = state.scanReady or 0
+  end,
+  -- 20: a ship can be held by another's webifier or warp disruptor. No
+  -- ship of a save from before is.
+  [19] = function(state: any)
+    for _, ball in state.balls do
+      ball.vitals.web = ball.vitals.web or 1
+      if ball.vitals.scrambled == nil then
+        ball.vitals.scrambled = false
+      end
+    end
   end,
 }
 

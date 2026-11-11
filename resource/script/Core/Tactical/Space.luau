@@ -345,6 +345,8 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
       local _, _, _, distance = warpPoint(ball, target, command.range or 0)
       if distance < Constants.WARP_MIN_DISTANCE then
         return false, "too close to warp"
+      elseif ball.vitals.scrambled then
+        return false, "warp scrambled"
       end
     end
     return true
@@ -399,7 +401,8 @@ function Space.Apply(state: State.State, command: State.Command, events: { Event
   elseif kind == "Dock" or kind == "Jump" then
     ball.intent = { kind = if kind == "Dock" then "dock" else "jump", target = target.id }
     local _, _, _, distance = warpPoint(ball, target, 0)
-    if distance >= Constants.WARP_MIN_DISTANCE then
+    -- (a ship held out of warp sets off the slow way)
+    if distance >= Constants.WARP_MIN_DISTANCE and not ball.vitals.scrambled then
       beginWarp(ball, target, 0)
     else
       setMode(ball, "approach", target.id, 0)

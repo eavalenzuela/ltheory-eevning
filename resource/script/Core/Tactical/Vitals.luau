@@ -49,6 +49,7 @@ function Vitals.New(state: State.State, ship: State.Ship): State.Vitals
     shieldResonance = resonance(stats, "shieldResonance"),
     armorResonance = resonance(stats, "armorResonance"),
     hullResonance = resonance(stats, "hullResonance"),
+    web = 1, scrambled = false,
     locks = {}, running = {},
   }
 end
@@ -68,7 +69,8 @@ function Vitals.Refresh(state: State.State, ball: State.Ball)
   v.shieldResonance = resonance(stats, "shieldResonance")
   v.armorResonance = resonance(stats, "armorResonance")
   v.hullResonance = resonance(stats, "hullResonance")
-  ball.maxVelocity, ball.tau = stats.maxVelocity, stats.tau
+  -- (a webifier on it takes its share of the speed, whatever the fit)
+  ball.maxVelocity, ball.tau = stats.maxVelocity * v.web, stats.tau
 end
 
 -- Remember a ball's damage on its ship, as it docks.

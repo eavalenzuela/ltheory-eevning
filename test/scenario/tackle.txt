@@ -1,0 +1,48 @@
+# Holding another ship, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/tackle.txt
+#
+# A stasis webifier and a warp disruptor are fitted to the starter
+# Courier's two mid slots (the modules and the skill for them are
+# given), and switched on with its guns on the pirate that comes to the
+# belt: the pirate is slowed and cannot warp, and does not last.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Give('web.stasis', 1) and GameDebug.Give('disruptor.warp', 1))
+frames 3
+lua assert(not GameDebug.CanPress('Fit:web.stasis'), 'a webifier should want its skill')
+lua GameDebug.Train('electronics', 2)
+lua GameDebug.Train('propulsion.jamming', 1)
+until GameDebug.Press('Fit:web.stasis')
+until GameDebug.Fitted('web.stasis') == 1
+until GameDebug.Press('Fit:disruptor.warp')
+until GameDebug.Fitted('disruptor.warp') == 1
+
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+until GameDebug.Count('ship') > 0
+until GameDebug.Distance('ship') < 9000
+lua assert(GameDebug.Lock('ship'), 'the lock was refused')
+until GameDebug.Locked() > 0
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Held('target') == 1 and not select(2, GameDebug.Held('target')), 'nobody is held before anything is switched on')
+
+# Both guns, the webifier and the disruptor.
+lua assert(GameDebug.Fire() == 4, 'two guns, a webifier and a disruptor should all start')
+until select(2, GameDebug.Held('target'))
+lua assert(GameDebug.Held('target') < 0.5, 'the pirate should be webbed to under half its speed')
+lua assert(GameDebug.Held() == 1 and not select(2, GameDebug.Held()), 'a scout holds nobody')
+
+# Held, it does not last.
+lua GameDebug.TimeScale(4)
+until GameDebug.Count('ship') == 0
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Hull() == 'frigate.courier', 'the player lost the fight')
+
+echo tackle scenario passed
+quit

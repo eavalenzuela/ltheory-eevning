@@ -260,6 +260,13 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     row(to, if repair.layer == "shield" then "Shield restored" else "Armour repaired", `{plain(repair.amount)} HP every {seconds(repair.duration)}`)
     row(to, "Capacitor a cycle", `{plain(repair.capacitor)} GJ`)
   end
+  if module.hex then
+    local hex = module.hex
+    local to = section(sheet, if hex.kind == "web" then "Stasis web" else "Warp disruption")
+    row(to, "On its target", if hex.kind == "web" then `top speed cut to {plain(hex.strength * 100)}%` else "cannot warp")
+    row(to, "Range", metres(hex.range))
+    row(to, "Capacitor a cycle", `{plain(hex.capacitor)} GJ every {seconds(hex.duration)}`)
+  end
   if miner then
     local to = section(sheet, "Mining")
     row(to, "Ore a cycle", `{plain(miner.volume)} m3 every {seconds(miner.duration)}`)

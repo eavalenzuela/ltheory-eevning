@@ -71,16 +71,20 @@ local function all(...: { { string } }): { { string } }
 end
 
 -- A scout is a raider's hull with one gun on it and nothing else: what
--- a new pilot in a Courier can beat.
+-- a new pilot in a Courier can beat. A raider carries a warp disruptor
+-- and a destroyer a webifier (and each the other's, if it has the room):
+-- away from where order is kept, a pack holds what it catches.
 local KINDS: { Kind } = {
   { id = "scout", hull = "frigate.cutthroat", name = "Pirate Scout", range = 1500, bounty = 6000, tags = 1,
     fit = { { "autocannon.small", "ammo.fusion" } } },
   { id = "raider", hull = "frigate.cutthroat", name = "Pirate Raider", range = 2000, bounty = 15000, tags = 1,
     fit = all(times(3, "autocannon.small", "ammo.fusion"), times(1, "launcher.light"),
-      { { "afterburner.1mn" }, { "armor.plate.200mm" }, { "damage.control" }, { "gyrostabilizer" } }) },
+      { { "disruptor.warp" }, { "afterburner.1mn" }, { "armor.plate.200mm" }, { "damage.control" }, { "gyrostabilizer" },
+        { "web.stasis" } }) },
   { id = "jackal", hull = "destroyer.jackal", name = "Pirate Jackal", range = 3000, bounty = 40000, tags = 2,
     fit = all(times(6, "autocannon.small", "ammo.fusion"), times(3, "launcher.light"),
-      { { "afterburner.1mn" }, { "armor.plate.200mm" }, { "damage.control" }, { "gyrostabilizer" }, { "armor.plate.200mm" } }) },
+      { { "web.stasis" }, { "afterburner.1mn" }, { "armor.plate.200mm" }, { "damage.control" }, { "gyrostabilizer" },
+        { "disruptor.warp" }, { "armor.plate.200mm" } }) },
   { id = "marauder", hull = "cruiser.marauder", name = "Pirate Marauder", range = 6000, bounty = 120000, tags = 4,
     fit = all(times(5, "autocannon.medium"), times(3, "launcher.heavy"),
       { { "armor.plate.medium" }, { "damage.control" }, { "gyrostabilizer" }, { "gyrostabilizer" }, { "ballistic.control" },
@@ -306,8 +310,11 @@ function Pirates.Think(state: State.State, events: { Event })
     if not targeted then
       give(state, { kind = "LockTarget", actor = id, target = prey.id }, events)
     elseif locked then
+      -- Everything it has for another ship: its guns, and what holds
+      -- the prey where it is (each is refused until it is in reach).
       for _, item in Items.Fitted(state, id) do
-        if Modules.byId[item.type].weapon then
+        local module = Modules.byId[item.type]
+        if module.weapon or module.hex then
           give(state, { kind = "ActivateModule", actor = id, item = item.id, target = prey.id }, events)
         end
       end

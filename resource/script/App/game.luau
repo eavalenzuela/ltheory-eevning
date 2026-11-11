@@ -30,6 +30,7 @@ local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
+local Types = require("@lt/Core/Data/Types")
 local Wallet = require("@lt/Core/Assets/Wallet")
 
 local App = {}
@@ -567,6 +568,43 @@ function Debug.Traffic(): (number, number, number)
     hostile += if entry.hostile then 1 else 0
   end
   return #state.trafficIds, near, hostile
+end
+
+-- Two cheats, for scripted runs that test something other than buying
+-- and training: so many of an item from nowhere (into the hangar of the
+-- station docked at, else the hold), and a skill at a level.
+function Debug.Give(type: string, quantity: number): boolean
+  local state = session.game.state
+  local ship = state.ships[state.player.ship]
+  if Types.Get(type) == nil then
+    return false
+  end
+  Items.Add(state, type, quantity, if ship.docked ~= 0 then ship.docked else ship.id, if ship.docked ~= 0 then "hangar" else "cargo")
+  return true
+end
+
+function Debug.Train(skill: string, level: number)
+  session.game.state.skills[skill] = level
+end
+
+-- How a ship is held (Tactical/Combat): the share of its top speed a
+-- webifier leaves it (1 for none), and whether it is kept out of warp.
+-- The pilot's own, or with 'target' the first ship they have locked.
+function Debug.Held(what: string?): (number, boolean)
+  local state = session.game.state
+  local ball = state.balls[state.player.ship]
+  if what == "target" and ball then
+    for _, lock in ball.vitals.locks do
+      if lock.locked and state.balls[lock.target] then
+        ball = state.balls[lock.target]
+        break
+      end
+    end
+  end
+  if ball == nil then
+    return 1, false
+  end
+  return ball.vitals.web, ball.vitals.scrambled
 end
 
 -- What a faction ("vessari", "talmar", ...) thinks of the pilot.

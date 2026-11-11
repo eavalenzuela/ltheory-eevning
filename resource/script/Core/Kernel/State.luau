@@ -58,6 +58,11 @@ export type Vitals = {
   shieldResonance: { number },
   armorResonance: { number },
   hullResonance: { number },
+  -- What other ships are doing to it (Tactical/Combat): its top speed
+  -- is 'web' of what it would be (1: nobody has a webifier on it), and
+  -- 'scrambled' keeps it out of warp.
+  web: number,
+  scrambled: boolean,
   locks: { Lock },          -- in the order they were asked for
   running: { Running },     -- in the order they were switched on
 }

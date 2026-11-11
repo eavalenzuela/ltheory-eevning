@@ -413,10 +413,14 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
     if module.miner then
       note = if running then "mining" else "idle"
     end
+    if module.hex then
+      note = if running then "holding" else "idle"
+    end
     if running then
       local duration = if module.weapon then module.weapon.duration
         elseif module.repair then module.repair.duration
         elseif module.miner then module.miner.duration
+        elseif module.hex then module.hex.duration
         else module.boostDuration or 1
       bar(bx + 8, y + 38, width - 16, 3, duration - math.max(0, running.next - now), duration, Im.ACCENT)
       if running.stopping then
@@ -427,7 +431,7 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
     if clicked and active then
       if running then
         Session.Do(session, { kind = "DeactivateModule", actor = 0, item = item.id })
-      elseif module.weapon or module.miner then
+      elseif module.weapon or module.miner or module.hex then
         -- at the selected target if it is locked, else the first locked one
         local target = 0
         local chosen = lockOf(ball, session.selected)
@@ -458,6 +462,13 @@ local function drawNavigation(session: Session.Session, ball: State.Ball, x: num
   Im.Text(describe(game, ball), x + 14, y + 40, 15, Im.ACCENT)
   -- how much of its top speed, as a bar
   bar(x + 150, y + 22, 150, 4, speed, ball.maxVelocity, Im.ACCENT)
+  -- (and what somebody else is doing about either: Tactical/Combat)
+  if ball.vitals.scrambled then
+    Im.Text("WARP SCRAMBLED", x + 310, y + 44, 13, HULL)
+  end
+  if ball.vitals.web < 1 then
+    Im.Text("WEBBED", x + 310, y + 28, 13, HULL)
+  end
   local inWarp = ball.warp ~= nil and ball.warp.stage == "warp"
   if Im.Button("STOP", x + width - 92, y + 8, 80, 24, not inWarp) then
     Session.Order(session, "Stop")

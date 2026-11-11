@@ -51,6 +51,17 @@ export type Miner = {
   range: number,            -- m
 }
 
+-- What a module does to another ship while it runs on it: a "web" cuts
+-- the target's top speed to 'strength' of what it was, and a "scramble"
+-- keeps it out of warp.
+export type Hex = {
+  kind: "web" | "scramble",
+  range: number,            -- m
+  strength: number,
+  duration: number,         -- s per cycle
+  capacitor: number,        -- GJ per cycle
+}
+
 export type ModuleType = {
   id: string,
   name: string,
@@ -68,6 +79,7 @@ export type ModuleType = {
   boost: { Modifier }?,     -- applies while running
   boostDuration: number?,   -- s per cycle, with 'boost'
   boostCapacitor: number?,  -- GJ per cycle
+  hex: Hex?,
   -- Skills a pilot needs to fit it. (Where absent, Data/Skills says.)
   requires: { { skill: string, level: number } }?,
 }
@@ -203,6 +215,21 @@ local modules: { ModuleType } = {
       weapons("laser", "optimal", 1.10), weapons("projectile", "optimal", 1.10),
       weapons("laser", "falloff", 1.20), weapons("projectile", "falloff", 1.20),
     },
+  },
+
+  -- Holding another ship: slowing it, and keeping it out of warp. (One
+  -- size of each: what they do does not go by the size of the hull.)
+  {
+    id = "web.stasis", name = "Stasis Webifier", slot = "mid", hardpoint = "",
+    cpu = 22, powergrid = 1, volume = 5, basePrice = 30000, passive = {},
+    hex = { kind = "web", range = 10000, strength = 0.45, duration = 5, capacitor = 4 },
+    requires = { { skill = "propulsion.jamming", level = 1 } },
+  },
+  {
+    id = "disruptor.warp", name = "Warp Disruptor", slot = "mid", hardpoint = "",
+    cpu = 26, powergrid = 1, volume = 5, basePrice = 45000, passive = {},
+    hex = { kind = "scramble", range = 20000, strength = 1, duration = 5, capacitor = 8 },
+    requires = { { skill = "propulsion.jamming", level = 1 } },
   },
 
   -- Speed, capacitor, cargo
