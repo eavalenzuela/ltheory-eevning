@@ -23,6 +23,14 @@ function Names.System(rng: Rng.Rng): string
   return string.upper(string.sub(name, 1, 1)) .. string.sub(name, 2)
 end
 
+-- A person's name: a given name and a family's.
+local GIVEN = { "Ada", "Bren", "Cato", "Dara", "Edrin", "Fal", "Garet", "Hana", "Ilse", "Joran", "Kessa", "Lio",
+  "Mara", "Nico", "Orla", "Pell", "Quin", "Rhea", "Soren", "Tamsin", "Ulla", "Varo", "Wren", "Yara" }
+
+function Names.Person(rng: Rng.Rng): string
+  return pick(rng, GIVEN) .. " " .. Names.System(rng)
+end
+
 local NUMERALS = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII" }
 
 function Names.Roman(n: number): string

@@ -29,9 +29,9 @@ local Station = {}
 Station.WIDTH = 940
 Station.HEIGHT = 600
 
-local TABS: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Wallet", "Missions" }
+local TABS: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions" }
 -- (and one more at a starbase of the pilot's own: the running of it)
-local OWN: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Wallet", "Missions", "Starbase" }
+local OWN: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions", "Starbase" }
 -- The services each tab's doings are done by (Core/Assets/Stations).
 local WANTS: { [string]: { string } } = {
   Fitting = { "fitting" }, Market = { "market" }, Industry = { "refining", "industry", "research" }, Ships = { "fitting" },
@@ -1049,6 +1049,105 @@ local function drawShips(session: Session.Session, game: Core.Game, player: Core
 end
 
 -- ---------------------------------------------------------------------
+-- Crew: pilots to hire, and the pilots hired (Core/Tactical/Fleet)
+
+local function drawCrew(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
+  local station = player.docked
+  local left, right = x + 16, x + 400
+  local line = y + 78
+  local candidates, most = Core.Query.Candidates(game, station)
+  local fleet = Core.Query.Fleet(game)
+
+  Im.Heading("LOOKING FOR WORK HERE", left, line, 16, Im.DIM)
+  line += 30
+  if #candidates == 0 then
+    Im.Text("Nobody more today.", left, line, 14, Im.DIM, 0.8)
+  end
+  for index, found in candidates do
+    Im.Text(found.name, left, line, 15, Im.TEXT)
+    Im.TextRight(`grade {found.skill}`, left + 350, line, 15, Im.ACCENT)
+    Im.Text(`{Format.Credits(found.wage)} a day`, left, line + 21, 12, Im.DIM)
+    Im.TextRight(`{Format.Credits(found.fee)} to sign`, left + 350, line + 21, 12, Im.DIM)
+    local hire: State.Command = { kind = "HirePilot", actor = 0, what = found.key }
+    local can, whyNot = Session.CanDo(session, hire)
+    if Im.Button("Hire", left, line + 42, 90, 24, can, `Hire:{index}`) then
+      Session.Do(session, hire)
+    end
+    if not can then
+      Im.Text(shorten(tostring(whyNot), 38), left + 100, line + 46, 12, Im.WARN)
+    end
+    line += 84
+  end
+  line = y + 78 + 30 + 3 * 84 + 4
+  Im.Heading("WHAT A PILOT IS", left, line, 14, Im.DIM)
+  for index, text in { "A hired pilot flies a ship of yours and goes where you go:", "out when you undock, to warp and through gates after you,",
+    "into a fight beside you. Every skill counts as their grade.", "Grade 1 flies frigates and haulers, 2 destroyers and barges,",
+    "3 cruisers, 4 battleships. You command one for each level", "of Leadership. A ship lost is insured; its pilot is not lost." } do
+    Im.Text(text, left, line + 6 + index * 17, 12, Im.DIM)
+  end
+
+  -- The pilots hired, and for each the ships here they could be given.
+  local free: { State.Ship } = {}
+  for _, ship in Core.Query.Ships(game, station) do
+    if ship.id ~= player.ship and ship.pilot == 0 and Ships.byId[ship.type].class ~= "capsule" then
+      table.insert(free, ship)
+    end
+  end
+  line = y + 78
+  Im.Heading(`YOUR PILOTS  {#fleet} / {most}`, right, line, 16, Im.DIM)
+  line += 30
+  if #fleet == 0 then
+    Im.Text("Nobody is hired.", right, line, 14, Im.DIM, 0.8)
+  end
+  for index, row in fleet do
+    if index > 5 then
+      break
+    end
+    Im.Text(row.name, right, line, 15, Im.TEXT)
+    Im.Text(`grade {row.skill}`, right + 210, line + 1, 13, Im.ACCENT)
+    Im.TextRight(`{Format.Credits(row.wage)} a day`, right + 520, line + 1, 13, Im.DIM)
+    if row.ship ~= 0 then
+      ItemIcon.Draw(row.hull, right, line + 20, 18)
+      local ship = game.state.ships[row.ship]
+      local where = if ship and ship.docked == station then "docked here" else row.where
+      Im.Text(shorten(`{row.shipName} ({Ships.byId[row.hull].name}), {where}`, 58), right + 24, line + 22, 12, Im.DIM)
+    else
+      Im.Text("No ship: give them one of yours that is docked here.", right, line + 22, 12, Im.WARN)
+    end
+    -- (the ships here they could have: the first three)
+    local bx = right
+    local reason: string? = nil
+    for at, ship in free do
+      if at > 3 then
+        break
+      end
+      local give: State.Command = { kind = "AssignShip", actor = 0, pilot = row.id, target = ship.id }
+      local can, whyNot = Session.CanDo(session, give)
+      if Im.Button(shorten(`Give {ship.name}`, 16), bx, line + 42, 124, 24, can, `Give:{index}:{at}`) then
+        Session.Do(session, give)
+      end
+      reason = reason or (if can then nil else whyNot)
+      bx += 128
+    end
+    if #free == 0 and row.ship == 0 then
+      Im.Text("No ship of yours is free here (Ships tab).", right, line + 46, 12, Im.DIM)
+    end
+    local off: State.Command = { kind = "AssignShip", actor = 0, pilot = row.id, target = 0 }
+    if row.ship ~= 0 and Im.Button("Take off", right + 388, line + 42, 64, 24, (Session.CanDo(session, off)), `TakeOff:{index}`) then
+      Session.Do(session, off)
+    end
+    local dismiss: State.Command = { kind = "DismissPilot", actor = 0, pilot = row.id }
+    if Im.Button("Dismiss", right + 456, line + 42, 64, 24, (Session.CanDo(session, dismiss)), `Dismiss:{index}`) then
+      Session.Do(session, dismiss)
+    end
+    if reason then
+      Im.Text(shorten(reason, 70), right, line + 69, 12, Im.WARN)
+    end
+    line += 90
+  end
+end
+
+-- ---------------------------------------------------------------------
 -- Missions: the jobs a station has, and the jobs in hand
 
 local function drawMissions(session: Session.Session, game: Core.Game, x: number, y: number)
@@ -1340,6 +1439,8 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
     drawShips(session, game, player, x, y)
   elseif tab == "Wallet" then
     drawWallet(game, x, y)
+  elseif tab == "Crew" then
+    drawCrew(session, game, player, x, y)
   elseif tab == "Missions" then
     drawMissions(session, game, x, y)
   elseif tab == "Starbase" and own then

@@ -579,7 +579,7 @@ end
 function Space.NewShip(state: State.State, type: string, name: string, owner: string, station: number): State.Ship
   assert(Ships.byId[type], `no ship type '{type}'`)
   local ship: State.Ship = { id = State.NewId(state), type = type, name = name, owner = owner, docked = station,
-    armorDamage = 0, hullDamage = 0 }
+    armorDamage = 0, hullDamage = 0, pilot = 0 }
   state.ships[ship.id] = ship
   table.insert(state.shipIds, ship.id)
   return ship

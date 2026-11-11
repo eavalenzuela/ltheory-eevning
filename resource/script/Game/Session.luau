@@ -117,7 +117,18 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "Salvaged" and event.ball == mine then
     Session.Say(session, `Salvaged: {event.pieces} {if event.pieces == 1 then "piece" else "pieces"} brought off`)
   elseif kind == "DroneLost" and event.owner == mine then
-    Session.Say(session, `A {Types.Info(event.type).name} was left behind: it is lost`)
+    Session.Say(session, if event.destroyed then `A {Types.Info(event.type).name} has been destroyed`
+      else `A {Types.Info(event.type).name} was left behind: it is lost`)
+  elseif kind == "PilotHired" then
+    Session.Say(session, `{event.name} is hired: give them a ship on the Crew tab`)
+  elseif kind == "ShipAssigned" then
+    local ship = session.game.state.ships[event.ship]
+    Session.Say(session, if ship then `{event.name} flies the {ship.name} and goes where you go` else `{event.name} has no ship now`)
+  elseif kind == "WingmanLost" then
+    Session.Say(session, `{event.name}'s ship has been destroyed: they got out, and are without one`)
+  elseif kind == "PilotLeft" then
+    Session.Say(session, if (event.reason :: string) == "unpaid" then `{event.name} could not be paid and has left: their ship is at your home station`
+      else `{event.name} has been let go`)
   elseif kind == "Jammed" and event.ball == mine then
     Session.Say(session, "Jammed: your locks are broken")
   elseif kind == "Held" and event.ball == mine then

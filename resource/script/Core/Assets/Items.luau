@@ -69,9 +69,25 @@ function Items.Fit(state: State.State, ship: number, running: { [number]: boolea
   return fit
 end
 
--- The skills that bear on a ship: the pilot's, if it is the player's.
+-- What a hired pilot knows: every skill at the one level.
+local HIRED: { Dogma.Levels } = {}
+for level = 1, Skills.MAX_LEVEL do
+  HIRED[level] = {}
+  for _, skill in Skills.list do
+    HIRED[level][skill.id] = level
+  end
+end
+Items.HIRED = HIRED
+
+-- The skills that bear on a ship: the player's, if it is theirs; a
+-- hired pilot's, if one flies it (Tactical/Fleet); nobody's otherwise.
 function Items.Levels(state: State.State, ship: number): Dogma.Levels?
-  return if state.ships[ship].owner == "player" then state.skills else nil
+  local record = state.ships[ship]
+  if record.owner ~= "player" then
+    return nil
+  end
+  local wing = state.fleet[record.pilot]
+  return if wing then HIRED[wing.skill] else state.skills
 end
 
 -- A ship's attributes with its present fit, nothing running.

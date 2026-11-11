@@ -253,6 +253,59 @@ local function give(state: State.State, command: State.Command, events: { Event 
   return false
 end
 
+-- What a pirate here would go for: the nearest ship of the pilot's
+-- side (their own, or a hired pilot's) that is worth shooting. One
+-- pirate in three goes for a drone instead when any are out, and any
+-- of them does when there is nothing else.
+local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
+  local best: State.Ball?, least = nil, math.huge
+  local drone: State.Ball?, droneLeast = nil, math.huge
+  local function consider(other: State.Ball?, small: boolean)
+    if other == nil or other.system ~= ball.system or other.grid ~= ball.grid then
+      return
+    end
+    local far = Space.Distance(other :: any, ball :: any)
+    if small then
+      if far < droneLeast then
+        drone, droneLeast = other, far
+      end
+    elseif far < least and Ships.byId[state.ships[other.id].type].class ~= "capsule" then
+      best, least = other, far
+    end
+  end
+  consider(state.balls[state.player.ship], false)
+  for _, id in state.fleetIds do
+    consider(state.balls[state.fleet[id].ship], false)
+  end
+  for _, id in state.droneIds do
+    if state.ships[id] and state.ships[id].owner == "player" then
+      consider(state.balls[id], true)
+    end
+  end
+  if drone and (best == nil or Rng.Chance(Rng.For(state.historySeed, ball.id, 53), 1 / 3)) then
+    return drone
+  end
+  return best
+end
+
+-- Whoever on a ship's grid is after anybody of the pilot's side, the
+-- nearest to that ship first: what its drones and its fleet go for
+-- when nothing has been pointed out to them. 0 for nobody.
+function Pirates.Hunting(state: State.State, near: State.Ball): number
+  local best, least = 0, math.huge
+  for _, id in state.pilotIds do
+    local other = state.balls[id]
+    local prey = state.ships[state.pilots[id].prey]
+    if other and prey and prey.owner == "player" and other.system == near.system and other.grid == near.grid then
+      local far = Space.Distance(other :: any, near :: any)
+      if far < least then
+        best, least = id, far
+      end
+    end
+  end
+  return best
+end
+
 -- Each pirate decides what to do this tick.
 function Pirates.Think(state: State.State, events: { Event })
   local player = state.balls[state.player.ship]
@@ -263,8 +316,15 @@ function Pirates.Think(state: State.State, events: { Event })
       continue
     end
 
+    -- Prey: a ship of the pilot's side, if one is here and worth shooting.
+    local prey: State.Ball? = state.balls[pilot.prey]
+    if prey == nil or prey.system ~= ball.system or prey.grid ~= ball.grid then
+      prey = pickPrey(state, ball)
+      pilot.prey = if prey then prey.id else 0
+    end
+
     -- Leave if nobody has been here for a while.
-    local company = player ~= nil and player.system == ball.system and player.grid == ball.grid
+    local company = prey ~= nil or (player ~= nil and player.system == ball.system and player.grid == ball.grid)
     pilot.alone = if company then 0 else pilot.alone + 1
     if pilot.alone > PATIENCE then
       Space.RemoveBall(state, ball)
@@ -279,16 +339,6 @@ function Pirates.Think(state: State.State, events: { Event })
       continue
     end
 
-    -- Prey: the player's ship, if it is here and worth shooting.
-    local prey: State.Ball? = state.balls[pilot.prey]
-    if prey == nil or prey.system ~= ball.system or prey.grid ~= ball.grid then
-      pilot.prey = 0
-      prey = nil
-      if company and player and Ships.byId[state.ships[player.id].type].class ~= "capsule" then
-        pilot.prey = player.id
-        prey = player
-      end
-    end
     if prey == nil then
       if ball.mode ~= "stop" then
         give(state, { kind = "Stop", actor = id }, events)

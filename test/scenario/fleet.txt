@@ -1,0 +1,67 @@
+# A hired pilot, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/fleet.txt
+#
+# Money and a second Courier are given. On the Crew tab the first pilot
+# looking for work is hired and given the second ship. They undock when
+# the player does and warp to the belt after them. When the pirate comes
+# the player fires on nothing: the hired pilot is pointed at it, destroys
+# it, and the bounty is the player's. Then through the gate to the next
+# system and into a station there, the hired pilot after them all the way.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Grant(1000000)
+lua assert(GameDebug.Spare('frigate.courier'), 'no second ship')
+frames 3
+until GameDebug.Press('Crew')
+until GameDebug.Tab() == 'Crew'
+lua assert(GameDebug.Fleet() == 0, 'nobody should be hired yet')
+until GameDebug.Press('Hire:1')
+until GameDebug.Fleet() == 1
+frames 3
+lua assert(not GameDebug.CanPress('Hire:1'), 'Leadership 1 commands one pilot')
+until GameDebug.Press('Give:1:1')
+until select(3, GameDebug.Fleet()) == 1
+
+# Out together, and to the belt together.
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+until select(2, GameDebug.Fleet()) == 1
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+until select(2, GameDebug.Fleet()) == 1
+lua GameDebug.TimeScale(1)
+
+# The pirate comes. The hired pilot is pointed at it and does the rest.
+lua GameDebug.TimeScale(8)
+until GameDebug.Pirates() >= 1
+lua GameDebug.TimeScale(2)
+lua _G.before = GameDebug.Wallet()
+lua assert(GameDebug.Select('Pirate'), 'no pirate to point at')
+frames 3
+until GameDebug.Press('Fleet:engage')
+until select(4, GameDebug.Fleet()) == 1
+lua GameDebug.TimeScale(8)
+patience 600
+until GameDebug.Pirates() == 0
+lua GameDebug.TimeScale(1)
+frames 5
+lua assert(GameDebug.Wallet() > _G.before, 'the bounty for what a hired pilot destroys is the player s')
+lua assert(GameDebug.Hull() == 'frigate.courier', 'the player lost their ship')
+lua assert(GameDebug.Fleet() == 1 and select(2, GameDebug.Fleet()) == 1, 'the hired pilot should still be there')
+
+# Through the gate, and into a station on the other side.
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('Jump', 'gate'), 'jump was refused')
+until GameDebug.System() ~= 1
+until select(2, GameDebug.Fleet()) == 1
+lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused')
+until GameDebug.Docked()
+until select(3, GameDebug.Fleet()) == 1
+lua GameDebug.TimeScale(1)
+
+echo fleet scenario passed
+quit

@@ -22,6 +22,9 @@ export type Ship = {
   -- repaired; shields and capacitor refill by themselves.
   armorDamage: number,
   hullDamage: number,
+  -- The hired pilot who flies it (Tactical/Fleet), by their id; 0 for
+  -- a ship the player flies themselves, or that nobody does.
+  pilot: number,
 }
 
 -- A target being locked, or locked. Times are game seconds (tick * TICK).
@@ -207,6 +210,7 @@ export type Command = {
   what: string?,      -- what a colony's facility is set on or set to make
   pin: number?,       -- a colony's facility, by its number there
   hours: number?,     -- the length of an extractor's programme
+  pilot: number?,     -- a hired pilot, by their id
 }
 
 -- A standing offer at a station's market. A sell order's goods and a buy
@@ -246,6 +250,16 @@ export type Job = {
 -- back, and whether it was near enough its owner, last tick, to be
 -- taken aboard if the owner left.
 export type Drone = { ship: number, owner: number, type: string, target: number, returning: boolean, near: boolean }
+
+-- A pilot hired to fly one of the player's ships beside their own
+-- (Tactical/Fleet). Every skill counts as 'skill' for a ship they fly.
+-- Their wages are paid up to the tick 'paid'. 'ship' is the ship they
+-- have been given (0: none). Their 'order' is to "follow" the player
+-- or to "stay" docked, and 'target' is what they have been pointed at.
+export type Wingman = {
+  id: number, name: string, skill: number, wage: number, paid: number,
+  ship: number, order: string, target: number,
+}
 
 -- A place that is on nobody's chart (Tactical/Sites): 'id' is the place
 -- it is in its system's description. 'strength' is how far a scanner
@@ -374,6 +388,12 @@ export type State = {
   scanReady: number,
   drones: { [number]: Drone },      -- by the drone's own ship id
   droneIds: { number },
+  -- The pilots the player has hired (Tactical/Fleet), in the order they
+  -- were, and which of the day 'hiredDay''s candidates have been taken.
+  fleet: { [number]: Wingman },
+  fleetIds: { number },
+  hired: { string },
+  hiredDay: number,
   queue: { Command },     -- submitted, to be applied at the next tick
 }
 

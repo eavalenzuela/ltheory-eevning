@@ -214,9 +214,8 @@ function Combat.Apply(state: State.State, command: State.Command, events: { Even
     -- A pilot who opens fire on anybody but a pirate is marked for it:
     -- the factions' patrols fight a marked pilot (Tactical/Traffic).
     local shooter = state.ships[ball.id]
-    -- (a drone's fire is its owner's)
-    local drone = state.drones[ball.id]
-    local mine = ball.id == state.player.ship or (drone ~= nil and drone.owner == state.player.ship)
+    -- (a drone's fire is its owner's, and a hired pilot's their employer's)
+    local mine = shooter ~= nil and shooter.owner == "player"
     local victim = if module.weapon and mine then state.ships[command.target or 0] else nil
     if victim and shooter and victim.owner ~= "pirates" and victim.owner ~= shooter.owner then
       if state.tick >= state.player.marked then

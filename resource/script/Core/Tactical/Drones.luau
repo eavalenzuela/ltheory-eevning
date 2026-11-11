@@ -15,15 +15,18 @@
 -- enough is taken aboard and one that is not is lost.
 --
 -- What a drone destroys is its owner's doing (the bounty, and the
--- blame). Nobody shoots at drones yet.
+-- blame). A drone can be shot: some of the pirates on a grid go for the
+-- drones rather than the ships (Tactical/Pirates), and one that is
+-- destroyed leaves nothing behind.
 --
 -- (EVE's, cut down. Not yet: a drone bay apart from the hold, drones
--- that can be shot, drones that mine, repair or jam, bandwidth.)
+-- that mine, repair or jam, bandwidth.)
 
 local Combat = require("@lt/Core/Tactical/Combat")
 local Kinds = require("@lt/Core/Data/Drones")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
+local Pirates = require("@lt/Core/Tactical/Pirates")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -187,22 +190,6 @@ function Drones.Apply(state: State.State, command: State.Command, events: { Even
   end
 end
 
--- Whoever is after a ship on its grid, nearest first: for a drone with
--- nothing pointed out to it.
-local function attacker(state: State.State, owner: State.Ball): number
-  local best, least = 0, math.huge
-  for _, id in state.pilotIds do
-    local other = state.balls[id]
-    if other and other.system == owner.system and other.grid == owner.grid and state.pilots[id].prey == owner.id then
-      local far = Space.Distance(other :: any, owner :: any)
-      if far < least then
-        best, least = id, far
-      end
-    end
-  end
-  return best
-end
-
 -- Once a tick: every drone does what it is for.
 function Drones.Step(state: State.State, events: { Event })
   for _, id in table.clone(state.droneIds) do
@@ -213,6 +200,7 @@ function Drones.Step(state: State.State, events: { Event })
       -- (destroyed: whoever did it has seen to the rest)
       state.drones[id] = nil
       State.RemoveId(state.droneIds, id)
+      table.insert(events, { kind = "DroneLost", owner = drone.owner, type = drone.type, destroyed = true })
     elseif owner == nil or state.ships[drone.owner] == nil or (owner.warp and owner.warp.stage == "warp") or owner.system ~= ball.system then
       -- Its owner has docked, warped or gone: aboard if it was near, lost if not.
       if drone.near and state.ships[drone.owner] then
@@ -234,7 +222,7 @@ function Drones.Step(state: State.State, events: { Event })
       else
         local prey = state.balls[drone.target]
         if prey == nil or prey.system ~= ball.system or prey.grid ~= ball.grid then
-          drone.target = attacker(state, owner)
+          drone.target = Pirates.Hunting(state, owner)
           prey = state.balls[drone.target]
         end
         if prey == nil then

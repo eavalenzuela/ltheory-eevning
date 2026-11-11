@@ -60,7 +60,8 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   table.insert(events, { kind = "BallDestroyed", ball = id, by = by, name = ball.name, system = ball.system,
     x = ball.x, y = ball.y, z = ball.z, radius = ball.radius })
 
-  if hull.class ~= "capsule" then
+  -- (a capsule leaves nothing, and neither does a drone)
+  if hull.class ~= "capsule" and hull.class ~= "drone" then
     local wreck: State.Wreck = {
       id = State.NewId(state), kind = "wreck", name = ball.name .. " Wreck", system = ball.system, grid = ball.grid,
       x = ball.x, y = ball.y, z = ball.z, radius = ball.radius, hull = ship.type, expires = state.tick + WRECK_LIFETIME,
@@ -90,6 +91,11 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   end
 
   local wasPlayer = id == state.player.ship
+  -- (a ship of the pilot's that somebody hired was flying is insured as
+  -- their own is: Tactical/Fleet sees to the pilot)
+  if ship.owner == "player" and ship.pilot ~= 0 then
+    pay(state, math.floor(hull.basePrice * INSURANCE), "insurance", events)
+  end
   local velocity = { ball.vx, ball.vy, ball.vz }
   Space.RemoveBall(state, ball)
   forget(state, id)
@@ -143,7 +149,7 @@ function Aftermath.Step(state: State.State, events: { Event })
     local own: State.Ship? = nil
     for _, id in state.shipIds do
       local other = state.ships[id]
-      if other.owner == "player" and other.docked == station
+      if other.owner == "player" and other.docked == station and other.pilot == 0
         and Skills.Missing(Skills.Needs(other.type), state.skills) == nil then
         own = other
         break

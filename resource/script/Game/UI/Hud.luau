@@ -22,6 +22,7 @@ local Modules = require("@lt/Core/Data/Modules")
 local Scanner = require("@lt/Game/UI/Scanner")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
+local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
 local Station = require("@lt/Game/UI/Station")
 local Structures = require("@lt/Core/Data/Structures")
@@ -56,6 +57,8 @@ local SAFE = vector.create(0.45, 0.85, 0.55)
 local SHIELD = vector.create(0.35, 0.65, 1.0)
 local ARMOR = vector.create(0.95, 0.75, 0.3)
 local HULL = vector.create(0.85, 0.35, 0.3)
+-- (a ship of the pilot's side: a drone, or a hired pilot's)
+local OURS = vector.create(0.45, 0.85, 0.55)
 local CAPACITOR = vector.create(1.0, 0.9, 0.5)
 
 -- ---------------------------------------------------------------------
@@ -186,7 +189,7 @@ local function drawBrackets(session: Session.Session, scene: Scene.Scene, entrie
       local small = entry.kind == "asteroid"
       local lock = if ball then lockOf(ball, entry.id) else nil
       local hostile = entry.hostile
-      local color = if selected then Colors.White elseif hostile then HULL elseif entry.onGrid then Im.ACCENT else Im.DIM
+      local color = if selected then Colors.White elseif hostile then HULL elseif entry.own then OURS elseif entry.onGrid then Im.ACCENT else Im.DIM
       Icon_Draw(icon(entry.kind), p, if small then 4 else 8, color, if selected or hot then 1 else 0.7)
       if lock then
         -- a ring round a target: closing while it locks, steady once locked
@@ -235,7 +238,7 @@ local function drawOverview(session: Session.Session, entries: { Core.Entry }, x
     end
     local rowY = top + (row - 1) * rowHeight
     local _, clicked, double = Im.Row(x + 4, rowY, width - 8, rowHeight, entry.id == session.selected)
-    local color = if entry.hostile then HULL elseif entry.onGrid then Im.TEXT else Im.DIM
+    local color = if entry.hostile then HULL elseif entry.own then OURS elseif entry.onGrid then Im.TEXT else Im.DIM
     Im.Text(TAGS[entry.kind] or "?", x + 12, rowY + 3, 13, Im.DIM)
     Im.Text(entry.name, x + 52, rowY + 3, 14, color)
     Im.TextRight(Format.Distance(entry.distance), x + width - 12, rowY + 3, 14, color)
@@ -643,6 +646,60 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           if Im.Button("Recall", left + 380, dy + 4, 76, 26, (Session.CanDo(session, { kind = "RecallDrones", actor = 0 })),
             "Drones:recall") then
             Session.Do(session, { kind = "RecallDrones", actor = 0 })
+          end
+        end
+      end
+      -- The hired pilots, if there are any: who, in what, where, and how
+      -- their ships are holding up. Over the drones' row.
+      local fleet = Core.Query.Fleet(game)
+      if #fleet > 0 then
+        local fy = bottom - 180 - 22 * #fleet
+        Im.Panel(left + 24, fy, 440, 34 + 22 * #fleet)
+        Im.Text(`FLEET  {#fleet}`, left + 36, fy + 9, 13, Im.TEXT)
+        -- (at what is selected, if it is a ship. else at the first thing locked)
+        local target = session.selected
+        if game.state.balls[target] == nil then
+          target = 0
+          if ball then
+            for _, lock in ball.vitals.locks do
+              if lock.locked and game.state.balls[lock.target] then
+                target = lock.target
+                break
+              end
+            end
+          end
+        end
+        local engage: State.Command = { kind = "FleetOrder", actor = 0, what = "engage", target = target }
+        if Im.Button("Engage", left + 226, fy + 4, 70, 26, (Session.CanDo(session, engage)), "Fleet:engage") then
+          Session.Do(session, engage)
+        end
+        local staying = fleet[1].order == "stay"
+        if Im.Button("Regroup", left + 300, fy + 4, 76, 26, true, "Fleet:follow") then
+          Session.Do(session, { kind = "FleetOrder", actor = 0, what = "follow" })
+        end
+        if Im.Toggle("Stay", left + 380, fy + 4, 76, 26, staying, "Fleet:stay") then
+          Session.Do(session, { kind = "FleetOrder", actor = 0, what = if staying then "follow" else "stay" })
+        end
+        for index, row in fleet do
+          local ry = fy + 34 + (index - 1) * 22
+          local hull = Ships.byId[row.hull]
+          Im.Text(row.name, left + 36, ry, 13, if row.near then OURS else Im.TEXT)
+          Im.Text(if hull then hull.name else "no ship", left + 180, ry, 12, Im.DIM)
+          if row.near then
+            -- shield, armour and hull, as three short bars
+            for at, share in { row.shield, row.armor, row.structure } do
+              local bx = left + 300 + (at - 1) * 34
+              Im.Fill(bx, ry + 5, 30, 6, Im.DIM, 0.25)
+              Im.Fill(bx, ry + 5, 30 * math.clamp(share, 0, 1), 6, if at == 1 then SHIELD elseif at == 2 then ARMOR else HULL, 0.95)
+            end
+            Im.TextRight(Format.Distance(row.distance), left + 456, ry, 12, Im.DIM)
+          else
+            -- (a pilot who should be here and is not, in the colour of a warning)
+            local ship = game.state.ships[row.ship]
+            local here = ship ~= nil and ship.docked ~= 0 and ship.docked == player.docked
+            local where = if here then "docked here" else row.where
+            Im.TextRight(if #where > 34 then string.sub(where, 1, 32) .. ".." else where, left + 456, ry, 12,
+              if here or row.order == "stay" or row.ship == 0 then Im.DIM else Im.WARN)
           end
         end
       end

@@ -45,6 +45,8 @@ function Hangar.Validate(state: State.State, command: State.Command): (boolean, 
       return false, "that ship is not here"
     elseif other.id == ship.id then
       return false, "already aboard"
+    elseif other.pilot ~= 0 then
+      return false, "a hired pilot flies that ship"
     end
     local missing = Skills.Missing(Skills.Needs(other.type), state.skills)
     if missing then

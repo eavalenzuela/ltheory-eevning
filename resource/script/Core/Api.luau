@@ -21,6 +21,7 @@ local Constants = require("@lt/Core/Data/Constants")
 local Dogma = require("@lt/Core/Dogma")
 local Drones = require("@lt/Core/Tactical/Drones")
 local Factions = require("@lt/Core/Data/Factions")
+local Fleet = require("@lt/Core/Tactical/Fleet")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Hangar = require("@lt/Core/Assets/Hangar")
 local Industry = require("@lt/Core/Assets/Industry")
@@ -65,7 +66,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 23
+Core.SAVE_VERSION = 24
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -215,6 +216,20 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
     state.drones = state.drones or {}
     state.droneIds = state.droneIds or {}
   end,
+  -- 24: pilots can be hired to fly the player's other ships. A save from
+  -- before has hired nobody, and nobody flies any ship but the player.
+  [23] = function(state: any)
+    state.fleet = state.fleet or {}
+    state.fleetIds = state.fleetIds or {}
+    state.hired = state.hired or {}
+    state.hiredDay = state.hiredDay or 0
+    for _, ship in state.ships do
+      ship.pilot = ship.pilot or 0
+    end
+    if state.skills.leadership == nil then
+      state.skills.leadership = 1
+    end
+  end,
 }
 
 -- A new game: a galaxy, and the player's first ship docked at a station
@@ -249,6 +264,10 @@ function Core.New(options: Options): Game
     scanReady = 0,
     drones = {},
     droneIds = {},
+    fleet = {},
+    fleetIds = {},
+    hired = {},
+    hiredDay = 0,
     jobIds = {},
     wallet = 0,
     journal = {},
@@ -312,6 +331,7 @@ local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
 local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true }
 local SITE_COMMANDS = { Scan = true }
 local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones = true }
+local FLEET_COMMANDS = { HirePilot = true, AssignShip = true, DismissPilot = true, FleetOrder = true }
 local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true }
 local COLONY_COMMANDS = { DeployColony = true, BuildFacility = true, RemoveFacility = true, StartExtraction = true, Export = true }
 
@@ -343,6 +363,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Sites.Validate(state, command)
   elseif DRONE_COMMANDS[command.kind] then
     return Drones.Validate(state, command)
+  elseif FLEET_COMMANDS[command.kind] then
+    return Fleet.Validate(state, command)
   elseif TRAINING_COMMANDS[command.kind] then
     return Training.Validate(state, command)
   end
@@ -380,9 +402,10 @@ function Core.Step(game: Game)
   for _, id in table.clone(state.ballIds) do
     local by = killers[id]
     if by then
-      -- (what a drone destroys is its owner's doing)
-      local drone = state.drones[by]
-      Aftermath.Destroy(state, id, if drone then drone.owner else by, game.events)
+      -- (what a drone destroys is its owner's doing, and what a hired
+      -- pilot destroys their employer's)
+      local killer = state.ships[by]
+      Aftermath.Destroy(state, id, if killer and killer.owner == "player" then state.player.ship else by, game.events)
     end
   end
   local queue = state.queue
@@ -411,6 +434,8 @@ function Core.Step(game: Game)
       Sites.Apply(state, command, game.events)
     elseif ok and DRONE_COMMANDS[command.kind] then
       Drones.Apply(state, command, game.events)
+    elseif ok and FLEET_COMMANDS[command.kind] then
+      Fleet.Apply(state, command, game.events)
     elseif ok and TRAINING_COMMANDS[command.kind] then
       Training.Apply(state, command, game.events)
     elseif ok then
@@ -425,6 +450,7 @@ function Core.Step(game: Game)
   Traffic.Step(state, game.events)
   Pirates.Think(state, game.events)
   Drones.Step(state, game.events)
+  Fleet.Step(state, game.events)
   Space.Decide(state, game.events)
   Aftermath.Step(state, game.events)
   Mining.Step(state)
@@ -522,6 +548,7 @@ export type Entry = {
   onGrid: boolean,
   variety: string,
   hostile: boolean,   -- a ship that will fire on the pilot: a pirate, or a patrol that has taken them for a criminal
+  own: boolean,       -- a ship of the pilot's side: a drone of theirs, or a hired pilot's
 }
 
 -- What the player's ship can see: everything on its grid, and every
@@ -544,7 +571,7 @@ function Query.Overview(game: Game): { Entry }
     end
     if (onGrid or object.kind ~= "asteroid") and not gone then
       local entry: Entry = { id = object.id, kind = if site then "site" else object.kind :: string, name = object.name,
-        distance = Space.Gap(me :: any, object :: any), onGrid = onGrid, variety = object.variety, hostile = false }
+        distance = Space.Gap(me :: any, object :: any), onGrid = onGrid, variety = object.variety, hostile = false, own = false }
       table.insert(entries, entry)
     end
   end
@@ -553,7 +580,7 @@ function Query.Overview(game: Game): { Entry }
     if id ~= me.id and ball.system == me.system and ball.grid == me.grid and me.grid ~= 0 then
       local entry: Entry = { id = id, kind = ball.kind :: string, name = ball.name,
         distance = Space.Gap(me :: any, ball :: any), onGrid = true, variety = state.ships[id].type,
-        hostile = state.ships[id].owner == "pirates" or state.pilots[id] ~= nil }
+        hostile = state.ships[id].owner == "pirates" or state.pilots[id] ~= nil, own = state.ships[id].owner == "player" }
       table.insert(entries, entry)
     end
   end
@@ -561,7 +588,7 @@ function Query.Overview(game: Game): { Entry }
     local wreck = state.wrecks[id]
     if wreck.system == me.system and wreck.grid == me.grid and me.grid ~= 0 then
       local entry: Entry = { id = id, kind = "wreck", name = wreck.name,
-        distance = Space.Gap(me :: any, wreck :: any), onGrid = true, variety = "", hostile = false }
+        distance = Space.Gap(me :: any, wreck :: any), onGrid = true, variety = "", hostile = false, own = false }
       table.insert(entries, entry)
     end
   end
@@ -836,6 +863,67 @@ function Query.Drones(game: Game): DronesStatus
     engaged += if drone.target ~= 0 and not drone.returning then 1 else 0
   end
   return { carried = carried, out = #out, max = Drones.Max(state, ship), returning = returning, engaged = engaged }
+end
+
+-- The pilots the player has hired, in the order they were: who, what
+-- they fly and where it is, and how it is holding up (shares of its
+-- shield, armour and hull; whole for a ship that is docked).
+export type FleetRow = {
+  id: number, name: string, skill: number, wage: number, order: string, target: number,
+  ship: number, shipName: string, hull: string,   -- 0 and "" for a pilot with no ship
+  where: string,      -- "no ship", "docked at ...", "with you", or the system it is in
+  near: boolean,      -- on the pilot's grid
+  distance: number,   -- from the pilot's ship, when near
+  shield: number, armor: number, structure: number,
+}
+function Query.Fleet(game: Game): { FleetRow }
+  local state = game.state
+  local lead = state.balls[state.player.ship]
+  local rows: { FleetRow } = {}
+  for _, id in state.fleetIds do
+    local wing = state.fleet[id]
+    local ship = state.ships[wing.ship]
+    local row: FleetRow = {
+      id = wing.id, name = wing.name, skill = wing.skill, wage = wing.wage, order = wing.order, target = wing.target,
+      ship = 0, shipName = "", hull = "", where = "no ship", near = false, distance = 0, shield = 1, armor = 1, structure = 1,
+    }
+    if ship then
+      row.ship, row.shipName, row.hull = ship.id, ship.name, ship.type
+      local ball = state.balls[ship.id]
+      if ball then
+        local vitals = ball.vitals
+        row.shield = if vitals.shieldMax > 0 then vitals.shield / vitals.shieldMax else 0
+        row.armor = if vitals.armorMax > 0 then vitals.armor / vitals.armorMax else 0
+        row.structure = if vitals.hullMax > 0 then vitals.hull / vitals.hullMax else 0
+        row.near = lead ~= nil and lead.system == ball.system and lead.grid ~= 0 and lead.grid == ball.grid
+        row.distance = if row.near and lead then Space.Gap(lead :: any, ball :: any) else 0
+        row.where = if row.near then "with you" elseif ball.warp and ball.warp.stage == "warp" then "in warp"
+          else state.galaxy.systems[ball.system].name
+      else
+        local station = Space.Object(state, ship.docked)
+        row.where = `docked at {if station then station.name else "a station"}`
+      end
+    end
+    table.insert(rows, row)
+  end
+  return rows
+end
+
+-- Who is looking for work at a station today, and how many pilots the
+-- player can command.
+function Query.Candidates(game: Game, station: number): ({ Fleet.Candidate }, number)
+  return Fleet.Candidates(game.state, station), Fleet.Max(game.state)
+end
+
+-- Why a hired pilot cannot fly a ship as it is fitted, or nil if they
+-- can.
+function Query.CanFly(game: Game, pilot: number, ship: number): string?
+  local wing = game.state.fleet[pilot]
+  local record = game.state.ships[ship]
+  if wing == nil or record == nil then
+    return "no such pilot"
+  end
+  return Fleet.Cannot(game.state, wing, record)
 end
 
 -- What the ship's scanner shows of the system the pilot is in: every

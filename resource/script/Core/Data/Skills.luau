@@ -47,6 +47,8 @@ local skills: { Skill } = {
   -- Company
   { id = "drones", name = "Drones", rank = 2, start = 0, requires = {},
     note = "One more drone out at once a level, as far as the hull controls." },
+  { id = "leadership", name = "Leadership", rank = 4, start = 1, requires = {},
+    note = "One more hired pilot under your command a level." },
   -- Getting in another ship's way
   { id = "electronic.warfare", name = "Electronic Warfare", rank = 3, start = -1, requires = { { skill = "electronics", level = 2 } },
     note = "To fit painters and dampeners (1), neutralisers (2) and jammers (3)." },

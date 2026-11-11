@@ -862,6 +862,38 @@ function Debug.Fly(type: string): boolean
   return true
 end
 
+-- A cheat, for a hired pilot to have something to fly: while docked, a
+-- second ship of a hull type in the hangar, with a small autocannon in
+-- each of two turrets (or as many as it has) and rounds for them.
+function Debug.Spare(type: string): boolean
+  local state = session.game.state
+  local mine = state.ships[state.player.ship]
+  local hull = Ships.byId[type]
+  if mine == nil or mine.docked == 0 or hull == nil then
+    return false
+  end
+  local ship = Space.NewShip(state, hull.id, "Spare " .. hull.name, "player", mine.docked)
+  for _ = 1, math.min(2, hull.turrets) do
+    Items.Equip(state, ship.id, "autocannon.small", "ammo.emp")
+  end
+  Items.Add(state, "ammo.emp", 2000, ship.id, "cargo")
+  return true
+end
+
+-- The hired pilots: how many there are, how many are in space on the
+-- pilot's grid, how many have a ship that is docked, and how many are
+-- pointed at something.
+function Debug.Fleet(): (number, number, number, number)
+  local near, docked, engaged = 0, 0, 0
+  local rows = Core.Query.Fleet(session.game)
+  for _, row in rows do
+    near += if row.near then 1 else 0
+    docked += if row.ship ~= 0 and string.sub(row.where, 1, 6) == "docked" then 1 else 0
+    engaged += if row.target ~= 0 then 1 else 0
+  end
+  return #rows, near, docked, engaged
+end
+
 -- The weapon models standing on the mounts of the pilot's ship (two to
 -- a fitted weapon), and how far from its target the worst-pointed of
 -- the turrets that are firing still is (radians, or -1 if none has a
