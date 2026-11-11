@@ -25,13 +25,13 @@ export type Faction = {
   kind: "human" | "pirate" | "alien",
   -- How its hulls are built up (Game/View/Hull). Human: "slab" broad
   -- armoured plates, "cloud" rounded lobes with blisters and no corners
-  -- (the Talmar, by their draft), "bulb" rounded masses (the Orun, a
-  -- placeholder that the Talmar's draft has since overtaken),
-  -- "lattice" open frames and spars. Pirate: "patchwork", somebody
+  -- (the Talmar, by their draft), "motley" no two hulls built in the
+  -- same manner (the Orun, by theirs), "lattice" open frames and spars.
+  -- Pirate: "patchwork", somebody
   -- else's hull with parts missing and parts bolted on. Alien: "crystal"
   -- shards grown outward from a core, "carapace" segmented and curled
   -- like something alive, "monolith" rings and slabs without a seam.
-  style: "slab" | "cloud" | "bulb" | "lattice" | "patchwork" | "crystal" | "carapace" | "monolith",
+  style: "slab" | "cloud" | "motley" | "lattice" | "patchwork" | "crystal" | "carapace" | "monolith",
   weapon: string,           -- the turret family its warships carry
   launchers: number,        -- the share of a warship's hardpoints that are launchers
   tank: "armor" | "shield" | "hull",
@@ -88,9 +88,16 @@ Factions.list = {
     hulls = { frigate = "Rapier", destroyer = "Sabre", cruiser = "Falchion", battleship = "Claymore", industrial = "Packet" },
   },
   {
-    id = "orun", name = "Orun", kind = "human", style = "bulb", weapon = "hybrid", launchers = 0, tank = "armor",
-    note = "Blasters, railguns and sheer bulk. Heavy, rounded hulls that are slow, hard to kill and carry a great deal.",
-    paint = { primary = { 0.36, 0.40, 0.30 }, secondary = { 0.60, 0.42, 0.18 }, glow = { 0.75, 1.0, 0.40 } },
+    -- (After the project owner's draft, 2026-11-11: the Orun
+    -- Confederation; human, anarchist; "ships are very different in
+    -- style from each other, because they're designed by different
+    -- groups within the confederation. Unifying visual feature is red
+    -- and gold highlights. Also, they tend to have a lot of antenna
+    -- masts." The draft says nothing of weapons or defence, nor of what
+    -- the hulls are called: those are as they were.)
+    id = "orun", name = "Orun", kind = "human", style = "motley", weapon = "hybrid", launchers = 0, tank = "armor",
+    note = "Blasters, railguns and sheer bulk. The Confederation's hulls come from yards that agree on nothing: no two are built alike, and all of them wear red and gold and a thicket of aerials. Slow, hard to kill, and they carry a great deal.",
+    paint = { primary = { 0.36, 0.37, 0.39 }, secondary = { 0.62, 0.09, 0.07 }, glow = { 1.0, 0.84, 0.50 } },
     shield = 0.9, armor = 1.15, hull = 1.4, velocity = 0.9, mass = 1.12, cpu = 0.95, powergrid = 1.1, capacitor = 1.0,
     lockRange = 0.9, cargo = 1.25, price = 1, mids = 0, lows = 0, hardpoints = 0,
     hulls = { frigate = "Mastiff", destroyer = "Boar", cruiser = "Aurochs", battleship = "Mammoth", industrial = "Ox" },
