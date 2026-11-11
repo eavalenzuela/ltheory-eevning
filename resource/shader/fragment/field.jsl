@@ -1,0 +1,36 @@
+/* The field of a control tower: a shell of force round the whole
+   starbase, drawn on a sphere (the shader is given additive blending,
+   no depth writing, and both faces). It shows where the line of sight
+   grazes it: a bright rim seen from outside, and from inside nearly
+   nothing until one is close to the wall. Faint bands run round it.
+
+   'scale' is the field's radius (the mesh is a unit sphere). */
+
+#include frag.jsl
+#include math.jsl
+#include color.jsl
+#include lighting.jsl
+#include worldnoise.jsl
+
+FRAG_IN vec3 normal;
+FRAG_IN vec3 position;
+FRAG_IN vec3 origin;
+FRAG_IN vec3 scale;
+
+uniform vec3 fieldTint;
+uniform float fieldGlow;
+
+void main() {
+  vec3 rd = normalize(position - eye);
+  vec3 n = normalize(position - origin);
+  float graze = 1.0 - abs(dot(n, rd));
+
+  float rim = pow(graze, 5.0);
+  /* (both faces of the shell are drawn, so this is seen twice) */
+  float veil = 0.010 * pow(graze, 1.5);
+  float bands = 0.5 + 0.5 * sin(n.y * 46.0 + 5.0 * wn_fbm(n * 2.2, 3, 0.55));
+  float cells = 0.6 + 0.4 * wn_fbm(n * 9.0, 3, 0.6);
+
+  float a = fieldGlow * (rim * (0.55 + 0.45 * bands) + veil * cells);
+  RETURN(vec4(mix(fieldTint, vec3(1.0), 0.5 * rim) * a, 1.0));
+}

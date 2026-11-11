@@ -10,6 +10,8 @@
 --     its true direction at a distance the renderer can reach, shrunk by
 --     the same factor, so it covers exactly the right part of the sky;
 --   - the sun, as the direction light comes from;
+--   - a station as what it is made of (Game/View/Starbase): its control
+--     tower, the modules anchored round it, and its field;
 --   - on a hull of our own design, what is fitted to its hardpoints
 --     (Game/View/Arms): the turrets turn to what they are shooting at,
 --     and their shots leave from their mouths.
@@ -30,6 +32,7 @@ local Effects = require("@lt/Game/View/Effects")
 local Hull = require("@lt/Game/View/Hull")
 local Planet = require("@lt/Game/View/Planet")
 local Star = require("@lt/Game/View/Star")
+local Starbase = require("@lt/Game/View/Starbase")
 local Modules = require("@lt/Core/Data/Modules")
 local Motion = require("@lt/Core/Tactical/Motion")
 local Session = require("@lt/Game/Session")
@@ -99,6 +102,7 @@ export type Scene = {
   fx: Effects.Fx?,                    -- weapon fire and the like, in this system's container
   mining: { [number]: number },       -- when each mining module's beam was last begun, by its item
   wreckage: { [number]: Wrecked },    -- the pieces of each wreck on the grid
+  works: { [number]: { Object } },    -- what stands round each station's tower: its modules, their guns, its field
   arms: { [number]: Armed },          -- what is on the hardpoints of each ship of our own design
   armsTick: number,                   -- the tick the arms were last checked against the fits
   armsTime: number,                   -- when (scene time) the turrets were last swung
@@ -143,7 +147,7 @@ function Scene.New(camera: Camera): Scene
     proxies = {}, celestials = {}, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
-    wreckage = {}, arms = {}, armsTick = -1, armsTime = 0,
+    wreckage = {}, works = {}, arms = {}, armsTick = -1, armsTime = 0,
   }
 end
 
@@ -308,6 +312,17 @@ local function dropWreck(scene: Scene, id: number)
       Object_Delete(piece.object)
     end
     scene.wreckage[id] = nil
+  end
+end
+
+-- Take away what stands round a station's tower.
+local function dropWorks(scene: Scene, id: number)
+  local works = scene.works[id]
+  if works then
+    for _, object in works do
+      Object_Delete(object)
+    end
+    scene.works[id] = nil
   end
 end
 
@@ -493,12 +508,24 @@ local function makeStatic(object: SystemData.Object): Object
     made = Object_Asteroid(object.seed)
     made:SetScale(vector.create(object.radius, object.radius, object.radius))
   else
-    -- Stations, and gates until they have a model of their own.
+    -- Gates, until they have a model of their own. (A station is a
+    -- tower and what is anchored round it: makeStation.)
     made = Item_StationType(1000000, object.seed, 1, 1, 1, 1):Instantiate()
     fit(made, object.radius)
     made:SetName(object.name)
   end
   return made
+end
+
+-- A station: its tower, which is the station's own object, with its
+-- modules and its field round it, at 'at'. The station's radius is the
+-- radius of its field.
+local function makeStation(scene: Scene, object: SystemData.Object, at: vector, container: Object): Object
+  local raised = Starbase.Raise(Starbase.Layout(object.variety, object.radius, object.seed), container, at, 1)
+  local tower = table.remove(raised, 1) :: Object
+  tower:SetName(object.name)
+  scene.works[object.id] = raised
+  return tower
 end
 
 local function clear(scene: Scene, objects: { [number]: Object })
@@ -515,6 +542,9 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
   end
   for id in scene.wreckage do
     dropWreck(scene, id)
+  end
+  for id in scene.works do
+    dropWorks(scene, id)
   end
   clear(scene, scene.proxies)
   clear(scene, scene.celestials)
@@ -654,13 +684,17 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       if state.balls[id] == nil then
         dropArms(scene, id)
         dropWreck(scene, id)
+        dropWorks(scene, id)
         Object_Delete(object)
         scene.proxies[id] = nil
       end
     end
     if grid ~= 0 then
       for _, object in objects do
-        if object.site == grid and object.kind ~= "belt" then
+        if object.site == grid and object.kind == "station" then
+          scene.proxies[object.id] = makeStation(scene, object,
+            vector.create(object.x - scene.ox, object.y - scene.oy, object.z - scene.oz), container)
+        elseif object.site == grid and object.kind ~= "belt" then
           local made = makeStatic(object)
           container:AddInterior(made)
           place(made, vector.create(object.x - scene.ox, object.y - scene.oy, object.z - scene.oz))

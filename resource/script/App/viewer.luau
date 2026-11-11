@@ -31,6 +31,8 @@ local AppShell = require("@lt/AppShell")
 local Arms = require("@lt/Game/View/Arms")
 local Effects = require("@lt/Game/View/Effects")
 local Hull = require("@lt/Game/View/Hull")
+local Starbase = require("@lt/Game/View/Starbase")
+local Structures = require("@lt/Core/Data/Structures")
 local Planet = require("@lt/Game/View/Planet")
 local Ships = require("@lt/Core/Data/Ships")
 local Star = require("@lt/Game/View/Star")
@@ -174,6 +176,26 @@ for _, type in WRECKS do
     table.insert(VIEWS, { name = `wreck-{short}-{view[1]}`, kind = `wreck-{type}`, seed = 1, eye = eye * 1.25, look = view[3],
       light = eye + vector.create(0.5, 0.9, 0.2) * (0.6 * vector.magnitude(eye)) })
   end
+end
+
+-- Stations (Game/View/Starbase). The three sizes of tower side by side,
+-- at the sizes they stand in fields of 3, 5 and 7 km; every module in
+-- rows, at their own sizes beside each other; and whole stations laid
+-- out, with their fields, from outside and from among the modules.
+for index, eye in { vector.create(0.5, 0.25, 2.7), vector.create(-1.7, 1.0, 2.1) } do
+  table.insert(VIEWS, { name = `base-towers-{index}`, kind = "towers", seed = 1, eye = eye, look = vector.create(-0.15, 0, 0),
+    light = vector.create(1.5, 1.6, 2.5) })
+end
+for index, eye in { vector.create(0.5, 1.1, 2.9), vector.create(-1.9, 0.8, -2.4) } do
+  table.insert(VIEWS, { name = `base-modules-{index}`, kind = "modules", seed = 1, eye = eye, look = vector.create(0, -0.1, 0),
+    light = if index == 1 then vector.create(1.5, 1.8, 2.5) else vector.create(-2.0, 1.8, -1.5) })
+end
+for index, base in { { "outpost", 3000 }, { "shipyard", 5000 }, { "trade hub", 7500 } } :: { { any } } do
+  local word = ({ "small", "medium", "large" })[index]
+  table.insert(VIEWS, { name = `base-{index}-{word}-1-outside`, kind = `starbase:{base[1]}:{base[2]}`, seed = 3 + index,
+    eye = vector.create(1.5, 0.7, 2.5), look = CENTRE, light = vector.create(2.5, 2.2, 3.0) })
+  table.insert(VIEWS, { name = `base-{index}-{word}-2-inside`, kind = `starbase:{base[1]}:{base[2]}`, seed = 3 + index,
+    eye = vector.create(-0.55, 0.22, 0.75), look = vector.create(0, 0.05, 0), light = vector.create(-1.5, 1.6, 2.2) })
 end
 
 -- What goes on hardpoints: every weapon's model, small, in rows (the
@@ -443,6 +465,51 @@ return AppShell.Create(function(): Widget
           local m = piece.middle
           object:SetPos((m + away * 0.30 * wreckage.radius) * scale - (right * m.x + up * m.y + look * m.z) * scale)
           Object_SetAxes(object, look, up)
+        end
+      elseif v.kind == "towers" or v.kind == "modules" or string.sub(v.kind, 1, 9) == "starbase:" then
+        table.insert(stage, Object_Scenery({}))
+        table.insert(units, 1)
+        local fore = vector.create(0, 0, 1)
+        local layout: Starbase.Layout
+        local metres: number
+        if v.kind == "towers" then
+          -- (a metre is such that the large tower is the view's radius high and a bit)
+          metres = radius / 1960
+          local parts: { Starbase.Part } = {}
+          -- (seen from +z, +x is to the left: the small one is out there)
+          for size, across in { 1650, 350, -1500 } do
+            local made = Starbase.Tower("vessari", size)
+            local towerRadius = ({ 3000, 5000, 7000 })[size] * Starbase.TOWER
+            table.insert(parts, { id = "tower", model = made.model, at = vector.create(across, 0, 0), look = fore,
+              scale = towerRadius / made.radius, radius = towerRadius })
+          end
+          layout = { tower = parts[1], modules = { parts[2], parts[3] }, field = 0 }
+        elseif v.kind == "modules" then
+          metres = radius / 900
+          local parts: { Starbase.Part } = {}
+          for index, module in Structures.modules do
+            local made = Starbase.Module(module.id)
+            local column, row = (index - 1) % 5, (index - 1) // 5
+            local part: Starbase.Part = { id = module.id, model = made.model,
+              at = vector.create((2 - column) * 900, 0, (0.5 - row) * 1300), look = fore, scale = module.radius / made.radius,
+              radius = module.radius }
+            if module.id == "battery.gun" then
+              part.arm, part.unit = "artillery.large", 26
+            elseif module.id == "battery.missile" then
+              part.arm, part.unit = "launcher.cruise", 26
+            end
+            table.insert(parts, part)
+          end
+          layout = { tower = table.remove(parts, 1) :: Starbase.Part, modules = parts, field = 0 }
+        else
+          local variety, size = string.match(v.kind, "^starbase:(.+):(%d+)$")
+          local started = os.clock()
+          layout = Starbase.Layout(variety or "outpost", tonumber(size) or 3000, v.seed)
+          print(`viewer: the station '{v.kind}' took {math.floor((os.clock() - started) * 1000)} ms to lay out and make`)
+          metres = radius / layout.field
+        end
+        for _, object in Starbase.Raise(layout, system, vector.create(0, 0, 0), metres) do
+          table.insert(extras, object)
         end
       elseif v.kind == "arms-sizes" then
         table.insert(stage, Object_Scenery({}))
