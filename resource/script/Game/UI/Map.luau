@@ -243,7 +243,15 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   Im.Text(string.format("%s  %.1f", BAND_NAME[band], system.security), px, line, 14, BAND[band])
   line += 22
   Im.Text(`{#system.neighbors} {if #system.neighbors == 1 then "gate" else "gates"}`, px, line, 13, Im.DIM)
-  line += 30
+  line += 20
+  -- (what the pilot knows is there: a den found, a stronghold a den gave away)
+  for index, name in Core.Query.KnownSites(game, shown) do
+    if index <= 3 then
+      Im.Text(name, px, line, 12, Im.WARN)
+      line += 16
+    end
+  end
+  line += 10
   if shown == here then
     Im.Text("You are here.", px, line, 13, Im.DIM)
   else

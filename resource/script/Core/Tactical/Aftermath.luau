@@ -16,6 +16,7 @@ local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
+local Sites = require("@lt/Core/Tactical/Sites")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
@@ -255,8 +256,13 @@ function Aftermath.Apply(state: State.State, command: State.Command, events: { E
   end
   table.insert(events, { kind = "Looted", ship = ship.id, wreck = wreck.id, taken = taken, left = left })
   if left == 0 then
+    local den = state.sites[wreck.grid]
     Aftermath.RemoveWreck(state, wreck)
     table.insert(events, { kind = "WreckRemoved", wreck = wreck.id })
+    -- (a den's stores, emptied, may say where the pack's stronghold is)
+    if den and den.system == wreck.system then
+      Sites.Lead(state, den, events)
+    end
   end
 end
 

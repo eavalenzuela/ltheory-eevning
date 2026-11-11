@@ -274,7 +274,11 @@ export type Wingman = {
 -- A place that is on nobody's chart (Tactical/Sites): 'id' is the place
 -- it is in its system's description. 'strength' is how far a scanner
 -- has got with it, from 0 to 1 (found); 'gone' is a site that is over.
-export type Site = { id: number, system: number, kind: string, code: string, strength: number, expires: number, gone: boolean }
+-- 'depth' is how far along a trail it is (0 for a site that was simply
+-- there; 1 for a stronghold a den's records led to), and 'led' whether
+-- it has itself been asked where it leads.
+export type Site = { id: number, system: number, kind: string, code: string, strength: number, expires: number, gone: boolean,
+  depth: number, led: boolean }
 
 -- A job a station has for a pilot (Assets/Missions): a "bounty" (destroy
 -- 'need' pirates in 'system'; 'done' so far), a "courier" run (carry

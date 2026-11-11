@@ -158,6 +158,8 @@ function Session.Notice(session: Session, event: Space.Event)
       elseif event.scrambled then "Warp scrambled: you cannot warp"
       elseif event.web < 1 then "Webbed: your speed is cut"
       else "You are free of them")
+  elseif kind == "TrailFound" then
+    Session.Say(session, `The den's records give away a stronghold: {event.name}, in {session.game.state.galaxy.systems[event.system].name}`)
   elseif kind == "Scanned" and event.ball == mine then
     Session.Say(session, if event.found > 0 then `Scan: {event.found} found` .. (if event.signals > 0 then `, {event.signals} still to resolve` else "")
       elseif event.signals > 0 then `Scan: {event.signals} {if event.signals == 1 then "signal" else "signals"}, nearer`

@@ -69,7 +69,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 31
+Core.SAVE_VERSION = 32
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -277,6 +277,16 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   [30] = function(state: any)
     for _, wing in state.fleet do
       wing.experience = wing.experience or 0
+    end
+  end,
+  -- 32: a den's stores may lead on to a stronghold. The sites of a save
+  -- from before are none of them strongholds, and have led nowhere yet.
+  [31] = function(state: any)
+    for _, site in state.sites do
+      site.depth = site.depth or 0
+      if site.led == nil then
+        site.led = false
+      end
     end
   end,
 }
@@ -918,6 +928,19 @@ function Query.Implants(game: Game): ({ ImplantPlace }, number)
     table.insert(places, { slot = slot, implant = Implanting.In(game.state, slot) })
   end
   return places, math.clamp(game.state.skills.cybernetics or 0, 0, Implants.SLOTS)
+end
+
+-- The sites the pilot knows of in a system (found, and still there), by
+-- name: for the map, which has no overview to show them on.
+function Query.KnownSites(game: Game, system: number): { string }
+  local names: { string } = {}
+  for _, site in Sites.In(game.state, system) do
+    local place = Space.Object(game.state, site.id)
+    if site.strength >= 1 and place then
+      table.insert(names, place.name)
+    end
+  end
+  return names
 end
 
 -- The places the pilot has marked, in the order they were.

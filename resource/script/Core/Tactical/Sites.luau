@@ -116,12 +116,14 @@ local function addWreck(state: State.State, name: string, system: number, grid: 
 end
 
 -- Make a site in a system: a place in its description, and what is
--- there. Nothing is made if the description is nearly full.
-local function make(state: State.State, system: number, rng: Rng.Rng, events: { Event })
+-- there. Nothing is made if the description is nearly full. With
+-- 'depth' it is a stronghold on a den's trail: a den, found already,
+-- with more in its stores. Returns the site made, if one was.
+local function make(state: State.State, system: number, rng: Rng.Rng, events: { Event }, depth: number?): State.Site?
   local description = Space.Describe(state, system)
   local objects = description.objects
   if #objects + 40 >= Constants.STRUCTURE_ID_SPAN then
-    return
+    return nil
   end
   local planets: { System.Object } = {}
   for _, object in objects do
@@ -130,7 +132,7 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
     end
   end
   if #planets == 0 then
-    return
+    return nil
   end
   local band = Galaxy.Band(state.galaxy.systems[system].security)
   local roll, kind = Rng.Next(rng), "relic"
@@ -140,6 +142,10 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
       kind = KINDS[index]
       break
     end
+  end
+  local deep = depth or 0
+  if deep > 0 then
+    kind = "combat"
   end
   -- Somewhere out from a planet, well clear of it.
   local planet = planets[Rng.Int(rng, #planets) + 1]
@@ -155,13 +161,14 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
     table.insert(objects, object)
     return object
   end
-  local place = add("belt", `{NAMES[kind]} {code}`, x, y, z, 0, planet.id, "site." .. kind)
+  local place = add("belt", `{if deep > 0 then "Pirate Stronghold" else NAMES[kind]} {code}`, x, y, z, 0, planet.id, "site." .. kind)
   place.site = place.id
   local expires = state.tick + Sites.LIFE
-  state.sites[place.id] = {
+  local site: State.Site = {
     id = place.id, system = system, kind = kind, code = code, strength = if Sites.SCANS[kind] <= 0 then 1 else 0,
-    expires = expires, gone = false,
+    expires = expires, gone = false, depth = deep, led = false,
   }
+  state.sites[place.id] = site
   table.insert(state.siteIds, place.id)
 
   if kind == "ore" then
@@ -179,7 +186,7 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
     end
   else
     -- Hulls adrift (or, at a den, the pirates' stores) with things aboard.
-    local rich = if band == "secure" then 1 elseif band == "low" then 2 else 4
+    local rich = (if band == "secure" then 1 elseif band == "low" then 2 else 4) * (1 + 2 * deep)
     local hulls = if kind == "combat" then 1 else 2 + Rng.Int(rng, 2)
     for h = 1, hulls do
       local wreck = addWreck(state, if kind == "combat" then "Pirate Stores" else "Derelict Hull", system, place.id,
@@ -198,6 +205,39 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
     end
   end
   table.insert(events, { kind = "SiteAppeared", site = place.id, system = system, what = kind })
+  return site
+end
+
+-- The chance that a den's stores, once emptied, say where another is.
+Sites.TRAIL = 0.4
+
+-- A den's stores have been emptied: now and then there is something in
+-- them that says where the pack's stronghold is. It is in the least
+-- safe system a jump away (the den's own, if none is less safe than
+-- it), found already and on the overview there for a day and a half;
+-- the pack that keeps it is the worst there is, and its stores are
+-- three times a den's. A stronghold leads nowhere further.
+function Sites.Lead(state: State.State, site: State.Site, events: { Event })
+  if site.kind ~= "combat" or site.led or site.depth > 0 then
+    return
+  end
+  site.led = true
+  local rng = Rng.For(state.historySeed, site.id, 93)
+  if not Rng.Chance(rng, Sites.TRAIL) then
+    return
+  end
+  local to = site.system
+  for _, neighbor in state.galaxy.systems[site.system].neighbors do
+    if state.galaxy.systems[neighbor].security < state.galaxy.systems[to].security then
+      to = neighbor
+    end
+  end
+  local stronghold = make(state, to, rng, events, 1)
+  if stronghold then
+    local place = Space.Object(state, stronghold.id)
+    table.insert(events, { kind = "TrailFound", from = site.id, site = stronghold.id, system = to,
+      name = if place then place.name else "a stronghold" })
+  end
 end
 
 -- Whether there is anything left at a site worth its being there.

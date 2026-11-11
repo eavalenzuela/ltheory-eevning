@@ -210,7 +210,8 @@ function Pirates.Populate(state: State.State, events: { Event })
   -- troubles a derelict where order is kept.
   local hidden = state.sites[site.id]
   if hidden and hidden.kind == "combat" then
-    band = if band == "secure" then "low" else "lawless"
+    -- (and a stronghold has the worst there is, wherever it is)
+    band = if band == "secure" and hidden.depth == 0 then "low" else "lawless"
   elseif hidden and hidden.kind == "relic" and band == "secure" then
     return
   end

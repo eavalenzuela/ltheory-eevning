@@ -260,4 +260,91 @@ suite:Case("a site lasts so long, sites are in the save, and an older save is gi
   t.eq(#Sites.In(before.state, 1), Sites.COUNT.secure)
 end)
 
+suite:Case("a den's stores, emptied, now and then give away a stronghold a jump off: found already, richer, and the end of the trail", function(t)
+  local led, quiet = 0, 0
+  for seed = 1, 60 do
+    local game = inSpace(seed)
+    local state = game.state
+    local den: State.Site? = nil
+    for _, site in Sites.In(state, 1) do
+      den = den or (if site.kind == "combat" then site else nil)
+    end
+    if den then
+      go(game, den.id)
+      local me = state.balls[state.player.ship]
+      local stores: State.Wreck? = nil
+      for _, id in state.wreckIds do
+        if state.wrecks[id].grid == den.id then
+          stores = state.wrecks[id]
+        end
+      end
+      local wreck = assert(stores, "a den with no stores")
+      -- (all but the tags are put over the side, so that the rest fits a Courier's hold)
+      for _, item in Items.In(state, wreck.id, "cargo") do
+        if item.type ~= "tag.pirate" then
+          Items.Take(state, item, item.quantity)
+        end
+      end
+      me.x, me.y, me.z = wreck.x + 500, wreck.y, wreck.z
+      Core.TakeEvents(game)
+      t.ok(Core.Submit(game, { kind = "Loot", actor = me.id, target = wreck.id }))
+      Core.Step(game)
+      t.eq(den.led, true)
+      local trail: { [string]: any }? = nil
+      for _, event in Core.TakeEvents(game) do
+        trail = trail or (if event.kind == "TrailFound" then event else nil)
+      end
+      if trail then
+        led += 1
+        local stronghold = state.sites[trail.site]
+        t.eq({ stronghold.kind, stronghold.depth, stronghold.strength, stronghold.gone, trail.from } :: { any },
+          { "combat", 1, 1, false, den.id } :: { any })
+        -- In the least safe system a jump away (the den's own was a homeworld's).
+        local least = 1
+        for _, neighbor in state.galaxy.systems[1].neighbors do
+          least = if state.galaxy.systems[neighbor].security < state.galaxy.systems[least].security then neighbor else least
+        end
+        t.eq({ stronghold.system, trail.system }, { least, least })
+        local place = assert(Space.Object(state, stronghold.id))
+        t.ok(string.sub(place.name, 1, 17) == "Pirate Stronghold" and trail.name == place.name)
+        -- Its stores hold three times what a den's would there.
+        local tags = 0
+        for _, id in state.wreckIds do
+          if state.wrecks[id].grid == stronghold.id then
+            for _, item in Items.In(state, id, "cargo") do
+              tags += if item.type == "tag.pirate" then item.quantity else 0
+            end
+          end
+        end
+        local band = Galaxy.Band(state.galaxy.systems[least].security)
+        t.eq(tags, 2 * 3 * (if band == "secure" then 1 elseif band == "low" then 2 else 4))
+        -- And it leads nowhere further, however often it is asked.
+        Sites.Lead(state, stronghold, game.events)
+        t.eq(stronghold.led, false)
+        for _, event in Core.TakeEvents(game) do
+          t.ok(event.kind ~= "TrailFound", "a stronghold led on to another")
+        end
+      else
+        quiet += 1
+      end
+      -- (asked again, a den has nothing more to say)
+      local sites = #state.siteIds
+      Sites.Lead(state, den, game.events)
+      t.eq(#state.siteIds, sites)
+    end
+  end
+  t.ok(led >= 3 and quiet >= 3, `{led} dens led on to a stronghold and {quiet} did not`)
+  t.ok(led < quiet * 2, "about two dens in five should lead somewhere")
+  -- A save from before there were strongholds: its sites are none, and have led nowhere.
+  local game = inSpace(1)
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 31
+  for _, site in file.state.sites do
+    site.depth, site.led = nil, nil
+  end
+  local old, oldLength = Codec.Encode(file)
+  t.eq(Core.Hash(Core.Load(old, oldLength)), Core.Hash(game))
+end)
+
 return suite
