@@ -296,11 +296,21 @@ end
 -- widest, and stands 'height' out there.
 function Plates.Fairing(b: Builder, part: number, outline: Outline, z: number, around: number, length: number, width: number,
   height: number, x: number?, y: number?)
-  local tag = part + own(b)
+  local tone = own(b)
   local ruin = b.ruin
   if ruin and (z < ruin.from or z >= ruin.to or dice(b, 21) < ruin.loss) then
     return
   end
+  local patch = b.patch
+  if patch then
+    -- (a pirate's: some are gone, and some are whatever was to hand)
+    if dice(b, 22) < patch * 0.30 then
+      return
+    elseif dice(b, 23) < patch * 0.40 then
+      part = if math.floor(part) == Plates.PATCH then Plates.PLATING else Plates.PATCH
+    end
+  end
+  local tag = part + tone
   local skin = skinOf(b)
   local first, last = outline[1][1], outline[#outline][1]
   local rings, sides = 12, 7

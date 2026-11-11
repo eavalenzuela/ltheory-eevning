@@ -43,7 +43,7 @@ Hull.looks = {
   -- bare, a red light.
   unbound = {
     plating = { 0.25, 0.19, 0.16 }, patch = { 0.50, 0.48, 0.44 }, frame = { 0.13, 0.12, 0.12 },
-    glow = { 1.0, 0.25, 0.10 }, trim = { 0.50, 0.08, 0.05 }, wear = 0.85, rust = 0.85, sheets = 3.2,
+    glow = { 1.0, 0.25, 0.10 }, trim = { 0.50, 0.08, 0.05 }, wear = 0.85, rust = 0.85, sheets = 3.2, mottle = 1.0,
   },
   -- Hulls no faction owns: plain blue-grey, a yellow stripe, a cold light.
   civil = {
@@ -642,15 +642,23 @@ end
 -- The Talmar. Their hulls are like clouds (the project owner's draft:
 -- "cloud-like, with rounded edges and protrusions", Star Wars' Mon
 -- Calamari cruisers the point of reference), and like those they look
--- grown, not built and not blown up: the first drawings were a few
--- smooth fat lobes, and "too blimp-y, and not organic growth". So a
--- Talmar hull is a body that swells and narrows along its length, with
--- pods of every size swelling out of it in turn, the same on both
--- sides (they are symmetrical, the owner again); round engines in a
--- cluster at the stern; and, theirs being a theocracy, a dome and
--- slender spires on the larger ones. (All v0s.)
+-- grown, not built and not blown up. They are not made of plates. A
+-- Talmar hull is a skin (Plates.Loft): one surface drawn through oval
+-- sections, that swells and narrows from stern to bow without a break,
+-- with lesser skins run into it for a wing, a tier or a keel, and
+-- slender fairings lying along all of them (Plates.Fairing), a few long
+-- and most short. It is the same on both sides (the owner again). Its
+-- plating is a patchwork of small panels with pinpoint lights; its
+-- engines are round, in a cluster at the stern; and, theirs being a
+-- theocracy, the larger carry a dome and slender spires.
+--
+-- (Two earlier tries were plates: first a few smooth fat lobes, "too
+-- blimp-y", then lobes with pods grown on them, which was nearer but
+-- still stacked boxes. The Claymore was the first drawn as skins, and
+-- "looks MUCH better"; the rest followed. All v0s.)
 
--- A lobe: a rounded mass.
+-- A lobe: a rounded mass (a plate with its corners all but gone), for
+-- the few things that are still plates: a dome, an engine, a bead.
 local function lobe(b: Builder, part: number, center: vector, half: vector, turn: vector?)
   block(b, part, center, half, turn, 0.92)
 end
@@ -658,69 +666,6 @@ end
 -- A number from 0 to 1 that follows from 'n'.
 local function chance(n: number): number
   return (math.sin(n * 12.9898) * 43758.5453) % 1
-end
-
--- The outline of a body, from stern to bow: at each place along z, half
--- its width and half its height there, and how high its middle is (0
--- if not said).
-type Outline = { { number } }
-
--- Half the width and height of an outline at 'z', and its middle's height.
-local function girth(outline: Outline, z: number): (number, number, number)
-  for index = 1, #outline - 1 do
-    local a, c = outline[index], outline[index + 1]
-    if z <= c[1] or index == #outline - 1 then
-      local t = math.clamp((z - a[1]) / (c[1] - a[1]), 0, 1)
-      return a[2] + (c[2] - a[2]) * t, a[3] + (c[3] - a[3]) * t, (a[4] or 0) + ((c[4] or 0) - (a[4] or 0)) * t
-    end
-  end
-  return outline[1][2], outline[1][3], outline[1][4] or 0
-end
-
--- A grown body: lobes run together along an outline, so that it swells
--- and narrows as it goes. With 'x' it is two bodies, one that far to
--- each side; 'y' lifts it.
-local function grown(b: Builder, part: number, outline: Outline, x: number?, y: number?)
-  for index, at in outline do
-    local before = if index > 1 then at[1] - outline[index - 1][1] else outline[2][1] - at[1]
-    local after = if index < #outline then outline[index + 1][1] - at[1] else before
-    local long = math.max(math.max(before, after) * 0.85, math.min(at[2], at[3]) * 0.7)
-    local skin = if index % 3 == 0 then PATCH else part
-    local center = v(x or 0, (at[4] or 0) + (y or 0), at[1])
-    lobe(b, skin, center, v(at[2], at[3], long))
-    if x and x ~= 0 then
-      lobe(b, skin, v(-center.x, center.y, center.z), v(at[2], at[3], long))
-    end
-  end
-end
-
--- Growths: 'count' pods swelling out of a body's skin anywhere along
--- its outline, a few of them big and most small ('size' is the middling
--- one), each lying along the body and flat to it. What grows on one
--- side grows on the other; what grows on the back or the keel grows on
--- the middle line. ('x' and 'y' as for the body they are on.)
-local function growths(b: Builder, outline: Outline, count: number, size: number, seed: number, x: number?, y: number?)
-  local first, last = outline[1][1], outline[#outline][1]
-  local aside = x or 0
-  for index = 1, count do
-    local n = seed * 17.3 + index * 3.1
-    local z = first + (last - first) * (0.06 + 0.86 * chance(n))
-    local w, h, middle = girth(outline, z)
-    -- (a body on the middle line grows them from keel round one side to
-    -- its back; one out to the side, all the way round)
-    local around = if aside == 0 then (chance(n + 0.37) - 0.5) * math.pi else chance(n + 0.37) * 2 * math.pi
-    local big = size * (0.45 + 1.9 * chance(n + 0.71) ^ 3)
-    local half = v(big * 0.62, big * 0.36, big * (1.3 + 1.6 * chance(n + 0.13)))
-    local skin = if index % 3 == 0 then PATCH else PLATING
-    local out = v(math.cos(around), math.sin(around), 0)
-    local at = v(aside + out.x * w * 0.93, middle + (y or 0) + out.y * h * 0.93, z)
-    if aside == 0 and math.abs(out.x) * w < big * 0.5 then
-      lobe(b, skin, v(0, at.y, z), half)
-    else
-      lobe(b, skin, at, half, v(0, 0, around - math.pi / 2))
-      lobe(b, skin, v(-at.x, at.y, z), half, v(0, 0, math.pi / 2 - around))
-    end
-  end
 end
 
 -- A round engine: a pod with a lit mouth.
@@ -736,68 +681,6 @@ local function spire(b: Builder, foot: vector, height: number, thick: number)
   beam(b, PLATING, foot, foot + v(0, height * 0.62, 0), thick, 0.9)
   beam(b, PATCH, foot + v(0, height * 0.58, 0), foot + v(0, height, 0), thick * 0.5, 0.9)
   lobe(b, TRIM, foot + v(0, height * 0.60, 0), v(thick * 1.6, thick * 1.2, thick * 1.6))
-end
-
--- The Rapier, a frigate: a teardrop, grown over, with a hump for its
--- bridge and three engines.
-local RAPIER: Outline = { { -0.58, 0.15, 0.12 }, { -0.28, 0.24, 0.18 }, { 0.08, 0.27, 0.20 }, { 0.44, 0.21, 0.16 }, { 0.78, 0.13, 0.10 }, { 1.00, 0.06, 0.05 } }
-local function rapier(b: Builder)
-  grown(b, PLATING, RAPIER)
-  growths(b, RAPIER, 14, 0.10, 1)
-  growths(b, RAPIER, 12, 0.045, 2)
-  lobe(b, PATCH, v(0, 0.18, 0.10), v(0.12, 0.09, 0.24))
-  block(b, GLOW, v(0, 0.21, 0.33), v(0.08, 0.02, 0.012), nil, 0.6)
-  thruster(b, v(0, 0.02, -0.72), 0.20, 0.10)
-  for _, side in { -1, 1 } do
-    thruster(b, v(side * 0.17, -0.03, -0.66), 0.16, 0.075)
-    ports(b, v(side * 0.262, 0.07, -0.20), v(side * 0.262, 0.07, 0.20), 4, 0.010)
-  end
-end
-
--- The Sabre, a destroyer: a long body that swells twice along its
--- length, with a pontoon grown out on a neck each side.
-local SABRE: Outline = { { -1.10, 0.14, 0.12 }, { -0.80, 0.21, 0.18 }, { -0.45, 0.17, 0.15 }, { -0.05, 0.24, 0.20 }, { 0.35, 0.22, 0.18 },
-  { 0.70, 0.15, 0.13 }, { 1.00, 0.17, 0.14 }, { 1.28, 0.10, 0.08 }, { 1.44, 0.05, 0.04 } }
-local SABRE_PONTOON: Outline = { { -0.70, 0.07, 0.065 }, { -0.30, 0.09, 0.08 }, { 0.15, 0.085, 0.075 }, { 0.50, 0.05, 0.045 } }
-local function sabre(b: Builder)
-  grown(b, PLATING, SABRE)
-  growths(b, SABRE, 18, 0.09, 3)
-  growths(b, SABRE, 14, 0.04, 4)
-  grown(b, PLATING, SABRE_PONTOON, 0.36, -0.06)
-  growths(b, SABRE_PONTOON, 6, 0.04, 5, 0.36, -0.06)
-  lobe(b, PATCH, v(0, 0.20, 0.20), v(0.10, 0.07, 0.18))
-  block(b, GLOW, v(0, 0.22, 0.37), v(0.065, 0.018, 0.010), nil, 0.6)
-  for _, side in { -1, 1 } do
-    lobe(b, PLATING, v(side * 0.27, -0.04, 0.12), v(0.07, 0.05, 0.09))
-    lobe(b, PLATING, v(side * 0.27, -0.04, -0.42), v(0.07, 0.05, 0.09))
-    thruster(b, v(side * 0.36, -0.06, -0.84), 0.12, 0.06)
-    thruster(b, v(side * 0.10, 0.0, -1.22), 0.16, 0.085)
-    ports(b, v(side * 0.243, 0.06, -0.22), v(side * 0.243, 0.06, 0.30), 5, 0.010)
-  end
-end
-
--- The Falchion, a cruiser: a great body with a wing grown out and
--- swept back each side, a domed sanctuary on its back with a spire,
--- and six engines.
-local FALCHION: Outline = { { -1.00, 0.24, 0.18 }, { -0.60, 0.33, 0.24 }, { -0.10, 0.37, 0.27 }, { 0.40, 0.34, 0.25 }, { 0.85, 0.26, 0.20 },
-  { 1.25, 0.18, 0.14 }, { 1.58, 0.09, 0.07 } }
-local FALCHION_WING: Outline = { { -0.85, 0.13, 0.07 }, { -0.50, 0.24, 0.10 }, { -0.10, 0.22, 0.10 }, { 0.25, 0.12, 0.07 } }
-local function falchion(b: Builder)
-  grown(b, PLATING, FALCHION)
-  growths(b, FALCHION, 24, 0.12, 6)
-  growths(b, FALCHION, 20, 0.05, 7)
-  grown(b, PLATING, FALCHION_WING, 0.52, -0.04)
-  growths(b, FALCHION_WING, 8, 0.06, 8, 0.52, -0.04)
-  lobe(b, PATCH, v(0, 0.30, -0.15), v(0.20, 0.13, 0.28))
-  block(b, GLOW, v(0, 0.32, 0.12), v(0.13, 0.022, 0.012), nil, 0.6)
-  block(b, TRIM, v(0, 0.285, -0.15), v(0.205, 0.012, 0.285), nil, 0.9)
-  spire(b, v(0, 0.41, -0.22), 0.60, 0.022)
-  for _, side in { -1, 1 } do
-    thruster(b, v(side * 0.15, 0.09, -1.14), 0.20, 0.10)
-    thruster(b, v(side * 0.16, -0.10, -1.12), 0.18, 0.09)
-    thruster(b, v(side * 0.52, -0.04, -0.98), 0.12, 0.06)
-    ports(b, v(side * 0.368, 0.09, -0.40), v(side * 0.368, 0.09, 0.50), 9, 0.011)
-  end
 end
 
 -- Fairings: 'count' slender swellings on a skin, lying along it, a few
@@ -817,10 +700,10 @@ local function fairings(b: Builder, outline: Plates.Outline, count: number, leng
       -- (from the keel round the starboard side to the back)
       local around = (chance(n + 0.37) - 0.5) * math.pi
       if math.abs(math.cos(around)) < 0.22 then
-        Plates.Fairing(b, skin, outline, z, if around > 0 then math.pi / 2 else -math.pi / 2, long, wide, wide * 0.5)
+        Plates.Fairing(b, skin, outline, z, if around > 0 then math.pi / 2 else -math.pi / 2, long, wide, wide * 0.5, 0, y)
       else
-        Plates.Fairing(b, skin, outline, z, around, long, wide, wide * 0.5)
-        Plates.Fairing(b, skin, outline, z, math.pi - around, long, wide, wide * 0.5)
+        Plates.Fairing(b, skin, outline, z, around, long, wide, wide * 0.5, 0, y)
+        Plates.Fairing(b, skin, outline, z, math.pi - around, long, wide, wide * 0.5, 0, y)
       end
     else
       local around = chance(n + 0.37) * 2 * math.pi
@@ -830,19 +713,94 @@ local function fairings(b: Builder, outline: Plates.Outline, count: number, leng
   end
 end
 
+-- A skin and its twin, one that far to each side.
+local function pair(b: Builder, part: number, outline: Plates.Outline, x: number, y: number)
+  Plates.Loft(b, part, outline, x, y)
+  Plates.Loft(b, part, outline, -x, y)
+end
+
+-- (Where on a skin a mount goes.)
+local on = Plates.Point
+local BACK, KEEL, STARBOARD_SIDE, PORT_SIDE = math.pi / 2, -math.pi / 2, 0, math.pi
+
+-- The Rapier, a frigate: a teardrop, with a blister on its back for the
+-- bridge and three engines.
+local RAPIER: Plates.Outline = { { -0.62, 0.10, 0.08 }, { -0.35, 0.22, 0.16 }, { 0.05, 0.27, 0.19 }, { 0.45, 0.21, 0.15 },
+  { 0.80, 0.12, 0.09 }, { 1.05, 0.04, 0.03 } }
+local RAPIER_BRIDGE: Plates.Outline = { { -0.14, 0.03, 0.02 }, { 0.06, 0.11, 0.065 }, { 0.30, 0.07, 0.045 }, { 0.42, 0.02, 0.015 } }
+local function rapier(b: Builder)
+  Plates.Loft(b, PLATING, RAPIER)
+  Plates.Loft(b, PATCH, RAPIER_BRIDGE, 0, 0.17)
+  block(b, GLOW, v(0, 0.215, 0.33), v(0.045, 0.012, 0.03), nil, 0.6)
+  fairings(b, RAPIER, 10, 0.30, 1, -0.50, 0.70)
+  fairings(b, RAPIER, 8, 0.13, 2, -0.50, 0.80)
+  thruster(b, v(0, 0.01, -0.66), 0.17, 0.085)
+  for _, side in { -1, 1 } do
+    thruster(b, v(side * 0.15, -0.03, -0.60), 0.14, 0.065)
+  end
+end
+
+-- The Sabre, a destroyer: a long slender body that swells twice along
+-- its length, with a pontoon out on necks each side.
+local SABRE: Plates.Outline = { { -1.18, 0.08, 0.07 }, { -0.85, 0.20, 0.17 }, { -0.45, 0.16, 0.14 }, { -0.05, 0.24, 0.19 },
+  { 0.40, 0.21, 0.17 }, { 0.75, 0.14, 0.12 }, { 1.05, 0.15, 0.12 }, { 1.32, 0.08, 0.06 }, { 1.50, 0.03, 0.02 } }
+local SABRE_PONTOON: Plates.Outline = { { -0.75, 0.03, 0.03 }, { -0.40, 0.085, 0.075 }, { 0.10, 0.09, 0.08 }, { 0.50, 0.03, 0.03 } }
+local SABRE_BRIDGE: Plates.Outline = { { 0.00, 0.03, 0.02 }, { 0.18, 0.09, 0.055 }, { 0.36, 0.06, 0.04 }, { 0.46, 0.02, 0.015 } }
+local function sabre(b: Builder)
+  Plates.Loft(b, PLATING, SABRE)
+  pair(b, PLATING, SABRE_PONTOON, 0.36, -0.06)
+  Plates.Loft(b, PATCH, SABRE_BRIDGE, 0, 0.16)
+  block(b, GLOW, v(0, 0.20, 0.39), v(0.04, 0.011, 0.025), nil, 0.6)
+  fairings(b, SABRE, 14, 0.32, 3, -1.00, 1.20)
+  fairings(b, SABRE, 10, 0.13, 4, -1.00, 1.30)
+  fairings(b, SABRE_PONTOON, 3, 0.20, 5, -0.55, 0.30, 0.36, -0.06)
+  for _, side in { -1, 1 } do
+    lobe(b, PLATING, v(side * 0.27, -0.04, 0.10), v(0.08, 0.045, 0.08))
+    lobe(b, PLATING, v(side * 0.26, -0.04, -0.40), v(0.08, 0.045, 0.08))
+    thruster(b, v(side * 0.36, -0.06, -0.78), 0.10, 0.05)
+    thruster(b, v(side * 0.085, 0.0, -1.22), 0.14, 0.07)
+  end
+end
+
+-- The Falchion, a cruiser: a great body with a broad flat wing swept
+-- back from each side of it, a tier laid along its back, a small domed
+-- sanctuary on that with a spire, and six engines.
+local FALCHION: Plates.Outline = { { -1.05, 0.16, 0.12 }, { -0.65, 0.32, 0.23 }, { -0.10, 0.37, 0.26 }, { 0.40, 0.33, 0.24 },
+  { 0.85, 0.25, 0.18 }, { 1.25, 0.15, 0.11 }, { 1.60, 0.04, 0.03 } }
+local FALCHION_WING: Plates.Outline = { { -0.90, 0.06, 0.03 }, { -0.60, 0.24, 0.08 }, { -0.15, 0.26, 0.09 }, { 0.25, 0.14, 0.06 },
+  { 0.50, 0.03, 0.02 } }
+local FALCHION_TIER: Plates.Outline = { { -0.75, 0.08, 0.05 }, { -0.40, 0.22, 0.12 }, { 0.05, 0.20, 0.11 }, { 0.45, 0.07, 0.04 } }
+local function falchion(b: Builder)
+  Plates.Loft(b, PLATING, FALCHION)
+  pair(b, PLATING, FALCHION_WING, 0.50, -0.04)
+  Plates.Loft(b, PATCH, FALCHION_TIER, 0, 0.22)
+  fairings(b, FALCHION, 22, 0.42, 6, -0.90, 1.30)
+  fairings(b, FALCHION, 16, 0.16, 7, -0.90, 1.40)
+  fairings(b, FALCHION_WING, 5, 0.26, 8, -0.70, 0.30, 0.50, -0.04)
+  fairings(b, FALCHION_TIER, 3, 0.20, 9, -0.55, 0.30, 0, 0.22)
+  lobe(b, PLATING, v(0, 0.36, -0.30), v(0.10, 0.07, 0.13))
+  block(b, GLOW, v(0, 0.37, -0.16), v(0.05, 0.014, 0.012), nil, 0.6)
+  spire(b, v(0, 0.42, -0.34), 0.50, 0.018)
+  for _, side in { -1, 1 } do
+    thruster(b, v(side * 0.11, 0.07, -1.12), 0.16, 0.08)
+    thruster(b, v(side * 0.12, -0.08, -1.10), 0.15, 0.075)
+    thruster(b, v(side * 0.50, -0.04, -0.94), 0.10, 0.05)
+  end
+end
+
 -- The Claymore, a battleship: a cathedral in a cloud, with a sword for
 -- a prow. It is one skin from its stern to the point of its blade: a
--- great body that narrows and flattens at the bow into a long blade,
--- flat and level, running out ahead of it. A lesser body lies along
--- each flank, a keel under it and a second tier on its back, each a
--- skin of its own; slender fairings lie along all of them. On the tier
--- a dome with blisters ringing it like a halo, and three spires; six
--- engines. (The first hull drawn as skins and not as plates: the
--- project owner found the plate ones "too blimp-y, and not organic
--- growth". The blade is at their word too, and has no guard across it.)
+-- great body that narrows and flattens at the bow into a blade, flat
+-- and level, running out ahead of it. A lesser body lies along each
+-- flank, a keel under it and a second tier on its back, each a skin of
+-- its own; slender fairings lie along all of them. On the tier a dome
+-- with blisters ringing it like a halo, and three spires; six engines.
+-- (The blade is at the project owner's word, in place of a nose that
+-- "looks like a blimp"; it has no guard across it, and is a third
+-- shorter than it was first drawn, both at their word too.)
 local CLAYMORE: Plates.Outline = { { -2.10, 0.26, 0.20 }, { -1.60, 0.44, 0.32 }, { -0.80, 0.52, 0.37 }, { 0.00, 0.52, 0.36 },
-  { 0.80, 0.46, 0.31 }, { 1.45, 0.42, 0.20 }, { 1.95, 0.46, 0.10, -0.02 }, { 2.80, 0.42, 0.065, -0.02 }, { 3.60, 0.30, 0.05, -0.02 },
-  { 4.30, 0.16, 0.04, -0.02 }, { 4.75, 0.04, 0.02, -0.02 } }
+  { 0.80, 0.46, 0.31 }, { 1.45, 0.42, 0.20 }, { 1.95, 0.46, 0.10, -0.02 }, { 2.50, 0.42, 0.065, -0.02 }, { 3.05, 0.30, 0.05, -0.02 },
+  { 3.50, 0.16, 0.04, -0.02 }, { 3.78, 0.04, 0.02, -0.02 } }
 local CLAYMORE_FLANK: Plates.Outline = { { -1.60, 0.14, 0.11 }, { -1.00, 0.28, 0.20 }, { -0.30, 0.31, 0.22 }, { 0.40, 0.24, 0.17 },
   { 0.95, 0.10, 0.07 } }
 local CLAYMORE_TIER: Plates.Outline = { { -1.35, 0.16, 0.10 }, { -0.80, 0.32, 0.20 }, { -0.30, 0.34, 0.22 }, { 0.20, 0.26, 0.16 },
@@ -850,8 +808,7 @@ local CLAYMORE_TIER: Plates.Outline = { { -1.35, 0.16, 0.10 }, { -0.80, 0.32, 0.
 local CLAYMORE_KEEL: Plates.Outline = { { -0.65, 0.12, 0.07 }, { -0.10, 0.25, 0.15 }, { 0.50, 0.24, 0.14 }, { 1.05, 0.10, 0.06 } }
 local function claymore(b: Builder)
   Plates.Loft(b, PLATING, CLAYMORE)
-  Plates.Loft(b, PLATING, CLAYMORE_FLANK, 0.60, -0.10)
-  Plates.Loft(b, PLATING, CLAYMORE_FLANK, -0.60, -0.10)
+  pair(b, PLATING, CLAYMORE_FLANK, 0.60, -0.10)
   Plates.Loft(b, PATCH, CLAYMORE_TIER, 0, 0.40)
   Plates.Loft(b, PLATING, CLAYMORE_KEEL, 0, -0.40)
   fairings(b, CLAYMORE, 30, 0.55, 10, -1.90, 1.60)
@@ -860,8 +817,8 @@ local function claymore(b: Builder)
   fairings(b, CLAYMORE_TIER, 7, 0.34, 13, -1.20, 0.40, 0, 0.40)
   fairings(b, CLAYMORE_KEEL, 4, 0.30, 14, -0.50, 0.90, 0, -0.40)
   -- a ridge down the middle of the blade, above and below
-  Plates.Fairing(b, TRIM, CLAYMORE, 3.25, math.pi / 2, 2.70, 0.10, 0.035)
-  Plates.Fairing(b, TRIM, CLAYMORE, 3.25, -math.pi / 2, 2.70, 0.10, 0.035)
+  Plates.Fairing(b, TRIM, CLAYMORE, 2.80, BACK, 1.80, 0.10, 0.035)
+  Plates.Fairing(b, TRIM, CLAYMORE, 2.80, KEEL, 1.80, 0.10, 0.035)
   -- the dome, its halo, and the spires
   lobe(b, PLATING, v(0, 0.66, -0.60), v(0.24, 0.18, 0.34))
   block(b, TRIM, v(0, 0.63, -0.60), v(0.245, 0.014, 0.345), nil, 0.9)
@@ -879,40 +836,38 @@ local function claymore(b: Builder)
   end
 end
 
--- (Where on the Claymore its mounts go: on its skins.)
-local function onClaymore(outline: Plates.Outline, z: number, around: number, x: number?, y: number?): vector
-  return Plates.Point(outline, z, around, x, y)
-end
-
 -- The Packet, a hauler, as a packet boat is: a slim hull that carries
--- its parcels where they can be seen. A slender grown spine with the
--- bridge at its bow and the engines at its stern, and under it, in a
--- row, four cargo sacs, each hung by a neck and grown over like the
--- rest of it. (The third drawing. The first was a heap of fat lobes,
--- and ugly; the second had this plan, which was liked, but its cargo
--- was four smooth balls and it was "too blimp-y".)
-local PACKET: Outline = { { -1.05, 0.10, 0.09, 0.30 }, { -0.60, 0.15, 0.12, 0.30 }, { 0.00, 0.17, 0.13, 0.30 }, { 0.60, 0.15, 0.12, 0.30 },
-  { 1.05, 0.10, 0.085, 0.29 }, { 1.32, 0.05, 0.045, 0.28 } }
+-- its parcels where they can be seen. A slender spine with a blister
+-- for the bridge at its bow and the engines at its stern, and under it,
+-- in a row, four cargo sacs hung by necks: each a skin like the rest,
+-- fuller toward its front, no two quite the same size. (The plan was
+-- liked from the second drawing on; this is the fourth.)
+local PACKET: Plates.Outline = { { -1.10, 0.04, 0.04, 0.30 }, { -0.70, 0.13, 0.11, 0.30 }, { 0.00, 0.17, 0.13, 0.30 },
+  { 0.70, 0.14, 0.11, 0.30 }, { 1.10, 0.09, 0.07, 0.29 }, { 1.36, 0.03, 0.025, 0.28 } }
+local PACKET_BRIDGE: Plates.Outline = { { 0.58, 0.02, 0.015 }, { 0.74, 0.08, 0.05 }, { 0.92, 0.055, 0.035 }, { 1.02, 0.02, 0.012 } }
+local PACKET_SACS = { 0.74, 0.25, -0.24, -0.73 }
+-- The outline of the cargo sac at 'z' (the 'index'th from the bow).
+local function sac(index: number): Plates.Outline
+  local z = PACKET_SACS[index]
+  local swell = 1 + 0.10 * (if index % 2 == 0 then 1 else -1)
+  return { { z - 0.21, 0.04, 0.04 }, { z - 0.09, 0.21 * swell, 0.19 * swell }, { z + 0.05, 0.25 * swell, 0.23 * swell },
+    { z + 0.21, 0.05, 0.05 } }
+end
 local function packet(b: Builder)
-  grown(b, PLATING, PACKET)
-  growths(b, PACKET, 12, 0.06, 21)
-  lobe(b, PATCH, v(0, 0.41, 0.78), v(0.10, 0.065, 0.19))
-  block(b, GLOW, v(0, 0.425, 0.965), v(0.065, 0.018, 0.010), nil, 0.6)
-  for index, z in { 0.74, 0.25, -0.24, -0.73 } do
-    -- (no two quite the same size)
-    local swell = 1 + 0.10 * (if index % 2 == 0 then 1 else -1)
-    local sac: Outline = { { z - 0.17, 0.17 * swell, 0.16 * swell, -0.13 }, { z, 0.25 * swell, 0.23 * swell, -0.13 },
-      { z + 0.17, 0.17 * swell, 0.16 * swell, -0.13 } }
-    grown(b, if index % 2 == 0 then PATCH else PLATING, sac)
-    growths(b, sac, 7, 0.085, 30 + index)
-    growths(b, sac, 5, 0.04, 40 + index)
-    lobe(b, PLATING, v(0, 0.15, z), v(0.07, 0.07, 0.09))
+  Plates.Loft(b, PLATING, PACKET)
+  Plates.Loft(b, PATCH, PACKET_BRIDGE, 0, 0.405)
+  block(b, GLOW, v(0, 0.44, 0.935), v(0.035, 0.009, 0.02), nil, 0.6)
+  fairings(b, PACKET, 8, 0.30, 21, -0.90, 1.00)
+  for index, z in PACKET_SACS do
+    local outline = sac(index)
+    Plates.Loft(b, if index % 2 == 0 then PATCH else PLATING, outline, 0, -0.13)
+    fairings(b, outline, 4, 0.16, 30 + index, z - 0.12, z + 0.12, 0, -0.13)
+    lobe(b, PLATING, v(0, 0.14, z), v(0.06, 0.07, 0.08))
   end
   for _, side in { -1, 1 } do
-    thruster(b, v(side * 0.11, 0.31, -1.12), 0.17, 0.085)
-    ports(b, v(side * 0.165, 0.32, -0.40), v(side * 0.165, 0.32, 0.40), 6, 0.010)
+    thruster(b, v(side * 0.09, 0.31, -1.10), 0.15, 0.075)
   end
-  thruster(b, v(0, 0.12, -1.06), 0.12, 0.06)
+  thruster(b, v(0, 0.13, -1.04), 0.11, 0.055)
 end
 
 -- A mount: a place on the hull where a weapon can stand. Where it is,
@@ -1011,50 +966,58 @@ local designs: { [string]: Design } = {
   },
   -- The Talmar. (Their hulls are the same on both sides, and so are
   -- their mounts: each pair is a beam apart, or back and keel on the
-  -- middle line.)
+  -- middle line. They are taken from the skins themselves.)
   ["frigate.harrier"] = {
-    faction = "talmar", draw = rapier,
-    turrets = { abeam(v(0.27, 0.0, 0.08), v(-0.27, 0.0, 0.08)), over(v(0, 0.27, 0.10), v(0, -0.20, 0.08)) },
-    launchers = { abeam(v(0.235, 0.0, -0.30), v(-0.235, 0.0, -0.30)), over(v(0, 0.16, 0.46), v(0, -0.17, -0.28)) },
+    faction = "talmar", draw = rapier, sheets = 5.0,
+    turrets = {
+      abeam(on(RAPIER, 0.08, STARBOARD_SIDE), on(RAPIER, 0.08, PORT_SIDE)),
+      over(on(RAPIER_BRIDGE, 0.02, BACK, 0, 0.17), on(RAPIER, 0.08, KEEL)),
+    },
+    launchers = {
+      abeam(on(RAPIER, -0.30, STARBOARD_SIDE), on(RAPIER, -0.30, PORT_SIDE)),
+      over(on(RAPIER, 0.52, BACK), on(RAPIER, -0.28, KEEL)),
+    },
     fit = { "autocannon.small", "autocannon.small", "launcher.light", "launcher.light" },
   },
   ["destroyer.sabre"] = {
-    faction = "talmar", draw = sabre, sheets = 3.5,
+    faction = "talmar", draw = sabre, sheets = 6.0,
     turrets = {
-      over(v(0, 0.20, -0.05), v(0, -0.20, -0.05)), over(v(0, 0.18, -0.80), v(0, -0.18, -0.80)),
-      abeam(v(0.445, -0.06, 0.15), v(-0.445, -0.06, 0.15)), abeam(v(0.45, -0.06, -0.30), v(-0.45, -0.06, -0.30)),
+      over(on(SABRE, -0.05, BACK), on(SABRE, -0.05, KEEL)), over(on(SABRE, -0.85, BACK), on(SABRE, -0.85, KEEL)),
+      abeam(on(SABRE_PONTOON, 0.10, STARBOARD_SIDE, 0.36, -0.06), on(SABRE_PONTOON, 0.10, PORT_SIDE, -0.36, -0.06)),
+      abeam(on(SABRE_PONTOON, -0.38, STARBOARD_SIDE, 0.36, -0.06), on(SABRE_PONTOON, -0.38, PORT_SIDE, -0.36, -0.06)),
     },
-    launchers = { over(v(0, 0.14, 1.00), v(0, -0.14, 1.00)), over(v(0, 0.17, 0.60), v(0, -0.17, 0.42)) },
+    launchers = { over(on(SABRE, 1.05, BACK), on(SABRE, 1.05, KEEL)), over(on(SABRE, 0.62, BACK), on(SABRE, 0.45, KEEL)) },
     fit = { "autocannon.small", "autocannon.small", "autocannon.small", "autocannon.small", "launcher.light", "launcher.light" },
   },
   ["cruiser.falchion"] = {
-    faction = "talmar", draw = falchion, sheets = 4.5,
+    faction = "talmar", draw = falchion, sheets = 7.0,
     turrets = {
-      over(v(0, 0.25, 0.42), v(0, -0.25, 0.40)), abeam(v(0.76, -0.04, -0.50), v(-0.76, -0.04, -0.50)),
-      over(v(0, 0.22, -0.72), v(0, -0.23, -0.66)),
+      over(on(FALCHION, 0.65, BACK), on(FALCHION, 0.60, KEEL)),
+      abeam(on(FALCHION_WING, -0.30, STARBOARD_SIDE, 0.50, -0.04), on(FALCHION_WING, -0.30, PORT_SIDE, -0.50, -0.04)),
+      over(on(FALCHION, -0.82, BACK), on(FALCHION, -0.80, KEEL)),
     },
-    launchers = { over(v(0, 0.43, -0.15), v(0, -0.27, -0.10)) },
+    launchers = { over(on(FALCHION_TIER, 0.08, BACK, 0, 0.22), on(FALCHION, -0.10, KEEL)) },
     fit = { "autocannon.medium", "autocannon.medium", "autocannon.medium", "launcher.heavy" },
   },
   ["battleship.claymore"] = {
     faction = "talmar", draw = claymore, sheets = 9.0,
     turrets = {
-      over(onClaymore(CLAYMORE, 1.20, math.pi / 2), onClaymore(CLAYMORE, 1.20, -math.pi / 2)),
-      abeam(onClaymore(CLAYMORE_FLANK, -0.30, 0, 0.60, -0.10), onClaymore(CLAYMORE_FLANK, -0.30, math.pi, -0.60, -0.10)),
-      abeam(onClaymore(CLAYMORE_FLANK, -1.00, 0, 0.60, -0.10), onClaymore(CLAYMORE_FLANK, -1.00, math.pi, -0.60, -0.10)),
-      over(onClaymore(CLAYMORE_TIER, -0.05, math.pi / 2, 0, 0.40), onClaymore(CLAYMORE_KEEL, 0.20, -math.pi / 2, 0, -0.40)),
-      over(onClaymore(CLAYMORE, -1.72, math.pi / 2), onClaymore(CLAYMORE, -1.72, -math.pi / 2)),
+      over(on(CLAYMORE, 1.20, BACK), on(CLAYMORE, 1.20, KEEL)),
+      abeam(on(CLAYMORE_FLANK, -0.30, STARBOARD_SIDE, 0.60, -0.10), on(CLAYMORE_FLANK, -0.30, PORT_SIDE, -0.60, -0.10)),
+      abeam(on(CLAYMORE_FLANK, -1.00, STARBOARD_SIDE, 0.60, -0.10), on(CLAYMORE_FLANK, -1.00, PORT_SIDE, -0.60, -0.10)),
+      over(on(CLAYMORE_TIER, -0.05, BACK, 0, 0.40), on(CLAYMORE_KEEL, 0.20, KEEL, 0, -0.40)),
+      over(on(CLAYMORE, -1.72, BACK), on(CLAYMORE, -1.72, KEEL)),
     },
     launchers = {
-      abeam(onClaymore(CLAYMORE, 1.25, 0), onClaymore(CLAYMORE, 1.25, math.pi)),
-      over(onClaymore(CLAYMORE_TIER, -1.05, math.pi / 2, 0, 0.40), onClaymore(CLAYMORE, -1.00, -math.pi / 2)),
+      abeam(on(CLAYMORE, 1.25, STARBOARD_SIDE), on(CLAYMORE, 1.25, PORT_SIDE)),
+      over(on(CLAYMORE_TIER, -1.05, BACK, 0, 0.40), on(CLAYMORE, -1.00, KEEL)),
     },
     fit = { "artillery.large", "artillery.large", "artillery.large", "artillery.large", "artillery.large", "launcher.cruise", "launcher.cruise" },
   },
   ["industrial.packet"] = {
-    faction = "talmar", draw = packet, sheets = 3.5,
+    faction = "talmar", draw = packet, sheets = 6.0,
     -- (its one gun on the spine's back, and under a cargo sac)
-    turrets = { over(v(0, 0.43, 0.0), v(0, -0.36, 0.25)) },
+    turrets = { over(on(PACKET, 0.0, BACK), on(sac(2), 0.27, KEEL, 0, -0.13)) },
     launchers = {},
     fit = { "autocannon.small" },
   },
