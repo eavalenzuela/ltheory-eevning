@@ -40,20 +40,26 @@ local Scene = {}
 
 export type Placed = { object: Object, x: number, y: number, z: number, radius: number }
 
--- What stands on one hardpoint of a ship.
+-- What stands on one mount of a ship.
 type Arm = {
-  item: number,             -- the fitted module, or 0 for the cover on an empty hardpoint
-  piece: Arms.Piece?,       -- nil for a cover
+  piece: Arms.Piece?,       -- nil for the cover on an empty hardpoint
   base: Object?,
   gun: Object,
   mount: Hull.Mount,
   yaw: number,              -- where a turret has swung to: radians round from rest,
   lift: number,             -- and up from level
-  off: number,              -- how far round from its target it still is, in radians (-1 with none)
 }
 
--- And on all of them. 'key' is the fit it was made for.
-type Armed = { key: string, arms: { Arm }, built: Hull.Built }
+-- A hardpoint and what is fitted to it: the same weapon on each of its
+-- two mounts, on opposite sides of the hull (Game/View/Hull).
+type Point = {
+  item: number,             -- the fitted module, or 0 if the hardpoint is empty
+  arms: { Arm },
+  off: number,              -- how far the gun that faces the target is from pointing at it, in radians (-1 with none)
+}
+
+-- And all of a ship's. 'key' is the fit they were made for.
+type Armed = { key: string, points: { Point }, built: Hull.Built }
 
 export type Scene = {
   camera: Camera,
@@ -188,20 +194,22 @@ end
 local function dropArms(scene: Scene, id: number)
   local armed = scene.arms[id]
   if armed then
-    for _, arm in armed.arms do
-      if arm.base then
-        Object_Delete(arm.base)
+    for _, point in armed.points do
+      for _, arm in point.arms do
+        if arm.base then
+          Object_Delete(arm.base)
+        end
+        Object_Delete(arm.gun)
       end
-      Object_Delete(arm.gun)
     end
     scene.arms[id] = nil
   end
 end
 
 -- Put on a ship's hardpoints what is fitted to it: its weapons in the
--- order of their slots, each on the next hardpoint of its kind, and a
--- cover on every hardpoint left over. Nothing is done if they are there
--- already.
+-- order of their slots, each on the next hardpoint of its kind (on both
+-- of that hardpoint's mounts), and covers on every hardpoint left over.
+-- Nothing is done if they are there already.
 local function armShip(scene: Scene, game: Core.Game, id: number, built: Hull.Built, container: Object)
   local fitted = Core.Query.Fitted(game, id)
   local key = ""
@@ -215,20 +223,23 @@ local function armShip(scene: Scene, game: Core.Game, id: number, built: Hull.Bu
     return
   end
   dropArms(scene, id)
-  local arms: { Arm } = {}
-  local function stand(mount: Hull.Mount, item: number, piece: Arms.Piece?)
-    local base: Object? = nil
-    if piece and piece.base then
-      local made = Object_Scenery({})
-      Object_SetRenderable(made, piece.base)
-      container:AddInterior(made)
-      base = made
+  local points: { Point } = {}
+  local function fill(hardpoint: Hull.Hardpoint, item: number, piece: Arms.Piece?)
+    local arms: { Arm } = {}
+    for _, mount in hardpoint do
+      local base: Object? = nil
+      if piece and piece.base then
+        local made = Object_Scenery({})
+        Object_SetRenderable(made, piece.base)
+        container:AddInterior(made)
+        base = made
+      end
+      local gun = Object_Scenery({})
+      Object_SetRenderable(gun, if piece then piece.gun else Arms.Blank())
+      container:AddInterior(gun)
+      table.insert(arms, { piece = piece, base = base, gun = gun, mount = mount, yaw = 0, lift = 0 })
     end
-    local gun = Object_Scenery({})
-    Object_SetRenderable(gun, if piece then piece.gun else Arms.Blank())
-    container:AddInterior(gun)
-    table.insert(arms, { item = if piece then item else 0, piece = piece, base = base, gun = gun, mount = mount, yaw = 0, lift = 0,
-      off = -1 })
+    table.insert(points, { item = if piece then item else 0, arms = arms, off = -1 })
   end
   local turrets, launchers = 0, 0
   for _, item in fitted do
@@ -236,86 +247,99 @@ local function armShip(scene: Scene, game: Core.Game, id: number, built: Hull.Bu
     if module and item.place == "high" and module.hardpoint == "turret" then
       turrets += 1
       if built.turrets[turrets] then
-        stand(built.turrets[turrets], item.id, Arms.Build(item.type))
+        fill(built.turrets[turrets], item.id, Arms.Build(item.type))
       end
     elseif module and item.place == "high" and module.hardpoint == "launcher" then
       launchers += 1
       if built.launchers[launchers] then
-        stand(built.launchers[launchers], item.id, Arms.Build(item.type))
+        fill(built.launchers[launchers], item.id, Arms.Build(item.type))
       end
     end
   end
   for at = turrets + 1, #built.turrets do
-    stand(built.turrets[at], 0, nil)
+    fill(built.turrets[at], 0, nil)
   end
   for at = launchers + 1, #built.launchers do
-    stand(built.launchers[at], 0, nil)
+    fill(built.launchers[at], 0, nil)
   end
-  scene.arms[id] = { key = key, arms = arms, built = built }
+  scene.arms[id] = { key = key, points = points, built = built }
 end
 
 local FORE = vector.create(0, 0, 1)
 
--- Stand a ship's arms on its hull where the hull now is, swing its
--- turrets toward what they are shooting at (for 'seconds', at their own
--- rates), and note where each one's shots leave from: scene.screen holds
--- that under the module's item id, negated.
+-- Stand a ship's arms on its hull where the hull now is, and swing its
+-- turrets (for 'seconds', at their own rates). Of the two on a
+-- hardpoint, each turns to the target if it can see it, and one that
+-- has the hull in the way goes back to rest; the one that faces the
+-- target the more squarely is the one that fires, and where its shots
+-- leave from is noted: scene.screen holds that under the module's item
+-- id, negated.
 local function placeArms(scene: Scene, armed: Armed, proxy: Object, at: vector, radius: number, running: { State.Running }, seconds: number)
   local right, up, look = proxy:GetRight(), proxy:GetUp(), proxy:GetLook()
   local unit = radius / armed.built.radius
   -- (an empty hardpoint's cover is the size of the weapons the hull is drawn for)
   local cover = Arms.SIZE[Arms.SizeOf(armed.built.fit[1] or "")] or 1
-  for _, arm in armed.arms do
-    local mount = arm.mount
-    local fore = mount.fore or FORE
-    local origin = at + (right * mount.at.x + up * mount.at.y + look * mount.at.z) * unit
-    local mountUp = right * mount.up.x + up * mount.up.y + look * mount.up.z
-    local mountFore = right * fore.x + up * fore.y + look * fore.z
-    local piece = arm.piece
-    if piece then
-      local aim: vector? = nil
+  for _, point in armed.points do
+    local target: vector? = nil
+    if point.item ~= 0 then
       for _, run in running do
-        if run.item == arm.item and run.target ~= 0 then
-          local there: vector? = scene.screen[run.target]
-          if there and vector.magnitude(there - origin) > 1 then
-            aim = vector.normalize(there - origin)
+        if run.item == point.item and run.target ~= 0 then
+          target = scene.screen[run.target]
+        end
+      end
+    end
+    local best = -2
+    point.off = -1
+    for index, arm in point.arms do
+      local mount = arm.mount
+      local fore = mount.fore or FORE
+      local origin = at + (right * mount.at.x + up * mount.at.y + look * mount.at.z) * unit
+      local mountUp = right * mount.up.x + up * mount.up.y + look * mount.up.z
+      local mountFore = right * fore.x + up * fore.y + look * fore.z
+      local piece = arm.piece
+      if piece then
+        local aim: vector? = nil
+        local facing = 0
+        if target and vector.magnitude(target - origin) > 1 then
+          local toward = vector.normalize(target - origin)
+          facing = vector.dot(toward, mountUp)
+          if Arms.Sees(facing) then
+            aim = toward
           end
         end
-      end
-      local point: vector
-      arm.yaw, arm.lift, point = Arms.Swing(piece, mountUp, mountFore, aim, arm.yaw, arm.lift, seconds)
-      scene.screen[-arm.item] = (Arms.Place(piece, arm.base, arm.gun, origin, mountUp, mountFore, point, 1))
-      arm.off = -1
-      if aim and piece.turns then
-        -- (round the mount only: a target under its own deck it cannot tip down to)
-        local wanted = aim - mountUp * vector.dot(aim, mountUp)
-        local got = point - mountUp * vector.dot(point, mountUp)
-        arm.off = 0
-        if vector.magnitude(wanted) > 1e-3 and vector.magnitude(got) > 1e-3 then
-          arm.off = math.acos(math.clamp(vector.dot(vector.normalize(wanted), vector.normalize(got)), -1, 1))
+        local direction: vector
+        arm.yaw, arm.lift, direction = Arms.Swing(piece, mountUp, mountFore, aim, arm.yaw, arm.lift, seconds)
+        local muzzle = Arms.Place(piece, arm.base, arm.gun, origin, mountUp, mountFore, direction, 1)
+        if (target ~= nil and facing > best) or (target == nil and index == 1) then
+          best = facing
+          scene.screen[-point.item] = muzzle
+          point.off = if aim and piece.turns then math.acos(math.clamp(vector.dot(direction, aim), -1, 1)) else -1
         end
+      else
+        local level = mountFore - mountUp * vector.dot(mountFore, mountUp)
+        arm.gun:SetPos(origin)
+        Object_SetAxes(arm.gun, if vector.magnitude(level) > 1e-4 then level else right, mountUp)
+        arm.gun:SetScale(vector.create(cover, cover, cover))
       end
-    else
-      local level = mountFore - mountUp * vector.dot(mountFore, mountUp)
-      arm.gun:SetPos(origin)
-      Object_SetAxes(arm.gun, if vector.magnitude(level) > 1e-4 then level else right, mountUp)
-      arm.gun:SetScale(vector.create(cover, cover, cover))
     end
   end
 end
 
--- For checking (GameDebug.Arms): how many weapons stand on a ship's
--- hardpoints, and how far round from its target the worst-pointed of
--- its turrets still is, in radians (-1 if none has a target).
+-- For checking (GameDebug.Arms): how many weapon models stand on a
+-- ship's mounts (two to a fitted weapon), and how far from its target
+-- the worst-pointed of its firing turrets still is, in radians (-1 if
+-- none has a target).
 function Scene.Arms(scene: Scene, ship: number): (number, number)
   local armed = scene.arms[ship]
   local count, off = 0, -1
   if armed then
-    for _, arm in armed.arms do
-      if arm.piece then
-        count += 1
-        off = math.max(off, arm.off)
+    for _, point in armed.points do
+      for _, arm in point.arms do
+        if arm.piece then
+          count += 1
+        end
       end
+      off = math.max(off, point.off)
     end
   end
   return count, off

@@ -5,6 +5,11 @@
 -- turret goes on any turret hardpoint, any launcher on any launcher
 -- hardpoint, and nothing here knows what faction built the ship.
 --
+-- A hull's hardpoint is a pair of mounts on opposite sides of it (see
+-- Game/View/Hull), and a weapon fitted to it stands on both: there are
+-- two of everything here on a ship, and the one that faces the target
+-- is the one that fires.
+--
 -- A turret is two models: a base that turns on its mount, and a gun
 -- that tips up and down in the base's cheeks. A launcher is one model,
 -- a rack of tubes that does not move. Both are drawn once, in units of
@@ -284,7 +289,15 @@ end
 
 -- How far down and up a gun can tip from level: not through its own
 -- mount, nor quite straight up.
-local LOW, HIGH = -0.12, 1.35
+local LOW, HIGH = -0.12, 1.5
+
+-- Whether a turret can be brought to bear on something: 'facing' is how
+-- squarely its mount faces it (the way out of the hull there, dotted
+-- with the way to the target). If not, the hull is in the way, and the
+-- shot is for the turret's twin on the far side.
+function Arms.Sees(facing: number): boolean
+  return facing >= math.sin(LOW)
+end
 
 -- The level way a mount faces at rest, and the level way to its side.
 local function frame(up: vector, fore: vector): (vector, vector)

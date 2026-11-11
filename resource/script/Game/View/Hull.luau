@@ -157,8 +157,8 @@ local function javelin(b: Builder)
   block(b, GLOW, v(0.15, 0.225, 0.955), v(0.075, 0.020, 0.006), nil, 0.3)
   block(b, FRAME, v(0.15, 0.285, 0.76), v(0.06, 0.012, 0.08))
 
-  -- a pylon under the port bow, for a launcher to hang from (the other
-  -- launcher goes on the starboard flank)
+  -- a pylon under the port bow, for a launcher to hang from (its twin
+  -- stands on the back; the other pair goes on the flanks)
   block(b, FRAME, v(-0.20, -0.125, 0.80), v(0.07, 0.012, 0.16), nil, 0.2)
   beam(b, FRAME, v(-0.20, -0.12, 0.70), v(-0.10, -0.03, 0.70), 0.014)
   beam(b, FRAME, v(-0.20, -0.12, 0.92), v(-0.10, -0.03, 0.92), 0.014)
@@ -280,8 +280,10 @@ local function caravan(b: Builder)
   beam(b, FRAME, v(-0.97, 0.56, 0.36), v(-0.97, 0.18, 0.38), 0.006, 0.1)
   tank(b, v(-0.66, -0.36, -0.46), 0.085, 0.24)
   tank(b, v(-0.66, -0.36, 0.10), 0.07, 0.17, PLATING)
-  -- a platform on the top rails forward, for its one gun
+  -- a platform on the top rails forward, for its one gun, and another
+  -- under the keel for that gun's twin
   block(b, PLATING, v(-0.06, high + 0.035, bow - 0.24), v(0.15, 0.018, 0.13), nil, 0.2)
+  block(b, PLATING, v(0.06, low - 0.05, bow - 0.24), v(0.15, 0.018, 0.13), nil, 0.2)
   -- starboard: a mast, and a slab of plate over the middle bay
   mast(b, v(0.20, high, -0.50), 0.55, 0.04)
   block(b, PLATING, v(0.47, 0.02, stern + length * 1.5), v(0.018, 0.30, length * 0.36), v(0, 0, -0.29), 0.06)
@@ -316,7 +318,7 @@ local function halberd(b: Builder)
   end
   beam(b, FRAME, v(0, -0.10, 0.50), v(0, -0.60, 0.70), 0.020)
   beam(b, FRAME, v(0, -0.08, 0.20), v(0, -0.84, 0.66), 0.016)
-  ports(b, v(0.062, -0.30, 0.82), v(0.062, -0.30, 1.18), 5, 0.012)
+  ports(b, v(0.062, -0.08, 0.82), v(0.062, -0.08, 1.18), 5, 0.012)
 
   -- the works, strung along the pole
   block(b, PLATING, v(0.03, 0.17, 0.42), v(0.17, 0.15, 0.27))
@@ -403,7 +405,8 @@ local function cuirass(b: Builder)
   beam(b, FRAME, v(0.05, -0.30, 1.42), v(-0.06, -0.54, 1.68), 0.018)
 
   -- the bare side: the gun deck, a shelf along it on brackets, with a
-  -- low wall at its edge between the mounts; and the tanks hung under
+  -- low wall at its edge between the mounts. Its weapons stand on it
+  -- and hang under it, in two tiers; a tank is slung aft of them.
   block(b, PLATING, v(0.47, 0.04, 0.12), v(0.15, 0.026, 1.26), nil, 0.1)
   block(b, FRAME, v(0.33, 0.10, 0.12), v(0.02, 0.05, 1.22), nil, 0.1)
   for _, z in { 1.22, 0.72, 0.22, -0.28, -0.78 } do
@@ -411,10 +414,8 @@ local function cuirass(b: Builder)
     block(b, PLATING, v(0.605, 0.085, z + 0.25), v(0.014, 0.045, 0.10), nil, 0.1)
   end
   block(b, TRIM, v(0.622, 0.04, 0.12), v(0.006, 0.020, 1.24), nil, 0.2)
-  tank(b, v(0.46, -0.14, 0.84), 0.105, 0.30)
-  tank(b, v(0.46, -0.16, 0.16), 0.095, 0.26, PLATING)
-  tank(b, v(0.45, -0.15, -0.50), 0.100, 0.28, PLATING)
   tank(b, v(0.42, -0.14, -1.14), 0.085, 0.22)
+  tank(b, v(0.40, -0.16, 1.58), 0.075, 0.16, PLATING)
   conduit(b, { v(0.36, -0.30, 1.30), v(0.36, -0.32, 0.20), v(0.36, -0.30, -1.30) }, 0.016)
   conduit(b, { v(0.56, -0.02, 1.34), v(0.56, -0.05, 1.50), v(0.34, -0.05, 1.56) }, 0.014)
   conduit(b, { v(0.34, 0.20, -0.92), v(0.34, 0.24, -1.40), v(0.30, 0.20, -1.60) }, 0.016)
@@ -570,6 +571,11 @@ local function bastion(b: Builder)
   block(b, GLOW, v(0.06, -0.22, 2.196), v(0.20, 0.05, 0.006), v(0, 0.10, 0), 0.3)
   block(b, PLATING, v(0.02, -0.40, 2.50), v(0.30, 0.05, 0.30), v(0, -0.12, 0), 0.06)
 
+  -- under the bow, a pad below each gatehouse tower, for the twin of
+  -- the gun on its top
+  block(b, PLATING, v(-0.36, -0.53, 2.30), v(0.10, 0.020, 0.10), nil, 0.2)
+  block(b, PLATING, v(0.37, -0.53, 1.90), v(0.10, 0.020, 0.10), nil, 0.2)
+
   -- under the keel, the magazines: two drums in cradles
   tank(b, v(0.06, -0.82, 0.80), 0.19, 0.62, PLATING)
   tank(b, v(-0.04, -0.80, -1.10), 0.17, 0.52)
@@ -594,12 +600,31 @@ local function bastion(b: Builder)
   nacelle(b, v(-0.02, 0.06, stern - 0.44), 0.22, 0.085)
 end
 
--- A hardpoint: where on the hull it is, the way out of the hull there,
--- and the way what is mounted on it faces at rest (forward, if not
--- said). What goes on it is the pilot's business (Game/View/Arms).
+-- A mount: a place on the hull where a weapon can stand. Where it is,
+-- the way out of the hull there, and the way what stands on it faces at
+-- rest (forward, if not said).
 export type Mount = { at: vector, up: vector, fore: vector? }
 
+-- A hardpoint is a pair of mounts on opposite sides of the hull, as in
+-- EVE (the project owner's note): whichever way the ship is heading,
+-- one of the two can see the target, so a ship's heading never keeps it
+-- from firing, and only range, angle and how fast its guns can turn
+-- decide a shot. What is fitted to a hardpoint stands on both of its
+-- mounts and fires from the one that faces what it shoots at. What that
+-- is is the pilot's business (Game/View/Arms).
+export type Hardpoint = { Mount }
+
 local UP, DOWN, PORT, STARBOARD = v(0, 1, 0), v(0, -1, 0), v(-1, 0, 0), v(1, 0, 0)
+
+-- A hardpoint whose mounts are a deck apart: one on top, one beneath.
+local function over(top: vector, bottom: vector, fore: vector?): Hardpoint
+  return { { at = top, up = UP, fore = fore }, { at = bottom, up = DOWN, fore = fore } }
+end
+
+-- A hardpoint whose mounts are a beam apart: one to starboard, one to port.
+local function abeam(starboard: vector, port: vector): Hardpoint
+  return { { at = starboard, up = STARBOARD }, { at = port, up = PORT } }
+end
 
 type Design = {
   faction: string,
@@ -607,52 +632,63 @@ type Design = {
   -- (A bigger ship is plated in more and smaller sheets for its size:
   -- it is one of the things that says how big it is.)
   sheets: number?,
-  turrets: { Mount },
-  launchers: { Mount },
+  turrets: { Hardpoint },
+  launchers: { Hardpoint },
   -- What it is shown carrying where nobody has fitted it (a gallery):
-  -- turrets, then launchers, in the order of its mounts.
+  -- turrets, then launchers, in the order of its hardpoints.
   fit: { string },
 }
 
 local designs: { [string]: Design } = {
   ["frigate.javelin"] = {
     faction = "vessari", draw = javelin,
-    turrets = { { at = v(0.05, 0.13, 0.92), up = UP } },
-    launchers = { { at = v(-0.20, -0.137, 0.80), up = DOWN }, { at = v(0.322, 0.09, 0.02), up = STARBOARD } },
+    -- (its gun on and under the bow; a rack on each flank; a rack on the
+    -- back and one hung under the port bow)
+    turrets = { over(v(-0.05, 0.13, 0.96), v(0.06, -0.21, 0.94)) },
+    launchers = {
+      abeam(v(0.322, 0.09, 0.02), v(-0.317, 0.06, 0.30)),
+      over(v(-0.10, 0.287, 0.16), v(-0.20, -0.137, 0.80)),
+    },
     fit = { "autocannon.small", "launcher.light", "launcher.light" },
   },
   ["destroyer.halberd"] = {
     faction = "vessari", draw = halberd, sheets = 4.0,
-    turrets = { { at = v(-0.06, 0.32, 0.30), up = UP }, { at = v(0.12, 0.28, -0.72), up = UP } },
+    -- (its guns on the works and under them; its racks on the two faces
+    -- of the blade, four to a face)
+    turrets = { over(v(-0.06, 0.32, 0.30), v(0.00, -0.24, 0.10)), over(v(0.12, 0.28, -0.72), v(-0.10, -0.16, -0.78)) },
     launchers = {
-      { at = v(0.060, -0.46, 0.98), up = STARBOARD }, { at = v(-0.060, -0.46, 0.98), up = PORT },
-      { at = v(0.060, -0.14, 1.06), up = STARBOARD }, { at = v(-0.060, -0.14, 1.06), up = PORT },
+      abeam(v(0.060, -0.31, 1.14), v(-0.060, -0.31, 1.14)), abeam(v(0.060, -0.31, 0.86), v(-0.060, -0.31, 0.86)),
+      abeam(v(0.060, -0.57, 1.14), v(-0.060, -0.57, 1.14)), abeam(v(0.060, -0.57, 0.86), v(-0.060, -0.57, 0.86)),
     },
     fit = { "autocannon.small", "autocannon.small", "launcher.light", "launcher.light", "launcher.light", "launcher.light" },
   },
   ["cruiser.cuirass"] = {
     faction = "vessari", draw = cuirass, sheets = 6.5,
-    -- (the broadside: every hardpoint in a line along the gun deck, facing out)
-    turrets = { { at = v(0.47, 0.066, 0.97), up = UP, fore = STARBOARD } },
+    -- (the broadside: every hardpoint in a line along the gun deck, a
+    -- weapon standing on it and its twin hanging under it, all facing out)
+    turrets = { over(v(0.47, 0.066, 0.97), v(0.47, 0.014, 0.97), STARBOARD) },
     launchers = {
-      { at = v(0.47, 0.066, 0.47), up = UP, fore = STARBOARD }, { at = v(0.47, 0.066, -0.03), up = UP, fore = STARBOARD },
-      { at = v(0.47, 0.066, -0.53), up = UP, fore = STARBOARD },
+      over(v(0.47, 0.066, 0.47), v(0.47, 0.014, 0.47), STARBOARD), over(v(0.47, 0.066, -0.03), v(0.47, 0.014, -0.03), STARBOARD),
+      over(v(0.47, 0.066, -0.53), v(0.47, 0.014, -0.53), STARBOARD),
     },
     fit = { "artillery.medium", "launcher.heavy", "launcher.heavy", "launcher.heavy" },
   },
   ["battleship.bastion"] = {
     faction = "vessari", draw = bastion, sheets = 13,
-    -- (its guns on the gatehouse towers; its launchers along the outsides of the walls)
-    turrets = { { at = v(-0.46, 0.76, 2.36), up = UP }, { at = v(0.48, 0.56, 1.96), up = UP } },
+    -- (its guns on the gatehouse towers, each with a twin under the
+    -- hull below it; its launchers along the outsides of both walls)
+    turrets = { over(v(-0.46, 0.76, 2.36), v(-0.36, -0.55, 2.30)), over(v(0.48, 0.56, 1.96), v(0.37, -0.55, 1.90)) },
     launchers = {
-      { at = v(-0.545, -0.08, 1.45), up = PORT }, { at = v(-0.545, 0.00, 0.20), up = PORT }, { at = v(-0.545, -0.12, -1.80), up = PORT },
-      { at = v(0.565, -0.10, 1.04), up = STARBOARD }, { at = v(0.565, -0.06, -1.40), up = STARBOARD },
+      abeam(v(0.565, -0.24, 1.60), v(-0.545, -0.24, 1.60)), abeam(v(0.565, -0.24, 0.70), v(-0.545, -0.24, 0.70)),
+      abeam(v(0.565, -0.24, -0.20), v(-0.545, -0.24, -0.20)), abeam(v(0.565, -0.24, -1.30), v(-0.545, -0.24, -1.30)),
+      abeam(v(0.565, -0.24, -2.20), v(-0.545, -0.24, -2.20)),
     },
     fit = { "artillery.large", "artillery.large", "launcher.cruise", "launcher.cruise", "launcher.cruise", "launcher.cruise", "launcher.cruise" },
   },
   ["industrial.caravan"] = {
     faction = "vessari", draw = caravan, sheets = 4.0,
-    turrets = { { at = v(-0.06, 0.493, 0.78), up = UP } },
+    -- (its one gun on the platform over the forward bay, and under the keel there)
+    turrets = { over(v(-0.06, 0.493, 0.78), v(0.06, -0.508, 0.78)) },
     launchers = {},
     fit = { "autocannon.small" },
   },
@@ -663,8 +699,8 @@ local designs: { [string]: Design } = {
 export type Built = {
   model: Model,
   radius: number,       -- half the longest way across it, in its own units
-  turrets: { Mount },   -- its hardpoints, in its own units
-  launchers: { Mount },
+  turrets: { Hardpoint },   -- its hardpoints, in its own units
+  launchers: { Hardpoint },
   fit: { string },
   engines: { Exhaust }, -- where its engines' fire leaves it
   glow: { number },     -- and the colour of that fire
@@ -707,6 +743,13 @@ function Hull.Build(type: string): Built?
   local hull = Ships.byId[type]
   assert(hull == nil or (#design.turrets == hull.turrets and #design.launchers == hull.launchers),
     `the design of {type} has {#design.turrets} turret and {#design.launchers} launcher mounts; the hull has {if hull then hull.turrets else 0} and {if hull then hull.launchers else 0}`)
+  -- (and a hardpoint is two mounts that look away from each other)
+  for _, points in { design.turrets, design.launchers } do
+    for _, point in points do
+      assert(#point == 2 and vector.dot(point[1].up, point[2].up) < -0.5,
+        `a hardpoint of {type} is not a pair of mounts on opposite sides`)
+    end
+  end
   local result: Built = { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = design.turrets,
     launchers = design.launchers, fit = design.fit, engines = table.clone(exhausts), glow = Hull.looks[design.faction].glow }
   built[type] = result

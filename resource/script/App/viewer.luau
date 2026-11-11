@@ -309,14 +309,17 @@ return AppShell.Create(function(): Widget
     local metres = radius / hull.radius
     local fore = vector.create(0, 0, 1)
     local at = 0
-    local function each(mounts: { Hull.Mount })
-      for index, mount in mounts do
+    local function each(points: { Hull.Hardpoint })
+      for index, point in points do
         at += 1
-        local rest = mount.fore or fore
-        -- (the guns slewed off to one side and up a little, turn about, to show that they do)
-        local side = vector.cross(mount.up, rest)
-        local aim = vector.normalize(rest + side * (if index % 2 == 0 then -0.7 else 0.7) + mount.up * 0.35)
-        mountArm(built.fit[at], mount.at * unit, mount.up, rest, aim, metres)
+        -- (the same weapon on both mounts of the hardpoint)
+        for _, mount in point do
+          local rest = mount.fore or fore
+          -- (the guns slewed off to one side and up a little, turn about, to show that they do)
+          local side = vector.cross(mount.up, rest)
+          local aim = vector.normalize(rest + side * (if index % 2 == 0 then -0.7 else 0.7) + mount.up * 0.35)
+          mountArm(built.fit[at], mount.at * unit, mount.up, rest, aim, metres)
+        end
       end
     end
     each(built.turrets)

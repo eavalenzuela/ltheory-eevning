@@ -544,9 +544,10 @@ function Debug.Fly(type: string): boolean
   return true
 end
 
--- The weapons standing on the hardpoints of the pilot's ship, and how
--- far round from its target the worst-pointed turret still is (radians,
--- or -1 if no turret has a target).
+-- The weapon models standing on the mounts of the pilot's ship (two to
+-- a fitted weapon), and how far from its target the worst-pointed of
+-- the turrets that are firing still is (radians, or -1 if none has a
+-- target).
 function Debug.Arms(): (number, number)
   return Scene.Arms(scene, session.game.state.player.ship)
 end
