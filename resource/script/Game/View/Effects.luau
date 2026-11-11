@@ -104,7 +104,7 @@ local STRUCK = {
 } :: { [string]: { color: { number }, ring: number } }
 
 -- How big the flash at a gun's mouth is, in metres, by the gun's size.
-local MUZZLE = { 12, 26, 60 }
+local MUZZLE = { 10, 18, 34 }
 
 local function vec(c: { number }): vector
   return vector.create(c[1], c[2], c[3])
@@ -249,7 +249,9 @@ function Effects.Fire(fx: Fx, type: string, from: number, to: number, fromRadius
     end
     table.insert(fx.effects, effect)
   end
-  -- The gun's mouth flashes (a missile's launcher and a beam do not).
+  -- The gun's mouth flashes (a beam's does not: the beam is there to
+  -- see). A gun on a big hull is small, and this is what shows where it
+  -- is: the flash is never drawn smaller than a few pixels.
   if look.kind == "bolt" or look.kind == "rail" then
     if origin then
       -- (at the mouth itself, and the size of the gun rather than the ship)
@@ -257,6 +259,9 @@ function Effects.Fire(fx: Fx, type: string, from: number, to: number, fromRadius
     else
       Effects.Flash(fx, from, vector.create(0, 0, 0), vec(look.color), 0.5 * fromRadius * SIZE[size], 0, 0.10, now)
     end
+  elseif look.kind == "missile" and origin then
+    -- (a missile leaving its rack: the motor lighting)
+    Effects.Flash(fx, origin, vector.create(0, 0, 0), vec(look.color), 0.8 * MUZZLE[size], 0, 0.22, now)
   end
 end
 

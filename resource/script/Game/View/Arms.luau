@@ -14,7 +14,7 @@
 --
 -- Everything stands on the same foot: a square mounting ring, Arms.FOOT
 -- units from its middle to its edge. So there are three footprints in
--- all, one for each size of weapon (about 5, 12 and 28 m across), and a
+-- all, one for each size of weapon (about 4, 8 and 14 m across), and a
 -- hull's pad for a size takes anything of that size (and the cover that
 -- goes on an empty hardpoint).
 --
@@ -30,9 +30,15 @@ local PLATING, PATCH, FRAME, GLOW, TRIM = Plates.PLATING, Plates.PATCH, Plates.F
 local block, beam = Plates.Block, Plates.Beam
 
 -- How many metres a unit of the drawings is, for a small, a medium and
--- a large weapon. (Bigger than life, as EVE's are: a gun in true
--- proportion to an 80 m frigate cannot be seen on it.)
-Arms.SIZE = { 1.7, 3.8, 9.0 }
+-- a large weapon. A weapon's size is its own and not the hull's, and
+-- the sizes are EVE's, as its players have measured them: a small
+-- autocannon about 7 m long (on a frigate of 60 m or so, where it
+-- looks big), a large pulse laser about 20 m (on a battleship of 800
+-- to 1,600 m, where it looks small). The medium is put between the
+-- two. So a gun on a big hull barely shows, which is as it should be:
+-- it is noticed when it fires. (A capital size, when there are capital
+-- weapons, is a fourth number here: EVE's are some ten times the large.)
+Arms.SIZE = { 1.35, 2.5, 4.5 }
 -- Half the width of the mounting ring, in the drawings' units.
 Arms.FOOT = 1.55
 
