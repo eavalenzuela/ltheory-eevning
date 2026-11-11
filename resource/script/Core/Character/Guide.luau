@@ -86,6 +86,11 @@ Guide.steps = {
       return (event.found or 0) > 0
     end,
     how = "Scan, at the top of the overview, until a signal is found." },
+  { id = "hack", group = "Getting on", title = "Hack a derelict's sealed hold", on = "HackDone",
+    also = function(event: Event): boolean
+      return event.success == true
+    end,
+    how = "A Data Analyzer fitted, within 5 km of a derelict's hull: Hack. Destroy the core." },
   { id = "colony", group = "Getting on", title = "Found a colony on a planet", on = "ColonyDeployed",
     how = "A Colony Command Centre in the hold, in space by a planet: Colony." },
   { id = "tower", group = "Getting on", title = "Anchor a tower of your own", on = "StarbaseAnchored",

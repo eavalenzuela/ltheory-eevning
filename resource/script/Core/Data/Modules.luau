@@ -102,6 +102,9 @@ export type ModuleType = {
   -- ship) nobody can target the ship, and anything that comes within
   -- 'reach' metres of it switches it off.
   cloak: { reach: number }?,
+  -- A data analyzer: fitted, it lets the ship hack a sealed hold from
+  -- within its range (Tactical/Hacking).
+  analyzer: { range: number }?,
   -- Skills a pilot needs to fit it. (Where absent, Data/Skills says.)
   requires: { { skill: string, level: number } }?,
   -- What only a drone carries (Data/Drones): nobody sells it, finds it
@@ -295,6 +298,15 @@ local modules: { ModuleType } = {
     cpu = 30, powergrid = 1, volume = 5, basePrice = 40000, passive = {},
     hex = { kind = "jam", range = 25000, strength = 0.35, duration = 10, capacitor = 14 },
     requires = { { skill = "electronic.warfare", level = 3 } },
+  },
+
+  -- Getting into a derelict's sealed hold (Tactical/Hacking): it has
+  -- only to be fitted.
+  {
+    id = "analyzer.data", name = "Data Analyzer", slot = "mid", hardpoint = "",
+    cpu = 20, powergrid = 1, volume = 5, basePrice = 60000, passive = {},
+    analyzer = { range = 5000 },
+    requires = { { skill = "hacking", level = 1 } },
   },
 
   -- Not being seen. While it runs the ship cannot be targeted, and what

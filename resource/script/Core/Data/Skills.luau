@@ -114,6 +114,9 @@ local skills: { Skill } = {
   -- What a pilot has in their head
   { id = "cybernetics", name = "Cybernetics", rank = 3, start = -1, requires = {},
     note = "One more place for an implant a level, to five." },
+  -- Getting into things
+  { id = "hacking", name = "Hacking", rank = 3, start = -1, requires = { { skill = "electronics", level = 2 } },
+    note = "Level 1 to fit a data analyzer; 10 more coherence and 5 more strength a level." },
   -- Not being seen
   { id = "cloaking", name = "Cloaking", rank = 4, start = -1, requires = { { skill = "electronics", level = 3 } },
     note = "Level 1 to fit a cloaking device." },

@@ -170,7 +170,17 @@ export type Wreck = {
   hull: string,       -- the Data/Ships id of the ship it was ("" in a save from before this was kept)
   expires: number,    -- the tick it disappears
   salvaged: boolean,  -- a salvager has had what the hull itself was worth
+  locked: boolean,    -- its hold is sealed: nothing is looted until it has been hacked (Tactical/Hacking)
 }
+
+-- A hack under way (Tactical/Hacking): the hull whose hold it is for,
+-- the board (its nodes row by row: what each is, what it has left and
+-- hits with, whether it has been found, whether it is cleared), the
+-- pilot's coherence now and at most, their strength, and the node the
+-- way in began at.
+export type HackNode = { kind: string, hp: number, strength: number, seen: boolean, cleared: boolean }
+export type Hack = { wreck: number, width: number, height: number, nodes: { HackNode }, coherence: number, most: number,
+  strength: number, start: number }
 
 -- A ship flown by the game rather than the player: what it is doing.
 export type Pilot = {
@@ -411,6 +421,8 @@ export type State = {
   sitesDue: { [number]: number },
   sitesSeen: { [number]: boolean },
   scanReady: number,
+  -- The hack the pilot has under way, if any.
+  hack: Hack?,
   -- The scan probes the pilot has out, in the order they were put out.
   probes: { [number]: Probe },
   probeIds: { number },

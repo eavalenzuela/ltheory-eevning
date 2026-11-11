@@ -153,7 +153,7 @@ local function addWreck(state: State.State, name: string, system: number, grid: 
   expires: number): number
   local wreck: State.Wreck = {
     id = State.NewId(state), kind = "wreck", name = name, system = system, grid = grid, x = x, y = y, z = z, radius = radius,
-    hull = "", expires = expires, salvaged = false,
+    hull = "", expires = expires, salvaged = false, locked = false,
   }
   state.wrecks[wreck.id] = wreck
   table.insert(state.wreckIds, wreck.id)
@@ -238,8 +238,10 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
         x + Rng.Float(rng, -6000, 6000), y + Rng.Float(rng, -1500, 1500), z + Rng.Float(rng, -6000, 6000),
         Rng.Float(rng, 50, 140), expires)
       loot(state, rng, wreck, rich)
-      -- (a derelict has what an invention is worked out from: Assets/Industry)
+      -- (a derelict's hold is sealed: Tactical/Hacking. And it has what
+      -- an invention is worked out from: Assets/Industry)
       if kind == "relic" then
+        state.wrecks[wreck].locked = true
         Items.Add(state, "datacore", (1 + Rng.Int(rng, 2)) * rich, wreck, "cargo")
       end
       if kind == "combat" then

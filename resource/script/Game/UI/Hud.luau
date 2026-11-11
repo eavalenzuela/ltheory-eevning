@@ -21,6 +21,7 @@ local Keys = require("@lt/Game/UI/Keys")
 local Map = require("@lt/Game/UI/Map")
 local Menu = require("@lt/Game/UI/Menu")
 local Modules = require("@lt/Core/Data/Modules")
+local Hack = require("@lt/Game/UI/Hack")
 local Scanner = require("@lt/Game/UI/Scanner")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
@@ -339,6 +340,10 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     if targeted then { label = "Unlock", kind = "UnlockTarget" } else { label = "Lock", kind = "LockTarget" },
     { label = "Loot", kind = "Loot" },
   }
+  if entry.kind == "wreck" then
+    -- (a sealed hold is hacked open before it is looted)
+    table.insert(orders, { label = "Hack", kind = "StartHack" })
+  end
   local buttonWidth = (width - 24 - 16) / 3
   for index, order in orders do
     local column, line = (index - 1) % 3, (index - 1) // 3
@@ -686,6 +691,8 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Guide.Draw(session, left + 16, top + 130)
       if ball then
         Scanner.Draw(session, left + 16, top + 130)
+        -- (a hack under way has the middle of the screen)
+        Hack.Draw(session, left + (w.size.x - Hack.WIDTH) / 2, top + 150)
       end
       -- Where the pilot means to go, and the autopilot's switch: a row
       -- of its own over the buttons at the foot of the screen (beside

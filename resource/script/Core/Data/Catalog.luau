@@ -44,7 +44,7 @@ local MODULES: { { any } } = {
   { "capacitor.", "Capacitor", 8 }, { "miner.", "Mining", 9 }, { "salvager", "Mining", 9 },
   { "web.", "Electronic warfare", 10 },
   { "disruptor.", "Electronic warfare", 10 }, { "painter.", "Electronic warfare", 10 }, { "damper.", "Electronic warfare", 10 },
-  { "neutraliser.", "Electronic warfare", 10 }, { "jammer.", "Electronic warfare", 10 }, { "cloak.", "Electronic warfare", 10 },
+  { "neutraliser.", "Electronic warfare", 10 }, { "jammer.", "Electronic warfare", 10 }, { "cloak.", "Electronic warfare", 10 }, { "analyzer.", "Electronic warfare", 10 },
   { "remote.", "Remote repair", 11 }, { "rig.", "Rigs", 12 },
 }
 local MISSILES = { "Light missiles", "Heavy missiles", "Cruise missiles" }

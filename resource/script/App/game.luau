@@ -15,6 +15,7 @@ local Audio = require("@lt/Game/View/Audio")
 local Colony = require("@lt/Game/UI/Colony")
 local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Hacking = require("@lt/Core/Tactical/Hacking")
 local Planets = require("@lt/Core/Data/Planets")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Dogma = require("@lt/Core/Dogma")
@@ -602,8 +603,9 @@ end
 
 -- A cheat, for a wreck to work on without a fight: a pirate scout from
 -- nowhere, a kilometre off the pilot's ship, destroyed by nobody.
--- Returns false if the pilot is not in space.
-function Debug.Wreck(): boolean
+-- With 'sealed' its hold is sealed, as a derelict's is, and has to be
+-- hacked. Returns false if the pilot is not in space.
+function Debug.Wreck(sealed: boolean?): boolean
   local state = session.game.state
   local me = state.balls[state.player.ship]
   if me == nil then
@@ -611,7 +613,45 @@ function Debug.Wreck(): boolean
   end
   local scout = Pirates.Spawn(state, Pirates.SCOUT, me.system, me.x + 1000, me.y, me.z, me.grid)
   Aftermath.Destroy(state, scout.id, 0, session.game.events)
+  if sealed then
+    state.wrecks[state.wreckIds[#state.wreckIds]].locked = true
+  end
   return true
+end
+
+-- The hack under way: whether there is one, the coherence the pilot has
+-- left, and how many nodes of the board are cleared.
+function Debug.Hack(): (boolean, number, number)
+  local hack = Core.Query.Hack(session.game)
+  if hack == nil then
+    return false, 0, 0
+  end
+  local cleared = 0
+  for _, node in hack.nodes do
+    cleared += if node.cleared then 1 else 0
+  end
+  return true, hack.coherence, cleared
+end
+
+-- A cheat that plays the hack under way, a try each time it is asked:
+-- it presses the node that can be tried which is nearest the core (it
+-- looks where the core is, which a pilot cannot). True once no hack is
+-- under way. For "until GameDebug.HackOn()".
+function Debug.HackOn(): boolean
+  local hack = session.game.state.hack
+  if hack == nil then
+    return true
+  end
+  local best, least = 0, math.huge
+  for index in hack.nodes do
+    if Hacking.Open(hack, index) and Hacking.Steps(hack, index) < least then
+      best, least = index, Hacking.Steps(hack, index)
+    end
+  end
+  if best ~= 0 then
+    Im.Press(`Hack:{best}`)
+  end
+  return false
 end
 
 -- Switch every salvager on, on the nearest wreck. Returns how many started.

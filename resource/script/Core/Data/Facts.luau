@@ -274,6 +274,12 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     row(to, "Range", metres(salvager.range))
     row(to, "Capacitor a cycle", `{plain(salvager.capacitor)} GJ every {seconds(salvager.duration)}`)
   end
+  if module.analyzer then
+    local to = section(sheet, "Hacking")
+    row(to, "Opens", "a derelict's sealed hold, once the core of its lock is destroyed")
+    row(to, "Range", metres(module.analyzer.range))
+    row(to, "A level of Hacking", "10 more coherence, and 5 more strength")
+  end
   if module.cloak then
     local to = section(sheet, "Cloak")
     row(to, "While it runs", "the ship cannot be targeted, and can target nothing")

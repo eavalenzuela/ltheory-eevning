@@ -24,6 +24,7 @@ local Factions = require("@lt/Core/Data/Factions")
 local Fleet = require("@lt/Core/Tactical/Fleet")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Guide = require("@lt/Core/Character/Guide")
+local Hacking = require("@lt/Core/Tactical/Hacking")
 local Hangar = require("@lt/Core/Assets/Hangar")
 local Implanting = require("@lt/Core/Character/Implants")
 local Implants = require("@lt/Core/Data/Implants")
@@ -69,7 +70,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 34
+Core.SAVE_VERSION = 35
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -289,6 +290,15 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       end
     end
   end,
+  -- 35: a derelict's hold is sealed until it is hacked. The hulls of a
+  -- save from before are as open as they were.
+  [34] = function(state: any)
+    for _, wreck in state.wrecks do
+      if wreck.locked == nil then
+        wreck.locked = false
+      end
+    end
+  end,
   -- 34: there are scan probes. A save from before has none out. (Its
   -- derelicts half found stay as far found as they were.)
   [33] = function(state: any)
@@ -421,6 +431,7 @@ local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, Canc
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
 local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true }
 local SITE_COMMANDS = { Scan = true, LaunchProbe = true, RecallProbes = true }
+local HACK_COMMANDS = { StartHack = true, HackNode = true, AbandonHack = true }
 local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones = true }
 local IMPLANT_COMMANDS = { PlugImplant = true, UnplugImplant = true }
 local FLEET_COMMANDS = { HirePilot = true, AssignShip = true, DismissPilot = true, FleetOrder = true }
@@ -459,6 +470,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Fleet.Validate(state, command)
   elseif IMPLANT_COMMANDS[command.kind] then
     return Implanting.Validate(state, command)
+  elseif HACK_COMMANDS[command.kind] then
+    return Hacking.Validate(state, command)
   elseif TRAINING_COMMANDS[command.kind] then
     return Training.Validate(state, command)
   end
@@ -540,6 +553,8 @@ function Core.Step(game: Game)
       Fleet.Apply(state, command, game.events)
     elseif ok and IMPLANT_COMMANDS[command.kind] then
       Implanting.Apply(state, command, game.events)
+    elseif ok and HACK_COMMANDS[command.kind] then
+      Hacking.Apply(state, command, game.events)
     elseif ok and TRAINING_COMMANDS[command.kind] then
       Training.Apply(state, command, game.events)
     elseif ok then
@@ -549,6 +564,7 @@ function Core.Step(game: Game)
     end
   end
   Sites.Step(state, game.events)
+  Hacking.Step(state, game.events)
   Missions.Step(state, game.events)
   Standings.Step(state)
   Pirates.Populate(state, game.events)
@@ -708,7 +724,8 @@ function Query.Overview(game: Game): { Entry }
     local wreck = state.wrecks[id]
     if wreck.system == me.system and wreck.grid == me.grid and me.grid ~= 0 then
       local entry: Entry = { id = id, kind = "wreck", name = wreck.name,
-        distance = Space.Gap(me :: any, wreck :: any), onGrid = true, variety = "", hostile = false, own = false }
+        distance = Space.Gap(me :: any, wreck :: any), onGrid = true, variety = if wreck.locked then "sealed" else "",
+        hostile = false, own = false }
       table.insert(entries, entry)
     end
   end
@@ -968,6 +985,31 @@ function Query.KnownSites(game: Game, system: number): { string }
     end
   end
   return names
+end
+
+-- The hack under way, as the pilot sees it, or nil: each node of the
+-- board with what is known of it. One not found yet is "hidden"; a
+-- cleared one says how many steps off the core is; 'open' is whether
+-- it can be tried now.
+export type HackNode = { kind: string, hp: number, strength: number, cleared: boolean, open: boolean, steps: number }
+export type HackStatus = { wreck: number, name: string, width: number, height: number, coherence: number, most: number,
+  strength: number, start: number, nodes: { HackNode } }
+function Query.Hack(game: Game): HackStatus?
+  local hack = game.state.hack
+  if hack == nil then
+    return nil
+  end
+  local wreck = game.state.wrecks[hack.wreck]
+  local nodes: { HackNode } = {}
+  for index, node in hack.nodes do
+    table.insert(nodes, {
+      kind = if node.seen then node.kind else "hidden", hp = if node.seen then node.hp else 0,
+      strength = if node.seen then node.strength else 0, cleared = node.cleared, open = Hacking.Open(hack, index),
+      steps = if node.cleared then Hacking.Steps(hack, index) else 0,
+    })
+  end
+  return { wreck = hack.wreck, name = if wreck then wreck.name else "", width = hack.width, height = hack.height,
+    coherence = hack.coherence, most = hack.most, strength = hack.strength, start = hack.start, nodes = nodes }
 end
 
 -- The places the pilot has marked, in the order they were.

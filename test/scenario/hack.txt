@@ -1,0 +1,62 @@
+# Hacking, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/hack.txt
+#
+# A Data Analyzer goes into one of the starter Courier's mid slots (the
+# module and the skill for it are given). A wreck with a sealed hold is
+# given too (a derelict's hulls have them: finding one is the scanner's
+# work). It cannot be looted. The hack is begun from what is selected,
+# given up, begun again and played until the core is destroyed. Then
+# the hold is open, with everything in it.
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Give('analyzer.data', 1))
+lua GameDebug.Train('hacking', 5)
+frames 3
+until GameDebug.Press('Fit:analyzer.data')
+until GameDebug.Fitted('analyzer.data') == 1
+
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('Stop'))
+wait 3
+lua assert(GameDebug.Wreck(true), 'no wreck could be made')
+frames 5
+lua assert(GameDebug.Count('wreck') == 1, 'the wreck is not on the overview')
+lua assert(GameDebug.Select('wreck'))
+frames 3
+lua assert(not GameDebug.CanPress('Loot'), 'a sealed hold should not be looted')
+lua assert(not GameDebug.Hack(), 'no hack should be under way yet')
+lua assert(not GameDebug.CanPress('Hack:abandon'), 'with no hack there should be no board')
+
+# Begin: the board comes up, with the way in cleared and nothing else.
+until GameDebug.Press('Hack')
+until GameDebug.Hack()
+lua assert(select(2, GameDebug.Hack()) == 110, 'Hacking 5 should give 110 coherence')
+lua assert(select(3, GameDebug.Hack()) == 1, 'only the way in should be cleared at the start')
+frames 3
+lua assert(not GameDebug.CanPress('Hack'), 'a second hack should not be begun over the first')
+
+# Given up, the hold is as sealed as it was.
+until GameDebug.Press('Hack:abandon')
+until not GameDebug.Hack()
+frames 3
+lua assert(not GameDebug.CanPress('Loot'), 'a hack given up should leave the hold sealed')
+
+# Begun again and played: a try a tick, at the node nearest the core.
+until GameDebug.Press('Hack')
+until GameDebug.Hack()
+lua GameDebug.TimeScale(4)
+until GameDebug.HackOn()
+lua GameDebug.TimeScale(1)
+wait 2
+lua assert(select(3, GameDebug.Guide('hack')), 'the guide should have the hack ticked off')
+
+# The hold is open, and nothing in it was burnt.
+lua assert(GameDebug.Order('Loot', 'wreck'), 'loot was refused after the hack')
+until GameDebug.Hold('tag.pirate') == 1
+
+echo hack scenario passed
+quit

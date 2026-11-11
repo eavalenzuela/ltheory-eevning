@@ -66,7 +66,7 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     local wreck: State.Wreck = {
       id = State.NewId(state), kind = "wreck", name = ball.name .. " Wreck", system = ball.system, grid = ball.grid,
       x = ball.x, y = ball.y, z = ball.z, radius = ball.radius, hull = ship.type, expires = state.tick + WRECK_LIFETIME,
-      salvaged = false,
+      salvaged = false, locked = false,
     }
     state.wrecks[wreck.id] = wreck
     table.insert(state.wreckIds, wreck.id)
@@ -221,6 +221,8 @@ function Aftermath.Validate(state: State.State, command: State.Command): (boolea
       return false, "not a wreck"
     elseif wreck.system ~= ball.system or Space.Gap(ball :: any, wreck :: any) > LOOT_RANGE then
       return false, "too far away"
+    elseif wreck.locked then
+      return false, "its hold is sealed: it has to be hacked"
     end
     return true
   end

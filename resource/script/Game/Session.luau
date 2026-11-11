@@ -169,6 +169,14 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `Probe out: {event.out} of {4}. It lasts an hour`)
   elseif kind == "ProbesRecalled" and event.ball == mine then
     Session.Say(session, `{event.count} {if event.count == 1 then "probe is" else "probes are"} back in the hold`)
+  elseif kind == "HackStarted" then
+    Session.Say(session, "Hacking: find the core, and destroy it")
+  elseif kind == "HackDone" then
+    local reason = event.reason :: string
+    Session.Say(session, if event.success then "The core is destroyed: the hold is open to loot"
+      elseif reason == "coherence lost" then "Out of coherence: the hold is open, with half of what was in it burnt"
+      elseif reason == "out of reach" then "Too far off: the hack is dropped, and the hold still sealed"
+      else "The hack is given up: the hold is still sealed")
   elseif kind == "ProbeLost" then
     Session.Say(session, "A probe has run down, and is gone")
   elseif kind == "StandingChanged" and event.by < 0 then
