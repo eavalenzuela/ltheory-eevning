@@ -38,7 +38,10 @@
 -- the stocks of the system they are in, not from a fixed normal level.)
 
 local Economy = require("@lt/Core/Strategic/Economy")
+local Factions = require("@lt/Core/Data/Factions")
 local Items = require("@lt/Core/Assets/Items")
+local Modules = require("@lt/Core/Data/Modules")
+local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
@@ -118,20 +121,70 @@ function Market.Index(type: string): number?
   return indexOf[type]
 end
 
+-- Whose a station is shows in its market. A faction's stations have
+-- its own hulls and its own kinds of weapon, and what they fire, at
+-- the price anybody would ask. Another faction's are imports: dearer
+-- by this much, and of another faction's hulls a station keeps only a
+-- few (which is why they have to be dearer by so much: a market of
+-- four moves a long way for one hull). So a hull or a rack of guns
+-- bought where it is made sells for more where it is not, by more than
+-- the spread and the tax, and rounds by the hold do too.
+Market.FOREIGN_HULL = 1.4
+Market.FOREIGN_ARMS = 1.25
+Market.FOREIGN_STOCK = 4
+
+-- The kinds of weapon a faction's own ships carry: its turrets, and
+-- missiles if a fair share of its hardpoints are launchers.
+local function families(faction: string): { [string]: boolean }
+  local own = Factions.byId[faction]
+  if own == nil then
+    return {}
+  end
+  return { [own.weapon] = true, missile = own.launchers >= 0.3 }
+end
+
+-- What a faction's station makes of a type: how much dearer than
+-- anybody's it is there (1: no dearer), and whether it has only a few.
+function Market.Leaning(faction: string, id: string): (number, boolean)
+  if Factions.byId[faction] == nil then
+    return 1, false
+  end
+  local hull = Ships.byId[id]
+  if hull then
+    local builder = Factions.byId[hull.lineage]
+    if builder and builder.kind == "human" and builder.id ~= faction then
+      return Market.FOREIGN_HULL, true
+    end
+    return 1, false
+  end
+  local module, charge = Modules.byId[id], Modules.chargeById[id]
+  local family = if module and module.weapon then module.weapon.family elseif charge then charge.family else nil
+  if family and not families(faction)[family] then
+    return Market.FOREIGN_ARMS, false
+  end
+  return 1, false
+end
+
 -- A market as it is on the day it opens: every type there is, at its
--- normal stock, valued as a station of that kind values it.
-local function open(name: string, variety: string): Economy.Economy
+-- normal stock, valued as a station of that kind, and of that faction,
+-- values it.
+local function open(name: string, variety: string, faction: string): Economy.Economy
   local tastes = TASTES[variety] or {}
   local classes: { Economy.Class } = {}
   for _, id in Types.Ids() do
     local info = Types.Info(id)
-    table.insert(classes, { id = id, par = info.basePrice * (tastes[info.category] or 1), cover = 0, need = 0 })
+    table.insert(classes, { id = id, par = info.basePrice * (tastes[info.category] or 1) * (Market.Leaning(faction, id)), cover = 0,
+      need = 0 })
   end
   local econ = Economy.New(classes, {})
   local node = Economy.AddNode(econ, name, 0)
   for index, id in Types.Ids() do
     local info = Types.Info(id)
     local normal = normalStock(info)
+    local _, few = Market.Leaning(faction, id)
+    if few then
+      normal = math.min(normal, Market.FOREIGN_STOCK)
+    end
     if info.scarce then
       -- Nobody brings these: a station has what pilots have sold it,
       -- would like a few, and pays well while it has none.
@@ -171,7 +224,8 @@ function Market.Reconcile(state: State.State)
     end
     if not same then
       local object = Space.Object(state, station)
-      local fresh = open(old.nodes[1].name, if object then object.variety else "")
+      local fresh = open(old.nodes[1].name, if object then object.variety else "",
+        if object then state.galaxy.systems[Space.SystemOf(state, station)].nearest else "")
       local was: { [string]: number } = {}
       for index, class in old.classes do
         was[class.id] = index
@@ -203,7 +257,9 @@ function Market.For(state: State.State, station: number): Economy.Economy
     return existing
   end
   local object = assert(Space.Object(state, station), "no such station")
-  local econ = open(object.name, object.variety)
+  -- (it is the market of the faction whose tower the station is: the
+  -- one whose homeworld is nearest)
+  local econ = open(object.name, object.variety, state.galaxy.systems[Space.SystemOf(state, station)].nearest)
   state.markets[station] = econ
   local at = #state.marketIds + 1
   while at > 1 and state.marketIds[at - 1] > station do
