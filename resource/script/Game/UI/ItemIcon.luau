@@ -137,7 +137,7 @@ local PICTOGRAMS: { [string]: () -> { Glyph } } = {
 -- Which pictogram a type has, by the start of its id.
 local BY_PREFIX: { { string } } = {
   { "laser.", "laser" }, { "autocannon", "gun" }, { "artillery", "gun" }, { "blaster", "hybrid" }, { "railgun", "hybrid" },
-  { "launcher.", "launcher" }, { "shield.", "shield" }, { "armor.", "armor" }, { "afterburner", "engine" }, { "capacitor.", "battery" },
+  { "launcher.", "launcher" }, { "shield.", "shield" }, { "armor.", "armor" }, { "afterburner", "engine" }, { "mwd.", "engine" }, { "capacitor.", "battery" },
   { "miner.", "miner" }, { "missile.", "missile" }, { "crystal.", "crystal" }, { "charge.", "slug" }, { "ammo.", "rounds" },
 }
 local BY_CATEGORY: { [string]: string } = {

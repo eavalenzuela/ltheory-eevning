@@ -40,7 +40,7 @@ local CLASSES: { [string]: number } = { frigate = 1, destroyer = 2, cruiser = 3,
 local MODULES: { { any } } = {
   { "laser.", "Lasers", 1 }, { "autocannon", "Projectile guns", 2 }, { "artillery", "Projectile guns", 2 },
   { "blaster", "Hybrid guns", 3 }, { "railgun", "Hybrid guns", 3 }, { "launcher.", "Launchers", 4 },
-  { "shield.", "Shields", 5 }, { "armor.", "Armour", 6 }, { "afterburner", "Propulsion", 7 },
+  { "shield.", "Shields", 5 }, { "armor.", "Armour", 6 }, { "afterburner", "Propulsion", 7 }, { "mwd.", "Propulsion", 7 },
   { "capacitor.", "Capacitor", 8 }, { "miner.", "Mining", 9 }, { "web.", "Electronic warfare", 10 },
   { "disruptor.", "Electronic warfare", 10 },
 }

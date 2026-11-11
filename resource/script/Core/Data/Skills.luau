@@ -139,6 +139,7 @@ local NEEDS: { [string]: { Need } } = {
   ["ballistic.control"] = { { skill = "weapon.upgrades", level = 1 } },
   ["tracking.enhancer"] = { { skill = "weapon.upgrades", level = 1 } },
   ["afterburner.1mn"] = { { skill = "propulsion", level = 1 } },
+  ["mwd.5mn"] = { { skill = "propulsion", level = 3 } },
 }
 
 function Skills.Needs(type: string): { Need }

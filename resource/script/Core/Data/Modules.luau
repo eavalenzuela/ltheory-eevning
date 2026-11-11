@@ -239,6 +239,15 @@ local modules: { ModuleType } = {
     boost = { ship("maxVelocity", "mul", 2.1), ship("mass", "add", 500000) },
     boostDuration = 10, boostCapacitor = 11,
   },
+  -- Six times the speed for as long as the capacitor lasts, which is not
+  -- long, and a signature six times the size while it burns: easy to hit
+  -- from far off, hard to catch. (An afterburner is the other bargain.)
+  {
+    id = "mwd.5mn", name = "Small Microwarpdrive", slot = "mid", hardpoint = "",
+    cpu = 22, powergrid = 14, volume = 5, basePrice = 60000, passive = { ship("capacitor", "mul", 0.85) },
+    boost = { ship("maxVelocity", "mul", 6.0), ship("mass", "add", 500000), ship("signature", "mul", 6.0) },
+    boostDuration = 10, boostCapacitor = 42,
+  },
   {
     id = "overdrive", name = "Thrust Booster", slot = "low", hardpoint = "",
     cpu = 20, powergrid = 1, volume = 5, basePrice = 9000,
@@ -393,6 +402,7 @@ local FITTINGS: { { any } } = {
   { "armor.plate.200mm", "armor.plate", "hull.upgrades" },
   { "armor.repairer.small", "armor.repairer", "repair.systems" },
   { "afterburner.1mn", "afterburner", "propulsion" },
+  { "mwd.5mn", "mwd", "propulsion" },
   { "capacitor.battery.small", "capacitor.battery", "engineering" },
 }
 local FIT_AMOUNT = { 1, 3.2, 9 }

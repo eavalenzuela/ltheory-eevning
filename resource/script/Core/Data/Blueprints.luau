@@ -56,7 +56,7 @@ local function moduleParts(module: Modules.ModuleType): { { any } }
     return { { "component.emitter", 0.7 }, { "component.electronics", 0.3 } }
   elseif string.sub(id, 1, 6) == "armor." or id == "damage.control" then
     return { { "component.plating", 1 } }
-  elseif string.sub(id, 1, 11) == "afterburner" or id == "overdrive" or id == "nanofiber" then
+  elseif string.sub(id, 1, 11) == "afterburner" or string.sub(id, 1, 4) == "mwd." or id == "overdrive" or id == "nanofiber" then
     return { { "component.thruster", 1 } }
   elseif string.sub(id, 1, 10) == "capacitor." then
     return { { "component.capacitor", 1 } }
