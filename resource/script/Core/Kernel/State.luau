@@ -154,6 +154,7 @@ export type Wreck = {
   y: number,
   z: number,
   radius: number,
+  hull: string,       -- the Data/Ships id of the ship it was ("" in a save from before this was kept)
   expires: number,    -- the tick it disappears
 }
 

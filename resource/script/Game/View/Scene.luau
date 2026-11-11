@@ -61,6 +61,17 @@ type Point = {
 -- And all of a ship's. 'key' is the fit they were made for.
 type Armed = { key: string, points: { Point }, built: Hull.Built }
 
+-- A wreck as drawn: the pieces of the hull it was (Hull.Wreck), each
+-- turning slowly about its own middle as they drift apart.
+type Wrecked = {
+  pieces: { { object: Object, middle: vector, away: vector, axis: vector, spin: number } },
+  right: vector,            -- the way the ship lay when it died
+  up: vector,
+  look: vector,
+  scale: number,            -- metres to one of the hull's own units
+  seen: number,             -- when (scene time) it was first drawn
+}
+
 export type Scene = {
   camera: Camera,
   system: number,                     -- the system shown; 0 before the first frame
@@ -87,6 +98,7 @@ export type Scene = {
   time: number,                       -- seconds the scene has been running, for effects
   fx: Effects.Fx?,                    -- weapon fire and the like, in this system's container
   mining: { [number]: number },       -- when each mining module's beam was last begun, by its item
+  wreckage: { [number]: Wrecked },    -- the pieces of each wreck on the grid
   arms: { [number]: Armed },          -- what is on the hardpoints of each ship of our own design
   armsTick: number,                   -- the tick the arms were last checked against the fits
   armsTime: number,                   -- when (scene time) the turrets were last swung
@@ -131,7 +143,7 @@ function Scene.New(camera: Camera): Scene
     proxies = {}, celestials = {}, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
-    arms = {}, armsTick = -1, armsTime = 0,
+    wreckage = {}, arms = {}, armsTick = -1, armsTime = 0,
   }
 end
 
@@ -203,6 +215,73 @@ local function dropArms(scene: Scene, id: number)
       end
     end
     scene.arms[id] = nil
+  end
+end
+
+-- Take a wreck's pieces away.
+local function dropWreck(scene: Scene, id: number)
+  local wrecked = scene.wreckage[id]
+  if wrecked then
+    for _, piece in wrecked.pieces do
+      Object_Delete(piece.object)
+    end
+    scene.wreckage[id] = nil
+  end
+end
+
+-- A number from 0 to 1 that follows from 'n'.
+local function dice(n: number): number
+  return (math.sin(n * 12.9898) * 43758.5453) % 1
+end
+
+-- 'v' turned by 'angle' about the axis 'k' (of length 1).
+local function about(v: vector, k: vector, angle: number): vector
+  local c, s = math.cos(angle), math.sin(angle)
+  return v * c + vector.cross(k, v) * s + k * (vector.dot(k, v) * (1 - c))
+end
+
+-- Make the pieces of a wreck, lying as the ship lay ('look' and 'up').
+local function makeWreck(scene: Scene, id: number, wreck: State.Wreck, look: vector, up: vector, container: Object)
+  local wreckage = Hull.Wreck(wreck.hull)
+  local scale = wreck.radius / wreckage.radius
+  local wrecked: Wrecked = { pieces = {}, right = vector.cross(up, look), up = up, look = look, scale = scale, seen = scene.time }
+  for index, piece in wreckage.pieces do
+    local object = Object_Scenery({})
+    Object_SetRenderable(object, piece.model)
+    object:SetScale(vector.create(scale, scale, scale))
+    container:AddInterior(object)
+    local n = id * 7 + index * 31
+    -- (each goes off the way it was already out from the middle, more
+    -- or less, and turns about an axis of its own)
+    local out = piece.middle + vector.create(dice(n) - 0.5, dice(n + 1) - 0.5, dice(n + 2) - 0.5) * 0.6
+    local axis = vector.create(dice(n + 3) - 0.5, dice(n + 4) - 0.5, dice(n + 5) - 0.5)
+    table.insert(wrecked.pieces, {
+      object = object, middle = piece.middle,
+      away = if vector.magnitude(out) > 1e-3 then vector.normalize(out) else vector.create(0, 1, 0),
+      axis = if vector.magnitude(axis) > 1e-3 then vector.normalize(axis) else vector.create(0, 1, 0),
+      spin = (0.02 + 0.05 * dice(n + 6)) * (if dice(n + 7) < 0.5 then -1 else 1),
+    })
+  end
+  scene.wreckage[id] = wrecked
+end
+
+-- Put a wreck's pieces where they have got to: 'at' is the wreck, and
+-- 'radius' the radius of the ship it was.
+local function placeWreck(scene: Scene, wrecked: Wrecked, at: vector, radius: number)
+  local since = scene.time - wrecked.seen
+  -- (they part quickly at first and all but stop within a minute)
+  local spread = radius * (0.05 + 0.30 * (1 - math.exp(-since / 20)))
+  for _, piece in wrecked.pieces do
+    local m = piece.middle
+    local middle = at + (wrecked.right * m.x + wrecked.up * m.y + wrecked.look * m.z) * wrecked.scale
+      + (wrecked.right * piece.away.x + wrecked.up * piece.away.y + wrecked.look * piece.away.z) * spread
+    local angle = piece.spin * since
+    local look = about(wrecked.look, piece.axis, angle)
+    local up = about(wrecked.up, piece.axis, angle)
+    local right = vector.cross(up, look)
+    -- (the object is placed by its own origin: its middle is that far from it, turned as it now is)
+    piece.object:SetPos(middle - (right * m.x + up * m.y + look * m.z) * wrecked.scale)
+    Object_SetAxes(piece.object, look, up)
   end
 end
 
@@ -372,6 +451,9 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
   for id in scene.arms do
     dropArms(scene, id)
   end
+  for id in scene.wreckage do
+    dropWreck(scene, id)
+  end
   clear(scene, scene.proxies)
   clear(scene, scene.celestials)
   if scene.container then
@@ -505,6 +587,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     for id, object in scene.proxies do
       if state.balls[id] == nil then
         dropArms(scene, id)
+        dropWreck(scene, id)
         Object_Delete(object)
         scene.proxies[id] = nil
       end
@@ -564,21 +647,32 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       scene.proxies[id] = nil
     end
   end
-  -- Wrecks on the grid: a lump of rubble, until wrecks have a look of
-  -- their own.
+  -- Wrecks on the grid: the hull each was, in pieces (Hull.Wreck). The
+  -- wreck's own object is a bare point for the rest to refer to.
   if grid ~= 0 then
     for _, id in state.wreckIds do
       local wreck = state.wrecks[id]
       if wreck.system == player.system and wreck.grid == grid then
         local at = vector.create(wreck.x - scene.ox, wreck.y - scene.oy, wreck.z - scene.oz)
         if not scene.proxies[id] then
-          local rubble = Object_Asteroid(id % 100000)
-          local size = wreck.radius * 0.6
-          rubble:SetScale(vector.create(size, size, size))
-          container:AddInterior(rubble)
-          rubble:SetPos(at)
-          scene.proxies[id] = rubble
+          local anchor = Object_Scenery({})
+          container:AddInterior(anchor)
+          anchor:SetPos(at)
+          scene.proxies[id] = anchor
+          -- It lies as the ship lay, if the ship is still here to ask
+          -- (it is, on the frame it dies); else any way up.
+          local look = vector.normalize(vector.create(dice(id) - 0.5, (dice(id + 1) - 0.5) * 0.4, dice(id + 2) - 0.5))
+          local up = vector.create(0, 1, 0)
+          for other, proxy in scene.proxies do
+            if other >= Constants.FIRST_DYNAMIC_ID and state.balls[other] == nil and state.wrecks[other] == nil
+              and vector.magnitude(proxy:GetPos() - at) < wreck.radius then
+              look, up = proxy:GetLook(), proxy:GetUp()
+            end
+          end
+          up = vector.normalize(up - look * vector.dot(up, look))
+          makeWreck(scene, id, wreck, look, up, container)
         end
+        placeWreck(scene, scene.wreckage[id], at, wreck.radius)
         scene.screen[id] = at
       end
     end
@@ -586,6 +680,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
   for id, proxy in scene.proxies do
     if id >= Constants.FIRST_DYNAMIC_ID and state.balls[id] == nil and state.wrecks[id] == nil then
       dropArms(scene, id)
+      dropWreck(scene, id)
       Object_Delete(proxy)
       scene.proxies[id] = nil
     end

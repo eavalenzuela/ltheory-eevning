@@ -704,6 +704,8 @@ export type Built = {
   fit: { string },
   engines: { Exhaust }, -- where its engines' fire leaves it
   glow: { number },     -- and the colour of that fire
+  lower: vector,        -- the corners of the box it fills
+  upper: vector,
 }
 
 local built: { [string]: Built } = {}
@@ -751,8 +753,103 @@ function Hull.Build(type: string): Built?
     end
   end
   local result: Built = { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = design.turrets,
-    launchers = design.launchers, fit = design.fit, engines = table.clone(exhausts), glow = Hull.looks[design.faction].glow }
+    launchers = design.launchers, fit = design.fit, engines = table.clone(exhausts), glow = Hull.looks[design.faction].glow,
+    lower = lower, upper = upper }
   built[type] = result
+  return result
+end
+
+-- ---------------------------------------------------------------------
+-- Wrecks
+
+-- What is left of a ship nobody has designed: a length of spine with
+-- some of its plating still on, a dead engine out on its strut, a tank.
+local function debris(b: Builder)
+  truss(b, v(0.02, 0.00, -0.88), v(-0.03, 0.04, 0.84), 0.26, 6)
+  truss(b, v(0.02, 0.00, -0.88), v(-0.03, 0.04, 0.84), 0.24, 6, v(1, 0, 0))
+  block(b, PLATING, v(0.02, 0.03, 0.30), v(0.26, 0.22, 0.34))
+  block(b, PLATING, v(-0.03, -0.02, -0.42), v(0.22, 0.24, 0.24))
+  block(b, PLATING, v(0.05, -0.05, 0.80), v(0.17, 0.15, 0.15))
+  block(b, PATCH, v(0.29, 0.02, 0.22), v(0.020, 0.17, 0.26), v(0, 0, 0.12))
+  block(b, PLATING, v(-0.27, 0.05, -0.32), v(0.020, 0.15, 0.20), v(0, 0, -0.10))
+  block(b, PATCH, v(0.00, 0.27, 0.12), v(0.20, 0.020, 0.30), v(0, 0.06, 0))
+  block(b, PLATING, v(-0.02, -0.27, -0.30), v(0.18, 0.020, 0.26))
+  block(b, PATCH, v(0.10, 0.17, 0.74), v(0.09, 0.07, 0.13), nil, 0.14)
+  nacelle(b, v(0.52, 0.08, -0.50), 0.30, 0.11)
+  truss(b, v(0.22, 0.03, -0.44), v(0.42, 0.07, -0.46), 0.10, 2, v(0, 0, 1))
+  tank(b, v(-0.34, -0.12, 0.06), 0.08, 0.20)
+  conduit(b, { v(0.08, 0.29, 0.50), v(0.08, 0.29, -0.20), v(0.02, 0.26, -0.62) }, 0.013)
+  mast(b, v(-0.06, 0.26, -0.36), 0.40, 0.03)
+end
+
+-- Paint after a fire: everything toward soot, the lights out, more rust.
+local function charred(look: Look): Look
+  local function soot(c: { number }, keep: number): { number }
+    return { c[1] * keep + 0.015, c[2] * keep * 0.94 + 0.015, c[3] * keep * 0.88 + 0.015 }
+  end
+  return {
+    plating = soot(look.plating, 0.30), patch = soot(look.patch, 0.26), frame = soot(look.frame, 0.60), glow = { 0, 0, 0 },
+    trim = soot(look.trim, 0.36), wear = 0.45, rust = 1.0, sheets = look.sheets,
+  }
+end
+
+-- The paint of a hull nobody has designed.
+local PLAIN: Look = {
+  plating = { 0.40, 0.38, 0.36 }, patch = { 0.48, 0.46, 0.43 }, frame = { 0.17, 0.17, 0.17 }, glow = { 0, 0, 0 },
+  trim = { 0.34, 0.20, 0.12 }, wear = 0.75, rust = 0.5, sheets = 3.2,
+}
+
+-- A ship in pieces: the model of each, the middle of each in the
+-- ship's own units (a piece turns about its middle as the wreck drifts
+-- apart), and the radius the whole ship had in those units.
+export type Wreckage = { pieces: { { model: Model, middle: vector } }, radius: number }
+
+local wrecks: { [string]: Wreckage } = {}
+
+-- The wreck of a hull type: the hull itself, as designed, broken across
+-- in two or three (three for a big one), with plates gone, the rest
+-- knocked about and burnt, and nothing lit. A hull without a design
+-- (and "", for a wreck that does not say what it was) leaves plain
+-- wreckage. Made once for each type and kept.
+function Hull.Wreck(type: string): Wreckage
+  local made = wrecks[type]
+  if made then
+    return made
+  end
+  local design = designs[type]
+  local whole = Hull.Build(type)
+  local draw: (b: Builder) -> () = if design then design.draw else debris
+  local look = charred(if design then Hull.looks[design.faction] else PLAIN)
+  local lower, upper = if whole then whole.lower.z else -1.0, if whole then whole.upper.z else 1.0
+  local hull = Ships.byId[type]
+  local breaks: { number } = if hull and hull.radius >= 100 then { 0.36, 0.69 } else { 0.47 }
+  local edges: { number } = { -math.huge }
+  for _, at in breaks do
+    table.insert(edges, lower + (upper - lower) * at)
+  end
+  table.insert(edges, math.huge)
+
+  local pieces: { { model: Model, middle: vector } } = {}
+  local low: vector? = nil
+  local high: vector? = nil
+  for index = 1, #edges - 1 do
+    -- (the seed the whole hull was built with: the same plates, in the same tones)
+    local b = Plates.New(#type * 1.37)
+    b.ruin = { from = edges[index], to = edges[index + 1], loss = 0.42 }
+    draw(b)
+    if b.kept >= 4 then
+      local model, a, c = Plates.Finish(b, look, if design then design.sheets else nil)
+      table.insert(pieces, { model = model, middle = (a + c) / 2 })
+      low = if low then vector.min(low, a) else a
+      high = if high then vector.max(high, c) else c
+    end
+  end
+  table.clear(exhausts)
+  local radius = if whole then whole.radius
+    elseif low and high then math.max(high.x - low.x, high.y - low.y, high.z - low.z) / 2
+    else 1
+  local result: Wreckage = { pieces = pieces, radius = radius }
+  wrecks[type] = result
   return result
 end
 

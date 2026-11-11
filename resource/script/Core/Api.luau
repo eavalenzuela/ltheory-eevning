@@ -49,7 +49,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 10
+Core.SAVE_VERSION = 11
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -90,6 +90,13 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       end
     end
     walk(state)
+  end,
+  -- 11: a wreck remembers what hull it was, for the view to draw it as
+  -- that hull broken. One from before is drawn as plain wreckage.
+  [10] = function(state: any)
+    for _, wreck in state.wrecks do
+      wreck.hull = wreck.hull or ""
+    end
   end,
 }
 

@@ -163,6 +163,19 @@ for _, type in Hull.Types() do
   end
 end
 
+-- Wrecks: each designed hull's, and the plain wreckage of a ship nobody
+-- has designed ("wreck-plain"), as they lie half a minute after.
+local WRECKS = Hull.Types()
+table.insert(WRECKS, "")
+for _, type in WRECKS do
+  local short = if type == "" then "plain" else string.match(type, "%.(%a+)$") or type
+  for _, view in { HULL_VIEWS[1], HULL_VIEWS[2] } do
+    local eye: vector = view[2]
+    table.insert(VIEWS, { name = `wreck-{short}-{view[1]}`, kind = `wreck-{type}`, seed = 1, eye = eye * 1.25, look = view[3],
+      light = eye + vector.create(0.5, 0.9, 0.2) * (0.6 * vector.magnitude(eye)) })
+  end
+end
+
 -- What goes on hardpoints: every weapon's model, small, in rows (the
 -- eye and what it looks at are in the units the models are drawn in:
 -- see Game/View/Arms), from the front and the back.
@@ -407,6 +420,29 @@ return AppShell.Create(function(): Widget
           -- (all at the size of a small weapon, to compare them)
           mountArm(type, vector.create((column - 2) * 11, 0, (0.5 - row) * 14) * radius, vector.create(0, 1, 0),
             vector.create(0, 0, 1), aim, radius / Arms.SIZE[1], true)
+        end
+      elseif string.sub(v.kind, 1, 6) == "wreck-" then
+        -- the pieces of a wreck, parted and turned as they are after a while
+        table.insert(stage, Object_Scenery({}))
+        table.insert(units, 1)
+        local started = os.clock()
+        local wreckage = Hull.Wreck(string.sub(v.kind, 7))
+        print(`viewer: the wreck of '{string.sub(v.kind, 7)}' took {math.floor((os.clock() - started) * 1000)} ms to make`)
+        local scale = radius / wreckage.radius
+        for index, piece in wreckage.pieces do
+          local object = Object_Scenery({})
+          Object_SetRenderable(object, piece.model)
+          object:SetScale(vector.create(scale, scale, scale))
+          system:AddInterior(object)
+          table.insert(extras, object)
+          local away = vector.normalize(piece.middle + vector.create(0.2 * index - 0.4, 0.15 * index - 0.3, 0.01))
+          local tilt = 0.9 * (index - (#wreckage.pieces + 1) / 2) + 0.2
+          local look = vector.normalize(vector.create(math.sin(tilt), 0.4 * math.sin(tilt * 1.7), math.cos(tilt)))
+          local up = vector.normalize(vector.create(0.3 * math.sin(tilt * 2.1), 1, 0) - look * (0.3 * math.sin(tilt * 2.1) * look.x + look.y))
+          local right = vector.cross(up, look)
+          local m = piece.middle
+          object:SetPos((m + away * 0.30 * wreckage.radius) * scale - (right * m.x + up * m.y + look * m.z) * scale)
+          Object_SetAxes(object, look, up)
         end
       elseif v.kind == "arms-sizes" then
         table.insert(stage, Object_Scenery({}))

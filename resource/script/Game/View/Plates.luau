@@ -28,6 +28,13 @@ export type Look = {
   sheets: number,       -- sheets of plating to a unit of the model
 }
 
+-- To build a thing as the wreck of itself, a piece at a time: only the
+-- plates whose middles lie from 'from' to 'to' along z are kept (the
+-- line between two pieces is ragged, and each plate falls on one side
+-- of it), 'loss' of those are missing, small ones first and most near
+-- where it broke, the rest are knocked askew, and nothing is lit.
+export type Ruin = { from: number, to: number, loss: number }
+
 export type Builder = {
   big: PlateMesh,       -- plates with room for a fine bevel
   small: PlateMesh,     -- beams, pipes, fittings
@@ -36,12 +43,14 @@ export type Builder = {
   -- Plates smaller than this (the longest half-size) go in the coarse
   -- mesh: 0.11 suits a hull drawn about two units long.
   fine: number,
+  ruin: Ruin?,
+  kept: number,         -- how many plates have gone in
 }
 
 local ZERO = vector.create(0, 0, 0)
 
 function Plates.New(seed: number, fine: number?): Builder
-  return { big = PlateMesh_Create(9), small = PlateMesh_Create(4), count = 0, seed = seed, fine = fine or 0.11 }
+  return { big = PlateMesh_Create(9), small = PlateMesh_Create(4), count = 0, seed = seed, fine = fine or 0.11, ruin = nil, kept = 0 }
 end
 
 -- The next plate's own number: the fraction of its tag.
@@ -50,11 +59,43 @@ local function own(b: Builder): number
   return ((math.sin(b.count * 12.9898 + b.seed) * 43758.5453) % 1) * 0.97
 end
 
+-- A number from 0 to 1 that follows from the plate's count and 'salt'.
+local function dice(b: Builder, salt: number): number
+  return (math.sin(b.count * 78.233 + salt * 37.719 + b.seed) * 43758.5453) % 1
+end
+
+-- Put a plate in; or, building a ruin, perhaps not, or not straight.
+local function add(b: Builder, mesh: PlateMesh, part: number, center: vector, half: vector, turn: vector, bevel: number)
+  local tag = part + own(b)
+  local ruin = b.ruin
+  if ruin then
+    if math.floor(part) == Plates.GLOW then
+      return
+    end
+    local size = math.max(half.x, half.y, half.z)
+    -- (which side of a break it falls: by its middle, give or take)
+    local z = center.z + (dice(b, 1) - 0.5) * 0.3
+    if z < ruin.from or z >= ruin.to then
+      return
+    end
+    local near = 1 - math.clamp(math.min(z - ruin.from, ruin.to - z) / 0.3, 0, 1)
+    local loss = ruin.loss * (if size < b.fine then 1.5 else 1) * (1 + 1.2 * near)
+    if dice(b, 2) < loss then
+      return
+    end
+    local knock = ruin.loss * (0.35 + 0.9 * near)
+    turn += vector.create(dice(b, 3) - 0.5, dice(b, 4) - 0.5, dice(b, 5) - 0.5) * knock
+    center += vector.create(dice(b, 6) - 0.5, dice(b, 7) - 0.5, dice(b, 8) - 0.5) * (math.min(size, 0.2) * knock)
+  end
+  b.kept += 1
+  PlateMesh_AddTagged(mesh, center, half, turn, bevel, tag)
+end
+
 -- A box: where its middle is, half its size each way, and optionally
 -- how it is turned (yaw, pitch, roll) and how far its edges are eased.
 function Plates.Block(b: Builder, part: number, center: vector, half: vector, turn: vector?, bevel: number?)
   local mesh = if math.max(half.x, half.y, half.z) > b.fine and math.min(half.x, half.y, half.z) > b.fine * 0.11 then b.big else b.small
-  PlateMesh_AddTagged(mesh, center, half, turn or ZERO, bevel or 0.10, part + own(b))
+  add(b, mesh, part, center, half, turn or ZERO, bevel or 0.10)
 end
 
 -- A bar from one point to another, 'thick' to a side.
@@ -66,7 +107,7 @@ function Plates.Beam(b: Builder, part: number, from: vector, to: vector, thick: 
   end
   d /= length
   local turn = vector.create(math.atan2(d.x, d.z), -math.asin(math.clamp(d.y, -1, 1)), 0)
-  PlateMesh_AddTagged(b.small, (from + to) / 2, vector.create(thick, thick, length / 2), turn, bevel or 0.15, part + own(b))
+  add(b, b.small, part, (from + to) / 2, vector.create(thick, thick, length / 2), turn, bevel or 0.15)
 end
 
 -- A girder of open lattice between two points: two rails 'width' apart
