@@ -53,5 +53,13 @@ frames 3
 lua assert(GameDebug.Order('Stop'))
 lua assert(not GameDebug.Autopilot(), 'an order by hand should switch the autopilot off')
 
+# This is another faction's homeworld: its stations are its own towers.
+lua GameDebug.TimeScale(16)
+lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused')
+until GameDebug.Docked()
+lua GameDebug.TimeScale(1)
+frames 10
+lua assert(select(2, GameDebug.Galaxy()) == 'Talmar', 'the far homeworld in this galaxy should be the Talmar\'s')
+
 echo galaxy scenario passed
 quit

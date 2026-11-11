@@ -536,11 +536,147 @@ local MODULES: { [string]: (b: Builder) -> () } = {
 -- ---------------------------------------------------------------------
 
 -- A model and half the longest way across it, in its own units.
+-- ---------------------------------------------------------------------
+-- The Talmar towers
+--
+-- Grown, as their hulls are (Game/View/Hull): a stem that swells into a
+-- head, with lesser bodies budded round it, every surface a skin and
+-- not a plate. A tower is round about its axis, where a hull is the
+-- same on both sides: what buds from it buds three or six ways.
+--
+-- A skin is lofted along z, so these are drawn lying down, the top of
+-- the tower toward +z, and stood up when they are put in a scene
+-- (LYING, Starbase.TowerPart).
+
+-- A skin's outline moved along its length and made bigger or smaller.
+local function moved(outline: Plates.Outline, along: number, size: number): Plates.Outline
+  local out: Plates.Outline = {}
+  for index, station in outline do
+    out[index] = { station[1] * size + along, station[2] * size, station[3] * size }
+  end
+  return out
+end
+
+-- A bud: a small body of its own, an egg and not a leaf (round at both
+-- ends, fattest a little above its middle).
+local BUD: Plates.Outline = { { -0.19, 0.012, 0.012 }, { -0.165, 0.046, 0.046 }, { -0.10, 0.080, 0.080 }, { 0.01, 0.098, 0.098 },
+  { 0.11, 0.084, 0.084 }, { 0.165, 0.052, 0.052 }, { 0.19, 0.014, 0.014 } }
+-- A spire: a slender body that comes to a point.
+local SPIRE: Plates.Outline = { { 0, 0.020, 0.020 }, { 0.10, 0.016, 0.016 }, { 0.34, 0.010, 0.010 }, { 0.50, 0.003, 0.003 } }
+
+-- 'count' of something round the axis, evenly, the first at 'turn':
+-- 'each' is given where round it is, and the way out from the axis there.
+local function round(count: number, turn: number, each: (around: number, out: vector) -> ())
+  for index = 1, count do
+    local around = turn + (index - 1) * 2 * math.pi / count
+    each(around, v(math.cos(around), math.sin(around), 0))
+  end
+end
+
+-- Buds on a skin, 'count' round it at 'z', each 'size' big and standing
+-- 'off' of its own thickness out of the skin.
+local function buds(b: Builder, outline: Plates.Outline, z: number, count: number, turn: number, size: number, off: number)
+  round(count, turn, function(around: number, out: vector)
+    local skin = Plates.Point(outline, z, around)
+    local at = skin + out * (0.085 * size * off)
+    Plates.Loft(b, PATCH, moved(BUD, z, size), at.x, at.y)
+  end)
+end
+
+-- A ring of lit windows round a skin at 'z'.
+local function lights(b: Builder, outline: Plates.Outline, z: number, count: number, size: number)
+  round(count, 0.3, function(around: number, out: vector)
+    local at = Plates.Point(outline, z, around)
+    block(b, GLOW, at + out * (size * 0.2), v(size, size, size * 1.6), nil, 0.7)
+  end)
+end
+
+-- Swellings lying along a skin, 'count' round it.
+local function ribs(b: Builder, outline: Plates.Outline, z: number, count: number, turn: number, length: number)
+  round(count, turn, function(around: number)
+    Plates.Fairing(b, PLATING, outline, z, around, length, length * 0.14, length * 0.07)
+  end)
+end
+
+local TALMAR_SMALL: Plates.Outline = {
+  { -1.00, 0.012, 0.012 }, { -0.72, 0.050, 0.050 }, { -0.42, 0.105, 0.105 }, { -0.16, 0.070, 0.070 }, { 0.10, 0.19, 0.19 },
+  { 0.38, 0.27, 0.27 }, { 0.62, 0.21, 0.21 }, { 0.82, 0.09, 0.09 }, { 1.00, 0.015, 0.015 },
+}
+-- Small: a stem and one head, three buds under the head and a spire on it.
+local function talmarSmall(b: Builder)
+  Plates.Loft(b, PLATING, TALMAR_SMALL)
+  buds(b, TALMAR_SMALL, 0.12, 3, 0.5, 1.0, 0.55)
+  buds(b, TALMAR_SMALL, -0.44, 3, 1.55, 0.6, 0.5)
+  ribs(b, TALMAR_SMALL, 0.40, 6, 0.0, 0.42)
+  lights(b, TALMAR_SMALL, 0.50, 9, 0.012)
+  lights(b, TALMAR_SMALL, -0.40, 5, 0.009)
+  Plates.Loft(b, TRIM, moved(SPIRE, 0.96, 0.7))
+end
+
+local TALMAR_MEDIUM: Plates.Outline = {
+  { -1.20, 0.012, 0.012 }, { -0.92, 0.055, 0.055 }, { -0.66, 0.15, 0.15 }, { -0.44, 0.19, 0.19 }, { -0.22, 0.10, 0.10 },
+  { 0.02, 0.17, 0.17 }, { 0.34, 0.31, 0.31 }, { 0.62, 0.27, 0.27 }, { 0.86, 0.13, 0.13 }, { 1.06, 0.05, 0.05 }, { 1.24, 0.012, 0.012 },
+}
+-- Medium: a lesser body below the head, buds in two rings, three spires.
+local function talmarMedium(b: Builder)
+  Plates.Loft(b, PLATING, TALMAR_MEDIUM)
+  buds(b, TALMAR_MEDIUM, 0.16, 3, 0.5, 1.35, 0.6)
+  buds(b, TALMAR_MEDIUM, 0.66, 3, 1.55, 0.8, 0.5)
+  buds(b, TALMAR_MEDIUM, -0.50, 6, 0.0, 0.75, 0.5)
+  ribs(b, TALMAR_MEDIUM, 0.40, 6, 0.26, 0.50)
+  ribs(b, TALMAR_MEDIUM, -0.52, 3, 0.5, 0.30)
+  lights(b, TALMAR_MEDIUM, 0.46, 12, 0.012)
+  lights(b, TALMAR_MEDIUM, 0.74, 8, 0.010)
+  lights(b, TALMAR_MEDIUM, -0.40, 8, 0.010)
+  Plates.Loft(b, TRIM, moved(SPIRE, 1.18, 0.8))
+  round(3, 0.5, function(_, out: vector)
+    Plates.Loft(b, PATCH, moved(SPIRE, 0.86, 0.55), out.x * 0.10, out.y * 0.10)
+  end)
+end
+
+local TALMAR_LARGE: Plates.Outline = {
+  { -1.50, 0.012, 0.012 }, { -1.22, 0.06, 0.06 }, { -0.98, 0.14, 0.14 }, { -0.80, 0.17, 0.17 }, { -0.62, 0.10, 0.10 },
+  { -0.42, 0.20, 0.20 }, { -0.20, 0.25, 0.25 }, { -0.02, 0.14, 0.14 }, { 0.20, 0.24, 0.24 }, { 0.52, 0.38, 0.38 },
+  { 0.82, 0.33, 0.33 }, { 1.06, 0.17, 0.17 }, { 1.28, 0.06, 0.06 }, { 1.50, 0.012, 0.012 },
+}
+-- Large: three bodies one over another, the head the greatest, a crown
+-- of spires, and bodies of their own budded off the head on stalks.
+local TALMAR_HOUSE: Plates.Outline = { { -0.30, 0.02, 0.02 }, { -0.14, 0.09, 0.09 }, { 0.04, 0.12, 0.12 }, { 0.20, 0.08, 0.08 },
+  { 0.34, 0.015, 0.015 } }
+local function talmarLarge(b: Builder)
+  Plates.Loft(b, PLATING, TALMAR_LARGE)
+  buds(b, TALMAR_LARGE, 0.30, 6, 0.0, 1.3, 0.6)
+  buds(b, TALMAR_LARGE, 0.90, 3, 0.5, 1.0, 0.5)
+  buds(b, TALMAR_LARGE, -0.30, 6, 0.26, 0.9, 0.5)
+  buds(b, TALMAR_LARGE, -0.86, 3, 1.55, 0.7, 0.5)
+  ribs(b, TALMAR_LARGE, 0.60, 6, 0.26, 0.60)
+  ribs(b, TALMAR_LARGE, -0.22, 6, 0.0, 0.30)
+  lights(b, TALMAR_LARGE, 0.56, 16, 0.013)
+  lights(b, TALMAR_LARGE, 0.84, 12, 0.012)
+  lights(b, TALMAR_LARGE, -0.16, 10, 0.011)
+  lights(b, TALMAR_LARGE, -0.84, 6, 0.010)
+  -- three houses out on stalks, level with the head
+  round(3, 1.55, function(around: number, out: vector)
+    local root = Plates.Point(TALMAR_LARGE, 0.56, around)
+    local at = out * 0.66
+    beam(b, PLATING, root - out * 0.03 + v(0, 0, 0.56) - v(0, 0, root.z), at + v(0, 0, 0.60), 0.028, 0.9)
+    Plates.Loft(b, PATCH, moved(TALMAR_HOUSE, 0.60, 1.0), at.x, at.y)
+    block(b, GLOW, at + out * 0.115 + v(0, 0, 0.64), v(0.012, 0.012, 0.03), nil, 0.7)
+  end)
+  Plates.Loft(b, TRIM, moved(SPIRE, 1.42, 1.0))
+  round(6, 0.0, function(_, out: vector)
+    Plates.Loft(b, PATCH, moved(SPIRE, 1.04, 0.6), out.x * 0.15, out.y * 0.15)
+  end)
+end
+
 export type Made = { model: Model, radius: number }
 
 local TOWERS: { [string]: { (b: Builder) -> () } } = {
   vessari = { vessariSmall, vessariMedium, vessariLarge },
+  talmar = { talmarSmall, talmarMedium, talmarLarge },
 }
+-- The factions whose towers are drawn lying along z and stood up.
+local LYING: { [string]: boolean } = { talmar = true }
 
 local made: { [string]: Made } = {}
 
@@ -564,6 +700,20 @@ function Starbase.Tower(faction: string, size: number): Made
   local designs = TOWERS[faction] or TOWERS.vessari
   local owner = if TOWERS[faction] then faction else "vessari"
   return finish(`tower.{owner}.{size}`, designs[size], Hull.looks[owner], 4.5 + 2.5 * size, 0.11)
+end
+
+-- A faction's tower of a size as a thing to put in a scene (Raise): its
+-- middle at 'at' and 'towerRadius' metres in radius, upright whichever
+-- way its drawing lies.
+function Starbase.TowerPart(faction: string, size: number, at: vector, towerRadius: number): Part
+  local made = Starbase.Tower(faction, size)
+  local lying = LYING[faction] == true and TOWERS[faction] ~= nil
+  return {
+    id = `tower.{faction}.{size}`, model = made.model, at = at,
+    look = if lying then vector.create(0, 1, 0) else vector.create(0, 0, 1),
+    up = if lying then vector.create(0, 0, -1) else nil,
+    scale = towerRadius / made.radius, radius = towerRadius,
+  }
 end
 
 -- The model of a module (Core/Data/Structures' ids). A battery of
@@ -639,7 +789,9 @@ local BATTERY = 26
 -- of the station (metres), which way it faces, and how many metres one
 -- of its model's units is. 'arm' is the weapon type standing on a
 -- battery, and 'unit' then how many metres one of that weapon's is.
-export type Part = { id: string, model: Model, at: vector, look: vector, scale: number, radius: number, arm: string?, unit: number? }
+-- ('up' is which way the model's own top goes, if not up.)
+export type Part = { id: string, model: Model, at: vector, look: vector, up: vector?, scale: number, radius: number, arm: string?,
+  unit: number? }
 
 export type Layout = { tower: Part, modules: { Part }, field: number }
 
@@ -662,13 +814,10 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
   local owner = faction or (if given then Structures.towerById[given.tower].faction else "vessari")
   local makeup = given or Structures.Makeup(variety, radius, owner)
   local size = Structures.towerById[makeup.tower].size
-  local tower = Starbase.Tower(owner, size)
   local towerRadius = radius * Starbase.TOWER
-  local layout: Layout = {
-    tower = { id = makeup.tower, model = tower.model, at = vector.create(0, 0, 0), look = vector.create(0, 0, 1),
-      scale = towerRadius / tower.radius, radius = towerRadius },
-    modules = {}, field = if dark then 0 else radius,
-  }
+  local tower = Starbase.TowerPart(owner, size, vector.create(0, 0, 0), towerRadius)
+  tower.id = makeup.tower
+  local layout: Layout = { tower = tower, modules = {}, field = if dark then 0 else radius }
 
   -- Where each would like to be: round the tower by turns of the golden
   -- angle, on three levels, batteries farthest out.
@@ -754,7 +903,7 @@ function Starbase.Raise(layout: Layout, container: Object, origin: vector, metre
     local size = part.scale * metres
     object:SetScale(vector.create(size, size, size))
     object:SetPos(origin + part.at * metres)
-    Object_SetAxes(object, part.look, UP)
+    Object_SetAxes(object, part.look, part.up or UP)
     local arm = if part.arm then Arms.Build(part.arm) else nil
     if arm then
       -- (on the ring of the battery's stand, facing the way the stand does, at rest)
