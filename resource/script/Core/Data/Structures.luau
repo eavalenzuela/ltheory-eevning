@@ -18,11 +18,11 @@
 -- throughout, to suit stations of 2 to 8 km (Describe/System), and keep
 -- those proportions.
 --
--- This is the data and the makeup of the stations there already are.
--- The rules that go with it (anchoring, bringing online, fuel, a
--- service only where its module is online) are not written yet: for
--- now every station offers everything, and so is given every module
--- that a service needs.
+-- This is the data, and the makeup of the stations there already are.
+-- A service is only where its module is (Assets/Stations): a station
+-- has what its kind is for and no more, but for the one a pilot starts
+-- at, which has everything the whole round of play needs. The rest of
+-- the rules (anchoring, bringing online, fuel) are not written yet.
 
 local Factions = require("@lt/Core/Data/Factions")
 
@@ -39,7 +39,9 @@ export type Tower = {
 
 -- What a module is for: the service it gives the tower's guests, or how
 -- it serves the tower itself.
-export type Service = "market" | "fitting" | "refining" | "industry" | "research" | "storage" | "quarters" | "defence"
+-- (One of Structures.SERVICES: "market", "fitting", "refining",
+-- "industry", "research", "storage", "quarters", "defence".)
+export type Service = string
 
 export type ModuleType = {
   id: string,           -- "array.assembly"
@@ -51,6 +53,7 @@ export type ModuleType = {
 }
 
 Structures.SIZES = { "small", "medium", "large" }
+Structures.SERVICES = { "market", "fitting", "refining", "industry", "research", "storage", "quarters", "defence" } :: { Service }
 
 -- A tower's supply by size. (EVE's doubles with each size; so does this.)
 local SUPPLY = { { powergrid = 1500, cpu = 2000 }, { powergrid = 3000, cpu = 4000 }, { powergrid = 6000, cpu = 8000 } }
@@ -91,17 +94,31 @@ for _, module in modules do
   Structures.moduleById[module.id] = module
 end
 
--- The services a docked pilot has screens for. Until modules are things
--- that can be offline or absent, every station has one of each.
-local BASICS = { "array.trade", "array.hangar", "array.refining", "array.assembly" }
+-- The module that gives a service, by name, for telling a pilot what a
+-- station lacks.
+function Structures.Provider(service: Service): string
+  for _, module in modules do
+    if module.service == service then
+      return module.name
+    end
+  end
+  return service
+end
 
--- What a kind of station (Describe/System's 'variety') has more of.
-local LEANING: { [string]: { string } } = {
-  ["trade hub"] = { "array.storage", "array.trade", "array.storage", "array.habitat" },
-  ["shipyard"] = { "array.assembly", "array.storage", "array.assembly", "array.laboratory" },
-  ["refinery"] = { "array.refining", "array.storage", "array.storage", "array.refining" },
-  ["habitat"] = { "array.habitat", "array.habitat", "array.laboratory", "array.storage" },
-  ["outpost"] = { "array.storage", "battery.gun", "battery.missile", "array.hangar" },
+-- What the whole round of play needs: selling and buying, fitting and
+-- repairs, refining, building, and somewhere to keep things. The
+-- station a pilot starts at has all of it.
+local ROUND = { "array.trade", "array.hangar", "array.refining", "array.assembly", "array.storage" }
+
+-- What a kind of station (Describe/System's 'variety') is made of, the
+-- first things first: a small one has the first three, and each size
+-- above one more.
+local KIND: { [string]: { string } } = {
+  ["trade hub"] = { "array.trade", "array.storage", "array.hangar", "array.storage", "array.habitat" },
+  ["shipyard"] = { "array.assembly", "array.hangar", "array.storage", "array.assembly", "array.laboratory" },
+  ["refinery"] = { "array.refining", "array.storage", "array.refining", "array.storage", "array.hangar" },
+  ["habitat"] = { "array.habitat", "array.storage", "array.habitat", "array.laboratory", "array.hangar" },
+  ["outpost"] = { "array.hangar", "array.storage", "array.storage", "array.laboratory", "array.habitat" },
 }
 
 -- The size of tower for a station of a radius (Describe/System makes
@@ -115,19 +132,20 @@ export type Makeup = { tower: string, modules: { string } }
 -- What a station is made of: its tower, and the modules anchored round
 -- it, the larger ones first. It follows from what the station is and
 -- nothing else, so it need not be kept: 'variety' and 'radius' are the
--- station's (Describe/System), 'faction' is whose tower it is.
+-- station's (Describe/System), 'faction' is whose tower it is, and
+-- 'starter' says it is the station a pilot starts at.
 --
--- Every station has the basics. A bigger tower carries more of what its
--- kind of station leans to, and more batteries; it is never given more
--- than it can power.
-function Structures.Makeup(variety: string, radius: number, faction: string): Makeup
+-- A station has what its kind is for, more of it the bigger its tower,
+-- and batteries; the starter has, before all that, everything the round
+-- of play needs. It is never given more than its tower can power.
+function Structures.Makeup(variety: string, radius: number, faction: string, starter: boolean?): Makeup
   local size = Structures.SizeFor(radius)
   local tower = Structures.towerById[`tower.{faction}.{Structures.SIZES[size]}`]
   assert(tower, `no tower of faction '{faction}'`)
-  local chosen = table.clone(BASICS)
-  local leaning = LEANING[variety] or LEANING["outpost"]
-  for index = 1, size + 1 do
-    table.insert(chosen, leaning[index])
+  local chosen: { string } = if starter then table.clone(ROUND) else {}
+  local kind = KIND[variety] or KIND["outpost"]
+  for index = 1, size + 2 do
+    table.insert(chosen, kind[index])
   end
   for _ = 1, size do
     table.insert(chosen, "battery.gun")

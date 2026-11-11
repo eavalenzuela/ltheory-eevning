@@ -652,9 +652,13 @@ end
 -- radius; the tower stands in the middle of it; its modules stand round
 -- it inside the field, the big ones nearer, on several levels and clear
 -- of each other; its batteries stand near the edge, high and low.
-function Starbase.Layout(variety: string, radius: number, seed: number, faction: string?): Layout
+--
+-- 'makeup' is what the station is made of, if the game has said
+-- (Core.Query.Station); without it, it is what a station of that kind
+-- and size would be that is nobody's starting place.
+function Starbase.Layout(variety: string, radius: number, seed: number, faction: string?, given: Structures.Makeup?): Layout
   local owner = faction or "vessari"
-  local makeup = Structures.Makeup(variety, radius, owner)
+  local makeup = given or Structures.Makeup(variety, radius, owner)
   local size = Structures.towerById[makeup.tower].size
   local tower = Starbase.Tower(owner, size)
   local towerRadius = radius * Starbase.TOWER

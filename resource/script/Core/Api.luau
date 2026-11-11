@@ -30,6 +30,8 @@ local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local Stations = require("@lt/Core/Assets/Stations")
+local Structures = require("@lt/Core/Data/Structures")
 local System = require("@lt/Core/Describe/System")
 local Training = require("@lt/Core/Character/Training")
 
@@ -143,13 +145,8 @@ function Core.New(options: Options): Game
     player = { ship = 0, home = 0 },
     queue = {},
   }
-  local home: System.Object? = nil
-  for _, object in Space.Describe(state, 1).objects do
-    if object.kind == "station" then
-      home = object
-      break
-    end
-  end
+  -- (the starter station: the one that has a module for everything)
+  local home = Space.Object(state, Stations.Starter(state))
   assert(home, "the first system has no station")
   local ship = Space.NewShip(state, "frigate.courier", "Courier", "player", home.id)
   state.player.ship = ship.id
@@ -178,6 +175,11 @@ local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, Canc
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
 
 local function validate(state: State.State, command: State.Command): (boolean, string?)
+  -- (first, whether the station it is given at has the module for it)
+  local served, lacking = Stations.Validate(state, command)
+  if not served then
+    return false, lacking
+  end
   if ASSET_COMMANDS[command.kind] then
     return Items.Validate(state, command)
   elseif COMBAT_COMMANDS[command.kind] then
@@ -512,6 +514,17 @@ end
 -- A body by id (a ship in space or a described object), or nil.
 function Query.Body(game: Game, id: number): Space.Body?
   return Space.Body(game.state, id)
+end
+
+-- The station a new pilot starts at: the one that has everything.
+function Query.Starter(game: Game): number
+  return Stations.Starter(game.state)
+end
+
+-- What a station is made of (its tower and modules), and the services
+-- its modules give. Nil and none if 'id' is not a station.
+function Query.Station(game: Game, id: number): (Structures.Makeup?, { Structures.Service })
+  return Stations.Makeup(game.state, id), Stations.Services(game.state, id)
 end
 
 -- A ship's ball, or nil if it is docked.

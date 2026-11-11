@@ -20,6 +20,7 @@ local Session = require("@lt/Game/Session")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local State = require("@lt/Core/Kernel/State")
+local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
 
 local Station = {}
@@ -28,6 +29,10 @@ Station.WIDTH = 940
 Station.HEIGHT = 600
 
 local TABS = { "Fitting", "Market", "Industry", "Skills", "Ships", "Wallet" }
+-- The services each tab's doings are done by (Core/Assets/Stations).
+local WANTS: { [string]: { string } } = {
+  Fitting = { "fitting" }, Market = { "market" }, Industry = { "refining", "industry" }, Ships = { "fitting" },
+}
 local tab = "Fitting"
 
 -- The market: the category listed, the type shown, and what is entered.
@@ -279,7 +284,8 @@ local function drawWheel(session: Session.Session, game: Core.Game, player: Core
         end
         -- taking it out: the corner away from the middle
         local ux, uy = onWheel(sx, sy, SLOT * 0.62, turn)
-        local unfitHot, unfit = Im.Area(`Unfit:{name}{slot}`, ux - 8, uy - 8, 16, 16, true)
+        local unfitHot, unfit = Im.Area(`Unfit:{name}{slot}`, ux - 8, uy - 8, 16, 16,
+          (Session.CanDo(session, { kind = "Unfit", actor = 0, item = item.id })))
         WidgetRenderer_DrawPanel(vector.create(ux - 8, uy - 8), vector.create(16, 16),
           if unfitHot then OVER else vector.create(0.07, 0.12, 0.17), 0.9, 1, 8)
         Glyph_Draw(Glyph_Line(vector.create(-1, -1), vector.create(1, 1), 1, 1), vector.create(ux, uy), 3, Im.TEXT, 0.9)
@@ -959,7 +965,8 @@ local function drawShips(session: Session.Session, game: Core.Game, player: Core
       if untrained then
         Im.Text(`to fly it: {untrained}`, left + 420, line + 5, 13, Im.WARN)
       end
-      if Im.Button("Assemble", left + 620, line, 90, 26, true, `Assemble:{item.type}`) then
+      if Im.Button("Assemble", left + 620, line, 90, 26, (Session.CanDo(session, { kind = "Assemble", actor = 0, item = item.id })),
+        `Assemble:{item.type}`) then
         Session.Do(session, { kind = "Assemble", actor = 0, item = item.id })
       end
       line += 32
@@ -1021,6 +1028,23 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
     if Im.Toggle(name, x + 364 + (index - 1) * 94, y + 18, 90, 28, tab == name) then
       tab = name
     end
+  end
+  -- What can be done here is what the station has a module for: say
+  -- what the tab that is open wants and the station has not.
+  local _, services = Core.Query.Station(game, player.docked)
+  local has: { [string]: boolean } = {}
+  for _, service in services do
+    has[service] = true
+  end
+  local lacking: { string } = {}
+  local wanted: { string } = WANTS[tab] or {}
+  for _, service in wanted do
+    if not has[service] then
+      table.insert(lacking, Structures.Provider(service :: Structures.Service))
+    end
+  end
+  if #lacking > 0 then
+    Im.Text(`This station has no {table.concat(lacking, " and no ")}.`, x + 16, y + 58, 13, Im.WARN)
   end
 
   if tab == "Market" then

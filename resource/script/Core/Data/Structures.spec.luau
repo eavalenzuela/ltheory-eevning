@@ -37,19 +37,42 @@ suite:Case("no module belongs to a faction", function(t)
   end
 end)
 
-suite:Case("a station of any kind and size has a module for every service a docked pilot uses", function(t)
+local function services(makeup: Structures.Makeup): { [string]: boolean }
+  local has: { [string]: boolean } = {}
+  for _, id in makeup.modules do
+    has[Structures.moduleById[id].service] = true
+  end
+  return has
+end
+
+suite:Case("the station a pilot starts at has everything the round of play needs, whatever its kind and size", function(t)
   for _, variety in VARIETIES do
     for _, radius in { 2000, 3999, 4000, 5999, 6000, 8000 } do
-      local makeup = Structures.Makeup(variety, radius, "vessari")
-      local has: { [string]: boolean } = {}
-      for _, id in makeup.modules do
-        has[Structures.moduleById[id].service] = true
-      end
-      for _, service in { "market", "fitting", "refining", "industry" } do
-        t.ok(has[service], `a {variety} of {radius} m has nothing for {service}`)
+      local has = services(Structures.Makeup(variety, radius, "vessari", true))
+      for _, service in { "market", "fitting", "refining", "industry", "storage" } do
+        t.ok(has[service], `a starter {variety} of {radius} m has nothing for {service}`)
       end
     end
   end
+end)
+
+suite:Case("any other station has what its kind is for, and not everything", function(t)
+  local first = { ["trade hub"] = "market", shipyard = "industry", refinery = "refining", habitat = "quarters", outpost = "fitting" }
+  for _, variety in VARIETIES do
+    for _, radius in { 3000, 5000, 7000 } do
+      local has = services(Structures.Makeup(variety, radius, "vessari"))
+      t.ok(has[first[variety]], `a {variety} of {radius} m has nothing for {first[variety]}`)
+      local count = 0
+      for _, service in { "market", "fitting", "refining", "industry" } do
+        count += if has[service] then 1 else 0
+      end
+      t.ok(count < 4, `a {variety} of {radius} m does everything, which only the starter should`)
+    end
+  end
+  -- (and some are missing what a pilot will go looking for)
+  t.ok(not services(Structures.Makeup("refinery", 3000, "vessari")).market, "a small refinery should have no market")
+  t.ok(not services(Structures.Makeup("trade hub", 3000, "vessari")).refining, "a small trade hub should not refine")
+  t.ok(not services(Structures.Makeup("habitat", 3000, "vessari")).fitting, "a small habitat should have no ship maintenance")
 end)
 
 suite:Case("a tower is never given more than it can power, and a bigger one carries more", function(t)
@@ -86,6 +109,7 @@ suite:Case("a kind of station has more of what it is for than another kind has",
   t.ok(count("refinery", "array.refining") > count("shipyard", "array.refining"))
   t.ok(count("trade hub", "array.trade") > count("refinery", "array.trade"))
   t.ok(count("habitat", "array.habitat") > count("refinery", "array.habitat"))
+  t.ok(count("shipyard", "array.assembly") == 2, "a large shipyard should have two assembly arrays")
 end)
 
 suite:Case("the makeup is the same every time it is asked for, larger modules first", function(t)

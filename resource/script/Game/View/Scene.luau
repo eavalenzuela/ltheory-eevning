@@ -522,8 +522,9 @@ end
 -- A station: its tower, which is the station's own object, with its
 -- modules and its field round it, at 'at'. The station's radius is the
 -- radius of its field.
-local function makeStation(scene: Scene, object: SystemData.Object, at: vector, container: Object): Object
-  local raised = Starbase.Raise(Starbase.Layout(object.variety, object.radius, object.seed), container, at, 1)
+local function makeStation(scene: Scene, game: Core.Game, object: SystemData.Object, at: vector, container: Object): Object
+  local makeup = Core.Query.Station(game, object.id)
+  local raised = Starbase.Raise(Starbase.Layout(object.variety, object.radius, object.seed, nil, makeup), container, at, 1)
   local tower = table.remove(raised, 1) :: Object
   tower:SetName(object.name)
   scene.works[object.id] = raised
@@ -719,7 +720,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     if grid ~= 0 then
       for _, object in objects do
         if object.site == grid and object.kind == "station" then
-          scene.proxies[object.id] = makeStation(scene, object,
+          scene.proxies[object.id] = makeStation(scene, game, object,
             vector.create(object.x - scene.ox, object.y - scene.oy, object.z - scene.oz), container)
         elseif object.site == grid and object.kind ~= "belt" then
           local made = makeStatic(object)
