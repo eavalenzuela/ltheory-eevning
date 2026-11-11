@@ -41,6 +41,7 @@ type Effect = {
   look: Look,
   from: number,
   to: number,
+  origin: number?,        -- where in 'where' the mouth of the gun it leaves is, if it is shown
   fromRadius: number,
   toRadius: number,
   miss: vector?,          -- for a miss: where it goes instead, from the target
@@ -101,6 +102,9 @@ local STRUCK = {
   armor = { color = { 1.0, 0.55, 0.20 }, ring = 0 },
   hull = { color = { 1.0, 0.92, 0.80 }, ring = 0 },
 } :: { [string]: { color: { number }, ring: number } }
+
+-- How big the flash at a gun's mouth is, in metres, by the gun's size.
+local MUZZLE = { 12, 26, 60 }
 
 local function vec(c: { number }): vector
   return vector.create(c[1], c[2], c[3])
@@ -209,9 +213,11 @@ end
 -- A weapon of type 'type' on body 'from' fires at body 'to'. 'outcome'
 -- is the Core's: "miss", "hit", "wreck" (a telling hit), or for a missile
 -- "launched"; 'flight' is how long a missile takes; 'struck' is what the
--- shot lands on ("shield", "armor", "hull").
+-- shot lands on ("shield", "armor", "hull"). 'origin', if given, is what
+-- Effects.Update's 'where' will hold the mouth of the gun under, for the
+-- shot to leave from there and not from the middle of the ship.
 function Effects.Fire(fx: Fx, type: string, from: number, to: number, fromRadius: number, toRadius: number,
-  outcome: string, flight: number, struck: string, now: number)
+  outcome: string, flight: number, struck: string, now: number, origin: number?)
   local look, size = Effects.LookOf(type)
   if look == nil then
     return
@@ -226,7 +232,7 @@ function Effects.Fire(fx: Fx, type: string, from: number, to: number, fromRadius
       miss = vector.create(math.cos(angle), math.sin(angle * 1.3), math.sin(angle)) * (toRadius * 2.2 + 12)
     end
     local effect: Effect = {
-      look = look, from = from, to = to, fromRadius = fromRadius, toRadius = toRadius, miss = miss,
+      look = look, from = from, to = to, origin = origin, fromRadius = fromRadius, toRadius = toRadius, miss = miss,
       born = now + (shot - 1) * (look.gap or 0), life = look.life or 0, flight = flight, size = size,
       struck = if outcome == "miss" then "" else struck, landed = false, pieces = {},
     }
@@ -245,7 +251,12 @@ function Effects.Fire(fx: Fx, type: string, from: number, to: number, fromRadius
   end
   -- The gun's mouth flashes (a missile's launcher and a beam do not).
   if look.kind == "bolt" or look.kind == "rail" then
-    Effects.Flash(fx, from, vector.create(0, 0, 0), vec(look.color), 0.5 * fromRadius * SIZE[size], 0, 0.10, now)
+    if origin then
+      -- (at the mouth itself, and the size of the gun rather than the ship)
+      Effects.Flash(fx, origin, vector.create(0, 0, 0), vec(look.color), MUZZLE[size], 0, 0.10, now)
+    else
+      Effects.Flash(fx, from, vector.create(0, 0, 0), vec(look.color), 0.5 * fromRadius * SIZE[size], 0, 0.10, now)
+    end
   end
 end
 
@@ -320,8 +331,14 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
       local d = vector.normalize(to - from)
       -- From the side of the firer toward the target, to the side of
       -- the target toward the firer (or past it).
-      local start = from + d * (effect.fromRadius * 0.7)
+      local mouth: vector? = if effect.origin then where[effect.origin] else nil
+      local start = mouth or from + d * (effect.fromRadius * 0.7)
       local finish = if effect.miss then to + effect.miss + d * (effect.toRadius * 6 + 200) else to - d * (effect.toRadius * 0.6)
+      -- (the way it flies, which from a gun out on the hull is not quite
+      -- the way from one ship to the other)
+      if vector.magnitude(finish - start) > 1e-3 then
+        d = vector.normalize(finish - start)
+      end
       local piece = effect.pieces[1]
       if look.kind == "beam" then
         local t = age / effect.life

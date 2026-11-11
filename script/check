@@ -23,6 +23,8 @@
 #   game-economy  the game app plays the M3 loop through its station screens
 #               (test/scenario/economy.txt): mine, refine, build ammunition,
 #               sell it by standing order, buy a hull, train for it, board it
+#   game-arms   a hull of our own design carries its fitted weapons on its
+#               hardpoints, and its turret comes to bear (test/scenario/arms.txt)
 #   game-pace   the game app must draw at least thirty frames a second just
 #               outside the home station (test/scenario/pace.txt)
 #   goldens     script/goldens: screenshots of the stored scenes must match
@@ -119,6 +121,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/combat.txt
   step game-economy 0 timeout 600 bin/launch game --no-present --fixed-step 60 --timeout 500 \
     --script test/scenario/economy.txt
+  step game-arms 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
+    --script test/scenario/arms.txt
   step game-pace 0 timeout 200 bin/launch game --no-present --fixed-step 60 --timeout 150 \
     --script test/scenario/pace.txt
   step goldens 0 script/goldens

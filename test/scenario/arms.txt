@@ -1,0 +1,41 @@
+# What is fitted to a hull of our own design stands on its hardpoints
+# (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/arms.txt
+#
+# The other scenarios fly the starter courier, which is one of the
+# engine's ships and carries nothing to see. Here the pilot is put in a
+# Vessari cruiser with the fit its design is drawn with: its weapons
+# must be on its hardpoints when it undocks, all of them must fire, and
+# its turret must come round to what it is shooting at.
+
+wait 2
+lua assert(GameDebug.Fly('cruiser.cuirass'), 'the Cuirass could not be flown')
+lua assert(GameDebug.Hull() == 'cruiser.cuirass', 'the pilot is not in the Cuirass')
+lua assert(GameDebug.Fitted('artillery.medium') == 1, 'the Cuirass did not take its gun')
+lua assert(GameDebug.Fitted('launcher.heavy') == 3, 'the Cuirass did not take its launchers')
+lua assert(GameDebug.Order('Undock'), 'undock was refused')
+until GameDebug.InSpace()
+frames 5
+lua assert(GameDebug.Arms() == 4, 'four weapons should stand on the hardpoints of the Cuirass')
+
+lua GameDebug.TimeScale(4)
+lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+until GameDebug.Count('ship') > 0
+until GameDebug.Distance('ship') < 18000
+lua assert(GameDebug.Lock('ship'), 'the lock was refused')
+until GameDebug.Locked() > 0
+lua assert(GameDebug.Fire() == 4, 'all four weapons should open fire')
+lua GameDebug.TimeScale(1)
+
+# A medium gun swings at a little under a radian a second: five seconds
+# bring it round from anywhere.
+wait 5
+lua print('the turret is', select(2, GameDebug.Arms()), 'radians off its target')
+lua assert(select(2, GameDebug.Arms()) >= 0, 'the turret has nothing to point at')
+lua assert(select(2, GameDebug.Arms()) < 0.05, 'the turret has not come round to its target')
+
+echo arms scenario passed
+quit

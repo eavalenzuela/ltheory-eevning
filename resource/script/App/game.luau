@@ -12,12 +12,18 @@
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Core = require("@lt/Core/Api")
+local Dogma = require("@lt/Core/Dogma")
 local Hud = require("@lt/Game/UI/Hud")
+local Hull = require("@lt/Game/View/Hull")
 local Im = require("@lt/Game/UI/Im")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
 local Station = require("@lt/Game/UI/Station")
 local Info = require("@lt/Game/UI/Info")
+local Items = require("@lt/Core/Assets/Items")
+local Modules = require("@lt/Core/Data/Modules")
+local Ships = require("@lt/Core/Data/Ships")
+local Space = require("@lt/Core/Tactical/Space")
 local Wallet = require("@lt/Core/Assets/Wallet")
 
 local App = {}
@@ -176,6 +182,18 @@ function Debug.LookAt(what: string, zoom: number?): boolean
   if zoom then
     scene.zoom, scene.zoomTarget = zoom, zoom
   end
+  return true
+end
+
+-- The other way about: look at the ship from the side something is on,
+-- GameDebug.LookFrom('sun') for the lit side of it. 'turn' swings the
+-- camera round from there, in radians.
+function Debug.LookFrom(what: string, zoom: number?, turn: number?): boolean
+  if not Debug.LookAt(what, zoom) then
+    return false
+  end
+  scene.pitch = math.clamp(math.pi - scene.pitch - 0.5, 0.05, math.pi - 0.05)
+  scene.yaw += math.pi + (turn or 0)
   return true
 end
 
@@ -486,6 +504,51 @@ end
 -- credits from nowhere, entered in the journal as such.
 function Debug.Grant(credits: number)
   Wallet.Pay(session.game.state, credits, "cheat", session.game.events)
+end
+
+-- Another cheat, for looking at hulls: while docked, a hull of a type
+-- from nowhere, boarded whatever the pilot's skills, and fitted with
+-- what its design is shown with (Game/View/Hull), loaded, as far as
+-- that fits. The ship stepped out of stays in the hangar. False if not
+-- docked, or there is no such hull.
+function Debug.Fly(type: string): boolean
+  local state = session.game.state
+  local old = state.ships[state.player.ship]
+  local hull = Ships.byId[type]
+  if old == nil or old.docked == 0 or hull == nil then
+    return false
+  end
+  local ship = Space.NewShip(state, hull.id, hull.name, "player", old.docked)
+  local built = Hull.Build(type)
+  local types: { string } = {}
+  local wanted: { string } = if built then built.fit else {}
+  for _, module in wanted do
+    table.insert(types, module)
+    if Dogma.Check(hull, types) then
+      local weapon = Modules.byId[module].weapon
+      local charge: string? = nil
+      if weapon then
+        for _, candidate in Modules.charges do
+          if candidate.family == weapon.family and candidate.size == weapon.size then
+            charge = candidate.id
+            break
+          end
+        end
+      end
+      Items.Equip(state, ship.id, module, charge)
+    else
+      table.remove(types)
+    end
+  end
+  state.player.ship = ship.id
+  return true
+end
+
+-- The weapons standing on the hardpoints of the pilot's ship, and how
+-- far round from its target the worst-pointed turret still is (radians,
+-- or -1 if no turret has a target).
+function Debug.Arms(): (number, number)
+  return Scene.Arms(scene, session.game.state.player.ship)
 end
 
 function Debug.Hash(): string

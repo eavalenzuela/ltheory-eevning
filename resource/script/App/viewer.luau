@@ -28,9 +28,11 @@
 -- (rockPale 0.6 0.5 0.4).
 
 local AppShell = require("@lt/AppShell")
+local Arms = require("@lt/Game/View/Arms")
 local Effects = require("@lt/Game/View/Effects")
 local Hull = require("@lt/Game/View/Hull")
 local Planet = require("@lt/Game/View/Planet")
+local Ships = require("@lt/Core/Data/Ships")
 local Star = require("@lt/Game/View/Star")
 local SceneView = require("@lt/SceneView")
 
@@ -161,6 +163,25 @@ for _, type in Hull.Types() do
   end
 end
 
+-- What goes on hardpoints: every weapon's model, small, in rows (the
+-- eye and what it looks at are in the units the models are drawn in:
+-- see Game/View/Arms), from the front and the back.
+local ARMS = { "laser.pulse.small", "laser.beam.small", "autocannon.small", "artillery.small", "blaster.small", "railgun.small",
+  "miner.small", "launcher.light", "launcher.heavy", "launcher.cruise" }
+table.insert(VIEWS, { name = "arms-1-front", kind = "arms", seed = 1, eye = vector.create(14, 18, 37), look = vector.create(0, 1.0, 0),
+  light = vector.create(0.5, 0.9, 0.6), radius = 30 })
+table.insert(VIEWS, { name = "arms-2-back", kind = "arms", seed = 1, eye = vector.create(-16, 16, -36), look = vector.create(0, 1.0, 0),
+  light = vector.create(-0.5, 0.9, -0.6), radius = 30 })
+
+-- And the three sizes side by side, small to large from the left: a
+-- turret, a launcher and the cover of an empty hardpoint at each, to
+-- show that all three stand on the one mounting ring of their size.
+local ARM_SIZES = { { "artillery.small", "artillery.medium", "artillery.large" }, { "launcher.light", "launcher.heavy", "launcher.cruise" } }
+table.insert(VIEWS, { name = "arms-3-sizes", kind = "arms-sizes", seed = 1, eye = vector.create(-8, 46, 100), look = vector.create(-1, 2, 0),
+  light = vector.create(0.5, 0.9, 0.6), radius = 30 })
+table.insert(VIEWS, { name = "arms-4-sizes-above", kind = "arms-sizes", seed = 1, eye = vector.create(-1, 125, 9), look = vector.create(-1, 0, 5),
+  light = vector.create(0.3, 0.9, 0.5), radius = 30 })
+
 -- One of everything, for a single picture of how the bodies look.
 table.insert(VIEWS, { name = "gallery", kind = "gallery", seed = 0, eye = vector.create(0, 0, 9.6), look = CENTRE, light = DAY,
   gallery = {
@@ -223,6 +244,7 @@ return AppShell.Create(function(): Widget
   local worlds: { Planet.World } = {}
   local stage: { Object } = {}    -- what stands in the scene for the view
   local units: { number } = {}    -- and how big each is, to a radius of 1
+  local extras: { Object } = {}   -- what is mounted on it (placed and sized as made)
   local fx: Effects.Fx? = nil
   local built = ""          -- what the stage was built for
   local index = 0           -- the view being taken; 0 when idle
@@ -249,6 +271,56 @@ return AppShell.Create(function(): Widget
     local planet = Planet.New(kind, seed, resolution, tweaks)
     table.insert(worlds, planet)
     return planet.body, 1
+  end
+
+  -- A weapon's model stood on a mount, as scenery. 'aim' is where it
+  -- points, or nil for at rest.
+  local function mountArm(type: string, origin: vector, up: vector, fore: vector, aim: vector?, metres: number, small: boolean?)
+    local piece = Arms.Build(type)
+    if piece == nil then
+      return
+    end
+    if small then
+      piece.scale = Arms.SIZE[1]
+    end
+    local base: Object? = nil
+    if piece.base then
+      local made = Object_Scenery({})
+      Object_SetRenderable(made, piece.base)
+      system:AddInterior(made)
+      table.insert(extras, made)
+      base = made
+    end
+    local gun = Object_Scenery({})
+    Object_SetRenderable(gun, piece.gun)
+    system:AddInterior(gun)
+    table.insert(extras, gun)
+    Arms.Place(piece, base, gun, origin, up, fore, aim, metres)
+  end
+
+  -- A hull's hardpoints, carrying what its design says it is shown with.
+  local function dress(type: string, radius: number)
+    local built = Hull.Build(type)
+    local hull = Ships.byId[type]
+    if built == nil or hull == nil then
+      return
+    end
+    local unit = radius / built.radius      -- one of the hull's own units, in the scene
+    local metres = radius / hull.radius
+    local fore = vector.create(0, 0, 1)
+    local at = 0
+    local function each(mounts: { Hull.Mount })
+      for index, mount in mounts do
+        at += 1
+        local rest = mount.fore or fore
+        -- (the guns slewed off to one side and up a little, turn about, to show that they do)
+        local side = vector.cross(mount.up, rest)
+        local aim = vector.normalize(rest + side * (if index % 2 == 0 then -0.7 else 0.7) + mount.up * 0.35)
+        mountArm(built.fit[at], mount.at * unit, mount.up, rest, aim, metres)
+      end
+    end
+    each(built.turrets)
+    each(built.launchers)
   end
 
   local function setUp(v: View)
@@ -306,11 +378,45 @@ return AppShell.Create(function(): Widget
       for _, object in stage do
         Object_Delete(object)
       end
+      for _, object in extras do
+        Object_Delete(object)
+      end
+      table.clear(extras)
       table.clear(stage)
       table.clear(units)
       table.clear(worlds)
       local radius = v.radius or RADIUS
-      if fire or explode then
+      if v.kind == "arms" then
+        -- every weapon's model in two rows, 13 m apart, some swung round
+        table.insert(stage, Object_Scenery({}))
+        table.insert(units, 1)
+        for index, type in ARMS do
+          local column, row = (index - 1) % 5, (index - 1) // 5
+          local aim = vector.normalize(vector.create(0.5 * ((index % 3) - 1), 0.25 + 0.1 * (index % 2), 1))
+          -- (all at the size of a small weapon, to compare them)
+          mountArm(type, vector.create((column - 2) * 11, 0, (0.5 - row) * 14) * radius, vector.create(0, 1, 0),
+            vector.create(0, 0, 1), aim, radius / Arms.SIZE[1], true)
+        end
+      elseif v.kind == "arms-sizes" then
+        table.insert(stage, Object_Scenery({}))
+        table.insert(units, 1)
+        local up, fore = vector.create(0, 1, 0), vector.create(0, 0, 1)
+        -- (a row: cover, launcher, turret at each size, and seen from
+        -- the front +x is on the left, so the small ones are out at +x)
+        for size, x in { 53, 28, -27 } do
+          local apart = ({ 5, 11, 26 })[size]
+          local unit = radius / Arms.SIZE[1]
+          mountArm(ARM_SIZES[1][size], vector.create(x - apart, 0, 0) * radius, up, fore, vector.normalize(vector.create(0, 0.2, 1)), unit)
+          mountArm(ARM_SIZES[2][size], vector.create(x, 0, 0) * radius, up, fore, nil, unit)
+          local cover = Object_Scenery({})
+          Object_SetRenderable(cover, Arms.Blank())
+          cover:SetPos(vector.create(x + apart, 0, 0) * radius)
+          local scale = Arms.SIZE[size] * unit
+          cover:SetScale(vector.create(scale, scale, scale))
+          system:AddInterior(cover)
+          table.insert(extras, cover)
+        end
+      elseif fire or explode then
         -- (something for the camera to be told to look at)
         table.insert(stage, Object_Scenery({}))
         table.insert(units, 1)
@@ -330,6 +436,10 @@ return AppShell.Create(function(): Widget
         local size = radius / units[index]
         object:SetScale(vector.create(size, size, size))
         system:AddInterior(object)
+      end
+      local hull = string.match(v.kind, "^hull%-(.+)$")
+      if hull then
+        dress(hull, radius)
       end
       camera:SetTarget(stage[1])
       built = key

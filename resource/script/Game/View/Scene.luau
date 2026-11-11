@@ -9,7 +9,10 @@
 --   - the system's planets and moons, in scaled space: each is drawn in
 --     its true direction at a distance the renderer can reach, shrunk by
 --     the same factor, so it covers exactly the right part of the sky;
---   - the sun, as the direction light comes from.
+--   - the sun, as the direction light comes from;
+--   - on a hull of our own design, what is fitted to its hardpoints
+--     (Game/View/Arms): the turrets turn to what they are shooting at,
+--     and their shots leave from their mouths.
 --
 -- The engine's positions lose precision far from zero, and its far plane
 -- is at 1e6. So the scene's origin is the anchor of the player's grid
@@ -19,6 +22,7 @@
 -- Between ticks ships are drawn where the Core's own formulas put them
 -- (Tactical/Motion): the state at a tick fixes the next second of flight.
 
+local Arms = require("@lt/Game/View/Arms")
 local Clock = require("@lt/Game/Clock")
 local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
@@ -26,6 +30,7 @@ local Effects = require("@lt/Game/View/Effects")
 local Hull = require("@lt/Game/View/Hull")
 local Planet = require("@lt/Game/View/Planet")
 local Star = require("@lt/Game/View/Star")
+local Modules = require("@lt/Core/Data/Modules")
 local Motion = require("@lt/Core/Tactical/Motion")
 local Session = require("@lt/Game/Session")
 local State = require("@lt/Core/Kernel/State")
@@ -34,6 +39,21 @@ local SystemData = require("@lt/Core/Describe/System")
 local Scene = {}
 
 export type Placed = { object: Object, x: number, y: number, z: number, radius: number }
+
+-- What stands on one hardpoint of a ship.
+type Arm = {
+  item: number,             -- the fitted module, or 0 for the cover on an empty hardpoint
+  piece: Arms.Piece?,       -- nil for a cover
+  base: Object?,
+  gun: Object,
+  mount: Hull.Mount,
+  yaw: number,              -- where a turret has swung to: radians round from rest,
+  lift: number,             -- and up from level
+  off: number,              -- how far round from its target it still is, in radians (-1 with none)
+}
+
+-- And on all of them. 'key' is the fit it was made for.
+type Armed = { key: string, arms: { Arm }, built: Hull.Built }
 
 export type Scene = {
   camera: Camera,
@@ -61,6 +81,9 @@ export type Scene = {
   time: number,                       -- seconds the scene has been running, for effects
   fx: Effects.Fx?,                    -- weapon fire and the like, in this system's container
   mining: { [number]: number },       -- when each mining module's beam was last begun, by its item
+  arms: { [number]: Armed },          -- what is on the hardpoints of each ship of our own design
+  armsTick: number,                   -- the tick the arms were last checked against the fits
+  armsTime: number,                   -- when (scene time) the turrets were last swung
 }
 
 -- A shot to show: who at whom, how it went, and when (scene time). A
@@ -102,6 +125,7 @@ function Scene.New(camera: Camera): Scene
     proxies = {}, celestials = {}, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
+    arms = {}, armsTick = -1, armsTime = 0,
   }
 end
 
@@ -124,7 +148,7 @@ end
 -- The proxies that are hulls of our own design (Game/View/Hull), which
 -- are scenery and are turned by Object_SetAxes; the rest are the
 -- engine's ships.
-local designed: { [Object]: boolean } = setmetatable({} :: any, { __mode = "k" })
+local designed: { [Object]: Hull.Built } = setmetatable({} :: any, { __mode = "k" })
 
 local function makeShip(type: string, radius: number): Object
   local built = Hull.Build(type)
@@ -133,7 +157,7 @@ local function makeShip(type: string, radius: number): Object
     Object_SetRenderable(object, built.model)
     local size = radius / built.radius
     object:SetScale(vector.create(size, size, size))
-    designed[object] = true
+    designed[object] = built
     return object
   end
   local item: Item? = hullItems[type]
@@ -160,6 +184,143 @@ function Scene.Preview(type: string, radius: number): Renderable | Model
   return (item :: Item):GetRenderable()
 end
 
+-- Take what is on a ship's hardpoints away.
+local function dropArms(scene: Scene, id: number)
+  local armed = scene.arms[id]
+  if armed then
+    for _, arm in armed.arms do
+      if arm.base then
+        Object_Delete(arm.base)
+      end
+      Object_Delete(arm.gun)
+    end
+    scene.arms[id] = nil
+  end
+end
+
+-- Put on a ship's hardpoints what is fitted to it: its weapons in the
+-- order of their slots, each on the next hardpoint of its kind, and a
+-- cover on every hardpoint left over. Nothing is done if they are there
+-- already.
+local function armShip(scene: Scene, game: Core.Game, id: number, built: Hull.Built, container: Object)
+  local fitted = Core.Query.Fitted(game, id)
+  local key = ""
+  for _, item in fitted do
+    if item.place == "high" then
+      key ..= `{item.id}:{item.type} `
+    end
+  end
+  local armed = scene.arms[id]
+  if armed and armed.key == key then
+    return
+  end
+  dropArms(scene, id)
+  local arms: { Arm } = {}
+  local function stand(mount: Hull.Mount, item: number, piece: Arms.Piece?)
+    local base: Object? = nil
+    if piece and piece.base then
+      local made = Object_Scenery({})
+      Object_SetRenderable(made, piece.base)
+      container:AddInterior(made)
+      base = made
+    end
+    local gun = Object_Scenery({})
+    Object_SetRenderable(gun, if piece then piece.gun else Arms.Blank())
+    container:AddInterior(gun)
+    table.insert(arms, { item = if piece then item else 0, piece = piece, base = base, gun = gun, mount = mount, yaw = 0, lift = 0,
+      off = -1 })
+  end
+  local turrets, launchers = 0, 0
+  for _, item in fitted do
+    local module = Modules.byId[item.type]
+    if module and item.place == "high" and module.hardpoint == "turret" then
+      turrets += 1
+      if built.turrets[turrets] then
+        stand(built.turrets[turrets], item.id, Arms.Build(item.type))
+      end
+    elseif module and item.place == "high" and module.hardpoint == "launcher" then
+      launchers += 1
+      if built.launchers[launchers] then
+        stand(built.launchers[launchers], item.id, Arms.Build(item.type))
+      end
+    end
+  end
+  for at = turrets + 1, #built.turrets do
+    stand(built.turrets[at], 0, nil)
+  end
+  for at = launchers + 1, #built.launchers do
+    stand(built.launchers[at], 0, nil)
+  end
+  scene.arms[id] = { key = key, arms = arms, built = built }
+end
+
+local FORE = vector.create(0, 0, 1)
+
+-- Stand a ship's arms on its hull where the hull now is, swing its
+-- turrets toward what they are shooting at (for 'seconds', at their own
+-- rates), and note where each one's shots leave from: scene.screen holds
+-- that under the module's item id, negated.
+local function placeArms(scene: Scene, armed: Armed, proxy: Object, at: vector, radius: number, running: { State.Running }, seconds: number)
+  local right, up, look = proxy:GetRight(), proxy:GetUp(), proxy:GetLook()
+  local unit = radius / armed.built.radius
+  -- (an empty hardpoint's cover is the size of the weapons the hull is drawn for)
+  local cover = Arms.SIZE[Arms.SizeOf(armed.built.fit[1] or "")] or 1
+  for _, arm in armed.arms do
+    local mount = arm.mount
+    local fore = mount.fore or FORE
+    local origin = at + (right * mount.at.x + up * mount.at.y + look * mount.at.z) * unit
+    local mountUp = right * mount.up.x + up * mount.up.y + look * mount.up.z
+    local mountFore = right * fore.x + up * fore.y + look * fore.z
+    local piece = arm.piece
+    if piece then
+      local aim: vector? = nil
+      for _, run in running do
+        if run.item == arm.item and run.target ~= 0 then
+          local there: vector? = scene.screen[run.target]
+          if there and vector.magnitude(there - origin) > 1 then
+            aim = vector.normalize(there - origin)
+          end
+        end
+      end
+      local point: vector
+      arm.yaw, arm.lift, point = Arms.Swing(piece, mountUp, mountFore, aim, arm.yaw, arm.lift, seconds)
+      scene.screen[-arm.item] = (Arms.Place(piece, arm.base, arm.gun, origin, mountUp, mountFore, point, 1))
+      arm.off = -1
+      if aim and piece.turns then
+        -- (round the mount only: a target under its own deck it cannot tip down to)
+        local wanted = aim - mountUp * vector.dot(aim, mountUp)
+        local got = point - mountUp * vector.dot(point, mountUp)
+        arm.off = 0
+        if vector.magnitude(wanted) > 1e-3 and vector.magnitude(got) > 1e-3 then
+          arm.off = math.acos(math.clamp(vector.dot(vector.normalize(wanted), vector.normalize(got)), -1, 1))
+        end
+      end
+    else
+      local level = mountFore - mountUp * vector.dot(mountFore, mountUp)
+      arm.gun:SetPos(origin)
+      Object_SetAxes(arm.gun, if vector.magnitude(level) > 1e-4 then level else right, mountUp)
+      arm.gun:SetScale(vector.create(cover, cover, cover))
+    end
+  end
+end
+
+-- For checking (GameDebug.Arms): how many weapons stand on a ship's
+-- hardpoints, and how far round from its target the worst-pointed of
+-- its turrets still is, in radians (-1 if none has a target).
+function Scene.Arms(scene: Scene, ship: number): (number, number)
+  local armed = scene.arms[ship]
+  local count, off = 0, -1
+  if armed then
+    for _, arm in armed.arms do
+      if arm.piece then
+        count += 1
+        off = math.max(off, arm.off)
+      end
+    end
+  end
+  return count, off
+end
+
 local function makeStatic(object: SystemData.Object): Object
   local made: Object
   if object.kind == "asteroid" then
@@ -184,6 +345,9 @@ end
 
 -- Throw away everything and start a container for 'system'.
 local function enterSystem(scene: Scene, game: Core.Game, system: number)
+  for id in scene.arms do
+    dropArms(scene, id)
+  end
   clear(scene, scene.proxies)
   clear(scene, scene.celestials)
   if scene.container then
@@ -316,6 +480,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     scene.key = key
     for id, object in scene.proxies do
       if state.balls[id] == nil then
+        dropArms(scene, id)
         Object_Delete(object)
         scene.proxies[id] = nil
       end
@@ -370,6 +535,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       end
       scene.screen[id] = at
     elseif existing then
+      dropArms(scene, id)
       Object_Delete(existing)
       scene.proxies[id] = nil
     end
@@ -395,8 +561,30 @@ function Scene.Sync(scene: Scene, session: Session.Session)
   end
   for id, proxy in scene.proxies do
     if id >= Constants.FIRST_DYNAMIC_ID and state.balls[id] == nil and state.wrecks[id] == nil then
+      dropArms(scene, id)
       Object_Delete(proxy)
       scene.proxies[id] = nil
+    end
+  end
+
+  -- What is on the hardpoints of the hulls of our own design. (After
+  -- every ship has been placed: a turret points at where its target is
+  -- this frame. The fits are looked at once a tick, and when a ship is
+  -- first seen.)
+  local seconds = math.clamp(scene.time - scene.armsTime, 0, 0.25)
+  scene.armsTime = scene.time
+  local check = scene.armsTick ~= state.tick
+  scene.armsTick = state.tick
+  for _, id in state.ballIds do
+    local proxy: Object? = scene.proxies[id]
+    local built = if proxy then designed[proxy] else nil
+    local at: vector? = scene.screen[id]
+    if proxy and built and at then
+      if check or scene.arms[id] == nil then
+        armShip(scene, game, id, built, container)
+      end
+      local ball = state.balls[id]
+      placeArms(scene, scene.arms[id], proxy, at, ball.radius, ball.vitals.running, seconds)
     end
   end
 
@@ -407,8 +595,9 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       local from, to = state.balls[event.from], state.balls[event.to]
       if from and to then
         local item = state.items[event.item]
+        -- (from the mouth of the gun, if it is one that is shown)
         Effects.Fire(fx, if item then item.type else FALLBACK[event.family] or "autocannon", from.id, to.id, from.radius, to.radius,
-          event.outcome, event.flight or 0, struck(to), scene.time)
+          event.outcome, event.flight or 0, struck(to), scene.time, if scene.screen[-event.item] then -event.item else nil)
       end
     elseif event.kind == "BallDestroyed" and event.system == player.system and grid ~= 0 then
       local at = vector.create(event.x - scene.ox, event.y - scene.oy, event.z - scene.oz)
@@ -429,7 +618,8 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         if item and rock and string.sub(item.type, 1, 5) == "miner" and scene.screen[running.target]
           and scene.time - (scene.mining[running.item] or -1) > 0.42 then
           scene.mining[running.item] = scene.time
-          Effects.Fire(fx, item.type, id, running.target, ball.radius, rock.radius, "hit", 0, "", scene.time)
+          Effects.Fire(fx, item.type, id, running.target, ball.radius, rock.radius, "hit", 0, "", scene.time,
+            if scene.screen[-running.item] then -running.item else nil)
         end
       end
     end
