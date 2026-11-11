@@ -483,4 +483,21 @@ suite:Case("what the pilot owns is listed place by place, the hold and where the
   t.eq(#assets[2].ships, 0)
 end)
 
+suite:Case("an older save's galaxy is given the regions it would have had", function(t)
+  local game = Core.New({ galaxySeed = 5, historySeed = 1, systems = 40, peaceful = true })
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 27
+  file.state.galaxy.regions, file.state.galaxy.constellations = nil, nil
+  for _, system in file.state.galaxy.systems do
+    system.region, system.constellation = nil, nil
+  end
+  local old, oldLength = Codec.Encode(file)
+  local loaded = Core.Load(old, oldLength)
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  local player = Core.Query.Player(loaded)
+  t.ok(#player.region > 4 and #player.constellation > 2)
+  t.eq(player.region, loaded.state.galaxy.regions[loaded.state.galaxy.systems[1].region].name)
+end)
+
 return suite

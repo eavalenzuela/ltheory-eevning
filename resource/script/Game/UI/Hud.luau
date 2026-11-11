@@ -566,6 +566,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
 
       -- Where we are and what we have.
       Im.Heading(string.upper(player.systemName), left + 24, top + 18, 30, Im.TEXT)
+      -- (and where that is: its constellation and its region)
+      Im.Text(`{player.constellation}, {player.region}`, left + 24 + Im.HeadingWidth(string.upper(player.systemName), 30) + 16, top + 30, 13,
+        Im.DIM)
       -- (how safe it is here: what comes to a belt follows from it)
       local _, band = Core.Query.Security(game, player.system)
       local whose = if player.owner ~= "" then string.upper(player.owner) else "UNCLAIMED"

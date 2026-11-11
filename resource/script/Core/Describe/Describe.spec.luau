@@ -256,4 +256,69 @@ suite:Case("a route is the fewest jumps, or the safest way", function(t)
   end
 end)
 
+suite:Case("a galaxy is shared out into regions and constellations, each of systems that gates join, each with a name of its own", function(t)
+  for _, count in { 1, 3, 40, 150, 400 } do
+    local galaxy = Galaxy.Describe(7, count)
+    local systems = galaxy.systems
+    -- (about a region to sixteen systems: fewer where one came out too small to keep)
+    local most = math.max(1, math.floor(count / Galaxy.REGION + 0.5))
+    t.ok(#galaxy.regions >= math.max(1, most // 2) and #galaxy.regions <= most, `{#galaxy.regions} regions for {count} systems`)
+    t.ok(#galaxy.constellations >= #galaxy.regions)
+    -- Every system is in a constellation of its own region.
+    local inRegion: { [number]: { number } } = {}
+    local inConstellation: { [number]: { number } } = {}
+    for id, system in systems do
+      local region = assert(galaxy.regions[system.region], `system {id} is in no region`)
+      local constellation = assert(galaxy.constellations[system.constellation], `system {id} is in no constellation`)
+      t.eq({ region.id, constellation.id, constellation.region }, { system.region, system.constellation, system.region })
+      inRegion[system.region] = inRegion[system.region] or {}
+      table.insert(inRegion[system.region], id)
+      inConstellation[system.constellation] = inConstellation[system.constellation] or {}
+      table.insert(inConstellation[system.constellation], id)
+    end
+    -- Each group can be crossed without leaving it.
+    local function joined(members: { number }, same: (a: number, b: number) -> boolean): boolean
+      local seen: { [number]: boolean } = { [members[1]] = true }
+      local queue = { members[1] }
+      local at = 1
+      while at <= #queue do
+        local id = queue[at]
+        at += 1
+        for _, neighbor in systems[id].neighbors do
+          if not seen[neighbor] and same(id, neighbor) then
+            seen[neighbor] = true
+            table.insert(queue, neighbor)
+          end
+        end
+      end
+      return #queue == #members
+    end
+    local names: { [string]: boolean } = {}
+    for _, region in galaxy.regions do
+      local members = assert(inRegion[region.id], `{region.name} has no systems`)
+      t.ok(joined(members, function(a: number, b: number): boolean
+        return systems[a].region == systems[b].region
+      end), `{region.name} is in pieces`)
+      t.ok(not names[region.name] and #region.name > 4, `two regions are called {region.name}`)
+      names[region.name] = true
+      if count >= 150 then
+        t.ok(#members >= Galaxy.REGION // 3 and #members <= 4 * Galaxy.REGION, `{region.name} has {#members} systems`)
+      end
+    end
+    for _, constellation in galaxy.constellations do
+      local members = assert(inConstellation[constellation.id], `{constellation.name} has no systems`)
+      t.ok(joined(members, function(a: number, b: number): boolean
+        return systems[a].constellation == systems[b].constellation
+      end), `{constellation.name} is in pieces`)
+      t.ok(not names[constellation.name], `two places are called {constellation.name}`)
+      names[constellation.name] = true
+    end
+  end
+  -- It follows from the seed, and is the same however often it is worked out.
+  local a, b = Galaxy.Describe(3, 60), Galaxy.Describe(3, 60)
+  Galaxy.Regions(b)
+  t.eq(Codec.HashOf(a), Codec.HashOf(b))
+  t.ok(Codec.HashOf(Galaxy.Describe(4, 60).regions) ~= Codec.HashOf(a.regions))
+end)
+
 return suite

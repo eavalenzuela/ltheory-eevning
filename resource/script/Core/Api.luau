@@ -67,7 +67,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 27
+Core.SAVE_VERSION = 28
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -249,6 +249,11 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- (what was done before is done again soon enough).
   [26] = function(state: any)
     state.guide = state.guide or {}
+  end,
+  -- 28: the galaxy has regions and constellations. An older save's is
+  -- given the ones it would have had.
+  [27] = function(state: any)
+    Galaxy.Regions(state.galaxy)
   end,
 }
 
@@ -542,6 +547,8 @@ export type PlayerInfo = {
   systemName: string,
   security: number,   -- of the system: 1 at a homeworld, 0 where nobody keeps order
   owner: string,      -- the name of the faction whose system it is; "" if nobody's
+  region: string,     -- the names of the region and the constellation it is in
+  constellation: string,
 }
 
 function Query.Player(game: Game): PlayerInfo
@@ -552,6 +559,8 @@ function Query.Player(game: Game): PlayerInfo
     ship = ship.id, shipName = ship.name, hull = Ships.byId[ship.type], docked = ship.docked,
     system = system, systemName = state.galaxy.systems[system].name, security = state.galaxy.systems[system].security,
     owner = if Factions.byId[state.galaxy.systems[system].owner] then Factions.byId[state.galaxy.systems[system].owner].name else "",
+    region = state.galaxy.regions[state.galaxy.systems[system].region].name,
+    constellation = state.galaxy.constellations[state.galaxy.systems[system].constellation].name,
   }
 end
 

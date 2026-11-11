@@ -29,7 +29,16 @@ export type SystemNode = {
   -- What comes to a belt or waits at a gate follows from it
   -- (Tactical/Pirates), and what ore the belts have (Describe/System).
   security: number,
+  -- Where it is on the map of names (Galaxy.Regions): its region, and
+  -- its constellation within that, by their ids.
+  region: number,
+  constellation: number,
 }
+
+-- A region is a score or so of systems that lie together, and a
+-- constellation a handful of those: names to find one's way by.
+export type Region = { id: number, name: string }
+export type Constellation = { id: number, name: string, region: number }
 
 -- The three kinds of space a security figure makes.
 export type Band = "secure" | "low" | "lawless"
@@ -178,7 +187,193 @@ end
 export type Galaxy = {
   seed: number,
   systems: { SystemNode },  -- systems[id]
+  regions: { Region },      -- regions[id]
+  constellations: { Constellation },
 }
+
+-- Systems to a region, and to a constellation, more or less.
+Galaxy.REGION = 16
+Galaxy.CONSTELLATION = 5
+
+local REGION_KINDS = { "Reach", "Expanse", "Marches", "Deep", "Verge", "Span", "Drift", "Hollow" }
+
+-- Share 'members' (systems, by id) out into 'count' groups, each joined
+-- up by gates among its own: the hearts of the groups are spread
+-- evenly over the map, and every member goes to the heart fewest jumps
+-- away through the members. A group that comes out with fewer
+-- than 'least' goes in with a neighbour. Returns each member's group,
+-- and how many groups there are in the end.
+local function share(systems: { SystemNode }, members: { number }, count: number, least: number): ({ [number]: number }, number)
+  local among: { [number]: boolean } = {}
+  for _, id in members do
+    among[id] = true
+  end
+  -- Where the hearts are: begin with members far apart on the map, then
+  -- move each to the middle of the members nearest it, a few times over,
+  -- so that the groups come out much of a size.
+  local cx: { number }, cy: { number } = { systems[members[1]].x }, { systems[members[1]].y }
+  while #cx < math.min(count, #members) do
+    local best, most = 0, -1
+    for _, id in members do
+      local near = math.huge
+      for index = 1, #cx do
+        near = math.min(near, (systems[id].x - cx[index]) ^ 2 + (systems[id].y - cy[index]) ^ 2)
+      end
+      if near > most then
+        best, most = id, near
+      end
+    end
+    table.insert(cx, systems[best].x)
+    table.insert(cy, systems[best].y)
+  end
+  for _ = 1, 8 do
+    local sx: { number }, sy: { number }, n: { number } = table.create(#cx, 0), table.create(#cx, 0), table.create(#cx, 0)
+    for _, id in members do
+      local best, near = 1, math.huge
+      for index = 1, #cx do
+        local d = (systems[id].x - cx[index]) ^ 2 + (systems[id].y - cy[index]) ^ 2
+        if d < near then
+          best, near = index, d
+        end
+      end
+      sx[best] += systems[id].x
+      sy[best] += systems[id].y
+      n[best] += 1
+    end
+    for index = 1, #cx do
+      if n[index] > 0 then
+        cx[index], cy[index] = sx[index] / n[index], sy[index] / n[index]
+      end
+    end
+  end
+  -- (a heart is the member nearest each of those places)
+  local hearts: { number } = {}
+  local taken: { [number]: boolean } = {}
+  for index = 1, #cx do
+    local best, near = 0, math.huge
+    for _, id in members do
+      local d = (systems[id].x - cx[index]) ^ 2 + (systems[id].y - cy[index]) ^ 2
+      if not taken[id] and d < near then
+        best, near = id, d
+      end
+    end
+    if best ~= 0 then
+      taken[best] = true
+      table.insert(hearts, best)
+    end
+  end
+  local group: { [number]: number } = {}
+  local queue: { number } = {}
+  for index, heart in hearts do
+    if group[heart] == nil then
+      group[heart] = index
+      table.insert(queue, heart)
+    end
+  end
+  local at = 1
+  while at <= #queue do
+    local id = queue[at]
+    at += 1
+    for _, neighbor in systems[id].neighbors do
+      if among[neighbor] and group[neighbor] == nil then
+        group[neighbor] = group[id]
+        table.insert(queue, neighbor)
+      end
+    end
+  end
+  -- (anything the gates among the members do not reach goes with the first)
+  for _, id in members do
+    group[id] = group[id] or 1
+  end
+  -- A group too small to be worth a name joins the group next to it:
+  -- the smallest first, into the neighbour its lowest member touches.
+  while true do
+    local sizes: { number } = table.create(#hearts, 0)
+    for _, id in members do
+      sizes[group[id]] += 1
+    end
+    local small, fewest = 0, least
+    for index, size in sizes do
+      if size > 0 and size < fewest then
+        small, fewest = index, size
+      end
+    end
+    local into = 0
+    if small ~= 0 then
+      for _, id in members do
+        if group[id] == small and into == 0 then
+          for _, neighbor in systems[id].neighbors do
+            if among[neighbor] and group[neighbor] ~= small and into == 0 then
+              into = group[neighbor]
+            end
+          end
+        end
+      end
+    end
+    if into == 0 then
+      break
+    end
+    for _, id in members do
+      if group[id] == small then
+        group[id] = into
+      end
+    end
+  end
+  -- Number the groups there are from 1, in the order of their first members.
+  local renumbered: { [number]: number } = {}
+  local groups = 0
+  for _, id in members do
+    if renumbered[group[id]] == nil then
+      groups += 1
+      renumbered[group[id]] = groups
+    end
+    group[id] = renumbered[group[id]]
+  end
+  return group, groups
+end
+
+-- Give the galaxy its regions and constellations, and every system its
+-- place in them. They follow from the galaxy's seed and its gates, so
+-- a galaxy always has the same.
+function Galaxy.Regions(galaxy: Galaxy)
+  local systems = galaxy.systems
+  local rng = Rng.For(galaxy.seed, 2002)
+  local used: { [string]: boolean } = {}
+  local function name(): string
+    local made = Names.System(rng)
+    while used[made] do
+      made = Names.System(rng)
+    end
+    used[made] = true
+    return made
+  end
+  local all: { number } = {}
+  for id = 1, #systems do
+    all[id] = id
+  end
+  local inRegion, regions = share(systems, all, math.max(1, math.floor(#systems / Galaxy.REGION + 0.5)), Galaxy.REGION // 3)
+  galaxy.regions, galaxy.constellations = {}, {}
+  for region = 1, regions do
+    galaxy.regions[region] = { id = region, name = `{name()} {REGION_KINDS[Rng.Int(rng, #REGION_KINDS) + 1]}` }
+    local members: { number } = {}
+    for id = 1, #systems do
+      if inRegion[id] == region then
+        table.insert(members, id)
+      end
+    end
+    if #members > 0 then
+      local inConstellation, count = share(systems, members, math.max(1, math.floor(#members / Galaxy.CONSTELLATION + 0.5)), 2)
+      local first = #galaxy.constellations
+      for index = 1, count do
+        table.insert(galaxy.constellations, { id = first + index, name = name(), region = region })
+      end
+      for _, id in members do
+        systems[id].region = region
+        systems[id].constellation = first + inConstellation[id]
+      end
+    end
+  end
+end
 
 local SPACING = 4 -- light years between neighbours, roughly
 
@@ -212,7 +407,8 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
       name = Names.System(rng)
     end
     used[name] = true
-    systems[id] = { id = id, name = name, x = x, y = y, neighbors = {}, owner = "", nearest = "", home = false, hops = 0, security = 1 }
+    systems[id] = { id = id, name = name, x = x, y = y, neighbors = {}, owner = "", nearest = "", home = false, hops = 0, security = 1,
+      region = 1, constellation = 1 }
   end
 
   local function link(a: number, b: number)
@@ -252,8 +448,9 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
     table.sort(system.neighbors)
   end
 
-  local galaxy: Galaxy = { seed = seed, systems = systems }
+  local galaxy: Galaxy = { seed = seed, systems = systems, regions = {}, constellations = {} }
   Galaxy.Claim(galaxy)
+  Galaxy.Regions(galaxy)
   return galaxy
 end
 

@@ -104,6 +104,11 @@ function Im.TextRight(s: string, x: number, y: number, size: number, color: vect
   Im.Text(s, x - Im.TextWidth(s, size), y, size, color, alpha)
 end
 
+-- How wide a heading is.
+function Im.HeadingWidth(s: string, size: number): number
+  return WidgetRenderer_GetTextSize(Fonts.Heading(), s, size).x
+end
+
 function Im.Heading(s: string, x: number, y: number, size: number, color: vector)
   WidgetRenderer_DrawText(Fonts.Heading(), s, vector.create(x, y + 0.8 * size), size, color, 1, false)
 end

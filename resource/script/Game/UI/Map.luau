@@ -163,6 +163,22 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   end
   local centre = vector.create(x + 8 + mapW / 2, y + 48 + mapH / 2)
   Im.Fill(x + 8, y + 48, mapW, mapH, vector.create(0.015, 0.02, 0.03), 0.85)
+  -- The regions' names, each over the middle of its systems, under
+  -- everything else.
+  for _, region in galaxy.regions do
+    local sum, count = vector.create(0, 0), 0
+    for id, system in systems do
+      if system.region == region.id then
+        sum += made.at[id]
+        count += 1
+      end
+    end
+    if count > 0 then
+      local label = string.upper(region.name)
+      local middle = centre + sum / count
+      Im.Text(label, middle.x - Im.TextWidth(label, 15) / 2, middle.y - 8, 15, Im.DIM, 0.85)
+    end
+  end
   Icon_Draw(made.gates, centre, 1, Im.DIM, 0.35)
   local groups: { { icon: Icon, color: vector } } = if bySecurity then made.banded else made.owned
   for _, group in groups do
@@ -216,7 +232,9 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   local band = Galaxy.Band(system.security)
   local owner = Factions.byId[system.owner]
   Im.Heading(string.upper(system.name), px, line, 20, Im.TEXT)
-  line += 32
+  line += 28
+  Im.Text(`{galaxy.constellations[system.constellation].name}, {galaxy.regions[system.region].name}`, px, line, 13, Im.DIM)
+  line += 24
   Im.Text(if owner then `{owner.name} space` else "Nobody's", px, line, 14, if owner then colorOf(system.owner) else UNCLAIMED)
   if system.home then
     Im.Text("homeworld", px + 170, line, 13, Im.DIM)
