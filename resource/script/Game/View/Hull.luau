@@ -33,6 +33,17 @@ Hull.looks = {
     plating = { 0.52, 0.31, 0.16 }, patch = { 0.56, 0.52, 0.43 }, frame = { 0.17, 0.16, 0.16 },
     glow = { 1.0, 0.72, 0.32 }, trim = { 0.46, 0.12, 0.07 }, wear = 0.65, rust = 0.65, sheets = 3.2,
   },
+  -- The pirates: whatever paint was on it, gone dark, the new plate
+  -- bare, a red light.
+  unbound = {
+    plating = { 0.25, 0.19, 0.16 }, patch = { 0.50, 0.48, 0.44 }, frame = { 0.13, 0.12, 0.12 },
+    glow = { 1.0, 0.25, 0.10 }, trim = { 0.50, 0.08, 0.05 }, wear = 0.85, rust = 0.85, sheets = 3.2,
+  },
+  -- Hulls no faction owns: plain blue-grey, a yellow stripe, a cold light.
+  civil = {
+    plating = { 0.40, 0.44, 0.48 }, patch = { 0.62, 0.62, 0.58 }, frame = { 0.16, 0.16, 0.17 },
+    glow = { 0.70, 0.90, 1.0 }, trim = { 0.74, 0.52, 0.10 }, wear = 0.40, rust = 0.20, sheets = 3.2,
+  },
 } :: { [string]: Look }
 
 local block, beam, truss, conduit = Plates.Block, Plates.Beam, Plates.Truss, Plates.Conduit
@@ -194,6 +205,27 @@ local function javelin(b: Builder)
   mast(b, v(-0.08, 0.27, -0.38), 0.50, -0.03)
   block(b, PLATING, v(0.04, -0.37, -0.05), v(0.016, 0.13, 0.26), v(0, 0.10, 0))
   beam(b, FRAME, v(0.04, -0.26, 0.18), v(0.04, -0.48, 0.02), 0.010)
+end
+
+-- The Courier, the ship anyone can have (and a pirate scout's too): a
+-- plain box on a spine, the cockpit at the front, a cargo box slung
+-- under, an engine pod each side on a short strut. (A v0, like all of
+-- these: the quickest thing that reads as what it is.)
+local function courier(b: Builder)
+  truss(b, v(0, 0, -0.80), v(0, 0, 0.70), 0.18, 6)
+  block(b, PLATING, v(0, 0.02, 0.10), v(0.24, 0.20, 0.42))
+  block(b, PLATING, v(0, -0.02, -0.52), v(0.20, 0.18, 0.22))
+  block(b, FRAME, v(0, 0.0, -0.31), v(0.15, 0.14, 0.04))
+  block(b, PATCH, v(0, 0.06, 0.66), v(0.17, 0.14, 0.18), nil, 0.2)
+  block(b, GLOW, v(0, 0.10, 0.842), v(0.11, 0.035, 0.006), nil, 0.3)
+  block(b, TRIM, v(0, 0.225, 0.10), v(0.08, 0.010, 0.36))
+  block(b, PATCH, v(0, -0.30, 0.06), v(0.18, 0.10, 0.30), nil, 0.08)
+  ports(b, v(0.245, 0.06, -0.10), v(0.245, 0.06, 0.30), 3, 0.014)
+  for _, side in { -1, 1 } do
+    nacelle(b, v(side * 0.46, 0.0, -0.44), 0.30, 0.10)
+    truss(b, v(side * 0.22, 0, -0.42), v(side * 0.37, 0, -0.44), 0.09, 2, v(0, 0, 1))
+  end
+  mast(b, v(-0.08, 0.22, -0.30), 0.34, 0.02)
 end
 
 -- The Caravan, a hauler. A cage of heavy girders, wider at the keel
@@ -629,6 +661,8 @@ end
 type Design = {
   faction: string,
   draw: (b: Builder) -> (),
+  -- (A pirate hull is somebody else's design, patched: Plates' 'patch'.)
+  patch: number?,
   -- (A bigger ship is plated in more and smaller sheets for its size:
   -- it is one of the things that says how big it is.)
   sheets: number?,
@@ -692,7 +726,76 @@ local designs: { [string]: Design } = {
     launchers = {},
     fit = { "autocannon.small" },
   },
+  ["frigate.courier"] = {
+    faction = "civil", draw = courier,
+    -- (a gun on the back and under the cargo box; a gun on each flank)
+    turrets = { over(v(0, 0.235, 0.36), v(0, -0.40, 0.10)), abeam(v(0.24, 0.04, -0.06), v(-0.24, 0.04, -0.06)) },
+    launchers = {},
+    fit = { "autocannon.small", "autocannon.small" },
+  },
 }
+
+-- How much of a pirate's ship is not as its builders left it.
+local PATCHED = 0.8
+
+-- The pirates' own hulls. Each began as a human hull (its 'donor' in
+-- Core/Data/Ships) and is that hull's design, patched, with more guns
+-- bolted on than it was built for: the donor's hardpoints, and beside
+-- them as many more as the pirate hull has. Where nobody has drawn the
+-- donor yet, the Vessari hull of its class stands in for it.
+for _, hull in Ships.list do
+  if hull.lineage == "unbound" and designs[hull.id] == nil then
+    local base: Design? = if hull.donor then designs[hull.donor] else nil
+    if base == nil then
+      for id, design in designs do
+        local other = Ships.byId[id]
+        if design.faction == "vessari" and other and other.class == hull.class then
+          base = design
+        end
+      end
+    end
+    if base then
+      local points: { Hardpoint } = {}
+      for _, point in base.turrets do
+        table.insert(points, point)
+      end
+      for _, point in base.launchers do
+        table.insert(points, point)
+      end
+      local had = #points
+      local extra = 0
+      while #points < hull.turrets + hull.launchers and had > 0 do
+        extra += 1
+        -- (beside one of those it has, a little way aft)
+        local like = points[(extra - 1) % had + 1]
+        local shift = v(0, 0, -0.17 * math.ceil(extra / had))
+        table.insert(points, {
+          { at = like[1].at + shift, up = like[1].up, fore = like[1].fore },
+          { at = like[2].at + shift, up = like[2].up, fore = like[2].fore },
+        })
+      end
+      local gun = if #base.turrets > 0 then base.fit[1] else "autocannon.small"
+      local rack = if #base.launchers > 0 then base.fit[#base.turrets + 1] else "launcher.light"
+      local derived: Design = { faction = "unbound", draw = base.draw, patch = PATCHED, sheets = base.sheets, turrets = {}, launchers = {}, fit = {} }
+      for index, point in points do
+        if index <= hull.turrets then
+          table.insert(derived.turrets, point)
+        elseif index <= hull.turrets + hull.launchers then
+          table.insert(derived.launchers, point)
+        end
+      end
+      for _ = 1, #derived.turrets do
+        table.insert(derived.fit, gun)
+      end
+      for _ = 1, #derived.launchers do
+        table.insert(derived.fit, rack)
+      end
+      if #derived.turrets == hull.turrets and #derived.launchers == hull.launchers then
+        designs[hull.id] = derived
+      end
+    end
+  end
+end
 
 -- ---------------------------------------------------------------------
 
@@ -726,20 +829,26 @@ function Hull.Types(): { string }
 end
 
 -- The model of a hull type and how big it came out, or nil if nobody
--- has designed it. Made once and kept.
-function Hull.Build(type: string): Built?
-  local made = built[type]
-  if made then
-    return made
-  end
+-- has designed it. Made once and kept. 'pirate' asks for the hull as a
+-- pirate flies it, whoever built it: patched, and in their paint (a
+-- pirate hull is that anyway).
+function Hull.Build(type: string, pirate: boolean?): Built?
   local design = designs[type]
   if design == nil then
     return nil
   end
+  local patched = pirate == true and design.patch == nil
+  local key = if patched then type .. ":pirate" else type
+  local made = built[key]
+  if made then
+    return made
+  end
+  local look = Hull.looks[if patched then "unbound" else design.faction]
   local b = Plates.New(#type * 1.37)
+  b.patch = if patched then PATCHED else design.patch
   table.clear(exhausts)
   design.draw(b)
-  local model, lower, upper = Plates.Finish(b, Hull.looks[design.faction], design.sheets)
+  local model, lower, upper = Plates.Finish(b, look, design.sheets)
   local size = upper - lower
   -- (a design has to have the hardpoints the game says the hull has)
   local hull = Ships.byId[type]
@@ -753,9 +862,9 @@ function Hull.Build(type: string): Built?
     end
   end
   local result: Built = { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = design.turrets,
-    launchers = design.launchers, fit = design.fit, engines = table.clone(exhausts), glow = Hull.looks[design.faction].glow,
+    launchers = design.launchers, fit = design.fit, engines = table.clone(exhausts), glow = look.glow,
     lower = lower, upper = upper }
-  built[type] = result
+  built[key] = result
   return result
 end
 
@@ -835,6 +944,7 @@ function Hull.Wreck(type: string): Wreckage
   for index = 1, #edges - 1 do
     -- (the seed the whole hull was built with: the same plates, in the same tones)
     local b = Plates.New(#type * 1.37)
+    b.patch = if design then design.patch else nil
     b.ruin = { from = edges[index], to = edges[index + 1], loss = 0.42 }
     draw(b)
     if b.kept >= 4 then

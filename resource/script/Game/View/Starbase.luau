@@ -575,6 +575,36 @@ function Starbase.Module(id: string): Made
   return finish(key, draw, WORKS, 4.0, 0.11)
 end
 
+-- A stargate (a v0: the quickest thing that reads as one). A ring to
+-- fly through, lit round its inside, with four pylons whose prongs lean
+-- in ahead of it and astern. Its front is toward +z, the way a ship
+-- leaves through it.
+local function gate(b: Builder)
+  local count = 12
+  for index = 0, count - 1 do
+    local a = index / count * 2 * math.pi
+    local out = v(math.cos(a), math.sin(a), 0)
+    local turn = v(0, 0, a + math.pi / 2)
+    block(b, if index % 3 == 1 then PATCH else PLATING, out * 0.80, v(0.215, 0.07, 0.10), turn, 0.15)
+    block(b, GLOW, out * 0.722, v(0.12, 0.008, 0.03), turn, 0.3)
+    if index % 3 == 0 then
+      block(b, PLATING, out * 0.95, v(0.09, 0.13, 0.16), turn, 0.15)
+      block(b, TRIM, out * 1.085, v(0.095, 0.012, 0.165), turn, 0.2)
+      beam(b, FRAME, out * 0.90 + v(0, 0, 0.12), out * 0.62 + v(0, 0, 0.62), 0.035)
+      beam(b, FRAME, out * 0.90 + v(0, 0, -0.12), out * 0.66 + v(0, 0, -0.50), 0.035)
+      block(b, GLOW, out * 0.62 + v(0, 0, 0.64), v(0.03, 0.03, 0.03), v(0, 0, a), 0.45)
+    end
+  end
+  block(b, PATCH, v(0.0, 1.14, 0.0), v(0.10, 0.07, 0.12), nil, 0.14)
+  block(b, GLOW, v(0, 1.15, 0.122), v(0.07, 0.02, 0.004), nil, 0.3)
+  mast(b, v(0.04, 1.21, 0), 0.30, 0.02)
+end
+
+-- The model of a stargate. (One for everybody, until gates are somebody's.)
+function Starbase.Gate(): Made
+  return finish("gate", gate, WORKS, 4.0, 0.11)
+end
+
 local shell: Model? = nil
 
 -- The field: a unit sphere to be scaled to the field's radius.

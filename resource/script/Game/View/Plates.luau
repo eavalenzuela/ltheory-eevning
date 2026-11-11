@@ -44,13 +44,19 @@ export type Builder = {
   -- mesh: 0.11 suits a hull drawn about two units long.
   fine: number,
   ruin: Ruin?,
+  -- To build a thing as it is after pirates have had it: from 0 to 1,
+  -- how much of its small fittings are gone, its plating swapped for
+  -- whatever was to hand or left off down to the frame, and all of it
+  -- a little out of true.
+  patch: number?,
   kept: number,         -- how many plates have gone in
 }
 
 local ZERO = vector.create(0, 0, 0)
 
 function Plates.New(seed: number, fine: number?): Builder
-  return { big = PlateMesh_Create(9), small = PlateMesh_Create(4), count = 0, seed = seed, fine = fine or 0.11, ruin = nil, kept = 0 }
+  return { big = PlateMesh_Create(9), small = PlateMesh_Create(4), count = 0, seed = seed, fine = fine or 0.11, ruin = nil,
+    patch = nil, kept = 0 }
 end
 
 -- The next plate's own number: the fraction of its tag.
@@ -66,7 +72,23 @@ end
 
 -- Put a plate in; or, building a ruin, perhaps not, or not straight.
 local function add(b: Builder, mesh: PlateMesh, part: number, center: vector, half: vector, turn: vector, bevel: number)
-  local tag = part + own(b)
+  local tone = own(b)
+  local patch = b.patch
+  if patch then
+    local kind = math.floor(part)
+    if kind ~= Plates.GLOW and math.max(half.x, half.y, half.z) < b.fine and dice(b, 11) < patch * 0.30 then
+      return
+    end
+    if kind == Plates.PLATING and dice(b, 12) < patch * 0.40 then
+      part = if dice(b, 13) < 0.3 then Plates.FRAME else Plates.PATCH
+    elseif kind == Plates.PATCH and dice(b, 12) < patch * 0.30 then
+      part = Plates.PLATING
+    elseif kind == Plates.TRIM and dice(b, 12) < patch * 0.5 then
+      part = Plates.FRAME
+    end
+    turn += vector.create(dice(b, 14) - 0.5, dice(b, 15) - 0.5, dice(b, 16) - 0.5) * (0.07 * patch)
+  end
+  local tag = part + tone
   local ruin = b.ruin
   if ruin then
     if math.floor(part) == Plates.GLOW then

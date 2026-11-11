@@ -190,6 +190,9 @@ for index, eye in { vector.create(0.5, 1.1, 2.9), vector.create(-1.9, 0.8, -2.4)
   table.insert(VIEWS, { name = `base-modules-{index}`, kind = "modules", seed = 1, eye = eye, look = vector.create(0, -0.1, 0),
     light = if index == 1 then vector.create(1.5, 1.8, 2.5) else vector.create(-2.0, 1.8, -1.5) })
 end
+for index, eye in { vector.create(1.3, 0.6, 2.3), vector.create(2.6, 0.3, 0.5) } do
+  table.insert(VIEWS, { name = `base-gate-{index}`, kind = "gate", seed = 1, eye = eye, look = CENTRE, light = vector.create(1.5, 1.8, 2.5) })
+end
 for index, base in { { "outpost", 3000 }, { "shipyard", 5000 }, { "trade hub", 7500 } } :: { { any } } do
   local word = ({ "small", "medium", "large" })[index]
   table.insert(VIEWS, { name = `base-{index}-{word}-1-outside`, kind = `starbase:{base[1]}:{base[2]}`, seed = 3 + index,
@@ -466,7 +469,7 @@ return AppShell.Create(function(): Widget
           object:SetPos((m + away * 0.30 * wreckage.radius) * scale - (right * m.x + up * m.y + look * m.z) * scale)
           Object_SetAxes(object, look, up)
         end
-      elseif v.kind == "towers" or v.kind == "modules" or string.sub(v.kind, 1, 9) == "starbase:" then
+      elseif v.kind == "towers" or v.kind == "modules" or v.kind == "gate" or string.sub(v.kind, 1, 9) == "starbase:" then
         table.insert(stage, Object_Scenery({}))
         table.insert(units, 1)
         local fore = vector.create(0, 0, 1)
@@ -484,6 +487,11 @@ return AppShell.Create(function(): Widget
               scale = towerRadius / made.radius, radius = towerRadius })
           end
           layout = { tower = parts[1], modules = { parts[2], parts[3] }, field = 0 }
+        elseif v.kind == "gate" then
+          metres = radius / 2000
+          local made = Starbase.Gate()
+          layout = { tower = { id = "gate", model = made.model, at = vector.create(0, 0, 0), look = fore, scale = 2000 / made.radius,
+            radius = 2000 }, modules = {}, field = 0 }
         elseif v.kind == "modules" then
           metres = radius / 900
           local parts: { Starbase.Part } = {}

@@ -103,6 +103,8 @@ export type Scene = {
   mining: { [number]: number },       -- when each mining module's beam was last begun, by its item
   wreckage: { [number]: Wrecked },    -- the pieces of each wreck on the grid
   works: { [number]: { Object } },    -- what stands round each station's tower: its modules, their guns, its field
+  docked: boolean,                    -- the pilot is docked: the camera is on the station
+  zoomAway: number,                   -- the zoom there was before docking, to go back to
   arms: { [number]: Armed },          -- what is on the hardpoints of each ship of our own design
   armsTick: number,                   -- the tick the arms were last checked against the fits
   armsTime: number,                   -- when (scene time) the turrets were last swung
@@ -147,16 +149,8 @@ function Scene.New(camera: Camera): Scene
     proxies = {}, celestials = {}, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
-    wreckage = {}, works = {}, arms = {}, armsTick = -1, armsTime = 0,
+    wreckage = {}, works = {}, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0,
   }
-end
-
--- Scale an object so its bounding radius is 'radius' metres.
-local function fit(object: Object, radius: number)
-  local current = object:GetRadius()
-  if current > 0 then
-    object:SetScale(object:GetScale() * (radius / current))
-  end
 end
 
 -- Put an object so that the middle of its bounds is at 'at'. A generated
@@ -172,8 +166,9 @@ end
 -- engine's ships.
 local designed: { [Object]: Hull.Built } = setmetatable({} :: any, { __mode = "k" })
 
-local function makeShip(type: string, radius: number): Object
-  local built = Hull.Build(type)
+-- ('pirate': it is a pirate's, and looks it.)
+local function makeShip(type: string, radius: number, pirate: boolean): Object
+  local built = Hull.Build(type, pirate)
   if built then
     local object = Object_Scenery({})
     Object_SetRenderable(object, built.model)
@@ -508,10 +503,17 @@ local function makeStatic(object: SystemData.Object): Object
     made = Object_Asteroid(object.seed)
     made:SetScale(vector.create(object.radius, object.radius, object.radius))
   else
-    -- Gates, until they have a model of their own. (A station is a
-    -- tower and what is anchored round it: makeStation.)
-    made = Item_StationType(1000000, object.seed, 1, 1, 1, 1):Instantiate()
-    fit(made, object.radius)
+    -- A gate: a ring, facing out of the system, the way its jump goes.
+    -- (A station is a tower and what is anchored round it: makeStation.)
+    local gate = Starbase.Gate()
+    made = Object_Scenery({})
+    Object_SetRenderable(made, gate.model)
+    local size = object.radius / gate.radius
+    made:SetScale(vector.create(size, size, size))
+    local out = vector.create(object.x, 0, object.z)
+    if vector.magnitude(out) > 1 then
+      Object_SetAxes(made, vector.normalize(out), vector.create(0, 1, 0))
+    end
     made:SetName(object.name)
   end
   return made
@@ -622,6 +624,13 @@ local function ballAt(ball: State.Ball, tick: number, since: number): (number, n
     ball.tvx, ball.tvy, ball.tvz, ball.tau, since)
 end
 
+-- Docked, the camera stands this many of the tower's radii off, and
+-- looks this far to one side of it (as a share of that distance): the
+-- station's screens fill the middle of the window, and the tower is to
+-- stand in the clear beside them.
+local DOCKED_ZOOM = 2.3
+local DOCKED_ASIDE = 0.62
+
 -- Bring the engine's objects into line with the Core for this frame.
 function Scene.Sync(scene: Scene, session: Session.Session)
   local game = session.game
@@ -656,6 +665,24 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     local station = objects[player.docked % Constants.STRUCTURE_ID_SPAN]
     scene.eyeX, scene.eyeY, scene.eyeZ = station.x, station.y, station.z
     grid = station.id
+    if not scene.docked then
+      -- Just docked (or the game has begun docked): bring the camera in
+      -- on the tower, from the side the sun is on and a little round
+      -- from it, so that it is seen lit and in the round.
+      scene.docked = true
+      scene.zoomAway = scene.zoomTarget
+      scene.zoom, scene.zoomTarget = DOCKED_ZOOM, DOCKED_ZOOM
+      scene.pitch = 1.32
+      for _, object in objects do
+        if object.kind == "sun" then
+          scene.yaw = math.atan2(object.z - station.z, object.x - station.x) + 0.7
+        end
+      end
+    end
+  end
+  if me and scene.docked then
+    scene.docked = false
+    scene.zoom, scene.zoomTarget = scene.zoomAway, scene.zoomAway
   end
 
   -- The origin: the grid's anchor, or the ship itself in warp.
@@ -723,7 +750,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       if existing then
         proxy = existing
       else
-        proxy = makeShip(state.ships[id].type, ball.radius)
+        proxy = makeShip(state.ships[id].type, ball.radius, state.ships[id].owner == "pirates")
         proxy:SetName(ball.name)
         container:AddInterior(proxy)
         scene.proxies[id] = proxy
@@ -960,8 +987,17 @@ function Scene.UpdateCamera(scene: Scene, frameSeconds: number, input: boolean)
   -- is made effectively instant and the smoothing done on the zoom above.
   local camera = scene.camera
   local center = focus:GetCenter()
+  local distance = scene.zoom * focus:GetRadius()
+  if scene.docked then
+    -- (the eye and what it looks at go aside together, and the tower
+    -- goes the other way across the window)
+    local across = vector.cross(look, vector.create(0, 1, 0))
+    if vector.magnitude(across) > 1e-3 then
+      center += vector.normalize(across) * (distance * DOCKED_ASIDE)
+    end
+  end
   camera:SetTarget(focus)
-  camera:SetRelativePos(center + look * (scene.zoom * focus:GetRadius()))
+  camera:SetRelativePos(center + look * distance)
   camera:SetRelativeLookAt(center)
   camera:SetRigidity(100000)
   -- In warp the view opens out.
