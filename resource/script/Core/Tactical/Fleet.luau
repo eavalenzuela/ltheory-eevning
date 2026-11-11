@@ -20,6 +20,13 @@
 -- and otherwise they keep station. Told to stay, a pilot docks at the
 -- nearest station and waits there.
 --
+-- A pilot whose ship has a mining laser can be set to mine the belt
+-- the player is at: they cut rock after rock until the hold is full,
+-- take the ore in to the nearest station, where it goes into the
+-- player's hangar, and come back, for as long as they are left to it
+-- and wherever the player goes. Somebody after them at the belt sends
+-- them in early.
+--
 -- They fly with the orders anybody's ship does, so everything that
 -- holds for a ship holds for theirs. What they destroy is the
 -- player's doing (the bounty, and the blame). A ship of theirs that is
@@ -29,12 +36,13 @@
 -- A pilot whose wage cannot be paid leaves, and the ship they flew is
 -- found at the player's home station.
 --
--- (The beginning of M7. Not yet: pilots who mine or haul by standing
+-- (The beginning of M7. Not yet: pilots who haul or patrol by standing
 -- order, pilots who get better, loyalty, a ship's own drones.)
 
 local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Mining = require("@lt/Core/Tactical/Mining")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Names = require("@lt/Core/Describe/Names")
@@ -45,6 +53,7 @@ local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local System = require("@lt/Core/Describe/System")
+local Types = require("@lt/Core/Data/Types")
 local Vitals = require("@lt/Core/Tactical/Vitals")
 local Wallet = require("@lt/Core/Assets/Wallet")
 
@@ -125,6 +134,49 @@ function Fleet.Cannot(state: State.State, wing: State.Wingman, ship: State.Ship)
   return if missing then Skills.Describe(missing) else nil
 end
 
+local function nearestStation(state: State.State, me: State.Ball): System.Object?
+  local best: System.Object?, least = nil, math.huge
+  for _, object in Space.Describe(state, me.system).objects do
+    local starbase = state.starbases[object.id]
+    if object.kind == "station" and (starbase == nil or starbase.ready <= state.tick) then
+      local far = Space.Distance(object :: any, me :: any)
+      if far < least then
+        best, least = object, far
+      end
+    end
+  end
+  return best
+end
+
+-- The mining lasers a ship has fitted.
+local function miners(state: State.State, ship: number): { State.Item }
+  local found: { State.Item } = {}
+  if state.ships[ship] then
+    for _, item in Items.Fitted(state, ship) do
+      if Modules.byId[item.type].miner then
+        table.insert(found, item)
+      end
+    end
+  end
+  return found
+end
+
+-- The hired pilots a "mine here" would set to work: those (or the one
+-- named) on the player's grid whose ship has a mining laser.
+local function diggers(state: State.State, only: State.Wingman?): { State.Wingman }
+  local lead = state.balls[state.player.ship]
+  local found: { State.Wingman } = {}
+  for _, id in state.fleetIds do
+    local wing = state.fleet[id]
+    local ball = state.balls[wing.ship]
+    if (only == nil or only == wing) and lead and ball and ball.system == lead.system and ball.grid == lead.grid
+      and #miners(state, wing.ship) > 0 then
+      table.insert(found, wing)
+    end
+  end
+  return found
+end
+
 function Fleet.Validate(state: State.State, command: State.Command): (boolean, string?)
   local ship = state.ships[command.actor]
   if ship == nil or ship.id ~= state.player.ship then
@@ -195,6 +247,20 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
     local what = command.what
     if what == "follow" or what == "stay" then
       return true
+    elseif what == "mine" then
+      local me = state.balls[ship.id]
+      if me == nil then
+        return false, "docked"
+      end
+      local post = Space.Object(state, me.grid)
+      if post == nil or post.kind ~= "belt" then
+        return false, "this is not an asteroid belt"
+      elseif nearestStation(state, me) == nil then
+        return false, "there is no station in this system to take the ore to"
+      elseif #diggers(state, wing) == 0 then
+        return false, "no hired pilot here has a mining laser fitted"
+      end
+      return true
     elseif what == "engage" then
       local me = state.balls[ship.id]
       local target = state.balls[command.target or 0]
@@ -239,7 +305,7 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     table.insert(state.hired, found.key)
     Wallet.Pay(state, -found.fee, "hiring", events)
     local wing: State.Wingman = { id = State.NewId(state), name = found.name, skill = found.skill, wage = found.wage,
-      paid = state.tick, ship = 0, order = "follow", target = 0 }
+      paid = state.tick, ship = 0, order = "follow", target = 0, post = 0, base = 0, hauled = 0 }
     state.fleet[wing.id] = wing
     table.insert(state.fleetIds, wing.id)
     table.insert(events, { kind = "PilotHired", pilot = wing.id, name = wing.name })
@@ -257,6 +323,15 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
   elseif kind == "DismissPilot" then
     table.insert(events, { kind = "PilotLeft", pilot = wing.id, name = wing.name, reason = "dismissed" })
     forget(state, wing)
+  elseif kind == "FleetOrder" and command.what == "mine" then
+    -- The belt the player is at, and the station nearest it.
+    local me = state.balls[ship.id]
+    local base = nearestStation(state, me) :: System.Object
+    for _, each in diggers(state, wing) do
+      each.order, each.target = "mine", 0
+      each.post, each.base = me.grid, base.id
+    end
+    table.insert(events, { kind = "FleetOrdered", what = "mine", target = me.grid })
   elseif kind == "FleetOrder" then
     for _, id in state.fleetIds do
       local each = state.fleet[id]
@@ -300,20 +375,6 @@ local function quit(state: State.State, wing: State.Wingman, events: { Event })
   end
   table.insert(events, { kind = "PilotLeft", pilot = wing.id, name = wing.name, reason = "unpaid" })
   forget(state, wing)
-end
-
-local function nearestStation(state: State.State, me: State.Ball): System.Object?
-  local best: System.Object?, least = nil, math.huge
-  for _, object in Space.Describe(state, me.system).objects do
-    local starbase = state.starbases[object.id]
-    if object.kind == "station" and (starbase == nil or starbase.ready <= state.tick) then
-      local far = Space.Distance(object :: any, me :: any)
-      if far < least then
-        best, least = object, far
-      end
-    end
-  end
-  return best
 end
 
 -- Whether a module that runs on its own ship is one to switch on for a
@@ -392,6 +453,128 @@ local function mend(state: State.State, me: State.Ball, fighting: boolean, event
   end
 end
 
+-- The next gate on the way to a system.
+local function travel(state: State.State, me: State.Ball, system: number, events: { Event })
+  if not (me.intent and me.intent.kind == "jump") then
+    local route = Galaxy.Route(state.galaxy, me.system, system)
+    local gate = System.GateTo(Space.Describe(state, me.system), route[2])
+    if gate then
+      give(state, { kind = "Jump", actor = me.id, target = gate.id }, events)
+    end
+  end
+end
+
+-- What a pilot set to mine does: to the belt, a rock after another
+-- until the hold is full, in to the station with it, and out again.
+-- Somebody after the fleet at the belt sends them in early.
+local function work(state: State.State, wing: State.Wingman, ship: State.Ship, events: { Event })
+  local post, base = Space.Object(state, wing.post), Space.Object(state, wing.base)
+  if post == nil or base == nil or #miners(state, ship.id) == 0 then
+    wing.order = "stay"
+    return
+  end
+  local me = state.balls[ship.id]
+  if me == nil then
+    -- Docked: what was mined goes into the hangar, and out again.
+    local units = 0
+    if ship.docked == base.id then
+      for _, item in Items.In(state, ship.id, "cargo") do
+        if Types.Info(item.type).category == "ore" then
+          units += item.quantity
+          Items.Add(state, item.type, item.quantity, base.id, "hangar")
+          Items.Take(state, item, item.quantity)
+        end
+      end
+    end
+    if units > 0 then
+      wing.hauled += units
+      table.insert(events, { kind = "OreDelivered", pilot = wing.id, name = wing.name, units = units, station = base.id })
+    end
+    give(state, { kind = "Undock", actor = ship.id }, events)
+    return
+  end
+  mend(state, me, false, events)
+  if me.intent and me.intent.kind == "dock" then
+    return
+  end
+  local system = Space.SystemOf(state, post.id)
+  if me.system ~= system then
+    travel(state, me, system, events)
+    return
+  elseif me.grid ~= post.id then
+    if me.warp == nil and not give(state, { kind = "WarpTo", actor = ship.id, target = post.id, range = 0 }, events)
+      and not (me.mode == "approach" and me.target == post.id) then
+      give(state, { kind = "Approach", actor = ship.id, target = post.id, range = 0 }, events)
+    end
+    return
+  end
+
+  -- At the belt.
+  local lasers = miners(state, ship.id)
+  local function goIn()
+    me.vitals.locks = {}
+    give(state, { kind = "Dock", actor = ship.id, target = base.id }, events)
+  end
+  if Pirates.Hunting(state, me) ~= 0 then
+    goIn()
+    return
+  end
+  for _, item in lasers do
+    if running(me, item.id) then
+      return
+    end
+  end
+  -- Nothing is cutting: the hold is full, the rock is gone, or it is time to begin.
+  local capacity = Items.ShipStats(state, ship.id).cargo
+  local used = Items.CargoUsed(state, ship.id)
+  if capacity - used < math.max(2, 0.03 * capacity) then
+    goIn()
+    return
+  end
+  local reach = math.huge
+  for _, item in lasers do
+    reach = math.min(reach, (Modules.byId[item.type].miner :: Modules.Miner).range)
+  end
+  local rock: System.Object?, least = nil, math.huge
+  for _, object in Space.Describe(state, system).objects do
+    if object.kind == "asteroid" and object.site == post.id and Mining.Left(state, object) > 0 then
+      local far = Space.Distance(object :: any, me :: any)
+      if far < least then
+        rock, least = object, far
+      end
+    end
+  end
+  if rock == nil then
+    -- The belt is mined out: in with what there is, or wait for it to grow back.
+    if used > 0.03 * capacity then
+      goIn()
+    elseif me.mode ~= "stop" then
+      give(state, { kind = "Stop", actor = ship.id }, events)
+    end
+    return
+  end
+  if Space.Gap(me :: any, rock :: any) > reach * 0.8 then
+    if not (me.mode == "approach" and me.target == rock.id) then
+      give(state, { kind = "Approach", actor = ship.id, target = rock.id, range = reach * 0.5 }, events)
+    end
+    return
+  end
+  local locked, targeted = false, false
+  for _, lock in me.vitals.locks do
+    if lock.target == rock.id then
+      targeted, locked = true, lock.locked
+    end
+  end
+  if not targeted then
+    me.vitals.locks = {}
+    give(state, { kind = "LockTarget", actor = ship.id, target = rock.id }, events)
+  elseif locked then
+    for _, item in lasers do
+      give(state, { kind = "ActivateModule", actor = ship.id, item = item.id, target = rock.id }, events)
+    end
+  end
+end
+
 -- What a hired pilot does with their ship this tick. 'place' is theirs
 -- in the list, which is where they keep station.
 local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, place: number, events: { Event })
@@ -402,7 +585,10 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
     return
   end
 
-  if wing.order == "stay" then
+  if wing.order == "mine" then
+    work(state, wing, ship, events)
+    return
+  elseif wing.order == "stay" then
     -- Dock at the nearest station, and wait.
     if me and not (me.intent and me.intent.kind == "dock") then
       local station = nearestStation(state, me)
@@ -431,13 +617,7 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
   if not held then
     if me.system ~= leadSystem then
       -- The next gate on the way to the player.
-      if not (me.intent and me.intent.kind == "jump") then
-        local route = Galaxy.Route(state.galaxy, me.system, leadSystem)
-        local gate = System.GateTo(Space.Describe(state, me.system), route[2])
-        if gate then
-          give(state, { kind = "Jump", actor = ship.id, target = gate.id }, events)
-        end
-      end
+      travel(state, me, leadSystem, events)
       return
     elseif lead == nil then
       -- The player is docked here: dock too.

@@ -254,11 +254,14 @@ export type Drone = { ship: number, owner: number, type: string, target: number,
 -- A pilot hired to fly one of the player's ships beside their own
 -- (Tactical/Fleet). Every skill counts as 'skill' for a ship they fly.
 -- Their wages are paid up to the tick 'paid'. 'ship' is the ship they
--- have been given (0: none). Their 'order' is to "follow" the player
--- or to "stay" docked, and 'target' is what they have been pointed at.
+-- have been given (0: none). Their 'order' is to "follow" the player,
+-- to "stay" docked, or to "mine" the belt 'post' and take the ore to
+-- the station 'base' ('hauled' is the units brought in so far); and
+-- 'target' is what they have been pointed at.
 export type Wingman = {
   id: number, name: string, skill: number, wage: number, paid: number,
   ship: number, order: string, target: number,
+  post: number, base: number, hauled: number,
 }
 
 -- A place that is on nobody's chart (Tactical/Sites): 'id' is the place

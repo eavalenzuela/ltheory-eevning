@@ -66,7 +66,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 24
+Core.SAVE_VERSION = 25
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -228,6 +228,15 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
     end
     if state.skills.leadership == nil then
       state.skills.leadership = 1
+    end
+  end,
+  -- 25: a hired pilot can be set to mine a belt. None of a save from
+  -- before has been.
+  [24] = function(state: any)
+    for _, wing in state.fleet do
+      wing.post = wing.post or 0
+      wing.base = wing.base or 0
+      wing.hauled = wing.hauled or 0
     end
   end,
 }
@@ -872,6 +881,10 @@ export type FleetRow = {
   id: number, name: string, skill: number, wage: number, order: string, target: number,
   ship: number, shipName: string, hull: string,   -- 0 and "" for a pilot with no ship
   where: string,      -- "no ship", "docked at ...", "with you", or the system it is in
+  -- "no ship", "following", "fighting", "waiting", or for a pilot set
+  -- to mine: "mining", "taking ore in", "unloading", "going to the belt"
+  doing: string,
+  hauled: number,     -- units of ore a pilot set to mine has brought in
   near: boolean,      -- on the pilot's grid
   distance: number,   -- from the pilot's ship, when near
   shield: number, armor: number, structure: number,
@@ -886,6 +899,7 @@ function Query.Fleet(game: Game): { FleetRow }
     local row: FleetRow = {
       id = wing.id, name = wing.name, skill = wing.skill, wage = wing.wage, order = wing.order, target = wing.target,
       ship = 0, shipName = "", hull = "", where = "no ship", near = false, distance = 0, shield = 1, armor = 1, structure = 1,
+      doing = "no ship", hauled = wing.hauled,
     }
     if ship then
       row.ship, row.shipName, row.hull = ship.id, ship.name, ship.type
@@ -902,6 +916,14 @@ function Query.Fleet(game: Game): { FleetRow }
       else
         local station = Space.Object(state, ship.docked)
         row.where = `docked at {if station then station.name else "a station"}`
+      end
+      if wing.order == "mine" then
+        row.doing = if ball == nil then "unloading" elseif ball.intent and ball.intent.kind == "dock" then "taking ore in"
+          elseif ball.grid == wing.post then "mining" else "going to the belt"
+      elseif wing.order == "stay" then
+        row.doing = "waiting"
+      else
+        row.doing = if ball and #ball.vitals.locks > 0 then "fighting" else "following"
       end
     end
     table.insert(rows, row)

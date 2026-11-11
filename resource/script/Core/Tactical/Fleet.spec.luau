@@ -373,6 +373,114 @@ suite:Case("told to stay, a hired pilot docks at the nearest station and waits t
   t.eq(refused(game, { kind = "DismissPilot", actor = 0, pilot = wing.id }), `{wing.name} is out flying`)
 end)
 
+-- A game with a hired pilot in a Prospector with two mining lasers, out
+-- at the first belt with the player.
+local function atBelt(): (Core.Game, State.Wingman, State.Ship, number)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  state.wallet = 10000000
+  local second = Space.NewShip(state, "frigate.prospector", "Digger", "player", state.player.home)
+  Items.Equip(state, second.id, "miner.small", nil)
+  Items.Equip(state, second.id, "miner.small", nil)
+  local wing = hired(game, second, 2)
+  local rocks = belt(game, 1)
+  assert(submit(game, { kind = "Undock", actor = 0 }))
+  steps(game, 5)
+  assert(submit(game, { kind = "WarpTo", actor = 0, target = rocks }))
+  assert(waitFor(game, 600, function()
+    local me, ball = state.balls[state.player.ship], state.balls[second.id]
+    return me.grid == rocks and ball ~= nil and ball.grid == rocks
+  end), "the two did not get to the belt")
+  return game, wing, second, rocks
+end
+
+local function oreIn(game: Core.Game, holder: number, place: string): number
+  local units = 0
+  for _, item in Items.In(game.state, holder, place) do
+    if string.sub(item.type, 1, 4) == "ore." then
+      units += item.quantity
+    end
+  end
+  return units
+end
+
+suite:Case("a hired pilot with a mining laser is set to mine a belt: the hold is filled, taken in to the nearest station, and they go back", function(t)
+  local game, wing, second, rocks = atBelt()
+  local state = game.state
+  local home = state.player.home
+  local before = oreIn(game, home, "hangar")
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "mine" })))
+  t.eq({ wing.order, wing.post } :: { any }, { "mine", rocks } :: { any })
+  local base = wing.base
+  t.ok((Space.Object(state, base) :: System.Object).kind == "station")
+  t.eq(Core.Query.Fleet(game)[1].doing, "mining")
+  -- They go to a rock and cut it.
+  t.ok(waitFor(game, 300, function()
+    return oreIn(game, second.id, "cargo") > 0
+  end), "nothing was mined")
+  -- The player goes home and stays in. The pilot carries on: a hold of ore is brought in.
+  t.ok((submit(game, { kind = "Dock", actor = 0, target = home })))
+  local delivered = 0
+  t.ok(waitFor(game, 4000, function()
+    for _, event in Core.TakeEvents(game) do
+      if event.kind == "OreDelivered" and event.pilot == wing.id then
+        delivered += event.units
+      end
+    end
+    return delivered > 0
+  end), "no ore was brought in")
+  t.eq(wing.hauled, delivered)
+  t.eq(oreIn(game, base, "hangar") - (if base == home then before else 0), delivered)
+  t.eq(oreIn(game, second.id, "cargo"), 0)
+  -- (most of a Prospector's hold of it)
+  t.ok(delivered * 0.1 > 0.5 * 480 or delivered > 200, `only {delivered} units came in`)
+  -- And out again to the belt, and cutting.
+  t.ok(waitFor(game, 600, function()
+    local ball = state.balls[second.id]
+    return ball ~= nil and ball.grid == rocks and oreIn(game, second.id, "cargo") > 0
+  end), "the pilot did not go back to the belt")
+  t.eq(Core.Query.Fleet(game)[1].doing, "mining")
+  t.eq(Core.Query.Fleet(game)[1].hauled, delivered)
+  -- Told to regroup, they stop work and come to the player, who is docked.
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "follow" })))
+  t.ok(waitFor(game, 600, function()
+    return second.docked == home
+  end), "the pilot did not come back when called")
+end)
+
+suite:Case("only a pilot with a mining laser, at a belt, in a system with a station, is set to mine; and one who is hunted there goes in", function(t)
+  local game, second = docked()
+  local state = game.state
+  local wing = hired(game, second)
+  t.eq(refused(game, { kind = "FleetOrder", actor = 0, what = "mine" }), "docked")
+  t.ok((submit(game, { kind = "Undock", actor = 0 })))
+  steps(game, 5)
+  t.eq(refused(game, { kind = "FleetOrder", actor = 0, what = "mine" }), "this is not an asteroid belt")
+  local rocks = belt(game, 1)
+  t.ok((submit(game, { kind = "WarpTo", actor = 0, target = rocks })))
+  t.ok(waitFor(game, 600, function()
+    local me, ball = state.balls[state.player.ship], state.balls[second.id]
+    return me.grid == rocks and ball.grid == rocks
+  end))
+  -- (a Courier with autocannons has nothing to mine with)
+  t.eq(refused(game, { kind = "FleetOrder", actor = 0, what = "mine" }), "no hired pilot here has a mining laser fitted")
+  t.eq(wing.order, "follow")
+
+  local mining, digger, ship = atBelt()
+  t.ok((submit(mining, { kind = "FleetOrder", actor = 0, what = "mine", pilot = digger.id })))
+  t.ok(waitFor(mining, 300, function()
+    return oreIn(mining, ship.id, "cargo") > 0
+  end))
+  -- Somebody turns up and goes for the fleet: the pilot makes for the station.
+  local me = mining.state.balls[mining.state.player.ship]
+  Pirates.Spawn(mining.state, Pirates.SCOUT, me.system, me.x + 20000, me.y, me.z, me.grid)
+  t.ok(waitFor(mining, 10, function()
+    local ball = mining.state.balls[ship.id]
+    return ball.intent ~= nil and ball.intent.kind == "dock" and ball.intent.target == digger.base
+  end), "a hunted miner stayed at the belt")
+  t.eq(Core.Query.Fleet(mining)[1].doing, "taking ore in")
+end)
+
 suite:Case("wages are paid by the day, and a pilot who cannot be paid leaves the ship they flew at home", function(t)
   local game, second = docked()
   local state = game.state
@@ -417,6 +525,15 @@ suite:Case("a fleet is in the save, and an older save has none", function(t)
   steps(loaded, 60)
   t.eq(Core.Hash(loaded), Core.Hash(game))
   t.eq(Core.Query.Fleet(loaded)[1].where, "with you")
+  -- (a save from before a pilot could be set to mine)
+  local now, nowLength = Core.Save(game)
+  local before = Codec.Decode(now, nowLength)
+  before.saveVersion = 24
+  for _, wing in before.state.fleet do
+    wing.post, wing.base, wing.hauled = nil, nil, nil
+  end
+  local earlier, earlierLength = Codec.Encode(before)
+  t.eq(Core.Hash(Core.Load(earlier, earlierLength)), Core.Hash(game))
   local fresh = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local saved, savedLength = Core.Save(fresh)
   local file = Codec.Decode(saved, savedLength)

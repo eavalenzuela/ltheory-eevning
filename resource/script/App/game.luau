@@ -863,21 +863,36 @@ function Debug.Fly(type: string): boolean
 end
 
 -- A cheat, for a hired pilot to have something to fly: while docked, a
--- second ship of a hull type in the hangar, with a small autocannon in
--- each of two turrets (or as many as it has) and rounds for them.
-function Debug.Spare(type: string): boolean
+-- second ship of a hull type in the hangar, with a module in each of
+-- two turrets (or as many as it has): a small autocannon and rounds
+-- for it, unless another is named (a mining laser, say).
+function Debug.Spare(type: string, module: string?): boolean
   local state = session.game.state
   local mine = state.ships[state.player.ship]
   local hull = Ships.byId[type]
-  if mine == nil or mine.docked == 0 or hull == nil then
+  local fitted = Modules.byId[module or "autocannon.small"]
+  if mine == nil or mine.docked == 0 or hull == nil or fitted == nil then
     return false
   end
   local ship = Space.NewShip(state, hull.id, "Spare " .. hull.name, "player", mine.docked)
   for _ = 1, math.min(2, hull.turrets) do
-    Items.Equip(state, ship.id, "autocannon.small", "ammo.emp")
+    Items.Equip(state, ship.id, fitted.id, if fitted.weapon then "ammo.emp" else nil)
   end
-  Items.Add(state, "ammo.emp", 2000, ship.id, "cargo")
+  if fitted.weapon then
+    Items.Add(state, "ammo.emp", 2000, ship.id, "cargo")
+  end
   return true
+end
+
+-- What the nth hired pilot is doing ("following", "mining", "taking
+-- ore in" and so on: Core.Query.Fleet), and the units of ore they have
+-- brought in. "" and 0 for nobody.
+function Debug.Crew(n: number): (string, number)
+  local row = Core.Query.Fleet(session.game)[n]
+  if row == nil then
+    return "", 0
+  end
+  return row.doing, row.hauled
 end
 
 -- The hired pilots: how many there are, how many are in space on the

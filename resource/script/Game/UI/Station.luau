@@ -1082,7 +1082,8 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
   Im.Heading("WHAT A PILOT IS", left, line, 14, Im.DIM)
   for index, text in { "A hired pilot flies a ship of yours and goes where you go:", "out when you undock, to warp and through gates after you,",
     "into a fight beside you. Every skill counts as their grade.", "Grade 1 flies frigates and haulers, 2 destroyers and barges,",
-    "3 cruisers, 4 battleships. You command one for each level", "of Leadership. A ship lost is insured; its pilot is not lost." } do
+    "3 cruisers, 4 battleships. You command one for each level", "of Leadership. A ship lost is insured; its pilot is not lost.",
+    "One with a mining laser can be set to mine a belt (Mine here,", "in space): the ore is brought to the nearest station." } do
     Im.Text(text, left, line + 6 + index * 17, 12, Im.DIM)
   end
 
@@ -1110,6 +1111,11 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
       ItemIcon.Draw(row.hull, right, line + 20, 18)
       local ship = game.state.ships[row.ship]
       local where = if ship and ship.docked == station then "docked here" else row.where
+      if row.order == "mine" then
+        where = `{row.doing}: {row.hauled} units of ore brought in`
+      elseif row.order == "stay" then
+        where ..= ", told to stay"
+      end
       Im.Text(shorten(`{row.shipName} ({Ships.byId[row.hull].name}), {where}`, 58), right + 24, line + 22, 12, Im.DIM)
     else
       Im.Text("No ship: give them one of yours that is docked here.", right, line + 22, 12, Im.WARN)

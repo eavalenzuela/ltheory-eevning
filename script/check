@@ -57,6 +57,8 @@
 #               beside its ship, and called back
 #   game-fleet  a hired pilot (test/scenario/fleet.txt): hired, given a ship,
 #               out to a belt with the player, a pirate destroyed, a jump
+#   game-miner  a hired pilot set to mine (test/scenario/miner.txt): a hold of
+#               ore brought in to the station while the player sits docked
 #   game-pace   the game app must draw at least thirty frames a second just
 #               outside the home station (test/scenario/pace.txt)
 #   goldens     script/goldens: screenshots of the stored scenes must match
@@ -181,6 +183,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/drones.txt
   step game-fleet 0 timeout 700 bin/launch game --no-present --fixed-step 60 --timeout 600 \
     --script test/scenario/fleet.txt
+  step game-miner 0 timeout 700 bin/launch game --no-present --fixed-step 60 --timeout 600 \
+    --script test/scenario/miner.txt
   step game-pace 0 timeout 200 bin/launch game --no-present --fixed-step 60 --timeout 150 \
     --script test/scenario/pace.txt
   step goldens 0 script/goldens

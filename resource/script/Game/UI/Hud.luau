@@ -670,21 +670,27 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           end
         end
         local engage: State.Command = { kind = "FleetOrder", actor = 0, what = "engage", target = target }
-        if Im.Button("Engage", left + 226, fy + 4, 70, 26, (Session.CanDo(session, engage)), "Fleet:engage") then
+        if Im.Button("Engage", left + 150, fy + 4, 70, 26, (Session.CanDo(session, engage)), "Fleet:engage") then
           Session.Do(session, engage)
         end
         local staying = fleet[1].order == "stay"
-        if Im.Button("Regroup", left + 300, fy + 4, 76, 26, true, "Fleet:follow") then
+        if Im.Button("Regroup", left + 224, fy + 4, 76, 26, true, "Fleet:follow") then
           Session.Do(session, { kind = "FleetOrder", actor = 0, what = "follow" })
         end
-        if Im.Toggle("Stay", left + 380, fy + 4, 76, 26, staying, "Fleet:stay") then
+        if Im.Toggle("Stay", left + 304, fy + 4, 60, 26, staying, "Fleet:stay") then
           Session.Do(session, { kind = "FleetOrder", actor = 0, what = if staying then "follow" else "stay" })
+        end
+        -- (at a belt: those with a mining laser work it from now on)
+        local mine: State.Command = { kind = "FleetOrder", actor = 0, what = "mine" }
+        if Im.Button("Mine here", left + 368, fy + 4, 88, 26, (Session.CanDo(session, mine)), "Fleet:mine") then
+          Session.Do(session, mine)
         end
         for index, row in fleet do
           local ry = fy + 34 + (index - 1) * 22
           local hull = Ships.byId[row.hull]
           Im.Text(row.name, left + 36, ry, 13, if row.near then OURS else Im.TEXT)
-          Im.Text(if hull then hull.name else "no ship", left + 180, ry, 12, Im.DIM)
+          local flying = if hull == nil then "no ship" elseif row.order == "mine" and row.near then `{hull.name}: {row.doing}` else hull.name
+          Im.Text(if #flying > 20 then string.sub(flying, 1, 19) .. "." else flying, left + 180, ry, 12, Im.DIM)
           if row.near then
             -- shield, armour and hull, as three short bars
             for at, share in { row.shield, row.armor, row.structure } do
@@ -698,8 +704,12 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             local ship = game.state.ships[row.ship]
             local here = ship ~= nil and ship.docked ~= 0 and ship.docked == player.docked
             local where = if here then "docked here" else row.where
+            -- (one set to mine is where they should be, wherever that is)
+            if row.order == "mine" then
+              where = `{row.doing}, {row.hauled} units in`
+            end
             Im.TextRight(if #where > 34 then string.sub(where, 1, 32) .. ".." else where, left + 456, ry, 12,
-              if here or row.order == "stay" or row.ship == 0 then Im.DIM else Im.WARN)
+              if here or row.order ~= "follow" or row.ship == 0 then Im.DIM else Im.WARN)
           end
         end
       end

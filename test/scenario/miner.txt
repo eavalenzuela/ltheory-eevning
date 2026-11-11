@@ -1,0 +1,58 @@
+# A hired pilot set to mine, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/miner.txt
+#
+# Money and a mining frigate with two lasers are given, a pilot is hired
+# and given it, and the two go out to the belt. There the pilot is set to
+# mine. The player goes back in and sits docked while a hold of ore is
+# cut, brought in to the station nearest the belt, and the pilot goes out
+# for more. Called back, they stop work and come in.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Peaceful(true)
+lua GameDebug.Grant(1000000)
+lua assert(GameDebug.Spare('frigate.prospector', 'miner.small'), 'no mining frigate')
+frames 3
+until GameDebug.Press('Crew')
+until GameDebug.Tab() == 'Crew'
+until GameDebug.Press('Hire:1')
+until GameDebug.Fleet() == 1
+until GameDebug.Press('Give:1:1')
+until select(3, GameDebug.Fleet()) == 1
+
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 5
+lua assert(not GameDebug.CanPress('Fleet:mine'), 'nobody mines outside a station')
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+until select(2, GameDebug.Fleet()) == 1
+lua GameDebug.TimeScale(1)
+frames 5
+
+# Set to work.
+until GameDebug.Press('Fleet:mine')
+until GameDebug.Crew(1) == 'mining'
+
+# The player goes in. The pilot stays out, and the ore comes in.
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused')
+until GameDebug.Docked()
+lua assert(select(2, GameDebug.Fleet()) == 0, 'the miner should have stayed at the belt')
+lua GameDebug.TimeScale(20)
+patience 900
+until select(2, GameDebug.Crew(1)) > 0
+lua assert(select(2, GameDebug.Crew(1)) >= 200, 'a hold of ore is more than that')
+until GameDebug.Crew(1) == 'mining'
+
+# Called back.
+until GameDebug.Press('Fleet:follow')
+until GameDebug.Crew(1) ~= 'mining'
+until select(3, GameDebug.Fleet()) == 1
+lua GameDebug.TimeScale(1)
+
+echo miner scenario passed
+quit
