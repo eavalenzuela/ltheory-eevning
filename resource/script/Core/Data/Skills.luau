@@ -39,6 +39,9 @@ local function weapons(family: string, attribute: string, perLevel: number): Mod
 end
 
 local skills: { Skill } = {
+  -- Finding things
+  { id = "astrometrics", name = "Astrometrics", rank = 3, start = 0, requires = {},
+    note = "Each scan brings a hidden site 10% nearer to found a level." },
   -- Ships
   { id = "frigates", name = "Frigates", rank = 2, start = 1, requires = {}, note = "Level 2 to fly combat frigates." },
   { id = "destroyers", name = "Destroyers", rank = 3, start = -1, requires = { { skill = "frigates", level = 3 } },

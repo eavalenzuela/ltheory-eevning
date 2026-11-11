@@ -1,0 +1,47 @@
+# Sites on nobody's chart, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/sites.txt
+#
+# The first system has two signals the ship's scanner can pick up, in
+# this game both hidden belts. Neither is on the overview. Three scans
+# resolve them. Then they are places like any other: warp to one, and
+# its rocks are there to mine.
+
+wait 2
+lua GameDebug.Peaceful(true)
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('Stop'))
+lua assert(GameDebug.Count('site') == 0, 'an unfound site should not be on the overview')
+until GameDebug.Press('Scanner')
+frames 3
+lua assert(GameDebug.Sites() == 2, 'the scanner should show two signals here')
+lua assert(select(2, GameDebug.Sites()) == 0, 'nothing should be found before a scan')
+lua assert(not GameDebug.CanPress('SiteWarp:1'), 'an unresolved signal is not somewhere to warp to')
+
+# Three scans. The scanner takes a few seconds each time.
+until GameDebug.Press('Scan')
+until not GameDebug.CanPress('Scan')
+lua assert(select(2, GameDebug.Sites()) == 0, 'a hidden belt should take more than one scan')
+until GameDebug.CanPress('Scan')
+until GameDebug.Press('Scan')
+until not GameDebug.CanPress('Scan')
+until GameDebug.CanPress('Scan')
+until GameDebug.Press('Scan')
+until select(2, GameDebug.Sites()) == 2
+lua assert(GameDebug.Count('site') == 2, 'a found site should be on the overview')
+lua assert(select(3, GameDebug.Sites('ore')) ~= '', 'the sites here should be hidden belts')
+
+# To one of them, where there are rocks nobody else is mining.
+frames 3
+lua GameDebug.TimeScale(16)
+until GameDebug.Press('SiteWarp:1')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+frames 5
+lua assert(GameDebug.Count('asteroid') >= 10, 'a hidden belt should have its rocks')
+lua assert(GameDebug.Distance('Hidden Belt') < 1000, 'the warp did not end at the site')
+
+echo sites scenario passed
+quit

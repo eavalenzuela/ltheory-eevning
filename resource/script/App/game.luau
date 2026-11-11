@@ -568,6 +568,21 @@ function Debug.Traffic(): (number, number, number)
   return #state.trafficIds, near, hostile
 end
 
+-- The scanner: how many sites the system has, how many of them are
+-- found, and the name of the first found one of a kind ("ore", "relic",
+-- "combat"; "" if there is none).
+function Debug.Sites(kind: string?): (number, number, string)
+  local sites = Core.Query.Sites(session.game)
+  local found, name = 0, ""
+  for _, site in sites do
+    found += if site.found then 1 else 0
+    if site.found and site.kind == kind and name == "" then
+      name = site.name
+    end
+  end
+  return #sites, found, name
+end
+
 -- Jobs: how many the station docked at offers, how many are in hand,
 -- how many have been finished, and the standing with the faction whose
 -- station it is.

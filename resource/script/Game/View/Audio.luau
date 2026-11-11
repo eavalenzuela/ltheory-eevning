@@ -55,6 +55,7 @@ local WEAPON: { [string]: { files: { string }, volume: number, pitch: number } }
 local OWN: { [string]: { any } } = {
   WarpStarted = { "jumpdrive/activate.ogg", 0.25 }, WarpEnded = { "jumpdrive/deactivate.ogg", 0.22 },
   LockCompleted = { "ui/targetacquired.ogg", 0.18 }, LockLost = { "ui/targetlost.ogg", 0.14 },
+  Scanned = { "ui/scanneropen.wav", 0.16 },
 }
 local SHIP: { [string]: { any } } = {
   Jumped = { "warpnode/exit.ogg", 0.28 }, Docked = { "ui/confirm.ogg", 0.18 }, Undocked = { "ui/activate.ogg", 0.18 },

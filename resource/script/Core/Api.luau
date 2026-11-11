@@ -30,6 +30,7 @@ local Missions = require("@lt/Core/Assets/Missions")
 local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Ships = require("@lt/Core/Data/Ships")
+local Sites = require("@lt/Core/Tactical/Sites")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local Colonies = require("@lt/Core/Assets/Colonies")
@@ -62,7 +63,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 18
+Core.SAVE_VERSION = 19
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -171,6 +172,15 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
     state.missionsDone = state.missionsDone or 0
     state.standings = state.standings or {}
   end,
+  -- 19: systems have sites to find. A save from before has found none
+  -- (and is given its first when the game goes on).
+  [18] = function(state: any)
+    state.sites = state.sites or {}
+    state.siteIds = state.siteIds or {}
+    state.sitesDue = state.sitesDue or {}
+    state.sitesSeen = state.sitesSeen or {}
+    state.scanReady = state.scanReady or 0
+  end,
 }
 
 -- A new game: a galaxy, and the player's first ship docked at a station
@@ -198,6 +208,11 @@ function Core.New(options: Options): Game
     missionsTaken = {},
     missionsDone = 0,
     standings = {},
+    sites = {},
+    siteIds = {},
+    sitesDue = {},
+    sitesSeen = {},
+    scanReady = 0,
     jobIds = {},
     wallet = 0,
     journal = {},
@@ -259,6 +274,7 @@ local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true }
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
 local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true }
+local SITE_COMMANDS = { Scan = true }
 local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true }
 local COLONY_COMMANDS = { DeployColony = true, BuildFacility = true, RemoveFacility = true, StartExtraction = true, Export = true }
 
@@ -286,6 +302,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Colonies.Validate(state, command)
   elseif MISSION_COMMANDS[command.kind] then
     return Missions.Validate(state, command)
+  elseif SITE_COMMANDS[command.kind] then
+    return Sites.Validate(state, command)
   elseif TRAINING_COMMANDS[command.kind] then
     return Training.Validate(state, command)
   end
@@ -348,6 +366,8 @@ function Core.Step(game: Game)
       Colonies.Apply(state, command, game.events)
     elseif ok and MISSION_COMMANDS[command.kind] then
       Missions.Apply(state, command, game.events)
+    elseif ok and SITE_COMMANDS[command.kind] then
+      Sites.Apply(state, command, game.events)
     elseif ok and TRAINING_COMMANDS[command.kind] then
       Training.Apply(state, command, game.events)
     elseif ok then
@@ -356,6 +376,7 @@ function Core.Step(game: Game)
       table.insert(game.events, { kind = "CommandRejected", command = command.kind, actor = command.actor, reason = reason })
     end
   end
+  Sites.Step(state, game.events)
   Pirates.Populate(state, game.events)
   Traffic.Step(state, game.events)
   Pirates.Think(state, game.events)
@@ -470,8 +491,14 @@ function Query.Overview(game: Game): { Entry }
   for _, object in Space.Describe(state, me.system).objects do
     local onGrid = me.grid ~= 0 and object.site == me.grid
     local gone = object.kind == "asteroid" and Mining.Left(state, object) <= 0
+    -- (a site is on the overview once it has been found, and while the
+    -- pilot is at it: Tactical/Sites)
+    local site = state.sites[object.id]
+    if site and not onGrid and Sites.Hidden(state, object.id) then
+      gone = true
+    end
     if (onGrid or object.kind ~= "asteroid") and not gone then
-      local entry: Entry = { id = object.id, kind = object.kind :: string, name = object.name,
+      local entry: Entry = { id = object.id, kind = if site then "site" else object.kind :: string, name = object.name,
         distance = Space.Gap(me :: any, object :: any), onGrid = onGrid, variety = object.variety, hostile = false }
       table.insert(entries, entry)
     end
@@ -739,6 +766,29 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
     anchored = Starbases.Anchored(state, starbase), wait = math.max(0, starbase.ready - state.tick) * Constants.TICK, lit = lit,
     fuel = starbase.fuel, hours = Starbases.Hours(starbase), powergrid = powergrid, cpu = cpu, modules = modules,
   }
+end
+
+-- What the ship's scanner shows of the system the pilot is in: every
+-- site still there, found or not. One not found is a signal with a
+-- code and no more. And the seconds until the scanner can be used again.
+export type SiteStatus = {
+  id: number, name: string, kind: string,   -- kind is "" until it is found
+  strength: number, found: boolean, distance: number,
+}
+function Query.Sites(game: Game): ({ SiteStatus }, number)
+  local state = game.state
+  local player = Query.Player(game)
+  local me = state.balls[player.ship]
+  local found: { SiteStatus } = {}
+  for _, site in Sites.In(state, player.system) do
+    local object = Space.Object(state, site.id) :: System.Object
+    local known = site.strength >= 1
+    table.insert(found, {
+      id = site.id, name = if known then object.name else `Signal {site.code}`, kind = if known then site.kind else "",
+      strength = site.strength, found = known, distance = if me then Space.Gap(me :: any, object :: any) else 0,
+    })
+  end
+  return found, math.max(0, state.scanReady - state.tick) * Constants.TICK
 end
 
 -- The jobs to be had and in hand: what the station the pilot is docked

@@ -190,9 +190,18 @@ function Pirates.Populate(state: State.State, events: { Event })
   if site == nil then
     return
   end
-  local band = Galaxy.Band(state.galaxy.systems[me.system].security)
+  local band: string = Galaxy.Band(state.galaxy.systems[me.system].security)
   local camp = site.kind == "gate" and band == "lawless"
   if site.kind ~= "belt" and not camp then
+    return
+  end
+  -- A site (Tactical/Sites) is a belt to everything else. A den has a
+  -- pack a kind of space tougher than the belts here bring, and nobody
+  -- troubles a derelict where order is kept.
+  local hidden = state.sites[site.id]
+  if hidden and hidden.kind == "combat" then
+    band = if band == "secure" then "low" else "lawless"
+  elseif hidden and hidden.kind == "relic" and band == "secure" then
     return
   end
   local last = state.spawned[site.id]

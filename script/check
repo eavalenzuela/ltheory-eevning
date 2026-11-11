@@ -45,6 +45,8 @@
 #               on one
 #   game-missions  the jobs a station offers (test/scenario/missions.txt):
 #               taken, one filled and paid, one given up
+#   game-sites  sites on nobody's chart (test/scenario/sites.txt): two
+#               hidden belts found with the scanner, and a warp to one
 #   game-pace   the game app must draw at least thirty frames a second just
 #               outside the home station (test/scenario/pace.txt)
 #   goldens     script/goldens: screenshots of the stored scenes must match
@@ -157,6 +159,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/traffic.txt
   step game-missions 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/missions.txt
+  step game-sites 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
+    --script test/scenario/sites.txt
   step game-pace 0 timeout 200 bin/launch game --no-present --fixed-step 60 --timeout 150 \
     --script test/scenario/pace.txt
   step goldens 0 script/goldens

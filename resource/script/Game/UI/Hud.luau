@@ -19,6 +19,7 @@ local Info = require("@lt/Game/UI/Info")
 local Map = require("@lt/Game/UI/Map")
 local Menu = require("@lt/Game/UI/Menu")
 local Modules = require("@lt/Core/Data/Modules")
+local Scanner = require("@lt/Game/UI/Scanner")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
 local State = require("@lt/Core/Kernel/State")
@@ -42,8 +43,11 @@ local KEEP_RANGE = 10000
 
 local TAGS: { [string]: string } = {
   sun = "SUN", planet = "PLN", moon = "MON", belt = "BLT", asteroid = "AST",
-  station = "STA", gate = "GAT", ship = "SHP", wreck = "WRK",
+  station = "STA", gate = "GAT", ship = "SHP", wreck = "WRK", site = "SIT",
 }
+
+-- What a site (Tactical/Sites) is called, by the variety of its place.
+local SITES: { [string]: string } = { ["site.combat"] = "pirate den", ["site.ore"] = "hidden belt", ["site.relic"] = "derelict" }
 
 -- The three kinds of space (Describe/Galaxy), as the pilot is told.
 local BANDS: { [string]: string } = { secure = "SECURE SPACE", low = "LOW SECURITY", lawless = "LAWLESS SPACE" }
@@ -207,6 +211,17 @@ local function drawOverview(session: Session.Session, entries: { Core.Entry }, x
   local rowHeight = 22
   Im.Panel(x, y, width, height)
   Im.Heading(`OVERVIEW  {#entries}`, x + 12, y + 8, 16, Im.DIM)
+  -- (the ship's scanner, for what is on nobody's chart: it takes the
+  -- place the colonies and assets windows take)
+  if Im.Button("Scan", x + width - 76, y + 5, 64, 22, true, "Scanner") then
+    if Scanner.IsOpen() then
+      Scanner.Close()
+    else
+      Scanner.Open()
+      Colony.Close()
+      Assets.Close()
+    end
+  end
   local top = y + 34
   local visible = math.max(1, (height - 42) // rowHeight)
   if Im.Inside(x, y, width, height) then
@@ -255,6 +270,9 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
   local entry: Core.Entry = selected
   Im.Heading(string.upper(entry.name), x + 12, y + 8, 16, Im.TEXT)
   local what = if entry.variety ~= "" and entry.kind ~= "ship" then `{entry.variety} {entry.kind}` else entry.kind
+  if entry.kind == "site" then
+    what = SITES[entry.variety] or "site"
+  end
   local tone = Im.DIM
   if entry.kind == "gate" then
     -- (a gate says what kind of space is on the other side of it)
@@ -537,6 +555,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         else
           Colony.Open()
           Assets.Close()
+          Scanner.Close()
         end
       end
       if Im.Button("Assets", left + 334, bottom - 54, 70, 34, true) then
@@ -545,6 +564,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         else
           Assets.Open()
           Colony.Close()
+          Scanner.Close()
         end
       end
       if Im.Button("Map", left + 408, bottom - 54, 56, 34, true) then
@@ -556,6 +576,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       end
       Colony.Draw(session, left + 16, top + 130)
       Assets.Draw(session, left + 16, top + 130)
+      if ball then
+        Scanner.Draw(session, left + 16, top + 130)
+      end
       -- Where the pilot means to go, and the autopilot's switch: a row
       -- of its own over the buttons at the foot of the screen (beside
       -- them is the ship's own panel, in space), whatever else is open.

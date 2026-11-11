@@ -230,6 +230,11 @@ export type Job = {
   ends: number,
 }
 
+-- A place that is on nobody's chart (Tactical/Sites): 'id' is the place
+-- it is in its system's description. 'strength' is how far a scanner
+-- has got with it, from 0 to 1 (found); 'gone' is a site that is over.
+export type Site = { id: number, system: number, kind: string, code: string, strength: number, expires: number, gone: boolean }
+
 -- A job a station has for a pilot (Assets/Missions): a "bounty" (destroy
 -- 'need' pirates in 'system'; 'done' so far), a "courier" run (carry
 -- 'need' of 'type' to the station 'to'), or a "supply" order (bring
@@ -342,6 +347,14 @@ export type State = {
   missionsTaken: { string },
   missionsDone: number,
   standings: { [string]: number },
+  -- Sites (Tactical/Sites) by the id of their place, in the order they
+  -- came; when each system's are next looked at, and which systems have
+  -- had any (by system id); and the tick the ship's scanner is free.
+  sites: { [number]: Site },
+  siteIds: { number },
+  sitesDue: { [number]: number },
+  sitesSeen: { [number]: boolean },
+  scanReady: number,
   queue: { Command },     -- submitted, to be applied at the next tick
 }
 

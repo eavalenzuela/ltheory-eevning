@@ -111,6 +111,10 @@ function Session.Notice(session: Session, event: Space.Event)
     end
   elseif kind == "BatteryFired" and event.to == mine then
     Session.Say(session, "The station's batteries are firing on you")
+  elseif kind == "Scanned" and event.ball == mine then
+    Session.Say(session, if event.found > 0 then `Scan: {event.found} found` .. (if event.signals > 0 then `, {event.signals} still to resolve` else "")
+      elseif event.signals > 0 then `Scan: {event.signals} {if event.signals == 1 then "signal" else "signals"}, nearer`
+      else "Scan: nothing new")
   elseif kind == "MissionAccepted" then
     Session.Say(session, `Job taken: {event.title}`)
   elseif kind == "MissionCompleted" then
