@@ -5,6 +5,7 @@ local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
+local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -331,6 +332,33 @@ suite:Case("in secure space the police come for a marked pilot, follow them, and
     state.player.marked = state.tick
     steps(game, 3)
     t.eq(#ofKind(state, "police"), 0)
+  end
+end)
+
+suite:Case("the police come in what it takes: destroyers for a small ship, cruisers for a cruiser, battleships for a battleship", function(t)
+  for _, case in { { "frigate.courier", "destroyer", 1 }, { "cruiser.cuirass", "cruiser", 2 }, { "battleship.bastion", "battleship", 3 } } :: { { any } } do
+    local game = busy()
+    local state = game.state
+    move(game, 1)
+    state.ships[state.player.ship].type = case[1]
+    state.player.marked = state.tick + 300
+    steps(game, 2 * Traffic.INTERVAL + 1)
+    local lawmen = ofKind(state, "police")
+    t.ok(#lawmen >= 2, `nobody came for a {case[1]}`)
+    for _, id in lawmen do
+      local hull = Ships.byId[state.ships[id].type]
+      t.eq({ hull.class, hull.lineage } :: { any }, { case[2], state.galaxy.systems[1].owner } :: { any })
+      -- (armed for its size: every weapon it carries is of the hull's size)
+      local guns = 0
+      for _, item in Items.Fitted(state, id) do
+        local weapon = Modules.byId[item.type].weapon
+        if weapon then
+          guns += 1
+          t.eq(weapon.size, case[3], `{hull.name} carries a {item.type}`)
+        end
+      end
+      t.ok(guns >= 3, `{hull.name} has {guns} weapons`)
+    end
   end
 end)
 

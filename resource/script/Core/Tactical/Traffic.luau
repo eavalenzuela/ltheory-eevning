@@ -23,9 +23,10 @@
 -- an hour (Combat does the marking). While that lasts, a patrol that
 -- shares a grid with them fights them, as a pirate would. And in secure
 -- space the police come: within a quarter of a minute a pair of the
--- faction's destroyers arrives wherever the marked pilot is, and more
--- after them, up to four, which follow the pilot about the system and
--- go when the mark has lapsed.
+-- faction's ships arrives wherever the marked pilot is (destroyers for
+-- a small ship, cruisers for a cruiser, battleships for a battleship),
+-- and more after them, up to four, which follow the pilot about the
+-- system and go when the mark has lapsed.
 --
 -- (A stand-in, like the pirates' rules: when the strategic layer joins
 -- the game, who is about is who its trade and its navies send.)
@@ -69,7 +70,16 @@ local CIVILIAN = "industrial.hauler"
 -- What a hauler may have aboard, for whoever takes it.
 local CARGO = { "ore.ferrite", "mineral.iron", "mineral.silicon", "planet.water", "planet.alloys", "component.plating" }
 
-local GUNS: { [string]: string } = { projectile = "autocannon.small", laser = "laser.pulse.small", hybrid = "blaster.small" }
+local GUNS: { [string]: string } = { projectile = "autocannon", laser = "laser.pulse", hybrid = "blaster" }
+-- What goes on a hull of each size: its guns' and fittings' size, and
+-- its launchers.
+local SIZES = { "small", "medium", "large" }
+local LAUNCHERS = { "launcher.light", "launcher.heavy", "launcher.cruise" }
+local FITTINGS = {
+  { "afterburner.1mn", "armor.plate.200mm", "damage.control", "shield.extender.small" },
+  { "afterburner.medium", "armor.plate.medium", "damage.control", "shield.extender.medium" },
+  { "afterburner.large", "armor.plate.large", "damage.control", "shield.extender.large" },
+}
 
 -- A faction's hull of a class, if it has one.
 local function hullOf(faction: string, class: string): string?
@@ -81,24 +91,27 @@ local function hullOf(faction: string, class: string): string?
   return nil
 end
 
--- What a patrol ship of a faction is: a frigate or a destroyer of its
--- own, with its own kind of gun on every hardpoint.
+-- What a patrol ship of a faction is: a hull of its own of a class,
+-- with its own kind of gun on every hardpoint, of the size the hull
+-- carries (a frigate's and a destroyer's are small, a cruiser's medium,
+-- a battleship's large).
 local function patrolKind(faction: Factions.Faction, class: string): Pirates.Kind?
   local hull = hullOf(faction.id, class)
   if hull == nil then
     return nil
   end
+  local size = if class == "battleship" then 3 elseif class == "cruiser" then 2 else 1
   local fit: { { string } } = {}
   for _ = 1, 8 do
-    table.insert(fit, { GUNS[faction.weapon] or "autocannon.small" })
+    table.insert(fit, { `{GUNS[faction.weapon] or "autocannon"}.{SIZES[size]}` })
   end
   for _ = 1, 4 do
-    table.insert(fit, { "launcher.light" })
+    table.insert(fit, { LAUNCHERS[size] })
   end
-  for _, module in { "afterburner.1mn", "armor.plate.200mm", "damage.control", "shield.extender.small" } do
+  for _, module in FITTINGS[size] do
     table.insert(fit, { module })
   end
-  return { id = "patrol", hull = hull, name = `{faction.name} Patrol`, range = 2500, bounty = 0, tags = 0, fit = fit }
+  return { id = "patrol", hull = hull, name = `{faction.name} Patrol`, range = 2500 * size, bounty = 0, tags = 0, fit = fit }
 end
 
 -- Take a ship of the traffic out of the game: its ball, what it
@@ -272,11 +285,15 @@ local function pirateNear(state: State.State, ball: State.Ball): boolean
   return false
 end
 
--- The police: two destroyers of the system's faction (frigates, if it
--- has no destroyer), out of warp a few kilometres from the marked pilot.
+-- The police: two ships of the system's faction, out of warp a few
+-- kilometres from the marked pilot. They come in what it takes: in
+-- destroyers for anything small, in cruisers for a cruiser, and in
+-- battleships for a battleship.
 local function police(state: State.State, mine: State.Ball, rng: Rng.Rng, events: { Event }): number
   local faction = Factions.byId[state.galaxy.systems[mine.system].owner]
-  local kind = if faction then patrolKind(faction, "destroyer") or patrolKind(faction, "frigate") else nil
+  local flown = Ships.byId[state.ships[mine.id].type].class
+  local class = if flown == "battleship" or flown == "cruiser" then flown else "destroyer"
+  local kind = if faction then patrolKind(faction, class) or patrolKind(faction, "destroyer") or patrolKind(faction, "frigate") else nil
   if faction == nil or kind == nil then
     return 0
   end

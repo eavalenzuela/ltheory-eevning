@@ -15,7 +15,7 @@ local Guide = {}
 
 Guide.WIDTH = 468
 
-local ROW = 22
+local ROW = 20
 local DONE = vector.create(0.45, 0.85, 0.55)
 
 local open = false

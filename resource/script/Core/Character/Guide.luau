@@ -50,8 +50,12 @@ Guide.steps = {
     how = "Industry tab. The hangar has a blueprint for rounds: it wants minerals." },
   { id = "job", group = "Making a living", title = "Finish a job for a station", on = "MissionCompleted",
     how = "Missions tab: bounties, courier runs and supply orders." },
+  { id = "loyalty", group = "Making a living", title = "Spend loyalty points", on = "LoyaltyRedeemed",
+    how = "Jobs earn them. The Missions tab has the faction's store, at the foot." },
   { id = "research", group = "Making a living", title = "Research a blueprint", on = "ResearchDone",
     how = "Industry tab, at a station with a laboratory." },
+  { id = "invent", group = "Making a living", title = "Try to invent a tech 2 blueprint", on = "InventionDone",
+    how = "Industry tab: Invent tech 2. It wants datacores, which derelicts have." },
 
   { id = "fit", group = "Fighting", title = "Fit a module", on = "Fitted",
     how = "Fitting tab: a module in the hangar goes into a free slot." },
@@ -66,6 +70,8 @@ Guide.steps = {
     how = "A Salvager wants the Salvaging skill. What it brings off builds rigs." },
   { id = "drones", group = "Fighting", title = "Launch a drone", on = "DroneLaunched", mine = "owner",
     how = "Drones are bought, carried in the hold and launched in space." },
+  { id = "cloak", group = "Fighting", title = "Cloak", on = "Cloaked", mine = "ball",
+    how = "A Cloaking Device, switched on before anybody has you targeted." },
 
   { id = "train", group = "Getting on", title = "Train a skill", on = "SkillTrained",
     how = "Skills tab. A skill not known yet is learned from its book, on the market." },
@@ -73,6 +79,8 @@ Guide.steps = {
     how = "Buy a hull on the market, then assemble and board it on the Ships tab." },
   { id = "hire", group = "Getting on", title = "Hire a pilot", on = "PilotHired",
     how = "Crew tab. Give them a second ship and they go where you go." },
+  { id = "implant", group = "Getting on", title = "Plug in an implant", on = "ImplantPlugged",
+    how = "Skills tab, with Cybernetics. Implants are on the market." },
   { id = "site", group = "Getting on", title = "Find a hidden site", on = "Scanned", mine = "ball",
     also = function(event: Event): boolean
       return (event.found or 0) > 0
