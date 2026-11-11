@@ -529,7 +529,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       -- Colonies are run from anywhere, in space or docked, and what
       -- the pilot owns can be looked over from anywhere. The two windows
       -- take the same place: opening one closes the other.
-      if Im.Button("Colonies", left + 246, bottom - 54, 96, 34, true) then
+      -- (these end short of the ship's own panel, which in space begins
+      -- 468 px in on a screen 1920 wide)
+      if Im.Button("Colonies", left + 246, bottom - 54, 84, 34, true) then
         if Colony.IsOpen() then
           Colony.Close()
         else
@@ -537,7 +539,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           Assets.Close()
         end
       end
-      if Im.Button("Assets", left + 348, bottom - 54, 84, 34, true) then
+      if Im.Button("Assets", left + 334, bottom - 54, 70, 34, true) then
         if Assets.IsOpen() then
           Assets.Close()
         else
@@ -545,7 +547,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           Colony.Close()
         end
       end
-      if Im.Button("Map", left + 438, bottom - 54, 70, 34, true) then
+      if Im.Button("Map", left + 408, bottom - 54, 56, 34, true) then
         if Map.IsOpen() then
           Map.Close()
         else
@@ -554,13 +556,15 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       end
       Colony.Draw(session, left + 16, top + 130)
       Assets.Draw(session, left + 16, top + 130)
-      -- Where the pilot means to go, and the autopilot's switch: at the
-      -- foot of the screen, by the buttons, whatever else is open.
+      -- Where the pilot means to go, and the autopilot's switch: a row
+      -- of its own over the buttons at the foot of the screen (beside
+      -- them is the ship's own panel, in space), whatever else is open.
       if session.destination ~= 0 then
         local route = Session.Route(session)
         local name = game.state.galaxy.systems[session.destination].name
-        Im.Text(`To {name}: {math.max(0, #route - 1)} {if #route == 2 then "jump" else "jumps"}`, left + 524, bottom - 44, 14, Im.ACCENT)
-        if Im.Toggle(if session.autopilot then "Autopilot on" else "Autopilot", left + 700, bottom - 54, 120, 34, session.autopilot,
+        Im.Panel(left + 24, bottom - 96, 440, 34)
+        Im.Text(`To {name}: {math.max(0, #route - 1)} {if #route == 2 then "jump" else "jumps"}`, left + 36, bottom - 87, 14, Im.ACCENT)
+        if Im.Toggle(if session.autopilot then "Autopilot on" else "Autopilot", left + 338, bottom - 93, 120, 28, session.autopilot,
           "Autopilot") then
           session.autopilot = not session.autopilot
         end
