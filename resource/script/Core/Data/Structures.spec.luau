@@ -2,6 +2,7 @@
 -- What stations are made of (Data/Structures).
 
 local Factions = require("@lt/Core/Data/Factions")
+local Ships = require("@lt/Core/Data/Ships")
 local Structures = require("@lt/Core/Data/Structures")
 local Test = require("@lt/Tool/Test")
 
@@ -118,6 +119,30 @@ suite:Case("the makeup is the same every time it is asked for, larger modules fi
   t.eq(table.concat(a.modules, ","), table.concat(b.modules, ","))
   for index = 2, #a.modules do
     t.ok(Structures.moduleById[a.modules[index - 1]].radius >= Structures.moduleById[a.modules[index]].radius)
+  end
+end)
+
+suite:Case("a tower, a module and a day's fuel for the largest tower each go, packed, in the hold of any industrial a pilot can buy", function(t)
+  local smallest = math.huge
+  for _, ship in Ships.list do
+    if ship.class == "industrial" and not ship.restricted then
+      smallest = math.min(smallest, ship.cargo)
+    end
+  end
+  t.ok(smallest < math.huge, "there is no industrial")
+  for _, tower in Structures.towers do
+    t.ok(tower.volume <= smallest, `{tower.name} is {tower.volume} m3 and the smallest industrial holds {smallest}`)
+  end
+  for _, module in Structures.modules do
+    t.ok(module.volume <= smallest, `{module.name} is {module.volume} m3 and the smallest industrial holds {smallest}`)
+  end
+  t.ok(Structures.towers[3].fuel * 24 * Structures.FUEL.volume <= smallest, "a day's fuel for a large tower does not go in an industrial")
+end)
+
+suite:Case("a bigger tower has a wider field, burns more, takes longer to anchor and costs more", function(t)
+  for index = 2, 3 do
+    local a, b = Structures.towerById[`tower.vessari.{Structures.SIZES[index - 1]}`], Structures.towerById[`tower.vessari.{Structures.SIZES[index]}`]
+    t.ok(b.field > a.field and b.fuel > a.fuel and b.anchor > a.anchor and b.basePrice > a.basePrice and b.volume > a.volume)
   end
 end)
 

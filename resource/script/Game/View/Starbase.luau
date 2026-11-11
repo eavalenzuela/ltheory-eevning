@@ -653,11 +653,13 @@ end
 -- it inside the field, the big ones nearer, on several levels and clear
 -- of each other; its batteries stand near the edge, high and low.
 --
--- 'makeup' is what the station is made of, if the game has said
--- (Core.Query.Station); without it, it is what a station of that kind
--- and size would be that is nobody's starting place.
-function Starbase.Layout(variety: string, radius: number, seed: number, faction: string?, given: Structures.Makeup?): Layout
-  local owner = faction or "vessari"
+-- 'given' is what the station is made of, if the game has said
+-- (Core.Query.Station): its tower then says whose it is. Without it,
+-- it is what a station of that kind and size would be that is nobody's
+-- starting place. 'dark' is a tower with no fuel: it has no field.
+function Starbase.Layout(variety: string, radius: number, seed: number, faction: string?, given: Structures.Makeup?,
+  dark: boolean?): Layout
+  local owner = faction or (if given then Structures.towerById[given.tower].faction else "vessari")
   local makeup = given or Structures.Makeup(variety, radius, owner)
   local size = Structures.towerById[makeup.tower].size
   local tower = Starbase.Tower(owner, size)
@@ -665,7 +667,7 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
   local layout: Layout = {
     tower = { id = makeup.tower, model = tower.model, at = vector.create(0, 0, 0), look = vector.create(0, 0, 1),
       scale = towerRadius / tower.radius, radius = towerRadius },
-    modules = {}, field = radius,
+    modules = {}, field = if dark then 0 else radius,
   }
 
   -- Where each would like to be: round the tower by turns of the golden

@@ -500,6 +500,23 @@ function Debug.HoldFull(): number
   return Core.Query.CargoUsed(session.game, ship) / math.max(1, Core.Query.Stats(session.game, ship).cargo)
 end
 
+-- The starbase the pilot put up last: how it stands ("none",
+-- "anchoring", "dark" or "lit"), the fuel blocks aboard, and how many
+-- of its modules are online.
+function Debug.Tower(): (string, number, number)
+  local state = session.game.state
+  local id = state.starbaseIds[#state.starbaseIds]
+  local status = if id then Core.Query.Starbase(session.game, id) else nil
+  if status == nil then
+    return "none", 0, 0
+  end
+  local online = 0
+  for _, module in status.modules do
+    online += if module.online then 1 else 0
+  end
+  return if not status.anchored then "anchoring" elseif status.lit then "lit" else "dark", status.fuel, online
+end
+
 -- A cheat, for scripted runs that test something other than earning:
 -- credits from nowhere, entered in the journal as such.
 function Debug.Grant(credits: number)

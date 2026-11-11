@@ -19,6 +19,7 @@ local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
 local State = require("@lt/Core/Kernel/State")
 local Station = require("@lt/Game/UI/Station")
+local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
 
 local Hud = {}
@@ -250,22 +251,42 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
   Im.TextRight(Format.Distance(entry.distance), x + width - 12, y + 32, 14, Im.TEXT)
 
   local targeted = lockOf(ball, entry.id) ~= nil
+  -- (what is done at a moon is to anchor a tower there: the one in the hold)
+  local tower = 0
+  if entry.kind == "moon" then
+    for _, item in Core.Query.Items(session.game, ball.id, "cargo") do
+      if Structures.towerById[item.type] then
+        tower = item.id
+        break
+      end
+    end
+  end
   local orders: { { label: string, kind: string, range: number? } } = {
     { label = "Approach", kind = "Approach", range = 0 },
     { label = "Orbit 5 km", kind = "Orbit", range = ORBIT_RANGE },
     { label = "Keep 10 km", kind = "KeepAtRange", range = KEEP_RANGE },
     { label = "Warp to", kind = "WarpTo", range = 0 },
     { label = "Align", kind = "AlignTo" },
-    if entry.kind == "gate" then { label = "Jump", kind = "Jump" } else { label = "Dock", kind = "Dock" },
+    if entry.kind == "gate" then { label = "Jump", kind = "Jump" }
+      elseif entry.kind == "moon" then { label = "Anchor tower", kind = "AnchorTower" }
+      else { label = "Dock", kind = "Dock" },
     if targeted then { label = "Unlock", kind = "UnlockTarget" } else { label = "Lock", kind = "LockTarget" },
     { label = "Loot", kind = "Loot" },
   }
   local buttonWidth = (width - 24 - 16) / 3
   for index, order in orders do
     local column, line = (index - 1) % 3, (index - 1) // 3
-    local can = Session.Can(session, order.kind, entry.id, order.range)
-    if Im.Button(order.label, x + 12 + column * (buttonWidth + 8), y + 58 + line * 32, buttonWidth, 26, can) then
-      Session.Order(session, order.kind, entry.id, order.range)
+    local bx, by = x + 12 + column * (buttonWidth + 8), y + 58 + line * 32
+    if order.kind == "AnchorTower" then
+      local command: State.Command = { kind = "AnchorTower", actor = 0, item = tower, target = entry.id }
+      if Im.Button(order.label, bx, by, buttonWidth, 26, (Session.CanDo(session, command))) then
+        Session.Do(session, command)
+      end
+    else
+      local can = Session.Can(session, order.kind, entry.id, order.range)
+      if Im.Button(order.label, bx, by, buttonWidth, 26, can) then
+        Session.Order(session, order.kind, entry.id, order.range)
+      end
     end
   end
 end

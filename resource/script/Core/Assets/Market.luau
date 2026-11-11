@@ -74,6 +74,9 @@ local function normalStock(info: Types.Info): number
     return math.max(100, math.floor(6000000 / info.basePrice))
   elseif info.category == "charge" then
     return math.max(100, math.floor(3000000 / info.basePrice))
+  elseif info.category == "structure" then
+    -- Fuel is burnt by the hour and bought by the hold; a tower is a rare sale.
+    return if info.id == "fuel.block" then math.max(100, math.floor(3000000 / info.basePrice)) else 6
   elseif info.category == "ship" then
     return 10
   elseif info.category == "goods" then

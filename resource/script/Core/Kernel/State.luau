@@ -219,6 +219,23 @@ export type Job = {
 -- A line in the wallet's journal.
 export type Entry = { tick: number, amount: number, reason: string, balance: number }
 
+-- A module anchored at a pilot's starbase: its Data/Structures id, and
+-- the tick it is online from.
+export type Anchored = { type: string, ready: number }
+
+-- A starbase a pilot has put up (Assets/Starbases). Its tower is a
+-- station in its system's description, with this id; here is what a
+-- described station has not.
+export type Starbase = {
+  id: number,
+  tower: string,      -- Data/Structures tower id
+  owner: string,      -- "player"
+  ready: number,      -- the tick its anchoring is done
+  fuel: number,       -- fuel blocks aboard
+  burnt: number,      -- the tick it last burnt one (or was lit)
+  modules: { Anchored },
+}
+
 export type State = {
   galaxySeed: number,     -- layout; a galaxy can be shared by its seed
   historySeed: number,    -- every roll made during play
@@ -247,6 +264,8 @@ export type State = {
   orderIds: { number },
   -- trades[station][type]: recent days of trade, oldest first
   trades: { [number]: { [string]: { TradeDay } } },
+  starbases: { [number]: Starbase },  -- by the id of the station the tower is
+  starbaseIds: { number },
   balls: { [number]: Ball },
   ballIds: { number },
   missiles: { Missile },  -- in flight, oldest first
@@ -273,6 +292,15 @@ function State.NewId(state: State): number
 end
 
 -- Remove 'id' from an ascending list of ids.
+-- Put an id into an ascending list of ids, in its place.
+function State.InsertId(ids: { number }, id: number)
+  local at = #ids + 1
+  while at > 1 and ids[at - 1] > id do
+    at -= 1
+  end
+  table.insert(ids, at, id)
+end
+
 function State.RemoveId(ids: { number }, id: number)
   local lo, hi = 1, #ids
   while lo <= hi do

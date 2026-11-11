@@ -103,6 +103,7 @@ export type Scene = {
   mining: { [number]: number },       -- when each mining module's beam was last begun, by its item
   wreckage: { [number]: Wrecked },    -- the pieces of each wreck on the grid
   works: { [number]: { Object } },    -- what stands round each station's tower: its modules, their guns, its field
+  standing: { [number]: string },     -- what a pilot's starbase was made of when it was put up here
   docked: boolean,                    -- the pilot is docked: the camera is on the station
   zoomAway: number,                   -- the zoom there was before docking, to go back to
   arms: { [number]: Armed },          -- what is on the hardpoints of each ship of our own design
@@ -149,7 +150,7 @@ function Scene.New(camera: Camera): Scene
     proxies = {}, celestials = {}, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
-    wreckage = {}, works = {}, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0,
+    wreckage = {}, works = {}, standing = {}, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0,
   }
 end
 
@@ -319,6 +320,7 @@ local function dropWorks(scene: Scene, id: number)
     end
     scene.works[id] = nil
   end
+  scene.standing[id] = nil
 end
 
 -- A number from 0 to 1 that follows from 'n'.
@@ -522,12 +524,34 @@ end
 -- A station: its tower, which is the station's own object, with its
 -- modules and its field round it, at 'at'. The station's radius is the
 -- radius of its field.
+--
+-- A pilot's own starbase is not always what it was: its modules come
+-- and go, and its field with its fuel. What stands there is written
+-- down ('standing'), so that it is put up again when that changes.
+local function standing(game: Core.Game, id: number): string?
+  local status = Core.Query.Starbase(game, id)
+  if status == nil then
+    return nil
+  end
+  local parts = { status.tower.id, if status.lit then "lit" else "dark" }
+  for _, module in status.modules do
+    table.insert(parts, module.type)
+  end
+  return table.concat(parts, " ")
+end
+
 local function makeStation(scene: Scene, game: Core.Game, object: SystemData.Object, at: vector, container: Object): Object
   local makeup = Core.Query.Station(game, object.id)
-  local raised = Starbase.Raise(Starbase.Layout(object.variety, object.radius, object.seed, nil, makeup), container, at, 1)
+  local status = Core.Query.Starbase(game, object.id)
+  local dark = status ~= nil and not status.lit
+  local raised = Starbase.Raise(Starbase.Layout(object.variety, object.radius, object.seed, nil, makeup, dark), container, at, 1)
   local tower = table.remove(raised, 1) :: Object
   tower:SetName(object.name)
   scene.works[object.id] = raised
+  local made = standing(game, object.id)
+  if made then
+    scene.standing[object.id] = made
+  end
   return tower
 end
 
@@ -730,6 +754,24 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         end
       end
     end
+  end
+
+  -- A starbase that is not what it was when it was put up here.
+  local changed: { number } = {}
+  for id, was in scene.standing do
+    if standing(game, id) ~= was then
+      table.insert(changed, id)
+    end
+  end
+  for _, id in changed do
+    local object = objects[id % Constants.STRUCTURE_ID_SPAN]
+    local old = scene.proxies[id]
+    dropWorks(scene, id)
+    if old then
+      Object_Delete(old)
+    end
+    scene.proxies[id] = makeStation(scene, game, object,
+      vector.create(object.x - scene.ox, object.y - scene.oy, object.z - scene.oz), container)
   end
 
   table.clear(scene.screen)

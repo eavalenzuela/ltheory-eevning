@@ -25,6 +25,10 @@
 #               sell it by standing order, buy a hull, train for it, board it
 #   game-arms   a hull of our own design carries its fitted weapons on its
 #               hardpoints, and its turret comes to bear (test/scenario/arms.txt)
+#   game-starbase  a pilot puts up a starbase through the game's screens
+#               (test/scenario/starbase.txt): buy a tower, fuel and an array,
+#               anchor the tower at a moon, moor, fuel it, anchor the array,
+#               refine there
 #   game-pace   the game app must draw at least thirty frames a second just
 #               outside the home station (test/scenario/pace.txt)
 #   goldens     script/goldens: screenshots of the stored scenes must match
@@ -123,6 +127,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/economy.txt
   step game-arms 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/arms.txt
+  step game-starbase 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
+    --script test/scenario/starbase.txt
   step game-pace 0 timeout 200 bin/launch game --no-present --fixed-step 60 --timeout 150 \
     --script test/scenario/pace.txt
   step goldens 0 script/goldens

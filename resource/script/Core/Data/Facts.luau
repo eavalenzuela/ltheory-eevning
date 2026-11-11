@@ -14,6 +14,7 @@ local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
+local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
 
 local Facts = {}
@@ -372,6 +373,33 @@ function Facts.Of(type: string): Sheet?
     end
     local market = section(sheet, "Trade")
     row(market, "Base price", `{whole(blueprint.basePrice)} cr`)
+  elseif category == "structure" then
+    local tower, anchored = Structures.towerById[type], Structures.moduleById[type]
+    if tower then
+      sheet.kind = "Control tower"
+      sheet.note = "The heart of a starbase. Anchored at a moon and fed with fuel, it throws a field and powers the modules anchored round it."
+      local has = section(sheet, "Tower")
+      row(has, "Field", `{whole(tower.field)} m`)
+      row(has, "Powergrid", `{whole(tower.powergrid)} MW`)
+      row(has, "CPU", `{whole(tower.cpu)} tf`)
+      row(has, "Burns", `{tower.fuel} blocks an hour`, Structures.FUEL.id)
+      row(has, "Anchors in", seconds(tower.anchor))
+    elseif anchored then
+      sheet.kind = "Structure module"
+      sheet.note = "Anchored inside a tower's field and run from the tower's power. Whoever built the tower, the module is the same."
+      local does = section(sheet, "Module")
+      row(does, "Gives", anchored.service)
+      row(does, "Powergrid", `{whole(anchored.powergrid)} MW`)
+      row(does, "CPU", `{whole(anchored.cpu)} tf`)
+      row(does, "Anchors in", seconds(anchored.anchor))
+      row(does, "A pilot can anchor one", if anchored.pilot then "yes" else "no")
+    else
+      sheet.kind = "Fuel"
+      sheet.note = "What a control tower burns. A tower that runs out goes dark, and its modules with it."
+    end
+    local market = section(sheet, "Trade")
+    row(market, "Volume", `{whole(if info then info.volume else 0)} m3`)
+    row(market, "Base price", `{whole(if info then info.basePrice else 0)} cr`)
   elseif category == "skillbook" then
     local skill: Skills.Skill? = nil
     for _, candidate in Skills.list do

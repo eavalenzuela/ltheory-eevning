@@ -11,6 +11,7 @@
 local Factions = require("@lt/Core/Data/Factions")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
+local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
 
 local Catalog = {}
@@ -19,7 +20,7 @@ local Catalog = {}
 export type Entry = { header: string?, info: Types.Info? }
 
 -- The order the categories come in where they are mixed (a hangar).
-Catalog.CATEGORIES = { "module", "charge", "ship", "ore", "mineral", "component", "blueprint", "skillbook", "goods" }
+Catalog.CATEGORIES = { "module", "charge", "ship", "structure", "ore", "mineral", "component", "blueprint", "skillbook", "goods" }
 
 local categoryOrder: { [string]: number } = {}
 for index, category in Catalog.CATEGORIES do
@@ -43,6 +44,7 @@ local MODULES: { { any } } = {
 local MISSILES = { "Light missiles", "Heavy missiles", "Cruise missiles" }
 local MAKES: { [string]: { any } } = {
   ship = { "Hulls", 1 }, module = { "Modules", 2 }, charge = { "Charges", 3 }, component = { "Components", 4 },
+  structure = { "Structures", 5 },
 }
 
 -- 1 small, 2 medium, 3 large, from a type's id.
@@ -77,6 +79,14 @@ function Catalog.Group(id: string): (string, number, number)
     end
     local order = if charge.family == "laser" then 1 elseif charge.family == "projectile" then 2 else 3
     return if order == 1 then "Laser crystals" elseif order == 2 then "Projectile rounds" else "Hybrid charges", order, charge.size
+  elseif category == "structure" then
+    local tower = Structures.towerById[id]
+    if tower then
+      return "Control towers", 1, tower.size
+    elseif Structures.moduleById[id] then
+      return "Structure modules", 2, 0
+    end
+    return "Fuel", 3, 0
   elseif category == "blueprint" then
     local product = string.sub(id, #"blueprint." + 1)
     local made = Types.Get(product)

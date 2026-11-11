@@ -17,6 +17,7 @@
 -- training are not any module's: they can be done at any station.
 
 local Space = require("@lt/Core/Tactical/Space")
+local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
 local Structures = require("@lt/Core/Data/Structures")
 
@@ -42,11 +43,21 @@ function Stations.Makeup(state: State.State, id: number): Structures.Makeup?
   if object == nil or object.kind ~= "station" then
     return nil
   end
+  -- (a pilot's own: what has been anchored there, online or not)
+  local starbase = state.starbases[id]
+  if starbase then
+    return Starbases.Makeup(starbase)
+  end
   return Structures.Makeup(object.variety, object.radius, OWNER, id == Stations.Starter(state))
 end
 
 -- Whether a station has a module that gives a service.
 function Stations.Has(state: State.State, id: number, service: Structures.Service): boolean
+  -- (a pilot's own gives only what is online, and nothing when it is dark)
+  local starbase = state.starbases[id]
+  if starbase then
+    return Starbases.Has(state, starbase, service)
+  end
   local makeup = Stations.Makeup(state, id)
   if makeup then
     for _, module in makeup.modules do
@@ -84,6 +95,14 @@ local NEEDS: { [string]: Structures.Service } = {
 -- command given by a ship that is not docked is not this module's to
 -- refuse: whoever carries it out says whether it can be done in space.)
 function Stations.Validate(state: State.State, command: State.Command): (boolean, string?)
+  if command.kind == "Dock" then
+    -- (nobody moors at a tower that is still being anchored)
+    local starbase = state.starbases[command.target or 0]
+    if starbase and not Starbases.Anchored(state, starbase) then
+      return false, "the tower is not anchored yet"
+    end
+    return true
+  end
   local service = NEEDS[command.kind]
   local ship = state.ships[command.actor]
   if service == nil or ship == nil or ship.docked == 0 then

@@ -28,16 +28,20 @@ local Station = {}
 Station.WIDTH = 940
 Station.HEIGHT = 600
 
-local TABS = { "Fitting", "Market", "Industry", "Skills", "Ships", "Wallet" }
+local TABS: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Wallet" }
+-- (and one more at a starbase of the pilot's own: the running of it)
+local OWN: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Wallet", "Starbase" }
 -- The services each tab's doings are done by (Core/Assets/Stations).
 local WANTS: { [string]: { string } } = {
   Fitting = { "fitting" }, Market = { "market" }, Industry = { "refining", "industry" }, Ships = { "fitting" },
 }
 local tab = "Fitting"
+local dockedAt = 0    -- the station the screen was last drawn for
 
 -- The market: the category listed, the type shown, and what is entered.
 local CATEGORIES: { { string } } = {
-  { "module", "Modules" }, { "charge", "Charges" }, { "ship", "Ships" }, { "ore", "Ore" }, { "mineral", "Minerals" }, { "component", "Components" },
+  { "module", "Modules" }, { "charge", "Charges" }, { "ship", "Ships" }, { "structure", "Structures" }, { "ore", "Ore" }, { "mineral", "Minerals" },
+  { "component", "Components" },
   { "blueprint", "Blueprints" }, { "skillbook", "Skill books" }, { "goods", "Goods" },
 }
 local category = "module"
@@ -70,7 +74,7 @@ end
 
 -- Show a tab, as clicking it would: for scripted runs.
 function Station.Show(name: string): boolean
-  for _, known in TABS do
+  for _, known in OWN do
     if known == name then
       tab = name
       return true
@@ -978,6 +982,122 @@ local function drawShips(session: Session.Session, game: Core.Game, player: Core
 end
 
 -- ---------------------------------------------------------------------
+-- Starbase: the running of a tower of the pilot's own
+
+-- A bar of what is used of what there is, with the figures over it.
+local function supply(label: string, used: number, capacity: number, unit: string, x: number, y: number, width: number)
+  Im.Text(label, x, y, 13, Im.DIM)
+  Im.TextRight(`{Format.Whole(used)} / {Format.Whole(capacity)} {unit}`, x + width, y, 13, Im.TEXT)
+  Im.Fill(x, y + 20, width, 6, Im.DIM, 0.25)
+  Im.Fill(x, y + 20, width * math.clamp(used / math.max(1, capacity), 0, 1), 6, if used > capacity * 0.9 then Im.WARN else Im.ACCENT, 0.95)
+end
+
+local function drawStarbase(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, status: Core.StarbaseStatus,
+  x: number, y: number)
+  local station = player.docked
+  local left = x + 16
+  local line = y + 78
+  local tower = status.tower
+
+  -- The tower: its fuel, and what it supplies.
+  Im.Heading("TOWER", left, line, 16, Im.DIM)
+  line += 26
+  ItemIcon.Draw(tower.id, left, line, 22)
+  Info.Name(tower.id, tower.name, left + 30, line + 3, 15, Im.TEXT)
+  line += 30
+  if status.lit then
+    Im.Text("Lit: its field is up and its modules have power.", left, line, 13, GOOD)
+  else
+    Im.Text("DARK: no fuel. Its field is down and its modules give nothing.", left, line, 13, Im.WARN)
+  end
+  line += 24
+  Im.Text("Fuel", left, line, 13, Im.DIM)
+  Im.TextRight(`{Format.Whole(status.fuel)} blocks`, left + 400, line, 13, if status.lit then Im.TEXT else Im.WARN)
+  line += 20
+  Im.Text(`It burns {tower.fuel} an hour`, left, line, 13, Im.DIM)
+  Im.TextRight(if status.fuel > 0 then `{Format.Duration(status.hours * 3600)} left` else "none left", left + 400, line, 13,
+    if status.hours >= 1 then Im.TEXT else Im.WARN)
+  line += 30
+  supply("Powergrid", status.powergrid, tower.powergrid, "MW", left, line, 400)
+  line += 38
+  supply("CPU", status.cpu, tower.cpu, "tf", left, line, 400)
+  line += 46
+
+  -- What is anchored round it.
+  Im.Heading(`ANCHORED  {#status.modules}`, left, line, 16, Im.DIM)
+  line += 26
+  if #status.modules == 0 then
+    Im.Text("Nothing yet. A module to hand is anchored from the list on the right.", left, line, 13, Im.DIM, 0.8)
+  end
+  local visible = 8
+  local first = Im.Scroll("anchored", left - 4, line, 420, visible * 26, #status.modules, visible)
+  for row = 1, visible do
+    local module = status.modules[row + first]
+    if module == nil then
+      break
+    end
+    local type = Structures.moduleById[module.type]
+    ItemIcon.Draw(type.id, left, line + 1, 20)
+    Info.Name(type.id, shorten(type.name, 24), left + 26, line + 3, 13, Im.TEXT)
+    if module.online then
+      Im.Text("online", left + 214, line + 3, 13, GOOD)
+    elseif module.wait > 0 then
+      Im.Text(`online in {Format.Duration(module.wait)}`, left + 214, line + 3, 13, Im.DIM)
+    else
+      Im.Text("no power", left + 214, line + 3, 13, Im.WARN)
+    end
+    local unanchor: State.Command = { kind = "UnanchorModule", actor = 0, type = type.id }
+    if Im.Button("Unanchor", left + 320, line, 80, 21, (Session.CanDo(session, unanchor)), `Unanchor:{type.id}`) then
+      Session.Do(session, unanchor)
+    end
+    line += 26
+  end
+
+  -- What there is to hand, in the hold and in the tower's hangar, to
+  -- burn or to anchor.
+  local right = x + 480
+  line = y + 78
+  local hand: { { item: State.Item, where: string } } = {}
+  for _, place in { "cargo", "hangar" } do
+    for _, item in Core.Query.Items(game, if place == "cargo" then player.ship else station, place) do
+      if item.type == Structures.FUEL.id or Structures.moduleById[item.type] then
+        table.insert(hand, { item = item, where = if place == "cargo" then "hold" else "hangar" })
+      end
+    end
+  end
+  Im.Heading(`TO HAND  {#hand}`, right, line, 16, Im.DIM)
+  line += 26
+  if #hand == 0 then
+    Im.Text("No fuel and no modules in the hold or the hangar.", right, line, 13, Im.DIM, 0.8)
+    Im.Text("A market sells both, under Structures.", right, line + 20, 13, Im.DIM, 0.8)
+  end
+  local shown = 16
+  local top = Im.Scroll("tohand", right - 4, line, 448, shown * 26, #hand, shown)
+  for row = 1, shown do
+    local entry = hand[row + top]
+    if entry == nil then
+      break
+    end
+    local item = entry.item
+    local name = shorten(Types.Info(item.type).name, 22)
+    ItemIcon.Draw(item.type, right, line + 1, 20)
+    Info.Name(item.type, name, right + 26, line + 3, 13, Im.TEXT)
+    Im.Text(`x{item.quantity}  {entry.where}`, right + 30 + Im.TextWidth(name, 13), line + 3, 12, Im.DIM)
+    local fuel = item.type == Structures.FUEL.id
+    local command: State.Command = { kind = if fuel then "Fuel" else "AnchorModule", actor = 0, item = item.id }
+    local can, whyNot = Session.CanDo(session, command)
+    if Im.Button(if fuel then "Fuel" else "Anchor", right + 250, line, 60, 21, can,
+      if fuel then `Fuel:{entry.where}` else `Anchor:{item.type}`) then
+      Session.Do(session, command)
+    end
+    if not can then
+      Im.Text(shorten(tostring(whyNot), 20), right + 318, line + 3, 12, Im.WARN)
+    end
+    line += 26
+  end
+end
+
+-- ---------------------------------------------------------------------
 -- Wallet
 
 local function drawWallet(game: Core.Game, x: number, y: number)
@@ -1024,8 +1144,23 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
   Im.Panel(x, y, width, height)
   Im.Heading("DOCKED", x + 16, y + 12, 16, Im.DIM)
   Im.Heading(if station then shorten(station.name, 32) else "?", x + 16, y + 36, 17, Im.TEXT)
-  for index, name in TABS do
-    if Im.Toggle(name, x + 364 + (index - 1) * 94, y + 18, 90, 28, tab == name) then
+  -- At a starbase of the pilot's own there is the running of it too,
+  -- which is what the pilot has come for: it is open on arrival.
+  local starbase = Core.Query.Starbase(game, player.docked)
+  local own: Core.StarbaseStatus? = if starbase and starbase.mine then starbase else nil
+  if player.docked ~= dockedAt then
+    if own then
+      tab = "Starbase"
+    end
+    dockedAt = player.docked
+  end
+  if tab == "Starbase" and own == nil then
+    tab = "Fitting"
+  end
+  local tabs: { string } = if own then OWN else TABS
+  local pitch = (width - 364 - 12) / #tabs
+  for index, name in tabs do
+    if Im.Toggle(name, x + 364 + (index - 1) * pitch, y + 18, pitch - 4, 28, tab == name) then
       tab = name
     end
   end
@@ -1057,6 +1192,8 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
     drawShips(session, game, player, x, y)
   elseif tab == "Wallet" then
     drawWallet(game, x, y)
+  elseif tab == "Starbase" and own then
+    drawStarbase(session, game, player, own, x, y)
   else
     drawFitting(session, game, player, x, y, preview)
   end

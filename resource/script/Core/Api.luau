@@ -29,6 +29,7 @@ local Pirates = require("@lt/Core/Tactical/Pirates")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
+local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
 local Stations = require("@lt/Core/Assets/Stations")
 local Structures = require("@lt/Core/Data/Structures")
@@ -51,7 +52,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 11
+Core.SAVE_VERSION = 12
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -100,6 +101,11 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       wreck.hull = wreck.hull or ""
     end
   end,
+  -- 12: pilots can put up starbases. A save from before has none.
+  [11] = function(state: any)
+    state.starbases = state.starbases or {}
+    state.starbaseIds = state.starbaseIds or {}
+  end,
 }
 
 -- A new game: a galaxy, and the player's first ship docked at a station
@@ -129,6 +135,8 @@ function Core.New(options: Options): Game
     orders = {},
     orderIds = {},
     trades = {},
+    starbases = {},
+    starbaseIds = {},
     balls = {},
     ballIds = {},
     missiles = {},
@@ -173,6 +181,7 @@ local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true }
 local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true }
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true }
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
+local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true }
 
 local function validate(state: State.State, command: State.Command): (boolean, string?)
   -- (first, whether the station it is given at has the module for it)
@@ -192,6 +201,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Market.Validate(state, command)
   elseif HANGAR_COMMANDS[command.kind] then
     return Hangar.Validate(state, command)
+  elseif STARBASE_COMMANDS[command.kind] then
+    return Starbases.Validate(state, command)
   elseif TRAINING_COMMANDS[command.kind] then
     return Training.Validate(state, command)
   end
@@ -248,6 +259,8 @@ function Core.Step(game: Game)
       Market.Apply(state, command, game.events)
     elseif ok and HANGAR_COMMANDS[command.kind] then
       Hangar.Apply(state, command, game.events)
+    elseif ok and STARBASE_COMMANDS[command.kind] then
+      Starbases.Apply(state, command, game.events)
     elseif ok and TRAINING_COMMANDS[command.kind] then
       Training.Apply(state, command, game.events)
     elseif ok then
@@ -262,6 +275,7 @@ function Core.Step(game: Game)
   Aftermath.Step(state, game.events)
   Mining.Step(state)
   Market.Step(state, game.events)
+  Starbases.Step(state, game.events)
   Industry.Step(state, game.events)
   Training.Step(state, game.events)
 end
@@ -514,6 +528,42 @@ end
 -- A body by id (a ship in space or a described object), or nil.
 function Query.Body(game: Game, id: number): Space.Body?
   return Space.Body(game.state, id)
+end
+
+-- A pilot's starbase, by the id of its station: how it stands. Nil if
+-- the station is not one.
+export type StarbaseStatus = {
+  tower: Structures.Tower,
+  mine: boolean,          -- it is the player's
+  anchored: boolean,      -- its anchoring is done
+  wait: number,           -- seconds until it is, if it is not
+  lit: boolean,           -- and it has fuel
+  fuel: number,           -- blocks aboard
+  hours: number,          -- that they will last
+  powergrid: number,      -- drawn by its modules
+  cpu: number,
+  -- (a module is online when its own anchoring is done and the tower is lit)
+  modules: { { type: string, online: boolean, wait: number } },
+}
+function Query.Starbase(game: Game, id: number): StarbaseStatus?
+  local state = game.state
+  local starbase = state.starbases[id]
+  if starbase == nil then
+    return nil
+  end
+  local powergrid, cpu = Starbases.Draw(starbase)
+  local lit = Starbases.Lit(state, starbase)
+  local modules = {}
+  for _, module in starbase.modules do
+    table.insert(modules, { type = module.type, online = lit and state.tick >= module.ready,
+      wait = math.max(0, module.ready - state.tick) * Constants.TICK })
+  end
+  local ship = state.ships[state.player.ship]
+  return {
+    tower = Structures.towerById[starbase.tower], mine = ship ~= nil and ship.owner == starbase.owner,
+    anchored = Starbases.Anchored(state, starbase), wait = math.max(0, starbase.ready - state.tick) * Constants.TICK, lit = lit,
+    fuel = starbase.fuel, hours = Starbases.Hours(starbase), powergrid = powergrid, cpu = cpu, modules = modules,
+  }
 end
 
 -- The station a new pilot starts at: the one that has everything.

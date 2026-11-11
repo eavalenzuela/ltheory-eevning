@@ -8,13 +8,14 @@ local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
+local Structures = require("@lt/Core/Data/Structures")
 
 local Types = {}
 
 export type Info = {
   id: string,
   name: string,
-  category: "module" | "charge" | "goods" | "ore" | "mineral" | "component" | "ship" | "blueprint" | "skillbook",
+  category: "module" | "charge" | "goods" | "ore" | "mineral" | "component" | "ship" | "blueprint" | "skillbook" | "structure",
   volume: number,     -- m3 per unit
   basePrice: number,  -- credits per unit
 }
@@ -47,6 +48,17 @@ for _, hull in Ships.list do
     byId[hull.id] = { id = hull.id, name = hull.name, category = "ship", volume = hull.volume, basePrice = hull.basePrice }
   end
 end
+
+-- What a starbase is made of, packed for carrying: towers, the modules
+-- anchored round them, and the fuel they burn.
+for _, tower in Structures.towers do
+  byId[tower.id] = { id = tower.id, name = tower.name, category = "structure", volume = tower.volume, basePrice = tower.basePrice }
+end
+for _, module in Structures.modules do
+  byId[module.id] = { id = module.id, name = module.name, category = "structure", volume = module.volume, basePrice = module.basePrice }
+end
+byId[Structures.FUEL.id] = { id = Structures.FUEL.id, name = Structures.FUEL.name, category = "structure",
+  volume = Structures.FUEL.volume, basePrice = Structures.FUEL.basePrice }
 
 for _, blueprint in Blueprints.list do
   byId[blueprint.id] = { id = blueprint.id, name = blueprint.name, category = "blueprint", volume = 0.01,

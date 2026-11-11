@@ -14,6 +14,7 @@ local Components = require("@lt/Core/Data/Components")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Ships = require("@lt/Core/Data/Ships")
+local Structures = require("@lt/Core/Data/Structures")
 
 export type Blueprint = {
   id: string,               -- "blueprint.<product>"
@@ -118,6 +119,16 @@ for _, hull in Ships.list do
     add(hull.id, hull.name, mix, hull.basePrice, 1, math.min(72000, 600 + hull.basePrice // 200), Components.HULL)
   end
 end
+
+-- Structures: a tower as a big hull is built, its modules as lesser
+-- ones, and fuel by the forty.
+for _, tower in Structures.towers do
+  add(tower.id, tower.name, MIX.cruiser, tower.basePrice, 1, math.min(72000, 600 + tower.basePrice // 200), Components.HULL)
+end
+for _, module in Structures.modules do
+  add(module.id, module.name, MIX.ship, module.basePrice, 1, math.min(72000, 600 + module.basePrice // 200), Components.HULL)
+end
+add(Structures.FUEL.id, Structures.FUEL.name, MIX.charge, Structures.FUEL.basePrice, 40, 120)
 
 -- Jobs a pilot can run at once before any skill adds more.
 Blueprints.JOB_SLOTS = 2
