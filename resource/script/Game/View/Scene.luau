@@ -567,6 +567,31 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     end
   end
 
+  -- Their engines: a glare at each mouth and fire behind it, by how
+  -- fast the ship means to go of what it can (so they light when it
+  -- sets off, before it has got anywhere), and a little by how fast it
+  -- is going.
+  local fx = scene.fx :: Effects.Fx
+  for _, id in state.ballIds do
+    local proxy: Object? = scene.proxies[id]
+    local built = if proxy then designed[proxy] else nil
+    local at: vector? = scene.screen[id]
+    if proxy and built and at then
+      local ball = state.balls[id]
+      local warp = ball.warp
+      local speed = math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy + ball.vz * ball.vz)
+      local wanted = math.sqrt(ball.tvx * ball.tvx + ball.tvy * ball.tvy + ball.tvz * ball.tvz)
+      local throttle = if warp and warp.stage == "warp" then 1 else (0.65 * wanted + 0.35 * speed) / math.max(ball.maxVelocity, 1)
+      local right, up, look = proxy:GetRight(), proxy:GetUp(), proxy:GetLook()
+      local unit = ball.radius / built.radius
+      local color = vector.create(built.glow[1], built.glow[2], built.glow[3])
+      for index, engine in built.engines do
+        Effects.Thrust(fx, id * 16 + index, at + (right * engine.at.x + up * engine.at.y + look * engine.at.z) * unit, -look,
+          engine.radius * unit, throttle, color, scene.time)
+      end
+    end
+  end
+
   -- What is on the hardpoints of the hulls of our own design. (After
   -- every ship has been placed: a turret points at where its target is
   -- this frame. The fits are looked at once a tick, and when a ship is
@@ -589,7 +614,6 @@ function Scene.Sync(scene: Scene, session: Session.Session)
   end
 
   -- What just happened, as effects (Game/View/Effects).
-  local fx = scene.fx :: Effects.Fx
   for _, event in session.events do
     if event.kind == "Shot" then
       local from, to = state.balls[event.from], state.balls[event.to]

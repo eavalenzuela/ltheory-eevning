@@ -44,6 +44,16 @@ end
 -- An engine pod, faceted (two boxes, one turned an eighth), with an
 -- intake collar, a strap, and a lit throat at the back. 'length' and
 -- 'radius' are half-sizes.
+-- Where an engine's fire leaves the hull: the middle of its mouth and
+-- half the mouth's width, in the design's own units. The fire goes aft.
+export type Exhaust = { at: vector, radius: number }
+
+-- (The exhausts of the design being drawn: Hull.Build takes them from here.)
+local exhausts: { Exhaust } = {}
+local function exhaust(at: vector, radius: number)
+  table.insert(exhausts, { at = at, radius = radius })
+end
+
 local function nacelle(b: Builder, center: vector, length: number, radius: number)
   block(b, PLATING, center, v(radius, radius, length), nil, 0.16)
   block(b, PLATING, center + v(0, 0, -length * 0.04), v(radius * 0.94, radius * 0.94, length * 0.9), v(0, 0, math.pi / 4), 0.16)
@@ -54,6 +64,7 @@ local function nacelle(b: Builder, center: vector, length: number, radius: numbe
   block(b, FRAME, center + v(0, 0, -length * 1.06), v(radius * 0.86, radius * 0.86, length * 0.16), nil, 0.22)
   block(b, FRAME, center + v(0, 0, -length * 1.08), v(radius * 0.80, radius * 0.80, length * 0.12), v(0, 0, math.pi / 4), 0.22)
   block(b, GLOW, center + v(0, 0, -length * 1.235), v(radius * 0.60, radius * 0.60, length * 0.02), v(0, 0, math.pi / 8), 0.5)
+  exhaust(center + v(0, 0, -length * 1.26), radius * 0.60)
 end
 
 -- A tank strapped on: a rounded drum lying along z, with two bands.
@@ -167,6 +178,7 @@ local function javelin(b: Builder)
   block(b, FRAME, v(0.00, -0.02, -1.00), v(0.15, 0.15, 0.07), nil, 0.2)
   block(b, FRAME, v(0.00, -0.02, -1.02), v(0.14, 0.14, 0.05), v(0, 0, math.pi / 4), 0.2)
   block(b, GLOW, v(0.00, -0.02, -1.085), v(0.105, 0.105, 0.012), v(0, 0, math.pi / 8), 0.5)
+  exhaust(v(0.00, -0.02, -1.10), 0.105)
   ports(b, v(0.205, 0.05, -0.90), v(0.205, 0.05, -0.70), 3, 0.014)
 
   -- the engine pods: starboard the bigger, higher and further forward
@@ -256,6 +268,7 @@ local function caravan(b: Builder)
   for index, x in { -0.32, 0.0, 0.32 } do
     block(b, FRAME, v(x, -0.03, stern - 0.40), v(0.12, 0.13, 0.07), nil, 0.25)
     block(b, GLOW, v(x, -0.03, stern - 0.482), v(0.085, 0.095, 0.010), nil, 0.5)
+    exhaust(v(x, -0.03, stern - 0.495), 0.09)
   end
   conduit(b, { v(0.30, high + 0.03, stern + 0.10), v(0.30, high + 0.03, stern - 0.08), v(0.36, 0.30, stern - 0.12) }, 0.016)
   conduit(b, { v(-0.22, high + 0.03, bow - 0.10), v(-0.22, high + 0.03, stern + 0.30), v(-0.30, 0.30, stern - 0.10) }, 0.014)
@@ -327,6 +340,7 @@ local function halberd(b: Builder)
   beam(b, FRAME, v(0.0, 0.30, -0.62), v(0.0, 0.80, -0.80), 0.018)
   block(b, FRAME, v(0.00, -0.02, -1.14), v(0.13, 0.13, 0.07), nil, 0.2)
   block(b, GLOW, v(0.00, -0.02, -1.222), v(0.09, 0.09, 0.010), v(0, 0, math.pi / 8), 0.5)
+  exhaust(v(0.00, -0.02, -1.235), 0.09)
   mast(b, v(-0.03, 1.03, -0.86), 0.42, 0.02)
 
   -- out to starboard, a boom with its drum
@@ -652,6 +666,8 @@ export type Built = {
   turrets: { Mount },   -- its hardpoints, in its own units
   launchers: { Mount },
   fit: { string },
+  engines: { Exhaust }, -- where its engines' fire leaves it
+  glow: { number },     -- and the colour of that fire
 }
 
 local built: { [string]: Built } = {}
@@ -683,6 +699,7 @@ function Hull.Build(type: string): Built?
     return nil
   end
   local b = Plates.New(#type * 1.37)
+  table.clear(exhausts)
   design.draw(b)
   local model, lower, upper = Plates.Finish(b, Hull.looks[design.faction], design.sheets)
   local size = upper - lower
@@ -691,7 +708,7 @@ function Hull.Build(type: string): Built?
   assert(hull == nil or (#design.turrets == hull.turrets and #design.launchers == hull.launchers),
     `the design of {type} has {#design.turrets} turret and {#design.launchers} launcher mounts; the hull has {if hull then hull.turrets else 0} and {if hull then hull.launchers else 0}`)
   local result: Built = { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = design.turrets,
-    launchers = design.launchers, fit = design.fit }
+    launchers = design.launchers, fit = design.fit, engines = table.clone(exhausts), glow = Hull.looks[design.faction].glow }
   built[type] = result
   return result
 end

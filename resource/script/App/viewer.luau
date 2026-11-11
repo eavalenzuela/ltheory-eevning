@@ -321,6 +321,14 @@ return AppShell.Create(function(): Widget
     end
     each(built.turrets)
     each(built.launchers)
+    -- (and its engines burning, at most of what they have)
+    local effects = Effects.New(system)
+    local color = vector.create(built.glow[1], built.glow[2], built.glow[3])
+    for index, engine in built.engines do
+      Effects.Thrust(effects, index, engine.at * unit, vector.create(0, 0, -1), engine.radius * unit, 0.75, color, 0)
+    end
+    Effects.Update(effects, 0, {})
+    fx = effects
   end
 
   local function setUp(v: View)

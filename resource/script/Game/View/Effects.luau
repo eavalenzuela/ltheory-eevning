@@ -65,10 +65,15 @@ type Flash = {
   piece: Piece,
 }
 
+-- An engine that is burning: a glare at its mouth and the fire behind.
+type Burn = { glare: Piece, plume: Piece, frame: number, level: number, time: number }
+
 export type Fx = {
   container: Object,
   effects: { Effect },
   flashes: { Flash },
+  burns: { [number]: Burn },  -- by the key Effects.Thrust was given
+  frame: number,              -- counts Effects.Update, to tell which burns were asked for since
   pools: { [string]: { Piece } },
   made: { Piece },        -- every piece there is, in use or put away
   seed: number,
@@ -93,6 +98,9 @@ local SIZE = { 1, 1.8, 3 }
 -- down its middle about a pixel), nor a flash smaller than SMALL of it.
 local THIN = 0.006
 local SMALL = 0.010
+-- An engine's glare and its fire are let go smaller: a point and a thread.
+local GLINT = 0.0035
+local THREAD = 0.0012
 
 -- The longest a round from a gun is in flight, in seconds.
 local BLINK = 0.4
@@ -125,16 +133,17 @@ function Effects.LookOf(type: string): (Look?, number)
 end
 
 function Effects.New(container: Object): Fx
-  return { container = container, effects = {}, flashes = {}, pools = {}, made = {}, seed = 0 }
+  return { container = container, effects = {}, flashes = {}, burns = {}, frame = 0, pools = {}, made = {}, seed = 0 }
 end
 
 local streakMesh: Mesh? = nil
 local squareMesh: Mesh? = nil
 
 -- A piece to draw with: a square of light with the fragment shader
--- 'name', as a streak (a strip along the object's z) or a flash.
-local function take(fx: Fx, name: string, streak: boolean): Piece
-  local pool = fx.pools[name]
+-- 'name', as a streak (a strip along the object's z) or a flash. Pieces
+-- are kept by shader, or by 'kept' for a use that sets one up its own way.
+local function take(fx: Fx, name: string, streak: boolean, kept: string?): Piece
+  local pool = fx.pools[kept or name]
   if pool and #pool > 0 then
     return table.remove(pool) :: Piece
   end
@@ -159,7 +168,7 @@ local function take(fx: Fx, name: string, streak: boolean): Piece
   -- (nothing to see until it is first placed)
   object:SetScale(vector.create(0, 0, 0))
   fx.container:AddInterior(object)
-  local piece = { object = object, shader = shader, pool = name }
+  local piece = { object = object, shader = shader, pool = kept or name }
   table.insert(fx.made, piece)
   return piece
 end
@@ -320,6 +329,44 @@ function Effects.Explode(fx: Fx, at: vector, radius: number, now: number)
   Effects.Burst(fx, at, vector.create(0.85, 0.30, 0.10), 3.4 * radius, 0, 2.4 * slow, now + 0.25 * slow, true)
 end
 
+-- An engine burns, this frame. 'key' is the engine's own (the same
+-- every frame); 'at' is the middle of its mouth, 'aft' the way its fire
+-- goes, 'radius' half the mouth's width, 'throttle' how hard it is
+-- burning from 0 to 1. It glows a little even at rest. Say so every
+-- frame: an engine not heard from by the next Effects.Update is out.
+function Effects.Thrust(fx: Fx, key: number, at: vector, aft: vector, radius: number, throttle: number, color: vector, now: number)
+  local burn = fx.burns[key]
+  if burn == nil then
+    local glare = take(fx, "fx_flash.jsl", false, "glare")
+    local plume = take(fx, "fx_plume.jsl", true)
+    -- (neither is kept as big on the screen as a shot is: far off, a
+    -- ship under way is a point of light and a thread)
+    ShaderInstance_SetFloat(glare.shader, "fxMin", GLINT)
+    ShaderInstance_SetFloat(glare.shader, "fxRing", 0)
+    ShaderInstance_SetFloat(glare.shader, "fxSeed", key * 1.7)
+    ShaderInstance_SetFloat(plume.shader, "fxMin", THREAD)
+    burn = { glare = glare, plume = plume, frame = 0, level = math.clamp(throttle, 0, 1), time = now }
+    fx.burns[key] = burn
+  end
+  burn.frame = fx.frame
+  -- (an engine does not jump from one setting to another: it comes up
+  -- and dies down over half a second or so)
+  burn.level += (math.clamp(throttle, 0, 1) - burn.level) * (1 - math.exp(-4 * math.clamp(now - burn.time, 0, 0.1)))
+  burn.time = now
+  throttle = burn.level
+  local size = radius * (2.6 + 2.4 * throttle)
+  burn.glare.object:SetPos(at)
+  burn.glare.object:SetScale(vector.create(size, 1, size))
+  -- (the flash's shader late in its life: a soft glow, its rays nearly gone)
+  paint(burn.glare, color, 0.30 + 0.50 * throttle, 0.92)
+  if throttle > 0.02 then
+    lay(burn.plume, at, at + aft * (radius * (3 + 11 * throttle)), radius * 1.25)
+    paint(burn.plume, color, 0.35 + 0.65 * throttle, now)
+  else
+    burn.plume.object:SetScale(NOWHERE)
+  end
+end
+
 -- Place everything for this frame. 'where' gives each body's place in
 -- the scene; an effect whose ends are not both there is dropped.
 function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
@@ -407,6 +454,16 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
       paint(flash.piece, flash.color, (1 - t) ^ 1.5, t)
     end
   end
+
+  -- The engines nobody has said are still burning go out.
+  for key, burn in fx.burns do
+    if burn.frame ~= fx.frame then
+      give(fx, burn.glare)
+      give(fx, burn.plume)
+      fx.burns[key] = nil
+    end
+  end
+  fx.frame += 1
 end
 
 -- Drop every effect. 'gone' says the container has been deleted, and
@@ -419,6 +476,7 @@ function Effects.Clear(fx: Fx, gone: boolean)
   end
   table.clear(fx.effects)
   table.clear(fx.flashes)
+  table.clear(fx.burns)
   table.clear(fx.pools)
   table.clear(fx.made)
 end
