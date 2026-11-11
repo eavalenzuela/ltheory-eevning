@@ -26,6 +26,8 @@ export type Look = {
   wear: number,
   rust: number,
   sheets: number,       -- sheets of plating to a unit of the model
+  mottle: number?,      -- how unlike one sheet is to the next, 0 to 1 (a patchwork); 0 if not said
+  lights: number?,      -- how many sheets have a lit port in them, 0 to 1; 0 if not said
 }
 
 -- To build a thing as the wreck of itself, a piece at a time: only the
@@ -50,13 +52,17 @@ export type Builder = {
   -- a little out of true.
   patch: number?,
   kept: number,         -- how many plates have gone in
+  -- What is not plates: skins lofted through outlines, and what swells
+  -- out of them (Plates.Loft, Plates.Fairing). One mesh for all of it.
+  skin: Mesh?,
+  points: number,       -- how many vertices that mesh has
 }
 
 local ZERO = vector.create(0, 0, 0)
 
 function Plates.New(seed: number, fine: number?): Builder
   return { big = PlateMesh_Create(9), small = PlateMesh_Create(4), count = 0, seed = seed, fine = fine or 0.11, ruin = nil,
-    patch = nil, kept = 0 }
+    patch = nil, kept = 0, skin = nil, points = 0 }
 end
 
 -- The next plate's own number: the fraction of its tag.
@@ -161,6 +167,170 @@ function Plates.Conduit(b: Builder, points: { vector }, thick: number)
   end
 end
 
+-- ---------------------------------------------------------------------
+-- Skins. A plate is a box, and a hull of boxes has corners however they
+-- are rounded. A skin is one surface drawn through a row of oval
+-- sections, so that it swells and narrows without a break; and a
+-- fairing is a slender swelling lying along such a skin and flush to it.
+
+-- The outline of a skin, from one end to the other along z: at each
+-- place, half its width and half its height there, and how high its
+-- middle is (0 if not said).
+export type Outline = { { number } }
+
+-- A value drawn smoothly through four in a row, 't' of the way from the
+-- second to the third.
+local function through(a: number, b: number, c: number, d: number, t: number): number
+  return 0.5 * ((2 * b) + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (3 * b - a - 3 * c + d) * t * t * t)
+end
+
+-- Half the width and half the height of an outline at 'z', and how high
+-- its middle is there.
+function Plates.Girth(outline: Outline, z: number): (number, number, number)
+  local last = #outline
+  local index = 1
+  while index < last - 1 and z > outline[index + 1][1] do
+    index += 1
+  end
+  local p1, p2 = outline[index], outline[index + 1]
+  local p0, p3 = outline[math.max(index - 1, 1)], outline[math.min(index + 2, last)]
+  local t = math.clamp((z - p1[1]) / (p2[1] - p1[1]), 0, 1)
+  return math.max(through(p0[2], p1[2], p2[2], p3[2], t), 0.001), math.max(through(p0[3], p1[3], p2[3], p3[3], t), 0.001),
+    through(p0[4] or 0, p1[4] or 0, p2[4] or 0, p3[4] or 0, t)
+end
+
+-- How square a section is: 2 is an ellipse.
+local SQUARE = 2.3
+
+-- The point of a skin at 'z' along it and 'around' it (0 to starboard,
+-- a quarter turn is its back), for a skin whose middle line is at 'x'
+-- and lifted 'y'.
+function Plates.Point(outline: Outline, z: number, around: number, x: number?, y: number?): vector
+  local w, h, middle = Plates.Girth(outline, z)
+  local c, s = math.cos(around), math.sin(around)
+  return vector.create((x or 0) + w * math.sign(c) * math.abs(c) ^ (2 / SQUARE),
+    (y or 0) + middle + h * math.sign(s) * math.abs(s) ^ (2 / SQUARE), z)
+end
+
+-- The way out of a skin at a point of it.
+function Plates.Normal(outline: Outline, z: number, around: number): vector
+  local e = 0.01
+  local round = Plates.Point(outline, z, around + e) - Plates.Point(outline, z, around - e)
+  local along = Plates.Point(outline, z + e, around) - Plates.Point(outline, z - e, around)
+  local n = vector.cross(round, along)
+  return if vector.magnitude(n) > 1e-9 then vector.normalize(n) else vector.create(math.cos(around), math.sin(around), 0)
+end
+
+local function skinOf(b: Builder): Mesh
+  local skin = b.skin
+  if skin == nil then
+    skin = Mesh_Create()
+    b.skin = skin
+  end
+  return skin :: Mesh
+end
+
+local UNSET = vector.create(0, 1, 0)
+
+-- A skin drawn through an outline, closed to a rounded end at each end
+-- of it. 'x' and 'y' put its middle line aside and lift it.
+function Plates.Loft(b: Builder, part: number, outline: Outline, x: number?, y: number?)
+  local tag = part + own(b)
+  local skin = skinOf(b)
+  local first, last = outline[1][1], outline[#outline][1]
+  local from, to = first, last
+  local ruin = b.ruin
+  if ruin then
+    -- (a wreck: only the length of it that this piece of the wreck is)
+    from, to = math.max(first, ruin.from), math.min(last, ruin.to)
+    if to - from < 0.05 then
+      return
+    end
+  end
+  local sides = 28
+  local rings = math.clamp(math.ceil((to - from) / 0.07), 6, 96)
+  local base = b.points
+  for ring = 0, rings do
+    local z = from + (to - from) * ring / rings
+    for side = 0, sides - 1 do
+      Mesh_AddVertex(skin, Plates.Point(outline, z, side / sides * 2 * math.pi, x, y), UNSET, 1, tag)
+    end
+  end
+  b.points += (rings + 1) * sides
+  for ring = 0, rings - 1 do
+    for side = 0, sides - 1 do
+      local a, c = base + ring * sides + side, base + (ring + 1) * sides + side
+      local a2, c2 = base + ring * sides + (side + 1) % sides, base + (ring + 1) * sides + (side + 1) % sides
+      Mesh_AddTriangle(skin, a, a2, c)
+      Mesh_AddTriangle(skin, a2, c2, c)
+    end
+  end
+  -- the ends, each drawn in to a point a little beyond (not where a
+  -- wreck is broken off: that end is left open)
+  local function close(z: number, ring: number, out: number)
+    local w, h, middle = Plates.Girth(outline, z)
+    Mesh_AddVertex(skin, vector.create(x or 0, (y or 0) + middle, z + out * math.min(w, h) * 0.8), UNSET, 1, tag)
+    local pole = b.points
+    b.points += 1
+    for side = 0, sides - 1 do
+      local a, a2 = base + ring * sides + side, base + ring * sides + (side + 1) % sides
+      if out < 0 then
+        Mesh_AddTriangle(skin, pole, a2, a)
+      else
+        Mesh_AddTriangle(skin, pole, a, a2)
+      end
+    end
+  end
+  if from == first then
+    close(first, 0, -1)
+  end
+  if to == last then
+    close(last, rings, 1)
+  end
+  b.kept += 1
+end
+
+-- A fairing: a slender swelling on a skin, lying along it and flush to
+-- it, pointed at both ends. 'z' and 'around' are where its middle is on
+-- the skin (Plates.Point); it is 'length' long, 'width' across at its
+-- widest, and stands 'height' out there.
+function Plates.Fairing(b: Builder, part: number, outline: Outline, z: number, around: number, length: number, width: number,
+  height: number, x: number?, y: number?)
+  local tag = part + own(b)
+  local ruin = b.ruin
+  if ruin and (z < ruin.from or z >= ruin.to or dice(b, 21) < ruin.loss) then
+    return
+  end
+  local skin = skinOf(b)
+  local first, last = outline[1][1], outline[#outline][1]
+  local rings, sides = 12, 7
+  local base = b.points
+  local ahead = vector.create(0, 0, 1)
+  for ring = 0, rings do
+    local s = -1 + 2 * ring / rings
+    local at = math.clamp(z + s * length / 2, first, last)
+    local foot, out = Plates.Point(outline, at, around, x, y), Plates.Normal(outline, at, around)
+    local across = vector.cross(out, ahead)
+    across = if vector.magnitude(across) > 1e-6 then vector.normalize(across) else vector.create(1, 0, 0)
+    -- (fullest a little ahead of its middle, and drawn out to a point behind)
+    local full = math.max(0, 1 - s * s) ^ 0.7 * (1 + 0.25 * s)
+    for side = 0, sides do
+      local turn = side / sides * math.pi
+      Mesh_AddVertex(skin, foot - out * (0.25 * height * full + 0.004) + across * (0.5 * width * full * math.cos(turn))
+        + out * (1.25 * height * full * math.sin(turn)), UNSET, 1, tag)
+    end
+  end
+  b.points += (rings + 1) * (sides + 1)
+  for ring = 0, rings - 1 do
+    for side = 0, sides - 1 do
+      local a, c = base + ring * (sides + 1) + side, base + (ring + 1) * (sides + 1) + side
+      Mesh_AddTriangle(skin, a, a + 1, c)
+      Mesh_AddTriangle(skin, a + 1, c + 1, c)
+    end
+  end
+  b.kept += 1
+end
+
 -- The model of what has been built, painted as 'look' says, and the
 -- corners of the box it fills.
 function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector, vector)
@@ -180,10 +350,20 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
   ShaderInstance_SetFloat(skin, "wear", look.wear)
   ShaderInstance_SetFloat(skin, "rust", look.rust)
   ShaderInstance_SetFloat(skin, "sheets", sheets or look.sheets)
+  ShaderInstance_SetFloat(skin, "mottle", look.mottle or 0)
+  ShaderInstance_SetFloat(skin, "lights", look.lights or 0)
   ShaderInstance_Link(skin)
 
   local model = Model_Create()
   Model_AddShell(model, mesh, skin)
+  local lofted = b.skin
+  if lofted then
+    -- (the engine's faces turn the other way from the way these were wound)
+    Mesh_ReverseWinding(lofted)
+    Mesh_ComputeNormals(lofted)
+    Mesh_ComputeOcclusion(lofted)
+    Model_AddShell(model, lofted, skin)
+  end
   local bound = Renderable_GetBound(model)
   return model, bound.lower, bound.upper
 end

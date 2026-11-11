@@ -33,20 +33,30 @@ uniform vec3 paintTrim;
 uniform float wear;         /* how far the paint is worn off, 0 to 1 */
 uniform float rust;         /* how rusted, 0 to 1 */
 uniform float sheets;       /* sheets of plating to a unit of the hull */
+uniform float mottle;       /* how unlike one sheet is to the next, 0 to 1: a patchwork */
+uniform float lights;       /* how many of its sheets have a lit port in them, 0 to 1 */
 
 vec3 lin(vec3 c) {
   return pow(c, vec3(2.2));
 }
 
-/* Lines where one sheet of plating meets the next, across the face that
-   'n' is the normal of: 1 on a seam. */
-float seams(vec3 p, vec3 n, float offset) {
+/* Where a point is among the sheets of plating, across the face that
+   'n' is the normal of: whole numbers are sheets. */
+vec2 sheetAt(vec3 p, vec3 n, float offset) {
   vec3 a = abs(n);
   vec2 q = a.x > a.y && a.x > a.z ? p.zy : (a.y > a.z ? p.xz : p.xy);
-  q = q * sheets * vec2(1.0, 1.6) + offset;
+  return q * sheets * vec2(1.0, 1.6) + offset;
+}
+
+/* Lines where one sheet of plating meets the next: 1 on a seam. */
+float seams(vec2 q) {
   vec2 f = abs(fract(q) - 0.5);
   float d = 0.5 - max(f.x, f.y);
   return 1.0 - smoothstep(0.0, 0.035, d);
+}
+
+float sheetHash(vec2 cell, float salt) {
+  return fract(sin(dot(cell, vec2(127.1, 311.7)) + salt * 17.3) * 43758.5453);
 }
 
 void main() {
@@ -79,7 +89,32 @@ void main() {
   /* The edges of a plate, where its bevel turns: the smoothed normal is
      shorter there. */
   float edge = 1.0 - exp(-900.0 * length(normal - normalize(normal)));
-  float seam = bare ? 0.0 : seams(p, n, own * 13.0);
+  vec2 sheet = sheetAt(p, n, own * 13.0);
+  float seam = bare ? 0.0 : seams(sheet);
+  if (!bare && mottle > 0.0) {
+    /* A patchwork: each sheet its own tone, and some of them the other
+       paint altogether. */
+    vec2 cell = floor(sheet);
+    paint *= 1.0 + mottle * 0.5 * (sheetHash(cell, 1.0) - 0.5);
+    if (part < 1.5 && sheetHash(cell, 2.0) < 0.30 * mottle)
+      paint = mix(paint, (part < 0.5 ? paintPatch : paintPlating) * (0.75 + 0.4 * own), 0.7);
+    seam *= 1.0 - 0.6 * mottle;
+  }
+  if (!bare && lights > 0.0 && part < 1.5) {
+    /* A lit port in some of the sheets: a pinpoint, which is what says
+       how big the hull is. (Not on its back or its keel.) */
+    vec2 fine = sheet * 3.0;
+    vec2 cell = floor(fine);
+    vec2 at = fract(fine) - 0.5;
+    if (sheetHash(cell, 3.0) < 0.22 * lights && abs(n.y) < 0.75 && max(abs(at.x) * 1.6, abs(at.y) * 3.2) < 0.34) {
+      outputAlbedo(lin(paintGlow) * (1.6 + 1.4 * sheetHash(cell, 4.0)));
+      outputAlpha(1.0);
+      outputNormal(normalize(normal));
+      outputMaterial(MATERIAL_NOSHADE);
+      outputRoughness(0.0);
+      return;
+    }
+  }
 
   float blotch = wn_fbm(p * 2.2 + own * 31.0, 5, 0.55);
   float fine = wn_fbm(p * 19.0 + own * 7.0, 4, 0.6);
