@@ -64,14 +64,19 @@ function Session.Notice(session: Session, event: Space.Event)
   if kind == "CommandRejected" then
     Session.Say(session, `{event.command}: {tostring(event.reason)}`)
   elseif kind == "PiratesArrived" and event.wave then
-    Session.Say(session, `Wave {event.wave} of {event.of}: {event.count} {if event.count == 1 then "ship" else "ships"} of the camp's`)
+    Session.Say(session, `Wave {event.wave} of {event.of}: ` .. (if event.chief then "the camp's chief is out"
+      .. (if event.count > 1 then `, with {event.count - 1} more` else "")
+      else `{event.count} {if event.count == 1 then "ship" else "ships"} of the camp's`))
   elseif kind == "PiratesArrived" then
     Session.Say(session, if event.count == 1 then "A pirate has arrived" else `{event.count} pirates have arrived`)
   elseif kind == "WaveDown" then
     Session.Say(session, `Wave {event.wave} of {event.of} is down: the next is coming`)
   elseif kind == "AssaultCleared" then
     local body = Core.Query.Body(session.game, event.station)
-    Session.Say(session, `The camp is cleared: {if body then body.name else "the station"} will pay for it`)
+    Session.Say(session, `{if (event.aim :: string) == "chief" then "The chief is destroyed" else "The camp is cleared"}: `
+      .. `{if body then body.name else "the station"} will pay for it`)
+  elseif kind == "RoomOpen" then
+    Session.Say(session, `The way on is found: {event.name} is on the overview`)
   elseif kind == "WalletChanged" then
     local sign = if event.amount >= 0 then "+" else "-"
     Session.Say(session, `{sign}{math.abs(event.amount)} credits ({event.reason})`)

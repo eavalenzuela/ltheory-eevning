@@ -72,7 +72,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 37
+Core.SAVE_VERSION = 38
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -290,6 +290,18 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       if site.led == nil then
         site.led = false
       end
+    end
+  end,
+  -- 38: a camp can be of more than one room, and an assault can be to
+  -- destroy its chief or to bring back what it took. The assaults of a
+  -- save from before are on camps of one room, to be cleared.
+  [37] = function(state: any)
+    for _, mission in state.missions do
+      local assault = mission.kind == "assault"
+      mission.rooms = mission.rooms or (if assault and mission.site ~= 0 then { mission.site } else {})
+      mission.ends = mission.ends or (if assault then { #mission.waves } else {})
+      mission.aim = mission.aim or (if assault then "clear" else "")
+      mission.mark = mission.mark or 0
     end
   end,
   -- 37: a station's fourth agent has assaults on pirate camps. The jobs
@@ -1050,6 +1062,12 @@ function Query.Directional(game: Game, toward: number?, angle: number, range: nu
   return Dscan.Scan(game.state, ship, toward, angle, range), ok, why
 end
 
+-- Whether a site is one the pilot can see on the overview: found, and
+-- still there.
+function Query.Found(game: Game, site: number): boolean
+  return game.state.sites[site] ~= nil and not Sites.Hidden(game.state, site)
+end
+
 -- The places the pilot has marked, in the order they were.
 function Query.Bookmarks(game: Game): { State.Bookmark }
   local found: { State.Bookmark } = {}
@@ -1304,13 +1322,19 @@ function Query.Sites(game: Game): ({ SiteStatus }, number, ProbeStatus)
   for _, site in Sites.In(state, player.system) do
     local object = Space.Object(state, site.id) :: System.Object
     local known = site.strength >= 1
+    -- (a part of a camp that a job has not opened yet is not a signal)
+    local unopened = string.sub(site.kind, 1, 7) == "mission" and not known
+    if unopened then
+      continue
+    end
+    local kind: string = site.kind
     local by = Space.Object(state, object.parent)
     local probes, near = Sites.Covered(state, site, me)
     table.insert(found, {
-      id = site.id, name = if known then object.name else `Signal {site.code}`, kind = if known then site.kind else "",
+      id = site.id, name = if known then object.name else `Signal {site.code}`, kind = if known then kind else "",
       strength = site.strength, found = known, distance = if me then Space.Gap(me :: any, object :: any) else 0,
       near = if by and site.strength >= 0.25 then by.name else "", probes = probes,
-      faint = not known and not near and site.strength >= (Sites.ALONE[site.kind] or 1),
+      faint = not known and not near and site.strength >= (Sites.ALONE[kind] or 1),
     })
   end
   local carried = 0

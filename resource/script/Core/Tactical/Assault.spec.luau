@@ -10,6 +10,7 @@ local Dogma = require("@lt/Core/Dogma")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
+local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
@@ -204,6 +205,38 @@ suite:Case("a camp of a level has that level's packs, and a harder level's are w
     end
     t.ok(least > last, `the least a level {level} camp pays is {least}, and the most the level below is {last}`)
     last = most
+  end
+end)
+
+suite:Case("a camp is laid out in as many rooms as its level may have, each with a wave at least, and the job there is one of three", function(t)
+  for level = 1, #Assault.PACKS do
+    local rooms: { [number]: number } = {}
+    local aims: { [string]: number } = {}
+    for seed = 1, 400 do
+      local ends, aim = Assault.Shape(Rng.For(seed, level, 7), level)
+      rooms[#ends] = (rooms[#ends] or 0) + 1
+      aims[aim] = (aims[aim] or 0) + 1
+      -- Every room has a wave, in order, and the last wave is in the last room.
+      t.eq(ends[#ends], Assault.WAVES[level])
+      for index, last in ends do
+        t.ok(last > (ends[index - 1] or 0), `level {level}: a room with no wave`)
+      end
+      t.ok(#ends <= Assault.ROOMS[level] and #ends <= Assault.WAVES[level], `level {level}: {#ends} rooms`)
+    end
+    -- One room at the first level, one or two at the second, two at the third, two or three at the fourth.
+    local counts: { number } = {}
+    for count = 1, 3 do
+      counts[count] = if (rooms[count] or 0) > 0 then 1 else 0
+    end
+    t.eq(counts, ({ { 1, 0, 0 }, { 1, 1, 0 }, { 0, 1, 0 }, { 0, 1, 1 } })[level], `the rooms of level {level}`)
+    -- To clear it about half the time, and each of the others about a quarter.
+    t.near((aims.clear or 0) / 400, 0.5, 0.09)
+    t.near((aims.chief or 0) / 400, 0.25, 0.08)
+    t.near((aims.fetch or 0) / 400, 0.25, 0.08)
+    -- What a job counts: the ships, the one chief, or ten crates a level.
+    local waves = Assault.Plan(Rng.For(level, 11), level)
+    t.eq({ Assault.Need("clear", level, waves), Assault.Need("chief", level, waves), Assault.Need("fetch", level, waves) },
+      { (Assault.Count(waves)), 1, 10 * level })
   end
 end)
 

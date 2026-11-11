@@ -226,19 +226,21 @@ local function assaults(game: Core.Game, station: number): { State.Mission }
 end
 
 -- A game in which the home station's assault of a level is on a camp in
--- its own system, that job taken: the game and the job.
-local function camp(level: number): (Core.Game, State.Mission)
-  for seed = 1, 40 do
+-- its own system, to do a thing there ("clear" it, if not said), of so
+-- many rooms (any number, if not said), that job taken: the game and
+-- the job.
+local function camp(level: number, aim: string?, rooms: number?): (Core.Game, State.Mission)
+  for seed = 1, 200 do
     local game = newGame(seed)
     local state = game.state
     state.standings.vessari = Assault.STANDING[level]
     local offer = assaults(game, state.player.home)[level]
-    if offer and offer.system == 1 then
+    if offer and offer.system == 1 and offer.aim == (aim or "clear") and (rooms == nil or #offer.ends == rooms) then
       assert(submit(game, { kind = "AcceptMission", actor = 0, what = offer.key }))
       return game, state.missions[state.missionIds[1]]
     end
   end
-  error("no history seed up to 40 has the camp in the home system")
+  error(`no history seed up to 200 has a level {level} camp like that in the home system`)
 end
 
 -- The ships that keep a place, in the order they came.
@@ -305,14 +307,25 @@ suite:Case("the fourth agent has an assault on a pirate camp, at each level the 
         bounty += Pirates.kindById[kind].bounty
       end
     end
-    t.eq(offer.need, ships)
+    -- What it counts is what it is to do: the camp's ships, its one chief, or the crates to bring back.
+    t.ok(table.find(Assault.AIMS, offer.aim) ~= nil, `an assault to "{offer.aim}"`)
+    t.eq({ offer.need, offer.type } :: { any },
+      if offer.aim == "chief" then { 1, "" } :: { any } elseif offer.aim == "fetch" then { 10 * level, "cargo.stolen" } :: { any }
+        else { ships, "" } :: { any })
+    -- Its rooms: as many as its level may have, each with a wave at least, the last wave in the last.
+    t.ok(#offer.ends >= 1 and #offer.ends <= Assault.ROOMS[level] and offer.ends[#offer.ends] == #offer.waves)
+    for index = 2, #offer.ends do
+      t.ok(offer.ends[index] > offer.ends[index - 1])
+    end
+    t.eq({ #offer.rooms, offer.mark }, { 0, 0 })
     -- It pays six tenths of the bounties on them and five thousand a level, and what the pilot's standing adds.
     t.eq(offer.reward, math.floor((math.floor(0.6 * bounty) + 5000 * level) * (1 + 0.03 * 5)))
     t.near(offer.standing, 0.15 * level, 1e-9)
     t.eq(offer.loyalty, offer.reward // Missions.LOYALTY)
     t.ok(offer.reward > last, "a harder camp should pay more")
     last = offer.reward
-    t.eq(Missions.Title(offer), `Assault, level {level}: a camp of {ships}`)
+    t.eq(Missions.Title(offer), `Assault, level {level}: ` .. (if offer.aim == "chief" then "the chief of a camp"
+      elseif offer.aim == "fetch" then `{offer.need} crates a camp took` else `a camp of {ships}`))
   end
   -- One from a station at a time: taking one takes the others off the list, and the agent's next is another job.
   t.ok((submit(game, { kind = "AcceptMission", actor = 0, what = offers[2].key })))
@@ -328,7 +341,7 @@ suite:Case("the fourth agent has an assault on a pirate camp, at each level the 
 end)
 
 suite:Case("taking an assault puts its camp on the charts: a place of its own, found already, that is not one of the system's sites", function(t)
-  local game, mission = camp(1)
+  local game, mission = camp(1, "clear", 1)
   local state = game.state
   local site = assert(state.sites[mission.site], "the job has no camp")
   local place = assert(Space.Object(state, site.id))
@@ -354,7 +367,7 @@ suite:Case("taking an assault puts its camp on the charts: a place of its own, f
 end)
 
 suite:Case("at the camp its keepers come in waves, each a little after the last is destroyed, and the last one down finishes the job", function(t)
-  local game, mission = camp(1)
+  local game, mission = camp(1, "clear", 1)
   local state = game.state
   local home = state.player.home
   local wallet, credit = state.wallet, Missions.Standing(state, "vessari")
@@ -437,7 +450,7 @@ suite:Case("at the camp its keepers come in waves, each a little after the last 
 end)
 
 suite:Case("an assault given up takes its camp and whoever is in it; it is in the save, and an older save has none", function(t)
-  local game, mission = camp(2)
+  local game, mission = camp(2, "clear", 1)
   local state = game.state
   local home = state.player.home
   t.ok((submit(game, { kind = "Undock", actor = 0 })))
@@ -484,6 +497,241 @@ suite:Case("an assault given up takes its camp and whoever is in it; it is in th
   end
   local old, oldLength = Codec.Encode(file)
   t.eq(Core.Hash(Core.Load(old, oldLength)), Core.Hash(plain))
+end)
+
+-- Destroy every keeper of a room, as the pilot's doing. Returns how many there were.
+local function sweep(game: Core.Game, room: number): number
+  local there = keepers(game, room)
+  for _, id in there do
+    Aftermath.Destroy(game.state, id, game.state.player.ship, game.events)
+  end
+  return #there
+end
+
+-- The events of a kind since they were last taken.
+local function said(game: Core.Game, kind: string): { [string]: any }?
+  local found: { [string]: any }? = nil
+  for _, event in Core.TakeEvents(game) do
+    found = if event.kind == kind then event else found
+  end
+  return found
+end
+
+suite:Case("a camp of two rooms: only the first is on the charts, and the way to the second is found when the first is cleared", function(t)
+  local game, mission = camp(3, "clear", 2)
+  local state = game.state
+  t.eq({ #mission.rooms, mission.site } :: { any }, { 2, mission.rooms[1] } :: { any })
+  local first, second = mission.rooms[1], mission.rooms[2]
+  local outer, inner = assert(Space.Object(state, first)), assert(Space.Object(state, second))
+  -- The second room: a place of its own, far enough off to be another grid, by the camp's name; and not found.
+  t.eq({ state.sites[first].strength, state.sites[second].strength, state.sites[second].code } :: { any },
+    { 1, 0, state.sites[first].code } :: { any })
+  t.eq(inner.name, outer.name .. " II")
+  local apart = Space.Distance(outer :: any, inner :: any)
+  t.ok(apart >= 2e7 and apart <= 6.1e7, `the rooms are {apart} m apart`)
+  t.eq(Sites.Hidden(state, second), true)
+  t.ok((submit(game, { kind = "Undock", actor = 0 })))
+  -- No scanner finds it, and it is not a signal.
+  for _ = 1, 6 do
+    submit(game, { kind = "Scan", actor = 0 })
+    steps(game, Sites.SCAN + 1)
+  end
+  t.eq(state.sites[second].strength, 0, "a scan found a room of a camp")
+  for _, row in Core.Query.Sites(game) do
+    t.ok(row.id ~= second, "the room that is not open is on the scanner")
+  end
+  -- The first room has its own waves and no more: with the last of them down, nobody else comes there.
+  at(game, first)
+  local inFirst = mission.ends[1]
+  local destroyed = 0
+  for wave = 1, inFirst do
+    steps(game, Assault.BREATHER + 3)
+    t.eq({ mission.wave, #keepers(game, first) }, { wave, #mission.waves[wave] })
+    Core.TakeEvents(game)
+    destroyed += sweep(game, first)
+  end
+  local open = assert(said(game, "RoomOpen"), "nobody said the way on was found")
+  t.eq({ open.room, open.of, open.site, open.name } :: { any }, { 2, 2, second, inner.name } :: { any })
+  t.eq({ state.sites[second].strength, Sites.Hidden(state, second), mission.done } :: { any }, { 1, false, destroyed } :: { any })
+  steps(game, Assault.BREATHER + 20)
+  t.eq({ mission.wave, #keepers(game, first) }, { inFirst, 0 })
+  local shown = false
+  for _, entry in Core.Query.Overview(game) do
+    shown = shown or (entry.id == second and entry.kind == "site")
+  end
+  t.ok(shown, "the second room is not on the overview")
+  -- The rest are in the second room, and come when the pilot does.
+  at(game, second)
+  for wave = inFirst + 1, #mission.waves do
+    steps(game, Assault.BREATHER + 3)
+    t.eq({ mission.wave, #keepers(game, second), #keepers(game, first) }, { wave, #mission.waves[wave], 0 })
+    Core.TakeEvents(game)
+    sweep(game, second)
+  end
+  t.eq(mission.done, mission.need)
+  -- Done with, both rooms go.
+  local home = state.player.home
+  local ball = state.balls[state.player.ship]
+  local station = assert(Space.Object(state, home))
+  ball.x, ball.y, ball.z = station.x + station.radius + 500, station.y, station.z
+  Space.AssignGrid(state, ball)
+  t.ok((submit(game, { kind = "Dock", actor = 0, target = home })))
+  for _ = 1, 600 do
+    if state.ships[state.player.ship].docked == home then
+      break
+    end
+    Core.Step(game)
+  end
+  t.ok((submit(game, { kind = "CompleteMission", actor = 0, target = mission.id })))
+  t.eq({ state.sites[first].gone, state.sites[second].gone }, { true, true })
+end)
+
+suite:Case("a pilot who finds their own way to a room that is not open finds nobody in", function(t)
+  local game, mission = camp(3, "clear", 2)
+  t.ok((submit(game, { kind = "Undock", actor = 0 })))
+  at(game, mission.rooms[2])
+  steps(game, Assault.BREATHER + 20)
+  t.eq({ mission.wave, #keepers(game, mission.rooms[2]) }, { 0, 0 })
+end)
+
+suite:Case("an assault on a camp's chief is done when the chief is destroyed, whoever else is left", function(t)
+  -- (a camp whose last wave is more than the chief)
+  local game: Core.Game, mission: State.Mission
+  for level = 2, 4 do
+    game, mission = camp(level, "chief", 1)
+    if #mission.waves[#mission.waves] > 1 then
+      break
+    end
+  end
+  local state = game.state
+  t.ok(#mission.waves[#mission.waves] > 1, "no camp with company for its chief")
+  t.eq({ mission.need, mission.done, mission.mark }, { 1, 0, 0 })
+  t.eq(refused(game, { kind = "CompleteMission", actor = 0, target = mission.id }), "the camp's chief is still to destroy")
+  t.ok((submit(game, { kind = "Undock", actor = 0 })))
+  at(game, mission.site)
+  -- The waves before the last: nobody of them is the chief, and destroying them is not the job.
+  for wave = 1, #mission.waves - 1 do
+    steps(game, Assault.BREATHER + 3)
+    t.eq({ mission.wave, mission.mark }, { wave, 0 })
+    sweep(game, mission.site)
+    t.eq(mission.done, 0)
+  end
+  -- The chief is the first of the last wave, by that name, with twice the bounty on them.
+  Core.TakeEvents(game)
+  steps(game, Assault.BREATHER + 3)
+  local last = keepers(game, mission.site)
+  t.eq({ #last, mission.mark }, { #mission.waves[#mission.waves], last[1] })
+  local arrived = assert(said(game, "PiratesArrived"))
+  t.eq(arrived.chief, true)
+  local kind = Pirates.kindById[mission.waves[#mission.waves][1]]
+  t.eq({ state.balls[last[1]].name, state.ships[last[1]].name, state.pilots[last[1]].bounty } :: { any },
+    { "Pirate Chief", "Pirate Chief", 2 * kind.bounty } :: { any })
+  t.eq(state.balls[last[2]].name, Pirates.kindById[mission.waves[#mission.waves][2]].name)
+  -- One of the others down: not the job. The chief down: the job, with the rest still there.
+  Aftermath.Destroy(state, last[2], state.player.ship, game.events)
+  t.eq(mission.done, 0)
+  Core.TakeEvents(game)
+  local wallet = state.wallet
+  Aftermath.Destroy(state, last[1], state.player.ship, game.events)
+  t.eq({ mission.done, state.wallet - wallet }, { 1, 2 * kind.bounty })
+  local cleared = assert(said(game, "AssaultCleared"), "nobody said the chief was down")
+  t.eq(cleared.aim, "chief")
+  -- Paid at the station; and whoever was left goes with the camp.
+  local left = #keepers(game, mission.site)
+  local home = state.player.home
+  local ball = state.balls[state.player.ship]
+  local station = assert(Space.Object(state, home))
+  ball.x, ball.y, ball.z = station.x + station.radius + 500, station.y, station.z
+  Space.AssignGrid(state, ball)
+  t.ok((submit(game, { kind = "Dock", actor = 0, target = home })))
+  for _ = 1, 600 do
+    if state.ships[state.player.ship].docked == home then
+      break
+    end
+    Core.Step(game)
+  end
+  t.ok((submit(game, { kind = "CompleteMission", actor = 0, target = mission.id })))
+  t.eq({ #keepers(game, mission.site), #state.missionIds }, { 0, 0 })
+  t.ok(left == #last - 2)
+end)
+
+suite:Case("an assault to fetch what a camp took: a container in the last room, looted and brought back to the station", function(t)
+  local game, mission = camp(1, "fetch")
+  local state = game.state
+  local home = state.player.home
+  t.eq({ mission.need, mission.type } :: { any }, { 10, "cargo.stolen" } :: { any })
+  -- The container is in the last room, with the crates in it.
+  local container = assert(state.wrecks[mission.mark], "the camp has no container")
+  local last = mission.rooms[#mission.rooms]
+  t.eq({ container.name, container.grid, container.system, container.locked } :: { any }, { "Stolen Cargo", last, 1, false } :: { any })
+  local crates = 0
+  for _, item in Items.In(state, container.id, "cargo") do
+    crates += if item.type == "cargo.stolen" then item.quantity else 0
+  end
+  t.eq(crates, 10)
+  t.eq(refused(game, { kind = "CompleteMission", actor = 0, target = mission.id }), "10 more to bring")
+  -- It does not fade while the job is in hand.
+  t.ok((submit(game, { kind = "Undock", actor = 0 })))
+  steps(game, 200)
+  t.ok(state.wrecks[container.id] ~= nil)
+  -- Destroying the camp's keepers is not the job: it counts nothing.
+  at(game, mission.site)
+  steps(game, 3)
+  sweep(game, mission.site)
+  t.eq(mission.done, 0)
+  -- Looted (from beside it), the crates are in the hold. Nobody in that room has to be destroyed first.
+  local ball = state.balls[state.player.ship]
+  ball.x, ball.y, ball.z = container.x + 500, container.y, container.z
+  Space.AssignGrid(state, ball)
+  t.ok((submit(game, { kind = "Loot", actor = 0, target = container.id })))
+  local held = 0
+  for _, item in Items.In(state, state.player.ship, "cargo") do
+    held += if item.type == "cargo.stolen" then item.quantity else 0
+  end
+  t.eq(held, 10)
+  -- Brought back: handed over, and paid.
+  local station = assert(Space.Object(state, home))
+  ball.x, ball.y, ball.z = station.x + station.radius + 500, station.y, station.z
+  Space.AssignGrid(state, ball)
+  t.ok((submit(game, { kind = "Dock", actor = 0, target = home })))
+  for _ = 1, 600 do
+    if state.ships[state.player.ship].docked == home then
+      break
+    end
+    Core.Step(game)
+  end
+  local wallet = state.wallet
+  t.ok((submit(game, { kind = "CompleteMission", actor = 0, target = mission.id })))
+  t.eq(state.wallet - wallet, mission.reward)
+  local kept = 0
+  for _, place in { { state.player.ship, "cargo" }, { home, "hangar" } } :: { { any } } do
+    for _, item in Items.In(state, place[1], place[2]) do
+      kept += if item.type == "cargo.stolen" then item.quantity else 0
+    end
+  end
+  t.eq(kept, 0, "the crates should have been handed over")
+
+  -- Given up with the container untouched: it goes with the camp.
+  local other, job = camp(1, "fetch")
+  local box = job.mark
+  t.ok(other.state.wrecks[box] ~= nil)
+  t.ok((submit(other, { kind = "AbandonMission", actor = 0, target = job.id })))
+  t.eq(other.state.wrecks[box], nil)
+end)
+
+suite:Case("an assault of a save from before camps had rooms is on a camp of one room, to be cleared", function(t)
+  local game, mission = camp(1, "clear", 1)
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 37
+  for _, each in file.state.missions do
+    each.rooms, each.ends, each.aim, each.mark = nil, nil, nil, nil
+  end
+  local old, oldLength = Codec.Encode(file)
+  local loaded = Core.Load(old, oldLength)
+  local theirs = loaded.state.missions[mission.id]
+  t.eq({ theirs.rooms, theirs.ends, theirs.aim, theirs.mark } :: { any }, { { mission.site }, { #mission.waves }, "clear", 0 } :: { any })
+  t.eq(Core.Hash(loaded), Core.Hash(game))
 end)
 
 suite:Case("a job comes from an agent, the same people at a station every day, and is worth loyalty points beside its pay", function(t)

@@ -1308,12 +1308,22 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
       -- (where the camp is; and, once the job is taken, how it is going)
       local name = game.state.galaxy.systems[mission.system].name
       local camp = if mission.site ~= 0 then Core.Query.Body(game, mission.site) else nil
+      local rooms = if #mission.ends == 1 then "one room" else `{#mission.ends} rooms`
       if camp == nil then
-        return `in {name}: {#mission.waves} waves`
-      elseif mission.done >= mission.need then
-        return `{camp.name}, in {name}: cleared`
+        return `in {name}: {rooms}, {#mission.waves} waves`
+      elseif mission.aim ~= "fetch" and mission.done >= mission.need then
+        return `{camp.name}, in {name}: done`
       end
-      return `{camp.name}, in {name}: wave {mission.wave} of {#mission.waves}, {mission.done} of {mission.need} destroyed`
+      -- (how far in the pilot has got: the rooms whose way is found)
+      local open = 0
+      for _, room in mission.rooms do
+        open += if Core.Query.Found(game, room) then 1 else 0
+      end
+      local where = if #mission.rooms > 1 then `room {open} of {#mission.rooms}, ` else ""
+      local how = if mission.aim == "chief" then "the chief comes with the last"
+        elseif mission.aim == "fetch" then "the cargo is in the last room"
+        else `{mission.done}/{mission.need} down`
+      return `{camp.name}, {name}: {where}wave {mission.wave} of {#mission.waves}, {how}`
     elseif mission.kind == "courier" then
       local to = Core.Query.Body(game, mission.to)
       return `to {if to then shorten(to.name, 40) else "?"}`
@@ -1400,7 +1410,7 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
   for index, held in status.inHand do
     Im.Text(held.title, right, line, 15, Im.TEXT)
     Im.TextRight(Format.Credits(held.mission.reward), right + 430, line, 15, GOOD)
-    Im.Text(about(held.mission), right, line + 21, 12, Im.DIM)
+    Im.Text(shorten(about(held.mission), 68), right, line + 21, 12, Im.DIM)
     -- (how long it can still be kept: in the colour of a warning at the last)
     Im.TextRight(Format.Duration(held.left), right + 430, line + 21, 12, if held.left < 6 * 3600 then Im.WARN else Im.DIM)
     local complete: State.Command = { kind = "CompleteMission", actor = 0, target = held.mission.id }

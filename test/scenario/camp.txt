@@ -1,0 +1,74 @@
+# A camp of two rooms, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/camp.txt
+#
+# With a standing of 3 the home station's fourth agent has assaults of
+# three levels. The third, in this game, is to clear a camp of two rooms
+# in this system: five ships in three waves, the first wave in the first
+# room. A battleship and the skill to use it are given. Only the first
+# room is on the overview. Its wave is destroyed, which finds the way to
+# the second, and nobody else comes to the first. In the second the
+# other two waves come, one after the other. Cleared, the job is paid at
+# home.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Standing('vessari', 3)
+lua GameDebug.Train('all', 4)
+until GameDebug.Press('Missions')
+until GameDebug.Tab() == 'Missions'
+frames 3
+lua assert(GameDebug.Missions() == 6, 'three jobs of the day, and three levels of assault')
+until GameDebug.Press('Accept:6')
+until select(2, GameDebug.Missions()) == 1
+frames 3
+lua assert(select(8, GameDebug.Assault()) == 'clear', 'this camp is to be cleared')
+lua assert(select(7, GameDebug.Assault()) == 2, 'this camp has two rooms')
+lua assert(select(6, GameDebug.Assault()) == 1, 'only the first room should be found')
+lua assert(select(3, GameDebug.Assault()) == 3 and select(5, GameDebug.Assault()) == 5, 'three waves, five ships')
+
+lua assert(GameDebug.Fly('battleship.bastion', true), 'no battleship')
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 5
+lua assert(GameDebug.Count('site') == 1, 'only the first room should be on the overview')
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('WarpTo', 'Pirate Camp'), 'warp to the camp was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+
+# The first room: its one wave, two ships. Destroyed, the way on is found.
+until GameDebug.Pirates() == 2
+patience 400
+until GameDebug.Engage(12000) == 0 and select(6, GameDebug.Assault()) == 2
+lua assert(select(2, GameDebug.Assault()) == 1, 'the first room has the first wave and no more')
+lua assert(GameDebug.Count('site') == 2, 'the second room should be on the overview')
+wait 5
+lua assert(GameDebug.Pirates() == 0, 'nobody else should come to the first room')
+lua assert(select(2, GameDebug.Assault()) == 1, 'the second wave is the second room\'s')
+
+# The second room: the other two waves.
+lua assert(GameDebug.Order('WarpTo', (GameDebug.Assault()) .. ' II'), 'warp to the second room was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+until GameDebug.Pirates() > 0
+lua assert(select(2, GameDebug.Assault()) == 2, 'the second wave should be out')
+patience 400
+until GameDebug.Engage(12000) == 0 and select(2, GameDebug.Assault()) == 3 and select(4, GameDebug.Assault()) == 5
+lua assert(GameDebug.Hull() == 'battleship.bastion', 'the battleship should have come through it')
+
+# Cleared. Home, to be paid.
+lua assert(GameDebug.Order('Dock', 'home'), 'docking at home was refused')
+patience 300
+until GameDebug.Docked()
+lua GameDebug.TimeScale(1)
+until GameDebug.Press('Missions')
+until GameDebug.Tab() == 'Missions'
+frames 3
+lua _G.before = GameDebug.Wallet()
+until GameDebug.Press('Complete:1')
+until select(3, GameDebug.Missions()) == 1
+lua assert(GameDebug.Wallet() > _G.before + 80000, 'the job did not pay')
+
+echo camp scenario passed
+quit

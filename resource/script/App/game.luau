@@ -33,6 +33,7 @@ local Items = require("@lt/Core/Assets/Items")
 local Keys = require("@lt/Game/UI/Keys")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
+local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local Types = require("@lt/Core/Data/Types")
 local Wallet = require("@lt/Core/Assets/Wallet")
@@ -592,6 +593,13 @@ function Debug.Give(type: string, quantity: number): boolean
 end
 
 function Debug.Train(skill: string, level: number)
+  -- ("all": every skill there is)
+  if skill == "all" then
+    for _, each in Skills.list do
+      session.game.state.skills[each.id] = level
+    end
+    return
+  end
   session.game.state.skills[skill] = level
 end
 
@@ -692,8 +700,12 @@ function Debug.Held(what: string?): (number, boolean)
   return ball.vitals.web, ball.vitals.scrambled
 end
 
--- What a faction ("vessari", "talmar", ...) thinks of the pilot.
-function Debug.Standing(faction: string): number
+-- What a faction ("vessari", "talmar", ...) thinks of the pilot. Given
+-- a number, a cheat: it is set to that.
+function Debug.Standing(faction: string, to: number?): number
+  if to then
+    session.game.state.standings[faction] = math.clamp(to, -10, 10)
+  end
   for _, row in Core.Query.Standings(session.game) do
     if row.faction == faction then
       return row.standing
@@ -760,17 +772,23 @@ function Debug.Offer(kind: string): number
 end
 
 -- The first assault in hand: the name of its camp ("" with no assault
--- in hand), the waves that have come and how many there are, and the
--- ships destroyed and how many there are.
-function Debug.Assault(): (string, number, number, number, number)
+-- in hand), the waves that have come and how many there are, what the
+-- job counts that is done and how many there are of it, the rooms of
+-- the camp whose way is found and how many it has, and what the job is
+-- to do there ("clear", "chief" or "fetch").
+function Debug.Assault(): (string, number, number, number, number, number, number, string)
   for _, held in Core.Query.Missions(session.game).inHand do
     local mission = held.mission
     if mission.kind == "assault" then
       local camp = Core.Query.Body(session.game, mission.site)
-      return if camp then camp.name else "?", mission.wave, #mission.waves, mission.done, mission.need
+      local open = 0
+      for _, room in mission.rooms do
+        open += if Core.Query.Found(session.game, room) then 1 else 0
+      end
+      return if camp then camp.name else "?", mission.wave, #mission.waves, mission.done, mission.need, open, #mission.rooms, mission.aim
     end
   end
-  return "", 0, 0, 0, 0
+  return "", 0, 0, 0, 0, 0, 0, ""
 end
 
 -- A cheat, for a scripted fight: the pilot's ship goes for the nearest
@@ -818,6 +836,9 @@ function Debug.Engage(range: number?): number
       end
       if not on and (module.weapon or (module.hex and not Modules.Mends(module))) then
         Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id, target = nearest.id })
+      elseif not on and (module.repair or module.boost) then
+        -- (and what it has for itself: a repairer, an afterburner)
+        Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id })
       end
     end
   end
@@ -974,9 +995,11 @@ end
 -- Another cheat, for looking at hulls: while docked, a hull of a type
 -- from nowhere, boarded whatever the pilot's skills, and fitted with
 -- what its design is shown with (Game/View/Hull), loaded, as far as
--- that fits. The ship stepped out of stays in the hangar. False if not
--- docked, or there is no such hull.
-function Debug.Fly(type: string): boolean
+-- that fits, with more of what it fires in the hold; and with 'tank',
+-- a plain fit's afterburner, extenders, plates and repairer beside. The
+-- ship stepped out of stays in the hangar. False if not docked, or
+-- there is no such hull.
+function Debug.Fly(type: string, tank: boolean?): boolean
   local state = session.game.state
   local old = state.ships[state.player.ship]
   local hull = Ships.byId[type]
@@ -986,6 +1009,7 @@ function Debug.Fly(type: string): boolean
   local ship = Space.NewShip(state, hull.id, hull.name, "player", old.docked)
   local built = Hull.Build(type)
   local types: { string } = {}
+  local carried: { [string]: boolean } = {}
   local wanted: { string } = if built then built.fit else {}
   for _, module in wanted do
     table.insert(types, module)
@@ -1001,8 +1025,30 @@ function Debug.Fly(type: string): boolean
         end
       end
       Items.Equip(state, ship.id, module, charge)
+      -- (and more of what it fires in the hold, a crystal aside, which lasts)
+      local loaded = if charge then Modules.chargeById[charge] else nil
+      if charge and loaded and loaded.family ~= "laser" and not carried[charge] then
+        carried[charge] = true
+        Items.Add(state, charge, if loaded.family == "missile" then 150 else 1500, ship.id, "cargo")
+      end
     else
       table.remove(types)
+    end
+  end
+  -- With 'tank', what a plain fit has beside its weapons, as far as it
+  -- fits: an afterburner, two shield extenders, a plate, a repairer, a
+  -- damage control and another plate, of the hull's size.
+  if tank then
+    local size = if hull.class == "battleship" then "large" elseif hull.class == "cruiser" then "medium" else "small"
+    local plate = if size == "small" then "armor.plate.200mm" else "armor.plate." .. size
+    for _, module in { if size == "small" then "afterburner.1mn" else "afterburner." .. size, "shield.extender." .. size,
+      "shield.extender." .. size, plate, "armor.repairer." .. size, "damage.control", plate } do
+      table.insert(types, module)
+      if Modules.byId[module] and Dogma.Check(hull, types) then
+        Items.Equip(state, ship.id, module, nil)
+      else
+        table.remove(types)
+      end
     end
   end
   state.player.ship = ship.id

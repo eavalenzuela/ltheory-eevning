@@ -40,7 +40,8 @@
 -- it are Tactical/Assault's). It comes in levels, as many of them open
 -- as the pilot's standing with the faction allows, each offered beside
 -- the day's three; a pilot has one from a station at a time, and the
--- agent has another as soon as that is done with.
+-- agent has another as soon as that is done with. The job there is to
+-- clear the camp, to destroy its chief, or to bring back what it took.
 --
 -- (A first version of the roadmap's agents. Not yet: agents with a
 -- standing of their own, jobs made from what the simulation needs.)
@@ -86,7 +87,10 @@ function Missions.Title(mission: State.Mission): string
   if mission.kind == "bounty" then
     return `Bounty: {mission.need} {if mission.need == 1 then "pirate" else "pirates"}`
   elseif mission.kind == "assault" then
-    return `Assault, level {mission.level}: a camp of {mission.need}`
+    local ships = Assault.Count(mission.waves)
+    return `Assault, level {mission.level}: ` .. (if mission.aim == "chief" then "the chief of a camp"
+      elseif mission.aim == "fetch" then `{mission.need} crates a camp took`
+      else `a camp of {ships}`)
   elseif mission.kind == "courier" then
     return `Courier: {mission.need} m3 of sealed cargo`
   end
@@ -139,7 +143,7 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         id = 0, key = key, kind = "bounty", station = station, faction = node.nearest, system = system, need = 1, done = 0,
         type = "", to = station, reward = 0, standing = 0.1, taken = 0,
         agent = Missions.Agent(state, station, slot), loyalty = 0,
-        level = 0, waves = {}, wave = 0, site = 0,
+        level = 0, waves = {}, wave = 0, site = 0, rooms = {}, ends = {}, aim = "", mark = 0,
       }
       local roll = Rng.Int(rng, 3)
       -- (a neighbour's station, for a courier run that is a jump)
@@ -195,15 +199,16 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
       where = system
     end
     local waves = Assault.Plan(rng, level)
-    local ships = Assault.Count(waves)
+    local ends, aim = Assault.Shape(rng, level)
     local pay, credit = Assault.Pay(level, waves)
     local reward = math.floor(pay * bonus)
     if Assault.Room(state, where) then
       table.insert(offers, {
         id = 0, key = `{station}:a{given}:{level}`, kind = "assault", station = station, faction = node.nearest, system = where,
-        need = ships, done = 0, type = "", to = station, reward = reward, standing = credit, taken = 0,
+        need = Assault.Need(aim, level, waves), done = 0, type = if aim == "fetch" then Assault.LOOT else "", to = station,
+        reward = reward, standing = credit, taken = 0,
         agent = Missions.Agent(state, station, Missions.OFFERS + 1), loyalty = math.max(1, reward // Missions.LOYALTY),
-        level = level, waves = waves, wave = 0, site = 0,
+        level = level, waves = waves, wave = 0, site = 0, rooms = {}, ends = ends, aim = aim, mark = 0,
       })
     end
   end
@@ -252,7 +257,11 @@ function Missions.Ready(state: State.State, ship: State.Ship, mission: State.Mis
   if ship.docked ~= where then
     local object = Space.Object(state, where)
     return false, `finish it at {if object then object.name else "its station"}`
-  elseif mission.kind == "bounty" or mission.kind == "assault" then
+  elseif mission.kind == "assault" and mission.aim == "chief" then
+    if mission.done < mission.need then
+      return false, "the camp's chief is still to destroy"
+    end
+  elseif mission.kind == "bounty" or (mission.kind == "assault" and mission.aim ~= "fetch") then
     if mission.done < mission.need then
       return false, `{mission.need - mission.done} still to destroy`
     end
@@ -360,6 +369,10 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
   local mission = state.missions[command.target :: number]
   if kind == "CompleteMission" then
     if mission.kind == "assault" then
+      -- (what the camp took is handed over, where that was the job)
+      if mission.aim == "fetch" then
+        hand(state, ship, mission.type, mission.need)
+      end
       Assault.Close(state, mission, events)
     elseif mission.kind ~= "bounty" then
       hand(state, ship, mission.type, mission.need)
@@ -372,8 +385,9 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
     table.insert(events, { kind = "MissionCompleted", mission = mission.id, title = Missions.Title(mission), reward = mission.reward,
       faction = mission.faction, standing = Missions.Standing(state, mission.faction), loyalty = mission.loyalty })
   elseif kind == "AbandonMission" then
-    -- (a courier's cargo goes back, as much of it as is to hand)
-    if mission.kind == "courier" then
+    -- (a courier's cargo goes back, as much of it as is to hand; and so
+    -- does what was fetched from a camp)
+    if mission.kind == "courier" or (mission.kind == "assault" and mission.aim == "fetch") then
       hand(state, ship, mission.type, math.min(mission.need, toHand(state, ship, mission.type)))
     end
     Assault.Close(state, mission, events)

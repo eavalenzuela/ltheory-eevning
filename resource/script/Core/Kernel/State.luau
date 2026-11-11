@@ -311,14 +311,24 @@ export type Site = { id: number, system: number, kind: string, code: string, str
 -- An "assault" is on a camp made for it (Tactical/Assault): 'level'
 -- is how hard it is, 1 to 4; 'waves' the packs that keep the camp, each
 -- a list of the kinds of pirate in it, one coming when the last is
--- destroyed; 'wave' how many have come; 'site' the place, once the job
--- is taken (0 before, and for any other kind of job); and 'need' and
--- 'done' count the ships.
+-- destroyed; 'wave' how many have come; and 'site' the place, once the
+-- job is taken (0 before, and for any other kind of job).
+--
+-- A camp is of one room or more: 'ends' says, for each room, which
+-- wave is the last that is in it (so { 1, 3 } is a camp of two rooms,
+-- the first wave in the first), and 'rooms' are the places, once the
+-- job is taken ('site' is the first).
+--
+-- 'aim' is what the job is to do there: "clear" it ('need' ships, of
+-- which 'done' are destroyed), destroy its "chief" ('need' is 1; 'mark'
+-- is the chief's ship, once it is out), or "fetch" what it took ('need'
+-- of 'type', which is in a container that 'mark' is, in the last room).
 export type Mission = {
   id: number, key: string, kind: string, station: number, faction: string, system: number, need: number, done: number,
   type: string, to: number, reward: number, standing: number, taken: number,
   agent: string, loyalty: number,
   level: number, waves: { { string } }, wave: number, site: number,
+  rooms: { number }, ends: { number }, aim: string, mark: number,
 }
 
 -- What a pilot has researched of a blueprint: levels of each kind.

@@ -283,9 +283,16 @@ end
 -- and there until whoever made it lets it go (Sites.Release). It is a
 -- site of the kind "mission" to everything that knows sites, and no
 -- business of this module's otherwise: nothing is put there, it is not
--- one of the system's count of sites, and it does not go by itself.
+-- one of the system's count of sites, no scanner finds it, and it does
+-- not go by itself.
+--
+-- With 'beyond' it is a further part of the place that is: some tens
+-- of thousands of kilometres from it, by its code and with 'suffix' to
+-- its name, and not found (whoever made it says when it is: by setting
+-- its strength to 1).
+--
 -- Nil if the system's description is nearly full, or it has no planet.
-function Sites.Stake(state: State.State, system: number, rng: Rng.Rng, title: string): State.Site?
+function Sites.Stake(state: State.State, system: number, rng: Rng.Rng, title: string, beyond: State.Site?, suffix: string?): State.Site?
   local objects = Space.Describe(state, system).objects
   local planets: { System.Object } = {}
   for _, object in objects do
@@ -296,17 +303,26 @@ function Sites.Stake(state: State.State, system: number, rng: Rng.Rng, title: st
   if #objects + 40 >= Constants.STRUCTURE_ID_SPAN or #planets == 0 then
     return nil
   end
-  local planet = planets[Rng.Int(rng, #planets) + 1]
-  local angle, out = Rng.Float(rng, 0, 2 * math.pi), planet.radius * Rng.Float(rng, 6, 14)
-  local code = string.format("%s%s-%03d", string.char(65 + Rng.Int(rng, 26)), string.char(65 + Rng.Int(rng, 26)), Rng.Int(rng, 1000))
+  local x, y, z, parent, code
+  local before = if beyond then Space.Object(state, beyond.id) else nil
+  if beyond and before then
+    local angle, out = Rng.Float(rng, 0, 2 * math.pi), Rng.Float(rng, 2e7, 6e7)
+    x, y, z = before.x + out * math.cos(angle), before.y + out * Rng.Float(rng, -0.1, 0.1), before.z + out * math.sin(angle)
+    parent, code = before.parent, beyond.code
+  else
+    local planet = planets[Rng.Int(rng, #planets) + 1]
+    local angle, out = Rng.Float(rng, 0, 2 * math.pi), planet.radius * Rng.Float(rng, 6, 14)
+    x, y, z = planet.x + out * math.cos(angle), planet.y + out * Rng.Float(rng, -0.1, 0.1), planet.z + out * math.sin(angle)
+    parent = planet.id
+    code = string.format("%s%s-%03d", string.char(65 + Rng.Int(rng, 26)), string.char(65 + Rng.Int(rng, 26)), Rng.Int(rng, 1000))
+  end
   local place: System.Object = {
-    id = system * Constants.STRUCTURE_ID_SPAN + #objects + 1, kind = "belt", name = `{title} {code}`,
-    x = planet.x + out * math.cos(angle), y = planet.y + out * Rng.Float(rng, -0.1, 0.1), z = planet.z + out * math.sin(angle),
-    radius = 0, seed = Rng.Int(rng, 2 ^ 31), parent = planet.id, site = 0, variety = "site.mission", to = 0,
+    id = system * Constants.STRUCTURE_ID_SPAN + #objects + 1, kind = "belt", name = `{title} {code}{suffix or ""}`,
+    x = x, y = y, z = z, radius = 0, seed = Rng.Int(rng, 2 ^ 31), parent = parent, site = 0, variety = "site.mission", to = 0,
   }
   place.site = place.id
   table.insert(objects, place)
-  local site: State.Site = { id = place.id, system = system, kind = "mission", code = code, strength = 1,
+  local site: State.Site = { id = place.id, system = system, kind = "mission", code = code, strength = if beyond then 0 else 1,
     expires = 2 ^ 52, gone = false, depth = 0, led = false }
   state.sites[place.id] = site
   table.insert(state.siteIds, place.id)
@@ -484,7 +500,8 @@ function Sites.Apply(state: State.State, command: State.Command, events: { Event
   state.scanReady = state.tick + Sites.SCAN
   local found, signals, faint = 0, 0, 0
   for _, site in Sites.In(state, ball.system) do
-    if site.strength < 1 then
+    -- (a part of a camp that a job has not opened yet is no scanner's to find)
+    if site.strength < 1 and site.kind ~= "mission" then
       -- (each probe near it makes the scan worth as much again; and
       -- without anything near it, a faint one is got only so far)
       local probes, near = Sites.Covered(state, site, ball)

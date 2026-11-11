@@ -111,7 +111,7 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   forget(state, id)
   -- (one that kept a camp a job is to clear counts toward the job)
   if pilot then
-    Assault.Fell(state, pilot.home, events)
+    Assault.Fell(state, pilot.home, id, events)
   end
 
   -- (a bounty is on the pilot, not the hull: a scout in a patched frigate
