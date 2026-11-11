@@ -4,7 +4,8 @@
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/economy.txt
 #
 # Fit a mining laser, mine a hold of ore, refine it, build ammunition from
-# the starter blueprint, sell it through a standing order, buy a combat
+# the starter blueprint, research the blueprint, sell the ammunition
+# through a standing order, buy a combat
 # frigate's hull, find it cannot be flown, train for it, and board it.
 #
 # Buttons are pressed by name (GameDebug.Press), which runs the same code
@@ -71,6 +72,19 @@ until GameDebug.Jobs() == 0
 lua GameDebug.TimeScale(1)
 lua assert(GameDebug.Hangar('ammo.emp') >= 700, 'the job delivered no rounds')
 lua assert(GameDebug.Hangar('blueprint.ammo.emp') == 1, 'the blueprint did not come back')
+
+# Research, in the laboratory: a level of time saving on the blueprint.
+lua assert(GameDebug.Blueprint('blueprint.ammo.emp'))
+frames 3
+lua assert(select(2, GameDebug.Researched('blueprint.ammo.emp')) == 0)
+until GameDebug.Press('Research:time')
+until GameDebug.Jobs() == 1
+lua assert(GameDebug.Hangar('blueprint.ammo.emp') == 0, 'the blueprint should be in the laboratory')
+lua GameDebug.TimeScale(30)
+until GameDebug.Jobs() == 0
+lua GameDebug.TimeScale(1)
+lua assert(select(2, GameDebug.Researched('blueprint.ammo.emp')) == 1, 'the research taught nothing')
+lua assert(GameDebug.Hangar('blueprint.ammo.emp') == 1, 'the blueprint did not come back from the laboratory')
 
 # Sell a hundred of them through a standing order at the price offered.
 lua assert(GameDebug.Market('ammo.emp'))

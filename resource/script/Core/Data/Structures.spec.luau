@@ -50,7 +50,7 @@ suite:Case("the station a pilot starts at has everything the round of play needs
   for _, variety in VARIETIES do
     for _, radius in { 2000, 3999, 4000, 5999, 6000, 8000 } do
       local has = services(Structures.Makeup(variety, radius, "vessari", true))
-      for _, service in { "market", "fitting", "refining", "industry", "storage" } do
+      for _, service in { "market", "fitting", "refining", "industry", "research", "storage" } do
         t.ok(has[service], `a starter {variety} of {radius} m has nothing for {service}`)
       end
     end

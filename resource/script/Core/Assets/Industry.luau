@@ -81,10 +81,47 @@ function Industry.JobSlots(state: State.State): number
   return Blueprints.JOB_SLOTS + math.max(0, state.skills["mass.production"] or 0)
 end
 
+-- Research: what a pilot has learned of a blueprint in a laboratory.
+-- Each level of the one kind takes 1% off what a run uses, and each of
+-- the other 2% off how long it takes, to ten levels of each (EVE's
+-- material and time efficiency). It is the pilot's knowledge of the
+-- design, not a mark on one copy: it holds for every copy they have.
+Industry.RESEARCH_LEVELS = 10
+Industry.MATERIAL_SAVED = 0.01
+Industry.TIME_SAVED = 0.02
+
+-- The levels a pilot has researched of a blueprint: materials, time.
+function Industry.Researched(state: State.State, blueprint: string): (number, number)
+  local known = state.research[blueprint]
+  if known then
+    return known.material, known.time
+  end
+  return 0, 0
+end
+
+export type ResearchPlan = { what: string, level: number, seconds: number, fee: number }
+
+-- What the next level of research into a blueprint would take: "material"
+-- or "time". Nil when there is no next level. Each level takes half as
+-- long again as the last, and costs more.
+function Industry.ResearchPlan(state: State.State, blueprint: Blueprints.Blueprint, what: string): ResearchPlan?
+  local material, time = Industry.Researched(state, blueprint.id)
+  local level = if what == "material" then material elseif what == "time" then time else Industry.RESEARCH_LEVELS
+  if level >= Industry.RESEARCH_LEVELS then
+    return nil
+  end
+  return {
+    what = what, level = level + 1,
+    seconds = math.ceil((300 + 0.5 * math.min(7200, blueprint.seconds)) * 1.5 ^ level),
+    fee = math.ceil(blueprint.basePrice * 0.02 * (level + 1)),
+  }
+end
+
 -- How long a job of so many runs takes: 4% less for each level of
--- Industry.
+-- Industry, and less again for what has been researched of it.
 function Industry.JobSeconds(state: State.State, blueprint: Blueprints.Blueprint, runs: number): number
-  return math.ceil(blueprint.seconds * runs * (1 - 0.04 * math.max(0, state.skills.industry or 0)))
+  local _, time = Industry.Researched(state, blueprint.id)
+  return math.ceil(blueprint.seconds * runs * (1 - 0.04 * math.max(0, state.skills.industry or 0)) * (1 - Industry.TIME_SAVED * time))
 end
 
 -- What the station charges to run it.
@@ -105,8 +142,12 @@ export type Plan = {
 -- in the hangar there.
 function Industry.Plan(state: State.State, station: number, blueprint: Blueprints.Blueprint, runs: number): Plan
   local materials = {}
+  -- (what has been researched comes off the whole job, though never to
+  -- less than one of a thing a run)
+  local saved = 1 - Industry.MATERIAL_SAVED * (Industry.Researched(state, blueprint.id))
   for _, m in blueprint.materials do
-    table.insert(materials, { type = m.type, need = m.quantity * runs, have = Industry.Have(state, station, m.type) })
+    table.insert(materials, { type = m.type, need = math.max(runs, math.ceil(m.quantity * runs * saved - 1e-9)),
+      have = Industry.Have(state, station, m.type) })
   end
   return {
     blueprint = blueprint, runs = runs, quantity = blueprint.perRun * runs,
@@ -163,6 +204,25 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
       return false, "not enough credits for the fee"
     end
     return true
+
+  elseif command.kind == "StartResearch" then
+    local blueprint = Blueprints.byId[item.type]
+    if blueprint == nil then
+      return false, "that is not a blueprint"
+    elseif command.what ~= "material" and command.what ~= "time" then
+      return false, "research is into materials or into time"
+    end
+    local plan = Industry.ResearchPlan(state, blueprint, command.what :: string)
+    if plan == nil then
+      return false, "there is no more to learn of it"
+    elseif (state.skills.industry or 0) < 1 then
+      return false, "needs Industry 1"
+    elseif #state.jobIds >= Industry.JobSlots(state) then
+      return false, "every job slot is in use"
+    elseif plan.fee > state.wallet then
+      return false, "not enough credits for the fee"
+    end
+    return true
   end
   return false, `unknown command '{command.kind}'`
 end
@@ -197,12 +257,26 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
     Wallet.Pay(state, -plan.fee, "manufacturing fee", events)
     local job: State.Job = {
       id = State.NewId(state), station = station, blueprint = plan.blueprint.id, runs = plan.runs,
-      product = plan.blueprint.product, quantity = plan.quantity,
+      product = plan.blueprint.product, quantity = plan.quantity, research = "",
       started = state.tick, ends = state.tick + math.ceil(plan.seconds / Constants.TICK),
     }
     state.jobs[job.id] = job
     table.insert(state.jobIds, job.id)
     table.insert(events, { kind = "JobStarted", job = job.id, product = job.product, quantity = job.quantity, ends = job.ends })
+
+  elseif command.kind == "StartResearch" then
+    local blueprint = Blueprints.byId[item.type]
+    local plan = Industry.ResearchPlan(state, blueprint, command.what :: string) :: ResearchPlan
+    -- The blueprint is in the laboratory until it is done.
+    Items.Take(state, item, 1)
+    Wallet.Pay(state, -plan.fee, "research fee", events)
+    local job: State.Job = {
+      id = State.NewId(state), station = ship.docked, blueprint = blueprint.id, runs = 0, product = "", quantity = 0,
+      research = plan.what, started = state.tick, ends = state.tick + math.ceil(plan.seconds / Constants.TICK),
+    }
+    state.jobs[job.id] = job
+    table.insert(state.jobIds, job.id)
+    table.insert(events, { kind = "ResearchStarted", job = job.id, blueprint = blueprint.id, what = plan.what, ends = job.ends })
   end
 end
 
@@ -212,11 +286,24 @@ function Industry.Step(state: State.State, events: { Event })
   for _, id in table.clone(state.jobIds) do
     local job = state.jobs[id]
     if job.ends <= state.tick then
-      Items.Add(state, job.product, job.quantity, job.station, "hangar")
       Items.Add(state, job.blueprint, 1, job.station, "hangar")
       state.jobs[id] = nil
       State.RemoveId(state.jobIds, id)
-      table.insert(events, { kind = "JobDone", job = id, product = job.product, quantity = job.quantity, station = job.station })
+      if job.research ~= "" then
+        -- What was learned is the pilot's from now on.
+        local known = state.research[job.blueprint] or { material = 0, time = 0 }
+        if job.research == "material" then
+          known.material += 1
+        else
+          known.time += 1
+        end
+        state.research[job.blueprint] = known
+        table.insert(events, { kind = "ResearchDone", job = id, blueprint = job.blueprint, what = job.research,
+          level = if job.research == "material" then known.material else known.time, station = job.station })
+      else
+        Items.Add(state, job.product, job.quantity, job.station, "hangar")
+        table.insert(events, { kind = "JobDone", job = id, product = job.product, quantity = job.quantity, station = job.station })
+      end
     end
   end
 end

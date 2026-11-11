@@ -7,6 +7,7 @@ local Industry = require("@lt/Core/Assets/Industry")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local State = require("@lt/Core/Kernel/State")
+local Stations = require("@lt/Core/Assets/Stations")
 local Test = require("@lt/Tool/Test")
 local Types = require("@lt/Core/Data/Types")
 
@@ -15,6 +16,16 @@ local suite = Test.Suite("Industry")
 local function newGame(): (Core.Game, number)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   return game, game.state.player.home
+end
+
+-- A type's stack in the hangar of the pilot's home station, if there is one.
+local function inHangar(game: Core.Game, type: string): State.Item?
+  for _, item in Items.In(game.state, game.state.player.home, "hangar") do
+    if item.type == type then
+      return item
+    end
+  end
+  return nil
 end
 
 local function order(t: Test.Context, game: Core.Game, command: State.Command)
@@ -228,6 +239,107 @@ suite:Case("jobs are plain data and survive a save, to the same state", function
   t.eq(#Core.Query.Jobs(copy), 0)
   t.eq(Industry.Have(copy.state, home, "ammo.emp"), hangar(game, "ammo.emp"))
   t.eq(Core.Hash(copy), Core.Hash(game))
+end)
+
+suite:Case("research in a laboratory takes a level at a time off what a blueprint uses, or off how long it takes", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local home = state.player.home
+  state.wallet = 10000000
+  local blueprint = Blueprints.byId["blueprint.ammo.emp"]
+  local item = assert(inHangar(game, blueprint.id))
+  for _, mineral in { "mineral.iron", "mineral.silicon" } do
+    Items.Add(state, mineral, 1000000, home, "hangar")
+  end
+  local function submit(command: State.Command): (boolean, string?)
+    command.actor = state.player.ship
+    local ok, why = Core.Submit(game, command)
+    Core.Step(game)
+    return ok, why
+  end
+  local before = Industry.Plan(state, home, blueprint, 10)
+  t.eq({ Industry.Researched(state, blueprint.id) }, { 0, 0 })
+  local first = assert(Industry.ResearchPlan(state, blueprint, "material"))
+  t.eq({ first.level, first.fee }, { 1, math.ceil(blueprint.basePrice * 0.02) })
+  t.eq({ Core.Validate(game, { kind = "StartResearch", actor = state.player.ship, item = item.id, what = "speed" }) } :: { any },
+    { false, "research is into materials or into time" } :: { any })
+
+  -- A level of each. The blueprint is in the laboratory meanwhile, and research takes a job slot.
+  local wallet = state.wallet
+  t.ok(submit({ kind = "StartResearch", actor = 0, item = item.id, what = "material" }))
+  t.eq(wallet - state.wallet, first.fee)
+  t.eq(inHangar(game, blueprint.id), nil)
+  t.eq(#Core.Query.Jobs(game, home), 1)
+  t.eq(Core.Query.Jobs(game, home)[1].research, "material")
+  for _ = 1, first.seconds + 2 do
+    Core.Step(game)
+  end
+  t.eq({ Industry.Researched(state, blueprint.id) }, { 1, 0 })
+  item = assert(inHangar(game, blueprint.id))
+  t.eq(#Core.Query.Jobs(game, home), 0)
+  local second = assert(Industry.ResearchPlan(state, blueprint, "material"))
+  t.ok(second.seconds > first.seconds and second.fee > first.fee, "a second level should take longer and cost more than the first")
+  t.ok(submit({ kind = "StartResearch", actor = 0, item = item.id, what = "time" }))
+  for _ = 1, first.seconds + 2 do
+    Core.Step(game)
+  end
+  t.eq({ Industry.Researched(state, blueprint.id) }, { 1, 1 })
+
+  -- What was learned comes off a job: a hundredth of the materials, a fiftieth of the time.
+  local after = Industry.Plan(state, home, blueprint, 10)
+  for index, material in after.materials do
+    t.eq(material.need, math.max(10, math.ceil(before.materials[index].need * 0.99 - 1e-9)))
+    t.ok(material.need <= before.materials[index].need)
+  end
+  t.ok(after.seconds < before.seconds)
+  t.near(after.seconds, before.seconds * 0.98, 1)
+  t.eq(after.quantity, before.quantity)
+
+  -- Ten levels is all there is.
+  state.research[blueprint.id] = { material = 10, time = 3 }
+  t.eq(Industry.ResearchPlan(state, blueprint, "material"), nil)
+  item = assert(inHangar(game, blueprint.id))
+  t.eq({ Core.Validate(game, { kind = "StartResearch", actor = state.player.ship, item = item.id, what = "material" }) } :: { any },
+    { false, "there is no more to learn of it" } :: { any })
+  local status = assert(Core.Query.Research(game, blueprint.id))
+  t.eq({ status.material, status.time, status.nextMaterial == nil, status.nextTime ~= nil } :: { any }, { 10, 3, true, true } :: { any })
+  local tenth = Industry.Plan(state, home, blueprint, 10)
+  t.near(tenth.materials[1].need, before.materials[1].need * 0.9, 1)
+end)
+
+suite:Case("research wants a laboratory, and is in the save", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  state.wallet = 10000000
+  local item = assert(inHangar(game, "blueprint.ammo.emp"))
+  local study: State.Command = { kind = "StartResearch", actor = state.player.ship, item = item.id, what = "time" }
+  t.ok((Core.Validate(game, study)), "the starter station should have a laboratory")
+  -- Moor the ship, and the blueprint, at a station without one.
+  local home = state.player.home
+  for system = 1, 3 do
+    for _, object in Core.Query.Objects(game, system) do
+      if object.kind == "station" and not Stations.Has(state, object.id, "research") then
+        state.ships[state.player.ship].docked = object.id
+        item.holder = object.id
+        t.eq({ Core.Validate(game, study) } :: { any }, { false, "this station has no Laboratory" } :: { any })
+      end
+    end
+  end
+  state.ships[state.player.ship].docked = home
+  item.holder = home
+  t.ok(Core.Submit(game, study))
+  for _ = 1, 50 do
+    Core.Step(game)
+  end
+  local data, length = Core.Save(game)
+  local loaded = Core.Load(data, length)
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  for _ = 1, 600 do
+    Core.Step(game)
+    Core.Step(loaded)
+  end
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  t.eq({ Industry.Researched(loaded.state, "blueprint.ammo.emp") }, { 0, 1 })
 end)
 
 return suite

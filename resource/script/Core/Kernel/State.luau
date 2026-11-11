@@ -223,9 +223,15 @@ export type Job = {
   runs: number,
   product: string,
   quantity: number,   -- units it will make
+  -- "" for a job that builds. For research into its blueprint, what is
+  -- being learned: "material" or "time" (it makes nothing).
+  research: string,
   started: number,
   ends: number,
 }
+
+-- What a pilot has researched of a blueprint: levels of each kind.
+export type Research = { material: number, time: number }
 
 -- A line in the wallet's journal.
 export type Entry = { tick: number, amount: number, reason: string, balance: number }
@@ -317,6 +323,7 @@ export type State = {
   trafficIds: { number },
   trafficDue: number,
   trafficOn: boolean,     -- whether there is any: a game has, a test of one ship has not
+  research: { [string]: Research },   -- by blueprint id (Assets/Industry)
   queue: { Command },     -- submitted, to be applied at the next tick
 }
 

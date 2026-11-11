@@ -60,7 +60,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 16
+Core.SAVE_VERSION = 17
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -152,6 +152,14 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
     end
     state.player.marked = state.player.marked or 0
   end,
+  -- 17: blueprints can be researched. A save from before has learned
+  -- nothing, and its jobs all build.
+  [16] = function(state: any)
+    state.research = state.research or {}
+    for _, job in state.jobs do
+      job.research = job.research or ""
+    end
+  end,
 }
 
 -- A new game: a galaxy, and the player's first ship docked at a station
@@ -173,6 +181,7 @@ function Core.New(options: Options): Game
     training = {},
     trainingStarted = 0,
     jobs = {},
+    research = {},
     jobIds = {},
     wallet = 0,
     journal = {},
@@ -229,7 +238,7 @@ end
 local ASSET_COMMANDS = { Fit = true, Unfit = true, LoadCharge = true, MoveItems = true }
 local COMBAT_COMMANDS = { LockTarget = true, UnlockTarget = true, ActivateModule = true, DeactivateModule = true }
 local AFTERMATH_COMMANDS = { Loot = true, Repair = true }
-local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true }
+local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true, StartResearch = true }
 local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true }
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true }
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
@@ -708,6 +717,23 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
     tower = Structures.towerById[starbase.tower], mine = ship ~= nil and ship.owner == starbase.owner,
     anchored = Starbases.Anchored(state, starbase), wait = math.max(0, starbase.ready - state.tick) * Constants.TICK, lit = lit,
     fuel = starbase.fuel, hours = Starbases.Hours(starbase), powergrid = powergrid, cpu = cpu, modules = modules,
+  }
+end
+
+-- What the pilot has researched of a blueprint (levels of material and
+-- of time saving), and what the next level of each would take (nil when
+-- there is none). Nothing for no such blueprint.
+export type ResearchStatus = { material: number, time: number, nextMaterial: Industry.ResearchPlan?, nextTime: Industry.ResearchPlan? }
+function Query.Research(game: Game, type: string): ResearchStatus?
+  local blueprint = Blueprints.byId[type]
+  if blueprint == nil then
+    return nil
+  end
+  local material, time = Industry.Researched(game.state, type)
+  return {
+    material = material, time = time,
+    nextMaterial = Industry.ResearchPlan(game.state, blueprint, "material"),
+    nextTime = Industry.ResearchPlan(game.state, blueprint, "time"),
   }
 end
 

@@ -571,6 +571,15 @@ function Debug.Marked(): boolean
   return session.game.state.tick < session.game.state.player.marked
 end
 
+-- The levels the pilot has researched of a blueprint: materials, time.
+function Debug.Researched(type: string): (number, number)
+  local status = Core.Query.Research(session.game, type)
+  if status == nil then
+    return -1, -1
+  end
+  return status.material, status.time
+end
+
 -- Open the colonies window on a planet (a kind or part of a name, as
 -- for Order), or on the pilot's first colony.
 function Debug.Colony(what: string?): boolean

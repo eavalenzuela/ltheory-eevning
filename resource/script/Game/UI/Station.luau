@@ -12,6 +12,7 @@ local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
+local Industry = require("@lt/Core/Assets/Industry")
 local Info = require("@lt/Game/UI/Info")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
 local Modules = require("@lt/Core/Data/Modules")
@@ -33,7 +34,7 @@ local TABS: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "
 local OWN: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Wallet", "Starbase" }
 -- The services each tab's doings are done by (Core/Assets/Stations).
 local WANTS: { [string]: { string } } = {
-  Fitting = { "fitting" }, Market = { "market" }, Industry = { "refining", "industry" }, Ships = { "fitting" },
+  Fitting = { "fitting" }, Market = { "market" }, Industry = { "refining", "industry", "research" }, Ships = { "fitting" },
 }
 local tab = "Fitting"
 local dockedAt = 0    -- the station the screen was last drawn for
@@ -807,7 +808,29 @@ local function drawIndustry(session: Session.Session, game: Core.Game, player: C
     if not can then
       Im.Text(tostring(whyNot), dx + 172, line + 8, 13, Im.WARN)
     end
-    line += 48
+    line += 40
+    -- Research, in a laboratory: what the pilot has learned of this
+    -- design, and the next level of each kind.
+    local research = Core.Query.Research(game, plan.blueprint.id)
+    if research then
+      Im.Text(`Researched: materials -{research.material}%, time -{research.time * 2}%`, dx, line, 13, Im.DIM)
+      line += 22
+      for index, what in { "material", "time" } do
+        local next: Industry.ResearchPlan? = if what == "material" then research.nextMaterial else research.nextTime
+        local study: State.Command = { kind = "StartResearch", actor = 0, item = chosenItem.id, what = what }
+        local canStudy = next ~= nil and (Session.CanDo(session, study))
+        local bx = dx + (index - 1) * 226
+        if Im.Button(if what == "material" then "Research materials" else "Research time", bx, line, 150, 26, canStudy,
+          `Research:{what}`) then
+          Session.Do(session, study)
+        end
+        Im.Text(if next then `{Format.Duration(next.seconds)}` else "done", bx + 156, line - 1, 12, Im.DIM)
+        if next then
+          Im.Text(Format.Credits(next.fee), bx + 156, line + 13, 12, Im.DIM)
+        end
+      end
+      line += 34
+    end
   end
 
   -- Jobs running, here and elsewhere.
@@ -824,7 +847,8 @@ local function drawIndustry(session: Session.Session, game: Core.Game, player: C
     end
     local where = Core.Query.Body(game, job.station)
     local remaining = job.ends - game.state.tick
-    Im.Text(`{Format.Whole(job.quantity)} x {shorten(Types.Info(job.product).name, 26)}`, dx, line, 14, Im.TEXT)
+    Im.Text(if job.research ~= "" then `Research ({job.research}): {shorten(Types.Info(job.blueprint).name, 22)}`
+      else `{Format.Whole(job.quantity)} x {shorten(Types.Info(job.product).name, 26)}`, dx, line, 14, Im.TEXT)
     Im.TextRight(Format.Duration(remaining * Constants.TICK), dx + 446, line, 14, Im.TEXT)
     line += 18
     Im.Text(if job.station == station then "here" else shorten(if where then where.name else "?", 30), dx, line, 12, Im.DIM)

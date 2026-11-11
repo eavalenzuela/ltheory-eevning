@@ -138,9 +138,9 @@ function Structures.Provider(service: Service): string
 end
 
 -- What the whole round of play needs: selling and buying, fitting and
--- repairs, refining, building, and somewhere to keep things. The
--- station a pilot starts at has all of it.
-local ROUND = { "array.trade", "array.hangar", "array.refining", "array.assembly", "array.storage" }
+-- repairs, refining, building, research, and somewhere to keep things.
+-- The station a pilot starts at has all of it.
+local ROUND = { "array.trade", "array.hangar", "array.refining", "array.assembly", "array.laboratory", "array.storage" }
 
 -- What a kind of station (Describe/System's 'variety') is made of, the
 -- first things first: a small one has the first three, and each size
@@ -171,7 +171,9 @@ export type Makeup = { tower: string, modules: { string } }
 -- and batteries; the starter has, before all that, everything the round
 -- of play needs. It is never given more than its tower can power.
 function Structures.Makeup(variety: string, radius: number, faction: string, starter: boolean?): Makeup
-  local size = Structures.SizeFor(radius)
+  -- (a small tower cannot power everything the round of play needs: the
+  -- station a pilot starts at has a medium one at the least)
+  local size = if starter then math.max(2, Structures.SizeFor(radius)) else Structures.SizeFor(radius)
   local tower = Structures.towerById[`tower.{faction}.{Structures.SIZES[size]}`]
   assert(tower, `no tower of faction '{faction}'`)
   local chosen: { string } = if starter then table.clone(ROUND) else {}

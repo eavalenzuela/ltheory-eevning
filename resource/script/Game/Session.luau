@@ -87,6 +87,8 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `Learned {Skills.byId[event.skill].name}: it can be trained now`)
   elseif kind == "JobDone" then
     Session.Say(session, `Built: {event.quantity} x {Types.Info(event.product).name}`)
+  elseif kind == "ResearchDone" then
+    Session.Say(session, `Research done: {Types.Info(event.blueprint).name}, {event.what} level {event.level}`)
   elseif kind == "ShipAssembled" then
     Session.Say(session, "The hull is assembled: board it from the Ships tab")
   elseif kind == "StarbaseAnchored" then
