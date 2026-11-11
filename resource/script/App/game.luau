@@ -22,6 +22,7 @@ local Hull = require("@lt/Game/View/Hull")
 local Im = require("@lt/Game/UI/Im")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
+local Settings = require("@lt/Game/Settings")
 local Station = require("@lt/Game/UI/Station")
 local Info = require("@lt/Game/UI/Info")
 local Menu = require("@lt/Game/UI/Menu")
@@ -816,8 +817,18 @@ function App:Initialize()
   session = Session.New(1, 1)
   scene = Scene.New(camera)
   audio = Audio.New()
-  Menu.Sound(audio.enabled, function(on: boolean)
-    Audio.Set(audio, on)
+  -- What a person set last time: sound or none, and how loud. (A script
+  -- has no sound unless it asks, whatever anybody has set.)
+  local settings = Settings.Load()
+  if not Host.scripted then
+    Audio.Set(audio, settings.sound, settings.volume / 100)
+  end
+  Menu.Sound(settings.sound, settings.volume, function(on: boolean, volume: number)
+    settings.sound, settings.volume = on, volume
+    if not Host.scripted then
+      Audio.Set(audio, on, volume / 100)
+    end
+    Settings.Save(settings)
   end)
   _G.GameDebug = Debug
   -- A person is given the menu, over a new game that stands still

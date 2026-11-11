@@ -17,6 +17,10 @@ lua assert(GameDebug.Seed() == 1)
 lua assert(GameDebug.Menu('main') == 'main')
 frames 3
 lua assert(not GameDebug.CanPress('UNDOCK'), 'nothing of the game is drawn behind a menu')
+# (the sound's switch and its loudness are here: a script's run stays silent whatever is pressed)
+lua assert(GameDebug.CanPress('Menu:sound') and GameDebug.CanPress('Menu:quieter') and GameDebug.CanPress('Menu:louder'))
+until GameDebug.Press('Menu:quieter')
+frames 3
 until GameDebug.Press('Menu:new')
 frames 3
 lua GameDebug.Enter('Seed', 7)

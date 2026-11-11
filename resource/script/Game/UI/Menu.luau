@@ -39,10 +39,11 @@ end
 -- Whether sound is on, and the asking of it to be otherwise: the game
 -- says how (Menu.Sound), since the menu does not own the sound.
 local soundOn = true
-local setSound: ((on: boolean) -> ())? = nil
+local volume = 70   -- of 100
+local setSound: ((on: boolean, volume: number) -> ())? = nil
 
-function Menu.Sound(on: boolean, set: (on: boolean) -> ())
-  soundOn, setSound = on, set
+function Menu.Sound(on: boolean, loud: number, set: (on: boolean, volume: number) -> ())
+  soundOn, volume, setSound = on, loud, set
 end
 
 function Menu.IsOpen(): boolean
@@ -128,7 +129,17 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
   if (page == "main" or page == "pause") and setSound then
     if Im.Button(if soundOn then "Sound: on" else "Sound: off", x + w - 126, y + 14, 110, 26, true, "Menu:sound") then
       soundOn = not soundOn
-      setSound(soundOn)
+      setSound(soundOn, volume)
+    end
+    -- (how loud, in tenths)
+    if Im.Button("-", x + w - 126, y + 46, 26, 24, soundOn and volume > 0, "Menu:quieter") then
+      volume = math.max(0, volume - 10)
+      setSound(soundOn, volume)
+    end
+    Im.Text(`{volume}%`, x + w - 90, y + 50, 13, if soundOn then Im.TEXT else Im.DIM)
+    if Im.Button("+", x + w - 42, y + 46, 26, 24, soundOn and volume < 100, "Menu:louder") then
+      volume = math.min(100, volume + 10)
+      setSound(soundOn, volume)
     end
   end
 

@@ -189,6 +189,8 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
     audio.engine = Sound_Play2DLooped("thruster/loop1.ogg", 0)
     audio.warp = Sound_Play2DLooped("warpnode/drone1.ogg", 0)
   end
+  -- (every frame, so that turning the sound up or down is heard at once)
+  Sound_SetVolume(audio.place, 0.10 * audio.master)
   Sound_SetVolume(audio.engine, audio.engineNow * audio.master)
   Sound_SetVolume(audio.warp, audio.warpNow * audio.master)
 end
