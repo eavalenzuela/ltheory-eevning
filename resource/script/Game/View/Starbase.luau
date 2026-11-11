@@ -298,161 +298,238 @@ end
 -- ---------------------------------------------------------------------
 -- The modules, which are everybody's. Each is drawn about its own
 -- middle, about one unit from there to its farthest part, its front
--- toward +z.
+-- toward +z. Like the towers they are things in space, and none has a
+-- floor to it, or feet, or anything it could be stood on (the owner's
+-- word again): each is built out both ways from its middle.
 
 local MODULES: { [string]: (b: Builder) -> () } = {
-  -- A trade hub: a drum of offices with four arms out to mooring pads,
-  -- and signs lit along the arms.
+  -- A trade hub: a drum of offices, narrowing above and below, with
+  -- four arms out to mooring pads and signs lit along the arms.
   ["array.trade"] = function(b)
-    drum(b, v(0, 0, 0), 0.30, 0.50, PLATING)
-    block(b, PATCH, v(0, 0.30, 0), v(0.22, 0.06, 0.22), nil, 0.4)
-    windows(b, v(0, 0.05, 0), 0.292, 4, 0.02)
-    windows(b, v(0, -0.10, 0), 0.292, 4, 0.02)
+    drum(b, v(0, 0, 0), 0.30, 0.44, PLATING)
+    block(b, PATCH, v(0, 0.29, 0), v(0.21, 0.08, 0.21), nil, 0.4)
+    block(b, PATCH, v(0, -0.29, 0), v(0.20, 0.08, 0.20), nil, 0.4)
+    block(b, PLATING, v(0, -0.45, 0), v(0.12, 0.09, 0.12), nil, 0.4)
+    windows(b, v(0, 0.07, 0), 0.292, 4, 0.02)
+    windows(b, v(0, -0.08, 0), 0.292, 4, 0.02)
     for index, out in { v(1, 0, 0), v(-1, 0, 0), v(0, 0, 1), v(0, 0, -1) } do
       local reach = 0.80 + 0.10 * (index % 2)
       truss(b, out * 0.28, out * reach, 0.10, 4, v(0, 1, 0))
-      block(b, PLATING, out * (reach + 0.07) + v(0, -0.02, 0), v(0.13, 0.025, 0.13), nil, 0.2)
-      block(b, TRIM, out * (reach + 0.07) + v(0, 0.01, 0), v(0.10, 0.008, 0.10), nil, 0.2)
+      block(b, PLATING, out * (reach + 0.07), v(0.13, 0.035, 0.13), nil, 0.3)
+      block(b, TRIM, out * (reach + 0.07) + v(0, 0.038, 0), v(0.10, 0.008, 0.10), nil, 0.2)
+      block(b, TRIM, out * (reach + 0.07) + v(0, -0.038, 0), v(0.10, 0.008, 0.10), nil, 0.2)
       block(b, GLOW, out * (reach * 0.6) + v(0, 0.075, 0), v(0.012 + 0.10 * math.abs(out.x), 0.012, 0.012 + 0.10 * math.abs(out.z)), nil, 0.3)
+      block(b, GLOW, out * (reach * 0.6) + v(0, -0.075, 0), v(0.012 + 0.10 * math.abs(out.x), 0.012, 0.012 + 0.10 * math.abs(out.z)), nil, 0.3)
     end
-    mast(b, v(0.05, 0.36, 0.04), 0.5, 0.02)
+    mast(b, v(0.05, 0.37, 0.04), 0.50, 0.02)
+    tail(b, v(0, -0.52, 0), 0.44, 0.035)
   end,
-  -- A ship maintenance array: a hangar open at the front, lit inside.
+  -- A ship maintenance array: a hangar open at the front and lit
+  -- inside, its roof a ridge and its underside a keel, a tank slung
+  -- under that.
   ["array.hangar"] = function(b)
-    block(b, PLATING, v(0, -0.30, -0.05), v(0.50, 0.03, 0.80), nil, 0.1)
-    block(b, PLATING, v(0.50, 0.0, -0.10), v(0.03, 0.30, 0.74), nil, 0.1)
-    block(b, PLATING, v(-0.50, 0.0, -0.10), v(0.03, 0.30, 0.74), nil, 0.1)
-    block(b, PATCH, v(0, 0.30, -0.14), v(0.53, 0.03, 0.72), nil, 0.1)
-    block(b, PLATING, v(0, 0.0, -0.84), v(0.50, 0.30, 0.03), nil, 0.1)
+    block(b, PLATING, v(0.50, 0.0, -0.10), v(0.03, 0.24, 0.74), nil, 0.1)
+    block(b, PLATING, v(-0.50, 0.0, -0.10), v(0.03, 0.24, 0.74), nil, 0.1)
+    block(b, PATCH, v(-0.25, 0.345, -0.12), v(0.275, 0.025, 0.72), v(0, 0, 0.398), 0.1)
+    block(b, PATCH, v(0.25, 0.345, -0.12), v(0.275, 0.025, 0.72), v(0, 0, -0.398), 0.1)
+    block(b, PLATING, v(-0.25, -0.345, -0.12), v(0.275, 0.025, 0.72), v(0, 0, -0.398), 0.1)
+    block(b, PLATING, v(0.25, -0.345, -0.12), v(0.275, 0.025, 0.72), v(0, 0, 0.398), 0.1)
+    beam(b, FRAME, v(0, 0.455, -0.86), v(0, 0.455, 0.64), 0.03)
+    beam(b, FRAME, v(0, -0.455, -0.86), v(0, -0.455, 0.64), 0.03)
+    -- the back of it, and the light inside
+    block(b, PLATING, v(0, 0.0, -0.84), v(0.50, 0.24, 0.03), nil, 0.1)
+    block(b, PLATING, v(0, 0.0, -0.84), v(0.30, 0.38, 0.028), nil, 0.1)
     block(b, GLOW, v(0, 0.0, -0.80), v(0.40, 0.20, 0.006), nil, 0.2)
-    block(b, TRIM, v(0.50, 0.0, 0.66), v(0.036, 0.31, 0.03), nil, 0.2)
-    block(b, TRIM, v(-0.50, 0.0, 0.66), v(0.036, 0.31, 0.03), nil, 0.2)
-    block(b, TRIM, v(0, 0.30, 0.60), v(0.53, 0.034, 0.03), nil, 0.2)
+    -- the mouth, edged in trim all the way round
+    block(b, TRIM, v(0.50, 0.0, 0.66), v(0.036, 0.25, 0.03), nil, 0.2)
+    block(b, TRIM, v(-0.50, 0.0, 0.66), v(0.036, 0.25, 0.03), nil, 0.2)
+    beam(b, TRIM, v(-0.50, 0.24, 0.62), v(0, 0.455, 0.62), 0.028)
+    beam(b, TRIM, v(0.50, 0.24, 0.62), v(0, 0.455, 0.62), 0.028)
+    beam(b, TRIM, v(-0.50, -0.24, 0.62), v(0, -0.455, 0.62), 0.028)
+    beam(b, TRIM, v(0.50, -0.24, 0.62), v(0, -0.455, 0.62), 0.028)
     for _, x in { -0.3, 0.3 } do
-      beam(b, FRAME, v(x, 0.24, -0.76), v(x, 0.24, 0.72), 0.02)
+      beam(b, FRAME, v(x, 0.18, -0.76), v(x, 0.18, 0.60), 0.018)
     end
-    block(b, FRAME, v(0.1, 0.20, 0.20), v(0.42, 0.025, 0.04))
-    drum(b, v(0.66, -0.10, -0.40), 0.10, 0.36)
-    block(b, PATCH, v(-0.62, 0.10, -0.50), v(0.09, 0.10, 0.14), nil, 0.14)
-    block(b, GLOW, v(-0.712, 0.12, -0.50), v(0.004, 0.02, 0.10), nil, 0.3)
+    -- under the keel a tank on struts, over the ridge a mast, a cabin on the side
+    block(b, PATCH, v(0.02, -0.66, -0.26), v(0.10, 0.10, 0.32), nil, 0.55)
+    for _, z in { -0.48, -0.04 } do
+      beam(b, FRAME, v(0, -0.46, z), v(0.02, -0.58, z), 0.022)
+    end
+    mast(b, v(-0.04, 0.46, -0.50), 0.42, 0.02)
+    mast(b, v(0.02, -0.76, -0.30), -0.28, 0.02)
+    block(b, PATCH, v(-0.62, 0.04, -0.46), v(0.09, 0.11, 0.15), nil, 0.14)
+    block(b, GLOW, v(-0.712, 0.06, -0.46), v(0.004, 0.02, 0.10), nil, 0.3)
+    drum(b, v(0.64, -0.02, -0.36), 0.10, 0.36)
   end,
-  -- A refining array: furnace stacks of unequal height, piped together,
-  -- over a hopper.
+  -- A refining array: furnace columns of unequal length through a
+  -- collar of girders, each with a vent at the top and a nozzle below,
+  -- piped together, with a hopper on the side.
   ["array.refining"] = function(b)
-    block(b, FRAME, v(0, -0.62, 0), v(0.52, 0.03, 0.46), nil, 0.2)
-    for index, at in { v(-0.28, 0, -0.10), v(0.10, 0, 0.12), v(0.36, 0, -0.18) } do
-      local height = 1.30 - 0.26 * index
-      block(b, if index == 2 then PATCH else PLATING, v(at.x, -0.60 + height / 2, at.z), v(0.13, height / 2, 0.13), nil, 0.3)
-      block(b, FRAME, v(at.x, -0.60 + height, at.z), v(0.15, 0.03, 0.15), nil, 0.3)
-      block(b, GLOW, v(at.x, -0.60 + height + 0.035, at.z), v(0.09, 0.008, 0.09), nil, 0.4)
-      block(b, TRIM, v(at.x, -0.60 + height * 0.7, at.z), v(0.134, 0.02, 0.134), nil, 0.3)
+    for _, z in { -0.34, 0.34 } do
+      beam(b, FRAME, v(-0.54, 0, z), v(0.56, 0, z), 0.035)
     end
-    block(b, PLATING, v(-0.05, -0.36, 0.34), v(0.26, 0.20, 0.12), v(0, 0.25, 0), 0.1)
-    conduit(b, { v(-0.28, 0.20, -0.10), v(-0.10, 0.34, 0.0), v(0.10, 0.20, 0.12) }, 0.03)
-    conduit(b, { v(0.10, -0.10, 0.12), v(0.24, 0.02, -0.02), v(0.36, -0.10, -0.18) }, 0.03)
-    conduit(b, { v(-0.28, -0.30, -0.10), v(-0.48, -0.30, -0.10), v(-0.48, -0.56, -0.10) }, 0.025)
-    truss(b, v(-0.50, -0.20, 0.30), v(0.50, -0.20, 0.30), 0.08, 5, v(0, 0, 1))
+    for _, x in { -0.54, -0.08, 0.56 } do
+      beam(b, FRAME, v(x, 0, -0.34), v(x, 0, 0.34), 0.030)
+    end
+    beam(b, FRAME, v(-0.54, 0, -0.34), v(-0.08, 0, 0.34), 0.018)
+    beam(b, FRAME, v(-0.08, 0, 0.34), v(0.56, 0, -0.34), 0.018)
+    for index, column in { { -0.30, -0.10, -0.55, 0.82 }, { 0.10, 0.12, -0.84, 0.46 }, { 0.38, -0.16, -0.36, 0.62 } } do
+      local x, z, low, high = column[1], column[2], column[3], column[4]
+      block(b, if index == 2 then PATCH else PLATING, v(x, (low + high) / 2, z), v(0.13, (high - low) / 2, 0.13), nil, 0.3)
+      block(b, FRAME, v(x, high, z), v(0.15, 0.03, 0.15), nil, 0.3)
+      block(b, GLOW, v(x, high + 0.035, z), v(0.09, 0.008, 0.09), nil, 0.4)
+      block(b, TRIM, v(x, 0.10, z), v(0.134, 0.02, 0.134), nil, 0.3)
+      -- (the nozzle: it narrows to where the slag is let go)
+      block(b, FRAME, v(x, low - 0.05, z), v(0.10, 0.06, 0.10), nil, 0.3)
+      block(b, FRAME, v(x, low - 0.14, z), v(0.06, 0.05, 0.06), v(math.pi / 4, 0, 0), 0.3)
+      block(b, GLOW, v(x, low - 0.195, z), v(0.035, 0.006, 0.035), nil, 0.4)
+    end
+    block(b, PLATING, v(-0.08, -0.06, 0.44), v(0.24, 0.17, 0.10), v(0, 0.25, 0), 0.1)
+    block(b, PLATING, v(-0.08, -0.28, 0.40), v(0.12, 0.08, 0.07), v(0, 0.25, 0), 0.2)
+    conduit(b, { v(-0.30, 0.40, -0.10), v(-0.10, 0.54, 0.0), v(0.10, 0.34, 0.12) }, 0.03)
+    conduit(b, { v(0.10, 0.20, 0.12), v(0.24, 0.32, -0.02), v(0.38, 0.24, -0.16) }, 0.03)
+    conduit(b, { v(-0.30, -0.30, -0.10), v(-0.10, -0.44, 0.0), v(0.10, -0.40, 0.12) }, 0.028)
+    conduit(b, { v(0.10, -0.60, 0.12), v(0.26, -0.50, -0.04), v(0.38, -0.22, -0.16) }, 0.024)
+    mast(b, v(-0.52, 0.02, -0.32), 0.50, -0.02)
+    mast(b, v(0.54, -0.02, 0.32), -0.40, 0.02)
   end,
-  -- A ship assembly array: a cradle of ribs over two rails, a crane
-  -- across it, and a hull half built inside.
+  -- A ship assembly array: a cage of hoops along four rails, a crane
+  -- over and a crane under, and a hull half built in the middle of it.
   ["array.assembly"] = function(b)
-    for _, x in { -0.26, 0.26 } do
-      truss(b, v(x, -0.22, -0.92), v(x, -0.22, 0.92), 0.08, 12)
+    for _, x in { -0.34, 0.34 } do
+      for _, y in { -0.27, 0.27 } do
+        beam(b, FRAME, v(x, y, -0.92), v(x, y, 0.92), 0.024, 0.1)
+      end
     end
     for index = 0, 5 do
       local z = -0.88 + index * 0.352
-      beam(b, FRAME, v(-0.30, -0.24, z), v(-0.34, 0.24, z), 0.018)
-      beam(b, FRAME, v(0.30, -0.24, z), v(0.34, 0.24, z), 0.018)
-      beam(b, FRAME, v(-0.34, 0.24, z), v(0.34, 0.24, z), 0.018)
-      block(b, GLOW, v(0, 0.215, z), v(0.05, 0.006, 0.012), nil, 0.3)
+      beam(b, FRAME, v(-0.34, -0.27, z), v(-0.34, 0.27, z), 0.018)
+      beam(b, FRAME, v(0.34, -0.27, z), v(0.34, 0.27, z), 0.018)
+      beam(b, FRAME, v(-0.34, 0.27, z), v(0.34, 0.27, z), 0.018)
+      beam(b, FRAME, v(-0.34, -0.27, z), v(0.34, -0.27, z), 0.018)
+      block(b, GLOW, v(0, 0.245, z), v(0.05, 0.006, 0.012), nil, 0.3)
+      block(b, GLOW, v(0, -0.245, z), v(0.05, 0.006, 0.012), nil, 0.3)
+      if index < 5 and index % 2 == 0 then
+        beam(b, FRAME, v(0.34, -0.27, z), v(0.34, 0.27, z + 0.352), 0.012)
+        beam(b, FRAME, v(-0.34, 0.27, z), v(-0.34, -0.27, z + 0.352), 0.012)
+      end
     end
-    for _, x in { -0.34, 0.34 } do
-      beam(b, FRAME, v(x, 0.24, -0.88), v(x, 0.24, 0.88), 0.016)
-    end
-    -- the crane, and its cab
-    block(b, TRIM, v(0, 0.29, 0.30), v(0.38, 0.03, 0.04), nil, 0.2)
-    block(b, FRAME, v(0.12, 0.20, 0.30), v(0.04, 0.07, 0.04))
-    block(b, PATCH, v(0.44, 0.10, -0.80), v(0.08, 0.09, 0.10), nil, 0.14)
-    block(b, GLOW, v(0.358, 0.11, -0.80), v(0.004, 0.02, 0.07), nil, 0.3)
-    -- the hull on the slip: a keel, and plating as far as it has got
-    beam(b, FRAME, v(0, -0.06, -0.70), v(0, -0.06, 0.62), 0.03)
-    block(b, PLATING, v(0, -0.04, -0.40), v(0.15, 0.12, 0.26), nil, 0.1)
-    block(b, PATCH, v(-0.01, -0.02, 0.02), v(0.13, 0.10, 0.14), nil, 0.1)
+    -- the cranes, and the cab
+    block(b, TRIM, v(0, 0.32, 0.30), v(0.38, 0.03, 0.04), nil, 0.2)
+    block(b, FRAME, v(0.12, 0.23, 0.30), v(0.04, 0.07, 0.04))
+    block(b, TRIM, v(0, -0.32, -0.42), v(0.38, 0.03, 0.04), nil, 0.2)
+    block(b, FRAME, v(-0.14, -0.23, -0.42), v(0.04, 0.07, 0.04))
+    block(b, PATCH, v(0.44, 0.02, -0.80), v(0.08, 0.09, 0.10), nil, 0.14)
+    block(b, GLOW, v(0.358, 0.03, -0.80), v(0.004, 0.02, 0.07), nil, 0.3)
+    block(b, PATCH, v(-0.43, -0.04, 0.40), v(0.07, 0.07, 0.24), nil, 0.55)
+    -- the hull on the slip: a spine, plating as far as it has got, ribs beyond
+    beam(b, FRAME, v(0, 0, -0.70), v(0, 0, 0.66), 0.03)
+    block(b, PLATING, v(0, 0.0, -0.40), v(0.15, 0.13, 0.26), nil, 0.1)
+    block(b, PATCH, v(-0.01, 0.01, 0.02), v(0.13, 0.11, 0.14), nil, 0.1)
     for index = 0, 3 do
-      beam(b, FRAME, v(-0.12, -0.14, 0.24 + index * 0.11), v(0.12, -0.14, 0.24 + index * 0.11), 0.012)
-      beam(b, FRAME, v(-0.12, -0.14, 0.24 + index * 0.11), v(-0.12, 0.04, 0.24 + index * 0.11), 0.012)
-      beam(b, FRAME, v(0.12, -0.14, 0.24 + index * 0.11), v(0.12, 0.04, 0.24 + index * 0.11), 0.012)
+      local z = 0.24 + index * 0.11
+      beam(b, FRAME, v(-0.12, -0.10, z), v(0.12, -0.10, z), 0.012)
+      beam(b, FRAME, v(-0.12, 0.10, z), v(0.12, 0.10, z), 0.012)
+      beam(b, FRAME, v(-0.12, -0.10, z), v(-0.12, 0.10, z), 0.012)
+      beam(b, FRAME, v(0.12, -0.10, z), v(0.12, 0.10, z), 0.012)
     end
   end,
-  -- A laboratory: domes on a deck, a dish, and aerials.
+  -- A laboratory: pods round a hub, some above it and some below, a
+  -- dish on a boom, and aerials both ways.
   ["array.laboratory"] = function(b)
-    block(b, PLATING, v(0, -0.30, 0), v(0.62, 0.04, 0.50), nil, 0.2)
-    block(b, PATCH, v(-0.24, -0.06, 0.06), v(0.26, 0.24, 0.26), nil, 0.7)
-    block(b, PLATING, v(0.28, -0.14, -0.14), v(0.18, 0.16, 0.18), nil, 0.7)
-    block(b, GLOW, v(-0.24, -0.06, 0.322), v(0.12, 0.02, 0.004), nil, 0.3)
-    block(b, GLOW, v(0.28, -0.14, 0.042), v(0.08, 0.016, 0.004), nil, 0.3)
-    block(b, FRAME, v(0.30, -0.18, 0.28), v(0.14, 0.10, 0.10))
-    beam(b, FRAME, v(0.44, -0.26, -0.36), v(0.56, 0.36, -0.44), 0.02)
-    block(b, PATCH, v(0.58, 0.44, -0.46), v(0.20, 0.014, 0.20), v(0.3, 0.6, 0), 0.4)
-    mast(b, v(-0.50, -0.26, -0.36), 0.90, 0.02)
-    mast(b, v(-0.06, -0.26, -0.40), 0.55, -0.02)
-    block(b, TRIM, v(0, -0.25, 0.50), v(0.62, 0.012, 0.012), nil, 0.2)
+    drum(b, v(0, 0, 0), 0.15, 0.50, PLATING)
+    block(b, TRIM, v(0, 0.0, 0), v(0.165, 0.02, 0.165), nil, 0.4)
+    block(b, PATCH, v(-0.32, 0.18, 0.06), v(0.25, 0.23, 0.25), nil, 0.7)
+    block(b, PLATING, v(0.32, -0.16, -0.10), v(0.20, 0.18, 0.20), nil, 0.7)
+    block(b, PATCH, v(0.04, -0.44, 0.24), v(0.16, 0.14, 0.16), nil, 0.7)
+    block(b, PLATING, v(0.10, 0.42, -0.26), v(0.13, 0.11, 0.13), nil, 0.7)
+    block(b, GLOW, v(-0.32, 0.18, 0.312), v(0.12, 0.02, 0.004), nil, 0.3)
+    block(b, GLOW, v(0.32, -0.16, 0.102), v(0.09, 0.016, 0.004), nil, 0.3)
+    block(b, GLOW, v(0.04, -0.44, 0.402), v(0.07, 0.014, 0.004), nil, 0.3)
+    beam(b, FRAME, v(0, 0.12, 0), v(-0.20, 0.18, 0.04), 0.03)
+    beam(b, FRAME, v(0, -0.10, 0), v(0.20, -0.16, -0.06), 0.03)
+    beam(b, FRAME, v(0, -0.22, 0.04), v(0.04, -0.36, 0.16), 0.026)
+    beam(b, FRAME, v(0, 0.22, -0.04), v(0.08, 0.36, -0.18), 0.026)
+    beam(b, FRAME, v(0.10, 0.0, -0.10), v(0.56, 0.30, -0.50), 0.02)
+    block(b, PATCH, v(0.60, 0.36, -0.54), v(0.20, 0.014, 0.20), v(0.3, 0.6, 0), 0.4)
+    beam(b, FRAME, v(-0.12, -0.06, -0.08), v(-0.62, -0.24, -0.30), 0.016)
+    block(b, FRAME, v(-0.66, -0.26, -0.32), v(0.05, 0.05, 0.08), nil, 0.3)
+    mast(b, v(0, 0.26, 0), 0.70, 0.02)
+    mast(b, v(0, -0.26, 0), -0.52, -0.02)
   end,
-  -- A storage array: drums in a cage of girders, and a stack of boxes.
+  -- A storage array: drums in a cage of girders, the cage drawn in to
+  -- a point above and below, with boxes clamped on its sides.
   ["array.storage"] = function(b)
-    for _, x in { -0.56, 0.20 } do
-      for _, z in { -0.46, 0.46 } do
-        beam(b, FRAME, v(x, -0.50, z), v(x, 0.50, z), 0.03, 0.1)
+    for _, x in { -0.38, 0.38 } do
+      for _, z in { -0.40, 0.40 } do
+        beam(b, FRAME, v(x, -0.44, z), v(x, 0.44, z), 0.03, 0.1)
+        beam(b, FRAME, v(x, 0.44, z), v(0, 0.86, 0), 0.022)
+        beam(b, FRAME, v(x, -0.44, z), v(0, -0.86, 0), 0.022)
       end
     end
-    for _, y in { -0.50, 0.50 } do
-      for _, z in { -0.46, 0.46 } do
-        beam(b, FRAME, v(-0.56, y, z), v(0.20, y, z), 0.026)
+    for _, y in { -0.44, 0.44 } do
+      for _, z in { -0.40, 0.40 } do
+        beam(b, FRAME, v(-0.38, y, z), v(0.38, y, z), 0.026)
       end
-      for _, x in { -0.56, 0.20 } do
-        beam(b, FRAME, v(x, y, -0.46), v(x, y, 0.46), 0.026)
+      for _, x in { -0.38, 0.38 } do
+        beam(b, FRAME, v(x, y, -0.40), v(x, y, 0.40), 0.026)
       end
     end
-    for index, at in { v(-0.37, 0, -0.26), v(-0.37, 0, 0.26), v(0.01, 0, -0.26), v(0.01, 0, 0.26) } do
-      drum(b, at, 0.17, 0.92, if index == 3 then PLATING else PATCH)
+    for index, at in { v(-0.19, 0, -0.20), v(-0.19, 0, 0.20), v(0.19, 0, -0.20), v(0.19, 0, 0.20) } do
+      drum(b, at, 0.165, 0.84, if index == 3 then PLATING else PATCH)
     end
-    beam(b, FRAME, v(-0.56, -0.50, -0.46), v(0.20, 0.50, -0.46), 0.016)
-    beam(b, FRAME, v(-0.56, 0.50, 0.46), v(0.20, -0.50, 0.46), 0.016)
-    block(b, PLATING, v(0.50, -0.30, -0.16), v(0.18, 0.20, 0.26), nil, 0.06)
-    block(b, TRIM, v(0.52, 0.06, -0.20), v(0.15, 0.16, 0.22), nil, 0.06)
-    block(b, PLATING, v(0.50, -0.34, 0.34), v(0.16, 0.16, 0.16), nil, 0.06)
-    block(b, GLOW, v(0.684, -0.30, -0.16), v(0.004, 0.02, 0.10), nil, 0.3)
+    beam(b, FRAME, v(-0.38, -0.44, -0.40), v(0.38, 0.44, -0.40), 0.016)
+    beam(b, FRAME, v(-0.38, 0.44, 0.40), v(0.38, -0.44, 0.40), 0.016)
+    block(b, FRAME, v(0, 0.88, 0), v(0.05, 0.04, 0.05), nil, 0.3)
+    block(b, FRAME, v(0, -0.88, 0), v(0.05, 0.04, 0.05), nil, 0.3)
+    block(b, GLOW, v(0, 0.935, 0), v(0.025, 0.02, 0.025), v(math.pi / 4, 0, 0), 0.45)
+    block(b, GLOW, v(0, -0.935, 0), v(0.025, 0.02, 0.025), v(math.pi / 4, 0, 0), 0.45)
+    block(b, PLATING, v(0.56, 0.08, -0.10), v(0.15, 0.20, 0.24), nil, 0.06)
+    block(b, TRIM, v(-0.55, -0.10, 0.12), v(0.14, 0.16, 0.20), nil, 0.06)
+    block(b, PLATING, v(0.04, 0.12, 0.56), v(0.18, 0.15, 0.13), nil, 0.06)
+    block(b, GLOW, v(0.714, 0.08, -0.10), v(0.004, 0.02, 0.10), nil, 0.3)
   end,
-  -- A habitat: three wide decks on a spine, their ports lit, a dome over.
+  -- A habitat: decks on a spine, the widest in the middle and the rest
+  -- smaller toward both ends, their ports lit; a dome at the top, a
+  -- lesser one turned down at the bottom.
   ["array.habitat"] = function(b)
-    beam(b, FRAME, v(0, -0.80, 0), v(0, 0.70, 0), 0.07, 0.1)
-    for index, y in { -0.46, -0.04, 0.38 } do
-      local half = 0.56 - 0.07 * index
+    beam(b, FRAME, v(0, -0.80, 0), v(0, 0.80, 0), 0.07, 0.1)
+    for index, deck in { { -0.40, 0.40 }, { 0.0, 0.56 }, { 0.40, 0.43 } } do
+      local y, half = deck[1], deck[2]
       block(b, if index == 2 then PATCH else PLATING, v(0, y, 0), v(half, 0.13, half), nil, 0.5)
       windows(b, v(0, y + 0.02, 0), half * 0.985, 5, 0.018)
-      block(b, TRIM, v(0, y - 0.11, 0), v(half * 0.9, 0.012, half * 0.9), nil, 0.5)
+      block(b, TRIM, v(0, y + (if y < 0 then 0.11 else -0.11), 0), v(half * 0.9, 0.012, half * 0.9), nil, 0.5)
     end
-    block(b, PATCH, v(0, 0.62, 0), v(0.20, 0.12, 0.20), nil, 0.8)
-    mast(b, v(0.04, 0.72, 0.02), 0.40, 0.02)
-    drum(b, v(0.30, -0.76, 0.10), 0.09, 0.26)
-    drum(b, v(-0.26, -0.78, -0.14), 0.08, 0.22, PLATING)
+    block(b, PATCH, v(0, 0.66, 0), v(0.21, 0.12, 0.21), nil, 0.8)
+    block(b, PLATING, v(0, -0.66, 0), v(0.18, 0.11, 0.18), nil, 0.8)
+    mast(b, v(0.04, 0.76, 0.02), 0.36, 0.02)
+    tail(b, v(0, -0.76, 0), 0.34, 0.03)
+    drum(b, v(0.50, -0.02, 0.36), 0.08, 0.30)
+    drum(b, v(-0.46, 0.20, -0.40), 0.07, 0.24, PLATING)
   end,
-  -- A battery's stand: a deck on struts, with the ring for its gun or
-  -- rack (which is one of the ship's weapons, at the size of a structure).
+  -- What a battery's gun or rack stands on (the gun or rack is one of
+  -- the ship's weapons, at the size of a structure): a deck with the
+  -- ring for it, and under the deck a body that narrows in steps to a
+  -- point, braced to the deck's corners.
   ["battery"] = function(b)
     block(b, PLATING, v(0, -0.06, 0), v(0.62, 0.05, 0.62), nil, 0.3)
     block(b, PLATING, v(0, -0.06, 0), v(0.62, 0.05, 0.62), v(math.pi / 4, 0, 0), 0.3)
     block(b, TRIM, v(0, -0.004, 0), v(0.50, 0.01, 0.50), v(math.pi / 4, 0, 0), 0.3)
     block(b, FRAME, v(0, 0.01, 0), v(0.36, 0.03, 0.36), nil, 0.45)
+    block(b, PLATING, v(0, -0.27, 0), v(0.40, 0.16, 0.40), v(math.pi / 4, 0, 0), 0.3)
+    block(b, PATCH, v(0, -0.52, 0), v(0.27, 0.12, 0.27), nil, 0.3)
+    block(b, TRIM, v(0, -0.41, 0), v(0.28, 0.015, 0.28), nil, 0.3)
+    block(b, FRAME, v(0, -0.70, 0), v(0.15, 0.08, 0.15), v(math.pi / 4, 0, 0), 0.3)
+    tail(b, v(0, -0.76, 0), 0.46, 0.04)
     for index = 1, 4 do
       local angle = (index - 0.5) / 4 * 2 * math.pi
       local out = v(math.cos(angle), 0, math.sin(angle))
-      beam(b, FRAME, out * 0.50 + v(0, -0.08, 0), out * 0.80 + v(0, -0.62, 0), 0.035)
-      block(b, FRAME, out * 0.82 + v(0, -0.66, 0), v(0.08, 0.03, 0.08), nil, 0.3)
+      beam(b, FRAME, out * 0.74 + v(0, -0.10, 0), out * 0.20 + v(0, -0.72, 0), 0.03)
     end
     block(b, PATCH, v(0.42, 0.08, -0.42), v(0.10, 0.10, 0.10), nil, 0.14)
     block(b, GLOW, v(0.42, 0.10, -0.316), v(0.06, 0.02, 0.004), nil, 0.3)
-    drum(b, v(-0.44, 0.10, 0.40), 0.07, 0.24)
+    block(b, GLOW, v(0, -0.52, 0.272), v(0.12, 0.02, 0.004), nil, 0.3)
+    drum(b, v(-0.46, -0.30, 0.42), 0.07, 0.24)
   end,
 }
 
