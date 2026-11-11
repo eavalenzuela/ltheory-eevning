@@ -1,0 +1,41 @@
+# The other ships about, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/traffic.txt
+#
+# A homeworld's system is busy: haulers come and go at its stations and
+# its faction's patrols stand at its gate. They are nobody's enemy until
+# a pilot makes them one. Firing on one marks the pilot, and the patrol
+# on the grid turns on them.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.TimeScale(8)
+until GameDebug.Traffic() >= 3
+lua assert(GameDebug.Pirates() == 0, 'traffic is not pirates')
+
+# At the gate there is a patrol, and it leaves a pilot alone.
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('WarpTo', 'gate'), 'warp to the gate was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+patience 300
+until GameDebug.Distance('Patrol') < 60000
+lua GameDebug.TimeScale(1)
+frames 5
+lua assert(select(3, GameDebug.Traffic()) == 0, 'a patrol should be nobody\'s enemy until they make it one')
+lua assert(not GameDebug.Marked())
+
+# Until the pilot fires on it.
+lua assert(GameDebug.Order('Approach', 'Patrol', 2000), 'approach was refused')
+lua GameDebug.TimeScale(4)
+until GameDebug.Distance('Patrol') < 9000
+lua assert(GameDebug.Lock('Patrol'), 'the lock was refused')
+until GameDebug.Locked() > 0
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Fire() >= 1, 'no weapon opened fire')
+until GameDebug.Marked()
+until select(3, GameDebug.Traffic()) >= 1
+
+echo traffic scenario passed
+quit

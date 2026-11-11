@@ -37,6 +37,7 @@ local State = require("@lt/Core/Kernel/State")
 local Stations = require("@lt/Core/Assets/Stations")
 local Structures = require("@lt/Core/Data/Structures")
 local System = require("@lt/Core/Describe/System")
+local Traffic = require("@lt/Core/Tactical/Traffic")
 local Training = require("@lt/Core/Character/Training")
 local Types = require("@lt/Core/Data/Types")
 
@@ -52,11 +53,14 @@ export type Options = {
   historySeed: number,
   systems: number?,   -- default 3
   peaceful: boolean?, -- no pirates; default false
+  -- Other ships about (Tactical/Traffic); default false. The game turns
+  -- it on. A test that is about one ship has the galaxy to itself.
+  traffic: boolean?,
 }
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 15
+Core.SAVE_VERSION = 16
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -136,6 +140,18 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   [14] = function(state: any)
     Galaxy.Claim(state.galaxy)
   end,
+  -- 16: there are other ships about, and a pilot can be marked for
+  -- firing on them. A save from before has none, and nobody is marked.
+  [15] = function(state: any)
+    state.traffic = state.traffic or {}
+    state.trafficIds = state.trafficIds or {}
+    state.trafficDue = state.trafficDue or 0
+    -- (a save from before was somebody's game, and a game has traffic)
+    if state.trafficOn == nil then
+      state.trafficOn = true
+    end
+    state.player.marked = state.player.marked or 0
+  end,
 }
 
 -- A new game: a galaxy, and the player's first ship docked at a station
@@ -182,7 +198,11 @@ function Core.New(options: Options): Game
     rockIds = {},
     grids = {},
     gridIds = {},
-    player = { ship = 0, home = 0 },
+    player = { ship = 0, home = 0, marked = 0 },
+    traffic = {},
+    trafficIds = {},
+    trafficDue = 0,
+    trafficOn = options.traffic == true,
     queue = {},
   }
   -- (the starter station: the one that has a module for everything)
@@ -307,6 +327,7 @@ function Core.Step(game: Game)
     end
   end
   Pirates.Populate(state, game.events)
+  Traffic.Step(state, game.events)
   Pirates.Think(state, game.events)
   Space.Decide(state, game.events)
   Aftermath.Step(state, game.events)
@@ -404,6 +425,7 @@ export type Entry = {
   distance: number,   -- metres between surfaces, from the player's ship
   onGrid: boolean,
   variety: string,
+  hostile: boolean,   -- a ship that will fire on the pilot: a pirate, or a patrol that has taken them for a criminal
 }
 
 -- What the player's ship can see: everything on its grid, and every
@@ -420,7 +442,7 @@ function Query.Overview(game: Game): { Entry }
     local gone = object.kind == "asteroid" and Mining.Left(state, object) <= 0
     if (onGrid or object.kind ~= "asteroid") and not gone then
       local entry: Entry = { id = object.id, kind = object.kind :: string, name = object.name,
-        distance = Space.Gap(me :: any, object :: any), onGrid = onGrid, variety = object.variety }
+        distance = Space.Gap(me :: any, object :: any), onGrid = onGrid, variety = object.variety, hostile = false }
       table.insert(entries, entry)
     end
   end
@@ -428,7 +450,8 @@ function Query.Overview(game: Game): { Entry }
     local ball = state.balls[id]
     if id ~= me.id and ball.system == me.system and ball.grid == me.grid and me.grid ~= 0 then
       local entry: Entry = { id = id, kind = ball.kind :: string, name = ball.name,
-        distance = Space.Gap(me :: any, ball :: any), onGrid = true, variety = state.ships[id].type }
+        distance = Space.Gap(me :: any, ball :: any), onGrid = true, variety = state.ships[id].type,
+        hostile = state.ships[id].owner == "pirates" or state.pilots[id] ~= nil }
       table.insert(entries, entry)
     end
   end
@@ -436,7 +459,7 @@ function Query.Overview(game: Game): { Entry }
     local wreck = state.wrecks[id]
     if wreck.system == me.system and wreck.grid == me.grid and me.grid ~= 0 then
       local entry: Entry = { id = id, kind = "wreck", name = wreck.name,
-        distance = Space.Gap(me :: any, wreck :: any), onGrid = true, variety = "" }
+        distance = Space.Gap(me :: any, wreck :: any), onGrid = true, variety = "", hostile = false }
       table.insert(entries, entry)
     end
   end

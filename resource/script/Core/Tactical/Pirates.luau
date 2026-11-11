@@ -142,9 +142,10 @@ function Pirates.Fit(kind: Kind): { { string } }
   return fitted
 end
 
--- A pirate ship of a kind, in space at a point.
-function Pirates.Spawn(state: State.State, kind: Kind, system: number, x: number, y: number, z: number, home: number): State.Ball
-  local ship = Space.NewShip(state, kind.hull, kind.name, "pirates", 0)
+-- Fit a ship as a kind is fitted, loaded, with more of what it fires in
+-- its hold. (For anybody's ship that is fitted from a list: the
+-- factions' patrols are, Tactical/Traffic.)
+function Pirates.Equip(state: State.State, ship: State.Ship, kind: Kind)
   local carried: { [string]: boolean } = {}
   for _, entry in Pirates.Fit(kind) do
     local charge: string? = if entry[2] ~= "" then entry[2] else nil
@@ -156,6 +157,12 @@ function Pirates.Spawn(state: State.State, kind: Kind, system: number, x: number
       Items.Add(state, charge, if loaded.family == "missile" then 200 else 2000, ship.id, "cargo")
     end
   end
+end
+
+-- A pirate ship of a kind, in space at a point.
+function Pirates.Spawn(state: State.State, kind: Kind, system: number, x: number, y: number, z: number, home: number): State.Ball
+  local ship = Space.NewShip(state, kind.hull, kind.name, "pirates", 0)
+  Pirates.Equip(state, ship, kind)
   local ball = Space.Launch(state, ship, system, x, y, z)
   state.pilots[ship.id] = { ship = ship.id, range = kind.range, prey = 0, home = home, alone = 0, bounty = kind.bounty, tags = kind.tags }
   table.insert(state.pilotIds, ship.id)

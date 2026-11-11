@@ -45,7 +45,7 @@ local STANDOFF: { [string]: number } = { planet = 1, moon = 1.5, sun = 4 }
 
 function Session.New(galaxySeed: number, historySeed: number): Session
   return {
-    game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed }),
+    game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, traffic = true }),
     clock = Clock.New(), selected = 0, events = {}, message = "", messageTick = 0, epoch = 1,
     destination = 0, autopilot = false, safest = false,
   }
@@ -107,6 +107,8 @@ function Session.Notice(session: Session, event: Space.Event)
         elseif now == "low" then "Low security: order is thin here"
         else "Secure space")
     end
+  elseif kind == "Marked" then
+    Session.Say(session, "You have fired on a ship that is no pirate's: the patrols will fire on you")
   elseif kind == "ColonyDeployed" then
     local body = Core.Query.Body(session.game, event.planet)
     Session.Say(session, `A colony is founded on {if body then body.name else "the planet"}`)
@@ -308,7 +310,7 @@ end
 -- Replace the running game with a new one, of so many systems (three,
 -- if nobody says).
 function Session.Restart(session: Session, galaxySeed: number, historySeed: number, systems: number?)
-  session.game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, systems = systems })
+  session.game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, systems = systems, traffic = true })
   session.selected = 0
   session.events = { { kind = "Loaded" } }
   session.epoch += 1

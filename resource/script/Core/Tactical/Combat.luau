@@ -29,6 +29,10 @@ local Vitals = require("@lt/Core/Tactical/Vitals")
 
 local Combat = {}
 
+-- Ticks a pilot stays marked after firing on somebody who is no pirate
+-- (Tactical/Traffic.MARKED: a quarter of an hour).
+local MARKED = 900
+
 export type Event = { [string]: any }
 
 -- Damage waiting to be applied at the end of the tick.
@@ -179,6 +183,16 @@ function Combat.Apply(state: State.State, command: State.Command, events: { Even
       Vitals.Refresh(state, ball)
     end
     table.insert(events, { kind = "ModuleStarted", ball = ball.id, item = item.id, target = command.target or 0 })
+    -- A pilot who opens fire on anybody but a pirate is marked for it:
+    -- the factions' patrols fight a marked pilot (Tactical/Traffic).
+    local shooter = state.ships[ball.id]
+    local victim = if module.weapon and ball.id == state.player.ship then state.ships[command.target or 0] else nil
+    if victim and shooter and victim.owner ~= "pirates" and victim.owner ~= shooter.owner then
+      if state.tick >= state.player.marked then
+        table.insert(events, { kind = "Marked", owner = victim.owner })
+      end
+      state.player.marked = state.tick + MARKED
+    end
 
   elseif kind == "DeactivateModule" then
     local running = findRunning(ball, command.item :: number) :: State.Running

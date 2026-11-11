@@ -169,6 +169,12 @@ export type Pilot = {
   tags: number,       -- pirate tags its wreck holds
 }
 
+-- A ship of the traffic: a hauler coming "in" to dock at 'goal' or going
+-- "out" to the gate 'goal', or a "patrol" on station at 'goal'. It
+-- belongs to the system it was made in, and 'wait' counts its last
+-- moments at a gate.
+export type Traffic = { ship: number, kind: string, goal: number, system: number, born: number, wait: number }
+
 -- A grid that is not anchored to a station, gate or belt: made where a
 -- ship arrived in open space (those anchored to a site use the site's id).
 export type Grid = { id: number, system: number, x: number, y: number, z: number }
@@ -302,7 +308,15 @@ export type State = {
   rockIds: { number },
   grids: { [number]: Grid },
   gridIds: { number },
-  player: { ship: number, home: number },
+  -- 'marked' is the tick until which the factions' patrols take the
+  -- pilot for a criminal (Tactical/Traffic); 0 if they never have.
+  player: { ship: number, home: number, marked: number },
+  -- The other ships about (Tactical/Traffic), by ship id, and the tick
+  -- at which somebody new is next looked for.
+  traffic: { [number]: Traffic },
+  trafficIds: { number },
+  trafficDue: number,
+  trafficOn: boolean,     -- whether there is any: a game has, a test of one ship has not
   queue: { Command },     -- submitted, to be applied at the next tick
 }
 

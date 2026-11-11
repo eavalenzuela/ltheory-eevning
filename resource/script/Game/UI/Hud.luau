@@ -181,7 +181,7 @@ local function drawBrackets(session: Session.Session, scene: Scene.Scene, entrie
       local hot = d2 < 14 ^ 2 and not overInterface
       local small = entry.kind == "asteroid"
       local lock = if ball then lockOf(ball, entry.id) else nil
-      local hostile = entry.kind == "ship"
+      local hostile = entry.hostile
       local color = if selected then Colors.White elseif hostile then HULL elseif entry.onGrid then Im.ACCENT else Im.DIM
       Icon_Draw(icon(entry.kind), p, if small then 4 else 8, color, if selected or hot then 1 else 0.7)
       if lock then
@@ -220,7 +220,7 @@ local function drawOverview(session: Session.Session, entries: { Core.Entry }, x
     end
     local rowY = top + (row - 1) * rowHeight
     local _, clicked, double = Im.Row(x + 4, rowY, width - 8, rowHeight, entry.id == session.selected)
-    local color = if entry.kind == "ship" then HULL elseif entry.onGrid then Im.TEXT else Im.DIM
+    local color = if entry.hostile then HULL elseif entry.onGrid then Im.TEXT else Im.DIM
     Im.Text(TAGS[entry.kind] or "?", x + 12, rowY + 3, 13, Im.DIM)
     Im.Text(entry.name, x + 52, rowY + 3, 14, color)
     Im.TextRight(Format.Distance(entry.distance), x + width - 12, rowY + 3, 14, color)

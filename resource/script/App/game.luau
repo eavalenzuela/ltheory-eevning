@@ -549,6 +549,28 @@ function Debug.Pirates(): (number, number)
   return count, drawn
 end
 
+-- The other ships about: how many the system has, how many of them are
+-- on the pilot's grid, and how many ships on the overview would fire on
+-- the pilot.
+function Debug.Traffic(): (number, number, number)
+  local state = session.game.state
+  local me = state.balls[state.player.ship]
+  local near, hostile = 0, 0
+  for _, id in state.trafficIds do
+    local ball = state.balls[id]
+    near += if me and ball and ball.grid == me.grid then 1 else 0
+  end
+  for _, entry in Core.Query.Overview(session.game) do
+    hostile += if entry.hostile then 1 else 0
+  end
+  return #state.trafficIds, near, hostile
+end
+
+-- Whether the factions' patrols take the pilot for a criminal just now.
+function Debug.Marked(): boolean
+  return session.game.state.tick < session.game.state.player.marked
+end
+
 -- Open the colonies window on a planet (a kind or part of a name, as
 -- for Order), or on the pilot's first colony.
 function Debug.Colony(what: string?): boolean
