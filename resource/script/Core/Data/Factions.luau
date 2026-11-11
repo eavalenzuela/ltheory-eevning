@@ -24,12 +24,14 @@ export type Faction = {
   name: string,
   kind: "human" | "pirate" | "alien",
   -- How its hulls are built up (Game/View/Hull). Human: "slab" broad
-  -- armoured plates, "blade" long and swept, "bulb" rounded masses,
+  -- armoured plates, "cloud" rounded lobes with blisters and no corners
+  -- (the Talmar, by their draft), "bulb" rounded masses (the Orun, a
+  -- placeholder that the Talmar's draft has since overtaken),
   -- "lattice" open frames and spars. Pirate: "patchwork", somebody
   -- else's hull with parts missing and parts bolted on. Alien: "crystal"
   -- shards grown outward from a core, "carapace" segmented and curled
   -- like something alive, "monolith" rings and slabs without a seam.
-  style: "slab" | "blade" | "bulb" | "lattice" | "patchwork" | "crystal" | "carapace" | "monolith",
+  style: "slab" | "cloud" | "bulb" | "lattice" | "patchwork" | "crystal" | "carapace" | "monolith",
   weapon: string,           -- the turret family its warships carry
   launchers: number,        -- the share of a warship's hardpoints that are launchers
   tank: "armor" | "shield" | "hull",
@@ -73,8 +75,13 @@ Factions.list = {
     hulls = { frigate = "Javelin", destroyer = "Halberd", cruiser = "Cuirass", battleship = "Bastion", industrial = "Caravan" },
   },
   {
-    id = "talmar", name = "Talmar", kind = "human", style = "blade", weapon = "projectile", launchers = 0.35, tank = "shield",
-    note = "Guns, missiles and shields. Long, swept hulls that are fast for their class and fight on the move.",
+    -- (After the project owner's draft, 2026-11-10: humans, an
+    -- ethno-theocracy; ships "kind of cloud-like, with rounded edges and
+    -- protrusions", with Star Wars' Mon Calamari cruisers as the visual
+    -- point of reference. The draft says nothing of weapons or defence:
+    -- those are as they were.)
+    id = "talmar", name = "Talmar", kind = "human", style = "cloud", weapon = "projectile", launchers = 0.35, tank = "shield",
+    note = "Guns, missiles and shields. Hulls like clouds: rounded, lobed and blistered, without a corner on them, fast for their class.",
     paint = { primary = { 0.62, 0.66, 0.70 }, secondary = { 0.15, 0.32, 0.55 }, glow = { 0.45, 0.75, 1.0 } },
     shield = 1.2, armor = 0.85, hull = 0.95, velocity = 1.1, mass = 0.92, cpu = 1.1, powergrid = 0.95, capacitor = 0.95,
     lockRange = 1.0, cargo = 0.95, price = 1, mids = 1, lows = -1, hardpoints = 0,
