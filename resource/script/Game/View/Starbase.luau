@@ -4,12 +4,18 @@
 -- station is made of; this draws it).
 --
 -- A tower is its faction's, in three sizes, and each size is its own
--- drawing, not one drawing made bigger. The Vessari's are the first:
--- derricks of open girders with a plated core, fuel drums strapped
--- round the foot, a control house near the top with its lights on, and
--- above it the crown of prongs that throws the field. They are built
--- from the same plates and painted with the same paint as Vessari hulls
--- (Game/View/Hull).
+-- drawing, not one drawing made bigger. It is a thing in space: it
+-- stands on nothing, and must not look as if it did (the project
+-- owner's correction of the first drawings, which were derricks on
+-- feet). A tower is a spindle: widest at its waist, and narrowing from
+-- there to both ends.
+--
+-- The Vessari's are the first: open girders round a plated core, a
+-- deck at the waist with fuel drums hung round it, a control house
+-- toward the top with its lights on, above that the crown of prongs
+-- that throws the field, and below a tail that narrows to a point.
+-- They are built from the same plates and painted with the same paint
+-- as Vessari hulls (Game/View/Hull).
 --
 -- A module is nobody's (the project owner's decision): a battery, a
 -- shipyard, a storage array is one design wherever it is anchored, in a
@@ -54,13 +60,15 @@ local function drum(b: Builder, center: vector, radius: number, height: number, 
 end
 
 -- A mast: a pole with spars across it.
+-- (With a height below zero it hangs down.)
 local function mast(b: Builder, foot: vector, height: number, lean: number)
   local top = foot + v(lean, height, lean * 0.6)
-  beam(b, FRAME, foot, top, height * 0.03, 0.1)
+  local size = math.abs(height)
+  beam(b, FRAME, foot, top, size * 0.03, 0.1)
   for index, share in { 0.45, 0.70, 0.90 } do
     local at = foot + (top - foot) * share
-    local reach = height * (0.24 - 0.055 * index)
-    beam(b, FRAME, at + v(-reach, 0, 0), at + v(reach, 0, 0), height * 0.016, 0.1)
+    local reach = size * (0.24 - 0.055 * index)
+    beam(b, FRAME, at + v(-reach, 0, 0), at + v(reach, 0, 0), size * 0.016, 0.1)
   end
 end
 
@@ -75,49 +83,65 @@ local function windows(b: Builder, center: vector, half: number, count: number, 
   end
 end
 
--- One stage of a derrick: four corner posts from 'low' to 'high', 'half'
--- apart from the middle, braced across each side bay by bay, with a
--- plated core up 'plated' of its height.
-local function stage(b: Builder, low: number, high: number, half: number, plated: number)
-  local post = half * 0.075
-  for _, x in { -half, half } do
-    for _, z in { -half, half } do
-      beam(b, FRAME, v(x, low, z), v(x, high, z), post, 0.1)
+-- One stage of a tower: four corner posts from 'low' to 'high', as far
+-- from the middle as 'below' at the bottom and 'above' at the top, so
+-- that a stage narrows one way or the other; braced across each side
+-- bay by bay; with a plated core through 'plated' of its height from
+-- its wider end, stepping in as the stage narrows.
+local function stage(b: Builder, low: number, high: number, below: number, above: number, plated: number)
+  local wide = math.max(below, above)
+  local post = wide * 0.07
+  local function half(t: number): number
+    return below + (above - below) * t
+  end
+  for _, x in { -1, 1 } do
+    for _, z in { -1, 1 } do
+      beam(b, FRAME, v(x * below, low, z * below), v(x * above, high, z * above), post, 0.1)
     end
   end
-  local bays = math.max(2, math.floor((high - low) / (half * 1.5) + 0.5))
+  local bays = math.max(2, math.floor((high - low) / (wide * 1.5) + 0.5))
   for bay = 0, bays do
-    local y = low + (high - low) * bay / bays
-    for _, side in { -half, half } do
-      beam(b, FRAME, v(-half, y, side), v(half, y, side), post * 0.7)
-      beam(b, FRAME, v(side, y, -half), v(side, y, half), post * 0.7)
+    local y, h = low + (high - low) * bay / bays, half(bay / bays)
+    for _, side in { -h, h } do
+      beam(b, FRAME, v(-h, y, side), v(h, y, side), post * 0.7)
+      beam(b, FRAME, v(side, y, -h), v(side, y, h), post * 0.7)
     end
     if bay < bays then
-      local next = low + (high - low) * (bay + 1) / bays
+      local y2, h2 = low + (high - low) * (bay + 1) / bays, half((bay + 1) / bays)
       local lean = if bay % 2 == 0 then 1 else -1
-      for _, side in { -half, half } do
-        beam(b, FRAME, v(-half * lean, y, side), v(half * lean, next, side), post * 0.55)
-        beam(b, FRAME, v(side, y, half * lean), v(side, next, -half * lean), post * 0.55)
+      for _, side in { -1, 1 } do
+        beam(b, FRAME, v(-h * lean, y, side * h), v(h2 * lean, y2, side * h2), post * 0.55)
+        beam(b, FRAME, v(side * h, y, h * lean), v(side * h2, y2, -h2 * lean), post * 0.55)
       end
     end
   end
-  local core = (high - low) * plated
-  block(b, PLATING, v(0, low + core / 2, 0), v(half * 0.66, core / 2, half * 0.66), nil, 0.05)
+  for step = 1, 2 do
+    -- (from the wider end: 'from' and 'to' are shares of the height)
+    local near, far = (step - 1) / 2 * plated, step / 2 * plated
+    local from, to = near, far
+    if above > below then
+      from, to = 1 - far, 1 - near
+    end
+    local narrow = half(if above > below then from else to)
+    block(b, PLATING, v(0, low + (high - low) * (from + to) / 2, 0), v(narrow * 0.72, (high - low) * (to - from) / 2, narrow * 0.72), nil, 0.05)
+  end
 end
 
 -- The crown that throws the field: a ring, prongs leaning in over it,
--- and the lit core they hold.
-local function crown(b: Builder, at: vector, half: number, prongs: number)
+-- and the lit core they hold. ('down' turns it over, for one that
+-- hangs under a tower.)
+local function crown(b: Builder, at: vector, half: number, prongs: number, down: boolean?)
+  local s = if down then -1 else 1
   block(b, FRAME, at, v(half, half * 0.07, half), nil, 0.3)
-  block(b, TRIM, at + v(0, half * 0.09, 0), v(half * 0.8, half * 0.03, half * 0.8), nil, 0.3)
+  block(b, TRIM, at + v(0, s * half * 0.09, 0), v(half * 0.8, half * 0.03, half * 0.8), nil, 0.3)
   for index = 1, prongs do
     local angle = (index - 0.5) / prongs * 2 * math.pi
     local out = v(math.cos(angle), 0, math.sin(angle))
-    beam(b, PLATING, at + out * (half * 0.92), at + out * (half * 0.42) + v(0, half * 1.25, 0), half * 0.085, 0.2)
-    beam(b, FRAME, at + out * (half * 0.55), at + out * (half * 0.80) + v(0, half * 0.55, 0), half * 0.04)
+    beam(b, PLATING, at + out * (half * 0.92), at + out * (half * 0.30) + v(0, s * half * 1.45, 0), half * 0.085, 0.2)
+    beam(b, FRAME, at + out * (half * 0.55), at + out * (half * 0.74) + v(0, s * half * 0.55, 0), half * 0.04)
   end
-  block(b, GLOW, at + v(0, half * 0.62, 0), v(half * 0.24, half * 0.34, half * 0.24), v(math.pi / 4, 0, 0), 0.45)
-  block(b, FRAME, at + v(0, half * 0.20, 0), v(half * 0.30, half * 0.12, half * 0.30), nil, 0.2)
+  block(b, GLOW, at + v(0, s * half * 0.66, 0), v(half * 0.22, half * 0.34, half * 0.22), v(math.pi / 4, 0, 0), 0.45)
+  block(b, FRAME, at + v(0, s * half * 0.20, 0), v(half * 0.30, half * 0.12, half * 0.30), nil, 0.2)
 end
 
 -- The Vessari's slanted plates: a pair, leaning together like a roof.
@@ -126,122 +150,149 @@ local function roof(b: Builder, at: vector, half: vector)
   block(b, PATCH, at + v(half.x * 0.5, 0, 0), v(half.x * 0.56, half.y, half.z), v(0, 0, -0.45), 0.08)
 end
 
+-- What a tower ends in below: a spire from 'top' down, 'thick' at its
+-- root and coming to a point, with a beacon lit part way down it and
+-- spars across it.
+local function tail(b: Builder, top: vector, length: number, thick: number)
+  beam(b, PLATING, top, top + v(0, -length * 0.42, 0), thick, 0.2)
+  beam(b, FRAME, top + v(0, -length * 0.38, 0), top + v(0, -length * 0.74, 0), thick * 0.6, 0.2)
+  beam(b, FRAME, top + v(0, -length * 0.70, 0), top + v(0, -length, 0), thick * 0.28, 0.15)
+  block(b, TRIM, top + v(0, -length * 0.40, 0), v(thick * 1.25, thick * 0.4, thick * 1.25), nil, 0.3)
+  block(b, GLOW, top + v(0, -length * 0.56, 0), v(thick * 0.85, thick * 0.6, thick * 0.85), v(math.pi / 4, 0, 0), 0.45)
+  for index, share in { 0.24, 0.66 } do
+    local reach = thick * (4.2 - 1.6 * index)
+    local at = top + v(0, -length * share, 0)
+    beam(b, FRAME, at + v(-reach, 0, 0), at + v(reach, 0, 0), thick * 0.22, 0.1)
+    beam(b, FRAME, at + v(0, 0, -reach), at + v(0, 0, reach), thick * 0.22, 0.1)
+  end
+end
+
 -- ---------------------------------------------------------------------
 -- The Vessari towers
 
--- Small: one derrick, a house on top of it, the crown on that.
+-- Small: a stage up from the waist and a stage down, the house and the
+-- crown above, the tail below.
 local function vessariSmall(b: Builder)
-  stage(b, -1.00, 0.45, 0.20, 0.62)
-  block(b, FRAME, v(0, -1.03, 0), v(0.36, 0.03, 0.36), nil, 0.2)
-  block(b, PATCH, v(0.14, -0.30, 0.0), v(0.022, 0.26, 0.12))
-  block(b, TRIM, v(0, -0.06, 0), v(0.138, 0.02, 0.138), nil, 0.1)
-  drum(b, v(0.30, -0.80, 0.05), 0.10, 0.38)
-  drum(b, v(-0.28, -0.84, -0.12), 0.08, 0.30, PLATING)
-  drum(b, v(0.05, -0.86, -0.31), 0.07, 0.26)
-  conduit(b, { v(0.30, -0.60, 0.05), v(0.22, -0.40, 0.05), v(0.21, 0.30, 0.05) }, 0.014)
-  conduit(b, { v(-0.28, -0.68, -0.12), v(-0.21, -0.50, -0.12), v(-0.21, 0.10, -0.16) }, 0.012)
-  -- the control house, set off to one side, under the family's roof
-  block(b, FRAME, v(0, 0.47, 0), v(0.25, 0.02, 0.25), nil, 0.2)
-  block(b, PATCH, v(0.06, 0.62, 0.02), v(0.24, 0.13, 0.20), nil, 0.12)
-  windows(b, v(0.06, 0.64, 0.02), 0.205, 3, 0.022)
-  roof(b, v(0.06, 0.80, 0.02), v(0.26, 0.014, 0.23))
-  crown(b, v(0, 0.92, 0), 0.26, 4)
-  mast(b, v(-0.16, 0.76, -0.14), 0.62, -0.03)
-  -- a boom with its dish
-  truss(b, v(0.20, 0.20, 0), v(0.62, 0.30, 0.04), 0.08, 3, v(0, 0, 1))
-  block(b, PATCH, v(0.68, 0.34, 0.04), v(0.10, 0.012, 0.10), v(0, 0.5, 0.4), 0.3)
+  block(b, PLATING, v(0, 0, 0), v(0.34, 0.022, 0.34), nil, 0.2)
+  block(b, TRIM, v(0, 0.03, 0), v(0.345, 0.010, 0.345), nil, 0.2)
+  stage(b, 0.00, 0.62, 0.24, 0.15, 0.60)
+  stage(b, -0.72, 0.00, 0.10, 0.24, 0.60)
+  -- drums hung round the waist, over and under the deck
+  drum(b, v(0.33, -0.22, 0.06), 0.09, 0.36)
+  drum(b, v(-0.31, -0.18, -0.12), 0.075, 0.28, PLATING)
+  drum(b, v(0.04, 0.19, -0.32), 0.065, 0.26)
+  conduit(b, { v(0.33, -0.02, 0.06), v(0.26, 0.10, 0.06), v(0.19, 0.40, 0.06) }, 0.013)
+  conduit(b, { v(-0.31, -0.34, -0.12), v(-0.20, -0.46, -0.10), v(-0.12, -0.66, -0.06) }, 0.011)
+  block(b, PATCH, v(0.185, 0.24, 0.0), v(0.018, 0.17, 0.10), v(0, 0, 0.145))
+  -- the control house, under the family's roof
+  block(b, FRAME, v(0, 0.64, 0), v(0.19, 0.018, 0.19), nil, 0.2)
+  block(b, PATCH, v(0.03, 0.765, 0.02), v(0.18, 0.105, 0.18), nil, 0.12)
+  windows(b, v(0.03, 0.775, 0.02), 0.184, 3, 0.020)
+  roof(b, v(0.03, 0.89, 0.02), v(0.20, 0.012, 0.19))
+  crown(b, v(0, 0.99, 0), 0.20, 4)
+  mast(b, v(-0.12, 0.88, -0.10), 0.50, -0.03)
+  tail(b, v(0, -0.70, 0), 0.66, 0.05)
+  -- a boom with its dish, out from the waist
+  truss(b, v(0.30, 0.04, 0), v(0.70, 0.12, 0.04), 0.08, 3, v(0, 0, 1))
+  block(b, PATCH, v(0.76, 0.16, 0.04), v(0.10, 0.012, 0.10), v(0, 0.5, 0.4), 0.3)
 end
 
--- Medium: two stages with a deck between, and arms out to its banks.
+-- Medium: two stages each way, and arms out from the waist to its banks.
 local function vessariMedium(b: Builder)
-  stage(b, -1.40, -0.20, 0.30, 0.70)
-  stage(b, -0.20, 0.90, 0.20, 0.55)
-  block(b, FRAME, v(0, -1.43, 0), v(0.48, 0.03, 0.48), nil, 0.2)
-  block(b, PLATING, v(0, -0.20, 0), v(0.42, 0.022, 0.42), nil, 0.15)
-  block(b, TRIM, v(0, -0.17, 0), v(0.43, 0.012, 0.43), nil, 0.15)
-  block(b, PATCH, v(0.205, -0.80, 0.02), v(0.022, 0.34, 0.15))
-  block(b, PATCH, v(-0.02, -1.05, -0.205), v(0.13, 0.20, 0.022))
-  for index, at in { v(0.42, -1.18, 0.10), v(-0.40, -1.22, -0.14), v(0.08, -1.24, -0.44), v(-0.12, -1.20, 0.43), v(0.34, -1.26, -0.30) } do
+  block(b, PLATING, v(0, 0, 0), v(0.44, 0.024, 0.44), nil, 0.15)
+  block(b, TRIM, v(0, 0.032, 0), v(0.445, 0.011, 0.445), nil, 0.15)
+  stage(b, 0.00, 0.58, 0.32, 0.22, 0.65)
+  stage(b, 0.58, 1.08, 0.22, 0.15, 0.50)
+  stage(b, -0.62, 0.00, 0.20, 0.32, 0.65)
+  stage(b, -1.16, -0.62, 0.10, 0.20, 0.50)
+  for index, at in { v(0.44, -0.26, 0.10), v(-0.42, -0.22, -0.14), v(0.08, 0.26, -0.44), v(-0.12, -0.24, 0.43), v(0.36, 0.22, -0.30) } do
     drum(b, at, 0.12 - 0.012 * index, 0.46 - 0.04 * index, if index % 2 == 0 then PLATING else PATCH)
   end
-  conduit(b, { v(0.42, -0.94, 0.10), v(0.31, -0.70, 0.10), v(0.31, -0.24, 0.10) }, 0.016)
-  conduit(b, { v(-0.40, -1.00, -0.14), v(-0.31, -0.80, -0.14), v(-0.31, -0.30, -0.20), v(-0.21, -0.10, -0.20), v(-0.21, 0.70, -0.20) }, 0.014)
+  block(b, PATCH, v(0.255, 0.26, 0.02), v(0.020, 0.22, 0.13), v(0, 0, 0.17))
+  block(b, PATCH, v(-0.02, -0.30, -0.25), v(0.12, 0.20, 0.020), v(0, -0.19, 0))
+  conduit(b, { v(0.44, 0.00, 0.10), v(0.34, 0.14, 0.10), v(0.27, 0.50, 0.10) }, 0.016)
+  conduit(b, { v(-0.42, -0.40, -0.14), v(-0.26, -0.56, -0.12), v(-0.16, -1.00, -0.08) }, 0.014)
   -- the arms: a long one with a big bank, a short one with a small
-  truss(b, v(0.30, -0.56, 0), v(1.02, -0.46, 0.06), 0.12, 5, v(0, 0, 1))
-  block(b, PLATING, v(1.14, -0.46, 0.06), v(0.14, 0.20, 0.17), nil, 0.12)
-  block(b, TRIM, v(1.14, -0.30, 0.06), v(0.145, 0.02, 0.175), nil, 0.12)
-  beam(b, FRAME, v(0.30, -0.20, 0), v(1.00, -0.40, 0.05), 0.014)
-  truss(b, v(-0.30, -0.86, -0.04), v(-0.74, -0.92, -0.10), 0.10, 3, v(0, 0, 1))
-  drum(b, v(-0.84, -0.92, -0.10), 0.10, 0.30)
+  truss(b, v(0.36, -0.06, 0), v(1.04, 0.02, 0.06), 0.12, 5, v(0, 0, 1))
+  block(b, PLATING, v(1.16, 0.02, 0.06), v(0.14, 0.20, 0.17), nil, 0.12)
+  block(b, TRIM, v(1.16, 0.18, 0.06), v(0.145, 0.02, 0.175), nil, 0.12)
+  beam(b, FRAME, v(0.26, 0.40, 0), v(1.02, 0.08, 0.05), 0.014)
+  truss(b, v(-0.36, -0.10, -0.04), v(-0.78, -0.16, -0.10), 0.10, 3, v(0, 0, 1))
+  drum(b, v(-0.88, -0.16, -0.10), 0.10, 0.30)
   -- the houses, and the crown
-  block(b, PATCH, v(-0.10, 0.10, 0.215), v(0.11, 0.09, 0.05), nil, 0.14)
-  block(b, GLOW, v(-0.10, 0.11, 0.268), v(0.08, 0.02, 0.004), nil, 0.3)
-  block(b, FRAME, v(0, 0.92, 0), v(0.28, 0.02, 0.28), nil, 0.2)
-  block(b, PATCH, v(0.05, 1.08, 0.0), v(0.26, 0.14, 0.23), nil, 0.12)
-  windows(b, v(0.05, 1.10, 0.0), 0.235, 4, 0.022)
-  roof(b, v(0.05, 1.27, 0.0), v(0.29, 0.015, 0.26))
-  crown(b, v(0, 1.40, 0), 0.30, 4)
-  mast(b, v(-0.18, 1.22, -0.16), 0.85, -0.04)
-  truss(b, v(0.20, 0.50, 0), v(0.66, 0.62, -0.06), 0.08, 3, v(0, 0, 1))
-  block(b, PATCH, v(0.73, 0.67, -0.06), v(0.12, 0.012, 0.12), v(0, 0.5, 0.4), 0.3)
+  block(b, PATCH, v(-0.10, 0.74, 0.20), v(0.10, 0.08, 0.05), nil, 0.14)
+  block(b, GLOW, v(-0.10, 0.75, 0.252), v(0.07, 0.02, 0.004), nil, 0.3)
+  block(b, FRAME, v(0, 1.10, 0), v(0.20, 0.02, 0.20), nil, 0.2)
+  block(b, PATCH, v(0.03, 1.235, 0.0), v(0.19, 0.12, 0.19), nil, 0.12)
+  windows(b, v(0.03, 1.245, 0.0), 0.194, 4, 0.020)
+  roof(b, v(0.03, 1.375, 0.0), v(0.21, 0.013, 0.20))
+  crown(b, v(0, 1.48, 0), 0.24, 4)
+  mast(b, v(-0.14, 1.36, -0.12), 0.70, -0.04)
+  tail(b, v(0, -1.14, 0), 0.86, 0.055)
+  truss(b, v(0.20, 0.80, 0), v(0.62, 0.90, -0.06), 0.08, 3, v(0, 0, 1))
+  block(b, PATCH, v(0.69, 0.95, -0.06), v(0.12, 0.012, 0.12), v(0, 0.5, 0.4), 0.3)
 end
 
--- Large: three stages on four splayed legs, a walled deck with its drum
--- farm, a keep for a control house, and a crown of six.
+-- Large: a walled deck at the waist with its drum farm, two stages each
+-- way, and from each corner of the deck a girder up and a girder down
+-- to where the stages narrow, so that the whole is a diamond. A keep
+-- for a control house and a crown of six above; below, a lesser crown
+-- turned down, and the tail.
 local function vessariLarge(b: Builder)
-  stage(b, -2.00, -0.80, 0.42, 0.75)
-  stage(b, -0.80, 0.50, 0.30, 0.62)
-  stage(b, 0.50, 1.50, 0.20, 0.50)
-  -- the legs, each to a footing with a drum on it
-  for index, corner in { v(1, 0, 1), v(-1, 0, 1), v(-1, 0, -1), v(1, 0, -1) } do
-    local reach = 1.02 + 0.06 * (index % 2)
-    local foot = v(corner.x * reach, -2.10, corner.z * reach)
-    truss(b, v(corner.x * 0.42, -0.86, corner.z * 0.42), foot, 0.16, 6, v(corner.z, 0, -corner.x) * 0.7071)
-    block(b, FRAME, foot + v(0, -0.04, 0), v(0.20, 0.035, 0.20), nil, 0.25)
-    drum(b, foot + v(0, 0.16, 0), 0.13, 0.30, if index % 2 == 0 then PLATING else PATCH)
-    beam(b, FRAME, v(corner.x * 0.42, -1.90, corner.z * 0.42), foot + v(0, 0.02, 0), 0.02)
-  end
-  block(b, FRAME, v(0, -2.03, 0), v(0.56, 0.03, 0.56), nil, 0.2)
-  -- the walled deck where the first stage ends, and what stands on it
-  block(b, PLATING, v(0, -0.80, 0), v(0.66, 0.026, 0.66), nil, 0.12)
-  block(b, TRIM, v(0, -0.765, 0), v(0.665, 0.012, 0.665), nil, 0.12)
+  block(b, PLATING, v(0, 0, 0), v(0.66, 0.026, 0.66), nil, 0.12)
+  block(b, TRIM, v(0, 0.035, 0), v(0.665, 0.012, 0.665), nil, 0.12)
   for index = 1, 7 do
     local along = (index - 4) * 0.19
     if index % 3 ~= 0 then
-      block(b, PLATING, v(along, -0.735, 0.64), v(0.07, 0.04, 0.02), nil, 0.15)
-      block(b, PLATING, v(along, -0.735, -0.64), v(0.07, 0.04, 0.02), nil, 0.15)
-      block(b, PLATING, v(0.64, -0.735, along), v(0.02, 0.04, 0.07), nil, 0.15)
-      block(b, PLATING, v(-0.64, -0.735, along), v(0.02, 0.04, 0.07), nil, 0.15)
+      block(b, PLATING, v(along, 0.065, 0.64), v(0.07, 0.04, 0.02), nil, 0.15)
+      block(b, PLATING, v(along, 0.065, -0.64), v(0.07, 0.04, 0.02), nil, 0.15)
+      block(b, PLATING, v(0.64, 0.065, along), v(0.02, 0.04, 0.07), nil, 0.15)
+      block(b, PLATING, v(-0.64, 0.065, along), v(0.02, 0.04, 0.07), nil, 0.15)
     end
   end
-  for index, at in { v(0.50, -0.56, 0.20), v(0.48, -0.60, -0.22), v(-0.50, -0.58, 0.10), v(-0.46, -0.62, -0.34), v(0.10, -0.60, 0.50), v(-0.20, -0.62, -0.50) } do
+  stage(b, 0.00, 0.75, 0.42, 0.30, 0.70)
+  stage(b, 0.75, 1.45, 0.30, 0.20, 0.55)
+  stage(b, -0.85, 0.00, 0.28, 0.42, 0.70)
+  stage(b, -1.65, -0.85, 0.14, 0.28, 0.55)
+  -- the girders that make the diamond
+  for index, corner in { v(1, 0, 1), v(-1, 0, 1), v(-1, 0, -1), v(1, 0, -1) } do
+    local across = v(corner.z, 0, -corner.x) * 0.7071
+    truss(b, v(corner.x * 0.64, 0.03, corner.z * 0.64), v(corner.x * 0.22, 1.32, corner.z * 0.22), 0.11, 7, across)
+    truss(b, v(corner.x * 0.64, -0.03, corner.z * 0.64), v(corner.x * 0.16, -1.52, corner.z * 0.16), 0.11, 8, across)
+  end
+  -- the drum farm, on the deck and hung under it
+  for index, at in { v(0.52, 0.24, 0.18), v(0.50, 0.21, -0.24), v(-0.52, 0.23, 0.10), v(-0.48, -0.22, -0.34), v(0.12, -0.21, 0.52), v(-0.22, 0.20, -0.52) } do
     drum(b, at, 0.115 - 0.008 * index, 0.42 - 0.03 * index, if index % 2 == 0 then PLATING else PATCH)
   end
-  block(b, PATCH, v(0.285, -1.40, 0.04), v(0.024, 0.46, 0.20))
-  block(b, PATCH, v(-0.04, -1.62, -0.285), v(0.18, 0.26, 0.024))
-  block(b, PLATING, v(-0.285, -1.20, -0.06), v(0.024, 0.30, 0.16))
-  conduit(b, { v(0.50, -0.36, 0.20), v(0.40, -0.20, 0.20), v(0.31, 0.00, 0.14), v(0.31, 0.44, 0.14) }, 0.018)
-  conduit(b, { v(-0.50, -0.38, 0.10), v(-0.31, -0.20, 0.10), v(-0.31, 0.30, 0.04), v(-0.21, 0.56, 0.04), v(-0.21, 1.40, 0.04) }, 0.016)
+  block(b, PATCH, v(0.345, 0.34, 0.04), v(0.022, 0.28, 0.18), v(0, 0, 0.16))
+  block(b, PATCH, v(-0.04, -0.40, -0.335), v(0.17, 0.26, 0.022), v(0, -0.16, 0))
+  block(b, PLATING, v(-0.335, -0.36, -0.06), v(0.022, 0.26, 0.15), v(0, 0, 0.16))
+  conduit(b, { v(0.52, 0.44, 0.18), v(0.40, 0.60, 0.16), v(0.30, 0.80, 0.14), v(0.24, 1.30, 0.12) }, 0.018)
+  conduit(b, { v(-0.48, -0.40, -0.34), v(-0.34, -0.70, -0.24), v(-0.24, -1.00, -0.16), v(-0.16, -1.56, -0.10) }, 0.016)
   -- arms at three heights, none alike
-  truss(b, v(0.30, -0.10, 0), v(1.20, 0.04, 0.08), 0.14, 6, v(0, 0, 1))
-  block(b, PLATING, v(1.36, 0.04, 0.08), v(0.17, 0.24, 0.20), nil, 0.12)
-  block(b, TRIM, v(1.36, 0.23, 0.08), v(0.175, 0.022, 0.205), nil, 0.12)
-  beam(b, FRAME, v(0.30, 0.44, 0), v(1.18, 0.10, 0.07), 0.016)
-  truss(b, v(-0.30, 0.20, -0.04), v(-0.96, 0.12, -0.14), 0.12, 4, v(0, 0, 1))
-  drum(b, v(-1.08, 0.12, -0.14), 0.12, 0.36)
-  truss(b, v(0, 0.86, -0.20), v(-0.06, 0.94, -0.80), 0.09, 3, v(1, 0, 0))
-  block(b, PATCH, v(-0.06, 0.99, -0.90), v(0.15, 0.012, 0.15), v(0.4, 0.5, 0), 0.3)
-  -- the keep: the control house in three steps, under the roof
-  block(b, FRAME, v(0, 1.52, 0), v(0.30, 0.02, 0.30), nil, 0.2)
-  block(b, PLATING, v(0.04, 1.70, 0.0), v(0.28, 0.16, 0.25), nil, 0.10)
-  windows(b, v(0.04, 1.72, 0.0), 0.255, 4, 0.022)
-  block(b, PATCH, v(0.06, 1.96, 0.02), v(0.22, 0.11, 0.20), nil, 0.10)
-  windows(b, v(0.06, 1.97, 0.02), 0.205, 3, 0.020)
-  block(b, TRIM, v(0.04, 1.855, 0.0), v(0.285, 0.014, 0.255), nil, 0.1)
-  roof(b, v(0.06, 2.10, 0.02), v(0.25, 0.015, 0.23))
-  crown(b, v(0, 2.24, 0), 0.36, 6)
-  mast(b, v(-0.20, 2.06, -0.16), 1.10, -0.05)
-  mast(b, v(0.22, 2.06, 0.14), 0.66, 0.03)
+  truss(b, v(0.36, 0.44, 0), v(1.22, 0.56, 0.08), 0.14, 6, v(0, 0, 1))
+  block(b, PLATING, v(1.38, 0.56, 0.08), v(0.17, 0.24, 0.20), nil, 0.12)
+  block(b, TRIM, v(1.38, 0.75, 0.08), v(0.175, 0.022, 0.205), nil, 0.12)
+  beam(b, FRAME, v(0.28, 0.92, 0), v(1.20, 0.62, 0.07), 0.016)
+  truss(b, v(-0.36, -0.40, -0.04), v(-0.98, -0.48, -0.14), 0.12, 4, v(0, 0, 1))
+  drum(b, v(-1.10, -0.48, -0.14), 0.12, 0.36)
+  truss(b, v(0, 1.10, -0.24), v(-0.06, 1.18, -0.82), 0.09, 3, v(1, 0, 0))
+  block(b, PATCH, v(-0.06, 1.23, -0.92), v(0.15, 0.012, 0.15), v(0.4, 0.5, 0), 0.3)
+  -- the keep: the control house in two steps, under the roof
+  block(b, FRAME, v(0, 1.47, 0), v(0.26, 0.02, 0.26), nil, 0.2)
+  block(b, PLATING, v(0.03, 1.64, 0.0), v(0.24, 0.15, 0.24), nil, 0.10)
+  windows(b, v(0.03, 1.66, 0.0), 0.245, 4, 0.022)
+  block(b, TRIM, v(0.03, 1.795, 0.0), v(0.245, 0.013, 0.245), nil, 0.1)
+  block(b, PATCH, v(0.04, 1.905, 0.02), v(0.19, 0.10, 0.19), nil, 0.10)
+  windows(b, v(0.04, 1.915, 0.02), 0.194, 3, 0.020)
+  roof(b, v(0.04, 2.025, 0.02), v(0.21, 0.014, 0.20))
+  crown(b, v(0, 2.14, 0), 0.30, 6)
+  mast(b, v(-0.17, 2.02, -0.14), 0.95, -0.05)
+  mast(b, v(0.18, 2.02, 0.12), 0.56, 0.03)
+  -- below
+  crown(b, v(0, -1.68, 0), 0.20, 4, true)
+  tail(b, v(0, -1.66, 0), 1.10, 0.06)
+  mast(b, v(0.10, -1.66, 0.08), -0.50, 0.03)
 end
 
 -- ---------------------------------------------------------------------
