@@ -314,7 +314,7 @@ suite:Case("some of a pack go for a drone rather than its owner, and a drone des
   local game = docked()
   local state = game.state
   state.skills.drones = 5
-  Items.Add(state, "drone.light", 1, state.player.ship, "cargo")
+  Items.Add(state, "drone.light", 1, state.player.ship, "dronebay")
   t.ok((submit(game, { kind = "Undock", actor = 0 })))
   steps(game, 5)
   local me = state.balls[state.player.ship]

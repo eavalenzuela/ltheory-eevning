@@ -91,7 +91,8 @@ export type Item = {
   type: string,       -- Data/Types id
   quantity: number,
   holder: number,     -- the ship it is in or on, or the station whose hangar it is in
-  place: "hangar" | "cargo" | "high" | "mid" | "low" | "rig",
+  -- ("dronebay" is a ship's drone bay: Tactical/Drones)
+  place: "hangar" | "cargo" | "dronebay" | "high" | "mid" | "low" | "rig",
   slot: number,       -- within its rack, from 1; 0 unless fitted
   charge: string,     -- for a fitted weapon: the charge type loaded, or ""
   rounds: number,     -- and the shots left in the clip

@@ -354,7 +354,9 @@ suite:Case("every weapon, repairer, extender, plate and mining laser has a tech 
       t.eq({ Types.Info(module.id).scarce, Types.Info("blueprint." .. module.id).scarce, Blueprints.byProduct[module.id].invented } :: { any },
         { true, true, true } :: { any })
     else
-      t.eq({ module.base, Types.Info(module.id).scarce } :: { any }, { nil, nil } :: { any })
+      -- (what only a drone carries is nobody's to buy either)
+      t.eq({ module.base, Types.Info(module.id).scarce } :: { any }, { nil, if module.internal then true else nil } :: { any })
+      t.ok(not module.internal or Modules.Improved(module.id) == nil, "a drone's own module has a tech 2 make")
     end
   end
   -- 21 weapons, 2 repairers, an extender and a plate in three sizes each, and two mining lasers.

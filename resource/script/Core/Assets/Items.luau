@@ -139,12 +139,21 @@ function Items.CargoUsed(state: State.State, ship: number): number
   return used
 end
 
+-- Cubic metres of drones in a ship's drone bay.
+function Items.BayUsed(state: State.State, ship: number): number
+  local used = 0
+  for _, item in Items.In(state, ship, "dronebay") do
+    used += item.quantity * Types.Info(item.type).volume
+  end
+  return used
+end
+
 -- ---------------------------------------------------------------------
 -- Making and moving
 
 -- Add 'quantity' of a type to a hangar or hold, merging with a stack that
 -- is already there. Returns the stack.
-function Items.Add(state: State.State, type: string, quantity: number, holder: number, place: "hangar" | "cargo"): State.Item
+function Items.Add(state: State.State, type: string, quantity: number, holder: number, place: "hangar" | "cargo" | "dronebay"): State.Item
   assert(Types.Get(type), `no item type '{type}'`)
   assert(quantity > 0 and quantity % 1 == 0, "a quantity is a positive whole number")
   for _, item in Items.In(state, holder, place) do
@@ -319,6 +328,18 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
         return false, "already in the hangar"
       end
       return true
+    elseif command.to == "dronebay" then
+      -- (drones, and as many as the bay has room for)
+      if item.place == "dronebay" then
+        return false, "already in the drone bay"
+      elseif Types.Info(item.type).category ~= "drone" then
+        return false, "only drones go in a drone bay"
+      end
+      local free = (hull.bay or 0) - Items.BayUsed(state, ship.id)
+      if quantity * Types.Info(item.type).volume > free + 1e-9 then
+        return false, if (hull.bay or 0) == 0 then "this hull has no drone bay" else "not enough room in the drone bay"
+      end
+      return true
     end
     return false, "move it where?"
   end
@@ -391,6 +412,8 @@ function Items.Apply(state: State.State, command: State.Command, events: { Event
     Items.Take(state, item, quantity)
     if command.to == "cargo" then
       Items.Add(state, type, quantity, ship.id, "cargo")
+    elseif command.to == "dronebay" then
+      Items.Add(state, type, quantity, ship.id, "dronebay")
     else
       Items.Add(state, type, quantity, station, "hangar")
     end

@@ -424,11 +424,20 @@ function Facts.Of(type: string): Sheet?
   elseif category == "drone" then
     local drone = Drones.byId[type]
     sheet.kind = "Drone"
-    sheet.note = "Launched from the hold to fight beside the ship: it goes for what it is pointed at, or for whatever is attacking its owner. Near enough when its owner warps or docks, it is taken aboard; left behind, it is lost."
     local gun = Modules.byId[drone.gun]
     local flies = Ships.byId[drone.hull]
+    sheet.note = if drone.role == "mining" then "Launched from the drone bay to cut the rock its owner is working, or the one it is pointed at: when its little hold is full it flies back, puts the ore in its owner's hold and goes out again."
+      elseif drone.role == "repair" then "Launched from the drone bay to mend whoever of its owner's side has lost most armour: it goes to them and sets to, and otherwise keeps station on its owner."
+      else "Launched from the drone bay to fight beside the ship: it goes for what it is pointed at, or for whatever is attacking its owner's side."
+    sheet.note ..= " Near enough when its owner warps or docks, it is taken aboard; left behind, it is lost."
     local has = section(sheet, "Drone")
-    row(has, "Armed with", gun.name, gun.id)
+    if gun.miner then
+      row(has, "Cuts", `{whole(gun.miner.volume)} m3 a minute, into a hold of {whole(flies.cargo)} m3`)
+    elseif gun.hex then
+      row(has, "Mends", `{whole(gun.hex.strength)} armour every {seconds(gun.hex.duration)}`)
+    else
+      row(has, "Armed with", gun.name, gun.id)
+    end
     row(has, "Speed", `{whole(flies.maxVelocity)} m/s`)
     row(has, "Shield, armour, hull", `{whole(flies.shield)}, {whole(flies.armor)}, {whole(flies.hull)} HP`)
     row(has, "To launch", `Drones {flies.requires and flies.requires[1].level or 1}`)

@@ -497,6 +497,13 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
       if Im.Button("Refine", left + 178, line, 46, 21, can, `Refine:{item.type}`) then
         Session.Do(session, { kind = "Reprocess", actor = 0, item = item.id })
       end
+    elseif info.category == "drone" then
+      -- (a drone goes in the drone bay: as many of the stack as there is room for)
+      local room = math.floor((Core.Query.Drones(game).bay - Core.Query.Drones(game).bayUsed + 1e-9) / info.volume)
+      local toBay: State.Command = { kind = "MoveItems", actor = 0, item = item.id, to = "dronebay", quantity = math.min(item.quantity, room) }
+      if Im.Button("Bay", left + 178, line, 46, 21, room >= 1 and (Session.CanDo(session, toBay)), `ToBay:{item.type}`) then
+        Session.Do(session, toBay)
+      end
     end
     local toHold = Session.CanDo(session, { kind = "MoveItems", actor = 0, item = item.id, to = "cargo" })
     if Im.Button("Hold", left + 228, line, 46, 21, toHold, `ToHold:{item.type}`) then
@@ -525,6 +532,24 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
       Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "hangar" })
     end
     line += 24
+  end
+
+  -- The drone bay, under the hold: what is in it, a stack to a line.
+  local drones = Core.Query.Drones(game)
+  if drones.bay > 0 then
+    line = y + 78 + 24 + visible * 24 + 8 + 24 + 3 * 24 + 2
+    Im.Heading(string.format("DRONE BAY  %.0f / %.0f m3", drones.bayUsed, drones.bay), left, line, 13, Im.DIM)
+    -- (a click on a stack puts it back in the hangar)
+    local bx = left
+    for index, item in Core.Query.Items(game, ship, "dronebay") do
+      if index <= 2 then
+        local label = shorten(`{item.quantity} {Types.Info(item.type).name}`, 21)
+        if Im.Button(label, bx, line + 17, 138, 20, true, `FromBay:{item.type}`) then
+          Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "hangar" })
+        end
+        bx += 142
+      end
+    end
   end
 
   -- The ship: its name over the wheel.

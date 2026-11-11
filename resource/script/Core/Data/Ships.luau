@@ -44,6 +44,9 @@ export type ShipType = {
   -- How many drones it can control at once (Tactical/Drones): by its
   -- class, given below, unless it says.
   drones: number?,
+  -- And the room it has for them, m3: its drone bay, apart from its
+  -- hold. By its class too.
+  bay: number?,
   -- Rig slots, and the calibration the rigs in them share (Data/Modules).
   -- Every hull but the capsule has three and 400: given below, to all.
   rigs: number?,
@@ -263,17 +266,42 @@ table.insert(types, {
   requires = { { skill = "drones", level = 2 } }, restricted = true, rigs = 0, drones = 0,
 })
 
+-- What a mining drone and a repair drone fly as.
+table.insert(types, {
+  id = "drone.hull.mining", name = "Mining Drone", class = "drone", lineage = "", basePrice = 30000, volume = 10,
+  mass = 600000, inertia = 3.0, maxVelocity = 420, warpSpeed = 5, radius = 8,
+  shield = 60, armor = 80, hull = 120, shieldRecharge = 250,
+  shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 22,
+  cpu = 40, powergrid = 15, highs = 1, mids = 0, lows = 0, turrets = 1, launchers = 0,
+  capacitor = 200, capacitorRecharge = 90,
+  scanResolution = 600, lockRange = 20000, maxTargets = 1, cargo = 30,
+  requires = { { skill = "drones", level = 1 } }, restricted = true, rigs = 0, drones = 0,
+})
+table.insert(types, {
+  id = "drone.hull.repair", name = "Armor Repair Drone", class = "drone", lineage = "", basePrice = 60000, volume = 10,
+  mass = 600000, inertia = 3.0, maxVelocity = 450, warpSpeed = 5, radius = 8,
+  shield = 80, armor = 110, hull = 140, shieldRecharge = 250,
+  shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 22,
+  cpu = 40, powergrid = 15, highs = 1, mids = 0, lows = 0, turrets = 0, launchers = 0,
+  capacitor = 260, capacitorRecharge = 80,
+  scanResolution = 600, lockRange = 20000, maxTargets = 1, cargo = 5,
+  requires = { { skill = "drones", level = 2 } }, restricted = true, rigs = 0, drones = 0,
+})
+
 local Ships = { list = types, byId = {} :: { [string]: ShipType } }
 
 Ships.RIGS = 3
 Ships.CALIBRATION = 400
 -- Drones a hull controls, by its class.
 Ships.DRONES = { frigate = 1, destroyer = 2, cruiser = 4, battleship = 5, industrial = 2, barge = 3 } :: { [string]: number }
+-- And the room in its drone bay, m3: what it controls, and spares.
+Ships.BAY = { frigate = 10, destroyer = 25, cruiser = 50, battleship = 125, industrial = 25, barge = 50 } :: { [string]: number }
 
 for _, t in types do
   Ships.byId[t.id] = t
   t.rigs = t.rigs or (if t.class == "capsule" then 0 else Ships.RIGS)
   t.drones = t.drones or Ships.DRONES[t.class] or 0
+  t.bay = t.bay or Ships.BAY[t.class] or 0
   t.calibration = t.calibration or Ships.CALIBRATION
 end
 

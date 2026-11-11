@@ -31,7 +31,7 @@ local byId: { [string]: Info } = {}
 
 for _, m in Modules.list do
   byId[m.id] = { id = m.id, name = m.name, category = "module", volume = m.volume, basePrice = m.basePrice,
-    scarce = if m.tech == 2 then true else nil }
+    scarce = if m.tech == 2 or m.internal then true else nil }
 end
 for _, c in Modules.charges do
   byId[c.id] = { id = c.id, name = c.name, category = "charge", volume = c.volume, basePrice = c.basePrice }

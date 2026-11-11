@@ -69,7 +69,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 32
+Core.SAVE_VERSION = 33
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -286,6 +286,25 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       site.depth = site.depth or 0
       if site.led == nil then
         site.led = false
+      end
+    end
+  end,
+  -- 33: a ship has a drone bay, and its drones are launched from there.
+  -- The drones in the hold of a ship of a save from before are put in
+  -- its bay, as many as it has room for.
+  [32] = function(state: any)
+    local used: { [number]: number } = {}
+    for _, id in state.itemIds do
+      local item = state.items[id]
+      local ship = state.ships[item.holder]
+      local hull = if ship then Ships.byId[ship.type] else nil
+      local info = Types.Get(item.type)
+      if hull and info and info.category == "drone" and item.place == "cargo" then
+        local room = (hull.bay or 0) - (used[ship.id] or 0)
+        if item.quantity * info.volume <= room + 1e-9 then
+          item.place = "dronebay"
+          used[ship.id] = (used[ship.id] or 0) + item.quantity * info.volume
+        end
       end
     end
   end,
@@ -988,18 +1007,17 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
   }
 end
 
--- The pilot's drones: how many are in the hold, how many are out, how
--- many could be out at once, and how many of those out have been called
--- back.
-export type DronesStatus = { carried: number, out: number, max: number, returning: number, engaged: number }
+-- The pilot's drones: how many are in the drone bay, how many are out,
+-- how many could be out at once, how many of those out have been
+-- called back or pointed at something, and the bay: how much of it is
+-- used, m3, of how much.
+export type DronesStatus = { carried: number, out: number, max: number, returning: number, engaged: number, bayUsed: number, bay: number }
 function Query.Drones(game: Game): DronesStatus
   local state = game.state
   local ship = state.player.ship
   local carried = 0
-  for _, item in Items.In(state, ship, "cargo") do
-    if Types.Info(item.type).category == "drone" then
-      carried += item.quantity
-    end
+  for _, item in Items.In(state, ship, "dronebay") do
+    carried += item.quantity
   end
   local returning, engaged = 0, 0
   local out = Drones.Out(state, ship)
@@ -1007,7 +1025,8 @@ function Query.Drones(game: Game): DronesStatus
     returning += if drone.returning then 1 else 0
     engaged += if drone.target ~= 0 and not drone.returning then 1 else 0
   end
-  return { carried = carried, out = #out, max = Drones.Max(state, ship), returning = returning, engaged = engaged }
+  return { carried = carried, out = #out, max = Drones.Max(state, ship), returning = returning, engaged = engaged,
+    bayUsed = Items.BayUsed(state, ship), bay = Ships.byId[state.ships[ship].type].bay or 0 }
 end
 
 -- The pilots the player has hired, in the order they were: who, what

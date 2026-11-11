@@ -712,9 +712,11 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             "Drones:launch") then
             Session.Do(session, { kind = "LaunchDrones", actor = 0 })
           end
-          -- (at what is selected, if it is a ship; else at the first thing locked)
+          -- (at what is selected, if it is a ship, or a rock for the mining
+          -- drones; else at the first thing locked)
           local target = session.selected
-          if game.state.balls[target] == nil then
+          local picked = Core.Query.Body(game, target)
+          if game.state.balls[target] == nil and not (picked and picked.kind == "asteroid") then
             target = 0
             for _, lock in ball.vitals.locks do
               if lock.locked and game.state.balls[lock.target] then

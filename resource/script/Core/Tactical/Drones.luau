@@ -1,35 +1,47 @@
 --!strict
--- Drones: small ships a pilot launches to fight beside their own.
+-- Drones: small ships a pilot launches to work beside their own.
 --
--- A drone is an item in the hold until it is launched, and then a ship
--- of its own (a hull of class "drone", Data/Ships) that belongs to the
--- ship that launched it and flies with the orders anybody's ship does.
--- A hull can control so many at once, and a pilot one for each level of
--- the Drones skill, whichever is fewer.
+-- A drone is an item in its ship's drone bay until it is launched, and
+-- then a ship of its own (a hull of class "drone", Data/Ships) that
+-- belongs to the ship that launched it and flies with the orders
+-- anybody's ship does. A hull can control so many at once, and a pilot
+-- one for each level of the Drones skill, whichever is fewer; the bay
+-- holds those and some spare. Drones go into the bay at a station.
 --
--- Out of the hold a drone does one of three things. Told to engage, it
--- orbits what its owner pointed it at and fires on it. With nothing
--- pointed out, it goes for whatever is attacking its owner. Otherwise
--- it keeps station on its owner. Recalled, it comes back and is taken
--- aboard, an item again. When its owner docks or warps, a drone near
--- enough is taken aboard and one that is not is lost.
+-- What a drone does out of the bay follows from what it is for
+-- (Data/Drones):
+--   - a combat drone orbits what its owner pointed it at and fires on
+--     it; with nothing pointed out, it goes for whatever is attacking
+--     its owner's side; otherwise it keeps station on its owner;
+--   - a mining drone cuts the rock it was pointed at, or the rock its
+--     owner is cutting, and when its little hold is full flies back,
+--     puts the ore in its owner's hold, and goes out again;
+--   - a repair drone goes to whoever of its owner's side has lost most
+--     of their armour and mends it, and otherwise keeps station.
+-- Recalled, a drone comes back and is taken aboard, an item in the bay
+-- again. When its owner docks or warps, a drone near enough is taken
+-- aboard and one that is not is lost.
 --
 -- What a drone destroys is its owner's doing (the bounty, and the
 -- blame). A drone can be shot: some of the pirates on a grid go for the
 -- drones rather than the ships (Tactical/Pirates), and one that is
 -- destroyed leaves nothing behind.
 --
--- (EVE's, cut down. Not yet: a drone bay apart from the hold, drones
--- that mine, repair or jam, bandwidth.)
+-- (EVE's, cut down. Not yet: bandwidth, drones that jam, a hired
+-- pilot's own drones.)
 
 local Combat = require("@lt/Core/Tactical/Combat")
 local Kinds = require("@lt/Core/Data/Drones")
 local Items = require("@lt/Core/Assets/Items")
+local Mend = require("@lt/Core/Tactical/Mend")
+local Mining = require("@lt/Core/Tactical/Mining")
 local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local System = require("@lt/Core/Describe/System")
+local Types = require("@lt/Core/Data/Types")
 
 local Drones = {}
 
@@ -65,15 +77,34 @@ function Drones.Out(state: State.State, ship: number): { State.Drone }
   return found
 end
 
--- The drones in a ship's hold, as stacks.
+-- The drones in a ship's drone bay, as stacks.
 local function carried(state: State.State, ship: number): { State.Item }
   local found: { State.Item } = {}
-  for _, item in Items.In(state, ship, "cargo") do
+  for _, item in Items.In(state, ship, "dronebay") do
     if Kinds.byId[item.type] then
       table.insert(found, item)
     end
   end
   return found
+end
+
+-- Put what a drone has in its hold into its owner's, as much as fits.
+-- Returns the units moved.
+local function unload(state: State.State, drone: State.Drone): number
+  local free = Items.ShipStats(state, drone.owner).cargo - Items.CargoUsed(state, drone.owner)
+  local moved = 0
+  for _, item in Items.In(state, drone.ship, "cargo") do
+    local volume = Types.Info(item.type).volume
+    local fits = math.min(item.quantity, math.floor((free + 1e-9) / volume))
+    if fits > 0 then
+      local type = item.type
+      Items.Take(state, item, fits)
+      Items.Add(state, type, fits, drone.owner, "cargo")
+      free -= fits * volume
+      moved += fits
+    end
+  end
+  return moved
 end
 
 -- Take a drone out of the game: its ball, what it carries, every record.
@@ -96,7 +127,11 @@ end
 
 -- Take a drone back aboard its owner: it is an item in the hold again.
 local function scoop(state: State.State, drone: State.Drone, events: { Event })
-  Items.Add(state, drone.type, 1, drone.owner, "cargo")
+  -- (and what a mining drone was carrying comes aboard with it, if it fits)
+  if Kinds.byId[drone.type].role == "mining" then
+    unload(state, drone)
+  end
+  Items.Add(state, drone.type, 1, drone.owner, "dronebay")
   remove(state, drone.ship, "scooped", events)
   table.insert(events, { kind = "DroneScooped", owner = drone.owner, type = drone.type })
 end
@@ -129,7 +164,7 @@ function Drones.Validate(state: State.State, command: State.Command): (boolean, 
   local kind = command.kind
   if kind == "LaunchDrones" then
     if #carried(state, ship.id) == 0 then
-      return false, "no drones in the hold"
+      return false, "no drones in the drone bay"
     elseif (Ships.byId[ship.type].drones or 0) == 0 then
       return false, "this hull controls no drones"
     elseif #out >= Drones.Max(state, ship.id) then
@@ -141,6 +176,14 @@ function Drones.Validate(state: State.State, command: State.Command): (boolean, 
   elseif kind == "EngageDrones" then
     if #out == 0 then
       return false, "no drones are out"
+    end
+    -- (a rock, for the mining drones to cut)
+    local rock = Space.Object(state, command.target or 0)
+    if rock and rock.kind == "asteroid" then
+      if Space.SystemOf(state, rock.id) ~= ball.system or rock.site ~= ball.grid then
+        return false, "target is not on grid"
+      end
+      return true
     end
     local target = state.balls[command.target or 0]
     if target == nil or target.id == ball.id or state.drones[target.id] then
@@ -165,8 +208,10 @@ function Drones.Apply(state: State.State, command: State.Command, events: { Even
         local type = Kinds.byId[stack.type]
         Items.Take(state, stack, 1)
         local drone = Space.NewShip(state, type.hull, type.name, ship.owner, 0)
-        Items.Equip(state, drone.id, type.gun, type.charge)
-        Items.Add(state, type.charge, 4000, drone.id, "cargo")
+        Items.Equip(state, drone.id, type.gun, if type.charge ~= "" then type.charge else nil)
+        if type.charge ~= "" then
+          Items.Add(state, type.charge, 4000, drone.id, "cargo")
+        end
         local n = #state.droneIds
         local launched = Space.Launch(state, drone, ball.system, ball.x + 150 * math.cos(n * 2.4), ball.y + 60,
           ball.z + 150 * math.sin(n * 2.4))
@@ -183,11 +228,121 @@ function Drones.Apply(state: State.State, command: State.Command, events: { Even
       drone.target = 0
     end
   elseif kind == "EngageDrones" then
+    -- (a rock is for the mining drones, and a ship for those that fight:
+    -- the others carry on as they were)
+    local rock = Space.Object(state, command.target :: number) ~= nil
     for _, drone in Drones.Out(state, ship.id) do
-      drone.returning = false
-      drone.target = command.target :: number
+      local role = Kinds.byId[drone.type].role
+      if (rock and role == "mining") or (not rock and role == "combat") then
+        drone.returning = false
+        drone.target = command.target :: number
+      end
     end
   end
+end
+
+-- The rock a ship is cutting, or has locked: what its mining drones go
+-- for when no rock has been pointed out to them.
+local function working(state: State.State, owner: State.Ball): System.Object?
+  for _, running in owner.vitals.running do
+    local item = state.items[running.item]
+    local rock = if item and Modules.byId[item.type].miner then Space.Object(state, running.target) else nil
+    if rock and Mining.Left(state, rock) > 0 then
+      return rock
+    end
+  end
+  for _, lock in owner.vitals.locks do
+    local rock = Space.Object(state, lock.target)
+    if rock and rock.kind == "asteroid" and Mining.Left(state, rock) > 0 then
+      return rock
+    end
+  end
+  return nil
+end
+
+-- The ships of a drone's owner's side: for a repair drone to look over.
+local function side(state: State.State): { number }
+  local ids: { number } = { state.player.ship }
+  for _, id in state.fleetIds do
+    table.insert(ids, state.fleet[id].ship)
+  end
+  for _, id in state.droneIds do
+    table.insert(ids, id)
+  end
+  return ids
+end
+
+-- Keep station on the owner, with nothing locked.
+local function station(state: State.State, ball: State.Ball, owner: State.Ball, events: { Event })
+  if #ball.vitals.locks > 0 then
+    ball.vitals.locks, ball.vitals.running = {}, {}
+  end
+  if not (ball.mode == "orbit" and ball.target == owner.id) then
+    give(state, { kind = "Orbit", actor = ball.id, target = owner.id, range = 600 }, events)
+  end
+end
+
+-- A mining drone's tick: out to the rock and cutting, or back with a
+-- full hold.
+local function mine(state: State.State, drone: State.Drone, ball: State.Ball, owner: State.Ball, events: { Event })
+  local rock = Space.Object(state, drone.target)
+  if rock == nil or rock.kind ~= "asteroid" or rock.site ~= owner.grid or Mining.Left(state, rock) <= 0 then
+    rock = working(state, owner)
+    drone.target = if rock then rock.id else 0
+  end
+  local capacity = Items.ShipStats(state, ball.id).cargo
+  local used = Items.CargoUsed(state, ball.id)
+  if used > 0 and (used >= 0.7 * capacity or rock == nil) then
+    -- Back with it. (If the owner's hold is full it waits beside them.)
+    ball.vitals.locks, ball.vitals.running = {}, {}
+    if Space.Gap(ball :: any, owner :: any) < 400 then
+      local moved = unload(state, drone)
+      if moved > 0 then
+        table.insert(events, { kind = "DroneDelivered", owner = owner.id, drone = ball.id, units = moved })
+      end
+    elseif not (ball.mode == "approach" and ball.target == owner.id) then
+      give(state, { kind = "Approach", actor = ball.id, target = owner.id, range = 0 }, events)
+    end
+    return
+  elseif rock == nil then
+    station(state, ball, owner, events)
+    return
+  end
+  if not (ball.mode == "orbit" and ball.target == rock.id) then
+    ball.vitals.locks, ball.vitals.running = {}, {}
+    give(state, { kind = "Orbit", actor = ball.id, target = rock.id, range = 500 }, events)
+  end
+  local locked, targeted = false, false
+  for _, lock in ball.vitals.locks do
+    if lock.target == rock.id then
+      targeted, locked = true, lock.locked
+    end
+  end
+  if not targeted then
+    give(state, { kind = "LockTarget", actor = ball.id, target = rock.id }, events)
+  elseif locked then
+    for _, item in Items.Fitted(state, ball.id) do
+      give(state, { kind = "ActivateModule", actor = ball.id, item = item.id, target = rock.id }, events)
+    end
+  end
+end
+
+-- A repair drone's tick: to whoever of its side has lost most armour,
+-- and mending.
+local function repair(state: State.State, ball: State.Ball, owner: State.Ball, events: { Event })
+  local friends = side(state)
+  local worst = Mend.Hurt(state, ball, friends, "armor", math.huge)
+  if worst == nil then
+    Mend.Tend(state, ball, friends, events)
+    if #ball.vitals.running == 0 then
+      station(state, ball, owner, events)
+    end
+    return
+  end
+  if not (ball.mode == "orbit" and ball.target == worst.id) then
+    give(state, { kind = "Orbit", actor = ball.id, target = worst.id, range = 700 }, events)
+  end
+  Mend.Tend(state, ball, friends, events)
 end
 
 -- Once a tick: every drone does what it is for.
@@ -219,6 +374,10 @@ function Drones.Step(state: State.State, events: { Event })
           ball.vitals.locks, ball.vitals.running = {}, {}
           give(state, { kind = "Approach", actor = id, target = owner.id, range = 0 }, events)
         end
+      elseif Kinds.byId[drone.type].role == "mining" then
+        mine(state, drone, ball, owner, events)
+      elseif Kinds.byId[drone.type].role == "repair" then
+        repair(state, ball, owner, events)
       else
         local prey = state.balls[drone.target]
         if prey == nil or prey.system ~= ball.system or prey.grid ~= ball.grid then

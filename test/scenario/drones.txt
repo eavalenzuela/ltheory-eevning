@@ -2,18 +2,22 @@
 #
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/drones.txt
 #
-# Two light drones are given and put in the Courier's hold, and the
-# skill for them trained to two. A Courier controls one. At a belt it is
-# launched, and when the pirate comes it goes for it without being told,
-# beside the Courier's own guns. Called back, it is in the hold again.
+# Two light drones are given and put in the Courier's drone bay, which
+# they fill, and the skill for them trained to two. A Courier controls
+# one. At a belt it is launched, and when the pirate comes it goes for
+# it without being told, beside the Courier's own guns. Called back, it
+# is in the bay again.
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
 lua assert(GameDebug.Give('drone.light', 2))
 lua GameDebug.Train('drones', 2)
 frames 3
-until GameDebug.Press('ToHold:drone.light')
-until GameDebug.Hold('drone.light') == 2
+until GameDebug.Press('ToBay:drone.light')
+until select(2, GameDebug.Drones()) == 2
+frames 3
+lua assert(GameDebug.CanPress('FromBay:drone.light'), 'the bay should list what is in it')
+lua assert(GameDebug.Hold('drone.light') == 0, 'drones in the bay are not in the hold')
 
 until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()
@@ -27,7 +31,7 @@ frames 5
 # One goes out: the hull controls no more.
 until GameDebug.Press('Drones:launch')
 until GameDebug.Drones() == 1
-lua assert(select(2, GameDebug.Drones()) == 1, 'one drone should still be in the hold')
+lua assert(select(2, GameDebug.Drones()) == 1, 'one drone should still be in the bay')
 frames 3
 lua assert(not GameDebug.CanPress('Drones:launch'), 'a Courier controls one drone')
 
@@ -49,7 +53,7 @@ until GameDebug.Press('Drones:recall')
 lua GameDebug.TimeScale(4)
 until GameDebug.Drones() == 0
 lua GameDebug.TimeScale(1)
-lua assert(GameDebug.Hold('drone.light') == 2, 'a drone called back should be in the hold again')
+lua assert(select(2, GameDebug.Drones()) == 2, 'a drone called back should be in the bay again')
 
 echo drones scenario passed
 quit

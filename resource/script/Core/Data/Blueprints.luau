@@ -147,6 +147,11 @@ for _, module in Modules.list do
     blueprint.invented = true
   else
     add(module.id, module.name, MIX.module, module.basePrice, 1, 120 + module.basePrice // 100, moduleParts(module))
+    -- (what only a drone carries is built into the drone: nobody sells
+    -- the drawings for it apart)
+    if module.internal then
+      Blueprints.byProduct[module.id].invented = true
+    end
   end
 end
 for _, charge in Modules.charges do

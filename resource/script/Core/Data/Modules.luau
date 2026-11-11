@@ -104,6 +104,9 @@ export type ModuleType = {
   cloak: { reach: number }?,
   -- Skills a pilot needs to fit it. (Where absent, Data/Skills says.)
   requires: { { skill: string, level: number } }?,
+  -- What only a drone carries (Data/Drones): nobody sells it, finds it
+  -- or fits it to a ship.
+  internal: boolean?,
   -- 2 for a tech 2 module: the improved make of the module 'base',
   -- which nobody sells: it is invented and built (Assets/Industry).
   tech: number?,
@@ -321,6 +324,19 @@ local modules: { ModuleType } = {
     cpu = 18, powergrid = 8, volume = 5, basePrice = 40000, passive = {},
     hex = { kind = "armor", range = 8000, strength = 55, duration = 6, capacitor = 30 },
     requires = { { skill = "remote.repair", level = 1 } },
+  },
+
+  -- What a mining drone cuts with and a repair drone mends with: small
+  -- things, of no use on a ship.
+  {
+    id = "miner.drone", name = "Drone Mining Laser", slot = "high", hardpoint = "turret",
+    cpu = 5, powergrid = 1, volume = 1, basePrice = 4000, passive = {},
+    miner = { volume = 10, duration = 60, capacitor = 5, range = 2000 }, internal = true,
+  },
+  {
+    id = "remote.armor.drone", name = "Drone Armor Repairer", slot = "high", hardpoint = "",
+    cpu = 5, powergrid = 1, volume = 1, basePrice = 8000, passive = {},
+    hex = { kind = "armor", range = 3000, strength = 18, duration = 5, capacitor = 6 }, internal = true,
   },
 
   -- Speed, capacitor, cargo
@@ -566,7 +582,7 @@ end
 local REMOTE_RANGE = { 1, 1.6, 2.5 }
 for _, base in table.clone(modules) do
   local hex = base.hex
-  if hex and (hex.kind == "shield" or hex.kind == "armor") then
+  if hex and (hex.kind == "shield" or hex.kind == "armor") and not base.internal then
     for size = 2, 3 do
       table.insert(modules, {
         id = (string.gsub(base.id, "small", SIZE_NAME[size])), name = (string.gsub(base.name, "Small", SIZE_TITLE[size])),
@@ -640,7 +656,7 @@ end
 local TECH2 = { damage = 1.2, amount = 1.25, fitting = 1.15, price = 8 }
 for _, base in table.clone(modules) do
   local buffer = string.sub(base.id, 1, 15) == "shield.extender" or string.sub(base.id, 1, 11) == "armor.plate"
-  if base.weapon or base.repair or base.miner or buffer then
+  if (base.weapon or base.repair or base.miner or buffer) and not base.internal then
     local weapon, repair, miner = base.weapon, base.repair, base.miner
     local passive: { Modifier } = {}
     for _, m in base.passive do

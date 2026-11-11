@@ -99,6 +99,8 @@ local function loot(state: State.State, rng: Rng.Rng, wreck: number, rich: numbe
     local module = Modules.list[Rng.Int(rng, #Modules.list) + 1]
     if module.tech == 2 and module.base then
       module = Modules.byId[module.base]
+    elseif module.internal then
+      module = Modules.byId["miner.small"]
     end
     Items.Add(state, if Rng.Chance(rng, 0.15) then "blueprint." .. module.id else module.id, 1, wreck, "cargo")
   end

@@ -39,6 +39,10 @@ local function hurt(state: State.State, me: State.Ball, friends: { number }, lay
   return worst
 end
 
+-- (For whoever has to fly to the one that wants mending before it can
+-- be mended: a repair drone.)
+Mend.Hurt = hurt
+
 -- Every remote repairer a ship has goes on whoever of its friends wants
 -- it most, and comes off when they are whole. Returns the ships it is
 -- locked on for that (by id), which are not to be let go of with the
