@@ -45,7 +45,7 @@ local KEEP_RANGE = 10000
 
 local TAGS: { [string]: string } = {
   sun = "SUN", planet = "PLN", moon = "MON", belt = "BLT", asteroid = "AST",
-  station = "STA", gate = "GAT", ship = "SHP", wreck = "WRK", site = "SIT",
+  station = "STA", gate = "GAT", ship = "SHP", wreck = "WRK", site = "SIT", bookmark = "BKM",
 }
 
 -- What a site (Tactical/Sites) is called, by the variety of its place.
@@ -97,6 +97,10 @@ local function icon(kind: string): Icon
     glyphs = { Glyph_Circle(0, 0.5, 1, 1) }
   elseif kind == "wreck" then
     glyphs = { Glyph_Line(v(-1, -1), v(1, 1), 1, 1), Glyph_Line(v(-1, 1), v(1, -1), 1, 1) }
+  elseif kind == "bookmark" then
+    -- a pin: a diamond on a stalk
+    glyphs = { Glyph_Line(v(0, -1), v(0.7, -0.2), 1, 1), Glyph_Line(v(0.7, -0.2), v(0, 0.4), 1, 1),
+      Glyph_Line(v(0, 0.4), v(-0.7, -0.2), 1, 1), Glyph_Line(v(-0.7, -0.2), v(0, -1), 1, 1), Glyph_Line(v(0, 0.4), v(0, 1.2), 1, 1) }
   else
     glyphs = { Glyph_Ring(0, 1, 1, 1, 0) }
   end
@@ -217,6 +221,12 @@ local function drawOverview(session: Session.Session, entries: { Core.Entry }, x
   Im.Heading(`OVERVIEW  {#entries}`, x + 12, y + 8, 16, Im.DIM)
   -- (the ship's scanner, for what is on nobody's chart: it takes the
   -- place the colonies and assets windows take)
+  -- (and the marking of where the ship is, to warp back to: it is on
+  -- the overview from then on, in this system)
+  local mark: State.Command = { kind = "Bookmark", actor = 0 }
+  if Im.Button("Mark", x + width - 144, y + 5, 64, 22, (Session.CanDo(session, mark)), "Bookmark") then
+    Session.Do(session, mark)
+  end
   if Im.Button("Scan", x + width - 76, y + 5, 64, 22, true, "Scanner") then
     if Scanner.IsOpen() then
       Scanner.Close()
@@ -280,6 +290,9 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
   local entry: Core.Entry = selected
   Im.Heading(string.upper(entry.name), x + 12, y + 8, 16, Im.TEXT)
   local what = if entry.variety ~= "" and entry.kind ~= "ship" then `{entry.variety} {entry.kind}` else entry.kind
+  if entry.kind == "bookmark" then
+    what = "a place you marked"
+  end
   if entry.kind == "site" then
     what = SITES[entry.variety] or "site"
   end
@@ -314,6 +327,7 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     { label = "Warp to", kind = "WarpTo", range = 0 },
     { label = "Align", kind = "AlignTo" },
     if entry.kind == "gate" then { label = "Jump", kind = "Jump" }
+      elseif entry.kind == "bookmark" then { label = "Forget", kind = "ForgetBookmark" }
       elseif entry.kind == "moon" then { label = "Anchor tower", kind = "AnchorTower" }
       elseif entry.kind == "planet" then { label = "Colony", kind = "Colony" }
       else { label = "Dock", kind = "Dock" },

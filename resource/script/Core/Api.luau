@@ -66,7 +66,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 25
+Core.SAVE_VERSION = 26
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -239,6 +239,11 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       wing.hauled = wing.hauled or 0
     end
   end,
+  -- 26: a pilot can mark places in space. A save from before has none.
+  [25] = function(state: any)
+    state.bookmarks = state.bookmarks or {}
+    state.bookmarkIds = state.bookmarkIds or {}
+  end,
 }
 
 -- A new game: a galaxy, and the player's first ship docked at a station
@@ -277,6 +282,8 @@ function Core.New(options: Options): Game
     fleetIds = {},
     hired = {},
     hiredDay = 0,
+    bookmarks = {},
+    bookmarkIds = {},
     jobIds = {},
     wallet = 0,
     journal = {},
@@ -593,6 +600,16 @@ function Query.Overview(game: Game): { Entry }
       table.insert(entries, entry)
     end
   end
+  -- (the places the pilot has marked in this system: somewhere to warp to)
+  for _, id in state.bookmarkIds do
+    local mark = state.bookmarks[id]
+    if mark.system == me.system then
+      local entry: Entry = { id = id, kind = "bookmark", name = mark.name,
+        distance = math.max(0, math.sqrt((mark.x - me.x) ^ 2 + (mark.y - me.y) ^ 2 + (mark.z - me.z) ^ 2) - me.radius),
+        onGrid = false, variety = "", hostile = false, own = false }
+      table.insert(entries, entry)
+    end
+  end
   for _, id in state.wreckIds do
     local wreck = state.wrecks[id]
     if wreck.system == me.system and wreck.grid == me.grid and me.grid ~= 0 then
@@ -813,7 +830,18 @@ end
 
 -- A body by id (a ship in space or a described object), or nil.
 function Query.Body(game: Game, id: number): Space.Body?
-  return Space.Body(game.state, id)
+  -- (a place the pilot has marked counts, to whoever only wants its name
+  -- and where it is)
+  return Space.Body(game.state, id) or Space.Marked(game.state, id)
+end
+
+-- The places the pilot has marked, in the order they were.
+function Query.Bookmarks(game: Game): { State.Bookmark }
+  local found: { State.Bookmark } = {}
+  for _, id in game.state.bookmarkIds do
+    table.insert(found, game.state.bookmarks[id])
+  end
+  return found
 end
 
 -- A pilot's starbase, by the id of its station: how it stands. Nil if

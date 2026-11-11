@@ -124,6 +124,8 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "ShipAssigned" then
     local ship = session.game.state.ships[event.ship]
     Session.Say(session, if ship then `{event.name} flies the {ship.name} and goes where you go` else `{event.name} has no ship now`)
+  elseif kind == "Bookmarked" then
+    Session.Say(session, `Marked: {event.name}. It is on the overview, to warp back to`)
   elseif kind == "OreDelivered" then
     local body = Core.Query.Body(session.game, event.station)
     Session.Say(session, `{event.name} brought in {event.units} units of ore to {if body then body.name else "the station"}`)

@@ -251,6 +251,9 @@ export type Job = {
 -- taken aboard if the owner left.
 export type Drone = { ship: number, owner: number, type: string, target: number, returning: boolean, near: boolean }
 
+-- A place in space a pilot has marked, to warp back to (Tactical/Space).
+export type Bookmark = { id: number, name: string, system: number, x: number, y: number, z: number }
+
 -- A pilot hired to fly one of the player's ships beside their own
 -- (Tactical/Fleet). Every skill counts as 'skill' for a ship they fly.
 -- Their wages are paid up to the tick 'paid'. 'ship' is the ship they
@@ -397,6 +400,9 @@ export type State = {
   fleetIds: { number },
   hired: { string },
   hiredDay: number,
+  -- The places the pilot has marked, in the order they were.
+  bookmarks: { [number]: Bookmark },
+  bookmarkIds: { number },
   queue: { Command },     -- submitted, to be applied at the next tick
 }
 

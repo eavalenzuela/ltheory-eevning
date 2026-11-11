@@ -72,11 +72,29 @@ function Space.Body(state: State.State, id: number): Body?
   return Space.Object(state, id) :: any
 end
 
+-- A place the pilot has marked, as something to warp or align to: a
+-- point, with no size. (It is not a Body to anything else: nothing is
+-- there to approach, orbit or lock.)
+function Space.Marked(state: State.State, id: number): Body?
+  local mark = state.bookmarks[id]
+  if mark == nil then
+    return nil
+  end
+  return { id = mark.id, kind = "bookmark", name = mark.name, x = mark.x, y = mark.y, z = mark.z, radius = 0 }
+end
+
+-- How many places a pilot can have marked at once.
+Space.BOOKMARKS = 40
+
 -- The system a body is in.
 function Space.SystemOf(state: State.State, id: number): number
   local ball = state.balls[id]
   if ball then
     return ball.system
+  end
+  local mark = state.bookmarks[id]
+  if mark then
+    return mark.system
   end
   local wreck = state.wrecks[id]
   if wreck then
@@ -304,6 +322,8 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
   local kind = command.kind
   if kind == "Undock" then
     return ship.docked ~= 0, if ship.docked ~= 0 then nil else "not docked"
+  elseif kind == "ForgetBookmark" then
+    return state.bookmarks[command.target or 0] ~= nil, "no such place is marked"
   end
   local ball = state.balls[ship.id]
   if ball == nil then
@@ -314,6 +334,13 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
   end
   if kind == "Stop" then
     return true
+  elseif kind == "Bookmark" then
+    if ship.id ~= state.player.ship then
+      return false, "no such ship"
+    elseif #state.bookmarkIds >= Space.BOOKMARKS then
+      return false, `{Space.BOOKMARKS} places are marked already: forget one first`
+    end
+    return true
   elseif kind == "Goto" then
     local x, y, z = command.x or 0, command.y or 0, command.z or 0
     if x == 0 and y == 0 and z == 0 then
@@ -323,6 +350,10 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
   elseif kind == "Approach" or kind == "Orbit" or kind == "KeepAtRange" or kind == "AlignTo"
     or kind == "WarpTo" or kind == "Dock" or kind == "Jump" then
     local target = Space.Body(state, command.target or 0)
+    -- (a marked place can be warped to and aligned to, and nothing else)
+    if target == nil and (kind == "WarpTo" or kind == "AlignTo") then
+      target = Space.Marked(state, command.target or 0)
+    end
     if target == nil or target.id == ball.id then
       return false, "no such target"
     end
@@ -361,6 +392,28 @@ function Space.Apply(state: State.State, command: State.Command, events: { Event
   if kind == "Undock" then
     undock(state, ship, events)
     return
+  elseif kind == "ForgetBookmark" then
+    local id = command.target :: number
+    state.bookmarks[id] = nil
+    State.RemoveId(state.bookmarkIds, id)
+    table.insert(events, { kind = "BookmarkForgotten", bookmark = id })
+    return
+  elseif kind == "Bookmark" then
+    -- Where the ship is now, by a name given or made up ("Merear spot 3").
+    local here = state.balls[ship.id]
+    local name: string = command.what or ""
+    if name == "" then
+      local count = 1
+      for _, id in state.bookmarkIds do
+        count += if state.bookmarks[id].system == here.system then 1 else 0
+      end
+      name = `{state.galaxy.systems[here.system].name} spot {count}`
+    end
+    local mark: State.Bookmark = { id = State.NewId(state), name = name, system = here.system, x = here.x, y = here.y, z = here.z }
+    state.bookmarks[mark.id] = mark
+    table.insert(state.bookmarkIds, mark.id)
+    table.insert(events, { kind = "Bookmarked", bookmark = mark.id, name = mark.name })
+    return
   end
   local ball = state.balls[ship.id]
   -- A new order replaces whatever the ship was doing or meant to do.
@@ -375,7 +428,7 @@ function Space.Apply(state: State.State, command: State.Command, events: { Event
     ball.dx, ball.dy, ball.dz = unit(command.x or 0, command.y or 0, command.z or 0)
     return
   end
-  local target = Space.Body(state, command.target :: number) :: Body
+  local target = (Space.Body(state, command.target :: number) or Space.Marked(state, command.target :: number)) :: Body
   if kind == "Approach" then
     setMode(ball, "approach", target.id, range)
   elseif kind == "KeepAtRange" then
