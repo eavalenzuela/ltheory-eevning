@@ -433,6 +433,22 @@ function Market.Validate(state: State.State, command: State.Command): (boolean, 
   return false, `unknown command '{kind}'`
 end
 
+-- Sell so many of an item to a station's market, at once: the item
+-- goes, the wallet is paid what it fetched less the tax, and the trade
+-- is on the station's books. Returns what was paid. (The item is the
+-- pilot's own, wherever it is: in the hangar there, or in the hold of a
+-- ship of theirs docked there.)
+function Market.Sell(state: State.State, station: number, item: State.Item, quantity: number, events: { Event }): number
+  local type = item.type
+  local gross = Economy.Sell(Market.For(state, station), 1, Market.Index(type) :: number, quantity)
+  local net = math.floor(gross * (1 - Market.Tax(state, station)))
+  Items.Take(state, item, quantity)
+  Wallet.Pay(state, net, "market sale", events)
+  record(state, station, type, quantity, math.floor(gross))
+  table.insert(events, { kind = "Sold", type = type, quantity = quantity, revenue = net })
+  return net
+end
+
 local function removeOrder(state: State.State, order: State.Order)
   state.orders[order.id] = nil
   State.RemoveId(state.orderIds, order.id)
@@ -453,14 +469,7 @@ function Market.Apply(state: State.State, command: State.Command, events: { Even
 
   elseif kind == "SellNow" then
     local item = state.items[command.item :: number]
-    local type = item.type
-    local quantity = command.quantity or item.quantity
-    local gross = Economy.Sell(econ, 1, Market.Index(type) :: number, quantity)
-    local net = math.floor(gross * (1 - Market.Tax(state, station)))
-    Items.Take(state, item, quantity)
-    Wallet.Pay(state, net, "market sale", events)
-    record(state, station, type, quantity, math.floor(gross))
-    table.insert(events, { kind = "Sold", type = type, quantity = quantity, revenue = net })
+    Market.Sell(state, station, item, command.quantity or item.quantity, events)
 
   elseif kind == "PlaceOrder" then
     local price = command.price :: number

@@ -137,9 +137,10 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `Your capsule is destroyed, and your {if event.count == 1 then "implant" else `{event.count} implants`} with it`)
   elseif kind == "Bookmarked" then
     Session.Say(session, `Marked: {event.name}. It is on the overview, to warp back to`)
-  elseif kind == "OreDelivered" then
+  elseif kind == "OreDelivered" or kind == "HaulDelivered" then
     local body = Core.Query.Body(session.game, event.station)
-    Session.Say(session, `{event.name} brought in {event.units} units of ore to {if body then body.name else "the station"}`)
+    Session.Say(session, `{event.name} brought in {event.units} units{if kind == "OreDelivered" then " of ore" else ""} to `
+      .. `{if body then body.name else "the station"}` .. (if (event.revenue or 0) > 0 then `, sold for {event.revenue} credits` else ""))
   elseif kind == "PilotPromoted" then
     Session.Say(session, `{event.name} is a grade {event.skill} pilot now, and is paid as one`)
   elseif kind == "WingmanLost" then

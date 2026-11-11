@@ -65,6 +65,8 @@
 #               tried for from a plain one and two datacores
 #   game-hack   hacking (test/scenario/hack.txt): a data analyzer fitted, a
 #               sealed hold's lock given up, played and won, and the hold looted
+#   game-haul   a hired pilot set to haul (test/scenario/haul.txt): ore
+#               carried to another station and sold there, and more after
 #   game-dscan  the directional scanner (test/scenario/dscan.txt): all
 #               round, in a cone pointed at something, and at a short range
 #   game-pace   the game app must draw at least thirty frames a second just
@@ -199,6 +201,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/invent.txt
   step game-hack 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/hack.txt
+  step game-haul 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
+    --script test/scenario/haul.txt
   step game-dscan 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/dscan.txt
   step game-pace 0 timeout 200 bin/launch game --no-present --fixed-step 60 --timeout 150 \

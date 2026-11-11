@@ -34,11 +34,22 @@
 -- destroyed is lost with what was aboard, less the insurance. The
 -- pilot is not: they are back on the list, without a ship.
 --
+-- A pilot whose ship is docked can be set to haul: what there is of a
+-- kind (ore, minerals, what colonies make, components, or all of
+-- these) in the player's hangar at that station is carried, a hold at
+-- a time, to another station, in the system or systems away, and put
+-- in the player's hangar there. With nothing left to carry they wait
+-- where the goods were, and go again when there are more.
+--
+-- And a pilot can be told to sell what they bring in, mined or
+-- carried: it goes to the market of the station they bring it to, if
+-- that has one, at what the market gives, and into the hangar if not.
+--
 -- A pilot whose wage cannot be paid leaves, and the ship they flew is
 -- found at the player's home station.
 --
--- (The beginning of M7. Not yet: pilots who haul or patrol by standing
--- order, pilots who get better, loyalty, a ship's own drones.)
+-- (The beginning of M7. Not yet: pilots who patrol by standing order,
+-- a route of more than two stations, loyalty, a ship's own drones.)
 
 local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
@@ -46,6 +57,7 @@ local Digger = require("@lt/Core/Tactical/Digger")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Mend = require("@lt/Core/Tactical/Mend")
 local Items = require("@lt/Core/Assets/Items")
+local Market = require("@lt/Core/Assets/Market")
 local Modules = require("@lt/Core/Data/Modules")
 local Names = require("@lt/Core/Describe/Names")
 local Pirates = require("@lt/Core/Tactical/Pirates")
@@ -54,6 +66,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local Stations = require("@lt/Core/Assets/Stations")
 local System = require("@lt/Core/Describe/System")
 local Types = require("@lt/Core/Data/Types")
 local Vitals = require("@lt/Core/Tactical/Vitals")
@@ -123,6 +136,19 @@ function Fleet.Credit(state: State.State, system: number, grid: number, bounty: 
       learn(state, wing, points, events)
     end
   end
+end
+
+-- What a pilot set to haul can be told to carry: the things of one
+-- category, or of all of these.
+Fleet.CARGO = { "ore", "mineral", "planetary", "component", "all" }
+
+-- Whether a type is of a kind a hauler carries.
+function Fleet.Carries(kind: string, type: string): boolean
+  local category = Types.Info(type).category
+  if kind == "all" then
+    return category == "ore" or category == "mineral" or category == "planetary" or category == "component"
+  end
+  return category == kind and table.find(Fleet.CARGO, kind) ~= nil
 end
 
 -- How many pilots the player can command: their Leadership.
@@ -279,6 +305,34 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
     local what = command.what
     if what == "follow" or what == "stay" then
       return true
+    elseif what == "sell" or what == "keep" then
+      -- (what they bring in is sold, or kept: said to one pilot)
+      if wing == nil then
+        return false, "that is said to one pilot"
+      end
+      return true
+    elseif what == "haul" then
+      if wing == nil then
+        return false, "that is said to one pilot"
+      end
+      local theirs = state.ships[wing.ship]
+      if theirs == nil then
+        return false, `{wing.name} has no ship`
+      elseif theirs.docked == 0 then
+        return false, `{wing.name} has to be docked where the goods are`
+      elseif table.find(Fleet.CARGO, command.type or "") == nil then
+        return false, "no such cargo"
+      end
+      local to = Space.Object(state, command.target or 0)
+      local starbase = if to then state.starbases[to.id] else nil
+      if to == nil or to.kind ~= "station" or (starbase ~= nil and starbase.ready > state.tick) then
+        return false, "that is not a station to carry to"
+      elseif to.id == theirs.docked then
+        return false, "that is where the goods are"
+      elseif #Galaxy.Route(state.galaxy, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, to.id)) == 0 then
+        return false, "there is no way there"
+      end
+      return true
     elseif what == "mine" then
       local me = state.balls[ship.id]
       if me == nil then
@@ -337,7 +391,8 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     table.insert(state.hired, found.key)
     Wallet.Pay(state, -found.fee, "hiring", events)
     local wing: State.Wingman = { id = State.NewId(state), name = found.name, skill = found.skill, wage = found.wage,
-      paid = state.tick, ship = 0, order = "follow", target = 0, post = 0, base = 0, hauled = 0, experience = 0 }
+      paid = state.tick, ship = 0, order = "follow", target = 0, post = 0, base = 0, hauled = 0, experience = 0,
+      cargo = "", sell = false, earned = 0 }
     state.fleet[wing.id] = wing
     table.insert(state.fleetIds, wing.id)
     table.insert(events, { kind = "PilotHired", pilot = wing.id, name = wing.name })
@@ -364,6 +419,15 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
       each.post, each.base = me.grid, base.id
     end
     table.insert(events, { kind = "FleetOrdered", what = "mine", target = me.grid })
+  elseif kind == "FleetOrder" and (command.what == "sell" or command.what == "keep") then
+    wing.sell = command.what == "sell"
+    table.insert(events, { kind = "FleetOrdered", what = command.what, target = 0 })
+  elseif kind == "FleetOrder" and command.what == "haul" then
+    -- From the station their ship is docked at, to the one named.
+    wing.order, wing.target = "haul", 0
+    wing.post, wing.base = state.ships[wing.ship].docked, command.target :: number
+    wing.cargo = command.type :: string
+    table.insert(events, { kind = "FleetOrdered", what = "haul", target = wing.base })
   elseif kind == "FleetOrder" then
     for _, id in state.fleetIds do
       local each = state.fleet[id]
@@ -509,6 +573,96 @@ local function travel(state: State.State, me: State.Ball, system: number, events
   end
 end
 
+-- Unload what a docked ship holds of a kind at the station it is docked
+-- at: into the player's hangar there, or to the market, for a pilot who
+-- sells, if the station has one and trades in the thing. Returns the
+-- units unloaded, what selling made, and the volume of it all.
+local function unload(state: State.State, wing: State.Wingman, ship: State.Ship, kind: string, events: { Event }): (number, number, number)
+  local station = ship.docked
+  local sells = wing.sell and Stations.Has(state, station, "market")
+  local units, revenue, volume = 0, 0, 0
+  for _, item in Items.In(state, ship.id, "cargo") do
+    if Fleet.Carries(kind, item.type) then
+      units += item.quantity
+      volume += item.quantity * Types.Info(item.type).volume
+      if sells and Market.Index(item.type) then
+        revenue += Market.Sell(state, station, item, item.quantity, events)
+      else
+        Items.Add(state, item.type, item.quantity, station, "hangar")
+        Items.Take(state, item, item.quantity)
+      end
+    end
+  end
+  wing.hauled += units
+  wing.earned += revenue
+  return units, revenue, volume
+end
+
+-- Whether a ship has anything of a kind in its hold.
+local function laden(state: State.State, ship: number, kind: string): boolean
+  for _, item in Items.In(state, ship, "cargo") do
+    if Fleet.Carries(kind, item.type) then
+      return true
+    end
+  end
+  return false
+end
+
+-- What a pilot set to haul does: a hold of what there is to carry out
+-- of the hangar where the goods are, to the other station with it, and
+-- back for more; and with nothing to carry, they wait where the goods
+-- would be.
+local function carry(state: State.State, wing: State.Wingman, ship: State.Ship, events: { Event })
+  local from, to = Space.Object(state, wing.post), Space.Object(state, wing.base)
+  if from == nil or to == nil then
+    wing.order = "stay"
+    return
+  end
+  local me = state.balls[ship.id]
+  if me == nil then
+    if ship.docked == to.id then
+      local units, revenue, volume = unload(state, wing, ship, wing.cargo, events)
+      if units > 0 then
+        table.insert(events, { kind = "HaulDelivered", pilot = wing.id, name = wing.name, units = units, station = to.id, revenue = revenue })
+        -- (a point of experience for every hundred cubic metres brought)
+        learn(state, wing, volume // 100, events)
+      end
+    elseif ship.docked == from.id then
+      -- (the hangar is looked over now and then, not every second)
+      if not laden(state, ship.id, wing.cargo) and (state.tick + wing.id) % 5 == 0 then
+        local free = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
+        for _, item in Items.In(state, from.id, "hangar") do
+          if Fleet.Carries(wing.cargo, item.type) then
+            local each = Types.Info(item.type).volume
+            local take = if each > 0 then math.min(item.quantity, math.floor(free / each)) else item.quantity
+            if take > 0 then
+              Items.Add(state, item.type, take, ship.id, "cargo")
+              Items.Take(state, item, take)
+              free -= take * each
+            end
+          end
+        end
+      end
+      if not laden(state, ship.id, wing.cargo) then
+        return
+      end
+    end
+    give(state, { kind = "Undock", actor = ship.id }, events)
+    return
+  end
+  mend(state, me, false, events)
+  local goal = if laden(state, ship.id, wing.cargo) then to else from
+  if me.intent and me.intent.kind == "dock" and me.intent.target == goal.id then
+    return
+  end
+  local system = Space.SystemOf(state, goal.id)
+  if me.system ~= system then
+    travel(state, me, system, events)
+  else
+    give(state, { kind = "Dock", actor = ship.id, target = goal.id }, events)
+  end
+end
+
 -- What a pilot set to mine does: to the belt, a rock after another
 -- until the hold is full, in to the station with it, and out again.
 -- Somebody after the fleet at the belt sends them in early.
@@ -520,20 +674,13 @@ local function work(state: State.State, wing: State.Wingman, ship: State.Ship, e
   end
   local me = state.balls[ship.id]
   if me == nil then
-    -- Docked: what was mined goes into the hangar, and out again.
-    local units = 0
+    -- Docked: what was mined goes into the hangar (or is sold), and out again.
+    local units, revenue = 0, 0
     if ship.docked == base.id then
-      for _, item in Items.In(state, ship.id, "cargo") do
-        if Types.Info(item.type).category == "ore" then
-          units += item.quantity
-          Items.Add(state, item.type, item.quantity, base.id, "hangar")
-          Items.Take(state, item, item.quantity)
-        end
-      end
+      units, revenue = unload(state, wing, ship, "ore", events)
     end
     if units > 0 then
-      wing.hauled += units
-      table.insert(events, { kind = "OreDelivered", pilot = wing.id, name = wing.name, units = units, station = base.id })
+      table.insert(events, { kind = "OreDelivered", pilot = wing.id, name = wing.name, units = units, station = base.id, revenue = revenue })
       learn(state, wing, units // 50, events)
     end
     give(state, { kind = "Undock", actor = ship.id }, events)
@@ -575,6 +722,9 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
 
   if wing.order == "mine" then
     work(state, wing, ship, events)
+    return
+  elseif wing.order == "haul" then
+    carry(state, wing, ship, events)
     return
   elseif wing.order == "stay" then
     -- Dock at the nearest station, and wait.

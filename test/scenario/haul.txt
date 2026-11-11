@@ -1,0 +1,66 @@
+# A hired pilot set to haul, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/haul.txt
+#
+# Money, a hauler and two thousand units of ore are given, and a pilot
+# is hired and given the hauler. On the Crew tab they are told to sell
+# what they bring in, and set to haul the ore to the other trade hub of
+# the system (the place offered first: the nearest). The player sits
+# docked. The ore goes, is sold there, and the pilot comes back to wait
+# for more. More is given, and that goes too.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Peaceful(true)
+lua GameDebug.Grant(1000000)
+lua assert(GameDebug.Spare('industrial.hauler'), 'no hauler')
+lua assert(GameDebug.Give('ore.ferrite', 2000))
+lua assert(GameDebug.Give('mineral.iron', 50))
+frames 3
+until GameDebug.Press('Crew')
+until GameDebug.Tab() == 'Crew'
+until GameDebug.Press('Hire:1')
+until GameDebug.Fleet() == 1
+frames 3
+lua assert(not GameDebug.CanPress('Haul:go:1'), 'a pilot with no ship hauls nothing')
+until GameDebug.Press('Give:1:1')
+until select(3, GameDebug.Fleet()) == 1
+frames 3
+
+# Told to sell what they bring in.
+lua assert(not select(6, GameDebug.Crew(1)), 'a pilot keeps what they bring in until told to sell it')
+until GameDebug.Press('Sells:1')
+until select(6, GameDebug.Crew(1))
+
+# Where to: the button goes round the places there are (two here), and
+# back to the first, which is the nearest and has a market.
+until GameDebug.Press('Haul:to:1')
+frames 3
+until GameDebug.Press('Haul:to:1')
+frames 3
+
+# Set to haul ore: out they go, with the ore and not the minerals.
+lua _G.before = GameDebug.Wallet()
+until GameDebug.Press('Haul:go:1')
+until GameDebug.Crew(1) == 'carrying'
+lua assert(GameDebug.Hangar('ore.ferrite') == 0, 'the ore should have gone into the hauler')
+lua assert(GameDebug.Hangar('mineral.iron') == 50, 'minerals are not ore')
+frames 3
+lua assert(GameDebug.CanPress('Recall:1'), 'a pilot out hauling can be called back')
+
+# Sold at the other station, and back to wait for more.
+lua GameDebug.TimeScale(16)
+until select(2, GameDebug.Crew(1)) == 2000
+lua assert(select(5, GameDebug.Crew(1)) > 0, 'the ore should have been sold')
+lua assert(GameDebug.Wallet() == _G.before + select(5, GameDebug.Crew(1)), 'what it sold for should be in the wallet')
+until GameDebug.Crew(1) == 'waiting for cargo'
+lua assert(select(3, GameDebug.Fleet()) == 1, 'the hauler should be docked again')
+
+# More ore turns up, and that goes too.
+lua assert(GameDebug.Give('ore.ferrite', 300))
+until select(2, GameDebug.Crew(1)) == 2300
+lua GameDebug.TimeScale(1)
+lua print('haul: sold for', select(5, GameDebug.Crew(1)))
+
+echo haul scenario passed
+quit

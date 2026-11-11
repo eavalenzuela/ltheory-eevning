@@ -279,11 +279,17 @@ export type Bookmark = { id: number, name: string, system: number, x: number, y:
 -- the station 'base' ('hauled' is the units brought in so far); and
 -- 'target' is what they have been pointed at. 'experience' is what
 -- they have learned toward their next grade.
+-- One set to "haul" carries what is of the kind 'cargo' in the pilot's
+-- hangar at the station 'post' to the station 'base', a hold at a time
+-- ('hauled' counts those units too). One who 'sell's sells what they
+-- bring in, mined or carried, where the station has a market, and
+-- 'earned' is what that has made.
 export type Wingman = {
   id: number, name: string, skill: number, wage: number, paid: number,
   ship: number, order: string, target: number,
   post: number, base: number, hauled: number,
   experience: number,
+  cargo: string, sell: boolean, earned: number,
 }
 
 -- A place that is on nobody's chart (Tactical/Sites): 'id' is the place

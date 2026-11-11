@@ -10,6 +10,7 @@ local Blueprints = require("@lt/Core/Data/Blueprints")
 local Catalog = require("@lt/Core/Data/Catalog")
 local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
+local Fleet = require("@lt/Core/Tactical/Fleet")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
 local Industry = require("@lt/Core/Assets/Industry")
@@ -1126,6 +1127,12 @@ end
 -- ---------------------------------------------------------------------
 -- Crew: pilots to hire, and the pilots hired (Core/Tactical/Fleet)
 
+-- What a pilot docked here would be set to carry, and where to: which
+-- of the kinds, and which of the places, by the pilot's id.
+local haulWhat: { [number]: number } = {}
+local haulTo: { [number]: number } = {}
+local CARGO: { [string]: string } = { ore = "ore", mineral = "minerals", planetary = "planetary", component = "components", all = "all goods" }
+
 local function drawCrew(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
   local station = player.docked
   local left, right = x + 16, x + 400
@@ -1158,8 +1165,8 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
   for index, text in { "A hired pilot flies a ship of yours and goes where you go:", "out when you undock, to warp and through gates after you,",
     "into a fight beside you. Every skill counts as their grade.", "Grade 1 flies frigates and haulers, 2 destroyers and barges,",
     "3 cruisers, 4 battleships. You command one for each level", "of Leadership. A ship lost is insured; its pilot is not lost.",
-    "One with a mining laser can be set to mine a belt (Mine here,", "in space): the ore is brought to the nearest station.",
-    "They learn from the pirates destroyed where they fly and", "the ore they bring in, and go up a grade, to 5 at most." } do
+    "One with a mining laser can be set to mine a belt (Mine here,", "in space); one docked here to haul what is in your hangar to",
+    "another station; and any to sell what they bring in. They", "learn by all of it, and go up a grade, to 5 at most." } do
     Im.Text(text, left, line + 6 + index * 17, 12, Im.DIM)
   end
 
@@ -1185,36 +1192,85 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
     Im.Text(if row.needed > 0 then `grade {row.skill}  {row.experience} / {row.needed}` else `grade {row.skill}`, right + 210, line + 1,
       13, Im.ACCENT)
     Im.TextRight(`{Format.Credits(row.wage)} a day`, right + 520, line + 1, 13, Im.DIM)
+    local reason: string? = nil
+    local note = ""
+    local here = false
     if row.ship ~= 0 then
       ItemIcon.Draw(row.hull, right, line + 20, 18)
       local ship = game.state.ships[row.ship]
-      local where = if ship and ship.docked == station then "docked here" else row.where
+      here = ship ~= nil and ship.docked == station
+      local where = if here then "docked here" else row.where
       if row.order == "mine" then
         where = `{row.doing}: {row.hauled} units of ore brought in`
+      elseif row.order == "haul" then
+        where = row.doing
+        note = `Hauling {CARGO[row.cargo] or row.cargo} to {row.to}: {row.hauled} units`
       elseif row.order == "stay" then
         where ..= ", told to stay"
+      end
+      if row.earned > 0 then
+        note = if note ~= "" then `{note}, sold for {Format.Credits(row.earned)}` else `What they brought in has sold for {Format.Credits(row.earned)}`
       end
       Im.Text(shorten(`{row.shipName} ({Ships.byId[row.hull].name}), {where}`, 58), right + 24, line + 22, 12, Im.DIM)
     else
       Im.Text("No ship: give them one of yours that is docked here.", right, line + 22, 12, Im.WARN)
     end
-    -- (the ships here they could have: the first three)
-    local bx = right
-    local reason: string? = nil
-    for at, ship in free do
-      if at > 3 then
-        break
+    if row.ship == 0 then
+      -- (the ships here they could have: the first three)
+      local bx = right
+      for at, ship in free do
+        if at > 3 then
+          break
+        end
+        local give: State.Command = { kind = "AssignShip", actor = 0, pilot = row.id, target = ship.id }
+        local can, whyNot = Session.CanDo(session, give)
+        if Im.Button(shorten(`Give {ship.name}`, 16), bx, line + 42, 124, 24, can, `Give:{index}:{at}`) then
+          Session.Do(session, give)
+        end
+        reason = reason or (if can then nil else whyNot)
+        bx += 128
       end
-      local give: State.Command = { kind = "AssignShip", actor = 0, pilot = row.id, target = ship.id }
-      local can, whyNot = Session.CanDo(session, give)
-      if Im.Button(shorten(`Give {ship.name}`, 16), bx, line + 42, 124, 24, can, `Give:{index}:{at}`) then
-        Session.Do(session, give)
+      if #free == 0 then
+        Im.Text("No ship of yours is free here (Ships tab).", right, line + 46, 12, Im.DIM)
       end
-      reason = reason or (if can then nil else whyNot)
-      bx += 128
+    elseif here then
+      -- Docked here: what in the hangar they are to carry, and where to.
+      local targets = Core.Query.HaulTargets(game, row.id, if session.destination ~= 0 then session.destination else nil)
+      local what = math.clamp(haulWhat[row.id] or 1, 1, #Fleet.CARGO)
+      local to = math.clamp(haulTo[row.id] or 1, 1, math.max(1, #targets))
+      local kind = Fleet.CARGO[what]
+      if Im.Button(`Carry {CARGO[kind]}`, right, line + 42, 112, 24, true, `Haul:what:{index}`) then
+        haulWhat[row.id] = what % #Fleet.CARGO + 1
+      end
+      local target = targets[to]
+      if Im.Button(if target then shorten(`to {target.name}`, 24) else "nowhere to carry to", right + 116, line + 42, 172, 24, #targets > 1,
+        `Haul:to:{index}`) then
+        haulTo[row.id] = to % #targets + 1
+      end
+      local haul: State.Command = { kind = "FleetOrder", actor = 0, what = "haul", pilot = row.id, target = if target then target.id else 0,
+        type = kind }
+      local can, whyNot = Session.CanDo(session, haul)
+      if Im.Button("Haul", right + 292, line + 42, 48, 24, can, `Haul:go:{index}`) then
+        Session.Do(session, haul)
+      end
+      reason = if can then nil else whyNot
+      if target and row.order ~= "haul" then
+        note = `{target.name}: ` .. (if target.jumps == 0 then "in this system" elseif target.jumps == 1 then `1 jump, in {target.system}`
+          else `{target.jumps} jumps, in {target.system}`) .. (if target.market then ", has a market" else ", no market")
+      end
+    else
+      -- Out flying: called back, they come to where you are.
+      local recall: State.Command = { kind = "FleetOrder", actor = 0, what = "follow", pilot = row.id }
+      if Im.Button("Recall", right, line + 42, 90, 24, row.order ~= "follow" and (Session.CanDo(session, recall)), `Recall:{index}`) then
+        Session.Do(session, recall)
+      end
     end
-    if #free == 0 and row.ship == 0 then
-      Im.Text("No ship of yours is free here (Ships tab).", right, line + 46, 12, Im.DIM)
+    if row.ship ~= 0 then
+      -- (what they bring in, mined or carried, is sold where there is a market)
+      local sell: State.Command = { kind = "FleetOrder", actor = 0, what = if row.sells then "keep" else "sell", pilot = row.id }
+      if Im.Toggle("Sell", right + 344, line + 42, 40, 24, row.sells, `Sells:{index}`) then
+        Session.Do(session, sell)
+      end
     end
     local off: State.Command = { kind = "AssignShip", actor = 0, pilot = row.id, target = 0 }
     if row.ship ~= 0 and Im.Button("Take off", right + 388, line + 42, 64, 24, (Session.CanDo(session, off)), `TakeOff:{index}`) then
@@ -1226,6 +1282,8 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
     end
     if reason then
       Im.Text(shorten(reason, 70), right, line + 69, 12, Im.WARN)
+    elseif note ~= "" then
+      Im.Text(shorten(note, 84), right, line + 69, 12, Im.DIM)
     end
     line += 90
   end

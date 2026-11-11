@@ -71,7 +71,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 35
+Core.SAVE_VERSION = 36
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -288,6 +288,17 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       site.depth = site.depth or 0
       if site.led == nil then
         site.led = false
+      end
+    end
+  end,
+  -- 36: a hired pilot can be set to haul, and to sell what they bring
+  -- in. The pilots of a save from before carry nothing and sell nothing.
+  [35] = function(state: any)
+    for _, wing in state.fleet do
+      wing.cargo = wing.cargo or ""
+      wing.earned = wing.earned or 0
+      if wing.sell == nil then
+        wing.sell = false
       end
     end
   end,
@@ -1098,10 +1109,17 @@ export type FleetRow = {
   id: number, name: string, skill: number, wage: number, order: string, target: number,
   ship: number, shipName: string, hull: string,   -- 0 and "" for a pilot with no ship
   where: string,      -- "no ship", "docked at ...", "with you", or the system it is in
-  -- "no ship", "following", "fighting", "waiting", or for a pilot set
-  -- to mine: "mining", "taking ore in", "unloading", "going to the belt"
+  -- "no ship", "following", "fighting", "waiting"; for a pilot set to
+  -- mine: "mining", "taking ore in", "unloading", "going to the belt";
+  -- and for one set to haul: "loading", "waiting for cargo", "carrying",
+  -- "unloading", "going back for more"
   doing: string,
-  hauled: number,     -- units of ore a pilot set to mine has brought in
+  hauled: number,     -- units a pilot set to mine or to haul has brought in
+  cargo: string,      -- for one set to haul: what kind they carry,
+  from: string,       -- the name of the station it is carried from,
+  to: string,         -- and of the one it is carried to
+  sells: boolean,     -- they sell what they bring in,
+  earned: number,     -- and this is what that has made
   experience: number, -- what they have learned toward the next grade,
   needed: number,     -- and what that takes (0 for one who is as good as they get)
   near: boolean,      -- on the pilot's grid
@@ -1119,6 +1137,7 @@ function Query.Fleet(game: Game): { FleetRow }
       id = wing.id, name = wing.name, skill = wing.skill, wage = wing.wage, order = wing.order, target = wing.target,
       ship = 0, shipName = "", hull = "", where = "no ship", near = false, distance = 0, shield = 1, armor = 1, structure = 1,
       doing = "no ship", hauled = wing.hauled, experience = wing.experience,
+      cargo = wing.cargo, from = "", to = "", sells = wing.sell, earned = wing.earned,
       needed = if wing.skill >= Fleet.BEST then 0 else Fleet.Needed(wing.skill),
     }
     if ship then
@@ -1140,6 +1159,16 @@ function Query.Fleet(game: Game): { FleetRow }
       if wing.order == "mine" then
         row.doing = if ball == nil then "unloading" elseif ball.intent and ball.intent.kind == "dock" then "taking ore in"
           elseif ball.grid == wing.post then "mining" else "going to the belt"
+      elseif wing.order == "haul" then
+        local from, to = Space.Object(state, wing.post), Space.Object(state, wing.base)
+        row.from, row.to = if from then from.name else "?", if to then to.name else "?"
+        local laden = false
+        for _, item in Items.In(state, ship.id, "cargo") do
+          laden = laden or Fleet.Carries(wing.cargo, item.type)
+        end
+        row.doing = if ball then (if laden then "carrying" else "going back for more")
+          elseif ship.docked == wing.base then "unloading"
+          elseif laden then "loading" else "waiting for cargo"
       elseif wing.order == "stay" then
         row.doing = "waiting"
       else
@@ -1149,6 +1178,76 @@ function Query.Fleet(game: Game): { FleetRow }
     table.insert(rows, row)
   end
   return rows
+end
+
+-- Where a hired pilot whose ship is docked could be set to haul to:
+-- the pilot's home station, the other stations of the system the ship
+-- is in, the player's own starbases, and the stations of one more
+-- system if one is named (where the map's destination is). Each with
+-- its name, its system's, how many jumps off it is, and whether it has
+-- a market to sell at. Home first, then the nearest: by jumps, and in
+-- the ship's own system by how far from where it is docked.
+export type HaulTarget = { id: number, name: string, system: string, jumps: number, market: boolean }
+function Query.HaulTargets(game: Game, pilot: number, also: number?): { HaulTarget }
+  local state = game.state
+  local wing = state.fleet[pilot]
+  local ship = if wing then state.ships[wing.ship] else nil
+  local found: { HaulTarget } = {}
+  if ship == nil or ship.docked == 0 then
+    return found
+  end
+  local here = Space.SystemOf(state, ship.docked)
+  local origin = Space.Object(state, ship.docked)
+  local seen: { [number]: boolean } = { [ship.docked] = true }
+  local far: { [number]: number } = {}
+  local function add(id: number)
+    local object = Space.Object(state, id)
+    local starbase = state.starbases[id]
+    if object == nil or object.kind ~= "station" or seen[id] or (starbase ~= nil and starbase.ready > state.tick) then
+      return
+    end
+    seen[id] = true
+    local system = Space.SystemOf(state, id)
+    local route = Galaxy.Route(state.galaxy, here, system)
+    if #route > 0 then
+      far[id] = if system == here and origin then Space.Distance(origin :: any, object :: any) else 0
+      table.insert(found, { id = id, name = object.name, system = state.galaxy.systems[system].name, jumps = #route - 1,
+        market = Stations.Has(state, id, "market") })
+    end
+  end
+  add(state.player.home)
+  local rest = #found + 1
+  for _, system in { here, also or here } do
+    for _, object in Space.Describe(state, system).objects do
+      if object.kind == "station" then
+        add(object.id)
+      end
+    end
+  end
+  for _, id in state.starbaseIds do
+    add(id)
+  end
+  -- (home stays first: the others by how far, then as they were found)
+  local order: { [number]: number } = {}
+  for at, target in found do
+    order[target.id] = at
+  end
+  local tail: { HaulTarget } = {}
+  for at = rest, #found do
+    table.insert(tail, found[at])
+  end
+  table.sort(tail, function(a: HaulTarget, b: HaulTarget): boolean
+    if a.jumps ~= b.jumps then
+      return a.jumps < b.jumps
+    elseif far[a.id] ~= far[b.id] then
+      return far[a.id] < far[b.id]
+    end
+    return order[a.id] < order[b.id]
+  end)
+  for at = rest, #found do
+    found[at] = tail[at - rest + 1]
+  end
+  return found
 end
 
 -- Who is looking for work at a station today, and how many pilots the

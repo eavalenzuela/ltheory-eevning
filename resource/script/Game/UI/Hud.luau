@@ -812,7 +812,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             local here = ship ~= nil and ship.docked ~= 0 and ship.docked == player.docked
             local where = if here then "docked here" else row.where
             -- (one set to mine is where they should be, wherever that is)
-            if row.order == "mine" then
+            if row.order == "mine" or row.order == "haul" then
               where = `{row.doing}, {row.hauled} units in`
             end
             Im.TextRight(if #where > 34 then string.sub(where, 1, 32) .. ".." else where, left + 456, ry, 12,
