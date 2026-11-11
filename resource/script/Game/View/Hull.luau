@@ -881,8 +881,11 @@ end
 --
 -- So no two of their hulls are laid out alike or painted alike: a
 -- forked gunboat, a ship of two hulls side by side, a long hull in
--- lengths, a tall ship with jaws and a citadel, a flat bed of
--- containers with its house at the stern. What they share is heavy
+-- lengths, a ship of three hulls with a citadel on the middle one, two
+-- slim hulls with a load of containers slung between them. (Of the
+-- first five drawn the owner liked the ship of two hulls best by far,
+-- and had the battleship and the hauler drawn again as ships of
+-- several hulls.) What they share is heavy
 -- plating in plain boxes, a red mark and a gold one on every hull, and
 -- aerials wherever there is room for one. (All v0s.)
 
@@ -1072,91 +1075,119 @@ local function aurochs(b: Builder)
   aerial(b, v(0.12, -0.31, -1.10), 0.34, v(0.15, -1, -0.2))
 end
 
--- The Mammoth, a battleship, from people who build high: a slab of a
--- hull taller than it is wide, its bow open in two jaws with a lit
--- throat between them, armour hung along each flank in three great
--- skirts, a citadel rising in three stages from its back, a keel under
--- it, and six engines in the stern, two wide and three high.
+-- The Mammoth, a battleship, from a yard that builds in threes: a great
+-- hull in the middle, tall, with a citadel rising in three stages from
+-- its back, and a lesser hull out on each side of it, lower and set
+-- back, each joined to it by a wing of deck and two girders. Ten
+-- engines: four in the middle hull and two, one over the other, in
+-- each of the others. (Redrawn as a ship of several hulls at the
+-- project owner's word, who liked the Boar best of the first five: it
+-- was one slab of a hull with jaws for a bow.)
 local function mammoth(b: Builder)
-  block(b, PLATING, v(0, 0, -0.50), v(0.52, 0.46, 1.70), nil, 0.08)
-  -- the jaws
-  block(b, PLATING, v(0, 0.27, 1.90), v(0.44, 0.17, 0.75), nil, 0.10)
-  block(b, PLATING, v(0, 0.30, 2.86), v(0.30, 0.11, 0.30), nil, 0.16)
-  block(b, TRIM, v(0, 0.30, 3.165), v(0.26, 0.085, 0.012), nil, 0.16)
-  block(b, PLATING, v(0, -0.29, 1.75), v(0.40, 0.15, 0.60), nil, 0.10)
-  block(b, PLATING, v(0, -0.31, 2.52), v(0.26, 0.10, 0.22), nil, 0.16)
-  block(b, FRAME, v(0, 0, 1.45), v(0.34, 0.13, 0.28), nil, 0.1)
-  block(b, GLOW, v(0, 0, 1.74), v(0.22, 0.06, 0.012), nil, 0.2)
-  for _, side in { -1, 1 } do
-    for index, z in { -1.55, -0.45, 0.62 } do
-      block(b, PLATING, v(side * 0.57, -0.08 + 0.03 * (index % 2), z), v(0.05, 0.36, 0.46), nil, 0.1)
-    end
-    block(b, TRIM, v(side * 0.622, -0.05, -0.45), v(0.004, 0.22, 0.22), nil, 0.1)
-    beam(b, PATCH, v(side * 0.60, 0.33, -2.02), v(side * 0.60, 0.33, 1.10), 0.022, 0.2)
-    beam(b, FRAME, v(side * 0.58, -0.47, -2.02), v(side * 0.58, -0.47, 1.10), 0.03, 0.2)
-    ports(b, v(side * 0.445, 0.33, 1.30), v(side * 0.445, 0.33, 2.55), 8, 0.016)
-    ports(b, v(side * 0.305, 0.66, -1.20), v(side * 0.305, 0.66, -0.30), 6, 0.016)
-    ports(b, v(side * 0.205, 0.95, -1.12), v(side * 0.205, 0.95, -0.58), 4, 0.014)
-    for _, level in { -1, 0, 1 } do
-      burner(b, v(side * 0.24, level * 0.28, -2.36), 0.20, 0.17, 0.11)
-    end
-    aerial(b, v(side * 0.22, 0.44, 2.62), 0.72, v(side * 0.2, 0.6, 1))
-    aerial(b, v(side * 0.40, 0.44, 1.50), 0.50, v(side * 0.3, 1, 0.2))
+  -- the middle hull, its bow stepped down twice to a red nose
+  block(b, PLATING, v(0, 0, 0.10), v(0.34, 0.40, 2.30), nil, 0.08)
+  block(b, PLATING, v(0, 0.03, 2.74), v(0.26, 0.30, 0.36), nil, 0.14)
+  block(b, PLATING, v(0, 0.05, 3.24), v(0.17, 0.20, 0.17), nil, 0.2)
+  block(b, TRIM, v(0, 0.05, 3.42), v(0.14, 0.165, 0.012), nil, 0.2)
+  block(b, PATCH, v(0, 0, 1.60), v(0.345, 0.405, 0.05), nil, 0.08)
+  for _, z in { -1.45, -0.20, 0.85 } do
+    block(b, FRAME, v(0, 0, z), v(0.35, 0.41, 0.025), nil, 0.1)
   end
-  block(b, TRIM, v(0, 0, -2.12), v(0.53, 0.47, 0.035), nil, 0.08)
+  block(b, TRIM, v(0, 0, -2.10), v(0.348, 0.408, 0.035), nil, 0.08)
+  for _, side in { -1, 1 } do
+    for _, level in { -1, 1 } do
+      burner(b, v(side * 0.165, level * 0.195, -2.40), 0.22, 0.145, 0.165)
+    end
+    ports(b, v(side * 0.343, 0.22, 1.75), v(side * 0.343, 0.22, 2.35), 5, 0.016)
+    ports(b, v(side * 0.343, 0.22, -1.25), v(side * 0.343, 0.22, -0.35), 7, 0.016)
+    ports(b, v(side * 0.263, 0.57, -1.00), v(side * 0.263, 0.57, -0.10), 6, 0.016)
+    ports(b, v(side * 0.183, 0.86, -0.92), v(side * 0.183, 0.86, -0.38), 4, 0.014)
+
+    -- an outer hull
+    local x = side * 0.92
+    block(b, PLATING, v(x, -0.12, -0.60), v(0.20, 0.24, 1.55), nil, 0.10)
+    block(b, PLATING, v(x, -0.10, 1.18), v(0.15, 0.17, 0.26), nil, 0.16)
+    block(b, TRIM, v(x, -0.10, 1.45), v(0.115, 0.125, 0.012), nil, 0.16)
+    block(b, PATCH, v(x, -0.12, 0.40), v(0.204, 0.244, 0.04), nil, 0.1)
+    for _, z in { -1.50, -0.45 } do
+      block(b, FRAME, v(x, -0.12, z), v(0.208, 0.248, 0.022), nil, 0.1)
+    end
+    block(b, PLATING, v(x + side * 0.17, -0.16, -0.80), v(0.07, 0.15, 0.70), nil, 0.12)
+    ports(b, v(x + side * 0.203, 0.02, 0.00), v(x + side * 0.203, 0.02, 0.95), 7, 0.015)
+    burner(b, v(x, 0.00, -2.31), 0.19, 0.15, 0.10)
+    burner(b, v(x, -0.24, -2.31), 0.19, 0.15, 0.10)
+    -- what joins it to the middle hull
+    truss(b, v(side * 0.34, -0.10, 0.60), v(side * 0.72, -0.10, 0.60), 0.24, 3)
+    truss(b, v(side * 0.34, -0.10, -1.75), v(side * 0.72, -0.10, -1.75), 0.24, 3)
+    block(b, PLATING, v(side * 0.53, -0.14, -0.55), v(0.20, 0.045, 0.85), nil, 0.08)
+    aerial(b, v(x, 0.07, 1.30), 0.60, v(side * 0.25, 0.5, 1))
+    aerial(b, v(x + side * 0.10, 0.12, -0.30), 0.55, v(side * 0.35, 1, 0))
+    aerial(b, v(x + side * 0.10, 0.12, -1.60), 0.42, v(side * 0.3, 1, -0.2))
+    aerial(b, v(x, -0.36, 0.20), 0.40, v(side * 0.2, -1, 0.2))
+    aerial(b, v(side * 0.20, 0.40, 2.20), 0.70, v(side * 0.2, 1, 0.4))
+  end
   -- the citadel, the bridge at the top of it under a gold roof
-  block(b, PLATING, v(0, 0.62, -0.75), v(0.30, 0.17, 0.55), nil, 0.10)
-  block(b, PLATING, v(0, 0.92, -0.85), v(0.20, 0.14, 0.34), nil, 0.12)
-  block(b, PLATING, v(0, 1.14, -0.90), v(0.12, 0.09, 0.20), nil, 0.16)
-  block(b, GLOW, v(0, 1.15, -0.695), v(0.09, 0.02, 0.008), nil, 0.3)
-  block(b, PATCH, v(0, 1.235, -0.90), v(0.125, 0.008, 0.205), nil, 0.16)
-  aerials(b, v(-0.10, 1.24, -1.06), v(0.10, 1.24, -0.78), 6, 0.95)
-  aerials(b, v(-0.26, 0.79, -1.24), v(0.26, 0.79, -1.24), 4, 0.60)
-  -- the keel
-  block(b, PLATING, v(0, -0.60, -0.60), v(0.10, 0.15, 0.80), nil, 0.12)
-  aerial(b, v(0, -0.75, -0.15), 0.62, v(0, -1, 0.2))
-  aerial(b, v(0, -0.75, -1.15), 0.46, v(0, -1, -0.15))
+  block(b, PLATING, v(0, 0.56, -0.55), v(0.26, 0.16, 0.55), nil, 0.10)
+  block(b, PLATING, v(0, 0.85, -0.65), v(0.18, 0.13, 0.34), nil, 0.12)
+  block(b, PLATING, v(0, 1.06, -0.70), v(0.11, 0.085, 0.20), nil, 0.16)
+  block(b, GLOW, v(0, 1.07, -0.495), v(0.085, 0.02, 0.008), nil, 0.3)
+  block(b, PATCH, v(0, 1.15, -0.70), v(0.115, 0.008, 0.205), nil, 0.16)
+  aerials(b, v(-0.09, 1.155, -0.86), v(0.09, 1.155, -0.58), 6, 0.95)
+  aerials(b, v(-0.22, 0.72, -1.04), v(0.22, 0.72, -1.04), 4, 0.60)
+  aerial(b, v(0, 0.21, 3.30), 0.80, v(0, 0.45, 1))
+  aerial(b, v(0, -0.40, 0.60), 0.62, v(0, -1, 0.2))
+  aerial(b, v(0, -0.40, -1.20), 0.46, v(0, -1, -0.15))
 end
 
--- The Ox, a hauler, from people who move boxes: a long flat bed with
--- containers clamped on it above and below, two abreast, nobody's two
--- alike; a blunt bow; and the house at the stern, tall and narrow, with
--- the bridge on top of it looking out over the load.
+-- The Ox, a hauler, from people who move boxes: two slim hulls set
+-- well apart, with the load slung between them on beams, three boxes
+-- abreast above and below, nobody's two alike; and the house at the
+-- stern on a span from one hull to the other, tall and narrow, with
+-- the bridge on top of it looking out over the load. (Redrawn as a
+-- ship of two hulls at the project owner's word: it was one flat bed.)
 local OX_BOXES = { PLATING, PLATING, TRIM, PLATING, PATCH, PLATING, PLATING, PLATING, TRIM, PLATING }
 local function ox(b: Builder)
-  block(b, PLATING, v(0, 0, 0.10), v(0.20, 0.05, 1.15), nil, 0.08)
+  for _, side in { -1, 1 } do
+    local x = side * 0.43
+    block(b, PLATING, v(x, 0, 0.00), v(0.09, 0.13, 1.30), nil, 0.10)
+    block(b, PLATING, v(x, 0.01, 1.43), v(0.065, 0.09, 0.14), nil, 0.2)
+    block(b, TRIM, v(x, 0.01, 1.58), v(0.05, 0.068, 0.012), nil, 0.2)
+    block(b, PATCH, v(x, 0, 1.06), v(0.094, 0.134, 0.025), nil, 0.1)
+    for _, z in { -0.80, 0.14 } do
+      block(b, FRAME, v(x, 0, z), v(0.096, 0.136, 0.015), nil, 0.1)
+    end
+    ports(b, v(x + side * 0.092, 0.06, -0.60), v(x + side * 0.092, 0.06, 0.95), 9, 0.011)
+    burner(b, v(x, 0, -1.44), 0.15, 0.085, 0.10)
+    aerial(b, v(x, 0.10, 1.48), 0.34, v(side * 0.25, 0.6, 1))
+    aerial(b, v(x + side * 0.09, 0.02, -0.30), 0.36, v(side, 0.35, -0.2))
+    aerial(b, v(x, -0.13, 0.60), 0.26, v(side * 0.2, -1, 0.2))
+  end
+  -- the load, hung from a beam at the head of each row
   local n = 0
   for row = 1, 5 do
-    local z = 1.02 - (row - 1) * 0.42
-    for _, side in { -1, 1 } do
+    local z = 0.90 - (row - 1) * 0.42
+    beam(b, FRAME, v(-0.35, 0, z + 0.208), v(0.35, 0, z + 0.208), 0.022, 0.2)
+    for column = -1, 1 do
       for _, level in { 1, -1 } do
         n += 1
-        -- (a place or two on the bed is empty)
+        -- (a place or two is empty)
         if chance(n * 3.7) > 0.12 then
-          local tall = 0.10 + 0.05 * chance(n * 1.3)
-          block(b, OX_BOXES[(n * 7) % #OX_BOXES + 1], v(side * 0.105, level * (0.058 + tall), z), v(0.092, tall, 0.19), nil, 0.05)
+          local tall = 0.09 + 0.05 * chance(n * 1.3)
+          block(b, OX_BOXES[(n * 7) % #OX_BOXES + 1], v(column * 0.213, level * (0.012 + tall), z), v(0.098, tall, 0.19), nil, 0.05)
         end
       end
     end
-    beam(b, FRAME, v(-0.215, 0.062, z + 0.205), v(0.215, 0.062, z + 0.205), 0.012, 0.2)
-    beam(b, FRAME, v(-0.215, -0.062, z + 0.205), v(0.215, -0.062, z + 0.205), 0.012, 0.2)
   end
-  block(b, PLATING, v(0, 0, 1.37), v(0.17, 0.10, 0.12), nil, 0.15)
-  block(b, TRIM, v(0, 0, 1.495), v(0.13, 0.07, 0.010), nil, 0.15)
-  -- the house
-  block(b, PLATING, v(0, 0.10, -1.05), v(0.21, 0.20, 0.16), nil, 0.10)
-  block(b, PLATING, v(0, 0.40, -1.08), v(0.15, 0.12, 0.12), nil, 0.12)
-  block(b, PLATING, v(0, 0.58, -1.06), v(0.19, 0.06, 0.13), nil, 0.14)
-  block(b, GLOW, v(0, 0.59, -0.925), v(0.16, 0.022, 0.008), nil, 0.3)
-  block(b, PATCH, v(0, 0.645, -1.06), v(0.195, 0.008, 0.135), nil, 0.14)
-  aerials(b, v(-0.15, 0.65, -1.15), v(0.15, 0.65, -1.00), 6, 0.56)
-  -- the engines, under and behind it
-  block(b, PLATING, v(0, -0.06, -1.30), v(0.24, 0.16, 0.14), nil, 0.1)
-  for _, side in { -1, 1 } do
-    burner(b, v(side * 0.12, -0.06, -1.50), 0.13, 0.10, 0.11)
-  end
-  aerial(b, v(0.13, 0.10, 1.40), 0.40, v(0.2, 1, 0.4))
-  aerial(b, v(-0.11, -0.10, 1.40), 0.30, v(-0.2, -1, 0.5))
+  beam(b, FRAME, v(-0.35, 0, -0.99), v(0.35, 0, -0.99), 0.022, 0.2)
+  truss(b, v(-0.34, 0, 1.22), v(0.34, 0, 1.22), 0.12, 4)
+  -- the span at the stern, and the house on it
+  block(b, PLATING, v(0, 0.02, -1.12), v(0.35, 0.07, 0.13), nil, 0.1)
+  block(b, PLATING, v(0, 0.25, -1.13), v(0.15, 0.16, 0.11), nil, 0.12)
+  block(b, PLATING, v(0, 0.47, -1.11), v(0.20, 0.06, 0.13), nil, 0.14)
+  block(b, GLOW, v(0, 0.48, -0.975), v(0.17, 0.022, 0.008), nil, 0.3)
+  block(b, PATCH, v(0, 0.535, -1.11), v(0.205, 0.008, 0.135), nil, 0.14)
+  aerials(b, v(-0.16, 0.54, -1.20), v(0.16, 0.54, -1.05), 6, 0.56)
+  aerial(b, v(0, -0.05, -1.12), 0.30, v(0, -1, -0.2))
 end
 
 -- A mount: a place on the hull where a weapon can stand. Where it is,
@@ -1350,22 +1381,22 @@ local designs: { [string]: Design } = {
   },
   ["battleship.mammoth"] = {
     faction = "orun", draw = mammoth, sheets = 12, look = orun({ 0.24, 0.27, 0.31 }, 0.50, 0.25),
-    -- (on the upper jaw and under the lower; on and under the hull behind
-    -- them; on each skirt, fore and aft and amidships; on the citadel's
-    -- first stage and under the keel; on and under the stern)
+    -- (on and under the middle hull, three times along it; on the first
+    -- stage of the citadel and under the hull below it; on and under each
+    -- outer hull; and on the outside of each)
     turrets = {
-      over(v(0, 0.44, 1.90), v(0, -0.44, 1.75)), over(v(0, 0.46, 0.70), v(0, -0.46, 0.80)),
-      abeam(v(0.62, -0.05, 0.62), v(-0.62, -0.05, 0.62)), abeam(v(0.62, 0.16, -0.45), v(-0.62, 0.16, -0.45)),
-      abeam(v(0.62, -0.05, -1.55), v(-0.62, -0.05, -1.55)), over(v(0, 0.79, -0.33), v(0, -0.75, -0.60)),
-      over(v(0, 0.46, -1.90), v(0, -0.46, -1.90)),
+      over(v(0, 0.40, 2.00), v(0, -0.40, 2.00)), over(v(0, 0.40, 1.00), v(0, -0.40, 1.00)),
+      over(v(0, 0.72, -0.14), v(0, -0.40, -0.40)), over(v(0, 0.40, -1.75), v(0, -0.40, -1.75)),
+      over(v(0.92, 0.12, 0.65), v(0.92, -0.36, 0.65)), over(v(-0.92, 0.12, 0.65), v(-0.92, -0.36, 0.65)),
+      abeam(v(1.16, -0.16, -0.80), v(-1.16, -0.16, -0.80)),
     },
     launchers = {},
     fit = { "railgun.large", "railgun.large", "railgun.large", "railgun.large", "railgun.large", "railgun.large", "railgun.large" },
   },
   ["industrial.ox"] = {
     faction = "orun", draw = ox, sheets = 5.0, look = orun({ 0.42, 0.41, 0.39 }, 0.70, 0.50),
-    -- (its one gun on the bow and under it)
-    turrets = { over(v(0, 0.10, 1.37), v(0, -0.10, 1.37)) },
+    -- (its one gun on the starboard hull's bow and under it)
+    turrets = { over(v(0.43, 0.13, 1.12), v(0.43, -0.13, 1.12)) },
     launchers = {},
     fit = { "blaster.small" },
   },
