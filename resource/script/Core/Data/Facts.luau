@@ -276,13 +276,15 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
   if module.hex then
     local hex = module.hex
     local titles: { [string]: string } = { web = "Stasis web", scramble = "Warp disruption", paint = "Target painting",
-      damp = "Sensor dampening", neut = "Energy neutralising", jam = "Jamming" }
+      damp = "Sensor dampening", neut = "Energy neutralising", jam = "Jamming", shield = "Remote shield boosting",
+      armor = "Remote armour repair" }
     local does: { [string]: string } = {
       web = `top speed cut to {plain(hex.strength * 100)}%`, scramble = "cannot warp",
       paint = `signature {plain(hex.strength * 100)}% of what it was`,
       damp = `lock range and scan resolution cut to {plain(hex.strength * 100)}%`,
       neut = `{plain(hex.strength)} GJ taken from its capacitor a cycle`,
       jam = `{plain(hex.strength * 100)}% chance a cycle of breaking its locks`,
+      shield = `{plain(hex.strength)} shield put back a cycle`, armor = `{plain(hex.strength)} armour put back a cycle`,
     }
     local to = section(sheet, titles[hex.kind])
     row(to, "On its target", does[hex.kind])

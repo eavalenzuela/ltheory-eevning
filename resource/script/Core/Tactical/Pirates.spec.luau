@@ -83,8 +83,8 @@ suite:Case("every kind of pirate flies an Unbound hull with a fit the hull takes
     end
     t.ok((Dogma.Check(hull, types)), `{kind.name}'s fit does not go on its hull`)
     t.ok(weapons >= 1, `{kind.name} has no weapon`)
-    -- (all but the scout use every hardpoint the hull has)
-    if kind.id ~= "scout" then
+    -- (all but the scout and the mender use every hardpoint the hull has)
+    if kind.id ~= "scout" and kind.id ~= "mender" then
       t.eq(weapons, hull.turrets + hull.launchers)
     end
   end
@@ -95,6 +95,10 @@ suite:Case("a bigger pirate hits harder, takes more killing and pays more", func
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local last = { dps = 0, hp = 0, bounty = 0, tags = 0 }
   for _, kind in Pirates.kinds do
+    -- (a mender is not one of the ladder: it is there for the others)
+    if kind.id == "mender" then
+      continue
+    end
     local ball = Pirates.Spawn(game.state, kind, 1, 1e9, 0, 0, 0)
     local offence = Items.Offence(game.state, ball.id)
     local v = ball.vitals
@@ -110,6 +114,42 @@ suite:Case("a bigger pirate hits harder, takes more killing and pays more", func
   end
   -- A scout is what it was when it flew a Courier: one small gun, worth 6,000.
   t.eq(Pirates.SCOUT.bounty, 6000)
+end)
+
+suite:Case("a mender keeps its pack whole: its repairers go on whichever pirate is worst hurt", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local fit = Pirates.Fit(Pirates.kindById["mender"])
+  local remote = 0
+  for _, entry in fit do
+    remote += if Modules.Mends(Modules.byId[entry[1]]) then 1 else 0
+  end
+  t.eq(remote, 2)
+  -- The player out in open space, a raider on them, and a mender with it.
+  t.ok((Core.Submit(game, { kind = "Undock", actor = state.player.ship })))
+  Core.Step(game)
+  local me = state.balls[state.player.ship]
+  me.x += 4e6
+  Space.AssignGrid(state, me)
+  local raider = Pirates.Spawn(state, Pirates.kindById["raider"], me.system, me.x + 3000, me.y, me.z, me.grid)
+  local mender = Pirates.Spawn(state, Pirates.kindById["mender"], me.system, me.x + 5000, me.y, me.z, me.grid)
+  for _ = 1, 30 do
+    Core.Step(game)
+  end
+  -- (it does not mend the ship it is hunting, hurt as it may be)
+  for _, running in mender.vitals.running do
+    t.ok(running.target ~= me.id or not Modules.Mends(Modules.byId[state.items[running.item].type]), "the mender is mending its prey")
+  end
+  raider.vitals.armor = raider.vitals.armorMax * 0.2
+  local mending = false
+  for _ = 1, 40 do
+    Core.Step(game)
+    for _, running in mender.vitals.running do
+      mending = mending or running.target == raider.id
+    end
+  end
+  t.ok(mending, "the mender did nothing for a raider with a fifth of its armour")
+  t.ok(raider.vitals.armor > raider.vitals.armorMax * 0.2 + 100 or state.balls[raider.id] == nil, "the raider's armour was not put back")
 end)
 
 suite:Case("what comes follows from how safe the system is", function(t)

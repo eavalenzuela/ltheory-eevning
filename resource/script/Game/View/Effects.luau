@@ -35,6 +35,7 @@ type Look = {
   burst: number?,         -- bolt: how many, one after another
   gap: number?,           -- and how long between them
   blunt: number?,         -- bolt: 0 a needle, 1 a ball
+  held: boolean?,         -- beam: it stays for as long as its module runs, not for a shot
 }
 
 type Effect = {
@@ -99,8 +100,32 @@ Effects.looks = {
   ["blaster"] = { kind = "bolt", color = { 0.30, 1.0, 0.72 }, width = 11, length = 70, speed = 1900, burst = 1, gap = 0, blunt = 1 },
   ["railgun"] = { kind = "rail", color = { 0.55, 0.80, 1.0 }, width = 5, life = 0.55 },
   ["launcher"] = { kind = "missile", color = { 1.0, 0.62, 0.26 }, width = 7, length = 180 },
-  ["miner"] = { kind = "beam", color = { 0.35, 1.0, 0.55 }, width = 5, life = 0.5 },
+  ["miner"] = { kind = "beam", color = { 0.35, 1.0, 0.55 }, width = 5, life = 0.5, held = true },
+  -- What runs on another ship or a wreck for as long as it is on (the
+  -- scene begins each beam again while the module runs): thin, and each
+  -- its own colour.
+  ["salvager"] = { kind = "beam", color = { 1.0, 0.70, 0.30 }, width = 3, life = 0.5, held = true },
+  ["web."] = { kind = "beam", color = { 0.90, 0.80, 0.30 }, width = 3, life = 0.5, held = true },
+  ["disruptor."] = { kind = "beam", color = { 0.70, 0.40, 1.0 }, width = 3, life = 0.5, held = true },
+  ["painter."] = { kind = "beam", color = { 1.0, 0.30, 0.30 }, width = 2, life = 0.5, held = true },
+  ["damper."] = { kind = "beam", color = { 0.50, 0.60, 0.80 }, width = 2, life = 0.5, held = true },
+  ["neutraliser."] = { kind = "beam", color = { 0.80, 0.60, 1.0 }, width = 4, life = 0.5, held = true },
+  ["jammer."] = { kind = "beam", color = { 0.70, 0.90, 1.0 }, width = 2, life = 0.5, held = true },
+  ["remote.shield"] = { kind = "beam", color = { 0.40, 0.75, 1.0 }, width = 4, life = 0.5, held = true },
+  ["remote.armor"] = { kind = "beam", color = { 1.0, 0.75, 0.35 }, width = 4, life = 0.5, held = true },
 } :: { [string]: Look }
+
+-- Whether a module's beam is one that stays for as long as it runs (a
+-- mining laser's, a salvager's, and whatever runs on another ship)
+-- rather than one shot's.
+function Effects.Held(type: string): boolean
+  for prefix, look in Effects.looks do
+    if look.held and string.sub(type, 1, #prefix) == prefix then
+      return true
+    end
+  end
+  return false
+end
 
 -- How much wider a medium or a large weapon's fire is than a small one's.
 local SIZE = { 1, 1.8, 3 }

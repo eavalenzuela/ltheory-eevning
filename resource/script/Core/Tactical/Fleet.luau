@@ -17,8 +17,9 @@
 -- jumps, and one left behind makes their own way after, gate by gate.
 -- On the player's grid they fight whatever they have been pointed at;
 -- with nothing pointed out, whoever is attacking anybody of the fleet;
--- and otherwise they keep station. Told to stay, a pilot docks at the
--- nearest station and waits there.
+-- and otherwise they keep station. One with a remote repairer fitted
+-- mends whoever of the fleet is worst hurt. Told to stay, a pilot docks
+-- at the nearest station and waits there.
 --
 -- A pilot whose ship has a mining laser can be set to mine the belt
 -- the player is at: they cut rock after rock until the hold is full,
@@ -42,6 +43,7 @@
 local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Mend = require("@lt/Core/Tactical/Mend")
 local Mining = require("@lt/Core/Tactical/Mining")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
@@ -419,7 +421,7 @@ local function fight(state: State.State, me: State.Ball, prey: State.Ball, event
   end
   for _, item in Items.Fitted(state, me.id) do
     local module = Modules.byId[item.type]
-    if module.weapon or module.hex then
+    if module.weapon or (module.hex and not Modules.Mends(module)) then
       if locked then
         give(state, { kind = "ActivateModule", actor = me.id, item = item.id, target = prey.id }, events)
       end
@@ -451,6 +453,19 @@ local function mend(state: State.State, me: State.Ball, fighting: boolean, event
       give(state, { kind = "DeactivateModule", actor = me.id, item = item.id }, events)
     end
   end
+end
+
+-- The ships of the player's side: their own, the hired pilots', and
+-- the drones.
+local function side(state: State.State): { number }
+  local ids: { number } = { state.player.ship }
+  for _, id in state.fleetIds do
+    table.insert(ids, state.fleet[id].ship)
+  end
+  for _, id in state.droneIds do
+    table.insert(ids, id)
+  end
+  return ids
 end
 
 -- The next gate on the way to a system.
@@ -663,6 +678,8 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
 
   -- On the player's grid, or held on another: fight what has been
   -- pointed out, or whoever is after the fleet, or keep station.
+  -- (one with a remote repairer mends whoever of the fleet is worst hurt)
+  local mending = Mend.Tend(state, me, side(state), events)
   local prey = state.balls[wing.target]
   if prey == nil or prey.system ~= me.system or prey.grid ~= me.grid then
     wing.target = 0
@@ -671,8 +688,11 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
   if prey then
     fight(state, me, prey, events)
   else
-    if #me.vitals.locks > 0 then
-      me.vitals.locks = {}
+    -- (nobody to fight: let go of everybody but those being mended)
+    for at = #me.vitals.locks, 1, -1 do
+      if not mending[me.vitals.locks[at].target] then
+        table.remove(me.vitals.locks, at)
+      end
     end
     if together and lead and not (me.mode == "keep" and me.target == lead.id) then
       give(state, { kind = "KeepAtRange", actor = ship.id, target = lead.id, range = 500 + 400 * place }, events)

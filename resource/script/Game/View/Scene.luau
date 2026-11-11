@@ -943,15 +943,16 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       Effects.Explode(fx, at, event.radius or 25, scene.time)
     end
   end
-  -- A mining laser's beam, for as long as the module runs: begun again
-  -- each time the last one is nearly out.
+  -- A mining laser's beam, a salvager's, and that of whatever runs on
+  -- another ship, for as long as the module runs: begun again each time
+  -- the last one is nearly out.
   for _, id in state.ballIds do
     local ball = state.balls[id]
     if scene.screen[id] and ball.system == player.system then
       for _, running in ball.vitals.running do
         local item = state.items[running.item]
         local rock = if running.target ~= 0 then Core.Query.Body(game, running.target) else nil
-        if item and rock and string.sub(item.type, 1, 5) == "miner" and scene.screen[running.target]
+        if item and rock and Effects.Held(item.type) and scene.screen[running.target]
           and scene.time - (scene.mining[running.item] or -1) > 0.42 then
           scene.mining[running.item] = scene.time
           Effects.Fire(fx, item.type, id, running.target, ball.radius, rock.radius, "hit", 0, "", scene.time,

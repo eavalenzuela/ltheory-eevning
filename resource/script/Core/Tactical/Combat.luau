@@ -499,8 +499,19 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       end
       v.capacitor -= hex.capacitor
       running.next += hex.duration
-      -- A neutraliser and a jammer do their work a cycle at a time.
-      if hex.kind == "neut" then
+      -- A neutraliser, a jammer and a remote repairer do their work a
+      -- cycle at a time.
+      if hex.kind == "shield" or hex.kind == "armor" then
+        local t = target.vitals
+        local before = if hex.kind == "shield" then t.shield else t.armor
+        if hex.kind == "shield" then
+          t.shield = math.min(t.shieldMax, t.shield + hex.strength)
+        else
+          t.armor = math.min(t.armorMax, t.armor + hex.strength)
+        end
+        table.insert(events, { kind = "Mended", ball = ball.id, target = target.id, layer = hex.kind,
+          amount = (if hex.kind == "shield" then t.shield else t.armor) - before })
+      elseif hex.kind == "neut" then
         target.vitals.capacitor = math.max(0, target.vitals.capacitor - hex.strength)
       elseif hex.kind == "jam" then
         if Rng.Chance(Rng.For(state.historySeed, state.tick, ball.id, item.id, 67), hex.strength) then

@@ -25,6 +25,7 @@ local Combat = require("@lt/Core/Tactical/Combat")
 local Dogma = require("@lt/Core/Dogma")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
+local Mend = require("@lt/Core/Tactical/Mend")
 local Modules = require("@lt/Core/Data/Modules")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
@@ -92,6 +93,11 @@ local KINDS: { Kind } = {
   { id = "ravager", hull = "battleship.ravager", name = "Pirate Ravager", range = 15000, bounty = 400000, tags = 10,
     fit = all(times(6, "artillery.large"), times(4, "launcher.cruise"),
       { { "armor.plate.large" }, { "damage.control" }, { "gyrostabilizer" }, { "armor.plate.large" }, { "shield.extender.large" } }) },
+  -- Not one of the ladder: a mender has little to shoot with. It keeps
+  -- the rest of its pack whole, and is the one to shoot first.
+  { id = "mender", hull = "frigate.cutthroat", name = "Pirate Mender", range = 4500, bounty = 25000, tags = 1,
+    fit = { { "remote.armor.small" }, { "remote.armor.small" }, { "autocannon.small", "ammo.fusion" }, { "afterburner.1mn" },
+      { "armor.plate.200mm" }, { "damage.control" } } },
 }
 
 Pirates.kinds = KINDS
@@ -106,8 +112,8 @@ Pirates.SCOUT = Pirates.kindById["scout"]
 local PACKS: { [string]: { { any } } } = {
   secure = { { 0.3, { "scout", "scout" } }, { 0.7, { "scout" } } },
   low = { { 0.5, { "raider", "raider" } }, { 0.3, { "jackal", "raider" } }, { 0.2, { "jackal", "raider", "raider" } } },
-  lawless = { { 0.4, { "jackal", "jackal", "raider" } }, { 0.35, { "marauder", "raider", "raider" } },
-    { 0.2, { "marauder", "jackal", "raider" } }, { 0.05, { "ravager", "jackal", "jackal" } } },
+  lawless = { { 0.4, { "jackal", "jackal", "raider" } }, { 0.35, { "marauder", "mender", "raider" } },
+    { 0.2, { "marauder", "jackal", "raider" } }, { 0.05, { "ravager", "mender", "jackal" } } },
 }
 Pirates.PACKS = PACKS
 
@@ -359,15 +365,28 @@ function Pirates.Think(state: State.State, events: { Event })
     end
     if not targeted then
       give(state, { kind = "LockTarget", actor = id, target = prey.id }, events)
-    elseif locked then
-      -- Everything it has for another ship: its guns, and what holds
-      -- the prey where it is (each is refused until it is in reach).
-      for _, item in Items.Fitted(state, id) do
-        local module = Modules.byId[item.type]
-        if module.weapon or module.hex then
-          give(state, { kind = "ActivateModule", actor = id, item = item.id, target = prey.id }, events)
+    end
+    -- Everything it has for another ship: its guns, and what holds the
+    -- prey where it is (each is refused until it is in reach). And what
+    -- it has for its own side: a remote repairer goes on whoever of the
+    -- pack is worst hurt (Tactical/Mend).
+    local mends = false
+    for _, item in Items.Fitted(state, id) do
+      local module = Modules.byId[item.type]
+      if module.hex and Modules.Mends(module) then
+        mends = true
+      elseif locked and (module.weapon or module.hex) then
+        give(state, { kind = "ActivateModule", actor = id, item = item.id, target = prey.id }, events)
+      end
+    end
+    if mends then
+      local pack: { number } = {}
+      for _, other in state.pilotIds do
+        if state.ships[other] and state.ships[other].owner == state.ships[id].owner then
+          table.insert(pack, other)
         end
       end
+      Mend.Tend(state, ball, pack, events)
     end
   end
 end

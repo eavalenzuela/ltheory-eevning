@@ -417,7 +417,7 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
       note = if running then "mining" else "idle"
     end
     if module.hex then
-      note = if running then "holding" else "idle"
+      note = if not running then "idle" elseif Modules.Mends(module) then "mending" else "holding"
     end
     if module.salvager then
       note = if running then "salvaging" else "idle"

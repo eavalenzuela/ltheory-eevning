@@ -57,9 +57,11 @@ export type Miner = {
 -- as big; a "damp" cuts how far it can lock and how fast to 'strength'
 -- of what they were; a "neut" takes 'strength' GJ from its capacitor
 -- each cycle; and a "jam" has a chance of 'strength' each cycle of
--- breaking every lock it holds.
+-- breaking every lock it holds. Two are for a friend: a "shield" puts
+-- 'strength' points back on its target's shield each cycle, and an
+-- "armor" on its armour.
 export type Hex = {
-  kind: "web" | "scramble" | "paint" | "damp" | "neut" | "jam",
+  kind: "web" | "scramble" | "paint" | "damp" | "neut" | "jam" | "shield" | "armor",
   range: number,            -- m
   strength: number,
   duration: number,         -- s per cycle
@@ -282,6 +284,21 @@ local modules: { ModuleType } = {
     cpu = 30, powergrid = 1, volume = 5, basePrice = 40000, passive = {},
     hex = { kind = "jam", range = 25000, strength = 0.35, duration = 10, capacitor = 14 },
     requires = { { skill = "electronic.warfare", level = 3 } },
+  },
+
+  -- Mending somebody else: shield or armour put back on another ship,
+  -- for as long as it is locked, in reach, and there is capacitor.
+  {
+    id = "remote.shield.small", name = "Small Remote Shield Booster", slot = "high", hardpoint = "",
+    cpu = 28, powergrid = 6, volume = 5, basePrice = 40000, passive = {},
+    hex = { kind = "shield", range = 10000, strength = 50, duration = 5, capacitor = 30 },
+    requires = { { skill = "remote.repair", level = 1 } },
+  },
+  {
+    id = "remote.armor.small", name = "Small Remote Armor Repairer", slot = "high", hardpoint = "",
+    cpu = 18, powergrid = 8, volume = 5, basePrice = 40000, passive = {},
+    hex = { kind = "armor", range = 8000, strength = 55, duration = 6, capacitor = 30 },
+    requires = { { skill = "remote.repair", level = 1 } },
   },
 
   -- Speed, capacitor, cargo
@@ -523,6 +540,25 @@ for _, fitting in FITTINGS do
   end
 end
 
+-- And the remote repairers by size: more put back, from farther off.
+local REMOTE_RANGE = { 1, 1.6, 2.5 }
+for _, base in table.clone(modules) do
+  local hex = base.hex
+  if hex and (hex.kind == "shield" or hex.kind == "armor") then
+    for size = 2, 3 do
+      table.insert(modules, {
+        id = (string.gsub(base.id, "small", SIZE_NAME[size])), name = (string.gsub(base.name, "Small", SIZE_TITLE[size])),
+        slot = base.slot, hardpoint = base.hardpoint,
+        cpu = math.floor(base.cpu * FIT_CPU[size] + 0.5), powergrid = math.floor(base.powergrid * FIT_POWERGRID[size] + 0.5),
+        volume = base.volume * (size * size - size), basePrice = base.basePrice * FIT_PRICE[size], passive = {},
+        hex = { kind = hex.kind, range = hex.range * REMOTE_RANGE[size], strength = hex.strength * FIT_AMOUNT[size],
+          duration = hex.duration, capacitor = hex.capacitor * FIT_CAPACITOR[size] },
+        requires = { { skill = "remote.repair", level = size + 1 } },
+      })
+    end
+  end
+end
+
 -- What a mining barge carries.
 table.insert(modules, {
   id = "miner.strip", name = "Strip Miner", slot = "high", hardpoint = "turret",
@@ -581,6 +617,13 @@ local Modules = {
 
 for _, m in modules do
   Modules.byId[m.id] = m
+end
+
+-- Whether a module is one that mends another ship (a remote shield
+-- booster or armour repairer): for a friend, where everything else
+-- that runs on another ship is for an enemy.
+function Modules.Mends(module: ModuleType): boolean
+  return module.hex ~= nil and (module.hex.kind == "shield" or module.hex.kind == "armor")
 end
 for _, c in charges do
   Modules.chargeById[c.id] = c

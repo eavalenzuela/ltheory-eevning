@@ -373,6 +373,87 @@ suite:Case("told to stay, a hired pilot docks at the nearest station and waits t
   t.eq(refused(game, { kind = "DismissPilot", actor = 0, pilot = wing.id }), `{wing.name} is out flying`)
 end)
 
+suite:Case("a remote repairer puts shield or armour back on a locked ship in reach, a cycle at a time", function(t)
+  local game, second = docked()
+  local state = game.state
+  -- (it wants the skill to fit)
+  local item = Items.Add(state, "remote.shield.small", 1, state.player.home, "hangar")
+  t.eq(refused(game, { kind = "Fit", actor = 0, item = item.id }), "needs Remote Repair 1")
+  state.skills["remote.repair"] = 1
+  -- (a Courier has two high slots, and a gun in each: one comes out)
+  local gun = Items.Fitted(state, state.player.ship)[1]
+  Items.Take(state, gun, 1)
+  t.ok((submit(game, { kind = "Fit", actor = 0, item = item.id })))
+  hired(game, second)
+  local me, theirs = adrift(game, second)
+  theirs.vitals.shield = 20
+  t.ok((submit(game, { kind = "LockTarget", actor = 0, target = theirs.id })))
+  t.ok(waitFor(game, 30, function()
+    return me.vitals.locks[1] ~= nil and me.vitals.locks[1].locked
+  end))
+  local fitted = Items.Fitted(state, me.id)
+  local remote = fitted[#fitted]
+  for _, each in fitted do
+    if each.type == "remote.shield.small" then
+      remote = each
+    end
+  end
+  local capacitor = me.vitals.capacitor
+  local before = theirs.vitals.shield
+  t.ok((submit(game, { kind = "ActivateModule", actor = 0, item = remote.id, target = theirs.id })))
+  steps(game, 1)
+  -- One cycle at once: fifty points for thirty of capacitor (the shield's own recharge aside).
+  t.ok(theirs.vitals.shield >= before + 50 and theirs.vitals.shield < before + 60, `the shield went from {before} to {theirs.vitals.shield}`)
+  t.ok(me.vitals.capacitor <= capacitor - 30 + 5)
+  local mended = 0
+  for _, event in Core.TakeEvents(game) do
+    if event.kind == "Mended" and event.target == theirs.id and event.layer == "shield" then
+      mended += event.amount
+    end
+  end
+  t.eq(mended, 50)
+  -- It never puts back more than there is room for.
+  steps(game, 60)
+  t.eq(theirs.vitals.shield, theirs.vitals.shieldMax)
+  -- Out of reach, it stops.
+  theirs.vitals.shield = 20
+  theirs.x += 12000
+  steps(game, 6)
+  t.eq(#me.vitals.running, 0)
+  -- And there are three sizes of each kind, the bigger wanting more of the skill.
+  local Modules = require("@lt/Core/Data/Modules")
+  for _, kind in { "shield", "armor" } do
+    local small, large = Modules.byId[`remote.{kind}.small`], Modules.byId[`remote.{kind}.large`]
+    t.ok(Modules.Mends(small) and Modules.Mends(large) and Modules.Mends(Modules.byId[`remote.{kind}.medium`]))
+    t.ok((large.hex :: any).strength > 5 * (small.hex :: any).strength and (large.hex :: any).range > (small.hex :: any).range)
+    t.eq((large.requires :: any)[1], { skill = "remote.repair", level = 4 })
+  end
+  t.ok(not Modules.Mends(Modules.byId["web.stasis"]))
+end)
+
+suite:Case("a hired pilot with a remote repairer mends whoever of the fleet is hurt, and stops when they are whole", function(t)
+  local game, second = docked("destroyer.jackal")
+  local state = game.state
+  Items.Equip(state, second.id, "remote.armor.small", nil)
+  hired(game, second, 2)
+  local me, theirs = adrift(game, second)
+  steps(game, 10)
+  t.eq({ #theirs.vitals.locks, #theirs.vitals.running }, { 0, 0 })
+  -- The player's armour is knocked about: the pilot locks them and sets to.
+  me.vitals.armor = me.vitals.armorMax * 0.3
+  t.ok(waitFor(game, 40, function()
+    return #theirs.vitals.running == 1 and theirs.vitals.running[1].target == me.id
+  end), "the hired pilot did not start mending")
+  t.ok(waitFor(game, 300, function()
+    return me.vitals.armor >= 0.99 * me.vitals.armorMax
+  end), "the armour was not mended")
+  -- Whole again: the repairer comes off, and so does the lock.
+  t.ok(waitFor(game, 20, function()
+    return #theirs.vitals.running == 0 and #theirs.vitals.locks == 0
+  end), "the hired pilot went on mending a whole ship")
+  t.eq({ theirs.mode, theirs.target } :: { any }, { "keep", me.id } :: { any })
+end)
+
 -- A game with a hired pilot in a Prospector with two mining lasers, out
 -- at the first belt with the player.
 local function atBelt(): (Core.Game, State.Wingman, State.Ship, number)

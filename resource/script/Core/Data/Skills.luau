@@ -49,6 +49,8 @@ local skills: { Skill } = {
     note = "One more drone out at once a level, as far as the hull controls." },
   { id = "leadership", name = "Leadership", rank = 4, start = 1, requires = {},
     note = "One more hired pilot under your command a level." },
+  { id = "remote.repair", name = "Remote Repair", rank = 2, start = -1, requires = { { skill = "repair.systems", level = 2 } },
+    note = "To fit remote shield boosters and armor repairers: small (1), medium (3), large (4)." },
   -- Getting in another ship's way
   { id = "electronic.warfare", name = "Electronic Warfare", rank = 3, start = -1, requires = { { skill = "electronics", level = 2 } },
     note = "To fit painters and dampeners (1), neutralisers (2) and jammers (3)." },
