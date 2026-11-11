@@ -111,6 +111,10 @@ function Session.Notice(session: Session, event: Space.Event)
     end
   elseif kind == "BatteryFired" and event.to == mine then
     Session.Say(session, "The station's batteries are firing on you")
+  elseif kind == "MissionAccepted" then
+    Session.Say(session, `Job taken: {event.title}`)
+  elseif kind == "MissionCompleted" then
+    Session.Say(session, string.format("Job done: +%d credits, standing %.1f", event.reward, event.standing))
   elseif kind == "Marked" then
     Session.Say(session, "You have fired on a ship that is no pirate's: the patrols will fire on you")
   elseif kind == "ColonyDeployed" then

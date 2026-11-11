@@ -568,6 +568,14 @@ function Debug.Traffic(): (number, number, number)
   return #state.trafficIds, near, hostile
 end
 
+-- Jobs: how many the station docked at offers, how many are in hand,
+-- how many have been finished, and the standing with the faction whose
+-- station it is.
+function Debug.Missions(): (number, number, number, number)
+  local status = Core.Query.Missions(session.game)
+  return #status.offers, #status.inHand, status.done, status.standing
+end
+
 -- How many volleys of a station's batteries the scene has shown.
 function Debug.Battery(): number
   return scene.volleys

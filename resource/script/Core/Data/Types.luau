@@ -91,6 +91,9 @@ local goods: { Info } = {
   -- Proof of a pirate killed. Worth a bounty to whoever collects them.
   { id = "tag.pirate", name = "Pirate Tag", category = "goods", volume = 0.1, basePrice = 4000 },
   { id = "scrap.metal", name = "Scrap Metal", category = "goods", volume = 0.5, basePrice = 60 },
+  -- What a courier job gives a pilot to carry (Assets/Missions): a cubic
+  -- metre a unit, and worth nothing to anybody but who it is for.
+  { id = "cargo.sealed", name = "Sealed Cargo", category = "goods", volume = 1, basePrice = 1 },
 }
 for _, g in goods do
   byId[g.id] = g

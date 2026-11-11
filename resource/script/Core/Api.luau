@@ -26,6 +26,7 @@ local Industry = require("@lt/Core/Assets/Industry")
 local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
 local Mining = require("@lt/Core/Tactical/Mining")
+local Missions = require("@lt/Core/Assets/Missions")
 local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Ships = require("@lt/Core/Data/Ships")
@@ -61,7 +62,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 17
+Core.SAVE_VERSION = 18
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -161,6 +162,15 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       job.research = job.research or ""
     end
   end,
+  -- 18: stations have jobs for a pilot, and a pilot has a standing with
+  -- each faction. A save from before has none in hand and stands at 0.
+  [17] = function(state: any)
+    state.missions = state.missions or {}
+    state.missionIds = state.missionIds or {}
+    state.missionsTaken = state.missionsTaken or {}
+    state.missionsDone = state.missionsDone or 0
+    state.standings = state.standings or {}
+  end,
 }
 
 -- A new game: a galaxy, and the player's first ship docked at a station
@@ -183,6 +193,11 @@ function Core.New(options: Options): Game
     trainingStarted = 0,
     jobs = {},
     research = {},
+    missions = {},
+    missionIds = {},
+    missionsTaken = {},
+    missionsDone = 0,
+    standings = {},
     jobIds = {},
     wallet = 0,
     journal = {},
@@ -244,6 +259,7 @@ local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true }
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
 local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true }
+local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true }
 local COLONY_COMMANDS = { DeployColony = true, BuildFacility = true, RemoveFacility = true, StartExtraction = true, Export = true }
 
 local function validate(state: State.State, command: State.Command): (boolean, string?)
@@ -268,6 +284,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Starbases.Validate(state, command)
   elseif COLONY_COMMANDS[command.kind] then
     return Colonies.Validate(state, command)
+  elseif MISSION_COMMANDS[command.kind] then
+    return Missions.Validate(state, command)
   elseif TRAINING_COMMANDS[command.kind] then
     return Training.Validate(state, command)
   end
@@ -328,6 +346,8 @@ function Core.Step(game: Game)
       Starbases.Apply(state, command, game.events)
     elseif ok and COLONY_COMMANDS[command.kind] then
       Colonies.Apply(state, command, game.events)
+    elseif ok and MISSION_COMMANDS[command.kind] then
+      Missions.Apply(state, command, game.events)
     elseif ok and TRAINING_COMMANDS[command.kind] then
       Training.Apply(state, command, game.events)
     elseif ok then
@@ -719,6 +739,33 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
     anchored = Starbases.Anchored(state, starbase), wait = math.max(0, starbase.ready - state.tick) * Constants.TICK, lit = lit,
     fuel = starbase.fuel, hours = Starbases.Hours(starbase), powergrid = powergrid, cpu = cpu, modules = modules,
   }
+end
+
+-- The jobs to be had and in hand: what the station the pilot is docked
+-- at offers (none in space), the jobs the pilot has taken, each with
+-- whether it can be finished where they are now (and if not, why not),
+-- and their standing with the faction whose station it is.
+export type MissionStatus = { mission: State.Mission, title: string, ready: boolean, why: string }
+export type MissionsStatus = { offers: { MissionStatus }, inHand: { MissionStatus }, faction: string, standing: number, done: number }
+function Query.Missions(game: Game): MissionsStatus
+  local state = game.state
+  local ship = state.ships[state.player.ship]
+  local offers: { MissionStatus } = {}
+  local faction, standing = "", 0
+  if ship.docked ~= 0 then
+    for _, offer in Missions.Offers(state, ship.docked) do
+      table.insert(offers, { mission = offer, title = Missions.Title(offer), ready = false, why = "" })
+    end
+    local node = state.galaxy.systems[Space.SystemOf(state, ship.docked)]
+    faction = if Factions.byId[node.nearest] then Factions.byId[node.nearest].name else ""
+    standing = Missions.Standing(state, node.nearest)
+  end
+  local inHand: { MissionStatus } = {}
+  for _, mission in Missions.InHand(state) do
+    local ready, why = Missions.Ready(state, ship, mission)
+    table.insert(inHand, { mission = mission, title = Missions.Title(mission), ready = ready, why = why or "" })
+  end
+  return { offers = offers, inHand = inHand, faction = faction, standing = standing, done = state.missionsDone }
 end
 
 -- What the pilot has researched of a blueprint (levels of material and

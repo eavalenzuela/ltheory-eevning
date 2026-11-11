@@ -96,6 +96,13 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   -- is worth a scout's)
   if ship.owner == "pirates" and by == state.player.ship then
     pay(state, if pilot then pilot.bounty else math.floor(hull.basePrice * 0.2), "bounty", events)
+    -- (and it counts toward any bounty job the pilot has for this system)
+    for _, id in state.missionIds do
+      local mission = state.missions[id]
+      if mission.kind == "bounty" and mission.system == ball.system and mission.done < mission.need then
+        mission.done += 1
+      end
+    end
   end
   if wasPlayer and hull.class ~= "capsule" then
     pay(state, math.floor(hull.basePrice * INSURANCE), "insurance", events)

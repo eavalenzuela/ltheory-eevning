@@ -230,6 +230,16 @@ export type Job = {
   ends: number,
 }
 
+-- A job a station has for a pilot (Assets/Missions): a "bounty" (destroy
+-- 'need' pirates in 'system'; 'done' so far), a "courier" run (carry
+-- 'need' of 'type' to the station 'to'), or a "supply" order (bring
+-- 'need' of 'type' to 'station'). 'key' is the offer it was (station,
+-- day and place in the list), and 'id' is 0 until a pilot has taken it.
+export type Mission = {
+  id: number, key: string, kind: string, station: number, faction: string, system: number, need: number, done: number,
+  type: string, to: number, reward: number, standing: number, taken: number,
+}
+
 -- What a pilot has researched of a blueprint: levels of each kind.
 export type Research = { material: number, time: number }
 
@@ -324,6 +334,14 @@ export type State = {
   trafficDue: number,
   trafficOn: boolean,     -- whether there is any: a game has, a test of one ship has not
   research: { [string]: Research },   -- by blueprint id (Assets/Industry)
+  -- Jobs in hand (Assets/Missions), which of today's offers have been
+  -- taken, how many jobs have been finished, and the pilot's standing
+  -- with each faction (-10 to 10; a faction not here is at 0).
+  missions: { [number]: Mission },
+  missionIds: { number },
+  missionsTaken: { string },
+  missionsDone: number,
+  standings: { [string]: number },
   queue: { Command },     -- submitted, to be applied at the next tick
 }
 

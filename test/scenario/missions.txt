@@ -1,0 +1,58 @@
+# Jobs at a station, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/missions.txt
+#
+# The station a pilot starts at offers three jobs today, one of each
+# kind in this game: a bounty, a supply order and a courier run. Take
+# all three. Fill the supply order from the market and be paid for it,
+# which raises the pilot's standing. Give the courier run up, which
+# costs some. The bounty stays in hand.
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+until GameDebug.Press('Missions')
+frames 3
+lua assert(GameDebug.Missions() == 3, 'a station offers three jobs a day')
+lua assert(not GameDebug.CanPress('Complete:1'), 'with no job in hand there is none to finish')
+
+# Take all three: each leaves the list of offers for the list in hand.
+until GameDebug.Press('Accept:1')
+until select(2, GameDebug.Missions()) == 1
+until GameDebug.Press('Accept:1')
+until select(2, GameDebug.Missions()) == 2
+until GameDebug.Press('Accept:1')
+until select(2, GameDebug.Missions()) == 3
+lua assert(GameDebug.Missions() == 0, 'a job taken should no longer be offered')
+lua assert(GameDebug.Hangar('cargo.sealed') == 90, 'the courier\'s cargo should be in the hangar')
+frames 3
+lua assert(not GameDebug.CanPress('Complete:2'), 'a supply order is not filled by nothing')
+
+# The supply order (the second taken) wants 500 Cuprite: the market has it.
+lua GameDebug.Grant(10000)
+wait 1.5
+lua assert(GameDebug.Market('ore.cuprite'))
+frames 3
+lua GameDebug.Enter('Quantity', 500)
+frames 2
+until GameDebug.Press('BuyNow')
+until GameDebug.Hangar('ore.cuprite') == 500
+until GameDebug.Press('Missions')
+frames 3
+lua _G.before = GameDebug.Wallet()
+until GameDebug.Press('Complete:2')
+until select(3, GameDebug.Missions()) == 1
+lua assert(GameDebug.Wallet() == _G.before + 11250, 'the supply order did not pay what it offered')
+lua assert(GameDebug.Hangar('ore.cuprite') == 0, 'the ore was not taken')
+lua assert(select(4, GameDebug.Missions()) > 0, 'a job done should raise the pilot\'s standing')
+lua _G.standing = select(4, GameDebug.Missions())
+
+# Giving a job up costs standing.
+frames 3
+until GameDebug.Press('Abandon:2')
+until select(2, GameDebug.Missions()) == 1
+lua assert(select(4, GameDebug.Missions()) < _G.standing, 'a job given up should cost standing')
+lua assert(GameDebug.Hangar('cargo.sealed') == 0, 'a courier run given up should give its cargo back')
+
+echo missions scenario passed
+quit

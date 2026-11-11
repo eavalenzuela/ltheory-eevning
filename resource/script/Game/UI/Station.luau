@@ -29,9 +29,9 @@ local Station = {}
 Station.WIDTH = 940
 Station.HEIGHT = 600
 
-local TABS: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Wallet" }
+local TABS: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Wallet", "Missions" }
 -- (and one more at a starbase of the pilot's own: the running of it)
-local OWN: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Wallet", "Starbase" }
+local OWN: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Wallet", "Missions", "Starbase" }
 -- The services each tab's doings are done by (Core/Assets/Stations).
 local WANTS: { [string]: { string } } = {
   Fitting = { "fitting" }, Market = { "market" }, Industry = { "refining", "industry", "research" }, Ships = { "fitting" },
@@ -1006,6 +1006,74 @@ local function drawShips(session: Session.Session, game: Core.Game, player: Core
 end
 
 -- ---------------------------------------------------------------------
+-- Missions: the jobs a station has, and the jobs in hand
+
+local function drawMissions(session: Session.Session, game: Core.Game, x: number, y: number)
+  local status = Core.Query.Missions(game)
+  local left, right = x + 16, x + 480
+  local line = y + 78
+  local function about(mission: State.Mission): string
+    if mission.kind == "bounty" then
+      local _, band = Core.Query.Security(game, mission.system)
+      return `in {game.state.galaxy.systems[mission.system].name} ({band or "?"} space): {mission.done} of {mission.need} destroyed`
+    elseif mission.kind == "courier" then
+      local to = Core.Query.Body(game, mission.to)
+      return `to {if to then shorten(to.name, 40) else "?"}`
+    end
+    local at = Core.Query.Body(game, mission.station)
+    return `to {if at then shorten(at.name, 40) else "?"}`
+  end
+
+  Im.Heading("JOBS OFFERED HERE", left, line, 16, Im.DIM)
+  if status.faction ~= "" then
+    Im.TextRight(string.format("%s standing  %.1f", status.faction, status.standing), left + 430, line + 2, 13,
+      if status.standing < 0 then Im.WARN else Im.TEXT)
+  end
+  line += 30
+  if #status.offers == 0 then
+    Im.Text("Nothing more today.", left, line, 14, Im.DIM, 0.8)
+  end
+  for index, offer in status.offers do
+    Im.Text(offer.title, left, line, 15, Im.TEXT)
+    Im.TextRight(Format.Credits(offer.mission.reward), left + 430, line, 15, GOOD)
+    Im.Text(about(offer.mission), left, line + 21, 12, Im.DIM)
+    local accept: State.Command = { kind = "AcceptMission", actor = 0, what = offer.mission.key }
+    local can, whyNot = Session.CanDo(session, accept)
+    if Im.Button("Accept", left, line + 42, 90, 24, can, `Accept:{index}`) then
+      Session.Do(session, accept)
+    end
+    if not can then
+      Im.Text(tostring(whyNot), left + 100, line + 46, 12, Im.WARN)
+    end
+    line += 84
+  end
+
+  line = y + 78
+  Im.Heading(`IN HAND  {#status.inHand} / 5`, right, line, 16, Im.DIM)
+  Im.TextRight(`{status.done} done`, right + 430, line + 2, 13, Im.DIM)
+  line += 30
+  if #status.inHand == 0 then
+    Im.Text("No jobs in hand.", right, line, 14, Im.DIM, 0.8)
+  end
+  for index, held in status.inHand do
+    Im.Text(held.title, right, line, 15, Im.TEXT)
+    Im.TextRight(Format.Credits(held.mission.reward), right + 430, line, 15, GOOD)
+    Im.Text(about(held.mission), right, line + 21, 12, Im.DIM)
+    local complete: State.Command = { kind = "CompleteMission", actor = 0, target = held.mission.id }
+    if Im.Button("Complete", right, line + 42, 90, 24, held.ready, `Complete:{index}`) then
+      Session.Do(session, complete)
+    end
+    if not held.ready then
+      Im.Text(shorten(held.why, 34), right + 100, line + 46, 12, Im.DIM)
+    end
+    if Im.Button("Abandon", right + 350, line + 42, 80, 24, true, `Abandon:{index}`) then
+      Session.Do(session, { kind = "AbandonMission", actor = 0, target = held.mission.id })
+    end
+    line += 84
+  end
+end
+
+-- ---------------------------------------------------------------------
 -- Starbase: the running of a tower of the pilot's own
 
 -- A bar of what is used of what there is, with the figures over it.
@@ -1216,6 +1284,8 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
     drawShips(session, game, player, x, y)
   elseif tab == "Wallet" then
     drawWallet(game, x, y)
+  elseif tab == "Missions" then
+    drawMissions(session, game, x, y)
   elseif tab == "Starbase" and own then
     drawStarbase(session, game, player, own, x, y)
   else

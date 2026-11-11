@@ -43,6 +43,8 @@
 #   game-traffic  the other ships about (test/scenario/traffic.txt): haulers
 #               and patrols at a homeworld, and a pilot marked for firing
 #               on one
+#   game-missions  the jobs a station offers (test/scenario/missions.txt):
+#               taken, one filled and paid, one given up
 #   game-pace   the game app must draw at least thirty frames a second just
 #               outside the home station (test/scenario/pace.txt)
 #   goldens     script/goldens: screenshots of the stored scenes must match
@@ -153,6 +155,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/galaxy.txt
   step game-traffic 0 timeout 700 bin/launch game --no-present --fixed-step 60 --timeout 600 \
     --script test/scenario/traffic.txt
+  step game-missions 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
+    --script test/scenario/missions.txt
   step game-pace 0 timeout 200 bin/launch game --no-present --fixed-step 60 --timeout 150 \
     --script test/scenario/pace.txt
   step goldens 0 script/goldens
