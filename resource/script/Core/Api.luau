@@ -13,6 +13,7 @@
 -- effect at the start of the next tick.
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
+local Batteries = require("@lt/Core/Tactical/Batteries")
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Codec = require("@lt/Core/Persist/Codec")
 local Combat = require("@lt/Core/Tactical/Combat")
@@ -300,7 +301,7 @@ function Core.Step(game: Game)
   local state = game.state
   state.tick += 1
   Space.Integrate(state, game.events)
-  local killers = Combat.Step(state, game.events)
+  local killers = Combat.Step(state, game.events, Batteries.Fire(state, game.events))
   for _, id in table.clone(state.ballIds) do
     local by = killers[id]
     if by then

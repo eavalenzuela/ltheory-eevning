@@ -568,6 +568,11 @@ function Debug.Traffic(): (number, number, number)
   return #state.trafficIds, near, hostile
 end
 
+-- How many volleys of a station's batteries the scene has shown.
+function Debug.Battery(): number
+  return scene.volleys
+end
+
 -- Whether the factions' patrols take the pilot for a criminal just now.
 function Debug.Marked(): boolean
   return session.game.state.tick < session.game.state.player.marked

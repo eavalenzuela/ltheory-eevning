@@ -453,9 +453,12 @@ end
 -- Recharge, check locks, run modules, land missiles, apply damage. Ships
 -- destroyed this tick are returned (id to killer) for the caller to deal
 -- with: what becomes of a wreck and its pilot is not combat's business.
-function Combat.Step(state: State.State, events: { Event }): { [number]: number }
+--
+-- 'landed' is hits from elsewhere to apply with the rest (a station's
+-- batteries: Tactical/Batteries).
+function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): { [number]: number }
   local time = now(state)
-  local hits: { Hit } = {}
+  local hits: { Hit } = landed or {}
 
   for _, id in table.clone(state.ballIds) do
     local ball = state.balls[id]

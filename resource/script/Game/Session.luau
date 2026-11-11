@@ -109,6 +109,8 @@ function Session.Notice(session: Session, event: Space.Event)
         elseif now == "low" then "Low security: order is thin here"
         else "Secure space")
     end
+  elseif kind == "BatteryFired" and event.to == mine then
+    Session.Say(session, "The station's batteries are firing on you")
   elseif kind == "Marked" then
     Session.Say(session, "You have fired on a ship that is no pirate's: the patrols will fire on you")
   elseif kind == "ColonyDeployed" then

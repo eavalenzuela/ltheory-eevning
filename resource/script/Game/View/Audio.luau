@@ -140,6 +140,12 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
         play(audio, if shielded then "shield/hit.ogg" else `impact/metal/{event.item % 4 + 1}.wav`, if shielded then 0.10 else 0.14,
           "struck", 0.15)
       end
+    elseif kind == "BatteryFired" then
+      local weapon = if event.missile then WEAPON.missile else WEAPON.projectile
+      play(audio, weapon.files[event.battery % #weapon.files + 1], weapon.volume * 0.8, `battery{event.battery}`, 0.2, 0.55)
+      if event.to == mine and me then
+        play(audio, if me.vitals.shield > 1 then "shield/hit.ogg" else "impact/metal/3.wav", 0.14, "struck", 0.15)
+      end
     elseif kind == "MissileHit" and event.to == mine and me then
       play(audio, if me.vitals.shield > 1 then "shield/hit.ogg" else "impact/metal/2.wav", 0.14, "struck", 0.15)
     elseif kind == "BallDestroyed" then

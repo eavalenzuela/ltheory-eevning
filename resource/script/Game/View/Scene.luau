@@ -105,6 +105,7 @@ export type Scene = {
   works: { [number]: { Object } },    -- what stands round each station's tower: its modules, their guns, its field
   standing: { [number]: string },     -- what a pilot's starbase was made of when it was put up here
   epoch: number,                      -- the game (Session's 'epoch') the scene was made for
+  volleys: number,                    -- shots of a station's batteries shown so far
   docked: boolean,                    -- the pilot is docked: the camera is on the station
   zoomAway: number,                   -- the zoom there was before docking, to go back to
   arms: { [number]: Armed },          -- what is on the hardpoints of each ship of our own design
@@ -151,7 +152,7 @@ function Scene.New(camera: Camera): Scene
     proxies = {}, celestials = {}, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
-    wreckage = {}, works = {}, standing = {}, epoch = 1, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0,
+    wreckage = {}, works = {}, standing = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0,
   }
 end
 
@@ -923,6 +924,16 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         -- (from the mouth of the gun, if it is one that is shown)
         Effects.Fire(fx, if item then item.type else FALLBACK[event.family] or "autocannon", from.id, to.id, from.radius, to.radius,
           event.outcome, event.flight or 0, struck(to), scene.time, if scene.screen[-event.item] then -event.item else nil)
+      end
+    elseif event.kind == "BatteryFired" then
+      -- (from the station's side of its field toward what it fires on:
+      -- which battery it was is not followed yet)
+      local to = state.balls[event.to]
+      local station = objects[event.station % Constants.STRUCTURE_ID_SPAN]
+      if to and station and scene.screen[event.station] then
+        scene.volleys += 1
+        Effects.Fire(fx, if event.missile then "launcher.cruise" else "artillery.large", event.station, event.to, station.radius * 0.35,
+          to.radius, "hit", 0, struck(to), scene.time, nil)
       end
     elseif event.kind == "BallDestroyed" and event.system == player.system and grid ~= 0 then
       local at = vector.create(event.x - scene.ox, event.y - scene.oy, event.z - scene.oz)
