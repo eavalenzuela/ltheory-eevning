@@ -164,6 +164,31 @@ local function ports(b: Builder, from: vector, to: vector, count: number, size: 
   end
 end
 
+-- A block of launch cells: a box with a grid of hatches on its top.
+local function silos(b: Builder, center: vector, half: vector, columns: number, rows: number)
+  block(b, PLATING, center, half, nil, 0.06)
+  block(b, FRAME, center + v(0, half.y, 0), v(half.x * 0.94, half.y * 0.04, half.z * 0.94), nil, 0.1)
+  for column = 1, columns do
+    for row = 1, rows do
+      local x = (column - (columns + 1) / 2) * (1.8 * half.x / columns)
+      local z = (row - (rows + 1) / 2) * (1.8 * half.z / rows)
+      local lid = if (column + row) % 5 == 0 then PATCH else TRIM
+      block(b, lid, center + v(x, half.y * 1.05, z), v(0.66 * half.x / columns, half.y * 0.035, 0.66 * half.z / rows), nil, 0.3)
+    end
+  end
+end
+
+-- Battlements along the top of a wall that runs along z: a row of
+-- small blocks with gaps between.
+local function battlements(b: Builder, from: vector, to: vector, count: number, size: number)
+  for index = 1, count do
+    if index % 3 ~= 0 then
+      block(b, if index % 4 == 0 then PATCH else PLATING, from + (to - from) * ((index - 0.5) / count),
+        v(size * 0.8, size, size * 1.1 * vector.magnitude(to - from) / count / size * 0.36), nil, 0.12)
+    end
+  end
+end
+
 -- ---------------------------------------------------------------------
 -- The Vessari
 
@@ -329,9 +354,255 @@ local function caravan(b: Builder)
   block(b, PLATING, v(0.47, 0.02, stern + length * 1.5), v(0.018, 0.30, length * 0.36), v(0, 0, -0.29), 0.06)
 end
 
-local designs: { [string]: { faction: string, draw: (b: Builder) -> () } } = {
+-- The Halberd, a missile destroyer, drawn as the weapon it is named
+-- for: a long pole of girders with the ship's works strung along it,
+-- and at the bow a great blade of armour hanging below the pole, with a
+-- spike out ahead. To balance the blade the engines are stacked above
+-- the pole at the stern, so that the whole ship runs on a slant.
+local function halberd(b: Builder)
+  -- the pole
+  truss(b, v(0, 0, -1.42), v(0, 0, 1.40), 0.20, 12)
+  truss(b, v(0, 0, -1.42), v(0, 0, 1.40), 0.18, 12, v(1, 0, 0))
+  -- the spike
+  beam(b, FRAME, v(0, 0.02, 1.36), v(0, 0.05, 2.20), 0.022, 0.1)
+  beam(b, FRAME, v(0.05, -0.04, 1.36), v(0.07, -0.05, 1.82), 0.011, 0.1)
+  block(b, PLATING, v(0, 0.01, 1.42), v(0.10, 0.10, 0.07), nil, 0.2)
+
+  -- the blade: three slabs that make an axe-head under the bow, and a
+  -- fluke above it
+  block(b, PLATING, v(0.00, -0.36, 1.00), v(0.060, 0.36, 0.32), nil, 0.06)
+  block(b, PLATING, v(-0.01, -0.84, 0.86), v(0.055, 0.24, 0.26), v(0, 0.30, 0), 0.06)
+  block(b, PATCH, v(0.01, -0.62, 0.58), v(0.050, 0.26, 0.14), v(0, -0.22, 0), 0.06)
+  block(b, PLATING, v(0.00, 0.24, 1.10), v(0.050, 0.15, 0.17), v(0, -0.25, 0), 0.06)
+  -- its edge, in trim, and ribs across it
+  block(b, TRIM, v(0.00, -0.50, 1.325), v(0.064, 0.30, 0.018), v(0, 0.06, 0), 0.2)
+  block(b, TRIM, v(-0.01, -0.99, 1.10), v(0.060, 0.11, 0.018), v(0, 0.62, 0), 0.2)
+  for _, y in { -0.16, -0.42, -0.68 } do
+    beam(b, FRAME, v(0.066, y, 0.72), v(0.066, y - 0.06, 1.28), 0.012)
+    beam(b, FRAME, v(-0.066, y, 0.72), v(-0.066, y - 0.06, 1.28), 0.012)
+  end
+  beam(b, FRAME, v(0, -0.10, 0.50), v(0, -0.60, 0.70), 0.020)
+  beam(b, FRAME, v(0, -0.08, 0.20), v(0, -0.84, 0.66), 0.016)
+  ports(b, v(0.062, -0.30, 0.82), v(0.062, -0.30, 1.18), 5, 0.012)
+
+  -- the works, strung along the pole
+  block(b, PLATING, v(0.03, 0.17, 0.42), v(0.17, 0.15, 0.27))
+  block(b, PATCH, v(0.11, 0.37, 0.50), v(0.095, 0.060, 0.13), nil, 0.14)
+  block(b, GLOW, v(0.11, 0.39, 0.634), v(0.070, 0.018, 0.006), nil, 0.3)
+  block(b, FRAME, v(0.11, 0.44, 0.46), v(0.055, 0.010, 0.07))
+  block(b, PLATING, v(0.00, -0.04, -0.14), v(0.21, 0.20, 0.30))
+  block(b, PATCH, v(-0.225, 0.00, -0.10), v(0.020, 0.16, 0.22), v(0, 0, 0.05))
+  block(b, PLATING, v(0.228, -0.05, -0.20), v(0.020, 0.13, 0.17), v(0, 0, -0.05))
+  block(b, PLATING, v(0.00, 0.06, -0.84), v(0.24, 0.22, 0.25))
+  block(b, FRAME, v(0.00, 0.02, -0.50), v(0.15, 0.15, 0.05))
+  tank(b, v(0.15, -0.31, -0.18), 0.085, 0.24)
+  tank(b, v(-0.14, -0.30, -0.26), 0.070, 0.18, PLATING)
+  conduit(b, { v(0.06, 0.33, 0.20), v(0.06, 0.22, 0.10), v(0.06, 0.18, -0.50), v(0.06, 0.30, -0.62) }, 0.014)
+  conduit(b, { v(-0.08, 0.17, -0.40), v(-0.08, 0.30, -0.56), v(-0.08, 0.30, -0.98) }, 0.012)
+
+  -- the engines, stacked above the pole on a pylon; a small one below
+  truss(b, v(0, 0.24, -0.92), v(0, 0.98, -0.92), 0.16, 4, v(0, 0, 1))
+  nacelle(b, v(0.00, 0.52, -1.08), 0.44, 0.145)
+  nacelle(b, v(-0.03, 0.92, -0.96), 0.34, 0.110)
+  beam(b, FRAME, v(0.0, 0.30, -0.62), v(0.0, 0.80, -0.80), 0.018)
+  block(b, FRAME, v(0.00, -0.02, -1.14), v(0.13, 0.13, 0.07), nil, 0.2)
+  block(b, GLOW, v(0.00, -0.02, -1.222), v(0.09, 0.09, 0.010), v(0, 0, math.pi / 8), 0.5)
+  mast(b, v(-0.03, 1.03, -0.86), 0.42, 0.02)
+
+  -- out to starboard, a boom with its drum
+  truss(b, v(0.22, 0.00, -0.30), v(0.82, 0.06, -0.36), 0.10, 4, v(0, 0, 1))
+  tank(b, v(0.90, 0.06, -0.36), 0.10, 0.22, PLATING)
+  beam(b, FRAME, v(0.90, 0.16, -0.30), v(0.94, 0.52, -0.40), 0.008, 0.1)
+end
+
+-- The Cuirass, a missile cruiser, which goes into a fight behind its
+-- breastplate: a great shield of slabs standing off the bow and wrapped
+-- back along the port side, held on struts, while the starboard side
+-- behind it is left bare, tanks, pipes and all. The bridge looks over
+-- the top of the shield from a tower; the engines hang off a beam across
+-- the stern, three of them, none the same size or the same way out.
+local function cuirass(b: Builder)
+  -- the keel and the body on it
+  truss(b, v(0.05, -0.20, -1.30), v(0.05, -0.20, 1.10), 0.26, 10)
+  truss(b, v(0.05, -0.20, -1.30), v(0.05, -0.20, 1.10), 0.24, 10, v(1, 0, 0))
+  block(b, PLATING, v(0.05, 0.04, 0.42), v(0.29, 0.25, 0.48))
+  block(b, PLATING, v(0.03, 0.02, -0.42), v(0.26, 0.28, 0.30))
+  block(b, FRAME, v(0.05, 0.02, -0.08), v(0.20, 0.20, 0.07))
+  block(b, PATCH, v(0.05, 0.305, 0.36), v(0.22, 0.022, 0.34))
+  block(b, PLATING, v(0.04, 0.31, -0.42), v(0.19, 0.020, 0.22), v(0, 0.03, 0))
+
+  -- the breastplate: the face of it across the bow, canted
+  block(b, PLATING, v(-0.06, 0.06, 1.34), v(0.50, 0.56, 0.050), v(0.10, -0.06, 0), 0.05)
+  block(b, PATCH, v(0.30, -0.36, 1.375), v(0.19, 0.17, 0.030), v(0.10, -0.06, 0), 0.08)
+  block(b, TRIM, v(-0.08, 0.36, 1.392), v(0.44, 0.045, 0.012), v(0.10, -0.06, 0), 0.2)
+  block(b, TRIM, v(-0.08, 0.22, 1.398), v(0.44, 0.020, 0.012), v(0.10, -0.06, 0), 0.2)
+  -- its shoulder, turning the corner to port
+  block(b, PLATING, v(-0.66, 0.03, 1.08), v(0.050, 0.52, 0.30), v(0.55, 0, 0), 0.05)
+  -- and its flank, back along the port side in three lengths that step down
+  block(b, PLATING, v(-0.80, 0.00, 0.50), v(0.050, 0.48, 0.34), v(0.10, 0, 0), 0.05)
+  block(b, PATCH, v(-0.82, -0.06, -0.14), v(0.045, 0.40, 0.27), v(0.02, 0, 0.04), 0.05)
+  block(b, PLATING, v(-0.80, -0.12, -0.68), v(0.045, 0.30, 0.24), v(-0.06, 0, 0), 0.05)
+  block(b, TRIM, v(-0.855, 0.30, 0.50), v(0.012, 0.045, 0.33), v(0.10, 0, 0), 0.2)
+  -- a brow over the top, and a chin under
+  block(b, PLATING, v(-0.16, 0.66, 1.10), v(0.42, 0.045, 0.26), v(0, -0.30, 0), 0.05)
+  block(b, PLATING, v(-0.10, -0.56, 1.14), v(0.38, 0.040, 0.22), v(0, 0.34, 0), 0.05)
+  -- the struts that carry it
+  for _, y in { -0.18, 0.20 } do
+    beam(b, FRAME, v(-0.24, y, 0.60), v(-0.76, y, 0.56), 0.022)
+    beam(b, FRAME, v(-0.24, y, 0.10), v(-0.78, y - 0.04, -0.10), 0.022)
+    beam(b, FRAME, v(-0.22, y - 0.04, -0.50), v(-0.76, y - 0.10, -0.66), 0.020)
+    beam(b, FRAME, v(-0.10, y, 0.92), v(-0.20, y, 1.28), 0.022)
+    beam(b, FRAME, v(0.20, y, 0.92), v(0.30, y, 1.30), 0.022)
+  end
+  beam(b, FRAME, v(-0.24, 0.20, 0.60), v(-0.78, -0.18, 0.10), 0.014)
+  beam(b, FRAME, v(0.05, 0.30, 0.80), v(-0.10, 0.62, 1.04), 0.018)
+  beam(b, FRAME, v(0.05, -0.30, 0.80), v(-0.06, -0.54, 1.06), 0.018)
+
+  -- the bare side: tanks in a row, and the pipes that feed them
+  tank(b, v(0.44, 0.14, 0.52), 0.115, 0.30)
+  tank(b, v(0.44, -0.12, 0.44), 0.105, 0.26, PLATING)
+  tank(b, v(0.42, 0.10, -0.30), 0.095, 0.24, PLATING)
+  tank(b, v(0.42, -0.14, -0.40), 0.085, 0.20)
+  conduit(b, { v(0.44, 0.27, 0.80), v(0.44, 0.30, 0.20), v(0.42, 0.22, -0.06), v(0.42, 0.22, -0.56) }, 0.018)
+  conduit(b, { v(0.56, -0.02, 0.70), v(0.56, -0.02, -0.10), v(0.52, -0.02, -0.60) }, 0.014)
+  conduit(b, { v(0.36, -0.28, 0.80), v(0.36, -0.30, -0.70) }, 0.016)
+
+  -- the tower, and the bridge on it that sees over the brow
+  block(b, PLATING, v(0.20, 0.52, 0.30), v(0.13, 0.22, 0.15))
+  block(b, FRAME, v(0.20, 0.76, 0.30), v(0.10, 0.03, 0.11))
+  block(b, PATCH, v(0.20, 0.86, 0.36), v(0.18, 0.075, 0.22), nil, 0.14)
+  block(b, GLOW, v(0.20, 0.885, 0.584), v(0.14, 0.022, 0.006), nil, 0.3)
+  block(b, GLOW, v(0.383, 0.885, 0.40), v(0.004, 0.020, 0.12), nil, 0.3)
+  mast(b, v(0.14, 0.93, 0.26), 0.52, 0.03)
+  beam(b, FRAME, v(0.28, 0.93, 0.44), v(0.30, 1.22, 0.40), 0.008, 0.1)
+
+  -- a magazine slung under the middle
+  block(b, PLATING, v(0.04, -0.52, -0.22), v(0.21, 0.15, 0.40), nil, 0.08)
+  block(b, TRIM, v(0.04, -0.52, -0.02), v(0.216, 0.155, 0.03), nil, 0.1)
+  for _, z in { -0.52, 0.06 } do
+    beam(b, FRAME, v(0.20, -0.30, z), v(0.20, -0.40, z), 0.018)
+    beam(b, FRAME, v(-0.12, -0.30, z), v(-0.12, -0.40, z), 0.018)
+  end
+
+  -- the engines: a beam across the stern, and three pods hung off it
+  block(b, PLATING, v(0.04, 0.00, -0.92), v(0.24, 0.24, 0.20))
+  truss(b, v(-0.92, 0.20, -1.06), v(1.12, -0.04, -1.02), 0.16, 9)
+  nacelle(b, v(0.04, -0.14, -1.42), 0.50, 0.21)
+  nacelle(b, v(-0.84, 0.30, -1.20), 0.40, 0.14)
+  nacelle(b, v(1.10, -0.10, -1.10), 0.44, 0.165)
+  beam(b, FRAME, v(-0.30, 0.20, -0.70), v(-0.80, 0.26, -1.00), 0.020)
+  beam(b, FRAME, v(0.34, -0.10, -0.66), v(1.02, -0.08, -0.94), 0.020)
+  -- (the family's slanted plates, over and under the middle engine)
+  block(b, PLATING, v(0.04, 0.18, -1.36), v(0.26, 0.020, 0.26), v(0, -0.26, 0), 0.08)
+  block(b, PATCH, v(0.04, -0.44, -1.38), v(0.28, 0.020, 0.26), v(0, 0.28, 0), 0.08)
+end
+
+-- The Bastion, a missile battleship: two walls and a keep. Two great
+-- slabs of armour stand on edge side by side, the port one longer and
+-- taller than the starboard, with battlements along their tops; the
+-- missiles sit in blocks of cells in the yard between them, under
+-- gantries that tie the walls together; and from the port wall, aft of
+-- the middle, rises the keep, with the bridge at its top. The port wall
+-- runs on past the bow as a ram. Engines of five sizes fill the stern.
+local function bastion(b: Builder)
+  local port, starboard = -0.50, 0.52
+
+  -- the keel under it all
+  truss(b, v(0, -0.50, -1.60), v(0, -0.50, 1.30), 0.30, 12)
+  truss(b, v(0, -0.50, -1.60), v(0, -0.50, 1.30), 0.50, 12, v(1, 0, 0))
+
+  -- the port wall, in four lengths that step up toward the keep
+  block(b, PLATING, v(port, -0.02, 1.36), v(0.085, 0.42, 0.52), nil, 0.04)
+  block(b, PLATING, v(port - 0.01, 0.08, 0.50), v(0.100, 0.56, 0.42), nil, 0.04)
+  block(b, PATCH, v(port, 0.14, -0.30), v(0.105, 0.66, 0.44), nil, 0.04)
+  block(b, PLATING, v(port + 0.01, 0.04, -1.12), v(0.095, 0.54, 0.44), nil, 0.04)
+  -- the ram: the wall carried on past the bow, edged in trim
+  block(b, PLATING, v(port, -0.10, 2.06), v(0.070, 0.30, 0.24), v(0, 0.16, 0), 0.05)
+  block(b, TRIM, v(port, -0.14, 2.31), v(0.076, 0.27, 0.020), v(0, 0.16, 0), 0.2)
+  block(b, TRIM, v(port - 0.09, 0.30, 0.90), v(0.012, 0.050, 1.00), nil, 0.2)
+  -- the starboard wall, shorter and lower, in three
+  block(b, PLATING, v(starboard, -0.12, 0.72), v(0.085, 0.40, 0.46), nil, 0.04)
+  block(b, PLATING, v(starboard + 0.01, -0.08, -0.14), v(0.095, 0.46, 0.42), nil, 0.04)
+  block(b, PATCH, v(starboard, -0.14, -0.98), v(0.085, 0.38, 0.44), nil, 0.04)
+  block(b, TRIM, v(starboard + 0.085, 0.14, -0.10), v(0.012, 0.045, 0.80), nil, 0.2)
+  -- battlements along the tops
+  battlements(b, v(port, 0.44, 0.86), v(port, 0.44, 1.86), 9, 0.05)
+  battlements(b, v(port, 0.68, 0.10), v(port, 0.68, 0.90), 7, 0.05)
+  battlements(b, v(port, 0.62, -1.54), v(port, 0.62, -0.72), 7, 0.05)
+  battlements(b, v(starboard, 0.32, 0.28), v(starboard, 0.32, 1.16), 8, 0.045)
+  battlements(b, v(starboard, 0.42, -0.54), v(starboard, 0.42, 0.26), 7, 0.045)
+  battlements(b, v(starboard, 0.28, -1.40), v(starboard, 0.28, -0.56), 7, 0.045)
+  -- rows of lit ports, to say how big it is
+  ports(b, v(port - 0.105, 0.20, 0.14), v(port - 0.105, 0.20, 0.86), 12, 0.010)
+  ports(b, v(port - 0.110, -0.10, -0.70), v(port - 0.110, -0.10, 0.10), 14, 0.010)
+  ports(b, v(port - 0.105, 0.34, -0.66), v(port - 0.105, 0.34, 0.06), 10, 0.010)
+  ports(b, v(starboard + 0.100, -0.06, -0.50), v(starboard + 0.100, -0.06, 0.24), 12, 0.010)
+  ports(b, v(starboard + 0.090, -0.20, 0.34), v(starboard + 0.090, -0.20, 1.10), 10, 0.010)
+
+  -- the yard between the walls: blocks of launch cells, and the floor under them
+  block(b, FRAME, v(0.01, -0.36, 0.00), v(0.40, 0.05, 1.30), nil, 0.06)
+  silos(b, v(0.02, -0.14, 0.84), v(0.30, 0.18, 0.30), 4, 4)
+  silos(b, v(0.00, -0.08, 0.08), v(0.32, 0.24, 0.34), 4, 5)
+  silos(b, v(0.03, -0.16, -0.72), v(0.28, 0.16, 0.30), 3, 4)
+  -- gantries across the yard, wall to wall, no two at the same height
+  truss(b, v(port + 0.10, 0.36, 0.46), v(starboard - 0.08, 0.20, 0.46), 0.12, 6, v(0, 0, 1))
+  truss(b, v(port + 0.10, 0.50, -0.34), v(starboard - 0.08, 0.30, -0.34), 0.14, 6, v(0, 0, 1))
+  truss(b, v(port + 0.09, 0.26, 1.24), v(starboard - 0.08, 0.16, 1.06), 0.10, 6, v(0, 0, 1))
+  truss(b, v(port + 0.10, 0.34, -1.14), v(starboard - 0.08, 0.16, -1.10), 0.12, 6, v(0, 0, 1))
+  conduit(b, { v(port + 0.12, 0.22, 1.20), v(port + 0.12, 0.26, 0.40), v(port + 0.14, 0.30, -0.40), v(port + 0.12, 0.26, -1.30) }, 0.022)
+  conduit(b, { v(starboard - 0.11, 0.06, 1.00), v(starboard - 0.11, 0.10, -1.20) }, 0.020)
+  -- the bow of the yard: a mouth between the walls, lit
+  block(b, PLATING, v(0.04, -0.20, 1.24), v(0.38, 0.24, 0.05), v(0, 0.10, 0), 0.06)
+  block(b, GLOW, v(0.06, -0.16, 1.296), v(0.22, 0.05, 0.006), v(0, 0.10, 0), 0.3)
+
+  -- the keep: up out of the port wall, aft of the middle
+  block(b, PLATING, v(port + 0.06, 0.88, -0.36), v(0.20, 0.26, 0.26), nil, 0.06)
+  block(b, PATCH, v(port + 0.08, 1.24, -0.34), v(0.16, 0.12, 0.20), nil, 0.06)
+  block(b, FRAME, v(port + 0.08, 1.39, -0.34), v(0.12, 0.035, 0.15))
+  block(b, PLATING, v(port + 0.12, 1.52, -0.26), v(0.24, 0.10, 0.30), nil, 0.12)
+  block(b, GLOW, v(port + 0.12, 1.55, 0.044), v(0.19, 0.026, 0.006), nil, 0.3)
+  block(b, GLOW, v(port + 0.364, 1.55, -0.22), v(0.004, 0.024, 0.20), nil, 0.3)
+  block(b, TRIM, v(port + 0.06, 0.70, -0.095), v(0.205, 0.05, 0.012), nil, 0.2)
+  mast(b, v(port + 0.02, 1.62, -0.40), 0.62, 0.03)
+  mast(b, v(port + 0.24, 1.62, -0.12), 0.40, -0.02)
+  beam(b, FRAME, v(port + 0.20, 0.70, -0.60), v(port + 0.30, 1.42, -0.50), 0.020)
+  beam(b, FRAME, v(port + 0.20, 0.66, -0.12), v(starboard - 0.10, 0.38, 0.10), 0.018)
+  -- a lesser tower on the starboard wall, forward
+  block(b, PLATING, v(starboard - 0.02, 0.46, 0.80), v(0.12, 0.16, 0.14), nil, 0.08)
+  block(b, PATCH, v(starboard - 0.02, 0.66, 0.82), v(0.09, 0.05, 0.10), nil, 0.14)
+  beam(b, FRAME, v(starboard - 0.02, 0.71, 0.80), v(starboard, 1.06, 0.76), 0.010, 0.1)
+
+  -- under the keel, the magazine: a great drum in a cradle
+  tank(b, v(0.06, -0.86, -0.10), 0.22, 0.62, PLATING)
+  for _, z in { -0.56, 0.36 } do
+    beam(b, FRAME, v(-0.20, -0.52, z), v(-0.14, -0.74, z), 0.024)
+    beam(b, FRAME, v(0.30, -0.52, z), v(0.26, -0.74, z), 0.024)
+  end
+  -- out to starboard, a boom
+  truss(b, v(starboard + 0.08, -0.20, 0.30), v(1.30, -0.10, 0.40), 0.12, 5, v(0, 0, 1))
+  block(b, PATCH, v(1.36, -0.10, 0.40), v(0.07, 0.07, 0.16), nil, 0.2)
+  beam(b, FRAME, v(1.36, -0.03, 0.40), v(1.40, 0.44, 0.34), 0.009, 0.1)
+
+  -- the stern: a block that joins the walls, and five engines in it,
+  -- behind the family's slanted plates
+  block(b, PLATING, v(0.01, -0.06, -1.74), v(0.58, 0.46, 0.20), nil, 0.05)
+  block(b, PLATING, v(0.00, 0.48, -1.90), v(0.52, 0.026, 0.30), v(0, -0.34, 0), 0.06)
+  block(b, PATCH, v(0.02, -0.60, -1.90), v(0.56, 0.026, 0.30), v(0, 0.34, 0), 0.06)
+  nacelle(b, v(-0.26, 0.06, -2.02), 0.36, 0.20)
+  nacelle(b, v(0.24, -0.16, -2.06), 0.40, 0.23)
+  nacelle(b, v(0.30, 0.26, -1.96), 0.26, 0.11)
+  nacelle(b, v(-0.34, -0.34, -1.96), 0.26, 0.12)
+  nacelle(b, v(-0.02, 0.32, -1.94), 0.22, 0.09)
+end
+
+-- (A bigger ship is plated in more and smaller sheets for its size: it
+-- is one of the things that says how big it is.)
+local designs: { [string]: { faction: string, draw: (b: Builder) -> (), sheets: number? } } = {
   ["frigate.javelin"] = { faction = "vessari", draw = javelin },
-  ["industrial.caravan"] = { faction = "vessari", draw = caravan },
+  ["destroyer.halberd"] = { faction = "vessari", draw = halberd, sheets = 4.0 },
+  ["cruiser.cuirass"] = { faction = "vessari", draw = cuirass, sheets = 5.5 },
+  ["battleship.bastion"] = { faction = "vessari", draw = bastion, sheets = 8.5 },
+  ["industrial.caravan"] = { faction = "vessari", draw = caravan, sheets = 4.0 },
 }
 
 -- ---------------------------------------------------------------------
@@ -387,7 +658,7 @@ function Hull.Build(type: string): Built?
   ShaderInstance_SetVec3(skin, "paintTrim", color(look.trim))
   ShaderInstance_SetFloat(skin, "wear", look.wear)
   ShaderInstance_SetFloat(skin, "rust", look.rust)
-  ShaderInstance_SetFloat(skin, "sheets", look.sheets)
+  ShaderInstance_SetFloat(skin, "sheets", design.sheets or look.sheets)
   ShaderInstance_Link(skin)
 
   local model = Model_Create()
