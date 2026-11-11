@@ -23,6 +23,7 @@ local Drones = require("@lt/Core/Tactical/Drones")
 local Factions = require("@lt/Core/Data/Factions")
 local Fleet = require("@lt/Core/Tactical/Fleet")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Guide = require("@lt/Core/Character/Guide")
 local Hangar = require("@lt/Core/Assets/Hangar")
 local Industry = require("@lt/Core/Assets/Industry")
 local Items = require("@lt/Core/Assets/Items")
@@ -66,7 +67,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 26
+Core.SAVE_VERSION = 27
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -244,6 +245,11 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
     state.bookmarks = state.bookmarks or {}
     state.bookmarkIds = state.bookmarkIds or {}
   end,
+  -- 27: there is a guide. A save from before has ticked nothing off
+  -- (what was done before is done again soon enough).
+  [26] = function(state: any)
+    state.guide = state.guide or {}
+  end,
 }
 
 -- A new game: a galaxy, and the player's first ship docked at a station
@@ -284,6 +290,7 @@ function Core.New(options: Options): Game
     hiredDay = 0,
     bookmarks = {},
     bookmarkIds = {},
+    guide = {},
     jobIds = {},
     wallet = 0,
     journal = {},
@@ -413,6 +420,7 @@ end
 function Core.Step(game: Game)
   local state = game.state
   state.tick += 1
+  local first = #game.events + 1
   Space.Integrate(state, game.events)
   local killers = Combat.Step(state, game.events, Batteries.Fire(state, game.events))
   for _, id in table.clone(state.ballIds) do
@@ -475,6 +483,7 @@ function Core.Step(game: Game)
   Colonies.Step(state, game.events)
   Industry.Step(state, game.events)
   Training.Step(state, game.events)
+  Guide.Step(state, game.events, first)
 end
 
 -- The events since the last call, oldest first.
@@ -833,6 +842,17 @@ function Query.Body(game: Game, id: number): Space.Body?
   -- (a place the pilot has marked counts, to whoever only wants its name
   -- and where it is)
   return Space.Body(game.state, id) or Space.Marked(game.state, id)
+end
+
+-- The guide: every step there is, in order, with whether the pilot has
+-- done it; and how many they have.
+export type GuideRow = { step: Guide.Step, done: boolean }
+function Query.Guide(game: Game): ({ GuideRow }, number)
+  local rows: { GuideRow } = {}
+  for _, step in Guide.steps do
+    table.insert(rows, { step = step, done = Guide.Done(game.state, step.id) })
+  end
+  return rows, #game.state.guide
 end
 
 -- The places the pilot has marked, in the order they were.

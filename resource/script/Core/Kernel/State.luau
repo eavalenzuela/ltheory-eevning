@@ -402,6 +402,9 @@ export type State = {
   fleetIds: { number },
   hired: { string },
   hiredDay: number,
+  -- The steps of the guide the pilot has done (Character/Guide), in the
+  -- order they did them.
+  guide: { string },
   -- The places the pilot has marked, in the order they were.
   bookmarks: { [number]: Bookmark },
   bookmarkIds: { number },

@@ -14,6 +14,7 @@ local Components = require("@lt/Widget/Components")
 local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
+local Guide = require("@lt/Game/UI/Guide")
 local Im = require("@lt/Game/UI/Im")
 local Info = require("@lt/Game/UI/Info")
 local Keys = require("@lt/Game/UI/Keys")
@@ -234,6 +235,7 @@ local function drawOverview(session: Session.Session, entries: { Core.Entry }, x
       Scanner.Open()
       Colony.Close()
       Assets.Close()
+      Guide.Close()
     end
   end
   local top = y + 34
@@ -574,6 +576,19 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       if session.message ~= "" and game.state.tick - session.messageTick < 10 then
         Im.Text(session.message, left + 24, top + 107, 16, Im.WARN)
       end
+      -- The guide: what there is to do, and how much of it is done. Its
+      -- window takes the place the colonies and assets windows take.
+      local steps, guided = Core.Query.Guide(game)
+      if Im.Button(`Guide  {guided} / {#steps}`, left + 300, top + 60, 118, 28, true, "Guide") then
+        if Guide.IsOpen() then
+          Guide.Close()
+        else
+          Guide.Open()
+          Colony.Close()
+          Assets.Close()
+          Scanner.Close()
+        end
+      end
 
       if scene.warp > 0 and ball and ball.warp then
         local target = Core.Query.Body(game, ball.warp.target)
@@ -626,6 +641,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           Colony.Open()
           Assets.Close()
           Scanner.Close()
+          Guide.Close()
         end
       end
       if Im.Button("Assets", left + 334, bottom - 54, 70, 34, true) then
@@ -635,6 +651,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           Assets.Open()
           Colony.Close()
           Scanner.Close()
+          Guide.Close()
         end
       end
       if Im.Button("Map", left + 408, bottom - 54, 56, 34, true) or Keys.Pressed("M") then
@@ -646,6 +663,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       end
       Colony.Draw(session, left + 16, top + 130)
       Assets.Draw(session, left + 16, top + 130)
+      Guide.Draw(session, left + 16, top + 130)
       if ball then
         Scanner.Draw(session, left + 16, top + 130)
       end

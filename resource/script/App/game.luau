@@ -889,6 +889,17 @@ function Debug.Spare(type: string, module: string?): boolean
   return true
 end
 
+-- The guide: how many of its steps the pilot has done, of how many, and
+-- whether a step named ("undock", "kill": Core/Character/Guide) is done.
+function Debug.Guide(step: string?): (number, number, boolean)
+  local rows, count = Core.Query.Guide(session.game)
+  local done = false
+  for _, row in rows do
+    done = done or (row.step.id == step and row.done)
+  end
+  return count, #rows, done
+end
+
 -- Press a key by its name ("Q", "Space", "Tab", "F1": Game/UI/Keys), as
 -- a pilot at the keyboard would. False if there is no such key.
 function Debug.Key(name: string): boolean

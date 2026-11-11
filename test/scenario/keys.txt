@@ -72,5 +72,13 @@ lua assert(GameDebug.Distance('belt') < 100000, 'the marked place was at the bel
 lua assert(GameDebug.Distance('bookmark') < 1000, 'the ship should come out of warp at the place it marked')
 lua GameDebug.TimeScale(1)
 
+# What was done on the way is ticked off in the guide.
+lua assert(select(3, GameDebug.Guide('undock')) and select(3, GameDebug.Guide('warp')), 'undocking and warping should be ticked off')
+lua assert(select(3, GameDebug.Guide('fit')) and select(3, GameDebug.Guide('kill')) and select(3, GameDebug.Guide('bookmark')), 'so should fitting, a pirate and a marked place')
+lua assert(not select(3, GameDebug.Guide('hire')), 'nobody was hired')
+until GameDebug.Press('Guide')
+frames 3
+until GameDebug.Press('Guide:close')
+
 echo keys scenario passed
 quit
