@@ -66,7 +66,19 @@ type Flash = {
 }
 
 -- An engine that is burning: a glare at its mouth and the fire behind.
-type Burn = { glare: Piece, plume: Piece, frame: number, level: number, time: number }
+type Burn = {
+  glare: Piece,
+  plume: Piece,
+  frame: number,
+  level: number,
+  time: number,
+  trail: { Piece },       -- the lengths of its trail, newest first (none until one is asked for)
+  points: { vector },     -- where its mouth has been, newest first, a step of time apart
+  stamp: number,          -- when the newest of those was noted
+}
+
+-- How many lengths a trail is drawn in.
+local SEGMENTS = 8
 
 export type Fx = {
   container: Object,
@@ -334,7 +346,13 @@ end
 -- goes, 'radius' half the mouth's width, 'throttle' how hard it is
 -- burning from 0 to 1. It glows a little even at rest. Say so every
 -- frame: an engine not heard from by the next Effects.Update is out.
-function Effects.Thrust(fx: Fx, key: number, at: vector, aft: vector, radius: number, throttle: number, color: vector, now: number)
+--
+-- With 'trail', it also leaves a trail along the way it has come, that
+-- many seconds long: a thread from its mouth back through where the
+-- mouth has been, fading to nothing. (Places are the scene's: if the
+-- scene's origin moves, call Effects.Still, or every trail will leap.)
+function Effects.Thrust(fx: Fx, key: number, at: vector, aft: vector, radius: number, throttle: number, color: vector, now: number,
+  trail: number?)
   local burn = fx.burns[key]
   if burn == nil then
     local glare = take(fx, "fx_flash.jsl", false, "glare")
@@ -345,7 +363,7 @@ function Effects.Thrust(fx: Fx, key: number, at: vector, aft: vector, radius: nu
     ShaderInstance_SetFloat(glare.shader, "fxRing", 0)
     ShaderInstance_SetFloat(glare.shader, "fxSeed", key * 1.7)
     ShaderInstance_SetFloat(plume.shader, "fxMin", THREAD)
-    burn = { glare = glare, plume = plume, frame = 0, level = math.clamp(throttle, 0, 1), time = now }
+    burn = { glare = glare, plume = plume, frame = 0, level = math.clamp(throttle, 0, 1), time = now, trail = {}, points = {}, stamp = now }
     fx.burns[key] = burn
   end
   burn.frame = fx.frame
@@ -364,6 +382,55 @@ function Effects.Thrust(fx: Fx, key: number, at: vector, aft: vector, radius: nu
     paint(burn.plume, color, 0.35 + 0.65 * throttle, now)
   else
     burn.plume.object:SetScale(NOWHERE)
+  end
+
+  if trail then
+    local points = burn.points
+    local step = trail / SEGMENTS
+    if #points == 0 or now < burn.stamp then
+      table.clear(points)
+      points[1] = at
+      burn.stamp = now
+    elseif now - burn.stamp >= step then
+      table.insert(points, 1, at)
+      burn.stamp = now
+      if #points > SEGMENTS then
+        table.remove(points)
+      end
+    end
+    if #burn.trail == 0 then
+      for _ = 1, SEGMENTS do
+        local piece = take(fx, "fx_trail.jsl", true)
+        ShaderInstance_SetFloat(piece.shader, "fxMin", THREAD)
+        table.insert(burn.trail, piece)
+      end
+    end
+    -- From the mouth back, each length from one noted place to the one
+    -- before, as bright at each end as a trail that old is.
+    local function glow(age: number): number
+      return 0.55 * throttle * math.max(0, 1 - age / trail) ^ 1.5
+    end
+    local since = now - burn.stamp
+    local newer, newerAge = at, 0
+    for index = 1, SEGMENTS do
+      local piece = burn.trail[index]
+      local older: vector? = points[index]
+      if older then
+        local olderAge = since + (index - 1) * step
+        lay(piece, newer, older, radius * 0.5)
+        paint(piece, color, glow(newerAge), glow(olderAge))
+        newer, newerAge = older, olderAge
+      else
+        piece.object:SetScale(NOWHERE)
+      end
+    end
+  end
+end
+
+-- The scene's origin has moved: forget where every engine has been.
+function Effects.Still(fx: Fx)
+  for _, burn in fx.burns do
+    table.clear(burn.points)
   end
 end
 
@@ -460,6 +527,9 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
     if burn.frame ~= fx.frame then
       give(fx, burn.glare)
       give(fx, burn.plume)
+      for _, piece in burn.trail do
+        give(fx, piece)
+      end
       fx.burns[key] = nil
     end
   end

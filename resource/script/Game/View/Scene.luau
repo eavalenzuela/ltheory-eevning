@@ -646,6 +646,10 @@ function Scene.Sync(scene: Scene, session: Session.Session)
   -- since a hull is costly to make and the player's comes along.
   if key ~= scene.key then
     scene.key = key
+    -- (the origin has moved under every trail)
+    if scene.fx then
+      Effects.Still(scene.fx)
+    end
     for id, object in scene.proxies do
       if state.balls[id] == nil then
         dropArms(scene, id)
@@ -766,9 +770,12 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       local right, up, look = proxy:GetRight(), proxy:GetUp(), proxy:GetLook()
       local unit = ball.radius / built.radius
       local color = vector.create(built.glow[1], built.glow[2], built.glow[3])
+      -- (a trail three ship-lengths long at full speed; none in warp,
+      -- where the scene goes with the ship and it has not moved)
+      local trail = math.clamp(6 * ball.radius / math.max(ball.maxVelocity, 1), 0.8, 20)
       for index, engine in built.engines do
         Effects.Thrust(fx, id * 16 + index, at + (right * engine.at.x + up * engine.at.y + look * engine.at.z) * unit, -look,
-          engine.radius * unit, throttle, color, scene.time)
+          engine.radius * unit, throttle, color, scene.time, trail)
       end
     end
   end

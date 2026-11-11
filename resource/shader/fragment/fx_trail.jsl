@@ -1,0 +1,18 @@
+/* A length of the trail an engine leaves along the way the ship has
+   come: a soft thread, 'fxFade' bright at its newer end (uv.y of 0) and
+   'fxAge' bright at its older, so that lengths laid end to end fade
+   evenly from the engine to nothing. (Additive.) */
+
+#include frag.jsl
+#include math.jsl
+
+uniform vec3 fxColor;
+uniform float fxFade;
+uniform float fxAge;
+
+void main() {
+  float x = abs(2.0 * uv.x - 1.0);
+  float fade = mix(fxFade, fxAge, uv.y);
+  float a = (0.8 * exp(-x * x * 5.0) + 0.6 * exp(-x * 12.0)) * (1.0 - smoothstep(0.7, 1.0, x)) * fade;
+  RETURN(vec4(mix(fxColor, vec3(1.0), 0.25 * exp(-x * 12.0)), 1.0) * a);
+}
