@@ -7,6 +7,9 @@
 # wreck, then lose the ship, fly the capsule home and be given a new one.
 
 wait 2
+# (sound, which a script does not otherwise get: at no loudness, so that its
+# code runs and nobody hears it)
+lua GameDebug.Sound(true, 0)
 lua assert(GameDebug.Docked(), 'a new game starts docked')
 lua assert(GameDebug.Fitted('autocannon.small') == 2, 'the starter ship has two autocannons')
 
@@ -55,6 +58,8 @@ lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused')
 until GameDebug.Docked()
 wait 0.5
 lua assert(GameDebug.Hull() == 'frigate.courier', 'docking in a capsule should give a new ship')
+
+lua assert(GameDebug.Sound() > 5, 'hardly a sound was made in all that')
 
 echo combat scenario passed
 quit

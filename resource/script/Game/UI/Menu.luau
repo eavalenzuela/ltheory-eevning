@@ -36,6 +36,15 @@ local function refresh()
   saves = Session.Saves()
 end
 
+-- Whether sound is on, and the asking of it to be otherwise: the game
+-- says how (Menu.Sound), since the menu does not own the sound.
+local soundOn = true
+local setSound: ((on: boolean) -> ())? = nil
+
+function Menu.Sound(on: boolean, set: (on: boolean) -> ())
+  soundOn, setSound = on, set
+end
+
 function Menu.IsOpen(): boolean
   return page ~= ""
 end
@@ -115,6 +124,12 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
   local cx = x + w / 2
   local function button(label: string, row: number, enabled: boolean, id: string): boolean
     return Im.Button(label, cx - 130, y + 96 + row * 44, 260, 34, enabled, id)
+  end
+  if (page == "main" or page == "pause") and setSound then
+    if Im.Button(if soundOn then "Sound: on" else "Sound: off", x + w - 126, y + 14, 110, 26, true, "Menu:sound") then
+      soundOn = not soundOn
+      setSound(soundOn)
+    end
   end
 
   if page == "main" then

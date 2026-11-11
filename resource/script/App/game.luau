@@ -11,6 +11,7 @@
 --   bin/launch game --do "lua GameDebug.Order('Undock'); until GameDebug.InSpace(); ..."
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
+local Audio = require("@lt/Game/View/Audio")
 local Colony = require("@lt/Game/UI/Colony")
 local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
@@ -34,6 +35,7 @@ local App = {}
 
 local session: Session.Session
 local scene: Scene.Scene
+local audio: Audio.Audio
 local ui: Interface
 
 -- The nearest thing on the overview of a kind ("belt", "station", ...)
@@ -571,6 +573,16 @@ function Debug.Marked(): boolean
   return session.game.state.tick < session.game.state.player.marked
 end
 
+-- Sound, which a script does not get unless it asks: on or off, and how
+-- loud all of it is (0 runs the sound's code without a noise). Returns
+-- how many sounds have been started so far.
+function Debug.Sound(on: boolean?, master: number?): number
+  if on ~= nil then
+    Audio.Set(audio, on, master)
+  end
+  return audio.played
+end
+
 -- The levels the pilot has researched of a blueprint: materials, time.
 function Debug.Researched(type: string): (number, number)
   local status = Core.Query.Research(session.game, type)
@@ -765,6 +777,10 @@ function App:Initialize()
   camera:Push()
   session = Session.New(1, 1)
   scene = Scene.New(camera)
+  audio = Audio.New()
+  Menu.Sound(audio.enabled, function(on: boolean)
+    Audio.Set(audio, on)
+  end)
   _G.GameDebug = Debug
   -- A person is given the menu, over a new game that stands still
   -- behind it. A script goes straight into that game.
@@ -812,6 +828,7 @@ function App:Initialize()
       Scene.Sync(scene, session)
       Scene.UpdateCamera(scene, frame, not Hud.CursorOverInterface())
       Scene.Update(scene, frame)
+      Audio.Update(audio, session, scene.warp, frame)
     end,
   }))
 

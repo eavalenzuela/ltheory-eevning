@@ -15,6 +15,9 @@
 # proves it can be done.
 
 wait 2
+# (sound, which a script does not otherwise get: at no loudness, so that its
+# code runs and nobody hears it)
+lua GameDebug.Sound(true, 0)
 lua GameDebug.Peaceful(true)
 lua assert(GameDebug.Docked(), 'a new game starts docked')
 
@@ -131,6 +134,8 @@ until GameDebug.Hull() == 'frigate.lancer'
 # And it flies.
 until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()
+
+lua assert(GameDebug.Sound() > 5, 'hardly a sound was made in all that')
 
 echo economy scenario passed
 quit

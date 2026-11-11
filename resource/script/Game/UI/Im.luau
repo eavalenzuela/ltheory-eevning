@@ -17,6 +17,7 @@ Im.over = false
 
 local cursor = vector.create(0, 0)
 local pressed = false
+local clicked = false   -- a button was clicked with the mouse this frame
 local double = false
 
 -- Buttons drawn this frame and last, by name, with whether they were
@@ -138,7 +139,18 @@ function Im.Button(label: string, x: number, y: number, w: number, h: number, en
   local size = math.min(15, h - 8)
   Im.Text(label, x + (w - Im.TextWidth(label, size)) / 2, y + (h - size) / 2 - 1, size,
     if enabled then Im.TEXT else Im.DIM, if enabled then 1 else 0.6)
+  if hot and pressed then
+    clicked = true
+  end
   return scripted or (hot and pressed)
+end
+
+-- Whether a button has been clicked with the mouse since this was last
+-- asked: for whoever makes the click's sound.
+function Im.Clicked(): boolean
+  local was = clicked
+  clicked = false
+  return was
 end
 
 -- Text that can be clicked, lit while the cursor is on it; true on the
