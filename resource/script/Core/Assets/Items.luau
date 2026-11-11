@@ -48,7 +48,7 @@ function Items.Fitted(state: State.State, ship: number): { State.Item }
       table.insert(found, item)
     end
   end
-  local rank = { high = 1, mid = 2, low = 3 }
+  local rank = { high = 1, mid = 2, low = 3, rig = 4 }
   table.sort(found, function(a: State.Item, b: State.Item): boolean
     local ra, rb = rank[a.place :: "high"], rank[b.place :: "high"]
     if ra ~= rb then
@@ -339,8 +339,13 @@ function Items.Apply(state: State.State, command: State.Command, events: { Event
     unload(state, item, station)
     local type = item.type
     Items.Take(state, item, 1)
-    Items.Add(state, type, 1, station, "hangar")
-    table.insert(events, { kind = "Unfitted", ship = ship.id, type = type })
+    -- (a rig does not come out whole: it is gone)
+    if Modules.byId[type].slot == "rig" then
+      table.insert(events, { kind = "RigDestroyed", ship = ship.id, type = type })
+    else
+      Items.Add(state, type, 1, station, "hangar")
+      table.insert(events, { kind = "Unfitted", ship = ship.id, type = type })
+    end
 
   elseif kind == "LoadCharge" then
     local weapon = (Modules.byId[item.type].weapon :: Modules.Weapon)

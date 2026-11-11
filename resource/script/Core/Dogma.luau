@@ -148,9 +148,9 @@ end
 
 -- Whether a hull can carry these modules at once; if not, why not.
 function Dogma.Check(hull: Ships.ShipType, types: { string }, levels: Levels?): (boolean, string?)
-  local slots = { high = 0, mid = 0, low = 0 }
+  local slots = { high = 0, mid = 0, low = 0, rig = 0 }
   local hardpoints = { turret = 0, launcher = 0 }
-  local cpu, powergrid = 0, 0
+  local cpu, powergrid, calibration = 0, 0, 0
   local fitted: { Fitted } = {}
   for _, id in types do
     local module = Modules.byId[id]
@@ -163,6 +163,7 @@ function Dogma.Check(hull: Ships.ShipType, types: { string }, levels: Levels?): 
     end
     cpu += module.cpu
     powergrid += module.powergrid
+    calibration += module.calibration or 0
     table.insert(fitted, { type = id, running = false })
   end
   if slots.high > hull.highs then
@@ -171,6 +172,10 @@ function Dogma.Check(hull: Ships.ShipType, types: { string }, levels: Levels?): 
     return false, "no free mid slot"
   elseif slots.low > hull.lows then
     return false, "no free low slot"
+  elseif slots.rig > (hull.rigs or 0) then
+    return false, "no free rig slot"
+  elseif calibration > (hull.calibration or 0) then
+    return false, string.format("not enough calibration (%d of %d)", calibration, hull.calibration or 0)
   elseif hardpoints.turret > hull.turrets then
     return false, "no free turret hardpoint"
   elseif hardpoints.launcher > hull.launchers then

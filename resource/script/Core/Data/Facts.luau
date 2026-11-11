@@ -260,6 +260,11 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     row(to, if repair.layer == "shield" then "Shield restored" else "Armour repaired", `{plain(repair.amount)} HP every {seconds(repair.duration)}`)
     row(to, "Capacitor a cycle", `{plain(repair.capacitor)} GJ`)
   end
+  if module.slot == "rig" then
+    local to = section(sheet, "Rig")
+    row(to, "Calibration", `{plain(module.calibration or 0)} of a hull's 400`)
+    row(to, "Taken out", "it is destroyed")
+  end
   if module.salvager then
     local salvager = module.salvager
     local to = section(sheet, "Salvaging")

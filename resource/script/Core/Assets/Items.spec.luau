@@ -168,4 +168,46 @@ suite:Case("a fit changes how the ship flies once it undocks", function(t)
   t.near(ball.tau, 3.2 * 0.87 * 1.1, 1e-9)
 end)
 
+suite:Case("a rig is fitted like a module, wants its skill, and is destroyed when it is taken out", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local ship = state.player.ship
+  local home = state.player.home
+  local rig = Items.Add(state, "rig.hull", 2, home, "hangar")
+  local fit: State.Command = { kind = "Fit", actor = ship, item = rig.id }
+  t.eq({ Core.Validate(game, fit) } :: { any }, { false, "needs Jury Rigging 1" } :: { any })
+  state.skills["jury.rigging"] = 1
+  local before = Core.Query.Stats(game, ship)
+  t.ok(Core.Submit(game, fit))
+  Core.Step(game)
+  local fitted: State.Item? = nil
+  for _, item in Core.Query.Fitted(game, ship) do
+    if item.type == "rig.hull" then
+      fitted = item
+    end
+  end
+  local there = assert(fitted, "the rig was not fitted")
+  t.eq({ there.place, there.slot } :: { any }, { "rig", 1 } :: { any })
+  t.eq(rig.quantity, 1)
+  local after = Core.Query.Stats(game, ship)
+  t.near(after.hull, before.hull * 1.2, 1e-6)
+  t.near(after.cargo, before.cargo * 0.9, 1e-6)
+  -- (it takes none of the CPU or powergrid, and none of the other slots)
+  t.eq({ Core.Query.FittingUse(game, ship) }, { Core.Query.FittingUse(game, ship) })
+  -- Taken out, it is gone: the hangar has the one that was never fitted, and no more.
+  t.ok(Core.Submit(game, { kind = "Unfit", actor = ship, item = there.id }))
+  local destroyed = false
+  Core.Step(game)
+  for _, event in Core.TakeEvents(game) do
+    destroyed = destroyed or (event.kind == "RigDestroyed" and event.type == "rig.hull")
+  end
+  t.ok(destroyed, "nothing said the rig was destroyed")
+  local left = 0
+  for _, item in Core.Query.Items(game, home, "hangar") do
+    left += if item.type == "rig.hull" then item.quantity else 0
+  end
+  t.eq(left, 1)
+  t.near(Core.Query.Stats(game, ship).hull, before.hull, 1e-6)
+end)
+
 return suite

@@ -41,6 +41,10 @@ export type ShipType = {
   highs: number,
   mids: number,
   lows: number,
+  -- Rig slots, and the calibration the rigs in them share (Data/Modules).
+  -- Every hull but the capsule has three and 400: given below, to all.
+  rigs: number?,
+  calibration: number?,
   turrets: number,        -- hardpoints
   launchers: number,
   capacitor: number,      -- GJ
@@ -235,8 +239,13 @@ table.insert(types, {
 
 local Ships = { list = types, byId = {} :: { [string]: ShipType } }
 
+Ships.RIGS = 3
+Ships.CALIBRATION = 400
+
 for _, t in types do
   Ships.byId[t.id] = t
+  t.rigs = t.rigs or (if t.class == "capsule" then 0 else Ships.RIGS)
+  t.calibration = t.calibration or Ships.CALIBRATION
 end
 
 -- Seconds; see the note on agility above.

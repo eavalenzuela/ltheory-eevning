@@ -275,16 +275,26 @@ suite:Case("components are made from minerals, and modules from components and m
   t.near(hullShare, 1, 1e-9)
   for _, module in Modules.list do
     local blueprint = assert(Blueprints.byProduct[module.id], module.id)
-    local components, minerals = 0, 0
-    for _, material in blueprint.materials do
-      if Components.byId[material.type] then
-        components += 1
-      else
-        minerals += 1
+    if module.slot == "rig" then
+      -- (a rig is made of what is salvaged, and nothing else: three kinds, twenty pieces)
+      local pieces = 0
+      for _, material in blueprint.materials do
+        t.ok(string.sub(material.type, 1, 8) == "salvage.", `{material.type} in {blueprint.id}`)
+        pieces += material.quantity
       end
-      t.ok(fromOre(material.type), `{material.type} in {blueprint.id}`)
+      t.eq({ #blueprint.materials, pieces }, { 3, 20 })
+    else
+      local components, minerals = 0, 0
+      for _, material in blueprint.materials do
+        if Components.byId[material.type] then
+          components += 1
+        else
+          minerals += 1
+        end
+        t.ok(fromOre(material.type), `{material.type} in {blueprint.id}`)
+      end
+      t.ok(components >= 1 and minerals >= 2, module.id)
     end
-    t.ok(components >= 1 and minerals >= 2, module.id)
   end
   -- what is fired is still made straight from minerals
   for _, charge in Modules.charges do

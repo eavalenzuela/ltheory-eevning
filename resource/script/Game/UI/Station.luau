@@ -237,7 +237,7 @@ local function drawWheel(session: Session.Session, game: Core.Game, player: Core
 
   -- The slots.
   local hint = ""
-  local fitted: { [string]: { [number]: State.Item } } = { high = {}, mid = {}, low = {} }
+  local fitted: { [string]: { [number]: State.Item } } = { high = {}, mid = {}, low = {}, rig = {} }
   local turretsUsed, launchersUsed = 0, 0
   for _, item in Core.Query.Fitted(game, ship) do
     fitted[item.place][item.slot] = item
@@ -306,6 +306,48 @@ local function drawWheel(session: Session.Session, game: Core.Game, player: Core
         WidgetRenderer_DrawPanel(vector.create(left, top), vector.create(SLOT, SLOT), vector.create(0.22, 0.32, 0.42), 0.18, 0.75, 5)
         if Im.Inside(left, top, SLOT, SLOT) then
           hint = `{label} {slot}:  empty`
+        end
+      end
+    end
+  end
+
+  -- The rigs: a row of their own inside the foot of the wheel (the ring
+  -- is full). A rig taken out is destroyed, and its cross says so.
+  local rigs = hull.rigs or 0
+  if rigs > 0 then
+    local size = 30
+    Im.Text("RIGS", cx - Im.TextWidth("RIGS", 10) / 2, cy + 76, 10, Im.DIM)
+    for slot = 1, rigs do
+      local left, top = cx + (slot - (rigs + 1) / 2) * (size + 8) - size / 2, cy + 92
+      local item = fitted.rig[slot]
+      if item then
+        local module = Modules.byId[item.type]
+        local hot, clicked = Im.Area(`Info:{item.type}`, left, top, size, size, true)
+        ItemIcon.Draw(item.type, left, top, size)
+        if hot then
+          Im.Fill(left, top, size, size, Im.ACCENT, 0.18)
+          hint = `Rig {slot}:  {module.name}`
+        end
+        if clicked then
+          Info.Open(item.type)
+        end
+        local ux, uy = left + size, top
+        local unfitHot, unfit = Im.Area(`Unfit:rig{slot}`, ux - 8, uy - 8, 16, 16,
+          (Session.CanDo(session, { kind = "Unfit", actor = 0, item = item.id })))
+        WidgetRenderer_DrawPanel(vector.create(ux - 8, uy - 8), vector.create(16, 16),
+          if unfitHot then OVER else vector.create(0.07, 0.12, 0.17), 0.9, 1, 8)
+        Glyph_Draw(Glyph_Line(vector.create(-1, -1), vector.create(1, 1), 1, 1), vector.create(ux, uy), 3, Im.TEXT, 0.9)
+        Glyph_Draw(Glyph_Line(vector.create(-1, 1), vector.create(1, -1), 1, 1), vector.create(ux, uy), 3, Im.TEXT, 0.9)
+        if unfitHot then
+          hint = `Take the {module.name} out: it will be destroyed`
+        end
+        if unfit then
+          Session.Do(session, { kind = "Unfit", actor = 0, item = item.id })
+        end
+      else
+        WidgetRenderer_DrawPanel(vector.create(left, top), vector.create(size, size), vector.create(0.22, 0.32, 0.42), 0.18, 0.75, 5)
+        if Im.Inside(left, top, size, size) then
+          hint = `Rig {slot}:  empty`
         end
       end
     end

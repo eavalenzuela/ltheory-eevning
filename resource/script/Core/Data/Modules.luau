@@ -74,7 +74,9 @@ export type Salvager = {
 export type ModuleType = {
   id: string,
   name: string,
-  slot: "high" | "mid" | "low",
+  slot: "high" | "mid" | "low" | "rig",
+  -- A rig's share of the hull's calibration (Data/Ships).
+  calibration: number?,
   hardpoint: "turret" | "launcher" | "",
   cpu: number,
   powergrid: number,
@@ -412,6 +414,26 @@ for index, launcher in LAUNCHERS do
     requires = needs("missiles", index + 1),
   })
 end
+
+-- Rigs: worked into the hull for good. A rig does one thing well and
+-- another a little worse, takes no CPU or powergrid, shares the hull's
+-- calibration with the other rigs, and is destroyed if it is taken out.
+-- They are built of what is salvaged from wrecks (Data/Blueprints).
+local function rig(id: string, name: string, calibration: number, passive: { Modifier })
+  table.insert(modules, {
+    id = "rig." .. id, name = name, slot = "rig", hardpoint = "", cpu = 0, powergrid = 0, volume = 5, basePrice = 24000,
+    calibration = calibration, passive = passive, requires = { { skill = "jury.rigging", level = 1 } },
+  })
+end
+rig("shield", "Field Extender Rig", 150, { ship("shield", "mul", 1.15, true), ship("signature", "mul", 1.10) })
+rig("armor", "Armour Pump Rig", 150, { ship("armor", "mul", 1.15, true), ship("maxVelocity", "mul", 0.90) })
+rig("hull", "Bulkhead Rig", 100, { ship("hull", "mul", 1.20, true), ship("cargo", "mul", 0.90) })
+rig("engine", "Engine Tuning Rig", 100, { ship("maxVelocity", "mul", 1.10, true), ship("armor", "mul", 0.90) })
+rig("cargo", "Cargo Bracing Rig", 100, { ship("cargo", "mul", 1.15, true), ship("armor", "mul", 0.90) })
+rig("capacitor", "Capacitor Flux Rig", 100, { ship("capacitorRecharge", "mul", 0.85, true), ship("shield", "mul", 0.90) })
+rig("projectile", "Projectile Burst Rig", 200, { weapons("projectile", "duration", 0.90), ship("powergrid", "mul", 0.90) })
+rig("laser", "Energy Burst Rig", 200, { weapons("laser", "duration", 0.90), ship("powergrid", "mul", 0.90) })
+rig("hybrid", "Hybrid Burst Rig", 200, { weapons("hybrid", "duration", 0.90), ship("powergrid", "mul", 0.90) })
 
 -- Fittings by size: the small ones are written out above, and a medium
 -- and a large are each of those, scaled for a cruiser and a battleship.

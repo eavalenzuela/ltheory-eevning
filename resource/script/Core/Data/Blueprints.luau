@@ -109,8 +109,29 @@ for _, component in Components.list do
   add(component.id, component.name, component.mix, component.basePrice, 10, 60 + component.basePrice // 5)
 end
 
+-- A rig is built of what is salvaged from wrecks (Tactical/Combat), and
+-- nothing else: ten of the kind of salvage it is mostly made of, six of
+-- the next and four of the third, which is which going round with the
+-- rigs so that all three kinds are wanted.
+local SALVAGE = { "salvage.plates", "salvage.circuits", "salvage.conduits" }
+local rigs = 0
 for _, module in Modules.list do
-  add(module.id, module.name, MIX.module, module.basePrice, 1, 120 + module.basePrice // 100, moduleParts(module))
+  if module.slot == "rig" then
+    rigs += 1
+    local materials = {}
+    for index, count in { 10, 6, 4 } do
+      table.insert(materials, { type = SALVAGE[(rigs + index - 2) % 3 + 1], quantity = count })
+    end
+    local blueprint: Blueprint = {
+      id = "blueprint." .. module.id, product = module.id, name = module.name .. " Blueprint", perRun = 1, seconds = 600,
+      materials = materials, basePrice = module.basePrice * 10,
+    }
+    table.insert(Blueprints.list, blueprint)
+    Blueprints.byId[blueprint.id] = blueprint
+    Blueprints.byProduct[module.id] = blueprint
+  else
+    add(module.id, module.name, MIX.module, module.basePrice, 1, 120 + module.basePrice // 100, moduleParts(module))
+  end
 end
 for _, charge in Modules.charges do
   -- Crystals are made one at a time; rounds and missiles by the hundred.

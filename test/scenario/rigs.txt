@@ -1,0 +1,43 @@
+# Rigs, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/rigs.txt
+#
+# A rig is built of what is salvaged from wrecks. The salvage, the
+# blueprint and the skill are given (salvaging is the salvage scenario's).
+# Build a Bulkhead Rig, fit it to the Courier, where it goes in a slot
+# of its own, and take it out again, which destroys it.
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Give('salvage.plates', 10) and GameDebug.Give('salvage.circuits', 10) and GameDebug.Give('salvage.conduits', 10))
+lua assert(GameDebug.Give('blueprint.rig.hull', 1))
+
+# It is built of twenty pieces of salvage, ten of them of one kind.
+lua assert(GameDebug.Blueprint('blueprint.rig.hull'))
+frames 3
+until GameDebug.Press('StartJob')
+until GameDebug.Jobs() == 1
+lua assert(GameDebug.Hangar('salvage.plates') + GameDebug.Hangar('salvage.circuits') + GameDebug.Hangar('salvage.conduits') == 10, 'a rig should take twenty pieces of salvage')
+lua GameDebug.TimeScale(30)
+until GameDebug.Jobs() == 0
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Hangar('rig.hull') == 1, 'the job delivered no rig')
+
+# It wants its skill, and then it fits.
+until GameDebug.Press('Fitting')
+frames 3
+lua assert(not GameDebug.CanPress('Fit:rig.hull'), 'a rig should want Jury Rigging')
+lua GameDebug.Train('jury.rigging', 1)
+until GameDebug.Press('Fit:rig.hull')
+until GameDebug.Fitted('rig.hull') == 1
+lua assert(GameDebug.Fitted('autocannon.small') == 2, 'a rig should take none of the other slots')
+
+# Taken out, it is destroyed.
+frames 3
+until GameDebug.Press('Unfit:rig1')
+until GameDebug.Fitted('rig.hull') == 0
+lua assert(GameDebug.Hangar('rig.hull') == 0, 'a rig taken out should be destroyed, not put back')
+
+echo rigs scenario passed
+quit

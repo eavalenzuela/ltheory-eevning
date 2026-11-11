@@ -72,6 +72,28 @@ suite:Case("a hardener only helps while it is running", function(t)
   t.near(on["shieldResonance.2"], 0.8 * 0.75, 1e-12)
 end)
 
+suite:Case("a hull takes three rigs within its calibration, and each does one thing well and another worse", function(t)
+  local bare = Dogma.Ship(courier, {})
+  t.eq({ courier.rigs, courier.calibration } :: { any }, { 3, 400 } :: { any })
+  t.eq(Ships.byId["capsule"].rigs, 0)
+  local shielded = Dogma.Ship(courier, { { type = "rig.shield", running = false } })
+  t.near(shielded.shield, bare.shield * 1.15, 1e-6)
+  t.near(shielded.signature, bare.signature * 1.10, 1e-6)
+  local quick = Dogma.Ship(courier, { { type = "rig.engine", running = false } })
+  t.near(quick.maxVelocity, bare.maxVelocity * 1.10, 1e-6)
+  t.near(quick.armor, bare.armor * 0.90, 1e-6)
+  -- Three go in, within calibration; a fourth does not, nor do three that ask for too much.
+  t.ok((Dogma.Check(courier, { "rig.hull", "rig.engine", "rig.cargo" })))
+  t.eq({ Dogma.Check(courier, { "rig.hull", "rig.engine", "rig.cargo", "rig.capacitor" }) } :: { any },
+    { false, "no free rig slot" } :: { any })
+  t.eq({ Dogma.Check(courier, { "rig.projectile", "rig.laser", "rig.shield" }) } :: { any },
+    { false, "not enough calibration (550 of 400)" } :: { any })
+  t.ok((Dogma.Check(courier, { "rig.projectile", "rig.shield" })))
+  t.eq({ Dogma.Check(Ships.byId["capsule"], { "rig.hull" }) } :: { any }, { false, "no free rig slot" } :: { any })
+  -- (a rig takes no slot of another kind)
+  t.ok((Dogma.Check(courier, { "autocannon.small", "autocannon.small", "rig.hull" })))
+end)
+
 suite:Case("a microwarpdrive, running, is six times the speed and six times the signature, and costs capacitor to carry", function(t)
   local off = Dogma.Ship(courier, { { type = "mwd.5mn", running = false } })
   local on = Dogma.Ship(courier, { { type = "mwd.5mn", running = true } })
@@ -126,7 +148,12 @@ end)
 
 suite:Case("every module and charge in the data is well formed", function(t)
   for _, module in Modules.list do
-    t.ok(module.slot == "high" or module.slot == "mid" or module.slot == "low", module.id)
+    t.ok(module.slot == "high" or module.slot == "mid" or module.slot == "low" or module.slot == "rig", module.id)
+    -- (a rig takes calibration and nothing else, and is always on)
+    t.ok((module.slot == "rig") == (module.calibration ~= nil), `{module.id}: calibration is a rig's`)
+    if module.slot == "rig" then
+      t.eq({ module.cpu, module.powergrid, #module.passive } :: { any }, { 0, 0, 2 } :: { any })
+    end
     local roles = (if module.weapon then 1 else 0) + (if module.repair then 1 else 0) + (if module.boost then 1 else 0)
     t.ok(roles <= 1, `{module.id} does more than one thing`)
     t.ok((module.boost == nil) == (module.boostDuration == nil), `{module.id}: boost needs a duration`)

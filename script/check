@@ -51,6 +51,8 @@
 #               webifier and a warp disruptor fitted and used on a pirate
 #   game-salvage  salvaging (test/scenario/salvage.txt): a salvager fitted,
 #               a wreck stripped, and then looted
+#   game-rigs   rigs (test/scenario/rigs.txt): one built of salvage, fitted,
+#               and destroyed by taking it out
 #   game-pace   the game app must draw at least thirty frames a second just
 #               outside the home station (test/scenario/pace.txt)
 #   goldens     script/goldens: screenshots of the stored scenes must match
@@ -169,6 +171,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/tackle.txt
   step game-salvage 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/salvage.txt
+  step game-rigs 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
+    --script test/scenario/rigs.txt
   step game-pace 0 timeout 200 bin/launch game --no-present --fixed-step 60 --timeout 150 \
     --script test/scenario/pace.txt
   step goldens 0 script/goldens
