@@ -69,7 +69,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 33
+Core.SAVE_VERSION = 34
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -289,6 +289,12 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       end
     end
   end,
+  -- 34: there are scan probes. A save from before has none out. (Its
+  -- derelicts half found stay as far found as they were.)
+  [33] = function(state: any)
+    state.probes = state.probes or {}
+    state.probeIds = state.probeIds or {}
+  end,
   -- 33: a ship has a drone bay, and its drones are launched from there.
   -- The drones in the hold of a ship of a save from before are put in
   -- its bay, as many as it has room for.
@@ -341,6 +347,8 @@ function Core.New(options: Options): Game
     sitesDue = {},
     sitesSeen = {},
     scanReady = 0,
+    probes = {},
+    probeIds = {},
     drones = {},
     droneIds = {},
     fleet = {},
@@ -412,7 +420,7 @@ local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true }
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
 local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true }
-local SITE_COMMANDS = { Scan = true }
+local SITE_COMMANDS = { Scan = true, LaunchProbe = true, RecallProbes = true }
 local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones = true }
 local IMPLANT_COMMANDS = { PlugImplant = true, UnplugImplant = true }
 local FLEET_COMMANDS = { HirePilot = true, AssignShip = true, DismissPilot = true, FleetOrder = true }
@@ -1109,11 +1117,18 @@ end
 -- What the ship's scanner shows of the system the pilot is in: every
 -- site still there, found or not. One not found is a signal with a
 -- code and no more. And the seconds until the scanner can be used again.
+-- (And for one not found: the planet it is by, once the scanner has got
+-- a quarter of the way with it; how many probes are near enough to
+-- help; and whether it is too faint to get further with from here, with
+-- no probe by it.) Last, the probes: how many are out in this system,
+-- how many in all, how many there can be, and how many are in the hold.
 export type SiteStatus = {
   id: number, name: string, kind: string,   -- kind is "" until it is found
   strength: number, found: boolean, distance: number,
+  near: string, probes: number, faint: boolean,
 }
-function Query.Sites(game: Game): ({ SiteStatus }, number)
+export type ProbeStatus = { here: number, out: number, max: number, carried: number }
+function Query.Sites(game: Game): ({ SiteStatus }, number, ProbeStatus)
   local state = game.state
   local player = Query.Player(game)
   local me = state.balls[player.ship]
@@ -1121,12 +1136,21 @@ function Query.Sites(game: Game): ({ SiteStatus }, number)
   for _, site in Sites.In(state, player.system) do
     local object = Space.Object(state, site.id) :: System.Object
     local known = site.strength >= 1
+    local by = Space.Object(state, object.parent)
+    local probes, near = Sites.Covered(state, site, me)
     table.insert(found, {
       id = site.id, name = if known then object.name else `Signal {site.code}`, kind = if known then site.kind else "",
       strength = site.strength, found = known, distance = if me then Space.Gap(me :: any, object :: any) else 0,
+      near = if by and site.strength >= 0.25 then by.name else "", probes = probes,
+      faint = not known and not near and site.strength >= (Sites.ALONE[site.kind] or 1),
     })
   end
-  return found, math.max(0, state.scanReady - state.tick) * Constants.TICK
+  local carried = 0
+  for _, item in Items.In(state, player.ship, "cargo") do
+    carried += if item.type == Sites.PROBE then item.quantity else 0
+  end
+  return found, math.max(0, state.scanReady - state.tick) * Constants.TICK,
+    { here = #Sites.Probes(state, player.system), out = #state.probeIds, max = Sites.PROBES, carried = carried }
 end
 
 -- What each human faction thinks of the pilot, in the order of the

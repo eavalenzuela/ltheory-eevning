@@ -43,5 +43,17 @@ frames 5
 lua assert(GameDebug.Count('asteroid') >= 10, 'a hidden belt should have its rocks')
 lua assert(GameDebug.Distance('Hidden Belt') < 1000, 'the warp did not end at the site')
 
+# Probes: one is put out where the ship is, and called in again.
+lua assert(not GameDebug.CanPress('Probe:launch'), 'a probe has to be in the hold')
+lua assert(GameDebug.Give('probe.scan', 2))
+frames 3
+until GameDebug.Press('Probe:launch')
+until GameDebug.Probes() == 1
+lua assert(select(2, GameDebug.Probes()) == 1, 'one probe should be left in the hold')
+frames 3
+until GameDebug.Press('Probe:recall')
+until GameDebug.Probes() == 0
+lua assert(select(2, GameDebug.Probes()) == 2, 'a probe called in should be in the hold again')
+
 echo sites scenario passed
 quit

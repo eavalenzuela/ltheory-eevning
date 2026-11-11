@@ -116,6 +116,9 @@ local goods: { Info } = {
   -- What a courier job gives a pilot to carry (Assets/Missions): a cubic
   -- metre a unit, and worth nothing to anybody but who it is for.
   { id = "cargo.sealed", name = "Sealed Cargo", category = "goods", volume = 1, basePrice = 1 },
+  -- A scan probe (Tactical/Sites): put out near where a signal is, it
+  -- makes every scan of it worth more.
+  { id = "probe.scan", name = "Scan Probe", category = "goods", volume = 1, basePrice = 15000 },
   -- What an invention is worked out from (Assets/Industry): found in
   -- derelicts (Tactical/Sites), and nowhere to be bought.
   { id = "datacore", name = "Datacore", category = "goods", volume = 0.1, basePrice = 30000, scarce = true },

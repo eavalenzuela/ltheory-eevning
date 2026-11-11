@@ -659,6 +659,13 @@ function Debug.Standing(faction: string): number
   return 0
 end
 
+-- The scan probes: how many are out in this system, and how many are
+-- in the hold.
+function Debug.Probes(): (number, number)
+  local _, _, probes = Core.Query.Sites(session.game)
+  return probes.here, probes.carried
+end
+
 -- The scanner: how many sites the system has, how many of them are
 -- found, and the name of the first found one of a kind ("ore", "relic",
 -- "combat"; "" if there is none).

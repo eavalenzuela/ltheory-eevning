@@ -67,6 +67,49 @@ function Sites.Gain(state: State.State, kind: string): number
   return (1 + 0.1 * math.max(0, state.skills.astrometrics or 0)) / scans + 1e-9
 end
 
+-- Probes. A scan probe is put out where the ship is and stays there
+-- for an hour. A signal with a probe within an astronomical unit of it
+-- is scanned that much better: each probe that near makes a scan worth
+-- as much again. And a derelict cannot be pinned down without one: the
+-- ship's own scanner gets it half way, and no further, unless a probe
+-- (or the ship itself) is that near it. The scanner says which planet
+-- a signal is by, which is where to take a probe.
+Sites.PROBE = "probe.scan"
+Sites.PROBES = 4              -- a pilot has so many out at once, at most
+Sites.PROBE_LIFE = 3600       -- ticks
+Sites.PROBE_RANGE = Constants.AU
+-- How far the ship's scanner alone gets with a site of a kind (1: all the way).
+Sites.ALONE = { combat = 1, ore = 1, relic = 0.5 } :: { [string]: number }
+
+-- The probes a pilot has out in a system, in the order they were put out.
+function Sites.Probes(state: State.State, system: number): { State.Probe }
+  local found: { State.Probe } = {}
+  for _, id in state.probeIds do
+    if state.probes[id].system == system then
+      table.insert(found, state.probes[id])
+    end
+  end
+  return found
+end
+
+-- How many probes are near enough a site to help with it, and whether
+-- anything of the pilot's is (a probe, or 'ball', the ship itself).
+function Sites.Covered(state: State.State, site: State.Site, ball: State.Ball?): (number, boolean)
+  local place = Space.Object(state, site.id)
+  if place == nil then
+    return 0, false
+  end
+  local near = 0
+  for _, probe in Sites.Probes(state, site.system) do
+    if (probe.x - place.x) ^ 2 + (probe.y - place.y) ^ 2 + (probe.z - place.z) ^ 2 <= Sites.PROBE_RANGE ^ 2 then
+      near += 1
+    end
+  end
+  local ship = ball ~= nil and ball.system == site.system
+    and (ball.x - place.x) ^ 2 + (ball.y - place.y) ^ 2 + (ball.z - place.z) ^ 2 <= Sites.PROBE_RANGE ^ 2
+  return near, near > 0 or ship
+end
+
 -- The sites of a system that are still there, in the order they came.
 function Sites.In(state: State.State, system: number): { State.Site }
   local found: { State.Site } = {}
@@ -264,6 +307,15 @@ end
 -- Once a tick: now and then, in the system the pilot is in, sites that
 -- are spent or out of time go, and one comes if there is room.
 function Sites.Step(state: State.State, events: { Event })
+  -- (a probe that has run down is gone)
+  for index = #state.probeIds, 1, -1 do
+    local probe = state.probes[state.probeIds[index]]
+    if state.tick >= probe.expires then
+      state.probes[probe.id] = nil
+      table.remove(state.probeIds, index)
+      table.insert(events, { kind = "ProbeLost", probe = probe.id })
+    end
+  end
   local me = state.ships[state.player.ship]
   if me == nil then
     return
@@ -303,6 +355,22 @@ function Sites.Validate(state: State.State, command: State.Command): (boolean, s
     return false, "docked"
   elseif ball.warp and ball.warp.stage == "warp" then
     return false, "in warp"
+  elseif command.kind == "LaunchProbe" then
+    local carried = false
+    for _, item in Items.In(state, ball.id, "cargo") do
+      carried = carried or item.type == Sites.PROBE
+    end
+    if not carried then
+      return false, "no scan probe in the hold"
+    elseif #state.probeIds >= Sites.PROBES then
+      return false, `{Sites.PROBES} probes are out already`
+    end
+    return true
+  elseif command.kind == "RecallProbes" then
+    if #Sites.Probes(state, ball.system) == 0 then
+      return false, "no probes are out in this system"
+    end
+    return true
   elseif command.kind ~= "Scan" then
     return false, `unknown command '{command.kind}'`
   elseif state.tick < state.scanReady then
@@ -313,19 +381,51 @@ end
 
 function Sites.Apply(state: State.State, command: State.Command, events: { Event })
   local ball = state.balls[command.actor]
+  if command.kind == "LaunchProbe" then
+    for _, item in Items.In(state, ball.id, "cargo") do
+      if item.type == Sites.PROBE then
+        Items.Take(state, item, 1)
+        break
+      end
+    end
+    local probe: State.Probe = { id = State.NewId(state), system = ball.system, x = ball.x, y = ball.y, z = ball.z,
+      expires = state.tick + Sites.PROBE_LIFE }
+    state.probes[probe.id] = probe
+    table.insert(state.probeIds, probe.id)
+    table.insert(events, { kind = "ProbeLaunched", ball = ball.id, probe = probe.id, out = #state.probeIds })
+    return
+  elseif command.kind == "RecallProbes" then
+    -- (those in this system come back to the hold, wherever they are in it)
+    local back = 0
+    for _, probe in Sites.Probes(state, ball.system) do
+      state.probes[probe.id] = nil
+      State.RemoveId(state.probeIds, probe.id)
+      back += 1
+    end
+    Items.Add(state, Sites.PROBE, back, ball.id, "cargo")
+    table.insert(events, { kind = "ProbesRecalled", ball = ball.id, count = back })
+    return
+  end
   state.scanReady = state.tick + Sites.SCAN
-  local found, signals = 0, 0
+  local found, signals, faint = 0, 0, 0
   for _, site in Sites.In(state, ball.system) do
     if site.strength < 1 then
-      site.strength = math.min(1, site.strength + Sites.Gain(state, site.kind))
+      -- (each probe near it makes the scan worth as much again; and
+      -- without anything near it, a faint one is got only so far)
+      local probes, near = Sites.Covered(state, site, ball)
+      local reach = if near then 1 else Sites.ALONE[site.kind] or 1
+      if site.strength < reach then
+        site.strength = math.min(reach, site.strength + Sites.Gain(state, site.kind) * (1 + probes))
+      end
       if site.strength >= 1 then
         found += 1
       else
         signals += 1
+        faint += if not near and site.strength >= reach then 1 else 0
       end
     end
   end
-  table.insert(events, { kind = "Scanned", ball = ball.id, system = ball.system, found = found, signals = signals })
+  table.insert(events, { kind = "Scanned", ball = ball.id, system = ball.system, found = found, signals = signals, faint = faint })
 end
 
 return Sites

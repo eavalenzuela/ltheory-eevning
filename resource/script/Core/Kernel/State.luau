@@ -254,6 +254,10 @@ export type Job = {
 -- taken aboard if the owner left.
 export type Drone = { ship: number, owner: number, type: string, target: number, returning: boolean, near: boolean }
 
+-- A scan probe a pilot has put out (Tactical/Sites): where it is, and
+-- the tick it runs down at.
+export type Probe = { id: number, system: number, x: number, y: number, z: number, expires: number }
+
 -- A place in space a pilot has marked, to warp back to (Tactical/Space).
 export type Bookmark = { id: number, name: string, system: number, x: number, y: number, z: number }
 
@@ -407,6 +411,9 @@ export type State = {
   sitesDue: { [number]: number },
   sitesSeen: { [number]: boolean },
   scanReady: number,
+  -- The scan probes the pilot has out, in the order they were put out.
+  probes: { [number]: Probe },
+  probeIds: { number },
   drones: { [number]: Drone },      -- by the drone's own ship id
   droneIds: { number },
   -- The pilots the player has hired (Tactical/Fleet), in the order they

@@ -162,8 +162,15 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `The den's records give away a stronghold: {event.name}, in {session.game.state.galaxy.systems[event.system].name}`)
   elseif kind == "Scanned" and event.ball == mine then
     Session.Say(session, if event.found > 0 then `Scan: {event.found} found` .. (if event.signals > 0 then `, {event.signals} still to resolve` else "")
+      elseif event.signals > 0 and (event.faint or 0) >= event.signals then "Scan: too faint from here. The scanner says where to take a probe"
       elseif event.signals > 0 then `Scan: {event.signals} {if event.signals == 1 then "signal" else "signals"}, nearer`
       else "Scan: nothing new")
+  elseif kind == "ProbeLaunched" and event.ball == mine then
+    Session.Say(session, `Probe out: {event.out} of {4}. It lasts an hour`)
+  elseif kind == "ProbesRecalled" and event.ball == mine then
+    Session.Say(session, `{event.count} {if event.count == 1 then "probe is" else "probes are"} back in the hold`)
+  elseif kind == "ProbeLost" then
+    Session.Say(session, "A probe has run down, and is gone")
   elseif kind == "StandingChanged" and event.by < 0 then
     local faction = Factions.byId[event.faction]
     Session.Say(session, string.format("%s standing %.1f: now %.1f%s", if faction then faction.name else "?", event.by, event.standing,
