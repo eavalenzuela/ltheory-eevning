@@ -53,6 +53,8 @@
 #               a wreck stripped, and then looted
 #   game-rigs   rigs (test/scenario/rigs.txt): one built of salvage, fitted,
 #               and destroyed by taking it out
+#   game-drones  drones (test/scenario/drones.txt): one launched, fighting
+#               beside its ship, and called back
 #   game-pace   the game app must draw at least thirty frames a second just
 #               outside the home station (test/scenario/pace.txt)
 #   goldens     script/goldens: screenshots of the stored scenes must match
@@ -173,6 +175,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/salvage.txt
   step game-rigs 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/rigs.txt
+  step game-drones 0 timeout 600 bin/launch game --no-present --fixed-step 60 --timeout 500 \
+    --script test/scenario/drones.txt
   step game-pace 0 timeout 200 bin/launch game --no-present --fixed-step 60 --timeout 150 \
     --script test/scenario/pace.txt
   step goldens 0 script/goldens

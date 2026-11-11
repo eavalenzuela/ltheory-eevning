@@ -21,8 +21,8 @@ local Catalog = {}
 export type Entry = { header: string?, info: Types.Info? }
 
 -- The order the categories come in where they are mixed (a hangar).
-Catalog.CATEGORIES = { "module", "charge", "ship", "structure", "ore", "mineral", "planetary", "component", "blueprint", "skillbook",
-  "goods" }
+Catalog.CATEGORIES = { "module", "charge", "drone", "ship", "structure", "ore", "mineral", "planetary", "component", "blueprint",
+  "skillbook", "goods" }
 
 local categoryOrder: { [string]: number } = {}
 for index, category in Catalog.CATEGORIES do
@@ -49,7 +49,7 @@ local MODULES: { { any } } = {
 local MISSILES = { "Light missiles", "Heavy missiles", "Cruise missiles" }
 local MAKES: { [string]: { any } } = {
   ship = { "Hulls", 1 }, module = { "Modules", 2 }, charge = { "Charges", 3 }, component = { "Components", 4 },
-  structure = { "Structures", 5 },
+  structure = { "Structures", 5 }, drone = { "Drones", 6 },
 }
 
 -- 1 small, 2 medium, 3 large, from a type's id.

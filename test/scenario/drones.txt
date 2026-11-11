@@ -1,0 +1,55 @@
+# Drones, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/drones.txt
+#
+# Two light drones are given and put in the Courier's hold, and the
+# skill for them trained to two. A Courier controls one. At a belt it is
+# launched, and when the pirate comes it goes for it without being told,
+# beside the Courier's own guns. Called back, it is in the hold again.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Give('drone.light', 2))
+lua GameDebug.Train('drones', 2)
+frames 3
+until GameDebug.Press('ToHold:drone.light')
+until GameDebug.Hold('drone.light') == 2
+
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+frames 5
+
+# One goes out: the hull controls no more.
+until GameDebug.Press('Drones:launch')
+until GameDebug.Drones() == 1
+lua assert(select(2, GameDebug.Drones()) == 1, 'one drone should still be in the hold')
+frames 3
+lua assert(not GameDebug.CanPress('Drones:launch'), 'a Courier controls one drone')
+
+# The pirate comes, and the drone goes for it with the Courier.
+lua GameDebug.TimeScale(8)
+until GameDebug.Count('ship') >= 2
+until GameDebug.Distance('Pirate') < 9000
+lua assert(GameDebug.Lock('Pirate'), 'the lock was refused')
+until GameDebug.Locked() > 0
+lua GameDebug.TimeScale(2)
+lua assert(GameDebug.Fire() == 2, 'both guns should open fire')
+until GameDebug.Count('ship') == 1
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Hull() == 'frigate.courier', 'the player lost the fight')
+lua assert(GameDebug.Drones() == 1, 'the drone should still be out')
+
+# Back aboard.
+until GameDebug.Press('Drones:recall')
+lua GameDebug.TimeScale(4)
+until GameDebug.Drones() == 0
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Hold('drone.light') == 2, 'a drone called back should be in the hold again')
+
+echo drones scenario passed
+quit

@@ -240,6 +240,13 @@ export type Job = {
   ends: number,
 }
 
+-- A drone that is out of its owner's hold (Tactical/Drones): its own
+-- ship, the ship it belongs to, the kind of drone it is (Data/Drones),
+-- what it has been pointed at (0: nothing), whether it has been called
+-- back, and whether it was near enough its owner, last tick, to be
+-- taken aboard if the owner left.
+export type Drone = { ship: number, owner: number, type: string, target: number, returning: boolean, near: boolean }
+
 -- A place that is on nobody's chart (Tactical/Sites): 'id' is the place
 -- it is in its system's description. 'strength' is how far a scanner
 -- has got with it, from 0 to 1 (found); 'gone' is a site that is over.
@@ -365,6 +372,8 @@ export type State = {
   sitesDue: { [number]: number },
   sitesSeen: { [number]: boolean },
   scanReady: number,
+  drones: { [number]: Drone },      -- by the drone's own ship id
+  droneIds: { number },
   queue: { Command },     -- submitted, to be applied at the next tick
 }
 

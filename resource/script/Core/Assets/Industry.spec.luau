@@ -71,7 +71,7 @@ suite:Case("everything fitted, fired, flown or built into it has a blueprint, an
   for _, id in Types.Ids() do
     local info = Types.Info(id)
     if info.category == "module" or info.category == "charge" or info.category == "ship" or info.category == "component"
-      or info.category == "structure" then
+      or info.category == "structure" or info.category == "drone" then
       local blueprint = assert(Blueprints.byProduct[id], `no blueprint for {id}`)
       count += 1
       t.eq(Types.Info(blueprint.id).category, "blueprint")

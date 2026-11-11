@@ -11,6 +11,7 @@
 -- A blueprint is not used up; it costs ten times its product.
 
 local Components = require("@lt/Core/Data/Components")
+local Drones = require("@lt/Core/Data/Drones")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Planets = require("@lt/Core/Data/Planets")
@@ -146,6 +147,12 @@ for _, hull in Ships.list do
     -- (the largest hulls take most of a day, not a week)
     add(hull.id, hull.name, mix, hull.basePrice, 1, math.min(72000, 600 + hull.basePrice // 200), Components.HULL)
   end
+end
+
+-- A drone is built as a small gun on a small engine is.
+for _, drone in Drones.list do
+  local parts: { { any } } = { { "component.weapon", 0.4 }, { "component.thruster", 0.3 }, { "component.electronics", 0.3 } }
+  add(drone.id, drone.name, MIX.module, drone.basePrice, 1, 300, parts)
 end
 
 -- Structures: a tower as a big hull is built, its modules as lesser

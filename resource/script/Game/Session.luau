@@ -116,6 +116,8 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{Types.Info(event.type).name} taken out: it is destroyed`)
   elseif kind == "Salvaged" and event.ball == mine then
     Session.Say(session, `Salvaged: {event.pieces} {if event.pieces == 1 then "piece" else "pieces"} brought off`)
+  elseif kind == "DroneLost" and event.owner == mine then
+    Session.Say(session, `A {Types.Info(event.type).name} was left behind: it is lost`)
   elseif kind == "Jammed" and event.ball == mine then
     Session.Say(session, "Jammed: your locks are broken")
   elseif kind == "Held" and event.ball == mine then

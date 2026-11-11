@@ -19,6 +19,7 @@ local Codec = require("@lt/Core/Persist/Codec")
 local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
 local Dogma = require("@lt/Core/Dogma")
+local Drones = require("@lt/Core/Tactical/Drones")
 local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Hangar = require("@lt/Core/Assets/Hangar")
@@ -64,7 +65,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 22
+Core.SAVE_VERSION = 23
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -209,6 +210,11 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       ball.vitals.damp = ball.vitals.damp or 1
     end
   end,
+  -- 23: there are drones. A save from before has none out.
+  [22] = function(state: any)
+    state.drones = state.drones or {}
+    state.droneIds = state.droneIds or {}
+  end,
 }
 
 -- A new game: a galaxy, and the player's first ship docked at a station
@@ -241,6 +247,8 @@ function Core.New(options: Options): Game
     sitesDue = {},
     sitesSeen = {},
     scanReady = 0,
+    drones = {},
+    droneIds = {},
     jobIds = {},
     wallet = 0,
     journal = {},
@@ -303,6 +311,7 @@ local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, Canc
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
 local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true }
 local SITE_COMMANDS = { Scan = true }
+local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones = true }
 local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true }
 local COLONY_COMMANDS = { DeployColony = true, BuildFacility = true, RemoveFacility = true, StartExtraction = true, Export = true }
 
@@ -332,6 +341,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Missions.Validate(state, command)
   elseif SITE_COMMANDS[command.kind] then
     return Sites.Validate(state, command)
+  elseif DRONE_COMMANDS[command.kind] then
+    return Drones.Validate(state, command)
   elseif TRAINING_COMMANDS[command.kind] then
     return Training.Validate(state, command)
   end
@@ -369,7 +380,9 @@ function Core.Step(game: Game)
   for _, id in table.clone(state.ballIds) do
     local by = killers[id]
     if by then
-      Aftermath.Destroy(state, id, by, game.events)
+      -- (what a drone destroys is its owner's doing)
+      local drone = state.drones[by]
+      Aftermath.Destroy(state, id, if drone then drone.owner else by, game.events)
     end
   end
   local queue = state.queue
@@ -396,6 +409,8 @@ function Core.Step(game: Game)
       Missions.Apply(state, command, game.events)
     elseif ok and SITE_COMMANDS[command.kind] then
       Sites.Apply(state, command, game.events)
+    elseif ok and DRONE_COMMANDS[command.kind] then
+      Drones.Apply(state, command, game.events)
     elseif ok and TRAINING_COMMANDS[command.kind] then
       Training.Apply(state, command, game.events)
     elseif ok then
@@ -409,6 +424,7 @@ function Core.Step(game: Game)
   Pirates.Populate(state, game.events)
   Traffic.Step(state, game.events)
   Pirates.Think(state, game.events)
+  Drones.Step(state, game.events)
   Space.Decide(state, game.events)
   Aftermath.Step(state, game.events)
   Mining.Step(state)
@@ -798,6 +814,28 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
     anchored = Starbases.Anchored(state, starbase), wait = math.max(0, starbase.ready - state.tick) * Constants.TICK, lit = lit,
     fuel = starbase.fuel, hours = Starbases.Hours(starbase), powergrid = powergrid, cpu = cpu, modules = modules,
   }
+end
+
+-- The pilot's drones: how many are in the hold, how many are out, how
+-- many could be out at once, and how many of those out have been called
+-- back.
+export type DronesStatus = { carried: number, out: number, max: number, returning: number, engaged: number }
+function Query.Drones(game: Game): DronesStatus
+  local state = game.state
+  local ship = state.player.ship
+  local carried = 0
+  for _, item in Items.In(state, ship, "cargo") do
+    if Types.Info(item.type).category == "drone" then
+      carried += item.quantity
+    end
+  end
+  local returning, engaged = 0, 0
+  local out = Drones.Out(state, ship)
+  for _, drone in out do
+    returning += if drone.returning then 1 else 0
+    engaged += if drone.target ~= 0 and not drone.returning then 1 else 0
+  end
+  return { carried = carried, out = #out, max = Drones.Max(state, ship), returning = returning, engaged = engaged }
 end
 
 -- What the ship's scanner shows of the system the pilot is in: every

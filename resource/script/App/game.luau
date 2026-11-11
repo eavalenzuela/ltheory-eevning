@@ -588,6 +588,13 @@ function Debug.Train(skill: string, level: number)
   session.game.state.skills[skill] = level
 end
 
+-- The pilot's drones: how many are out, how many are in the hold, and
+-- how many could be out at once.
+function Debug.Drones(): (number, number, number)
+  local status = Core.Query.Drones(session.game)
+  return status.out, status.carried, status.max
+end
+
 -- A cheat, for a wreck to work on without a fight: a pirate scout from
 -- nowhere, a kilometre off the pilot's ship, destroyed by nobody.
 -- Returns false if the pilot is not in space.

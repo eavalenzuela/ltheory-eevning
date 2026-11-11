@@ -9,6 +9,7 @@
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Components = require("@lt/Core/Data/Components")
+local Drones = require("@lt/Core/Data/Drones")
 local Factions = require("@lt/Core/Data/Factions")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
@@ -402,6 +403,18 @@ function Facts.Of(type: string): Sheet?
     end
     local market = section(sheet, "Trade")
     row(market, "Base price", `{whole(blueprint.basePrice)} cr`)
+  elseif category == "drone" then
+    local drone = Drones.byId[type]
+    sheet.kind = "Drone"
+    sheet.note = "Launched from the hold to fight beside the ship: it goes for what it is pointed at, or for whatever is attacking its owner. Near enough when its owner warps or docks, it is taken aboard; left behind, it is lost."
+    local gun = Modules.byId[drone.gun]
+    local flies = Ships.byId[drone.hull]
+    local has = section(sheet, "Drone")
+    row(has, "Armed with", gun.name, gun.id)
+    row(has, "Speed", `{whole(flies.maxVelocity)} m/s`)
+    row(has, "Shield, armour, hull", `{whole(flies.shield)}, {whole(flies.armor)}, {whole(flies.hull)} HP`)
+    row(has, "To launch", `Drones {flies.requires and flies.requires[1].level or 1}`)
+    trade(sheet, type)
   elseif category == "planetary" then
     local raw, product = Planets.rawById[type], Planets.productById[type]
     if raw then

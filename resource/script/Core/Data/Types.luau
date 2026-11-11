@@ -4,6 +4,7 @@
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Components = require("@lt/Core/Data/Components")
+local Drones = require("@lt/Core/Data/Drones")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Planets = require("@lt/Core/Data/Planets")
@@ -17,7 +18,7 @@ export type Info = {
   id: string,
   name: string,
   category: "module" | "charge" | "goods" | "ore" | "mineral" | "component" | "ship" | "blueprint" | "skillbook" | "structure"
-    | "planetary",
+    | "planetary" | "drone",
   volume: number,     -- m3 per unit
   basePrice: number,  -- credits per unit
 }
@@ -73,6 +74,11 @@ for _, product in Planets.products do
 end
 byId[Planets.CENTRE.id] = { id = Planets.CENTRE.id, name = Planets.CENTRE.name, category = "structure",
   volume = Planets.CENTRE.volume, basePrice = Planets.CENTRE.basePrice }
+
+-- Drones, as they are in a hold.
+for _, drone in Drones.list do
+  byId[drone.id] = { id = drone.id, name = drone.name, category = "drone", volume = drone.volume, basePrice = drone.basePrice }
+end
 
 for _, blueprint in Blueprints.list do
   byId[blueprint.id] = { id = blueprint.id, name = blueprint.name, category = "blueprint", volume = 0.01,

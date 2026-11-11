@@ -613,6 +613,39 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           session.autopilot = not session.autopilot
         end
       end
+      -- The drones, if there are any aboard or out: a row over that.
+      if ball then
+        local drones = Core.Query.Drones(game)
+        if drones.carried + drones.out > 0 then
+          local dy = bottom - 138
+          Im.Panel(left + 24, dy, 440, 34)
+          Im.Text(`DRONES  {drones.out} out, {drones.carried} aboard`, left + 36, dy + 9, 13,
+            if drones.out > 0 then Im.TEXT else Im.DIM)
+          if Im.Button("Launch", left + 226, dy + 4, 70, 26, (Session.CanDo(session, { kind = "LaunchDrones", actor = 0 })),
+            "Drones:launch") then
+            Session.Do(session, { kind = "LaunchDrones", actor = 0 })
+          end
+          -- (at what is selected, if it is a ship; else at the first thing locked)
+          local target = session.selected
+          if game.state.balls[target] == nil then
+            target = 0
+            for _, lock in ball.vitals.locks do
+              if lock.locked and game.state.balls[lock.target] then
+                target = lock.target
+                break
+              end
+            end
+          end
+          local engage: State.Command = { kind = "EngageDrones", actor = 0, target = target }
+          if Im.Button("Engage", left + 300, dy + 4, 76, 26, (Session.CanDo(session, engage)), "Drones:engage") then
+            Session.Do(session, engage)
+          end
+          if Im.Button("Recall", left + 380, dy + 4, 76, 26, (Session.CanDo(session, { kind = "RecallDrones", actor = 0 })),
+            "Drones:recall") then
+            Session.Do(session, { kind = "RecallDrones", actor = 0 })
+          end
+        end
+      end
       -- (the map goes over everything else)
       Map.Draw(session, left, top, w.size.x, w.size.y)
       overInterface = Im.over

@@ -44,6 +44,9 @@ local skills: { Skill } = {
   -- Picking over what is left
   { id = "salvaging", name = "Salvaging", rank = 3, start = -1, requires = {},
     note = "Level 1 to fit a salvager. 10% likelier to bring something off each cycle a level." },
+  -- Company
+  { id = "drones", name = "Drones", rank = 2, start = 0, requires = {},
+    note = "One more drone out at once a level, as far as the hull controls." },
   -- Getting in another ship's way
   { id = "electronic.warfare", name = "Electronic Warfare", rank = 3, start = -1, requires = { { skill = "electronics", level = 2 } },
     note = "To fit painters and dampeners (1), neutralisers (2) and jammers (3)." },
