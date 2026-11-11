@@ -23,6 +23,7 @@ local Clock = require("@lt/Game/Clock")
 local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
 local Effects = require("@lt/Game/View/Effects")
+local Hull = require("@lt/Game/View/Hull")
 local Planet = require("@lt/Game/View/Planet")
 local Star = require("@lt/Game/View/Star")
 local Motion = require("@lt/Core/Tactical/Motion")
@@ -120,7 +121,21 @@ local function place(object: Object, at: vector)
   object:SetPos(at + (at - object:GetCenter()))
 end
 
+-- The proxies that are hulls of our own design (Game/View/Hull), which
+-- are scenery and are turned by Object_SetAxes; the rest are the
+-- engine's ships.
+local designed: { [Object]: boolean } = setmetatable({} :: any, { __mode = "k" })
+
 local function makeShip(type: string, radius: number): Object
+  local built = Hull.Build(type)
+  if built then
+    local object = Object_Scenery({})
+    Object_SetRenderable(object, built.model)
+    local size = radius / built.radius
+    object:SetScale(vector.create(size, size, size))
+    designed[object] = true
+    return object
+  end
   local item: Item? = hullItems[type]
   if not item then
     local made = Item_ShipType((radius / 0.0675) ^ 2, HULL_SEED[type] or 55, 1, 1, 1, 1, 1, 1)
@@ -131,7 +146,11 @@ local function makeShip(type: string, radius: number): Object
 end
 
 -- The model of a hull type of this radius, for the interface to draw.
-function Scene.Preview(type: string, radius: number): Renderable
+function Scene.Preview(type: string, radius: number): Renderable | Model
+  local built = Hull.Build(type)
+  if built then
+    return built.model
+  end
   local item: Item? = hullItems[type]
   if not item then
     local made = Item_ShipType((radius / 0.0675) ^ 2, HULL_SEED[type] or 55, 1, 1, 1, 1, 1, 1)
@@ -342,7 +361,12 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       proxy:SetPos(at)
       local speed = math.sqrt(vx * vx + vy * vy + vz * vz)
       if speed > 1 then
-        proxy:SetLook(vector.create(vx / speed, vy / speed, vz / speed))
+        local heading = vector.create(vx / speed, vy / speed, vz / speed)
+        if designed[proxy] then
+          Object_SetAxes(proxy, heading, if math.abs(heading.y) < 0.98 then vector.create(0, 1, 0) else vector.create(1, 0, 0))
+        else
+          proxy:SetLook(heading)
+        end
       end
       scene.screen[id] = at
     elseif existing then

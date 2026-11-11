@@ -185,7 +185,7 @@ end
 local turning = 0
 
 local function drawWheel(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, cx: number, cy: number,
-  preview: Renderable?)
+  preview: (Renderable | Model)?)
   local ship = player.ship
   local hull = player.hull
   local stats = Core.Query.Stats(game, ship)
@@ -195,7 +195,7 @@ local function drawWheel(session: Session.Session, game: Core.Game, player: Core
   WidgetRenderer_DrawPanelRadial(vector.create(cx, cy), 0, RING - 28, 0, 1, vector.create(0.02, 0.03, 0.045), 0.9, 0.9, 0)
   if preview then
     turning += 0.25 * FrameTimer_Get()
-    local bound = preview:GetBound()
+    local bound = Renderable_GetBound(preview)
     local size = bound.upper - bound.lower
     local fov = math.rad(0.02)
     local distance = math.max(size.x, size.y, size.z) * 0.47 / math.tan(0.5 * fov)
@@ -385,7 +385,7 @@ local function drawFigures(game: Core.Game, player: Core.PlayerInfo, x: number, 
 end
 
 local function drawFitting(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number,
-  preview: Renderable?)
+  preview: (Renderable | Model)?)
   local ship = player.ship
   local stats = Core.Query.Stats(game, ship)
 
@@ -465,9 +465,10 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
 
   -- The ship: its name over the wheel.
   local cx, cy = x + 480, y + 296
-  local title = string.upper(player.hull.name)
-  ItemIcon.Draw(player.hull.id, cx + RING - 150, y + 74, 22)
-  Im.Heading(title, cx + RING - 122, y + 77, 15, Im.TEXT)
+  local title = string.upper(shorten(player.hull.name, 20))
+  local titleWidth = Im.TextWidth(title, 15) * 1.12
+  ItemIcon.Draw(player.hull.id, cx + RING - 42 - titleWidth - 28, y + 74, 22)
+  Im.Heading(title, cx + RING - 42 - titleWidth, y + 77, 15, Im.TEXT)
   if Im.Button("Info", cx + RING - 28, y + 74, 46, 21, true, `Info:{player.hull.id}`) then
     Info.Open(player.hull.id)
   end
@@ -998,7 +999,8 @@ end
 
 -- 'preview' is the model of the player's hull, for the fitting screen
 -- to show.
-function Station.Draw(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number, preview: Renderable?)
+function Station.Draw(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number,
+  preview: (Renderable | Model)?)
   local width, height = Station.WIDTH, Station.HEIGHT
   local ship = player.ship
   local station = Core.Query.Body(game, player.docked)

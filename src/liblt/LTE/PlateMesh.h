@@ -15,6 +15,16 @@ struct PlateMeshT : public RefCounted {
     V3 const& rotation,
     float bevel) = 0;
 
+  /* A plate that carries a number of its own: every vertex of it has
+   * that number as its 'v', for a shader to tell the plates of a mesh
+   * apart by (which paint, which part). 'u' is the occlusion. */
+  virtual void AddTagged(
+    V3 const& center,
+    V3 const& scale,
+    V3 const& rotation,
+    float bevel,
+    float tag) = 0;
+
   virtual void Add(Warp const& warp) = 0;
 
   virtual void Add(

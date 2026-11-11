@@ -1,0 +1,116 @@
+/* The skin of a hull built of tagged plates (Game/View/Hull): paint over
+   metal, worn.
+
+   Every plate carries a number in its v: the whole part says which paint
+   it has (0 the hull's plating, 1 the plates that have been patched in,
+   2 bare structure, 3 something lit from within, 4 trim), and the
+   fraction is the plate's own, so that no two plates are quite the same
+   tone and their seams and rust do not line up. Its u is how open the
+   place is to the sky (the occlusion baked into the mesh).
+
+   On that: seams between the sheets a plate is made of; paint worn back
+   to metal along every edge; rust that starts in the seams and the
+   sheltered places and runs down from them; grime where the hull is
+   closed in. How much of each is the hull's to say. Positions are the
+   hull's own, so a hull looks the same at any size. */
+
+#include frag.jsl
+#include color.jsl
+#include lighting.jsl
+#include math.jsl
+#include worldnoise.jsl
+
+FRAG_IN vec3 normal;
+FRAG_IN vec3 position;
+
+uniform sampler2D depthBuffer;
+
+uniform vec3 paintPlating;
+uniform vec3 paintPatch;
+uniform vec3 paintFrame;
+uniform vec3 paintGlow;
+uniform vec3 paintTrim;
+uniform float wear;         /* how far the paint is worn off, 0 to 1 */
+uniform float rust;         /* how rusted, 0 to 1 */
+uniform float sheets;       /* sheets of plating to a unit of the hull */
+
+vec3 lin(vec3 c) {
+  return pow(c, vec3(2.2));
+}
+
+/* Lines where one sheet of plating meets the next, across the face that
+   'n' is the normal of: 1 on a seam. */
+float seams(vec3 p, vec3 n, float offset) {
+  vec3 a = abs(n);
+  vec2 q = a.x > a.y && a.x > a.z ? p.zy : (a.y > a.z ? p.xz : p.xy);
+  q = q * sheets * vec2(1.0, 1.6) + offset;
+  vec2 f = abs(fract(q) - 0.5);
+  float d = 0.5 - max(f.x, f.y);
+  return 1.0 - smoothstep(0.0, 0.035, d);
+}
+
+void main() {
+  PREPASS
+  EARLY_Z
+
+  float tag = uv.y + 0.001;
+  float part = floor(tag);
+  float own = fract(tag);
+  float open = uv.x;
+  vec3 p = vertpos;
+  vec3 n = normalize(vertnormal);
+
+  if (part > 2.5 && part < 3.5) {
+    /* Lit from within: an engine's throat, a row of ports. */
+    outputAlbedo(lin(paintGlow) * (2.2 + 1.2 * wn_noise(p * 9.0)));
+    outputAlpha(1.0);
+    outputNormal(normalize(normal));
+    outputMaterial(MATERIAL_NOSHADE);
+    outputRoughness(0.0);
+    return;
+  }
+
+  bool bare = part > 1.5 && part < 2.5;
+  vec3 paint = part < 0.5 ? paintPlating : (part < 1.5 ? paintPatch : (bare ? paintFrame : paintTrim));
+  /* (each plate a little lighter or darker, and off in hue, than the next) */
+  paint *= 0.68 + 0.58 * own;
+  paint = mix(paint, vec3(dot(paint, vec3(0.33))), 0.25 * sin(own * 40.0) + 0.1);
+
+  /* The edges of a plate, where its bevel turns: the smoothed normal is
+     shorter there. */
+  float edge = 1.0 - exp(-900.0 * length(normal - normalize(normal)));
+  float seam = bare ? 0.0 : seams(p, n, own * 13.0);
+
+  float blotch = wn_fbm(p * 2.2 + own * 31.0, 5, 0.55);
+  float fine = wn_fbm(p * 19.0 + own * 7.0, 4, 0.6);
+  /* (streaks: the same noise drawn out downward) */
+  float streak = wn_fbm(vec3(p.x * 9.0, p.y * 1.1, p.z * 9.0) + own * 17.0, 4, 0.6);
+
+  /* Paint gone to metal: along edges, and scuffed off in patches. */
+  float worn = saturate(wear * (1.6 * edge + smoothstep(0.10, 0.45, blotch + 0.5 * fine) * 0.7));
+  /* Rust: out of the seams and the sheltered places, and down. */
+  float sheltered = 1.0 - smoothstep(0.25, 0.75, open);
+  float rusted = rust * saturate(1.4 * seam * (0.4 + streak) + 0.9 * sheltered + smoothstep(0.02, 0.30, streak + 0.5 * blotch) * 0.8
+    + 0.5 * worn);
+  rusted = saturate(rusted * (0.7 + 0.6 * fine + 0.3));
+
+  vec3 metal = vec3(0.30, 0.31, 0.33) * (0.85 + 0.3 * fine);
+  vec3 oxide = mix(vec3(0.20, 0.08, 0.04), vec3(0.36, 0.17, 0.07), saturate(0.5 + fine + streak));
+  vec3 c = bare ? mix(paint, metal, 0.22) : mix(paint, metal, worn);
+  c = mix(c, oxide, bare ? 0.6 * rusted : rusted);
+  c *= 1.0 - 0.55 * seam;
+  /* grime, where the hull is closed in */
+  float shut = 1.0 - smoothstep(0.05, 0.65, open);
+  c *= 1.0 - 0.5 * shut;
+  c *= 0.9 + 0.2 * fine;
+
+  float rough = mix(0.16, 0.05, worn);
+  rough = mix(rough, 0.2, rusted);
+  if (bare) rough = mix(0.07, 0.2, rusted);
+
+  outputAlbedo(lin(c) * mix(0.30, 1.0, smoothstep(0.0, 0.75, open)) * 4.6);
+  outputAlpha(1.0);
+  outputNormal(normalize(normal));
+  outputMaterial(MATERIAL_COOKT);
+  outputRoughness(rough);
+}

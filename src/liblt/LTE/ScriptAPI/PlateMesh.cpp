@@ -16,6 +16,18 @@ VoidFreeFunction(PlateMesh_AddPlate,
   plateMesh->Add(center, scale, rotation, bevel);
 } FunctionAlias(PlateMesh_AddPlate, Add);
 
+VoidFreeFunction(PlateMesh_AddTagged,
+  "Add a plate to 'plateMesh' whose every vertex carries 'tag' as its v (zero or more), for a shader to tell plates apart by",
+  PlateMesh, plateMesh,
+  V3, center,
+  V3, scale,
+  V3, rotation,
+  float, bevel,
+  float, tag)
+{
+  plateMesh->AddTagged(center, scale, rotation, bevel, tag);
+} FunctionAlias(PlateMesh_AddTagged, AddTagged);
+
 VoidFreeFunction(PlateMesh_AddPlateMesh,
   "Add 'source' to 'plateMesh' with translation 'offset' and scale 'scale'",
   PlateMesh, plateMesh,

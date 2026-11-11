@@ -21,7 +21,8 @@ namespace {
     V3, center,
     V3, scale,
     V3, rotation,
-    float, bevel)
+    float, bevel,
+    float, tag)
     Plate() {}
   };
 
@@ -41,7 +42,17 @@ namespace {
       V3 const& rotation,
       float bevel)
     {
-      plates.push(Plate(center, scale, rotation, bevel));
+      plates.push(Plate(center, scale, rotation, bevel, -1.0f));
+    }
+
+    void AddTagged(
+      V3 const& center,
+      V3 const& scale,
+      V3 const& rotation,
+      float bevel,
+      float tag)
+    {
+      plates.push(Plate(center, scale, rotation, bevel, tag));
     }
 
     void Add(Warp const& warp) {
@@ -64,11 +75,15 @@ namespace {
 
       for (size_t i = 0; i < plates.size(); ++i) {
         Plate const& plate = plates[i];
+        size_t first = self->vertices.size();
         self->AddMesh(
           Mesh_BoxRounded(quality, plate.bevel),
           Matrix::Translation(plate.center) *
           Matrix::RotationYPR(plate.rotation) *
           Matrix::Scale(plate.scale));
+        if (plate.tag >= 0)
+          for (size_t j = first; j < self->vertices.size(); ++j)
+            self->vertices[j].v = plate.tag;
       }
 
       for (size_t i = 0; i < children.size(); ++i)

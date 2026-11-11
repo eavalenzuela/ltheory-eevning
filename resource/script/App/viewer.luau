@@ -29,6 +29,7 @@
 
 local AppShell = require("@lt/AppShell")
 local Effects = require("@lt/Game/View/Effects")
+local Hull = require("@lt/Game/View/Hull")
 local Planet = require("@lt/Game/View/Planet")
 local Star = require("@lt/Game/View/Star")
 local SceneView = require("@lt/SceneView")
@@ -41,7 +42,8 @@ local DONE = "cache/viewer/done.txt"
 
 type View = {
   name: string,
-  kind: string,           -- a kind of planet (Planet.kinds), or "star-" and a class of star
+  kind: string,           -- a kind of planet (Planet.kinds), "star-" and a class of star, or
+                          -- "hull-" and a hull type that has a design (Game/View/Hull)
   seed: number,
   eye: vector,            -- where the camera is, in planet radii from its centre
   look: vector,           -- what it looks at, likewise
@@ -140,6 +142,25 @@ table.insert(VIEWS, { name = "fx-5-landing-near", kind = "fx", seed = 1, eye = v
 table.insert(VIEWS, { name = "fx-6-explosions", kind = "fx", seed = 1, eye = vector.create(0, 0, 5200), look = CENTRE, light = DAY, radius = 1,
   explode = { radii = { 25, 90, 250 }, ages = { 0.06, 0.3, 0.8, 1.8 } } })
 
+-- Every hull that has a design, from six sides. (The light is kept on
+-- the camera's side of the hull, as it must be: see SIDE.)
+local HULL_VIEWS: { { any } } = {
+  { "1-bow-quarter", vector.create(1.05, 0.55, 1.35), CENTRE },
+  { "2-side", vector.create(1.9, 0.12, 0.05), CENTRE },
+  { "3-above", vector.create(0.2, 1.9, 0.25), CENTRE },
+  { "4-stern-quarter", vector.create(-1.15, 0.45, -1.35), CENTRE },
+  { "5-below", vector.create(-0.95, -0.95, 1.15), CENTRE },
+  { "6-close", vector.create(0.55, 0.30, 0.80), vector.create(0.05, 0.05, 0.30) },
+}
+for _, type in Hull.Types() do
+  local short = string.match(type, "%.(%a+)$") or type
+  for _, view in HULL_VIEWS do
+    local eye: vector = view[2]
+    table.insert(VIEWS, { name = `hull-{short}-{view[1]}`, kind = `hull-{type}`, seed = 1, eye = eye, look = view[3],
+      light = eye + vector.create(0.5, 0.9, 0.2) * (0.6 * vector.magnitude(eye)) })
+  end
+end
+
 -- One of everything, for a single picture of how the bodies look.
 table.insert(VIEWS, { name = "gallery", kind = "gallery", seed = 0, eye = vector.create(0, 0, 9.6), look = CENTRE, light = DAY,
   gallery = {
@@ -193,9 +214,15 @@ return AppShell.Create(function(): Widget
     end
     interior:Advance()
   end
+  if lamp then
+    -- (white light: this system's own star is green, and hulls are lit
+    -- by it; the worlds are told to take white light themselves)
+    Star_SetColor(lamp, vector.create(1.15, 1.15, 1.15))
+  end
 
   local worlds: { Planet.World } = {}
   local stage: { Object } = {}    -- what stands in the scene for the view
+  local units: { number } = {}    -- and how big each is, to a radius of 1
   local fx: Effects.Fx? = nil
   local built = ""          -- what the stage was built for
   local index = 0           -- the view being taken; 0 when idle
@@ -205,15 +232,23 @@ return AppShell.Create(function(): Widget
   local params: Planet.Tweaks = {}
   local views: { View } = VIEWS
 
-  -- A body of a kind: a planet's, or "star-" and a class of star.
-  local function make(kind: string, seed: number, tweaks: Planet.Tweaks, resolution: number?): Object
+  -- A body of a kind (a planet's, "star-" and a class of star, "hull-"
+  -- and a hull type), and how big it is as made.
+  local function make(kind: string, seed: number, tweaks: Planet.Tweaks, resolution: number?): (Object, number)
     local class = string.match(kind, "^star%-(%a+)$")
     if class then
-      return Star.New(class, seed, tweaks)
+      return Star.New(class, seed, tweaks), 1
+    end
+    local hull = string.match(kind, "^hull%-(.+)$")
+    if hull then
+      local built = assert(Hull.Build(hull), `no design for the hull '{hull}'`)
+      local object = Object_Scenery({})
+      Object_SetRenderable(object, built.model)
+      return object, built.radius
     end
     local planet = Planet.New(kind, seed, resolution, tweaks)
     table.insert(worlds, planet)
-    return planet.body
+    return planet.body, 1
   end
 
   local function setUp(v: View)
@@ -272,22 +307,28 @@ return AppShell.Create(function(): Widget
         Object_Delete(object)
       end
       table.clear(stage)
+      table.clear(units)
       table.clear(worlds)
       local radius = v.radius or RADIUS
       if fire or explode then
         -- (something for the camera to be told to look at)
         table.insert(stage, Object_Scenery({}))
+        table.insert(units, 1)
       elseif v.gallery then
         for at, item in v.gallery do
-          local made = make(item.kind, item.seed, tweaks, 512)
+          local made, unit = make(item.kind, item.seed, tweaks, 512)
           made:SetPos(vector.create(((at - 1) % 4 - 1.5) * 2.8, (0.5 - (at - 1) // 4) * 2.8, 0) * radius)
           table.insert(stage, made)
+          table.insert(units, unit)
         end
       else
-        table.insert(stage, make(v.kind, v.seed, tweaks, nil))
+        local made, unit = make(v.kind, v.seed, tweaks, nil)
+        table.insert(stage, made)
+        table.insert(units, unit)
       end
-      for _, object in stage do
-        object:SetScale(vector.create(radius, radius, radius))
+      for index, object in stage do
+        local size = radius / units[index]
+        object:SetScale(vector.create(size, size, size))
         system:AddInterior(object)
       end
       camera:SetTarget(stage[1])

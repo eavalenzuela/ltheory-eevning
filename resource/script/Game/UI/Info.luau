@@ -10,6 +10,8 @@
 local Facts = require("@lt/Core/Data/Facts")
 local Im = require("@lt/Game/UI/Im")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
+local Scene = require("@lt/Game/View/Scene")
+local Ships = require("@lt/Core/Data/Ships")
 
 local Info = {}
 
@@ -19,8 +21,12 @@ Info.HEIGHT = 600
 local ROW = 20
 local SIZE = 13
 
+-- How tall the picture of a hull is, at the top of its sheet.
+local PICTURE = 150
+
 local showing: string? = nil
 local history: { string } = {}
+local turning = 0
 
 -- Show the sheet of a type. False if there is no such type.
 function Info.Open(type: string): boolean
@@ -136,8 +142,25 @@ function Info.Draw(x: number, y: number)
 
   local left, right = x + 16, x + width - 18
   local top = y + 70
+  -- A hull has its picture first: the model the game draws for it,
+  -- turning.
+  local hull = Ships.byId[type]
+  if hull then
+    local model = Scene.Preview(type, hull.radius)
+    turning += 0.3 * FrameTimer_Get()
+    local bound = Renderable_GetBound(model)
+    local size = bound.upper - bound.lower
+    local fov = math.rad(0.02)
+    local distance = math.max(size.x, size.y, size.z) * 0.36 / math.tan(0.5 * fov)
+    local from = vector.normalize(vector.create(math.cos(turning), 0.38, math.sin(turning))) * distance
+    Im.Fill(left, top, right - left, PICTURE, vector.create(0.02, 0.03, 0.045), 0.9)
+    WidgetRenderer_DrawRenderable(model, Transform_Identity(), from, -1 * vector.normalize(from), vector.create(0, 1, 0), fov,
+      vector.create(left + (right - left - PICTURE * 1.6) / 2, top), vector.create(PICTURE * 1.6, PICTURE),
+      vector.create(0.55, 0.80, 1.0), 0.95, turning)
+    top += PICTURE + 10
+  end
   local all = lines(sheet, right - left)
-  local visible = (height - 86) // ROW
+  local visible = (y + height - 16 - top) // ROW
   local first = Im.Scroll("info", x + 4, top, width - 8, visible * ROW, #all, visible)
   for index = 1, visible do
     local line = all[index + first]
