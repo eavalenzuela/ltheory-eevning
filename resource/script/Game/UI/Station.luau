@@ -1133,7 +1133,8 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
   for index, text in { "A hired pilot flies a ship of yours and goes where you go:", "out when you undock, to warp and through gates after you,",
     "into a fight beside you. Every skill counts as their grade.", "Grade 1 flies frigates and haulers, 2 destroyers and barges,",
     "3 cruisers, 4 battleships. You command one for each level", "of Leadership. A ship lost is insured; its pilot is not lost.",
-    "One with a mining laser can be set to mine a belt (Mine here,", "in space): the ore is brought to the nearest station." } do
+    "One with a mining laser can be set to mine a belt (Mine here,", "in space): the ore is brought to the nearest station.",
+    "They learn from the pirates destroyed where they fly and", "the ore they bring in, and go up a grade, to 5 at most." } do
     Im.Text(text, left, line + 6 + index * 17, 12, Im.DIM)
   end
 
@@ -1155,7 +1156,9 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
       break
     end
     Im.Text(row.name, right, line, 15, Im.TEXT)
-    Im.Text(`grade {row.skill}`, right + 210, line + 1, 13, Im.ACCENT)
+    -- (their grade, and how far they are toward the next)
+    Im.Text(if row.needed > 0 then `grade {row.skill}  {row.experience} / {row.needed}` else `grade {row.skill}`, right + 210, line + 1,
+      13, Im.ACCENT)
     Im.TextRight(`{Format.Credits(row.wage)} a day`, right + 520, line + 1, 13, Im.DIM)
     if row.ship ~= 0 then
       ItemIcon.Draw(row.hull, right, line + 20, 18)

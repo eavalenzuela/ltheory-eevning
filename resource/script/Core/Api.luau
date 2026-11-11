@@ -69,7 +69,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 30
+Core.SAVE_VERSION = 31
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -272,6 +272,13 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       mission.taken = state.tick
     end
   end,
+  -- 31: hired pilots learn. Those of a save from before have learned
+  -- nothing yet.
+  [30] = function(state: any)
+    for _, wing in state.fleet do
+      wing.experience = wing.experience or 0
+    end
+  end,
 }
 
 -- A new game: a galaxy, and the player's first ship docked at a station
@@ -456,7 +463,14 @@ function Core.Step(game: Game)
       -- (what a drone destroys is its owner's doing, and what a hired
       -- pilot destroys their employer's)
       local killer = state.ships[by]
-      Aftermath.Destroy(state, id, if killer and killer.owner == "player" then state.player.ship else by, game.events)
+      local ours = killer ~= nil and killer.owner == "player"
+      local ball, victim = state.balls[id], state.pilots[id]
+      local system, grid, bounty = ball.system, ball.grid, if victim and state.ships[id].owner == "pirates" then victim.bounty else 0
+      Aftermath.Destroy(state, id, if ours then state.player.ship else by, game.events)
+      -- (and the hired pilots who were there learn from it: Tactical/Fleet)
+      if ours and bounty > 0 then
+        Fleet.Credit(state, system, grid, bounty, game.events)
+      end
     end
   end
   local queue = state.queue
@@ -984,6 +998,8 @@ export type FleetRow = {
   -- to mine: "mining", "taking ore in", "unloading", "going to the belt"
   doing: string,
   hauled: number,     -- units of ore a pilot set to mine has brought in
+  experience: number, -- what they have learned toward the next grade,
+  needed: number,     -- and what that takes (0 for one who is as good as they get)
   near: boolean,      -- on the pilot's grid
   distance: number,   -- from the pilot's ship, when near
   shield: number, armor: number, structure: number,
@@ -998,7 +1014,8 @@ function Query.Fleet(game: Game): { FleetRow }
     local row: FleetRow = {
       id = wing.id, name = wing.name, skill = wing.skill, wage = wing.wage, order = wing.order, target = wing.target,
       ship = 0, shipName = "", hull = "", where = "no ship", near = false, distance = 0, shield = 1, armor = 1, structure = 1,
-      doing = "no ship", hauled = wing.hauled,
+      doing = "no ship", hauled = wing.hauled, experience = wing.experience,
+      needed = if wing.skill >= Fleet.BEST then 0 else Fleet.Needed(wing.skill),
     }
     if ship then
       row.ship, row.shipName, row.hull = ship.id, ship.name, ship.type

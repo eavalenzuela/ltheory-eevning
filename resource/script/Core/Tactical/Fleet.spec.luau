@@ -562,6 +562,38 @@ suite:Case("only a pilot with a mining laser, at a belt, in a system with a stat
   t.eq(Core.Query.Fleet(mining)[1].doing, "taking ore in")
 end)
 
+suite:Case("a hired pilot learns from the pirates destroyed where they fly and from the ore they bring in, and goes up a grade", function(t)
+  local game, second = docked("destroyer.jackal")
+  local state = game.state
+  local wing = hired(game, second, 2)
+  t.eq({ wing.experience, Fleet.Needed(1), Fleet.Needed(2), Fleet.Needed(4) }, { 0, 200, 800, 3200 })
+  local me, theirs = adrift(game, second)
+  -- A scout destroyed beside them is worth six points to them, whoever fired.
+  Pirates.Spawn(state, Pirates.SCOUT, me.system, me.x + 5000, me.y, me.z, me.grid)
+  t.ok(waitFor(game, 600, function()
+    return #state.pilotIds == 0
+  end), "the scout was not destroyed")
+  t.eq(wing.experience, Pirates.SCOUT.bounty // 1000)
+  local row = Core.Query.Fleet(game)[1]
+  t.eq({ row.experience, row.needed }, { 6, 800 })
+  -- One they were not there for is worth nothing to them.
+  local before = wing.experience
+  Fleet.Credit(state, me.system, me.grid + 1, 400000, game.events)
+  t.eq(wing.experience, before)
+  -- Enough of it, and they are a grade better, paid as that grade is. What is over is kept.
+  Core.TakeEvents(game)
+  Fleet.Credit(state, theirs.system, theirs.grid, 900000, game.events)
+  t.eq({ wing.skill, wing.wage, wing.experience }, { 3, Fleet.Wage(3), 6 + 900 - 800 })
+  local told = false
+  for _, event in Core.TakeEvents(game) do
+    told = told or (event.kind == "PilotPromoted" and event.pilot == wing.id and event.skill == 3)
+  end
+  t.ok(told, "nobody said the pilot had been promoted")
+  -- Nobody gets better than grade 5.
+  Fleet.Credit(state, theirs.system, theirs.grid, 100000000, game.events)
+  t.eq({ wing.skill, wing.experience, Core.Query.Fleet(game)[1].needed }, { Fleet.BEST, 0, 0 })
+end)
+
 suite:Case("wages are paid by the day, and a pilot who cannot be paid leaves the ship they flew at home", function(t)
   local game, second = docked()
   local state = game.state
@@ -611,7 +643,7 @@ suite:Case("a fleet is in the save, and an older save has none", function(t)
   local before = Codec.Decode(now, nowLength)
   before.saveVersion = 24
   for _, wing in before.state.fleet do
-    wing.post, wing.base, wing.hauled = nil, nil, nil
+    wing.post, wing.base, wing.hauled, wing.experience = nil, nil, nil, nil
   end
   local earlier, earlierLength = Codec.Encode(before)
   t.eq(Core.Hash(Core.Load(earlier, earlierLength)), Core.Hash(game))

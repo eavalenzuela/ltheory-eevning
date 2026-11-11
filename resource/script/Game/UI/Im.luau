@@ -266,14 +266,23 @@ end
 
 -- A list row; returns whether the cursor is on it, whether it was just
 -- clicked, and whether that click was a double click.
-function Im.Row(x: number, y: number, w: number, h: number, selected: boolean): (boolean, boolean, boolean)
+function Im.Row(x: number, y: number, w: number, h: number, selected: boolean, id: string?): (boolean, boolean, boolean)
   local hot = inside(x, y, w, h)
+  -- (with a name, a script can click it as it can a button: Im.Press)
+  local scripted = false
+  if id then
+    seenNow[id] = true
+    scripted = pressNow == id
+    if scripted then
+      pressNow = nil
+    end
+  end
   if selected then
     Im.Fill(x, y, w, h, Im.ACCENT, 0.22)
   elseif hot then
     Im.Fill(x, y, w, h, Im.ACCENT, 0.1)
   end
-  return hot, hot and pressed, hot and double
+  return hot, (hot and pressed) or scripted, hot and double
 end
 
 return Im

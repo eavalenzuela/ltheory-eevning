@@ -262,11 +262,13 @@ export type Bookmark = { id: number, name: string, system: number, x: number, y:
 -- have been given (0: none). Their 'order' is to "follow" the player,
 -- to "stay" docked, or to "mine" the belt 'post' and take the ore to
 -- the station 'base' ('hauled' is the units brought in so far); and
--- 'target' is what they have been pointed at.
+-- 'target' is what they have been pointed at. 'experience' is what
+-- they have learned toward their next grade.
 export type Wingman = {
   id: number, name: string, skill: number, wage: number, paid: number,
   ship: number, order: string, target: number,
   post: number, base: number, hauled: number,
+  experience: number,
 }
 
 -- A place that is on nobody's chart (Tactical/Sites): 'id' is the place

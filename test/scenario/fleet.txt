@@ -42,6 +42,9 @@ lua GameDebug.TimeScale(2)
 lua _G.before = GameDebug.Wallet()
 lua assert(GameDebug.Select('Pirate'), 'no pirate to point at')
 frames 3
+# (the order is given to the one pilot, their row picked out first)
+until GameDebug.Press('Fleet:pick:1')
+frames 3
 until GameDebug.Press('Fleet:engage')
 until select(4, GameDebug.Fleet()) == 1
 lua GameDebug.TimeScale(8)
@@ -52,6 +55,7 @@ frames 5
 lua assert(GameDebug.Wallet() > _G.before, 'the bounty for what a hired pilot destroys is the player s')
 lua assert(GameDebug.Hull() == 'frigate.courier', 'the player lost their ship')
 lua assert(GameDebug.Fleet() == 1 and select(2, GameDebug.Fleet()) == 1, 'the hired pilot should still be there')
+lua assert(select(3, GameDebug.Crew(1)) > 0, 'the hired pilot should have learned something from it')
 
 # Through the gate, and into a station on the other side.
 lua GameDebug.TimeScale(8)

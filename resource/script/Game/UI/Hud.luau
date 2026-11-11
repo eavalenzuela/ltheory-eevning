@@ -269,6 +269,9 @@ local function drawOverview(session: Session.Session, entries: { Core.Entry }, x
   end
 end
 
+-- The hired pilot the fleet's orders are for (by their id), or 0: everybody.
+local fleetPicked = 0
+
 -- The key each order to the ship has, given at what is selected (Game/UI/Keys).
 local ORDER_KEYS: { [string]: string } = {
   Approach = "Q", Orbit = "W", KeepAtRange = "E", AlignTo = "A", WarpTo = "S", Dock = "D", Jump = "D",
@@ -729,7 +732,17 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       if #fleet > 0 then
         local fy = bottom - 180 - 22 * #fleet
         Im.Panel(left + 24, fy, 440, 34 + 22 * #fleet)
-        Im.Text(`FLEET  {#fleet}`, left + 36, fy + 9, 13, Im.TEXT)
+        -- An order is for everybody, or for the one pilot whose row has
+        -- been picked out by a click (and a click again lets them go).
+        local one: Core.FleetRow? = nil
+        for _, row in fleet do
+          if row.id == fleetPicked then
+            one = row
+          end
+        end
+        local only: number? = if one then one.id else nil
+        fleetPicked = if one then one.id else 0
+        Im.Text(if one then "ONE PILOT" else `FLEET  {#fleet}`, left + 36, fy + 9, 13, if one then Im.ACCENT else Im.TEXT)
         -- (at what is selected, if it is a ship. else at the first thing locked)
         local target = session.selected
         if game.state.balls[target] == nil then
@@ -743,25 +756,29 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             end
           end
         end
-        local engage: State.Command = { kind = "FleetOrder", actor = 0, what = "engage", target = target }
+        local engage: State.Command = { kind = "FleetOrder", actor = 0, what = "engage", target = target, pilot = only }
         if Im.Button("Engage", left + 150, fy + 4, 70, 26, (Session.CanDo(session, engage)), "Fleet:engage") then
           Session.Do(session, engage)
         end
-        local staying = fleet[1].order == "stay"
+        local staying = (if one then one.order else fleet[1].order) == "stay"
         if Im.Button("Regroup", left + 224, fy + 4, 76, 26, true, "Fleet:follow") then
-          Session.Do(session, { kind = "FleetOrder", actor = 0, what = "follow" })
+          Session.Do(session, { kind = "FleetOrder", actor = 0, what = "follow", pilot = only })
         end
         if Im.Toggle("Stay", left + 304, fy + 4, 60, 26, staying, "Fleet:stay") then
-          Session.Do(session, { kind = "FleetOrder", actor = 0, what = if staying then "follow" else "stay" })
+          Session.Do(session, { kind = "FleetOrder", actor = 0, what = if staying then "follow" else "stay", pilot = only })
         end
         -- (at a belt: those with a mining laser work it from now on)
-        local mine: State.Command = { kind = "FleetOrder", actor = 0, what = "mine" }
+        local mine: State.Command = { kind = "FleetOrder", actor = 0, what = "mine", pilot = only }
         if Im.Button("Mine here", left + 368, fy + 4, 88, 26, (Session.CanDo(session, mine)), "Fleet:mine") then
           Session.Do(session, mine)
         end
         for index, row in fleet do
           local ry = fy + 34 + (index - 1) * 22
           local hull = Ships.byId[row.hull]
+          local _, clicked = Im.Row(left + 28, ry - 2, 432, 21, row.id == fleetPicked, `Fleet:pick:{index}`)
+          if clicked then
+            fleetPicked = if row.id == fleetPicked then 0 else row.id
+          end
           Im.Text(row.name, left + 36, ry, 13, if row.near then OURS else Im.TEXT)
           local flying = if hull == nil then "no ship" elseif row.order == "mine" and row.near then `{hull.name}: {row.doing}` else hull.name
           Im.Text(if #flying > 20 then string.sub(flying, 1, 19) .. "." else flying, left + 180, ry, 12, Im.DIM)

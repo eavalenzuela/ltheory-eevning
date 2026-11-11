@@ -140,6 +140,8 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "OreDelivered" then
     local body = Core.Query.Body(session.game, event.station)
     Session.Say(session, `{event.name} brought in {event.units} units of ore to {if body then body.name else "the station"}`)
+  elseif kind == "PilotPromoted" then
+    Session.Say(session, `{event.name} is a grade {event.skill} pilot now, and is paid as one`)
   elseif kind == "WingmanLost" then
     Session.Say(session, `{event.name}'s ship has been destroyed: they got out, and are without one`)
   elseif kind == "PilotLeft" then

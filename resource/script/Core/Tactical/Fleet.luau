@@ -82,6 +82,49 @@ function Fleet.Fee(skill: number): number
   return 5 * Fleet.Wage(skill)
 end
 
+-- A hired pilot learns by doing: a point of experience for every
+-- thousand credits of bounty on a pirate destroyed on a grid they are
+-- flying on (whoever of the fleet fired the shot), and one for every
+-- fifty units of ore they bring in. Enough of it and they go up a
+-- grade, to 5 at most (a grade nobody is hired at), and are paid as
+-- that grade is.
+Fleet.BEST = 5
+
+-- The experience it takes to go up from a grade.
+function Fleet.Needed(skill: number): number
+  return 200 * skill * skill
+end
+
+-- Give a pilot experience, and promote them if it is enough.
+local function learn(state: State.State, wing: State.Wingman, points: number, events: { Event })
+  if wing.skill >= Fleet.BEST or points <= 0 then
+    return
+  end
+  wing.experience += points
+  while wing.skill < Fleet.BEST and wing.experience >= Fleet.Needed(wing.skill) do
+    wing.experience -= Fleet.Needed(wing.skill)
+    wing.skill += 1
+    wing.wage = Fleet.Wage(wing.skill)
+    table.insert(events, { kind = "PilotPromoted", pilot = wing.id, name = wing.name, skill = wing.skill })
+  end
+  if wing.skill >= Fleet.BEST then
+    wing.experience = 0
+  end
+end
+
+-- A pirate with so much bounty on it has been destroyed on a grid by
+-- the player's side: every hired pilot flying there learns from it.
+function Fleet.Credit(state: State.State, system: number, grid: number, bounty: number, events: { Event })
+  local points = bounty // 1000
+  for _, id in state.fleetIds do
+    local wing = state.fleet[id]
+    local ball = state.balls[wing.ship]
+    if ball and ball.system == system and ball.grid == grid and grid ~= 0 then
+      learn(state, wing, points, events)
+    end
+  end
+end
+
 -- How many pilots the player can command: their Leadership.
 function Fleet.Max(state: State.State): number
   return math.max(0, state.skills.leadership or 0)
@@ -294,7 +337,7 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     table.insert(state.hired, found.key)
     Wallet.Pay(state, -found.fee, "hiring", events)
     local wing: State.Wingman = { id = State.NewId(state), name = found.name, skill = found.skill, wage = found.wage,
-      paid = state.tick, ship = 0, order = "follow", target = 0, post = 0, base = 0, hauled = 0 }
+      paid = state.tick, ship = 0, order = "follow", target = 0, post = 0, base = 0, hauled = 0, experience = 0 }
     state.fleet[wing.id] = wing
     table.insert(state.fleetIds, wing.id)
     table.insert(events, { kind = "PilotHired", pilot = wing.id, name = wing.name })
@@ -491,6 +534,7 @@ local function work(state: State.State, wing: State.Wingman, ship: State.Ship, e
     if units > 0 then
       wing.hauled += units
       table.insert(events, { kind = "OreDelivered", pilot = wing.id, name = wing.name, units = units, station = base.id })
+      learn(state, wing, units // 50, events)
     end
     give(state, { kind = "Undock", actor = ship.id }, events)
     return
