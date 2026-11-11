@@ -43,7 +43,8 @@ local MODULES: { { any } } = {
   { "shield.", "Shields", 5 }, { "armor.", "Armour", 6 }, { "afterburner", "Propulsion", 7 }, { "mwd.", "Propulsion", 7 },
   { "capacitor.", "Capacitor", 8 }, { "miner.", "Mining", 9 }, { "salvager", "Mining", 9 },
   { "web.", "Electronic warfare", 10 },
-  { "disruptor.", "Electronic warfare", 10 }, { "rig.", "Rigs", 11 },
+  { "disruptor.", "Electronic warfare", 10 }, { "painter.", "Electronic warfare", 10 }, { "damper.", "Electronic warfare", 10 },
+  { "neutraliser.", "Electronic warfare", 10 }, { "jammer.", "Electronic warfare", 10 }, { "rig.", "Rigs", 11 },
 }
 local MISSILES = { "Light missiles", "Heavy missiles", "Cruise missiles" }
 local MAKES: { [string]: { any } } = {

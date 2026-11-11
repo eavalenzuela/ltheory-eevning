@@ -497,6 +497,17 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       end
       v.capacitor -= hex.capacitor
       running.next += hex.duration
+      -- A neutraliser and a jammer do their work a cycle at a time.
+      if hex.kind == "neut" then
+        target.vitals.capacitor = math.max(0, target.vitals.capacitor - hex.strength)
+      elseif hex.kind == "jam" then
+        if Rng.Chance(Rng.For(state.historySeed, state.tick, ball.id, item.id, 67), hex.strength) then
+          for at = #target.vitals.locks, 1, -1 do
+            Combat.DropLock(state, target, target.vitals.locks[at].target, "jammed", events)
+          end
+          table.insert(events, { kind = "Jammed", ball = target.id, by = ball.id })
+        end
+      end
 
     elseif module.repair then
       local repair = module.repair
@@ -603,17 +614,25 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
   -- Who is held: the strongest webifier running on each ship, and
   -- whether a disruptor is. A ship whose lot has changed is told, has
   -- its speed set to match, and if it was getting ready to warp, is not.
+  -- (and the strongest painter and the strongest dampener, likewise)
   local webs: { [number]: number } = {}
   local scrambles: { [number]: boolean } = {}
+  local paints: { [number]: number } = {}
+  local damps: { [number]: number } = {}
   for _, id in state.ballIds do
     for _, running in state.balls[id].vitals.running do
       local item = state.items[running.item]
       local hex = if item then Modules.byId[item.type].hex else nil
       if hex and state.balls[running.target] then
+        local target = running.target
         if hex.kind == "web" then
-          webs[running.target] = math.min(webs[running.target] or 1, hex.strength)
-        else
-          scrambles[running.target] = true
+          webs[target] = math.min(webs[target] or 1, hex.strength)
+        elseif hex.kind == "scramble" then
+          scrambles[target] = true
+        elseif hex.kind == "paint" then
+          paints[target] = math.max(paints[target] or 1, hex.strength)
+        elseif hex.kind == "damp" then
+          damps[target] = math.min(damps[target] or 1, hex.strength)
         end
       end
     end
@@ -621,15 +640,18 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
   for _, id in state.ballIds do
     local ball = state.balls[id]
     local v = ball.vitals
-    local web, scrambled = webs[id] or 1, scrambles[id] == true
-    if v.web ~= web or v.scrambled ~= scrambled then
-      v.web, v.scrambled = web, scrambled
+    local web, scrambled, paint, damp = webs[id] or 1, scrambles[id] == true, paints[id] or 1, damps[id] or 1
+    if v.web ~= web or v.scrambled ~= scrambled or v.paint ~= paint or v.damp ~= damp then
+      local held = v.web ~= web or v.scrambled ~= scrambled
+      v.web, v.scrambled, v.paint, v.damp = web, scrambled, paint, damp
       Vitals.Refresh(state, ball)
       if scrambled and ball.warp and ball.warp.stage ~= "warp" then
         ball.warp = nil
         ball.intent = nil
       end
-      table.insert(events, { kind = "Held", ball = id, web = web, scrambled = scrambled })
+      if held then
+        table.insert(events, { kind = "Held", ball = id, web = web, scrambled = scrambled })
+      end
     end
   end
 

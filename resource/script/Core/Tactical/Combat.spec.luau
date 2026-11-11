@@ -513,6 +513,67 @@ suite:Case("a raider carries a warp disruptor, and a pilot it catches cannot war
   t.eq(refused(a, { kind = "WarpTo", actor = 0, target = planet }), "(accepted)")
 end)
 
+suite:Case("a painter swells its target's signature, and a dampener cuts how far it can see", function(t)
+  local a = arena("frigate.courier", { { "painter.target" }, { "damper.sensor" } }, "frigate.courier", CANNONS, 12000)
+  local state = a.game.state
+  local painter, damper = modules(a)[1], modules(a)[2]
+  local signature, range, resolution = a.foe.vitals.signature, a.foe.vitals.lockRange, a.foe.vitals.scanResolution
+  lockFoe(t, a)
+  -- (the other ship has a lock of its own, on the player)
+  table.insert(a.foe.vitals.locks, { target = a.me.id, done = 0, locked = true })
+  order(t, a, { kind = "ActivateModule", actor = 0, item = painter.id, target = a.foe.id })
+  gather(a, 2, "none")
+  t.near(a.foe.vitals.signature, signature * 1.3, 1e-6)
+  t.eq({ a.foe.vitals.paint, a.foe.vitals.damp }, { 1.3, 1 })
+  t.eq(#a.foe.vitals.locks, 1)
+  -- Dampened to half its range, it cannot keep a lock from twelve kilometres.
+  order(t, a, { kind = "ActivateModule", actor = 0, item = damper.id, target = a.foe.id })
+  local lost = stepUntil(a, "LockLost", 4)
+  t.eq({ lost.ball, lost.target } :: { any }, { a.foe.id, a.me.id } :: { any })
+  t.near(a.foe.vitals.lockRange, range * 0.5, 1e-6)
+  t.near(a.foe.vitals.scanResolution, resolution * 0.5, 1e-6)
+  t.eq(#a.foe.vitals.locks, 0)
+  -- Switched off, it is as it was.
+  order(t, a, { kind = "DeactivateModule", actor = 0, item = painter.id })
+  order(t, a, { kind = "DeactivateModule", actor = 0, item = damper.id })
+  gather(a, 7, "none")
+  t.near(a.foe.vitals.signature, signature, 1e-6)
+  t.near(a.foe.vitals.lockRange, range, 1e-6)
+  t.ok(state.balls[a.foe.id] ~= nil)
+end)
+
+suite:Case("a neutraliser empties its target's capacitor, and a jammer breaks its locks sooner or later", function(t)
+  local a = arena("frigate.courier", { { "neutraliser.small" }, { "jammer.ecm" } }, "frigate.courier", CANNONS, 3000)
+  local neutraliser, jammer = modules(a)[1], modules(a)[2]
+  lockFoe(t, a)
+  local theirs, mine = a.foe.vitals.capacitor, a.me.vitals.capacitor
+  order(t, a, { kind = "ActivateModule", actor = 0, item = neutraliser.id, target = a.foe.id })
+  gather(a, 2, "none")
+  -- (less what a capacitor gets back in a second or two)
+  t.ok(a.foe.vitals.capacitor <= theirs - 35, "a neutraliser's first cycle should take most of its 45 GJ")
+  t.ok(a.me.vitals.capacitor < mine - 20, "and cost its owner capacitor too")
+  gather(a, 40, "none")
+  t.ok(a.foe.vitals.capacitor < theirs * 0.35 or a.me.vitals.capacitor < 30, "forty seconds of neutralising left the target its capacitor")
+  order(t, a, { kind = "DeactivateModule", actor = 0, item = neutraliser.id })
+  -- The jammer: the target has a lock, and loses it within a few cycles.
+  local broken = 0
+  for seed = 1, 6 do
+    local b = arena("frigate.courier", { { "jammer.ecm" } }, "frigate.courier", CANNONS, 3000, seed)
+    lockFoe(t, b)
+    table.insert(b.foe.vitals.locks, { target = b.me.id, done = 0, locked = true })
+    order(t, b, { kind = "ActivateModule", actor = 0, item = modules(b)[1].id, target = b.foe.id })
+    for _ = 1, 60 do
+      Core.Step(b.game)
+      if #b.foe.vitals.locks == 0 then
+        broken += 1
+        break
+      end
+    end
+  end
+  t.ok(broken >= 4, `a jammer broke a lock in a minute on only {broken} of 6 tries`)
+  t.ok(jammer ~= nil)
+end)
+
 -- ---------------------------------------------------------------------
 -- Salvaging
 

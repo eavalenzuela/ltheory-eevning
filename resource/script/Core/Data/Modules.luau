@@ -51,11 +51,15 @@ export type Miner = {
   range: number,            -- m
 }
 
--- What a module does to another ship while it runs on it: a "web" cuts
--- the target's top speed to 'strength' of what it was, and a "scramble"
--- keeps it out of warp.
+-- What a module does to another ship while it runs on it. A "web" cuts
+-- the target's top speed to 'strength' of what it was; a "scramble"
+-- keeps it out of warp; a "paint" makes its signature 'strength' times
+-- as big; a "damp" cuts how far it can lock and how fast to 'strength'
+-- of what they were; a "neut" takes 'strength' GJ from its capacitor
+-- each cycle; and a "jam" has a chance of 'strength' each cycle of
+-- breaking every lock it holds.
 export type Hex = {
-  kind: "web" | "scramble",
+  kind: "web" | "scramble" | "paint" | "damp" | "neut" | "jam",
   range: number,            -- m
   strength: number,
   duration: number,         -- s per cycle
@@ -251,6 +255,33 @@ local modules: { ModuleType } = {
     cpu = 26, powergrid = 1, volume = 5, basePrice = 45000, passive = {},
     hex = { kind = "scramble", range = 20000, strength = 1, duration = 5, capacitor = 8 },
     requires = { { skill = "propulsion.jamming", level = 1 } },
+  },
+
+  -- The rest of electronic warfare: making a ship easier to hit, harder
+  -- of sight, short of capacitor, or blind for a moment.
+  {
+    id = "painter.target", name = "Target Painter", slot = "mid", hardpoint = "",
+    cpu = 20, powergrid = 1, volume = 5, basePrice = 25000, passive = {},
+    hex = { kind = "paint", range = 40000, strength = 1.3, duration = 5, capacitor = 4 },
+    requires = { { skill = "electronic.warfare", level = 1 } },
+  },
+  {
+    id = "damper.sensor", name = "Sensor Dampener", slot = "mid", hardpoint = "",
+    cpu = 24, powergrid = 1, volume = 5, basePrice = 30000, passive = {},
+    hex = { kind = "damp", range = 30000, strength = 0.5, duration = 5, capacitor = 5 },
+    requires = { { skill = "electronic.warfare", level = 1 } },
+  },
+  {
+    id = "neutraliser.small", name = "Small Energy Neutraliser", slot = "high", hardpoint = "",
+    cpu = 12, powergrid = 9, volume = 5, basePrice = 35000, passive = {},
+    hex = { kind = "neut", range = 6000, strength = 45, duration = 6, capacitor = 30 },
+    requires = { { skill = "electronic.warfare", level = 2 } },
+  },
+  {
+    id = "jammer.ecm", name = "ECM Jammer", slot = "mid", hardpoint = "",
+    cpu = 30, powergrid = 1, volume = 5, basePrice = 40000, passive = {},
+    hex = { kind = "jam", range = 25000, strength = 0.35, duration = 10, capacitor = 14 },
+    requires = { { skill = "electronic.warfare", level = 3 } },
   },
 
   -- Speed, capacitor, cargo

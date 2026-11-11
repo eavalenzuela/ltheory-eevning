@@ -274,8 +274,17 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
   end
   if module.hex then
     local hex = module.hex
-    local to = section(sheet, if hex.kind == "web" then "Stasis web" else "Warp disruption")
-    row(to, "On its target", if hex.kind == "web" then `top speed cut to {plain(hex.strength * 100)}%` else "cannot warp")
+    local titles: { [string]: string } = { web = "Stasis web", scramble = "Warp disruption", paint = "Target painting",
+      damp = "Sensor dampening", neut = "Energy neutralising", jam = "Jamming" }
+    local does: { [string]: string } = {
+      web = `top speed cut to {plain(hex.strength * 100)}%`, scramble = "cannot warp",
+      paint = `signature {plain(hex.strength * 100)}% of what it was`,
+      damp = `lock range and scan resolution cut to {plain(hex.strength * 100)}%`,
+      neut = `{plain(hex.strength)} GJ taken from its capacitor a cycle`,
+      jam = `{plain(hex.strength * 100)}% chance a cycle of breaking its locks`,
+    }
+    local to = section(sheet, titles[hex.kind])
+    row(to, "On its target", does[hex.kind])
     row(to, "Range", metres(hex.range))
     row(to, "Capacitor a cycle", `{plain(hex.capacitor)} GJ every {seconds(hex.duration)}`)
   end

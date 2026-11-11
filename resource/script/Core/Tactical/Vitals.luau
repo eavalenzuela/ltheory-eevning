@@ -49,7 +49,7 @@ function Vitals.New(state: State.State, ship: State.Ship): State.Vitals
     shieldResonance = resonance(stats, "shieldResonance"),
     armorResonance = resonance(stats, "armorResonance"),
     hullResonance = resonance(stats, "hullResonance"),
-    web = 1, scrambled = false,
+    web = 1, scrambled = false, paint = 1, damp = 1,
     locks = {}, running = {},
   }
 end
@@ -64,8 +64,9 @@ function Vitals.Refresh(state: State.State, ball: State.Ball)
   v.shield, v.armor = math.min(v.shield, v.shieldMax), math.min(v.armor, v.armorMax)
   v.hull, v.capacitor = math.min(v.hull, v.hullMax), math.min(v.capacitor, v.capacitorMax)
   v.shieldRecharge, v.capacitorRecharge = stats.shieldRecharge, stats.capacitorRecharge
-  v.signature, v.scanResolution = stats.signature, stats.scanResolution
-  v.lockRange, v.maxTargets = stats.lockRange, stats.maxTargets
+  -- (a painter on it swells what it shows, and a dampener cuts what it sees)
+  v.signature, v.scanResolution = stats.signature * v.paint, stats.scanResolution * v.damp
+  v.lockRange, v.maxTargets = stats.lockRange * v.damp, stats.maxTargets
   v.shieldResonance = resonance(stats, "shieldResonance")
   v.armorResonance = resonance(stats, "armorResonance")
   v.hullResonance = resonance(stats, "hullResonance")

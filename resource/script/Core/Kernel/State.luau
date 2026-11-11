@@ -63,6 +63,10 @@ export type Vitals = {
   -- 'scrambled' keeps it out of warp.
   web: number,
   scrambled: boolean,
+  -- (and its signature is 'paint' times what it would be, and its lock
+  -- range and scan resolution 'damp' of what they would be: 1 for nobody)
+  paint: number,
+  damp: number,
   locks: { Lock },          -- in the order they were asked for
   running: { Running },     -- in the order they were switched on
 }

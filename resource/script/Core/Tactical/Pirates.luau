@@ -88,7 +88,7 @@ local KINDS: { Kind } = {
   { id = "marauder", hull = "cruiser.marauder", name = "Pirate Marauder", range = 6000, bounty = 120000, tags = 4,
     fit = all(times(5, "autocannon.medium"), times(3, "launcher.heavy"),
       { { "armor.plate.medium" }, { "damage.control" }, { "gyrostabilizer" }, { "gyrostabilizer" }, { "ballistic.control" },
-        { "shield.extender.medium" }, { "shield.extender.medium" } }) },
+        { "disruptor.warp" }, { "painter.target" }, { "shield.extender.medium" }, { "shield.extender.medium" } }) },
   { id = "ravager", hull = "battleship.ravager", name = "Pirate Ravager", range = 15000, bounty = 400000, tags = 10,
     fit = all(times(6, "artillery.large"), times(4, "launcher.cruise"),
       { { "armor.plate.large" }, { "damage.control" }, { "gyrostabilizer" }, { "armor.plate.large" }, { "shield.extender.large" } }) },

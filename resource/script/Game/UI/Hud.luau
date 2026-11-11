@@ -476,6 +476,9 @@ local function drawNavigation(session: Session.Session, ball: State.Ball, x: num
   if ball.vitals.web < 1 then
     Im.Text("WEBBED", x + 310, y + 28, 13, HULL)
   end
+  if ball.vitals.paint > 1 or ball.vitals.damp < 1 then
+    Im.Text(if ball.vitals.damp < 1 then "DAMPENED" else "PAINTED", x + 310, y + 12, 13, Im.WARN)
+  end
   local inWarp = ball.warp ~= nil and ball.warp.stage == "warp"
   if Im.Button("STOP", x + width - 92, y + 8, 80, 24, not inWarp) then
     Session.Order(session, "Stop")
