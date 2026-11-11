@@ -465,7 +465,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         drawStatus(ball, navX - 232, bottom - 120)
       else
         local stationX = left + (w.size.x - Station.WIDTH) / 2
-        Station.Draw(session, game, player, stationX, top + 130, Scene.Preview(player.hull.id, player.hull.radius))
+        Station.Draw(session, game, player, stationX, top + 130, Scene.Dressed(game, player.ship, player.hull.id, player.hull.radius))
         Info.Draw(stationX + Station.WIDTH + 12, top + 130)
       end
       drawClock(session, left + 24, bottom - 54)

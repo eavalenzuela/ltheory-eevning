@@ -184,8 +184,12 @@ end
 
 local turning = 0
 
+-- What the fitting screen draws of the ship: its hull first, then
+-- whatever stands on it, each with where it stands in the hull's units.
+export type Preview = { { model: Renderable | Model, transform: Transform } }
+
 local function drawWheel(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, cx: number, cy: number,
-  preview: (Renderable | Model)?)
+  preview: Preview?)
   local ship = player.ship
   local hull = player.hull
   local stats = Core.Query.Stats(game, ship)
@@ -193,16 +197,22 @@ local function drawWheel(session: Session.Session, game: Core.Game, player: Core
 
   -- The ship, turning.
   WidgetRenderer_DrawPanelRadial(vector.create(cx, cy), 0, RING - 28, 0, 1, vector.create(0.02, 0.03, 0.045), 0.9, 0.9, 0)
-  if preview then
+  if preview and preview[1] then
     turning += 0.25 * FrameTimer_Get()
-    local bound = Renderable_GetBound(preview)
+    local bound = Renderable_GetBound(preview[1].model)
     local size = bound.upper - bound.lower
     local fov = math.rad(0.02)
     local distance = math.max(size.x, size.y, size.z) * 0.47 / math.tan(0.5 * fov)
     local from = vector.normalize(vector.create(math.cos(turning), 0.42, math.sin(turning))) * distance
     local side = 2 * (RING - 44)
-    WidgetRenderer_DrawRenderable(preview, Transform_Identity(), from, -1 * vector.normalize(from), vector.create(0, 1, 0), fov,
-      vector.create(cx - side / 2, cy - side / 2), vector.create(side, side), vector.create(0.55, 0.80, 1.0), 0.95, turning)
+    -- (the hull, then what stands on its mounts, in another colour:
+    -- a gun is a few pixels on a big hull, and would not be found in
+    -- the hull's own)
+    for index, part in preview do
+      WidgetRenderer_DrawRenderable(part.model, part.transform, from, -1 * vector.normalize(from), vector.create(0, 1, 0), fov,
+        vector.create(cx - side / 2, cy - side / 2), vector.create(side, side),
+        if index == 1 then vector.create(0.55, 0.80, 1.0) else vector.create(1.0, 0.72, 0.30), if index == 1 then 0.95 else 1.0, turning)
+    end
   else
     ItemIcon.Draw(hull.id, cx - 40, cy - 40, 80)
   end
@@ -385,7 +395,7 @@ local function drawFigures(game: Core.Game, player: Core.PlayerInfo, x: number, 
 end
 
 local function drawFitting(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number,
-  preview: (Renderable | Model)?)
+  preview: Preview?)
   local ship = player.ship
   local stats = Core.Query.Stats(game, ship)
 
@@ -997,10 +1007,10 @@ end
 
 -- ---------------------------------------------------------------------
 
--- 'preview' is the model of the player's hull, for the fitting screen
--- to show.
+-- 'preview' is the player's ship as it is fitted, for the fitting
+-- screen to show (Scene.Dressed).
 function Station.Draw(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number,
-  preview: (Renderable | Model)?)
+  preview: Preview?)
   local width, height = Station.WIDTH, Station.HEIGHT
   local ship = player.ship
   local station = Core.Query.Body(game, player.docked)

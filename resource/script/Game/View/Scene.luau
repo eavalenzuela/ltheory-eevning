@@ -202,6 +202,88 @@ function Scene.Preview(type: string, radius: number): Renderable | Model
   return (item :: Item):GetRenderable()
 end
 
+-- Which weapon goes on which hardpoint: a ship's fitted weapons in the
+-- order of their slots, each on the next hardpoint of its kind, and
+-- nothing (nil) on every hardpoint left over. 'each' is told of every
+-- hardpoint the hull has.
+local function assign(fitted: { State.Item }, built: Hull.Built, each: (hardpoint: Hull.Hardpoint, item: State.Item?) -> ())
+  local turrets, launchers = 0, 0
+  for _, item in fitted do
+    local module = Modules.byId[item.type]
+    if module and item.place == "high" and module.hardpoint == "turret" then
+      turrets += 1
+      if built.turrets[turrets] then
+        each(built.turrets[turrets], item)
+      end
+    elseif module and item.place == "high" and module.hardpoint == "launcher" then
+      launchers += 1
+      if built.launchers[launchers] then
+        each(built.launchers[launchers], item)
+      end
+    end
+  end
+  for at = turrets + 1, #built.turrets do
+    each(built.turrets[at], nil)
+  end
+  for at = launchers + 1, #built.launchers do
+    each(built.launchers[at], nil)
+  end
+end
+
+-- One thing to draw of a ship shown in the interface: a model, and how
+-- it stands on the hull, in the hull's own units.
+export type Part = { model: Renderable | Model, transform: Transform }
+
+local dressed: { key: string, parts: { Part } }? = nil
+
+-- A ship as it is fitted, for the interface to draw: its hull, and on a
+-- hull of our own design what stands on its hardpoints, at rest, with a
+-- cover on each one left empty. 'radius' is the hull's, in metres. (The
+-- last one asked for is kept, and made again only when the fit changes.)
+function Scene.Dressed(game: Core.Game, ship: number, type: string, radius: number): { Part }
+  local built = Hull.Build(type)
+  if built == nil then
+    return { { model = Scene.Preview(type, radius), transform = Transform_Identity() } }
+  end
+  local fitted = Core.Query.Fitted(game, ship)
+  local key = `{ship}:{type}`
+  for _, item in fitted do
+    if item.place == "high" then
+      key ..= ` {item.id}:{item.type}`
+    end
+  end
+  if dressed and dressed.key == key then
+    return dressed.parts
+  end
+  local parts: { Part } = { { model = built.model, transform = Transform_Identity() } }
+  local unit = built.radius / radius      -- one metre, in the hull's own units
+  local function stand(model: Model, at: vector, look: vector, up: vector, size: number)
+    local transform = Transform_LookUp(at, look, up)
+    transform.scale = vector.create(size, size, size)
+    table.insert(parts, { model = model, transform = transform })
+  end
+  assign(fitted, built, function(hardpoint: Hull.Hardpoint, item: State.Item?)
+    local piece = if item then Arms.Build(item.type) else nil
+    for _, mount in hardpoint do
+      local fore = mount.fore or vector.create(0, 0, 1)
+      local level = fore - mount.up * vector.dot(fore, mount.up)
+      level = if vector.magnitude(level) > 1e-4 then vector.normalize(level) else vector.normalize(vector.cross(mount.up, vector.create(1, 0, 0)))
+      if piece then
+        local size = piece.scale * unit
+        if piece.base then
+          stand(piece.base, mount.at, level, mount.up, size)
+        end
+        local right = vector.cross(mount.up, level)
+        stand(piece.gun, mount.at + (right * piece.pivot.x + mount.up * piece.pivot.y + level * piece.pivot.z) * size, level, mount.up, size)
+      else
+        stand(Arms.Blank(), mount.at, level, mount.up, (Arms.SIZE[Arms.SizeOf(built.fit[1] or "")] or 1) * unit)
+      end
+    end
+  end)
+  dressed = { key = key, parts = parts }
+  return parts
+end
+
 -- Take what is on a ship's hardpoints away.
 local function dropArms(scene: Scene, id: number)
   local armed = scene.arms[id]
@@ -285,10 +367,9 @@ local function placeWreck(scene: Scene, wrecked: Wrecked, at: vector, radius: nu
   end
 end
 
--- Put on a ship's hardpoints what is fitted to it: its weapons in the
--- order of their slots, each on the next hardpoint of its kind (on both
--- of that hardpoint's mounts), and covers on every hardpoint left over.
--- Nothing is done if they are there already.
+-- Put on a ship's hardpoints what is fitted to it (on both mounts of
+-- each hardpoint), and covers on every hardpoint left empty. Nothing is
+-- done if they are there already.
 local function armShip(scene: Scene, game: Core.Game, id: number, built: Hull.Built, container: Object)
   local fitted = Core.Query.Fitted(game, id)
   local key = ""
@@ -303,7 +384,8 @@ local function armShip(scene: Scene, game: Core.Game, id: number, built: Hull.Bu
   end
   dropArms(scene, id)
   local points: { Point } = {}
-  local function fill(hardpoint: Hull.Hardpoint, item: number, piece: Arms.Piece?)
+  local function fill(hardpoint: Hull.Hardpoint, item: State.Item?)
+    local piece = if item then Arms.Build(item.type) else nil
     local arms: { Arm } = {}
     for _, mount in hardpoint do
       local base: Object? = nil
@@ -318,29 +400,9 @@ local function armShip(scene: Scene, game: Core.Game, id: number, built: Hull.Bu
       container:AddInterior(gun)
       table.insert(arms, { piece = piece, base = base, gun = gun, mount = mount, yaw = 0, lift = 0 })
     end
-    table.insert(points, { item = if piece then item else 0, arms = arms, off = -1 })
+    table.insert(points, { item = if piece and item then item.id else 0, arms = arms, off = -1 })
   end
-  local turrets, launchers = 0, 0
-  for _, item in fitted do
-    local module = Modules.byId[item.type]
-    if module and item.place == "high" and module.hardpoint == "turret" then
-      turrets += 1
-      if built.turrets[turrets] then
-        fill(built.turrets[turrets], item.id, Arms.Build(item.type))
-      end
-    elseif module and item.place == "high" and module.hardpoint == "launcher" then
-      launchers += 1
-      if built.launchers[launchers] then
-        fill(built.launchers[launchers], item.id, Arms.Build(item.type))
-      end
-    end
-  end
-  for at = turrets + 1, #built.turrets do
-    fill(built.turrets[at], 0, nil)
-  end
-  for at = launchers + 1, #built.launchers do
-    fill(built.launchers[at], 0, nil)
-  end
+  assign(fitted, built, fill)
   scene.arms[id] = { key = key, points = points, built = built }
 end
 
