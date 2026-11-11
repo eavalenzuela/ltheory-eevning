@@ -129,6 +129,12 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, if ship then `{event.name} flies the {ship.name} and goes where you go` else `{event.name} has no ship now`)
   elseif kind == "Guided" then
     Session.Say(session, `Guide: "{event.title}" is done ({event.done} of {event.of})`)
+  elseif kind == "ImplantPlugged" then
+    Session.Say(session, `{Types.Info(event.implant).name} is plugged in`)
+  elseif kind == "ImplantDestroyed" then
+    Session.Say(session, `{Types.Info(event.implant).name} taken out: it is destroyed`)
+  elseif kind == "ImplantsLost" then
+    Session.Say(session, `Your capsule is destroyed, and your {if event.count == 1 then "implant" else `{event.count} implants`} with it`)
   elseif kind == "Bookmarked" then
     Session.Say(session, `Marked: {event.name}. It is on the overview, to warp back to`)
   elseif kind == "OreDelivered" then

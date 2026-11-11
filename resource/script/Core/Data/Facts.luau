@@ -10,6 +10,7 @@
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Components = require("@lt/Core/Data/Components")
 local Drones = require("@lt/Core/Data/Drones")
+local Implants = require("@lt/Core/Data/Implants")
 local Factions = require("@lt/Core/Data/Factions")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
@@ -411,6 +412,15 @@ function Facts.Of(type: string): Sheet?
     end
     local market = section(sheet, "Trade")
     row(market, "Base price", `{whole(blueprint.basePrice)} cr`)
+  elseif category == "implant" then
+    local implant = Implants.byId[type]
+    sheet.kind = "Implant"
+    sheet.note = "Plugged in at a station, it is part of the pilot and counts for every ship they fly. Taken out, it is destroyed; and a pilot whose capsule is destroyed loses every implant they had."
+    local does = section(sheet, "Implant")
+    row(does, "Does", implant.note)
+    row(does, "Place", `{implant.slot} of {Implants.SLOTS}`)
+    row(does, "To plug in", `Cybernetics {implant.slot}`)
+    trade(sheet, type)
   elseif category == "drone" then
     local drone = Drones.byId[type]
     sheet.kind = "Drone"

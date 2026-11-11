@@ -43,7 +43,7 @@ local dockedAt = 0    -- the station the screen was last drawn for
 local CATEGORIES: { { string } } = {
   { "module", "Modules" }, { "charge", "Charges" }, { "drone", "Drones" }, { "ship", "Ships" }, { "structure", "Structures" }, { "ore", "Ore" }, { "mineral", "Minerals" },
   { "planetary", "Planetary" }, { "component", "Components" },
-  { "blueprint", "Blueprints" }, { "skillbook", "Skill books" }, { "goods", "Goods" },
+  { "blueprint", "Blueprints" }, { "skillbook", "Skill books" }, { "implant", "Implants" }, { "goods", "Goods" },
 }
 local category = "module"
 local chosen = ""
@@ -996,6 +996,42 @@ local function drawSkills(session: Session.Session, game: Core.Game, player: Cor
       Im.Fill(dx, line, 262, 4, Im.DIM, 0.25)
       Im.Fill(dx, line, 262 * math.clamp(1 - entry.left / math.max(1, entry.seconds), 0, 1), 4, Im.ACCENT, 0.95)
       line += 12
+    end
+  end
+
+  -- The pilot's implants: the five places, and what in the hangar could
+  -- go into one. (Under the queue at its longest.)
+  local places, open = Core.Query.Implants(game)
+  line = top + 266
+  Im.Heading("IMPLANTS", dx, line, 14, Im.DIM)
+  line += 22
+  for slot, place in places do
+    local implant = place.implant
+    Im.Text(`{slot}`, dx, line + 2, 12, Im.DIM)
+    if implant then
+      Info.Name(implant.id, shorten(implant.name, 24), dx + 16, line + 2, 13, Im.TEXT)
+      Im.Text(shorten(implant.note, 20), dx + 16 + 150, line + 3, 11, Im.DIM)
+      if Im.Button("x", dx + 272, line, 24, 18, true, `Unplug:{slot}`) then
+        Session.Do(session, { kind = "UnplugImplant", actor = 0, what = implant.id })
+      end
+    else
+      Im.Text(if slot <= open then "empty" else `needs Cybernetics {slot}`, dx + 16, line + 2, 12, Im.DIM, 0.8)
+    end
+    line += 20
+  end
+  local shown = 0
+  for _, item in Core.Query.Items(game, player.docked, "hangar") do
+    if Types.Info(item.type).category == "implant" and shown < 2 then
+      shown += 1
+      line += 4
+      local plug: State.Command = { kind = "PlugImplant", actor = 0, item = item.id }
+      local can, whyNot = Session.CanDo(session, plug)
+      if Im.Button("Plug in", dx, line, 70, 20, can, `Plug:{item.type}`) then
+        Session.Do(session, plug)
+      end
+      Im.Text(shorten(if can then Types.Info(item.type).name else tostring(whyNot), 32), dx + 78, line + 3, 12,
+        if can then Im.TEXT else Im.WARN)
+      line += 20
     end
   end
 end

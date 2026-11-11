@@ -131,6 +131,11 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     table.insert(events, { kind = "Ejected", pod = pod.id })
     table.insert(events, { kind = "BallAdded", ball = pod.id })
   elseif wasPlayer then
+    -- (the capsule was the pilot: what they had plugged in is gone with it)
+    if #state.implants > 0 then
+      table.insert(events, { kind = "ImplantsLost", count = #state.implants })
+      state.implants = {}
+    end
     local fresh = Space.NewShip(state, STARTER, "Courier", "player", state.player.home)
     state.player.ship = fresh.id
     table.insert(events, { kind = "Respawned", ship = fresh.id, station = state.player.home })

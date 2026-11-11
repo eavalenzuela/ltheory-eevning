@@ -39,30 +39,6 @@ local function weapons(family: string, attribute: string, perLevel: number): Mod
 end
 
 local skills: { Skill } = {
-  -- Working on the hull itself
-  { id = "jury.rigging", name = "Jury Rigging", rank = 2, start = -1, requires = {}, note = "Level 1 to fit rigs." },
-  -- Picking over what is left
-  { id = "salvaging", name = "Salvaging", rank = 3, start = -1, requires = {},
-    note = "Level 1 to fit a salvager. 10% likelier to bring something off each cycle a level." },
-  -- Company
-  { id = "drones", name = "Drones", rank = 2, start = 0, requires = {},
-    note = "One more drone out at once a level, as far as the hull controls." },
-  { id = "leadership", name = "Leadership", rank = 4, start = 1, requires = {},
-    note = "One more hired pilot under your command a level." },
-  { id = "remote.repair", name = "Remote Repair", rank = 2, start = -1, requires = { { skill = "repair.systems", level = 2 } },
-    note = "To fit remote shield boosters and armor repairers: small (1), medium (3), large (4)." },
-  -- Getting in another ship's way
-  { id = "electronic.warfare", name = "Electronic Warfare", rank = 3, start = -1, requires = { { skill = "electronics", level = 2 } },
-    note = "To fit painters and dampeners (1), neutralisers (2) and jammers (3)." },
-  -- Not being seen
-  { id = "cloaking", name = "Cloaking", rank = 4, start = -1, requires = { { skill = "electronics", level = 3 } },
-    note = "Level 1 to fit a cloaking device." },
-  -- Holding things
-  { id = "propulsion.jamming", name = "Propulsion Jamming", rank = 3, start = -1, requires = { { skill = "electronics", level = 2 } },
-    note = "Level 1 to fit a stasis webifier or a warp disruptor." },
-  -- Finding things
-  { id = "astrometrics", name = "Astrometrics", rank = 3, start = 0, requires = {},
-    note = "Each scan brings a hidden site 10% nearer to found a level." },
   -- Ships
   { id = "frigates", name = "Frigates", rank = 2, start = 1, requires = {}, note = "Level 2 to fly combat frigates." },
   { id = "destroyers", name = "Destroyers", rank = 3, start = -1, requires = { { skill = "frigates", level = 3 } },
@@ -119,6 +95,34 @@ local skills: { Skill } = {
     note = "Level 1 to invent a tech 2 blueprint; 5% likelier to succeed a level." },
   { id = "accounting", name = "Accounting", rank = 3, start = -1, requires = {}, note = "Sales tax a tenth lower a level." },
   { id = "broker.relations", name = "Broker Relations", rank = 2, start = -1, requires = {}, note = "Broker's fee a tenth lower a level." },
+  -- (What came later comes after: a pilot's first skills are the ones above.)
+  -- Working on the hull itself
+  { id = "jury.rigging", name = "Jury Rigging", rank = 2, start = -1, requires = {}, note = "Level 1 to fit rigs." },
+  -- Picking over what is left
+  { id = "salvaging", name = "Salvaging", rank = 3, start = -1, requires = {},
+    note = "Level 1 to fit a salvager. 10% likelier to bring something off each cycle a level." },
+  -- Company
+  { id = "drones", name = "Drones", rank = 2, start = 0, requires = {},
+    note = "One more drone out at once a level, as far as the hull controls." },
+  { id = "leadership", name = "Leadership", rank = 4, start = 1, requires = {},
+    note = "One more hired pilot under your command a level." },
+  { id = "remote.repair", name = "Remote Repair", rank = 2, start = -1, requires = { { skill = "repair.systems", level = 2 } },
+    note = "To fit remote shield boosters and armor repairers: small (1), medium (3), large (4)." },
+  -- Getting in another ship's way
+  { id = "electronic.warfare", name = "Electronic Warfare", rank = 3, start = -1, requires = { { skill = "electronics", level = 2 } },
+    note = "To fit painters and dampeners (1), neutralisers (2) and jammers (3)." },
+  -- What a pilot has in their head
+  { id = "cybernetics", name = "Cybernetics", rank = 3, start = -1, requires = {},
+    note = "One more place for an implant a level, to five." },
+  -- Not being seen
+  { id = "cloaking", name = "Cloaking", rank = 4, start = -1, requires = { { skill = "electronics", level = 3 } },
+    note = "Level 1 to fit a cloaking device." },
+  -- Holding things
+  { id = "propulsion.jamming", name = "Propulsion Jamming", rank = 3, start = -1, requires = { { skill = "electronics", level = 2 } },
+    note = "Level 1 to fit a stasis webifier or a warp disruptor." },
+  -- Finding things
+  { id = "astrometrics", name = "Astrometrics", rank = 3, start = 0, requires = {},
+    note = "Each scan brings a hidden site 10% nearer to found a level." },
 }
 
 local Skills = {

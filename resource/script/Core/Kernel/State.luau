@@ -402,6 +402,9 @@ export type State = {
   fleetIds: { number },
   hired: { string },
   hiredDay: number,
+  -- The implants the pilot has plugged in (Character/Implants), by the
+  -- places they are in.
+  implants: { string },
   -- The steps of the guide the pilot has done (Character/Guide), in the
   -- order they did them.
   guide: { string },

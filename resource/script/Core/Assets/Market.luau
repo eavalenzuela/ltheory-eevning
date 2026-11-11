@@ -92,6 +92,8 @@ local function normalStock(info: Types.Info): number
       else 6
   elseif info.category == "ship" then
     return 10
+  elseif info.category == "implant" then
+    return 12
   elseif info.category == "goods" then
     return 40
   elseif info.category == "blueprint" or info.category == "skillbook" then

@@ -5,6 +5,7 @@
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Components = require("@lt/Core/Data/Components")
 local Drones = require("@lt/Core/Data/Drones")
+local Implants = require("@lt/Core/Data/Implants")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Planets = require("@lt/Core/Data/Planets")
@@ -18,7 +19,7 @@ export type Info = {
   id: string,
   name: string,
   category: "module" | "charge" | "goods" | "ore" | "mineral" | "component" | "ship" | "blueprint" | "skillbook" | "structure"
-    | "planetary" | "drone",
+    | "planetary" | "drone" | "implant",
   volume: number,     -- m3 per unit
   basePrice: number,  -- credits per unit
   -- No station has it to sell unless a pilot sold it there: a tech 2
@@ -82,6 +83,12 @@ byId[Planets.CENTRE.id] = { id = Planets.CENTRE.id, name = Planets.CENTRE.name, 
 -- Drones, as they are in a hold.
 for _, drone in Drones.list do
   byId[drone.id] = { id = drone.id, name = drone.name, category = "drone", volume = drone.volume, basePrice = drone.basePrice }
+end
+
+-- Implants, before anybody has plugged them in.
+for _, implant in Implants.list do
+  byId[implant.id] = { id = implant.id, name = implant.name, category = "implant", volume = Implants.VOLUME,
+    basePrice = Implants.Price(implant) }
 end
 
 for _, blueprint in Blueprints.list do

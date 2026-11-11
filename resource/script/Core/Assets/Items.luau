@@ -66,6 +66,14 @@ function Items.Fit(state: State.State, ship: number, running: { [number]: boolea
   for _, item in Items.Fitted(state, ship) do
     table.insert(fit, { type = item.type, running = running ~= nil and running[item.id] == true })
   end
+  -- (and with it what the pilot has in their own head, for a ship they
+  -- fly themselves: Data/Implants)
+  local record = state.ships[ship]
+  if record and record.owner == "player" and record.pilot == 0 and Ships.byId[record.type].class ~= "drone" then
+    for _, implant in state.implants do
+      table.insert(fit, { type = implant, running = false })
+    end
+  end
   return fit
 end
 

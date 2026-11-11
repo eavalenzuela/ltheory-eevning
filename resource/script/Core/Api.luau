@@ -25,6 +25,8 @@ local Fleet = require("@lt/Core/Tactical/Fleet")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Guide = require("@lt/Core/Character/Guide")
 local Hangar = require("@lt/Core/Assets/Hangar")
+local Implanting = require("@lt/Core/Character/Implants")
+local Implants = require("@lt/Core/Data/Implants")
 local Industry = require("@lt/Core/Assets/Industry")
 local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
@@ -67,7 +69,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 28
+Core.SAVE_VERSION = 29
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -255,6 +257,10 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   [27] = function(state: any)
     Galaxy.Regions(state.galaxy)
   end,
+  -- 29: a pilot can have implants. One of a save from before has none.
+  [28] = function(state: any)
+    state.implants = state.implants or {}
+  end,
 }
 
 -- A new game: a galaxy, and the player's first ship docked at a station
@@ -296,6 +302,7 @@ function Core.New(options: Options): Game
     bookmarks = {},
     bookmarkIds = {},
     guide = {},
+    implants = {},
     jobIds = {},
     wallet = 0,
     journal = {},
@@ -359,6 +366,7 @@ local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
 local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true }
 local SITE_COMMANDS = { Scan = true }
 local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones = true }
+local IMPLANT_COMMANDS = { PlugImplant = true, UnplugImplant = true }
 local FLEET_COMMANDS = { HirePilot = true, AssignShip = true, DismissPilot = true, FleetOrder = true }
 local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true }
 local COLONY_COMMANDS = { DeployColony = true, BuildFacility = true, RemoveFacility = true, StartExtraction = true, Export = true }
@@ -393,6 +401,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Drones.Validate(state, command)
   elseif FLEET_COMMANDS[command.kind] then
     return Fleet.Validate(state, command)
+  elseif IMPLANT_COMMANDS[command.kind] then
+    return Implanting.Validate(state, command)
   elseif TRAINING_COMMANDS[command.kind] then
     return Training.Validate(state, command)
   end
@@ -465,6 +475,8 @@ function Core.Step(game: Game)
       Drones.Apply(state, command, game.events)
     elseif ok and FLEET_COMMANDS[command.kind] then
       Fleet.Apply(state, command, game.events)
+    elseif ok and IMPLANT_COMMANDS[command.kind] then
+      Implanting.Apply(state, command, game.events)
     elseif ok and TRAINING_COMMANDS[command.kind] then
       Training.Apply(state, command, game.events)
     elseif ok then
@@ -867,6 +879,18 @@ function Query.Guide(game: Game): ({ GuideRow }, number)
     table.insert(rows, { step = step, done = Guide.Done(game.state, step.id) })
   end
   return rows, #game.state.guide
+end
+
+-- The pilot's implants: the five places in order, each with what is in
+-- it (nothing, for an empty one), and how many places their
+-- Cybernetics opens.
+export type ImplantPlace = { slot: number, implant: Implants.Implant? }
+function Query.Implants(game: Game): ({ ImplantPlace }, number)
+  local places: { ImplantPlace } = {}
+  for slot = 1, Implants.SLOTS do
+    table.insert(places, { slot = slot, implant = Implanting.In(game.state, slot) })
+  end
+  return places, math.clamp(game.state.skills.cybernetics or 0, 0, Implants.SLOTS)
 end
 
 -- The places the pilot has marked, in the order they were.
