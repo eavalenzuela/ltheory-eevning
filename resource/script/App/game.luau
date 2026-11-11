@@ -747,6 +747,83 @@ function Debug.Missions(): (number, number, number, number)
   return #status.offers, #status.inHand, status.done, status.standing
 end
 
+-- Which of the jobs the station docked at offers is the first of a kind
+-- ("bounty", "courier", "supply", "assault"): its place in the list, as
+-- "Accept:<n>" wants it, or 0 for none.
+function Debug.Offer(kind: string): number
+  for index, offer in Core.Query.Missions(session.game).offers do
+    if offer.mission.kind == kind then
+      return index
+    end
+  end
+  return 0
+end
+
+-- The first assault in hand: the name of its camp ("" with no assault
+-- in hand), the waves that have come and how many there are, and the
+-- ships destroyed and how many there are.
+function Debug.Assault(): (string, number, number, number, number)
+  for _, held in Core.Query.Missions(session.game).inHand do
+    local mission = held.mission
+    if mission.kind == "assault" then
+      local camp = Core.Query.Body(session.game, mission.site)
+      return if camp then camp.name else "?", mission.wave, #mission.waves, mission.done, mission.need
+    end
+  end
+  return "", 0, 0, 0, 0
+end
+
+-- A cheat, for a scripted fight: the pilot's ship goes for the nearest
+-- ship on its grid that would fire on it. It orbits it (at 2.5 km, or
+-- the range given), locks it, and switches on everything it has for
+-- another ship. Asked every frame, it gives an order only once a tick
+-- and only where one is wanted. Returns how many such ships are there.
+local engaged = -1
+function Debug.Engage(range: number?): number
+  local game = session.game
+  local state = game.state
+  local me = state.balls[state.player.ship]
+  if me == nil then
+    return 0
+  end
+  local nearest: Core.Entry? = nil
+  local count = 0
+  for _, entry in Core.Query.Overview(game) do
+    if entry.hostile and entry.onGrid then
+      count += 1
+      nearest = nearest or entry
+    end
+  end
+  if nearest == nil or state.tick == engaged then
+    return count
+  end
+  engaged = state.tick
+  if not (me.mode == "orbit" and me.target == nearest.id) then
+    Session.Order(session, "Orbit", nearest.id, range or 2500)
+  end
+  local targeted, locked = false, false
+  for _, lock in me.vitals.locks do
+    if lock.target == nearest.id then
+      targeted, locked = true, lock.locked
+    end
+  end
+  if not targeted then
+    Session.Order(session, "LockTarget", nearest.id)
+  elseif locked then
+    for _, item in Core.Query.Fitted(game, me.id) do
+      local module = Modules.byId[item.type]
+      local on = false
+      for _, running in me.vitals.running do
+        on = on or running.item == item.id
+      end
+      if not on and (module.weapon or (module.hex and not Modules.Mends(module))) then
+        Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id, target = nearest.id })
+      end
+    end
+  end
+  return count
+end
+
 -- How many volleys of a station's batteries the scene has shown.
 function Debug.Battery(): number
   return scene.volleys

@@ -27,7 +27,7 @@ Scanner.WIDTH = 468
 Scanner.HEIGHT = 440
 
 local GOOD = vector.create(0.45, 0.85, 0.55)
-local KINDS: { [string]: string } = { combat = "pirate den", ore = "hidden belt", relic = "derelict" }
+local KINDS: { [string]: string } = { combat = "pirate den", ore = "hidden belt", relic = "derelict", mission = "camp to clear" }
 
 local open = false
 local side: "signals" | "directional" = "signals"

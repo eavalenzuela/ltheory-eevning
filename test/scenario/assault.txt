@@ -1,0 +1,70 @@
+# An assault on a pirate camp, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/assault.txt
+#
+# The home station's fourth agent has an assault for a pilot nobody
+# knows yet: level 1, a camp of five in two waves, in this system. The
+# job is taken, which puts the camp on the overview. A destroyer is
+# given to do it in. At the camp the first wave is waiting: three scouts.
+# With those destroyed the second comes: two. With those destroyed
+# the camp is cleared, and the job is paid for at home, where the agent
+# has another.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+until GameDebug.Press('Missions')
+until GameDebug.Tab() == 'Missions'
+frames 3
+lua assert(GameDebug.Offer('assault') == 4, 'the assault should be under the three jobs of the day')
+lua assert(GameDebug.Assault() == '', 'no assault is in hand yet')
+until GameDebug.Press('Accept:4')
+until select(2, GameDebug.Missions()) == 1
+frames 3
+lua assert(GameDebug.Offer('assault') == 0, 'a station gives one assault at a time')
+lua assert(string.sub(GameDebug.Assault(), 1, 11) == 'Pirate Camp', 'the job should have its camp')
+lua assert(select(3, GameDebug.Assault()) == 2 and select(5, GameDebug.Assault()) == 5, 'two waves, five ships')
+lua assert(not GameDebug.CanPress('Complete:1'), 'a camp is not cleared by taking the job')
+
+# A destroyer to do it in, and out to the camp.
+lua assert(GameDebug.Fly('destroyer.halberd'), 'no destroyer')
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 5
+lua assert(GameDebug.Count('site') == 1, 'the camp should be on the overview')
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('WarpTo', 'Pirate Camp'), 'warp to the camp was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+
+# The first wave is the camp's own three. Fought and destroyed.
+until GameDebug.Pirates() == 3
+lua assert(select(2, GameDebug.Assault()) == 1, 'the first wave should be out')
+patience 900
+until GameDebug.Engage() == 0 and select(4, GameDebug.Assault()) == 3
+
+# The second comes a little after: two.
+patience 120
+until GameDebug.Pirates() == 2
+lua assert(select(2, GameDebug.Assault()) == 2, 'the second wave should be out')
+patience 900
+until GameDebug.Engage() == 0 and select(4, GameDebug.Assault()) == 5
+lua assert(GameDebug.Hull() == 'destroyer.halberd', 'the destroyer should have come through it')
+
+# Cleared. Home, to be paid, and the agent has another.
+lua assert(GameDebug.Order('Dock', 'home'), 'docking at home was refused')
+patience 300
+until GameDebug.Docked()
+lua GameDebug.TimeScale(1)
+until GameDebug.Press('Missions')
+until GameDebug.Tab() == 'Missions'
+frames 3
+lua _G.before = GameDebug.Wallet()
+until GameDebug.Press('Complete:1')
+until select(3, GameDebug.Missions()) == 1
+lua assert(GameDebug.Wallet() > _G.before + 15000, 'the job did not pay')
+lua assert(GameDebug.Loyalty() > 30, 'the job should have earned loyalty points')
+frames 3
+lua assert(GameDebug.Offer('assault') == 4, 'the agent should have another assault')
+
+echo assault scenario passed
+quit

@@ -1304,6 +1304,16 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
     if mission.kind == "bounty" then
       local _, band = Core.Query.Security(game, mission.system)
       return `in {game.state.galaxy.systems[mission.system].name} ({band or "?"} space): {mission.done} of {mission.need} destroyed`
+    elseif mission.kind == "assault" then
+      -- (where the camp is; and, once the job is taken, how it is going)
+      local name = game.state.galaxy.systems[mission.system].name
+      local camp = if mission.site ~= 0 then Core.Query.Body(game, mission.site) else nil
+      if camp == nil then
+        return `in {name}: {#mission.waves} waves`
+      elseif mission.done >= mission.need then
+        return `{camp.name}, in {name}: cleared`
+      end
+      return `{camp.name}, in {name}: wave {mission.wave} of {#mission.waves}, {mission.done} of {mission.need} destroyed`
     elseif mission.kind == "courier" then
       local to = Core.Query.Body(game, mission.to)
       return `to {if to then shorten(to.name, 40) else "?"}`
@@ -1313,9 +1323,10 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
   end
 
   Im.Heading(if storeOpen then "LOYALTY STORE" else "JOBS OFFERED HERE", left, line, 16, Im.DIM)
-  if status.faction ~= "" then
-    Im.TextRight(string.format("%s standing  %.1f", status.faction, status.standing), left + 430, line + 2, 13,
-      if status.standing < 0 then Im.WARN else Im.TEXT)
+  -- (the faction's store, and the way back from it)
+  if Im.Toggle(if storeOpen then `Back to the jobs  ({status.loyalty} LP)` else `Loyalty store: {status.loyalty} LP`, left + 230, line - 4,
+    200, 24, storeOpen, "LoyaltyStore") then
+    storeOpen = not storeOpen
   end
   line += 30
   -- The store: what the faction lets a pilot have for loyalty points.
@@ -1323,8 +1334,13 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
     if #status.store == 0 then
       Im.Text("There is no store here.", left, line, 14, Im.DIM, 0.8)
     end
+    -- (more than fit: the list scrolls)
+    local visible = 21
+    local first = Im.Scroll("LoyaltyStore", left, line, 440, visible * 20, #status.store, visible)
     for index, row in status.store do
-      if index > 20 then
+      if index <= first then
+        continue
+      elseif index > first + visible then
         break
       end
       Info.Name(row.stock.type, shorten(row.name, 30), left, line + 1, 13, if row.can then Im.TEXT else Im.DIM)
@@ -1344,25 +1360,25 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
   end
   local offers: { Core.MissionStatus } = if storeOpen then {} else status.offers
   for index, offer in offers do
-    Im.Text(offer.title, left, line, 15, Im.TEXT)
-    Im.TextRight(Format.Credits(offer.mission.reward), left + 430, line, 15, GOOD)
-    Im.Text(about(offer.mission), left, line + 21, 12, Im.DIM)
-    Im.TextRight(`{offer.mission.agent}  +{offer.mission.loyalty} LP`, left + 430, line + 21, 12, Im.DIM)
+    if index > 7 then
+      break
+    end
+    Im.Text(shorten(offer.title, 34), left, line, 15, Im.TEXT)
+    Im.TextRight(Format.Credits(offer.mission.reward), left + 356, line, 15, GOOD)
     local accept: State.Command = { kind = "AcceptMission", actor = 0, what = offer.mission.key }
     local can, whyNot = Session.CanDo(session, accept)
-    if Im.Button("Accept", left, line + 42, 90, 24, can, `Accept:{index}`) then
+    Im.Text(if can then shorten(about(offer.mission), 44) else shorten(tostring(whyNot), 44), left, line + 21, 12, if can then Im.DIM else Im.WARN)
+    Im.TextRight(`{shorten(offer.mission.agent, 16)}  +{offer.mission.loyalty} LP`, left + 356, line + 21, 12, Im.DIM)
+    if Im.Button("Accept", left + 364, line + 4, 66, 28, can, `Accept:{index}`) then
       Session.Do(session, accept)
     end
-    if not can then
-      Im.Text(tostring(whyNot), left + 100, line + 46, 12, Im.WARN)
-    end
-    line += 84
+    line += 50
   end
 
   -- What every faction thinks of the pilot (it is their stations' fees,
   -- their jobs' pay and, at the worst, their patrols' guns).
   if not storeOpen then
-    line = y + 78 + 30 + 3 * 84 + 4
+    line = y + 78 + 30 + 7 * 50 + 6
     Im.Heading("STANDINGS", left, line, 14, Im.DIM)
     for index, row in Core.Query.Standings(game) do
       local sx = left + (index - 1) * 110
@@ -1372,12 +1388,6 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
         Im.Text("hostile", sx + 44, line + 44, 12, HOSTILE)
       end
     end
-  end
-  -- (the store, and the way back from it: at the foot of the column)
-  -- (under the standings; under the store's list when that is open)
-  if Im.Toggle(if storeOpen then `Back to the jobs  ({status.loyalty} points)` else `Loyalty store: {status.loyalty} points`, left,
-    y + (if storeOpen then 516 else 78 + 30 + 3 * 84 + 78), 250, 26, storeOpen, "LoyaltyStore") then
-    storeOpen = not storeOpen
   end
 
   line = y + 78

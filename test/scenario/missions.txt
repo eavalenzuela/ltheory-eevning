@@ -3,7 +3,8 @@
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/missions.txt
 #
 # The station a pilot starts at offers three jobs today, one of each
-# kind in this game: a bounty, a supply order and a courier run. Take
+# kind in this game: a bounty, a supply order and a courier run. (Its
+# fourth agent's assault is under them: test/scenario/assault.txt.) Take
 # all three. Fill the supply order from the market and be paid for it,
 # which raises the pilot's standing. Give the courier run up, which
 # costs some. The bounty stays in hand.
@@ -13,7 +14,7 @@ lua GameDebug.Peaceful(true)
 lua assert(GameDebug.Docked(), 'a new game starts docked')
 until GameDebug.Press('Missions')
 frames 3
-lua assert(GameDebug.Missions() == 3, 'a station offers three jobs a day')
+lua assert(GameDebug.Missions() == 4, 'a station offers three jobs a day, and its fourth agent an assault')
 lua assert(not GameDebug.CanPress('Complete:1'), 'with no job in hand there is none to finish')
 
 # Take all three: each leaves the list of offers for the list in hand.
@@ -23,7 +24,8 @@ until GameDebug.Press('Accept:1')
 until select(2, GameDebug.Missions()) == 2
 until GameDebug.Press('Accept:1')
 until select(2, GameDebug.Missions()) == 3
-lua assert(GameDebug.Missions() == 0, 'a job taken should no longer be offered')
+lua assert(GameDebug.Missions() == 1, 'a job taken should no longer be offered')
+lua assert(GameDebug.Offer('assault') == 1, 'the assault should be what is left')
 lua assert(GameDebug.Hangar('cargo.sealed') == 90, 'the courier\'s cargo should be in the hangar')
 frames 3
 lua assert(not GameDebug.CanPress('Complete:2'), 'a supply order is not filled by nothing')

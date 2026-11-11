@@ -209,7 +209,10 @@ function Pirates.Populate(state: State.State, events: { Event })
   -- pack a kind of space tougher than the belts here bring, and nobody
   -- troubles a derelict where order is kept.
   local hidden = state.sites[site.id]
-  if hidden and hidden.kind == "combat" then
+  if hidden and hidden.kind == "mission" then
+    -- (who is at a place made for a job is the job's business: Tactical/Assault)
+    return
+  elseif hidden and hidden.kind == "combat" then
     -- (and a stronghold has the worst there is, wherever it is)
     band = if band == "secure" and hidden.depth == 0 then "low" else "lawless"
   elseif hidden and hidden.kind == "relic" and band == "secure" then
@@ -331,8 +334,11 @@ function Pirates.Think(state: State.State, events: { Event })
       pilot.prey = if prey then prey.id else 0
     end
 
-    -- Leave if nobody has been here for a while.
+    -- Leave if nobody has been here for a while. (Those a job is to
+    -- clear out of their camp stay in it: Tactical/Assault.)
+    local kept = state.sites[pilot.home]
     local company = prey ~= nil or (player ~= nil and player.system == ball.system and player.grid == ball.grid)
+      or (kept ~= nil and kept.kind == "mission" and not kept.gone)
     pilot.alone = if company then 0 else pilot.alone + 1
     if pilot.alone > PATIENCE then
       Space.RemoveBall(state, ball)

@@ -51,7 +51,8 @@ local TAGS: { [string]: string } = {
 }
 
 -- What a site (Tactical/Sites) is called, by the variety of its place.
-local SITES: { [string]: string } = { ["site.combat"] = "pirate den", ["site.ore"] = "hidden belt", ["site.relic"] = "derelict" }
+local SITES: { [string]: string } = { ["site.combat"] = "pirate den", ["site.ore"] = "hidden belt", ["site.relic"] = "derelict",
+  ["site.mission"] = "camp to clear" }
 
 -- The three kinds of space (Describe/Galaxy), as the pilot is told.
 local BANDS: { [string]: string } = { secure = "SECURE SPACE", low = "LOW SECURITY", lawless = "LAWLESS SPACE" }

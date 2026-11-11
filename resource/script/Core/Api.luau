@@ -13,6 +13,7 @@
 -- effect at the start of the next tick.
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
+local Assault = require("@lt/Core/Tactical/Assault")
 local Batteries = require("@lt/Core/Tactical/Batteries")
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Codec = require("@lt/Core/Persist/Codec")
@@ -71,7 +72,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 36
+Core.SAVE_VERSION = 37
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -291,6 +292,18 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       end
     end
   end,
+  -- 37: a station's fourth agent has assaults on pirate camps. The jobs
+  -- of a save from before are none of them that, and no agent has given
+  -- any.
+  [36] = function(state: any)
+    state.assaults = state.assaults or {}
+    for _, mission in state.missions do
+      mission.level = mission.level or 0
+      mission.waves = mission.waves or {}
+      mission.wave = mission.wave or 0
+      mission.site = mission.site or 0
+    end
+  end,
   -- 36: a hired pilot can be set to haul, and to sell what they bring
   -- in. The pilots of a save from before carry nothing and sell nothing.
   [35] = function(state: any)
@@ -362,6 +375,7 @@ function Core.New(options: Options): Game
     missionIds = {},
     missionsTaken = {},
     missionsDone = 0,
+    assaults = {},
     standings = {},
     loyalty = {},
     sites = {},
@@ -579,6 +593,7 @@ function Core.Step(game: Game)
   Hacking.Step(state, game.events)
   Missions.Step(state, game.events)
   Standings.Step(state)
+  Assault.Step(state, game.events)
   Pirates.Populate(state, game.events)
   Traffic.Step(state, game.events)
   Pirates.Think(state, game.events)

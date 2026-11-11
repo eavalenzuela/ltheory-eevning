@@ -35,10 +35,17 @@
 -- standing: datacores for anybody it does not think ill of, implants
 -- at a standing of 1, blueprints at 2.
 --
+-- And a station has a fourth agent, whose work is of another kind: an
+-- assault on a pirate camp, at a place made for the job (the rules of
+-- it are Tactical/Assault's). It comes in levels, as many of them open
+-- as the pilot's standing with the faction allows, each offered beside
+-- the day's three; a pilot has one from a station at a time, and the
+-- agent has another as soon as that is done with.
+--
 -- (A first version of the roadmap's agents. Not yet: agents with a
--- standing of their own, jobs made from what the simulation needs, a
--- place made for a job.)
+-- standing of their own, jobs made from what the simulation needs.)
 
+local Assault = require("@lt/Core/Tactical/Assault")
 local Constants = require("@lt/Core/Data/Constants")
 local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
@@ -78,6 +85,8 @@ local SUPPLIES = { "ore.ferrite", "ore.cuprite", "ore.silicate", "mineral.iron",
 function Missions.Title(mission: State.Mission): string
   if mission.kind == "bounty" then
     return `Bounty: {mission.need} {if mission.need == 1 then "pirate" else "pirates"}`
+  elseif mission.kind == "assault" then
+    return `Assault, level {mission.level}: a camp of {mission.need}`
   elseif mission.kind == "courier" then
     return `Courier: {mission.need} m3 of sealed cargo`
   end
@@ -130,6 +139,7 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         id = 0, key = key, kind = "bounty", station = station, faction = node.nearest, system = system, need = 1, done = 0,
         type = "", to = station, reward = 0, standing = 0.1, taken = 0,
         agent = Missions.Agent(state, station, slot), loyalty = 0,
+        level = 0, waves = {}, wave = 0, site = 0,
       }
       local roll = Rng.Int(rng, 3)
       -- (a neighbour's station, for a courier run that is a jump)
@@ -165,6 +175,36 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
       end
       mission.loyalty = math.max(1, mission.reward // Missions.LOYALTY)
       table.insert(offers, mission)
+    end
+  end
+  -- The fourth agent's: an assault at each level the pilot's standing
+  -- opens, unless one of this station's is in hand already.
+  for _, id in state.missionIds do
+    local held = state.missions[id]
+    if held.kind == "assault" and held.station == station then
+      return offers
+    end
+  end
+  local given = state.assaults[station] or 0
+  for level = 1, Assault.Top(Missions.Standing(state, node.nearest)) do
+    local rng = Rng.For(state.historySeed, station, given, level, 89)
+    -- (two times in five the camp is in a neighbour's system)
+    local next = node.neighbors[Rng.Int(rng, math.max(1, #node.neighbors)) + 1]
+    local where = if next ~= nil and Rng.Chance(rng, 0.4) then next else system
+    if not Assault.Room(state, where) then
+      where = system
+    end
+    local waves = Assault.Plan(rng, level)
+    local ships = Assault.Count(waves)
+    local pay, credit = Assault.Pay(level, waves)
+    local reward = math.floor(pay * bonus)
+    if Assault.Room(state, where) then
+      table.insert(offers, {
+        id = 0, key = `{station}:a{given}:{level}`, kind = "assault", station = station, faction = node.nearest, system = where,
+        need = ships, done = 0, type = "", to = station, reward = reward, standing = credit, taken = 0,
+        agent = Missions.Agent(state, station, Missions.OFFERS + 1), loyalty = math.max(1, reward // Missions.LOYALTY),
+        level = level, waves = waves, wave = 0, site = 0,
+      })
     end
   end
   return offers
@@ -212,7 +252,7 @@ function Missions.Ready(state: State.State, ship: State.Ship, mission: State.Mis
   if ship.docked ~= where then
     local object = Space.Object(state, where)
     return false, `finish it at {if object then object.name else "its station"}`
-  elseif mission.kind == "bounty" then
+  elseif mission.kind == "bounty" or mission.kind == "assault" then
     if mission.done < mission.need then
       return false, `{mission.need - mission.done} still to destroy`
     end
@@ -307,6 +347,10 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
         end
         if offer.kind == "courier" then
           Items.Add(state, Missions.CRATE, offer.need, ship.docked, "hangar")
+        elseif offer.kind == "assault" then
+          -- (the agent's next is another job; and the camp is on the charts)
+          state.assaults[offer.station] = (state.assaults[offer.station] or 0) + 1
+          Assault.Open(state, offer, events)
         end
         table.insert(events, { kind = "MissionAccepted", mission = offer.id, title = Missions.Title(offer) })
       end
@@ -315,7 +359,9 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
   end
   local mission = state.missions[command.target :: number]
   if kind == "CompleteMission" then
-    if mission.kind ~= "bounty" then
+    if mission.kind == "assault" then
+      Assault.Close(state, mission, events)
+    elseif mission.kind ~= "bounty" then
       hand(state, ship, mission.type, mission.need)
     end
     Wallet.Pay(state, mission.reward, "mission reward", events)
@@ -330,6 +376,7 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
     if mission.kind == "courier" then
       hand(state, ship, mission.type, math.min(mission.need, toHand(state, ship, mission.type)))
     end
+    Assault.Close(state, mission, events)
     standing(state, mission.faction, -2 * mission.standing)
     close(state, mission)
     table.insert(events, { kind = "MissionAbandoned", mission = mission.id, title = Missions.Title(mission) })
@@ -345,6 +392,7 @@ function Missions.Step(state: State.State, events: { Event })
   for _, id in table.clone(state.missionIds) do
     local mission = state.missions[id]
     if state.tick - mission.taken > Missions.LIMIT then
+      Assault.Close(state, mission, events)
       standing(state, mission.faction, -2 * mission.standing)
       close(state, mission)
       table.insert(events, { kind = "MissionExpired", mission = mission.id, title = Missions.Title(mission) })

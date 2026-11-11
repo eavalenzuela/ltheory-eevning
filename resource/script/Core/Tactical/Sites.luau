@@ -278,6 +278,50 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
   return site
 end
 
+-- A place made for a job (Tactical/Assault): somewhere out from a
+-- planet, as a site is, by a name and a code of its own; found already,
+-- and there until whoever made it lets it go (Sites.Release). It is a
+-- site of the kind "mission" to everything that knows sites, and no
+-- business of this module's otherwise: nothing is put there, it is not
+-- one of the system's count of sites, and it does not go by itself.
+-- Nil if the system's description is nearly full, or it has no planet.
+function Sites.Stake(state: State.State, system: number, rng: Rng.Rng, title: string): State.Site?
+  local objects = Space.Describe(state, system).objects
+  local planets: { System.Object } = {}
+  for _, object in objects do
+    if object.kind == "planet" then
+      table.insert(planets, object)
+    end
+  end
+  if #objects + 40 >= Constants.STRUCTURE_ID_SPAN or #planets == 0 then
+    return nil
+  end
+  local planet = planets[Rng.Int(rng, #planets) + 1]
+  local angle, out = Rng.Float(rng, 0, 2 * math.pi), planet.radius * Rng.Float(rng, 6, 14)
+  local code = string.format("%s%s-%03d", string.char(65 + Rng.Int(rng, 26)), string.char(65 + Rng.Int(rng, 26)), Rng.Int(rng, 1000))
+  local place: System.Object = {
+    id = system * Constants.STRUCTURE_ID_SPAN + #objects + 1, kind = "belt", name = `{title} {code}`,
+    x = planet.x + out * math.cos(angle), y = planet.y + out * Rng.Float(rng, -0.1, 0.1), z = planet.z + out * math.sin(angle),
+    radius = 0, seed = Rng.Int(rng, 2 ^ 31), parent = planet.id, site = 0, variety = "site.mission", to = 0,
+  }
+  place.site = place.id
+  table.insert(objects, place)
+  local site: State.Site = { id = place.id, system = system, kind = "mission", code = code, strength = 1,
+    expires = 2 ^ 52, gone = false, depth = 0, led = false }
+  state.sites[place.id] = site
+  table.insert(state.siteIds, place.id)
+  return site
+end
+
+-- Let a place made for a job go.
+function Sites.Release(state: State.State, id: number, events: { Event })
+  local site = state.sites[id]
+  if site and not site.gone then
+    site.gone = true
+    table.insert(events, { kind = "SiteGone", site = id, system = site.system })
+  end
+end
+
 -- The chance that a den's stores, once emptied, say where another is.
 Sites.TRAIL = 0.4
 
@@ -354,6 +398,12 @@ function Sites.Step(state: State.State, events: { Event })
   local here = Sites.In(state, system)
   local left = #here
   for _, site in here do
+    -- (a place made for a job is not one of the system's own, and goes
+    -- when the job does)
+    if site.kind == "mission" then
+      left -= 1
+      continue
+    end
     -- (never from under the pilot)
     local present = ball ~= nil and ball.grid == site.id
     if not present and (state.tick >= site.expires or spent(state, site)) then

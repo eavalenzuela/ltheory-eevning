@@ -308,10 +308,17 @@ export type Site = { id: number, system: number, kind: string, code: string, str
 -- day and place in the list), and 'id' is 0 until a pilot has taken it.
 -- 'agent' is who at the station gives it, and 'loyalty' the points it
 -- is worth with their faction beside the pay.
+-- An "assault" is on a camp made for it (Tactical/Assault): 'level'
+-- is how hard it is, 1 to 4; 'waves' the packs that keep the camp, each
+-- a list of the kinds of pirate in it, one coming when the last is
+-- destroyed; 'wave' how many have come; 'site' the place, once the job
+-- is taken (0 before, and for any other kind of job); and 'need' and
+-- 'done' count the ships.
 export type Mission = {
   id: number, key: string, kind: string, station: number, faction: string, system: number, need: number, done: number,
   type: string, to: number, reward: number, standing: number, taken: number,
   agent: string, loyalty: number,
+  level: number, waves: { { string } }, wave: number, site: number,
 }
 
 -- What a pilot has researched of a blueprint: levels of each kind.
@@ -415,6 +422,9 @@ export type State = {
   missionIds: { number },
   missionsTaken: { string },
   missionsDone: number,
+  -- By station: how many assaults its agent has given the pilot (which
+  -- is what the next one follows from: Assets/Missions).
+  assaults: { [number]: number },
   standings: { [string]: number },
   -- Loyalty points with each faction, earned by its jobs and spent at
   -- its stations (a faction not here has none).

@@ -11,6 +11,7 @@
 -- capsule, the pilot is given a starter ship. If the capsule is destroyed
 -- too, the pilot wakes at home in one.
 
+local Assault = require("@lt/Core/Tactical/Assault")
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
@@ -108,6 +109,10 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   local velocity = { ball.vx, ball.vy, ball.vz }
   Space.RemoveBall(state, ball)
   forget(state, id)
+  -- (one that kept a camp a job is to clear counts toward the job)
+  if pilot then
+    Assault.Fell(state, pilot.home, events)
+  end
 
   -- (a bounty is on the pilot, not the hull: a scout in a patched frigate
   -- is worth a scout's)
