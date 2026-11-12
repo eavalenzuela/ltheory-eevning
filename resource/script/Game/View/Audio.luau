@@ -9,13 +9,23 @@
 -- hard they burn, and the warp. And under all of it, music (Game/View/Music).
 --
 -- And a place has its air: a loop or two of its own, very quiet, that
--- come in when the pilot gets there and fade when they leave. A station
--- has radio chatter: a good deal of it at a homeworld (with a burst of
--- somebody else's traffic over it now and then), some in secure space,
--- a little in low security, and none in lawless space, where nobody is
--- talking. A stargate hums. A belt ticks and groans. A vapour field
--- hisses. A derelict creaks, over a dead channel. A listening post has
--- its old transmissions, and a pirates' den or camp their talk.
+-- come in when the pilot gets there and fade when they leave.
+--
+-- Where people live there is comms chatter: the background noise of
+-- an inhabited place, and nobody's in particular (the owner's ruling,
+-- 2026-11-12: "background noise when near inhabited planets and
+-- stations, not faction specific"). So it is heard at any station, and
+-- near any planet people live on, whoever's space it is and whatever
+-- tongue the voices are in. How much of it follows from how busy the
+-- place is: a good deal at a homeworld, some elsewhere in secure
+-- space, a little where order is thin or there is none; and where
+-- there is more than a little, a burst of other voices is heard over
+-- it now and then. (A pilot's own tower is nobody's home: it has none
+-- of its own.)
+--
+-- A stargate hums. A belt ticks and groans. A vapour field hisses. A
+-- derelict creaks, over a dead channel. A listening post has its old
+-- transmissions, and a pirates' den or camp their talk.
 --
 -- The owner makes sounds of their own (resource/sound/atmosphere, as
 -- the wav files they are: a file put there again is what is heard next
@@ -48,6 +58,7 @@
 local Core = require("@lt/Core/Api")
 local Im = require("@lt/Game/UI/Im")
 local Music = require("@lt/Game/View/Music")
+local Planet = require("@lt/Game/View/Planet")
 local Session = require("@lt/Game/Session")
 
 local Audio = {}
@@ -104,8 +115,10 @@ local AIR: { [string]: { { any } } } = {
   data = { { "made/atmosphere/listening.ogg", 0.05 } },
   pirates = { { "made/atmosphere/pirates.ogg", 0.04 } },
 }
--- Somebody else's traffic, heard over a homeworld's chatter now and
--- then: one of these, once, and the next a minute or two after.
+-- More voices, heard over the chatter of a place that has more than a
+-- little of it, now and then: one of these, once, and the next a
+-- minute or two after. (Chatter like the rest, in another tongue: it is
+-- nobody's in particular.)
 local PASSING: { { any } } = {
   { "atmosphere/japanese_medium_comm_chatter_02.wav", 0.05 }, { "atmosphere/japanese_medium_comm_chatter_03.wav", 0.035 },
 }
@@ -120,8 +133,14 @@ local SITES: { [string]: string } = {
   ["site.gas"] = "gas", ["site.relic"] = "relic", ["site.data"] = "data", ["site.combat"] = "pirates", ["site.ore"] = "belt",
 }
 
+-- How near a planet people live on its chatter is heard: within this
+-- many of its radii of its surface. (A warp to a planet ends well
+-- inside that, and a station at one of its moons is usually outside it.)
+local NEAR_WORLD = 1.5
+
 -- Which air the place the pilot is at has ("": none): by what the
--- place is, and for a station by how safe its space is.
+-- place is; and where people live, comms chatter, by how busy the
+-- system is.
 function Audio.Where(game: Core.Game): string
   local state = game.state
   local player = Core.Query.Player(game)
@@ -130,13 +149,25 @@ function Audio.Where(game: Core.Game): string
     elseif me and not (me.warp and me.warp.stage == "warp") then me.grid
     else 0
   local place: any = if at ~= 0 then Core.Query.Body(game, at) else nil
-  if place == nil then
-    return ""
-  elseif place.kind == "station" then
+  -- People live at a station (not at a tower a pilot put up for
+  -- themselves), and on some kinds of planet: there, or near one of
+  -- those, there is chatter.
+  local inhabited = place ~= nil and place.kind == "station" and state.starbases[at] == nil
+  if not inhabited and me and not (me.warp and me.warp.stage == "warp") then
+    for _, object in Core.Query.Objects(game, player.system) do
+      if object.kind == "planet" and Planet.Inhabited(object.variety) then
+        local far = math.sqrt((object.x - me.x) ^ 2 + (object.y - me.y) ^ 2 + (object.z - me.z) ^ 2) - object.radius
+        inhabited = inhabited or far < NEAR_WORLD * object.radius
+      end
+    end
+  end
+  -- (a gate or a belt that happens to be near such a planet keeps its own air)
+  if inhabited and (place == nil or place.kind == "station") then
     local node = state.galaxy.systems[player.system]
     local _, band = Core.Query.Security(game, player.system)
-    return if band == "lawless" or node == nil then "" elseif node.home then "chatter.busy"
-      elseif band == "secure" then "chatter.light" else "chatter.thin"
+    return if node and node.home then "chatter.busy" elseif band == "secure" then "chatter.light" else "chatter.thin"
+  elseif place == nil then
+    return ""
   elseif place.kind == "gate" then
     return "gate"
   elseif place.kind ~= "belt" then
@@ -367,11 +398,11 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
           table.insert(audio.air, { sound = Sound_Play2DLooped(loop[1], 0), key = air, layer = layer, now = 0, want = loop[2] })
         end
       end
-      -- (and somebody else's traffic is first heard a while after getting to a busy station)
+      -- (and more voices are first heard a while after getting to a place with chatter)
       audio.passing = audio.time + PASSING_FIRST
     end
   end
-  if audio.airIs == "chatter.busy" and audio.time >= audio.passing then
+  if (audio.airIs == "chatter.busy" or audio.airIs == "chatter.light") and audio.time >= audio.passing then
     audio.passed += 1
     audio.passing = audio.time + PASSING_GAP + (audio.passed * 37) % 60
     local burst = PASSING[audio.passed % #PASSING + 1]

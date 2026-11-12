@@ -354,6 +354,13 @@ function Planet.Set(world: World, name: string, value: number)
   end
 end
 
+-- Whether a kind of planet is one people live on: the kinds drawn with
+-- the lights of cities on their night side.
+function Planet.Inhabited(variety: string): boolean
+  local kind = Planet.kinds[variety]
+  return kind ~= nil and (kind.settings.cityLights or 0) > 0
+end
+
 -- The kind that draws a body of the game: 'body' is "planet" or "moon",
 -- 'variety' what Core/Describe calls it. Nil if nothing here draws it.
 function Planet.KindOf(body: string, variety: string): string?

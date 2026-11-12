@@ -66,5 +66,25 @@ until GameDebug.Press('Probe:recall')
 until GameDebug.Probes() == 0
 lua assert(select(2, GameDebug.Probes()) == 2, 'a probe called in should be in the hold again')
 
+# Where people live there is comms chatter, whoever they are: near a
+# planet people live on as at a station, and none by a planet nobody
+# lives on.
+lua _G.world, _G.waste = GameDebug.World(true), GameDebug.World(false)
+lua assert(_G.world ~= '' and _G.waste ~= '', 'the system should have a planet people live on, and one nobody does')
+lua GameDebug.TimeScale(16)
+lua assert(GameDebug.Order('WarpTo', _G.world), 'warp to the planet was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+wait 1
+lua assert(GameDebug.Air() == 'chatter.busy', 'near a homeworld planet people live on there should be a good deal of chatter, not ' .. GameDebug.Air())
+lua GameDebug.TimeScale(16)
+lua assert(GameDebug.Order('WarpTo', _G.waste), 'warp to the other planet was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+wait 1
+lua assert(GameDebug.Air() == '', 'by a planet nobody lives on there is no chatter, not ' .. GameDebug.Air())
+
 echo sites scenario passed
 quit

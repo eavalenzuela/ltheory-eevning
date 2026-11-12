@@ -26,6 +26,7 @@ local Icons = require("@lt/Icons")
 local Hull = require("@lt/Game/View/Hull")
 local Im = require("@lt/Game/UI/Im")
 local Scanner = require("@lt/Game/UI/Scanner")
+local Planet = require("@lt/Game/View/Planet")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
 local Settings = require("@lt/Game/Settings")
@@ -1260,11 +1261,23 @@ function Debug.Sound(on: boolean?, master: number?): number
   return audio.played
 end
 
+-- The nearest planet of the pilot's system that people live on (or,
+-- with false, that nobody does): its name, "" if there is none such.
+function Debug.World(lived: boolean?): string
+  for _, entry in Core.Query.Overview(session.game) do
+    if entry.kind == "planet" and Planet.Inhabited(entry.variety) == (lived ~= false) then
+      return entry.name
+    end
+  end
+  return ""
+end
+
 -- The air of the place the pilot is at, as the sound has it ("gate",
--- "belt", "gas", "relic", "data", "pirates", a station's "chatter.thin",
--- "chatter.light" or "chatter.busy", or "" for none), and how many
--- loops of it are playing (two, while one fades out under another).
--- With the sound off it is always "" and none.
+-- "belt", "gas", "relic", "data", "pirates", or where people live, at a
+-- station or near a planet of theirs, "chatter.thin", "chatter.light"
+-- or "chatter.busy"; "" for none), and how many loops of it are playing
+-- (two, while one fades out under another). With the sound off it is
+-- always "" and none.
 function Debug.Air(): (string, number)
   return audio.airIs, #audio.air
 end
