@@ -321,6 +321,129 @@ local function dray(b: Builder)
   conduit(b, { v(0.05, 0.33, stern + 0.2), v(0.05, 0.33, bow - 0.3), v(0.10, 0.39, bow - 0.24) }, 0.013)
 end
 
+-- The Prospector, a mining frigate: anybody's. An ore hopper with a
+-- working head in front of it and an engine behind: the hopper a deep
+-- ribbed bin slung under a short spine, its lid in warning paint; the
+-- head a blunt block with a lamp across its face, the cab perched on
+-- top of it to one side and a sampling boom out ahead; one big engine
+-- low at the stern and two small ones high. (A v0: it reads as what it
+-- is.)
+local function prospector(b: Builder)
+  truss(b, v(0, 0.16, -0.66), v(0, 0.16, 0.44), 0.14, 6)
+  -- the hopper
+  block(b, PATCH, v(0, -0.12, -0.08), v(0.30, 0.25, 0.38), nil, 0.10)
+  for _, z in { -0.36, -0.08, 0.20 } do
+    block(b, FRAME, v(0, -0.12, z), v(0.312, 0.262, 0.022), nil, 0.1)
+  end
+  block(b, TRIM, v(0, 0.135, -0.08), v(0.26, 0.012, 0.34))
+  -- the working head, and the collar that joins it to the hopper
+  block(b, PLATING, v(0, 0.0, 0.58), v(0.27, 0.21, 0.20), nil, 0.10)
+  block(b, FRAME, v(0, -0.02, 0.34), v(0.20, 0.17, 0.04))
+  block(b, GLOW, v(0, -0.04, 0.784), v(0.17, 0.03, 0.006), nil, 0.3)
+  -- the cab, on top of it and off to port
+  block(b, PATCH, v(-0.12, 0.275, 0.50), v(0.10, 0.065, 0.11), nil, 0.2)
+  block(b, GLOW, v(-0.12, 0.29, 0.612), v(0.075, 0.02, 0.005), nil, 0.3)
+  -- a sampling boom out ahead, to starboard and low
+  beam(b, FRAME, v(0.16, -0.10, 0.74), v(0.20, -0.14, 1.00), 0.022, 0.1)
+  block(b, FRAME, v(0.20, -0.14, 1.00), v(0.04, 0.04, 0.03), nil, 0.2)
+  mast(b, v(0.08, 0.23, -0.30), 0.30, 0.02)
+  -- the engines: the big one low, behind the hopper, and two small ones on the spine
+  block(b, PLATING, v(0, -0.10, -0.54), v(0.22, 0.20, 0.10), nil, 0.10)
+  nacelle(b, v(0, -0.10, -0.72), 0.16, 0.14)
+  for _, side in { -1, 1 } do
+    nacelle(b, v(side * 0.30, 0.16, -0.60), 0.16, 0.06)
+    truss(b, v(side * 0.08, 0.16, -0.56), v(side * 0.25, 0.16, -0.58), 0.06, 2, v(0, 0, 1))
+  end
+  -- a tank on the starboard side of the hopper
+  tank(b, v(0.36, -0.04, -0.12), 0.06, 0.22)
+end
+
+-- The Quarry, a mining barge: anybody's. Two keel girders with four ore
+-- bins between them, open to the sky and no two filled alike; a working
+-- deck across the bow, where its mining heads stand; a gantry over the
+-- bins; and at the stern a control house up on a tower, with the
+-- engines under it. (A v0.)
+local function quarry(b: Builder)
+  local stern, bow = -0.90, 0.90
+  for _, side in { -1, 1 } do
+    truss(b, v(side * 0.34, -0.10, stern + 0.16), v(side * 0.34, -0.10, bow - 0.26), 0.10, 9)
+  end
+  -- the bins, and what is in them
+  local first, last, bins = stern + 0.32, bow - 0.34, 4
+  local length = (last - first) / bins
+  for bin = 1, bins do
+    local z = first + (bin - 0.5) * length
+    block(b, if bin % 2 == 0 then PATCH else PLATING, v(0, -0.08, z), v(0.27, 0.19, length * 0.44), nil, 0.06)
+    block(b, FRAME, v(0, 0.115, z), v(0.276, 0.012, length * 0.45), nil, 0.1)
+    local heap = 0.025 + 0.03 * ((bin * 3) % 4)
+    block(b, FRAME, v(0.03 * ((bin % 2) * 2 - 1), 0.10 + heap, z), v(0.19, heap, length * 0.32), v(0, 0.4 * bin, 0), 0.5)
+    beam(b, FRAME, v(-0.34, -0.10, z + length / 2), v(0.34, -0.10, z + length / 2), 0.020, 0.08)
+  end
+  -- the working deck across the bow: a slab, in warning paint on top, a lamp along its face
+  block(b, PLATING, v(0, -0.02, bow - 0.14), v(0.46, 0.13, 0.16), nil, 0.06)
+  block(b, TRIM, v(0, 0.114, bow - 0.14), v(0.44, 0.006, 0.15))
+  block(b, GLOW, v(0, -0.02, bow + 0.022), v(0.30, 0.025, 0.006), nil, 0.3)
+  -- the gantry over the bins, and its hook
+  for _, side in { -1, 1 } do
+    beam(b, FRAME, v(side * 0.34, -0.05, 0.02), v(side * 0.30, 0.44, 0.02), 0.03, 0.1)
+  end
+  beam(b, FRAME, v(-0.30, 0.44, 0.02), v(0.30, 0.44, 0.02), 0.03, 0.1)
+  beam(b, FRAME, v(0.07, 0.44, 0.02), v(0.07, 0.27, 0.02), 0.014, 0.1)
+  block(b, FRAME, v(0.07, 0.25, 0.02), v(0.03, 0.025, 0.03), nil, 0.3)
+  -- the stern: the engine house, the tower on it, and the control house on that, off to starboard
+  block(b, PLATING, v(0, -0.02, stern + 0.14), v(0.40, 0.24, 0.14), nil, 0.08)
+  block(b, FRAME, v(0.12, 0.32, stern + 0.16), v(0.09, 0.10, 0.08), nil, 0.1)
+  block(b, PATCH, v(0.12, 0.49, stern + 0.18), v(0.20, 0.07, 0.11), nil, 0.2)
+  block(b, GLOW, v(0.12, 0.505, stern + 0.292), v(0.16, 0.02, 0.005), nil, 0.3)
+  ports(b, v(0.405, 0.04, stern + 0.06), v(0.405, 0.04, stern + 0.24), 3, 0.012)
+  mast(b, v(0.0, 0.56, stern + 0.14), 0.24, 0.02)
+  for _, x in { -0.26, 0, 0.26 } do
+    block(b, FRAME, v(x, -0.04, stern - 0.03), v(0.10, 0.15, 0.05), nil, 0.25)
+    block(b, GLOW, v(x, -0.04, stern - 0.085), v(0.07, 0.11, 0.008), nil, 0.5)
+    exhaust(v(x, -0.04, stern - 0.095), 0.085)
+  end
+  tank(b, v(-0.47, -0.02, -0.28), 0.07, 0.24)
+end
+
+-- The Mule, a hauler: anybody's, and the plainest there is. A tug with
+-- its load out in front of it: a tall house at the stern with the
+-- bridge across its top and the engines behind; a spine forward from
+-- it with eight drums of cargo strapped round it, four and four, not
+-- all of one make; frames to hold them, and a plate across the bow.
+-- (A v0.)
+local function mule(b: Builder)
+  local stern, bow = -0.90, 0.92
+  truss(b, v(0, 0, stern + 0.36), v(0, 0, bow - 0.04), 0.14, 9)
+  -- the house, the bridge across the top of it
+  block(b, PLATING, v(0, 0.02, stern + 0.20), v(0.36, 0.36, 0.20), nil, 0.08)
+  block(b, PATCH, v(0, 0.45, stern + 0.26), v(0.30, 0.07, 0.12), nil, 0.2)
+  block(b, GLOW, v(0, 0.465, stern + 0.382), v(0.24, 0.02, 0.005), nil, 0.3)
+  block(b, TRIM, v(0, 0.385, stern + 0.26), v(0.31, 0.010, 0.125))
+  ports(b, v(0.365, 0.12, stern + 0.10), v(0.365, 0.12, stern + 0.30), 3, 0.012)
+  mast(b, v(-0.16, 0.52, stern + 0.22), 0.28, 0.02)
+  -- the engines: two mouths
+  for _, x in { -0.18, 0.18 } do
+    block(b, FRAME, v(x, -0.04, stern - 0.02), v(0.13, 0.19, 0.06), nil, 0.25)
+    block(b, GLOW, v(x, -0.04, stern - 0.085), v(0.095, 0.15, 0.008), nil, 0.5)
+    exhaust(v(x, -0.04, stern - 0.095), 0.11)
+  end
+  -- the load: drums lying along the spine, four round it and two rows of them
+  for row, z in { -0.20, 0.42 } do
+    for index, at in { v(0.21, 0.21, z), v(-0.21, 0.21, z), v(0.21, -0.21, z), v(-0.21, -0.21, z) } do
+      tank(b, at, 0.17, 0.27, if (index + row) % 3 == 0 then PLATING else PATCH)
+    end
+  end
+  -- the frames that hold them, and the plate across the bow
+  for _, z in { stern + 0.42, 0.11, 0.72 } do
+    for _, side in { -1, 1 } do
+      beam(b, FRAME, v(side * 0.40, -0.40, z), v(side * 0.40, 0.40, z), 0.022, 0.08)
+      beam(b, FRAME, v(-0.40, side * 0.40, z), v(0.40, side * 0.40, z), 0.022, 0.08)
+    end
+  end
+  block(b, PLATING, v(0, 0, bow), v(0.34, 0.34, 0.03), nil, 0.08)
+  block(b, TRIM, v(0, 0, bow + 0.032), v(0.28, 0.05, 0.004))
+end
+
 -- The Caravan, a hauler. A cage of heavy girders, wider at the keel
 -- than at the top, with three cargo bays in it that do not match
 -- (containers in two, drums in the third); the pilot in a pod out on a
@@ -1975,6 +2098,31 @@ local designs: { [string]: Design } = {
   },
   -- (a freighter has nothing on it to fight with)
   ["freighter.dray"] = { faction = "civil", draw = dray, sheets = 6.0, turrets = {}, launchers = {}, fit = {} },
+  -- (And the three plain working hulls anybody flies: the mining
+  -- frigate, the mining barge and the hauler.)
+  ["frigate.prospector"] = {
+    faction = "civil", draw = prospector,
+    -- (a mining laser on the head and under it; one on each cheek of it)
+    turrets = { over(v(0.12, 0.21, 0.58), v(0, -0.21, 0.58)), abeam(v(0.27, 0.02, 0.58), v(-0.27, 0.02, 0.58)) },
+    launchers = {},
+    fit = { "miner.small", "miner.small" },
+  },
+  ["barge.quarry"] = {
+    faction = "civil", draw = quarry, sheets = 5.0,
+    -- (its three heads on the working deck: the middle one above and
+    -- below, the others above on one side and below on the other)
+    turrets = { over(v(0, 0.12, 0.76), v(0, -0.15, 0.76)), over(v(0.30, 0.12, 0.76), v(-0.30, -0.15, 0.76)),
+      over(v(-0.30, 0.12, 0.76), v(0.30, -0.15, 0.76)) },
+    launchers = {},
+    fit = { "miner.strip", "miner.strip", "miner.strip" },
+  },
+  ["industrial.hauler"] = {
+    faction = "civil", draw = mule, sheets = 4.5,
+    -- (its one gun on the bridge's roof, and under the house)
+    turrets = { over(v(0.12, 0.52, -0.64), v(0, -0.34, -0.70)) },
+    launchers = {},
+    fit = { "autocannon.small" },
+  },
   ["frigate.courier"] = {
     faction = "civil", draw = courier,
     -- (a gun on the back and under the cargo box; a gun on each flank)
