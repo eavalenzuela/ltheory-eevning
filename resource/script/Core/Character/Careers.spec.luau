@@ -322,6 +322,10 @@ suite:Case("what is to be brought is handed over, a skill had is enough, and a c
   Items.Add(state, "ore.ferrite", 700, home, "hangar")
   Items.Add(state, "ore.ferrite", 500, mine, "cargo")
   t.eq({ row(game, "industry").have, row(game, "industry").need, row(game, "industry").can } :: { any }, { 1000, 1000, true } :: { any })
+  -- (away from the agents' station, what there is of it is what is in the hold)
+  state.ships[mine].docked = home + 1
+  t.eq({ Careers.Progress(state, "industry") }, { 500, 1000 })
+  state.ships[mine].docked = home
   local wallet = state.wallet
   t.ok((Core.Submit(game, { kind = "CompleteLesson", actor = mine, what = "industry" })))
   Core.Step(game)

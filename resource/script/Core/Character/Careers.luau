@@ -274,8 +274,9 @@ function Careers.Gifts(state: State.State, lesson: Lesson): { Stack }
 end
 
 -- How a lesson in hand stands: how much of what it wants there is, of
--- how much. (What is to be brought is counted only where it can be
--- handed over: docked at the agents' station.)
+-- how much. (What is to be brought is what could be handed over, docked
+-- at the agents' station: in the hold and in the hangar there. Anywhere
+-- else it is what is in the hold.)
 function Careers.Progress(state: State.State, id: string): (number, number)
   local lesson = Careers.Lesson(state, id)
   local mine = Careers.Of(state, id)
@@ -283,7 +284,14 @@ function Careers.Progress(state: State.State, id: string): (number, number)
     return 0, 0
   elseif lesson.bring then
     local ship = state.ships[state.player.ship]
-    local have = if ship and ship.docked == Careers.Station(state) then Missions.ToHand(state, ship, lesson.bring.type) else 0
+    local have = 0
+    if ship and ship.docked == Careers.Station(state) then
+      have = Missions.ToHand(state, ship, lesson.bring.type)
+    elseif ship then
+      for _, item in Items.In(state, ship.id, "cargo") do
+        have += if item.type == lesson.bring.type then item.quantity else 0
+      end
+    end
     return math.min(have, lesson.bring.quantity), lesson.bring.quantity
   end
   return math.min(mine.count, lesson.need), lesson.need

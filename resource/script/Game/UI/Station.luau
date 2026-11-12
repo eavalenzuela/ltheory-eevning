@@ -1708,8 +1708,9 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
   end
   if #lacking > 0 then
     Im.Text(`This station has no {table.concat(lacking, " and no ")}.`, x + 16, y + 58, 13, Im.WARN)
-  elseif school and not careers.begun and tab ~= "Careers" then
-    -- (a pilot who has not met them yet is told they are here)
+  elseif school and not careers.begun and tab ~= "Careers" and select(2, Core.Query.Guide(game)) < 12 then
+    -- (a pilot who has not met them yet is told they are here; one who
+    -- has done half of what there is to do without them is not new)
     Im.Text("New here? The career agents teach the ropes, and pay: Careers.", x + 16, y + 58, 13, Im.ACCENT)
   end
 
