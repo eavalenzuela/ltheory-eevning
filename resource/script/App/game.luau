@@ -738,6 +738,23 @@ function Debug.Give(type: string, quantity: number): boolean
   return true
 end
 
+-- The other way: every one of a type the pilot has in the hangar of the
+-- station docked at is gone (lost, as with a ship). How many went.
+function Debug.Lose(type: string): number
+  local state = session.game.state
+  local ship = state.ships[state.player.ship]
+  local gone = 0
+  if ship.docked ~= 0 then
+    for _, item in Items.In(state, ship.docked, "hangar") do
+      if item.type == type then
+        gone += item.quantity
+        Items.Take(state, item, item.quantity)
+      end
+    end
+  end
+  return gone
+end
+
 function Debug.Train(skill: string, level: number)
   -- ("all": every skill there is)
   if skill == "all" then

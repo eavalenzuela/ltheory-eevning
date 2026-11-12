@@ -38,6 +38,15 @@ lua assert(GameDebug.Hangar('miner.small') == 2, 'the mining laser was not hande
 frames 3
 lua assert(not GameDebug.CanPress('Lesson:report:industry'), 'nothing has been mined yet')
 
+# What a lesson hands over, lost, is handed over again: once, and only to
+# a pilot who has none of it left. Both lasers are lost, and one comes back.
+lua assert(not GameDebug.CanPress('Lesson:kit:industry'), 'with the laser to hand there is nothing to ask for')
+lua assert(GameDebug.Lose('miner.small') == 2)
+until GameDebug.Press('Lesson:kit:industry')
+until GameDebug.Hangar('miner.small') == 1
+frames 3
+lua assert(not GameDebug.CanPress('Lesson:kit:industry'), 'there is no third time')
+
 # A mining laser in place of one gun, for industry's.
 until GameDebug.Press('Fitting')
 until GameDebug.Press('Unfit:high1')

@@ -192,6 +192,8 @@ function Session.Notice(session: Session, event: Space.Event)
       .. (if event.left > 0 then `, and is going back for {event.left} more` else ": that is all of it"))
   elseif kind == "BuyEnded" then
     Session.Say(session, `{event.name} could not buy {event.short} of the {Types.Info(event.type).name}: {event.reason}`)
+  elseif kind == "KitReplaced" then
+    Session.Say(session, `{event.agent} has handed it over again: it is in the hangar. There is no third time`)
   elseif kind == "SurgeBegan" then
     local name = session.game.state.galaxy.systems[event.system].name
     Session.Say(session, `PIRATE SURGE: pirates are massing ` .. (if event.jumps == 0 then `here in {name}`

@@ -285,7 +285,7 @@ end
 
 -- How far the pilot has got with a career (not begun, if nothing says).
 function Careers.Of(state: State.State, id: string): State.Career
-  return state.careers[id] or { done = 0, taken = false, count = 0 }
+  return state.careers[id] or { done = 0, taken = false, count = 0, again = false }
 end
 
 -- Who a career's agent is: the same person for as long as the galaxy lasts.
@@ -397,6 +397,44 @@ local function provide(state: State.State, kind: string, events: { Event })
   end
 end
 
+-- How many of a type the pilot has, anywhere: in any hangar, and aboard
+-- or fitted to any ship of theirs.
+local function owned(state: State.State, type: string): number
+  local have = 0
+  for _, id in state.itemIds do
+    local item = state.items[id]
+    if item.type == type then
+      local ship = state.ships[item.holder]
+      if ship == nil or ship.owner == "player" then
+        -- (a hangar's, or one of their ships': not a wreck's, nor anybody else's)
+        if ship ~= nil or Space.Object(state, item.holder) ~= nil then
+          have += item.quantity
+        end
+      end
+    end
+  end
+  return have
+end
+
+-- What of a lesson's kit the pilot no longer has: the stacks it would
+-- take to make it whole again. (A thing used up in doing the lesson is
+-- not lost: once the lesson is done there is nothing to hand over.)
+function Careers.Lost(state: State.State, id: string): { Stack }
+  local lesson = Careers.Lesson(state, id)
+  local mine = Careers.Of(state, id)
+  local lost: { Stack } = {}
+  local have, need = Careers.Progress(state, id)
+  if lesson and mine.taken and have < need then
+    for _, stack in lesson.kit do
+      local short = stack.quantity - owned(state, stack.type)
+      if short > 0 then
+        table.insert(lost, { type = stack.type, quantity = short })
+      end
+    end
+  end
+  return lost
+end
+
 function Careers.Validate(state: State.State, command: State.Command): (boolean, string?)
   local ship = state.ships[command.actor]
   local career = Careers.byId[command.what or ""]
@@ -420,6 +458,20 @@ function Careers.Validate(state: State.State, command: State.Command): (boolean,
     return true
   elseif command.kind == "CompleteLesson" then
     return Careers.Ready(state, ship, career.id)
+  elseif command.kind == "ReplaceKit" then
+    -- What a lesson handed over, handed over again to a pilot who has
+    -- lost it: once a lesson, and only what is really gone.
+    local lesson = Careers.Lesson(state, career.id)
+    if not mine.taken or lesson == nil then
+      return false, "no lesson of theirs is in hand"
+    elseif #lesson.kit == 0 then
+      return false, "that lesson handed nothing over"
+    elseif mine.again then
+      return false, `{Careers.Agent(state, career.id)} has handed it over twice already`
+    elseif #Careers.Lost(state, career.id) == 0 then
+      return false, "you still have what was handed over"
+    end
+    return true
   end
   return false, `unknown command '{command.kind}'`
 end
@@ -430,13 +482,22 @@ function Careers.Apply(state: State.State, command: State.Command, events: { Eve
   local station = Careers.Station(state)
   local mine = state.careers[career.id]
   if mine == nil then
-    mine = { done = 0, taken = false, count = 0 }
+    mine = { done = 0, taken = false, count = 0, again = false }
     state.careers[career.id] = mine
   end
   local lesson = career.lessons[mine.done + 1]
   local agent = Careers.Agent(state, career.id)
+  if command.kind == "ReplaceKit" then
+    local lost = Careers.Lost(state, career.id)
+    for _, stack in lost do
+      Items.Add(state, stack.type, stack.quantity, station, "hangar")
+    end
+    mine.again = true
+    table.insert(events, { kind = "KitReplaced", career = career.id, agent = agent, stacks = #lost })
+    return
+  end
   if command.kind == "AcceptLesson" then
-    mine.taken, mine.count = true, 0
+    mine.taken, mine.count, mine.again = true, 0, false
     for _, stack in lesson.kit do
       Items.Add(state, stack.type, stack.quantity, station, "hangar")
     end
@@ -456,7 +517,7 @@ function Careers.Apply(state: State.State, command: State.Command, events: { Eve
   end
   Standings.Change(state, faction(state), Careers.STANDING)
   mine.done += 1
-  mine.taken, mine.count = false, 0
+  mine.taken, mine.count, mine.again = false, 0, false
   table.insert(events, { kind = "LessonDone", career = career.id, lesson = mine.done, title = lesson.title, agent = agent,
     credits = lesson.credits, gifts = #gifts, finished = mine.done >= #career.lessons, name = career.name })
 end

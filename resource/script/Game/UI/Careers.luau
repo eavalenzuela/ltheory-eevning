@@ -127,6 +127,15 @@ function Careers.Detail(session: Session.Session, status: Core.CareersStatus, x:
     end
     Im.Text("Handed over", x, line, 12, Im.DIM)
     line = Im.Wrapped(table.concat(kit, ", "), x + 92, line - 1, width - 92, 13, Im.TEXT, 18) + 4
+    -- (lost with a ship, or sold by mistake: the agent hands it over a
+    -- second time, once, to a pilot who has none of it left anywhere)
+    if row.taken and status.here and row.have < row.need then
+      if Im.Button("Lost it?", x + 92, line, 84, 22, row.again, `Lesson:kit:{career.id}`) then
+        Session.Do(session, { kind = "ReplaceKit", actor = 0, what = career.id })
+      end
+      Im.Text(if row.again then "It is handed over again, the once." else row.whyNot, x + 184, line + 4, 12, Im.DIM)
+      line += 28
+    end
   end
   local pays: { string } = { Format.Credits(lesson.credits) }
   for _, stack in row.gifts do

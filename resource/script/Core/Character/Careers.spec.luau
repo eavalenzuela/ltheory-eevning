@@ -92,7 +92,7 @@ suite:Case("a lesson is taken at the agents' station, done in space, reported th
 
   t.ok((Core.Submit(game, { kind = "AcceptLesson", actor = mine, what = "flight" })))
   Core.Step(game)
-  t.eq(state.careers.flight, { done = 0, taken = true, count = 0 })
+  t.eq(state.careers.flight, { done = 0, taken = true, count = 0, again = false })
   local taken = said(game, "LessonTaken")
   t.eq({ #taken, taken[1].career, taken[1].lesson, taken[1].title, taken[1].agent } :: { any }, { 1, "flight", 1, "Out and back", first.agent } :: { any })
   t.eq({ Core.Validate(game, { kind = "AcceptLesson", actor = mine, what = "flight" }) } :: { any }, { false, "that lesson is in hand already" } :: { any })
@@ -139,7 +139,7 @@ suite:Case("a lesson is taken at the agents' station, done in space, reported th
   t.ok(row(game, "flight").can)
   t.ok((Core.Submit(game, { kind = "CompleteLesson", actor = mine, what = "flight" })))
   Core.Step(game)
-  t.eq(state.careers.flight, { done = 1, taken = false, count = 0 })
+  t.eq(state.careers.flight, { done = 1, taken = false, count = 0, again = false })
   t.eq(state.wallet, wallet + 2000)
   t.near(Standings.Of(state, faction), Careers.STANDING, 1e-9)
   local done = said(game, "LessonDone")
@@ -184,7 +184,7 @@ suite:Case("the flight school can be flown from its first lesson to its last", f
     order("Dock", home)
     till("Docked", 6000)
     lesson("CompleteLesson")
-    t.eq(state.careers.flight, { done = done, taken = false, count = 0 })
+    t.eq(state.careers.flight, { done = done, taken = false, count = 0, again = false })
   end
 
   -- Out and back.
@@ -249,7 +249,7 @@ suite:Case("the flight school can be flown from its first lesson to its last", f
   order("Dock", home)
   till("Docked", 6000)
   lesson("CompleteLesson")
-  t.eq(state.careers.flight, { done = 4, taken = false, count = 0 })
+  t.eq(state.careers.flight, { done = 4, taken = false, count = 0, again = false })
   local done = said(game, "LessonDone")
   t.eq({ #done, done[1].finished, done[1].name } :: { any }, { 1, true, "Flight school" } :: { any })
   t.eq(hangar(state, home, "book.evasive.maneuvering"), 1)
@@ -285,14 +285,14 @@ suite:Case("only what is done with a lesson in hand counts, by the pilot's own s
 
   -- Some lessons want more of the event than its kind. A station docked
   -- at has to be another; a sale has to be made somewhere else.
-  state.careers.flight = { done = 3, taken = true, count = 0 }
+  state.careers.flight = { done = 3, taken = true, count = 0, again = false }
   after({ kind = "Docked", ship = mine, station = home })
   t.eq(state.careers.flight.count, 0)
   after({ kind = "Docked", ship = mine + 1, station = home + 1 })
   t.eq(state.careers.flight.count, 0)
   after({ kind = "Docked", ship = mine, station = home + 1 })
   t.eq(state.careers.flight.count, 1)
-  state.careers.trade = { done = 3, taken = true, count = 0 }
+  state.careers.trade = { done = 3, taken = true, count = 0, again = false }
   after({ kind = "Sold", type = "ore.ferrite", quantity = 5, revenue = 20 })
   t.eq(state.careers.trade.count, 0)
   state.ships[mine].docked = home + 1
@@ -300,13 +300,13 @@ suite:Case("only what is done with a lesson in hand counts, by the pilot's own s
   t.eq(state.careers.trade.count, 1)
   state.ships[mine].docked = home
   -- Money that is no bounty is no pirate destroyed; a scan that finds nothing has found nothing.
-  state.careers.combat = { done = 4, taken = true, count = 0 }
+  state.careers.combat = { done = 4, taken = true, count = 0, again = false }
   after({ kind = "WalletChanged", reason = "mission reward", amount = 5 })
   after({ kind = "WalletChanged", reason = "bounty", amount = 5 })
   after({ kind = "WalletChanged", reason = "bounty", amount = 5 })
   t.eq(state.careers.combat.count, 2)
   t.eq({ Core.Validate(game, { kind = "CompleteLesson", actor = mine, what = "combat" }) } :: { any }, { false, "2 of 5 so far" } :: { any })
-  state.careers.survey = { done = 1, taken = true, count = 0 }
+  state.careers.survey = { done = 1, taken = true, count = 0, again = false }
   after({ kind = "Scanned", ball = mine, found = 0, signals = 1 })
   t.eq(state.careers.survey.count, 0)
   after({ kind = "Scanned", ball = mine, found = 1, signals = 0 })
@@ -316,7 +316,7 @@ end)
 suite:Case("what is to be brought is handed over, a skill had is enough, and a career ends with something worth having", function(t)
   local game, state, mine, home = new()
   -- The fourth lesson of industry: a thousand Ferrite.
-  state.careers.industry = { done = 3, taken = true, count = 0 }
+  state.careers.industry = { done = 3, taken = true, count = 0, again = false }
   t.eq({ Core.Validate(game, { kind = "CompleteLesson", actor = mine, what = "industry" }) } :: { any },
     { false, "1000 more Ferrite to bring" } :: { any })
   Items.Add(state, "ore.ferrite", 700, home, "hangar")
@@ -338,7 +338,7 @@ suite:Case("what is to be brought is handed over, a skill had is enough, and a c
   -- The fifth: Mining at level 2, which the pilot has not; and then has.
   t.ok((Core.Submit(game, { kind = "AcceptLesson", actor = mine, what = "industry" })))
   Core.Step(game)
-  t.eq(state.careers.industry, { done = 4, taken = true, count = 0 })
+  t.eq(state.careers.industry, { done = 4, taken = true, count = 0, again = false })
   t.eq(state.skills.mining, 1)
   t.ok(not row(game, "industry").can)
   Core.TakeEvents(game)
@@ -358,7 +358,7 @@ suite:Case("what is to be brought is handed over, a skill had is enough, and a c
   t.ok(not can and string.find(why or "", "has nothing more to teach", 1, true) ~= nil, why)
 
   -- The fighter's last gives a combat frigate of the faction whose station it is.
-  state.careers.combat = { done = 4, taken = true, count = 5 }
+  state.careers.combat = { done = 4, taken = true, count = 5, again = false }
   local frigate = Careers.Frigate(state)
   t.eq({ Ships.byId[frigate].class, Ships.byId[frigate].lineage } :: { any }, { "frigate", state.galaxy.systems[1].nearest } :: { any })
   t.eq(row(game, "combat").gifts, { { type = frigate, quantity = 1 } })
@@ -379,7 +379,7 @@ suite:Case("a surveying lesson has something to find for as long as it is in han
     return found
   end
   -- A belt no chart has, for the lesson that is to find one.
-  state.careers.survey = { done = 1, taken = false, count = 0 }
+  state.careers.survey = { done = 1, taken = false, count = 0, again = false }
   t.ok((Core.Submit(game, { kind = "AcceptLesson", actor = mine, what = "survey" })))
   Core.Step(game)
   local belts = sites("ore", true)
@@ -400,7 +400,7 @@ suite:Case("a surveying lesson has something to find for as long as it is in han
 
   -- A derelict with a sealed hold, for the lesson that is to open one;
   -- and what it takes, handed over.
-  state.careers.survey = { done = 3, taken = false, count = 0 }
+  state.careers.survey = { done = 3, taken = false, count = 0, again = false }
   t.ok((Core.Submit(game, { kind = "AcceptLesson", actor = mine, what = "survey" })))
   Core.Step(game)
   t.eq({ hangar(state, home, "analyzer.data"), hangar(state, home, "probe.scan") }, { 1, 2 })
@@ -418,11 +418,11 @@ suite:Case("how far a pilot has got is in the save, and an older save has begun 
   local game, state, mine = new()
   t.ok((Core.Submit(game, { kind = "AcceptLesson", actor = mine, what = "trade" })))
   Core.Step(game)
-  state.careers.flight = { done = 2, taken = false, count = 0 }
+  state.careers.flight = { done = 2, taken = false, count = 0, again = false }
   local data, length = Core.Save(game)
   local loaded = Core.Load(data, length)
   t.eq(Core.Hash(loaded), Core.Hash(game))
-  t.eq(loaded.state.careers, { trade = { done = 0, taken = true, count = 0 }, flight = { done = 2, taken = false, count = 0 } })
+  t.eq(loaded.state.careers, { trade = { done = 0, taken = true, count = 0, again = false }, flight = { done = 2, taken = false, count = 0, again = false } })
   local file = Codec.Decode(data, length)
   file.saveVersion = 43
   file.state.careers = nil
@@ -430,6 +430,79 @@ suite:Case("how far a pilot has got is in the save, and an older save has begun 
   local older = Core.Load(old, oldLength)
   t.eq(older.state.careers, {})
   t.ok(not Core.Query.Careers(older).begun)
+end)
+
+suite:Case("a lesson's kit that is lost is handed over again, once, and only what is really gone", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local station = Careers.Station(state)
+  local function refused(kind: string, career: string): string?
+    local ok, why = Core.Validate(game, { kind = kind, actor = state.player.ship, what = career })
+    return if ok then "(accepted)" else why
+  end
+  local function have(type: string): number
+    local units = 0
+    for _, item in Items.In(state, station, "hangar") do
+      units += if item.type == type then item.quantity else 0
+    end
+    return units
+  end
+  local agent = Careers.Agent(state, "survey")
+  -- A lesson that hands over two probes: the third of the surveyor's.
+  t.eq(refused("ReplaceKit", "survey"), "no lesson of theirs is in hand")
+  state.careers.survey = { done = 2, taken = false, count = 0, again = false }
+  local lesson = assert(Careers.Lesson(state, "survey"))
+  t.eq({ lesson.kit[1].type, lesson.kit[1].quantity } :: { any }, { "probe.scan", 2 } :: { any })
+  local before = have("probe.scan")
+  t.ok(Core.Submit(game, { kind = "AcceptLesson", actor = state.player.ship, what = "survey" }))
+  Core.Step(game)
+  t.eq(have("probe.scan"), before + 2)
+  -- With the kit still there, there is nothing to hand over.
+  t.eq(refused("ReplaceKit", "survey"), "you still have what was handed over")
+  t.eq(Careers.Lost(state, "survey"), {})
+  -- One of the two is gone (and whatever the pilot had besides): that one is handed over, and no more.
+  for _, item in Items.In(state, station, "hangar") do
+    if item.type == "probe.scan" then
+      Items.Take(state, item, item.quantity - 1)
+    end
+  end
+  t.eq(Careers.Lost(state, "survey"), { { type = "probe.scan", quantity = 1 } })
+  local row: Core.CareerRow? = nil
+  for _, each in Core.Query.Careers(game).rows do
+    if each.career.id == "survey" then
+      row = each
+    end
+  end
+  t.eq(assert(row).again, true)
+  t.ok(Core.Submit(game, { kind = "ReplaceKit", actor = state.player.ship, what = "survey" }))
+  Core.Step(game)
+  t.eq(have("probe.scan"), 2)
+  local said = false
+  for _, event in Core.TakeEvents(game) do
+    said = said or (event.kind == "KitReplaced" and event.agent == agent and event.stacks == 1)
+  end
+  t.ok(said, "the handing over again should be said")
+  -- Lost again: there is no third time.
+  for _, item in Items.In(state, station, "hangar") do
+    if item.type == "probe.scan" then
+      Items.Take(state, item, item.quantity)
+    end
+  end
+  t.eq(refused("ReplaceKit", "survey"), `{agent} has handed it over twice already`)
+  -- A lesson that handed nothing over has nothing to ask for, and the next lesson starts afresh.
+  state.careers.flight = { done = 0, taken = true, count = 0, again = false }
+  t.eq(refused("ReplaceKit", "flight"), "that lesson handed nothing over")
+  t.eq(state.careers.survey.again, true)
+  state.careers.survey.taken = false
+  t.ok(Core.Submit(game, { kind = "AcceptLesson", actor = state.player.ship, what = "survey" }))
+  Core.Step(game)
+  t.eq(state.careers.survey.again, false)
+  -- A save from before has asked for nothing.
+  local file = Codec.Decode(Core.Save(game))
+  file.saveVersion = 55
+  file.state.careers.survey.again = nil
+  local old, oldLength = Codec.Encode(file)
+  t.eq(Core.Load(old, oldLength).state.careers.survey.again, false)
 end)
 
 return suite

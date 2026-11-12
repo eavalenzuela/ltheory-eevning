@@ -288,8 +288,9 @@ export type Bookmark = { id: number, name: string, system: number, x: number, y:
 
 -- How far a pilot has got with a career agent (Character/Careers): the
 -- lessons done, whether the next is in hand, and how much of what it
--- wants has been done since it was taken.
-export type Career = { done: number, taken: boolean, count: number }
+-- wants has been done since it was taken. 'again': what the lesson in
+-- hand handed over has been handed over a second time (once is all).
+export type Career = { done: number, taken: boolean, count: number, again: boolean }
 
 -- A pilot hired to fly one of the player's ships beside their own
 -- (Tactical/Fleet). Every skill counts as 'skill' for a ship they fly.

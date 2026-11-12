@@ -80,7 +80,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 55
+Core.SAVE_VERSION = 56
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -310,6 +310,15 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- save from before has given any.
   [49] = function(state: any)
     state.couriers = state.couriers or {}
+  end,
+  -- 56: a lesson's kit is handed over again, once, to a pilot who has
+  -- lost it. Nobody of a save from before has asked.
+  [55] = function(state: any)
+    for _, career in state.careers do
+      if career.again == nil then
+        career.again = false
+      end
+    end
   end,
   -- 55: pirates mass in a system now and then. A save from before has
   -- had none, and the first comes in its time.
@@ -702,7 +711,7 @@ local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones 
 local IMPLANT_COMMANDS = { PlugImplant = true, UnplugImplant = true }
 local FLEET_COMMANDS = { HirePilot = true, AssignShip = true, DismissPilot = true, FleetOrder = true }
 local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true, RedeemLoyalty = true }
-local CAREER_COMMANDS = { AcceptLesson = true, CompleteLesson = true }
+local CAREER_COMMANDS = { AcceptLesson = true, CompleteLesson = true, ReplaceKit = true }
 local CORPORATION_COMMANDS = { FoundCorporation = true, CorporationDeposit = true, CorporationWithdraw = true }
 local BOOSTER_COMMANDS = { TakeBooster = true }
 local COLONY_COMMANDS = { DeployColony = true, BuildFacility = true, RemoveFacility = true, StartExtraction = true, Export = true }
@@ -1287,8 +1296,10 @@ end
 -- wants is done, and whether it can be taken or reported done now (and
 -- if not, why not). And the station the agents are at, with whether the
 -- pilot is docked there.
+-- ('again': whether what the lesson in hand handed over can be handed
+-- over again now, to a pilot who has lost it; and why not, if not.)
 export type CareerRow = { career: Careers.Career, agent: string, done: number, taken: boolean, lesson: Careers.Lesson?,
-  gifts: { Careers.Stack }, have: number, need: number, can: boolean, why: string }
+  gifts: { Careers.Stack }, have: number, need: number, can: boolean, why: string, again: boolean, whyNot: string }
 export type CareersStatus = { rows: { CareerRow }, station: number, here: boolean, begun: boolean }
 function Query.Careers(game: Game): CareersStatus
   local state = game.state
@@ -1305,8 +1316,10 @@ function Query.Careers(game: Game): CareersStatus
       can, why = validate(state, { kind = if mine.taken then "CompleteLesson" else "AcceptLesson", actor = ship.id, what = career.id })
     end
     begun = begun or mine.taken or mine.done > 0
+    local again, whyNot = validate(state, { kind = "ReplaceKit", actor = ship.id, what = career.id })
     table.insert(rows, { career = career, agent = Careers.Agent(state, career.id), done = mine.done, taken = mine.taken, lesson = lesson,
-      gifts = if lesson then Careers.Gifts(state, lesson) else {}, have = have, need = need, can = can, why = why or "" })
+      gifts = if lesson then Careers.Gifts(state, lesson) else {}, have = have, need = need, can = can, why = why or "",
+      again = again, whyNot = whyNot or "" })
   end
   return { rows = rows, station = station, here = ship.docked == station, begun = begun }
 end
