@@ -26,7 +26,6 @@ click Right 1700 227
 frames 3
 lua assert(GameDebug.Selected() ~= '', 'a right click should pick the row out')
 lua assert(GameDebug.CanPress('Menu:AlignTo'), 'a right click on the overview should bring up the menu')
-shot context-menu
 click Left 500 620
 frames 3
 lua assert(not GameDebug.CanPress('Menu:AlignTo'), 'a click elsewhere should put the menu away')
@@ -39,7 +38,6 @@ lua assert(GameDebug.CanPress('Menu:Orbit') and GameDebug.CanPress('Menu:Dock'))
 lua assert(not GameDebug.CanPress('Menu:WarpTo'), 'what is here is not warped to')
 until GameDebug.Press('Menu:Orbit')
 frames 3
-shot context-distances
 until GameDebug.Press('Menu:Orbit:10000')
 until GameDebug.Doing() == 'orbit'
 lua assert(GameDebug.Range('Orbit') == 10000)

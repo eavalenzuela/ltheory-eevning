@@ -630,6 +630,10 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
   scene.system = system
 
   local container = Object_System(vector.create(0, 0, 0), game.state.galaxySeed * 7919 + system)
+  -- (the camera goes into the new system now, while the old one is still
+  -- there to be left: the engine moves it only when it next draws, and
+  -- by then the old one may have been thrown away under it)
+  container:AddInterior(scene.camera)
   scene.container = container
   scene.fx = Effects.New(container)
   local interior = container:GetInteriorObjects()
@@ -1056,8 +1060,11 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       -- where the scene goes with the ship and it has not moved)
       local trail = math.clamp(6 * ball.radius / math.max(ball.maxVelocity, 1), 0.8, 20)
       for index, engine in built.engines do
+        -- (and none while the pilot's own ship is in warp: the scene goes
+        -- with that ship then, and every other one is somewhere else in
+        -- it each frame)
         Effects.Thrust(fx, id * 16 + index, at + (right * engine.at.x + up * engine.at.y + look * engine.at.z) * unit, -look,
-          engine.radius * unit, throttle, color, scene.time, trail)
+          engine.radius * unit, throttle, color, scene.time, if grid == 0 then nil else trail)
       end
     end
   end

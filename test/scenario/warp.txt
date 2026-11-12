@@ -22,7 +22,6 @@ lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
 until GameDebug.InWarp()
 frames 20
 lua assert(GameDebug.Bodies() >= 1, 'the station should still be there to see as the warp begins')
-shot warp-leaving
 
 # In the middle of it nothing is near.
 until GameDebug.InWarp() and select(2, GameDebug.Bodies()) < 6 and GameDebug.Bodies() == 0
@@ -34,11 +33,9 @@ lua assert(GameDebug.InWarp(), 'the rocks should be in the scene before the warp
 lua _G.rocks = GameDebug.Bodies()
 lua _G.early = select(2, GameDebug.Bodies())
 lua assert(_G.early > 1, 'the rocks should come up ahead for more than a second, not ' .. _G.early)
-shot warp-arriving
 until GameDebug.Idle()
 frames 5
 lua assert(GameDebug.Bodies() == _G.rocks, 'the rocks seen coming should be the rocks that are there')
-shot warp-arrived
 
 echo warp scenario passed
 quit

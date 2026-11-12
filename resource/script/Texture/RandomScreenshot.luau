@@ -9,7 +9,9 @@ local SPLASH = "resource/texture/splash.png"
 return {
   Get = function(): Texture
     local path = SPLASH
-    if OS_IsDirectory(DIR) then
+    -- (a scripted run is one whose pictures are compared: it has the
+    -- splash image whatever has been saved since)
+    if not Host.scripted and OS_IsDirectory(DIR) then
       local contents = Directory_List(DIR)
       if contents.size > 0 then
         path = DIR .. contents:Get(Int_Random(contents.size))

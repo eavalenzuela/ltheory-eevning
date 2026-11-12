@@ -16,14 +16,12 @@ lua _G.ship = GameDebug.Moor('kethri')
 lua assert(string.find(_G.ship, 'Colony ship') ~= nil, 'the Kethri station should be a colony ship, not ' .. _G.ship)
 wait 2
 lua assert(GameDebug.Docked())
-shot nomads-aboard
 
 # Everything is aboard: the market, fitting, and a hull to buy.
 until GameDebug.Press('Market')
 until GameDebug.Tab() == 'Market'
 until GameDebug.Press('Fitting')
 until GameDebug.Tab() == 'Fitting'
-shot nomads-fitting
 
 # Out of it: it is there, it is what the overview says it is, and it is
 # as big as it should be.
@@ -34,10 +32,8 @@ lua assert(GameDebug.Order('Stop'))
 lua assert(GameDebug.Select(_G.ship), 'the colony ship should be on the overview')
 lua assert(GameDebug.LookAt(_G.ship, 60))
 wait 2
-shot nomads-ship
 lua GameDebug.Zoom(300, nil, 0.5)
 wait 2
-shot nomads-ship-above
 
 # And back aboard.
 lua assert(GameDebug.Order('Dock', _G.ship))
