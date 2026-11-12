@@ -8,6 +8,13 @@
 # orbited at 10 km and then kept at 25, and the belt is warped to at
 # 30 km. A distance picked is the one the plain button and the key use
 # from then on.
+#
+# Then the two other menus of the kind. A right click on a plain button
+# that gives its order at a distance brings up that order's distances,
+# and one picked is the button's: nothing is ordered. And the menu a
+# right click on empty space brings up has what there is in the system
+# to go to, by kind: a station picked from it is selected, and the menu
+# becomes the one for that station.
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
@@ -72,6 +79,48 @@ lua GameDebug.TimeScale(8)
 until GameDebug.InWarp()
 until GameDebug.Idle()
 lua assert(math.abs(GameDebug.Distance('belt') - 30000) < 2000, 'the warp should end 30 km short, not ' .. GameDebug.Distance('belt'))
+
+# A right click on the plain Orbit button (in a 1920x1080 window): its
+# distances. 50 km is picked, the button says so, and the ship has been
+# given no order.
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Order('Stop'))
+until GameDebug.Doing() == 'stop'
+lua assert(GameDebug.Select('belt'))
+frames 3
+lua assert(GameDebug.CanPress('Orbit 10 km'))
+click Right 1718 89
+frames 3
+lua assert(select(2, GameDebug.Range('Orbit')) == 'set', 'a right click on the Orbit button should bring up its distances')
+lua assert(GameDebug.CanPress('Set:Orbit:50000') and not GameDebug.CanPress('Menu:Orbit'))
+until GameDebug.Press('Set:Orbit:50000')
+frames 3
+lua assert(GameDebug.Range('Orbit') == 50000 and select(2, GameDebug.Range('Orbit')) == '', 'the distance should be set and the menu gone')
+lua assert(GameDebug.CanPress('Orbit 50 km'), 'the plain button should say the distance picked')
+lua assert(GameDebug.Doing() == 'stop', 'setting a distance orders nothing')
+
+# Empty space: stop, and what there is to go to. The stations come out
+# in a list, nearest first, and the first of them picked is selected,
+# with its own menu up where this one was.
+lua assert(GameDebug.Context())
+frames 3
+lua assert(select(2, GameDebug.Range('Orbit')) == 'space')
+lua assert(GameDebug.CanPress('Space:stop') and GameDebug.CanPress('Space:station') and GameDebug.CanPress('Space:gate'))
+lua assert(GameDebug.CanPress('Space:belt') and GameDebug.CanPress('Space:planet'))
+until GameDebug.Press('Space:station')
+frames 3
+lua assert(GameDebug.CanPress('Space:station:1'), 'the stations should be listed')
+until GameDebug.Press('Space:station:1')
+frames 3
+lua assert(select(2, GameDebug.Range('Orbit')) == 'thing', 'a place picked should have its own menu up')
+lua assert(GameDebug.CanPress('Menu:WarpTo'), 'a station that is not here is warped to')
+until GameDebug.Press('Menu:WarpTo')
+frames 3
+until GameDebug.Press('Menu:WarpTo:0')
+lua GameDebug.TimeScale(8)
+until GameDebug.InWarp()
+until GameDebug.Idle()
+lua assert(GameDebug.Distance('station') < 20000, 'the warp should end at a station')
 
 echo context scenario passed
 quit

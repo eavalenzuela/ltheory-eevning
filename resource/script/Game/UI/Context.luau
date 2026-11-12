@@ -13,11 +13,24 @@
 -- runs: the plain order of that kind (the selected thing's button, the
 -- key) is given at it from then on (Context.Range).
 --
+-- Two more menus are of the same kind. A right click on one of the
+-- plain buttons that give an order at a distance (Orbit, Keep, Warp to)
+-- brings up that order's distances and nothing else, and one picked is
+-- the button's from then on: no order is given (Context.Set). And a
+-- right click on empty space brings up what there is in the system to
+-- go to, by kind (stations, gates, belts, planets, moons, places
+-- marked), each kind opening a list of them, nearest first; one picked
+-- is selected, and the menu becomes the one for it (Context.OpenSpace).
+--
 -- Its rows' names, for a script (Im.Press): "Menu:<order>" ("Menu:Orbit",
 -- "Menu:KeepAtRange", "Menu:WarpTo", "Menu:Approach", ...), and in a
--- menu of distances "Menu:<order>:<metres>" ("Menu:Orbit:10000").
+-- menu of distances "Menu:<order>:<metres>" ("Menu:Orbit:10000"); for a
+-- button's distances "Set:<order>:<metres>"; and out in space
+-- "Space:stop", "Space:<kind>" ("Space:station") and, in a kind's list,
+-- "Space:<kind>:<n>" for the nth of them.
 
 local Core = require("@lt/Core/Api")
+local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
 local Session = require("@lt/Game/Session")
 
@@ -32,7 +45,11 @@ local ranges: { [string]: number } = { Orbit = 5000, KeepAtRange = 10000, WarpTo
 
 local WIDTH, SUB_WIDTH, ROW = 172, 112, 24
 
-local open = 0            -- what the menu is for (an overview entry's id); 0: there is none
+-- (what the menu is for: an overview entry's id; 0: there is none; -1:
+-- empty space; -2: the distances of the order 'setting')
+local open = 0
+local SPACE, SET = -1, -2
+local setting = ""
 local atX, atY = 0, 0
 local out = ""            -- the order whose distances are out beside it; "": none
 local fresh = false       -- opened this frame: the click that opened it is not one to close it
@@ -58,6 +75,31 @@ end
 function Context.Close()
   open, out = 0, ""
 end
+
+-- The distances of an order, to choose the one its plain button gives
+-- it at: nothing is ordered.
+function Context.Set(kind: string, x: number, y: number)
+  open, setting, atX, atY, out, fresh = SET, kind, x, y, "", true
+end
+
+-- What there is in the system to go to, for a right click on empty space.
+function Context.OpenSpace(x: number, y: number)
+  open, atX, atY, out, fresh = SPACE, x, y, "", true
+end
+
+-- What the menu is: "" (none), "space", "set", or "thing".
+function Context.Kind(): string
+  return if open == 0 then "" elseif open == SPACE then "space" elseif open == SET then "set" else "thing"
+end
+
+-- The kinds of place a right click on empty space lists, each with what
+-- it is called there. (Rocks, ships and wrecks are on the overview.)
+local PLACES: { { string } } = {
+  { "station", "Stations" }, { "gate", "Stargates" }, { "belt", "Asteroid belts" }, { "planet", "Planets" },
+  { "moon", "Moons" }, { "site", "Sites found" }, { "bookmark", "Places marked" },
+}
+-- How many of a kind are listed at most: the nearest.
+local LISTED = 14
 
 -- (an order with 'near' is for what is here, on the ship's own grid:
 -- what is not is warped to first)
@@ -105,6 +147,125 @@ end
 function Context.Draw(session: Session.Session, entries: { Core.Entry }, left: number, top: number, right: number, bottom: number)
   Im.Release()
   if open == 0 then
+    return
+  end
+  if open == SET then
+    -- The distances of one order: the one picked is its button's from now on.
+    local distances: { number } = if setting == "WarpTo" then Context.WARPS else Context.ORBITS
+    local height = #distances * ROW + 30
+    local x = math.clamp(atX, left + 4, math.max(left + 4, right - SUB_WIDTH - 24))
+    local y = math.clamp(atY, top + 4, math.max(top + 4, bottom - height - 4))
+    local width = SUB_WIDTH + 20
+    local within = Im.Inside(x, y, width, height)
+    Im.Panel(x, y, width, height)
+    Im.Text(if setting == "Orbit" then "Orbit at" elseif setting == "KeepAtRange" then "Keep at" else "Warp to at", x + 10, y + 6, 12, Im.DIM)
+    local picked = false
+    for at, range in distances do
+      local rowY = y + 26 + (at - 1) * ROW
+      local hot, clicked = Im.Area(`Set:{setting}:{range}`, x + 2, rowY, width - 4, ROW, true)
+      if hot then
+        Im.Fill(x + 2, rowY, width - 4, ROW, Im.ACCENT, 0.3)
+      end
+      Im.Text(Context.Distance(range), x + 12, rowY + 4, 14, if range == ranges[setting] then Im.ACCENT else Im.TEXT)
+      if clicked then
+        ranges[setting] = range
+        picked = true
+      end
+    end
+    if picked or (not fresh and not within and (Im.Pressed() or Im.RightPressed())) then
+      Context.Close()
+    end
+    fresh = false
+    return
+  elseif open == SPACE then
+    -- Empty space: stop, and what there is to go to, by kind.
+    local kinds: { { string } } = {}
+    local of: { [string]: { Core.Entry } } = {}
+    for _, each in entries do
+      local list = of[each.kind]
+      if list == nil then
+        list = {}
+        of[each.kind] = list
+      end
+      table.insert(list, each)
+    end
+    for _, place in PLACES do
+      if of[place[1]] then
+        table.insert(kinds, place)
+      end
+    end
+    local height = (#kinds + 1) * ROW + 30
+    local x = math.clamp(atX, left + 4, math.max(left + 4, right - WIDTH - 4))
+    local y = math.clamp(atY, top + 4, math.max(top + 4, bottom - height - 4))
+    local within = Im.Inside(x, y, WIDTH, height)
+    Im.Panel(x, y, WIDTH, height)
+    Im.Text("Out here", x + 10, y + 6, 12, Im.DIM)
+    local done = false
+    local canStop = Session.Can(session, "Stop", 0, nil)
+    local stopHot, stopClicked = Im.Area("Space:stop", x + 2, y + 26, WIDTH - 4, ROW, canStop)
+    if stopHot and canStop then
+      Im.Fill(x + 2, y + 26, WIDTH - 4, ROW, Im.ACCENT, 0.3)
+      out = ""
+    end
+    Im.Text("Stop the ship", x + 10, y + 30, 14, if canStop then Im.TEXT else Im.DIM)
+    if stopClicked and canStop then
+      Session.Order(session, "Stop")
+      done = true
+    end
+    local chosen: Core.Entry? = nil
+    for index, place in kinds do
+      local rowY = y + 26 + index * ROW
+      local hot, clicked = Im.Area(`Space:{place[1]}`, x + 2, rowY, WIDTH - 4, ROW, true)
+      if hot or out == place[1] then
+        Im.Fill(x + 2, rowY, WIDTH - 4, ROW, Im.ACCENT, if hot then 0.3 else 0.16)
+      end
+      Im.Text(place[2], x + 10, rowY + 4, 14, Im.TEXT)
+      Im.TextRight(">", x + WIDTH - 10, rowY + 4, 14, Im.DIM)
+      if hot or clicked then
+        out = place[1]
+      end
+      if out == place[1] then
+        -- Those of the kind, nearest first, beside the row.
+        local list = table.clone(of[place[1]])
+        table.sort(list, function(a: Core.Entry, b: Core.Entry): boolean
+          if a.distance ~= b.distance then
+            return a.distance < b.distance
+          end
+          return a.id < b.id
+        end)
+        local shown = math.min(#list, LISTED)
+        local listWidth = 250
+        local subHeight = shown * ROW + 8
+        local subX = if x + WIDTH + listWidth + 4 <= right then x + WIDTH - 2 else x - listWidth + 2
+        local subY = math.clamp(rowY - 4, top + 4, math.max(top + 4, bottom - subHeight - 4))
+        within = within or Im.Inside(subX, subY, listWidth, subHeight)
+        Im.Panel(subX, subY, listWidth, subHeight)
+        for at = 1, shown do
+          local each = list[at]
+          local subRowY = subY + 4 + (at - 1) * ROW
+          local subHot, subClicked = Im.Area(`Space:{place[1]}:{at}`, subX + 2, subRowY, listWidth - 4, ROW, true)
+          if subHot then
+            Im.Fill(subX + 2, subRowY, listWidth - 4, ROW, Im.ACCENT, 0.3)
+          end
+          local name = if #each.name > 26 then string.sub(each.name, 1, 24) .. ".." else each.name
+          Im.Text(name, subX + 10, subRowY + 4, 13, if each.onGrid then Im.TEXT else Im.DIM)
+          Im.TextRight(Format.Distance(each.distance), subX + listWidth - 10, subRowY + 5, 12, Im.DIM)
+          if subClicked then
+            chosen = each
+          end
+        end
+      end
+    end
+    if chosen then
+      -- (picked out, and the menu is the one for it, where this one was)
+      session.selected = chosen.id
+      Context.Open(chosen.id, x, y)
+      return
+    end
+    if done or (not fresh and not within and (Im.Pressed() or Im.RightPressed())) then
+      Context.Close()
+    end
+    fresh = false
     return
   end
   local entry: Core.Entry? = nil

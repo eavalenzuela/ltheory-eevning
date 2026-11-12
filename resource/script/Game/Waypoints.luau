@@ -88,6 +88,32 @@ local function stop(game: Core.Game, ship: number, mission: State.Mission): (num
   return mission.station, home
 end
 
+-- The systems, other than the one the pilot is in, that what they have
+-- set out to do lies in: for each job in hand, where it is next to be
+-- done or paid, and for a lesson to report, the agents' system. By the
+-- system's id: why ("job", "lesson"). For the map.
+function Waypoints.Systems(session: Session.Session): { [number]: string }
+  local game = session.game
+  local player = Core.Query.Player(game)
+  local found: { [number]: string } = {}
+  for _, held in Core.Query.Missions(game).inHand do
+    local _, system = stop(game, player.ship, held.mission)
+    if system ~= player.system then
+      found[system] = "job"
+    end
+  end
+  local careers = Core.Query.Careers(game)
+  for _, row in careers.rows do
+    if row.taken and row.lesson and row.lesson.bring == nil and row.have >= row.need then
+      local system = Space.SystemOf(game.state, careers.station)
+      if system ~= player.system and found[system] == nil then
+        found[system] = "lesson"
+      end
+    end
+  end
+  return found
+end
+
 function Waypoints.Of(session: Session.Session): Marks
   local game = session.game
   local state = game.state

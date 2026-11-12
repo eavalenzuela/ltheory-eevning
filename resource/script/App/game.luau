@@ -106,8 +106,13 @@ function Debug.Order(kind: string, what: string?, range: number?): boolean
 end
 
 -- Bring up the menu a right click on something would (Game/UI/Context),
--- with it picked out. False if nothing matches.
-function Debug.Context(what: string): boolean
+-- with it picked out. False if nothing matches. With nothing named: the
+-- menu a right click on empty space brings up.
+function Debug.Context(what: string?): boolean
+  if what == nil then
+    Context.OpenSpace(700, 300)
+    return true
+  end
   local entry = find(what)
   if entry == nil then
     return false
@@ -118,9 +123,10 @@ function Debug.Context(what: string): boolean
 end
 
 -- The distance the plain order of a kind is given at ("Orbit",
--- "KeepAtRange", "WarpTo"): what was last picked from a menu.
-function Debug.Range(kind: string): number
-  return Context.Range(kind)
+-- "KeepAtRange", "WarpTo"): what was last picked from a menu. And what
+-- menu is up now: "" (none), "thing", "space" or "set".
+function Debug.Range(kind: string): (number, string)
+  return Context.Range(kind), Context.Kind()
 end
 
 function Debug.Select(what: string): boolean
@@ -1583,6 +1589,12 @@ end
 -- 0), and where it is looking from: its yaw and pitch.
 function Debug.Tracking(): (number, number, number)
   return scene.tracking, scene.yaw, scene.pitch
+end
+
+-- How many times a gate in sight has been lit by a ship going through
+-- it (the pilot's own, or anybody's).
+function Debug.GatesLit(): number
+  return scene.gates
 end
 
 -- Whether the pilot's own ship is drawn cloaked (as light bending round

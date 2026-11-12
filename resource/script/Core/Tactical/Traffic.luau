@@ -123,12 +123,13 @@ local function patrolKind(faction: Factions.Faction, class: string): Pirates.Kin
 end
 
 -- Take a ship of the traffic out of the game: its ball, what it
--- carries, and every record of it.
-local function remove(state: State.State, id: number, reason: string, events: { Event })
+-- carries, and every record of it. ('gate': the gate it went out by,
+-- for one that has jumped: the view lights it.)
+local function remove(state: State.State, id: number, reason: string, events: { Event }, gate: number?)
   local ball = state.balls[id]
   if ball then
     Space.RemoveBall(state, ball)
-    table.insert(events, { kind = "BallRemoved", ball = id, reason = reason })
+    table.insert(events, { kind = "BallRemoved", ball = id, reason = reason, gate = gate })
   end
   for _, item in Items.In(state, id, nil) do
     Items.Take(state, item, item.quantity)
@@ -204,7 +205,8 @@ local function hauler(state: State.State, system: number, rng: Rng.Rng, events: 
     ship = Space.NewShip(state, type, name, owner, 0)
     local x, y, z = near(rng, gate, 3000, 8000)
     local ball = Space.Launch(state, ship, system, x, y, z)
-    table.insert(events, { kind = "BallAdded", ball = ball.id })
+    -- (it has come in by the gate, as far as anybody can see)
+    table.insert(events, { kind = "BallAdded", ball = ball.id, gate = gate.id })
     if #stations > 0 then
       local station = stations[Rng.Int(rng, #stations) + 1]
       enlist(state, ship, "in", station.id, system)
@@ -417,7 +419,7 @@ function Traffic.Step(state: State.State, events: { Event })
           -- At its gate: a moment, and it is through.
           record.wait += 1
           if record.wait > 5 then
-            remove(state, id, "jumped", events)
+            remove(state, id, "jumped", events, record.goal)
           end
         elseif record.kind == "out" then
           if not order(state, { kind = "WarpTo", actor = id, target = record.goal }, events) then

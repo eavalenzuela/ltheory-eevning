@@ -259,10 +259,13 @@ local function drawBrackets(session: Session.Session, scene: Scene.Scene, entrie
       Session.Do(session, { kind = "Goto", actor = 0, x = way.x, y = way.y, z = way.z })
     end
   end
-  -- (a right click picks it out too, and brings up what can be done about it)
+  -- (a right click picks it out too, and brings up what can be done about
+  -- it; and on empty space, what there is in the system to go to)
   if clicked ~= 0 and Im.RightPressed() and not overInterface then
     session.selected = clicked
     Context.Open(clicked, cursor.x, cursor.y)
+  elseif ball and Im.RightPressed() and not overInterface then
+    Context.OpenSpace(cursor.x, cursor.y)
   end
 end
 
@@ -491,6 +494,12 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
       local pressed = key ~= nil and Keys.Did(key) and can
       if Im.Button(order.label, bx, by, buttonWidth, 26, can) or pressed then
         Session.Order(session, order.kind, entry.id, order.range)
+      end
+      -- (a right click on one that is given at a distance: its distances,
+      -- for the one this button gives it at from now on)
+      if (order.kind == "Orbit" or order.kind == "KeepAtRange" or order.kind == "WarpTo") and Im.Inside(bx, by, buttonWidth, 26)
+        and Im.RightPressed() then
+        Context.Set(order.kind, Im.Cursor().x, Im.Cursor().y)
       end
     end
   end

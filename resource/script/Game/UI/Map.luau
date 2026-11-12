@@ -17,6 +17,7 @@ local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Im = require("@lt/Game/UI/Im")
 local Session = require("@lt/Game/Session")
+local Waypoints = require("@lt/Game/Waypoints")
 
 local Map = {}
 
@@ -24,6 +25,8 @@ local SIDE = 300          -- the panel beside the map
 local MARGIN = 28
 
 local UNCLAIMED = vector.create(0.34, 0.35, 0.38)
+-- (where the pilot is next to go: the gold the overview uses for it)
+local NEXT = vector.create(1.0, 0.80, 0.28)
 -- A faction's colour on the map. (Not its hull paint, which is chosen
 -- to look right on a hull: two of the four are greys.)
 local WHOSE: { [string]: vector } = {
@@ -188,6 +191,12 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   local player = Core.Query.Player(game)
   local here = player.system
   local route = Session.Route(session)
+  -- (the systems the pilot's jobs lie in, in order of their ids)
+  local jobSystems: { number } = {}
+  for id in Waypoints.Systems(session) do
+    table.insert(jobSystems, id)
+  end
+  table.sort(jobSystems)
   for index = 2, #route do
     Glyph_Draw(Glyph_Line(centre + made.at[route[index - 1]], centre + made.at[route[index]], 1, 1), 0, 1, Colors.White, 0.9)
   end
@@ -216,6 +225,18 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   mark(here, 11, Colors.White, true)
   if session.destination ~= 0 and session.destination ~= here then
     mark(session.destination, 11, Im.ACCENT, true)
+  end
+  -- Where the pilot is next to go, in the gold the overview picks such
+  -- places out in: the next system of the way to the destination, and
+  -- the systems their jobs in hand are next to be done or paid in.
+  local nextStop = if #route >= 2 then route[2] else 0
+  if nextStop ~= 0 and nextStop ~= session.destination then
+    mark(nextStop, 8, NEXT, true)
+  end
+  for _, id in jobSystems do
+    if id ~= nextStop then
+      mark(id, 6, NEXT, id == hot or id == picked)
+    end
   end
   if picked ~= 0 and picked ~= here and picked ~= session.destination then
     mark(picked, 9, Im.WARN, true)
@@ -285,7 +306,22 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   line += 44
   if session.destination ~= 0 then
     Im.Text(`Going to {systems[session.destination].name}: {math.max(0, #route - 1)} jumps`, px, line, 13, Im.ACCENT)
-    line += 22
+    line += 20
+    if nextStop ~= 0 then
+      Im.Text(`Next: {systems[nextStop].name}`, px, line, 13, NEXT)
+      line += 20
+    end
+  end
+  if #jobSystems > 0 then
+    -- (the ringed systems: what is in hand there)
+    local names: { string } = {}
+    for index, id in jobSystems do
+      if index <= 3 then
+        table.insert(names, systems[id].name)
+      end
+    end
+    Im.Text(`In hand at {table.concat(names, ", ")}` .. (if #jobSystems > 3 then ` and {#jobSystems - 3} more` else ""), px, line, 12, NEXT)
+    line += 20
   end
 
   -- What the colours mean.

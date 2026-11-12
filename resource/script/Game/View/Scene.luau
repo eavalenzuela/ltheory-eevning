@@ -130,6 +130,8 @@ export type Scene = {
   -- out of it there ('arrived': when, or -1).
   jump: number,
   arrived: number,
+  lit: boolean,                       -- the gate the pilot came out of has had its light (once an arrival)
+  gates: number,                      -- how many times a gate has been lit by somebody going through it
   veil: number,                       -- how much of the view is whited out, 0 to 1 (the interface draws it)
   rush: number,                       -- how far the view is opened out by a jump, 0 to 1
   standing: { [number]: string },     -- what a pilot's starbase was made of when it was put up here
@@ -202,7 +204,7 @@ function Scene.New(camera: Camera): Scene
     proxies = {}, celestials = {}, worlds = {}, passing = 0, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6, tracking = 0,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
-    wreckage = {}, works = {}, offsets = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, veil = 0, rush = 0,
+    wreckage = {}, works = {}, offsets = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
     standing = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0, ghosts = {},
   }
 end
@@ -802,6 +804,33 @@ local JUMP_OUT = 1.12
 local JUMP_IN = 1.5
 local JUMP_LIGHT = vector.create(0.72, 0.90, 1.0)
 
+-- A gate lights when a ship goes through it, either way: a flash at it
+-- as big as the gate, and a ring thrown out from it.
+local function lightGate(scene: Scene, fx: Effects.Fx, id: number, life: number)
+  local at: vector? = scene.screen[id]
+  local gate = scene.statics[id]
+  if at and gate and gate.kind == "gate" then
+    Effects.Burst(fx, at, JUMP_LIGHT, 2.2 * gate.radius, 0, life, scene.time)
+    Effects.Burst(fx, at, JUMP_LIGHT, 7 * gate.radius, 1, life * 1.4, scene.time)
+    scene.gates += 1
+  end
+end
+
+-- The gate of the scene nearest a place in it, within 'reach' (0: none).
+local function gateNear(scene: Scene, at: vector, reach: number): number
+  local found, least = 0, reach
+  for id, object in scene.statics do
+    local where: vector? = scene.screen[id]
+    if object.kind == "gate" and where then
+      local far = vector.magnitude(where - at)
+      if far < least or (far == least and id < found) then
+        found, least = id, far
+      end
+    end
+  end
+  return found
+end
+
 -- Bring the engine's objects into line with the Core for this frame.
 function Scene.Sync(scene: Scene, session: Session.Session)
   local game = session.game
@@ -829,6 +858,8 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       if at and scene.fx then
         Effects.Burst(scene.fx, at, JUMP_LIGHT, 60 * radius, 0, JUMP_OUT * 1.2, scene.time)
         Effects.Burst(scene.fx, at, JUMP_LIGHT, 220 * radius, 1, JUMP_OUT * 1.2, scene.time)
+        -- (and the gate it went through lights)
+        lightGate(scene, scene.fx, gateNear(scene, at, 50000), JUMP_OUT)
       end
     end
     if through and scene.time - scene.jump < JUMP_OUT then
@@ -841,6 +872,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     end
     -- (the next system is made behind the white)
     scene.arrived = if through then scene.time else -1
+    scene.lit = not through
     scene.jump = -1
     enterSystem(scene, game, player.system)
   end
@@ -1273,9 +1305,31 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     end
   end
 
+  -- The gate the pilot has just come out of lights, as the white clears.
+  if not scene.lit then
+    local at: vector? = scene.screen[player.ship]
+    if at then
+      scene.lit = true
+      lightGate(scene, fx, gateNear(scene, at, 50000), JUMP_IN)
+    end
+  end
+
   -- What just happened, as effects (Game/View/Effects).
   for _, event in session.events do
-    if event.kind == "Shot" then
+    if event.kind == "Jumped" and event.ship ~= player.ship and grid ~= 0 then
+      -- Somebody else through a gate that is in sight: out of this
+      -- system by one of its gates, or into it by one.
+      if event.from == player.system then
+        lightGate(scene, fx, event.gate, 0.7)
+      end
+      if event.to == player.system then
+        lightGate(scene, fx, event.arrival, 0.7)
+      end
+    elseif (event.kind == "BallAdded" or event.kind == "BallRemoved") and event.gate and grid ~= 0 then
+      -- (and the system's own traffic, which comes in by a gate and goes
+      -- out by one as far as anybody can see: Tactical/Traffic)
+      lightGate(scene, fx, event.gate, 0.7)
+    elseif event.kind == "Shot" then
       local from, to = state.balls[event.from], state.balls[event.to]
       if from and to then
         local item = state.items[event.item]

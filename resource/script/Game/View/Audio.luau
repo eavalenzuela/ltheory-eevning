@@ -179,6 +179,8 @@ local OWN: { [string]: { any } } = {
   LockCompleted = { "ui/targetacquired.ogg", 0.18 }, LockLost = { "ui/targetlost.ogg", 0.14 },
   Scanned = { "made/ui/scan.ogg", 0.07 },
 }
+-- How loud somebody else's warp drive is, right beside the pilot.
+local OTHERS_WARP = 0.12
 local SHIP: { [string]: { any } } = {
   Jumped = { "made/gate/jump.ogg", 0.28 }, Docked = { "ui/confirm.ogg", 0.18 }, Undocked = { "ui/activate.ogg", 0.18 },
 }
@@ -295,6 +297,17 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
       end
     elseif OWN[kind] and event.ball == mine then
       play(audio, OWN[kind][1], OWN[kind][2])
+    elseif (kind == "WarpStarted" or kind == "WarpEnded") and me then
+      -- Somebody else's drive, going in or coming out near by: the same
+      -- sound as the pilot's own, a little higher and a good deal
+      -- quieter, and quieter the farther off. (Not on top of one
+      -- another: a busy station has somebody coming or going all the time.)
+      local other = Core.Query.Ball(session.game, event.ball)
+      if other and other.system == me.system then
+        local far = math.sqrt((other.x - me.x) ^ 2 + (other.y - me.y) ^ 2 + (other.z - me.z) ^ 2)
+        local file = if kind == "WarpStarted" then "jumpdrive/activate.ogg" else "jumpdrive/deactivate.ogg"
+        play(audio, file, OTHERS_WARP * reach(far, 8000), "warp:" .. kind, 0.8, 1.25)
+      end
     elseif SHIP[kind] and event.ship == mine then
       play(audio, SHIP[kind][1], SHIP[kind][2])
     elseif ANY[kind] and not (kind == "PiratesArrived" and event.away) then
