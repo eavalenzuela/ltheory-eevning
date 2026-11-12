@@ -473,6 +473,46 @@ suite:Case("a moon with nothing under it takes no drill", function(t)
   t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "array.drill", 1).id }), "this moon has nothing worth a drill")
 end)
 
+suite:Case("a tower that has burnt its last feeds itself from the fuel in its hangar, a day's worth at a time, and is not dark for it", function(t)
+  local game, station = moored(t, 3)
+  local state = game.state
+  local starbase = state.starbases[station]
+  -- Three blocks in the tank, and five hundred in the hangar: when the three are burnt it takes a day's worth, and stays lit.
+  Items.Add(state, FUEL, 500, station, "hangar")
+  local dark, fed = false, 0
+  for _ = 1, 3 * 360 + 10 do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      dark = dark or event.kind == "StarbaseDark"
+      if event.kind == "StarbaseFuelled" and event.hangar then
+        fed += event.fuel
+      end
+    end
+  end
+  local day = SMALL.fuel * 24
+  t.eq({ dark, fed } :: { any }, { false, day } :: { any })
+  t.ok(Starbases.Lit(state, starbase), "the tower should have stayed lit")
+  local left = 0
+  for _, item in Items.In(state, station, "hangar") do
+    left += if item.type == FUEL then item.quantity else 0
+  end
+  t.eq(left, 500 - day)
+  t.ok(starbase.fuel > day - 3 and starbase.fuel <= day)
+  -- A dark tower with fuel put in its hangar lights itself; one with none stays dark.
+  starbase.fuel = 0
+  for _, item in Items.In(state, station, "hangar") do
+    if item.type == FUEL then
+      Items.Take(state, item, item.quantity)
+    end
+  end
+  steps(game, 5)
+  t.ok(not Starbases.Lit(state, starbase))
+  Items.Add(state, FUEL, 40, station, "hangar")
+  steps(game, 2)
+  t.ok(Starbases.Lit(state, starbase), "fuel in the hangar should light a dark tower")
+  t.eq(starbase.fuel, 40)
+end)
+
 suite:Case("a module can be unanchored again, into the tower's hangar", function(t)
   local game, station = moored(t, 100)
   anchor(t, game, "array.refining")

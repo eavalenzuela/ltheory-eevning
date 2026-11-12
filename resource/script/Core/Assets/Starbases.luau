@@ -17,7 +17,9 @@
 --   - It burns fuel blocks by the hour while it has any. With none it
 --     is dark: its field is down and none of its modules gives
 --     anything. Fuel is put in by a ship moored there, and it lights
---     again at once.
+--     again at once. And a tower that has burnt its last feeds itself
+--     from whatever fuel is in its own hangar, a day's worth at a time:
+--     so fuel brought there by anybody keeps it lit.
 --   - A module is anchored by a ship moored there, from its hold or the
 --     tower's hangar, if the tower is lit and has the powergrid and CPU
 --     for it besides what it already carries. It takes a while to come
@@ -378,9 +380,26 @@ end
 -- has the room.
 local HOUR = math.floor(3600 / Constants.TICK + 0.5)
 
+-- A tower with nothing in its tank takes what fuel is in its own
+-- hangar, a day's worth at a time.
+local function feed(state: State.State, starbase: State.Starbase, events: { Event })
+  if starbase.fuel > 0 or not Starbases.Anchored(state, starbase) then
+    return
+  end
+  for _, item in Items.In(state, starbase.id, "hangar") do
+    if item.type == Structures.FUEL.id and starbase.fuel == 0 then
+      local take = math.min(item.quantity, Structures.towerById[starbase.tower].fuel * 24)
+      Items.Take(state, item, take)
+      starbase.fuel, starbase.burnt = take, state.tick
+      table.insert(events, { kind = "StarbaseFuelled", station = starbase.id, fuel = take, hangar = true })
+    end
+  end
+end
+
 function Starbases.Step(state: State.State, events: { Event })
   for _, id in state.starbaseIds do
     local starbase = state.starbases[id]
+    feed(state, starbase, events)
     -- (the drill: its hour runs from when it came online, and only
     -- while the tower is lit)
     local since = 0
@@ -415,6 +434,8 @@ function Starbases.Step(state: State.State, events: { Event })
         starbase.fuel -= 1
         starbase.burnt += every
       end
+      -- (its last block burnt: what is in the hangar, before it goes dark)
+      feed(state, starbase, events)
       if starbase.fuel == 0 then
         table.insert(events, { kind = "StarbaseDark", station = id })
       end

@@ -1391,6 +1391,97 @@ suite:Case("a pilot sent to buy pays no more than they were told and no more tha
   end
 end)
 
+suite:Case("a pilot set to keep a thing in stock buys what the hangar is short of, waits while it is not short, and goes again when it is", function(t)
+  local game, second = docked("industrial.hauler")
+  local state = game.state
+  local home = state.player.home
+  local other = others(game, 1)
+  local wing = hired(game, second)
+  local type = "fuel.block"
+  local each = math.ceil((Core.Query.BuyCost(game, other, type, 400) :: number) / 400 * 1.25)
+  local keep: State.Command = { kind = "FleetOrder", actor = 0, what = "stock", pilot = wing.id, target = other, type = type, quantity = 400,
+    price = each }
+  t.eq(refused(game, { kind = "FleetOrder", actor = 0, what = "stock", target = other, type = type, quantity = 400, price = each }),
+    "that is said to one pilot")
+  t.eq(refused(game, { kind = "FleetOrder", actor = 0, what = "stock", pilot = wing.id, target = home, type = type, quantity = 400, price = each }),
+    "that is this station: buy it here yourself")
+  t.ok((submit(game, keep)))
+  t.eq({ wing.order, wing.post, wing.base, wing.want, wing.keep, wing.limit } :: { any }, { "stock", other, home, type, 400, each } :: { any })
+  Core.TakeEvents(game)
+  -- The hangar has none: they go for four hundred, and bring them.
+  t.ok(waitFor(game, 3000, function()
+    return count(game, home, "hangar", type) == 400
+  end), "the stock was not brought")
+  t.ok(waitFor(game, 60, function()
+    return second.docked == home
+  end))
+  steps(game, 30)
+  local row = Core.Query.Fleet(game)[1]
+  t.eq({ row.doing, row.keep, row.want, second.docked } :: { any }, { "keeping stock", 400, Types.Info(type).name, home } :: { any })
+  t.eq(wing.order, "stock", "a standing order does not end when it is filled")
+  -- A little is used: not enough to go for (a tenth is forty).
+  local function use(units: number)
+    for _, item in Items.In(state, home, "hangar") do
+      if item.type == type then
+        Items.Take(state, item, units)
+      end
+    end
+  end
+  use(30)
+  steps(game, 200)
+  t.eq({ second.docked, count(game, home, "hangar", type) }, { home, 370 })
+  -- More is used: they go, and it is four hundred again.
+  use(120)
+  t.ok(waitFor(game, 60, function()
+    return state.balls[second.id] ~= nil
+  end), "the pilot did not go for more")
+  t.eq(wing.need, 150)
+  t.ok(waitFor(game, 3000, function()
+    return count(game, home, "hangar", type) == 400
+  end), "the stock was not made up")
+  -- The market has none to spare under the price: they say so, come back, and try again in ten minutes.
+  wing.limit = 1
+  use(200)
+  local short: any = nil
+  t.ok(waitFor(game, 3000, function()
+    for _, event in Core.TakeEvents(game) do
+      if event.kind == "StockShort" and event.pilot == wing.id then
+        short = event
+      end
+      t.ok(event.kind ~= "BuyEnded", "a standing order should not end for a market that is short")
+    end
+    return short ~= nil
+  end), "nothing was said of a market with none under the price")
+  t.eq({ short.type, short.station } :: { any }, { type, other } :: { any })
+  t.ok(waitFor(game, 600, function()
+    return second.docked == home
+  end))
+  local tried = state.tick
+  t.ok(wing.retry > tried and wing.retry <= tried + Fleet.RETRY)
+  steps(game, 100)
+  t.eq({ wing.order, second.docked } :: { any }, { "stock", home } :: { any }, "they should wait for their ten minutes")
+  wing.limit = each
+  t.ok(waitFor(game, Fleet.RETRY + 3000, function()
+    return count(game, home, "hangar", type) == 400
+  end), "the stock was not made up after the wait")
+  -- It is in the save; an older save has nobody keeping anything; and called back, they stop.
+  local data, length = Core.Save(game)
+  local loaded = Core.Load(data, length)
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 56
+  for _, kept in file.state.fleet do
+    kept.keep, kept.retry = nil, nil
+  end
+  local old, oldLength = Codec.Encode(file)
+  local opened = Core.Load(old, oldLength)
+  t.eq({ opened.state.fleet[wing.id].keep, opened.state.fleet[wing.id].retry }, { 0, 0 })
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "follow", pilot = wing.id })))
+  use(300)
+  steps(game, 200)
+  t.eq({ wing.order, second.docked } :: { any }, { "follow", home } :: { any })
+end)
+
 suite:Case("a market some jumps off is on the list without its system being put in the save; a pilot sent there goes, and the corporation pays", function(t)
   local game, second = docked("industrial.hauler")
   local state = game.state

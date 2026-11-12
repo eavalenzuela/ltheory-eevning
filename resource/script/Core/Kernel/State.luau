@@ -326,6 +326,11 @@ export type Wingman = {
   -- the average of a purchase ('limit'). It is bought at the station
   -- 'post' and brought to the station 'base'.
   want: string, need: number, limit: number,
+  -- For one set to keep a thing in "stock" (the same, as a standing
+  -- order): how many of it are to be kept in the hangar at 'base'
+  -- ('keep'), and the tick before which they do not go again, after a
+  -- market that had none for them ('retry').
+  keep: number, retry: number,
 }
 
 -- A place that is on nobody's chart (Tactical/Sites): 'id' is the place

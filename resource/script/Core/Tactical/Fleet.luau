@@ -68,6 +68,14 @@
 -- to be had under that price, or nothing left to pay with, they bring
 -- what they have and say so. Done, they wait where they brought it.
 --
+-- The same errand can be a standing order: so many of a thing are to be
+-- kept in the hangar where the pilot is docked. Whenever it is short of
+-- that by a tenth (or by a hold's worth) they go and buy what is
+-- missing, and bring it; and with nothing short they wait there. A
+-- market with too little for them is tried again in ten minutes. So a
+-- tower's fuel is seen to (a tower feeds itself from the fuel in its
+-- hangar: Assets/Starbases), or the minerals a line of work uses up.
+--
 -- Where the player is not, a hired pilot is on their own. Pirates come
 -- for them as they come for the player (Tactical/Pirates), half as
 -- often, and the fight is fought as any is; a pilot who is gone for
@@ -195,6 +203,11 @@ Fleet.STOPS = 5
 -- How many jumps off a market can be, to be offered as a place to send
 -- a pilot to buy at. (They will go further, sent.)
 Fleet.SHOPS = 5
+-- For a pilot who keeps a thing in stock: the share of what is kept
+-- that has to be missing before they go for more, and the ticks before
+-- they try again a market that had too little.
+Fleet.SHORT = 0.1
+Fleet.RETRY = 600
 
 -- Whether a type is of a kind a hauler carries. (Gas goes with ore: it
 -- is brought in the same way, by whoever was set to work a place.)
@@ -479,7 +492,8 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
         end
       end
       return true
-    elseif what == "buy" then
+    elseif what == "buy" or what == "stock" then
+      -- (so many to be brought, once; or so many to be kept there, from now on)
       if wing == nil then
         return false, "that is said to one pilot"
       end
@@ -579,7 +593,7 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     Corporation.Spend(state, found.fee, "hiring", events)
     local wing: State.Wingman = { id = State.NewId(state), name = found.name, skill = found.skill, wage = found.wage,
       paid = state.tick, ship = 0, order = "follow", target = 0, post = 0, base = 0, hauled = 0, experience = 0,
-      stops = {}, leg = 0, want = "", need = 0, limit = 0,
+      stops = {}, leg = 0, want = "", need = 0, limit = 0, keep = 0, retry = 0,
       cargo = "", sell = false, earned = 0, ward = 0, alarm = false }
     state.fleet[wing.id] = wing
     table.insert(state.fleetIds, wing.id)
@@ -635,17 +649,20 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
       table.insert(wing.stops, id)
     end
     table.insert(events, { kind = "FleetOrdered", what = "haul", target = wing.base })
-  elseif kind == "FleetOrder" and command.what == "buy" then
+  elseif kind == "FleetOrder" and (command.what == "buy" or command.what == "stock") then
     -- To the market named, and back to the station their ship is docked
     -- at. (The market's system is described now, if it never was.)
     local market = command.target :: number
+    local standing = command.what == "stock"
     Space.Describe(state, Space.SystemOf(state, market))
-    wing.order, wing.target = "buy", 0
+    wing.order, wing.target = command.what :: string, 0
     wing.post, wing.base = market, state.ships[wing.ship].docked
-    wing.want, wing.need, wing.limit = command.type :: string, command.quantity :: number, command.price :: number
+    wing.want, wing.limit = command.type :: string, command.price :: number
+    -- (a standing order works out what is missing each time it looks)
+    wing.need, wing.keep, wing.retry = if standing then 0 else command.quantity :: number, if standing then command.quantity :: number else 0, 0
     wing.stops, wing.leg = {}, 0
-    table.insert(events, { kind = "FleetOrdered", what = "buy", target = market, pilot = wing.id, name = wing.name,
-      type = wing.want, quantity = wing.need, price = wing.limit })
+    table.insert(events, { kind = "FleetOrdered", what = command.what, target = market, pilot = wing.id, name = wing.name,
+      type = wing.want, quantity = command.quantity, price = wing.limit })
   elseif kind == "FleetOrder" then
     for _, id in state.fleetIds do
       local each = state.fleet[id]
@@ -1004,7 +1021,28 @@ local function shop(state: State.State, wing: State.Wingman, ship: State.Ship, e
       end
       -- (no room for one more, with the hold as it is: that is the end of it)
       local room = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
-      if wing.need > 0 and room < info.volume then
+      if wing.order == "stock" then
+        -- A standing order: how many the hangar is short of what is to
+        -- be kept. Not for a trifle, and not while a market that had
+        -- too little is given its time.
+        if (state.tick + wing.id) % 5 ~= 0 then
+          return
+        end
+        local have = 0
+        for _, item in Items.In(state, home.id, "hangar") do
+          have += if item.type == wing.want then item.quantity else 0
+        end
+        local fits = if info.volume > 0 then math.floor(room / info.volume) else wing.keep
+        wing.need = math.max(0, wing.keep - have)
+        if fits < 1 then
+          table.insert(events, { kind = "BuyEnded", pilot = wing.id, name = wing.name, type = wing.want, short = wing.need,
+            station = home.id, reason = "there is no room in their hold" })
+          wing.order, wing.want, wing.need, wing.keep = "stay", "", 0, 0
+          return
+        elseif wing.need < math.max(1, math.min(math.floor(wing.keep * Fleet.SHORT), fits)) or state.tick < wing.retry then
+          return
+        end
+      elseif wing.need > 0 and room < info.volume then
         table.insert(events, { kind = "BuyEnded", pilot = wing.id, name = wing.name, type = wing.want, short = wing.need,
           station = home.id, reason = "there is no room in their hold" })
         wing.need = 0
@@ -1038,8 +1076,15 @@ local function shop(state: State.State, wing: State.Wingman, ship: State.Ship, e
         local reason = if quote == nil or quote.ask == nil or quote.stock < 1 then "there is no more to be had there"
           elseif quote.ask > wing.limit then `it is {math.ceil(quote.ask)} credits each there now`
           else "there is not the money for more"
-        table.insert(events, { kind = "BuyEnded", pilot = wing.id, name = wing.name, type = wing.want, short = wing.need,
-          station = market.id, reason = reason })
+        if wing.order == "stock" then
+          -- (a standing order goes on: they bring what they have, and try again later)
+          wing.retry = state.tick + Fleet.RETRY
+          table.insert(events, { kind = "StockShort", pilot = wing.id, name = wing.name, type = wing.want, short = wing.need,
+            station = market.id, reason = reason })
+        else
+          table.insert(events, { kind = "BuyEnded", pilot = wing.id, name = wing.name, type = wing.want, short = wing.need,
+            station = market.id, reason = reason })
+        end
         wing.need = 0
       end
     end
@@ -1234,7 +1279,7 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
   elseif wing.order == "haul" then
     carry(state, wing, ship, events)
     return
-  elseif wing.order == "buy" then
+  elseif wing.order == "buy" or wing.order == "stock" then
     shop(state, wing, ship, events)
     return
   elseif wing.order == "patrol" then

@@ -80,7 +80,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 56
+Core.SAVE_VERSION = 57
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -310,6 +310,14 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- save from before has given any.
   [49] = function(state: any)
     state.couriers = state.couriers or {}
+  end,
+  -- 57: a hired pilot can be set to keep a thing in stock. Nobody of a
+  -- save from before has been.
+  [56] = function(state: any)
+    for _, wing in state.fleet do
+      wing.keep = wing.keep or 0
+      wing.retry = wing.retry or 0
+    end
   end,
   -- 56: a lesson's kit is handed over again, once, to a pilot who has
   -- lost it. Nobody of a save from before has asked.
@@ -1604,8 +1612,9 @@ export type FleetRow = {
   stops: { string },  -- the names of every station collected at, in order
   -- for one sent to buy ('from' is the market's name and 'to' that of
   -- the station it is brought to): the name of the thing, and how many
-  -- are still to be bought
-  want: string, need: number,
+  -- are still to be bought; and for one who keeps it in stock, how many
+  -- are kept
+  want: string, need: number, keep: number,
   sells: boolean,     -- they sell what they bring in,
   earned: number,     -- and this is what that has made
   experience: number, -- what they have learned toward the next grade,
@@ -1626,7 +1635,7 @@ function Query.Fleet(game: Game): { FleetRow }
       ship = 0, shipName = "", hull = "", where = "no ship", near = false, distance = 0, shield = 1, armor = 1, structure = 1,
       doing = "no ship", hauled = wing.hauled, experience = wing.experience,
       cargo = wing.cargo, from = "", to = "", stops = {}, sells = wing.sell, earned = wing.earned,
-      want = "", need = 0,
+      want = "", need = 0, keep = 0,
       post = "", ward = "", hunted = wing.alarm,
       needed = if wing.skill >= Fleet.BEST then 0 else Fleet.Needed(wing.skill),
     }
@@ -1665,14 +1674,15 @@ function Query.Fleet(game: Game): { FleetRow }
         row.doing = if ball then (if why == "collect" and laden then "collecting" elseif laden then "carrying" else "going back for more")
           elseif ship.docked == wing.base then "unloading"
           elseif laden then "loading" else "waiting for cargo"
-      elseif wing.order == "buy" then
+      elseif wing.order == "buy" or wing.order == "stock" then
         local from, to = Space.Object(state, wing.post), Space.Object(state, wing.base)
         local info = Types.Get(wing.want)
         row.from, row.to = if from then from.name else "?", if to then to.name else "?"
-        row.want, row.need = if info then info.name else "?", wing.need
+        row.want, row.need, row.keep = if info then info.name else "?", wing.need, wing.keep
         local aboard = Fleet.Bought(state, wing, ship) > 0
         row.doing = if ball then (if aboard then "bringing it in" elseif wing.need > 0 then "going to buy" else "coming back")
-          elseif ship.docked == wing.base then "unloading" else "buying"
+          elseif ship.docked ~= wing.base then "buying"
+          elseif wing.order == "stock" then "keeping stock" else "unloading"
       elseif wing.order == "patrol" then
         local post = Space.Object(state, wing.post)
         row.post = if post then post.name else "?"

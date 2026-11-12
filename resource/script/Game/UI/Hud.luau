@@ -1071,7 +1071,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             -- (one set to mine is where they should be, wherever that is)
             if row.order == "mine" or row.order == "haul" then
               where = `{row.doing}, {row.hauled} units in`
-            elseif row.order == "buy" then
+            elseif row.order == "buy" or row.order == "stock" then
               where = `{row.doing}: {row.want}`
             elseif row.order == "patrol" then
               where = `{row.doing}: {row.post}`

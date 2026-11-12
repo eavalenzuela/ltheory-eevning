@@ -62,8 +62,11 @@ local sellPrice, buyPrice = 0, 0    -- 0: the best price that fills now
 local elsewhere = { key = "", age = 0, list = {} :: { Core.Source } }
 
 -- How much over what a market asks now a pilot sent there may pay, a
--- unit, on the average of a purchase: prices move while they fly.
+-- unit, on the average of a purchase: prices move while they fly. And
+-- one who is to keep a thing in stock from now on, more: prices move
+-- further in a week than in an hour.
 local LEEWAY = 1.1
+local STANDING = 1.25
 
 -- Industry: the blueprint shown and the runs entered.
 local blueprintChosen = ""
@@ -749,18 +752,27 @@ local function drawMarket(session: Session.Session, game: Core.Game, player: Cor
     for _, row in Core.Query.Fleet(game) do
       local ship = game.state.ships[row.ship]
       if goes == nil and ship and ship.docked == station and (row.order == "follow" or row.order == "stay") then
+        -- (one keeping stock here already is busy: called back from the Crew tab first)
         goes = row
       end
     end
     local fetch: State.Command = { kind = "FleetOrder", actor = 0, what = "buy", pilot = if goes then goes.id else 0, target = best.id,
       type = chosen, quantity = asked, price = math.ceil(best.each * LEEWAY) }
+    -- (or, as a standing order: so many kept in the hangar here from now on)
+    local keep: State.Command = { kind = "FleetOrder", actor = 0, what = "stock", pilot = if goes then goes.id else 0, target = best.id,
+      type = chosen, quantity = asked, price = math.ceil(best.each * STANDING) }
     local can, why = false, nil :: string?
+    local canKeep = false
     if goes then
       can, why = Session.CanDo(session, fetch)
+      canKeep = (Session.CanDo(session, keep))
     end
-    if Im.Button(if goes then shorten(`Send {string.match(goes.name, "^%S+") or goes.name}`, 14) else "Send a pilot", dx + 338, line, 108, 26,
+    if Im.Button(if goes then shorten(`Send {string.match(goes.name, "^%S+") or goes.name}`, 11) else "Send", dx + 318, line, 82, 26,
       can, "Fetch") then
       Session.Do(session, fetch)
+    end
+    if Im.Button("Keep", dx + 404, line, 42, 26, canKeep, "Fetch:keep") then
+      Session.Do(session, keep)
     end
     if goes and not can and why then
       Im.Text(shorten(why, 44), dx + 64, line + 30, 11, Im.WARN)
@@ -1275,6 +1287,9 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
       elseif row.order == "buy" then
         where = row.doing
         note = `{Format.Whole(row.need)} {row.want} still to buy at {row.from}, to bring to {row.to}`
+      elseif row.order == "stock" then
+        where = row.doing
+        note = `Keeps {Format.Whole(row.keep)} {row.want} in the hangar {if here then "here" else `at {row.to}`}, from {row.from}`
       elseif row.order == "haul" then
         where = row.doing
         -- (a round of several stations says how many it collects at)
@@ -1351,7 +1366,7 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
         Session.Do(session, haul)
       end
       reason = if can then nil else whyNot
-      if target and row.order ~= "haul" and row.order ~= "buy" then
+      if target and row.order ~= "haul" and row.order ~= "buy" and row.order ~= "stock" then
         note = `{target.name}: ` .. (if target.jumps == 0 then "in this system" elseif target.jumps == 1 then `1 jump, in {target.system}`
           else `{target.jumps} jumps, in {target.system}`) .. (if target.market then ", has a market" else ", no market")
       end

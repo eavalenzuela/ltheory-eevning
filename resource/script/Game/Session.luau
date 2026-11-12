@@ -131,8 +131,17 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "StarbaseAnchored" then
     local status = Core.Query.Starbase(session.game, event.station)
     Session.Say(session, `The tower is anchoring: it can be moored at in {if status then status.wait else 0} s`)
+  elseif kind == "StarbaseFuelled" and event.hangar then
+    local body = Core.Query.Body(session.game, event.station)
+    Session.Say(session, `{if body then body.name else "A tower"} has taken {event.fuel} fuel blocks from its hangar`)
   elseif kind == "StarbaseFuelled" then
     Session.Say(session, `The tower has {event.fuel} fuel blocks aboard`)
+  elseif kind == "FleetOrdered" and event.what == "stock" then
+    local body = Core.Query.Body(session.game, event.target)
+    Session.Say(session, `{event.name} will keep {event.quantity} {Types.Info(event.type).name} in the hangar here, bought at `
+      .. `{if body then body.name else "the market"} for no more than {event.price} credits each`)
+  elseif kind == "StockShort" then
+    Session.Say(session, `{event.name} could not buy all the {Types.Info(event.type).name} that is wanted: {event.reason}. They will try again`)
   elseif kind == "ModuleAnchored" then
     Session.Say(session, `{Types.Info(event.module).name} anchored: it will be online shortly`)
   elseif kind == "ModuleUnanchored" then

@@ -9,6 +9,10 @@
 # sits docked. The pilot goes to the other market, buys them, brings
 # them back to the hangar here, and waits. What they cost has gone out
 # of the wallet, and no more than was allowed.
+#
+# Then the same as a standing order: with twelve hundred asked for, the
+# line's Keep has the pilot keep that many in the hangar. They go for
+# the two hundred that are missing, and then wait, on the order still.
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
@@ -57,5 +61,18 @@ lua assert(_G.spent > 0 and _G.spent <= math.ceil(_G.each * 1.1) * 1000, 'what w
 lua assert(math.abs(_G.spent - _G.each * 1000) <= 1, 'with nobody else buying, they cost what was quoted')
 frames 3
 lua assert(GameDebug.CanPress('Fetch'), 'back and waiting, they can be sent again')
+
+# Twelve hundred to be kept here: two hundred are missing, and are fetched.
+lua GameDebug.Enter('Quantity', 1200)
+frames 3
+until GameDebug.Press('Fetch:keep')
+until GameDebug.Crew(1) == 'going to buy'
+lua assert(select(9, GameDebug.Crew(1)) == 200, 'two hundred should be still to buy')
+lua GameDebug.TimeScale(16)
+until GameDebug.Hangar('fuel.block') == 1200
+until GameDebug.Crew(1) == 'keeping stock'
+lua GameDebug.TimeScale(1)
+frames 3
+lua assert(not GameDebug.CanPress('Fetch') and not GameDebug.CanPress('Fetch:keep'), 'one who keeps stock here is on that errand still')
 echo errand scenario passed
 quit
