@@ -1603,6 +1603,10 @@ type Design = {
   draw: (b: Builder) -> (),
   -- (A pirate hull is somebody else's design, patched: Plates' 'patch'.)
   patch: number?,
+  -- (And that it is such a copy, with guns bolted on beside the ones it
+  -- was built for: the rule of hardpoints is not kept on it. What the
+  -- pirates built themselves is patched too, and is held to the rule.)
+  copied: boolean?,
   -- (A bigger ship is plated in more and smaller sheets for its size:
   -- it is one of the things that says how big it is.)
   sheets: number?,
@@ -1959,7 +1963,8 @@ for _, hull in Ships.list do
       end
       local gun = if #base.turrets > 0 then base.fit[1] else "autocannon.small"
       local rack = if #base.launchers > 0 then base.fit[#base.turrets + 1] else "launcher.light"
-      local derived: Design = { faction = "unbound", draw = base.draw, patch = PATCHED, sheets = base.sheets, turrets = {}, launchers = {}, fit = {} }
+      local derived: Design = { faction = "unbound", draw = base.draw, patch = PATCHED, copied = true, sheets = base.sheets, turrets = {},
+        launchers = {}, fit = {} }
       for index, point in points do
         if index <= hull.turrets then
           table.insert(derived.turrets, point)
@@ -1999,6 +2004,142 @@ for _, hull in Ships.list do
     designs[hull.id] = { faction = base.faction, draw = base.draw, sheets = base.sheets, even = base.even, reach = base.reach,
       look = rebuilt(base.look or Hull.looks[base.faction]), turrets = base.turrets, launchers = base.launchers, fit = base.fit }
   end
+end
+
+-- ---------------------------------------------------------------------
+-- What a pirate camp is built of (Core/Tactical/Assault): things that
+-- stand where they are put. None of them is a ship and none is drawn as
+-- one: no bow, no engines, and as much beneath as above. They are the
+-- pirates' own work, of whatever was to hand.
+
+-- A crate lashed on: a box with two straps round it.
+local function crate(b: Builder, center: vector, half: vector, part: number?)
+  block(b, part or PLATING, center, half, nil, 0.08)
+  for _, side in { -0.5, 0.5 } do
+    block(b, FRAME, center + v(0, 0, side * half.z), v(half.x * 1.05, half.y * 1.05, half.z * 0.06), nil, 0.2)
+  end
+end
+
+-- The Cache, a store: a length of girder with crates lashed to it on
+-- every side, no two the same size, a tank or two among them, a mast,
+-- and a lamp at each end.
+local function cache(b: Builder)
+  truss(b, v(0, 0, -0.85), v(0, 0, 0.85), 0.16, 6)
+  truss(b, v(0, 0, -0.85), v(0, 0, 0.85), 0.16, 6, v(1, 0, 0))
+  crate(b, v(0.30, 0.02, 0.42), v(0.20, 0.22, 0.34))
+  crate(b, v(-0.27, -0.05, 0.50), v(0.17, 0.17, 0.26), PATCH)
+  crate(b, v(0.02, 0.31, -0.05), v(0.24, 0.19, 0.30))
+  crate(b, v(-0.04, -0.33, -0.12), v(0.22, 0.21, 0.36))
+  crate(b, v(0.29, -0.03, -0.45), v(0.18, 0.18, 0.28), PATCH)
+  crate(b, v(-0.31, 0.06, -0.30), v(0.20, 0.24, 0.40))
+  tank(b, v(-0.22, 0.30, 0.52), 0.11, 0.26)
+  tank(b, v(0.24, -0.30, 0.55), 0.10, 0.22)
+  mast(b, v(0.02, 0.50, -0.05), 0.40, 0.05)
+  block(b, GLOW, v(0, 0, 0.87), v(0.05, 0.05, 0.02), nil, 0.3)
+  block(b, GLOW, v(0, 0, -0.87), v(0.05, 0.05, 0.02), nil, 0.3)
+end
+
+-- The Depot, a big store: a boxed girder with a deck through it, crates
+-- in a row along its back and another under its belly, no two alike; a
+-- great tank out on arms on either flank, one forward and one aft; and
+-- the keepers' quarters on one side, lit, with a mast.
+local function depot(b: Builder)
+  for _, side in { -1, 1 } do
+    truss(b, v(side * 0.10, 0, -0.98), v(side * 0.10, 0, 0.98), 0.20, 10)
+  end
+  block(b, FRAME, v(0, 0, 0), v(0.13, 0.03, 0.96), nil, 0.1)
+  for row = 1, 5 do
+    local z = -0.78 + (row - 1) * 0.39
+    local tall = 0.13 + 0.05 * ((row * 7) % 3)
+    crate(b, v(0, 0.12 + tall, z), v(0.20 + 0.03 * (row % 2), tall, 0.17), if row % 3 == 0 then PATCH else PLATING)
+    local deep = 0.12 + 0.05 * ((row * 5) % 3)
+    crate(b, v(0, -0.12 - deep, z + 0.04), v(0.22 - 0.03 * (row % 2), deep, 0.16), if row % 4 == 0 then PATCH else PLATING)
+  end
+  for _, side in { -1, 1 } do
+    local z = 0.30 * side
+    tank(b, v(side * 0.42, 0.02 * side, z), 0.17, 0.52, PLATING)
+    for _, at in { -0.3, 0.3 } do
+      beam(b, FRAME, v(side * 0.12, 0, z + at), v(side * 0.30, 0.02 * side, z + at), 0.025, 0.1)
+    end
+  end
+  block(b, PLATING, v(-0.36, 0.05, -0.55), v(0.14, 0.12, 0.20), nil, 0.1)
+  ports(b, v(-0.505, 0.07, -0.70), v(-0.505, 0.07, -0.40), 4, 0.022)
+  beam(b, FRAME, v(-0.12, 0, -0.55), v(-0.24, 0.03, -0.55), 0.03, 0.1)
+  mast(b, v(-0.36, 0.17, -0.55), 0.42, -0.04)
+end
+
+-- The Battery, a gun emplacement: an armoured drum of eight sides with a
+-- flat deck above and beneath, its launchers on the decks; a belt of
+-- slab armour round its waist, a slab gone; and a boom out to one side
+-- with its eyes on it.
+local BATTERY_DECK = 0.20
+local BATTERY_GUNS: { vector } = { v(0, 0, 0.27), v(0.25, 0, -0.16), v(-0.25, 0, -0.16) }
+local function battery(b: Builder)
+  block(b, PLATING, v(0, 0, 0), v(0.52, BATTERY_DECK, 0.52), nil, 0.08)
+  block(b, PLATING, v(0, 0, 0), v(0.52, BATTERY_DECK, 0.52), v(math.pi / 4, 0, 0), 0.08)
+  for index = 0, 6 do
+    local angle = index * math.pi / 4 + math.pi / 8
+    block(b, if index % 3 == 1 then PATCH else PLATING, v(0.60 * math.sin(angle), 0, 0.60 * math.cos(angle)), v(0.17, 0.13, 0.035),
+      v(angle, 0, 0), 0.12)
+  end
+  for _, side in { -1, 1 } do
+    block(b, FRAME, v(0, side * (BATTERY_DECK + 0.015), 0), v(0.07, 0.02, 0.07), v(math.pi / 4, 0, 0), 0.2)
+    block(b, GLOW, v(0, side * (BATTERY_DECK + 0.04), 0), v(0.035, 0.008, 0.035), nil, 0.3)
+  end
+  beam(b, FRAME, v(0.50, 0, 0.10), v(0.95, 0.04, 0.20), 0.03, 0.1)
+  mast(b, v(0.95, 0.04, 0.20), 0.36, 0.03)
+  block(b, PATCH, v(0.95, -0.06, 0.20), v(0.06, 0.08, 0.06), nil, 0.15)
+end
+
+-- The Redoubt, a fort: a keep, with a narrower storey above it and one
+-- beneath, lit; four bastions at its corners, no two the same height,
+-- each joined to the keep by a wall and to the next by a curtain, with
+-- a launcher on its head and one under its foot; and a mast on the keep.
+local REDOUBT_OUT = 0.72
+local REDOUBT_HIGH: { number } = { 0.17, 0.20, 0.17, 0.20 }
+local function bastionAt(index: number): (vector, number)
+  local angle = math.pi / 4 + (index - 1) * math.pi / 2
+  return v(REDOUBT_OUT * math.sin(angle), 0, REDOUBT_OUT * math.cos(angle)), angle
+end
+local function redoubt(b: Builder)
+  block(b, PLATING, v(0, 0, 0), v(0.34, 0.30, 0.34), nil, 0.08)
+  for _, side in { -1, 1 } do
+    block(b, PLATING, v(0, side * 0.40, 0), v(0.24, 0.10, 0.24), v(math.pi / 4, 0, 0), 0.10)
+    block(b, FRAME, v(0, side * 0.515, 0), v(0.20, 0.015, 0.20), v(math.pi / 4, 0, 0), 0.1)
+    for _, face in { -1, 1 } do
+      block(b, GLOW, v(face * 0.343, side * 0.12, 0), v(0.004, 0.035, 0.20), nil, 0.3)
+    end
+  end
+  for index = 1, 4 do
+    local at, angle = bastionAt(index)
+    block(b, if index == 3 then PATCH else PLATING, at, v(0.17, REDOUBT_HIGH[index], 0.17), v(angle, 0, 0), 0.08)
+    block(b, PLATING, at * 0.62, v(0.05, 0.11, 0.20), v(angle, 0, 0), 0.08)
+    -- (the curtain to the next bastion round, with a gap in one of them)
+    if index ~= 2 then
+      local along = angle + math.pi / 4
+      local out = REDOUBT_OUT * math.cos(math.pi / 4)
+      block(b, PLATING, v(out * math.sin(along), 0, out * math.cos(along)), v(0.36, 0.09, 0.03), v(along, 0, 0), 0.10)
+    end
+  end
+  mast(b, v(0, 0.53, 0), 0.40, 0.03)
+end
+
+designs["works.cache"] = { faction = "unbound", draw = cache, patch = PATCHED, turrets = {}, launchers = {}, fit = {} }
+designs["works.depot"] = { faction = "unbound", draw = depot, patch = PATCHED, sheets = 5.0, turrets = {}, launchers = {}, fit = {} }
+do
+  local guns: { Hardpoint } = {}
+  for _, at in BATTERY_GUNS do
+    table.insert(guns, over(at + v(0, BATTERY_DECK, 0), at - v(0, BATTERY_DECK, 0)))
+  end
+  designs["works.battery"] = { faction = "unbound", draw = battery, patch = PATCHED, turrets = {}, launchers = guns,
+    fit = { "launcher.light", "launcher.light", "launcher.light" } }
+  local heavy: { Hardpoint } = {}
+  for index = 1, 4 do
+    local at = bastionAt(index)
+    table.insert(heavy, over(at + v(0, REDOUBT_HIGH[index], 0), at - v(0, REDOUBT_HIGH[index], 0)))
+  end
+  designs["works.redoubt"] = { faction = "unbound", draw = redoubt, patch = PATCHED, sheets = 4.0, turrets = {}, launchers = heavy,
+    fit = { "launcher.heavy", "launcher.heavy", "launcher.heavy", "launcher.heavy" } }
 end
 
 -- ---------------------------------------------------------------------
@@ -2088,7 +2229,7 @@ function Hull.Build(type: string, pirate: boolean?): Built?
   -- copy, with guns bolted on beside the ones it was built for, is not
   -- held to it.)
   local hanging: { string } = {}
-  if hull and not patched and design.patch == nil then
+  if hull and not patched and not design.copied then
     local metres = hull.radius / radius
     local at = 0
     for kind, points in { design.turrets, design.launchers } do

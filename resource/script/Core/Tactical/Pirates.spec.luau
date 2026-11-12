@@ -67,6 +67,10 @@ end
 suite:Case("every kind of pirate flies an Unbound hull with a fit the hull takes, its weapons loaded", function(t)
   for _, kind in Pirates.kinds do
     local hull = Ships.byId[kind.hull]
+    -- (what a camp is built of is nobody's hull, and is not flown: below)
+    if hull ~= nil and hull.class == "works" then
+      continue
+    end
     t.ok(hull ~= nil and hull.lineage == "unbound", `{kind.name} flies '{kind.hull}', which is not the pirates' own`)
     local fit = Pirates.Fit(kind)
     local types: { string } = {}
@@ -95,8 +99,9 @@ suite:Case("a bigger pirate hits harder, takes more killing and pays more", func
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local last = { dps = 0, hp = 0, bounty = 0, tags = 0 }
   for _, kind in Pirates.kinds do
-    -- (a mender is not one of the ladder: it is there for the others)
-    if kind.id == "mender" then
+    -- (a mender is not one of the ladder: it is there for the others;
+    -- nor is what a camp is built of)
+    if kind.id == "mender" or Ships.byId[kind.hull].class == "works" then
       continue
     end
     local ball = Pirates.Spawn(game.state, kind, 1, 1e9, 0, 0, 0)
@@ -114,6 +119,54 @@ suite:Case("a bigger pirate hits harder, takes more killing and pays more", func
   end
   -- A scout is what it was when it flew a Courier: one small gun, worth 6,000.
   t.eq(Pirates.SCOUT.bounty, 6000)
+end)
+
+suite:Case("what a camp is built of stands where it is put: a store does nothing, and an emplacement fires on what comes in reach", function(t)
+  local stores, emplacements = 0, 0
+  for _, kind in Pirates.kinds do
+    local hull = Ships.byId[kind.hull]
+    if hull.class ~= "works" then
+      continue
+    end
+    -- Nobody sells one or builds one, and it does not move.
+    t.eq({ hull.restricted, hull.maxVelocity, hull.turrets } :: { any }, { true, 0, 0 } :: { any })
+    local fit = Pirates.Fit(kind)
+    local weapons = 0
+    for _, entry in fit do
+      weapons += if Modules.byId[entry[1]].weapon then 1 else 0
+    end
+    t.eq({ #fit, weapons }, { #kind.fit, hull.launchers }, `{kind.name}'s fit`)
+    stores += if weapons == 0 then 1 else 0
+    emplacements += if weapons > 0 then 1 else 0
+
+    local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+    local state = game.state
+    local id = state.player.ship
+    t.ok((Core.Submit(game, { kind = "Undock", actor = id })))
+    Core.Step(game)
+    local me = state.balls[id]
+    me.x += 5e7
+    me.vx, me.vy, me.vz = 0, 0, 0
+    Space.AssignGrid(state, me)
+    t.ok((Core.Submit(game, { kind = "Stop", actor = id })))
+    local ball = Pirates.Spawn(state, kind, me.system, me.x + 6000, me.y, me.z, me.grid)
+    local x, y, z = ball.x, ball.y, ball.z
+    local was = me.vitals.shield
+    local shots = 0
+    for _ = 1, 40 do
+      Core.Step(game)
+      for _, event in Core.TakeEvents(game) do
+        shots += if event.kind == "Shot" and event.from == ball.id then 1 else 0
+      end
+    end
+    t.eq({ ball.x, ball.y, ball.z }, { x, y, z }, `{kind.name} moved`)
+    if weapons > 0 then
+      t.ok(shots > 0 and me.vitals.shield < was, `{kind.name} did not fire on a ship six kilometres off`)
+    else
+      t.eq({ shots, me.vitals.shield }, { 0, was }, `{kind.name} is a store`)
+    end
+  end
+  t.ok(stores >= 2 and emplacements >= 2)
 end)
 
 suite:Case("a mender keeps its pack whole: its repairers go on whichever pirate is worst hurt", function(t)

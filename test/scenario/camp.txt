@@ -1,17 +1,21 @@
-# A camp of two rooms, in the game app (script/check runs this):
+# A camp of two rooms, to raze, in the game app (script/check runs this):
 #
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/camp.txt
 #
 # With a standing of 3 the home station's fourth agent has assaults of
-# three levels. The third, in this game, is to clear a camp of two rooms
-# in this system: five ships in three waves, the first wave in the first
-# room. A cruiser (what the third level is set against) and the skill to
-# use it are given. Only the first
-# room is on the overview. In it stands a gate, shut. Its wave is
-# destroyed, which opens the gate, and nobody else comes to the first
-# room. Through the gate the ship is sent on to the second, which is on
-# the overview from then on, and there the other two waves come, one
-# after the other. Cleared, the job is paid at home.
+# three levels. The third, in this game, is to raze a camp of two rooms
+# in this system: what it is built of, a depot and a battery, which
+# stand in its second room, and five ships in three waves to keep it,
+# the first wave in the first room. A cruiser (what the third level is
+# set against) and the skill to use it are given. Only the first room is
+# on the overview. In it stands a gate, shut, and nothing built. Its
+# wave is destroyed, which opens the gate, and nobody else comes to the
+# first room. Through the gate the ship is sent on to the second, which
+# is on the overview from then on. There the works stand, the battery
+# with its launchers on it, and the second wave comes. Whatever is
+# nearest is fought, ships and works as they come, until the works are
+# destroyed, which is the job. Then whoever is still there is seen off,
+# and the job is paid at home.
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
@@ -25,10 +29,10 @@ lua assert(GameDebug.CanPress('Level:assault:down') and not GameDebug.CanPress('
 until GameDebug.Press('Accept:assault')
 until select(2, GameDebug.Missions()) == 1
 frames 3
-lua assert(select(8, GameDebug.Assault()) == 'clear', 'this camp is to be cleared')
+lua assert(select(8, GameDebug.Assault()) == 'raze', 'this camp is to be razed')
 lua assert(select(7, GameDebug.Assault()) == 2, 'this camp has two rooms')
 lua assert(select(6, GameDebug.Assault()) == 1, 'only the first room should be found')
-lua assert(select(3, GameDebug.Assault()) == 3 and select(5, GameDebug.Assault()) == 5, 'three waves, five ships')
+lua assert(select(3, GameDebug.Assault()) == 3 and select(5, GameDebug.Assault()) == 2, 'three waves, and two works to destroy')
 
 lua assert(GameDebug.Fly('cruiser.cuirass', true), 'no cruiser')
 until GameDebug.Press('UNDOCK')
@@ -41,8 +45,10 @@ until GameDebug.InWarp()
 until GameDebug.Idle()
 
 # The first room: its one wave, two ships, and its gate, which is shut
-# while they are there. Destroyed, the gate opens, and is where to go next.
+# while they are there. Nothing of the camp's is built here. Destroyed,
+# the gate opens, and is where to go next.
 until GameDebug.Pirates() == 2
+lua assert(GameDebug.Works() == 0, 'what the camp is built of is in its last room')
 lua assert(not GameDebug.Order('Jump', 'Gate to'), 'the gate should be shut while the camp holds the room')
 patience 400
 until GameDebug.Engage(12000) == 0 and GameDebug.Pirates() == 0
@@ -50,21 +56,33 @@ lua assert(select(2, GameDebug.Assault()) == 1, 'the first room has the first wa
 wait 5
 lua assert(GameDebug.Pirates() == 0, 'nobody else should come to the first room')
 lua assert(select(2, GameDebug.Assault()) == 1, 'the second wave is the second room\'s')
+lua assert(select(4, GameDebug.Assault()) == 0, 'the camp\'s keepers are not the job')
 lua assert(select(6, GameDebug.Assault()) == 1 and GameDebug.Count('site') == 1, 'the second room is on no chart until the gate is gone through')
 lua assert(string.find(select(2, GameDebug.Next('job')), 'Gate to', 1, true), 'the open gate should be where to go next: ' .. select(2, GameDebug.Next('job')))
 
-# Through the gate, on to the second room: the other two waves.
+# Through the gate, on to the second room: what the camp is built of,
+# and the second wave.
 lua assert(GameDebug.Order('Jump', 'Gate to'), 'the open gate was refused')
 until GameDebug.InWarp()
 until GameDebug.Idle()
 lua assert(select(6, GameDebug.Assault()) == 2 and GameDebug.Count('site') == 2, 'the second room should be on the overview now')
-until GameDebug.Pirates() > 0
+until GameDebug.Works() == 2
+until GameDebug.Pirates() > 2
 lua assert(select(2, GameDebug.Assault()) == 2, 'the second wave should be out')
-patience 400
-until GameDebug.Engage(12000) == 0 and select(2, GameDebug.Assault()) == 3 and select(4, GameDebug.Assault()) == 5
-lua assert(GameDebug.Hull() == 'cruiser.cuirass', 'the cruiser should have come through it')
+frames 30
+lua assert(select(2, GameDebug.Works()) == 1, 'the battery should have its launchers on it')
 
-# Cleared. Home, to be paid.
+# Whatever is nearest, until the depot and the battery are destroyed.
+# That is the job, whoever of the camp's keepers is left.
+patience 200
+until (GameDebug.Engage(12000) >= 0 and GameDebug.Works() == 0) or GameDebug.Hull() ~= 'cruiser.cuirass'
+lua assert(GameDebug.Hull() == 'cruiser.cuirass', 'the cruiser should have come through it')
+lua assert(select(4, GameDebug.Assault()) == 2, 'two works destroyed should be the job done')
+
+# Whoever is about is seen off, so as to get away. Home, to be paid.
+patience 200
+until GameDebug.Engage(12000) == 0 or GameDebug.Hull() ~= 'cruiser.cuirass'
+lua assert(GameDebug.Hull() == 'cruiser.cuirass', 'the cruiser should have come through the rest of them')
 lua assert(GameDebug.Order('Dock', 'home'), 'docking at home was refused')
 patience 300
 until GameDebug.Docked()

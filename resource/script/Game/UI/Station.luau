@@ -1351,6 +1351,7 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
       local where = if #mission.rooms > 1 then `room {open} of {#mission.rooms}, ` else ""
       local how = if mission.aim == "chief" then "the chief comes with the last"
         elseif mission.aim == "fetch" then "the cargo is in the last room"
+        elseif mission.aim == "raze" then `{mission.done}/{mission.need} of its works razed, in the last room`
         else `{mission.done}/{mission.need} down`
       return `{camp.name}, {name}: {where}wave {mission.wave} of {#mission.waves}, {how}`
     elseif mission.kind == "mining" then

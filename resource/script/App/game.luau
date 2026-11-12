@@ -952,7 +952,7 @@ end
 -- in hand), the waves that have come and how many there are, what the
 -- job counts that is done and how many there are of it, the rooms of
 -- the camp whose way is found and how many it has, and what the job is
--- to do there ("clear", "chief" or "fetch").
+-- to do there ("clear", "raze", "chief" or "fetch").
 function Debug.Assault(): (string, number, number, number, number, number, number, string)
   for _, held in Core.Query.Missions(session.game).inHand do
     local mission = held.mission
@@ -968,13 +968,49 @@ function Debug.Assault(): (string, number, number, number, number, number, numbe
   return "", 0, 0, 0, 0, 0, 0, ""
 end
 
+-- A cheat, for a picture or a scripted fight: a pirate of a kind, as
+-- Tactical/Pirates names them ('raider', 'battery', ...), so far from
+-- the pilot's ship (3 km, if not said) and so far round it (radians).
+-- False if there is no such kind, or the pilot is not in space.
+function Debug.Pirate(kind: string, far: number?, round: number?): boolean
+  local state = session.game.state
+  local me = state.balls[state.player.ship]
+  local what = Pirates.kindById[kind]
+  if me == nil or what == nil then
+    return false
+  end
+  local out, angle = far or 3000, round or 0
+  local ball = Pirates.Spawn(state, what, me.system, me.x + out * math.cos(angle), me.y, me.z + out * math.sin(angle), me.grid)
+  table.insert(session.game.events, { kind = "BallAdded", ball = ball.id })
+  return true
+end
+
+-- How many of the things a pirate camp is built of (hulls of the class
+-- "works") are on the pilot's grid, and how many of them the scene shows
+-- with weapons on them.
+function Debug.Works(): (number, number)
+  local state = session.game.state
+  local me = state.balls[state.player.ship]
+  local count, armed = 0, 0
+  for _, id in state.pilotIds do
+    local ball = state.balls[id]
+    if me and ball and ball.system == me.system and ball.grid == me.grid and Ships.byId[state.ships[id].type].class == "works" then
+      count += 1
+      armed += if Scene.Arms(scene, id) > 0 then 1 else 0
+    end
+  end
+  return count, armed
+end
+
 -- A cheat, for a scripted fight: the pilot's ship goes for the nearest
 -- ship on its grid that would fire on it. It orbits it (at 2.5 km, or
 -- the range given), locks it, and switches on everything it has for
 -- another ship. Asked every frame, it gives an order only once a tick
 -- and only where one is wanted. Returns how many such ships are there.
+-- 'works': what a camp is built of is gone for first, while any of it
+-- stands, whoever else is nearer.
 local engaged = -1
-function Debug.Engage(range: number?): number
+function Debug.Engage(range: number?, works: boolean?): number
   local game = session.game
   local state = game.state
   local me = state.balls[state.player.ship]
@@ -982,13 +1018,19 @@ function Debug.Engage(range: number?): number
     return 0
   end
   local nearest: Core.Entry? = nil
+  local built: Core.Entry? = nil
   local count = 0
   for _, entry in Core.Query.Overview(game) do
     if entry.hostile and entry.onGrid then
       count += 1
       nearest = nearest or entry
+      local ship = state.ships[entry.id]
+      if works and built == nil and ship and Ships.byId[ship.type].class == "works" then
+        built = entry
+      end
     end
   end
+  nearest = built or nearest
   if nearest == nil or state.tick == engaged then
     return count
   end

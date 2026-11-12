@@ -94,6 +94,7 @@ function Missions.Title(mission: State.Mission): string
     local ships = Assault.Count(mission.waves)
     return `Assault, level {mission.level}: ` .. (if mission.aim == "chief" then "the chief of a camp"
       elseif mission.aim == "fetch" then `{mission.need} crates a camp took`
+      elseif mission.aim == "raze" then (if mission.need == 1 then "a camp's store" else `a camp's {mission.need} works`)
       else `a camp of {ships}`)
   elseif mission.kind == "mining" then
     return `Mining, level {mission.level}: {mission.need} {Types.Info(mission.type).name}`
@@ -208,7 +209,7 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
     end
     local waves = Assault.Plan(rng, level)
     local ends, aim = Assault.Shape(rng, level)
-    local pay, credit = Assault.Pay(level, waves)
+    local pay, credit = Assault.Pay(level, waves, aim)
     local reward = math.floor(pay * bonus)
     if Assault.Room(state, where) then
       table.insert(offers, {

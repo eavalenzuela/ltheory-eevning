@@ -93,6 +93,15 @@ local KINDS: { Kind } = {
   { id = "ravager", hull = "battleship.ravager", name = "Pirate Ravager", range = 15000, bounty = 400000, tags = 10,
     fit = all(times(6, "artillery.large"), times(4, "launcher.cruise"),
       { { "armor.plate.large" }, { "damage.control" }, { "gyrostabilizer" }, { "armor.plate.large" }, { "shield.extender.large" } }) },
+  -- Not of the ladder either: what a camp is built of (Tactical/Assault).
+  -- They stand where they are. The stores do nothing; the emplacements
+  -- throw missiles at whatever of the pilot's side comes in reach.
+  { id = "cache", hull = "works.cache", name = "Pirate Cache", range = 0, bounty = 8000, tags = 2, fit = {} },
+  { id = "depot", hull = "works.depot", name = "Pirate Depot", range = 0, bounty = 30000, tags = 6, fit = {} },
+  { id = "battery", hull = "works.battery", name = "Pirate Battery", range = 0, bounty = 12000, tags = 2,
+    fit = all(times(3, "launcher.light"), { { "armor.plate.200mm" }, { "damage.control" } }) },
+  { id = "redoubt", hull = "works.redoubt", name = "Pirate Redoubt", range = 0, bounty = 45000, tags = 5,
+    fit = all(times(4, "launcher.heavy"), { { "armor.plate.medium" }, { "damage.control" }, { "ballistic.control" } }) },
   -- Not one of the ladder: a mender has little to shoot with. It keeps
   -- the rest of its pack whole, and is the one to shoot first.
   { id = "mender", hull = "frigate.cutthroat", name = "Pirate Mender", range = 4500, bounty = 25000, tags = 1,
@@ -383,7 +392,8 @@ function Pirates.Think(state: State.State, events: { Event })
       continue
     end
 
-    if not (ball.mode == "orbit" and ball.target == prey.id) then
+    -- (what a camp is built of stands where it was put)
+    if ball.maxVelocity > 0 and not (ball.mode == "orbit" and ball.target == prey.id) then
       give(state, { kind = "Orbit", actor = id, target = prey.id, range = pilot.range }, events)
     end
     local locked = false

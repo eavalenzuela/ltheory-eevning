@@ -60,8 +60,10 @@ end
 -- some waves in turn, each from thirty kilometres off: they orbit the
 -- nearest of them at a range, lock it, and switch everything on. Whether
 -- they came through it, and the share of the ship's shield, armour and
--- hull that was left.
-local function fight(hullId: string, level: number, orbit: number, waves: { { string } }): (boolean, number)
+-- hull that was left. 'works': what the camp is built of stands eight
+-- kilometres off from the first, firing if it can, and is destroyed
+-- when the last of the waves is: whoever flies is gone for first.
+local function fight(hullId: string, level: number, orbit: number, waves: { { string } }, works: { string }?): (boolean, number)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
   for _, skill in Skills.list do
@@ -82,8 +84,13 @@ local function fight(hullId: string, level: number, orbit: number, waves: { { st
   me.x += 5e7
   me.vx, me.vy, me.vz = 0, 0, 0
   Space.AssignGrid(state, me)
-  for _, wave in waves do
-    for n, kind in wave do
+  local standing: { string } = works or {}
+  for n, kind in standing do
+    Pirates.Spawn(state, Pirates.kindById[kind], me.system, me.x + 8000 * math.cos(2.1 * n), me.y, me.z + 8000 * math.sin(2.1 * n), me.grid)
+  end
+  -- (the waves in turn, and then, with nobody left flying, what stands)
+  for round = 1, #waves + (if #standing > 0 then 1 else 0) do
+    for n, kind in waves[round] or {} :: { string } do
       Pirates.Spawn(state, Pirates.kindById[kind], me.system, me.x + 30000 * math.cos(2.1 * n), me.y, me.z + 30000 * math.sin(2.1 * n),
         me.grid)
     end
@@ -94,7 +101,8 @@ local function fight(hullId: string, level: number, orbit: number, waves: { { st
       local nearest: number, least = 0, math.huge
       for _, other in state.pilotIds do
         local ball = state.balls[other]
-        if ball and ball.grid == me.grid and Space.Distance(ball :: any, me :: any) < least then
+        local flies = Ships.byId[state.ships[other].type].class ~= "works"
+        if ball and ball.grid == me.grid and (flies or round > #waves) and Space.Distance(ball :: any, me :: any) < least then
           nearest, least = other, Space.Distance(ball :: any, me :: any)
         end
       end
@@ -189,6 +197,34 @@ suite:Case("a plain ship of the class a level is for comes through every camp of
   print("     assault: " .. table.concat(said, "; "))
 end)
 
+-- (The job is what the camp is built of, which stands in its last room,
+-- and whoever is in that room is on the pilot while they are at it: at
+-- the worst every wave the last room can have, one after another, with
+-- the emplacements firing all the while. Whoever flies is gone for
+-- first, which is the way to do it.)
+suite:Case("a plain ship of the class a level is for razes a camp of that level, with every wave its last room can have on them", function(t)
+  local lines: { string } = {}
+  for level = 1, #Assault.PACKS do
+    local hull: string, skill: number, orbit: number = FOR[level][1], FOR[level][2], FOR[level][3]
+    -- (the most waves a last room has: all of them but one for each room before it)
+    local most = Assault.WAVES[level] - Assault.LEAST[level] + 1
+    local every = camps(level)
+    local won, tried, worst = 0, 0, 1
+    -- (every other camp the level can be: enough to say)
+    for index = 1, #every, 2 do
+      local waves = table.move(every[index], #every[index] - most + 1, #every[index], 1, {})
+      local ok, left = fight(hull, skill, orbit, waves, Assault.WORKS[level])
+      tried += 1
+      won += if ok then 1 else 0
+      worst = math.min(worst, left)
+    end
+    table.insert(lines, `{(string.match(hull, "^%a+"))} L{level} {won}/{tried}, least {math.floor(worst * 100)}%`)
+    t.eq(won, tried, `a {hull} with skills at {skill} should raze every level {level} camp`)
+    t.ok(worst > 0.08, `a {hull} razed a level {level} camp with {math.floor(worst * 100)}% of itself`)
+  end
+  print("     raze: " .. table.concat(lines, "; "))
+end)
+
 suite:Case("a camp of a level has that level's packs, and a harder level's are worth more", function(t)
   local last = 0
   for level = 1, #Assault.PACKS do
@@ -208,7 +244,7 @@ suite:Case("a camp of a level has that level's packs, and a harder level's are w
   end
 end)
 
-suite:Case("a camp is laid out in as many rooms as its level may have, each with a wave at least, and the job there is one of three", function(t)
+suite:Case("a camp is laid out in as many rooms as its level may have, each with a wave at least, and the job there is one of four", function(t)
   for level = 1, #Assault.PACKS do
     local rooms: { [number]: number } = {}
     local aims: { [string]: number } = {}
@@ -229,14 +265,19 @@ suite:Case("a camp is laid out in as many rooms as its level may have, each with
       counts[count] = if (rooms[count] or 0) > 0 then 1 else 0
     end
     t.eq(counts, ({ { 1, 0, 0 }, { 1, 1, 0 }, { 0, 1, 0 }, { 0, 1, 1 } })[level], `the rooms of level {level}`)
-    -- To clear it about half the time, and each of the others about a quarter.
-    t.near((aims.clear or 0) / 400, 0.5, 0.09)
+    -- To clear it three times in ten, to raze it two, and each of the others about a quarter.
+    t.near((aims.clear or 0) / 400, 0.3, 0.08)
+    t.near((aims.raze or 0) / 400, 0.2, 0.08)
     t.near((aims.chief or 0) / 400, 0.25, 0.08)
     t.near((aims.fetch or 0) / 400, 0.25, 0.08)
-    -- What a job counts: the ships, the one chief, or ten crates a level.
+    -- What a job counts: the ships, what the camp is built of, the one chief, or ten crates a level.
     local waves = Assault.Plan(Rng.For(level, 11), level)
-    t.eq({ Assault.Need("clear", level, waves), Assault.Need("chief", level, waves), Assault.Need("fetch", level, waves) },
-      { (Assault.Count(waves)), 1, 10 * level })
+    t.eq({ Assault.Need("clear", level, waves), Assault.Need("raze", level, waves), Assault.Need("chief", level, waves),
+      Assault.Need("fetch", level, waves) }, { (Assault.Count(waves)), #Assault.WORKS[level], 1, 10 * level })
+    -- And a camp to raze pays for what it is built of beside its keepers.
+    local _, standing = Assault.Count({ Assault.WORKS[level] })
+    t.eq(Assault.Pay(level, waves, "raze") - Assault.Pay(level, waves), math.floor(0.6 * (select(2, Assault.Count(waves)) + standing))
+      - math.floor(0.6 * select(2, Assault.Count(waves))))
   end
 end)
 

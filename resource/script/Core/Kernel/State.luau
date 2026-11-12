@@ -333,8 +333,10 @@ export type Site = { id: number, system: number, kind: string, code: string, str
 --
 -- 'aim' is what the job is to do there: "clear" it ('need' ships, of
 -- which 'done' are destroyed), destroy its "chief" ('need' is 1; 'mark'
--- is the chief's ship, once it is out), or "fetch" what it took ('need'
--- of 'type', which is in a container that 'mark' is, in the last room).
+-- is the chief's ship, once it is out), "fetch" what it took ('need'
+-- of 'type', which is in a container that 'mark' is, in the last room),
+-- or "raze" it ('need' things it is built of, which stand in the last
+-- room once the pilot has been there: 'mark' is the first of them).
 --
 -- A "mining" contract has a place made for it too: a pocket of rocks of
 -- the ore 'type', of which 'need' units are to be brought in ('aim' is

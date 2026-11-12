@@ -25,8 +25,14 @@
 -- that takes a ship through a stargate) is sent on to the next room,
 -- which is on the overview from then on.
 --
--- What the job is to do there is one of three things:
+-- What the job is to do there is one of four things:
 --   - clear the camp: every ship of every wave;
+--   - raze it: destroy what it is built of, which stands in the last
+--     room from when the pilot gets there (Assault.WORKS: stores, and
+--     at the two harder levels an emplacement that fires on whoever
+--     comes).
+--     They are ships to everything that locks and shoots, and do not
+--     move. Whoever of the camp's keepers is left can be left;
 --   - destroy its chief, who comes out with the last wave of the last
 --     room (and has twice the bounty on them): whoever else is left can
 --     be left;
@@ -45,8 +51,8 @@
 -- pilot does, once. (Ore of the kind from anywhere else does as well:
 -- the pocket is where it is to be had.)
 --
--- (Security and mining missions, cut down. Not yet: things to destroy
--- other than ships, a camp that is not pirates'.)
+-- (Security and mining missions, cut down. Not yet: a camp that is not
+-- pirates'.)
 
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
@@ -70,6 +76,7 @@ Assault.STANDING = { -2, 1, 3, 5 }
 Assault.WAVES = { 2, 3, 3, 3 }
 Assault.ROOMS = { 1, 2, 2, 3 }
 local LEAST = { 1, 1, 2, 2 }
+Assault.LEAST = LEAST
 -- Seconds between the last ship of a wave and the first of the next.
 Assault.BREATHER = 20
 -- What a job pays, as a share of the bounties on the camp's keepers,
@@ -78,8 +85,22 @@ Assault.SHARE = 0.6
 Assault.BASE = 5000
 Assault.CREDIT = 0.15
 -- What a job may be to do, and how likely each is.
-Assault.AIMS = { "clear", "chief", "fetch" }
-local ODDS = { 0.5, 0.25, 0.25 }
+Assault.AIMS = { "clear", "raze", "chief", "fetch" }
+local ODDS = { 0.3, 0.2, 0.25, 0.25 }
+-- What a camp of each level is built of (kinds of Tactical/Pirates, of
+-- hulls of the class "works"): there to be destroyed where the job is
+-- to raze the camp, and not there at all where it is anything else.
+-- And how far from the middle of the last room they stand. (An
+-- emplacement fires for as long as it stands, beside whoever keeps the
+-- room: the levels have as much of that as the ship a level is for
+-- comes through, which the spec holds them to, and no more.)
+Assault.WORKS = {
+  { "cache" },
+  { "cache", "cache" },
+  { "depot", "battery" },
+  { "depot", "redoubt" },
+}
+Assault.WORKS_OUT = { 7000, 10000 }
 -- What a camp took, and how much of it there is to bring back, a level.
 Assault.LOOT = "cargo.stolen"
 Assault.CRATES = 10
@@ -213,19 +234,25 @@ function Assault.Count(waves: { { string } }): (number, number)
 end
 
 -- What a job at a camp pays (before what the pilot's standing adds),
--- and the standing it is worth.
-function Assault.Pay(level: number, waves: { { string } }): (number, number)
+-- and the standing it is worth. (A camp that is to be razed has what
+-- it is built of to pay for beside its keepers.)
+function Assault.Pay(level: number, waves: { { string } }, aim: string?): (number, number)
   local _, bounty = Assault.Count(waves)
+  if aim == "raze" then
+    bounty += select(2, Assault.Count({ Assault.WORKS[level] }))
+  end
   return math.floor(Assault.SHARE * bounty) + Assault.BASE * level, Assault.CREDIT * level
 end
 
--- What a job of an aim counts: the ships of the camp, the one chief, or
--- the crates to bring back.
+-- What a job of an aim counts: the ships of the camp, what it is built
+-- of, the one chief, or the crates to bring back.
 function Assault.Need(aim: string, level: number, waves: { { string } }): number
   if aim == "chief" then
     return 1
   elseif aim == "fetch" then
     return Assault.CRATES * level
+  elseif aim == "raze" then
+    return #Assault.WORKS[level]
   end
   return (Assault.Count(waves))
 end
@@ -299,11 +326,18 @@ function Assault.Open(state: State.State, mission: State.Mission, events: { Even
   end
 end
 
--- Whoever of a room of a camp is still in it.
-local function keepers(state: State.State, room: number): { number }
+-- Whether a ship is a thing a camp is built of, and not one that flies.
+local function isWorks(state: State.State, id: number): boolean
+  local ship = state.ships[id]
+  return ship ~= nil and Ships.byId[ship.type].class == "works"
+end
+
+-- Whoever of a room of a camp is still in it: its keepers, who come in
+-- waves; or with them, if 'all', what the camp is built of.
+local function keepers(state: State.State, room: number, all: boolean?): { number }
   local found: { number } = {}
   for _, id in state.pilotIds do
-    if state.pilots[id].home == room and state.balls[id] then
+    if state.pilots[id].home == room and state.balls[id] and (all or not isWorks(state, id)) then
       table.insert(found, id)
     end
   end
@@ -315,7 +349,7 @@ end
 -- (What they left in wrecks stays until it fades.)
 function Assault.Close(state: State.State, mission: State.Mission, events: { Event })
   for _, room in mission.rooms do
-    for _, id in keepers(state, room) do
+    for _, id in keepers(state, room, true) do
       Space.RemoveBall(state, state.balls[id])
       for _, item in Items.In(state, id, nil) do
         Items.Take(state, item, item.quantity)
@@ -380,16 +414,17 @@ function Assault.Passable(state: State.State, gate: System.Object): (boolean, st
 end
 
 -- A ship that kept a place has been destroyed (Tactical/Aftermath, once
--- it is gone): if the place is a room of a camp, it counts toward the
--- job as the job counts; and with the last of a wave the next is due,
--- or the way to the next room is found, or the camp is cleared.
-function Assault.Fell(state: State.State, home: number, ship: number, events: { Event })
+-- it is gone; 'works' says it was a thing the place is built of): if
+-- the place is a room of a camp, it counts toward the job as the job
+-- counts; and with the last of a wave the next is due, or the way to
+-- the next room is found, or the camp is cleared.
+function Assault.Fell(state: State.State, home: number, ship: number, works: boolean, events: { Event })
   local mission, room = roomOf(state, home)
   if mission == nil then
     return
   end
   local was = mission.done
-  if mission.aim == "clear" then
+  if mission.aim == (if works then "raze" else "clear") then
     mission.done = math.min(mission.need, mission.done + 1)
   elseif mission.aim == "chief" and ship == mission.mark then
     mission.done = mission.need
@@ -397,7 +432,8 @@ function Assault.Fell(state: State.State, home: number, ship: number, events: { 
   if mission.aim ~= "fetch" and mission.done >= mission.need and was < mission.need then
     table.insert(events, { kind = "AssaultCleared", mission = mission.id, station = mission.station, aim = mission.aim })
   end
-  if #keepers(state, home) > 0 then
+  -- (what a camp is built of is no part of its waves)
+  if works or #keepers(state, home) > 0 then
     return
   end
   state.spawned[home] = state.tick
@@ -429,15 +465,36 @@ function Assault.Step(state: State.State, events: { Event })
     return
   end
   local mission, room = roomOf(state, me.grid)
+  local place = Space.Object(state, me.grid)
   -- (the waves of the rooms before have all to have come: a pilot who
-  -- has found their own way to a room finds nobody in)
-  if mission == nil or mission.wave >= mission.ends[room] or mission.wave < (mission.ends[room - 1] or 0)
-    or #keepers(state, me.grid) > 0 then
+  -- has found their own way to a room finds nobody in, and nothing)
+  if mission == nil or place == nil or mission.wave < (mission.ends[room - 1] or 0) then
+    return
+  end
+  -- A camp that is to be razed has what it is built of standing in its
+  -- last room, from when the pilot first comes there: spread round the
+  -- middle of it, some kilometres out. ('mark' is the first of them.)
+  if mission.aim == "raze" and room == #mission.rooms and mission.mark == 0 then
+    local works = Assault.WORKS[mission.level]
+    local rng = Rng.For(state.historySeed, mission.id, 67)
+    local turn = Rng.Float(rng, 0, 2 * math.pi)
+    for index, kind in works do
+      local angle = turn + (index - 1 + Rng.Float(rng, -0.2, 0.2)) * 2 * math.pi / #works
+      local out = Rng.Float(rng, Assault.WORKS_OUT[1], Assault.WORKS_OUT[2])
+      local ball = Pirates.Spawn(state, Pirates.kindById[kind], me.system,
+        place.x + out * math.cos(angle), place.y + Rng.Float(rng, -1500, 1500), place.z + out * math.sin(angle), place.id)
+      if index == 1 then
+        mission.mark = ball.id
+      end
+      table.insert(events, { kind = "BallAdded", ball = ball.id })
+    end
+    table.insert(events, { kind = "WorksSighted", mission = mission.id, grid = place.id, count = #works })
+  end
+  if mission.wave >= mission.ends[room] or #keepers(state, me.grid) > 0 then
     return
   end
   local last = state.spawned[me.grid]
-  local place = Space.Object(state, me.grid)
-  if place == nil or (last ~= nil and (state.tick - last) * Constants.TICK < Assault.BREATHER) then
+  if last ~= nil and (state.tick - last) * Constants.TICK < Assault.BREATHER then
     return
   end
   mission.wave += 1

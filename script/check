@@ -76,8 +76,9 @@
 #               sealed hold's lock given up, played and won, and the hold looted
 #   game-assault  an assault on a pirate camp (test/scenario/assault.txt):
 #               the job taken, two waves destroyed at its camp, and paid
-#   game-camp   a camp of two rooms (test/scenario/camp.txt): the first
-#               cleared, the way to the second found, and that cleared too
+#   game-camp   a camp of two rooms, to raze (test/scenario/camp.txt): the first
+#               cleared, its gate gone through, and what the camp is built of
+#               destroyed in the second
 #   game-patrol  a hired pilot left to patrol a belt (test/scenario/patrol.txt):
 #               pirates come for them with the player docked, and are seen off
 #   game-dig    a mining contract (test/scenario/dig.txt): taken, its

@@ -225,6 +225,32 @@ for _, yard in Factions.list do
   end
 end
 
+-- What a pirate camp is built of (Tactical/Assault): things that stand
+-- where they are put and do not fly, of the kind a ship is to everything
+-- that locks, shoots and loots. Stores, small and large, which only
+-- stand there; and gun emplacements, small and large, which fight.
+-- Nobody sells them or has a blueprint for them. (Each takes about as
+-- much destroying as a ship of the pirates' that is met beside it: a
+-- cache a scout and a half, a battery a raider, a depot a destroyer and
+-- a half, a redoubt a cruiser.)
+for _, works in {
+  { id = "works.cache", name = "Cache", radius = 70, shield = 250, armor = 600, hull = 700, signature = 250, launchers = 0, bulk = 1 },
+  { id = "works.depot", name = "Depot", radius = 150, shield = 700, armor = 1800, hull = 2200, signature = 600, launchers = 0, bulk = 4 },
+  { id = "works.battery", name = "Battery", radius = 60, shield = 350, armor = 500, hull = 600, signature = 180, launchers = 3, bulk = 1 },
+  { id = "works.redoubt", name = "Redoubt", radius = 110, shield = 1000, armor = 1800, hull = 1800, signature = 420, launchers = 4, bulk = 3 },
+} do
+  table.insert(types, {
+    id = works.id, name = works.name, class = "works", lineage = "", basePrice = 250000 * works.bulk, volume = 100000 * works.bulk,
+    mass = 40000000 * works.bulk, inertia = 1, maxVelocity = 0, warpSpeed = 1, radius = works.radius,
+    shield = works.shield, armor = works.armor, hull = works.hull, shieldRecharge = 900,
+    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = works.signature,
+    cpu = 600, powergrid = 2000, highs = works.launchers, mids = 2, lows = 3, turrets = 0, launchers = works.launchers,
+    capacitor = 2500, capacitorRecharge = 240,
+    scanResolution = 320, lockRange = 60000, maxTargets = 3, cargo = 600 * works.bulk,
+    restricted = true,
+  })
+end
+
 -- Hulls no faction owns: anyone builds them.
 table.insert(types, {
   id = "frigate.prospector", name = "Prospector", class = "frigate", lineage = "", basePrice = 180000, volume = 2500,

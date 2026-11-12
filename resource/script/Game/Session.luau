@@ -81,8 +81,12 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `Wave {event.wave} of {event.of} is down: the next is coming`)
   elseif kind == "AssaultCleared" then
     local body = Core.Query.Body(session.game, event.station)
-    Session.Say(session, `{if (event.aim :: string) == "chief" then "The chief is destroyed" else "The camp is cleared"}: `
+    local aim: string = event.aim
+    Session.Say(session, `{if aim == "chief" then "The chief is destroyed" elseif aim == "raze" then "The camp is razed" else "The camp is cleared"}: `
       .. `{if body then body.name else "the station"} will pay for it`)
+  elseif kind == "WorksSighted" then
+    Session.Say(session, if event.count == 1 then "The camp's store is here: destroy it"
+      else `What the camp is built of is here: {event.count} works to destroy`)
   elseif kind == "RoomOpen" then
     Session.Say(session, if (event.gate or 0) ~= 0 then `The room is cleared: its gate is open, and leads on to {event.name}`
       else `The way on is found: {event.name} is on the overview`)
