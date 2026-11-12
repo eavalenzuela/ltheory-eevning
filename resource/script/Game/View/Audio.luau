@@ -13,10 +13,17 @@
 -- from the pilot's ship. Some are the game's own sounds, made from
 -- written descriptions (resource/sound/made, by script/soundgen), where
 -- the owner's ear preferred them: projectile guns, railguns and missiles,
--- what lands on the shield and the hull, a ship blowing up, and the surge
--- of a gate (joined to the old jump sound for its clap). The rest is the
--- engine's old sound, which for lasers and the warp drive is the better
--- one, and for everything else has not been looked at yet.
+-- what lands on the shield and the hull, a ship blowing up, the surge of
+-- a gate (joined to the old jump sound for its clap), a button's click,
+-- the scanner's ping, the warning that pirates have come, the notice
+-- that something is put down, and the three loops. The rest is the
+-- engine's old sound, where that is the better one: lasers, the warp
+-- drive going in and coming out, docking and undocking, a lock made and
+-- lost, an order refused, a job begun and done, a skill trained.
+--
+-- The made sounds are all brought to one loudness, and the old ones are
+-- as loud as they happened to be (some of them very quiet): the figures
+-- here make up the difference, so they say little side by side.
 --
 -- A script hears nothing: sound is off when a harness drives the app
 -- (Host.scripted), unless the script asks for it (GameDebug.Sound), and
@@ -49,7 +56,13 @@ export type Audio = {
 -- The hum of a place. (Space had a chiming loop of the engine's, which
 -- passed for music and was not much liked as that: it has music now,
 -- and no loop of its own.)
-local PLACE: { [string]: string } = { station = "station/ambiance_ship_loops_14.wav" }
+local PLACE: { [string]: string } = { station = "made/loop/station.ogg" }
+local PLACE_LEVEL = 0.03
+
+-- The loops of the pilot's own ship, and how loud each is at its most:
+-- the engines at full burn, and deep in warp.
+local ENGINE, ENGINE_LEVEL = "made/loop/engine.ogg", 0.12
+local WARP, WARP_LEVEL = "made/loop/warp.ogg", 0.10
 
 -- A weapon's sound by its family: the files, how loud, and its pitch.
 local WEAPON: { [string]: { files: { string }, volume: number, pitch: number } } = {
@@ -67,7 +80,7 @@ local SHIELD_HIT, HULL_HIT = "made/impact/shield1.ogg", "made/impact/hull1.ogg"
 local OWN: { [string]: { any } } = {
   WarpStarted = { "jumpdrive/activate.ogg", 0.25 }, WarpEnded = { "jumpdrive/deactivate.ogg", 0.22 },
   LockCompleted = { "ui/targetacquired.ogg", 0.18 }, LockLost = { "ui/targetlost.ogg", 0.14 },
-  Scanned = { "ui/scanneropen.wav", 0.16 },
+  Scanned = { "made/ui/scan.ogg", 0.07 },
 }
 local SHIP: { [string]: { any } } = {
   Jumped = { "made/gate/jump.ogg", 0.28 }, Docked = { "ui/confirm.ogg", 0.18 }, Undocked = { "ui/activate.ogg", 0.18 },
@@ -76,8 +89,8 @@ local ANY: { [string]: { any } } = {
   JobStarted = { "productionlab/initiate.ogg", 0.18 }, ResearchStarted = { "productionlab/initiate.ogg", 0.18 },
   JobDone = { "productionlab/complete.ogg", 0.22 }, ResearchDone = { "productionlab/complete.ogg", 0.22 },
   SkillTrained = { "ui/objective_complete.ogg", 0.22 }, CommandRejected = { "ui/cancel.ogg", 0.14 },
-  PiratesArrived = { "ui/scanneropen.wav", 0.18 }, Marked = { "ui/targetlost.ogg", 0.2 },
-  StarbaseAnchored = { "ui/equip.wav", 0.2 }, ColonyDeployed = { "ui/equip.wav", 0.2 },
+  PiratesArrived = { "made/ui/alert.ogg", 0.13 }, Marked = { "ui/targetlost.ogg", 0.2 },
+  StarbaseAnchored = { "made/ui/placed.ogg", 0.2 }, ColonyDeployed = { "made/ui/placed.ogg", 0.2 },
 }
 
 function Audio.New(): Audio
@@ -180,7 +193,7 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
     end
   end
   if Im.Clicked() then
-    play(audio, "ui/click_on.wav", 0.10, "click", 0.04)
+    play(audio, "made/ui/click.ogg", 0.045, "click", 0.04)
   end
 
   -- The loops. The place: a station's hum, or the quiet of space.
@@ -190,7 +203,7 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
     if audio.place then
       Sound_Delete(audio.place)
     end
-    audio.place = if PLACE[where] then Sound_Play2DLooped(PLACE[where], 0.10 * audio.master) else nil
+    audio.place = if PLACE[where] then Sound_Play2DLooped(PLACE[where], PLACE_LEVEL * audio.master) else nil
     audio.placeIs = where
   end
   -- The engines, by how fast the ship is going of what it can.
@@ -199,15 +212,15 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
   if me and not session.clock.paused then
     burn = math.clamp(math.sqrt(me.vx ^ 2 + me.vy ^ 2 + me.vz ^ 2) / math.max(1, me.maxVelocity), 0, 1)
   end
-  audio.engineNow += (0.16 * burn - audio.engineNow) * ease
-  audio.warpNow += (0.22 * math.clamp(warp, 0, 1) - audio.warpNow) * ease
+  audio.engineNow += (ENGINE_LEVEL * burn - audio.engineNow) * ease
+  audio.warpNow += (WARP_LEVEL * math.clamp(warp, 0, 1) - audio.warpNow) * ease
   if audio.engine == nil then
-    audio.engine = Sound_Play2DLooped("thruster/loop1.ogg", 0)
-    audio.warp = Sound_Play2DLooped("warpnode/drone1.ogg", 0)
+    audio.engine = Sound_Play2DLooped(ENGINE, 0)
+    audio.warp = Sound_Play2DLooped(WARP, 0)
   end
   -- (every frame, so that turning the sound up or down is heard at once)
   if audio.place then
-    Sound_SetVolume(audio.place, 0.10 * audio.master)
+    Sound_SetVolume(audio.place, PLACE_LEVEL * audio.master)
   end
   Sound_SetVolume(audio.engine, audio.engineNow * audio.master)
   Sound_SetVolume(audio.warp, audio.warpNow * audio.master)

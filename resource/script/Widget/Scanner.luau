@@ -14,7 +14,7 @@ function Scanner.Create(_player: Player, object: Object): Widget
   local box = Glyph_Box(0, 1, 1, 1)
   return Widget_Luau(Widget_Create(), {
     Create = function()
-      Sound_Play("ui/scanneropen.wav", 0.9)
+      Sound_Play("made/ui/scan.ogg", 0.08)
     end,
     PreDraw = function(_, w: Widget)
       local count = output:Size()

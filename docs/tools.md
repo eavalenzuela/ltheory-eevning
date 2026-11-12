@@ -58,3 +58,13 @@ A script works the station screens by pressing buttons by name, which runs the s
 | `script/goldens --update [NAME ...]` | Stores this run's screenshots as the golden images. |
 
 `bin/launch APP --do "COMMANDS" --out DIR` drives an app with scripted input and saves screenshots; see `docs/harness.md`.
+
+## Sounds
+
+| Command | What it does |
+|---|---|
+| `script/soundgen` | Makes each sound and piece of music listed in `resource/sound/made/sounds.txt` that is not there yet, from the description on its line, with ElevenLabs' services (a key in `.env`; it spends credits). `--force NAME` makes one again, and it will not be the same sound twice. |
+| `script/soundgen --list` | Says what is listed and what is there. |
+| `script/soundgen --check` | Fails if a script names a sound file that is not in `resource/sound` (the engine plays silence for a missing file and says nothing), or if the list and what is in `resource/sound/made` disagree. Asks nobody for anything; part of `script/check`. |
+
+`Game/View/Audio.luau` says which sound is heard when, and how loud. The made sounds are all brought to one loudness; the original engine's are as loud as they happened to be, some of them very quiet, so a figure there for one kind says little about a figure for the other.

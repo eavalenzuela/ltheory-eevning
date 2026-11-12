@@ -13,8 +13,10 @@
 # out over the 'seconds' after.
 #
 # What was tried and not kept (the owner's ear, 2026-11-11): generated
-# laser shots and warp-drive sounds. The engine's old ones are better,
-# and are what the game plays (weapon/pulse/1, jumpdrive).
+# laser shots and warp-drive sounds, and generated sounds for docking and
+# undocking, an order refused, a lock made and lost, a job begun and
+# done, and a skill trained. The engine's old ones are better, and are
+# what the game plays (weapon/pulse/1, jumpdrive, ui, productionlab).
 
 # Weapons, a shot each. (Lasers keep the engine's old sound.)
 weapon/projectile1 | 1.2 | once | Single shot from a large spaceship autocannon heard from inside the hull: a heavy mechanical thud and muffled boom with the metallic clank of the breech, deep, punchy, dry, no music, no voice
@@ -41,3 +43,23 @@ music/space1       | 120 | music | Slow ambient music for drifting through deep 
 music/space2       | 120 | music | Slow ambient music for a long quiet voyage between the stars: a slow swell of sustained strings rising and falling, a deep warm drone, a few lonely piano notes far apart with long reverb, no drums, no vocals, vast, wistful, patient, cinematic
 music/docked1      | 120 | music | Warm, quiet ambient music for a ship at rest in a space station hangar: gentle sustained strings and a soft felt piano playing a slow simple figure with long pauses, a faint low hum, no drums, no vocals, safe, intimate, unhurried, cinematic
 music/combat1      | 120 | music | Tense underscore for a battle between starships: an urgent low string ostinato, a deep pulsing drone, hard sparse piano notes in the low register, rising string swells, sparse distant orchestral percussion, no drum kit, no vocals, dark, relentless, cinematic
+
+# The interface. A button's click, the scanner's ping, and the warning
+# that pirates have come.
+ui/click           | 0.5 | once | A single soft tactile click of a spacecraft control panel button: short, dry, mechanical, with a faint electronic tick, subtle, no music, no voice
+ui/scan            | 1.5 | once | A sensor sweep from a starship scanner: one clear sonar-like ping with a soft echoing tail, no music, no voice
+ui/alert           | 1.2 | once | A short proximity warning on a starship bridge: two urgent but muted warning tones, tense, not harsh, no music, no voice
+
+# The notice that a tower is anchored or a colony put down. (The first
+# try was the sound of the thing itself, a heavy thunk and clamps: "think
+# of this as a notification sound". Of three chimes, this one.)
+ui/placed          | 1.0 | once | A short notification chime on a ship's console confirming that a task is complete: two warm bell-like tones, the second a little higher, soft, clean, no music, no voice
+
+# The loops: the pilot's engines, a station's hum while docked, and
+# being in warp. (Warp took two tries: the engine's old loop is "too
+# choppy" and the first new one, with "shimmering high harmonics", "too
+# shrill"; it "should sound deep and thrumming, with whooshes". Of three
+# of that kind, this one.)
+loop/engine        | 8.0 | loop | The steady low rumble of a spaceship's engines heard from inside the cockpit: deep, smooth, continuous, with a faint turbine whine, no music, no voice
+loop/station       | 12.0 | loop | The quiet inside of a space station hangar: a low ventilation hum, distant machinery, an occasional faint metallic creak, calm, no music, no voice
+loop/warp          | 10.0 | loop | Inside a starship travelling at warp speed: a deep thrumming engine drone, low and powerful, with slow heavy whooshes passing by, dark and smooth, no high-pitched tones, no whine, no music, no voice

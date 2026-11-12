@@ -28,6 +28,11 @@ heard until then, and fades out over the 'seconds' after.
     script/soundgen NAME...         make these (if not there yet)
     script/soundgen --force NAME... make these again
     script/soundgen --list          say what is listed and what is there
+    script/soundgen --check         fail if a script names a sound that is
+                                    not there (the engine plays silence for
+                                    one, and says nothing), or if the list
+                                    and resource/sound/made disagree; asks
+                                    nobody for anything
 
 The key is read from the environment (ELEVENLABS_API_KEY) or from .env
 at the top of the repository, and is never printed. Nothing is sent but
@@ -177,6 +182,32 @@ def make(sound, secret):
     return max(cost, 0)
 
 
+def check():
+    """What is wrong: sounds the scripts name that are not there, sounds
+    listed but not made, and sounds made but not listed."""
+    wrong = []
+    named = re.compile(r'"([A-Za-z0-9_/. -]+\.(?:ogg|wav))"')
+    for folder, _, files in sorted(os.walk(os.path.join(ROOT, "resource/script"))):
+        for file in sorted(files):
+            if not file.endswith(".luau"):
+                continue
+            path = os.path.join(folder, file)
+            for number, line in enumerate(open(path, encoding="utf-8", errors="replace"), 1):
+                for name in named.findall(line):
+                    if not os.path.exists(os.path.join(SOUNDS, name)):
+                        wrong.append(f"{os.path.relpath(path, ROOT)}:{number}: no sound '{name}' in resource/sound")
+    known = {sound["name"] for sound in listed()}
+    for name in sorted(known):
+        if not os.path.exists(os.path.join(OUT, name + ".ogg")):
+            wrong.append(f"{os.path.relpath(LIST, ROOT)}: '{name}' is listed and has not been made")
+    for folder, _, files in sorted(os.walk(OUT)):
+        for file in sorted(files):
+            name = os.path.relpath(os.path.join(folder, file), OUT)
+            if name.endswith(".ogg") and name[:-4] not in known:
+                wrong.append(f"resource/sound/made/{name}: made, and not listed in sounds.txt")
+    return wrong
+
+
 def main():
     args = sys.argv[1:]
     force = "--force" in args
@@ -186,6 +217,12 @@ def main():
     for name in names:
         if name not in known:
             sys.exit(f"soundgen: '{name}' is not listed in {LIST}")
+    if "--check" in args:
+        wrong = check()
+        for line in wrong:
+            print(line)
+        print(f"soundgen: {len(wrong)} wrong" if wrong else "soundgen: every sound a script names is there, and the list and what is made agree")
+        sys.exit(1 if wrong else 0)
     if "--list" in args:
         for sound in sounds:
             there = os.path.exists(os.path.join(OUT, sound["name"] + ".ogg"))

@@ -11,6 +11,9 @@
 #               rejected by the type checker
 #   specs       bin/ltcore Tool/specs: the engine-free test suites
 #   specs-fail  a planted failing suite must make the runner exit non-zero
+#   sounds      script/soundgen --check: every sound a script names is
+#               there (the engine plays silence for a missing one and says
+#               nothing), and the list of made sounds matches what is made
 #   launch-*    bin/launch must exit 0 for a clean app, 1 for a script
 #               error, and with 128 + the signal for a crash or a failed
 #               assertion
@@ -170,6 +173,7 @@ rm -f "$planted"
 
 step specs 0 bin/ltcore Tool/specs
 step specs-fail 1 bin/ltcore Tool/specs --file Tool/selftest/failing.planted
+step sounds 0 script/soundgen --check
 
 if [ "$fast" -eq 0 ]; then
   step launch-pass 0 timeout 120 bin/launch selftest/pass

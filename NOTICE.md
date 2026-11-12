@@ -38,6 +38,6 @@ Under ElevenLabs' terms the account holder keeps all rights in what they generat
 
 These came with the original Limit Theory repository. The public-domain dedication cannot be assumed to reach them. (The original soundtrack's sound banks and a copy of the Oculus SDK's headers were of this kind too, were used by nothing, and have been removed.)
 
-- **Sounds in `resource/sound/`** other than `made/`. Most appear to have been made for the original game. Twenty-five carried embedded keyword tags of the kind a stock sound library adds, and were probably licensed from one. Twenty-three of those have been removed. Two are still here because the game plays them until their replacements are chosen: `station/ambiance_ship_loops_14.wav` and `ui/scanneropen.wav`.
+- **Sounds in `resource/sound/`** other than `made/`. Most appear to have been made for the original game. Twenty-five more carried embedded keyword tags of the kind a stock sound library adds, and were probably licensed from one. All of those have been removed, and what the game played of them is replaced by sounds made for it.
 - **`include/GL/`**: old OpenGL headers for the Windows build: Microsoft's (`GL.H`, `GLU.H`, `GLAux.h`), GLUT and GLUI, each under its own terms.
 - **Textures** `ice.jpg`, `rock.jpg`, `water_normals.jpg`, `lensdirt.jpg`, `tree.png`, `splash.png` and the icons in `resource/texture/`.
