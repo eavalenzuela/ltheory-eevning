@@ -224,7 +224,7 @@ end
 -- strongbox has one of.
 local customs: { string } = {}
 for _, module in Modules.list do
-  if module.meta then
+  if module.meta == 1 then
     table.insert(customs, module.id)
   end
 end

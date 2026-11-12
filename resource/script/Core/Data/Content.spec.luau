@@ -441,34 +441,45 @@ suite:Case("every weapon, repairer, extender, plate and mining laser has a tech 
     Modules.SizeOf(Modules.byId["miner.small"]) }, { 2, 3, 1 })
 end)
 
-suite:Case("the same modules have a custom make, between the plain one and tech 2: a little better, easier to fit, and only ever found", function(t)
-  local customs = 0
+suite:Case("the same modules have a custom make, between the plain one and tech 2, and a masterwork past it: easier to fit, and only ever found", function(t)
+  local customs, masterworks = 0, 0
   for _, module in Modules.list do
     if module.meta then
-      customs += 1
+      local master = module.meta == 2
+      customs += if master then 0 else 1
+      masterworks += if master then 1 else 0
       local base = Modules.byId[module.base :: string]
       local better = assert(Modules.Improved(base.id), `{base.id} has a custom make and no tech 2 make`)
       t.eq({ module.id, module.name, module.slot, module.hardpoint, module.tech } :: { any },
-        { base.id .. ".custom", base.name .. " Custom", base.slot, base.hardpoint, nil } :: { any })
-      t.eq(Modules.Custom(base.id), module)
-      t.ok(Modules.Custom(module.id) == nil and Modules.Improved(module.id) == nil, "a custom make has no better make of its own")
-      -- Easier to fit than the plain one, and worth more; less than tech 2 in what it does.
+        { base.id .. (if master then ".master" else ".custom"), base.name .. (if master then " Masterwork" else " Custom"), base.slot,
+          base.hardpoint, nil } :: { any })
+      t.eq(if master then Modules.Masterwork(base.id) else Modules.Custom(base.id), module)
+      t.ok(Modules.Custom(module.id) == nil and Modules.Improved(module.id) == nil and Modules.Masterwork(module.id) == nil,
+        "a custom make has no better make of its own")
+      -- What a pirate of a grade fits of it: the custom make a veteran, the masterwork a captain.
+      t.eq({ Modules.Graded(base.id, 0), Modules.Graded(base.id, 1), Modules.Graded(base.id, 2) },
+        { base.id, base.id .. ".custom", base.id .. ".master" })
+      -- Easier to fit than the plain one, and worth more; a custom make does less than tech 2, and a masterwork more.
       t.ok(module.cpu <= base.cpu and module.powergrid <= base.powergrid and module.cpu >= 1 and module.powergrid >= 1, module.id)
       t.ok(module.cpu < base.cpu or module.powergrid < base.powergrid or base.cpu + base.powergrid <= 2, module.id)
-      t.eq(module.basePrice, base.basePrice * 3)
+      t.eq(module.basePrice, base.basePrice * (if master then 20 else 3))
+      local damage, amount = if master then 1.25 else 1.1, if master then 1.35 else 1.125
+      local function placed(mine: number, theirs: number)
+        t.ok(if master then mine > theirs else mine < theirs, `{module.id} against the tech 2 make`)
+      end
       if module.weapon and base.weapon and better.weapon then
-        t.near(module.weapon.damageMultiplier, base.weapon.damageMultiplier * 1.1, 1e-9)
-        t.ok(module.weapon.damageMultiplier < better.weapon.damageMultiplier)
+        t.near(module.weapon.damageMultiplier, base.weapon.damageMultiplier * damage, 1e-9)
+        placed(module.weapon.damageMultiplier, better.weapon.damageMultiplier)
         t.eq({ module.weapon.family, module.weapon.size } :: { any }, { base.weapon.family, base.weapon.size } :: { any })
       elseif module.repair and base.repair and better.repair then
-        t.near(module.repair.amount, base.repair.amount * 1.125, 1e-9)
-        t.ok(module.repair.amount < better.repair.amount)
+        t.near(module.repair.amount, base.repair.amount * amount, 1e-9)
+        placed(module.repair.amount, better.repair.amount)
       elseif module.miner and base.miner and better.miner then
-        t.near(module.miner.volume, base.miner.volume * 1.125, 1e-9)
-        t.ok(module.miner.volume < better.miner.volume)
+        t.near(module.miner.volume, base.miner.volume * amount, 1e-9)
+        placed(module.miner.volume, better.miner.volume)
       elseif module.hex and base.hex and better.hex then
-        t.near(module.hex.strength, base.hex.strength * 1.125, 1e-9)
-        t.ok(module.hex.strength < better.hex.strength)
+        t.near(module.hex.strength, base.hex.strength * amount, 1e-9)
+        placed(module.hex.strength, better.hex.strength)
       end
       t.ok(not base.internal, "what only a drone carries has a custom make")
       -- No more skill than the plain one.
@@ -478,9 +489,11 @@ suite:Case("the same modules have a custom make, between the plain one and tech 
         { true, nil, nil } :: { any })
     end
   end
-  -- One for every module that has a tech 2 make and is not a drone's own.
-  t.eq(customs, 21 + 4 * 3 + 2 + 2 * 3)
+  -- One of each for every module that has a tech 2 make and is not a drone's own.
+  t.eq({ customs, masterworks }, { 21 + 4 * 3 + 2 + 2 * 3, 21 + 4 * 3 + 2 + 2 * 3 })
   t.ok(Modules.Custom("projector.entanglement") == nil and Modules.Custom("autocannon.small.ii") == nil)
+  t.ok(Modules.Masterwork("projector.entanglement") == nil and Modules.Masterwork("autocannon.small.custom") == nil)
+  t.eq({ Modules.Graded("projector.entanglement", 2), Modules.Graded("autocannon.small", 3) }, { "projector.entanglement", "autocannon.small" })
   t.eq(Modules.SizeOf(Modules.byId["autocannon.medium.custom"]), 2)
 end)
 

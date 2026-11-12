@@ -14,6 +14,16 @@
 -- room, power and hardpoints for), how far off it likes to fight, and
 -- what killing it pays. The bounty is on the pilot, not the hull.
 --
+-- Not all of them are alike. Away from where order is kept, now and
+-- then one of a pack is a veteran, and in lawless space now and then
+-- its captain: the same kind in the same hull, with the better makes
+-- of whatever it fits that has one (Data/Modules: the custom make for
+-- a veteran, the masterwork for a captain), by another name, and with
+-- more on its head. A stronghold is always a captain's. What such a
+-- ship had fitted is found in its wreck as it was more often than a
+-- plain pirate's is found better than it looked (Tactical/Aftermath),
+-- and a captain's wreck is the only place a masterwork is to be had.
+--
 -- Each flies with the same orders a player gives (orbit, lock,
 -- activate), so anything a pirate can do, a pilot can. They ignore
 -- capsules. A pack left alone for a few minutes goes away.
@@ -51,6 +61,7 @@ export type Kind = {
   bounty: number,
   tags: number,       -- pirate tags in its wreck
   fit: { { string } },
+  grade: number?,     -- 1 for a veteran of its kind, 2 for a captain
 }
 
 local function times(count: number, module: string, charge: string?): { { string } }
@@ -116,6 +127,20 @@ for _, kind in KINDS do
 end
 Pirates.SCOUT = Pirates.kindById["scout"]
 
+-- The grades above a plain pirate: what one is called, how many times
+-- over the bounty on it is, and how many more tags it carries.
+Pirates.GRADES = {
+  { id = "veteran", bounty = 2, tags = 1 },
+  { id = "captain", bounty = 5, tags = 3 },
+}
+-- How often a pirate that comes is of each grade, by how safe the
+-- system is: none where order is kept.
+Pirates.GRADED = {
+  secure = { 0, 0 },
+  low = { 0.12, 0.02 },
+  lawless = { 0.25, 0.06 },
+} :: { [string]: { number } }
+
 -- What comes, by how safe the system is: each a pack, and its share of
 -- the times one comes. (Where order is kept it is a scout, or two.)
 local PACKS: { [string]: { { any } } } = {
@@ -142,23 +167,65 @@ end
 
 -- What a kind of pirate ends up fitted with: as much of what it would
 -- like, in order, as its hull takes. Each entry is a module and its
--- charge ("" for none).
-function Pirates.Fit(kind: Kind): { { string } }
+-- charge ("" for none). And, of what it would like, what it got and
+-- what it has no room for.
+local function fitOf(kind: Kind): ({ { string } }, { { string } }, { { string } })
   local hull = Ships.byId[kind.hull]
   local types: { string } = {}
   local fitted: { { string } } = {}
+  local got: { { string } } = {}
+  local left: { { string } } = {}
   for _, entry in kind.fit do
     local module = Modules.byId[entry[1]]
     if module then
       table.insert(types, module.id)
       if Attributes.Check(hull, types) then
         table.insert(fitted, { module.id, entry[2] or chargeFor(module) or "" })
+        table.insert(got, entry)
       else
         table.remove(types)
+        table.insert(left, entry)
       end
     end
   end
-  return fitted
+  return fitted, got, left
+end
+
+function Pirates.Fit(kind: Kind): { { string } }
+  return (fitOf(kind))
+end
+
+-- A kind as one of a grade flies it: the same hull, and what the plain
+-- kind has fitted, each thing the make of it that the grade fits
+-- (Modules.Graded). A better make is easier to fit, so then, if there
+-- is room, what the plain kind would have liked and could not have.
+-- The kind itself, for no grade, and for what does not fly: nobody
+-- commands a store.
+local graded: { [string]: Kind } = {}
+for _, kind in KINDS do
+  if Ships.byId[kind.hull].class ~= "works" then
+    local _, got, left = fitOf(kind)
+    for grade, rank in Pirates.GRADES do
+      local fit: { { string } } = {}
+      for _, entries in { got, left } do
+        for _, entry in entries do
+          table.insert(fit, { Modules.Graded(entry[1], grade), entry[2] })
+        end
+      end
+      local short = (string.gsub(kind.name, "^Pirate ", ""))
+      local made: Kind = {
+        id = `{kind.id}.{rank.id}`, hull = kind.hull, name = if grade == 1 then `Veteran {short}` else `{short} Captain`,
+        range = kind.range, bounty = kind.bounty * rank.bounty, tags = kind.tags + rank.tags, fit = fit, grade = grade,
+      }
+      graded[made.id] = made
+      Pirates.kindById[made.id] = made
+    end
+  end
+end
+
+function Pirates.Graded(kind: Kind, grade: number): Kind
+  local rank = Pirates.GRADES[grade]
+  return if rank then graded[`{kind.id}.{rank.id}`] or kind else kind
 end
 
 -- Fit a ship as a kind is fitted, loaded, with more of what it fires in
@@ -219,6 +286,8 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   -- pack a kind of space tougher than the belts here bring, and nobody
   -- troubles a derelict where order is kept.
   local hidden = state.sites[site.id]
+  -- (a stronghold is a captain's: the first of whoever keeps it)
+  local stronghold = hidden ~= nil and hidden.kind == "combat" and hidden.depth > 0
   if hidden and hidden.kind == "mission" then
     -- (who is at a place made for a job is the job's business: Tactical/Assault)
     return
@@ -249,15 +318,21 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
       break
     end
   end
-  for _, id in pack do
+  local captains = 0
+  for index, id in pack do
     -- Somewhere 25 to 35 km out from the middle of the place.
     local angle = Rng.Float(rng, 0, 2 * math.pi)
     local out = Rng.Float(rng, 25000, 35000)
-    local ball = Pirates.Spawn(state, Pirates.kindById[id], me.system,
+    -- (what grade it is, rolled apart, so that nothing else about the pack follows from it)
+    local luck = Rng.Next(Rng.For(state.historySeed, state.tick, site.id, index, 73))
+    local odds = Pirates.GRADED[band]
+    local grade = if (stronghold and index == 1) or luck < odds[2] then 2 elseif luck < odds[2] + odds[1] then 1 else 0
+    captains += if grade == 2 then 1 else 0
+    local ball = Pirates.Spawn(state, Pirates.Graded(Pirates.kindById[id], grade), me.system,
       site.x + out * math.cos(angle), site.y + Rng.Float(rng, -3000, 3000), site.z + out * math.sin(angle), site.id)
     table.insert(events, { kind = "BallAdded", ball = ball.id })
   end
-  table.insert(events, { kind = "PiratesArrived", grid = site.id, count = #pack, away = away })
+  table.insert(events, { kind = "PiratesArrived", grid = site.id, count = #pack, away = away, captains = captains })
 end
 
 -- Once a tick: pirates come to where the player is, and to where a

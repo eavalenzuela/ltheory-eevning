@@ -119,6 +119,10 @@ export type ModuleType = {
   -- 1 for a custom make: the module 'base' as somebody has worked it
   -- over, a little better and easier to fit. Nobody sells one or builds
   -- one: they are found in wrecks (Tactical/Aftermath, Tactical/Sites).
+  -- 2 for a masterwork: the same module made over by the best hands
+  -- the pirates have, better than tech 2 and as easy to fit as a custom
+  -- make. Only their captains fit them (Tactical/Pirates), and only a
+  -- captain's wreck has one.
   meta: number?,
 }
 
@@ -703,19 +707,26 @@ end
 -- sells or builds these: a pirate's wreck now and then has the custom
 -- make of what the pirate had fitted, and their stores have some.
 --
+-- And past tech 2, the masterwork of each of the same modules: a
+-- quarter more damage, or a third more of what it mends, holds or cuts,
+-- as easy to fit as the custom make, and no more skill than the plain
+-- one. Nobody sells, builds or stores these: a pirate captain fits
+-- them, and what is left of them is in the captain's wreck.
+--
 -- (What only a drone carries has a tech 2 make and no custom one: it is
 -- what a tech 2 drone carries, and is no more to be had apart than the
 -- plain one is.)
 type Better = { id: string, name: string, damage: number, amount: number, fitting: number, price: number, tech: number?, meta: number? }
 local TECH2: Better = { id = ".ii", name = " II", damage = 1.2, amount = 1.25, fitting = 1.15, price = 8, tech = 2 }
 local CUSTOM: Better = { id = ".custom", name = " Custom", damage = 1.1, amount = 1.125, fitting = 0.9, price = 3, meta = 1 }
+local MASTER: Better = { id = ".master", name = " Masterwork", damage = 1.25, amount = 1.35, fitting = 0.9, price = 20, meta = 2 }
 for _, base in table.clone(modules) do
   local buffer = string.sub(base.id, 1, 15) == "shield.extender" or string.sub(base.id, 1, 11) == "armor.plate"
   local hex = base.hex
   local mends = hex ~= nil and (hex.kind == "shield" or hex.kind == "armor")
   if base.weapon or base.repair or base.miner or buffer or mends then
     local weapon, repair, miner = base.weapon, base.repair, base.miner
-    local makes: { Better } = if base.internal then { TECH2 } else { CUSTOM, TECH2 }
+    local makes: { Better } = if base.internal then { TECH2 } else { CUSTOM, TECH2, MASTER }
     for _, make in makes do
       local passive: { Modifier } = {}
       for _, m in base.passive do
@@ -774,6 +785,21 @@ end
 function Modules.Custom(id: string): ModuleType?
   local better = Modules.byId[id .. ".custom"]
   return if better and better.meta then better else nil
+end
+
+-- The masterwork of a module, if it has one.
+function Modules.Masterwork(id: string): ModuleType?
+  local better = Modules.byId[id .. ".master"]
+  return if better and better.meta then better else nil
+end
+
+-- The make of a module that a pirate of a grade fits (Tactical/Pirates):
+-- the custom make for a veteran (1), the masterwork for a captain (2);
+-- the module itself where there is no such make of it, or for anybody
+-- else.
+function Modules.Graded(id: string, grade: number): string
+  local better = if grade == 1 then Modules.Custom(id) elseif grade == 2 then Modules.Masterwork(id) else nil
+  return if better then better.id else id
 end
 
 -- A module's size, 1 to 3: its weapon's, or what its name says.

@@ -219,6 +219,37 @@ suite:Case("what survives of a pirate's fitted module is now and then the custom
   end
 end)
 
+suite:Case("a veteran's custom fittings and a captain's masterworks outlive the ship two times in five; the rest are found plain", function(t)
+  local game = inSpace(true)
+  local state = game.state
+  local ball = me(game)
+  for grade, id in { "raider.veteran", "raider.captain" } do
+    local kept, plain = 0, 0
+    for i = 1, 150 do
+      local raider = Pirates.Spawn(state, Pirates.kindById[id], ball.system, ball.x + 1000 * i, ball.y + 1e6 * grade, ball.z, ball.grid)
+      local better = 0
+      for _, item in Items.Fitted(state, raider.id) do
+        better += if Modules.byId[item.type].meta == grade then 1 else 0
+      end
+      assert(better >= 4, `a {id} has {better} of its grade's make fitted`)
+      Aftermath.Destroy(state, raider.id, 0, game.events)
+      for _, item in Items.In(state, state.wreckIds[#state.wreckIds], "cargo") do
+        local module = Modules.byId[item.type]
+        if module and module.meta then
+          -- (never a better make than it had, nor the other grade's)
+          t.eq(module.meta, grade, `a {id}'s wreck had a {module.name}`)
+          kept += item.quantity
+        elseif module and Modules.Graded(item.type, grade) ~= item.type then
+          plain += item.quantity
+        end
+        t.ok(module == nil or module.tech ~= 2, "a pirate's wreck had a tech 2 module")
+      end
+    end
+    t.ok(kept > 0 and plain > 0, `{kept} kept and {plain} plain in a hundred and fifty wrecks of a {id}`)
+    t.near(kept / (kept + plain), Aftermath.KEPT_CHANCE, 0.07)
+  end
+end)
+
 suite:Case("wrecks fade after two hours", function(t)
   local game = inSpace(true)
   local scout = scoutAt(game, 3000)

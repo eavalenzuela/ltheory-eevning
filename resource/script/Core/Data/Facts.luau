@@ -240,7 +240,9 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     elseif module.hardpoint ~= "" then `{slot} {module.hardpoint}`
     else `{slot} module`
   -- (a make of another module: what it is the make of, and how it is come by)
-  if module.meta and module.base then
+  if module.meta == 2 and module.base then
+    sheet.note = `The {nameOf(module.base)} made over by the best hands the pirates have: better than any that is built to a drawing, easy to fit, and no harder to use than the plain one. Nobody sells or builds one. Only a pirate captain fits them, and now and then one outlives the captain's ship.`
+  elseif module.meta and module.base then
     sheet.note = `The {nameOf(module.base)} as somebody has worked it over: a little better, easier to fit, and no harder to use. Nobody sells or builds one. They are found in pirates' wrecks and in their stores.`
   elseif module.tech == 2 and module.base then
     sheet.note = `The tech 2 make of the {nameOf(module.base)}: better, and harder to fit and to use. Nobody sells one. Its blueprint is invented from the plain one's.`

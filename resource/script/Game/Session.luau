@@ -72,7 +72,8 @@ function Session.Notice(session: Session, event: Space.Event)
     -- (somewhere else, for a hired pilot: they say so themselves when they are gone for)
     return
   elseif kind == "PiratesArrived" then
-    Session.Say(session, if event.count == 1 then "A pirate has arrived" else `{event.count} pirates have arrived`)
+    Session.Say(session, (if event.count == 1 then "A pirate has arrived" else `{event.count} pirates have arrived`)
+      .. (if (event.captains or 0) > 0 then (if event.count == 1 then ": a captain" else ", a captain among them") else ""))
   elseif kind == "FleetAttacked" then
     Session.Say(session, `{event.name} is under attack at {event.where}`)
   elseif kind == "PatrolRetired" then

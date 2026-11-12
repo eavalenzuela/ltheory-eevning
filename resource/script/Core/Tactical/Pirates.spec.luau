@@ -64,6 +64,19 @@ local function arrivals(game: Core.Game): { string }
   return names
 end
 
+-- What a pirate is called without its grade ("Veteran Raider" and
+-- "Raider Captain" are a "Pirate Raider"), and the grade.
+local function ungraded(name: string): (string, number)
+  local veteran = string.match(name, "^Veteran (.+)$")
+  local captain = string.match(name, "^(.+) Captain$")
+  if veteran then
+    return "Pirate " .. veteran, 1
+  elseif captain then
+    return "Pirate " .. captain, 2
+  end
+  return name, 0
+end
+
 suite:Case("every kind of pirate flies an Unbound hull with a fit the hull takes, its weapons loaded", function(t)
   for _, kind in Pirates.kinds do
     local hull = Ships.byId[kind.hull]
@@ -232,16 +245,156 @@ suite:Case("what comes follows from how safe the system is", function(t)
     t.ok(#low >= 2 and #low <= 3, `history seed {seed}: {#low} pirates at a belt in low security`)
     local lawless = arrivals((at(t, seed, "lawless", "belt")))
     t.eq(#lawless, 3)
+    -- (whatever grade each is of: below)
     for _, name in low do
-      t.ok(name == "Pirate Raider" or name == "Pirate Jackal", `{name} in low security`)
+      local kind = ungraded(name)
+      t.ok(kind == "Pirate Raider" or kind == "Pirate Jackal", `{name} in low security`)
     end
     for _, name in lawless do
-      t.ok(name ~= "Pirate Scout", "a scout in lawless space")
-      seen[name] = true
+      local kind = ungraded(name)
+      t.ok(kind ~= "Pirate Scout", "a scout in lawless space")
+      seen[kind] = true
     end
   end
   t.ok(seen["Pirate Marauder"], "twelve packs in lawless space and no cruiser among them")
   t.ok(seen["Pirate Jackal"] and seen["Pirate Raider"])
+end)
+
+suite:Case("a veteran of a kind fits the custom make of whatever it has one of, and a captain the masterwork: the same hull, more to it, and more on its head", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local function whole(ball: State.Ball): number
+    return ball.vitals.shieldMax + ball.vitals.armorMax + ball.vitals.hullMax
+  end
+  local graded = 0
+  for _, kind in Pirates.kinds do
+    t.eq(Pirates.Graded(kind, 0), kind)
+    -- (nobody commands a store)
+    if Ships.byId[kind.hull].class == "works" then
+      t.eq({ Pirates.Graded(kind, 1), Pirates.Graded(kind, 2) }, { kind, kind })
+      continue
+    end
+    local plain = Pirates.Spawn(state, kind, 1, 1e9, 0, 0, 0)
+    local last = { dps = Items.Offence(state, plain.id).dps, hp = whole(plain) }
+    local short = (string.gsub(kind.name, "^Pirate ", ""))
+    for grade, rank in Pirates.GRADES do
+      graded += 1
+      local better = Pirates.Graded(kind, grade)
+      t.eq({ better.id, better.hull, better.grade, better.range, better.bounty, better.tags } :: { any },
+        { `{kind.id}.{rank.id}`, kind.hull, grade, kind.range, kind.bounty * rank.bounty, kind.tags + rank.tags } :: { any })
+      t.eq(Pirates.kindById[better.id], better)
+      t.eq({ better.name, (ungraded(better.name)), select(2, ungraded(better.name)) } :: { any },
+        { if grade == 1 then `Veteran {short}` else `{short} Captain`, kind.name, grade } :: { any })
+      -- It has what the plain kind has, each thing the make its grade fits, loaded alike; and then
+      -- whatever else of what the plain kind would like that there is room for now.
+      t.eq(#better.fit, #kind.fit)
+      local was, fit = Pirates.Fit(kind), Pirates.Fit(better)
+      for index, entry in was do
+        t.eq(fit[index], { Modules.Graded(entry[1], grade), entry[2] }, `{better.name}'s fit, place {index}`)
+      end
+      local made = 0
+      for _, entry in fit do
+        local module = Modules.byId[entry[1]]
+        made += if module.meta == grade then 1 else 0
+        t.ok(module.meta == nil or module.meta == grade, `{better.name} has a {module.name}`)
+        t.ok(module.meta == grade or Modules.Graded(entry[1], grade) == entry[1], `{better.name} has a plain {module.name}`)
+      end
+      t.ok(#fit >= #was and made >= 1, `{better.name}'s fit`)
+      -- It hits harder than the grade below, takes as much killing at least, and is worth what its grade is.
+      local ball = Pirates.Spawn(state, better, 1, 1e9 + 1e6 * graded, 0, 0, 0)
+      local dps, hp = Items.Offence(state, ball.id).dps, whole(ball)
+      t.ok(dps > last.dps * 1.03, `{better.name} does {dps} a second and the grade below {last.dps}`)
+      t.ok(hp >= last.hp, `{better.name} has {hp} hit points and the grade below {last.hp}`)
+      local pilot = state.pilots[ball.id]
+      t.eq({ ball.name, state.ships[ball.id].type, pilot.bounty, pilot.tags } :: { any },
+        { better.name, kind.hull, better.bounty, better.tags } :: { any })
+      last = { dps = dps, hp = hp }
+    end
+  end
+  -- (the five of the ladder and the mender, in two grades)
+  t.eq(graded, 12)
+  -- A captain's marauder against a plain one: a quarter more to its guns, and a good deal more plate and shield.
+  local plain = Pirates.Spawn(state, Pirates.kindById["marauder"], 1, 3e9, 0, 0, 0)
+  local captain = Pirates.Spawn(state, Pirates.kindById["marauder.captain"], 1, 4e9, 0, 0, 0)
+  t.near(Items.Offence(state, captain.id).dps / Items.Offence(state, plain.id).dps, 1.25, 0.03)
+  t.ok(whole(captain) > whole(plain) * 1.1, `{whole(captain)} against {whole(plain)}`)
+end)
+
+suite:Case("veterans and captains come where order is thin: none where it is kept, more of them the wilder it is, and a stronghold is a captain's", function(t)
+  local counts: { [string]: { number } } = {}
+  local bands: { Galaxy.Band } = {}
+  table.insert(bands, "secure")
+  table.insert(bands, "low")
+  table.insert(bands, "lawless")
+  for _, band: Galaxy.Band in bands do
+    local all, veterans, captains = 0, 0, 0
+    for seed = 1, 80 do
+      local game = at(t, seed, band, "belt")
+      local said = 0
+      for _ = 1, 3 do
+        Core.Step(game)
+        for _, event in Core.TakeEvents(game) do
+          local ship = if event.kind == "BallAdded" then game.state.ships[event.ball] else nil
+          if ship and ship.owner == "pirates" then
+            local _, grade = ungraded(ship.name)
+            all += 1
+            veterans += if grade == 1 then 1 else 0
+            captains += if grade == 2 then 1 else 0
+            said -= if grade == 2 then 1 else 0
+          elseif event.kind == "PiratesArrived" then
+            said += event.captains
+          end
+        end
+      end
+      -- (the word that they have come says how many captains are among them)
+      t.eq(said, 0)
+    end
+    counts[band] = { all, veterans, captains }
+    local odds = Pirates.GRADED[band]
+    t.near(veterans / all, odds[1], 0.07, `{veterans} veterans of {all} in {band} space`)
+    t.near(captains / all, odds[2], 0.04, `{captains} captains of {all} in {band} space`)
+  end
+  t.eq({ counts.secure[2], counts.secure[3] }, { 0, 0 })
+  t.ok(counts.low[2] > 0 and counts.lawless[2] > counts.low[2] and counts.lawless[3] > 0,
+    `{counts.low[2]} veterans in low security, {counts.lawless[2]} and {counts.lawless[3]} captains in lawless space`)
+  -- A stronghold (a den that another den's stores gave away): the first of whoever keeps it is a captain.
+  local kept = 0
+  for seed = 1, 40 do
+    local game = Core.New({ galaxySeed = 1, historySeed = seed })
+    local state = game.state
+    t.ok(Core.Submit(game, { kind = "Undock", actor = state.player.ship }))
+    Core.Step(game)
+    local den: State.Site? = nil
+    for _, id in state.siteIds do
+      local site = state.sites[id]
+      den = den or (if site.kind == "combat" and site.system == 1 and not site.gone then site else nil)
+    end
+    if den == nil then
+      continue
+    end
+    kept += 1
+    den.depth = 1
+    local place = assert(Space.Object(state, den.id))
+    local ball = state.balls[state.player.ship]
+    ball.x, ball.y, ball.z = place.x + 500, place.y, place.z
+    Space.AssignGrid(state, ball)
+    Core.TakeEvents(game)
+    local first: string? = nil
+    local others = 0
+    for _ = 1, 3 do
+      Core.Step(game)
+      for _, event in Core.TakeEvents(game) do
+        local ship = if event.kind == "BallAdded" then state.ships[event.ball] else nil
+        if ship and ship.owner == "pirates" then
+          others += if first then 1 else 0
+          first = first or ship.name
+        end
+      end
+    end
+    t.eq(select(2, ungraded(first or "")), 2, `a stronghold's first keeper is a {first or "nobody"}`)
+    t.ok(others >= 1, "a captain with nobody to command")
+  end
+  t.ok(kept >= 5, `{kept} dens in forty games`)
 end)
 
 suite:Case("a gate is watched only in lawless space, and not every time", function(t)

@@ -142,7 +142,8 @@ local function loot(state: State.State, rng: Rng.Rng, wreck: number, rich: numbe
   -- custom make: those are the plain one's.)
   if Rng.Chance(rng, 0.5) then
     local module = Modules.list[Rng.Int(rng, #Modules.list) + 1]
-    if module.tech == 2 and module.base then
+    if (module.tech == 2 or module.meta == 2) and module.base then
+      -- (nor is a masterwork: only a pirate captain has one)
       module = Modules.byId[module.base]
     elseif module.internal then
       module = Modules.byId["miner.small"]
@@ -156,7 +157,7 @@ end
 -- The modules there is a custom make of, worked out once.
 local customs: { Modules.ModuleType } = {}
 for _, module in Modules.list do
-  if module.meta then
+  if module.meta == 1 then
     table.insert(customs, module)
   end
 end

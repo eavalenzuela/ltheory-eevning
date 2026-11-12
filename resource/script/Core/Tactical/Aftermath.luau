@@ -36,6 +36,11 @@ local DROP_CHANCE = 0.5
 -- custom make of it (Data/Modules), where there is one.
 local CUSTOM_CHANCE = 0.2
 Aftermath.CUSTOM_CHANCE = CUSTOM_CHANCE
+-- And how often a module of a pirate's that was a better make to begin
+-- with (a veteran's custom fittings, a captain's masterworks) is found
+-- as it was: the rest of the time what is left of it is the plain one.
+local KEPT_CHANCE = 0.4
+Aftermath.KEPT_CHANCE = KEPT_CHANCE
 -- The share of a bounty the pilot is paid for a pirate their hired
 -- pilots destroyed with the pilot somewhere else: the rest is theirs.
 Aftermath.AWAY = 0.5
@@ -91,8 +96,14 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
       if Rng.Chance(rng, DROP_CHANCE) then
         -- (a pirate's own guns and fittings are now and then better than they look)
         local fitted = item.place == "high" or item.place == "mid" or item.place == "low"
-        local custom = if ship.owner == "pirates" and fitted then Modules.Custom(item.type) else nil
-        local found = if custom and Rng.Chance(rng, CUSTOM_CHANCE) then custom.id else item.type
+        local made = Modules.byId[item.type]
+        local found = item.type
+        if ship.owner == "pirates" and fitted and made and made.meta and made.base then
+          found = if Rng.Chance(rng, KEPT_CHANCE) then item.type else made.base
+        elseif ship.owner == "pirates" and fitted then
+          local custom = Modules.Custom(item.type)
+          found = if custom and Rng.Chance(rng, CUSTOM_CHANCE) then custom.id else item.type
+        end
         Items.Add(state, found, item.quantity, wreck.id, "cargo")
       end
     end
