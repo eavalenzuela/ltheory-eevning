@@ -540,6 +540,17 @@ function Debug.Corporation(): (string, number, number, number, number)
   return info.name, info.wallet, info.earned, info.spent, select(2, Core.Query.Candidates(session.game, session.game.state.player.home))
 end
 
+-- Which of the pilots looking for work at the home station is the first
+-- of a grade or better (the number on their Hire button), or 0.
+function Debug.Candidate(grade: number): number
+  for index, found in (Core.Query.Candidates(session.game, session.game.state.player.home)) do
+    if found.skill >= grade then
+      return index
+    end
+  end
+  return 0
+end
+
 -- Open the market at an item type, or the industry tab at a blueprint.
 -- Open the information window on a type of item ("frigate.lancer").
 function Debug.Info(type: string): boolean

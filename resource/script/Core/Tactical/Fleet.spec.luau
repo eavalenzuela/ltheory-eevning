@@ -491,7 +491,7 @@ suite:Case("a capacitor relay sends what it costs into a locked ship in reach, a
       fed += event.amount
     end
   end
-  t.eq(fed, 40)
+  t.near(fed, 40, 1e-6)
   -- It never puts in more than there is room for: what a full ship is sent is lost.
   theirs.vitals.capacitor = theirs.vitals.capacitorMax - 15
   steps(game, 5)

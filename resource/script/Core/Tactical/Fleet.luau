@@ -214,6 +214,11 @@ function Fleet.Candidates(state: State.State, station: number): { Candidate }
       local rng = Rng.For(state.historySeed, station, day, slot, 97)
       local roll = Rng.Next(rng)
       local skill = if roll < 0.4 then 1 elseif roll < 0.75 then 2 elseif roll < 0.95 then 3 else 4
+      -- (the first at the station a new pilot starts at is always
+      -- somebody new: there is always one a new pilot can afford)
+      if slot == 1 and station == Stations.Starter(state) then
+        skill = 1
+      end
       table.insert(found, { key = key, name = Names.Person(rng), skill = skill, fee = Fleet.Fee(skill), wage = Fleet.Wage(skill) })
     end
   end

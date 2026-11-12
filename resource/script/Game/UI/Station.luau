@@ -1538,7 +1538,7 @@ local function drawCareers(session: Session.Session, game: Core.Game, x: number,
   local status = Core.Query.Careers(game)
   local left, right = x + 16, x + 480
   Im.Heading("CAREER AGENTS", left, y + 78, 16, Im.DIM)
-  Im.Text("Five people who teach a way of making a living each, and pay for the learning.", left, y + 104, 13, Im.DIM)
+  Im.Text("Seven people who teach a way of making a living each, and pay for the learning.", left, y + 104, 13, Im.DIM)
   Im.Text("A lesson from each can be in hand at once. The Guide (top left) shows them in space.", left, y + 122, 13, Im.DIM)
   Careers.List(status, left - 8, y + 152, 448)
   Careers.Detail(session, status, right, y + 78, 444)

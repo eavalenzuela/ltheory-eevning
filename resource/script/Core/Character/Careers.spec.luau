@@ -75,13 +75,13 @@ suite:Case("every career has lessons that say what to do, can be done one way, a
       t.ok(lesson.site == nil or lesson.site == "ore" or lesson.site == "relic")
     end
   end
-  t.eq(ids, { "flight", "industry", "trade", "combat", "survey" })
+  t.eq(ids, { "flight", "industry", "trade", "combat", "survey", "command", "planets" })
 end)
 
 suite:Case("a lesson is taken at the agents' station, done in space, reported there, and paid", function(t)
   local game, state, mine, home = new()
   local status = Core.Query.Careers(game)
-  t.eq({ #status.rows, status.station, status.here, status.begun } :: { any }, { 5, home, true, false } :: { any })
+  t.eq({ #status.rows, status.station, status.here, status.begun } :: { any }, { 7, home, true, false } :: { any })
   local first = status.rows[1]
   t.eq({ first.career.id, first.done, first.taken, first.can, first.lesson and first.lesson.title } :: { any },
     { "flight", 0, false, true, "Out and back" } :: { any })

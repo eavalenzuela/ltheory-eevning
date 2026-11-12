@@ -319,6 +319,12 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
       break
     end
   end
+  -- (at a homeworld's own belts order is kept best of all: one comes,
+  -- never a pack. A new pilot's first belt is one of these, and the ship
+  -- a new game gives is no match for two: Character/Proof.spec.)
+  if hidden == nil and site.kind == "belt" and state.galaxy.systems[me.system].home and #pack > 1 then
+    pack = { pack[1] }
+  end
   local captains = 0
   for index, id in pack do
     -- Somewhere 25 to 35 km out from the middle of the place.

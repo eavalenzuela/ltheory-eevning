@@ -14,9 +14,11 @@ local Core = require("@lt/Core/Api")
 local Hacking = require("@lt/Core/Tactical/Hacking")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
+local Planets = require("@lt/Core/Data/Planets")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local System = require("@lt/Core/Describe/System")
 local Test = require("@lt/Tool/Test")
 
 local suite = Test.Suite("Proof")
@@ -152,6 +154,35 @@ local function hostile(p: Pilot, me: State.Ball): number
   return nearest
 end
 
+-- A tick's fighting of one enemy: orbited, locked, and everything there
+-- is to fire or to mend with switched on.
+local function engage(p: Pilot, me: State.Ball, enemy: number, orbit: number)
+  local v = me.vitals
+  if not (me.mode == "orbit" and me.target == enemy) then
+    Core.Submit(p.game, { kind = "Orbit", actor = me.id, target = enemy, range = orbit })
+  end
+  local targeted, locked = false, false
+  for _, lock in v.locks do
+    if lock.target == enemy then
+      targeted, locked = true, lock.locked
+    end
+  end
+  if not targeted then
+    Core.Submit(p.game, { kind = "LockTarget", actor = me.id, target = enemy })
+  elseif locked then
+    for _, item in Items.Fitted(p.state, me.id) do
+      local module = Modules.byId[item.type]
+      local on = false
+      for _, running in v.running do
+        on = on or running.item == item.id
+      end
+      if not on and (module.weapon or (module.repair and v.shield < 0.7 * v.shieldMax)) then
+        Core.Submit(p.game, { kind = "ActivateModule", actor = me.id, item = item.id, target = if module.weapon then enemy else nil })
+      end
+    end
+  end
+end
+
 -- Fight at the belts until so many bounties have been paid in all: the
 -- nearest pirate orbited and shot at, home to be mended when the shield
 -- is gone and the armour going, and on to the next belt when nobody
@@ -200,29 +231,7 @@ local function fight(p: Pilot, wanted: number, orbit: number): number
       continue
     end
     quiet = 0
-    if not (me.mode == "orbit" and me.target == enemy) then
-      Core.Submit(p.game, { kind = "Orbit", actor = me.id, target = enemy, range = orbit })
-    end
-    local targeted, locked = false, false
-    for _, lock in v.locks do
-      if lock.target == enemy then
-        targeted, locked = true, lock.locked
-      end
-    end
-    if not targeted then
-      Core.Submit(p.game, { kind = "LockTarget", actor = me.id, target = enemy })
-    elseif locked then
-      for _, item in Items.Fitted(p.state, me.id) do
-        local module = Modules.byId[item.type]
-        local on = false
-        for _, running in v.running do
-          on = on or running.item == item.id
-        end
-        if not on and (module.weapon or (module.repair and v.shield < 0.7 * v.shieldMax)) then
-          Core.Submit(p.game, { kind = "ActivateModule", actor = me.id, item = item.id, target = if module.weapon then enemy else nil })
-        end
-      end
-    end
+    engage(p, me, enemy, orbit)
     step(p)
   end
   return p.killedAt
@@ -570,6 +579,175 @@ suite:Case("a new pilot in the starter ship flies the survey career to its end: 
     print(`       {line}`)
   end
   t.eq(finished, SEEDS, "a new pilot in the starter ship did not finish the survey career")
+end)
+
+suite:Case("a new pilot flies the command career to its end on what the lessons pay: a drone, a hired pilot, a ship for them, a hold of ore", function(t)
+  local said: { string } = {}
+  local finished = 0
+  local SEEDS = 4
+  for seed = 1, SEEDS do
+    local p = new(seed)
+    local state = p.state
+    local mine = state.player.ship
+    -- A drone of your own: Drones to level 1, the drone into the bay, and out.
+    lesson(p, "AcceptLesson", "command")
+    must(p, { kind = "TrainSkill", actor = 0, type = "drones" })
+    for _ = 1, 400 do
+      if (state.skills.drones or 0) >= 1 then
+        break
+      end
+      step(p)
+    end
+    t.ok((state.skills.drones or 0) >= 1, "Drones was not trained in a few minutes")
+    must(p, { kind = "MoveItems", actor = 0, item = assert(stock(p, "drone.light")).id, to = "dronebay" })
+    must(p, { kind = "Undock", actor = 0 })
+    must(p, { kind = "LaunchDrones", actor = 0 })
+    dock(p)
+    lesson(p, "CompleteLesson", "command")
+    -- Call it home: out again, recalled, and aboard.
+    lesson(p, "AcceptLesson", "command")
+    must(p, { kind = "Undock", actor = 0 })
+    must(p, { kind = "LaunchDrones", actor = 0 })
+    must(p, { kind = "RecallDrones", actor = 0 })
+    for _ = 1, 200 do
+      if state.careers.command.count >= 1 then
+        break
+      end
+      step(p)
+    end
+    dock(p)
+    lesson(p, "CompleteLesson", "command")
+    -- Somebody to fly with: the first on the list, who is always somebody a new pilot can afford.
+    lesson(p, "AcceptLesson", "command")
+    local candidate = Core.Query.Candidates(p.game, p.home)[1]
+    t.ok(candidate.skill == 1 and candidate.fee <= state.wallet,
+      `{seed}: the first pilot looking for work wants {candidate.fee} and the lessons have paid {state.wallet}`)
+    must(p, { kind = "HirePilot", actor = 0, what = candidate.key })
+    lesson(p, "CompleteLesson", "command")
+    -- A ship for them: the hull assembled, the laser fitted to it, and given.
+    lesson(p, "AcceptLesson", "command")
+    must(p, { kind = "Assemble", actor = 0, item = assert(stock(p, "frigate.courier")).id })
+    local second = 0
+    for _, id in state.shipIds do
+      local ship = state.ships[id]
+      second = if id ~= mine and ship.docked == p.home and ship.type == "frigate.courier" and ship.owner == "player" then id else second
+    end
+    t.ok(second ~= 0, "the hull was not assembled")
+    must(p, { kind = "BoardShip", actor = 0, target = second })
+    t.ok((fit(p, "miner.small")), "the mining laser would not fit the new ship")
+    must(p, { kind = "BoardShip", actor = 0, target = mine })
+    local wing = state.fleet[state.fleetIds[1]]
+    must(p, { kind = "AssignShip", actor = 0, pilot = wing.id, target = second })
+    lesson(p, "CompleteLesson", "command")
+    -- Earn their keep: to a belt together, set to mine, and whoever comes for them seen off.
+    lesson(p, "AcceptLesson", "command")
+    must(p, { kind = "Undock", actor = 0 })
+    local belt = belts(p)[1]
+    to(p, belt)
+    for _ = 1, 600 do
+      local theirs = state.balls[second]
+      if p.lost or (theirs and theirs.grid == belt and theirs.warp == nil) then
+        break
+      end
+      step(p)
+    end
+    if not p.lost then
+      must(p, { kind = "FleetOrder", actor = 0, what = "mine" })
+    end
+    for _ = 1, 6000 do
+      if p.lost or state.careers.command.count >= 1 then
+        break
+      end
+      local me = ball(p)
+      local enemy = if me then hostile(p, me) else 0
+      if me and me.vitals.shield < 0.15 * me.vitals.shieldMax and me.vitals.armor < 0.6 * me.vitals.armorMax then
+        -- ("If your shield goes, warp out": mended, and back to the belt)
+        p.fled += 1
+        dock(p)
+        if not p.lost then
+          to(p, belt)
+        end
+      elseif me and enemy ~= 0 then
+        engage(p, me, enemy, 1500)
+      end
+      step(p)
+    end
+    if p.lost or state.careers.command.count < 1 then
+      table.insert(said, `{seed}: ` .. (if p.lost then "lost at the belt" else "no ore was brought in"))
+      continue
+    end
+    dock(p)
+    if p.lost then
+      table.insert(said, `{seed}: lost on the way home`)
+      continue
+    end
+    lesson(p, "CompleteLesson", "command")
+    t.eq(Careers.Of(state, "command").done, #Careers.byId.command.lessons)
+    finished += 1
+    table.insert(said, `{seed}: done in {math.floor(p.ticks / 60)} min, with {state.wallet} credits in hand, home to be mended {p.fled} times`)
+  end
+  print(`     command, new pilot: {finished} of {SEEDS} histories finished`)
+  for _, line in said do
+    print(`       {line}`)
+  end
+  t.eq(finished, SEEDS, "a new pilot did not finish the command career")
+end)
+
+suite:Case("a new pilot flies the planets career to its end on what the lessons pay: a colony, an extractor, a processor, a first load", function(t)
+  local p = new(1)
+  local state = p.state
+  -- Ground: the command centre into the hold, to a planet with something in it, and down.
+  lesson(p, "AcceptLesson", "planets")
+  must(p, { kind = "MoveItems", actor = 0, item = assert(stock(p, "colony.command")).id, to = "cargo" })
+  must(p, { kind = "Undock", actor = 0 })
+  local planet: System.Object? = nil
+  for _, object in Space.Describe(state, 1).objects do
+    if object.kind == "planet" and planet == nil and #Planets.Deposits(object.variety, object.seed) > 0 then
+      planet = object
+    end
+  end
+  local world = assert(planet, "the first system has no planet to work")
+  to(p, world.id)
+  local centre: State.Item? = nil
+  for _, item in Items.In(state, state.player.ship, "cargo") do
+    centre = if item.type == "colony.command" then item else centre
+  end
+  must(p, { kind = "DeployColony", actor = 0, target = world.id, item = assert(centre).id })
+  dock(p)
+  lesson(p, "CompleteLesson", "planets")
+  -- Digging: an extractor on the first thing in the ground, and a programme. (From the station: a colony is run from anywhere.)
+  lesson(p, "AcceptLesson", "planets")
+  local raw = Planets.Deposits(world.variety, world.seed)[1].raw
+  t.ok(state.wallet >= Planets.facilityById.extractor.cost, `an extractor costs more than the {state.wallet} a new pilot has by now`)
+  must(p, { kind = "BuildFacility", actor = 0, target = world.id, type = "extractor", what = raw })
+  must(p, { kind = "StartExtraction", actor = 0, target = world.id, pin = 1, hours = Planets.PROGRAMMES[1] })
+  lesson(p, "CompleteLesson", "planets")
+  -- Make: the processor that takes it.
+  lesson(p, "AcceptLesson", "planets")
+  local product = Planets.productOf[raw]
+  t.ok(state.wallet >= Planets.facilityById.processor.cost, `a processor costs more than the {state.wallet} the lessons have paid`)
+  must(p, { kind = "BuildFacility", actor = 0, target = world.id, type = "processor", what = product.id })
+  lesson(p, "CompleteLesson", "planets")
+  -- Bring it up: a wait for the first of it, out to the planet, and whatever is in the store into the hold.
+  lesson(p, "AcceptLesson", "planets")
+  local waited = 0
+  for _ = 1, 4000 do
+    local colony = assert(Core.Query.Colony(p.game, world.id))
+    if #colony.store > 0 then
+      break
+    end
+    step(p)
+    waited += 1
+  end
+  local store = assert(Core.Query.Colony(p.game, world.id)).store
+  t.ok(#store > 0, "the colony made nothing in an hour")
+  to(p, world.id)
+  must(p, { kind = "Export", actor = 0, target = world.id, type = store[1].type, quantity = math.min(store[1].quantity, 100) })
+  dock(p)
+  t.ok(not p.lost, "lost on the way home from the planet")
+  lesson(p, "CompleteLesson", "planets")
+  t.eq(Careers.Of(state, "planets").done, #Careers.byId.planets.lessons)
+  print(`     planets, new pilot: done in {math.floor(p.ticks / 60)} min ({math.floor(waited / 60)} of them waiting for the first load), with {state.wallet} credits in hand`)
 end)
 
 return suite

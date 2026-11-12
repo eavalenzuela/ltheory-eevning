@@ -16,7 +16,9 @@ lua assert(GameDebug.Spare('frigate.prospector', 'miner.small'), 'no mining frig
 frames 3
 until GameDebug.Press('Crew')
 until GameDebug.Tab() == 'Crew'
-until GameDebug.Press('Hire:1')
+# (the first looking for work is new to it, grade 1: a mining frigate wants Mining 2)
+lua assert(GameDebug.Candidate(2) > 0, 'nobody of grade 2 today')
+until GameDebug.Press('Hire:' .. GameDebug.Candidate(2))
 until GameDebug.Fleet() == 1
 until GameDebug.Press('Give:1:1')
 until select(3, GameDebug.Fleet()) == 1

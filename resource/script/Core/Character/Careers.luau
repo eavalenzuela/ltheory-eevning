@@ -1,9 +1,11 @@
 --!strict
 -- Careers: the agents who show a new pilot the ropes.
 --
--- At the station a new pilot starts at there are five agents, one for
--- each way of making a living: flying, industry, trade, fighting and
--- surveying. Each has a short run of lessons, to be done in order. A
+-- At the station a new pilot starts at there are seven agents, one for
+-- each way of making a living: flying, industry, trade, fighting,
+-- surveying, command (drones, and pilots who fly for you) and planets
+-- (a colony, and what it makes). Each has a short run of lessons, to be
+-- done in order. A
 -- lesson is one thing to do, said plainly. What it needs is handed over
 -- when it is taken (into the station's hangar); when it is done the
 -- pilot reports back to the agent, docked there, and is paid: some
@@ -218,6 +220,60 @@ Careers.list = {
         says = "A derelict is adrift in this system. The scanner gets it half way and says which planet it is by: take a "
           .. "probe there and scan again. Its hold is sealed. Train Hacking (it wants CPU Management 2), fit the Data "
           .. "Analyzer, and Hack from within five kilometres: get the key of the safeguards in." },
+    },
+  },
+  {
+    id = "command", name = "Command", about = "Others to do the work: drones, and pilots who fly for you.",
+    lessons = {
+      { title = "A drone of your own", aim = "Launch a drone", on = "DroneLaunched", mine = "owner", need = 1, credits = 3000,
+        kit = { { type = "drone.light", quantity = 1 } }, gifts = {},
+        says = "A drone is a small ship that works beside yours. Train Drones to level 1 (Skills tab: two minutes). Fitting "
+          .. "tab: put this one in the drone bay. Undock and Launch (the drones' row, bottom left). It fights whoever "
+          .. "comes for you, and whoever you point it at." },
+      { title = "Call it home", aim = "Take a drone back aboard", on = "DroneScooped", mine = "owner", need = 1, kit = {},
+        credits = 35000, gifts = { { type = "drone.mining", quantity = 1 } },
+        says = "A drone left behind when you warp or dock is lost, unless it is close by. Recall brings it in. Launch, "
+          .. "recall, and wait until it is aboard. What I pay for this one is for the next: it signs a pilot." },
+      { title = "Somebody to fly with", aim = "Hire a pilot", on = "PilotHired", need = 1, kit = {}, credits = 12000,
+        gifts = { { type = "frigate.courier", quantity = 1 }, { type = "miner.small", quantity = 1 } },
+        says = "Crew tab: pilots looking for work, each with a fee to sign and a wage a day. The first on the list here "
+          .. "is always somebody new, and cheap. Hire them. Leadership says how many you command: one, to begin with." },
+      { title = "A ship for them", aim = "Give your pilot a ship", on = "ShipAssigned", need = 1, kit = {}, credits = 8000,
+        gifts = {},
+        says = "A pilot flies a ship of yours. Ships tab: assemble the Courier hull I gave you and board it. Fitting tab: "
+          .. "fit the mining laser. Board your own ship again, and on the Crew tab give them the new one. They undock "
+          .. "when you do, and go where you go." },
+      { title = "Earn their keep", aim = "Have your pilot bring ore in", on = "OreDelivered", need = 1, kit = {},
+        credits = 30000, gifts = { { type = "drone.light", quantity = 2 }, { type = "drone.mining", quantity = 1 } },
+        says = "Warp to a belt, your pilot beside you. Mine here (the fleet's panel, bottom left) sets them to it: they "
+          .. "fill the hold, take it in to the nearest station and go back, wherever you go after. Report in when the "
+          .. "first hold is in." },
+    },
+  },
+  {
+    id = "planets", name = "Planets", about = "A planet's worth: a colony, what it digs up and what it makes.",
+    lessons = {
+      { title = "Ground", aim = "Put a colony down on a planet", on = "ColonyDeployed", mine = "by", need = 1, credits = 50000,
+        kit = { { type = "colony.command", quantity = 1 } }, gifts = {},
+        says = "Planets have what stations pay for. Put this command centre in your hold, warp to a planet, select it and "
+          .. "press Colony: it shows what is in the ground there. Deploy puts the centre down, and the colony is yours." },
+      { title = "Digging", aim = "Raise an extractor", on = "FacilityBuilt", need = 1, kit = {}, credits = 80000, gifts = {},
+        also = function(event: Event): boolean
+          return event.type == "extractor"
+        end,
+        says = "The Colonies window (bottom left, from anywhere) raises facilities, for credits. Raise an extractor on "
+          .. "something in the ground and give it a programme: the longer it runs, the less it brings up an hour." },
+      { title = "Make", aim = "Raise a processor", on = "FacilityBuilt", need = 1, kit = {}, credits = 30000, gifts = {},
+        also = function(event: Event): boolean
+          return event.type == "processor"
+        end,
+        says = "A processor turns what the extractor brings up into something worth carrying. Raise the one that takes "
+          .. "what you are digging. What I paid you for the extractor covers it." },
+      { title = "Bring it up", aim = "Fetch what the colony has made", on = "Exported", mine = "ship", need = 1, kit = {},
+        credits = 40000, gifts = { { type = "colony.command", quantity = 1 } },
+        says = "What a colony digs and makes waits in its store: the first is there a quarter of an hour after the "
+          .. "programme begins. From orbit, in the Colonies window, take it up into your hold (there is a little tax), "
+          .. "and sell it. A colony goes on working while you are away. Here is a second centre for another planet." },
     },
   },
 } :: { Career }
