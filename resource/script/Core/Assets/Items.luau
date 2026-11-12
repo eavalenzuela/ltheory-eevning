@@ -10,7 +10,7 @@
 -- Fitting happens docked: the ship and the item must be at the same
 -- station.
 
-local Dogma = require("@lt/Core/Dogma")
+local Attributes = require("@lt/Core/Attributes")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
@@ -61,7 +61,7 @@ end
 
 -- The fit as the attribute engine wants it. 'running' says which module
 -- items are switched on, by item id.
-function Items.Fit(state: State.State, ship: number, running: { [number]: boolean }?): { Dogma.Fitted }
+function Items.Fit(state: State.State, ship: number, running: { [number]: boolean }?): { Attributes.Fitted }
   local fit = {}
   for _, item in Items.Fitted(state, ship) do
     table.insert(fit, { type = item.type, running = running ~= nil and running[item.id] == true })
@@ -78,7 +78,7 @@ function Items.Fit(state: State.State, ship: number, running: { [number]: boolea
 end
 
 -- What a hired pilot knows: every skill at the one level.
-local HIRED: { Dogma.Levels } = {}
+local HIRED: { Attributes.Levels } = {}
 for level = 1, Skills.MAX_LEVEL do
   HIRED[level] = {}
   for _, skill in Skills.list do
@@ -89,7 +89,7 @@ Items.HIRED = HIRED
 
 -- The skills that bear on a ship: the player's, if it is theirs; a
 -- hired pilot's, if one flies it (Tactical/Fleet); nobody's otherwise.
-function Items.Levels(state: State.State, ship: number): Dogma.Levels?
+function Items.Levels(state: State.State, ship: number): Attributes.Levels?
   local record = state.ships[ship]
   if record.owner ~= "player" then
     return nil
@@ -99,8 +99,8 @@ function Items.Levels(state: State.State, ship: number): Dogma.Levels?
 end
 
 -- A ship's attributes with its present fit, nothing running.
-function Items.ShipStats(state: State.State, ship: number): Dogma.Stats
-  return Dogma.Ship(Ships.byId[state.ships[ship].type], Items.Fit(state, ship, nil), Items.Levels(state, ship))
+function Items.ShipStats(state: State.State, ship: number): Attributes.Stats
+  return Attributes.Ship(Ships.byId[state.ships[ship].type], Items.Fit(state, ship, nil), Items.Levels(state, ship))
 end
 
 -- What a ship's weapons come to on paper with what is loaded in them:
@@ -115,7 +115,7 @@ function Items.Offence(state: State.State, ship: number): Offence
   local out: Offence = { volley = 0, dps = 0, kinds = { 0, 0, 0, 0 }, range = 0 }
   for _, item in Items.Fitted(state, ship) do
     if Modules.byId[item.type].weapon and item.charge ~= "" then
-      local weapon = Dogma.Weapon(fit, item.type, levels)
+      local weapon = Attributes.Weapon(fit, item.type, levels)
       local charge = Modules.chargeById[item.charge]
       for index = 1, 4 do
         local hit = charge.damage[index] * weapon.damageMultiplier
@@ -195,7 +195,7 @@ function Items.Equip(state: State.State, ship: number, type: string, charge: str
       taken[fitted.slot] = true
     end
   end
-  local ok, why = Dogma.Check(hull, types)
+  local ok, why = Attributes.Check(hull, types)
   assert(ok, `{type} does not fit a {hull.name}: {tostring(why)}`)
   local slot = 1
   while taken[slot] do
@@ -279,7 +279,7 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
       table.insert(types, fitted.type)
     end
     table.insert(types, item.type)
-    return Dogma.Check(hull, types, Items.Levels(state, ship.id))
+    return Attributes.Check(hull, types, Items.Levels(state, ship.id))
 
   elseif kind == "Unfit" then
     if item.slot == 0 or item.holder ~= ship.id then

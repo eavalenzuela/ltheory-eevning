@@ -18,7 +18,7 @@ local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 
-local Dogma = {}
+local Attributes = {}
 
 -- A module on a ship: its type and whether it is running (its 'boost'
 -- then applies).
@@ -31,7 +31,7 @@ export type Stats = { [string]: number }
 export type Levels = { [string]: number }
 
 -- The weight of the n-th strongest of several stacking effects (n from 0).
-function Dogma.Penalty(n: number): number
+function Attributes.Penalty(n: number): number
   return math.exp(-(n / 2.67) ^ 2)
 end
 
@@ -67,10 +67,10 @@ local function resolve(base: number, p: Pending): number
   end)
   table.sort(p.penalties)
   for n, m in p.bonuses do
-    value *= 1 + (m - 1) * Dogma.Penalty(n - 1)
+    value *= 1 + (m - 1) * Attributes.Penalty(n - 1)
   end
   for n, m in p.penalties do
-    value *= 1 + (m - 1) * Dogma.Penalty(n - 1)
+    value *= 1 + (m - 1) * Attributes.Penalty(n - 1)
   end
   return value
 end
@@ -116,7 +116,7 @@ local PLAIN = { "mass", "inertia", "maxVelocity", "warpSpeed", "radius", "shield
 
 -- A ship's attributes with this fit, flown by a pilot with these skills
 -- (none, for a ship nobody trained to fly).
-function Dogma.Ship(hull: Ships.ShipType, fitted: { Fitted }, levels: Levels?): Stats
+function Attributes.Ship(hull: Ships.ShipType, fitted: { Fitted }, levels: Levels?): Stats
   local base: Stats = {}
   local source = hull :: any
   for _, name in PLAIN do
@@ -139,7 +139,7 @@ function Dogma.Ship(hull: Ships.ShipType, fitted: { Fitted }, levels: Levels?): 
 end
 
 -- A weapon module's statistics on a ship with this fit.
-function Dogma.Weapon(fitted: { Fitted }, type: string, levels: Levels?): Modules.Weapon
+function Attributes.Weapon(fitted: { Fitted }, type: string, levels: Levels?): Modules.Weapon
   local weapon = assert(Modules.byId[type].weapon, `{type} is not a weapon`)
   local pending = gather(fitted, "weapons", weapon.family, levels)
   local out = table.clone(weapon) :: any
@@ -150,7 +150,7 @@ function Dogma.Weapon(fitted: { Fitted }, type: string, levels: Levels?): Module
 end
 
 -- Whether a hull can carry these modules at once; if not, why not.
-function Dogma.Check(hull: Ships.ShipType, types: { string }, levels: Levels?): (boolean, string?)
+function Attributes.Check(hull: Ships.ShipType, types: { string }, levels: Levels?): (boolean, string?)
   local slots = { high = 0, mid = 0, low = 0, rig = 0 }
   local hardpoints = { turret = 0, launcher = 0 }
   local cpu, powergrid, calibration = 0, 0, 0
@@ -184,7 +184,7 @@ function Dogma.Check(hull: Ships.ShipType, types: { string }, levels: Levels?): 
   elseif hardpoints.launcher > hull.launchers then
     return false, "no free launcher hardpoint"
   end
-  local stats = Dogma.Ship(hull, fitted, levels)
+  local stats = Attributes.Ship(hull, fitted, levels)
   if cpu > stats.cpu then
     return false, string.format("not enough CPU (%.0f of %.0f tf)", cpu, stats.cpu)
   elseif powergrid > stats.powergrid then
@@ -193,4 +193,4 @@ function Dogma.Check(hull: Ships.ShipType, types: { string }, levels: Levels?): 
   return true
 end
 
-return Dogma
+return Attributes

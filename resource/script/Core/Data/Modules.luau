@@ -8,7 +8,7 @@
 -- applies either to the ship or to the ship's weapons of one family.
 -- Multipliers marked 'stack' are subject to the stacking penalty: the
 -- second one of a kind is worth 87% of itself, the third 57%, and so on
--- (Dogma.luau).
+-- (Attributes.luau).
 --
 -- Damage is a list of four numbers: EM, thermal, kinetic, explosive.
 

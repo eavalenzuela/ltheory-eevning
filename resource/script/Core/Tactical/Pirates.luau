@@ -22,7 +22,7 @@
 -- from pirate pressure in the system instead of these fixed rules.)
 
 local Combat = require("@lt/Core/Tactical/Combat")
-local Dogma = require("@lt/Core/Dogma")
+local Attributes = require("@lt/Core/Attributes")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Mend = require("@lt/Core/Tactical/Mend")
@@ -142,7 +142,7 @@ function Pirates.Fit(kind: Kind): { { string } }
     local module = Modules.byId[entry[1]]
     if module then
       table.insert(types, module.id)
-      if Dogma.Check(hull, types) then
+      if Attributes.Check(hull, types) then
         table.insert(fitted, { module.id, entry[2] or chargeFor(module) or "" })
       else
         table.remove(types)

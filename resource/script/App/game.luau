@@ -20,7 +20,7 @@ local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Hacking = require("@lt/Core/Tactical/Hacking")
 local Planets = require("@lt/Core/Data/Planets")
 local Pirates = require("@lt/Core/Tactical/Pirates")
-local Dogma = require("@lt/Core/Dogma")
+local Attributes = require("@lt/Core/Attributes")
 local Hud = require("@lt/Game/UI/Hud")
 local Icons = require("@lt/Icons")
 local Hull = require("@lt/Game/View/Hull")
@@ -1237,7 +1237,7 @@ function Debug.Fly(type: string, tank: boolean?): boolean
   local wanted: { string } = if built then built.fit else {}
   for _, module in wanted do
     table.insert(types, module)
-    if Dogma.Check(hull, types) then
+    if Attributes.Check(hull, types) then
       local weapon = Modules.byId[module].weapon
       local charge: string? = nil
       if weapon then
@@ -1268,7 +1268,7 @@ function Debug.Fly(type: string, tank: boolean?): boolean
     for _, module in { if size == "small" then "afterburner.1mn" else "afterburner." .. size, "shield.extender." .. size,
       "shield.extender." .. size, plate, "armor.repairer." .. size, "damage.control", plate } do
       table.insert(types, module)
-      if Modules.byId[module] and Dogma.Check(hull, types) then
+      if Modules.byId[module] and Attributes.Check(hull, types) then
         Items.Equip(state, ship.id, module, nil)
       else
         table.remove(types)

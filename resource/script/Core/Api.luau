@@ -19,7 +19,7 @@ local Blueprints = require("@lt/Core/Data/Blueprints")
 local Codec = require("@lt/Core/Persist/Codec")
 local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
-local Dogma = require("@lt/Core/Dogma")
+local Attributes = require("@lt/Core/Attributes")
 local Drones = require("@lt/Core/Tactical/Drones")
 local Dscan = require("@lt/Core/Tactical/Dscan")
 local Factions = require("@lt/Core/Data/Factions")
@@ -870,7 +870,7 @@ function Query.Fitted(game: Game, ship: number): { State.Item }
 end
 
 -- A ship's attributes with its present fit (nothing running).
-function Query.Stats(game: Game, ship: number): Dogma.Stats
+function Query.Stats(game: Game, ship: number): Attributes.Stats
   return Items.ShipStats(game.state, ship)
 end
 

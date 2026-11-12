@@ -6,7 +6,7 @@
 
 local Assault = require("@lt/Core/Tactical/Assault")
 local Core = require("@lt/Core/Api")
-local Dogma = require("@lt/Core/Dogma")
+local Attributes = require("@lt/Core/Attributes")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
@@ -47,7 +47,7 @@ local function plain(hullId: string): { { string } }
   for _, entry in wanted do
     assert(Modules.byId[entry[1]], `no module {entry[1]}`)
     table.insert(types, entry[1])
-    if Dogma.Check(hull, types) then
+    if Attributes.Check(hull, types) then
       table.insert(fit, entry)
     else
       table.remove(types)

@@ -4,7 +4,7 @@
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
-local Dogma = require("@lt/Core/Dogma")
+local Attributes = require("@lt/Core/Attributes")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
@@ -81,7 +81,7 @@ suite:Case("every kind of pirate flies an Unbound hull with a fit the hull takes
         t.eq({ charge.family, charge.size } :: { any }, { module.weapon.family, module.weapon.size } :: { any })
       end
     end
-    t.ok((Dogma.Check(hull, types)), `{kind.name}'s fit does not go on its hull`)
+    t.ok((Attributes.Check(hull, types)), `{kind.name}'s fit does not go on its hull`)
     t.ok(weapons >= 1, `{kind.name} has no weapon`)
     -- (all but the scout and the mender use every hardpoint the hull has)
     if kind.id ~= "scout" and kind.id ~= "mender" then

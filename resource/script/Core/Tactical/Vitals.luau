@@ -2,30 +2,30 @@
 -- A ship's condition in space: hit points, capacitor, and the numbers a
 -- fight turns on, worked out from its hull and fit.
 
-local Dogma = require("@lt/Core/Dogma")
+local Attributes = require("@lt/Core/Attributes")
 local Items = require("@lt/Core/Assets/Items")
 local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
 
 local Vitals = {}
 
-local function resonance(stats: Dogma.Stats, layer: string): { number }
+local function resonance(stats: Attributes.Stats, layer: string): { number }
   return { stats[layer .. ".1"], stats[layer .. ".2"], stats[layer .. ".3"], stats[layer .. ".4"] }
 end
 
 -- A ship's attributes with the modules now running on its ball.
-function Vitals.Stats(state: State.State, ship: State.Ship, vitals: State.Vitals?): Dogma.Stats
+function Vitals.Stats(state: State.State, ship: State.Ship, vitals: State.Vitals?): Attributes.Stats
   local running: { [number]: boolean } = {}
   if vitals then
     for _, r in vitals.running do
       running[r.item] = true
     end
   end
-  return Dogma.Ship(Ships.byId[ship.type], Items.Fit(state, ship.id, running), Items.Levels(state, ship.id))
+  return Attributes.Ship(Ships.byId[ship.type], Items.Fit(state, ship.id, running), Items.Levels(state, ship.id))
 end
 
 -- The fit as the attribute engine wants it, with what is running.
-function Vitals.Fit(state: State.State, ball: State.Ball): { Dogma.Fitted }
+function Vitals.Fit(state: State.State, ball: State.Ball): { Attributes.Fitted }
   local running: { [number]: boolean } = {}
   for _, r in ball.vitals.running do
     running[r.item] = true

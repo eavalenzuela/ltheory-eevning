@@ -41,7 +41,7 @@ export type Running = {
 }
 
 -- A ship's condition and what bears on a fight. The maxima and
--- resonances come from hull and fit (Core/Dogma) and are refreshed when a
+-- resonances come from hull and fit (Core/Attributes) and are refreshed when a
 -- module that changes them starts or stops.
 export type Vitals = {
   shield: number,

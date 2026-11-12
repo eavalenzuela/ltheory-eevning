@@ -16,7 +16,7 @@
 -- each other on the same tick both get their shot off.
 
 local Constants = require("@lt/Core/Data/Constants")
-local Dogma = require("@lt/Core/Dogma")
+local Attributes = require("@lt/Core/Attributes")
 local Gunnery = require("@lt/Core/Tactical/Gunnery")
 local Items = require("@lt/Core/Assets/Items")
 local Mining = require("@lt/Core/Tactical/Mining")
@@ -378,7 +378,7 @@ function Combat.HitChance(state: State.State, ship: number, item: number, target
   if module == nil or module.weapon == nil or module.weapon.family == "missile" then
     return nil
   end
-  return turretChance(state, ball, fitted, Dogma.Weapon(Vitals.Fit(state, ball), fitted.type, Items.Levels(state, ball.id)), body)
+  return turretChance(state, ball, fitted, Attributes.Weapon(Vitals.Fit(state, ball), fitted.type, Items.Levels(state, ball.id)), body)
 end
 
 -- One shot from a turret: the dice, and the damage if it lands.
@@ -436,7 +436,7 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
     end
 
     if module.weapon then
-      local weapon = Dogma.Weapon(Vitals.Fit(state, ball), item.type, Items.Levels(state, ball.id))
+      local weapon = Attributes.Weapon(Vitals.Fit(state, ball), item.type, Items.Levels(state, ball.id))
       local lock = findLock(ball, running.target)
       local target = Space.Body(state, running.target)
       if lock == nil or not lock.locked or target == nil then
