@@ -21,7 +21,7 @@ This is a fork of the old C++ implementation of Limit Theory, its engine (LTE) a
 - **Combat**: target locking, tracking and range, shields, armour and hull, wrecks to loot and salvage, insurance, and a capsule to get home in.
 - **Industry**: mining, refining, manufacturing from blueprints, research and invention, and planetary colonies.
 - **Trade**: a market at each station with buy and sell orders, where prices differ by who owns the station.
-- **Things to do**: career agents who show a new pilot the ropes, daily jobs, combat camps and mining contracts from agents, standings and loyalty stores, sites to scan down, derelicts and vaults to hack, gas to harvest and make into boosters.
+- **Things to do**: career agents who show a new pilot the ropes, daily jobs, combat camps, mining contracts and courier contracts from agents, standings and loyalty stores, sites to scan down, derelicts and vaults to hack, gas to harvest and make into boosters.
 - **A character**: skills that train in real time, including while the game is closed, and implants.
 - **Company**: hired pilots who follow, mine, haul, patrol and guard, with drones of their own; a corporation of your own for them to work for, with its own account and books; starbases of your own with anchored modules.
 - **A world**: security that falls away from each faction's homeworld, police and gate guns where order is kept, other ships going about their business.

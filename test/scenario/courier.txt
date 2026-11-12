@@ -1,0 +1,62 @@
+# A courier contract, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/courier.txt
+#
+# The home station's sixth agent has courier contracts, in levels. A
+# pilot nobody knows is offered the first: so much sealed cargo, of a
+# size for the starter ship's hold, to a station a jump or more off by
+# a way that keeps out of lawless space. It is taken on the Missions
+# tab, the crates are put in the hold, the autopilot flies the way, the
+# ship docks where the cargo goes, and the contract is paid there.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Peaceful(true)
+until GameDebug.Press('Missions')
+until GameDebug.Tab() == 'Missions'
+frames 3
+lua assert(GameDebug.CanPress('Accept:courier'), 'the sixth agent should have a courier contract')
+lua assert(not GameDebug.CanPress('Level:courier:up'), 'only one level is open to a pilot nobody knows')
+until GameDebug.Press('Accept:courier')
+until select(2, GameDebug.Missions()) == 1
+frames 3
+lua assert(not GameDebug.CanPress('Accept:courier'), 'a station gives one courier contract at a time')
+lua _G.need, _G.to, _G.there, _G.jumps = GameDebug.Run()
+lua print('courier:', _G.need, 'm3 to', _G.to, 'which is', _G.jumps, 'jumps off')
+lua assert(_G.need >= 30 and _G.need <= 150, 'a first contract should go in the starter hold')
+lua assert(_G.jumps >= 1 and _G.jumps <= 3, 'a first contract should go one to three jumps')
+lua assert(GameDebug.Hangar('cargo.sealed') == _G.need, 'the crates should be in the hangar')
+lua assert(not GameDebug.CanPress('Complete:1'), 'a contract is not finished by taking it')
+
+# The crates into the hold, and off.
+until GameDebug.Press('Fitting')
+frames 3
+until GameDebug.Press('ToHold:cargo.sealed')
+until GameDebug.Hold('cargo.sealed') == _G.need
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 5
+lua assert(GameDebug.Destination(_G.there, true) == _G.jumps, 'the safest way should be as long as the contract says')
+lua GameDebug.TimeScale(16)
+lua assert(GameDebug.Autopilot(true))
+patience 600
+until GameDebug.System() == _G.there
+until not GameDebug.Autopilot()
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('Dock', _G.to), 'docking where the cargo goes was refused')
+patience 300
+until GameDebug.Docked()
+lua GameDebug.TimeScale(1)
+
+# Paid where it is delivered.
+until GameDebug.Press('Missions')
+until GameDebug.Tab() == 'Missions'
+frames 3
+lua _G.before = GameDebug.Wallet()
+until GameDebug.Press('Complete:1')
+until select(2, GameDebug.Missions()) == 0
+lua assert(GameDebug.Wallet() >= _G.before + 3000, 'the contract did not pay')
+lua assert(GameDebug.Hold('cargo.sealed') == 0, 'the crates should have been handed over')
+
+echo courier scenario passed
+quit

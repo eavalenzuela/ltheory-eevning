@@ -477,6 +477,8 @@ export type State = {
   assaults: { [number]: number },
   -- And how many mining contracts its fifth agent has.
   digs: { [number]: number },
+  -- And how many courier contracts its sixth.
+  couriers: { [number]: number },
   standings: { [string]: number },
   -- Loyalty points with each faction, earned by its jobs and spent at
   -- its stations (a faction not here has none).

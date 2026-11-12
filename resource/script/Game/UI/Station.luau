@@ -1360,7 +1360,7 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
   local status = Core.Query.Missions(game)
   local left, right = x + 16, x + 480
   local line = y + 78
-  local function about(mission: State.Mission): string
+  local function about(mission: State.Mission, jumps: number): string
     if mission.kind == "bounty" then
       local _, band = Core.Query.Security(game, mission.system)
       return `in {game.state.galaxy.systems[mission.system].name} ({band or "?"} space): {mission.done} of {mission.need} destroyed`
@@ -1392,8 +1392,10 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
       local disputed = if #mission.waves > 0 then ", disputed" else ""
       return if place then `{place.name}, in {name}{disputed}` else `a pocket in {name}{disputed}`
     elseif mission.kind == "courier" then
+      -- (where to, and how far that is)
       local to = Core.Query.Body(game, mission.to)
-      return `to {if to then shorten(to.name, 40) else "?"}`
+      local far = if jumps == 0 then "this system" elseif jumps == 1 then "1 jump" else `{jumps} jumps`
+      return `{far}: to {if to then shorten(to.name, 40) else "?"}`
     end
     local at = Core.Query.Body(game, mission.station)
     return `to {if at then shorten(at.name, 40) else "?"}`
@@ -1435,9 +1437,10 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
   elseif #status.offers == 0 then
     Im.Text("Nothing more today.", left, line, 14, Im.DIM, 0.8)
   end
-  -- The day's jobs, each a row; then the fourth agent's assault and the
-  -- fifth's mining contract, a row each: the level shown is stepped up
-  -- and down, as far as the pilot's standing has opened.
+  -- The day's jobs, each a row; then the fourth agent's assault, the
+  -- fifth's mining contract and the sixth's courier contract, a row
+  -- each: the level shown is stepped up and down, as far as the pilot's
+  -- standing has opened.
   local offers: { Core.MissionStatus } = if storeOpen then {} else status.offers
   local function offered(offer: Core.MissionStatus, id: string, kind: string?, level: number, levels: number)
     -- (a job with levels says its level in a word less: the steps beside it say the rest)
@@ -1446,7 +1449,8 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
     Im.TextRight(Format.Credits(offer.mission.reward), left + 356, line, 15, GOOD)
     local accept: State.Command = { kind = "AcceptMission", actor = 0, what = offer.mission.key }
     local can, whyNot = Session.CanDo(session, accept)
-    Im.Text(if can then shorten(about(offer.mission), 44) else shorten(tostring(whyNot), 44), left, line + 21, 12, if can then Im.DIM else Im.WARN)
+    Im.Text(if can then shorten(about(offer.mission, offer.jumps), 44) else shorten(tostring(whyNot), 44), left, line + 21, 12,
+      if can then Im.DIM else Im.WARN)
     -- (who gives it, what they think of the pilot once they think anything, and the points it is worth)
     local thinks = if offer.regard ~= 0 then string.format(" (%.1f)", offer.regard) else ""
     Im.TextRight(`{shorten(offer.mission.agent, 16)}{thinks}  +{offer.mission.loyalty} LP`, left + 356, line + 21, 12,
@@ -1466,15 +1470,15 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
   end
   local daily = 0
   for _, offer in offers do
-    if offer.mission.kind ~= "assault" and offer.mission.kind ~= "mining" then
+    if offer.mission.level == 0 then
       daily += 1
       offered(offer, `Accept:{daily}`, nil, 0, 0)
     end
   end
-  for _, kind in { "assault", "mining" } do
+  for _, kind in { "assault", "mining", "courier" } do
     local levels: { Core.MissionStatus } = {}
     for _, offer in offers do
-      if offer.mission.kind == kind then
+      if offer.mission.kind == kind and offer.mission.level > 0 then
         table.insert(levels, offer)
       end
     end
@@ -1487,7 +1491,7 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
   -- What every faction thinks of the pilot (it is their stations' fees,
   -- their jobs' pay and, at the worst, their patrols' guns).
   if not storeOpen then
-    line = y + 78 + 30 + 5 * 50 + 16
+    line = y + 78 + 30 + 6 * 50 + 16
     Im.Heading("STANDINGS", left, line, 14, Im.DIM)
     for index, row in Core.Query.Standings(game) do
       local sx = left + (index - 1) * 110
@@ -1509,7 +1513,7 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
   for index, held in status.inHand do
     Im.Text(held.title, right, line, 15, Im.TEXT)
     Im.TextRight(Format.Credits(held.mission.reward), right + 430, line, 15, GOOD)
-    Im.Text(shorten(about(held.mission), 68), right, line + 21, 12, Im.DIM)
+    Im.Text(shorten(about(held.mission, held.jumps), 68), right, line + 21, 12, Im.DIM)
     -- (how long it can still be kept: in the colour of a warning at the last)
     Im.TextRight(Format.Duration(held.left), right + 430, line + 21, 12, if held.left < 6 * 3600 then Im.WARN else Im.DIM)
     local complete: State.Command = { kind = "CompleteMission", actor = 0, target = held.mission.id }

@@ -63,6 +63,9 @@
 #   game-vault  a listening post's vault (test/scenario/vault.txt): its
 #               bigger lock looked at, then played inside its clock,
 #               and the vault looted
+#   game-courier  a courier contract (test/scenario/courier.txt): the
+#               sixth agent's first level taken, its crates flown a
+#               jump by the autopilot, and paid where they are delivered
 #   game-tackle  holding another ship (test/scenario/tackle.txt): a
 #               entanglement projector and a warp disruptor fitted and used on a pirate
 #   game-salvage  salvaging (test/scenario/salvage.txt): a salvager fitted,
@@ -239,6 +242,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/traffic.txt
   step game-missions 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/missions.txt
+  step game-courier 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
+    --script test/scenario/courier.txt
   step game-sites 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/sites.txt
   step game-tackle 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \

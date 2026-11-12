@@ -972,6 +972,21 @@ function Debug.Level(kind: string, to: number?): number
   return Station.Level(kind, to)
 end
 
+-- The first courier contract in hand (the sixth agent's: one with a
+-- level): the cubic metres it wants carried (0 with none in hand), the
+-- name of the station they go to, the system that is in, and how many
+-- jumps off it is by the way the contract counts.
+function Debug.Run(): (number, string, number, number)
+  for _, held in Core.Query.Missions(session.game).inHand do
+    local mission = held.mission
+    if mission.kind == "courier" and mission.level > 0 then
+      local to = Core.Query.Body(session.game, mission.to)
+      return mission.need, if to then to.name else "?", mission.system, held.jumps
+    end
+  end
+  return 0, "", 0, 0
+end
+
 -- The first mining contract in hand: the ore it wants ("" with none in
 -- hand), how many units, the name of its pocket, and the system that
 -- is in.

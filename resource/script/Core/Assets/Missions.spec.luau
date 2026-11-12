@@ -5,6 +5,7 @@ local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Assault = require("@lt/Core/Tactical/Assault")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
+local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Mining = require("@lt/Core/Tactical/Mining")
 local Missions = require("@lt/Core/Assets/Missions")
@@ -58,14 +59,15 @@ suite:Case("a station offers three jobs a day, the same however often it is aske
     local state = game.state
     local every = Missions.Offers(state, state.player.home)
     t.eq(Missions.Offers(state, state.player.home), every)
-    -- (the day's three: the fourth agent's assaults and the fifth's mining contracts are their own cases)
+    -- (the day's three: the fourth agent's assaults, the fifth's mining contracts and the sixth's courier contracts
+    -- are their own cases)
     local offers: { State.Mission } = {}
     for _, offer in every do
-      if offer.kind ~= "assault" and offer.kind ~= "mining" then
+      if offer.level == 0 then
         table.insert(offers, offer)
       end
     end
-    t.eq({ #offers, #every }, { Missions.OFFERS, Missions.OFFERS + 2 })
+    t.eq({ #offers, #every }, { Missions.OFFERS, Missions.OFFERS + 3 })
     for _, offer in offers do
       kinds[offer.kind] = (kinds[offer.kind] or 0) + 1
       t.ok(offer.reward > 0 and offer.need > 0 and offer.standing > 0, `{Missions.Title(offer)} pays {offer.reward}`)
@@ -87,7 +89,7 @@ suite:Case("a station offers three jobs a day, the same however often it is aske
   end
   t.ok((kinds.bounty or 0) > 3 and (kinds.courier or 0) > 3 and (kinds.supply or 0) > 3, "a kind of job is hardly ever offered")
   t.eq(#Missions.Offers(newGame().state, 99999), 0)
-  t.eq(#Core.Query.Missions(newGame()).offers, 5)
+  t.eq(#Core.Query.Missions(newGame()).offers, 6)
 end)
 
 suite:Case("a job is taken at its station, once, and a pilot has five in hand at most", function(t)
@@ -213,7 +215,7 @@ suite:Case("a job abandoned costs standing, and jobs are in the save", function(
   local old, oldLength = Codec.Encode(file)
   local before = Core.Load(old, oldLength)
   t.eq({ #before.state.missionIds, before.state.missionsDone, Missions.Standing(before.state, "vessari") }, { 0, 0, 0 })
-  t.eq(#Core.Query.Missions(before).offers, 5)
+  t.eq(#Core.Query.Missions(before).offers, 6)
 end)
 
 -- The assaults a station offers, by level.
@@ -340,7 +342,8 @@ suite:Case("the fourth agent has an assault on a pirate camp, at each level the 
   -- One from a station at a time: taking one takes the others off the list, and the agent's next is another job.
   t.ok((submit(game, { kind = "AcceptMission", actor = 0, what = offers[2].key })))
   t.eq({ #assaults(game, home), state.assaults[home] }, { 0, 1 })
-  t.eq(#Missions.Offers(state, home), Missions.OFFERS + 4, "the day's three are still offered, and the mining contracts")
+  -- (and the one courier contract a galaxy of three systems has room for)
+  t.eq(#Missions.Offers(state, home), Missions.OFFERS + 4 + 1, "the day's three are still offered, and the mining contracts")
   local mine = state.missions[state.missionIds[1]]
   t.ok((submit(game, { kind = "AbandonMission", actor = 0, target = mine.id })))
   -- (giving it up cost standing: put that back, to see all four again)
@@ -1277,6 +1280,132 @@ suite:Case("the fourth and the fifth agent open their harder levels to a pilot t
   t.near(Missions.Regard(state, home, Missions.OFFERS + 2), Missions.REGARD.levelled * 2, 1e-9)
   -- (so four first-level jobs for one agent open that agent's second level)
   t.ok(4 * Missions.REGARD.levelled * 2 >= Missions.OPENS[2])
+end)
+
+-- The sixth agent's courier contracts among what a station offers, by level.
+local function runs(game: Core.Game, station: number): { State.Mission }
+  local found: { State.Mission } = {}
+  for _, offer in Missions.Offers(game.state, station) do
+    if offer.kind == "courier" and offer.level > 0 then
+      table.insert(found, offer)
+    end
+  end
+  return found
+end
+
+suite:Case("the sixth agent has courier contracts in levels: a frigate's hold over a few jumps, then a hauler's over many, never through lawless space", function(t)
+  local seen = { 0, 0 }
+  for seed = 1, 6 do
+    local game = Core.New({ galaxySeed = 1, historySeed = seed, peaceful = true, systems = 40 })
+    local state = game.state
+    local home = state.player.home
+    -- One level for a pilot nobody knows; the second at a standing of 1, or for a pilot the agent knows. No more yet.
+    t.eq(#runs(game, home), 1)
+    state.regard[`{home}:{Missions.OFFERS + 3}`] = Missions.OPENS[2]
+    t.eq(#runs(game, home), 2)
+    state.regard = {}
+    state.standings.vessari = 10
+    local offers = runs(game, home)
+    t.eq(#offers, #Missions.RUNS, "there are two levels of courier contract so far")
+    t.eq(runs(game, home), offers, "the same however often it is asked")
+    local reach = Missions.Reach(state.galaxy, 1)
+    for level, offer in offers do
+      local run = Missions.RUNS[level]
+      seen[level] += 1
+      t.eq({ offer.level, offer.id, offer.station, offer.type, offer.slot, offer.aim } :: { any },
+        { level, 0, home, Missions.CRATE, Missions.OFFERS + 3, "run" } :: { any })
+      t.eq(offer.agent, Missions.Agent(state, home, Missions.OFFERS + 3), "a courier contract is the sixth agent's")
+      -- So much cargo, to a station so many jumps off by a way that keeps out of lawless space.
+      t.ok(offer.need >= run.least and offer.need <= run.most and offer.need % run.step == 0, `level {level}: {offer.need} m3`)
+      local to = assert(Space.Object(state, offer.to))
+      t.eq({ to.kind, offer.system } :: { any }, { "station", Space.SystemOf(state, to.id) } :: { any })
+      local jumps = assert(reach[offer.system], "a courier contract goes where only lawless space leads")
+      t.ok(jumps >= run.near and jumps <= run.far, `level {level}: {jumps} jumps`)
+      t.eq(Missions.Jumps(state, offer), jumps)
+      -- It pays for the volume and the way, and standing by its level.
+      t.eq(offer.reward, math.floor((run.base + run.rate * offer.need * jumps) * (1 + 0.03 * 10)))
+      t.near(offer.standing, Missions.RUN_CREDIT * level, 1e-9)
+      t.eq(Missions.Title(offer), `Courier, level {level}: {offer.need} m3`)
+    end
+    -- (the first level goes in the starter ship's hold; the second wants a hauler's, and goes in one)
+    t.ok(Missions.RUNS[1].most <= Ships.byId["frigate.courier"].cargo and Missions.RUNS[2].least > Ships.byId["frigate.courier"].cargo)
+    t.ok(Missions.RUNS[2].most <= Ships.byId["industrial.hauler"].cargo)
+  end
+  t.eq(seen, { 6, 6 })
+  -- The way there: every system on it is one the pilot can cross without entering lawless space.
+  local galaxy = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true, systems = 40 }).state.galaxy
+  for id, jumps in Missions.Reach(galaxy, 1) do
+    t.ok(id == 1 or Galaxy.Band(galaxy.systems[id].security) ~= "lawless", `system {id}, {jumps} jumps off, is lawless`)
+  end
+  -- A galaxy too small for it: the first level goes as far as there is to go, and there is no second.
+  local small = newGame()
+  small.state.standings.vessari = 10
+  local few = runs(small, small.state.player.home)
+  t.eq(#few, 1)
+  t.ok(Missions.Jumps(small.state, few[1]) <= 1)
+end)
+
+suite:Case("a courier contract hands its crates over, is carried in as many trips as it takes, and is paid where it is delivered; then the agent has another", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true, systems = 40 })
+  local state = game.state
+  local home = state.player.home
+  local ship = state.ships[state.player.ship]
+  state.standings.vessari = 1
+  local offers = runs(game, home)
+  local big = offers[2]
+  t.eq(big.level, 2)
+  t.ok((submit(game, { kind = "AcceptMission", actor = 0, what = big.key })))
+  local mission = state.missions[state.missionIds[1]]
+  -- The crates are in the hangar here, the agent has nothing more while it is in hand, and it is one more job in hand.
+  local crates = 0
+  for _, item in Items.In(state, home, "hangar") do
+    crates += if item.type == Missions.CRATE then item.quantity else 0
+  end
+  t.eq({ crates, #runs(game, home), state.couriers[home] } :: { any }, { mission.need, 0, 1 } :: { any })
+  t.eq(refused(game, { kind = "CompleteMission", actor = 0, target = mission.id }),
+    `finish it at {(assert(Space.Object(state, mission.to))).name}`)
+  -- A first trip with what a Courier holds, left in the hangar there; and the rest brought after.
+  local function there(units: number)
+    for _, item in Items.In(state, home, "hangar") do
+      if item.type == Missions.CRATE and units > 0 then
+        Items.Add(state, Missions.CRATE, units, ship.id, "cargo")
+        Items.Take(state, item, units)
+      end
+    end
+    ship.docked = mission.to
+  end
+  there(150)
+  t.eq(refused(game, { kind = "CompleteMission", actor = 0, target = mission.id }), `{mission.need - 150} more to bring`)
+  t.ok((submit(game, { kind = "MoveItems", actor = 0, item = Items.In(state, ship.id, "cargo")[1].id, to = "hangar" })))
+  ship.docked = home
+  there(mission.need - 150)
+  local wallet, standing = state.wallet, Missions.Standing(state, "vessari")
+  t.ok((submit(game, { kind = "CompleteMission", actor = 0, target = mission.id })))
+  t.eq(state.wallet - wallet, mission.reward)
+  t.near(Missions.Standing(state, "vessari") - standing, Missions.RUN_CREDIT * 2, 1e-9)
+  -- (with whoever gave it, a quarter of a point and a quarter a level)
+  t.near(Missions.Regard(state, home, Missions.OFFERS + 3), Missions.REGARD.levelled * 3, 1e-9)
+  local left = 0
+  for _, holder in { ship.id, mission.to, home } do
+    for _, item in Items.In(state, holder, nil) do
+      left += if item.type == Missions.CRATE then item.quantity else 0
+    end
+  end
+  t.eq(left, 0, "the crates should all have been handed over")
+  -- The agent's next is another contract, and not the same one.
+  ship.docked = home
+  local next = runs(game, home)
+  t.eq(#next, 2)
+  t.ok(next[2].key ~= big.key)
+  -- Contracts given are in the save, and an older save has given none.
+  local data, length = Core.Save(game)
+  local loaded = Core.Load(data, length)
+  t.eq({ Core.Hash(loaded), loaded.state.couriers[home] } :: { any }, { Core.Hash(game), 1 } :: { any })
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 49
+  file.state.couriers = nil
+  local old, oldLength = Codec.Encode(file)
+  t.eq(Core.Load(old, oldLength).state.couriers, {})
 end)
 
 return suite

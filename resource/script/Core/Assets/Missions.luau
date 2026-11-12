@@ -47,6 +47,18 @@
 -- same terms: so much of an ore to bring in, from a pocket of it made
 -- for the contract and put on the charts when it is taken.
 --
+-- A sixth has courier contracts, in levels of their own: sealed cargo
+-- to a station some jumps off, more of it and farther the higher the
+-- level (Missions.RUNS). The first is a frigate's hold over one to
+-- three jumps. The second is a hauler's over five to ten. Where it
+-- goes is a station that can be got to without going through lawless
+-- space, that many jumps off by such a way (the farthest there is, in
+-- a galaxy too small to have one in reach), and it pays by the volume
+-- and the jumps. The crates are handed over at the station the
+-- contract is taken at, and can be carried in as many trips as it
+-- takes. (Two levels so far. The harder ones are for holds nobody has
+-- yet, or for runs through lawless space.)
+--
 -- And each agent has a regard of their own for the pilot, beside what
 -- their faction thinks: nothing to begin with, more with every job of
 -- theirs that is finished (half a point for one of the day's; a
@@ -85,6 +97,16 @@ local Missions = {}
 export type Event = { [string]: any }
 
 Missions.OFFERS = 3
+-- The levels of the sixth agent's courier contracts: cubic metres of
+-- sealed cargo (from 'least' to 'most', by 'step'), the jumps it is to
+-- be carried ('near' to 'far'), and what it pays: so much, and so much
+-- for each cubic metre carried a jump.
+Missions.RUNS = {
+  { least = 30, most = 150, step = 10, near = 1, far = 3, base = 3000, rate = 25 },
+  { least = 1000, most = 3000, step = 100, near = 5, far = 10, base = 10000, rate = 3 },
+}
+-- The standing a courier contract is worth, a level.
+Missions.RUN_CREDIT = 0.1
 Missions.IN_HAND = 5
 Missions.CRATE = "cargo.sealed"
 -- Credits of a job's pay to a loyalty point.
@@ -110,6 +132,8 @@ function Missions.Title(mission: State.Mission): string
       else `a camp of {ships}`)
   elseif mission.kind == "mining" then
     return `Mining, level {mission.level}: {mission.need} {Types.Info(mission.type).name}`
+  elseif mission.kind == "courier" and mission.level > 0 then
+    return `Courier, level {mission.level}: {mission.need} m3`
   elseif mission.kind == "courier" then
     return `Courier: {mission.need} m3 of sealed cargo`
   end
@@ -129,6 +153,104 @@ local function stations(state: State.State, system: number): { System.Object }
     end
   end
   return found
+end
+
+-- How many jumps every system is from one, by ways that keep out of
+-- lawless space (a system not in the list cannot be got to so). Worked
+-- out once for each system of a galaxy and kept: a galaxy does not
+-- change.
+type Reached = { [number]: number }
+local reaches: { [Galaxy.Galaxy]: { [number]: Reached } } = setmetatable({}, { __mode = "k" }) :: any
+function Missions.Reach(galaxy: Galaxy.Galaxy, from: number): Reached
+  local known: { [number]: Reached }? = reaches[galaxy]
+  if known == nil then
+    local fresh: { [number]: Reached } = {}
+    reaches[galaxy] = fresh
+    known = fresh
+  end
+  local kept: Reached? = (known :: { [number]: Reached })[from]
+  if kept then
+    return kept
+  end
+  local far: Reached = { [from] = 0 }
+  local queue = { from }
+  local at = 1
+  while at <= #queue do
+    local id = queue[at]
+    at += 1
+    for _, next in galaxy.systems[id].neighbors do
+      if far[next] == nil and Galaxy.Band(galaxy.systems[next].security) ~= "lawless" then
+        far[next] = far[id] + 1
+        table.insert(queue, next)
+      end
+    end
+  end
+  (known :: { [number]: Reached })[from] = far
+  return far
+end
+
+-- How many jumps a courier job's cargo is carried: by the way that
+-- keeps out of lawless space, or by the shortest if there is no such.
+function Missions.Jumps(state: State.State, mission: State.Mission): number
+  local from, to = Space.SystemOf(state, mission.station), Space.SystemOf(state, mission.to)
+  return Missions.Reach(state.galaxy, from)[to] or math.max(0, #Galaxy.Route(state.galaxy, from, to) - 1)
+end
+
+-- Where a courier contract of a level from a station goes: a station
+-- so many jumps off as the level says, by a way that keeps out of
+-- lawless space, and how many jumps that is. With no such station in
+-- the galaxy, the farthest there is short of it, if that is farther
+-- than the level below goes; and for the first level, with nowhere
+-- else, another station of the same system. Nil if there is nowhere.
+local TRIES = 4
+local function destination(state: State.State, station: number, system: number, level: number, rng: Rng.Rng): (System.Object?, number)
+  local run = Missions.RUNS[level]
+  local far = Missions.Reach(state.galaxy, system)
+  local within: { number } = {}
+  local short: { number } = {}
+  local least = if level > 1 then Missions.RUNS[level - 1].far + 1 else 1
+  for id = 1, #state.galaxy.systems do
+    local jumps = far[id]
+    if jumps and jumps >= run.near and jumps <= run.far then
+      table.insert(within, id)
+    elseif jumps and jumps >= least and jumps < run.near then
+      table.insert(short, id)
+    end
+  end
+  -- (the farthest first, and of those as far the lower-numbered)
+  table.sort(short, function(a: number, b: number): boolean
+    if far[a] ~= far[b] then
+      return far[a] > far[b]
+    end
+    return a < b
+  end)
+  -- Some of those the right way off, from wherever the roll says, until one has a station.
+  local first = Rng.Int(rng, math.max(1, #within))
+  for try = 1, math.min(TRIES, #within) do
+    local id = within[(first + try - 1) % #within + 1]
+    local there = stations(state, id)
+    if #there > 0 then
+      return there[Rng.Int(rng, #there) + 1], far[id]
+    end
+  end
+  for try = 1, math.min(TRIES, #short) do
+    local there = stations(state, short[try])
+    if #there > 0 then
+      return there[Rng.Int(rng, #there) + 1], far[short[try]]
+    end
+  end
+  if level == 1 then
+    local here: { System.Object } = {}
+    for _, object in stations(state, system) do
+      if object.id ~= station then
+        table.insert(here, object)
+      end
+    end
+    if #here > 0 then
+      return here[Rng.Int(rng, #here) + 1], 0
+    end
+  end
+  return nil, 0
 end
 
 -- Who at a station gives its nth job of the day: the same person every
@@ -240,11 +362,12 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
   -- The fourth agent's, and the fifth's: an assault and a mining
   -- contract at each level the pilot's standing opens, unless one of
   -- this station's of the kind is in hand already.
-  local assaulting, digging = false, false
+  local assaulting, digging, running = false, false, false
   for _, id in state.missionIds do
     local held = state.missions[id]
     assaulting = assaulting or (held.kind == "assault" and held.station == station)
     digging = digging or (held.kind == "mining" and held.station == station)
+    running = running or (held.kind == "courier" and held.level > 0 and held.station == station)
   end
   -- (as many levels as the faction's standing opens, or as the agent's
   -- own regard does, whichever is more; none from an agent whose
@@ -294,6 +417,26 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         agent = Missions.Agent(state, station, Missions.OFFERS + 2), loyalty = math.max(1, reward // Missions.LOYALTY),
         slot = Missions.OFFERS + 2, level = level, waves = if #pack > 0 then { pack } else {}, wave = 0, site = 0, rooms = {},
         ends = { if #pack > 0 then 1 else 0 }, aim = "dig", mark = 0,
+      })
+    end
+  end
+  -- The sixth agent's: a courier contract at each level there is that
+  -- the pilot's standing opens, unless one of this station's is in hand.
+  local run = state.couriers[station] or 0
+  for level = 1, if running then 0 else math.min(#Missions.RUNS, topOf(Missions.OFFERS + 3)) do
+    local bonus = paying(Missions.OFFERS + 3)
+    local rng = Rng.For(state.historySeed, station, run, level, 107)
+    local to, jumps = destination(state, station, system, level, rng)
+    if to then
+      local spec = Missions.RUNS[level]
+      local need = spec.least + spec.step * Rng.Int(rng, (spec.most - spec.least) // spec.step + 1)
+      local reward = math.floor((spec.base + spec.rate * need * math.max(1, jumps)) * bonus)
+      table.insert(offers, {
+        id = 0, key = `{station}:c{run}:{level}`, kind = "courier", station = station, faction = node.nearest,
+        system = Space.SystemOf(state, to.id), need = need, done = 0, type = Missions.CRATE, to = to.id, reward = reward,
+        standing = Missions.RUN_CREDIT * level, taken = 0,
+        agent = Missions.Agent(state, station, Missions.OFFERS + 3), loyalty = math.max(1, reward // Missions.LOYALTY),
+        slot = Missions.OFFERS + 3, level = level, waves = {}, wave = 0, site = 0, rooms = {}, ends = {}, aim = "run", mark = 0,
       })
     end
   end
@@ -441,6 +584,10 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
         end
         if offer.kind == "courier" then
           Items.Add(state, Missions.CRATE, offer.need, ship.docked, "hangar")
+          -- (the sixth agent's next is another contract)
+          if offer.level > 0 then
+            state.couriers[offer.station] = (state.couriers[offer.station] or 0) + 1
+          end
         elseif offer.kind == "assault" then
           -- (the agent's next is another job; and the camp is on the charts)
           state.assaults[offer.station] = (state.assaults[offer.station] or 0) + 1
