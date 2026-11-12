@@ -82,6 +82,9 @@ local function normalStock(info: Types.Info): number
   if info.category == "planetary" then
     -- (raw materials are worth too little for anyone to keep a mountain of)
     return math.max(100, math.min(200000, math.floor(3000000 / info.basePrice)))
+  elseif info.category == "moon" then
+    -- (thinly traded: a tower's output is more than one station takes at its price)
+    return math.max(100, math.floor(1200000 / info.basePrice))
   elseif info.category == "ore" or info.category == "mineral" or info.category == "component" then
     return math.max(100, math.floor(6000000 / info.basePrice))
   elseif info.category == "charge" then

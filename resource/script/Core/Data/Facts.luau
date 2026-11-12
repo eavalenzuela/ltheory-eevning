@@ -17,6 +17,7 @@ local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
+local Moons = require("@lt/Core/Data/Moons")
 local Planets = require("@lt/Core/Data/Planets")
 local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
@@ -501,6 +502,18 @@ function Facts.Of(type: string): Sheet?
       row(section(sheet, "Processed from"), nameOf(product.from), `{whole(product.input)} make {whole(product.output)}`, product.from)
       row(section(sheet, "Use"), "Called for by", `{usedIn(type)} blueprints`)
     end
+    trade(sheet, type)
+  elseif category == "moon" then
+    local material = Moons.byId[type]
+    sheet.kind = "Moon material"
+    sheet.note = "Brought up out of a moon by the drill of a tower anchored there. "
+      .. (if material.grade == 1 then "Found under moons anywhere."
+        elseif material.grade == 2 then "Not found where order is kept."
+        else "Found only where nobody keeps order.")
+    local has = section(sheet, "Deposit")
+    row(has, "Grade", if material.grade == 1 then "common" elseif material.grade == 2 then "uncommon" else "rare")
+    row(has, "A drill brings up", `{whole(Moons.YIELD * Moons.POOREST)} to {whole(Moons.YIELD * Moons.RICHEST)} an hour`)
+    row(section(sheet, "Use"), "Called for by", `{usedIn(type)} blueprints`)
     trade(sheet, type)
   elseif category == "structure" and type == Planets.CENTRE.id then
     sheet.kind = "Command centre"

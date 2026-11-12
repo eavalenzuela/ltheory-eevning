@@ -9,11 +9,18 @@
 -- and the builder's time.
 --
 -- A blueprint is not used up; it costs ten times its product.
+--
+-- The tech 2 make of a module, a hull or a drone is built of the plain
+-- one, of the parts and the rare minerals that make the difference,
+-- and of what is drilled out of moons (Data/Moons): the common grade
+-- for small things, the middle one for cruiser-sized, the rare for the
+-- largest.
 
 local Boosters = require("@lt/Core/Data/Boosters")
 local Components = require("@lt/Core/Data/Components")
 local Drones = require("@lt/Core/Data/Drones")
 local Modules = require("@lt/Core/Data/Modules")
+local Moons = require("@lt/Core/Data/Moons")
 local Ores = require("@lt/Core/Data/Ores")
 local Planets = require("@lt/Core/Data/Planets")
 local Ships = require("@lt/Core/Data/Ships")
@@ -73,11 +80,45 @@ end
 
 local Blueprints = { list = {} :: { Blueprint }, byId = {} :: { [string]: Blueprint }, byProduct = {} :: { [string]: Blueprint } }
 
--- What a part costs: a component, or something made on a planet.
+-- What a part costs: a component, something made on a planet, or
+-- something drilled out of a moon.
 local function priceOf(part: string): number
   local component = Components.byId[part]
-  return if component then component.basePrice else Planets.productById[part].basePrice
+  local material = Moons.byId[part]
+  return if component then component.basePrice elseif material then material.basePrice else Planets.productById[part].basePrice
 end
+
+-- The parts of the tech 2 make of something: the parts of the plain
+-- one, and a moon material of the grade its size calls for (1 small, 2
+-- medium, 3 large), which takes 'share' of what the parts cost between
+-- them (so the whole costs what it did). Which of a grade's two goes
+-- round with every tech 2 thing there is, so that both are wanted.
+-- A module or a drone is a fifth moon material by cost of parts. A
+-- hull is a twenty-fifth: it costs so much more than what is fitted to
+-- it that a fifth of a battleship would be more than a tower brings up
+-- in a week.
+local MOON_SHARE, MOON_HULL = 0.2, 0.04
+local turn = 0
+local function advanced(parts: { { any } }, size: number, share: number): { { any } }
+  local all: { { any } } = {}
+  for _, part in parts do
+    table.insert(all, { part[1], part[2] * (1 - share) })
+  end
+  turn += 1
+  table.insert(all, { Moons.For(size, turn).id :: any, share })
+  return all
+end
+
+-- How big a module is, for that: by its weapon's size, or by its name.
+local function moduleSize(module: Modules.ModuleType): number
+  if string.find(module.id, ".large", 1, true) then
+    return 3
+  elseif string.find(module.id, ".medium", 1, true) then
+    return 2
+  end
+  return if module.weapon then module.weapon.size else 1
+end
+local HULL_SIZE: { [string]: number } = { frigate = 1, destroyer = 1, cruiser = 2, industrial = 2, barge = 2, battleship = 3, freighter = 3 }
 
 -- 'mix' is how the mineral part of the cost is split; 'parts', if
 -- given, the components (and what is made on planets) that take
@@ -146,7 +187,8 @@ for _, module in Modules.list do
     -- difference: components and the rare minerals. Its blueprint is
     -- not for sale.
     local base = Modules.byId[module.base]
-    add(module.id, module.name, MIX.tech2, module.basePrice - base.basePrice, 1, 600 + module.basePrice // 100, moduleParts(module))
+    add(module.id, module.name, MIX.tech2, module.basePrice - base.basePrice, 1, 600 + module.basePrice // 100,
+      advanced(moduleParts(module), moduleSize(module), MOON_SHARE))
     local blueprint = Blueprints.byProduct[module.id]
     table.insert(blueprint.materials, 1, { type = base.id, quantity = 1 })
     blueprint.basePrice = module.basePrice * 10
@@ -182,7 +224,8 @@ for _, hull in Ships.list do
     -- A tech 2 hull is built of the plain one, and of what makes the
     -- difference: hull components and the rare minerals. Its blueprint
     -- is not for sale.
-    add(hull.id, hull.name, MIX.tech2, hull.basePrice - plain.basePrice, 1, math.min(72000, 600 + hull.basePrice // 200), Components.HULL)
+    add(hull.id, hull.name, MIX.tech2, hull.basePrice - plain.basePrice, 1, math.min(72000, 600 + hull.basePrice // 200),
+      advanced(Components.HULL, HULL_SIZE[hull.class] or 1, MOON_HULL))
     local blueprint = Blueprints.byProduct[hull.id]
     table.insert(blueprint.materials, 1, { type = plain.id, quantity = 1 })
     blueprint.basePrice = hull.basePrice * 10
@@ -204,7 +247,7 @@ for _, drone in Drones.list do
   if plain then
     -- (a tech 2 drone is built of the plain one, the same parts over
     -- again and the rare minerals; and its blueprint is not for sale)
-    add(drone.id, drone.name, MIX.tech2, drone.basePrice - plain.basePrice, 1, 600, parts)
+    add(drone.id, drone.name, MIX.tech2, drone.basePrice - plain.basePrice, 1, 600, advanced(parts, 1, MOON_SHARE))
     local blueprint = Blueprints.byProduct[drone.id]
     table.insert(blueprint.materials, 1, { type = plain.id, quantity = 1 })
     blueprint.basePrice = drone.basePrice * 10

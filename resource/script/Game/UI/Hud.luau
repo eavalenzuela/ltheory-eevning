@@ -32,6 +32,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
 local Station = require("@lt/Game/UI/Station")
 local Waypoints = require("@lt/Game/Waypoints")
+local Moons = require("@lt/Core/Data/Moons")
 local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
 
@@ -427,6 +428,12 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     what = `cloud of gas, {math.floor(Core.Query.Left(session.game, entry.id) * 100 + 0.5)}% left`
   end
   local tone = Im.DIM
+  if entry.kind == "moon" then
+    -- (a moon says what is under it, for whoever would put a tower and a drill there)
+    local deposit = Core.Query.Deposit(session.game, entry.id)
+    what = if deposit then `moon: {deposit.material.name}, {Moons.Word(deposit.richness)}` else "moon: nothing under it"
+    tone = if deposit then NEXT else Im.DIM
+  end
   if entry.kind == "gate" and entry.variety == "passage" then
     -- (a camp's gate: shut until its room is cleared)
     what = if Session.Can(session, "Jump", entry.id) then "the camp's gate: open" else "the camp's gate: shut"

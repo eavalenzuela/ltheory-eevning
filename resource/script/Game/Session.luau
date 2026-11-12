@@ -191,6 +191,9 @@ function Session.Notice(session: Session, event: Space.Event)
       .. (if event.left > 0 then `, and is going back for {event.left} more` else ": that is all of it"))
   elseif kind == "BuyEnded" then
     Session.Say(session, `{event.name} could not buy {event.short} of the {Types.Info(event.type).name}: {event.reason}`)
+  elseif kind == "MoonDrilled" and event.full then
+    local body = Core.Query.Body(session.game, event.station)
+    Session.Say(session, `{if body then body.name else "A tower"} has no room for more {Types.Info(event.type).name}: its drill stands idle`)
   elseif kind == "PilotPromoted" then
     Session.Say(session, `{event.name} is a grade {event.skill} pilot now, and is paid as one`)
   elseif kind == "WingmanLost" then

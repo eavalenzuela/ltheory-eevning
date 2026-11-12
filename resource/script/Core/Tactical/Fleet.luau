@@ -187,7 +187,7 @@ end
 
 -- What a pilot set to haul can be told to carry: the things of one
 -- category, or of all of these.
-Fleet.CARGO = { "ore", "mineral", "planetary", "component", "all" }
+Fleet.CARGO = { "ore", "mineral", "moon", "planetary", "component", "all" }
 -- The stations a haul can collect at, the one the ship is docked at among them.
 Fleet.STOPS = 5
 -- How many jumps off a market can be, to be offered as a place to send
@@ -198,7 +198,7 @@ Fleet.SHOPS = 5
 function Fleet.Carries(kind: string, type: string): boolean
   local category = Types.Info(type).category
   if kind == "all" then
-    return category == "ore" or category == "mineral" or category == "planetary" or category == "component"
+    return category == "ore" or category == "mineral" or category == "moon" or category == "planetary" or category == "component"
   end
   return category == kind and table.find(Fleet.CARGO, kind) ~= nil
 end

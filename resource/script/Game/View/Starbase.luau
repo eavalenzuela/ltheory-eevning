@@ -490,6 +490,48 @@ local MODULES: { [string]: (b: Builder) -> () } = {
     block(b, PLATING, v(0.04, 0.12, 0.56), v(0.18, 0.15, 0.13), nil, 0.06)
     block(b, GLOW, v(0.714, 0.08, -0.10), v(0.004, 0.02, 0.10), nil, 0.3)
   end,
+  -- A moon drill: a bore column longer than anything else round the
+  -- tower, through a collar of girders, with its drive in a drum at the
+  -- head and a cutting head lit at the foot; and two hoppers, piped to
+  -- the column, for what comes up.
+  ["array.drill"] = function(b)
+    -- the collar, braced to the head and to the column
+    for _, z in { -0.30, 0.30 } do
+      beam(b, FRAME, v(-0.42, 0.10, z), v(0.42, 0.10, z), 0.032)
+    end
+    for _, x in { -0.42, 0.42 } do
+      beam(b, FRAME, v(x, 0.10, -0.30), v(x, 0.10, 0.30), 0.032)
+    end
+    for _, corner in { v(-0.42, 0.10, -0.30), v(0.42, 0.10, -0.30), v(-0.42, 0.10, 0.30), v(0.42, 0.10, 0.30) } do
+      beam(b, FRAME, corner, v(corner.x * 0.3, 0.58, corner.z * 0.3), 0.020)
+      beam(b, FRAME, corner, v(0, -0.42, 0), 0.018)
+    end
+    -- the column, banded, and the drive at its head
+    block(b, PLATING, v(0, -0.15, 0), v(0.075, 0.72, 0.075), nil, 0.3)
+    for _, y in { 0.30, -0.10, -0.50 } do
+      block(b, FRAME, v(0, y, 0), v(0.10, 0.025, 0.10), nil, 0.3)
+    end
+    drum(b, v(0, 0.70, 0), 0.20, 0.30, PLATING)
+    block(b, TRIM, v(0, 0.53, 0), v(0.215, 0.020, 0.215), nil, 0.3)
+    windows(b, v(0, 0.70, 0), 0.196, 2, 0.018)
+    -- the cutting head: wider than the column, banded in warning, and
+    -- lit where it bites
+    block(b, FRAME, v(0, -0.86, 0), v(0.13, 0.07, 0.13), nil, 0.3)
+    block(b, TRIM, v(0, -0.775, 0), v(0.135, 0.015, 0.135), nil, 0.3)
+    block(b, FRAME, v(0, -0.95, 0), v(0.085, 0.04, 0.085), v(math.pi / 4, 0, 0), 0.3)
+    block(b, GLOW, v(0, -0.996, 0), v(0.05, 0.008, 0.05), nil, 0.4)
+    -- the hoppers, unlike, on arms from the collar
+    drum(b, v(0.60, 0.02, 0.04), 0.15, 0.50)
+    drum(b, v(-0.58, -0.06, -0.06), 0.13, 0.40, PLATING)
+    beam(b, FRAME, v(0.42, 0.10, 0.04), v(0.60, 0.10, 0.04), 0.024)
+    beam(b, FRAME, v(-0.42, 0.10, -0.06), v(-0.58, 0.10, -0.06), 0.024)
+    conduit(b, { v(0.075, -0.30, 0), v(0.34, -0.38, 0.02), v(0.60, -0.25, 0.04) }, 0.028)
+    conduit(b, { v(-0.075, -0.44, 0), v(-0.32, -0.48, -0.04), v(-0.58, -0.27, -0.06) }, 0.026)
+    -- a cabin on the collar, and a mast on the drive
+    block(b, PATCH, v(0.20, 0.20, 0.38), v(0.12, 0.09, 0.09), nil, 0.14)
+    block(b, GLOW, v(0.20, 0.22, 0.474), v(0.08, 0.02, 0.004), nil, 0.3)
+    mast(b, v(0.05, 0.85, 0.04), 0.15, 0.01)
+  end,
   -- A habitat: decks on a spine, the widest in the middle and the rest
   -- smaller toward both ends, their ports lit; a dome at the top, a
   -- lesser one turned down at the bottom.

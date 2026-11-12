@@ -11,6 +11,7 @@
 local Factions = require("@lt/Core/Data/Factions")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
+local Moons = require("@lt/Core/Data/Moons")
 local Planets = require("@lt/Core/Data/Planets")
 local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
@@ -21,7 +22,7 @@ local Catalog = {}
 export type Entry = { header: string?, info: Types.Info? }
 
 -- The order the categories come in where they are mixed (a hangar).
-Catalog.CATEGORIES = { "module", "charge", "drone", "ship", "structure", "ore", "mineral", "planetary", "component", "blueprint",
+Catalog.CATEGORIES = { "module", "charge", "drone", "ship", "structure", "ore", "mineral", "moon", "planetary", "component", "blueprint",
   "skillbook", "implant", "goods" }
 
 local categoryOrder: { [string]: number } = {}
@@ -100,6 +101,10 @@ function Catalog.Group(id: string): (string, number, number)
     return "Fuel", 3, 0
   elseif category == "planetary" then
     return if Planets.rawById[id] then "Raw materials" else "Processed materials", if Planets.rawById[id] then 1 else 2, 0
+  elseif category == "moon" then
+    -- (by grade: the common, the middle and the rare)
+    local grade = Moons.byId[id].grade
+    return if grade == 1 then "Common moon materials" elseif grade == 2 then "Uncommon moon materials" else "Rare moon materials", grade, 0
   elseif category == "blueprint" then
     local product = string.sub(id, #"blueprint." + 1)
     local made = Types.Get(product)

@@ -29,6 +29,7 @@ local TILE: { [string]: vector } = {
   goods = vector.create(0.42, 0.42, 0.36),
   structure = vector.create(0.34, 0.40, 0.48),
   planetary = vector.create(0.30, 0.46, 0.44),
+  moon = vector.create(0.46, 0.44, 0.56),
   drone = vector.create(0.46, 0.34, 0.50),
   implant = vector.create(0.50, 0.26, 0.40),
 }
@@ -144,7 +145,7 @@ local BY_PREFIX: { { string } } = {
 }
 local BY_CATEGORY: { [string]: string } = {
   module = "gear", charge = "rounds", ore = "rock", mineral = "ingot", component = "gear", blueprint = "blueprint",
-  skillbook = "book", goods = "crate", structure = "crate", planetary = "crate", drone = "gear", implant = "gear",
+  skillbook = "book", goods = "crate", structure = "crate", planetary = "crate", moon = "rock", drone = "gear", implant = "gear",
 }
 local CLASS_PIPS: { [string]: number } = { frigate = 1, destroyer = 1, cruiser = 2, battleship = 3, industrial = 2, barge = 2, freighter = 3 }
 

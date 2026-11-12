@@ -72,6 +72,9 @@
 #   game-cloak  a cloak as its pilot sees it (test/scenario/cloak.txt): it
 #               will not run by a station, at a belt the ship is drawn
 #               as a ghost with nothing mounted, and off it is itself
+#   game-moon   a tower drilling its moon (test/scenario/moon.txt): a
+#               moon with something under it found, a tower and a drill
+#               anchored there, and an hour's worth in its hangar
 #   game-tackle  holding another ship (test/scenario/tackle.txt): a
 #               entanglement projector and a warp disruptor fitted and used on a pirate
 #   game-salvage  salvaging (test/scenario/salvage.txt): a salvager fitted,
@@ -254,6 +257,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/errand.txt
   step game-cloak 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/cloak.txt
+  step game-moon 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
+    --script test/scenario/moon.txt
   step game-sites 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/sites.txt
   step game-tackle 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \

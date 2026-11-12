@@ -165,7 +165,8 @@ suite:Case("the Kethri build no towers: their stations are colony ships with eve
       t.eq(makeup.tower, nil)
       local has = services(makeup)
       for _, service in Structures.SERVICES do
-        t.ok(has[service], `a colony ship has no {service}`)
+        -- (all but a moon drill: that is a tower's, at a moon)
+        t.eq(has[service] == true, service ~= "extraction", `a colony ship and {service}`)
       end
     end
   end

@@ -37,6 +37,7 @@ local Implants = require("@lt/Core/Data/Implants")
 local Industry = require("@lt/Core/Assets/Industry")
 local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
+local Moons = require("@lt/Core/Data/Moons")
 local Mining = require("@lt/Core/Tactical/Mining")
 local Ores = require("@lt/Core/Data/Ores")
 local Missions = require("@lt/Core/Assets/Missions")
@@ -77,7 +78,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 51
+Core.SAVE_VERSION = 52
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -307,6 +308,19 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- save from before has given any.
   [49] = function(state: any)
     state.couriers = state.couriers or {}
+  end,
+  -- 52: a tower can drill its moon. One of a save from before has not
+  -- begun.
+  -- (And Anchoring is a skill, which a pilot has from the start and
+  -- one of a save from before has at nothing: the towers they have,
+  -- they keep.)
+  [51] = function(state: any)
+    for _, starbase in state.starbases do
+      starbase.drilled = starbase.drilled or state.tick
+    end
+    if state.skills.anchoring == nil then
+      state.skills.anchoring = 0
+    end
   end,
   -- 51: a hired pilot can be sent to buy. Nobody of a save from before
   -- has been.
@@ -1425,6 +1439,14 @@ export type StarbaseStatus = {
   cpu: number,
   -- (a module is online when its own anchoring is done and the tower is lit)
   modules: { { type: string, online: boolean, wait: number } },
+  -- The moon it is anchored at, by name, and how its drilling stands
+  -- (Assets/Starbases): what is under the moon, whether a drill is
+  -- anchored and online, what it brings up an hour, how much of it is
+  -- in the hangar and how much the tower holds; and the seconds until
+  -- the drill's next hour is up (0 when it is not drilling).
+  moon: string,
+  drilling: Starbases.Drilling,
+  next: number,
 }
 function Query.Starbase(game: Game, id: number): StarbaseStatus?
   local state = game.state
@@ -1440,11 +1462,23 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
       wait = math.max(0, module.ready - state.tick) * Constants.TICK })
   end
   local ship = state.ships[state.player.ship]
+  local moon = Space.Object(state, Starbases.Moon(state, starbase))
+  local drilling = Starbases.Drilling(state, starbase)
   return {
     tower = Structures.towerById[starbase.tower], mine = ship ~= nil and ship.owner == starbase.owner,
     anchored = Starbases.Anchored(state, starbase), wait = math.max(0, starbase.ready - state.tick) * Constants.TICK, lit = lit,
     fuel = starbase.fuel, hours = Starbases.Hours(starbase), powergrid = powergrid, cpu = cpu, modules = modules,
+    moon = if moon then moon.name else "", drilling = drilling,
+    next = if drilling.online and drilling.deposit then math.max(0, starbase.drilled + 3600 / Constants.TICK - state.tick) * Constants.TICK
+      else 0,
   }
+end
+
+-- What is under a moon, by the moon's id (Data/Moons): the material and
+-- how rich the deposit is, or nil for a moon with nothing worth a
+-- drill (and for what is no moon).
+function Query.Deposit(game: Game, moon: number): Moons.Deposit?
+  return Starbases.Deposit(game.state, moon)
 end
 
 -- The pilot's drones: how many are in the drone bay, how many are out,

@@ -24,6 +24,7 @@ local Session = require("@lt/Game/Session")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local State = require("@lt/Core/Kernel/State")
+local Moons = require("@lt/Core/Data/Moons")
 local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
 
@@ -47,7 +48,7 @@ local dockedAt = 0    -- the station the screen was last drawn for
 -- The market: the category listed, the type shown, and what is entered.
 local CATEGORIES: { { string } } = {
   { "module", "Modules" }, { "charge", "Charges" }, { "drone", "Drones" }, { "ship", "Ships" }, { "structure", "Structures" }, { "ore", "Ore" }, { "mineral", "Minerals" },
-  { "planetary", "Planetary" }, { "component", "Components" },
+  { "moon", "Moon" }, { "planetary", "Planetary" }, { "component", "Components" },
   { "blueprint", "Blueprints" }, { "skillbook", "Skill books" }, { "implant", "Implants" }, { "goods", "Goods" },
 }
 local category = "module"
@@ -1194,7 +1195,8 @@ local haulTo: { [number]: number } = {}
 -- And the further stations they would collect at on the way, in the
 -- order they were added (a round of several: Core/Tactical/Fleet).
 local haulAlso: { [number]: { number } } = {}
-local CARGO: { [string]: string } = { ore = "ore", mineral = "minerals", planetary = "planetary", component = "components", all = "all goods" }
+local CARGO: { [string]: string } = { ore = "ore", mineral = "minerals", moon = "moon ore", planetary = "planetary", component = "components",
+  all = "all goods" }
 
 local function drawCrew(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
   local station = player.docked
@@ -1641,7 +1643,35 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
   supply("Powergrid", status.powergrid, tower.powergrid, "MW", left, line, 400)
   line += 38
   supply("CPU", status.cpu, tower.cpu, "tf", left, line, 400)
-  line += 46
+  line += 44
+
+  -- Its moon: what is under it, and how the drilling of it stands.
+  local drilling = status.drilling
+  local deposit = drilling.deposit
+  Im.Heading(shorten(`MOON  {string.upper(status.moon)}`, 40), left, line, 16, Im.DIM)
+  line += 24
+  if deposit then
+    ItemIcon.Draw(deposit.material.id, left, line - 1, 18)
+    Info.Name(deposit.material.id, deposit.material.name, left + 24, line, 13, Im.TEXT)
+    Im.TextRight(`{Moons.Word(deposit.richness)}: a drill brings up {Format.Whole(drilling.perHour)} an hour`, left + 400, line, 13, Im.DIM)
+    line += 20
+    local full = drilling.stored >= drilling.room
+    local held = `{Format.Whole(drilling.stored)} of {Format.Whole(drilling.room)} in the hangar`
+    if not drilling.anchored then
+      Im.Text("No drill is anchored: a Moon Drill gets at it.", left, line, 13, Im.DIM)
+    elseif full then
+      Im.Text(`Full, {held}: take some away, or anchor a Storage Array.`, left, line, 13, Im.WARN)
+    elseif drilling.online then
+      Im.Text(`Drilling: {held}`, left, line, 13, GOOD)
+      Im.TextRight(`more in {Format.Duration(status.next)}`, left + 400, line, 13, Im.DIM)
+    else
+      Im.Text(`The drill is not working: {held}`, left, line, 13, Im.WARN)
+    end
+  else
+    Im.Text("Nothing under it worth a drill.", left, line, 13, Im.DIM)
+    line += 20
+  end
+  line += 28
 
   -- What is anchored round it.
   Im.Heading(`ANCHORED  {#status.modules}`, left, line, 16, Im.DIM)
@@ -1649,7 +1679,7 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
   if #status.modules == 0 then
     Im.Text("Nothing yet. A module to hand is anchored from the list on the right.", left, line, 13, Im.DIM, 0.8)
   end
-  local visible = 8
+  local visible = 5
   local first = Im.Scroll("anchored", left - 4, line, 420, visible * 26, #status.modules, visible)
   for row = 1, visible do
     local module = status.modules[row + first]

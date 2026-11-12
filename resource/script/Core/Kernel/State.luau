@@ -411,6 +411,9 @@ export type Starbase = {
   fuel: number,       -- fuel blocks aboard
   burnt: number,      -- the tick it last burnt one (or was lit)
   modules: { Anchored },
+  -- The tick its drill last brought an hour's worth up out of the moon
+  -- (or was last not drilling: it counts from when it can).
+  drilled: number,
 }
 
 export type State = {

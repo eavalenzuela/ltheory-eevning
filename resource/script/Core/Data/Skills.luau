@@ -108,6 +108,9 @@ local skills: { Skill } = {
     note = "One more drone out at once a level, as far as the hull controls. Level 4 for a tech 2 drone." },
   { id = "leadership", name = "Leadership", rank = 4, start = 1, requires = {},
     note = "One more hired pilot under your command a level." },
+  -- Towers
+  { id = "anchoring", name = "Anchoring", rank = 4, start = 0, requires = {},
+    note = "One more control tower of your own a level. A pilot keeps one without it." },
   { id = "remote.repair", name = "Remote Repair", rank = 2, start = -1, requires = { { skill = "repair.systems", level = 2 } },
     note = "To fit remote shield boosters and armor repairers: small (1), medium (3), large (4)." },
   -- Getting in another ship's way

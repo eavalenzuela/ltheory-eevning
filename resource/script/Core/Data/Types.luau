@@ -8,6 +8,7 @@ local Components = require("@lt/Core/Data/Components")
 local Drones = require("@lt/Core/Data/Drones")
 local Implants = require("@lt/Core/Data/Implants")
 local Modules = require("@lt/Core/Data/Modules")
+local Moons = require("@lt/Core/Data/Moons")
 local Ores = require("@lt/Core/Data/Ores")
 local Planets = require("@lt/Core/Data/Planets")
 local Ships = require("@lt/Core/Data/Ships")
@@ -20,7 +21,7 @@ export type Info = {
   id: string,
   name: string,
   category: "module" | "charge" | "goods" | "ore" | "mineral" | "component" | "ship" | "blueprint" | "skillbook" | "structure"
-    | "planetary" | "drone" | "implant",
+    | "planetary" | "drone" | "implant" | "moon",
   volume: number,     -- m3 per unit
   basePrice: number,  -- credits per unit
   -- No station has it to sell unless a pilot sold it there: a tech 2
@@ -82,6 +83,11 @@ for _, product in Planets.products do
 end
 byId[Planets.CENTRE.id] = { id = Planets.CENTRE.id, name = Planets.CENTRE.name, category = "structure",
   volume = Planets.CENTRE.volume, basePrice = Planets.CENTRE.basePrice }
+
+-- What a tower's drill brings up out of a moon (Data/Moons).
+for _, material in Moons.materials do
+  byId[material.id] = { id = material.id, name = material.name, category = "moon", volume = material.volume, basePrice = material.basePrice }
+end
 
 -- Drones, as they are in a hold.
 for _, drone in Drones.list do

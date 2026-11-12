@@ -6,7 +6,9 @@ local Blueprints = require("@lt/Core/Data/Blueprints")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Items = require("@lt/Core/Assets/Items")
+local Moons = require("@lt/Core/Data/Moons")
 local Space = require("@lt/Core/Tactical/Space")
+local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
 local Stations = require("@lt/Core/Assets/Stations")
 local Structures = require("@lt/Core/Data/Structures")
@@ -62,9 +64,11 @@ local function carry(game: Core.Game, type: string, quantity: number): State.Ite
 end
 
 -- A moon of the first system the ship can warp to from where it is.
-local function aMoon(game: Core.Game): System.Object
+-- 'deposit': one with something under it (true), or with nothing (false).
+local function aMoon(game: Core.Game, deposit: boolean?): System.Object
   for _, object in Core.Query.Objects(game, 1) do
-    if object.kind == "moon" and Core.Validate(game, { kind = "WarpTo", actor = game.state.player.ship, target = object.id }) then
+    if object.kind == "moon" and Core.Validate(game, { kind = "WarpTo", actor = game.state.player.ship, target = object.id })
+      and (deposit == nil or (Core.Query.Deposit(game, object.id) ~= nil) == deposit) then
       return object
     end
   end
@@ -73,12 +77,12 @@ end
 
 -- A peaceful game with the pilot's ship in space beside a moon, a small
 -- tower in its hold: the game, the moon and the tower.
-local function atMoon(t: Test.Context): (Core.Game, System.Object, State.Item)
+local function atMoon(t: Test.Context, deposit: boolean?): (Core.Game, System.Object, State.Item)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local tower = carry(game, SMALL.id, 1)
   order(t, game, { kind = "Undock", actor = 0 })
   Core.Step(game)
-  local moon = aMoon(game)
+  local moon = aMoon(game, deposit)
   order(t, game, { kind = "WarpTo", actor = 0, target = moon.id })
   stepUntil(game, "WarpEnded", 600)
   return game, moon, tower
@@ -86,8 +90,8 @@ end
 
 -- The same with the tower anchored and the ship moored at it: the game
 -- and the station the tower is.
-local function moored(t: Test.Context, fuel: number?): (Core.Game, number)
-  local game, moon, tower = atMoon(t)
+local function moored(t: Test.Context, fuel: number?, deposit: boolean?): (Core.Game, number)
+  local game, moon, tower = atMoon(t, deposit)
   order(t, game, { kind = "AnchorTower", actor = 0, item = tower.id, target = moon.id })
   local station = stepUntil(game, "StarbaseAnchored", 3).station :: number
   steps(game, SMALL.anchor)
@@ -174,6 +178,44 @@ suite:Case("nobody moors at a tower until it is anchored, and a moon takes one t
   t.eq(#Core.Query.Items(game, station, "hangar"), 1)
   order(t, game, { kind = "Undock", actor = 0 })
   stepUntil(game, "Undocked", 3)
+end)
+
+suite:Case("a pilot keeps one tower, and one more for each level of Anchoring", function(t)
+  local game, moon, tower = atMoon(t)
+  local state = game.state
+  t.eq({ Starbases.Kept(state, "player") }, { 0, 1 })
+  order(t, game, { kind = "AnchorTower", actor = 0, item = tower.id, target = moon.id })
+  stepUntil(game, "StarbaseAnchored", 3)
+  t.eq({ Starbases.Kept(state, "player") }, { 1, 1 })
+  -- At another moon, a second is one too many.
+  local other: System.Object? = nil
+  for _, object in Core.Query.Objects(game, 1) do
+    if object.kind == "moon" and object.id ~= moon.id and other == nil
+      and Core.Validate(game, { kind = "WarpTo", actor = state.player.ship, target = object.id }) then
+      other = object
+    end
+  end
+  local there = assert(other, "no second moon to warp to")
+  order(t, game, { kind = "WarpTo", actor = 0, target = there.id })
+  stepUntil(game, "WarpEnded", 600)
+  local second = carry(game, SMALL.id, 1)
+  local again: State.Command = { kind = "AnchorTower", actor = 0, item = second.id, target = there.id }
+  t.eq(refused(game, again), "you keep one tower: each level of Anchoring is one more")
+  -- With a level of it, the second goes up; and a third does not.
+  state.skills.anchoring = 1
+  order(t, game, again)
+  stepUntil(game, "StarbaseAnchored", 3)
+  t.eq({ Starbases.Kept(state, "player") }, { 2, 2 })
+  t.eq(refused(game, { kind = "AnchorTower", actor = 0, item = carry(game, SMALL.id, 1).id, target = there.id }),
+    "that moon has a tower already")
+  -- A pilot begins with the skill at nothing, and one of a save from before is given it so.
+  local fresh = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  t.eq(fresh.state.skills.anchoring, 0)
+  local file = Codec.Decode(Core.Save(fresh))
+  file.saveVersion = 51
+  file.state.skills.anchoring = nil
+  local old, oldLength = Codec.Encode(file)
+  t.eq(Core.Load(old, oldLength).state.skills.anchoring, 0)
 end)
 
 suite:Case("fuel lights a tower, and it burns by the hour", function(t)
@@ -281,6 +323,154 @@ suite:Case("a tower out of fuel is dark and gives nothing, and fuel lights it ag
   t.eq(game.state.starbases[station].fuel, 5)
   steps(game, 2)
   t.eq(game.state.starbases[station].fuel, 4)
+end)
+
+suite:Case("a moon may have a deposit: which, and how rich, is the moon's own, and the better ones are where order is thin", function(t)
+  -- By how safe the system is: what share of moons have anything, and of what grade.
+  local found: { [string]: { number } } = {}
+  for _, band in { "secure", "low", "lawless" } do
+    local grades = { 0, 0, 0, 0 }
+    for seed = 1, 600 do
+      local deposit = Moons.Deposit(seed, band)
+      if deposit then
+        grades[deposit.material.grade] += 1
+        t.ok(deposit.richness >= Moons.POOREST and deposit.richness <= Moons.RICHEST, `a deposit {deposit.richness} rich`)
+        t.eq(Moons.PerHour(deposit), math.floor(Moons.YIELD * deposit.richness + 0.5))
+        -- (the same moon has the same, whenever it is asked)
+        local again = assert(Moons.Deposit(seed, band))
+        t.eq({ again.material.id, again.richness } :: { any }, { deposit.material.id, deposit.richness } :: { any })
+      else
+        grades[4] += 1
+      end
+    end
+    found[band] = grades
+  end
+  print(string.format("     moons: of 600, with nothing %d where order is kept, %d where it is thin, %d where there is none; rare under %d of those",
+    found.secure[4], found.low[4], found.lawless[4], found.lawless[3]))
+  t.ok(found.secure[1] > 200 and found.secure[2] == 0 and found.secure[3] == 0, "where order is kept there is only the common grade")
+  t.ok(found.low[1] > 150 and found.low[2] > 120 and found.low[3] == 0, "where it is thin, the middle grade too")
+  t.ok(found.lawless[2] > 120 and found.lawless[3] > 80, "and the rare only where there is none")
+  t.ok(found.secure[4] > found.low[4] and found.low[4] > found.lawless[4], "the safer, the more moons with nothing")
+  -- Each grade has two materials, and both turn up.
+  local seen: { [string]: boolean } = {}
+  for seed = 1, 600 do
+    local deposit = Moons.Deposit(seed, "lawless")
+    if deposit then
+      seen[deposit.material.id] = true
+    end
+  end
+  for _, material in Moons.materials do
+    t.ok(seen[material.id], `no moon has {material.name}`)
+  end
+  -- A moon of the game says what it has (the first system is a homeworld's: order is kept), and nothing else has a deposit.
+  -- And stations trade in what moons give, as in anything.
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  for _, material in Moons.materials do
+    local quote = Core.Query.Quote(game, game.state.player.home, material.id)
+    t.ok(quote.ask ~= nil and quote.stock >= 100, `the market should have {material.name}`)
+  end
+  for _, object in Core.Query.Objects(game, 1) do
+    local deposit = Core.Query.Deposit(game, object.id)
+    if object.kind == "moon" then
+      local same = Moons.Deposit(object.seed, "secure")
+      t.eq(if deposit then deposit.material.id else "", if same then same.material.id else "", object.name)
+    else
+      t.eq(deposit, nil, object.name)
+    end
+  end
+end)
+
+suite:Case("a tower with a drill online brings up what is under its moon by the hour, into its hangar, while it has the room", function(t)
+  local game, station = moored(t, 1000, true)
+  local state = game.state
+  local starbase = state.starbases[station]
+  local deposit = assert(Starbases.Deposit(state, Starbases.Moon(state, starbase)), "the moon should have a deposit")
+  local type, hourly = deposit.material.id, Moons.PerHour(deposit)
+  local function stored(): number
+    local units = 0
+    for _, item in Core.Query.Items(game, station, "hangar") do
+      units += if item.type == type then item.quantity else 0
+    end
+    return units
+  end
+  -- With no drill nothing comes up.
+  local status = assert(Core.Query.Starbase(game, station))
+  t.eq({ status.drilling.anchored, status.drilling.online, status.drilling.perHour, status.drilling.room, status.next } :: { any },
+    { false, false, hourly, Moons.SILO, 0 } :: { any })
+  t.ok(status.moon ~= "" and assert(status.drilling.deposit).material.id == type)
+  steps(game, 3700)
+  t.eq(stored(), 0)
+  -- A drill is anchored: one, and no second.
+  anchor(t, game, "array.drill")
+  Core.TakeEvents(game)
+  status = assert(Core.Query.Starbase(game, station))
+  t.eq({ status.drilling.anchored, status.drilling.online } :: { any }, { true, true } :: { any })
+  t.ok(status.next > 3500 and status.next <= 3600, `the first hour should be nearly all to come, not {status.next} s`)
+  t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "array.drill", 1).id }), "the tower has a drill already")
+  -- An hour on, an hour's worth is in the hangar; and the same the hour after.
+  local first = stepUntil(game, "MoonDrilled", 3700)
+  t.eq({ first.station, first.type, first.units, first.full } :: { any }, { station, type, hourly, false } :: { any })
+  t.eq(stored(), hourly)
+  steps(game, 3600)
+  t.eq(stored(), 2 * hourly)
+  -- It is in the save, part of the way through an hour.
+  steps(game, 1000)
+  local data, length = Core.Save(game)
+  local loaded = Core.Load(data, length)
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  steps(game, 3000)
+  steps(loaded, 3000)
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  t.eq(stored(), 3 * hourly)
+  -- The tower holds a silo's worth and no more: the drill stops, and says so with the last it had room for.
+  state.starbases[station].fuel = 100000
+  local last: Space.Event? = nil
+  for _ = 1, 30 do
+    if stored() >= Moons.SILO then
+      break
+    end
+    last = stepUntil(game, "MoonDrilled", 3700)
+  end
+  t.eq(stored(), Moons.SILO)
+  t.eq(assert(last).full, true)
+  t.ok(assert(last).units <= hourly)
+  steps(game, 2 * 3600)
+  t.eq(stored(), Moons.SILO, "a full tower should take no more")
+  -- Some is taken away, and it goes on.
+  for _, item in Items.In(state, station, "hangar") do
+    if item.type == type then
+      Items.Take(state, item, 1000)
+    end
+  end
+  stepUntil(game, "MoonDrilled", 3700)
+  t.eq(stored(), Moons.SILO - 1000 + hourly)
+  -- A storage array is room for more.
+  anchor(t, game, "array.storage")
+  t.eq(assert(Core.Query.Starbase(game, station)).drilling.room, Moons.SILO + Moons.STORAGE)
+  -- A dark tower drills nothing, and when it is lit again the hour begins again: nothing is owed for the dark.
+  local before = stored()
+  state.starbases[station].fuel = 0
+  steps(game, 3 * 3600)
+  t.eq(stored(), before)
+  t.eq(assert(Core.Query.Starbase(game, station)).next, 0)
+  order(t, game, { kind = "Fuel", actor = 0, item = carry(game, FUEL, 500).id })
+  steps(game, 3500)
+  t.eq(stored(), before, "an hour had not gone by since the tower was lit")
+  steps(game, 200)
+  t.eq(stored(), before + hourly)
+  -- A save from before towers drilled opens, and its tower begins from now.
+  local file = Codec.Decode(Core.Save(game))
+  file.saveVersion = 51
+  file.state.starbases[station].drilled = nil
+  local old, oldLength = Codec.Encode(file)
+  local opened = Core.Load(old, oldLength)
+  t.eq(opened.state.starbases[station].drilled, opened.state.tick)
+end)
+
+suite:Case("a moon with nothing under it takes no drill", function(t)
+  local game, station = moored(t, 500, false)
+  t.eq(assert(Core.Query.Starbase(game, station)).drilling.deposit, nil)
+  t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "array.drill", 1).id }), "this moon has nothing worth a drill")
 end)
 
 suite:Case("a module can be unanchored again, into the tower's hangar", function(t)

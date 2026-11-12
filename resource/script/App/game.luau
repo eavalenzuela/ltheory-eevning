@@ -642,6 +642,40 @@ function Debug.Tower(): (string, number, number)
   return if not status.anchored then "anchoring" elseif status.lit then "lit" else "dark", status.fuel, online
 end
 
+-- The nearest moon of the pilot's system with something under it (or,
+-- with false, with nothing): its name and the material's id ("" and ""
+-- if there is none such).
+function Debug.Moon(deposit: boolean?): (string, string)
+  for _, entry in Core.Query.Overview(session.game) do
+    if entry.kind == "moon" then
+      local has = Core.Query.Deposit(session.game, entry.id)
+      if (has ~= nil) == (deposit ~= false) then
+        return entry.name, if has then has.material.id else ""
+      end
+    end
+  end
+  return "", ""
+end
+
+-- How the drilling stands at the starbase the pilot put up last:
+-- "nothing" (its moon has nothing under it), "none" (no drill),
+-- "waiting" (a drill that is not working yet, or has no power),
+-- "drilling" or "full"; and the material's id, what the drill brings up
+-- an hour, how much of it is in the tower's hangar, and how much the
+-- tower holds.
+function Debug.Drill(): (string, string, number, number, number)
+  local state = session.game.state
+  local id = state.starbaseIds[#state.starbaseIds]
+  local status = if id then Core.Query.Starbase(session.game, id) else nil
+  if status == nil or status.drilling.deposit == nil then
+    return "nothing", "", 0, 0, 0
+  end
+  local drilling = status.drilling
+  local deposit = drilling.deposit :: any
+  return if not drilling.anchored then "none" elseif not drilling.online then "waiting"
+    elseif drilling.stored >= drilling.room then "full" else "drilling", deposit.material.id, drilling.perHour, drilling.stored, drilling.room
+end
+
 -- How safe the system the pilot is in is, and which kind of space that
 -- makes it ("secure", "low" or "lawless").
 function Debug.Security(): (number, string)

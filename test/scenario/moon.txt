@@ -1,0 +1,63 @@
+# A tower drilling its moon, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/moon.txt
+#
+# A moon of the first system that has something under it is found and
+# flown to. A tower, fuel and a Moon Drill are given, the tower is
+# anchored there and lit, and the drill anchored at it. An hour on, an
+# hour's worth of what is under the moon is in the tower's hangar.
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 5
+
+# A moon with something under it. (Where order is kept, about half have.)
+lua _G.moon, _G.material = GameDebug.Moon(true)
+lua assert(_G.moon ~= '' and _G.material ~= '', 'no moon of this system has anything under it')
+lua assert(GameDebug.Moon(false) ~= '', 'and some moon should have nothing')
+lua GameDebug.TimeScale(30)
+lua _G.warped = GameDebug.Order('WarpTo', _G.moon)
+until not _G.warped or GameDebug.InWarp()
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+
+# What it takes, from nowhere, and the tower put up.
+lua assert(GameDebug.Give('tower.vessari.small', 1) and GameDebug.Give('fuel.block', 300) and GameDebug.Give('array.drill', 1))
+lua assert(GameDebug.Select(_G.moon), 'the moon is not on the overview')
+frames 3
+until GameDebug.Press('Anchor tower')
+until GameDebug.Tower() == 'anchoring'
+lua GameDebug.TimeScale(10)
+until GameDebug.Tower() == 'dark'
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Order('Dock', 'Starbase'), 'the tower refused its owner')
+until GameDebug.Docked()
+frames 3
+lua assert(GameDebug.Tab() == 'Starbase')
+until GameDebug.Press('Fuel:hold')
+until GameDebug.Tower() == 'lit'
+
+# The moon is this tower's, and nothing is drilling it yet.
+lua assert(GameDebug.Drill() == 'none', 'with no drill anchored, not ' .. GameDebug.Drill())
+lua assert(select(2, GameDebug.Drill()) == _G.material, 'the tower should be at the moon that was picked')
+lua assert(select(3, GameDebug.Drill()) > 0 and select(4, GameDebug.Drill()) == 0)
+
+# The drill: anchored, online a minute later, and at work.
+until GameDebug.Press('Anchor:array.drill')
+lua GameDebug.TimeScale(10)
+until GameDebug.Drill() == 'drilling'
+
+# An hour on, an hour's worth is in the hangar.
+lua GameDebug.TimeScale(60)
+patience 200
+until select(4, GameDebug.Drill()) > 0
+lua GameDebug.TimeScale(1)
+lua assert(select(4, GameDebug.Drill()) == select(3, GameDebug.Drill()), 'an hour should bring up what an hour is worth')
+lua assert(GameDebug.Hangar(_G.material) == select(4, GameDebug.Drill()), 'and it should be in the hangar of the tower')
+frames 3
+
+echo moon scenario passed
+quit
