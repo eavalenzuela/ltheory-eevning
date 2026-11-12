@@ -10,8 +10,10 @@
 --
 -- Everything is played flat (not placed in space by the engine) at a
 -- loudness worked out here: what is far off is quiet, by how far it is
--- from the pilot's ship. All of it is the engine's old placeholder
--- sound (resource/sound), wired up; none of it is final.
+-- from the pilot's ship. The weapons, what they hit, a ship blowing up,
+-- the warp drive and a gate are the game's own sounds, made from written
+-- descriptions (resource/sound/made, by script/soundgen); the rest is
+-- still the engine's old placeholder sound, wired up.
 --
 -- A script hears nothing: sound is off when a harness drives the app
 -- (Host.scripted), unless the script asks for it (GameDebug.Sound), and
@@ -42,23 +44,23 @@ local PLACE = { space = "system/ambiance/002.wav", station = "station/ambiance_s
 
 -- A weapon's sound by its family: the files, how loud, and its pitch.
 local WEAPON: { [string]: { files: { string }, volume: number, pitch: number } } = {
-  laser = { files = { "weapon/pulse/1/Pulse1.1.ogg", "weapon/pulse/1/Pulse1.2.ogg", "weapon/pulse/1/Pulse1.3.ogg",
-    "weapon/pulse/1/Pulse1.4.ogg" }, volume = 0.10, pitch = 1 },
-  projectile = { files = { "weapon/pulse/3/Pulse3.1.ogg", "weapon/pulse/3/Pulse3.2.ogg", "weapon/pulse/3/Pulse3.3.ogg",
-    "weapon/pulse/3/Pulse3.4.ogg" }, volume = 0.10, pitch = 0.7 },
-  hybrid = { files = { "weapon/pulse/2/Pulse2.1short.ogg", "weapon/pulse/2/Pulse2.2short.ogg", "weapon/pulse/2/Pulse2.3short.ogg" },
-    volume = 0.10, pitch = 0.85 },
-  missile = { files = { "weapon/missile/1.ogg", "weapon/missile/2.ogg", "weapon/missile/3.ogg" }, volume = 0.13, pitch = 1 },
+  laser = { files = { "made/weapon/laser1.ogg", "made/weapon/laser2.ogg" }, volume = 0.10, pitch = 1 },
+  projectile = { files = { "made/weapon/projectile1.ogg", "made/weapon/projectile2.ogg" }, volume = 0.10, pitch = 1 },
+  hybrid = { files = { "made/weapon/hybrid1.ogg" }, volume = 0.10, pitch = 1 },
+  missile = { files = { "made/weapon/missile1.ogg" }, volume = 0.13, pitch = 1 },
 }
+
+-- What lands on the pilot's own ship, on its shield and on its hull.
+local SHIELD_HIT, HULL_HIT = "made/impact/shield1.ogg", "made/impact/hull1.ogg"
 
 -- What an event of the pilot's own sounds like: the file and how loud.
 local OWN: { [string]: { any } } = {
-  WarpStarted = { "jumpdrive/activate.ogg", 0.25 }, WarpEnded = { "jumpdrive/deactivate.ogg", 0.22 },
+  WarpStarted = { "made/warp/enter.ogg", 0.25 }, WarpEnded = { "made/warp/exit.ogg", 0.22 },
   LockCompleted = { "ui/targetacquired.ogg", 0.18 }, LockLost = { "ui/targetlost.ogg", 0.14 },
   Scanned = { "ui/scanneropen.wav", 0.16 },
 }
 local SHIP: { [string]: { any } } = {
-  Jumped = { "warpnode/exit.ogg", 0.28 }, Docked = { "ui/confirm.ogg", 0.18 }, Undocked = { "ui/activate.ogg", 0.18 },
+  Jumped = { "made/gate/jump.ogg", 0.28 }, Docked = { "ui/confirm.ogg", 0.18 }, Undocked = { "ui/activate.ogg", 0.18 },
 }
 local ANY: { [string]: { any } } = {
   JobStarted = { "productionlab/initiate.ogg", 0.18 }, ResearchStarted = { "productionlab/initiate.ogg", 0.18 },
@@ -138,23 +140,22 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
       -- (and what lands on the pilot's own ship is heard from inside it)
       if event.to == mine and event.outcome ~= "miss" and me and event.family ~= "missile" then
         local shielded = me.vitals.shield > 1
-        play(audio, if shielded then "shield/hit.ogg" else `impact/metal/{event.item % 4 + 1}.wav`, if shielded then 0.10 else 0.14,
-          "struck", 0.15)
+        play(audio, if shielded then SHIELD_HIT else HULL_HIT, if shielded then 0.10 else 0.14, "struck", 0.15)
       end
     elseif kind == "BatteryFired" then
       local weapon = if event.missile then WEAPON.missile else WEAPON.projectile
       play(audio, weapon.files[event.battery % #weapon.files + 1], weapon.volume * 0.8, `battery{event.battery}`, 0.2, 0.55)
       if event.to == mine and me then
-        play(audio, if me.vitals.shield > 1 then "shield/hit.ogg" else "impact/metal/3.wav", 0.14, "struck", 0.15)
+        play(audio, if me.vitals.shield > 1 then SHIELD_HIT else HULL_HIT, 0.14, "struck", 0.15)
       end
     elseif kind == "MissileHit" and event.to == mine and me then
-      play(audio, if me.vitals.shield > 1 then "shield/hit.ogg" else "impact/metal/2.wav", 0.14, "struck", 0.15)
+      play(audio, if me.vitals.shield > 1 then SHIELD_HIT else HULL_HIT, 0.14, "struck", 0.15)
     elseif kind == "BallDestroyed" then
       local far = if me and event.system == me.system then math.sqrt((event.x - me.x) ^ 2 + (event.y - me.y) ^ 2 + (event.z - me.z) ^ 2)
         else 1e9
       -- (a bigger ship goes up lower and louder)
       local size = math.clamp((event.radius or 40) / 400, 0.1, 1)
-      play(audio, "explosion/1_close.ogg", (0.3 + 0.3 * size) * reach(far, 12000), nil, 0.2, 1.1 - 0.5 * size)
+      play(audio, "made/explosion/ship1.ogg", (0.3 + 0.3 * size) * reach(far, 12000), nil, 0.2, 1.1 - 0.5 * size)
     elseif OWN[kind] and event.ball == mine then
       play(audio, OWN[kind][1], OWN[kind][2])
     elseif SHIP[kind] and event.ship == mine then
