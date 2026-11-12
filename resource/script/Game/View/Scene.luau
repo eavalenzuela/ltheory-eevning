@@ -115,6 +115,15 @@ export type Scene = {
   -- the one it left and the one it is coming to (the ids, as one word).
   sites: string,
   left: number,                       -- the grid the ship was last on in this system; 0: none yet
+  -- A jump through a gate, as it is shown. The Core has the ship in the
+  -- next system at once; the scene holds the one it left for a moment
+  -- while the view rushes and whites out ('jump': when that began, in
+  -- scene time, or -1), makes the next one behind the white, and comes
+  -- out of it there ('arrived': when, or -1).
+  jump: number,
+  arrived: number,
+  veil: number,                       -- how much of the view is whited out, 0 to 1 (the interface draws it)
+  rush: number,                       -- how far the view is opened out by a jump, 0 to 1
   standing: { [number]: string },     -- what a pilot's starbase was made of when it was put up here
   epoch: number,                      -- the game (Session's 'epoch') the scene was made for
   volleys: number,                    -- shots of a station's batteries shown so far
@@ -171,7 +180,8 @@ function Scene.New(camera: Camera): Scene
     proxies = {}, celestials = {}, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6, tracking = 0,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
-    wreckage = {}, works = {}, offsets = {}, statics = {}, sites = "", left = 0, standing = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0,
+    wreckage = {}, works = {}, offsets = {}, statics = {}, sites = "", left = 0, jump = -1, arrived = -1, veil = 0, rush = 0,
+    standing = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0,
   }
 end
 
@@ -688,6 +698,12 @@ end
 local DOCKED_ZOOM = 2.3
 local DOCKED_ASIDE = 0.62
 
+-- A jump takes this long to leave by, and this long to come out of
+-- (seconds, of the clock on the wall: time run faster does not hurry it).
+local JUMP_OUT = 0.6
+local JUMP_IN = 1.5
+local JUMP_LIGHT = vector.create(0.72, 0.90, 1.0)
+
 -- Bring the engine's objects into line with the Core for this frame.
 function Scene.Sync(scene: Scene, session: Session.Session)
   local game = session.game
@@ -701,9 +717,45 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     scene.system = 0
     scene.key = ""
     scene.docked = false
+    scene.jump, scene.arrived, scene.veil, scene.rush = -1, -1, 0, 0
   end
   if player.system ~= scene.system then
+    -- Flown through a gate (and not put somewhere else by a save, a new
+    -- game or a new clone): the system left stands a moment longer,
+    -- with a flash where the ship was and the view rushing into it.
+    local through = scene.system ~= 0 and state.balls[player.ship] ~= nil and scene.fx ~= nil
+    if through and scene.jump < 0 then
+      scene.jump = scene.time
+      local at: vector? = scene.screen[player.ship]
+      local radius = state.balls[player.ship].radius
+      if at and scene.fx then
+        Effects.Burst(scene.fx, at, JUMP_LIGHT, 60 * radius, 0, JUMP_OUT * 1.2, scene.time)
+        Effects.Burst(scene.fx, at, JUMP_LIGHT, 220 * radius, 1, JUMP_OUT * 1.2, scene.time)
+      end
+    end
+    if through and scene.time - scene.jump < JUMP_OUT then
+      local t = (scene.time - scene.jump) / JUMP_OUT
+      scene.veil, scene.rush = t * t, t * t
+      if scene.fx then
+        Effects.Update(scene.fx, scene.time, scene.screen)
+      end
+      return
+    end
+    -- (the next system is made behind the white)
+    scene.arrived = if through then scene.time else -1
+    scene.jump = -1
     enterSystem(scene, game, player.system)
+  end
+  if scene.arrived >= 0 then
+    -- Out of it on the far side: the white clears and the view closes in.
+    local t = (scene.time - scene.arrived) / JUMP_IN
+    if t >= 1 then
+      scene.arrived, scene.veil, scene.rush = -1, 0, 0
+    else
+      scene.veil, scene.rush = (1 - t) ^ 2, (1 - t) ^ 3
+    end
+  elseif scene.jump < 0 then
+    scene.veil, scene.rush = 0, 0
   end
   local container = scene.container :: Object
   local objects = Core.Query.Objects(game, player.system)
@@ -1210,9 +1262,9 @@ function Scene.UpdateCamera(scene: Scene, frameSeconds: number, input: boolean)
   camera:SetRelativePos(center + look * distance)
   camera:SetRelativeLookAt(center)
   camera:SetRigidity(100000)
-  -- In warp the view opens out.
+  -- In warp the view opens out; and through a gate, farther.
   local eased = scene.warp * scene.warp * (3 - 2 * scene.warp)
-  camera:SetFov(62 + 30 * eased)
+  camera:SetFov(62 + 30 * eased + 44 * scene.rush)
 end
 
 -- Advance the engine's own effects (lights, trails, particles).

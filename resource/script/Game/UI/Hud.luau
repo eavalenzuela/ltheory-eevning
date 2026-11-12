@@ -43,6 +43,9 @@ function Hud.CursorOverInterface(): boolean
   return overInterface
 end
 
+-- The light a jump through a gate whites the view out with.
+local VEIL = vector.create(0.80, 0.92, 1.0)
+
 local TAGS: { [string]: string } = {
   sun = "SUN", planet = "PLN", moon = "MON", belt = "BLT", asteroid = "AST",
   station = "STA", gate = "GAT", ship = "SHP", wreck = "WRK", site = "SIT", bookmark = "BKM",
@@ -588,6 +591,11 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       local entries = Core.Query.Overview(game)
       local left, top = w.pos.x, w.pos.y
       local right, bottom = left + w.size.x, top + w.size.y
+
+      -- Through a gate the view whites out, under everything written on it.
+      if scene.veil > 0 then
+        Im.Fill(left, top, w.size.x, w.size.y, VEIL, math.min(1, scene.veil))
+      end
 
       -- (with a right click's menu up, a click is the menu's: Context.Draw)
       if Context.IsOpen() then

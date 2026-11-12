@@ -195,6 +195,13 @@ function Debug.Bodies(): (number, number)
   return count, if scene.warp > 0 then scene.warpSeconds else 0
 end
 
+-- How much of the view a jump through a gate has whited out, 0 to 1
+-- (0 when none is under way), and the system the scene is showing:
+-- behind the Core's by a moment while a jump is leaving.
+function Debug.Veil(): (number, number)
+  return scene.veil, scene.system
+end
+
 -- The engine objects in the scene, with their sizes: for checking the view.
 function Debug.Proxies()
   for id, object in scene.proxies do
