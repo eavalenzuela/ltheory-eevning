@@ -85,7 +85,7 @@ Two unattended tests are the exit. `Core/Loop.spec.luau` plays the whole loop he
 
 **M3 items still open:**
 - Main menu, new game, load and settings screens: the game still starts straight into a new game, with quick save and load on the docked screen.
-- Blueprint research and copies; jobs cannot be cancelled.
+- Blueprint copies. (Research and invention are built; and since 2026-11-12 **a job can be called off** where it runs, from the Industry tab's list, its button pressed twice: the blueprint comes back with what the runs already finished have made, and what went into the rest is lost, with the fee. `Core/Assets/Industry.spec`; `test/scenario/economy.txt` calls one off.)
 - Skills: 25 of the planned 40. There are no attributes or implants, and training speed is the same for everyone.
 - Market screen: no depth view or history chart; history is the last three days as text. An order's price cannot be changed, only cancelled.
 - No assets view across stations: what is in another station's hangar can only be seen there.

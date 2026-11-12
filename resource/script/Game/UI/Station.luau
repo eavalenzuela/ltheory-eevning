@@ -61,6 +61,10 @@ local sellPrice, buyPrice = 0, 0    -- 0: the best price that fills now
 -- every frame.
 local elsewhere = { key = "", age = 0, list = {} :: { Core.Source } }
 
+-- The job whose "Call off" has been pressed once, and the frames it
+-- stays asked for: a second press within them calls it off.
+local calling = { job = 0, left = 0 }
+
 -- How much over what a market asks now a pilot sent there may pay, a
 -- unit, on the average of a purchase: prices move while they fly. And
 -- one who is to keep a thing in stock from now on, more: prices move
@@ -990,6 +994,7 @@ local function drawIndustry(session: Session.Session, game: Core.Game, player: C
   end
 
   -- Jobs running, here and elsewhere.
+  calling.left = math.max(0, calling.left - 1)
   local jobs = Core.Query.Jobs(game, nil)
   line = math.max(line, top + 250)
   Im.Heading(`JOBS  {#jobs} / {Core.Query.JobSlots(game)}`, dx, line, 16, Im.DIM)
@@ -1009,6 +1014,20 @@ local function drawIndustry(session: Session.Session, game: Core.Game, player: C
     line += 18
     Im.Text(if job.station == station then "here" else shorten(if where then where.name else "?", 30), dx, line, 12, Im.DIM)
     local span = math.max(1, job.ends - job.started)
+    -- (called off where it runs: pressed once it asks, and pressed again
+    -- within a few seconds it is done. What went into the runs not
+    -- finished is lost.)
+    local cancel: State.Command = { kind = "CancelJob", actor = 0, target = job.id }
+    local armed = calling.job == job.id and calling.left > 0
+    if job.station == station and Im.Button(if armed then "Sure?" else "Call off", dx + 60, line - 2, 76, 20, (Session.CanDo(session, cancel)),
+      `Job:cancel:{index}`) then
+      if armed then
+        Session.Do(session, cancel)
+        calling.job, calling.left = 0, 0
+      else
+        calling.job, calling.left = job.id, 240
+      end
+    end
     Im.Fill(dx + 150, line + 5, 296, 4, Im.DIM, 0.25)
     Im.Fill(dx + 150, line + 5, 296 * math.clamp(1 - remaining / span, 0, 1), 4, Im.ACCENT, 0.95)
     line += 24

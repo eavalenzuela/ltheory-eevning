@@ -62,6 +62,26 @@ frames 3
 until GameDebug.Press('Refine:ore.ferrite')
 until GameDebug.Hangar('mineral.iron') >= 500
 
+# A job can be called off where it runs: pressed once, its button asks,
+# and pressed again it is done. The blueprint is back, and what went in
+# is lost. (The minerals of that run are a gift, so that the rest of
+# this is as it was.)
+lua assert(GameDebug.Give('mineral.iron', 210) and GameDebug.Give('mineral.silicon', 45))
+lua assert(GameDebug.Blueprint('blueprint.ammo.emp'))
+frames 3
+until GameDebug.Press('Runs:1')
+frames 2
+until GameDebug.Press('StartJob')
+until GameDebug.Jobs() == 1
+lua _G.iron = GameDebug.Hangar('mineral.iron')
+until GameDebug.Press('Job:cancel:1')
+frames 3
+lua assert(GameDebug.Jobs() == 1, 'one press only asks')
+until GameDebug.Press('Job:cancel:1')
+until GameDebug.Jobs() == 0
+lua assert(GameDebug.Hangar('blueprint.ammo.emp') == 1, 'the blueprint of a job called off should be back')
+lua assert(GameDebug.Hangar('mineral.iron') == _G.iron, 'what went into a job called off is not given back')
+
 # Build as many runs of EMP rounds as the minerals allow.
 lua assert(GameDebug.Blueprint('blueprint.ammo.emp'))
 frames 3

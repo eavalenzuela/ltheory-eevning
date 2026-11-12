@@ -708,7 +708,7 @@ end
 local ASSET_COMMANDS = { Fit = true, Unfit = true, LoadCharge = true, MoveItems = true }
 local COMBAT_COMMANDS = { LockTarget = true, UnlockTarget = true, ActivateModule = true, DeactivateModule = true }
 local AFTERMATH_COMMANDS = { Loot = true, Repair = true }
-local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true, StartResearch = true }
+local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true, StartResearch = true, CancelJob = true }
 local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true }
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true }
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }

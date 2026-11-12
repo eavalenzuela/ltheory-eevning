@@ -134,6 +134,51 @@ suite:Case("a job takes the minerals, a fee and the blueprint, and delivers when
   t.eq(#Core.Query.Jobs(game), 0)
 end)
 
+suite:Case("a job is called off where it runs: the blueprint comes back with what the finished runs made, and the rest is lost", function(t)
+  local game, home = newGame()
+  local state = game.state
+  local item = stack(game, "blueprint.ammo.emp")
+  Items.Add(state, "mineral.iron", 1050, home, "hangar")
+  Items.Add(state, "mineral.silicon", 225, home, "hangar")
+  local rounds = hangar(game, "ammo.emp")
+  t.eq(refused(game, { kind = "CancelJob", actor = 0, target = 4242 }), "no such job")
+  -- Five runs of a hundred rounds, 288 seconds in all. Called off after 120: two runs are done.
+  order(t, game, { kind = "StartJob", actor = 0, item = item.id, quantity = 5 })
+  local job = Core.Query.Jobs(game, home)[1]
+  local wallet = state.wallet
+  for _ = 1, 119 do
+    Core.Step(game)
+  end
+  Core.TakeEvents(game)
+  order(t, game, { kind = "CancelJob", actor = 0, target = job.id })
+  local called: any = nil
+  for _, event in Core.TakeEvents(game) do
+    if event.kind == "JobCancelled" then
+      called = event
+    end
+    t.ok(event.kind ~= "JobDone", "a job called off is not done")
+  end
+  t.eq({ called.job, called.product, called.made, called.quantity, called.research } :: { any },
+    { job.id, "ammo.emp", 200, 500, "" } :: { any })
+  t.eq({ hangar(game, "ammo.emp"), hangar(game, "blueprint.ammo.emp"), hangar(game, "mineral.iron"), hangar(game, "mineral.silicon") },
+    { rounds + 200, 1, 0, 0 })
+  t.eq({ #Core.Query.Jobs(game), state.wallet }, { 0, wallet }, "its place is free, and the fee is not given back")
+  for _ = 1, 400 do
+    Core.Step(game)
+  end
+  t.eq(hangar(game, "ammo.emp"), rounds + 200, "nothing more should come of a job called off")
+  -- At once, nothing has been made; and a job is called off only where it runs.
+  Items.Add(state, "mineral.iron", 210, home, "hangar")
+  Items.Add(state, "mineral.silicon", 45, home, "hangar")
+  order(t, game, { kind = "StartJob", actor = 0, item = stack(game, "blueprint.ammo.emp").id, quantity = 1 })
+  local second = Core.Query.Jobs(game, home)[1]
+  state.ships[state.player.ship].docked = home + 1
+  t.eq(refused(game, { kind = "CancelJob", actor = 0, target = second.id }), "that job is running at another station")
+  state.ships[state.player.ship].docked = home
+  order(t, game, { kind = "CancelJob", actor = 0, target = second.id })
+  t.eq({ hangar(game, "ammo.emp"), hangar(game, "blueprint.ammo.emp") }, { rounds + 200, 1 })
+end)
+
 suite:Case("a job that cannot be run is refused, with the reason", function(t)
   local game, home = newGame()
   local state = game.state

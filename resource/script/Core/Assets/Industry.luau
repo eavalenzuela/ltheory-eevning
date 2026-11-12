@@ -213,6 +213,19 @@ function Industry.Jobs(state: State.State, station: number?): { State.Job }
 end
 
 function Industry.Validate(state: State.State, command: State.Command): (boolean, string?)
+  if command.kind == "CancelJob" then
+    -- A job is called off where it runs, by whoever is docked there.
+    local ship = state.ships[command.actor]
+    local job = state.jobs[command.target or 0]
+    if ship == nil then
+      return false, "no such ship"
+    elseif job == nil then
+      return false, "no such job"
+    elseif ship.docked ~= job.station then
+      return false, "that job is running at another station"
+    end
+    return true
+  end
   local item, why = inHangar(state, command)
   if item == nil then
     return false, why
@@ -292,7 +305,33 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
   return false, `unknown command '{command.kind}'`
 end
 
+-- How many units a job that builds has finished so far: whole runs of
+-- it, by how far through its time it is.
+function Industry.Made(state: State.State, job: State.Job): number
+  if job.research ~= "" or job.runs < 1 then
+    return 0
+  end
+  local span = math.max(1, job.ends - job.started)
+  local runs = math.floor(job.runs * math.clamp((state.tick - job.started) / span, 0, 1))
+  return runs * (job.quantity // job.runs)
+end
+
 function Industry.Apply(state: State.State, command: State.Command, events: { Event })
+  if command.kind == "CancelJob" then
+    -- Called off: the blueprint comes back, and what the runs already
+    -- finished have made. What went into the rest is lost, and the fee.
+    local job = state.jobs[command.target :: number]
+    local made = Industry.Made(state, job)
+    Items.Add(state, job.blueprint, 1, job.station, "hangar")
+    if made > 0 then
+      Items.Add(state, job.product, made, job.station, "hangar")
+    end
+    state.jobs[job.id] = nil
+    State.RemoveId(state.jobIds, job.id)
+    table.insert(events, { kind = "JobCancelled", job = job.id, blueprint = job.blueprint, product = job.product, made = made,
+      quantity = job.quantity, research = job.research, station = job.station })
+    return
+  end
   local ship = state.ships[command.actor]
   local item = state.items[command.item :: number]
   if command.kind == "Reprocess" then

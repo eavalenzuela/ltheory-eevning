@@ -119,6 +119,10 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{Skills.byId[event.skill].name} trained to level {event.level}`)
   elseif kind == "SkillLearned" then
     Session.Say(session, `Learned {Skills.byId[event.skill].name}: it can be trained now`)
+  elseif kind == "JobCancelled" then
+    Session.Say(session, if event.research ~= "" then `Called off: the {Types.Info(event.blueprint).name} is back in the hangar`
+      elseif event.made > 0 then `Called off: {event.made} of {event.quantity} {Types.Info(event.product).name} were made. What went into the rest is lost`
+      else `Called off: nothing was made yet, and what went into it is lost. The blueprint is back in the hangar`)
   elseif kind == "JobDone" then
     Session.Say(session, `Built: {event.quantity} x {Types.Info(event.product).name}`)
   elseif kind == "ResearchDone" then
