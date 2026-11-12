@@ -271,7 +271,23 @@ local function dock(state: State.State, ball: State.Ball, station: number, event
   table.insert(events, { kind = "Docked", ship = ball.id, station = station })
 end
 
+local beginWarp: (ball: State.Ball, target: Body, range: number) -> ()
+
 local function jump(state: State.State, ball: State.Ball, gate: System.Object, events: { Event })
+  -- A gate that leads to a place and not to a system (a room of a camp:
+  -- Tactical/Assault) sends the ship on to that place, in warp, and the
+  -- place is on the charts from then on.
+  if gate.variety == "passage" then
+    local beyond = Space.Object(state, gate.to)
+    local site = state.sites[gate.to]
+    ball.intent = nil
+    if beyond and site then
+      site.strength = 1
+      beginWarp(ball, beyond :: any, 0)
+      table.insert(events, { kind = "PassageTaken", ship = ball.id, gate = gate.id, site = gate.to, name = beyond.name })
+    end
+    return
+  end
   local from = ball.system
   local arrival = System.GateTo(Space.Describe(state, gate.to), from) :: System.Object
   -- A point a fixed distance from the far gate, in a direction rolled for
@@ -301,7 +317,7 @@ local function warpPoint(ball: State.Ball, target: Body, range: number): (number
   return x, y, z, math.sqrt((x - ball.x) ^ 2 + (y - ball.y) ^ 2 + (z - ball.z) ^ 2)
 end
 
-local function beginWarp(ball: State.Ball, target: Body, range: number)
+function beginWarp(ball: State.Ball, target: Body, range: number)
   local x, y, z = warpPoint(ball, target, range)
   setMode(ball, "align", 0, 0)
   ball.dx, ball.dy, ball.dz = unit(x - ball.x, y - ball.y, z - ball.z)

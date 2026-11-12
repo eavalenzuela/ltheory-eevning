@@ -519,7 +519,7 @@ local function said(game: Core.Game, kind: string): { [string]: any }?
   return found
 end
 
-suite:Case("a camp of two rooms: only the first is on the charts, and the way to the second is found when the first is cleared", function(t)
+suite:Case("a camp of two rooms: only the first is on the charts, and the way to the second is the first's gate, shut until it is cleared", function(t)
   local game, mission = camp(3, "clear", 2)
   local state = game.state
   t.eq({ #mission.rooms, mission.site } :: { any }, { 2, mission.rooms[1] } :: { any })
@@ -542,21 +542,51 @@ suite:Case("a camp of two rooms: only the first is on the charts, and the way to
   for _, row in Core.Query.Sites(game) do
     t.ok(row.id ~= second, "the room that is not open is on the scanner")
   end
+  -- The first room has a gate that leads on to the second (the last room
+  -- has none), a little way from its middle: a gate as a stargate is,
+  -- that leads to a place.
+  local gate = assert(Assault.Gate(state, first), "the first room has no gate")
+  t.eq({ gate.kind, gate.variety, gate.to, gate.site, gate.name } :: { any },
+    { "gate", Assault.GATE, second, first, `Gate to {inner.name}` } :: { any })
+  t.eq(Assault.Gate(state, second), nil, "the last room has a gate")
+  t.near(Space.Distance(outer :: any, gate :: any), Assault.GATE_OUT, 1600)
   -- The first room has its own waves and no more: with the last of them down, nobody else comes there.
   at(game, first)
+  -- (and its gate is shut while they are to come, or there)
+  t.eq(refused(game, { kind = "Jump", actor = 0, target = gate.id }), "the gate is shut while the camp's keepers hold this room")
   local inFirst = mission.ends[1]
   local destroyed = 0
   for wave = 1, inFirst do
     steps(game, Assault.BREATHER + 3)
     t.eq({ mission.wave, #keepers(game, first) }, { wave, #mission.waves[wave] })
+    t.eq(refused(game, { kind = "Jump", actor = 0, target = gate.id }), "the gate is shut while the camp's keepers hold this room")
     Core.TakeEvents(game)
     destroyed += sweep(game, first)
   end
-  local open = assert(said(game, "RoomOpen"), "nobody said the way on was found")
-  t.eq({ open.room, open.of, open.site, open.name } :: { any }, { 2, 2, second, inner.name } :: { any })
-  t.eq({ state.sites[second].strength, Sites.Hidden(state, second), mission.done } :: { any }, { 1, false, destroyed } :: { any })
+  local open = assert(said(game, "RoomOpen"), "nobody said the gate was open")
+  t.eq({ open.room, open.of, open.site, open.name, open.gate } :: { any }, { 2, 2, second, inner.name, gate.id } :: { any })
+  -- The second room is on no chart yet: the gate is the way to it.
+  t.eq({ state.sites[second].strength, Sites.Hidden(state, second), mission.done } :: { any }, { 0, true, destroyed } :: { any })
   steps(game, Assault.BREATHER + 20)
   t.eq({ mission.wave, #keepers(game, first) }, { inFirst, 0 })
+  -- Through it: the ship makes for the gate, and at it is sent on to the
+  -- second room, in warp; and that room is on the overview from then on.
+  t.eq(refused(game, { kind = "Jump", actor = 0, target = gate.id }), "(accepted)")
+  t.ok((submit(game, { kind = "Jump", actor = 0, target = gate.id })))
+  local through: { [string]: any }? = nil
+  for _ = 1, 900 do
+    Core.Step(game)
+    through = through or said(game, "PassageTaken")
+    if through then
+      break
+    end
+  end
+  t.ok(through ~= nil, "the ship never went through the gate")
+  local sent = through :: { [string]: any }
+  t.eq({ sent.ship, sent.gate, sent.site, sent.name } :: { any }, { state.player.ship, gate.id, second, inner.name } :: { any })
+  local sentOn = state.balls[state.player.ship]
+  t.eq({ state.sites[second].strength, Sites.Hidden(state, second), sentOn.warp and sentOn.warp.target } :: { any },
+    { 1, false, second } :: { any })
   local shown = false
   for _, entry in Core.Query.Overview(game) do
     shown = shown or (entry.id == second and entry.kind == "site")

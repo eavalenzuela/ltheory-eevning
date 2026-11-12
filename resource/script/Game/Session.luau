@@ -84,7 +84,10 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{if (event.aim :: string) == "chief" then "The chief is destroyed" else "The camp is cleared"}: `
       .. `{if body then body.name else "the station"} will pay for it`)
   elseif kind == "RoomOpen" then
-    Session.Say(session, `The way on is found: {event.name} is on the overview`)
+    Session.Say(session, if (event.gate or 0) ~= 0 then `The room is cleared: its gate is open, and leads on to {event.name}`
+      else `The way on is found: {event.name} is on the overview`)
+  elseif kind == "PassageTaken" and event.ship == mine then
+    Session.Say(session, `Through the gate: on to {event.name}`)
   elseif kind == "WalletChanged" then
     local sign = if event.amount >= 0 then "+" else "-"
     Session.Say(session, `{sign}{math.abs(event.amount)} credits ({event.reason})`)

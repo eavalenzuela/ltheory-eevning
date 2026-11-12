@@ -165,7 +165,8 @@ local function hauler(state: State.State, system: number, rng: Rng.Rng, events: 
   local gates: { System.Object } = {}
   local stations: { System.Object } = {}
   for _, object in Space.Describe(state, system).objects do
-    if object.kind == "gate" then
+    -- (a stargate: not the gate of a pirate camp, which leads to a place)
+    if object.kind == "gate" and object.variety ~= "passage" then
       table.insert(gates, object)
     elseif object.kind == "station" and state.starbases[object.id] == nil then
       table.insert(stations, object)
@@ -212,7 +213,7 @@ local function patrol(state: State.State, system: number, rng: Rng.Rng, events: 
   local kind = if faction then patrolKind(faction, if Rng.Chance(rng, 0.4) then "destroyer" else "frigate") else nil
   local sites: { System.Object } = {}
   for _, object in Space.Describe(state, system).objects do
-    if object.kind == "gate" then
+    if object.kind == "gate" and object.variety ~= "passage" then
       table.insert(sites, object)
     end
   end

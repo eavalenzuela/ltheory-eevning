@@ -93,7 +93,8 @@ local function rowsFor(session: Session.Session, entry: Core.Entry): { Row }
       can = Session.Can(session, row.kind, entry.id, row.range)
     end
     if can then
-      table.insert(found, row)
+      -- (a camp's gate is gone through, not jumped: it leads to a place)
+      table.insert(found, if row.kind == "Jump" and entry.variety == "passage" then { label = "Go through", kind = "Jump" } else row)
     end
   end
   return found

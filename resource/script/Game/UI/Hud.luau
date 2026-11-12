@@ -367,7 +367,10 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     what = SITES[entry.variety] or "site"
   end
   local tone = Im.DIM
-  if entry.kind == "gate" then
+  if entry.kind == "gate" and entry.variety == "passage" then
+    -- (a camp's gate: shut until its room is cleared)
+    what = if Session.Can(session, "Jump", entry.id) then "the camp's gate: open" else "the camp's gate: shut"
+  elseif entry.kind == "gate" then
     -- (a gate says what kind of space is on the other side of it)
     local gate: any = Core.Query.Body(session.game, entry.id)
     local _, band = Core.Query.Security(session.game, if gate then gate.to else 0)
@@ -398,7 +401,7 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     { label = if Context.Range("WarpTo") > 0 then `Warp to {Context.Distance(Context.Range("WarpTo"))}` else "Warp to", kind = "WarpTo",
       range = Context.Range("WarpTo") },
     { label = "Align", kind = "AlignTo" },
-    if entry.kind == "gate" then { label = "Jump", kind = "Jump" }
+    if entry.kind == "gate" then { label = if entry.variety == "passage" then "Go through" else "Jump", kind = "Jump" }
       elseif entry.kind == "bookmark" then { label = "Forget", kind = "ForgetBookmark" }
       elseif entry.kind == "moon" then { label = "Anchor tower", kind = "AnchorTower" }
       elseif entry.kind == "planet" then { label = "Colony", kind = "Colony" }

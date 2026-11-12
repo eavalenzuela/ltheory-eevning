@@ -19,8 +19,11 @@
 -- A camp is of one room or more (one at the first level, as many as
 -- three at the fourth): each a place of its own, some tens of thousands
 -- of kilometres from the last, with some of the camp's waves in it. Only
--- the first is on the charts. The way to the next is found when a room
--- is cleared: it is on the overview from then on.
+-- the first is on the charts. The way on from a room is its gate, which
+-- stands in the room and is shut while anybody of the room is left: with
+-- the room cleared it opens, and a ship that goes through it (the order
+-- that takes a ship through a stargate) is sent on to the next room,
+-- which is on the overview from then on.
 --
 -- What the job is to do there is one of three things:
 --   - clear the camp: every ship of every wave;
@@ -42,9 +45,8 @@
 -- pilot does, once. (Ore of the kind from anywhere else does as well:
 -- the pocket is where it is to be had.)
 --
--- (Security and mining missions, cut down. Not yet: a gate to fly
--- through from room to room, things to destroy other than ships, a camp
--- that is not pirates'.)
+-- (Security and mining missions, cut down. Not yet: things to destroy
+-- other than ships, a camp that is not pirates'.)
 
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
@@ -55,6 +57,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local System = require("@lt/Core/Describe/System")
 
 local Assault = {}
 
@@ -82,6 +85,13 @@ Assault.LOOT = "cargo.stolen"
 Assault.CRATES = 10
 -- How many times over the bounty on a camp's chief is.
 Assault.CHIEF = 2
+-- A room's gate on to the next: what kind of gate it is (a thing of the
+-- system's description, of the kind a stargate is, that leads to a place
+-- and not to a system), how far from the middle of its room it stands,
+-- and how big it is.
+Assault.GATE = "passage"
+Assault.GATE_OUT = 9000
+Assault.GATE_RADIUS = 260
 
 -- The packs a camp of each level may be kept by: a camp has some of
 -- them, no two alike, the order they come in being part of the luck.
@@ -251,6 +261,19 @@ function Assault.Open(state: State.State, mission: State.Mission, events: { Even
     table.insert(mission.rooms, site.id)
     last = site
   end
+  -- (the gate on from each room but the last: rolled apart from the
+  -- rest, so that nothing else about the camp follows from it)
+  if mission.kind == "assault" then
+    for room = 1, #mission.rooms - 1 do
+      local here, beyond = state.sites[mission.rooms[room]], Space.Object(state, mission.rooms[room + 1])
+      if here and beyond then
+        local roll = Rng.For(state.historySeed, mission.id, room, 61)
+        local angle = Rng.Float(roll, 0, 2 * math.pi)
+        Sites.Fixture(state, here, "gate", `Gate to {beyond.name}`, Assault.GATE_OUT * math.cos(angle), Rng.Float(roll, -1500, 1500),
+          Assault.GATE_OUT * math.sin(angle), Assault.GATE_RADIUS, Assault.GATE, beyond.id)
+      end
+    end
+  end
   mission.site = mission.rooms[1] or 0
   if mission.site ~= 0 then
     table.insert(events, { kind = "SiteAppeared", site = mission.site, system = mission.system, what = "mission" })
@@ -329,6 +352,33 @@ local function roomOf(state: State.State, place: number): (State.Mission?, numbe
   return nil, 0
 end
 
+-- The gate that stands in a room of a camp, if it has one (the last
+-- room has none; nor has a camp of a save from before there were gates).
+function Assault.Gate(state: State.State, room: number): System.Object?
+  local site = state.sites[room]
+  if site == nil then
+    return nil
+  end
+  for _, object in Space.Describe(state, site.system).objects do
+    if object.kind == "gate" and object.variety == Assault.GATE and object.site == room then
+      return object
+    end
+  end
+  return nil
+end
+
+-- Whether a camp's gate will take a ship through: it is shut while any
+-- wave of its room is still to come, or anybody of the room is left.
+function Assault.Passable(state: State.State, gate: System.Object): (boolean, string?)
+  local mission, room = roomOf(state, gate.site)
+  if mission == nil or state.sites[gate.to] == nil then
+    return false, "the gate leads nowhere now"
+  elseif mission.wave < mission.ends[room] or #keepers(state, gate.site) > 0 then
+    return false, "the gate is shut while the camp's keepers hold this room"
+  end
+  return true
+end
+
 -- A ship that kept a place has been destroyed (Tactical/Aftermath, once
 -- it is gone): if the place is a room of a camp, it counts toward the
 -- job as the job counts; and with the last of a wave the next is due,
@@ -354,13 +404,18 @@ function Assault.Fell(state: State.State, home: number, ship: number, events: { 
   if mission.wave < mission.ends[room] then
     table.insert(events, { kind = "WaveDown", mission = mission.id, wave = mission.wave, of = #mission.waves })
   elseif room < #mission.rooms then
-    -- The room is cleared: the way to the next is found.
+    -- The room is cleared: its gate opens, and leads on to the next.
+    -- (A camp with no gate, of a save from before there were any, has
+    -- the way to the next room found, as it was then.)
     local next = state.sites[mission.rooms[room + 1]]
     local place = Space.Object(state, mission.rooms[room + 1])
+    local gate = Assault.Gate(state, home)
     if next and place and next.strength < 1 then
-      next.strength = 1
+      if gate == nil then
+        next.strength = 1
+      end
       table.insert(events, { kind = "RoomOpen", mission = mission.id, room = room + 1, of = #mission.rooms, site = next.id,
-        name = place.name })
+        name = place.name, gate = if gate then gate.id else 0 })
     end
   end
 end

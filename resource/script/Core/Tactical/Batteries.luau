@@ -51,7 +51,8 @@ function Batteries.Fire(state: State.State, events: { Event }): { Hit }
   local sentries = 0
   if station.kind == "gate" then
     local node = state.galaxy.systems[me.system]
-    sentries = if node.owner == "" then 0 elseif Galaxy.Band(node.security) == "secure" then 3 else 2
+    -- (a stargate's: the gate of a pirate camp is nobody's to guard)
+    sentries = if node.owner == "" or station.variety == "passage" then 0 elseif Galaxy.Band(node.security) == "secure" then 3 else 2
     if sentries == 0 then
       return hits
     end

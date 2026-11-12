@@ -8,7 +8,8 @@
 --   - For each job in hand (Assets/Missions): where it is to be done, or,
 --     once it is done, where it is paid. A bounty has no one place (its
 --     pirates are at the belts of its system). An assault's is the room
---     of its camp the pilot has got to. A mining contract's is its
+--     of its camp the pilot has got to, or, once that room is cleared,
+--     the gate in it that leads on. A mining contract's is its
 --     pocket, until the ore is aboard. A courier run's is where the
 --     cargo goes, or, while the cargo is not aboard, where it is.
 --   - For a lesson of a career agent's that is done and not yet reported
@@ -67,11 +68,18 @@ local function stop(game: Core.Game, ship: number, mission: State.Mission): (num
     if done or mission.site == 0 then
       return mission.station, home
     end
-    -- (the room the pilot has got to: the last whose way is found)
+    -- (the room the pilot has got to: the last whose way is found; or,
+    -- with that room cleared, its gate, which leads on)
     local room = mission.site
     for _, id in mission.rooms do
       if Core.Query.Found(game, id) then
         room = id
+      end
+    end
+    for _, object in Core.Query.Objects(game, mission.system) do
+      if object.kind == "gate" and object.variety == "passage" and object.site == room
+        and Core.Validate(game, { kind = "Jump", actor = ship, target = object.id }) then
+        return object.id, mission.system
       end
     end
     return room, mission.system

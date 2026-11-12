@@ -632,7 +632,15 @@ local function validate(state: State.State, command: State.Command): (boolean, s
   elseif TRAINING_COMMANDS[command.kind] then
     return Training.Validate(state, command)
   end
-  return Space.Validate(state, command)
+  local ok, why = Space.Validate(state, command)
+  -- (through a camp's gate, only when the camp says it is open: Tactical/Assault)
+  if ok and command.kind == "Jump" then
+    local gate = Space.Object(state, command.target or 0)
+    if gate and gate.variety == Assault.GATE then
+      return Assault.Passable(state, gate)
+    end
+  end
+  return ok, why
 end
 
 -- Whether a command could be carried out now, and if not, why not. Does

@@ -343,6 +343,26 @@ end
 
 -- Rocks at a place made for a job: so many, of an ore, each with so
 -- many units in it, a few kilometres out from the middle of the place.
+-- Something built at a site (a gate on to a camp's next room): a thing
+-- of the system's description that belongs to the site, so far from its
+-- middle, and goes from every chart when the site does. Nil if the
+-- site's place is not there.
+function Sites.Fixture(state: State.State, site: State.Site, kind: System.Kind, name: string, dx: number, dy: number, dz: number,
+  radius: number, variety: string, to: number): System.Object?
+  local objects = Space.Describe(state, site.system).objects
+  local place = Space.Object(state, site.id)
+  if place == nil then
+    return nil
+  end
+  local object: System.Object = {
+    id = site.system * Constants.STRUCTURE_ID_SPAN + #objects + 1, kind = kind, name = name,
+    x = place.x + dx, y = place.y + dy, z = place.z + dz, radius = radius, seed = site.id % 2 ^ 31, parent = place.id, site = place.id,
+    variety = variety, to = to,
+  }
+  table.insert(objects, object)
+  return object
+end
+
 function Sites.Rocks(state: State.State, site: State.Site, rng: Rng.Rng, ore: string, count: number, units: number)
   local objects = Space.Describe(state, site.system).objects
   local place = Space.Object(state, site.id)
