@@ -30,10 +30,11 @@ export type Faction = {
   -- sharp at every edge, each with its conning tower (the Kethri, by
   -- theirs).
   -- Pirate: "patchwork", somebody
-  -- else's hull with parts missing and parts bolted on. Alien: "crystal"
-  -- shards grown outward from a core, "carapace" segmented and curled
-  -- like something alive, "monolith" rings and slabs without a seam.
-  style: "slab" | "cloud" | "motley" | "blade" | "patchwork" | "crystal" | "carapace" | "monolith",
+  -- else's hull with parts missing and parts bolted on. Alien: "spindle"
+  -- long smooth hulls behind a needle prow, banded in two colours (the
+  -- Vail, by their drawings), "carapace" segmented and curled like
+  -- something alive, "monolith" rings and slabs without a seam.
+  style: "slab" | "cloud" | "motley" | "blade" | "patchwork" | "spindle" | "carapace" | "monolith",
   weapon: string,           -- the turret family its warships carry
   launchers: number,        -- the share of a warship's hardpoints that are launchers
   tank: "armor" | "shield" | "hull",
@@ -139,13 +140,20 @@ Factions.list = {
 
   -- The three alien factions. Nothing of theirs is sold on a human
   -- market, and nobody has a blueprint for it.
+  -- The Vail (the owner's, 2026-11-11): aliens who go on two legs and
+  -- crew their ships as people do. What their ships look like is from
+  -- the owner's drawings (docs/concepts/vail): a needle prow before a
+  -- long smooth hull, banded in brown and charcoal, lit in amber. Their
+  -- weapons, their defences and the figures below are still what was
+  -- put here before the drawings came, and the hulls' names are
+  -- stand-ins: none of it is the owner's yet.
   {
-    id = "vael", name = "Vael", kind = "alien", style = "crystal", weapon = "laser", launchers = 0, tank = "shield",
-    note = "Ships grown as crystal around a bright core. Beams of great reach and shields that mend in moments, around a hull that shatters.",
-    paint = { primary = { 0.55, 0.85, 0.90 }, secondary = { 0.90, 0.95, 1.0 }, glow = { 0.60, 1.0, 1.0 } },
+    id = "vail", name = "Vail", kind = "alien", style = "spindle", weapon = "laser", launchers = 0, tank = "shield",
+    note = "Ships like thrown spears: a needle prow before a long hull banded in brown and black, lit in amber. Beams of great reach, behind shields that mend in moments.",
+    paint = { primary = { 0.40, 0.27, 0.16 }, secondary = { 0.14, 0.14, 0.14 }, glow = { 1.0, 0.66, 0.24 } },
     shield = 1.5, armor = 0.5, hull = 0.6, velocity = 1.05, mass = 0.8, cpu = 1.3, powergrid = 1.3, capacitor = 1.5,
     lockRange = 1.4, cargo = 0.5, price = 3, mids = 2, lows = -2, hardpoints = 0,
-    hulls = { frigate = "Shard", destroyer = "Prism", cruiser = "Lattice-Song", battleship = "Cathedral", industrial = "Seed" },
+    hulls = { frigate = "Thorn", destroyer = "Barb", cruiser = "Pike", battleship = "Harpoon", industrial = "Drover" },
   },
   {
     id = "skarn", name = "Skarn", kind = "alien", style = "carapace", weapon = "hybrid", launchers = 0, tank = "armor",
