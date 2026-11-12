@@ -371,6 +371,45 @@ suite:Case("cancelling an order returns what it held, but not the fee", function
   t.eq(refused(game, { kind = "CancelOrder", actor = 0, order = 12345 }), "no such order")
 end)
 
+suite:Case("an order's price can be changed where the order is: the broker is paid on what it gains, and a buy order holds the difference", function(t)
+  local game, home = newGame()
+  local state = game.state
+  state.wallet = 50000
+  local ore = Items.Add(state, "mineral.copper", 500, home, "hangar")
+  order(t, game, { kind = "PlaceOrder", actor = 0, to = "sell", item = ore.id, quantity = 500, price = 30 })
+  order(t, game, { kind = "PlaceOrder", actor = 0, to = "buy", type = "mineral.iron", quantity = 1000, price = 2 })
+  local sell: State.Order?, buy: State.Order? = nil, nil
+  for _, placed in Core.Query.Orders(game, home) do
+    if placed.side == "sell" then
+      sell = placed
+    else
+      buy = placed
+    end
+  end
+  local selling, buying = assert(sell), assert(buy)
+  t.eq(refused(game, { kind = "ModifyOrder", actor = 0, order = 12345, price = 31 }), "no such order")
+  t.eq(refused(game, { kind = "ModifyOrder", actor = 0, order = selling.id, price = 30 }), "that is its price already")
+  t.eq(refused(game, { kind = "ModifyOrder", actor = 0, order = selling.id, price = 0 }), "no such price")
+  t.eq(refused(game, { kind = "ModifyOrder", actor = 0, order = selling.id, price = 30.5 }), "no such price")
+  -- A sell order put up from 30 to 40: the broker's 3% of the 5,000 it has gained. Brought down, nothing.
+  local before = state.wallet
+  order(t, game, { kind = "ModifyOrder", actor = 0, order = selling.id, price = 40 })
+  t.eq({ selling.price, selling.quantity, before - state.wallet }, { 40, 500, 150 })
+  order(t, game, { kind = "ModifyOrder", actor = 0, order = selling.id, price = 25 })
+  t.eq({ selling.price, before - state.wallet }, { 25, 150 })
+  -- A buy order put up from 2 to 3: the thousand credits more it holds, and the broker's 30. Brought down to 1, it gives 2,000 back.
+  before = state.wallet
+  order(t, game, { kind = "ModifyOrder", actor = 0, order = buying.id, price = 3 })
+  t.eq({ buying.price, before - state.wallet }, { 3, 1000 + 30 })
+  order(t, game, { kind = "ModifyOrder", actor = 0, order = buying.id, price = 1 })
+  t.eq({ buying.price, before - state.wallet }, { 1, 1030 - 2000 })
+  -- Not for more than there is to pay with; and cancelled, it gives back what it holds now.
+  state.wallet = 100
+  t.eq(refused(game, { kind = "ModifyOrder", actor = 0, order = buying.id, price = 2 }), "not enough credits")
+  order(t, game, { kind = "CancelOrder", actor = 0, order = buying.id })
+  t.eq(state.wallet, 100 + 1000)
+end)
+
 suite:Case("orders are refused for want of goods, credits or sense", function(t)
   local game, home = newGame()
   game.state.wallet = 100

@@ -710,7 +710,7 @@ local COMBAT_COMMANDS = { LockTarget = true, UnlockTarget = true, ActivateModule
 local AFTERMATH_COMMANDS = { Loot = true, Repair = true }
 local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true, StartResearch = true, CancelJob = true }
 local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true }
-local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true }
+local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true, ModifyOrder = true }
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
 local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true }
 local SITE_COMMANDS = { Scan = true, LaunchProbe = true, RecallProbes = true }

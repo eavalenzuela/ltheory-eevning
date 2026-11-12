@@ -87,7 +87,7 @@ Two unattended tests are the exit. `Core/Loop.spec.luau` plays the whole loop he
 - Main menu, new game, load and settings screens: the game still starts straight into a new game, with quick save and load on the docked screen.
 - Blueprint copies. (Research and invention are built; and since 2026-11-12 **a job can be called off** where it runs, from the Industry tab's list, its button pressed twice: the blueprint comes back with what the runs already finished have made, and what went into the rest is lost, with the fee. `Core/Assets/Industry.spec`; `test/scenario/economy.txt` calls one off.)
 - Skills: 25 of the planned 40. There are no attributes or implants, and training speed is the same for everyone.
-- Market screen: no depth view or history chart; history is the last three days as text. An order's price cannot be changed, only cancelled.
+- Market screen: no depth view or history chart; history is the last three days as text. (Since 2026-11-12 **an order's price can be changed** where the order is: in the list of the pilot's orders its price is a field, and another typed there and set is its price from then on. The broker is paid on what the order gains in worth, nothing for a price brought down, and a buy order holds the difference or gives it back. `Core/Assets/Market.spec`; `test/scenario/orders.txt`, `game-orders`.)
 - No assets view across stations: what is in another station's hangar can only be seen there.
 - View: a mining laser has no beam, and every ore looks the same.
 - The station markets stand alone: each has a fixed normal stock that an unsimulated wider world restores at a quarter of the gap an hour. S2 and S4 replace this with stocks that flow between systems.

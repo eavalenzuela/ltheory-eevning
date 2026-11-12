@@ -593,6 +593,9 @@ end
 -- ---------------------------------------------------------------------
 -- Market
 
+-- A price typed for an order and not yet set, by the order's id.
+local repriced: { [number]: number } = {}
+
 local function drawOrders(session: Session.Session, game: Core.Game, station: number, x: number, y: number, width: number)
   local orders = Core.Query.Orders(game, nil)
   Im.Heading(`MY ORDERS  {#orders}`, x, y, 16, Im.DIM)
@@ -612,8 +615,22 @@ local function drawOrders(session: Session.Session, game: Core.Game, station: nu
     local where = Core.Query.Body(game, order.station)
     Im.Text(if order.side == "sell" then "SELL" else "BUY", x, line + 4, 12, if order.side == "sell" then Im.WARN else GOOD)
     Im.Text(`{shorten(Types.Info(order.type).name, 28)}  x{Format.Whole(order.quantity)}`, x + 44, line + 3, 14, Im.TEXT)
-    Im.TextRight(`at {Format.Credits(order.price)}`, x + 420, line + 3, 14, Im.TEXT)
-    Im.Text(if here then "here" else shorten(if where then where.name else "?", 22), x + 436, line + 4, 12, Im.DIM)
+    if here then
+      -- (an order here has its price in a field: another typed there,
+      -- and Set, is its price from then on)
+      local shown = repriced[order.id] or order.price
+      local typed = Im.Number(`OrderPrice:{row + first}`, shown, x + 328, line, 92, 22)
+      repriced[order.id] = if typed ~= order.price then typed else nil :: any
+      local change: State.Command = { kind = "ModifyOrder", actor = 0, order = order.id, price = typed }
+      if Im.Button("Set", x + 424, line, 40, 22, typed ~= order.price and (Session.CanDo(session, change)), `SetOrder:{row + first}`) then
+        Session.Do(session, change)
+        repriced[order.id] = nil
+      end
+      Im.Text("here", x + 474, line + 4, 12, Im.DIM)
+    else
+      Im.TextRight(`at {Format.Credits(order.price)}`, x + 420, line + 3, 14, Im.TEXT)
+      Im.Text(shorten(if where then where.name else "?", 22), x + 436, line + 4, 12, Im.DIM)
+    end
     if Im.Button("Cancel", x + width - 80, line, 72, 22, here, `CancelOrder:{row + first}`) then
       Session.Do(session, { kind = "CancelOrder", actor = 0, order = order.id })
     end

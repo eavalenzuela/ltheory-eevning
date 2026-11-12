@@ -500,8 +500,37 @@ function Market.Validate(state: State.State, command: State.Command): (boolean, 
       return false, "that order is at another station"
     end
     return true
+
+  elseif kind == "ModifyOrder" then
+    -- An order's price changed, where the order is.
+    local order = state.orders[command.order or 0]
+    local price = command.price or 0
+    if order == nil then
+      return false, "no such order"
+    elseif order.station ~= station then
+      return false, "that order is at another station"
+    elseif price <= 0 or price % 1 ~= 0 then
+      return false, "no such price"
+    elseif price == order.price then
+      return false, "that is its price already"
+    end
+    local fee, held = Market.Reprice(state, order, price)
+    if fee + math.max(0, held) > state.wallet then
+      return false, "not enough credits"
+    end
+    return true
   end
   return false, `unknown command '{kind}'`
+end
+
+-- What changing an order's price costs: the broker's fee, on what the
+-- order has gained in worth (nothing, for a price brought down); and,
+-- for a buy order, how much more it has to hold (less than nothing: it
+-- gives some back).
+function Market.Reprice(state: State.State, order: State.Order, price: number): (number, number)
+  local more = (price - order.price) * order.quantity
+  local fee = if more > 0 then math.ceil(more * Market.Fee(state, order.station)) else 0
+  return fee, if order.side == "buy" then more else 0
 end
 
 -- Sell so many of an item to a station's market, at once: the item
@@ -596,6 +625,20 @@ function Market.Apply(state: State.State, command: State.Command, events: { Even
     end
     removeOrder(state, order)
     table.insert(events, { kind = "OrderCancelled", order = order.id })
+
+  elseif kind == "ModifyOrder" then
+    local order = state.orders[command.order :: number]
+    local price = command.price :: number
+    local fee, held = Market.Reprice(state, order, price)
+    if fee > 0 then
+      Wallet.Pay(state, -fee, "broker's fee", events)
+    end
+    if held ~= 0 then
+      Wallet.Pay(state, -held, if held > 0 then "buy order escrow" else "buy order repriced", events)
+    end
+    local was = order.price
+    order.price = price
+    table.insert(events, { kind = "OrderChanged", order = order.id, type = order.type, was = was, price = price, fee = fee })
   end
 end
 

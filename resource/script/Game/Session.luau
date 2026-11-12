@@ -119,6 +119,9 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{Skills.byId[event.skill].name} trained to level {event.level}`)
   elseif kind == "SkillLearned" then
     Session.Say(session, `Learned {Skills.byId[event.skill].name}: it can be trained now`)
+  elseif kind == "OrderChanged" then
+    Session.Say(session, `The order for {Types.Info(event.type).name} is at {event.price} credits now, from {event.was}`
+      .. (if event.fee > 0 then `: the broker took {event.fee}` else ""))
   elseif kind == "JobCancelled" then
     Session.Say(session, if event.research ~= "" then `Called off: the {Types.Info(event.blueprint).name} is back in the hangar`
       elseif event.made > 0 then `Called off: {event.made} of {event.quantity} {Types.Info(event.product).name} were made. What went into the rest is lost`

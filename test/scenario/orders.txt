@@ -1,0 +1,40 @@
+# An order's price changed, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/orders.txt
+#
+# Copper is given and a hundred of it put up for sale at 40. On the
+# Market tab's list of the pilot's orders the order's price is a field:
+# 45 is typed there and set, the order is at 45, and the broker has had
+# three in a hundred of what the order gained. Then it is cancelled, and
+# the copper is back.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Give('mineral.copper', 500))
+lua assert(GameDebug.Market('mineral.copper'))
+frames 3
+until GameDebug.Press('Quantity:100')
+frames 2
+lua GameDebug.Enter('SellPrice', 40)
+frames 3
+until GameDebug.Press('PlaceSell')
+until GameDebug.Hangar('mineral.copper') == 400
+until GameDebug.Press('Category:orders')
+frames 5
+
+lua assert(not GameDebug.CanPress('SetOrder:1'), 'with its price as it is there is nothing to set')
+lua GameDebug.Enter('OrderPrice:1', 45)
+frames 3
+lua assert(GameDebug.CanPress('SetOrder:1'), 'another price typed can be set')
+lua _G.wallet = GameDebug.Wallet()
+until GameDebug.Press('SetOrder:1')
+until GameDebug.Wallet() == _G.wallet - 15
+frames 3
+lua assert(not GameDebug.CanPress('SetOrder:1'), 'set, there is nothing more to set')
+
+until GameDebug.Press('CancelOrder:1')
+until GameDebug.Hangar('mineral.copper') == 500
+lua assert(GameDebug.Wallet() == _G.wallet - 15, 'cancelling gives the goods back, and no fee')
+
+echo orders scenario passed
+quit
