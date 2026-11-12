@@ -18,9 +18,10 @@
 -- piece.
 --
 -- It is the sound's (Game/View/Audio owns it): no louder than the sound
--- is, and silent when the sound is off. With the sound on at no
--- loudness at all, as a script has it, nothing is played, but the mood
--- and the piece are followed all the same, for the script to ask about.
+-- silent when the sound is off, and as loud as the pilot has set music
+-- to be. Set to nothing (as a script has it), nothing is played, but
+-- the mood and the piece are followed all the same, for the script to
+-- ask about; turned up from nothing, the piece of the moment begins.
 
 local Core = require("@lt/Core/Api")
 local Session = require("@lt/Game/Session")
@@ -79,6 +80,13 @@ function Music.Stop(music: Music)
   music.mood, music.file = "", ""
 end
 
+-- A piece as a sound, silent as yet. (One piece that comes round plays
+-- as a loop; one of several plays once, and the next takes over before
+-- it is done.)
+local function sounding(mood: string, file: string): Sound
+  return if #PIECES[mood] == 1 then Sound_Play2DLooped(file, 0) else Sound_Play2D(file, 0)
+end
+
 -- Begin the next piece of a mood, over whatever is playing.
 local function begin(music: Music, mood: string, time: number, master: number)
   local pieces = PIECES[mood]
@@ -88,13 +96,7 @@ local function begin(music: Music, mood: string, time: number, master: number)
   if music.now then
     table.insert(music.going, music.now)
   end
-  -- (one piece that comes round plays as a loop; one of several plays
-  -- once, and the next takes over before it is done)
-  local sound: Sound? = nil
-  if master > 0 then
-    sound = if #pieces == 1 then Sound_Play2DLooped(piece.file, 0) else Sound_Play2D(piece.file, 0)
-  end
-  music.now = { sound = sound, level = 0 }
+  music.now = { sound = if master > 0 then sounding(mood, piece.file) else nil, level = 0 }
   music.mood, music.file, music.seconds, music.began = mood, piece.file, piece.seconds, time
   music.changes += 1
 end
@@ -140,6 +142,11 @@ function Music.Update(music: Music, session: Session.Session, time: number, fram
   -- nothing and are done with.
   local playing = music.now
   if playing then
+    -- (the music has been turned up from nothing: the piece begins)
+    if playing.sound == nil and master > 0 then
+      playing.sound = sounding(music.mood, music.file)
+      music.began = time
+    end
     local rise = frameSeconds / (if music.mood == "combat" then FADE_FIGHT else FADE_IN)
     playing.level = math.min(1, playing.level + rise)
     if playing.sound then

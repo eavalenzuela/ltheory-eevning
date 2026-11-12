@@ -17,10 +17,39 @@ lua assert(GameDebug.Seed() == 1)
 lua assert(GameDebug.Menu('main') == 'main')
 frames 3
 lua assert(not GameDebug.CanPress('UNDOCK'), 'nothing of the game is drawn behind a menu')
-# (the sound's switch and its loudness are here: a script's run stays silent whatever is pressed)
-lua assert(GameDebug.CanPress('Menu:sound') and GameDebug.CanPress('Menu:quieter') and GameDebug.CanPress('Menu:louder'))
-until GameDebug.Press('Menu:quieter')
+# Options: the sound's switch, and a slider each for how loud its effects
+# and its music are. (A script's run stays silent whatever is set.)
+lua assert(select(2, GameDebug.Options()) == 70 and select(3, GameDebug.Options()) == 70, 'effects and music begin at 70')
+until GameDebug.Press('Menu:options')
 frames 3
+lua assert(GameDebug.CanPress('Menu:sound') and GameDebug.CanPress('Effects volume') and GameDebug.CanPress('Music volume'))
+lua GameDebug.Enter('Music volume', 35)
+frames 3
+lua assert(select(3, GameDebug.Options()) == 35 and select(2, GameDebug.Options()) == 70, 'the music slider should set the music and nothing else')
+lua GameDebug.Enter('Effects volume', 90)
+frames 3
+lua assert(select(2, GameDebug.Options()) == 90 and select(3, GameDebug.Options()) == 35, 'the effects slider should set the effects and nothing else')
+# (and by hand: the knob of the music slider, where 35 puts it in a
+# 1920x1080 window, dragged to the far left)
+move 961 535
+frames 2
+mousedown Left
+frames 2
+move 872 535
+frames 3
+mouseup Left
+frames 3
+lua assert(select(3, GameDebug.Options()) == 0, 'dragging the music knob to the left end should set the music to nothing, not ' .. select(3, GameDebug.Options()))
+until GameDebug.Press('Menu:sound')
+frames 3
+lua assert(GameDebug.Options() == false, 'the switch should turn the sound off')
+lua assert(not GameDebug.CanPress('Music volume'), 'with the sound off the sliders are not to be moved')
+until GameDebug.Press('Menu:sound')
+frames 3
+lua assert(GameDebug.Options() == true)
+until GameDebug.Press('Menu:back')
+frames 3
+lua assert(GameDebug.CanPress('Menu:options'), 'back from the options is the menu they were opened from')
 until GameDebug.Press('Menu:new')
 frames 3
 lua GameDebug.Enter('Seed', 7)

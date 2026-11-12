@@ -32,7 +32,8 @@ local Audio = {}
 
 export type Audio = {
   enabled: boolean,
-  master: number,                 -- every loudness is times this
+  master: number,                 -- every loudness but the music's is times this
+  musicLevel: number,             -- and the music's times this
   time: number,                   -- seconds since it began, for spacing sounds out
   last: { [string]: number },     -- when a sound of a key was last played
   place: Sound?,                  -- the loops
@@ -81,15 +82,18 @@ local ANY: { [string]: { any } } = {
 
 function Audio.New(): Audio
   return {
-    enabled = not Host.scripted, master = 1, time = 0, last = {}, place = nil, placeIs = "", engine = nil, warp = nil,
+    enabled = not Host.scripted, master = 1, musicLevel = 1, time = 0, last = {}, place = nil, placeIs = "", engine = nil, warp = nil,
     engineNow = 0, warpNow = 0, played = 0, music = Music.New(),
   }
 end
 
--- Switch sound on or off, and (for a script) set how loud all of it is.
-function Audio.Set(audio: Audio, enabled: boolean, master: number?)
+-- Switch sound on or off, and set how loud it is: 'master' for
+-- everything but the music, 'music' for the music (as loud as the rest,
+-- if only the one is said, which is how a script asks for silence).
+function Audio.Set(audio: Audio, enabled: boolean, master: number?, music: number?)
   audio.enabled = enabled
   audio.master = master or audio.master
+  audio.musicLevel = music or master or audio.musicLevel
   if not enabled then
     -- (Sound_Delete takes nothing for an answer)
     Sound_Delete(audio.place)
@@ -208,7 +212,7 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
   Sound_SetVolume(audio.engine, audio.engineNow * audio.master)
   Sound_SetVolume(audio.warp, audio.warpNow * audio.master)
 
-  Music.Update(audio.music, session, audio.time, frameSeconds, audio.master)
+  Music.Update(audio.music, session, audio.time, frameSeconds, audio.musicLevel)
 end
 
 return Audio

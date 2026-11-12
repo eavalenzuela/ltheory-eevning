@@ -47,6 +47,7 @@ local App = {}
 local session: Session.Session
 local scene: Scene.Scene
 local audio: Audio.Audio
+local settings: Settings.Settings
 local ui: Interface
 
 -- The nearest thing on the overview of a kind ("belt", "station", ...)
@@ -1040,6 +1041,13 @@ function Debug.Sound(on: boolean?, master: number?): number
   return audio.played
 end
 
+-- What is set in the menu's options: whether there is sound, and how
+-- loud its effects and its music are, of 100. (A script's run stays as
+-- silent as it was whatever is set.)
+function Debug.Options(): (boolean, number, number)
+  return settings.sound, settings.effects, settings.music
+end
+
 -- The music: the mood it is in ("docked", "space", "combat"; "" with
 -- the sound off), the piece playing, and how many pieces have been begun.
 function Debug.Music(): (string, string, number)
@@ -1384,16 +1392,19 @@ function App:Initialize()
   audio = Audio.New()
   -- What a person set last time: sound or none, and how loud. (A script
   -- has no sound unless it asks, whatever anybody has set.)
-  local settings = Settings.Load()
+  settings = Settings.Load()
   if not Host.scripted then
-    Audio.Set(audio, settings.sound, settings.volume / 100)
+    Audio.Set(audio, settings.sound, settings.effects / 100, settings.music / 100)
   end
-  Menu.Sound(settings.sound, settings.volume, function(on: boolean, volume: number)
-    settings.sound, settings.volume = on, volume
+  -- (the menu's options: heard at once, and kept when a thing is set)
+  Menu.Sound(settings.sound, settings.effects, settings.music, function(on: boolean, effects: number, music: number, done: boolean)
+    settings.sound, settings.effects, settings.music = on, effects, music
     if not Host.scripted then
-      Audio.Set(audio, on, volume / 100)
+      Audio.Set(audio, on, effects / 100, music / 100)
     end
-    Settings.Save(settings)
+    if done then
+      Settings.Save(settings)
+    end
   end)
   _G.GameDebug = Debug
   -- A person is given the menu, over a new game that stands still

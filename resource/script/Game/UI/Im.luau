@@ -268,6 +268,57 @@ function Im.Number(name: string, value: number, x: number, y: number, w: number,
   return value
 end
 
+-- The slider being dragged, by name; "" if none.
+local sliding = ""
+
+-- Whether a slider is being dragged.
+function Im.Sliding(): boolean
+  return sliding ~= ""
+end
+
+-- A slider: a track with a knob on it, for a whole number from 'low' to
+-- 'high'. The knob is dragged, or the track clicked where the knob is
+-- to go. Returns the number it holds now. 'name' is its name for a
+-- script, which puts a number in it with Im.Enter.
+function Im.Slider(name: string, value: number, low: number, high: number, x: number, y: number, w: number, h: number,
+  enabled: boolean): number
+  if seenNow[name] == nil or enabled then
+    seenNow[name] = enabled
+  end
+  local set = entered[name]
+  if set then
+    entered[name] = nil
+    value = math.clamp(math.floor(set + 0.5), low, high)
+  end
+  -- (the knob's middle runs from half a knob in at one end to half a knob in at the other)
+  local knob = h
+  local run = w - knob
+  if enabled then
+    if pressed and inside(x, y - 4, w, h + 8) then
+      sliding = name
+    end
+    if sliding == name then
+      if Mouse_LeftDown() then
+        local share = math.clamp((cursor.x - x - knob / 2) / run, 0, 1)
+        value = low + math.floor(share * (high - low) + 0.5)
+      else
+        sliding = ""
+      end
+    end
+  elseif sliding == name then
+    sliding = ""
+  end
+  local share = if high > low then (value - low) / (high - low) else 0
+  local middle = y + h / 2
+  Im.Fill(x + knob / 2, middle - 2, run, 4, Im.DIM, 0.3)
+  Im.Fill(x + knob / 2, middle - 2, run * share, 4, Im.ACCENT, if enabled then 0.9 else 0.3)
+  local hot = enabled and (sliding == name or inside(x, y - 4, w, h + 8))
+  WidgetRenderer_DrawPanel(vector.create(x + run * share, y), vector.create(knob, h),
+    if hot then vector.create(0.1, 0.3, 0.45) else vector.create(0.07, 0.12, 0.17), 0.95, if enabled then 1 else 0.45, 4)
+  Im.Fill(x + run * share + knob / 2 - 1, y + 4, 2, h - 8, if enabled then Im.TEXT else Im.DIM, if enabled then 0.8 else 0.4)
+  return value
+end
+
 -- The first row to draw of a scrolling list of 'count' rows of which
 -- 'visible' fit, moved by the wheel while the cursor is over the list.
 function Im.Scroll(name: string, x: number, y: number, w: number, h: number, count: number, visible: number): number

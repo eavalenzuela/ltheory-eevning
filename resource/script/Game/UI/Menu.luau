@@ -1,15 +1,17 @@
 --!strict
 -- The menus: the one the game opens on (continue, new game, load,
--- quit), and the one Escape brings up in play (resume, save, load, back
--- to the first, quit).
+-- options, quit), and the one Escape brings up in play (resume, save,
+-- load, options, back to the first, quit). Options is where the sound
+-- is set: on or off, and how loud its effects and its music are.
 --
 -- While a menu is up the game stands still and nothing else of the
 -- interface is drawn (Game/UI/Hud asks Menu.IsOpen). Drawn every frame
 -- with Game/UI/Im. Its buttons' names, for a script (Im.Press):
 -- "Menu:continue", "Menu:new", "Menu:load", "Menu:save", "Menu:resume",
 -- "Menu:main", "Menu:quit", "Menu:back", "Menu:start", "Menu:random",
--- "Load:<slot>", "Save:<slot>", "Delete:<slot>"; the seed field is
--- "Seed".
+-- "Menu:options", "Menu:sound", "Load:<slot>", "Save:<slot>",
+-- "Delete:<slot>"; the seed field is "Seed", and the two sliders are
+-- "Effects volume" and "Music volume" (Im.Enter).
 
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
@@ -24,7 +26,7 @@ Menu.WIDTH = 560
 local SLOTS = { "save 1", "save 2", "save 3", "save 4", "save 5" }
 
 -- "": no menu. "main" is the opening menu and "pause" the one in play;
--- "new", "load" and "save" are their pages.
+-- "new", "load", "save" and "options" are their pages.
 local page = ""
 local root = "main"       -- where Back goes
 local seed = 1
@@ -36,14 +38,18 @@ local function refresh()
   saves = Session.Saves()
 end
 
--- Whether sound is on, and the asking of it to be otherwise: the game
--- says how (Menu.Sound), since the menu does not own the sound.
+-- Whether sound is on and how loud its effects and its music are (of
+-- 100), and the asking for it to be otherwise: the game says how
+-- (Menu.Sound), since the menu does not own the sound. 'done' is false
+-- while a slider is still being dragged, and true when a thing is set.
 local soundOn = true
-local volume = 70   -- of 100
-local setSound: ((on: boolean, volume: number) -> ())? = nil
+local effects, music = 70, 70
+local setSound: ((on: boolean, effects: number, music: number, done: boolean) -> ())? = nil
+local unsaved = false     -- a slider has been moved and not yet let go of
 
-function Menu.Sound(on: boolean, loud: number, set: (on: boolean, volume: number) -> ())
-  soundOn, volume, setSound = on, loud, set
+function Menu.Sound(on: boolean, effectsLevel: number, musicLevel: number,
+  set: (on: boolean, effects: number, music: number, done: boolean) -> ())
+  soundOn, effects, music, setSound = on, effectsLevel, musicLevel, set
 end
 
 function Menu.IsOpen(): boolean
@@ -116,7 +122,7 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
     return
   end
   local w = Menu.WIDTH
-  local h = if page == "load" or page == "save" then 420 else 340
+  local h = if page == "load" or page == "save" then 420 elseif page == "pause" then 390 elseif page == "main" then 370 else 340
   local x, y = left + (width - w) / 2, top + (height - h) / 2 - 40
   -- (the game behind is dimmed, so the menu is what there is to read)
   Im.Fill(left, top, width, height, vector.create(0, 0, 0), 0.45)
@@ -125,22 +131,6 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
   local cx = x + w / 2
   local function button(label: string, row: number, enabled: boolean, id: string): boolean
     return Im.Button(label, cx - 130, y + 96 + row * 44, 260, 34, enabled, id)
-  end
-  if (page == "main" or page == "pause") and setSound then
-    if Im.Button(if soundOn then "Sound: on" else "Sound: off", x + w - 126, y + 14, 110, 26, true, "Menu:sound") then
-      soundOn = not soundOn
-      setSound(soundOn, volume)
-    end
-    -- (how loud, in tenths)
-    if Im.Button("-", x + w - 126, y + 46, 26, 24, soundOn and volume > 0, "Menu:quieter") then
-      volume = math.max(0, volume - 10)
-      setSound(soundOn, volume)
-    end
-    Im.Text(`{volume}%`, x + w - 90, y + 50, 13, if soundOn then Im.TEXT else Im.DIM)
-    if Im.Button("+", x + w - 42, y + 46, 26, 24, soundOn and volume < 100, "Menu:louder") then
-      volume = math.min(100, volume + 10)
-      setSound(soundOn, volume)
-    end
   end
 
   if page == "main" then
@@ -161,7 +151,10 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
     if button("Load game", 2.4, #saves > 0, "Menu:load") then
       page = "load"
     end
-    if button("Quit", 3.4, true, "Menu:quit") then
+    if button("Options", 3.4, true, "Menu:options") then
+      page = "options"
+    end
+    if button("Quit", 4.4, true, "Menu:quit") then
       Host.Exit(0)
     end
   elseif page == "pause" then
@@ -175,11 +168,46 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
     if button("Load game", 2, #saves > 0, "Menu:load") then
       page = "load"
     end
-    if button("Main menu", 3, true, "Menu:main") then
+    if button("Options", 3, true, "Menu:options") then
+      page = "options"
+    end
+    if button("Main menu", 4, true, "Menu:main") then
       page, root = "main", "main"
     end
-    if button("Quit", 4, true, "Menu:quit") then
+    if button("Quit", 5, true, "Menu:quit") then
       Host.Exit(0)
+    end
+  elseif page == "options" then
+    Im.Heading("OPTIONS", cx - 62, y + 26, 26, Im.TEXT)
+    local set = setSound
+    local labelX, sliderX, sliderW = x + 70, x + 190, 250
+    Im.Text("Sound", labelX, y + 101, 15, Im.TEXT)
+    if set and Im.Button(if soundOn then "On" else "Off", sliderX, y + 96, 90, 28, true, "Menu:sound") then
+      soundOn = not soundOn
+      set(soundOn, effects, music, true)
+    end
+    -- How loud: what happens (weapons, engines, the interface), and the
+    -- music under it, each on its own. What is heard follows the knob as
+    -- it is dragged, and is kept when the knob is let go.
+    local wasEffects, wasMusic = effects, music
+    Im.Text("Effects", labelX, y + 151, 15, if soundOn then Im.TEXT else Im.DIM)
+    effects = Im.Slider("Effects volume", effects, 0, 100, sliderX, y + 148, sliderW, 22, soundOn)
+    Im.TextRight(`{effects}%`, x + w - 60, y + 151, 14, if soundOn then Im.TEXT else Im.DIM)
+    Im.Text("Music", labelX, y + 197, 15, if soundOn then Im.TEXT else Im.DIM)
+    music = Im.Slider("Music volume", music, 0, 100, sliderX, y + 194, sliderW, 22, soundOn)
+    Im.TextRight(`{music}%`, x + w - 60, y + 197, 14, if soundOn then Im.TEXT else Im.DIM)
+    if set then
+      local moved = effects ~= wasEffects or music ~= wasMusic
+      unsaved = unsaved or moved
+      if unsaved and not Im.Sliding() then
+        unsaved = false
+        set(soundOn, effects, music, true)
+      elseif moved then
+        set(soundOn, effects, music, false)
+      end
+    end
+    if Im.Button("Back", cx - 130, y + h - 50, 260, 34, true, "Menu:back") then
+      page = root
     end
   elseif page == "new" then
     Im.Heading("NEW GAME", cx - 72, y + 26, 26, Im.TEXT)
