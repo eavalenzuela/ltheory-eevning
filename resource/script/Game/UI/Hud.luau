@@ -132,7 +132,7 @@ local function bar(x: number, y: number, w: number, h: number, value: number, ma
 end
 
 local function shorten(name: string, limit: number): string
-  return if #name > limit then string.sub(name, 1, limit - 1) .. "." else name
+  return if #name > limit then (string.gsub(string.sub(name, 1, limit - 1), "%s+$", "")) .. "." else name
 end
 
 local function whole(n: number): string
@@ -487,18 +487,40 @@ local function drawStatus(ball: State.Ball, x: number, y: number)
   end
 end
 
--- The fitted modules, as buttons: click to switch one on or off.
-local function drawRack(session: Session.Session, game: Core.Game, ball: State.Ball, cx: number, y: number)
+-- The fitted modules, as buttons: click to switch one on or off. A row
+-- for each kind of slot that has anything in it: the high slots on top,
+-- the mid slots under them, and the low slots (and the rigs) under
+-- those, each row in the middle of the screen, the lowest at 'foot'. A row
+-- is no wider than 'span': with more in it than fit at their full
+-- width, they are drawn narrower. (They were one row, which ran under
+-- the ship's own panel with five modules and off the screen with a
+-- battleship's.)
+local RACK_ROWS: { [string]: number } = { high = 1, mid = 2, low = 3, rig = 3 }
+local function drawRack(session: Session.Session, game: Core.Game, ball: State.Ball, cx: number, foot: number, span: number)
   local fitted = Core.Query.Fitted(game, ball.id)
   if #fitted == 0 then
     return
   end
   local now = game.state.tick * Constants.TICK
-  local width, gap = 128, 6
-  local x = cx - (#fitted * (width + gap) - gap) / 2
+  local gap, pitch = 6, 52
+  -- (how many are in each row, and how many rows there are)
+  local counts: { number } = { 0, 0, 0 }
+  for _, item in fitted do
+    counts[RACK_ROWS[item.place] or 3] += 1
+  end
+  local below: { number } = { 0, 0, 0 }
+  for row = 2, 1, -1 do
+    below[row] = below[row + 1] + (if counts[row + 1] > 0 then 1 else 0)
+  end
+  local placed: { number } = { 0, 0, 0 }
   for index, item in fitted do
     local module = Modules.byId[item.type]
-    local bx = x + (index - 1) * (width + gap)
+    local row = RACK_ROWS[item.place] or 3
+    local width = math.min(128, math.floor((span + gap) / counts[row]) - gap)
+    local letters = math.max(6, math.floor((width - 16) / 6.2))
+    local bx = cx - (counts[row] * (width + gap) - gap) / 2 + placed[row] * (width + gap)
+    placed[row] += 1
+    local y = foot - below[row] * pitch
     local running: State.Running? = nil
     for _, r in ball.vitals.running do
       if r.item == item.id then
@@ -515,12 +537,13 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
       Im.TextRight(key, bx + width - 6, y + 5, 11, Im.DIM)
       clicked = Keys.Pressed(key) or clicked
     end
-    Im.Text(module.short or shorten(module.name, 18), bx + 8, y + 5, 13, if active then Im.TEXT else Im.DIM)
+    Im.Text(shorten(module.short or module.name, letters - (if key and active then 2 else 0)), bx + 8, y + 5, 13,
+      if active then Im.TEXT else Im.DIM)
     local note = if not active then "passive" else ""
     if module.weapon then
       note = if item.charge == "" then "empty"
         elseif module.weapon.clip > 0 then `{item.rounds} rounds`
-        else shorten(Types.Info(item.charge).name, 18)
+        else shorten(Types.Info(item.charge).name, letters)
     end
     if module.miner then
       note = if running then "mining" else "idle"
@@ -732,7 +755,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         end
         drawSelected(session, entries, ball, panelX, top + 16, panelWidth)
         drawOverview(session, entries, panelX, top + 182, panelWidth, math.min(600, bottom - top - 272), marks)
-        drawRack(session, game, ball, left + w.size.x / 2, bottom - 140)
+        -- (over the ship's own panel, and no wider than leaves the drones'
+        -- row and the fleet's panel, which end 464 px in, clear)
+        drawRack(session, game, ball, left + w.size.x / 2, bottom - 172, math.max(400, w.size.x - 2 * 476))
         drawNavigation(session, ball, navX, bottom - 86, 520)
         drawStatus(ball, navX - 232, bottom - 120)
       else
