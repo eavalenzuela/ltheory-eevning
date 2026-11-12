@@ -187,9 +187,8 @@ local COLONY_VIEWS: { { any } } = {
   { "1-bow-quarter", vector.create(0.92, 0.50, 1.22), vector.create(0, 0, 0.02), vector.create(1.2, 1.4, 0.9) },
   { "2-side", vector.create(1.25, 0.05, 0), CENTRE, vector.create(1.3, 1.0, 0.5) },
   { "3-above", vector.create(0.02, 1.3, 0), CENTRE, vector.create(0.6, 1.5, 0.4) },
-  { "4-stern-quarter", vector.create(-0.62, 0.34, -1.30), vector.create(0, 0, -0.30), vector.create(-0.9, 1.3, -1.2) },
-  { "5-below", vector.create(-0.60, -0.62, 0.55), vector.create(0, 0, -0.22), vector.create(-0.5, -1.4, 0.6) },
-  { "6-tower", vector.create(0.22, 0.13, -0.28), vector.create(0, 0.06, -0.52), vector.create(0.9, 0.8, 0.7) },
+  { "4-stern-quarter", vector.create(-0.55, 0.32, -1.75), vector.create(0, 0, -0.45), vector.create(-0.9, 1.3, -1.2) },
+  { "5-below", vector.create(-0.60, -0.62, 0.45), vector.create(0, 0, -0.30), vector.create(-0.5, -1.4, 0.6) },
 }
 for index, across in { 0.2, 0.45 } do
   for _, view in COLONY_VIEWS do
@@ -197,6 +196,9 @@ for index, across in { 0.2, 0.45 } do
     table.insert(VIEWS, { name = `colony-{index}-{view[1]}`, kind = `colony-{across}`, seed = 1, eye = eye, look = view[3],
       light = view[4] })
   end
+  local tower = vector.create(0, 0.06, Capital.Conning(across))
+  table.insert(VIEWS, { name = `colony-{index}-6-tower`, kind = `colony-{across}`, seed = 1, eye = tower + vector.create(0.22, 0.07, 0.24),
+    look = tower, light = vector.create(0.9, 0.8, 0.7) })
 end
 
 -- Stations (Game/View/Starbase). The three sizes of tower side by side,

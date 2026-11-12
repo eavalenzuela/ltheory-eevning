@@ -57,6 +57,9 @@ export type Faction = {
   hulls: { [string]: string },
   -- Pirates only: whose hull each of theirs was, by class (a faction id).
   donors: { [string]: string }?,
+  -- A people with no fixed place: it builds no towers, and where another
+  -- faction has a station it has a colony ship (Data/Structures).
+  nomad: boolean?,
 }
 
 Factions.list = {
@@ -104,8 +107,14 @@ Factions.list = {
   },
   {
     -- (Lasers and armour by the project owner's decision, 2026-11-10,
-    -- when the Vessari took missiles. The rest is still a placeholder.)
-    id = "kethri", name = "Kethri", kind = "human", style = "lattice", weapon = "laser", launchers = 0, tank = "armor",
+    -- when the Vessari took missiles. By the owner's draft of 2026-11-11
+    -- they are nomads: "no fixed stations, instead they have massive
+    -- (talking 10km long, 1km wide) colony ships, that serve as mobile
+    -- stations and fleet docks", in the manner of "sharp edges, flat grey
+    -- plates, arrowheads, conning towers". Their hulls are not drawn to
+    -- that yet: the style, the note, the paint and the names below are
+    -- still the placeholders from before it.)
+    id = "kethri", name = "Kethri", kind = "human", style = "lattice", weapon = "laser", launchers = 0, tank = "armor", nomad = true,
     note = "Lasers and armour. Open-framed hulls with deep capacitors that see far, hold their range and never run out of ammunition.",
     paint = { primary = { 0.24, 0.30, 0.46 }, secondary = { 0.80, 0.80, 0.84 }, glow = { 0.55, 0.60, 1.0 } },
     shield = 0.85, armor = 1.25, hull = 1.0, velocity = 0.97, mass = 1.03, cpu = 0.95, powergrid = 1.1, capacitor = 1.15,

@@ -6,8 +6,8 @@
 -- EVE's old player-owned starbases (decided by the project's owner): a
 -- service is there because its module is.
 --
--- A tower is a faction's: each of the four human factions builds its
--- own, in three sizes. What is anchored round a tower is nobody's in
+-- A tower is a faction's: each human faction that keeps to a place
+-- builds its own, in three sizes. What is anchored round a tower is nobody's in
 -- particular: a gun battery, a shipyard or a storage array is the same
 -- thing at any faction's tower, as a ship's weapons are the same on any
 -- hull (the owner's decision, 2026-11-10).
@@ -17,6 +17,13 @@
 -- (a battery) to nearly 2 km (a ship assembly array). Ours are smaller
 -- throughout, to suit stations of 2 to 8 km (Describe/System), and keep
 -- those proportions.
+--
+-- The Kethri keep to no place and build no towers. Where another people
+-- has a station they have a colony ship: ten kilometres of ship that is
+-- station and fleet dock both, with everything aboard it that a station
+-- has anchored round it (the owner's draft, 2026-11-11). To the game it
+-- is a station like any other, which a ship moors at; it is not yet a
+-- ship that goes anywhere, or that anybody flies.
 --
 -- This is the data, and the makeup of the stations there already are.
 -- A service is only where its module is (Assets/Stations): a station
@@ -62,6 +69,15 @@ export type ModuleType = {
   basePrice: number,
 }
 
+-- A class of colony ship: a nomad faction's station.
+export type ColonyShip = {
+  id: string,           -- "colonyship.larmes"
+  name: string,
+  faction: string,
+  length: number,       -- m, bow to stern
+  beam: number,         -- m, at its widest
+}
+
 Structures.SIZES = { "small", "medium", "large" }
 Structures.SERVICES = { "market", "fitting", "refining", "industry", "research", "storage", "quarters", "defence" } :: { Service }
 
@@ -76,7 +92,7 @@ local SUPPLY = {
 
 local towers: { Tower } = {}
 for _, faction in Factions.list do
-  if faction.kind == "human" then
+  if faction.kind == "human" and not faction.nomad then
     for size, word in Structures.SIZES do
       table.insert(towers, {
         id = `tower.{faction.id}.{word}`,
@@ -112,15 +128,41 @@ local modules: { ModuleType } = {
     pilot = true, volume = 500, basePrice = 600000 },
 }
 
+-- The colony ships, by class. (The first of a size of ship above
+-- capitals. There is the one class so far.)
+local colonyShips: { ColonyShip } = {
+  { id = "colonyship.larmes", name = "Les Larmes de Nova", faction = "kethri", length = 10000, beam = 1000 },
+}
+
 -- What a tower burns. A block is a block, whoever's tower it is for.
 Structures.FUEL = { id = "fuel.block", name = "Fuel Block", volume = 2, basePrice = 300 }
 
 Structures.towers = towers
 Structures.modules = modules
+Structures.colonyShips = colonyShips
 Structures.towerById = {} :: { [string]: Tower }
 Structures.moduleById = {} :: { [string]: ModuleType }
+Structures.colonyShipById = {} :: { [string]: ColonyShip }
 for _, tower in towers do
   Structures.towerById[tower.id] = tower
+end
+for _, ship in colonyShips do
+  Structures.colonyShipById[ship.id] = ship
+end
+
+-- The class of colony ship a faction has for a station, if it is one
+-- that has them.
+function Structures.ColonyShip(faction: string): ColonyShip?
+  local whose = Factions.byId[faction]
+  if whose == nil or not whose.nomad then
+    return nil
+  end
+  for _, ship in colonyShips do
+    if ship.faction == faction then
+      return ship
+    end
+  end
+  return nil
 end
 for _, module in modules do
   Structures.moduleById[module.id] = module
@@ -159,7 +201,16 @@ function Structures.SizeFor(radius: number): number
   return if radius < 4000 then 1 elseif radius < 6000 then 2 else 3
 end
 
-export type Makeup = { tower: string, modules: { string } }
+-- What a station is made of. A tower ('tower', its type) and the
+-- modules anchored round it; or a colony ship ('ship', its class), and
+-- then 'modules' are what it has aboard, which give what they would
+-- give anchored at a tower but stand nowhere.
+export type Makeup = { tower: string?, ship: string?, modules: { string } }
+
+-- What a colony ship has aboard: everything the round of play needs,
+-- room to live, and as many batteries as a large tower.
+local ABOARD = { "array.assembly", "array.trade", "array.habitat", "array.hangar", "array.storage", "array.laboratory", "array.refining",
+  "battery.gun", "battery.gun", "battery.gun", "battery.missile", "battery.missile", "battery.missile" }
 
 -- What a station is made of: its tower, and the modules anchored round
 -- it, the larger ones first. It follows from what the station is and
@@ -170,7 +221,14 @@ export type Makeup = { tower: string, modules: { string } }
 -- A station has what its kind is for, more of it the bigger its tower,
 -- and batteries; the starter has, before all that, everything the round
 -- of play needs. It is never given more than its tower can power.
+--
+-- A nomad faction's is a colony ship, whatever kind or size the station
+-- would have been, and has the same aboard every time.
 function Structures.Makeup(variety: string, radius: number, faction: string, starter: boolean?): Makeup
+  local ship = Structures.ColonyShip(faction)
+  if ship then
+    return { ship = ship.id, modules = table.clone(ABOARD) }
+  end
   -- (a small tower cannot power everything the round of play needs: the
   -- station a pilot starts at has a medium one at the least)
   local size = if starter then math.max(2, Structures.SizeFor(radius)) else Structures.SizeFor(radius)

@@ -27,6 +27,7 @@
 --   -- base.tower, base.modules: each a model, a place and a size
 
 local Arms = require("@lt/Game/View/Arms")
+local Capital = require("@lt/Game/View/Capital")
 local Hull = require("@lt/Game/View/Hull")
 local Plates = require("@lt/Game/View/Plates")
 local Structures = require("@lt/Core/Data/Structures")
@@ -967,12 +968,23 @@ end
 -- starting place. 'dark' is a tower with no fuel: it has no field.
 function Starbase.Layout(variety: string, radius: number, seed: number, faction: string?, given: Structures.Makeup?,
   dark: boolean?): Layout
-  local owner = faction or (if given then Structures.towerById[given.tower].faction else "vessari")
-  local makeup = given or Structures.Makeup(variety, radius, owner)
-  local size = Structures.towerById[makeup.tower].size
+  local makeup = given or Structures.Makeup(variety, radius, faction or "vessari")
+  local class = makeup.ship
+  if class then
+    -- A colony ship: the ship, as long as the station is across, lying
+    -- level and heading where its seed says. Nothing stands round it:
+    -- what it has is aboard. (Its 'tower' is the ship.)
+    local made = Capital.Build(class)
+    local heading = dice(seed) * 2 * math.pi
+    return { tower = { id = class, model = made.model, at = vector.create(0, 0, 0),
+      look = vector.create(math.cos(heading), 0, math.sin(heading)), scale = radius / made.radius, radius = radius },
+      modules = {}, field = 0 }
+  end
+  local type = Structures.towerById[makeup.tower :: string]
+  local owner = faction or type.faction
   local towerRadius = radius * Starbase.TOWER
-  local tower = Starbase.TowerPart(owner, size, vector.create(0, 0, 0), towerRadius)
-  tower.id = makeup.tower
+  local tower = Starbase.TowerPart(owner, type.size, vector.create(0, 0, 0), towerRadius)
+  tower.id = type.id
   local layout: Layout = { tower = tower, modules = {}, field = if dark then 0 else radius }
 
   -- Where each would like to be: round the tower by turns of the golden

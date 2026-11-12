@@ -5,15 +5,16 @@ local Factions = require("@lt/Core/Data/Factions")
 local Ships = require("@lt/Core/Data/Ships")
 local Structures = require("@lt/Core/Data/Structures")
 local Test = require("@lt/Tool/Test")
+local Types = require("@lt/Core/Data/Types")
 
 local suite = Test.Suite("Structures")
 
 local VARIETIES = { "trade hub", "shipyard", "refinery", "habitat", "outpost" }
 
-suite:Case("each human faction has a tower in each of three sizes, each twice the last", function(t)
+suite:Case("each human faction that keeps to a place has a tower in each of three sizes, each twice the last", function(t)
   local humans = 0
   for _, faction in Factions.list do
-    if faction.kind == "human" then
+    if faction.kind == "human" and not faction.nomad then
       humans += 1
       local last = 0
       for size, word in Structures.SIZES do
@@ -81,7 +82,7 @@ suite:Case("a tower is never given more than it can power, and a bigger one carr
     local last = 0
     for _, radius in { 3000, 5000, 7000 } do
       local makeup = Structures.Makeup(variety, radius, "vessari")
-      local tower = Structures.towerById[makeup.tower]
+      local tower = Structures.towerById[makeup.tower :: string]
       t.eq(tower.size, Structures.SizeFor(radius))
       local powergrid, cpu = 0, 0
       for _, id in makeup.modules do
@@ -144,6 +145,34 @@ suite:Case("a bigger tower has a wider field, burns more, takes longer to anchor
     local a, b = Structures.towerById[`tower.vessari.{Structures.SIZES[index - 1]}`], Structures.towerById[`tower.vessari.{Structures.SIZES[index]}`]
     t.ok(b.field > a.field and b.fuel > a.fuel and b.anchor > a.anchor and b.basePrice > a.basePrice and b.volume > a.volume)
   end
+end)
+
+suite:Case("the Kethri build no towers: their stations are colony ships with everything aboard", function(t)
+  t.ok(Factions.byId.kethri.nomad, "the Kethri should be nomads")
+  for _, word in Structures.SIZES do
+    t.eq(Structures.towerById[`tower.kethri.{word}`], nil)
+    t.eq(Types.Get(`tower.kethri.{word}`), nil)
+  end
+  local class = assert(Structures.ColonyShip("kethri"))
+  t.eq(class.name, "Les Larmes de Nova")
+  t.eq(class.length, 10000)
+  t.eq(Structures.ColonyShip("vessari"), nil)
+  -- whatever kind and size of station it would have been, and starter or not
+  for _, variety in VARIETIES do
+    for _, radius in { 2500, 5000, 7500 } do
+      local makeup = Structures.Makeup(variety, radius, "kethri")
+      t.eq(makeup.ship, class.id)
+      t.eq(makeup.tower, nil)
+      local has = services(makeup)
+      for _, service in Structures.SERVICES do
+        t.ok(has[service], `a colony ship has no {service}`)
+      end
+    end
+  end
+  -- and the others' are towers still
+  local makeup = Structures.Makeup("outpost", 3000, "talmar")
+  t.eq(makeup.ship, nil)
+  t.eq(makeup.tower, "tower.talmar.small")
 end)
 
 return suite

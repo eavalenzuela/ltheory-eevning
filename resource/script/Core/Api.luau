@@ -72,7 +72,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 41
+Core.SAVE_VERSION = 42
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -296,6 +296,55 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- save from before has given any.
   [40] = function(state: any)
     state.digs = state.digs or {}
+  end,
+  -- 42: the Kethri are nomads. They build no towers, and where they had
+  -- a station they have a colony ship. In a save from before, a Kethri
+  -- tower (in a hold, in a job, anchored at a moon) is a Vessari one of
+  -- its size, which is the same but for whose it is; and the stations
+  -- among the Kethri, in the systems that have been seen, are colony
+  -- ships. (The markets drop what there no longer is by themselves:
+  -- Market.Reconcile.)
+  [41] = function(state: any)
+    local OLD, NEW = "tower.kethri.", "tower.vessari."
+    local function walk(tab: any)
+      local keys: { string } = {}
+      for key, value in tab do
+        if type(value) == "table" then
+          walk(value)
+        elseif type(value) == "string" and string.find(value, OLD, 1, true) then
+          tab[key] = (string.gsub(value, "tower%.kethri%.", NEW))
+        end
+        if type(key) == "string" and string.find(key, OLD, 1, true) then
+          table.insert(keys, key)
+        end
+      end
+      table.sort(keys)
+      for _, key in keys do
+        local to = (string.gsub(key, "tower%.kethri%.", NEW))
+        local had, has = tab[key], tab[to]
+        tab[key] = nil
+        tab[to] = if type(had) == "number" and type(has) == "number" then had + has elseif has ~= nil then has else had
+      end
+    end
+    for name, part in state do
+      if name ~= "markets" and name ~= "galaxy" and name ~= "systems" and type(part) == "table" then
+        walk(part)
+      end
+    end
+    for id, description in state.systems do
+      local ship = Structures.ColonyShip(state.galaxy.systems[id].nearest)
+      if ship then
+        for _, object in description.objects do
+          if object.kind == "station" and state.starbases[object.id] == nil then
+            local host, number = string.match(object.name, "^(.*) %- .- (%d+)$")
+            if host then
+              object.name = `{host} - Colony ship {number}`
+            end
+            object.variety, object.radius = System.COLONY_SHIP, ship.length / 2
+          end
+        end
+      end
+    end
   end,
   -- 40: a hired pilot can be set to patrol a place or to guard another
   -- pilot, and says when they are attacked with the player elsewhere.

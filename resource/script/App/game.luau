@@ -1065,6 +1065,31 @@ function Debug.NewGame(seed: number, systems: number?)
   Session.Restart(session, seed, seed, systems)
 end
 
+-- A cheat, for looking at places a long way off: while docked, the
+-- pilot and the ship they are aboard are moored at the first station of
+-- another system instead. 'what' is the system's number, or a faction's
+-- id for the first system whose stations are that faction's. The name
+-- of the station; "" if not docked, or there is no such place.
+function Debug.Moor(what: number | string): string
+  local state = session.game.state
+  local ship = state.ships[state.player.ship]
+  if ship == nil or ship.docked == 0 then
+    return ""
+  end
+  for id, node in state.galaxy.systems do
+    if id == what or node.nearest == what then
+      for _, object in Space.Describe(state, id).objects do
+        if object.kind == "station" then
+          ship.docked = object.id
+          session.selected = 0
+          return object.name
+        end
+      end
+    end
+  end
+  return ""
+end
+
 -- Set where the pilot means to go: a system by name or number. Returns
 -- the jumps there by the way chosen (-1: no such system). With no
 -- argument, the jumps left to where they already mean to go (-1: nowhere).

@@ -297,6 +297,10 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
   local entry: Core.Entry = selected
   Im.Heading(string.upper(entry.name), x + 12, y + 8, 16, Im.TEXT)
   local what = if entry.variety ~= "" and entry.kind ~= "ship" then `{entry.variety} {entry.kind}` else entry.kind
+  if entry.kind == "station" and entry.variety == "colony ship" then
+    -- (a station to moor at, and a ship: it says the second)
+    what = "colony ship"
+  end
   if entry.kind == "bookmark" then
     what = "a place you marked"
   end

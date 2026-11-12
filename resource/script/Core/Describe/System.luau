@@ -17,6 +17,7 @@ local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Names = require("@lt/Core/Describe/Names")
 local Ores = require("@lt/Core/Data/Ores")
 local Rng = require("@lt/Core/Kernel/Rng")
+local Structures = require("@lt/Core/Data/Structures")
 
 local System = {}
 
@@ -35,7 +36,9 @@ export type Object = {
   -- The grid anchor it sits on: itself for a station, gate or belt, its
   -- belt for an asteroid, 0 for the sun, planets and moons.
   site: number,
-  variety: string,    -- planet type, station type, star class, an asteroid's ore; "" if none
+  -- planet type, station type ("colony ship" for a nomad faction's),
+  -- star class, an asteroid's ore; "" if none
+  variety: string,
   to: number,         -- a gate's destination system; 0 otherwise
 }
 
@@ -52,6 +55,8 @@ local MIDDLE = { "temperate", "ocean", "barren", "gas" }
 local OUTER = { "gas", "ice", "gas", "barren" }
 local STATIONS = { "trade hub", "shipyard", "refinery", "habitat", "outpost" }
 local STARS = { "yellow", "orange", "red", "white", "blue" }
+-- The variety of a station that is a colony ship.
+System.COLONY_SHIP = "colony ship"
 
 function System.Describe(galaxy: Galaxy.Galaxy, id: number): Description
   local node = galaxy.systems[id]
@@ -135,8 +140,15 @@ function System.Describe(galaxy: Galaxy.Galaxy, id: number): Description
     local host = hosts[Rng.Int(rng, #hosts) + 1]
     local x, y, z = around(host.x, host.y, host.z, host.radius * Rng.Float(rng, 2.5, 4))
     local variety = STATIONS[Rng.Int(rng, #STATIONS) + 1]
+    local radius = Rng.Float(rng, 2000, 8000)
+    -- (among nomads it is a colony ship that lies there, and its radius
+    -- is half the length of the ship)
+    local ship = Structures.ColonyShip(node.nearest)
+    if ship then
+      variety, radius = System.COLONY_SHIP, ship.length / 2
+    end
     local station = add("station", `{host.name} - {string.upper(string.sub(variety, 1, 1))}{string.sub(variety, 2)} {s}`,
-      x, y, z, Rng.Float(rng, 2000, 8000), host.id, variety)
+      x, y, z, radius, host.id, variety)
     station.site = station.id
   end
 

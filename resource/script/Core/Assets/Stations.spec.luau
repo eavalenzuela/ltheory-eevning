@@ -98,7 +98,7 @@ suite:Case("a ship in space is not refused for want of a station's module", func
   t.ok(Stations.Validate(game.state, { kind = "BuyNow", actor = player.ship, type = "ammo.emp", quantity = 1 }))
 end)
 
-suite:Case("a station's tower is of the faction whose homeworld is nearest", function(t)
+suite:Case("a station's tower is of the faction whose homeworld is nearest, and among nomads it is a colony ship", function(t)
   local game = Core.New({ galaxySeed = 3, historySeed = 1, systems = 40, peaceful = true })
   local state = game.state
   local seen: { [string]: boolean } = {}
@@ -107,7 +107,19 @@ suite:Case("a station's tower is of the faction whose homeworld is nearest", fun
     for _, object in Space.Describe(state, system).objects do
       if object.kind == "station" then
         local makeup = assert(Stations.Makeup(state, object.id))
-        t.eq(Structures.towerById[makeup.tower].faction, node.nearest)
+        local class = makeup.ship
+        if class then
+          -- (ten kilometres of ship, and all that a station gives aboard it)
+          t.eq(node.nearest, "kethri")
+          t.eq(Structures.colonyShipById[class].faction, node.nearest)
+          t.eq(object.variety, "colony ship")
+          t.eq(object.radius, 5000)
+          t.ok(string.find(object.name, " - Colony ship %d+$") ~= nil, `'{object.name}' is not named as a colony ship`)
+          t.eq(#Stations.Services(state, object.id), #Structures.SERVICES)
+        else
+          t.ok(node.nearest ~= "kethri", "a station among the Kethri should be a colony ship")
+          t.eq(Structures.towerById[makeup.tower :: string].faction, node.nearest)
+        end
         seen[node.nearest] = true
       end
     end

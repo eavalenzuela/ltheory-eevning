@@ -389,6 +389,66 @@ suite:Case("a save from the version before still opens", function(t)
   end)
 end)
 
+suite:Case("a save from before the Kethri were nomads has their stations as colony ships and their towers as Vessari ones", function(t)
+  local game = Core.New({ galaxySeed = 3, historySeed = 1, systems = 40, peaceful = true })
+  local state = game.state
+  -- A system of the Kethri's that has been seen, and a market of theirs
+  -- that has been looked at.
+  local theirs, station = 0, 0
+  for system = 1, 40 do
+    if theirs == 0 and state.galaxy.systems[system].nearest == "kethri" then
+      for _, object in Space.Describe(state, system).objects do
+        if object.kind == "station" and station == 0 then
+          theirs, station = system, object.id
+        end
+      end
+    end
+  end
+  t.ok(station ~= 0, "no station among the Kethri in a galaxy of forty")
+  Core.Query.Quote(game, station, "ore.ferrite")
+  local data, length = Core.Save(game)
+  -- As it was: a station there of a kind and size, and a Kethri tower in
+  -- the pilot's hangar, one anchored, and one in a market's list.
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 41
+  local old = file.state
+  for _, object in old.systems[theirs].objects do
+    if object.id == station then
+      object.name, object.variety, object.radius = "Somewhere IV - Moon 2 - Trade hub 1", "trade hub", 6400
+    end
+  end
+  local item = 0
+  for id, held in old.items do
+    if held.type == "ammo.emp" then
+      item = id
+    end
+  end
+  t.ok(item ~= 0, "the starting hangar has rounds in it to turn into a tower")
+  old.items[item].type = "tower.kethri.medium"
+  old.starbases[7] = { id = 7, tower = "tower.kethri.small", owner = "player", ready = 0, fuel = 0, burnt = 0, modules = {} }
+  table.insert(old.starbaseIds, 7)
+  local market = old.markets[station]
+  table.insert(market.classes, { id = "tower.kethri.small", par = 1, cover = 0, need = 0 })
+  for _, name in { "initial", "produced", "consumed", "used", "anchorIn", "anchorOut", "bought", "sold", "moved", "lost" } do
+    table.insert(market[name], 0)
+  end
+  for _, name in { "stock", "target", "anchor", "taste" } do
+    table.insert(market.nodes[1][name], 0)
+  end
+  local was, wasLength = Codec.Encode(file)
+  local loaded = Core.Load(was, wasLength).state
+  t.eq(loaded.items[item].type, "tower.vessari.medium")
+  t.eq(loaded.starbases[7].tower, "tower.vessari.small")
+  local object = assert(Space.Object(loaded, station))
+  t.eq(object.name, "Somewhere IV - Moon 2 - Colony ship 1")
+  t.eq(object.variety, "colony ship")
+  t.eq(object.radius, 5000)
+  t.eq(#loaded.markets[station].classes, #Types.Ids())
+  for _, class in loaded.markets[station].classes do
+    t.ok(string.find(class.id, "tower.kethri.", 1, true) == nil, "a market still lists a Kethri tower")
+  end
+end)
+
 suite:Case("a save from before item types were added keeps each type's own market figures", function(t)
   -- A market keeps its figures by a type's place among all the types.
   -- Make a save as it would have been before the structures were items:
