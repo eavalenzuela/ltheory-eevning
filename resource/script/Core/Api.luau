@@ -77,7 +77,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 47
+Core.SAVE_VERSION = 48
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -302,6 +302,23 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- save from before has given any.
   [40] = function(state: any)
     state.digs = state.digs or {}
+  end,
+  -- 48: a rig is made for a size of hull. The rigs there were are the
+  -- small ones now. One worked into a bigger hull in a save from before
+  -- is the rig of that hull's size from now on: nobody loses what they
+  -- had fitted.
+  [47] = function(state: any)
+    for _, item in state.items do
+      local ship = state.ships[item.holder]
+      local hull = if ship then Ships.byId[ship.type] else nil
+      if item.place == "rig" and item.slot > 0 and hull and Modules.byId[item.type] then
+        local size = Ships.RigSize(hull)
+        local sized = item.type .. (if size == 2 then ".medium" elseif size == 3 then ".large" else "")
+        if Modules.byId[sized] then
+          item.type = sized
+        end
+      end
+    end
   end,
   -- 47: an agent has a regard of their own for the pilot. In a save from
   -- before, nobody has any, and a job in hand is from nobody in

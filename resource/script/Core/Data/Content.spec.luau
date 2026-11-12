@@ -345,13 +345,19 @@ suite:Case("components are made from minerals, and modules from components and m
     end
     local blueprint = assert(Blueprints.byProduct[module.id], module.id)
     if module.slot == "rig" then
-      -- (a rig is made of what is salvaged, and nothing else: three kinds, twenty pieces)
+      -- (a rig is made of what is salvaged, and nothing else: three kinds, twenty pieces for a small one,
+      -- three times as many for a medium, and three times that for a large)
       local pieces = 0
       for _, material in blueprint.materials do
         t.ok(string.sub(material.type, 1, 8) == "salvage.", `{material.type} in {blueprint.id}`)
         pieces += material.quantity
       end
-      t.eq({ #blueprint.materials, pieces }, { 3, 20 })
+      t.eq({ #blueprint.materials, pieces }, { 3, 20 * ({ 1, 3, 9 })[Modules.SizeOf(module)] }, module.id)
+      -- (and a sized one is the small one of its kind, of more of the same)
+      local small = Modules.byId[(string.gsub((string.gsub(module.id, "%.medium$", "")), "%.large$", ""))]
+      t.eq({ module.passive, module.calibration, blueprint.materials[1].type } :: { any },
+        { small.passive, small.calibration, Blueprints.byProduct[small.id].materials[1].type } :: { any })
+      t.eq(module.basePrice, small.basePrice * ({ 1, 3, 9 })[Modules.SizeOf(module)])
     else
       local components, minerals = 0, 0
       for index, material in blueprint.materials do

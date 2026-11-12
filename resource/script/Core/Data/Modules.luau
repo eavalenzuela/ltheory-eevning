@@ -537,12 +537,25 @@ end
 -- another a little worse, takes no CPU or powergrid, shares the hull's
 -- calibration with the other rigs, and is destroyed if it is taken out.
 -- They are built of what is salvaged from wrecks (Data/Blueprints).
+--
+-- A rig is made for a size of hull, and goes into no other (Data/Ships:
+-- RigSize): a small one into a frigate or a destroyer, a medium one
+-- into a cruiser, a hauler or a barge, a large one into a battleship.
+-- All three do the same; what differs is what there is to work it
+-- into, and so what it takes to make: three times as much salvage for
+-- a medium rig as for a small one, and three times that for a large.
+local RIG_SIZES: { { any } } = { { "", "Small ", 1 }, { ".medium", "Medium ", 3 }, { ".large", "Large ", 9 } }
 local function rig(id: string, name: string, calibration: number, passive: { Modifier })
-  table.insert(modules, {
-    id = "rig." .. id, name = name, slot = "rig", hardpoint = "", cpu = 0, powergrid = 0, volume = 5, basePrice = 24000,
-    calibration = calibration, passive = passive, requires = { { skill = "jury.rigging", level = 1 } },
-  })
+  for _, size in RIG_SIZES do
+    table.insert(modules, {
+      id = "rig." .. id .. size[1], name = size[2] .. name, slot = "rig", hardpoint = "", cpu = 0, powergrid = 0,
+      volume = 5 * size[3], basePrice = 24000 * size[3],
+      calibration = calibration, passive = passive, requires = { { skill = "jury.rigging", level = 1 } },
+    })
+  end
 end
+-- How many times a small rig's salvage a rig of each size takes.
+local RIG_WORK = { 1, 3, 9 }
 rig("shield", "Field Extender Rig", 150, { ship("shield", "mul", 1.15, true), ship("signature", "mul", 1.10) })
 rig("armor", "Armour Pump Rig", 150, { ship("armor", "mul", 1.15, true), ship("maxVelocity", "mul", 0.90) })
 rig("hull", "Bulkhead Rig", 100, { ship("hull", "mul", 1.20, true), ship("cargo", "mul", 0.90) })
@@ -841,6 +854,12 @@ end
 function Modules.Graded(id: string, grade: number): string
   local better = if grade == 1 then Modules.Custom(id) elseif grade == 2 then Modules.Masterwork(id) else nil
   return if better then better.id else id
+end
+
+-- How much more of everything a rig takes to make than a small one of
+-- its kind (Data/Blueprints).
+function Modules.RigWork(module: ModuleType): number
+  return RIG_WORK[if string.find(module.id, ".large", 1, true) then 3 elseif string.find(module.id, ".medium", 1, true) then 2 else 1]
 end
 
 -- A module's size, 1 to 3: its weapon's, or what its name says.

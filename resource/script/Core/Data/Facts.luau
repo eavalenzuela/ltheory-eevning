@@ -276,6 +276,7 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
   if module.slot == "rig" then
     local to = section(sheet, "Rig")
     row(to, "Calibration", `{plain(module.calibration or 0)} of a hull's 400`)
+    row(to, "Goes into", ({ "a frigate or a destroyer", "a cruiser, a hauler or a barge", "a battleship" })[Modules.SizeOf(module)])
     row(to, "Taken out", "it is destroyed")
   end
   if module.salvager then

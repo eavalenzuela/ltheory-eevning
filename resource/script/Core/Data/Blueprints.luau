@@ -124,10 +124,12 @@ local SALVAGE = { "salvage.plates", "salvage.circuits", "salvage.conduits" }
 local rigs = 0
 for _, module in Modules.list do
   if module.slot == "rig" then
-    rigs += 1
+    -- (a medium or a large rig is the small one of its kind, of more of the same)
+    local work = Modules.RigWork(module)
+    rigs += if work == 1 then 1 else 0
     local materials = {}
     for index, count in { 10, 6, 4 } do
-      table.insert(materials, { type = SALVAGE[(rigs + index - 2) % 3 + 1], quantity = count })
+      table.insert(materials, { type = SALVAGE[(rigs + index - 2) % 3 + 1], quantity = count * work })
     end
     local blueprint: Blueprint = {
       id = "blueprint." .. module.id, product = module.id, name = module.name .. " Blueprint", perRun = 1, seconds = 600,

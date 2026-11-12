@@ -153,6 +153,8 @@ function Attributes.Weapon(fitted: { Fitted }, type: string, levels: Levels?): M
   return out
 end
 
+local RIGS = { "small", "medium", "large" }
+
 -- Whether a hull can carry these modules at once; if not, why not.
 function Attributes.Check(hull: Ships.ShipType, types: { string }, levels: Levels?): (boolean, string?)
   local slots = { high = 0, mid = 0, low = 0, rig = 0 }
@@ -187,6 +189,14 @@ function Attributes.Check(hull: Ships.ShipType, types: { string }, levels: Level
     return false, "no free turret hardpoint"
   elseif hardpoints.launcher > hull.launchers then
     return false, "no free launcher hardpoint"
+  end
+  -- (a rig is made for a size of hull, and goes into no other)
+  local takes = Ships.RigSize(hull)
+  for _, id in types do
+    local module = Modules.byId[id]
+    if module.slot == "rig" and takes > 0 and Modules.SizeOf(module) ~= takes then
+      return false, `a {RIGS[Modules.SizeOf(module)]} rig does not go into this hull: it takes {RIGS[takes]} ones`
+    end
   end
   local stats = Attributes.Ship(hull, fitted, levels)
   if cpu > stats.cpu then

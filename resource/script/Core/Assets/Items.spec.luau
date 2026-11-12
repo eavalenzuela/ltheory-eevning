@@ -1,6 +1,8 @@
 --!strict
+local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Items = require("@lt/Core/Assets/Items")
+local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Test = require("@lt/Tool/Test")
 
@@ -235,6 +237,42 @@ suite:Case("a rig is fitted like a module, wants its skill, and is destroyed whe
   end
   t.eq(left, 1)
   t.near(Core.Query.Stats(game, ship).hull, before.hull, 1e-6)
+end)
+
+suite:Case("a rig goes into a hull of its size and no other, and one in a bigger hull in an older save is that hull's size from then on", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local home = state.player.home
+  state.skills["jury.rigging"] = 1
+  -- The Courier is a frigate: a small rig goes in, a medium one does not, and says why.
+  local medium = Items.Add(state, "rig.hull.medium", 1, home, "hangar")
+  t.eq({ Core.Validate(game, { kind = "Fit", actor = state.player.ship, item = medium.id }) } :: { any },
+    { false, "a medium rig does not go into this hull: it takes small ones" } :: { any })
+  local small = Items.Add(state, "rig.hull", 1, home, "hangar")
+  t.ok(Core.Submit(game, { kind = "Fit", actor = state.player.ship, item = small.id }))
+  Core.Step(game)
+  -- A cruiser of the pilot's, with a medium rig in it; and another, in the hangar, with a large one that is its own size.
+  local cruiser = Space.NewShip(state, "cruiser.cuirass", "Cruiser", "player", home)
+  local inCruiser = Items.Equip(state, cruiser.id, "rig.engine.medium", nil)
+  local battleship = Space.NewShip(state, "battleship.bastion", "Battleship", "player", home)
+  local inBattleship = Items.Equip(state, battleship.id, "rig.shield.large", nil)
+  -- As a save from before rigs had sizes would have them: every one the rig there was, whatever it is in.
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 47
+  file.state.items[inCruiser.id].type = "rig.engine"
+  file.state.items[inBattleship.id].type = "rig.shield"
+  file.state.items[medium.id].type = "rig.hull"
+  local old, oldLength = Codec.Encode(file)
+  local loaded = Core.Load(old, oldLength).state
+  -- What is worked into a hull is that hull's size; what lies loose in a hangar is the small one it always was.
+  t.eq({ loaded.items[inCruiser.id].type, loaded.items[inBattleship.id].type, loaded.items[medium.id].type } :: { any },
+    { "rig.engine.medium", "rig.shield.large", "rig.hull" } :: { any })
+  local frigates = 0
+  for _, item in loaded.items do
+    frigates += if item.place == "rig" and item.holder == loaded.player.ship and item.type == "rig.hull" then 1 else 0
+  end
+  t.eq(frigates, 1, "the frigate's small rig should be as it was")
 end)
 
 return suite

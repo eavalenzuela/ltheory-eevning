@@ -28,6 +28,7 @@ type Pilot = {
   home: number,
   lost: boolean,          -- the ship a new game gave is gone
   bounties: number,       -- pirates destroyed and paid for
+  killedAt: number,       -- the place the pilot was at when the last of them was
   fled: number,           -- times the pilot went home to be mended
   ticks: number,
   events: { [string]: number },   -- how many of each kind of event were the pilot's
@@ -35,7 +36,8 @@ type Pilot = {
 
 local function new(seed: number): Pilot
   local game = Core.New({ galaxySeed = 1, historySeed = seed })
-  return { game = game, state = game.state, home = game.state.player.home, lost = false, bounties = 0, fled = 0, ticks = 0, events = {} }
+  return { game = game, state = game.state, home = game.state.player.home, lost = false, bounties = 0, killedAt = 0, fled = 0,
+    ticks = 0, events = {} }
 end
 
 local function step(p: Pilot, count: number?)
@@ -45,6 +47,8 @@ local function step(p: Pilot, count: number?)
     for _, event in Core.TakeEvents(p.game) do
       if event.kind == "WalletChanged" and event.reason == "bounty" then
         p.bounties += 1
+        local me = p.state.balls[p.state.player.ship]
+        p.killedAt = if me then me.grid else p.killedAt
       elseif event.kind == "Ejected" then
         p.lost = true
       end
@@ -118,7 +122,8 @@ local function to(p: Pilot, place: number)
   if me.grid == place then
     return
   end
-  order(p, { kind = "WarpTo", actor = 0, target = place })
+  local ok, why = order(p, { kind = "WarpTo", actor = 0, target = place })
+  assert(ok, `a warp was refused: {tostring(why)}, from grid {me.grid} to {place}, mode {me.mode}`)
   -- (the warp begun, and then over: a planet is somewhere to warp to and no grid of its own)
   local begun = false
   for _ = 1, 9000 do
@@ -150,10 +155,10 @@ end
 -- Fight at the belts until so many bounties have been paid in all: the
 -- nearest pirate orbited and shot at, home to be mended when the shield
 -- is gone and the armour going, and on to the next belt when nobody
--- comes to this one. Returns the belt the last pirate was destroyed at.
+-- comes to this one. Returns the place the last pirate was destroyed at.
 local function fight(p: Pilot, wanted: number, orbit: number): number
   local places: { number } = {}
-  local at, quiet, last = 1, 0, 0
+  local at, quiet = 1, 0
   while p.bounties < wanted and not p.lost and p.ticks < 60000 do
     if p.state.ships[p.state.player.ship].docked ~= 0 then
       must(p, { kind = "Undock", actor = 0 })
@@ -218,11 +223,9 @@ local function fight(p: Pilot, wanted: number, orbit: number): number
         end
       end
     end
-    local before = p.bounties
     step(p)
-    last = if p.bounties > before then places[at] else last
   end
-  return last
+  return p.killedAt
 end
 
 -- The wreck on the pilot's grid that is nearest (and, with 'whole', has

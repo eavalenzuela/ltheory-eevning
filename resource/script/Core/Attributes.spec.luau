@@ -92,6 +92,29 @@ suite:Case("a hull takes three rigs within its calibration, and each does one th
   t.eq({ Attributes.Check(Ships.byId["capsule"], { "rig.hull" }) } :: { any }, { false, "no free rig slot" } :: { any })
   -- (a rig takes no slot of another kind)
   t.ok((Attributes.Check(courier, { "autocannon.small", "autocannon.small", "rig.hull" })))
+  -- A rig is made for a size of hull: a small one for a frigate or a destroyer, a medium for a cruiser, a hauler
+  -- or a barge, a large for a battleship. It goes into no other.
+  local sizes = { frigate = 1, destroyer = 1, cruiser = 2, industrial = 2, barge = 2, battleship = 3 }
+  local made = { "rig.hull", "rig.hull.medium", "rig.hull.large" }
+  local called = { "small", "medium", "large" }
+  local seen: { [string]: boolean } = {}
+  for _, hull in Ships.list do
+    local takes = sizes[hull.class]
+    if takes and not seen[hull.class] and (hull.rigs or 0) > 0 then
+      seen[hull.class] = true
+      t.eq(Ships.RigSize(hull), takes, hull.id)
+      for size, rig in made do
+        t.eq({ Attributes.Check(hull, { rig }) } :: { any },
+          if size == takes then { true } :: { any }
+          else { false, `a {called[size]} rig does not go into this hull: it takes {called[takes]} ones` } :: { any }, `{rig} in a {hull.class}`)
+      end
+    end
+  end
+  t.ok(seen.frigate and seen.cruiser and seen.battleship and seen.industrial)
+  -- (the three sizes of a rig do the same thing)
+  t.eq(Modules.byId["rig.hull.large"].passive, Modules.byId["rig.hull"].passive)
+  t.eq({ Modules.byId["rig.hull"].name, Modules.byId["rig.hull.medium"].name, Modules.byId["rig.hull.large"].name },
+    { "Small Bulkhead Rig", "Medium Bulkhead Rig", "Large Bulkhead Rig" })
 end)
 
 suite:Case("a microwarpdrive, running, is six times the speed and six times the signature, and costs capacitor to carry", function(t)

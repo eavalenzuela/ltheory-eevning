@@ -414,6 +414,14 @@ for _, t in types do
   t.calibration = t.calibration or Ships.CALIBRATION
 end
 
+-- The size of rig a hull takes (Data/Modules): 1 for a frigate or a
+-- destroyer, 2 for a cruiser, a hauler or a barge, 3 for a battleship;
+-- 0 for what takes none.
+local RIG_SIZE: { [string]: number } = { frigate = 1, destroyer = 1, cruiser = 2, industrial = 2, barge = 2, battleship = 3 }
+function Ships.RigSize(t: ShipType): number
+  return RIG_SIZE[t.class] or 0
+end
+
 -- The tech 2 make of a hull, if it has one.
 function Ships.Improved(id: string): ShipType?
   local better = Ships.byId[id .. ".ii"]
