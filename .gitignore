@@ -11,3 +11,6 @@ resource/script/engine.d.luau
 
 # Saved games
 /save/
+
+# Keys for outside services (never committed)
+/.env
