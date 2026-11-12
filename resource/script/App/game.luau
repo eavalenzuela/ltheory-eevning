@@ -1179,6 +1179,15 @@ function Debug.Sound(on: boolean?, master: number?): number
   return audio.played
 end
 
+-- The air of the place the pilot is at, as the sound has it ("gate",
+-- "belt", "gas", "relic", "data", "pirates", a station's "chatter.thin",
+-- "chatter.light" or "chatter.busy", or "" for none), and how many
+-- loops of it are playing (two, while one fades out under another).
+-- With the sound off it is always "" and none.
+function Debug.Air(): (string, number)
+  return audio.airIs, #audio.air
+end
+
 -- The hulls whose weapons do not stand wholly on them (Hull.Audit):
 -- each is printed, and how many there are is returned.
 function Debug.Hulls(): number

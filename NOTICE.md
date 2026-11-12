@@ -13,6 +13,8 @@
 
 `resource/sound/made/` holds sound effects and music generated from the text descriptions in `sounds.txt`, with ElevenLabs' sound-effect and music services, by the project's owner on their own account, which carries a commercial licence (`script/soundgen`). One of them, `gate/jump.ogg`, is a generated sound joined to one of the original engine's.
 
+`resource/sound/atmosphere/` holds sounds that the project's owner made themselves, by their own means, and put there for the game to play: radio chatter, the creaking of wrecks, a missile's impact, a small explosion. They publish them with the rest.
+
 Under ElevenLabs' terms the account holder keeps all rights in what they generate, except as those terms expressly say otherwise. The owner puts no restriction of their own on these files and publishes them with the rest. Anyone reusing the files elsewhere should read ElevenLabs' terms, which also say how such output may be used.
 
 ## Third-party code

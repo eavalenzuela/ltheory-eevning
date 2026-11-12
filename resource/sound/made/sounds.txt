@@ -63,3 +63,17 @@ ui/placed          | 1.0 | once | A short notification chime on a ship's console
 loop/engine        | 8.0 | loop | The steady low rumble of a spaceship's engines heard from inside the cockpit: deep, smooth, continuous, with a faint turbine whine, no music, no voice
 loop/station       | 12.0 | loop | The quiet inside of a space station hangar: a low ventilation hum, distant machinery, an occasional faint metallic creak, calm, no music, no voice
 loop/warp          | 10.0 | loop | Inside a starship travelling at warp speed: a deep thrumming engine drone, low and powerful, with slow heavy whooshes passing by, dark and smooth, no high-pitched tones, no whine, no music, no voice
+
+# Atmosphere: what a place sounds like, under everything else and very
+# quiet (Game/View/Audio says where each is heard). The owner began
+# these with radio chatter of their own making, which is not made here:
+# resource/sound/atmosphere. These are a first try at the rest, made
+# 2026-11-12 with nobody's ear on them yet. (A seventh, busy traffic
+# chatter, was made and is not kept: the owner's own chatter loops, in
+# three weights, are what a station has.)
+atmosphere/gate      | 20 | loop | The deep steady thrum of an enormous stargate idling in space, heard from a ship close by: a slow pulsing low-frequency hum with a faint electrical shimmer over it, vast, calm, continuous, no music, no voice
+atmosphere/belt      | 20 | loop | Drifting through an asteroid field in a spaceship, heard from inside the cockpit: near silence, a faint hiss of dust against the hull, an occasional tiny tick of grit, a distant low groan of rock now and then, sparse, calm, no music, no voice
+atmosphere/vapour    | 20 | loop | A spaceship inside a thin cloud of gas in space, heard from inside the hull: a soft continuous hiss of gas streaming over the hull, slow low rumbling swells, faint crackles of static electricity, no music, no voice
+atmosphere/derelict  | 20 | loop | A dead radio channel beside an abandoned wreck in deep space: quiet empty static, a slow faint electronic warble that comes and goes, a lonely distress beacon blip far apart, eerie, sparse, no music, no voice
+atmosphere/listening | 20 | loop | An old automated listening post still transmitting to nobody: soft static, quiet streams of data chirps and modem-like tones fading in and out, a faint carrier hum underneath, mysterious, sparse, no music, no voice
+atmosphere/pirates   | 20 | loop | Intercepted pirate radio traffic on a scratchy channel: distorted unintelligible rough voices in short bursts, between bursts of static and squelch clicks, menacing, sparse, no music

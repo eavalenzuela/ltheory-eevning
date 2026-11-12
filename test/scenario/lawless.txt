@@ -10,6 +10,8 @@
 # pilot's Courier is no match for any of it: it looks, and gets away.
 
 wait 2
+# (the sound, at no loudness, so that what is heard of a fight is run: missiles land on the pilot here)
+lua GameDebug.Sound(true, 0)
 lua assert(GameDebug.Docked(), 'a new game starts docked')
 lua assert(select(2, GameDebug.Security()) == 'secure', 'a pilot starts where order is kept')
 lua assert(GameDebug.Security() == 1)

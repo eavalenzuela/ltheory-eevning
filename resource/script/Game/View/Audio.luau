@@ -8,6 +8,21 @@
 -- the game: a station's hum while docked, the pilot's engines by how
 -- hard they burn, and the warp. And under all of it, music (Game/View/Music).
 --
+-- And a place has its air: a loop or two of its own, very quiet, that
+-- come in when the pilot gets there and fade when they leave. A station
+-- has radio chatter: a good deal of it at a homeworld (with a burst of
+-- somebody else's traffic over it now and then), some in secure space,
+-- a little in low security, and none in lawless space, where nobody is
+-- talking. A stargate hums. A belt ticks and groans. A vapour field
+-- hisses. A derelict creaks, over a dead channel. A listening post has
+-- its old transmissions, and a pirates' den or camp their talk.
+--
+-- The owner makes sounds of their own (resource/sound/atmosphere, as
+-- the wav files they are: a file put there again is what is heard next
+-- time): the chatter, the creaking of wrecks, a missile landing on the
+-- pilot's own ship, and a small ship blowing up. The rest of the air is
+-- made from descriptions (resource/sound/made/atmosphere).
+--
 -- Everything is played flat (not placed in space by the engine) at a
 -- loudness worked out here: what is far off is quiet, by how far it is
 -- from the pilot's ship. Some are the game's own sounds, made from
@@ -37,6 +52,11 @@ local Session = require("@lt/Game/Session")
 
 local Audio = {}
 
+-- A loop of a place's air: which place's it is and which of that
+-- place's loops, how loud it is now, and how loud it is wanted (nothing,
+-- for one on its way out).
+type Air = { sound: Sound, key: string, layer: number, now: number, want: number }
+
 export type Audio = {
   enabled: boolean,
   master: number,                 -- every loudness but the music's is times this
@@ -45,8 +65,16 @@ export type Audio = {
   last: { [string]: number },     -- when a sound of a key was last played
   place: Sound?,                  -- the loops
   placeIs: string,
+  -- The air of the place: the loop that is wanted, and any that are
+  -- still fading out; and which place's it is ("" where there is none).
+  air: { Air },
+  airIs: string,
+  airAsked: number,               -- when where the pilot is was last looked at
+  passing: number,                -- when somebody else's traffic is next heard, and how many times it has been
+  passed: number,
   engine: Sound?,
   warp: Sound?,
+  struck: number,                 -- missiles that have landed on the pilot's ship, for taking the sounds of it in turn
   engineNow: number,              -- their loudness now, eased toward what the game asks
   warpNow: number,
   played: number,                 -- sounds started so far, for a script to see that it works
@@ -58,6 +86,75 @@ export type Audio = {
 -- and no loop of its own.)
 local PLACE: { [string]: string } = { station = "made/loop/station.ogg" }
 local PLACE_LEVEL = 0.03
+
+-- The air of a place: its loop, and how loud it is. (Quiet: these are
+-- under everything, and nobody has yet said how loud they should be.)
+-- (Each place: its loops, a file and a loudness each.)
+local AIR: { [string]: { { any } } } = {
+  ["chatter.thin"] = { { "atmosphere/very_light_comm_chatter_loop_1.wav", 0.06 } },
+  ["chatter.light"] = { { "atmosphere/light_comm_chatter_loop_01.wav", 0.05 } },
+  ["chatter.busy"] = { { "atmosphere/medium_comm_chatter_loop_01.wav", 0.09 } },
+  gate = { { "made/atmosphere/gate.ogg", 0.03 } },
+  belt = { { "made/atmosphere/belt.ogg", 0.025 } },
+  gas = { { "made/atmosphere/vapour.ogg", 0.03 } },
+  -- (a derelict is one of two, by which it is: each of the owner's two
+  -- creakings, over the dead channel)
+  relic = { { "atmosphere/metallic_creaking_wrecks_01.wav", 0.07 }, { "made/atmosphere/derelict.ogg", 0.02 } },
+  ["relic.b"] = { { "atmosphere/metallic_creaking_wrecks_02.wav", 0.16 }, { "made/atmosphere/derelict.ogg", 0.02 } },
+  data = { { "made/atmosphere/listening.ogg", 0.05 } },
+  pirates = { { "made/atmosphere/pirates.ogg", 0.04 } },
+}
+-- Somebody else's traffic, heard over a homeworld's chatter now and
+-- then: one of these, once, and the next a minute or two after.
+local PASSING: { { any } } = {
+  { "atmosphere/japanese_medium_comm_chatter_02.wav", 0.05 }, { "atmosphere/japanese_medium_comm_chatter_03.wav", 0.035 },
+}
+local PASSING_FIRST, PASSING_GAP = 25, 70
+-- A missile landing on the pilot's own ship, and a small ship blowing
+-- up (one no bigger than a destroyer): the owner's.
+local MISSILE_HIT = { "atmosphere/missile_impact_player_01.wav", "atmosphere/missile_impact_player_02.wav" }
+local SMALL_BLAST, SMALL = "atmosphere/small_hull_explosion_01.wav", 100
+-- Seconds one takes to come in, and to fade.
+local AIR_FADE = 2.5
+local SITES: { [string]: string } = {
+  ["site.gas"] = "gas", ["site.relic"] = "relic", ["site.data"] = "data", ["site.combat"] = "pirates", ["site.ore"] = "belt",
+}
+
+-- Which air the place the pilot is at has ("": none): by what the
+-- place is, and for a station by how safe its space is.
+function Audio.Where(game: Core.Game): string
+  local state = game.state
+  local player = Core.Query.Player(game)
+  local me = state.balls[state.player.ship]
+  local at = if player.docked ~= 0 then player.docked
+    elseif me and not (me.warp and me.warp.stage == "warp") then me.grid
+    else 0
+  local place: any = if at ~= 0 then Core.Query.Body(game, at) else nil
+  if place == nil then
+    return ""
+  elseif place.kind == "station" then
+    local node = state.galaxy.systems[player.system]
+    local _, band = Core.Query.Security(game, player.system)
+    return if band == "lawless" or node == nil then "" elseif node.home then "chatter.busy"
+      elseif band == "secure" then "chatter.light" else "chatter.thin"
+  elseif place.kind == "gate" then
+    return "gate"
+  elseif place.kind ~= "belt" then
+    return ""
+  elseif place.variety == "site.relic" then
+    return if at % 2 == 0 then "relic" else "relic.b"
+  elseif place.variety == "site.mission" then
+    -- (a place made for a job: a camp of the pirates', or a pocket of ore)
+    for _, id in state.missionIds do
+      local mission = state.missions[id]
+      if mission.kind == "mining" and (mission.site == at or table.find(mission.rooms, at) ~= nil) then
+        return "belt"
+      end
+    end
+    return "pirates"
+  end
+  return SITES[place.variety] or "belt"
+end
 
 -- The loops of the pilot's own ship, and how loud each is at its most:
 -- the engines at full burn, and deep in warp.
@@ -97,7 +194,8 @@ local ANY: { [string]: { any } } = {
 function Audio.New(): Audio
   return {
     enabled = not Host.scripted, master = 1, musicLevel = 1, time = 0, last = {}, place = nil, placeIs = "", engine = nil, warp = nil,
-    engineNow = 0, warpNow = 0, played = 0, music = Music.New(),
+    engineNow = 0, warpNow = 0, played = 0, struck = 0, music = Music.New(), air = {}, airIs = "", airAsked = -10,
+    passing = 0, passed = 0,
   }
 end
 
@@ -114,6 +212,10 @@ function Audio.Set(audio: Audio, enabled: boolean, master: number?, music: numbe
     Sound_Delete(audio.engine)
     Sound_Delete(audio.warp)
     audio.place, audio.engine, audio.warp, audio.placeIs = nil, nil, nil, ""
+    for _, air in audio.air do
+      Sound_Delete(air.sound)
+    end
+    audio.air, audio.airIs, audio.airAsked = {}, "", -10
     Music.Stop(audio.music)
   end
 end
@@ -177,13 +279,20 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
         play(audio, if me.vitals.shield > 1 then SHIELD_HIT else HULL_HIT, 0.14, "struck", 0.15)
       end
     elseif kind == "MissileHit" and event.to == mine and me then
-      play(audio, if me.vitals.shield > 1 then SHIELD_HIT else HULL_HIT, 0.14, "struck", 0.15)
+      -- (the owner's: one and then the other, and not one on top of another)
+      audio.struck += 1
+      play(audio, MISSILE_HIT[audio.struck % #MISSILE_HIT + 1], 0.16, "missile", 0.6)
     elseif kind == "BallDestroyed" then
       local far = if me and event.system == me.system then math.sqrt((event.x - me.x) ^ 2 + (event.y - me.y) ^ 2 + (event.z - me.z) ^ 2)
         else 1e9
       -- (a bigger ship goes up lower and louder)
       local size = math.clamp((event.radius or 40) / 400, 0.1, 1)
-      play(audio, "made/explosion/ship1.ogg", (0.3 + 0.3 * size) * reach(far, 12000), nil, 0.2, 1.1 - 0.5 * size)
+      if (event.radius or 40) <= SMALL then
+        -- (a small one: the owner's, as it is)
+        play(audio, SMALL_BLAST, 0.3 * reach(far, 12000), "blast", 0.2)
+      else
+        play(audio, "made/explosion/ship1.ogg", (0.3 + 0.3 * size) * reach(far, 12000), nil, 0.2, 1.1 - 0.5 * size)
+      end
     elseif OWN[kind] and event.ball == mine then
       play(audio, OWN[kind][1], OWN[kind][2])
     elseif SHIP[kind] and event.ship == mine then
@@ -207,6 +316,47 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
     audio.place = if PLACE[where] then Sound_Play2DLooped(PLACE[where], PLACE_LEVEL * audio.master) else nil
     audio.placeIs = where
   end
+  -- The air of the place, looked for a few times a second: what is
+  -- wanted comes in, and whatever else there was fades out under it.
+  if audio.time - audio.airAsked >= 0.25 then
+    audio.airAsked = audio.time
+    local air = Audio.Where(game)
+    if air ~= audio.airIs then
+      audio.airIs = air
+      local back = false
+      for _, each in audio.air do
+        -- (back before it had quite gone: it is not begun twice)
+        each.want = if each.key == air then AIR[air][each.layer][2] else 0
+        back = back or each.key == air
+      end
+      if not back then
+        local layers: { { any } } = AIR[air] or {}
+        for layer, loop in layers do
+          table.insert(audio.air, { sound = Sound_Play2DLooped(loop[1], 0), key = air, layer = layer, now = 0, want = loop[2] })
+        end
+      end
+      -- (and somebody else's traffic is first heard a while after getting to a busy station)
+      audio.passing = audio.time + PASSING_FIRST
+    end
+  end
+  if audio.airIs == "chatter.busy" and audio.time >= audio.passing then
+    audio.passed += 1
+    audio.passing = audio.time + PASSING_GAP + (audio.passed * 37) % 60
+    local burst = PASSING[audio.passed % #PASSING + 1]
+    play(audio, burst[1], burst[2], "passing", 5)
+  end
+  for index = #audio.air, 1, -1 do
+    local each = audio.air[index]
+    local step = AIR[each.key][each.layer][2] * frameSeconds / AIR_FADE
+    each.now = if each.now < each.want then math.min(each.want, each.now + step) else math.max(each.want, each.now - step)
+    if each.want == 0 and each.now <= 0 then
+      Sound_Delete(each.sound)
+      table.remove(audio.air, index)
+    else
+      Sound_SetVolume(each.sound, each.now * audio.master)
+    end
+  end
+
   -- The engines, by how fast the ship is going of what it can.
   local ease = math.min(1, 4 * frameSeconds)
   local burn = 0

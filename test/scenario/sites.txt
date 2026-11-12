@@ -10,9 +10,15 @@
 
 wait 2
 lua GameDebug.Peaceful(true)
+# (the sound, at no loudness: a place has its air, and a script can ask which)
+lua GameDebug.Sound(true, 0)
+wait 1
+lua assert(GameDebug.Air() == 'chatter.busy', 'a homeworld station should have a good deal of chatter')
 until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()
 lua assert(GameDebug.Order('Stop'))
+wait 1
+lua assert(GameDebug.Air() == 'chatter.busy', 'outside the station its chatter should still be heard')
 lua assert(GameDebug.Count('site') == 0, 'an unfound site should not be on the overview')
 until GameDebug.Press('Scanner')
 frames 3
@@ -39,9 +45,12 @@ frames 3
 lua GameDebug.TimeScale(16)
 until GameDebug.Press('SiteWarp:1')
 until GameDebug.InWarp()
+until GameDebug.Air() == ''
 until GameDebug.Idle()
 lua GameDebug.TimeScale(1)
-frames 5
+wait 1
+lua assert(GameDebug.Air() == 'gas', 'a vapour field should have its own air')
+lua assert(select(2, GameDebug.Air()) <= 2, 'the chatter left behind should be gone, or going')
 lua assert(GameDebug.Count('asteroid') >= 4, 'a vapour field should have its clouds')
 lua assert(GameDebug.Distance('Vapour Field') < 1000, 'the warp did not end at the site')
 
