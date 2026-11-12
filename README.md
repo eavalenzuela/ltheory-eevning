@@ -122,4 +122,4 @@ Nothing is needed to play them. Making new ones needs an ElevenLabs API key in t
 
 ## Licence
 
-The code is in the public domain (see `LICENSE`). Third-party code under `ext/` carries its own licences.
+The code, and everything it makes, is in the public domain (see `LICENSE`). Some files came from elsewhere and keep their own terms: third-party code, the fonts, and some of the original engine's sounds. `NOTICE.md` says which.
