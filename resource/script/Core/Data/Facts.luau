@@ -284,9 +284,9 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
   end
   if module.analyzer then
     local to = section(sheet, "Hacking")
-    row(to, "Opens", "a derelict's sealed hold, once the core of its lock is destroyed")
+    row(to, "Opens", "a derelict's sealed hold, by finding the keys of its lock")
     row(to, "Range", metres(module.analyzer.range))
-    row(to, "A level of Hacking", "10 more coherence, and 5 more strength")
+    row(to, "A level of Hacking", "one more code in the buffer")
   end
   if module.cloak then
     local to = section(sheet, "Cloak")

@@ -5,15 +5,17 @@
 # A Data Analyzer goes into one of the starter Courier's mid slots (the
 # module and the skill for it are given). A wreck with a sealed hold is
 # given too (a derelict's hulls have them: finding one is the scanner's
-# work). It cannot be looted. The hack is begun from what is selected,
-# given up, begun again and played until the core is destroyed. Then
-# the hold is open, with everything in it.
+# work). It cannot be looted. The hack is begun from what is selected:
+# the lock comes up, a matrix of codes with its top row to pick from.
+# It is left before a pick, which costs nothing, and begun again and
+# played, by the best way through the matrix there is. Then the hold is
+# open, with everything in it.
 
 wait 2
 lua GameDebug.Peaceful(true)
 lua assert(GameDebug.Docked(), 'a new game starts docked')
 lua assert(GameDebug.Give('analyzer.data', 1))
-lua GameDebug.Train('hacking', 5)
+lua GameDebug.Train('hacking', 3)
 frames 3
 until GameDebug.Press('Fit:analyzer.data')
 until GameDebug.Fitted('analyzer.data') == 1
@@ -31,23 +33,27 @@ lua assert(not GameDebug.CanPress('Loot'), 'a sealed hold should not be looted')
 lua assert(not GameDebug.Hack(), 'no hack should be under way yet')
 lua assert(not GameDebug.CanPress('Hack:abandon'), 'with no hack there should be no board')
 
-# Begin: the board comes up, with the way in cleared and nothing else.
+# Begin: the lock comes up, nothing picked, with the buffer Hacking 3 gives.
 until GameDebug.Press('Hack')
 until GameDebug.Hack()
-lua assert(select(2, GameDebug.Hack()) == 110, 'Hacking 5 should give 110 coherence')
-lua assert(select(3, GameDebug.Hack()) == 1, 'only the way in should be cleared at the start')
+lua assert(select(2, GameDebug.Hack()) == 0 and select(3, GameDebug.Hack()) == 7, 'Hacking 3 should give a buffer of seven, empty')
 frames 3
 lua assert(not GameDebug.CanPress('Hack'), 'a second hack should not be begun over the first')
+lua assert(GameDebug.CanPress('Hack:1') and GameDebug.CanPress('Hack:5'), 'the first pick is anywhere in the top row')
+lua assert(not GameDebug.CanPress('Hack:6'), 'and nowhere else')
 
-# Given up, the hold is as sealed as it was.
+# Left before a pick, the hold is as sealed as it was.
 until GameDebug.Press('Hack:abandon')
 until not GameDebug.Hack()
 frames 3
-lua assert(not GameDebug.CanPress('Loot'), 'a hack given up should leave the hold sealed')
+lua assert(not GameDebug.CanPress('Loot'), 'a lock left alone should leave the hold sealed')
 
-# Begun again and played: a try a tick, at the node nearest the core.
+# Begun again and played: a pick a tick, the best way through there is.
 until GameDebug.Press('Hack')
 until GameDebug.Hack()
+lua _G.best = GameDebug.HackBest()
+lua assert(_G.best >= 1, 'the key of the safeguards can always be got')
+lua print('hack: the best way gets', _G.best, 'of the three keys')
 lua GameDebug.TimeScale(4)
 until GameDebug.HackOn()
 lua GameDebug.TimeScale(1)

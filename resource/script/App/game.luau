@@ -35,6 +35,7 @@ local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
+local State = require("@lt/Core/Kernel/State")
 local Types = require("@lt/Core/Data/Types")
 local Wallet = require("@lt/Core/Assets/Wallet")
 
@@ -630,39 +631,91 @@ function Debug.Wreck(sealed: boolean?, far: number?): boolean
   return true
 end
 
--- The hack under way: whether there is one, the coherence the pilot has
--- left, and how many nodes of the board are cleared.
-function Debug.Hack(): (boolean, number, number)
+-- The hack under way: whether there is one, how many codes are in the
+-- buffer and how many it holds, and how many of the keys are in.
+function Debug.Hack(): (boolean, number, number, number)
   local hack = Core.Query.Hack(session.game)
   if hack == nil then
-    return false, 0, 0
+    return false, 0, 0, 0
   end
-  local cleared = 0
-  for _, node in hack.nodes do
-    cleared += if node.cleared then 1 else 0
+  local keys = 0
+  for _, key in hack.keys do
+    keys += if key.done then 1 else 0
   end
-  return true, hack.coherence, cleared
+  return true, #hack.buffer, hack.room, keys
 end
 
--- A cheat that plays the hack under way, a try each time it is asked:
--- it presses the node that can be tried which is nearest the core (it
--- looks where the core is, which a pilot cannot). True once no hack is
--- under way. For "until GameDebug.HackOn()".
+-- The best that can still be made of a hack: the cell to pick next (0
+-- if no pick makes it better than it is), and how many keys would be
+-- in at the end of it. The safeguards' key counts before any number of
+-- the others, and of ways as good the shortest is taken.
+local function plan(hack: State.Hack): (number, number)
+  local size = hack.size
+  local used = table.clone(hack.used)
+  local buffer = table.clone(hack.buffer)
+  local function worth(): (number, number)
+    local score, keys = 0, 0
+    for index, key in hack.keys do
+      if key.done or Hacking.Holds(buffer, key.codes) then
+        keys += 1
+        score += if index == 1 then 100 else 10
+      end
+    end
+    return score - 0.01 * #buffer, keys
+  end
+  local bestScore, bestKeys = worth()
+  local bestPick = 0
+  local function go(along: string, line: number, first: number)
+    if #buffer >= hack.room then
+      return
+    end
+    for at = 1, size do
+      local index = if along == "row" then (line - 1) * size + at else (at - 1) * size + line
+      if not used[index] then
+        used[index] = true
+        table.insert(buffer, hack.cells[index])
+        local score, keys = worth()
+        local pick = if first == 0 then index else first
+        if score > bestScore then
+          bestScore, bestKeys, bestPick = score, keys, pick
+        end
+        if along == "row" then
+          go("column", at, pick)
+        else
+          go("row", at, pick)
+        end
+        table.remove(buffer)
+        used[index] = false
+      end
+    end
+  end
+  go(hack.along, hack.line, 0)
+  return bestPick, bestKeys
+end
+
+-- A cheat that plays the hack under way, a pick each time it is asked:
+-- the next cell of the best way there is through the matrix (which a
+-- pilot has to find by looking), and when no pick would better it, the
+-- end. True once no hack is under way. For "until GameDebug.HackOn()".
+local planned, plannedTick = "", -1
 function Debug.HackOn(): boolean
   local hack = session.game.state.hack
   if hack == nil then
     return true
   end
-  local best, least = 0, math.huge
-  for index in hack.nodes do
-    if Hacking.Open(hack, index) and Hacking.Steps(hack, index) < least then
-      best, least = index, Hacking.Steps(hack, index)
-    end
+  -- (worked out once a tick: it is asked every frame)
+  if session.game.state.tick ~= plannedTick then
+    local pick = plan(hack)
+    planned, plannedTick = if pick ~= 0 then `Hack:{pick}` else "Hack:abandon", session.game.state.tick
   end
-  if best ~= 0 then
-    Im.Press(`Hack:{best}`)
-  end
+  Im.Press(planned)
   return false
+end
+
+-- How many keys the best way through the lock under way would get in.
+function Debug.HackBest(): number
+  local hack = session.game.state.hack
+  return if hack then select(2, plan(hack)) else 0
 end
 
 -- Switch every salvager on, on the nearest wreck. Returns how many started.

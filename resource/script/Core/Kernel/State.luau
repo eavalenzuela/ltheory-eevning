@@ -173,14 +173,15 @@ export type Wreck = {
   locked: boolean,    -- its hold is sealed: nothing is looted until it has been hacked (Tactical/Hacking)
 }
 
--- A hack under way (Tactical/Hacking): the hull whose hold it is for,
--- the board (its nodes row by row: what each is, what it has left and
--- hits with, whether it has been found, whether it is cleared), the
--- pilot's coherence now and at most, their strength, and the node the
--- way in began at.
-export type HackNode = { kind: string, hp: number, strength: number, seen: boolean, cleared: boolean }
-export type Hack = { wreck: number, width: number, height: number, nodes: { HackNode }, coherence: number, most: number,
-  strength: number, start: number }
+-- A hack under way (Tactical/Hacking): the hull whose hold it is for;
+-- the lock's matrix, 'size' by 'size' (its codes row by row, and which
+-- of its cells have been picked); the buffer (the codes picked, in
+-- order) and the room it has; the keys (each a run of codes, and
+-- whether it is in the buffer yet); and where the next pick has to be:
+-- 'along' a "row" or a "column", and which 'line' of those.
+export type HackKey = { name: string, codes: { string }, done: boolean }
+export type Hack = { wreck: number, size: number, cells: { string }, used: { boolean }, buffer: { string }, room: number,
+  keys: { HackKey }, along: string, line: number }
 
 -- A ship flown by the game rather than the player: what it is doing.
 export type Pilot = {

@@ -1,11 +1,12 @@
 --!strict
 -- Hacking (Tactical/Hacking).
 
+local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
-local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Hacking = require("@lt/Core/Tactical/Hacking")
 local Items = require("@lt/Core/Assets/Items")
+local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Space = require("@lt/Core/Tactical/Space")
@@ -58,24 +59,41 @@ local function beside(fitted: boolean, level: number): (Core.Game, State.Wreck, 
   error("no history seed up to 60 gives the first system a derelict")
 end
 
--- Try the open node nearest the core (the test may look; a pilot goes by
--- the numbers), until the hack is over. Returns the blows it took.
-local function play(game: Core.Game): number
-  local state = game.state
-  local turns = 0
-  while state.hack and turns < 200 do
-    local hack = state.hack :: State.Hack
-    local best, least = 0, math.huge
-    for index in hack.nodes do
-      if Hacking.Open(hack, index) and Hacking.Steps(hack, index) < least then
-        best, least = index, Hacking.Steps(hack, index)
-      end
-    end
-    assert(best ~= 0, "nothing on the board can be tried")
-    assert(submit(game, { kind = "HackNode", actor = 0, pin = best }))
-    turns += 1
+-- A hack begun on a lock made for the test: a matrix whose rows are the
+-- five codes, each row a step round from the one above, so that picking
+-- (1,1), (2,1), (2,2), (3,2), (3,3) and so on down the stair puts
+-- AX DO KE NU RI AX DO in the buffer; and the keys given.
+local STAIR = { 1, 6, 7, 12, 13, 18, 19 }
+local function crafted(level: number, keys: { { string } }): (Core.Game, State.Wreck, State.Hack)
+  local game, wreck = beside(true, level)
+  assert(submit(game, { kind = "StartHack", actor = 0, target = wreck.id }))
+  local hack = assert(game.state.hack)
+  for index = 1, 25 do
+    local row, column = (index - 1) // 5, (index - 1) % 5
+    hack.cells[index] = Hacking.CODES[(row + column) % 5 + 1]
   end
-  return turns
+  for index, codes in keys do
+    hack.keys[index].codes = codes
+  end
+  Core.TakeEvents(game)
+  return game, wreck, hack
+end
+
+-- What a wreck holds, by type.
+local function held(game: Core.Game, wreck: number): { [string]: number }
+  local found: { [string]: number } = {}
+  for _, item in Items.In(game.state, wreck, "cargo") do
+    found[item.type] = (found[item.type] or 0) + item.quantity
+  end
+  return found
+end
+
+local function event(game: Core.Game, kind: string): { [string]: any }?
+  local found: { [string]: any }? = nil
+  for _, each in Core.TakeEvents(game) do
+    found = if each.kind == kind then each else found
+  end
+  return found
 end
 
 suite:Case("a derelict's hold is sealed, and is hacked by a ship with a data analyzer from near by", function(t)
@@ -98,30 +116,38 @@ suite:Case("a derelict's hold is sealed, and is hacked by a ship with a data ana
   me.x -= 10000
   t.ok((submit(game, { kind = "StartHack", actor = 0, target = wreck.id })))
   local hack = assert(state.hack)
-  t.eq({ hack.wreck, #hack.nodes, hack.coherence, hack.most, hack.strength } :: { any }, { wreck.id, 30, 70, 70, 25 } :: { any })
   t.eq(refused(game, { kind = "StartHack", actor = 0, target = wreck.id }), "a hack is under way already")
-  -- The board: the way in cleared, one core in the last column, ten firewalls, two repair nodes.
+  -- The lock: a matrix of the five codes, five by five, nothing picked; a buffer of five; and the three keys.
+  t.eq({ hack.wreck, hack.size, #hack.cells, #hack.used, #hack.buffer, hack.room, hack.along, hack.line } :: { any },
+    { wreck.id, 5, 25, 25, 0, 5, "row", 1 } :: { any })
   local counts: { [string]: number } = {}
-  for index, node in hack.nodes do
-    counts[node.kind] = (counts[node.kind] or 0) + 1
-    t.eq(node.cleared, index == hack.start)
-    if node.kind == "core" then
-      t.eq(index % Hacking.WIDTH, 0)
+  for index, code in hack.cells do
+    t.ok(table.find(Hacking.CODES, code) ~= nil, `a cell with the code {code}`)
+    t.eq(hack.used[index], false)
+    counts[code] = (counts[code] or 0) + 1
+  end
+  -- (as many of each code as of any other)
+  for _, code in Hacking.CODES do
+    t.eq(counts[code], 5, code)
+  end
+  t.eq(#hack.keys, 3)
+  for index, key in hack.keys do
+    t.eq({ key.name, #key.codes, key.done } :: { any }, { Hacking.KEYS[index].name, index + 1, false } :: { any })
+    for _, code in key.codes do
+      t.ok(table.find(Hacking.CODES, code) ~= nil)
     end
   end
-  t.eq({ counts.core, counts.firewall, counts.repair, counts.empty } :: { any }, { 1, 10, 2, 17 } :: { any })
-  t.eq((hack.start - 1) % Hacking.WIDTH, 0)
-  -- What the pilot sees of it: hidden nodes, those next to the way in open.
+  -- What the pilot sees of it: the top row is what can be picked.
   local seen = assert(Core.Query.Hack(game))
-  local open = 0
-  for index, node in seen.nodes do
-    open += if node.open then 1 else 0
-    t.eq(node.kind, if index == hack.start then "empty" else "hidden")
+  for index, cell in seen.cells do
+    t.eq({ cell.code, cell.used, cell.open } :: { any }, { hack.cells[index], false, index <= 5 } :: { any })
   end
-  t.eq(open, 3)
-  t.ok(seen.nodes[hack.start].steps >= 5)
-  t.eq(refused(game, { kind = "HackNode", actor = 0, pin = hack.start }), "that node cannot be reached yet")
-  t.eq(refused(game, { kind = "HackNode", actor = 0, pin = hack.start + 3 }), "that node cannot be reached yet")
+  t.eq({ seen.room, #seen.buffer, #seen.keys, seen.keys[1].begun, seen.along, seen.line } :: { any }, { 5, 0, 3, 0, "row", 1 } :: { any })
+  -- The buffer is five codes, and one more for each level of Hacking after the first.
+  for level, room in { 5, 6, 7, 8, 9 } do
+    state.skills.hacking = level
+    t.eq(Hacking.Buffer(state), room, `at Hacking {level}`)
+  end
   -- The pirates' stores at a den are not sealed.
   for seed = 1, 20 do
     local other = Core.New({ galaxySeed = 1, historySeed = seed, peaceful = true })
@@ -138,199 +164,233 @@ suite:Case("a derelict's hold is sealed, and is hacked by a ship with a data ana
   end
 end)
 
-suite:Case("a node is found, then fought: a blow takes the pilot's strength off it, and its answer its own off their coherence", function(t)
-  local game, wreck = beside(true, 0)
-  local state = game.state
-  state.skills.hacking = 0
-  t.ok((submit(game, { kind = "StartHack", actor = 0, target = wreck.id })))
-  local hack = assert(state.hack)
-  t.eq({ hack.coherence, hack.strength }, { 60, 20 })
-  -- (the node beside the way in is made a firewall, to see one fought)
-  local at = hack.start + 1
-  local node = hack.nodes[at]
-  node.kind, node.hp, node.strength = "firewall", 50, 15
-  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = at })))
-  t.eq({ node.seen, node.cleared, node.hp, hack.coherence } :: { any }, { true, false, 50, 60 } :: { any })
-  t.eq(assert(Core.Query.Hack(game)).nodes[at].kind, "firewall")
-  -- The way past it is shut while it stands.
-  t.eq(refused(game, { kind = "HackNode", actor = 0, pin = at + 1 }), "that node cannot be reached yet")
-  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = at })))
-  t.eq({ node.hp, hack.coherence }, { 30, 45 })
-  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = at })))
-  t.eq({ node.hp, hack.coherence }, { 10, 30 })
-  -- The blow that brings it down is not answered, and the way past is open.
-  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = at })))
-  t.eq({ node.hp, node.cleared, hack.coherence } :: { any }, { 0, true, 30 } :: { any })
-  t.eq(refused(game, { kind = "HackNode", actor = 0, pin = at + 1 }), "(accepted)")
-  -- A repair node gives coherence back, never above what the pilot began with; nothing clears and says how far the core is.
-  local mend = hack.nodes[at + 1]
-  mend.kind, mend.hp, mend.strength = "repair", 0, 0
-  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = at + 1 })))
-  t.eq({ mend.cleared, hack.coherence } :: { any }, { true, 55 } :: { any })
-  local plain = hack.nodes[at + 2]
-  plain.kind, plain.hp, plain.strength = "empty", 0, 0
-  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = at + 2 })))
-  t.eq(assert(Core.Query.Hack(game)).nodes[at + 2].steps, Hacking.Steps(hack, at + 2))
-  -- Coherence gone: the hold opens, with half of everything in it burnt.
-  local before: { [string]: number } = {}
-  for _, item in Items.In(state, wreck.id, "cargo") do
-    before[item.type] = item.quantity
-  end
-  local wall = hack.nodes[at + 3]
-  wall.kind, wall.hp, wall.strength = "firewall", 500, 100
-  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = at + 3 })))
-  Core.TakeEvents(game)
-  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = at + 3 })))
-  t.eq({ state.hack, wreck.locked } :: { any }, { nil, false } :: { any })
-  local told = false
-  for _, event in Core.TakeEvents(game) do
-    told = told or (event.kind == "HackDone" and event.success == false and event.wreck == wreck.id)
-  end
-  t.ok(told, "nobody said the hack had failed")
-  for _, item in Items.In(state, wreck.id, "cargo") do
-    t.eq(item.quantity, before[item.type] - math.ceil(before[item.type] / 2), item.type)
-  end
+suite:Case("picks go a row and a column by turns from the top row, no cell twice, each putting its code in the buffer", function(t)
+  local game, _, hack = crafted(1, { { "RI", "RI" }, { "RI", "RI", "RI" }, { "RI", "RI", "RI", "RI" } })
+  -- The first pick is in the top row.
+  t.eq(refused(game, { kind = "HackNode", actor = 0, pin = 7 }), "the next pick is in row 1")
+  t.eq(refused(game, { kind = "HackNode", actor = 0, pin = 99 }), "the next pick is in row 1")
+  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = 2 })))
+  t.eq({ hack.buffer, hack.used[2], hack.along, hack.line } :: { any }, { { "DO" }, true, "column", 2 } :: { any })
+  -- The next is down its column: the four cells of it that are left.
+  t.eq(Hacking.Open(hack), { 7, 12, 17, 22 })
+  t.eq(refused(game, { kind = "HackNode", actor = 0, pin = 2 }), "that cell is picked already")
+  t.eq(refused(game, { kind = "HackNode", actor = 0, pin = 3 }), "the next pick is in column 2")
+  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = 12 })))
+  t.eq({ hack.buffer, hack.along, hack.line } :: { any }, { { "DO", "NU" }, "row", 3 } :: { any })
+  -- And the one after along the row of that: the four of it that are left.
+  t.eq(Hacking.Open(hack), { 11, 13, 14, 15 })
+  t.eq(refused(game, { kind = "HackNode", actor = 0, pin = 17 }), "the next pick is in row 3")
+  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = 11 })))
+  t.eq({ hack.buffer, hack.along, hack.line } :: { any }, { { "DO", "NU", "KE" }, "column", 1 } :: { any })
+  local seen = assert(Core.Query.Hack(game))
+  t.eq({ seen.buffer, seen.cells[11].used, seen.cells[1].open, seen.cells[6].open, seen.cells[11].open, seen.cells[2].open } :: { any },
+    { { "DO", "NU", "KE" }, true, true, true, false, false } :: { any })
 end)
 
-suite:Case("with the core destroyed the hold is open, and what is in it can be taken", function(t)
-  local game, wreck = beside(true, 5)
+suite:Case("a key is in when its codes stand in the buffer one after another, and the end of the buffer shows how far one is begun", function(t)
+  t.eq({ Hacking.Holds({ "AX", "DO", "KE" }, { "DO", "KE" }), Hacking.Holds({ "AX", "DO", "KE" }, { "AX", "KE" }),
+    Hacking.Holds({ "AX" }, { "AX", "DO" }), Hacking.Holds({}, { "AX" }), Hacking.Holds({ "DO", "DO", "KE" }, { "DO", "KE" }) },
+    { true, false, false, false, true })
+  t.eq({ Hacking.Begun({ "AX", "DO" }, { "DO", "KE", "NU" }), Hacking.Begun({ "AX", "DO", "KE" }, { "DO", "KE", "NU" }),
+    Hacking.Begun({ "AX" }, { "DO", "KE" }), Hacking.Begun({}, { "DO" }), Hacking.Begun({ "DO", "KE", "AX" }, { "DO", "KE" }) },
+    { 1, 2, 0, 0, 0 })
+
+  -- Down the stair: the safeguards' key first, then the manifest's, with the strongbox's out of reach.
+  local game, wreck, hack = crafted(1, { { "AX", "DO" }, { "DO", "KE", "NU" }, { "RI", "RI", "RI", "RI" } })
   local state = game.state
-  local held = 0
-  for _, item in Items.In(state, wreck.id, "cargo") do
-    held += item.quantity
+  local before = held(game, wreck.id)
+  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = STAIR[1] })))
+  t.eq({ hack.keys[1].done, assert(Core.Query.Hack(game)).keys[1].begun } :: { any }, { false, 1 } :: { any })
+  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = STAIR[2] })))
+  local told = assert(event(game, "HackKey"), "nobody said a key was in")
+  t.eq({ told.key, told.name, hack.keys[1].done, hack.keys[2].done } :: { any }, { 1, "Safeguards", true, false } :: { any })
+  t.eq({ assert(Core.Query.Hack(game)).keys[1].begun, assert(Core.Query.Hack(game)).keys[2].begun }, { 2, 1 })
+  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = STAIR[3] })))
+  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = STAIR[4] })))
+  t.eq({ hack.keys[2].done, state.hack ~= nil, wreck.locked } :: { any }, { true, true, true } :: { any })
+  -- The fifth pick fills the buffer: the hack is over, and the hold open with what the keys say.
+  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = STAIR[5] })))
+  local done = assert(event(game, "HackDone"))
+  t.eq({ state.hack, wreck.locked, done.success, done.keys, done.reason, done.wreck } :: { any },
+    { nil, false, true, 2, "buffer full", wreck.id } :: { any })
+  -- Nothing burnt, and the datacores as many again (the manifest's key); no custom module (the strongbox's was not in).
+  local after = held(game, wreck.id)
+  for type, quantity in before do
+    t.eq(after[type], if type == "datacore" then 2 * quantity else quantity, type)
   end
-  t.ok((submit(game, { kind = "StartHack", actor = 0, target = wreck.id })))
-  Core.TakeEvents(game)
-  local turns = play(game)
-  t.ok(turns >= 6, `the hack was over in {turns} turns`)
-  local won = false
-  for _, event in Core.TakeEvents(game) do
-    won = won or (event.kind == "HackDone" and event.success == true)
+  t.ok((before.datacore or 0) >= 1, "a derelict's hull should have a datacore")
+  for type in after do
+    t.ok(before[type] ~= nil, `the hold has {type}, which it had not`)
   end
-  t.ok(won, "a pilot with Hacking 5 lost to a derelict's lock")
-  t.eq({ state.hack, wreck.locked } :: { any }, { nil, false } :: { any })
-  local now = 0
-  for _, item in Items.In(state, wreck.id, "cargo") do
-    now += item.quantity
-  end
-  t.eq(now, held, "a hold opened by hacking should have everything in it")
   t.eq(refused(game, { kind = "StartHack", actor = 0, target = wreck.id }), "its hold is not sealed")
   t.eq(refused(game, { kind = "Loot", actor = 0, target = wreck.id }), "(accepted)")
 end)
 
-suite:Case("a hack can be given up, is dropped if the ship goes off, and meets the same board next time; and it is in the save", function(t)
+suite:Case("with every key in it is over at once, the strongbox giving a custom module; with the safeguards' not in, half the hold is burnt", function(t)
+  -- All three on the stair, in five picks: over with the last, though a bigger buffer has room left.
+  local game, wreck, hack = crafted(5, { { "AX", "DO" }, { "DO", "KE", "NU" }, { "DO", "KE", "NU", "RI" } })
+  t.eq(hack.room, 9)
+  local before = held(game, wreck.id)
+  for index = 1, 5 do
+    t.ok((submit(game, { kind = "HackNode", actor = 0, pin = STAIR[index] })))
+  end
+  local done = assert(event(game, "HackDone"))
+  t.eq({ game.state.hack, done.success, done.keys, done.reason } :: { any }, { nil, true, 3, "every key" } :: { any })
+  local after = held(game, wreck.id)
+  local customs = 0
+  for type, quantity in after do
+    local module = Modules.byId[type]
+    if module and module.meta and (before[type] or 0) < quantity then
+      customs += quantity - (before[type] or 0)
+    end
+  end
+  t.eq(customs, 1, "the strongbox should give one custom module")
+  t.eq(after.datacore, 2 * before.datacore)
+
+  -- The buffer filled with the safeguards' key not in: half of every stack is burnt, whatever else was got.
+  local lost, hull, lock = crafted(1, { { "RI", "RI" }, { "DO", "KE", "NU" }, { "RI", "RI", "RI", "RI" } })
+  local had = held(lost, hull.id)
+  for index = 1, 5 do
+    t.ok((submit(lost, { kind = "HackNode", actor = 0, pin = STAIR[index] })))
+  end
+  local over = assert(event(lost, "HackDone"))
+  t.eq({ lost.state.hack, hull.locked, over.success, over.keys, lock.keys[2].done } :: { any }, { nil, false, false, 1, true } :: { any })
+  local left = held(lost, hull.id)
+  for type, quantity in had do
+    local kept = quantity - math.ceil(quantity / 2)
+    -- (the manifest's key was in: what datacores came through the burning are as many again, and one at least)
+    t.eq(left[type] or 0, if type == "datacore" then kept + math.max(1, kept) else kept, type)
+  end
+end)
+
+suite:Case("until the first pick the lock can be left and come back to, the same; after it, leaving or flying off ends the hack", function(t)
   local game, wreck = beside(true, 2)
   local state = game.state
   t.ok((submit(game, { kind = "StartHack", actor = 0, target = wreck.id })))
-  local first = Codec.HashOf(assert(state.hack).nodes)
-  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = assert(state.hack).start + 1 })))
-  -- (in the save, half done)
-  local data, length = Core.Save(game)
-  local loaded = Core.Load(data, length)
-  t.eq(Core.Hash(loaded), Core.Hash(game))
-  t.ok(loaded.state.hack ~= nil)
+  local first = Codec.HashOf(assert(state.hack))
+  -- Left before a pick: nothing done, the hold as sealed as it was, and the same lock next time.
+  Core.TakeEvents(game)
   t.ok((submit(game, { kind = "AbandonHack", actor = 0 })))
-  t.eq({ state.hack, wreck.locked } :: { any }, { nil, true } :: { any })
+  local left = assert(event(game, "HackDone"))
+  t.eq({ state.hack, wreck.locked, left.reason, left.success } :: { any }, { nil, true, "left", false } :: { any })
   t.ok((submit(game, { kind = "StartHack", actor = 0, target = wreck.id })))
-  t.eq(Codec.HashOf(assert(state.hack).nodes), first)
-  -- A little way off, within a kilometre of the analyzer's reach, it holds.
+  t.eq(Codec.HashOf(assert(state.hack)), first)
+  -- Flown off before a pick: dropped, the hold still sealed.
   local me = state.balls[state.player.ship]
   me.x += 4000
   Core.Step(game)
   t.ok(state.hack ~= nil, "the hack was dropped inside its leash")
-  -- Off it goes, and the hack is dropped, the hold still sealed.
   me.x += Hacking.LEASH + 1000
-  Core.TakeEvents(game)
   Core.Step(game)
   t.eq({ state.hack, wreck.locked } :: { any }, { nil, true } :: { any })
-  local why = ""
-  for _, event in Core.TakeEvents(game) do
-    why = if event.kind == "HackDone" then event.reason :: string else why
+  me.x -= Hacking.LEASH + 5000
+
+  -- In the save, a pick made.
+  t.ok((submit(game, { kind = "StartHack", actor = 0, target = wreck.id })))
+  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = 3 })))
+  local data, length = Core.Save(game)
+  local loaded = Core.Load(data, length)
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  t.eq(#assert(loaded.state.hack).buffer, 1)
+  -- Left after a pick: it is ended, with what keys are in (none: half is burnt).
+  local before = held(game, wreck.id)
+  Core.TakeEvents(game)
+  t.ok((submit(game, { kind = "AbandonHack", actor = 0 })))
+  local ended = assert(event(game, "HackDone"))
+  t.eq({ state.hack, wreck.locked, ended.reason, ended.success } :: { any }, { nil, false, "ended", false } :: { any })
+  for type, quantity in before do
+    t.eq((held(game, wreck.id))[type] or 0, quantity - math.ceil(quantity / 2), type)
   end
-  t.eq(why, "out of reach")
-  -- A save from before holds were sealed: its hulls are as open as they were.
+  -- And so is one begun whose ship flies out of reach.
+  local other, hull, hack = crafted(1, { { "AX", "DO" }, { "RI", "RI", "RI" }, { "RI", "RI", "RI", "RI" } })
+  t.ok((submit(other, { kind = "HackNode", actor = 0, pin = STAIR[1] })))
+  t.ok((submit(other, { kind = "HackNode", actor = 0, pin = STAIR[2] })))
+  t.eq(hack.keys[1].done, true)
+  local had = held(other, hull.id)
+  local ball = other.state.balls[other.state.player.ship]
+  ball.x += 20000
+  Core.TakeEvents(other)
+  Core.Step(other)
+  local gone = assert(event(other, "HackDone"))
+  t.eq({ other.state.hack, hull.locked, gone.reason, gone.success } :: { any }, { nil, false, "out of reach", true } :: { any })
+  t.eq(held(other, hull.id), had, "the safeguards' key was in: nothing should be burnt")
+
+  -- A save from before locks were matrices: a hack that was under way is dropped, the hold as sealed as it was.
   local file = Codec.Decode(data, length)
-  file.saveVersion = 34
-  file.state.hack = nil
-  for _, each in file.state.wrecks do
-    each.locked = nil
-  end
+  file.saveVersion = 38
+  file.state.hack = { wreck = wreck.id, width = 6, height = 5, nodes = {}, coherence = 80, most = 80, strength = 20, start = 13 }
   local old, oldLength = Codec.Encode(file)
   local opened = Core.Load(old, oldLength)
-  for _, id in opened.state.wreckIds do
-    t.eq(opened.state.wrecks[id].locked, false)
-  end
+  t.eq({ opened.state.hack, opened.state.wrecks[wreck.id].locked } :: { any }, { nil, true } :: { any })
 end)
 
--- A careful pilot, who goes by what the board has shown and nothing
--- else: of the nodes that can be tried, the one not known yet that the
--- numbers say could be nearest the core; a firewall only when going
--- round it would be two steps the worse, or there is no way round; and
--- the core as soon as it is found.
-local function careful(hack: State.Hack): number
-  local function could(index: number): number
-    local least = math.huge
-    for _, beside in Hacking.Beside(index) do
-      if hack.nodes[beside].cleared then
-        least = math.min(least, Hacking.Steps(hack, beside) - 1)
+-- Every way through a lock of so many picks: which of the keys each can
+-- be got by itself, and the most that can be got together.
+local function reach(hack: State.Hack, room: number): ({ boolean }, number)
+  local size = hack.size
+  local used: { boolean } = {}
+  local buffer: { string } = {}
+  local alone = { false, false, false }
+  local most = 0
+  local function go(along: string, line: number)
+    if #buffer >= room then
+      return
+    end
+    for at = 1, size do
+      local index = if along == "row" then (line - 1) * size + at else (at - 1) * size + line
+      if not used[index] then
+        used[index] = true
+        table.insert(buffer, hack.cells[index])
+        local keys = 0
+        for which, key in hack.keys do
+          if Hacking.Holds(buffer, key.codes) then
+            alone[which] = true
+            keys += 1
+          end
+        end
+        most = math.max(most, keys)
+        go(if along == "row" then "column" else "row", at)
+        table.remove(buffer)
+        used[index] = false
       end
     end
-    return least
   end
-  local unknown, unknownAt, wall, wallAt = 0, math.huge, 0, math.huge
-  for index, node in hack.nodes do
-    if Hacking.Open(hack, index) then
-      local at = could(index)
-      if node.seen and node.kind == "core" then
-        return index
-      elseif node.seen and at < wallAt then
-        wall, wallAt = index, at
-      elseif not node.seen and at < unknownAt then
-        unknown, unknownAt = index, at
-      end
-    end
-  end
-  return if unknown ~= 0 and (wall == 0 or unknownAt <= wallAt + 2) then unknown else wall
+  go("row", 1)
+  return alone, most
 end
 
-suite:Case("played carefully, a pilot new to it opens about half the holds whole, and a practised one nearly all", function(t)
-  local won: { number } = {}
-  for _, level in { 1, 3, 5 } do
-    local game = Core.New({ galaxySeed = 1, historySeed = 3, peaceful = true })
-    local state = game.state
-    state.skills.hacking = level
-    Items.Equip(state, state.player.ship, Hacking.ANALYZER, nil)
-    assert(submit(game, { kind = "Undock", actor = 0 }))
-    assert(submit(game, { kind = "Stop", actor = 0 }))
-    local me = state.balls[state.player.ship]
-    me.vx, me.vy, me.vz = 0, 0, 0
-    local wins = 0
-    for _ = 1, 300 do
-      -- (a hull with a sealed hold from nowhere: each has a lock of its own)
-      local scout = Pirates.Spawn(state, Pirates.SCOUT, me.system, me.x + 1000, me.y, me.z, me.grid)
-      Aftermath.Destroy(state, scout.id, 0, game.events)
-      local wreck = state.wrecks[state.wreckIds[#state.wreckIds]]
-      wreck.locked = true
-      assert(submit(game, { kind = "StartHack", actor = 0, target = wreck.id }))
-      Core.TakeEvents(game)
-      local turns = 0
-      while state.hack and turns < 200 do
-        assert(submit(game, { kind = "HackNode", actor = 0, pin = careful(state.hack :: State.Hack) }))
-        turns += 1
-      end
-      for _, event in Core.TakeEvents(game) do
-        wins += if event.kind == "HackDone" and event.success == true then 1 else 0
-      end
-      t.eq(wreck.locked, false, "a hack played out should leave the hold open, won or lost")
-      Aftermath.RemoveWreck(state, wreck)
+suite:Case("every lock can be opened whole with the smallest buffer; all three keys together want a bigger one, and luck", function(t)
+  local game = beside(true, 1)
+  local state = game.state
+  local me = state.balls[state.player.ship]
+  local locks = 150
+  local all5, all7, two5, tried7 = 0, 0, 0, 0
+  for n = 1, locks do
+    -- (a hull with a sealed hold from nowhere: each has a lock of its own)
+    local scout = Pirates.Spawn(state, Pirates.SCOUT, me.system, me.x + 1000, me.y, me.z, me.grid)
+    Aftermath.Destroy(state, scout.id, 0, game.events)
+    local wreck = state.wrecks[state.wreckIds[#state.wreckIds]]
+    wreck.locked = true
+    assert(submit(game, { kind = "StartHack", actor = 0, target = wreck.id }))
+    local hack = assert(state.hack)
+    local alone, most = reach(hack, Hacking.BUFFER)
+    t.eq(alone, { true, true, true }, `lock {n}: a key that the smallest buffer cannot get`)
+    all5 += if most == 3 then 1 else 0
+    two5 += if most >= 2 then 1 else 0
+    -- (a buffer of seven, which is Hacking 3's, on some of them: it is a long look)
+    if n <= 40 then
+      tried7 += 1
+      all7 += if select(2, reach(hack, Hacking.BUFFER + 2)) == 3 then 1 else 0
     end
-    table.insert(won, wins)
+    assert(submit(game, { kind = "AbandonHack", actor = 0 }))
+    Aftermath.RemoveWreck(state, wreck)
   end
-  print(string.format("     hacking: played carefully, %d, %d and %d holds of 300 opened whole at Hacking 1, 3 and 5", won[1], won[2], won[3]))
-  t.ok(won[1] >= 120 and won[1] <= 225, `at Hacking 1, {won[1]} of 300`)
-  t.ok(won[2] >= 270, `at Hacking 3, {won[2]} of 300`)
-  t.ok(won[3] >= 294, `at Hacking 5, {won[3]} of 300`)
-  t.ok(won[1] < won[2] and won[2] <= won[3], "the skill should tell")
+  print(string.format("     hacking: of %d locks, two keys together in %d and all three in %d with a buffer of 5; all three in %d of %d with 7",
+    locks, two5, all5, all7, tried7))
+  t.ok(two5 >= 0.5 * locks, `two keys together in only {two5} of {locks}`)
+  t.ok(all5 <= 0.1 * locks, `all three keys with the smallest buffer in {all5} of {locks}: too easy`)
+  t.ok(all7 / tried7 > all5 / locks, "a bigger buffer should get all three more often")
+  t.ok(all7 >= 0.1 * tried7 and all7 <= 0.6 * tried7, `all three keys with a buffer of seven in {all7} of {tried7}`)
 end)
 
 return suite

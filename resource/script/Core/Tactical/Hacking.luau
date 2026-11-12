@@ -3,27 +3,40 @@
 --
 -- A derelict's hull (Tactical/Sites) has its hold sealed: it is not
 -- looted until it has been hacked, by a ship with a Data Analyzer
--- fitted, from within five kilometres.
+-- fitted, from within the analyzer's reach.
 --
--- A hack is a board of nodes, six by five, nearly all of them hidden.
--- The pilot's way in begins at a node on one edge, and somewhere on the
--- board is the core: destroy that and the hold is open. A node can be
--- tried if it is next to one already cleared. What is found there:
---   - nothing, which clears it, and it then says how many steps off
---     the core is;
---   - a repair node, which clears and gives back some coherence;
---   - a firewall, or the core itself: it has to be attacked, a blow at
---     a time. Each blow takes the pilot's strength off it; if it is
---     still standing it answers, and takes its own strength off the
---     pilot's coherence. (So does the way past a firewall stay shut
---     until it is down.)
--- With the core destroyed the hold is open. With the pilot's coherence
--- gone, the hold's safeguards fire: it opens, with half of everything
--- in it burnt. A hack can be given up, and is dropped if the ship goes
--- a kilometre out of the analyzer's reach; the board is the same next time.
+-- The lock is a matrix of codes, five by five, and three keys: short
+-- runs of codes. The pilot has a buffer, of five codes and one more for
+-- each level of Hacking after the first, and fills it by picking cells of
+-- the matrix. The first pick is anywhere in the top row. The next has
+-- to be in the column of that one, the one after in the row of that,
+-- and so on, a row and a column by turns; and no cell is picked twice.
+-- A key is in when its codes stand in the buffer one after another.
 --
--- (EVE's hacking, cut down. Not yet: other kinds of node, utilities to
--- pick up and use, a second kind of lock.)
+-- The hack is over when the buffer is full, when every key is in, when
+-- there is nothing left to pick, or when the pilot says it is; and then
+-- the hold opens, whatever was done. What the keys decide is how:
+--   - the safeguards' key (two codes): without it, half of everything
+--     in the hold is burnt as it opens;
+--   - the manifest's (three): the hold's datacores are as many again
+--     (one, if it had none);
+--   - the strongbox's (four): there is a custom make of some module in
+--     the hold beside.
+-- Each key can be got by itself within the smallest buffer there is.
+-- Getting two, or all three, is a matter of finding a way through the
+-- matrix on which they overlap, and of how big the buffer is: with five
+-- codes the safeguards' key and one other go together in about four
+-- locks of five and all three in none; with seven, all three in about
+-- one lock in four; with eight, in about half.
+--
+-- Until the first pick the pilot can look as long as they like, and
+-- leave with nothing done: the lock is the same next time. After it,
+-- the hack is begun: leaving it, or flying out of the analyzer's reach,
+-- ends it with whatever keys are in.
+--
+-- (A grid, a buffer and runs to find, in the manner of the hacking of
+-- Cyberpunk 2077. Not yet: a clock, locks of other sizes, locks on
+-- anything but a derelict's hold.)
 
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
@@ -35,98 +48,120 @@ local Hacking = {}
 
 export type Event = { [string]: any }
 
-Hacking.WIDTH, Hacking.HEIGHT = 6, 5
-Hacking.LEASH = 1000        -- m: how much farther off than it began before the hack is dropped
+Hacking.SIZE = 5
+-- The codes a matrix is made of.
+Hacking.CODES = { "AX", "DO", "KE", "NU", "RI" }
+-- The keys, the first being the one that matters most, and how long
+-- each is.
+Hacking.KEYS = { { name = "Safeguards", length = 2 }, { name = "Manifest", length = 3 }, { name = "Strongbox", length = 4 } }
+-- The smallest buffer: what a pilot with Hacking 1 has.
+Hacking.BUFFER = 5
+Hacking.LEASH = 1000        -- m: how much farther off than the analyzer reaches before the hack is ended
 Hacking.ANALYZER = "analyzer.data"
--- (What a board is made of is set against how often a pilot wins it:
--- the spec plays three hundred boards a level, carefully, and holds a
--- pilot new to it to about half of them and a practised one to nearly
--- all. A core is 60 to 110 strong, a board to a board.)
-local FIREWALLS, REPAIRS = 10, 2
-local REPAIR = 25
-local CORE_HP, CORE_SPREAD, CORE_STRENGTH = 60, 6, 20
+local DATACORE = "datacore"
 
--- The pilot's coherence and strength at the start of a hack: more of
--- each for every level of the Hacking skill.
-function Hacking.Virus(state: State.State): (number, number)
-  local level = math.max(0, state.skills.hacking or 0)
-  return 60 + 10 * level, 20 + 5 * level
+-- The pilot's buffer: five codes, and one more for every level of
+-- Hacking after the first.
+function Hacking.Buffer(state: State.State): number
+  local level = math.max(1, state.skills.hacking or 0)
+  return Hacking.BUFFER + level - 1
 end
 
--- The board a hull's lock is: the same every time it is asked for.
-local function board(state: State.State, wreck: number): ({ State.HackNode }, number)
-  local rng = Rng.For(state.historySeed, wreck, 61)
-  local count = Hacking.WIDTH * Hacking.HEIGHT
-  local nodes: { State.HackNode } = {}
-  for index = 1, count do
-    nodes[index] = { kind = "empty", hp = 0, strength = 0, seen = false, cleared = false }
-  end
-  -- (the way in: the middle of the first column. The core: somewhere in the last.)
-  local start = (Hacking.HEIGHT // 2) * Hacking.WIDTH + 1
-  local core = Rng.Int(rng, Hacking.HEIGHT) * Hacking.WIDTH + Hacking.WIDTH
-  nodes[core].kind, nodes[core].hp, nodes[core].strength = "core", CORE_HP + 10 * Rng.Int(rng, CORE_SPREAD), CORE_STRENGTH
-  local function place(kind: string, hp: number, strength: number)
-    for _ = 1, 40 do
-      local at = Rng.Int(rng, count) + 1
-      if at ~= start and nodes[at].kind == "empty" then
-        nodes[at].kind, nodes[at].hp, nodes[at].strength = kind, hp, strength
-        return
-      end
-    end
-  end
-  for _ = 1, FIREWALLS do
-    place("firewall", 30 + 10 * Rng.Int(rng, 4), 10 + 5 * Rng.Int(rng, 3))
-  end
-  for _ = 1, REPAIRS do
-    place("repair", 0, 0)
-  end
-  nodes[start].seen, nodes[start].cleared = true, true
-  return nodes, start
-end
-
--- The nodes next to one, by their places on the board.
-function Hacking.Beside(index: number): { number }
-  local column, row = (index - 1) % Hacking.WIDTH, (index - 1) // Hacking.WIDTH
+-- The cells of a matrix that can be picked now: those not picked yet
+-- of the row or the column the next pick has to be in.
+function Hacking.Open(hack: State.Hack): { number }
   local found: { number } = {}
-  if column > 0 then
-    table.insert(found, index - 1)
-  end
-  if column < Hacking.WIDTH - 1 then
-    table.insert(found, index + 1)
-  end
-  if row > 0 then
-    table.insert(found, index - Hacking.WIDTH)
-  end
-  if row < Hacking.HEIGHT - 1 then
-    table.insert(found, index + Hacking.WIDTH)
+  for at = 1, hack.size do
+    local index = if hack.along == "row" then (hack.line - 1) * hack.size + at else (at - 1) * hack.size + hack.line
+    if not hack.used[index] then
+      table.insert(found, index)
+    end
   end
   return found
 end
 
--- Whether a node can be tried: it is not cleared, and is next to one
--- that is.
-function Hacking.Open(hack: State.Hack, index: number): boolean
-  local node = hack.nodes[index]
-  if node == nil or node.cleared then
-    return false
-  end
-  for _, beside in Hacking.Beside(index) do
-    if hack.nodes[beside].cleared then
+-- Whether a run of codes stands in a buffer, one after another.
+function Hacking.Holds(buffer: { string }, codes: { string }): boolean
+  for start = 1, #buffer - #codes + 1 do
+    local all = true
+    for at, code in codes do
+      if buffer[start + at - 1] ~= code then
+        all = false
+        break
+      end
+    end
+    if all then
       return true
     end
   end
   return false
 end
 
--- How many steps a node is from the core.
-function Hacking.Steps(hack: State.Hack, index: number): number
-  for at, node in hack.nodes do
-    if node.kind == "core" then
-      return math.abs((at - 1) % Hacking.WIDTH - (index - 1) % Hacking.WIDTH)
-        + math.abs((at - 1) // Hacking.WIDTH - (index - 1) // Hacking.WIDTH)
+-- How much of a run the end of a buffer has begun: the longest start
+-- of it that the buffer ends with.
+function Hacking.Begun(buffer: { string }, codes: { string }): number
+  for length = math.min(#codes, #buffer), 1, -1 do
+    local all = true
+    for at = 1, length do
+      if buffer[#buffer - length + at] ~= codes[at] then
+        all = false
+        break
+      end
+    end
+    if all then
+      return length
     end
   end
   return 0
+end
+
+-- The lock of a hull: the same every time it is asked for. A matrix of
+-- the codes, as many of each as of any other, shuffled; and for each
+-- key a run that some way through the matrix spells out, early enough
+-- to be got within the smallest buffer.
+local function lock(state: State.State, wreck: number): ({ string }, { State.HackKey })
+  local rng = Rng.For(state.historySeed, wreck, 61)
+  local size = Hacking.SIZE
+  local cells: { string } = {}
+  for index = 1, size * size do
+    cells[index] = Hacking.CODES[(index - 1) % #Hacking.CODES + 1]
+  end
+  for index = #cells, 2, -1 do
+    local other = Rng.Int(rng, index) + 1
+    cells[index], cells[other] = cells[other], cells[index]
+  end
+  local keys: { State.HackKey } = {}
+  for _, key in Hacking.KEYS do
+    -- A way through the matrix, as a pilot would go: from the top row,
+    -- a column and a row by turns, no cell twice.
+    local used: { boolean } = {}
+    local path: { string } = {}
+    local along, line = "row", 1
+    for _ = 1, Hacking.BUFFER do
+      local open: { number } = {}
+      for at = 1, size do
+        local index = if along == "row" then (line - 1) * size + at else (at - 1) * size + line
+        if not used[index] then
+          table.insert(open, index)
+        end
+      end
+      local pick = open[Rng.Int(rng, #open) + 1]
+      used[pick] = true
+      table.insert(path, cells[pick])
+      if along == "row" then
+        along, line = "column", (pick - 1) % size + 1
+      else
+        along, line = "row", (pick - 1) // size + 1
+      end
+    end
+    local from = Rng.Int(rng, Hacking.BUFFER - key.length + 1)
+    local codes: { string } = {}
+    for at = 1, key.length do
+      codes[at] = path[from + at]
+    end
+    table.insert(keys, { name = key.name, codes = codes, done = false })
+  end
+  return cells, keys
 end
 
 -- How far the ship's analyzer reaches (the best fitted); 0 with none.
@@ -175,78 +210,104 @@ function Hacking.Validate(state: State.State, command: State.Command): (boolean,
   elseif kind == "AbandonHack" then
     return true
   elseif kind == "HackNode" then
-    if not Hacking.Open(hack, command.pin or 0) then
-      return false, "that node cannot be reached yet"
+    if table.find(Hacking.Open(hack), command.pin or 0) == nil then
+      return false, if hack.used[command.pin or 0] then "that cell is picked already"
+        elseif hack.along == "row" then `the next pick is in row {hack.line}`
+        else `the next pick is in column {hack.line}`
     end
     return true
   end
   return false, `unknown command '{kind}'`
 end
 
--- The hack is over: the hold is open; and if it was lost, half of what
--- was in it is burnt.
-local function finish(state: State.State, hack: State.Hack, won: boolean, events: { Event })
+-- The modules there is a custom make of, worked out once: what a
+-- strongbox has one of.
+local customs: { string } = {}
+for _, module in Modules.list do
+  if module.meta then
+    table.insert(customs, module.id)
+  end
+end
+
+-- The hack is over: the hold is open, as the keys that are in say.
+local function finish(state: State.State, hack: State.Hack, reason: string, events: { Event })
   local wreck = state.wrecks[hack.wreck]
+  local done = 0
+  for _, key in hack.keys do
+    done += if key.done then 1 else 0
+  end
   if wreck then
     wreck.locked = false
-    if not won then
+    if not hack.keys[1].done then
       for _, item in Items.In(state, wreck.id, "cargo") do
         Items.Take(state, item, math.ceil(item.quantity / 2))
       end
     end
+    if hack.keys[2].done then
+      local cores = 0
+      for _, item in Items.In(state, wreck.id, "cargo") do
+        cores += if item.type == DATACORE then item.quantity else 0
+      end
+      Items.Add(state, DATACORE, math.max(1, cores), wreck.id, "cargo")
+    end
+    if hack.keys[3].done and #customs > 0 then
+      Items.Add(state, customs[Rng.Int(Rng.For(state.historySeed, wreck.id, 67), #customs) + 1], 1, wreck.id, "cargo")
+    end
   end
   state.hack = nil
-  table.insert(events, { kind = "HackDone", wreck = hack.wreck, success = won, reason = if won then "core destroyed" else "coherence lost" })
+  table.insert(events, { kind = "HackDone", wreck = hack.wreck, success = hack.keys[1].done, keys = done, reason = reason })
 end
 
 function Hacking.Apply(state: State.State, command: State.Command, events: { Event })
   local kind = command.kind
   if kind == "StartHack" then
-    local nodes, start = board(state, command.target :: number)
-    local coherence, strength = Hacking.Virus(state)
-    state.hack = { wreck = command.target :: number, width = Hacking.WIDTH, height = Hacking.HEIGHT, nodes = nodes,
-      coherence = coherence, most = coherence, strength = strength, start = start }
+    local cells, keys = lock(state, command.target :: number)
+    state.hack = { wreck = command.target :: number, size = Hacking.SIZE, cells = cells, used = table.create(#cells, false),
+      buffer = {}, room = Hacking.Buffer(state), keys = keys, along = "row", line = 1 }
     table.insert(events, { kind = "HackStarted", wreck = command.target })
     return
   end
   local hack = state.hack :: State.Hack
   if kind == "AbandonHack" then
-    state.hack = nil
-    table.insert(events, { kind = "HackDone", wreck = hack.wreck, success = false, reason = "given up" })
-    return
-  end
-  local node = hack.nodes[command.pin :: number]
-  if not node.seen then
-    -- Found: nothing and a repair node clear at once; anything that
-    -- fights back only shows itself.
-    node.seen = true
-    if node.kind == "empty" then
-      node.cleared = true
-    elseif node.kind == "repair" then
-      node.cleared = true
-      hack.coherence = math.min(hack.most, hack.coherence + REPAIR)
+    -- Before the first pick, nothing is done and nothing lost. After
+    -- it, leaving is ending.
+    if #hack.buffer == 0 then
+      state.hack = nil
+      table.insert(events, { kind = "HackDone", wreck = hack.wreck, success = false, keys = 0, reason = "left" })
+    else
+      finish(state, hack, "ended", events)
     end
     return
   end
-  -- A blow at it; and its answer, if it is still standing.
-  node.hp -= hack.strength
-  if node.hp <= 0 then
-    node.hp = 0
-    node.cleared = true
-    if node.kind == "core" then
-      finish(state, hack, true, events)
-    end
-    return
+  -- A pick: its code into the buffer, and the next is across it.
+  local pick = command.pin :: number
+  hack.used[pick] = true
+  table.insert(hack.buffer, hack.cells[pick])
+  if hack.along == "row" then
+    hack.along, hack.line = "column", (pick - 1) % hack.size + 1
+  else
+    hack.along, hack.line = "row", (pick - 1) // hack.size + 1
   end
-  hack.coherence -= node.strength
-  if hack.coherence <= 0 then
-    hack.coherence = 0
-    finish(state, hack, false, events)
+  local all = true
+  for index, key in hack.keys do
+    if not key.done and Hacking.Holds(hack.buffer, key.codes) then
+      key.done = true
+      table.insert(events, { kind = "HackKey", wreck = hack.wreck, key = index, name = key.name })
+    end
+    all = all and key.done
+  end
+  if all then
+    finish(state, hack, "every key", events)
+  elseif #hack.buffer >= hack.room then
+    finish(state, hack, "buffer full", events)
+  elseif #Hacking.Open(hack) == 0 then
+    finish(state, hack, "nothing left to pick", events)
   end
 end
 
--- Once a tick: a hack whose ship has gone off, or whose hull has, is
--- dropped.
+-- Once a tick: a hack whose ship has gone out of reach, or whose hull
+-- has gone, is over. One not begun is dropped, with nothing done. One
+-- begun is ended, with whatever keys are in.
 function Hacking.Step(state: State.State, events: { Event })
   local hack = state.hack
   if hack == nil then
@@ -257,8 +318,12 @@ function Hacking.Step(state: State.State, events: { Event })
   local reach = Hacking.Reach(state, state.player.ship)
   if wreck == nil or ball == nil or ball.system ~= wreck.system or reach <= 0
     or Space.Gap(ball :: any, wreck :: any) > reach + Hacking.LEASH then
-    state.hack = nil
-    table.insert(events, { kind = "HackDone", wreck = hack.wreck, success = false, reason = "out of reach" })
+    if #hack.buffer == 0 or wreck == nil then
+      state.hack = nil
+      table.insert(events, { kind = "HackDone", wreck = hack.wreck, success = false, keys = 0, reason = "out of reach" })
+    else
+      finish(state, hack, "out of reach", events)
+    end
   end
 end
 

@@ -72,7 +72,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 38
+Core.SAVE_VERSION = 39
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -291,6 +291,12 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
         site.led = false
       end
     end
+  end,
+  -- 39: a hold's lock is a matrix of codes and keys to find in it, not
+  -- a board of nodes. A hack that was under way in a save from before
+  -- is dropped: the hold is as sealed as it was.
+  [38] = function(state: any)
+    state.hack = nil
   end,
   -- 38: a camp can be of more than one room, and an assault can be to
   -- destroy its chief or to bring back what it took. The assaults of a
@@ -1026,29 +1032,33 @@ function Query.KnownSites(game: Game, system: number): { string }
   return names
 end
 
--- The hack under way, as the pilot sees it, or nil: each node of the
--- board with what is known of it. One not found yet is "hidden"; a
--- cleared one says how many steps off the core is; 'open' is whether
--- it can be tried now.
-export type HackNode = { kind: string, hp: number, strength: number, cleared: boolean, open: boolean, steps: number }
-export type HackStatus = { wreck: number, name: string, width: number, height: number, coherence: number, most: number,
-  strength: number, start: number, nodes: { HackNode } }
+-- The hack under way, as the pilot sees it, or nil: the lock's matrix
+-- (each cell's code, whether it has been picked, and whether it can be
+-- picked now), the buffer and its room, the keys (each with its codes,
+-- whether it is in, and how many of its codes the end of the buffer has
+-- begun it with), and the row or column the next pick has to be in.
+export type HackCell = { code: string, used: boolean, open: boolean }
+export type HackKey = { name: string, codes: { string }, done: boolean, begun: number }
+export type HackStatus = { wreck: number, name: string, size: number, cells: { HackCell }, buffer: { string }, room: number,
+  keys: { HackKey }, along: string, line: number }
 function Query.Hack(game: Game): HackStatus?
   local hack = game.state.hack
   if hack == nil then
     return nil
   end
   local wreck = game.state.wrecks[hack.wreck]
-  local nodes: { HackNode } = {}
-  for index, node in hack.nodes do
-    table.insert(nodes, {
-      kind = if node.seen then node.kind else "hidden", hp = if node.seen then node.hp else 0,
-      strength = if node.seen then node.strength else 0, cleared = node.cleared, open = Hacking.Open(hack, index),
-      steps = if node.cleared then Hacking.Steps(hack, index) else 0,
-    })
+  local open = Hacking.Open(hack)
+  local cells: { HackCell } = {}
+  for index, code in hack.cells do
+    table.insert(cells, { code = code, used = hack.used[index], open = table.find(open, index) ~= nil })
   end
-  return { wreck = hack.wreck, name = if wreck then wreck.name else "", width = hack.width, height = hack.height,
-    coherence = hack.coherence, most = hack.most, strength = hack.strength, start = hack.start, nodes = nodes }
+  local keys: { HackKey } = {}
+  for _, key in hack.keys do
+    table.insert(keys, { name = key.name, codes = table.clone(key.codes), done = key.done,
+      begun = if key.done then #key.codes else Hacking.Begun(hack.buffer, key.codes) })
+  end
+  return { wreck = hack.wreck, name = if wreck then wreck.name else "", size = hack.size, cells = cells,
+    buffer = table.clone(hack.buffer), room = hack.room, keys = keys, along = hack.along, line = hack.line }
 end
 
 -- The directional scanner (Tactical/Dscan): the ships and wrecks within
