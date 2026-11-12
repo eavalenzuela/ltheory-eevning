@@ -77,7 +77,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 46
+Core.SAVE_VERSION = 47
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -303,6 +303,15 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   [40] = function(state: any)
     state.digs = state.digs or {}
   end,
+  -- 47: an agent has a regard of their own for the pilot. In a save from
+  -- before, nobody has any, and a job in hand is from nobody in
+  -- particular.
+  [46] = function(state: any)
+    state.regard = state.regard or {}
+    for _, mission in state.missions do
+      mission.slot = mission.slot or 0
+    end
+  end,
   -- 46: a pilot takes boosters, and there are vaults, whose lock is on a
   -- clock. In a save from before, no booster is at work, every sealed
   -- thing is a hold, and a hack under way is not on a clock.
@@ -525,6 +534,7 @@ function Core.New(options: Options): Game
     digs = {},
     standings = {},
     loyalty = {},
+    regard = {},
     sites = {},
     siteIds = {},
     sitesDue = {},
@@ -1666,7 +1676,8 @@ end
 -- (And a job in hand's seconds left; the pilot's loyalty points with
 -- that faction; and what its store has, with whether each can be had
 -- now and if not, why not.)
-export type MissionStatus = { mission: State.Mission, title: string, ready: boolean, why: string, left: number }
+-- ('regard': what the agent who gives it thinks of the pilot.)
+export type MissionStatus = { mission: State.Mission, title: string, ready: boolean, why: string, left: number, regard: number }
 export type StoreRow = { stock: Missions.Stock, name: string, can: boolean, why: string }
 export type MissionsStatus = { offers: { MissionStatus }, inHand: { MissionStatus }, faction: string, standing: number, done: number,
   loyalty: number, store: { StoreRow } }
@@ -1678,7 +1689,8 @@ function Query.Missions(game: Game): MissionsStatus
   local store: { StoreRow } = {}
   if ship.docked ~= 0 then
     for _, offer in Missions.Offers(state, ship.docked) do
-      table.insert(offers, { mission = offer, title = Missions.Title(offer), ready = false, why = "", left = 0 })
+      table.insert(offers, { mission = offer, title = Missions.Title(offer), ready = false, why = "", left = 0,
+        regard = Missions.Regard(state, offer.station, offer.slot) })
     end
     local node = state.galaxy.systems[Space.SystemOf(state, ship.docked)]
     faction = if Factions.byId[node.nearest] then Factions.byId[node.nearest].name else ""
@@ -1695,7 +1707,7 @@ function Query.Missions(game: Game): MissionsStatus
   for _, mission in Missions.InHand(state) do
     local ready, why = Missions.Ready(state, ship, mission)
     table.insert(inHand, { mission = mission, title = Missions.Title(mission), ready = ready, why = why or "",
-      left = Missions.Left(state, mission) })
+      left = Missions.Left(state, mission), regard = Missions.Regard(state, mission.station, mission.slot) })
   end
   return { offers = offers, inHand = inHand, faction = faction, standing = standing, done = state.missionsDone,
     loyalty = loyalty, store = store }

@@ -930,6 +930,18 @@ function Debug.Stat(name: string): number
   return Items.ShipStats(state, state.player.ship)[name] or 0
 end
 
+-- What the nth agent of the station docked at thinks of the pilot (1
+-- to 3 the day's, 4 the assaults', 5 the mining contracts'); with
+-- 'set', a cheat that makes it so.
+function Debug.Regard(agent: number, set: number?): number
+  local state = session.game.state
+  local station = Core.Query.Player(session.game).docked
+  if set then
+    state.regard[`{station}:{agent}`] = set
+  end
+  return state.regard[`{station}:{agent}`] or 0
+end
+
 -- Jobs: how many the station docked at offers, how many are in hand,
 -- how many have been finished, and the standing with the faction whose
 -- station it is.

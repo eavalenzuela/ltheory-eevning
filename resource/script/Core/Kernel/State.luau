@@ -353,6 +353,9 @@ export type Mission = {
   id: number, key: string, kind: string, station: number, faction: string, system: number, need: number, done: number,
   type: string, to: number, reward: number, standing: number, taken: number,
   agent: string, loyalty: number,
+  -- (which of its station's agents gives it: 1 to 5; 0 in a save from
+  -- before agents had a regard of their own)
+  slot: number,
   level: number, waves: { { string } }, wave: number, site: number,
   rooms: { number }, ends: { number }, aim: string, mark: number,
 }
@@ -473,6 +476,10 @@ export type State = {
   -- Loyalty points with each faction, earned by its jobs and spent at
   -- its stations (a faction not here has none).
   loyalty: { [string]: number },
+  -- What each agent thinks of the pilot (Assets/Missions), by the
+  -- agent: "<station>:<which of its agents>". Nothing, for one the
+  -- pilot has done nothing for.
+  regard: { [string]: number },
   -- Sites (Tactical/Sites) by the id of their place, in the order they
   -- came; when each system's are next looked at, and which systems have
   -- had any (by system id); and the tick the ship's scanner is free.

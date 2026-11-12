@@ -1166,4 +1166,117 @@ suite:Case("a job kept more than three days lapses, at the cost of having given 
   t.eq({ kept.agent, kept.loyalty, kept.taken, loaded.state.loyalty } :: { any }, { "", 0, loaded.state.tick, {} } :: { any })
 end)
 
+suite:Case("an agent has a regard of their own for the pilot: more with every job of theirs finished, less with one given up, and they pay for it", function(t)
+  local game, mission = taken(t, "supply")
+  local state = game.state
+  local home = state.player.home
+  t.ok(mission.slot >= 1 and mission.slot <= Missions.OFFERS)
+  t.eq(mission.agent, Missions.Agent(state, home, mission.slot))
+  t.eq(Missions.Regard(state, home, mission.slot), 0)
+  -- What the same agent would pay for the same job by a pilot they think well of: 2% a point.
+  local function paid(regard: number): number
+    local other = newGame(state.historySeed)
+    other.state.regard[`{home}:{mission.slot}`] = regard
+    for _, offer in Missions.Offers(other.state, home) do
+      if offer.key == mission.key then
+        return offer.reward
+      end
+    end
+    error("the offer is gone")
+  end
+  t.eq(paid(0), mission.reward)
+  t.near(paid(5) / mission.reward, 1 + 5 * Missions.REGARD.pay, 0.001)
+  -- (one who thinks ill of the pilot pays what they pay anybody)
+  t.eq(paid(-3), mission.reward)
+  -- Finished: half a point with whoever gave it, and with nobody else.
+  Items.Add(state, mission.type, mission.need, home, "hangar")
+  t.ok((submit(game, { kind = "CompleteMission", actor = 0, target = mission.id })))
+  local done: { [string]: any }? = nil
+  for _, event in Core.TakeEvents(game) do
+    done = if event.kind == "MissionCompleted" then event else done
+  end
+  t.eq({ assert(done).agent, assert(done).regard } :: { any }, { mission.agent, Missions.REGARD.daily } :: { any })
+  for slot = 1, Missions.OFFERS + 2 do
+    t.eq(Missions.Regard(state, home, slot), if slot == mission.slot then Missions.REGARD.daily else 0, `agent {slot}`)
+  end
+  -- The pilot sees it against each job offered.
+  for _, row in Core.Query.Missions(game).offers do
+    t.eq(row.regard, Missions.Regard(state, home, row.mission.slot))
+  end
+  -- Given up: a point less, and it can go below nothing; let lapse, the same.
+  local other, held = taken(t, "bounty")
+  t.ok((submit(other, { kind = "AbandonMission", actor = 0, target = held.id })))
+  t.eq(Missions.Regard(other.state, held.station, held.slot), -Missions.REGARD.lost)
+  local third, kept = taken(t, "bounty")
+  for _ = 1, Missions.LIMIT + 200 do
+    Core.Step(third)
+  end
+  t.eq({ #third.state.missionIds, Missions.Regard(third.state, kept.station, kept.slot) } :: { any }, { 0, -Missions.REGARD.lost } :: { any })
+  -- It is in the save, and an older save has nobody's.
+  state.regard[`{home}:1`] = 9.8
+  local data, length = Core.Save(game)
+  local loaded = Core.Load(data, length)
+  t.eq({ Core.Hash(loaded), Missions.Regard(loaded.state, home, 1) } :: { any }, { Core.Hash(game), 9.8 } :: { any })
+  local busy, job = taken(t, "bounty")
+  local busyData, busyLength = Core.Save(busy)
+  local busyFile = Codec.Decode(busyData, busyLength)
+  busyFile.saveVersion = 46
+  busyFile.state.regard = nil
+  for _, each in busyFile.state.missions do
+    each.slot = nil
+  end
+  local old, oldLength = Codec.Encode(busyFile)
+  local opened = Core.Load(old, oldLength)
+  t.eq({ opened.state.regard, opened.state.missions[job.id].slot } :: { any }, { {}, 0 } :: { any })
+  -- (a job from before agents had a regard is from nobody in particular: finishing it moves nobody's)
+  t.ok((submit(opened, { kind = "AbandonMission", actor = 0, target = job.id })))
+  t.eq(opened.state.regard, {})
+end)
+
+suite:Case("the fourth and the fifth agent open their harder levels to a pilot they know, whatever the faction makes of them", function(t)
+  local game = newGame()
+  local state = game.state
+  local home = state.player.home
+  local function levels(kind: string): number
+    local top = 0
+    for _, offer in Missions.Offers(state, home) do
+      top = if offer.kind == kind then math.max(top, offer.level) else top
+    end
+    return top
+  end
+  -- A pilot the faction has no opinion of has the first level from each.
+  t.eq({ levels("assault"), levels("mining") }, { 1, 1 })
+  -- Known to the fourth agent, and not to the fifth: the fourth's levels open, and theirs only.
+  for level, wanted in Missions.OPENS do
+    state.regard[`{home}:{Missions.OFFERS + 1}`] = wanted
+    t.eq({ levels("assault"), levels("mining") }, { level, 1 }, `at a regard of {wanted}`)
+    state.regard[`{home}:{Missions.OFFERS + 1}`] = wanted - 0.01
+    t.eq(levels("assault"), math.max(1, level - 1), `just short of a regard of {wanted}`)
+  end
+  -- The faction's standing still opens them for everybody's agents, as it did.
+  state.regard = {}
+  state.standings.vessari = Assault.STANDING[3]
+  t.eq({ levels("assault"), levels("mining") }, { 3, 3 })
+  -- (whichever is more)
+  state.regard[`{home}:{Missions.OFFERS + 2}`] = Missions.OPENS[4]
+  t.eq({ levels("assault"), levels("mining") }, { 3, 4 })
+  -- And no regard gets work out of an agent whose faction will give the pilot none.
+  state.standings.vessari = Assault.STANDING[1] - 1
+  t.eq({ levels("assault"), levels("mining") }, { 0, 0 })
+  -- An assault finished is worth a quarter of a point and a quarter a level with its agent.
+  state.standings.vessari = 0
+  state.regard = {}
+  local offer: State.Mission? = nil
+  for _, each in Missions.Offers(state, home) do
+    offer = if each.kind == "mining" then each else offer
+  end
+  local contract = assert(offer)
+  t.ok((submit(game, { kind = "AcceptMission", actor = 0, what = contract.key })))
+  Items.Add(state, contract.type, contract.need, home, "hangar")
+  t.ok((submit(game, { kind = "CompleteMission", actor = 0, target = state.missionIds[1] })))
+  t.near(Missions.Regard(state, home, Missions.OFFERS + 2), Missions.REGARD.levelled * 2, 1e-9)
+  -- (so four first-level jobs for one agent open that agent's second level)
+  t.ok(4 * Missions.REGARD.levelled * 2 >= Missions.OPENS[2])
+end)
+
 return suite

@@ -1412,12 +1412,17 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
   -- and down, as far as the pilot's standing has opened.
   local offers: { Core.MissionStatus } = if storeOpen then {} else status.offers
   local function offered(offer: Core.MissionStatus, id: string, kind: string?, level: number, levels: number)
-    Im.Text(shorten(offer.title, if kind then 30 else 34), left, line, 15, Im.TEXT)
+    -- (a job with levels says its level in a word less: the steps beside it say the rest)
+    Im.Text(shorten(if kind then (string.gsub(offer.title, ", level", "", 1)) else offer.title, if kind then 30 else 34), left, line, 15,
+      Im.TEXT)
     Im.TextRight(Format.Credits(offer.mission.reward), left + 356, line, 15, GOOD)
     local accept: State.Command = { kind = "AcceptMission", actor = 0, what = offer.mission.key }
     local can, whyNot = Session.CanDo(session, accept)
     Im.Text(if can then shorten(about(offer.mission), 44) else shorten(tostring(whyNot), 44), left, line + 21, 12, if can then Im.DIM else Im.WARN)
-    Im.TextRight(`{shorten(offer.mission.agent, 16)}  +{offer.mission.loyalty} LP`, left + 356, line + 21, 12, Im.DIM)
+    -- (who gives it, what they think of the pilot once they think anything, and the points it is worth)
+    local thinks = if offer.regard ~= 0 then string.format(" (%.1f)", offer.regard) else ""
+    Im.TextRight(`{shorten(offer.mission.agent, 16)}{thinks}  +{offer.mission.loyalty} LP`, left + 356, line + 21, 12,
+      if offer.regard > 0 then GOOD elseif offer.regard < 0 then Im.WARN else Im.DIM)
     if kind and levels > 1 then
       if Im.Button("<", left + 236, line - 1, 20, 20, level > 1, `Level:{kind}:down`) then
         ladder[kind] = level - 1

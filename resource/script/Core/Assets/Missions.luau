@@ -47,8 +47,20 @@
 -- same terms: so much of an ore to bring in, from a pocket of it made
 -- for the contract and put on the charts when it is taken.
 --
--- (A first version of the roadmap's agents. Not yet: agents with a
--- standing of their own, jobs made from what the simulation needs.)
+-- And each agent has a regard of their own for the pilot, beside what
+-- their faction thinks: nothing to begin with, more with every job of
+-- theirs that is finished (half a point for one of the day's; a
+-- quarter and a quarter a level for an assault or a contract), a point
+-- less for one given up or let lapse, from -5 to 10. An agent pays a
+-- pilot they think well of more (2% a point, over what the faction's
+-- standing adds); and the fourth and the fifth open their harder
+-- levels to a pilot they know, whatever the faction makes of them: the
+-- second at a regard of 2, the third at 5, the fourth at 8. So the
+-- levels can be had by going from station to station doing a little
+-- for everybody, or by staying with one agent and doing a lot.
+--
+-- (A first version of the roadmap's agents. Not yet: jobs made from
+-- what the simulation needs.)
 
 local Assault = require("@lt/Core/Tactical/Assault")
 local Constants = require("@lt/Core/Data/Constants")
@@ -125,6 +137,38 @@ function Missions.Agent(state: State.State, station: number, slot: number): stri
   return Names.Person(Rng.For(state.galaxySeed, station, slot, 71))
 end
 
+-- An agent's own regard for the pilot: what a finished job of the day's
+-- adds to it, what one with levels adds (and that again for each
+-- level), what one given up or let lapse takes, how far it goes either
+-- way, the share more an agent pays for each point of it, and the
+-- regard at which each level of an assault or a contract is opened.
+Missions.REGARD = { daily = 0.5, levelled = 0.25, lost = 1, least = -5, most = 10, pay = 0.02 }
+Missions.OPENS = { 0, 2, 5, 8 }
+
+-- What an agent thinks of the pilot ('slot': which of the station's
+-- agents; 0, of a job from before they had a regard, is nobody).
+function Missions.Regard(state: State.State, station: number, slot: number): number
+  return state.regard[`{station}:{slot}`] or 0
+end
+
+local function regarded(state: State.State, mission: State.Mission, change: number)
+  if mission.slot > 0 then
+    local key = `{mission.station}:{mission.slot}`
+    state.regard[key] = math.clamp((state.regard[key] or 0) + change, Missions.REGARD.least, Missions.REGARD.most)
+  end
+end
+
+-- The hardest level an agent's regard opens by itself.
+local function known(regard: number): number
+  local top = 0
+  for level, wanted in Missions.OPENS do
+    if regard >= wanted then
+      top = level
+    end
+  end
+  return top
+end
+
 -- The key of an offer: its station, day and place in the list.
 local function keyOf(station: number, day: number, slot: number): string
   return `{station}:{day}:{slot}`
@@ -140,16 +184,21 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
   local system = Space.SystemOf(state, station)
   local node = state.galaxy.systems[system]
   local day = state.tick // DAY
-  local bonus = 1 + 0.03 * Missions.Standing(state, node.nearest)
+  local factions = 1 + 0.03 * Missions.Standing(state, node.nearest)
+  -- (what an agent pays: for the faction's standing, and for their own regard)
+  local function paying(slot: number): number
+    return factions * (1 + Missions.REGARD.pay * math.max(0, Missions.Regard(state, station, slot)))
+  end
   local offers: { State.Mission } = {}
   for slot = 1, Missions.OFFERS do
+    local bonus = paying(slot)
     local key = keyOf(station, day, slot)
     if not table.find(state.missionsTaken, key) then
       local rng = Rng.For(state.historySeed, station, day, slot, 83)
       local mission: State.Mission = {
         id = 0, key = key, kind = "bounty", station = station, faction = node.nearest, system = system, need = 1, done = 0,
         type = "", to = station, reward = 0, standing = 0.1, taken = 0,
-        agent = Missions.Agent(state, station, slot), loyalty = 0,
+        agent = Missions.Agent(state, station, slot), loyalty = 0, slot = slot,
         level = 0, waves = {}, wave = 0, site = 0, rooms = {}, ends = {}, aim = "", mark = 0,
       }
       local roll = Rng.Int(rng, 3)
@@ -197,9 +246,16 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
     assaulting = assaulting or (held.kind == "assault" and held.station == station)
     digging = digging or (held.kind == "mining" and held.station == station)
   end
-  local top = Assault.Top(Missions.Standing(state, node.nearest))
+  -- (as many levels as the faction's standing opens, or as the agent's
+  -- own regard does, whichever is more; none from an agent whose
+  -- faction thinks too ill of the pilot to give any)
+  local standingTop = Assault.Top(Missions.Standing(state, node.nearest))
+  local function topOf(slot: number): number
+    return if standingTop == 0 then 0 else math.max(standingTop, known(Missions.Regard(state, station, slot)))
+  end
   local given = state.assaults[station] or 0
-  for level = 1, if assaulting then 0 else top do
+  for level = 1, if assaulting then 0 else topOf(Missions.OFFERS + 1) do
+    local bonus = paying(Missions.OFFERS + 1)
     local rng = Rng.For(state.historySeed, station, given, level, 89)
     -- (two times in five the camp is in a neighbour's system)
     local next = node.neighbors[Rng.Int(rng, math.max(1, #node.neighbors)) + 1]
@@ -217,12 +273,13 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         need = Assault.Need(aim, level, waves), done = 0, type = if aim == "fetch" then Assault.LOOT else "", to = station,
         reward = reward, standing = credit, taken = 0,
         agent = Missions.Agent(state, station, Missions.OFFERS + 1), loyalty = math.max(1, reward // Missions.LOYALTY),
-        level = level, waves = waves, wave = 0, site = 0, rooms = {}, ends = ends, aim = aim, mark = 0,
+        slot = Missions.OFFERS + 1, level = level, waves = waves, wave = 0, site = 0, rooms = {}, ends = ends, aim = aim, mark = 0,
       })
     end
   end
   local dug = state.digs[station] or 0
-  for level = 1, if digging then 0 else top do
+  for level = 1, if digging then 0 else topOf(Missions.OFFERS + 2) do
+    local bonus = paying(Missions.OFFERS + 2)
     local rng = Rng.For(state.historySeed, station, dug, level, 101)
     -- (one time in three the pocket is in a neighbour's system)
     local next = node.neighbors[Rng.Int(rng, math.max(1, #node.neighbors)) + 1]
@@ -235,7 +292,7 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         id = 0, key = `{station}:d{dug}:{level}`, kind = "mining", station = station, faction = node.nearest, system = where,
         need = units, done = 0, type = ore, to = station, reward = reward, standing = credit, taken = 0,
         agent = Missions.Agent(state, station, Missions.OFFERS + 2), loyalty = math.max(1, reward // Missions.LOYALTY),
-        level = level, waves = if #pack > 0 then { pack } else {}, wave = 0, site = 0, rooms = {},
+        slot = Missions.OFFERS + 2, level = level, waves = if #pack > 0 then { pack } else {}, wave = 0, site = 0, rooms = {},
         ends = { if #pack > 0 then 1 else 0 }, aim = "dig", mark = 0,
       })
     end
@@ -411,11 +468,14 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
     Assault.Close(state, mission, events)
     Wallet.Pay(state, mission.reward, "mission reward", events)
     standing(state, mission.faction, mission.standing)
+    -- (and whoever gave it thinks the better of the pilot)
+    regarded(state, mission, if mission.level > 0 then Missions.REGARD.levelled * (1 + mission.level) else Missions.REGARD.daily)
     state.loyalty[mission.faction] = (state.loyalty[mission.faction] or 0) + mission.loyalty
     close(state, mission)
     state.missionsDone += 1
     table.insert(events, { kind = "MissionCompleted", mission = mission.id, title = Missions.Title(mission), reward = mission.reward,
-      faction = mission.faction, standing = Missions.Standing(state, mission.faction), loyalty = mission.loyalty })
+      faction = mission.faction, standing = Missions.Standing(state, mission.faction), loyalty = mission.loyalty,
+      agent = mission.agent, regard = Missions.Regard(state, mission.station, mission.slot) })
   elseif kind == "AbandonMission" then
     -- (a courier's cargo goes back, as much of it as is to hand; and so
     -- does what was fetched from a camp)
@@ -424,6 +484,7 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
     end
     Assault.Close(state, mission, events)
     standing(state, mission.faction, -2 * mission.standing)
+    regarded(state, mission, -Missions.REGARD.lost)
     close(state, mission)
     table.insert(events, { kind = "MissionAbandoned", mission = mission.id, title = Missions.Title(mission) })
   end
@@ -440,6 +501,7 @@ function Missions.Step(state: State.State, events: { Event })
     if state.tick - mission.taken > Missions.LIMIT then
       Assault.Close(state, mission, events)
       standing(state, mission.faction, -2 * mission.standing)
+      regarded(state, mission, -Missions.REGARD.lost)
       close(state, mission)
       table.insert(events, { kind = "MissionExpired", mission = mission.id, title = Missions.Title(mission) })
     end
