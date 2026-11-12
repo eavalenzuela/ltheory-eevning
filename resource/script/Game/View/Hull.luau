@@ -18,6 +18,7 @@
 -- outside, masts and fins, and rust.
 
 local Arms = require("@lt/Game/View/Arms")
+local Imported = require("@lt/Game/View/Imported")
 local Plates = require("@lt/Game/View/Plates")
 local Ships = require("@lt/Core/Data/Ships")
 
@@ -45,6 +46,12 @@ Hull.looks = {
     plating = { 0.36, 0.37, 0.39 }, patch = { 0.29, 0.30, 0.33 }, frame = { 0.12, 0.12, 0.13 },
     glow = { 0.85, 0.93, 1.0 }, trim = { 0.15, 0.16, 0.18 }, fire = { 0.70, 0.92, 1.0 }, wear = 0.15, rust = 0.02, sheets = 3.4,
     mottle = 0.35, lights = 0.5,
+  },
+  -- The Vail (the owner's drawings): brown and charcoal in broad bands,
+  -- what is marked black, lit in amber; kept, not new.
+  vail = {
+    plating = { 0.33, 0.20, 0.10 }, patch = { 0.11, 0.11, 0.11 }, frame = { 0.10, 0.10, 0.10 },
+    glow = { 1.0, 0.66, 0.24 }, trim = { 0.045, 0.045, 0.05 }, fire = { 1.0, 0.56, 0.18 }, wear = 0.30, rust = 0.12, sheets = 3.0,
   },
   -- The pirates: whatever paint was on it, gone dark, the new plate
   -- bare, a red light.
@@ -76,6 +83,19 @@ export type Exhaust = { at: vector, radius: number }
 local exhausts: { Exhaust } = {}
 local function exhaust(at: vector, radius: number)
   table.insert(exhausts, { at = at, radius = radius })
+end
+
+-- A hull that was modelled in another program (Game/View/Imported): the
+-- drawing of it is the reading of its file from resource/model, and its
+-- engines are where the file has fire.
+local function vessel(file: string, options: Imported.Options?): (b: Builder) -> ()
+  return function(b: Builder)
+    local model = Imported.Load(file, options)
+    Imported.Draw(b, model)
+    for _, engine in model.engines do
+      exhaust(v(engine.x, engine.y, engine.z), engine.radius)
+    end
+  end
 end
 
 local function nacelle(b: Builder, center: vector, length: number, radius: number)
@@ -1593,12 +1613,28 @@ type Design = {
   reach: number?,
   turrets: { Hardpoint },
   launchers: { Hardpoint },
+  -- Its hardpoints, where they are not known until it is built (a hull
+  -- read from a file has its mounts put on its surface: Imported.Mounts):
+  -- its turrets and its launchers, asked for once, the first time.
+  place: (() -> ({ Hardpoint }, { Hardpoint }))?,
   -- What it is shown carrying where nobody has fitted it (a gallery):
   -- turrets, then launchers, in the order of its hardpoints.
   fit: { string },
 }
 
 local designs: { [string]: Design } = {
+  -- The Vail's frigate, modelled from the owner's first drawing
+  -- (script/modelgen): a gun on the back and one beneath where the hull
+  -- is highest and flattest, and a pair abreast on the broad of it aft.
+  -- (Farther forward its back falls away too fast for a gun's foot.)
+  ["frigate.thorn"] = {
+    faction = "vail", draw = vessel("vail/frigate.obj"), turrets = {}, launchers = {},
+    place = function(): ({ Hardpoint }, { Hardpoint })
+      local model = Imported.Load("vail/frigate.obj")
+      return { Imported.Mounts(model, 0, 0.04), Imported.Mounts(model, 0.14, -0.24), Imported.Mounts(model, -0.14, -0.24) }, {}
+    end,
+    fit = { "laser.pulse.small", "laser.pulse.small", "laser.pulse.small" },
+  },
   ["frigate.javelin"] = {
     faction = "vessari", draw = javelin,
     -- (its gun on and under the bow; a rack on each flank; a rack on the
@@ -1964,6 +2000,12 @@ function Hull.Build(type: string, pirate: boolean?): Built?
     return made
   end
   local look = if patched then Hull.looks.unbound else design.look or Hull.looks[design.faction]
+  -- (its hardpoints, if they are where the building of it says)
+  local place = design.place
+  if place then
+    design.turrets, design.launchers = place()
+    design.place = nil
+  end
   local b = Plates.New(#type * 1.37)
   b.patch = if patched then PATCHED else design.patch
   -- (a pirate's is a patchwork whatever it was)

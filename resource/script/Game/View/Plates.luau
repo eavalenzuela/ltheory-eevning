@@ -47,6 +47,9 @@ export type Solid = {
   center: vector?, half: vector?, turn: vector?,
   outline: { { number } }?, x: number?, y: number?,
   sections: { { z: number, ring: { vector } } }?,
+  -- (or a shape of somebody else's making, which says for itself
+  -- whether a point is inside it: Plates.Stands)
+  within: ((p: vector) -> boolean)?,
 }
 
 export type Builder = {
@@ -489,6 +492,53 @@ function Plates.Hard(b: Builder, part: number, sections: { Section }, reach: num
   end
 end
 
+-- A skin of somebody else's making (Game/View/Imported): points (x, y
+-- and z of each, one after another) and faces of three of them (counted
+-- from 1, in order counter-clockwise seen from outside), all of one
+-- paint and one tone. In a wreck, only the faces of the length of it
+-- that this piece of the wreck is, less what was lost, a patch of them
+-- at a time; and nothing lit.
+function Plates.Skin(b: Builder, part: number, points: { number }, faces: { number })
+  local tag = part + own(b)
+  local kind = math.floor(part)
+  local ruin = b.ruin
+  if ruin and (kind == Plates.GLOW or kind == Plates.FIRE) then
+    return
+  end
+  local skin = skinOf(b)
+  local base = b.points
+  for at = 1, #points, 3 do
+    Mesh_AddVertex(skin, vector.create(points[at], points[at + 1], points[at + 2]), UNSET, 1, tag)
+  end
+  b.points += #points // 3
+  for at = 1, #faces, 3 do
+    local a, c, d = faces[at], faces[at + 1], faces[at + 2]
+    local keep = true
+    if ruin then
+      local x = (points[3 * a - 2] + points[3 * c - 2] + points[3 * d - 2]) / 3
+      local y = (points[3 * a - 1] + points[3 * c - 1] + points[3 * d - 1]) / 3
+      local z = (points[3 * a] + points[3 * c] + points[3 * d]) / 3
+      -- (faces near one another go, or stay, together: as a plate would)
+      local patch = math.floor(x * 7) * 12.9898 + math.floor(y * 7) * 78.233 + math.floor(z * 7) * 37.719 + b.seed
+      local ragged = (math.sin(patch) * 43758.5453) % 1
+      local lost = (math.sin(patch * 1.7 + 4.1) * 43758.5453) % 1
+      z += (ragged - 0.5) * 0.3
+      keep = z >= ruin.from and z < ruin.to and lost >= ruin.loss
+    end
+    if keep then
+      Mesh_AddTriangle(skin, base + a - 1, base + c - 1, base + d - 1)
+    end
+  end
+  b.kept += 1
+end
+
+-- Something has been built that a thing can stand on, which says for
+-- itself whether a point is inside it (a closed skin of somebody
+-- else's making).
+function Plates.Stands(b: Builder, within: (p: vector) -> boolean)
+  table.insert(b.solids, { within = within })
+end
+
 -- Whether a point is inside something that has been built (a box, a
 -- skin or a hull in flat plates; not a beam, a truss or a pipe, which
 -- nothing stands on).
@@ -496,7 +546,12 @@ function Plates.Inside(b: Builder, p: vector): boolean
   for _, solid in b.solids do
     local center, half, turn = solid.center, solid.half, solid.turn
     local outline, sections = solid.outline, solid.sections
-    if center and half and turn then
+    local within = solid.within
+    if within then
+      if within(p) then
+        return true
+      end
+    elseif center and half and turn then
       -- (a box is turned about y, then x, then z: undo them the other way round)
       local q = p - center
       if turn.x ~= 0 then

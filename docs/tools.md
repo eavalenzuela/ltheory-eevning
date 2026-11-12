@@ -70,3 +70,17 @@ A script works the station screens by pressing buttons by name, which runs the s
 | `script/soundgen --check` | Fails if a script names a sound file that is not in `resource/sound` (the engine plays silence for a missing file and says nothing), or if the list and what is in `resource/sound/made` disagree. Asks nobody for anything; part of `script/check`. |
 
 `Game/View/Audio.luau` says which sound is heard when, and how loud. The made sounds are all brought to one loudness; the original engine's are as loud as they happened to be, some of them very quiet, so a figure there for one kind says little about a figure for the other.
+
+## Models
+
+Most hulls are built in script, plate by plate (`Game/View/Hull`). A hull can also be read from a file somebody modelled: a Wavefront `.obj` (Blender: File, Export, Wavefront) or a binary glTF `.glb`, under `resource/model`.
+
+| Command | What it does |
+|---|---|
+| `script/modelgen [DIR]` | Writes the models that are made from numbers (the Vail's hulls, from the owner's drawings in `docs/concepts/vail`) as `.obj` files with their `.mtl`: Y up, the bow along -Z, a unit long, an object to a part and a material to a paint. Needs nothing but Python; Blender opens what it writes. |
+
+What the game takes from a model file (`Game/View/Imported`, on the readers in `Tool/Mesh`) is its shape and the names of its parts. The shape is turned to lie as a hull does (a design says which way the file's bow and back are, if not -Z and +Y), set to the hull's size, and its sharp edges kept sharp. Each part gets one of a hull's six paints: its material's, if that is named `plating`, `patch`, `frame`, `lit`, `trim` or `fire`; else a guess from the part's names (an engine's glow is its fire, a light or a window is lit, a nozzle is trim), from whether its material gives off light, and from its colour (bright and strong is lit, strong is plating, grey is the other plating, near black is trim). Engines are where the fire is. The hull's own shader then paints, seams, wears and lights it as it does every hull; pictures laid on a model, and anything that moves, are not read.
+
+Gun mounts are not in the file. A hull's design (`designs` in `Game/View/Hull`) says where along and across the hull each hardpoint is, and `Imported.Mounts` puts a mount on the back and one on the belly there, standing as the surface about it does. `Hull.Audit` holds them to the same rule as every other hull: the whole foot of the gun has to have hull under it.
+
+To add a hull from a file: put it under `resource/model`, and give its type a design whose `draw` is `vessel("folder/file.glb", { fore = "-x", up = "+z" })` and whose `place` returns its hardpoints. `script/viewer start hull-NAME` shows it.

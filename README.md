@@ -101,6 +101,7 @@ Docking saves the game. Saves and settings are kept in `save/`, which git ignore
 | `script/viewer` | One window for looking at hulls, stations, planets and effects, and for taking pictures of them. |
 | `script/offscreen` | Runs a command that opens windows on a desktop of its own with no screen (a headless `sway`, on the same graphics card). A scripted or hidden run of `bin/launch` goes through it by itself. |
 | `script/soundgen` | Makes the game's own sounds and music from the written descriptions in `resource/sound/made/sounds.txt`. |
+| `script/modelgen` | Writes the hull models under `resource/model` (Wavefront OBJ, which Blender opens) from numbers. The game reads a hull from such a file, or from a binary glTF (`.glb`) made anywhere. |
 
 `docs/tools.md` covers these and the rest, and `docs/harness.md` the scripted harness the play-throughs use.
 
@@ -113,7 +114,7 @@ Docking saves the game. Saves and settings are kept in `save/`, which git ignore
 | `resource/script/App/` | The apps, `game.luau` among them |
 | `resource/script/Tool/` | Engine-free tools: the spec runner, the simulation runs |
 | `src/` | The engine (`liblt`), the launcher, `ltcore` and `luaucheck` |
-| `resource/` | Shaders, fonts, textures, sounds |
+| `resource/` | Shaders, fonts, textures, sounds, and the hull models that are read from files |
 | `test/` | Scripted play-throughs (`scenario/`) and stored screenshots (`golden/`) |
 | `docs/` | The roadmap, design notes, and a catalogue of the old codebase |
 | `ext/`, `extbin/`, `extlib/` | Third-party code and libraries |
