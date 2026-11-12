@@ -12,6 +12,7 @@
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Audio = require("@lt/Game/View/Audio")
+local Colors = require("@lt/Colors")
 local Colony = require("@lt/Game/UI/Colony")
 local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
@@ -20,6 +21,7 @@ local Planets = require("@lt/Core/Data/Planets")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Dogma = require("@lt/Core/Dogma")
 local Hud = require("@lt/Game/UI/Hud")
+local Icons = require("@lt/Icons")
 local Hull = require("@lt/Game/View/Hull")
 local Im = require("@lt/Game/UI/Im")
 local Scanner = require("@lt/Game/UI/Scanner")
@@ -71,6 +73,15 @@ local function find(what: string): Core.Entry?
 end
 
 local Debug = {}
+
+-- Whether the pointer is drawn (App:Initialize says: it is, for a person).
+local pointer = false
+
+-- Have the pointer drawn, or not: for a script, which has none unless
+-- it asks.
+function Debug.Pointer(on: boolean)
+  pointer = on
+end
 
 -- GameDebug.Order("Undock"), GameDebug.Order("WarpTo", "belt"),
 -- GameDebug.Order("Orbit", "asteroid", 5000)
@@ -1321,6 +1332,7 @@ function App:Initialize()
   if not Host.scripted then
     Menu.OpenMain(session)
   end
+  pointer = not Host.scripted
 
   local root = Widget_Stack(Widget_Luau(Widget_Create(), {
     CreateChildren = function(): { Widget }
@@ -1330,6 +1342,17 @@ function App:Initialize()
       passes:Append(RenderPass_SMAA())
       passes:Append(RenderPass_PostFilter("post/dither.jsl"))
       return { Widget_Rendered(passes), Hud.Create(session, scene) }
+    end,
+    -- The pointer, over everything else: the engine hides the system's
+    -- own, and every app draws its own. (Not in a scripted run, whose
+    -- pictures must not depend on where the mouse happens to be: a
+    -- script that wants it asks, with GameDebug.Pointer.)
+    PostDraw = function()
+      if pointer then
+        local at = Cursor_Get()
+        Icon_Draw(Icons.Cursors.Pointer(), at + vector.create(1, 1), 14, vector.create(0, 0, 0), 0.8)
+        Icon_Draw(Icons.Cursors.Pointer(), at, 14, 4 * Colors.Primary, 0.9)
+      end
     end,
     PreUpdate = function()
       local frame = math.min(0.1, FrameTimer_Get())
