@@ -86,7 +86,9 @@
 #   game-haul   a hired pilot set to haul (test/scenario/haul.txt): ore
 #               carried to another station and sold there, and more after
 #   game-dscan  the directional scanner (test/scenario/dscan.txt): all
-#               round, in a cone pointed at something, and at a short range
+#               round, in a cone pointed at something or by the camera, and
+#               at a short range, with structures on it; and a marked place
+#               given a name
 #   game-away   time (test/scenario/away.txt): run faster at a station only,
 #               and training that goes on while the game is not played
 #   game-warp   the ends of a warp (test/scenario/warp.txt): the station left

@@ -38,6 +38,24 @@ export type Event = { [string]: any }
 
 local SPAN = Constants.STRUCTURE_ID_SPAN
 
+-- How long the name of a place the pilot has marked may be.
+Space.PLACE_NAME = 32
+
+-- A name for a marked place as it would be kept (the spaces at its ends
+-- gone, and runs of them inside it made one), or nil and why it will
+-- not do.
+function Space.PlaceName(text: string): (string?, string?)
+  local name = string.gsub(string.gsub(string.gsub(text, "^%s+", ""), "%s+$", ""), "%s+", " ")
+  if #name < 1 then
+    return nil, "a place has a name"
+  elseif #name > Space.PLACE_NAME then
+    return nil, `a name has {Space.PLACE_NAME} letters at most`
+  elseif string.find(name, "[^%w '&%.%-]") then
+    return nil, "a name is of letters, figures and spaces"
+  end
+  return name
+end
+
 -- ---------------------------------------------------------------------
 -- Looking things up
 
@@ -341,6 +359,12 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
     return ship.docked ~= 0, if ship.docked ~= 0 then nil else "not docked"
   elseif kind == "ForgetBookmark" then
     return state.bookmarks[command.target or 0] ~= nil, "no such place is marked"
+  elseif kind == "RenameBookmark" then
+    if state.bookmarks[command.target or 0] == nil then
+      return false, "no such place is marked"
+    end
+    local name, why = Space.PlaceName(command.what or "")
+    return name ~= nil, why
   end
   local ball = state.balls[ship.id]
   if ball == nil then
@@ -414,6 +438,11 @@ function Space.Apply(state: State.State, command: State.Command, events: { Event
     state.bookmarks[id] = nil
     State.RemoveId(state.bookmarkIds, id)
     table.insert(events, { kind = "BookmarkForgotten", bookmark = id })
+    return
+  elseif kind == "RenameBookmark" then
+    local mark = state.bookmarks[command.target :: number]
+    mark.name = Space.PlaceName(command.what :: string) :: string
+    table.insert(events, { kind = "BookmarkRenamed", bookmark = mark.id, name = mark.name })
     return
   elseif kind == "Bookmark" then
     -- Where the ship is now, by a name given or made up ("Merear spot 3").

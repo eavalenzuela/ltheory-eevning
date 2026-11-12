@@ -8,7 +8,11 @@
 # as it reaches, has both. A cone has to be pointed at something:
 # pointed at the near wreck it has both (the far one is that way), and
 # pointed at the sun it has neither. All round at a tenth of an
-# astronomical unit it has the near one alone.
+# astronomical unit it has the near one alone. The station just left is
+# on it too, as a structure, and the gates. And a cone can be pointed by
+# the camera, with nothing picked out: looking toward the near wreck it
+# has both, and looking toward the sun, neither. Last, a place is marked
+# and given a name of the pilot's own, in the panel of what is selected.
 
 wait 2
 lua GameDebug.Peaceful(true)
@@ -34,6 +38,9 @@ until select(2, GameDebug.Sighted()) == 1
 lua print('dscan, all round at 14 AU:', GameDebug.Sighted())
 lua assert(GameDebug.Sighted('Wreck') == 2, 'both wrecks should be on it')
 lua assert(select(3, GameDebug.Sighted('Wreck')) == 1, 'and one of them is not on the overview')
+lua assert(GameDebug.Sighted('Trade hub 1') == 1 and select(3, GameDebug.Sighted('Trade hub 1')) == 0, 'the station just left should be on it, and on the grid')
+lua assert(GameDebug.Sighted('Trade hub') >= 2, 'the system has more stations than that in reach')
+lua assert(GameDebug.Sighted('Asteroid Belt') == 0, 'a belt is the charts business, not the scanners')
 lua _G.all = GameDebug.Sighted()
 
 # A cone has to be pointed at something.
@@ -69,10 +76,51 @@ lua print('dscan, all round at 0.1 AU:', GameDebug.Sighted())
 lua assert(GameDebug.Sighted('Wreck') == 1, 'a short scan should have the near wreck alone')
 lua assert(GameDebug.Sighted() <= _G.all, 'a short scan should have no more than a long one')
 
+# A cone pointed by the camera, with nothing picked out: toward the near
+# wreck it has both wrecks, and toward the sun it has neither. (The
+# camera is turned by a helper that looks a little over what it is
+# turned to, so as to see past the ship: a cone of thirty degrees.)
+lua GameDebug.Select('nothing of this name')
+until GameDebug.Press('Dscan:range:14')
+frames 3
+until GameDebug.Press('Dscan:angle:30')
+frames 3
+lua assert(not GameDebug.CanPress('Dscan:scan'), 'a cone with nothing to point at should not scan')
+until GameDebug.Press('Dscan:aim:camera')
+frames 3
+lua assert(GameDebug.LookAt('wreck'), 'the camera would not turn to the wreck')
+frames 5
+lua assert(GameDebug.CanPress('Dscan:scan'), 'a cone pointed by the camera should scan')
+until GameDebug.Press('Dscan:scan')
+until select(2, GameDebug.Sighted()) == 5
+lua print('dscan, 30 degrees where the camera looks, at the wreck:', GameDebug.Sighted())
+lua assert(GameDebug.Sighted('Wreck') == 2, 'looking toward the near wreck, the cone should have both')
+lua assert(GameDebug.LookAt('sun'), 'the camera would not turn to the sun')
+frames 5
+until GameDebug.Press('Dscan:scan')
+until select(2, GameDebug.Sighted()) == 6
+lua assert(GameDebug.Sighted('Wreck') == 0, 'looking toward the sun, the cone should have neither wreck')
+until GameDebug.Press('Dscan:aim:selected')
+frames 3
+
 # The other side of the window is as it was.
 until GameDebug.Press('Scanner:signals')
 frames 3
 lua assert(GameDebug.CanPress('Scan'), 'the signals side should have its Scan')
+until GameDebug.Press('Scanner:close')
+frames 3
+
+# A place marked, and called what the pilot likes.
+until GameDebug.Press('Bookmark')
+until GameDebug.Count('bookmark') == 1
+lua assert(GameDebug.Select('spot 1'), 'the marked place should be on the overview by the name made up for it')
+frames 3
+lua GameDebug.Type('Bookmark:name', '  Wreck   watch ')
+wait 2
+lua assert(GameDebug.Select('Wreck watch'), 'the place should be called what was typed, tidied')
+frames 3
+lua assert(GameDebug.Count('bookmark') == 1, 'it is the same place, renamed')
+lua assert(not GameDebug.Select('spot 1'), 'and it should go by its made-up name no more')
 
 echo dscan scenario passed
 quit

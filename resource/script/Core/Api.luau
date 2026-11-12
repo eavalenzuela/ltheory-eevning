@@ -1259,15 +1259,16 @@ function Query.Hack(game: Game): HackStatus?
     buffer = table.clone(hack.buffer), room = hack.room, keys = keys, along = hack.along, line = hack.line }
 end
 
--- The directional scanner (Tactical/Dscan): the ships and wrecks within
--- 'range' metres of the pilot's ship, all round ('angle' 360) or in a
--- cone of 'angle' degrees pointed at 'toward'; and whether the scan
--- could be made, with why not if it could not.
+-- The directional scanner (Tactical/Dscan): the ships, wrecks and
+-- structures within 'range' metres of the pilot's ship, all round
+-- ('angle' 360) or in a cone of 'angle' degrees pointed along the line
+-- 'along' (x, y and z of it) or, with no line, at 'toward'; and whether
+-- the scan could be made, with why not if it could not.
 export type Sighting = Dscan.Sighting
-function Query.Directional(game: Game, toward: number?, angle: number, range: number): ({ Sighting }, boolean, string?)
+function Query.Directional(game: Game, toward: number?, angle: number, range: number, along: { number }?): ({ Sighting }, boolean, string?)
   local ship = game.state.player.ship
-  local ok, why = Dscan.Can(game.state, ship, toward, angle)
-  return Dscan.Scan(game.state, ship, toward, angle, range), ok, why
+  local ok, why = Dscan.Can(game.state, ship, toward, angle, along)
+  return Dscan.Scan(game.state, ship, toward, angle, range, along), ok, why
 end
 
 -- Whether a site is one the pilot can see on the overview: found, and

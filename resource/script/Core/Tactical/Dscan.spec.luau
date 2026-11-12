@@ -7,7 +7,9 @@ local Core = require("@lt/Core/Api")
 local Dscan = require("@lt/Core/Tactical/Dscan")
 local Items = require("@lt/Core/Assets/Items")
 local Pirates = require("@lt/Core/Tactical/Pirates")
+local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
+local Sites = require("@lt/Core/Tactical/Sites")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Test = require("@lt/Tool/Test")
@@ -133,6 +135,82 @@ suite:Case("in a cone, it has what is within half the cone's angle of the line t
   t.eq(select(2, Core.Query.Directional(game, marked, 10, 14 * AU)), false, "a mark where the ship is points nowhere")
   me.x -= 5000
   t.eq(has(Core.Query.Directional(game, marked, 10, 14 * AU), { mark, at[1], at[7] }), { true, true, false })
+end)
+
+suite:Case("it has the stations and gates in its range, as structures; and what stands at a place nobody has found, only once it is found", function(t)
+  local game, me = still()
+  local state = game.state
+  local found = Core.Query.Directional(game, nil, 360, 14 * AU)
+  -- Every station and gate of the charts within reach is on it, by its name and what it is; and nothing else of the charts is.
+  local wanted, seen = 0, 0
+  for _, object in Space.Describe(state, me.system).objects do
+    local far = Space.Distance(me :: any, object :: any)
+    local structure = object.kind == "station" or object.kind == "gate"
+    wanted += if structure and far <= Dscan.REACH then 1 else 0
+    for _, sighting in found do
+      if sighting.id == object.id then
+        seen += 1
+        t.ok(structure and far <= Dscan.REACH, `{object.name}, a {object.kind}, is on the scanner`)
+        t.eq({ sighting.kind, sighting.name, sighting.onGrid } :: { any }, { "structure", object.name, object.site == me.grid } :: { any })
+        t.eq(sighting.type, if object.kind == "gate" then "stargate" elseif object.variety ~= "" then object.variety else "station")
+      end
+    end
+  end
+  t.ok(wanted >= 2, `{wanted} stations and gates in reach of the home station`)
+  t.eq(seen, wanted)
+  -- (the station the ship has just left is the one the overview has too)
+  local here = 0
+  for _, sighting in found do
+    here += if sighting.kind == "structure" and sighting.onGrid then 1 else 0
+  end
+  t.eq(here, 1)
+  -- Range counts for them as for a ship.
+  local near = Core.Query.Directional(game, nil, 360, 0.1 * AU)
+  for _, sighting in near do
+    local object = Space.Object(state, sighting.id)
+    t.ok(object == nil or Space.Distance(me :: any, object :: any) <= 0.1 * AU)
+  end
+  -- A camp of two rooms with a gate in each: the first room is found, and its gate is seen; the second is not, nor its gate,
+  -- until it is; and neither is once the place is gone.
+  local rng = Rng.For(7, 7)
+  local first = assert(Sites.Stake(state, me.system, rng, "Pirate Camp"))
+  local second = assert(Sites.Stake(state, me.system, rng, "Pirate Camp", first, " II"))
+  local gate = assert(Sites.Fixture(state, first, "gate", "Gate to the second room", 9000, 0, 0, 260, "passage", second.id))
+  local hidden = assert(Sites.Fixture(state, second, "gate", "Gate to nowhere", 9000, 0, 0, 260, "passage", first.id))
+  -- (the camp is by some planet or other: the ship is put within reach of it)
+  local camp = assert(Space.Object(state, first.id))
+  me.x, me.y, me.z = camp.x + 5e6, camp.y, camp.z
+  Space.AssignGrid(state, me)
+  t.eq(has(Core.Query.Directional(game, nil, 360, 14 * AU), { gate.id, hidden.id }), { true, false })
+  for _, sighting in Core.Query.Directional(game, nil, 360, 14 * AU) do
+    if sighting.id == gate.id then
+      t.eq({ sighting.kind, sighting.type, sighting.onGrid } :: { any }, { "structure", "camp gate", false } :: { any })
+    end
+  end
+  second.strength = 1
+  t.eq(has(Core.Query.Directional(game, nil, 360, 14 * AU), { gate.id, hidden.id }), { true, true })
+  first.gone = true
+  t.eq(has(Core.Query.Directional(game, nil, 360, 14 * AU), { gate.id, hidden.id }), { false, true })
+end)
+
+suite:Case("a cone can be pointed along a line, the way the pilot looks, with nothing picked out", function(t)
+  local game, me = still()
+  local at: { number } = {}
+  for index, degrees in { 4, 6, 14, 16, 44, 46, 180 } do
+    at[index] = put(game, me, AU, degrees)
+  end
+  -- Along x, which is the line the ships were put about: as a cone pointed at something on that line.
+  t.eq(has(Core.Query.Directional(game, nil, 10, 14 * AU, { 1, 0, 0 }), at), { true, false, false, false, false, false, false })
+  t.eq(has(Core.Query.Directional(game, nil, 30, 14 * AU, { 5, 0, 0 }), at), { true, true, true, false, false, false, false })
+  t.eq(has(Core.Query.Directional(game, nil, 90, 14 * AU, { 0.01, 0, 0 }), at), { true, true, true, true, true, false, false })
+  -- The other way, the one behind.
+  t.eq(has(Core.Query.Directional(game, nil, 10, 14 * AU, { -1, 0, 0 }), at), { false, false, false, false, false, false, true })
+  -- A line counts before whatever is picked out; and no line at all is no cone.
+  t.eq(has(Core.Query.Directional(game, at[7], 10, 14 * AU, { 1, 0, 0 }), { at[1], at[7] }), { true, false })
+  local none, ok, why = Core.Query.Directional(game, nil, 10, 14 * AU, { 0, 0, 0 })
+  t.eq({ #none, ok, why } :: { any }, { 0, false, "a cone has to be pointed at something" } :: { any })
+  -- All round, a line makes no difference.
+  t.eq((Core.Query.Directional(game, nil, 360, 14 * AU, { 1, 0, 0 })), (Core.Query.Directional(game, nil, 360, 14 * AU)))
 end)
 
 return suite

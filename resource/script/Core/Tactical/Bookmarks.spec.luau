@@ -146,4 +146,52 @@ suite:Case("a place marked in one system is not on another's overview, and marks
   t.eq(#Core.Query.Bookmarks(Core.Load(old, oldLength)), 0)
 end)
 
+suite:Case("a marked place is given a name of the pilot's own, from anywhere, and keeps it", function(t)
+  local game = adrift()
+  local state = game.state
+  t.ok((submit(game, { kind = "Bookmark", actor = 0 })))
+  local id = state.bookmarkIds[1]
+  local made = state.bookmarks[id].name
+  -- A name: one letter to thirty-two, of letters, figures and spaces (and a few marks), tidied.
+  t.eq(Space.PlaceName("  The   quiet  belt "), "The quiet belt")
+  t.eq(Space.PlaceName("7"), "7")
+  t.eq({ Space.PlaceName("   ") } :: { any }, { nil, "a place has a name" } :: { any })
+  t.eq(select(2, Space.PlaceName(string.rep("a", 33))), "a name has 32 letters at most")
+  t.eq(select(2, Space.PlaceName("a;b")), "a name is of letters, figures and spaces")
+  t.eq(refused(game, { kind = "RenameBookmark", actor = 0, target = id, what = "" }), "a place has a name")
+  t.eq(refused(game, { kind = "RenameBookmark", actor = 0, target = id }), "a place has a name")
+  t.eq(refused(game, { kind = "RenameBookmark", actor = 0, target = 12345, what = "Home" }), "no such place is marked")
+  -- Renamed: it is that on the overview, and where it is has not changed.
+  local x, y, z = state.bookmarks[id].x, state.bookmarks[id].y, state.bookmarks[id].z
+  Core.TakeEvents(game)
+  t.ok((submit(game, { kind = "RenameBookmark", actor = 0, target = id, what = " Ore  cache 2 " })))
+  local renamed: { [string]: any }? = nil
+  for _, event in Core.TakeEvents(game) do
+    renamed = if event.kind == "BookmarkRenamed" then event else renamed
+  end
+  t.eq({ assert(renamed).bookmark, assert(renamed).name } :: { any }, { id, "Ore cache 2" } :: { any })
+  local mark = state.bookmarks[id]
+  t.eq({ mark.name, mark.x, mark.y, mark.z } :: { any }, { "Ore cache 2", x, y, z } :: { any })
+  t.ok(made ~= mark.name)
+  t.eq(marks(game)[1].name, "Ore cache 2")
+  -- It is in the save by that name.
+  local data, length = Core.Save(game)
+  t.eq(Core.Load(data, length).state.bookmarks[id].name, "Ore cache 2")
+  -- And it can be done docked: a name is not a matter of where the ship is.
+  local home = state.player.home
+  local ball = state.balls[state.player.ship]
+  local station = assert(Space.Object(state, home))
+  ball.x, ball.y, ball.z = station.x + station.radius + 500, station.y, station.z
+  Space.AssignGrid(state, ball)
+  t.ok((submit(game, { kind = "Dock", actor = 0, target = home })))
+  for _ = 1, 600 do
+    if state.ships[state.player.ship].docked == home then
+      break
+    end
+    Core.Step(game)
+  end
+  t.ok((submit(game, { kind = "RenameBookmark", actor = 0, target = id, what = "Back door" })))
+  t.eq(state.bookmarks[id].name, "Back door")
+end)
+
 return suite

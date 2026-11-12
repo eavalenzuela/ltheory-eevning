@@ -2,16 +2,18 @@
 -- The scanner window. It has two sides. "Signals": what the ship's
 -- scanner shows of the system, the signals it has not resolved yet, the
 -- scanning of them and the probes. "Directional": the directional
--- scanner (Core/Tactical/Dscan), which says what ships and wrecks are
--- within a range, all round or in a cone pointed at what is selected.
+-- scanner (Core/Tactical/Dscan), which says what ships, wrecks and
+-- structures are within a range, all round or in a cone pointed at what
+-- is selected or the way the camera looks.
 --
 -- Open in space, from the Scan button on the overview. Drawn every
 -- frame with Game/UI/Im; it reads the Core through queries and acts on
 -- it only through the Session. Its buttons' names, for a script
 -- (Im.Press): "Scanner:close", "Scanner:signals", "Scanner:directional";
 -- "Scan", "Probe:launch", "Probe:recall" and "SiteWarp:<n>" for the nth
--- site listed; "Dscan:scan", "Dscan:angle:<degrees>" (360, 90, 30, 10)
--- and "Dscan:range:<AU>" (14, 5, 1, 0.1).
+-- site listed; "Dscan:scan", "Dscan:angle:<degrees>" (360, 90, 30, 10),
+-- "Dscan:range:<AU>" (14, 5, 1, 0.1), and "Dscan:aim:selected" and
+-- "Dscan:aim:camera" for what a cone is pointed by.
 
 local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
@@ -35,13 +37,14 @@ local side: "signals" | "directional" = "signals"
 -- The directional scanner: how it is set, and what its last scan had
 -- (a scan is of a moment: the list stands until the next one).
 local angle, range = 360, 14
+local aim: "selected" | "camera" = "selected"
 local sightings: { Core.Sighting } = {}
 local scans = 0             -- how many have been made
 local scannedTick = -1      -- the tick of the last
 local scannedIn = 0         -- and the system it was made in
 local scannedHow = ""       -- and how it was set
 
-local ROWS = 9
+local ROWS = 8
 
 function Scanner.Open()
   open = true
@@ -60,7 +63,8 @@ function Scanner.Sightings(): ({ Core.Sighting }, number)
   return sightings, scans
 end
 
-local function drawDirectional(session: Session.Session, x: number, y: number, width: number, height: number)
+-- ('look': the way the camera looks, as the Core has its directions.)
+local function drawDirectional(session: Session.Session, x: number, y: number, width: number, height: number, look: vector?)
   local game = session.game
   local state = game.state
   local left, right = x + 16, x + width - 16
@@ -71,39 +75,54 @@ local function drawDirectional(session: Session.Session, x: number, y: number, w
   end
   local toward = if session.selected ~= 0 then session.selected else nil
   local body = if toward then Core.Query.Body(game, toward) else nil
-  Im.Text("Pointed at", left, y + 48, 13, Im.DIM)
-  Im.Text(if body then body.name else "nothing: select something to point a cone at", left + 84, y + 48, 13, if body then Im.TEXT else Im.DIM)
-  Im.Text("Cone", left, y + 79, 13, Im.DIM)
+  -- A cone is pointed at what is selected, or the way the camera looks.
+  local along: { number }? = if aim == "camera" and look then { look.x, look.y, look.z } else nil
+  Im.Text("Pointed", left, y + 48, 13, Im.DIM)
+  if Im.Toggle("at what is selected", left + 84, y + 42, 170, 24, aim == "selected", "Dscan:aim:selected") then
+    aim = "selected"
+  end
+  if Im.Toggle("where I look", left + 260, y + 42, 170, 24, aim == "camera", "Dscan:aim:camera") then
+    aim = "camera"
+  end
+  local name = if body then body.name else nil
+  if #(name or "") > 40 then
+    name = string.sub(name :: string, 1, 39) .. "."
+  end
+  Im.Text(if along then "the way the camera looks: turn it, and scan" elseif name then name else "nothing: select something to point a cone at",
+    left + 84, y + 72, 13, if along or name then Im.TEXT else Im.DIM)
+  Im.Text("Cone", left, y + 103, 13, Im.DIM)
   for index, degrees in Dscan.ANGLES do
     local label = if degrees == 360 then "all round" else `{degrees} deg`
-    if Im.Toggle(label, left + 84 + (index - 1) * 88, y + 72, 82, 26, angle == degrees, `Dscan:angle:{degrees}`) then
+    if Im.Toggle(label, left + 84 + (index - 1) * 88, y + 96, 82, 26, angle == degrees, `Dscan:angle:{degrees}`) then
       angle = degrees
     end
   end
-  Im.Text("Range", left, y + 111, 13, Im.DIM)
+  Im.Text("Range", left, y + 135, 13, Im.DIM)
   for index, reach in Dscan.RANGES do
-    if Im.Toggle(`{reach} AU`, left + 84 + (index - 1) * 88, y + 104, 82, 26, range == reach, `Dscan:range:{reach}`) then
+    if Im.Toggle(`{reach} AU`, left + 84 + (index - 1) * 88, y + 128, 82, 26, range == reach, `Dscan:range:{reach}`) then
       range = reach
     end
   end
-  local _, can, whyNot = Core.Query.Directional(game, toward, angle, range * Constants.AU)
-  if Im.Button("Scan", left, y + 140, 110, 28, can, "Dscan:scan") then
-    sightings = Core.Query.Directional(game, toward, angle, range * Constants.AU)
+  local _, can, whyNot = Core.Query.Directional(game, toward, angle, range * Constants.AU, along)
+  if Im.Button("Scan", left, y + 164, 110, 28, can, "Dscan:scan") then
+    sightings = Core.Query.Directional(game, toward, angle, range * Constants.AU, along)
     scans += 1
     scannedTick, scannedIn = state.tick, system
-    scannedHow = if angle == 360 then `all round, {range} AU` else `{angle} deg at {if body then body.name else "?"}, {range} AU`
+    scannedHow = if angle == 360 then `all round, {range} AU`
+      elseif along then `{angle} deg where the camera looked, {range} AU`
+      else `{angle} deg at {name or "?"}, {range} AU`
   end
   if not can then
-    Im.Text(tostring(whyNot), left + 122, y + 147, 13, Im.DIM)
+    Im.Text(tostring(whyNot), left + 122, y + 171, 13, Im.DIM)
   elseif scannedTick >= 0 then
     local age = math.floor((state.tick - scannedTick) * Constants.TICK)
-    Im.Text(`{#sightings} found, {if age <= 0 then "now" else `{age} s ago`}`, left + 122, y + 147, 13, GOOD)
-    Im.TextRight(scannedHow, right, y + 148, 11, Im.DIM)
+    Im.Text(`{#sightings} found, {if age <= 0 then "now" else `{age} s ago`}`, left + 122, y + 171, 13, GOOD)
+    Im.TextRight(scannedHow, right, y + 196, 11, Im.DIM)
   else
-    Im.Text("ready", left + 122, y + 147, 13, GOOD)
+    Im.Text("ready", left + 122, y + 171, 13, GOOD)
   end
 
-  local line = y + 180
+  local line = y + 214
   if scannedTick >= 0 and #sightings == 0 then
     Im.Text("Nothing there.", left, line, 13, Im.DIM, 0.8)
   end
@@ -120,10 +139,11 @@ local function drawDirectional(session: Session.Session, x: number, y: number, w
     line += 22
   end
   Im.Text("It says what is there and not where: that is worked out by", left, y + height - 46, 12, Im.DIM, 0.8)
-  Im.Text("narrowing the range, and the cone on what is selected.", left, y + height - 30, 12, Im.DIM, 0.8)
+  Im.Text("narrowing the range, and the cone, on a thing or where you look.", left, y + height - 30, 12, Im.DIM, 0.8)
 end
 
-function Scanner.Draw(session: Session.Session, x: number, y: number)
+-- ('look': the way the camera looks, for a cone that is pointed by it.)
+function Scanner.Draw(session: Session.Session, x: number, y: number, look: vector?)
   if not open then
     return
   end
@@ -143,7 +163,7 @@ function Scanner.Draw(session: Session.Session, x: number, y: number)
     side = "directional"
   end
   if side == "directional" then
-    drawDirectional(session, x, y, width, height)
+    drawDirectional(session, x, y, width, height, look)
     return
   end
   local sites, wait, probes = Core.Query.Sites(game)

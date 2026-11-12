@@ -339,6 +339,14 @@ local ORDER_KEYS: { [string]: string } = {
   LockTarget = "L", UnlockTarget = "L",
 }
 
+-- The marked place whose name is shown as a field in the panel of what
+-- is selected, what the field holds, and the tick a new name for it was
+-- sent to the Core (-1 with none on its way).
+local naming = 0
+local named = ""
+local sentAt = -1
+
+
 local function drawSelected(session: Session.Session, entries: { Core.Entry }, ball: State.Ball, x: number, y: number, width: number)
   local selected: Core.Entry? = nil
   for _, entry in entries do
@@ -354,7 +362,33 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     return
   end
   local entry: Core.Entry = selected
-  Im.Heading(string.upper(entry.name), x + 12, y + 8, 16, Im.TEXT)
+  if entry.kind == "bookmark" then
+    -- A place the pilot marked is called what they like: its name is a
+    -- field, and what is typed there is its name when the typing is done.
+    local tick = session.game.state.tick
+    if naming ~= entry.id then
+      naming, named, sentAt = entry.id, entry.name, -1
+    end
+    named = Im.Words("Bookmark:name", named, x + 8, y + 4, width - 120, 24, 32)
+    if not Im.Typing() and named ~= entry.name then
+      local rename: State.Command = { kind = "RenameBookmark", actor = 0, target = entry.id, what = named }
+      if sentAt >= 0 and tick > sentAt then
+        -- (the name sent is the place's now, tidied: the field shows it as it is kept)
+        named, sentAt = entry.name, -1
+      elseif sentAt < 0 and Session.CanDo(session, rename) then
+        Session.Do(session, rename)
+        sentAt = tick
+      elseif sentAt < 0 then
+        -- (no name at all, or one that will not do: it is called what it was)
+        named = entry.name
+      end
+    elseif not Im.Typing() then
+      sentAt = -1
+    end
+  else
+    naming = 0
+    Im.Heading(string.upper(entry.name), x + 12, y + 8, 16, Im.TEXT)
+  end
   local what = if entry.variety ~= "" and entry.kind ~= "ship" then `{entry.variety} {entry.kind}` else entry.kind
   if entry.kind == "station" and entry.variety == "colony ship" then
     -- (a station to moor at, and a ship: it says the second)
@@ -802,7 +836,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Assets.Draw(session, left + 16, top + 130)
       Guide.Draw(session, left + 16, top + 130)
       if ball then
-        Scanner.Draw(session, left + 16, top + 130)
+        Scanner.Draw(session, left + 16, top + 130, scene.camera:GetLook())
         -- (a hack under way has the middle of the screen)
         Hack.Draw(session, left + (w.size.x - Hack.WIDTH) / 2, top + 150)
       end
