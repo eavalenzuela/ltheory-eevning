@@ -76,8 +76,8 @@ end)
 
 suite:Case("a fit that breaks the rules is refused, with the reason", function(t)
   local game = newGame()
-  -- both high slots hold autocannons already
-  t.eq(refused(game, { kind = "Fit", actor = 0, item = inHangar(game, "laser.pulse.small").id }), "no free high slot")
+  -- both turret hardpoints hold autocannons already (the third high slot is for what needs none)
+  t.eq(refused(game, { kind = "Fit", actor = 0, item = inHangar(game, "laser.pulse.small").id }), "no free turret hardpoint")
   t.eq(refused(game, { kind = "Fit", actor = 0, item = inHangar(game, "ammo.emp").id }), "not a module")
   t.eq(refused(game, { kind = "Fit", actor = 0, item = 12345 }), "no such item")
   local fitted = Items.Fitted(game.state, game.state.player.ship)[1]

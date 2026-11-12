@@ -134,7 +134,11 @@ end)
 
 suite:Case("a fit must respect slots, hardpoints, CPU and powergrid", function(t)
   t.eq({ Attributes.Check(lancer, { "laser.pulse.small", "laser.pulse.small", "laser.pulse.small" }) }, { true } :: { any })
+  -- (the Courier's third high slot is for what needs no hardpoint: a salvager goes beside its two guns, a third gun does not)
   t.eq({ Attributes.Check(courier, { "laser.pulse.small", "laser.pulse.small", "laser.pulse.small" }) },
+    { false, "no free turret hardpoint" } :: { any })
+  t.eq({ Attributes.Check(courier, { "autocannon.small", "autocannon.small", "salvager.small" }) }, { true } :: { any })
+  t.eq({ Attributes.Check(courier, { "autocannon.small", "autocannon.small", "salvager.small", "cloak.device" }) },
     { false, "no free high slot" } :: { any })
   t.eq({ Attributes.Check(lancer, { "launcher.light" }) }, { false, "no free launcher hardpoint" } :: { any })
   t.eq({ Attributes.Check(courier, { "shield.extender.small", "shield.booster.small", "armor.repairer.small" }) },

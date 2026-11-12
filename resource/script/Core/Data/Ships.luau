@@ -85,7 +85,10 @@ local types: { ShipType } = {
     mass = 1100000, inertia = 3.2, maxVelocity = 360, warpSpeed = 5, radius = 40,
     shield = 350, armor = 300, hull = 300, shieldRecharge = 625,
     shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 38,
-    cpu = 110, powergrid = 32, highs = 2, mids = 2, lows = 1, turrets = 2, launchers = 0,
+    -- (two guns, and a third high slot for what needs no hardpoint: the
+    -- salvager a new pilot is taught with goes beside the guns, not in
+    -- place of one. Character/Proof.spec flies that.)
+    cpu = 110, powergrid = 32, highs = 3, mids = 2, lows = 1, turrets = 2, launchers = 0,
     capacitor = 260, capacitorRecharge = 190,
     scanResolution = 580, lockRange = 22000, maxTargets = 3, cargo = 180,
   },
