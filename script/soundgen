@@ -11,14 +11,18 @@ brought to a common loudness and written to resource/sound/made/<name>.ogg
 there already is left alone unless it is named with --force: asking
 again gives a different sound, and costs credits.
 
+A line whose kind is 'music' is a piece of music, asked of the same
+people's music service (instrumental, as long as the line says), faded
+in and out at its ends and written the same way.
+
 A sound can also be joined from two that are there, which asks nobody
 for anything:
 
-    name | seconds | join | FIRST then SECOND
+    name | seconds | join | FIRST then SECOND [after N]
 
-FIRST (one of the sounds made here) is heard up to its loudest moment
-and fades out over the 'seconds' after it; SECOND (any sound under
-resource/sound) begins at that moment.
+SECOND (any sound under resource/sound) begins at the loudest moment of
+FIRST (one of the sounds made here), or N seconds after it; FIRST is
+heard until then, and fades out over the 'seconds' after.
 
     script/soundgen                 make every sound that is not there yet
     script/soundgen NAME...         make these (if not there yet)
@@ -43,7 +47,8 @@ LIST = os.path.join(ROOT, "resource/sound/made/sounds.txt")
 OUT = os.path.join(ROOT, "resource/sound/made")
 RAW = os.path.join(ROOT, "cache/soundgen")
 URL = "https://api.elevenlabs.io/v1/sound-generation?output_format=mp3_44100_128"
-PEAK = {"once": -1.0, "loop": -4.0, "join": -1.0}    # dB: how loud the loudest moment of each is made
+PEAK = {"once": -1.0, "loop": -4.0, "join": -1.0, "music": -3.0}    # dB: how loud the loudest moment of each is made
+MUSIC = "https://api.elevenlabs.io/v1/music?output_format=mp3_44100_128"
 SOUNDS = os.path.join(ROOT, "resource/sound")
 
 
@@ -67,7 +72,7 @@ def listed():
             continue
         parts = [part.strip() for part in line.split("|", 3)]
         if len(parts) != 4 or parts[2] not in PEAK:
-            sys.exit(f"soundgen: {LIST}:{number}: expected 'name | seconds | once, loop or join | description'")
+            sys.exit(f"soundgen: {LIST}:{number}: expected 'name | seconds | once, loop, music or join | description'")
         sounds.append({"name": parts[0], "seconds": float(parts[1]), "kind": parts[2], "text": parts[3]})
     return sounds
 
@@ -107,6 +112,7 @@ def loudest(path):
 def join(sound):
     """A sound of two: the first up to its loudest moment, the second from then."""
     first, _, second = sound["text"].partition(" then ")
+    second, _, later = second.partition(" after ")
     first, second = os.path.join(OUT, first.strip() + ".ogg"), os.path.join(SOUNDS, second.strip())
     for path in (first, second):
         if not os.path.exists(path):
@@ -114,7 +120,7 @@ def join(sound):
     out = os.path.join(OUT, sound["name"] + ".ogg")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     os.makedirs(RAW, exist_ok=True)
-    at = loudest(first)
+    at = loudest(first) + (float(later) if later.strip() else 0.0)
     mixed = os.path.join(RAW, "join.wav")
     ffmpeg("-i", first, "-i", second, "-filter_complex",
            f"[0:a]afade=t=out:st={at:.3f}:d={sound['seconds']:.3f}[a];[1:a]adelay={int(at * 1000)}:all=1[b];"
@@ -127,14 +133,19 @@ def join(sound):
 
 
 def ask(sound, secret):
+    url = URL
     body = {"text": sound["text"], "duration_seconds": sound["seconds"], "prompt_influence": 0.5}
     if sound["kind"] == "loop":
         body["loop"] = True
-    request = urllib.request.Request(URL, data=json.dumps(body).encode(), method="POST", headers={
+    elif sound["kind"] == "music":
+        url = MUSIC
+        body = {"prompt": sound["text"], "music_length_ms": int(sound["seconds"] * 1000), "force_instrumental": True}
+    request = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST", headers={
         "xi-api-key": secret, "Content-Type": "application/json", "User-Agent": "soundgen/1"})
     try:
-        with urllib.request.urlopen(request, timeout=180) as answer:
-            return answer.read(), int(answer.headers.get("character-cost") or 0)
+        with urllib.request.urlopen(request, timeout=900) as answer:
+            # (the music service does not say what a piece cost: -1)
+            return answer.read(), int(answer.headers.get("character-cost") or (-1 if sound["kind"] == "music" else 0))
     except urllib.error.HTTPError as error:
         sys.exit(f"soundgen: {sound['name']}: the service said {error.code}: {error.read()[:300].decode(errors='replace')}")
 
@@ -147,7 +158,12 @@ def make(sound, secret):
     data, cost = ask(sound, secret)
     open(raw, "wb").write(data)
     gain = PEAK[sound["kind"]] - peak(raw)
-    if sound["kind"] == "loop":
+    if sound["kind"] == "music":
+        # (in and out of silence at its ends, so that it can come round again)
+        end = length(raw)
+        ffmpeg("-i", raw, "-af", f"afade=t=in:st=0:d=2.5,afade=t=out:st={max(0.0, end - 4):.3f}:d=4,volume={gain:.2f}dB",
+               "-c:a", "libvorbis", "-q:a", "4", out)
+    elif sound["kind"] == "loop":
         # (as it came, but for its loudness: a loop's ends are made to meet)
         ffmpeg("-i", raw, "-af", f"volume={gain:.2f}dB", "-c:a", "libvorbis", "-q:a", "5", out)
     else:
@@ -157,8 +173,8 @@ def make(sound, secret):
         end = length(trimmed)
         ffmpeg("-i", trimmed, "-af", f"afade=t=out:st={max(0.0, end - 0.06):.3f}:d=0.06", "-c:a", "libvorbis", "-q:a", "5", out)
         os.remove(trimmed)
-    print(f"  made  {sound['name']:<24} {length(out):5.2f} s  {cost:4d} credits")
-    return cost
+    print(f"  made  {sound['name']:<24} {length(out):6.2f} s  " + (f"{cost:4d} credits" if cost >= 0 else "cost not said"))
+    return max(cost, 0)
 
 
 def main():
@@ -185,7 +201,7 @@ def main():
             continue
         # (what is joined comes after what it is joined from in the list)
         spent += join(sound) if sound["kind"] == "join" else make(sound, key())
-    print(f"soundgen: {spent} credits spent")
+    print(f"soundgen: {spent} credits spent (music not counted: the service does not say)")
 
 
 main()

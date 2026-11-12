@@ -5,8 +5,8 @@
 -- sounds: weapons by their kind, hits on the pilot's own ship, ships
 -- blowing up, the warp drive, a gate, docking, a lock, a job done, and a
 -- click for a button. Under them run three loops whose loudness follows
--- the game: the place (space, or a station's hum), the pilot's engines
--- by how hard they burn, and the warp.
+-- the game: a station's hum while docked, the pilot's engines by how
+-- hard they burn, and the warp. And under all of it, music (Game/View/Music).
 --
 -- Everything is played flat (not placed in space by the engine) at a
 -- loudness worked out here: what is far off is quiet, by how far it is
@@ -25,6 +25,7 @@
 
 local Core = require("@lt/Core/Api")
 local Im = require("@lt/Game/UI/Im")
+local Music = require("@lt/Game/View/Music")
 local Session = require("@lt/Game/Session")
 
 local Audio = {}
@@ -41,9 +42,13 @@ export type Audio = {
   engineNow: number,              -- their loudness now, eased toward what the game asks
   warpNow: number,
   played: number,                 -- sounds started so far, for a script to see that it works
+  music: Music.Music,
 }
 
-local PLACE = { space = "system/ambiance/002.wav", station = "station/ambiance_ship_loops_14.wav" }
+-- The hum of a place. (Space had a chiming loop of the engine's, which
+-- passed for music and was not much liked as that: it has music now,
+-- and no loop of its own.)
+local PLACE: { [string]: string } = { station = "station/ambiance_ship_loops_14.wav" }
 
 -- A weapon's sound by its family: the files, how loud, and its pitch.
 local WEAPON: { [string]: { files: { string }, volume: number, pitch: number } } = {
@@ -77,7 +82,7 @@ local ANY: { [string]: { any } } = {
 function Audio.New(): Audio
   return {
     enabled = not Host.scripted, master = 1, time = 0, last = {}, place = nil, placeIs = "", engine = nil, warp = nil,
-    engineNow = 0, warpNow = 0, played = 0,
+    engineNow = 0, warpNow = 0, played = 0, music = Music.New(),
   }
 end
 
@@ -91,6 +96,7 @@ function Audio.Set(audio: Audio, enabled: boolean, master: number?)
     Sound_Delete(audio.engine)
     Sound_Delete(audio.warp)
     audio.place, audio.engine, audio.warp, audio.placeIs = nil, nil, nil, ""
+    Music.Stop(audio.music)
   end
 end
 
@@ -180,7 +186,7 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
     if audio.place then
       Sound_Delete(audio.place)
     end
-    audio.place = Sound_Play2DLooped(PLACE[where], 0.10 * audio.master)
+    audio.place = if PLACE[where] then Sound_Play2DLooped(PLACE[where], 0.10 * audio.master) else nil
     audio.placeIs = where
   end
   -- The engines, by how fast the ship is going of what it can.
@@ -196,9 +202,13 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
     audio.warp = Sound_Play2DLooped("warpnode/drone1.ogg", 0)
   end
   -- (every frame, so that turning the sound up or down is heard at once)
-  Sound_SetVolume(audio.place, 0.10 * audio.master)
+  if audio.place then
+    Sound_SetVolume(audio.place, 0.10 * audio.master)
+  end
   Sound_SetVolume(audio.engine, audio.engineNow * audio.master)
   Sound_SetVolume(audio.warp, audio.warpNow * audio.master)
+
+  Music.Update(audio.music, session, audio.time, frameSeconds, audio.master)
 end
 
 return Audio

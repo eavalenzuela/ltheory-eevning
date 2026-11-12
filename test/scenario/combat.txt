@@ -11,6 +11,9 @@ wait 2
 # code runs and nobody hears it)
 lua GameDebug.Sound(true, 0)
 lua assert(GameDebug.Docked(), 'a new game starts docked')
+# (and music with it: a station's, while docked)
+frames 3
+lua assert(GameDebug.Music() == 'docked', 'docked, the music should be the station\'s, not ' .. GameDebug.Music())
 lua assert(GameDebug.Fitted('autocannon.small') == 2, 'the starter ship has two autocannons')
 
 # The Fit button on the second hangar row, the shield extender (1920x1080).
@@ -22,12 +25,16 @@ lua assert(GameDebug.Fitted('shield.extender.small') == 1, 'clicking Fit did not
 # UNDOCK, at the foot of the fitting screen.
 click Left 566 700
 until GameDebug.InSpace()
+frames 3
+lua assert(GameDebug.Music() == 'space', 'out of the station the music should be space\'s')
 
 lua GameDebug.TimeScale(4)
 lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
 until GameDebug.InWarp()
 until GameDebug.Idle()
 until GameDebug.Pirates() > 0
+# (a pirate on the grid is a fight, to the music)
+until GameDebug.Music() == 'combat'
 lua assert(GameDebug.Pirates() == 1, 'this seed brings one pirate')
 
 # It starts out of targeting range and comes to us.
@@ -60,6 +67,7 @@ wait 0.5
 lua assert(GameDebug.Hull() == 'frigate.courier', 'docking in a capsule should give a new ship')
 
 lua assert(GameDebug.Sound() > 5, 'hardly a sound was made in all that')
+lua assert(GameDebug.Music() == 'docked' and select(3, GameDebug.Music()) >= 4, 'the music should have gone from station to space to fight and back')
 
 echo combat scenario passed
 quit

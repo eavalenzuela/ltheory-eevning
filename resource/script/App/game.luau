@@ -1040,6 +1040,12 @@ function Debug.Sound(on: boolean?, master: number?): number
   return audio.played
 end
 
+-- The music: the mood it is in ("docked", "space", "combat"; "" with
+-- the sound off), the piece playing, and how many pieces have been begun.
+function Debug.Music(): (string, string, number)
+  return audio.music.mood, audio.music.file, audio.music.changes
+end
+
 -- The levels the pilot has researched of a blueprint: materials, time.
 function Debug.Researched(type: string): (number, number)
   local status = Core.Query.Research(session.game, type)

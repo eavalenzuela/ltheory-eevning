@@ -3,12 +3,14 @@
 # resource/sound/made/<name>.ogg. Game/View/Audio says which is heard when.
 #
 #   name | seconds | once or loop | what it should sound like
-#   name | seconds | join         | FIRST then SECOND
+#   name | seconds | music        | what the piece should be like
+#   name | seconds | join         | FIRST then SECOND [after N]
 #
 # A line changed does not change the sound: script/soundgen --force NAME
 # makes it again (and it will not be the same sound twice). A join is
-# FIRST up to its loudest moment, fading out over 'seconds' after it,
-# with SECOND (any sound under resource/sound) begun at that moment.
+# SECOND (any sound under resource/sound) begun at FIRST's loudest
+# moment, or N seconds after it, with FIRST heard until then and fading
+# out over the 'seconds' after.
 #
 # What was tried and not kept (the owner's ear, 2026-11-11): generated
 # laser shots and warp-drive sounds. The engine's old ones are better,
@@ -26,6 +28,16 @@ impact/hull1       | 0.8 | once | A projectile slamming into thick starship hull
 explosion/ship1    | 3.5 | once | A spaceship exploding, heard through the hull from some distance: a deep muffled boom, debris clattering, and a low rumbling tail, cinematic, no music, no voice
 
 # A gate: the surge that builds, and then (the owner's mix) the engine's
-# old jump sound for the clap, begun at the surge's peak.
+# old jump sound for the clap, begun 0.6 s after the surge's peak (of the
+# clap at the peak, 0.3 s after and 0.6 s after, "the .6 second-later mix
+# is the one").
 gate/surge         | 3.5 | once | A stargate flinging a starship across space: a huge electrical surge building for half a second, a bright crackling burst of energy, then a rushing wind-tunnel whoosh that fades away, cinematic, no music, no voice
-gate/jump          | 0.6 | join | gate/surge then warpnode/exit.ogg
+gate/jump          | 0.6 | join | gate/surge then warpnode/exit.ogg after 0.6
+
+# Music (Game/View/Music says which is heard where). In the manner the
+# owner chose (2026-11-11): strings, a warm drone, "the occasional piano
+# key". About 25 credits a second.
+music/space1       | 120 | music | Slow ambient music for drifting through deep space: soft sustained strings, a deep warm drone, sparse distant piano notes with long reverb, no drums, no vocals, vast, calm, contemplative, cinematic
+music/space2       | 120 | music | Slow ambient music for a long quiet voyage between the stars: a slow swell of sustained strings rising and falling, a deep warm drone, a few lonely piano notes far apart with long reverb, no drums, no vocals, vast, wistful, patient, cinematic
+music/docked1      | 120 | music | Warm, quiet ambient music for a ship at rest in a space station hangar: gentle sustained strings and a soft felt piano playing a slow simple figure with long pauses, a faint low hum, no drums, no vocals, safe, intimate, unhurried, cinematic
+music/combat1      | 120 | music | Tense underscore for a battle between starships: an urgent low string ostinato, a deep pulsing drone, hard sparse piano notes in the low register, rising string swells, sparse distant orchestral percussion, no drum kit, no vocals, dark, relentless, cinematic
