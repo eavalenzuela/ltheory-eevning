@@ -1,8 +1,8 @@
-# Limit Theory (old): codebase catalog and EVE roadmap
+# Limit Theory (old): codebase catalog and roadmap
 
 > **Superseded in part (2026-11-09).** The roadmap is now [`docs/roadmap.md`](../roadmap.md). Sections 3 to 6 below (the gap table, the two paths, the first milestone) are kept as history only. The catalog also predates the Luau port, so script paths ending in `.lts` are now `.luau`, and several "not working" items (mining, docking, fitting, respawn, the universe clock, the per-frame economy rebuild) have since been fixed. The descriptions of the C++ engine still hold.
 
-This catalog records what exists in this repository, how well it works, and how it maps onto the target: **a single-player game modelled on EVE Online**. There are two ways to get there: grow this codebase into that game, or take it apart and carry its best ideas into a new one.
+This catalog records what exists in this repository, how well it works, and how it maps onto the target: **a single-player, command-driven space sandbox (flight by orders, a market the pilot takes part in, fitting, skills, fleets), called the target game below**. There are two ways to get there: grow this codebase into that game, or take it apart and carry its best ideas into a new one.
 
 It was produced in October 2026, right after the codebase was revived on Linux. Seven reviewers each read one subsystem. Almost everything comes from reading the code. The only runtime evidence is the smoke test of all 27 apps, the GPU-reset investigation and the bug fixes made in the same session. Claims the authors couldn't confirm are marked **(unverified)** in the section files.
 
@@ -13,9 +13,9 @@ It was produced in October 2026, right after the codebase was revived on Linux. 
 | 01 | [Scripting runtime](01-scripting-runtime.md) | LTSL compiler and interpreter, reflection/type system, the ~800-function script API, **a reference for the language itself** |
 | 02 | [Rendering](02-rendering.md) | Renderer, frame pipeline, materials and lighting, procedural texture generators, all 169 shaders |
 | 03 | [Core, math, platform, geometry](03-core-math-platform-geometry.md) | Containers, smart pointers, math, OS/window/input, threads/jobs, file locations, spatial partitioning, **procedural meshes** (PlateMesh hulls, SDF asteroids, marching cubes, AO bake) |
-| 04 | [Game world model](04-game-world-model.md) | Objects, items, universe generation, economy and market, players and factions, **gameplay feature matrix with EVE equivalents** |
-| 05 | [Simulation systems](05-simulation-systems.md) | Components, AI tasks and the economic planner, physics, scheduler, audio, **EVE mapping of flight/combat/NPCs** |
-| 06 | [UI](06-ui.md) | Widget framework, HUD and every screen, **status of EVE's UI surfaces** |
+| 04 | [Game world model](04-game-world-model.md) | Objects, items, universe generation, economy and market, players and factions, **gameplay feature matrix with the target game's equivalents** |
+| 05 | [Simulation systems](05-simulation-systems.md) | Components, AI tasks and the economic planner, physics, scheduler, audio, **mapping of the target game's flight/combat/NPCs** |
+| 06 | [UI](06-ui.md) | Widget framework, HUD and every screen, **status of the target game's UI surfaces** |
 | 07 | [Apps, scripts, periphery](07-apps-scripts-periphery.md) | All 27 apps, gameplay scripts, launcher and legacy code, third-party libraries, assets, **licensing** |
 
 ---
@@ -97,15 +97,15 @@ The other 26 apps are tech demos and test beds that donate pieces. `dogfight` ha
 
 ---
 
-## 3. EVE roadmap: what exists vs what's needed
+## 3. Roadmap: what exists vs what's needed
 
 Status: ✅ implemented · 🟡 partial · 🔧 stub (code exists, not wired up or not working) · ❌ absent.
-Effort to reach a solid EVE-like single-player version on *this* codebase: **S** ≈ a day or less · **M** ≈ days to a week · **L** ≈ multiple weeks. Efforts are judgement calls from reading the code, not estimates from measured work.
+Effort to reach a solid sandbox-style single-player version on *this* codebase: **S** ≈ a day or less · **M** ≈ days to a week · **L** ≈ multiple weeks. Efforts are judgement calls from reading the code, not estimates from measured work.
 
 ### Flight and navigation
-| EVE system | Here | Status | Effort | Notes / where |
+| Target system | Here | Status | Effort | Notes / where |
 |---|---|---|---|---|
-| Ship movement | Direct WASD/mouse piloting, drag-limited top speed, boost/cruise | ✅ (different) | — | EVE has no direct piloting. Keep both: direct flight plus EVE-style commands (05 §10) |
+| Ship movement | Direct WASD/mouse piloting, drag-limited top speed, boost/cruise | ✅ (different) | — | The target game has no direct piloting. Keep both: direct flight plus ship commands (05 §10) |
 | Approach / orbit / keep at range / align | `Task_Goto` and the orbit inside `Task_Destroy`; SDF steering makes these one task each | 🟡 | S–M | `Component/MotionControl.cpp`, `Game/Task/Goto.cpp`. No UI issues them |
 | In-system warp | **Warp rails**: physical lanes with slot allocation; Goto pathfinds through them | 🟡 (different) | M | Free "warp to anything" is absent. Rails are a distinctive feature worth keeping (04 §8b) |
 | Stargates / jumps | Wormhole pairs generated along region spanning trees; teleport on dock | 🔧 | L | Goto's inter-system branch is empty, and arriving systems aren't simulated (needs off-screen sim) |
@@ -114,10 +114,10 @@ Effort to reach a solid EVE-like single-player version on *this* codebase: **S**
 | Selected-item panel | Radial RMB menu (Target, Trade) | 🟡 | S–M | Add approach/orbit/warp/dock actions |
 
 ### Combat
-| EVE system | Here | Status | Effort | Notes / where |
+| Target system | Here | Status | Effort | Notes / where |
 |---|---|---|---|---|
 | Weapons | Pulse only; Missile/Rail/Beam code is unreachable; infinite ammo | 🟡 | M | `Item/WeaponType.cpp` (`kAmmoProbabilityMult`) |
-| Target lock, range, tracking | Instant lock, hard range cutoff, physical projectiles with lead | 🟡 (different) | M | Choose physical (current) vs statistical (EVE) hits |
+| Target lock, range, tracking | Instant lock, hard range cutoff, physical projectiles with lead | 🟡 (different) | M | Choose physical (current) vs statistical hits |
 | Shield / armor / hull, resists | Shield (socketed, never fitted by default) → hull; no armor, no damage types | 🟡 | M | `Object.cpp: ApplyDamage`, `Object/Shield.cpp` |
 | Capacitor | Proportional power grid throttles modules; capacitor used for boost only | 🟡 | M | `Object/PowerGenerator.cpp` |
 | E-war, drones | Drone bay launches a drone with an empty update | ❌ / 🔧 | L | |
@@ -125,7 +125,7 @@ Effort to reach a solid EVE-like single-player version on *this* codebase: **S**
 | Death, wrecks, loot, clones, insurance | Explosions; hulks left behind; no loot drop; "TODO: What if player dies?" | ❌ / 🟡 | M | `Component/Pilotable.cpp`, `Object/Pod.cpp` |
 
 ### Resources and industry
-| EVE system | Here | Status | Effort | Notes / where |
+| Target system | Here | Status | Effort | Notes / where |
 |---|---|---|---|---|
 | Mining | Transfer-unit beam; yield depends on aiming at a hidden per-asteroid "phase" | ✅ | S (player) | Uncomment the plug in `ltheory.lts`. A fun mechanic worth keeping |
 | Ore types | 9 procedural ores per universe | ✅ | S | Seed hard-coded to 190, so every universe has the same ores |
@@ -135,7 +135,7 @@ Effort to reach a solid EVE-like single-player version on *this* codebase: **S**
 | Planetary industry | Colonies with markets and governors; production stubbed | 🔧 | L | `Object/Colony.cpp`, `Object/Colony.lts` |
 
 ### Economy
-| EVE system | Here | Status | Effort | Notes / where |
+| Target system | Here | Status | Effort | Notes / where |
 |---|---|---|---|---|
 | Market order books | **Per-station buy/sell books, escrow via hangar lockers, 27-period price averages** | ✅ | — | `Component/Market.*`, ~250 lines. **The single best piece in the codebase** |
 | Market UI | Browse, search, best bid/ask, quick buy/sell against the book | 🟡 | M | Missing: placing your own orders, "my orders", history, region scope |
@@ -144,7 +144,7 @@ Effort to reach a solid EVE-like single-player version on *this* codebase: **S**
 | Goods sinks / NPC consumption | — | ❌ | M | Nothing ever leaves the economy |
 
 ### Ships and fitting
-| EVE system | Here | Status | Effort | Notes / where |
+| Target system | Here | Status | Effort | Notes / where |
 |---|---|---|---|---|
 | Ship hulls | Infinite procedural hulls from (value, seed); class is a size label | ✅ | — | `Item/ShipType.cpp` + `Generate.lts`. No roles/bonuses; propulsion/systems/turrets multipliers are ignored |
 | Modules | Procedural modules on the same value/seed model | ✅ | — | Item identity is per call, so identical parameters give different items |
@@ -154,7 +154,7 @@ Effort to reach a solid EVE-like single-player version on *this* codebase: **S**
 | Docking, station services | AI teleport-dock; no player action or UI; no repair/insurance | 🟡 | S–M | `Task_Dock` is script-callable |
 
 ### World, factions, missions, progression
-| EVE system | Here | Status | Effort | Notes / where |
+| Target system | Here | Status | Effort | Notes / where |
 |---|---|---|---|---|
 | Universe generation | Universe → regions (circle packing) → systems; spanning-tree wormhole graph; grammar names; LTSL system recipe | ✅ | — | Planet always renamed "Melian Prime" (bug) |
 | Factions / corporations | AI "players" act as corps with fleets and credits | 🟡 | M | No relations |
@@ -169,7 +169,7 @@ Effort to reach a solid EVE-like single-player version on *this* codebase: **S**
 
 **Totals:**
 - **Strong foundations:** order-book markets, procedural ships/modules/universe, mining, flight, AI corp planner (needs fixes), HUD/market/info UI, warp rails.
-- **Thin or missing, and EVE's depth lives here:** industry, missions, skills, travel between systems, save/load, combat depth (armor, e-war, drones).
+- **Thin or missing, and the target game's depth lives here:** industry, missions, skills, travel between systems, save/load, combat depth (armor, e-war, drones).
 
 ---
 
@@ -179,7 +179,7 @@ Effort to reach a solid EVE-like single-player version on *this* codebase: **S**
 |---|---|---|
 | ~~**FMOD Ex 4.44**: proprietary, discontinued; the launcher can't start without it~~ | **Resolved (Oct 2026):** replaced by vendored miniaudio + stb_vorbis (public domain) behind the same `SoundEngine` interface. Missing sound files and missing audio devices are no longer fatal. The 4 FMOD music banks (`resource/music/*.fev/.fsb`) can no longer be played | 05 §7, 07 §5 |
 | **LTSL silently drops lines that fail to compile**, often with no message and never a line number | The biggest day-to-day productivity cost; several "features" are silently off (`#` also comments out whole blocks) | 01 §6, 07 §1 |
-| **Single-system simulation + no save + no fixed timestep** | Blocks a persistent EVE-like galaxy; deep changes to a tightly coupled world model | 04 §6, 07 §8 |
+| **Single-system simulation + no save + no fixed timestep** | Blocks a persistent sandbox-style galaxy; deep changes to a tightly coupled world model | 04 §6, 07 §8 |
 | **World model coupled to GPU, audio and scripts** | Can't simulate headless or off-screen without refactoring constructors | 04 §7 |
 | **Unsafe threading**: plain refcounts, unguarded globals, script code on worker threads | Latent crashes; limits use of more cores | 01 §6, 03 §5 |
 | **Legacy OpenGL 2.1 / GLSL 1.20** | Fine on Linux/Windows desktop; no macOS core/GLES path | 02 §6 |
@@ -191,7 +191,7 @@ Effort to reach a solid EVE-like single-player version on *this* codebase: **S**
 
 ### (a) Grow this codebase into the game
 **For:** a great deal already works together: a living-looking system, a real market, procedural everything, a distinctive visual style, and fast iteration (hot reload, scripted UI). The first playable loop is cheap (§6).
-**Against:** the expensive EVE pillars (galaxy simulation, save/load, industry, missions) need deep work in a world model that is tightly coupled and was frozen mid-refactor. You'd own a custom engine and language with no community or tooling, legacy GL, and unsafe threading. (The FMOD dependency has since been replaced.)
+**Against:** the expensive pillars of the target game (galaxy simulation, save/load, industry, missions) need deep work in a world model that is tightly coupled and was frozen mid-refactor. You'd own a custom engine and language with no community or tooling, legacy GL, and unsafe threading. (The FMOD dependency has since been replaced.)
 
 ### (b) Take the designs into a new game
 Carry over, roughly in order of value (details in each section's assessment):
@@ -218,7 +218,7 @@ Leave behind:
 
 ## 6. Suggested first milestone: fly → mine → dock → sell → buy → fit
 
-> **Status (Oct 2026): done and merged, except ship purchase (deferred: switching ships means rebinding the HUD and flight controls).** Mining needed two engine fixes: asteroid collision meshes only existed once drawn, and per-frame yields truncated to zero. The work also fixed a market escrow bug that created credits, and gave weapons a value. It adds LTSL line-numbered errors, a station panel, a fitting window, ore demand, pirates and respawn. `App/test_gameplay.lts` checks the loop end to end, and the screenshot and input harness (`docs/harness.md`) lets UI changes be checked visually. Playing it through the real HUD with the harness then exposed that the flight controls blocked every autopilot task (Dock and approach never moved the player), asteroids had no markers, the market could not be closed, and LTSL's `Quantity * Float` silently truncates (which priced most ore bids at 1). All of that is fixed, and EVE-style warp was added in `Task_Goto`, so the loop now runs by clicking through the HUD. The fixed-timestep port is still open. Instead of an engine change, LTSL is being replaced with Luau (typed Lua): every bound engine function is exposed automatically from the reflection data, `bin/luaucheck` type-checks scripts against definitions generated from the same data, and LTSL and Luau interoperate during the migration (see `docs/luau.md`).
+> **Status (Oct 2026): done and merged, except ship purchase (deferred: switching ships means rebinding the HUD and flight controls).** Mining needed two engine fixes: asteroid collision meshes only existed once drawn, and per-frame yields truncated to zero. The work also fixed a market escrow bug that created credits, and gave weapons a value. It adds LTSL line-numbered errors, a station panel, a fitting window, ore demand, pirates and respawn. `App/test_gameplay.lts` checks the loop end to end, and the screenshot and input harness (`docs/harness.md`) lets UI changes be checked visually. Playing it through the real HUD with the harness then exposed that the flight controls blocked every autopilot task (Dock and approach never moved the player), asteroids had no markers, the market could not be closed, and LTSL's `Quantity * Float` silently truncates (which priced most ore bids at 1). All of that is fixed, and warp was added in `Task_Goto`, so the loop now runs by clicking through the HUD. The fixed-timestep port is still open. Instead of an engine change, LTSL is being replaced with Luau (typed Lua): every bound engine function is exposed automatically from the reflection data, `bin/luaucheck` type-checks scripts against definitions generated from the same data, and LTSL and Luau interoperate during the migration (see `docs/luau.md`).
 
 Mostly from 04 §8a, 05 §9 and 07 §8a:
 

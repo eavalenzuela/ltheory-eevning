@@ -172,7 +172,7 @@ So the "planner" is **random sampling, then a greedy profitability threshold, wi
 
 | Aspect | Implementation | File |
 |---|---|---|
-| Integration | Explicit Euler. `force -= v*m*kLinearDrag(0.8)`, `torque -= ω*I*kAngularDrag(2)`, `v += F/m dt`, `ω += τ/I dt` (scalar inertia, "should be inertial tensor"), `pos += v dt`, `RotateBasis(ω dt)`. Forces are cleared each frame. Top speed = maxThrust / (0.8·mass). The model is "space with drag" (arcade/EVE-like, not Newtonian). | `Component/Motion.cpp` |
+| Integration | Explicit Euler. `force -= v*m*kLinearDrag(0.8)`, `torque -= ω*I*kAngularDrag(2)`, `v += F/m dt`, `ω += τ/I dt` (scalar inertia, "should be inertial tensor"), `pos += v dt`, `RotateBasis(ω dt)`. Forces are cleared each frame. Top speed = maxThrust / (0.8·mass). The model is "space with drag" (arcade-like, not Newtonian). | `Component/Motion.cpp` |
 | Thrust | Thruster children receive `MessageThrustLinear/Angular/Cruise` and add to the root's force. Cruise raises the power request 100×. A power grid exists: `PowerGenerator` splits power proportionally to `ComponentPluggable.powerRequest × priority`, and `GetPowerFraction` scales thrusters, beams, scanners and shield recharge. | `Game/Object/Thruster.cpp`, `PowerGenerator.cpp`, `Component/Pluggable.*` |
 | Broadphase | `ComponentQueryable` on each System is a 2-level spatial hash (cell size 1024, 4096 buckets, static level ×2). Static objects are inserted once. Movable objects are cleared and re-inserted **every frame** (`Run` sets dirty). Box queries dedupe with `BoundingBox.queryVersion`. Ray queries march the hash and call `PhysicsEngine::Raycast`. `LTE_ASSERT(marchDistance < 100000)`. | `Component/Queryable.cpp` |
 | Narrowphase | `PhysicsEngine::CheckCollision` does triangle-mesh vs triangle-mesh with `LTE/CollisionMesh` (uses ThirdParty `TriTriOverlap`). Meshes are cached by renderable hash and evicted after 120 s unused (`PhysicsEngine::Update`). A Null engine exists. The engine is a push/pop global stack. | `Module/PhysicsEngine.cpp` |
@@ -594,7 +594,7 @@ Priority fixes for a game loop:
 
 | Design | Value | Portability |
 |---|---|---|
-| **Market order book** (`Component/Market.*`): sorted asks/bids, midpoint trades, escrow via per-owner lockers, interval stats and 27 doubling-period EMAs | High. A ready-made EVE-style regional market | High. About 250 lines. Depends only on Item/Order/owner credits. Port almost verbatim |
+| **Market order book** (`Component/Market.*`): sorted asks/bids, midpoint trades, escrow via per-owner lockers, interval stats and 27 doubling-period EMAs | High. A ready-made sandbox-style regional market | High. About 250 lines. Depends only on Item/Order/owner credits. Port almost verbatim |
 | **Task algebra plus market valuation** (`Game/Task.h`, `Buy.cpp`/`Sell.cpp`, `Project.cpp::UpdateGross`): tasks declare inputs/outputs/value. Wrappers bind unbound I/O to markets and fold prices into value. Project gross = outputs − inputs | High. A clean, composable way to make NPCs reason about profit | High as a design. Rewrite in your own ECS. Fix the Buy flaw |
 | **Project layer** (allocation, idle detection, dispatch, metrics revenue/expense/losses, revenue-feedback wallet, metaprojects) | Medium-high. A good skeleton for faction/corp AI | Medium. Coupled to Player/Assets/Tasks |
 | **Task stack** with push-subtask travel (Goto/Dock inside Mine/Sell) | Medium. Simple and robust | High |
@@ -608,23 +608,23 @@ Priority fixes for a game loop:
 
 ---
 
-## 10. EVE Online mapping
+## 10. Mapping onto the target game
 
 Status key: **Impl** = implemented, **Partial**, **Stub**, **Absent**.
 
 ### Flight model
-| EVE feature | Here | Status | Where |
+| Target feature | Here | Status | Where |
 |---|---|---|---|
-| Direct piloting | Human flies directly (WASD-style thrust plus mouse look) through `ShipAffector`. EVE has no direct piloting | n/a (different) | `Game/Widget/HUD.cpp:36-95` |
+| Direct piloting | Human flies directly (WASD-style thrust plus mouse look) through `ShipAffector`. The target game has no direct piloting | n/a (different) | `Game/Widget/HUD.cpp:36-95` |
 | Approach / move-to | `Task_Goto(target, distance)` steers to within distance and finishes. For the human it is autopilot (HUD yields while a task exists), but no HUD command issues it; only scripts do (`objectinfo.lts`, `handling.lts`) | Partial | `Game/Task/Goto.cpp` |
 | Orbit | `Task_Destroy` orbits the target at 1000 m + radii (8 s period). Mine wanders around the asteroid surface. There is no standalone Orbit task, but SDF steering makes one trivial | Partial | `Destroy.cpp`, `Mine.cpp`, `Component/MotionControl.cpp` |
 | Keep at range | No task. Goto stops once inside range and does not hold it | Absent (trivial with SDF) | — |
 | Warp | **Warp rails**: chains of WarpNodes (15 km spacing) between POIs and orbital rings. Ships enter via `MessageStartUsing` and are carried along. Goto pathfinds through rails at zero cost (Dijkstra). This works like acceleration-gate lanes. No free warp-to-anywhere, no align time | Partial (different) | `Goto.cpp`, `Game/Object/WarpNode.cpp`, `Object/WarpNode.lts`, `Component/Navigable.h` |
 | Stargates / inter-system jumps | Wormhole objects have Navigable, but Goto's inter-system branch is empty ("CRITICAL") | Stub | `Goto.cpp`, `Game/Object/Wormhole.cpp` |
-| Speed model | Drag-limited top speed = thrust/(0.8·mass), with cruise/boost overcharge. Similar in spirit to EVE's exponential velocity curve | Impl | `Component/Motion.*`, `Thruster.cpp` |
+| Speed model | Drag-limited top speed = thrust/(0.8·mass), with cruise/boost overcharge. Similar in spirit to the target game's exponential velocity curve | Impl | `Component/Motion.*`, `Thruster.cpp` |
 
 ### Combat
-| EVE feature | Here | Status | Where |
+| Target feature | Here | Status | Where |
 |---|---|---|---|
 | Target locking | `ComponentTargets` is a plain list (Add/Remove/Has). No lock time, max-targets or sensor strength. AI tasks aim directly without locking | Partial | `Component/Targets.*` |
 | Ranges (optimal/falloff) | Weapon `Range` attribute is a hard cutoff, with no falloff curve | Partial | `Destroy.cpp`, `Attribute/Range.h` |
@@ -639,7 +639,7 @@ Status key: **Impl** = implemented, **Partial**, **Stub**, **Absent**.
 | Bounties / kill rights | DataDamaged/Destroyed items are awarded per damage dealt, and missions pay per item (Manage→Monopolize "Damage the Enemy") | Partial | `Event/Damage.cpp`, `Task/Manage.cpp` |
 
 ### NPC / AI ecosystem
-| EVE role | Here | Status |
+| Target role | Here | Status |
 |---|---|---|
 | NPC miners | AI players' spawned ships run Mine→Sell projects | Impl (`Play.cpp`, `Mine.cpp`) |
 | NPC haulers / traders | Transport task exists but moves no goods. Sell hauls own ore to market | Partial / Stub |
@@ -648,10 +648,10 @@ Status key: **Impl** = implemented, **Partial**, **Stub**, **Absent**.
 | Station owners / governors | Player_AI managers seed sell orders once, then stay idle (they pilot nothing, so never update) | Stub |
 | Factions | AI players get grammar-generated faction names and a random weapon type (`Play.cpp`). No faction relations beyond Opinions | Partial |
 
-**Economy comparison.** EVE's economy is player-driven, with regional order books, buy/sell orders, escrow, broker fees and NPC seeding. This engine already has the same core: **per-station order books with escrow and price history** (`Component/Market.cpp`). Its "players" are AI corporations choosing profitable production chains from market EMAs. What is missing compared with EVE: broker fees and taxes, regional or remote orders (orders are per station and require docking), contracts, NPC consumption sinks, manufacturing at scale (Produce is buggy, and blueprints are only reachable through Mint/Research), and a working buy side (§7.1).
+**Economy comparison.** The target game's economy is player-driven, with regional order books, buy/sell orders, escrow, broker fees and NPC seeding. This engine already has the same core: **per-station order books with escrow and price history** (`Component/Market.cpp`). Its "players" are AI corporations choosing profitable production chains from market EMAs. What is missing compared with the target game: broker fees and taxes, regional or remote orders (orders are per station and require docking), contracts, NPC consumption sinks, manufacturing at scale (Produce is buggy, and blueprints are only reachable through Mint/Research), and a working buy side (§7.1).
 
 ### Docking and station services
-| EVE feature | Here | Status | Where |
+| Target feature | Here | Status | Where |
 |---|---|---|---|
 | Dock / undock | Teleport into hangar / out near a port. AI uses it through Task_Dock/Goto. No player dock command found in `ltheory.lts` | Partial | `Component/Dockable.cpp`, `Task/Dock.cpp` |
 | Item hangar | Per-owner locker per station (Pod with capacity 100000), used as market escrow | Impl | `Component/Storage.cpp` |
@@ -662,7 +662,7 @@ Status key: **Impl** = implemented, **Partial**, **Stub**, **Absent**.
 | Manufacturing / research | ProductionLab/TechLab objects with Tasks. Produce/Mint/Research tasks exist but are only reachable when chips/blueprints exist | Partial | `Task/Produce.cpp`, `Mint.cpp`, `Research.cpp` |
 
 ### Mining and cargo
-| EVE feature | Here | Status |
+| Target feature | Here | Status |
 |---|---|---|
 | Mining lasers | TransferUnit beam module → `Action_Mine`. Yield is best at the asteroid's "phase" sweet spot (a fun twist) | Impl (`Action/Mine.cpp`, `TransferUnit.cpp`) |
 | Asteroid belts / ore types | Zones with weighted `Resources`, and asteroids with `Mineable` item+quantity. Orbital belt zones in `System.lts` | Impl |
@@ -671,16 +671,16 @@ Status key: **Impl** = implemented, **Partial**, **Stub**, **Absent**.
 | Depletion / respawn | Quantity decrements. No respawn found | Partial |
 
 ### Skills / progression
-| EVE feature | Here | Status |
+| Target feature | Here | Status |
 |---|---|---|
 | Skills / training queue | None. `Game/Attribute/*` are **item-type stat mixins** (mass, range, rate, damage, …), not character attributes | Absent |
 | Character attributes | `Traits` (7 personality floats) exist for AI players only, and only `Lawless` is read | Absent for player |
 | Ship progression | Credits buy ships (AI auto-buys via `GetShipType`) and modules can be plugged. Ship value tiers are powers of 10 | Partial |
 | Implants / standings-gated content | None | Absent |
 
-**Bottom line for an EVE-like single-player game.** The engine gives you:
-- EVE's economic core (order-book markets, escrow, hangars) and a profit-seeking NPC-corp planner to fill it;
-- a flight model that can do EVE's approach/orbit/keep-at-range through SDF steering with very little code (one task each);
+**Bottom line for a sandbox-style single-player game.** The engine gives you:
+- the target game's economic core (order-book markets, escrow, hangars) and a profit-seeking NPC-corp planner to fill it;
+- a flight model that can do the target game's approach/orbit/keep-at-range through SDF steering with very little code (one task each);
 - lane-based warp travel;
 - two-layer damage with power-scaled modules.
 

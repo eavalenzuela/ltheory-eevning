@@ -30,13 +30,13 @@ Controls listed are app-specific. Every 3D app that creates `Widget/HUD:Create p
 
 "Smoke" = result of this session's Linux smoke test: *runs* = keeps running; *one-shot* = prints/writes and exits by design.
 
-| App | Purpose | Systems exercised | App-specific controls | EVE-like pieces shown | Gameplay vs demo | Smoke |
+| App | Purpose | Systems exercised | App-specific controls | sandbox-style pieces shown | Gameplay vs demo | Smoke |
 |---|---|---|---|---|---|---|
 | **ltheory** | Main game prototype: fly a ship in a procedural universe | `Object_Universe` (seed 39) → regions → systems built by `Object/System:Init`; ShipType/WeaponType gen; `Player_Human`; HUD; render passes (Clear, Camera, SMAA, dither); FMOD looped ambience | Y = enter warp rail of last-targeted object, U = leave it; H (hold) = 20× time | Flight, combat (weapons fitted), warp rails, stations with markets ("Trade" context menu), colonies on planets, asteroid belt/zones, AI pilots, pirates vs patrols | **Closest to gameplay**, but no goals | runs (fixed earlier: undefined `ui` pass removed) |
 | **war** | AI skirmish: 32 AI ships of 4 hull sizes, each told to destroy an earlier ship | `Object_System`, `Task_Destroy`, weapons, HUD in `RenderPass_Interface` | P pause, H 20× time, T recompile shaders | Combat / fleet battle | Combat test bed | runs |
 | **dogfight** | 10 enemies all hunt the player; big planet backdrop | Same as war + `Item_PlanetType`, `Task_Destroy ship` | H 20× time, T recompile | PvE combat, flight | Closest to a "combat mission" | runs |
 | **handling** | Flight-model test, plus a fake player empire for the info UI | System with named ore resource, `Item_TransferUnitType` fitted, 16 player-owned ships/stations with `Task_Goto`, cargo, `player.AddLog`, `Grammar_Get` names | P pause, H 20× time | Flight, asset list/fleet, cargo, log, mining *equipment* (no field: zone not added) | Sandbox / UI testbed | runs |
-| **rails** | Warp-rail test: 8 warp nodes in a line between 2 stations; 64 AI ships shuttle between the stations | `Object_WarpNode`, `Object/WarpRail:Create`, `Task_Goto` (AI uses rails), `Task_Wait`, `Item_StationType` | Y/U enter/leave rail (**no null check**, see §7), T recompile | Warp travel (EVE "warp" analogue), traffic | Tech demo | runs |
+| **rails** | Warp-rail test: 8 warp nodes in a line between 2 stations; 64 AI ships shuttle between the stations | `Object_WarpNode`, `Object/WarpRail:Create`, `Task_Goto` (AI uses rails), `Task_Wait`, `Item_StationType` | Y/U enter/leave rail (**no null check**, see §7), T recompile | Warp travel (a "warp" analogue), traffic | Tech demo | runs |
 | **observatory** | Cinematic spectator view of a 32-ship free-for-all near a station | `Widget/Observatory` (free camera + `Texture/Filters` post-processing), `Object_Zone` asteroid field, `Task_Destroy` | P pause, H 20× time; camera controls in `Widget/Observatory` (LMB / RMB drag, F3) | Combat spectating; *mining exists but is commented out* | Demo | runs |
 | **model** | Model viewer: a random ship, station, planet and 1024 asteroids | ShipType/StationType/PlanetType gen, `Object_Asteroid`, orbit camera | R regenerate; RMB-drag orbit, scroll zoom, WASD/QE pan, F3 frame info | Ship "show-info" 3D view | Tool | runs |
 | **map** | 2D system map of a fully generated system, simulated at 10× speed | `Object/System:Init`, `Widget/Map`, context menus | WASD pan (in `Widget/Map`), right-click context menus | System map / navigation, AI economy at work | UI prototype | runs |
@@ -94,7 +94,7 @@ Applies to ltheory, war, dogfight, handling, rails and hud. Source owned by the 
   - 2 asteroid zones, each with an outpost station that sells 32 item listings, plus 2 invulnerable patrols and 3 invulnerable pirates per patrol fighting each other
   - rails linking the points of interest
   - 2 AI players running `Task_Play` in boss-class ships with transfer units
-- **EVE-like features available:**
+- **sandbox-style features available:**
   - flight
   - combat (hostiles exist, but pirates only target patrols, so nothing attacks the player unprovoked **(unverified)**)
   - targeting
@@ -111,7 +111,7 @@ Applies to ltheory, war, dogfight, handling, rails and hud. Source owned by the 
 - These are the best ready-made **combat encounter** templates.
 
 **handling**
-- The flight test bed, and the most "EVE-like empire" setup:
+- The flight test bed, and the most "empire-like" setup:
   - a named system ("Fermat's Last") with a named ore ("Mercoxit")
   - 16 player-owned assets (Fighter/Hauler/Battleship/stations) scattered 10 km out, about half of them flying `Task_Goto` to each other
   - random weapons and ore loaded into cargo
@@ -124,7 +124,7 @@ Applies to ltheory, war, dogfight, handling, rails and hud. Source owned by the 
 - Dedicated test of the warp-rail system: 8 `Object_WarpNode`s 10 km apart along +Z, joined by `Object/WarpRail` objects, with a 10⁸-value station near each end.
 - 64 AI ships alternate `Task_Goto station1` / `Task_Goto station2` eight times after a random 0–10 s wait. `Task/Goto.cpp` sends `MessageStartUsing` to rails, so AI traffic rides them.
 - The player starts at the last node and uses Y/U to board/leave the targeted node (`WarpNode.cpp:400`).
-- Shows EVE-style "warp to" travel along fixed lanes.
+- Shows sandbox-style "warp to" travel along fixed lanes.
 
 **observatory**
 - Spectator camera targeting a station (`Widget/Observatory` adds post FX via `Texture/Filters`). Contains a 1024-asteroid zone and a 32-ship battle.
@@ -138,7 +138,7 @@ Applies to ltheory, war, dogfight, handling, rails and hud. Source owned by the 
 **map**
 - Generates a system through `Object/System:Init`, then picks `player` as the owner of the **last** owned interior object. That should be one of the AI players' ships, since those are added last **(unverified)**.
 - Shows `Widget/Map` (2D system map with WASD panning and context menus) while the system simulates at 10× speed.
-- The basis for an EVE-style system map / overview.
+- The basis for a sandbox-style system map / overview.
 
 **market / objectinfo**
 - Both build a station whose market has 256 random orders (10% sell orders with stock placed in the seller's storage locker, 90% buy orders) and show `Widget/Browser` → `Widget/ObjectInfo`.
@@ -172,7 +172,7 @@ Applies to ltheory, war, dogfight, handling, rails and hud. Source owned by the 
 
 ### 2.4 Experiments: what they were for
 
-The code has almost no comments about intent. Each entry below says what the code computes (from reading it) and gives an **inferred** purpose, plus possible uses in an EVE-style game. Four of the experiments share a naming theme: "Harmonic Neural Network", "Harmonic Lattice", "Universe Lattice Simulation", and the unused "HARMONIC REALITY" splash. That suggests a side research thread on emergent behaviour in networks of simple units. **None of them is connected to the game's AI**, which is the task planner in `src/liblt/Game/Task/`.
+The code has almost no comments about intent. Each entry below says what the code computes (from reading it) and gives an **inferred** purpose, plus possible uses in a sandbox-style game. Four of the experiments share a naming theme: "Harmonic Neural Network", "Harmonic Lattice", "Universe Lattice Simulation", and the unused "HARMONIC REALITY" splash. That suggests a side research thread on emergent behaviour in networks of simple units. **None of them is connected to the game's AI**, which is the task planner in `src/liblt/Game/Task/`.
 
 | Item | What it actually computes | Inferred purpose | Possible use |
 |---|---|---|---|
@@ -187,7 +187,7 @@ The code has almost no comments about intent. Each entry below says what the cod
 
 | Item | What it is | Intended use | Status |
 |---|---|---|---|
-| Scanner (`Widget/Scanner.lts`, `HUD/Miniscanner.lts`, `Object_GetScannerOutput`) | Each nearby object's signature drawn as a log-frequency spectrum, over a looping ambient sound | Basis for exploration and probe-scanning gameplay | Display only; no results or gameplay attached. **The most directly useful piece for EVE-style probe scanning** |
+| Scanner (`Widget/Scanner.lts`, `HUD/Miniscanner.lts`, `Object_GetScannerOutput`) | Each nearby object's signature drawn as a log-frequency spectrum, over a looping ambient sound | Basis for exploration and probe-scanning gameplay | Display only; no results or gameplay attached. **The most directly useful piece for sandbox-style probe scanning** |
 | `src/liblt/Audio/` | A small offline signal-graph synth: instrument (generator + note pattern + envelope), delay, lowpass, compressor, sum/product nodes, rendered to a float buffer or WAV (see 05 §2.7) | Procedural sound design | Used only by `src/old/soundstudio` (glass synth, wind, scales), which isn't built. Partly broken |
 | `resource/shader/fragment/gen/sound.jsl` | A GPU synth that writes audio samples into a texture (sine/saw/tri waves, envelope) | Experiment in GPU audio synthesis | Unused |
 
@@ -434,7 +434,7 @@ These are Josh's text (Unlicense) and reusable.
 
 ## 8. Assessment for the two goals
 
-### 8(a) Pushing this engine toward a playable game (EVE-style single-player loop)
+### 8(a) Pushing this engine toward a playable game (sandbox-style single-player loop)
 
 **Best foundation: `ltheory.lts`, merged with pieces of `handling.lts` and `src/old/ltheory/ltheory.cpp`.**
 
@@ -443,11 +443,11 @@ These are Josh's text (Unlicense) and reusable.
 - puts a **player-piloted ship** in it with the full HUD/flight/targeting stack
 - exposes **trading** (right-click → Trade on an outpost) and **warp-rail travel** (Y/U)
 
-That is the skeleton of EVE's loop of flying, fighting, mining, trading and travelling. The other apps are best used as donors:
+That is the skeleton of the target game's loop of flying, fighting, mining, trading and travelling. The other apps are best used as donors:
 
-| EVE-like loop piece | Status in ltheory.lts | Donor app / script | What's missing |
+| sandbox-style loop piece | Status in ltheory.lts | Donor app / script | What's missing |
 |---|---|---|---|
-| Flight / piloting | ✅ Works (Handling.lts) | — | EVE-style click-to-approach/orbit/align (AI `Task_Goto` exists and is used in handling/rails; give the player a "fly to" via `ship.PushTask`) |
+| Flight / piloting | ✅ Works (Handling.lts) | — | sandbox-style click-to-approach/orbit/align (AI `Task_Goto` exists and is used in handling/rails; give the player a "fly to" via `ship.PushTask`) |
 | Combat | ✅ Weapons fitted; pirates exist | `dogfight` (hostiles that hunt the player), `war` (fleet battles) | Hostile NPCs aimed at the player, damage feedback, death/respawn/clone, loot drops |
 | Mining | ❌ Transfer-unit plug is commented out | `handling` (transfer units), `observatory` (`Task_Mine zone`, re-enable `# desc "Miners"`) | Fit a transfer unit, a player "mine" action on a zone/asteroid, ore → cargo → sell |
 | Trading / market | ⚠️ Trade window reachable via context menu on outposts | `market`, `objectinfo` (market + storage locker UI) | Docking flow, buy/sell feedback, profit loop; outposts only *sell* (32 sell orders), so you need buy orders for ore/loot |

@@ -1,6 +1,6 @@
 # Universe simulation
 
-The universe simulation produces the activity a single-player EVE-like game has to fake: wars, trade, ownership changes, prices that move. EVE gets this from thousands of players; here the game has to do it.
+The universe simulation produces the activity a single-player sandbox game has to fake: wars, trade, ownership changes, prices that move. A multiplayer game gets this from thousands of players; here the game has to do it.
 
 Status: the proposal, decisions and design details below were agreed on 2026-10-25 and a headless prototype implemented them (see "Prototype"). On 2026-11-09 the economy was redesigned as stocks and flows and several decisions changed; see "Changes of 2026-11-09" directly below and `docs/roadmap.md` §6 for the current design. On 2026-11-10 the faction layer was rebuilt on that economy as `resource/script/Core/Strategic/` and the prototype was removed from the tree; see "The faction layer as rebuilt". The rest of this document describes the prototype as it was, for the record.
 

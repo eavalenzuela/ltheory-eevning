@@ -69,7 +69,7 @@ LTSL defines more message types (e.g. `MessageGatherWidgets`, `MessageFireworks`
 |---|---|---|
 | ThrusterType | Thruster | ShipType fills all thruster sockets with `standardThruster` on instantiate |
 | PowerGeneratorType, ScannerType, ShieldType | Generator | The scanner uses a Generator socket because there is no scanner socket type |
-| WeaponType, TransferUnitType | Turret (via a Turret object) | Weapons and mining beams compete for the same hardpoints, like EVE high slots |
+| WeaponType, TransferUnitType | Turret (via a Turret object) | Weapons and mining beams compete for the same hardpoints, like high slots |
 | TechLabType, ProductionLabType, DroneBayType | Interior | Small ships get **0** interior sockets (`2*int(log(scale)/log(10))`) |
 
 **Power**: there is no static CPU/powergrid. `PowerGenerator` gathers `Pluggable.powerRequest × priority` from every plugged module each frame, then sets each module's `powerIn` to `request × (output/total)`, smoothed. Modules use `GetPowerFraction()` to scale their output: thrust, beam activity, shield recharge. Weapons never set a power request, so they are effectively free.
@@ -231,7 +231,7 @@ Station (Component_Market): per-item order book (asks/bids), matched every frame
 |---|---|---|
 | Credits | `Component/Account` (Player, Colony) | `int64` quantities. No global money supply control |
 | Ownership | `Component/Asset` (owner on object), `Component/Assets` (list on player) | `GetRoot()` stops at the first object with `Asset`. `GetOwner()` walks up parents |
-| Storage lockers | `Component/Storage` | One `Pod` per owner per station. This is where market goods live (EVE-like personal hangar) |
+| Storage lockers | `Component/Storage` | One `Pod` per owner per station. This is where market goods live (a personal hangar) |
 | Orders | `Game/Order.*` | `{owner, item, volume, price, filledVolume, filledTotal, node}`. Owner gets a copy in `Component/Orders` |
 | Markets | `Component/Market.*` | Regional books per station. No cross-station or regional aggregation. Trade timestamps use `Universe_Age()`, which is always 0 (§6) |
 | Projects | `Game/Project.*` | A task chain + allocated assets + metrics + wallet with revenue-feedback (90% of sales recycled into the project wallet). Places buy orders for inputs and sell orders for whatever is in the owner's locker |
@@ -384,13 +384,13 @@ Line counts are from `wc -l`. Status: **C** = complete for its purpose, **P** = 
 
 ---
 
-## 4. Gameplay feature matrix (with EVE equivalents)
+## 4. Gameplay feature matrix (with the target game's equivalents)
 
 Status: **I** implemented · **P** partial · **S** stub · **A** absent. "Where": C++ file(s) / LTSL script(s).
 
-| Feature | EVE equivalent | Status | Where | Notes |
+| Feature | Target equivalent | Status | Where | Notes |
 |---|---|---|---|---|
-| Newtonian flight, thrusters, cruise, boost | Ship navigation, MWD/AB | I | `Object/Thruster.cpp`, `Component/Motion*`, `Object/PowerGenerator.cpp`; `Widget/Handling.lts` | Direct piloting (not EVE's click-to-orbit). Thrust depends on power |
+| Newtonian flight, thrusters, cruise, boost | Ship navigation, MWD/AB | I | `Object/Thruster.cpp`, `Component/Motion*`, `Object/PowerGenerator.cpp`; `Widget/Handling.lts` | Direct piloting (not click-to-orbit). Thrust depends on power |
 | Ship classes / hulls | Ship classes (frigate→titan), hull variety | I (procedural) | `Item/ShipType.cpp`, `Item/ShipType/Generate.lts`, `NLP.cpp: ScaleToClass` | Infinite hulls from (value, seed). Class is just a label by scale (Fighter…Colossus). There are no roles or bonuses |
 | Procedural variation of modules | Meta levels / T1-T2 variants | I | All `Item/*Type.cpp` | (value, seed, multipliers) → stats. Identity is per instance (§2.2) |
 | Fitting: slots/hardpoints | High/Mid/Low/Rig slots | P | `Game/Socket.h`, `Component/Sockets.cpp`, ShipType socket placement | 4 socket types ≈ Turret (high), Generator (mid-ish), Interior, Thruster. `Plug()` is free and instant. **No unplug UI and no fitting screen** |
@@ -426,8 +426,8 @@ Status: **I** implemented · **P** partial · **S** stub · **A** absent. "Where
 | Exploration / scanning | Probe scanning, D-scan | P | `Game/Signature.h`, `Object/Scanner.cpp` (`Object_GetScannerOutput`), `Widget/Scanner.lts`, `HUD/Miniscanner.lts` | Spectral D-scan-like display works. Fog-of-war / info levels are disabled. Prospecting drones are stubs |
 | Colonies / planetary industry | Planetary Industry | S | `Object/Colony.cpp`, `Item/ColonyType.cpp`, `resource/script/Object/Colony.lts`, `Object/Planet.cpp` | Colonies exist with markets and governors. The production task is a stub; the script randomly spawns lab items into colony cargo |
 | Player progression / skills | Skill training | A/D | `Item/Worker.cpp`, `Component/Crew.h` | Crew skill items exist but are unused. Nothing for the player |
-| Wallet / credits | ISK wallet | I | `Component/Account` | |
-| Universe generation | New Eden map | I | `Game/Universe.cpp`, `Object/Region.cpp`, `Object/System.cpp`, `Object/System.lts` | Seeded, recursive, named by grammar. Small by default (depth 0) |
+| Wallet / credits | Wallet | I | `Component/Account` | |
+| Universe generation | Galaxy map | I | `Game/Universe.cpp`, `Object/Region.cpp`, `Object/System.cpp`, `Object/System.lts` | Seeded, recursive, named by grammar. Small by default (depth 0) |
 | Procedural naming | — | I | `LTE/Grammar.cpp`, `gamedata/grammar/default.txt` | |
 | Saving / loading | Persistent universe | A | `Widget/GameMenu.lts` has a "SAVE GAME" button with no handler | Reflection (`FIELDS`) and `LTE/Serializer` exist but are not used for the world |
 | Off-screen simulation | Server-side sim | A | `Game/Task/LOD.cpp` (unused) | Only the current system is ticked |
@@ -529,16 +529,16 @@ What already works for a human: flying, targeting, shooting (pulse), mining with
 
 Estimate: steps 1–5 are a few hundred lines of LTSL plus 1–2 tiny C++ bindings, all on existing systems. Missions, industry and inter-system play need real C++ work: a mission turn-in path, blueprint seeding, the `GetOutputs` fix, and simulation of non-current systems.
 
-### 8b. Cross-mapping into a new (EVE-like single-player) game
+### 8b. Cross-mapping into a new (sandbox-style single-player) game
 
 | System | Design value | Coupling to engine | Recommendation |
 |---|---|---|---|
-| **Order-book station markets** (`Component/Market.*`, `Game/Order.*`) | High. Correct escrow semantics, price-time matching, EMA history at 27 depths, per-owner lockers. Very close to EVE's regional market at station granularity | Low. Depends only on Item/Object handles, credits and lockers | **Port almost as-is.** Add regional aggregation, broker fees and order expiry. Key items by type id, not instance |
+| **Order-book station markets** (`Component/Market.*`, `Game/Order.*`) | High. Correct escrow semantics, price-time matching, EMA history at 27 depths, per-owner lockers. Very close to the target game's regional market at station granularity | Low. Depends only on Item/Object handles, credits and lockers | **Port almost as-is.** Add regional aggregation, broker fees and order expiry. Key items by type id, not instance |
 | **AI economic agents** (`Task_Play`, `Project`, `Task_Manage`, `Component/Economy`) | High conceptually: agents discover task chains from world state (zones → Mine, markets → Transport), wrap unbound inputs/outputs in Buy/Sell, estimate gross from market prices, allocate ships, recycle revenue (feedback 0.9), buy ships | Medium. Tied to Task/Capability interfaces and per-frame object updates | Re-implement as an abstract, tick-based sim (planner + project ledger) that runs off-screen. Keep the "task with inputs/outputs/capability factors" abstraction (`Game/Task.h`), which is clean and reusable |
-| **Procedural item types** (`Item_*Type(value, seed, multipliers)`, `Constants.h` curves) | High. One "value" axis drives mass, capacity, integrity, output and power drain. Seed varies flavour. Multipliers express design tradeoffs. Stored metatype args allow **research by parameter mutation** (Blueprint) | Medium-high. Types embed `Renderable`s and call LTSL mesh generators | Port the *parameter model and curves* (pure data math). Separate visual generation from stats. Intern types by (generator, args) so identical params give the same type (fixes quirk #2). The Blueprint-mutation idea maps well onto EVE ME/TE research and invention |
+| **Procedural item types** (`Item_*Type(value, seed, multipliers)`, `Constants.h` curves) | High. One "value" axis drives mass, capacity, integrity, output and power drain. Seed varies flavour. Multipliers express design tradeoffs. Stored metatype args allow **research by parameter mutation** (Blueprint) | Medium-high. Types embed `Renderable`s and call LTSL mesh generators | Port the *parameter model and curves* (pure data math). Separate visual generation from stats. Intern types by (generator, args) so identical params give the same type (fixes quirk #2). The Blueprint-mutation idea maps well onto material- and time-efficiency research and invention |
 | **Universe generation** (Universe → Region (recursive circle-packing) → System; MST-based wormhole links; grammar naming) | Medium. Simple and robust: recursive packing plus 2× randomized MST gives a connected, non-tree gate graph | Low for topology (pure math). High for systems (System.lts content, GPU nebulae) | Port the region/graph algorithm and the grammar (`default.txt` + `LTE/Grammar.cpp` are tiny and standalone). Rewrite system population as data-driven tables. Add security levels per region depth/distance |
-| **Warp-rail network** (`WarpNode.cpp`) | Medium. Distinctive physical travel lanes with slot allocation and lane-locking forces | Medium (physics + script FX) | Worth porting if you want visible traffic lanes. Otherwise EVE warp is simpler |
-| **Sockets + dynamic power** (`Socket.h`, `Component/Sockets`, `PowerGenerator`) | Medium. Raycast-placed hardpoints on procedural hulls are clever. Dynamic power throttling is a nice alternative to static PG/CPU | Medium | Port hardpoint placement for procedural hulls. Add EVE-style static fitting constraints on top |
+| **Warp-rail network** (`WarpNode.cpp`) | Medium. Distinctive physical travel lanes with slot allocation and lane-locking forces | Medium (physics + script FX) | Worth porting if you want visible traffic lanes. Otherwise plain warp is simpler |
+| **Sockets + dynamic power** (`Socket.h`, `Component/Sockets`, `PowerGenerator`) | Medium. Raycast-placed hardpoints on procedural hulls are clever. Dynamic power throttling is a nice alternative to static PG/CPU | Medium | Port hardpoint placement for procedural hulls. Add sandbox-style static fitting constraints on top |
 | **Signature/spectral scanning** (`Signature.h`, `Object_GetScannerOutput`) | Medium. A physically flavoured D-scan (log-frequency spectra per object class) | Low | Port. Good basis for exploration/probing mini-game |
 | **Mining phase mechanic** (`Action_Mine`) | Small but fun: yield depends on aiming at a hidden per-asteroid direction | Low | Port as an optional skill element |
 | **Evidence-based bounties** (DataDamaged items + item-property mission constraints) | Medium. Missions as "buy orders for facts", with constraints over item properties. A generic mission system | Low (but incomplete) | Port the idea; implement fulfilment |
