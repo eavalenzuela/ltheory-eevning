@@ -10,6 +10,10 @@
 # hardpoint, which are a pair on opposite sides of the hull), all of
 # them must fire, and of its two turrets the one that faces the target
 # must come to point at it.
+#
+# And no hull of any faction has a hardpoint on a surface too small for
+# what stands on it: the whole foot of every weapon, at its real size
+# beside its hull, has hull under it (the project owner's rule).
 
 wait 2
 lua assert(GameDebug.Fly('cruiser.cuirass'), 'the Cuirass could not be flown')
@@ -38,6 +42,9 @@ wait 5
 lua print('the turret is', select(2, GameDebug.Arms()), 'radians off its target')
 lua assert(select(2, GameDebug.Arms()) >= 0, 'the turret has nothing to point at')
 lua assert(select(2, GameDebug.Arms()) < 0.05, 'the turret that faces the target is not pointing at it')
+
+# Every hull there is a design for: nothing hangs off into space.
+lua assert(GameDebug.Hulls() == 0, 'a hull has a weapon that does not stand wholly on it (each is printed above)')
 
 echo arms scenario passed
 quit

@@ -1041,6 +1041,16 @@ function Debug.Sound(on: boolean?, master: number?): number
   return audio.played
 end
 
+-- The hulls whose weapons do not stand wholly on them (Hull.Audit):
+-- each is printed, and how many there are is returned.
+function Debug.Hulls(): number
+  local found = Hull.Audit()
+  for _, line in found do
+    print("hanging: " .. line)
+  end
+  return #found
+end
+
 -- What is set in the menu's options: whether there is sound, and how
 -- loud its effects and its music are, of 100. (A script's run stays as
 -- silent as it was whatever is set.)

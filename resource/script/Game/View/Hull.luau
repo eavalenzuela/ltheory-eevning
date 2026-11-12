@@ -18,6 +18,7 @@
 -- plates of two colours where repairs have been made, tanks strapped on
 -- outside, masts and fins, and rust.
 
+local Arms = require("@lt/Game/View/Arms")
 local Plates = require("@lt/Game/View/Plates")
 local Ships = require("@lt/Core/Data/Ships")
 
@@ -1329,12 +1330,96 @@ local function drive(b: Builder, at: vector, wide: number, high: number)
   exhaust(at + v(0, 0, -0.09), math.min(wide, high) * 0.78)
 end
 
+-- Where a weapon stands on a blade. A hardpoint is never on a surface
+-- too small for the whole foot of what stands on it (the owner's rule,
+-- for every ship; it was these hulls that showed it, with guns out on
+-- the sharp edge "hanging off into space"). So a mount here is on one of
+-- a blade's faces, and is refused where the face is too small: the flat
+-- along its back or along its keel, or the sloped armour between a flat
+-- and the edge, topside or underneath.
+
+-- Half the width of a weapon's foot on a hull, in the hull's own units:
+-- the hull's type, half the length it is drawn, and the weapon's size
+-- (1 small to 3 large).
+local function footOn(type: string, reach: number, size: number): number
+  return Arms.FOOT * Arms.SIZE[size] * reach / Ships.byId[type].radius
+end
+
+-- A place on a face of a blade at 'z'. On the back or the keel, its
+-- middle line. On a slope ("top" or "bottom", to the side 'side'),
+-- 'share' of the way from the flat to the edge.
+local function faceAt(rows: { Row }, z: number, face: string, side: number, share: number): vector
+  local row = rowAt(rows, z)
+  if face == "back" then
+    return v(row[7], row[8] + row[3], z)
+  elseif face == "keel" then
+    return v(row[7], row[8] - row[5], z)
+  elseif face == "top" then
+    return v(row[7] + side * (row[4] + (row[2] - row[4]) * share), row[8] + row[3] * (1 - share), z)
+  end
+  return v(row[7] + side * (row[6] + (row[2] - row[6]) * share), row[8] - row[5] * (1 - share), z)
+end
+
+-- A mount on a face of a blade, standing straight out of it. 'foot' is
+-- footOn's. On a slope it stands in the middle of what is free of the
+-- slope: all of it, or what a tier laid on the back ('under') leaves
+-- uncovered. An error if the face has not room for the foot there.
+local function mountOn(name: string, rows: { Row }, z: number, face: string, side: number, foot: number, under: { Row }?): Mount
+  local share = 0.5
+  for _, at in { z - foot, z, z + foot } do
+    local row = rowAt(rows, at)
+    local room: number
+    if face == "back" then
+      room = row[4]
+    elseif face == "keel" then
+      room = row[6]
+    else
+      -- (how long the slope is, and how much of it, from the flat, is covered)
+      local flat = if face == "top" then row[4] else row[6]
+      local long = math.sqrt((row[2] - flat) ^ 2 + (if face == "top" then row[3] else row[5]) ^ 2)
+      local covered = 0
+      if under and face == "top" and at <= under[1][1] and at >= under[#under][1] then
+        covered = math.max(0, rowAt(under, at)[2] - flat) / math.max(row[2] - flat, 1e-6)
+      end
+      if at == z then
+        share = (covered + 1) / 2
+      end
+      room = long * (1 - covered) / 2
+    end
+    assert(room >= foot, `the {name} has a mount on its {face} at {z} where there is not room for it: {room} to stand on, and a foot of {foot}`)
+  end
+  -- (the way out of the face: across it, and along it)
+  local e = 0.01
+  local along = faceAt(rows, z + e, face, side, share) - faceAt(rows, z - e, face, side, share)
+  local across = if face == "top" or face == "bottom"
+    then faceAt(rows, z, face, side, share + e) - faceAt(rows, z, face, side, share - e)
+    else v(1, 0, 0)
+  local out = vector.normalize(vector.cross(along, across))
+  if (out.y < 0) ~= (face == "keel" or face == "bottom") then
+    out = -out
+  end
+  return { at = faceAt(rows, z, face, side, share), up = out }
+end
+
+-- A hardpoint on the sloped armour: one mount topside on the side
+-- 'side' of the hull, and its twin underneath on the other.
+local function slopes(name: string, rows: { Row }, z: number, side: number, foot: number, under: { Row }?): Hardpoint
+  return { mountOn(name, rows, z, "top", side, foot, under), mountOn(name, rows, z, "bottom", -side, foot) }
+end
+
+-- A hardpoint on the flats: one mount on a back (the hull's, or a
+-- tier's), and its twin under the keel.
+local function flats(name: string, back: { Row }, backZ: number, keel: { Row }, keelZ: number, foot: number): Hardpoint
+  return { mountOn(name, back, backZ, "back", 0, foot), mountOn(name, keel, keelZ, "keel", 0, foot) }
+end
+
 -- The Lancer, a frigate: a spearhead. One blade from its point to two
 -- short barbs, a tower over the stern, two drives.
 local LANCER: { Row } = {
   { 1.20, 0, 0, 0, 0, 0 }, { 0.55, 0.13, 0.045, 0.012, 0.030, 0.03 }, { -0.35, 0.36, 0.10, 0.05, 0.06, 0.10 },
   { -0.62, 0.22, 0.11, 0.07, 0.06, 0.10 }, { -0.80, 0.20, 0.10, 0.07, 0.055, 0.09 },
 }
+local LANCER_FOOT = footOn("frigate.lancer", 1.10, 1)
 local function lancer(b: Builder)
   hard(b, PLATING, LANCER)
   for _, side in { 1, -1 } do
@@ -1355,6 +1440,7 @@ local GANTRY: { Row } = {
   { -0.95, 0.42, 0.13, 0.09, 0.08, 0.14 }, { -1.18, 0.25, 0.13, 0.09, 0.07, 0.12 }, { -1.35, 0.23, 0.12, 0.09, 0.065, 0.11 },
 }
 local GANTRY_TIER = tierOn(GANTRY, { { 0.45, 0, 0, 0 }, { -0.10, 0.085, 0.05, 0.045 }, { -1.02, 0.12, 0.07, 0.075 }, { -1.22, 0.09, 0.06, 0.055 } })
+local GANTRY_FOOT = footOn("destroyer.gantry", 1.585, 1)
 local function gantry(b: Builder)
   hard(b, PLATING, GANTRY)
   hard(b, PLATING, GANTRY_TIER)
@@ -1381,6 +1467,7 @@ local TRELLIS_TIER = tierOn(TRELLIS, { { 0.15, 0, 0, 0 }, { -0.28, 0.16, 0.06, 0
 local TRELLIS_BARB: { [number]: { Row } } = {
   [1] = barbOf(1, -0.46, -1.62, 0.60, 0.74, 0.15, 0.05, 0.03), [-1] = barbOf(-1, -0.46, -1.62, 0.60, 0.74, 0.15, 0.05, 0.03),
 }
+local TRELLIS_FOOT = footOn("cruiser.trellis", 1.61, 2)
 local function trellis(b: Builder)
   hard(b, PLATING, TRELLIS)
   hard(b, PLATING, TRELLIS_TIER)
@@ -1411,6 +1498,7 @@ local SPIRE_CROWN = tierOn(SPIRE_TIER, { { -0.10, 0, 0, 0 }, { -0.50, 0.13, 0.06
 local SPIRE_BARB: { [number]: { Row } } = {
   [1] = barbOf(1, -0.80, -2.70, 0.80, 0.98, 0.22, 0.07, 0.05), [-1] = barbOf(-1, -0.80, -2.70, 0.80, 0.98, 0.22, 0.07, 0.05),
 }
+local SPIRE_FOOT = footOn("battleship.spire", 2.70, 3)
 local function spireShip(b: Builder)
   hard(b, PLATING, SPIRE)
   hard(b, PLATING, SPIRE_TIER)
@@ -1443,6 +1531,7 @@ local LIGHTER: { Row } = {
   { 1.40, 0.24, 0, 0.24, 0, 0.24 }, { 0.85, 0.44, 0.24, 0.26, 0.24, 0.28 }, { -0.85, 0.44, 0.24, 0.26, 0.24, 0.28 },
   { -1.15, 0.40, 0.22, 0.24, 0.20, 0.24 }, { -1.35, 0.34, 0.18, 0.20, 0.16, 0.20 },
 }
+local LIGHTER_FOOT = footOn("industrial.lighter", 1.42, 1)
 local function lighter(b: Builder)
   hard(b, PLATING, LIGHTER)
   edged(b, LIGHTER, 0.009)
@@ -1498,6 +1587,9 @@ type Design = {
   -- How alike its plates are in tone (Plates' 'even'): as unlike as
   -- plates come, if not said.
   even: number?,
+  -- Half the length it is drawn, where its mounts were worked out from
+  -- that (the Kethri's: footOn). Hull.Build checks it is so.
+  reach: number?,
   turrets: { Hardpoint },
   launchers: { Hardpoint },
   -- What it is shown carrying where nobody has fitted it (a gallery):
@@ -1565,10 +1657,12 @@ local designs: { [string]: Design } = {
     faction = "talmar", draw = rapier, sheets = 5.0,
     turrets = {
       abeam(on(RAPIER, 0.08, STARBOARD_SIDE), on(RAPIER, 0.08, PORT_SIDE)),
-      over(on(RAPIER_BRIDGE, 0.02, BACK, 0, 0.17), on(RAPIER, 0.08, KEEL)),
+      -- (on the back behind the bridge: the bridge's blister is too small to stand a gun on)
+      over(on(RAPIER, -0.30, BACK), on(RAPIER, 0.08, KEEL)),
     },
     launchers = {
-      abeam(on(RAPIER, -0.30, STARBOARD_SIDE), on(RAPIER, -0.30, PORT_SIDE)),
+      -- (on the flanks where the body is fullest: farther aft it draws in too fast for a rack's foot)
+      abeam(on(RAPIER, -0.14, STARBOARD_SIDE), on(RAPIER, -0.14, PORT_SIDE)),
       over(on(RAPIER, 0.52, BACK), on(RAPIER, -0.28, KEEL)),
     },
     fit = { "autocannon.small", "autocannon.small", "launcher.light", "launcher.light" },
@@ -1587,8 +1681,11 @@ local designs: { [string]: Design } = {
     faction = "talmar", draw = falchion, sheets = 7.0,
     turrets = {
       over(on(FALCHION, 0.65, BACK), on(FALCHION, 0.60, KEEL)),
-      abeam(on(FALCHION_WING, -0.30, STARBOARD_SIDE, 0.50, -0.04), on(FALCHION_WING, -0.30, PORT_SIDE, -0.50, -0.04)),
-      over(on(FALCHION, -0.82, BACK), on(FALCHION, -0.80, KEEL)),
+      -- (on the wings' broad faces, the starboard wing's back and the port
+      -- wing's underside: a wing's edge is too thin to stand a gun on)
+      over(on(FALCHION_WING, -0.30, BACK, 0.50, -0.04), on(FALCHION_WING, -0.30, KEEL, -0.50, -0.04)),
+      -- (on the tier's back and under the body, ahead of where the tail draws in)
+      over(on(FALCHION_TIER, -0.45, BACK, 0, 0.22), on(FALCHION, -0.55, KEEL)),
     },
     launchers = { over(on(FALCHION_TIER, 0.08, BACK, 0, 0.22), on(FALCHION, -0.10, KEEL)) },
     fit = { "autocannon.medium", "autocannon.medium", "autocannon.medium", "launcher.heavy" },
@@ -1671,52 +1768,54 @@ local designs: { [string]: Design } = {
     launchers = {},
     fit = { "blaster.small" },
   },
-  -- The Kethri. (Lasers, all on turrets: on the back and under the keel,
-  -- and out on the edge of the blade each side.)
+  -- The Kethri. (Lasers, all on turrets. Each pair stands on the sloped
+  -- armour, one topside to one side and its twin underneath to the
+  -- other, turn about along the hull; and the last pair on the flats,
+  -- on the back behind the tower and under the keel.)
   ["frigate.lancer"] = {
-    faction = "kethri", draw = lancer, sheets = 5.0, even = 0.7,
+    faction = "kethri", draw = lancer, sheets = 5.0, even = 0.7, reach = 1.10,
     turrets = {
-      over(topOf(LANCER, 0.36), keelOf(LANCER, 0.36)), abeam(edgeOf(LANCER, -0.20, 1), edgeOf(LANCER, -0.20, -1)),
-      over(topOf(LANCER, -0.70), keelOf(LANCER, -0.50)),
+      slopes("Lancer", LANCER, 0.30, 1, LANCER_FOOT), slopes("Lancer", LANCER, -0.20, -1, LANCER_FOOT),
+      flats("Lancer", LANCER, -0.69, LANCER, -0.50, LANCER_FOOT),
     },
     launchers = {},
     fit = { "laser.pulse.small", "laser.pulse.small", "laser.pulse.small" },
   },
   ["destroyer.gantry"] = {
-    faction = "kethri", draw = gantry, sheets = 6.0, even = 0.7,
+    faction = "kethri", draw = gantry, sheets = 6.0, even = 0.7, reach = 1.585,
     turrets = {
-      over(topOf(GANTRY, 1.00), keelOf(GANTRY, 1.00)), over(topOf(GANTRY, 0.30, 0.004), keelOf(GANTRY, 0.45)),
-      abeam(edgeOf(GANTRY, 0.10, 1), edgeOf(GANTRY, 0.10, -1)), abeam(edgeOf(GANTRY, -0.60, 1), edgeOf(GANTRY, -0.60, -1)),
-      over(topOf(GANTRY_TIER, -0.36), keelOf(GANTRY, -0.35)), over(topOf(GANTRY_TIER, -1.12), keelOf(GANTRY, -0.95)),
+      slopes("Gantry", GANTRY, 0.72, 1, GANTRY_FOOT), slopes("Gantry", GANTRY, 0.32, -1, GANTRY_FOOT, GANTRY_TIER),
+      slopes("Gantry", GANTRY, -0.08, 1, GANTRY_FOOT, GANTRY_TIER), slopes("Gantry", GANTRY, -0.44, -1, GANTRY_FOOT, GANTRY_TIER),
+      slopes("Gantry", GANTRY, -0.76, 1, GANTRY_FOOT, GANTRY_TIER), flats("Gantry", GANTRY_TIER, -1.10, GANTRY, -0.95, GANTRY_FOOT),
     },
     launchers = {},
     fit = { "laser.pulse.small", "laser.pulse.small", "laser.pulse.small", "laser.pulse.small", "laser.pulse.small", "laser.pulse.small" },
   },
   ["cruiser.trellis"] = {
-    faction = "kethri", draw = trellis, sheets = 7.5, even = 0.7,
+    faction = "kethri", draw = trellis, sheets = 7.5, even = 0.7, reach = 1.61,
     turrets = {
-      over(topOf(TRELLIS, 1.00), keelOf(TRELLIS, 1.00)), abeam(edgeOf(TRELLIS, -0.20, 1), edgeOf(TRELLIS, -0.20, -1)),
-      over(topOf(TRELLIS_TIER, -0.98), keelOf(TRELLIS, -0.45)), abeam(edgeOf(TRELLIS_BARB[1], -0.90, 1), edgeOf(TRELLIS_BARB[-1], -0.90, -1)),
+      slopes("Trellis", TRELLIS, 0.85, 1, TRELLIS_FOOT), slopes("Trellis", TRELLIS, 0.25, -1, TRELLIS_FOOT, TRELLIS_TIER),
+      slopes("Trellis", TRELLIS, -0.32, 1, TRELLIS_FOOT, TRELLIS_TIER), flats("Trellis", TRELLIS_TIER, -1.00, TRELLIS, -0.45, TRELLIS_FOOT),
     },
     launchers = {},
     fit = { "laser.pulse.medium", "laser.pulse.medium", "laser.pulse.medium", "laser.pulse.medium" },
   },
   ["battleship.spire"] = {
-    faction = "kethri", draw = spireShip, sheets = 12, even = 0.7,
+    faction = "kethri", draw = spireShip, sheets = 12, even = 0.7, reach = 2.70,
     turrets = {
-      over(topOf(SPIRE, 2.05), keelOf(SPIRE, 2.05)), over(topOf(SPIRE_TIER, 0.45), keelOf(SPIRE, 0.90)),
-      over(topOf(SPIRE_CROWN, -0.36), keelOf(SPIRE, -0.10)), abeam(edgeOf(SPIRE, 0.40, 1), edgeOf(SPIRE, 0.40, -1)),
-      abeam(edgeOf(SPIRE, -0.60, 1), edgeOf(SPIRE, -0.60, -1)), abeam(edgeOf(SPIRE_BARB[1], -1.60, 1), edgeOf(SPIRE_BARB[-1], -1.60, -1)),
-      over(topOf(SPIRE_TIER, -1.80), keelOf(SPIRE, -1.85)),
+      slopes("Spire", SPIRE, 1.80, 1, SPIRE_FOOT), slopes("Spire", SPIRE, 1.25, -1, SPIRE_FOOT, SPIRE_TIER),
+      slopes("Spire", SPIRE, 0.62, 1, SPIRE_FOOT, SPIRE_TIER), slopes("Spire", SPIRE, 0.00, -1, SPIRE_FOOT, SPIRE_TIER),
+      slopes("Spire", SPIRE, -0.62, 1, SPIRE_FOOT, SPIRE_TIER), slopes("Spire", SPIRE, -1.25, -1, SPIRE_FOOT, SPIRE_TIER),
+      flats("Spire", SPIRE_TIER, -1.76, SPIRE, -1.80, SPIRE_FOOT),
     },
     launchers = {},
     fit = { "laser.beam.large", "laser.beam.large", "laser.beam.large", "laser.beam.large", "laser.beam.large", "laser.beam.large",
       "laser.beam.large" },
   },
   ["industrial.lighter"] = {
-    faction = "kethri", draw = lighter, sheets = 5.0, even = 0.7,
-    -- (its one gun on the back of the bow, and under it)
-    turrets = { over(topOf(LIGHTER, 1.02), keelOf(LIGHTER, 1.02)) },
+    faction = "kethri", draw = lighter, sheets = 5.0, even = 0.7, reach = 1.42,
+    -- (its one gun on the flat of the back ahead of the first hatch, and under the keel there)
+    turrets = { flats("Lighter", LIGHTER, 0.79, LIGHTER, 0.79, LIGHTER_FOOT) },
     launchers = {},
     fit = { "laser.pulse.small" },
   },
@@ -1807,7 +1906,7 @@ end
 for _, hull in Ships.list do
   local base: Design? = if hull.tech == 2 and hull.base then designs[hull.base] else nil
   if base and designs[hull.id] == nil then
-    designs[hull.id] = { faction = base.faction, draw = base.draw, sheets = base.sheets, even = base.even,
+    designs[hull.id] = { faction = base.faction, draw = base.draw, sheets = base.sheets, even = base.even, reach = base.reach,
       look = rebuilt(base.look or Hull.looks[base.faction]), turrets = base.turrets, launchers = base.launchers, fit = base.fit }
   end
 end
@@ -1824,6 +1923,9 @@ export type Built = {
   glow: { number },     -- and the colour of that fire (the look's 'fire', or its 'glow')
   lower: vector,        -- the corners of the box it fills
   upper: vector,
+  -- The mounts that are not wholly on the hull, each in a line of words
+  -- (none, for a design that is as it should be: Hull.Audit).
+  hanging: { string },
 }
 
 local built: { [string]: Built } = {}
@@ -1878,11 +1980,53 @@ function Hull.Build(type: string, pirate: boolean?): Built?
         `a hardpoint of {type} is not a pair of mounts on opposite sides`)
     end
   end
-  local result: Built = { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = design.turrets,
+  local radius = math.max(size.x, size.y, size.z) / 2
+  assert(design.reach == nil or math.abs(design.reach - radius) < 0.03 * radius,
+    `the design of {type} says it is drawn {design.reach} long each way, and it came out {radius}`)
+  -- A hardpoint is never on a surface too small for what stands on it
+  -- (the project owner's rule, 2026-11-11, for every ship): the whole
+  -- foot of the weapon it is shown with has to have hull under it, at
+  -- the size the weapon really is beside this hull. (A pirate's patched
+  -- copy, with guns bolted on beside the ones it was built for, is not
+  -- held to it.)
+  local hanging: { string } = {}
+  if hull and not patched and design.patch == nil then
+    local metres = hull.radius / radius
+    local at = 0
+    for _, points in { design.turrets, design.launchers } do
+      for _, point in points do
+        at += 1
+        local foot = Arms.FOOT * Arms.SIZE[Arms.SizeOf(design.fit[at] or "")] / metres
+        for index, mount in point do
+          local rests, off = Plates.Rests(b, mount.at, mount.up, mount.fore or v(0, 0, 1), foot)
+          if not rests then
+            table.insert(hanging, string.format("%s: hardpoint %d, mount %d at (%.3f, %.3f, %.3f), foot %.3f: %d of 9 places have no hull under them",
+              type, at, index, mount.at.x, mount.at.y, mount.at.z, foot, off))
+          end
+        end
+      end
+    end
+  end
+  local result: Built = { model = model, radius = radius, turrets = design.turrets,
     launchers = design.launchers, fit = design.fit, engines = table.clone(exhausts), glow = look.fire or look.glow,
-    lower = lower, upper = upper }
+    lower = lower, upper = upper, hanging = hanging }
   built[key] = result
   return result
+end
+
+-- Every design's mounts that are not wholly on its hull, in words: none,
+-- when every hull is as it should be. (It builds every hull to find out.)
+function Hull.Audit(): { string }
+  local found: { string } = {}
+  for _, type in Hull.Types() do
+    local made = Hull.Build(type)
+    if made then
+      for _, line in made.hanging do
+        table.insert(found, line)
+      end
+    end
+  end
+  return found
 end
 
 -- ---------------------------------------------------------------------

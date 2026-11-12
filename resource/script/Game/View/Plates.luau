@@ -39,6 +39,16 @@ export type Look = {
 -- where it broke, the rest are knocked askew, and nothing is lit.
 export type Ruin = { from: number, to: number, loss: number }
 
+-- A thing built, as a shape to ask whether a point is inside: a box
+-- (its middle, its half-size and its turn), a skin (its outline, and
+-- how far aside and how high its middle line is), or a hull in flat
+-- plates (its sections).
+export type Solid = {
+  center: vector?, half: vector?, turn: vector?,
+  outline: { { number } }?, x: number?, y: number?,
+  sections: { { z: number, ring: { vector } } }?,
+}
+
 export type Builder = {
   big: PlateMesh,       -- plates with room for a fine bevel
   small: PlateMesh,     -- beams, pipes, fittings
@@ -57,6 +67,9 @@ export type Builder = {
   -- How alike the plates are in tone, 0 to 1: as unlike as plates come
   -- if not said, and at 1 all the one tone.
   even: number?,
+  -- What has been built that a thing can stand on, as shapes: every
+  -- box, every skin, every hull in flat plates (Plates.Rests asks them).
+  solids: { Solid },
   -- What is not plates: skins lofted through outlines, and what swells
   -- out of them (Plates.Loft, Plates.Fairing). One mesh for all of it.
   skin: Mesh?,
@@ -67,7 +80,7 @@ local ZERO = vector.create(0, 0, 0)
 
 function Plates.New(seed: number, fine: number?): Builder
   return { big = PlateMesh_Create(9), small = PlateMesh_Create(4), count = 0, seed = seed, fine = fine or 0.11, ruin = nil,
-    patch = nil, kept = 0, skin = nil, points = 0 }
+    patch = nil, kept = 0, skin = nil, points = 0, solids = {} }
 end
 
 -- The next plate's own number: the fraction of its tag.
@@ -123,6 +136,7 @@ local function add(b: Builder, mesh: PlateMesh, part: number, center: vector, ha
     center += vector.create(dice(b, 6) - 0.5, dice(b, 7) - 0.5, dice(b, 8) - 0.5) * (math.min(size, 0.2) * knock)
   end
   b.kept += 1
+  table.insert(b.solids, { center = center, half = half, turn = turn })
   PlateMesh_AddTagged(mesh, center, half, turn, bevel, tag)
 end
 
@@ -295,6 +309,7 @@ function Plates.Loft(b: Builder, part: number, outline: Outline, x: number?, y: 
     close(last, rings, 1)
   end
   b.kept += 1
+  table.insert(b.solids, { outline = outline, x = x or 0, y = y or 0 })
 end
 
 -- A fairing: a slender swelling on a skin, lying along it and flush to
@@ -462,6 +477,7 @@ function Plates.Hard(b: Builder, part: number, sections: { Section }, reach: num
       end
     end
   end
+  table.insert(b.solids, { sections = sections })
   local first, last = sections[1], sections[#sections]
   local ahead = if last.z > first.z then 1 else -1
   for _, cap in { { section = first, out = -ahead }, { section = last, out = ahead } } do
@@ -471,6 +487,109 @@ function Plates.Hard(b: Builder, part: number, sections: { Section }, reach: num
     end
     Plates.Flat(b, part, ring, vector.create(0, 0, cap.out))
   end
+end
+
+-- Whether a point is inside something that has been built (a box, a
+-- skin or a hull in flat plates; not a beam, a truss or a pipe, which
+-- nothing stands on).
+function Plates.Inside(b: Builder, p: vector): boolean
+  for _, solid in b.solids do
+    local center, half, turn = solid.center, solid.half, solid.turn
+    local outline, sections = solid.outline, solid.sections
+    if center and half and turn then
+      -- (a box is turned about y, then x, then z: undo them the other way round)
+      local q = p - center
+      if turn.x ~= 0 then
+        local c, s = math.cos(-turn.x), math.sin(-turn.x)
+        q = vector.create(c * q.x + s * q.z, q.y, -s * q.x + c * q.z)
+      end
+      if turn.y ~= 0 then
+        local c, s = math.cos(-turn.y), math.sin(-turn.y)
+        q = vector.create(q.x, c * q.y - s * q.z, s * q.y + c * q.z)
+      end
+      if turn.z ~= 0 then
+        local c, s = math.cos(-turn.z), math.sin(-turn.z)
+        q = vector.create(c * q.x - s * q.y, s * q.x + c * q.y, q.z)
+      end
+      if math.abs(q.x) <= half.x and math.abs(q.y) <= half.y and math.abs(q.z) <= half.z then
+        return true
+      end
+    elseif outline then
+      if p.z >= outline[1][1] and p.z <= outline[#outline][1] then
+        local w, h, middle = Plates.Girth(outline, p.z)
+        local dx, dy = math.abs(p.x - (solid.x or 0)) / w, math.abs(p.y - (solid.y or 0) - middle) / h
+        if dx ^ SQUARE + dy ^ SQUARE <= 1 then
+          return true
+        end
+      end
+    elseif sections then
+      for index = 1, #sections - 1 do
+        local a, c = sections[index], sections[index + 1]
+        local low, high = math.min(a.z, c.z), math.max(a.z, c.z)
+        if p.z >= low and p.z <= high and high > low then
+          -- (its outline there, between the two sections: inside it if the
+          -- point is on the same side of every edge)
+          local t = (p.z - a.z) / (c.z - a.z)
+          local sign = 0
+          local inside = true
+          local count = #a.ring
+          for corner = 1, count do
+            local after = corner % count + 1
+            local x1 = a.ring[corner].x + (c.ring[corner].x - a.ring[corner].x) * t
+            local y1 = a.ring[corner].y + (c.ring[corner].y - a.ring[corner].y) * t
+            local x2 = a.ring[after].x + (c.ring[after].x - a.ring[after].x) * t
+            local y2 = a.ring[after].y + (c.ring[after].y - a.ring[after].y) * t
+            local turnOf = (x2 - x1) * (p.y - y1) - (y2 - y1) * (p.x - x1)
+            if math.abs(turnOf) > 1e-9 then
+              local way = if turnOf > 0 then 1 else -1
+              if sign == 0 then
+                sign = way
+              elseif way ~= sign then
+                inside = false
+                break
+              end
+            end
+          end
+          if inside and sign ~= 0 then
+            return true
+          end
+        end
+      end
+    end
+  end
+  return false
+end
+
+-- Whether a thing with a square foot stands wholly on what has been
+-- built: 'at' is the middle of the foot, 'up' the way out of the hull
+-- there, 'fore' the way the thing faces, and 'foot' how far it is from
+-- the foot's middle to its edge. Every corner of the foot, the middle
+-- of every edge and the middle of the foot have to have hull under them
+-- within a third of that (a skin curves away under a flat foot, and
+-- that is no fault): a foot with nothing under part of it hangs off
+-- into space. Returns whether it stands, and how many of the nine
+-- places have nothing under them.
+function Plates.Rests(b: Builder, at: vector, up: vector, fore: vector, foot: number): (boolean, number)
+  local level = fore - up * vector.dot(fore, up)
+  level = if vector.magnitude(level) > 1e-4 then vector.normalize(level) else vector.normalize(vector.cross(up, vector.create(1, 0, 0)))
+  local side = vector.cross(up, level)
+  local hanging = 0
+  for along = -1, 1 do
+    for across = -1, 1 do
+      local place = at + level * (along * foot) + side * (across * foot)
+      local held = false
+      for _, depth in { 0.02, 0.12, 0.22, 0.33 } do
+        if Plates.Inside(b, place - up * (depth * foot)) then
+          held = true
+          break
+        end
+      end
+      if not held then
+        hanging += 1
+      end
+    end
+  end
+  return hanging == 0, hanging
 end
 
 -- The model of what has been built, painted as 'look' says, and the
