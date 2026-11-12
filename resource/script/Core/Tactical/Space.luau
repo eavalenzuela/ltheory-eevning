@@ -78,6 +78,42 @@ function Space.Object(state: State.State, id: number): System.Object?
   return if description then description.objects[id % SPAN] else nil
 end
 
+-- A system's description for a look at it, which is not kept: the
+-- state's own if the system has been described, and otherwise what it
+-- would be (it follows from the galaxy alone), remembered here beside
+-- the galaxy and not in the state. For asking what is where a pilot has
+-- never been (what the markets some jumps off sell, say) without
+-- putting every system asked about into the save.
+type Glances = { [number]: System.Description }
+local glances: { [any]: Glances } = setmetatable({} :: any, { __mode = "k" })
+
+function Space.Glance(state: State.State, system: number): System.Description
+  local kept = state.systems[system]
+  if kept then
+    return kept
+  end
+  local seen = glances[state.galaxy]
+  if seen == nil then
+    seen = {}
+    glances[state.galaxy] = seen
+  end
+  local description = seen[system]
+  if description == nil then
+    description = System.Describe(state.galaxy, system)
+    seen[system] = description
+  end
+  return description
+end
+
+-- The described object with this id, whether or not its system has
+-- been described yet (Space.Glance).
+function Space.Peek(state: State.State, id: number): System.Object?
+  if id <= 0 or id >= Constants.FIRST_DYNAMIC_ID or state.galaxy.systems[id // SPAN] == nil then
+    return nil
+  end
+  return Space.Glance(state, id // SPAN).objects[id % SPAN]
+end
+
 -- Anything in space by id: a ship's ball, a wreck or a described object.
 function Space.Body(state: State.State, id: number): Body?
   local ball = state.balls[id]

@@ -77,7 +77,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 50
+Core.SAVE_VERSION = 51
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -307,6 +307,15 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- save from before has given any.
   [49] = function(state: any)
     state.couriers = state.couriers or {}
+  end,
+  -- 51: a hired pilot can be sent to buy. Nobody of a save from before
+  -- has been.
+  [50] = function(state: any)
+    for _, wing in state.fleet do
+      wing.want = wing.want or ""
+      wing.need = wing.need or 0
+      wing.limit = wing.limit or 0
+    end
   end,
   -- 49: a haul can be a round of several stations. One of a save from
   -- before collects at the one station it did.
@@ -1482,6 +1491,10 @@ export type FleetRow = {
   from: string,       -- the name of the station it is carried from (the first, of a round of several),
   to: string,         -- and of the one it is carried to
   stops: { string },  -- the names of every station collected at, in order
+  -- for one sent to buy ('from' is the market's name and 'to' that of
+  -- the station it is brought to): the name of the thing, and how many
+  -- are still to be bought
+  want: string, need: number,
   sells: boolean,     -- they sell what they bring in,
   earned: number,     -- and this is what that has made
   experience: number, -- what they have learned toward the next grade,
@@ -1502,6 +1515,7 @@ function Query.Fleet(game: Game): { FleetRow }
       ship = 0, shipName = "", hull = "", where = "no ship", near = false, distance = 0, shield = 1, armor = 1, structure = 1,
       doing = "no ship", hauled = wing.hauled, experience = wing.experience,
       cargo = wing.cargo, from = "", to = "", stops = {}, sells = wing.sell, earned = wing.earned,
+      want = "", need = 0,
       post = "", ward = "", hunted = wing.alarm,
       needed = if wing.skill >= Fleet.BEST then 0 else Fleet.Needed(wing.skill),
     }
@@ -1540,6 +1554,14 @@ function Query.Fleet(game: Game): { FleetRow }
         row.doing = if ball then (if why == "collect" and laden then "collecting" elseif laden then "carrying" else "going back for more")
           elseif ship.docked == wing.base then "unloading"
           elseif laden then "loading" else "waiting for cargo"
+      elseif wing.order == "buy" then
+        local from, to = Space.Object(state, wing.post), Space.Object(state, wing.base)
+        local info = Types.Get(wing.want)
+        row.from, row.to = if from then from.name else "?", if to then to.name else "?"
+        row.want, row.need = if info then info.name else "?", wing.need
+        local aboard = Fleet.Bought(state, wing, ship) > 0
+        row.doing = if ball then (if aboard then "bringing it in" elseif wing.need > 0 then "going to buy" else "coming back")
+          elseif ship.docked == wing.base then "unloading" else "buying"
       elseif wing.order == "patrol" then
         local post = Space.Object(state, wing.post)
         row.post = if post then post.name else "?"
@@ -1628,6 +1650,61 @@ function Query.HaulTargets(game: Game, pilot: number, also: number?): { HaulTarg
   for at = rest, #found do
     found[at] = tail[at - rest + 1]
   end
+  return found
+end
+
+-- Where else a thing can be bought: the markets within a few jumps
+-- (Fleet.SHOPS) of a station that have any, the best first. For each,
+-- its name and its system's, how many jumps off, how many it would
+-- sell of the 'quantity' asked for (all it has, if that is fewer), and
+-- what those would cost there now, in all and each. The best is one
+-- that has them all before one that has not, then the cheapest for
+-- one, then the nearest. (Nothing is opened or kept by asking.)
+export type Source = { id: number, name: string, system: string, jumps: number, units: number, cost: number, each: number }
+function Query.Sources(game: Game, station: number, type: string, quantity: number): { Source }
+  local state = game.state
+  local found: { Source } = {}
+  if Space.Object(state, station) == nil or Market.Index(type) == nil or quantity < 1 then
+    return found
+  end
+  -- (the systems within reach, nearest first)
+  local systems = state.galaxy.systems
+  local here = Space.SystemOf(state, station)
+  local jumps: { [number]: number } = { [here] = 0 }
+  local queue = { here }
+  local at = 1
+  while at <= #queue do
+    local system = queue[at]
+    at += 1
+    for _, object in Space.Glance(state, system).objects do
+      if object.kind == "station" and object.id ~= station and Stations.Has(state, object.id, "market") then
+        local units, cost = Market.Asks(state, object.id, type, quantity)
+        if units > 0 then
+          table.insert(found, { id = object.id, name = object.name, system = systems[system].name, jumps = jumps[system],
+            units = units, cost = cost, each = cost / units })
+        end
+      end
+    end
+    if jumps[system] < Fleet.SHOPS then
+      for _, neighbor in systems[system].neighbors do
+        if jumps[neighbor] == nil then
+          jumps[neighbor] = jumps[system] + 1
+          table.insert(queue, neighbor)
+        end
+      end
+    end
+  end
+  table.sort(found, function(a: Source, b: Source): boolean
+    local wholeA, wholeB = a.units >= quantity, b.units >= quantity
+    if wholeA ~= wholeB then
+      return wholeA
+    elseif a.each ~= b.each then
+      return a.each < b.each
+    elseif a.jumps ~= b.jumps then
+      return a.jumps < b.jumps
+    end
+    return a.id < b.id
+  end)
   return found
 end
 

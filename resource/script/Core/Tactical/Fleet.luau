@@ -57,6 +57,16 @@
 -- carried: it goes to the market of the station they bring it to, if
 -- that has one, at what the market gives, and into the hangar if not.
 --
+-- A pilot whose ship is docked can be sent to buy: so many of a thing,
+-- at the market of another station, for no more than so much each.
+-- They go there, buy what the hold takes, bring it back to the station
+-- they were sent from and put it in the player's hangar, and go again
+-- until it is all brought. The corporation pays, where there is one.
+-- What a market asks rises with every unit it sells, so "no more than
+-- so much each" is on the average of a purchase; and with nothing more
+-- to be had under that price, or nothing left to pay with, they bring
+-- what they have and say so. Done, they wait where they brought it.
+--
 -- Where the player is not, a hired pilot is on their own. Pirates come
 -- for them as they come for the player (Tactical/Pirates), half as
 -- often, and the fight is fought as any is; a pilot who is gone for
@@ -83,8 +93,7 @@
 -- taken aboard. (One who is running for a station with a ship that is
 -- going to pieces does not wait.)
 --
--- (The beginning of M7. Not yet: a route of more than two stations,
--- loyalty.)
+-- (The beginning of M7. Not yet: loyalty.)
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Combat = require("@lt/Core/Tactical/Combat")
@@ -181,6 +190,9 @@ end
 Fleet.CARGO = { "ore", "mineral", "planetary", "component", "all" }
 -- The stations a haul can collect at, the one the ship is docked at among them.
 Fleet.STOPS = 5
+-- How many jumps off a market can be, to be offered as a place to send
+-- a pilot to buy at. (They will go further, sent.)
+Fleet.SHOPS = 5
 
 -- Whether a type is of a kind a hauler carries.
 function Fleet.Carries(kind: string, type: string): boolean
@@ -458,6 +470,46 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
         end
       end
       return true
+    elseif what == "buy" then
+      if wing == nil then
+        return false, "that is said to one pilot"
+      end
+      local theirs = state.ships[wing.ship]
+      if theirs == nil then
+        return false, `{wing.name} has no ship`
+      elseif theirs.docked == 0 then
+        return false, `{wing.name} has to be docked where it is to be brought`
+      end
+      local info = Types.Get(command.type or "")
+      local quantity, price = command.quantity or 0, command.price or 0
+      if info == nil or Market.Index(info.id) == nil then
+        return false, "no such thing to buy"
+      elseif quantity < 1 or quantity % 1 ~= 0 then
+        return false, "how many?"
+      elseif price <= 0 then
+        return false, "for how much each, at most?"
+      end
+      -- (the market may be in a system nobody has been to yet)
+      local at = Space.Peek(state, command.target or 0)
+      if at == nil or at.kind ~= "station" or not Stations.Has(state, at.id, "market") then
+        return false, "that is not a station with a market"
+      elseif at.id == theirs.docked then
+        return false, "that is this station: buy it here yourself"
+      elseif #Galaxy.Route(state.galaxy, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, at.id)) == 0 then
+        return false, "there is no way there"
+      elseif info.volume > Items.ShipStats(state, theirs.id).cargo then
+        return false, `one does not fit in {wing.name}'s hold`
+      end
+      -- (and one, at least, is to be had there now for what was said, and can be paid for)
+      local units, cost = Market.Asks(state, at.id, info.id, 1)
+      if units < 1 then
+        return false, "that market has none"
+      elseif cost > price then
+        return false, `one is {cost} credits there now`
+      elseif not Corporation.Afford(state, cost) then
+        return false, "not enough credits"
+      end
+      return true
     elseif what == "mine" then
       local me = state.balls[ship.id]
       if me == nil then
@@ -517,7 +569,7 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     Corporation.Spend(state, found.fee, "hiring", events)
     local wing: State.Wingman = { id = State.NewId(state), name = found.name, skill = found.skill, wage = found.wage,
       paid = state.tick, ship = 0, order = "follow", target = 0, post = 0, base = 0, hauled = 0, experience = 0,
-      stops = {}, leg = 0,
+      stops = {}, leg = 0, want = "", need = 0, limit = 0,
       cargo = "", sell = false, earned = 0, ward = 0, alarm = false }
     state.fleet[wing.id] = wing
     table.insert(state.fleetIds, wing.id)
@@ -573,6 +625,17 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
       table.insert(wing.stops, id)
     end
     table.insert(events, { kind = "FleetOrdered", what = "haul", target = wing.base })
+  elseif kind == "FleetOrder" and command.what == "buy" then
+    -- To the market named, and back to the station their ship is docked
+    -- at. (The market's system is described now, if it never was.)
+    local market = command.target :: number
+    Space.Describe(state, Space.SystemOf(state, market))
+    wing.order, wing.target = "buy", 0
+    wing.post, wing.base = market, state.ships[wing.ship].docked
+    wing.want, wing.need, wing.limit = command.type :: string, command.quantity :: number, command.price :: number
+    wing.stops, wing.leg = {}, 0
+    table.insert(events, { kind = "FleetOrdered", what = "buy", target = market, pilot = wing.id, name = wing.name,
+      type = wing.want, quantity = wing.need, price = wing.limit })
   elseif kind == "FleetOrder" then
     for _, id in state.fleetIds do
       local each = state.fleet[id]
@@ -887,6 +950,107 @@ local function carry(state: State.State, wing: State.Wingman, ship: State.Ship, 
   end
 end
 
+-- How many of what a pilot was sent to buy are in their hold.
+function Fleet.Bought(state: State.State, wing: State.Wingman, ship: State.Ship): number
+  local aboard = 0
+  for _, item in Items.In(state, ship.id, "cargo") do
+    if item.type == wing.want then
+      aboard += item.quantity
+    end
+  end
+  return aboard
+end
+
+-- What a pilot sent to buy does: to the market, where they buy what the
+-- hold takes of what is still wanted, for no more than they were told
+-- to pay and with what there is to pay with; back with it to where they
+-- were sent from; and again, until it is all brought. With nothing more
+-- to be had they say why, bring what they have, and the errand is over.
+local function shop(state: State.State, wing: State.Wingman, ship: State.Ship, events: { Event })
+  local market, home = Space.Object(state, wing.post), Space.Object(state, wing.base)
+  local info = Types.Get(wing.want)
+  if market == nil or home == nil or info == nil then
+    wing.order = "stay"
+    return
+  end
+  local me = state.balls[ship.id]
+  if me == nil then
+    if ship.docked == home.id then
+      -- (what is aboard of it, into the hangar)
+      local units = 0
+      for _, item in Items.In(state, ship.id, "cargo") do
+        if item.type == wing.want then
+          units += item.quantity
+          Items.Add(state, item.type, item.quantity, home.id, "hangar")
+          Items.Take(state, item, item.quantity)
+        end
+      end
+      if units > 0 then
+        wing.hauled += units
+        table.insert(events, { kind = "BuyDelivered", pilot = wing.id, name = wing.name, type = wing.want, units = units,
+          station = home.id, left = wing.need })
+        -- (a point of experience for every hundred cubic metres brought)
+        learn(state, wing, (units * info.volume) // 100, events)
+      end
+      -- (no room for one more, with the hold as it is: that is the end of it)
+      local room = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
+      if wing.need > 0 and room < info.volume then
+        table.insert(events, { kind = "BuyEnded", pilot = wing.id, name = wing.name, type = wing.want, short = wing.need,
+          station = home.id, reason = "there is no room in their hold" })
+        wing.need = 0
+      end
+      if wing.need <= 0 then
+        -- (all brought, or all there was to bring: they wait here)
+        wing.order, wing.want, wing.need = "stay", "", 0
+        return
+      end
+    elseif ship.docked == market.id and wing.need > 0 then
+      -- (the market is looked over now and then, not every second)
+      if (state.tick + wing.id) % 5 ~= 0 then
+        return
+      end
+      local free = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
+      local fits = if info.volume > 0 then math.floor(free / info.volume) else wing.need
+      local purse = state.wallet + (if Corporation.Founded(state) then math.max(0, state.corporation.wallet) else 0)
+      local most = math.min(wing.need, fits)
+      local sells = Stations.Has(state, market.id, "market")
+      local units = if sells then Market.Within(state, market.id, wing.want, most, wing.limit, purse) else 0
+      if units > 0 then
+        local cost = Market.Buy(state, market.id, wing.want, units, ship.id, "cargo", events, true)
+        wing.need -= units
+        table.insert(events, { kind = "BuyMade", pilot = wing.id, name = wing.name, type = wing.want, units = units, cost = cost,
+          station = market.id })
+      end
+      if units < most then
+        -- (fewer than the hold would take: there is no more for them here,
+        -- and they bring what they have)
+        local quote = if sells then Market.Quote(state, market.id, wing.want) else nil
+        local reason = if quote == nil or quote.ask == nil or quote.stock < 1 then "there is no more to be had there"
+          elseif quote.ask > wing.limit then `it is {math.ceil(quote.ask)} credits each there now`
+          else "there is not the money for more"
+        table.insert(events, { kind = "BuyEnded", pilot = wing.id, name = wing.name, type = wing.want, short = wing.need,
+          station = market.id, reason = reason })
+        wing.need = 0
+      end
+    end
+    give(state, { kind = "Undock", actor = ship.id }, events)
+    return
+  end
+  mend(state, me, false, events)
+  if me.intent and (me.intent.kind == "dock" or me.intent.kind == "jump") then
+    return
+  end
+  -- (to the market for more, with room for it; and home with what there is)
+  local free = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
+  local goal = if wing.need > 0 and free >= info.volume and Fleet.Bought(state, wing, ship) == 0 then market else home
+  local system = Space.SystemOf(state, goal.id)
+  if me.system ~= system then
+    travel(state, me, system, events)
+  else
+    give(state, { kind = "Dock", actor = ship.id, target = goal.id }, events)
+  end
+end
+
 -- Whether a pilot has a guard with them: another hired pilot set to
 -- guard them, whose ship is on the grid theirs is on.
 local function guarded(state: State.State, wing: State.Wingman, me: State.Ball): boolean
@@ -1057,6 +1221,9 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
     return
   elseif wing.order == "haul" then
     carry(state, wing, ship, events)
+    return
+  elseif wing.order == "buy" then
+    shop(state, wing, ship, events)
     return
   elseif wing.order == "patrol" then
     patrol(state, wing, ship, events)

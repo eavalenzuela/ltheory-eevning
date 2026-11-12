@@ -540,6 +540,19 @@ function Debug.Corporation(): (string, number, number, number, number)
   return info.name, info.wallet, info.earned, info.spent, select(2, Core.Query.Candidates(session.game, session.game.state.player.home))
 end
 
+-- Where else a thing is to be had, from the station the pilot is docked
+-- at: how many markets within reach have any, and of the best of them
+-- the id, how many jumps off it is, and what one costs there.
+function Debug.Sources(type: string, quantity: number?): (number, number, number, number)
+  local docked = Core.Query.Player(session.game).docked
+  local found = Core.Query.Sources(session.game, docked, type, quantity or 1)
+  local best = found[1]
+  if best == nil then
+    return 0, 0, 0, 0
+  end
+  return #found, best.id, best.jumps, best.each
+end
+
 -- Which of the pilots looking for work at the home station is the first
 -- of a grade or better (the number on their Hire button), or 0.
 function Debug.Candidate(grade: number): number
@@ -1584,13 +1597,14 @@ end
 -- grade, their grade, what selling what they bring in has made,
 -- whether they are told to sell it, and whether somebody is after them
 -- with the player elsewhere; and, for one set to haul, how many
--- stations their round collects at. "" and 0 for nobody.
-function Debug.Crew(n: number): (string, number, number, number, number, boolean, boolean, number)
+-- stations their round collects at; and, for one sent to buy, how many
+-- are still to be bought. "" and 0 for nobody.
+function Debug.Crew(n: number): (string, number, number, number, number, boolean, boolean, number, number)
   local row = Core.Query.Fleet(session.game)[n]
   if row == nil then
-    return "", 0, 0, 0, 0, false, false, 0
+    return "", 0, 0, 0, 0, false, false, 0, 0
   end
-  return row.doing, row.hauled, row.experience, row.skill, row.earned, row.sells, row.hunted, #row.stops
+  return row.doing, row.hauled, row.experience, row.skill, row.earned, row.sells, row.hunted, #row.stops, row.need
 end
 
 -- A cheat, for a round of several stations to have something to

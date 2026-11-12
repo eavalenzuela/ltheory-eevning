@@ -314,6 +314,11 @@ export type Wingman = {
   -- the first), and how far round them this round has got (the place
   -- in that list of the last one loaded at; 0 before the first).
   stops: { number }, leg: number,
+  -- For one sent to "buy": the type of thing ('want'), how many of it
+  -- are still to be bought ('need'), and the most to pay for one, on
+  -- the average of a purchase ('limit'). It is bought at the station
+  -- 'post' and brought to the station 'base'.
+  want: string, need: number, limit: number,
 }
 
 -- A place that is on nobody's chart (Tactical/Sites): 'id' is the place

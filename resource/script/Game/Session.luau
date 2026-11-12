@@ -181,6 +181,16 @@ function Session.Notice(session: Session, event: Space.Event)
     local body = Core.Query.Body(session.game, event.station)
     Session.Say(session, `{event.name} brought in {event.units} units{if kind == "OreDelivered" then " of ore" else ""} to `
       .. `{if body then body.name else "the station"}` .. (if (event.revenue or 0) > 0 then `, sold for {event.revenue} credits` else ""))
+  elseif kind == "FleetOrdered" and event.what == "buy" then
+    local body = Core.Query.Body(session.game, event.target)
+    Session.Say(session, `{event.name} is off to buy {event.quantity} {Types.Info(event.type).name} at `
+      .. `{if body then body.name else "the market"}, for no more than {event.price} credits each`)
+  elseif kind == "BuyDelivered" then
+    local body = Core.Query.Body(session.game, event.station)
+    Session.Say(session, `{event.name} brought {event.units} {Types.Info(event.type).name} to {if body then body.name else "the station"}`
+      .. (if event.left > 0 then `, and is going back for {event.left} more` else ": that is all of it"))
+  elseif kind == "BuyEnded" then
+    Session.Say(session, `{event.name} could not buy {event.short} of the {Types.Info(event.type).name}: {event.reason}`)
   elseif kind == "PilotPromoted" then
     Session.Say(session, `{event.name} is a grade {event.skill} pilot now, and is paid as one`)
   elseif kind == "WingmanLost" then

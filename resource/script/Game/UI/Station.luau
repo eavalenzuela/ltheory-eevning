@@ -55,6 +55,15 @@ local chosen = ""
 local quantity = 1
 local sellPrice, buyPrice = 0, 0    -- 0: the best price that fills now
 
+-- Where else the thing chosen is to be had (Core.Query.Sources): asked
+-- again when what is asked changes and a couple of times a second, not
+-- every frame.
+local elsewhere = { key = "", age = 0, list = {} :: { Core.Source } }
+
+-- How much over what a market asks now a pilot sent there may pay, a
+-- unit, on the average of a purchase: prices move while they fly.
+local LEEWAY = 1.1
+
 -- Industry: the blueprint shown and the runs entered.
 local blueprintChosen = ""
 local runs = 1
@@ -714,7 +723,52 @@ local function drawMarket(session: Session.Session, game: Core.Game, player: Cor
   if not canBuy and whole then
     Im.Text(tostring(whyNot), dx, line, 12, Im.WARN)
   end
-  line += 26
+  line += 18
+
+  -- Where else it is to be had: the best market within a few jumps, what
+  -- it asks, and a hired pilot whose ship is docked here to send for it.
+  -- They buy as many as the quantity above and bring them here.
+  local asked = math.max(1, math.floor(quantity))
+  local key = `{station}:{chosen}:{asked}`
+  elsewhere.age += 1
+  if elsewhere.key ~= key or elsewhere.age > 30 then
+    elsewhere.key, elsewhere.age, elsewhere.list = key, 0, Core.Query.Sources(game, station, chosen, asked)
+  end
+  local best = elsewhere.list[1]
+  if best then
+    local here = if cost then cost / asked else nil
+    Im.Text("Elsewhere", dx, line, 12, Im.DIM)
+    Im.Text(shorten(best.name, 36), dx + 64, line, 12, Im.TEXT)
+    local far = if best.jumps == 0 then "in this system" elseif best.jumps == 1 then `1 jump, in {best.system}`
+      else `{best.jumps} jumps, in {best.system}`
+    Im.Text(shorten(`{far}: {Format.Price(best.each)} each` .. (if best.units < asked then `, has {Format.Whole(best.units)}` else ""), 50),
+      dx + 64, line + 15, 12, if here == nil or best.each < here then GOOD else Im.DIM)
+    -- (who goes: the first of the pilots docked here who is doing nothing else)
+    local goes: Core.FleetRow? = nil
+    for _, row in Core.Query.Fleet(game) do
+      local ship = game.state.ships[row.ship]
+      if goes == nil and ship and ship.docked == station and (row.order == "follow" or row.order == "stay") then
+        goes = row
+      end
+    end
+    local fetch: State.Command = { kind = "FleetOrder", actor = 0, what = "buy", pilot = if goes then goes.id else 0, target = best.id,
+      type = chosen, quantity = asked, price = math.ceil(best.each * LEEWAY) }
+    local can, why = false, nil :: string?
+    if goes then
+      can, why = Session.CanDo(session, fetch)
+    end
+    if Im.Button(if goes then shorten(`Send {string.match(goes.name, "^%S+") or goes.name}`, 14) else "Send a pilot", dx + 338, line, 108, 26,
+      can, "Fetch") then
+      Session.Do(session, fetch)
+    end
+    if goes and not can and why then
+      Im.Text(shorten(why, 44), dx + 64, line + 30, 11, Im.WARN)
+    end
+  else
+    Im.Text("Elsewhere", dx, line, 12, Im.DIM)
+    Im.Text(`no market within {Fleet.SHOPS} jumps has any`, dx + 64, line, 12, Im.DIM, 0.8)
+  end
+  line += 38
 
   -- Standing orders.
   Im.Heading("STANDING ORDERS", dx, line, 14, Im.DIM)
@@ -1216,6 +1270,9 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
       local where = if here then "docked here" else row.where
       if row.order == "mine" then
         where = `{row.doing}: {row.hauled} units of ore brought in`
+      elseif row.order == "buy" then
+        where = row.doing
+        note = `{Format.Whole(row.need)} {row.want} still to buy at {row.from}, to bring to {row.to}`
       elseif row.order == "haul" then
         where = row.doing
         -- (a round of several stations says how many it collects at)
@@ -1292,7 +1349,7 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
         Session.Do(session, haul)
       end
       reason = if can then nil else whyNot
-      if target and row.order ~= "haul" then
+      if target and row.order ~= "haul" and row.order ~= "buy" then
         note = `{target.name}: ` .. (if target.jumps == 0 then "in this system" elseif target.jumps == 1 then `1 jump, in {target.system}`
           else `{target.jumps} jumps, in {target.system}`) .. (if target.market then ", has a market" else ", no market")
       end

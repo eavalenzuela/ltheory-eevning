@@ -36,7 +36,8 @@ end
 -- What a station is made of: its tower and its modules. Nil if 'id' is
 -- not a station.
 function Stations.Makeup(state: State.State, id: number): Structures.Makeup?
-  local object = Space.Object(state, id)
+  -- (a station of a system nobody has been to yet has its makeup too)
+  local object = Space.Peek(state, id)
   if object == nil or object.kind ~= "station" then
     return nil
   end

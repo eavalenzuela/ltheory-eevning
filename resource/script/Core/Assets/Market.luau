@@ -295,6 +295,73 @@ function Market.Quote(state: State.State, station: number, type: string): Quote
   }
 end
 
+-- A station's market for a look at it: the market itself where it has
+-- been opened, and otherwise one as any station of its kind and faction
+-- has on the day it opens, which is not kept (and is never to be traded
+-- with). Nil if that is no station. So what a market some jumps off
+-- asks can be said without opening it.
+local unopened: { [string]: Economy.Economy } = {}
+
+function Market.Glance(state: State.State, station: number): Economy.Economy?
+  local existing = state.markets[station]
+  if existing then
+    return existing
+  end
+  local object = Space.Peek(state, station)
+  if object == nil or object.kind ~= "station" then
+    return nil
+  end
+  local faction = state.galaxy.systems[Space.SystemOf(state, station)].nearest
+  local key = `{object.variety}:{faction}`
+  local econ = unopened[key]
+  if econ == nil then
+    econ = open(key, object.variety, faction)
+    unopened[key] = econ
+  end
+  return econ
+end
+
+-- What a station some way off has of a type, and what 'quantity' of it
+-- (or all it has, if that is fewer) would cost there now: the units
+-- that is, and the cost. Nothing is opened or changed. (0, 0: it has
+-- none, or is no station.)
+function Market.Asks(state: State.State, station: number, type: string, quantity: number): (number, number)
+  local econ = Market.Glance(state, station)
+  local index = Market.Index(type)
+  if econ == nil or index == nil then
+    return 0, 0
+  end
+  local units = math.min(quantity, math.floor(econ.nodes[1].stock[index]))
+  if units < 1 then
+    return 0, 0
+  end
+  return units, math.ceil(Economy.BuyCost(econ, 1, index, units) :: number)
+end
+
+-- How many of a type, 'most' at most, a station's market will sell now
+-- to somebody who pays no more than 'limit' credits for one on the
+-- average of the purchase, and no more than 'purse' credits in all. (A
+-- market asks more for each unit than for the one before: so it is the
+-- first so many, and a search finds how many.)
+function Market.Within(state: State.State, station: number, type: string, most: number, limit: number, purse: number): number
+  local econ = Market.For(state, station)
+  local index = assert(Market.Index(type), `no item type '{type}'`)
+  local function fine(units: number): boolean
+    local cost = Economy.BuyCost(econ, 1, index, units)
+    return cost ~= nil and math.ceil(cost) <= limit * units and math.ceil(cost) <= purse
+  end
+  local low, high = 0, math.min(most, math.floor(econ.nodes[1].stock[index]))
+  while low < high do
+    local middle = (low + high + 1) // 2
+    if fine(middle) then
+      low = middle
+    else
+      high = middle - 1
+    end
+  end
+  return low
+end
+
 -- What buying 'quantity' at once would cost in all, or nil if the station
 -- has not that many.
 function Market.BuyCost(state: State.State, station: number, type: string, quantity: number): number?
@@ -457,6 +524,29 @@ function Market.Sell(state: State.State, station: number, item: State.Item, quan
   return net
 end
 
+-- Buy so many of a type from a station's market, at once: they are put
+-- in 'place' of 'holder' (the pilot's hangar at the station, or the
+-- hold of a ship of theirs docked there), what they cost is paid, and
+-- the trade is on the station's books. Returns what was paid.
+-- 'business': it is a hired pilot who buys, and the corporation that
+-- pays, if there is one (Assets/Corporation).
+function Market.Buy(state: State.State, station: number, type: string, quantity: number, holder: number,
+  place: "hangar" | "cargo", events: { Event }, business: boolean?): number
+  local cost = math.ceil(Economy.Buy(Market.For(state, station), 1, Market.Index(type) :: number, quantity) :: number)
+  if business then
+    Corporation.Spend(state, cost, "market purchase", events)
+  else
+    Wallet.Pay(state, -cost, "market purchase", events)
+  end
+  Items.Add(state, type, quantity, holder, place)
+  record(state, station, type, quantity, cost)
+  -- (a hired pilot's buying is said by whoever sent them: Tactical/Fleet)
+  if not business then
+    table.insert(events, { kind = "Bought", type = type, quantity = quantity, cost = cost })
+  end
+  return cost
+end
+
 local function removeOrder(state: State.State, order: State.Order)
   state.orders[order.id] = nil
   State.RemoveId(state.orderIds, order.id)
@@ -464,16 +554,10 @@ end
 
 function Market.Apply(state: State.State, command: State.Command, events: { Event })
   local station = state.ships[command.actor].docked
-  local econ = Market.For(state, station)
   local kind = command.kind
 
   if kind == "BuyNow" then
-    local type, quantity = command.type :: string, command.quantity :: number
-    local cost = math.ceil(Economy.Buy(econ, 1, Market.Index(type) :: number, quantity) :: number)
-    Wallet.Pay(state, -cost, "market purchase", events)
-    Items.Add(state, type, quantity, station, "hangar")
-    record(state, station, type, quantity, cost)
-    table.insert(events, { kind = "Bought", type = type, quantity = quantity, cost = cost })
+    Market.Buy(state, station, command.type :: string, command.quantity :: number, station, "hangar", events)
 
   elseif kind == "SellNow" then
     local item = state.items[command.item :: number]
