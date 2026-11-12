@@ -8,7 +8,7 @@
 -- destroyed, and a pilot whose capsule is destroyed loses them all
 -- (Character/Implants has the rules).
 --
--- (EVE's hardwirings, cut down. Not yet: grades of the same implant,
+-- (Hardwirings, cut down. Not yet: grades of the same implant,
 -- implants for a kind of weapon, sets.)
 
 local Modules = require("@lt/Core/Data/Modules")

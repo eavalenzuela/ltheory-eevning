@@ -15,7 +15,7 @@
 
 #include "LTE/Debug.h"
 
-/* Warp: legs longer than kWarpMinDistance are covered EVE-style. The ship
+/* Warp: legs longer than kWarpMinDistance are covered by warp. The ship
    aligns toward the destination under normal thrust, then moves along the
    leg on a smooth ease-in/out curve and drops out kWarpExitDistance from
    the destination's surface, from where normal flight takes over. */

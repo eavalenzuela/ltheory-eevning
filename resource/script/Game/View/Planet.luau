@@ -1,6 +1,6 @@
 --!strict
 -- Planets and moons as things to look at, built the way the engine's
--- own planet is and the way EVE's are (docs/roadmap.md, "Bodies: how to
+-- own planet is (docs/roadmap.md, "Bodies: how to
 -- build them"): what a world is like is drawn once into a cube map by
 -- its kind's generator, and a shader dresses and lights the globe from
 -- it; a shell around the globe adds the glow of its air, if it has any.

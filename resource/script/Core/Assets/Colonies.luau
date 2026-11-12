@@ -6,7 +6,7 @@
 --   - A command centre is put down from a ship's hold, from near the
 --     planet, on a planet that can be worked and has no colony yet.
 --   - Facilities are raised round it for credits, from anywhere (a
---     colony is run from a distance, as EVE's are), within the power
+--     colony is run from a distance), within the power
 --     and CPU the centre supplies: extractors, each set on one raw
 --     material the planet has; processors, each making one product of
 --     a raw material the planet has; storage.

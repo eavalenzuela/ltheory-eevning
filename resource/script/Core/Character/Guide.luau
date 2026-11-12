@@ -8,7 +8,7 @@
 -- stays done. Nothing is given for it: it is a list to find one's way
 -- about by, with a line on how each thing is done.
 --
--- (The manner of EVE's opportunities. Not yet: agents who walk a new
+-- (A list of opportunities. Not yet: agents who walk a new
 -- pilot through a career.)
 
 local State = require("@lt/Core/Kernel/State")

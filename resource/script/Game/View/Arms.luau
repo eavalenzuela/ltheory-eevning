@@ -1,6 +1,6 @@
 --!strict
 -- What is mounted on a hull's hardpoints: a model for every weapon
--- module, the same on whatever hull it is fitted to. As in EVE, a
+-- module, the same on whatever hull it is fitted to. A
 -- hardpoint belongs to the hull and what sits on it to the pilot: any
 -- turret goes on any turret hardpoint, any launcher on any launcher
 -- hardpoint, and nothing here knows what faction built the ship.
@@ -36,13 +36,13 @@ local block, beam = Plates.Block, Plates.Beam
 
 -- How many metres a unit of the drawings is, for a small, a medium and
 -- a large weapon. A weapon's size is its own and not the hull's, and
--- the sizes are EVE's, as its players have measured them: a small
+-- the sizes are fixed ones: a small
 -- autocannon about 7 m long (on a frigate of 60 m or so, where it
 -- looks big), a large pulse laser about 20 m (on a battleship of 800
 -- to 1,600 m, where it looks small). The medium is put between the
 -- two. So a gun on a big hull barely shows, which is as it should be:
 -- it is noticed when it fires. (A capital size, when there are capital
--- weapons, is a fourth number here: EVE's are some ten times the large.)
+-- weapons, is a fourth number here: some ten times the large.)
 Arms.SIZE = { 1.35, 2.5, 4.5 }
 -- Half the width of the mounting ring, in the drawings' units.
 Arms.FOOT = 1.55

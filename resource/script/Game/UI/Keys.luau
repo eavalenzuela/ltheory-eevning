@@ -7,7 +7,7 @@
 --   Tab the next hostile ship   M the map         F1 to F12 the rack
 --   C the camera follows what is selected (and again, lets it go)
 --
--- (the manner of EVE's, where they are its own. Not yet: a screen to
+-- (Not yet: a screen to
 -- change them.)
 --
 -- A scripted run has no keyboard: GameDebug.Key presses one by name,

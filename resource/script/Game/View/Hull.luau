@@ -12,8 +12,7 @@
 --
 -- The Vessari (the first faction drawn, after the project owner's
 -- sketch and direction: mercantilists; blocky, utilitarian; conduits
--- showing, heavy armour, missiles, engines out on struts; in the manner
--- of EVE's Minmatar without being any ship of theirs): a spine of bare
+-- showing, heavy armour, missiles, engines out on struts): a spine of bare
 -- girders with armoured boxes hung on it, nothing quite symmetrical,
 -- plates of two colours where repairs have been made, tanks strapped on
 -- outside, masts and fins, and rust.
@@ -1554,8 +1553,8 @@ end
 -- rest (forward, if not said).
 export type Mount = { at: vector, up: vector, fore: vector? }
 
--- A hardpoint is a pair of mounts on opposite sides of the hull, as in
--- EVE (the project owner's note): whichever way the ship is heading,
+-- A hardpoint is a pair of mounts on opposite sides of the hull (the
+-- project owner's note): whichever way the ship is heading,
 -- one of the two can see the target, so a ship's heading never keeps it
 -- from firing, and only range, angle and how fast its guns can turn
 -- decide a shot. What is fitted to a hardpoint stands on both of its

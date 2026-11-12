@@ -27,7 +27,7 @@
 -- drones rather than the ships (Tactical/Pirates), and one that is
 -- destroyed leaves nothing behind.
 --
--- (EVE's, cut down. Not yet: bandwidth, drones that jam, a hired
+-- (Cut down to this. Not yet: bandwidth, drones that jam, a hired
 -- pilot's own drones.)
 
 local Combat = require("@lt/Core/Tactical/Combat")

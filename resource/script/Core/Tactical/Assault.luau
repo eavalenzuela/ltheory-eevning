@@ -42,7 +42,7 @@
 -- pilot does, once. (Ore of the kind from anywhere else does as well:
 -- the pocket is where it is to be had.)
 --
--- (EVE's security and mining missions, cut down. Not yet: a gate to fly
+-- (Security and mining missions, cut down. Not yet: a gate to fly
 -- through from room to room, things to destroy other than ships, a camp
 -- that is not pirates'.)
 

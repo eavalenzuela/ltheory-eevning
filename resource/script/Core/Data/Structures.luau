@@ -2,9 +2,8 @@
 -- Starbases: what a station is made of.
 --
 -- A station is not one building. It is a control tower with separate
--- modules anchored round it inside the tower's field, in the manner of
--- EVE's old player-owned starbases (decided by the project's owner): a
--- service is there because its module is.
+-- modules anchored round it inside the tower's field (decided by the
+-- project's owner): a service is there because its module is.
 --
 -- A tower is a faction's: each human faction that keeps to a place
 -- builds its own, in three sizes. What is anchored round a tower is nobody's in
@@ -12,7 +11,7 @@
 -- thing at any faction's tower, as a ship's weapons are the same on any
 -- hull (the owner's decision, 2026-11-10).
 --
--- For scale, EVE's: a tower's field is 15, 21 and 30 km in radius for
+-- For scale, at full size a tower's field is 15, 21 and 30 km in radius for
 -- the three sizes, the tower itself some 3 km, its modules from 400 m
 -- (a battery) to nearly 2 km (a ship assembly array). Ours are smaller
 -- throughout, to suit stations of 2 to 8 km (Describe/System), and keep
@@ -82,7 +81,7 @@ Structures.SIZES = { "small", "medium", "large" }
 Structures.SERVICES = { "market", "fitting", "refining", "industry", "research", "storage", "quarters", "defence" } :: { Service }
 
 -- A tower by size. Its supply doubles with each size, and so does the
--- fuel it burns (ten, twenty and forty blocks an hour, as EVE's do).
+-- fuel it burns (ten, twenty and forty blocks an hour).
 -- Packed, the largest still goes in the hold of any industrial.
 local SUPPLY = {
   { powergrid = 1500, cpu = 2000, field = 3000, fuel = 10, anchor = 60, volume = 1500, basePrice = 2000000 },

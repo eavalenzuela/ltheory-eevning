@@ -2,7 +2,7 @@
 -- The mathematics of a fight, with no state: how long a lock takes,
 -- whether a turret hits and how hard, how much of a missile's blast a
 -- target takes, how damage passes through shield, armour and hull, and
--- how shields and capacitors recharge. All of it follows EVE's formulas.
+-- how shields and capacitors recharge.
 
 local Gunnery = {}
 

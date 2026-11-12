@@ -148,7 +148,7 @@ local function weaponFor(game: Core.Game, ship: number, charge: State.Item): Sta
   return other
 end
 
--- The fitting screen is set out as EVE's is. In the middle is the ship,
+-- The fitting screen. In the middle is the ship,
 -- turning, inside a wheel of its slots: high slots along the top, mid
 -- slots down the right, low slots along the bottom, and on the left two
 -- arcs that fill as the fit uses the hull's CPU and powergrid. A slot

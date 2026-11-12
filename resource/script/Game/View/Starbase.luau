@@ -932,8 +932,7 @@ function Starbase.Field(): Model
 end
 
 -- How big a tower stands in its field: its radius, as a share of the
--- field's. (EVE's is a tenth to a fifth; ours stands larger in a
--- smaller field.)
+-- field's. (It stands large for its field, which is a small one.)
 Starbase.TOWER = 0.28
 
 -- The weapons a battery may carry, of each kind. Which one a given

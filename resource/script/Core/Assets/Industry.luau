@@ -87,8 +87,8 @@ end
 
 -- Research: what a pilot has learned of a blueprint in a laboratory.
 -- Each level of the one kind takes 1% off what a run uses, and each of
--- the other 2% off how long it takes, to ten levels of each (EVE's
--- material and time efficiency). It is the pilot's knowledge of the
+-- the other 2% off how long it takes, to ten levels of each (material
+-- and time efficiency). It is the pilot's knowledge of the
 -- design, not a mark on one copy: it holds for every copy they have.
 Industry.RESEARCH_LEVELS = 10
 Industry.MATERIAL_SAVED = 0.01

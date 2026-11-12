@@ -68,9 +68,9 @@ Factions.list = {
   -- The four human factions.
   {
     -- (After the project owner's first sketch, 2026-11-10: mercantilists,
-    -- blocky utilitarian ships, "think Minmatar": exposed conduits, heavy
-    -- armour, missiles, engine nacelles. The guns on the hardpoints that
-    -- are not launchers are projectile ones by that likeness; the sketch
+    -- blocky utilitarian ships: exposed conduits, heavy armour, missiles,
+    -- engine nacelles. The guns on the hardpoints that are not launchers
+    -- are projectile ones, which suits that; the sketch
     -- does not say.)
     id = "vessari", name = "Vessari", kind = "human", style = "slab", weapon = "projectile", launchers = 0.7, tank = "armor",
     note = "Missiles and heavy armour. Blocky, hard-working hulls with their conduits bare and their engines out on struts: a merchant people's ships, built to be hit and keep flying.",

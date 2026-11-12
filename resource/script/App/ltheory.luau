@@ -62,7 +62,7 @@ local function startMining(rock: Object)
   miningTarget = rock
   lastCargo = cargoCount(ship)
   minedSinceReport = 0
-  -- Approach the rock first, like EVE's approach-and-mine
+  -- Approach the rock first, then mine
   ship:ClearTasks()
   ship:PushTask(Task_Goto(rock, 0.5 * MINING_REACH))
   player:AddLog(`Mining {rock:GetName()}; yield is best from the right side of the rock`)

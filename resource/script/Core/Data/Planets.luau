@@ -2,8 +2,8 @@
 -- Planets worked: what a colony takes out of a planet, and what it
 -- makes of it.
 --
--- In the manner of EVE's planetary industry (CCP's account of it is the
--- owner's reference): a command centre is put down on a planet from
+-- Planetary industry, as the owner set it out: a command centre is put
+-- down on a planet from
 -- orbit, and facilities are raised round it within the power and CPU
 -- the centre supplies. Extractors bring up a raw material the planet
 -- has, on a programme of some hours whose yield falls off as it runs;
@@ -13,7 +13,7 @@
 -- What a planet has follows from its kind, and how rich it is in each
 -- from the planet itself. What is made there goes into fuel blocks and
 -- into towers and their modules (Data/Blueprints), so a starbase is fed
--- and built from planets, as EVE's are.
+-- and built from planets.
 --
 -- This is the data. The rules are Assets/Colonies.
 
@@ -74,7 +74,7 @@ Planets.CENTRE = {
   powergrid = 6000, cpu = 1600, room = 500,
 }
 
--- (EVE's figures, near enough. The CPU is what runs out: three
+-- (The CPU is what runs out: three
 -- extractors and three processors leave none for storage.)
 Planets.facilities = {
   { id = "extractor", name = "Extractor", powergrid = 800, cpu = 200, cost = 45000, room = 0 },

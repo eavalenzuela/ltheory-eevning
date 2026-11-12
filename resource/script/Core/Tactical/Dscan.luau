@@ -12,7 +12,7 @@
 -- It changes nothing, so it is a question and not a command: asked
 -- twice in a tick, it has the same answer.
 --
--- (EVE's directional scanner, cut down. Not yet: places and structures
+-- (A directional scanner, cut down. Not yet: places and structures
 -- on it, a cone pointed where the camera looks.)
 
 local Combat = require("@lt/Core/Tactical/Combat")

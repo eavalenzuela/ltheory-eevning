@@ -20,7 +20,7 @@
 -- is, how far a scanner has got with it, and when it goes. Only the
 -- system the pilot is in gets new ones.
 --
--- (EVE's exploration, cut down. Not yet: probes to place, a hacking
+-- (Exploration, cut down to this. Not yet: probes to place, a hacking
 -- game, gas, sites that lead on to others, anything a pilot cannot
 -- reach with the ship's own scanner.)
 

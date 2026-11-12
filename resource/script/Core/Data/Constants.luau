@@ -10,7 +10,7 @@ Constants.TICK = 1
 
 Constants.AU = 149597870700
 
--- Warp (docs/roadmap.md §3, EVE's model). A ship enters warp once it
+-- Warp (docs/roadmap.md §3). A ship enters warp once it
 -- moves within WARP_ALIGN_ANGLE of the destination at WARP_ALIGN_SPEED of
 -- its top speed. Warps shorter than WARP_MIN_DISTANCE are refused.
 Constants.WARP_ALIGN_COS = math.cos(math.rad(5))

@@ -1,7 +1,6 @@
 --!strict
 -- Starbases a pilot puts up: a control tower anchored at a moon, fed
--- with fuel, with modules anchored round it (Data/Structures), as EVE's
--- old player-owned starbases were.
+-- with fuel, with modules anchored round it (Data/Structures).
 --
 -- A pilot's tower is a station like any other. Anchoring one adds a
 -- station to its system's description, so it is on the overview, can be
