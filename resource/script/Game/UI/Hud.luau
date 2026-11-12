@@ -540,12 +540,15 @@ end
 local function drawClock(session: Session.Session, x: number, y: number)
   local clock = session.clock
   Im.Panel(x, y, 214, 34)
-  if Im.Button("-", x + 6, y + 5, 28, 24, clock.scale > 1) then
+  if Im.Button("-", x + 6, y + 5, 28, 24, clock.scale > 1, "Clock:slower") then
     clock.scale = math.max(1, clock.scale / 2)
   end
   Im.Text(if clock.paused then "paused" else `time x{clock.scale}`, x + 44, y + 9, 14, if clock.paused then Im.WARN else Im.TEXT)
-  if Im.Button("+", x + 118, y + 5, 28, 24, clock.scale < 16) then
+  -- (time is run faster only at a station)
+  local docked = Core.Query.Player(session.game).docked ~= 0
+  if Im.Button("+", x + 118, y + 5, 28, 24, docked and clock.scale < 16, "Clock:faster") then
     clock.scale = math.min(16, clock.scale * 2)
+    clock.forced = false
   end
   if Im.Button(if clock.paused then "run" else "pause", x + 152, y + 5, 56, 24, true) then
     clock.paused = not clock.paused

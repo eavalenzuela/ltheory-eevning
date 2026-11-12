@@ -646,6 +646,15 @@ function Core.Step(game: Game)
 end
 
 -- The events since the last call, oldest first.
+-- The pilot has been away so many seconds, with the game not running:
+-- their training has gone on for that long (Character/Training), and
+-- nothing else has moved. Returns how many levels it finished.
+function Core.Away(game: Game, seconds: number): number
+  local trained = Training.Credit(game.state, seconds, game.events)
+  table.insert(game.events, { kind = "TrainingCredited", seconds = seconds, trained = trained, queued = #game.state.training })
+  return trained
+end
+
 function Core.TakeEvents(game: Game): { Space.Event }
   local events = game.events
   game.events = {}

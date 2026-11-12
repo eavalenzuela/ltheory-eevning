@@ -6,6 +6,7 @@
 local Clock = require("@lt/Game/Clock")
 local Core = require("@lt/Core/Api")
 local Factions = require("@lt/Core/Data/Factions")
+local Format = require("@lt/Game/Format")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
@@ -200,6 +201,13 @@ function Session.Notice(session: Session, event: Space.Event)
       elseif wreck ~= nil and wreck.locked then "Too far off: the hack is dropped, and the hold still sealed"
       elseif event.success then `The hold is open, whole: {event.keys} of 3 keys were in`
       else "The hold is open with half of what was in it burnt: the key of the safeguards was not in")
+  elseif kind == "TrainingCredited" then
+    -- (said only where there was training for the time to go to)
+    if event.trained > 0 or event.queued > 0 then
+      Session.Say(session, `Away {Format.Duration(event.seconds)}: `
+        .. (if event.trained == 0 then "your training went on" elseif event.trained == 1 then "a skill level was trained"
+          else `{event.trained} skill levels were trained`))
+    end
   elseif kind == "ProbeLost" then
     Session.Say(session, "A probe has run down, and is gone")
   elseif kind == "StandingChanged" and event.by < 0 then
@@ -236,6 +244,11 @@ end
 -- Take the ticks that are due this frame.
 function Session.Update(session: Session, frameSeconds: number)
   session.events = {}
+  -- (time runs faster only at a station: out of one, it is as it is)
+  local clock = session.clock
+  if clock.scale > 1 and not clock.forced and Core.Query.Player(session.game).docked == 0 then
+    clock.scale = 1
+  end
   for _ = 1, Clock.Advance(session.clock, frameSeconds) do
     Core.Step(session.game)
     for _, event in Core.TakeEvents(session.game) do
@@ -431,9 +444,21 @@ function Session.Restart(session: Session, galaxySeed: number, historySeed: numb
   session.message = ""
 end
 
+-- When a save was made (seconds since 1970); 0 if it does not say.
+local function savedAt(slot: string): number
+  local meta = Host.ReadFile(`{SAVE_DIR}/{slot}/meta.txt`)
+  local time = if meta then string.match(buffer.tostring(meta), "time=(%d+)") else nil
+  return tonumber(time) or 0
+end
+
 -- Replace the running game with a save. Returns false if there is none
 -- or it cannot be read.
-function Session.Load(session: Session, slot: string): boolean
+--
+-- The time since the save was made is given to the pilot's training
+-- (Core.Away): 'away' says how long that is, for a script; without it,
+-- it is the real time since, and none in a scripted run (which has to
+-- play out the same every time).
+function Session.Load(session: Session, slot: string, away: number?): boolean
   local data = Host.ReadFile(`{SAVE_DIR}/{slot}/state.bin`)
   if data == nil then
     Session.Say(session, `No save in {SAVE_DIR}/{slot}`)
@@ -451,6 +476,15 @@ function Session.Load(session: Session, slot: string): boolean
   session.destination, session.autopilot = 0, false
   session.clock.pending = 0
   Session.Say(session, `Loaded {SAVE_DIR}/{slot}`)
+  local made = savedAt(slot)
+  local gone = away or (if Host.scripted or made == 0 then 0 else math.max(0, Host.Time() - made))
+  if gone >= 1 then
+    Core.Away(session.game, gone)
+    for _, event in Core.TakeEvents(session.game) do
+      table.insert(session.events, event)
+      Session.Notice(session, event)
+    end
+  end
   return true
 end
 

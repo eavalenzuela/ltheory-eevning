@@ -1,0 +1,60 @@
+# Time, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/away.txt
+#
+# Time is run faster only at a station: docked, the clock's + works, and
+# out of the station it is back to x1 and cannot be put up. And training
+# goes on while the game is not being played: two levels are queued, the
+# game is saved, and the save is opened as if an hour had gone by since
+# it was made. Both levels are trained, and nothing else has moved.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Clock() == 1)
+
+# Docked: faster, and slower again.
+until GameDebug.Press('Clock:faster')
+until GameDebug.Clock() == 2
+until GameDebug.Press('Clock:faster')
+until GameDebug.Clock() == 4
+until GameDebug.Press('Clock:slower')
+until GameDebug.Clock() == 2
+
+# Two levels of a skill into the queue: five minutes of training.
+until GameDebug.Press('Skills')
+until GameDebug.Tab() == 'Skills'
+until GameDebug.Press('Train:lasers')
+until GameDebug.Training() == 1
+until GameDebug.Press('Train:lasers')
+until GameDebug.Training() == 2
+
+# Out of the station time is as it is, and cannot be run faster.
+until GameDebug.Press('Fitting')
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 5
+lua assert(GameDebug.Clock() == 1, 'out of a station time should run as it is')
+lua assert(not GameDebug.CanPress('Clock:faster'), 'time is not run faster in space')
+lua assert(GameDebug.Order('Stop'))
+
+# Saved, with the two levels still to train.
+lua assert(GameDebug.Training() == 2 and GameDebug.Skill('lasers') == 0, 'the queue should not be done yet')
+lua assert(GameDebug.Save('away'), 'the save failed')
+lua _G.wallet = GameDebug.Wallet()
+lua _G.tick = GameDebug.Tick()
+
+# A script's own load gives no time: the queue is as it was.
+lua assert(GameDebug.Load('away'), 'the load failed')
+frames 5
+lua assert(GameDebug.Training() == 2, 'a load with no time gone by should train nothing')
+
+# Opened an hour on: both levels are trained, and that is all that has happened.
+lua assert(GameDebug.Load('away', 3600), 'the load failed')
+frames 5
+lua assert(GameDebug.Skill('lasers') == 2 and GameDebug.Training() == 0, 'an hour away should have trained both levels')
+lua assert(GameDebug.Wallet() == _G.wallet, 'nothing but training should have moved')
+lua assert(GameDebug.Tick() - _G.tick < 30, 'the world should not have been run on an hour')
+lua assert(GameDebug.InSpace(), 'the pilot should be where they were')
+
+echo away scenario passed
+quit

@@ -77,6 +77,8 @@
 #               carried to another station and sold there, and more after
 #   game-dscan  the directional scanner (test/scenario/dscan.txt): all
 #               round, in a cone pointed at something, and at a short range
+#   game-away   time (test/scenario/away.txt): run faster at a station only,
+#               and training that goes on while the game is not played
 #   game-pace   the game app must draw at least thirty frames a second just
 #               outside the home station (test/scenario/pace.txt)
 #   goldens     script/goldens: screenshots of the stored scenes must match
@@ -221,6 +223,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/haul.txt
   step game-dscan 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/dscan.txt
+  step game-away 0 timeout 300 bin/launch game --no-present --fixed-step 60 --timeout 240 \
+    --script test/scenario/away.txt
   step game-pace 0 timeout 200 bin/launch game --no-present --fixed-step 60 --timeout 150 \
     --script test/scenario/pace.txt
   step goldens 0 script/goldens

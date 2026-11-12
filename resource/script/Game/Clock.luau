@@ -1,6 +1,10 @@
 --!strict
 -- Turns frame time into Core ticks. Pause and acceleration change how
 -- fast ticks are taken, never what a tick does.
+--
+-- Time is run faster only while the pilot is docked at a station
+-- (Game/Session puts it back to x1 when they are not). 'forced' is a
+-- script's cheat that keeps it fast anywhere, for scripted runs.
 
 local Constants = require("@lt/Core/Data/Constants")
 
@@ -10,13 +14,14 @@ export type Clock = {
   scale: number,    -- game seconds per real second
   paused: boolean,
   pending: number,  -- game seconds accumulated toward the next tick
+  forced: boolean,  -- a script set the scale: it holds in space too
 }
 
 -- No more than this many ticks in one frame, so a stall cannot snowball.
 local MAX_TICKS_PER_FRAME = 40
 
 function Clock.New(): Clock
-  return { scale = 1, paused = false, pending = 0 }
+  return { scale = 1, paused = false, pending = 0, forced = false }
 end
 
 -- Add a frame's worth of time; returns how many ticks are now due.

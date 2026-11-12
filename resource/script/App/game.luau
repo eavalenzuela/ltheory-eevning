@@ -429,7 +429,14 @@ function Debug.Peaceful(on: boolean)
 end
 
 function Debug.TimeScale(scale: number)
+  -- (a script's cheat: a person runs time faster only at a station)
   session.clock.scale = scale
+  session.clock.forced = scale ~= 1
+end
+
+-- How fast time is running, as the pilot has it.
+function Debug.Clock(): number
+  return session.clock.scale
 end
 
 -- Press a button of the interface by name, as a click would: its label
@@ -1282,8 +1289,11 @@ function Debug.Save(slot: string): boolean
   return Session.Save(session, slot)
 end
 
-function Debug.Load(slot: string): boolean
-  return Session.Load(session, slot)
+-- (With 'away': as if so many seconds had gone by since the save was
+-- made, which is given to the pilot's training. A script's own loads
+-- give it none.)
+function Debug.Load(slot: string, away: number?): boolean
+  return Session.Load(session, slot, away)
 end
 
 function App:Initialize()

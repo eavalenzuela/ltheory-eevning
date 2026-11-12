@@ -66,10 +66,11 @@ suite:Case("the skill data is sound", function(t)
       t.ok(Skills.byId[need.skill] ~= nil, `{id} needs an unknown skill '{need.skill}'`)
     end
   end
-  -- a minute for the first level of a rank 1 skill; twenty hours for the
-  -- fifth level of a rank 2
+  -- a minute for the first level of a rank 1 skill; eight hours for the
+  -- fifth level of a rank 2; a day and more for the fifth of battleships
   t.eq(Skills.TrainingSeconds(Skills.byId.lasers, 1), 60)
-  t.eq(Skills.TrainingSeconds(Skills.byId.frigates, 5), 72000)
+  t.eq(Skills.TrainingSeconds(Skills.byId.frigates, 5), 28800)
+  t.eq(Skills.TrainingSeconds(Skills.byId.battleships, 5), 115200)
 end)
 
 suite:Case("a new pilot cannot fit a laser until Laser Turrets is trained, which takes a minute", function(t)
@@ -100,12 +101,12 @@ suite:Case("levels queue, each takes its base time times the skill's rank, and o
   local game = newGame()
   local state = game.state
   order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })      -- 60 s
-  order(t, game, { kind = "TrainSkill", actor = 0, type = "frigates" })    -- level 2 of a rank 2: 600 s
-  order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })      -- level 2: 300 s
+  order(t, game, { kind = "TrainSkill", actor = 0, type = "frigates" })    -- level 2 of a rank 2: 480 s
+  order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })      -- level 2: 240 s
   local queue = Core.Query.Training(game)
   t.eq({ queue[1].level, queue[2].level, queue[3].level }, { 1, 2, 2 })
   -- two ticks have passed since the first was queued
-  t.eq({ queue[1].left, queue[2].left, queue[3].left }, { 58, 658, 958 })
+  t.eq({ queue[1].left, queue[2].left, queue[3].left }, { 58, 538, 778 })
   local started = state.tick - 2
   Core.TakeEvents(game)
   local finished: { { any } } = {}
@@ -117,12 +118,47 @@ suite:Case("levels queue, each takes its base time times the skill's rank, and o
       end
     end
   end
-  t.eq(finished, { { "lasers", 1, 60 }, { "frigates", 2, 660 }, { "lasers", 2, 960 } } :: { { any } })
+  t.eq(finished, { { "lasers", 1, 60 }, { "frigates", 2, 540 }, { "lasers", 2, 780 } } :: { { any } })
   local known: { [string]: number } = {}
   for _, info in Core.Query.Skills(game) do
     known[info.skill.id] = info.level
   end
   t.eq({ known.lasers, known.frigates, known.missiles, known["rapid.firing"] }, { 2, 2, 0, -1 })
+end)
+
+suite:Case("time the pilot was away goes to their training, and to nothing else; what is left when the queue runs out is lost", function(t)
+  local game = newGame()
+  local state = game.state
+  -- With nothing in training, time away is nothing.
+  t.eq(Core.Away(game, 3600), 0)
+  order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })      -- 60 s
+  order(t, game, { kind = "TrainSkill", actor = 0, type = "frigates" })    -- 480 s
+  order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })      -- 240 s
+  local tick, wallet = state.tick, state.wallet
+  Core.TakeEvents(game)
+  -- A hundred seconds away: the first level is trained, and the second is forty-two seconds in (two had gone by).
+  t.eq(Core.Away(game, 100), 1)
+  t.eq({ state.skills.lasers, #state.training, state.tick, state.wallet }, { 1, 2, tick, wallet })
+  local queue = Core.Query.Training(game)
+  t.eq({ queue[1].skill, queue[1].left, queue[2].left } :: { any }, { "frigates", 480 - 42, 480 - 42 + 240 } :: { any })
+  local trained, credited = 0, false
+  for _, event in Core.TakeEvents(game) do
+    trained += if event.kind == "SkillTrained" then 1 else 0
+    credited = credited or (event.kind == "TrainingCredited" and event.seconds == 100 and event.trained == 1 and event.queued == 2)
+  end
+  t.eq({ trained, credited } :: { any }, { 1, true } :: { any })
+  -- No time, or less than none: nothing.
+  t.eq({ Core.Away(game, 0), Core.Away(game, -50) }, { 0, 0 })
+  t.eq(Core.Query.Training(game)[1].left, 480 - 42)
+  -- A day away: everything queued is trained, and the rest of the day is gone.
+  t.eq(Core.Away(game, 86400), 2)
+  t.eq({ state.skills.frigates, state.skills.lasers, #state.training, state.tick }, { 2, 2, 0, tick })
+  -- What is queued after that starts from now, not from then.
+  order(t, game, { kind = "TrainSkill", actor = 0, type = "missiles" })
+  t.eq(Core.Query.Training(game)[1].left, Skills.TrainingSeconds(Skills.byId.missiles, 1))
+  -- It is in the save as anything else is.
+  local data, length = Core.Save(game)
+  t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
 end)
 
 suite:Case("a skill a pilot does not start with is learned from its book, once its own needs are met", function(t)

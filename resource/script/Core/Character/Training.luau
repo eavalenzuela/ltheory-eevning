@@ -5,6 +5,12 @@
 -- trains it a level at a time. Levels wait in a queue; the first is in
 -- training, and takes its time whatever the pilot is doing. Taking the
 -- level in training out of the queue loses the time spent on it.
+--
+-- Training goes on while the game is not being played: when a save is
+-- opened, the time since it was made is given to the queue
+-- (Training.Credit, by way of Core.Away: the view says how long it
+-- was). Nothing else in the game moves in that time. What is left of it
+-- when the queue runs out is lost.
 
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
@@ -147,6 +153,22 @@ end
 
 -- Each tick: the level in training is finished if its time is up, and the
 -- next begins where it ended.
+-- Give the queue so many seconds that nothing else has had: the levels
+-- they finish are trained. Returns how many were.
+function Training.Credit(state: State.State, seconds: number, events: { Event }): number
+  local queued = #state.training
+  if queued == 0 or seconds <= 0 then
+    return 0
+  end
+  state.trainingStarted -= math.floor(seconds / Constants.TICK)
+  Training.Step(state, events)
+  -- (with nothing left in training there is nothing for the rest of it to go to)
+  if #state.training == 0 then
+    state.trainingStarted = state.tick
+  end
+  return queued - #state.training
+end
+
 function Training.Step(state: State.State, events: { Event })
   while true do
     local first = state.training[1]

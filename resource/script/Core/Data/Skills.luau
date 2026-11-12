@@ -28,7 +28,7 @@ export type Skill = {
 }
 
 -- Seconds to train each level of a rank 1 skill.
-local LEVEL_SECONDS = { 60, 300, 1500, 7200, 36000 }
+local LEVEL_SECONDS = { 60, 240, 900, 3600, 14400 }
 
 local function ship(attribute: string, perLevel: number): Modules.Modifier
   return { on = "ship", attribute = attribute, op = "mul", value = perLevel }
