@@ -1,0 +1,92 @@
+# A mining contract, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/dig.txt
+#
+# The home station's fifth agent has a mining contract for a pilot
+# nobody knows yet: level 1, so much of a common ore, from a pocket
+# that in this game is in the next system. The contract is taken. A
+# mining frigate is given and boarded, and the autopilot flies it to
+# the pocket's system, where the pocket is on the overview. At the
+# pocket are four rocks of the ore. They are cut, one after another,
+# until the hold has what the contract wants. Home, and the contract
+# is paid.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Peaceful(true)
+until GameDebug.Press('Missions')
+until GameDebug.Tab() == 'Missions'
+frames 3
+lua assert(GameDebug.Offer('mining') == 5, 'the mining contract should be under the assault')
+lua assert(not GameDebug.CanPress('Level:mining:down'), 'only one level is open to a pilot nobody knows')
+until GameDebug.Press('Accept:mining')
+until select(2, GameDebug.Missions()) == 1
+frames 3
+lua assert(GameDebug.Offer('mining') == 0, 'a station gives one mining contract at a time')
+lua assert(GameDebug.Contract() ~= '' and select(2, GameDebug.Contract()) >= 2000, 'the contract should want its ore')
+lua assert(string.sub(select(3, GameDebug.Contract()), 1, 10) == 'Ore Pocket', 'the contract should have its pocket')
+lua assert(not GameDebug.CanPress('Complete:1'), 'a contract is not filled by taking it')
+
+# A mining frigate, with two lasers, and the skill to fly it.
+lua GameDebug.Train('all', 3)
+lua assert(GameDebug.Spare('frigate.prospector', 'miner.small'), 'no mining frigate')
+until GameDebug.Press('Ships')
+until GameDebug.Tab() == 'Ships'
+frames 3
+until GameDebug.Press('Board:2')
+until GameDebug.Hull() == 'frigate.prospector'
+
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 5
+
+# The pocket is a jump away: the autopilot takes the frigate there.
+lua _G.there = select(4, GameDebug.Contract())
+lua assert(_G.there ~= GameDebug.System(), 'in this game the first pocket is in the next system')
+lua assert(GameDebug.Destination(_G.there) == 1, 'the pocket should be a jump away')
+lua GameDebug.TimeScale(16)
+lua assert(GameDebug.Autopilot(true))
+patience 600
+until GameDebug.System() == _G.there
+until not GameDebug.Autopilot()
+lua GameDebug.TimeScale(1)
+frames 5
+lua assert(GameDebug.Count('site') == 1, 'the pocket should be on the overview')
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('WarpTo', 'Ore Pocket'), 'warp to the pocket was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+frames 5
+lua assert(GameDebug.Count('asteroid') == 4, 'the pocket should have its four rocks')
+lua assert(GameDebug.Pirates() == 0, 'nobody disputes a pocket of this level')
+
+# Cut, a rock after another, until the hold has what is wanted.
+lua GameDebug.TimeScale(16)
+patience 600
+until GameDebug.Dig((GameDebug.Contract())) >= select(2, GameDebug.Contract())
+lua assert(GameDebug.Count('asteroid') < 4, 'a rock of the pocket should have been cut away')
+
+# Home, a jump back, and paid.
+lua assert(GameDebug.Destination(1) == 1)
+lua assert(GameDebug.Autopilot(true))
+patience 600
+until GameDebug.System() == 1
+until not GameDebug.Autopilot()
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('Dock', 'home'), 'docking at home was refused')
+patience 300
+until GameDebug.Docked()
+lua GameDebug.TimeScale(1)
+until GameDebug.Press('Missions')
+until GameDebug.Tab() == 'Missions'
+frames 3
+lua _G.before = GameDebug.Wallet()
+until GameDebug.Press('Complete:1')
+until select(3, GameDebug.Missions()) == 1
+lua assert(GameDebug.Wallet() > _G.before + 15000, 'the contract did not pay')
+frames 3
+lua assert(GameDebug.Offer('mining') == 5, 'the agent should have another contract')
+
+echo dig scenario passed
+quit

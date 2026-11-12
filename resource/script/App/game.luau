@@ -813,8 +813,12 @@ function Debug.Missions(): (number, number, number, number)
 end
 
 -- Which of the jobs the station docked at offers is the first of a kind
--- ("bounty", "courier", "supply", "assault"): its place in the list, as
--- "Accept:<n>" wants it, or 0 for none.
+-- ("bounty", "courier", "supply", "assault", "mining"): its place in
+-- the Core's list, or 0 for none. (The day's three are "Accept:<n>" on
+-- the screen, by their place among themselves; an assault and a mining
+-- contract are "Accept:assault" and "Accept:mining", at the level the
+-- list shows: "Level:<kind>:up" and "Level:<kind>:down" step it, and
+-- GameDebug.Level(kind, n) sets it.)
 function Debug.Offer(kind: string): number
   for index, offer in Core.Query.Missions(session.game).offers do
     if offer.mission.kind == kind then
@@ -822,6 +826,68 @@ function Debug.Offer(kind: string): number
     end
   end
   return 0
+end
+
+-- The level of a kind of job ("assault", "mining") the Missions tab
+-- shows; given one, it is set to that. 0: the hardest there is.
+function Debug.Level(kind: string, to: number?): number
+  return Station.Level(kind, to)
+end
+
+-- The first mining contract in hand: the ore it wants ("" with none in
+-- hand), how many units, the name of its pocket, and the system that
+-- is in.
+function Debug.Contract(): (string, number, string, number)
+  for _, held in Core.Query.Missions(session.game).inHand do
+    local mission = held.mission
+    if mission.kind == "mining" then
+      local place = Core.Query.Body(session.game, mission.site)
+      return mission.type, mission.need, if place then place.name else "?", mission.system
+    end
+  end
+  return "", 0, "", 0
+end
+
+-- A cheat, for a scripted contract: with no mining laser cutting, the
+-- nearest rock on the grid is locked and every laser put on it. Asked
+-- every frame, it gives an order only once a tick and only where one
+-- is wanted. Returns how many units of an ore are in the hold.
+local dug = -1
+function Debug.Dig(ore: string): number
+  local game = session.game
+  local state = game.state
+  local me = state.balls[state.player.ship]
+  if me and state.tick ~= dug then
+    dug = state.tick
+    local lasers: { State.Item } = {}
+    local cutting = false
+    for _, item in Core.Query.Fitted(game, me.id) do
+      if Modules.byId[item.type].miner then
+        table.insert(lasers, item)
+        for _, running in me.vitals.running do
+          cutting = cutting or running.item == item.id
+        end
+      end
+    end
+    local rock = find("asteroid")
+    if rock and not cutting then
+      local locked, targeted = false, false
+      for _, lock in me.vitals.locks do
+        if lock.target == rock.id then
+          targeted, locked = true, lock.locked
+        end
+      end
+      if not targeted then
+        me.vitals.locks = {}
+        Session.Order(session, "LockTarget", rock.id)
+      elseif locked then
+        for _, item in lasers do
+          Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id, target = rock.id })
+        end
+      end
+    end
+  end
+  return Debug.Hold(ore)
 end
 
 -- The first assault in hand: the name of its camp ("" with no assault

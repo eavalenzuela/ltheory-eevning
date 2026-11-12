@@ -18,8 +18,9 @@ lua GameDebug.Train('all', 4)
 until GameDebug.Press('Missions')
 until GameDebug.Tab() == 'Missions'
 frames 3
-lua assert(GameDebug.Missions() == 6, 'three jobs of the day, and three levels of assault')
-until GameDebug.Press('Accept:6')
+lua assert(GameDebug.Missions() == 9, 'three jobs of the day, and three levels of assault and of mining contract')
+lua assert(GameDebug.CanPress('Level:assault:down') and not GameDebug.CanPress('Level:assault:up'), 'the hardest level is the one shown')
+until GameDebug.Press('Accept:assault')
 until select(2, GameDebug.Missions()) == 1
 frames 3
 lua assert(select(8, GameDebug.Assault()) == 'clear', 'this camp is to be cleared')

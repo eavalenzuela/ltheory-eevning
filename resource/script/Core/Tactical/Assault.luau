@@ -34,12 +34,21 @@
 -- Finished, given up or lapsed, the camp goes, and whoever and whatever
 -- is left of it.
 --
--- (EVE's security missions, cut down. Not yet: a gate to fly through
--- from room to room, things to destroy other than ships, a camp that is
--- not pirates'.)
+-- A mining contract (a station's fifth agent's work) has a place made
+-- for it in the same way: a pocket of rocks of one ore, half as much
+-- again as the contract wants, which nobody else knows of. The job is
+-- to bring so much of that ore in. At the first two levels nobody
+-- disputes it; at the third and the fourth a pack turns up when the
+-- pilot does, once. (Ore of the kind from anywhere else does as well:
+-- the pocket is where it is to be had.)
+--
+-- (EVE's security and mining missions, cut down. Not yet: a gate to fly
+-- through from room to room, things to destroy other than ships, a camp
+-- that is not pirates'.)
 
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
+local Ores = require("@lt/Core/Data/Ores")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
@@ -90,6 +99,41 @@ local PACKS: { { { string } } } = {
   { { "marauder" }, { "marauder", "jackal" }, { "jackal", "jackal" }, { "marauder", "raider" } },
 }
 Assault.PACKS = PACKS
+
+-- A mining contract of each level: the ores it may be for, how much of
+-- the ore it wants (cubic metres: most of a mining frigate's hold at
+-- the first, two holds of a barge at the fourth), and who turns up to
+-- dispute the pocket.
+local DIGS: { { ores: { string }, volume: number, pack: { string } } } = {
+  { ores = { "ore.ferrite", "ore.silicate" }, volume = 300, pack = {} },
+  { ores = { "ore.silicate", "ore.cuprite" }, volume = 900, pack = {} },
+  { ores = { "ore.titanite", "ore.cobaltite" }, volume = 2500, pack = { "scout", "scout" } },
+  { ores = { "ore.cobaltite", "ore.iridite" }, volume = 7000, pack = { "raider", "scout" } },
+}
+-- What a contract pays over what the ore is worth, with so much a
+-- level beside; the standing it is worth a level; how many rocks its
+-- pocket has; and how much more ore is in them than the contract wants.
+Assault.DIG_PAY = 1.3
+Assault.DIG_BASE = 3000
+Assault.DIG_CREDIT = 0.1
+Assault.DIG_ROCKS = 4
+Assault.DIG_SPARE = 1.5
+
+-- The terms of a mining contract of a level: the ore, how many units
+-- of it (a round number of hundreds), and the pack that disputes it
+-- (empty for none).
+function Assault.Dig(rng: Rng.Rng, level: number): (string, number, { string })
+  local dig = DIGS[level]
+  local ore = dig.ores[Rng.Int(rng, #dig.ores) + 1]
+  local units = math.max(100, math.floor(dig.volume / Ores.byId[ore].volume / 100 + 0.5) * 100)
+  return ore, units, table.clone(dig.pack)
+end
+
+-- What a mining contract for so much of an ore pays (before what the
+-- pilot's standing adds), and the standing it is worth.
+function Assault.DigPay(level: number, ore: string, units: number): (number, number)
+  return math.floor(Assault.DIG_PAY * units * Ores.byId[ore].basePrice) + Assault.DIG_BASE * level, Assault.DIG_CREDIT * level
+end
 
 -- The hardest level a pilot of a standing is given; 0 for one the
 -- faction thinks too ill of to give any.
@@ -199,7 +243,8 @@ function Assault.Open(state: State.State, mission: State.Mission, events: { Even
   local rng = Rng.For(state.historySeed, mission.id, 59)
   local last: State.Site? = nil
   for room = 1, #mission.ends do
-    local site = Sites.Stake(state, mission.system, rng, "Pirate Camp", last, NUMERALS[room])
+    local site = Sites.Stake(state, mission.system, rng, if mission.kind == "mining" then "Ore Pocket" else "Pirate Camp", last,
+      NUMERALS[room])
     if site == nil then
       break
     end
@@ -209,6 +254,11 @@ function Assault.Open(state: State.State, mission: State.Mission, events: { Even
   mission.site = mission.rooms[1] or 0
   if mission.site ~= 0 then
     table.insert(events, { kind = "SiteAppeared", site = mission.site, system = mission.system, what = "mission" })
+  end
+  -- (a mining contract's pocket has its rocks: half as much ore again as is wanted)
+  if mission.kind == "mining" and last then
+    Sites.Rocks(state, last, rng, mission.type, Assault.DIG_ROCKS,
+      math.ceil(Assault.DIG_SPARE * mission.need / Assault.DIG_ROCKS))
   end
   if mission.aim == "fetch" and last then
     local place = Space.Object(state, last.id)
@@ -271,7 +321,7 @@ end
 local function roomOf(state: State.State, place: number): (State.Mission?, number)
   for _, id in state.missionIds do
     local mission = state.missions[id]
-    local room = if mission.kind == "assault" then table.find(mission.rooms, place) else nil
+    local room = if mission.kind == "assault" or mission.kind == "mining" then table.find(mission.rooms, place) else nil
     if room then
       return mission, room
     end

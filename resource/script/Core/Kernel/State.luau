@@ -330,6 +330,11 @@ export type Site = { id: number, system: number, kind: string, code: string, str
 -- which 'done' are destroyed), destroy its "chief" ('need' is 1; 'mark'
 -- is the chief's ship, once it is out), or "fetch" what it took ('need'
 -- of 'type', which is in a container that 'mark' is, in the last room).
+--
+-- A "mining" contract has a place made for it too: a pocket of rocks of
+-- the ore 'type', of which 'need' units are to be brought in ('aim' is
+-- "dig"). Its 'waves' are whoever turns up there to dispute it: none,
+-- or one pack.
 export type Mission = {
   id: number, key: string, kind: string, station: number, faction: string, system: number, need: number, done: number,
   type: string, to: number, reward: number, standing: number, taken: number,
@@ -442,6 +447,8 @@ export type State = {
   -- By station: how many assaults its agent has given the pilot (which
   -- is what the next one follows from: Assets/Missions).
   assaults: { [number]: number },
+  -- And how many mining contracts its fifth agent has.
+  digs: { [number]: number },
   standings: { [string]: number },
   -- Loyalty points with each faction, earned by its jobs and spent at
   -- its stations (a faction not here has none).

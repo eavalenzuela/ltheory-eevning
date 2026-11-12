@@ -43,6 +43,10 @@
 -- agent has another as soon as that is done with. The job there is to
 -- clear the camp, to destroy its chief, or to bring back what it took.
 --
+-- A fifth agent has mining contracts, in the same levels and on the
+-- same terms: so much of an ore to bring in, from a pocket of it made
+-- for the contract and put on the charts when it is taken.
+--
 -- (A first version of the roadmap's agents. Not yet: agents with a
 -- standing of their own, jobs made from what the simulation needs.)
 
@@ -91,6 +95,8 @@ function Missions.Title(mission: State.Mission): string
     return `Assault, level {mission.level}: ` .. (if mission.aim == "chief" then "the chief of a camp"
       elseif mission.aim == "fetch" then `{mission.need} crates a camp took`
       else `a camp of {ships}`)
+  elseif mission.kind == "mining" then
+    return `Mining, level {mission.level}: {mission.need} {Types.Info(mission.type).name}`
   elseif mission.kind == "courier" then
     return `Courier: {mission.need} m3 of sealed cargo`
   end
@@ -181,16 +187,18 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
       table.insert(offers, mission)
     end
   end
-  -- The fourth agent's: an assault at each level the pilot's standing
-  -- opens, unless one of this station's is in hand already.
+  -- The fourth agent's, and the fifth's: an assault and a mining
+  -- contract at each level the pilot's standing opens, unless one of
+  -- this station's of the kind is in hand already.
+  local assaulting, digging = false, false
   for _, id in state.missionIds do
     local held = state.missions[id]
-    if held.kind == "assault" and held.station == station then
-      return offers
-    end
+    assaulting = assaulting or (held.kind == "assault" and held.station == station)
+    digging = digging or (held.kind == "mining" and held.station == station)
   end
+  local top = Assault.Top(Missions.Standing(state, node.nearest))
   local given = state.assaults[station] or 0
-  for level = 1, Assault.Top(Missions.Standing(state, node.nearest)) do
+  for level = 1, if assaulting then 0 else top do
     local rng = Rng.For(state.historySeed, station, given, level, 89)
     -- (two times in five the camp is in a neighbour's system)
     local next = node.neighbors[Rng.Int(rng, math.max(1, #node.neighbors)) + 1]
@@ -209,6 +217,25 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         reward = reward, standing = credit, taken = 0,
         agent = Missions.Agent(state, station, Missions.OFFERS + 1), loyalty = math.max(1, reward // Missions.LOYALTY),
         level = level, waves = waves, wave = 0, site = 0, rooms = {}, ends = ends, aim = aim, mark = 0,
+      })
+    end
+  end
+  local dug = state.digs[station] or 0
+  for level = 1, if digging then 0 else top do
+    local rng = Rng.For(state.historySeed, station, dug, level, 101)
+    -- (one time in three the pocket is in a neighbour's system)
+    local next = node.neighbors[Rng.Int(rng, math.max(1, #node.neighbors)) + 1]
+    local where = if next ~= nil and Rng.Chance(rng, 1 / 3) and Assault.Room(state, next) then next else system
+    local ore, units, pack = Assault.Dig(rng, level)
+    local pay, credit = Assault.DigPay(level, ore, units)
+    local reward = math.floor(pay * bonus)
+    if Assault.Room(state, where) then
+      table.insert(offers, {
+        id = 0, key = `{station}:d{dug}:{level}`, kind = "mining", station = station, faction = node.nearest, system = where,
+        need = units, done = 0, type = ore, to = station, reward = reward, standing = credit, taken = 0,
+        agent = Missions.Agent(state, station, Missions.OFFERS + 2), loyalty = math.max(1, reward // Missions.LOYALTY),
+        level = level, waves = if #pack > 0 then { pack } else {}, wave = 0, site = 0, rooms = {},
+        ends = { if #pack > 0 then 1 else 0 }, aim = "dig", mark = 0,
       })
     end
   end
@@ -360,6 +387,9 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
           -- (the agent's next is another job; and the camp is on the charts)
           state.assaults[offer.station] = (state.assaults[offer.station] or 0) + 1
           Assault.Open(state, offer, events)
+        elseif offer.kind == "mining" then
+          state.digs[offer.station] = (state.digs[offer.station] or 0) + 1
+          Assault.Open(state, offer, events)
         end
         table.insert(events, { kind = "MissionAccepted", mission = offer.id, title = Missions.Title(offer) })
       end
@@ -373,10 +403,11 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
       if mission.aim == "fetch" then
         hand(state, ship, mission.type, mission.need)
       end
-      Assault.Close(state, mission, events)
     elseif mission.kind ~= "bounty" then
       hand(state, ship, mission.type, mission.need)
     end
+    -- (a place made for the job goes with it)
+    Assault.Close(state, mission, events)
     Wallet.Pay(state, mission.reward, "mission reward", events)
     standing(state, mission.faction, mission.standing)
     state.loyalty[mission.faction] = (state.loyalty[mission.faction] or 0) + mission.loyalty

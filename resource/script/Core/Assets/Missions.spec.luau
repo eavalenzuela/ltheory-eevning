@@ -6,7 +6,9 @@ local Assault = require("@lt/Core/Tactical/Assault")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Items = require("@lt/Core/Assets/Items")
+local Mining = require("@lt/Core/Tactical/Mining")
 local Missions = require("@lt/Core/Assets/Missions")
+local Ores = require("@lt/Core/Data/Ores")
 local Ships = require("@lt/Core/Data/Ships")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Sites = require("@lt/Core/Tactical/Sites")
@@ -56,14 +58,14 @@ suite:Case("a station offers three jobs a day, the same however often it is aske
     local state = game.state
     local every = Missions.Offers(state, state.player.home)
     t.eq(Missions.Offers(state, state.player.home), every)
-    -- (the day's three: the fourth agent's assaults are their own case)
+    -- (the day's three: the fourth agent's assaults and the fifth's mining contracts are their own cases)
     local offers: { State.Mission } = {}
     for _, offer in every do
-      if offer.kind ~= "assault" then
+      if offer.kind ~= "assault" and offer.kind ~= "mining" then
         table.insert(offers, offer)
       end
     end
-    t.eq({ #offers, #every }, { Missions.OFFERS, Missions.OFFERS + 1 })
+    t.eq({ #offers, #every }, { Missions.OFFERS, Missions.OFFERS + 2 })
     for _, offer in offers do
       kinds[offer.kind] = (kinds[offer.kind] or 0) + 1
       t.ok(offer.reward > 0 and offer.need > 0 and offer.standing > 0, `{Missions.Title(offer)} pays {offer.reward}`)
@@ -85,7 +87,7 @@ suite:Case("a station offers three jobs a day, the same however often it is aske
   end
   t.ok((kinds.bounty or 0) > 3 and (kinds.courier or 0) > 3 and (kinds.supply or 0) > 3, "a kind of job is hardly ever offered")
   t.eq(#Missions.Offers(newGame().state, 99999), 0)
-  t.eq(#Core.Query.Missions(newGame()).offers, 4)
+  t.eq(#Core.Query.Missions(newGame()).offers, 5)
 end)
 
 suite:Case("a job is taken at its station, once, and a pilot has five in hand at most", function(t)
@@ -211,7 +213,7 @@ suite:Case("a job abandoned costs standing, and jobs are in the save", function(
   local old, oldLength = Codec.Encode(file)
   local before = Core.Load(old, oldLength)
   t.eq({ #before.state.missionIds, before.state.missionsDone, Missions.Standing(before.state, "vessari") }, { 0, 0, 0 })
-  t.eq(#Core.Query.Missions(before).offers, 4)
+  t.eq(#Core.Query.Missions(before).offers, 5)
 end)
 
 -- The assaults a station offers, by level.
@@ -330,7 +332,7 @@ suite:Case("the fourth agent has an assault on a pirate camp, at each level the 
   -- One from a station at a time: taking one takes the others off the list, and the agent's next is another job.
   t.ok((submit(game, { kind = "AcceptMission", actor = 0, what = offers[2].key })))
   t.eq({ #assaults(game, home), state.assaults[home] }, { 0, 1 })
-  t.eq(#Missions.Offers(state, home), Missions.OFFERS, "the day's three are still offered")
+  t.eq(#Missions.Offers(state, home), Missions.OFFERS + 4, "the day's three are still offered, and the mining contracts")
   local mine = state.missions[state.missionIds[1]]
   t.ok((submit(game, { kind = "AbandonMission", actor = 0, target = mine.id })))
   -- (giving it up cost standing: put that back, to see all four again)
@@ -732,6 +734,162 @@ suite:Case("an assault of a save from before camps had rooms is on a camp of one
   local theirs = loaded.state.missions[mission.id]
   t.eq({ theirs.rooms, theirs.ends, theirs.aim, theirs.mark } :: { any }, { { mission.site }, { #mission.waves }, "clear", 0 } :: { any })
   t.eq(Core.Hash(loaded), Core.Hash(game))
+end)
+
+-- The mining contracts a station offers, by level.
+local function contracts(game: Core.Game, station: number): { State.Mission }
+  local found: { State.Mission } = {}
+  for _, offer in Missions.Offers(game.state, station) do
+    if offer.kind == "mining" then
+      table.insert(found, offer)
+    end
+  end
+  return found
+end
+
+-- A game in which the home station's mining contract of a level is for
+-- a pocket in its own system, that contract taken: the game and the job.
+local function pocket(level: number): (Core.Game, State.Mission)
+  for seed = 1, 60 do
+    local game = newGame(seed)
+    local state = game.state
+    state.standings.vessari = Assault.STANDING[level]
+    local offer = contracts(game, state.player.home)[level]
+    if offer and offer.system == 1 then
+      assert(submit(game, { kind = "AcceptMission", actor = 0, what = offer.key }))
+      return game, state.missions[state.missionIds[1]]
+    end
+  end
+  error("no history seed up to 60 has the pocket in the home system")
+end
+
+suite:Case("the fifth agent has a mining contract at each level the pilot's standing opens: so much of an ore, for more than it is worth", function(t)
+  local game = newGame()
+  local state = game.state
+  local home = state.player.home
+  for _, case in { { -3, 0 }, { 0, 1 }, { 1, 2 }, { 3, 3 }, { 5, 4 } } do
+    state.standings.vessari = case[1]
+    t.eq(#contracts(game, home), case[2], `at a standing of {case[1]}`)
+  end
+  local offers = contracts(game, home)
+  t.eq(contracts(game, home), offers, "the same however often it is asked")
+  local last = 0
+  for level, offer in offers do
+    t.eq({ offer.kind, offer.aim, offer.level, offer.id, offer.site, offer.station } :: { any },
+      { "mining", "dig", level, 0, 0, home } :: { any })
+    t.eq(offer.agent, Missions.Agent(state, home, 5), "a mining contract is the fifth agent's")
+    t.ok(offer.agent ~= Missions.Agent(state, home, 4))
+    t.ok(offer.system == 1 or table.find(state.galaxy.systems[1].neighbors, offer.system) ~= nil)
+    -- An ore, and a round number of hundreds of it: more by the cubic metre a level.
+    local ore = assert(Ores.byId[offer.type], `a contract for {offer.type}`)
+    t.eq(offer.need % 100, 0)
+    local volume = offer.need * ore.volume
+    t.near(volume, ({ 300, 900, 2500, 7000 })[level], 61, `level {level} wants {volume} m3`)
+    -- It pays three tenths over what the ore is worth, and three thousand a level, and what the pilot's standing adds.
+    t.eq(offer.reward, math.floor((math.floor(1.3 * offer.need * ore.basePrice) + 3000 * level) * (1 + 0.03 * 5)))
+    t.near(offer.standing, 0.1 * level, 1e-9)
+    t.ok(offer.reward > last, "a bigger contract should pay more")
+    last = offer.reward
+    t.eq(Missions.Title(offer), `Mining, level {level}: {offer.need} {ore.name}`)
+    -- Nobody disputes the first two; a pack turns up at the others.
+    t.eq({ #offer.waves, #offer.ends, offer.ends[1] }, if level <= 2 then { 0, 1, 0 } else { 1, 1, 1 })
+  end
+  -- The rare ores are the higher levels'.
+  t.ok(Ores.byId[offers[1].type].share > 0.2 and Ores.byId[offers[4].type].share == 0)
+  -- One from a station at a time, beside whatever else is in hand; and the agent's next is another.
+  t.ok((submit(game, { kind = "AcceptMission", actor = 0, what = offers[1].key })))
+  t.eq({ #contracts(game, home), state.digs[home], #assaults(game, home) }, { 0, 1, 4 })
+  t.ok((submit(game, { kind = "AbandonMission", actor = 0, target = state.missionIds[1] })))
+  state.standings.vessari = 5
+  t.ok(contracts(game, home)[1].key ~= offers[1].key)
+end)
+
+suite:Case("taking a mining contract puts its pocket on the charts: rocks of the ore, half as much again as is wanted; the ore brought in, it is paid", function(t)
+  local game, mission = pocket(1)
+  local state = game.state
+  local home = state.player.home
+  local site = assert(state.sites[mission.site], "the contract has no pocket")
+  local place = assert(Space.Object(state, site.id))
+  t.eq({ site.kind, site.strength, string.sub(place.name, 1, 10), #mission.rooms } :: { any }, { "mission", 1, "Ore Pocket", 1 } :: { any })
+  -- Its rocks: four of them, of the ore, a few kilometres from the middle, with what is wanted and half as much again.
+  local rocks, units = 0, 0
+  for _, object in Space.Describe(state, 1).objects do
+    if object.kind == "asteroid" and object.site == site.id then
+      rocks += 1
+      units += Mining.Left(state, object)
+      t.eq(object.variety, mission.type)
+      local far = Space.Distance(object :: any, place :: any)
+      t.ok(far >= 2500 and far <= 7500, `a rock {far} m from the middle of the pocket`)
+    end
+  end
+  t.eq(rocks, 4)
+  t.ok(units >= 1.5 * mission.need and units <= 1.6 * mission.need + 200, `{units} units in the pocket for a contract of {mission.need}`)
+  -- Nobody is there, and nobody comes: pirates leave a pocket alone as they do a camp.
+  t.ok((submit(game, { kind = "Undock", actor = 0 })))
+  state.peaceful = false
+  at(game, site.id)
+  steps(game, 90)
+  t.eq(#keepers(game, site.id), 0)
+  for _, id in state.pilotIds do
+    local ball = state.balls[id]
+    t.ok(ball == nil or ball.grid ~= site.id, "somebody came to a pocket nobody disputes")
+  end
+  state.peaceful = true
+  -- Not done until the ore is to hand at the station. (Ore of the kind from anywhere does.)
+  t.eq(refused(game, { kind = "CompleteMission", actor = 0, target = mission.id }), "not docked")
+  Items.Add(state, mission.type, mission.need - 100, state.player.ship, "cargo")
+  local ball = state.balls[state.player.ship]
+  local station = assert(Space.Object(state, home))
+  ball.x, ball.y, ball.z = station.x + station.radius + 500, station.y, station.z
+  Space.AssignGrid(state, ball)
+  t.ok((submit(game, { kind = "Dock", actor = 0, target = home })))
+  for _ = 1, 600 do
+    if state.ships[state.player.ship].docked == home then
+      break
+    end
+    Core.Step(game)
+  end
+  t.eq(refused(game, { kind = "CompleteMission", actor = 0, target = mission.id }), "100 more to bring")
+  Items.Add(state, mission.type, 150, home, "hangar")
+  local wallet = state.wallet
+  t.ok((submit(game, { kind = "CompleteMission", actor = 0, target = mission.id })))
+  t.eq(state.wallet - wallet, mission.reward)
+  local left = 0
+  for _, holder in { { state.player.ship, "cargo" }, { home, "hangar" } } :: { { any } } do
+    for _, item in Items.In(state, holder[1], holder[2]) do
+      left += if item.type == mission.type then item.quantity else 0
+    end
+  end
+  t.eq(left, 50, "what was wanted should be taken, and no more")
+  -- The pocket goes with the contract.
+  t.eq({ state.sites[site.id].gone, #state.missionIds } :: { any }, { true, 0 } :: { any })
+end)
+
+suite:Case("at the harder contracts a pack turns up at the pocket when the pilot does, once; and a save from before has no contracts given", function(t)
+  local game, mission = pocket(3)
+  local state = game.state
+  t.eq(#mission.waves, 1)
+  t.ok((submit(game, { kind = "Undock", actor = 0 })))
+  at(game, mission.site)
+  steps(game, 2)
+  local pack = keepers(game, mission.site)
+  t.eq({ #pack, mission.wave }, { #mission.waves[1], 1 })
+  -- Destroyed, they are not replaced, and they count for nothing toward the contract.
+  for _, id in pack do
+    Aftermath.Destroy(state, id, state.player.ship, game.events)
+  end
+  steps(game, Assault.BREATHER + 30)
+  t.eq({ #keepers(game, mission.site), mission.done, mission.wave }, { 0, 0, 1 })
+  -- In the save; and a save from before the fifth agent had any.
+  local data, length = Core.Save(game)
+  t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
+  local plain = newGame()
+  local now, nowLength = Core.Save(plain)
+  local file = Codec.Decode(now, nowLength)
+  file.saveVersion = 40
+  file.state.digs = nil
+  local old, oldLength = Codec.Encode(file)
+  t.eq(Core.Hash(Core.Load(old, oldLength)), Core.Hash(plain))
 end)
 
 suite:Case("a job comes from an agent, the same people at a station every day, and is worth loyalty points beside its pay", function(t)

@@ -1308,6 +1308,19 @@ end
 -- the jobs offered.)
 local storeOpen = false
 
+-- The level of assault, and of mining contract, the list shows: the
+-- hardest there is, until the pilot steps it down.
+local ladder: { [string]: number } = {}
+
+-- Which level of a kind of job ("assault", "mining") the list shows:
+-- given one, it is set to that. 0: the hardest there is.
+function Station.Level(kind: string, to: number?): number
+  if to then
+    ladder[kind] = to
+  end
+  return ladder[kind] or 0
+end
+
 local function drawMissions(session: Session.Session, game: Core.Game, x: number, y: number)
   local status = Core.Query.Missions(game)
   local left, right = x + 16, x + 480
@@ -1336,6 +1349,12 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
         elseif mission.aim == "fetch" then "the cargo is in the last room"
         else `{mission.done}/{mission.need} down`
       return `{camp.name}, {name}: {where}wave {mission.wave} of {#mission.waves}, {how}`
+    elseif mission.kind == "mining" then
+      -- (where the pocket is; and whether anybody disputes it)
+      local name = game.state.galaxy.systems[mission.system].name
+      local place = if mission.site ~= 0 then Core.Query.Body(game, mission.site) else nil
+      local disputed = if #mission.waves > 0 then ", disputed" else ""
+      return if place then `{place.name}, in {name}{disputed}` else `a pocket in {name}{disputed}`
     elseif mission.kind == "courier" then
       local to = Core.Query.Body(game, mission.to)
       return `to {if to then shorten(to.name, 40) else "?"}`
@@ -1380,27 +1399,54 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
   elseif #status.offers == 0 then
     Im.Text("Nothing more today.", left, line, 14, Im.DIM, 0.8)
   end
+  -- The day's jobs, each a row; then the fourth agent's assault and the
+  -- fifth's mining contract, a row each: the level shown is stepped up
+  -- and down, as far as the pilot's standing has opened.
   local offers: { Core.MissionStatus } = if storeOpen then {} else status.offers
-  for index, offer in offers do
-    if index > 7 then
-      break
-    end
-    Im.Text(shorten(offer.title, 34), left, line, 15, Im.TEXT)
+  local function offered(offer: Core.MissionStatus, id: string, kind: string?, level: number, levels: number)
+    Im.Text(shorten(offer.title, if kind then 30 else 34), left, line, 15, Im.TEXT)
     Im.TextRight(Format.Credits(offer.mission.reward), left + 356, line, 15, GOOD)
     local accept: State.Command = { kind = "AcceptMission", actor = 0, what = offer.mission.key }
     local can, whyNot = Session.CanDo(session, accept)
     Im.Text(if can then shorten(about(offer.mission), 44) else shorten(tostring(whyNot), 44), left, line + 21, 12, if can then Im.DIM else Im.WARN)
     Im.TextRight(`{shorten(offer.mission.agent, 16)}  +{offer.mission.loyalty} LP`, left + 356, line + 21, 12, Im.DIM)
-    if Im.Button("Accept", left + 364, line + 4, 66, 28, can, `Accept:{index}`) then
+    if kind and levels > 1 then
+      if Im.Button("<", left + 236, line - 1, 20, 20, level > 1, `Level:{kind}:down`) then
+        ladder[kind] = level - 1
+      end
+      if Im.Button(">", left + 260, line - 1, 20, 20, level < levels, `Level:{kind}:up`) then
+        ladder[kind] = level + 1
+      end
+    end
+    if Im.Button("Accept", left + 364, line + 4, 66, 28, can, id) then
       Session.Do(session, accept)
     end
     line += 50
+  end
+  local daily = 0
+  for _, offer in offers do
+    if offer.mission.kind ~= "assault" and offer.mission.kind ~= "mining" then
+      daily += 1
+      offered(offer, `Accept:{daily}`, nil, 0, 0)
+    end
+  end
+  for _, kind in { "assault", "mining" } do
+    local levels: { Core.MissionStatus } = {}
+    for _, offer in offers do
+      if offer.mission.kind == kind then
+        table.insert(levels, offer)
+      end
+    end
+    if #levels > 0 then
+      local level = math.clamp(if (ladder[kind] or 0) == 0 then #levels else ladder[kind], 1, #levels)
+      offered(levels[level], `Accept:{kind}`, kind, level, #levels)
+    end
   end
 
   -- What every faction thinks of the pilot (it is their stations' fees,
   -- their jobs' pay and, at the worst, their patrols' guns).
   if not storeOpen then
-    line = y + 78 + 30 + 7 * 50 + 6
+    line = y + 78 + 30 + 5 * 50 + 16
     Im.Heading("STANDINGS", left, line, 14, Im.DIM)
     for index, row in Core.Query.Standings(game) do
       local sx = left + (index - 1) * 110

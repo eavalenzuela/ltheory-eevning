@@ -72,7 +72,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 40
+Core.SAVE_VERSION = 41
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -292,6 +292,11 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       end
     end
   end,
+  -- 41: a station's fifth agent has mining contracts. No agent of a
+  -- save from before has given any.
+  [40] = function(state: any)
+    state.digs = state.digs or {}
+  end,
   -- 40: a hired pilot can be set to patrol a place or to guard another
   -- pilot, and says when they are attacked with the player elsewhere.
   -- The pilots of a save from before guard nobody.
@@ -405,6 +410,7 @@ function Core.New(options: Options): Game
     missionsTaken = {},
     missionsDone = 0,
     assaults = {},
+    digs = {},
     standings = {},
     loyalty = {},
     sites = {},

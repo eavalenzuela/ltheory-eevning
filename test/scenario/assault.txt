@@ -17,7 +17,7 @@ until GameDebug.Tab() == 'Missions'
 frames 3
 lua assert(GameDebug.Offer('assault') == 4, 'the assault should be under the three jobs of the day')
 lua assert(GameDebug.Assault() == '', 'no assault is in hand yet')
-until GameDebug.Press('Accept:4')
+until GameDebug.Press('Accept:assault')
 until select(2, GameDebug.Missions()) == 1
 frames 3
 lua assert(GameDebug.Offer('assault') == 0, 'a station gives one assault at a time')

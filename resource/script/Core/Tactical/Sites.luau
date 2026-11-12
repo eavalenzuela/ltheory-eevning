@@ -329,6 +329,30 @@ function Sites.Stake(state: State.State, system: number, rng: Rng.Rng, title: st
   return site
 end
 
+-- Rocks at a place made for a job: so many, of an ore, each with so
+-- many units in it, a few kilometres out from the middle of the place.
+function Sites.Rocks(state: State.State, site: State.Site, rng: Rng.Rng, ore: string, count: number, units: number)
+  local objects = Space.Describe(state, site.system).objects
+  local place = Space.Object(state, site.id)
+  local kind = Ores.byId[ore]
+  if place == nil or kind == nil then
+    return
+  end
+  local start = Rng.Float(rng, 0, 2 * math.pi)
+  for r = 1, count do
+    local along = start + (r / count) * 2 * math.pi
+    local far = Rng.Float(rng, 3000, 7000)
+    local rock: System.Object = {
+      id = site.system * Constants.STRUCTURE_ID_SPAN + #objects + 1, kind = "asteroid", name = kind.name,
+      x = place.x + far * math.cos(along), y = place.y + Rng.Float(rng, -1500, 1500), z = place.z + far * math.sin(along),
+      -- (a rock holds what its size says it does: Data/Ores)
+      radius = math.max(20, math.ceil(units / 40)), seed = Rng.Int(rng, 2 ^ 31), parent = place.id, site = place.id, variety = kind.id,
+      to = 0,
+    }
+    table.insert(objects, rock)
+  end
+end
+
 -- Let a place made for a job go.
 function Sites.Release(state: State.State, id: number, events: { Event })
   local site = state.sites[id]
