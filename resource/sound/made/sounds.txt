@@ -3,13 +3,18 @@
 # resource/sound/made/<name>.ogg. Game/View/Audio says which is heard when.
 #
 #   name | seconds | once or loop | what it should sound like
+#   name | seconds | join         | FIRST then SECOND
 #
 # A line changed does not change the sound: script/soundgen --force NAME
-# makes it again (and it will not be the same sound twice).
+# makes it again (and it will not be the same sound twice). A join is
+# FIRST up to its loudest moment, fading out over 'seconds' after it,
+# with SECOND (any sound under resource/sound) begun at that moment.
+#
+# What was tried and not kept (the owner's ear, 2026-11-11): generated
+# laser shots and warp-drive sounds. The engine's old ones are better,
+# and are what the game plays (weapon/pulse/1, jumpdrive).
 
-# Weapons, a shot each.
-weapon/laser1      | 1.0 | once | Single shot from a spaceship pulse laser cannon: a sharp bright crack of energy with a brief electrical sizzle tail, punchy, cinematic, dry, no music, no voice
-weapon/laser2      | 1.0 | once | Single shot from a heavy spaceship beam laser: a hard snap of discharging capacitors and a short searing hiss, slightly lower and fuller, punchy, cinematic, dry, no music, no voice
+# Weapons, a shot each. (Lasers keep the engine's old sound.)
 weapon/projectile1 | 1.2 | once | Single shot from a large spaceship autocannon heard from inside the hull: a heavy mechanical thud and muffled boom with the metallic clank of the breech, deep, punchy, dry, no music, no voice
 weapon/projectile2 | 1.2 | once | Single shot from a spaceship artillery cannon heard from inside the hull: a deep concussive boom with a short metallic ring and recoil clunk, weighty, dry, no music, no voice
 weapon/hybrid1     | 1.2 | once | Single shot from a magnetic railgun on a spaceship: a very short rising electric charge whine cut off by a hard supersonic crack and a metallic ring, powerful, dry, no music, no voice
@@ -20,7 +25,7 @@ impact/shield1     | 0.8 | once | An energy force field absorbing a weapon hit: 
 impact/hull1       | 0.8 | once | A projectile slamming into thick starship hull plating, heard from inside the ship: a heavy metallic bang with a brief groan of stressed metal, no music, no voice
 explosion/ship1    | 3.5 | once | A spaceship exploding, heard through the hull from some distance: a deep muffled boom, debris clattering, and a low rumbling tail, cinematic, no music, no voice
 
-# Getting about.
-warp/enter         | 3.0 | once | A starship engaging its warp drive: a deep power build-up whine rising for two seconds into a thunderous whoosh as it leaps away, cinematic, no music, no voice
-warp/exit          | 2.5 | once | A starship dropping out of warp: a fast descending whoosh ending in a deep soft thump and a fading power-down hum, cinematic, no music, no voice
-gate/jump          | 3.5 | once | A stargate flinging a starship across space: a huge electrical surge building for half a second, a bright crackling burst of energy, then a rushing wind-tunnel whoosh that fades away, cinematic, no music, no voice
+# A gate: the surge that builds, and then (the owner's mix) the engine's
+# old jump sound for the clap, begun at the surge's peak.
+gate/surge         | 3.5 | once | A stargate flinging a starship across space: a huge electrical surge building for half a second, a bright crackling burst of energy, then a rushing wind-tunnel whoosh that fades away, cinematic, no music, no voice
+gate/jump          | 0.6 | join | gate/surge then warpnode/exit.ogg

@@ -704,7 +704,9 @@ local DOCKED_ASIDE = 0.62
 
 -- A jump takes this long to leave by, and this long to come out of
 -- (seconds, of the clock on the wall: time run faster does not hurry it).
-local JUMP_OUT = 0.6
+-- (The leaving is as long as a gate's sound takes to come to its clap:
+-- resource/sound/made/gate/jump.)
+local JUMP_OUT = 0.52
 local JUMP_IN = 1.5
 local JUMP_LIGHT = vector.create(0.72, 0.90, 1.0)
 

@@ -10,10 +10,13 @@
 --
 -- Everything is played flat (not placed in space by the engine) at a
 -- loudness worked out here: what is far off is quiet, by how far it is
--- from the pilot's ship. The weapons, what they hit, a ship blowing up,
--- the warp drive and a gate are the game's own sounds, made from written
--- descriptions (resource/sound/made, by script/soundgen); the rest is
--- still the engine's old placeholder sound, wired up.
+-- from the pilot's ship. Some are the game's own sounds, made from
+-- written descriptions (resource/sound/made, by script/soundgen), where
+-- the owner's ear preferred them: projectile guns, railguns and missiles,
+-- what lands on the shield and the hull, a ship blowing up, and the surge
+-- of a gate (joined to the old jump sound for its clap). The rest is the
+-- engine's old sound, which for lasers and the warp drive is the better
+-- one, and for everything else has not been looked at yet.
 --
 -- A script hears nothing: sound is off when a harness drives the app
 -- (Host.scripted), unless the script asks for it (GameDebug.Sound), and
@@ -44,7 +47,8 @@ local PLACE = { space = "system/ambiance/002.wav", station = "station/ambiance_s
 
 -- A weapon's sound by its family: the files, how loud, and its pitch.
 local WEAPON: { [string]: { files: { string }, volume: number, pitch: number } } = {
-  laser = { files = { "made/weapon/laser1.ogg", "made/weapon/laser2.ogg" }, volume = 0.10, pitch = 1 },
+  laser = { files = { "weapon/pulse/1/Pulse1.1.ogg", "weapon/pulse/1/Pulse1.2.ogg", "weapon/pulse/1/Pulse1.3.ogg",
+    "weapon/pulse/1/Pulse1.4.ogg" }, volume = 0.10, pitch = 1 },
   projectile = { files = { "made/weapon/projectile1.ogg", "made/weapon/projectile2.ogg" }, volume = 0.10, pitch = 1 },
   hybrid = { files = { "made/weapon/hybrid1.ogg" }, volume = 0.10, pitch = 1 },
   missile = { files = { "made/weapon/missile1.ogg" }, volume = 0.13, pitch = 1 },
@@ -55,7 +59,7 @@ local SHIELD_HIT, HULL_HIT = "made/impact/shield1.ogg", "made/impact/hull1.ogg"
 
 -- What an event of the pilot's own sounds like: the file and how loud.
 local OWN: { [string]: { any } } = {
-  WarpStarted = { "made/warp/enter.ogg", 0.25 }, WarpEnded = { "made/warp/exit.ogg", 0.22 },
+  WarpStarted = { "jumpdrive/activate.ogg", 0.25 }, WarpEnded = { "jumpdrive/deactivate.ogg", 0.22 },
   LockCompleted = { "ui/targetacquired.ogg", 0.18 }, LockLost = { "ui/targetlost.ogg", 0.14 },
   Scanned = { "ui/scanneropen.wav", 0.16 },
 }
