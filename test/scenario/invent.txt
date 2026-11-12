@@ -8,7 +8,8 @@
 # datacores and the blueprint go into the laboratory, and half an hour on
 # the blueprint is back, with a tech 2 one beside it if it came off.
 # Then a frigate's blueprint is put to the same work, a custom make of a
-# gun is fitted, and a tech 2 frigate is flown.
+# gun is fitted, a tech 2 gun is loaded with tech 2 rounds, and a tech 2
+# frigate is flown.
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
@@ -55,6 +56,21 @@ until GameDebug.Press('Unfit:high2')
 until GameDebug.Fitted('autocannon.small') == 1
 until GameDebug.Press('Fit:autocannon.small.custom')
 until GameDebug.Fitted('autocannon.small.custom') == 1
+
+# Tech 2 rounds go into a tech 2 gun and no other: with a plain gun and
+# a custom one fitted there is nothing to load them into, and with a
+# tech 2 autocannon in place of one there is.
+lua assert(GameDebug.Give('ammo.fusion.ii', 300) and GameDebug.Give('autocannon.small.ii', 1))
+lua GameDebug.Train('projectiles', 4)
+frames 3
+lua assert(not GameDebug.CanPress('Load:ammo.fusion.ii'), 'tech 2 rounds should want a tech 2 gun')
+until GameDebug.Press('Unfit:high1')
+until GameDebug.Fitted('autocannon.small') == 0
+until GameDebug.Press('Fit:autocannon.small.ii')
+until GameDebug.Fitted('autocannon.small.ii') == 1
+frames 3
+until GameDebug.Press('Load:ammo.fusion.ii')
+until GameDebug.Hangar('ammo.fusion.ii') == 180
 
 # A tech 2 hull is the hull it was made from, to look at and to arm: its
 # gun and its two racks are on it, a pair of mounts each.

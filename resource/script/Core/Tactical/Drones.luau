@@ -66,6 +66,13 @@ function Drones.Max(state: State.State, ship: number): number
   return math.min(hull.drones or 0, if levels then math.max(0, levels.drones or 0) else hull.drones or 0)
 end
 
+-- The Drones skill of whoever flies a ship: the pilot's own, or a hired
+-- pilot's grade.
+function Drones.Skill(state: State.State, ship: number): number
+  local levels = Items.Levels(state, ship)
+  return if levels then math.max(0, levels.drones or 0) else 5
+end
+
 -- The drones a ship has out, in the order they were launched.
 function Drones.Out(state: State.State, ship: number): { State.Drone }
   local found: { State.Drone } = {}
@@ -170,6 +177,14 @@ function Drones.Validate(state: State.State, command: State.Command): (boolean, 
     elseif #out >= Drones.Max(state, ship.id) then
       return false, if Drones.Max(state, ship.id) == 0 then "needs Drones 1" else "as many drones are out as can be controlled"
     end
+    -- (a tech 2 drone takes more of the skill than a plain one)
+    local least = math.huge
+    for _, stack in carried(state, ship.id) do
+      least = math.min(least, Kinds.byId[stack.type].level)
+    end
+    if Drones.Skill(state, ship.id) < least then
+      return false, `needs Drones {least} for what is in the bay`
+    end
     return true
   elseif kind == "RecallDrones" then
     return #out > 0, if #out > 0 then nil else "no drones are out"
@@ -203,8 +218,10 @@ function Drones.Apply(state: State.State, command: State.Command, events: { Even
   if kind == "LaunchDrones" then
     -- As many as there is room to control, from the stacks in the hold.
     local room = Drones.Max(state, ship.id) - #Drones.Out(state, ship.id)
+    local skill = Drones.Skill(state, ship.id)
     for _, stack in carried(state, ship.id) do
-      while room > 0 and state.items[stack.id] do
+      -- (what the pilot has not the skill for stays in the bay)
+      while room > 0 and state.items[stack.id] and Kinds.byId[stack.type].level <= skill do
         local type = Kinds.byId[stack.type]
         Items.Take(state, stack, 1)
         local drone = Space.NewShip(state, type.hull, type.name, ship.owner, 0)

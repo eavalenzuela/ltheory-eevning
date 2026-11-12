@@ -352,10 +352,17 @@ suite:Case("invention works out a tech 2 blueprint from a plain one, for datacor
   local state = game.state
   local home = state.player.home
   state.wallet = 10000000
-  -- What has no tech 2 make cannot be invented from. (Rounds have none.)
-  local rounds = assert(inHangar(game, "blueprint.ammo.emp"))
-  t.eq(Industry.InventionPlan(state, Blueprints.byId["blueprint.ammo.emp"]), nil)
-  t.eq(refused(game, { kind = "StartResearch", actor = 0, item = rounds.id, what = "invent" }), "there is no tech 2 make of that to invent")
+  -- What has no tech 2 make cannot be invented from. (A stasis webifier has none.)
+  local web = Items.Add(state, "blueprint.web.stasis", 1, home, "hangar")
+  t.eq(Industry.InventionPlan(state, Blueprints.byId["blueprint.web.stasis"]), nil)
+  t.eq(refused(game, { kind = "StartResearch", actor = 0, item = web.id, what = "invent" }), "there is no tech 2 make of that to invent")
+  -- Rounds have one, and so has a drone: as a small module is to work out, and a medium one for the bigger drones.
+  local rounds = assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.ammo.emp"]))
+  t.eq({ rounds.product, rounds.blueprint, rounds.datacores } :: { any }, { "ammo.emp.ii", "blueprint.ammo.emp.ii", 2 } :: { any })
+  t.eq(assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.missile.cruise.kinetic"])).datacores, 8)
+  local light = assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.drone.light"]))
+  t.eq({ light.product, light.datacores } :: { any }, { "drone.light.ii", 2 } :: { any })
+  t.eq(assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.drone.mining"])).datacores, 4)
   -- A small autocannon has: two datacores, half an hour, three chances in ten.
   local plain = Items.Add(state, "blueprint.autocannon.small", 1, home, "hangar")
   local invent: State.Command = { kind = "StartResearch", actor = 0, item = plain.id, what = "invent" }

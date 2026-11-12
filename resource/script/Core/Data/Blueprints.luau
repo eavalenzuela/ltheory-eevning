@@ -160,7 +160,18 @@ end
 for _, charge in Modules.charges do
   -- Crystals are made one at a time; rounds and missiles by the hundred.
   local perRun = if charge.family == "laser" then 1 else 100
-  add(charge.id, charge.name, MIX.charge, charge.basePrice, perRun, 60)
+  local plain = if charge.tech == 2 and charge.base then Modules.chargeById[charge.base] else nil
+  if plain then
+    -- A tech 2 charge is built of the plain one, as many as are made,
+    -- and of the rare minerals. Its blueprint is not for sale.
+    add(charge.id, charge.name, MIX.tech2, charge.basePrice - plain.basePrice, perRun, 120)
+    local blueprint = Blueprints.byProduct[charge.id]
+    table.insert(blueprint.materials, 1, { type = plain.id, quantity = perRun })
+    blueprint.basePrice = charge.basePrice * perRun * 10
+    blueprint.invented = true
+  else
+    add(charge.id, charge.name, MIX.charge, charge.basePrice, perRun, 60)
+  end
 end
 for _, hull in Ships.list do
   local plain = if hull.tech == 2 and hull.base then Ships.byId[hull.base] else nil
@@ -185,7 +196,18 @@ end
 -- A drone is built as a small gun on a small engine is.
 for _, drone in Drones.list do
   local parts: { { any } } = { { "component.weapon", 0.4 }, { "component.thruster", 0.3 }, { "component.electronics", 0.3 } }
-  add(drone.id, drone.name, MIX.module, drone.basePrice, 1, 300, parts)
+  local plain = if drone.tech == 2 and drone.base then Drones.byId[drone.base] else nil
+  if plain then
+    -- (a tech 2 drone is built of the plain one, the same parts over
+    -- again and the rare minerals; and its blueprint is not for sale)
+    add(drone.id, drone.name, MIX.tech2, drone.basePrice - plain.basePrice, 1, 600, parts)
+    local blueprint = Blueprints.byProduct[drone.id]
+    table.insert(blueprint.materials, 1, { type = plain.id, quantity = 1 })
+    blueprint.basePrice = drone.basePrice * 10
+    blueprint.invented = true
+  else
+    add(drone.id, drone.name, MIX.module, drone.basePrice, 1, 300, parts)
+  end
 end
 
 -- Structures: a tower as a big hull is built, its modules as lesser

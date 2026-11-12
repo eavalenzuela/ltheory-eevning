@@ -303,6 +303,8 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
     local chargeType = Modules.chargeById[charge.type]
     if chargeType == nil or chargeType.family ~= module.weapon.family or chargeType.size ~= module.weapon.size then
       return false, "that does not fit this weapon"
+    elseif chargeType.tech == 2 and module.tech ~= 2 then
+      return false, "a tech 2 charge wants a tech 2 weapon"
     end
     return true
 

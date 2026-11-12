@@ -6,6 +6,8 @@ local Blueprints = require("@lt/Core/Data/Blueprints")
 local Components = require("@lt/Core/Data/Components")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
+local Drones = require("@lt/Core/Data/Drones")
+local Dogma = require("@lt/Core/Dogma")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Test = require("@lt/Tool/Test")
@@ -405,7 +407,13 @@ suite:Case("every weapon, repairer, extender, plate and mining laser has a tech 
         t.near(module.repair.amount, base.repair.amount * 1.25, 1e-9)
       elseif module.miner and base.miner then
         t.near(module.miner.volume, base.miner.volume * 1.25, 1e-9)
+      elseif module.hex and base.hex then
+        -- (a repairer for another ship: more put back, from as far)
+        t.near(module.hex.strength, base.hex.strength * 1.25, 1e-9)
+        t.eq({ module.hex.kind, module.hex.range } :: { any }, { base.hex.kind, base.hex.range } :: { any })
       end
+      -- (what only a drone carries is what only a tech 2 drone carries)
+      t.eq(module.internal, base.internal)
       -- More skill than the plain one, and never less than four of it.
       local needs, plain = Skills.Needs(module.id), Skills.Needs(base.id)
       t.ok(#needs >= 1 and #needs >= #plain)
@@ -421,11 +429,13 @@ suite:Case("every weapon, repairer, extender, plate and mining laser has a tech 
     elseif module.meta == nil then
       -- (what only a drone carries is nobody's to buy either)
       t.eq({ module.base, Types.Info(module.id).scarce } :: { any }, { nil, if module.internal then true else nil } :: { any })
-      t.ok(not module.internal or Modules.Improved(module.id) == nil, "a drone's own module has a tech 2 make")
+      -- (and has a tech 2 make, for a tech 2 drone, and no custom one)
+      t.ok(not module.internal or (Modules.Improved(module.id) ~= nil and Modules.Custom(module.id) == nil), module.id)
     end
   end
-  -- 21 weapons, 2 repairers, an extender and a plate in three sizes each, and two mining lasers.
-  t.eq(improved, 21 + 4 * 3 + 2)
+  -- 21 weapons, 2 repairers, an extender and a plate in three sizes each, two mining lasers, the repairers for
+  -- another ship (shield and armour, in three sizes), and the two things only a drone carries.
+  t.eq(improved, 21 + 4 * 3 + 2 + 2 * 3 + 2)
   t.ok(Modules.Improved("web.stasis") == nil and Modules.Improved("rig.shield") == nil)
   t.eq({ Modules.SizeOf(Modules.byId["autocannon.medium.ii"]), Modules.SizeOf(Modules.byId["shield.extender.large"]),
     Modules.SizeOf(Modules.byId["miner.small"]) }, { 2, 3, 1 })
@@ -456,7 +466,11 @@ suite:Case("the same modules have a custom make, between the plain one and tech 
       elseif module.miner and base.miner and better.miner then
         t.near(module.miner.volume, base.miner.volume * 1.125, 1e-9)
         t.ok(module.miner.volume < better.miner.volume)
+      elseif module.hex and base.hex and better.hex then
+        t.near(module.hex.strength, base.hex.strength * 1.125, 1e-9)
+        t.ok(module.hex.strength < better.hex.strength)
       end
+      t.ok(not base.internal, "what only a drone carries has a custom make")
       -- No more skill than the plain one.
       t.eq(Skills.Needs(module.id), Skills.Needs(base.id))
       -- Nobody sells one, and there are no drawings for it.
@@ -464,10 +478,80 @@ suite:Case("the same modules have a custom make, between the plain one and tech 
         { true, nil, nil } :: { any })
     end
   end
-  -- One for every module that has a tech 2 make.
-  t.eq(customs, 21 + 4 * 3 + 2)
+  -- One for every module that has a tech 2 make and is not a drone's own.
+  t.eq(customs, 21 + 4 * 3 + 2 + 2 * 3)
   t.ok(Modules.Custom("web.stasis") == nil and Modules.Custom("autocannon.small.ii") == nil)
   t.eq(Modules.SizeOf(Modules.byId["autocannon.medium.custom"]), 2)
+end)
+
+suite:Case("every charge has a tech 2 make: a seventh more damage, for a tech 2 weapon only, and nobody's to buy", function(t)
+  local improved, plain = 0, 0
+  for _, charge in Modules.charges do
+    if charge.tech == 2 then
+      improved += 1
+      local base = Modules.chargeById[charge.base :: string]
+      t.eq({ charge.id, charge.name, charge.family, charge.size, charge.volume } :: { any },
+        { base.id .. ".ii", base.name .. " II", base.family, base.size, base.volume } :: { any })
+      t.eq(Modules.ImprovedCharge(base.id), charge)
+      t.ok(base.tech == nil and Modules.ImprovedCharge(charge.id) == nil)
+      for index = 1, 4 do
+        t.near(charge.damage[index], base.damage[index] * 1.15, 1e-9)
+      end
+      -- (it flies and reaches as the plain one does)
+      t.eq({ charge.rangeMultiplier, charge.velocity, charge.flightTime, charge.explosionRadius, charge.explosionVelocity },
+        { base.rangeMultiplier, base.velocity, base.flightTime, base.explosionRadius, base.explosionVelocity })
+      t.eq(charge.basePrice, base.basePrice * 5)
+      -- Nobody sells it or its blueprint; it is built of the plain charge, as many as are made, and the rare minerals.
+      local blueprint = assert(Blueprints.byProduct[charge.id], charge.id)
+      t.eq({ Types.Info(charge.id).scarce, Types.Info(blueprint.id).scarce, blueprint.invented } :: { any }, { true, true, true } :: { any })
+      t.eq({ blueprint.materials[1].type, blueprint.materials[1].quantity, blueprint.perRun } :: { any },
+        { base.id, blueprint.perRun, if charge.family == "laser" then 1 else 100 } :: { any })
+      local rare = 0
+      for index, material in blueprint.materials do
+        rare += if index > 1 and (material.type == "mineral.cobalt" or material.type == "mineral.iridium") then 1 else 0
+      end
+      t.eq(rare, 2, charge.id)
+    else
+      plain += 1
+      t.eq({ charge.base, Types.Info(charge.id).scarce } :: { any }, { nil, nil } :: { any })
+      t.ok(Modules.ImprovedCharge(charge.id) ~= nil, `{charge.id} has no tech 2 make`)
+    end
+  end
+  t.ok(improved == plain and plain >= 30, `{plain} plain charges and {improved} tech 2`)
+end)
+
+suite:Case("every drone has a tech 2 make: a tougher, quicker hull with the tech 2 make of what it carries, for a pilot with Drones 4", function(t)
+  local improved = 0
+  for _, drone in Drones.list do
+    if drone.tech == 2 then
+      improved += 1
+      local base = Drones.byId[drone.base :: string]
+      t.eq({ drone.id, drone.name, drone.role, drone.volume, drone.charge, drone.level, base.level } :: { any },
+        { base.id .. ".ii", base.name .. " II", base.role, base.volume, base.charge, 4, 1 } :: { any })
+      t.eq(Drones.Improved(base.id), drone)
+      t.ok(Drones.Improved(drone.id) == nil)
+      t.eq(drone.basePrice, base.basePrice * 5)
+      -- What it carries is the tech 2 make of what the plain one carries.
+      local gun, was = Modules.byId[drone.gun], Modules.byId[base.gun]
+      t.eq({ gun.tech, gun.base } :: { any }, { 2, was.id } :: { any })
+      -- What it flies as: more of it, a quarter less getting through, a tenth quicker; a drone's hull still.
+      local hull, plain = Ships.byId[drone.hull], Ships.byId[base.hull]
+      t.eq({ hull.class, hull.restricted, hull.tech, hull.turrets, hull.radius } :: { any }, { "drone", true, nil, plain.turrets, plain.radius } :: { any })
+      t.ok(hull.shield > 1.2 * plain.shield and hull.armor > 1.2 * plain.armor and hull.hull > 1.2 * plain.hull, hull.id)
+      t.near(hull.armorResonance[1], plain.armorResonance[1] * 0.75, 1e-9)
+      t.ok(hull.maxVelocity > 1.05 * plain.maxVelocity and hull.cpu > plain.cpu and hull.powergrid > plain.powergrid)
+      t.ok(Types.Get(hull.id) == nil, "a drone's hull is not a thing to hold")
+      -- (and what it carries fits it)
+      t.ok(Dogma.Check(hull, { gun.id }), `{gun.id} does not fit {hull.id}`)
+      -- Nobody sells it or its blueprint; it is built of the plain drone.
+      local blueprint = assert(Blueprints.byProduct[drone.id], drone.id)
+      t.eq({ Types.Info(drone.id).scarce, Types.Info(blueprint.id).scarce, blueprint.invented } :: { any }, { true, true, true } :: { any })
+      t.eq({ blueprint.materials[1].type, blueprint.materials[1].quantity } :: { any }, { base.id, 1 } :: { any })
+    else
+      t.eq({ drone.base, drone.level, Types.Info(drone.id).scarce } :: { any }, { nil, 1, nil } :: { any })
+    end
+  end
+  t.eq(improved, 4)
 end)
 
 suite:Case("fittings come in three sizes, each for a larger ship than the last", function(t)

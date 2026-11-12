@@ -103,7 +103,7 @@ local skills: { Skill } = {
     note = "Level 1 to fit a salvager. 10% likelier to bring something off each cycle a level." },
   -- Company
   { id = "drones", name = "Drones", rank = 2, start = 0, requires = {},
-    note = "One more drone out at once a level, as far as the hull controls." },
+    note = "One more drone out at once a level, as far as the hull controls. Level 4 for a tech 2 drone." },
   { id = "leadership", name = "Leadership", rank = 4, start = 1, requires = {},
     note = "One more hired pilot under your command a level." },
   { id = "remote.repair", name = "Remote Repair", rank = 2, start = -1, requires = { { skill = "repair.systems", level = 2 } },

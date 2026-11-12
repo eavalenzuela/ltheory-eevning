@@ -135,7 +135,9 @@ local function weaponFor(game: Core.Game, ship: number, charge: State.Item): Sta
   local other: State.Item? = nil
   for _, item in Core.Query.Fitted(game, ship) do
     local weapon = Modules.byId[item.type].weapon
-    if weapon and weapon.family == family then
+    -- (one that would take it: of its size, and tech 2 for a tech 2 charge)
+    if weapon and weapon.family == family
+      and (Core.Validate(game, { kind = "LoadCharge", actor = ship, item = item.id, other = charge.id })) then
       if item.charge == "" then
         return item
       elseif item.charge ~= charge.type and other == nil then

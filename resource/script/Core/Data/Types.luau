@@ -34,7 +34,8 @@ for _, m in Modules.list do
     scarce = if m.tech == 2 or m.internal or m.meta then true else nil }
 end
 for _, c in Modules.charges do
-  byId[c.id] = { id = c.id, name = c.name, category = "charge", volume = c.volume, basePrice = c.basePrice }
+  byId[c.id] = { id = c.id, name = c.name, category = "charge", volume = c.volume, basePrice = c.basePrice,
+    scarce = if c.tech == 2 then true else nil }
 end
 
 for _, ore in Ores.list do
@@ -83,7 +84,8 @@ byId[Planets.CENTRE.id] = { id = Planets.CENTRE.id, name = Planets.CENTRE.name, 
 
 -- Drones, as they are in a hold.
 for _, drone in Drones.list do
-  byId[drone.id] = { id = drone.id, name = drone.name, category = "drone", volume = drone.volume, basePrice = drone.basePrice }
+  byId[drone.id] = { id = drone.id, name = drone.name, category = "drone", volume = drone.volume, basePrice = drone.basePrice,
+    scarce = if drone.tech == 2 then true else nil }
 end
 
 -- Implants, before anybody has plugged them in.

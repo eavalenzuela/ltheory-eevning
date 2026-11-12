@@ -134,6 +134,10 @@ export type ChargeType = {
   flightTime: number,       -- s
   explosionRadius: number,  -- m; smaller targets take less
   explosionVelocity: number, -- m/s; faster targets take less
+  -- 2 for a tech 2 charge: the improved make of the charge 'base',
+  -- which only a tech 2 weapon takes (below).
+  tech: number?,
+  base: string?,
 }
 
 local function ship(attribute: string, op: "add" | "mul", value: number, stack: boolean?): Modifier
@@ -662,10 +666,30 @@ for index, sized in MISSILE_SIZES do
   end
 end
 
--- Tech 2: the improved make of every weapon, repairer, shield
--- extender, armour plate and mining laser. A fifth more damage, or a
--- quarter more of what it mends, holds or cuts, for a seventh more CPU
--- and powergrid and a good deal more skill (Data/Skills). Nobody sells
+-- Tech 2 charges: the improved make of every crystal, round, charge
+-- and missile. A seventh more damage, and nothing else different; and
+-- only a tech 2 weapon takes one (Assets/Items). Nobody sells them:
+-- the blueprint is invented from the plain charge's, and they are built
+-- of the plain charge and of what lawless space has (Data/Blueprints).
+local CHARGE2 = { damage = 1.15, price = 5 }
+for _, base in table.clone(charges) do
+  local damage: { number } = {}
+  for index, amount in base.damage do
+    damage[index] = amount * CHARGE2.damage
+  end
+  table.insert(charges, {
+    id = base.id .. ".ii", name = base.name .. " II", family = base.family, size = base.size, volume = base.volume,
+    basePrice = base.basePrice * CHARGE2.price, damage = damage, rangeMultiplier = base.rangeMultiplier,
+    velocity = base.velocity, flightTime = base.flightTime, explosionRadius = base.explosionRadius,
+    explosionVelocity = base.explosionVelocity, tech = 2, base = base.id,
+  })
+end
+
+-- Tech 2: the improved make of every weapon, repairer (a ship's own, or
+-- one for another ship), shield extender, armour plate and mining
+-- laser. A fifth more damage, or a quarter more of what it mends, holds
+-- or cuts, for a seventh more CPU and powergrid and a good deal more
+-- skill (Data/Skills). Nobody sells
 -- one: its blueprint is invented from the plain module's in a
 -- laboratory, and it is built of the plain module and of minerals that
 -- safe space does not have (Data/Blueprints, Assets/Industry).
@@ -676,14 +700,21 @@ end
 -- CPU and powergrid, and no more skill than the plain one. Nobody
 -- sells or builds these: a pirate's wreck now and then has the custom
 -- make of what the pirate had fitted, and their stores have some.
+--
+-- (What only a drone carries has a tech 2 make and no custom one: it is
+-- what a tech 2 drone carries, and is no more to be had apart than the
+-- plain one is.)
 type Better = { id: string, name: string, damage: number, amount: number, fitting: number, price: number, tech: number?, meta: number? }
 local TECH2: Better = { id = ".ii", name = " II", damage = 1.2, amount = 1.25, fitting = 1.15, price = 8, tech = 2 }
 local CUSTOM: Better = { id = ".custom", name = " Custom", damage = 1.1, amount = 1.125, fitting = 0.9, price = 3, meta = 1 }
 for _, base in table.clone(modules) do
   local buffer = string.sub(base.id, 1, 15) == "shield.extender" or string.sub(base.id, 1, 11) == "armor.plate"
-  if (base.weapon or base.repair or base.miner or buffer) and not base.internal then
+  local hex = base.hex
+  local mends = hex ~= nil and (hex.kind == "shield" or hex.kind == "armor")
+  if base.weapon or base.repair or base.miner or buffer or mends then
     local weapon, repair, miner = base.weapon, base.repair, base.miner
-    for _, make in { CUSTOM, TECH2 } do
+    local makes: { Better } = if base.internal then { TECH2 } else { CUSTOM, TECH2 }
+    for _, make in makes do
       local passive: { Modifier } = {}
       for _, m in base.passive do
         -- (what it holds is more; what it weighs and shows is the same)
@@ -705,6 +736,9 @@ for _, base in table.clone(modules) do
           capacitor = repair.capacitor } else nil,
         miner = if miner then { volume = miner.volume * make.amount, duration = miner.duration, capacitor = miner.capacitor,
           range = miner.range } else nil,
+        hex = if hex and mends then { kind = hex.kind, range = hex.range, strength = hex.strength * make.amount,
+          duration = hex.duration, capacitor = hex.capacitor } else nil,
+        internal = base.internal,
         tech = make.tech, meta = make.meta, base = base.id,
       })
     end
@@ -725,6 +759,12 @@ end
 -- The tech 2 make of a module, if it has one.
 function Modules.Improved(id: string): ModuleType?
   local better = Modules.byId[id .. ".ii"]
+  return if better and better.tech == 2 then better else nil
+end
+
+-- The tech 2 make of a charge, if it has one.
+function Modules.ImprovedCharge(id: string): ChargeType?
+  local better = Modules.chargeById[id .. ".ii"]
   return if better and better.tech == 2 then better else nil
 end
 

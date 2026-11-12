@@ -344,6 +344,30 @@ for _, base in table.clone(types) do
   end
 end
 
+-- And what a tech 2 drone flies as (Data/Drones): the drone's hull made
+-- over in the same way, and a tenth quicker. (It is a drone's hull as
+-- the plain one is: nobody boards it, sells it or builds it apart, and
+-- it is not one of the tech 2 hulls above.)
+for _, base in table.clone(types) do
+  if base.class == "drone" then
+    table.insert(types, {
+      id = base.id .. ".ii", name = base.name .. " II", class = base.class :: string, lineage = base.lineage,
+      basePrice = base.basePrice * 5, volume = base.volume,
+      mass = base.mass, inertia = base.inertia, maxVelocity = round(base.maxVelocity * 1.1),
+      warpSpeed = base.warpSpeed, radius = base.radius,
+      shield = round(base.shield * TECH2.layers), armor = round(base.armor * TECH2.layers), hull = round(base.hull * TECH2.layers),
+      shieldRecharge = base.shieldRecharge, shieldResonance = tougher(base.shieldResonance),
+      armorResonance = tougher(base.armorResonance), hullResonance = base.hullResonance,
+      signature = base.signature,
+      cpu = round(base.cpu * TECH2.fitting), powergrid = round(base.powergrid * TECH2.fitting),
+      highs = base.highs, mids = base.mids, lows = base.lows, turrets = base.turrets, launchers = base.launchers,
+      capacitor = round(base.capacitor * TECH2.fitting), capacitorRecharge = base.capacitorRecharge,
+      scanResolution = base.scanResolution, lockRange = base.lockRange, maxTargets = base.maxTargets, cargo = base.cargo,
+      requires = base.requires, restricted = true, rigs = base.rigs, drones = base.drones,
+    })
+  end
+end
+
 local Ships = { list = types, byId = {} :: { [string]: ShipType } }
 
 Ships.RIGS = 3

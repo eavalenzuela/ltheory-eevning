@@ -103,6 +103,33 @@ suite:Case("unfitting returns the module and what was loaded in it", function(t)
     { "laser.pulse.small", 1, "autocannon.small", 2 } :: { any })
 end)
 
+suite:Case("a tech 2 charge goes into a tech 2 weapon and no other, and does a seventh more", function(t)
+  local game = newGame()
+  local state = game.state
+  local ship = state.player.ship
+  local home = state.player.home
+  local cannon = Items.Fitted(state, ship)[1]
+  local better = Items.Add(state, "ammo.fusion.ii", 500, home, "hangar")
+  t.eq(refused(game, { kind = "LoadCharge", actor = 0, item = cannon.id, other = better.id }), "a tech 2 charge wants a tech 2 weapon")
+  -- A tech 2 autocannon in its place takes it, and plain rounds too.
+  order(t, game, { kind = "Unfit", actor = 0, item = cannon.id })
+  state.skills["projectiles"] = 5
+  local gun = Items.Add(state, "autocannon.small.ii", 1, home, "hangar")
+  order(t, game, { kind = "Fit", actor = 0, item = gun.id })
+  local fitted: State.Item? = nil
+  for _, item in Items.Fitted(state, ship) do
+    fitted = if item.type == "autocannon.small.ii" then item else fitted
+  end
+  local weapon = assert(fitted, "the tech 2 autocannon is not fitted")
+  order(t, game, { kind = "LoadCharge", actor = 0, item = weapon.id, other = inHangar(game, "ammo.fusion").id })
+  local plain = Items.Offence(state, ship).volley
+  order(t, game, { kind = "LoadCharge", actor = 0, item = weapon.id, other = inHangar(game, "ammo.fusion.ii").id })
+  t.eq({ weapon.charge, weapon.rounds } :: { any }, { "ammo.fusion.ii", 120 } :: { any })
+  t.eq(hangarCount(game, "ammo.fusion.ii"), 380)
+  -- (the other gun fires what it did: the difference is this one's)
+  t.ok(Items.Offence(state, ship).volley > plain, "tech 2 rounds should hit harder")
+end)
+
 suite:Case("loading swaps the charge; a crystal is one item and is not counted in rounds", function(t)
   local game = newGame()
   local ship = game.state.player.ship

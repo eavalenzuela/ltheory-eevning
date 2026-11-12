@@ -343,6 +343,9 @@ end
 
 local function chargeSheet(sheet: Sheet, charge: Modules.ChargeType)
   sheet.kind = `{SIZES[charge.size] or "Small"} {charge.family} charge`
+  if charge.tech == 2 and charge.base then
+    sheet.note = `The tech 2 make of {nameOf(charge.base)}: a seventh more damage. Only a tech 2 weapon takes it. Nobody sells it: its blueprint is invented from the plain one's.`
+  end
   local to = section(sheet, "Charge")
   row(to, "Damage", damage(charge.damage, 1))
   if charge.family == "missile" then
@@ -444,6 +447,9 @@ function Facts.Of(type: string): Sheet?
       elseif drone.role == "repair" then "Launched from the drone bay to mend whoever of its owner's side has lost most armour: it goes to them and sets to, and otherwise keeps station on its owner."
       else "Launched from the drone bay to fight beside the ship: it goes for what it is pointed at, or for whatever is attacking its owner's side."
     sheet.note ..= " Near enough when its owner warps or docks, it is taken aboard; left behind, it is lost."
+    if drone.tech == 2 and drone.base then
+      sheet.note ..= ` The tech 2 make of the {nameOf(drone.base)}: tougher and quicker, with the tech 2 make of what that carries. It takes Drones {drone.level} to have one out. Nobody sells one: its blueprint is invented from the plain drone's.`
+    end
     local has = section(sheet, "Drone")
     if gun.miner then
       row(has, "Cuts", `{whole(gun.miner.volume)} m3 a minute, into a hold of {whole(flies.cargo)} m3`)

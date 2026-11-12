@@ -104,6 +104,47 @@ suite:Case("drones are launched from the hold, as many as the hull controls and 
   t.eq({ Core.Query.Drones(small).out, carried(small) }, { 1, 2 })
 end)
 
+suite:Case("a tech 2 drone takes Drones 4 to have out, and flies a tougher hull with the tech 2 make of what it carries", function(t)
+  -- With only tech 2 drones in the bay, a pilot short of the skill launches none.
+  local game, me = flying("cruiser.cuirass", 0, 3)
+  local state = game.state
+  Items.Add(state, "drone.light.ii", 2, me.id, "dronebay")
+  t.eq(refused(game, { kind = "LaunchDrones", actor = 0 }), "needs Drones 4 for what is in the bay")
+  -- With plain ones beside them, the plain ones go and the others stay.
+  Items.Add(state, "drone.light", 1, me.id, "dronebay")
+  t.ok((submit(game, { kind = "LaunchDrones", actor = 0 })))
+  local out = Drones.Out(state, me.id)
+  t.eq({ #out, out[1].type, carried(game) } :: { any }, { 1, "drone.light", 2 } :: { any })
+  -- With the skill, they go: each a tougher hull, with a tech 2 gun on it.
+  state.skills.drones = 4
+  t.ok((submit(game, { kind = "LaunchDrones", actor = 0 })))
+  out = Drones.Out(state, me.id)
+  t.eq({ #out, carried(game) }, { 3, 0 })
+  local seen = 0
+  for _, drone in out do
+    if drone.type == "drone.light.ii" then
+      seen += 1
+      local ship, ball = state.ships[drone.ship], state.balls[drone.ship]
+      t.eq({ ship.type, ball.name } :: { any }, { "drone.hull.light.ii", "Light Combat Drone II" } :: { any })
+      local guns = Items.Fitted(state, drone.ship)
+      t.eq({ #guns, guns[1].type, guns[1].charge } :: { any }, { 1, "autocannon.small.ii", "ammo.fusion" } :: { any })
+      t.ok(ball.vitals.armorMax > state.balls[out[1].ship].vitals.armorMax, "a tech 2 drone should have more armour")
+    end
+  end
+  t.eq(seen, 2)
+  -- The others of them: a mining drone and a repair drone of the tech 2 make carry the tech 2 make of their tools.
+  local other, ship = flying("cruiser.cuirass", 0, 5)
+  Items.Add(other.state, "drone.mining.ii", 1, ship.id, "dronebay")
+  Items.Add(other.state, "drone.repair.ii", 1, ship.id, "dronebay")
+  t.ok((submit(other, { kind = "LaunchDrones", actor = 0 })))
+  local tools: { string } = {}
+  for _, drone in Drones.Out(other.state, ship.id) do
+    table.insert(tools, Items.Fitted(other.state, drone.ship)[1].type)
+  end
+  table.sort(tools)
+  t.eq(tools, { "miner.drone.ii", "remote.armor.drone.ii" })
+end)
+
 suite:Case("a drone keeps station on its owner, fights what it is pointed at, and comes back when it is called", function(t)
   local game, me = flying("cruiser.cuirass", 2, 5)
   local state = game.state

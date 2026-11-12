@@ -10,6 +10,7 @@
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
+local Drones = require("@lt/Core/Data/Drones")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Rng = require("@lt/Core/Kernel/Rng")
@@ -142,13 +143,17 @@ export type InventionPlan = { product: string, blueprint: string, datacores: num
 function Industry.InventionPlan(state: State.State, blueprint: Blueprints.Blueprint): InventionPlan?
   local module = Modules.Improved(blueprint.product)
   local hull = Ships.Improved(blueprint.product)
-  local id = if module then module.id elseif hull then hull.id else ""
+  local charge = Modules.ImprovedCharge(blueprint.product)
+  local drone = Drones.Improved(blueprint.product)
+  local id = if module then module.id elseif hull then hull.id elseif charge then charge.id elseif drone then drone.id else ""
   local made = Blueprints.byProduct[id]
   if made == nil then
     return nil
   end
-  -- (a hull is a bigger thing to work out than any module)
-  local size = if module then Modules.SizeOf(module) elseif hull then Industry.HULL_SIZE[hull.class] or 3 else 1
+  -- (a hull is a bigger thing to work out than any module; a charge is
+  -- as its weapon is, and a drone as a small module or a medium one)
+  local size = if module then Modules.SizeOf(module) elseif hull then Industry.HULL_SIZE[hull.class] or 3
+    elseif charge then charge.size elseif drone then (if drone.volume > 5 then 2 else 1) else 1
   return {
     product = id, blueprint = made.id, datacores = 2 ^ size, seconds = 1800 * size,
     fee = math.ceil(Types.Info(id).basePrice * 0.05),
