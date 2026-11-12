@@ -10,6 +10,8 @@
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
+# (with the sound on at no loudness: a gate the traffic goes through is heard, without a noise)
+lua GameDebug.Sound(true, 0)
 lua GameDebug.TimeScale(8)
 until GameDebug.Traffic() >= 3
 until select(5, GameDebug.Traffic()) >= 1

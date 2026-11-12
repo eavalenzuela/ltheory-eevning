@@ -12,6 +12,8 @@
 wait 2
 lua GameDebug.Peaceful(true)
 lua assert(GameDebug.Docked(), 'a new game starts docked')
+# (with the sound on at no loudness: a cloak going on has a sound, which is then played without a noise)
+lua GameDebug.Sound(true, 0)
 lua assert(GameDebug.Give('cloak.device', 1))
 lua GameDebug.Train('electronics', 5)
 lua GameDebug.Train('cloaking', 5)

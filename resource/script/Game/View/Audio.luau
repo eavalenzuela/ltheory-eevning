@@ -177,10 +177,16 @@ local SHIELD_HIT, HULL_HIT = "made/impact/shield1.ogg", "made/impact/hull1.ogg"
 local OWN: { [string]: { any } } = {
   WarpStarted = { "jumpdrive/activate.ogg", 0.25 }, WarpEnded = { "jumpdrive/deactivate.ogg", 0.22 },
   LockCompleted = { "ui/targetacquired.ogg", 0.18 }, LockLost = { "ui/targetlost.ogg", 0.14 },
+  -- (a cloak going on, and one broken by something come too near: two
+  -- of the engine's old interface sounds, picked by their names and
+  -- heard by nobody yet)
+  Cloaked = { "ui/cruise_engage.wav", 0.14 }, Decloaked = { "ui/camera_toggle.wav", 0.16 },
   Scanned = { "made/ui/scan.ogg", 0.07 },
 }
--- How loud somebody else's warp drive is, right beside the pilot.
+-- How loud somebody else's warp drive is, right beside the pilot; and a
+-- gate that somebody else goes through.
 local OTHERS_WARP = 0.12
+local OTHERS_GATE = 0.12
 local SHIP: { [string]: { any } } = {
   Jumped = { "made/gate/jump.ogg", 0.28 }, Docked = { "ui/confirm.ogg", 0.18 }, Undocked = { "ui/activate.ogg", 0.18 },
 }
@@ -298,6 +304,18 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
       end
     elseif OWN[kind] and event.ball == mine then
       play(audio, OWN[kind][1], OWN[kind][2])
+    elseif me and ((kind == "Jumped" and event.ship ~= mine and (event.from == me.system or event.to == me.system))
+      or ((kind == "BallAdded" or kind == "BallRemoved") and event.gate)) then
+      -- Somebody else through a gate near by, either way, or the
+      -- system's own traffic coming in by one or going out: the gate's
+      -- surge, a good deal quieter than the pilot's own jump, and
+      -- quieter the farther off the gate is. (Not one on top of another.)
+      local id = if kind ~= "Jumped" then event.gate elseif event.from == me.system then event.gate else event.arrival
+      local gate: any = Core.Query.Body(session.game, id)
+      if gate then
+        local far = math.sqrt((gate.x - me.x) ^ 2 + (gate.y - me.y) ^ 2 + (gate.z - me.z) ^ 2)
+        play(audio, "made/gate/surge.ogg", OTHERS_GATE * reach(far, 15000), "gate:other", 1.5, 1.1)
+      end
     elseif (kind == "WarpStarted" or kind == "WarpEnded") and me then
       -- Somebody else's drive, going in or coming out near by: the same
       -- sound as the pilot's own, a little higher and a good deal
