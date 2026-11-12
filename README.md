@@ -1,83 +1,125 @@
-# Limit Theory Old
+# Limit Theory (old engine): an offline space sandbox
 
-This is the (old) C++ implementation of Limit Theory, the Limit Theory Engine (LTE), and the Limit Theory Scripting Language (LTSL), written from 2012 to 2015. While this code is dated compared to the newer C/Lua LT, it is arguably meatier in gameplay implementation.
+A single-player space game built on the old C++ Limit Theory engine. You fly by giving your ship orders, and make a living mining, building, trading, running missions and fighting pirates in a generated galaxy of up to 400 systems.
 
-In this fork the LTSL scripts have been replaced by [Luau](https://luau.org) scripts; see `docs/luau.md`.
+It is a work in progress. The systems are playable from end to end; the ships, stations and sounds are first-pass placeholders ("grey box").
 
-# Requirements
+## Where this comes from
 
-Although LT was developed for both Windows and Linux (indeed, primarily developed on Linux), I have only resurrected the Windows build. If you would like to get it working on Linux, you're on your own...although it shouldn't be too difficult.
+This is a fork of the old C++ implementation of Limit Theory, its engine (LTE) and its scripting language, written by Josh Parnell from 2012 to 2015 and released into the public domain. What has changed in this fork:
 
-## Linux
+- The scripts are [Luau](https://luau.org) (typed Lua); the engine's own scripting language is gone. See `docs/luau.md`.
+- It builds and runs on 64-bit Linux.
+- There is a new game on top of the engine (`bin/launch game`). All of its state and rules live in a deterministic, engine-free Luau core, and the engine draws what the core says. The old prototype is still in the tree as `ltheory`.
 
-The 64-bit Linux build works (tested on Ubuntu with GCC 15, CMake 4.2, Mesa). In place of Visual Studio, install a compiler and the libraries SFML and LT need, e.g. on Debian/Ubuntu:
+`docs/roadmap.md` has the plan and, at its top, what is built so far.
 
-- `sudo apt install build-essential cmake python3 git-lfs libglew-dev libglu1-mesa-dev libfreetype-dev libx11-dev libxrandr-dev libudev-dev libgl-dev`
+## What is in the game
 
-Then follow the same steps below from a regular terminal (`python3 configure.py`, `python3 configure.py build`, `python3 configure.py run war`). The executable is `bin/launch`. Audio goes through the vendored miniaudio (`ext/miniaudio/`), so no extra audio libraries are needed. If no audio device is available, the game runs silently.
+- **Flight by orders**: approach, orbit, keep at range, align, warp, dock, jump through gates, with an autopilot and a star map.
+- **Ships and fitting**: frigates to battleships and haulers for four human factions and the pirates, with turrets, launchers, drones, electronic warfare, cloaks, rigs and tech 2 gear.
+- **Combat**: target locking, tracking and range, shields, armour and hull, wrecks to loot and salvage, insurance, and a capsule to get home in.
+- **Industry**: mining, refining, manufacturing from blueprints, research and invention, and planetary colonies.
+- **Trade**: a market at each station with buy and sell orders, where prices differ by who owns the station.
+- **Things to do**: daily jobs, combat camps and mining contracts from agents, standings and loyalty stores, sites to scan down, derelicts to hack.
+- **A character**: skills that train in real time, including while the game is closed, and implants.
+- **Company**: hired pilots who follow, mine, haul, patrol and guard; starbases of your own with anchored modules.
+- **A world**: security that falls away from each faction's homeworld, police and gate guns where order is kept, other ships going about their business.
+- **Saves**, music, and sound.
 
-# Prerequisites
+## Requirements
 
-To build Limit Theory, you'll need a few standard developer tools. All of them are available to download for free.
+64-bit Linux is what this fork is built and tested on (Ubuntu, GCC 15, CMake 4.2, Mesa). The original targeted Windows with Visual Studio; that has not been tried here.
 
-- Python: https://www.python.org/downloads/
-- Git: https://git-scm.com/downloads
-- Git LFS: https://git-lfs.github.com/
-- Visual Studio Community: https://visualstudio.microsoft.com/vs/
-- CMake: https://cmake.org/download/
+On Debian or Ubuntu:
 
-# Building
-
-With the above prerequisites installed, open a **Git Bash terminal**.
-
-## Checking out the Repository
-
-First, use `cd` to change directories to the place where you want to download LT. 
-- `cd ~/Desktop/<path where you want to put the LT source>`
-
-Before doing any other `git` commands, make sure LFS is installed:
-- `git lfs install`
-
-You should see `Git LFS initialized` or a similar message. **Important**: if you forget to install and initialize Git LFS, most of the resources will probably be broken, and the whole process will likely fail in strange and mysterious ways. This is a common gotcha with projects that use LFS. Make sure you do the above step!
-
-Now, you can download the repository:
-
-- `git clone --recursive https://github.com/JoshParnell/ltheory-old.git ltheory-old`
-
-## Compiling
-
-Once you have the repository, the build process proceeds in two steps (as with other CMake builds): generating the build files, and then building. There is a Python script `configure.py` at the top level of the repository to help you do this easily.
-
-From a terminal in the directory of the checked-out repository, run
-
-- `python configure.py`
-
-This runs CMake to generate the build files. Then, to compile,
-
-- `python configure.py build`
-
-This invokes compilation. It will take a while.
-
-## Running an App
-
-If the compilation is successful, you now have `bin/launch` (`bin/launch.exe` on Windows), the main executable. It runs a script app: `resource/script/App/<name>.luau`.
-
-- `python configure.py run <app name>` or `bin/launch <app name>`
-
-`ltheory` is the game. The others are demos and tools, for example `war` (an AI skirmish), `dogfight`, `rails` (warp rails), `observatory` (a battle seen from a free camera), `model` (generated ships, stations and asteroids), `platemesh` (a model editor) and `map`. Ctrl+Tab opens the developer panel in ltheory and most of the demos.
-
-# Example of the Entire Process
-
-An example of the entire sequence of commands to run an LTSL app, starting from nothing (but having the prerequisites installed):
-
-Open Git Bash. Each line below is one command, some of which will take a while to complete:
-
+```sh
+sudo apt install build-essential cmake python3 git-lfs libglew-dev libglu1-mesa-dev \
+  libfreetype-dev libx11-dev libxrandr-dev libudev-dev libgl-dev
 ```
-cd ~/Desktop
+
+Audio goes through the vendored miniaudio, so no audio libraries are needed. With no audio device the game runs silently.
+
+## Getting the source
+
+The art, fonts and sounds are stored with Git LFS, and SFML and Luau are submodules. Install LFS before cloning, or most resources will be broken in ways that are hard to recognise.
+
+```sh
 git lfs install
-git clone --recursive https://github.com/JoshParnell/ltheory-old.git ltheory-old
-cd ltheory-old
-python configure.py
-python configure.py build
-python configure.py run war
+git clone --recursive <this repository's URL> ltheory
+cd ltheory
 ```
+
+## Building
+
+```sh
+python3 configure.py          # generate the build files (CMake)
+python3 configure.py build    # compile; the first time takes a while
+```
+
+This leaves three programs in `bin/`: `launch` (runs an app in a window), `ltcore` (runs engine-free scripts with no window) and `luaucheck` (the type checker). Scripts are read at start, so changing a `.luau` file needs no rebuild.
+
+## Playing
+
+```sh
+bin/launch game
+```
+
+On a laptop with two graphics cards, `DRI_PRIME=1 bin/launch game` runs it on the faster one.
+
+The game opens on a menu: continue, new game (pick a seed and a galaxy size), load, options (sound on or off, and the loudness of effects and music), quit. A new game starts you docked at a station with a small ship; the Guide button lists things to do, roughly in the order a new pilot would want them.
+
+| | |
+|---|---|
+| Left click | Select something in space or on the overview |
+| Right click | A menu of what can be done about it, with distances for orbit, keep at range and warp |
+| Double click (overview) | Approach it, or warp to it if it is far off |
+| Left drag, mouse wheel | Turn the camera, zoom |
+| Q, W, E, A | Approach, orbit, keep at range, align |
+| S, D | Warp to, dock or jump |
+| L, Tab | Lock or unlock, pick the next hostile ship |
+| F1 to F12 | Switch the fitted modules on and off |
+| Space | Stop |
+| C, M | Camera follows what is selected, the star map |
+| P, Escape | Pause, the menu |
+| F9, F10 | Quick save, quick load |
+
+Docking saves the game. Saves and settings are kept in `save/`, which git ignores.
+
+## Other apps and tools
+
+`bin/launch <name>` runs `resource/script/App/<name>.luau`. Besides `game` there are the old prototype (`ltheory`) and the original demos and tools, among them `war`, `dogfight`, `rails`, `observatory`, `model`, `platemesh` and `map`.
+
+| | |
+|---|---|
+| `script/check` | Says whether the tree is healthy: type check, engine-free specs, about thirty scripted play-throughs of the game, and screenshot comparisons. It opens many short windows and takes about a quarter of an hour. `--fast` skips everything that opens a window. |
+| `bin/luaucheck` | Type-checks every script in strict mode. |
+| `bin/ltcore Tool/specs` | Runs the engine-free test suites. |
+| `script/viewer` | One window for looking at hulls, stations, planets and effects, and for taking pictures of them. |
+| `script/soundgen` | Makes the game's own sounds and music from the written descriptions in `resource/sound/made/sounds.txt`. |
+
+`docs/tools.md` covers these and the rest, and `docs/harness.md` the scripted harness the play-throughs use.
+
+## Where things are
+
+| | |
+|---|---|
+| `resource/script/Core/` | The game: all state and rules, engine-free and deterministic (`docs/design/core.md`) |
+| `resource/script/Game/` | What the player sees and hears: the scene, the interface, sound and music |
+| `resource/script/App/` | The apps, `game.luau` among them |
+| `resource/script/Tool/` | Engine-free tools: the spec runner, the simulation runs |
+| `src/` | The engine (`liblt`), the launcher, `ltcore` and `luaucheck` |
+| `resource/` | Shaders, fonts, textures, sounds |
+| `test/` | Scripted play-throughs (`scenario/`) and stored screenshots (`golden/`) |
+| `docs/` | The roadmap, design notes, and a catalogue of the old codebase |
+| `ext/`, `extbin/`, `extlib/` | Third-party code and libraries |
+
+## Sound and music
+
+The original engine's sounds are in `resource/sound`. The sounds and music under `resource/sound/made` were generated from text descriptions with ElevenLabs' sound-effect and music services, by `script/soundgen`; the descriptions are kept beside them in `sounds.txt`.
+
+Nothing is needed to play them. Making new ones needs an ElevenLabs API key in the environment or in a `.env` file at the top of the repository (`ELEVENLABS_API_KEY=...`), which git ignores, and spends credits on that account.
+
+## Licence
+
+The code is in the public domain (see `LICENSE`). Third-party code under `ext/` carries its own licences.
