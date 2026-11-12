@@ -1,0 +1,34 @@
+/* A cloaked hull, as its own pilot sees it: not the hull, but the light
+   bending round it. Drawn on the hull's own mesh in place of its paint
+   (Game/View/Hull's Ghost), with additive blending, no depth writing and
+   both faces: a thin rim where the surface turns away from the eye, a
+   slow shimmer crawling over it, faint lines running down its length,
+   and next to nothing where it faces the eye. So the shape is still
+   read, the stars show through it, and nobody takes it for a hull.
+
+   Positions are the hull's own, so it looks the same at any size. */
+
+#include frag.jsl
+#include math.jsl
+#include color.jsl
+#include lighting.jsl
+#include worldnoise.jsl
+
+FRAG_IN vec3 normal;
+FRAG_IN vec3 position;
+
+uniform vec3 ghostTint;
+uniform float ghostGlow;
+uniform float time;
+
+void main() {
+  vec3 rd = normalize(position - eye);
+  vec3 n = normalize(normal);
+  float facing = abs(dot(n, rd));
+  float rim = pow(1.0 - facing, 2.5);
+  /* (the shimmer drifts along the hull, and the lines run with it) */
+  float shimmer = wn_fbm(vertpos * 5.0 + vec3(0.0, 0.11 * time, 0.07 * time), 3, 0.55);
+  float lines = smoothstep(0.82, 1.0, sin(vertpos.y * 90.0 + shimmer * 9.0 - 1.3 * time));
+  float a = ghostGlow * (rim * (0.45 + 0.75 * shimmer) + 0.05 * lines + 0.012);
+  RETURN(vec4(ghostTint * a, 1.0));
+}

@@ -1,0 +1,58 @@
+# A cloak, as its pilot sees it, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/cloak.txt
+#
+# A cloaking device is given and fitted in place of the second gun. By
+# the station it will not run: something is too near. At a belt it
+# does: the HUD says so, and the ship is drawn as the light bending
+# round it and not as a hull, with nothing on its hardpoints. Nothing
+# can be locked from inside it. Switched off, the hull is back, and its
+# gun with it.
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Give('cloak.device', 1))
+lua GameDebug.Train('electronics', 5)
+lua GameDebug.Train('cloaking', 5)
+frames 3
+until GameDebug.Press('Unfit:high2')
+until GameDebug.Fitted('autocannon.small') == 1
+until GameDebug.Press('Fit:cloak.device')
+until GameDebug.Fitted('cloak.device') == 1
+
+# Beside the station there is no cloaking.
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('Stop'))
+frames 30
+lua assert(not GameDebug.Ghost(), 'a ship that is not cloaked is drawn as itself')
+lua assert(select(2, GameDebug.Ghost()) > 0, 'and its gun is on its hardpoint')
+lua GameDebug.Key('F2')
+frames 90
+lua assert(GameDebug.Running() == 0 and not GameDebug.Ghost(), 'a cloak should not run this near a station')
+
+# At a belt, away from everything, it does.
+lua assert(GameDebug.Select('belt'), 'no belt on the overview')
+lua GameDebug.Key('S')
+lua GameDebug.TimeScale(8)
+until GameDebug.InWarp()
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Order('Stop'))
+lua GameDebug.Key('F2')
+until GameDebug.Running() == 1
+until GameDebug.Ghost()
+frames 10
+lua assert(select(2, GameDebug.Ghost()) == 0, 'a cloaked ship should have nothing drawn on its hardpoints')
+lua assert(GameDebug.Select('asteroid'), 'no rock on the overview')
+lua assert(not GameDebug.Order('LockTarget', 'asteroid'), 'nothing is locked from inside a cloak')
+
+# Off again: the hull is back, and what is mounted on it.
+lua GameDebug.Key('F2')
+until GameDebug.Running() == 0
+until not GameDebug.Ghost()
+until select(2, GameDebug.Ghost()) > 0
+
+echo cloak scenario passed
+quit

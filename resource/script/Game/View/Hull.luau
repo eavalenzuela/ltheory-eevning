@@ -59,6 +59,19 @@ Hull.looks = {
     plating = { 0.25, 0.19, 0.16 }, patch = { 0.50, 0.48, 0.44 }, frame = { 0.13, 0.12, 0.12 },
     glow = { 1.0, 0.25, 0.10 }, trim = { 0.50, 0.08, 0.05 }, wear = 0.85, rust = 0.85, sheets = 3.2, mottle = 1.0,
   },
+  -- A pirate veteran's: the same dark hull, kept from rusting through,
+  -- with what was patched in and the trim painted bone white. And a
+  -- captain's: black and well kept, what was patched in painted their
+  -- red, gold trim, lit ports. (So the two are told from the pack by
+  -- eye. First drafts.)
+  veteran = {
+    plating = { 0.20, 0.16, 0.15 }, patch = { 0.86, 0.83, 0.72 }, frame = { 0.12, 0.11, 0.11 },
+    glow = { 1.0, 0.25, 0.10 }, trim = { 0.86, 0.83, 0.72 }, wear = 0.55, rust = 0.40, sheets = 3.2, mottle = 0.9,
+  },
+  captain = {
+    plating = { 0.05, 0.045, 0.05 }, patch = { 0.55, 0.05, 0.04 }, frame = { 0.08, 0.07, 0.07 },
+    glow = { 1.0, 0.45, 0.12 }, trim = { 0.90, 0.66, 0.15 }, wear = 0.22, rust = 0.15, sheets = 3.2, mottle = 0.6, lights = 0.3,
+  },
   -- Hulls no faction owns: plain blue-grey, a yellow stripe, a cold light.
   civil = {
     plating = { 0.40, 0.44, 0.48 }, patch = { 0.62, 0.62, 0.58 }, frame = { 0.16, 0.16, 0.17 },
@@ -2206,6 +2219,10 @@ export type Built = {
   -- The mounts that are not wholly on the hull, each in a line of words
   -- (none, for a design that is as it should be: Hull.Audit).
   hanging: { string },
+  -- What it is made of, and the same drawn cloaked, once that has been
+  -- asked for (Hull.Ghost).
+  meshes: { Mesh },
+  ghost: Model?,
 }
 
 local built: { [string]: Built } = {}
@@ -2228,19 +2245,21 @@ end
 -- The model of a hull type and how big it came out, or nil if nobody
 -- has designed it. Made once and kept. 'pirate' asks for the hull as a
 -- pirate flies it, whoever built it: patched, and in their paint (a
--- pirate hull is that anyway).
-function Hull.Build(type: string, pirate: boolean?): Built?
+-- pirate hull is that anyway). 'rank': it is a pirate veteran's (1) or
+-- a captain's (2), and is painted as theirs are.
+function Hull.Build(type: string, pirate: boolean?, rank: number?): Built?
   local design = designs[type]
   if design == nil then
     return nil
   end
   local patched = pirate == true and design.patch == nil
-  local key = if patched then type .. ":pirate" else type
+  local ranked = if pirate == true and rank == 1 then Hull.looks.veteran elseif pirate == true and rank == 2 then Hull.looks.captain else nil
+  local key = (if patched then type .. ":pirate" else type) .. (if ranked then `:{rank}` else "")
   local made = built[key]
   if made then
     return made
   end
-  local look = if patched then Hull.looks.unbound else design.look or Hull.looks[design.faction]
+  local look = ranked or (if patched then Hull.looks.unbound else design.look or Hull.looks[design.faction])
   -- (its hardpoints, if they are where the building of it says)
   local place = design.place
   if place then
@@ -2253,7 +2272,7 @@ function Hull.Build(type: string, pirate: boolean?): Built?
   b.even = if patched then nil else design.even
   table.clear(exhausts)
   design.draw(b)
-  local model, lower, upper = Plates.Finish(b, look, design.sheets)
+  local model, lower, upper, meshes = Plates.Finish(b, look, design.sheets)
   local size = upper - lower
   -- (a design has to have the hardpoints the game says the hull has)
   local hull = Ships.byId[type]
@@ -2299,9 +2318,18 @@ function Hull.Build(type: string, pirate: boolean?): Built?
   end
   local result: Built = { model = model, radius = radius, turrets = design.turrets,
     launchers = design.launchers, fit = design.fit, engines = table.clone(exhausts), glow = look.fire or look.glow,
-    lower = lower, upper = upper, hanging = hanging }
+    lower = lower, upper = upper, hanging = hanging, meshes = meshes }
   built[key] = result
   return result
+end
+
+-- A built hull as it is drawn cloaked: its own shape, as light bending
+-- round something that is not seen. Made once and kept.
+local GHOST = vector.create(0.45, 0.75, 1.0)
+function Hull.Ghost(made: Built): Model
+  local ghost: Model = made.ghost or Plates.Ghost(made.meshes, GHOST, 0.42)
+  made.ghost = ghost
+  return ghost
 end
 
 -- Every design's mounts that are not wholly on its hull, in words: none,

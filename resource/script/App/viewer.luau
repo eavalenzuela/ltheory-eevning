@@ -167,6 +167,22 @@ for _, type in Hull.Types() do
   end
 end
 
+-- The pirates' ranks: a hull of theirs as one of the pack flies it, as
+-- a veteran does and as a captain does ("rank-"; the kind is the hull
+-- and "@" the rank: Hull.Build's).
+for rank, who in { [0] = "0-pack", "1-veteran", "2-captain" } do
+  for _, hull in { "frigate.cutthroat", "cruiser.marauder" } do
+    local short = string.match(hull, "^%a+%.(.+)$") or hull
+    for at, view in HULL_VIEWS do
+      if at == 1 or at == 3 then
+        local eye: vector = view[2]
+        table.insert(VIEWS, { name = `rank-{short}-{who}-{view[1]}`, kind = `hull-{hull}@{rank}`, seed = 1, eye = eye, look = view[3],
+          light = eye + vector.create(0.5, 0.9, 0.2) * (0.6 * vector.magnitude(eye)) })
+      end
+    end
+  end
+end
+
 -- Wrecks: each designed hull's, and the plain wreckage of a ship nobody
 -- has designed ("wreck-plain"), as they lie half a minute after.
 local WRECKS = Hull.Types()
@@ -332,7 +348,10 @@ return AppShell.Create(function(): Widget
     end
     local hull = string.match(kind, "^hull%-(.+)$")
     if hull then
-      local built = assert(Hull.Build(hull), `no design for the hull '{hull}'`)
+      -- ("@1": as a pirate veteran flies it; "@2", a captain; "@0", one of the pack)
+      local plain, rank = string.match(hull, "^(.+)@(%d)$")
+      local built = if plain then assert(Hull.Build(plain, true, tonumber(rank)), `no design for the hull '{plain}'`)
+        else assert(Hull.Build(hull), `no design for the hull '{hull}'`)
       local object = Object_Scenery({})
       Object_SetRenderable(object, built.model)
       return object, built.radius
@@ -598,7 +617,7 @@ return AppShell.Create(function(): Widget
       end
       local hull = string.match(v.kind, "^hull%-(.+)$")
       if hull then
-        dress(hull, radius)
+        dress((string.gsub(hull, "@%d$", "")), radius)
       end
       camera:SetTarget(stage[1])
       built = key

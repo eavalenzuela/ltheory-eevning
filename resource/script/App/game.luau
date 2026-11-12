@@ -1585,6 +1585,21 @@ function Debug.Tracking(): (number, number, number)
   return scene.tracking, scene.yaw, scene.pitch
 end
 
+-- Whether the pilot's own ship is drawn cloaked (as light bending round
+-- it, not as a hull), and how many things are on its hardpoints in the
+-- scene (nothing is, while it is).
+function Debug.Ghost(): (boolean, number)
+  local id = session.game.state.player.ship
+  local armed = scene.arms[id]
+  local mounted = 0
+  if armed then
+    for _, point in armed.points do
+      mounted += #point.arms
+    end
+  end
+  return scene.ghosts[id] == true, mounted
+end
+
 -- Press a key by its name ("Q", "Space", "Tab", "F1": Game/UI/Keys), as
 -- a pilot at the keyboard would. False if there is no such key.
 function Debug.Key(name: string): boolean

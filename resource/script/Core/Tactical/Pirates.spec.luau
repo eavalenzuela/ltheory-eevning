@@ -269,6 +269,9 @@ suite:Case("a veteran of a kind fits the custom make of whatever it has one of, 
   local graded = 0
   for _, kind in Pirates.kinds do
     t.eq(Pirates.Graded(kind, 0), kind)
+    -- (what one is, is told by the name it flies under: whoever draws it asks)
+    t.eq({ Pirates.Rank(kind.name), Pirates.Rank(Pirates.Graded(kind, 1).name), Pirates.Rank(Pirates.Graded(kind, 2).name) },
+      if Ships.byId[kind.hull].class == "works" then { 0, 0, 0 } else { 0, 1, 2 }, kind.name)
     -- (nobody commands a store)
     if Ships.byId[kind.hull].class == "works" then
       t.eq({ Pirates.Graded(kind, 1), Pirates.Graded(kind, 2) }, { kind, kind })

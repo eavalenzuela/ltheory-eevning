@@ -69,6 +69,9 @@
 #   game-errand  a hired pilot sent to buy (test/scenario/errand.txt):
 #               the Market tab says where else a thing is to be had,
 #               a pilot is sent for a thousand, and brings them back
+#   game-cloak  a cloak as its pilot sees it (test/scenario/cloak.txt): it
+#               will not run by a station, at a belt the ship is drawn
+#               as a ghost with nothing mounted, and off it is itself
 #   game-tackle  holding another ship (test/scenario/tackle.txt): a
 #               entanglement projector and a warp disruptor fitted and used on a pirate
 #   game-salvage  salvaging (test/scenario/salvage.txt): a salvager fitted,
@@ -249,6 +252,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/courier.txt
   step game-errand 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/errand.txt
+  step game-cloak 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
+    --script test/scenario/cloak.txt
   step game-sites 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/sites.txt
   step game-tackle 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \

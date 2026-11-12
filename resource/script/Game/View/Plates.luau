@@ -677,7 +677,7 @@ end
 
 -- The model of what has been built, painted as 'look' says, and the
 -- corners of the box it fills.
-function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector, vector)
+function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector, vector, { Mesh })
   PlateMesh_AddPlateMesh(b.big, b.small, ZERO, vector.create(1, 1, 1))
   local mesh = PlateMesh_GetMesh(b.big)
   Mesh_ComputeOcclusion(mesh)
@@ -701,15 +701,36 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
 
   local model = Model_Create()
   Model_AddShell(model, mesh, skin)
+  local meshes = { mesh }
   for _, lofted in { b.skin :: Mesh?, b.apart :: Mesh? } do
     -- (the engine's faces turn the other way from the way these were wound)
     Mesh_ReverseWinding(lofted)
     Mesh_ComputeNormals(lofted)
     Mesh_ComputeOcclusion(lofted)
     Model_AddShell(model, lofted, skin)
+    table.insert(meshes, lofted :: Mesh)
   end
   local bound = Renderable_GetBound(model)
-  return model, bound.lower, bound.upper
+  return model, bound.lower, bound.upper, meshes
+end
+
+-- The same shape as a finished model (its meshes: Plates.Finish gives
+-- them), not painted but drawn as light bending round something that
+-- is not seen (fx_ghost.jsl): what a cloaked hull looks like to its
+-- own pilot. 'tint' is the colour of that light.
+function Plates.Ghost(meshes: { Mesh }, tint: vector, glow: number): Model
+  local skin = ShaderInstance_Create(Shader_Create("npm.jsl", "fx_ghost.jsl"))
+  ShaderInstance_SetState(skin, "BlendModeAdditive")
+  ShaderInstance_SetState(skin, "ZWritableOff")
+  ShaderInstance_SetState(skin, "CullModeDisabled")
+  ShaderInstance_SetVec3(skin, "ghostTint", tint)
+  ShaderInstance_SetFloat(skin, "ghostGlow", glow)
+  ShaderInstance_Link(skin)
+  local model = Model_Create()
+  for _, mesh in meshes do
+    Model_AddShell(model, mesh, skin)
+  end
+  return model
 end
 
 return Plates

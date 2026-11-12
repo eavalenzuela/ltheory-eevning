@@ -34,6 +34,7 @@ local Planet = require("@lt/Game/View/Planet")
 local Star = require("@lt/Game/View/Star")
 local Starbase = require("@lt/Game/View/Starbase")
 local Modules = require("@lt/Core/Data/Modules")
+local Pirates = require("@lt/Core/Tactical/Pirates")
 local Motion = require("@lt/Core/Tactical/Motion")
 local Ores = require("@lt/Core/Data/Ores")
 local Session = require("@lt/Game/Session")
@@ -138,6 +139,7 @@ export type Scene = {
   zoomAway: number,                   -- the zoom there was before docking, to go back to
   arms: { [number]: Armed },          -- what is on the hardpoints of each ship of our own design
   armsTick: number,                   -- the tick the arms were last checked against the fits
+  ghosts: { [number]: boolean },      -- the ships drawn cloaked now (Hull.Ghost in place of the hull)
   armsTime: number,                   -- when (scene time) the turrets were last swung
 }
 
@@ -201,7 +203,7 @@ function Scene.New(camera: Camera): Scene
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6, tracking = 0,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
     wreckage = {}, works = {}, offsets = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, veil = 0, rush = 0,
-    standing = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0,
+    standing = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0, ghosts = {},
   }
 end
 
@@ -219,8 +221,8 @@ end
 local designed: { [Object]: Hull.Built } = setmetatable({} :: any, { __mode = "k" })
 
 -- ('pirate': it is a pirate's, and looks it.)
-local function makeShip(type: string, radius: number, pirate: boolean): Object
-  local built = Hull.Build(type, pirate)
+local function makeShip(type: string, radius: number, pirate: boolean, rank: number?): Object
+  local built = Hull.Build(type, pirate, rank)
   if built then
     local object = Object_Scenery({})
     Object_SetRenderable(object, built.model)
@@ -1085,11 +1087,16 @@ function Scene.Sync(scene: Scene, session: Session.Session)
   for _, id in state.ballIds do
     local ball = state.balls[id]
     local shown = ball.system == player.system and (id == player.ship or inScene[ball.grid] == true)
+    -- (a cloaked ship is seen by nobody but its own pilot)
+    local cloaked = Core.Query.Cloaked(game, id)
+    if cloaked and id ~= player.ship then
+      shown = false
+    end
     -- (and those in warp that are near, going or coming; not while the
     -- pilot's own ship is in warp, when the scene goes with it. A ship
     -- that has gone unseen stays so.)
     if not shown and grid ~= 0 and ball.system == player.system and ball.warp and ball.warp.stage == "warp"
-      and not Core.Query.Cloaked(game, id) then
+      and not cloaked then
       local x, y, z = ballAt(ball, state.tick, since)
       if (x - scene.eyeX) ^ 2 + (y - scene.eyeY) ^ 2 + (z - scene.eyeZ) ^ 2 < PASSING ^ 2 then
         shown = true
@@ -1102,10 +1109,21 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       if existing then
         proxy = existing
       else
-        proxy = makeShip(state.ships[id].type, ball.radius, state.ships[id].owner == "pirates")
+        -- (a pirate's is in the pirates' paint, and a veteran's or a captain's in their own)
+        local theirs = state.ships[id].owner == "pirates"
+        proxy = makeShip(state.ships[id].type, ball.radius, theirs, if theirs then Pirates.Rank(state.ships[id].name) else nil)
         proxy:SetName(ball.name)
         container:AddInterior(proxy)
         scene.proxies[id] = proxy
+        scene.ghosts[id] = nil
+      end
+      -- (to its own pilot a cloaked hull is the light bending round it:
+      -- the same shape, drawn another way, with nothing mounted on it)
+      local made = designed[proxy]
+      if made and cloaked ~= (scene.ghosts[id] == true) then
+        Object_SetRenderable(proxy, if cloaked then Hull.Ghost(made) else made.model)
+        scene.ghosts[id] = if cloaked then true else nil :: any
+        dropArms(scene, id)
       end
       local x, y, z, vx, vy, vz = ballAt(ball, state.tick, since)
       local at = vector.create(x - scene.ox, y - scene.oy, z - scene.oz)
@@ -1124,6 +1142,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       dropArms(scene, id)
       Object_Delete(existing)
       scene.proxies[id] = nil
+      scene.ghosts[id] = nil
     end
   end
   -- Wrecks on the grid: the hull each was, in pieces (Hull.Wreck). The
@@ -1186,7 +1205,8 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     local proxy: Object? = scene.proxies[id]
     local built = if proxy then designed[proxy] else nil
     local at: vector? = scene.screen[id]
-    if proxy and built and at then
+    -- (a cloaked ship shows no fire)
+    if proxy and built and at and not scene.ghosts[id] then
       local ball = state.balls[id]
       local warp = ball.warp
       local speed = math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy + ball.vz * ball.vz)
@@ -1243,7 +1263,8 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     local proxy: Object? = scene.proxies[id]
     local built = if proxy then designed[proxy] else nil
     local at: vector? = scene.screen[id]
-    if proxy and built and at then
+    -- (nor anything on its hardpoints)
+    if proxy and built and at and not scene.ghosts[id] then
       if check or scene.arms[id] == nil then
         armShip(scene, game, id, built, container)
       end

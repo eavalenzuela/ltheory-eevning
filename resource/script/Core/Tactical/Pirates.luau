@@ -223,6 +223,13 @@ for _, kind in KINDS do
   end
 end
 
+-- What a pirate is by the name it flies under: 1 for a veteran, 2 for a
+-- captain, 0 for anybody else. (The name is all that is kept of it: for
+-- whoever draws the ship.)
+function Pirates.Rank(name: string): number
+  return if string.find(name, "^Veteran ") then 1 elseif string.find(name, " Captain$") then 2 else 0
+end
+
 function Pirates.Graded(kind: Kind, grade: number): Kind
   local rank = Pirates.GRADES[grade]
   return if rank then graded[`{kind.id}.{rank.id}`] or kind else kind
