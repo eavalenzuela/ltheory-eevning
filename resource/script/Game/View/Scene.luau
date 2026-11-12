@@ -106,6 +106,15 @@ export type Scene = {
   mining: { [number]: number },       -- when each mining module's beam was last begun, by its item
   wreckage: { [number]: Wrecked },    -- the pieces of each wreck on the grid
   works: { [number]: { Object } },    -- what stands round each station's tower: its modules, their guns, its field
+  -- Where each of those stands from the station's middle, in the order
+  -- of 'works' and after the tower's own (the first): to move them by.
+  offsets: { [number]: { vector } },
+  -- The described bodies there are proxies of (rocks, stations, gates), by id.
+  statics: { [number]: SystemData.Object },
+  -- Whose bodies are in the scene: the grid the ship is on, or in warp
+  -- the one it left and the one it is coming to (the ids, as one word).
+  sites: string,
+  left: number,                       -- the grid the ship was last on in this system; 0: none yet
   standing: { [number]: string },     -- what a pilot's starbase was made of when it was put up here
   epoch: number,                      -- the game (Session's 'epoch') the scene was made for
   volleys: number,                    -- shots of a station's batteries shown so far
@@ -120,6 +129,13 @@ export type Scene = {
 -- missile takes 'flight' seconds to arrive; anything else is instant.
 
 
+
+-- In warp, what is on the grid the ship has left, and on the one it is
+-- coming to, is drawn as it is while it is nearer than this: so that a
+-- belt's rocks fall away behind and come up ahead, and are not there
+-- one moment and gone the next. (Under FAR: past that a place is only
+-- a mark in its direction.)
+local NEAR = 550000
 
 -- Bodies beyond the renderer's reach are drawn this far away, or a
 -- little farther to stand behind a nearer one, but never past FARTHEST
@@ -155,7 +171,7 @@ function Scene.New(camera: Camera): Scene
     proxies = {}, celestials = {}, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6, tracking = 0,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
-    wreckage = {}, works = {}, standing = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0,
+    wreckage = {}, works = {}, offsets = {}, statics = {}, sites = "", left = 0, standing = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0,
   }
 end
 
@@ -325,6 +341,7 @@ local function dropWorks(scene: Scene, id: number)
     end
     scene.works[id] = nil
   end
+  scene.offsets[id] = nil
   scene.standing[id] = nil
 end
 
@@ -553,6 +570,12 @@ local function makeStation(scene: Scene, game: Core.Game, object: SystemData.Obj
   local tower = table.remove(raised, 1) :: Object
   tower:SetName(object.name)
   scene.works[object.id] = raised
+  local offsets: { vector } = { tower:GetPos() - at }
+  for _, work in raised do
+    table.insert(offsets, work:GetPos() - at)
+  end
+  scene.offsets[object.id] = offsets
+  scene.statics[object.id] = object
   local made = standing(game, object.id)
   if made then
     scene.standing[object.id] = made
@@ -587,9 +610,13 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
     Effects.Clear(scene.fx, true)
   end
   table.clear(scene.mining)
+  table.clear(scene.statics)
+  table.clear(scene.offsets)
   scene.focus = nil
   scene.star = nil
   scene.key = ""
+  scene.sites = ""
+  scene.left = 0
   scene.system = system
 
   local container = Object_System(vector.create(0, 0, 0), game.state.galaxySeed * 7919 + system)
@@ -737,34 +764,117 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     end
   end
 
-  -- A different grid: replace the bodies that sit on it. Ships are kept,
-  -- since a hull is costly to make and the player's comes along.
-  if key ~= scene.key then
+  -- Whose bodies are in the scene: the grid the ship is on. In warp, the
+  -- grid it has left and the one it is coming to (the one its landing
+  -- place belongs to, as the Core will find: Space.AssignGrid), each
+  -- for as long as it is near enough to be drawn.
+  local inScene: { [number]: boolean } = {}
+  local sites = ""
+  if grid ~= 0 then
+    inScene[grid] = true
+    sites = `{grid} `
+    scene.left = grid
+  elseif me and me.warp and me.warp.stage == "warp" then
+    local warp = me.warp
+    local coming, nearest = 0, Constants.GRID_RADIUS
+    for _, object in objects do
+      if object.site == object.id then
+        local d = math.sqrt((object.x - warp.tx) ^ 2 + (object.y - warp.ty) ^ 2 + (object.z - warp.tz) ^ 2)
+        if d < nearest then
+          coming, nearest = object.id, d
+        end
+      end
+    end
+    if coming == 0 then
+      for _, id in state.gridIds do
+        local open = state.grids[id]
+        if open.system == player.system then
+          local d = math.sqrt((open.x - warp.tx) ^ 2 + (open.y - warp.ty) ^ 2 + (open.z - warp.tz) ^ 2)
+          if d < nearest then
+            coming, nearest = id, d
+          end
+        end
+      end
+    end
+    for _, id in { scene.left, coming } do
+      if id ~= 0 and not inScene[id] then
+        local open = state.grids[id]
+        local anchor: { x: number, y: number, z: number }? = open
+        if anchor == nil and id < Constants.FIRST_DYNAMIC_ID then
+          anchor = objects[id % Constants.STRUCTURE_ID_SPAN]
+        end
+        if anchor and (anchor.x - scene.eyeX) ^ 2 + (anchor.y - scene.eyeY) ^ 2 + (anchor.z - scene.eyeZ) ^ 2 < NEAR ^ 2 then
+          inScene[id] = true
+          sites ..= `{id} `
+        end
+      end
+    end
+  end
+
+  -- Another grid, or another origin: every trail has had the origin
+  -- moved under it.
+  local moved = key ~= scene.key
+  if moved then
     scene.key = key
-    -- (the origin has moved under every trail)
     if scene.fx then
       Effects.Still(scene.fx)
     end
-    for id, object in scene.proxies do
+  end
+  -- Other bodies than were there: take away what is no longer wanted,
+  -- and make what is. Ships are kept, since a hull is costly to make
+  -- and the player's comes along.
+  if sites ~= scene.sites then
+    scene.sites = sites
+    local gone: { number } = {}
+    for id in scene.proxies do
       if state.balls[id] == nil then
-        dropArms(scene, id)
-        dropWreck(scene, id)
-        dropWorks(scene, id)
-        Object_Delete(object)
-        scene.proxies[id] = nil
+        local static = scene.statics[id]
+        local wreck = state.wrecks[id]
+        local site = if static then static.site elseif wreck then wreck.grid else 0
+        if not inScene[site] then
+          table.insert(gone, id)
+        end
       end
     end
-    if grid ~= 0 then
-      for _, object in objects do
-        if object.site == grid and object.kind == "station" then
+    for _, id in gone do
+      dropArms(scene, id)
+      dropWreck(scene, id)
+      dropWorks(scene, id)
+      Object_Delete(scene.proxies[id])
+      scene.proxies[id] = nil
+      scene.statics[id] = nil
+    end
+    for _, object in objects do
+      if inScene[object.site] and not scene.proxies[object.id] then
+        if object.kind == "station" then
           scene.proxies[object.id] = makeStation(scene, game, object,
             vector.create(object.x - scene.ox, object.y - scene.oy, object.z - scene.oz), container)
-        elseif object.site == grid and object.kind ~= "belt" then
+        elseif object.kind ~= "belt" then
           local made = makeStatic(object)
           container:AddInterior(made)
           place(made, vector.create(object.x - scene.ox, object.y - scene.oy, object.z - scene.oz))
           scene.proxies[object.id] = made
+          scene.statics[object.id] = object
         end
+      end
+    end
+    moved = true
+  end
+  -- In warp the origin is the ship, and goes with it: everything that
+  -- stands still is somewhere else each frame. (And once more when the
+  -- origin is a grid's again.)
+  if moved or grid == 0 then
+    for id, object in scene.statics do
+      local at = vector.create(object.x - scene.ox, object.y - scene.oy, object.z - scene.oz)
+      local proxy = scene.proxies[id]
+      local offsets = scene.offsets[id]
+      if offsets then
+        proxy:SetPos(at + offsets[1])
+        for index, work in scene.works[id] do
+          work:SetPos(at + offsets[index + 1])
+        end
+      else
+        place(proxy, at)
       end
     end
   end
@@ -788,18 +898,19 @@ function Scene.Sync(scene: Scene, session: Session.Session)
   end
 
   table.clear(scene.screen)
-  if grid ~= 0 then
+  if next(inScene) then
     for _, object in objects do
-      if object.site == grid then
+      if inScene[object.site] then
         scene.screen[object.id] = vector.create(object.x - scene.ox, object.y - scene.oy, object.z - scene.oz)
       end
     end
   end
 
-  -- Ships on the grid (in warp, only the player's own).
+  -- Ships on the grid (in warp, the player's own, and those where it
+  -- has been and is going while they are near).
   for _, id in state.ballIds do
     local ball = state.balls[id]
-    local shown = ball.system == player.system and (id == player.ship or (grid ~= 0 and ball.grid == grid))
+    local shown = ball.system == player.system and (id == player.ship or inScene[ball.grid] == true)
     local existing: Object? = scene.proxies[id]
     if shown then
       local proxy: Object
@@ -832,12 +943,14 @@ function Scene.Sync(scene: Scene, session: Session.Session)
   end
   -- Wrecks on the grid: the hull each was, in pieces (Hull.Wreck). The
   -- wreck's own object is a bare point for the rest to refer to.
-  if grid ~= 0 then
+  if next(inScene) then
     for _, id in state.wreckIds do
       local wreck = state.wrecks[id]
-      if wreck.system == player.system and wreck.grid == grid then
+      if wreck.system == player.system and inScene[wreck.grid] then
         local at = vector.create(wreck.x - scene.ox, wreck.y - scene.oy, wreck.z - scene.oz)
-        if not scene.proxies[id] then
+        if scene.proxies[id] then
+          scene.proxies[id]:SetPos(at)
+        else
           local anchor = Object_Scenery({})
           container:AddInterior(anchor)
           anchor:SetPos(at)

@@ -183,6 +183,18 @@ function Debug.Distance(what: string): number
   return if entry then entry.distance else math.huge
 end
 
+-- How many of the system's standing bodies (rocks, stations, gates) are
+-- drawn in the scene now, and the seconds of the warp the ship is in
+-- that are left (0 out of warp): for checking that what a ship leaves
+-- and comes to is there to be seen at the ends of a warp.
+function Debug.Bodies(): (number, number)
+  local count = 0
+  for _ in scene.statics do
+    count += 1
+  end
+  return count, if scene.warp > 0 then scene.warpSeconds else 0
+end
+
 -- The engine objects in the scene, with their sizes: for checking the view.
 function Debug.Proxies()
   for id, object in scene.proxies do

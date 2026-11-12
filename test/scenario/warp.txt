@@ -1,0 +1,44 @@
+# What is seen at the ends of a warp, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/warp.txt
+#
+# A ship that warps away from a station to a belt sees the station fall
+# away behind it, and the belt's rocks come up ahead before it is there:
+# they are not taken out of the scene the moment the warp begins, nor
+# put in only when it is over. In the middle of the warp, with nothing
+# near, nothing stands in the scene.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Peaceful(true)
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 5
+lua assert(GameDebug.Bodies() >= 1, 'the station should be in the scene')
+
+# Away to the belt, looking back at the station.
+lua assert(GameDebug.LookFrom('station', 14))
+lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
+until GameDebug.InWarp()
+frames 20
+lua assert(GameDebug.Bodies() >= 1, 'the station should still be there to see as the warp begins')
+shot warp-leaving
+
+# In the middle of it nothing is near.
+until GameDebug.InWarp() and select(2, GameDebug.Bodies()) < 6 and GameDebug.Bodies() == 0
+lua assert(GameDebug.LookAt('belt', 9))
+
+# Coming out: the rocks are there before the ship is.
+until not GameDebug.InWarp() or GameDebug.Bodies() > 10
+lua assert(GameDebug.InWarp(), 'the rocks should be in the scene before the warp is over')
+lua _G.rocks = GameDebug.Bodies()
+lua _G.early = select(2, GameDebug.Bodies())
+lua assert(_G.early > 1, 'the rocks should come up ahead for more than a second, not ' .. _G.early)
+shot warp-arriving
+until GameDebug.Idle()
+frames 5
+lua assert(GameDebug.Bodies() == _G.rocks, 'the rocks seen coming should be the rocks that are there')
+shot warp-arrived
+
+echo warp scenario passed
+quit

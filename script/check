@@ -79,6 +79,8 @@
 #               round, in a cone pointed at something, and at a short range
 #   game-away   time (test/scenario/away.txt): run faster at a station only,
 #               and training that goes on while the game is not played
+#   game-warp   the ends of a warp (test/scenario/warp.txt): the station left
+#               is seen falling away, and the belt's rocks coming up ahead
 #   game-context the right-click menu (test/scenario/context.txt): brought up
 #               on the overview, and orbit, keep and warp at a distance
 #               picked from it
@@ -230,6 +232,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/dscan.txt
   step game-away 0 timeout 300 bin/launch game --no-present --fixed-step 60 --timeout 240 \
     --script test/scenario/away.txt
+  step game-warp 0 timeout 300 bin/launch game --no-present --fixed-step 60 --timeout 240 \
+    --script test/scenario/warp.txt
   step game-context 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 340 \
     --script test/scenario/context.txt
   step game-nomads 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 340 \
