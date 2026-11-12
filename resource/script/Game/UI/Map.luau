@@ -14,6 +14,7 @@
 local Colors = require("@lt/Colors")
 local Core = require("@lt/Core/Api")
 local Factions = require("@lt/Core/Data/Factions")
+local Format = require("@lt/Game/Format")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Im = require("@lt/Game/UI/Im")
 local Session = require("@lt/Game/Session")
@@ -226,6 +227,12 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   if session.destination ~= 0 and session.destination ~= here then
     mark(session.destination, 11, Im.ACCENT, true)
   end
+  -- Where pirates are massing (Tactical/Surges), ringed twice in red.
+  local surge = Core.Query.Surge(game)
+  if surge then
+    mark(surge.system, 13, BAND.lawless, surge.system ~= here and surge.system ~= session.destination)
+    mark(surge.system, 16, BAND.lawless, false)
+  end
   -- Where the pilot is next to go, in the gold the overview picks such
   -- places out in: the next system of the way to the destination, and
   -- the systems their jobs in hand are next to be done or paid in.
@@ -311,6 +318,11 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
       Im.Text(`Next: {systems[nextStop].name}`, px, line, 13, NEXT)
       line += 20
     end
+  end
+  if surge then
+    Im.Text(`Pirate surge in {surge.name}: ` .. (if surge.jumps == 0 then "here" elseif surge.jumps == 1 then "1 jump" else `{surge.jumps} jumps`)
+      .. `, {Format.Duration(surge.left)} left`, px, line, 12, BAND.lawless)
+    line += 20
   end
   if #jobSystems > 0 then
     -- (the ringed systems: what is in hand there)

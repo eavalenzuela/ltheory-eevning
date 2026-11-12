@@ -1625,6 +1625,16 @@ function Debug.Tracking(): (number, number, number)
   return scene.tracking, scene.yaw, scene.pitch
 end
 
+-- Where pirates are massing (Tactical/Surges): the system's id (0 with
+-- no surge on), how many jumps off it is, and the seconds it has left.
+function Debug.Surge(): (number, number, number)
+  local surge = Core.Query.Surge(session.game)
+  if surge == nil then
+    return 0, 0, 0
+  end
+  return surge.system, surge.jumps, surge.left
+end
+
 -- How many times a gate in sight has been lit by a ship going through
 -- it (the pilot's own, or anybody's).
 function Debug.GatesLit(): number

@@ -818,8 +818,14 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       -- (how safe it is here: what comes to a belt follows from it)
       local _, band = Core.Query.Security(game, player.system)
       local whose = if player.owner ~= "" then string.upper(player.owner) else "UNCLAIMED"
-      Im.Text(string.format("%s  -  %s  %.1f", whose, BANDS[band or "secure"], player.security), left + 24, top + 51, 13,
-        if band == "secure" then SAFE elseif band == "low" then Im.WARN else HULL)
+      local standing = string.format("%s  -  %s  %.1f", whose, BANDS[band or "secure"], player.security)
+      Im.Text(standing, left + 24, top + 51, 13, if band == "secure" then SAFE elseif band == "low" then Im.WARN else HULL)
+      -- (and whether pirates are massing here: Tactical/Surges)
+      local surge = Core.Query.Surge(game)
+      if surge and surge.system == player.system then
+        Im.Text(`PIRATE SURGE  bounties doubled, {Format.Duration(surge.left)} left`, left + 24 + Im.TextWidth(standing, 13) + 16, top + 51, 13,
+          HULL)
+      end
       Im.Text(`{player.shipName}  -  {player.hull.name}`, left + 24, top + 68, 15, Im.DIM)
       Im.Text(`{game.state.wallet} credits`, left + 24, top + 87, 15, Im.DIM)
       if session.message ~= "" and game.state.tick - session.messageTick < 10 then

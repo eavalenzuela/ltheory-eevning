@@ -41,6 +41,7 @@ local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local Surges = require("@lt/Core/Tactical/Surges")
 local System = require("@lt/Core/Describe/System")
 
 local Pirates = {}
@@ -280,8 +281,9 @@ Pirates.AWAY = 2
 -- Put a pack at a place: each of its ships somewhere 25 to 35 km out
 -- from the middle of it, of the grade the space brings (and a
 -- stronghold's first a captain), and say that they have come.
+-- ('keen': how many times as likely each is to be a veteran or a captain.)
 local function bring(state: State.State, system: number, site: System.Object, band: string, pack: { string }, stronghold: boolean,
-  rng: Rng.Rng, away: boolean, events: { Event })
+  rng: Rng.Rng, away: boolean, events: { Event }, keen: number?)
   local captains = 0
   for index, id in pack do
     local angle = Rng.Float(rng, 0, 2 * math.pi)
@@ -289,7 +291,8 @@ local function bring(state: State.State, system: number, site: System.Object, ba
     -- (what grade it is, rolled apart, so that nothing else about the pack follows from it)
     local luck = Rng.Next(Rng.For(state.historySeed, state.tick, site.id, index, 73))
     local odds = Pirates.GRADED[band] or Pirates.GRADED.low
-    local grade = if (stronghold and index == 1) or luck < odds[2] then 2 elseif luck < odds[2] + odds[1] then 1 else 0
+    local captain, veteran = odds[2] * (keen or 1), odds[1] * (keen or 1)
+    local grade = if (stronghold and index == 1) or luck < captain then 2 elseif luck < captain + veteran then 1 else 0
     captains += if grade == 2 then 1 else 0
     local ball = Pirates.Spawn(state, Pirates.Graded(Pirates.kindById[id], grade), system,
       site.x + out * math.cos(angle), site.y + Rng.Float(rng, -3000, 3000), site.z + out * math.sin(angle), site.id)
@@ -306,7 +309,10 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   if site == nil then
     return
   end
-  local band: string = Galaxy.Band(state.galaxy.systems[me.system].security)
+  -- (where pirates are massing, the system is a kind of space worse
+  -- than it is: Tactical/Surges)
+  local surging = Surges.On(state, me.system)
+  local band: string = Surges.Band(state, me.system, Galaxy.Band(state.galaxy.systems[me.system].security))
   local camp = site.kind == "gate" and band == "lawless"
   if site.kind ~= "belt" and not camp then
     return
@@ -328,7 +334,7 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
     return
   end
   local last = state.spawned[site.id]
-  local wait = if away then RESPAWN * Pirates.AWAY else RESPAWN
+  local wait = (if away then RESPAWN * Pirates.AWAY else RESPAWN) / (if surging then Surges.SOONER else 1)
   if (last and state.tick - last < wait) or pirateOnGrid(state, me.system, site.id) then
     return
   end
@@ -354,7 +360,7 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   if hidden == nil and site.kind == "belt" and state.galaxy.systems[me.system].home and #pack > 1 then
     pack = { pack[1] }
   end
-  bring(state, me.system, site, band, pack, stronghold, rng, away, events)
+  bring(state, me.system, site, band, pack, stronghold, rng, away, events, if surging then Surges.GRADED else 1)
 end
 
 -- Bring a pack to a place for a reason that is somebody else's (a raid

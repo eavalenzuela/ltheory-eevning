@@ -181,6 +181,12 @@ export type Wreck = {
 -- whether it is in the buffer yet); and where the next pick has to be:
 -- 'along' a "row" or a "column", and which 'line' of those.
 export type HackKey = { name: string, codes: { string }, done: boolean }
+-- Pirates massing in a system (Tactical/Surges): the system (0: none is
+-- on), the tick it ends, the tick the next begins, how many pirates
+-- have been destroyed there since it began, and how many surges there
+-- have been.
+export type Surge = { system: number, ends: number, next: number, kills: number, count: number }
+
 -- A booster at work on the pilot (Data/Boosters), the tick it wears
 -- off at, and whether it sat badly: its ill effect is at work too.
 export type Boosted = { type: string, ends: number, wrong: boolean }
@@ -459,6 +465,7 @@ export type State = {
   pilots: { [number]: Pilot },  -- by ship id
   pilotIds: { number },
   spawned: { [number]: number },  -- by grid: the tick pirates last appeared there
+  surge: Surge,           -- where pirates are massing, if anywhere (Tactical/Surges)
   peaceful: boolean,      -- no pirates come (for tests, and for sightseeing)
   -- Asteroids that have been mined, by id: the units left, and the tick
   -- mining began (they grow back some hours later). A rock not listed is whole.

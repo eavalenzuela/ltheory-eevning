@@ -192,6 +192,14 @@ function Session.Notice(session: Session, event: Space.Event)
       .. (if event.left > 0 then `, and is going back for {event.left} more` else ": that is all of it"))
   elseif kind == "BuyEnded" then
     Session.Say(session, `{event.name} could not buy {event.short} of the {Types.Info(event.type).name}: {event.reason}`)
+  elseif kind == "SurgeBegan" then
+    local name = session.game.state.galaxy.systems[event.system].name
+    Session.Say(session, `PIRATE SURGE: pirates are massing ` .. (if event.jumps == 0 then `here in {name}`
+      elseif event.jumps == 1 then `in {name}, a jump off` else `in {name}, {event.jumps} jumps off`)
+      .. `. For two hours what is on their heads is doubled there`)
+  elseif kind == "SurgeEnded" then
+    local name = session.game.state.galaxy.systems[event.system].name
+    Session.Say(session, `The surge in {name} is over` .. (if event.kills > 0 then `: {event.kills} pirates were destroyed there` else ""))
   elseif kind == "TowerRaided" then
     local body = Core.Query.Body(session.game, event.station)
     local name = if body then body.name else "your tower"

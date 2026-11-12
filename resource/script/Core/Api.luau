@@ -44,6 +44,7 @@ local Missions = require("@lt/Core/Assets/Missions")
 local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Raids = require("@lt/Core/Tactical/Raids")
+local Surges = require("@lt/Core/Tactical/Surges")
 local Ships = require("@lt/Core/Data/Ships")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Skills = require("@lt/Core/Data/Skills")
@@ -79,7 +80,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 54
+Core.SAVE_VERSION = 55
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -309,6 +310,11 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- save from before has given any.
   [49] = function(state: any)
     state.couriers = state.couriers or {}
+  end,
+  -- 55: pirates mass in a system now and then. A save from before has
+  -- had none, and the first comes in its time.
+  [54] = function(state: any)
+    state.surge = state.surge or { system = 0, ends = 0, next = state.tick + 3600, kills = 0, count = 0 }
   end,
   -- 54: a booster sits badly only some of the time. One at work in a
   -- save from before did, as they all did.
@@ -647,6 +653,7 @@ function Core.New(options: Options): Game
     pilots = {},
     pilotIds = {},
     spawned = {},
+    surge = { system = 0, ends = 0, next = 0, kills = 0, count = 0 },
     peaceful = options.peaceful == true,
     rocks = {},
     rockIds = {},
@@ -666,6 +673,7 @@ function Core.New(options: Options): Game
   state.player.ship = ship.id
   state.player.home = home.id
   state.wallet = 5000
+  state.surge = Surges.None(state)
 
   -- A starter fit and a few things to try in the hangar: some of them
   -- need a skill trained first, and the blueprint needs minerals.
@@ -850,6 +858,7 @@ function Core.Step(game: Game)
   Missions.Step(state, game.events)
   Standings.Step(state)
   Assault.Step(state, game.events)
+  Surges.Step(state, game.events)
   Pirates.Populate(state, game.events)
   Traffic.Step(state, game.events)
   Pirates.Think(state, game.events)
@@ -1504,6 +1513,29 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
     defence = defence, batteries = batteries, patrol = patrol,
     raidLeast = if raids then raids[1] else 0, raidMost = if raids then raids[2] else 0,
   }
+end
+
+-- Where pirates are massing (Tactical/Surges), if anywhere: the system
+-- and its name, how many jumps from the pilot it is, the seconds the
+-- surge has left, and how many pirates have been destroyed there
+-- since it began. Nil with none on.
+export type SurgeInfo = { system: number, name: string, jumps: number, left: number, kills: number }
+-- (How far off it is, is worked out when the surge or the pilot's
+-- system changes, not every time it is asked: a screen asks every frame.)
+local surgeFar = { galaxy = nil :: any, from = 0, to = 0, jumps = 0 }
+function Query.Surge(game: Game): SurgeInfo?
+  local state = game.state
+  local surge = state.surge
+  if surge.system == 0 then
+    return nil
+  end
+  local here = Query.Player(game).system
+  if surgeFar.galaxy ~= state.galaxy or surgeFar.from ~= here or surgeFar.to ~= surge.system then
+    surgeFar.galaxy, surgeFar.from, surgeFar.to = state.galaxy, here, surge.system
+    surgeFar.jumps = math.max(0, #Galaxy.Route(state.galaxy, here, surge.system) - 1)
+  end
+  return { system = surge.system, name = state.galaxy.systems[surge.system].name, jumps = surgeFar.jumps,
+    left = math.max(0, surge.ends - state.tick) * Constants.TICK, kills = surge.kills }
 end
 
 -- What is under a moon, by the moon's id (Data/Moons): the material and

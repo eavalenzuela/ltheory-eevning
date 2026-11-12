@@ -22,6 +22,7 @@ local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
+local Surges = require("@lt/Core/Tactical/Surges")
 local Types = require("@lt/Core/Data/Types")
 local Corporation = require("@lt/Core/Assets/Corporation")
 local Wallet = require("@lt/Core/Assets/Wallet")
@@ -144,7 +145,8 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   if ship.owner == "pirates" and by == state.player.ship then
     -- (with the pilot somewhere else it was their hired pilots' doing,
     -- and half of the bounty is theirs)
-    local full = if pilot then pilot.bounty else math.floor(hull.basePrice * 0.2)
+    -- (doubled where pirates are massing, and counted there: Tactical/Surges)
+    local full = (if pilot then pilot.bounty else math.floor(hull.basePrice * 0.2)) * Surges.Fell(state, ball.system)
     local mine = state.balls[state.player.ship]
     local there = wasPlayer or (mine ~= nil and mine.system == ball.system and mine.grid == ball.grid)
     if there then

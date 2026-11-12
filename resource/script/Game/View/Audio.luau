@@ -189,7 +189,7 @@ local ANY: { [string]: { any } } = {
   JobDone = { "productionlab/complete.ogg", 0.22 }, ResearchDone = { "productionlab/complete.ogg", 0.22 },
   SkillTrained = { "ui/objective_complete.ogg", 0.22 }, CommandRejected = { "ui/cancel.ogg", 0.14 },
   PiratesArrived = { "made/ui/alert.ogg", 0.13 }, Marked = { "ui/targetlost.ogg", 0.2 },
-  TowerRaided = { "made/ui/alert.ogg", 0.13 },
+  TowerRaided = { "made/ui/alert.ogg", 0.13 }, SurgeBegan = { "made/ui/alert.ogg", 0.11 },
   StarbaseAnchored = { "made/ui/placed.ogg", 0.2 }, ColonyDeployed = { "made/ui/placed.ogg", 0.2 },
   LessonReady = { "made/ui/placed.ogg", 0.2 }, LessonDone = { "ui/objective_complete.ogg", 0.22 },
 }
