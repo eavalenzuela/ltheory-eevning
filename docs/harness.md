@@ -23,6 +23,15 @@ Each screenshot is written as `<out>/<name>.png`, and the launcher prints `SCREE
 | `--console` | Read Luau from the terminal while the app runs: each line typed is run in the app's VM and an expression's values are printed |
 | `--no-present` | Draw every frame but never show it. Screenshots still work, and a desktop that holds back a hidden window (a locked or sleeping screen can cut it to two frames a second) cannot slow the run |
 | `--selftest KIND` | Fail on purpose (`segv` or `assert`) to prove failures reach the exit status |
+| `--on-desktop` | Open the window on the desktop even for a run that is nobody's to watch (see below) |
+
+### Where a run is drawn
+
+A run given `--do`, `--script`, `--no-present`, `--fixed-step` or `--selftest` is nobody's to watch, and somebody may be working at the desktop: its window is not opened there. `bin/launch` runs itself again through `script/offscreen`, which starts a Wayland compositor (`sway`) on its headless backend: a desktop with one 1920x1080 output and no screen. Programs in it get the graphics card as they would outside (`DRI_PRIME` picks which), so a run takes as long and draws the same pictures: the golden images match to the pixel. The command's output and exit status come back as if it had been run directly (a planted crash still exits 139).
+
+`script/check` and `script/goldens` put their whole run through `script/offscreen`, so that the fifty or so windows of a full check are never seen. `--on-desktop`, to `bin/launch` or to either script, opens the windows where they can be watched. A plain `bin/launch APP` with none of the flags above is somebody playing, and opens its window as it always did.
+
+Without `sway`, `script/offscreen` falls back on `xvfb-run`, which draws in software and is many times slower (the check's time limits are not set for it); without that either it refuses. It never opens a window on the desktop by itself. The window inside is always the size of the output (1920x1080), whatever `--size` asks.
 
 ## Commands
 

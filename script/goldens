@@ -4,6 +4,10 @@
     script/goldens [NAME ...]            run scenarios and compare with their golden images
     script/goldens --update [NAME ...]   write this run's screenshots as the golden images
     script/goldens --planted             compare two made-up images that differ; must exit 1
+    script/goldens --on-desktop ...      let the windows open on the desktop
+
+The scenarios' windows are opened where nobody sees them: the whole run
+goes through script/offscreen, on a desktop of its own with no screen.
 
 Scenarios are listed in test/golden/scenarios.txt, one per line:
 
@@ -37,6 +41,16 @@ import tempfile
 from PIL import Image, ImageChops
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Off the desktop, unless the windows are asked for (and then bin/launch,
+# which would send each run there itself, is told they are).
+if "--on-desktop" in sys.argv:
+    sys.argv.remove("--on-desktop")
+    os.environ["LT_OFFSCREEN"] = "desktop"
+elif not os.environ.get("LT_OFFSCREEN") and "--planted" not in sys.argv:
+    os.chdir(ROOT)
+    os.execv(os.path.join(ROOT, "script", "offscreen"), ["script/offscreen", os.path.join("script", "goldens")] + sys.argv[1:])
+
 GOLDEN = os.path.join(ROOT, "test", "golden")
 OUT = os.path.join(ROOT, "cache", "golden")
 CHANNEL_TOLERANCE = 24

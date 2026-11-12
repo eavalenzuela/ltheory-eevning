@@ -3,6 +3,10 @@
 
 #include <poll.h>
 #include <unistd.h>
+#include <cerrno>
+#include <cstdlib>
+#include <cstring>
+#include <vector>
 
 #include "Harness.h"
 
@@ -204,6 +208,11 @@ void Usage() {
     "                   line and it is run in the app's VM, values printed\n"
     "  --no-present     draw every frame but never show it; screenshots still\n"
     "                   work, and the desktop cannot slow the run down\n"
+    "  --on-desktop     open the window on the desktop even for a run that is\n"
+    "                   nobody's to watch (one with --do, --script,\n"
+    "                   --no-present, --fixed-step or --selftest): such a run\n"
+    "                   is otherwise made where it is not seen\n"
+    "                   (script/offscreen)\n"
     "  --selftest KIND  fail on purpose once the engine is up, to prove that\n"
     "                   failures reach the exit status: segv or assert\n");
 }
@@ -220,10 +229,16 @@ int main(int argc, char const* argv[]) {
   float fixedHz = 0;
   bool present = true;
   bool console = false;
+  bool scripted = false;
+  bool onDesktop = false;
   for (int i = 2; i < argc; ++i) {
     String opt = argv[i];
     if (opt == "--no-present") {
       present = false;
+      continue;
+    }
+    if (opt == "--on-desktop") {
+      onDesktop = true;
       continue;
     }
     if (opt == "--console") {
@@ -236,13 +251,16 @@ int main(int argc, char const* argv[]) {
       return 1;
     }
     String value = argv[++i];
-    if (opt == "--do")
+    if (opt == "--do") {
       harness.Load(value);
+      scripted = true;
+    }
     else if (opt == "--script") {
       if (!harness.LoadFile(value)) {
         printf("ERROR: Cannot read harness script %s\n", value.c_str());
         return 1;
       }
+      scripted = true;
     }
     else if (opt == "--out")
       Screenshot_SetDirectory(value);
@@ -277,6 +295,26 @@ int main(int argc, char const* argv[]) {
       Usage();
       return 1;
     }
+  }
+
+  /* A run that is nobody's to watch (a script's, a hidden one, a timed
+     one, a planted failure) opens no window on the desktop: somebody is
+     working there, and a check is fifty such windows one after another.
+     It is run again where it is not seen (script/offscreen: a desktop of
+     its own with no screen, on the same graphics card), unless it is
+     there already or the window has been asked for. It never falls back
+     on the desktop by itself. */
+  if ((scripted || !present || fixedHz > 0 || selftest.size()) && !onDesktop && !getenv("LT_OFFSCREEN")) {
+    std::vector<char*> args;
+    args.push_back((char*)"script/offscreen");
+    for (int i = 0; i < argc; ++i)
+      args.push_back((char*)argv[i]);
+    args.push_back(nullptr);
+    fflush(stdout);
+    execv("script/offscreen", args.data());
+    printf("ERROR: this run opens no window on the desktop, and script/offscreen could not be run from here (%s).\n"
+           "       Run it from the top of the repository, or give --on-desktop to open the window.\n", strerror(errno));
+    return 1;
   }
 
   Launcher launcher(argv[1], size, harness);

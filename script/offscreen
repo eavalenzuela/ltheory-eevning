@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# script/offscreen CMD [ARG ...]: run a command that opens windows where
+# nobody sees them.
+#
+# Somebody works at this machine. A scripted run of the game opens a
+# window, and the full check opens fifty of them one after another: on
+# the desktop that is fifty windows popping up over whatever is being
+# done there. So such a run is given a desktop of its own that has no
+# screen: a Wayland compositor (sway) on its "headless" backend, with one
+# output of the size the game's window is and nothing drawn anywhere.
+# Programs inside it still get the graphics card (DRI_PRIME picks which,
+# as outside), so a run is as fast, and its pictures the same, as on the
+# real desktop.
+#
+#   script/offscreen bin/launch game --no-present --fixed-step 60 --script FILE
+#   script/offscreen script/goldens
+#
+# The command's output comes out here as it is written, and its exit
+# status is this script's. script/check, script/goldens and script/viewer
+# go through this by themselves; --on-desktop to any of them is for when
+# the windows are wanted.
+#
+# Inside, LT_OFFSCREEN is set, and a command run through this again is
+# simply run.
+#
+# Without sway it falls back on xvfb-run, which draws in software and is
+# many times slower (script/check's time limits are not set for it), and
+# without that it refuses: it never opens a window on the desktop.
+
+set -u
+
+if [ $# -eq 0 ]; then
+  echo "usage: script/offscreen CMD [ARG ...]" >&2
+  exit 2
+fi
+if [ -n "${LT_OFFSCREEN:-}" ]; then
+  exec "$@"
+fi
+
+if ! command -v sway >/dev/null 2>&1; then
+  if command -v xvfb-run >/dev/null 2>&1; then
+    echo "offscreen: no sway; using xvfb-run (software drawing: slow)" >&2
+    LT_OFFSCREEN=xvfb exec xvfb-run -a -s "-screen 0 1920x1080x24" "$@"
+  fi
+  echo "offscreen: neither sway nor xvfb-run is installed, and this will not open a window on the desktop" >&2
+  exit 127
+fi
+
+work=$(mktemp -d)
+sway_pid=
+# (stopped from outside, by a time limit say: the compositor goes, and
+# with it whatever was running in it)
+trap 'rm -rf "$work"' EXIT
+trap '[ -n "$sway_pid" ] && kill "$sway_pid" 2>/dev/null; exit 143' TERM INT HUP
+
+# What runs inside: the command, from here, with its output and its exit
+# status kept; then the compositor is told to go.
+{
+  echo '#!/usr/bin/env bash'
+  printf 'cd %q\n' "$PWD"
+  echo 'export LT_OFFSCREEN=sway'
+  printf '%q ' "$@"
+  printf '> %q 2>&1\n' "$work/out"
+  printf 'echo $? > %q\n' "$work/status"
+  echo 'swaymsg exit >/dev/null 2>&1'
+} > "$work/run"
+chmod +x "$work/run"
+
+cat > "$work/config" <<EOF
+output HEADLESS-1 resolution 1920x1080 position 0 0
+xwayland enable
+default_border none
+default_floating_border none
+focus_follows_mouse no
+exec $work/run
+EOF
+
+: > "$work/out"
+# (no way into the real desktop is handed down: the compositor makes its
+# own displays, and gives those to what it runs)
+env -u WAYLAND_DISPLAY -u DISPLAY WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 \
+  sway -c "$work/config" > "$work/sway.log" 2>&1 &
+sway_pid=$!
+tail -f --pid=$sway_pid -n +1 "$work/out" 2>/dev/null
+wait $sway_pid 2>/dev/null
+
+if [ ! -s "$work/status" ]; then
+  echo "offscreen: the compositor went before the command finished" >&2
+  tail -n 5 "$work/sway.log" >&2
+  exit 125
+fi
+exit "$(cat "$work/status")"

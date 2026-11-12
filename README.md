@@ -38,6 +38,8 @@ sudo apt install build-essential cmake python3 git-lfs libglew-dev libglu1-mesa-
   libfreetype-dev libx11-dev libxrandr-dev libudev-dev libgl-dev
 ```
 
+To run the checks (not needed to play): `sudo apt install sway xwayland python3-pil`. The scripted play-throughs draw on a hidden desktop that `sway` provides; without it they fall back on `xvfb-run`, which is much slower.
+
 Audio goes through the vendored miniaudio, so no audio libraries are needed. With no audio device the game runs silently.
 
 ## Getting the source
@@ -93,10 +95,11 @@ Docking saves the game. Saves and settings are kept in `save/`, which git ignore
 
 | | |
 |---|---|
-| `script/check` | Says whether the tree is healthy: type check, engine-free specs, about thirty scripted play-throughs of the game, and screenshot comparisons. It opens many short windows and takes about a quarter of an hour. `--fast` skips everything that opens a window. |
+| `script/check` | Says whether the tree is healthy: type check, engine-free specs, about thirty-five scripted play-throughs of the game, and screenshot comparisons. It takes about a quarter of an hour. Its fifty or so windows are opened where nobody sees them (`script/offscreen`); `--on-desktop` shows them, and `--fast` skips everything that needs one. |
 | `bin/luaucheck` | Type-checks every script in strict mode. |
 | `bin/ltcore Tool/specs` | Runs the engine-free test suites. |
 | `script/viewer` | One window for looking at hulls, stations, planets and effects, and for taking pictures of them. |
+| `script/offscreen` | Runs a command that opens windows on a desktop of its own with no screen (a headless `sway`, on the same graphics card). A scripted or hidden run of `bin/launch` goes through it by itself. |
 | `script/soundgen` | Makes the game's own sounds and music from the written descriptions in `resource/sound/made/sounds.txt`. |
 
 `docs/tools.md` covers these and the rest, and `docs/harness.md` the scripted harness the play-throughs use.

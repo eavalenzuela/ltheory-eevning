@@ -4,6 +4,12 @@
 #   script/check            run everything except the soak
 #   script/check --fast     skip the steps that open a window
 #   script/check --soak     also run the soaks (about 25 minutes)
+#   script/check --on-desktop   let the windows open on the desktop
+#
+# The steps that open a window (about fifty of them, one after another)
+# do so where nobody sees them: the whole run goes through
+# script/offscreen, on a desktop of its own with no screen. Nothing
+# appears on the real one unless --on-desktop asks for it.
 #
 # Steps:
 #   types       bin/luaucheck: every script, strict mode
@@ -122,13 +128,24 @@ cd "$(dirname "$0")/.."
 
 fast=0
 soak=0
+desktop=0
 for arg in "$@"; do
   case "$arg" in
     --fast) fast=1 ;;
     --soak) soak=1 ;;
-    *) echo "usage: script/check [--fast] [--soak]"; exit 2 ;;
+    --on-desktop) desktop=1 ;;
+    *) echo "usage: script/check [--fast] [--soak] [--on-desktop]"; exit 2 ;;
   esac
 done
+
+# Windows are opened where nobody sees them (script/offscreen), unless
+# they are asked for; and bin/launch is told so, which would otherwise
+# send each of its own runs there.
+if [ "$desktop" -eq 1 ]; then
+  export LT_OFFSCREEN=desktop
+elif [ "$fast" -eq 0 ] && [ -z "${LT_OFFSCREEN:-}" ]; then
+  exec script/offscreen script/check "$@"
+fi
 
 # The discrete GPU, where this machine has one; harmless elsewhere.
 : "${DRI_PRIME:=1}"

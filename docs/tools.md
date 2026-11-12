@@ -8,6 +8,8 @@ Everything here runs from the repository root after `python3 configure.py build`
 |---|---|
 | `script/check` | Type check, engine-free specs, and the launcher's exit codes, each paired with a planted failure that must be caught. Exits 0 only if every step did what it should. |
 | `script/check --fast` | The same without the steps that open a window. |
+| `script/check --on-desktop` | The same with its windows (about fifty, one after another) opened on the desktop. Otherwise they are opened where nobody sees them: see `script/offscreen`. |
+| `script/offscreen CMD ...` | Runs a command on a desktop of its own that has no screen (a headless `sway`, on the same graphics card), so that whatever windows it opens are not seen. `script/check`, `script/goldens` and every scripted or hidden run of `bin/launch` go through it by themselves; `docs/harness.md` has the particulars. |
 | `script/check --soak` | Adds the soaks: eight seeds of the 400-system strategic sim, each run in memory and again with a save and load every 97 ticks, for four and a half game days; the economy sweep (16 seeds); the faction sweep (32 seeds). About 25 minutes. |
 
 `bin/launch APP` exits 0 only when the app started, no script raised an error and every harness command worked. A crash or failed assertion exits with 128 + the signal number.
