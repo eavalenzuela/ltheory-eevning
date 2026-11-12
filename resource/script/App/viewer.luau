@@ -29,6 +29,7 @@
 
 local AppShell = require("@lt/AppShell")
 local Arms = require("@lt/Game/View/Arms")
+local Capital = require("@lt/Game/View/Capital")
 local Effects = require("@lt/Game/View/Effects")
 local Hull = require("@lt/Game/View/Hull")
 local Starbase = require("@lt/Game/View/Starbase")
@@ -179,6 +180,25 @@ for _, type in WRECKS do
   end
 end
 
+-- The Kethri's colony ship (Game/View/Capital): as long as said and a
+-- tenth of that across ("colony-1"), and broader ("colony-2"), from
+-- about, from below where the docks are, and close to the conning tower.
+local COLONY_VIEWS: { { any } } = {
+  { "1-bow-quarter", vector.create(0.92, 0.50, 1.22), vector.create(0, 0, 0.02), vector.create(1.2, 1.4, 0.9) },
+  { "2-side", vector.create(1.25, 0.05, 0), CENTRE, vector.create(1.3, 1.0, 0.5) },
+  { "3-above", vector.create(0.02, 1.3, 0), CENTRE, vector.create(0.6, 1.5, 0.4) },
+  { "4-stern-quarter", vector.create(-0.62, 0.34, -1.30), vector.create(0, 0, -0.30), vector.create(-0.9, 1.3, -1.2) },
+  { "5-below", vector.create(-0.60, -0.62, 0.55), vector.create(0, 0, -0.22), vector.create(-0.5, -1.4, 0.6) },
+  { "6-tower", vector.create(0.22, 0.13, -0.28), vector.create(0, 0.06, -0.52), vector.create(0.9, 0.8, 0.7) },
+}
+for index, across in { 0.2, 0.45 } do
+  for _, view in COLONY_VIEWS do
+    local eye: vector = view[2]
+    table.insert(VIEWS, { name = `colony-{index}-{view[1]}`, kind = `colony-{across}`, seed = 1, eye = eye, look = view[3],
+      light = view[4] })
+  end
+end
+
 -- Stations (Game/View/Starbase). The three sizes of tower side by side,
 -- at the sizes they stand in fields of 3, 5 and 7 km; every module in
 -- rows, at their own sizes beside each other; and whole stations laid
@@ -311,6 +331,13 @@ return AppShell.Create(function(): Widget
     local hull = string.match(kind, "^hull%-(.+)$")
     if hull then
       local built = assert(Hull.Build(hull), `no design for the hull '{hull}'`)
+      local object = Object_Scenery({})
+      Object_SetRenderable(object, built.model)
+      return object, built.radius
+    end
+    local across = string.match(kind, "^colony%-(.+)$")
+    if across then
+      local built = Capital.Larmes(tonumber(across))
       local object = Object_Scenery({})
       Object_SetRenderable(object, built.model)
       return object, built.radius

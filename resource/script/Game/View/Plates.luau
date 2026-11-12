@@ -54,6 +54,9 @@ export type Builder = {
   -- a little out of true.
   patch: number?,
   kept: number,         -- how many plates have gone in
+  -- How alike the plates are in tone, 0 to 1: as unlike as plates come
+  -- if not said, and at 1 all the one tone.
+  even: number?,
   -- What is not plates: skins lofted through outlines, and what swells
   -- out of them (Plates.Loft, Plates.Fairing). One mesh for all of it.
   skin: Mesh?,
@@ -70,7 +73,9 @@ end
 -- The next plate's own number: the fraction of its tag.
 local function own(b: Builder): number
   b.count += 1
-  return ((math.sin(b.count * 12.9898 + b.seed) * 43758.5453) % 1) * 0.97
+  local tone = ((math.sin(b.count * 12.9898 + b.seed) * 43758.5453) % 1) * 0.97
+  local even = b.even
+  return if even then 0.485 + (tone - 0.485) * (1 - even) else tone
 end
 
 -- A number from 0 to 1 that follows from the plate's count and 'salt'.
@@ -339,6 +344,40 @@ function Plates.Fairing(b: Builder, part: number, outline: Outline, z: number, a
       Mesh_AddTriangle(skin, a, a + 1, c)
       Mesh_AddTriangle(skin, a + 1, c + 1, c)
     end
+  end
+  b.kept += 1
+end
+
+-- Three corners of a flat plate with the tag 'tag': their own points,
+-- so that it is lit as one face.
+local function facet(b: Builder, tag: number, p1: vector, p2: vector, p3: vector, out: vector)
+  local skin = skinOf(b)
+  if vector.dot(vector.cross(p2 - p1, p3 - p1), out) < 0 then
+    p2, p3 = p3, p2
+  end
+  local base = b.points
+  Mesh_AddVertex(skin, p1, UNSET, 1, tag)
+  Mesh_AddVertex(skin, p2, UNSET, 1, tag)
+  Mesh_AddVertex(skin, p3, UNSET, 1, tag)
+  Mesh_AddTriangle(skin, base, base + 1, base + 2)
+  b.points += 3
+end
+
+-- A flat plate with three corners, sharp at every edge. 'out' is the
+-- way its outside looks, near enough: the corners are taken in
+-- whichever order makes that so.
+function Plates.Facet(b: Builder, part: number, p1: vector, p2: vector, p3: vector, out: vector)
+  facet(b, part + own(b), p1, p2, p3, out)
+  b.kept += 1
+end
+
+-- A flat plate with any number of corners, given in order round it
+-- (they should lie in a plane, and bulge nowhere inward): one plate,
+-- of one tone.
+function Plates.Flat(b: Builder, part: number, corners: { vector }, out: vector)
+  local tag = part + own(b)
+  for index = 2, #corners - 1 do
+    facet(b, tag, corners[1], corners[index], corners[index + 1], out)
   end
   b.kept += 1
 end

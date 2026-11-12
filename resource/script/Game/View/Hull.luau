@@ -39,6 +39,13 @@ Hull.looks = {
     plating = { 0.50, 0.50, 0.50 }, patch = { 0.40, 0.42, 0.46 }, frame = { 0.20, 0.22, 0.26 },
     glow = { 0.75, 0.88, 1.0 }, trim = { 0.14, 0.27, 0.50 }, wear = 0.22, rust = 0.05, sheets = 3.0, mottle = 0.8, lights = 0.6,
   },
+  -- The Kethri: flat grey plate, clean, in big sheets; what is marked is
+  -- near black; a cold white light, and many lit ports.
+  kethri = {
+    plating = { 0.36, 0.37, 0.39 }, patch = { 0.29, 0.30, 0.33 }, frame = { 0.12, 0.12, 0.13 },
+    glow = { 0.85, 0.93, 1.0 }, trim = { 0.15, 0.16, 0.18 }, fire = { 0.70, 0.92, 1.0 }, wear = 0.15, rust = 0.02, sheets = 3.4,
+    mottle = 0.35, lights = 0.5,
+  },
   -- The pirates: whatever paint was on it, gone dark, the new plate
   -- bare, a red light.
   unbound = {
