@@ -128,6 +128,42 @@ suite:Case("sharp edges are kept sharp, and a closed part is known from an open 
   t.ok(not Shape.Closed(open.parts[1]))
 end)
 
+suite:Case("a part that is inside out is turned about, where it can be told", function(t)
+  -- A box with every face wound the wrong way holds less than nothing.
+  local inside = box()
+  for at = 1, #inside.faces, 3 do
+    inside.faces[at + 1], inside.faces[at + 2] = inside.faces[at + 2], inside.faces[at + 1]
+  end
+  t.ok(Shape.Mend(inside), "an inside-out box was left as it was")
+  local caster = Shape.Cast({ inside })
+  local _, _, ny = caster.Top(0, 0)
+  t.eq(ny, 1)
+  t.ok(not Shape.Mend(inside) and not Shape.Mend(box()), "a box that is right was turned about")
+  -- A sheet lying on a hull's back, to one side of its middle line,
+  -- looking down into it: turned to look up. Looking up, it is left.
+  local sheet = Obj.Parse("v 1 2 0\nv 2 2 0\nv 2 2 1\nv 1 2 1\nf 1 2 3 4\n").parts[1]
+  local _, _, before = Shape.Cast({ sheet }).Top(1.5, 0.5)
+  t.eq(before, -1)
+  t.ok(Shape.Mend(sheet))
+  local _, _, after = Shape.Cast({ sheet }).Top(1.5, 0.5)
+  t.eq(after, 1)
+  t.ok(not Shape.Mend(sheet))
+  -- A tube with no ends, off to one side: as much of it looks each way,
+  -- and whichever way it is wound it is left alone.
+  local lines = {}
+  for i = 0, 7 do
+    local a = i * math.pi / 4
+    table.insert(lines, string.format("v %.6f %.6f 0", 3 + math.cos(a), math.sin(a)))
+    table.insert(lines, string.format("v %.6f %.6f 1", 3 + math.cos(a), math.sin(a)))
+  end
+  for i = 0, 7 do
+    local j = (i + 1) % 8
+    table.insert(lines, `f {2 * i + 1} {2 * j + 1} {2 * j + 2} {2 * i + 2}`)
+  end
+  local tube = Obj.Parse(table.concat(lines, "\n") .. "\n").parts[1]
+  t.ok(not Shape.Closed(tube) and not Shape.Mend(tube))
+end)
+
 suite:Case("a part's paint is its material's if that is a hull's, and guessed if not", function(t)
   local function part(name: string, material: string, color: { number }?, glows: boolean?): Shape.Part
     return { name = name, material = material, color = color, glows = glows, points = {}, faces = {} }

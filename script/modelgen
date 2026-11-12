@@ -70,12 +70,13 @@ class Model:
     def __init__(self):
         self.vertices = []      # (x, y, z): x to starboard, y up, z forward
         self.objects = []       # (name, [(paint, (a, b, c)), ...])
+        self.flat = set()       # the names of the parts that are lit as flat faces
 
     def vertex(self, p):
         self.vertices.append(p)
         return len(self.vertices) - 1
 
-    def skin(self, name, t0, t1, rings, around, shape, paint, caps=("trim", "trim"), lean=None):
+    def skin(self, name, t0, t1, rings, around, shape, paint, caps=("trim", "trim"), lean=None, phase=0.0):
         """A skin from t0 to t1 along the ship (0 its prow, 1 its stern).
 
         'shape(t)' gives (x, y, half width, height above, height below,
@@ -90,10 +91,14 @@ class Model:
         square across the ship but run where the lean says, so that paint
         laid on by rows (u, a row's own place) has clean edges that are
         not square across it either: chevrons.
+
+        'phase' turns the corners of its sections about, in corners: a
+        skin of few corners has one at its top with none, and a flat face
+        there with a half.
         """
         def point(t, j):
             cx, cy, a, top, bottom, n_top, n_bottom = shape(t)
-            angle = 2 * math.pi * j / around
+            angle = 2 * math.pi * (j + phase) / around
             c, s = math.cos(angle), math.sin(angle)
             n = n_top if s >= 0 else n_bottom
             return (cx + a * math.copysign(abs(c) ** (2 / n), c),
@@ -127,7 +132,7 @@ class Model:
                 # (rows that have run into an end of the skin lie on one another there)
                 if abs(la[j][0] - lb[j][0]) < 1e-9 and abs(la[k][0] - lb[k][0]) < 1e-9:
                     continue
-                angle = 2 * math.pi * (j + 0.5) / around
+                angle = 2 * math.pi * (j + 0.5 + phase) / around
                 mid = [sum(self.vertices[v][axis] for _, v in corners) / 4 for axis in range(3)]
                 what = paint((ua + ub) / 2, sum(t for t, _ in corners) / 4, angle, mid[0], mid[1])
                 # (wound so that, with z turned about for the file, it is
@@ -145,6 +150,117 @@ class Model:
                 k = (j + 1) % around
                 faces.append((cap, (hub, loop[k][1], loop[j][1]) if end == 0 else (hub, loop[j][1], loop[k][1])))
         self.objects.append((name, faces))
+        if around <= 8:
+            self.flat.add(name)
+
+    def solid(self, name, corners, faces, paint):
+        """A solid with flat faces that bulges nowhere inward (a fin, a
+        box, a wedge): its corners, and its faces as corners in order
+        round each. 'paint' is one paint, or what gives a face's from
+        where its middle is (t, x, y). Each face is wound to look away
+        from the solid's middle."""
+        index = [self.vertex(c) for c in corners]
+        mid = [sum(c[axis] for c in corners) / len(corners) for axis in range(3)]
+        out = []
+        for face in faces:
+            pts = [corners[i] for i in face]
+            centre = [sum(q[axis] for q in pts) / len(pts) for axis in range(3)]
+            what = paint if isinstance(paint, str) else paint(0.5 - centre[2], centre[0], centre[1])
+            for k in range(1, len(face) - 1):
+                a, b, c = pts[0], pts[k], pts[k + 1]
+                # (as the file has it: z turned about)
+                ux, uy, uz = b[0] - a[0], b[1] - a[1], -(b[2] - a[2])
+                vx, vy, vz = c[0] - a[0], c[1] - a[1], -(c[2] - a[2])
+                n = (uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx)
+                away = (centre[0] - mid[0], centre[1] - mid[1], -(centre[2] - mid[2]))
+                tri = (index[face[0]], index[face[k]], index[face[k + 1]])
+                if n[0] * away[0] + n[1] * away[1] + n[2] * away[2] < 0:
+                    tri = (tri[0], tri[2], tri[1])
+                out.append((what, tri))
+        self.objects.append((name, out))
+        self.flat.add(name)
+
+    def box(self, name, t0, t1, x0, x1, y0, y1, paint):
+        """A box with its sides square to the ship."""
+        corners = [(x, y, 0.5 - t) for t in (t0, t1) for y in (y0, y1) for x in (x0, x1)]
+        self.solid(name, corners, [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)], paint)
+
+    def fin(self, name, root, tip, thick, paint):
+        """A fin: a flat plate with four corners, thick at its root and
+        thin at its tip. 'root' and 'tip' are each two places (t, x, y):
+        the fore and after ends of the edge it stands on, and of its
+        outer edge."""
+        (rt0, rx0, ry0), (rt1, rx1, ry1) = root
+        (tt0, tx0, ty0), (tt1, tx1, ty1) = tip
+        # (the way it is thick: square to its own face)
+        ax, ay, az = tx0 - rx0, ty0 - ry0, -(tt0 - rt0)
+        bx, by, bz = rx1 - rx0, ry1 - ry0, -(rt1 - rt0)
+        nx, ny, nz = ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx
+        long = math.sqrt(nx * nx + ny * ny + nz * nz) or 1.0
+        nx, ny, nz = nx / long, ny / long, nz / long
+        corners = []
+        for sign in (1, -1):
+            for (t, x, y), half in (((rt0, rx0, ry0), thick / 2), ((rt1, rx1, ry1), thick / 2), ((tt1, tx1, ty1), thick / 6),
+                                    ((tt0, tx0, ty0), thick / 6)):
+                corners.append((x + sign * nx * half, y + sign * ny * half, 0.5 - t + sign * nz * half))
+        self.solid(name, corners, [(0, 1, 2, 3), (4, 7, 6, 5), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)], paint)
+
+    def plate(self, name, shape, t0, t1, turn0, turn1, lift, paint, rows=6, columns=4):
+        """A plate of armour standing off a skin: the piece of the skin
+        'shape' from t0 to t1 along it and from 'turn0' to 'turn1' round
+        it (in turns: 0 to starboard, a quarter up), lifted 'lift' off
+        it, with sides down to it."""
+        def at(t, turn, out):
+            cx, cy, a, top, bottom, n_top, n_bottom = shape(t)
+            angle = 2 * math.pi * turn
+            c, s_ = math.cos(angle), math.sin(angle)
+            n = n_top if s_ >= 0 else n_bottom
+            x = a * math.copysign(abs(c) ** (2 / n), c)
+            y = (top if s_ >= 0 else bottom) * math.copysign(abs(s_) ** (2 / n), s_)
+            # (out from the skin's middle line, near enough square to it)
+            long = math.sqrt(x * x + y * y) or 1.0
+            return (cx + x + out * x / long, cy + y + out * y / long, 0.5 - t)
+        outer, inner = [], []
+        for i in range(rows + 1):
+            for j in range(columns + 1):
+                t, turn = t0 + (t1 - t0) * i / rows, turn0 + (turn1 - turn0) * j / columns
+                outer.append(self.vertex(at(t, turn, lift)))
+                inner.append(self.vertex(at(t, turn, -0.2 * lift)))
+        faces = []
+        mid = at((t0 + t1) / 2, (turn0 + turn1) / 2, lift / 2)
+
+        def face(a, b, c, d, centre):
+            # (wound to look away from the plate's own middle, as the file has it)
+            pa, pb, pc = self.vertices[a], self.vertices[b], self.vertices[c]
+            ux, uy, uz = pb[0] - pa[0], pb[1] - pa[1], -(pb[2] - pa[2])
+            vx, vy, vz = pc[0] - pa[0], pc[1] - pa[1], -(pc[2] - pa[2])
+            n = (uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx)
+            away = (centre[0] - mid[0], centre[1] - mid[1], -(centre[2] - mid[2]))
+            what = paint if isinstance(paint, str) else paint(0.5 - centre[2], centre[0], centre[1])
+            if n[0] * away[0] + n[1] * away[1] + n[2] * away[2] >= 0:
+                faces.extend([(what, (a, b, c)), (what, (a, c, d))])
+            else:
+                faces.extend([(what, (a, c, b)), (what, (a, d, c))])
+
+        def centre_of(*ids):
+            return [sum(self.vertices[i][axis] for i in ids) / len(ids) for axis in range(3)]
+        w = columns + 1
+        for i in range(rows):
+            for j in range(columns):
+                a, b, c, d = i * w + j, i * w + j + 1, (i + 1) * w + j + 1, (i + 1) * w + j
+                # (the outer face looks out from the skin: away from the inner one under it)
+                face(outer[a], outer[b], outer[c], outer[d],
+                     [2 * o - n for o, n in zip(centre_of(outer[a], outer[c]), centre_of(inner[a], inner[c]))])
+        for i in range(rows):
+            for j in (0, columns):
+                a, d = i * w + j, (i + 1) * w + j
+                face(outer[a], outer[d], inner[d], inner[a], centre_of(outer[a], outer[d], inner[d], inner[a]))
+        for j in range(columns):
+            for i in (0, rows):
+                a, b = i * w + j, i * w + j + 1
+                face(outer[a], outer[b], inner[b], inner[a], centre_of(outer[a], outer[b], inner[b], inner[a]))
+        self.objects.append((name, faces))
+        self.flat.add(name)
 
     def write(self, path, title):
         base = os.path.splitext(os.path.basename(path))[0]
@@ -161,7 +277,7 @@ class Model:
                 # (the game's z runs forward; a file's -Z does)
                 out.write(f"v {x:.5f} {y:.5f} {-z:.5f}\n")
             for name, faces in self.objects:
-                out.write(f"o {name}\ns 1\n")
+                out.write(f"o {name}\ns {'off' if name in self.flat else '1'}\n")
                 current = None
                 for paint, (a, b, c) in sorted(faces, key=lambda face: PAINTS.index(face[0])):
                     if paint != current:
@@ -194,84 +310,238 @@ class Camo:
         return "plating" if band - math.floor(band) < 0.5 else "patch"
 
 
-def vail_frigate():
-    """The first of the Vail concepts: a sleek teardrop of a hull behind a
-    needle prow, with a rail down each flank that sweeps aft to an engine
-    pod held off the tail."""
-    model = Model()
-    camo = Camo(0.17, 0.75, 0.0)
-    width = curve([(0.085, 0.020), (0.16, 0.034), (0.25, 0.070), (0.35, 0.108), (0.45, 0.135), (0.52, 0.143), (0.60, 0.136),
-                   (0.68, 0.108), (0.74, 0.078), (0.83, 0.045), (0.94, 0.032)])
-    above = curve([(0.085, 0.020), (0.16, 0.034), (0.25, 0.058), (0.35, 0.080), (0.50, 0.092), (0.65, 0.080), (0.80, 0.050),
-                   (0.94, 0.028)])
-    below = curve([(0.085, 0.020), (0.16, 0.030), (0.30, 0.052), (0.50, 0.066), (0.70, 0.054), (0.94, 0.024)])
-    peak = curve([(0.085, 2.0), (0.20, 1.9), (0.35, 1.6), (0.75, 1.6), (0.94, 2.0)])
+# ---------------------------------------------------------------------
+# The Vail's hulls. What they have in common is here; each hull below is
+# its own proportions and what it carries.
 
-    # Dark hatches let into the back, by where their middles are and how big.
-    hatches = [(0.30, 0.0, 0.020, 0.010), (0.42, 0.036, 0.016, 0.010), (0.42, -0.036, 0.016, 0.010), (0.56, 0.0, 0.020, 0.009),
-               (0.68, 0.036, 0.016, 0.010), (0.68, -0.036, 0.016, 0.010)]
+def bow(model, camo, long, thick, collar):
+    """A needle for a prow, 'long' of the ship's length and 'thick' at
+    its root, standing in a dark collar of radius 'collar'."""
+    model.skin("needle", 0.0, long, 12, 16,
+               lambda t: (0.0, 0.0, 0.0005 + thick * t / long, 0.0005 + thick * t / long, 0.0005 + thick * t / long, 2.0, 2.0),
+               lambda u, t, angle, x, y: "patch" if t < 0.42 * long else "plating", (None, "trim"))
+    model.skin("collar", long - 0.006, long + 0.018, 3, 20, lambda t: (0.0, 0.0, collar, collar, collar, 2.0, 2.0),
+               lambda u, t, angle, x, y: "trim", ("trim", "trim"))
 
-    def hull_paint(u, t, angle, x, y):
+
+def slit(model, name, t0, t1, where, wide=0.0022, high=0.0030):
+    """A lit slit: a thin strip standing just proud of what it is on.
+    'where(t)' is its middle line (x, y)."""
+    model.skin(name, t0, t1, 4, 6, lambda t: where(t) + (wide, high, high, 4.0, 4.0),
+               lambda u, t, angle, x, y: "lit", ("lit", "lit"))
+
+
+def engine(model, camo, name, x, y, t0, t1, wide, high, nozzle, around=16, square=4.5):
+    """An engine pod on the line (x, y), pointed before and square in the
+    body, with a lit slit down its outer side, and its nozzle: a dark
+    barrel with fire in its throat."""
+    side = 1 if x >= 0 else -1
+    long = t1 - t0
+    pod_wide = curve([(t0, 0.15 * wide), (t0 + 0.16 * long, 0.72 * wide), (t0 + 0.36 * long, wide), (t1 - 0.2 * long, wide),
+                      (t1, 0.84 * wide)])
+    pod_high = curve([(t0, 0.15 * high), (t0 + 0.16 * long, 0.72 * high), (t0 + 0.36 * long, high), (t1 - 0.2 * long, high),
+                      (t1, 0.84 * high)])
+    model.skin(f"pod.{name}", t0, t1, camo.step, around,
+               lambda t: (x, y, pod_wide(t), pod_high(t), pod_high(t) * 0.92, square, square),
+               lambda u, t, angle, px, py: camo.paint(u), ("patch", "trim"), camo.lean)
+    slit(model, f"light.pod.{name}", t0 + 0.42 * long, t1 - 0.14 * long, lambda t: (x + side * (wide + 0.0008), y + 0.15 * high))
+    end = min(1.0, t1 + 2.3 * nozzle)
+    model.skin(f"nozzle.{name}", t1 - 0.012, end, 4, 18,
+               lambda t: (x, y, nozzle * (1.06 - 0.5 * (t - t1 + 0.012)), nozzle * (1.06 - 0.5 * (t - t1 + 0.012)),
+                          nozzle * (1.06 - 0.5 * (t - t1 + 0.012)), 2.0, 2.0),
+               lambda u, t, angle, px, py: "trim", ("trim", "fire"))
+
+
+def hatched(camo, hatches):
+    """The paint of a hull's faces: its bands, with dark hatches let into
+    its back ((t, x, how long, how wide) each)."""
+    def paint(u, t, angle, x, y):
         if math.sin(angle) > 0.5:
             for ht, hx, long, wide in hatches:
                 if abs(t - ht) < long and abs(x - hx) < wide:
                     return "trim"
         return camo.paint(u)
+    return paint
 
-    model.skin("hull", 0.085, 0.94, camo.step, 48,
-               lambda t: (0.0, 0.0, width(t), above(t), below(t), peak(t), 2.2), hull_paint, ("trim", "trim"), camo.lean)
 
-    # The needle, and the collar it stands in.
-    model.skin("needle", 0.0, 0.070, 10, 16,
-               lambda t: (0.0, 0.0, 0.0005 + 0.0125 * t / 0.070, 0.0005 + 0.0125 * t / 0.070, 0.0005 + 0.0125 * t / 0.070, 2.0, 2.0),
-               lambda u, t, angle, x, y: "patch" if t < 0.030 else "plating", (None, "trim"))
-    model.skin("collar", 0.066, 0.090, 3, 20, lambda t: (0.0, 0.0, 0.0225, 0.0225, 0.0225, 2.0, 2.0),
-               lambda u, t, angle, x, y: "trim", ("trim", "trim"))
-
-    def slit(name, t0, t1, where):
-        """A lit slit: a thin strip standing just proud of what it is on."""
-        model.skin(name, t0, t1, 4, 6, lambda t: where(t) + (0.0022, 0.0030, 0.0030, 4.0, 4.0),
-                   lambda u, t, angle, x, y: "lit", ("lit", "lit"))
+def vail_frigate():
+    """The first of the Vail drawings: a sleek teardrop of a hull behind a
+    needle prow, with a rail down each flank that sweeps aft to an engine
+    pod held off the tail."""
+    model = Model()
+    camo = Camo(0.17, 0.75, 0.0)
+    width = curve([(0.085, 0.020), (0.16, 0.032), (0.25, 0.062), (0.35, 0.095), (0.45, 0.119), (0.52, 0.126), (0.60, 0.120),
+                   (0.68, 0.097), (0.74, 0.072), (0.83, 0.044), (0.94, 0.032)])
+    above = curve([(0.085, 0.020), (0.16, 0.034), (0.25, 0.056), (0.35, 0.076), (0.50, 0.088), (0.65, 0.078), (0.80, 0.050),
+                   (0.94, 0.028)])
+    below = curve([(0.085, 0.020), (0.16, 0.030), (0.30, 0.050), (0.50, 0.062), (0.70, 0.052), (0.94, 0.024)])
+    peak = curve([(0.085, 2.0), (0.20, 2.0), (0.35, 1.9), (0.75, 1.9), (0.94, 2.0)])
+    hatches = [(0.30, 0.0, 0.020, 0.010), (0.42, 0.034, 0.016, 0.010), (0.42, -0.034, 0.016, 0.010), (0.56, 0.0, 0.020, 0.009),
+               (0.68, 0.034, 0.016, 0.010), (0.68, -0.034, 0.016, 0.010)]
+    model.skin("hull", 0.085, 0.94, camo.step, 48, lambda t: (0.0, 0.0, width(t), above(t), below(t), peak(t), 2.2),
+               hatched(camo, hatches), ("trim", "trim"), camo.lean)
+    bow(model, camo, 0.070, 0.0125, 0.0225)
 
     for side, name in ((1, "starboard"), (-1, "port")):
-        # Lit slits on the flanks of the neck.
-        slit(f"light.neck.{name}", 0.100, 0.138, lambda t, side=side: (side * (width(t) + 0.0005), 0.004))
-
+        slit(model, f"light.neck.{name}", 0.100, 0.138, lambda t, side=side: (side * (width(t) + 0.0005), 0.004))
         # A rail along the flank: on the hull's edge as far as its widest,
         # then leaving it for the engine pod.
-        out = curve([(0.30, 0.092), (0.36, 0.114), (0.44, 0.138), (0.52, 0.148), (0.60, 0.144), (0.68, 0.127), (0.74, 0.106),
-                     (0.78, 0.087), (0.81, 0.074)])
+        out = curve([(0.30, 0.082), (0.36, 0.101), (0.44, 0.122), (0.52, 0.131), (0.60, 0.128), (0.68, 0.115), (0.74, 0.099),
+                     (0.78, 0.084), (0.81, 0.074)])
         girth = curve([(0.30, 0.25), (0.37, 1.0), (0.74, 1.0), (0.81, 0.85)])
 
         def rail(t, side=side, out=out, girth=girth):
             g = girth(t)
-            return (side * out(t), 0.008, 0.013 * g, 0.024 * g, 0.020 * g, 4.0, 4.0)
+            return (side * out(t), 0.008, 0.012 * g, 0.024 * g, 0.020 * g, 4.0, 4.0)
 
         model.skin(f"rail.{name}", 0.30, 0.81, camo.step, 12, rail, lambda u, t, angle, x, y: camo.paint(u), ("patch", None),
                    camo.lean)
-        # (a broken line of lit slits along its outer face)
         for n in range(7):
             t0 = 0.40 + 0.052 * n
-            slit(f"light.rail.{name}.{n + 1}", t0, t0 + 0.034, lambda t, side=side, out=out: (side * (out(t) + 0.0128), 0.010))
-
-        # The engine pod: pointed before, square in the body; and its nozzle.
-        pod_wide = curve([(0.770, 0.004), (0.80, 0.020), (0.835, 0.030), (0.92, 0.030), (0.955, 0.025)])
-        pod_high = curve([(0.770, 0.004), (0.80, 0.022), (0.835, 0.033), (0.92, 0.033), (0.955, 0.027)])
-
-        def pod(t, side=side, pod_wide=pod_wide, pod_high=pod_high):
-            return (side * 0.068, 0.006, pod_wide(t), pod_high(t), pod_high(t) * 0.9, 4.5, 4.5)
-
-        model.skin(f"pod.{name}", 0.770, 0.955, camo.step, 16, pod, lambda u, t, angle, x, y: camo.paint(u), ("patch", "trim"),
-                   camo.lean)
-        slit(f"light.pod.{name}", 0.845, 0.925, lambda t, side=side: (side * (0.068 + 0.0300), 0.008))
-        model.skin(f"nozzle.{name}", 0.945, 1.0, 4, 18,
-                   lambda t, side=side: (side * 0.068, 0.006, 0.0215 - 0.04 * (t - 0.945), 0.0215 - 0.04 * (t - 0.945),
-                                         0.0215 - 0.04 * (t - 0.945), 2.0, 2.0),
-                   lambda u, t, angle, x, y: "trim", ("trim", "fire"))
+            slit(model, f"light.rail.{name}.{n + 1}", t0, t0 + 0.034, lambda t, side=side, out=out: (side * (out(t) + 0.0118), 0.010))
+        engine(model, camo, name, side * 0.068, 0.006, 0.770, 0.955, 0.030, 0.033, 0.0205)
     return model, "The Vail's frigate: the first of the owner's drawings (a frigate, until it is said otherwise)"
 
 
-MODELS = {"vail/frigate": vail_frigate}
+def vail_destroyer():
+    """The third drawing: a slim spindle behind a long needle, a raised
+    shoulder along each upper flank, small fins forward, a pair of swept
+    fins aft, and two engines side by side."""
+    model = Model()
+    camo = Camo(0.15, 0.9, 0.02)
+    width = curve([(0.165, 0.026), (0.25, 0.046), (0.38, 0.070), (0.52, 0.084), (0.64, 0.079), (0.76, 0.060), (0.90, 0.040)])
+    above = curve([(0.165, 0.026), (0.30, 0.050), (0.52, 0.066), (0.76, 0.050), (0.90, 0.032)])
+    below = curve([(0.165, 0.026), (0.30, 0.042), (0.52, 0.054), (0.76, 0.042), (0.90, 0.028)])
+    peak = curve([(0.165, 2.0), (0.30, 1.7), (0.80, 1.7), (0.90, 2.0)])
+    hatches = [(0.33, 0.0, 0.024, 0.008), (0.47, 0.022, 0.022, 0.008), (0.47, -0.022, 0.022, 0.008), (0.61, 0.0, 0.024, 0.008)]
+
+    def hull(t):
+        return (0.0, 0.0, width(t), above(t), below(t), peak(t), 2.2)
+
+    model.skin("hull", 0.165, 0.90, camo.step, 48, hull, hatched(camo, hatches), ("trim", "trim"), camo.lean)
+    bow(model, camo, 0.160, 0.021, 0.029)
+
+    for side, name in ((1, "starboard"), (-1, "port")):
+        # The shoulder: a long fairing on the upper flank, lit along its outer face.
+        girth = curve([(0.36, 0.2), (0.43, 1.0), (0.66, 1.0), (0.73, 0.2)])
+
+        def shoulder(t, side=side, girth=girth):
+            g = girth(t)
+            return (side * 0.80 * width(t), 0.52 * above(t), 0.012 * g, 0.013 * g, 0.010 * g, 4.0, 4.0)
+
+        model.skin(f"shoulder.{name}", 0.36, 0.73, camo.step, 10, shoulder, lambda u, t, angle, x, y: camo.paint(u), ("patch", "patch"),
+                   camo.lean)
+        for n in range(4):
+            t0 = 0.45 + 0.052 * n
+            slit(model, f"light.shoulder.{name}.{n + 1}", t0, t0 + 0.036,
+                 lambda t, side=side: (side * (0.80 * width(t) + 0.0122), 0.52 * above(t) + 0.002))
+        slit(model, f"light.neck.{name}", 0.185, 0.235, lambda t, side=side: (side * (width(t) + 0.0005), 0.004))
+        # Small fins forward, and the swept pair aft.
+        model.fin(f"fin.fore.{name}", ((0.225, side * width(0.225), 0.0), (0.285, side * width(0.285), 0.0)),
+                  ((0.275, side * (width(0.275) + 0.030), 0.0), (0.300, side * (width(0.300) + 0.030), 0.0)), 0.007,
+                  lambda t, x, y: "patch")
+        model.fin(f"fin.aft.{name}", ((0.620, side * width(0.62) * 0.96, 0.004), (0.720, side * width(0.72) * 0.96, 0.004)),
+                  ((0.730, side * (width(0.70) + 0.100), 0.012), (0.770, side * (width(0.70) + 0.100), 0.012)), 0.010,
+                  lambda t, x, y: "plating" if x * side < 0.12 else "patch")
+        model.fin(f"fin.keel.{name}", ((0.500, side * width(0.50) * 0.6, -0.8 * below(0.50)), (0.575, side * width(0.575) * 0.6, -0.8 * below(0.575))),
+                  ((0.560, side * width(0.56) * 0.72, -below(0.56) - 0.022), (0.590, side * width(0.59) * 0.72, -below(0.59) - 0.022)), 0.006,
+                  lambda t, x, y: "patch")
+        engine(model, camo, name, side * 0.050, 0.002, 0.755, 0.955, 0.040, 0.041, 0.0285)
+    return model, "The Vail's destroyer: the third of the owner's drawings (a destroyer, until it is said otherwise)"
+
+
+def vail_cruiser():
+    """The second drawing: a broad hull in flat faces behind a long
+    needle, plates of armour standing off its upper flanks, and two great
+    engines side by side, shrouded."""
+    model = Model()
+    camo = Camo(0.16, 0.8, 0.05)
+    width = curve([(0.195, 0.032), (0.28, 0.058), (0.40, 0.088), (0.54, 0.104), (0.66, 0.100), (0.78, 0.082), (0.90, 0.056)])
+    above = curve([(0.195, 0.032), (0.30, 0.058), (0.54, 0.082), (0.78, 0.064), (0.90, 0.042)])
+    below = curve([(0.195, 0.032), (0.30, 0.048), (0.54, 0.066), (0.78, 0.052), (0.90, 0.036)])
+    hatches = [(0.36, 0.0, 0.026, 0.009), (0.50, 0.026, 0.024, 0.009), (0.50, -0.026, 0.024, 0.009), (0.64, 0.0, 0.026, 0.009)]
+
+    # (eight flat faces round: a ridge down its back, a keel beneath)
+    def hull(t):
+        return (0.0, 0.0, width(t), above(t), below(t), 2.0, 2.0)
+
+    model.skin("hull", 0.195, 0.90, camo.step, 8, hull, hatched(camo, hatches), ("trim", "trim"), camo.lean)
+    bow(model, camo, 0.190, 0.026, 0.036)
+
+    for side, name in ((1, "starboard"), (-1, "port")):
+        # Plates of armour standing off the upper flank, a lit slit under each.
+        low, high = (0.132, 0.192) if side == 1 else (0.308, 0.368)
+        for n, (t0, t1) in enumerate(((0.34, 0.43), (0.47, 0.58), (0.62, 0.72))):
+            model.plate(f"armour.{name}.{n + 1}", hull, t0, t1, low, high, 0.009, "plating" if n % 2 == 0 else "patch")
+            slit(model, f"light.flank.{name}.{n + 1}", t0 + 0.012, t1 - 0.012, lambda t, side=side: (side * (width(t) + 0.0006), 0.006))
+        slit(model, f"light.neck.{name}", 0.215, 0.265, lambda t, side=side: (side * (width(t) + 0.0005), 0.004))
+        engine(model, camo, name, side * 0.058, 0.0, 0.775, 0.950, 0.050, 0.050, 0.036, around=8, square=2.0)
+        # The shrouds: a swept plate over each engine, one under, one outboard.
+        model.fin(f"shroud.over.{name}", ((0.800, side * 0.058, 0.050), (0.900, side * 0.058, 0.050)),
+                  ((0.880, side * 0.062, 0.088), (0.935, side * 0.062, 0.088)), 0.012, lambda t, x, y: "plating")
+        model.fin(f"shroud.under.{name}", ((0.800, side * 0.058, -0.048), (0.900, side * 0.058, -0.048)),
+                  ((0.880, side * 0.062, -0.082), (0.935, side * 0.062, -0.082)), 0.012, lambda t, x, y: "patch")
+        model.fin(f"shroud.out.{name}", ((0.800, side * 0.106, 0.0), (0.900, side * 0.106, 0.0)),
+                  ((0.885, side * 0.150, 0.0), (0.940, side * 0.150, 0.0)), 0.012, lambda t, x, y: "plating")
+    return model, "The Vail's cruiser: the second of the owner's drawings (a cruiser, until it is said otherwise)"
+
+
+def vail_hauler():
+    """The fifth drawing: a deep, round hull behind a short prow, with an
+    open bay along each side holding four containers between its frames,
+    and two engines."""
+    model = Model()
+    camo = Camo(0.19, 0.7, 0.04)
+    width = curve([(0.085, 0.040), (0.17, 0.090), (0.28, 0.128), (0.40, 0.140), (0.62, 0.136), (0.76, 0.116), (0.88, 0.076)])
+    above = curve([(0.085, 0.040), (0.17, 0.078), (0.30, 0.108), (0.45, 0.116), (0.66, 0.108), (0.88, 0.060)])
+    below = curve([(0.085, 0.040), (0.17, 0.068), (0.30, 0.092), (0.45, 0.098), (0.66, 0.092), (0.88, 0.052)])
+    bay = (0.375, 0.805)
+
+    def hull(t):
+        return (0.0, 0.0, width(t), above(t), below(t), 2.6, 2.6)
+
+    def paint(u, t, angle, x, y):
+        # (the bay: the hull's side let in dark, behind what is carried)
+        if bay[0] < t < bay[1] and abs(math.sin(angle)) < 0.42:
+            return "trim"
+        return camo.paint(u)
+
+    # (twelve faces round, with a flat one on its back, its belly and each side)
+    model.skin("hull", 0.085, 0.88, camo.step, 12, hull, paint, ("trim", "trim"), camo.lean, phase=0.5)
+    bow(model, camo, 0.075, 0.030, 0.044)
+
+    for side, name in ((1, "starboard"), (-1, "port")):
+        # The bay's lip over it and its sill under it, and what it holds:
+        # four containers, a frame before, between and after them.
+        top, bottom = (0.062, 0.155) if side == 1 else (0.345, 0.438), (0.845, 0.938) if side == 1 else (0.562, 0.655)
+        long = (bay[1] - bay[0]) / 4
+        for n in range(5):
+            t0, t1 = bay[0] - 0.02 + n * (long + 0.008) * 0.99, bay[0] - 0.02 + (n + 1) * (long + 0.008) * 0.99 - 0.006
+            model.plate(f"bay.lip.{name}.{n + 1}", hull, t0, t1, top[0], top[1], 0.014, "plating" if n % 2 == 0 else "patch", rows=4)
+            model.plate(f"bay.sill.{name}.{n + 1}", hull, t0, t1, bottom[0], bottom[1], 0.014, "patch" if n % 2 == 0 else "plating", rows=4)
+        for n in range(4):
+            t0 = bay[0] + n * long + 0.010
+            t1 = bay[0] + (n + 1) * long - 0.010
+            inner = min(width(t0), width(t1)) - 0.012
+            x0, x1 = sorted((side * inner, side * (inner + 0.030)))
+            model.box(f"cargo.{name}.{n + 1}", t0, t1, x0, x1, -0.034, 0.036, "plating")
+            # (a dark band round the middle of each, and a lamp over it)
+            bx0, bx1 = sorted((side * (inner + 0.0301), side * (inner + 0.0312)))
+            model.box(f"cargo.band.{name}.{n + 1}", t0 + 0.006, t1 - 0.006, bx0, bx1, -0.006, 0.008, "patch")
+            slit(model, f"light.bay.{name}.{n + 1}", t0 + 0.022, t1 - 0.022, lambda t, side=side, inner=inner: (side * (inner + 0.012), 0.046))
+        for n in range(5):
+            t = bay[0] + n * long
+            inner = width(min(max(t, bay[0]), bay[1])) - 0.014
+            x0, x1 = sorted((side * inner, side * (inner + 0.026)))
+            model.box(f"frame.{name}.{n + 1}", t - 0.008, t + 0.008, x0, x1, -0.046, 0.048, "frame")
+        for n in range(3):
+            t0 = 0.20 + 0.055 * n
+            slit(model, f"light.bow.{name}.{n + 1}", t0, t0 + 0.036, lambda t, side=side: (side * (width(t) + 0.0006), 0.010))
+        engine(model, camo, name, side * 0.066, 0.004, 0.790, 0.945, 0.046, 0.048, 0.032, around=12, square=3.0)
+    return model, "The Vail's hauler: the fifth of the owner's drawings"
+
+
+MODELS = {"vail/frigate": vail_frigate, "vail/destroyer": vail_destroyer, "vail/cruiser": vail_cruiser, "vail/hauler": vail_hauler}
 
 
 def main():

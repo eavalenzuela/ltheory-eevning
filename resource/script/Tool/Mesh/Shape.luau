@@ -193,6 +193,39 @@ function Shape.Closed(part: Part): boolean
   return next(edges) ~= nil
 end
 
+-- Turn a part's faces about if they look inward. A closed part does if
+-- what it holds comes to less than nothing. An open one (a sheet of
+-- armour lying on a hull) does if, on the whole and plainly, its faces
+-- look toward the ship's middle line and not away from it: a part with
+-- as much looking each way (a tube, a trough) is left as it is. The
+-- shape has to lie as a hull does (Shape.Turn). Returns whether it was
+-- turned about.
+function Shape.Mend(part: Part): boolean
+  local p, f = part.points, part.faces
+  local volume, toward, area, reach = 0, 0, 0, 0
+  for at = 1, #f, 3 do
+    local a, b, c = f[at], f[at + 1], f[at + 2]
+    local ax, ay, az = p[3 * a - 2], p[3 * a - 1], p[3 * a]
+    local bx, by, bz = p[3 * b - 2], p[3 * b - 1], p[3 * b]
+    local cx, cy, cz = p[3 * c - 2], p[3 * c - 1], p[3 * c]
+    volume += (ax * (by * cz - bz * cy) - ay * (bx * cz - bz * cx) + az * (bx * cy - by * cx)) / 6
+    local nx, ny, nz = facing(p, a, b, c)
+    local mx, my = (ax + bx + cx) / 3, (ay + by + cy) / 3
+    -- (out from the ship's middle line: away from x = 0, y = 0)
+    toward += nx * mx + ny * my
+    local size = math.sqrt(nx * nx + ny * ny + nz * nz)
+    area += size
+    reach += size * math.sqrt(mx * mx + my * my)
+  end
+  local inward = if Shape.Closed(part) then volume < 0 else reach > 0 and toward / reach < -0.5
+  if inward then
+    for at = 1, #f, 3 do
+      f[at + 1], f[at + 2] = f[at + 2], f[at + 1]
+    end
+  end
+  return inward
+end
+
 -- Parts as one part: every point and face of them, under the first's
 -- name. (An object in two materials is two parts; whether it is closed,
 -- and what is inside it, are questions for the two together.)

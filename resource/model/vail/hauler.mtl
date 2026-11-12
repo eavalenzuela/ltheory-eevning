@@ -1,0 +1,43 @@
+# The Vail's hauler: the fifth of the owner's drawings: the paints of its faces, as the game names them.
+
+newmtl plating
+Kd 0.460 0.320 0.180
+Ke 0.000 0.000 0.000
+Ns 60
+d 1
+illum 2
+
+newmtl patch
+Kd 0.160 0.150 0.140
+Ke 0.000 0.000 0.000
+Ns 60
+d 1
+illum 2
+
+newmtl frame
+Kd 0.100 0.100 0.100
+Ke 0.000 0.000 0.000
+Ns 60
+d 1
+illum 2
+
+newmtl lit
+Kd 1.000 0.700 0.250
+Ke 1.000 0.620 0.180
+Ns 60
+d 1
+illum 2
+
+newmtl trim
+Kd 0.060 0.060 0.060
+Ke 0.000 0.000 0.000
+Ns 60
+d 1
+illum 2
+
+newmtl fire
+Kd 1.000 0.550 0.150
+Ke 1.000 0.500 0.120
+Ns 60
+d 1
+illum 2

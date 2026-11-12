@@ -1635,6 +1635,36 @@ local designs: { [string]: Design } = {
     end,
     fit = { "laser.pulse.small", "laser.pulse.small", "laser.pulse.small" },
   },
+  -- Their destroyer, from the third drawing: its guns in a line down its
+  -- back and its keel, the last two abreast between its shoulders.
+  ["destroyer.barb"] = {
+    faction = "vail", draw = vessel("vail/destroyer.obj"), sheets = 4.0, turrets = {}, launchers = {},
+    place = function(): ({ Hardpoint }, { Hardpoint })
+      local model = Imported.Load("vail/destroyer.obj")
+      return { Imported.Mounts(model, 0, 0.26), Imported.Mounts(model, 0, 0.10), Imported.Mounts(model, 0, -0.06),
+        Imported.Mounts(model, 0, -0.22), Imported.Mounts(model, 0.06, -0.36), Imported.Mounts(model, -0.06, -0.36) }, {}
+    end,
+    fit = { "laser.pulse.small", "laser.pulse.small", "laser.pulse.small", "laser.pulse.small", "laser.pulse.small", "laser.pulse.small" },
+  },
+  -- Their cruiser, from the second: a gun on each face of its roof and
+  -- of its keel, forward and aft, inboard of the armour on its shoulders.
+  ["cruiser.pike"] = {
+    faction = "vail", draw = vessel("vail/cruiser.obj"), sheets = 6.5, turrets = {}, launchers = {},
+    place = function(): ({ Hardpoint }, { Hardpoint })
+      local model = Imported.Load("vail/cruiser.obj")
+      return { Imported.Mounts(model, 0.04, 0.22), Imported.Mounts(model, -0.04, 0.22), Imported.Mounts(model, 0.04, -0.10),
+        Imported.Mounts(model, -0.04, -0.10) }, {}
+    end,
+    fit = { "laser.pulse.medium", "laser.pulse.medium", "laser.pulse.medium", "laser.pulse.medium" },
+  },
+  -- Their hauler, from the fifth: one gun, on its back before the bay.
+  ["industrial.drover"] = {
+    faction = "vail", draw = vessel("vail/hauler.obj"), sheets = 4.0, turrets = {}, launchers = {},
+    place = function(): ({ Hardpoint }, { Hardpoint })
+      return { Imported.Mounts(Imported.Load("vail/hauler.obj"), 0, 0.42) }, {}
+    end,
+    fit = { "laser.pulse.small" },
+  },
   ["frigate.javelin"] = {
     faction = "vessari", draw = javelin,
     -- (its gun on and under the bow; a rack on each flank; a rack on the

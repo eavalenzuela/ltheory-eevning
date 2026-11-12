@@ -4,6 +4,10 @@
 -- and made a hull's skin, in a hull's paints, lit and worn by the hull's
 -- own shader as every other hull is (Game/View/Plates).
 --
+-- A model made by hand or by another program often has parts that are
+-- inside out (a part mirrored across the ship and never turned back).
+-- Those are mended on the way in, where it can be told: Shape.Mend.
+--
 -- What is taken from the file is its shape and what its parts are
 -- called. It is turned to lie as a hull does (the file's bow and back
 -- are said, where they are not as Blender writes them: -Z and +Y), set
@@ -31,6 +35,10 @@ export type Options = {
   fore: string?,      -- which way the file's bow points ("-z" if not said)
   up: string?,        -- and its back ("+y")
   crease: number?,    -- faces more degrees apart than this have an edge between them (40)
+  -- A word in the names of the parts that are the mouths of its engines,
+  -- where the file has nothing painted as their fire ("cooling ring",
+  -- "nozzle"): the engines' fire then leaves by the after end of each.
+  exhausts: string?,
 }
 
 export type Model = {
@@ -44,20 +52,31 @@ export type Model = {
 }
 
 local loaded: { [string]: Model } = {}
+local loadedAs: { [string]: string } = {}
 
 -- A model by its file's name under resource/model. Read once and kept.
--- A file that is not there, or cannot be read, is an error that says so.
+-- A file that is not there, or cannot be read, is an error that says so;
+-- and so is asking for one file two ways (which way its bow points is
+-- said once, wherever it is asked for).
 function Imported.Load(file: string, options: Options?): Model
+  local as = if options then `{options.fore or ""} {options.up or ""} {options.crease or ""} {options.exhausts or ""}` else "   "
   local had = loaded[file]
   if had then
+    assert(loadedAs[file] == as, `Imported: {file} is asked for in two different ways`)
     return had
   end
+  loadedAs[file] = as
   local shape, why = File.Read(Imported.FOLDER .. file)
   if shape == nil then
     error(`Imported: {tostring(why)}`, 0)
   end
   Shape.Turn(shape, if options and options.fore then options.fore else "-z", if options and options.up then options.up else "+y")
   Shape.Fit(shape, Imported.LENGTH)
+  -- (a part copied across the ship as in a mirror, and its faces never
+  -- turned back, looks inward and is drawn dark: it is turned about)
+  for _, part in shape.parts do
+    Shape.Mend(part)
+  end
   local paints: { number } = {}
   local deck: { Shape.Part } = {}
   local byName: { [string]: { Shape.Part } } = {}
@@ -82,7 +101,18 @@ function Imported.Load(file: string, options: Options?): Model
       table.insert(solids, Shape.Cast({ whole }))
     end
   end
-  local model: Model = { shape = shape, paints = paints, engines = Shape.Engines(shape), deck = Shape.Cast(deck), solids = solids }
+  local engines = Shape.Engines(shape)
+  local word = if options and options.exhausts then string.lower(options.exhausts) else nil
+  if word then
+    for _, part in shape.parts do
+      if string.find(string.lower(part.name), word, 1, true) then
+        local lower, upper = Shape.Bounds({ parts = { part } })
+        table.insert(engines, { x = (lower[1] + upper[1]) / 2, y = (lower[2] + upper[2]) / 2, z = lower[3],
+          radius = math.max(upper[1] - lower[1], upper[2] - lower[2]) / 2 })
+      end
+    end
+  end
+  local model: Model = { shape = shape, paints = paints, engines = engines, deck = Shape.Cast(deck), solids = solids }
   loaded[file] = model
   return model
 end
@@ -108,19 +138,31 @@ end
 export type Mount = { at: vector, up: vector, fore: vector? }
 function Imported.Mounts(model: Model, x: number, z: number, fore: vector?): { Mount }
   local AROUND = 0.03
-  local function mount(ask: (x: number, z: number) -> (number?, number, number, number)): Mount
+  -- ('out' is the way out of the hull there, near enough: up for its
+  -- back, down for its belly. A face that looks the other way, as a
+  -- sheet with no thickness may, is taken to look that way.)
+  local function mount(ask: (x: number, z: number) -> (number?, number, number, number), out: number): Mount
     local height = ask(x, z)
     assert(height, `there is no hull at {x} across and {z} along to stand a gun on`)
     local up = vector.create(0, 0, 0)
     for _, way in { { 0, 0 }, { AROUND, 0 }, { -AROUND, 0 }, { 0, AROUND }, { 0, -AROUND } } do
       local there, nx, ny, nz = ask(x + way[1], z + way[2])
       if there then
-        up += vector.create(nx, ny, nz)
+        up += vector.create(nx, ny, nz) * (if ny * out < 0 then -1 else 1)
       end
     end
-    return { at = vector.create(x, height :: number, z), up = vector.normalize(up), fore = fore }
+    local long = vector.magnitude(up)
+    up = if long > 1e-6 then up / long else vector.create(0, out, 0)
+    return { at = vector.create(x, height :: number, z), up = up, fore = fore }
   end
-  return { mount(model.deck.Top), mount(model.deck.Bottom) }
+  local top, bottom = mount(model.deck.Top, 1), mount(model.deck.Bottom, -1)
+  -- (a hardpoint's two mounts look away from each other. Where the
+  -- surface says they do not, at an edge or a step in it, both stand
+  -- upright.)
+  if vector.dot(top.up, bottom.up) > -0.6 then
+    top.up, bottom.up = vector.create(0, 1, 0), vector.create(0, -1, 0)
+  end
+  return { top, bottom }
 end
 
 return Imported
