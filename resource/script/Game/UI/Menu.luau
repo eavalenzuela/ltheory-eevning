@@ -2,19 +2,25 @@
 -- The menus: the one the game opens on (continue, new game, load,
 -- options, quit), and the one Escape brings up in play (resume, save,
 -- load, options, back to the first, quit). Options is where the sound
--- is set: on or off, and how loud its effects and its music are.
+-- is set: on or off, and how loud its effects and its music are; and
+-- from it, Keys is where each thing a key does (Game/UI/Keys) is given
+-- the key a person likes: its button is clicked, and the next key
+-- pressed is its key (Escape leaves it as it was). A key another thing
+-- had changes hands: that one gets the key this one gave up.
 --
 -- While a menu is up the game stands still and nothing else of the
 -- interface is drawn (Game/UI/Hud asks Menu.IsOpen). Drawn every frame
 -- with Game/UI/Im. Its buttons' names, for a script (Im.Press):
 -- "Menu:continue", "Menu:new", "Menu:load", "Menu:save", "Menu:resume",
 -- "Menu:main", "Menu:quit", "Menu:back", "Menu:start", "Menu:random",
--- "Menu:options", "Menu:sound", "Load:<slot>", "Save:<slot>",
--- "Delete:<slot>"; the seed field is "Seed", and the two sliders are
--- "Effects volume" and "Music volume" (Im.Enter).
+-- "Menu:options", "Menu:sound", "Menu:keys", "Menu:defaults",
+-- "Key:<action>", "Load:<slot>", "Save:<slot>", "Delete:<slot>"; the
+-- seed field is "Seed", and the two sliders are "Effects volume" and
+-- "Music volume" (Im.Enter).
 
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
+local Keys = require("@lt/Game/UI/Keys")
 local Session = require("@lt/Game/Session")
 
 local Menu = {}
@@ -26,7 +32,8 @@ Menu.WIDTH = 560
 local SLOTS = { "save 1", "save 2", "save 3", "save 4", "save 5" }
 
 -- "": no menu. "main" is the opening menu and "pause" the one in play;
--- "new", "load", "save" and "options" are their pages.
+-- "new", "load", "save" and "options" are their pages, and "keys" is a
+-- page of options.
 local page = ""
 local root = "main"       -- where Back goes
 local seed = 1
@@ -52,6 +59,21 @@ function Menu.Sound(on: boolean, effectsLevel: number, musicLevel: number,
   soundOn, effects, music, setSound = on, effectsLevel, musicLevel, set
 end
 
+-- The action a key is being listened for (the keys page), or "". And
+-- what the game does when a key has changed hands (it keeps them:
+-- Menu.Keys).
+local asking = ""
+local setKeys: (() -> ())? = nil
+
+function Menu.Keys(set: () -> ())
+  setKeys = set
+end
+
+-- The action the keys page is listening for a key for, or "".
+function Menu.Asking(): string
+  return asking
+end
+
 function Menu.IsOpen(): boolean
   return page ~= ""
 end
@@ -67,8 +89,13 @@ function Menu.OpenMain(session: Session.Session)
   refresh()
 end
 
--- Open the menu of a game in play, or close it if it is open.
+-- Open the menu of a game in play, or close it if it is open. (Escape,
+-- while a key is being listened for, is "leave it as it was".)
 function Menu.Toggle(session: Session.Session)
+  if asking ~= "" then
+    asking = ""
+    return
+  end
   if page == "" then
     page, root = "pause", "pause"
     wasPaused = session.clock.paused
@@ -118,11 +145,17 @@ local function saved(slot: string): Session.SaveInfo?
 end
 
 function Menu.Draw(session: Session.Session, left: number, top: number, width: number, height: number)
+  -- (while a key is listened for, no key does what it otherwise does)
+  if page ~= "keys" then
+    asking = ""
+  end
+  Keys.Listen(asking ~= "")
   if page == "" then
     return
   end
   local w = Menu.WIDTH
-  local h = if page == "load" or page == "save" then 420 elseif page == "pause" then 390 elseif page == "main" then 370 else 340
+  local h = if page == "load" or page == "save" then 420 elseif page == "pause" then 390 elseif page == "main" then 370
+    elseif page == "keys" then 520 else 340
   local x, y = left + (width - w) / 2, top + (height - h) / 2 - 40
   -- (the game behind is dimmed, so the menu is what there is to read)
   Im.Fill(left, top, width, height, vector.create(0, 0, 0), 0.45)
@@ -206,8 +239,50 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
         set(soundOn, effects, music, false)
       end
     end
+    -- (the page is as tall as it was before it had this button: what is above stays where it was)
+    if Im.Button("Keys", cx - 130, y + 240, 260, 34, true, "Menu:keys") then
+      page = "keys"
+    end
     if Im.Button("Back", cx - 130, y + h - 50, 260, 34, true, "Menu:back") then
       page = root
+    end
+  elseif page == "keys" then
+    Im.Heading("KEYS", cx - 34, y + 26, 26, Im.TEXT)
+    Im.Text(if asking ~= "" then "Press the key it is to have. Escape leaves it as it was."
+      else "Click a key to give the thing another. A key something else has changes hands.", x + 30, y + 68, 13,
+      if asking ~= "" then Im.ACCENT else Im.DIM)
+    -- (the key just pressed is the key of what was clicked)
+    if asking ~= "" then
+      local heard = Keys.Heard()
+      if heard then
+        Keys.Bind(asking, heard)
+        asking = ""
+        if setKeys then
+          setKeys()
+        end
+      end
+    end
+    -- Everything there is a key for, in two columns.
+    local half = math.ceil(#Keys.ACTIONS / 2)
+    for index, action in Keys.ACTIONS do
+      local column = if index > half then 1 else 0
+      local rowX = x + 30 + column * 258
+      local rowY = y + 98 + ((index - 1) % half) * 31
+      local mine = asking == action.id
+      Im.Text(action.label, rowX, rowY + 5, 14, if mine then Im.ACCENT else Im.TEXT)
+      if Im.Toggle(if mine then "..." else Keys.Of(action.id), rowX + 150, rowY, 84, 26, mine, `Key:{action.id}`) then
+        asking = if mine then "" else action.id
+      end
+    end
+    if Im.Button("Defaults", cx - 266, y + h - 50, 260, 34, not Keys.AtFirst(), "Menu:defaults") then
+      Keys.Reset()
+      asking = ""
+      if setKeys then
+        setKeys()
+      end
+    end
+    if Im.Button("Back", cx + 6, y + h - 50, 260, 34, true, "Menu:back") then
+      page = "options"
     end
   elseif page == "new" then
     Im.Heading("NEW GAME", cx - 72, y + 26, 26, Im.TEXT)
@@ -274,7 +349,7 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
       end
       line += 36
     end
-    Im.Text("F9 saves to 'quick' at any time, and docking saves to 'auto'.", x + 24, line + 8, 12, Im.DIM, 0.8)
+    Im.Text(`{Keys.Of("save")} saves to 'quick' at any time, and docking saves to 'auto'.`, x + 24, line + 8, 12, Im.DIM, 0.8)
     if Im.Button("Back", cx - 130, y + h - 50, 260, 34, true, "Menu:back") then
       page = root
     end

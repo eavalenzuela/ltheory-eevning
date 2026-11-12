@@ -1591,6 +1591,18 @@ function Debug.Key(name: string): boolean
   return Keys.Press(name)
 end
 
+-- Give a thing another key, as the keys page of the menu does ("stop",
+-- "X"). False if there is no such thing or no such key.
+function Debug.Bind(action: string, key: string): boolean
+  return Keys.Bind(action, key)
+end
+
+-- The key a thing has ("stop": "Space"), as it is shown; and, for the
+-- keys page of the menu, the thing it is listening for a key for ("").
+function Debug.KeyOf(action: string): (string, string)
+  return Keys.Of(action), Menu.Asking()
+end
+
 -- What the nth hired pilot is doing ("following", "mining", "taking
 -- ore in", "carrying" and so on: Core.Query.Fleet), the units they have
 -- brought in, mined or hauled, what they have learned toward their next
@@ -1685,6 +1697,12 @@ function App:Initialize()
       Settings.Save(settings)
     end
   end)
+  -- (and the keys a person has changed, kept when one changes hands)
+  Keys.Import(settings.keys)
+  Menu.Keys(function()
+    settings.keys = Keys.Export()
+    Settings.Save(settings)
+  end)
   _G.GameDebug = Debug
   -- A person is given the menu, over a new game that stands still
   -- behind it. A script goes straight into that game.
@@ -1719,13 +1737,13 @@ function App:Initialize()
         Menu.Toggle(session)
       end
       if not Menu.IsOpen() then
-        if Key_Pressed(Key_P()) and not Im.Typing() then
+        if Keys.Did("pause") then
           session.clock.paused = not session.clock.paused
         end
-        if Key_Pressed(Key_F9()) then
+        if Keys.Did("save") then
           Session.Save(session, "quick")
         end
-        if Key_Pressed(Key_F10()) then
+        if Keys.Did("load") then
           Session.Load(session, "quick")
         end
       end

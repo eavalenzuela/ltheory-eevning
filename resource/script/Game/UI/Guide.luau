@@ -12,6 +12,7 @@
 local Careers = require("@lt/Game/UI/Careers")
 local Core = require("@lt/Core/Api")
 local Im = require("@lt/Game/UI/Im")
+local Keys = require("@lt/Game/UI/Keys")
 local Session = require("@lt/Game/Session")
 
 local Guide = {}
@@ -132,7 +133,7 @@ function Guide.Draw(session: Session.Session, x: number, y: number)
 
   line += 10
   if shown then
-    local first, second = broken(shown.step.how, 62)
+    local first, second = broken(Keys.Say(shown.step.how), 62)
     Im.Text(if shown.done then shown.step.title else `Next: {shown.step.title}`, left, line, 14, Im.ACCENT)
     Im.Text(first, left, line + 22, 13, Im.TEXT)
     Im.Text(second, left, line + 40, 13, Im.TEXT)

@@ -348,10 +348,11 @@ end
 -- The hired pilot the fleet's orders are for (by their id), or 0: everybody.
 local fleetPicked = 0
 
--- The key each order to the ship has, given at what is selected (Game/UI/Keys).
+-- What each order to the ship is to the keyboard, given at what is
+-- selected (an action of Game/UI/Keys, which says what key that is).
 local ORDER_KEYS: { [string]: string } = {
-  Approach = "Q", Orbit = "W", KeepAtRange = "E", AlignTo = "A", WarpTo = "S", Dock = "D", Jump = "D",
-  LockTarget = "L", UnlockTarget = "L",
+  Approach = "approach", Orbit = "orbit", KeepAtRange = "keep", AlignTo = "align", WarpTo = "warp", Dock = "dock", Jump = "dock",
+  LockTarget = "lock", UnlockTarget = "lock",
 }
 
 -- The marked place whose name is shown as a field in the panel of what
@@ -487,7 +488,7 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     else
       local can = Session.Can(session, order.kind, entry.id, order.range)
       local key = ORDER_KEYS[order.kind]
-      local pressed = key ~= nil and Keys.Pressed(key) and can
+      local pressed = key ~= nil and Keys.Did(key) and can
       if Im.Button(order.label, bx, by, buttonWidth, 26, can) or pressed then
         Session.Order(session, order.kind, entry.id, order.range)
       end
@@ -631,11 +632,11 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
       or module.hex ~= nil or module.salvager ~= nil
     Im.Panel(bx, y, width, 46)
     local hot, clicked = Im.Row(bx, y, width, 46, running ~= nil)
-    -- (and by its key: F1 for the first of the rack)
+    -- (and by its key: F1 for the first of the rack, until a person says otherwise)
     local key = Keys.Rack(index)
     if key and active then
-      Im.TextRight(key, bx + width - 6, y + 5, 11, Im.DIM)
-      clicked = Keys.Pressed(key) or clicked
+      Im.TextRight(Keys.Of(key), bx + width - 6, y + 5, 11, Im.DIM)
+      clicked = Keys.Did(key) or clicked
     end
     Im.Text(shorten(module.short or module.name, letters - (if key and active then 2 else 0)), bx + 8, y + 5, 13,
       if active then Im.TEXT else Im.DIM)
@@ -723,7 +724,7 @@ local function drawNavigation(session: Session.Session, ball: State.Ball, x: num
     Im.Text("CLOAKED", x + 400, y + 12, 13, Im.ACCENT)
   end
   local inWarp = ball.warp ~= nil and ball.warp.stage == "warp"
-  local stop = Keys.Pressed("Space") and not inWarp
+  local stop = Keys.Did("stop") and not inWarp
   if Im.Button("STOP", x + width - 92, y + 8, 80, 24, not inWarp) or stop then
     Session.Order(session, "Stop")
   end
@@ -832,9 +833,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       if ball then
         local navX = left + (w.size.x - 520) / 2
         drawTargets(session, game, ball, left + 300, top + 16)
-        -- Tab picks out the next ship that would fire on the pilot, nearest
-        -- first and round again.
-        if Keys.Pressed("Tab") then
+        -- A key (Tab) picks out the next ship that would fire on the pilot,
+        -- nearest first and round again.
+        if Keys.Did("next") then
           local first, after, passed = 0, 0, false
           for _, entry in entries do
             if entry.hostile and entry.onGrid then
@@ -847,8 +848,8 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             session.selected = if after ~= 0 then after else first
           end
         end
-        -- C has the camera follow what is selected, and again lets it go.
-        if Keys.Pressed("C") then
+        -- A key (C) has the camera follow what is selected, and again lets it go.
+        if Keys.Did("camera") then
           Scene.Track(scene, if scene.tracking == session.selected then 0 else session.selected)
         end
         if scene.tracking ~= 0 and scene.tracking == session.selected then
@@ -894,7 +895,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           Guide.Close()
         end
       end
-      if Im.Button("Map", left + 408, bottom - 54, 56, 34, true) or Keys.Pressed("M") then
+      if Im.Button("Map", left + 408, bottom - 54, 56, 34, true) or Keys.Did("map") then
         if Map.IsOpen() then
           Map.Close()
         else

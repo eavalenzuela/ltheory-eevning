@@ -25,6 +25,19 @@ lua assert(GameDebug.Doing() == 'goto', 'a ship leaves a station under way')
 lua assert(GameDebug.Key('Space') and not GameDebug.Key('Nonesuch'))
 until GameDebug.Doing() == 'stop'
 
+# A thing can be given another key (the menu's Options, Keys): with
+# stopping on X, Space does nothing and X stops the ship. And back.
+lua assert(GameDebug.Select('belt'), 'no belt on the overview')
+lua GameDebug.Key('A')
+until GameDebug.Doing() == 'align'
+lua assert(GameDebug.Bind('stop', 'X') and GameDebug.KeyOf('stop') == 'X')
+lua GameDebug.Key('Space')
+frames 10
+lua assert(GameDebug.Doing() == 'align', 'Space should stop nothing when stopping is on X')
+lua GameDebug.Key('X')
+until GameDebug.Doing() == 'stop'
+lua assert(GameDebug.Bind('stop', 'Space') and GameDebug.KeyOf('stop') == 'Space')
+
 lua assert(GameDebug.Select('belt'), 'no belt on the overview')
 lua GameDebug.Key('S')
 lua GameDebug.TimeScale(8)

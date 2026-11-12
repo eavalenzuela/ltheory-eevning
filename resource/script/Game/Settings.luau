@@ -1,20 +1,22 @@
 --!strict
 -- What a person has set, kept between one run of the game and the next:
--- whether there is sound, and how loud its effects and its music are. A
--- few lines of "key=value" in save/settings.txt.
+-- whether there is sound, how loud its effects and its music are, and
+-- the keys that are not what they were at first (Game/UI/Keys). A few
+-- lines of "key=value" in save/settings.txt.
 --
 -- A script's run has the defaults and keeps nothing: a test neither
 -- depends on what somebody has set nor changes it.
 
 local Settings = {}
 
--- (effects and music: 0 to 100)
-export type Settings = { sound: boolean, effects: number, music: number }
+-- (effects and music: 0 to 100; keys: "action:key,action:key", only
+-- those a person has changed)
+export type Settings = { sound: boolean, effects: number, music: number, keys: string }
 
 local PATH = "save/settings.txt"
 
 function Settings.Load(): Settings
-  local settings: Settings = { sound = true, effects = 70, music = 70 }
+  local settings: Settings = { sound = true, effects = 70, music = 70, keys = "" }
   local file = if Host.scripted then nil else Host.ReadFile(PATH)
   if file then
     local found: { [string]: string } = {}
@@ -32,6 +34,7 @@ function Settings.Load(): Settings
     local both = level(found.volume, 70)
     settings.effects = level(found.effects, both)
     settings.music = level(found.music, both)
+    settings.keys = found.keys or ""
   end
   return settings
 end
@@ -41,7 +44,8 @@ function Settings.Save(settings: Settings)
     return
   end
   Host.MakeDir("save")
-  Host.WriteFile(PATH, `sound={if settings.sound then 1 else 0}\neffects={settings.effects}\nmusic={settings.music}\n`)
+  Host.WriteFile(PATH, `sound={if settings.sound then 1 else 0}\neffects={settings.effects}\nmusic={settings.music}\n`
+    .. `keys={settings.keys}\n`)
 end
 
 return Settings

@@ -47,6 +47,40 @@ lua assert(not GameDebug.CanPress('Music volume'), 'with the sound off the slide
 until GameDebug.Press('Menu:sound')
 frames 3
 lua assert(GameDebug.Options() == true)
+# Keys: each thing a key does can be given another. Stopping is Space.
+# Its button is clicked, and the next key pressed (X, on the keyboard)
+# is its key.
+until GameDebug.Press('Menu:keys')
+frames 3
+lua assert(GameDebug.KeyOf('stop') == 'Space', 'stopping begins on Space')
+lua assert(not GameDebug.CanPress('Menu:defaults'), 'with every key as it was at first there is nothing to put back')
+until GameDebug.Press('Key:stop')
+until select(2, GameDebug.KeyOf('stop')) == 'stop'
+key X
+frames 3
+lua assert(GameDebug.KeyOf('stop') == 'X', 'the key pressed should be the key of what was clicked, not ' .. GameDebug.KeyOf('stop'))
+lua assert(select(2, GameDebug.KeyOf('stop')) == '', 'with the key given, no more is listened for')
+# A key something else has changes hands: approaching takes W, and
+# orbiting gets the Q it gave up.
+until GameDebug.Press('Key:approach')
+until select(2, GameDebug.KeyOf('approach')) == 'approach'
+key W
+frames 3
+lua assert(GameDebug.KeyOf('approach') == 'W' and GameDebug.KeyOf('orbit') == 'Q', 'the two should have changed keys')
+# Escape, while a key is listened for, leaves it as it was, and the menu up.
+until GameDebug.Press('Key:map')
+until select(2, GameDebug.KeyOf('map')) == 'map'
+key Escape
+frames 3
+lua assert(select(2, GameDebug.KeyOf('map')) == '' and GameDebug.KeyOf('map') == 'M', 'Escape should leave the key as it was')
+lua assert(GameDebug.Menu() == 'keys', 'and should not have closed the menu')
+# And everything back as it was at first.
+until GameDebug.Press('Menu:defaults')
+frames 3
+lua assert(GameDebug.KeyOf('stop') == 'Space' and GameDebug.KeyOf('approach') == 'Q' and GameDebug.KeyOf('orbit') == 'W')
+until GameDebug.Press('Menu:back')
+frames 3
+lua assert(GameDebug.CanPress('Menu:keys'), 'back from the keys is the options')
 until GameDebug.Press('Menu:back')
 frames 3
 lua assert(GameDebug.CanPress('Menu:options'), 'back from the options is the menu they were opened from')

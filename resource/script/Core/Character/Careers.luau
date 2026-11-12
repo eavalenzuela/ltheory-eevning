@@ -172,11 +172,11 @@ Careers.list = {
           return event.reason == "bounty"
         end,
         gifts = { { type = "shield.booster.small", quantity = 1 } },
-        says = "Pirates come to the belts. Warp to one and wait. Tab picks a pirate out, L locks it, F1 and F2 fire. Orbit "
+        says = "Pirates come to the belts. Warp to one and wait. <next> picks a pirate out, <lock> locks it, <rack1> and <rack2> fire. Orbit "
           .. "it (W) while you shoot: a moving ship is harder to hit. If your shield goes, warp out." },
       { title = "What they leave", aim = "Loot a wreck", on = "Looted", mine = "ship", need = 1, kit = {}, credits = 4000,
         gifts = { { type = "book.salvaging", quantity = 1 }, { type = "salvager.small", quantity = 1 } },
-        says = "A destroyed ship leaves a wreck, and what it carried is in it. Approach the wreck (Q) and Loot. Pirate "
+        says = "A destroyed ship leaves a wreck, and what it carried is in it. Approach the wreck (<approach>) and Loot. Pirate "
           .. "tags sell, and so does the rest." },
       { title = "Nothing wasted", aim = "Salvage a wreck", on = "Salvaged", mine = "ball", need = 1, kit = {}, credits = 6000,
         gifts = { { type = "armor.plate.200mm", quantity = 1 } },

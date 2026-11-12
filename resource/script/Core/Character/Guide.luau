@@ -63,9 +63,9 @@ Guide.steps = {
     also = function(event: Event): boolean
       return event.reason == "bounty"
     end,
-    how = "They come to belts. Tab picks one out, L locks it, F1 and F2 fire." },
+    how = "They come to belts. <next> picks one out, <lock> locks it, <rack1> and <rack2> fire." },
   { id = "loot", group = "Fighting", title = "Loot a wreck", on = "Looted", mine = "ship",
-    how = "Approach the wreck (Q), then Loot." },
+    how = "Approach the wreck (<approach>), then Loot." },
   { id = "salvage", group = "Fighting", title = "Salvage a wreck", on = "Salvaged", mine = "ball",
     how = "A Salvager wants the Salvaging skill. What it brings off builds rigs." },
   { id = "drones", group = "Fighting", title = "Launch a drone", on = "DroneLaunched", mine = "owner",

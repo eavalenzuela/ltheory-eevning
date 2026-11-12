@@ -18,6 +18,7 @@
 local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
+local Keys = require("@lt/Game/UI/Keys")
 local Session = require("@lt/Game/Session")
 local Types = require("@lt/Core/Data/Types")
 
@@ -109,7 +110,7 @@ function Careers.Detail(session: Session.Session, status: Core.CareersStatus, x:
     return line + 24
   end
   Im.Text(lesson.title, x, line, 16, Im.ACCENT)
-  line = Im.Wrapped(lesson.says, x, line + 26, width, 13, Im.TEXT, 18) + 8
+  line = Im.Wrapped(Keys.Say(lesson.says), x, line + 26, width, 13, Im.TEXT, 18) + 8
 
   Im.Text("To do", x, line, 12, Im.DIM)
   Im.Text(lesson.aim, x + 92, line - 1, 14, Im.TEXT)
