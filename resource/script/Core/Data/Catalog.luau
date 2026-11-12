@@ -42,7 +42,7 @@ local MODULES: { { any } } = {
   { "blaster", "Hybrid guns", 3 }, { "railgun", "Hybrid guns", 3 }, { "launcher.", "Launchers", 4 },
   { "shield.", "Shields", 5 }, { "armor.", "Armour", 6 }, { "afterburner", "Propulsion", 7 }, { "mwd.", "Propulsion", 7 },
   { "capacitor.", "Capacitor", 8 }, { "miner.", "Mining", 9 }, { "salvager", "Mining", 9 },
-  { "web.", "Electronic warfare", 10 },
+  { "projector.", "Electronic warfare", 10 },
   { "disruptor.", "Electronic warfare", 10 }, { "painter.", "Electronic warfare", 10 }, { "damper.", "Electronic warfare", 10 },
   { "neutraliser.", "Electronic warfare", 10 }, { "jammer.", "Electronic warfare", 10 }, { "cloak.", "Electronic warfare", 10 }, { "analyzer.", "Electronic warfare", 10 },
   { "remote.", "Remote repair", 11 }, { "rig.", "Rigs", 12 },

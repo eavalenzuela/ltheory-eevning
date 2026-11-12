@@ -73,7 +73,7 @@ end
 
 -- A scout is a raider's hull with one gun on it and nothing else: what
 -- a new pilot in a Courier can beat. A raider carries a warp disruptor
--- and a destroyer a webifier (and each the other's, if it has the room):
+-- and a destroyer an entanglement projector (and each the other's, if it has the room):
 -- away from where order is kept, a pack holds what it catches.
 local KINDS: { Kind } = {
   { id = "scout", hull = "frigate.cutthroat", name = "Pirate Scout", range = 1500, bounty = 6000, tags = 1,
@@ -81,10 +81,10 @@ local KINDS: { Kind } = {
   { id = "raider", hull = "frigate.cutthroat", name = "Pirate Raider", range = 2000, bounty = 15000, tags = 1,
     fit = all(times(3, "autocannon.small", "ammo.fusion"), times(1, "launcher.light"),
       { { "disruptor.warp" }, { "afterburner.1mn" }, { "armor.plate.200mm" }, { "damage.control" }, { "gyrostabilizer" },
-        { "web.stasis" } }) },
+        { "projector.entanglement" } }) },
   { id = "jackal", hull = "destroyer.jackal", name = "Pirate Jackal", range = 3000, bounty = 40000, tags = 2,
     fit = all(times(6, "autocannon.small", "ammo.fusion"), times(3, "launcher.light"),
-      { { "web.stasis" }, { "afterburner.1mn" }, { "armor.plate.200mm" }, { "damage.control" }, { "gyrostabilizer" },
+      { { "projector.entanglement" }, { "afterburner.1mn" }, { "armor.plate.200mm" }, { "damage.control" }, { "gyrostabilizer" },
         { "disruptor.warp" }, { "armor.plate.200mm" } }) },
   { id = "marauder", hull = "cruiser.marauder", name = "Pirate Marauder", range = 6000, bounty = 120000, tags = 4,
     fit = all(times(5, "autocannon.medium"), times(3, "launcher.heavy"),

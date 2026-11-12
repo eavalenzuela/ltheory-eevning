@@ -175,9 +175,9 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "Jammed" and event.ball == mine then
     Session.Say(session, "Jammed: your locks are broken")
   elseif kind == "Held" and event.ball == mine then
-    Session.Say(session, if event.scrambled and event.web < 1 then "Webbed and warp scrambled: you are held"
+    Session.Say(session, if event.scrambled and event.entangle < 1 then "Entangled and warp scrambled: you are held"
       elseif event.scrambled then "Warp scrambled: you cannot warp"
-      elseif event.web < 1 then "Webbed: your speed is cut"
+      elseif event.entangle < 1 then "Entangled: your speed is cut"
       else "You are free of them")
   elseif kind == "TrailFound" then
     Session.Say(session, `The den's records give away a stronghold: {event.name}, in {session.game.state.galaxy.systems[event.system].name}`)

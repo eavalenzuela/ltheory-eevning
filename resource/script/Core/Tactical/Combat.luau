@@ -691,11 +691,11 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
   end
   state.missiles = flying
 
-  -- Who is held: the strongest webifier running on each ship, and
+  -- Who is held: the strongest entanglement projector running on each ship, and
   -- whether a disruptor is. A ship whose lot has changed is told, has
   -- its speed set to match, and if it was getting ready to warp, is not.
   -- (and the strongest painter and the strongest dampener, likewise)
-  local webs: { [number]: number } = {}
+  local entangles: { [number]: number } = {}
   local scrambles: { [number]: boolean } = {}
   local paints: { [number]: number } = {}
   local damps: { [number]: number } = {}
@@ -705,8 +705,8 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
       local hex = if item then Modules.byId[item.type].hex else nil
       if hex and state.balls[running.target] then
         local target = running.target
-        if hex.kind == "web" then
-          webs[target] = math.min(webs[target] or 1, hex.strength)
+        if hex.kind == "entangle" then
+          entangles[target] = math.min(entangles[target] or 1, hex.strength)
         elseif hex.kind == "scramble" then
           scrambles[target] = true
         elseif hex.kind == "paint" then
@@ -720,17 +720,17 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
   for _, id in state.ballIds do
     local ball = state.balls[id]
     local v = ball.vitals
-    local web, scrambled, paint, damp = webs[id] or 1, scrambles[id] == true, paints[id] or 1, damps[id] or 1
-    if v.web ~= web or v.scrambled ~= scrambled or v.paint ~= paint or v.damp ~= damp then
-      local held = v.web ~= web or v.scrambled ~= scrambled
-      v.web, v.scrambled, v.paint, v.damp = web, scrambled, paint, damp
+    local entangle, scrambled, paint, damp = entangles[id] or 1, scrambles[id] == true, paints[id] or 1, damps[id] or 1
+    if v.entangle ~= entangle or v.scrambled ~= scrambled or v.paint ~= paint or v.damp ~= damp then
+      local held = v.entangle ~= entangle or v.scrambled ~= scrambled
+      v.entangle, v.scrambled, v.paint, v.damp = entangle, scrambled, paint, damp
       Vitals.Refresh(state, ball)
       if scrambled and ball.warp and ball.warp.stage ~= "warp" then
         ball.warp = nil
         ball.intent = nil
       end
       if held then
-        table.insert(events, { kind = "Held", ball = id, web = web, scrambled = scrambled })
+        table.insert(events, { kind = "Held", ball = id, entangle = entangle, scrambled = scrambled })
       end
     end
   end

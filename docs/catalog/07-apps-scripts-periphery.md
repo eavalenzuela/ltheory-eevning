@@ -112,7 +112,7 @@ Applies to ltheory, war, dogfight, handling, rails and hud. Source owned by the 
 
 **handling**
 - The flight test bed, and the most "empire-like" setup:
-  - a named system ("Fermat's Last") with a named ore ("Mercoxit")
+  - a named system ("Fermat's Last") with a named ore ("Xenotime")
   - 16 player-owned assets (Fighter/Hauler/Battleship/stations) scattered 10 km out, about half of them flying `Task_Goto` to each other
   - random weapons and ore loaded into cargo
   - two "Pirate" ships (unarmed, no tasks, random health)

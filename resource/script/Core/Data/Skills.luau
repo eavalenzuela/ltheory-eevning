@@ -122,7 +122,7 @@ local skills: { Skill } = {
     note = "Level 1 to fit a cloaking device." },
   -- Holding things
   { id = "propulsion.jamming", name = "Propulsion Jamming", rank = 3, start = -1, requires = { { skill = "electronics", level = 2 } },
-    note = "Level 1 to fit a stasis webifier or a warp disruptor." },
+    note = "Level 1 to fit an entanglement projector or a warp disruptor." },
   -- Finding things
   { id = "astrometrics", name = "Astrometrics", rank = 3, start = 0, requires = {},
     note = "Each scan brings a hidden site 10% nearer to found a level." },

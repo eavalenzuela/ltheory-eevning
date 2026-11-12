@@ -389,6 +389,30 @@ suite:Case("a save from the version before still opens", function(t)
   end)
 end)
 
+suite:Case("a save from before the entanglement projector had its name keeps the module and what it was doing", function(t)
+  local game = newGame()
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 42
+  local old = file.state
+  -- As it was: the module under its old id, and a ship's share of its
+  -- speed under the old name of that.
+  local item = 0
+  for id, held in old.items do
+    if held.type == "ammo.emp" then
+      item = id
+    end
+  end
+  t.ok(item ~= 0, "the starting hangar has rounds in it to turn into a module")
+  old.items[item].type = "web.stasis"
+  old.balls[901] = { id = 901, vitals = { web = 0.45, scrambled = true } }
+  local was, wasLength = Codec.Encode(file)
+  local loaded = Core.Load(was, wasLength).state
+  t.eq(loaded.items[item].type, "projector.entanglement")
+  t.eq(loaded.balls[901].vitals.entangle, 0.45)
+  t.eq((loaded.balls[901].vitals :: any).web, nil)
+end)
+
 suite:Case("a save from before the Kethri were nomads has their stations as colony ships and their towers as Vessari ones", function(t)
   local game = Core.New({ galaxySeed = 3, historySeed = 1, systems = 40, peaceful = true })
   local state = game.state

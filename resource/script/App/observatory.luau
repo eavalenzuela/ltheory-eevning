@@ -15,7 +15,7 @@ return AppShell.Create(function(): Widget
 
   local system = Object_System(vector.create(15.012, 15.012, 15.012), 1200)
   local oreType = Item_OreType(10, 13)
-  oreType:SetName("Mercoxit")
+  oreType:SetName("Xenotime")
   system:AddResource(oreType, 1)
 
   local zone = Object_Zone(system, 0, vector.create(1000, 1000, 1000), vector.create(10000, 10000, 10000),

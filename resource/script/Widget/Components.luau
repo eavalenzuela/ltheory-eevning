@@ -252,7 +252,6 @@ function Components.FocusGlow(widget: Widget): Widget
     PostUpdate = function(_, w: Widget)
       if w.focusMouse then
         if t < 0.001 then
-          Sound_Play("ui/hover.wav", 0.008)
         end
         t = mix(t, 1, approach(0.1))
       else
@@ -276,7 +275,6 @@ function Components.FocusPanel(widget: Widget): Widget
         focus = w.focusMouse
         w:Rebuild()
         if focus then
-          Sound_Play("ui/hover.wav", 0.008)
         end
       end
     end,
@@ -363,10 +361,8 @@ function Components.Draggable(widget: Widget): Widget
     PostUpdate = function(_, w: Widget)
       if w.focusMouse and Mouse_LeftPressed() then
         dragging = true
-        Sound_Play("ui/dragbegin.wav", 0.05)
       end
       if dragging and Mouse_LeftReleased() then
-        Sound_Play("ui/dragend.wav", 0.05)
         dragging = false
         offset = snap * vector.floor(offset / snap + vector.create(0.5, 0.5))
       end

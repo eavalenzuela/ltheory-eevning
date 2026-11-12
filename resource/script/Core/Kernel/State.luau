@@ -62,9 +62,9 @@ export type Vitals = {
   armorResonance: { number },
   hullResonance: { number },
   -- What other ships are doing to it (Tactical/Combat): its top speed
-  -- is 'web' of what it would be (1: nobody has a webifier on it), and
-  -- 'scrambled' keeps it out of warp.
-  web: number,
+  -- is 'entangle' of what it would be (1: nobody has an entanglement
+  -- projector on it), and 'scrambled' keeps it out of warp.
+  entangle: number,
   scrambled: boolean,
   -- (and its signature is 'paint' times what it would be, and its lock
   -- range and scan resolution 'damp' of what they would be: 1 for nobody)

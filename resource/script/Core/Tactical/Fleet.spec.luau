@@ -430,7 +430,7 @@ suite:Case("a remote repairer puts shield or armour back on a locked ship in rea
     t.ok((large.hex :: any).strength > 5 * (small.hex :: any).strength and (large.hex :: any).range > (small.hex :: any).range)
     t.eq((large.requires :: any)[1], { skill = "remote.repair", level = 4 })
   end
-  t.ok(not Modules.Mends(Modules.byId["web.stasis"]))
+  t.ok(not Modules.Mends(Modules.byId["projector.entanglement"]))
 end)
 
 suite:Case("a hired pilot with a remote repairer mends whoever of the fleet is hurt, and stops when they are whole", function(t)

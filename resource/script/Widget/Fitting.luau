@@ -95,7 +95,6 @@ local function fittingList(player: Player, station: Object): Widget
         if ship:Plug(item) then
           locker:RemoveItem(item, 1)
           player:AddLog(`Fitted {item:GetName()}`)
-          Sound_Play("ui/elementselect.wav", 0.2)
         else
           player:AddLog(`No free slot for {item:GetName()}`)
         end
@@ -105,7 +104,6 @@ local function fittingList(player: Player, station: Object): Widget
         if item then
           locker:AddItem(item, 1)
           player:AddLog(`Removed {item:GetName()} to your hangar`)
-          Sound_Play("ui/elementselect.wav", 0.2)
         end
         w:Rebuild()
       end

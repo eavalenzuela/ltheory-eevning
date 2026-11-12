@@ -48,7 +48,7 @@
 #   game-sites  sites on nobody's chart (test/scenario/sites.txt): two
 #               hidden belts found with the scanner, and a warp to one
 #   game-tackle  holding another ship (test/scenario/tackle.txt): a
-#               webifier and a warp disruptor fitted and used on a pirate
+#               entanglement projector and a warp disruptor fitted and used on a pirate
 #   game-salvage  salvaging (test/scenario/salvage.txt): a salvager fitted,
 #               a wreck stripped, and then looted
 #   game-rigs   rigs (test/scenario/rigs.txt): one built of salvage, fitted,
@@ -60,7 +60,7 @@
 #   game-miner  a hired pilot set to mine (test/scenario/miner.txt): a hold of
 #               ore brought in to the station while the player sits docked
 #   game-keys   flying by the keyboard (test/scenario/keys.txt): stop, warp,
-#               pick out a pirate, lock, fire and web it, dock, by keys alone
+#               pick out a pirate, lock, fire and hold it, dock, by keys alone
 #   game-invent  invention (test/scenario/invent.txt): a tech 2 blueprint
 #               tried for from a plain one and two datacores
 #   game-hack   hacking (test/scenario/hack.txt): a data analyzer fitted, a

@@ -105,7 +105,7 @@ Effects.looks = {
   -- scene begins each beam again while the module runs): thin, and each
   -- its own colour.
   ["salvager"] = { kind = "beam", color = { 1.0, 0.70, 0.30 }, width = 3, life = 0.5, held = true },
-  ["web."] = { kind = "beam", color = { 0.90, 0.80, 0.30 }, width = 3, life = 0.5, held = true },
+  ["projector."] = { kind = "beam", color = { 0.90, 0.80, 0.30 }, width = 3, life = 0.5, held = true },
   ["disruptor."] = { kind = "beam", color = { 0.70, 0.40, 1.0 }, width = 3, life = 0.5, held = true },
   ["painter."] = { kind = "beam", color = { 1.0, 0.30, 0.30 }, width = 2, life = 0.5, held = true },
   ["damper."] = { kind = "beam", color = { 0.50, 0.60, 0.80 }, width = 2, life = 0.5, held = true },

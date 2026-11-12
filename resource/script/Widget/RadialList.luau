@@ -23,10 +23,8 @@ end
 function RadialList.Create(radius: number, widget: Widget): Widget
   return Widget_Luau(widget, {
     Create = function()
-      Sound_Play("ui/objectmenuopen.wav", 0.4)
     end,
     Destroy = function()
-      Sound_Play("ui/objectmenuclose.wav", 0.4)
     end,
     PreDraw = function(_, w: Widget)
       local center = w.pos

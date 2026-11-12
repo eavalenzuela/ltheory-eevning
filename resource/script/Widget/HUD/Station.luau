@@ -99,7 +99,6 @@ function StationPanel.Receive(self: StationPanel, widget: Widget, message: any)
     else
       self.player:AddLog("Nothing to deposit")
     end
-    Sound_Play("ui/elementselect.wav", 0.2)
   elseif action == "undock" then
     ship:Undock()
     self.player:AddLog(`Undocked from {station:GetName()}`)

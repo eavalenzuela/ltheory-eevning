@@ -11,19 +11,10 @@ local RESOLUTION = 256
 
 function Scanner.Create(_player: Player, object: Object): Widget
   local output = Object_GetScannerOutput(object, RESOLUTION)
-  local loop: Sound? = nil
   local box = Glyph_Box(0, 1, 1, 1)
   return Widget_Luau(Widget_Create(), {
     Create = function()
       Sound_Play("ui/scanneropen.wav", 0.9)
-      loop = Sound_PlayLooped("scanner/loop.wav", 0.3)
-    end,
-    Destroy = function()
-      Sound_Play("ui/scannerclose.wav", 0.4)
-      local sound = loop
-      if sound then
-        sound:Delete()
-      end
     end,
     PreDraw = function(_, w: Widget)
       local count = output:Size()
@@ -57,11 +48,6 @@ function Scanner.Create(_player: Player, object: Object): Widget
     end,
     PreUpdate = function()
       output:Blend(Object_GetScannerOutput(object, RESOLUTION), 1 - Float_ExpDecay(FrameTimer_Get(), 0.1))
-      local sound = loop
-      if sound then
-        sound:SetVolume(0.1 + 0.5 * (1 - Float_ExpDecay(output:AverageAmplitude(), 1)))
-        sound:SetPitch(0.5 + output:AverageFrequency())
-      end
     end,
   })
 end

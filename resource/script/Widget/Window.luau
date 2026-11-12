@@ -17,7 +17,6 @@ function Window.Create(title: string, contents: Widget): Widget
   local opacity = 0
   local window = Widget_Luau(Widget_Create(), {
     Create = function()
-      Sound_Play("ui/windowopen.wav", 0.1)
     end,
     Destroy = function()
       Sound_Play("ui/windowclose.wav", 0.2)

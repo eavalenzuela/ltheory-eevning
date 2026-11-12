@@ -463,7 +463,7 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
       Im.TextRight(key, bx + width - 6, y + 5, 11, Im.DIM)
       clicked = Keys.Pressed(key) or clicked
     end
-    Im.Text(shorten(module.name, 18), bx + 8, y + 5, 13, if active then Im.TEXT else Im.DIM)
+    Im.Text(module.short or shorten(module.name, 18), bx + 8, y + 5, 13, if active then Im.TEXT else Im.DIM)
     local note = if not active then "passive" else ""
     if module.weapon then
       note = if item.charge == "" then "empty"
@@ -536,8 +536,8 @@ local function drawNavigation(session: Session.Session, ball: State.Ball, x: num
   if ball.vitals.scrambled then
     Im.Text("WARP SCRAMBLED", x + 310, y + 44, 13, HULL)
   end
-  if ball.vitals.web < 1 then
-    Im.Text("WEBBED", x + 310, y + 28, 13, HULL)
+  if ball.vitals.entangle < 1 then
+    Im.Text("ENTANGLED", x + 310, y + 28, 13, HULL)
   end
   if ball.vitals.paint > 1 or ball.vitals.damp < 1 then
     Im.Text(if ball.vitals.damp < 1 then "DAMPENED" else "PAINTED", x + 310, y + 12, 13, Im.WARN)

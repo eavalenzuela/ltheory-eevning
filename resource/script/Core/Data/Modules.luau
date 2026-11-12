@@ -51,7 +51,7 @@ export type Miner = {
   range: number,            -- m
 }
 
--- What a module does to another ship while it runs on it. A "web" cuts
+-- What a module does to another ship while it runs on it. An "entangle" cuts
 -- the target's top speed to 'strength' of what it was; a "scramble"
 -- keeps it out of warp; a "paint" makes its signature 'strength' times
 -- as big; a "damp" cuts how far it can lock and how fast to 'strength'
@@ -61,7 +61,7 @@ export type Miner = {
 -- 'strength' points back on its target's shield each cycle, and an
 -- "armor" on its armour.
 export type Hex = {
-  kind: "web" | "scramble" | "paint" | "damp" | "neut" | "jam" | "shield" | "armor",
+  kind: "entangle" | "scramble" | "paint" | "damp" | "neut" | "jam" | "shield" | "armor",
   range: number,            -- m
   strength: number,
   duration: number,         -- s per cycle
@@ -105,6 +105,8 @@ export type ModuleType = {
   -- A data analyzer: fitted, it lets the ship hack a sealed hold from
   -- within its range (Tactical/Hacking).
   analyzer: { range: number }?,
+  -- What it is called for short, where there is not room for its name.
+  short: string?,
   -- Skills a pilot needs to fit it. (Where absent, Data/Skills says.)
   requires: { { skill: string, level: number } }?,
   -- What only a drone carries (Data/Drones): nobody sells it, finds it
@@ -269,9 +271,9 @@ local modules: { ModuleType } = {
   -- Holding another ship: slowing it, and keeping it out of warp. (One
   -- size of each: what they do does not go by the size of the hull.)
   {
-    id = "web.stasis", name = "Stasis Webifier", slot = "mid", hardpoint = "",
+    id = "projector.entanglement", name = "Gravitic Entanglement Projector", short = "GEP", slot = "mid", hardpoint = "",
     cpu = 22, powergrid = 1, volume = 5, basePrice = 30000, passive = {},
-    hex = { kind = "web", range = 10000, strength = 0.45, duration = 5, capacitor = 4 },
+    hex = { kind = "entangle", range = 10000, strength = 0.45, duration = 5, capacitor = 4 },
     requires = { { skill = "propulsion.jamming", level = 1 } },
   },
   {

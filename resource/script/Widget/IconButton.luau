@@ -19,7 +19,6 @@ local function behavior(onPress: any, draw: (w: Widget, focus: boolean) -> ())
     PostUpdate = function(_, w: Widget)
       if w.focusMouse and not focus then
         focus = true
-        Sound_Play("ui/hover.wav", 0.008)
       elseif not w.focusMouse and focus then
         focus = false
         w:Rebuild()

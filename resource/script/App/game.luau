@@ -791,7 +791,7 @@ function Debug.Salvage(): number
 end
 
 -- How a ship is held (Tactical/Combat): the share of its top speed a
--- webifier leaves it (1 for none), and whether it is kept out of warp.
+-- entanglement projector leaves it (1 for none), and whether it is kept out of warp.
 -- The pilot's own, or with 'target' the first ship they have locked.
 function Debug.Held(what: string?): (number, boolean)
   local state = session.game.state
@@ -807,7 +807,7 @@ function Debug.Held(what: string?): (number, boolean)
   if ball == nil then
     return 1, false
   end
-  return ball.vitals.web, ball.vitals.scrambled
+  return ball.vitals.entangle, ball.vitals.scrambled
 end
 
 -- What a faction ("vessari", "talmar", ...) thinks of the pilot. Given

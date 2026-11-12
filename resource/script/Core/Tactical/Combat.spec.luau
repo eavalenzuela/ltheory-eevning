@@ -403,25 +403,25 @@ suite:Case("the same seeds give the same fight, and a save in mid-fight carries 
 end)
 
 -- ---------------------------------------------------------------------
--- Holding another ship: the webifier and the warp disruptor
+-- Holding another ship: the entanglement projector and the warp disruptor
 
-local TACKLE = { { "web.stasis" }, { "disruptor.warp" } }
+local TACKLE = { { "projector.entanglement" }, { "disruptor.warp" } }
 
-suite:Case("a webifier cuts its target's speed while it runs, and only the strongest one counts", function(t)
+suite:Case("an entanglement projector cuts its target's speed while it runs, and only the strongest one counts", function(t)
   local a = arena("frigate.courier", TACKLE, "frigate.courier", {}, 3000)
   local state = a.game.state
-  local web = modules(a)[1]
+  local projector = modules(a)[1]
   local was = a.foe.maxVelocity
-  t.eq(refused(a, { kind = "ActivateModule", actor = 0, item = web.id, target = a.foe.id }), "no locked target")
+  t.eq(refused(a, { kind = "ActivateModule", actor = 0, item = projector.id, target = a.foe.id }), "no locked target")
   lockFoe(t, a)
-  order(t, a, { kind = "ActivateModule", actor = 0, item = web.id, target = a.foe.id })
+  order(t, a, { kind = "ActivateModule", actor = 0, item = projector.id, target = a.foe.id })
   local held = stepUntil(a, "Held", 3)
-  t.eq({ held.ball, held.web, held.scrambled } :: { any }, { a.foe.id, 0.45, false } :: { any })
+  t.eq({ held.ball, held.entangle, held.scrambled } :: { any }, { a.foe.id, 0.45, false } :: { any })
   t.near(a.foe.maxVelocity, was * 0.45, 1e-6)
-  t.eq(a.foe.vitals.web, 0.45)
-  -- A second webifier on it, from somebody else, makes it no slower.
+  t.eq(a.foe.vitals.entangle, 0.45)
+  -- A second projector on it, from somebody else, makes it no slower.
   local other = Space.NewShip(state, "frigate.courier", "Second", "player", 0)
-  local second = Items.Equip(state, other.id, "web.stasis", nil)
+  local second = Items.Equip(state, other.id, "projector.entanglement", nil)
   local ball = Space.Launch(state, other, 1, a.me.x, a.me.y + 500, a.me.z)
   table.insert(ball.vitals.locks, { target = a.foe.id, done = 0, locked = true })
   table.insert(ball.vitals.running, { item = second.id, target = a.foe.id, next = 0, stopping = false, cycles = 0 })
@@ -431,19 +431,19 @@ suite:Case("a webifier cuts its target's speed while it runs, and only the stron
   -- It costs capacitor every cycle, and switched off, the target is free.
   local capacitor = a.me.vitals.capacitor
   gather(a, 11, "none")
-  t.ok(a.me.vitals.capacitor < capacitor - 4, "a webifier should cost capacitor to keep running")
-  order(t, a, { kind = "DeactivateModule", actor = 0, item = web.id })
+  t.ok(a.me.vitals.capacitor < capacitor - 4, "an entanglement projector should cost capacitor to keep running")
+  order(t, a, { kind = "DeactivateModule", actor = 0, item = projector.id })
   gather(a, 7, "none")
   t.near(a.foe.maxVelocity, was, 1e-6)
-  t.eq(a.foe.vitals.web, 1)
+  t.eq(a.foe.vitals.entangle, 1)
 end)
 
-suite:Case("a warp disruptor keeps its target out of warp, and reaches twice as far as a webifier", function(t)
+suite:Case("a warp disruptor keeps its target out of warp, and reaches twice as far as an entanglement projector", function(t)
   local a = arena("frigate.courier", TACKLE, "frigate.courier", {}, 15000)
   local state = a.game.state
-  local web, disruptor = modules(a)[1], modules(a)[2]
+  local projector, disruptor = modules(a)[1], modules(a)[2]
   lockFoe(t, a)
-  t.eq(refused(a, { kind = "ActivateModule", actor = 0, item = web.id, target = a.foe.id }), "out of range")
+  t.eq(refused(a, { kind = "ActivateModule", actor = 0, item = projector.id, target = a.foe.id }), "out of range")
   -- The target is getting ready to warp when it is caught.
   local far = 0
   for _, object in Core.Query.Objects(a.game, 1) do
@@ -457,7 +457,7 @@ suite:Case("a warp disruptor keeps its target out of warp, and reaches twice as 
   t.ok(a.foe.warp ~= nil)
   order(t, a, { kind = "ActivateModule", actor = 0, item = disruptor.id, target = a.foe.id })
   local held = stepUntil(a, "Held", 3)
-  t.eq({ held.ball, held.web, held.scrambled } :: { any }, { a.foe.id, 1, true } :: { any })
+  t.eq({ held.ball, held.entangle, held.scrambled } :: { any }, { a.foe.id, 1, true } :: { any })
   t.eq(a.foe.warp, nil)
   t.eq({ Space.Validate(state, warp) } :: { any }, { false, "warp scrambled" } :: { any })
   -- (an order to dock far off is still taken: it sets off the slow way)
@@ -485,7 +485,7 @@ suite:Case("a raider carries a warp disruptor, and a pilot it catches cannot war
   for _, entry in Pirates.Fit(Pirates.kindById["jackal"]) do
     jackal[entry[1]] = true
   end
-  t.ok(jackal["web.stasis"], "a jackal has no webifier")
+  t.ok(jackal["projector.entanglement"], "a jackal has no entanglement projector")
   for _, entry in Pirates.Fit(Pirates.SCOUT) do
     t.ok(Modules.byId[entry[1]].hex == nil, "a scout should hold nobody")
   end

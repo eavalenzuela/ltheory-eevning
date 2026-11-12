@@ -22,14 +22,12 @@ local function behavior(group: string, label: string, state: State, extra: { [st
       state.focus = w.focusMouse
       w:Rebuild()
       if state.focus then
-        Sound_Play("ui/hover.wav", 0.008)
       end
     end
     if w.focusMouse and Mouse_LeftPressed() then
       state.selected = true
       local select: Select = { type = "TabSelect", group = group, label = label }
       w:SendUp(select)
-      Sound_Play("ui/tabselect.wav", 0.1)
     end
   end
   extra.Receive = function(_, w: Widget, message: any)

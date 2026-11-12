@@ -61,7 +61,6 @@ function TextField.Create(size: number, contents: Contents): Widget
         end
         contents.text = text
         if cursor ~= before then
-          Sound_Play("ui/entertext.wav", 0.1)
           w:Rebuild()
         end
       end

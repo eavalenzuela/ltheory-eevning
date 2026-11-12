@@ -72,7 +72,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 42
+Core.SAVE_VERSION = 43
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -190,10 +190,11 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
     state.sitesSeen = state.sitesSeen or {}
     state.scanReady = state.scanReady or 0
   end,
-  -- 20: a ship can be held by another's webifier or warp disruptor. No
+  -- 20: a ship can be held by another's entanglement projector or warp disruptor. No
   -- ship of a save from before is.
   [19] = function(state: any)
     for _, ball in state.balls do
+      -- (the field was 'web' then: 43 gives it the name it has now)
       ball.vitals.web = ball.vitals.web or 1
       if ball.vitals.scrambled == nil then
         ball.vitals.scrambled = false
@@ -296,6 +297,42 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- save from before has given any.
   [40] = function(state: any)
     state.digs = state.digs or {}
+  end,
+  -- 43: the module that slows another ship is the Gravitic Entanglement
+  -- Projector, and what it does is to entangle. A save from before has
+  -- it under its old id, and each ship's share of its speed under the
+  -- old name of that.
+  [42] = function(state: any)
+    local OLD, NEW = "web.stasis", "projector.entanglement"
+    local function walk(tab: any)
+      local keys: { string } = {}
+      for key, value in tab do
+        if type(value) == "table" then
+          walk(value)
+        elseif type(value) == "string" and string.find(value, OLD, 1, true) then
+          tab[key] = (string.gsub(value, "web%.stasis", NEW))
+        end
+        if type(key) == "string" and string.find(key, OLD, 1, true) then
+          table.insert(keys, key)
+        end
+      end
+      table.sort(keys)
+      for _, key in keys do
+        local to = (string.gsub(key, "web%.stasis", NEW))
+        local had, has = tab[key], tab[to]
+        tab[key] = nil
+        tab[to] = if type(had) == "number" and type(has) == "number" then had + has elseif has ~= nil then has else had
+      end
+      -- (a ship's vitals: the share of its speed it is left with)
+      if type(tab.web) == "number" and tab.scrambled ~= nil then
+        tab.entangle, tab.web = tab.web, nil
+      end
+    end
+    for name, part in state do
+      if name ~= "markets" and name ~= "galaxy" and name ~= "systems" and type(part) == "table" then
+        walk(part)
+      end
+    end
   end,
   -- 42: the Kethri are nomads. They build no towers, and where they had
   -- a station they have a colony ship. In a save from before, a Kethri

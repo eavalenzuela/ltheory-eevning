@@ -28,7 +28,6 @@ function Button.Create(onPress: any, text: string, size: number): Widget
         focus = w.focusMouse
         w:Rebuild()
         if focus then
-          Sound_Play("ui/hover.wav", 0.008)
         end
       end
       if focus and Mouse_LeftPressed() then

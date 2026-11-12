@@ -80,7 +80,6 @@ local function element(player: Player, market: Object, item: Item): Widget
         selected = true
         w:Rebuild()
         w:SendUp(Messages.SelectItem(item))
-        Sound_Play("ui/elementselect.wav", 0.2)
         if not shift then
           w:SendUp(Messages.Selected(w))
         end

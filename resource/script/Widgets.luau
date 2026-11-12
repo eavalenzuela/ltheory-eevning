@@ -184,7 +184,6 @@ end
 function Widgets.FocusWindow(opacity: number, widget: Widget): Widget
   local window = Widget_Stack(Widget_Luau(Widget_Create(), {
     Create = function()
-      Sound_Play("ui/windowopen.wav", 0.1)
     end,
     Destroy = function()
       Sound_Play("ui/windowclose.wav", 0.2)
