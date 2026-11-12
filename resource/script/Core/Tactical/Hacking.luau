@@ -34,9 +34,23 @@
 -- the hack is begun: leaving it, or flying out of the analyzer's reach,
 -- ends it with whatever keys are in.
 --
+-- A vault's lock (a listening post has vaults: Tactical/Sites) is
+-- another kind, and a harder one. Its matrix is six by six, of six
+-- codes; its keys are longer (three codes, three and four); and it is
+-- on a clock: from the first pick there are so many seconds
+-- (Hacking.LOCKS.vault.clock) and then it is over, with whatever keys
+-- are in. What its keys decide:
+--   - the safeguards' key: without it the vault wipes itself, and
+--     there is nothing in it at all;
+--   - the index's: the vault's datacores are as many again;
+--   - the archive's: there are the drawings of the tech 2 make of some
+--     module in the vault beside, which are otherwise only invented.
+-- The pilot's buffer is the same for both. So a vault is worth looking
+-- at for as long as it takes before the first pick: the looking is
+-- free, and the clock is not.
+--
 -- (A grid, a buffer and runs to find, in the manner of the hacking of
--- Cyberpunk 2077. Not yet: a clock, locks of other sizes, locks on
--- anything but a derelict's hold.)
+-- Cyberpunk 2077. Not yet: locks on anything that is not adrift.)
 
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
@@ -54,6 +68,41 @@ Hacking.CODES = { "AX", "DO", "KE", "NU", "RI" }
 -- The keys, the first being the one that matters most, and how long
 -- each is.
 Hacking.KEYS = { { name = "Safeguards", length = 2 }, { name = "Manifest", length = 3 }, { name = "Strongbox", length = 4 } }
+
+-- The kinds of lock there are: how big the matrix, what codes it is
+-- made of, its keys (and what each is for, in a few words), how long
+-- there is from the first pick (ticks; 0: as long as it takes), and how
+-- much of what it holds is lost without the first key.
+export type Lock = {
+  size: number,
+  codes: { string },
+  keys: { { name: string, length: number, what: string } },
+  clock: number,
+  burns: number,
+}
+Hacking.LOCKS = {
+  hold = {
+    size = Hacking.SIZE, codes = Hacking.CODES, clock = 0, burns = 0.5,
+    keys = {
+      { name = "Safeguards", length = 2, what = "or half is burnt" },
+      { name = "Manifest", length = 3, what = "datacores, as many again" },
+      { name = "Strongbox", length = 4, what = "a custom module" },
+    },
+  },
+  vault = {
+    size = 6, codes = { "AX", "DO", "KE", "NU", "RI", "VE" }, clock = 45, burns = 1,
+    keys = {
+      { name = "Safeguards", length = 3, what = "or it is all wiped" },
+      { name = "Index", length = 3, what = "datacores, as many again" },
+      { name = "Archive", length = 4, what = "tech 2 drawings" },
+    },
+  },
+} :: { [string]: Lock }
+
+-- The lock a sealed thing has: a vault's, or a hold's.
+function Hacking.LockOf(wreck: State.Wreck): Lock
+  return Hacking.LOCKS[wreck.lock] or Hacking.LOCKS.hold
+end
 -- The smallest buffer: what a pilot with Hacking 1 has.
 Hacking.BUFFER = 5
 Hacking.LEASH = 1000        -- m: how much farther off than the analyzer reaches before the hack is ended
@@ -119,19 +168,19 @@ end
 -- the codes, as many of each as of any other, shuffled; and for each
 -- key a run that some way through the matrix spells out, early enough
 -- to be got within the smallest buffer.
-local function lock(state: State.State, wreck: number): ({ string }, { State.HackKey })
+local function lock(state: State.State, wreck: number, kind: Lock): ({ string }, { State.HackKey })
   local rng = Rng.For(state.historySeed, wreck, 61)
-  local size = Hacking.SIZE
+  local size = kind.size
   local cells: { string } = {}
   for index = 1, size * size do
-    cells[index] = Hacking.CODES[(index - 1) % #Hacking.CODES + 1]
+    cells[index] = kind.codes[(index - 1) % #kind.codes + 1]
   end
   for index = #cells, 2, -1 do
     local other = Rng.Int(rng, index) + 1
     cells[index], cells[other] = cells[other], cells[index]
   end
   local keys: { State.HackKey } = {}
-  for _, key in Hacking.KEYS do
+  for _, key in kind.keys do
     -- A way through the matrix, as a pilot would go: from the top row,
     -- a column and a row by turns, no cell twice.
     local used: { boolean } = {}
@@ -229,6 +278,15 @@ for _, module in Modules.list do
   end
 end
 
+-- The drawings there are of a tech 2 make of a module, worked out
+-- once: what a vault's archive has one of.
+local drawings: { string } = {}
+for _, module in Modules.list do
+  if module.tech == 2 and not module.internal then
+    table.insert(drawings, "blueprint." .. module.id)
+  end
+end
+
 -- The hack is over: the hold is open, as the keys that are in say.
 local function finish(state: State.State, hack: State.Hack, reason: string, events: { Event })
   local wreck = state.wrecks[hack.wreck]
@@ -237,21 +295,27 @@ local function finish(state: State.State, hack: State.Hack, reason: string, even
     done += if key.done then 1 else 0
   end
   if wreck then
+    local kind = Hacking.LockOf(wreck)
     wreck.locked = false
     if not hack.keys[1].done then
       for _, item in Items.In(state, wreck.id, "cargo") do
-        Items.Take(state, item, math.ceil(item.quantity / 2))
+        Items.Take(state, item, math.ceil(item.quantity * kind.burns))
       end
     end
-    if hack.keys[2].done then
+    -- (a vault that has wiped itself has nothing for the other keys to find)
+    local wiped = not hack.keys[1].done and kind.burns >= 1
+    if hack.keys[2].done and not wiped then
       local cores = 0
       for _, item in Items.In(state, wreck.id, "cargo") do
         cores += if item.type == DATACORE then item.quantity else 0
       end
       Items.Add(state, DATACORE, math.max(1, cores), wreck.id, "cargo")
     end
-    if hack.keys[3].done and #customs > 0 then
-      Items.Add(state, customs[Rng.Int(Rng.For(state.historySeed, wreck.id, 67), #customs) + 1], 1, wreck.id, "cargo")
+    -- (the third key's prize is the lock's own: a custom make of
+    -- something out of a hold, drawings out of a vault)
+    local prizes = if wreck.lock == "vault" then drawings else customs
+    if hack.keys[3].done and #prizes > 0 and not wiped then
+      Items.Add(state, prizes[Rng.Int(Rng.For(state.historySeed, wreck.id, 67), #prizes) + 1], 1, wreck.id, "cargo")
     end
   end
   state.hack = nil
@@ -261,9 +325,10 @@ end
 function Hacking.Apply(state: State.State, command: State.Command, events: { Event })
   local kind = command.kind
   if kind == "StartHack" then
-    local cells, keys = lock(state, command.target :: number)
-    state.hack = { wreck = command.target :: number, size = Hacking.SIZE, cells = cells, used = table.create(#cells, false),
-      buffer = {}, room = Hacking.Buffer(state), keys = keys, along = "row", line = 1 }
+    local sealed = Hacking.LockOf(state.wrecks[command.target :: number])
+    local cells, keys = lock(state, command.target :: number, sealed)
+    state.hack = { wreck = command.target :: number, size = sealed.size, cells = cells, used = table.create(#cells, false),
+      buffer = {}, room = Hacking.Buffer(state), keys = keys, along = "row", line = 1, ends = 0 }
     table.insert(events, { kind = "HackStarted", wreck = command.target })
     return
   end
@@ -279,8 +344,14 @@ function Hacking.Apply(state: State.State, command: State.Command, events: { Eve
     end
     return
   end
-  -- A pick: its code into the buffer, and the next is across it.
+  -- A pick: its code into the buffer, and the next is across it. (And
+  -- with the first, a lock that is on a clock begins to count.)
   local pick = command.pin :: number
+  local wreck = state.wrecks[hack.wreck]
+  local clock = if wreck then Hacking.LockOf(wreck).clock else 0
+  if #hack.buffer == 0 and clock > 0 then
+    hack.ends = state.tick + clock
+  end
   hack.used[pick] = true
   table.insert(hack.buffer, hack.cells[pick])
   if hack.along == "row" then
@@ -324,6 +395,8 @@ function Hacking.Step(state: State.State, events: { Event })
     else
       finish(state, hack, "out of reach", events)
     end
+  elseif hack.ends > 0 and state.tick >= hack.ends then
+    finish(state, hack, "out of time", events)
   end
 end
 

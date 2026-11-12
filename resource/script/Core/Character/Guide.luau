@@ -55,7 +55,7 @@ Guide.steps = {
   { id = "research", group = "Making a living", title = "Research a blueprint", on = "ResearchDone",
     how = "Industry tab, at a station with a laboratory." },
   { id = "invent", group = "Making a living", title = "Try to invent a tech 2 blueprint", on = "InventionDone",
-    how = "Industry tab: Invent tech 2. It wants datacores, which derelicts have." },
+    how = "Industry tab: Invent tech 2. It wants datacores, which derelicts and vaults have." },
 
   { id = "fit", group = "Fighting", title = "Fit a module", on = "Fitted",
     how = "Fitting tab: a module in the hangar goes into a free slot." },

@@ -1,0 +1,35 @@
+/* A cloud of gas: a puff, drawn on a sphere (the shader is given
+   additive blending, no depth writing, and both faces). It is thick
+   where the line of sight goes through its middle and thins to nothing
+   at its edge, so that a few of them laid over one another make a
+   cloud with no outline; and it is wispy, the wisps fixed to the cloud.
+   From inside one, everything is seen through its colour.
+
+   'scale' is the puff's radius (the mesh is a unit sphere). */
+
+#include frag.jsl
+#include math.jsl
+#include color.jsl
+#include lighting.jsl
+#include worldnoise.jsl
+
+FRAG_IN vec3 normal;
+FRAG_IN vec3 position;
+FRAG_IN vec3 origin;
+FRAG_IN vec3 scale;
+
+uniform vec3 cloudTint;
+uniform float cloudGlow;
+
+void main() {
+  vec3 rd = normalize(position - eye);
+  vec3 n = normalize(position - origin);
+  float through = abs(dot(n, rd));
+  /* (both faces of the sphere are drawn, so this is seen twice) */
+  float thick = through * through * through;
+  float wisps = 0.25 + 0.75 * wn_fbm(n * 2.4 + origin * 0.0013, 4, 0.55);
+  float fine = 0.7 + 0.3 * wn_fbm(n * 9.0, 3, 0.6);
+
+  float a = cloudGlow * thick * wisps * fine;
+  RETURN(vec4(mix(cloudTint, vec3(1.0), 0.25 * thick * wisps) * a, 1.0));
+}

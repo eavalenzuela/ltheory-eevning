@@ -2,12 +2,14 @@
 -- Hacking (Tactical/Hacking).
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
+local Blueprints = require("@lt/Core/Data/Blueprints")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Hacking = require("@lt/Core/Tactical/Hacking")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
+local Rng = require("@lt/Core/Kernel/Rng")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -358,6 +360,158 @@ local function reach(hack: State.Hack, room: number): ({ boolean }, number)
   go("row", 1)
   return alone, most
 end
+
+-- A game with a listening post in the first system, the pilot's ship
+-- beside one of its vaults with a data analyzer fitted and Hacking at a
+-- level, and a hack begun on a lock made for the test: a matrix whose
+-- rows are the six codes, each a step round from the one above, so that
+-- the stair (1,1), (2,1), (2,2), (3,2), (3,3)... puts AX DO KE NU RI VE
+-- in the buffer; and the keys given.
+local VAULT_STAIR = { 1, 7, 8, 14, 15, 21, 22 }
+local function vault(level: number, keys: { { string } }?): (Core.Game, State.Wreck, State.Hack)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  state.skills.hacking = level
+  Items.Equip(state, state.player.ship, Hacking.ANALYZER, nil)
+  assert(submit(game, { kind = "Undock", actor = 0 }))
+  assert(submit(game, { kind = "Stop", actor = 0 }))
+  local site = assert(Sites.Plant(state, 1, "data", Rng.For(7, 7), game.events))
+  local found: State.Wreck? = nil
+  for _, id in state.wreckIds do
+    if state.wrecks[id].grid == site.id then
+      found = found or state.wrecks[id]
+    end
+  end
+  local wreck = assert(found, "a listening post with no vault")
+  local me = state.balls[state.player.ship]
+  me.x, me.y, me.z = wreck.x + 1500, wreck.y, wreck.z
+  me.vx, me.vy, me.vz = 0, 0, 0
+  Space.AssignGrid(state, me)
+  assert(submit(game, { kind = "StartHack", actor = 0, target = wreck.id }))
+  local hack = assert(state.hack)
+  if keys then
+    local codes = Hacking.LOCKS.vault.codes
+    for index = 1, 36 do
+      local row, column = (index - 1) // 6, (index - 1) % 6
+      hack.cells[index] = codes[(row + column) % 6 + 1]
+    end
+    for index, run in keys do
+      hack.keys[index].codes = run
+    end
+  end
+  Core.TakeEvents(game)
+  return game, wreck, hack
+end
+
+suite:Case("a vault's lock is another kind: six by six, of six codes, with longer keys, and what its keys are for is its own", function(t)
+  local game, wreck, hack = vault(1)
+  t.eq({ wreck.name, wreck.locked, wreck.lock, hack.size, #hack.cells, hack.room, hack.ends } :: { any },
+    { Sites.VAULT, true, "vault", 6, 36, Hacking.BUFFER, 0 } :: { any })
+  local counts: { [string]: number } = {}
+  for _, code in hack.cells do
+    counts[code] = (counts[code] or 0) + 1
+  end
+  for _, code in Hacking.LOCKS.vault.codes do
+    t.eq(counts[code], 6, code)
+  end
+  for index, key in hack.keys do
+    local made = Hacking.LOCKS.vault.keys[index]
+    t.eq({ key.name, #key.codes, key.done } :: { any }, { made.name, made.length, false } :: { any })
+  end
+  t.eq({ hack.keys[1].name, hack.keys[2].name, hack.keys[3].name }, { "Safeguards", "Index", "Archive" })
+  -- The pilot is told what each is for, and how long there will be.
+  local seen = assert(Core.Query.Hack(game))
+  t.eq({ seen.size, seen.clock, seen.left, seen.keys[1].what, seen.keys[3].what } :: { any },
+    { 6, Hacking.LOCKS.vault.clock, Hacking.LOCKS.vault.clock, "or it is all wiped", "tech 2 drawings" } :: { any })
+  -- (a derelict's hold is as it was)
+  local other, hull = beside(true, 1)
+  t.ok((submit(other, { kind = "StartHack", actor = 0, target = hull.id })))
+  local plain = assert(Core.Query.Hack(other))
+  t.eq({ plain.size, plain.clock, plain.left, plain.keys[1].what } :: { any }, { 5, 0, 0, "or half is burnt" } :: { any })
+  -- And every vault can be opened whole with the smallest buffer: each key by itself.
+  for index, key in hack.keys do
+    t.ok(#key.codes <= Hacking.BUFFER, `key {index} is longer than the smallest buffer`)
+  end
+end)
+
+suite:Case("a vault's index doubles its datacores and its archive has tech 2 drawings; without the safeguards it is wiped", function(t)
+  local game, wreck = vault(5, { { "AX", "DO", "KE" }, { "DO", "KE", "NU" }, { "DO", "KE", "NU", "RI" } })
+  local before = held(game, wreck.id)
+  t.ok((before.datacore or 0) >= 3, "a vault has more datacores than a derelict's hull")
+  for type in before do
+    t.ok(type == "datacore" or string.sub(type, 1, 10) == "blueprint." or string.sub(type, 1, 5) == "book.",
+      `a vault had a {type} in it`)
+  end
+  for index = 1, 5 do
+    t.ok((submit(game, { kind = "HackNode", actor = 0, pin = VAULT_STAIR[index] })))
+  end
+  local done = assert(event(game, "HackDone"))
+  t.eq({ game.state.hack, done.success, done.keys, done.reason, wreck.locked } :: { any }, { nil, true, 3, "every key", false } :: { any })
+  local after = held(game, wreck.id)
+  t.eq(after.datacore, 2 * before.datacore)
+  local drawings = 0
+  for type, quantity in after do
+    if string.sub(type, -3) == ".ii" and string.sub(type, 1, 10) == "blueprint." then
+      drawings += quantity - (before[type] or 0)
+      t.ok(Blueprints.byId[type].invented, type)
+    end
+  end
+  t.eq(drawings, 1, "the archive should give the drawings of one tech 2 module")
+
+  -- The buffer filled with the safeguards' key not in: nothing is left, whatever else was got.
+  local lost, box, lock = vault(1, { { "VE", "VE", "VE" }, { "DO", "KE", "NU" }, { "VE", "VE", "VE", "VE" } })
+  for index = 1, 5 do
+    t.ok((submit(lost, { kind = "HackNode", actor = 0, pin = VAULT_STAIR[index] })))
+  end
+  local over = assert(event(lost, "HackDone"))
+  t.eq({ lost.state.hack, box.locked, over.success, over.keys, lock.keys[2].done, over.reason } :: { any },
+    { nil, false, false, 1, true, "buffer full" } :: { any })
+  t.eq(held(lost, box.id), {})
+end)
+
+suite:Case("a vault's lock is on a clock from the first pick: looking is free, and when the time is up it is over", function(t)
+  local game, wreck, hack = vault(5, { { "AX", "DO", "KE" }, { "VE", "VE", "VE" }, { "VE", "VE", "VE", "VE" } })
+  local clock = Hacking.LOCKS.vault.clock
+  -- Looking costs nothing.
+  for _ = 1, clock * 2 do
+    Core.Step(game)
+  end
+  t.ok(game.state.hack ~= nil and hack.ends == 0)
+  local before = held(game, wreck.id)
+  -- The first pick starts it.
+  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = VAULT_STAIR[1] })))
+  t.ok(hack.ends > 0)
+  local left = assert(Core.Query.Hack(game)).left
+  t.ok(left <= clock and left >= clock - 2, `{left} s left after the first pick`)
+  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = VAULT_STAIR[2] })))
+  t.ok((submit(game, { kind = "HackNode", actor = 0, pin = VAULT_STAIR[3] })))
+  t.ok(hack.keys[1].done)
+  -- Out of time, with the safeguards' key in: what was in it is there, and no more.
+  local done: { [string]: any }? = nil
+  for _ = 1, clock + 2 do
+    Core.Step(game)
+    done = done or event(game, "HackDone")
+  end
+  local over = assert(done, "the clock ran out and nothing was said")
+  t.eq({ game.state.hack, over.reason, over.success, over.keys, wreck.locked } :: { any }, { nil, "out of time", true, 1, false } :: { any })
+  t.eq(held(game, wreck.id), before)
+  -- (a save from before vaults has a hold's lock on every sealed thing, and no clock on a hack under way)
+  local saved = vault(1)
+  local data, length = Core.Save(saved)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 45
+  for _, each in file.state.wrecks do
+    each.lock = nil
+  end
+  file.state.hack.ends = nil
+  file.state.boosters = nil
+  local old, oldLength = Codec.Encode(file)
+  local loaded = Core.Load(old, oldLength)
+  t.eq(assert(loaded.state.hack).ends, 0)
+  for _, each in loaded.state.wrecks do
+    t.eq(each.lock, "")
+  end
+end)
 
 suite:Case("every lock can be opened whole with the smallest buffer; all three keys together want a bigger one, and luck", function(t)
   local game = beside(true, 1)

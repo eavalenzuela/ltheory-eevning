@@ -3,6 +3,7 @@
 -- commodity or a packaged hull.
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
+local Boosters = require("@lt/Core/Data/Boosters")
 local Components = require("@lt/Core/Data/Components")
 local Drones = require("@lt/Core/Data/Drones")
 local Implants = require("@lt/Core/Data/Implants")
@@ -130,6 +131,15 @@ local goods: { Info } = {
 }
 for _, g in goods do
   byId[g.id] = g
+end
+-- Gas, drawn off a cloud (Data/Ores), and the boosters made from it
+-- (Data/Boosters): no station has either unless a pilot sold it there.
+for _, gas in Ores.gases do
+  byId[gas.id] = { id = gas.id, name = gas.name, category = "goods", volume = gas.volume, basePrice = gas.basePrice, scarce = true }
+end
+for _, booster in Boosters.list do
+  byId[booster.id] = { id = booster.id, name = booster.name .. " Booster", category = "goods", volume = Boosters.VOLUME,
+    basePrice = Boosters.PRICE, scarce = true }
 end
 
 -- Every type id, in order: the order markets list them in.

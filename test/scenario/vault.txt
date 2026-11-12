@@ -1,0 +1,75 @@
+# A listening post's vault, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/vault.txt
+#
+# A Data Analyzer goes into one of the starter Courier's mid slots (the
+# module and the skill for it are given). A listening post is given
+# too, found already (finding one is the scanner's work, and wants a
+# probe: sites.txt). The ship warps to it and goes up to a vault. The
+# vault cannot be looted. Its lock comes up: six by six, and on a clock
+# that does not run until the first pick. It is looked at for longer
+# than the clock allows, which costs nothing, and then played by the
+# best way through the matrix there is, well inside the time. Then the
+# vault is open, with what was in it.
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Give('analyzer.data', 1))
+lua GameDebug.Train('hacking', 3)
+frames 3
+until GameDebug.Press('Fit:analyzer.data')
+until GameDebug.Fitted('analyzer.data') == 1
+
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('Stop'))
+wait 2
+lua _G.post = GameDebug.Plant('data')
+lua assert(_G.post ~= '', 'no listening post could be made')
+frames 5
+lua assert(GameDebug.Select(_G.post), 'the listening post is not on the overview')
+
+# To the post, and up to a vault.
+lua GameDebug.TimeScale(16)
+lua assert(GameDebug.Order('WarpTo', _G.post), 'warp to the post was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+frames 5
+lua assert(GameDebug.Count('wreck') >= 2, 'a listening post should have its vaults')
+lua assert(GameDebug.Select('Data Vault'), 'a vault should be on the overview')
+lua assert(GameDebug.Order('Approach', 'Data Vault', 1000), 'the approach was refused')
+until GameDebug.Distance('Data Vault') < 2500
+lua assert(GameDebug.Order('Stop'))
+lua GameDebug.TimeScale(1)
+wait 2
+lua assert(GameDebug.Select('Data Vault'))
+frames 3
+lua assert(not GameDebug.CanPress('Loot'), 'a locked vault should not be looted')
+
+# The lock: a bigger matrix, and a clock that waits for the first pick.
+until GameDebug.Press('Hack')
+until GameDebug.Hack()
+lua assert(select(2, GameDebug.Hack()) == 0 and select(3, GameDebug.Hack()) == 7, 'Hacking 3 should give a buffer of seven, empty')
+frames 3
+lua assert(GameDebug.CanPress('Hack:1') and GameDebug.CanPress('Hack:6'), 'the first pick is anywhere in the top row, which is six long')
+lua assert(not GameDebug.CanPress('Hack:7'), 'and nowhere else')
+lua assert(select(5, GameDebug.Hack()) == 45 and select(6, GameDebug.Hack()) == 45, 'a vault should allow forty-five seconds, not begun')
+lua GameDebug.TimeScale(16)
+wait 4
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Hack() and select(6, GameDebug.Hack()) == 45, 'looking should cost nothing')
+
+# Played: a pick a tick, the best way through there is.
+lua _G.best = GameDebug.HackBest()
+lua assert(_G.best >= 1, 'the key of the safeguards can always be got')
+lua print('vault: the best way gets', _G.best, 'of the three keys')
+until GameDebug.HackOn()
+wait 2
+
+# The vault is open, and what was in it is there to take.
+lua assert(GameDebug.Order('Loot', 'Data Vault'), 'loot was refused after the hack')
+until GameDebug.Hold('datacore') >= 3
+
+echo vault scenario passed
+quit

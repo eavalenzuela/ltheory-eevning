@@ -101,6 +101,8 @@ Effects.looks = {
   ["railgun"] = { kind = "rail", color = { 0.55, 0.80, 1.0 }, width = 5, life = 0.55 },
   ["launcher"] = { kind = "missile", color = { 1.0, 0.62, 0.26 }, width = 7, length = 180 },
   ["miner"] = { kind = "beam", color = { 0.35, 1.0, 0.55 }, width = 5, life = 0.5, held = true },
+  -- (what draws gas off a cloud: wider and paler, into the cloud's middle)
+  ["miner.gas"] = { kind = "beam", color = { 0.80, 0.88, 1.0 }, width = 9, life = 0.5, held = true },
   -- What runs on another ship or a wreck for as long as it is on (the
   -- scene begins each beam again while the module runs): thin, and each
   -- its own colour.
@@ -119,12 +121,8 @@ Effects.looks = {
 -- mining laser's, a salvager's, and whatever runs on another ship)
 -- rather than one shot's.
 function Effects.Held(type: string): boolean
-  for prefix, look in Effects.looks do
-    if look.held and string.sub(type, 1, #prefix) == prefix then
-      return true
-    end
-  end
-  return false
+  local look = Effects.LookOf(type)
+  return look ~= nil and look.held == true
 end
 
 -- How much wider a medium or a large weapon's fire is than a small one's.
@@ -161,12 +159,16 @@ function Effects.LookOf(type: string): (Look?, number)
   local size = if string.find(type, "large", 1, true) or string.find(type, "cruise", 1, true) then 3
     elseif string.find(type, "medium", 1, true) or string.find(type, "heavy", 1, true) then 2
     else 1
+  -- (the longest start of its id that there is a look for: "miner.gas"
+  -- before "miner")
+  local found: Look? = nil
+  local length = 0
   for prefix, look in Effects.looks do
-    if string.sub(type, 1, #prefix) == prefix then
-      return look, size
+    if #prefix > length and string.sub(type, 1, #prefix) == prefix then
+      found, length = look, #prefix
     end
   end
-  return nil, size
+  return found, size
 end
 
 function Effects.New(container: Object): Fx

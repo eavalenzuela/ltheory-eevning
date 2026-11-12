@@ -3,9 +3,10 @@
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/sites.txt
 #
 # The first system has two signals the ship's scanner can pick up, in
-# this game both hidden belts. Neither is on the overview. Three scans
-# resolve them. Then they are places like any other: warp to one, and
-# its rocks are there to mine.
+# this game a vapour field and a hidden belt. Neither is on the
+# overview. Three scans resolve them. Then they are places like any
+# other: warp to the first, the vapour field, and its clouds are there
+# to draw off (gas.txt does that).
 
 wait 2
 lua GameDebug.Peaceful(true)
@@ -22,7 +23,7 @@ lua assert(not GameDebug.CanPress('SiteWarp:1'), 'an unresolved signal is not so
 # Three scans. The scanner takes a few seconds each time.
 until GameDebug.Press('Scan')
 until not GameDebug.CanPress('Scan')
-lua assert(select(2, GameDebug.Sites()) == 0, 'a hidden belt should take more than one scan')
+lua assert(select(2, GameDebug.Sites()) == 0, 'a hidden belt or a vapour field should take more than one scan')
 until GameDebug.CanPress('Scan')
 until GameDebug.Press('Scan')
 until not GameDebug.CanPress('Scan')
@@ -30,9 +31,10 @@ until GameDebug.CanPress('Scan')
 until GameDebug.Press('Scan')
 until select(2, GameDebug.Sites()) == 2
 lua assert(GameDebug.Count('site') == 2, 'a found site should be on the overview')
-lua assert(select(3, GameDebug.Sites('ore')) ~= '', 'the sites here should be hidden belts')
+lua assert(select(3, GameDebug.Sites('ore')) ~= '', 'one of the sites here should be a hidden belt')
+lua assert(select(3, GameDebug.Sites('gas')) ~= '', 'and the other a vapour field')
 
-# To one of them, where there are rocks nobody else is mining.
+# To the first of them, where there are clouds nobody else is drawing off.
 frames 3
 lua GameDebug.TimeScale(16)
 until GameDebug.Press('SiteWarp:1')
@@ -40,8 +42,8 @@ until GameDebug.InWarp()
 until GameDebug.Idle()
 lua GameDebug.TimeScale(1)
 frames 5
-lua assert(GameDebug.Count('asteroid') >= 10, 'a hidden belt should have its rocks')
-lua assert(GameDebug.Distance('Hidden Belt') < 1000, 'the warp did not end at the site')
+lua assert(GameDebug.Count('asteroid') >= 4, 'a vapour field should have its clouds')
+lua assert(GameDebug.Distance('Vapour Field') < 1000, 'the warp did not end at the site')
 
 # Probes: one is put out where the ship is, and called in again.
 lua assert(not GameDebug.CanPress('Probe:launch'), 'a probe has to be in the hold')

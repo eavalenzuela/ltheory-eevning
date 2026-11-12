@@ -7,9 +7,12 @@ local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Mining = require("@lt/Core/Tactical/Mining")
+local Ores = require("@lt/Core/Data/Ores")
+local Rng = require("@lt/Core/Kernel/Rng")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local System = require("@lt/Core/Describe/System")
 local Test = require("@lt/Tool/Test")
 
 local suite = Test.Suite("Sites")
@@ -88,7 +91,10 @@ suite:Case("a system the pilot comes to has its sites, as many as its kind of sp
       t.ok(row.found or (row.kind == "" and string.sub(row.name, 1, 7) == "Signal "), "an unfound site should say nothing of itself")
     end
   end
-  t.ok((kinds.combat or 0) > 5 and (kinds.ore or 0) > 5 and (kinds.relic or 0) > 5, "a kind of site hardly ever turns up")
+  t.ok((kinds.combat or 0) > 5 and (kinds.ore or 0) > 5 and (kinds.relic or 0) > 3, "a kind of site hardly ever turns up")
+  -- (a vapour field and a listening post are the rare ones, and are there to be found all the same)
+  t.ok((kinds.gas or 0) >= 1 and (kinds.data or 0) >= 1, `a kind of site never turns up: {kinds.gas or 0} gas, {kinds.data or 0} data`)
+  print(`     sites: of 40 in safe space, {kinds.combat} dens, {kinds.ore} belts, {kinds.gas} fields, {kinds.relic} derelicts, {kinds.data} posts`)
   -- (and the other kinds of space have more)
   local game = inSpace(1)
   for system = 2, 3 do
@@ -195,6 +201,186 @@ suite:Case("a hidden belt has big rocks, some of the rare ores, and can be mined
   t.ok(rocks > 50)
   t.ok(rare > 0, "no hidden belt in secure space had any rare ore")
   t.ok(rare < rocks / 2)
+end)
+
+suite:Case("a vapour field has clouds of the one gas, a few kilometres apart, each holding what a cloud of its size does", function(t)
+  local clouds, fields = 0, 0
+  for seed = 1, 60 do
+    local game = inSpace(seed)
+    for _, site in Sites.In(game.state, 1) do
+      if site.kind == "gas" then
+        fields += 1
+        local here, gas = 0, ""
+        local place = assert(Space.Object(game.state, site.id))
+        t.eq(string.sub(place.name, 1, 13), "Vapour Field ")
+        for _, object in Space.Describe(game.state, 1).objects do
+          if object.kind == "asteroid" and object.site == site.id then
+            here += 1
+            gas = if gas == "" then object.variety else gas
+            t.eq(object.variety, gas, "a field of two gases")
+            t.eq(object.name, assert(Ores.gasById[object.variety]).name)
+            t.ok(Mining.Cloud(object) and not Mining.Rock(object))
+            t.ok(object.radius >= 700 and object.radius <= 1300)
+            t.eq(Mining.Left(game.state, object), math.floor(object.radius / 2))
+            local far = math.sqrt((object.x - place.x) ^ 2 + (object.z - place.z) ^ 2)
+            t.ok(far >= 3000 and far <= 9000, `a cloud {far} m from the middle of its field`)
+          end
+        end
+        t.ok(here >= 4 and here <= 5, `{here} clouds in a field where order is kept`)
+        clouds += here
+      end
+    end
+  end
+  t.ok(fields >= 3, `only {fields} vapour fields over 60 histories`)
+  -- (a belt's rock is no cloud)
+  local game = inSpace(1)
+  for _, object in Space.Describe(game.state, 1).objects do
+    if object.kind == "asteroid" and game.state.sites[object.site] == nil then
+      t.ok(Mining.Rock(object) and not Mining.Cloud(object))
+      break
+    end
+  end
+end)
+
+suite:Case("a cloud is drawn off with a gas harvester and nothing else, and a field with nothing left in it goes", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local ship = state.player.ship
+  state.skills.mining = 2
+  for _, item in Items.Fitted(state, ship) do
+    if Modules.byId[item.type].weapon then
+      Items.Take(state, item, 1)
+    end
+  end
+  local harvester = Items.Equip(state, ship, "miner.gas", nil)
+  local laser = Items.Equip(state, ship, "miner.small", nil)
+  assert(Core.Submit(game, { kind = "Undock", actor = ship }))
+  Core.Step(game)
+  assert(Core.Submit(game, { kind = "Stop", actor = ship }))
+  Core.Step(game)
+  local site = assert(Sites.Plant(state, 1, "gas", Rng.For(3, 3), game.events))
+  local clouds: { System.Object } = {}
+  for _, object in Space.Describe(state, 1).objects do
+    if object.site == site.id and object.kind == "asteroid" then
+      table.insert(clouds, object)
+    end
+  end
+  local cloud = clouds[1]
+  local ball = state.balls[ship]
+  -- Beside the first cloud: a kilometre off its edge.
+  ball.x, ball.y, ball.z = cloud.x + cloud.radius + 1000, cloud.y, cloud.z
+  ball.vx, ball.vy, ball.vz = 0, 0, 0
+  Space.AssignGrid(state, ball)
+  t.eq(ball.grid, site.id)
+  -- On the overview here, as a rock is.
+  local listed = false
+  for _, entry in Core.Query.Overview(game) do
+    listed = listed or (entry.id == cloud.id and entry.kind == "asteroid" and entry.variety == cloud.variety)
+  end
+  t.ok(listed, "a cloud should be on the overview of a ship in its field")
+  local function refused(command: State.Command): string?
+    local ok, why = Core.Validate(game, command)
+    return if ok then "(accepted)" else why
+  end
+  t.eq(refused({ kind = "ActivateModule", actor = ship, item = harvester.id, target = cloud.id }), "no locked target")
+  assert(Core.Submit(game, { kind = "LockTarget", actor = ship, target = cloud.id }))
+  for _ = 1, 30 do
+    Core.Step(game)
+  end
+  -- A laser that cuts rock does nothing to a cloud.
+  t.eq(refused({ kind = "ActivateModule", actor = ship, item = laser.id, target = cloud.id }), "a cloud of gas wants a harvester")
+  local whole = Mining.Left(state, cloud)
+  assert(Core.Submit(game, { kind = "ActivateModule", actor = ship, item = harvester.id, target = cloud.id }))
+  Core.TakeEvents(game)
+  local mined: { [string]: any }? = nil
+  local ticks = 0
+  while mined == nil and ticks < 70 do
+    Core.Step(game)
+    ticks += 1
+    for _, event in Core.TakeEvents(game) do
+      mined = if event.kind == "Mined" then event else mined
+    end
+  end
+  -- (20 m3 a minute of a gas at a cubic metre a unit, and a twentieth more for the second level of Mining)
+  t.eq({ ticks, assert(mined).ore, assert(mined).units } :: { any }, { 61, cloud.variety, 21 } :: { any })
+  t.eq(Mining.Left(state, cloud), whole - 21)
+  local aboard = 0
+  for _, item in Items.In(state, ship, "cargo") do
+    aboard += if item.type == cloud.variety then item.quantity else 0
+  end
+  t.eq(aboard, 21)
+  -- Too far off, it will not begin; and a harvester does nothing to a rock.
+  assert(Core.Submit(game, { kind = "DeactivateModule", actor = ship, item = harvester.id }))
+  for _ = 1, 70 do
+    Core.Step(game)
+  end
+  ball.x += 3000
+  t.eq(refused({ kind = "ActivateModule", actor = ship, item = harvester.id, target = cloud.id }), "too far from the cloud")
+  ball.x -= 3000
+  local rock: System.Object? = nil
+  for _, object in Space.Describe(state, 1).objects do
+    if Mining.Rock(object) then
+      rock = object
+      break
+    end
+  end
+  t.eq(refused({ kind = "ActivateModule", actor = ship, item = harvester.id, target = assert(rock).id }), "no locked target")
+  -- Nearly drawn off, the cycle takes what is left and the cloud is gone from the overview.
+  Mining.Take(state, cloud, Mining.Left(state, cloud) - 5)
+  assert(Core.Submit(game, { kind = "ActivateModule", actor = ship, item = harvester.id, target = cloud.id }))
+  local stopped = ""
+  for _ = 1, 70 do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      stopped = if event.kind == "ModuleStopped" then event.reason else stopped
+    end
+  end
+  t.eq({ Mining.Left(state, cloud), stopped } :: { any }, { 0, "the cloud is drawn off" } :: { any })
+  t.eq(refused({ kind = "ActivateModule", actor = ship, item = harvester.id, target = cloud.id }), "that cloud is drawn off")
+  -- With every cloud empty the field goes, once the pilot has left.
+  for _, each in clouds do
+    Mining.Take(state, each, Mining.Left(state, each))
+  end
+  go(game, state.player.home)
+  for _ = 1, Sites.CHECK + 5 do
+    Core.Step(game)
+  end
+  t.ok(site.gone, "a field with nothing in it is still there")
+end)
+
+suite:Case("a listening post has vaults, each locked with a vault's lock, with datacores and drawings in them and nothing that was fitted", function(t)
+  local posts = 0
+  for seed = 1, 60 do
+    local game = inSpace(seed)
+    local state = game.state
+    for _, site in Sites.In(state, 1) do
+      if site.kind == "data" then
+        posts += 1
+        t.eq(string.sub(assert(Space.Object(state, site.id)).name, 1, 15), "Listening Post ")
+        -- (too faint for the ship's scanner alone, as a derelict is)
+        t.eq({ Sites.ALONE.data, Sites.SCANS.data } :: { any }, { 0.5, 5 } :: { any })
+        local vaults = 0
+        for _, id in state.wreckIds do
+          local wreck = state.wrecks[id]
+          if wreck.grid == site.id then
+            vaults += 1
+            t.eq({ wreck.name, wreck.locked, wreck.lock, wreck.salvaged } :: { any }, { Sites.VAULT, true, "vault", true } :: { any })
+            local datacores, drawings = 0, 0
+            for _, item in Items.In(state, id, "cargo") do
+              datacores += if item.type == "datacore" then item.quantity else 0
+              drawings += if string.sub(item.type, 1, 10) == "blueprint." then item.quantity else 0
+              t.ok(Modules.byId[item.type] == nil, `a vault had a {item.type} in it`)
+              t.ok(string.sub(item.type, -3) ~= ".ii", `a vault had {item.type} in it before anybody opened its archive`)
+            end
+            t.ok(datacores >= 3 and datacores <= 5, `{datacores} datacores in a vault where order is kept`)
+            t.ok(drawings >= 1 and drawings <= 2)
+          end
+        end
+        t.ok(vaults >= 2 and vaults <= 3)
+      end
+    end
+  end
+  t.ok(posts >= 2, `only {posts} listening posts over 60 histories`)
 end)
 
 suite:Case("a den has the pirates' stores, and a tougher pack than the belts of its space", function(t)

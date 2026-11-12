@@ -10,6 +10,7 @@
 --
 -- A blueprint is not used up; it costs ten times its product.
 
+local Boosters = require("@lt/Core/Data/Boosters")
 local Components = require("@lt/Core/Data/Components")
 local Drones = require("@lt/Core/Data/Drones")
 local Modules = require("@lt/Core/Data/Modules")
@@ -230,6 +231,19 @@ add(Structures.FUEL.id, Structures.FUEL.name, MIX.charge, Structures.FUEL.basePr
 -- (a command centre is built as a small hull is, of nothing a colony
 -- makes: the first one has to come from somewhere)
 add(Planets.CENTRE.id, Planets.CENTRE.name, MIX.ship, Planets.CENTRE.basePrice, 1, 600, Components.HULL)
+
+-- A booster is made of its gas, and of silicon to hold it: nothing a
+-- station sells is the gas, so it is made by whoever went and got it.
+for _, booster in Boosters.list do
+  local blueprint: Blueprint = {
+    id = "blueprint." .. booster.id, product = booster.id, name = booster.name .. " Booster Blueprint", perRun = 1, seconds = 300,
+    materials = { { type = booster.gas, quantity = Boosters.GAS }, { type = "mineral.silicon", quantity = Boosters.SILICON } },
+    basePrice = Boosters.PRICE * 10,
+  }
+  table.insert(Blueprints.list, blueprint)
+  Blueprints.byId[blueprint.id] = blueprint
+  Blueprints.byProduct[booster.id] = blueprint
+end
 
 -- Jobs a pilot can run at once before any skill adds more.
 Blueprints.JOB_SLOTS = 2

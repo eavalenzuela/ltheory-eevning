@@ -2,6 +2,7 @@
 -- Building from blueprints, through the Core's front door.
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
+local Boosters = require("@lt/Core/Data/Boosters")
 local Core = require("@lt/Core/Api")
 local Industry = require("@lt/Core/Assets/Industry")
 local Items = require("@lt/Core/Assets/Items")
@@ -76,7 +77,8 @@ suite:Case("everything fitted, fired, flown or built into it has a blueprint, an
       -- (a custom make is found, never built: there are no drawings for it)
       t.eq(Blueprints.byProduct[id], nil, id)
     elseif info.category == "module" or info.category == "charge" or info.category == "ship" or info.category == "component"
-      or info.category == "structure" or info.category == "drone" then
+      or info.category == "structure" or info.category == "drone" or Boosters.byId[id] ~= nil then
+      -- (and a booster, which is made of its gas)
       local blueprint = assert(Blueprints.byProduct[id], `no blueprint for {id}`)
       count += 1
       t.eq(Types.Info(blueprint.id).category, "blueprint")

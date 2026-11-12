@@ -13,6 +13,7 @@
 -- penalties are ranked separately. This is what stops five of the same
 -- module from being five times as good.
 
+local Boosters = require("@lt/Core/Data/Boosters")
 local Implants = require("@lt/Core/Data/Implants")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
@@ -92,8 +93,11 @@ local function gather(fitted: { Fitted }, on: string, family: string?, levels: L
   end
   for _, f in fitted do
     local module = Modules.byId[f.type]
-    -- (what is not a module is an implant of the pilot's: Data/Implants)
-    local passive: { Modules.Modifier } = if module then module.passive else Implants.byId[f.type].passive
+    -- (what is not a module is an implant of the pilot's, or a booster
+    -- at work on them: Data/Implants, Data/Boosters)
+    local implant = Implants.byId[f.type]
+    local passive: { Modules.Modifier } = if module then module.passive elseif implant then implant.passive
+      else Boosters.byId[f.type].passive
     for _, modifier in passive do
       if modifier.on == on and (on == "ship" or modifier.family == family) then
         collect(pending, modifier)

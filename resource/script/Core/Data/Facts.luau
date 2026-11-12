@@ -8,6 +8,7 @@
 --   for _, section in sheet.sections do ... section.title, section.rows
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
+local Boosters = require("@lt/Core/Data/Boosters")
 local Components = require("@lt/Core/Data/Components")
 local Drones = require("@lt/Core/Data/Drones")
 local Implants = require("@lt/Core/Data/Implants")
@@ -548,6 +549,27 @@ function Facts.Of(type: string): Sheet?
         for _, need in skill.requires do
           row(required, Skills.byId[need.skill].name, `level {need.level}`, Skills.Book(need.skill))
         end
+      end
+    end
+    trade(sheet, type)
+  elseif Boosters.byId[type] then
+    local booster = Boosters.byId[type]
+    sheet.kind = "Booster"
+    sheet.note = "Taken out of the hold, or out of the hangar where the pilot is docked, it is used up and is at work for half an hour on every ship they fly. One of a kind at a time."
+    local does = section(sheet, "Booster")
+    row(does, "Gives", booster.note)
+    row(does, "Takes", booster.cost)
+    row(does, "Kind", Boosters.KINDS[booster.kind])
+    row(does, "Lasts", seconds(Boosters.SECONDS))
+    row(does, "Made from", nameOf(booster.gas), booster.gas)
+    trade(sheet, type)
+  elseif Ores.gasById[type] then
+    sheet.kind = "Gas"
+    sheet.note = "Drawn off the clouds of a vapour field with a gas harvester. Nothing refines it, and no station has it to sell: it is what boosters are made from."
+    local made = section(sheet, "Made into")
+    for _, booster in Boosters.list do
+      if booster.gas == type then
+        row(made, booster.name .. " Booster", booster.note, booster.id)
       end
     end
     trade(sheet, type)

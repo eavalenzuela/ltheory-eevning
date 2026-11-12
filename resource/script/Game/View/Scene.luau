@@ -35,6 +35,7 @@ local Star = require("@lt/Game/View/Star")
 local Starbase = require("@lt/Game/View/Starbase")
 local Modules = require("@lt/Core/Data/Modules")
 local Motion = require("@lt/Core/Tactical/Motion")
+local Ores = require("@lt/Core/Data/Ores")
 local Session = require("@lt/Game/Session")
 local State = require("@lt/Core/Kernel/State")
 local SystemData = require("@lt/Core/Describe/System")
@@ -113,6 +114,10 @@ export type Scene = {
   offsets: { [number]: { vector } },
   -- The described bodies there are proxies of (rocks, stations, gates), by id.
   statics: { [number]: SystemData.Object },
+  -- The clouds of gas among them: how big each puff of one is when the
+  -- cloud is whole (the cloud's own first), and how much of the cloud
+  -- was left when it was last sized.
+  clouds: { [number]: { sizes: { number }, shown: number } },
   -- Whose bodies are in the scene: the grid the ship is on, or in warp
   -- the one it left and the one it is coming to (the ids, as one word).
   sites: string,
@@ -195,7 +200,7 @@ function Scene.New(camera: Camera): Scene
     proxies = {}, celestials = {}, worlds = {}, passing = 0, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6, tracking = 0,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
-    wreckage = {}, works = {}, offsets = {}, statics = {}, sites = "", left = 0, jump = -1, arrived = -1, veil = 0, rush = 0,
+    wreckage = {}, works = {}, offsets = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, veil = 0, rush = 0,
     standing = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0,
   }
 end
@@ -568,6 +573,72 @@ local function makeStatic(object: SystemData.Object): Object
   return made
 end
 
+-- What a puff of each gas is drawn with: a unit sphere, to be scaled.
+local puffs: { [string]: Model } = {}
+local TINTS: { [string]: vector } = {
+  ["gas.amber"] = vector.create(1.0, 0.62, 0.22), ["gas.verdant"] = vector.create(0.40, 0.95, 0.50),
+  ["gas.azure"] = vector.create(0.35, 0.62, 1.0),
+}
+local function puff(gas: string): Model
+  local kept: Model? = puffs[gas]
+  if kept then
+    return kept
+  end
+  local made: Model
+  do
+    local shader = ShaderInstance_Create(Shader_Create("npm.jsl", "cloud.jsl"))
+    ShaderInstance_SetState(shader, "BlendModeAdditive")
+    ShaderInstance_SetState(shader, "ZWritableOff")
+    ShaderInstance_SetState(shader, "CullModeDisabled")
+    ShaderInstance_SetVec3(shader, "cloudTint", TINTS[gas] or vector.create(0.7, 0.7, 0.7))
+    ShaderInstance_SetFloat(shader, "cloudGlow", 0.26)
+    ShaderInstance_Link(shader)
+    made = Model_Create()
+    Model_AddShell(made, Mesh_SetU(Mesh_BoxSphere(24, true), 1), shader)
+    puffs[gas] = made
+  end
+  return made
+end
+
+-- A cloud of gas (Core/Data/Ores): a big puff the size of the cloud,
+-- which is the cloud's own object, and lesser ones laid over it and
+-- hanging off it, each a little different, the same every time for the
+-- same cloud. (A grey box of a cloud: nothing drifts in it.)
+local PUFFS = 6
+local function makeCloud(scene: Scene, object: SystemData.Object, at: vector, container: Object): Object
+  local model = puff(object.variety)
+  local roll = object.seed % 2147483647
+  local function next(): number
+    roll = (roll * 48271 + 11) % 2147483647
+    return roll / 2147483647
+  end
+  local function one(size: number, offset: vector): Object
+    local made = Object_Scenery({})
+    Object_SetRenderable(made, model)
+    container:AddInterior(made)
+    made:SetScale(vector.create(size, size, size))
+    made:SetPos(at + offset)
+    return made
+  end
+  local middle = one(object.radius, vector.zero)
+  local lobes: { Object } = {}
+  local sizes: { number } = { object.radius }
+  local offsets: { vector } = { vector.zero }
+  for _ = 1, PUFFS do
+    local angle, lift = next() * 2 * math.pi, (next() - 0.5) * 0.9
+    local out = (0.35 + 0.45 * next()) * object.radius
+    local size = (0.45 + 0.35 * next()) * object.radius
+    local offset = vector.create(math.cos(angle) * out, lift * out, math.sin(angle) * out)
+    table.insert(lobes, one(size, offset))
+    table.insert(sizes, size)
+    table.insert(offsets, offset)
+  end
+  scene.works[object.id] = lobes
+  scene.offsets[object.id] = offsets
+  scene.clouds[object.id] = { sizes = sizes, shown = 1 }
+  return middle
+end
+
 -- A station: its tower, which is the station's own object, with its
 -- modules and its field round it, at 'at'. The station's radius is the
 -- radius of its field.
@@ -638,6 +709,7 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
   table.clear(scene.mining)
   table.clear(scene.statics)
   table.clear(scene.offsets)
+  table.clear(scene.clouds)
   scene.focus = nil
   scene.star = nil
   scene.key = ""
@@ -925,6 +997,10 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         if object.kind == "station" then
           scene.proxies[object.id] = makeStation(scene, game, object,
             vector.create(object.x - scene.ox, object.y - scene.oy, object.z - scene.oz), container)
+        elseif object.kind == "asteroid" and Ores.gasById[object.variety] then
+          scene.proxies[object.id] = makeCloud(scene, object,
+            vector.create(object.x - scene.ox, object.y - scene.oy, object.z - scene.oz), container)
+          scene.statics[object.id] = object
         elseif object.kind ~= "belt" then
           local made = makeStatic(object)
           container:AddInterior(made)
@@ -951,6 +1027,27 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         end
       else
         place(proxy, at)
+      end
+    end
+  end
+
+  -- A cloud is as big as what is left in it: it thins as it is drawn
+  -- off, and with nothing left there is nothing to see.
+  for id, cloud in scene.clouds do
+    local proxy: Object? = scene.proxies[id]
+    local lobes = scene.works[id]
+    if not proxy or lobes == nil then
+      scene.clouds[id] = nil
+    else
+      local left = Core.Query.Left(game, id)
+      if left ~= cloud.shown then
+        cloud.shown = left
+        local share = if left <= 0 then 0.001 else 0.4 + 0.6 * left
+        proxy:SetScale(vector.create(cloud.sizes[1] * share, cloud.sizes[1] * share, cloud.sizes[1] * share))
+        for index, lobe in lobes do
+          local size = cloud.sizes[index + 1] * share
+          lobe:SetScale(vector.create(size, size, size))
+        end
       end
     end
   end

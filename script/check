@@ -54,8 +54,15 @@
 #               on one
 #   game-missions  the jobs a station offers (test/scenario/missions.txt):
 #               taken, one filled and paid, one given up
-#   game-sites  sites on nobody's chart (test/scenario/sites.txt): two
-#               hidden belts found with the scanner, and a warp to one
+#   game-sites  sites on nobody's chart (test/scenario/sites.txt): a
+#               vapour field and a hidden belt found with the scanner,
+#               and a warp to the first
+#   game-gas    gas and what it is for (test/scenario/gas.txt): a
+#               harvester fitted, a cloud drawn off, the gas made into
+#               a booster, and the booster taken
+#   game-vault  a listening post's vault (test/scenario/vault.txt): its
+#               bigger lock looked at, then played inside its clock,
+#               and the vault looted
 #   game-tackle  holding another ship (test/scenario/tackle.txt): a
 #               entanglement projector and a warp disruptor fitted and used on a pirate
 #   game-salvage  salvaging (test/scenario/salvage.txt): a salvager fitted,
@@ -252,6 +259,10 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/invent.txt
   step game-hack 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/hack.txt
+  step game-vault 0 timeout 300 bin/launch game --no-present --fixed-step 60 --timeout 240 \
+    --script test/scenario/vault.txt
+  step game-gas 0 timeout 300 bin/launch game --no-present --fixed-step 60 --timeout 240 \
+    --script test/scenario/gas.txt
   step game-assault 0 timeout 600 bin/launch game --no-present --fixed-step 60 --timeout 500 \
     --script test/scenario/assault.txt
   step game-camp 0 timeout 700 bin/launch game --no-present --fixed-step 60 --timeout 640 \

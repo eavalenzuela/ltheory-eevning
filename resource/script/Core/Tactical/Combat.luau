@@ -201,12 +201,14 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
       local rock = Space.Object(state, command.target or 0)
       if lock == nil or not lock.locked then
         return false, "no locked target"
-      elseif rock == nil or rock.kind ~= "asteroid" then
-        return false, "not an asteroid"
+      elseif module.miner.gas and not Mining.Cloud(rock) then
+        return false, "not a cloud of gas"
+      elseif rock == nil or not module.miner.gas and not Mining.Rock(rock) then
+        return false, if Mining.Cloud(rock) then "a cloud of gas wants a harvester" else "not an asteroid"
       elseif Mining.Left(state, rock) <= 0 then
-        return false, "that asteroid is mined out"
+        return false, if module.miner.gas then "that cloud is drawn off" else "that asteroid is mined out"
       elseif Space.Gap(ball :: any, rock :: any) > module.miner.range then
-        return false, "out of mining range"
+        return false, if module.miner.gas then "too far from the cloud" else "out of mining range"
       end
       return true
     elseif module.salvager then
@@ -482,7 +484,8 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
         return false
       end
       -- As much as the cycle yields, the rock has left and the hold takes.
-      local ore = Ores.byId[rock.variety]
+      -- (an ore, off a rock; or a gas, off a cloud)
+      local ore: { id: string, volume: number } = Ores.byId[rock.variety] or Ores.gasById[rock.variety]
       local free = Vitals.Stats(state, state.ships[ball.id], v).cargo - Items.CargoUsed(state, ball.id)
       -- A practised miner gets 5% more for each level after the first.
       local levels = Items.Levels(state, ball.id)
@@ -500,7 +503,7 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       end
       if Mining.Left(state, rock) <= 0 then
         table.insert(events, { kind = "RockDepleted", rock = rock.id })
-        stop(state, ball, index, "the asteroid is mined out", events)
+        stop(state, ball, index, if miner.gas then "the cloud is drawn off" else "the asteroid is mined out", events)
         return false
       end
       running.next += miner.duration

@@ -294,7 +294,8 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   elseif hidden and hidden.kind == "combat" then
     -- (and a stronghold has the worst there is, wherever it is)
     band = if band == "secure" and hidden.depth == 0 then "low" else "lawless"
-  elseif hidden and hidden.kind == "relic" and band == "secure" then
+  elseif hidden and (hidden.kind == "relic" or hidden.kind == "data") and band == "secure" then
+    -- (nor a listening post)
     return
   end
   local last = state.spawned[site.id]

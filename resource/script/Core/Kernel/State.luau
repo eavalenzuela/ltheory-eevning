@@ -171,6 +171,7 @@ export type Wreck = {
   expires: number,    -- the tick it disappears
   salvaged: boolean,  -- a salvager has had what the hull itself was worth
   locked: boolean,    -- its hold is sealed: nothing is looted until it has been hacked (Tactical/Hacking)
+  lock: string,       -- the kind of lock that seals it ("": a hold's; "vault": Tactical/Hacking)
 }
 
 -- A hack under way (Tactical/Hacking): the hull whose hold it is for;
@@ -180,8 +181,14 @@ export type Wreck = {
 -- whether it is in the buffer yet); and where the next pick has to be:
 -- 'along' a "row" or a "column", and which 'line' of those.
 export type HackKey = { name: string, codes: { string }, done: boolean }
+-- A booster at work on the pilot (Data/Boosters), and the tick it wears
+-- off at.
+export type Boosted = { type: string, ends: number }
+
+-- ('ends': the tick a lock on a clock runs out at; 0 for one that is
+-- not on a clock, or not begun)
 export type Hack = { wreck: number, size: number, cells: { string }, used: { boolean }, buffer: { string }, room: number,
-  keys: { HackKey }, along: string, line: number }
+  keys: { HackKey }, along: string, line: number, ends: number }
 
 -- A ship flown by the game rather than the player: what it is doing.
 export type Pilot = {
@@ -490,6 +497,9 @@ export type State = {
   -- The implants the pilot has plugged in (Character/Implants), by the
   -- places they are in.
   implants: { string },
+  -- The boosters at work on the pilot (Character/Boosters), in the
+  -- order they were taken.
+  boosters: { Boosted },
   -- The steps of the guide the pilot has done (Character/Guide), in the
   -- order they did them.
   guide: { string },

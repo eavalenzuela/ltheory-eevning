@@ -48,11 +48,26 @@ local ores: { Ore } = {
     yields = { { mineral = "mineral.iridium", amount = 60 }, { mineral = "mineral.cobalt", amount = 40 } } },
 }
 
+-- Gas: what a cloud is made of (Tactical/Sites has the places where
+-- there are clouds). It is drawn off with a harvester as ore is cut
+-- with a laser, into the hold; nothing refines it, and it is what a
+-- booster is made from (Data/Boosters), each kind of gas the boosters of
+-- one kind.
+export type Gas = { id: string, name: string, volume: number, basePrice: number }
+
+local gases: { Gas } = {
+  { id = "gas.amber", name = "Amber Vapour", volume = 1, basePrice = 240 },
+  { id = "gas.verdant", name = "Verdant Vapour", volume = 1, basePrice = 240 },
+  { id = "gas.azure", name = "Azure Vapour", volume = 1, basePrice = 240 },
+}
+
 local Ores = {
   list = ores,
   byId = {} :: { [string]: Ore },
   minerals = minerals,
   mineralById = {} :: { [string]: Mineral },
+  gases = gases,
+  gasById = {} :: { [string]: Gas },
   -- The share of an ore's minerals a station's refinery recovers.
   REFINE_YIELD = 0.5,
   -- Units refined at a time.
@@ -65,10 +80,25 @@ end
 for _, mineral in minerals do
   Ores.mineralById[mineral.id] = mineral
 end
+for _, gas in gases do
+  Ores.gasById[gas.id] = gas
+end
 
 -- How many units of ore a rock of a given radius (m) holds when whole.
 function Ores.RockUnits(radius: number): number
   return math.floor(radius * 40)
+end
+
+-- How many units of gas a cloud of a given radius (m) holds when whole:
+-- a cloud is a great deal of room with very little in it.
+function Ores.CloudUnits(radius: number): number
+  return math.floor(radius / 2)
+end
+
+-- What a thing to be mined holds when whole: 'variety' is what it is of
+-- (an ore, for a rock; a gas, for a cloud).
+function Ores.Units(variety: string, radius: number): number
+  return if Ores.gasById[variety] then Ores.CloudUnits(radius) else Ores.RockUnits(radius)
 end
 
 -- The ore of a rock, from a roll in [0, 1). In lawless space ('wild')

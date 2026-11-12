@@ -107,7 +107,9 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "Looted" and event.ship == mine then
     Session.Say(session, if event.left > 0 then `Looted {event.taken}; {event.left} would not fit` else `Looted {event.taken}`)
   elseif kind == "Mined" and event.ball == mine then
-    Session.Say(session, `Mined {event.units} units of ore`)
+    -- (ore, off a rock; or gas, off a cloud)
+    Session.Say(session, if string.sub(event.ore, 1, 4) == "gas." then `Drew off {event.units} units of {Types.Info(event.ore).name}`
+      else `Mined {event.units} units of ore`)
   elseif kind == "Reprocessed" and event.ship == mine then
     Session.Say(session, `Refined {event.units} units of ore`)
   elseif kind == "LockLost" and event.ball == mine and tostring(event.reason) ~= "unlocked" then
@@ -215,10 +217,18 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "HackDone" then
     local reason = event.reason :: string
     local wreck = session.game.state.wrecks[event.wreck]
-    Session.Say(session, if reason == "left" then "The lock is left as it was: the hold is still sealed"
-      elseif wreck ~= nil and wreck.locked then "Too far off: the hack is dropped, and the hold still sealed"
-      elseif event.success then `The hold is open, whole: {event.keys} of 3 keys were in`
+    -- (a vault's lock is its own: on a clock, and all or nothing)
+    local vault = wreck ~= nil and wreck.lock == "vault"
+    local late = if reason == "out of time" then " The time ran out." else ""
+    Session.Say(session, if reason == "left" then `The lock is left as it was: the {if vault then "vault" else "hold"} is still sealed`
+      elseif wreck ~= nil and wreck.locked then `Too far off: the hack is dropped, and the {if vault then "vault" else "hold"} still sealed`
+      elseif event.success then `The {if vault then "vault" else "hold"} is open, whole: {event.keys} of 3 keys were in.{late}`
+      elseif vault then `The vault has wiped itself: the key of the safeguards was not in.{late}`
       else "The hold is open with half of what was in it burnt: the key of the safeguards was not in")
+  elseif kind == "BoosterTaken" then
+    Session.Say(session, `{Types.Info(event.booster).name}: at work for half an hour`)
+  elseif kind == "BoosterSpent" then
+    Session.Say(session, `{Types.Info(event.booster).name} has worn off`)
   elseif kind == "TrainingCredited" then
     -- (said only where there was training for the time to go to)
     if event.trained > 0 or event.queued > 0 then

@@ -2,12 +2,16 @@
 -- Sites: places that are not on anybody's chart.
 --
 -- A system has a few places in it worth finding, more of them the less
--- safe it is, of three kinds:
+-- safe it is, of five kinds:
 --   - a pirate den: a pack a kind of space tougher than the belts bring,
 --     and the pirates' stores to be looted;
 --   - a hidden belt: big rocks, some of the rare ores even where order
 --     is kept;
---   - a derelict: hulls adrift with what was aboard them.
+--   - a vapour field: clouds of a gas, to be drawn off with a harvester
+--     (Data/Ores, Tactical/Combat) and made into boosters;
+--   - a derelict: hulls adrift with what was aboard them;
+--   - a listening post: somebody's vaults of what they overheard, still
+--     locked (Tactical/Hacking has the lock, which is not a derelict's).
 -- A den shows on a ship's scanner at once (it is not hiding). The others
 -- are signals that have to be worked: every scan brings each one nearer
 -- to being found, and a found site can be warped to like any other
@@ -20,9 +24,9 @@
 -- is, how far a scanner has got with it, and when it goes. Only the
 -- system the pilot is in gets new ones.
 --
--- (Exploration, cut down to this. Not yet: probes to place, a hacking
--- game, gas, sites that lead on to others, anything a pilot cannot
--- reach with the ship's own scanner.)
+-- (Exploration, cut down to this. Not yet: a cloud that does anything
+-- to the ship in it, anything a pilot cannot reach with the ship's own
+-- scanner and a probe.)
 
 local Components = require("@lt/Core/Data/Components")
 local Constants = require("@lt/Core/Data/Constants")
@@ -32,6 +36,7 @@ local Mining = require("@lt/Core/Tactical/Mining")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Rng = require("@lt/Core/Kernel/Rng")
+local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local System = require("@lt/Core/Describe/System")
@@ -52,11 +57,18 @@ Sites.SCAN = 8
 -- Scans it takes to find a site of a kind with no skill at it (a den is
 -- found before the first). Each level of Astrometrics makes every scan
 -- worth a tenth more.
-Sites.SCANS = { combat = 0, ore = 3, relic = 4 } :: { [string]: number }
-local NAMES: { [string]: string } = { combat = "Pirate Den", ore = "Hidden Belt", relic = "Derelict" }
--- How likely each kind is, by how safe the system is: combat, ore, relic.
-local ODDS: { [string]: { number } } = { secure = { 0.4, 0.35, 0.25 }, low = { 0.45, 0.25, 0.3 }, lawless = { 0.5, 0.2, 0.3 } }
-local KINDS = { "combat", "ore", "relic" }
+Sites.SCANS = { combat = 0, ore = 3, gas = 3, relic = 4, data = 5 } :: { [string]: number }
+local NAMES: { [string]: string } = { combat = "Pirate Den", ore = "Hidden Belt", gas = "Vapour Field", relic = "Derelict",
+  data = "Listening Post" }
+-- How likely each kind is, by how safe the system is, in the order of
+-- KINDS. (A vapour field is what a hidden belt would now and then have
+-- been, and a listening post a derelict.)
+local ODDS: { [string]: { number } } = {
+  secure = { 0.40, 0.26, 0.09, 0.18, 0.07 }, low = { 0.45, 0.16, 0.09, 0.21, 0.09 }, lawless = { 0.50, 0.11, 0.09, 0.20, 0.10 },
+}
+local KINDS = { "combat", "ore", "gas", "relic", "data" }
+-- What a vault is called, and what its lock is (Tactical/Hacking).
+Sites.VAULT = "Data Vault"
 
 -- What a scan adds to a site's signal: all of it at once for a den.
 function Sites.Gain(state: State.State, kind: string): number
@@ -79,7 +91,7 @@ Sites.PROBES = 4              -- a pilot has so many out at once, at most
 Sites.PROBE_LIFE = 3600       -- ticks
 Sites.PROBE_RANGE = Constants.AU
 -- How far the ship's scanner alone gets with a site of a kind (1: all the way).
-Sites.ALONE = { combat = 1, ore = 1, relic = 0.5 } :: { [string]: number }
+Sites.ALONE = { combat = 1, ore = 1, gas = 1, relic = 0.5, data = 0.5 } :: { [string]: number }
 
 -- The probes a pilot has out in a system, in the order they were put out.
 function Sites.Probes(state: State.State, system: number): { State.Probe }
@@ -170,11 +182,41 @@ local function prizes(state: State.State, rng: Rng.Rng, wreck: number, count: nu
   end
 end
 
+-- The skill books there are: what a vault now and then has one of.
+local books: { string } = {}
+for _, skill in Skills.list do
+  if skill.start < 0 then
+    table.insert(books, Skills.Book(skill.id))
+  end
+end
+
+-- The plain modules there are drawings for anybody to have: what a
+-- vault has the drawings of.
+local drawn: { string } = {}
+for _, module in Modules.list do
+  if not module.meta and module.tech ~= 2 and not module.internal then
+    table.insert(drawn, "blueprint." .. module.id)
+  end
+end
+
+-- What a vault holds: what was written down, and nothing that was
+-- fitted to anything. Datacores, more of them than any derelict has;
+-- the drawings of a module or two; and now and then a book.
+local function archive(state: State.State, rng: Rng.Rng, wreck: number, rich: number)
+  Items.Add(state, "datacore", (3 + Rng.Int(rng, 3)) * rich, wreck, "cargo")
+  for _ = 1, 1 + Rng.Int(rng, 2) do
+    Items.Add(state, drawn[Rng.Int(rng, #drawn) + 1], 1, wreck, "cargo")
+  end
+  if Rng.Chance(rng, 0.5) then
+    Items.Add(state, books[Rng.Int(rng, #books) + 1], 1, wreck, "cargo")
+  end
+end
+
 local function addWreck(state: State.State, name: string, system: number, grid: number, x: number, y: number, z: number, radius: number,
   expires: number): number
   local wreck: State.Wreck = {
     id = State.NewId(state), kind = "wreck", name = name, system = system, grid = grid, x = x, y = y, z = z, radius = radius,
-    hull = "", expires = expires, salvaged = false, locked = false,
+    hull = "", expires = expires, salvaged = false, locked = false, lock = "",
   }
   state.wrecks[wreck.id] = wreck
   table.insert(state.wreckIds, wreck.id)
@@ -253,6 +295,33 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
         Rng.Float(rng, 500, 1200), place.id, ore.id)
       rock.site = place.id
     end
+  elseif kind == "gas" then
+    -- Clouds of the one gas, a few kilometres apart: more of them, and
+    -- bigger, the less safe the place.
+    local gas = Ores.gases[Rng.Int(rng, #Ores.gases) + 1]
+    local more = if band == "secure" then 0 elseif band == "low" then 1 else 2
+    local clouds = 4 + more + Rng.Int(rng, 2)
+    local start = Rng.Float(rng, 0, 2 * math.pi)
+    for c = 1, clouds do
+      local along = start + (c / clouds) * 2 * math.pi * Rng.Float(rng, 0.9, 1.1)
+      local far = Rng.Float(rng, 3000, 9000)
+      local cloud = add("asteroid", gas.name, x + far * math.cos(along), y + Rng.Float(rng, -2000, 2000), z + far * math.sin(along),
+        Rng.Float(rng, 700, 1300) * (1 + 0.15 * more), place.id, gas.id)
+      cloud.site = place.id
+    end
+  elseif kind == "data" then
+    -- Vaults, each locked, with what was written down in them.
+    local rich = if band == "secure" then 1 elseif band == "low" then 2 else 3
+    for _ = 1, 2 + Rng.Int(rng, 2) do
+      local wreck = addWreck(state, Sites.VAULT, system, place.id,
+        x + Rng.Float(rng, -5000, 5000), y + Rng.Float(rng, -1200, 1200), z + Rng.Float(rng, -5000, 5000), 90, expires)
+      archive(state, rng, wreck, rich)
+      state.wrecks[wreck].locked = true
+      state.wrecks[wreck].lock = "vault"
+      state.wrecks[wreck].hull = "relay"
+      -- (there is nothing of a vault for a salvager to bring off)
+      state.wrecks[wreck].salvaged = true
+    end
   else
     -- Hulls adrift (or, at a den, the pirates' stores) with things aboard.
     local rich = (if band == "secure" then 1 elseif band == "low" then 2 else 4) * (1 + 2 * deep)
@@ -282,7 +351,7 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
   return site
 end
 
--- A site of a kind somebody wants there to be ("ore", "relic"), in a
+-- A site of a kind somebody wants there to be ("ore", "relic", ...), in a
 -- system: one of the system's own from then on, found, worked and gone
 -- as they are (Character/Careers: an agent who teaches finding things
 -- sees to it that there is something to find). Nil if the system's
@@ -429,7 +498,7 @@ end
 
 -- Whether there is anything left at a site worth its being there.
 local function spent(state: State.State, site: State.Site): boolean
-  if site.kind == "ore" then
+  if site.kind == "ore" or site.kind == "gas" then
     for _, object in Space.Describe(state, site.system).objects do
       if object.kind == "asteroid" and object.site == site.id and Mining.Left(state, object) > 0 then
         return false

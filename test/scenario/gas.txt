@@ -1,0 +1,89 @@
+# Gas and what it is for, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/gas.txt
+#
+# A Gas Harvester goes on the starter Courier in place of a gun (the
+# module and the skill for it are given). A vapour field is given too,
+# found already (finding one is the scanner's work: sites.txt). The
+# ship warps to it, goes up to the nearest cloud and draws gas off it,
+# two cycles' worth. At home the gas is made into a booster, from
+# drawings and silicon that are given. The booster is taken from the
+# panel at the foot of the screen, and the ship is at once what the
+# booster makes it. Out in space the panel is still there, counting
+# down.
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Give('miner.gas', 1))
+lua GameDebug.Train('mining', 2)
+frames 3
+until GameDebug.Press('Unfit:high1')
+until GameDebug.Fitted('autocannon.small') == 1
+until GameDebug.Press('Fit:miner.gas')
+until GameDebug.Fitted('miner.gas') == 1
+
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('Stop'))
+wait 2
+lua _G.field = GameDebug.Plant('gas', 'gas.amber')
+lua assert(_G.field ~= '', 'no vapour field could be made')
+frames 5
+lua assert(GameDebug.Select(_G.field), 'the vapour field is not on the overview')
+
+# To the field, and up to the nearest cloud.
+lua GameDebug.TimeScale(16)
+lua assert(GameDebug.Order('WarpTo', _G.field), 'warp to the field was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+frames 5
+lua assert(GameDebug.Count('asteroid') >= 4, 'a vapour field should have its clouds')
+lua assert(GameDebug.Select('Amber Vapour'), 'a cloud should be on the overview by the name of its gas')
+lua assert(GameDebug.Order('Approach', 'Amber Vapour', 1000), 'the approach was refused')
+until GameDebug.Distance('Amber Vapour') < 2500
+lua assert(GameDebug.Lock('Amber Vapour'), 'the lock was refused')
+until GameDebug.Locked() > 0
+lua assert(GameDebug.Mine() == 1, 'the harvester did not start')
+until GameDebug.Running() == 1
+until GameDebug.Hold('gas.amber') >= 42
+lua assert(GameDebug.Order('Stop'))
+
+# Home, and the gas into a booster.
+lua assert(GameDebug.Order('Dock', 'home'), 'dock was refused')
+until GameDebug.Docked()
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Give('blueprint.booster.redline', 1))
+lua assert(GameDebug.Give('mineral.silicon', 150))
+until GameDebug.Press('Fitting')
+frames 3
+until GameDebug.Press('ToHangar:gas.amber')
+until GameDebug.Hangar('gas.amber') >= 42
+lua assert(GameDebug.Blueprint('blueprint.booster.redline'))
+frames 3
+until GameDebug.Press('StartJob')
+until GameDebug.Jobs() == 1
+lua assert(GameDebug.Hangar('gas.amber') == 2, 'a booster should take forty of its gas')
+lua GameDebug.TimeScale(30)
+until GameDebug.Jobs() == 0
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Hangar('booster.redline') == 1, 'the job delivered no booster')
+
+# Taken: it is at work, and the ship is what it makes it.
+lua _G.shield = GameDebug.Stat('shield')
+lua assert(GameDebug.Boosters() == 0 and select(2, GameDebug.Boosters()) == 1, 'the booster should be to hand, and none at work')
+frames 3
+until GameDebug.Press('Booster:redline')
+until GameDebug.Boosters() == 1
+lua assert(GameDebug.Hangar('booster.redline') == 0, 'a booster taken should be used up')
+lua assert(math.abs(GameDebug.Stat('shield') - 0.9 * _G.shield) < 0.5, 'Redline should cost a tenth of the shield')
+lua assert(select(3, GameDebug.Boosters()) > 1700, 'it should be at work for half an hour')
+
+# And still at work out in space.
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+wait 2
+lua assert(GameDebug.Boosters() == 1, 'a booster should go on working in space')
+
+echo gas scenario passed
+quit

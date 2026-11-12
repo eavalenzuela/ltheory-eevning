@@ -49,6 +49,9 @@ export type Miner = {
   duration: number,         -- s; the ore arrives at the end of each cycle
   capacitor: number,        -- GJ per cycle
   range: number,            -- m
+  -- It draws gas off a cloud, and does nothing to a rock (as a laser
+  -- that cuts rock does nothing to a cloud).
+  gas: boolean?,
 }
 
 -- What a module does to another ship while it runs on it. An "entangle" cuts
@@ -631,6 +634,15 @@ table.insert(modules, {
   requires = { { skill = "mining", level = 4 } },
 })
 
+-- What draws the gas off a cloud (Data/Ores, Tactical/Sites): it works
+-- from close by, and brings in half the room a mining laser cuts.
+table.insert(modules, {
+  id = "miner.gas", name = "Gas Harvester", short = "Harvester", slot = "high", hardpoint = "turret",
+  cpu = 50, powergrid = 2, volume = 5, basePrice = 60000, passive = {},
+  miner = { volume = 20, duration = 60, capacitor = 40, range = 3000, gas = true },
+  requires = { { skill = "mining", level = 2 } },
+})
+
 -- Ammunition by size. The small charges are written out above; the
 -- medium and large ones are those, larger. And what the hybrids fire.
 table.insert(charges, turretCharge("charge.plasma", "Plasma Charge", "hybrid", { 0, 6, 5, 0 }, 0.5))
@@ -748,7 +760,7 @@ for _, base in table.clone(modules) do
         repair = if repair then { layer = repair.layer, amount = repair.amount * make.amount, duration = repair.duration,
           capacitor = repair.capacitor } else nil,
         miner = if miner then { volume = miner.volume * make.amount, duration = miner.duration, capacitor = miner.capacitor,
-          range = miner.range } else nil,
+          range = miner.range, gas = miner.gas } else nil,
         hex = if hex and mends then { kind = hex.kind, range = hex.range, strength = hex.strength * make.amount,
           duration = hex.duration, capacitor = hex.capacitor } else nil,
         internal = base.internal,

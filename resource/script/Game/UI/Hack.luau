@@ -1,8 +1,9 @@
 --!strict
--- The hacking window: a hold's lock (Core/Tactical/Hacking) while the
--- pilot is at it. The matrix of codes, with the row or column the next
--- pick has to be in marked; the keys to get in, beside it; and the
--- buffer under it.
+-- The hacking window: a lock (Core/Tactical/Hacking) while the pilot is
+-- at it. The matrix of codes, with the row or column the next pick has
+-- to be in marked; the keys to get in, beside it; and the buffer under
+-- it. A lock that is on a clock (a vault's) shows it: how long there
+-- will be, before the first pick, and how long there is, after.
 --
 -- There while a hack is under way, and gone when it is over: it has no
 -- opening or closing of its own. Drawn every frame with Game/UI/Im; it
@@ -22,7 +23,8 @@ local Hack = {}
 Hack.WIDTH = 484
 Hack.HEIGHT = 468
 
-local CELL_W, CELL_H, GAP = 56, 44, 6
+-- (a matrix of five across at its full size; a bigger one in the same room)
+local FULL_W, FULL_H, GAP = 56, 44, 6
 local GOOD = vector.create(0.45, 0.85, 0.55)
 local BACK = vector.create(0.02, 0.03, 0.05)
 
@@ -60,8 +62,20 @@ function Hack.Draw(session: Session.Session, x: number, y: number)
   -- The matrix, with the row or the column the next pick is in marked.
   local size = hack.size
   local gridX, gridY = left, y + 46
-  local span = size * CELL_W + (size - 1) * GAP
-  local tall = size * CELL_H + (size - 1) * GAP
+  local span = 5 * FULL_W + 4 * GAP
+  local tall = 5 * FULL_H + 4 * GAP
+  local CELL_W, CELL_H = (span - (size - 1) * GAP) / size, (tall - (size - 1) * GAP) / size
+  local glyph = if size > 5 then 14 else 16
+  -- The clock, if the lock is on one: over the matrix, running down.
+  if hack.clock > 0 then
+    local begun = #hack.buffer > 0
+    local share = math.clamp(hack.left / hack.clock, 0, 1)
+    local tone = if begun and share < 0.34 then Im.WARN else Im.ACCENT
+    Im.Fill(gridX, y + 36, span, 4, Im.DIM, 0.25)
+    Im.Fill(gridX, y + 36, span * share, 4, tone, 0.95)
+    Im.TextRight(if begun then `{math.ceil(hack.left)} s` else `{math.ceil(hack.clock)} s from the first pick`, right, y + 30, 12,
+      if begun then tone else Im.DIM)
+  end
   if hack.along == "row" then
     Im.Fill(gridX - 4, gridY + (hack.line - 1) * (CELL_H + GAP) - 4, span + 8, CELL_H + 8, Im.ACCENT, 0.16)
   else
@@ -75,13 +89,13 @@ function Hack.Draw(session: Session.Session, x: number, y: number)
     local hot, clicked = Im.Area(`Hack:{index}`, cx, cy, CELL_W, CELL_H, cell.open)
     if cell.used then
       Im.Fill(cx, cy, CELL_W, CELL_H, Im.DIM, 0.08)
-      Im.Text(cell.code, cx + (CELL_W - Im.TextWidth(cell.code, 16)) / 2, cy + 13, 16, Im.DIM, 0.3)
+      Im.Text(cell.code, cx + (CELL_W - Im.TextWidth(cell.code, glyph)) / 2, cy + (CELL_H - glyph) / 2 - 1, glyph, Im.DIM, 0.3)
     elseif cell.open then
       Im.Fill(cx, cy, CELL_W, CELL_H, Im.ACCENT, if hot then 0.62 else 0.36)
-      Im.Text(cell.code, cx + (CELL_W - Im.TextWidth(cell.code, 16)) / 2, cy + 13, 16, Im.TEXT)
+      Im.Text(cell.code, cx + (CELL_W - Im.TextWidth(cell.code, glyph)) / 2, cy + (CELL_H - glyph) / 2 - 1, glyph, Im.TEXT)
     else
       Im.Fill(cx, cy, CELL_W, CELL_H, Im.DIM, 0.16)
-      Im.Text(cell.code, cx + (CELL_W - Im.TextWidth(cell.code, 16)) / 2, cy + 13, 16, Im.DIM)
+      Im.Text(cell.code, cx + (CELL_W - Im.TextWidth(cell.code, glyph)) / 2, cy + (CELL_H - glyph) / 2 - 1, glyph, Im.DIM)
     end
     if waiting and tried == index then
       -- (the one being picked now: a bar under it until the Core has taken it up)
@@ -100,8 +114,7 @@ function Hack.Draw(session: Session.Session, x: number, y: number)
   -- the buffer has begun it, and green when it is in.
   local keyX = gridX + span + 18
   local line = gridY - 2
-  local WHAT: { string } = { "or half is burnt", "datacores, as many again", "a custom module" }
-  for index, key in hack.keys do
+  for _, key in hack.keys do
     Im.Text(key.name, keyX, line, 13, if key.done then GOOD else Im.TEXT)
     Im.TextRight(if key.done then "in" else "", right, line, 13, GOOD)
     for at, code in key.codes do
@@ -109,7 +122,7 @@ function Hack.Draw(session: Session.Session, x: number, y: number)
       chip(code, keyX + (at - 1) * 30, line + 20, 27, 22, if key.done then GOOD elseif lit then Im.ACCENT else Im.DIM,
         if lit then 0.5 else 0.18, if lit then Im.TEXT else Im.DIM)
     end
-    Im.Text(WHAT[index] or "", keyX, line + 46, 11, Im.DIM, 0.85)
+    Im.Text(key.what, keyX, line + 46, 11, Im.DIM, 0.85)
     line += 82
   end
 
@@ -127,7 +140,9 @@ function Hack.Draw(session: Session.Session, x: number, y: number)
   Im.Text(next, left, foot + 40, 13, Im.TEXT)
   Im.Text("A pick puts its code in the buffer, and the next is across it: a row and a", left, foot + 64, 12, Im.DIM, 0.8)
   Im.Text("column by turns. A key is in when its codes stand there one after another.", left, foot + 80, 12, Im.DIM, 0.8)
-  Im.Text(if begun then "It is over when the buffer is full, or when you end it."
+  Im.Text(if begun and hack.clock > 0 then "It is over when the buffer is full, when the time is up, or when you end it."
+    elseif begun then "It is over when the buffer is full, or when you end it."
+    elseif hack.clock > 0 then "Look as long as you like: the clock starts with the first pick."
     else "Until the first pick the lock can be left as it is, and come back to.", left, foot + 96, 12, Im.DIM, 0.8)
   local abandon: State.Command = { kind = "AbandonHack", actor = 0 }
   if Im.Button(if begun then "End it" else "Leave", right - 90, y + height - 38, 90, 26, true, "Hack:abandon") then

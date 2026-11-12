@@ -316,7 +316,7 @@ function Assault.Open(state: State.State, mission: State.Mission, events: { Even
       local wreck: State.Wreck = {
         id = State.NewId(state), kind = "wreck", name = "Stolen Cargo", system = mission.system, grid = place.id,
         x = place.x + Rng.Float(rng, -4000, 4000), y = place.y + Rng.Float(rng, -1000, 1000), z = place.z + Rng.Float(rng, -4000, 4000),
-        radius = 30, hull = "", expires = 2 ^ 52, salvaged = true, locked = false,
+        radius = 30, hull = "", expires = 2 ^ 52, salvaged = true, locked = false, lock = "",
       }
       state.wrecks[wreck.id] = wreck
       table.insert(state.wreckIds, wreck.id)

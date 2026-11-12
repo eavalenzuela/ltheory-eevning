@@ -194,7 +194,7 @@ function Drones.Validate(state: State.State, command: State.Command): (boolean, 
     end
     -- (a rock, for the mining drones to cut)
     local rock = Space.Object(state, command.target or 0)
-    if rock and rock.kind == "asteroid" then
+    if rock and Mining.Rock(rock) then
       if Space.SystemOf(state, rock.id) ~= ball.system or rock.site ~= ball.grid then
         return false, "target is not on grid"
       end
@@ -264,13 +264,14 @@ local function working(state: State.State, owner: State.Ball): System.Object?
   for _, running in owner.vitals.running do
     local item = state.items[running.item]
     local rock = if item and Modules.byId[item.type].miner then Space.Object(state, running.target) else nil
-    if rock and Mining.Left(state, rock) > 0 then
+    -- (a cloud is nothing to a drone: it cuts rock)
+    if rock and Mining.Rock(rock) and Mining.Left(state, rock) > 0 then
       return rock
     end
   end
   for _, lock in owner.vitals.locks do
     local rock = Space.Object(state, lock.target)
-    if rock and rock.kind == "asteroid" and Mining.Left(state, rock) > 0 then
+    if rock and Mining.Rock(rock) and Mining.Left(state, rock) > 0 then
       return rock
     end
   end
@@ -303,7 +304,7 @@ end
 -- full hold.
 local function mine(state: State.State, drone: State.Drone, ball: State.Ball, owner: State.Ball, events: { Event })
   local rock = Space.Object(state, drone.target)
-  if rock == nil or rock.kind ~= "asteroid" or rock.site ~= owner.grid or Mining.Left(state, rock) <= 0 then
+  if rock == nil or not Mining.Rock(rock) or rock.site ~= owner.grid or Mining.Left(state, rock) <= 0 then
     rock = working(state, owner)
     drone.target = if rock then rock.id else 0
   end

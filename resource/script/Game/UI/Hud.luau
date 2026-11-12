@@ -8,6 +8,7 @@
 -- through queries and acts on it only through the Session.
 
 local Assets = require("@lt/Game/UI/Assets")
+local Boosters = require("@lt/Core/Data/Boosters")
 local Colony = require("@lt/Game/UI/Colony")
 local Colors = require("@lt/Colors")
 local Components = require("@lt/Widget/Components")
@@ -22,6 +23,7 @@ local Keys = require("@lt/Game/UI/Keys")
 local Map = require("@lt/Game/UI/Map")
 local Menu = require("@lt/Game/UI/Menu")
 local Modules = require("@lt/Core/Data/Modules")
+local Ores = require("@lt/Core/Data/Ores")
 local Hack = require("@lt/Game/UI/Hack")
 local Scanner = require("@lt/Game/UI/Scanner")
 local Scene = require("@lt/Game/View/Scene")
@@ -54,7 +56,19 @@ local TAGS: { [string]: string } = {
 
 -- What a site (Tactical/Sites) is called, by the variety of its place.
 local SITES: { [string]: string } = { ["site.combat"] = "pirate den", ["site.ore"] = "hidden belt", ["site.relic"] = "derelict",
-  ["site.mission"] = "camp to clear" }
+  ["site.gas"] = "vapour field", ["site.data"] = "listening post", ["site.mission"] = "camp to clear" }
+
+-- Whether a row of the overview is a vault (Core/Tactical/Sites): a
+-- wreck to the Core, and not one to the pilot.
+local function vaulted(entry: Core.Entry): boolean
+  return entry.kind == "wreck" and string.sub(entry.variety, 1, 6) == "vault."
+end
+
+-- Whether a row of the overview is a cloud of gas (Core/Data/Ores): a
+-- rock to the Core, and not one to the pilot.
+local function cloudy(entry: Core.Entry): boolean
+  return entry.kind == "asteroid" and Ores.gasById[entry.variety] ~= nil
+end
 
 -- The three kinds of space (Describe/Galaxy), as the pilot is told.
 local BANDS: { [string]: string } = { secure = "SECURE SPACE", low = "LOW SECURITY", lawless = "LAWLESS SPACE" }
@@ -313,7 +327,8 @@ local function drawOverview(session: Session.Session, all: { Core.Entry }, x: nu
     if goal then
       Im.Fill(x + 4, rowY + 2, 3, rowHeight - 4, NEXT, 0.95)
     end
-    Im.Text(TAGS[entry.kind] or "?", x + 12, rowY + 3, 13, if goal then NEXT else Im.DIM)
+    Im.Text(if cloudy(entry) then "GAS" elseif vaulted(entry) then "VLT" else TAGS[entry.kind] or "?", x + 12, rowY + 3, 13,
+      if goal then NEXT else Im.DIM)
     Im.Text(entry.name, x + 52, rowY + 3, 14, color)
     Im.TextRight(Format.Distance(entry.distance), x + width - 12, rowY + 3, 14, color)
     if clicked then
@@ -399,6 +414,13 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
   end
   if entry.kind == "site" then
     what = SITES[entry.variety] or "site"
+  end
+  if vaulted(entry) then
+    what = if entry.variety == "vault.locked" then "vault, locked" else "vault, open"
+  end
+  if cloudy(entry) then
+    -- (and how much of it there is still to draw off)
+    what = `cloud of gas, {math.floor(Core.Query.Left(session.game, entry.id) * 100 + 0.5)}% left`
   end
   local tone = Im.DIM
   if entry.kind == "gate" and entry.variety == "passage" then
@@ -518,6 +540,50 @@ local function drawStatus(ball: State.Ball, x: number, y: number)
     Im.Text(row.label, x + 10, rowY - 2, 13, Im.DIM)
     bar(x + 78, rowY + 3, 92, 8, row.value, row.max, row.color)
     Im.TextRight(whole(row.value), x + 212, rowY - 2, 13, Im.TEXT)
+  end
+end
+
+-- The pilot's boosters (Core/Character/Boosters): those at work, each
+-- with the time it has left, and those to hand (in the hold, and in the
+-- hangar where the ship is docked), each with a button to take it. A
+-- panel that is there only when there is something to put in it, its
+-- foot at 'foot'. A script's names: "Booster:<id>" ("Booster:redline").
+local BOOSTER_ROWS = 5
+local function drawBoosters(session: Session.Session, x: number, foot: number)
+  local working, hand = Core.Query.Boosters(session.game)
+  local rows = math.min(BOOSTER_ROWS, #working + #hand)
+  if rows == 0 then
+    return
+  end
+  local width, height = 276, 30 + rows * 22
+  local y = foot - height
+  Im.Panel(x, y, width, height)
+  Im.Heading("BOOSTERS", x + 10, y + 7, 13, Im.DIM)
+  local line = y + 28
+  local shown = 0
+  for _, row in working do
+    if shown < rows then
+      shown += 1
+      Info.Name(row.booster.id, row.booster.name, x + 10, line, 13, Im.TEXT)
+      -- (how much of its half hour is left, as a bar and in figures)
+      Im.Fill(x + 108, line + 6, 90, 5, Im.DIM, 0.25)
+      Im.Fill(x + 108, line + 6, 90 * math.clamp(row.left / Boosters.SECONDS, 0, 1), 5, Im.ACCENT, 0.95)
+      Im.TextRight(Format.Duration(row.left), x + width - 10, line, 12, Im.DIM)
+      line += 22
+    end
+  end
+  for _, row in hand do
+    if shown < rows then
+      shown += 1
+      Info.Name(row.booster.id, row.booster.name, x + 10, line, 13, if row.refused then Im.DIM else Im.TEXT)
+      Im.Text(`x{row.quantity}`, x + 108, line, 12, Im.DIM)
+      local take: State.Command = { kind = "TakeBooster", actor = 0, item = row.item }
+      if Im.Button("Take", x + width - 74, line - 2, 64, 20, row.refused == nil,
+        `Booster:{string.sub(row.booster.id, #"booster." + 1)}`) then
+        Session.Do(session, take)
+      end
+      line += 22
+    end
   end
 end
 
@@ -799,6 +865,8 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         Station.Draw(session, game, player, stationX, top + 130, Scene.Dressed(game, player.ship, player.hull.id, player.hull.radius))
         Info.Draw(stationX + Station.WIDTH + 12, top + 130)
       end
+      -- (beside the ship's own panels in space, and in the same place docked)
+      drawBoosters(session, left + (w.size.x - 520) / 2 + 532, bottom - 20)
       drawClock(session, left + 24, bottom - 54)
       -- Colonies are run from anywhere, in space or docked, and what
       -- the pilot owns can be looked over from anywhere. The two windows

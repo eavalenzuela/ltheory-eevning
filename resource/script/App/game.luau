@@ -35,7 +35,10 @@ local Menu = require("@lt/Game/UI/Menu")
 local Items = require("@lt/Core/Assets/Items")
 local Keys = require("@lt/Game/UI/Keys")
 local Modules = require("@lt/Core/Data/Modules")
+local Ores = require("@lt/Core/Data/Ores")
+local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
+local Sites = require("@lt/Core/Tactical/Sites")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -232,7 +235,7 @@ end
 -- Swing the camera round to look past the ship at something:
 -- GameDebug.LookAt('sun'), GameDebug.LookAt('planet'). False if there is
 -- no such thing in view of the overview.
-function Debug.LookAt(what: string, zoom: number?): boolean
+function Debug.LookAt(what: string, zoom: number?, over: number?): boolean
   local entry = find(what)
   local at = if entry then scene.screen[entry.id] else nil
   local focus = scene.focus
@@ -242,7 +245,8 @@ function Debug.LookAt(what: string, zoom: number?): boolean
   -- The camera sits on the far side of the ship from what it looks at.
   local away = vector.normalize(focus:GetPos() - at)
   -- (a little above the line through the ship, or the ship would hide it)
-  scene.pitch = math.clamp(math.acos(math.clamp(away.y, -1, 1)) - 0.16, 0.05, math.pi - 0.05)
+  -- ('over': how far above it, in radians, where that is not enough)
+  scene.pitch = math.clamp(math.acos(math.clamp(away.y, -1, 1)) - (over or 0.16), 0.05, math.pi - 0.05)
   scene.yaw = math.atan2(away.z, away.x)
   if zoom then
     scene.zoom, scene.zoomTarget = zoom, zoom
@@ -391,7 +395,8 @@ function Debug.Mine(): number
     for _, lock in ball.vitals.locks do
       if lock.locked then
         for _, item in Core.Query.Fitted(session.game, ship) do
-          if item.type == "miner.small"
+          -- (a laser, on a rock; a harvester, on a cloud)
+          if Modules.byId[item.type].miner
             and Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id, target = lock.target }) then
             started += 1
           end
@@ -708,17 +713,19 @@ function Debug.Wreck(sealed: boolean?, far: number?): boolean
 end
 
 -- The hack under way: whether there is one, how many codes are in the
--- buffer and how many it holds, and how many of the keys are in.
-function Debug.Hack(): (boolean, number, number, number)
+-- buffer and how many it holds, how many of the keys are in, and the
+-- seconds its lock allows from the first pick (0: it is on no clock)
+-- and has left.
+function Debug.Hack(): (boolean, number, number, number, number, number)
   local hack = Core.Query.Hack(session.game)
   if hack == nil then
-    return false, 0, 0, 0
+    return false, 0, 0, 0, 0, 0
   end
   local keys = 0
   for _, key in hack.keys do
     keys += if key.done then 1 else 0
   end
-  return true, #hack.buffer, hack.room, keys
+  return true, #hack.buffer, hack.room, keys, hack.clock, hack.left
 end
 
 -- The best that can still be made of a hack: the cell to pick next (0
@@ -878,6 +885,49 @@ function Debug.Sites(kind: string?): (number, number, string)
     end
   end
   return #sites, found, name
+end
+
+-- A cheat, for a site to work without the finding of it (which is the
+-- scanner's work: test/scenario/sites.txt): a site of a kind ("gas",
+-- "data", "ore", "relic") in the system the pilot is in, found already,
+-- and on the overview. With 'gas', a vapour field's clouds are of that
+-- gas. Returns its name ("" if none could be made).
+function Debug.Plant(kind: string, gas: string?): string
+  local state = session.game.state
+  local me = state.balls[state.player.ship]
+  if me == nil then
+    return ""
+  end
+  local site = Sites.Plant(state, me.system, kind, Rng.For(state.historySeed, state.tick, 57), session.game.events)
+  if site == nil then
+    return ""
+  end
+  site.strength = 1
+  local made = Ores.gasById[gas or ""]
+  if made then
+    for _, object in Space.Describe(state, me.system).objects do
+      if object.site == site.id and object.kind == "asteroid" then
+        object.variety, object.name = made.id, made.name
+      end
+    end
+  end
+  local place = Space.Object(state, site.id)
+  return if place then place.name else ""
+end
+
+-- The pilot's boosters: how many are at work, how many kinds of them
+-- are to hand (in the hold, and in the hangar where docked), and the
+-- seconds the first at work has left.
+function Debug.Boosters(): (number, number, number)
+  local working, hand = Core.Query.Boosters(session.game)
+  return #working, #hand, if working[1] then working[1].left else 0
+end
+
+-- An attribute of the pilot's ship as it is fitted and flown ("shield",
+-- "armor", "maxVelocity", ...), with whatever is at work on the pilot.
+function Debug.Stat(name: string): number
+  local state = session.game.state
+  return Items.ShipStats(state, state.player.ship)[name] or 0
 end
 
 -- Jobs: how many the station docked at offers, how many are in hand,

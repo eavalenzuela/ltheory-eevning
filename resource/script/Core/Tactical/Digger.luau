@@ -35,7 +35,9 @@ function Digger.Lasers(state: State.State, ship: number): { State.Item }
   local found: { State.Item } = {}
   if state.ships[ship] then
     for _, item in Items.Fitted(state, ship) do
-      if Modules.byId[item.type].miner then
+      -- (a hired pilot cuts rock: what draws gas off a cloud is not one of these)
+      local miner = Modules.byId[item.type].miner
+      if miner and not miner.gas then
         table.insert(found, item)
       end
     end
@@ -72,7 +74,7 @@ function Digger.Work(state: State.State, me: State.Ball, post: System.Object, ev
   end
   local rock: System.Object?, least = nil, math.huge
   for _, object in Space.Describe(state, me.system).objects do
-    if object.kind == "asteroid" and object.site == post.id and Mining.Left(state, object) > 0 then
+    if Mining.Rock(object) and object.site == post.id and Mining.Left(state, object) > 0 then
       local far = Space.Distance(object :: any, me :: any)
       if far < least then
         rock, least = object, far

@@ -2310,6 +2310,38 @@ local PLAIN: Look = {
   trim = { 0.34, 0.20, 0.12 }, wear = 0.75, rust = 0.5, sheets = 3.2,
 }
 
+-- What is adrift and is not the wreck of anything: it is drawn whole,
+-- as it was left, and is no ship's hull (so it is not one of the
+-- designs). A wreck says it is one by its 'hull' (Core/Tactical/Sites).
+
+-- The Relay, a vault at a listening post: a squat drum in a cage of
+-- girders, a lit band round it, a wide dish on a boom to one side with
+-- its horn, and a stand of aerials on top.
+local function relay(b: Builder)
+  block(b, PLATING, v(0, 0, 0), v(0.34, 0.26, 0.34), nil, 0.45)
+  block(b, GLOW, v(0, 0.06, 0), v(0.345, 0.02, 0.345), nil, 0.45)
+  block(b, PATCH, v(0, 0.29, 0), v(0.22, 0.04, 0.22), nil, 0.3)
+  block(b, PATCH, v(0, -0.29, 0), v(0.22, 0.04, 0.22), nil, 0.3)
+  for _, x in { -1, 1 } do
+    for _, z in { -1, 1 } do
+      beam(b, FRAME, v(x * 0.40, -0.40, z * 0.40), v(x * 0.40, 0.40, z * 0.40), 0.03, 0.1)
+    end
+    beam(b, FRAME, v(x * 0.40, 0.40, -0.40), v(x * 0.40, 0.40, 0.40), 0.025, 0.1)
+    beam(b, FRAME, v(x * 0.40, -0.40, -0.40), v(x * 0.40, -0.40, 0.40), 0.025, 0.1)
+    beam(b, FRAME, v(-0.40, x * 0.40, x * 0.40), v(0.40, x * 0.40, x * 0.40), 0.025, 0.1)
+    beam(b, FRAME, v(-0.40, x * 0.40, -x * 0.40), v(0.40, x * 0.40, -x * 0.40), 0.025, 0.1)
+  end
+  -- (the dish, out on its boom, and the horn it is fed from)
+  beam(b, FRAME, v(0.34, 0, 0), v(0.78, 0.05, 0), 0.03, 0.1)
+  block(b, PATCH, v(0.80, 0.05, 0), v(0.03, 0.30, 0.30), nil, 0.5)
+  block(b, FRAME, v(0.84, 0.05, 0), v(0.012, 0.22, 0.22), nil, 0.5)
+  beam(b, FRAME, v(0.86, 0.05, 0), v(1.0, 0.05, 0), 0.015, 0.1)
+  aerials(b, v(-0.20, 0.33, -0.16), v(-0.20, 0.33, 0.16), 3, 0.50)
+  aerial(b, v(0.10, -0.33, 0.05), 0.36, v(0, -1, 0))
+end
+
+local adrift: { [string]: (b: Builder) -> () } = { relay = relay }
+
 -- A ship in pieces: the model of each, the middle of each in the
 -- ship's own units (a piece turns about its middle as the wreck drifts
 -- apart), and the radius the whole ship had in those units.
@@ -2326,6 +2358,18 @@ function Hull.Wreck(type: string): Wreckage
   local made = wrecks[type]
   if made then
     return made
+  end
+  local left = adrift[type]
+  if left then
+    -- (in one piece, as it was left: unburnt and unbroken, and lit)
+    local b = Plates.New(#type * 1.37)
+    left(b)
+    local model, a, c = Plates.Finish(b, Hull.looks.unbound, nil)
+    table.clear(exhausts)
+    local size = c - a
+    local result: Wreckage = { pieces = { { model = model, middle = (a + c) / 2 } }, radius = math.max(size.x, size.y, size.z) / 2 }
+    wrecks[type] = result
+    return result
   end
   local design = designs[type]
   local whole = Hull.Build(type)

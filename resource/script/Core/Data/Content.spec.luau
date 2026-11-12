@@ -433,9 +433,9 @@ suite:Case("every weapon, repairer, extender, plate and mining laser has a tech 
       t.ok(not module.internal or (Modules.Improved(module.id) ~= nil and Modules.Custom(module.id) == nil), module.id)
     end
   end
-  -- 21 weapons, 2 repairers, an extender and a plate in three sizes each, two mining lasers, the repairers for
-  -- another ship (shield and armour, in three sizes), and the two things only a drone carries.
-  t.eq(improved, 21 + 4 * 3 + 2 + 2 * 3 + 2)
+  -- 21 weapons, 2 repairers, an extender and a plate in three sizes each, two mining lasers and a gas harvester,
+  -- the repairers for another ship (shield and armour, in three sizes), and the two things only a drone carries.
+  t.eq(improved, 21 + 4 * 3 + 3 + 2 * 3 + 2)
   t.ok(Modules.Improved("projector.entanglement") == nil and Modules.Improved("rig.shield") == nil)
   t.eq({ Modules.SizeOf(Modules.byId["autocannon.medium.ii"]), Modules.SizeOf(Modules.byId["shield.extender.large"]),
     Modules.SizeOf(Modules.byId["miner.small"]) }, { 2, 3, 1 })
@@ -490,7 +490,7 @@ suite:Case("the same modules have a custom make, between the plain one and tech 
     end
   end
   -- One of each for every module that has a tech 2 make and is not a drone's own.
-  t.eq({ customs, masterworks }, { 21 + 4 * 3 + 2 + 2 * 3, 21 + 4 * 3 + 2 + 2 * 3 })
+  t.eq({ customs, masterworks }, { 21 + 4 * 3 + 3 + 2 * 3, 21 + 4 * 3 + 3 + 2 * 3 })
   t.ok(Modules.Custom("projector.entanglement") == nil and Modules.Custom("autocannon.small.ii") == nil)
   t.ok(Modules.Masterwork("projector.entanglement") == nil and Modules.Masterwork("autocannon.small.custom") == nil)
   t.eq({ Modules.Graded("projector.entanglement", 2), Modules.Graded("autocannon.small", 3) }, { "projector.entanglement", "autocannon.small" })

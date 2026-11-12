@@ -31,11 +31,14 @@ local Guide = require("@lt/Core/Character/Guide")
 local Hacking = require("@lt/Core/Tactical/Hacking")
 local Hangar = require("@lt/Core/Assets/Hangar")
 local Implanting = require("@lt/Core/Character/Implants")
+local Boosters = require("@lt/Core/Data/Boosters")
+local Boosting = require("@lt/Core/Character/Boosters")
 local Implants = require("@lt/Core/Data/Implants")
 local Industry = require("@lt/Core/Assets/Industry")
 local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
 local Mining = require("@lt/Core/Tactical/Mining")
+local Ores = require("@lt/Core/Data/Ores")
 local Missions = require("@lt/Core/Assets/Missions")
 local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
@@ -74,7 +77,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 45
+Core.SAVE_VERSION = 46
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -299,6 +302,18 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- save from before has given any.
   [40] = function(state: any)
     state.digs = state.digs or {}
+  end,
+  -- 46: a pilot takes boosters, and there are vaults, whose lock is on a
+  -- clock. In a save from before, no booster is at work, every sealed
+  -- thing is a hold, and a hack under way is not on a clock.
+  [45] = function(state: any)
+    state.boosters = state.boosters or {}
+    for _, wreck in state.wrecks do
+      wreck.lock = wreck.lock or ""
+    end
+    if state.hack then
+      state.hack.ends = state.hack.ends or 0
+    end
   end,
   -- 45: a pilot may found a corporation. In a save from before, nobody has.
   [44] = function(state: any)
@@ -529,6 +544,7 @@ function Core.New(options: Options): Game
     careers = {},
     corporation = Corporation.None(),
     implants = {},
+    boosters = {},
     jobIds = {},
     wallet = 0,
     journal = {},
@@ -598,6 +614,7 @@ local FLEET_COMMANDS = { HirePilot = true, AssignShip = true, DismissPilot = tru
 local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true, RedeemLoyalty = true }
 local CAREER_COMMANDS = { AcceptLesson = true, CompleteLesson = true }
 local CORPORATION_COMMANDS = { FoundCorporation = true, CorporationDeposit = true, CorporationWithdraw = true }
+local BOOSTER_COMMANDS = { TakeBooster = true }
 local COLONY_COMMANDS = { DeployColony = true, BuildFacility = true, RemoveFacility = true, StartExtraction = true, Export = true }
 
 local function validate(state: State.State, command: State.Command): (boolean, string?)
@@ -636,6 +653,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Fleet.Validate(state, command)
   elseif IMPLANT_COMMANDS[command.kind] then
     return Implanting.Validate(state, command)
+  elseif BOOSTER_COMMANDS[command.kind] then
+    return Boosting.Validate(state, command)
   elseif HACK_COMMANDS[command.kind] then
     return Hacking.Validate(state, command)
   elseif TRAINING_COMMANDS[command.kind] then
@@ -731,6 +750,8 @@ function Core.Step(game: Game)
       Fleet.Apply(state, command, game.events)
     elseif ok and IMPLANT_COMMANDS[command.kind] then
       Implanting.Apply(state, command, game.events)
+    elseif ok and BOOSTER_COMMANDS[command.kind] then
+      Boosting.Apply(state, command, game.events)
     elseif ok and HACK_COMMANDS[command.kind] then
       Hacking.Apply(state, command, game.events)
     elseif ok and TRAINING_COMMANDS[command.kind] then
@@ -741,6 +762,7 @@ function Core.Step(game: Game)
       table.insert(game.events, { kind = "CommandRejected", command = command.kind, actor = command.actor, reason = reason })
     end
   end
+  Boosting.Step(state, game.events)
   Sites.Step(state, game.events)
   Hacking.Step(state, game.events)
   Missions.Step(state, game.events)
@@ -913,7 +935,10 @@ function Query.Overview(game: Game): { Entry }
     local wreck = state.wrecks[id]
     if wreck.system == me.system and wreck.grid == me.grid and me.grid ~= 0 then
       local entry: Entry = { id = id, kind = "wreck", name = wreck.name,
-        distance = Space.Gap(me :: any, wreck :: any), onGrid = true, variety = if wreck.locked then "sealed" else "",
+        distance = Space.Gap(me :: any, wreck :: any), onGrid = true,
+        -- (a vault is no wreck to the pilot: Tactical/Sites)
+        variety = if wreck.lock == "vault" then (if wreck.locked then "vault.locked" else "vault.open")
+          elseif wreck.locked then "sealed" else "",
         hostile = false, own = false }
       table.insert(entries, entry)
     end
@@ -1217,6 +1242,49 @@ function Query.Implants(game: Game): ({ ImplantPlace }, number)
   return places, math.clamp(game.state.skills.cybernetics or 0, 0, Implants.SLOTS)
 end
 
+-- How much is left in a rock or a cloud, as a share of what it holds
+-- whole (1 for anything that is neither).
+function Query.Left(game: Game, id: number): number
+  local object = Space.Object(game.state, id)
+  if object == nil or object.kind ~= "asteroid" then
+    return 1
+  end
+  local whole = Ores.Units(object.variety, object.radius)
+  return if whole > 0 then Mining.Left(game.state, object) / whole else 0
+end
+
+-- The pilot's boosters: those at work, each with the seconds it has
+-- left; and those to hand (in the hold of the ship they fly, and in the
+-- hangar where they are docked), each with the item to take, how many
+-- there are of it, and why it cannot be taken now, if it cannot.
+export type BoosterAtWork = { booster: Boosters.Booster, left: number }
+export type BoosterToHand = { booster: Boosters.Booster, item: number, quantity: number, refused: string? }
+function Query.Boosters(game: Game): ({ BoosterAtWork }, { BoosterToHand })
+  local state = game.state
+  local working: { BoosterAtWork } = {}
+  for _, boosted in state.boosters do
+    table.insert(working, { booster = Boosters.byId[boosted.type], left = math.max(0, boosted.ends - state.tick) * Constants.TICK })
+  end
+  local hand: { BoosterToHand } = {}
+  local ship = state.ships[state.player.ship]
+  if ship then
+    local stacks = Items.In(state, ship.id, "cargo")
+    if ship.docked ~= 0 then
+      for _, item in Items.In(state, ship.docked, "hangar") do
+        table.insert(stacks, item)
+      end
+    end
+    for _, item in stacks do
+      local booster = Boosters.byId[item.type]
+      if booster then
+        local ok, why = Boosting.Validate(state, { kind = "TakeBooster", actor = ship.id, item = item.id })
+        table.insert(hand, { booster = booster, item = item.id, quantity = item.quantity, refused = if ok then nil else why })
+      end
+    end
+  end
+  return working, hand
+end
+
 -- The sites the pilot knows of in a system (found, and still there), by
 -- name: for the map, which has no overview to show them on.
 function Query.KnownSites(game: Game, system: number): { string }
@@ -1236,9 +1304,12 @@ end
 -- whether it is in, and how many of its codes the end of the buffer has
 -- begun it with), and the row or column the next pick has to be in.
 export type HackCell = { code: string, used: boolean, open: boolean }
-export type HackKey = { name: string, codes: { string }, done: boolean, begun: number }
+-- ('what': a key's use in a few words. 'clock': the seconds the lock
+-- allows from the first pick, 0 for one that is on no clock; 'left':
+-- the seconds there are left of them, once it is begun.)
+export type HackKey = { name: string, codes: { string }, done: boolean, begun: number, what: string }
 export type HackStatus = { wreck: number, name: string, size: number, cells: { HackCell }, buffer: { string }, room: number,
-  keys: { HackKey }, along: string, line: number }
+  keys: { HackKey }, along: string, line: number, clock: number, left: number }
 function Query.Hack(game: Game): HackStatus?
   local hack = game.state.hack
   if hack == nil then
@@ -1250,13 +1321,17 @@ function Query.Hack(game: Game): HackStatus?
   for index, code in hack.cells do
     table.insert(cells, { code = code, used = hack.used[index], open = table.find(open, index) ~= nil })
   end
+  local kind = if wreck then Hacking.LockOf(wreck) else Hacking.LOCKS.hold
   local keys: { HackKey } = {}
-  for _, key in hack.keys do
+  for index, key in hack.keys do
     table.insert(keys, { name = key.name, codes = table.clone(key.codes), done = key.done,
-      begun = if key.done then #key.codes else Hacking.Begun(hack.buffer, key.codes) })
+      begun = if key.done then #key.codes else Hacking.Begun(hack.buffer, key.codes),
+      what = if kind.keys[index] then kind.keys[index].what else "" })
   end
   return { wreck = hack.wreck, name = if wreck then wreck.name else "", size = hack.size, cells = cells,
-    buffer = table.clone(hack.buffer), room = hack.room, keys = keys, along = hack.along, line = hack.line }
+    buffer = table.clone(hack.buffer), room = hack.room, keys = keys, along = hack.along, line = hack.line,
+    clock = kind.clock * Constants.TICK,
+    left = if hack.ends > 0 then math.max(0, hack.ends - game.state.tick) * Constants.TICK else kind.clock * Constants.TICK }
 end
 
 -- The directional scanner (Tactical/Dscan): the ships, wrecks and
