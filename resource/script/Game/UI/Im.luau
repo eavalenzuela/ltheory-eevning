@@ -17,6 +17,8 @@ Im.over = false
 
 local cursor = vector.create(0, 0)
 local pressed = false
+local rightPressed = false
+local held = false      -- this frame's click is being kept for what is drawn last (Im.Hold)
 local clicked = false   -- a button was clicked with the mouse this frame
 local double = false
 
@@ -44,7 +46,9 @@ function Im.Begin()
   Im.over = false
   cursor = Cursor_Get()
   pressed = Mouse_LeftPressed()
+  rightPressed = Mouse_RightPressed()
   double = Mouse_DoubleClicked()
+  held = false
   seen, seenNow = seenNow, {}
   pressNow, pressNext = pressNext, nil
 end
@@ -82,6 +86,29 @@ end
 -- Whether the mouse button went down this frame (anywhere).
 function Im.Pressed(): boolean
   return pressed
+end
+
+-- Whether the other mouse button went down this frame (anywhere).
+function Im.RightPressed(): boolean
+  return rightPressed
+end
+
+-- Keep this frame's click from everything drawn from here on, until
+-- Im.Release: for a menu that is drawn last, over everything, when the
+-- click is the menu's and not for what lies under it.
+function Im.Hold()
+  if pressed then
+    held = true
+    pressed = false
+  end
+  double = false
+end
+
+function Im.Release()
+  if held then
+    pressed = true
+    held = false
+  end
 end
 
 local function inside(x: number, y: number, w: number, h: number): boolean

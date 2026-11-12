@@ -320,11 +320,13 @@ end
 -- from the autopilot.)
 function Session.Order(session: Session, kind: string, target: number?, range: number?): boolean
   session.autopilot = false
-  if kind == "WarpTo" and target and (range or 0) == 0 then
+  if kind == "WarpTo" and target then
+    -- (a world or a sun is warped to from well off it: a distance asked
+    -- for is that much farther off again)
     local body = Core.Query.Body(session.game, target)
     local standoff = if body then STANDOFF[body.kind] else nil
     if body and standoff then
-      range = standoff * body.radius
+      range = standoff * body.radius + (range or 0)
     end
   end
   local command: State.Command = { kind = kind, actor = session.game.state.player.ship, target = target, range = range }

@@ -79,6 +79,9 @@
 #               round, in a cone pointed at something, and at a short range
 #   game-away   time (test/scenario/away.txt): run faster at a station only,
 #               and training that goes on while the game is not played
+#   game-context the right-click menu (test/scenario/context.txt): brought up
+#               on the overview, and orbit, keep and warp at a distance
+#               picked from it
 #   game-nomads the Kethri's colony ships (test/scenario/nomads.txt): one
 #               boarded in a galaxy of forty, left, looked at and moored at
 #   game-pace   the game app must draw at least thirty frames a second just
@@ -227,6 +230,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/dscan.txt
   step game-away 0 timeout 300 bin/launch game --no-present --fixed-step 60 --timeout 240 \
     --script test/scenario/away.txt
+  step game-context 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 340 \
+    --script test/scenario/context.txt
   step game-nomads 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 340 \
     --script test/scenario/nomads.txt
   step game-pace 0 timeout 200 bin/launch game --no-present --fixed-step 60 --timeout 150 \

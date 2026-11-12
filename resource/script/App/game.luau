@@ -14,6 +14,7 @@ local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Audio = require("@lt/Game/View/Audio")
 local Colors = require("@lt/Colors")
 local Colony = require("@lt/Game/UI/Colony")
+local Context = require("@lt/Game/UI/Context")
 local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Hacking = require("@lt/Core/Tactical/Hacking")
@@ -97,6 +98,24 @@ function Debug.Order(kind: string, what: string?, range: number?): boolean
     session.selected = entry.id
   end
   return Session.Order(session, kind, target, range)
+end
+
+-- Bring up the menu a right click on something would (Game/UI/Context),
+-- with it picked out. False if nothing matches.
+function Debug.Context(what: string): boolean
+  local entry = find(what)
+  if entry == nil then
+    return false
+  end
+  session.selected = entry.id
+  Context.Open(entry.id, 700, 300)
+  return true
+end
+
+-- The distance the plain order of a kind is given at ("Orbit",
+-- "KeepAtRange", "WarpTo"): what was last picked from a menu.
+function Debug.Range(kind: string): number
+  return Context.Range(kind)
 end
 
 function Debug.Select(what: string): boolean

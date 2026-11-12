@@ -1,0 +1,79 @@
+# The right-click menu, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/context.txt
+#
+# A right click on a row of the overview brings up what can be done
+# about it, and a click somewhere else puts it away. Orbit, keep at
+# range and warp to each open a second menu of distances: the station is
+# orbited at 10 km and then kept at 25, and the belt is warped to at
+# 30 km. A distance picked is the one the plain button and the key use
+# from then on.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Peaceful(true)
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 5
+lua assert(GameDebug.Order('Stop'))
+lua assert(GameDebug.Select('station'))
+frames 3
+lua assert(GameDebug.CanPress('Orbit 5 km') and GameDebug.CanPress('Keep 10 km'), 'the plain orders begin at 5 and 10 km')
+
+# A right click on the first row of the overview (1920x1080 window): the
+# menu is up, for what that row is, and a click elsewhere puts it away.
+click Right 1700 227
+frames 3
+lua assert(GameDebug.Selected() ~= '', 'a right click should pick the row out')
+lua assert(GameDebug.CanPress('Menu:AlignTo'), 'a right click on the overview should bring up the menu')
+shot context-menu
+click Left 500 620
+frames 3
+lua assert(not GameDebug.CanPress('Menu:AlignTo'), 'a click elsewhere should put the menu away')
+
+# The station: orbit, from its distances, at 10 km. It is on the grid,
+# so the menu has no warp in it.
+lua assert(GameDebug.Context('station'))
+frames 3
+lua assert(GameDebug.CanPress('Menu:Orbit') and GameDebug.CanPress('Menu:Dock'))
+lua assert(not GameDebug.CanPress('Menu:WarpTo'), 'what is here is not warped to')
+until GameDebug.Press('Menu:Orbit')
+frames 3
+shot context-distances
+until GameDebug.Press('Menu:Orbit:10000')
+until GameDebug.Doing() == 'orbit'
+lua assert(GameDebug.Range('Orbit') == 10000)
+frames 3
+lua assert(not GameDebug.CanPress('Menu:Orbit'), 'the menu should be gone once an order is given')
+lua assert(GameDebug.CanPress('Orbit 10 km'), 'the plain button should orbit at the distance picked')
+
+# Kept at 25 km.
+lua assert(GameDebug.Context('station'))
+frames 3
+until GameDebug.Press('Menu:KeepAtRange')
+frames 3
+until GameDebug.Press('Menu:KeepAtRange:25000')
+until GameDebug.Doing() == 'keep'
+lua assert(GameDebug.Range('KeepAtRange') == 25000)
+
+# The key orbits at the 10 km picked before.
+lua GameDebug.Key('W')
+until GameDebug.Doing() == 'orbit'
+lua GameDebug.TimeScale(4)
+wait 60
+lua assert(math.abs(GameDebug.TargetGap() - 10000) < 1500, 'the key should orbit at 10 km, not ' .. GameDebug.TargetGap())
+
+# The belt, which is not here: warped to, at 30 km.
+lua assert(GameDebug.Context('belt'))
+frames 3
+lua assert(GameDebug.CanPress('Menu:WarpTo') and not GameDebug.CanPress('Menu:Orbit'), 'what is not here is warped to, and nothing else')
+until GameDebug.Press('Menu:WarpTo')
+frames 3
+until GameDebug.Press('Menu:WarpTo:30000')
+lua GameDebug.TimeScale(8)
+until GameDebug.InWarp()
+until GameDebug.Idle()
+lua assert(math.abs(GameDebug.Distance('belt') - 30000) < 2000, 'the warp should end 30 km short, not ' .. GameDebug.Distance('belt'))
+
+echo context scenario passed
+quit

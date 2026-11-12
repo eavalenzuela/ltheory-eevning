@@ -12,6 +12,7 @@ local Colony = require("@lt/Game/UI/Colony")
 local Colors = require("@lt/Colors")
 local Components = require("@lt/Widget/Components")
 local Constants = require("@lt/Core/Data/Constants")
+local Context = require("@lt/Game/UI/Context")
 local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Guide = require("@lt/Game/UI/Guide")
@@ -41,9 +42,6 @@ local overviewScroll = 0
 function Hud.CursorOverInterface(): boolean
   return overInterface
 end
-
-local ORBIT_RANGE = 5000
-local KEEP_RANGE = 10000
 
 local TAGS: { [string]: string } = {
   sun = "SUN", planet = "PLN", moon = "MON", belt = "BLT", asteroid = "AST",
@@ -216,6 +214,11 @@ local function drawBrackets(session: Session.Session, scene: Scene.Scene, entrie
   if clicked ~= 0 and Im.Pressed() and not overInterface then
     session.selected = clicked
   end
+  -- (a right click picks it out too, and brings up what can be done about it)
+  if clicked ~= 0 and Im.RightPressed() and not overInterface then
+    session.selected = clicked
+    Context.Open(clicked, cursor.x, cursor.y)
+  end
 end
 
 local function drawOverview(session: Session.Session, entries: { Core.Entry }, x: number, y: number, width: number, height: number)
@@ -252,7 +255,11 @@ local function drawOverview(session: Session.Session, entries: { Core.Entry }, x
       break
     end
     local rowY = top + (row - 1) * rowHeight
-    local _, clicked, double = Im.Row(x + 4, rowY, width - 8, rowHeight, entry.id == session.selected)
+    local hot, clicked, double = Im.Row(x + 4, rowY, width - 8, rowHeight, entry.id == session.selected)
+    if hot and Im.RightPressed() then
+      session.selected = entry.id
+      Context.Open(entry.id, Im.Cursor().x, Im.Cursor().y)
+    end
     local color = if entry.hostile then HULL elseif entry.own then OURS elseif entry.onGrid then Im.TEXT else Im.DIM
     Im.Text(TAGS[entry.kind] or "?", x + 12, rowY + 3, 13, Im.DIM)
     Im.Text(entry.name, x + 52, rowY + 3, 14, color)
@@ -333,9 +340,11 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
   end
   local orders: { { label: string, kind: string, range: number? } } = {
     { label = "Approach", kind = "Approach", range = 0 },
-    { label = "Orbit 5 km", kind = "Orbit", range = ORBIT_RANGE },
-    { label = "Keep 10 km", kind = "KeepAtRange", range = KEEP_RANGE },
-    { label = "Warp to", kind = "WarpTo", range = 0 },
+    -- (at the distances last picked from the menu a right click brings up)
+    { label = `Orbit {Context.Distance(Context.Range("Orbit"))}`, kind = "Orbit", range = Context.Range("Orbit") },
+    { label = `Keep {Context.Distance(Context.Range("KeepAtRange"))}`, kind = "KeepAtRange", range = Context.Range("KeepAtRange") },
+    { label = if Context.Range("WarpTo") > 0 then `Warp to {Context.Distance(Context.Range("WarpTo"))}` else "Warp to", kind = "WarpTo",
+      range = Context.Range("WarpTo") },
     { label = "Align", kind = "AlignTo" },
     if entry.kind == "gate" then { label = "Jump", kind = "Jump" }
       elseif entry.kind == "bookmark" then { label = "Forget", kind = "ForgetBookmark" }
@@ -579,6 +588,15 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       local entries = Core.Query.Overview(game)
       local left, top = w.pos.x, w.pos.y
       local right, bottom = left + w.size.x, top + w.size.y
+
+      -- (with a right click's menu up, a click is the menu's: Context.Draw)
+      if Context.IsOpen() then
+        if ball then
+          Im.Hold()
+        else
+          Context.Close()
+        end
+      end
 
       -- Brackets and shots go under the panels and use last frame's
       -- answer to "is the cursor over a panel".
@@ -852,6 +870,8 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           end
         end
       end
+      -- The menu a right click brought up, over all of that.
+      Context.Draw(session, entries, left, top, right, bottom)
       -- (the map goes over everything else)
       Map.Draw(session, left, top, w.size.x, w.size.y)
       Keys.EndFrame()
