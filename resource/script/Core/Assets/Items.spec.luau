@@ -103,7 +103,7 @@ suite:Case("unfitting returns the module and what was loaded in it", function(t)
     { "laser.pulse.small", 1, "autocannon.small", 2 } :: { any })
 end)
 
-suite:Case("a tech 2 charge goes into a tech 2 weapon and no other, and does a seventh more", function(t)
+suite:Case("a tech 2 charge goes into a tech 2 weapon and no other, and hits harder", function(t)
   local game = newGame()
   local state = game.state
   local ship = state.player.ship

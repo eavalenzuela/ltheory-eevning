@@ -13,6 +13,7 @@ local Skills = require("@lt/Core/Data/Skills")
 local Test = require("@lt/Tool/Test")
 local Types = require("@lt/Core/Data/Types")
 local Factions = require("@lt/Core/Data/Factions")
+local Facts = require("@lt/Core/Data/Facts")
 
 local suite = Test.Suite("Content")
 
@@ -497,8 +498,9 @@ suite:Case("the same modules have a custom make, between the plain one and tech 
   t.eq(Modules.SizeOf(Modules.byId["autocannon.medium.custom"]), 2)
 end)
 
-suite:Case("every charge has a tech 2 make: a seventh more damage, for a tech 2 weapon only, and nobody's to buy", function(t)
+suite:Case("every charge has a tech 2 make: better at what the plain one is for and worse at something else, for a tech 2 weapon only, and nobody's to buy", function(t)
   local improved, plain = 0, 0
+  local trades: { [string]: number } = {}
   for _, charge in Modules.charges do
     if charge.tech == 2 then
       improved += 1
@@ -507,12 +509,32 @@ suite:Case("every charge has a tech 2 make: a seventh more damage, for a tech 2 
         { base.id .. ".ii", base.name .. " II", base.family, base.size, base.volume } :: { any })
       t.eq(Modules.ImprovedCharge(base.id), charge)
       t.ok(base.tech == nil and Modules.ImprovedCharge(charge.id) == nil)
-      for index = 1, 4 do
-        t.near(charge.damage[index], base.damage[index] * 1.15, 1e-9)
+      -- What it gives, and what it takes, by what the plain one is for: more damage, range, tracking or blast.
+      local more: { number }, kind
+      if base.family == "missile" then
+        -- (a quarter harder, with a wider blast: less of it lands on what is small)
+        more, kind = { 1.25, 1, 1, 1.3 }, "missile"
+      elseif base.rangeMultiplier < 0.8 then
+        more, kind = { 1.25, 1, 0.75, 1 }, "short"
+      elseif base.rangeMultiplier > 1.3 then
+        more, kind = { 1.10, 1.25, 0.8, 1 }, "long"
+      else
+        more, kind = { 1.05, 0.85, 1.3, 1 }, "middle"
       end
-      -- (it flies and reaches as the plain one does)
-      t.eq({ charge.rangeMultiplier, charge.velocity, charge.flightTime, charge.explosionRadius, charge.explosionVelocity },
-        { base.rangeMultiplier, base.velocity, base.flightTime, base.explosionRadius, base.explosionVelocity })
+      trades[kind] = (trades[kind] or 0) + 1
+      for index = 1, 4 do
+        t.near(charge.damage[index], base.damage[index] * more[1], 1e-9)
+      end
+      t.near(charge.rangeMultiplier, base.rangeMultiplier * more[2], 1e-9, charge.id)
+      t.eq(charge.tracking, if base.family == "missile" then nil else more[3], charge.id)
+      t.near(charge.explosionRadius, base.explosionRadius * more[4], 1e-9)
+      -- (every one is better at something and worse at something)
+      local better = more[1] > 1 or more[2] > 1 or more[3] > 1
+      local worse = more[2] < 1 or more[3] < 1 or more[4] > 1
+      t.ok(better and worse, charge.id)
+      -- (a missile flies as the plain one does)
+      t.eq({ charge.velocity, charge.flightTime, charge.explosionVelocity }, { base.velocity, base.flightTime, base.explosionVelocity })
+      t.ok(string.find(assert(Facts.Of(charge.id)).note, "Only a tech 2 weapon takes it", 1, true) ~= nil)
       t.eq(charge.basePrice, base.basePrice * 5)
       -- Nobody sells it or its blueprint; it is built of the plain charge, as many as are made, and the rare minerals.
       local blueprint = assert(Blueprints.byProduct[charge.id], charge.id)
@@ -526,11 +548,13 @@ suite:Case("every charge has a tech 2 make: a seventh more damage, for a tech 2 
       t.eq(rare, 2, charge.id)
     else
       plain += 1
-      t.eq({ charge.base, Types.Info(charge.id).scarce } :: { any }, { nil, nil } :: { any })
+      t.eq({ charge.base, charge.tracking, Types.Info(charge.id).scarce } :: { any }, { nil, nil, nil } :: { any })
       t.ok(Modules.ImprovedCharge(charge.id) ~= nil, `{charge.id} has no tech 2 make`)
     end
   end
   t.ok(improved == plain and plain >= 30, `{plain} plain charges and {improved} tech 2`)
+  -- (there is every kind of trade to be had)
+  t.ok((trades.short or 0) > 0 and (trades.middle or 0) > 0 and (trades.long or 0) > 0 and (trades.missile or 0) > 0)
 end)
 
 suite:Case("every drone has a tech 2 make: a tougher, quicker hull with the tech 2 make of what it carries, for a pilot with Drones 4", function(t)

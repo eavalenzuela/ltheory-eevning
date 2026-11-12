@@ -362,7 +362,8 @@ local function turretChance(state: State.State, ball: State.Ball, item: State.It
     local across = math.sqrt(math.max(0, vx * vx + vy * vy + vz * vz - along * along))
     angular = across / distance
   end
-  return Gunnery.HitChance(angular, weapon.tracking, signature(state, target),
+  -- (a charge may make the gun track better or worse: Data/Modules)
+  return Gunnery.HitChance(angular, weapon.tracking * (charge.tracking or 1), signature(state, target),
     Space.Gap(ball :: any, target), weapon.optimal * charge.rangeMultiplier, weapon.falloff)
 end
 

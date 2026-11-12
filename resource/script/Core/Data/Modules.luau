@@ -138,6 +138,9 @@ export type ChargeType = {
   basePrice: number,
   damage: { number },
   rangeMultiplier: number,  -- on a turret's optimal range
+  -- on a turret's tracking, where the charge changes it (a tech 2
+  -- charge's trade, below); as the gun tracks by itself, if not said
+  tracking: number?,
   -- missiles
   velocity: number,         -- m/s
   flightTime: number,       -- s
@@ -685,20 +688,46 @@ for index, sized in MISSILE_SIZES do
 end
 
 -- Tech 2 charges: the improved make of every crystal, round, charge
--- and missile. A seventh more damage, and nothing else different; and
--- only a tech 2 weapon takes one (Assets/Items). Nobody sells them:
--- the blueprint is invented from the plain charge's, and they are built
--- of the plain charge and of what lawless space has (Data/Blueprints).
-local CHARGE2 = { damage = 1.15, price = 5 }
+-- and missile, which only a tech 2 weapon takes (Assets/Items). Each is
+-- better at what the plain one is for and worse at something else, so
+-- that it is a choice and not only a dearer round:
+--   - a turret's short charge (the one that hits hardest, at half the
+--     range) hits a quarter harder still, and the gun tracks a quarter
+--     worse with it: for what is big and slow;
+--   - its middle charge makes the gun track three tenths better, for a
+--     twentieth more damage and a seventh less range: for what is small
+--     and quick;
+--   - its long charge reaches a quarter further, for a tenth more
+--     damage, and the gun tracks a fifth worse with it: for what is to
+--     be kept at a distance;
+--   - a missile hits a quarter harder, and its blast is three tenths
+--     wider, so that what is small takes less of it than of the plain
+--     one.
+-- Nobody sells them: the blueprint is invented from the plain charge's,
+-- and they are built of the plain charge and of what lawless space has
+-- (Data/Blueprints).
+type Trade = { damage: number, range: number, tracking: number?, blast: number }
+local CHARGE2 = {
+  price = 5,
+  short = { damage = 1.25, range = 1, tracking = 0.75, blast = 1 } :: Trade,
+  middle = { damage = 1.05, range = 0.85, tracking = 1.3, blast = 1 } :: Trade,
+  long = { damage = 1.10, range = 1.25, tracking = 0.8, blast = 1 } :: Trade,
+  missile = { damage = 1.25, range = 1, tracking = nil, blast = 1.3 } :: Trade,
+}
 for _, base in table.clone(charges) do
+  local trade: Trade = if base.family == "missile" then CHARGE2.missile
+    elseif base.rangeMultiplier < 0.8 then CHARGE2.short
+    elseif base.rangeMultiplier > 1.3 then CHARGE2.long
+    else CHARGE2.middle
   local damage: { number } = {}
   for index, amount in base.damage do
-    damage[index] = amount * CHARGE2.damage
+    damage[index] = amount * trade.damage
   end
   table.insert(charges, {
     id = base.id .. ".ii", name = base.name .. " II", family = base.family, size = base.size, volume = base.volume,
-    basePrice = base.basePrice * CHARGE2.price, damage = damage, rangeMultiplier = base.rangeMultiplier,
-    velocity = base.velocity, flightTime = base.flightTime, explosionRadius = base.explosionRadius,
+    basePrice = base.basePrice * CHARGE2.price, damage = damage, rangeMultiplier = base.rangeMultiplier * trade.range,
+    tracking = trade.tracking,
+    velocity = base.velocity, flightTime = base.flightTime, explosionRadius = base.explosionRadius * trade.blast,
     explosionVelocity = base.explosionVelocity, tech = 2, base = base.id,
   })
 end

@@ -347,7 +347,13 @@ end
 local function chargeSheet(sheet: Sheet, charge: Modules.ChargeType)
   sheet.kind = `{SIZES[charge.size] or "Small"} {charge.family} charge`
   if charge.tech == 2 and charge.base then
-    sheet.note = `The tech 2 make of {nameOf(charge.base)}: a seventh more damage. Only a tech 2 weapon takes it. Nobody sells it: its blueprint is invented from the plain one's.`
+    -- (what it is better at than the plain one, and what worse)
+    local plain = Modules.chargeById[charge.base]
+    local how = if charge.family == "missile" then "it hits a quarter harder, and its blast is wider, so that small ships take less of it"
+      elseif plain.rangeMultiplier < 0.8 then "it hits a quarter harder, and the gun tracks a quarter worse with it"
+      elseif plain.rangeMultiplier > 1.3 then "it reaches a quarter further and hits a little harder, and the gun tracks a fifth worse with it"
+      else "the gun tracks three tenths better with it and it hits a little harder, at a seventh less range"
+    sheet.note = `The tech 2 make of {nameOf(charge.base)}: {how}. Only a tech 2 weapon takes it. Nobody sells it: its blueprint is invented from the plain one's.`
   end
   local to = section(sheet, "Charge")
   row(to, "Damage", damage(charge.damage, 1))
@@ -357,8 +363,13 @@ local function chargeSheet(sheet: Sheet, charge: Modules.ChargeType)
     row(to, "Range", metres(charge.velocity * charge.flightTime))
     row(to, "Explosion radius", metres(charge.explosionRadius))
     row(to, "Explosion velocity", `{plain(charge.explosionVelocity)} m/s`)
-  elseif charge.rangeMultiplier ~= 1 then
-    row(to, "Optimal range", percent(charge.rangeMultiplier))
+  else
+    if charge.rangeMultiplier ~= 1 then
+      row(to, "Optimal range", percent(charge.rangeMultiplier))
+    end
+    if charge.tracking then
+      row(to, "Tracking", percent(charge.tracking))
+    end
   end
   trade(sheet, charge.id)
 end

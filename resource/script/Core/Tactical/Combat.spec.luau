@@ -201,6 +201,35 @@ suite:Case("a target crossing the line of fire is harder to hit than one flying 
   t.eq(Combat.HitChance(state, a.me.id, 12345, a.foe.id), nil)
 end)
 
+suite:Case("a tech 2 charge's trade is in the shot: a short one's gun tracks worse, a middle one's better and nearer, a long one's reaches further", function(t)
+  local a = arena("frigate.courier", CANNONS, "frigate.courier", {}, 420)
+  local state = a.game.state
+  local cannon = modules(a)[1]
+  local function chance(charge: string): number
+    cannon.charge = charge
+    return assert(Combat.HitChance(state, a.me.id, cannon.id, a.foe.id))
+  end
+  -- Crossing at 300 m/s from 500 m: 0.6 rad/s, against tracking 470 and a 38 m signature.
+  a.foe.vx, a.foe.vz = 0, 300
+  local function tracked(share: number): number
+    return 0.5 ^ ((0.6 * 40000 / (470 * share * 38)) ^ 2)
+  end
+  -- (the short rounds, at half the gun's range: in reach here, so it is all tracking)
+  t.near(chance("ammo.fusion"), tracked(1), 1e-12)
+  t.near(chance("ammo.fusion.ii"), tracked(0.75), 1e-12)
+  -- (the middle rounds: the gun follows three tenths better with the tech 2 make)
+  t.near(chance("ammo.sabot"), tracked(1), 1e-12)
+  t.near(chance("ammo.sabot.ii"), tracked(1.3), 1e-12)
+  t.ok(chance("ammo.sabot.ii") > chance("ammo.sabot") and chance("ammo.fusion.ii") < chance("ammo.fusion"))
+  -- Not crossing, from far off: range is all of it. The middle rounds' tech 2 make reaches a seventh less.
+  a.foe.vz = 0
+  a.foe.x += 4000
+  local gap = 4420
+  t.near(chance("ammo.sabot"), Gunnery.HitChance(0, 470, 38, gap, 1100, 5200), 1e-12)
+  t.near(chance("ammo.sabot.ii"), Gunnery.HitChance(0, 470 * 1.3, 38, gap, 1100 * 0.85, 5200), 1e-12)
+  t.ok(chance("ammo.sabot.ii") < chance("ammo.sabot"), "the middle rounds' tech 2 make should give up some range")
+end)
+
 suite:Case("damage goes through shield, armour and hull, and the ship dies", function(t)
   local a = arena("frigate.lancer", { { "laser.pulse.small", "crystal.multifrequency" },
     { "laser.pulse.small", "crystal.multifrequency" }, { "laser.pulse.small", "crystal.multifrequency" } },
