@@ -964,7 +964,8 @@ local function mastiff(b: Builder)
   block(b, FRAME, v(0, -0.02, 0.30), v(0.10, 0.05, 0.07), nil, 0.1)
   for _, side in { -1, 1 } do
     -- a prong, stepped down to its tip, with a red stripe along its back
-    block(b, PLATING, v(side * 0.17, -0.01, 0.56), v(0.065, 0.075, 0.38), nil, 0.14)
+    -- (wide enough for a small gun's ring to turn on)
+    block(b, PLATING, v(side * 0.17, -0.01, 0.56), v(0.070, 0.075, 0.38), nil, 0.14)
     block(b, PLATING, v(side * 0.17, -0.02, 1.02), v(0.045, 0.05, 0.12), nil, 0.2)
     block(b, TRIM, v(side * 0.17, 0.066, 0.62), v(0.045, 0.006, 0.26), nil, 0.2)
     block(b, PATCH, v(side * 0.17, -0.02, 1.15), v(0.032, 0.036, 0.015), nil, 0.3)
@@ -1338,11 +1339,12 @@ end
 -- along its back or along its keel, or the sloped armour between a flat
 -- and the edge, topside or underneath.
 
--- Half the width of a weapon's foot on a hull, in the hull's own units:
--- the hull's type, half the length it is drawn, and the weapon's size
--- (1 small to 3 large).
+-- How far a weapon's foot reaches from its middle on a hull (as far as
+-- a turret's ring does while it turns), in the hull's own units: the
+-- hull's type, half the length it is drawn, and the weapon's size (1
+-- small to 3 large).
 local function footOn(type: string, reach: number, size: number): number
-  return Arms.FOOT * Arms.SIZE[size] * reach / Ships.byId[type].radius
+  return Arms.REACH * Arms.SIZE[size] * reach / Ships.byId[type].radius
 end
 
 -- A place on a face of a blade at 'z'. On the back or the keel, its
@@ -1613,7 +1615,7 @@ local designs: { [string]: Design } = {
     faction = "vessari", draw = halberd, sheets = 4.0,
     -- (its guns on the works and under them; its racks on the two faces
     -- of the blade, four to a face)
-    turrets = { over(v(-0.06, 0.32, 0.30), v(0.00, -0.24, 0.10)), over(v(0.12, 0.28, -0.72), v(-0.10, -0.16, -0.78)) },
+    turrets = { over(v(-0.06, 0.32, 0.30), v(-0.03, -0.24, 0.05)), over(v(0.12, 0.28, -0.72), v(-0.10, -0.16, -0.78)) },
     launchers = {
       abeam(v(0.060, -0.31, 1.14), v(-0.060, -0.31, 1.14)), abeam(v(0.060, -0.31, 0.86), v(-0.060, -0.31, 0.86)),
       abeam(v(0.060, -0.57, 1.14), v(-0.060, -0.57, 1.14)), abeam(v(0.060, -0.57, 0.86), v(-0.060, -0.57, 0.86)),
@@ -1671,8 +1673,10 @@ local designs: { [string]: Design } = {
     faction = "talmar", draw = sabre, sheets = 6.0,
     turrets = {
       over(on(SABRE, -0.05, BACK), on(SABRE, -0.05, KEEL)), over(on(SABRE, -0.85, BACK), on(SABRE, -0.85, KEEL)),
-      abeam(on(SABRE_PONTOON, 0.10, STARBOARD_SIDE, 0.36, -0.06), on(SABRE_PONTOON, 0.10, PORT_SIDE, -0.36, -0.06)),
-      abeam(on(SABRE_PONTOON, -0.38, STARBOARD_SIDE, 0.36, -0.06), on(SABRE_PONTOON, -0.38, PORT_SIDE, -0.36, -0.06)),
+      -- (on the pontoons' backs and under them, one pontoon's back and the
+      -- other's keel to a pair: a pontoon's flank is too slight for a gun's ring)
+      over(on(SABRE_PONTOON, 0.10, BACK, 0.36, -0.06), on(SABRE_PONTOON, 0.10, KEEL, -0.36, -0.06)),
+      over(on(SABRE_PONTOON, -0.34, BACK, -0.36, -0.06), on(SABRE_PONTOON, -0.34, KEEL, 0.36, -0.06)),
     },
     launchers = { over(on(SABRE, 1.05, BACK), on(SABRE, 1.05, KEEL)), over(on(SABRE, 0.62, BACK), on(SABRE, 0.45, KEEL)) },
     fit = { "autocannon.small", "autocannon.small", "autocannon.small", "autocannon.small", "launcher.light", "launcher.light" },
@@ -1697,7 +1701,7 @@ local designs: { [string]: Design } = {
       abeam(on(CLAYMORE_FLANK, -0.30, STARBOARD_SIDE, 0.60, -0.10), on(CLAYMORE_FLANK, -0.30, PORT_SIDE, -0.60, -0.10)),
       abeam(on(CLAYMORE_FLANK, -1.00, STARBOARD_SIDE, 0.60, -0.10), on(CLAYMORE_FLANK, -1.00, PORT_SIDE, -0.60, -0.10)),
       over(on(CLAYMORE_TIER, -0.05, BACK, 0, 0.40), on(CLAYMORE_KEEL, 0.20, KEEL, 0, -0.40)),
-      over(on(CLAYMORE, -1.72, BACK), on(CLAYMORE, -1.72, KEEL)),
+      over(on(CLAYMORE, -1.55, BACK), on(CLAYMORE, -1.55, KEEL)),
     },
     launchers = {
       abeam(on(CLAYMORE, 1.25, STARBOARD_SIDE), on(CLAYMORE, 1.25, PORT_SIDE)),
@@ -1784,7 +1788,7 @@ local designs: { [string]: Design } = {
   ["destroyer.gantry"] = {
     faction = "kethri", draw = gantry, sheets = 6.0, even = 0.7, reach = 1.585,
     turrets = {
-      slopes("Gantry", GANTRY, 0.72, 1, GANTRY_FOOT), slopes("Gantry", GANTRY, 0.32, -1, GANTRY_FOOT, GANTRY_TIER),
+      slopes("Gantry", GANTRY, 0.56, 1, GANTRY_FOOT), slopes("Gantry", GANTRY, 0.26, -1, GANTRY_FOOT, GANTRY_TIER),
       slopes("Gantry", GANTRY, -0.08, 1, GANTRY_FOOT, GANTRY_TIER), slopes("Gantry", GANTRY, -0.44, -1, GANTRY_FOOT, GANTRY_TIER),
       slopes("Gantry", GANTRY, -0.76, 1, GANTRY_FOOT, GANTRY_TIER), flats("Gantry", GANTRY_TIER, -1.10, GANTRY, -0.95, GANTRY_FOOT),
     },
@@ -1985,23 +1989,27 @@ function Hull.Build(type: string, pirate: boolean?): Built?
     `the design of {type} says it is drawn {design.reach} long each way, and it came out {radius}`)
   -- A hardpoint is never on a surface too small for what stands on it
   -- (the project owner's rule, 2026-11-11, for every ship): the whole
-  -- foot of the weapon it is shown with has to have hull under it, at
-  -- the size the weapon really is beside this hull. (A pirate's patched
+  -- foot of the weapon it is shown with (as far as its ring reaches
+  -- while it turns) has to have hull under it, at the size the weapon
+  -- really is beside this hull, and no farther under it than the
+  -- ring's foundation goes down. (A pirate's patched
   -- copy, with guns bolted on beside the ones it was built for, is not
   -- held to it.)
   local hanging: { string } = {}
   if hull and not patched and design.patch == nil then
     local metres = hull.radius / radius
     local at = 0
-    for _, points in { design.turrets, design.launchers } do
+    for kind, points in { design.turrets, design.launchers } do
       for _, point in points do
         at += 1
-        local foot = Arms.FOOT * Arms.SIZE[Arms.SizeOf(design.fit[at] or "")] / metres
+        local unit = Arms.SIZE[Arms.SizeOf(design.fit[at] or "")] / metres
         for index, mount in point do
-          local rests, off = Plates.Rests(b, mount.at, mount.up, mount.fore or v(0, 0, 1), foot)
+          -- (a turret's ring turns with it; a launcher's rack stays as it is)
+          local rests, off = Plates.Rests(b, mount.at, mount.up, mount.fore or v(0, 0, 1), Arms.REACH * unit, Arms.GAP * unit,
+            if kind == 2 then Arms.FOOT * unit else nil)
           if not rests then
-            table.insert(hanging, string.format("%s: hardpoint %d, mount %d at (%.3f, %.3f, %.3f), foot %.3f: %d of 9 places have no hull under them",
-              type, at, index, mount.at.x, mount.at.y, mount.at.z, foot, off))
+            table.insert(hanging, string.format("%s: hardpoint %d, mount %d at (%.3f, %.3f, %.3f), reach %.3f: %d of 17 places have no hull under them",
+              type, at, index, mount.at.x, mount.at.y, mount.at.z, Arms.REACH * unit, off))
           end
         end
       end

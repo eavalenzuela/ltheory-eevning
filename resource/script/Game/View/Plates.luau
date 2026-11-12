@@ -560,33 +560,42 @@ function Plates.Inside(b: Builder, p: vector): boolean
   return false
 end
 
--- Whether a thing with a square foot stands wholly on what has been
--- built: 'at' is the middle of the foot, 'up' the way out of the hull
--- there, 'fore' the way the thing faces, and 'foot' how far it is from
--- the foot's middle to its edge. Every corner of the foot, the middle
--- of every edge and the middle of the foot have to have hull under them
--- within a third of that (a skin curves away under a flat foot, and
--- that is no fault): a foot with nothing under part of it hangs off
--- into space. Returns whether it stands, and how many of the nine
--- places have nothing under them.
-function Plates.Rests(b: Builder, at: vector, up: vector, fore: vector, foot: number): (boolean, number)
+-- Whether a thing that stands on a round foot stands wholly on what
+-- has been built: 'at' is the middle of the foot, 'up' the way out of
+-- the hull there, 'fore' the way the thing faces, 'reach' how far the
+-- foot goes from its middle (as far as a turret's ring reaches while it
+-- turns), and 'gap' how far under the foot the hull may lie (a skin
+-- curves away under a flat foot, and that is no fault). The middle of
+-- the foot, eight places round its rim and eight halfway out have to
+-- have hull under them within 'gap': a foot with nothing under part of
+-- it hangs off into space. Returns whether it stands, and how many of
+-- the seventeen places have nothing under them.
+--
+-- A foot that does not turn (a launcher's rack) is a square with its
+-- corners rounded: 'square' is then half its width, and it reaches
+-- 'reach' only toward its corners.
+function Plates.Rests(b: Builder, at: vector, up: vector, fore: vector, reach: number, gap: number, square: number?): (boolean, number)
   local level = fore - up * vector.dot(fore, up)
   level = if vector.magnitude(level) > 1e-4 then vector.normalize(level) else vector.normalize(vector.cross(up, vector.create(1, 0, 0)))
   local side = vector.cross(up, level)
+  local places: { vector } = { at }
+  for step = 0, 7 do
+    local way = level * math.cos(step * math.pi / 4) + side * math.sin(step * math.pi / 4)
+    local far = if square and step % 2 == 0 then square else reach
+    table.insert(places, at + way * far)
+    table.insert(places, at + way * (far / 2))
+  end
   local hanging = 0
-  for along = -1, 1 do
-    for across = -1, 1 do
-      local place = at + level * (along * foot) + side * (across * foot)
-      local held = false
-      for _, depth in { 0.02, 0.12, 0.22, 0.33 } do
-        if Plates.Inside(b, place - up * (depth * foot)) then
-          held = true
-          break
-        end
+  for _, place in places do
+    local held = false
+    for _, share in { 0.06, 0.36, 0.68, 1.0 } do
+      if Plates.Inside(b, place - up * (share * gap)) then
+        held = true
+        break
       end
-      if not held then
-        hanging += 1
-      end
+    end
+    if not held then
+      hanging += 1
     end
   end
   return hanging == 0, hanging

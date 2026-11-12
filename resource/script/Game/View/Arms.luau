@@ -46,6 +46,17 @@ local block, beam = Plates.Block, Plates.Beam
 Arms.SIZE = { 1.35, 2.5, 4.5 }
 -- Half the width of the mounting ring, in the drawings' units.
 Arms.FOOT = 1.55
+-- How far from its middle the ring reaches as a turret turns on it (its
+-- corners, which are rounded): what a hardpoint has to have hull under.
+Arms.REACH = 1.25 * Arms.FOOT
+-- How far under the ring the hull may lie at the edge of that reach (a
+-- flat ring on a curved skin), and how far down the ring's foundation
+-- goes: a little farther, so that there is never air under a mount. On
+-- a flat face the foundation is inside the hull, and the ring stands
+-- flush as it always did. (Game/View/Hull holds every design to it:
+-- Plates.Rests.)
+Arms.GAP = 0.33 * Arms.FOOT
+Arms.DEEP = Arms.GAP + 0.07 * Arms.FOOT
 
 export type Piece = {
   base: Model?,           -- the part that turns on the mount; nil for a launcher
@@ -79,9 +90,14 @@ local LOOKS = {
 
 local PIVOT = v(0, 1.9, 0)
 
--- The foot of everything that goes on a hardpoint: the mounting ring.
+-- The foot of everything that goes on a hardpoint: the mounting ring,
+-- and under it its foundation, the ring's own outline carried down into
+-- the hull (the owner's, 2026-11-11: "so they never have 'air' beneath
+-- them ... on a curve there's a 'foundation' underneath that will
+-- always reach the hull").
 local function ring(b: Plates.Builder)
   block(b, FRAME, v(0, 0.22, 0), v(Arms.FOOT, 0.22, Arms.FOOT), nil, 0.45)
+  block(b, FRAME, v(0, (0.10 - Arms.DEEP) / 2, 0), v(Arms.FOOT, (0.10 + Arms.DEEP) / 2, Arms.FOOT), nil, 0.45)
 end
 
 -- The base every turret stands on: the ring as a turntable, a pedestal,
