@@ -92,6 +92,10 @@
 #   game-careers  the career agents (test/scenario/careers.txt): a new
 #               pilot takes lessons from two of them, does three, reports
 #               each and is paid, and reads one again in space
+#   game-sights  what is seen and pointed at (test/scenario/sights.txt): a
+#               double click in space flies the ship, another ship is drawn
+#               going into warp, the planets turn, and where the pilot is
+#               next to go is picked out on the overview
 #   game-pace   the game app must draw at least thirty frames a second just
 #               outside the home station (test/scenario/pace.txt)
 #   goldens     script/goldens: screenshots of the stored scenes must match
@@ -247,6 +251,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/nomads.txt
   step game-careers 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 340 \
     --script test/scenario/careers.txt
+  step game-sights 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 440 \
+    --script test/scenario/sights.txt
   step game-pace 0 timeout 200 bin/launch game --no-present --fixed-step 60 --timeout 150 \
     --script test/scenario/pace.txt
   step goldens 0 script/goldens

@@ -22,6 +22,22 @@ local held = false      -- this frame's click is being kept for what is drawn la
 local clicked = false   -- a button was clicked with the mouse this frame
 local double = false
 
+-- A double click is worked out here: two clicks of the left button, the
+-- second begun within so long of the first's end and so near it, and
+-- neither of them a drag. (The engine's own notion of one,
+-- Mouse_DoubleClicked, wants the second press within a tenth of a second
+-- of the first's release, which a hand seldom manages; and it takes the
+-- end of one drag and the start of the next for one, which out in space,
+-- where a drag turns the camera and a double click flies the ship,
+-- would not do.)
+local DOUBLE_SECONDS = 0.4
+local DOUBLE_NEAR = 8     -- pixels between the two clicks, at most
+local CLICK_NEAR = 5      -- pixels the cursor may move in a click that is no drag
+local clock = 0
+local downAt: vector? = nil
+local clickAt = vector.create(0, 0)
+local clickTime = -1
+
 -- Buttons drawn this frame and last, by name, with whether they were
 -- enabled: so that a script can press one by name (Im.Press).
 local seen: { [string]: boolean } = {}
@@ -47,7 +63,23 @@ function Im.Begin()
   cursor = Cursor_Get()
   pressed = Mouse_LeftPressed()
   rightPressed = Mouse_RightPressed()
-  double = Mouse_DoubleClicked()
+  clock += FrameTimer_Get()
+  double = false
+  if pressed then
+    if clickTime >= 0 and clock - clickTime <= DOUBLE_SECONDS and vector.magnitude(cursor - clickAt) <= DOUBLE_NEAR then
+      double = true
+      clickTime = -1
+      downAt = nil
+    else
+      clickTime = -1
+      downAt = cursor
+    end
+  elseif downAt and Mouse_LeftReleased() then
+    if vector.magnitude(cursor - downAt) <= CLICK_NEAR then
+      clickTime, clickAt = clock, cursor
+    end
+    downAt = nil
+  end
   held = false
   seen, seenNow = seenNow, {}
   pressNow, pressNext = pressNext, nil
@@ -91,6 +123,11 @@ end
 -- Whether the other mouse button went down this frame (anywhere).
 function Im.RightPressed(): boolean
   return rightPressed
+end
+
+-- Whether this frame's press is the second of a double click (anywhere).
+function Im.DoublePressed(): boolean
+  return double
 end
 
 -- Keep this frame's click from everything drawn from here on, until

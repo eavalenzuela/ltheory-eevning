@@ -29,6 +29,7 @@ local Session = require("@lt/Game/Session")
 local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
 local Station = require("@lt/Game/UI/Station")
+local Waypoints = require("@lt/Game/Waypoints")
 local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
 
@@ -64,6 +65,9 @@ local ARMOR = vector.create(0.95, 0.75, 0.3)
 local HULL = vector.create(0.85, 0.35, 0.3)
 -- (a ship of the pilot's side: a drone, or a hired pilot's)
 local OURS = vector.create(0.45, 0.85, 0.55)
+-- Where the pilot is next to go (Game/Waypoints): the gate of the way
+-- they have planned, the place a job is done or paid.
+local NEXT = vector.create(1.0, 0.80, 0.28)
 local CAPACITOR = vector.create(1.0, 0.9, 0.5)
 
 -- ---------------------------------------------------------------------
@@ -185,9 +189,10 @@ end
 -- In space
 
 local function drawBrackets(session: Session.Session, scene: Scene.Scene, entries: { Core.Entry }, w: Widget,
-  ball: State.Ball?)
+  ball: State.Ball?, marks: Waypoints.Marks)
   local cursor = Im.Cursor()
   local clicked = 0
+  local onGrid = false
   local nearest = 14 ^ 2
   for _, entry in entries do
     local p = onScreen(scene, entry.id)
@@ -198,8 +203,14 @@ local function drawBrackets(session: Session.Session, scene: Scene.Scene, entrie
       local small = entry.kind == "asteroid"
       local lock = if ball then lockOf(ball, entry.id) else nil
       local hostile = entry.hostile
-      local color = if selected then Colors.White elseif hostile then HULL elseif entry.own then OURS elseif entry.onGrid then Im.ACCENT else Im.DIM
-      Icon_Draw(icon(entry.kind), p, if small then 4 else 8, color, if selected or hot then 1 else 0.7)
+      -- (where the pilot is next to go stands out, and says what it is)
+      local goal = marks[entry.id] ~= nil
+      local color = if selected then Colors.White elseif hostile then HULL elseif goal then NEXT elseif entry.own then OURS
+        elseif entry.onGrid then Im.ACCENT else Im.DIM
+      Icon_Draw(icon(entry.kind), p, if small then 4 else 8, color, if selected or hot or goal then 1 else 0.7)
+      if goal then
+        Glyph_Draw(Glyph_Ring(p, 12, 1, 1, 0), 0, 1, NEXT, 0.8)
+      end
       if lock then
         -- a ring round a target: closing while it locks, steady once locked
         Glyph_Draw(Glyph_Ring(p, if lock.locked then 14 else 20, 1, 1, 0), 0, 1, Colors.White, if lock.locked then 0.9 else 0.5)
@@ -207,15 +218,32 @@ local function drawBrackets(session: Session.Session, scene: Scene.Scene, entrie
       if selected or hot then
         Im.Text(entry.name, p.x + 18, p.y - 16, 14, Im.TEXT)
         Im.Text(Format.Distance(entry.distance), p.x + 18, p.y, 13, Im.DIM)
+      elseif goal then
+        Im.Text(entry.name, p.x + 18, p.y - 8, 13, NEXT)
       end
       if hot and d2 < nearest then
         nearest = d2
         clicked = entry.id
+        onGrid = entry.onGrid
       end
     end
   end
   if clicked ~= 0 and Im.Pressed() and not overInterface then
     session.selected = clicked
+  end
+  -- A double click out in space flies the ship: to what is under the
+  -- cursor, as a double click on its row of the overview would (fly to
+  -- what is here, warp to what is not); or, with nothing there, the way
+  -- the cursor points.
+  if ball and Im.DoublePressed() and not overInterface then
+    if clicked ~= 0 then
+      Session.Order(session, if onGrid then "Approach" else "WarpTo", clicked, 0)
+    else
+      local ray = Camera_GetRay(scene.camera, cursor)
+      local way = Ray_GetPoint(ray, 1000) - Ray_GetPoint(ray, 0)
+      session.autopilot = false
+      Session.Do(session, { kind = "Goto", actor = 0, x = way.x, y = way.y, z = way.z })
+    end
   end
   -- (a right click picks it out too, and brings up what can be done about it)
   if clicked ~= 0 and Im.RightPressed() and not overInterface then
@@ -224,8 +252,25 @@ local function drawBrackets(session: Session.Session, scene: Scene.Scene, entrie
   end
 end
 
-local function drawOverview(session: Session.Session, entries: { Core.Entry }, x: number, y: number, width: number, height: number)
+local function drawOverview(session: Session.Session, all: { Core.Entry }, x: number, y: number, width: number, height: number,
+  marks: Waypoints.Marks)
   local rowHeight = 22
+  -- Where the pilot is next to go comes first, whatever is nearer: the
+  -- gate of the way they have planned, the place a job is done or paid.
+  local entries = all
+  if next(marks) then
+    entries = {}
+    for _, entry in all do
+      if marks[entry.id] then
+        table.insert(entries, entry)
+      end
+    end
+    for _, entry in all do
+      if not marks[entry.id] then
+        table.insert(entries, entry)
+      end
+    end
+  end
   Im.Panel(x, y, width, height)
   Im.Heading(`OVERVIEW  {#entries}`, x + 12, y + 8, 16, Im.DIM)
   -- (the ship's scanner, for what is on nobody's chart: it takes the
@@ -263,8 +308,12 @@ local function drawOverview(session: Session.Session, entries: { Core.Entry }, x
       session.selected = entry.id
       Context.Open(entry.id, Im.Cursor().x, Im.Cursor().y)
     end
-    local color = if entry.hostile then HULL elseif entry.own then OURS elseif entry.onGrid then Im.TEXT else Im.DIM
-    Im.Text(TAGS[entry.kind] or "?", x + 12, rowY + 3, 13, Im.DIM)
+    local goal = marks[entry.id] ~= nil
+    local color = if entry.hostile then HULL elseif goal then NEXT elseif entry.own then OURS elseif entry.onGrid then Im.TEXT else Im.DIM
+    if goal then
+      Im.Fill(x + 4, rowY + 2, 3, rowHeight - 4, NEXT, 0.95)
+    end
+    Im.Text(TAGS[entry.kind] or "?", x + 12, rowY + 3, 13, if goal then NEXT else Im.DIM)
     Im.Text(entry.name, x + 52, rowY + 3, 14, color)
     Im.TextRight(Format.Distance(entry.distance), x + width - 12, rowY + 3, 14, color)
     if clicked then
@@ -609,8 +658,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       -- Brackets and shots go under the panels and use last frame's
       -- answer to "is the cursor over a panel".
       overInterface = wasOver
+      local marks = Waypoints.Of(session)
       if ball then
-        drawBrackets(session, scene, entries, w, ball)
+        drawBrackets(session, scene, entries, w, ball, marks)
       end
 
       -- Where we are and what we have.
@@ -678,7 +728,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           Im.TextRight("camera following (C)", panelX + panelWidth - 12, top + 2, 11, Im.ACCENT)
         end
         drawSelected(session, entries, ball, panelX, top + 16, panelWidth)
-        drawOverview(session, entries, panelX, top + 182, panelWidth, math.min(600, bottom - top - 272))
+        drawOverview(session, entries, panelX, top + 182, panelWidth, math.min(600, bottom - top - 272), marks)
         drawRack(session, game, ball, left + w.size.x / 2, bottom - 140)
         drawNavigation(session, ball, navX, bottom - 86, 520)
         drawStatus(ball, navX - 232, bottom - 120)

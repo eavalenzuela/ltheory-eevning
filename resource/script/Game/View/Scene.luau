@@ -89,6 +89,8 @@ export type Scene = {
   eyeZ: number,
   proxies: { [number]: Object },      -- on-grid bodies by id
   celestials: { [number]: Object },   -- planets and moons by id
+  worlds: { [number]: Planet.World }, -- those of them that turn (Planet.Turn), by id
+  passing: number,                    -- ships drawn this frame that are in warp, coming or going
   screen: { [number]: vector },       -- where each drawn body is in the scene, this frame
   focus: Object?,
   yaw: number,
@@ -139,6 +141,19 @@ export type Scene = {
 
 
 
+-- A ship in warp is on no grid, and is drawn all the same while it is
+-- within this of the pilot: so that one leaving is seen to go, drawing
+-- its trail out behind it, and one arriving is seen to come in. (A
+-- frigate is this far off two or three seconds into its warp, and is
+-- that long again and more coming down from it at the other end. The
+-- far plane cuts the ship itself off long before: what is seen out
+-- there is its trail.)
+local PASSING = 20000000
+-- The seconds of its way a ship in warp trails behind it, at least, and
+-- the colour of the trail of one whose hull has no engines to give it one.
+local WAKE = 1.4
+local WAKE_COLOR = vector.create(0.55, 0.78, 1.0)
+
 -- In warp, what is on the grid the ship has left, and on the one it is
 -- coming to, is drawn as it is while it is nearer than this: so that a
 -- belt's rocks fall away behind and come up ahead, and are not there
@@ -177,7 +192,7 @@ function Scene.New(camera: Camera): Scene
   return {
     camera = camera, system = 0, container = nil, star = nil, key = "",
     ox = 0, oy = 0, oz = 0, eyeX = 0, eyeY = 0, eyeZ = 0,
-    proxies = {}, celestials = {}, screen = {}, focus = nil,
+    proxies = {}, celestials = {}, worlds = {}, passing = 0, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6, tracking = 0,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
     wreckage = {}, works = {}, offsets = {}, statics = {}, sites = "", left = 0, jump = -1, arrived = -1, veil = 0, rush = 0,
@@ -613,6 +628,7 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
   end
   clear(scene, scene.proxies)
   clear(scene, scene.celestials)
+  table.clear(scene.worlds)
   if scene.container then
     Object_Delete(scene.container)
   end
@@ -651,7 +667,9 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
       -- rest are still the engine's old planet.
       local kind = Planet.KindOf(object.kind, object.variety)
       if kind then
-        body = Planet.New(kind, object.seed, if object.kind == "moon" then MOON_MAP else WORLD_MAP).body
+        local world = Planet.New(kind, object.seed, if object.kind == "moon" then MOON_MAP else WORLD_MAP)
+        scene.worlds[object.id] = world
+        body = world.body
       else
         body = Item_PlanetType(object.seed):Instantiate()
       end
@@ -966,9 +984,21 @@ function Scene.Sync(scene: Scene, session: Session.Session)
 
   -- Ships on the grid (in warp, the player's own, and those where it
   -- has been and is going while they are near).
+  scene.passing = 0
   for _, id in state.ballIds do
     local ball = state.balls[id]
     local shown = ball.system == player.system and (id == player.ship or inScene[ball.grid] == true)
+    -- (and those in warp that are near, going or coming; not while the
+    -- pilot's own ship is in warp, when the scene goes with it. A ship
+    -- that has gone unseen stays so.)
+    if not shown and grid ~= 0 and ball.system == player.system and ball.warp and ball.warp.stage == "warp"
+      and not Core.Query.Cloaked(game, id) then
+      local x, y, z = ballAt(ball, state.tick, since)
+      if (x - scene.eyeX) ^ 2 + (y - scene.eyeY) ^ 2 + (z - scene.eyeZ) ^ 2 < PASSING ^ 2 then
+        shown = true
+        scene.passing += 1
+      end
+    end
     local existing: Object? = scene.proxies[id]
     if shown then
       local proxy: Object
@@ -1045,6 +1075,16 @@ function Scene.Sync(scene: Scene, session: Session.Session)
   -- sets off, before it has got anywhere), and a little by how fast it
   -- is going.
   local fx = scene.fx :: Effects.Fx
+  -- How hard the engines of a ship in warp are seen to burn, by how far
+  -- off it is: the fire dims with every tenfold of distance, from all of
+  -- it within a thousandth of as far as such a ship is drawn to none at
+  -- the end of that. A ship's distance in warp grows and shrinks tenfold
+  -- in equal times, so it fades out as it goes and in as it comes, and
+  -- does not blink.
+  local eye = vector.create(scene.eyeX - scene.ox, scene.eyeY - scene.oy, scene.eyeZ - scene.oz)
+  local function wake(at: vector): number
+    return math.clamp(1 - math.log10(math.max(vector.magnitude(at - eye), 1) / (PASSING / 1000)) / 3, 0, 1)
+  end
   for _, id in state.ballIds do
     local proxy: Object? = scene.proxies[id]
     local built = if proxy then designed[proxy] else nil
@@ -1061,12 +1101,35 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       -- (a trail three ship-lengths long at full speed; none in warp,
       -- where the scene goes with the ship and it has not moved)
       local trail = math.clamp(6 * ball.radius / math.max(ball.maxVelocity, 1), 0.8, 20)
+      -- (a ship of somebody else's in warp draws its trail out behind it
+      -- for a second and more, however small it is: that is what is seen
+      -- of it going)
+      if warp and warp.stage == "warp" and id ~= player.ship then
+        trail = math.max(trail, WAKE)
+        throttle = wake(at)
+      end
       for index, engine in built.engines do
         -- (and none while the pilot's own ship is in warp: the scene goes
         -- with that ship then, and every other one is somewhere else in
         -- it each frame)
         Effects.Thrust(fx, id * 16 + index, at + (right * engine.at.x + up * engine.at.y + look * engine.at.z) * unit, -look,
           engine.radius * unit, throttle, color, scene.time, if grid == 0 then nil else trail)
+      end
+    end
+  end
+
+  -- (A hull that is not of our own design has no engines to show, and
+  -- one of ours may have none: in warp it draws a trail all the same,
+  -- from its stern.)
+  for _, id in state.ballIds do
+    local proxy: Object? = scene.proxies[id]
+    local at: vector? = scene.screen[id]
+    local ball = state.balls[id]
+    if proxy and at and id ~= player.ship and grid ~= 0 and ball.warp and ball.warp.stage == "warp" then
+      local built = designed[proxy]
+      if built == nil or #built.engines == 0 then
+        local look = proxy:GetLook()
+        Effects.Thrust(fx, id * 16 + 15, at - look * ball.radius, -look, 0.3 * ball.radius, wake(at), WAKE_COLOR, scene.time, WAKE)
       end
     end
   end
@@ -1111,6 +1174,14 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         scene.volleys += 1
         Effects.Fire(fx, if event.missile then "launcher.cruise" else "artillery.large", event.station, event.to, station.radius * 0.35,
           to.radius, "hit", 0, struck(to), scene.time, nil)
+      end
+    elseif (event.kind == "WarpStarted" or event.kind == "WarpEnded") and event.ball ~= player.ship and grid ~= 0 then
+      -- Somebody else going into warp, or coming out of it, where it can
+      -- be seen: a flash where they are (and a ring, coming out).
+      local at: vector? = scene.screen[event.ball]
+      local ball = state.balls[event.ball]
+      if at and ball then
+        Effects.Burst(fx, at, WAKE_COLOR, 5 * ball.radius, if event.kind == "WarpEnded" then 1 else 0, 0.5, scene.time)
       end
     elseif event.kind == "BallDestroyed" and event.system == player.system and grid ~= 0 then
       local at = vector.create(event.x - scene.ox, event.y - scene.oy, event.z - scene.oz)
@@ -1188,6 +1259,11 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     body:SetPos(at)
     local radius = object.radius * shrink
     body:SetScale(vector.create(radius, radius, radius))
+    -- (a world turns on its axis, as far as the game's time says)
+    local world = scene.worlds[object.id]
+    if world then
+      Planet.Turn(world, state.tick * Constants.TICK + since)
+    end
     scene.screen[object.id] = at
     if object.kind == "sun" and scene.star then
       -- The flare is the glare of a star too small to show a face. It

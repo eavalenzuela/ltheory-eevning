@@ -46,11 +46,20 @@ export type World = {
   kind: string,
   seed: number,
   body: Object,
+  -- Its axis, the way it faces with no turn on it, and the seconds it
+  -- takes to turn once (Planet.Turn).
+  axis: vector,
+  fore: vector,
+  period: number,
   surface: ShaderInstance,
   air: ShaderInstance?,
   ring: ShaderInstance?,
   map: CubeMap,
 }
+
+-- The seconds a world takes to turn once, the least and the most, by
+-- what it is.
+Planet.DAY = { gas = { 900, 1500 }, world = { 1500, 2700 }, moon = { 2700, 4200 } } :: { [string]: { number } }
 
 -- The size of a face of the cube map, in pixels. (Six faces at 16-bit
 -- float: about 50 MB at 1024.)
@@ -310,9 +319,26 @@ function Planet.New(kindId: string, seed: number, resolution: number?, tweaks: T
   -- seed; a ringed world leans enough for its rings to be seen.
   local lean = math.rad(number("tilt", if ringed then 12 + 18 * ((seed // 37) % 100) / 100 else 24 * ((seed // 37) % 100) / 100))
   local toward = math.rad((seed // 53) % 360)
-  Object_SetAxes(body, vector.create(-math.sin(toward), 0, math.cos(toward)),
-    vector.create(math.sin(lean) * math.cos(toward), math.cos(lean), math.sin(lean) * math.sin(toward)))
-  return { kind = kindId, seed = seed, body = body, surface = surface, air = air, ring = ring, map = map }
+  local fore = vector.create(-math.sin(toward), 0, math.cos(toward))
+  local axis = vector.create(math.sin(lean) * math.cos(toward), math.cos(lean), math.sin(lean) * math.sin(toward))
+  Object_SetAxes(body, fore, axis)
+  -- How long its day is, by its seed: a gas giant's is short, a moon's
+  -- long. (Not a real day's length, or nobody would see it turn: a turn
+  -- in some tens of minutes, which from near by can just be watched.)
+  local days = if kindId == "gas" then Planet.DAY.gas elseif kindId == "moon" or kindId == "icemoon" then Planet.DAY.moon
+    else Planet.DAY.world
+  local period = days[1] + (days[2] - days[1]) * ((seed // 71) % 100) / 100
+  return { kind = kindId, seed = seed, body = body, axis = axis, fore = fore, period = period,
+    surface = surface, air = air, ring = ring, map = map }
+end
+
+-- Turn a world about its axis to where it is 'seconds' into its turning
+-- (of the game's time: every world has turned as far as the time says,
+-- whenever it is looked at). It turns eastward, as most worlds do.
+function Planet.Turn(world: World, seconds: number)
+  local angle = 2 * math.pi * ((seconds / world.period) % 1)
+  local east = vector.cross(world.axis, world.fore)
+  Object_SetAxes(world.body, world.fore * math.cos(angle) + east * math.sin(angle), world.axis)
 end
 
 -- Change one of a world's shader settings (a name from its kind's

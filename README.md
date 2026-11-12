@@ -74,6 +74,7 @@ The game opens on a menu: continue, new game (pick a seed and a galaxy size), lo
 | Left click | Select something in space or on the overview |
 | Right click | A menu of what can be done about it, with distances for orbit, keep at range and warp |
 | Double click (overview) | Approach it, or warp to it if it is far off |
+| Double click (in space) | Fly the way the cursor points; on a bracket, as on its row of the overview |
 | Left drag, mouse wheel | Turn the camera, zoom |
 | Q, W, E, A | Approach, orbit, keep at range, align |
 | S, D | Warp to, dock or jump |

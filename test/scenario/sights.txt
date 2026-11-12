@@ -1,0 +1,68 @@
+# What is seen and pointed at, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/sights.txt
+#
+# Four things the first playtests found missing. A double click out in
+# space flies the ship the way the cursor points (and two slow clicks do
+# not). Another ship going into warp is still drawn as it goes. The
+# planets turn. And where the pilot is next to go is picked out on the
+# overview: the gate of the way they have planned, and the station a
+# finished lesson is reported at.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(select(2, GameDebug.Turned('planet')) > 0, 'no world of this system turns')
+lua _G.turned = GameDebug.Turned('planet')
+
+# A lesson to have something to report: the flight school's first.
+until GameDebug.Press('Careers')
+until GameDebug.Press('Career:flight')
+until GameDebug.Press('Lesson:accept:flight')
+until select(2, GameDebug.Career('flight'))
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('Stop'), 'stop was refused')
+frames 30
+lua assert(GameDebug.Next() == 0, 'nowhere is next yet: ' .. select(2, GameDebug.Next()))
+
+# A double click on empty space: the ship flies that way.
+click Left 700 330
+frames 4
+click Left 700 330
+frames 10
+lua assert(GameDebug.Doing() == 'goto', 'a double click in space should fly the ship: ' .. GameDebug.Doing())
+# Two clicks with a pause between them are two clicks.
+lua assert(GameDebug.Order('Stop'), 'stop was refused')
+frames 10
+click Left 700 330
+frames 40
+click Left 700 330
+frames 10
+lua assert(GameDebug.Doing() == 'stop', 'two slow clicks are not a double click: ' .. GameDebug.Doing())
+
+# Somebody leaves: they are drawn turning to their warp, and still drawn
+# in it.
+lua GameDebug.TimeScale(8)
+patience 600
+until GameDebug.Leaving() ~= ''
+lua GameDebug.TimeScale(1)
+until GameDebug.Passing() > 0
+lua assert(select(2, GameDebug.Leaving()), 'the ship that left is not drawn in its warp')
+
+# The planets have turned meanwhile.
+lua assert(GameDebug.Turned('planet') ~= _G.turned, 'the planet has not turned')
+
+# Somewhere to go: the gate that leads there is next.
+lua GameDebug.Destination(2)
+frames 5
+lua assert(GameDebug.Next() == 1 and string.find(select(2, GameDebug.Next('route')), 'Stargate', 1, true), 'the gate of the way is not picked out')
+
+# The lesson done: the station it is reported at is next too.
+lua GameDebug.TimeScale(30)
+lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+frames 5
+lua assert(GameDebug.Next() == 2 and string.find(select(2, GameDebug.Next('lesson')), 'Trade hub', 1, true), 'the agents station is not picked out')
+quit

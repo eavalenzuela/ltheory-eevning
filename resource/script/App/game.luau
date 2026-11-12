@@ -41,6 +41,7 @@ local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Types = require("@lt/Core/Data/Types")
 local Wallet = require("@lt/Core/Assets/Wallet")
+local Waypoints = require("@lt/Game/Waypoints")
 
 local App = {}
 
@@ -1325,6 +1326,74 @@ function Debug.Guide(step: string?): (number, number, boolean)
     done = done or (row.step.id == step and row.done)
   end
   return count, #rows, done
+end
+
+-- Ships drawn this frame that are in warp, going or coming (not the
+-- pilot's own): the scene's count.
+function Debug.Passing(): number
+  return scene.passing
+end
+
+-- A ship on the pilot's grid, not the pilot's own, that is about to
+-- leave it (turning to its warp): its name, or "". The camera is set to
+-- follow it, so that its going can be watched; and afterwards, whether
+-- the ship last named so is still drawn, and in warp.
+local leaving = 0
+function Debug.Leaving(): (string, boolean)
+  local state = session.game.state
+  local mine = state.balls[state.player.ship]
+  local last = state.balls[leaving]
+  local proxy: Object? = scene.proxies[leaving]
+  local seen = last ~= nil and last.warp ~= nil and last.warp.stage == "warp" and proxy ~= nil
+  if mine then
+    for _, id in state.ballIds do
+      local ball = state.balls[id]
+      if id ~= mine.id and ball.system == mine.system and ball.grid == mine.grid and mine.grid ~= 0 and ball.warp
+        and ball.warp.stage == "align" then
+        leaving = id
+        session.selected = id
+        Scene.Track(scene, id)
+        return ball.name, seen
+      end
+    end
+  end
+  return "", seen
+end
+
+-- How far a planet or moon has turned on its axis, in turns, and how
+-- many of them there are that turn: the first that 'what' names (a kind,
+-- or part of a name).
+function Debug.Turned(what: string): (number, number)
+  local turned, count = -1, 0
+  for _, object in Core.Query.Objects(session.game, Core.Query.Player(session.game).system) do
+    local world = scene.worlds[object.id]
+    if world then
+      count += 1
+      if turned < 0 and (object.kind == what or string.find(object.name, what, 1, true)) then
+        local look = world.body:GetLook()
+        local east = vector.cross(world.axis, world.fore)
+        turned = (math.atan2(vector.dot(look, east), vector.dot(look, world.fore)) / (2 * math.pi)) % 1
+      end
+    end
+  end
+  return turned, count
+end
+
+-- Where the pilot is next to go (Game/Waypoints): how many places of
+-- this system are picked out, and the name of the first of a kind of
+-- reason ("route", "job", "lesson"; any, if none is said), or "".
+function Debug.Next(why: string?): (number, string)
+  local count, name = 0, ""
+  local marks = Waypoints.Of(session)
+  for _, entry in Core.Query.Overview(session.game) do
+    if marks[entry.id] then
+      count += 1
+      if name == "" and (why == nil or marks[entry.id] == why) then
+        name = entry.name
+      end
+    end
+  end
+  return count, name
 end
 
 -- A career agent (Core/Character/Careers: "flight", "industry", "trade",
