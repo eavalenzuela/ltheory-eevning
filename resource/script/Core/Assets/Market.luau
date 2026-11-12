@@ -46,6 +46,7 @@ local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
 local Types = require("@lt/Core/Data/Types")
+local Corporation = require("@lt/Core/Assets/Corporation")
 local Wallet = require("@lt/Core/Assets/Wallet")
 
 local Market = {}
@@ -437,13 +438,20 @@ end
 -- goes, the wallet is paid what it fetched less the tax, and the trade
 -- is on the station's books. Returns what was paid. (The item is the
 -- pilot's own, wherever it is: in the hangar there, or in the hold of a
--- ship of theirs docked there.)
-function Market.Sell(state: State.State, station: number, item: State.Item, quantity: number, events: { Event }): number
+-- ship of theirs docked there.) 'business': it is a hired pilot who
+-- sells, and what it fetches is the corporation's, if there is one
+-- (Assets/Corporation).
+function Market.Sell(state: State.State, station: number, item: State.Item, quantity: number, events: { Event },
+  business: boolean?): number
   local type = item.type
   local gross = Economy.Sell(Market.For(state, station), 1, Market.Index(type) :: number, quantity)
   local net = math.floor(gross * (1 - Market.Tax(state, station)))
   Items.Take(state, item, quantity)
-  Wallet.Pay(state, net, "market sale", events)
+  if business then
+    Corporation.Earn(state, net, "market sale", events)
+  else
+    Wallet.Pay(state, net, "market sale", events)
+  end
   record(state, station, type, quantity, math.floor(gross))
   table.insert(events, { kind = "Sold", type = type, quantity = quantity, revenue = net })
   return net

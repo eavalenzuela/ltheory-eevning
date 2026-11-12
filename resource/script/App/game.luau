@@ -517,6 +517,24 @@ function Debug.Enter(name: string, value: number)
   Im.Enter(name, value)
 end
 
+-- Put words in a field of words, by its name ('Corporation:name').
+function Debug.Type(name: string, text: string)
+  Im.Say(name, text)
+end
+
+-- A cheat: so many credits in the pilot's wallet.
+function Debug.Credits(amount: number)
+  session.game.state.wallet = amount
+end
+
+-- The pilot's corporation: its name ("" if there is none), what is in
+-- its account, all it has earned and all it has spent, and how many
+-- pilots can be hired.
+function Debug.Corporation(): (string, number, number, number, number)
+  local info = Core.Query.Corporation(session.game)
+  return info.name, info.wallet, info.earned, info.spent, select(2, Core.Query.Candidates(session.game, session.game.state.player.home))
+end
+
 -- Open the market at an item type, or the industry tab at a blueprint.
 -- Open the information window on a type of item ("frigate.lancer").
 function Debug.Info(type: string): boolean

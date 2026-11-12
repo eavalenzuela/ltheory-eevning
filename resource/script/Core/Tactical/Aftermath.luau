@@ -23,6 +23,7 @@ local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
 local Types = require("@lt/Core/Data/Types")
+local Corporation = require("@lt/Core/Assets/Corporation")
 local Wallet = require("@lt/Core/Assets/Wallet")
 
 local Aftermath = {}
@@ -146,7 +147,12 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     local full = if pilot then pilot.bounty else math.floor(hull.basePrice * 0.2)
     local mine = state.balls[state.player.ship]
     local there = wasPlayer or (mine ~= nil and mine.system == ball.system and mine.grid == ball.grid)
-    pay(state, if there then full else math.floor(full * Aftermath.AWAY), "bounty", events)
+    if there then
+      pay(state, full, "bounty", events)
+    else
+      -- (which is their corporation's, where they have one)
+      Corporation.Earn(state, math.floor(full * Aftermath.AWAY), "bounty", events)
+    end
     -- (and it counts toward any bounty job the pilot has for this system)
     for _, id in state.missionIds do
       local mission = state.missions[id]

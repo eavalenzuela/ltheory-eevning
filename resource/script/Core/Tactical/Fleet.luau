@@ -7,7 +7,10 @@
 -- good they are, a grade from 1 to 4, which is the level every skill
 -- counts as for a ship they fly and decides how big a hull they can be
 -- given (a frigate at 1, a battleship at 4). The player commands as
--- many as their Leadership.
+-- many as their Leadership, and a corporation of theirs has places for
+-- a few more (Assets/Corporation). What the pilots cost and what they
+-- bring in is the corporation's business, where there is one, and the
+-- player's own where there is not.
 --
 -- A hired pilot does nothing until given a ship: one of the player's
 -- own, docked where the player is, fitted as the player fitted it,
@@ -67,6 +70,7 @@
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
+local Corporation = require("@lt/Core/Assets/Corporation")
 local Digger = require("@lt/Core/Tactical/Digger")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Mend = require("@lt/Core/Tactical/Mend")
@@ -84,7 +88,6 @@ local Stations = require("@lt/Core/Assets/Stations")
 local System = require("@lt/Core/Describe/System")
 local Types = require("@lt/Core/Data/Types")
 local Vitals = require("@lt/Core/Tactical/Vitals")
-local Wallet = require("@lt/Core/Assets/Wallet")
 
 local Fleet = {}
 
@@ -165,9 +168,13 @@ function Fleet.Carries(kind: string, type: string): boolean
   return category == kind and table.find(Fleet.CARGO, kind) ~= nil
 end
 
--- How many pilots the player can command: their Leadership.
+-- How many pilots the player can have hired: as many as their
+-- Leadership, and with that what places a corporation of theirs has.
+-- (Leadership comes first: a corporation of nobody who can lead has
+-- nobody.)
 function Fleet.Max(state: State.State): number
-  return math.max(0, state.skills.leadership or 0)
+  local lead = math.max(0, state.skills.leadership or 0)
+  return if lead > 0 then lead + Corporation.Staff(state) else 0
 end
 
 -- The pilots looking for work at a station today, less those hired.
@@ -293,8 +300,10 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
     if found == nil then
       return false, "nobody of that name is looking for work here"
     elseif #state.fleetIds >= Fleet.Max(state) then
-      return false, if Fleet.Max(state) == 0 then "needs Leadership 1" else `Leadership {Fleet.Max(state)} commands no more pilots`
-    elseif state.wallet < found.fee then
+      return false, if Fleet.Max(state) == 0 then "needs Leadership 1"
+        elseif Corporation.Founded(state) then `{state.corporation.name} has places for {Fleet.Max(state)} pilots and no more`
+        else `Leadership {Fleet.Max(state)} commands no more pilots`
+    elseif not Corporation.Afford(state, found.fee) then
       return false, "not enough credits"
     end
     return true
@@ -459,7 +468,7 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
       state.hired, state.hiredDay = {}, day
     end
     table.insert(state.hired, found.key)
-    Wallet.Pay(state, -found.fee, "hiring", events)
+    Corporation.Spend(state, found.fee, "hiring", events)
     local wing: State.Wingman = { id = State.NewId(state), name = found.name, skill = found.skill, wage = found.wage,
       paid = state.tick, ship = 0, order = "follow", target = 0, post = 0, base = 0, hauled = 0, experience = 0,
       cargo = "", sell = false, earned = 0, ward = 0, alarm = false }
@@ -669,7 +678,7 @@ local function unload(state: State.State, wing: State.Wingman, ship: State.Ship,
       units += item.quantity
       volume += item.quantity * Types.Info(item.type).volume
       if sells and Market.Index(item.type) then
-        revenue += Market.Sell(state, station, item, item.quantity, events)
+        revenue += Market.Sell(state, station, item, item.quantity, events, true)
       else
         Items.Add(state, item.type, item.quantity, station, "hangar")
         Items.Take(state, item, item.quantity)
@@ -829,10 +838,10 @@ local function patrol(state: State.State, wing: State.Wingman, ship: State.Ship,
     -- Docked: mended, if it can be paid for (if not, they wait until it can), and out.
     if ship.armorDamage + ship.hullDamage > 0 then
       local cost = Aftermath.RepairCost(state, ship)
-      if cost > state.wallet then
+      if not Corporation.Afford(state, cost) then
         return
       end
-      Wallet.Pay(state, -cost, "repairs", events)
+      Corporation.Spend(state, cost, "repairs", events)
       ship.armorDamage, ship.hullDamage = 0, 0
       table.insert(events, { kind = "ShipRepaired", ship = ship.id })
     end
@@ -1027,11 +1036,11 @@ function Fleet.Step(state: State.State, events: { Event })
   for place, id in table.clone(state.fleetIds) do
     local wing = state.fleet[id]
     if state.tick - wing.paid >= DAY then
-      if state.wallet < wing.wage then
+      if not Corporation.Afford(state, wing.wage) then
         quit(state, wing, events)
         continue
       end
-      Wallet.Pay(state, -wing.wage, "wages", events)
+      Corporation.Spend(state, wing.wage, "wages", events)
       wing.paid += DAY
     end
     local ship = state.ships[wing.ship]

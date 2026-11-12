@@ -26,6 +26,7 @@ local Factions = require("@lt/Core/Data/Factions")
 local Fleet = require("@lt/Core/Tactical/Fleet")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Careers = require("@lt/Core/Character/Careers")
+local Corporation = require("@lt/Core/Assets/Corporation")
 local Guide = require("@lt/Core/Character/Guide")
 local Hacking = require("@lt/Core/Tactical/Hacking")
 local Hangar = require("@lt/Core/Assets/Hangar")
@@ -73,7 +74,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 44
+Core.SAVE_VERSION = 45
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -299,6 +300,10 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   [40] = function(state: any)
     state.digs = state.digs or {}
   end,
+  -- 45: a pilot may found a corporation. In a save from before, nobody has.
+  [44] = function(state: any)
+    state.corporation = state.corporation or Corporation.None()
+  end,
   -- 44: there are career agents. A save from before has begun with none
   -- of them.
   [43] = function(state: any)
@@ -522,6 +527,7 @@ function Core.New(options: Options): Game
     bookmarkIds = {},
     guide = {},
     careers = {},
+    corporation = Corporation.None(),
     implants = {},
     jobIds = {},
     wallet = 0,
@@ -591,6 +597,7 @@ local IMPLANT_COMMANDS = { PlugImplant = true, UnplugImplant = true }
 local FLEET_COMMANDS = { HirePilot = true, AssignShip = true, DismissPilot = true, FleetOrder = true }
 local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true, RedeemLoyalty = true }
 local CAREER_COMMANDS = { AcceptLesson = true, CompleteLesson = true }
+local CORPORATION_COMMANDS = { FoundCorporation = true, CorporationDeposit = true, CorporationWithdraw = true }
 local COLONY_COMMANDS = { DeployColony = true, BuildFacility = true, RemoveFacility = true, StartExtraction = true, Export = true }
 
 local function validate(state: State.State, command: State.Command): (boolean, string?)
@@ -619,6 +626,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Missions.Validate(state, command)
   elseif CAREER_COMMANDS[command.kind] then
     return Careers.Validate(state, command)
+  elseif CORPORATION_COMMANDS[command.kind] then
+    return Corporation.Validate(state, command)
   elseif SITE_COMMANDS[command.kind] then
     return Sites.Validate(state, command)
   elseif DRONE_COMMANDS[command.kind] then
@@ -712,6 +721,8 @@ function Core.Step(game: Game)
       Missions.Apply(state, command, game.events)
     elseif ok and CAREER_COMMANDS[command.kind] then
       Careers.Apply(state, command, game.events)
+    elseif ok and CORPORATION_COMMANDS[command.kind] then
+      Corporation.Apply(state, command, game.events)
     elseif ok and SITE_COMMANDS[command.kind] then
       Sites.Apply(state, command, game.events)
     elseif ok and DRONE_COMMANDS[command.kind] then
@@ -993,6 +1004,30 @@ end
 -- The wallet's journal, oldest first.
 function Query.Journal(game: Game): { State.Entry }
   return game.state.journal
+end
+
+-- The pilot's corporation (Assets/Corporation): whether there is one,
+-- and what it is called; its account and that account's journal, oldest
+-- first; all it has earned and spent; what founding one costs; and how
+-- many more pilots than Leadership commands it has places for (as it
+-- is, and as it would be).
+export type CorporationInfo = {
+  founded: boolean, name: string, since: number, wallet: number, journal: { State.Entry }, earned: number, spent: number,
+  fee: number, staff: number, wages: number,
+}
+function Query.Corporation(game: Game): CorporationInfo
+  local state = game.state
+  local corporation = state.corporation
+  -- (what its pilots are paid a day, all told)
+  local wages = 0
+  for _, id in state.fleetIds do
+    wages += state.fleet[id].wage
+  end
+  return {
+    founded = Corporation.Founded(state), name = corporation.name, since = corporation.founded, wallet = corporation.wallet,
+    journal = corporation.journal, earned = corporation.earned, spent = corporation.spent, fee = Corporation.FEE,
+    staff = Corporation.STAFF, wages = wages,
+  }
 end
 
 function Query.Orders(game: Game, station: number?): { State.Order }

@@ -356,6 +356,12 @@ export type Research = { material: number, time: number }
 -- A line in the wallet's journal.
 export type Entry = { tick: number, amount: number, reason: string, balance: number }
 
+-- The pilot's corporation (Assets/Corporation): its name ("" until one
+-- is founded) and when it was founded, its own credits and their recent
+-- history, and all it has earned and spent since (what its founder has
+-- paid in and taken out aside).
+export type Corporation = { name: string, founded: number, wallet: number, journal: { Entry }, earned: number, spent: number }
+
 -- A facility of a colony (Assets/Colonies): its number there, what kind
 -- it is ("extractor", "processor" or "storage"), and what it is set on
 -- (an extractor's raw material) or set to make (a processor's product).
@@ -490,6 +496,7 @@ export type State = {
   -- How far the pilot has got with each of the career agents
   -- (Character/Careers), by the career's id: one not here is not begun.
   careers: { [string]: Career },
+  corporation: Corporation,
   -- The places the pilot has marked, in the order they were.
   bookmarks: { [number]: Bookmark },
   bookmarkIds: { number },

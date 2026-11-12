@@ -85,6 +85,8 @@ function Session.Notice(session: Session, event: Space.Event)
     local aim: string = event.aim
     Session.Say(session, `{if aim == "chief" then "The chief is destroyed" elseif aim == "raze" then "The camp is razed" else "The camp is cleared"}: `
       .. `{if body then body.name else "the station"} will pay for it`)
+  elseif kind == "CorporationFounded" then
+    Session.Say(session, `{event.name} is founded: your hired pilots work for it from now on`)
   elseif kind == "WorksSighted" then
     Session.Say(session, if event.count == 1 then "The camp's store is here: destroy it"
       else `What the camp is built of is here: {event.count} works to destroy`)

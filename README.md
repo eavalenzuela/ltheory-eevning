@@ -23,7 +23,7 @@ This is a fork of the old C++ implementation of Limit Theory, its engine (LTE) a
 - **Trade**: a market at each station with buy and sell orders, where prices differ by who owns the station.
 - **Things to do**: career agents who show a new pilot the ropes, daily jobs, combat camps and mining contracts from agents, standings and loyalty stores, sites to scan down, derelicts to hack.
 - **A character**: skills that train in real time, including while the game is closed, and implants.
-- **Company**: hired pilots who follow, mine, haul, patrol and guard; starbases of your own with anchored modules.
+- **Company**: hired pilots who follow, mine, haul, patrol and guard; a corporation of your own for them to work for, with its own account and books; starbases of your own with anchored modules.
 - **A world**: security that falls away from each faction's homeworld, police and gate guns where order is kept, other ships going about their business.
 - **Saves**, music, and sound.
 

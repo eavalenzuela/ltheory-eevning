@@ -1184,7 +1184,10 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
     end
   end
   line = y + 78
-  Im.Heading(`YOUR PILOTS  {#fleet} / {most}`, right, line, 16, Im.DIM)
+  -- (whose they are, where a corporation has been founded: the Wallet tab has its books)
+  local whose = Core.Query.Corporation(game)
+  Im.Heading(if whose.founded then `{string.upper(shorten(whose.name, 24))}  {#fleet} / {most}` else `YOUR PILOTS  {#fleet} / {most}`,
+    right, line, 16, Im.DIM)
   line += 30
   if #fleet == 0 then
     Im.Text("Nobody is hired.", right, line, 14, Im.DIM, 0.8)
@@ -1623,13 +1626,80 @@ end
 -- ---------------------------------------------------------------------
 -- Wallet
 
-local function drawWallet(game: Core.Game, x: number, y: number)
+-- Which side of the Wallet tab is shown (the pilot's own, or their
+-- corporation's); the name a corporation would be founded under; and
+-- how much is to go into its account or come out of it.
+local books = "mine"
+local corporationName = ""
+local corporationAmount = 0
+
+local function drawWallet(session: Session.Session, game: Core.Game, x: number, y: number)
   local top = y + 78
   local left = x + 16
+  local corporation = Core.Query.Corporation(game)
+  if Im.Toggle("Mine", x + 700, top - 6, 80, 26, books == "mine", "Wallet:mine") then
+    books = "mine"
+  end
+  if Im.Toggle("Corporation", x + 784, top - 6, 140, 26, books == "corporation", "Wallet:corporation") then
+    books = "corporation"
+  end
   local journal = Core.Query.Journal(game)
-  Im.Heading("BALANCE", left, top, 16, Im.DIM)
-  Im.Heading(Format.Credits(game.state.wallet), left + 110, top - 4, 22, Im.TEXT)
   local line = top + 40
+  if books == "corporation" and not corporation.founded then
+    -- Nobody's yet: what one is, and the founding of it.
+    Im.Heading("NO CORPORATION", left, top, 16, Im.DIM)
+    line = top + 34
+    for _, text in { "A corporation is the business your hired pilots work for. It has an account of its own:",
+      "their signing on, their wages and the mending of their ships come out of it, and what they sell",
+      "and the bounties they earn with you elsewhere go into it, so its books say what they make against",
+      `what they cost. It has places for {corporation.staff} more pilots than your Leadership commands. Where its account`,
+      "is short, your own wallet pays the difference. It is founded once, here, under a name of yours." } do
+      Im.Text(text, left, line, 13, Im.DIM)
+      line += 19
+    end
+    line += 14
+    Im.Text("Name", left, line + 5, 14, Im.DIM)
+    corporationName = Im.Words("Corporation:name", corporationName, left + 60, line, 300, 28, 24, "three letters to twenty-four")
+    local found: State.Command = { kind = "FoundCorporation", actor = 0, what = corporationName }
+    local can, whyNot = Session.CanDo(session, found)
+    if Im.Button(`Found it: {Format.Credits(corporation.fee)}`, left + 372, line, 200, 28, can, "Corporation:found") then
+      Session.Do(session, found)
+      books = "corporation"
+    end
+    if not can and corporationName ~= "" then
+      Im.Text(tostring(whyNot), left + 584, line + 6, 13, Im.WARN)
+    end
+    return
+  elseif books == "corporation" then
+    journal = corporation.journal
+    Im.Heading(string.upper(corporation.name), left, top, 16, Im.DIM)
+    Im.Heading(Format.Credits(corporation.wallet), left, top + 24, 22, Im.TEXT)
+    Im.Text(`founded {Format.Clock(corporation.since)}`, left + 2, top + 54, 12, Im.DIM)
+    -- Its books: what its pilots have made against what they have cost.
+    local net = corporation.earned - corporation.spent
+    Im.Text("earned", left + 250, top + 26, 12, Im.DIM)
+    Im.TextRight(Format.Whole(corporation.earned), left + 400, top + 24, 14, GOOD)
+    Im.Text("spent", left + 250, top + 46, 12, Im.DIM)
+    Im.TextRight(Format.Whole(corporation.spent), left + 400, top + 44, 14, Im.WARN)
+    Im.Text("which makes", left + 420, top + 26, 12, Im.DIM)
+    Im.TextRight((if net >= 0 then "+" else "") .. Format.Whole(net), left + 600, top + 24, 14, if net >= 0 then GOOD else Im.WARN)
+    Im.Text("wages a day", left + 420, top + 46, 12, Im.DIM)
+    Im.TextRight(Format.Whole(corporation.wages), left + 600, top + 44, 14, Im.TEXT)
+    -- Into its account from the pilot's own wallet, and out of it.
+    corporationAmount = Im.Number("Corporation:amount", corporationAmount, left + 620, top + 34, 110, 26)
+    local deposit: State.Command = { kind = "CorporationDeposit", actor = 0, quantity = corporationAmount }
+    if Im.Button("Pay in", left + 736, top + 34, 76, 26, (Session.CanDo(session, deposit)), "Corporation:deposit") then
+      Session.Do(session, deposit)
+    end
+    local withdraw: State.Command = { kind = "CorporationWithdraw", actor = 0, quantity = corporationAmount }
+    if Im.Button("Take out", left + 816, top + 34, 92, 26, (Session.CanDo(session, withdraw)), "Corporation:withdraw") then
+      Session.Do(session, withdraw)
+    end
+    line = top + 84
+  else
+    Im.Heading("BALANCE", left, top, 16, Im.DIM)
+    Im.Heading(Format.Credits(game.state.wallet), left + 110, top - 4, 22, Im.TEXT)
+  end
   Im.Text("WHEN", left, line, 12, Im.DIM)
   Im.Text("WHAT", left + 150, line, 12, Im.DIM)
   Im.TextRight("AMOUNT", left + 600, line, 12, Im.DIM)
@@ -1638,8 +1708,9 @@ local function drawWallet(game: Core.Game, x: number, y: number)
   if #journal == 0 then
     Im.Text("Nothing has been paid or earned yet.", left, line, 14, Im.DIM, 0.8)
   end
-  local visible = 18
-  local first = Im.Scroll("journal", left - 4, line, 900, visible * 22, #journal, visible)
+  local visible = if books == "corporation" then 16 else 18
+  local first = Im.Scroll(if books == "corporation" then "corporation journal" else "journal", left - 4, line, 900, visible * 22, #journal,
+    visible)
   for row = 1, visible do
     -- newest first
     local entry = journal[#journal - (row + first) + 1]
@@ -1724,7 +1795,7 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
   elseif tab == "Ships" then
     drawShips(session, game, player, x, y)
   elseif tab == "Wallet" then
-    drawWallet(game, x, y)
+    drawWallet(session, game, x, y)
   elseif tab == "Crew" then
     drawCrew(session, game, player, x, y)
   elseif tab == "Missions" then

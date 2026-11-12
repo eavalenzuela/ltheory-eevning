@@ -45,10 +45,12 @@ local seenNow: { [string]: boolean } = {}
 local pressNow: string? = nil
 local pressNext: string? = nil
 
--- The number field being typed into, and what a script has put in one.
+-- The field being typed into (of numbers, or of words), and what a
+-- script has put in one.
 local focus = ""
 local typed = ""
 local entered: { [string]: number } = {}
+local said: { [string]: string } = {}
 
 -- How far each scrolling list is scrolled, by name.
 local scrolls: { [string]: number } = {}
@@ -106,7 +108,12 @@ function Im.Enter(name: string, value: number)
   entered[name] = value
 end
 
--- Whether a number field has the keyboard.
+-- Put words in a field of words by name: for scripted runs.
+function Im.Say(name: string, text: string)
+  said[name] = text
+end
+
+-- Whether a field has the keyboard.
 function Im.Typing(): boolean
   return focus ~= ""
 end
@@ -335,6 +342,58 @@ function Im.Number(name: string, value: number, x: number, y: number, w: number,
   local size = math.min(15, h - 8)
   local text = if focused then typed .. "_" else tostring(value)
   Im.TextRight(text, x + w - 8, y + (h - size) / 2 - 1, size, Im.TEXT)
+  return value
+end
+
+-- A field holding a line of words, 'limit' letters at most: letters,
+-- figures, spaces and the few marks a name has. Click it and type;
+-- Return or a click elsewhere finishes. Returns what it holds now.
+-- 'hint' is shown, dim, while it is empty and nobody is typing in it.
+function Im.Words(name: string, value: string, x: number, y: number, w: number, h: number, limit: number, hint: string?): string
+  local set = said[name]
+  if set then
+    said[name] = nil
+    value = string.sub(set, 1, limit)
+    if focus == name then
+      focus = ""
+    end
+  end
+  local hot = inside(x, y, w, h)
+  if pressed then
+    if hot then
+      focus = name
+      typed = value
+    elseif focus == name then
+      focus = ""
+    end
+  end
+  if focus == name then
+    for letter in string.gmatch(Keyboard_GetText(), "[%w '&%.%-]") do
+      if #typed < limit then
+        typed ..= letter
+      end
+    end
+    if Key_Pressed(Key_BackSpace()) then
+      typed = string.sub(typed, 1, -2)
+    end
+    if Key_Pressed(Key_Return()) then
+      focus = ""
+    end
+    value = typed
+  end
+  local focused = focus == name
+  WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), vector.create(0.02, 0.03, 0.04), 0.95, 1, 3)
+  if focused then
+    Im.Fill(x, y + h - 2, w, 2, Im.ACCENT, 0.95)
+  end
+  local size = math.min(15, h - 8)
+  if focused then
+    Im.Text(typed .. "_", x + 8, y + (h - size) / 2 - 1, size, Im.TEXT)
+  elseif value == "" and hint then
+    Im.Text(hint, x + 8, y + (h - size) / 2 - 1, size, Im.DIM, 0.7)
+  else
+    Im.Text(value, x + 8, y + (h - size) / 2 - 1, size, Im.TEXT)
+  end
   return value
 end
 

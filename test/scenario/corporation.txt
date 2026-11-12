@@ -1,0 +1,69 @@
+# A corporation founded and put to work, in the game app (script/check
+# runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/corporation.txt
+#
+# The Wallet tab has a side for the pilot's corporation. There is none
+# yet: founding one is refused without a name, and without the fee. With
+# a name typed and the fee in the wallet it is founded. Credits are paid
+# into its account and some taken out again, which its books count as
+# neither earned nor spent. Then pilots are hired on the Crew tab: the
+# account pays for their signing, and there are places for two more of
+# them than Leadership alone commands.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+until GameDebug.Press('Wallet')
+until GameDebug.Tab() == 'Wallet'
+frames 3
+until GameDebug.Press('Wallet:corporation')
+frames 3
+lua assert(GameDebug.Corporation() == '', 'nobody has founded anything yet')
+lua assert(select(5, GameDebug.Corporation()) == 1, 'Leadership 1 commands one pilot')
+lua assert(not GameDebug.CanPress('Corporation:found'), 'a corporation with no name')
+lua GameDebug.Type('Corporation:name', 'Merear Carriers')
+frames 3
+lua assert(not GameDebug.CanPress('Corporation:found'), 'a corporation for the 5,000 credits a pilot starts with')
+lua GameDebug.Credits(900000)
+frames 3
+until GameDebug.Press('Corporation:found')
+until GameDebug.Corporation() == 'Merear Carriers'
+lua assert(GameDebug.Wallet() == 650000, 'founding should cost 250,000')
+lua assert(select(5, GameDebug.Corporation()) == 3, 'Leadership 1, and two places of its own')
+frames 3
+
+# Paid in, and some of it taken out again.
+lua assert(not GameDebug.CanPress('Corporation:deposit'), 'nothing has been said to pay in')
+lua GameDebug.Enter('Corporation:amount', 600000)
+frames 3
+until GameDebug.Press('Corporation:deposit')
+until select(2, GameDebug.Corporation()) == 600000
+lua assert(GameDebug.Wallet() == 50000, 'what is paid in comes out of the wallet')
+lua GameDebug.Enter('Corporation:amount', 100000)
+frames 3
+until GameDebug.Press('Corporation:withdraw')
+until select(2, GameDebug.Corporation()) == 500000
+lua assert(GameDebug.Wallet() == 150000, 'what is taken out goes into the wallet')
+lua assert(select(3, GameDebug.Corporation()) == 0 and select(4, GameDebug.Corporation()) == 0, 'its founder paying in is neither earning nor spending')
+
+# A pilot hired: the account pays, and it is on the books.
+until GameDebug.Press('Crew')
+until GameDebug.Tab() == 'Crew'
+frames 3
+until GameDebug.Press('Hire:1')
+until GameDebug.Fleet() == 1
+lua assert(GameDebug.Wallet() == 150000, 'the corporation should have paid for the signing')
+lua assert(select(2, GameDebug.Corporation()) < 500000, 'the signing should have come out of the account')
+lua assert(select(4, GameDebug.Corporation()) == 500000 - select(2, GameDebug.Corporation()), 'what a pilot costs should be on the books')
+
+# And two more than Leadership alone commands.
+frames 3
+until GameDebug.Press('Hire:1')
+until GameDebug.Fleet() == 2
+frames 3
+until GameDebug.Press('Hire:1')
+until GameDebug.Fleet() == 3
+lua assert(GameDebug.Wallet() == 150000, 'the account should have paid for all three')
+
+echo corporation scenario passed
+quit
