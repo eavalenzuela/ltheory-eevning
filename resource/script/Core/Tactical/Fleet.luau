@@ -64,14 +64,26 @@
 -- A pilot whose wage cannot be paid leaves, and the ship they flew is
 -- found at the player's home station.
 --
+-- A hired pilot uses the drones in their ship's bay (Tactical/Drones)
+-- by themselves: as many as their hull controls and their grade allows
+-- go out when there is something for them to do (somebody to fight, or
+-- a rock being cut), the fighting ones at whoever the pilot is
+-- fighting, and are called in again when there is not. And a pilot
+-- does not leave them behind: before going anywhere of their own
+-- accord they call them in, and wait for any that is too far off to be
+-- taken aboard. (One who is running for a station with a ship that is
+-- going to pieces does not wait.)
+--
 -- (The beginning of M7. Not yet: a route of more than two stations,
--- loyalty, a ship's own drones.)
+-- loyalty.)
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
 local Corporation = require("@lt/Core/Assets/Corporation")
 local Digger = require("@lt/Core/Tactical/Digger")
+local DroneKinds = require("@lt/Core/Data/Drones")
+local Drones = require("@lt/Core/Tactical/Drones")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Mend = require("@lt/Core/Tactical/Mend")
 local Items = require("@lt/Core/Assets/Items")
@@ -607,7 +619,7 @@ local function fight(state: State.State, me: State.Ball, prey: State.Ball, event
   end
   for _, item in Items.Fitted(state, me.id) do
     local module = Modules.byId[item.type]
-    if module.weapon or (module.hex and not Modules.Mends(module)) then
+    if module.weapon or (module.hex and not Modules.Friendly(module)) then
       if locked then
         give(state, { kind = "ActivateModule", actor = me.id, item = item.id, target = prey.id }, events)
       end
@@ -615,6 +627,40 @@ local function fight(state: State.State, me: State.Ball, prey: State.Ball, event
       give(state, { kind = "ActivateModule", actor = me.id, item = item.id }, events)
     end
   end
+end
+
+-- A pilot's own drones, out: whatever is in the bay that can be
+-- controlled, any that were on their way in turned round, and those
+-- that fight pointed at 'prey' (with none, they do what drones do with
+-- nothing pointed out: Tactical/Drones).
+local function loose(state: State.State, me: State.Ball, prey: State.Ball?, events: { Event })
+  local launch: State.Command = { kind = "LaunchDrones", actor = me.id }
+  if Drones.Validate(state, launch) then
+    Drones.Apply(state, launch, events)
+  end
+  local astray = false
+  for _, drone in Drones.Out(state, me.id) do
+    drone.returning = false
+    -- (only those that fight are pointed at anybody)
+    astray = astray or (prey ~= nil and drone.target ~= prey.id and DroneKinds.byId[drone.type].role == "combat")
+  end
+  if prey and astray then
+    local engage: State.Command = { kind = "EngageDrones", actor = me.id, target = prey.id }
+    if Drones.Validate(state, engage) then
+      Drones.Apply(state, engage, events)
+    end
+  end
+end
+
+-- And called in. True while any of them is still too far off to be
+-- taken aboard if the ship left now.
+local function callIn(state: State.State, me: State.Ball): boolean
+  local waiting = false
+  for _, drone in Drones.Out(state, me.id) do
+    drone.returning, drone.target = true, 0
+    waiting = waiting or not drone.near
+  end
+  return waiting
 end
 
 -- Look after the ship: a repairer runs while there is something to
@@ -813,8 +859,15 @@ local function work(state: State.State, wing: State.Wingman, ship: State.Ship, e
   -- with nothing left (Tactical/Digger).
   local hunted = Pirates.Hunting(state, me) ~= 0 and not guarded(state, wing, me)
   if hunted or not Digger.Work(state, me, post, events) then
+    -- (the drones in first, unless there is no time for it)
+    if callIn(state, me) and not hunted then
+      return
+    end
     me.vitals.locks = {}
     give(state, { kind = "Dock", actor = ship.id, target = base.id }, events)
+  else
+    -- (at work: what is in the drone bay works too)
+    loose(state, me, nil, events)
   end
 end
 
@@ -855,6 +908,8 @@ local function patrol(state: State.State, wing: State.Wingman, ship: State.Ship,
   if vitals.armor + vitals.hull < Fleet.RETIRE * (vitals.armorMax + vitals.hullMax) and not vitals.scrambled then
     local station = nearestStation(state, me)
     if station then
+      -- (the drones are called, and not waited for)
+      callIn(state, me)
       me.vitals.locks = {}
       give(state, { kind = "Dock", actor = ship.id, target = station.id }, events)
       table.insert(events, { kind = "PatrolRetired", pilot = wing.id, name = wing.name, station = station.id })
@@ -887,7 +942,9 @@ local function patrol(state: State.State, wing: State.Wingman, ship: State.Ship,
   local mending = Mend.Tend(state, me, side(state), events)
   if prey then
     fight(state, me, prey, events)
+    loose(state, me, prey, events)
   else
+    callIn(state, me)
     for at = #me.vitals.locks, 1, -1 do
       if not mending[me.vitals.locks[at].target] then
         table.remove(me.vitals.locks, at)
@@ -919,7 +976,10 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
     patrol(state, wing, ship, events)
     return
   elseif wing.order == "stay" then
-    -- Dock at the nearest station, and wait.
+    -- Dock at the nearest station, and wait. (The drones in first.)
+    if me and callIn(state, me) then
+      return
+    end
     if me and not (me.intent and me.intent.kind == "dock") then
       local station = nearestStation(state, me)
       if station then
@@ -961,6 +1021,11 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
   local leadSystem = if lead then lead.system else Space.SystemOf(state, mine.docked)
   local together = lead ~= nil and lead.system == me.system and lead.grid ~= 0 and lead.grid == me.grid
   if not held then
+    -- (about to go somewhere: the drones in first, and waited for)
+    local leaving = me.system ~= leadSystem or lead == nil or lead.intent ~= nil or lead.warp ~= nil or not together
+    if leaving and callIn(state, me) then
+      return
+    end
     if me.system ~= leadSystem then
       -- The next gate on the way to the player.
       travel(state, me, leadSystem, events)
@@ -1018,7 +1083,9 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
   end
   if prey then
     fight(state, me, prey, events)
+    loose(state, me, prey, events)
   else
+    callIn(state, me)
     -- (nobody to fight: let go of everybody but those being mended)
     for at = #me.vitals.locks, 1, -1 do
       if not mending[me.vitals.locks[at].target] then

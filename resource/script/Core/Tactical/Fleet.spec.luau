@@ -3,6 +3,7 @@
 
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
+local Drones = require("@lt/Core/Tactical/Drones")
 local Fleet = require("@lt/Core/Tactical/Fleet")
 local Items = require("@lt/Core/Assets/Items")
 local Pirates = require("@lt/Core/Tactical/Pirates")
@@ -456,6 +457,104 @@ suite:Case("a hired pilot with a remote repairer mends whoever of the fleet is h
   t.eq({ theirs.mode, theirs.target } :: { any }, { "keep", me.id } :: { any })
 end)
 
+suite:Case("a capacitor relay sends what it costs into a locked ship in reach, and no more than there is room for", function(t)
+  local game, second = docked()
+  local state = game.state
+  local Modules = require("@lt/Core/Data/Modules")
+  -- (it wants the skill to fit, and goes in the Courier's third high slot, beside the guns)
+  local item = Items.Add(state, "remote.capacitor.small", 1, state.player.home, "hangar")
+  t.eq(refused(game, { kind = "Fit", actor = 0, item = item.id }), "needs Power Grid Management 2")
+  state.skills["engineering"] = 2
+  t.ok((submit(game, { kind = "Fit", actor = 0, item = item.id })))
+  hired(game, second)
+  local me, theirs = adrift(game, second)
+  theirs.vitals.capacitor = 10
+  t.ok((submit(game, { kind = "LockTarget", actor = 0, target = theirs.id })))
+  t.ok(waitFor(game, 30, function()
+    return me.vitals.locks[1] ~= nil and me.vitals.locks[1].locked
+  end))
+  local relay: State.Item? = nil
+  for _, each in Items.Fitted(state, me.id) do
+    relay = if each.type == "remote.capacitor.small" then each else relay
+  end
+  local mine, before = me.vitals.capacitor, theirs.vitals.capacitor
+  Core.TakeEvents(game)
+  t.ok((submit(game, { kind = "ActivateModule", actor = 0, item = assert(relay).id, target = theirs.id })))
+  steps(game, 1)
+  -- One cycle at once: forty out of one capacitor and into the other (each one's own recharge aside).
+  t.ok(theirs.vitals.capacitor >= before + 40 and theirs.vitals.capacitor < before + 50,
+    `their capacitor went from {before} to {theirs.vitals.capacitor}`)
+  t.ok(me.vitals.capacitor <= mine - 40 + 5 and me.vitals.capacitor >= mine - 40, `mine went from {mine} to {me.vitals.capacitor}`)
+  local fed = 0
+  for _, event in Core.TakeEvents(game) do
+    if event.kind == "Fed" and event.ball == me.id and event.target == theirs.id then
+      fed += event.amount
+    end
+  end
+  t.eq(fed, 40)
+  -- It never puts in more than there is room for: what a full ship is sent is lost.
+  theirs.vitals.capacitor = theirs.vitals.capacitorMax - 15
+  steps(game, 5)
+  t.eq(theirs.vitals.capacitor, theirs.vitals.capacitorMax)
+  -- Out of reach, it stops.
+  theirs.x += 12000
+  steps(game, 6)
+  t.eq(#me.vitals.running, 0)
+  -- There are three sizes; each sends what it costs, the bigger more and farther, for more of the skill.
+  local small, medium, large = Modules.byId["remote.capacitor.small"], Modules.byId["remote.capacitor.medium"],
+    Modules.byId["remote.capacitor.large"]
+  for size, relayed in { small, medium, large } do
+    local hex = relayed.hex :: Modules.Hex
+    t.eq({ hex.kind, hex.strength } :: { any }, { "capacitor", hex.capacitor } :: { any }, relayed.id)
+    t.eq((relayed.requires :: any)[1], { skill = "engineering", level = size + 1 })
+    -- (for a friend, and not one of those that mend; nor is there a tech 2 or a custom make of it)
+    t.ok(Modules.Friendly(relayed) and not Modules.Mends(relayed))
+    t.eq({ Modules.Improved(relayed.id), Modules.Custom(relayed.id) } :: { any }, { nil, nil } :: { any })
+  end
+  t.ok((large.hex :: any).strength > (medium.hex :: any).strength and (medium.hex :: any).strength > (small.hex :: any).strength)
+  t.ok((large.hex :: any).range > (small.hex :: any).range)
+  t.ok(Modules.Friendly(Modules.byId["remote.armor.small"]) and not Modules.Friendly(Modules.byId["neutraliser.small"]))
+end)
+
+suite:Case("a hired pilot with a relay feeds whoever of the fleet is short of capacitor, and keeps enough of their own to fly on", function(t)
+  local game, second = docked("destroyer.jackal")
+  local state = game.state
+  Items.Equip(state, second.id, "remote.capacitor.small", nil)
+  hired(game, second, 2)
+  local me, theirs = adrift(game, second)
+  steps(game, 10)
+  t.eq({ #theirs.vitals.locks, #theirs.vitals.running }, { 0, 0 })
+  -- A pilot short of their own does not begin.
+  me.vitals.capacitor = me.vitals.capacitorMax * 0.2
+  theirs.vitals.capacitor = theirs.vitals.capacitorMax * 0.4
+  steps(game, 12)
+  t.eq(#theirs.vitals.running, 0, "a pilot with less than half their own capacitor gave some away")
+  -- With enough, they lock the player and set to.
+  theirs.vitals.capacitor = theirs.vitals.capacitorMax
+  me.vitals.capacitor = me.vitals.capacitorMax * 0.2
+  t.ok(waitFor(game, 40, function()
+    return #theirs.vitals.running == 1 and theirs.vitals.running[1].target == me.id
+  end), "the hired pilot did not start feeding")
+  t.ok(waitFor(game, 300, function()
+    return me.vitals.capacitor >= 0.9 * me.vitals.capacitorMax
+  end), "the capacitor was not filled")
+  -- Enough: the relay comes off, and so does the lock.
+  t.ok(waitFor(game, 20, function()
+    return #theirs.vitals.running == 0 and #theirs.vitals.locks == 0
+  end), "the hired pilot went on feeding a ship that had enough")
+  t.ok(theirs.vitals.capacitor > theirs.vitals.capacitorMax / 3)
+  -- And they stop short of running themselves dry, whoever still wants it.
+  me.vitals.capacitor = 0
+  t.ok(waitFor(game, 40, function()
+    return #theirs.vitals.running == 1
+  end))
+  theirs.vitals.capacitor = theirs.vitals.capacitorMax * 0.3
+  me.vitals.capacitor = 0
+  t.ok(waitFor(game, 20, function()
+    return #theirs.vitals.running == 0
+  end), "the hired pilot went on feeding with under a third of their own left")
+end)
+
 -- A game with a hired pilot in a Prospector with two mining lasers, out
 -- at the first belt with the player.
 local function atBelt(): (Core.Game, State.Wingman, State.Ship, number)
@@ -529,6 +628,122 @@ suite:Case("a hired pilot with a mining laser is set to mine a belt: the hold is
   t.ok(waitFor(game, 600, function()
     return second.docked == home
   end), "the pilot did not come back when called")
+end)
+
+-- How many drones are in a ship's drone bay, and how many it has out.
+local function dronesOf(game: Core.Game, ship: number): (number, number)
+  local aboard = 0
+  for _, item in Items.In(game.state, ship, "dronebay") do
+    aboard += item.quantity
+  end
+  return aboard, #Drones.Out(game.state, ship)
+end
+
+suite:Case("a hired pilot looses their own drones on whoever they fight, calls them in after, and does not leave them behind", function(t)
+  local game, second = docked("destroyer.jackal")
+  local state = game.state
+  -- Three in the bay of a hull that controls two, flown by a pilot good enough for two.
+  Items.Add(state, "drone.light", 3, second.id, "dronebay")
+  hired(game, second, 2)
+  t.eq(Drones.Max(state, second.id), 2)
+  local me, theirs = adrift(game, second)
+  steps(game, 20)
+  -- With nobody to fight, they stay in the bay.
+  t.eq({ dronesOf(game, second.id) }, { 3, 0 })
+  -- (and the player's own drone bay and drones are none of the pilot's business)
+  t.eq(Core.Query.Drones(game).out, 0)
+  -- A raider turns up: the drones go out, as many as can be controlled, at whoever the pilot is fighting.
+  local raider = Pirates.Spawn(state, Pirates.kindById.raider, me.system, me.x + 9000, me.y, me.z, me.grid)
+  t.ok(waitFor(game, 30, function()
+    return select(2, dronesOf(game, second.id)) == 2
+  end), "the hired pilot's drones did not go out")
+  t.eq({ dronesOf(game, second.id) }, { 1, 2 })
+  for _, drone in Drones.Out(state, second.id) do
+    t.eq({ drone.owner, drone.target, drone.returning } :: { any }, { second.id, raider.id, false } :: { any })
+    t.eq(state.ships[drone.ship].owner, "player")
+  end
+  t.eq(Core.Query.Drones(game).out, 0, "a hired pilot's drones were counted as the player's")
+  -- The player warps off in the middle of it. The pilot calls the drones in, waits for them, and only then follows:
+  -- none is lost.
+  local planet = 0
+  for _, entry in Core.Query.Overview(game) do
+    planet = if entry.kind == "planet" and planet == 0 then entry.id else planet
+  end
+  -- (the drones well out, at the raider)
+  t.ok(waitFor(game, 60, function()
+    for _, drone in Drones.Out(state, second.id) do
+      local ball = state.balls[drone.ship]
+      if ball and Space.Gap(ball :: any, theirs :: any) > Drones.SCOOP then
+        return true
+      end
+    end
+    return false
+  end), "no drone got far enough from its owner to be lost by a warp")
+  Core.TakeEvents(game)
+  t.ok((submit(game, { kind = "WarpTo", actor = 0, target = planet })))
+  local lost, waited = 0, 0
+  t.ok(waitFor(game, 400, function()
+    for _, event in Core.TakeEvents(game) do
+      lost += if event.kind == "DroneLost" and event.owner == second.id then 1 else 0
+    end
+    local ball = state.balls[second.id]
+    -- (turning to go is not yet gone: a ship takes its drones aboard as it enters warp)
+    local turning = ball ~= nil and ball.warp ~= nil
+    waited += if turning then 0 else 1
+    return ball ~= nil and ball.warp ~= nil and ball.warp.stage == "warp"
+  end), "the hired pilot never followed")
+  steps(game, 2)
+  for _, event in Core.TakeEvents(game) do
+    lost += if event.kind == "DroneLost" and event.owner == second.id then 1 else 0
+  end
+  t.eq({ lost, dronesOf(game, second.id) } :: { any }, { 0, 3, 0 } :: { any })
+  t.ok(waited > 3, "the pilot did not wait for the drones")
+end)
+
+suite:Case("a hired pilot's drones come in when the fight is over, and a miner's mining drones work the rock with the lasers", function(t)
+  local game, second = docked("destroyer.jackal")
+  local state = game.state
+  Items.Add(state, "drone.light", 2, second.id, "dronebay")
+  hired(game, second, 2)
+  local me = adrift(game, second)
+  local scout = Pirates.Spawn(state, Pirates.SCOUT, me.system, me.x + 6000, me.y, me.z, me.grid)
+  t.ok(waitFor(game, 40, function()
+    return select(2, dronesOf(game, second.id)) == 2
+  end), "the drones did not go out")
+  t.ok(waitFor(game, 600, function()
+    return state.balls[scout.id] == nil
+  end), "the scout was not destroyed")
+  -- Nobody left: called in, and aboard again.
+  t.ok(waitFor(game, 120, function()
+    return select(2, dronesOf(game, second.id)) == 0
+  end), "the drones stayed out with nobody to fight")
+  t.eq({ dronesOf(game, second.id) }, { 2, 0 })
+
+  -- A miner with mining drones: they go out when the lasers are cutting, and bring what they cut to the miner.
+  local digging, wing, prospector, rocks = atBelt()
+  local there = digging.state
+  Items.Add(there, "drone.mining", 1, prospector.id, "dronebay")
+  t.ok((submit(digging, { kind = "FleetOrder", actor = 0, what = "mine" })))
+  t.ok(waitFor(digging, 300, function()
+    return select(2, dronesOf(digging, prospector.id)) == 1
+  end), "the mining drone did not go out")
+  local brought = 0
+  t.ok(waitFor(digging, 900, function()
+    for _, event in Core.TakeEvents(digging) do
+      brought += if event.kind == "DroneDelivered" and event.owner == prospector.id then event.units else 0
+    end
+    return brought > 0
+  end), "the mining drone brought nothing to the miner")
+  -- The hold full, the drone is called in before the miner goes: it is in the bay when they dock, not lost.
+  local lost = 0
+  t.ok(waitFor(digging, 6000, function()
+    for _, event in Core.TakeEvents(digging) do
+      lost += if event.kind == "DroneLost" and event.owner == prospector.id then 1 else 0
+    end
+    return prospector.docked ~= 0
+  end), "the miner never went in")
+  t.eq({ lost, dronesOf(digging, prospector.id) } :: { any }, { 0, 1, 0 } :: { any })
+  t.eq({ wing.order, rocks ~= 0 } :: { any }, { "mine", true } :: { any })
 end)
 
 suite:Case("only a pilot with a mining laser, at a belt, in a system with a station, is set to mine; and one who is hunted there goes in", function(t)

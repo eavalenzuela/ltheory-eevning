@@ -27,8 +27,11 @@
 -- drones rather than the ships (Tactical/Pirates), and one that is
 -- destroyed leaves nothing behind.
 --
--- (Cut down to this. Not yet: bandwidth, drones that jam, a hired
--- pilot's own drones.)
+-- A hired pilot's ship has its own, and its pilot sees to them
+-- (Tactical/Fleet): everything here goes by the ship that launched a
+-- drone, whoever flies it.
+--
+-- (Cut down to this. Not yet: bandwidth, drones that jam.)
 
 local Combat = require("@lt/Core/Tactical/Combat")
 local Kinds = require("@lt/Core/Data/Drones")

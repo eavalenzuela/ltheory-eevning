@@ -1133,7 +1133,7 @@ function Debug.Engage(range: number?, works: boolean?): number
       for _, running in me.vitals.running do
         on = on or running.item == item.id
       end
-      if not on and (module.weapon or (module.hex and not Modules.Mends(module))) then
+      if not on and (module.weapon or (module.hex and not Modules.Friendly(module))) then
         Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id, target = nearest.id })
       elseif not on and (module.repair or module.boost) then
         -- (and what it has for itself: a repairer, an afterburner)

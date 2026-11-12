@@ -60,11 +60,13 @@ export type Miner = {
 -- as big; a "damp" cuts how far it can lock and how fast to 'strength'
 -- of what they were; a "neut" takes 'strength' GJ from its capacitor
 -- each cycle; and a "jam" has a chance of 'strength' each cycle of
--- breaking every lock it holds. Two are for a friend: a "shield" puts
--- 'strength' points back on its target's shield each cycle, and an
--- "armor" on its armour.
+-- breaking every lock it holds. Three are for a friend: a "shield" puts
+-- 'strength' points back on its target's shield each cycle, an
+-- "armor" on its armour, and a "capacitor" puts 'strength' GJ into its
+-- capacitor (which is what the cycle costs the ship that sends it: the
+-- energy is moved, not made).
 export type Hex = {
-  kind: "entangle" | "scramble" | "paint" | "damp" | "neut" | "jam" | "shield" | "armor",
+  kind: "entangle" | "scramble" | "paint" | "damp" | "neut" | "jam" | "shield" | "armor" | "capacitor",
   range: number,            -- m
   strength: number,
   duration: number,         -- s per cycle
@@ -358,6 +360,15 @@ local modules: { ModuleType } = {
     requires = { { skill = "remote.repair", level = 1 } },
   },
 
+  -- And feeding somebody else: capacitor sent to another ship, for as
+  -- long as it is locked and in reach. What arrives is what was sent.
+  {
+    id = "remote.capacitor.small", name = "Small Capacitor Relay", short = "Relay", slot = "high", hardpoint = "",
+    cpu = 20, powergrid = 5, volume = 5, basePrice = 40000, passive = {},
+    hex = { kind = "capacitor", range = 10000, strength = 40, duration = 5, capacitor = 40 },
+    requires = { { skill = "engineering", level = 2 } },
+  },
+
   -- What a mining drone cuts with and a repair drone mends with: small
   -- things, of no use on a ship.
   {
@@ -623,20 +634,24 @@ for _, fitting in FITTINGS do
   end
 end
 
--- And the remote repairers by size: more put back, from farther off.
+-- And the remote repairers by size, and the relays: more put back, or
+-- sent, from farther off. (What a relay sends is what it costs, at
+-- every size.)
 local REMOTE_RANGE = { 1, 1.6, 2.5 }
 for _, base in table.clone(modules) do
   local hex = base.hex
-  if hex and (hex.kind == "shield" or hex.kind == "armor") and not base.internal then
+  if hex and (hex.kind == "shield" or hex.kind == "armor" or hex.kind == "capacitor") and not base.internal then
     for size = 2, 3 do
+      local cost = hex.capacitor * FIT_CAPACITOR[size]
       table.insert(modules, {
         id = (string.gsub(base.id, "small", SIZE_NAME[size])), name = (string.gsub(base.name, "Small", SIZE_TITLE[size])),
         slot = base.slot, hardpoint = base.hardpoint,
         cpu = math.floor(base.cpu * FIT_CPU[size] + 0.5), powergrid = math.floor(base.powergrid * FIT_POWERGRID[size] + 0.5),
         volume = base.volume * (size * size - size), basePrice = base.basePrice * FIT_PRICE[size], passive = {},
-        hex = { kind = hex.kind, range = hex.range * REMOTE_RANGE[size], strength = hex.strength * FIT_AMOUNT[size],
-          duration = hex.duration, capacitor = hex.capacitor * FIT_CAPACITOR[size] },
-        requires = { { skill = "remote.repair", level = size + 1 } },
+        hex = { kind = hex.kind, range = hex.range * REMOTE_RANGE[size],
+          strength = if hex.kind == "capacitor" then cost else hex.strength * FIT_AMOUNT[size],
+          duration = hex.duration, capacitor = cost },
+        requires = { { skill = if hex.kind == "capacitor" then "engineering" else "remote.repair", level = size + 1 } },
       })
     end
   end
@@ -871,10 +886,16 @@ function Modules.SizeOf(module: ModuleType): number
 end
 
 -- Whether a module is one that mends another ship (a remote shield
--- booster or armour repairer): for a friend, where everything else
--- that runs on another ship is for an enemy.
+-- booster or armour repairer).
 function Modules.Mends(module: ModuleType): boolean
   return module.hex ~= nil and (module.hex.kind == "shield" or module.hex.kind == "armor")
+end
+
+-- Whether a module that runs on another ship is for a friend (one that
+-- mends, or a relay that sends capacitor), where everything else that
+-- runs on another ship is for an enemy.
+function Modules.Friendly(module: ModuleType): boolean
+  return module.hex ~= nil and (Modules.Mends(module) or module.hex.kind == "capacitor")
 end
 for _, c in charges do
   Modules.chargeById[c.id] = c

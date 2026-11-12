@@ -582,6 +582,12 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
         end
         table.insert(events, { kind = "Mended", ball = ball.id, target = target.id, layer = hex.kind,
           amount = (if hex.kind == "shield" then t.shield else t.armor) - before })
+      elseif hex.kind == "capacitor" then
+        -- (what was taken from this ship's capacitor, into the other's: as much of it as there is room for)
+        local t = target.vitals
+        local before = t.capacitor
+        t.capacitor = math.min(t.capacitorMax, t.capacitor + hex.strength)
+        table.insert(events, { kind = "Fed", ball = ball.id, target = target.id, amount = t.capacitor - before })
       elseif hex.kind == "neut" then
         target.vitals.capacitor = math.max(0, target.vitals.capacitor - hex.strength)
       elseif hex.kind == "jam" then

@@ -115,6 +115,7 @@ Effects.looks = {
   ["jammer."] = { kind = "beam", color = { 0.70, 0.90, 1.0 }, width = 2, life = 0.5, held = true },
   ["remote.shield"] = { kind = "beam", color = { 0.40, 0.75, 1.0 }, width = 4, life = 0.5, held = true },
   ["remote.armor"] = { kind = "beam", color = { 1.0, 0.75, 0.35 }, width = 4, life = 0.5, held = true },
+  ["remote.capacitor"] = { kind = "beam", color = { 1.0, 0.95, 0.45 }, width = 4, life = 0.5, held = true },
 } :: { [string]: Look }
 
 -- Whether a module's beam is one that stays for as long as it runs (a
