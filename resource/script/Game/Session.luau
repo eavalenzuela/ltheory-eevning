@@ -67,8 +67,15 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `Wave {event.wave} of {event.of}: ` .. (if event.chief then "the camp's chief is out"
       .. (if event.count > 1 then `, with {event.count - 1} more` else "")
       else `{event.count} {if event.count == 1 then "ship" else "ships"} of the camp's`))
+  elseif kind == "PiratesArrived" and event.away then
+    -- (somewhere else, for a hired pilot: they say so themselves when they are gone for)
+    return
   elseif kind == "PiratesArrived" then
     Session.Say(session, if event.count == 1 then "A pirate has arrived" else `{event.count} pirates have arrived`)
+  elseif kind == "FleetAttacked" then
+    Session.Say(session, `{event.name} is under attack at {event.where}`)
+  elseif kind == "PatrolRetired" then
+    Session.Say(session, `{event.name} is going in to mend`)
   elseif kind == "WaveDown" then
     Session.Say(session, `Wave {event.wave} of {event.of} is down: the next is coming`)
   elseif kind == "AssaultCleared" then

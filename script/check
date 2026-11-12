@@ -69,6 +69,8 @@
 #               the job taken, two waves destroyed at its camp, and paid
 #   game-camp   a camp of two rooms (test/scenario/camp.txt): the first
 #               cleared, the way to the second found, and that cleared too
+#   game-patrol  a hired pilot left to patrol a belt (test/scenario/patrol.txt):
+#               pirates come for them with the player docked, and are seen off
 #   game-haul   a hired pilot set to haul (test/scenario/haul.txt): ore
 #               carried to another station and sold there, and more after
 #   game-dscan  the directional scanner (test/scenario/dscan.txt): all
@@ -209,6 +211,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/assault.txt
   step game-camp 0 timeout 700 bin/launch game --no-present --fixed-step 60 --timeout 640 \
     --script test/scenario/camp.txt
+  step game-patrol 0 timeout 600 bin/launch game --no-present --fixed-step 60 --timeout 500 \
+    --script test/scenario/patrol.txt
   step game-haul 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/haul.txt
   step game-dscan 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \

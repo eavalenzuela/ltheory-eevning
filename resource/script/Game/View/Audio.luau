@@ -159,7 +159,8 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
       play(audio, OWN[kind][1], OWN[kind][2])
     elseif SHIP[kind] and event.ship == mine then
       play(audio, SHIP[kind][1], SHIP[kind][2])
-    elseif ANY[kind] then
+    elseif ANY[kind] and not (kind == "PiratesArrived" and event.away) then
+      -- (pirates who have come for a hired pilot somewhere else are not heard)
       play(audio, ANY[kind][1], ANY[kind][2], nil, 0.3)
     end
   end

@@ -45,12 +45,26 @@
 -- carried: it goes to the market of the station they bring it to, if
 -- that has one, at what the market gives, and into the hangar if not.
 --
+-- Where the player is not, a hired pilot is on their own. Pirates come
+-- for them as they come for the player (Tactical/Pirates), half as
+-- often, and the fight is fought as any is; a pilot who is gone for
+-- says so. A pirate they destroy with the player elsewhere pays half
+-- its bounty (Tactical/Aftermath). Two orders are for that:
+--   - patrol: the armed pilots with the player (or the one named) hold
+--     the place the player is at. They fight whatever pirates come
+--     there, and one badly hurt goes in to the nearest station, is
+--     mended for what mending costs, and comes out again.
+--   - guard: one pilot goes where another hired pilot goes, as the rest
+--     go where the player goes: beside a miner at their belt, or a
+--     hauler on their run, and fights whoever comes for either.
+--
 -- A pilot whose wage cannot be paid leaves, and the ship they flew is
 -- found at the player's home station.
 --
--- (The beginning of M7. Not yet: pilots who patrol by standing order,
--- a route of more than two stations, loyalty, a ship's own drones.)
+-- (The beginning of M7. Not yet: a route of more than two stations,
+-- loyalty, a ship's own drones.)
 
+local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
 local Digger = require("@lt/Core/Tactical/Digger")
@@ -235,6 +249,36 @@ local function diggers(state: State.State, only: State.Wingman?): { State.Wingma
   return found
 end
 
+-- The hired pilots a "patrol here" would set to it: those (or the one
+-- named) on the player's grid whose ship has a weapon.
+local function guards(state: State.State, only: State.Wingman?): { State.Wingman }
+  local lead = state.balls[state.player.ship]
+  local found: { State.Wingman } = {}
+  for _, id in state.fleetIds do
+    local wing = state.fleet[id]
+    local ball = state.balls[wing.ship]
+    if (only == nil or only == wing) and lead and ball and ball.system == lead.system and ball.grid == lead.grid then
+      for _, item in Items.Fitted(state, wing.ship) do
+        if Modules.byId[item.type].weapon then
+          table.insert(found, wing)
+          break
+        end
+      end
+    end
+  end
+  return found
+end
+
+-- The hired pilot who flies a ship, if one does.
+function Fleet.Flying(state: State.State, ship: number): State.Wingman?
+  for _, id in state.fleetIds do
+    if ship ~= 0 and state.fleet[id].ship == ship then
+      return state.fleet[id]
+    end
+  end
+  return nil
+end
+
 function Fleet.Validate(state: State.State, command: State.Command): (boolean, string?)
   local ship = state.ships[command.actor]
   if ship == nil or ship.id ~= state.player.ship then
@@ -309,6 +353,32 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
       -- (what they bring in is sold, or kept: said to one pilot)
       if wing == nil then
         return false, "that is said to one pilot"
+      end
+      return true
+    elseif what == "guard" then
+      -- (one pilot, and another's ship for them to go with)
+      if wing == nil then
+        return false, "that is said to one pilot"
+      elseif state.ships[wing.ship] == nil then
+        return false, `{wing.name} has no ship`
+      end
+      local ward = Fleet.Flying(state, command.target or 0)
+      if ward == nil then
+        return false, "pick the ship of another of your pilots for them to guard"
+      elseif ward == wing then
+        return false, "nobody guards themselves"
+      elseif ward.order == "guard" and ward.ward == wing.id then
+        return false, `{ward.name} is guarding {wing.name}`
+      end
+      return true
+    elseif what == "patrol" then
+      local me = state.balls[ship.id]
+      if me == nil then
+        return false, "docked"
+      elseif Space.Object(state, me.grid) == nil then
+        return false, "there is nothing here to hold: go to a belt, a gate or a station"
+      elseif #guards(state, wing) == 0 then
+        return false, "no hired pilot here has a weapon fitted"
       end
       return true
     elseif what == "haul" then
@@ -392,7 +462,7 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     Wallet.Pay(state, -found.fee, "hiring", events)
     local wing: State.Wingman = { id = State.NewId(state), name = found.name, skill = found.skill, wage = found.wage,
       paid = state.tick, ship = 0, order = "follow", target = 0, post = 0, base = 0, hauled = 0, experience = 0,
-      cargo = "", sell = false, earned = 0 }
+      cargo = "", sell = false, earned = 0, ward = 0, alarm = false }
     state.fleet[wing.id] = wing
     table.insert(state.fleetIds, wing.id)
     table.insert(events, { kind = "PilotHired", pilot = wing.id, name = wing.name })
@@ -422,6 +492,19 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
   elseif kind == "FleetOrder" and (command.what == "sell" or command.what == "keep") then
     wing.sell = command.what == "sell"
     table.insert(events, { kind = "FleetOrdered", what = command.what, target = 0 })
+  elseif kind == "FleetOrder" and command.what == "guard" then
+    local ward = Fleet.Flying(state, command.target :: number) :: State.Wingman
+    wing.order, wing.target, wing.ward = "guard", 0, ward.id
+    table.insert(events, { kind = "FleetOrdered", what = "guard", target = ward.ship })
+  elseif kind == "FleetOrder" and command.what == "patrol" then
+    -- The place the player is at, and the station nearest it to mend at.
+    local me = state.balls[ship.id]
+    local base = nearestStation(state, me)
+    for _, each in guards(state, wing) do
+      each.order, each.target = "patrol", 0
+      each.post, each.base = me.grid, if base then base.id else 0
+    end
+    table.insert(events, { kind = "FleetOrdered", what = "patrol", target = me.grid })
   elseif kind == "FleetOrder" and command.what == "haul" then
     -- From the station their ship is docked at, to the one named.
     wing.order, wing.target = "haul", 0
@@ -663,6 +746,20 @@ local function carry(state: State.State, wing: State.Wingman, ship: State.Ship, 
   end
 end
 
+-- Whether a pilot has a guard with them: another hired pilot set to
+-- guard them, whose ship is on the grid theirs is on.
+local function guarded(state: State.State, wing: State.Wingman, me: State.Ball): boolean
+  for _, id in state.fleetIds do
+    local other = state.fleet[id]
+    local ball = state.balls[other.ship]
+    if other.order == "guard" and other.ward == wing.id and ball and ball.system == me.system and ball.grid == me.grid
+      and me.grid ~= 0 then
+      return true
+    end
+  end
+  return false
+end
+
 -- What a pilot set to mine does: to the belt, a rock after another
 -- until the hold is full, in to the station with it, and out again.
 -- Somebody after the fleet at the belt sends them in early.
@@ -702,11 +799,94 @@ local function work(state: State.State, wing: State.Wingman, ship: State.Ship, e
     return
   end
 
-  -- At the belt: somebody after the fleet sends them in, and so does a
-  -- full hold or a belt with nothing left (Tactical/Digger).
-  if Pirates.Hunting(state, me) ~= 0 or not Digger.Work(state, me, post, events) then
+  -- At the belt: somebody after the fleet sends them in (unless they
+  -- have a guard there to see to it), and so does a full hold or a belt
+  -- with nothing left (Tactical/Digger).
+  local hunted = Pirates.Hunting(state, me) ~= 0 and not guarded(state, wing, me)
+  if hunted or not Digger.Work(state, me, post, events) then
     me.vitals.locks = {}
     give(state, { kind = "Dock", actor = ship.id, target = base.id }, events)
+  end
+end
+
+-- How much of its armour and hull a patrol's ship can lose before its
+-- pilot takes it in to be mended.
+Fleet.RETIRE = 0.4
+
+-- What a pilot set to patrol does: to their post, and there whatever
+-- pirates come are fought, the nearest first. Badly hurt, in to the
+-- nearest station; mended there, for what it costs, and out again.
+local function patrol(state: State.State, wing: State.Wingman, ship: State.Ship, events: { Event })
+  local post = Space.Object(state, wing.post)
+  local site = state.sites[wing.post]
+  if post == nil or (site ~= nil and site.gone) then
+    -- (the place is no more: back to the player)
+    wing.order = "follow"
+    return
+  end
+  local me = state.balls[ship.id]
+  if me == nil then
+    -- Docked: mended, if it can be paid for (if not, they wait until it can), and out.
+    if ship.armorDamage + ship.hullDamage > 0 then
+      local cost = Aftermath.RepairCost(state, ship)
+      if cost > state.wallet then
+        return
+      end
+      Wallet.Pay(state, -cost, "repairs", events)
+      ship.armorDamage, ship.hullDamage = 0, 0
+      table.insert(events, { kind = "ShipRepaired", ship = ship.id })
+    end
+    give(state, { kind = "Undock", actor = ship.id }, events)
+    return
+  end
+  if me.intent and me.intent.kind == "dock" then
+    return
+  end
+  local vitals = me.vitals
+  if vitals.armor + vitals.hull < Fleet.RETIRE * (vitals.armorMax + vitals.hullMax) and not vitals.scrambled then
+    local station = nearestStation(state, me)
+    if station then
+      me.vitals.locks = {}
+      give(state, { kind = "Dock", actor = ship.id, target = station.id }, events)
+      table.insert(events, { kind = "PatrolRetired", pilot = wing.id, name = wing.name, station = station.id })
+      return
+    end
+  end
+  local system = Space.SystemOf(state, post.id)
+  if me.system ~= system then
+    travel(state, me, system, events)
+    return
+  elseif me.grid ~= post.id and not vitals.scrambled then
+    if me.warp == nil and not give(state, { kind = "WarpTo", actor = ship.id, target = post.id, range = 0 }, events)
+      and not (me.mode == "approach" and me.target == post.id) then
+      give(state, { kind = "Approach", actor = ship.id, target = post.id, range = 0 }, events)
+    end
+    return
+  end
+  -- At the post: the nearest pirate there is, if there is one.
+  local prey: State.Ball?, least = nil, math.huge
+  for _, id in state.pilotIds do
+    local other = state.balls[id]
+    if other and state.ships[id].owner == "pirates" and other.system == me.system and other.grid == me.grid then
+      local far = Space.Distance(other :: any, me :: any)
+      if far < least then
+        prey, least = other, far
+      end
+    end
+  end
+  mend(state, me, prey ~= nil, events)
+  local mending = Mend.Tend(state, me, side(state), events)
+  if prey then
+    fight(state, me, prey, events)
+  else
+    for at = #me.vitals.locks, 1, -1 do
+      if not mending[me.vitals.locks[at].target] then
+        table.remove(me.vitals.locks, at)
+      end
+    end
+    if not (me.mode == "orbit" and me.target == post.id) then
+      give(state, { kind = "Orbit", actor = ship.id, target = post.id, range = 5000 }, events)
+    end
   end
 end
 
@@ -726,6 +906,9 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
   elseif wing.order == "haul" then
     carry(state, wing, ship, events)
     return
+  elseif wing.order == "patrol" then
+    patrol(state, wing, ship, events)
+    return
   elseif wing.order == "stay" then
     -- Dock at the nearest station, and wait.
     if me and not (me.intent and me.intent.kind == "dock") then
@@ -739,6 +922,20 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
     return
   end
 
+  -- One set to guard another pilot goes where that one goes, as the
+  -- rest go where the player goes: from here on 'mine' and 'lead' are
+  -- that pilot's ship. (If that pilot or their ship is no more, it is
+  -- the player again.)
+  if wing.order == "guard" then
+    local ward = state.fleet[wing.ward]
+    local theirs = if ward then state.ships[ward.ship] else nil
+    if theirs then
+      mine, lead = theirs, state.balls[theirs.id]
+    else
+      wing.order, wing.ward = "follow", 0
+    end
+  end
+
   if me == nil then
     -- Docked: out when the player is out, or is somewhere else.
     if lead ~= nil or mine.docked ~= ship.docked then
@@ -749,7 +946,9 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
   mend(state, me, me.vitals.scrambled or wing.target ~= 0, events)
 
   -- A pilot who is held where they are fights whoever is doing it.
-  local held = me.vitals.scrambled
+  -- (and one set to guard stands and fights whoever is after anybody
+  -- of the pilot's where they are, and catches their charge up after)
+  local held = me.vitals.scrambled or (wing.order == "guard" and me.grid ~= 0 and Pirates.Hunting(state, me) ~= 0)
   local leadSystem = if lead then lead.system else Space.SystemOf(state, mine.docked)
   local together = lead ~= nil and lead.system == me.system and lead.grid ~= 0 and lead.grid == me.grid
   if not held then
@@ -842,6 +1041,18 @@ function Fleet.Step(state: State.State, events: { Event })
       wing.ship, wing.target = 0, 0
     elseif ship then
       fly(state, wing, ship, place, events)
+      -- Somebody after them, with the player somewhere else: they say
+      -- so, once for as long as it goes on.
+      local ball = state.balls[ship.id]
+      local lead = state.balls[state.player.ship]
+      local alone = ball ~= nil and not (lead ~= nil and lead.system == ball.system and lead.grid == ball.grid)
+      local hunted = ball ~= nil and alone and ball.grid ~= 0 and Pirates.Hunting(state, ball) ~= 0
+      if ball and hunted and not wing.alarm then
+        local at = Space.Object(state, ball.grid)
+        table.insert(events, { kind = "FleetAttacked", pilot = wing.id, name = wing.name, grid = ball.grid,
+          where = if at then at.name else state.galaxy.systems[ball.system].name })
+      end
+      wing.alarm = hunted
     end
   end
 end

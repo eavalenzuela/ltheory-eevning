@@ -82,7 +82,7 @@ suite:Case("an implant is plugged in at a station, into its own place, by a pilo
   t.eq(#Items.Fit(state, second.id, nil), 2, "a ship the pilot could fly themselves should have their implants")
   second.pilot = 99
   state.fleet[99] = { id = 99, name = "Somebody", skill = 1, wage = 1, paid = 0, ship = second.id, order = "stay", target = 0, post = 0, base = 0, hauled = 0, experience = 0,
-    cargo = "", sell = false, earned = 0 }
+    cargo = "", sell = false, earned = 0, ward = 0, alarm = false }
   t.eq(#Items.Fit(state, second.id, nil), 0, "a hired pilot's ship should have none of the player's implants")
 end)
 

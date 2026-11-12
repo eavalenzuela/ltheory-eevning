@@ -747,8 +747,8 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       -- their ships are holding up. Over the drones' row.
       local fleet = Core.Query.Fleet(game)
       if #fleet > 0 then
-        local fy = bottom - 180 - 22 * #fleet
-        Im.Panel(left + 24, fy, 440, 34 + 22 * #fleet)
+        local fy = bottom - 210 - 22 * #fleet
+        Im.Panel(left + 24, fy, 440, 64 + 22 * #fleet)
         -- An order is for everybody, or for the one pilot whose row has
         -- been picked out by a click (and a click again lets them go).
         local one: Core.FleetRow? = nil
@@ -789,8 +789,24 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         if Im.Button("Mine here", left + 368, fy + 4, 88, 26, (Session.CanDo(session, mine)), "Fleet:mine") then
           Session.Do(session, mine)
         end
+        -- A second row, of the orders for when the pilot is not there:
+        -- those with a weapon hold this place; and the one picked out
+        -- goes with another pilot, whose ship is what is selected.
+        local hold: State.Command = { kind = "FleetOrder", actor = 0, what = "patrol", pilot = only }
+        if Im.Button("Patrol here", left + 150, fy + 34, 104, 26, (Session.CanDo(session, hold)), "Fleet:patrol") then
+          Session.Do(session, hold)
+        end
+        local guard: State.Command = { kind = "FleetOrder", actor = 0, what = "guard", pilot = only, target = session.selected }
+        local canGuard, whyNotGuard = Session.CanDo(session, guard)
+        if Im.Button("Guard", left + 258, fy + 34, 70, 26, canGuard, "Fleet:guard") then
+          Session.Do(session, guard)
+        end
+        if one and not canGuard then
+          Im.Text(if string.sub(tostring(whyNotGuard), 1, 4) == "pick" then "select another pilot's ship" else "", left + 334, fy + 41, 11,
+            Im.DIM)
+        end
         for index, row in fleet do
-          local ry = fy + 34 + (index - 1) * 22
+          local ry = fy + 64 + (index - 1) * 22
           local hull = Ships.byId[row.hull]
           local _, clicked = Im.Row(left + 28, ry - 2, 432, 21, row.id == fleetPicked, `Fleet:pick:{index}`)
           if clicked then
@@ -815,9 +831,17 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             -- (one set to mine is where they should be, wherever that is)
             if row.order == "mine" or row.order == "haul" then
               where = `{row.doing}, {row.hauled} units in`
+            elseif row.order == "patrol" then
+              where = `{row.doing}: {row.post}`
+            elseif row.order == "guard" then
+              where = `{row.doing} {row.ward}`
+            end
+            -- (one who is gone for with the pilot somewhere else says so)
+            if row.hunted then
+              where = `under attack, {row.where}`
             end
             Im.TextRight(if #where > 34 then string.sub(where, 1, 32) .. ".." else where, left + 456, ry, 12,
-              if here or row.order ~= "follow" or row.ship == 0 then Im.DIM else Im.WARN)
+              if row.hunted then Im.WARN elseif here or row.order ~= "follow" or row.ship == 0 then Im.DIM else Im.WARN)
           end
         end
       end

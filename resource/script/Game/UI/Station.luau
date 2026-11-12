@@ -1167,8 +1167,8 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
   for index, text in { "A hired pilot flies a ship of yours and goes where you go:", "out when you undock, to warp and through gates after you,",
     "into a fight beside you. Every skill counts as their grade.", "Grade 1 flies frigates and haulers, 2 destroyers and barges,",
     "3 cruisers, 4 battleships. You command one for each level", "of Leadership. A ship lost is insured; its pilot is not lost.",
-    "One with a mining laser can be set to mine a belt (Mine here,", "in space); one docked here to haul what is in your hangar to",
-    "another station; and any to sell what they bring in. They", "learn by all of it, and go up a grade, to 5 at most." } do
+    "In space one can be set to mine a belt, to hold a place against", "pirates (Patrol here) or to go with another pilot (Guard);",
+    "one docked here to haul what is in your hangar elsewhere; any", "to sell what they bring in. They learn by it, to grade 5." } do
     Im.Text(text, left, line + 6 + index * 17, 12, Im.DIM)
   end
 
@@ -1207,13 +1207,23 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
       elseif row.order == "haul" then
         where = row.doing
         note = `Hauling {CARGO[row.cargo] or row.cargo} to {row.to}: {row.hauled} units`
+      elseif row.order == "patrol" then
+        where = `{row.doing}: {row.post}`
+      elseif row.order == "guard" then
+        where = `{row.doing} {row.ward}` .. (if here then ", docked here" else `, {row.where}`)
       elseif row.order == "stay" then
         where ..= ", told to stay"
       end
       if row.earned > 0 then
         note = if note ~= "" then `{note}, sold for {Format.Credits(row.earned)}` else `What they brought in has sold for {Format.Credits(row.earned)}`
       end
-      Im.Text(shorten(`{row.shipName} ({Ships.byId[row.hull].name}), {where}`, 58), right + 24, line + 22, 12, Im.DIM)
+      -- (one who is gone for with the pilot somewhere else: that first, and plainly)
+      if row.hunted then
+        Im.Text(shorten(`{row.shipName}: UNDER ATTACK in {row.where}` .. (if row.post ~= "" then `, at {row.post}` else ""), 58),
+          right + 24, line + 22, 12, Im.WARN)
+      else
+        Im.Text(shorten(`{row.shipName} ({Ships.byId[row.hull].name}), {where}`, 58), right + 24, line + 22, 12, Im.DIM)
+      end
     else
       Im.Text("No ship: give them one of yours that is docked here.", right, line + 22, 12, Im.WARN)
     end

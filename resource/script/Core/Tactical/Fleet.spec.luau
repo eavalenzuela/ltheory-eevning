@@ -875,6 +875,267 @@ suite:Case("a mining pilot told to sell sells the ore they bring in, where the s
   t.eq(oreIn(game, base, "hangar"), before, "ore that is sold should not be in the hangar too")
 end)
 
+-- A game with money in the wallet, room for two hired pilots, and a
+-- warship in the hangar: a destroyer with its guns and racks filled,
+-- plated, flown by a hired pilot of grade 3. Nobody comes for anybody
+-- until the test says (state.peaceful).
+local function warship(): (Core.Game, State.Wingman, State.Ship)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  state.wallet = 10000000
+  state.skills.leadership = 2
+  local ship = Space.NewShip(state, "destroyer.halberd", "Escort", "player", state.player.home)
+  for _ = 1, Ships.byId[ship.type].turrets do
+    Items.Equip(state, ship.id, "autocannon.small", "ammo.fusion")
+  end
+  for _ = 1, Ships.byId[ship.type].launchers do
+    Items.Equip(state, ship.id, "launcher.light", "missile.light.kinetic")
+  end
+  Items.Equip(state, ship.id, "armor.plate.200mm", nil)
+  Items.Equip(state, ship.id, "armor.repairer.small", nil)
+  Items.Add(state, "ammo.fusion", 4000, ship.id, "cargo")
+  Items.Add(state, "missile.light.kinetic", 600, ship.id, "cargo")
+  return game, hired(game, ship, 3), ship
+end
+
+-- Take the player and whoever follows them to a place, and wait until
+-- the ships named are there too.
+local function everybodyTo(game: Core.Game, place: number, ships: { State.Ship })
+  local state = game.state
+  if state.balls[state.player.ship] == nil then
+    assert(submit(game, { kind = "Undock", actor = 0 }))
+    steps(game, 5)
+  end
+  assert(submit(game, { kind = "WarpTo", actor = 0, target = place }))
+  assert(waitFor(game, 900, function()
+    local all = state.balls[state.player.ship].grid == place
+    for _, ship in ships do
+      local ball = state.balls[ship.id]
+      all = all and ball ~= nil and ball.grid == place
+    end
+    return all
+  end), "they did not all get there")
+end
+
+-- Send the player home, and wait until they are in.
+local function home(game: Core.Game)
+  local state = game.state
+  assert(submit(game, { kind = "Dock", actor = 0, target = state.player.home }))
+  assert(waitFor(game, 900, function()
+    return state.ships[state.player.ship].docked == state.player.home
+  end), "the player did not get home")
+end
+
+-- The pirates on a grid.
+local function pirates(game: Core.Game, grid: number): { number }
+  local found: { number } = {}
+  for _, id in game.state.pilotIds do
+    local ball = game.state.balls[id]
+    if ball and ball.grid == grid and game.state.ships[id].owner == "pirates" then
+      table.insert(found, id)
+    end
+  end
+  return found
+end
+
+suite:Case("a pilot set to patrol holds a place; pirates come for them there with the player away, and half the bounty is the player's", function(t)
+  local game, wing, ship = warship()
+  local state = game.state
+  local rocks = belt(game, 1)
+  -- Only where there is a place to hold, from space, and only pilots with a weapon.
+  t.eq(refused(game, { kind = "FleetOrder", actor = 0, what = "patrol" }), "docked")
+  everybodyTo(game, rocks, { ship })
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "patrol" })))
+  t.eq({ wing.order, wing.post } :: { any }, { "patrol", rocks } :: { any })
+  t.ok((Space.Object(state, wing.base) :: System.Object).kind == "station")
+  local row = Core.Query.Fleet(game)[1]
+  t.eq({ row.doing, row.post, row.hunted } :: { any }, { "patrolling", (Space.Object(state, rocks) :: System.Object).name, false } :: { any })
+  -- The player goes home. The pilot stays at their post.
+  home(game)
+  steps(game, 60)
+  local theirs = assert(state.balls[ship.id], "the patrol went in with the player")
+  t.eq(theirs.grid, rocks)
+  -- Pirates come, as they would for the player: and are fought.
+  state.peaceful = false
+  Core.TakeEvents(game)
+  local arrived, attacked = false, 0
+  t.ok(waitFor(game, 60, function()
+    for _, event in Core.TakeEvents(game) do
+      arrived = arrived or (event.kind == "PiratesArrived" and event.away == true and event.grid == rocks)
+      attacked += if event.kind == "FleetAttacked" and event.pilot == wing.id then 1 else 0
+    end
+    return arrived and attacked > 0
+  end), "nobody came for a pilot who was out on their own")
+  local pack = pirates(game, rocks)
+  t.ok(#pack >= 1)
+  local bounties = 0
+  for _, id in pack do
+    bounties += state.pilots[id].bounty
+  end
+  t.eq(Core.Query.Fleet(game)[1].hunted, true)
+  local wallet, learned = state.wallet, wing.experience
+  t.ok(waitFor(game, 1500, function()
+    return #pirates(game, rocks) == 0
+  end), "the patrol did not see the pirates off")
+  for _, event in Core.TakeEvents(game) do
+    attacked += if event.kind == "FleetAttacked" then 1 else 0
+  end
+  t.eq(attacked, 1, "they should say they are attacked once")
+  t.ok(state.balls[ship.id] ~= nil, "the patrol's ship was lost to a secure belt's pirates")
+  -- Half of each bounty is the player's (they were not there), and the pilot has learned from it.
+  local paid = 0
+  for _, id in pack do
+    paid += 0
+  end
+  t.eq(state.wallet - wallet, bounties // 2 + paid)
+  t.ok(wing.experience > learned)
+  -- The place is left alone twice as long as it would be with the player there.
+  steps(game, 1300)
+  t.eq(#pirates(game, rocks), 0, "pirates came back for a hired pilot as soon as they would for the player")
+  t.ok(waitFor(game, 1300, function()
+    return #pirates(game, rocks) > 0
+  end), "pirates did not come back at all")
+end)
+
+suite:Case("a patrol's pilot badly hurt goes in to the nearest station, is mended for what it costs, and goes out again", function(t)
+  local game, wing, ship = warship()
+  local state = game.state
+  local rocks = belt(game, 1)
+  everybodyTo(game, rocks, { ship })
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "patrol", pilot = wing.id })))
+  -- Most of its armour and hull gone.
+  local ball = state.balls[ship.id]
+  ball.vitals.armor, ball.vitals.hull = 0.1 * ball.vitals.armorMax, 0.5 * ball.vitals.hullMax
+  Core.TakeEvents(game)
+  steps(game, 2)
+  local retired = false
+  for _, event in Core.TakeEvents(game) do
+    retired = retired or (event.kind == "PatrolRetired" and event.pilot == wing.id)
+  end
+  t.ok(retired, "nobody said the patrol was going in")
+  t.eq(Core.Query.Fleet(game)[1].doing, "going in to mend")
+  -- With nothing to pay for it, they wait in.
+  state.wallet = 0
+  t.ok(waitFor(game, 900, function()
+    return ship.docked ~= 0
+  end), "the patrol did not get in")
+  t.ok(ship.armorDamage > 0)
+  steps(game, 30)
+  t.eq({ ship.docked ~= 0, Core.Query.Fleet(game)[1].doing } :: { any }, { true, "mending" } :: { any })
+  -- Paid for, they are mended and back at their post.
+  state.wallet = 1000000
+  local cost = 0
+  Core.TakeEvents(game)
+  t.ok(waitFor(game, 900, function()
+    for _, event in Core.TakeEvents(game) do
+      if event.kind == "WalletChanged" and event.reason == "repairs" then
+        cost -= event.amount
+      end
+    end
+    local out = state.balls[ship.id]
+    return out ~= nil and out.grid == rocks
+  end), "the patrol did not go back to its post")
+  t.ok(cost > 0, "the mending should have cost something")
+  t.eq({ ship.armorDamage, ship.hullDamage, wing.order } :: { any }, { 0, 0, "patrol" } :: { any })
+  -- Called back, they come.
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "follow", pilot = wing.id })))
+  t.eq(wing.order, "follow")
+end)
+
+suite:Case("a pilot set to guard another goes where that one goes, and fights whoever comes for them", function(t)
+  local game, guard, escort = warship()
+  local state = game.state
+  local digger = Space.NewShip(state, "frigate.prospector", "Digger", "player", state.player.home)
+  Items.Equip(state, digger.id, "miner.small", nil)
+  Items.Equip(state, digger.id, "miner.small", nil)
+  local miner = hired(game, digger, 2)
+  -- One pilot, and the ship of another: not their own, and not one who is guarding them.
+  t.eq(refused(game, { kind = "FleetOrder", actor = 0, what = "guard", target = digger.id }), "that is said to one pilot")
+  t.eq(refused(game, { kind = "FleetOrder", actor = 0, what = "guard", pilot = guard.id, target = state.player.ship }),
+    "pick the ship of another of your pilots for them to guard")
+  t.eq(refused(game, { kind = "FleetOrder", actor = 0, what = "guard", pilot = guard.id, target = escort.id }), "nobody guards themselves")
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "guard", pilot = guard.id, target = digger.id })))
+  t.eq({ guard.order, guard.ward } :: { any }, { "guard", miner.id } :: { any })
+  t.eq(refused(game, { kind = "FleetOrder", actor = 0, what = "guard", pilot = miner.id, target = escort.id }),
+    `{guard.name} is guarding {miner.name}`)
+  local row = Core.Query.Fleet(game)[1]
+  t.eq({ row.doing, row.ward } :: { any }, { "guarding", miner.name } :: { any })
+
+  -- The miner is set to work at a belt, and the player goes home. The guard stays with the miner.
+  local rocks = belt(game, 1)
+  everybodyTo(game, rocks, { escort, digger })
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "mine", pilot = miner.id })))
+  home(game)
+  steps(game, 60)
+  t.eq({ assert(state.balls[escort.id]).grid, assert(state.balls[digger.id]).grid }, { rocks, rocks })
+  -- Pirates come. The miner, with a guard there, keeps at it; the guard fights, and sees them off.
+  state.peaceful = false
+  t.ok(waitFor(game, 60, function()
+    return #pirates(game, rocks) > 0
+  end), "nobody came for them")
+  steps(game, 20)
+  local working = state.balls[digger.id]
+  t.ok(working ~= nil and not (working.intent and working.intent.kind == "dock"), "a guarded miner ran for it")
+  t.ok(waitFor(game, 1500, function()
+    return #pirates(game, rocks) == 0
+  end), "the guard did not see the pirates off")
+  t.ok(state.balls[escort.id] ~= nil and state.ships[digger.id] ~= nil, "one of them was lost")
+  state.peaceful = true
+  -- When the miner takes the ore in, the guard goes with them to the station, and back out to the belt with them.
+  local base = miner.base
+  local delivered, escorted = false, false
+  Core.TakeEvents(game)
+  t.ok(waitFor(game, 6000, function()
+    for _, event in Core.TakeEvents(game) do
+      delivered = delivered or (event.kind == "OreDelivered" and event.pilot == miner.id)
+    end
+    local with = state.balls[escort.id]
+    escorted = escorted or escort.docked == base or (with ~= nil and with.grid == base)
+    return delivered and escorted
+  end), "the guard did not go in with the miner")
+  t.ok(waitFor(game, 1500, function()
+    local a, b = state.balls[digger.id], state.balls[escort.id]
+    return a ~= nil and b ~= nil and a.grid == rocks and b.grid == rocks
+  end), "the guard did not go back out with the miner")
+  -- The one they guard dismissed, a guard is the player's again.
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "stay", pilot = miner.id })))
+  t.ok(waitFor(game, 900, function()
+    return digger.docked ~= 0
+  end))
+  -- (the guard goes in where the one they guard is)
+  t.ok(waitFor(game, 900, function()
+    return escort.docked == digger.docked
+  end), "the guard did not dock where the miner did")
+  t.ok((submit(game, { kind = "DismissPilot", actor = 0, pilot = miner.id })))
+  steps(game, 3)
+  t.eq({ guard.order, guard.ward } :: { any }, { "follow", 0 } :: { any })
+end)
+
+suite:Case("a miner out alone with nobody to guard them goes in when pirates come, and says so", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  state.wallet = 10000000
+  local digger = Space.NewShip(state, "frigate.prospector", "Digger", "player", state.player.home)
+  Items.Equip(state, digger.id, "miner.small", nil)
+  Items.Equip(state, digger.id, "miner.small", nil)
+  local miner = hired(game, digger, 2)
+  local rocks = belt(game, 1)
+  everybodyTo(game, rocks, { digger })
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "mine" })))
+  home(game)
+  state.peaceful = false
+  Core.TakeEvents(game)
+  local said, went = false, false
+  t.ok(waitFor(game, 400, function()
+    for _, event in Core.TakeEvents(game) do
+      said = said or (event.kind == "FleetAttacked" and event.pilot == miner.id)
+    end
+    local ball = state.balls[digger.id]
+    went = went or digger.docked ~= 0 or (ball ~= nil and ball.intent ~= nil and ball.intent.kind == "dock")
+    return said and went
+  end), "a miner gone for should say so and go in")
+end)
+
 suite:Case("a fleet is in the save, and an older save has none", function(t)
   local game, second = docked()
   hired(game, second)
@@ -894,6 +1155,7 @@ suite:Case("a fleet is in the save, and an older save has none", function(t)
   for _, wing in before.state.fleet do
     wing.post, wing.base, wing.hauled, wing.experience = nil, nil, nil, nil
     wing.cargo, wing.sell, wing.earned = nil, nil, nil
+    wing.ward, wing.alarm = nil, nil
   end
   local earlier, earlierLength = Codec.Encode(before)
   t.eq(Core.Hash(Core.Load(earlier, earlierLength)), Core.Hash(game))

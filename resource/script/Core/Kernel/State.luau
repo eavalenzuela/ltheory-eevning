@@ -285,12 +285,18 @@ export type Bookmark = { id: number, name: string, system: number, x: number, y:
 -- ('hauled' counts those units too). One who 'sell's sells what they
 -- bring in, mined or carried, where the station has a market, and
 -- 'earned' is what that has made.
+-- One set to "patrol" holds the place 'post', and goes in to the
+-- nearest station to mend when badly hurt. One set to "guard" goes
+-- where the hired pilot 'ward' goes (by their id), as the rest go where
+-- the player goes. 'alarm' is set while somebody is after them with the
+-- player elsewhere: it is what has been said of already.
 export type Wingman = {
   id: number, name: string, skill: number, wage: number, paid: number,
   ship: number, order: string, target: number,
   post: number, base: number, hauled: number,
   experience: number,
   cargo: string, sell: boolean, earned: number,
+  ward: number, alarm: boolean,
 }
 
 -- A place that is on nobody's chart (Tactical/Sites): 'id' is the place

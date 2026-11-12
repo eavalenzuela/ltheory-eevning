@@ -72,7 +72,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 39
+Core.SAVE_VERSION = 40
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -289,6 +289,17 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       site.depth = site.depth or 0
       if site.led == nil then
         site.led = false
+      end
+    end
+  end,
+  -- 40: a hired pilot can be set to patrol a place or to guard another
+  -- pilot, and says when they are attacked with the player elsewhere.
+  -- The pilots of a save from before guard nobody.
+  [39] = function(state: any)
+    for _, wing in state.fleet do
+      wing.ward = wing.ward or 0
+      if wing.alarm == nil then
+        wing.alarm = false
       end
     end
   end,
@@ -1154,9 +1165,14 @@ export type FleetRow = {
   where: string,      -- "no ship", "docked at ...", "with you", or the system it is in
   -- "no ship", "following", "fighting", "waiting"; for a pilot set to
   -- mine: "mining", "taking ore in", "unloading", "going to the belt";
-  -- and for one set to haul: "loading", "waiting for cargo", "carrying",
-  -- "unloading", "going back for more"
+  -- for one set to haul: "loading", "waiting for cargo", "carrying",
+  -- "unloading", "going back for more"; for one set to patrol:
+  -- "patrolling", "fighting", "going in to mend", "mending", "going to
+  -- their post"; and for one set to guard: "guarding", "fighting"
   doing: string,
+  post: string,       -- for one set to patrol: the name of the place they hold
+  ward: string,       -- for one set to guard: the name of the pilot they go with
+  hunted: boolean,    -- somebody is after them, with the player somewhere else
   hauled: number,     -- units a pilot set to mine or to haul has brought in
   cargo: string,      -- for one set to haul: what kind they carry,
   from: string,       -- the name of the station it is carried from,
@@ -1181,6 +1197,7 @@ function Query.Fleet(game: Game): { FleetRow }
       ship = 0, shipName = "", hull = "", where = "no ship", near = false, distance = 0, shield = 1, armor = 1, structure = 1,
       doing = "no ship", hauled = wing.hauled, experience = wing.experience,
       cargo = wing.cargo, from = "", to = "", sells = wing.sell, earned = wing.earned,
+      post = "", ward = "", hunted = wing.alarm,
       needed = if wing.skill >= Fleet.BEST then 0 else Fleet.Needed(wing.skill),
     }
     if ship then
@@ -1212,6 +1229,16 @@ function Query.Fleet(game: Game): { FleetRow }
         row.doing = if ball then (if laden then "carrying" else "going back for more")
           elseif ship.docked == wing.base then "unloading"
           elseif laden then "loading" else "waiting for cargo"
+      elseif wing.order == "patrol" then
+        local post = Space.Object(state, wing.post)
+        row.post = if post then post.name else "?"
+        row.doing = if ball == nil then "mending" elseif ball.intent and ball.intent.kind == "dock" then "going in to mend"
+          elseif ball.grid ~= wing.post then "going to their post"
+          elseif #ball.vitals.locks > 0 then "fighting" else "patrolling"
+      elseif wing.order == "guard" then
+        local ward = state.fleet[wing.ward]
+        row.ward = if ward then ward.name else "?"
+        row.doing = if ball and #ball.vitals.locks > 0 then "fighting" else "guarding"
       elseif wing.order == "stay" then
         row.doing = "waiting"
       else

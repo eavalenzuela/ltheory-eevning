@@ -1171,14 +1171,15 @@ end
 -- What the nth hired pilot is doing ("following", "mining", "taking
 -- ore in", "carrying" and so on: Core.Query.Fleet), the units they have
 -- brought in, mined or hauled, what they have learned toward their next
--- grade, their grade, what selling what they bring in has made, and
--- whether they are told to sell it. "" and 0 for nobody.
-function Debug.Crew(n: number): (string, number, number, number, number, boolean)
+-- grade, their grade, what selling what they bring in has made,
+-- whether they are told to sell it, and whether somebody is after them
+-- with the player elsewhere. "" and 0 for nobody.
+function Debug.Crew(n: number): (string, number, number, number, number, boolean, boolean)
   local row = Core.Query.Fleet(session.game)[n]
   if row == nil then
-    return "", 0, 0, 0, 0, false
+    return "", 0, 0, 0, 0, false, false
   end
-  return row.doing, row.hauled, row.experience, row.skill, row.earned, row.sells
+  return row.doing, row.hauled, row.experience, row.skill, row.earned, row.sells, row.hunted
 end
 
 -- The hired pilots: how many there are, how many are in space on the

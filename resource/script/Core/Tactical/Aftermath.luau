@@ -36,6 +36,9 @@ local DROP_CHANCE = 0.5
 -- custom make of it (Data/Modules), where there is one.
 local CUSTOM_CHANCE = 0.2
 Aftermath.CUSTOM_CHANCE = CUSTOM_CHANCE
+-- The share of a bounty the pilot is paid for a pirate their hired
+-- pilots destroyed with the pilot somewhere else: the rest is theirs.
+Aftermath.AWAY = 0.5
 local INSURANCE = 0.4        -- of the hull's base price, paid without asking
 local STARTER = "frigate.courier"
 
@@ -127,7 +130,12 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     end
   end
   if ship.owner == "pirates" and by == state.player.ship then
-    pay(state, if pilot then pilot.bounty else math.floor(hull.basePrice * 0.2), "bounty", events)
+    -- (with the pilot somewhere else it was their hired pilots' doing,
+    -- and half of the bounty is theirs)
+    local full = if pilot then pilot.bounty else math.floor(hull.basePrice * 0.2)
+    local mine = state.balls[state.player.ship]
+    local there = wasPlayer or (mine ~= nil and mine.system == ball.system and mine.grid == ball.grid)
+    pay(state, if there then full else math.floor(full * Aftermath.AWAY), "bounty", events)
     -- (and it counts toward any bounty job the pilot has for this system)
     for _, id in state.missionIds do
       local mission = state.missions[id]

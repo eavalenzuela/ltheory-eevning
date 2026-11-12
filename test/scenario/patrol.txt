@@ -1,0 +1,64 @@
+# A hired pilot left to patrol a belt, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/patrol.txt
+#
+# Money and a destroyer are given, a pilot is hired and given it, and the
+# two go out to a belt, with nobody coming for anybody yet. There the
+# pilot is set to patrol, and the player goes home and sits docked.
+# Then pirates are let loose: they come for the pilot at the belt, who
+# says so, fights them and sees them off, and half of the bounty is in
+# the player's wallet without the player having left the station.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Peaceful(true)
+lua GameDebug.Grant(3000000)
+lua assert(GameDebug.Spare('destroyer.halberd'), 'no destroyer')
+frames 3
+until GameDebug.Press('Crew')
+until GameDebug.Tab() == 'Crew'
+until GameDebug.Press('Hire:1')
+until GameDebug.Fleet() == 1
+until GameDebug.Press('Give:1:1')
+until select(3, GameDebug.Fleet()) == 1
+
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 5
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+until select(2, GameDebug.Fleet()) == 1
+lua GameDebug.TimeScale(1)
+frames 5
+
+# Set to hold the belt. (Nobody else is hired, so there is nobody to guard.)
+until GameDebug.Press('Fleet:pick:1')
+frames 3
+lua assert(not GameDebug.CanPress('Fleet:guard'), 'there is no other pilot to guard')
+until GameDebug.Press('Fleet:patrol')
+until GameDebug.Crew(1) == 'patrolling'
+
+# The player goes in. The pilot stays out.
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('Dock', 'home'), 'docking at home was refused')
+until GameDebug.Docked()
+lua assert(GameDebug.Crew(1) == 'patrolling', 'the patrol should stay at its post')
+lua assert(select(3, GameDebug.Fleet()) == 0, 'the patrol should not have come in')
+
+# Pirates are let loose: they come for the pilot, who says so and fights.
+lua _G.before = GameDebug.Wallet()
+lua GameDebug.Peaceful(false)
+patience 120
+until select(7, GameDebug.Crew(1))
+lua assert(GameDebug.Docked(), 'the player is still in')
+patience 600
+until GameDebug.Wallet() > _G.before
+lua print('patrol: bounty paid to the docked player:', GameDebug.Wallet() - _G.before)
+lua assert((GameDebug.Wallet() - _G.before) % 3000 == 0, 'half of a scout\'s bounty at a time')
+lua assert(GameDebug.Crew(1) ~= 'no ship', 'the patrol should have come through it')
+lua GameDebug.TimeScale(1)
+
+echo patrol scenario passed
+quit

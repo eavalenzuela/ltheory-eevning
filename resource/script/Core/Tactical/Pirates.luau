@@ -189,13 +189,14 @@ local function pirateOnGrid(state: State.State, system: number, grid: number): b
   return false
 end
 
--- Bring pirates to where the player is, if the place is due some: a
--- belt anywhere, or a gate in lawless space.
-function Pirates.Populate(state: State.State, events: { Event })
-  local me = state.balls[state.player.ship]
-  if state.peaceful or me == nil or me.grid == 0 or Ships.byId[state.ships[me.id].type].class == "capsule" then
-    return
-  end
+-- How many times as long a place is left alone where it is a hired
+-- pilot who is there and not the player.
+Pirates.AWAY = 2
+
+-- Bring pirates to where a ship of the pilot's side is, if the place is
+-- due some: a belt anywhere, or a gate in lawless space. 'away': the
+-- ship is a hired pilot's, with the player somewhere else.
+local function populate(state: State.State, me: State.Ball, away: boolean, events: { Event })
   local site = Space.Object(state, me.grid)
   if site == nil then
     return
@@ -219,7 +220,8 @@ function Pirates.Populate(state: State.State, events: { Event })
     return
   end
   local last = state.spawned[site.id]
-  if (last and state.tick - last < RESPAWN) or pirateOnGrid(state, me.system, site.id) then
+  local wait = if away then RESPAWN * Pirates.AWAY else RESPAWN
+  if (last and state.tick - last < wait) or pirateOnGrid(state, me.system, site.id) then
     return
   end
   local rng = Rng.For(state.historySeed, state.tick, site.id, 41)
@@ -246,7 +248,28 @@ function Pirates.Populate(state: State.State, events: { Event })
       site.x + out * math.cos(angle), site.y + Rng.Float(rng, -3000, 3000), site.z + out * math.sin(angle), site.id)
     table.insert(events, { kind = "BallAdded", ball = ball.id })
   end
-  table.insert(events, { kind = "PiratesArrived", grid = site.id, count = #pack })
+  table.insert(events, { kind = "PiratesArrived", grid = site.id, count = #pack, away = away })
+end
+
+-- Once a tick: pirates come to where the player is, and to where a
+-- hired pilot of theirs is out without them (half as often: nobody
+-- hunts a hired hand as they hunt the one who pays). The fight there is
+-- fought as any is, whoever is watching.
+function Pirates.Populate(state: State.State, events: { Event })
+  if state.peaceful then
+    return
+  end
+  local me = state.balls[state.player.ship]
+  if me and me.grid ~= 0 and Ships.byId[state.ships[me.id].type].class ~= "capsule" then
+    populate(state, me, false, events)
+  end
+  for _, id in state.fleetIds do
+    local ball = state.balls[state.fleet[id].ship]
+    if ball and ball.grid ~= 0 and not (ball.warp and ball.warp.stage == "warp")
+      and (me == nil or me.system ~= ball.system or me.grid ~= ball.grid) then
+      populate(state, ball, true, events)
+    end
+  end
 end
 
 local function give(state: State.State, command: State.Command, events: { Event }): boolean
