@@ -181,9 +181,9 @@ export type Wreck = {
 -- whether it is in the buffer yet); and where the next pick has to be:
 -- 'along' a "row" or a "column", and which 'line' of those.
 export type HackKey = { name: string, codes: { string }, done: boolean }
--- A booster at work on the pilot (Data/Boosters), and the tick it wears
--- off at.
-export type Boosted = { type: string, ends: number }
+-- A booster at work on the pilot (Data/Boosters), the tick it wears
+-- off at, and whether it sat badly: its ill effect is at work too.
+export type Boosted = { type: string, ends: number, wrong: boolean }
 
 -- ('ends': the tick a lock on a clock runs out at; 0 for one that is
 -- not on a clock, or not begun)

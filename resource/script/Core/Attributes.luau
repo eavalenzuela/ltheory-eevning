@@ -23,7 +23,8 @@ local Attributes = {}
 
 -- A module on a ship: its type and whether it is running (its 'boost'
 -- then applies).
-export type Fitted = { type: string, running: boolean }
+-- ('spared': a booster at work whose ill effect did not strike.)
+export type Fitted = { type: string, running: boolean, spared: boolean? }
 
 -- A ship's attributes by name: "shield", "maxVelocity", "armorResonance.2", ...
 export type Stats = { [string]: number }
@@ -97,7 +98,7 @@ local function gather(fitted: { Fitted }, on: string, family: string?, levels: L
     -- at work on them: Data/Implants, Data/Boosters)
     local implant = Implants.byId[f.type]
     local passive: { Modules.Modifier } = if module then module.passive elseif implant then implant.passive
-      else Boosters.byId[f.type].passive
+      elseif f.spared then Boosters.byId[f.type].gives else Boosters.byId[f.type].passive
     for _, modifier in passive do
       if modifier.on == on and (on == "ship" or modifier.family == family) then
         collect(pending, modifier)

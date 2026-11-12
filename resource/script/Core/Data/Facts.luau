@@ -581,12 +581,13 @@ function Facts.Of(type: string): Sheet?
   elseif Boosters.byId[type] then
     local booster = Boosters.byId[type]
     sheet.kind = "Booster"
-    sheet.note = "Taken out of the hold, or out of the hangar where the pilot is docked, it is used up and is at work for half an hour on every ship they fly. One of a kind at a time."
+    sheet.note = "Taken out of the hold, or out of the hangar where the pilot is docked, it is used up and is at work for half an hour on every ship they fly. One of a kind at a time. One time in two it sits badly, and takes something for as long as it gives."
     local does = section(sheet, "Booster")
     row(does, "Gives", booster.note)
-    row(does, "Takes", booster.cost)
+    row(does, "May take", booster.cost)
+    row(does, "Sits badly", `{whole(Boosters.WRONG * 100)} times in 100; {whole(Boosters.TOLERANCE * 100)} fewer a level of Tolerance`)
     row(does, "Kind", Boosters.KINDS[booster.kind])
-    row(does, "Lasts", seconds(Boosters.SECONDS))
+    row(does, "Lasts", `{seconds(Boosters.SECONDS)}; a fifth longer a level of Pharmacology`)
     row(does, "Made from", nameOf(booster.gas), booster.gas)
     trade(sheet, type)
   elseif Ores.gasById[type] then

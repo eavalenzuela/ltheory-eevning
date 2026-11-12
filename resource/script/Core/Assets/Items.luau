@@ -75,7 +75,7 @@ function Items.Fit(state: State.State, ship: number, running: { [number]: boolea
     end
     -- (and whatever boosters are at work on them: Data/Boosters)
     for _, boosted in state.boosters do
-      table.insert(fit, { type = boosted.type, running = false })
+      table.insert(fit, { type = boosted.type, running = false, spared = not boosted.wrong })
     end
   end
   return fit

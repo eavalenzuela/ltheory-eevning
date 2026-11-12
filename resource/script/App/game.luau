@@ -982,9 +982,9 @@ end
 -- The pilot's boosters: how many are at work, how many kinds of them
 -- are to hand (in the hold, and in the hangar where docked), and the
 -- seconds the first at work has left.
-function Debug.Boosters(): (number, number, number)
+function Debug.Boosters(): (number, number, number, boolean)
   local working, hand = Core.Query.Boosters(session.game)
-  return #working, #hand, if working[1] then working[1].left else 0
+  return #working, #hand, if working[1] then working[1].left else 0, working[1] ~= nil and working[1].wrong
 end
 
 -- An attribute of the pilot's ship as it is fitted and flown ("shield",

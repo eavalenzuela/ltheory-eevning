@@ -76,7 +76,8 @@ frames 3
 until GameDebug.Press('Booster:redline')
 until GameDebug.Boosters() == 1
 lua assert(GameDebug.Hangar('booster.redline') == 0, 'a booster taken should be used up')
-lua assert(math.abs(GameDebug.Stat('shield') - 0.9 * _G.shield) < 0.5, 'Redline should cost a tenth of the shield')
+lua _G.cost = select(4, GameDebug.Boosters()) and 0.9 or 1
+lua assert(math.abs(GameDebug.Stat('shield') - _G.cost * _G.shield) < 0.5, 'Redline should cost a tenth of the shield when it sits badly, and nothing when it does not')
 lua assert(select(3, GameDebug.Boosters()) > 1700, 'it should be at work for half an hour')
 
 # And still at work out in space.

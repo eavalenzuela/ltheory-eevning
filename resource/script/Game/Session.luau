@@ -11,6 +11,7 @@ local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local Boosters = require("@lt/Core/Data/Boosters")
 local Types = require("@lt/Core/Data/Types")
 
 local Session = {}
@@ -251,7 +252,10 @@ function Session.Notice(session: Session, event: Space.Event)
       elseif vault then `The vault has wiped itself: the key of the safeguards was not in.{late}`
       else "The hold is open with half of what was in it burnt: the key of the safeguards was not in")
   elseif kind == "BoosterTaken" then
-    Session.Say(session, `{Types.Info(event.booster).name}: at work for half an hour`)
+    local booster = Boosters.byId[event.booster]
+    local minutes = math.floor((event.seconds or Boosters.SECONDS) / 60 + 0.5)
+    Session.Say(session, `{booster.name}: at work for {minutes} minutes. `
+      .. (if event.wrong then `It sits badly: {string.lower(string.sub(booster.cost, 1, 1))}{string.sub(booster.cost, 2)}` else "It sits well: no ill effect."))
   elseif kind == "BoosterSpent" then
     Session.Say(session, `{Types.Info(event.booster).name} has worn off`)
   elseif kind == "TrainingCredited" then

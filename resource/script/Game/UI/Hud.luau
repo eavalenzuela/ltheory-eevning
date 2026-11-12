@@ -582,9 +582,12 @@ local function drawBoosters(session: Session.Session, x: number, foot: number)
     if shown < rows then
       shown += 1
       Info.Name(row.booster.id, row.booster.name, x + 10, line, 13, Im.TEXT)
-      -- (how much of its half hour is left, as a bar and in figures)
+      -- (how much of its time is left, as a bar and in figures: the bar
+      -- in the colour of a warning for one that sat badly, whose ill
+      -- effect is at work too)
       Im.Fill(x + 108, line + 6, 90, 5, Im.DIM, 0.25)
-      Im.Fill(x + 108, line + 6, 90 * math.clamp(row.left / Boosters.SECONDS, 0, 1), 5, Im.ACCENT, 0.95)
+      Im.Fill(x + 108, line + 6, 90 * math.clamp(row.left / math.max(row.whole, Boosters.SECONDS), 0, 1), 5,
+        if row.wrong then Im.WARN else Im.ACCENT, 0.95)
       Im.TextRight(Format.Duration(row.left), x + width - 10, line, 12, Im.DIM)
       line += 22
     end

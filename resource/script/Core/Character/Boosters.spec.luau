@@ -13,6 +13,7 @@ local Items = require("@lt/Core/Assets/Items")
 local Ores = require("@lt/Core/Data/Ores")
 local State = require("@lt/Core/Kernel/State")
 local Test = require("@lt/Tool/Test")
+local Vitals = require("@lt/Core/Tactical/Vitals")
 local Types = require("@lt/Core/Data/Types")
 
 local suite = Test.Suite("Boosters")
@@ -34,6 +35,17 @@ end
 local function weapon(game: Core.Game, type: string): { [string]: any }
   local state = game.state
   return Attributes.Weapon(Items.Fit(state, state.player.ship, nil), type, Items.Levels(state, state.player.ship)) :: any
+end
+
+-- The booster taken last has sat badly, whatever chance said: its ill
+-- effect is at work. (What a booster costs is checked where it strikes.)
+local function struck(game: Core.Game)
+  local state = game.state
+  state.boosters[#state.boosters].wrong = true
+  local ball = state.balls[state.player.ship]
+  if ball then
+    Vitals.Refresh(state, ball)
+  end
 end
 
 local function give(game: Core.Game, type: string, quantity: number?): State.Item
@@ -58,8 +70,12 @@ suite:Case("there are two boosters of each of three kinds, each made of its kind
       local good = if time then modifier.value < 1 else modifier.value > 1
       better += if good then 1 else 0
       worse += if good then 0 else 1
+      -- (and what it gives is the good, and what it may take the other)
+      t.eq(table.find(booster.gives, modifier) ~= nil, good, `{booster.id}: {modifier.attribute}`)
+      t.eq(table.find(booster.takes, modifier) ~= nil, not good, `{booster.id}: {modifier.attribute}`)
     end
     t.ok(better >= 1 and worse == 1, `{booster.id} gives {better} and takes {worse}`)
+    t.eq(#booster.gives + #booster.takes, #booster.passive)
     -- An item nobody sells, with a sheet, and drawings that anybody does.
     local info = Types.Info(booster.id)
     t.eq({ info.category, info.scarce, info.basePrice } :: { any }, { "goods", true, Boosters.PRICE } :: { any })
@@ -89,6 +105,7 @@ suite:Case("a booster is taken from the hold or the hangar, is used up, and make
   t.eq(refused(game, { kind = "TakeBooster", actor = 0, item = give(game, "datacore").id }), "that is not a booster")
   t.eq(refused(game, { kind = "TakeBooster", actor = 0, item = 999999 }), "that is not in the hold, nor in the hangar here")
   t.ok((submit(game, { kind = "TakeBooster", actor = 0, item = skin.id })))
+  struck(game)
   t.eq({ #state.boosters, state.boosters[1].type, skin.quantity } :: { any }, { 1, "booster.thickskin", 1 } :: { any })
   local after = Items.ShipStats(state, ship)
   t.near(after.armor, before.armor * 1.15, 1e-6)
@@ -99,6 +116,7 @@ suite:Case("a booster is taken from the hold or the hangar, is used up, and make
   t.eq(refused(game, { kind = "TakeBooster", actor = 0, item = give(game, "booster.halo").id }),
     "Thickskin is still at work: one of a kind at a time")
   t.ok((submit(game, { kind = "TakeBooster", actor = 0, item = give(game, "booster.redline").id })))
+  struck(game)
   local now = weapon(game, gun.type)
   t.near(now.damageMultiplier, was.damageMultiplier * 1.10, 1e-6)
   t.near(Items.ShipStats(state, ship).shield, before.shield * 0.90, 1e-6)
@@ -117,6 +135,7 @@ suite:Case("a booster is taken from the hold or the hangar, is used up, and make
   local ball = state.balls[ship]
   local speed, armor = ball.maxVelocity, ball.vitals.armorMax
   t.ok((submit(game, { kind = "TakeBooster", actor = 0, item = third.id })))
+  struck(game)
   t.near(ball.maxVelocity, speed * 1.15, 1e-6)
   t.near(ball.vitals.armorMax, armor * 0.92, 1e-6)
   t.ok(ball.vitals.armor <= ball.vitals.armorMax)
@@ -159,6 +178,61 @@ suite:Case("a booster wears off in half an hour, is in the save, and is gone wit
   t.eq(#state.boosters, 1)
   Aftermath.Destroy(state, state.player.ship, 0, game.events)
   t.eq(state.boosters, {})
+end)
+
+suite:Case("a booster sits badly one time in two, less often with Tolerance, and the good it does is done either way; Pharmacology makes one last", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local ship = state.player.ship
+  local before = Items.ShipStats(state, ship)
+  -- A hundred and fifty doses of one kind, one after another: how many sat badly, and what each did.
+  local function doses(): number
+    local bad = 0
+    for _ = 1, 150 do
+      t.ok((submit(game, { kind = "TakeBooster", actor = 0, item = give(game, "booster.thickskin").id })))
+      local boosted = state.boosters[1]
+      local now = Items.ShipStats(state, ship)
+      t.near(now.armor, before.armor * 1.15, 1e-6)
+      t.near(now.maxVelocity, before.maxVelocity * (if boosted.wrong then 0.92 else 1), 1e-6)
+      bad += if boosted.wrong then 1 else 0
+      state.boosters = {}
+    end
+    return bad
+  end
+  t.eq({ Boosting.Odds(state) }, { Boosting.TICKS, Boosters.WRONG })
+  local plain = doses()
+  state.skills.tolerance = 5
+  t.near(select(2, Boosting.Odds(state)), Boosters.WRONG - 5 * Boosters.TOLERANCE, 1e-9)
+  local hardened = doses()
+  print(string.format("     boosters: of 150 doses, %d sat badly with no Tolerance and %d with five levels of it", plain, hardened))
+  t.ok(plain >= 55 and plain <= 95, `{plain} of 150 doses sat badly`)
+  t.ok(hardened >= 4 and hardened <= 32 and hardened < plain, `{hardened} of 150 with Tolerance 5`)
+  -- The pilot is told, and sees it.
+  t.ok((submit(game, { kind = "TakeBooster", actor = 0, item = give(game, "booster.thickskin").id })))
+  local told = false
+  for _, event in Core.TakeEvents(game) do
+    if event.kind == "BoosterTaken" and event.wrong == state.boosters[1].wrong and event.seconds == Boosters.SECONDS then
+      told = true
+    end
+  end
+  t.ok(told, "taking one should say whether it sat badly, and how long it lasts")
+  t.eq(Core.Query.Boosters(game)[1].wrong, state.boosters[1].wrong)
+  state.boosters = {}
+  -- Pharmacology: a fifth longer a level.
+  state.skills.pharmacology = 3
+  t.eq((Boosting.Odds(state)), math.floor(Boosting.TICKS * 1.6 + 0.5))
+  t.ok((submit(game, { kind = "TakeBooster", actor = 0, item = give(game, "booster.halo").id })))
+  local left = state.boosters[1].ends - state.tick
+  t.ok(left <= math.floor(Boosting.TICKS * 1.6 + 0.5) and left >= math.floor(Boosting.TICKS * 1.6 + 0.5) - 1, `{left} ticks of it left`)
+  t.near(Core.Query.Boosters(game)[1].whole, Boosters.SECONDS * 1.6, 1)
+  -- Both are skills with books, and the second wants the first.
+  t.eq({ Types.Info("book.pharmacology").category, Types.Info("book.tolerance").category }, { "skillbook", "skillbook" })
+  -- A booster at work in a save from before sat badly, as they all did.
+  local file = Codec.Decode(Core.Save(game))
+  file.saveVersion = 53
+  file.state.boosters[1].wrong = nil
+  local old, oldLength = Codec.Encode(file)
+  t.eq(Core.Load(old, oldLength).state.boosters[1].wrong, true)
 end)
 
 return suite

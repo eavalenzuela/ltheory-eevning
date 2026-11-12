@@ -108,6 +108,11 @@ local skills: { Skill } = {
     note = "One more drone out at once a level, as far as the hull controls. Level 4 for a tech 2 drone." },
   { id = "leadership", name = "Leadership", rank = 4, start = 1, requires = {},
     note = "One more hired pilot under your command a level." },
+  -- What a pilot takes
+  { id = "pharmacology", name = "Pharmacology", rank = 2, start = -1, requires = {},
+    note = "A booster lasts a fifth longer a level." },
+  { id = "tolerance", name = "Tolerance", rank = 3, start = -1, requires = { { skill = "pharmacology", level = 2 } },
+    note = "A booster sits badly 8% less often a level, from one time in two." },
   -- Towers
   { id = "anchoring", name = "Anchoring", rank = 4, start = 0, requires = {},
     note = "One more control tower of your own a level. A pilot keeps one without it." },

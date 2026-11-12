@@ -79,7 +79,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 53
+Core.SAVE_VERSION = 54
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -309,6 +309,15 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- save from before has given any.
   [49] = function(state: any)
     state.couriers = state.couriers or {}
+  end,
+  -- 54: a booster sits badly only some of the time. One at work in a
+  -- save from before did, as they all did.
+  [53] = function(state: any)
+    for _, boosted in state.boosters do
+      if boosted.wrong == nil then
+        boosted.wrong = true
+      end
+    end
   end,
   -- 53: pirates raid a pilot's tower where order is thin. Nobody has
   -- raided one of a save from before, and the first comes in its time.
@@ -1331,13 +1340,16 @@ end
 -- left; and those to hand (in the hold of the ship they fly, and in the
 -- hangar where they are docked), each with the item to take, how many
 -- there are of it, and why it cannot be taken now, if it cannot.
-export type BoosterAtWork = { booster: Boosters.Booster, left: number }
+-- ('wrong': it sat badly, and its ill effect is at work too; 'whole':
+-- the seconds one taken now would last.)
+export type BoosterAtWork = { booster: Boosters.Booster, left: number, wrong: boolean, whole: number }
 export type BoosterToHand = { booster: Boosters.Booster, item: number, quantity: number, refused: string? }
 function Query.Boosters(game: Game): ({ BoosterAtWork }, { BoosterToHand })
   local state = game.state
   local working: { BoosterAtWork } = {}
   for _, boosted in state.boosters do
-    table.insert(working, { booster = Boosters.byId[boosted.type], left = math.max(0, boosted.ends - state.tick) * Constants.TICK })
+    table.insert(working, { booster = Boosters.byId[boosted.type], left = math.max(0, boosted.ends - state.tick) * Constants.TICK,
+      wrong = boosted.wrong, whole = (Boosting.Odds(state)) * Constants.TICK })
   end
   local hand: { BoosterToHand } = {}
   local ship = state.ships[state.player.ship]

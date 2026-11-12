@@ -5,15 +5,20 @@
 -- A booster is taken out of the hold of the ship the pilot is flying,
 -- anywhere, or out of the hangar of the station they are docked at. It
 -- is used up, and is at work from then for half an hour
--- (Boosters.SECONDS), wherever the pilot goes and whatever they fly:
+-- (Boosters.SECONDS, and a fifth longer for each level of
+-- Pharmacology), wherever the pilot goes and whatever they fly:
 -- Assets/Items hands it to the attribute engine with the fit, as it
--- does an implant. One of each kind can be at work at once; another of
--- a kind is refused until the one at work has worn off. A pilot whose
--- capsule is destroyed wakes with none at work (Tactical/Aftermath).
+-- does an implant. Whether it sits badly is settled as it is taken:
+-- one time in two, and less with Tolerance; then its ill effect is at
+-- work beside the good it does, for as long. One of each kind can be
+-- at work at once; another of a kind is refused until the one at work
+-- has worn off. A pilot whose capsule is destroyed wakes with none at
+-- work (Tactical/Aftermath).
 
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
 local Kinds = require("@lt/Core/Data/Boosters")
+local Rng = require("@lt/Core/Kernel/Rng")
 local State = require("@lt/Core/Kernel/State")
 local Vitals = require("@lt/Core/Tactical/Vitals")
 
@@ -21,8 +26,16 @@ local Boosters = {}
 
 export type Event = { [string]: any }
 
--- Ticks a booster is at work for.
+-- Ticks a booster is at work for, before any skill.
 Boosters.TICKS = math.ceil(Kinds.SECONDS / Constants.TICK)
+
+-- Ticks one taken now would be at work for, and the chance that it
+-- would sit badly: what the pilot's skills make of both.
+function Boosters.Odds(state: State.State): (number, number)
+  local longer = 1 + Kinds.LONGER * math.max(0, state.skills.pharmacology or 0)
+  local chance = math.clamp(Kinds.WRONG - Kinds.TOLERANCE * math.max(0, state.skills.tolerance or 0), 0, 1)
+  return math.floor(Boosters.TICKS * longer + 0.5), chance
+end
 
 -- The booster of a kind that is at work, if one is.
 function Boosters.Working(state: State.State, kind: number): State.Boosted?
@@ -69,11 +82,14 @@ end
 function Boosters.Apply(state: State.State, command: State.Command, events: { Event })
   local item = state.items[command.item :: number]
   local booster = Kinds.byId[item.type]
+  local ticks, chance = Boosters.Odds(state)
+  -- (by the moment and the dose: the same save taken on gives the same)
+  local wrong = Rng.Chance(Rng.For(state.historySeed, state.tick, item.id, #state.boosters, 907), chance)
   Items.Take(state, item, 1)
-  local ends = state.tick + Boosters.TICKS
-  table.insert(state.boosters, { type = booster.id, ends = ends })
+  local ends = state.tick + ticks
+  table.insert(state.boosters, { type = booster.id, ends = ends, wrong = wrong })
   refresh(state)
-  table.insert(events, { kind = "BoosterTaken", booster = booster.id, ends = ends })
+  table.insert(events, { kind = "BoosterTaken", booster = booster.id, ends = ends, wrong = wrong, seconds = ticks * Constants.TICK })
 end
 
 -- Once a tick: a booster whose time is up has worn off.
