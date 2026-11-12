@@ -1137,6 +1137,9 @@ end
 -- of the kinds, and which of the places, by the pilot's id.
 local haulWhat: { [number]: number } = {}
 local haulTo: { [number]: number } = {}
+-- And the further stations they would collect at on the way, in the
+-- order they were added (a round of several: Core/Tactical/Fleet).
+local haulAlso: { [number]: { number } } = {}
 local CARGO: { [string]: string } = { ore = "ore", mineral = "minerals", planetary = "planetary", component = "components", all = "all goods" }
 
 local function drawCrew(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
@@ -1172,8 +1175,10 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
     "into a fight beside you. Every skill counts as their grade.", "Grade 1 flies frigates and haulers, 2 destroyers and barges,",
     "3 cruisers, 4 battleships. You command one for each level", "of Leadership. A ship lost is insured; its pilot is not lost.",
     "In space one can be set to mine a belt, to hold a place against", "pirates (Patrol here) or to go with another pilot (Guard);",
-    "one docked here to haul what is in your hangar elsewhere; any", "to sell what they bring in. They learn by it, to grade 5." } do
-    Im.Text(text, left, line + 6 + index * 17, 12, Im.DIM)
+    "one docked here to haul what is in your hangar elsewhere (+", "adds a station to collect at on the way: a round); any to",
+    "sell what they bring in. They learn by it, to grade 5." } do
+    -- (eleven lines in the room ten had)
+    Im.Text(text, left, line + 6 + index * 15.5, 12, Im.DIM)
   end
 
   -- The pilots hired, and for each the ships here they could be given.
@@ -1213,7 +1218,9 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
         where = `{row.doing}: {row.hauled} units of ore brought in`
       elseif row.order == "haul" then
         where = row.doing
-        note = `Hauling {CARGO[row.cargo] or row.cargo} to {row.to}: {row.hauled} units`
+        -- (a round of several stations says how many it collects at)
+        note = if #row.stops > 1 then `Hauling {CARGO[row.cargo] or row.cargo} from {#row.stops} stations to {row.to}: {row.hauled} units`
+          else `Hauling {CARGO[row.cargo] or row.cargo} to {row.to}: {row.hauled} units`
       elseif row.order == "patrol" then
         where = `{row.doing}: {row.post}`
       elseif row.order == "guard" then
@@ -1262,12 +1269,24 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
         haulWhat[row.id] = what % #Fleet.CARGO + 1
       end
       local target = targets[to]
-      if Im.Button(if target then shorten(`to {target.name}`, 24) else "nowhere to carry to", right + 116, line + 42, 172, 24, #targets > 1,
+      if Im.Button(if target then shorten(`to {target.name}`, 20) else "nowhere to carry to", right + 116, line + 42, 144, 24, #targets > 1,
         `Haul:to:{index}`) then
         haulTo[row.id] = to % #targets + 1
       end
+      -- (and the station shown, as one more to collect at on the way: a
+      -- round of several. Pressed again, it is not one.)
+      local also: { number } = haulAlso[row.id] or {}
+      haulAlso[row.id] = also
+      local added = if target then table.find(also, target.id) else nil
+      if Im.Toggle("+", right + 264, line + 42, 24, 24, added ~= nil, `Haul:also:{index}`) and target then
+        if added then
+          table.remove(also, added)
+        elseif #also + 1 < Fleet.STOPS then
+          table.insert(also, target.id)
+        end
+      end
       local haul: State.Command = { kind = "FleetOrder", actor = 0, what = "haul", pilot = row.id, target = if target then target.id else 0,
-        type = kind }
+        type = kind, stops = if #also > 0 then table.clone(also) else nil }
       local can, whyNot = Session.CanDo(session, haul)
       if Im.Button("Haul", right + 292, line + 42, 48, 24, can, `Haul:go:{index}`) then
         Session.Do(session, haul)
@@ -1276,6 +1295,15 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
       if target and row.order ~= "haul" then
         note = `{target.name}: ` .. (if target.jumps == 0 then "in this system" elseif target.jumps == 1 then `1 jump, in {target.system}`
           else `{target.jumps} jumps, in {target.system}`) .. (if target.market then ", has a market" else ", no market")
+      end
+      if #also > 0 then
+        -- (the round as it stands: here, and the stations added with +, in order)
+        local names: { string } = {}
+        for _, id in also do
+          local stop = Core.Query.Body(game, id)
+          table.insert(names, if stop then shorten(stop.name, 22) else "?")
+        end
+        note = `Collecting here, then at {table.concat(names, ", ")}` .. (if target and not added then `; to {target.name}` else "; + is another, then pick where to")
       end
     else
       -- Out flying: called back, they come to where you are.

@@ -1043,6 +1043,115 @@ suite:Case("a haul can be to a station systems away, and the list of where to sa
   t.eq(Core.Hash(loaded), Core.Hash(game))
 end)
 
+suite:Case("a haul can be a round of several stations: each that has something is collected at, in order, and it is all carried to the last", function(t)
+  local game, second = docked("industrial.hauler")
+  local state = game.state
+  local home = state.player.home
+  local wing = hired(game, second)
+  local second2, third = others(game, 1)
+  local function named(id: number): string
+    return (Space.Object(state, id) :: System.Object).name
+  end
+  local function round(stops: { number }, to: number): State.Command
+    return { kind = "FleetOrder", actor = 0, what = "haul", pilot = wing.id, target = to, type = "ore", stops = stops }
+  end
+  -- A round collects at stations, each once, and not at the one it is all carried to; five at most, here among them.
+  t.eq(refused(game, round({ third }, third)), "what is collected at the station it is carried to is there already")
+  t.eq(refused(game, round({ home }, third)), "a station is collected at once a round")
+  t.eq(refused(game, round({ second2, second2 }, third)), "a station is collected at once a round")
+  t.eq(refused(game, round({ belt(game, 1) }, third)), "that is not a station to collect at")
+  t.eq(refused(game, round({ 1, 2, 3, 4, 5 }, third)), `a round has {Fleet.STOPS} stations to collect at, at most`)
+  t.eq(refused(game, round({ second2 }, third)), "(accepted)")
+
+  -- The stations the ship docks at from now on, in order.
+  local docks: { number } = {}
+  local last = second.docked
+  local function watch(limit: number, holds: () -> boolean): boolean
+    return waitFor(game, limit, function()
+      if second.docked ~= 0 and second.docked ~= last then
+        table.insert(docks, second.docked)
+      end
+      last = second.docked
+      return holds()
+    end)
+  end
+
+  -- Some ore here and some at the second station: both are collected, in that order, and it all goes to the third.
+  Items.Add(state, "ore.ferrite", 300, home, "hangar")
+  Items.Add(state, "ore.ferrite", 400, second2, "hangar")
+  t.ok((submit(game, round({ second2 }, third))))
+  t.eq({ wing.order, wing.post, wing.base, wing.stops, wing.leg } :: { any }, { "haul", home, third, { home, second2 }, 0 } :: { any })
+  Core.TakeEvents(game)
+  t.ok(watch(60, function()
+    return state.balls[second.id] ~= nil
+  end), "the pilot did not set out")
+  t.eq({ count(game, second.id, "cargo", "ore.ferrite"), wing.leg }, { 300, 1 })
+  local row = Core.Query.Fleet(game)[1]
+  t.eq({ row.doing, row.from, row.to, row.stops } :: { any },
+    { "collecting", named(home), named(third), { named(home), named(second2) } } :: { any })
+  t.ok(watch(3000, function()
+    return count(game, third, "hangar", "ore.ferrite") == 700
+  end), "what was collected did not arrive")
+  t.eq(docks, { second2, third })
+  local told, units = 0, 0
+  for _, event in Core.TakeEvents(game) do
+    if event.kind == "HaulDelivered" and event.pilot == wing.id then
+      told += 1
+      units += event.units
+    end
+  end
+  t.eq({ told, units, wing.leg }, { 1, 700, 0 })
+  -- Nothing anywhere: back to the first station, to wait.
+  t.ok(watch(3000, function()
+    return second.docked == home
+  end), "the pilot did not go back to the first station")
+  steps(game, 40)
+  t.eq({ second.docked, Core.Query.Fleet(game)[1].doing } :: { any }, { home, "waiting for cargo" } :: { any })
+
+  -- Something turns up at the second station only: straight there, and on to deliver.
+  docks, last = {}, second.docked
+  Items.Add(state, "ore.ferrite", 200, second2, "hangar")
+  t.ok(watch(3000, function()
+    return count(game, third, "hangar", "ore.ferrite") == 900
+  end), "what turned up at the second station was not carried")
+  t.eq(docks, { second2, third })
+
+  -- A hold's worth and more at the first, and a little at the second: with the hold full they do not go on round, but
+  -- deliver; and the rest, and the little, come on the next round.
+  t.ok(watch(3000, function()
+    return second.docked == home
+  end))
+  steps(game, 10)
+  docks, last = {}, second.docked
+  local each = Types.Info("ore.ferrite").volume
+  local hold = math.floor((Items.ShipStats(state, second.id).cargo - Items.CargoUsed(state, second.id)) / each)
+  Items.Add(state, "ore.ferrite", hold + 100, home, "hangar")
+  Items.Add(state, "ore.ferrite", 50, second2, "hangar")
+  Core.TakeEvents(game)
+  t.ok(watch(6000, function()
+    return count(game, third, "hangar", "ore.ferrite") == 900 + hold + 150
+  end), "the full hold and what was left did not all arrive")
+  t.eq(docks, { third, home, second2, third })
+  local loads: { number } = {}
+  for _, event in Core.TakeEvents(game) do
+    if event.kind == "HaulDelivered" and event.pilot == wing.id then
+      table.insert(loads, event.units)
+    end
+  end
+  t.eq(loads, { hold, 150 })
+
+  -- A round is in the save, and a haul of a save from before is a round of the one station it collected at.
+  local data, length = Core.Save(game)
+  local loaded = Core.Load(data, length)
+  t.eq({ Core.Hash(loaded), loaded.state.fleet[wing.id].stops } :: { any }, { Core.Hash(game), { home, second2 } } :: { any })
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 48
+  file.state.fleet[wing.id].stops, file.state.fleet[wing.id].leg = nil, nil
+  local old, oldLength = Codec.Encode(file)
+  local kept = Core.Load(old, oldLength).state.fleet[wing.id]
+  t.eq({ kept.stops, kept.leg } :: { any }, { { home }, 0 } :: { any })
+end)
+
 suite:Case("a mining pilot told to sell sells the ore they bring in, where the station has a market", function(t)
   -- (at the belt nearest a station with a market, which is where the ore will be taken)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })

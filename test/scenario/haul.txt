@@ -7,7 +7,9 @@
 # what they bring in, and set to haul the ore to the other trade hub of
 # the system (the place offered first: the nearest). The player sits
 # docked. The ore goes, is sold there, and the pilot comes back to wait
-# for more. More is given, and that goes too.
+# for more. More is given, and that goes too. Then the haul is made a
+# round of two stations to collect at, and what is at both is brought
+# to a third.
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
@@ -61,6 +63,30 @@ lua assert(GameDebug.Give('ore.ferrite', 300))
 until select(2, GameDebug.Crew(1)) == 2300
 lua GameDebug.TimeScale(1)
 lua print('haul: sold for', select(5, GameDebug.Crew(1)))
+
+# A round of two stations. The place the ore went to is added with + as
+# one more to collect at, and the next place the button offers is where
+# it all goes. Some ore is given here and some put there. The pilot
+# takes what is here, collects what is there on the way, and brings
+# both to the last.
+lua GameDebug.TimeScale(16)
+until GameDebug.Crew(1) == 'waiting for cargo'
+lua GameDebug.TimeScale(1)
+frames 5
+lua assert(select(8, GameDebug.Crew(1)) == 1, 'the haul so far collects at one station')
+until GameDebug.Press('Haul:also:1')
+frames 3
+lua assert(not GameDebug.CanPress('Haul:go:1'), 'a round does not collect at the station it is carried to')
+until GameDebug.Press('Haul:to:1')
+frames 3
+lua assert(GameDebug.Give('ore.ferrite', 100))
+lua assert(GameDebug.Stock(1, 'ore.ferrite', 150), 'there is no first place to put ore at')
+until GameDebug.Press('Haul:go:1')
+until select(8, GameDebug.Crew(1)) == 2
+lua GameDebug.TimeScale(16)
+until GameDebug.Crew(1) == 'collecting'
+until select(2, GameDebug.Crew(1)) == 2550
+lua GameDebug.TimeScale(1)
 
 echo haul scenario passed
 quit

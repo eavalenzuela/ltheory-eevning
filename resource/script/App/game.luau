@@ -1548,13 +1548,29 @@ end
 -- brought in, mined or hauled, what they have learned toward their next
 -- grade, their grade, what selling what they bring in has made,
 -- whether they are told to sell it, and whether somebody is after them
--- with the player elsewhere. "" and 0 for nobody.
-function Debug.Crew(n: number): (string, number, number, number, number, boolean, boolean)
+-- with the player elsewhere; and, for one set to haul, how many
+-- stations their round collects at. "" and 0 for nobody.
+function Debug.Crew(n: number): (string, number, number, number, number, boolean, boolean, number)
   local row = Core.Query.Fleet(session.game)[n]
   if row == nil then
-    return "", 0, 0, 0, 0, false, false
+    return "", 0, 0, 0, 0, false, false, 0
   end
-  return row.doing, row.hauled, row.experience, row.skill, row.earned, row.sells, row.hunted
+  return row.doing, row.hauled, row.experience, row.skill, row.earned, row.sells, row.hunted, #row.stops
+end
+
+-- A cheat, for a round of several stations to have something to
+-- collect: so much of a type into the player's hangar at the nth place
+-- the first hired pilot's haul could be to (the Crew tab's "to" goes
+-- round them in this order). False if there is no such place.
+function Debug.Stock(n: number, type: string, quantity: number): boolean
+  local game = session.game
+  local first = Core.Query.Fleet(game)[1]
+  local target = if first then Core.Query.HaulTargets(game, first.id, nil)[n] else nil
+  if target == nil then
+    return false
+  end
+  Items.Add(game.state, type, quantity, target.id, "hangar")
+  return true
 end
 
 -- The hired pilots: how many there are, how many are in space on the

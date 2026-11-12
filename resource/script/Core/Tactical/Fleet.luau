@@ -44,6 +44,15 @@
 -- in the player's hangar there. With nothing left to carry they wait
 -- where the goods were, and go again when there are more.
 --
+-- A haul can be a round of several stations: the one the ship is
+-- docked at and as many as four more to collect at, in the order
+-- given, and one to deliver to. The pilot goes round the stops that
+-- have something for them, in that order, taking at each what fits,
+-- and then delivers: at once when the hold is full, and otherwise when
+-- there is nothing more further round. They know what is in the
+-- player's hangars (it is on the books), so they fly to no stop for
+-- nothing; and with nothing anywhere they wait at the first.
+--
 -- And a pilot can be told to sell what they bring in, mined or
 -- carried: it goes to the market of the station they bring it to, if
 -- that has one, at what the market gives, and into the hangar if not.
@@ -170,6 +179,8 @@ end
 -- What a pilot set to haul can be told to carry: the things of one
 -- category, or of all of these.
 Fleet.CARGO = { "ore", "mineral", "planetary", "component", "all" }
+-- The stations a haul can collect at, the one the ship is docked at among them.
+Fleet.STOPS = 5
 
 -- Whether a type is of a kind a hauler carries.
 function Fleet.Carries(kind: string, type: string): boolean
@@ -423,6 +434,24 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
       elseif #Galaxy.Route(state.galaxy, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, to.id)) == 0 then
         return false, "there is no way there"
       end
+      -- (and the further stations to collect at, if it is a round of several)
+      local stops: { number } = command.stops or {}
+      if #stops + 1 > Fleet.STOPS then
+        return false, `a round has {Fleet.STOPS} stations to collect at, at most`
+      end
+      for index, id in stops do
+        local stop = Space.Object(state, id)
+        local built = state.starbases[id]
+        if stop == nil or stop.kind ~= "station" or (built ~= nil and built.ready > state.tick) then
+          return false, "that is not a station to collect at"
+        elseif id == to.id then
+          return false, "what is collected at the station it is carried to is there already"
+        elseif id == theirs.docked or table.find(stops, id) ~= index then
+          return false, "a station is collected at once a round"
+        elseif #Galaxy.Route(state.galaxy, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, id)) == 0 then
+          return false, "there is no way there"
+        end
+      end
       return true
     elseif what == "mine" then
       local me = state.balls[ship.id]
@@ -483,6 +512,7 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     Corporation.Spend(state, found.fee, "hiring", events)
     local wing: State.Wingman = { id = State.NewId(state), name = found.name, skill = found.skill, wage = found.wage,
       paid = state.tick, ship = 0, order = "follow", target = 0, post = 0, base = 0, hauled = 0, experience = 0,
+      stops = {}, leg = 0,
       cargo = "", sell = false, earned = 0, ward = 0, alarm = false }
     state.fleet[wing.id] = wing
     table.insert(state.fleetIds, wing.id)
@@ -531,6 +561,12 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     wing.order, wing.target = "haul", 0
     wing.post, wing.base = state.ships[wing.ship].docked, command.target :: number
     wing.cargo = command.type :: string
+    -- (the round: here first, and then the further stations, in the order given)
+    wing.stops, wing.leg = { wing.post }, 0
+    local further: { number } = command.stops or {}
+    for _, id in further do
+      table.insert(wing.stops, id)
+    end
     table.insert(events, { kind = "FleetOrdered", what = "haul", target = wing.base })
   elseif kind == "FleetOrder" then
     for _, id in state.fleetIds do
@@ -736,28 +772,57 @@ local function unload(state: State.State, wing: State.Wingman, ship: State.Ship,
   return units, revenue, volume
 end
 
--- Whether a ship has anything of a kind in its hold.
-local function laden(state: State.State, ship: number, kind: string): boolean
-  for _, item in Items.In(state, ship, "cargo") do
-    if Fleet.Carries(kind, item.type) then
+-- Whether the player's hangar at a station has anything of a kind.
+local function stocked(state: State.State, station: number, kind: string): boolean
+  for _, item in Items.In(state, station, "hangar") do
+    if Fleet.Carries(kind, item.type) and item.quantity > 0 then
       return true
     end
   end
   return false
 end
 
--- What a pilot set to haul does: a hold of what there is to carry out
--- of the hangar where the goods are, to the other station with it, and
--- back for more; and with nothing to carry, they wait where the goods
--- would be.
+-- Where a pilot set to haul goes next, and why: the next station of
+-- their round, after the last one loaded at, that has something for
+-- them ("collect"), unless the hold is full; with none, the station it
+-- is all carried to, if they carry anything ("deliver"); and with
+-- nothing aboard and nothing anywhere, the first station of the round,
+-- to wait at ("wait").
+function Fleet.HaulGoal(state: State.State, wing: State.Wingman, ship: State.Ship): (number, string)
+  local carrying = false
+  for _, item in Items.In(state, ship.id, "cargo") do
+    carrying = carrying or Fleet.Carries(wing.cargo, item.type)
+  end
+  local capacity = Items.ShipStats(state, ship.id).cargo
+  local full = carrying and capacity - Items.CargoUsed(state, ship.id) < math.max(2, 0.03 * capacity)
+  if not full then
+    for index, stop in wing.stops do
+      -- (a round that has not begun has every stop before it; one that
+      -- has, only those further on)
+      if index > wing.leg and Space.Object(state, stop) and stocked(state, stop, wing.cargo) then
+        return stop, "collect"
+      end
+    end
+  end
+  if carrying then
+    return wing.base, "deliver"
+  end
+  return wing.stops[1] or wing.post, "wait"
+end
+
+-- What a pilot set to haul does: round the stations they collect at
+-- that have something for them, a hold's worth, to the station it is
+-- carried to with it, and round again; and with nothing to carry
+-- anywhere, they wait at the first.
 local function carry(state: State.State, wing: State.Wingman, ship: State.Ship, events: { Event })
-  local from, to = Space.Object(state, wing.post), Space.Object(state, wing.base)
-  if from == nil or to == nil then
+  local to = Space.Object(state, wing.base)
+  if to == nil or #wing.stops == 0 or Space.Object(state, wing.stops[1]) == nil then
     wing.order = "stay"
     return
   end
   local me = state.balls[ship.id]
   if me == nil then
+    local at = table.find(wing.stops, ship.docked)
     if ship.docked == to.id then
       local units, revenue, volume = unload(state, wing, ship, wing.cargo, events)
       if units > 0 then
@@ -765,32 +830,48 @@ local function carry(state: State.State, wing: State.Wingman, ship: State.Ship, 
         -- (a point of experience for every hundred cubic metres brought)
         learn(state, wing, volume // 100, events)
       end
-    elseif ship.docked == from.id then
+      -- (and the round begins again)
+      wing.leg = 0
+    elseif at and at > wing.leg then
       -- (the hangar is looked over now and then, not every second)
-      if not laden(state, ship.id, wing.cargo) and (state.tick + wing.id) % 5 == 0 then
-        local free = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
-        for _, item in Items.In(state, from.id, "hangar") do
-          if Fleet.Carries(wing.cargo, item.type) then
-            local each = Types.Info(item.type).volume
-            local take = if each > 0 then math.min(item.quantity, math.floor(free / each)) else item.quantity
-            if take > 0 then
-              Items.Add(state, item.type, take, ship.id, "cargo")
-              Items.Take(state, item, take)
-              free -= take * each
-            end
+      if (state.tick + wing.id) % 5 ~= 0 then
+        return
+      end
+      local free = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
+      local loaded = false
+      for _, item in Items.In(state, ship.docked, "hangar") do
+        if Fleet.Carries(wing.cargo, item.type) then
+          local each = Types.Info(item.type).volume
+          local take = if each > 0 then math.min(item.quantity, math.floor(free / each)) else item.quantity
+          if take > 0 then
+            Items.Add(state, item.type, take, ship.id, "cargo")
+            Items.Take(state, item, take)
+            free -= take * each
+            loaded = true
           end
         end
       end
-      if not laden(state, ship.id, wing.cargo) then
-        return
+      if loaded then
+        wing.leg = at
       end
+    end
+    -- (out, unless where they are is where they are to be: waiting for
+    -- cargo at the first station, with nothing aboard and nothing anywhere)
+    local goal, why = Fleet.HaulGoal(state, wing, ship)
+    if goal == ship.docked and why ~= "deliver" then
+      return
     end
     give(state, { kind = "Undock", actor = ship.id }, events)
     return
   end
   mend(state, me, false, events)
-  local goal = if laden(state, ship.id, wing.cargo) then to else from
-  if me.intent and me.intent.kind == "dock" and me.intent.target == goal.id then
+  -- (on the way in somewhere, they go on: where to is looked at again
+  -- when they have got there, or come out of a gate)
+  if me.intent and (me.intent.kind == "dock" or me.intent.kind == "jump") then
+    return
+  end
+  local goal = Space.Object(state, (Fleet.HaulGoal(state, wing, ship)))
+  if goal == nil then
     return
   end
   local system = Space.SystemOf(state, goal.id)

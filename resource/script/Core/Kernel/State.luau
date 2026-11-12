@@ -232,6 +232,7 @@ export type Command = {
   pin: number?,       -- a colony's facility, by its number there
   hours: number?,     -- the length of an extractor's programme
   pilot: number?,     -- a hired pilot, by their id
+  stops: { number }?, -- for a haul: the further stations to collect at, in order
 }
 
 -- A standing offer at a station's market. A sell order's goods and a buy
@@ -309,6 +310,10 @@ export type Wingman = {
   experience: number,
   cargo: string, sell: boolean, earned: number,
   ward: number, alarm: boolean,
+  -- For one set to haul: the stations collected at, in order ('post' is
+  -- the first), and how far round them this round has got (the place
+  -- in that list of the last one loaded at; 0 before the first).
+  stops: { number }, leg: number,
 }
 
 -- A place that is on nobody's chart (Tactical/Sites): 'id' is the place
