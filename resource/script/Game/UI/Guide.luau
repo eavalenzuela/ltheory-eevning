@@ -1,12 +1,15 @@
 --!strict
 -- The guide's window: the things there are to do (Core/Character/Guide),
 -- group by group, each ticked when the pilot has done it, and for the
--- one picked out a line on how it is done.
+-- one picked out a line on how it is done. And a second page: the
+-- career agents and their lessons (Game/UI/Careers), so that what a
+-- lesson in hand wants can be read again in space.
 --
 -- Open in space or docked, from the Guide button by the pilot's name.
--- Drawn every frame with Game/UI/Im; it only reads the Core. Its close
--- button is "Guide:close" (Im.Press).
+-- Drawn every frame with Game/UI/Im. Its close button is "Guide:close",
+-- and its pages are "Guide:steps" and "Guide:lessons" (Im.Press).
 
+local Careers = require("@lt/Game/UI/Careers")
 local Core = require("@lt/Core/Api")
 local Im = require("@lt/Game/UI/Im")
 local Session = require("@lt/Game/Session")
@@ -20,6 +23,7 @@ local DONE = vector.create(0.45, 0.85, 0.55)
 
 local open = false
 local picked = ""   -- the step whose "how" is shown; "": the first not done
+local lessons = false   -- whether the page shown is the career agents'
 
 function Guide.Open()
   open = true
@@ -31,6 +35,14 @@ end
 
 function Guide.IsOpen(): boolean
   return open
+end
+
+-- Which page is shown ("steps" or "lessons"): given one, that one is.
+function Guide.Page(to: string?): string
+  if to then
+    lessons = to == "lessons"
+  end
+  return if lessons then "lessons" else "steps"
 end
 
 -- A line of text broken in two at a space, if it is longer than 'limit'.
@@ -59,8 +71,21 @@ function Guide.Draw(session: Session.Session, x: number, y: number)
   local left = x + 16
   Im.Panel(x, y, width, height)
   Im.Heading(`GUIDE  {count} / {#rows}`, left, y + 12, 16, Im.DIM)
+  -- The two pages: the things there are to do, and the career agents.
+  if Im.Toggle("Things to do", x + 150, y + 9, 110, 26, not lessons, "Guide:steps") then
+    lessons = false
+  end
+  if Im.Toggle("Lessons", x + 264, y + 9, 90, 26, lessons, "Guide:lessons") then
+    lessons = true
+  end
   if Im.Button("x", x + width - 38, y + 10, 24, 24, true, "Guide:close") then
     open = false
+    return
+  end
+  if lessons then
+    local status = Core.Query.Careers(session.game)
+    local below = Careers.List(status, x + 8, y + 50, width - 16)
+    Careers.Detail(session, status, left, below + 14, width - 32)
     return
   end
 

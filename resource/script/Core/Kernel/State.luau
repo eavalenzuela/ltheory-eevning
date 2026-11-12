@@ -272,6 +272,11 @@ export type Probe = { id: number, system: number, x: number, y: number, z: numbe
 -- A place in space a pilot has marked, to warp back to (Tactical/Space).
 export type Bookmark = { id: number, name: string, system: number, x: number, y: number, z: number }
 
+-- How far a pilot has got with a career agent (Character/Careers): the
+-- lessons done, whether the next is in hand, and how much of what it
+-- wants has been done since it was taken.
+export type Career = { done: number, taken: boolean, count: number }
+
 -- A pilot hired to fly one of the player's ships beside their own
 -- (Tactical/Fleet). Every skill counts as 'skill' for a ship they fly.
 -- Their wages are paid up to the tick 'paid'. 'ship' is the ship they
@@ -480,6 +485,9 @@ export type State = {
   -- The steps of the guide the pilot has done (Character/Guide), in the
   -- order they did them.
   guide: { string },
+  -- How far the pilot has got with each of the career agents
+  -- (Character/Careers), by the career's id: one not here is not begun.
+  careers: { [string]: Career },
   -- The places the pilot has marked, in the order they were.
   bookmarks: { [number]: Bookmark },
   bookmarkIds: { number },

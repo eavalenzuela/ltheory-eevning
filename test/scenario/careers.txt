@@ -1,0 +1,109 @@
+# The career agents, through the game app's own screens (script/check
+# runs it):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/careers.txt
+#
+# A new pilot meets the agents at the station they start at, takes a
+# lesson from two of them at once, does the flight school's first two
+# (a warp out and back, a place marked) and the first of industry's
+# (ore mined with the laser that was handed over), reports each and is
+# paid. And reads a lesson again in space, in the guide's window, where
+# it can be read and not reported.
+#
+# Buttons are pressed by name (GameDebug.Press), which runs the same code
+# a click does.
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Wallet() == 5000, 'a new pilot has 5,000 credits')
+
+# The agents are a tab of this station's screen.
+until GameDebug.Press('Careers')
+frames 3
+lua assert(GameDebug.Tab() == 'Careers', 'the Careers tab did not open')
+lua assert(GameDebug.Career('flight') == 0 and not select(2, GameDebug.Career('flight')), 'no lesson is done or in hand yet')
+lua assert(not GameDebug.CanPress('Lesson:report:flight'), 'there is nothing to report yet')
+
+# A lesson from the flight school, and one from industry beside it: that
+# one hands over a mining laser.
+until GameDebug.Press('Career:flight')
+until GameDebug.Press('Lesson:accept:flight')
+until select(2, GameDebug.Career('flight'))
+lua assert(GameDebug.Hangar('miner.small') == 1, 'the starter kit has one mining laser')
+until GameDebug.Press('Career:industry')
+until GameDebug.Press('Lesson:accept:industry')
+until select(2, GameDebug.Career('industry'))
+lua assert(GameDebug.Hangar('miner.small') == 2, 'the mining laser was not handed over')
+frames 3
+lua assert(not GameDebug.CanPress('Lesson:report:industry'), 'nothing has been mined yet')
+
+# A mining laser in place of one gun, for industry's.
+until GameDebug.Press('Fitting')
+until GameDebug.Press('Unfit:high1')
+until GameDebug.Fitted('autocannon.small') == 1
+until GameDebug.Press('Fit:miner.small')
+until GameDebug.Fitted('miner.small') == 1
+
+# Out, and a warp to the belt: that is the flight school's first.
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua GameDebug.TimeScale(30)
+lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+until select(3, GameDebug.Career('flight')) == 1
+
+# In space the guide's window has the lessons, to read and not to report.
+lua GameDebug.TimeScale(1)
+until GameDebug.Press('Guide')
+until GameDebug.Press('Guide:lessons')
+until GameDebug.Press('Career:flight')
+frames 3
+lua assert(GameDebug.WhyNot('Lesson:report:flight') == 'greyed out', 'a lesson is reported at the station: ' .. GameDebug.WhyNot('Lesson:report:flight'))
+until GameDebug.Press('Guide:close')
+
+# Mine, for industry's: 400 units.
+lua GameDebug.TimeScale(30)
+lua assert(GameDebug.Order('Approach', 'Ferrite', 4000), 'no ferrite in this belt')
+until GameDebug.Distance('Ferrite') < 9000
+lua assert(GameDebug.Lock('Ferrite'), 'the lock was refused')
+until GameDebug.Locked() > 0
+lua assert(GameDebug.Mine() == 1, 'the mining laser did not start')
+until select(3, GameDebug.Career('industry')) >= 400
+
+# Home, and both reported: each is paid, and the flight school's next is
+# there to take.
+lua assert(GameDebug.Order('Dock', 'home'), 'dock was refused')
+until GameDebug.Docked()
+lua GameDebug.TimeScale(1)
+until GameDebug.Press('Careers')
+until GameDebug.Press('Career:flight')
+until GameDebug.Press('Lesson:report:flight')
+until GameDebug.Career('flight') == 1
+lua assert(GameDebug.Wallet() == 7000, 'the first lesson pays 2,000: ' .. GameDebug.Wallet())
+until GameDebug.Press('Career:industry')
+until GameDebug.Press('Lesson:report:industry')
+until GameDebug.Career('industry') == 1
+lua assert(GameDebug.Wallet() == 10000, 'the first of industry pays 3,000: ' .. GameDebug.Wallet())
+
+# The flight school's second: a place marked. It gives a module.
+until GameDebug.Press('Career:flight')
+until GameDebug.Press('Lesson:accept:flight')
+until select(2, GameDebug.Career('flight'))
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+until GameDebug.Press('Bookmark')
+until select(3, GameDebug.Career('flight')) == 1
+lua assert(GameDebug.Order('Dock', 'home'), 'dock was refused')
+lua GameDebug.TimeScale(30)
+until GameDebug.Docked()
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Hangar('nanofiber') == 0, 'the module is given when the lesson is reported, not before')
+until GameDebug.Press('Careers')
+until GameDebug.Press('Career:flight')
+until GameDebug.Press('Lesson:report:flight')
+until GameDebug.Career('flight') == 2
+lua assert(GameDebug.Hangar('nanofiber') == 1, 'the second lesson gives a Lightened Frame')
+lua assert(GameDebug.Wallet() == 12500, 'the second lesson pays 2,500: ' .. GameDebug.Wallet())
+quit

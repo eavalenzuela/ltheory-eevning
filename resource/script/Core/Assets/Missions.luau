@@ -253,7 +253,7 @@ end
 
 -- How many of a type a docked ship has to hand: in its hold and in the
 -- hangar of the station it is at.
-local function toHand(state: State.State, ship: State.Ship, type: string): number
+function Missions.ToHand(state: State.State, ship: State.Ship, type: string): number
   local have = 0
   for _, item in Items.In(state, ship.id, "cargo") do
     have += if item.type == type then item.quantity else 0
@@ -265,7 +265,7 @@ local function toHand(state: State.State, ship: State.Ship, type: string): numbe
 end
 
 -- Take 'quantity' of a type from what a docked ship has to hand.
-local function hand(state: State.State, ship: State.Ship, type: string, quantity: number)
+function Missions.Hand(state: State.State, ship: State.Ship, type: string, quantity: number)
   for _, place in { { ship.id, "cargo" }, { ship.docked, "hangar" } } :: { { any } } do
     for _, item in Items.In(state, place[1], place[2]) do
       if quantity > 0 and item.type == type and item.slot == 0 then
@@ -292,8 +292,8 @@ function Missions.Ready(state: State.State, ship: State.Ship, mission: State.Mis
     if mission.done < mission.need then
       return false, `{mission.need - mission.done} still to destroy`
     end
-  elseif toHand(state, ship, mission.type) < mission.need then
-    return false, `{mission.need - toHand(state, ship, mission.type)} more to bring`
+  elseif Missions.ToHand(state, ship, mission.type) < mission.need then
+    return false, `{mission.need - Missions.ToHand(state, ship, mission.type)} more to bring`
   end
   return true
 end
@@ -401,10 +401,10 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
     if mission.kind == "assault" then
       -- (what the camp took is handed over, where that was the job)
       if mission.aim == "fetch" then
-        hand(state, ship, mission.type, mission.need)
+        Missions.Hand(state, ship, mission.type, mission.need)
       end
     elseif mission.kind ~= "bounty" then
-      hand(state, ship, mission.type, mission.need)
+      Missions.Hand(state, ship, mission.type, mission.need)
     end
     -- (a place made for the job goes with it)
     Assault.Close(state, mission, events)
@@ -419,7 +419,7 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
     -- (a courier's cargo goes back, as much of it as is to hand; and so
     -- does what was fetched from a camp)
     if mission.kind == "courier" or (mission.kind == "assault" and mission.aim == "fetch") then
-      hand(state, ship, mission.type, math.min(mission.need, toHand(state, ship, mission.type)))
+      Missions.Hand(state, ship, mission.type, math.min(mission.need, Missions.ToHand(state, ship, mission.type)))
     end
     Assault.Close(state, mission, events)
     standing(state, mission.faction, -2 * mission.standing)

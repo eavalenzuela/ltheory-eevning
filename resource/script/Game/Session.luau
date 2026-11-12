@@ -147,6 +147,14 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "ShipAssigned" then
     local ship = session.game.state.ships[event.ship]
     Session.Say(session, if ship then `{event.name} flies the {ship.name} and goes where you go` else `{event.name} has no ship now`)
+  elseif kind == "LessonTaken" then
+    Session.Say(session, `{event.agent}: "{event.title}". The Guide has what it wants, under Lessons`)
+  elseif kind == "LessonReady" then
+    Session.Say(session, `"{event.title}" is done: report to {event.agent} for it`)
+  elseif kind == "LessonDone" then
+    Session.Say(session, if event.finished then `{event.name}: the last lesson is done. +{event.credits} credits, and what is in the hangar`
+      elseif event.gifts > 0 then `Lesson done: +{event.credits} credits, and something in the hangar`
+      else `Lesson done: +{event.credits} credits`)
   elseif kind == "Guided" then
     Session.Say(session, `Guide: "{event.title}" is done ({event.done} of {event.of})`)
   elseif kind == "ImplantPlugged" then

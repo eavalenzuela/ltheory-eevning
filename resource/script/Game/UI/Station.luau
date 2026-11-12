@@ -1,12 +1,14 @@
 --!strict
 -- The interface while docked: the ship's fit, the market, industry,
--- skills, the ships kept here and the wallet, a tab each.
+-- skills, the ships kept here and the wallet, a tab each; and, at the
+-- station a new pilot starts at, the career agents (Game/UI/Careers).
 --
 -- Drawn every frame with Game/UI/Im. It reads the Core through queries
 -- and acts on it only through the Session. Every button has a name a
 -- script can press it by (Im.Press): its label, or the id given here.
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
+local Careers = require("@lt/Game/UI/Careers")
 local Catalog = require("@lt/Core/Data/Catalog")
 local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
@@ -33,6 +35,8 @@ Station.HEIGHT = 600
 local TABS: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions" }
 -- (and one more at a starbase of the pilot's own: the running of it)
 local OWN: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions", "Starbase" }
+-- (and at the station the career agents are at: them)
+local SCHOOL: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions", "Careers" }
 -- The services each tab's doings are done by (Core/Assets/Stations).
 local WANTS: { [string]: { string } } = {
   Fitting = { "fitting" }, Market = { "market" }, Industry = { "refining", "industry", "research" }, Ships = { "fitting" },
@@ -77,8 +81,8 @@ end
 
 -- Show a tab, as clicking it would: for scripted runs.
 function Station.Show(name: string): boolean
-  for _, known in OWN do
-    if known == name then
+  for _, known in { OWN, SCHOOL } do
+    if table.find(known, name) then
       tab = name
       return true
     end
@@ -1486,6 +1490,20 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
 end
 
 -- ---------------------------------------------------------------------
+-- Careers: the agents who show a new pilot the ropes (Game/UI/Careers
+-- draws them: the list on the left, the one picked out on the right)
+
+local function drawCareers(session: Session.Session, game: Core.Game, x: number, y: number)
+  local status = Core.Query.Careers(game)
+  local left, right = x + 16, x + 480
+  Im.Heading("CAREER AGENTS", left, y + 78, 16, Im.DIM)
+  Im.Text("Five people who teach a way of making a living each, and pay for the learning.", left, y + 104, 13, Im.DIM)
+  Im.Text("A lesson from each can be in hand at once. The Guide (top left) shows them in space.", left, y + 122, 13, Im.DIM)
+  Careers.List(status, left - 8, y + 152, 448)
+  Careers.Detail(session, status, right, y + 78, 444)
+end
+
+-- ---------------------------------------------------------------------
 -- Starbase: the running of a tower of the pilot's own
 
 -- A bar of what is used of what there is, with the figures over it.
@@ -1661,7 +1679,13 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
   if tab == "Starbase" and own == nil then
     tab = "Fitting"
   end
-  local tabs: { string } = if own then OWN else TABS
+  -- And where the career agents are, there is them.
+  local careers = Core.Query.Careers(game)
+  local school = careers.station == player.docked
+  if tab == "Careers" and not school then
+    tab = "Fitting"
+  end
+  local tabs: { string } = if own then OWN elseif school then SCHOOL else TABS
   local pitch = (width - 364 - 12) / #tabs
   for index, name in tabs do
     if Im.Toggle(name, x + 364 + (index - 1) * pitch, y + 18, pitch - 4, 28, tab == name) then
@@ -1684,6 +1708,9 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
   end
   if #lacking > 0 then
     Im.Text(`This station has no {table.concat(lacking, " and no ")}.`, x + 16, y + 58, 13, Im.WARN)
+  elseif school and not careers.begun and tab ~= "Careers" then
+    -- (a pilot who has not met them yet is told they are here)
+    Im.Text("New here? The career agents teach the ropes, and pay: Careers.", x + 16, y + 58, 13, Im.ACCENT)
   end
 
   if tab == "Market" then
@@ -1700,6 +1727,8 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
     drawCrew(session, game, player, x, y)
   elseif tab == "Missions" then
     drawMissions(session, game, x, y)
+  elseif tab == "Careers" then
+    drawCareers(session, game, x, y)
   elseif tab == "Starbase" and own then
     drawStarbase(session, game, player, own, x, y)
   else

@@ -89,6 +89,9 @@
 #               picked from it
 #   game-nomads the Kethri's colony ships (test/scenario/nomads.txt): one
 #               boarded in a galaxy of forty, left, looked at and moored at
+#   game-careers  the career agents (test/scenario/careers.txt): a new
+#               pilot takes lessons from two of them, does three, reports
+#               each and is paid, and reads one again in space
 #   game-pace   the game app must draw at least thirty frames a second just
 #               outside the home station (test/scenario/pace.txt)
 #   goldens     script/goldens: screenshots of the stored scenes must match
@@ -242,6 +245,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/context.txt
   step game-nomads 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 340 \
     --script test/scenario/nomads.txt
+  step game-careers 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 340 \
+    --script test/scenario/careers.txt
   step game-pace 0 timeout 200 bin/launch game --no-present --fixed-step 60 --timeout 150 \
     --script test/scenario/pace.txt
   step goldens 0 script/goldens

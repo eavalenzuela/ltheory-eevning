@@ -1327,6 +1327,19 @@ function Debug.Guide(step: string?): (number, number, boolean)
   return count, #rows, done
 end
 
+-- A career agent (Core/Character/Careers: "flight", "industry", "trade",
+-- "combat", "survey"): how many of their lessons are done, whether the
+-- next is in hand, how much of what that wants is done and of how much,
+-- and whether it can be taken or reported now.
+function Debug.Career(id: string): (number, boolean, number, number, boolean)
+  for _, row in Core.Query.Careers(session.game).rows do
+    if row.career.id == id then
+      return row.done, row.taken, row.have, row.need, row.can
+    end
+  end
+  return -1, false, 0, 0, false
+end
+
 -- What the camera is following (the id of something on the grid, or
 -- 0), and where it is looking from: its yaw and pitch.
 function Debug.Tracking(): (number, number, number)

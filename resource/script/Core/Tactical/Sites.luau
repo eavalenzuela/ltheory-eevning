@@ -183,8 +183,9 @@ end
 -- Make a site in a system: a place in its description, and what is
 -- there. Nothing is made if the description is nearly full. With
 -- 'depth' it is a stronghold on a den's trail: a den, found already,
--- with more in its stores. Returns the site made, if one was.
-local function make(state: State.State, system: number, rng: Rng.Rng, events: { Event }, depth: number?): State.Site?
+-- with more in its stores. With 'forced' it is of that kind, whatever
+-- the system would have had. Returns the site made, if one was.
+local function make(state: State.State, system: number, rng: Rng.Rng, events: { Event }, depth: number?, forced: string?): State.Site?
   local description = Space.Describe(state, system)
   local objects = description.objects
   if #objects + 40 >= Constants.STRUCTURE_ID_SPAN then
@@ -211,6 +212,8 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
   local deep = depth or 0
   if deep > 0 then
     kind = "combat"
+  elseif forced then
+    kind = forced
   end
   -- Somewhere out from a planet, well clear of it.
   local planet = planets[Rng.Int(rng, #planets) + 1]
@@ -276,6 +279,15 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
   end
   table.insert(events, { kind = "SiteAppeared", site = place.id, system = system, what = kind })
   return site
+end
+
+-- A site of a kind somebody wants there to be ("ore", "relic"), in a
+-- system: one of the system's own from then on, found, worked and gone
+-- as they are (Character/Careers: an agent who teaches finding things
+-- sees to it that there is something to find). Nil if the system's
+-- description is nearly full, or it has no planet.
+function Sites.Plant(state: State.State, system: number, kind: string, rng: Rng.Rng, events: { Event }): State.Site?
+  return make(state, system, rng, events, 0, kind)
 end
 
 -- A place made for a job (Tactical/Assault): somewhere out from a

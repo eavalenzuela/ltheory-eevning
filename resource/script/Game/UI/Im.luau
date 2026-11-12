@@ -131,6 +131,39 @@ function Im.TextRight(s: string, x: number, y: number, size: number, color: vect
   Im.Text(s, x - Im.TextWidth(s, size), y, size, color, alpha)
 end
 
+-- Text broken into lines no wider than 'width', at its spaces, from
+-- (x, y) down, 'pitch' apart (1.4 of its size if not said). Returns the
+-- y below the last line. (How a text breaks is worked out once: it is
+-- for a paragraph that is the same from frame to frame.)
+local broken: { [string]: { string } } = {}
+
+function Im.Wrapped(s: string, x: number, y: number, width: number, size: number, color: vector, pitch: number?): number
+  local key = `{size}:{width}:{s}`
+  local lines = broken[key]
+  if lines == nil then
+    lines = {}
+    local line = ""
+    for word in string.gmatch(s, "%S+") do
+      local longer = if line == "" then word else `{line} {word}`
+      if line ~= "" and Im.TextWidth(longer, size) > width then
+        table.insert(lines, line)
+        line = word
+      else
+        line = longer
+      end
+    end
+    if line ~= "" then
+      table.insert(lines, line)
+    end
+    broken[key] = lines
+  end
+  local step = pitch or math.floor(1.4 * size + 0.5)
+  for index, line in lines do
+    Im.Text(line, x, y + (index - 1) * step, size, color)
+  end
+  return y + #lines * step
+end
+
 -- How wide a heading is.
 function Im.HeadingWidth(s: string, size: number): number
   return WidgetRenderer_GetTextSize(Fonts.Heading(), s, size).x

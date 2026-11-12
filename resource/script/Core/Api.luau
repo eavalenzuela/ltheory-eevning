@@ -25,6 +25,7 @@ local Dscan = require("@lt/Core/Tactical/Dscan")
 local Factions = require("@lt/Core/Data/Factions")
 local Fleet = require("@lt/Core/Tactical/Fleet")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Careers = require("@lt/Core/Character/Careers")
 local Guide = require("@lt/Core/Character/Guide")
 local Hacking = require("@lt/Core/Tactical/Hacking")
 local Hangar = require("@lt/Core/Assets/Hangar")
@@ -72,7 +73,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 43
+Core.SAVE_VERSION = 44
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -298,6 +299,11 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   [40] = function(state: any)
     state.digs = state.digs or {}
   end,
+  -- 44: there are career agents. A save from before has begun with none
+  -- of them.
+  [43] = function(state: any)
+    state.careers = state.careers or {}
+  end,
   -- 43: the module that slows another ship is the Gravitic Entanglement
   -- Projector, and what it does is to entangle. A save from before has
   -- it under its old id, and each ship's share of its speed under the
@@ -515,6 +521,7 @@ function Core.New(options: Options): Game
     bookmarks = {},
     bookmarkIds = {},
     guide = {},
+    careers = {},
     implants = {},
     jobIds = {},
     wallet = 0,
@@ -583,6 +590,7 @@ local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones 
 local IMPLANT_COMMANDS = { PlugImplant = true, UnplugImplant = true }
 local FLEET_COMMANDS = { HirePilot = true, AssignShip = true, DismissPilot = true, FleetOrder = true }
 local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true, RedeemLoyalty = true }
+local CAREER_COMMANDS = { AcceptLesson = true, CompleteLesson = true }
 local COLONY_COMMANDS = { DeployColony = true, BuildFacility = true, RemoveFacility = true, StartExtraction = true, Export = true }
 
 local function validate(state: State.State, command: State.Command): (boolean, string?)
@@ -609,6 +617,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Colonies.Validate(state, command)
   elseif MISSION_COMMANDS[command.kind] then
     return Missions.Validate(state, command)
+  elseif CAREER_COMMANDS[command.kind] then
+    return Careers.Validate(state, command)
   elseif SITE_COMMANDS[command.kind] then
     return Sites.Validate(state, command)
   elseif DRONE_COMMANDS[command.kind] then
@@ -692,6 +702,8 @@ function Core.Step(game: Game)
       Colonies.Apply(state, command, game.events)
     elseif ok and MISSION_COMMANDS[command.kind] then
       Missions.Apply(state, command, game.events)
+    elseif ok and CAREER_COMMANDS[command.kind] then
+      Careers.Apply(state, command, game.events)
     elseif ok and SITE_COMMANDS[command.kind] then
       Sites.Apply(state, command, game.events)
     elseif ok and DRONE_COMMANDS[command.kind] then
@@ -729,6 +741,7 @@ function Core.Step(game: Game)
   Industry.Step(state, game.events)
   Training.Step(state, game.events)
   Guide.Step(state, game.events, first)
+  Careers.Step(state, game.events, first)
 end
 
 -- The events since the last call, oldest first.
@@ -1106,6 +1119,36 @@ function Query.Body(game: Game, id: number): Space.Body?
   -- (a place the pilot has marked counts, to whoever only wants its name
   -- and where it is)
   return Space.Body(game.state, id) or Space.Marked(game.state, id)
+end
+
+-- The career agents: each career in order, with who its agent is, how
+-- far the pilot has got, the lesson in hand or next to take (nil when
+-- there is none left), what finishing it gives, how much of what it
+-- wants is done, and whether it can be taken or reported done now (and
+-- if not, why not). And the station the agents are at, with whether the
+-- pilot is docked there.
+export type CareerRow = { career: Careers.Career, agent: string, done: number, taken: boolean, lesson: Careers.Lesson?,
+  gifts: { Careers.Stack }, have: number, need: number, can: boolean, why: string }
+export type CareersStatus = { rows: { CareerRow }, station: number, here: boolean, begun: boolean }
+function Query.Careers(game: Game): CareersStatus
+  local state = game.state
+  local ship = state.ships[state.player.ship]
+  local station = Careers.Station(state)
+  local rows: { CareerRow } = {}
+  local begun = false
+  for _, career in Careers.list do
+    local mine = Careers.Of(state, career.id)
+    local lesson = Careers.Lesson(state, career.id)
+    local have, need = Careers.Progress(state, career.id)
+    local can, why = false, nil :: string?
+    if lesson then
+      can, why = validate(state, { kind = if mine.taken then "CompleteLesson" else "AcceptLesson", actor = ship.id, what = career.id })
+    end
+    begun = begun or mine.taken or mine.done > 0
+    table.insert(rows, { career = career, agent = Careers.Agent(state, career.id), done = mine.done, taken = mine.taken, lesson = lesson,
+      gifts = if lesson then Careers.Gifts(state, lesson) else {}, have = have, need = need, can = can, why = why or "" })
+  end
+  return { rows = rows, station = station, here = ship.docked == station, begun = begun }
 end
 
 -- The guide: every step there is, in order, with whether the pilot has

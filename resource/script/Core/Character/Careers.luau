@@ -1,0 +1,435 @@
+--!strict
+-- Careers: the agents who show a new pilot the ropes.
+--
+-- At the station a new pilot starts at there are five agents, one for
+-- each way of making a living: flying, industry, trade, fighting and
+-- surveying. Each has a short run of lessons, to be done in order. A
+-- lesson is one thing to do, said plainly. What it needs is handed over
+-- when it is taken (into the station's hangar); when it is done the
+-- pilot reports back to the agent, docked there, and is paid: some
+-- credits, often something to use in the next lesson, and at the end of
+-- a career something worth having (a mining frigate, a combat frigate
+-- of the faction's, a cloak).
+--
+-- A lesson is done by doing the thing while the lesson is in hand. It is
+-- the Core's own events that are counted, as the guide's steps are
+-- (Character/Guide), so what was done before the lesson was taken does
+-- not count; except where the lesson is to have something (a skill at a
+-- level) or to bring something. A lesson does not lapse, cannot be
+-- failed and costs nothing to leave alone, and one from each agent can
+-- be in hand at once.
+--
+-- Two of the surveying lessons want something to find, and the agent
+-- sees to it: while one is in hand there is a hidden belt, or a derelict
+-- with a sealed hold, in the agents' system (Tactical/Sites).
+--
+-- Finishing a lesson raises the pilot's standing a little with the
+-- faction whose station it is.
+
+local Items = require("@lt/Core/Assets/Items")
+local Missions = require("@lt/Core/Assets/Missions")
+local Names = require("@lt/Core/Describe/Names")
+local Rng = require("@lt/Core/Kernel/Rng")
+local Ships = require("@lt/Core/Data/Ships")
+local Sites = require("@lt/Core/Tactical/Sites")
+local Space = require("@lt/Core/Tactical/Space")
+local Standings = require("@lt/Core/Assets/Standings")
+local State = require("@lt/Core/Kernel/State")
+local Stations = require("@lt/Core/Assets/Stations")
+local Types = require("@lt/Core/Data/Types")
+local Wallet = require("@lt/Core/Assets/Wallet")
+
+local Careers = {}
+
+export type Event = { [string]: any }
+export type Stack = { type: string, quantity: number }
+
+-- A lesson. What does it is one of three things: so many of an event
+-- ('on', which has to be the pilot's own ship's where 'mine' names the
+-- field that says whose it is, and has to pass 'also'; each counts for
+-- one, or for what 'worth' says); a skill at a level; or something
+-- brought, which is handed over.
+export type Lesson = {
+  title: string,
+  aim: string,          -- what is to be done, in a few words
+  says: string,         -- what the agent says of it
+  kit: { Stack },       -- handed over when it is taken
+  on: string,
+  mine: string?,
+  also: ((event: Event, state: State.State) -> boolean)?,
+  worth: ((event: Event) -> number)?,
+  need: number,
+  skill: { id: string, level: number }?,
+  bring: Stack?,
+  site: string?,        -- the kind of site there is to be for it
+  credits: number,      -- what is paid for it
+  gifts: { Stack },     -- and given
+  frigate: boolean?,    -- and the faction's combat frigate with them
+}
+
+export type Career = { id: string, name: string, about: string, lessons: { Lesson } }
+
+-- Standing gained with the station's faction for a lesson.
+Careers.STANDING = 0.05
+-- Ticks between one look and the next at whether a lesson's site is
+-- still there to be found.
+Careers.CHECK = 600
+
+-- The station the agents are at: where a new pilot starts.
+function Careers.Station(state: State.State): number
+  return Stations.Starter(state)
+end
+
+local function elsewhere(_event: Event, state: State.State): boolean
+  local ship = state.ships[state.player.ship]
+  return ship ~= nil and ship.docked ~= 0 and ship.docked ~= Careers.Station(state)
+end
+
+Careers.list = {
+  {
+    id = "flight", name = "Flight school", about = "Getting about: warping, marking places, gates, other stations.",
+    lessons = {
+      { title = "Out and back", aim = "Warp somewhere", on = "WarpEnded", mine = "ball", need = 1, kit = {}, credits = 2000, gifts = {},
+        says = "Undock, pick any place on the overview and warp to it (S). When the warp ends, pick this station and dock (D). "
+          .. "That is most of what flying is." },
+      { title = "A place of your own", aim = "Mark a place in space", on = "Bookmarked", need = 1, kit = {}, credits = 2500,
+        gifts = { { type = "nanofiber", quantity = 1 } },
+        says = "Mark, at the top of the overview, keeps the spot your ship is at. It is on the overview from then on, to warp "
+          .. "back to: a quiet corner of a belt, a way out of trouble." },
+      { title = "Next door", aim = "Jump to another system, and back", on = "Jumped", mine = "ship", need = 2, kit = {}, credits = 5000,
+        gifts = { { type = "overdrive", quantity = 1 } },
+        says = "Pick a stargate on the overview and jump (D): the ship warps to it first. Then come back the same way. "
+          .. "The map (M) plans longer ways, and the autopilot flies them." },
+      { title = "Another harbour", aim = "Dock at another station", on = "Docked", mine = "ship", need = 1, kit = {}, credits = 8000,
+        also = function(event: Event, state: State.State): boolean
+          return event.station ~= Careers.Station(state)
+        end,
+        gifts = { { type = "book.evasive.maneuvering", quantity = 1 } },
+        says = "Dock somewhere that is not here. Every station keeps its own market and its own agents, and what is cheap "
+          .. "at one is dear at another." },
+    },
+  },
+  {
+    id = "industry", name = "Industry", about = "Making things: mining, refining, building from blueprints.",
+    lessons = {
+      { title = "Rock to ore", aim = "Mine 400 units of ore", on = "Mined", mine = "ball", need = 400, credits = 3000, gifts = {},
+        worth = function(event: Event): number
+          return event.units
+        end,
+        kit = { { type = "miner.small", quantity = 1 } },
+        says = "Fit this Mining Laser (Fitting tab: a gun can come out to make room). At a belt, lock a rock (L) and switch "
+          .. "the laser on. The ore comes into the hold a load a minute." },
+      { title = "Ore to minerals", aim = "Refine ore", on = "Reprocessed", mine = "ship", need = 1, kit = {}, credits = 3000, gifts = {},
+        says = "Ore is bulky and cheap. Refined, it is the minerals everything is built from. Industry tab, here: refine "
+          .. "what you mined." },
+      { title = "Minerals to goods", aim = "Build something from a blueprint", on = "JobDone", need = 1, kit = {}, credits = 5000,
+        gifts = { { type = "blueprint.miner.small", quantity = 1 } },
+        says = "Your hangar has a blueprint for rounds. Industry tab: pick it, see what minerals it wants, and start the job. "
+          .. "It takes a little while: come back when it is done." },
+      { title = "An order to fill", aim = "Bring 1,000 Ferrite", on = "", need = 0, kit = {}, credits = 12000, gifts = {},
+        bring = { type = "ore.ferrite", quantity = 1000 },
+        says = "A yard here wants a thousand units of Ferrite, and I said you would bring it. It is the commonest rock in "
+          .. "these belts. Have it in your hold or in the hangar here when you report." },
+      { title = "A ship for the work", aim = "Train Mining to level 2", on = "", need = 1, kit = {}, credits = 10000,
+        skill = { id = "mining", level = 2 },
+        gifts = { { type = "frigate.prospector", quantity = 1 }, { type = "miner.small", quantity = 1 } },
+        says = "The Prospector is built to mine: more lasers and a bigger hold. It wants Mining at level 2 (Skills tab; a "
+          .. "few minutes, and it goes on while you do other things). Have that, and there is a Prospector here for you." },
+    },
+  },
+  {
+    id = "trade", name = "Commerce", about = "Buying and selling: the market, orders, a station's jobs.",
+    lessons = {
+      { title = "Something to sell", aim = "Sell something on the market", on = "Sold", need = 1, kit = {}, credits = 2000, gifts = {},
+        says = "Market tab: pick something you have, and sell it. You have rounds and ore, if nothing else. What the "
+          .. "station pays is the price shown, less a tax." },
+      { title = "A standing order", aim = "Place an order on the market", on = "OrderPlaced", need = 1, kit = {}, credits = 3000,
+        gifts = { { type = "book.broker.relations", quantity = 1 } },
+        says = "Selling at once takes what the station pays. An order asks more and waits for a buyer: set a price above "
+          .. "the station's and place it. An order costs a broker's fee, and can be taken back." },
+      { title = "Work for the station", aim = "Finish a job from the Missions tab", on = "MissionCompleted", need = 1, kit = {},
+        credits = 6000, gifts = { { type = "cargo.expander", quantity = 1 } },
+        says = "The Missions tab has what the station wants done today. A courier run or a supply order is a trader's "
+          .. "work: take one and see it through. It pays, and the faction remembers." },
+      { title = "Buy here, sell there", aim = "Sell something at another station", on = "Sold", need = 1, kit = {}, credits = 15000,
+        also = elsewhere,
+        gifts = { { type = "book.accounting", quantity = 1 }, { type = "cargo.expander", quantity = 1 } },
+        says = "Prices differ from station to station, and the market shows what each pays. Carry something to another "
+          .. "station and sell it there. Minerals and components travel well." },
+    },
+  },
+  {
+    id = "combat", name = "Enforcement", about = "Fighting: fitting a ship, pirates, wrecks and what is in them.",
+    lessons = {
+      { title = "Fit for it", aim = "Fit a module", on = "Fitted", need = 1, kit = {}, credits = 2000,
+        gifts = { { type = "ammo.emp", quantity = 500 } },
+        says = "A ship is what is fitted to it. Fitting tab: the Small Shield Extender in your hangar goes into a free mid "
+          .. "slot. If it is in already, take it out and put it back: I want to see that you can." },
+      { title = "First pirate", aim = "Destroy a pirate", on = "WalletChanged", need = 1, kit = {}, credits = 6000,
+        also = function(event: Event): boolean
+          return event.reason == "bounty"
+        end,
+        gifts = { { type = "shield.booster.small", quantity = 1 } },
+        says = "Pirates come to the belts. Warp to one and wait. Tab picks a pirate out, L locks it, F1 and F2 fire. Orbit "
+          .. "it (W) while you shoot: a moving ship is harder to hit. If your shield goes, warp out." },
+      { title = "What they leave", aim = "Loot a wreck", on = "Looted", mine = "ship", need = 1, kit = {}, credits = 4000,
+        gifts = { { type = "book.salvaging", quantity = 1 }, { type = "salvager.small", quantity = 1 } },
+        says = "A destroyed ship leaves a wreck, and what it carried is in it. Approach the wreck (Q) and Loot. Pirate "
+          .. "tags sell, and so does the rest." },
+      { title = "Nothing wasted", aim = "Salvage a wreck", on = "Salvaged", mine = "ball", need = 1, kit = {}, credits = 6000,
+        gifts = { { type = "armor.plate.200mm", quantity = 1 } },
+        says = "Learn Salvaging from the book I gave you and train it to level 1 (Skills tab: three minutes). Fit the "
+          .. "Salvager, lock a wreck and run it. The pieces it brings off build rigs, and sell well." },
+      { title = "A patrol", aim = "Destroy 5 pirates", on = "WalletChanged", need = 5, kit = {}, credits = 20000, gifts = {},
+        also = function(event: Event): boolean
+          return event.reason == "bounty"
+        end,
+        frigate = true,
+        says = "Five more pirates, and you are no longer new at this. A bounty job from the Missions tab pays for the same "
+          .. "kills twice. There is a combat frigate of ours here for you when it is done: it wants Frigates at level 2." },
+    },
+  },
+  {
+    id = "survey", name = "Survey", about = "Finding things: the scanner, probes, derelicts and their locks.",
+    lessons = {
+      { title = "Listen", aim = "Run a scan", on = "Scanned", mine = "ball", need = 1, kit = {}, credits = 2000, gifts = {},
+        says = "Scan, at the top of the overview, opens the scanner. Undock and run one. It shows the signals in this "
+          .. "system that are on no chart: pirate dens at once, the rest a little nearer each time." },
+      { title = "A belt on no chart", aim = "Find a hidden site", on = "Scanned", mine = "ball", need = 1, kit = {}, credits = 5000,
+        also = function(event: Event): boolean
+          return (event.found or 0) > 0
+        end,
+        site = "ore", gifts = {},
+        says = "There is a belt in this system that no chart has. Keep scanning until it is found: three scans, fewer as "
+          .. "Astrometrics is trained. A found site is on the overview to warp to, and its rocks are bigger than any belt's." },
+      { title = "Probes", aim = "Put out a scan probe", on = "ProbeLaunched", mine = "ball", need = 1, credits = 4000,
+        kit = { { type = "probe.scan", quantity = 2 } },
+        gifts = { { type = "book.hacking", quantity = 1 } },
+        says = "A probe put out near a signal makes every scan worth as much again, and some signals cannot be found "
+          .. "without one. With these in your hold, undock and put one out from the scanner window. It lasts an hour; "
+          .. "Recall brings it back." },
+      { title = "The sealed hold", aim = "Hack a derelict's hold open, whole", on = "HackDone", need = 1, credits = 15000,
+        also = function(event: Event): boolean
+          return event.success == true
+        end,
+        site = "relic",
+        kit = { { type = "analyzer.data", quantity = 1 }, { type = "probe.scan", quantity = 2 } },
+        gifts = { { type = "cloak.device", quantity = 1 }, { type = "book.cloaking", quantity = 1 } },
+        says = "A derelict is adrift in this system. The scanner gets it half way and says which planet it is by: take a "
+          .. "probe there and scan again. Its hold is sealed. Train Hacking (it wants CPU Management 2), fit the Data "
+          .. "Analyzer, and Hack from within five kilometres: get the key of the safeguards in." },
+    },
+  },
+} :: { Career }
+
+Careers.byId = {} :: { [string]: Career }
+for _, career in Careers.list do
+  Careers.byId[career.id] = career
+end
+
+-- How far the pilot has got with a career (not begun, if nothing says).
+function Careers.Of(state: State.State, id: string): State.Career
+  return state.careers[id] or { done = 0, taken = false, count = 0 }
+end
+
+-- Who a career's agent is: the same person for as long as the galaxy lasts.
+function Careers.Agent(state: State.State, id: string): string
+  local slot = 0
+  for index, career in Careers.list do
+    slot = if career.id == id then index else slot
+  end
+  return Names.Person(Rng.For(state.galaxySeed, Careers.Station(state), slot, 113))
+end
+
+-- The lesson of a career that is in hand, or is the next to take; nil
+-- when the agent has nothing more to teach.
+function Careers.Lesson(state: State.State, id: string): Lesson?
+  local career = Careers.byId[id]
+  return if career then career.lessons[Careers.Of(state, id).done + 1] else nil
+end
+
+-- Whose station the agents are at.
+local function faction(state: State.State): string
+  return state.galaxy.systems[Space.SystemOf(state, Careers.Station(state))].nearest
+end
+
+-- The combat frigate that faction builds (the plain one, if it builds none).
+function Careers.Frigate(state: State.State): string
+  local whose = faction(state)
+  for _, hull in Ships.list do
+    if hull.class == "frigate" and hull.lineage == whose and hull.tech ~= 2 then
+      return hull.id
+    end
+  end
+  return "frigate.courier"
+end
+
+-- What finishing a lesson gives beside its credits.
+function Careers.Gifts(state: State.State, lesson: Lesson): { Stack }
+  local gifts = table.clone(lesson.gifts)
+  if lesson.frigate then
+    table.insert(gifts, { type = Careers.Frigate(state), quantity = 1 })
+  end
+  return gifts
+end
+
+-- How a lesson in hand stands: how much of what it wants there is, of
+-- how much. (What is to be brought is counted only where it can be
+-- handed over: docked at the agents' station.)
+function Careers.Progress(state: State.State, id: string): (number, number)
+  local lesson = Careers.Lesson(state, id)
+  local mine = Careers.Of(state, id)
+  if lesson == nil or not mine.taken then
+    return 0, 0
+  elseif lesson.bring then
+    local ship = state.ships[state.player.ship]
+    local have = if ship and ship.docked == Careers.Station(state) then Missions.ToHand(state, ship, lesson.bring.type) else 0
+    return math.min(have, lesson.bring.quantity), lesson.bring.quantity
+  end
+  return math.min(mine.count, lesson.need), lesson.need
+end
+
+-- Whether a lesson in hand can be reported done by a ship docked at the
+-- agents' station; if not, why not.
+function Careers.Ready(state: State.State, ship: State.Ship, id: string): (boolean, string?)
+  local lesson = Careers.Lesson(state, id)
+  local mine = Careers.Of(state, id)
+  if lesson == nil or not mine.taken then
+    return false, "no lesson of theirs is in hand"
+  elseif lesson.bring then
+    local have = Missions.ToHand(state, ship, lesson.bring.type)
+    if have < lesson.bring.quantity then
+      return false, `{lesson.bring.quantity - have} more {Types.Info(lesson.bring.type).name} to bring`
+    end
+  elseif mine.count < lesson.need then
+    return false, if lesson.need == 1 then "still to do" else `{mine.count} of {lesson.need} so far`
+  end
+  return true
+end
+
+-- Whether there is, in the agents' system, what a lesson wants found: a
+-- hidden belt not found yet, or a derelict with a hold still sealed.
+local function provided(state: State.State, system: number, kind: string): boolean
+  for _, site in Sites.In(state, system) do
+    if site.kind == kind and kind == "ore" and site.strength < 1 then
+      return true
+    elseif site.kind == kind and kind == "relic" then
+      for _, id in state.wreckIds do
+        local wreck = state.wrecks[id]
+        if wreck.system == system and wreck.grid == site.id and wreck.locked then
+          return true
+        end
+      end
+    end
+  end
+  return false
+end
+
+-- See to it that there is.
+local function provide(state: State.State, kind: string, events: { Event })
+  local system = Space.SystemOf(state, Careers.Station(state))
+  if not provided(state, system, kind) then
+    Sites.Plant(state, system, kind, Rng.For(state.historySeed, state.tick, system, 131), events)
+  end
+end
+
+function Careers.Validate(state: State.State, command: State.Command): (boolean, string?)
+  local ship = state.ships[command.actor]
+  local career = Careers.byId[command.what or ""]
+  if ship == nil then
+    return false, "no such ship"
+  elseif career == nil then
+    return false, "no such career"
+  end
+  local station = Careers.Station(state)
+  if ship.docked ~= station then
+    local object = Space.Object(state, station)
+    return false, `the career agents are at {if object then object.name else "the first station"}`
+  end
+  local mine = Careers.Of(state, career.id)
+  if command.kind == "AcceptLesson" then
+    if mine.taken then
+      return false, "that lesson is in hand already"
+    elseif mine.done >= #career.lessons then
+      return false, `{Careers.Agent(state, career.id)} has nothing more to teach`
+    end
+    return true
+  elseif command.kind == "CompleteLesson" then
+    return Careers.Ready(state, ship, career.id)
+  end
+  return false, `unknown command '{command.kind}'`
+end
+
+function Careers.Apply(state: State.State, command: State.Command, events: { Event })
+  local ship = state.ships[command.actor]
+  local career = Careers.byId[command.what :: string]
+  local station = Careers.Station(state)
+  local mine = state.careers[career.id]
+  if mine == nil then
+    mine = { done = 0, taken = false, count = 0 }
+    state.careers[career.id] = mine
+  end
+  local lesson = career.lessons[mine.done + 1]
+  local agent = Careers.Agent(state, career.id)
+  if command.kind == "AcceptLesson" then
+    mine.taken, mine.count = true, 0
+    for _, stack in lesson.kit do
+      Items.Add(state, stack.type, stack.quantity, station, "hangar")
+    end
+    if lesson.site then
+      provide(state, lesson.site, events)
+    end
+    table.insert(events, { kind = "LessonTaken", career = career.id, lesson = mine.done + 1, title = lesson.title, agent = agent })
+    return
+  end
+  if lesson.bring then
+    Missions.Hand(state, ship, lesson.bring.type, lesson.bring.quantity)
+  end
+  Wallet.Pay(state, lesson.credits, "career agent", events)
+  local gifts = Careers.Gifts(state, lesson)
+  for _, stack in gifts do
+    Items.Add(state, stack.type, stack.quantity, station, "hangar")
+  end
+  Standings.Change(state, faction(state), Careers.STANDING)
+  mine.done += 1
+  mine.taken, mine.count = false, 0
+  table.insert(events, { kind = "LessonDone", career = career.id, lesson = mine.done, title = lesson.title, agent = agent,
+    credits = lesson.credits, gifts = #gifts, finished = mine.done >= #career.lessons, name = career.name })
+end
+
+-- Once a tick: what the events since 'first' (the place in the list
+-- this tick's begin at) do for the lessons in hand; and, now and then,
+-- that what a lesson wants found is still there to find.
+function Careers.Step(state: State.State, events: { Event }, first: number)
+  local last = #events
+  for _, career in Careers.list do
+    local mine = state.careers[career.id]
+    local lesson = if mine and mine.taken then career.lessons[mine.done + 1] else nil
+    if mine == nil or lesson == nil then
+      continue
+    end
+    local before = mine.count
+    if lesson.skill then
+      if (state.skills[lesson.skill.id] or -1) >= lesson.skill.level then
+        mine.count = lesson.need
+      end
+    elseif lesson.on ~= "" and mine.count < lesson.need then
+      for at = first, last do
+        local event = events[at]
+        if event.kind == lesson.on and (lesson.mine == nil or event[lesson.mine] == state.player.ship)
+          and (lesson.also == nil or lesson.also(event, state)) then
+          mine.count = math.min(lesson.need, mine.count + (if lesson.worth then lesson.worth(event) else 1))
+        end
+      end
+    end
+    if before < lesson.need and mine.count >= lesson.need then
+      table.insert(events, { kind = "LessonReady", career = career.id, lesson = mine.done + 1, title = lesson.title,
+        agent = Careers.Agent(state, career.id) })
+    end
+    if lesson.site and state.tick % Careers.CHECK == 0 then
+      provide(state, lesson.site, events)
+    end
+  end
+end
+
+return Careers

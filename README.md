@@ -21,7 +21,7 @@ This is a fork of the old C++ implementation of Limit Theory, its engine (LTE) a
 - **Combat**: target locking, tracking and range, shields, armour and hull, wrecks to loot and salvage, insurance, and a capsule to get home in.
 - **Industry**: mining, refining, manufacturing from blueprints, research and invention, and planetary colonies.
 - **Trade**: a market at each station with buy and sell orders, where prices differ by who owns the station.
-- **Things to do**: daily jobs, combat camps and mining contracts from agents, standings and loyalty stores, sites to scan down, derelicts to hack.
+- **Things to do**: career agents who show a new pilot the ropes, daily jobs, combat camps and mining contracts from agents, standings and loyalty stores, sites to scan down, derelicts to hack.
 - **A character**: skills that train in real time, including while the game is closed, and implants.
 - **Company**: hired pilots who follow, mine, haul, patrol and guard; starbases of your own with anchored modules.
 - **A world**: security that falls away from each faction's homeworld, police and gate guns where order is kept, other ships going about their business.
@@ -67,7 +67,7 @@ bin/launch game
 
 On a laptop with two graphics cards, `DRI_PRIME=1 bin/launch game` runs it on the faster one.
 
-The game opens on a menu: continue, new game (pick a seed and a galaxy size), load, options (sound on or off, and the loudness of effects and music), quit. A new game starts you docked at a station with a small ship; the Guide button lists things to do, roughly in the order a new pilot would want them.
+The game opens on a menu: continue, new game (pick a seed and a galaxy size), load, options (sound on or off, and the loudness of effects and music), quit. A new game starts you docked at a station with a small ship. That station has five career agents (the Careers tab), who each teach a way of making a living in a few short lessons and pay for them; the Guide button lists everything else there is to do, and shows the lessons you have in hand while you are in space.
 
 | | |
 |---|---|
