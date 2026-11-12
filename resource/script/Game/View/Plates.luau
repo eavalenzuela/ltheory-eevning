@@ -77,13 +77,19 @@ export type Builder = {
   -- out of them (Plates.Loft, Plates.Fairing). One mesh for all of it.
   skin: Mesh?,
   points: number,       -- how many vertices that mesh has
+  -- And a second such mesh, for what stands on a skin and is not to
+  -- shelter it: how open to the sky each place is, is worked out for a
+  -- mesh by itself, and a low dome on a hull's back would otherwise put
+  -- the hull about it in its shade, and the shader's grime with it.
+  apart: Mesh?,
+  apartPoints: number,
 }
 
 local ZERO = vector.create(0, 0, 0)
 
 function Plates.New(seed: number, fine: number?): Builder
   return { big = PlateMesh_Create(9), small = PlateMesh_Create(4), count = 0, seed = seed, fine = fine or 0.11, ruin = nil,
-    patch = nil, kept = 0, skin = nil, points = 0, solids = {} }
+    patch = nil, kept = 0, skin = nil, points = 0, apart = nil, apartPoints = 0, solids = {} }
 end
 
 -- The next plate's own number: the fraction of its tag.
@@ -497,20 +503,33 @@ end
 -- from 1, in order counter-clockwise seen from outside), all of one
 -- paint and one tone. In a wreck, only the faces of the length of it
 -- that this piece of the wreck is, less what was lost, a patch of them
--- at a time; and nothing lit.
-function Plates.Skin(b: Builder, part: number, points: { number }, faces: { number })
+-- at a time; and nothing lit. With 'apart' it is kept from sheltering
+-- the rest (a thing standing on a hull, that is not to put the hull
+-- about it in shade).
+function Plates.Skin(b: Builder, part: number, points: { number }, faces: { number }, apart: boolean?)
   local tag = part + own(b)
   local kind = math.floor(part)
   local ruin = b.ruin
   if ruin and (kind == Plates.GLOW or kind == Plates.FIRE) then
     return
   end
-  local skin = skinOf(b)
-  local base = b.points
+  local skin: Mesh
+  local base: number
+  if apart then
+    local other = b.apart
+    if other == nil then
+      other = Mesh_Create()
+      b.apart = other
+    end
+    skin, base = other :: Mesh, b.apartPoints
+    b.apartPoints += #points // 3
+  else
+    skin, base = skinOf(b), b.points
+    b.points += #points // 3
+  end
   for at = 1, #points, 3 do
     Mesh_AddVertex(skin, vector.create(points[at], points[at + 1], points[at + 2]), UNSET, 1, tag)
   end
-  b.points += #points // 3
   for at = 1, #faces, 3 do
     local a, c, d = faces[at], faces[at + 1], faces[at + 2]
     local keep = true
@@ -682,8 +701,7 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
 
   local model = Model_Create()
   Model_AddShell(model, mesh, skin)
-  local lofted = b.skin
-  if lofted then
+  for _, lofted in { b.skin :: Mesh?, b.apart :: Mesh? } do
     -- (the engine's faces turn the other way from the way these were wound)
     Mesh_ReverseWinding(lofted)
     Mesh_ComputeNormals(lofted)

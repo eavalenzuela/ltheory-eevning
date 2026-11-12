@@ -7,7 +7,7 @@
 - The engine and tools in `src/`, and everything in `resource/script/` and `resource/shader/`.
 - Everything the game shows that those make when it runs: hulls, stations, planets, stars, effects, icons and the interface. Nearly all of it is made as the game runs and is stored nowhere.
 - `docs/`, `script/` and `test/`.
-- The hull models in `resource/model`, which `script/modelgen` writes from numbers.
+- The hull models in `resource/model`, which `script/modelgen` writes: from numbers, and for the Vail's battleship on a base shape (`resource/model/vail/base/battleship.glb`) that the project's owner modelled with other tools and in Blender, and publishes with the rest.
 
 ## Sounds and music made for this game
 

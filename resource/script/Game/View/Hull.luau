@@ -1594,6 +1594,10 @@ local function abeam(starboard: vector, port: vector): Hardpoint
   return { { at = starboard, up = STARBOARD }, { at = port, up = PORT } }
 end
 
+-- How the Vail's battleship is read: its bridge stands on its back
+-- without putting the hull about it in shade.
+local BATTLESHIP_FILE: Imported.Options = { apart = { "bridge" } }
+
 type Design = {
   faction: string,
   draw: (b: Builder) -> (),
@@ -1656,6 +1660,23 @@ local designs: { [string]: Design } = {
         Imported.Mounts(model, -0.04, -0.10) }, {}
     end,
     fit = { "laser.pulse.medium", "laser.pulse.medium", "laser.pulse.medium", "laser.pulse.medium" },
+  },
+  -- Their battleship. Its shape is the owner's (the hull and engine
+  -- housings of a model worked up in another program and in Blender: a
+  -- flattened arrowhead); the Vail's bands, lights, nozzles and its
+  -- bridge are put on it by script/modelgen. A gun forward on its back
+  -- and three pairs abreast down its length, clear of the bridge; each
+  -- with its twin beneath.
+  ["battleship.harpoon"] = {
+    faction = "vail", draw = vessel("vail/battleship.obj", BATTLESHIP_FILE), sheets = 13, turrets = {}, launchers = {},
+    place = function(): ({ Hardpoint }, { Hardpoint })
+      local model = Imported.Load("vail/battleship.obj", BATTLESHIP_FILE)
+      return { Imported.Mounts(model, 0, 0.42), Imported.Mounts(model, 0.11, -0.10), Imported.Mounts(model, -0.11, -0.10),
+        Imported.Mounts(model, 0.11, -0.30), Imported.Mounts(model, -0.11, -0.30), Imported.Mounts(model, 0.11, -0.48),
+        Imported.Mounts(model, -0.11, -0.48) }, {}
+    end,
+    fit = { "laser.beam.large", "laser.beam.large", "laser.beam.large", "laser.beam.large", "laser.beam.large", "laser.beam.large",
+      "laser.beam.large" },
   },
   -- Their hauler, from the fifth: one gun, on its back before the bay.
   ["industrial.drover"] = {

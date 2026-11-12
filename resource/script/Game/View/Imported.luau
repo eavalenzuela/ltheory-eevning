@@ -39,11 +39,17 @@ export type Options = {
   -- where the file has nothing painted as their fire ("cooling ring",
   -- "nozzle"): the engines' fire then leaves by the after end of each.
   exhausts: string?,
+  -- Words in the names of the parts that stand on the hull and are not
+  -- to shelter it ("bridge"): how open to the sky each place is, is
+  -- worked out without them, so that the hull about them is not put in
+  -- their shade and the shader's grime.
+  apart: { string }?,
 }
 
 export type Model = {
   shape: Shape.Shape,
   paints: { number },             -- the paint of each part, in the parts' order
+  apart: { boolean },             -- and whether it is kept from sheltering the rest
   engines: { Shape.Engine },
   -- The surface a gun can stand on: everything that is not lit.
   deck: Shape.Caster,
@@ -59,7 +65,8 @@ local loadedAs: { [string]: string } = {}
 -- and so is asking for one file two ways (which way its bow points is
 -- said once, wherever it is asked for).
 function Imported.Load(file: string, options: Options?): Model
-  local as = if options then `{options.fore or ""} {options.up or ""} {options.crease or ""} {options.exhausts or ""}` else "   "
+  local as = if options then `{options.fore or ""} {options.up or ""} {options.crease or ""} {options.exhausts or ""} `
+    .. table.concat(options.apart or {}, ",") else "    "
   local had = loaded[file]
   if had then
     assert(loadedAs[file] == as, `Imported: {file} is asked for in two different ways`)
@@ -78,6 +85,7 @@ function Imported.Load(file: string, options: Options?): Model
     Shape.Mend(part)
   end
   local paints: { number } = {}
+  local apart: { boolean } = {}
   local deck: { Shape.Part } = {}
   local byName: { [string]: { Shape.Part } } = {}
   local names: { string } = {}
@@ -85,6 +93,11 @@ function Imported.Load(file: string, options: Options?): Model
     Shape.Crease(part, if options and options.crease then options.crease else 40)
     local paint = Shape.Paint(part)
     paints[index] = paint
+    apart[index] = false
+    local words: { string } = if options and options.apart then options.apart else {}
+    for _, word in words do
+      apart[index] = apart[index] or string.find(string.lower(part.name), string.lower(word), 1, true) ~= nil
+    end
     if paint ~= Shape.LIT and paint ~= Shape.FIRE then
       table.insert(deck, part)
     end
@@ -112,7 +125,7 @@ function Imported.Load(file: string, options: Options?): Model
       end
     end
   end
-  local model: Model = { shape = shape, paints = paints, engines = engines, deck = Shape.Cast(deck), solids = solids }
+  local model: Model = { shape = shape, paints = paints, apart = apart, engines = engines, deck = Shape.Cast(deck), solids = solids }
   loaded[file] = model
   return model
 end
@@ -120,7 +133,7 @@ end
 -- Put a model into what is being built.
 function Imported.Draw(b: Plates.Builder, model: Model)
   for index, part in model.shape.parts do
-    Plates.Skin(b, model.paints[index], part.points, part.faces)
+    Plates.Skin(b, model.paints[index], part.points, part.faces, model.apart[index])
   end
   for _, solid in model.solids do
     Plates.Stands(b, function(p: vector): boolean

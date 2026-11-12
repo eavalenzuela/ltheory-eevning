@@ -20,8 +20,10 @@ writes (File, Import, Wavefront), and the game reads it as it is
 The models are the Vail's hulls, from the project owner's drawings
 (docs/concepts/vail).
 """
+import json
 import math
 import os
+import struct
 import sys
 
 PAINTS = ["plating", "patch", "frame", "lit", "trim", "fire"]
@@ -34,6 +36,84 @@ MTL = {
     "trim": ((0.06, 0.06, 0.06), (0, 0, 0)),
     "fire": ((1.0, 0.55, 0.15), (1.0, 0.50, 0.12)),
 }
+
+
+def read_glb(path):
+    """The meshes of a binary glTF file, each as (name, points, faces),
+    placed where its node puts it. Enough of the format for a base shape
+    made in another program: faces of three points, numbers kept in the
+    file itself."""
+    data = open(path, "rb").read()
+    assert data[:4] == b"glTF", f"{path} is not a binary glTF file"
+    at, doc, binary = 12, None, None
+    while at + 8 <= len(data):
+        long, kind = struct.unpack_from("<II", data, at)
+        if kind == 0x4E4F534A:
+            doc = json.loads(data[at + 8:at + 8 + long])
+        elif kind == 0x004E4942 and binary is None:
+            binary = at + 8
+        at += 8 + long
+    widths = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}
+    kinds = {5120: "b", 5121: "B", 5122: "h", 5123: "H", 5125: "I", 5126: "f"}
+
+    def numbers(index):
+        accessor = doc["accessors"][index]
+        view = doc["bufferViews"][accessor["bufferView"]]
+        width, kind = widths[accessor["type"]], kinds[accessor["componentType"]]
+        size = struct.calcsize(kind)
+        stride = view.get("byteStride", width * size)
+        start = binary + view.get("byteOffset", 0) + accessor.get("byteOffset", 0)
+        return [struct.unpack_from("<" + kind * width, data, start + n * stride) for n in range(accessor["count"])]
+
+    def place(node):
+        if "matrix" in node:
+            return node["matrix"]
+        tx, ty, tz = node.get("translation", (0, 0, 0))
+        x, y, z, w = node.get("rotation", (0, 0, 0, 1))
+        sx, sy, sz = node.get("scale", (1, 1, 1))
+        return [(1 - 2 * (y * y + z * z)) * sx, (2 * (x * y + z * w)) * sx, (2 * (x * z - y * w)) * sx, 0,
+                (2 * (x * y - z * w)) * sy, (1 - 2 * (x * x + z * z)) * sy, (2 * (y * z + x * w)) * sy, 0,
+                (2 * (x * z + y * w)) * sz, (2 * (y * z - x * w)) * sz, (1 - 2 * (x * x + y * y)) * sz, 0, tx, ty, tz, 1]
+
+    def times(a, b):
+        return [sum(a[k * 4 + row] * b[column * 4 + k] for k in range(4)) for column in range(4) for row in range(4)]
+
+    found = []
+
+    def visit(index, parent):
+        node = doc["nodes"][index]
+        m = times(parent, place(node))
+        if "mesh" in node:
+            for primitive in doc["meshes"][node["mesh"]]["primitives"]:
+                if primitive.get("mode", 4) != 4:
+                    continue
+                points = [(m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13],
+                           m[2] * x + m[6] * y + m[10] * z + m[14]) for x, y, z in numbers(primitive["attributes"]["POSITION"])]
+                corners = [c[0] for c in numbers(primitive["indices"])] if "indices" in primitive else list(range(len(points)))
+                found.append((node.get("name", ""), points, [tuple(corners[n:n + 3]) for n in range(0, len(corners) - 2, 3)]))
+        for child in node.get("children", ()):
+            visit(child, m)
+
+    for root in doc["scenes"][doc.get("scene", 0)]["nodes"]:
+        visit(root, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+    return found
+
+
+def cut(polygon, level):
+    """A flat polygon of (point, value) corners, cut where the value is
+    'level': the part of it below, and the part above (either may be
+    nothing). A cut edge is where the value, taken as running evenly
+    along it, comes to the level."""
+    below, above = [], []
+    for n, (p, u) in enumerate(polygon):
+        q, v = polygon[(n + 1) % len(polygon)]
+        (below if u <= level else above).append((p, u))
+        if (u <= level) != (v <= level):
+            s = (level - u) / (v - u)
+            at = (tuple(p[k] + (q[k] - p[k]) * s for k in range(3)), level)
+            below.append(at)
+            above.append(at)
+    return (below if len(below) >= 3 else []), (above if len(above) >= 3 else [])
 
 
 def curve(keys):
@@ -261,6 +341,58 @@ class Model:
                 face(outer[a], outer[b], inner[b], inner[a], centre_of(outer[a], outer[b], inner[b], inner[a]))
         self.objects.append((name, faces))
         self.flat.add(name)
+
+    def banded(self, name, points, faces, camo, paint=None):
+        """A mesh made elsewhere (points as this model has them: x to
+        starboard, y up, z forward; faces of three, counter-clockwise
+        seen from outside), laid in with the hull's bands painted on it:
+        every face is cut where a band ends, so that the bands' edges
+        are clean lines across it whatever its faces are. 'paint(t, x,
+        y, up)' may give a piece another paint (up: how far its face
+        looks upward, -1 to 1), or None to leave it its band's."""
+        index = {}
+        out = []
+
+        def vertex(p):
+            key = (round(p[0], 6), round(p[1], 6), round(p[2], 6))
+            if key not in index:
+                index[key] = self.vertex(p)
+            return index[key]
+
+        half = camo.period / 2
+        for a, b, c in faces:
+            pa, pb, pc = points[a], points[b], points[c]
+            ux, uy, uz = pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]
+            vx, vy, vz = pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]
+            nx, ny, nz = uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx
+            long = math.sqrt(nx * nx + ny * ny + nz * nz)
+            if long < 1e-14:
+                continue
+            # (the bands turn a corner on the ship's middle line: a face
+            # that lies across it is two faces, one on each side)
+            sides = cut([(p, p[0]) for p in (pa, pb, pc)], 0.0)
+            for side in sides:
+                if not side:
+                    continue
+                polygon = []
+                for p, _ in side:
+                    t = 0.5 - p[2]
+                    polygon.append((p, t - camo.lean(t, p[0]) + camo.shift))
+                low = math.floor(min(u for _, u in polygon) / half + 1e-9)
+                high = math.floor(max(u for _, u in polygon) / half - 1e-9)
+                for band in range(low, high + 1):
+                    piece, polygon = cut(polygon, (band + 1) * half) if band < high else (polygon, [])
+                    if not piece:
+                        continue
+                    mid = [sum(p[k] for p, _ in piece) / len(piece) for k in range(3)]
+                    what = paint(0.5 - mid[2], mid[0], mid[1], ny / long) if paint else None
+                    what = what or ("plating" if band % 2 == 0 else "patch")
+                    corners = [vertex(p) for p, _ in piece]
+                    for k in range(1, len(corners) - 1):
+                        if len({corners[0], corners[k], corners[k + 1]}) == 3:
+                            # (as the file has faces: this model's z is turned about for it)
+                            out.append((what, (corners[0], corners[k + 1], corners[k])))
+        self.objects.append((name, out))
 
     def write(self, path, title):
         base = os.path.splitext(os.path.basename(path))[0]
@@ -541,7 +673,149 @@ def vail_hauler():
     return model, "The Vail's hauler: the fifth of the owner's drawings"
 
 
-MODELS = {"vail/frigate": vail_frigate, "vail/destroyer": vail_destroyer, "vail/cruiser": vail_cruiser, "vail/hauler": vail_hauler}
+class Surface:
+    """Where the top of a mesh is, looking straight down on it: for
+    setting things on its back."""
+
+    def __init__(self, points, faces, cells=80):
+        self.points, self.cells = points, cells
+        xs, zs = [p[0] for p in points], [p[2] for p in points]
+        self.x0, self.z0 = min(xs), min(zs)
+        self.dx, self.dz = (max(xs) - self.x0) / cells or 1.0, (max(zs) - self.z0) / cells or 1.0
+        self.grid = {}
+        for face in faces:
+            fx, fz = [points[i][0] for i in face], [points[i][2] for i in face]
+            for i in range(int((min(fx) - self.x0) / self.dx), min(cells - 1, int((max(fx) - self.x0) / self.dx)) + 1):
+                for j in range(int((min(fz) - self.z0) / self.dz), min(cells - 1, int((max(fz) - self.z0) / self.dz)) + 1):
+                    self.grid.setdefault((i, j), []).append(face)
+
+    def top(self, x, t):
+        """The height of the back at 'x' across and 't' along, or None."""
+        z = 0.5 - t
+        best = None
+        for a, b, c in self.grid.get((min(self.cells - 1, int((x - self.x0) / self.dx)), min(self.cells - 1, int((z - self.z0) / self.dz))), ()):
+            (ax, ay, az), (bx, by, bz), (cx, cy, cz) = self.points[a], self.points[b], self.points[c]
+            area = (bx - ax) * (cz - az) - (cx - ax) * (bz - az)
+            if abs(area) < 1e-14:
+                continue
+            w1 = ((x - ax) * (cz - az) - (cx - ax) * (z - az)) / area
+            w2 = ((bx - ax) * (z - az) - (x - ax) * (bz - az)) / area
+            if w1 >= -1e-9 and w2 >= -1e-9 and w1 + w2 <= 1 + 1e-9:
+                y = ay + w1 * (by - ay) + w2 * (cy - ay)
+                best = y if best is None else max(best, y)
+        return best
+
+
+def vail_battleship():
+    """The Vail's battleship. Its shape is the owner's: the hull and the
+    engine housings of a model worked up in another program and in
+    Blender (a flattened arrowhead), which are read from its file as they
+    are. What is on them is as on the Vail's other hulls: their bands,
+    lit slits along the shoulders and down the back, dark hatches, and a
+    nozzle with fire in it at the end of each housing."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    parts = read_glb(os.path.join(root, "resource", "model", "vail", "base", "battleship.glb"))
+    kept = [part for part in parts if "arrowhead hull" in part[0] or "engine shoulder" in part[0]]
+    assert len(kept) == 3, f"the base file has {[part[0] for part in kept]} for its hull and its two engine housings"
+    # As this model has it: the file's bow is along -X and its back along
+    # +Z; a unit long, about its middle.
+    every = [p for _, points, _ in kept for p in points]
+    low, high = min(p[0] for p in every), max(p[0] for p in every)
+    scale, middle = 1.0 / (high - low), (high + low) / 2
+    height = (max(p[2] for p in every) + min(p[2] for p in every)) / 2
+
+    def turned(p):
+        return (-p[1] * scale, (p[2] - height) * scale, -(p[0] - middle) * scale)
+
+    model = Model()
+    camo = Camo(0.13, 0.7, 0.03)
+    hatches = [(0.34, 0.0, 0.020, 0.010), (0.46, 0.030, 0.018, 0.010), (0.46, -0.030, 0.018, 0.010), (0.58, 0.0, 0.022, 0.011),
+               (0.66, 0.045, 0.016, 0.011), (0.66, -0.045, 0.016, 0.011)]
+
+    def paint(t, x, y, up):
+        if up > 0.6:
+            for ht, hx, long, wide in hatches:
+                if abs(t - ht) < long and abs(x - hx) < wide:
+                    return "trim"
+        return None
+
+    hull = None
+    for name, points, faces in kept:
+        points = [turned(p) for p in points]
+        if "arrowhead hull" in name:
+            hull = Surface(points, faces)
+            model.banded("hull", points, faces, camo, paint)
+        else:
+            side = "port" if name.lower().find("port") >= 0 else "starboard"
+            model.banded(f"housing.{side}", points, faces, camo)
+            # Its nozzle, at its after end: a dark barrel with fire in its throat.
+            aft = min(p[2] for p in points)
+            ring = [p for p in points if p[2] < aft + 0.02]
+            cx = sum(p[0] for p in ring) / len(ring)
+            cy = sum(p[1] for p in ring) / len(ring)
+            radius = 0.42 * min(max(p[0] for p in ring) - min(p[0] for p in ring), max(p[1] for p in ring) - min(p[1] for p in ring))
+            t0 = 0.5 - aft
+            model.skin(f"nozzle.{side}", t0 - 0.012, t0 + 0.030, 4, 20,
+                       lambda t, cx=cx, cy=cy, radius=radius, t0=t0: (cx, cy, radius * (1.05 - 2.0 * (t - t0 + 0.012)),
+                                                                     radius * (1.05 - 2.0 * (t - t0 + 0.012)),
+                                                                     radius * (1.05 - 2.0 * (t - t0 + 0.012)), 2.0, 2.0),
+                       lambda u, t, angle, x, y: "trim", ("trim", "fire"))
+
+    # The bridge (the owner's: "a ovular bridge bulge on the top", "only
+    # about 1/3 of the oval actually emerging from the hull"): an oval
+    # sunk in its back on the middle line, a third of its height showing,
+    # dark, with a band of lit windows across its forward face.
+    at, long, wide, tall = 0.78, 0.058, 0.032, 0.021    # (well aft: "push it further back, so it's not in the center")
+    deck = hull.top(0.0, at)
+    sunk = tall / 3     # how far under the deck the oval's middle is
+
+    # (Only what shows is built: the cap of the oval that stands above
+    # the deck, on a flat foot just under it. The rest would be inside
+    # the hull, where nothing sees it and it only darkens the plating
+    # about it.)
+    def bridge(t):
+        along = max(-1.0, min(1.0, (t - at) / long))
+        girth = math.sqrt(max(0.0, 1 - along * along))
+        showing = tall * girth - sunk
+        if showing <= 0:
+            return (0.0, deck, 1e-4, 1e-4, 1e-4, 2.0, 2.0)
+        across = wide * girth * math.sqrt(max(0.0, 1 - (sunk / (tall * girth)) ** 2))
+        return (0.0, deck - 0.0015, max(1e-4, across), showing + 0.0015, 0.0005, 2.0, 2.0)
+
+    def bridge_paint(u, t, angle, x, y):
+        height = (y - deck) / (tall - sunk)
+        return "lit" if 0.28 < height < 0.60 and t < at - 0.2 * long else "patch"
+
+    reach = long * math.sqrt(1 - (sunk / tall) ** 2)
+    model.skin("bridge", at - reach, at + reach, 28, 28, bridge, bridge_paint, (None, None))
+
+    # Lit slits on its back: a broken line along each shoulder, following
+    # the hull's edge in, and a shorter one each side of the middle.
+    def lamp(name, t, x, long=0.016):
+        y0, y1 = hull.top(x, t), hull.top(x, t + long)
+        if y0 is not None and y1 is not None:
+            model.box(name, t, t + long, x - 0.0016, x + 0.0016, min(y0, y1) - 0.0008, max(y0, y1) + 0.0016, "lit")
+
+    def edge(t):
+        """How far out the hull's back goes at t."""
+        out = 0.0
+        while hull.top(out + 0.004, t) is not None and out < 0.3:
+            out += 0.004
+        return out
+
+    for n in range(16):
+        t = 0.22 + 0.040 * n
+        wide = edge(t)
+        for side, name in ((1, "starboard"), (-1, "port")):
+            if wide > 0.03:
+                lamp(f"light.shoulder.{name}.{n + 1}", t, side * 0.78 * wide)
+            if n % 2 == 0 and wide > 0.06:
+                lamp(f"light.back.{name}.{n + 1}", t + 0.010, side * 0.30 * wide, 0.012)
+    return model, "The Vail's battleship: the owner's hull, with the Vail's bands, lights and engines on it"
+
+
+MODELS = {"vail/frigate": vail_frigate, "vail/destroyer": vail_destroyer, "vail/cruiser": vail_cruiser, "vail/hauler": vail_hauler,
+          "vail/battleship": vail_battleship}
 
 
 def main():
