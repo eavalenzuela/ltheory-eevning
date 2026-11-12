@@ -30,8 +30,10 @@
 --     some is taken away. One drill to a tower, and none at a moon with
 --     nothing under it.
 --
--- Not yet: taking a tower down, anybody attacking one, batteries that
--- shoot, more than one owner.
+-- Pirates come for a tower where order is thin (Tactical/Raids), and
+-- its batteries fire on them (Tactical/Batteries).
+--
+-- Not yet: taking a tower down, more than one owner.
 
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
@@ -302,6 +304,23 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
   return false, `unknown command '{kind}'`
 end
 
+-- Put a tower up at a moon, at a place: it is a station in the
+-- system's description from now on, and anchoring. Its station's id.
+function Starbases.Raise(state: State.State, system: number, moon: System.Object, tower: Structures.Tower, owner: string,
+  x: number, y: number, z: number): number
+  local description = Space.Describe(state, system)
+  local id = system * Constants.STRUCTURE_ID_SPAN + #description.objects + 1
+  assert(#description.objects + 1 < Constants.STRUCTURE_ID_SPAN, "a system has outgrown its id range")
+  table.insert(description.objects, {
+    id = id, kind = "station", name = `{moon.name} - Starbase`, x = x, y = y, z = z,
+    radius = tower.field, seed = (state.tick * 7919 + id) % 100000, parent = moon.id, site = id, variety = "starbase", to = 0,
+  })
+  state.starbases[id] = { id = id, tower = tower.id, owner = owner, ready = state.tick + ticks(tower.anchor), fuel = 0,
+    burnt = state.tick, modules = {}, drilled = state.tick, raid = 0, raids = 0 }
+  State.InsertId(state.starbaseIds, id)
+  return id
+end
+
 function Starbases.Apply(state: State.State, command: State.Command, events: { Event })
   local ship = state.ships[command.actor]
   local kind = command.kind
@@ -311,19 +330,9 @@ function Starbases.Apply(state: State.State, command: State.Command, events: { E
     local tower = Structures.towerById[item.type]
     local moon = moonOf(state, command) :: System.Object
     Items.Take(state, item, 1)
-    -- The tower is a station in the system's description from now on:
-    -- a kilometre or so off the ship that put it there, which is then
-    -- inside its field.
-    local description = Space.Describe(state, ball.system)
-    local id = ball.system * Constants.STRUCTURE_ID_SPAN + #description.objects + 1
-    assert(#description.objects + 1 < Constants.STRUCTURE_ID_SPAN, "a system has outgrown its id range")
-    table.insert(description.objects, {
-      id = id, kind = "station", name = `{moon.name} - Starbase`, x = ball.x + 1200, y = ball.y, z = ball.z,
-      radius = tower.field, seed = (state.tick * 7919 + id) % 100000, parent = moon.id, site = id, variety = "starbase", to = 0,
-    })
-    state.starbases[id] = { id = id, tower = tower.id, owner = ship.owner, ready = state.tick + ticks(tower.anchor), fuel = 0,
-      burnt = state.tick, modules = {}, drilled = state.tick }
-    State.InsertId(state.starbaseIds, id)
+    -- (a kilometre or so off the ship that put it there, which is then
+    -- inside its field)
+    local id = Starbases.Raise(state, ball.system, moon, tower, ship.owner, ball.x + 1200, ball.y, ball.z)
     -- (the ships about are on its grid now, not out in open space)
     for _, other in state.ballIds do
       local near = state.balls[other]

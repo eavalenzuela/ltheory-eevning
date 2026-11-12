@@ -414,6 +414,9 @@ export type Starbase = {
   -- The tick its drill last brought an hour's worth up out of the moon
   -- (or was last not drilling: it counts from when it can).
   drilled: number,
+  -- The tick pirates next come for it (Tactical/Raids; 0: they do not,
+  -- where order is kept), and how many times they have.
+  raid: number, raids: number,
 }
 
 export type State = {

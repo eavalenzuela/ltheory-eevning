@@ -191,6 +191,18 @@ function Session.Notice(session: Session, event: Space.Event)
       .. (if event.left > 0 then `, and is going back for {event.left} more` else ": that is all of it"))
   elseif kind == "BuyEnded" then
     Session.Say(session, `{event.name} could not buy {event.short} of the {Types.Info(event.type).name}: {event.reason}`)
+  elseif kind == "TowerRaided" then
+    local body = Core.Query.Body(session.game, event.station)
+    local name = if body then body.name else "your tower"
+    if event.outcome == "robbed" then
+      Session.Say(session, `RAIDED: pirates got in at {name}`
+        .. (if event.taken > 0 then ` and carried off {event.taken} units of what its drill brought up` else "")
+        .. `. Its defence was {event.defence} against {event.strength}`)
+    elseif event.outcome == "beaten" then
+      Session.Say(session, `Pirates came for {name} and were beaten off: its defence was {event.defence} against {event.strength}`)
+    else
+      Session.Say(session, `Pirates have come for {name}`)
+    end
   elseif kind == "MoonDrilled" and event.full then
     local body = Core.Query.Body(session.game, event.station)
     Session.Say(session, `{if body then body.name else "A tower"} has no room for more {Types.Info(event.type).name}: its drill stands idle`)

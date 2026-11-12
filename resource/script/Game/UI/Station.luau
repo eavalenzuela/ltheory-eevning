@@ -1671,7 +1671,18 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
     Im.Text("Nothing under it worth a drill.", left, line, 13, Im.DIM)
     line += 20
   end
-  line += 28
+  line += 20
+  -- What it has against the pirates who come for what a drill brings
+  -- up, where order is thin: its batteries and whoever holds the place.
+  if status.raidMost == 0 then
+    Im.Text("Order is kept here: nobody raids it.", left, line, 13, Im.DIM)
+  else
+    local parts = `{status.batteries} {if status.batteries == 1 then "battery" else "batteries"}, {status.patrol} on patrol`
+    Im.Text(`Defence {status.defence} ({parts})`, left, line, 13, if status.defence >= status.raidMost then GOOD
+      elseif status.defence >= status.raidLeast then Im.TEXT else Im.WARN)
+    Im.TextRight(`raids here come {status.raidLeast} to {status.raidMost} strong`, left + 400, line, 13, Im.DIM)
+  end
+  line += 26
 
   -- What is anchored round it.
   Im.Heading(`ANCHORED  {#status.modules}`, left, line, 16, Im.DIM)

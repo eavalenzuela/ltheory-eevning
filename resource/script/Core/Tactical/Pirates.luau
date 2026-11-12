@@ -41,6 +41,7 @@ local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local System = require("@lt/Core/Describe/System")
 
 local Pirates = {}
 
@@ -276,6 +277,27 @@ end
 -- pilot who is there and not the player.
 Pirates.AWAY = 2
 
+-- Put a pack at a place: each of its ships somewhere 25 to 35 km out
+-- from the middle of it, of the grade the space brings (and a
+-- stronghold's first a captain), and say that they have come.
+local function bring(state: State.State, system: number, site: System.Object, band: string, pack: { string }, stronghold: boolean,
+  rng: Rng.Rng, away: boolean, events: { Event })
+  local captains = 0
+  for index, id in pack do
+    local angle = Rng.Float(rng, 0, 2 * math.pi)
+    local out = Rng.Float(rng, 25000, 35000)
+    -- (what grade it is, rolled apart, so that nothing else about the pack follows from it)
+    local luck = Rng.Next(Rng.For(state.historySeed, state.tick, site.id, index, 73))
+    local odds = Pirates.GRADED[band] or Pirates.GRADED.low
+    local grade = if (stronghold and index == 1) or luck < odds[2] then 2 elseif luck < odds[2] + odds[1] then 1 else 0
+    captains += if grade == 2 then 1 else 0
+    local ball = Pirates.Spawn(state, Pirates.Graded(Pirates.kindById[id], grade), system,
+      site.x + out * math.cos(angle), site.y + Rng.Float(rng, -3000, 3000), site.z + out * math.sin(angle), site.id)
+    table.insert(events, { kind = "BallAdded", ball = ball.id })
+  end
+  table.insert(events, { kind = "PiratesArrived", grid = site.id, count = #pack, away = away, captains = captains })
+end
+
 -- Bring pirates to where a ship of the pilot's side is, if the place is
 -- due some: a belt anywhere, or a gate in lawless space. 'away': the
 -- ship is a hired pilot's, with the player somewhere else.
@@ -332,21 +354,27 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   if hidden == nil and site.kind == "belt" and state.galaxy.systems[me.system].home and #pack > 1 then
     pack = { pack[1] }
   end
-  local captains = 0
-  for index, id in pack do
-    -- Somewhere 25 to 35 km out from the middle of the place.
-    local angle = Rng.Float(rng, 0, 2 * math.pi)
-    local out = Rng.Float(rng, 25000, 35000)
-    -- (what grade it is, rolled apart, so that nothing else about the pack follows from it)
-    local luck = Rng.Next(Rng.For(state.historySeed, state.tick, site.id, index, 73))
-    local odds = Pirates.GRADED[band]
-    local grade = if (stronghold and index == 1) or luck < odds[2] then 2 elseif luck < odds[2] + odds[1] then 1 else 0
-    captains += if grade == 2 then 1 else 0
-    local ball = Pirates.Spawn(state, Pirates.Graded(Pirates.kindById[id], grade), me.system,
-      site.x + out * math.cos(angle), site.y + Rng.Float(rng, -3000, 3000), site.z + out * math.sin(angle), site.id)
-    table.insert(events, { kind = "BallAdded", ball = ball.id })
+  bring(state, me.system, site, band, pack, stronghold, rng, away, events)
+end
+
+-- Bring a pack to a place for a reason that is somebody else's (a raid
+-- on a pilot's tower: Tactical/Raids): the kind of pack the space it is
+-- in brings ('band': "secure", "low" or "lawless"), arriving as any
+-- does. 'away': the pilot is somewhere else.
+function Pirates.Arrive(state: State.State, system: number, site: System.Object, band: string, away: boolean, events: { Event })
+  local rng = Rng.For(state.historySeed, state.tick, site.id, 43)
+  state.spawned[site.id] = state.tick
+  local roll = Rng.Next(rng)
+  local packs = PACKS[band] or PACKS.low
+  local pack: { string } = packs[#packs][2]
+  for _, entry in packs do
+    roll -= entry[1]
+    if roll < 0 then
+      pack = entry[2]
+      break
+    end
   end
-  table.insert(events, { kind = "PiratesArrived", grid = site.id, count = #pack, away = away, captains = captains })
+  bring(state, system, site, band, pack, false, rng, away, events)
 end
 
 -- Once a tick: pirates come to where the player is, and to where a

@@ -43,6 +43,7 @@ local Ores = require("@lt/Core/Data/Ores")
 local Missions = require("@lt/Core/Assets/Missions")
 local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
+local Raids = require("@lt/Core/Tactical/Raids")
 local Ships = require("@lt/Core/Data/Ships")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Skills = require("@lt/Core/Data/Skills")
@@ -78,7 +79,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 52
+Core.SAVE_VERSION = 53
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -308,6 +309,14 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- save from before has given any.
   [49] = function(state: any)
     state.couriers = state.couriers or {}
+  end,
+  -- 53: pirates raid a pilot's tower where order is thin. Nobody has
+  -- raided one of a save from before, and the first comes in its time.
+  [52] = function(state: any)
+    for _, starbase in state.starbases do
+      starbase.raid = starbase.raid or 0
+      starbase.raids = starbase.raids or 0
+    end
   end,
   -- 52: a tower can drill its moon. One of a save from before has not
   -- begun.
@@ -842,6 +851,7 @@ function Core.Step(game: Game)
   Mining.Step(state)
   Market.Step(state, game.events)
   Starbases.Step(state, game.events)
+  Raids.Step(state, game.events)
   Colonies.Step(state, game.events)
   Industry.Step(state, game.events)
   Training.Step(state, game.events)
@@ -1447,6 +1457,12 @@ export type StarbaseStatus = {
   moon: string,
   drilling: Starbases.Drilling,
   next: number,
+  -- What it has against a raid (Tactical/Raids): its strength, how
+  -- many batteries of it are online and how many hired pilots hold the
+  -- place; and how strong the raids that come there are, at least and
+  -- at most (0 and 0 where order is kept, and nobody comes).
+  defence: number, batteries: number, patrol: number,
+  raidLeast: number, raidMost: number,
 }
 function Query.Starbase(game: Game, id: number): StarbaseStatus?
   local state = game.state
@@ -1464,6 +1480,8 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
   local ship = state.ships[state.player.ship]
   local moon = Space.Object(state, Starbases.Moon(state, starbase))
   local drilling = Starbases.Drilling(state, starbase)
+  local defence, batteries, patrol = Raids.Defence(state, starbase)
+  local raids = Raids.STRENGTH[Raids.Band(state, starbase)]
   return {
     tower = Structures.towerById[starbase.tower], mine = ship ~= nil and ship.owner == starbase.owner,
     anchored = Starbases.Anchored(state, starbase), wait = math.max(0, starbase.ready - state.tick) * Constants.TICK, lit = lit,
@@ -1471,6 +1489,8 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
     moon = if moon then moon.name else "", drilling = drilling,
     next = if drilling.online and drilling.deposit then math.max(0, starbase.drilled + 3600 / Constants.TICK - state.tick) * Constants.TICK
       else 0,
+    defence = defence, batteries = batteries, patrol = patrol,
+    raidLeast = if raids then raids[1] else 0, raidMost = if raids then raids[2] else 0,
   }
 end
 
