@@ -261,6 +261,53 @@ local function courier(b: Builder)
   mast(b, v(-0.08, 0.22, -0.30), 0.34, 0.02)
 end
 
+-- The Dray, a freighter: anybody's, and the biggest thing a pilot flies
+-- that is not a warship. A long keel girder with cargo racked along it
+-- in two tiers, six bays to a side, no two rows quite alike; a
+-- bulkhead across the bow with the bridge high on it; tanks slung
+-- under; and a wall of engines across the stern. Nothing to fight
+-- with, and nowhere to put it. (A v0: it reads as what it is.)
+local function dray(b: Builder)
+  local stern, bow = -0.92, 0.92
+  truss(b, v(0, -0.08, stern), v(0, -0.08, bow), 0.16, 12)
+  truss(b, v(0, 0.24, stern + 0.10), v(0, 0.24, bow - 0.22), 0.09, 9)
+  local bays = 6
+  local first, last = stern + 0.20, bow - 0.24
+  local length = (last - first) / bays
+  for bay = 1, bays do
+    local z = first + (bay - 0.5) * length
+    local tall = 0.13 + 0.03 * ((bay * 5) % 3)
+    for _, side in { -1, 1 } do
+      local low = if (bay + (if side > 0 then 1 else 0)) % 3 == 0 then PATCH else PLATING
+      local high = if (bay + (if side > 0 then 0 else 2)) % 4 == 0 then TRIM else PLATING
+      block(b, low, v(side * 0.27, -0.12, z), v(0.17, 0.17, length * 0.44), nil, 0.06)
+      block(b, FRAME, v(side * 0.27, -0.12, z), v(0.176, 0.024, length * 0.45), nil, 0.1)
+      block(b, high, v(side * 0.24, 0.06 + tall, z + 0.01 * side), v(0.14, tall, length * 0.41), nil, 0.06)
+    end
+    -- (a frame across at the end of each bay, low and high)
+    beam(b, FRAME, v(-0.45, -0.30, z + length / 2), v(0.45, -0.30, z + length / 2), 0.020, 0.08)
+    beam(b, FRAME, v(-0.39, 0.06, z + length / 2), v(0.39, 0.06, z + length / 2), 0.015, 0.08)
+  end
+  -- the bow: a bulkhead across the front of the racks, the bridge high on it, a mast
+  block(b, PLATING, v(0, 0.04, bow - 0.13), v(0.44, 0.34, 0.07), nil, 0.08)
+  block(b, PATCH, v(0, 0.46, bow - 0.15), v(0.22, 0.085, 0.12), nil, 0.2)
+  block(b, GLOW, v(0, 0.48, bow - 0.028), v(0.17, 0.022, 0.006), nil, 0.3)
+  block(b, TRIM, v(0, 0.385, bow - 0.15), v(0.23, 0.012, 0.125))
+  ports(b, v(0.445, 0.10, bow - 0.17), v(0.445, 0.10, bow - 0.09), 2, 0.012)
+  mast(b, v(-0.12, 0.54, bow - 0.20), 0.30, 0.03)
+  -- the engines: a wall across the stern, four mouths
+  block(b, PLATING, v(0, 0.0, stern + 0.07), v(0.46, 0.36, 0.11), nil, 0.08)
+  for _, x in { -0.31, -0.105, 0.105, 0.31 } do
+    block(b, FRAME, v(x, 0.0, stern - 0.07), v(0.085, 0.17, 0.06), nil, 0.25)
+    block(b, GLOW, v(x, 0.0, stern - 0.135), v(0.06, 0.13, 0.008), nil, 0.5)
+    exhaust(v(x, 0.0, stern - 0.145), 0.075)
+  end
+  -- tanks under the keel, and a conduit along the back
+  tank(b, v(0, -0.40, stern + 0.42), 0.085, 0.28)
+  tank(b, v(0, -0.40, 0.22), 0.075, 0.22, PLATING)
+  conduit(b, { v(0.05, 0.33, stern + 0.2), v(0.05, 0.33, bow - 0.3), v(0.10, 0.39, bow - 0.24) }, 0.013)
+end
+
 -- The Caravan, a hauler. A cage of heavy girders, wider at the keel
 -- than at the top, with three cargo bays in it that do not match
 -- (containers in two, drums in the third); the pilot in a pod out on a
@@ -1913,6 +1960,8 @@ local designs: { [string]: Design } = {
     launchers = {},
     fit = { "laser.pulse.small" },
   },
+  -- (a freighter has nothing on it to fight with)
+  ["freighter.dray"] = { faction = "civil", draw = dray, sheets = 6.0, turrets = {}, launchers = {}, fit = {} },
   ["frigate.courier"] = {
     faction = "civil", draw = courier,
     -- (a gun on the back and under the cargo box; a gun on each flank)

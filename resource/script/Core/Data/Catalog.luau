@@ -34,7 +34,8 @@ for index, faction in Factions.list do
   factionOrder[faction.id] = index
 end
 
-local CLASSES: { [string]: number } = { frigate = 1, destroyer = 2, cruiser = 3, battleship = 4, industrial = 5, barge = 6, capsule = 7 }
+local CLASSES: { [string]: number } = { frigate = 1, destroyer = 2, cruiser = 3, battleship = 4, industrial = 5, freighter = 6, barge = 7,
+  capsule = 8 }
 
 -- Kinds of module, by the start of the type's id.
 local MODULES: { { any } } = {

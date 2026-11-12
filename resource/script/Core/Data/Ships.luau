@@ -121,6 +121,21 @@ local types: { ShipType } = {
     capacitor = 500, capacitorRecharge = 300,
     scanResolution = 150, lockRange = 30000, maxTargets = 2, cargo = 3800,
   },
+  -- A freighter: the biggest hold there is, ten times a hauler's and
+  -- more, and nothing else. No guns and nowhere to put one, no rigs, a
+  -- few low slots, a great deal of hull, slow to turn, slow to warp and
+  -- slow in it. Anybody's, as the Mule is. (The first of its class:
+  -- the factions' own are not drawn yet.)
+  {
+    id = "freighter.dray", name = "Dray Freighter", class = "freighter", lineage = "", basePrice = 60000000, volume = 250000,
+    mass = 300000000, inertia = 0.12, maxVelocity = 75, warpSpeed = 1.5, radius = 650,
+    shield = 6000, armor = 9000, hull = 38000, shieldRecharge = 3000,
+    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 900,
+    cpu = 90, powergrid = 60, highs = 0, mids = 0, lows = 3, turrets = 0, launchers = 0,
+    capacitor = 6000, capacitorRecharge = 1200,
+    scanResolution = 60, lockRange = 40000, maxTargets = 2, cargo = 40000,
+    rigs = 0,
+  },
   -- What a pilot is left in when the ship is gone.
   {
     id = "capsule", name = "Capsule", class = "capsule", lineage = "", basePrice = 0, volume = 500,

@@ -56,8 +56,12 @@
 -- a galaxy too small to have one in reach), and it pays by the volume
 -- and the jumps. The crates are handed over at the station the
 -- contract is taken at, and can be carried in as many trips as it
--- takes. (Two levels so far. The harder ones are for holds nobody has
--- yet, or for runs through lawless space.)
+-- takes. The third is more than a hauler holds, over six to twelve
+-- jumps: several trips, or a freighter's one. The fourth is one of two
+-- things, turn about by the roll: a freighter's hold over eight to
+-- sixteen jumps; or a hauler's to a station that cannot be got to
+-- without going through lawless space, which pays for the danger of
+-- it.
 --
 -- And each agent has a regard of their own for the pilot, beside what
 -- their faction thinks: nothing to begin with, more with every job of
@@ -104,7 +108,14 @@ Missions.OFFERS = 3
 Missions.RUNS = {
   { least = 30, most = 150, step = 10, near = 1, far = 3, base = 3000, rate = 25 },
   { least = 1000, most = 3000, step = 100, near = 5, far = 10, base = 10000, rate = 3 },
+  { least = 6000, most = 12000, step = 500, near = 6, far = 12, base = 30000, rate = 1.5 },
+  { least = 25000, most = 40000, step = 2500, near = 8, far = 16, base = 100000, rate = 1 },
 }
+-- And the fourth level's other kind: a hauler's hold to a station that
+-- only lawless space leads to, so many jumps off by the shortest way.
+-- How often the fourth is that, where there is such a station.
+Missions.WILD = { least = 500, most = 3000, step = 100, near = 3, far = 10, base = 150000, rate = 12 }
+Missions.WILD_CHANCE = 0.5
 -- The standing a courier contract is worth, a level.
 Missions.RUN_CREDIT = 0.1
 Missions.IN_HAND = 5
@@ -133,7 +144,8 @@ function Missions.Title(mission: State.Mission): string
   elseif mission.kind == "mining" then
     return `Mining, level {mission.level}: {mission.need} {Types.Info(mission.type).name}`
   elseif mission.kind == "courier" and mission.level > 0 then
-    return `Courier, level {mission.level}: {mission.need} m3`
+    -- (a run through lawless space says so)
+    return `Courier, level {mission.level}: {mission.need} m3` .. (if mission.aim == "wild" then ", lawless" else "")
   elseif mission.kind == "courier" then
     return `Courier: {mission.need} m3 of sealed cargo`
   end
@@ -196,19 +208,76 @@ function Missions.Jumps(state: State.State, mission: State.Mission): number
   return Missions.Reach(state.galaxy, from)[to] or math.max(0, #Galaxy.Route(state.galaxy, from, to) - 1)
 end
 
+-- How many jumps every system is from one by the shortest way,
+-- whatever space it goes through. Kept as Missions.Reach is.
+local anyway: { [Galaxy.Galaxy]: { [number]: Reached } } = setmetatable({}, { __mode = "k" }) :: any
+local function shortest(galaxy: Galaxy.Galaxy, from: number): Reached
+  local known: { [number]: Reached }? = anyway[galaxy]
+  if known == nil then
+    local fresh: { [number]: Reached } = {}
+    anyway[galaxy] = fresh
+    known = fresh
+  end
+  local kept: Reached? = (known :: { [number]: Reached })[from]
+  if kept then
+    return kept
+  end
+  local far: Reached = { [from] = 0 }
+  local queue = { from }
+  local at = 1
+  while at <= #queue do
+    local id = queue[at]
+    at += 1
+    for _, next in galaxy.systems[id].neighbors do
+      if far[next] == nil then
+        far[next] = far[id] + 1
+        table.insert(queue, next)
+      end
+    end
+  end
+  (known :: { [number]: Reached })[from] = far
+  return far
+end
+
+local TRIES = 4
+
+-- Where a run through lawless space from a system goes: a station that
+-- cannot be got to without it, so many jumps off by the shortest way as
+-- Missions.WILD says, and how many that is. Nil if there is none.
+local function beyond(state: State.State, system: number, rng: Rng.Rng): (System.Object?, number)
+  local held = Missions.Reach(state.galaxy, system)
+  local far = shortest(state.galaxy, system)
+  local within: { number } = {}
+  for id = 1, #state.galaxy.systems do
+    local jumps = far[id]
+    if jumps and held[id] == nil and jumps >= Missions.WILD.near and jumps <= Missions.WILD.far then
+      table.insert(within, id)
+    end
+  end
+  local first = Rng.Int(rng, math.max(1, #within))
+  for try = 1, math.min(TRIES, #within) do
+    local id = within[(first + try - 1) % #within + 1]
+    local there = stations(state, id)
+    if #there > 0 then
+      return there[Rng.Int(rng, #there) + 1], far[id]
+    end
+  end
+  return nil, 0
+end
+
 -- Where a courier contract of a level from a station goes: a station
 -- so many jumps off as the level says, by a way that keeps out of
 -- lawless space, and how many jumps that is. With no such station in
 -- the galaxy, the farthest there is short of it, if that is farther
--- than the level below goes; and for the first level, with nowhere
+-- than the level below begins; and for the first level, with nowhere
 -- else, another station of the same system. Nil if there is nowhere.
-local TRIES = 4
 local function destination(state: State.State, station: number, system: number, level: number, rng: Rng.Rng): (System.Object?, number)
   local run = Missions.RUNS[level]
   local far = Missions.Reach(state.galaxy, system)
   local within: { number } = {}
   local short: { number } = {}
-  local least = if level > 1 then Missions.RUNS[level - 1].far + 1 else 1
+  -- (short of it, but farther than the level below begins)
+  local least = if level > 1 then math.min(run.near, Missions.RUNS[level - 1].near + 1) else 1
   for id = 1, #state.galaxy.systems do
     local jumps = far[id]
     if jumps and jumps >= run.near and jumps <= run.far then
@@ -426,9 +495,20 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
   for level = 1, if running then 0 else math.min(#Missions.RUNS, topOf(Missions.OFFERS + 3)) do
     local bonus = paying(Missions.OFFERS + 3)
     local rng = Rng.For(state.historySeed, station, run, level, 107)
-    local to, jumps = destination(state, station, system, level, rng)
+    local spec = Missions.RUNS[level]
+    local aim = "run"
+    local to: System.Object?, jumps = nil, 0
+    -- (the fourth level is now and then a run through lawless space, where there is anywhere it leads)
+    if level == #Missions.RUNS and Rng.Chance(Rng.For(state.historySeed, station, run, 109), Missions.WILD_CHANCE) then
+      to, jumps = beyond(state, system, rng)
+      if to then
+        spec, aim = Missions.WILD, "wild"
+      end
+    end
+    if to == nil then
+      to, jumps = destination(state, station, system, level, rng)
+    end
     if to then
-      local spec = Missions.RUNS[level]
       local need = spec.least + spec.step * Rng.Int(rng, (spec.most - spec.least) // spec.step + 1)
       local reward = math.floor((spec.base + spec.rate * need * math.max(1, jumps)) * bonus)
       table.insert(offers, {
@@ -436,7 +516,7 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         system = Space.SystemOf(state, to.id), need = need, done = 0, type = Missions.CRATE, to = to.id, reward = reward,
         standing = Missions.RUN_CREDIT * level, taken = 0,
         agent = Missions.Agent(state, station, Missions.OFFERS + 3), loyalty = math.max(1, reward // Missions.LOYALTY),
-        slot = Missions.OFFERS + 3, level = level, waves = {}, wave = 0, site = 0, rooms = {}, ends = {}, aim = "run", mark = 0,
+        slot = Missions.OFFERS + 3, level = level, waves = {}, wave = 0, site = 0, rooms = {}, ends = {}, aim = aim, mark = 0,
       })
     end
   end

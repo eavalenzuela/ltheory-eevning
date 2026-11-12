@@ -1173,7 +1173,7 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
   Im.Heading("WHAT A PILOT IS", left, line, 14, Im.DIM)
   for index, text in { "A hired pilot flies a ship of yours and goes where you go:", "out when you undock, to warp and through gates after you,",
     "into a fight beside you. Every skill counts as their grade.", "Grade 1 flies frigates and haulers, 2 destroyers and barges,",
-    "3 cruisers, 4 battleships. You command one for each level", "of Leadership. A ship lost is insured; its pilot is not lost.",
+    "3 cruisers, 4 battleships and freighters. You command one a level", "of Leadership. A ship lost is insured; its pilot is not lost.",
     "In space one can be set to mine a belt, to hold a place against", "pirates (Patrol here) or to go with another pilot (Guard);",
     "one docked here to haul what is in your hangar elsewhere (+", "adds a station to collect at on the way: a round); any to",
     "sell what they bring in. They learn by it, to grade 5." } do

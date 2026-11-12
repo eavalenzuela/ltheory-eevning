@@ -17,7 +17,7 @@ This is a fork of the old C++ implementation of Limit Theory, its engine (LTE) a
 ## What is in the game
 
 - **Flight by orders**: approach, orbit, keep at range, align, warp, dock, jump through gates, with an autopilot and a star map.
-- **Ships and fitting**: frigates to battleships and haulers for four human factions and the pirates, with turrets, launchers, drones, electronic warfare, cloaks, rigs and tech 2 gear.
+- **Ships and fitting**: frigates to battleships and haulers for four human factions and the pirates, a freighter for anybody, with turrets, launchers, drones, electronic warfare, cloaks, rigs and tech 2 gear.
 - **Combat**: target locking, tracking and range, shields, armour and hull, wrecks to loot and salvage, insurance, and a capsule to get home in.
 - **Industry**: mining, refining, manufacturing from blueprints, research and invention, and planetary colonies.
 - **Trade**: a market at each station with buy and sell orders, where prices differ by who owns the station.

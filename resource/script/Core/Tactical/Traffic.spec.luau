@@ -94,7 +94,8 @@ suite:Case("a game with no traffic has none, and a secure system fills up to wha
     elseif record.kind == "miner" or record.kind == "home" then
       t.eq({ hull.class, ship.owner } :: { any }, { "frigate", "civilian" } :: { any })
     else
-      t.eq(hull.class, "industrial")
+      -- (a hauler; or, of a trader's, now and then a freighter)
+      t.ok(hull.class == "industrial" or (hull.class == "freighter" and ship.owner == "civilian"), ship.type)
       t.ok(ship.owner == "vessari" or ship.owner == "civilian")
     end
   end
@@ -132,7 +133,56 @@ suite:Case("haulers come in by a gate to dock, and go out from a station to a ga
   end
   t.ok(docked >= 3, `only {docked} haulers docked in fifty minutes`)
   t.ok(jumped >= 3, `only {jumped} haulers left by a gate in fifty minutes`)
-  t.ok(#state.shipIds <= 1 + Traffic.HAULERS.secure + Traffic.PATROLS.secure)
+  -- (the pilot's own, and no more than the haulers, patrols and miners a secure system has)
+  t.ok(#state.shipIds <= 1 + Traffic.HAULERS.secure + Traffic.PATROLS.secure + Traffic.MINERS.secure)
+end)
+
+suite:Case("where order is kept a trader is now and then a freighter, with a great deal aboard; nobody flies one where it is not", function(t)
+  local freighters, traders, most = 0, 0, 0
+  for seed = 1, 4 do
+    local game = busy(seed)
+    local state = game.state
+    move(game, 1)
+    local seen: { [number]: boolean } = {}
+    for _ = 1, 40 do
+      steps(game, Traffic.INTERVAL)
+      for _, id in state.trafficIds do
+        local ship = state.ships[id]
+        if ship and not seen[id] and ship.owner == "civilian" then
+          seen[id] = true
+          local aboard = 0
+          for _, item in Items.In(state, id, "cargo") do
+            aboard += item.quantity
+          end
+          if ship.type == "freighter.dray" then
+            freighters += 1
+            most = math.max(most, aboard)
+            t.eq(ship.name, "Freighter")
+            t.ok(aboard >= 50 * Traffic.FREIGHT, `a freighter with {aboard} units aboard`)
+          elseif Ships.byId[ship.type].class == "industrial" then
+            traders += 1
+          end
+        end
+      end
+    end
+  end
+  t.ok(freighters >= 2, `only {freighters} freighters among the traders of four histories`)
+  t.ok(traders > freighters, "most traders should fly a hauler")
+  t.ok(most > 400, "a freighter should carry more than any hauler does")
+  -- Where order is thin, none.
+  local wild = busy(1)
+  local low = 0
+  for id, node in wild.state.galaxy.systems do
+    low = if Galaxy.Band(node.security) ~= "secure" and low == 0 then id else low
+  end
+  move(wild, low)
+  for _ = 1, 60 do
+    steps(wild, Traffic.INTERVAL)
+    for _, id in wild.state.trafficIds do
+      local ship = wild.state.ships[id]
+      t.ok(ship == nil or ship.type ~= "freighter.dray", "a freighter outside secure space")
+    end
+  end
 end)
 
 suite:Case("how many are about follows from how safe the system is, and they do not outlast the pilot's leaving", function(t)

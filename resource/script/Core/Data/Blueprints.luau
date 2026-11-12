@@ -188,7 +188,8 @@ for _, hull in Ships.list do
     blueprint.basePrice = hull.basePrice * 10
     blueprint.invented = true
   elseif hull.class ~= "capsule" and not hull.restricted then
-    local mix = if hull.class == "battleship" then MIX.battleship
+    -- (a freighter is as much metal as a battleship, and of the same kinds)
+    local mix = if hull.class == "battleship" or hull.class == "freighter" then MIX.battleship
       elseif hull.class == "cruiser" or hull.class == "barge" then MIX.cruiser
       else MIX.ship
     -- (the largest hulls take most of a day, not a week)

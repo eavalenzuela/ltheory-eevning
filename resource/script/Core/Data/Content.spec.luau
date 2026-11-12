@@ -220,8 +220,10 @@ suite:Case("every hull for sale can be built from ore, and has skills a pilot ca
         end
         return false
       end
-      t.eq(takes("mineral.cobalt"), hull.class == "cruiser" or hull.class == "barge" or hull.class == "battleship", hull.id)
-      t.eq(takes("mineral.iridium"), hull.class == "battleship", hull.id)
+      -- (a freighter is as much metal as a battleship, and of the same kinds)
+      local great = hull.class == "battleship" or hull.class == "freighter"
+      t.eq(takes("mineral.cobalt"), hull.class == "cruiser" or hull.class == "barge" or great, hull.id)
+      t.eq(takes("mineral.iridium"), great, hull.id)
       for _, need in Skills.Needs(hull.id) do
         t.ok(Skills.byId[need.skill] ~= nil, `{hull.id} needs an unknown skill {need.skill}`)
         t.ok(need.level >= 1 and need.level <= Skills.MAX_LEVEL)
@@ -231,11 +233,35 @@ suite:Case("every hull for sale can be built from ore, and has skills a pilot ca
     end
   end
   -- the ladder of hull skills can be climbed from a new pilot's own
-  for _, id in { "destroyers", "cruisers", "battleships" } do
+  for _, id in { "destroyers", "cruisers", "battleships", "industrials", "freighters" } do
     for _, need in Skills.byId[id].requires do
       t.ok(Skills.byId[need.skill] ~= nil)
     end
   end
+end)
+
+suite:Case("a freighter is a hold and nothing else: ten times a hauler's, nothing to fight with, slow, and a skill of its own", function(t)
+  local dray, mule, bastion = Ships.byId["freighter.dray"], Ships.byId["industrial.hauler"], Ships.byId["battleship.bastion"]
+  t.eq({ dray.class, dray.lineage, dray.restricted, dray.tech } :: { any }, { "freighter", "", nil, nil } :: { any })
+  t.ok(dray.cargo >= 10 * mule.cargo, `a freighter holds {dray.cargo} m3 and a hauler {mule.cargo}`)
+  -- Nothing to fight with, nowhere to put it, and no rigs: a few low slots are all there is to fit.
+  t.eq({ dray.highs, dray.mids, dray.turrets, dray.launchers, dray.rigs, dray.drones, dray.bay } :: { any }, { 0, 0, 0, 0, 0, 0, 0 } :: { any })
+  t.ok(dray.lows >= 1)
+  t.eq({ Attributes.Check(dray, { "autocannon.small" }) } :: { any }, { false, "no free high slot" } :: { any })
+  t.eq({ Attributes.Check(dray, { "rig.cargo.large" }) } :: { any }, { false, "no free rig slot" } :: { any })
+  t.ok((Attributes.Check(dray, { "cargo.expander" })))
+  -- Slower than anything else there is to fly: to turn, to go, and in warp. And mostly hull.
+  t.ok(Ships.TimeConstant(dray) > 2 * Ships.TimeConstant(bastion) and Ships.TimeConstant(dray) > 2 * Ships.TimeConstant(mule))
+  t.ok(dray.maxVelocity < bastion.maxVelocity and dray.warpSpeed < bastion.warpSpeed and dray.warpSpeed < mule.warpSpeed)
+  t.ok(dray.hull > dray.shield + dray.armor)
+  -- Bought and built like any hull, of what a battleship is built of, by a pilot with the skill for it,
+  -- which is at the far end of the haulers'.
+  local info = Types.Info(dray.id)
+  t.eq({ info.category, info.scarce } :: { any }, { "ship", nil } :: { any })
+  t.ok(dray.basePrice > 50 * mule.basePrice and dray.basePrice < bastion.basePrice)
+  t.ok(Blueprints.byProduct[dray.id] ~= nil)
+  t.eq(Skills.Needs(dray.id), { { skill = "freighters", level = 1 } })
+  t.eq(Skills.byId["freighters"].requires, { { skill = "industrials", level = 4 } })
 end)
 
 suite:Case("every weapon takes ammunition of its own size and no other; larger reaches further and tracks worse", function(t)

@@ -146,14 +146,15 @@ local BY_CATEGORY: { [string]: string } = {
   module = "gear", charge = "rounds", ore = "rock", mineral = "ingot", component = "gear", blueprint = "blueprint",
   skillbook = "book", goods = "crate", structure = "crate", planetary = "crate", drone = "gear", implant = "gear",
 }
-local CLASS_PIPS: { [string]: number } = { frigate = 1, destroyer = 1, cruiser = 2, battleship = 3, industrial = 2, barge = 2 }
+local CLASS_PIPS: { [string]: number } = { frigate = 1, destroyer = 1, cruiser = 2, battleship = 3, industrial = 2, barge = 2, freighter = 3 }
 
 -- The pictogram, the size (0 for none, else 1 to 3) and the category of
 -- a type.
 function ItemIcon.Parts(type: string): (string, number, string)
   local hull = Ships.byId[type]
   if hull then
-    return if hull.class == "industrial" or hull.class == "barge" then "hauler" else "ship", CLASS_PIPS[hull.class] or 0, "ship"
+    return if hull.class == "industrial" or hull.class == "barge" or hull.class == "freighter" then "hauler" else "ship",
+      CLASS_PIPS[hull.class] or 0, "ship"
   end
   local info = Types.Get(type)
   local category = if info then info.category else "goods"

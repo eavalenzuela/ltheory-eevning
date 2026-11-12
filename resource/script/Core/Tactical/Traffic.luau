@@ -8,6 +8,8 @@
 -- system is (Describe/Galaxy). They fly with the orders a pilot gives,
 -- in the hulls of the faction whose space it is (or the hull anybody
 -- flies), and are real ships: they can be locked, shot and looted.
+-- Where order is kept, now and then one of the traders is a freighter,
+-- with a hold to match.
 --
 -- Only the system the pilot is in has any: a hauler is put into space
 -- at a gate as if it had just jumped in, or in a station as if it had
@@ -67,6 +69,11 @@ Traffic.MARKED = 900
 local MINER, LASER = "frigate.prospector", "miner.small"
 -- What anybody flies.
 local CIVILIAN = "industrial.hauler"
+-- And the freighter a trader flies in secure space, how often one who
+-- comes there flies it, and how many times a hauler's load it carries.
+local FREIGHTER = "freighter.dray"
+Traffic.FREIGHTERS = 0.3
+Traffic.FREIGHT = 25
 -- What a hauler may have aboard, for whoever takes it.
 local CARGO = { "ore.ferrite", "mineral.iron", "mineral.silicon", "planet.water", "planet.alloys", "component.plating" }
 
@@ -178,8 +185,12 @@ local function hauler(state: State.State, system: number, rng: Rng.Rng, events: 
   local node = state.galaxy.systems[system]
   local faction = Factions.byId[node.nearest]
   local own = if node.owner ~= "" and Rng.Chance(rng, 0.6) then hullOf(node.owner, "industrial") else nil
-  local type = own or CIVILIAN
-  local name = if own then `{faction.name} Hauler` else "Trader"
+  -- (a trader in secure space is now and then a freighter: rolled
+  -- apart, so that nothing else about who comes follows from it)
+  local great = own == nil and Galaxy.Band(node.security) == "secure"
+    and Rng.Chance(Rng.For(state.historySeed, state.tick, system, 131), Traffic.FREIGHTERS)
+  local type = own or (if great then FREIGHTER else CIVILIAN)
+  local name = if own then `{faction.name} Hauler` elseif great then "Freighter" else "Trader"
   local owner = if own then node.owner else "civilian"
   local gate = gates[Rng.Int(rng, #gates) + 1]
   local outbound = #stations > 0 and Rng.Chance(rng, 0.5)
@@ -203,7 +214,7 @@ local function hauler(state: State.State, system: number, rng: Rng.Rng, events: 
       enlist(state, ship, "out", other.id, system)
     end
   end
-  Items.Add(state, CARGO[Rng.Int(rng, #CARGO) + 1], 50 + Rng.Int(rng, 350), ship.id, "cargo")
+  Items.Add(state, CARGO[Rng.Int(rng, #CARGO) + 1], (50 + Rng.Int(rng, 350)) * (if great then Traffic.FREIGHT else 1), ship.id, "cargo")
 end
 
 -- Put a patrol ship of the system's faction on station at a gate (or,

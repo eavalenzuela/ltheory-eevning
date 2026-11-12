@@ -1293,56 +1293,77 @@ local function runs(game: Core.Game, station: number): { State.Mission }
   return found
 end
 
-suite:Case("the sixth agent has courier contracts in levels: a frigate's hold over a few jumps, then a hauler's over many, never through lawless space", function(t)
-  local seen = { 0, 0 }
-  for seed = 1, 6 do
+suite:Case("the sixth agent has courier contracts in levels: a frigate's hold over a few jumps, a hauler's over many, then more than a hauler holds, then a freighter's", function(t)
+  local seen = { 0, 0, 0, 0 }
+  local wild, bulk = 0, 0
+  for seed = 1, 12 do
     local game = Core.New({ galaxySeed = 1, historySeed = seed, peaceful = true, systems = 40 })
     local state = game.state
     local home = state.player.home
-    -- One level for a pilot nobody knows; the second at a standing of 1, or for a pilot the agent knows. No more yet.
+    -- One level for a pilot nobody knows; the second at a standing of 1, or for a pilot the agent knows.
     t.eq(#runs(game, home), 1)
     state.regard[`{home}:{Missions.OFFERS + 3}`] = Missions.OPENS[2]
     t.eq(#runs(game, home), 2)
     state.regard = {}
     state.standings.vessari = 10
     local offers = runs(game, home)
-    t.eq(#offers, #Missions.RUNS, "there are two levels of courier contract so far")
+    t.eq(#offers, #Missions.RUNS, "every level should be offered where the galaxy has room for it")
     t.eq(runs(game, home), offers, "the same however often it is asked")
     local reach = Missions.Reach(state.galaxy, 1)
     for level, offer in offers do
-      local run = Missions.RUNS[level]
+      local run = if offer.aim == "wild" then Missions.WILD else Missions.RUNS[level]
       seen[level] += 1
-      t.eq({ offer.level, offer.id, offer.station, offer.type, offer.slot, offer.aim } :: { any },
-        { level, 0, home, Missions.CRATE, Missions.OFFERS + 3, "run" } :: { any })
+      t.eq({ offer.level, offer.id, offer.station, offer.type, offer.slot } :: { any },
+        { level, 0, home, Missions.CRATE, Missions.OFFERS + 3 } :: { any })
       t.eq(offer.agent, Missions.Agent(state, home, Missions.OFFERS + 3), "a courier contract is the sixth agent's")
-      -- So much cargo, to a station so many jumps off by a way that keeps out of lawless space.
       t.ok(offer.need >= run.least and offer.need <= run.most and offer.need % run.step == 0, `level {level}: {offer.need} m3`)
       local to = assert(Space.Object(state, offer.to))
       t.eq({ to.kind, offer.system } :: { any }, { "station", Space.SystemOf(state, to.id) } :: { any })
-      local jumps = assert(reach[offer.system], "a courier contract goes where only lawless space leads")
-      t.ok(jumps >= run.near and jumps <= run.far, `level {level}: {jumps} jumps`)
-      t.eq(Missions.Jumps(state, offer), jumps)
+      local jumps = Missions.Jumps(state, offer)
+      if offer.aim == "wild" then
+        -- The fourth level's other kind: to a station that only lawless space leads to, and it says so.
+        wild += 1
+        t.eq(level, #Missions.RUNS)
+        t.eq(reach[offer.system], nil, "a run through lawless space went where there was a safe way")
+        t.eq(jumps, #Galaxy.Route(state.galaxy, 1, offer.system) - 1)
+        t.ok(jumps >= run.near and jumps <= run.far, `a lawless run of {jumps} jumps`)
+        t.eq(Missions.Title(offer), `Courier, level {level}: {offer.need} m3, lawless`)
+      else
+        -- Any other: so many jumps off by a way that keeps out of lawless space (in a galaxy of forty, the
+        -- farthest there is, for the levels that would go farther than it has room for).
+        bulk += if level == #Missions.RUNS then 1 else 0
+        t.eq(offer.aim, "run")
+        t.eq(jumps, assert(reach[offer.system], "a courier contract goes where only lawless space leads"))
+        local least = if level > 1 then math.min(run.near, Missions.RUNS[level - 1].near + 1) else 1
+        t.ok(jumps >= least and jumps <= run.far, `level {level}: {jumps} jumps`)
+        t.eq(Missions.Title(offer), `Courier, level {level}: {offer.need} m3`)
+      end
       -- It pays for the volume and the way, and standing by its level.
       t.eq(offer.reward, math.floor((run.base + run.rate * offer.need * jumps) * (1 + 0.03 * 10)))
       t.near(offer.standing, Missions.RUN_CREDIT * level, 1e-9)
-      t.eq(Missions.Title(offer), `Courier, level {level}: {offer.need} m3`)
     end
-    -- (the first level goes in the starter ship's hold; the second wants a hauler's, and goes in one)
-    t.ok(Missions.RUNS[1].most <= Ships.byId["frigate.courier"].cargo and Missions.RUNS[2].least > Ships.byId["frigate.courier"].cargo)
-    t.ok(Missions.RUNS[2].most <= Ships.byId["industrial.hauler"].cargo)
   end
-  t.eq(seen, { 6, 6 })
+  t.eq(seen, { 12, 12, 12, 12 })
+  t.ok(wild >= 2 and bulk >= 2, `of twelve fourth-level contracts, {wild} lawless runs and {bulk} freighter loads`)
+  -- What carries each: the starter ship the first, a hauler the second, more than a hauler the third, and only
+  -- a freighter the fourth (or, for the run through lawless space, a hauler).
+  local courier, mule, dray = Ships.byId["frigate.courier"].cargo, Ships.byId["industrial.hauler"].cargo, Ships.byId["freighter.dray"].cargo
+  t.ok(Missions.RUNS[1].most <= courier and Missions.RUNS[2].least > courier and Missions.RUNS[2].most <= mule)
+  t.ok(Missions.RUNS[3].least > mule and Missions.RUNS[3].most <= dray)
+  t.ok(Missions.RUNS[4].least > 3 * mule and Missions.RUNS[4].most <= dray and Missions.WILD.most <= mule)
   -- The way there: every system on it is one the pilot can cross without entering lawless space.
   local galaxy = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true, systems = 40 }).state.galaxy
   for id, jumps in Missions.Reach(galaxy, 1) do
     t.ok(id == 1 or Galaxy.Band(galaxy.systems[id].security) ~= "lawless", `system {id}, {jumps} jumps off, is lawless`)
   end
-  -- A galaxy too small for it: the first level goes as far as there is to go, and there is no second.
+  -- A galaxy too small for it: the first level goes as far as there is to go, and nothing harder has anywhere to.
   local small = newGame()
   small.state.standings.vessari = 10
   local few = runs(small, small.state.player.home)
-  t.eq(#few, 1)
-  t.ok(Missions.Jumps(small.state, few[1]) <= 1)
+  t.ok(#few >= 1 and few[1].level == 1 and Missions.Jumps(small.state, few[1]) <= 1)
+  for _, offer in few do
+    t.ok(offer.level == 1 or offer.aim == "wild", `a galaxy of three systems offered level {offer.level}`)
+  end
 end)
 
 suite:Case("a courier contract hands its crates over, is carried in as many trips as it takes, and is paid where it is delivered; then the agent has another", function(t)
