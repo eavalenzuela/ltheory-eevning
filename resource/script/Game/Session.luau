@@ -180,7 +180,7 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `Marked: {event.name}. It is on the overview, to warp back to`)
   elseif kind == "OreDelivered" or kind == "HaulDelivered" then
     local body = Core.Query.Body(session.game, event.station)
-    Session.Say(session, `{event.name} brought in {event.units} units{if kind == "OreDelivered" then " of ore" else ""} to `
+    Session.Say(session, `{event.name} brought in {event.units} units{if kind ~= "OreDelivered" then "" elseif event.gas then " of gas" else " of ore"} to `
       .. `{if body then body.name else "the station"}` .. (if (event.revenue or 0) > 0 then `, sold for {event.revenue} credits` else ""))
   elseif kind == "FleetOrdered" and event.what == "buy" then
     local body = Core.Query.Body(session.game, event.target)

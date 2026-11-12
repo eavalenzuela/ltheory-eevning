@@ -6,7 +6,11 @@ local Core = require("@lt/Core/Api")
 local Drones = require("@lt/Core/Tactical/Drones")
 local Fleet = require("@lt/Core/Tactical/Fleet")
 local Items = require("@lt/Core/Assets/Items")
+local Digger = require("@lt/Core/Tactical/Digger")
+local Ores = require("@lt/Core/Data/Ores")
 local Pirates = require("@lt/Core/Tactical/Pirates")
+local Rng = require("@lt/Core/Kernel/Rng")
+local Sites = require("@lt/Core/Tactical/Sites")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -628,6 +632,68 @@ suite:Case("a hired pilot with a mining laser is set to mine a belt: the hold is
   t.ok(waitFor(game, 600, function()
     return second.docked == home
   end), "the pilot did not come back when called")
+end)
+
+suite:Case("at a vapour field a hired pilot with a gas harvester draws the gas and brings it in, as a miner does ore", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  state.wallet = 10000000
+  local home = state.player.home
+  local second = Space.NewShip(state, "frigate.prospector", "Drawer", "player", home)
+  Items.Equip(state, second.id, "miner.gas", nil)
+  -- (a Gas Harvester wants Mining 2: a pilot of grade 2)
+  local wing = hired(game, second, 2)
+  t.eq({ #Digger.Lasers(state, second.id), #Digger.Lasers(state, second.id, true) }, { 0, 1 })
+  -- A vapour field, found already, and the two out at it.
+  local site = assert(Sites.Plant(state, 1, "gas", Rng.For(1, 2, 3), game.events), "no vapour field could be made")
+  site.strength = 1
+  local place = assert(Space.Object(state, site.id))
+  t.ok(Digger.Gassy(state, place), "a vapour field is clouds")
+  t.ok(not Digger.Gassy(state, assert(Space.Object(state, belt(game, 1)))), "and a belt is not")
+  assert(submit(game, { kind = "Undock", actor = 0 }))
+  steps(game, 5)
+  assert(submit(game, { kind = "WarpTo", actor = 0, target = site.id }))
+  t.ok(waitFor(game, 900, function()
+    local me, ball = state.balls[state.player.ship], state.balls[second.id]
+    return me ~= nil and me.grid == site.id and ball ~= nil and ball.grid == site.id
+  end), "the two did not get to the vapour field")
+  local function gasIn(holder: number, where: string): number
+    local units = 0
+    for _, item in Items.In(state, holder, where) do
+      units += if Ores.gasById[item.type] then item.quantity else 0
+    end
+    return units
+  end
+  -- Set to work: the harvester is on a cloud, and gas comes aboard.
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "mine" })))
+  t.eq({ wing.order, wing.post } :: { any }, { "mine", site.id } :: { any })
+  t.ok(waitFor(game, 600, function()
+    return gasIn(second.id, "cargo") > 0
+  end), "no gas was drawn")
+  -- The player goes in. A hold of it, or all the field had, is brought to the station.
+  t.ok((submit(game, { kind = "Dock", actor = 0, target = home })))
+  local delivered, gas = 0, false
+  t.ok(waitFor(game, 9000, function()
+    for _, event in Core.TakeEvents(game) do
+      if event.kind == "OreDelivered" and event.pilot == wing.id then
+        delivered += event.units
+        gas = event.gas == true
+      end
+    end
+    return delivered > 0
+  end), "no gas was brought in")
+  t.ok(gas, "what was brought in should be said to be gas")
+  t.eq({ gasIn(wing.base, "hangar"), gasIn(second.id, "cargo"), wing.hauled }, { delivered, 0, delivered })
+  -- (and a hauler told to carry ore carries gas with it)
+  t.ok(Fleet.Carries("ore", "gas.amber") and Fleet.Carries("all", "gas.amber") and not Fleet.Carries("mineral", "gas.amber"))
+  -- A pilot with only a laser is no use at a vapour field.
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "follow" })))
+  for _, item in Items.Fitted(state, second.id) do
+    if item.type == "miner.gas" then
+      Items.Take(state, item, 1)
+    end
+  end
+  t.eq(#Digger.Lasers(state, second.id, true), 0)
 end)
 
 -- How many drones are in a ship's drone bay, and how many it has out.

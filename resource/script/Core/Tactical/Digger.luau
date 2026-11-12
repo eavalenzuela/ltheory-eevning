@@ -3,6 +3,10 @@
 -- lasers it has fitted, once it is at the belt. A hired pilot set to
 -- mine does it (Tactical/Fleet), and so do the miners of the traffic
 -- (Tactical/Traffic).
+--
+-- A vapour field (Tactical/Sites) is worked the same way with the
+-- other tool: where the place is clouds of gas and not rocks, it is a
+-- ship's gas harvesters that are used, on the clouds.
 
 local Combat = require("@lt/Core/Tactical/Combat")
 local Items = require("@lt/Core/Assets/Items")
@@ -30,19 +34,30 @@ local function give(state: State.State, command: State.Command, events: { Event 
   return false
 end
 
--- The mining lasers a ship has fitted.
-function Digger.Lasers(state: State.State, ship: number): { State.Item }
+-- The mining lasers a ship has fitted; or, with 'gas', its gas
+-- harvesters. (Each is for its own thing: a laser cuts rock, and a
+-- harvester draws off a cloud.)
+function Digger.Lasers(state: State.State, ship: number, gas: boolean?): { State.Item }
   local found: { State.Item } = {}
   if state.ships[ship] then
     for _, item in Items.Fitted(state, ship) do
-      -- (a hired pilot cuts rock: what draws gas off a cloud is not one of these)
       local miner = Modules.byId[item.type].miner
-      if miner and not miner.gas then
+      if miner and (miner.gas == true) == (gas == true) then
         table.insert(found, item)
       end
     end
   end
   return found
+end
+
+-- Whether a place is clouds of gas (a vapour field) and not rocks.
+function Digger.Gassy(state: State.State, post: System.Object): boolean
+  for _, object in Space.Describe(state, Space.SystemOf(state, post.id)).objects do
+    if object.site == post.id and Mining.Cloud(object) then
+      return true
+    end
+  end
+  return false
 end
 
 -- One tick's work for a ship that is at the belt 'post': to the nearest
@@ -51,7 +66,9 @@ end
 -- the belt is mined out ('waits', if nothing has been mined yet: the
 -- ship then stays, for the belt to grow back).
 function Digger.Work(state: State.State, me: State.Ball, post: System.Object, events: { Event }): boolean
-  local lasers = Digger.Lasers(state, me.id)
+  -- (at a vapour field, the harvesters and the clouds)
+  local gas = Digger.Gassy(state, post)
+  local lasers = Digger.Lasers(state, me.id, gas)
   if #lasers == 0 then
     return false
   end
@@ -74,7 +91,7 @@ function Digger.Work(state: State.State, me: State.Ball, post: System.Object, ev
   end
   local rock: System.Object?, least = nil, math.huge
   for _, object in Space.Describe(state, me.system).objects do
-    if Mining.Rock(object) and object.site == post.id and Mining.Left(state, object) > 0 then
+    if (if gas then Mining.Cloud(object) else Mining.Rock(object)) and object.site == post.id and Mining.Left(state, object) > 0 then
       local far = Space.Distance(object :: any, me :: any)
       if far < least then
         rock, least = object, far

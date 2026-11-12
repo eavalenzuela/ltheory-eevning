@@ -29,7 +29,8 @@
 -- take the ore in to the nearest station, where it goes into the
 -- player's hangar, and come back, for as long as they are left to it
 -- and wherever the player goes. Somebody after them at the belt sends
--- them in early.
+-- them in early. At a vapour field it is the same with a gas
+-- harvester: cloud after cloud, and the gas brought in.
 --
 -- They fly with the orders anybody's ship does, so everything that
 -- holds for a ship holds for theirs. What they destroy is the
@@ -108,6 +109,7 @@ local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
 local Modules = require("@lt/Core/Data/Modules")
 local Names = require("@lt/Core/Describe/Names")
+local Ores = require("@lt/Core/Data/Ores")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
@@ -194,8 +196,12 @@ Fleet.STOPS = 5
 -- a pilot to buy at. (They will go further, sent.)
 Fleet.SHOPS = 5
 
--- Whether a type is of a kind a hauler carries.
+-- Whether a type is of a kind a hauler carries. (Gas goes with ore: it
+-- is brought in the same way, by whoever was set to work a place.)
 function Fleet.Carries(kind: string, type: string): boolean
+  if Ores.gasById[type] then
+    return kind == "ore" or kind == "all"
+  end
   local category = Types.Info(type).category
   if kind == "all" then
     return category == "ore" or category == "mineral" or category == "moon" or category == "planetary" or category == "component"
@@ -281,15 +287,18 @@ local function nearestStation(state: State.State, me: State.Ball): System.Object
 end
 
 -- The hired pilots a "mine here" would set to work: those (or the one
--- named) on the player's grid whose ship has a mining laser.
+-- named) on the player's grid whose ship has a mining laser; or, where
+-- the place is a vapour field, a gas harvester.
 local function diggers(state: State.State, only: State.Wingman?): { State.Wingman }
   local lead = state.balls[state.player.ship]
   local found: { State.Wingman } = {}
+  local place = if lead then Space.Object(state, lead.grid) else nil
+  local gas = place ~= nil and Digger.Gassy(state, place)
   for _, id in state.fleetIds do
     local wing = state.fleet[id]
     local ball = state.balls[wing.ship]
     if (only == nil or only == wing) and lead and ball and ball.system == lead.system and ball.grid == lead.grid
-      and #Digger.Lasers(state, wing.ship) > 0 then
+      and #Digger.Lasers(state, wing.ship, gas) > 0 then
       table.insert(found, wing)
     end
   end
@@ -521,7 +530,8 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
       elseif nearestStation(state, me) == nil then
         return false, "there is no station in this system to take the ore to"
       elseif #diggers(state, wing) == 0 then
-        return false, "no hired pilot here has a mining laser fitted"
+        return false, if Digger.Gassy(state, post) then "no hired pilot here has a gas harvester fitted"
+          else "no hired pilot here has a mining laser fitted"
       end
       return true
     elseif what == "engage" then
@@ -1070,7 +1080,7 @@ end
 -- Somebody after the fleet at the belt sends them in early.
 local function work(state: State.State, wing: State.Wingman, ship: State.Ship, events: { Event })
   local post, base = Space.Object(state, wing.post), Space.Object(state, wing.base)
-  if post == nil or base == nil or #Digger.Lasers(state, ship.id) == 0 then
+  if post == nil or base == nil or #Digger.Lasers(state, ship.id, Digger.Gassy(state, post)) == 0 then
     wing.order = "stay"
     return
   end
@@ -1082,7 +1092,9 @@ local function work(state: State.State, wing: State.Wingman, ship: State.Ship, e
       units, revenue = unload(state, wing, ship, "ore", events)
     end
     if units > 0 then
-      table.insert(events, { kind = "OreDelivered", pilot = wing.id, name = wing.name, units = units, station = base.id, revenue = revenue })
+      -- ('gas': it is gas they were set to draw, not rock to cut)
+      table.insert(events, { kind = "OreDelivered", pilot = wing.id, name = wing.name, units = units, station = base.id, revenue = revenue,
+        gas = Digger.Gassy(state, post) })
       learn(state, wing, units // 50, events)
     end
     give(state, { kind = "Undock", actor = ship.id }, events)
