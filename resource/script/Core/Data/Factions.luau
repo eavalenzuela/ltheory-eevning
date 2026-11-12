@@ -26,12 +26,14 @@ export type Faction = {
   -- How its hulls are built up (Game/View/Hull). Human: "slab" broad
   -- armoured plates, "cloud" rounded lobes with blisters and no corners
   -- (the Talmar, by their draft), "motley" no two hulls built in the
-  -- same manner (the Orun, by theirs), "lattice" open frames and spars.
+  -- same manner (the Orun, by theirs), "blade" arrowheads in flat plates,
+  -- sharp at every edge, each with its conning tower (the Kethri, by
+  -- theirs).
   -- Pirate: "patchwork", somebody
   -- else's hull with parts missing and parts bolted on. Alien: "crystal"
   -- shards grown outward from a core, "carapace" segmented and curled
   -- like something alive, "monolith" rings and slabs without a seam.
-  style: "slab" | "cloud" | "motley" | "lattice" | "patchwork" | "crystal" | "carapace" | "monolith",
+  style: "slab" | "cloud" | "motley" | "blade" | "patchwork" | "crystal" | "carapace" | "monolith",
   weapon: string,           -- the turret family its warships carry
   launchers: number,        -- the share of a warship's hardpoints that are launchers
   tank: "armor" | "shield" | "hull",
@@ -111,11 +113,11 @@ Factions.list = {
     -- they are nomads: "no fixed stations, instead they have massive
     -- (talking 10km long, 1km wide) colony ships, that serve as mobile
     -- stations and fleet docks", in the manner of "sharp edges, flat grey
-    -- plates, arrowheads, conning towers". Their hulls are not drawn to
-    -- that yet: the style, the note, the paint and the names below are
-    -- still the placeholders from before it.)
-    id = "kethri", name = "Kethri", kind = "human", style = "lattice", weapon = "laser", launchers = 0, tank = "armor", nomad = true,
-    note = "Lasers and armour. Open-framed hulls with deep capacitors that see far, hold their range and never run out of ammunition.",
+    -- plates, arrowheads, conning towers". The draft says nothing of what
+    -- the hulls are called: the names below are still the placeholders
+    -- from before it, and were thought of for open-framed hulls.)
+    id = "kethri", name = "Kethri", kind = "human", style = "blade", weapon = "laser", launchers = 0, tank = "armor", nomad = true,
+    note = "Lasers and armour. Nomads, who keep no stations and live aboard colony ships ten kilometres long. Their hulls are blades in flat grey plate, sharp at every edge, each with its conning tower: deep capacitors, long sight, and never out of ammunition.",
     paint = { primary = { 0.24, 0.30, 0.46 }, secondary = { 0.80, 0.80, 0.84 }, glow = { 0.55, 0.60, 1.0 } },
     shield = 0.85, armor = 1.25, hull = 1.0, velocity = 0.97, mass = 1.03, cpu = 0.95, powergrid = 1.1, capacitor = 1.15,
     lockRange = 1.2, cargo = 1.0, price = 1, mids = -1, lows = 1, hardpoints = 0,

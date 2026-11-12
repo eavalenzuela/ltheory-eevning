@@ -348,9 +348,38 @@ function Plates.Fairing(b: Builder, part: number, outline: Outline, z: number, a
   b.kept += 1
 end
 
+-- What becomes of a flat plate whose middle is at 'middle', in a wreck
+-- or on a pirate's hull: the part it is to be, or nil if it is not
+-- there. (A wreck has the plates of the piece of it being built, less
+-- what was lost, and nothing lit; a pirate's has some of its plating
+-- swapped for whatever was to hand. Anything else has it as it is.)
+local function fate(b: Builder, part: number, middle: vector): number?
+  local kind = math.floor(part)
+  local ruin = b.ruin
+  if ruin then
+    local z = middle.z + (dice(b, 1) - 0.5) * 0.3
+    if kind == Plates.GLOW or kind == Plates.FIRE or z < ruin.from or z >= ruin.to or dice(b, 2) < ruin.loss then
+      return nil
+    end
+  end
+  local patch = b.patch
+  if patch then
+    if kind == Plates.PLATING and dice(b, 12) < patch * 0.40 then
+      return if dice(b, 13) < 0.3 then Plates.FRAME else Plates.PATCH
+    elseif kind == Plates.PATCH and dice(b, 12) < patch * 0.30 then
+      return Plates.PLATING
+    end
+  end
+  return part
+end
+
 -- Three corners of a flat plate with the tag 'tag': their own points,
 -- so that it is lit as one face.
 local function facet(b: Builder, tag: number, p1: vector, p2: vector, p3: vector, out: vector)
+  -- (corners that meet make no plate: an outline that comes to a point)
+  if vector.magnitude(vector.cross(p2 - p1, p3 - p1)) < 1e-10 then
+    return
+  end
   local skin = skinOf(b)
   if vector.dot(vector.cross(p2 - p1, p3 - p1), out) < 0 then
     p2, p3 = p3, p2
@@ -367,19 +396,81 @@ end
 -- way its outside looks, near enough: the corners are taken in
 -- whichever order makes that so.
 function Plates.Facet(b: Builder, part: number, p1: vector, p2: vector, p3: vector, out: vector)
-  facet(b, part + own(b), p1, p2, p3, out)
-  b.kept += 1
+  local tone = own(b)
+  local as = fate(b, part, (p1 + p2 + p3) / 3)
+  if as then
+    facet(b, as + tone, p1, p2, p3, out)
+    b.kept += 1
+  end
 end
 
 -- A flat plate with any number of corners, given in order round it
 -- (they should lie in a plane, and bulge nowhere inward): one plate,
 -- of one tone.
 function Plates.Flat(b: Builder, part: number, corners: { vector }, out: vector)
-  local tag = part + own(b)
+  local tone = own(b)
+  local middle = vector.create(0, 0, 0)
+  for _, corner in corners do
+    middle += corner
+  end
+  local as = fate(b, part, middle / #corners)
+  if as == nil then
+    return
+  end
   for index = 2, #corners - 1 do
-    facet(b, tag, corners[1], corners[index], corners[index + 1], out)
+    facet(b, as + tone, corners[1], corners[index], corners[index + 1], out)
   end
   b.kept += 1
+end
+
+-- A section of a hull in flat plates: where it is along z, and the
+-- corners of its outline there in order round it (their x and y: a
+-- corner's own z is not looked at).
+export type Section = { z: number, ring: { vector } }
+
+-- A hull in flat plates, sharp at every edge: flat from each section to
+-- the next, corner to corner (every section has as many corners as the
+-- first, going round the same way, and bulges nowhere inward), and
+-- closed flat at both ends. An outline may come to a point, or to a
+-- line. A long reach between two sections is laid in several lengths
+-- of plate ('reach' long at the most, 0.3 if not said), so that the
+-- wreck of it breaks across and not along.
+function Plates.Hard(b: Builder, part: number, sections: { Section }, reach: number?)
+  local step = reach or 0.3
+  local function ringAt(a: Section, c: Section, t: number): ({ vector }, vector)
+    local ring: { vector } = {}
+    local middle = vector.create(0, 0, 0)
+    for index, p in a.ring do
+      local q = c.ring[index]
+      local at = vector.create(p.x + (q.x - p.x) * t, p.y + (q.y - p.y) * t, a.z + (c.z - a.z) * t)
+      ring[index] = at
+      middle += at
+    end
+    return ring, middle / #ring
+  end
+  for index = 1, #sections - 1 do
+    local a, c = sections[index], sections[index + 1]
+    local lengths = math.max(1, math.ceil(math.abs(c.z - a.z) / step))
+    for length = 1, lengths do
+      local near, nearMiddle = ringAt(a, c, (length - 1) / lengths)
+      local far, farMiddle = ringAt(a, c, length / lengths)
+      local middle = (nearMiddle + farMiddle) / 2
+      for corner = 1, #near do
+        local after = corner % #near + 1
+        Plates.Flat(b, part, { near[corner], near[after], far[after], far[corner] },
+          (near[corner] + near[after] + far[after] + far[corner]) / 4 - middle)
+      end
+    end
+  end
+  local first, last = sections[1], sections[#sections]
+  local ahead = if last.z > first.z then 1 else -1
+  for _, cap in { { section = first, out = -ahead }, { section = last, out = ahead } } do
+    local ring: { vector } = {}
+    for index, p in cap.section.ring do
+      ring[index] = vector.create(p.x, p.y, cap.section.z)
+    end
+    Plates.Flat(b, part, ring, vector.create(0, 0, cap.out))
+  end
 end
 
 -- The model of what has been built, painted as 'look' says, and the

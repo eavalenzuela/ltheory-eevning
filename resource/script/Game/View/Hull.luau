@@ -1201,6 +1201,263 @@ local function ox(b: Builder)
   aerial(b, v(0, -0.05, -1.12), 0.30, v(0, -1, -0.2))
 end
 
+-- ---------------------------------------------------------------------
+-- The Kethri
+--
+-- Nomads (their draft is in Core/Data/Factions): "lots of sharp edges,
+-- flat grey plates, arrowheads, conning towers", in the manner of Star
+-- Wars' Empire without being any ship of it. Every hull is a blade in
+-- flat plates (Plates.Hard): it comes to a point at the bow, is widest
+-- at its barbs well aft, and is sharp at its edge all the way round;
+-- its barbs run on back past the stern; a conning tower stands on its
+-- back toward the stern, small on the hull; and its engines are in a
+-- row across the stern. Flat grey throughout, the edge marked dark.
+
+-- A blade is drawn through rows, bow to stern. A row: where it is along
+-- z; half the blade's width at its edge there; how high its back stands
+-- over the edge, and half the width of the flat along the back; how
+-- deep its keel is, and half the width of the flat along that; and, if
+-- the blade is not on the hull's middle line at the height of its
+-- edge, how far aside and how high.
+type Row = { number }
+
+local function sectionOf(row: Row): Plates.Section
+  local z, w, t, d, k, f, x, y = row[1], row[2], row[3], row[4], row[5], row[6], row[7] or 0, row[8] or 0
+  return { z = z, ring = { v(x + d, y + t, 0), v(x + w, y, 0), v(x + f, y - k, 0), v(x - f, y - k, 0), v(x - w, y, 0), v(x - d, y + t, 0) } }
+end
+
+local function hard(b: Builder, part: number, rows: { Row })
+  local sections: { Plates.Section } = {}
+  for index, row in rows do
+    sections[index] = sectionOf(row)
+  end
+  Plates.Hard(b, part, sections)
+end
+
+-- A blade as it is at 'z', between its rows.
+local function rowAt(rows: { Row }, z: number): Row
+  for index = 1, #rows - 1 do
+    local a, c = rows[index], rows[index + 1]
+    if z <= a[1] and z >= c[1] then
+      local s = (a[1] - z) / math.max(a[1] - c[1], 1e-6)
+      local out: Row = { z }
+      for field = 2, 8 do
+        local p, q = a[field] or 0, c[field] or 0
+        out[field] = p + (q - p) * s
+      end
+      return out
+    end
+  end
+  local last = rows[#rows]
+  return { last[1], last[2], last[3], last[4], last[5], last[6], last[7] or 0, last[8] or 0 }
+end
+
+-- Places on a blade: on the middle of its back, under the middle of its
+-- keel, and on its edge to one side (1 starboard, -1 port).
+local function topOf(rows: { Row }, z: number, lift: number?): vector
+  local row = rowAt(rows, z)
+  return v(row[7], row[8] + row[3] + (lift or 0), z)
+end
+
+local function keelOf(rows: { Row }, z: number): vector
+  local row = rowAt(rows, z)
+  return v(row[7], row[8] - row[5], z)
+end
+
+local function edgeOf(rows: { Row }, z: number, side: number): vector
+  local row = rowAt(rows, z)
+  return v(row[7] + side * row[2], row[8], z)
+end
+
+-- A barb: a lesser blade lying beside the hull, from where it leaves
+-- the hull's edge back to a point. 'side' is which side; it is 'x'
+-- aside at its root and 'to' at its point.
+local function barbOf(side: number, from: number, back: number, x: number, to: number, w: number, t: number, k: number): { Row }
+  return { { from, w, t, 0, k, 0, side * x, 0 }, { back, 0, 0, 0, 0, 0, side * to, 0 } }
+end
+
+-- A tier: a low blade laid along a hull's back. Each of 'steps' is
+-- where along z, half its width at the foot, how high it stands, and
+-- half the width of its flat top.
+local function tierOn(rows: { Row }, steps: { { number } }): { Row }
+  local tier: { Row } = {}
+  for index, step in steps do
+    local under = rowAt(rows, step[1])
+    -- (its foot goes down as far as the back it stands on has fallen
+    -- away by there, and a little into it)
+    local fallen = if step[2] > under[4] then under[3] * (step[2] - under[4]) / math.max(under[2] - under[4], 1e-6) else 0
+    tier[index] = { step[1], step[2], step[3], step[4], fallen + 0.012, step[2], under[7], under[8] + under[3] - 0.006 }
+  end
+  return tier
+end
+
+-- The edge of a blade, marked: a dark line along it each side.
+local function edged(b: Builder, rows: { Row }, thick: number)
+  for index = 1, #rows - 1 do
+    for _, side in { 1, -1 } do
+      beam(b, TRIM, edgeOf(rows, rows[index][1], side), edgeOf(rows, rows[index + 1][1], side), thick, 0.1)
+    end
+  end
+end
+
+-- A conning tower: a narrow blade standing on the back, the bridge
+-- across the top of it and lit forward, a house at its foot and a mast.
+local function conning(b: Builder, foot: vector, height: number)
+  local h = height
+  block(b, PLATING, foot + v(0, h * 0.46, 0), v(h * 0.085, h * 0.50, h * 0.24), nil, 0.05)
+  block(b, PATCH, foot + v(0, h * 0.20, -h * 0.16), v(h * 0.14, h * 0.24, h * 0.22), nil, 0.05)
+  block(b, PATCH, foot + v(0, h * 0.99, h * 0.05), v(h * 0.30, h * 0.07, h * 0.15), nil, 0.08)
+  block(b, GLOW, foot + v(0, h * 0.99, h * 0.205), v(h * 0.26, h * 0.026, h * 0.012), nil, 0.1)
+  beam(b, FRAME, foot + v(0, h * 1.05, -h * 0.05), foot + v(0, h * 1.34, -h * 0.05), h * 0.022, 0.1)
+end
+
+-- A house on a hull's back: a plain block, some of them lit along a side.
+local function house(b: Builder, foot: vector, wide: number, high: number, long: number, lit: boolean?)
+  block(b, if lit then PATCH else PLATING, foot + v(0, high * 0.6, 0), v(wide, high, long), nil, 0.06)
+  if lit then
+    for _, side in { 1, -1 } do
+      block(b, GLOW, foot + v(side * wide, high * 0.9, 0), v(wide * 0.04, high * 0.16, long * 0.7), nil, 0.1)
+    end
+  end
+end
+
+-- A drive: a throat standing out of the stern, lit. 'at' is the middle
+-- of it on the stern's face; 'wide' and 'high' are half its size.
+local function drive(b: Builder, at: vector, wide: number, high: number)
+  block(b, FRAME, at + v(0, 0, -0.02), v(wide, high, 0.05), nil, 0.2)
+  block(b, Plates.FIRE, at + v(0, 0, -0.074), v(wide * 0.78, high * 0.74, 0.008), nil, 0.3)
+  exhaust(at + v(0, 0, -0.09), math.min(wide, high) * 0.78)
+end
+
+-- The Lancer, a frigate: a spearhead. One blade from its point to two
+-- short barbs, a tower over the stern, two drives.
+local LANCER: { Row } = {
+  { 1.20, 0, 0, 0, 0, 0 }, { 0.55, 0.13, 0.045, 0.012, 0.030, 0.03 }, { -0.35, 0.36, 0.10, 0.05, 0.06, 0.10 },
+  { -0.62, 0.22, 0.11, 0.07, 0.06, 0.10 }, { -0.80, 0.20, 0.10, 0.07, 0.055, 0.09 },
+}
+local function lancer(b: Builder)
+  hard(b, PLATING, LANCER)
+  for _, side in { 1, -1 } do
+    hard(b, PLATING, barbOf(side, -0.26, -1.00, 0.29, 0.42, 0.075, 0.024, 0.016))
+  end
+  edged(b, LANCER, 0.007)
+  house(b, topOf(LANCER, 0.08, -0.012), 0.032, 0.022, 0.10)
+  house(b, topOf(LANCER, -0.17, -0.012), 0.048, 0.028, 0.075, true)
+  conning(b, topOf(LANCER, -0.50, -0.012), 0.17)
+  drive(b, v(0.085, 0.022, -0.80), 0.058, 0.048)
+  drive(b, v(-0.085, 0.022, -0.80), 0.058, 0.048)
+end
+
+-- The Gantry, a destroyer: a sword. A long narrow blade with a low tier
+-- along its back from the middle aft, long barbs, three drives.
+local GANTRY: { Row } = {
+  { 1.55, 0, 0, 0, 0, 0 }, { 0.90, 0.12, 0.05, 0.02, 0.04, 0.04 }, { -0.30, 0.30, 0.12, 0.07, 0.08, 0.12 },
+  { -0.95, 0.42, 0.13, 0.09, 0.08, 0.14 }, { -1.18, 0.25, 0.13, 0.09, 0.07, 0.12 }, { -1.35, 0.23, 0.12, 0.09, 0.065, 0.11 },
+}
+local GANTRY_TIER = tierOn(GANTRY, { { 0.45, 0, 0, 0 }, { -0.10, 0.085, 0.05, 0.045 }, { -1.02, 0.12, 0.07, 0.075 }, { -1.22, 0.09, 0.06, 0.055 } })
+local function gantry(b: Builder)
+  hard(b, PLATING, GANTRY)
+  hard(b, PLATING, GANTRY_TIER)
+  for _, side in { 1, -1 } do
+    hard(b, PLATING, barbOf(side, -0.84, -1.62, 0.34, 0.50, 0.085, 0.028, 0.018))
+  end
+  edged(b, GANTRY, 0.008)
+  house(b, topOf(GANTRY, 0.62, -0.012), 0.030, 0.022, 0.09)
+  house(b, topOf(GANTRY_TIER, -0.22, -0.012), 0.040, 0.026, 0.085, true)
+  house(b, topOf(GANTRY_TIER, -0.50, -0.012), 0.055, 0.034, 0.075)
+  conning(b, topOf(GANTRY_TIER, -0.86, -0.012), 0.22)
+  for _, x in { -0.125, 0, 0.125 } do
+    drive(b, v(x, 0.028, -1.35), 0.050, 0.055)
+  end
+end
+
+-- The Trellis, a cruiser: a broadhead. A wide blade with a citadel on
+-- its back, a long barb out on each side past a deep notch, four drives.
+local TRELLIS: { Row } = {
+  { 1.60, 0, 0, 0, 0, 0 }, { 0.60, 0.30, 0.10, 0.04, 0.06, 0.10 }, { -0.55, 0.74, 0.17, 0.12, 0.10, 0.24 },
+  { -0.95, 0.36, 0.17, 0.12, 0.10, 0.20 }, { -1.15, 0.32, 0.16, 0.12, 0.09, 0.18 },
+}
+local TRELLIS_TIER = tierOn(TRELLIS, { { 0.15, 0, 0, 0 }, { -0.28, 0.16, 0.06, 0.10 }, { -1.00, 0.20, 0.08, 0.13 }, { -1.12, 0.16, 0.07, 0.10 } })
+local TRELLIS_BARB: { [number]: { Row } } = {
+  [1] = barbOf(1, -0.46, -1.62, 0.60, 0.74, 0.15, 0.05, 0.03), [-1] = barbOf(-1, -0.46, -1.62, 0.60, 0.74, 0.15, 0.05, 0.03),
+}
+local function trellis(b: Builder)
+  hard(b, PLATING, TRELLIS)
+  hard(b, PLATING, TRELLIS_TIER)
+  for _, side in { 1, -1 } do
+    hard(b, PLATING, TRELLIS_BARB[side])
+  end
+  edged(b, TRELLIS, 0.009)
+  house(b, topOf(TRELLIS, 0.72, -0.012), 0.035, 0.024, 0.10)
+  house(b, topOf(TRELLIS, 0.38, -0.012), 0.050, 0.030, 0.085, true)
+  house(b, topOf(TRELLIS_TIER, -0.18, -0.012), 0.060, 0.036, 0.085)
+  house(b, topOf(TRELLIS_TIER, -0.45, -0.012), 0.085, 0.045, 0.075, true)
+  conning(b, topOf(TRELLIS_TIER, -0.76, -0.012), 0.28)
+  for _, x in { -0.205, -0.07, 0.07, 0.205 } do
+    drive(b, v(x, 0.035, -1.15), 0.052, 0.060)
+  end
+end
+
+-- The Spire, a battleship: a great broadhead in three tiers, each a
+-- blade laid on the one below, with the tower the class is named for
+-- standing tall on the last, a fin under the keel below it, long barbs,
+-- and three great drives.
+local SPIRE: { Row } = {
+  { 2.70, 0, 0, 0, 0, 0 }, { 1.40, 0.34, 0.12, 0.05, 0.10, 0.10 }, { -0.90, 1.00, 0.26, 0.16, 0.18, 0.32 },
+  { -1.60, 0.54, 0.27, 0.18, 0.18, 0.30 }, { -2.00, 0.48, 0.25, 0.18, 0.16, 0.26 },
+}
+local SPIRE_TIER = tierOn(SPIRE, { { 1.15, 0, 0, 0 }, { 0.30, 0.20, 0.07, 0.12 }, { -1.55, 0.34, 0.11, 0.20 }, { -1.90, 0.26, 0.09, 0.16 } })
+local SPIRE_CROWN = tierOn(SPIRE_TIER, { { -0.10, 0, 0, 0 }, { -0.50, 0.13, 0.06, 0.08 }, { -1.45, 0.17, 0.07, 0.10 }, { -1.62, 0.12, 0.05, 0.07 } })
+local SPIRE_BARB: { [number]: { Row } } = {
+  [1] = barbOf(1, -0.80, -2.70, 0.80, 0.98, 0.22, 0.07, 0.05), [-1] = barbOf(-1, -0.80, -2.70, 0.80, 0.98, 0.22, 0.07, 0.05),
+}
+local function spireShip(b: Builder)
+  hard(b, PLATING, SPIRE)
+  hard(b, PLATING, SPIRE_TIER)
+  hard(b, PLATING, SPIRE_CROWN)
+  for _, side in { 1, -1 } do
+    hard(b, PLATING, SPIRE_BARB[side])
+  end
+  edged(b, SPIRE, 0.012)
+  for index, z in { 1.70, 1.32, 0.95, 0.62 } do
+    house(b, topOf(if z > 1.15 then SPIRE else SPIRE_TIER, z, -0.014), 0.034 + 0.012 * index, 0.026 + 0.006 * index, 0.11, index % 2 == 0)
+  end
+  house(b, topOf(SPIRE_TIER, 0.22, -0.014), 0.085, 0.050, 0.10, true)
+  house(b, topOf(SPIRE_CROWN, -0.62, -0.014), 0.070, 0.045, 0.09)
+  house(b, topOf(SPIRE_CROWN, -0.90, -0.014), 0.090, 0.055, 0.08, true)
+  conning(b, topOf(SPIRE_CROWN, -1.22, -0.014), 0.62)
+  -- the fin under the keel, below the tower
+  local under = keelOf(SPIRE, -1.25)
+  block(b, PLATING, under + v(0, -0.20, 0.02), v(0.022, 0.22, 0.34), v(0.10, 0, 0), 0.05)
+  block(b, TRIM, under + v(0, -0.43, -0.02), v(0.026, 0.014, 0.30), v(0.10, 0, 0), 0.1)
+  for _, x in { -0.27, 0, 0.27 } do
+    drive(b, v(x, 0.045, -2.00), 0.105, if x == 0 then 0.135 else 0.11)
+  end
+end
+
+-- The Lighter, a hauler: a hold with a wedge for a bow. A long six-sided
+-- body, flat on its back and its keel, drawn to a level edge at the
+-- bow; hatches along the back, cargo doors down each flank, the bridge
+-- in a tower over the stern as a freighter's is, two drives.
+local LIGHTER: { Row } = {
+  { 1.40, 0.24, 0, 0.24, 0, 0.24 }, { 0.85, 0.44, 0.24, 0.26, 0.24, 0.28 }, { -0.85, 0.44, 0.24, 0.26, 0.24, 0.28 },
+  { -1.15, 0.40, 0.22, 0.24, 0.20, 0.24 }, { -1.35, 0.34, 0.18, 0.20, 0.16, 0.20 },
+}
+local function lighter(b: Builder)
+  hard(b, PLATING, LIGHTER)
+  edged(b, LIGHTER, 0.009)
+  for index, z in { 0.60, 0.28, -0.04, -0.36, -0.68 } do
+    block(b, PATCH, v(0, 0.243, z), v(0.19, 0.008, 0.13), nil, 0.1)
+    block(b, FRAME, v(0, 0.250, z), v(0.012, 0.006, 0.12), nil, 0.1)
+    for _, side in { 1, -1 } do
+      block(b, if (index + side) % 2 == 0 then PATCH else PLATING, v(side * 0.45, 0, z), v(0.035, 0.11, 0.125), nil, 0.08)
+    end
+  end
+  conning(b, topOf(LIGHTER, -1.02, -0.012), 0.26)
+  drive(b, v(0.135, 0.01, -1.35), 0.085, 0.085)
+  drive(b, v(-0.135, 0.01, -1.35), 0.085, 0.085)
+end
+
 -- A mount: a place on the hull where a weapon can stand. Where it is,
 -- the way out of the hull there, and the way what stands on it faces at
 -- rest (forward, if not said).
@@ -1238,6 +1495,9 @@ type Design = {
   -- Its own paint, where its faction's hulls are not all painted alike
   -- (the Orun's). Its faction's, if not said.
   look: Look?,
+  -- How alike its plates are in tone (Plates' 'even'): as unlike as
+  -- plates come, if not said.
+  even: number?,
   turrets: { Hardpoint },
   launchers: { Hardpoint },
   -- What it is shown carrying where nobody has fitted it (a gallery):
@@ -1411,6 +1671,55 @@ local designs: { [string]: Design } = {
     launchers = {},
     fit = { "blaster.small" },
   },
+  -- The Kethri. (Lasers, all on turrets: on the back and under the keel,
+  -- and out on the edge of the blade each side.)
+  ["frigate.lancer"] = {
+    faction = "kethri", draw = lancer, sheets = 5.0, even = 0.7,
+    turrets = {
+      over(topOf(LANCER, 0.36), keelOf(LANCER, 0.36)), abeam(edgeOf(LANCER, -0.20, 1), edgeOf(LANCER, -0.20, -1)),
+      over(topOf(LANCER, -0.70), keelOf(LANCER, -0.50)),
+    },
+    launchers = {},
+    fit = { "laser.pulse.small", "laser.pulse.small", "laser.pulse.small" },
+  },
+  ["destroyer.gantry"] = {
+    faction = "kethri", draw = gantry, sheets = 6.0, even = 0.7,
+    turrets = {
+      over(topOf(GANTRY, 1.00), keelOf(GANTRY, 1.00)), over(topOf(GANTRY, 0.30, 0.004), keelOf(GANTRY, 0.45)),
+      abeam(edgeOf(GANTRY, 0.10, 1), edgeOf(GANTRY, 0.10, -1)), abeam(edgeOf(GANTRY, -0.60, 1), edgeOf(GANTRY, -0.60, -1)),
+      over(topOf(GANTRY_TIER, -0.36), keelOf(GANTRY, -0.35)), over(topOf(GANTRY_TIER, -1.12), keelOf(GANTRY, -0.95)),
+    },
+    launchers = {},
+    fit = { "laser.pulse.small", "laser.pulse.small", "laser.pulse.small", "laser.pulse.small", "laser.pulse.small", "laser.pulse.small" },
+  },
+  ["cruiser.trellis"] = {
+    faction = "kethri", draw = trellis, sheets = 7.5, even = 0.7,
+    turrets = {
+      over(topOf(TRELLIS, 1.00), keelOf(TRELLIS, 1.00)), abeam(edgeOf(TRELLIS, -0.20, 1), edgeOf(TRELLIS, -0.20, -1)),
+      over(topOf(TRELLIS_TIER, -0.98), keelOf(TRELLIS, -0.45)), abeam(edgeOf(TRELLIS_BARB[1], -0.90, 1), edgeOf(TRELLIS_BARB[-1], -0.90, -1)),
+    },
+    launchers = {},
+    fit = { "laser.pulse.medium", "laser.pulse.medium", "laser.pulse.medium", "laser.pulse.medium" },
+  },
+  ["battleship.spire"] = {
+    faction = "kethri", draw = spireShip, sheets = 12, even = 0.7,
+    turrets = {
+      over(topOf(SPIRE, 2.05), keelOf(SPIRE, 2.05)), over(topOf(SPIRE_TIER, 0.45), keelOf(SPIRE, 0.90)),
+      over(topOf(SPIRE_CROWN, -0.36), keelOf(SPIRE, -0.10)), abeam(edgeOf(SPIRE, 0.40, 1), edgeOf(SPIRE, 0.40, -1)),
+      abeam(edgeOf(SPIRE, -0.60, 1), edgeOf(SPIRE, -0.60, -1)), abeam(edgeOf(SPIRE_BARB[1], -1.60, 1), edgeOf(SPIRE_BARB[-1], -1.60, -1)),
+      over(topOf(SPIRE_TIER, -1.80), keelOf(SPIRE, -1.85)),
+    },
+    launchers = {},
+    fit = { "laser.beam.large", "laser.beam.large", "laser.beam.large", "laser.beam.large", "laser.beam.large", "laser.beam.large",
+      "laser.beam.large" },
+  },
+  ["industrial.lighter"] = {
+    faction = "kethri", draw = lighter, sheets = 5.0, even = 0.7,
+    -- (its one gun on the back of the bow, and under it)
+    turrets = { over(topOf(LIGHTER, 1.02), keelOf(LIGHTER, 1.02)) },
+    launchers = {},
+    fit = { "laser.pulse.small" },
+  },
   ["frigate.courier"] = {
     faction = "civil", draw = courier,
     -- (a gun on the back and under the cargo box; a gun on each flank)
@@ -1498,7 +1807,7 @@ end
 for _, hull in Ships.list do
   local base: Design? = if hull.tech == 2 and hull.base then designs[hull.base] else nil
   if base and designs[hull.id] == nil then
-    designs[hull.id] = { faction = base.faction, draw = base.draw, sheets = base.sheets,
+    designs[hull.id] = { faction = base.faction, draw = base.draw, sheets = base.sheets, even = base.even,
       look = rebuilt(base.look or Hull.looks[base.faction]), turrets = base.turrets, launchers = base.launchers, fit = base.fit }
   end
 end
@@ -1552,6 +1861,8 @@ function Hull.Build(type: string, pirate: boolean?): Built?
   local look = if patched then Hull.looks.unbound else design.look or Hull.looks[design.faction]
   local b = Plates.New(#type * 1.37)
   b.patch = if patched then PATCHED else design.patch
+  -- (a pirate's is a patchwork whatever it was)
+  b.even = if patched then nil else design.even
   table.clear(exhausts)
   design.draw(b)
   local model, lower, upper = Plates.Finish(b, look, design.sheets)
@@ -1651,6 +1962,7 @@ function Hull.Wreck(type: string): Wreckage
     -- (the seed the whole hull was built with: the same plates, in the same tones)
     local b = Plates.New(#type * 1.37)
     b.patch = if design then design.patch else nil
+    b.even = if design then design.even else nil
     b.ruin = { from = edges[index], to = edges[index + 1], loss = 0.42 }
     draw(b)
     if b.kept >= 4 then
