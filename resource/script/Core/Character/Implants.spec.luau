@@ -2,6 +2,7 @@
 -- Implants (Data/Implants, Character/Implants).
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
+local Attributes = require("@lt/Core/Attributes")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Facts = require("@lt/Core/Data/Facts")
@@ -31,7 +32,7 @@ local function give(game: Core.Game, type: string): State.Item
   return Items.Add(game.state, type, 1, game.state.player.home, "hangar")
 end
 
-suite:Case("there are two implants for each of five places, each an item with a price and a sheet", function(t)
+suite:Case("there are two implants for each of five places and four more for the fifth, each an item with a price and a sheet", function(t)
   local places: { number } = table.create(Implants.SLOTS, 0)
   for _, implant in Implants.list do
     t.ok(implant.slot >= 1 and implant.slot <= Implants.SLOTS and implant.slot % 1 == 0)
@@ -42,8 +43,39 @@ suite:Case("there are two implants for each of five places, each an item with a 
     local sheet = assert(Facts.Of(implant.id))
     t.eq(sheet.kind, "Implant")
   end
-  t.eq(places, { 2, 2, 2, 2, 2 })
+  t.eq(places, { 2, 2, 2, 2, 6 })
   t.ok(Implants.Price(Implants.byId["implant.scan"]) > Implants.Price(Implants.byId["implant.shield"]))
+end)
+
+suite:Case("an implant for a kind of weapon makes that kind do a twentieth more damage, and no other kind any", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  state.skills.cybernetics = 5
+  local ship = state.player.ship
+  local function damage(type: string): number
+    return Attributes.Weapon(Items.Fit(state, ship, nil), type, Items.Levels(state, ship)).damageMultiplier
+  end
+  local families: { [string]: string } = {
+    laser = "laser.pulse.small", projectile = "autocannon.small", hybrid = "blaster.small", missile = "launcher.light",
+  }
+  local before: { [string]: number } = {}
+  for family, type in families do
+    before[family] = damage(type)
+  end
+  -- One for each family, all for the fifth place: so one at a time.
+  for _, family in { "laser", "projectile", "hybrid", "missile" } do
+    local implant = Implants.byId["implant." .. family]
+    t.eq({ implant.slot, implant.passive[1].on, implant.passive[1].family } :: { any }, { 5, "weapons", family } :: { any })
+  end
+  t.ok((submit(game, { kind = "PlugImplant", actor = 0, item = give(game, "implant.projectile").id })))
+  t.eq(refused(game, { kind = "PlugImplant", actor = 0, item = give(game, "implant.laser").id }),
+    "that place has an implant in it: it has to come out first")
+  for family, type in families do
+    t.near(damage(type), before[family] * (if family == "projectile" then 1.05 else 1), 1e-9, family)
+  end
+  -- (and the ship in the fitting window says so: its guns are autocannons)
+  t.ok((submit(game, { kind = "UnplugImplant", actor = 0, what = "implant.projectile" })))
+  t.near(damage("autocannon.small"), before.projectile, 1e-9)
 end)
 
 suite:Case("an implant is plugged in at a station, into its own place, by a pilot with the Cybernetics for it", function(t)
