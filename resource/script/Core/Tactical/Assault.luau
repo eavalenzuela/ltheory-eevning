@@ -62,6 +62,15 @@
 -- they set the pace: a wave that is not down two minutes after it came
 -- has the next one come anyway (Assault.PRESS).
 --
+-- Every third job of that agent's is an escort (the aim "escort"): what
+-- stands in for the rig is a tender, which flies. It is waiting by the
+-- middle of the place when the pilot comes, and sets off at once,
+-- slowly, straight out: so far out (Assault.TENDER_OUT) it is clear,
+-- and gone. The same waves come for it on the way, at the same pace.
+-- The job is to see it out: whoever is still about when it goes is no
+-- part of the job (though their bounties are the pilot's), and no wave
+-- comes after. A tender destroyed is the job lost.
+--
 -- (Security and mining missions, cut down. Not yet: a camp that is not
 -- pirates', a thing to be defended that flies.)
 
@@ -106,6 +115,14 @@ Assault.HOLD_PAY = 1.25
 -- or not the first is destroyed (seconds): at a camp its keepers wait
 -- their turn, and those who come for a rig do not.
 Assault.PRESS = 120
+-- What an escort is to see through, by its level (Data/Ships); how far
+-- from the middle of the place it waits, and how far out it has to get
+-- to be clear (metres); and that every so-manyth job of the agent's is
+-- an escort.
+Assault.TENDERS = { "convoy.tender.1", "convoy.tender.2", "convoy.tender.3", "convoy.tender.4" }
+Assault.TENDER_FROM = 1500
+Assault.TENDER_OUT = 28000
+Assault.ESCORTS = 3
 -- What a job may be to do, and how likely each is. (A defence job is
 -- always to "hold", and is not one of these: it is another agent's.)
 Assault.AIMS = { "clear", "raze", "chief", "fetch" }
@@ -265,7 +282,7 @@ function Assault.Pay(level: number, waves: { { string } }, aim: string?): (numbe
     bounty += select(2, Assault.Count({ Assault.WORKS[level] }))
   end
   local pay = math.floor(Assault.SHARE * bounty) + Assault.BASE * level
-  return if aim == "hold" then math.floor(pay * Assault.HOLD_PAY) else pay, Assault.CREDIT * level
+  return if aim == "hold" or aim == "escort" then math.floor(pay * Assault.HOLD_PAY) else pay, Assault.CREDIT * level
 end
 
 -- What a job of an aim counts: the ships of the camp, what it is built
@@ -305,7 +322,8 @@ function Assault.Open(state: State.State, mission: State.Mission, events: { Even
   local last: State.Site? = nil
   for room = 1, #mission.ends do
     local site = Sites.Stake(state, mission.system, rng, if mission.kind == "mining" then "Ore Pocket"
-      elseif mission.aim == "hold" then "Survey Rig" else "Pirate Camp", last, NUMERALS[room])
+      elseif mission.aim == "hold" then "Survey Rig" elseif mission.aim == "escort" then "Convoy Route" else "Pirate Camp", last,
+      NUMERALS[room])
     if site == nil then
       break
     end
@@ -387,8 +405,8 @@ function Assault.Close(state: State.State, mission: State.Mission, events: { Eve
     Sites.Release(state, room, events)
     state.spawned[room] = nil
   end
-  -- (and the rig a defence job was to hold, if it still stands)
-  local rig = if mission.aim == "hold" or mission.aim == "lost" then state.ships[mission.mark] else nil
+  -- (and the rig a defence job was to hold, or the tender it was to see through, if it is still there)
+  local rig = if Assault.Warded(mission) or mission.aim == "lost" then state.ships[mission.mark] else nil
   if rig then
     local ball = state.balls[rig.id]
     if ball then
@@ -496,14 +514,60 @@ function Assault.Fell(state: State.State, home: number, ship: number, works: boo
   end
 end
 
+-- Whether a job is a defence job with its ward still to keep: a rig to
+-- hold, or a tender to see through.
+function Assault.Warded(mission: State.Mission): boolean
+  return mission.kind == "assault" and (mission.aim == "hold" or mission.aim == "escort")
+end
+
 -- A ship has been destroyed: if it was the rig a defence job was to
--- hold, the job is lost. (Assets/Missions ends it: it is marked here.)
+-- hold, or the tender it was to see through, the job is lost.
+-- (Assets/Missions ends it: it is marked here. What it was to do is
+-- kept in 'type', which such a job has no other use for.)
 function Assault.Lost(state: State.State, ship: number, events: { Event })
   for _, id in state.missionIds do
     local mission = state.missions[id]
-    if mission.kind == "assault" and mission.aim == "hold" and mission.mark ~= 0 and mission.mark == ship then
+    if Assault.Warded(mission) and mission.mark ~= 0 and mission.mark == ship and mission.done < mission.need then
+      table.insert(events, { kind = "WardLost", mission = mission.id, station = mission.station, escort = mission.aim == "escort" })
+      mission.type = mission.aim
       mission.aim = "lost"
-      table.insert(events, { kind = "WardLost", mission = mission.id, station = mission.station })
+    end
+  end
+end
+
+-- The way a job's tender flies: straight out from the middle of the
+-- place, level, the way it was put down from it.
+local function heading(state: State.State, mission: State.Mission): (number, number)
+  local angle = Rng.Float(Rng.For(state.historySeed, mission.id, 71), 0, 2 * math.pi)
+  return math.cos(angle), math.sin(angle)
+end
+
+-- Once a tick, wherever the pilot is: a tender that has got far enough
+-- out from the middle of its place is clear, and gone, and the job is
+-- done.
+local function arrive(state: State.State, events: { Event })
+  for _, id in state.missionIds do
+    local mission = state.missions[id]
+    local ball = if mission.kind == "assault" and mission.aim == "escort" and mission.done < mission.need then state.balls[mission.mark]
+      else nil
+    local place = if ball then Space.Object(state, mission.site) else nil
+    if ball and place then
+      local far = math.sqrt((ball.x - place.x) ^ 2 + (ball.y - place.y) ^ 2 + (ball.z - place.z) ^ 2)
+      if far >= Assault.TENDER_OUT then
+        Space.RemoveBall(state, ball)
+        for _, item in Items.In(state, ball.id, nil) do
+          Items.Take(state, item, item.quantity)
+        end
+        state.ships[ball.id] = nil
+        State.RemoveId(state.shipIds, ball.id)
+        mission.done = mission.need
+        table.insert(events, { kind = "BallRemoved", ball = ball.id, reason = "warped" })
+        table.insert(events, { kind = "AssaultCleared", mission = mission.id, station = mission.station, aim = mission.aim })
+      elseif ball.mode ~= "goto" then
+        -- (it keeps on its way out, whatever has happened to it)
+        local x, z = heading(state, mission)
+        Space.Apply(state, { kind = "Goto", actor = ball.id, x = x, y = 0, z = z }, events)
+      end
     end
   end
 end
@@ -513,6 +577,7 @@ end
 -- at once, the others after a breather). Where the job is to hold a
 -- rig, the next comes anyway once the last has been there long enough.
 function Assault.Step(state: State.State, events: { Event })
+  arrive(state, events)
   local me = state.balls[state.player.ship]
   if me == nil or me.grid == 0 or Ships.byId[state.ships[me.id].type].class == "capsule" then
     return
@@ -544,19 +609,30 @@ function Assault.Step(state: State.State, events: { Event })
     table.insert(events, { kind = "WorksSighted", mission = mission.id, grid = place.id, count = #works })
   end
   -- What a defence job is to hold stands there from when the pilot
-  -- first comes: a few kilometres from the middle of the place. ('mark'
-  -- is it.) It is the faction's, and nobody's enemy.
-  if mission.aim == "hold" and mission.mark == 0 then
+  -- first comes: a few kilometres from the middle of the place. And a
+  -- tender to be seen through is waiting nearer the middle, and sets
+  -- off straight out from it. ('mark' is it.) It is the faction's, and
+  -- nobody's enemy.
+  if Assault.Warded(mission) and mission.mark == 0 then
+    local escort = mission.aim == "escort"
     local rng = Rng.For(state.historySeed, mission.id, 71)
     local angle = Rng.Float(rng, 0, 2 * math.pi)
-    local out = Rng.Float(rng, Assault.RIG_OUT[1], Assault.RIG_OUT[2])
-    local hull = Ships.byId[Assault.RIGS[math.clamp(mission.level, 1, #Assault.RIGS)]]
+    local out = if escort then Assault.TENDER_FROM else Rng.Float(rng, Assault.RIG_OUT[1], Assault.RIG_OUT[2])
+    local hulls = if escort then Assault.TENDERS else Assault.RIGS
+    local hull = Ships.byId[hulls[math.clamp(mission.level, 1, #hulls)]]
     local rig = Space.NewShip(state, hull.id, hull.name, mission.faction, 0)
     local ball = Space.Launch(state, rig, me.system, place.x + out * math.cos(angle), place.y + Rng.Float(rng, -500, 500),
       place.z + out * math.sin(angle))
     mission.mark = rig.id
     table.insert(events, { kind = "BallAdded", ball = ball.id })
-    table.insert(events, { kind = "WardSighted", mission = mission.id, grid = place.id, ward = rig.id })
+    table.insert(events, { kind = "WardSighted", mission = mission.id, grid = place.id, ward = rig.id, escort = escort })
+    if escort then
+      Space.Apply(state, { kind = "Goto", actor = rig.id, x = math.cos(angle), y = 0, z = math.sin(angle) }, events)
+    end
+  end
+  -- (nobody comes for a tender that has got clear)
+  if mission.aim == "escort" and mission.done >= mission.need then
+    return
   end
   if mission.wave >= mission.ends[room] then
     return
@@ -566,14 +642,14 @@ function Assault.Step(state: State.State, events: { Event })
   if #keepers(state, me.grid) > 0 then
     -- (whoever comes for a rig does not wait for those before them to
     -- be destroyed: so long after one wave came, the next does)
-    if mission.aim ~= "hold" or since < Assault.PRESS then
+    if not Assault.Warded(mission) or since < Assault.PRESS then
       return
     end
   elseif since < Assault.BREATHER then
     return
   end
   mission.wave += 1
-  if mission.aim == "hold" then
+  if Assault.Warded(mission) then
     state.spawned[me.grid] = state.tick
   end
   local wave = mission.waves[mission.wave]
@@ -594,7 +670,8 @@ function Assault.Step(state: State.State, events: { Event })
     table.insert(events, { kind = "BallAdded", ball = ball.id })
   end
   table.insert(events, { kind = "PiratesArrived", grid = place.id, count = #wave, wave = mission.wave, of = #mission.waves,
-    chief = mission.aim == "chief" and mission.wave == #mission.waves, hold = mission.aim == "hold" })
+    chief = mission.aim == "chief" and mission.wave == #mission.waves, hold = mission.aim == "hold",
+    escort = mission.aim == "escort" })
 end
 
 return Assault

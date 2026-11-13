@@ -2428,6 +2428,15 @@ for size = 1, 4 do
   designs[`works.rig.{size}`] = { faction = "civil", draw = rigOf(size), sheets = 3.0 + 0.6 * size, turrets = {}, launchers = {}, fit = {} }
 end
 
+-- The tenders, what an escort is to see through (Core/Tactical/Assault):
+-- anybody's haulers, with nothing on them to shoot with. The two
+-- smaller are the Mule's drawing and the two bigger the Dray's, at
+-- their own sizes. (A v0: they are told from those by their names.)
+for size = 1, 4 do
+  designs[`convoy.tender.{size}`] = { faction = "civil", draw = if size <= 2 then mule else dray, sheets = 4.0 + 0.6 * size,
+    turrets = {}, launchers = {}, fit = {} }
+end
+
 -- ---------------------------------------------------------------------
 
 export type Built = {

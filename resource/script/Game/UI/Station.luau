@@ -1476,17 +1476,21 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
     if mission.kind == "bounty" then
       local _, band = Core.Query.Security(game, mission.system)
       return `in {game.state.galaxy.systems[mission.system].name} ({band or "?"} space): {mission.done} of {mission.need} destroyed`
-    elseif mission.kind == "assault" and (mission.aim == "hold" or mission.aim == "lost") then
-      -- (where the rig is; and, once the job is taken, how it is going and how the rig is)
+    elseif mission.kind == "assault" and (mission.aim == "hold" or mission.aim == "escort" or mission.aim == "lost") then
+      -- (where the rig is, or the tender; and, once the job is taken, how it is going and how the thing is)
       local name = game.state.galaxy.systems[mission.system].name
       local place = if mission.site ~= 0 then Core.Query.Body(game, mission.site) else nil
+      local escort = mission.aim == "escort"
       if place == nil then
         -- (they do not wait their turn, as a camp's keepers do)
         return `in {name}: {#mission.waves} waves, {Assault.PRESS // 60} minutes apart`
+          .. (if escort then ", while it flies out" else "")
       elseif mission.done >= mission.need then
-        return `{place.name}, in {name}: held`
+        return `{place.name}, in {name}: {if escort then "through" else "held"}`
       elseif ward < 0 then
         return `{place.name}, in {name}: they come when you do`
+      elseif escort then
+        return `{place.name}, {name}: wave {mission.wave} of {#mission.waves}, the tender at {math.ceil(ward * 100)}%`
       end
       return `{place.name}, {name}: wave {mission.wave} of {#mission.waves}, {mission.done}/{mission.need} down, the rig at `
         .. `{math.ceil(ward * 100)}%`

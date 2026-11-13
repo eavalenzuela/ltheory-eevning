@@ -294,6 +294,29 @@ for level, rig in {
   })
 end
 
+-- And what an escort is to see through (Tactical/Assault): a tender,
+-- which flies, slowly, and is rather less to shoot at than the rig of
+-- its level: left to itself with those who come for it, it is lost more
+-- often than not before it has flown the five and a half minutes it
+-- has to. Nobody sells one or has a blueprint for it either.
+for level, tender in {
+  { name = "Light Tender", radius = 110, shield = 600, armor = 850, hull = 1050 },
+  { name = "Tender", radius = 170, shield = 2100, armor = 3300, hull = 4100 },
+  { name = "Heavy Tender", radius = 260, shield = 4400, armor = 7000, hull = 9600 },
+  { name = "Great Tender", radius = 380, shield = 7200, armor = 10800, hull = 14000 },
+} do
+  table.insert(types, {
+    id = `convoy.tender.{level}`, name = tender.name, class = "industrial", lineage = "", basePrice = 400000 * level,
+    volume = 60000 * level, mass = 12000000, inertia = 1, maxVelocity = 90, warpSpeed = 3, radius = tender.radius,
+    shield = tender.shield, armor = tender.armor, hull = tender.hull, shieldRecharge = 1800,
+    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 250 + 100 * level,
+    cpu = 400, powergrid = 800, highs = 0, mids = 2, lows = 3, turrets = 0, launchers = 0,
+    capacitor = 1500, capacitorRecharge = 240,
+    scanResolution = 300, lockRange = 50000, maxTargets = 3, cargo = 4000 * level,
+    restricted = true,
+  })
+end
+
 -- Hulls no faction owns: anyone builds them.
 table.insert(types, {
   id = "frigate.prospector", name = "Prospector", class = "frigate", lineage = "", basePrice = 180000, volume = 2500,

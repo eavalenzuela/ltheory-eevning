@@ -1090,17 +1090,31 @@ end
 -- The first defence job in hand: the name of the place its rig is at
 -- ("" with none in hand), the waves that have come and how many there
 -- are, the ships destroyed and how many there are, how much of the rig
--- is left, 0 to 1 (-1 until the pilot has been there), and the system
--- the place is in.
-function Debug.Defence(): (string, number, number, number, number, number, number)
+-- is left, 0 to 1 (-1 until the pilot has been there), the system the
+-- place is in, and whether it is an escort: a tender to see through,
+-- of which what is done and wanted is 1, the tender getting there.
+function Debug.Defence(): (string, number, number, number, number, number, number, boolean)
   for _, held in Core.Query.Missions(session.game).inHand do
     local mission = held.mission
     if held.line == "defence" then
       local place = Core.Query.Body(session.game, mission.site)
-      return if place then place.name else "?", mission.wave, #mission.waves, mission.done, mission.need, held.ward, mission.system
+      return if place then place.name else "?", mission.wave, #mission.waves, mission.done, mission.need, held.ward, mission.system,
+        mission.aim == "escort"
     end
   end
-  return "", 0, 0, 0, 0, -1, 0
+  return "", 0, 0, 0, 0, -1, 0, false
+end
+
+-- How many defence jobs the seventh agent of the station docked at has
+-- given (every third is an escort); with a number, a cheat that makes
+-- it so.
+function Debug.Holds(set: number?): number
+  local state = session.game.state
+  local station = Core.Query.Player(session.game).docked
+  if set then
+    state.holds[station] = set
+  end
+  return state.holds[station] or 0
 end
 
 -- A cheat, for a scripted loss: the rig of the first defence job in

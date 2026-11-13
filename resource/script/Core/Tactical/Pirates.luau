@@ -419,12 +419,13 @@ local function give(state: State.State, command: State.Command, events: { Event 
   return false
 end
 
--- The rig a job is to hold at a place (Tactical/Assault's defence
--- job, seen here by the state alone), if it stands there: its ball.
+-- The rig a job is to hold at a place, or the tender it is to see
+-- through there (Tactical/Assault's defence job, seen here by the state
+-- alone), if it is there: its ball.
 local function ward(state: State.State, system: number, grid: number): State.Ball?
   for _, id in state.missionIds do
     local mission = state.missions[id]
-    if mission.kind == "assault" and mission.aim == "hold" and mission.site == grid then
+    if mission.kind == "assault" and (mission.aim == "hold" or mission.aim == "escort") and mission.site == grid then
       local rig = state.balls[mission.mark]
       if rig and rig.system == system and rig.grid == grid then
         return rig
@@ -466,8 +467,9 @@ local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
   end
   -- Where a job is to hold a rig, two pirates in three go for the rig,
   -- and any of them does with nobody else to go for.
+  -- (by a roll of its own for each: a pack's ids go in step, and would all choose alike)
   local rig = ward(state, ball.system, ball.grid)
-  if rig and (best == nil or ball.id % 3 ~= 0) then
+  if rig and (best == nil or Rng.Chance(Rng.For(state.historySeed, ball.id, 61), 2 / 3)) then
     return rig
   end
   if drone and (best == nil or Rng.Chance(Rng.For(state.historySeed, ball.id, 53), 1 / 3)) then

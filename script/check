@@ -104,6 +104,8 @@
 #   game-defence  a defence job (test/scenario/defence.txt): a survey rig
 #               held against everybody who comes for it and the job paid,
 #               then the next one's rig lost and the job with it
+#   game-escort  an escort (test/scenario/escort.txt): a tender seen out
+#               of its place while pirates come for it, and the job paid
 #   game-patrol  a hired pilot left to patrol a belt (test/scenario/patrol.txt):
 #               pirates come for them with the player docked, and are seen off
 #   game-dig    a mining contract (test/scenario/dig.txt): taken, its
@@ -297,6 +299,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/camp.txt
   step game-defence 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 340 \
     --script test/scenario/defence.txt
+  step game-escort 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 340 \
+    --script test/scenario/escort.txt
   step game-patrol 0 timeout 600 bin/launch game --no-present --fixed-step 60 --timeout 500 \
     --script test/scenario/patrol.txt
   step game-dig 0 timeout 800 bin/launch game --no-present --fixed-step 60 --timeout 740 \

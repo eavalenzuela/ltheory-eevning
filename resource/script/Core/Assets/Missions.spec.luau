@@ -1624,4 +1624,152 @@ suite:Case("a rig destroyed is the job lost, at once, at the cost of having give
   t.eq(Core.Hash(loaded), Core.Hash(plain))
 end)
 
+-- A game in which the home station's seventh agent has given two jobs
+-- already, so that the next is an escort; that one, of a level, in the
+-- home system, taken, and the pilot at the place with the tender
+-- sighted: the game and the job.
+local function convoy(level: number): (Core.Game, State.Mission)
+  for seed = 1, 200 do
+    local game = newGame(seed)
+    local state = game.state
+    state.standings.vessari = math.max(0, Assault.STANDING[level])
+    state.holds[state.player.home] = Assault.ESCORTS - 1
+    local offer = defences(game, state.player.home)[level]
+    if offer and offer.system == 1 then
+      assert(Missions.Escort(offer), "the agent's third job should be an escort")
+      assert(submit(game, { kind = "AcceptMission", actor = 0, what = offer.key }))
+      local mission = state.missions[state.missionIds[1]]
+      assert(submit(game, { kind = "Undock", actor = 0 }))
+      at(game, mission.site)
+      Core.TakeEvents(game)
+      steps(game, 2)
+      return game, mission
+    end
+  end
+  error(`no history seed up to 200 has a level {level} escort in the home system`)
+end
+
+suite:Case("every third job of the seventh agent's is an escort: a tender to see through, on the terms of the rig", function(t)
+  local game = newGame()
+  local state = game.state
+  local home = state.player.home
+  state.standings.vessari = 5
+  for given, escort in { [0] = false, false, true, false, false, true } do
+    state.holds[home] = given
+    for level, offer in defences(game, home) do
+      t.eq({ Missions.Escort(offer), offer.aim, Missions.Line(offer) } :: { any },
+        { escort, if escort then "escort" else "hold", "defence" } :: { any }, `job {given + 1}, level {level}`)
+    end
+  end
+  state.holds[home] = 2
+  for level, offer in defences(game, home) do
+    -- One thing to do, which is the tender getting there; the same waves, and the pay of holding against them.
+    local ships = Assault.Count(offer.waves)
+    t.eq({ offer.kind, offer.need, #offer.ends, offer.ends[1] } :: { any }, { "assault", 1, 1, #offer.waves } :: { any })
+    t.eq(Missions.Title(offer), `Escort, level {level}: a tender past {ships}`)
+    t.eq((Assault.Pay(level, offer.waves, "escort")), (Assault.Pay(level, offer.waves, "hold")))
+  end
+  t.eq(#assaults(game, home), 4)
+end)
+
+suite:Case("the tender waits by the middle of its place and flies out; those who come do not wait, and with the tender clear the job is done, whoever is left", function(t)
+  local game, mission = convoy(2)
+  local state = game.state
+  local home = state.player.home
+  local place = assert(Space.Object(state, mission.site))
+  t.ok(string.find(place.name, "Convoy Route", 1, true) ~= nil, `the place is called {place.name}`)
+  -- The tender: the faction's, nobody's to fly, by the middle of the place, and on its way out.
+  local ward = assert(state.ships[mission.mark], "no tender")
+  local ball = assert(state.balls[ward.id], "the tender is not in space")
+  t.eq({ ward.type, ward.owner, ball.grid, ball.mode } :: { any }, { Assault.TENDERS[2], "vessari", mission.site, "goto" } :: { any })
+  t.eq(state.pilots[ward.id], nil)
+  local function out(): number
+    return math.sqrt((ball.x - place.x) ^ 2 + (ball.y - place.y) ^ 2 + (ball.z - place.z) ^ 2)
+  end
+  t.ok(out() < Assault.TENDER_FROM + 500, `the tender is {out()} m out`)
+  -- The first wave came with the pilot, and the next does not wait for it.
+  t.eq({ #keepers(game, mission.site), mission.wave, mission.done }, { #mission.waves[1], 1, 0 })
+  steps(game, Assault.PRESS + 5)
+  t.eq(mission.wave, 2, "the second wave waits for nobody")
+  t.ok(out() > Assault.TENDER_FROM + 5000, "the tender has not moved")
+  -- Most of them are after the tender, and the pilot's drones and hired pilots would go for those.
+  local onTender = 0
+  for _, id in keepers(game, mission.site) do
+    onTender += if state.pilots[id].prey == ward.id then 1 else 0
+  end
+  t.ok(onTender > 0, "nobody is after the tender")
+  t.ok(Pirates.Hunting(state, state.balls[state.player.ship]) ~= 0)
+  -- One of them destroyed is a bounty, and no part of the job.
+  local wallet = state.wallet
+  local first = keepers(game, mission.site)[1]
+  local bounty = state.pilots[first].bounty
+  Aftermath.Destroy(state, first, state.player.ship, game.events)
+  t.eq({ state.wallet - wallet, mission.done }, { bounty, 0 })
+  -- In the save, on its way.
+  local data, length = Core.Save(game)
+  local loaded = Core.Load(data, length)
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  -- Through: put as far out as it has to get, it is clear at once, and gone.
+  Core.TakeEvents(game)
+  local scale = (Assault.TENDER_OUT + 100) / out()
+  ball.x, ball.y, ball.z = place.x + (ball.x - place.x) * scale, place.y + (ball.y - place.y) * scale, place.z + (ball.z - place.z) * scale
+  steps(game, 1)
+  local through = said(game, "AssaultCleared")
+  t.ok(through ~= nil and (through :: any).aim == "escort", "nobody said the tender was through")
+  t.eq({ mission.done, state.ships[ward.id], state.balls[ward.id] } :: { any }, { 1, nil, nil } :: { any })
+  -- Whoever is left is still there, and nobody else comes.
+  local left, wave = #keepers(game, mission.site), mission.wave
+  t.ok(left > 0)
+  steps(game, Assault.PRESS + Assault.BREATHER + 5)
+  t.eq({ mission.wave, #keepers(game, mission.site) }, { wave, left })
+  -- Paid at the station; the place goes, and they with it; and the agent's next is a rig again.
+  goHome(game)
+  local had = state.wallet
+  t.ok((submit(game, { kind = "CompleteMission", actor = 0, target = mission.id })))
+  t.eq(state.wallet - had, mission.reward)
+  t.eq({ #keepers(game, mission.site), state.sites[mission.site].gone } :: { any }, { 0, true } :: { any })
+  local next = defences(game, home)
+  t.ok(#next > 0 and not Missions.Escort(next[1]), "the agent's fourth job should be a rig to hold")
+end)
+
+suite:Case("a tender destroyed is the job lost, and is said to be a tender; one left alone flies out by itself", function(t)
+  local game, mission = convoy(1)
+  local state = game.state
+  local ward = mission.mark
+  local credit = Missions.Standing(state, "vessari")
+  Core.TakeEvents(game)
+  Aftermath.Destroy(state, ward, keepers(game, mission.site)[1], game.events)
+  steps(game, 1)
+  local lost, failed = false, ""
+  for _, event in Core.TakeEvents(game) do
+    lost = lost or (event.kind == "WardLost" and event.mission == mission.id and event.escort == true)
+    failed = if event.kind == "MissionFailed" and event.mission == mission.id then event.title else failed
+  end
+  t.ok(lost, "nobody said the tender was destroyed")
+  t.eq(failed, `Escort, level 1: a tender past {(Assault.Count(mission.waves))}`)
+  t.eq({ state.missions[mission.id], #state.missionIds } :: { any }, { nil, 0 } :: { any })
+  t.near(credit - Missions.Standing(state, "vessari"), 2 * mission.standing, 1e-9)
+
+  -- Nobody about (the pilot gone, and those who came with them): it gets there by itself, and the job is done.
+  local other, job = convoy(1)
+  local tender = other.state.balls[job.mark]
+  for _, id in keepers(other, job.site) do
+    Aftermath.Destroy(other.state, id, other.state.player.ship, other.events)
+  end
+  goHome(other)
+  -- (asked for the pay before it is in)
+  t.eq(refused(other, { kind = "CompleteMission", actor = 0, target = job.id }), "the tender is still to see through")
+  local arrived = false
+  for _ = 1, 600 do
+    Core.Step(other)
+    if job.done >= job.need then
+      arrived = true
+      break
+    end
+  end
+  t.ok(arrived, "the tender did not get clear by itself")
+  t.eq({ other.state.balls[tender.id], job.wave } :: { any }, { nil, 1 } :: { any })
+  t.ok((submit(other, { kind = "CompleteMission", actor = 0, target = job.id })))
+end)
+
 return suite

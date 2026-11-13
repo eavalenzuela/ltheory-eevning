@@ -371,8 +371,12 @@ export type Site = { id: number, system: number, kind: string, code: string, str
 -- the aim "hold": the place is where a rig of the faction's stands
 -- ('mark' is the rig's ship, once the pilot has been there), and the
 -- waves are those who come for it ('need' ships, of which 'done' are
--- destroyed). The aim is "lost" from when the rig is destroyed until
--- the job is ended for it, which is within the tick.
+-- destroyed). Every third such job is an escort, with the aim
+-- "escort": 'mark' is a tender, which flies out from the middle of
+-- the place, 'need' is 1, and 'done' is 1 when it has got clear. The aim is
+-- "lost" from when the rig or the tender is destroyed until the job is
+-- ended for it, which is within the tick, and 'type' then says which
+-- of the two it was.
 --
 -- A "mining" contract has a place made for it too: a pocket of rocks of
 -- the ore 'type', of which 'need' units are to be brought in ('aim' is
