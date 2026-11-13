@@ -167,6 +167,38 @@ for _, type in Hull.Types() do
   end
 end
 
+-- What that generator makes in the game's own paint (Hull.Grown), to
+-- look through for shapes ("grown-"): twelve seeds as it grew a frigate,
+-- and twelve as it grew its biggest. The kind is "grown-", the plates it
+-- grows, and "d" for with decks under.
+for _, make in { "4", "6d" } do
+  for seed = 1, 12 do
+    for at, view in HULL_VIEWS do
+      if at == 1 or at == 3 then
+        local eye: vector = view[2]
+        table.insert(VIEWS, { name = `grown-{make}-{string.format("%02d", seed)}-{view[1]}`, kind = `grown-{make}`,
+          seed = seed, eye = eye, look = view[3], light = eye + vector.create(0.5, 0.9, 0.2) * (0.6 * vector.magnitude(eye)) })
+      end
+    end
+  end
+end
+
+-- The hulls the engine's first generator makes (Item/ShipType/Generate:
+-- boxes grown off a cross, mirrored, pinched and flared), to set beside
+-- the designed ones ("old-"): at the size of a frigate, of a barge and of
+-- a hauler, a few seeds of each. The kind is "old-" and the radius.
+for _, size in { 44, 110, 160 } do
+  for _, seed in { 1, 2, 3, 4, 5, 6, 55, 77 } do
+    for at, view in HULL_VIEWS do
+      if at == 1 or at == 3 or at == 4 then
+        local eye: vector = view[2]
+        table.insert(VIEWS, { name = `old-{size}-{seed}-{view[1]}`, kind = `old-{size}`, seed = seed, eye = eye, look = view[3],
+          light = eye + vector.create(0.5, 0.9, 0.2) * (0.6 * vector.magnitude(eye)), radius = size })
+      end
+    end
+  end
+end
+
 -- The pirates' ranks: a hull of theirs as one of the pack flies it, as
 -- a veteran does and as a captain does ("rank-"; the kind is the hull
 -- and "@" the rank: Hull.Build's).
@@ -355,6 +387,24 @@ return AppShell.Create(function(): Widget
       local object = Object_Scenery({})
       Object_SetRenderable(object, built.model)
       return object, built.radius
+    end
+    local steps, decks = string.match(kind, "^grown%-(%d+)(d?)$")
+    if steps then
+      local built = Hull.Grown(seed, tonumber(steps) or 4, decks == "d")
+      local object = Object_Scenery({})
+      Object_SetRenderable(object, built.model)
+      return object, built.radius
+    end
+    local old = string.match(kind, "^old%-(%d+)$")
+    if old then
+      -- (the generator sizes a hull by its value: Game/View/Scene. It is
+      -- made at its size, and is not to be rescaled.)
+      local radius = tonumber(old) or 44
+      local item = Item_ShipType((radius / 0.0675) ^ 2, seed, 1, 1, 1, 1, 1, 1)
+      local ship = item:Instantiate()
+      -- (its own origin is wherever its first plate was: its middle goes in the middle)
+      ship:SetPos(-ship:GetCenter())
+      return ship, radius
     end
     local across = string.match(kind, "^colony%-(.+)$")
     if across then
@@ -612,7 +662,9 @@ return AppShell.Create(function(): Widget
       end
       for index, object in stage do
         local size = radius / units[index]
-        object:SetScale(vector.create(size, size, size))
+        if size ~= 1 then
+          object:SetScale(vector.create(size, size, size))
+        end
         system:AddInterior(object)
       end
       local hull = string.match(v.kind, "^hull%-(.+)$")
@@ -629,6 +681,9 @@ return AppShell.Create(function(): Widget
       Planet.Set(world, "whiteLight", if type(white) == "number" then white else 1)
     end
     if lamp then
+      -- (the old hulls are bare bright metal, and burn out in the light the painted ones are judged in)
+      local bright = if string.sub(v.kind, 1, 4) == "old-" then 0.5 else 1.15
+      Star_SetColor(lamp, vector.create(bright, bright, bright))
       -- (far enough off to be behind the camera whatever the body's size)
       lamp:SetPos(vector.normalize(v.light) * math.max(500000, 20 * (v.radius or RADIUS)))
     end

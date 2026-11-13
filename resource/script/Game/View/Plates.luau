@@ -83,13 +83,17 @@ export type Builder = {
   -- the hull about it in its shade, and the shader's grime with it.
   apart: Mesh?,
   apartPoints: number,
+  -- A bend put on all of its plates when it is finished (Plates.Bend):
+  -- where a point of the thing as drawn goes, and the way back.
+  bend: ((p: vector) -> vector)?,
+  unbend: ((p: vector) -> vector)?,
 }
 
 local ZERO = vector.create(0, 0, 0)
 
 function Plates.New(seed: number, fine: number?): Builder
   return { big = PlateMesh_Create(9), small = PlateMesh_Create(4), count = 0, seed = seed, fine = fine or 0.11, ruin = nil,
-    patch = nil, kept = 0, skin = nil, points = 0, apart = nil, apartPoints = 0, solids = {} }
+    patch = nil, kept = 0, skin = nil, points = 0, apart = nil, apartPoints = 0, solids = {}, bend = nil, unbend = nil }
 end
 
 -- The next plate's own number: the fraction of its tag.
@@ -562,6 +566,12 @@ end
 -- skin or a hull in flat plates; not a beam, a truss or a pipe, which
 -- nothing stands on).
 function Plates.Inside(b: Builder, p: vector): boolean
+  -- (what was built is kept as it was drawn: a point of the bent thing
+  -- is asked about where it was before the bend)
+  local unbend = b.unbend
+  if unbend then
+    p = unbend(p)
+  end
   for _, solid in b.solids do
     local center, half, turn = solid.center, solid.half, solid.turn
     local outline, sections = solid.outline, solid.sections
@@ -675,10 +685,27 @@ function Plates.Rests(b: Builder, at: vector, up: vector, fore: vector, reach: n
   return hanging == 0, hanging
 end
 
+-- Bend the whole of what is built of plates, when it is finished: 'bend'
+-- gives where a point of it as drawn goes, and 'unbend' is the way
+-- back. (The engine's first hulls were made so: plain boxes, and two
+-- warps over the lot. Skins are not bent.) What is asked of the thing
+-- afterwards (Plates.Inside, Plates.Rests) is asked of it as bent.
+function Plates.Bend(b: Builder, bend: (p: vector) -> vector, unbend: (p: vector) -> vector)
+  b.bend, b.unbend = bend, unbend
+end
+
 -- The model of what has been built, painted as 'look' says, and the
 -- corners of the box it fills.
 function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector, vector, { Mesh })
   PlateMesh_AddPlateMesh(b.big, b.small, ZERO, vector.create(1, 1, 1))
+  local bend = b.bend
+  if bend then
+    PlateMesh_AddWarp(b.big, Warp_Custom({
+      GetDelta = function(_, p: vector): vector
+        return bend(p) - p
+      end,
+    }))
+  end
   local mesh = PlateMesh_GetMesh(b.big)
   Mesh_ComputeOcclusion(mesh)
 

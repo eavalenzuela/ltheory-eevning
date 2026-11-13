@@ -19,6 +19,7 @@
 
 local Arms = require("@lt/Game/View/Arms")
 local Imported = require("@lt/Game/View/Imported")
+local Int = require("@lt/Int")
 local Plates = require("@lt/Game/View/Plates")
 local Ships = require("@lt/Core/Data/Ships")
 
@@ -321,127 +322,259 @@ local function dray(b: Builder)
   conduit(b, { v(0.05, 0.33, stern + 0.2), v(0.05, 0.33, bow - 0.3), v(0.10, 0.39, bow - 0.24) }, 0.013)
 end
 
--- The Prospector, a mining frigate: anybody's. An ore hopper with a
--- working head in front of it and an engine behind: the hopper a deep
--- ribbed bin slung under a short spine, its lid in warning paint; the
--- head a blunt block with a lamp across its face, the cab perched on
--- top of it to one side and a sampling boom out ahead; one big engine
--- low at the stern and two small ones high. (A v0: it reads as what it
--- is.)
+-- ---------------------------------------------------------------------
+-- Hulls in the manner of the engine's first generator
+-- (Item/ShipType/Generate): a few big plates with their edges well
+-- eased, laid in rows along the hull with a slighter plate through each
+-- row, every one of them there again on the other side, a broad flat
+-- deck under them, and the whole then bent by two warps: one that humps
+-- the middle of it up and lets the sides fall away, one that spreads it
+-- apart behind the bow. They are drawn in the generator's own units, six
+-- to a hull's one. (The project owner, 2026-11-12: the engine's old
+-- hulls looked better than the working ships drawn as boxes on girders.
+-- So those are drawn this way.)
+
+local GROWN = 1 / 6
+local EASED = 0.25      -- how far the generator eased a plate's edges
+-- (Plates' 'fine' for such a hull: its plates are few and big, and all
+-- but the smallest have their edges eased finely)
+local MANNER_FINE = 0.04
+
+-- The two warps, as one bend and the way back (Plates.Bend). 'spread':
+-- how far each side is pushed out; 'bow': from where along z that falls
+-- off toward the nose; 'hump': how far the middle is lifted, out to
+-- 'crown' either side of the centre line. (The generator's own: 0.5
+-- from 1.0, and 1.0 out to 1.25.)
+type Warps = { spread: number, bow: number, hump: number, crown: number }
+type Bend = (p: vector) -> vector
+local OLD: Warps = { spread = 0.5, bow = 1.0, hump = 1.0, crown = 1.25 }
+
+local function warped(w: Warps, middle: vector?): (Bend, Bend)
+  local function out(z: number): number
+    return w.spread * math.exp(-(math.max(0, z - w.bow) ^ 2) / 0.25)
+  end
+  local function lift(x: number): number
+    -- (less half of it: the hull stays about its own middle)
+    return w.hump * (math.exp(-math.max(0, math.abs(x) - w.crown)) - 0.5)
+  end
+  local off = middle or v(0, 0, 0)
+  local function bend(p: vector): vector
+    local x, y, z = p.x / GROWN, p.y / GROWN, p.z / GROWN
+    local side = if x > 0 then 1 elseif x < 0 then -1 else 0
+    return vector.create(x + side * out(z), y + lift(x), z) * GROWN - off
+  end
+  local function unbend(p: vector): vector
+    p += off
+    local x, y, z = p.x / GROWN, p.y / GROWN, p.z / GROWN
+    local wide = out(z)
+    -- (what lies between the two halves was on the centre line)
+    local was = if x > wide then x - wide elseif x < -wide then x + wide else 0
+    return vector.create(was, y - lift(was), z) * GROWN
+  end
+  return bend, unbend
+end
+
+-- (The bend of the design being drawn: its engines' fire is put where
+-- the bend takes it.)
+local bending: Bend = function(p: vector): vector
+  return p
+end
+
+-- Draw what follows in this manner, bent so.
+local function manner(b: Builder, w: Warps)
+  local bend, unbend = warped(w)
+  Plates.Bend(b, bend, unbend)
+  bending = bend
+end
+
+-- A plate on the centre line, in the generator's units.
+local function mid(b: Builder, part: number, center: vector, half: vector, bevel: number?)
+  block(b, part, center * GROWN, half * GROWN, nil, bevel or EASED)
+end
+
+-- A plate and its twin on the other side.
+local function twin(b: Builder, part: number, center: vector, half: vector, bevel: number?)
+  block(b, part, center * GROWN, half * GROWN, nil, bevel or EASED)
+  block(b, part, center * v(-1, 1, 1) * GROWN, half * (0.99 * GROWN), nil, bevel or EASED)
+end
+
+-- A row of plates along the hull, as the generator laid them: 'count'
+-- of them a plate's length apart, with a slighter one through each that
+-- joins it to the next; and their twins.
+local function ribs(b: Builder, part: number, center: vector, half: vector, count: number, through: number?)
+  for index = 0, count - 1 do
+    local at = center + v(0, 0, index * 3 * half.z)
+    twin(b, part, at, half)
+    twin(b, through or FRAME, at, half * v(0.5, 0.5, 1.5))
+  end
+end
+
+-- An engine: a housing, a dark throat let into the back of it and the
+-- fire in that. 'center' is the middle of the housing and 'half' its
+-- half-size; with 'both', its twin on the other side too.
+local function jet(b: Builder, center: vector, half: vector, both: boolean?)
+  local back = center - v(0, 0, half.z)
+  local throat = v(half.x * 0.80, half.y * 0.72, 0.24)
+  local fire = v(half.x * 0.62, half.y * 0.52, 0.03)
+  local put: (b: Builder, part: number, center: vector, half: vector, bevel: number?) -> () = if both then twin else mid
+  put(b, PLATING, center, half)
+  put(b, FRAME, back - v(0, 0, 0.10), throat, 0.3)
+  put(b, GLOW, back - v(0, 0, 0.36), fire, 0.5)
+  local sides: { number } = if both then { 1, -1 } else { 1 }
+  for _, side in sides do
+    exhaust(bending((back - v(0, 0, 0.40)) * v(side, 1, 1) * GROWN), math.min(fire.x, fire.y) * 1.25 * GROWN)
+  end
+end
+
+-- A bridge: a low house with a lit window across its front.
+local function cabin(b: Builder, center: vector, half: vector)
+  mid(b, PATCH, center, half, 0.3)
+  mid(b, GLOW, center + v(0, half.y * 0.25, half.z + 0.005), v(half.x * 0.72, half.y * 0.26, 0.03), 0.4)
+end
+
+-- A hull as the generator grew one, from a seed: 'steps' plates grown
+-- off a cross of two, each in a row of one to five along the hull with
+-- a slighter one through it, and (with 'decks') a broad flat one under
+-- each. The draws are the generator's own, in its order, and so is the
+-- bend. (Hull.Grown, for looking through what it makes.)
+local function grown(b: Builder, seed: number, steps: number, decks: boolean)
+  local rng = RNG_MTG(Int.Signed(seed + 102))
+  type Box = { center: vector, size: vector }
+  local boxes: { Box } = {
+    { center = v(0, 0, 0), size = v(2.0, 0.5, 0.5) },
+    { center = v(0, 0, 0), size = v(0.5, 1.0, 2.0) },
+  }
+  local slight: { Box } = {}
+  local lower, upper = v(-3, -2, -6), v(3, 2, 6)
+  local axes = { v(-1, 0, 0), v(1, 0, 0), v(0, -1, 0), v(0, 1, 0), v(0, 0, -1), v(0, 0, 1) }
+  for step = 1, steps do
+    rng:Int(#boxes)
+    local box = boxes[step]
+    local dir = axes[rng:Int(6) + 1]
+    local size = box.size * rng:Vec3(v(0.9, 0.9, 0.9), v(0.99, 0.99, 0.99))
+    local center = vector.clamp(box.center + dir * (box.size + size), lower + size, upper - size)
+    for _ = 1, rng:Int(1, 5) do
+      table.insert(boxes, { center = center, size = size })
+      table.insert(slight, { center = center, size = size * v(0.5, 0.5, 1.5) })
+      center += size * v(0, 0, 3)
+    end
+  end
+  local wide = v(1.25, 0.50, 2.00)
+  local under = v(1, -0.5, 1)
+  -- (bent about where its middle comes to, as the generator centred its hulls)
+  local plain = warped(OLD)
+  local low, high = v(math.huge, math.huge, math.huge), v(-math.huge, -math.huge, -math.huge)
+  local function reach(center: vector, size: vector)
+    for corner = 0, 7 do
+      local way = v(if corner % 2 == 0 then -1 else 1, if (corner // 2) % 2 == 0 then -1 else 1, if corner // 4 == 0 then -1 else 1)
+      for _, side in { 1, -1 } do
+        local at = plain((center + size * way) * v(side, 1, 1) * GROWN)
+        low, high = vector.min(low, at), vector.max(high, at)
+      end
+    end
+  end
+  for _, list in { boxes, slight } do
+    for _, box in list do
+      reach(box.center, box.size)
+      if decks then
+        reach(box.center * under, box.size * wide)
+      end
+    end
+  end
+  for _, box in boxes do
+    twin(b, PLATING, box.center, box.size)
+    if decks then
+      twin(b, PATCH, box.center * under, box.size * wide)
+    end
+  end
+  for _, box in slight do
+    twin(b, FRAME, box.center, box.size)
+    if decks then
+      twin(b, FRAME, box.center * under, box.size * wide)
+    end
+  end
+  local bend, unbend = warped(OLD, (low + high) / 2)
+  Plates.Bend(b, bend, unbend)
+  bending = bend
+end
+
+-- The Prospector, a mining frigate: anybody's. A keel with a bar across
+-- it at the shoulders, three ore pods a side along it on a broad deck,
+-- and at the bow a blunt head, where its lasers stand, between two jaws
+-- that reach out past it and turn in toward each other; the cabin on
+-- the keel's back, a big engine at the end of the keel and one under
+-- each shoulder. (A v0.)
+local PROSPECTOR: Warps = { spread = 0.5, bow = 2.0, hump = 0.8, crown = 1.0 }
 local function prospector(b: Builder)
-  truss(b, v(0, 0.16, -0.66), v(0, 0.16, 0.44), 0.14, 6)
-  -- the hopper
-  block(b, PATCH, v(0, -0.12, -0.08), v(0.30, 0.25, 0.38), nil, 0.10)
-  for _, z in { -0.36, -0.08, 0.20 } do
-    block(b, FRAME, v(0, -0.12, z), v(0.312, 0.262, 0.022), nil, 0.1)
-  end
-  block(b, TRIM, v(0, 0.135, -0.08), v(0.26, 0.012, 0.34))
-  -- the working head, and the collar that joins it to the hopper
-  block(b, PLATING, v(0, 0.0, 0.58), v(0.27, 0.21, 0.20), nil, 0.10)
-  block(b, FRAME, v(0, -0.02, 0.34), v(0.20, 0.17, 0.04))
-  block(b, GLOW, v(0, -0.04, 0.784), v(0.17, 0.03, 0.006), nil, 0.3)
-  -- the cab, on top of it and off to port
-  block(b, PATCH, v(-0.12, 0.275, 0.50), v(0.10, 0.065, 0.11), nil, 0.2)
-  block(b, GLOW, v(-0.12, 0.29, 0.612), v(0.075, 0.02, 0.005), nil, 0.3)
-  -- a sampling boom out ahead, to starboard and low
-  beam(b, FRAME, v(0.16, -0.10, 0.74), v(0.20, -0.14, 1.00), 0.022, 0.1)
-  block(b, FRAME, v(0.20, -0.14, 1.00), v(0.04, 0.04, 0.03), nil, 0.2)
-  mast(b, v(0.08, 0.23, -0.30), 0.30, 0.02)
-  -- the engines: the big one low, behind the hopper, and two small ones on the spine
-  block(b, PLATING, v(0, -0.10, -0.54), v(0.22, 0.20, 0.10), nil, 0.10)
-  nacelle(b, v(0, -0.10, -0.72), 0.16, 0.14)
-  for _, side in { -1, 1 } do
-    nacelle(b, v(side * 0.30, 0.16, -0.60), 0.16, 0.06)
-    truss(b, v(side * 0.08, 0.16, -0.56), v(side * 0.25, 0.16, -0.58), 0.06, 2, v(0, 0, 1))
-  end
-  -- a tank on the starboard side of the hopper
-  tank(b, v(0.36, -0.04, -0.12), 0.06, 0.22)
+  manner(b, PROSPECTOR)
+  mid(b, PLATING, v(0, 0, -0.5), v(0.55, 0.85, 3.3))
+  twin(b, PLATING, v(1.2, 0.0, -1.9), v(1.3, 0.45, 0.75))
+  -- the pods, and the deck under them
+  ribs(b, PLATING, v(1.3, 0.15, -2.6), v(0.7, 0.6, 0.55), 3)
+  twin(b, PATCH, v(1.15, -0.55, -0.9), v(1.4, 0.24, 2.6))
+  -- the head, and the jaws either side of it: a band of warning paint
+  -- round each, a dark tip, and a lamp in the tip
+  mid(b, PLATING, v(0, 0.0, 3.2), v(0.8, 0.6, 0.9))
+  twin(b, PLATING, v(1.15, -0.15, 3.4), v(0.4, 0.34, 1.9))
+  twin(b, TRIM, v(1.15, -0.15, 4.4), v(0.415, 0.355, 0.18), 0.2)
+  twin(b, FRAME, v(1.15, -0.15, 5.35), v(0.3, 0.25, 0.35))
+  twin(b, GLOW, v(1.15, -0.15, 5.72), v(0.15, 0.12, 0.03), 0.5)
+  cabin(b, v(0, 0.95, 1.5), v(0.42, 0.22, 0.7))
+  -- the engines
+  jet(b, v(1.25, 0.0, -3.5), v(0.6, 0.42, 0.75), true)
+  jet(b, v(0, 0.05, -4.0), v(0.5, 0.6, 0.7))
 end
 
--- The Quarry, a mining barge: anybody's. Two keel girders with four ore
--- bins between them, open to the sky and no two filled alike; a working
--- deck across the bow, where its mining heads stand; a gantry over the
--- bins; and at the stern a control house up on a tower, with the
--- engines under it. (A v0.)
-local function quarry(b: Builder)
-  local stern, bow = -0.90, 0.90
-  for _, side in { -1, 1 } do
-    truss(b, v(side * 0.34, -0.10, stern + 0.16), v(side * 0.34, -0.10, bow - 0.26), 0.10, 9)
-  end
-  -- the bins, and what is in them
-  local first, last, bins = stern + 0.32, bow - 0.34, 4
-  local length = (last - first) / bins
-  for bin = 1, bins do
-    local z = first + (bin - 0.5) * length
-    block(b, if bin % 2 == 0 then PATCH else PLATING, v(0, -0.08, z), v(0.27, 0.19, length * 0.44), nil, 0.06)
-    block(b, FRAME, v(0, 0.115, z), v(0.276, 0.012, length * 0.45), nil, 0.1)
-    local heap = 0.025 + 0.03 * ((bin * 3) % 4)
-    block(b, FRAME, v(0.03 * ((bin % 2) * 2 - 1), 0.10 + heap, z), v(0.19, heap, length * 0.32), v(0, 0.4 * bin, 0), 0.5)
-    beam(b, FRAME, v(-0.34, -0.10, z + length / 2), v(0.34, -0.10, z + length / 2), 0.020, 0.08)
-  end
-  -- the working deck across the bow: a slab, in warning paint on top, a lamp along its face
-  block(b, PLATING, v(0, -0.02, bow - 0.14), v(0.46, 0.13, 0.16), nil, 0.06)
-  block(b, TRIM, v(0, 0.114, bow - 0.14), v(0.44, 0.006, 0.15))
-  block(b, GLOW, v(0, -0.02, bow + 0.022), v(0.30, 0.025, 0.006), nil, 0.3)
-  -- the gantry over the bins, and its hook
-  for _, side in { -1, 1 } do
-    beam(b, FRAME, v(side * 0.34, -0.05, 0.02), v(side * 0.30, 0.44, 0.02), 0.03, 0.1)
-  end
-  beam(b, FRAME, v(-0.30, 0.44, 0.02), v(0.30, 0.44, 0.02), 0.03, 0.1)
-  beam(b, FRAME, v(0.07, 0.44, 0.02), v(0.07, 0.27, 0.02), 0.014, 0.1)
-  block(b, FRAME, v(0.07, 0.25, 0.02), v(0.03, 0.025, 0.03), nil, 0.3)
-  -- the stern: the engine house, the tower on it, and the control house on that, off to starboard
-  block(b, PLATING, v(0, -0.02, stern + 0.14), v(0.40, 0.24, 0.14), nil, 0.08)
-  block(b, FRAME, v(0.12, 0.32, stern + 0.16), v(0.09, 0.10, 0.08), nil, 0.1)
-  block(b, PATCH, v(0.12, 0.49, stern + 0.18), v(0.20, 0.07, 0.11), nil, 0.2)
-  block(b, GLOW, v(0.12, 0.505, stern + 0.292), v(0.16, 0.02, 0.005), nil, 0.3)
-  ports(b, v(0.405, 0.04, stern + 0.06), v(0.405, 0.04, stern + 0.24), 3, 0.012)
-  mast(b, v(0.0, 0.56, stern + 0.14), 0.24, 0.02)
-  for _, x in { -0.26, 0, 0.26 } do
-    block(b, FRAME, v(x, -0.04, stern - 0.03), v(0.10, 0.15, 0.05), nil, 0.25)
-    block(b, GLOW, v(x, -0.04, stern - 0.085), v(0.07, 0.11, 0.008), nil, 0.5)
-    exhaust(v(x, -0.04, stern - 0.095), 0.085)
-  end
-  tank(b, v(-0.47, -0.02, -0.28), 0.07, 0.24)
-end
-
--- The Mule, a hauler: anybody's, and the plainest there is. A tug with
--- its load out in front of it: a tall house at the stern with the
--- bridge across its top and the engines behind; a spine forward from
--- it with eight drums of cargo strapped round it, four and four, not
--- all of one make; frames to hold them, and a plate across the bow.
+-- The Quarry, a mining barge: anybody's. A long keel on a broad deck,
+-- four ore bins a side along it with their hatches in warning paint and
+-- a rail of smaller plates outboard of them; across the bow a working
+-- deck, where its three heads stand, over two short jaws; at the stern
+-- a tower on the keel with the bridge on top of it, and three engines.
 -- (A v0.)
+local QUARRY: Warps = { spread = 0.5, bow = 3.0, hump = 1.0, crown = 1.25 }
+local function quarry(b: Builder)
+  manner(b, QUARRY)
+  mid(b, PLATING, v(0, 0, -0.6), v(0.6, 1.0, 4.4))
+  twin(b, PATCH, v(1.55, -0.62, -0.5), v(1.85, 0.28, 4.3))
+  -- the bins and their hatches, and the rail
+  ribs(b, PLATING, v(1.55, 0.2, -3.3), v(0.95, 0.68, 0.58), 4)
+  for bin = 0, 3 do
+    twin(b, TRIM, v(1.55, 0.89, -3.3 + bin * 1.74), v(0.6, 0.04, 0.36), 0.2)
+  end
+  ribs(b, PLATING, v(2.95, -0.25, -3.0), v(0.38, 0.38, 0.5), 4)
+  -- the working deck: painted on top, a lamp along its face; and the jaws under it
+  mid(b, PLATING, v(0, 0.0, 4.6), v(1.9, 0.5, 0.9))
+  mid(b, TRIM, v(0, 0.505, 4.6), v(1.75, 0.02, 0.75), 0.1)
+  mid(b, GLOW, v(0, -0.05, 5.505), v(1.2, 0.09, 0.03), 0.4)
+  twin(b, PLATING, v(1.6, -0.45, 5.2), v(0.3, 0.3, 1.0))
+  twin(b, FRAME, v(1.6, -0.45, 6.2), v(0.22, 0.22, 0.25))
+  -- the tower at the stern, and the bridge
+  mid(b, PLATING, v(0, 1.2, -3.6), v(0.5, 0.45, 0.9))
+  cabin(b, v(0, 1.8, -3.4), v(0.8, 0.22, 0.7))
+  -- the engines
+  jet(b, v(1.6, -0.05, -4.9), v(0.8, 0.5, 0.8), true)
+  jet(b, v(0, 0.0, -5.3), v(0.55, 0.7, 0.7))
+end
+
+-- The Mule, a hauler: anybody's, and the plainest there is. A long
+-- spine on a deck, six holds a side along it and a tier of smaller ones
+-- on their backs; a blunt head at the bow with the bridge on it; a
+-- block across the stern, and two engines in that. (A v0.)
+local MULE: Warps = { spread = 0.4, bow = 3.2, hump = 0.7, crown = 1.0 }
 local function mule(b: Builder)
-  local stern, bow = -0.90, 0.92
-  truss(b, v(0, 0, stern + 0.36), v(0, 0, bow - 0.04), 0.14, 9)
-  -- the house, the bridge across the top of it
-  block(b, PLATING, v(0, 0.02, stern + 0.20), v(0.36, 0.36, 0.20), nil, 0.08)
-  block(b, PATCH, v(0, 0.45, stern + 0.26), v(0.30, 0.07, 0.12), nil, 0.2)
-  block(b, GLOW, v(0, 0.465, stern + 0.382), v(0.24, 0.02, 0.005), nil, 0.3)
-  block(b, TRIM, v(0, 0.385, stern + 0.26), v(0.31, 0.010, 0.125))
-  ports(b, v(0.365, 0.12, stern + 0.10), v(0.365, 0.12, stern + 0.30), 3, 0.012)
-  mast(b, v(-0.16, 0.52, stern + 0.22), 0.28, 0.02)
-  -- the engines: two mouths
-  for _, x in { -0.18, 0.18 } do
-    block(b, FRAME, v(x, -0.04, stern - 0.02), v(0.13, 0.19, 0.06), nil, 0.25)
-    block(b, GLOW, v(x, -0.04, stern - 0.085), v(0.095, 0.15, 0.008), nil, 0.5)
-    exhaust(v(x, -0.04, stern - 0.095), 0.11)
-  end
-  -- the load: drums lying along the spine, four round it and two rows of them
-  for row, z in { -0.20, 0.42 } do
-    for index, at in { v(0.21, 0.21, z), v(-0.21, 0.21, z), v(0.21, -0.21, z), v(-0.21, -0.21, z) } do
-      tank(b, at, 0.17, 0.27, if (index + row) % 3 == 0 then PLATING else PATCH)
-    end
-  end
-  -- the frames that hold them, and the plate across the bow
-  for _, z in { stern + 0.42, 0.11, 0.72 } do
-    for _, side in { -1, 1 } do
-      beam(b, FRAME, v(side * 0.40, -0.40, z), v(side * 0.40, 0.40, z), 0.022, 0.08)
-      beam(b, FRAME, v(-0.40, side * 0.40, z), v(0.40, side * 0.40, z), 0.022, 0.08)
-    end
-  end
-  block(b, PLATING, v(0, 0, bow), v(0.34, 0.34, 0.03), nil, 0.08)
-  block(b, TRIM, v(0, 0, bow + 0.032), v(0.28, 0.05, 0.004))
+  manner(b, MULE)
+  mid(b, PLATING, v(0, 0.05, -0.3), v(0.5, 0.8, 4.9))
+  twin(b, PLATING, v(1.25, -0.9, -0.2), v(1.55, 0.2, 4.4))
+  -- the holds, low and high
+  ribs(b, PATCH, v(1.3, -0.15, -3.6), v(0.85, 0.7, 0.5), 6)
+  ribs(b, PLATING, v(0.95, 0.72, -2.85), v(0.5, 0.3, 0.5), 5)
+  -- the head, a lamp across its face, and the bridge on it
+  mid(b, PLATING, v(0, 0.1, 5.0), v(1.1, 0.75, 0.8))
+  mid(b, GLOW, v(0, 0.0, 5.805), v(0.7, 0.08, 0.03), 0.4)
+  cabin(b, v(0, 1.0, 4.7), v(0.6, 0.22, 0.6))
+  -- the stern, and its engines
+  mid(b, PLATING, v(0, 0.0, -4.9), v(1.5, 0.8, 0.7))
+  jet(b, v(1.0, 0.0, -5.6), v(0.6, 0.5, 0.6), true)
 end
 
 -- The Caravan, a hauler. A cage of heavy girders, wider at the keel
@@ -1777,6 +1910,40 @@ local function abeam(starboard: vector, port: vector): Hardpoint
   return { { at = starboard, up = STARBOARD }, { at = port, up = PORT } }
 end
 
+-- A mount on a hull drawn in the generator's manner: where it stands
+-- and which way is up for it as the hull is drawn, in the generator's
+-- units, taken through the hull's bend (the face it stands on is tilted
+-- by the bend, and it with the face).
+local function bentMount(w: Warps, at: vector, up: vector): Mount
+  local bend = warped(w)
+  local p = at * GROWN
+  -- (the bend breaks on the centre line: the tilt is measured a little
+  -- to one side of it, and stepping away from it)
+  local small = 0.002
+  local from = if math.abs(p.x) < small then p + v(small, 0, 0) else p
+  local one = vector.normalize(vector.cross(up, if math.abs(up.z) < 0.9 then v(0, 0, 1) else v(1, 0, 0)))
+  local other = vector.cross(up, one)
+  local function along(way: vector): vector
+    if way.x * from.x < 0 then
+      way = -way
+    end
+    return (bend(from + way * small) - bend(from)) / small
+  end
+  local tilted = vector.normalize(vector.cross(along(one), along(other)))
+  if vector.dot(tilted, up) < 0 then
+    tilted = -tilted
+  end
+  return { at = bend(p), up = tilted }
+end
+
+local function bentOver(w: Warps, top: vector, bottom: vector): Hardpoint
+  return { bentMount(w, top, UP), bentMount(w, bottom, DOWN) }
+end
+
+local function bentAbeam(w: Warps, starboard: vector, port: vector): Hardpoint
+  return { bentMount(w, starboard, STARBOARD), bentMount(w, port, PORT) }
+end
+
 -- How the Vail's battleship is read: its bridge stands on its back
 -- without putting the hull about it in shade.
 local BATTLESHIP_FILE: Imported.Options = { apart = { "bridge" } }
@@ -1799,6 +1966,9 @@ type Design = {
   -- How alike its plates are in tone (Plates' 'even'): as unlike as
   -- plates come, if not said.
   even: number?,
+  -- How small a plate of it still has its edges eased finely (Plates'
+  -- 'fine'): 0.11, if not said.
+  fine: number?,
   -- Half the length it is drawn, where its mounts were worked out from
   -- that (the Kethri's: footOn). Hull.Build checks it is so.
   reach: number?,
@@ -2101,25 +2271,25 @@ local designs: { [string]: Design } = {
   -- (And the three plain working hulls anybody flies: the mining
   -- frigate, the mining barge and the hauler.)
   ["frigate.prospector"] = {
-    faction = "civil", draw = prospector,
-    -- (a mining laser on the head and under it; one on each cheek of it)
-    turrets = { over(v(0.12, 0.21, 0.58), v(0, -0.21, 0.58)), abeam(v(0.27, 0.02, 0.58), v(-0.27, 0.02, 0.58)) },
+    faction = "civil", draw = prospector, fine = MANNER_FINE,
+    -- (a mining laser on the head and under it; one on each shoulder)
+    turrets = { bentOver(PROSPECTOR, v(0, 0.6, 3.45), v(0, -0.6, 3.45)), bentAbeam(PROSPECTOR, v(2.5, 0, -1.9), v(-2.5, 0, -1.9)) },
     launchers = {},
     fit = { "miner.small", "miner.small" },
   },
   ["barge.quarry"] = {
-    faction = "civil", draw = quarry, sheets = 5.0,
+    faction = "civil", draw = quarry, sheets = 5.0, fine = MANNER_FINE,
     -- (its three heads on the working deck: the middle one above and
     -- below, the others above on one side and below on the other)
-    turrets = { over(v(0, 0.12, 0.76), v(0, -0.15, 0.76)), over(v(0.30, 0.12, 0.76), v(-0.30, -0.15, 0.76)),
-      over(v(-0.30, 0.12, 0.76), v(0.30, -0.15, 0.76)) },
+    turrets = { bentOver(QUARRY, v(0, 0.525, 4.6), v(0, -0.5, 4.6)), bentOver(QUARRY, v(0.85, 0.525, 4.6), v(-0.85, -0.5, 4.6)),
+      bentOver(QUARRY, v(-0.85, 0.525, 4.6), v(0.85, -0.5, 4.6)) },
     launchers = {},
     fit = { "miner.strip", "miner.strip", "miner.strip" },
   },
   ["industrial.hauler"] = {
-    faction = "civil", draw = mule, sheets = 4.5,
-    -- (its one gun on the bridge's roof, and under the house)
-    turrets = { over(v(0.12, 0.52, -0.64), v(0, -0.34, -0.70)) },
+    faction = "civil", draw = mule, sheets = 4.5, fine = MANNER_FINE,
+    -- (its one gun on the bridge's roof, and under the head)
+    turrets = { bentOver(MULE, v(0, 1.22, 4.7), v(0, -0.65, 5.0)) },
     launchers = {},
     fit = { "autocannon.small" },
   },
@@ -2173,7 +2343,8 @@ for _, hull in Ships.list do
       end
       local gun = if #base.turrets > 0 then base.fit[1] else "autocannon.small"
       local rack = if #base.launchers > 0 then base.fit[#base.turrets + 1] else "launcher.light"
-      local derived: Design = { faction = "unbound", draw = base.draw, patch = PATCHED, copied = true, sheets = base.sheets, turrets = {},
+      local derived: Design = { faction = "unbound", draw = base.draw, patch = PATCHED, copied = true, sheets = base.sheets,
+        fine = base.fine, turrets = {},
         launchers = {}, fit = {} }
       for index, point in points do
         if index <= hull.turrets then
@@ -2212,7 +2383,8 @@ for _, hull in Ships.list do
   local base: Design? = if hull.tech == 2 and hull.base then designs[hull.base] else nil
   if base and designs[hull.id] == nil then
     designs[hull.id] = { faction = base.faction, draw = base.draw, sheets = base.sheets, even = base.even, reach = base.reach,
-      look = rebuilt(base.look or Hull.looks[base.faction]), turrets = base.turrets, launchers = base.launchers, fit = base.fit }
+      fine = base.fine, look = rebuilt(base.look or Hull.looks[base.faction]), turrets = base.turrets, launchers = base.launchers,
+      fit = base.fit }
   end
 end
 
@@ -2434,6 +2606,7 @@ end
 -- their own sizes. (A v0: they are told from those by their names.)
 for size = 1, 4 do
   designs[`convoy.tender.{size}`] = { faction = "civil", draw = if size <= 2 then mule else dray, sheets = 4.0 + 0.6 * size,
+    fine = if size <= 2 then MANNER_FINE else nil,
     turrets = {}, launchers = {}, fit = {} }
 end
 
@@ -2499,7 +2672,7 @@ function Hull.Build(type: string, pirate: boolean?, rank: number?): Built?
     design.turrets, design.launchers = place()
     design.place = nil
   end
-  local b = Plates.New(#type * 1.37)
+  local b = Plates.New(#type * 1.37, design.fine)
   b.patch = if patched then PATCHED else design.patch
   -- (a pirate's is a patchwork whatever it was)
   b.even = if patched then nil else design.even
@@ -2554,6 +2727,23 @@ function Hull.Build(type: string, pirate: boolean?, rank: number?): Built?
     lower = lower, upper = upper, hanging = hanging, meshes = meshes }
   built[key] = result
   return result
+end
+
+-- A hull as the engine's first generator grows one from a seed, in the
+-- game's paint: for looking through what it makes (the viewer's
+-- "grown-"). 'steps': how many plates it grows off its cross (it grew
+-- four for a frigate and six for the biggest); 'decks': with the broad
+-- flat plates under, as its bigger hulls had. No hardpoints, and no
+-- engines.
+function Hull.Grown(seed: number, steps: number, decks: boolean): Built
+  local b = Plates.New(seed * 1.37, MANNER_FINE)
+  table.clear(exhausts)
+  grown(b, seed, steps, decks)
+  local look = Hull.looks.civil
+  local model, lower, upper, meshes = Plates.Finish(b, look, nil)
+  local size = upper - lower
+  return { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = {}, launchers = {}, fit = {}, engines = {},
+    glow = look.fire or look.glow, lower = lower, upper = upper, hanging = {}, meshes = meshes }
 end
 
 -- A built hull as it is drawn cloaked: its own shape, as light bending
@@ -2699,7 +2889,7 @@ function Hull.Wreck(type: string): Wreckage
   local high: vector? = nil
   for index = 1, #edges - 1 do
     -- (the seed the whole hull was built with: the same plates, in the same tones)
-    local b = Plates.New(#type * 1.37)
+    local b = Plates.New(#type * 1.37, if design then design.fine else nil)
     b.patch = if design then design.patch else nil
     b.even = if design then design.even else nil
     b.ruin = { from = edges[index], to = edges[index + 1], loss = 0.42 }
