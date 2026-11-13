@@ -428,4 +428,45 @@ suite:Case("nobody comes for a marked pilot where order is thin", function(t)
   t.eq(#ofKind(state, "police"), 0)
 end)
 
+suite:Case("an alien faction keeps order in its own space, in its own hulls; the pirates hold theirs and keep none", function(t)
+  -- (a galaxy of a hundred systems has all the factions in it)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true, traffic = true, systems = 100 })
+  local state = game.state
+  local function homeOf(faction: string): number
+    for id, node in state.galaxy.systems do
+      if node.home and node.owner == faction then
+        return id
+      end
+    end
+    error(`{faction} has no homeworld`)
+  end
+  local theirs = homeOf("vail")
+  t.eq({ Galaxy.Band(state.galaxy.systems[theirs].security), Galaxy.Keeper(state.galaxy.systems[theirs]) } :: { string }, { "secure", "vail" })
+  move(game, theirs)
+  steps(game, 900)
+  local _, patrols = count(state)
+  t.eq(patrols, Traffic.PATROLS.secure)
+  local own = 0
+  for _, id in state.trafficIds do
+    local ship = state.ships[id]
+    if state.traffic[id].kind == "patrol" then
+      t.eq({ ship.owner, Ships.byId[ship.type].lineage }, { "vail", "vail" })
+    end
+    -- (and of the hauliers, those that are a faction's are theirs)
+    t.ok(ship.owner == "vail" or ship.owner == "civilian", `a ship of {ship.owner} in the Vail's space`)
+    own += if ship.owner == "vail" then 1 else 0
+  end
+  t.ok(own >= patrols)
+
+  local lair = homeOf("unbound")
+  t.eq({ state.galaxy.systems[lair].security, Galaxy.Keeper(state.galaxy.systems[lair]) } :: { any }, { 0, "" } :: { any })
+  move(game, lair)
+  steps(game, 900)
+  _, patrols = count(state)
+  t.eq(patrols, 0)
+  for _, id in state.trafficIds do
+    t.eq(state.ships[id].owner, "civilian")
+  end
+end)
+
 return suite

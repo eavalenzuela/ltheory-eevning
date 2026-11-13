@@ -36,8 +36,8 @@ end
 
 -- A name that is not among those 'used', which it then is. Eight taken
 -- in a row, and the names of that length are running out: the next are
--- a syllable longer.
-function Names.Unused(rng: Rng.Rng, used: { [string]: boolean }): string
+-- a syllable longer. Returns the name, and whether it is a longer one.
+function Names.Unused(rng: Rng.Rng, used: { [string]: boolean }): (string, boolean)
   local name = Names.System(rng)
   local tries = 0
   while used[name] do
@@ -45,7 +45,7 @@ function Names.Unused(rng: Rng.Rng, used: { [string]: boolean }): string
     name = Names.System(rng, tries // 8)
   end
   used[name] = true
-  return name
+  return name, tries >= 8
 end
 
 -- A survey mark: what a system is known by that nobody has named,

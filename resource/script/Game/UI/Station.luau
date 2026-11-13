@@ -1683,11 +1683,14 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
     line = y + 78 + 30 + 7 * 50 + 16
     Im.Heading("STANDINGS", left, line, 14, Im.DIM)
     for index, row in Core.Query.Standings(game) do
-      local sx = left + (index - 1) * 110
-      Im.Text(row.name, sx, line + 24, 13, Im.DIM)
-      Im.Text(string.format("%.1f", row.standing), sx, line + 42, 15, if row.hostile then HOSTILE elseif row.standing < 0 then Im.WARN else Im.TEXT)
+      -- (four to a row: the four human factions, and under them any
+      -- other that has come to think something of the pilot)
+      local sx = left + (index - 1) % 4 * 110
+      local sy = line + (index - 1) // 4 * 44
+      Im.Text(row.name, sx, sy + 24, 13, Im.DIM)
+      Im.Text(string.format("%.1f", row.standing), sx, sy + 42, 15, if row.hostile then HOSTILE elseif row.standing < 0 then Im.WARN else Im.TEXT)
       if row.hostile then
-        Im.Text("hostile", sx + 44, line + 44, 12, HOSTILE)
+        Im.Text("hostile", sx + 44, sy + 44, 12, HOSTILE)
       end
     end
   end

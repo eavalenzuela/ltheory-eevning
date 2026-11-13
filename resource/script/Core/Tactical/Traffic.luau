@@ -184,15 +184,17 @@ local function hauler(state: State.State, system: number, rng: Rng.Rng, events: 
     return
   end
   local node = state.galaxy.systems[system]
-  local faction = Factions.byId[node.nearest]
-  local own = if node.owner ~= "" and Rng.Chance(rng, 0.6) then hullOf(node.owner, "industrial") else nil
+  -- (the faction that keeps the system, if any does: its own hauliers
+  -- come by, and the pirates' space has none of anybody's)
+  local keeper = Galaxy.Keeper(node)
+  local own = if keeper ~= "" and Rng.Chance(rng, 0.6) then hullOf(keeper, "industrial") else nil
   -- (a trader in secure space is now and then a freighter: rolled
   -- apart, so that nothing else about who comes follows from it)
   local great = own == nil and Galaxy.Band(node.security) == "secure"
     and Rng.Chance(Rng.For(state.historySeed, state.tick, system, 131), Traffic.FREIGHTERS)
   local type = own or (if great then FREIGHTER else CIVILIAN)
-  local name = if own then `{faction.name} Hauler` elseif great then "Freighter" else "Trader"
-  local owner = if own then node.owner else "civilian"
+  local name = if own then `{Factions.byId[keeper].name} Hauler` elseif great then "Freighter" else "Trader"
+  local owner = if own then keeper else "civilian"
   local gate = gates[Rng.Int(rng, #gates) + 1]
   local outbound = #stations > 0 and Rng.Chance(rng, 0.5)
   local ship: State.Ship
@@ -222,7 +224,7 @@ end
 -- Put a patrol ship of the system's faction on station at a gate (or,
 -- with no gate, at a station).
 local function patrol(state: State.State, system: number, rng: Rng.Rng, events: { Event })
-  local faction = Factions.byId[state.galaxy.systems[system].owner]
+  local faction = Factions.byId[Galaxy.Keeper(state.galaxy.systems[system])]
   local kind = if faction then patrolKind(faction, if Rng.Chance(rng, 0.4) then "destroyer" else "frigate") else nil
   local sites: { System.Object } = {}
   for _, object in Space.Describe(state, system).objects do
@@ -305,7 +307,7 @@ end
 -- destroyers for anything small, in cruisers for a cruiser, and in
 -- battleships for a battleship.
 local function police(state: State.State, mine: State.Ball, rng: Rng.Rng, events: { Event }): number
-  local faction = Factions.byId[state.galaxy.systems[mine.system].owner]
+  local faction = Factions.byId[Galaxy.Keeper(state.galaxy.systems[mine.system])]
   local flown = Ships.byId[state.ships[mine.id].type].class
   local class = if flown == "battleship" or flown == "cruiser" then flown else "destroyer"
   local kind = if faction then patrolKind(faction, class) or patrolKind(faction, "destroyer") or patrolKind(faction, "frigate") else nil
@@ -337,7 +339,7 @@ function Traffic.Step(state: State.State, events: { Event })
   local system = if mine then mine.system else Space.SystemOf(state, me.docked)
   -- (a pilot the system's faction thinks ill enough of is fought on
   -- sight, mark or no mark: Assets/Standings)
-  local marked = state.tick < state.player.marked or Standings.Hostile(state, state.galaxy.systems[system].owner)
+  local marked = state.tick < state.player.marked or Standings.Hostile(state, Galaxy.Keeper(state.galaxy.systems[system]))
   local haulers, patrols, miners, lawmen = 0, 0, 0, 0
   for _, id in table.clone(state.trafficIds) do
     local record = state.traffic[id]
@@ -445,7 +447,7 @@ function Traffic.Step(state: State.State, events: { Event })
   if patrols < Traffic.PATROLS[band] then
     patrol(state, system, rng, events)
   end
-  if miners < Traffic.MINERS[band] and state.galaxy.systems[system].owner ~= "" then
+  if miners < Traffic.MINERS[band] and Galaxy.Keeper(state.galaxy.systems[system]) ~= "" then
     miner(state, system, rng, events)
   end
   -- The police, for a marked pilot in secure space: wherever they are.

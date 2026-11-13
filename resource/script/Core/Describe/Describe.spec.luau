@@ -146,69 +146,132 @@ suite:Case("the rare ores are in the belts of lawless space and nowhere else", f
   t.ok(tame > wild, "lawless belts are mostly rare ore")
 end)
 
-suite:Case("the human factions share out most of a galaxy from a homeworld each, and nobody holds the rest", function(t)
-  local humans: { string } = {}
-  for _, faction in Factions.list do
-    if faction.kind == "human" then
-      table.insert(humans, faction.id)
-    end
-  end
+suite:Case("every faction has a homeworld and as much space as any other, of a piece where the gates allow; and nobody holds the rest", function(t)
+  local shutIn, heldInAll = 0, 0
   for seed = 1, 8 do
-    for _, count in { 3, 12, 40, 200 } do
+    for _, count in { 3, 12, 40, 100, 400 } do
       local galaxy = Galaxy.Describe(seed, count)
-      local factions = math.clamp(count // Galaxy.SYSTEMS_A_FACTION, 1, #humans)
+      local systems = galaxy.systems
+      local factions = math.clamp(count // Galaxy.SYSTEMS_A_FACTION, 1, #Factions.list)
+      local each = math.max(1, math.min(Galaxy.TERRITORY, math.floor(count * Galaxy.CLAIMED / factions)))
       local homes: { [string]: number } = {}
       local held: { [string]: number } = {}
-      local claimed = 0
-      for _, system in galaxy.systems do
-        t.ok(table.find(humans, system.nearest) ~= nil, `seed {seed}: system {system.id} is nearest nobody`)
+      for _, system in systems do
+        -- (whose towers its stations are: people's, and the holder's if the holder is people)
+        local builds = Factions.byId[system.nearest]
+        t.ok(builds ~= nil and builds.kind == "human", `seed {seed}: the stations of system {system.id} are nobody's`)
         if system.home then
           t.eq(system.hops, 0)
-          t.eq(system.security, 1)
           t.eq(homes[system.owner], nil)
           homes[system.owner] = system.id
         end
         if system.owner ~= "" then
-          claimed += 1
-          t.eq(system.owner, system.nearest)
-          t.ok(system.security >= 0.3, `seed {seed}: held space with a security of {system.security}`)
           held[system.owner] = (held[system.owner] or 0) + 1
+          if Factions.byId[system.owner].kind == "human" then
+            t.eq(system.nearest, system.owner)
+          end
+          if Galaxy.KeepsOrder(system.owner) then
+            t.ok(system.security >= 0.3, `seed {seed}: held space with a security of {system.security}`)
+            t.ok(not system.home or system.security == 1, `seed {seed}: a homeworld with a security of {system.security}`)
+            t.eq(Galaxy.Keeper(system), system.owner)
+          else
+            -- (the pirates hold what they hold, and keep no order in it)
+            t.eq({ system.security, Galaxy.Keeper(system) } :: { any }, { 0, "" } :: { any })
+          end
         else
-          t.eq(system.security, 0)
+          t.eq({ system.security, Galaxy.Keeper(system), system.home } :: { any }, { 0, "", false } :: { any })
         end
       end
-      t.eq(claimed, math.floor(count * Galaxy.CLAIMED))
-      -- (the first factions of the list, the first of them at the first system)
-      for index = 1, #humans do
+      -- The first factions of the list, the first of them at the first
+      -- system, and every one with as much as any other.
+      local holders: { string } = {}
+      for index, faction in Factions.list do
         if index <= factions then
-          t.ok(homes[humans[index]] ~= nil, `seed {seed}, {count} systems: {humans[index]} has no homeworld`)
-          t.ok(held[humans[index]] >= 2 or count < 12, `seed {seed}, {count} systems: {humans[index]} holds only its homeworld`)
+          t.ok(homes[faction.id] ~= nil, `seed {seed}, {count} systems: {faction.id} has no homeworld`)
+          t.eq(held[faction.id], each, `seed {seed}, {count} systems: what {faction.id} holds`)
+          table.insert(holders, faction.id)
         else
-          t.eq(homes[humans[index]], nil)
+          t.eq({ homes[faction.id], held[faction.id] } :: { any }, {})
         end
       end
-      t.eq(homes[humans[1]], 1)
+      t.eq(homes[Factions.list[1].id], 1)
+      t.eq(Galaxy.Holders(galaxy), holders)
       -- (and nobody's homeworld is next door to another's)
-      if factions > 1 then
-        for _, system in galaxy.systems do
-          if system.home then
-            for _, neighbor in system.neighbors do
-              t.ok(not galaxy.systems[neighbor].home, `seed {seed}, {count} systems: two homeworlds a jump apart`)
-            end
+      for _, system in systems do
+        if system.home then
+          for _, neighbor in system.neighbors do
+            t.ok(not systems[neighbor].home, `seed {seed}, {count} systems: two homeworlds a jump apart`)
           end
         end
       end
-      -- security never rises going away from home
-      for _, system in galaxy.systems do
-        for _, neighbor in system.neighbors do
-          local other = galaxy.systems[neighbor]
-          if other.hops > system.hops then
-            t.ok(other.security <= system.security, `seed {seed}: it gets safer going away from home`)
+      -- A faction's space is all of a piece: from its homeworld every
+      -- system of its own is reached through its own. And going away from
+      -- home through it, it never gets safer.
+      for _, faction in holders do
+        local within: { [number]: number } = { [homes[faction]] = 0 }
+        local queue = { homes[faction] }
+        local at = 1
+        while at <= #queue do
+          local id = queue[at]
+          at += 1
+          for _, neighbor in systems[id].neighbors do
+            if systems[neighbor].owner == faction and within[neighbor] == nil then
+              within[neighbor] = within[id] + 1
+              table.insert(queue, neighbor)
+            end
+          end
+        end
+        heldInAll += each
+        shutIn += each - #queue
+        for _, id in queue do
+          for _, neighbor in systems[id].neighbors do
+            if within[neighbor] and within[neighbor] > within[id] then
+              t.ok(systems[neighbor].security <= systems[id].security, `seed {seed}: it gets safer going away from home`)
+            end
           end
         end
       end
     end
   end
+  -- (a faction shut in, with every gate out of what it holds leading
+  -- into another's space, takes the nearest system nobody has and goes
+  -- on from there: its space is then in two pieces. The gates being
+  -- what they are, with few ways round, that is a few systems in a
+  -- hundred in galaxies as crowded as these.)
+  t.ok(shutIn <= heldInAll * 0.06, `{shutIn} of {heldInAll} held systems are cut off from their homeworlds`)
+  print(`     claim: {shutIn} of {heldInAll} held systems are cut off from their own homeworld`)
+end)
+
+suite:Case("in a galaxy with room for it a faction holds ninety systems, from a homeworld of five gates a hundred light years from any other", function(t)
+  for seed = 1, 3 do
+    local galaxy = Galaxy.Describe(seed, 2000)
+    local systems = galaxy.systems
+    local homes: { number } = {}
+    local held: { [string]: number } = {}
+    for id, system in systems do
+      if system.home then
+        table.insert(homes, id)
+      end
+      if system.owner ~= "" then
+        held[system.owner] = (held[system.owner] or 0) + 1
+      end
+    end
+    t.eq(#homes, #Factions.list)
+    for _, faction in Factions.list do
+      t.eq(held[faction.id], Galaxy.TERRITORY, `seed {seed}: what {faction.id} holds`)
+    end
+    for index, home in homes do
+      t.ok(#systems[home].neighbors >= Galaxy.HOME_GATES, `seed {seed}: a homeworld with {#systems[home].neighbors} gates`)
+      for other = index + 1, #homes do
+        local far = math.sqrt((systems[home].x - systems[homes[other]].x) ^ 2 + (systems[home].y - systems[homes[other]].y) ^ 2)
+        t.ok(far >= Galaxy.HOME_APART, `seed {seed}: two homeworlds {far} light years apart`)
+      end
+    end
+  end
+  -- It follows from the seed, and is the same however often it is worked out.
+  local a, b = Galaxy.Describe(4, 400), Galaxy.Describe(4, 400)
+  Galaxy.Claim(b)
+  t.eq(Codec.HashOf(a), Codec.HashOf(b))
 end)
 
 suite:Case("a route is the fewest jumps, or the safest way", function(t)
@@ -326,7 +389,7 @@ suite:Case("space nobody holds goes by its survey marks, and nothing else about 
       t.ok(not seen[system.name], `two systems are called {system.name}`)
       seen[system.name] = true
     end
-    t.ok(marked >= 1 and marked == count - math.max(1, math.floor(count * Galaxy.CLAIMED)), `{marked} of {count} systems have marks`)
+    t.ok(marked >= 1 and marked < count, `{marked} of {count} systems have marks`)
     -- The marks are given again and the galaxy is as it was: they come
     -- of the seed, and of nothing that was drawn to make the rest.
     local again = Galaxy.Describe(5, count)
@@ -338,8 +401,9 @@ suite:Case("space nobody holds goes by its survey marks, and nothing else about 
 end)
 
 suite:Case("a galaxy of thousands of systems is made: every system reached, every one with a name of its own", function(t)
-  -- (there are some 3,700 names of the usual length: beyond them the
-  -- names are longer, and are still names)
+  -- (there are some 3,700 names of the usual length, and the systems are
+  -- named as they are made, so the later of them are given longer ones:
+  -- but most of so many are held by nobody and go by their marks)
   local count = 6000
   local galaxy = Galaxy.Describe(2, count)
   t.eq(#galaxy.systems, count)
@@ -367,7 +431,8 @@ suite:Case("a galaxy of thousands of systems is made: every system reached, ever
     longest = math.max(longest, #system.name)
     t.ok(galaxy.regions[system.region] ~= nil and galaxy.constellations[system.constellation].region == system.region)
   end
-  t.ok(longest > 10 and longest <= 16, `the longest name is {longest} letters`)
+  -- (and the held systems, which are few of so many, all have plain names)
+  t.ok(longest <= 10, `the longest name is {longest} letters`)
   seen = {}
   for _, constellation in galaxy.constellations do
     t.ok(not seen[constellation.name], `two constellations are called {constellation.name}`)

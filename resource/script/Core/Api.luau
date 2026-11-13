@@ -2279,8 +2279,12 @@ end
 export type StandingStatus = { faction: string, name: string, standing: number, hostile: boolean }
 function Query.Standings(game: Game): { StandingStatus }
   local found: { StandingStatus } = {}
+  local holds = Galaxy.Holders(game.state.galaxy)
   for _, faction in Factions.list do
-    if faction.kind == "human" then
+    -- (the human factions always; and any other that keeps order in
+    -- space of its own, once it thinks anything of the pilot)
+    if faction.kind == "human" or (Galaxy.KeepsOrder(faction.id) and table.find(holds, faction.id) ~= nil
+      and Standings.Of(game.state, faction.id) ~= 0) then
       table.insert(found, { faction = faction.id, name = faction.name, standing = Standings.Of(game.state, faction.id),
         hostile = Standings.Hostile(game.state, faction.id) })
     end

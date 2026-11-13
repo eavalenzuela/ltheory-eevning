@@ -22,6 +22,7 @@
 
 local Constants = require("@lt/Core/Data/Constants")
 local Factions = require("@lt/Core/Data/Factions")
+local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 
@@ -59,14 +60,14 @@ function Standings.Change(state: State.State, faction: string, by: number, event
 end
 
 -- The faction that minds what is done to a ship of an owner in a
--- system: the ship's own, if it is a faction's, else whoever holds the
--- system. "" for nobody.
+-- system: the ship's own, if it is a faction's that keeps order, else
+-- whoever keeps order in the system. "" for nobody.
 function Standings.Minds(state: State.State, owner: string, system: number): string
-  if Factions.byId[owner] and Factions.byId[owner].kind == "human" then
+  if Galaxy.KeepsOrder(owner) then
     return owner
   end
   local node = state.galaxy.systems[system]
-  return if node then node.owner else ""
+  return if node then Galaxy.Keeper(node) else ""
 end
 
 -- What a station's fees and taxes are multiplied by for this pilot.

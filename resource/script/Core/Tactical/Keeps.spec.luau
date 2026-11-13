@@ -90,15 +90,18 @@ local function about(game: Core.Game, keep: State.Keep): (number, number)
   return flying, standing
 end
 
--- So many ticks with the pilot's ship made whole after each (these are
--- about the keep, not about who outlasts what comes for them).
+-- So many ticks with the pilot's ship made whole after each, and with
+-- more hull than a tick of anything can take off it (these are about
+-- the keep, not about who outlasts what comes for them: and which keep
+-- it is, and so what comes, is as the galaxy falls out).
 local function held(game: Core.Game, count: number)
   for _ = 1, count do
-    Core.Step(game)
     local mine = game.state.balls[game.state.player.ship]
     if mine then
+      mine.vitals.hullMax = 1e9
       mine.vitals.shield, mine.vitals.armor, mine.vitals.hull = mine.vitals.shieldMax, mine.vitals.armorMax, mine.vitals.hullMax
     end
+    Core.Step(game)
   end
 end
 

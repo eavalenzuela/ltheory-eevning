@@ -23,15 +23,17 @@ export type SystemNode = {
   -- two systems are (Galaxy.Apart) and in nothing else of the galaxy.
   z: number,
   neighbors: { number },  -- ids of systems one jump away, ascending
-  -- Whose it is (Galaxy.Claim): the id of a human faction
-  -- (Data/Factions), or "" for space nobody holds.
+  -- Whose it is (Galaxy.Claim): the id of a faction (Data/Factions), or
+  -- "" for space nobody holds.
   owner: string,
-  -- The faction whose homeworld is nearest, holder or not: whose towers
-  -- the stations there are, and whose ships come by.
+  -- Whose towers the stations there are: the holder's, if the holder is
+  -- one of the human factions; else the human faction's whose homeworld
+  -- is nearest on the map.
   nearest: string,
   home: boolean,          -- it is a faction's homeworld
   hops: number,           -- jumps to the nearest homeworld
-  -- How safe it is, from 1 (a homeworld) to 0 (space nobody holds).
+  -- How safe it is, from 1 (a homeworld) to 0 (space nobody holds, or
+  -- the pirates do).
   -- What comes to a belt or waits at a gate follows from it
   -- (Tactical/Pirates), and what ore the belts have (Describe/System).
   security: number,
@@ -53,16 +55,244 @@ function Galaxy.Band(security: number): Band
   return if security >= 0.7 then "secure" elseif security >= 0.3 then "low" else "lawless"
 end
 
--- The share of a galaxy's systems that some faction holds.
+-- How many systems a faction holds, its homeworld among them; but all
+-- the factions together hold no more than this share of a galaxy, so
+-- in one too small for that they hold fewer each.
+Galaxy.TERRITORY = 90
 Galaxy.CLAIMED = 0.7
--- A faction for every this many systems, up to the four there are.
+-- A faction for every this many systems, up to as many as there are.
 Galaxy.SYSTEMS_A_FACTION = 10
+-- A homeworld is a system with this many gates or more, this far (light
+-- years on the map) or further from every other homeworld: or as near
+-- to that as the galaxy has.
+Galaxy.HOME_GATES = 5
+Galaxy.HOME_APART = 100
 
--- Jumps from 'source' to every system.
-local function hopsFrom(systems: { SystemNode }, source: number): { number }
-  local hops: { number } = table.create(#systems, -1)
-  hops[source] = 0
-  local queue = { source }
+-- Whether a faction keeps order in the space it holds. The pirates do
+-- not: what is theirs is lawless, with nobody to patrol it, nobody to
+-- guard its gates and nobody to mind what is done there.
+function Galaxy.KeepsOrder(faction: string): boolean
+  local its = Factions.byId[faction]
+  return its ~= nil and its.kind ~= "pirate"
+end
+
+-- The faction that keeps order in a system: whoever holds it, if they
+-- keep order. "" for nobody.
+function Galaxy.Keeper(system: SystemNode): string
+  return if Galaxy.KeepsOrder(system.owner) then system.owner else ""
+end
+
+-- The factions that hold space in a galaxy, in the order of the list:
+-- those with a homeworld in it. (Worked out once for a galaxy and kept
+-- beside it, not in it: the homeworlds say it all.)
+local holders: { [any]: { string } } = setmetatable({}, { __mode = "k" }) :: any
+function Galaxy.Holders(galaxy: Galaxy): { string }
+  local kept = holders[galaxy]
+  if kept == nil then
+    local has: { [string]: boolean } = {}
+    for _, system in galaxy.systems do
+      if system.home then
+        has[system.owner] = true
+      end
+    end
+    kept = {}
+    for _, faction in Factions.list do
+      if has[faction.id] then
+        table.insert(kept, faction.id)
+      end
+    end
+    holders[galaxy] = kept
+  end
+  return kept
+end
+
+-- A heap of numbered things, the least 'key' at its head and of those
+-- as small the lower-numbered: put one in, and take the head out.
+local function heapPush(keys: { number }, ids: { number }, key: number, id: number)
+  local hole = #keys + 1
+  while hole > 1 do
+    local parent = hole // 2
+    if key < keys[parent] or (key == keys[parent] and id < ids[parent]) then
+      keys[hole], ids[hole] = keys[parent], ids[parent]
+      hole = parent
+    else
+      break
+    end
+  end
+  keys[hole], ids[hole] = key, id
+end
+
+local function heapPop(keys: { number }, ids: { number }): (number, number)
+  local size = #keys
+  local key, id = keys[1], ids[1]
+  local lastKey, lastId = keys[size], ids[size]
+  keys[size], ids[size] = nil, nil
+  size -= 1
+  if size > 0 then
+    local hole = 1
+    while true do
+      local child = hole * 2
+      if child > size then
+        break
+      end
+      if child < size and (keys[child + 1] < keys[child] or (keys[child + 1] == keys[child] and ids[child + 1] < ids[child])) then
+        child += 1
+      end
+      if keys[child] < lastKey or (keys[child] == lastKey and ids[child] < lastId) then
+        keys[hole], ids[hole] = keys[child], ids[child]
+        hole = child
+      else
+        break
+      end
+    end
+    keys[hole], ids[hole] = lastKey, lastId
+  end
+  return key, id
+end
+
+-- Say whose each system is, and so how safe. This is done when all the
+-- systems and their gates are made, and takes nothing from the order
+-- they were made in but where a pilot starts.
+--
+-- Every faction has a homeworld. The first faction's is the first
+-- system, where a pilot starts. Each of the others' is drawn from the
+-- systems with five gates or more that are a hundred light years or
+-- further from every homeworld already placed, and next door to none.
+-- (A galaxy too small for that: with as many gates as enough of its
+-- systems have, and as far apart as they can be.) A small galaxy has
+-- fewer factions, the first of the list.
+--
+-- Then they take their space in turns, a system a turn, round and
+-- round in the order of the list: each takes the system nearest its
+-- homeworld of those it has a gate to from what it already holds, so
+-- that what is a faction's is all of a piece and near its homeworld.
+-- (One shut in, with no such system left, takes the nearest that
+-- nobody has, wherever it is.) They stop at Galaxy.TERRITORY systems
+-- each, or sooner in a galaxy too small for it (Galaxy.CLAIMED); so
+-- every faction has as much as any other, and nobody holds the rest.
+--
+-- Security is 1 at a homeworld and falls with the jumps from it through
+-- its faction's own space, never below "low" in space somebody holds,
+-- and is nothing in space nobody does, or that the pirates do. So the
+-- smallest galaxy that has three systems has one of each kind of space.
+--
+-- (Who holds what does not change: when the strategic layer joins the
+-- game, ownership and security are what its powers make them.)
+function Galaxy.Claim(galaxy: Galaxy)
+  local systems = galaxy.systems
+  local count = #systems
+  local factions = Factions.list
+  local wanted = math.clamp(count // Galaxy.SYSTEMS_A_FACTION, 1, #factions)
+  local each = math.max(1, math.min(Galaxy.TERRITORY, math.floor(count * Galaxy.CLAIMED / wanted)))
+  -- (how far apart two systems are on the map, squared)
+  local function apart2(a: number, b: number): number
+    return (systems[a].x - systems[b].x) ^ 2 + (systems[a].y - systems[b].y) ^ 2
+  end
+
+  -- The homeworlds.
+  local homes: { number } = { 1 }
+  if wanted > 1 then
+    local gates = Galaxy.HOME_GATES
+    local choice: { number } = {}
+    while true do
+      choice = {}
+      for id = 2, count do
+        if #systems[id].neighbors >= gates then
+          table.insert(choice, id)
+        end
+      end
+      if #choice >= 3 * wanted or gates <= 1 then
+        break
+      end
+      gates -= 1
+    end
+    -- (they are drawn again a tenth nearer one another until every one
+    -- has a place: and in a galaxy so small that they are all but on top
+    -- of one another, next door will do)
+    local apart = Galaxy.HOME_APART
+    local attempt = 0
+    while #homes < wanted do
+      attempt += 1
+      local rng = Rng.For(galaxy.seed, 4407, attempt)
+      local placed: { number } = { 1 }
+      for index = 2, wanted do
+        local fit: { number } = {}
+        for _, id in choice do
+          local clear = true
+          for _, home in placed do
+            if id == home or apart2(id, home) < apart ^ 2 or (apart >= 0.01 and table.find(systems[home].neighbors, id) ~= nil) then
+              clear = false
+              break
+            end
+          end
+          if clear then
+            table.insert(fit, id)
+          end
+        end
+        if #fit == 0 then
+          break
+        end
+        placed[index] = fit[Rng.Int(rng, #fit) + 1]
+      end
+      if #placed == wanted then
+        homes = placed
+      else
+        apart *= 0.9
+      end
+    end
+  end
+
+  -- Their space: whose[id] is which faction of the list holds a system.
+  local whose: { number } = table.create(count, 0)
+  local keys: { { number } }, ids: { { number } } = {}, {}
+  for index = 1, wanted do
+    keys[index], ids[index] = {}, {}
+  end
+  local function take(index: number, id: number)
+    whose[id] = index
+    for _, neighbor in systems[id].neighbors do
+      if whose[neighbor] == 0 then
+        heapPush(keys[index], ids[index], apart2(neighbor, homes[index]), neighbor)
+      end
+    end
+  end
+  for index, home in homes do
+    whose[home] = index
+  end
+  for index, home in homes do
+    take(index, home)
+  end
+  for _ = 2, each do
+    for index = 1, wanted do
+      local got = 0
+      while #keys[index] > 0 do
+        local _, id = heapPop(keys[index], ids[index])
+        if whose[id] == 0 then
+          got = id
+          break
+        end
+      end
+      if got == 0 then
+        local least = math.huge
+        for id = 1, count do
+          if whose[id] == 0 and apart2(id, homes[index]) < least then
+            got, least = id, apart2(id, homes[index])
+          end
+        end
+      end
+      if got ~= 0 then
+        take(index, got)
+      end
+    end
+  end
+
+  -- Jumps to the nearest homeworld, whoever's.
+  local hops: { number } = table.create(count, -1)
+  local queue: { number } = {}
+  for _, home in homes do
+    hops[home] = 0
+    table.insert(queue, home)
+  end
   local at = 1
   while at <= #queue do
     local id = queue[at]
@@ -74,74 +304,52 @@ local function hopsFrom(systems: { SystemNode }, source: number): { number }
       end
     end
   end
-  return hops
-end
-
--- Say whose each system is, and so how safe.
---
--- The human factions have a homeworld each: the first faction's is the
--- first system, where a pilot starts, and each next one's is as far as
--- can be from those already chosen. A small galaxy has fewer factions.
--- The systems nearest a homeworld are its faction's, seven in ten of
--- them all told; the rest, the farthest from anybody, nobody holds.
--- Security is 1 at a homeworld and falls with the jumps from it, never
--- below "low" in space somebody holds, and is nothing in space nobody
--- does. So the smallest galaxy that has three systems has one of each
--- kind of space.
---
--- (The aliens are not on the map yet: where they live is not settled.
--- And who holds what does not change: when the strategic layer joins
--- the game, ownership and security are what its powers make them.)
-function Galaxy.Claim(galaxy: Galaxy)
-  local systems = galaxy.systems
-  local count = #systems
-  local humans: { string } = {}
-  for _, faction in Factions.list do
-    if faction.kind == "human" then
-      table.insert(humans, faction.id)
-    end
-  end
-  local wanted = math.clamp(count // Galaxy.SYSTEMS_A_FACTION, 1, #humans)
-  local hops = hopsFrom(systems, 1)
-  local nearest: { number } = table.create(count, 1)
-  local homes = 1
-  while homes < wanted do
-    local best, most = 1, -1
-    for id = 1, count do
-      if hops[id] > most then
-        best, most = id, hops[id]
-      end
-    end
-    homes += 1
-    for id, far in hopsFrom(systems, best) do
-      if far < hops[id] then
-        hops[id] = far
-        nearest[id] = homes
+  -- Jumps from a faction's homeworld through its own space, and how far
+  -- that goes.
+  local within: { number } = table.create(count, -1)
+  local reach: { number } = table.create(wanted, 0)
+  for index, home in homes do
+    within[home] = 0
+    queue, at = { home }, 1
+    while at <= #queue do
+      local id = queue[at]
+      at += 1
+      reach[index] = math.max(reach[index], within[id])
+      for _, neighbor in systems[id].neighbors do
+        if whose[neighbor] == index and within[neighbor] < 0 then
+          within[neighbor] = within[id] + 1
+          table.insert(queue, neighbor)
+        end
       end
     end
   end
 
-  -- The nearest to a homeworld first, and of those as near, the lower id.
-  local order: { number } = {}
-  for id = 1, count do
-    order[id] = id
-  end
-  table.sort(order, function(a: number, b: number): boolean
-    if hops[a] ~= hops[b] then
-      return hops[a] < hops[b]
-    end
-    return a < b
-  end)
-  local claimed = math.max(1, math.floor(count * Galaxy.CLAIMED))
-  local reach = hops[order[claimed]]
-  for rank, id in order do
-    local system = systems[id]
-    local held = rank <= claimed
-    system.owner = if held then humans[nearest[id]] else ""
-    system.nearest = humans[nearest[id]]
+  for id, system in systems do
+    local index = whose[id]
+    local faction = if index > 0 then factions[index] else nil
+    system.owner = if faction then faction.id else ""
+    system.home = index > 0 and homes[index] == id
     system.hops = hops[id]
-    system.home = hops[id] == 0
-    system.security = if held then math.max(0.3, 1 - hops[id] / (reach + 1)) else 0
+    -- (whose towers the stations are: the holder's, if they are people;
+    -- else the people's whose homeworld is nearest on the map)
+    if faction and faction.kind == "human" then
+      system.nearest = faction.id
+    else
+      local best, least = 1, math.huge
+      for other, home in homes do
+        if factions[other].kind == "human" and apart2(id, home) < least then
+          best, least = other, apart2(id, home)
+        end
+      end
+      system.nearest = factions[best].id
+    end
+    if faction and faction.kind ~= "pirate" then
+      -- (a system of theirs that their own space does not reach is as
+      -- unsafe as held space gets)
+      system.security = if within[id] < 0 then 0.3 else math.max(0.3, 1 - within[id] / (reach[index] + 1))
+    else
+      system.security = 0
+    end
   end
 end
 
@@ -608,6 +816,9 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
   local radius = SPACING * math.sqrt(count)
 
   local xs: { number }, ys: { number } = table.create(count, 0), table.create(count, 0)
+  -- (the systems whose names had to be longer ones, the plain names
+  -- having run out when they were made)
+  local drawnOut: { boolean } = table.create(count, false)
   local placed = gridOf(2 * SPACING, xs, ys)
   for id = 1, count do
     -- A place not too close to any earlier system.
@@ -622,7 +833,8 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
     end
     xs[id], ys[id] = x, y
     gridAdd(placed, id)
-    local name = Names.Unused(rng, used)
+    local name, long = Names.Unused(rng, used)
+    drawnOut[id] = long
     systems[id] = { id = id, name = name, x = x, y = y, z = 0, neighbors = {}, owner = "", nearest = "", home = false, hops = 0,
       security = 1, region = 1, constellation = 1 }
   end
@@ -662,6 +874,20 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
   Galaxy.Heights(galaxy)
   Galaxy.Claim(galaxy)
   Galaxy.Marks(galaxy)
+  -- A galaxy of thousands ran out of plain names as it was made, long
+  -- before anybody knew which systems would be held. Most are not, and
+  -- have given their names up for marks: a held system that was left
+  -- with a longer name has a plain one of those now.
+  local plain: { [string]: boolean } = {}
+  for _, system in systems do
+    plain[system.name] = true
+  end
+  local renaming = Rng.For(seed, 3302)
+  for id, system in systems do
+    if drawnOut[id] and system.owner ~= "" then
+      system.name = Names.Unused(renaming, plain)
+    end
+  end
   Galaxy.Regions(galaxy)
   return galaxy
 end

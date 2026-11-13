@@ -15,6 +15,7 @@ local Assault = require("@lt/Core/Tactical/Assault")
 local Keeps = require("@lt/Core/Tactical/Keeps")
 local Raids = require("@lt/Core/Tactical/Raids")
 local Constants = require("@lt/Core/Data/Constants")
+local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Rng = require("@lt/Core/Kernel/Rng")
@@ -146,7 +147,9 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   -- them, and a pirate destroyed in their space is to the pilot's credit.
   if by == state.player.ship and ship.owner ~= "player" then
     if ship.owner == "pirates" then
-      Standings.Change(state, state.galaxy.systems[ball.system].owner, Standings.PIRATE)
+      -- (to whoever keeps order there: the pirates do not thank a pilot
+      -- for it in their own space)
+      Standings.Change(state, Galaxy.Keeper(state.galaxy.systems[ball.system]), Standings.PIRATE)
     elseif state.traffic[id] then
       Standings.Change(state, Standings.Minds(state, ship.owner, ball.system), Standings.KILLED, events)
     end

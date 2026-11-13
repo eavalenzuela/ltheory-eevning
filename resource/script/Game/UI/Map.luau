@@ -49,10 +49,12 @@ local UNCLAIMED = vector.create(0.34, 0.35, 0.38)
 -- (where the pilot is next to go: the gold the overview uses for it)
 local NEXT = vector.create(1.0, 0.80, 0.28)
 -- A faction's colour on the map. (Not its hull paint, which is chosen
--- to look right on a hull: two of the four are greys.)
+-- to look right on a hull: several of them are greys and browns.)
 local WHOSE: { [string]: vector } = {
   vessari = vector.create(1.0, 0.72, 0.28), talmar = vector.create(0.45, 0.78, 1.0),
   orun = vector.create(0.55, 0.9, 0.5), kethri = vector.create(0.82, 0.55, 1.0),
+  unbound = vector.create(0.95, 0.38, 0.32), vail = vector.create(0.25, 0.85, 0.80),
+  skarn = vector.create(1.0, 0.45, 0.78), tessellate = vector.create(0.93, 0.93, 0.96),
 }
 local BAND: { [string]: vector } = {
   secure = vector.create(0.45, 0.85, 0.55), low = vector.create(0.95, 0.75, 0.3), lawless = vector.create(0.85, 0.35, 0.3),
@@ -975,8 +977,10 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
     line += 20
   end
 
-  -- What the colours mean.
-  line = y + h - 150
+  -- What the colours mean: the kinds of space, or the factions that hold
+  -- any of this galaxy.
+  local holders = Galaxy.Holders(galaxy)
+  line = y + h - 60 - 18 * (if bySecurity then 3 else #holders + 1)
   Im.Heading(if bySecurity then "SECURITY" else "WHOSE", px, line, 14, Im.DIM)
   line += 22
   if bySecurity then
@@ -986,12 +990,10 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
       line += 18
     end
   else
-    for _, faction in Factions.list do
-      if faction.kind == "human" then
-        Im.Fill(px, line + 3, 10, 10, colorOf(faction.id), 0.95)
-        Im.Text(faction.name, px + 18, line, 13, Im.DIM)
-        line += 18
-      end
+    for _, id in holders do
+      Im.Fill(px, line + 3, 10, 10, colorOf(id), 0.95)
+      Im.Text(Factions.byId[id].name, px + 18, line, 13, Im.DIM)
+      line += 18
     end
     Im.Fill(px, line + 3, 10, 10, UNCLAIMED, 0.95)
     Im.Text("Nobody's", px + 18, line, 13, Im.DIM)
