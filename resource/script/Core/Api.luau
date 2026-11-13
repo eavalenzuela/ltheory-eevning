@@ -81,7 +81,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 59
+Core.SAVE_VERSION = 60
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -315,6 +315,13 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- 59: a corporation keeps its books by head, and a tower keeps count
   -- of its running. A save from before has what was earned and spent
   -- under no head, and its towers begin their count now.
+  -- 60: a hired pilot has a loyalty. Those of a save from before stand
+  -- where one newly signed on does.
+  [59] = function(state: any)
+    for _, wing in state.fleet do
+      wing.loyalty = wing.loyalty or 40
+    end
+  end,
   [58] = function(state: any)
     state.corporation.books = state.corporation.books or {}
     for _, starbase in state.starbases do
@@ -1192,7 +1199,7 @@ function Query.Corporation(game: Game): CorporationInfo
   -- (what its pilots are paid a day, all told)
   local wages = 0
   for _, id in state.fleetIds do
-    wages += state.fleet[id].wage
+    wages += Fleet.Due(state.fleet[id])
   end
   local heads: { HeadRow } = {}
   local earned, spent = 0, 0
@@ -1660,7 +1667,9 @@ end
 -- they fly and where it is, and how it is holding up (shares of its
 -- shield, armour and hull; whole for a ship that is docked).
 export type FleetRow = {
-  id: number, name: string, skill: number, wage: number, order: string, target: number,
+  -- ('wage' is what they are paid a day, which for a devoted one is less
+  -- than their grade's; 'loyalty' is 0 to 100, and 'mood' the word for it)
+  id: number, name: string, skill: number, wage: number, loyalty: number, mood: string, order: string, target: number,
   ship: number, shipName: string, hull: string,   -- 0 and "" for a pilot with no ship
   where: string,      -- "no ship", "docked at ...", "with you", or the system it is in
   -- "no ship", "following", "fighting", "waiting"; for a pilot set to
@@ -1699,7 +1708,8 @@ function Query.Fleet(game: Game): { FleetRow }
     local wing = state.fleet[id]
     local ship = state.ships[wing.ship]
     local row: FleetRow = {
-      id = wing.id, name = wing.name, skill = wing.skill, wage = wing.wage, order = wing.order, target = wing.target,
+      id = wing.id, name = wing.name, skill = wing.skill, wage = Fleet.Due(wing), loyalty = wing.loyalty,
+      mood = Fleet.Mood(wing.loyalty), order = wing.order, target = wing.target,
       ship = 0, shipName = "", hull = "", where = "no ship", near = false, distance = 0, shield = 1, armor = 1, structure = 1,
       doing = "no ship", hauled = wing.hauled, experience = wing.experience,
       cargo = wing.cargo, from = "", to = "", stops = {}, sells = wing.sell, earned = wing.earned,

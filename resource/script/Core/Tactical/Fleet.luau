@@ -144,6 +144,28 @@ Fleet.CANDIDATES = 3
 local DAY = math.ceil(86400 / Constants.TICK)
 Fleet.DAY = DAY
 
+-- Loyalty: how a hired pilot stands toward the one who hired them, from
+-- 0 to 'most'. They are signed on at 'start'. A day's wage paid is
+-- 'paid' more, and a grade gained 'promoted' more. A day's wage that
+-- cannot be paid is 'unpaid' less, and they work the day for nothing;
+-- a ship destroyed under them is 'lost' less. At nothing they go, and
+-- not before: so one who has been paid for a while stays through a bad
+-- day or two, where one new to the job stays through one. And from
+-- 'devoted' up they take 'less' of their wage less: they would sooner
+-- stay. (All of it first figures, mine.)
+Fleet.LOYALTY = { start = 40, most = 100, paid = 5, promoted = 10, unpaid = 35, lost = 20, devoted = 80, less = 0.1 }
+
+-- What a loyalty is called.
+function Fleet.Mood(loyalty: number): string
+  return if loyalty >= Fleet.LOYALTY.devoted then "devoted" elseif loyalty >= 60 then "loyal" elseif loyalty >= 25 then "steady" else "wary"
+end
+
+-- What a hired pilot is paid a day: their grade's wage, and a tenth
+-- less of it for one who is devoted.
+function Fleet.Due(wing: State.Wingman): number
+  return if wing.loyalty >= Fleet.LOYALTY.devoted then math.floor(wing.wage * (1 - Fleet.LOYALTY.less)) else wing.wage
+end
+
 -- What a pilot of a skill is paid a day, and what it costs to sign them.
 function Fleet.Wage(skill: number): number
   return 6000 * skill * skill
@@ -176,6 +198,7 @@ local function learn(state: State.State, wing: State.Wingman, points: number, ev
     wing.experience -= Fleet.Needed(wing.skill)
     wing.skill += 1
     wing.wage = Fleet.Wage(wing.skill)
+    wing.loyalty = math.min(Fleet.LOYALTY.most, wing.loyalty + Fleet.LOYALTY.promoted)
     table.insert(events, { kind = "PilotPromoted", pilot = wing.id, name = wing.name, skill = wing.skill })
   end
   if wing.skill >= Fleet.BEST then
@@ -595,7 +618,7 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     local wing: State.Wingman = { id = State.NewId(state), name = found.name, skill = found.skill, wage = found.wage,
       paid = state.tick, ship = 0, order = "follow", target = 0, post = 0, base = 0, hauled = 0, experience = 0,
       stops = {}, leg = 0, want = "", need = 0, limit = 0, keep = 0, retry = 0,
-      cargo = "", sell = false, earned = 0, ward = 0, alarm = false }
+      cargo = "", sell = false, earned = 0, ward = 0, alarm = false, loyalty = Fleet.LOYALTY.start }
     state.fleet[wing.id] = wing
     table.insert(state.fleetIds, wing.id)
     table.insert(events, { kind = "PilotHired", pilot = wing.id, name = wing.name })
@@ -694,9 +717,11 @@ local function give(state: State.State, command: State.Command, events: { Event 
   return false
 end
 
--- A pilot whose wage cannot be paid goes. The ship they flew is found
--- at the player's home station, as it was.
-local function quit(state: State.State, wing: State.Wingman, events: { Event })
+-- A pilot with no loyalty left goes: one unpaid once too often
+-- ('reason' is "unpaid"), or who has lost one ship too many under them
+-- ("lost"). The ship they flew is found at the player's home station,
+-- as it was.
+local function quit(state: State.State, wing: State.Wingman, events: { Event }, reason: string?)
   local ship = state.ships[wing.ship]
   local ball = if ship then state.balls[ship.id] else nil
   if ship and ball then
@@ -705,7 +730,7 @@ local function quit(state: State.State, wing: State.Wingman, events: { Event })
     ship.docked = state.player.home
     table.insert(events, { kind = "BallRemoved", ball = ship.id, reason = "left" })
   end
-  table.insert(events, { kind = "PilotLeft", pilot = wing.id, name = wing.name, reason = "unpaid" })
+  table.insert(events, { kind = "PilotLeft", pilot = wing.id, name = wing.name, reason = reason or "unpaid" })
   forget(state, wing)
 end
 
@@ -1418,18 +1443,33 @@ function Fleet.Step(state: State.State, events: { Event })
   for place, id in table.clone(state.fleetIds) do
     local wing = state.fleet[id]
     if state.tick - wing.paid >= DAY then
-      if not Corporation.Afford(state, wing.wage) then
-        quit(state, wing, events)
-        continue
+      local due = Fleet.Due(wing)
+      if Corporation.Afford(state, due) then
+        Corporation.Spend(state, due, "wages", events)
+        wing.loyalty = math.min(Fleet.LOYALTY.most, wing.loyalty + Fleet.LOYALTY.paid)
+      else
+        -- A day worked for nothing: they think the less of it, and
+        -- with nothing left to think they go.
+        wing.loyalty -= Fleet.LOYALTY.unpaid
+        if wing.loyalty <= 0 then
+          quit(state, wing, events)
+          continue
+        end
+        table.insert(events, { kind = "PilotUnpaid", pilot = wing.id, name = wing.name, wage = due, loyalty = wing.loyalty })
       end
-      Corporation.Spend(state, wing.wage, "wages", events)
       wing.paid += DAY
     end
     local ship = state.ships[wing.ship]
     if wing.ship ~= 0 and ship == nil then
-      -- Their ship has been destroyed: they are back on the list.
+      -- Their ship has been destroyed: they are back on the list, and
+      -- think the less of whoever sent them out in it.
       table.insert(events, { kind = "WingmanLost", pilot = wing.id, name = wing.name })
       wing.ship, wing.target = 0, 0
+      wing.loyalty -= Fleet.LOYALTY.lost
+      if wing.loyalty <= 0 then
+        quit(state, wing, events, "lost")
+        continue
+      end
     elseif ship then
       fly(state, wing, ship, place, events)
       -- Somebody after them, with the player somewhere else: they say

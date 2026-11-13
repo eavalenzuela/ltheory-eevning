@@ -157,8 +157,14 @@ suite:Case("what the hired pilots cost comes out of its account, and the pilot's
     Core.Step(game)
   end
   t.eq({ state.corporation.wallet, own - state.wallet, #state.fleetIds }, { 0, wage, 1 })
-  -- With nothing anywhere, they go.
+  -- With nothing anywhere they work a day for nothing, and think the less of it; and after another, they go.
   state.wallet = wage - 1
+  local hand = state.fleet[state.fleetIds[1]]
+  local loyalty = hand.loyalty
+  for _ = 1, Fleet.DAY do
+    Core.Step(game)
+  end
+  t.eq({ #state.fleetIds, hand.loyalty, state.wallet }, { 1, loyalty - Fleet.LOYALTY.unpaid, wage - 1 })
   for _ = 1, Fleet.DAY do
     Core.Step(game)
   end

@@ -1,6 +1,7 @@
 --!strict
 -- Hired pilots (Tactical/Fleet).
 
+local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Drones = require("@lt/Core/Tactical/Drones")
@@ -877,36 +878,105 @@ suite:Case("a hired pilot learns from the pirates destroyed where they fly and f
   t.eq({ wing.skill, wing.experience, Core.Query.Fleet(game)[1].needed }, { Fleet.BEST, 0, 0 })
 end)
 
-suite:Case("wages are paid by the day, and a pilot who cannot be paid leaves the ship they flew at home", function(t)
+suite:Case("wages are paid by the day, and a pilot who cannot be paid once too often leaves the ship they flew at home", function(t)
   local game, second = docked()
   local state = game.state
   local wing = hired(game, second)
   local wage, id = wing.wage, wing.id
   local wallet = state.wallet
+  local L = Fleet.LOYALTY
+  t.eq({ wing.loyalty, Fleet.Mood(wing.loyalty) } :: { any }, { L.start, "steady" } :: { any })
   steps(game, Fleet.DAY - 5)
   t.eq(state.wallet, wallet)
   steps(game, 10)
   t.eq(state.wallet, wallet - wage)
+  -- (a day's wage paid is a little more loyalty)
+  t.eq(wing.loyalty, L.start + L.paid)
   local journal = Core.Query.Journal(game)
   t.eq({ journal[#journal].reason, journal[#journal].amount } :: { any }, { "wages", -wage } :: { any })
-  -- Out in space when the money runs out.
+  -- Out in space when the money runs out: the first day worked for nothing they stay, and think the less of it.
   t.ok((submit(game, { kind = "Undock", actor = 0 })))
   steps(game, 10)
   t.ok(state.balls[second.id] ~= nil)
   state.wallet = wage - 1
-  local left = false
-  for _ = 1, Fleet.DAY do
+  local left, unpaid = false, 0
+  for _ = 1, 2 * Fleet.DAY do
     Core.Step(game)
     for _, event in Core.TakeEvents(game) do
       left = left or (event.kind == "PilotLeft" and event.pilot == id and event.reason == "unpaid")
+      if event.kind == "PilotUnpaid" and event.pilot == id then
+        unpaid += 1
+        t.eq({ event.loyalty, wing.loyalty, Fleet.Mood(wing.loyalty) } :: { any },
+          { L.start + L.paid - L.unpaid, L.start + L.paid - L.unpaid, "wary" } :: { any })
+        t.eq({ #state.fleetIds, state.wallet }, { 1, wage - 1 })
+      end
     end
     if left then
       break
     end
   end
-  t.ok(left, "an unpaid pilot stayed")
+  -- The second, they go.
+  t.eq(unpaid, 1)
+  t.ok(left, "a pilot unpaid twice stayed")
   t.eq({ #state.fleetIds, state.balls[second.id], second.docked, second.pilot } :: { any }, { 0, nil, state.player.home, 0 } :: { any })
   t.eq(state.wallet, wage - 1)
+end)
+
+suite:Case("loyalty grows with the days paid and with a grade gained, a devoted pilot takes a tenth less, and a ship lost under them costs it", function(t)
+  local game, second = docked()
+  local state = game.state
+  local wing = hired(game, second)
+  local L = Fleet.LOYALTY
+  state.wallet = 100000000
+  -- Paid day after day, to the most there is.
+  local days = (L.devoted - L.start) // L.paid
+  steps(game, days * Fleet.DAY + 5)
+  t.eq({ wing.loyalty, Fleet.Mood(wing.loyalty), Fleet.Due(wing) } :: { any },
+    { L.devoted, "devoted", math.floor(wing.wage * (1 - L.less)) } :: { any })
+  -- Devoted, they are paid a tenth less: and that is what the crew list and the corporation's wages say.
+  local before = state.wallet
+  steps(game, Fleet.DAY)
+  t.eq(before - state.wallet, Fleet.Due(wing))
+  local row = Core.Query.Fleet(game)[1]
+  t.eq({ row.wage, row.loyalty, row.mood } :: { any }, { Fleet.Due(wing), wing.loyalty, "devoted" } :: { any })
+  steps(game, 20 * Fleet.DAY)
+  t.eq(wing.loyalty, L.most)
+  -- A ship destroyed under them: they are back on the list, less loyal than they were.
+  t.ok((submit(game, { kind = "Undock", actor = 0 })))
+  steps(game, 10)
+  Aftermath.Destroy(state, second.id, 0, game.events)
+  steps(game, 2)
+  t.eq({ wing.ship, wing.loyalty, #state.fleetIds }, { 0, L.most - L.lost, 1 })
+  -- One with little loyalty left, who loses another, goes.
+  wing.loyalty = L.lost
+  local third = Space.NewShip(state, "frigate.courier", "Third", "player", state.player.home)
+  third.pilot, wing.ship = wing.id, third.id
+  Core.TakeEvents(game)
+  state.ships[third.id] = nil
+  State.RemoveId(state.shipIds, third.id)
+  steps(game, 2)
+  local gone = false
+  for _, event in Core.TakeEvents(game) do
+    gone = gone or (event.kind == "PilotLeft" and event.reason == "lost")
+  end
+  t.ok(gone, "a pilot with no loyalty left should have gone")
+  t.eq(#state.fleetIds, 0)
+
+  -- A grade gained is loyalty gained. And a save from before there was loyalty: they stand where one newly signed on does.
+  local other, ship = docked()
+  local hand = hired(other, ship)
+  hand.experience = Fleet.Needed(hand.skill) - 1
+  Fleet.Credit(other.state, 0, 0, 0, other.events)
+  local data, length = Core.Save(other)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 59
+  for _, each in file.state.fleet do
+    each.loyalty = nil
+  end
+  local old, oldLength = Codec.Encode(file)
+  local loaded = Core.Load(old, oldLength)
+  t.eq(loaded.state.fleet[hand.id].loyalty, L.start)
+  t.eq(Core.Hash(loaded), Core.Hash(other))
 end)
 
 -- How many of a type somewhere holds.

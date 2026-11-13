@@ -5,6 +5,7 @@
 
 local Clock = require("@lt/Game/Clock")
 local Core = require("@lt/Core/Api")
+local Fleet = require("@lt/Core/Tactical/Fleet")
 local Factions = require("@lt/Core/Data/Factions")
 local Format = require("@lt/Game/Format")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
@@ -261,7 +262,10 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{event.name}'s ship has been destroyed: they got out, and are without one`)
   elseif kind == "PilotLeft" then
     Session.Say(session, if (event.reason :: string) == "unpaid" then `{event.name} could not be paid and has left: their ship is at your home station`
+      elseif (event.reason :: string) == "lost" then `{event.name} has lost one ship too many under you, and has left`
       else `{event.name} has been let go`)
+  elseif kind == "PilotUnpaid" then
+    Session.Say(session, `{event.name} could not be paid today: they stay, and think the less of it ({Fleet.Mood(event.loyalty)})`)
   elseif kind == "Cloaked" and event.ball == mine then
     Session.Say(session, "Cloaked: nobody can target you, and you can target nobody")
   elseif kind == "Decloaked" and event.ball == mine then

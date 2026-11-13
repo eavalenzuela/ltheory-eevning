@@ -1310,6 +1310,8 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
     -- (their grade, and how far they are toward the next)
     Im.Text(if row.needed > 0 then `grade {row.skill}  {row.experience} / {row.needed}` else `grade {row.skill}`, right + 210, line + 1,
       13, Im.ACCENT)
+    -- (and how they stand toward the pilot)
+    Im.Text(row.mood, right + 352, line + 1, 13, if row.mood == "wary" then Im.WARN elseif row.mood == "devoted" then GOOD else Im.DIM)
     Im.TextRight(`{Format.Credits(row.wage)} a day`, right + 520, line + 1, 13, Im.DIM)
     local reason: string? = nil
     local note = ""

@@ -333,6 +333,10 @@ export type Wingman = {
   -- ('keep'), and the tick before which they do not go again, after a
   -- market that had none for them ('retry').
   keep: number, retry: number,
+  -- How they stand toward the pilot, 0 to 100 (Fleet.LOYALTY): it grows
+  -- with every day's wage paid, and falls with one that is not and
+  -- with a ship lost under them. At nothing, they go.
+  loyalty: number,
 }
 
 -- A place that is on nobody's chart (Tactical/Sites): 'id' is the place

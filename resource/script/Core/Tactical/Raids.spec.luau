@@ -198,7 +198,7 @@ suite:Case("a hired pilot set to hold the place counts for the ship they fly", f
     ship.pilot = id
     state.fleet[id] = { id = id, name = "Somebody", skill = 3, wage = 1, paid = state.tick, ship = ship.id, order = order, target = 0, post = post,
       base = 0, hauled = 0, experience = 0, cargo = "", sell = false, earned = 0, ward = 0, alarm = false, stops = {}, leg = 0,
-      want = "", need = 0, limit = 0, keep = 0, retry = 0 }
+      want = "", need = 0, limit = 0, keep = 0, retry = 0, loyalty = 40 }
     table.insert(state.fleetIds, id)
   end
   guard(901, "destroyer.halberd", "patrol", station)
