@@ -453,16 +453,21 @@ local charges: { ChargeType } = {
 -- The rest of the armoury, made from tables
 --
 -- Turrets come in three families, each in a short-range and a
--- long-range form, each of those in three sizes; launchers in three
+-- long-range form, each of those in four sizes; launchers in four
 -- sizes. A larger weapon reaches further, follows a crossing target
 -- worse, and needs a larger ship to power it. What it does to a target
 -- is its ammunition's doing: every size of weapon takes its own size of
 -- charge, and a larger charge carries more.
+--
+-- The fourth size, XL, is what a siege dreadnought mounts (the project
+-- owner's ladder of 2026-11-12; its figures are first drafts): each
+-- wants more powergrid than a dreadnought has in all, so nothing else
+-- carries one. The other fittings stop at large.
 
-local SIZE_NAME = { "small", "medium", "large" }
-local SIZE_TITLE = { "Small", "Medium", "Large" }
+local SIZE_NAME = { "small", "medium", "large", "xl" }
+local SIZE_TITLE = { "Small", "Medium", "Large", "XL" }
 -- Charge damage, by size.
-local SIZE_DAMAGE = { 1, 2.3, 5.5 }
+local SIZE_DAMAGE = { 1, 2.3, 5.5, 14 }
 
 type Form = {
   id: string, title: string, family: string, skill: string,
@@ -486,15 +491,15 @@ local FORMS: { Form } = {
 }
 
 -- How a weapon grows with its size.
-local SIZE_RANGE = { 1, 2.2, 4.4 }
-local SIZE_TRACKING = { 1, 0.33, 0.12 }
-local SIZE_CAPACITOR = { 1, 3, 9 }
-local SIZE_DURATION = { 1, 1.25, 1.6 }
-local SIZE_CPU = { 1, 2.4, 5 }
-local SIZE_POWERGRID = { 1, 18, 230 }
-local SIZE_PRICE = { 1, 10, 100 }
-local SIZE_VOLUME = { 5, 10, 20 }
-local SIZE_SKILL: { string? } = { nil, "medium.weapons", "large.weapons" }
+local SIZE_RANGE = { 1, 2.2, 4.4, 8 }
+local SIZE_TRACKING = { 1, 0.33, 0.12, 0.04 }
+local SIZE_CAPACITOR = { 1, 3, 9, 30 }
+local SIZE_DURATION = { 1, 1.25, 1.6, 2.1 }
+local SIZE_CPU = { 1, 2.4, 5, 10 }
+local SIZE_POWERGRID = { 1, 18, 230, 12000 }
+local SIZE_PRICE = { 1, 10, 100, 1500 }
+local SIZE_VOLUME = { 5, 10, 20, 400 }
+local SIZE_SKILL: { string? } = { nil, "medium.weapons", "large.weapons", "capital.weapons" }
 
 local known: { [string]: boolean } = {}
 for _, m in modules do
@@ -511,7 +516,7 @@ local function needs(skill: string, size: number): { { skill: string, level: num
 end
 
 for _, form in FORMS do
-  for size = 1, 3 do
+  for size = 1, #SIZE_NAME do
     local id = `{form.id}.{SIZE_NAME[size]}`
     if not known[id] then
       table.insert(modules, {
@@ -533,6 +538,8 @@ local LAUNCHERS = {
     reload = 35 },
   { id = "launcher.cruise", name = "Cruise Missile Launcher", cpu = 80, powergrid = 1300, price = 1100000, duration = 16, clip = 24,
     reload = 40 },
+  { id = "launcher.siege", name = "Siege Missile Launcher", cpu = 160, powergrid = 40000, price = 16000000, duration = 22, clip = 16,
+    reload = 50 },
 }
 for index, launcher in LAUNCHERS do
   table.insert(modules, {
@@ -684,19 +691,21 @@ table.insert(charges, missile("missile.light.em", "Arc Light Missile", { 83, 0, 
 local MISSILE_SIZES = {
   { id = "heavy", title = "Heavy", damage = 190, velocity = 4300, flight = 6.5, radius = 140, speed = 85, volume = 0.03, price = 180 },
   { id = "cruise", title = "Cruise", damage = 450, velocity = 4700, flight = 14, radius = 330, speed = 70, volume = 0.05, price = 550 },
+  -- (what a siege launcher throws: slow, and for what is big and slow)
+  { id = "siege", title = "Siege", damage = 1150, velocity = 3800, flight = 24, radius = 1400, speed = 30, volume = 0.3, price = 3000 },
 }
 local MISSILE_KINDS = { { "em", "Arc", 1 }, { "thermal", "Ember", 2 }, { "kinetic", "Lance", 3 }, { "explosive", "Breaker", 4 } } :: { { any } }
 
 for _, small in table.clone(charges) do
   if small.family ~= "missile" then
-    for size = 2, 3 do
+    for size = 2, #SIZE_NAME do
       local damage: { number } = {}
       for index, amount in small.damage do
         damage[index] = amount * SIZE_DAMAGE[size]
       end
       table.insert(charges, {
         id = `{small.id}.{SIZE_NAME[size]}`, name = `{SIZE_TITLE[size]} {small.name}`, family = small.family, size = size,
-        volume = small.volume * (size * size - size), basePrice = small.basePrice * (if size == 2 then 3 else 9),
+        volume = small.volume * (size * size - size), basePrice = small.basePrice * 3 ^ (size - 1),
         damage = damage, rangeMultiplier = small.rangeMultiplier,
         velocity = 0, flightTime = 0, explosionRadius = 0, explosionVelocity = 0,
       })

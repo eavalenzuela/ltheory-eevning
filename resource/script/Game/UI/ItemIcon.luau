@@ -147,19 +147,22 @@ local BY_CATEGORY: { [string]: string } = {
   module = "gear", charge = "rounds", ore = "rock", mineral = "ingot", component = "gear", blueprint = "blueprint",
   skillbook = "book", goods = "crate", structure = "crate", planetary = "crate", moon = "rock", drone = "gear", implant = "gear",
 }
-local CLASS_PIPS: { [string]: number } = { frigate = 1, destroyer = 1, cruiser = 2, battleship = 3, industrial = 2, barge = 2, freighter = 3 }
+local CLASS_PIPS: { [string]: number } = { frigate = 1, destroyer = 1, cruiser = 2, battleship = 3, industrial = 2, barge = 2, freighter = 3,
+  attackbattlecruiser = 3, battlecruiser = 2, carrier = 3, dreadnought = 3, siegedreadnought = 3, capitalindustrial = 3, supercarrier = 3 }
 
 -- The pictogram, the size (0 for none, else 1 to 3) and the category of
 -- a type.
 function ItemIcon.Parts(type: string): (string, number, string)
   local hull = Ships.byId[type]
   if hull then
-    return if hull.class == "industrial" or hull.class == "barge" or hull.class == "freighter" then "hauler" else "ship",
+    return if hull.class == "industrial" or hull.class == "barge" or hull.class == "freighter" or hull.class == "capitalindustrial"
+      then "hauler" else "ship",
       CLASS_PIPS[hull.class] or 0, "ship"
   end
   local info = Types.Get(type)
   local category = if info then info.category else "goods"
-  local size = if string.find(type, "large", 1, true) or string.find(type, "cruise", 1, true) then 3
+  local size = if string.find(type, "large", 1, true) or string.find(type, "cruise", 1, true) or string.find(type, ".xl", 1, true)
+      or string.find(type, "siege", 1, true) then 3
     elseif string.find(type, "medium", 1, true) or string.find(type, "heavy", 1, true) then 2
     elseif category == "module" or category == "charge" then 1
     else 0

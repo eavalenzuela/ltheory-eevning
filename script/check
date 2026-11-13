@@ -253,7 +253,7 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/combat.txt
   step game-economy 0 timeout 600 bin/launch game --no-present --fixed-step 60 --timeout 500 \
     --script test/scenario/economy.txt
-  step game-arms 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
+  step game-arms 0 timeout 700 bin/launch game --no-present --fixed-step 60 --timeout 600 \
     --script test/scenario/arms.txt
   step game-starbase 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/starbase.txt

@@ -75,7 +75,8 @@ Raids.STRENGTH = { low = { 2, 4 }, lawless = { 4, 9 } } :: { [string]: { number 
 -- What a battery online is worth against one, and a hired pilot's ship
 -- holding the place, by its class.
 Raids.BATTERY = 2
-Raids.PATROL = { frigate = 1, destroyer = 2, cruiser = 4, battleship = 8 } :: { [string]: number }
+Raids.PATROL = { frigate = 1, destroyer = 2, cruiser = 4, attackbattlecruiser = 5, battlecruiser = 6, battleship = 8,
+  carrier = 20, siegedreadnought = 16, dreadnought = 24, supercarrier = 40 } :: { [string]: number }
 -- The most of what is there that raiders carry off, and how long the
 -- drill is out after they have been (seconds).
 Raids.MOST = 0.8

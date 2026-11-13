@@ -164,6 +164,9 @@ type Standard = {
   cpu: number, powergrid: number, highs: number, mids: number, lows: number, hardpoints: number,
   capacitor: number, capacitorRecharge: number, scan: number, lock: number, targets: number, cargo: number,
   skill: string, level: number,
+  -- Its hardpoints are as many as it says, whoever builds it (a
+  -- faction's yard gives or takes one on the classes that do not say).
+  exact: boolean?,
 }
 
 local CLASS: { [string]: Standard } = {
@@ -187,7 +190,61 @@ local CLASS: { [string]: Standard } = {
     shield = 1000, armor = 1100, hull = 1500, recharge = 900, signature = 180, cpu = 210, powergrid = 65,
     highs = 2, mids = 3, lows = 3, hardpoints = 1, capacitor = 520, capacitorRecharge = 300,
     scan = 150, lock = 30000, targets = 2, cargo = 4600, skill = "industrials", level = 1 },
+
+  -- The project owner's ladder above the battleship and beside it
+  -- (2026-11-12): how big each is, how many hardpoints it has and what
+  -- size of weapon they are for are the owner's. Every other figure is
+  -- a first draft, set along the line the first five make. A size of
+  -- weapon is not a rule of its own: a hull mounts what its powergrid
+  -- will carry, and these are given the powergrid for what they are
+  -- meant to mount and no more.
+  --
+  -- The two battlecruisers. The attack one is a cruiser's size and a
+  -- little over with four of a battleship's guns: quick, far-reaching
+  -- and thin-skinned. The other is twice a cruiser with eight of a
+  -- cruiser's guns, and takes a beating.
+  attackbattlecruiser = { price = 60000000, volume = 15000, mass = 15000000, inertia = 0.45, velocity = 195, warp = 2.8, radius = 200,
+    shield = 3200, armor = 3200, hull = 3000, recharge = 1500, signature = 230, cpu = 480, powergrid = 8600,
+    highs = 5, mids = 4, lows = 5, hardpoints = 4, capacitor = 3600, capacitorRecharge = 800,
+    scan = 240, lock = 80000, targets = 6, cargo = 500, skill = "battlecruisers", level = 1, exact = true },
+  battlecruiser = { price = 50000000, volume = 15000, mass = 35000000, inertia = 0.28, velocity = 160, warp = 2.5, radius = 300,
+    shield = 4800, armor = 4800, hull = 4500, recharge = 1800, signature = 270, cpu = 560, powergrid = 1900,
+    highs = 8, mids = 4, lows = 6, hardpoints = 8, capacitor = 3200, capacitorRecharge = 700,
+    scan = 210, lock = 65000, targets = 7, cargo = 600, skill = "battlecruisers", level = 1, exact = true },
+  -- The capitals. A carrier has no hardpoint: its high slots are for
+  -- what needs none, and it fights with what it launches. A dreadnought
+  -- is twenty hardpoints, with the powergrid for ten of a battleship's
+  -- guns and ten of a cruiser's (and not for one of a siege
+  -- dreadnought's). A siege dreadnought is four of the largest guns
+  -- there are and the hull to carry them. A supercarrier is a carrier
+  -- and more.
+  carrier = { price = 1200000000, volume = 1000000, mass = 1100000000, inertia = 0.035, velocity = 75, warp = 1.5, radius = 1000,
+    shield = 70000, armor = 70000, hull = 65000, recharge = 6000, signature = 3200, cpu = 1000, powergrid = 60000,
+    highs = 6, mids = 6, lows = 6, hardpoints = 0, capacitor = 45000, capacitorRecharge = 3600,
+    scan = 60, lock = 180000, targets = 10, cargo = 6000, skill = "carriers", level = 1, exact = true },
+  dreadnought = { price = 2200000000, volume = 1300000, mass = 1600000000, inertia = 0.03, velocity = 60, warp = 1.4, radius = 1300,
+    shield = 110000, armor = 110000, hull = 100000, recharge = 7000, signature = 4200, cpu = 1500, powergrid = 23000,
+    highs = 20, mids = 7, lows = 8, hardpoints = 20, capacitor = 60000, capacitorRecharge = 4200,
+    scan = 55, lock = 130000, targets = 10, cargo = 5000, skill = "dreadnoughts", level = 1, exact = true },
+  siegedreadnought = { price = 1900000000, volume = 1000000, mass = 1300000000, inertia = 0.035, velocity = 65, warp = 1.4, radius = 950,
+    shield = 85000, armor = 85000, hull = 80000, recharge = 6500, signature = 3400, cpu = 1100, powergrid = 410000,
+    highs = 5, mids = 6, lows = 7, hardpoints = 4, capacitor = 70000, capacitorRecharge = 4500,
+    scan = 50, lock = 160000, targets = 8, cargo = 5000, skill = "dreadnoughts", level = 1, exact = true },
+  -- (its hold is for what a fleet's barges bring it: that hold, and the
+  -- bringing, are not made yet)
+  capitalindustrial = { price = 900000000, volume = 800000, mass = 900000000, inertia = 0.045, velocity = 70, warp = 1.6, radius = 700,
+    shield = 40000, armor = 45000, hull = 60000, recharge = 5000, signature = 2800, cpu = 800, powergrid = 20000,
+    highs = 3, mids = 5, lows = 4, hardpoints = 0, capacitor = 30000, capacitorRecharge = 3200,
+    scan = 70, lock = 120000, targets = 8, cargo = 30000, skill = "capital.industrials", level = 1, exact = true },
+  supercarrier = { price = 6000000000, volume = 1500000, mass = 1800000000, inertia = 0.03, velocity = 55, warp = 1.3, radius = 1300,
+    shield = 180000, armor = 180000, hull = 170000, recharge = 9000, signature = 4800, cpu = 1400, powergrid = 90000,
+    highs = 7, mids = 7, lows = 7, hardpoints = 0, capacitor = 80000, capacitorRecharge = 5000,
+    scan = 45, lock = 200000, targets = 12, cargo = 9000, skill = "supercarriers", level = 1, exact = true },
 }
+
+-- The classes that are capitals: nobody has a tech 2 make of one.
+local CAPITAL: { [string]: boolean } = { carrier = true, dreadnought = true, siegedreadnought = true, capitalindustrial = true,
+  supercarrier = true, ultracapital = true }
 
 -- To two figures or so: nobody quotes a hull's armour to the hit point.
 local function round(x: number): number
@@ -210,7 +267,7 @@ for _, yard in Factions.list do
     end
     if not written then
       local s = CLASS[class]
-      local hardpoints = s.hardpoints + (if class == "industrial" then 0 else yard.hardpoints)
+      local hardpoints = s.hardpoints + (if class == "industrial" or s.exact then 0 else yard.hardpoints)
       local launchers = if class == "industrial" then 0 else math.floor(hardpoints * yard.launchers + 0.5)
       -- (a pirate hull: the human hull of this class it was made out of,
       -- which is in the list already, the human factions coming first)
@@ -235,7 +292,7 @@ for _, yard in Factions.list do
         turrets = hardpoints - launchers, launchers = launchers,
         capacitor = round(s.capacitor * yard.capacitor), capacitorRecharge = s.capacitorRecharge,
         scanResolution = s.scan, lockRange = round(s.lock * yard.lockRange), maxTargets = s.targets,
-        cargo = round(s.cargo * (if class == "industrial" then yard.cargo else 1)),
+        cargo = round(s.cargo * (if class == "industrial" or class == "capitalindustrial" then yard.cargo else 1)),
         requires = { { skill = s.skill, level = s.level } },
         restricted = if yard.kind ~= "human" then true else nil,
         donor = donor,
@@ -442,8 +499,8 @@ end
 for _, base in table.clone(types) do
   local yard = Factions.byId[base.lineage]
   local mining = base.id == "frigate.prospector" or base.id == "barge.quarry"
-  if ((yard ~= nil and yard.kind == "human") or mining) and not base.restricted then
-    local carrier = base.class == "industrial" or mining
+  if ((yard ~= nil and yard.kind == "human") or mining) and not base.restricted and not CAPITAL[base.class] then
+    local hauler = base.class == "industrial" or mining
     local armoured = base.armor >= base.shield
     table.insert(types, {
       id = base.id .. ".ii", name = base.name .. " II", class = base.class, lineage = base.lineage,
@@ -460,7 +517,7 @@ for _, base in table.clone(types) do
       capacitor = round(base.capacitor * TECH2.fitting), capacitorRecharge = base.capacitorRecharge,
       scanResolution = round(base.scanResolution * TECH2.scan), lockRange = round(base.lockRange * TECH2.lock),
       maxTargets = base.maxTargets,
-      cargo = if carrier then round(base.cargo * TECH2.cargo) else base.cargo,
+      cargo = if hauler then round(base.cargo * TECH2.cargo) else base.cargo,
       drones = base.drones, bay = base.bay, rigs = base.rigs, calibration = base.calibration,
       tech = 2, base = base.id,
     })
@@ -496,9 +553,32 @@ local Ships = { list = types, byId = {} :: { [string]: ShipType } }
 Ships.RIGS = 3
 Ships.CALIBRATION = 400
 -- Drones a hull controls, by its class.
-Ships.DRONES = { frigate = 1, destroyer = 2, cruiser = 4, battleship = 5, industrial = 2, barge = 3 } :: { [string]: number }
+-- (A carrier's are what it fights with, and a capital industrial's what
+-- it works with: they control twice a battleship's, a supercarrier
+-- three times, and have the bays for many times as many. Fighters and
+-- bombers, which are theirs alone, are not made yet.)
+Ships.DRONES = { frigate = 1, destroyer = 2, cruiser = 4, battleship = 5, industrial = 2, barge = 3,
+  attackbattlecruiser = 2, battlecruiser = 5, carrier = 10, dreadnought = 5, siegedreadnought = 5, capitalindustrial = 10,
+  supercarrier = 15 } :: { [string]: number }
 -- And the room in its drone bay, m3: what it controls, and spares.
-Ships.BAY = { frigate = 10, destroyer = 25, cruiser = 50, battleship = 125, industrial = 25, barge = 50 } :: { [string]: number }
+Ships.BAY = { frigate = 10, destroyer = 25, cruiser = 50, battleship = 125, industrial = 25, barge = 50,
+  attackbattlecruiser = 25, battlecruiser = 75, carrier = 2500, dreadnought = 250, siegedreadnought = 250, capitalindustrial = 1000,
+  supercarrier = 6000 } :: { [string]: number }
+-- Whether a class is a capital.
+function Ships.Capital(class: string): boolean
+  return CAPITAL[class] == true
+end
+-- What a class is called, one of them and several: for a list of hulls,
+-- or a sheet of one.
+Ships.CLASS_NAMES = {
+  frigate = { "Frigate", "Frigates" }, destroyer = { "Destroyer", "Destroyers" }, cruiser = { "Cruiser", "Cruisers" },
+  attackbattlecruiser = { "Attack Battlecruiser", "Attack Battlecruisers" }, battlecruiser = { "Battlecruiser", "Battlecruisers" },
+  battleship = { "Battleship", "Battleships" }, carrier = { "Carrier", "Carriers" }, dreadnought = { "Dreadnought", "Dreadnoughts" },
+  siegedreadnought = { "Siege Dreadnought", "Siege Dreadnoughts" }, supercarrier = { "Supercarrier", "Supercarriers" },
+  ultracapital = { "Ultracapital", "Ultracapitals" },
+  industrial = { "Industrial", "Industrials" }, capitalindustrial = { "Capital Industrial", "Capital Industrials" },
+  freighter = { "Freighter", "Freighters" }, barge = { "Mining Barge", "Mining Barges" }, capsule = { "Capsule", "Capsules" },
+} :: { [string]: { string } }
 
 for _, t in types do
   Ships.byId[t.id] = t
@@ -511,7 +591,11 @@ end
 -- The size of rig a hull takes (Data/Modules): 1 for a frigate or a
 -- destroyer, 2 for a cruiser, a hauler or a barge, 3 for a battleship;
 -- 0 for what takes none.
-local RIG_SIZE: { [string]: number } = { frigate = 1, destroyer = 1, cruiser = 2, industrial = 2, barge = 2, battleship = 3 }
+-- (a battlecruiser of either kind takes a cruiser's, and a capital a
+-- battleship's: there is no size of rig above that yet)
+local RIG_SIZE: { [string]: number } = { frigate = 1, destroyer = 1, cruiser = 2, industrial = 2, barge = 2, battleship = 3,
+  attackbattlecruiser = 2, battlecruiser = 2, carrier = 3, dreadnought = 3, siegedreadnought = 3, capitalindustrial = 3,
+  supercarrier = 3 }
 function Ships.RigSize(t: ShipType): number
   return RIG_SIZE[t.class] or 0
 end

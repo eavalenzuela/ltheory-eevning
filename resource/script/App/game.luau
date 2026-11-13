@@ -1784,7 +1784,8 @@ function Debug.Fly(type: string, tank: boolean?): boolean
   -- fits: an afterburner, two shield extenders, a plate, a repairer, a
   -- damage control and another plate, of the hull's size.
   if tank then
-    local size = if hull.class == "battleship" then "large" elseif hull.class == "cruiser" then "medium" else "small"
+    local size = if hull.class == "battleship" or hull.class == "attackbattlecruiser" or Ships.Capital(hull.class) then "large"
+      elseif hull.class == "cruiser" or hull.class == "battlecruiser" then "medium" else "small"
     local plate = if size == "small" then "armor.plate.200mm" else "armor.plate." .. size
     for _, module in { if size == "small" then "afterburner.1mn" else "afterburner." .. size, "shield.extender." .. size,
       "shield.extender." .. size, plate, "armor.repairer." .. size, "damage.control", plate } do

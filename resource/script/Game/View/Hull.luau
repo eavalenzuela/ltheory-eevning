@@ -21,6 +21,7 @@ local Arms = require("@lt/Game/View/Arms")
 local Imported = require("@lt/Game/View/Imported")
 local Int = require("@lt/Int")
 local Plates = require("@lt/Game/View/Plates")
+local Factions = require("@lt/Core/Data/Factions")
 local Ships = require("@lt/Core/Data/Ships")
 
 local Hull = {}
@@ -2197,7 +2198,10 @@ local function standsOf(boxes: { Box }, up: vector, reach: number, gap: number, 
     local room = flatOf(box.size.z, deep, gap, eased) - reach
     -- (the starboard faces of the plates to starboard: their twins have the port ones)
     if box.part ~= FRAME and wide >= reach and room >= 0 and (up.x == 0 or box.center.x > 0) then
-      local level = vector.dot(box.center, out) + way * deep
+      -- (a plate's twin to port is a hundredth smaller: a place on a
+      -- starboard face is put where the port face is, so that the twin
+      -- of what stands there stands on its plate and not over it)
+      local level = vector.dot(box.center, out) + way * deep * (if up.x ~= 0 then 0.99 else 1)
       local places = math.floor(2 * room / (2.4 * reach))
       for index = 0, places do
         local along = if places == 0 then 0 else -room + index * 2 * room / places
@@ -2371,13 +2375,20 @@ local function shipOf(g: Growth, metres: number, fit: { string }, turrets: numbe
   local scratch = Plates.New(0, MANNER_FINE)
   grown(scratch, g)
   local radius = math.max(g.across.x, g.across.y, g.across.z) / 2
-  local size = 1
+  local size, least = 1, math.huge
   for _, type in fit do
     size = math.max(size, Arms.SizeOf(type))
+    least = math.min(least, Arms.SizeOf(type))
   end
   -- (a tenth over: the engines make the hull a little longer than its plates)
   local unit = 1.1 * Arms.SIZE[size] * radius / metres
-  local reach, gap = Arms.REACH * unit, Arms.GAP * unit
+  -- (Every mount is for the biggest thing the hull carries, and so has
+  -- the room for any of it; but how far under a foot the hull may lie is
+  -- by the smallest, which stands closest: a hull that carries two sizes
+  -- of gun has each of its mounts good for either.)
+  -- (And not a tenth over, for that: a foot may reach less far than is
+  -- allowed for, but it may not stand higher.)
+  local reach, gap = Arms.REACH * unit, Arms.GAP * unit / 1.1 * Arms.SIZE[math.min(size, least)] / Arms.SIZE[size]
   type Stand = { at: vector, mount: Mount, seat: Seat? }
   local function stands(up: vector, mirrored: boolean?): { Stand }
     local out: { Stand } = {}
@@ -2869,37 +2880,73 @@ local designs: { [string]: Design } = {
   },
 }
 
--- A hull of the game's drawn as the generator grows one from a seed,
--- at a size (Hull.SIZES): in the paint of the design it takes the place
--- of, carrying what that design is shown with, on the hardpoints the
--- hull has by the data. Nothing, and why, if there is no such hull or
--- the seed has not the room for its hardpoints.
-local function seeded(type: string, seed: number, size: number, style: string?, painted: boolean?): (Design?, string)
-  local hull = Ships.byId[type]
-  local had = designs[type]
-  if hull == nil or had == nil then
-    return nil, "there is no such hull"
-  elseif Hull.SIZES[size] == nil then
-    return nil, `sizes are 1 to {#Hull.SIZES}`
+-- Stand-ins. A hull of a class nobody has drawn (the project owner's
+-- ladder of 2026-11-12: the two battlecruisers and the capitals), which
+-- no line of resource/hull/seeds.txt names either, is drawn by the
+-- generator from a seed that follows from its name: the first from
+-- there on with the room for its hardpoints. Nothing is meant by which
+-- seed that is: it stands in until the hull's own is picked. It is
+-- worked out when the hull is first wanted and not before ('pending'):
+-- there are dozens of them, and most are never looked at.
+-- (At the size the generator made its biggest hulls: a bigger one is
+-- seconds in the making, and these are many.)
+local STAND_SIZE: { [string]: number } = { attackbattlecruiser = 4, battlecruiser = 5, carrier = 5, dreadnought = 5,
+  siegedreadnought = 5, capitalindustrial = 5, supercarrier = 5 }
+local pending: { [string]: () -> Design? } = {}
+
+-- The design of a hull type, if it has one (a stand-in is made here,
+-- the first time it is asked for).
+local function designOf(type: string): Design?
+  local wait = pending[type]
+  if wait then
+    pending[type] = nil
+    local made = wait()
+    if made then
+      designs[type] = made
+    end
   end
-  local fit = table.clone(had.fit)
-  while #fit < hull.turrets + hull.launchers do
-    table.insert(fit, if #fit < hull.turrets then "autocannon.small" else "launcher.light")
+  return designs[type]
+end
+
+-- What a hull with no design of its own is shown carrying: its
+-- faction's kind of gun and launchers, of the size its class is for
+-- (the owner's ladder: a battleship's on an attack battlecruiser, a
+-- cruiser's on a battlecruiser, ten of each on a dreadnought, and the
+-- largest there are on a siege dreadnought).
+local STAND_GUN: { [string]: string } = { laser = "laser.pulse", projectile = "autocannon", hybrid = "blaster" }
+local STAND_RACK = { "launcher.light", "launcher.heavy", "launcher.cruise", "launcher.siege" }
+local STAND_WORD = { "small", "medium", "large", "xl" }
+local STAND_SIZES: { [string]: { number } } = { frigate = { 1 }, destroyer = { 1 }, cruiser = { 2 }, battleship = { 3 },
+  attackbattlecruiser = { 3 }, battlecruiser = { 2 }, dreadnought = { 3, 2 }, siegedreadnought = { 4 } }
+local function standFit(hull: Ships.ShipType): { string }
+  local faction = Factions.byId[hull.lineage]
+  local gun = STAND_GUN[if faction then faction.weapon else "projectile"] or "autocannon"
+  local sizes = STAND_SIZES[hull.class] or { 1 }
+  local fit: { string } = {}
+  for index = 1, hull.turrets do
+    table.insert(fit, `{gun}.{STAND_WORD[sizes[(index - 1) % #sizes + 1]]}`)
   end
-  local steps, decks = Hull.GrownSize(size)
-  local engines = if hull.radius < 60 then 2 elseif hull.radius < 200 then 3 else 4
-  if style and styleOf(style).name ~= style then
-    return nil, `there is no style called '{style}'`
+  for index = 1, hull.launchers do
+    table.insert(fit, STAND_RACK[sizes[(index - 1) % #sizes + 1]])
   end
-  local ship, why = shipOf(growth(seed, steps, decks, styleOf(style)), hull.radius, fit, hull.turrets, hull.launchers, engines)
-  if ship == nil then
-    return nil, why
-  end
-  -- (as the generator made it: its own mesh, and no paint. Painted, it
-  -- is in the paint of the design it takes the place of, drawn as the
-  -- game's hulls are.)
-  local design: Design = {
-    faction = had.faction, look = if painted then had.look else Hull.looks.bare, sheets = had.sheets, even = had.even, fine = MANNER_FINE,
+  return fit
+end
+
+-- How many engines a hull of a size is given, where the seed has the
+-- ends for them.
+local function enginesFor(hull: Ships.ShipType): number
+  return if hull.radius < 60 then 2 elseif hull.radius < 200 then 3 elseif hull.radius < 700 then 4 else 6
+end
+
+-- The design of a generated hull as a ship. (As the generator made it:
+-- its own mesh, and no paint. Painted, it is drawn as the game's hulls
+-- are, in the paint of the design it takes the place of, or its
+-- faction's.)
+local function grownDesign(ship: Ship, hull: Ships.ShipType, had: Design?, fit: { string }, painted: boolean?): Design
+  return {
+    faction = if had then had.faction elseif Hull.looks[hull.lineage] then hull.lineage else "civil",
+    look = if painted then (if had then had.look else nil) else Hull.looks.bare,
+    sheets = if had then had.sheets else nil, even = if had then had.even else nil, fine = MANNER_FINE,
     quality = if painted then nil else BARE_QUALITY,
     draw = function(b: Builder)
       grown(b, ship.growth)
@@ -2908,7 +2955,59 @@ local function seeded(type: string, seed: number, size: number, style: string?, 
     end,
     turrets = ship.turrets, launchers = ship.launchers, fit = fit,
   }
-  return design, ""
+end
+
+local function standIn(hull: Ships.ShipType): Design?
+  local seed = 0
+  for index = 1, #hull.id do
+    seed = (seed * 31 + string.byte(hull.id, index)) % 9973
+  end
+  local steps, decks = Hull.GrownSize(STAND_SIZE[hull.class])
+  local fit = standFit(hull)
+  for try = 0, 39 do
+    local ship = shipOf(growth(seed + try, steps, decks, styleOf(nil)), hull.radius, fit, hull.turrets, hull.launchers, enginesFor(hull))
+    if ship then
+      return grownDesign(ship, hull, nil, fit, false)
+    end
+  end
+  return nil
+end
+
+for _, hull in Ships.list do
+  if STAND_SIZE[hull.class] and hull.tech ~= 2 and designs[hull.id] == nil then
+    pending[hull.id] = function(): Design?
+      return standIn(hull)
+    end
+  end
+end
+
+-- A hull of the game's drawn as the generator grows one from a seed,
+-- at a size (Hull.SIZES), carrying what the design it takes the place
+-- of is shown with (or, if it has none of its own, what its class and
+-- its faction say), on the hardpoints the hull has by the data.
+-- Nothing, and why, if there is no such hull or the seed has not the
+-- room for its hardpoints.
+local function seeded(type: string, seed: number, size: number, style: string?, painted: boolean?): (Design?, string)
+  local hull = Ships.byId[type]
+  local had = designs[type]
+  if hull == nil or (had == nil and pending[type] == nil) then
+    return nil, "there is no such hull"
+  elseif Hull.SIZES[size] == nil then
+    return nil, `sizes are 1 to {#Hull.SIZES}`
+  end
+  local fit = if had then table.clone(had.fit) else standFit(hull)
+  while #fit < hull.turrets + hull.launchers do
+    table.insert(fit, if #fit < hull.turrets then "autocannon.small" else "launcher.light")
+  end
+  local steps, decks = Hull.GrownSize(size)
+  if style and styleOf(style).name ~= style then
+    return nil, `there is no style called '{style}'`
+  end
+  local ship, why = shipOf(growth(seed, steps, decks, styleOf(style)), hull.radius, fit, hull.turrets, hull.launchers, enginesFor(hull))
+  if ship == nil then
+    return nil, why
+  end
+  return grownDesign(ship, hull, had, fit, painted), ""
 end
 
 -- The hulls that are drawn by seed: resource/hull/seeds.txt, a hull's
@@ -2935,6 +3034,7 @@ do
         local design, why = seeded(name, tonumber(seed) or 0, tonumber(size) or 0, style, painted)
         if design then
           designs[name] = design
+          pending[name] = nil
         else
           print(`{Hull.SEEDS}: {name} is not drawn from seed {seed} at size {size}: {why}`)
         end
@@ -3020,12 +3120,25 @@ local function rebuilt(look: Look): Look
   }
 end
 
+-- (A hull in bare metal has no paint to darken: its tech 2 make is as
+-- it is.)
+local function improved(base: Design): Design
+  local look = base.look or Hull.looks[base.faction]
+  return { faction = base.faction, draw = base.draw, sheets = base.sheets, even = base.even, reach = base.reach,
+    fine = base.fine, quality = base.quality, look = if look.bare then look else rebuilt(look), turrets = base.turrets,
+    launchers = base.launchers, fit = base.fit }
+end
 for _, hull in Ships.list do
-  local base: Design? = if hull.tech == 2 and hull.base then designs[hull.base] else nil
+  local from = if hull.tech == 2 then hull.base else nil
+  local base: Design? = if from then designs[from] else nil
   if base and designs[hull.id] == nil then
-    designs[hull.id] = { faction = base.faction, draw = base.draw, sheets = base.sheets, even = base.even, reach = base.reach,
-      fine = base.fine, look = rebuilt(base.look or Hull.looks[base.faction]), turrets = base.turrets, launchers = base.launchers,
-      fit = base.fit }
+    designs[hull.id] = improved(base)
+  elseif from and pending[from] and designs[hull.id] == nil then
+    -- (the tech 2 make of a stand-in: when that is wanted)
+    pending[hull.id] = function(): Design?
+      local stood = designOf(from)
+      return if stood then improved(stood) else nil
+    end
   end
 end
 
@@ -3359,13 +3472,16 @@ local built: { [string]: Built } = {}
 
 -- Whether there is a design for a hull type.
 function Hull.Has(type: string): boolean
-  return designs[type] ~= nil
+  return designs[type] ~= nil or pending[type] ~= nil
 end
 
 -- The types there are designs for.
 function Hull.Types(): { string }
   local out: { string } = {}
   for type in designs do
+    table.insert(out, type)
+  end
+  for type in pending do
     table.insert(out, type)
   end
   table.sort(out)
@@ -3378,7 +3494,7 @@ end
 -- pirate hull is that anyway). 'rank': it is a pirate veteran's (1) or
 -- a captain's (2), and is painted as theirs are.
 function Hull.Build(type: string, pirate: boolean?, rank: number?): Built?
-  local design = designs[type]
+  local design = designOf(type)
   if design == nil then
     return nil
   end
@@ -3389,7 +3505,7 @@ function Hull.Build(type: string, pirate: boolean?, rank: number?): Built?
   if made then
     return made
   end
-  local look = ranked or (if patched then Hull.looks.unbound else design.look or Hull.looks[design.faction])
+  local look = ranked or (if patched then Hull.looks.unbound else design.look or Hull.looks[design.faction] or Hull.looks.civil)
   -- (its hardpoints, if they are where the building of it says)
   local place = design.place
   if place then
@@ -3658,7 +3774,7 @@ function Hull.Wreck(type: string): Wreckage
     wrecks[type] = result
     return result
   end
-  local design = designs[type]
+  local design = designOf(type)
   local whole = Hull.Build(type)
   local draw: (b: Builder) -> () = if design then design.draw else debris
   local look = charred(if design then design.look or Hull.looks[design.faction] else PLAIN)
@@ -3708,6 +3824,7 @@ function Hull.Seed(type: string, seed: number, size: number, style: string?, pai
     return false, why
   end
   designs[type] = design
+  pending[type] = nil
   for key in built do
     if key == type or string.sub(key, 1, #type + 1) == type .. ":" then
       built[key] = nil

@@ -292,7 +292,11 @@ local function candidate(state: State.State, station: number, key: string): Cand
 end
 
 -- How good a pilot has to be to be given a hull of a class.
-Fleet.GRADE = { frigate = 1, industrial = 1, destroyer = 2, barge = 2, cruiser = 3, battleship = 4, freighter = 4 } :: { [string]: number }
+-- (A capital wants the best there is: a grade nobody is hired at, and
+-- a pilot is promoted to.)
+Fleet.GRADE = { frigate = 1, industrial = 1, destroyer = 2, barge = 2, cruiser = 3, attackbattlecruiser = 4, battlecruiser = 4,
+  battleship = 4, freighter = 4, carrier = 5, dreadnought = 5, siegedreadnought = 5, capitalindustrial = 5,
+  supercarrier = 5 } :: { [string]: number }
 
 -- Why a hired pilot cannot fly a ship as it is fitted, if they cannot:
 -- they are not good enough for a hull of its class, or it or something

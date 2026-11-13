@@ -727,7 +727,6 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
     }))
   end
   local mesh = PlateMesh_GetMesh(b.big)
-  Mesh_ComputeOcclusion(mesh)
 
   -- (bare, it is the engine's own metal and nothing else, at the size
   -- that metal's grain is right for)
@@ -735,13 +734,14 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
     local scale = b.scale
     if scale and scale ~= 1 then
       Mesh_Scale(mesh, vector.create(scale, scale, scale))
-      Mesh_ComputeOcclusion(mesh)
     end
+    Mesh_ComputeOcclusion(mesh)
     local metal = Model_Create()
     Model_Add(metal, mesh, Material_Metal())
     local box = Renderable_GetBound(metal)
     return metal, box.lower, box.upper, { mesh }
   end
+  Mesh_ComputeOcclusion(mesh)
 
   local skin = ShaderInstance_Create(Shader_Create("npm.jsl", "material/hull.jsl"))
   local function color(c: { number }): vector

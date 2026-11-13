@@ -124,7 +124,8 @@ local function moduleSize(module: Modules.ModuleType): number
 end
 -- (the size from which a tech 2 module calls for a composite)
 local LARGE = 3
-local HULL_SIZE: { [string]: number } = { frigate = 1, destroyer = 1, cruiser = 2, industrial = 2, barge = 2, battleship = 3, freighter = 3 }
+local HULL_SIZE: { [string]: number } = { frigate = 1, destroyer = 1, cruiser = 2, industrial = 2, barge = 2, attackbattlecruiser = 2,
+  battlecruiser = 2, battleship = 3, freighter = 3 }
 
 -- 'mix' is how the mineral part of the cost is split; 'parts', if
 -- given, the components (and what is made on planets) that take
@@ -239,8 +240,9 @@ for _, hull in Ships.list do
     blueprint.invented = true
   elseif hull.class ~= "capsule" and not hull.restricted then
     -- (a freighter is as much metal as a battleship, and of the same kinds)
-    local mix = if hull.class == "battleship" or hull.class == "freighter" then MIX.battleship
-      elseif hull.class == "cruiser" or hull.class == "barge" then MIX.cruiser
+    local mix = if hull.class == "battleship" or hull.class == "freighter" or Ships.Capital(hull.class) then MIX.battleship
+      elseif hull.class == "cruiser" or hull.class == "barge" or hull.class == "attackbattlecruiser" or hull.class == "battlecruiser"
+        then MIX.cruiser
       else MIX.ship
     -- (the largest hulls take most of a day, not a week)
     add(hull.id, hull.name, mix, hull.basePrice, 1, math.min(72000, 600 + hull.basePrice // 200), Components.HULL)

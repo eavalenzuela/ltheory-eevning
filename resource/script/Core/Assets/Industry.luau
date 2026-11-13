@@ -132,7 +132,8 @@ Industry.DATACORE = "datacore"
 -- How big a thing a hull of a class is to invent, where a small module
 -- is 1 and a large one 3: it sets the datacores (two, doubled for each
 -- step) and the time.
-Industry.HULL_SIZE = { frigate = 3, destroyer = 4, industrial = 4, barge = 4, cruiser = 5, battleship = 6, freighter = 6 } :: { [string]: number }
+Industry.HULL_SIZE = { frigate = 3, destroyer = 4, industrial = 4, barge = 4, cruiser = 5, attackbattlecruiser = 6,
+  battlecruiser = 6, battleship = 6, freighter = 6 } :: { [string]: number }
 Industry.INVENT_CHANCE = 0.3
 Industry.INVENT_SKILL = 0.05
 

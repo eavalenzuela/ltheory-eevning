@@ -41,9 +41,10 @@ local block, beam = Plates.Block, Plates.Beam
 -- looks big), a large pulse laser about 20 m (on a battleship of 800
 -- to 1,600 m, where it looks small). The medium is put between the
 -- two. So a gun on a big hull barely shows, which is as it should be:
--- it is noticed when it fires. (A capital size, when there are capital
--- weapons, is a fourth number here: some ten times the large.)
-Arms.SIZE = { 1.35, 2.5, 4.5 }
+-- it is noticed when it fires. The fourth is the XL size, which a
+-- siege dreadnought mounts four of: about three times the large (a
+-- first figure: a gun some 60 m long on a hull of 1,900).
+Arms.SIZE = { 1.35, 2.5, 4.5, 14 }
 -- Half the width of the mounting ring, in the drawings' units.
 Arms.FOOT = 1.55
 -- How far from its middle the ring reaches as a turret turns on it (its
@@ -208,6 +209,7 @@ local RACKS: { [string]: { any } } = {
   ["launcher.light"] = { 2, 2, v(0.85, 0.75, 2.1) },
   ["launcher.heavy"] = { 3, 2, v(1.15, 0.80, 2.3) },
   ["launcher.cruise"] = { 3, 3, v(1.20, 1.15, 2.6) },
+  ["launcher.siege"] = { 4, 3, v(1.45, 1.15, 2.9) },
 }
 
 -- A rack of tubes on a short pylon on the ring, mouths forward. Returns
@@ -240,7 +242,8 @@ function Arms.SizeOf(type: string): number
   if weapon then
     return weapon.size
   end
-  return if string.find(type, "large", 1, true) or string.find(type, "strip", 1, true) then 3
+  return if string.find(type, ".xl", 1, true) or string.find(type, "siege", 1, true) then 4
+    elseif string.find(type, "large", 1, true) or string.find(type, "strip", 1, true) then 3
     elseif string.find(type, "medium", 1, true) then 2
     else 1
 end

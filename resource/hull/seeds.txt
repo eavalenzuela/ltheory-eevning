@@ -22,10 +22,28 @@
 #                                             F shows one as a ship)
 #                    script/hulls seeds 1 40 2 bare frigate
 # The types are in resource/script/Core/Data/Ships.luau: each faction
-# has one hull of each class (the Vessari: frigate.javelin,
-# destroyer.halberd, cruiser.cuirass, battleship.bastion,
-# industrial.caravan), and there are anybody's (frigate.courier,
-# frigate.prospector, barge.quarry, industrial.hauler, freighter.dray).
+# has one hull of each class, called <class>.<name>, and there are
+# anybody's (frigate.courier, frigate.prospector, barge.quarry,
+# industrial.hauler, freighter.dray). The classes, with how big a ship
+# of each is (its radius: half its length) and the Vessari hull of it:
+#
+#   frigate               42 m   frigate.javelin
+#   destroyer             75 m   destroyer.halberd
+#   cruiser              150 m   cruiser.cuirass
+#   industrial           180 m   industrial.caravan
+#   attackbattlecruiser  200 m   attackbattlecruiser.glaive
+#   battlecruiser        300 m   battlecruiser.pavise
+#   battleship           400 m   battleship.bastion
+#   capitalindustrial    700 m   capitalindustrial.emporium
+#   siegedreadnought     950 m   siegedreadnought.trebuchet
+#   carrier             1000 m   carrier.citadel
+#   dreadnought         1300 m   dreadnought.rampart
+#   supercarrier        1300 m   supercarrier.stronghold
+#
+# (The names of the hulls from the attack battlecruiser on are first
+# drafts, in resource/script/Core/Data/Factions.luau. Until a line here
+# names one of those hulls it is drawn from a seed that follows from its
+# name: a stand-in, with nothing meant by it.)
 #
 # If a seed has not the room for a hull's hardpoints even on seats, the
 # game says so when it starts and draws the hull as it was.

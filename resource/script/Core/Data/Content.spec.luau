@@ -90,9 +90,20 @@ suite:Case("every faction has a hull of every class, and a bigger class is more 
       t.ok(Ships.TimeConstant(big) > Ships.TimeConstant(small), `{big.id} turns no slower`)
       t.ok(big.signature > small.signature and big.lockRange > small.lockRange, big.id)
     end
+    -- The owner's ladder beside the battleship and above it (2026-11-12): how big each is, how many hardpoints
+    -- it has whoever builds it, and what they are for.
+    local LADDER: { [string]: { number } } = { attackbattlecruiser = { 200, 4 }, battlecruiser = { 300, 8 }, carrier = { 1000, 0 },
+      dreadnought = { 1300, 20 }, siegedreadnought = { 950, 4 }, capitalindustrial = { 700, 0 }, supercarrier = { 1300, 0 } }
     for _, hull in line do
-      -- (a hull may have more hardpoints than high slots: the pilot chooses the mix)
-      t.ok(hull.turrets <= hull.highs and hull.launchers <= hull.highs and hull.turrets + hull.launchers >= 1, hull.id)
+      local rung = LADDER[hull.class]
+      if rung then
+        t.eq({ hull.radius, hull.turrets + hull.launchers }, rung, hull.id)
+        t.eq(Ships.Capital(hull.class), hull.radius >= 700, hull.id)
+      end
+      -- (a hull may have more hardpoints than high slots: the pilot chooses the mix; and what fights with what
+      -- it launches, or does not fight, has no hardpoint at all)
+      t.ok(hull.turrets <= hull.highs and hull.launchers <= hull.highs, hull.id)
+      t.eq(hull.turrets + hull.launchers >= 1, rung == nil or rung[2] > 0, hull.id)
       t.ok(hull.mids >= 1 and hull.lows >= 1, hull.id)
       -- a faction's character shows in how its warships take a hit
       if hull.class ~= "industrial" then
@@ -130,7 +141,10 @@ suite:Case("every pirate hull is somebody else's, cheaper, quicker and thinner-s
     t.ok(hull.basePrice < original.basePrice, hull.id)
     if class ~= "industrial" then
       t.ok(hull.maxVelocity > 0.98 * original.maxVelocity, hull.id)
-      t.ok(hull.turrets + hull.launchers > original.turrets + original.launchers or original.id == "frigate.harrier", hull.id)
+      -- (more guns than it was built for; but for the classes whose hardpoints are the same whoever builds them)
+      t.ok(hull.turrets + hull.launchers > original.turrets + original.launchers or original.id == "frigate.harrier"
+        or (Factions.CLASSES[5] ~= class and table.find(Factions.CLASSES, class) :: number > 5
+          and hull.turrets + hull.launchers == original.turrets + original.launchers), hull.id)
     end
   end
 end)
@@ -194,13 +208,13 @@ suite:Case("every hull of a human line, and each mining hull, has a tech 2 make:
     else
       -- (and every hull that should have one, has)
       local should = hull.id == "frigate.prospector" or hull.id == "barge.quarry"
-        or (faction ~= nil and faction.kind == "human" and not hull.restricted)
+        or (faction ~= nil and faction.kind == "human" and not hull.restricted and not Ships.Capital(hull.class))
       t.eq(Ships.Improved(hull.id) ~= nil, should, hull.id)
       t.eq(Types.Get(hull.id) == nil or Types.Info(hull.id).scarce == nil, true, hull.id)
     end
   end
-  -- Four lines of five hulls, and the two that mine.
-  t.eq(improved, 4 * 5 + 2)
+  -- Four lines of five hulls and two battlecruisers (nobody has a tech 2 make of a capital), and the two that mine.
+  t.eq(improved, 4 * 7 + 2)
   t.ok(Ships.Improved("frigate.courier") == nil and Ships.Improved("industrial.hauler") == nil and Ships.Improved("capsule") == nil)
 end)
 
@@ -231,9 +245,11 @@ suite:Case("every hull for sale can be built from ore, and has skills a pilot ca
         end
         return false
       end
-      -- (a freighter is as much metal as a battleship, and of the same kinds)
-      local great = hull.class == "battleship" or hull.class == "freighter"
-      t.eq(takes("mineral.cobalt"), hull.class == "cruiser" or hull.class == "barge" or great, hull.id)
+      -- (a freighter is as much metal as a battleship, and of the same kinds; so is a capital, and a
+      -- battlecruiser of either kind is built of what a cruiser is)
+      local great = hull.class == "battleship" or hull.class == "freighter" or Ships.Capital(hull.class)
+      t.eq(takes("mineral.cobalt"), hull.class == "cruiser" or hull.class == "barge" or hull.class == "attackbattlecruiser"
+        or hull.class == "battlecruiser" or great, hull.id)
       t.eq(takes("mineral.iridium"), great, hull.id)
       for _, need in Skills.Needs(hull.id) do
         t.ok(Skills.byId[need.skill] ~= nil, `{hull.id} needs an unknown skill {need.skill}`)
@@ -295,10 +311,13 @@ suite:Case("every weapon takes ammunition of its own size and no other; larger r
       end
     end
   end
-  t.eq(weapons, 6 * 3 + 3, "six forms of turret and a launcher, in three sizes")
+  t.eq(weapons, 6 * 4 + 4, "six forms of turret and a launcher, in four sizes")
   for _, form in { "laser.pulse", "laser.beam", "autocannon", "artillery", "blaster", "railgun" } do
     local small, medium, large = Modules.byId[form .. ".small"], Modules.byId[form .. ".medium"], Modules.byId[form .. ".large"]
-    for _, pair in { { small, medium }, { medium, large } } do
+    -- (and the fourth size, which only a siege dreadnought has the powergrid for)
+    local xl = Modules.byId[form .. ".xl"]
+    t.eq({ assert(xl.weapon).size, xl.powergrid > 23000 } :: { any }, { 4, true } :: { any }, xl.id)
+    for _, pair in { { small, medium }, { medium, large }, { large, xl } } do
       local a, b = assert(pair[1].weapon), assert(pair[2].weapon)
       t.ok(b.optimal > a.optimal and b.tracking < a.tracking, pair[2].id)
       t.ok(pair[2].powergrid > 5 * pair[1].powergrid and pair[2].basePrice > pair[1].basePrice, pair[2].id)
@@ -309,15 +328,18 @@ suite:Case("every weapon takes ammunition of its own size and no other; larger r
     local bigger = Modules.chargeById[charge.id .. ".medium"]
     if bigger then
       local largest = assert(Modules.chargeById[charge.id .. ".large"])
+      local greatest = assert(Modules.chargeById[charge.id .. ".xl"])
       t.eq(bigger.size, 2)
       t.eq(largest.size, 3)
+      t.eq(greatest.size, 4)
       for index, amount in charge.damage do
-        t.ok(bigger.damage[index] >= amount and largest.damage[index] >= bigger.damage[index], bigger.id)
+        t.ok(bigger.damage[index] >= amount and largest.damage[index] >= bigger.damage[index]
+          and greatest.damage[index] >= largest.damage[index], bigger.id)
       end
-      t.ok(Blueprints.byProduct[bigger.id] ~= nil and Blueprints.byProduct[largest.id] ~= nil)
+      t.ok(Blueprints.byProduct[bigger.id] ~= nil and Blueprints.byProduct[largest.id] ~= nil and Blueprints.byProduct[greatest.id] ~= nil)
     end
   end
-  for _, size in { "light", "heavy", "cruise" } do
+  for _, size in { "light", "heavy", "cruise", "siege" } do
     for _, kind in { "em", "thermal", "kinetic", "explosive" } do
       t.ok(Modules.chargeById[`missile.{size}.{kind}`] ~= nil, `no {kind} {size} missile`)
     end
@@ -326,9 +348,11 @@ end)
 
 suite:Case("every human warship can carry a full rack of its own faction's weapons, at its own size", function(t)
   local SHORT = { laser = "laser.pulse", projectile = "autocannon", hybrid = "blaster" }
-  local SIZE = { frigate = 1, destroyer = 1, cruiser = 2, battleship = 3 }
-  local NAME = { "small", "medium", "large" }
-  local LAUNCHER = { "launcher.light", "launcher.heavy", "launcher.cruise" }
+  -- (by the owner's ladder: an attack battlecruiser carries a battleship's guns, a battlecruiser a cruiser's,
+  -- and a siege dreadnought the largest there are)
+  local SIZE = { frigate = 1, destroyer = 1, cruiser = 2, battleship = 3, attackbattlecruiser = 3, battlecruiser = 2, siegedreadnought = 4 }
+  local NAME = { "small", "medium", "large", "xl" }
+  local LAUNCHER = { "launcher.light", "launcher.heavy", "launcher.cruise", "launcher.siege" }
   for _, faction in Factions.list do
     if faction.kind == "human" then
       for _, hull in Ships.list do
@@ -345,12 +369,31 @@ suite:Case("every human warship can carry a full rack of its own faction's weapo
           t.ok(powergrid <= 0.8 * hull.powergrid, `{hull.id}: its weapons take {powergrid} of {hull.powergrid} MW`)
           -- and the same rack a size up is beyond it (the whole rack: on a
           -- hull that is mostly launchers, the one gun alone proves nothing)
-          if size < 3 then
+          if size < 4 then
             local bigger = assert(Modules.byId[`{SHORT[faction.weapon]}.{NAME[size + 1]}`])
             local biggerLauncher = assert(Modules.byId[LAUNCHER[size + 1]])
             local cpuUp = turrets * bigger.cpu + launchers * biggerLauncher.cpu
             local powergridUp = turrets * bigger.powergrid + launchers * biggerLauncher.powergrid
             t.ok(cpuUp > hull.cpu or powergridUp > hull.powergrid, `{hull.id} could carry its rack a size up`)
+          end
+        end
+        -- A dreadnought is ten of a battleship's and ten of a cruiser's, on twenty hardpoints: it has the
+        -- fitting for that, in its faction's guns of the long reach too, and not for one of the largest.
+        if hull.lineage == faction.id and hull.class == "dreadnought" then
+          local LONG = { laser = "laser.beam", projectile = "artillery", hybrid = "railgun" }
+          for _, form in { SHORT[faction.weapon], LONG[faction.weapon] } do
+            local cpu, powergrid = 0, 0
+            for index = 1, 20 do
+              local at = if index % 2 == 1 then 3 else 2
+              local module = assert(Modules.byId[if index <= hull.launchers then LAUNCHER[at] else `{form}.{NAME[at]}`])
+              cpu += module.cpu
+              powergrid += module.powergrid
+            end
+            t.ok(cpu <= hull.cpu and powergrid <= hull.powergrid,
+              `{hull.id}: ten large and ten medium ({form}) take {cpu} of {hull.cpu} cpu and {powergrid} of {hull.powergrid} MW`)
+          end
+          for _, module in Modules.list do
+            t.ok(module.weapon == nil or module.weapon.size < 4 or module.powergrid > hull.powergrid, `{hull.id} could carry a {module.id}`)
           end
         end
       end
@@ -491,9 +534,9 @@ suite:Case("every weapon, repairer, extender, plate and mining laser has a tech 
       t.ok(not module.internal or (Modules.Improved(module.id) ~= nil and Modules.Custom(module.id) == nil), module.id)
     end
   end
-  -- 21 weapons, 2 repairers, an extender and a plate in three sizes each, two mining lasers and a gas harvester,
+  -- 28 weapons, 2 repairers, an extender and a plate in three sizes each, two mining lasers and a gas harvester,
   -- the repairers for another ship (shield and armour, in three sizes), and the two things only a drone carries.
-  t.eq(improved, 21 + 4 * 3 + 3 + 2 * 3 + 2)
+  t.eq(improved, 28 + 4 * 3 + 3 + 2 * 3 + 2)
   t.ok(Modules.Improved("projector.entanglement") == nil and Modules.Improved("rig.shield") == nil)
   t.eq({ Modules.SizeOf(Modules.byId["autocannon.medium.ii"]), Modules.SizeOf(Modules.byId["shield.extender.large"]),
     Modules.SizeOf(Modules.byId["miner.small"]) }, { 2, 3, 1 })
@@ -548,7 +591,7 @@ suite:Case("the same modules have a custom make, between the plain one and tech 
     end
   end
   -- One of each for every module that has a tech 2 make and is not a drone's own.
-  t.eq({ customs, masterworks }, { 21 + 4 * 3 + 3 + 2 * 3, 21 + 4 * 3 + 3 + 2 * 3 })
+  t.eq({ customs, masterworks }, { 28 + 4 * 3 + 3 + 2 * 3, 28 + 4 * 3 + 3 + 2 * 3 })
   t.ok(Modules.Custom("projector.entanglement") == nil and Modules.Custom("autocannon.small.ii") == nil)
   t.ok(Modules.Masterwork("projector.entanglement") == nil and Modules.Masterwork("autocannon.small.custom") == nil)
   t.eq({ Modules.Graded("projector.entanglement", 2), Modules.Graded("autocannon.small", 3) }, { "projector.entanglement", "autocannon.small" })

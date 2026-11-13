@@ -21,7 +21,10 @@ its biggest hulls at about 5.
 PAINT is bare (as the engine made them; this if none is named), civil,
 vessari, talmar, kethri, vail or unbound.
 CLASS shows each hull as a ship, at that class's size: frigate,
-destroyer, cruiser or battleship. It is given that class's guns and
+destroyer, cruiser, battleship, attackbattlecruiser, battlecruiser,
+capitalindustrial, siegedreadnought, carrier, dreadnought or
+supercarrier (42, 75, 150, 400, 200, 300, 700, 950, 1000, 1300 and
+1300 m in radius). It is given that class's guns and
 engines where the game's rule of hardpoints lets them stand: on the
 hull's own faces, or, where none is wide enough for a gun's whole foot,
 on seats let into it. "no room" is written on a hull that has not the
@@ -45,7 +48,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
 PAINTS = ["bare", "civil", "vessari", "talmar", "kethri", "vail", "unbound"]
-CLASSES = ["frigate", "destroyer", "cruiser", "battleship"]
+CLASSES = ["frigate", "destroyer", "cruiser", "battleship", "attackbattlecruiser", "battlecruiser", "capitalindustrial",
+           "siegedreadnought", "carrier", "dreadnought", "supercarrier"]
 STYLES = ["old", "stout", "broad", "tall", "spear", "slab", "soft"]
 PLATES = [3, 4, 5, 5, 6, 7, 8, 9]
 DECKS = [False, False, False, True, True, True, True, True]

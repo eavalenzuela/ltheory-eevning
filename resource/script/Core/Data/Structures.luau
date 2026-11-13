@@ -74,11 +74,15 @@ export type ModuleType = {
   basePrice: number,
 }
 
--- A class of colony ship: a nomad faction's station.
+-- A class of colony ship: a nomad faction's station. It is a ship, of
+-- the class above every other (an ultracapital: Data/Ships'
+-- CLASS_NAMES), which has no size of its own: each such ship is the
+-- size it is (the project owner's ladder of 2026-11-12).
 export type ColonyShip = {
   id: string,           -- "colonyship.larmes"
   name: string,
   faction: string,
+  class: string,        -- "ultracapital"
   length: number,       -- m, bow to stern
   beam: number,         -- m, at its widest
 }
@@ -160,7 +164,7 @@ local modules: { ModuleType } = {
 -- The colony ships, by class. (The first of a size of ship above
 -- capitals. There is the one class so far.)
 local colonyShips: { ColonyShip } = {
-  { id = "colonyship.larmes", name = "Les Larmes de Nova", faction = "kethri", length = 10000, beam = 1000 },
+  { id = "colonyship.larmes", name = "Les Larmes de Nova", faction = "kethri", class = "ultracapital", length = 10000, beam = 1000 },
 }
 
 -- What a tower burns. A block is a block, whoever's tower it is for.

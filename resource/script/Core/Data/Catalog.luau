@@ -36,8 +36,9 @@ for index, faction in Factions.list do
   factionOrder[faction.id] = index
 end
 
-local CLASSES: { [string]: number } = { frigate = 1, destroyer = 2, cruiser = 3, battleship = 4, industrial = 5, freighter = 6, barge = 7,
-  capsule = 8 }
+local CLASSES: { [string]: number } = { frigate = 1, destroyer = 2, cruiser = 3, attackbattlecruiser = 4, battlecruiser = 5,
+  battleship = 6, carrier = 7, siegedreadnought = 8, dreadnought = 9, supercarrier = 10, industrial = 11, capitalindustrial = 12,
+  freighter = 13, barge = 14, capsule = 15 }
 
 -- Kinds of module, by the start of the type's id.
 local MODULES: { { any } } = {
@@ -58,7 +59,8 @@ local MAKES: { [string]: { any } } = {
 
 -- 1 small, 2 medium, 3 large, from a type's id.
 local function sizeOf(id: string): number
-  return if string.find(id, "large", 1, true) or string.find(id, "cruise", 1, true) then 3
+  return if string.find(id, ".xl", 1, true) or string.find(id, "siege", 1, true) then 4
+    elseif string.find(id, "large", 1, true) or string.find(id, "cruise", 1, true) then 3
     elseif string.find(id, "medium", 1, true) or string.find(id, "heavy", 1, true) then 2
     else 1
 end
@@ -72,7 +74,7 @@ function Catalog.Group(id: string): (string, number, number)
     local faction = Factions.byId[hull.lineage]
     -- (a tech 2 hull comes straight after the hull it is the improved make of)
     return if faction then faction.name else "Civilian", if faction then factionOrder[faction.id] else 99,
-      (CLASSES[hull.class] or 9) + (if hull.tech == 2 then 0.5 else 0)
+      (CLASSES[hull.class] or 19) + (if hull.tech == 2 then 0.5 else 0)
   end
   local info = Types.Get(id)
   local category = if info then info.category else ""

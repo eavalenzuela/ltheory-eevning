@@ -20,7 +20,10 @@
 --                  its rows are, how far it may reach, how it is bent,
 --                  how far its plates' edges are eased)
 --   F              as a ship: a frigate's guns and engines on it, then a
---                  destroyer's, a cruiser's, a battleship's, then none.
+--                  destroyer's, a cruiser's, a battleship's, then each
+--                  class of the ladder above (attack battlecruiser,
+--                  battlecruiser, capital industrial, siege dreadnought,
+--                  carrier, dreadnought, supercarrier), then none.
 --                  The engines go on the ends the hull has astern and
 --                  the guns where the game's rule of hardpoints lets
 --                  them (Hull.GrownShip); it says so if there is no room
@@ -58,6 +61,17 @@ local CLASSES: { Class } = {
   { name = "destroyer", metres = 75, turret = "autocannon.small", turrets = 5, launcher = "launcher.light", launchers = 1, engines = 2 },
   { name = "cruiser", metres = 150, turret = "artillery.medium", turrets = 4, launcher = "launcher.heavy", launchers = 1, engines = 3 },
   { name = "battleship", metres = 400, turret = "laser.beam.large", turrets = 6, launcher = "launcher.cruise", launchers = 2, engines = 4 },
+  -- (the owner's ladder of 2026-11-12: its sizes and its hardpoints. A
+  -- dreadnought's twenty are ten of a battleship's guns and ten of a
+  -- cruiser's, shown here as ten large turrets and ten heavy launchers;
+  -- a carrier, a supercarrier and a capital industrial have none.)
+  { name = "attackbattlecruiser", metres = 200, turret = "laser.beam.large", turrets = 4, launcher = "launcher.cruise", launchers = 0, engines = 3 },
+  { name = "battlecruiser", metres = 300, turret = "artillery.medium", turrets = 6, launcher = "launcher.heavy", launchers = 2, engines = 4 },
+  { name = "capitalindustrial", metres = 700, turret = "laser.beam.large", turrets = 0, launcher = "launcher.cruise", launchers = 0, engines = 6 },
+  { name = "siegedreadnought", metres = 950, turret = "laser.beam.xl", turrets = 4, launcher = "launcher.siege", launchers = 0, engines = 6 },
+  { name = "carrier", metres = 1000, turret = "laser.beam.large", turrets = 0, launcher = "launcher.cruise", launchers = 0, engines = 6 },
+  { name = "dreadnought", metres = 1300, turret = "laser.beam.large", turrets = 10, launcher = "launcher.heavy", launchers = 10, engines = 6 },
+  { name = "supercarrier", metres = 1300, turret = "laser.beam.large", turrets = 0, launcher = "launcher.cruise", launchers = 0, engines = 6 },
 }
 
 local KEPT = "cache/hulls-kept.txt"

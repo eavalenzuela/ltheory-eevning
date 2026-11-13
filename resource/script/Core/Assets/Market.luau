@@ -96,7 +96,9 @@ local function normalStock(info: Types.Info): number
       elseif info.id == "colony.command" then 20
       else 6
   elseif info.category == "ship" then
-    return 10
+    -- (and a capital is not a thing a station keeps ten of)
+    local hull = Ships.byId[info.id]
+    return if hull and Ships.Capital(hull.class) then 2 else 10
   elseif info.category == "implant" then
     return 12
   elseif info.category == "goods" then

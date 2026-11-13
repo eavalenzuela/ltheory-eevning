@@ -851,7 +851,8 @@ local stores: { [string]: { Stock } } = {}
 -- A faction's store: a datacore, the implants, the blueprints of the
 -- tech 2 makes of its own kinds of weapon, and, for a pilot it thinks
 -- well of, those of the tech 2 makes of its own hulls.
-Missions.HULL_POINTS = { frigate = 600, destroyer = 900, industrial = 900, cruiser = 1800, battleship = 3600 } :: { [string]: number }
+Missions.HULL_POINTS = { frigate = 600, destroyer = 900, industrial = 900, cruiser = 1800, attackbattlecruiser = 2700,
+  battlecruiser = 2700, battleship = 3600 } :: { [string]: number }
 function Missions.Store(faction: string): { Stock }
   local made = stores[faction]
   if made then

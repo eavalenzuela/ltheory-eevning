@@ -279,20 +279,24 @@ local function drawWheel(session: Session.Session, game: Core.Game, player: Core
     local name: string, label: string, middle: number, span: number = rack[1], rack[2], rack[3], rack[4]
     local count = counts[name]
     local pitch = math.min(0.047, span / math.max(1, count))
+    -- (a rack of many slots, as a dreadnought's twenty highs are, has
+    -- them smaller: as wide as the arc has room for each)
+    local size = math.max(14, math.min(SLOT, 2 * math.pi * RING * pitch * 0.94))
+    local small = math.min(20, size * 0.72)
     -- (its name, inside the wheel at the start of its arc)
     local lx, ly = onWheel(cx, cy, RING - 4, middle - pitch * (count + 1) / 2 - 0.004)
     Im.Text(string.upper(label), lx - Im.TextWidth(string.upper(label), 10) / 2, ly - 6, 10, Im.DIM)
     for slot = 1, count do
       local turn = middle + (slot - (count + 1) / 2) * pitch
       local sx, sy = onWheel(cx, cy, RING, turn)
-      local left, top = sx - SLOT / 2, sy - SLOT / 2
+      local left, top = sx - size / 2, sy - size / 2
       local item = fitted[name][slot]
       if item then
         local module = Modules.byId[item.type]
-        local hot, clicked = Im.Area(`Info:{item.type}`, left, top, SLOT, SLOT, true)
-        ItemIcon.Draw(item.type, left, top, SLOT)
+        local hot, clicked = Im.Area(`Info:{item.type}`, left, top, size, size, true)
+        ItemIcon.Draw(item.type, left, top, size)
         if hot then
-          Im.Fill(left, top, SLOT, SLOT, Im.ACCENT, 0.18)
+          Im.Fill(left, top, size, size, Im.ACCENT, 0.18)
           hint = `{label} {slot}:  {module.name}`
         end
         if clicked then
@@ -302,20 +306,20 @@ local function drawWheel(session: Session.Session, game: Core.Game, player: Core
         if module.weapon then
           local ix, iy = onWheel(cx, cy, RING - 36, turn)
           if item.charge ~= "" then
-            ItemIcon.Draw(item.charge, ix - 10, iy - 10, 20)
-            if hot or Im.Inside(ix - 10, iy - 10, 20, 20) then
+            ItemIcon.Draw(item.charge, ix - small / 2, iy - small / 2, small)
+            if hot or Im.Inside(ix - small / 2, iy - small / 2, small, small) then
               hint = `{label} {slot}:  {module.name},  {Types.Info(item.charge).name}`
                 .. (if module.weapon.clip > 0 then ` x{item.rounds}` else "")
             end
           else
-            WidgetRenderer_DrawPanel(vector.create(ix - 10, iy - 10), vector.create(20, 20), Im.WARN, 0.15, 0.6, 3)
+            WidgetRenderer_DrawPanel(vector.create(ix - small / 2, iy - small / 2), vector.create(small, small), Im.WARN, 0.15, 0.6, 3)
             if hot then
               hint ..= ",  nothing loaded"
             end
           end
         end
         -- taking it out: the corner away from the middle
-        local ux, uy = onWheel(sx, sy, SLOT * 0.62, turn)
+        local ux, uy = onWheel(sx, sy, size * 0.62, turn)
         local unfitHot, unfit = Im.Area(`Unfit:{name}{slot}`, ux - 8, uy - 8, 16, 16,
           (Session.CanDo(session, { kind = "Unfit", actor = 0, item = item.id })))
         WidgetRenderer_DrawPanel(vector.create(ux - 8, uy - 8), vector.create(16, 16),
@@ -329,8 +333,8 @@ local function drawWheel(session: Session.Session, game: Core.Game, player: Core
           Session.Do(session, { kind = "Unfit", actor = 0, item = item.id })
         end
       else
-        WidgetRenderer_DrawPanel(vector.create(left, top), vector.create(SLOT, SLOT), vector.create(0.22, 0.32, 0.42), 0.18, 0.75, 5)
-        if Im.Inside(left, top, SLOT, SLOT) then
+        WidgetRenderer_DrawPanel(vector.create(left, top), vector.create(size, size), vector.create(0.22, 0.32, 0.42), 0.18, 0.75, 5)
+        if Im.Inside(left, top, size, size) then
           hint = `{label} {slot}:  empty`
         end
       end

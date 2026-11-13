@@ -78,7 +78,8 @@ Factions.list = {
     paint = { primary = { 0.72, 0.58, 0.30 }, secondary = { 0.22, 0.20, 0.18 }, glow = { 1.0, 0.75, 0.35 } },
     shield = 0.8, armor = 1.35, hull = 1.05, velocity = 0.92, mass = 1.1, cpu = 1.1, powergrid = 0.95, capacitor = 0.9,
     lockRange = 1.1, cargo = 1.15, price = 1, mids = -1, lows = 1, hardpoints = 0,
-    hulls = { frigate = "Javelin", destroyer = "Halberd", cruiser = "Cuirass", battleship = "Bastion", industrial = "Caravan" },
+    hulls = { frigate = "Javelin", destroyer = "Halberd", cruiser = "Cuirass", battleship = "Bastion", industrial = "Caravan",
+      attackbattlecruiser = "Glaive", battlecruiser = "Pavise", carrier = "Citadel", dreadnought = "Rampart", siegedreadnought = "Trebuchet", capitalindustrial = "Emporium", supercarrier = "Stronghold" },
   },
   {
     -- (After the project owner's draft, 2026-11-10: humans, an
@@ -91,7 +92,8 @@ Factions.list = {
     paint = { primary = { 0.62, 0.66, 0.70 }, secondary = { 0.15, 0.32, 0.55 }, glow = { 0.45, 0.75, 1.0 } },
     shield = 1.2, armor = 0.85, hull = 0.95, velocity = 1.1, mass = 0.92, cpu = 1.1, powergrid = 0.95, capacitor = 0.95,
     lockRange = 1.0, cargo = 0.95, price = 1, mids = 1, lows = -1, hardpoints = 0,
-    hulls = { frigate = "Rapier", destroyer = "Sabre", cruiser = "Falchion", battleship = "Claymore", industrial = "Packet" },
+    hulls = { frigate = "Rapier", destroyer = "Sabre", cruiser = "Falchion", battleship = "Claymore", industrial = "Packet",
+      attackbattlecruiser = "Estoc", battlecruiser = "Scimitar", carrier = "Scabbard", dreadnought = "Zweihander", siegedreadnought = "Flamberge", capitalindustrial = "Argosy", supercarrier = "Armoury" },
   },
   {
     -- (After the project owner's draft, 2026-11-11: the Orun
@@ -106,7 +108,8 @@ Factions.list = {
     paint = { primary = { 0.36, 0.37, 0.39 }, secondary = { 0.62, 0.09, 0.07 }, glow = { 1.0, 0.84, 0.50 } },
     shield = 0.9, armor = 1.15, hull = 1.4, velocity = 0.9, mass = 1.12, cpu = 0.95, powergrid = 1.1, capacitor = 1.0,
     lockRange = 0.9, cargo = 1.25, price = 1, mids = 0, lows = 0, hardpoints = 0,
-    hulls = { frigate = "Mastiff", destroyer = "Boar", cruiser = "Aurochs", battleship = "Mammoth", industrial = "Ox" },
+    hulls = { frigate = "Mastiff", destroyer = "Boar", cruiser = "Aurochs", battleship = "Mammoth", industrial = "Ox",
+      attackbattlecruiser = "Wolverine", battlecruiser = "Bison", carrier = "Roost", dreadnought = "Behemoth", siegedreadnought = "Rhino", capitalindustrial = "Dromedary", supercarrier = "Rookery" },
   },
   {
     -- (Lasers and armour by the project owner's decision, 2026-11-10,
@@ -122,7 +125,8 @@ Factions.list = {
     paint = { primary = { 0.24, 0.30, 0.46 }, secondary = { 0.80, 0.80, 0.84 }, glow = { 0.55, 0.60, 1.0 } },
     shield = 0.85, armor = 1.25, hull = 1.0, velocity = 0.97, mass = 1.03, cpu = 0.95, powergrid = 1.1, capacitor = 1.15,
     lockRange = 1.2, cargo = 1.0, price = 1, mids = -1, lows = 1, hardpoints = 0,
-    hulls = { frigate = "Lancer", destroyer = "Gantry", cruiser = "Trellis", battleship = "Spire", industrial = "Lighter" },
+    hulls = { frigate = "Lancer", destroyer = "Gantry", cruiser = "Trellis", battleship = "Spire", industrial = "Lighter",
+      attackbattlecruiser = "Stanchion", battlecruiser = "Buttress", carrier = "Concourse", dreadnought = "Colonnade", siegedreadnought = "Obelisk", capitalindustrial = "Derrick", supercarrier = "Arcade" },
   },
 
   -- The pirates. Every hull of theirs began as one of the four above:
@@ -134,8 +138,11 @@ Factions.list = {
     paint = { primary = { 0.34, 0.24, 0.18 }, secondary = { 0.50, 0.48, 0.44 }, glow = { 1.0, 0.25, 0.10 } },
     shield = 0.8, armor = 0.85, hull = 1.1, velocity = 1.12, mass = 0.9, cpu = 0.85, powergrid = 1.0, capacitor = 0.85,
     lockRange = 0.85, cargo = 1.2, price = 0.55, mids = 0, lows = 0, hardpoints = 1,
-    hulls = { frigate = "Cutthroat", destroyer = "Jackal", cruiser = "Marauder", battleship = "Ravager", industrial = "Fence" },
-    donors = { frigate = "talmar", destroyer = "orun", cruiser = "vessari", battleship = "kethri", industrial = "orun" },
+    hulls = { frigate = "Cutthroat", destroyer = "Jackal", cruiser = "Marauder", battleship = "Ravager", industrial = "Fence",
+      attackbattlecruiser = "Reaver", battlecruiser = "Brigand", carrier = "Warren", dreadnought = "Tyrant", siegedreadnought = "Despoiler", capitalindustrial = "Hoard", supercarrier = "Matriarch" },
+    donors = { frigate = "talmar", destroyer = "orun", cruiser = "vessari", battleship = "kethri", industrial = "orun",
+      attackbattlecruiser = "talmar", battlecruiser = "vessari", carrier = "orun", dreadnought = "kethri", siegedreadnought = "vessari",
+      capitalindustrial = "talmar", supercarrier = "kethri" },
   },
 
   -- The three alien factions. Nothing of theirs is sold on a human
@@ -153,7 +160,8 @@ Factions.list = {
     paint = { primary = { 0.40, 0.27, 0.16 }, secondary = { 0.14, 0.14, 0.14 }, glow = { 1.0, 0.66, 0.24 } },
     shield = 1.5, armor = 0.5, hull = 0.6, velocity = 1.05, mass = 0.8, cpu = 1.3, powergrid = 1.3, capacitor = 1.5,
     lockRange = 1.4, cargo = 0.5, price = 3, mids = 2, lows = -2, hardpoints = 0,
-    hulls = { frigate = "Thorn", destroyer = "Barb", cruiser = "Pike", battleship = "Harpoon", industrial = "Drover" },
+    hulls = { frigate = "Thorn", destroyer = "Barb", cruiser = "Pike", battleship = "Harpoon", industrial = "Drover",
+      attackbattlecruiser = "Spur", battlecruiser = "Trident", carrier = "Quiver", dreadnought = "Partisan", siegedreadnought = "Ballista", capitalindustrial = "Herder", supercarrier = "Arsenal" },
   },
   {
     id = "skarn", name = "Skarn", kind = "alien", style = "carapace", weapon = "hybrid", launchers = 0, tank = "armor",
@@ -161,7 +169,8 @@ Factions.list = {
     paint = { primary = { 0.30, 0.16, 0.22 }, secondary = { 0.55, 0.50, 0.20 }, glow = { 0.85, 1.0, 0.20 } },
     shield = 0.4, armor = 1.6, hull = 1.2, velocity = 1.2, mass = 1.0, cpu = 0.8, powergrid = 1.2, capacitor = 0.9,
     lockRange = 0.7, cargo = 0.8, price = 3, mids = -1, lows = 2, hardpoints = 1,
-    hulls = { frigate = "Stinger", destroyer = "Render", cruiser = "Broodguard", battleship = "Leviathan", industrial = "Gorger" },
+    hulls = { frigate = "Stinger", destroyer = "Render", cruiser = "Broodguard", battleship = "Leviathan", industrial = "Gorger",
+      attackbattlecruiser = "Mauler", battlecruiser = "Carapace", carrier = "Broodmother", dreadnought = "Kraken", siegedreadnought = "Devourer", capitalindustrial = "Glutton", supercarrier = "Hivequeen" },
   },
   {
     id = "tessellate", name = "Tessellate", kind = "alien", style = "monolith", weapon = "projectile", launchers = 0.4, tank = "hull",
@@ -169,7 +178,8 @@ Factions.list = {
     paint = { primary = { 0.10, 0.10, 0.12 }, secondary = { 0.75, 0.75, 0.78 }, glow = { 1.0, 0.95, 0.80 } },
     shield = 0.9, armor = 1.1, hull = 2.2, velocity = 0.7, mass = 1.5, cpu = 1.4, powergrid = 1.2, capacitor = 1.2,
     lockRange = 1.6, cargo = 1.0, price = 3, mids = 0, lows = 0, hardpoints = 0,
-    hulls = { frigate = "Tile", destroyer = "Pylon", cruiser = "Annulus", battleship = "Monolith", industrial = "Reliquary" },
+    hulls = { frigate = "Tile", destroyer = "Pylon", cruiser = "Annulus", battleship = "Monolith", industrial = "Reliquary",
+      attackbattlecruiser = "Vertex", battlecruiser = "Lattice", carrier = "Matrix", dreadnought = "Polyhedron", siegedreadnought = "Prism", capitalindustrial = "Repository", supercarrier = "Tesseract" },
   },
 } :: { Faction }
 
@@ -178,7 +188,11 @@ for _, faction in Factions.list do
   Factions.byId[faction.id] = faction
 end
 
--- The classes every faction builds, smallest first.
-Factions.CLASSES = { "frigate", "destroyer", "cruiser", "battleship", "industrial" }
+-- The classes every faction builds: the first five, and then (by the
+-- project owner's ladder of 2026-11-12) the two kinds of battlecruiser
+-- and the capitals. (The names of the hulls of those, above, are first
+-- drafts.)
+Factions.CLASSES = { "frigate", "destroyer", "cruiser", "battleship", "industrial",
+  "attackbattlecruiser", "battlecruiser", "carrier", "dreadnought", "siegedreadnought", "capitalindustrial", "supercarrier" }
 
 return Factions
