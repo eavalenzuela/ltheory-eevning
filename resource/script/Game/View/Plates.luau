@@ -30,6 +30,10 @@ export type Look = {
   sheets: number,       -- sheets of plating to a unit of the model
   mottle: number?,      -- how unlike one sheet is to the next, 0 to 1 (a patchwork); 0 if not said
   lights: number?,      -- how many sheets have a lit port in them, 0 to 1; 0 if not said
+  -- No paint at all: the engine's own bare metal, as its first
+  -- generator's hulls were (and then nothing of the thing is lit, and
+  -- the colours above are only what its wreck is charred from).
+  bare: boolean?,
 }
 
 -- To build a thing as the wreck of itself, a piece at a time: only the
@@ -73,6 +77,15 @@ export type Builder = {
   -- What has been built that a thing can stand on, as shapes: every
   -- box, every skin, every hull in flat plates (Plates.Rests asks them).
   solids: { Solid },
+  -- Built to be left bare (a Look's 'bare'): what would be lit is left
+  -- out, since bare metal lights nothing. And 'scale': how many times
+  -- the size it was drawn at the bare thing is made when it is finished.
+  -- (The grain of the engine's metal is in the mesh's own units: a hull
+  -- of the first generator's drawn a sixth of the size it made them
+  -- would be all of a few great sheets. Whoever asks for it has what
+  -- stands on the thing to move out with it.)
+  bare: boolean?,
+  scale: number?,
   -- What is not plates: skins lofted through outlines, and what swells
   -- out of them (Plates.Loft, Plates.Fairing). One mesh for all of it.
   skin: Mesh?,
@@ -91,8 +104,12 @@ export type Builder = {
 
 local ZERO = vector.create(0, 0, 0)
 
-function Plates.New(seed: number, fine: number?): Builder
-  return { big = PlateMesh_Create(9), small = PlateMesh_Create(4), count = 0, seed = seed, fine = fine or 0.11, ruin = nil,
+-- ('quality' is how finely its plates are meshed, the small ones as
+-- finely as the big: 9 for the big and 4 for the small if not said,
+-- which is what the game's own hulls are drawn at. The engine's first
+-- generator meshed its hulls at 12.)
+function Plates.New(seed: number, fine: number?, quality: number?): Builder
+  return { big = PlateMesh_Create(quality or 9), small = PlateMesh_Create(quality or 4), count = 0, seed = seed, fine = fine or 0.11, ruin = nil,
     patch = nil, kept = 0, skin = nil, points = 0, apart = nil, apartPoints = 0, solids = {}, bend = nil, unbend = nil }
 end
 
@@ -111,6 +128,9 @@ end
 
 -- Put a plate in; or, building a ruin, perhaps not, or not straight.
 local function add(b: Builder, mesh: PlateMesh, part: number, center: vector, half: vector, turn: vector, bevel: number)
+  if b.bare and (math.floor(part) == Plates.GLOW or math.floor(part) == Plates.FIRE) then
+    return
+  end
   local tone = own(b)
   local patch = b.patch
   if patch then
@@ -708,6 +728,20 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
   end
   local mesh = PlateMesh_GetMesh(b.big)
   Mesh_ComputeOcclusion(mesh)
+
+  -- (bare, it is the engine's own metal and nothing else, at the size
+  -- that metal's grain is right for)
+  if look.bare then
+    local scale = b.scale
+    if scale and scale ~= 1 then
+      Mesh_Scale(mesh, vector.create(scale, scale, scale))
+      Mesh_ComputeOcclusion(mesh)
+    end
+    local metal = Model_Create()
+    Model_Add(metal, mesh, Material_Metal())
+    local box = Renderable_GetBound(metal)
+    return metal, box.lower, box.upper, { mesh }
+  end
 
   local skin = ShaderInstance_Create(Shader_Create("npm.jsl", "material/hull.jsl"))
   local function color(c: { number }): vector

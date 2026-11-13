@@ -20,11 +20,13 @@ and, from 4 up, with a broad deck under each. It made a frigate at 2 and
 its biggest hulls at about 5.
 PAINT is bare (as the engine made them; this if none is named), civil,
 vessari, talmar, kethri, vail or unbound.
-CLASS shows each hull as a ship: frigate, destroyer, cruiser or
-battleship. It is given that class's guns and engines where the game's
-rule of hardpoints lets them stand, and "no room" is written on a hull
-that has not the room for them (a bare hull is then shown in the civil
-paint).
+CLASS shows each hull as a ship, at that class's size: frigate,
+destroyer, cruiser or battleship. It is given that class's guns and
+engines where the game's rule of hardpoints lets them stand: on the
+hull's own faces, or, where none is wide enough for a gun's whole foot,
+on seats let into it. "no room" is written on a hull that has not the
+room for them even so. (A bare hull stays bare: the generator's own
+mesh and metal.)
 STYLE is the set of the generator's own numbers the hull is grown with:
 old (its own; this if none is named), stout, broad, tall, spear, slab or
 soft (Hull.STYLES in resource/script/Game/View/Hull.luau).

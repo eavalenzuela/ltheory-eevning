@@ -1565,9 +1565,11 @@ end
 -- looks until it is drawn again: undock, or board another. False, and
 -- why, if there is no such hull or the seed has not the room for its
 -- hardpoints. 'style' names one of the generator's styles (Hull.STYLES),
--- its own if not said. (resource/hull/seeds.txt does the same for good.)
-function Debug.HullSeed(type: string, seed: number, size: number, style: string?): (boolean, string)
-  return Hull.Seed(type, seed, size, style)
+-- its own if not said. It is drawn as the generator made it, in bare
+-- metal, unless 'painted' is true: then in the hull's own paint, as the
+-- game's hulls are drawn. (resource/hull/seeds.txt does the same for good.)
+function Debug.HullSeed(type: string, seed: number, size: number, style: string?, painted: boolean?): (boolean, string)
+  return Hull.Seed(type, seed, size, style, painted)
 end
 
 -- What is set in the menu's options: whether there is sound, and how

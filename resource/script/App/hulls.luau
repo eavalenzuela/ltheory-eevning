@@ -110,8 +110,10 @@ return AppShell.Create(function(): Widget
 
   local ships: { [string]: Hull.Built } = {}
 
-  -- The hull as a ship of a class, or nothing and why. (Painted: a bare
-  -- hull is the generator's own model, which has no engines.)
+  -- The hull as a ship of a class, or nothing and why. (In the paint it
+  -- is shown in: bare, it is still the generator's own mesh and metal,
+  -- with its engines let into it and seats for its guns where it needs
+  -- them.)
   local function ship(as: Class): (Hull.Built?, string)
     local name = `{seed}:{size}:{paint}:{style}:{as.name}`
     local had = ships[name]
@@ -125,7 +127,7 @@ return AppShell.Create(function(): Widget
     for _ = 1, as.launchers do
       table.insert(fit, as.launcher)
     end
-    local built, why = Hull.GrownShip(seed, stepsOf(size), decksOf(size), if PAINTS[paint] == "bare" then "civil" else PAINTS[paint],
+    local built, why = Hull.GrownShip(seed, stepsOf(size), decksOf(size), PAINTS[paint],
       as.metres, fit, as.turrets, as.launchers, as.engines, STYLES[style].name)
     if built then
       ships[name] = built
@@ -166,11 +168,8 @@ return AppShell.Create(function(): Widget
       built, why = ship(as)
       fitted = if built then `as a {as.name} of {as.metres} m: {as.turrets} turrets, {as.launchers} launchers, {#built.engines} engines`
         else `as a {as.name}: no room ({why})`
-      if built and PAINTS[paint] == "bare" then
-        fitted ..= "   (in the civil paint: the bare hull is the generator's own, without engines)"
-      end
     end
-    dim = built == nil and PAINTS[paint] == "bare"
+    dim = PAINTS[paint] == "bare"
     local plain = `{seed}:{size}:{paint}:{style}`
     local model: Renderable | Model = if built then built.model else models[plain] or make()
     if built == nil then

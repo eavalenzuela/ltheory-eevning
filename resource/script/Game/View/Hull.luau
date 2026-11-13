@@ -78,7 +78,18 @@ Hull.looks = {
     plating = { 0.40, 0.44, 0.48 }, patch = { 0.62, 0.62, 0.58 }, frame = { 0.16, 0.16, 0.17 },
     glow = { 0.70, 0.90, 1.0 }, trim = { 0.74, 0.52, 0.10 }, wear = 0.40, rust = 0.20, sheets = 3.2,
   },
+  -- No paint: the bare metal the engine's first generator left its
+  -- hulls in (Plates' 'bare'). A hull drawn from a seed is in this
+  -- unless it is asked for painted. (The colours are what its wreck is
+  -- charred from, and the light of its engines.)
+  bare = {
+    plating = { 0.50, 0.51, 0.52 }, patch = { 0.58, 0.58, 0.57 }, frame = { 0.42, 0.43, 0.44 },
+    glow = { 0.70, 0.90, 1.0 }, trim = { 0.50, 0.51, 0.52 }, wear = 0.40, rust = 0.20, sheets = 3.2, bare = true,
+  },
 } :: { [string]: Look }
+-- How finely the generator meshed its hulls (Item/ShipType/Generate),
+-- and so how finely a bare one is.
+local BARE_QUALITY = 12
 
 local block, beam, truss, conduit = Plates.Block, Plates.Beam, Plates.Truss, Plates.Conduit
 
@@ -2021,10 +2032,33 @@ local function bentAbeam(w: Warps, starboard: vector, port: vector): Hardpoint
   return { bentMount(w, starboard, STARBOARD), bentMount(w, port, PORT) }
 end
 
+-- Hardpoints, and exhausts, so many times as far from the middle of the
+-- hull they are on: for a hull that is made bigger than it was drawn
+-- (a bare one: Plates' 'scale').
+local function hardpointsOut(points: { Hardpoint }, by: number): { Hardpoint }
+  local out: { Hardpoint } = {}
+  for _, point in points do
+    local moved: Hardpoint = {}
+    for _, mount in point do
+      table.insert(moved, { at = mount.at * by, up = mount.up, fore = mount.fore })
+    end
+    table.insert(out, moved)
+  end
+  return out
+end
+local function exhaustsOut(by: number): { Exhaust }
+  local out: { Exhaust } = {}
+  for _, one in exhausts do
+    table.insert(out, { at = one.at * by, radius = one.radius * by })
+  end
+  return out
+end
+
 -- ---------------------------------------------------------------------
 -- A generated hull made a ship: engines on the ends it has astern, and
 -- hardpoints wherever the whole foot of a weapon has hull under it and
--- nothing over it. (The old engine did both by casting rays at the
+-- nothing over it: on the hull's own faces, or, where they will not
+-- take every mount, on seats let into it (seatsOf). (The old engine did both by casting rays at the
 -- finished hull, at random. Here the plates are asked, so the same seed
 -- is always the same ship, and the rule of hardpoints is kept: a pair
 -- of mounts on opposite sides, each wholly on the hull.)
@@ -2033,7 +2067,10 @@ type Box = { center: vector, size: vector, part: number }
 -- Where an engine goes: the middle of a face that looks aft, half its
 -- width and height, and whether there is one on the other side too.
 type End = { at: vector, wide: number, high: number, both: boolean }
-type Ship = { growth: Growth, ends: { End }, turrets: { Hardpoint }, launchers: { Hardpoint } }
+-- A seat: a low block let into the hull for a mount to stand on, where
+-- no face of the hull is flat enough to take the whole foot of one.
+type Seat = { center: vector, half: vector }
+type Ship = { growth: Growth, ends: { End }, turrets: { Hardpoint }, launchers: { Hardpoint }, seats: { Seat } }
 
 -- Every plate of a growth and its twin, as boxes.
 local function boxesOf(g: Growth): { Box }
@@ -2195,6 +2232,125 @@ local function standsOf(boxes: { Box }, up: vector, reach: number, gap: number, 
   return found
 end
 
+-- A seat's shape, in the reach of the foot it is for: half its width;
+-- how far its top stands over the highest of the hull under it; how
+-- far over the face it is let into its top may be at the most (no
+-- towers), and how far under its top the hull may lie at any corner of
+-- it (no stilts); how far into the lowest of the hull under it it
+-- goes; and how far its own edges are eased.
+local SEAT_WIDE, SEAT_LIFT, SEAT_RISE, SEAT_DROP, SEAT_SINK, SEAT_EASED = 1.1, 0.12, 0.8, 2.2, 0.3, 0.12
+-- How far apart the places asked are, in the same, and how many of them
+-- are kept for a face at the most.
+local SEAT_STEP, SEAT_MOST = 1.2, 400
+
+-- The places on a hull where a seat for a foot that reaches 'reach' can
+-- be let in: on top of it, under it, or on its starboard side, as
+-- standsOf has them. A hull grown of narrow strips has no one face wide
+-- enough for a gun, but strips run side by side: a seat lies across
+-- them. It has hull under the whole of it (under its middle, its
+-- corners and the middles of its sides there is a plate's face, clear
+-- of where the face is eased away, and near enough), its top is over
+-- everything of the hull that is under it, and it is let into the
+-- lowest of that. The places are asked on a grid over the whole of the
+-- hull, the centre line among them. Each is where the mount stands (the
+-- middle of the seat's top) and the seat. In the generator's units, as
+-- the hull is before its bend.
+local function seatsOf(boxes: { Box }, up: vector, reach: number, eased: number): { { at: vector, seat: Seat } }
+  local out = if up.x ~= 0 then v(1, 0, 0) else v(0, 1, 0)
+  local across = if up.x ~= 0 then v(0, 1, 0) else v(1, 0, 0)
+  local way = up.x + up.y
+  local half = SEAT_WIDE * reach
+  -- (each plate as numbers: where it is across and along, half of it
+  -- each way, how far out its face is the way the seat looks, and
+  -- whether a seat may rest on it)
+  type Flat = { a: number, z: number, ha: number, hz: number, top: number, rests: boolean }
+  local flats: { Flat } = {}
+  local least, most, aft, fore = math.huge, -math.huge, math.huge, -math.huge
+  for _, box in boxes do
+    local flat: Flat = { a = vector.dot(box.center, across), z = box.center.z, ha = vector.dot(box.size, across), hz = box.size.z,
+      top = way * vector.dot(box.center, out) + vector.dot(box.size, out), rests = box.part ~= FRAME }
+    table.insert(flats, flat)
+    least, most = math.min(least, flat.a - flat.ha), math.max(most, flat.a + flat.ha)
+    aft, fore = math.min(aft, flat.z - flat.hz), math.max(fore, flat.z + flat.hz)
+  end
+  local keep = 1 - 0.5 * eased
+  -- The hull at a place: how far out the face of it is that a seat
+  -- could rest on there (nil: none), and how far out anything of it is.
+  local function under(a: number, z: number): (number?, number)
+    local face: number? = nil
+    local over = -math.huge
+    for _, flat in flats do
+      local da, dz = math.abs(a - flat.a), math.abs(z - flat.z)
+      if da < flat.ha and dz < flat.hz then
+        over = math.max(over, flat.top)
+        if flat.rests and da < flat.ha * keep and dz < flat.hz * keep and (face == nil or flat.top > face) then
+          face = flat.top
+        end
+      end
+    end
+    return face, over
+  end
+  local CORNERS = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 } }
+  local step = SEAT_STEP * reach
+  local found: { { at: vector, seat: Seat } } = {}
+  -- (the starboard side's places are mirrored for the port side's: on
+  -- top and beneath, the grid has the centre line and both sides of it)
+  local first = math.ceil(least / step)
+  for column = first, math.floor(most / step) do
+    local a = column * step
+    for row = math.ceil(aft / step), math.floor(fore / step) do
+      local z = row * step
+      local level, over = under(a, z)
+      if level then
+        local top, low = over, level
+        local good = true
+        for _, corner in CORNERS do
+          local face, above = under(a + corner[1] * half, z + corner[2] * half)
+          if face == nil then
+            good = false
+            break
+          end
+          top, low = math.max(top, above), math.min(low, face)
+        end
+        top += SEAT_LIFT * reach
+        if good and top - level <= SEAT_RISE * reach and top - low <= SEAT_DROP * reach then
+          local bottom = low - SEAT_SINK * reach
+          table.insert(found, {
+            at = out * (way * top) + across * a + v(0, 0, z),
+            seat = { center = out * (way * (top + bottom) / 2) + across * a + v(0, 0, z),
+              half = out * ((top - bottom) / 2) + across * half + v(0, 0, half) },
+          })
+        end
+      end
+    end
+  end
+  -- (no more of them than can be gone through: evenly, of those there are)
+  if #found > SEAT_MOST then
+    local kept: { { at: vector, seat: Seat } } = {}
+    for index = 1, SEAT_MOST do
+      table.insert(kept, found[1 + math.floor((index - 1) * #found / SEAT_MOST)])
+    end
+    found = kept
+  end
+  table.sort(found, function(one, other): boolean
+    local p, q = one.at, other.at
+    if p.z ~= q.z then
+      return p.z > q.z
+    elseif p.x ~= q.x then
+      return p.x > q.x
+    end
+    return p.y > q.y
+  end)
+  return found
+end
+
+-- The seats a ship's mounts stand on, let into its hull.
+local function seated(b: Builder, seats: { Seat })
+  for _, seat in seats do
+    mid(b, PLATING, seat.center, seat.half, SEAT_EASED)
+  end
+end
+
 -- What a growth is as a ship 'metres' in radius that carries what 'fit'
 -- names on so many turret and launcher hardpoints, with so many engines
 -- (each with its twin, where it is not on the centre line); or nothing,
@@ -2206,7 +2362,7 @@ end
 local function shipOf(g: Growth, metres: number, fit: { string }, turrets: number, launchers: number, engines: number): (Ship?, string)
   local boxes = boxesOf(g)
   local bend = warped(g.style.warps, g.middle)
-  local ship: Ship = { growth = g, ends = endsOf(boxes, engines), turrets = {}, launchers = {} }
+  local ship: Ship = { growth = g, ends = endsOf(boxes, engines), turrets = {}, launchers = {}, seats = {} }
   local wanted = turrets + launchers
   if wanted == 0 then
     return ship, ""
@@ -2222,7 +2378,7 @@ local function shipOf(g: Growth, metres: number, fit: { string }, turrets: numbe
   -- (a tenth over: the engines make the hull a little longer than its plates)
   local unit = 1.1 * Arms.SIZE[size] * radius / metres
   local reach, gap = Arms.REACH * unit, Arms.GAP * unit
-  type Stand = { at: vector, mount: Mount }
+  type Stand = { at: vector, mount: Mount, seat: Seat? }
   local function stands(up: vector, mirrored: boolean?): { Stand }
     local out: { Stand } = {}
     for _, p in standsOf(boxes, up, reach / GROWN, gap / GROWN, g.style.eased) do
@@ -2234,70 +2390,118 @@ local function shipOf(g: Growth, metres: number, fit: { string }, turrets: numbe
     end
     return out
   end
+  -- (the same on seats let into the hull: each is asked with its seat there)
+  local function seats(up: vector, mirrored: boolean?): { Stand }
+    local out: { Stand } = {}
+    for _, place in seatsOf(boxes, up, reach / GROWN, g.style.eased) do
+      local flip = if mirrored then v(-1, 1, 1) else v(1, 1, 1)
+      local seat: Seat = { center = place.seat.center * flip, half = place.seat.half }
+      local at = place.at * flip
+      local mount = bentBy(bend, at, if mirrored then -up else up)
+      table.insert(scratch.solids, { center = seat.center * GROWN, half = seat.half * GROWN, turn = v(0, 0, 0) })
+      local rests = Plates.Rests(scratch, mount.at, mount.up, v(0, 0, 1), reach, gap)
+      table.remove(scratch.solids)
+      if rests then
+        table.insert(out, { at = at, mount = mount, seat = seat })
+      end
+    end
+    return out
+  end
+  local apart = 2.4 * reach / GROWN
+  -- The hardpoints, from the places there are: all that are wanted, or
+  -- none and why not.
+  local function choose(tops: { Stand }, bottoms: { Stand }, starboard: { Stand }, port: { Stand }): ({ Hardpoint }?, { Stand }, string)
+    local taken: { Stand } = {}     -- every mount taken
+    local firsts: { Stand } = {}    -- and the first of each hardpoint
+    -- (two mounts that look the same way are kept apart)
+    local function free(stand: Stand): boolean
+      for _, other in taken do
+        if vector.dot(stand.mount.up, other.mount.up) > 0.5 and vector.magnitude(stand.at - other.at) < apart then
+          return false
+        end
+      end
+      return true
+    end
+    local function away(stand: Stand): number
+      local least = math.huge
+      for _, first in firsts do
+        least = math.min(least, vector.magnitude(stand.at - first.at))
+      end
+      return least
+    end
+    local points: { Hardpoint } = {}
+    for _ = 1, wanted do
+      local best: Stand? = nil
+      local other: Stand? = nil
+      local bestAway = -1
+      for _, top in tops do
+        local far = away(top)
+        if far > bestAway and free(top) then
+          -- (beneath, and on the other side of the centre line if it can be)
+          local wish = v(-top.at.x, top.at.y, top.at.z)
+          local match: Stand? = nil
+          local near = math.huge
+          for _, bottom in bottoms do
+            local off = vector.magnitude((bottom.at - wish) * v(1, 0, 1))
+            if off < near and vector.dot(top.mount.up, bottom.mount.up) < -0.6 and free(bottom) then
+              match, near = bottom, off
+            end
+          end
+          if match then
+            best, other, bestAway = top, match, far
+          end
+        end
+      end
+      for _, side in starboard do
+        -- (a place on top is taken before one on the side that is as far off)
+        local far = 0.999 * away(side)
+        if far > bestAway and free(side) then
+          for _, twinned in port do
+            if twinned.at == side.at * v(-1, 1, 1) and free(twinned) and vector.dot(side.mount.up, twinned.mount.up) < -0.6 then
+              best, other, bestAway = side, twinned, far
+            end
+          end
+        end
+      end
+      if best == nil or other == nil then
+        return nil, taken, `room for {#points} of {wanted} hardpoints ({#tops} places on top, {#bottoms} beneath, {#starboard} a side)`
+      end
+      table.insert(taken, best)
+      table.insert(taken, other)
+      table.insert(firsts, best)
+      table.insert(points, { best.mount, other.mount })
+    end
+    return points, taken, ""
+  end
+  -- On the hull's own faces if they will take every mount whole. If
+  -- they will not, on seats let into it; and if seats alone will not
+  -- do either, on both.
   local tops, bottoms = stands(UP), stands(DOWN)
   local starboard, port = stands(STARBOARD), stands(STARBOARD, true)
-  local apart = 2.4 * reach / GROWN
-  local taken: { Stand } = {}     -- every mount taken
-  local firsts: { Stand } = {}    -- and the first of each hardpoint
-  -- (two mounts that look the same way are kept apart)
-  local function free(stand: Stand): boolean
-    for _, other in taken do
-      if vector.dot(stand.mount.up, other.mount.up) > 0.5 and vector.magnitude(stand.at - other.at) < apart then
-        return false
+  local points, taken, why = choose(tops, bottoms, starboard, port)
+  if points == nil then
+    local seatTops, seatBottoms = seats(UP), seats(DOWN)
+    local seatStarboard, seatPort = seats(STARBOARD), seats(STARBOARD, true)
+    local plain = why
+    points, taken, why = choose(seatTops, seatBottoms, seatStarboard, seatPort)
+    if points == nil then
+      local function both(one: { Stand }, other: { Stand }): { Stand }
+        local all = table.clone(one)
+        table.move(other, 1, #other, #all + 1, all)
+        return all
       end
+      points, taken, why = choose(both(tops, seatTops), both(bottoms, seatBottoms), both(starboard, seatStarboard), both(port, seatPort))
     end
-    return true
+    if points == nil then
+      return nil, `{plain}; and on seats, {why}`
+    end
   end
-  local function away(stand: Stand): number
-    local least = math.huge
-    for _, first in firsts do
-      least = math.min(least, vector.magnitude(stand.at - first.at))
+  for _, stand in taken do
+    if stand.seat then
+      table.insert(ship.seats, stand.seat)
     end
-    return least
   end
-  local points: { Hardpoint } = {}
-  for _ = 1, wanted do
-    local best: Stand? = nil
-    local other: Stand? = nil
-    local bestAway = -1
-    for _, top in tops do
-      local far = away(top)
-      if far > bestAway and free(top) then
-        -- (beneath, and on the other side of the centre line if it can be)
-        local wish = v(-top.at.x, top.at.y, top.at.z)
-        local match: Stand? = nil
-        local near = math.huge
-        for _, bottom in bottoms do
-          local off = vector.magnitude((bottom.at - wish) * v(1, 0, 1))
-          if off < near and vector.dot(top.mount.up, bottom.mount.up) < -0.6 and free(bottom) then
-            match, near = bottom, off
-          end
-        end
-        if match then
-          best, other, bestAway = top, match, far
-        end
-      end
-    end
-    for _, side in starboard do
-      -- (a place on top is taken before one on the side that is as far off)
-      local far = 0.999 * away(side)
-      if far > bestAway and free(side) then
-        for _, twinned in port do
-          if twinned.at == side.at * v(-1, 1, 1) and free(twinned) and vector.dot(side.mount.up, twinned.mount.up) < -0.6 then
-            best, other, bestAway = side, twinned, far
-          end
-        end
-      end
-    end
-    if best == nil or other == nil then
-      return nil, `room for {#points} of {wanted} hardpoints ({#tops} places on top, {#bottoms} beneath, {#starboard} a side)`
-    end
-    table.insert(taken, best)
-    table.insert(taken, other)
-    table.insert(firsts, best)
-    table.insert(points, { best.mount, other.mount })
-  end
-  for index, point in points do
+  for index, point in points :: { Hardpoint } do
     local list: { Hardpoint } = if index <= turrets then ship.turrets else ship.launchers
     table.insert(list, point)
   end
@@ -2329,6 +2533,9 @@ type Design = {
   -- How small a plate of it still has its edges eased finely (Plates'
   -- 'fine'): 0.11, if not said.
   fine: number?,
+  -- How finely its plates are meshed (Plates.New's 'quality'): as the
+  -- game's hulls are, if not said.
+  quality: number?,
   -- Half the length it is drawn, where its mounts were worked out from
   -- that (the Kethri's: footOn). Hull.Build checks it is so.
   reach: number?,
@@ -2667,7 +2874,7 @@ local designs: { [string]: Design } = {
 -- of, carrying what that design is shown with, on the hardpoints the
 -- hull has by the data. Nothing, and why, if there is no such hull or
 -- the seed has not the room for its hardpoints.
-local function seeded(type: string, seed: number, size: number, style: string?): (Design?, string)
+local function seeded(type: string, seed: number, size: number, style: string?, painted: boolean?): (Design?, string)
   local hull = Ships.byId[type]
   local had = designs[type]
   if hull == nil or had == nil then
@@ -2688,10 +2895,15 @@ local function seeded(type: string, seed: number, size: number, style: string?):
   if ship == nil then
     return nil, why
   end
+  -- (as the generator made it: its own mesh, and no paint. Painted, it
+  -- is in the paint of the design it takes the place of, drawn as the
+  -- game's hulls are.)
   local design: Design = {
-    faction = had.faction, look = had.look, sheets = had.sheets, even = had.even, fine = MANNER_FINE,
+    faction = had.faction, look = if painted then had.look else Hull.looks.bare, sheets = had.sheets, even = had.even, fine = MANNER_FINE,
+    quality = if painted then nil else BARE_QUALITY,
     draw = function(b: Builder)
       grown(b, ship.growth)
+      seated(b, ship.seats)
       jets(b, ship.ends)
     end,
     turrets = ship.turrets, launchers = ship.launchers, fit = fit,
@@ -2708,9 +2920,19 @@ do
   local ok, text = pcall(File_Read, Hull.SEEDS)
   if ok and type(text) == "string" then
     for line in string.gmatch(text, "[^\r\n]+") do
-      local name, seed, size, style = string.match(line, "^%s*([%a%d%._]+)%s+(%d+)%s+(%d+)%s*(%a*)%s*$")
+      local name, seed, size, words = string.match(line, "^%s*([%a%d%._]+)%s+(%d+)%s+(%d+)%s*([%a%s]-)%s*$")
       if name and string.sub(name, 1, 1) ~= "#" then
-        local design, why = seeded(name, tonumber(seed) or 0, tonumber(size) or 0, if style ~= "" then style else nil)
+        -- (after the size, in any order: a style, and "painted")
+        local style: string? = nil
+        local painted = false
+        for word in string.gmatch(words or "", "%a+") do
+          if word == "painted" then
+            painted = true
+          else
+            style = word
+          end
+        end
+        local design, why = seeded(name, tonumber(seed) or 0, tonumber(size) or 0, style, painted)
         if design then
           designs[name] = design
         else
@@ -3174,14 +3396,17 @@ function Hull.Build(type: string, pirate: boolean?, rank: number?): Built?
     design.turrets, design.launchers = place()
     design.place = nil
   end
-  local b = Plates.New(#type * 1.37, design.fine)
+  local b = Plates.New(#type * 1.37, design.fine, design.quality)
+  -- (a bare hull is the generator's, and is made the size it made them)
+  local grow = if look.bare then 1 / GROWN else 1
+  b.bare, b.scale = look.bare, grow
   b.patch = if patched then PATCHED else design.patch
   -- (a pirate's is a patchwork whatever it was)
   b.even = if patched then nil else design.even
   table.clear(exhausts)
   design.draw(b)
   local model, lower, upper, meshes = Plates.Finish(b, look, design.sheets)
-  local size = upper - lower
+  local size = (upper - lower) / grow
   -- (a design has to have the hardpoints the game says the hull has)
   local hull = Ships.byId[type]
   assert(hull == nil or (#design.turrets == hull.turrets and #design.launchers == hull.launchers),
@@ -3224,8 +3449,8 @@ function Hull.Build(type: string, pirate: boolean?, rank: number?): Built?
       end
     end
   end
-  local result: Built = { model = model, radius = radius, turrets = design.turrets,
-    launchers = design.launchers, fit = design.fit, engines = table.clone(exhausts), glow = look.fire or look.glow,
+  local result: Built = { model = model, radius = radius * grow, turrets = hardpointsOut(design.turrets, grow),
+    launchers = hardpointsOut(design.launchers, grow), fit = design.fit, engines = exhaustsOut(grow), glow = look.fire or look.glow,
     lower = lower, upper = upper, hanging = hanging, meshes = meshes }
   built[key] = result
   return result
@@ -3291,15 +3516,21 @@ function Hull.GrownShip(seed: number, steps: number, decks: boolean, paint: stri
   if ship == nil then
     return nil, why
   end
-  local b = Plates.New(seed * 1.37, MANNER_FINE)
+  -- (in a faction's paint, if one is named; bare, as the generator made
+  -- it, if that is; the civil blue-grey if nothing is)
+  local look = Hull.looks[paint or "civil"] or Hull.looks.civil
+  local b = Plates.New(seed * 1.37, MANNER_FINE, if look.bare then BARE_QUALITY else nil)
+  local grow = if look.bare then 1 / GROWN else 1
+  b.bare, b.scale = look.bare, grow
   table.clear(exhausts)
   grown(b, ship.growth)
+  seated(b, ship.seats)
   jets(b, ship.ends)
-  local look = Hull.looks[paint or "civil"] or Hull.looks.civil
   local model, lower, upper, meshes = Plates.Finish(b, look, nil)
   local size = upper - lower
-  return { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = ship.turrets, launchers = ship.launchers, fit = fit,
-    engines = table.clone(exhausts), glow = look.fire or look.glow, lower = lower, upper = upper, hanging = {}, meshes = meshes }, ""
+  return { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = hardpointsOut(ship.turrets, grow),
+    launchers = hardpointsOut(ship.launchers, grow), fit = fit,
+    engines = exhaustsOut(grow), glow = look.fire or look.glow, lower = lower, upper = upper, hanging = {}, meshes = meshes }, ""
 end
 
 -- A built hull as it is drawn cloaked: its own shape, as light bending
@@ -3471,8 +3702,8 @@ end
 -- a tech 2 make of it are not changed: resource/hull/seeds.txt, read
 -- when the game starts, does it for them too). False, and why, if there
 -- is no such hull or the seed has not the room for its hardpoints.
-function Hull.Seed(type: string, seed: number, size: number, style: string?): (boolean, string)
-  local design, why = seeded(type, math.floor(seed), size, style)
+function Hull.Seed(type: string, seed: number, size: number, style: string?, painted: boolean?): (boolean, string)
+  local design, why = seeded(type, math.floor(seed), size, style, painted)
   if design == nil then
     return false, why
   end

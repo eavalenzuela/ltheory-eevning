@@ -2,22 +2,33 @@
 #
 # One hull to a line: its type, a seed, and a size from 1 to 8 (how many
 # plates the generator grows: 3, 4, 5, 5, 6, 7, 8, 9, and from size 4 up
-# a broad deck under each); and after those, if it is not to be in the
-# generator's own style, a style: stout, broad, tall, spear, slab, soft.
-# A hull named here is drawn as that seed makes
-# it, in its own paint, with its engines and hardpoints put on by rule,
-# in place of the design drawn for it in Game/View/Hull.luau. A line that
-# starts with # is not read.
+# a broad deck under each); and after those, in any order, if they are
+# wanted: a style, if it is not to be in the generator's own (stout,
+# broad, tall, spear, slab, soft), and the word painted.
+#
+# A hull named here is drawn as that seed makes it, in place of the
+# design drawn for it in Game/View/Hull.luau: the generator's own mesh
+# in the generator's own bare metal, at the size the hull's class is
+# (the size above is how much hull the generator grows, not how big the
+# ship is: a frigate is a frigate's size whatever it is grown at). Its
+# engines are let into the ends it has astern, and its hardpoints are
+# put on by rule: on its own faces where one will take a gun's whole
+# foot, and where none will, on seats let into the hull. With the word
+# painted it is drawn as the game's own hulls are instead, in the paint
+# of the design it takes the place of. A line that starts with # is not
+# read.
 #
 # Find seeds with:   bin/launch hulls        (S goes round the styles,
 #                                             F shows one as a ship)
-#                    script/hulls seeds 1 40 2 civil frigate stout
-# The types are in resource/script/Core/Data/Ships.luau (frigate.courier,
-# frigate.prospector, barge.quarry, industrial.hauler, freighter.dray,
-# and each faction's: frigate.javelin, cruiser.trellis, ...).
+#                    script/hulls seeds 1 40 2 bare frigate
+# The types are in resource/script/Core/Data/Ships.luau: each faction
+# has one hull of each class (the Vessari: frigate.javelin,
+# destroyer.halberd, cruiser.cuirass, battleship.bastion,
+# industrial.caravan), and there are anybody's (frigate.courier,
+# frigate.prospector, barge.quarry, industrial.hauler, freighter.dray).
 #
-# If a seed has not the room for a hull's hardpoints the game says so
-# when it starts and draws the hull as it was.
+# If a seed has not the room for a hull's hardpoints even on seats, the
+# game says so when it starts and draws the hull as it was.
 #
 # frigate.prospector   12   2
-# frigate.courier       7   2   stout
+# frigate.courier       7   2   stout painted
