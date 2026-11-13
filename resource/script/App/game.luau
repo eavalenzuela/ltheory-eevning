@@ -1007,8 +1007,9 @@ function Debug.JumpReach(): (number, string)
   local here = Core.Query.Player(session.game).system
   local systems = session.game.state.galaxy.systems
   local best, most = 0, -1
-  for id, system in systems do
-    local far = math.sqrt((system.x - systems[here].x) ^ 2 + (system.y - systems[here].y) ^ 2)
+  for id in systems do
+    -- (through space: the map has a height: Describe/Galaxy)
+    local far = Galaxy.Apart(session.game.state.galaxy, here, id)
     if drive and id ~= here and far <= drive.range and far > most then
       best, most = id, far
     end
@@ -1041,6 +1042,23 @@ end
 function Debug.Beacons(): number
   local drive = Core.Query.JumpDrive(session.game)
   return if drive then #drive.beacons else 0
+end
+
+-- How the map is looked at: turned so far and tilted so far, radians (a
+-- quarter turn of tilt is from straight over it). Given either, it is
+-- looked at so. And how many systems the pilot's jump drive reaches.
+function Debug.MapView(turn: number?, tilt: number?): (number, number)
+  return Map.View(turn, tilt)
+end
+
+function Debug.JumpWithin(): number
+  local drive = Core.Query.JumpDrive(session.game)
+  local here = Core.Query.Player(session.game).system
+  local count = 0
+  for id in session.game.state.galaxy.systems do
+    count += if drive and id ~= here and Galaxy.Apart(session.game.state.galaxy, here, id) <= drive.range then 1 else 0
+  end
+  return count
 end
 
 -- Open the map on a system, as a click on it does (its number).

@@ -699,4 +699,28 @@ suite:Case("a save with the tech 2 make of a hull that every hull had opens with
   end
 end)
 
+suite:Case("a save from before the map had a height opens with the heights its galaxy would have had", function(t)
+  local game = Core.New({ galaxySeed = 3, historySeed = 1, systems = 40 })
+  local heights: { number } = {}
+  local most = 0
+  for id, system in game.state.galaxy.systems do
+    heights[id] = system.z
+    most = math.max(most, math.abs(system.z))
+  end
+  -- (a relief: some of it well out of the plane, none of it far, and neighbours at much the same height)
+  t.ok(most > 2 and most <= 1.2 * 25, `the highest system is {most} light years out of the plane`)
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 67
+  for _, system in file.state.galaxy.systems do
+    system.z = nil
+  end
+  local old, oldLength = Codec.Encode(file)
+  local opened = Core.Load(old, oldLength)
+  for id, system in opened.state.galaxy.systems do
+    t.eq(system.z, heights[id], `system {id}`)
+  end
+  t.eq(Core.Hash(opened), Core.Hash(game))
+end)
+
 return suite

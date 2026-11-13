@@ -11,6 +11,16 @@
 -- (Im.Press): "Map:close", "Map:factions", "Map:security",
 -- "Map:destination", "Map:clear", "Map:safest", "Map:autopilot", and
 -- "Map:jump" for a hull with a jump drive.
+--
+-- The galaxy has a height as well as the two ways it lies (every system
+-- is a little above or below the plane of the map: Describe/Galaxy), so
+-- the map is seen from a slant: each system stands on a stalk over the
+-- place on the plane it is above (or hangs under it), and the plane's
+-- edge is drawn. Dragging with the right button turns it and tilts it;
+-- "Map:flat" lays it flat (seen from straight over, as a chart), and
+-- "Map:left" and "Map:right" turn it a step. For a hull with a jump
+-- drive the sphere its drive reaches is drawn round where the pilot is
+-- (it grows with the skill), and the systems inside it are picked out.
 
 local Colors = require("@lt/Colors")
 local Core = require("@lt/Core/Api")
@@ -43,14 +53,30 @@ local BAND_NAME: { [string]: string } = { secure = "Secure space", low = "Low se
 local open = false
 local picked = 0          -- the system picked on the map, or 0
 local bySecurity = false  -- colour by security, not by whose
+-- How the map is looked at: how far it is turned about the upright
+-- (radians), and how steeply it is looked down on (a quarter turn is
+-- from straight over it). And where the cursor was a frame ago, while
+-- the right button is held: the map turns by how far it has moved.
+local TURNED, TILTED = 0.5, 0.75
+local yaw, pitch = TURNED, TILTED
+local dragged: vector? = nil
 
 -- What is made once: where each system is on the map (in pixels from
 -- the map's middle), the gates as one icon, and the systems as an icon
 -- for every colour they are drawn in.
 type Drawn = {
   epoch: number, width: number, height: number,
+  -- (how it was looked at when it was made, how many pixels a light
+  -- year is, the middle of the galaxy in light years, and where the
+  -- middle of what is drawn is, in pixels, from that)
+  yaw: number, pitch: number, scale: number, middle: vector, shift: vector,
+  -- (and the sphere that was given room on it: round which system, and
+  -- how far it reaches; 0 and 0 for none)
+  round: number, reach: number,
   at: { vector },
   gates: Icon,
+  -- (each system's stalk to the plane, and the plane's edge)
+  stalks: Icon,
   owned: { { icon: Icon, color: vector } },
   banded: { { icon: Icon, color: vector } },
 }
@@ -74,21 +100,77 @@ function Map.Picked(): number
   return picked
 end
 
+-- How the map is looked at: turned so far, tilted so far (radians).
+-- Given either, it is looked at so from now on.
+function Map.View(turn: number?, tilt: number?): (number, number)
+  yaw = turn or yaw
+  pitch = math.clamp(tilt or pitch, 0.3, math.pi / 2)
+  return yaw, pitch
+end
+
+-- Where a place in the galaxy (light years, 'z' its height) is on a map
+-- looked at so, in light years across and down the screen from the
+-- place 'middle'.
+local function seen(x: number, y: number, z: number, middle: vector, turn: number, tilt: number): vector
+  local dx, dy = x - middle.x, y - middle.y
+  local c, sn = math.cos(turn), math.sin(turn)
+  local rx, ry = dx * c - dy * sn, dx * sn + dy * c
+  return vector.create(rx, ry * math.sin(tilt) - z * math.cos(tilt))
+end
+
 local function colorOf(faction: string): vector
   return WHOSE[faction] or UNCLAIMED
 end
 
-local function make(galaxy: Galaxy.Galaxy, epoch: number, width: number, height: number): Drawn
+-- ('round' and 'reach': a sphere to leave room for, round a system and
+-- so many light years out from it, for a hull with a jump drive; 0 and
+-- 0 for none.)
+local function make(galaxy: Galaxy.Galaxy, epoch: number, width: number, height: number, round: number, reach: number): Drawn
   local systems = galaxy.systems
   local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
   for _, system in systems do
     minX, maxX = math.min(minX, system.x), math.max(maxX, system.x)
     minY, maxY = math.min(minY, system.y), math.max(maxY, system.y)
   end
-  local scale = math.min((width - 2 * MARGIN) / math.max(1e-3, maxX - minX), (height - 2 * MARGIN) / math.max(1e-3, maxY - minY))
-  local at: { vector } = {}
+  local middle = vector.create((minX + maxX) / 2, (minY + maxY) / 2)
+  -- (as it is looked at: every system, and the place on the plane under
+  -- it, and the room all of that takes)
+  local low, high = vector.create(math.huge, math.huge), vector.create(-math.huge, -math.huge)
+  local over: { vector } = {}
+  local under: { vector } = {}
   for id, system in systems do
-    at[id] = vector.create((system.x - (minX + maxX) / 2) * scale, (system.y - (minY + maxY) / 2) * scale)
+    over[id] = seen(system.x, system.y, system.z, middle, yaw, pitch)
+    under[id] = seen(system.x, system.y, 0, middle, yaw, pitch)
+    low, high = vector.min(low, vector.min(over[id], under[id])), vector.max(high, vector.max(over[id], under[id]))
+  end
+  -- (and the edge of the plane, a little outside the outermost systems;
+  -- and the sphere, which is a circle however it is looked at)
+  local edge = 0.04 * math.max(maxX - minX, maxY - minY)
+  local corners = { vector.create(minX - edge, minY - edge), vector.create(maxX + edge, minY - edge),
+    vector.create(maxX + edge, maxY + edge), vector.create(minX - edge, maxY + edge) }
+  for _, corner in corners do
+    local p = seen(corner.x, corner.y, 0, middle, yaw, pitch)
+    low, high = vector.min(low, p), vector.max(high, p)
+  end
+  if over[round] and reach > 0 then
+    low, high = vector.min(low, over[round] - vector.create(reach, reach)), vector.max(high, over[round] + vector.create(reach, reach))
+  end
+  local scale = math.min((width - 2 * MARGIN) / math.max(1e-3, high.x - low.x), (height - 2 * MARGIN) / math.max(1e-3, high.y - low.y))
+  local shift = (low + high) / 2 * scale
+  local at: { vector } = {}
+  for id in systems do
+    at[id] = over[id] * scale - shift
+  end
+  local stalks = Icon_Create()
+  for id, system in systems do
+    if math.abs(system.z) > 0.05 and vector.magnitude(over[id] - under[id]) * scale > 1.5 then
+      Icon_AddGlyph(stalks, Glyph_Line(at[id], under[id] * scale - shift, 1, 1))
+    end
+  end
+  for index, corner in corners do
+    local following = corners[index % 4 + 1]
+    Icon_AddGlyph(stalks, Glyph_Line(seen(corner.x, corner.y, 0, middle, yaw, pitch) * scale - shift,
+      seen(following.x, following.y, 0, middle, yaw, pitch) * scale - shift, 1, 1))
   end
   local gates = Icon_Create()
   for id, system in systems do
@@ -126,7 +208,8 @@ local function make(galaxy: Galaxy.Galaxy, epoch: number, width: number, height:
     end
     Icon_AddGlyph(its, Glyph_Box(at[id], vector.create(size, size), 1, 1))
   end
-  return { epoch = epoch, width = width, height = height, at = at, gates = gates, owned = ownedList, banded = bandedList }
+  return { epoch = epoch, width = width, height = height, yaw = yaw, pitch = pitch, scale = scale, middle = middle, shift = shift,
+    round = round, reach = reach, at = at, gates = gates, stalks = stalks, owned = ownedList, banded = bandedList }
 end
 
 function Map.Draw(session: Session.Session, left: number, top: number, width: number, height: number)
@@ -152,13 +235,45 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   if Im.Toggle("Security", x + 364, y + 8, 100, 26, bySecurity, "Map:security") then
     bySecurity = true
   end
+  -- How it is looked at: flat (from straight over) or from a slant, and
+  -- turned a step either way. (The right button, held, turns and tilts
+  -- it by hand: below.)
+  local flat = pitch >= math.pi / 2 - 1e-3
+  if Im.Toggle("Flat", x + 500, y + 8, 60, 26, flat, "Map:flat") then
+    -- (flat, it is a chart: square to the window, the way it was drawn
+    -- before it had a height)
+    yaw, pitch = if flat then TURNED else 0, if flat then TILTED else math.pi / 2
+  end
+  if Im.Button("<", x + 566, y + 8, 28, 26, true, "Map:left") then
+    yaw -= math.pi / 12
+  end
+  if Im.Button(">", x + 598, y + 8, 28, 26, true, "Map:right") then
+    yaw += math.pi / 12
+  end
 
   -- The map.
   local mapW, mapH = w - SIDE - 16, h - 56
   local kept = drawn
   local made: Drawn
-  if kept == nil or kept.epoch ~= session.epoch or kept.width ~= mapW or kept.height ~= mapH or #kept.at ~= #systems then
-    made = make(galaxy, session.epoch, mapW, mapH)
+  -- (the right button held over the map turns it and tilts it)
+  local pointer = Im.Cursor()
+  local onMap = pointer.x >= x + 8 and pointer.x <= x + 8 + mapW and pointer.y >= y + 48 and pointer.y <= y + 48 + mapH
+  if Mouse_RightDown() and (dragged ~= nil or onMap) then
+    local was = dragged or pointer
+    yaw += (pointer.x - was.x) * 0.008
+    pitch = math.clamp(pitch + (pointer.y - was.y) * 0.006, 0.3, math.pi / 2)
+    dragged = pointer
+  else
+    dragged = nil
+  end
+  -- (a hull with a jump drive has the sphere it reaches drawn round where
+  -- the pilot is, and the map leaves room for it)
+  local reaching = Core.Query.JumpDrive(game)
+  local round = if reaching then Core.Query.Player(game).system else 0
+  local reach = if reaching then reaching.range else 0
+  if kept == nil or kept.epoch ~= session.epoch or kept.width ~= mapW or kept.height ~= mapH or #kept.at ~= #systems
+    or kept.yaw ~= yaw or kept.pitch ~= pitch or kept.round ~= round or kept.reach ~= reach then
+    made = make(galaxy, session.epoch, mapW, mapH, round, reach)
     drawn = made
     if systems[picked] == nil then
       picked = 0
@@ -184,6 +299,7 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
       Im.Text(label, middle.x - Im.TextWidth(label, 15) / 2, middle.y - 8, 15, Im.DIM, 0.85)
     end
   end
+  Icon_Draw(made.stalks, centre, 1, Im.DIM, 0.22)
   Icon_Draw(made.gates, centre, 1, Im.DIM, 0.35)
   local groups: { { icon: Icon, color: vector } } = if bySecurity then made.banded else made.owned
   for _, group in groups do
@@ -225,10 +341,40 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
     end
   end
   mark(here, 11, Colors.White, true)
-  -- (for a hull with a jump drive: where a beacon is lit for it, brighter
-  -- where the drive reaches)
-  local reaching = Core.Query.JumpDrive(game)
+  -- For a hull with a jump drive: the sphere its drive reaches, round
+  -- where the pilot is (its outline, which is a circle however the map
+  -- is looked at, and three rings round it that turn with the map: the
+  -- level one, and two that stand upright); the systems inside it, each
+  -- with a small ring; and where a beacon is lit for it, brighter where
+  -- the drive reaches.
+  local within = 0
   if reaching then
+    local home = systems[here]
+    local function place(px: number, py: number, pz: number): vector
+      return centre + seen(px, py, pz, made.middle, made.yaw, made.pitch) * made.scale - made.shift
+    end
+    Glyph_Draw(Glyph_Ring(centre + made.at[here], reach * made.scale, 1, 1, 0), 0, 1, NEXT, 0.55)
+    local STEPS = 48
+    for ring = 1, 3 do
+      local before: vector? = nil
+      for step = 0, STEPS do
+        local angle = step / STEPS * 2 * math.pi
+        local c, sn = reach * math.cos(angle), reach * math.sin(angle)
+        local point = if ring == 1 then place(home.x + c, home.y + sn, home.z)
+          elseif ring == 2 then place(home.x + c, home.y, home.z + sn)
+          else place(home.x, home.y + c, home.z + sn)
+        if before then
+          Glyph_Draw(Glyph_Line(before, point, 1, 1), 0, 1, NEXT, if ring == 1 then 0.35 else 0.16)
+        end
+        before = point
+      end
+    end
+    for id in systems do
+      if id ~= here and Galaxy.Apart(galaxy, here, id) <= reach then
+        within += 1
+        Glyph_Draw(Glyph_Ring(centre + made.at[id], 4.5, 1, 1, 0), 0, 1, NEXT, 0.5)
+      end
+    end
     for _, beacon in reaching.beacons do
       if beacon.system ~= here then
         mark(beacon.system, 7, if beacon.reached then NEXT else Im.DIM, false)
@@ -328,7 +474,8 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   local drive = Core.Query.JumpDrive(game, shown)
   if drive then
     Im.Heading("JUMP DRIVE", px, line, 14, Im.DIM)
-    Im.TextRight(string.format("reaches %.1f ly", drive.range), px + SIDE - 24, line + 1, 12, Im.DIM)
+    Im.TextRight(string.format("reaches %.1f ly: %d %s", drive.range, within, if within == 1 then "system" else "systems"),
+      px + SIDE - 24, line + 1, 12, NEXT)
     line += 22
     if shown == here then
       Im.Text(`{Format.Whole(drive.held)} fuel blocks in the hold` .. (if drive.cooling > 0
@@ -341,10 +488,10 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
       if Im.Button("Jump", px, line, 90, 28, drive.ready, "Map:jump") then
         Session.Do(session, { kind = "JumpDrive", actor = 0, target = shown })
       end
+      line += 34
       if not drive.ready then
-        Im.Text(drive.why, px + 98, line + 7, 12, Im.WARN)
+        line = Im.Wrapped(drive.why, px, line, SIDE - 28, 12, Im.WARN) + 6
       end
-      line += 36
     end
     -- (it comes out at a beacon: the ones that are lit, nearest first)
     local lit = table.clone(drive.beacons)

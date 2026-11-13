@@ -83,7 +83,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 67
+Core.SAVE_VERSION = 68
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -317,6 +317,14 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- 59: a corporation keeps its books by head, and a tower keeps count
   -- of its running. A save from before has what was earned and spent
   -- under no head, and its towers begin their count now.
+  -- 68: the map has a height (Describe/Galaxy): each system lies a
+  -- little above or below its plane. A galaxy of a save from before is
+  -- given the heights it would have had.
+  [67] = function(state: any)
+    if state.galaxy and state.galaxy.systems and state.galaxy.systems[1] and state.galaxy.systems[1].z == nil then
+      Galaxy.Heights(state.galaxy)
+    end
+  end,
   -- 67: the Vessari's ships are the project owner's list of them
   -- (Data/Factions), as the Talmar's became theirs: the hulls they had
   -- are gone, and each is the hull of their line that stands where it

@@ -29,6 +29,7 @@
 -- beacon; space a drive does not reach into.)
 
 local Constants = require("@lt/Core/Data/Constants")
+local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
@@ -73,10 +74,11 @@ function Jumping.Range(state: State.State, ship: number): number
   return Jumping.RANGE * (1 + Jumping.FURTHER * level)
 end
 
--- How far it is from one system to another on the map, light years.
+-- How far it is from one system to another, light years: through
+-- space, which has a height as well as the two ways the map lies
+-- (Describe/Galaxy).
 function Jumping.Distance(state: State.State, from: number, to: number): number
-  local a, b = state.galaxy.systems[from], state.galaxy.systems[to]
-  return if a and b then math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2) else math.huge
+  return Galaxy.Apart(state.galaxy, from, to)
 end
 
 -- The fuel blocks a ship burns to jump so far.

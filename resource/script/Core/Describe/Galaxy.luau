@@ -16,6 +16,10 @@ export type SystemNode = {
   name: string,
   x: number,              -- light years on the map
   y: number,
+  -- And above the plane of the map (below it, if less than nothing): the
+  -- map has a gentle relief (Galaxy.Heights), which is in how far apart
+  -- two systems are (Galaxy.Apart) and in nothing else of the galaxy.
+  z: number,
   neighbors: { number },  -- ids of systems one jump away, ascending
   -- Whose it is (Galaxy.Claim): the id of a human faction
   -- (Data/Factions), or "" for space nobody holds.
@@ -377,6 +381,44 @@ end
 
 local SPACING = 4 -- light years between neighbours, roughly
 
+-- How far out of the plane of the map a system can lie, as a share of
+-- how far the map is across; and the least and the most that is, light
+-- years, whatever the size of the galaxy.
+Galaxy.RELIEF = 0.06
+Galaxy.RELIEF_LEAST, Galaxy.RELIEF_MOST = 2, 25
+
+-- Give every system its height over the plane of the map: a gentle
+-- relief over the whole of it, so that systems near each other lie at
+-- much the same height, and a little of each system's own. It follows
+-- from the galaxy's seed and from where each system is on the map, and
+-- from nothing else, so a galaxy of a save from before there were
+-- heights is given the ones it would have had.
+function Galaxy.Heights(galaxy: Galaxy)
+  local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
+  for _, system in galaxy.systems do
+    minX, maxX = math.min(minX, system.x), math.max(maxX, system.x)
+    minY, maxY = math.min(minY, system.y), math.max(maxY, system.y)
+  end
+  local span = math.max(1e-3, maxX - minX, maxY - minY)
+  local high = math.clamp(Galaxy.RELIEF * span, Galaxy.RELIEF_LEAST, Galaxy.RELIEF_MOST)
+  local rng = Rng.For(galaxy.seed, 7411)
+  local a, b, c = Rng.Float(rng, 0, 2 * math.pi), Rng.Float(rng, 0, 2 * math.pi), Rng.Float(rng, 0, 2 * math.pi)
+  for _, system in galaxy.systems do
+    local u, v = (system.x - minX) / span * 2 * math.pi, (system.y - minY) / span * 2 * math.pi
+    local wave = 0.6 * math.sin(1.3 * u + a) * math.cos(0.9 * v + b) + 0.4 * math.sin(2.1 * (u + v) + c)
+    local own = Rng.Float(Rng.For(galaxy.seed, system.id, 7412), -0.15, 0.15)
+    -- (to a hundredth of a light year: nobody quotes it finer)
+    system.z = math.floor(high * (wave + own) * 100 + 0.5) / 100
+  end
+end
+
+-- How far apart two systems are, light years: through space, and not
+-- along the gates.
+function Galaxy.Apart(galaxy: Galaxy, from: number, to: number): number
+  local a, b = galaxy.systems[from], galaxy.systems[to]
+  return if a and b then math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2 + (a.z - b.z) ^ 2) else math.huge
+end
+
 function Galaxy.Describe(seed: number, count: number): Galaxy
   assert(count >= 1 and count % 1 == 0, "a galaxy needs a whole number of systems")
   local rng = Rng.For(seed, 1001)
@@ -407,8 +449,8 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
       name = Names.System(rng)
     end
     used[name] = true
-    systems[id] = { id = id, name = name, x = x, y = y, neighbors = {}, owner = "", nearest = "", home = false, hops = 0, security = 1,
-      region = 1, constellation = 1 }
+    systems[id] = { id = id, name = name, x = x, y = y, z = 0, neighbors = {}, owner = "", nearest = "", home = false, hops = 0,
+      security = 1, region = 1, constellation = 1 }
   end
 
   local function link(a: number, b: number)
@@ -449,6 +491,7 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
   end
 
   local galaxy: Galaxy = { seed = seed, systems = systems, regions = {}, constellations = {} }
+  Galaxy.Heights(galaxy)
   Galaxy.Claim(galaxy)
   Galaxy.Regions(galaxy)
   return galaxy
