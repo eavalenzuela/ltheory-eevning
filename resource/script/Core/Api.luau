@@ -1873,7 +1873,12 @@ end
 -- How far it reaches, the fuel blocks in the hold and the seconds until
 -- it is ready (0: now); and, for a system, how far that is, what fuel
 -- it would take, and whether the jump can be made now ('why': why not).
-export type JumpDriveStatus = { range: number, held: number, cooling: number, distance: number, fuel: number, ready: boolean, why: string }
+-- And the beacons lit for the pilot, wherever they are: each one's
+-- system, whose it is ("tower" or "ship") and its name, how far off its
+-- system is, and whether that is within the drive's reach.
+export type JumpBeacon = { system: number, kind: string, name: string, distance: number, reached: boolean }
+export type JumpDriveStatus = { range: number, held: number, cooling: number, distance: number, fuel: number, ready: boolean, why: string,
+  beacons: { JumpBeacon } }
 function Query.JumpDrive(game: Game, system: number?): JumpDriveStatus?
   local state = game.state
   local ship = state.player.ship
@@ -1886,8 +1891,16 @@ function Query.JumpDrive(game: Game, system: number?): JumpDriveStatus?
   local known = state.galaxy.systems[to] ~= nil and to ~= here
   local distance = if known then Jumping.Distance(state, here, to) else 0
   local ok, why = Jumping.Validate(state, { kind = "JumpDrive", actor = ship, target = to })
-  return { range = Jumping.Range(state, ship), held = Jumping.Held(state, ship), cooling = Jumping.Cooling(state, ship),
-    distance = distance, fuel = if known then Jumping.Fuel(state, ship, distance) else 0, ready = ok, why = why or "" }
+  local range = Jumping.Range(state, ship)
+  local beacons: { JumpBeacon } = {}
+  for _, beacon in Jumping.Beacons(state, ship) do
+    local far = Jumping.Distance(state, here, beacon.system)
+    table.insert(beacons, { system = beacon.system, kind = beacon.kind :: string, name = beacon.name, distance = far,
+      reached = beacon.system ~= here and far <= range })
+  end
+  return { range = range, held = Jumping.Held(state, ship), cooling = Jumping.Cooling(state, ship),
+    distance = distance, fuel = if known then Jumping.Fuel(state, ship, distance) else 0, ready = ok, why = why or "",
+    beacons = beacons }
 end
 
 -- A tower the pirates hold a moon with (Tactical/Keeps), asked for by

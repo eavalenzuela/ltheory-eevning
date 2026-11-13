@@ -204,7 +204,7 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
   if hull.jump or hull.stealth then
     local built = section(sheet, "Built with")
     if hull.jump then
-      row(built, "Jump drive", "reaches 20 light years without a gate, on fuel blocks")
+      row(built, "Jump drive", "reaches 20 light years without a gate, to a beacon, on fuel blocks")
     end
     if hull.stealth then
       row(built, "Stealth", "a cloak does not slow it, and is broken only from half as far")

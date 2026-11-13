@@ -8,6 +8,7 @@ local Drones = require("@lt/Core/Tactical/Drones")
 local Fleet = require("@lt/Core/Tactical/Fleet")
 local Items = require("@lt/Core/Assets/Items")
 local Digger = require("@lt/Core/Tactical/Digger")
+local Jumping = require("@lt/Core/Tactical/Jumping")
 local Ores = require("@lt/Core/Data/Ores")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Rng = require("@lt/Core/Kernel/Rng")
@@ -2011,6 +2012,27 @@ suite:Case("a round that carries to several stations takes a load to each in tur
   hand.drops, hand.turn = { plain }, 1
   t.ok((submit(other, { kind = "FleetOrder", actor = 0, what = "haul", pilot = hand.id, target = market, type = "ore" })))
   t.eq({ #hand.drops, hand.turn, Fleet.Drop(hand) }, { 0, 0, market })
+end)
+
+suite:Case("a hired pilot with a jump beacon generator fitted keeps it running whenever they are out in space: a beacon for the pilot to jump to", function(t)
+  local game, second = docked()
+  local state = game.state
+  local generator = Items.Equip(state, second.id, "beacon.jump", nil)
+  hired(game, second, 3)
+  local me, theirs = adrift(game, second)
+  steps(game, 10)
+  local lit = false
+  for _, running in theirs.vitals.running do
+    lit = lit or running.item == generator.id
+  end
+  t.ok(lit, "the hired pilot should have lit the beacon")
+  -- It is a beacon for the pilot's ship, where the hired pilot is; and it stays lit.
+  local beacons = Jumping.Beacons(state, me.id)
+  t.eq({ #beacons, beacons[1].kind, beacons[1].id, beacons[1].system } :: { any }, { 1, "ship", second.id, theirs.system } :: { any })
+  steps(game, 120)
+  t.eq(#Jumping.Beacons(state, me.id), 1)
+  -- (and it is nothing they switch on for a fight and off after it, as they do a hardener)
+  t.ok(theirs.vitals.capacitor > 0.2 * theirs.vitals.capacitorMax, "the generator should not run a frigate dry")
 end)
 
 return suite

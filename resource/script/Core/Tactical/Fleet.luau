@@ -763,7 +763,7 @@ end
 -- fight: a hardener or an afterburner, but nothing that makes the ship
 -- a bigger target (a microwarpdrive).
 local function forFights(module: Modules.ModuleType): boolean
-  if module.boost == nil then
+  if module.boost == nil or module.beacon then
     return false
   end
   for _, modifier in module.boost do
@@ -865,6 +865,12 @@ local function mend(state: State.State, me: State.Ball, fighting: boolean, event
         give(state, { kind = "ActivateModule", actor = me.id, item = item.id }, events)
       elseif on and (have >= 0.98 * most or vitals.capacitor < 0.1 * vitals.capacitorMax) then
         give(state, { kind = "DeactivateModule", actor = me.id, item = item.id }, events)
+      end
+    elseif module.beacon then
+      -- (a jump beacon generator: lit whenever they are out in space
+      -- and have the capacitor for it, for the pilot to jump to)
+      if not running(me, item.id) and vitals.capacitor > 0.25 * vitals.capacitorMax then
+        give(state, { kind = "ActivateModule", actor = me.id, item = item.id }, events)
       end
     elseif not fighting and forFights(module) and running(me, item.id) then
       give(state, { kind = "DeactivateModule", actor = me.id, item = item.id }, events)

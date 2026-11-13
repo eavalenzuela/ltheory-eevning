@@ -8,6 +8,7 @@ local Items = require("@lt/Core/Assets/Items")
 local Jumping = require("@lt/Core/Tactical/Jumping")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
+local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
 local Structures = require("@lt/Core/Data/Structures")
 local Test = require("@lt/Tool/Test")
@@ -37,6 +38,23 @@ local function refused(game: Core.Game, command: State.Command): string?
   command.actor = game.state.player.ship
   local ok, why = Core.Validate(game, command)
   return if ok then "(accepted)" else why
+end
+
+-- A tower of the pilot's in a system, lit, with a Jump Beacon anchored
+-- and online: the station it is.
+local function tower(game: Core.Game, system: number): number
+  local state = game.state
+  for _, object in Space.Describe(state, system).objects do
+    if object.kind == "moon" then
+      local id = Starbases.Raise(state, system, object, Structures.towerById["tower.vessari.small"], "player",
+        object.x + object.radius * 3, object.y, object.z)
+      local starbase = state.starbases[id]
+      starbase.ready, starbase.fuel, starbase.burnt = state.tick, 100000, state.tick
+      table.insert(starbase.modules, { type = Structures.BEACON, ready = state.tick })
+      return id
+    end
+  end
+  error(`system {system} has no moon to put a tower at`)
 end
 
 -- The system farthest from another that is within so many light years
@@ -70,6 +88,11 @@ suite:Case("a hull built with a jump drive goes to a system within its reach wit
   local to, beyond = reach(game, home, Jumping.RANGE * (1 + Jumping.FURTHER))
   t.ok(to ~= 0 and beyond ~= 0, "the galaxy should have a system in reach and one out of it")
   -- It takes the skill, and reaches a tenth further for each level of it.
+  -- There has to be a beacon lit there: a Jump Beacon online at a lit tower of the pilot's.
+  t.eq(refused(game, { kind = "JumpDrive", actor = 0, target = to }), "no beacon is lit there")
+  t.eq(#assert(Core.Query.JumpDrive(game, to)).beacons, 0)
+  local lit = tower(game, to)
+  tower(game, beyond)
   t.eq(refused(game, { kind = "JumpDrive", actor = 0, target = to }), "needs Jump Drive Operation 1")
   state.skills[Jumping.SKILL] = 1
   t.near(Jumping.Range(state, me.id), Jumping.RANGE * 1.1, 1e-9)
@@ -99,13 +122,16 @@ suite:Case("a hull built with a jump drive goes to a system within its reach wit
   for _, event in Core.TakeEvents(game) do
     jumped = if event.kind == "Jumped" then event else jumped
   end
-  local beacon = assert(Jumping.Beacon(state, to))
-  t.eq({ me.system, assert(jumped).from, assert(jumped).to, assert(jumped).drive, assert(jumped).arrival } :: { any },
-    { to, home, to, true, beacon.id } :: { any })
-  t.ok(Space.Gap(me :: any, beacon :: any) <= Jumping.LAND * 1.2 and me.grid == beacon.id, "it should come out beside the station")
+  local beacon = assert(Jumping.Beacon(state, me.id, to))
+  t.eq({ me.system, assert(jumped).from, assert(jumped).to, assert(jumped).drive, assert(jumped).arrival, beacon.kind, beacon.id } :: { any },
+    { to, home, to, true, lit, "tower", lit } :: { any })
+  t.ok(Space.Gap(me :: any, beacon :: any) <= Jumping.LAND * 1.2 and me.grid == beacon.id, "it should come out beside the tower")
   t.eq({ Jumping.Held(state, me.id), me.mode } :: { any }, { 25, "stop" } :: { any })
   t.ok(me.vitals.capacitor < 0.1 * me.vitals.capacitorMax)
   t.eq(Core.Query.Player(game).system, to)
+  -- (the way home has no beacon: the drive goes nowhere there is none)
+  t.eq(refused(game, { kind = "JumpDrive", actor = 0, target = home }), "no beacon is lit there")
+  local back = tower(game, home)
   -- The drive cools before it fires again; and it is in the save, cooling.
   me.vitals.capacitor = me.vitals.capacitorMax
   Items.Add(state, Structures.FUEL.id, fuel, me.id, "cargo")
@@ -124,14 +150,53 @@ suite:Case("a hull built with a jump drive goes to a system within its reach wit
   me.vitals.scrambled = true
   t.eq(refused(game, { kind = "JumpDrive", actor = 0, target = home }), "warp scrambled")
   me.vitals.scrambled = false
-  t.ok((submit(game, { kind = "Dock", actor = 0, target = beacon.id })))
-  for _ = 1, 600 do
+  -- A tower that goes dark, or whose beacon is taken down, lights nobody's way.
+  t.eq(refused(game, { kind = "JumpDrive", actor = 0, target = home }), "(accepted)")
+  state.starbases[back].fuel = 0
+  t.eq(refused(game, { kind = "JumpDrive", actor = 0, target = home }), "no beacon is lit there")
+  state.starbases[back].fuel = 1000
+  table.clear(state.starbases[back].modules)
+  t.eq(refused(game, { kind = "JumpDrive", actor = 0, target = home }), "no beacon is lit there")
+  table.insert(state.starbases[back].modules, { type = Structures.BEACON, ready = state.tick })
+  t.ok((submit(game, { kind = "Dock", actor = 0, target = lit })))
+  for _ = 1, 900 do
     Core.Step(game)
     if state.ships[me.id].docked ~= 0 then
       break
     end
   end
   t.eq(refused(game, { kind = "JumpDrive", actor = 0, target = home }), "docked")
+end)
+
+suite:Case("a ship of the pilot's fleet with a beacon generator running lights the way to where it is, and the jump comes out beside it", function(t)
+  local game, me = flying("carrier.scoppo")
+  local state = game.state
+  local home = me.system
+  state.skills[Jumping.SKILL] = 1
+  local to = (reach(game, home, Jumping.RANGE))
+  Items.Add(state, Structures.FUEL.id, 2000, me.id, "cargo")
+  -- A ship of the pilot's out in space there, with a generator fitted and not running: no beacon.
+  local scout = Space.NewShip(state, "frigate.akashi", "Scout", "player", 0)
+  local generator = Items.Equip(state, scout.id, "beacon.jump", nil)
+  local far = assert(Space.Describe(state, to).objects[1])
+  local there = Space.Launch(state, scout, to, far.x + far.radius + 5e6, far.y, far.z)
+  t.eq(refused(game, { kind = "JumpDrive", actor = 0, target = to }), "no beacon is lit there")
+  -- Running, it is one: the map has it, a ship's, within the drive's reach.
+  t.ok((Core.Submit(game, { kind = "ActivateModule", actor = scout.id, item = generator.id })))
+  Core.Step(game)
+  local status = assert(Core.Query.JumpDrive(game, to))
+  t.eq({ #status.beacons, status.beacons[1].system, status.beacons[1].kind, status.beacons[1].reached, status.ready } :: { any },
+    { 1, to, "ship", true, true } :: { any })
+  t.ok((submit(game, { kind = "JumpDrive", actor = 0, target = to })))
+  t.eq({ me.system, me.grid == there.grid } :: { any }, { to, true } :: { any })
+  t.ok(Space.Gap(me :: any, there :: any) <= Jumping.LAND * 1.2, "it should come out beside the ship that lit the way")
+  -- Its own beacon is nobody's way to itself, and one switched off is none.
+  t.eq(#Jumping.Beacons(state, scout.id), 0)
+  t.ok((Core.Submit(game, { kind = "DeactivateModule", actor = scout.id, item = generator.id })))
+  for _ = 1, 15 do
+    Core.Step(game)
+  end
+  t.eq(#Jumping.Beacons(state, me.id), 0)
 end)
 
 return suite

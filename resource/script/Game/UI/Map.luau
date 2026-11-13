@@ -225,6 +225,16 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
     end
   end
   mark(here, 11, Colors.White, true)
+  -- (for a hull with a jump drive: where a beacon is lit for it, brighter
+  -- where the drive reaches)
+  local reaching = Core.Query.JumpDrive(game)
+  if reaching then
+    for _, beacon in reaching.beacons do
+      if beacon.system ~= here then
+        mark(beacon.system, 7, if beacon.reached then NEXT else Im.DIM, false)
+      end
+    end
+  end
   if session.destination ~= 0 and session.destination ~= here then
     mark(session.destination, 11, Im.ACCENT, true)
   end
@@ -335,6 +345,26 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
         Im.Text(drive.why, px + 98, line + 7, 12, Im.WARN)
       end
       line += 36
+    end
+    -- (it comes out at a beacon: the ones that are lit, nearest first)
+    local lit = table.clone(drive.beacons)
+    table.sort(lit, function(a: Core.JumpBeacon, b: Core.JumpBeacon): boolean
+      if a.distance ~= b.distance then
+        return a.distance < b.distance
+      end
+      return a.system < b.system
+    end)
+    if #lit == 0 then
+      Im.Text("No beacon is lit: a Jump Beacon at a tower of", px, line, 12, Im.DIM)
+      Im.Text("yours, or a fleet ship with a generator running.", px, line + 15, 12, Im.DIM)
+      line += 34
+    end
+    for index, beacon in lit do
+      if index <= 3 then
+        Im.Text(string.format("Beacon: %s, %s (%.1f ly)", systems[beacon.system].name, beacon.kind, beacon.distance), px, line, 12,
+          if beacon.reached then NEXT else Im.DIM)
+        line += 16
+      end
     end
   end
   line += 4

@@ -13,23 +13,30 @@
 --   - It takes most of a full capacitor, and leaves little of it.
 --   - It cannot be done from warp, with a warp scrambler on the ship, or
 --     again until the drive has cooled (Jumping.COOLDOWN).
--- The ship comes out at rest a little way off a station of the system
--- it went to (the first there is), or off a gate where there is no
--- station. What it had out and near comes with it, as into a warp
+--   - And there has to be a beacon lit in the system it goes to (the
+--     project owner's rule, 2026-11-13): a Jump Beacon anchored and
+--     online at a lit tower of the pilot's there (Data/Structures,
+--     Assets/Starbases), or a ship of the pilot's fleet out in space
+--     there with a Jump Beacon Generator running (Data/Modules: a hired
+--     pilot keeps theirs running, Tactical/Fleet).
+-- The ship comes out at rest a little way off the beacon: the tower,
+-- or the ship that lit one. (A tower's before a ship's, where there are
+-- both.) What it had out and near comes with it, as into a warp
 -- (Tactical/Drones).
 --
 -- (Every figure is a first proposal. Not yet: anybody but the pilot
--- jumping; a place to come out at that the pilot chooses, or that
--- somebody lights for them; space a drive does not reach into.)
+-- jumping; a choice between beacons in one system; anybody else's
+-- beacon; space a drive does not reach into.)
 
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
+local Modules = require("@lt/Core/Data/Modules")
 local Space = require("@lt/Core/Tactical/Space")
+local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
 local Structures = require("@lt/Core/Data/Structures")
-local System = require("@lt/Core/Describe/System")
 local Vitals = require("@lt/Core/Tactical/Vitals")
 
 local Jumping = {}
@@ -94,18 +101,55 @@ function Jumping.Cooling(state: State.State, ship: number): number
   return if last then math.max(0, Jumping.COOLDOWN - (state.tick - last) * Constants.TICK) else 0
 end
 
--- What a ship jumping into a system comes out beside: its first
--- station, or its first gate if it has none.
-function Jumping.Beacon(state: State.State, system: number): System.Object?
-  local gate: System.Object? = nil
-  for _, object in Space.Describe(state, system).objects do
-    if object.kind == "station" then
-      return object
-    elseif object.kind == "gate" and gate == nil then
-      gate = object
+-- A beacon that is lit: where it is, how big the thing that has it is,
+-- what that is (a tower's place in its system's description, or a
+-- ship), its name, and which kind of beacon it is.
+export type Beacon = { system: number, x: number, y: number, z: number, radius: number, id: number, name: string, kind: "tower" | "ship" }
+
+-- The beacons lit for a ship's owner, in every system: the towers
+-- first, in the order they were put up, and then the ships of the
+-- fleet, in the order of their ids. (Not the ship's own: nobody jumps
+-- to where they are.)
+function Jumping.Beacons(state: State.State, ship: number): { Beacon }
+  local record = state.ships[ship]
+  local found: { Beacon } = {}
+  if record == nil then
+    return found
+  end
+  for _, id in state.starbaseIds do
+    local starbase = state.starbases[id]
+    local place = Space.Object(state, id)
+    if starbase.owner == record.owner and place and Starbases.Has(state, starbase, "beacon") then
+      table.insert(found, { system = Space.SystemOf(state, id), x = place.x, y = place.y, z = place.z, radius = place.radius, id = id,
+        name = place.name, kind = "tower" })
     end
   end
-  return gate
+  for _, id in state.shipIds do
+    local other = state.ships[id]
+    local ball = state.balls[id]
+    if id ~= ship and other.owner == record.owner and ball and not ball.warp then
+      for _, running in ball.vitals.running do
+        local item = state.items[running.item]
+        if item and Modules.byId[item.type] and Modules.byId[item.type].beacon then
+          table.insert(found, { system = ball.system, x = ball.x, y = ball.y, z = ball.z, radius = ball.radius, id = id, name = ball.name,
+            kind = "ship" })
+          break
+        end
+      end
+    end
+  end
+  return found
+end
+
+-- The beacon a ship jumping into a system comes out at, if one is lit
+-- there for it.
+function Jumping.Beacon(state: State.State, ship: number, system: number): Beacon?
+  for _, beacon in Jumping.Beacons(state, ship) do
+    if beacon.system == system then
+      return beacon
+    end
+  end
+  return nil
 end
 
 function Jumping.Validate(state: State.State, command: State.Command): (boolean, string?)
@@ -127,6 +171,8 @@ function Jumping.Validate(state: State.State, command: State.Command): (boolean,
     return false, "no such system"
   elseif to == ball.system then
     return false, "that is the system you are in"
+  elseif Jumping.Beacon(state, ship.id, to) == nil then
+    return false, "no beacon is lit there"
   end
   local levels = Items.Levels(state, ship.id)
   if levels and math.max(0, levels[Jumping.SKILL] or 0) < 1 then
@@ -145,8 +191,6 @@ function Jumping.Validate(state: State.State, command: State.Command): (boolean,
   local fuel, held = Jumping.Fuel(state, ship.id, distance), Jumping.Held(state, ship.id)
   if held < fuel then
     return false, `needs {fuel} fuel blocks in the hold, and there are {held}`
-  elseif Jumping.Beacon(state, to) == nil then
-    return false, "nothing there to come out beside"
   end
   return true
 end
@@ -168,7 +212,7 @@ function Jumping.Apply(state: State.State, command: State.Command, events: { Eve
   ball.vitals.capacitor = Jumping.LEFT * ball.vitals.capacitorMax
   ball.vitals.running, ball.vitals.locks = {}, {}
   ship.jumped = state.tick
-  local beacon = Jumping.Beacon(state, to) :: System.Object
+  local beacon = Jumping.Beacon(state, ship.id, to) :: Beacon
   -- (a point so far from it, in a direction rolled for this jump)
   local rng = Rng.For(state.historySeed, state.tick, ball.id, 37)
   local angle = Rng.Float(rng, 0, 2 * math.pi)
@@ -183,7 +227,7 @@ function Jumping.Apply(state: State.State, command: State.Command, events: { Eve
   Vitals.Refresh(state, ball)
   -- (a jump, to everything that minds one: 'gate' is 0 for a drive's)
   table.insert(events, { kind = "Jumped", ship = ball.id, from = from, to = to, gate = 0, arrival = beacon.id, drive = true,
-    distance = distance })
+    distance = distance, beacon = beacon.name })
 end
 
 return Jumping

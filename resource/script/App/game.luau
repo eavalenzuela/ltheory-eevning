@@ -33,6 +33,7 @@ local Planet = require("@lt/Game/View/Planet")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
 local Settings = require("@lt/Game/Settings")
+local Starbases = require("@lt/Core/Assets/Starbases")
 local Station = require("@lt/Game/UI/Station")
 local Info = require("@lt/Game/UI/Info")
 local Menu = require("@lt/Game/UI/Menu")
@@ -47,6 +48,7 @@ local Sites = require("@lt/Core/Tactical/Sites")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
 local Wallet = require("@lt/Core/Assets/Wallet")
 local Waypoints = require("@lt/Game/Waypoints")
@@ -1012,6 +1014,33 @@ function Debug.JumpReach(): (number, string)
     end
   end
   return best, if best ~= 0 then systems[best].name else ""
+end
+
+-- A cheat, for a scripted jump: a tower of the pilot's from nowhere at
+-- a moon of a system, lit, with a Jump Beacon anchored and online.
+-- False if the system has no moon. (And how many beacons are lit for
+-- the pilot: Debug.Beacons.)
+function Debug.BeaconAt(system: number): boolean
+  local state = session.game.state
+  if state.galaxy.systems[system] == nil then
+    return false
+  end
+  for _, object in Space.Describe(state, system).objects do
+    if object.kind == "moon" then
+      local id = Starbases.Raise(state, system, object, Structures.towerById["tower.vessari.small"], "player",
+        object.x + object.radius * 3, object.y, object.z)
+      local starbase = state.starbases[id]
+      starbase.ready, starbase.fuel, starbase.burnt = state.tick, 5000, state.tick
+      table.insert(starbase.modules, { type = Structures.BEACON, ready = state.tick })
+      return true
+    end
+  end
+  return false
+end
+
+function Debug.Beacons(): number
+  local drive = Core.Query.JumpDrive(session.game)
+  return if drive then #drive.beacons else 0
 end
 
 -- Open the map on a system, as a click on it does (its number).

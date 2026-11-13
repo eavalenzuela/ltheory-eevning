@@ -9,8 +9,10 @@
 # hold. Out in space the ten are launched, more than the Drones skill
 # alone would hold, and called back. Then the map is opened on the
 # farthest system its drive reaches, which says how far that is and what
-# fuel it takes, and the jump is made: the carrier is there, the fuel is
-# burnt, and the drive is cooling.
+# fuel it takes. A drive comes out at a beacon, and there is none lit
+# there: the jump is refused. A tower of the pilot's with a Jump Beacon
+# is put there (a cheat), and the jump is made: the carrier is there
+# beside the tower, the fuel is burnt, and the drive is cooling.
 
 wait 2
 lua GameDebug.Peaceful(true)
@@ -47,22 +49,31 @@ lua assert(select(2, GameDebug.Drones()) == 10, 'the ten should be in the bay ag
 lua _G.to, _G.name = GameDebug.JumpReach()
 lua assert(_G.to ~= 0, 'the drive should reach somewhere')
 lua _G.home = GameDebug.System()
-lua assert(select(6, GameDebug.JumpDrive(_G.to)), 'the jump should be ready: ' .. select(7, GameDebug.JumpDrive(_G.to)))
 lua _G.fuel = select(5, GameDebug.JumpDrive(_G.to))
 lua assert(_G.fuel > 0 and _G.fuel <= 600, 'it should take fuel, and no more than there is: ' .. _G.fuel)
 lua assert(GameDebug.MapOn(_G.to))
 frames 5
+# No beacon is lit there, and the drive goes nowhere there is none.
+lua assert(GameDebug.Beacons() == 0 and not GameDebug.CanPress('Map:jump'), 'with no beacon lit the jump should be refused')
+lua assert(select(7, GameDebug.JumpDrive(_G.to)) == 'no beacon is lit there', select(7, GameDebug.JumpDrive(_G.to)))
+lua assert(GameDebug.BeaconAt(_G.to), 'no moon there to put a tower at')
+frames 5
+lua assert(GameDebug.Beacons() == 1)
+lua assert(select(6, GameDebug.JumpDrive(_G.to)), 'the jump should be ready: ' .. select(7, GameDebug.JumpDrive(_G.to)))
 until GameDebug.Press('Map:jump')
 until GameDebug.System() == _G.to
 frames 10
 lua assert(GameDebug.InSpace(), 'the carrier should be out in space there')
+lua assert(GameDebug.Select('Starbase'), 'it should have come out beside the tower that lit the way')
 lua assert(GameDebug.Hold('fuel.block') == 600 - _G.fuel, 'the fuel should be burnt')
 lua assert(select(3, GameDebug.JumpDrive()) > 0, 'the drive should be cooling')
 lua assert(GameDebug.Hull() == 'carrier.scoppo')
-# (and not back again at once)
+# (and not back again at once, with a beacon lit at home or without)
+lua assert(GameDebug.BeaconAt(_G.home))
 lua assert(GameDebug.MapOn(_G.home))
 frames 5
 lua assert(not GameDebug.CanPress('Map:jump'), 'a drive that has just fired should not fire again')
+lua assert(string.find(select(7, GameDebug.JumpDrive(_G.home)), 'cooling', 1, true), select(7, GameDebug.JumpDrive(_G.home)))
 
 echo carrier scenario passed
 quit

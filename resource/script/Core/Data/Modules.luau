@@ -107,6 +107,9 @@ export type ModuleType = {
   -- ship) nobody can target the ship, and anything that comes within
   -- 'reach' metres of it switches it off.
   cloak: { reach: number }?,
+  -- A jump beacon generator: while it runs, a ship with a jump drive
+  -- can jump to the system the ship is in (Tactical/Jumping).
+  beacon: boolean?,
   -- A data analyzer: fitted, it lets the ship hack a sealed hold from
   -- within its range (Tactical/Hacking).
   analyzer: { range: number }?,
@@ -343,6 +346,19 @@ local modules: { ModuleType } = {
     boost = { ship("maxVelocity", "mul", 0.25) }, boostDuration = 5, boostCapacitor = 2,
     cloak = { reach = 2000 },
     requires = { { skill = "cloaking", level = 1 } },
+  },
+
+  -- A beacon for a jump drive to come out at (Tactical/Jumping): while
+  -- it runs on a ship of the pilot's fleet, a ship of theirs with a jump
+  -- drive can jump to the system that ship is in. It goes on any hull,
+  -- and a hired pilot keeps theirs running whenever they are out in
+  -- space. (First figures.)
+  {
+    id = "beacon.jump", name = "Jump Beacon Generator", slot = "high", hardpoint = "",
+    cpu = 40, powergrid = 10, volume = 20, basePrice = 1500000, passive = {},
+    boost = {}, boostDuration = 10, boostCapacitor = 4,
+    beacon = true,
+    requires = { { skill = "jump.drives", level = 1 } },
   },
 
   -- Mending somebody else: shield or armour put back on another ship,

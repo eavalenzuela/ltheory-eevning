@@ -532,6 +532,28 @@ local MODULES: { [string]: (b: Builder) -> () } = {
     block(b, GLOW, v(0.20, 0.22, 0.474), v(0.08, 0.02, 0.004), nil, 0.3)
     mast(b, v(0.05, 0.85, 0.04), 0.15, 0.01)
   end,
+  -- A jump beacon: a tall mast on a small drum, with three rings round it
+  -- that grow toward its head, each lit, braced to the mast by spokes;
+  -- and a lamp at its head and one at its foot. (A v0.)
+  ["array.beacon"] = function(b)
+    beam(b, FRAME, v(0, -0.90, 0), v(0, 0.90, 0), 0.035, 0.1)
+    drum(b, v(0, -0.62, 0), 0.20, 0.30, PLATING)
+    block(b, TRIM, v(0, -0.45, 0), v(0.215, 0.018, 0.215), nil, 0.3)
+    for index, ring in { { -0.10, 0.26 }, { 0.30, 0.40 }, { 0.70, 0.56 } } do
+      local y, out = ring[1], ring[2]
+      local sides = 8
+      for side = 0, sides - 1 do
+        local a, c = side * 2 * math.pi / sides, (side + 1) * 2 * math.pi / sides
+        beam(b, if index == 2 then PATCH else PLATING, v(out * math.cos(a), y, out * math.sin(a)), v(out * math.cos(c), y, out * math.sin(c)), 0.03, 0.1)
+        if side % 2 == 0 then
+          beam(b, FRAME, v(0, y, 0), v(out * math.cos(a), y, out * math.sin(a)), 0.012, 0.1)
+          block(b, GLOW, v(out * math.cos(a), y + 0.035, out * math.sin(a)), v(0.03, 0.008, 0.03), nil, 0.4)
+        end
+      end
+    end
+    block(b, GLOW, v(0, 0.93, 0), v(0.04, 0.02, 0.04), v(math.pi / 4, 0, 0), 0.45)
+    block(b, GLOW, v(0, -0.93, 0), v(0.03, 0.015, 0.03), v(math.pi / 4, 0, 0), 0.45)
+  end,
   -- A reactor: a vessel of eight sides in a cage of girders, banded in
   -- warning and lit at its waist; a feed drum out on an arm either side
   -- of it, one for each thing it is fed, piped in at the top; what it
