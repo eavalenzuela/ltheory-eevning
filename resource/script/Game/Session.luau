@@ -169,6 +169,12 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{Types.Info(event.module).name} anchored: it will be online shortly`)
   elseif kind == "ModuleUnanchored" then
     Session.Say(session, `{Types.Info(event.module).name} unanchored: it is in the hangar`)
+  elseif kind == "TowerUnanchored" then
+    Session.Say(session, `The tower is down, and in the hold`
+      .. (if event.fuel > 0 then `, with {event.fuel} blocks of its fuel` else "")
+      .. (if event.left > 0 then `: {event.left} blocks there was no room for are left behind` else ""))
+  elseif kind == "FleetUnposted" then
+    Session.Say(session, `{event.name} has no post there any more, and waits`)
   elseif kind == "Jumped" and event.ship == mine then
     -- (say so when the kind of space changes: what waits at a belt does)
     local _, was = Core.Query.Security(session.game, event.from)

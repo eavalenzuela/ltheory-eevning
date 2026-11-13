@@ -807,8 +807,10 @@ function Debug.Lose(type: string): number
   local ship = state.ships[state.player.ship]
   local gone = 0
   if ship.docked ~= 0 then
-    for _, item in Items.In(state, ship.docked, "hangar") do
-      if item.type == type then
+    -- ('all': everything there, of whatever type, the corporation's too)
+    local stacks: { State.Item } = if type == "all" then Items.Stored(state, ship.docked) else Items.In(state, ship.docked, "hangar")
+    for _, item in stacks do
+      if item.type == type or type == "all" then
         gone += item.quantity
         Items.Take(state, item, item.quantity)
       end

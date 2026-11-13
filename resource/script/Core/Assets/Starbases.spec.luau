@@ -576,6 +576,98 @@ suite:Case("a module can be unanchored again, into the tower's hangar", function
   t.eq(found, 1)
 end)
 
+suite:Case("a tower is taken down by the one ship moored at it, with nothing on it and nothing in it, into that ship's hold; and the moon is free again", function(t)
+  -- A pilot with a hired hand, a tower lit at a moon with a module on it, moored there.
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local home = state.player.home
+  state.skills.leadership = 1
+  state.wallet = 10000000
+  order(t, game, { kind = "HirePilot", actor = 0, what = Core.Query.Candidates(game, home)[1].key })
+  Core.Step(game)
+  local wing = state.fleet[state.fleetIds[1]]
+  local tower = carry(game, SMALL.id, 1)
+  order(t, game, { kind = "Undock", actor = 0 })
+  Core.Step(game)
+  local moon = aMoon(game, nil)
+  order(t, game, { kind = "WarpTo", actor = 0, target = moon.id })
+  stepUntil(game, "WarpEnded", 600)
+  order(t, game, { kind = "AnchorTower", actor = 0, item = tower.id, target = moon.id })
+  local station = stepUntil(game, "StarbaseAnchored", 3).station :: number
+  steps(game, SMALL.anchor)
+  order(t, game, { kind = "Dock", actor = 0, target = station })
+  stepUntil(game, "Docked", 120)
+  order(t, game, { kind = "Fuel", actor = 0, item = carry(game, FUEL, 100).id })
+  Core.Step(game)
+  anchor(t, game, "array.storage")
+  local starbase = state.starbases[station]
+  -- (the hired pilot is set to carry from the tower to the home station: by hand, they having no ship)
+  wing.order, wing.base, wing.post, wing.stops = "haul", home, station, { station }
+  t.eq({ Starbases.Kept(state, "player") }, { 1, 1 })
+
+  -- Not with a module on it, nor with anything in its hangars.
+  local down: State.Command = { kind = "UnanchorTower", actor = 0 }
+  t.eq(refused(game, down), "unanchor its modules first")
+  order(t, game, { kind = "UnanchorModule", actor = 0, type = "array.storage" })
+  Core.Step(game)
+  t.eq(refused(game, down), "its hangars are not empty")
+  for _, item in Items.Stored(state, station) do
+    Items.Take(state, item, item.quantity)
+  end
+  -- Not into a hold too small for it.
+  t.eq(refused(game, down), string.format("the tower wants %d m3 of hold, and this ship has %d free", SMALL.volume,
+    math.floor(Items.ShipStats(state, state.player.ship).cargo - Items.CargoUsed(state, state.player.ship))))
+  -- A hauler has the room: but not while another ship of the pilot's is moored there.
+  local courier = state.player.ship
+  -- (stepped into by hand: a tower with no maintenance array lets nobody change ships at it)
+  local mule = Space.NewShip(state, "industrial.hauler", "Mule", "player", station)
+  state.player.ship = mule.id
+  t.eq(refused(game, down), "another ship is moored here")
+  state.ships[courier].docked = home
+  -- Not out in space, either.
+  t.eq(refused(game, down), "(accepted)")
+
+  -- Down it comes: the tower and what fuel was in its tank are in the hold, and the ship is in space where it was.
+  local fuel = starbase.fuel
+  t.ok(fuel > 0)
+  Core.TakeEvents(game)
+  order(t, game, down)
+  local said = stepUntil(game, "TowerUnanchored", 2)
+  t.eq({ said.station, said.tower, said.fuel, said.left } :: { any }, { station, SMALL.id, fuel, 0 } :: { any })
+  t.eq({ assert(hold(game, SMALL.id)).quantity, assert(hold(game, FUEL)).quantity }, { 1, fuel })
+  local me = state.balls[mule.id]
+  t.ok(me ~= nil and state.ships[mule.id].docked == 0, "the ship should be out in space")
+  t.ok(me.grid ~= station, "the ship is on the grid of a tower that is not there")
+  -- Nothing is left of it: no starbase, no station, nothing on the overview, and the pilot keeps none.
+  t.eq({ state.starbases[station], #state.starbaseIds } :: { any }, { nil, 0 } :: { any })
+  t.eq({ Starbases.Kept(state, "player") }, { 0, 1 })
+  local was = assert(Space.Object(state, station))
+  t.eq({ was.kind, was.site, was.parent } :: { any }, { "gone", 0, 0 } :: { any })
+  t.ok(not Stations.Has(state, station, "refining"))
+  for _, entry in Core.Query.Overview(game) do
+    t.ok(entry.id ~= station, "the tower is still on the overview")
+  end
+  t.eq(refused(game, { kind = "Dock", actor = 0, target = station }), "not a station")
+  -- The hired pilot who carried from it waits, with nowhere there to go.
+  t.eq({ wing.order, wing.base, wing.post, #wing.stops } :: { any }, { "stay", home, 0, 0 } :: { any })
+  -- It is all in the save.
+  local data, length = Core.Save(game)
+  local loaded = Core.Load(data, length)
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  t.eq(assert(Space.Object(loaded.state, station)).kind, "gone")
+  steps(game, 50)
+  steps(loaded, 50)
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+
+  -- And the moon takes a tower again: the same one, put up anew.
+  order(t, game, { kind = "Stop", actor = 0 })
+  steps(game, 20)
+  order(t, game, { kind = "AnchorTower", actor = 0, item = assert(hold(game, SMALL.id)).id, target = moon.id })
+  local again = stepUntil(game, "StarbaseAnchored", 3).station :: number
+  t.ok(again ~= station, "the new tower has the id of the one taken down")
+  t.eq({ #state.starbaseIds, assert(Space.Object(state, again)).kind } :: { any }, { 1, "station" } :: { any })
+end)
+
 suite:Case("a starbase is only its owner's to run, and only from its own moorings", function(t)
   local game = moored(t, 100)
   local blocks = carry(game, FUEL, 10)

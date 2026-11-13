@@ -1703,6 +1703,11 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
   line += 26
   ItemIcon.Draw(tower.id, left, line, 22)
   Info.Name(tower.id, tower.name, left + 30, line + 3, 15, Im.TEXT)
+  -- (taken down into the hold, with nothing on it and nothing in it:
+  -- pressed when it cannot be, it says why not)
+  if Im.Button("Take down", left + 300, line - 1, 100, 24, true, "Tower:down") then
+    Session.Do(session, { kind = "UnanchorTower", actor = 0 })
+  end
   line += 30
   if status.lit then
     Im.Text("Lit: its field is up and its modules have power.", left, line, 13, GOOD)

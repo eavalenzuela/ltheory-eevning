@@ -21,7 +21,10 @@ local Structures = require("@lt/Core/Data/Structures")
 
 local System = {}
 
-export type Kind = "sun" | "planet" | "moon" | "belt" | "asteroid" | "station" | "gate"
+-- ("gone": what was a pilot's tower before it was taken down. An
+-- object's place in the list is its id, so the place is kept; it is no
+-- body, no station and no grid's middle from then on: Assets/Starbases.)
+export type Kind = "sun" | "planet" | "moon" | "belt" | "asteroid" | "station" | "gate" | "gone"
 
 export type Object = {
   id: number,

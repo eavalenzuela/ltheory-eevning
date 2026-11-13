@@ -6,8 +6,9 @@
 # Buy a control tower, fuel and a refining array, carry them to a moon
 # in an industrial, anchor the tower there, moor at it, fuel it, anchor
 # the array, and refine ore at it: a station where there was none, that
-# does what the pilot built it to do. The industrial and the price of
-# it all are granted. The rest is done as a player does it.
+# does what the pilot built it to do. Then the tower is taken down
+# again, into the hold. The industrial and the price of it all are
+# granted. The rest is done as a player does it.
 
 wait 2
 lua GameDebug.Peaceful(true)
@@ -114,6 +115,28 @@ frames 3
 until GameDebug.Press('Unanchor:array.refining')
 until GameDebug.Hangar('array.refining') == 1
 lua assert(select(3, GameDebug.Tower()) == 0)
+
+# And down it comes again, into the hold: not with anything in its
+# hangar (pressed then, it says why not), and with the hangar empty the
+# tower is in the hold, the ship in space where the tower was, and
+# nothing of it left on the overview.
+until GameDebug.Press('Tower:down')
+frames 5
+lua assert(GameDebug.Tower() ~= 'none' and GameDebug.Docked(), 'a tower with things in its hangar should not come down')
+until GameDebug.Press('Fitting')
+frames 3
+until GameDebug.Press('ToHold:array.refining')
+until GameDebug.Hold('array.refining') == 1
+lua assert(GameDebug.Lose('all') > 0, 'the minerals should have been in the hangar')
+until GameDebug.Press('Starbase')
+frames 3
+until GameDebug.Press('Tower:down')
+until GameDebug.Tower() == 'none'
+until GameDebug.InSpace()
+frames 5
+lua assert(GameDebug.Hold('tower.vessari.small') == 1, 'the tower should be in the hold')
+lua assert(GameDebug.Hold('fuel.block') > 0, 'and what fuel was in its tank')
+lua assert(not GameDebug.Select('Starbase'), 'the tower should be off the overview')
 
 echo starbase scenario passed
 quit

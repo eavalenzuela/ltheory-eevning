@@ -730,7 +730,7 @@ local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true, StartResearch = t
 local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true }
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true, ModifyOrder = true }
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
-local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true }
+local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true, UnanchorTower = true }
 local SITE_COMMANDS = { Scan = true, LaunchProbe = true, RecallProbes = true }
 local HACK_COMMANDS = { StartHack = true, HackNode = true, AbandonHack = true }
 local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones = true }
@@ -1034,6 +1034,8 @@ function Query.Overview(game: Game): { Entry }
     if site and not onGrid and Sites.Hidden(state, object.id) then
       gone = true
     end
+    -- (and where a tower was taken down there is nothing)
+    gone = gone or object.kind == "gone"
     if (onGrid or object.kind ~= "asteroid") and not gone then
       local entry: Entry = { id = object.id, kind = if site then "site" else object.kind :: string, name = object.name,
         distance = Space.Gap(me :: any, object :: any), onGrid = onGrid, variety = object.variety, hostile = false, own = false }

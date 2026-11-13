@@ -52,6 +52,7 @@ local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Structures = require("@lt/Core/Data/Structures")
 local System = require("@lt/Core/Describe/System")
+local Types = require("@lt/Core/Data/Types")
 
 local Starbases = {}
 
@@ -311,6 +312,30 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
       end
     end
     return false, "no such module is anchored here"
+  elseif kind == "UnanchorTower" then
+    -- Taken down with nothing on it and nothing in it, by the one ship
+    -- moored there, into that ship's hold.
+    if #starbase.modules > 0 then
+      return false, "unanchor its modules first"
+    elseif #Items.Stored(state, starbase.id) > 0 then
+      return false, "its hangars are not empty"
+    end
+    for _, id in state.shipIds do
+      local other = state.ships[id]
+      if other.id ~= ship.id and other.docked == starbase.id then
+        return false, "another ship is moored here"
+      end
+    end
+    for _, id in state.jobIds do
+      if state.jobs[id].station == starbase.id then
+        return false, "a job is running here"
+      end
+    end
+    local free = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
+    if tower.volume > free + 1e-9 then
+      return false, string.format("the tower wants %d m3 of hold, and this ship has %d free", tower.volume, math.floor(free))
+    end
+    return true
   end
   return false, `unknown command '{kind}'`
 end
@@ -380,6 +405,55 @@ function Starbases.Apply(state: State.State, command: State.Command, events: { E
         break
       end
     end
+  elseif kind == "UnanchorTower" then
+    local tower = Structures.towerById[starbase.tower]
+    local id = starbase.id
+    -- Out of its moorings first, while there are moorings to leave.
+    Space.Apply(state, { kind = "Undock", actor = ship.id }, events)
+    Items.Add(state, tower.id, 1, ship.id, "cargo")
+    -- (what fuel is in its tank comes too, as far as there is room for it)
+    local free = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
+    local each = Types.Info(Structures.FUEL.id).volume
+    local kept = math.min(starbase.fuel, if each > 0 then math.max(0, math.floor((free + 1e-9) / each)) else starbase.fuel)
+    if kept > 0 then
+      Items.Add(state, Structures.FUEL.id, kept, ship.id, "cargo")
+    end
+    -- Whoever of the hired pilots was posted there, or based there, or
+    -- collected there, is not any more: they wait where they are, and
+    -- are the home station's from now on.
+    for _, wingId in state.fleetIds do
+      local wing = state.fleet[wingId]
+      local at = table.find(wing.stops, id)
+      if wing.base == id or wing.post == id or at then
+        wing.order = "stay"
+        wing.base = if wing.base == id then state.player.home else wing.base
+        wing.post = if wing.post == id then 0 else wing.post
+        while at do
+          table.remove(wing.stops, at)
+          at = table.find(wing.stops, id)
+        end
+        wing.leg = 0
+        table.insert(events, { kind = "FleetUnposted", pilot = wing.id, name = wing.name, station = id })
+      end
+    end
+    state.starbases[id] = nil
+    State.RemoveId(state.starbaseIds, id)
+    state.spawned[id] = nil
+    -- The place in the system's list is kept (an object's place there
+    -- is its id), and is nothing: no station, no body, no grid's middle.
+    local object = Space.Object(state, id)
+    local name = if object then object.name else "the tower"
+    if object then
+      object.kind, object.site, object.parent, object.variety, object.radius, object.to = "gone", 0, 0, "", 0, 0
+      -- (and whoever was on its grid is in open space)
+      for _, ballId in state.ballIds do
+        local ball = state.balls[ballId]
+        if ball.grid == id then
+          Space.AssignGrid(state, ball)
+        end
+      end
+    end
+    table.insert(events, { kind = "TowerUnanchored", station = id, name = name, tower = tower.id, fuel = kept, left = starbase.fuel - kept })
   end
 end
 
