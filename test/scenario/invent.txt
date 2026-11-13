@@ -7,9 +7,10 @@
 # which wants the Invention skill. With the skill, it is begun: the
 # datacores and the blueprint go into the laboratory, and half an hour on
 # the blueprint is back, with a tech 2 one beside it if it came off.
-# Then a frigate's blueprint is put to the same work, a custom make of a
-# gun is fitted, a tech 2 gun is loaded with tech 2 rounds, and a tech 2
-# frigate is flown.
+# Then a hull's blueprint is put to the same work (a hauler's that has a
+# tech 2 make of its own name: a hull with none offers nothing), a
+# custom make of a gun is fitted, a tech 2 gun is loaded with tech 2
+# rounds, and a tech 2 hull is flown.
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
@@ -33,18 +34,26 @@ lua assert(GameDebug.Hangar('blueprint.autocannon.small') == 1, 'the blueprint s
 lua print('tech 2 blueprints invented:', GameDebug.Hangar('blueprint.autocannon.small.ii'))
 lua assert(GameDebug.Hangar('blueprint.autocannon.small.ii') <= 1)
 
-# A hull's blueprint offers its tech 2 make too, and wants more to work
-# it out: eight datacores for a frigate.
-lua assert(GameDebug.Give('blueprint.frigate.javelin', 1) and GameDebug.Give('datacore', 7))
-lua GameDebug.Grant(1000000)
+# A ship has no "II": a tech 2 ship is a hull of its own that comes of a
+# plain one, where its faction's line names one. The blueprint of a hull
+# that has none offers no inventing. The Talmar's hauler, the Sunfish,
+# has the Tarantula: its blueprint offers that, and wants more to work
+# it out than a module does, sixteen datacores.
+lua assert(GameDebug.Give('blueprint.frigate.javelin', 1))
 frames 3
 lua assert(GameDebug.Blueprint('blueprint.frigate.javelin'), 'no such blueprint')
 frames 3
-lua assert(not GameDebug.CanPress('Invent'), 'a frigate should want eight datacores')
+lua assert(not GameDebug.CanPress('Invent'), 'a hull with no tech 2 make should offer no inventing')
+lua assert(GameDebug.Give('blueprint.industrial.sunfish', 1) and GameDebug.Give('datacore', 15))
+lua GameDebug.Grant(5000000)
+frames 3
+lua assert(GameDebug.Blueprint('blueprint.industrial.sunfish'), 'no such blueprint')
+frames 3
+lua assert(not GameDebug.CanPress('Invent'), 'a hauler should want sixteen datacores')
 lua assert(GameDebug.Give('datacore', 1))
 until GameDebug.Press('Invent')
 until GameDebug.Jobs() == 1
-lua assert(GameDebug.Hangar('datacore') == 0, 'the eight datacores should be used')
+lua assert(GameDebug.Hangar('datacore') == 0, 'the sixteen datacores should be used')
 
 # A custom make of a module, as a pirate's wreck now and then has, goes
 # where the plain one does, and wants no more skill than a new pilot has.
@@ -72,14 +81,14 @@ frames 3
 until GameDebug.Press('Load:ammo.fusion.ii')
 until GameDebug.Hangar('ammo.fusion.ii') == 180
 
-# A tech 2 hull is the hull it was made from, to look at and to arm: its
-# gun and its two racks are on it, a pair of mounts each.
-lua assert(GameDebug.Fly('frigate.javelin.ii'), 'no tech 2 Javelin')
+# A tech 2 hull is a hull of its own, to look at and to arm: the
+# Tarantula's one gun is on it, on its pair of mounts.
+lua assert(GameDebug.Fly('industrial.tarantula'), 'no Tarantula')
 until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()
 frames 10
-lua assert(GameDebug.Hull() == 'frigate.javelin.ii', 'the pilot should be flying the tech 2 hull')
-lua assert(GameDebug.Arms() == 6, 'a Javelin II should show its three weapons on its mounts')
+lua assert(GameDebug.Hull() == 'industrial.tarantula', 'the pilot should be flying the tech 2 hull')
+lua assert(GameDebug.Arms() == 2, 'a Tarantula should show its one weapon on its two mounts, and shows ' .. GameDebug.Arms())
 
 echo invent scenario passed
 quit

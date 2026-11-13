@@ -156,8 +156,8 @@ suite:Case("the Talmar's ships are the owner's rework of them: each by name, of 
   for _, hull in Ships.list do
     theirs += if hull.lineage == "talmar" then 1 else 0
   end
-  -- (the nineteen, and the "II" of the ten that are no capital and have no tech 2 make by name)
-  t.eq(theirs, #LINE + 10)
+  -- (the nineteen, and no other: a ship has no "II")
+  t.eq(theirs, #LINE)
   for _, entry in LINE do
     local name: string, class: string, of: string?, jump: boolean?, stealth: boolean? = entry[1], entry[2], entry[3], entry[4], entry[5]
     local hull = assert(Ships.byId[`{class}.{string.lower(name)}`], `the Talmar have no {name}`)
@@ -224,18 +224,17 @@ suite:Case("every pirate hull is somebody else's, cheaper, quicker and thinner-s
   end
 end)
 
-suite:Case("every hull of a human line, and each mining hull, has a tech 2 make: tougher, roomier, built of the plain hull, and nobody's to buy", function(t)
+suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in its faction's line, that comes of a plain one: tougher, roomier, built of the plain hull, and nobody's to buy", function(t)
   local improved = 0
   for _, hull in Ships.list do
     local faction = Factions.byId[hull.lineage]
     if hull.tech == 2 then
       improved += 1
       local base = Ships.byId[hull.base :: string]
-      -- (the hull it is the make of, called its "II"; or, where its faction's line names it, a hull with a name of its own)
-      local own = hull.id ~= base.id .. ".ii"
+      -- (a hull with a name of its own, which its faction's line gives it: no hull is another's "II")
       t.eq({ hull.class, hull.lineage } :: { any }, { base.class, base.lineage } :: { any })
-      t.ok(own or hull.name == base.name .. " II", hull.id)
-      t.ok(not own or (faction ~= nil and faction.line ~= nil and Ships.byId[base.id .. ".ii"] == nil), hull.id)
+      t.ok(hull.class ~= "drone" and string.sub(hull.id, -3) ~= ".ii" and string.sub(hull.name, -3) ~= " II", hull.id)
+      t.ok(faction ~= nil and faction.line ~= nil, hull.id)
       t.eq(Ships.Improved(base.id), hull)
       t.ok(base.tech == nil and Ships.Improved(hull.id) == nil, "a tech 2 hull has no tech 2 make of its own")
       -- The same hull to look at and to arm: its hardpoints, its size, its drones.
@@ -287,20 +286,18 @@ suite:Case("every hull of a human line, and each mining hull, has a tech 2 make:
       t.eq(moon, 1, `{hull.id} should call for one composite`)
     else
       -- (and every hull that should have one, has)
-      -- (a capital has none, but where its faction's line names one)
-      local named = false
+      -- (a hull has one where its faction's line names one, and nowhere else)
+      local should = false
       for _, entry in (if faction then faction.line else nil) or {} :: { Factions.Hull } do
-        named = named or (entry.tech == 2 and hull.name == `{(faction :: Factions.Faction).name} {entry.of}`)
+        should = should or (entry.tech == 2 and hull.name == `{(faction :: Factions.Faction).name} {entry.of}`)
       end
-      local should = hull.id == "frigate.prospector" or hull.id == "barge.quarry" or named
-        or (faction ~= nil and faction.kind == "human" and not hull.restricted and not Ships.Capital(hull.class))
+      t.ok(hull.class == "drone" or Ships.byId[hull.id .. ".ii"] == nil, `{hull.id} has a "II"`)
       t.eq(Ships.Improved(hull.id) ~= nil, should, hull.id)
       t.eq(Types.Get(hull.id) == nil or Types.Info(hull.id).scarce == nil, true, hull.id)
     end
   end
-  -- Three lines of five hulls and two battlecruisers (nobody has a tech 2 make of a capital, but where a line names
-  -- one); the Talmar's ten that are no capital and their three with names of their own; and the two that mine.
-  t.eq(improved, 3 * 7 + 13 + 2)
+  -- The Talmar's three: the Tarantula, the Sugarglider and the Rapa. (The other factions' lines name none yet.)
+  t.eq(improved, 3)
   t.ok(Ships.Improved("frigate.courier") == nil and Ships.Improved("industrial.hauler") == nil and Ships.Improved("capsule") == nil)
 end)
 

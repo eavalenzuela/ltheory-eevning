@@ -82,7 +82,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 65
+Core.SAVE_VERSION = 66
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -316,6 +316,55 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- 59: a corporation keeps its books by head, and a tower keeps count
   -- of its running. A save from before has what was earned and spent
   -- under no head, and its towers begin their count now.
+  -- 66: a ship has no "II" (the owner's ruling: a tech 2 ship is a hull
+  -- of its own, where a faction's line names one). What a save has of
+  -- the tech 2 make of a hull that every hull had, it has of the plain
+  -- hull: a ship of one is the plain ship, with what was fitted to it in
+  -- its hold (the plain hull has not the slots or the fitting for it
+  -- all), and a blueprint of one is the plain hull's.
+  [65] = function(state: any)
+    local function plain(value: any): any
+      if type(value) ~= "string" or string.sub(value, -3) ~= ".ii" then
+        return value
+      end
+      local base = string.sub(value, 1, -4)
+      local named = if string.sub(base, 1, 10) == "blueprint." then string.sub(base, 11) else base
+      local hull = Ships.byId[named]
+      -- (a hull's, and not a drone's: a drone has its "II" still)
+      return if hull and hull.class ~= "drone" and Ships.byId[named .. ".ii"] == nil then base else value
+    end
+    local refitted: { [number]: boolean } = {}
+    for id, ship in state.ships or {} do
+      if plain(ship.type) ~= ship.type then
+        refitted[id] = true
+      end
+    end
+    for _, item in state.items or {} do
+      if refitted[item.holder] and (item.place == "high" or item.place == "mid" or item.place == "low") then
+        item.place, item.slot, item.charge, item.rounds = "cargo", 0, "", 0
+      end
+    end
+    local function walk(node: any)
+      local moved: { [any]: any } = {}
+      for key, value in node do
+        if type(value) == "table" then
+          walk(value)
+        elseif plain(value) ~= value then
+          node[key] = plain(value)
+        end
+        if plain(key) ~= key then
+          moved[key] = plain(key)
+        end
+      end
+      for key, now in moved do
+        if node[now] == nil then
+          node[now] = node[key]
+        end
+        node[key] = nil
+      end
+    end
+    walk(state)
+  end,
   -- 65: the Talmar's ships were gone through by the project owner
   -- (Data/Factions): the hulls they had are gone, and each is the hull
   -- of their new line that stands where it stood. (And the hulls of the

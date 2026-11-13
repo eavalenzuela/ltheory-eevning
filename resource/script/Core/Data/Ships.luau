@@ -566,9 +566,7 @@ local function rebuiltHull(base: ShipType, id: string, name: string): ShipType
 end
 
 -- The tech 2 makes a faction's line names: each a hull of its own, with
--- its own name, of the hull of the line it says. (And the hull each is
--- the make of, so that it is given no other.)
-local named: { [string]: boolean } = {}
+-- its own name, of the hull of the line it says.
 for _, yard in Factions.list do
   local line: { Factions.Hull } = yard.line or {}
   for _, entry in line do
@@ -583,27 +581,17 @@ for _, yard in Factions.list do
       local hull = rebuiltHull(from, `{entry.class}.{string.lower((string.gsub(entry.name, "[^%a]", "")))}`, `{yard.name} {entry.name}`)
       hull.jump, hull.stealth = entry.jump or from.jump, entry.stealth or from.stealth
       table.insert(types, hull)
-      named[from.id] = true
     end
   end
 end
--- And of every other hull of a human line that is no capital, and of
--- the two that mine: the same hull, called its "II".
-for _, base in table.clone(types) do
-  local yard = Factions.byId[base.lineage]
-  local mining = base.id == "frigate.prospector" or base.id == "barge.quarry"
-  if ((yard ~= nil and yard.kind == "human") or mining) and not base.restricted and not CAPITAL[base.class] and base.tech ~= 2
-    and not named[base.id] then
-    local hull = rebuiltHull(base, base.id .. ".ii", base.name .. " II")
-    hull.jump, hull.stealth = base.jump, base.stealth
-    table.insert(types, hull)
-  end
-end
+-- (No other hull has a tech 2 make. A module has its "II", and a ship
+-- has not: a tech 2 ship is a hull of its own, made for something, that
+-- comes of a plain one. The project owner's ruling, 2026-11-13.)
 
--- And what a tech 2 drone flies as (Data/Drones): the drone's hull made
--- over in the same way, and a tenth quicker. (It is a drone's hull as
--- the plain one is: nobody boards it, sells it or builds it apart, and
--- it is not one of the tech 2 hulls above.)
+-- What a tech 2 drone flies as (Data/Drones) is another matter: a drone
+-- has its "II" as a module has, and its hull is that drone's hull made
+-- over in the same way, a tenth quicker. (Nobody boards it, sells it or
+-- builds it apart, and it is not one of the tech 2 hulls above.)
 for _, base in table.clone(types) do
   if base.class == "drone" then
     table.insert(types, {
@@ -678,11 +666,7 @@ end
 
 -- The tech 2 make of a hull, if it has one.
 function Ships.Improved(id: string): ShipType?
-  local better = Ships.byId[id .. ".ii"]
-  if better and better.tech == 2 then
-    return better
-  end
-  -- (or the one its faction's line names, which is called what it is called)
+  -- (the one its faction's line names, which is called what it is called)
   for _, hull in Ships.list do
     if hull.tech == 2 and hull.base == id then
       return hull

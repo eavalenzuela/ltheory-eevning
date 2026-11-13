@@ -1117,11 +1117,20 @@ suite:Case("a finished job earns loyalty points, and a faction's store sells for
       foreign += if string.find(stock.type, "laser", 1, true) or string.find(stock.type, "blaster", 1, true) then 1 else 0
     end
   end
-  -- (the Vessari's are projectile guns and missiles: eight kinds of gun and four launchers; and their five hulls
-  -- and two battlecruisers: nobody has a tech 2 make of a capital)
-  t.eq({ faction, blueprints, foreign, hulls } :: { any }, { "vessari", 12, 0, 7 } :: { any })
-  state.standings[faction] = 2.5
-  t.eq(refused(game, { kind = "RedeemLoyalty", actor = 0, type = "blueprint.frigate.javelin.ii" }), "needs a standing of 3 with them")
+  -- (the Vessari's are projectile guns and missiles: eight kinds of gun and four launchers; and no hull: a ship
+  -- has no "II", and their line names no tech 2 ship yet)
+  t.eq({ faction, blueprints, foreign, hulls } :: { any }, { "vessari", 12, 0, 0 } :: { any })
+  -- (the Talmar's store has the one tech 2 hull of theirs that a store sells: their hauler's, for a pilot they
+  -- think well of)
+  local theirs = 0
+  for _, stock in Missions.Store("talmar") do
+    if stock.type == "blueprint.industrial.tarantula" then
+      theirs += 1
+      t.eq({ stock.standing, stock.points } :: { any }, { 3, Missions.HULL_POINTS.industrial } :: { any })
+    end
+    t.ok(string.sub(stock.type, -3) ~= ".ii" or Ships.byId[string.sub(stock.type, #"blueprint." + 1)] == nil, stock.type)
+  end
+  t.eq(theirs, 1)
   state.standings[faction] = 1
   t.eq(refused(game, { kind = "RedeemLoyalty", actor = 0, type = "blueprint.autocannon.small.ii" }), "needs a standing of 2 with them")
   state.standings[faction] = 2

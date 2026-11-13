@@ -659,4 +659,43 @@ suite:Case("a save with the hulls the Talmar had opens with the hulls they have:
   t.eq(Core.Hash(opened), Core.Hash(game))
 end)
 
+suite:Case("a save with the tech 2 make of a hull that every hull had opens with the plain hull, and what was fitted to it in its hold", function(t)
+  local game = newGame()
+  local state = game.state
+  local home = Core.Query.Player(game).docked
+  local spare = Space.NewShip(state, "frigate.javelin", "Spare", "player", home)
+  -- (a gun fitted to it: put there by hand, the ship being nobody's to fit just now)
+  local gun = Items.Add(state, "autocannon.small", 1, spare.id, "cargo")
+  gun.place, gun.slot = "high", 1
+  Items.Add(state, "blueprint.frigate.javelin", 1, home, "hangar")
+  Items.Add(state, "drone.light.ii", 2, home, "hangar")
+  local data, length = Core.Save(game)
+  -- (as it was when there was a Javelin II: that ship is one, and the blueprint is its)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 65
+  file.state.ships[spare.id].type = "frigate.javelin.ii"
+  for _, item in file.state.items do
+    if item.type == "blueprint.frigate.javelin" then
+      item.type = "blueprint.frigate.javelin.ii"
+    end
+  end
+  local old, oldLength = Codec.Encode(file)
+  local opened = Core.Load(old, oldLength)
+  t.eq(opened.state.ships[spare.id].type, "frigate.javelin")
+  local fitted, held, blueprints, drones = 0, 0, 0, 0
+  for _, id in opened.state.itemIds do
+    local item = opened.state.items[id]
+    t.ok(Types.Get(item.type) ~= nil, `an item of a type there is not: {item.type}`)
+    fitted += if item.holder == spare.id and item.place == "high" then 1 else 0
+    held += if item.holder == spare.id and item.place == "cargo" and item.type == "autocannon.small" then 1 else 0
+    blueprints += if item.type == "blueprint.frigate.javelin" then item.quantity else 0
+    -- (a drone has its "II" still, as a module has)
+    drones += if item.type == "drone.light.ii" then item.quantity else 0
+  end
+  t.eq({ fitted, held, blueprints, drones }, { 0, 1, 1, 2 })
+  for _ = 1, 10 do
+    Core.Step(opened)
+  end
+end)
+
 return suite
