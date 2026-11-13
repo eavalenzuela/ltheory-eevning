@@ -40,6 +40,9 @@ local Hud = {}
 
 local overInterface = false
 local overviewScroll = 0
+-- How the overview is listed: by which column ("distance", "name" or
+-- "type"), and whether the other way round (farthest first, Z to A).
+local overviewSort, overviewDown = "distance", false
 
 -- Whether the cursor was over a panel last frame (the camera then leaves
 -- the mouse alone).
@@ -274,25 +277,80 @@ local function drawBrackets(session: Session.Session, scene: Scene.Scene, entrie
   end
 end
 
+-- What a row of the overview says a thing is, in three letters.
+local function tagOf(entry: Core.Entry): string
+  return if cloudy(entry) then "GAS" elseif vaulted(entry) then "VLT" else TAGS[entry.kind] or "?"
+end
+
+-- The overview as it is listed: what the Core gives (nearest first) put
+-- in the order the pilot has asked for, by a column; and where the pilot
+-- is next to go first, whatever the order: the gate of the way they
+-- have planned, the place a job is done or paid.
+local function listed(all: { Core.Entry }, marks: Waypoints.Marks): { Core.Entry }
+  local sorted = all
+  if overviewSort ~= "distance" or overviewDown then
+    -- (each with its place as the Core gave it: what is alike by the column stays nearest first)
+    local order: { { entry: Core.Entry, key: string, at: number } } = {}
+    for at, entry in all do
+      table.insert(order, { entry = entry, at = at,
+        key = if overviewSort == "name" then string.lower(entry.name) elseif overviewSort == "type" then tagOf(entry) else "" })
+    end
+    local down = overviewDown
+    table.sort(order, function(a, b): boolean
+      if a.key ~= b.key then
+        return (a.key < b.key) ~= down
+      elseif overviewSort == "distance" then
+        return a.at > b.at
+      end
+      return a.at < b.at
+    end)
+    sorted = {}
+    for _, each in order do
+      table.insert(sorted, each.entry)
+    end
+  end
+  if next(marks) == nil then
+    return sorted
+  end
+  local entries: { Core.Entry } = {}
+  for _, entry in sorted do
+    if marks[entry.id] then
+      table.insert(entries, entry)
+    end
+  end
+  for _, entry in sorted do
+    if not marks[entry.id] then
+      table.insert(entries, entry)
+    end
+  end
+  return entries
+end
+
+-- How the overview is listed, and (given a column) a way to say so:
+-- the column it is listed by, and whether the other way round. Asking
+-- for the column it is already listed by turns it round.
+function Hud.Sort(by: string?): (string, boolean)
+  if by == "distance" or by == "name" or by == "type" then
+    overviewDown = if by == overviewSort then not overviewDown else false
+    overviewSort = by
+    overviewScroll = 0
+  end
+  return overviewSort, overviewDown
+end
+
+-- The names on the overview as it is listed, top first: for a script.
+function Hud.Listed(session: Session.Session): { string }
+  local names: { string } = {}
+  for _, entry in listed(Core.Query.Overview(session.game), Waypoints.Of(session)) do
+    table.insert(names, entry.name)
+  end
+  return names
+end
+
 local function drawOverview(session: Session.Session, all: { Core.Entry }, x: number, y: number, width: number, height: number,
   marks: Waypoints.Marks)
   local rowHeight = 22
-  -- Where the pilot is next to go comes first, whatever is nearer: the
-  -- gate of the way they have planned, the place a job is done or paid.
-  local entries = all
-  if next(marks) then
-    entries = {}
-    for _, entry in all do
-      if marks[entry.id] then
-        table.insert(entries, entry)
-      end
-    end
-    for _, entry in all do
-      if not marks[entry.id] then
-        table.insert(entries, entry)
-      end
-    end
-  end
+  local entries = listed(all, marks)
   Im.Panel(x, y, width, height)
   Im.Heading(`OVERVIEW  {#entries}`, x + 12, y + 8, 16, Im.DIM)
   -- (the ship's scanner, for what is on nobody's chart: it takes the
@@ -313,8 +371,20 @@ local function drawOverview(session: Session.Session, all: { Core.Entry }, x: nu
       Guide.Close()
     end
   end
-  local top = y + 34
-  local visible = math.max(1, (height - 42) // rowHeight)
+  -- The columns' heads: a click lists by that column, and another turns
+  -- it round. The one it is listed by says which way.
+  local function head(column: string, label: string, at: number, right: boolean)
+    local text = if overviewSort == column then label .. (if overviewDown then " v" else " ^") else label
+    local hx = if right then at - Im.TextWidth(text, 11) else at
+    if Im.Link(text, hx, y + 33, 11, if overviewSort == column then Im.TEXT else Im.DIM, `Overview:sort:{column}`) then
+      Hud.Sort(column)
+    end
+  end
+  head("type", "TYPE", x + 12, false)
+  head("name", "NAME", x + 52, false)
+  head("distance", "DISTANCE", x + width - 12, true)
+  local top = y + 50
+  local visible = math.max(1, (height - 58) // rowHeight)
   if Im.Inside(x, y, width, height) then
     overviewScroll -= 3 * Mouse_GetScrollDelta()
   end
@@ -335,8 +405,7 @@ local function drawOverview(session: Session.Session, all: { Core.Entry }, x: nu
     if goal then
       Im.Fill(x + 4, rowY + 2, 3, rowHeight - 4, NEXT, 0.95)
     end
-    Im.Text(if cloudy(entry) then "GAS" elseif vaulted(entry) then "VLT" else TAGS[entry.kind] or "?", x + 12, rowY + 3, 13,
-      if goal then NEXT else Im.DIM)
+    Im.Text(tagOf(entry), x + 12, rowY + 3, 13, if goal then NEXT else Im.DIM)
     Im.Text(entry.name, x + 52, rowY + 3, 14, color)
     Im.TextRight(Format.Distance(entry.distance), x + width - 12, rowY + 3, 14, color)
     -- (a ship in a cloud of gas says so, before its distance: it is locked only from close in)

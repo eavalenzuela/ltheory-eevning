@@ -486,6 +486,16 @@ function Debug.SelfDestruct()
   end
 end
 
+-- How the overview is listed: the column it is listed by ("distance",
+-- "name" or "type") and whether the other way round; and the name on
+-- its nth row as it is listed (the first, if not said). The columns'
+-- heads are "Overview:sort:<column>": a press lists by that column, and
+-- another turns it round.
+function Debug.Listed(row: number?): (string, boolean, string)
+  local by, down = Hud.Sort()
+  return by, down, Hud.Listed(session)[row or 1] or ""
+end
+
 -- Whether the pilot's ship is in a cloud of gas (where it is locked,
 -- and locks, only from close in), how close that is in metres, and how
 -- many of the other ships on the overview are in one.

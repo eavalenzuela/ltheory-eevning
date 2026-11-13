@@ -27,9 +27,25 @@ lua assert(GameDebug.Select('station'))
 frames 3
 lua assert(GameDebug.CanPress('Orbit 5 km') and GameDebug.CanPress('Keep 10 km'), 'the plain orders begin at 5 and 10 km')
 
+# The overview is listed nearest first, and by another column at a
+# click on its head: by name, and at a second click the other way round.
+lua assert(GameDebug.Listed() == 'distance' and not select(2, GameDebug.Listed()), 'the overview begins nearest first')
+lua _G.nearest = select(3, GameDebug.Listed())
+until GameDebug.Press('Overview:sort:name')
+frames 3
+lua assert(GameDebug.Listed() == 'name' and not select(2, GameDebug.Listed()), 'a click on a head should list by it')
+lua assert(select(3, GameDebug.Listed(1)) <= select(3, GameDebug.Listed(2)), 'by name is A to Z')
+until GameDebug.Press('Overview:sort:name')
+frames 3
+lua assert(select(2, GameDebug.Listed()), 'a second click should turn it round')
+lua assert(select(3, GameDebug.Listed(1)) >= select(3, GameDebug.Listed(2)), 'the other way round is Z to A')
+until GameDebug.Press('Overview:sort:distance')
+frames 3
+lua assert(select(3, GameDebug.Listed()) == _G.nearest, 'by distance again, the nearest is first')
+
 # A right click on the first row of the overview (1920x1080 window): the
 # menu is up, for what that row is, and a click elsewhere puts it away.
-click Right 1700 227
+click Right 1700 243
 frames 3
 lua assert(GameDebug.Selected() ~= '', 'a right click should pick the row out')
 lua assert(GameDebug.CanPress('Menu:AlignTo'), 'a right click on the overview should bring up the menu')
