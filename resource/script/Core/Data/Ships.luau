@@ -72,6 +72,13 @@ export type ShipType = {
   -- is built from (below).
   tech: number?,
   base: string?,
+  -- What it is beside the plain hull of its class, where a faction's
+  -- line says (Data/Factions): "combat" for a combat hauler; that it has
+  -- a jump drive; that it is built to go unseen. (The last two are
+  -- marked and not yet made.)
+  role: string?,
+  jump: boolean?,
+  stealth: boolean?,
 }
 
 local SHIELD = { 1.0, 0.8, 0.6, 0.5 }
@@ -102,16 +109,6 @@ local types: { ShipType } = {
     cpu = 125, powergrid = 48, highs = 3, mids = 2, lows = 4, turrets = 3, launchers = 0,
     capacitor = 400, capacitorRecharge = 187,
     scanResolution = 600, lockRange = 26000, maxTargets = 4, cargo = 135,
-  },
-  -- Projectiles, missiles and shields.
-  {
-    id = "frigate.harrier", name = "Talmar Rapier", class = "frigate", lineage = "talmar", basePrice = 400000, volume = 2500,
-    mass = 1067000, inertia = 3.22, maxVelocity = 375, warpSpeed = 5, radius = 40,
-    shield = 500, armor = 380, hull = 330, shieldRecharge = 625,
-    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 35,
-    cpu = 150, powergrid = 40, highs = 3, mids = 4, lows = 2, turrets = 2, launchers = 2,
-    capacitor = 300, capacitorRecharge = 175,
-    scanResolution = 660, lockRange = 24000, maxTargets = 4, cargo = 130,
   },
   {
     id = "industrial.hauler", name = "Mule Hauler", class = "industrial", lineage = "", basePrice = 600000, volume = 20000,
@@ -242,7 +239,27 @@ local CLASS: { [string]: Standard } = {
     scan = 45, lock = 200000, targets = 12, cargo = 9000, skill = "supercarriers", level = 1, exact = true },
 }
 
--- The classes that are capitals: nobody has a tech 2 make of one.
+-- A faction's own mining barge and freighter are the Quarry and the
+-- Dray (below) as that faction builds them.
+CLASS.barge = { price = 6000000, volume = 15000, mass = 9000000, inertia = 0.9, velocity = 110, warp = 3.5, radius = 160,
+  shield = 1800, armor = 1500, hull = 2600, recharge = 1100, signature = 160, cpu = 320, powergrid = 160,
+  highs = 3, mids = 2, lows = 2, hardpoints = 3, capacitor = 1400, capacitorRecharge = 420,
+  scan = 200, lock = 25000, targets = 3, cargo = 3500, skill = "mining", level = 4, exact = true }
+CLASS.freighter = { price = 60000000, volume = 250000, mass = 300000000, inertia = 0.12, velocity = 75, warp = 1.5, radius = 650,
+  shield = 6000, armor = 9000, hull = 38000, recharge = 3000, signature = 900, cpu = 90, powergrid = 60,
+  highs = 0, mids = 0, lows = 3, hardpoints = 0, capacitor = 6000, capacitorRecharge = 1200,
+  scan = 60, lock = 40000, targets = 2, cargo = 40000, skill = "freighters", level = 1, exact = true }
+-- The classes that work and do not fight: what hardpoints they have are
+-- for tools and not for launchers, and their holds are as roomy as
+-- their builders make holds.
+local WORKING: { [string]: boolean } = { industrial = true, barge = true, freighter = true, capitalindustrial = true }
+-- A combat hauler, beside a hauler: half the hold, twice and more the
+-- hull under it, three hardpoints for guns and the fitting for them,
+-- and dearer. (First figures.)
+local COMBAT_HAULER = { cargo = 0.45, layers = 2.2, hardpoints = 3, fitting = 1.6, price = 2.5, slots = 1 }
+
+-- The classes that are capitals: nobody has a tech 2 make of one, but
+-- where a faction's line names one.
 local CAPITAL: { [string]: boolean } = { carrier = true, dreadnought = true, siegedreadnought = true, capitalindustrial = true,
   supercarrier = true, ultracapital = true }
 
@@ -252,13 +269,69 @@ local function round(x: number): number
   return math.floor(x / step + 0.5) * step
 end
 
-local function hullId(faction: Factions.Faction, class: string): string
-  return `{class}.{string.lower((string.gsub(faction.hulls[class], "[^%a]", "")))}`
+-- A hull of a class as a yard builds it: 'named' is what it is called,
+-- and 'role' what it is beside the plain hull ("combat": a combat
+-- hauler).
+local function yardHull(yard: Factions.Faction, class: string, named: string, role: string?): ShipType
+  local s = CLASS[class]
+  local combat = role == "combat"
+  local working = WORKING[class] and not combat
+  local hardpoints = if combat then COMBAT_HAULER.hardpoints else s.hardpoints + (if class == "industrial" or s.exact then 0 else yard.hardpoints)
+  local launchers = if working then 0 else math.floor(hardpoints * yard.launchers + 0.5)
+  local layers = if combat then COMBAT_HAULER.layers else 1
+  local fitting = if combat then COMBAT_HAULER.fitting else 1
+  -- (a pirate hull: the human hull of this class it was made out of,
+  -- which is in the list already, the human factions coming first: the
+  -- first plain one of its class they build)
+  local donor: string? = nil
+  if yard.donors then
+    for _, t in types do
+      if donor == nil and t.lineage == yard.donors[class] and t.class == class and t.tech ~= 2 and t.role == nil then
+        donor = t.id
+      end
+    end
+  end
+  return {
+    id = `{class}.{string.lower((string.gsub(named, "[^%a]", "")))}`, name = `{yard.name} {named}`, class = class, lineage = yard.id,
+    basePrice = round(s.price * yard.price * (if combat then COMBAT_HAULER.price else 1)), volume = s.volume,
+    mass = round(s.mass * yard.mass), inertia = s.inertia, maxVelocity = round(s.velocity * yard.velocity),
+    warpSpeed = s.warp, radius = s.radius,
+    shield = round(s.shield * yard.shield * layers), armor = round(s.armor * yard.armor * layers),
+    hull = round(s.hull * yard.hull * layers),
+    shieldRecharge = s.recharge, shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL,
+    signature = s.signature,
+    cpu = round(s.cpu * yard.cpu * fitting), powergrid = round(s.powergrid * yard.powergrid * fitting),
+    highs = math.max(s.highs, hardpoints),
+    mids = math.max(if s.mids == 0 then 0 else 1, s.mids + (if s.mids == 0 then 0 else yard.mids) + (if combat then COMBAT_HAULER.slots else 0)),
+    lows = math.max(1, s.lows + yard.lows + (if combat then COMBAT_HAULER.slots else 0)),
+    turrets = hardpoints - launchers, launchers = launchers,
+    capacitor = round(s.capacitor * yard.capacitor), capacitorRecharge = s.capacitorRecharge,
+    scanResolution = s.scan, lockRange = round(s.lock * yard.lockRange), maxTargets = s.targets,
+    cargo = round(s.cargo * (if WORKING[class] then yard.cargo else 1) * (if combat then COMBAT_HAULER.cargo else 1)),
+    requires = if class == "barge" then { { skill = "mining", level = 4 }, { skill = "industrials", level = 1 } }
+      else { { skill = s.skill, level = s.level } },
+    restricted = if yard.kind ~= "human" then true else nil,
+    donor = donor,
+    role = role,
+    rigs = if class == "freighter" then 0 else nil,
+  }
 end
 
 for _, yard in Factions.list do
+  local line = yard.line
+  if line then
+    -- (hull by hull, as the faction's line names them: the tech 2 makes
+    -- among them are made further down, of the hulls they are makes of)
+    for _, named in line do
+      if named.tech ~= 2 then
+        local hull = yardHull(yard, named.class, named.name, named.role)
+        hull.jump, hull.stealth = named.jump, named.stealth
+        table.insert(types, hull)
+      end
+    end
+    continue
+  end
   for _, class in Factions.CLASSES do
-    local id = hullId(yard, class)
     local written = false
     for _, t in types do
       if t.lineage == yard.id and t.class == class then
@@ -266,37 +339,7 @@ for _, yard in Factions.list do
       end
     end
     if not written then
-      local s = CLASS[class]
-      local hardpoints = s.hardpoints + (if class == "industrial" or s.exact then 0 else yard.hardpoints)
-      local launchers = if class == "industrial" then 0 else math.floor(hardpoints * yard.launchers + 0.5)
-      -- (a pirate hull: the human hull of this class it was made out of,
-      -- which is in the list already, the human factions coming first)
-      local donor: string? = nil
-      if yard.donors then
-        for _, t in types do
-          if t.lineage == yard.donors[class] and t.class == class then
-            donor = t.id
-          end
-        end
-      end
-      table.insert(types, {
-        id = id, name = `{yard.name} {yard.hulls[class]}`, class = class, lineage = yard.id,
-        basePrice = round(s.price * yard.price), volume = s.volume,
-        mass = round(s.mass * yard.mass), inertia = s.inertia, maxVelocity = round(s.velocity * yard.velocity),
-        warpSpeed = s.warp, radius = s.radius,
-        shield = round(s.shield * yard.shield), armor = round(s.armor * yard.armor), hull = round(s.hull * yard.hull),
-        shieldRecharge = s.recharge, shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL,
-        signature = s.signature,
-        cpu = round(s.cpu * yard.cpu), powergrid = round(s.powergrid * yard.powergrid),
-        highs = math.max(s.highs, hardpoints), mids = math.max(1, s.mids + yard.mids), lows = math.max(1, s.lows + yard.lows),
-        turrets = hardpoints - launchers, launchers = launchers,
-        capacitor = round(s.capacitor * yard.capacitor), capacitorRecharge = s.capacitorRecharge,
-        scanResolution = s.scan, lockRange = round(s.lock * yard.lockRange), maxTargets = s.targets,
-        cargo = round(s.cargo * (if class == "industrial" or class == "capitalindustrial" then yard.cargo else 1)),
-        requires = { { skill = s.skill, level = s.level } },
-        restricted = if yard.kind ~= "human" then true else nil,
-        donor = donor,
-      })
+      table.insert(types, yardHull(yard, class, yard.hulls[class]))
     end
   end
 end
@@ -496,31 +539,64 @@ local function tougher(resonance: { number }): { number }
   return out
 end
 
+-- The tech 2 make of a hull: 'id' and 'name' are its own.
+local function rebuiltHull(base: ShipType, id: string, name: string): ShipType
+  local mining = base.id == "frigate.prospector" or base.class == "barge"
+  local hauler = WORKING[base.class] or mining
+  local armoured = base.armor >= base.shield
+  return {
+    id = id, name = name, class = base.class, lineage = base.lineage,
+    basePrice = base.basePrice * TECH2.price, volume = base.volume,
+    mass = base.mass, inertia = base.inertia, maxVelocity = round(base.maxVelocity * TECH2.velocity),
+    warpSpeed = base.warpSpeed, radius = base.radius,
+    shield = round(base.shield * TECH2.layers), armor = round(base.armor * TECH2.layers), hull = round(base.hull * TECH2.layers),
+    shieldRecharge = base.shieldRecharge, shieldResonance = tougher(base.shieldResonance),
+    armorResonance = tougher(base.armorResonance), hullResonance = base.hullResonance,
+    signature = base.signature,
+    cpu = round(base.cpu * TECH2.fitting), powergrid = round(base.powergrid * TECH2.fitting),
+    highs = base.highs, mids = base.mids + (if armoured then 0 else 1), lows = base.lows + (if armoured then 1 else 0),
+    turrets = base.turrets, launchers = base.launchers,
+    capacitor = round(base.capacitor * TECH2.fitting), capacitorRecharge = base.capacitorRecharge,
+    scanResolution = round(base.scanResolution * TECH2.scan), lockRange = round(base.lockRange * TECH2.lock),
+    maxTargets = base.maxTargets,
+    cargo = if hauler then round(base.cargo * TECH2.cargo) else base.cargo,
+    drones = base.drones, bay = base.bay, rigs = base.rigs, calibration = base.calibration,
+    tech = 2, base = base.id, role = base.role,
+  }
+end
+
+-- The tech 2 makes a faction's line names: each a hull of its own, with
+-- its own name, of the hull of the line it says. (And the hull each is
+-- the make of, so that it is given no other.)
+local named: { [string]: boolean } = {}
+for _, yard in Factions.list do
+  local line: { Factions.Hull } = yard.line or {}
+  for _, entry in line do
+    if entry.tech == 2 then
+      local base: ShipType? = nil
+      for _, t in types do
+        if t.lineage == yard.id and t.name == `{yard.name} {entry.of}` then
+          base = t
+        end
+      end
+      local from = assert(base, `{yard.name}'s {entry.name} is the tech 2 make of a hull they do not build`)
+      local hull = rebuiltHull(from, `{entry.class}.{string.lower((string.gsub(entry.name, "[^%a]", "")))}`, `{yard.name} {entry.name}`)
+      hull.jump, hull.stealth = entry.jump or from.jump, entry.stealth or from.stealth
+      table.insert(types, hull)
+      named[from.id] = true
+    end
+  end
+end
+-- And of every other hull of a human line that is no capital, and of
+-- the two that mine: the same hull, called its "II".
 for _, base in table.clone(types) do
   local yard = Factions.byId[base.lineage]
   local mining = base.id == "frigate.prospector" or base.id == "barge.quarry"
-  if ((yard ~= nil and yard.kind == "human") or mining) and not base.restricted and not CAPITAL[base.class] then
-    local hauler = base.class == "industrial" or mining
-    local armoured = base.armor >= base.shield
-    table.insert(types, {
-      id = base.id .. ".ii", name = base.name .. " II", class = base.class, lineage = base.lineage,
-      basePrice = base.basePrice * TECH2.price, volume = base.volume,
-      mass = base.mass, inertia = base.inertia, maxVelocity = round(base.maxVelocity * TECH2.velocity),
-      warpSpeed = base.warpSpeed, radius = base.radius,
-      shield = round(base.shield * TECH2.layers), armor = round(base.armor * TECH2.layers), hull = round(base.hull * TECH2.layers),
-      shieldRecharge = base.shieldRecharge, shieldResonance = tougher(base.shieldResonance),
-      armorResonance = tougher(base.armorResonance), hullResonance = base.hullResonance,
-      signature = base.signature,
-      cpu = round(base.cpu * TECH2.fitting), powergrid = round(base.powergrid * TECH2.fitting),
-      highs = base.highs, mids = base.mids + (if armoured then 0 else 1), lows = base.lows + (if armoured then 1 else 0),
-      turrets = base.turrets, launchers = base.launchers,
-      capacitor = round(base.capacitor * TECH2.fitting), capacitorRecharge = base.capacitorRecharge,
-      scanResolution = round(base.scanResolution * TECH2.scan), lockRange = round(base.lockRange * TECH2.lock),
-      maxTargets = base.maxTargets,
-      cargo = if hauler then round(base.cargo * TECH2.cargo) else base.cargo,
-      drones = base.drones, bay = base.bay, rigs = base.rigs, calibration = base.calibration,
-      tech = 2, base = base.id,
-    })
+  if ((yard ~= nil and yard.kind == "human") or mining) and not base.restricted and not CAPITAL[base.class] and base.tech ~= 2
+    and not named[base.id] then
+    local hull = rebuiltHull(base, base.id .. ".ii", base.name .. " II")
+    hull.jump, hull.stealth = base.jump, base.stealth
+    table.insert(types, hull)
   end
 end
 
@@ -603,7 +679,16 @@ end
 -- The tech 2 make of a hull, if it has one.
 function Ships.Improved(id: string): ShipType?
   local better = Ships.byId[id .. ".ii"]
-  return if better and better.tech == 2 then better else nil
+  if better and better.tech == 2 then
+    return better
+  end
+  -- (or the one its faction's line names, which is called what it is called)
+  for _, hull in Ships.list do
+    if hull.tech == 2 and hull.base == id then
+      return hull
+    end
+  end
+  return nil
 end
 
 -- Seconds; see the note on agility above.

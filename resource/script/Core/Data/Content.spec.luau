@@ -53,8 +53,19 @@ suite:Case("four human factions, the pirates and three alien ones, each with a l
     styles[faction.style] = true
     t.ok(Factions.byId[faction.id] == faction)
     t.ok(#faction.note > 20, faction.id)
-    for _, class in Factions.CLASSES do
-      t.ok(faction.hulls[class] ~= nil, `{faction.id} has no {class}`)
+    -- (a hull of every class by name; or, where the owner has gone through the faction's ships, its line of them)
+    local line = faction.line
+    if line then
+      local named: { [string]: boolean } = {}
+      for _, hull in line do
+        t.ok(not named[hull.name], `{faction.id} has two hulls called {hull.name}`)
+        named[hull.name] = true
+      end
+      t.ok(#line >= 5, faction.id)
+    else
+      for _, class in Factions.CLASSES do
+        t.ok(faction.hulls[class] ~= nil, `{faction.id} has no {class}`)
+      end
     end
   end
   t.eq(kinds, { human = 4, pirate = 1, alien = 3 })
@@ -68,6 +79,10 @@ suite:Case("every faction has a hull of every class, and a bigger class is more 
     names[hull.name] = true
   end
   for _, faction in Factions.list do
+    -- (a faction whose ships the owner has gone through has its own line of them: the case after this one)
+    if faction.line then
+      continue
+    end
     local line: { Ships.ShipType } = {}
     for _, class in Factions.CLASSES do
       local found: Ships.ShipType? = nil
@@ -123,6 +138,66 @@ suite:Case("every faction has a hull of every class, and a bigger class is more 
   end
 end)
 
+suite:Case("the Talmar's ships are the owner's rework of them: each by name, of its class and that class's size, with the tech 2 makes that are hulls of their own", function(t)
+  local talmar = Factions.byId.talmar
+  local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, battlecruiser = 300, battleship = 400, carrier = 1000, dreadnought = 1300,
+    supercarrier = 1300, industrial = 180, barge = 160, freighter = 650, capitalindustrial = 700 }
+  -- (name, class, the hull it is the tech 2 make of, a jump drive, built to go unseen)
+  local LINE: { { any } } = {
+    { "Carvarro", "frigate" }, { "Creavo", "frigate" }, { "Meseolo", "destroyer" }, { "Paestro", "cruiser" }, { "Stenanno", "cruiser" },
+    { "Sopholto", "battlecruiser" }, { "Phaeto", "battleship" }, { "Losiano", "battleship" }, { "Scoppo", "carrier", nil, true },
+    { "Concorso", "dreadnought" }, { "Nullo", "supercarrier" },
+    { "Sunfish", "industrial" }, { "Tarantula", "industrial", "Sunfish", nil, true }, { "Armadillo", "industrial" },
+    { "Anteater", "barge" }, { "Rhino", "freighter" }, { "Sugarglider", "freighter", "Rhino", true },
+    { "Jaguar", "capitalindustrial" }, { "Rapa", "capitalindustrial", "Jaguar", true },
+  }
+  t.eq(#assert(talmar.line), #LINE)
+  local theirs = 0
+  for _, hull in Ships.list do
+    theirs += if hull.lineage == "talmar" then 1 else 0
+  end
+  -- (the nineteen, and the "II" of the ten that are no capital and have no tech 2 make by name)
+  t.eq(theirs, #LINE + 10)
+  for _, entry in LINE do
+    local name: string, class: string, of: string?, jump: boolean?, stealth: boolean? = entry[1], entry[2], entry[3], entry[4], entry[5]
+    local hull = assert(Ships.byId[`{class}.{string.lower(name)}`], `the Talmar have no {name}`)
+    t.eq({ hull.name, hull.class, hull.lineage, hull.radius, hull.jump, hull.stealth } :: { any },
+      { `Talmar {name}`, class, "talmar", RADIUS[class], jump, stealth } :: { any }, name)
+    if of then
+      local base = assert(Ships.byId[`{class}.{string.lower(of)}`])
+      t.eq({ hull.tech, hull.base, Ships.Improved(base.id), Ships.byId[base.id .. ".ii"] } :: { any }, { 2, base.id, hull, nil } :: { any }, name)
+      t.ok(hull.shield + hull.armor + hull.hull > base.shield + base.armor + base.hull and hull.cargo > base.cargo, name)
+      t.eq({ Types.Info(hull.id).scarce, assert(Blueprints.byProduct[hull.id]).invented } :: { any }, { true, true } :: { any }, name)
+    else
+      t.eq({ hull.tech, Types.Get(hull.id) ~= nil, Blueprints.byProduct[hull.id] ~= nil } :: { any }, { nil, true, true } :: { any }, name)
+      t.ok(#Skills.Needs(hull.id) >= 1, name)
+    end
+  end
+  -- A shield people, in every warship; two hulls of a class are the same to the rules, for now.
+  for _, pair in { { "frigate.carvarro", "frigate.creavo" }, { "cruiser.paestro", "cruiser.stenanno" }, { "battleship.phaeto", "battleship.losiano" } } do
+    local a, b = Ships.byId[pair[1]], Ships.byId[pair[2]]
+    t.ok(a.shield > a.armor, a.id)
+    t.eq({ a.shield, a.armor, a.hull, a.turrets, a.launchers, a.basePrice }, { b.shield, b.armor, b.hull, b.turrets, b.launchers, b.basePrice })
+  end
+  -- The combat hauler: half a hauler's hold, twice and more its hull, and guns.
+  local hauler, fighter = Ships.byId["industrial.sunfish"], Ships.byId["industrial.armadillo"]
+  t.ok(fighter.cargo < 0.5 * hauler.cargo and fighter.armor > 2 * hauler.armor and fighter.turrets + fighter.launchers == 3 and hauler.launchers == 0)
+  t.eq(fighter.role, "combat")
+  -- A barge of their own mines as the Quarry does, and a freighter of theirs carries as the Dray does.
+  local barge, freighter = Ships.byId["barge.anteater"], Ships.byId["freighter.rhino"]
+  t.eq({ barge.turrets, barge.launchers, freighter.turrets + freighter.launchers, freighter.rigs } :: { any }, { 3, 0, 0, 0 } :: { any })
+  t.ok(freighter.cargo > 30000 and #Skills.Needs(barge.id) == 2)
+  -- What they had is gone, and so are the classes their line does not name.
+  for _, gone in { "frigate.harrier", "destroyer.sabre", "cruiser.falchion", "battleship.claymore", "industrial.packet" } do
+    t.eq(Ships.byId[gone], nil, gone)
+  end
+  for _, hull in Ships.list do
+    t.ok(hull.lineage ~= "talmar" or (hull.class ~= "attackbattlecruiser" and hull.class ~= "siegedreadnought"), hull.id)
+  end
+  -- A patrol of theirs flies the first plain hull of a class, and the pirates' frigate is made of it.
+  t.eq(Ships.byId["frigate.cutthroat"].donor, "frigate.carvarro")
+end)
+
 suite:Case("every pirate hull is somebody else's, cheaper, quicker and thinner-skinned", function(t)
   local pirates = Factions.byId.unbound
   local donors = assert(pirates.donors)
@@ -142,7 +217,7 @@ suite:Case("every pirate hull is somebody else's, cheaper, quicker and thinner-s
     if class ~= "industrial" then
       t.ok(hull.maxVelocity > 0.98 * original.maxVelocity, hull.id)
       -- (more guns than it was built for; but for the classes whose hardpoints are the same whoever builds them)
-      t.ok(hull.turrets + hull.launchers > original.turrets + original.launchers or original.id == "frigate.harrier"
+      t.ok(hull.turrets + hull.launchers > original.turrets + original.launchers or original.id == "frigate.carvarro"
         or (Factions.CLASSES[5] ~= class and table.find(Factions.CLASSES, class) :: number > 5
           and hull.turrets + hull.launchers == original.turrets + original.launchers), hull.id)
     end
@@ -156,7 +231,11 @@ suite:Case("every hull of a human line, and each mining hull, has a tech 2 make:
     if hull.tech == 2 then
       improved += 1
       local base = Ships.byId[hull.base :: string]
-      t.eq({ hull.id, hull.name, hull.class, hull.lineage } :: { any }, { base.id .. ".ii", base.name .. " II", base.class, base.lineage } :: { any })
+      -- (the hull it is the make of, called its "II"; or, where its faction's line names it, a hull with a name of its own)
+      local own = hull.id ~= base.id .. ".ii"
+      t.eq({ hull.class, hull.lineage } :: { any }, { base.class, base.lineage } :: { any })
+      t.ok(own or hull.name == base.name .. " II", hull.id)
+      t.ok(not own or (faction ~= nil and faction.line ~= nil and Ships.byId[base.id .. ".ii"] == nil), hull.id)
       t.eq(Ships.Improved(base.id), hull)
       t.ok(base.tech == nil and Ships.Improved(hull.id) == nil, "a tech 2 hull has no tech 2 make of its own")
       -- The same hull to look at and to arm: its hardpoints, its size, its drones.
@@ -174,7 +253,8 @@ suite:Case("every hull of a human line, and each mining hull, has a tech 2 make:
       t.eq({ hull.mids - base.mids, hull.lows - base.lows }, if base.armor >= base.shield then { 0, 1 } else { 1, 0 }, hull.id)
       t.ok(hull.maxVelocity >= base.maxVelocity and hull.lockRange > base.lockRange and hull.scanResolution > base.scanResolution)
       -- What carries, carries half as much again; a warship's hold is as it was.
-      local carrier = base.class == "industrial" or base.id == "frigate.prospector" or base.id == "barge.quarry"
+      local carrier = base.class == "industrial" or base.class == "barge" or base.class == "freighter" or base.class == "capitalindustrial"
+        or base.id == "frigate.prospector"
       t.near(hull.cargo / base.cargo, if carrier then 1.5 else 1, 0.03, hull.id)
       t.eq(hull.basePrice, base.basePrice * 8)
       -- More skill than the plain one, and never less than four of it.
@@ -189,7 +269,7 @@ suite:Case("every hull of a human line, and each mining hull, has a tech 2 make:
       t.eq({ blueprint.materials[1].type, blueprint.materials[1].quantity } :: { any }, { base.id, 1 } :: { any })
       local rare, components, moon = 0, 0, 0
       -- (and of what a reactor makes of what is drilled out of moons: one composite, of the grade for a hull its size)
-      local grade = if hull.class == "battleship" or hull.class == "freighter" then 3
+      local grade = if hull.class == "battleship" or hull.class == "freighter" or Ships.Capital(hull.class) then 3
         elseif hull.class == "frigate" or hull.class == "destroyer" then 1 else 2
       for index, material in blueprint.materials do
         local reacted = Reactions.byId[material.type]
@@ -207,14 +287,20 @@ suite:Case("every hull of a human line, and each mining hull, has a tech 2 make:
       t.eq(moon, 1, `{hull.id} should call for one composite`)
     else
       -- (and every hull that should have one, has)
-      local should = hull.id == "frigate.prospector" or hull.id == "barge.quarry"
+      -- (a capital has none, but where its faction's line names one)
+      local named = false
+      for _, entry in (if faction then faction.line else nil) or {} :: { Factions.Hull } do
+        named = named or (entry.tech == 2 and hull.name == `{(faction :: Factions.Faction).name} {entry.of}`)
+      end
+      local should = hull.id == "frigate.prospector" or hull.id == "barge.quarry" or named
         or (faction ~= nil and faction.kind == "human" and not hull.restricted and not Ships.Capital(hull.class))
       t.eq(Ships.Improved(hull.id) ~= nil, should, hull.id)
       t.eq(Types.Get(hull.id) == nil or Types.Info(hull.id).scarce == nil, true, hull.id)
     end
   end
-  -- Four lines of five hulls and two battlecruisers (nobody has a tech 2 make of a capital), and the two that mine.
-  t.eq(improved, 4 * 7 + 2)
+  -- Three lines of five hulls and two battlecruisers (nobody has a tech 2 make of a capital, but where a line names
+  -- one); the Talmar's ten that are no capital and their three with names of their own; and the two that mine.
+  t.eq(improved, 3 * 7 + 13 + 2)
   t.ok(Ships.Improved("frigate.courier") == nil and Ships.Improved("industrial.hauler") == nil and Ships.Improved("capsule") == nil)
 end)
 

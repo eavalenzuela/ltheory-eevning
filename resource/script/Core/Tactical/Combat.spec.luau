@@ -279,7 +279,7 @@ suite:Case("damage goes through shield, armour and hull, and the ship dies", fun
 end)
 
 suite:Case("a missile lands after its flight and does less to a small target", function(t)
-  local a = arena("frigate.harrier", { { "launcher.light", "missile.light.kinetic" } }, "frigate.courier", {}, 10000)
+  local a = arena("frigate.carvarro", { { "launcher.light", "missile.light.kinetic" } }, "frigate.courier", {}, 10000)
   lockFoe(t, a)
   local launcher = modules(a)[1]
   order(t, a, { kind = "ActivateModule", actor = 0, item = launcher.id, target = a.foe.id })
@@ -297,7 +297,7 @@ suite:Case("a missile lands after its flight and does less to a small target", f
 end)
 
 suite:Case("a missile fired from beyond its reach does nothing", function(t)
-  local a = arena("frigate.harrier", { { "launcher.light", "missile.light.kinetic" } }, "frigate.courier", {}, 20000)
+  local a = arena("frigate.carvarro", { { "launcher.light", "missile.light.kinetic" } }, "frigate.courier", {}, 20000)
   lockFoe(t, a)
   order(t, a, { kind = "ActivateModule", actor = 0, item = modules(a)[1].id, target = a.foe.id })
   t.eq(stepUntil(a, "Shot", 3).outcome, "out of range")

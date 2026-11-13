@@ -473,7 +473,7 @@ suite:Case("a pilot who docks a capsule where they keep a ship is put in that sh
   local game, home = newGame()
   local state = game.state
   state.skills.frigates = 2
-  local spare = Space.NewShip(state, "frigate.harrier", "Spare", "player", home)
+  local spare = Space.NewShip(state, "frigate.carvarro", "Spare", "player", home)
   Core.Submit(game, { kind = "Undock", actor = state.player.ship })
   Core.Step(game)
   local Aftermath = require("@lt/Core/Tactical/Aftermath")
@@ -493,7 +493,7 @@ end)
 suite:Case("but not in a ship they have not trained to fly: then the station gives a starter", function(t)
   local game, home = newGame()
   local state = game.state
-  local spare = Space.NewShip(state, "frigate.harrier", "Spare", "player", home)
+  local spare = Space.NewShip(state, "frigate.carvarro", "Spare", "player", home)
   Core.Submit(game, { kind = "Undock", actor = state.player.ship })
   Core.Step(game)
   local Aftermath = require("@lt/Core/Tactical/Aftermath")
@@ -508,7 +508,7 @@ suite:Case("but not in a ship they have not trained to fly: then the station giv
   Core.Step(game)
   t.ok(state.player.ship ~= spare.id)
   t.eq(Core.Query.Player(game).hull.id, "frigate.courier")
-  t.eq(#Core.Query.Ships(game, home), 2, "the Harrier waits in the hangar")
+  t.eq(#Core.Query.Ships(game, home), 2, "the Carvarro waits in the hangar")
 end)
 
 suite:Case("markets are plain data and survive a save", function(t)

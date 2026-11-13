@@ -584,4 +584,79 @@ suite:Case("an older save's galaxy is given the regions it would have had", func
   t.eq(player.region, loaded.state.galaxy.regions[loaded.state.galaxy.systems[1].region].name)
 end)
 
+suite:Case("a save with the hulls the Talmar had opens with the hulls they have: every one of them, wherever it is in the save", function(t)
+  local game = newGame()
+  local state = game.state
+  local home = Core.Query.Player(game).docked
+  -- A ship of theirs, a packed hull and its blueprint, a tech 2 make with a name of its own, and their market.
+  Space.NewShip(state, "frigate.carvarro", "Spare", "player", home)
+  Items.Add(state, "cruiser.paestro", 1, home, "hangar")
+  Items.Add(state, "blueprint.battleship.phaeto", 1, home, "hangar")
+  Items.Add(state, "industrial.tarantula", 1, home, "hangar")
+  Core.Query.Quote(game, home, "destroyer.meseolo")
+  Core.Step(game)
+  local data, length = Core.Save(game)
+  -- The same save as it was before their ships were gone through: every name of a new hull is the old one's.
+  local WAS: { [string]: string } = {
+    ["frigate.carvarro"] = "frigate.harrier", ["destroyer.meseolo"] = "destroyer.sabre", ["cruiser.paestro"] = "cruiser.falchion",
+    ["battleship.phaeto"] = "battleship.claymore", ["industrial.sunfish"] = "industrial.packet",
+    ["frigate.carvarro.ii"] = "frigate.harrier.ii", ["destroyer.meseolo.ii"] = "destroyer.sabre.ii",
+    ["cruiser.paestro.ii"] = "cruiser.falchion.ii", ["battleship.phaeto.ii"] = "battleship.claymore.ii",
+    ["industrial.tarantula"] = "industrial.packet.ii",
+  }
+  local changed = 0
+  local function was(value: any): any
+    if type(value) ~= "string" then
+      return value
+    elseif WAS[value] then
+      return WAS[value]
+    elseif string.sub(value, 1, 10) == "blueprint." and WAS[string.sub(value, 11)] then
+      return "blueprint." .. WAS[string.sub(value, 11)]
+    end
+    return value
+  end
+  local function walk(node: any)
+    local moved: { [any]: any } = {}
+    for key, value in node do
+      if type(value) == "table" then
+        walk(value)
+      elseif was(value) ~= value then
+        node[key] = was(value)
+        changed += 1
+      end
+      if was(key) ~= key then
+        moved[key] = was(key)
+      end
+    end
+    for key, old in moved do
+      node[old] = node[key]
+      node[key] = nil
+      changed += 1
+    end
+  end
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 64
+  walk(file.state)
+  t.ok(changed >= 4, `the save should have had the hulls in it: {changed} places`)
+  local old, oldLength = Codec.Encode(file)
+  local opened = Core.Load(old, oldLength)
+  t.eq(Core.Hash(opened), Core.Hash(game))
+  local hulls = 0
+  for _, id in opened.state.shipIds do
+    local ship = opened.state.ships[id]
+    t.ok(Ships.byId[ship.type] ~= nil, `a ship of a hull there is not: {ship.type}`)
+    hulls += if ship.type == "frigate.carvarro" then 1 else 0
+  end
+  t.eq(hulls, 1)
+  for _, id in opened.state.itemIds do
+    t.ok(Types.Get(opened.state.items[id].type) ~= nil, `an item of a type there is not: {opened.state.items[id].type}`)
+  end
+  -- And it goes on as the other does.
+  for _ = 1, 20 do
+    Core.Step(game)
+    Core.Step(opened)
+  end
+  t.eq(Core.Hash(opened), Core.Hash(game))
+end)
+
 return suite

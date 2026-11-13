@@ -58,12 +58,27 @@ export type Faction = {
   hardpoints: number,
   -- its hulls, by class
   hulls: { [string]: string },
+  -- Or its ships hull by hull, where the project owner has gone through
+  -- the faction's (a faction at a time): it then has these and no
+  -- others, as many of a class as are named here and none of a class
+  -- that is not, and 'hulls' is not read for it.
+  line: { Hull }?,
   -- Pirates only: whose hull each of theirs was, by class (a faction id).
   donors: { [string]: string }?,
   -- A people with no fixed place: it builds no towers, and where another
   -- faction has a station it has a colony ship (Data/Structures).
   nomad: boolean?,
 }
+
+-- A hull of a faction's line: its name and its class, and what it is
+-- beside the plain hull of that class. 'role' "combat" is a hauler
+-- built to be shot at (a combat hauler). 'tech' 2 with 'of' is the tech
+-- 2 make of another hull of the line, by that hull's name: a hull of
+-- its own, with its own name and looks. 'jump': it has a jump drive.
+-- 'stealth': it is built to go unseen. (Neither a jump drive nor what
+-- stealth is to be is made yet: they are marked here, and said on the
+-- hull's sheet.)
+export type Hull = { name: string, class: string, role: string?, tech: number?, of: string?, jump: boolean?, stealth: boolean? }
 
 Factions.list = {
   -- The four human factions.
@@ -92,8 +107,29 @@ Factions.list = {
     paint = { primary = { 0.62, 0.66, 0.70 }, secondary = { 0.15, 0.32, 0.55 }, glow = { 0.45, 0.75, 1.0 } },
     shield = 1.2, armor = 0.85, hull = 0.95, velocity = 1.1, mass = 0.92, cpu = 1.1, powergrid = 0.95, capacitor = 0.95,
     lockRange = 1.0, cargo = 0.95, price = 1, mids = 1, lows = -1, hardpoints = 0,
-    hulls = { frigate = "Rapier", destroyer = "Sabre", cruiser = "Falchion", battleship = "Claymore", industrial = "Packet",
-      attackbattlecruiser = "Estoc", battlecruiser = "Scimitar", carrier = "Scabbard", dreadnought = "Zweihander", siegedreadnought = "Flamberge", capitalindustrial = "Argosy", supercarrier = "Armoury" },
+    hulls = {},
+    -- (The project owner's rework of the Talmar's ships, 2026-11-13:
+    -- every hull of theirs, by name, with the seed each is drawn from in
+    -- resource/hull/seeds.txt. They have no attack battlecruiser and no
+    -- siege dreadnought.)
+    line = {
+      { name = "Carvarro", class = "frigate" }, { name = "Creavo", class = "frigate" },
+      { name = "Meseolo", class = "destroyer" },
+      { name = "Paestro", class = "cruiser" }, { name = "Stenanno", class = "cruiser" },
+      { name = "Sopholto", class = "battlecruiser" },
+      { name = "Phaeto", class = "battleship" }, { name = "Losiano", class = "battleship" },
+      { name = "Scoppo", class = "carrier", jump = true },
+      { name = "Concorso", class = "dreadnought" },
+      { name = "Nullo", class = "supercarrier" },
+      { name = "Sunfish", class = "industrial" },
+      { name = "Tarantula", class = "industrial", tech = 2, of = "Sunfish", stealth = true },
+      { name = "Armadillo", class = "industrial", role = "combat" },
+      { name = "Anteater", class = "barge" },
+      { name = "Rhino", class = "freighter" },
+      { name = "Sugarglider", class = "freighter", tech = 2, of = "Rhino", jump = true },
+      { name = "Jaguar", class = "capitalindustrial" },
+      { name = "Rapa", class = "capitalindustrial", tech = 2, of = "Jaguar", jump = true },
+    },
   },
   {
     -- (After the project owner's draft, 2026-11-11: the Orun
@@ -109,7 +145,7 @@ Factions.list = {
     shield = 0.9, armor = 1.15, hull = 1.4, velocity = 0.9, mass = 1.12, cpu = 0.95, powergrid = 1.1, capacitor = 1.0,
     lockRange = 0.9, cargo = 1.25, price = 1, mids = 0, lows = 0, hardpoints = 0,
     hulls = { frigate = "Mastiff", destroyer = "Boar", cruiser = "Aurochs", battleship = "Mammoth", industrial = "Ox",
-      attackbattlecruiser = "Wolverine", battlecruiser = "Bison", carrier = "Roost", dreadnought = "Behemoth", siegedreadnought = "Rhino", capitalindustrial = "Dromedary", supercarrier = "Rookery" },
+      attackbattlecruiser = "Wolverine", battlecruiser = "Bison", carrier = "Roost", dreadnought = "Behemoth", siegedreadnought = "Tusker", capitalindustrial = "Dromedary", supercarrier = "Rookery" },
   },
   {
     -- (Lasers and armour by the project owner's decision, 2026-11-10,
@@ -141,7 +177,7 @@ Factions.list = {
     hulls = { frigate = "Cutthroat", destroyer = "Jackal", cruiser = "Marauder", battleship = "Ravager", industrial = "Fence",
       attackbattlecruiser = "Reaver", battlecruiser = "Brigand", carrier = "Warren", dreadnought = "Tyrant", siegedreadnought = "Despoiler", capitalindustrial = "Hoard", supercarrier = "Matriarch" },
     donors = { frigate = "talmar", destroyer = "orun", cruiser = "vessari", battleship = "kethri", industrial = "orun",
-      attackbattlecruiser = "talmar", battlecruiser = "vessari", carrier = "orun", dreadnought = "kethri", siegedreadnought = "vessari",
+      attackbattlecruiser = "orun", battlecruiser = "vessari", carrier = "orun", dreadnought = "kethri", siegedreadnought = "vessari",
       capitalindustrial = "talmar", supercarrier = "kethri" },
   },
 

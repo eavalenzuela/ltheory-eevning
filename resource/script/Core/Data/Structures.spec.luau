@@ -126,7 +126,8 @@ end)
 suite:Case("a tower, a module and a day's fuel for the largest tower each go, packed, in the hold of any industrial a pilot can buy", function(t)
   local smallest = math.huge
   for _, ship in Ships.list do
-    if ship.class == "industrial" and not ship.restricted then
+    -- (a hauler: a combat hauler is built to be shot at, and has half the hold)
+    if ship.class == "industrial" and not ship.restricted and ship.role == nil then
       smallest = math.min(smallest, ship.cargo)
     end
   end

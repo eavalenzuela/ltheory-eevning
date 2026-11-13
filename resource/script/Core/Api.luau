@@ -82,7 +82,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 64
+Core.SAVE_VERSION = 65
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -316,6 +316,59 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- 59: a corporation keeps its books by head, and a tower keeps count
   -- of its running. A save from before has what was earned and spent
   -- under no head, and its towers begin their count now.
+  -- 65: the Talmar's ships were gone through by the project owner
+  -- (Data/Factions): the hulls they had are gone, and each is the hull
+  -- of their new line that stands where it stood. (And the hulls of the
+  -- classes above the battleship that were theirs for a day under names
+  -- of mine.) Whatever a save has of one, anywhere in it (a ship, a
+  -- packed hull, a blueprint, an order, a job), it has of the other.
+  [64] = function(state: any)
+    local RENAMED: { [string]: string } = {
+      ["frigate.harrier"] = "frigate.carvarro", ["destroyer.sabre"] = "destroyer.meseolo", ["cruiser.falchion"] = "cruiser.paestro",
+      ["battleship.claymore"] = "battleship.phaeto", ["industrial.packet"] = "industrial.sunfish",
+      ["frigate.harrier.ii"] = "frigate.carvarro.ii", ["destroyer.sabre.ii"] = "destroyer.meseolo.ii",
+      ["cruiser.falchion.ii"] = "cruiser.paestro.ii", ["battleship.claymore.ii"] = "battleship.phaeto.ii",
+      ["industrial.packet.ii"] = "industrial.tarantula",
+      ["attackbattlecruiser.estoc"] = "battlecruiser.sopholto", ["attackbattlecruiser.estoc.ii"] = "battlecruiser.sopholto.ii",
+      ["battlecruiser.scimitar"] = "battlecruiser.sopholto", ["battlecruiser.scimitar.ii"] = "battlecruiser.sopholto.ii",
+      ["carrier.scabbard"] = "carrier.scoppo", ["dreadnought.zweihander"] = "dreadnought.concorso",
+      ["siegedreadnought.flamberge"] = "dreadnought.concorso", ["capitalindustrial.argosy"] = "capitalindustrial.jaguar",
+      ["supercarrier.armoury"] = "supercarrier.nullo", ["siegedreadnought.rhino"] = "siegedreadnought.tusker",
+    }
+    local function renamed(value: any): any
+      if type(value) ~= "string" then
+        return value
+      end
+      local now = RENAMED[value]
+      if now then
+        return now
+      elseif string.sub(value, 1, 10) == "blueprint." and RENAMED[string.sub(value, 11)] then
+        return "blueprint." .. RENAMED[string.sub(value, 11)]
+      end
+      return value
+    end
+    local function walk(node: any)
+      local moved: { [any]: any } = {}
+      for key, value in node do
+        if type(value) == "table" then
+          walk(value)
+        elseif type(value) == "string" then
+          node[key] = renamed(value)
+        end
+        if renamed(key) ~= key then
+          moved[key] = renamed(key)
+        end
+      end
+      for key, now in moved do
+        -- (two old hulls that are one new one: what was kept by either is kept, the first found)
+        if node[now] == nil then
+          node[now] = node[key]
+        end
+        node[key] = nil
+      end
+    end
+    walk(state)
+  end,
   -- 64: a tower can have a reactor, which makes a composite of what
   -- drills bring up. One of a save from before is making nothing.
   [63] = function(state: any)

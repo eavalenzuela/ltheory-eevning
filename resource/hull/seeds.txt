@@ -21,11 +21,15 @@
 # Find seeds with:   bin/launch hulls        (S goes round the styles,
 #                                             F shows one as a ship)
 #                    script/hulls seeds 1 40 2 bare frigate
-# The types are in resource/script/Core/Data/Ships.luau: each faction
-# has one hull of each class, called <class>.<name>, and there are
-# anybody's (frigate.courier, frigate.prospector, barge.quarry,
-# industrial.hauler, freighter.dray). The classes, with how big a ship
-# of each is (its radius: half its length) and the Vessari hull of it:
+# The types are in resource/script/Core/Data/Ships.luau: a hull is
+# called <class>.<name>. A faction has one hull of each class, or, where
+# its ships have been gone through one by one (the Talmar's, at the foot
+# of this file), the hulls its line names in
+# resource/script/Core/Data/Factions.luau: several of a class, or none.
+# And there are anybody's (frigate.courier, frigate.prospector,
+# barge.quarry, industrial.hauler, freighter.dray). The classes, with
+# how big a ship of each is (its radius: half its length) and the
+# Vessari hull of it:
 #
 #   frigate               42 m   frigate.javelin
 #   destroyer             75 m   destroyer.halberd
@@ -34,6 +38,8 @@
 #   attackbattlecruiser  200 m   attackbattlecruiser.glaive
 #   battlecruiser        300 m   battlecruiser.pavise
 #   battleship           400 m   battleship.bastion
+#   barge                160 m   (a faction's own: the Talmar's barge.anteater)
+#   freighter            650 m   (a faction's own: the Talmar's freighter.rhino)
 #   capitalindustrial    700 m   capitalindustrial.emporium
 #   siegedreadnought     950 m   siegedreadnought.trebuchet
 #   carrier             1000 m   carrier.citadel
@@ -50,3 +56,25 @@
 #
 # frigate.prospector   12   2
 # frigate.courier       7   2   stout painted
+
+# The Talmar's ships (the owner's rework of them, 2026-11-13: each hull's
+# name and class are in resource/script/Core/Data/Factions.luau).
+frigate.carvarro            29  6
+frigate.creavo              54  4
+destroyer.meseolo           43  5
+cruiser.paestro              2  8
+cruiser.stenanno            48  6
+battlecruiser.sopholto      18  8
+battleship.phaeto            4  6
+battleship.losiano           6  7
+carrier.scoppo              34  8
+dreadnought.concorso        38  8
+supercarrier.nullo          97  7
+industrial.sunfish          12  6
+industrial.tarantula        60  6
+industrial.armadillo        17  6
+barge.anteater              37  5
+freighter.rhino             22  4
+freighter.sugarglider       40  8
+capitalindustrial.jaguar    28  7
+capitalindustrial.rapa      28  8

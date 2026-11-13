@@ -2894,6 +2894,16 @@ local STAND_SIZE: { [string]: number } = { attackbattlecruiser = 4, battlecruise
   siegedreadnought = 5, capitalindustrial = 5, supercarrier = 5 }
 local pending: { [string]: () -> Design? } = {}
 
+-- A design drawn for a hull there no longer is (a faction's ships
+-- reworked: the Talmar's, 2026-11-13, whose hulls are now the
+-- generator's, by resource/hull/seeds.txt) is nobody's: the drawing
+-- of it is kept above, and is not a hull of the game.
+for id in designs do
+  if Ships.byId[id] == nil then
+    designs[id] = nil
+  end
+end
+
 -- The design of a hull type, if it has one (a stand-in is made here,
 -- the first time it is asked for).
 local function designOf(type: string): Design?
@@ -2990,7 +3000,7 @@ end
 local function seeded(type: string, seed: number, size: number, style: string?, painted: boolean?): (Design?, string)
   local hull = Ships.byId[type]
   local had = designs[type]
-  if hull == nil or (had == nil and pending[type] == nil) then
+  if hull == nil then
     return nil, "there is no such hull"
   elseif Hull.SIZES[size] == nil then
     return nil, `sizes are 1 to {#Hull.SIZES}`

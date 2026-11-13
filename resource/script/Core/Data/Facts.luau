@@ -191,12 +191,25 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
   local faction = Factions.byId[hull.lineage]
   local called = Ships.CLASS_NAMES[hull.class]
   local class = if called then called[1] else string.upper(string.sub(hull.class, 1, 1)) .. string.sub(hull.class, 2)
-  sheet.kind = if faction then `{faction.name} {string.lower(class)}` else class
+  -- (a hauler built to be shot at is called what it is)
+  local what = if hull.role == "combat" then "combat hauler" else string.lower(class)
+  sheet.kind = if faction then `{faction.name} {if hull.tech == 2 then "tech 2 " else ""}{what}` else class
   sheet.note = if hull.donor then `Made over from the {nameOf(hull.donor)}.`
     elseif hull.tech == 2 and hull.base then
-      `The tech 2 make of the {nameOf(hull.base)}: the same hull rebuilt to take more and fit more. Nobody sells one. Its blueprint is invented from the plain hull's, and it is built of the plain hull.`
+      `The tech 2 make of the {nameOf(hull.base)}: rebuilt to take more and fit more. Nobody sells one. Its blueprint is invented from the plain hull's, and it is built of the plain hull.`
     elseif faction then faction.note
     else ""
+  -- What it is built with that others of its class are not. (Marked on
+  -- the hull: neither does anything yet.)
+  if hull.jump or hull.stealth then
+    local built = section(sheet, "Built with")
+    if hull.jump then
+      row(built, "Jump drive", "yes (jump drives are not in the game yet)")
+    end
+    if hull.stealth then
+      row(built, "Stealth", "yes (it does nothing of its own yet)")
+    end
+  end
 
   local defence = section(sheet, "Defence")
   row(defence, "Shield", `{whole(hull.shield)} HP`)
