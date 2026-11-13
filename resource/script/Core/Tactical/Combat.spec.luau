@@ -231,7 +231,7 @@ suite:Case("a tech 2 charge's trade is in the shot: a short one's gun tracks wor
 end)
 
 suite:Case("damage goes through shield, armour and hull, and the ship dies", function(t)
-  local a = arena("frigate.lancer", { { "laser.pulse.small", "crystal.multifrequency" },
+  local a = arena("frigate.battleaxe", { { "laser.pulse.small", "crystal.multifrequency" },
     { "laser.pulse.small", "crystal.multifrequency" }, { "laser.pulse.small", "crystal.multifrequency" } },
     "frigate.courier", {}, 1500)
   local foe = a.foe.id
@@ -409,7 +409,7 @@ end)
 
 suite:Case("the same seeds give the same fight, and a save in mid-fight carries on unchanged", function(t)
   local function fight(historySeed: number, reloadAt: number?): string
-    local a = arena("frigate.lancer", { { "laser.pulse.small", "crystal.multifrequency" },
+    local a = arena("frigate.battleaxe", { { "laser.pulse.small", "crystal.multifrequency" },
       { "laser.pulse.small", "crystal.multifrequency" } }, "industrial.hauler", {}, 3000, historySeed)
     lockFoe(t, a)
     for _, laser in modules(a) do

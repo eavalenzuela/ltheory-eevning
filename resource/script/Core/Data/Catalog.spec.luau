@@ -59,7 +59,7 @@ suite:Case("modules go by what they are, small before large", function(t)
   t.ok(Catalog.Before("laser.pulse.large", "shield.extender.small"), "lasers come before shields")
   t.ok(Catalog.Before("shield.extender.small", "ammo.emp"), "modules come before charges")
   t.eq((Catalog.Group("missile.heavy.em")), "Heavy missiles")
-  t.eq((Catalog.Group("blueprint.frigate.lancer")), "Hulls")
+  t.eq((Catalog.Group("blueprint.frigate.battleaxe")), "Hulls")
   t.eq((Catalog.Group("mineral.iron")), "")
 end)
 

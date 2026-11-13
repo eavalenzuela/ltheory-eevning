@@ -64,7 +64,10 @@ export type Faction = {
   -- that is not, and 'hulls' is not read for it.
   line: { Hull }?,
   -- Pirates only: whose hull each of theirs was, by class (a faction id).
+  -- And, where that hull is not of the same class, of what class it is
+  -- ('cut': a hull of theirs cut down from a bigger one).
   donors: { [string]: string }?,
+  cut: { [string]: string }?,
   -- A people with no fixed place: it builds no towers, and where another
   -- faction has a station it has a colony ship (Data/Structures).
   nomad: boolean?,
@@ -82,8 +85,13 @@ export type Faction = {
 -- mass-miner): 'hardpoints' is then how many mining turrets it has.
 -- 'radius' is how big it is, m, for a hull of a class that has no size
 -- of its own (an ultracapital).
+-- 'guns' is its hardpoints by the size of weapon each is for (so many
+-- small, medium, large and XL), where they are not all of the size its
+-- class carries: the Kethri's colony ship has 140, of every size. Of
+-- each size its builders make their share launchers (Data/Ships).
+-- 'rare': nobody sells it, nor the blueprint for it.
 export type Hull = { name: string, class: string, role: string?, tech: number?, of: string?, jump: boolean?, stealth: boolean?,
-  hardpoints: number?, radius: number? }
+  hardpoints: number?, radius: number?, guns: { number }?, rare: boolean? }
 
 Factions.list = {
   -- The four human factions.
@@ -200,16 +208,40 @@ Factions.list = {
     -- they are nomads: "no fixed stations, instead they have massive
     -- (talking 10km long, 1km wide) colony ships, that serve as mobile
     -- stations and fleet docks", in the manner of "sharp edges, flat grey
-    -- plates, arrowheads, conning towers". The draft says nothing of what
-    -- the hulls are called: the names below are still the placeholders
-    -- from before it, and were thought of for open-framed hulls.)
-    id = "kethri", name = "Kethri", kind = "human", style = "blade", weapon = "laser", launchers = 0, tank = "armor", nomad = true,
-    note = "Lasers and armour. Nomads, who keep no stations and live aboard colony ships ten kilometres long. Their hulls are blades in flat grey plate, sharp at every edge, each with its conning tower: deep capacitors, long sight, and never out of ammunition.",
+    -- plates, arrowheads, conning towers".)
+    -- (2026-11-13, the owner: "an 80/20 mix of lasers/missiles": two
+    -- hardpoints in ten are launchers. Their frigate, the hull written
+    -- out by hand in Data/Ships, is small enough to be all lasers.)
+    id = "kethri", name = "Kethri", kind = "human", style = "blade", weapon = "laser", launchers = 0.2, tank = "armor", nomad = true,
+    note = "Lasers, with missiles beside them, and armour. Nomads, who keep no stations and live aboard colony ships ten kilometres long. Their hulls are blades in flat grey plate, sharp at every edge, each with its conning tower: deep capacitors, long sight, and never out of ammunition.",
     paint = { primary = { 0.24, 0.30, 0.46 }, secondary = { 0.80, 0.80, 0.84 }, glow = { 0.55, 0.60, 1.0 } },
     shield = 0.85, armor = 1.25, hull = 1.0, velocity = 0.97, mass = 1.03, cpu = 0.95, powergrid = 1.1, capacitor = 1.15,
     lockRange = 1.2, cargo = 1.0, price = 1, mids = -1, lows = 1, hardpoints = 0,
-    hulls = { frigate = "Lancer", destroyer = "Gantry", cruiser = "Trellis", battleship = "Spire", industrial = "Lighter",
-      attackbattlecruiser = "Stanchion", battlecruiser = "Buttress", carrier = "Concourse", dreadnought = "Colonnade", siegedreadnought = "Obelisk", capitalindustrial = "Derrick", supercarrier = "Arcade" },
+    hulls = {},
+    -- (The project owner's list of the Kethri's ships, 2026-11-13, with
+    -- the seed each is drawn from in resource/hull/seeds.txt. It is a
+    -- short list, "mostly because of the ultracapital": they have no
+    -- cruiser, attack battlecruiser, dreadnought, siege dreadnought or
+    -- supercarrier. The Battleaxe is the hand-written laser frigate of
+    -- Data/Ships, which was the Lancer. The Piton leads a mining fleet,
+    -- as the Orun's Stag does.
+    -- The last is their colony ship, the class "Les Larmes de Nova": ten
+    -- kilometres long, with "50 Sm/40 Md /30 Lg /20 XL turrets"; "not
+    -- purchaseable anywhere... though it may be *buildable* via
+    -- extremely rare blueprint". It roams their space with its support
+    -- fleet in tow: Tactical/Nomads.)
+    line = {
+      { name = "Battleaxe", class = "frigate" },
+      { name = "Sentry", class = "destroyer" },
+      { name = "Extremis", class = "battlecruiser" },
+      { name = "Teardrop", class = "battleship" },
+      { name = "Tennit", class = "carrier" },
+      { name = "Porter", class = "industrial" },
+      { name = "Hiven", class = "freighter" },
+      { name = "Pulley", class = "barge" },
+      { name = "Piton", class = "capitalindustrial" },
+      { name = "Les Larmes de Nova", class = "ultracapital", radius = 5000, guns = { 50, 40, 30, 20 }, rare = true },
+    },
   },
 
   -- The pirates. Every hull of theirs began as one of the four above:
@@ -223,11 +255,14 @@ Factions.list = {
     lockRange = 0.85, cargo = 1.2, price = 0.55, mids = 0, lows = 0, hardpoints = 1,
     hulls = { frigate = "Cutthroat", destroyer = "Jackal", cruiser = "Marauder", battleship = "Ravager", industrial = "Fence",
       attackbattlecruiser = "Reaver", battlecruiser = "Brigand", carrier = "Warren", dreadnought = "Tyrant", siegedreadnought = "Despoiler", capitalindustrial = "Hoard", supercarrier = "Matriarch" },
-    -- (the attack battlecruiser from the Kethri, the only people who
-    -- build one since the Orun's ships became the owner's list of them)
+    -- (Nobody builds an attack battlecruiser now that every human
+    -- faction's ships are the owner's list of them: the pirates' is the
+    -- Kethri's battlecruiser, cut down. And the capitals the Kethri
+    -- built are from those who build them still.)
+    cut = { attackbattlecruiser = "battlecruiser" },
     donors = { frigate = "talmar", destroyer = "orun", cruiser = "vessari", battleship = "kethri", industrial = "orun",
-      attackbattlecruiser = "kethri", battlecruiser = "vessari", carrier = "orun", dreadnought = "kethri", siegedreadnought = "kethri",
-      capitalindustrial = "talmar", supercarrier = "kethri" },
+      attackbattlecruiser = "kethri", battlecruiser = "vessari", carrier = "orun", dreadnought = "talmar", siegedreadnought = "orun",
+      capitalindustrial = "talmar", supercarrier = "talmar" },
   },
 
   -- The three alien factions. Nothing of theirs is sold on a human

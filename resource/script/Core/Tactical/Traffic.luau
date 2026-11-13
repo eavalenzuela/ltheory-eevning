@@ -30,6 +30,14 @@
 -- and more after them, up to four, which follow the pilot about the
 -- system and go when the mark has lapsed.
 --
+-- And in the space of a people who keep no stations, a colony fleet
+-- may be passing through (Tactical/Nomads says where each is): their
+-- colony ship and the support fleet it has in tow. It comes in by the
+-- gate from the system it was in, crosses to the gate it will go out
+-- by, and lies off that until it goes. It is there for the pilot who is
+-- there to see it, as all of this is; and it fights whoever its people
+-- would fight, with everything it has.
+--
 -- (A stand-in, like the pirates' rules: when the strategic layer joins
 -- the game, who is about is who its trade and its navies send.)
 
@@ -37,6 +45,7 @@ local Digger = require("@lt/Core/Tactical/Digger")
 local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
+local Nomads = require("@lt/Core/Tactical/Nomads")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
@@ -79,9 +88,15 @@ local CARGO = { "ore.ferrite", "mineral.iron", "mineral.silicon", "planet.water"
 
 local GUNS: { [string]: string } = { projectile = "autocannon", laser = "laser.pulse", hybrid = "blaster" }
 -- What goes on a hull of each size: its guns' and fittings' size, and
--- its launchers.
-local SIZES = { "small", "medium", "large" }
-local LAUNCHERS = { "launcher.light", "launcher.heavy", "launcher.cruise" }
+-- its launchers. (The fourth size is what only the largest hulls
+-- mount: a colony ship has hardpoints of every size.)
+local SIZES = { "small", "medium", "large", "xl" }
+local LAUNCHERS = { "launcher.light", "launcher.heavy", "launcher.cruise", "launcher.siege" }
+-- How far off the gate it lies by a colony ship keeps, and how far off
+-- the colony ship the nearest of its support fleet: metres between
+-- surfaces.
+Traffic.COLONY_OFF = 30000
+Traffic.ESCORT_OFF = 3000
 local FITTINGS = {
   { "afterburner.1mn", "armor.plate.200mm", "damage.control", "shield.extender.small" },
   { "afterburner.medium", "armor.plate.medium", "damage.control", "shield.extender.medium" },
@@ -108,7 +123,8 @@ local function patrolKind(faction: Factions.Faction, class: string): Pirates.Kin
   if hull == nil then
     return nil
   end
-  local size = if class == "battleship" then 3 elseif class == "cruiser" then 2 else 1
+  -- (a battlecruiser carries a cruiser's guns: the owner's ladder)
+  local size = if class == "battleship" or class == "carrier" then 3 elseif class == "cruiser" or class == "battlecruiser" then 2 else 1
   local fit: { { string } } = {}
   for _ = 1, 8 do
     table.insert(fit, { `{GUNS[faction.weapon] or "autocannon"}.{SIZES[size]}` })
@@ -328,6 +344,110 @@ local function police(state: State.State, mine: State.Ball, rng: Rng.Rng, events
   return 2
 end
 
+-- What a colony ship is as a ship that fights: a weapon of its
+-- hardpoint's size on every hardpoint it has, its people's guns and
+-- launchers, and the largest of everything else.
+local function colonyKind(faction: Factions.Faction, hull: Ships.ShipType, name: string): Pirates.Kind
+  local fit: { { string } } = {}
+  local guns: { number }, racks: { number } = hull.guns or {}, hull.racks or {}
+  for size = #guns, 1, -1 do
+    for _ = 1, guns[size] do
+      table.insert(fit, { `{GUNS[faction.weapon] or "autocannon"}.{SIZES[size]}` })
+    end
+  end
+  for size = #racks, 1, -1 do
+    for _ = 1, racks[size] do
+      table.insert(fit, { LAUNCHERS[size] })
+    end
+  end
+  for _, module in FITTINGS[3] do
+    table.insert(fit, { module })
+  end
+  return { id = "colony", hull = hull.id, name = name, range = Traffic.COLONY_OFF, bounty = 0, tags = 0, fit = fit }
+end
+
+-- The stargate of a system that leads to another, if it has one.
+local function gateTo(state: State.State, system: number, to: number): System.Object?
+  for _, object in Space.Describe(state, system).objects do
+    if object.kind == "gate" and object.variety ~= "passage" and object.to == to then
+      return object
+    end
+  end
+  return nil
+end
+
+-- How far off the colony ship one of its support fleet keeps: each its
+-- own distance, so that they ring it and do not bunch.
+local function escortOff(id: number): number
+  return Traffic.ESCORT_OFF + (id % 6) * 1500
+end
+
+-- Put a colony fleet into the system it is in: the colony ship, and
+-- round it its support fleet. It has only now come, if the pilot was
+-- here to see it come: then it is at the gate it came in by, and warps
+-- across to the gate it will go out by. Otherwise it lies off that gate
+-- already. (A people with one system has no gate to go by: its fleet
+-- lies off the first gate or station there is.)
+local function colonyFleet(state: State.State, system: number, fleet: Nomads.Fleet, rng: Rng.Rng, events: { Event })
+  local faction = Factions.byId[fleet.faction]
+  local hull = Ships.byId[fleet.hull]
+  local _, from, to, came = Nomads.At(fleet, state.tick)
+  local out = gateTo(state, system, to)
+  if out == nil then
+    for _, object in Space.Describe(state, system).objects do
+      if out == nil and (object.kind == "gate" or object.kind == "station") then
+        out = object
+      end
+    end
+  end
+  if faction == nil or hull == nil or out == nil then
+    return
+  end
+  local way = gateTo(state, system, from)
+  local coming = way ~= nil and state.tick - came <= 3
+  -- (and it has a way to go across the system, unless the gate it came
+  -- by is the one it goes back by)
+  local across = coming and way ~= nil and way.id ~= out.id
+  local at: System.Object = if coming and way then way else out
+  local x, y, z = near(rng, at, Traffic.COLONY_OFF, Traffic.COLONY_OFF + 8000)
+  local ship = Space.NewShip(state, hull.id, fleet.name, faction.id, 0)
+  Pirates.Equip(state, ship, colonyKind(faction, hull, fleet.name))
+  local ball = Space.Launch(state, ship, system, x, y, z)
+  table.insert(events, { kind = "BallAdded", ball = ball.id })
+  enlist(state, ship, "colony", out.id, system)
+  state.traffic[ship.id].wait = fleet.index
+  if across then
+    order(state, { kind = "WarpTo", actor = ship.id, target = out.id, range = Traffic.COLONY_OFF }, events)
+  else
+    order(state, { kind = "Orbit", actor = ship.id, target = out.id, range = Traffic.COLONY_OFF }, events)
+  end
+  local count = 1
+  for _, entry in Nomads.SUPPORT do
+    local kind = patrolKind(faction, entry[1])
+    for _ = 1, if kind then entry[2] else 0 do
+      local escort = Space.NewShip(state, (kind :: Pirates.Kind).hull, `{faction.name} Escort`, faction.id, 0)
+      Pirates.Equip(state, escort, kind :: Pirates.Kind)
+      local angle = Rng.Float(rng, 0, 2 * math.pi)
+      local off = hull.radius + escortOff(escort.id) + Ships.byId[escort.type].radius
+      local beside = Space.Launch(state, escort, system, x + off * math.cos(angle), y + Rng.Float(rng, -1500, 1500),
+        z + off * math.sin(angle))
+      table.insert(events, { kind = "BallAdded", ball = beside.id })
+      -- (an escort's 'goal' is the colony ship it keeps by)
+      enlist(state, escort, "escort", ship.id, system)
+      state.traffic[escort.id].wait = fleet.index
+      if across then
+        order(state, { kind = "WarpTo", actor = escort.id, target = out.id, range = Traffic.COLONY_OFF }, events)
+      else
+        order(state, { kind = "Orbit", actor = escort.id, target = ship.id, range = escortOff(escort.id) }, events)
+      end
+      count += 1
+    end
+  end
+  if coming then
+    table.insert(events, { kind = "ColonyFleetArrived", faction = faction.id, name = fleet.name, ships = count })
+  end
+end
+
 -- Once a tick: see to the ships there are, and now and then bring
 -- another.
 function Traffic.Step(state: State.State, events: { Event })
@@ -341,16 +461,73 @@ function Traffic.Step(state: State.State, events: { Event })
   -- sight, mark or no mark: Assets/Standings)
   local marked = state.tick < state.player.marked or Standings.Hostile(state, Galaxy.Keeper(state.galaxy.systems[system]))
   local haulers, patrols, miners, lawmen = 0, 0, 0, 0
+  -- (the colony fleets, and which of them have their colony ship here)
+  local fleets = Nomads.Fleets(state.galaxy)
+  local here: { [number]: boolean } = {}
+  -- (and the gate each lies off, by its fleet: its escorts go out by it
+  -- too, and after it)
+  local outBy: { [number]: number } = {}
+  for _, id in state.trafficIds do
+    local record = state.traffic[id]
+    if record.kind == "colony" and state.ships[id] then
+      outBy[record.wait] = record.goal
+    end
+  end
   for _, id in table.clone(state.trafficIds) do
     local record = state.traffic[id]
     local ship = state.ships[id]
     local ball = state.balls[id]
     if ship == nil then
-      -- (destroyed: whoever did it has seen to the rest)
+      -- (destroyed: whoever did it has seen to the rest. A colony ship
+      -- is gone for a day before another takes its place.)
+      if record.kind == "colony" then
+        state.nomads[record.wait] = state.tick + Nomads.GONE
+      end
       state.traffic[id] = nil
       State.RemoveId(state.trafficIds, id)
     elseif record.system ~= system then
       remove(state, id, "left", events)
+    elseif record.kind == "colony" or record.kind == "escort" then
+      local fleet = fleets[record.wait]
+      -- (the gate the fleet goes out by: none, for an escort whose
+      -- colony ship is lost)
+      local gate = outBy[record.wait] or 0
+      if fleet == nil or (Nomads.At(fleet, state.tick)) ~= system then
+        -- Its time here is up: through the gate, and on.
+        remove(state, id, "jumped", events, if gate ~= 0 then gate else nil)
+      else
+        if record.kind == "colony" then
+          here[record.wait] = true
+        end
+        local fighting = state.pilots[id] ~= nil
+        local sees = marked and mine ~= nil and ball ~= nil and mine.grid == ball.grid
+        if sees and not fighting then
+          state.pilots[id] = { ship = id, range = if record.kind == "colony" then Traffic.COLONY_OFF else 2500, prey = 0,
+            home = record.goal, alone = 0, bounty = 0, tags = 0 }
+          State.InsertId(state.pilotIds, id)
+        elseif fighting and not marked then
+          state.pilots[id] = nil
+          State.RemoveId(state.pilotIds, id)
+          if ball then
+            ball.vitals.locks = {}
+            ball.vitals.running = {}
+            ball.mode = "stop"
+          end
+        end
+        -- On station, when it is not fighting and not on its way: the
+        -- colony ship off its gate, and an escort by the colony ship (or
+        -- off the gate, if that is lost).
+        if state.pilots[id] == nil and ball and ball.warp == nil and ball.intent == nil and ball.mode ~= "orbit" then
+          if record.kind == "escort" and gate ~= 0 and state.balls[record.goal] and state.balls[record.goal].warp == nil then
+            order(state, { kind = "Orbit", actor = id, target = record.goal, range = escortOff(id) }, events)
+          elseif record.kind == "colony" then
+            order(state, { kind = "Orbit", actor = id, target = record.goal, range = Traffic.COLONY_OFF }, events)
+          elseif gate == 0 then
+            -- (its colony ship is gone: it stays where it is)
+            order(state, { kind = "Stop", actor = id }, events)
+          end
+        end
+      end
     elseif record.kind == "miner" then
       miners += 1
       if ball and ball.warp == nil and ball.intent == nil then
@@ -431,6 +608,16 @@ function Traffic.Step(state: State.State, events: { Event })
           -- (an order to dock that came to nothing: give it again)
           order(state, { kind = "Dock", actor = id, target = record.goal }, events)
         end
+      end
+    end
+  end
+
+  -- A colony fleet that is in this system and is not here yet. (With
+  -- the pilot in space: nobody watches from a hangar.)
+  if mine then
+    for _, fleet in fleets do
+      if not here[fleet.index] and not Nomads.Gone(state, fleet) and (Nomads.At(fleet, state.tick)) == system then
+        colonyFleet(state, system, fleet, Rng.For(state.historySeed, state.tick, system, fleet.index, 61), events)
       end
     end
   end

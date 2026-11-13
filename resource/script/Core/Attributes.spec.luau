@@ -6,7 +6,7 @@ local Test = require("@lt/Tool/Test")
 
 local suite = Test.Suite("Attributes")
 
-local lancer = Ships.byId["frigate.lancer"]
+local lancer = Ships.byId["frigate.battleaxe"]
 local courier = Ships.byId["frigate.courier"]
 
 local function fit(...: string): { Attributes.Fitted }

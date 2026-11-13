@@ -233,7 +233,7 @@ suite:Case("a hull built from its blueprint is a hull like any bought one", func
   local game, home = newGame()
   local state = game.state
   state.wallet = 100000
-  local blueprint = Blueprints.byId["blueprint.frigate.lancer"]
+  local blueprint = Blueprints.byId["blueprint.frigate.battleaxe"]
   for _, m in blueprint.materials do
     Items.Add(state, m.type, m.quantity, home, "hangar")
   end
@@ -243,8 +243,8 @@ suite:Case("a hull built from its blueprint is a hull like any bought one", func
     t.eq(hangar(game, m.type), 0)
   end
   stepUntil(game, "JobDone", 5000)
-  t.eq(hangar(game, "frigate.lancer"), 1)
-  order(t, game, { kind = "Assemble", actor = 0, item = stack(game, "frigate.lancer").id })
+  t.eq(hangar(game, "frigate.battleaxe"), 1)
+  order(t, game, { kind = "Assemble", actor = 0, item = stack(game, "frigate.battleaxe").id })
   t.eq(#Core.Query.Ships(game, home), 2)
 end)
 

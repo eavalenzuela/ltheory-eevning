@@ -548,6 +548,11 @@ export type State = {
   trafficIds: { number },
   trafficDue: number,
   trafficOn: boolean,     -- whether there is any: a game has, a test of one ship has not
+  -- The colony fleets of the nomads (Tactical/Nomads): where each is
+  -- follows from the tick, and all that is kept is, by a fleet's number,
+  -- the tick until which its colony ship is gone, for one that has been
+  -- destroyed.
+  nomads: { [number]: number },
   research: { [string]: Research },   -- by blueprint id (Assets/Industry)
   -- Jobs in hand (Assets/Missions), which of today's offers have been
   -- taken, how many jobs have been finished, and the pilot's standing

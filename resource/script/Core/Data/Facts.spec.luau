@@ -50,8 +50,8 @@ suite:Case("every hull has a sheet, the ones nobody sells too", function(t)
 end)
 
 suite:Case("a hull's sheet says what the data says", function(t)
-  local hull = Ships.byId["frigate.lancer"]
-  local sheet = assert(Facts.Of("frigate.lancer"))
+  local hull = Ships.byId["frigate.battleaxe"]
+  local sheet = assert(Facts.Of("frigate.battleaxe"))
   t.eq(sheet.kind, "Kethri frigate")
   t.eq(find(sheet, "Slots (high / mid / low)"), `{hull.highs} / {hull.mids} / {hull.lows}`)
   t.eq(find(sheet, "Top speed"), `{hull.maxVelocity} m/s`)

@@ -3,7 +3,7 @@
 -- values under headings, for an information window to show. One place
 -- knows how every kind of thing is described; nothing here is drawn.
 --
---   local sheet = Facts.Of("frigate.lancer")
+--   local sheet = Facts.Of("frigate.battleaxe")
 --   sheet.name, sheet.kind, sheet.note
 --   for _, section in sheet.sections do ... section.title, section.rows
 

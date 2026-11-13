@@ -385,6 +385,8 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{Types.Info(event.type).name} is in the hangar: {event.left} loyalty points left`)
   elseif kind == "PoliceArrived" then
     Session.Say(session, "The police are here, and they are here for you")
+  elseif kind == "ColonyFleetArrived" then
+    Session.Say(session, `{event.name} has come through the gate, with {event.ships - 1} ships of its fleet`)
   elseif kind == "Marked" then
     Session.Say(session, "You have fired on a ship that is no pirate's: the patrols will fire on you")
   elseif kind == "ColonyDeployed" then

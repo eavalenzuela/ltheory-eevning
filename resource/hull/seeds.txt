@@ -22,38 +22,37 @@
 #                                             F shows one as a ship)
 #                    script/hulls seeds 1 40 2 bare frigate
 # The types are in resource/script/Core/Data/Ships.luau: a hull is
-# called <class>.<name>. A faction has one hull of each class, or, where
-# its ships have been gone through one by one (the Talmar's, the
-# Vessari's and the Orun's, at the foot of this file), the hulls its
-# line names in
-# resource/script/Core/Data/Factions.luau: several of a class, or none.
-# And there are anybody's (frigate.courier, frigate.prospector,
-# barge.quarry, industrial.hauler, freighter.dray). The classes, with
-# how big a ship of each is (its radius: half its length) and the
-# Kethri hull of it:
+# called <class>.<name>. Every human faction's ships have been gone
+# through one by one by the project's owner, and it has the hulls its
+# line names in resource/script/Core/Data/Factions.luau: several of a
+# class, or none. Theirs are at the foot of this file. And there are
+# anybody's (frigate.courier, frigate.prospector, barge.quarry,
+# industrial.hauler, freighter.dray). The classes, with how big a ship
+# of each is (its radius: half its length) and a hull of it:
 #
-#   frigate               42 m   frigate.lancer
-#   destroyer             75 m   destroyer.gantry
-#   cruiser              150 m   cruiser.trellis
-#   industrial           180 m   industrial.lighter
-#   attackbattlecruiser  200 m   attackbattlecruiser.stanchion
-#   battlecruiser        300 m   battlecruiser.buttress
-#   battleship           400 m   battleship.spire
-#   barge                160 m   (a faction's own: the Talmar's barge.anteater)
-#   freighter            650 m   (a faction's own: the Talmar's freighter.rhino)
-#   capitalindustrial    700 m   capitalindustrial.derrick
-#   siegedreadnought     950 m   siegedreadnought.obelisk
-#   carrier             1000 m   carrier.concourse
-#   dreadnought         1300 m   dreadnought.colonnade
-#   supercarrier        1300 m   supercarrier.arcade
+#   frigate               42 m   frigate.battleaxe
+#   destroyer             75 m   destroyer.sentry
+#   cruiser              150 m   cruiser.ouyou
+#   barge                160 m   barge.pulley
+#   industrial           180 m   industrial.porter
+#   attackbattlecruiser  200 m   (nobody's but the pirates' and the aliens')
+#   battlecruiser        300 m   battlecruiser.extremis
+#   battleship           400 m   battleship.teardrop
+#   freighter            650 m   freighter.hiven
+#   capitalindustrial    700 m   capitalindustrial.piton
+#   siegedreadnought     950 m   siegedreadnought.sword
+#   carrier             1000 m   carrier.tennit
+#   dreadnought         1300 m   dreadnought.concorso
+#   supercarrier        1300 m   supercarrier.nullo
 #   ultracapital         (each its own size: the Vessari's
 #                         ultracapital.daiichi is 2,060 m, four
-#                         kilometres wide)
+#                         kilometres wide; the Kethri's colony ship,
+#                         ultracapital.leslarmesdenova, 5,000 m, ten
+#                         kilometres long)
 #
-# (The names of the hulls from the attack battlecruiser on are first
-# drafts, in resource/script/Core/Data/Factions.luau. Until a line here
-# names one of those hulls it is drawn from a seed that follows from its
-# name: a stand-in, with nothing meant by it.)
+# (A pirate's hull is the human hull it was made of, patched. An alien
+# faction's, until a line here names it, is drawn from a seed that
+# follows from its name: a stand-in, with nothing meant by it.)
 #
 # If a seed has not the room for a hull's hardpoints even on seats, the
 # game says so when it starts and draws the hull as it was.
@@ -118,3 +117,17 @@ industrial.pill           55650  5  stout
 industrial.longhorn       55650  8  stout
 freighter.tiger           98199  8  tall
 capitalindustrial.stag     7681  5  stout
+
+# The Kethri's ships (the owner's list of them, 2026-11-13). The last is
+# their colony ship, the class "Les Larmes de Nova": ten kilometres
+# long, with 140 hardpoints.
+frigate.battleaxe              40576  4  slab
+destroyer.sentry                 509  4  slab
+battlecruiser.extremis         16797  7  slab
+battleship.teardrop            37900  7  slab
+carrier.tennit                 61949  6  slab
+industrial.porter              61944  4  slab
+freighter.hiven                44641  4  spear
+barge.pulley                   54504  3  slab
+capitalindustrial.piton        54504  8  slab
+ultracapital.leslarmesdenova   37900  8  old

@@ -58,7 +58,7 @@ end
 for _, hull in Ships.list do
   if hull.class ~= "capsule" and not hull.restricted then
     byId[hull.id] = { id = hull.id, name = hull.name, category = "ship", volume = hull.volume, basePrice = hull.basePrice,
-      scarce = if hull.tech == 2 then true else nil }
+      scarce = if hull.tech == 2 or hull.rare then true else nil }
   end
 end
 
@@ -113,7 +113,7 @@ end
 
 for _, blueprint in Blueprints.list do
   byId[blueprint.id] = { id = blueprint.id, name = blueprint.name, category = "blueprint", volume = 0.01,
-    basePrice = blueprint.basePrice, scarce = blueprint.invented }
+    basePrice = blueprint.basePrice, scarce = blueprint.invented or blueprint.rare }
 end
 -- A book for every skill a pilot does not start with.
 for _, skill in Skills.list do

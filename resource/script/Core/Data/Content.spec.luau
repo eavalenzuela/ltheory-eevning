@@ -257,11 +257,103 @@ suite:Case("the Orun's ships are the owner's list of them: seventeen hulls, four
     t.ok(hull.lineage ~= "orun" or (hull.class ~= "attackbattlecruiser" and hull.class ~= "dreadnought" and hull.class ~= "supercarrier"),
       hull.id)
   end
-  -- The pirates' destroyer, hauler and carrier are made over from theirs; and their attack battlecruiser, which
-  -- was, from the Kethri's, who alone build one now.
+  -- The pirates' destroyer, hauler, carrier and siege dreadnought are made over from theirs. (Their attack
+  -- battlecruiser was: nobody builds one now, and it is the Kethri's battlecruiser cut down.)
   t.eq({ Ships.byId["destroyer.jackal"].donor, Ships.byId["industrial.fence"].donor, Ships.byId["carrier.warren"].donor,
-    Ships.byId["attackbattlecruiser.reaver"].donor } :: { any },
-    { "destroyer.scythe", "industrial.pill", "carrier.katana", "attackbattlecruiser.stanchion" } :: { any })
+    Ships.byId["siegedreadnought.despoiler"].donor, Ships.byId["attackbattlecruiser.reaver"].donor } :: { any },
+    { "destroyer.scythe", "industrial.pill", "carrier.katana", "siegedreadnought.sword", "battlecruiser.extremis" } :: { any })
+end)
+
+suite:Case("the Kethri's ships are the owner's list of them: ten hulls, two hardpoints in ten of them launchers, and a colony ship ten kilometres long with 140 hardpoints that nobody sells", function(t)
+  local kethri = Factions.byId.kethri
+  local RADIUS = { frigate = 42, destroyer = 75, battlecruiser = 300, battleship = 400, carrier = 1000, ultracapital = 5000,
+    barge = 160, industrial = 180, freighter = 650, capitalindustrial = 700 }
+  -- (name, class, the hull's own name in its id)
+  local LINE: { { string } } = {
+    { "Battleaxe", "frigate" }, { "Sentry", "destroyer" }, { "Extremis", "battlecruiser" }, { "Teardrop", "battleship" },
+    { "Tennit", "carrier" }, { "Porter", "industrial" }, { "Hiven", "freighter" }, { "Pulley", "barge" },
+    { "Piton", "capitalindustrial" }, { "Les Larmes de Nova", "ultracapital", "leslarmesdenova" },
+  }
+  t.eq(#assert(kethri.line), #LINE)
+  local theirs = 0
+  for _, hull in Ships.list do
+    theirs += if hull.lineage == "kethri" then 1 else 0
+  end
+  t.eq(theirs, #LINE)
+  for _, entry in LINE do
+    local name, class = entry[1], entry[2]
+    local hull = assert(Ships.byId[`{class}.{entry[3] or string.lower(name)}`], `the Kethri have no {name}`)
+    t.eq({ hull.name, hull.class, hull.lineage, hull.radius, hull.tech } :: { any }, { `Kethri {name}`, class, "kethri", RADIUS[class], nil } :: { any },
+      name)
+    t.ok(Types.Get(hull.id) ~= nil and Blueprints.byProduct[hull.id] ~= nil and #Skills.Needs(hull.id) >= 1, name)
+    -- An armour people; and of a warship's hardpoints about two in ten are launchers (the frigate, three
+    -- hardpoints and the hull written out by hand, is all lasers).
+    if hull.turrets + hull.launchers > 0 and class ~= "barge" and class ~= "industrial" then
+      t.ok(hull.armor > hull.shield, name)
+      local share = hull.launchers / (hull.turrets + hull.launchers)
+      t.ok(class == "frigate" and share == 0 or share >= 0.12 and share <= 0.26, `{name}: {hull.launchers} launchers of {hull.turrets + hull.launchers}`)
+    end
+  end
+  -- The colony ship: fifty hardpoints for small weapons, forty for medium, thirty for large and twenty for XL,
+  -- and of each size two in ten are launchers.
+  local ship = Ships.byId["ultracapital.leslarmesdenova"]
+  t.eq({ ship.guns, ship.racks } :: { any }, { { 40, 32, 24, 16 }, { 10, 8, 6, 4 } } :: { any })
+  t.eq({ ship.turrets, ship.launchers, Ships.Capital(ship.class), Skills.Needs(ship.id)[1].skill } :: { any },
+    { 112, 28, true, "ultracapitals" } :: { any })
+  t.ok(ship.highs >= 140 and assert(ship.bay) >= Ships.BAY.ultracapital)
+  -- It has the fitting for a beam laser on every turret hardpoint and a launcher on every other, each of its
+  -- hardpoint's size.
+  local SIZES = { "small", "medium", "large", "xl" }
+  local RACKS = { "launcher.light", "launcher.heavy", "launcher.cruise", "launcher.siege" }
+  local all: { string } = {}
+  for size = 1, 4 do
+    for _ = 1, assert(ship.guns)[size] do
+      table.insert(all, `laser.beam.{SIZES[size]}`)
+    end
+    for _ = 1, assert(ship.racks)[size] do
+      table.insert(all, RACKS[size])
+    end
+  end
+  t.eq(#all, 140)
+  t.eq({ Attributes.Check(ship, all) } :: { any }, { true } :: { any })
+  -- A weapon goes on a hardpoint of its own size or a bigger: not one XL gun more than it has the hardpoints
+  -- for, though a small gun will go where a large one would.
+  local over = table.clone(all)
+  table.remove(over, 1)
+  table.insert(over, "laser.beam.xl")
+  t.eq({ Attributes.Check(ship, over) } :: { any }, { false, "no free hardpoint for a XL turret" } :: { any })
+  local under: { string } = {}
+  for _ = 1, 112 do
+    table.insert(under, "laser.pulse.small")
+  end
+  t.eq({ Attributes.Check(ship, under) } :: { any }, { true } :: { any })
+  table.insert(under, "launcher.siege")
+  table.insert(under, "launcher.siege")
+  table.insert(under, "launcher.siege")
+  table.insert(under, "launcher.siege")
+  t.eq({ Attributes.Check(ship, under) } :: { any }, { true } :: { any })
+  table.insert(under, "launcher.siege")
+  t.eq({ Attributes.Check(ship, under) } :: { any }, { false, "no free hardpoint for a XL launcher" } :: { any })
+  -- Nobody sells it, nor the blueprint for it; and nobody invents it. It can be built by whoever comes by one.
+  t.eq({ ship.rare, Types.Info(ship.id).scarce, Types.Info(`blueprint.{ship.id}`).scarce, Blueprints.byProduct[ship.id].rare,
+    Blueprints.byProduct[ship.id].invented } :: { any }, { true, true, true, true, nil } :: { any })
+  -- (the Vessari's ultracapital, which anybody can buy, has no hardpoint at all)
+  t.eq({ Ships.byId["ultracapital.daiichi"].rare, Ships.byId["ultracapital.daiichi"].guns } :: { any }, {})
+  -- The Piton leads a mining fleet, as the Orun's Stag does; and the barge mines.
+  local piton, pulley = Ships.byId["capitalindustrial.piton"], Ships.byId["barge.pulley"]
+  t.eq({ piton.turrets + piton.launchers, piton.ore, pulley.turrets, pulley.launchers } :: { any },
+    { 0, Ships.ORE.capitalindustrial, 3, 0 } :: { any })
+  -- What they had is gone, and so are the classes their line does not name.
+  for _, gone in { "frigate.lancer", "destroyer.gantry", "cruiser.trellis", "battleship.spire", "industrial.lighter" } do
+    t.eq(Ships.byId[gone], nil, gone)
+  end
+  for _, hull in Ships.list do
+    t.ok(hull.lineage ~= "kethri" or (hull.class ~= "cruiser" and hull.class ~= "attackbattlecruiser" and hull.class ~= "dreadnought"
+      and hull.class ~= "siegedreadnought" and hull.class ~= "supercarrier"), hull.id)
+  end
+  -- The pirates' battleship is made over from theirs, and their attack battlecruiser from the Extremis, cut down.
+  t.eq({ Ships.byId["battleship.ravager"].donor, Ships.byId["attackbattlecruiser.reaver"].donor } :: { any },
+    { "battleship.teardrop", "battlecruiser.extremis" } :: { any })
 end)
 
 suite:Case("the Vessari's ships are the owner's list of them: an ultracapital four kilometres wide, a mass-miner with ten mining turrets, and two tech 2 hulls of their own", function(t)
@@ -334,14 +426,17 @@ suite:Case("every pirate hull is somebody else's, cheaper, quicker and thinner-s
     end
     local hull = assert(theirs)
     local original = assert(Ships.byId[assert(hull.donor, hull.id)], `{hull.id} was made from nothing`)
-    t.eq(original.class, class)
+    -- (of its own class, or where they say so of a bigger, cut down: nobody builds an attack battlecruiser)
+    t.eq(original.class, (Factions.byId.unbound.cut or {})[class] or class)
     t.eq(original.lineage, donors[class])
     t.eq(Factions.byId[original.lineage].kind, "human")
     t.ok(hull.basePrice < original.basePrice, hull.id)
     if class ~= "industrial" then
       t.ok(hull.maxVelocity > 0.98 * original.maxVelocity, hull.id)
-      -- (more guns than it was built for; but for the classes whose hardpoints are the same whoever builds them)
+      -- (more guns than it was built for; but for the classes whose hardpoints are the same whoever builds them,
+      -- and for a hull cut down from a bigger class, which has fewer and larger)
       t.ok(hull.turrets + hull.launchers > original.turrets + original.launchers or original.id == "frigate.carvarro"
+        or original.class ~= class
         or (Factions.CLASSES[5] ~= class and table.find(Factions.CLASSES, class) :: number > 5
           and hull.turrets + hull.launchers == original.turrets + original.launchers), hull.id)
     end
@@ -417,7 +512,8 @@ suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in i
       end
       t.ok(hull.class == "drone" or Ships.byId[hull.id .. ".ii"] == nil, `{hull.id} has a "II"`)
       t.eq(Ships.Improved(hull.id) ~= nil, should, hull.id)
-      t.eq(Types.Get(hull.id) == nil or Types.Info(hull.id).scarce == nil, true, hull.id)
+      -- (and it is to be bought, unless it is a hull nobody sells: the Kethri's colony ship)
+      t.eq(Types.Get(hull.id) == nil or Types.Info(hull.id).scarce == (if hull.rare then true else nil), true, hull.id)
     end
   end
   -- The Talmar's three (the Tarantula, the Sugarglider and the Rapa), the Vessari's two (the Kanau and the

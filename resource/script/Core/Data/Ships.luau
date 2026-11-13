@@ -84,6 +84,15 @@ export type ShipType = {
   role: string?,
   jump: boolean?,
   stealth: boolean?,
+  -- Its turret hardpoints by the size of gun each is for, where they are
+  -- not all alike: so many for small guns, for medium, for large and for
+  -- XL; and its launcher hardpoints likewise. A weapon goes on a
+  -- hardpoint of its own size, or on a bigger one (Attributes.Check).
+  -- Nil for a hull whose hardpoints take any.
+  guns: { number }?,
+  racks: { number }?,
+  -- Nobody sells it, nor the blueprint for it (Data/Types).
+  rare: boolean?,
 }
 
 local SHIELD = { 1.0, 0.8, 0.6, 0.5 }
@@ -107,7 +116,7 @@ local types: { ShipType } = {
   },
   -- Lasers and armour.
   {
-    id = "frigate.lancer", name = "Kethri Lancer", class = "frigate", lineage = "kethri", basePrice = 420000, volume = 2500,
+    id = "frigate.battleaxe", name = "Kethri Battleaxe", class = "frigate", lineage = "kethri", basePrice = 420000, volume = 2500,
     mass = 1190000, inertia = 3.0, maxVelocity = 345, warpSpeed = 5, radius = 42,
     shield = 390, armor = 520, hull = 360, shieldRecharge = 625,
     shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 37,
@@ -286,27 +295,56 @@ local function round(x: number): number
   return math.floor(x / step + 0.5) * step
 end
 
+-- What a gun of each size wants of a hull (small, medium, large, XL: a
+-- beam laser's, the hungriest of the guns a faction's hulls are shown
+-- with, and a little over), and what a launcher of each size does. A
+-- hull whose line says how many hardpoints of each size it has is given
+-- the fitting for a gun or a launcher on every one of them, over what
+-- its class has. (Content.spec fits the Kethri's colony ship so.)
+local GUN_GRID = { 10, 160, 2000, 100000 }
+local GUN_CPU = { 12, 28, 58, 115 }
+local RACK_GRID = { 6, 110, 1500, 46000 }
+local RACK_CPU = { 30, 58, 92, 184 }
+
 -- A hull of a class as a yard builds it: 'named' is what it is called,
 -- and 'role' what it is beside the plain hull ("combat": a combat
 -- hauler).
 -- ('own' is how many hardpoints it has, where its faction's line says:
 -- a mass-miner's mining turrets.)
-local function yardHull(yard: Factions.Faction, class: string, named: string, role: string?, own: number?): ShipType
+-- ('sized' is its hardpoints by the size of weapon each is for, where
+-- its faction's line says: so many small, medium, large and XL. Of each
+-- size its builders make their share launchers, as of any hull.)
+local function yardHull(yard: Factions.Faction, class: string, named: string, role: string?, own: number?, sized: { number }?): ShipType
   local s = CLASS[class]
+  local gunGrid, gunCpu, racked = 0, 0, 0
+  local guns: { number }?, racks: { number }? = nil, nil
+  if sized then
+    local turrets: { number }, launchers: { number } = {}, {}
+    for size, count in sized do
+      launchers[size] = if WORKING[class] then 0 else math.floor(count * yard.launchers + 0.5)
+      turrets[size] = count - launchers[size]
+      racked += launchers[size]
+      gunGrid += turrets[size] * GUN_GRID[size] + launchers[size] * RACK_GRID[size]
+      gunCpu += turrets[size] * GUN_CPU[size] + launchers[size] * RACK_CPU[size]
+    end
+    guns, racks = turrets, launchers
+  end
   local combat = role == "combat"
   local working = WORKING[class] and not combat
   local hardpoints = own or (if combat then COMBAT_HAULER.hardpoints
     else s.hardpoints + (if class == "industrial" or s.exact then 0 else yard.hardpoints))
-  local launchers = if working then 0 else math.floor(hardpoints * yard.launchers + 0.5)
+  local launchers = if working then 0 elseif sized then racked else math.floor(hardpoints * yard.launchers + 0.5)
   local layers = if combat then COMBAT_HAULER.layers else 1
   local fitting = if combat then COMBAT_HAULER.fitting elseif role == "miner" then MASS_MINER.fitting else 1
   -- (a pirate hull: the human hull of this class it was made out of,
   -- which is in the list already, the human factions coming first: the
   -- first plain one of its class they build)
+  -- (or, where they say so, of a bigger class: cut down)
   local donor: string? = nil
   if yard.donors then
+    local of = if yard.cut and yard.cut[class] then yard.cut[class] else class
     for _, t in types do
-      if donor == nil and t.lineage == yard.donors[class] and t.class == class and t.tech ~= 2 and t.role == nil then
+      if donor == nil and t.lineage == yard.donors[class] and t.class == of and t.tech ~= 2 and t.role == nil then
         donor = t.id
       end
     end
@@ -320,8 +358,8 @@ local function yardHull(yard: Factions.Faction, class: string, named: string, ro
     hull = round(s.hull * yard.hull * layers),
     shieldRecharge = s.recharge, shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL,
     signature = s.signature,
-    cpu = round(s.cpu * yard.cpu * fitting), powergrid = round(s.powergrid * yard.powergrid * fitting),
-    highs = math.max(s.highs, hardpoints),
+    cpu = round(s.cpu * yard.cpu * fitting + gunCpu), powergrid = round(s.powergrid * yard.powergrid * fitting + gunGrid),
+    highs = math.max(s.highs, hardpoints) + (if sized then s.highs else 0),
     mids = math.max(if s.mids == 0 then 0 else 1, s.mids + (if s.mids == 0 then 0 else yard.mids) + (if combat then COMBAT_HAULER.slots else 0)),
     lows = math.max(1, s.lows + yard.lows + (if combat then COMBAT_HAULER.slots else 0)),
     turrets = hardpoints - launchers, launchers = launchers,
@@ -334,6 +372,7 @@ local function yardHull(yard: Factions.Faction, class: string, named: string, ro
     donor = donor,
     role = role,
     rigs = if class == "freighter" then 0 else nil,
+    guns = guns, racks = racks,
   }
 end
 
@@ -344,10 +383,23 @@ for _, yard in Factions.list do
     -- among them are made further down, of the hulls they are makes of)
     for _, named in line do
       if named.tech ~= 2 then
-        local hull = yardHull(yard, named.class, named.name, named.role, named.hardpoints)
-        hull.jump, hull.stealth = named.jump, named.stealth
+        local own = named.hardpoints
+        local bySize: { number } = named.guns or {}
+        for _, count in bySize do
+          own = (own or 0) + count
+        end
+        local hull = yardHull(yard, named.class, named.name, named.role, own, named.guns)
+        hull.jump, hull.stealth, hull.rare = named.jump, named.stealth, named.rare
         hull.radius = named.radius or hull.radius
-        table.insert(types, hull)
+        -- (a hull written out by hand above, under the name the line has
+        -- for it, is that hull: the Kethri's frigate)
+        local written = false
+        for _, t in types do
+          written = written or t.id == hull.id
+        end
+        if not written then
+          table.insert(types, hull)
+        end
       end
     end
     continue

@@ -36,6 +36,9 @@ export type Blueprint = {
   basePrice: number,        -- of the blueprint itself
   -- Nobody sells it: it is invented from another (Assets/Industry).
   invented: boolean?,
+  -- Nobody sells it, and nobody invents it: a hull's that is not to be
+  -- bought (Data/Ships' 'rare'). It is to be found, if at all.
+  rare: boolean?,
 }
 
 local MATERIAL_SHARE = 0.6
@@ -247,6 +250,9 @@ for _, hull in Ships.list do
       else MIX.ship
     -- (the largest hulls take most of a day, not a week)
     add(hull.id, hull.name, mix, hull.basePrice, 1, math.min(72000, 600 + hull.basePrice // 200), Components.HULL)
+    -- (a hull nobody sells has a blueprint nobody sells either: it can
+    -- be built by whoever comes by one, and by nobody else)
+    Blueprints.byProduct[hull.id].rare = hull.rare
   end
 end
 

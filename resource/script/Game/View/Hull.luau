@@ -1764,8 +1764,14 @@ end
 -- a turret's ring does while it turns), in the hull's own units: the
 -- hull's type, half the length it is drawn, and the weapon's size (1
 -- small to 3 large).
+-- (The hulls these drawings were of are gone, the Kethri's ships being
+-- the owner's list of them now, and the drawings are nobody's: each is
+-- still measured as the hull of its class it was drawn for.)
+local DRAWN_FOR: { [string]: number } = { frigate = 42, destroyer = 75, cruiser = 150, industrial = 180, battleship = 400 }
 local function footOn(type: string, reach: number, size: number): number
-  return Arms.REACH * Arms.SIZE[size] * reach / Ships.byId[type].radius
+  local hull = Ships.byId[type]
+  local radius = if hull then hull.radius else DRAWN_FOR[string.match(type, "^(%a+)%.") or ""] or 42
+  return Arms.REACH * Arms.SIZE[size] * reach / radius
 end
 
 -- A place on a face of a blade at 'z'. On the back or the keel, its
@@ -2933,6 +2939,23 @@ local function standFit(hull: Ships.ShipType): { string }
   local family = if faction then faction.weapon else "projectile"
   local sizes = STAND_SIZES[hull.class] or { 1 }
   local fit: { string } = {}
+  -- (a hull whose hardpoints are of given sizes, the Kethri's colony
+  -- ship: a gun of its size on each, the biggest first, which have the
+  -- first pick of where to stand; and its launchers likewise)
+  local guns, racks = hull.guns, hull.racks
+  if guns and racks then
+    for size = #guns, 1, -1 do
+      for _ = 1, guns[size] do
+        table.insert(fit, `{STAND_GUN[family] or "autocannon"}.{STAND_WORD[size]}`)
+      end
+    end
+    for size = #racks, 1, -1 do
+      for _ = 1, racks[size] do
+        table.insert(fit, STAND_RACK[size])
+      end
+    end
+    return fit
+  end
   for index = 1, hull.turrets do
     local size = sizes[(index - 1) % #sizes + 1]
     -- (a mass-miner's turrets are for mining; and a projectile people's

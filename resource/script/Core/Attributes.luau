@@ -157,6 +157,7 @@ function Attributes.Weapon(fitted: { Fitted }, type: string, levels: Levels?): M
 end
 
 local RIGS = { "small", "medium", "large" }
+local GUN_SIZES = { "small", "medium", "large", "XL" }
 
 -- Whether a hull can carry these modules at once; if not, why not.
 function Attributes.Check(hull: Ships.ShipType, types: { string }, levels: Levels?): (boolean, string?)
@@ -192,6 +193,26 @@ function Attributes.Check(hull: Ships.ShipType, types: { string }, levels: Level
     return false, "no free turret hardpoint"
   elseif hardpoints.launcher > hull.launchers then
     return false, "no free launcher hardpoint"
+  end
+  -- (a hull whose hardpoints are of given sizes: a weapon goes on one
+  -- of its own size, or on a bigger one that nothing bigger wants)
+  for kind, sized in { turret = hull.guns, launcher = hull.racks } :: { [string]: { number }? } do
+    if sized then
+      local wanted: { number } = table.create(#sized, 0)
+      for _, id in types do
+        local module = Modules.byId[id]
+        if module.hardpoint == kind then
+          wanted[math.clamp(Modules.SizeOf(module), 1, #sized)] += 1
+        end
+      end
+      local free = 0
+      for size = #sized, 1, -1 do
+        free += sized[size] - wanted[size]
+        if free < 0 then
+          return false, `no free hardpoint for a {GUN_SIZES[size]} {kind}`
+        end
+      end
+    end
   end
   -- (a rig is made for a size of hull, and goes into no other)
   local takes = Ships.RigSize(hull)

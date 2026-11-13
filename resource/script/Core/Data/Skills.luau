@@ -177,7 +177,7 @@ end
 -- What a pilot needs to use a hull or module, by item type. Anything not
 -- listed needs nothing.
 local NEEDS: { [string]: { Need } } = {
-  ["frigate.lancer"] = { { skill = "frigates", level = 2 } },
+  ["frigate.battleaxe"] = { { skill = "frigates", level = 2 } },
   ["industrial.hauler"] = { { skill = "industrials", level = 1 } },
   ["freighter.dray"] = { { skill = "freighters", level = 1 } },
   ["laser.pulse.small"] = { { skill = "lasers", level = 1 } },

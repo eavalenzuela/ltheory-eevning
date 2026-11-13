@@ -609,7 +609,7 @@ function Debug.Candidate(grade: number): number
 end
 
 -- Open the market at an item type, or the industry tab at a blueprint.
--- Open the information window on a type of item ("frigate.lancer").
+-- Open the information window on a type of item ("frigate.battleaxe").
 function Debug.Info(type: string): boolean
   return Info.Open(type)
 end
@@ -1844,6 +1844,24 @@ end
 -- the pilot's is ("" if nobody's).
 function Debug.Galaxy(): (number, string)
   return #session.game.state.galaxy.systems, Core.Query.Player(session.game).owner
+end
+
+-- The nomads' first colony fleet (or the one of a number): the system
+-- it is in, what its colony ship is called, in how many seconds it goes,
+-- and the name of the gate it lies off there (the one it will go out
+-- by); 0 and "" with no such fleet.
+function Debug.Nomads(which: number?): (number, string, number, string)
+  local fleet = Core.Query.Nomads(session.game)[which or 1]
+  if fleet == nil then
+    return 0, "", 0, ""
+  end
+  local gate = ""
+  for _, object in Space.Describe(session.game.state, fleet.system).objects do
+    if object.kind == "gate" and object.to == fleet.next then
+      gate = object.name
+    end
+  end
+  return fleet.system, fleet.name, fleet.leaves, gate
 end
 
 -- The seed of the galaxy being played.

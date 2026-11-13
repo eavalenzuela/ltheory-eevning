@@ -744,6 +744,21 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
     end
   end
   mark(here, 11, Colors.White, true)
+  -- Where the nomads' colony fleets are: a box round the system each
+  -- is in, in its people's colour. (They move on every quarter of an
+  -- hour: Tactical/Nomads.)
+  local roaming = Core.Query.Nomads(game)
+  for _, fleet in roaming do
+    local p = spot(fleet.system)
+    if sighted(p, 0) then
+      local half = 7
+      local corners = { vector.create(p.x - half, p.y - half), vector.create(p.x + half, p.y - half),
+        vector.create(p.x + half, p.y + half), vector.create(p.x - half, p.y + half) }
+      for index, corner in corners do
+        Glyph_Draw(Glyph_Line(corner, corners[index % 4 + 1], 1, 1), 0, 1, colorOf(fleet.faction), 0.9)
+      end
+    end
+  end
   -- For a hull with a jump drive: the sphere its drive reaches, round
   -- where the pilot is (its outline, which is a circle however the map
   -- is looked at, and three rings round it that turn with the map: the
@@ -866,6 +881,15 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   line += 22
   Im.Text(`{#system.neighbors} {if #system.neighbors == 1 then "gate" else "gates"}`, px, line, 13, Im.DIM)
   line += 20
+  -- (a colony fleet that is there now, and for how long)
+  for _, fleet in roaming do
+    if fleet.system == shown then
+      local minutes = math.max(1, math.ceil(fleet.leaves / 60))
+      Im.Text(`{fleet.name} is here`, px, line, 13, colorOf(fleet.faction))
+      Im.Text(`with its fleet, for {minutes} min more, then to {systems[fleet.next].name}`, px, line + 16, 12, Im.DIM)
+      line += 36
+    end
+  end
   -- (what the pilot knows is there: a den found, a stronghold a den gave away)
   for index, name in Core.Query.KnownSites(game, shown) do
     if index <= 3 then

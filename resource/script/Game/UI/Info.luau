@@ -4,7 +4,7 @@
 -- opened it. A row that names another item opens that item's; Back
 -- returns.
 --
---   Info.Open("frigate.lancer")      (GameDebug.Info does this)
+--   Info.Open("frigate.battleaxe")      (GameDebug.Info does this)
 --   Info.Draw(x, y)                  every frame; draws nothing while shut
 
 local Facts = require("@lt/Core/Data/Facts")

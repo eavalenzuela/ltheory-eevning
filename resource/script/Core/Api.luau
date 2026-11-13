@@ -43,6 +43,7 @@ local Moons = require("@lt/Core/Data/Moons")
 local Mining = require("@lt/Core/Tactical/Mining")
 local Ores = require("@lt/Core/Data/Ores")
 local Missions = require("@lt/Core/Assets/Missions")
+local Nomads = require("@lt/Core/Tactical/Nomads")
 local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Raids = require("@lt/Core/Tactical/Raids")
@@ -83,7 +84,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 69
+Core.SAVE_VERSION = 70
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -355,6 +356,25 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- 59: a corporation keeps its books by head, and a tower keeps count
   -- of its running. A save from before has what was earned and spent
   -- under no head, and its towers begin their count now.
+  -- 70: the Kethri's ships are the project owner's list of them, the
+  -- last of the four human factions'. The hulls they had are gone, and
+  -- each is the hull of their line that stands where it stood. (They
+  -- build no cruiser, attack battlecruiser, dreadnought, siege
+  -- dreadnought or supercarrier now: a cruiser of theirs is their
+  -- battlecruiser, which is worth more and wants its own skill; the
+  -- others their battlecruiser, their battleship and their carrier.)
+  -- (And their colony ships roam: Tactical/Nomads.)
+  [69] = function(state: any)
+    state.nomads = state.nomads or {}
+    rehulled(state, {
+      ["frigate.lancer"] = "frigate.battleaxe", ["destroyer.gantry"] = "destroyer.sentry", ["cruiser.trellis"] = "battlecruiser.extremis",
+      ["battleship.spire"] = "battleship.teardrop", ["industrial.lighter"] = "industrial.porter",
+      ["attackbattlecruiser.stanchion"] = "battlecruiser.extremis", ["battlecruiser.buttress"] = "battlecruiser.extremis",
+      ["carrier.concourse"] = "carrier.tennit", ["supercarrier.arcade"] = "carrier.tennit",
+      ["dreadnought.colonnade"] = "battleship.teardrop", ["siegedreadnought.obelisk"] = "battleship.teardrop",
+      ["capitalindustrial.derrick"] = "capitalindustrial.piton",
+    })
+  end,
   -- 69: the Orun's ships are the project owner's list of them
   -- (Data/Factions), as the Talmar's and the Vessari's became theirs.
   -- The hulls they had are gone, and each is the hull of their line
@@ -960,6 +980,7 @@ function Core.New(options: Options): Game
     traffic = {},
     trafficIds = {},
     trafficDue = 0,
+    nomads = {},
     trafficOn = options.traffic == true,
     queue = {},
   }
@@ -2326,6 +2347,19 @@ function Query.Sites(game: Game): ({ SiteStatus }, number, ProbeStatus)
   end
   return found, math.max(0, state.scanReady - state.tick) * Constants.TICK,
     { here = #Sites.Probes(state, player.system), out = #state.probeIds, max = Sites.PROBES, carried = carried }
+end
+
+-- The nomads' colony fleets, and where each is now (Tactical/Nomads):
+-- whose it is, what its colony ship is called, the system it is in, the
+-- one it goes to next, and in how many seconds it goes.
+export type NomadStatus = { faction: string, name: string, system: number, next: number, leaves: number }
+function Query.Nomads(game: Game): { NomadStatus }
+  local found: { NomadStatus } = {}
+  for _, sighting in Nomads.Where(game.state) do
+    table.insert(found, { faction = sighting.faction, name = sighting.name, system = sighting.system, next = sighting.next,
+      leaves = (sighting.leaves - game.state.tick) * Constants.TICK })
+  end
+  return found
 end
 
 -- What each human faction thinks of the pilot, in the order of the
