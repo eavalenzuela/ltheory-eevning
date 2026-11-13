@@ -467,6 +467,53 @@ suite:Case("a tower with a drill online brings up what is under its moon by the 
   t.eq(opened.state.starbases[station].drilled, opened.state.tick)
 end)
 
+suite:Case("a tower keeps count of its running: the fuel it has burnt and what its drill has brought up, priced, and what a day of it costs and brings", function(t)
+  local game, station = moored(t, 1000, true)
+  local state = game.state
+  local starbase = state.starbases[station]
+  local deposit = assert(Starbases.Deposit(state, Starbases.Moon(state, starbase)))
+  local hourly, price = Moons.PerHour(deposit), deposit.material.basePrice
+  -- Lit, with no drill: it burns, and brings up nothing.
+  local running = Starbases.Running(state, starbase)
+  t.eq({ running.material, running.fuelADay, running.yieldADay } :: { any },
+    { deposit.material.id, SMALL.fuel * 24 * Structures.FUEL.basePrice, 0 } :: { any })
+  local used = starbase.used
+  steps(game, 3600 * 3)
+  t.eq({ starbase.used - used, starbase.raised, starbase.robbed }, { SMALL.fuel * 3, 0, 0 })
+  -- With the drill online: a day of it is twenty-four hours' worth, and each hour is counted.
+  anchor(t, game, Structures.DRILL)
+  t.eq(Starbases.Running(state, starbase).yieldADay, hourly * 24 * price)
+  steps(game, 3600 * 2 + 5)
+  running = Starbases.Running(state, starbase)
+  t.eq({ running.raised, running.raisedWorth }, { hourly * 2, hourly * 2 * price })
+  t.eq({ running.used, running.usedWorth }, { starbase.used, starbase.used * Structures.FUEL.basePrice })
+  t.eq(assert(Core.Query.Starbase(game, station)).running, running)
+  -- Dark, a day of it is nothing either way: and the count stays.
+  starbase.fuel = 0
+  for _, item in Core.Query.Items(game, station, "hangar") do
+    if item.type == FUEL then
+      Items.Take(state, item, item.quantity)
+    end
+  end
+  steps(game, 2)
+  local dark = Starbases.Running(state, starbase)
+  t.eq({ dark.fuelADay, dark.yieldADay, dark.raised }, { 0, 0, hourly * 2 })
+  -- It is in the save; and a save from before towers kept count opens with the count begun.
+  local data, length = Core.Save(game)
+  local loaded = Core.Load(data, length)
+  t.eq({ Core.Hash(loaded), loaded.state.starbases[station].raised } :: { any }, { Core.Hash(game), hourly * 2 } :: { any })
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 58
+  file.state.corporation.books = nil
+  for _, each in file.state.starbases do
+    each.used, each.raised, each.robbed = nil, nil, nil
+  end
+  local old, oldLength = Codec.Encode(file)
+  local before = Core.Load(old, oldLength).state
+  t.eq({ before.starbases[station].used, before.starbases[station].raised, before.starbases[station].robbed }, { 0, 0, 0 })
+  t.eq(before.corporation.books, {})
+end)
+
 suite:Case("a moon with nothing under it takes no drill", function(t)
   local game, station = moored(t, 500, false)
   t.eq(assert(Core.Query.Starbase(game, station)).drilling.deposit, nil)

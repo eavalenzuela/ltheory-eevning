@@ -151,6 +151,7 @@ function Raids.Step(state: State.State, events: { Event })
             module.ready = math.max(module.ready, state.tick + math.ceil(Raids.DOWN / Constants.TICK))
           end
         end
+        starbase.robbed += taken
         table.insert(events, { kind = "TowerRaided", station = id, outcome = "robbed", strength = strength, defence = defence,
           taken = taken, type = type })
       end

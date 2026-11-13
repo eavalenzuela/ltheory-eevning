@@ -9,7 +9,8 @@
 # into its account and some taken out again, which its books count as
 # neither earned nor spent. Then pilots are hired on the Crew tab: the
 # account pays for their signing, and there are places for two more of
-# them than Leadership alone commands.
+# them than Leadership alone commands. And the books are looked at, by
+# head: the signing is all there is under any.
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
@@ -64,6 +65,20 @@ frames 3
 until GameDebug.Press('Hire:1')
 until GameDebug.Fleet() == 3
 lua assert(GameDebug.Wallet() == 150000, 'the account should have paid for all three')
+
+# Its books, by head: all that has been spent is the signing of three,
+# and the pilot has no tower.
+until GameDebug.Press('Wallet')
+until GameDebug.Tab() == 'Wallet'
+frames 3
+until GameDebug.Press('Corporation:books')
+frames 3
+lua assert(GameDebug.CanPress('Corporation:journal'), 'the books should have their way back to the journal')
+lua assert(GameDebug.Books() == 1 and select(2, GameDebug.Books()) == 'Signing on', 'the signing should be the one head')
+lua assert(select(3, GameDebug.Books()) == -select(4, GameDebug.Corporation()), 'and all that was spent should be under it')
+lua assert(select(4, GameDebug.Books()) == 0, 'no tower is on the books')
+until GameDebug.Press('Corporation:journal')
+frames 3
 
 echo corporation scenario passed
 quit

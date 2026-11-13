@@ -35,6 +35,12 @@
 -- Pirates come for a tower where order is thin (Tactical/Raids), and
 -- its batteries fire on them (Tactical/Batteries).
 --
+-- A tower keeps count of its running since it was anchored: the fuel
+-- it has burnt, what its drill has brought up, and what raiders have
+-- carried off. Starbases.Running puts a price on each, and says what a
+-- day of it costs and brings: what the pilot's books show of it
+-- (Assets/Corporation).
+--
 -- Not yet: taking a tower down, more than one owner.
 
 local Constants = require("@lt/Core/Data/Constants")
@@ -318,7 +324,7 @@ function Starbases.Raise(state: State.State, system: number, moon: System.Object
     radius = tower.field, seed = (state.tick * 7919 + id) % 100000, parent = moon.id, site = id, variety = "starbase", to = 0,
   })
   state.starbases[id] = { id = id, tower = tower.id, owner = owner, ready = state.tick + ticks(tower.anchor), fuel = 0,
-    burnt = state.tick, modules = {}, drilled = state.tick, raid = 0, raids = 0 }
+    burnt = state.tick, modules = {}, drilled = state.tick, raid = 0, raids = 0, used = 0, raised = 0, robbed = 0 }
   State.InsertId(state.starbaseIds, id)
   return id
 end
@@ -380,6 +386,33 @@ end
 -- has the room.
 local HOUR = math.floor(3600 / Constants.TICK + 0.5)
 
+-- How a tower's running stands, in units and in what they are worth at
+-- the price such things are listed at (no market's: a tower is far from
+-- one): the fuel burnt since it was anchored, what the drill has
+-- brought up and what raiders have carried off; and what a day of it
+-- costs in fuel and brings up, as it is fitted now (nothing, dark).
+export type Running = {
+  used: number, usedWorth: number, raised: number, raisedWorth: number, robbed: number, robbedWorth: number,
+  material: string,       -- what is under its moon ("" for nothing)
+  fuelADay: number,       -- credits' worth of fuel burnt in a day
+  yieldADay: number,      -- credits' worth brought up in a day
+}
+function Starbases.Running(state: State.State, starbase: State.Starbase): Running
+  local fuel = Structures.FUEL.basePrice
+  local drilling = Starbases.Drilling(state, starbase)
+  local deposit = drilling.deposit
+  local price = if deposit then deposit.material.basePrice else 0
+  local lit = Starbases.Lit(state, starbase)
+  return {
+    used = starbase.used, usedWorth = starbase.used * fuel,
+    raised = starbase.raised, raisedWorth = starbase.raised * price,
+    robbed = starbase.robbed, robbedWorth = starbase.robbed * price,
+    material = if deposit then deposit.material.id else "",
+    fuelADay = if lit then Structures.towerById[starbase.tower].fuel * 24 * fuel else 0,
+    yieldADay = if lit and drilling.online then drilling.perHour * 24 * price else 0,
+  }
+end
+
 -- A tower with nothing in its tank takes what fuel is in its own
 -- hangar, a day's worth at a time.
 local function feed(state: State.State, starbase: State.Starbase, events: { Event })
@@ -420,6 +453,7 @@ function Starbases.Step(state: State.State, events: { Event })
         local units = math.min(drilling.perHour, drilling.room - drilling.stored)
         if units > 0 then
           Items.Add(state, deposit.material.id, units, id, "hangar")
+          starbase.raised += units
           -- ('full': that was the last it has room for)
           table.insert(events, { kind = "MoonDrilled", station = id, type = deposit.material.id, units = units,
             full = drilling.stored + units >= drilling.room })
@@ -432,6 +466,7 @@ function Starbases.Step(state: State.State, events: { Event })
       starbase.burnt = math.max(starbase.burnt, starbase.ready)
       while starbase.fuel > 0 and state.tick - starbase.burnt >= every do
         starbase.fuel -= 1
+        starbase.used += 1
         starbase.burnt += every
       end
       -- (its last block burnt: what is in the hangar, before it goes dark)

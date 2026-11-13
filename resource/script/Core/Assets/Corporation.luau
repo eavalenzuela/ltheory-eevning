@@ -17,14 +17,18 @@
 --     commands (Corporation.STAFF more).
 -- It keeps count of all it has earned and all it has spent, what its
 -- founder pays in and takes out aside, so that its books say plainly
--- what the pilots make against what they cost.
+-- what the pilots make against what they cost; and it keeps them by
+-- head (Corporation.HEADS): so much in sales, so much in wages, so
+-- much for fuel. The pilot's towers are on its books too, by what they
+-- burn and what they bring up (Assets/Starbases keeps the count, and
+-- the books put a price on it).
 --
 -- Before there is one, the same payments are the pilot's own, as they
 -- always were: everything here that pays or is paid falls through to
 -- the wallet.
 --
--- (The beginning of the corporation. Not yet: hangars of its own, the
--- pilot's structures on its books, anybody else's corporation.)
+-- (The beginning of the corporation. Not yet: hangars of its own,
+-- anybody else's corporation.)
 
 local State = require("@lt/Core/Kernel/State")
 local Wallet = require("@lt/Core/Assets/Wallet")
@@ -42,9 +46,25 @@ Corporation.LONGEST = 24
 
 local JOURNAL_LENGTH = 200
 
+-- The heads its books are kept under, in the order the books list
+-- them: the reason a thing is posted for, and what the head is called.
+-- (A reason that is none of these is kept all the same, and the books
+-- show it under its own name.)
+export type Head = { reason: string, name: string }
+Corporation.HEADS = {
+  { reason = "market sale", name = "Sales" },
+  { reason = "moon sale", name = "Moon material sold" },
+  { reason = "bounty", name = "Bounties" },
+  { reason = "wages", name = "Wages" },
+  { reason = "hiring", name = "Signing on" },
+  { reason = "repairs", name = "Repairs" },
+  { reason = "fuel", name = "Fuel bought" },
+  { reason = "market purchase", name = "Other purchases" },
+} :: { Head }
+
 -- A corporation that has not been founded: what a new game has.
 function Corporation.None(): State.Corporation
-  return { name = "", founded = 0, wallet = 0, journal = {}, earned = 0, spent = 0 }
+  return { name = "", founded = 0, wallet = 0, journal = {}, earned = 0, spent = 0, books = {} }
 end
 
 function Corporation.Founded(state: State.State): boolean
@@ -85,6 +105,7 @@ local function post(state: State.State, amount: number, reason: string, own: boo
   if not own then
     corporation.earned += math.max(0, amount)
     corporation.spent += math.max(0, -amount)
+    corporation.books[reason] = (corporation.books[reason] or 0) + amount
   end
   table.insert(corporation.journal, { tick = state.tick, amount = amount, reason = reason, balance = corporation.wallet })
   if #corporation.journal > JOURNAL_LENGTH then

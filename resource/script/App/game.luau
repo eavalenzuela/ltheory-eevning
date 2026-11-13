@@ -547,6 +547,15 @@ function Debug.Corporation(): (string, number, number, number, number)
   return info.name, info.wallet, info.earned, info.spent, select(2, Core.Query.Candidates(session.game, session.game.state.player.home))
 end
 
+-- The corporation's books: how many heads have anything under them,
+-- what the first of them is called and what is under it, and how many
+-- towers of the pilot's are on the books.
+function Debug.Books(): (number, string, number, number)
+  local info = Core.Query.Corporation(session.game)
+  local first = info.heads[1]
+  return #info.heads, if first then first.name else "", if first then first.amount else 0, #info.towers
+end
+
 -- Where else a thing is to be had, from the station the pilot is docked
 -- at: how many markets within reach have any, and of the best of them
 -- the id, how many jumps off it is, and what one costs there.
@@ -675,6 +684,21 @@ function Debug.Drill(): (string, string, number, number, number)
   local deposit = drilling.deposit :: any
   return if not drilling.anchored then "none" elseif not drilling.online then "waiting"
     elseif drilling.stored >= drilling.room then "full" else "drilling", deposit.material.id, drilling.perHour, drilling.stored, drilling.room
+end
+
+-- The running of the starbase the pilot put up last, since it was
+-- anchored: the fuel blocks it has burnt, the units its drill has
+-- brought up, the units raiders have carried off, and what a day of it
+-- costs in fuel and brings up, in credits' worth.
+function Debug.Tally(): (number, number, number, number, number)
+  local state = session.game.state
+  local id = state.starbaseIds[#state.starbaseIds]
+  local status = if id then Core.Query.Starbase(session.game, id) else nil
+  if status == nil then
+    return 0, 0, 0, 0, 0
+  end
+  local running = status.running
+  return running.used, running.raised, running.robbed, running.fuelADay, running.yieldADay
 end
 
 -- How safe the system the pilot is in is, and which kind of space that

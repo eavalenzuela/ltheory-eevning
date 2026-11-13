@@ -41,10 +41,12 @@ local Economy = require("@lt/Core/Strategic/Economy")
 local Factions = require("@lt/Core/Data/Factions")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
+local Moons = require("@lt/Core/Data/Moons")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
+local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
 local Corporation = require("@lt/Core/Assets/Corporation")
 local Wallet = require("@lt/Core/Assets/Wallet")
@@ -547,7 +549,8 @@ function Market.Sell(state: State.State, station: number, item: State.Item, quan
   local net = math.floor(gross * (1 - Market.Tax(state, station)))
   Items.Take(state, item, quantity)
   if business then
-    Corporation.Earn(state, net, "market sale", events)
+    -- (what a drill brought up is a head of its own on the books)
+    Corporation.Earn(state, net, if Moons.byId[type] then "moon sale" else "market sale", events)
   else
     Wallet.Pay(state, net, "market sale", events)
   end
@@ -566,7 +569,8 @@ function Market.Buy(state: State.State, station: number, type: string, quantity:
   place: "hangar" | "cargo", events: { Event }, business: boolean?): number
   local cost = math.ceil(Economy.Buy(Market.For(state, station), 1, Market.Index(type) :: number, quantity) :: number)
   if business then
-    Corporation.Spend(state, cost, "market purchase", events)
+    -- (and so is what the towers burn)
+    Corporation.Spend(state, cost, if type == Structures.FUEL.id then "fuel" else "market purchase", events)
   else
     Wallet.Pay(state, -cost, "market purchase", events)
   end

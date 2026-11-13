@@ -57,6 +57,11 @@ until select(4, GameDebug.Drill()) > 0
 lua GameDebug.TimeScale(1)
 lua assert(select(4, GameDebug.Drill()) == select(3, GameDebug.Drill()), 'an hour should bring up what an hour is worth')
 lua assert(GameDebug.Hangar(_G.material) == select(4, GameDebug.Drill()), 'and it should be in the hangar of the tower')
+# The tower has kept count: the fuel it has burnt, what it has brought
+# up, and what a day of it costs and brings.
+lua assert(GameDebug.Tally() > 0, 'the tower should have burnt fuel by now')
+lua assert(select(2, GameDebug.Tally()) == select(4, GameDebug.Drill()), 'what came up should be on the tower count')
+lua assert(select(3, GameDebug.Tally()) == 0 and select(4, GameDebug.Tally()) > 0 and select(5, GameDebug.Tally()) > 0)
 frames 3
 
 echo moon scenario passed

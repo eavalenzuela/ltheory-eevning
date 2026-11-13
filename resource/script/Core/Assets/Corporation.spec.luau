@@ -10,7 +10,11 @@ local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Space = require("@lt/Core/Tactical/Space")
+local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
+local Stations = require("@lt/Core/Assets/Stations")
+local Structures = require("@lt/Core/Data/Structures")
+local System = require("@lt/Core/Describe/System")
 local Test = require("@lt/Tool/Test")
 
 local suite = Test.Suite("Corporation")
@@ -229,6 +233,245 @@ suite:Case("what its pilots bring in is the corporation's: what they sell, and t
       t.eq(#state.corporation.journal, 0)
     end
   end
+end)
+
+-- The stack of a type in a station's hangar.
+local function stack(game: Core.Game, station: number, type: string): State.Item
+  for _, item in Items.In(game.state, station, "hangar") do
+    if item.type == type then
+      return item
+    end
+  end
+  error(`no {type} in the hangar`)
+end
+
+suite:Case("its books are kept by head: what came in and went out under each, fuel and moon material under their own", function(t)
+  local game = founded(5000000)
+  local state = game.state
+  local home = state.player.home
+  local books = state.corporation.books
+  -- What its founder pays in is under no head.
+  t.ok((submit(game, { kind = "CorporationDeposit", actor = 0, quantity = 2000000 })))
+  t.eq(books, {})
+  t.eq(#Core.Query.Corporation(game).heads, 0)
+  -- A hired pilot's sale of ore, and of what a drill brought up; their buying of fuel, and of anything else.
+  Items.Add(state, "ore.ferrite", 1000, home, "hangar")
+  Items.Add(state, "moon.cadmite", 100, home, "hangar")
+  local ore = Market.Sell(state, home, stack(game, home, "ore.ferrite"), 1000, game.events, true)
+  local moon = Market.Sell(state, home, stack(game, home, "moon.cadmite"), 100, game.events, true)
+  local fuel = Market.Buy(state, home, "fuel.block", 50, home, "hangar", game.events, true)
+  local other = Market.Buy(state, home, "mineral.iron", 100, home, "hangar", game.events, true)
+  t.ok(ore > 0 and moon > 0 and fuel > 0 and other > 0)
+  t.eq({ books["market sale"], books["moon sale"], books.fuel, books["market purchase"] }, { ore, moon, -fuel, -other })
+  local journal = state.corporation.journal
+  t.eq({ journal[#journal - 2].reason, journal[#journal - 1].reason }, { "moon sale", "fuel" })
+  -- The pilot's own trade is under none of them.
+  Items.Add(state, "ore.ferrite", 10, home, "hangar")
+  Market.Sell(state, home, stack(game, home, "ore.ferrite"), 10, game.events)
+  t.eq(books["market sale"], ore)
+  -- Signing somebody on.
+  local candidate = Core.Query.Candidates(game, home)[1]
+  t.ok((submit(game, { kind = "HirePilot", actor = 0, what = candidate.key })))
+  t.eq(books.hiring, -candidate.fee)
+  -- The books list the heads with anything under them, in their own order, and they add up to what was made.
+  local info = Core.Query.Corporation(game)
+  local names: { string } = {}
+  local sum = 0
+  for _, head in info.heads do
+    table.insert(names, head.name)
+    sum += head.amount
+  end
+  t.eq(names, { "Sales", "Moon material sold", "Signing on", "Fuel bought", "Other purchases" })
+  t.eq(sum, info.earned - info.spent)
+  t.eq(sum, ore + moon - fuel - other - candidate.fee)
+  -- In the save. And what a save from before the heads had earned and spent is under "earlier".
+  local data, length = Core.Save(game)
+  local loaded = Core.Load(data, length)
+  t.eq({ Core.Hash(loaded), loaded.state.corporation.books.fuel } :: { any }, { Core.Hash(game), -fuel } :: { any })
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 58
+  file.state.corporation.books = nil
+  local old, oldLength = Codec.Encode(file)
+  local before = Core.Query.Corporation(Core.Load(old, oldLength))
+  t.eq(before.heads, { { name = "Earlier earnings", amount = ore + moon }, { name = "Earlier spending", amount = -(fuel + other + candidate.fee) } })
+end)
+
+-- The M7 exit: the corporation runs a mining and hauling operation for
+-- fifty game-hours, and its books balance. A miner at a belt brings ore
+-- in to the station nearest it. A hauler carries it from there to a
+-- market and sells it. A tower with a drill runs beside. Every credit that
+-- moved is under a head, every unit of ore that was cut is somewhere
+-- or was sold, and the tower's count is what its tank and hangar say.
+suite:Case("fifty game-hours of mining and hauling with a tower run beside, and the books balance", function(t)
+  local game = founded(30000000)
+  local state = game.state
+  local home = state.player.home
+  local corporation = state.corporation
+  state.skills.leadership = 2
+  t.ok((submit(game, { kind = "CorporationDeposit", actor = 0, quantity = 5000000 })))
+  local digger = Space.NewShip(state, "frigate.prospector", "Digger", "player", home)
+  Items.Equip(state, digger.id, "miner.small", nil)
+  Items.Equip(state, digger.id, "miner.small", nil)
+  local mule = Space.NewShip(state, "industrial.hauler", "Mule", "player", home)
+  local function hire(ship: State.Ship): State.Wingman
+    assert(submit(game, { kind = "HirePilot", actor = 0, what = Core.Query.Candidates(game, home)[1].key }))
+    local wing = state.fleet[state.fleetIds[#state.fleetIds]]
+    wing.skill = 2
+    assert(submit(game, { kind = "AssignShip", actor = 0, pilot = wing.id, target = ship.id }))
+    return wing
+  end
+  local miner, carrier = hire(digger), hire(mule)
+
+  -- Out to a belt with both, and the miner set to work: what they cut goes in to the station nearest the belt.
+  local function waitFor(limit: number, holds: () -> boolean): boolean
+    for _ = 1, limit do
+      if holds() then
+        return true
+      end
+      Core.Step(game)
+    end
+    return holds()
+  end
+  local rocks = 0
+  for _, object in Space.Describe(state, 1).objects do
+    rocks = if object.kind == "belt" and rocks == 0 then object.id else rocks
+  end
+  assert(rocks ~= 0, "the home system wants a belt")
+  assert(submit(game, { kind = "Undock", actor = 0 }))
+  assert(submit(game, { kind = "WarpTo", actor = 0, target = rocks }))
+  assert(waitFor(900, function()
+    local me, theirs = state.balls[state.player.ship], state.balls[digger.id]
+    return me ~= nil and me.grid == rocks and theirs ~= nil and theirs.grid == rocks
+  end), "the miner did not get to the belt")
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "mine" })))
+  t.eq(miner.order, "mine")
+  local depot = miner.base
+  -- In to that station with the hauler, who is set to carry the ore from there to the nearest other market and sell it.
+  local from = Space.Object(state, depot) :: System.Object
+  local market, least = 0, math.huge
+  for _, object in Space.Describe(state, 1).objects do
+    if object.kind == "station" and object.id ~= depot and Stations.Has(state, object.id, "market")
+      and Space.Distance(from :: any, object :: any) < least then
+      market, least = object.id, Space.Distance(from :: any, object :: any)
+    end
+  end
+  assert(market ~= 0, "the home system wants a market that is not where the ore comes in")
+  assert(submit(game, { kind = "Dock", actor = 0, target = depot }))
+  assert(waitFor(1500, function()
+    return state.ships[state.player.ship].docked == depot and mule.docked == depot
+  end), "the pilot and the hauler did not get in")
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "sell", pilot = carrier.id })))
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "haul", pilot = carrier.id, target = market, type = "ore" })))
+
+  -- A tower at a moon with something under it, lit, its drill online.
+  local moon: System.Object? = nil
+  for _, object in Space.Describe(state, 1).objects do
+    if object.kind == "moon" and moon == nil and Starbases.Deposit(state, object.id) then
+      moon = object
+    end
+  end
+  local under = assert(moon, "the home system wants a moon with something under it")
+  local small = Structures.towerById["tower.vessari.small"]
+  local base = Starbases.Raise(state, 1, under, small, "player", under.x + under.radius * 5, under.y, under.z)
+  local starbase = state.starbases[base]
+  starbase.ready, starbase.burnt, starbase.drilled, starbase.fuel = state.tick, state.tick, state.tick, 600
+  table.insert(starbase.modules, { type = Structures.DRILL, ready = state.tick })
+  local deposit = assert(Starbases.Deposit(state, under.id))
+
+  -- Where every unit of ore is: the two holds and the two hangars.
+  local function held(): { [string]: number }
+    local found: { [string]: number } = {}
+    for _, place in { { digger.id, "cargo" }, { mule.id, "cargo" }, { depot, "hangar" }, { market, "hangar" } } :: { { any } } do
+      for _, item in Items.In(state, place[1], place[2]) do
+        if string.sub(item.type, 1, 4) == "ore." then
+          found[item.type] = (found[item.type] or 0) + item.quantity
+        end
+      end
+    end
+    return found
+  end
+  local ORES = { "ore.ferrite", "ore.cuprite", "ore.silicate", "ore.titanite", "ore.aurite", "ore.iridite" }
+  Core.TakeEvents(game)
+  local wallet, account, fuel = state.wallet, corporation.wallet, starbase.fuel
+  local made = corporation.earned - corporation.spent
+  local under0: { [string]: number } = table.clone(corporation.books)
+  local before = held()
+  local paid, posted, all = 0, {} :: { [string]: number }, 0
+  local mined, sold = {} :: { [string]: number }, {} :: { [string]: number }
+  local revenue, carried, brought, paydays = 0, 0, 0, 0
+  for _ = 1, 50 * 3600 do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      if event.kind == "WalletChanged" then
+        paid += event.amount
+      elseif event.kind == "CorporationChanged" then
+        posted[event.reason] = (posted[event.reason] or 0) + event.amount
+        all += event.amount
+        paydays += if event.reason == "wages" then 1 else 0
+      elseif event.kind == "Mined" then
+        mined[event.ore] = (mined[event.ore] or 0) + event.units
+      elseif event.kind == "Sold" then
+        sold[event.type] = (sold[event.type] or 0) + event.quantity
+      elseif event.kind == "HaulDelivered" then
+        revenue += event.revenue
+        carried += event.units
+      elseif event.kind == "OreDelivered" then
+        brought += event.units
+      end
+    end
+  end
+
+  -- The operation ran: ore was cut, brought in, carried and sold.
+  t.ok(brought > 0 and carried > 0 and revenue > 0, `{brought} brought in, {carried} carried, {revenue} made`)
+  -- Every credit: the account paid for all of it, and the pilot's own wallet was not touched.
+  t.eq({ paid, state.wallet - wallet }, { 0, 0 })
+  t.eq(corporation.wallet - account, all)
+  -- Under a head, each: what the books have under it is what was posted for it, and they add up to what was made.
+  local sum = 0
+  for _, reason in { "market sale", "moon sale", "bounty", "wages", "hiring", "repairs", "fuel", "market purchase" } do
+    t.eq((corporation.books[reason] or 0) - (under0[reason] or 0), posted[reason] or 0, reason)
+    sum += posted[reason] or 0
+  end
+  t.eq(sum, all, "something was posted under no head")
+  t.eq((corporation.earned - corporation.spent) - made, all)
+  -- (two paydays in fifty hours, for the two of them, at no more than they are paid now: one who
+  -- brings ore in learns by it, and is paid more for knowing more; and what the hauler sold is all
+  -- that came in)
+  t.eq(paydays, 4)
+  t.ok(posted.wages < 0 and -posted.wages <= 2 * (miner.wage + carrier.wage), `{posted.wages} in wages`)
+  t.eq({ posted["market sale"], carrier.earned }, { revenue, revenue })
+  for _, head in Core.Query.Corporation(game).heads do
+    t.ok(string.sub(head.name, 1, 7) ~= "Earlier", "the books have something under no head")
+  end
+  -- Every unit of ore: what was cut is in a hold or a hangar, or was sold.
+  local after = held()
+  local cut = 0
+  for _, ore in ORES do
+    t.eq((after[ore] or 0) - (before[ore] or 0), (mined[ore] or 0) - (sold[ore] or 0), ore)
+    cut += mined[ore] or 0
+  end
+  local counted = 0
+  for _, units in mined do
+    counted += units
+  end
+  t.eq(counted, cut, "an ore was cut that the count does not know")
+  t.ok(cut >= brought and brought >= carried, `{cut} cut, {brought} brought in, {carried} carried`)
+  -- The tower: what it has burnt is what has gone from its tank, and what it has brought up is in its hangar.
+  t.eq({ starbase.used, fuel - starbase.fuel }, { 50 * small.fuel, 50 * small.fuel })
+  local stored = 0
+  for _, item in Items.In(state, base, "hangar") do
+    stored += if item.type == deposit.material.id then item.quantity else 0
+  end
+  t.eq({ starbase.raised, starbase.robbed }, { stored, 0 })
+  t.ok(stored > 0, "the drill brought nothing up")
+  local tower = Core.Query.Corporation(game).towers[1]
+  t.eq({ tower.id, tower.running.usedWorth, tower.running.raisedWorth },
+    { base, starbase.used * Structures.FUEL.basePrice, stored * deposit.material.basePrice })
+  -- And it is all in the save.
+  local data, length = Core.Save(game)
+  t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
+  print(`     books: in fifty hours {cut} ore cut, {brought} brought in, {carried} carried and sold for {revenue}; `
+    .. `{-posted.wages} in wages; the tower burnt {starbase.used} blocks and brought up {stored}`)
 end)
 
 return suite

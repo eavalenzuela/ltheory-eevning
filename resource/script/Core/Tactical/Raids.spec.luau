@@ -122,6 +122,8 @@ suite:Case("with nothing against it a raid carries off most of what the drill br
   t.eq({ stored(game, station, "moon.promethite"), stored(game, station, "moon.cadmite"), stored(game, station, "ore.ferrite") },
     { 400, 2, 500 })
   t.eq(raid.taken, 1600 + 8)
+  -- (and it is on the tower's count of what raiders have had)
+  t.eq(starbase.robbed, 1608)
   -- The drill is out for an hour, and then at work again.
   local status = assert(Core.Query.Starbase(game, station))
   t.eq({ status.drilling.anchored, status.drilling.online } :: { any }, { true, false } :: { any })

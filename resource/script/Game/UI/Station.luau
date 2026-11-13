@@ -1801,7 +1801,7 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
     Im.Text("No fuel and no modules in the hold or the hangar.", right, line, 13, Im.DIM, 0.8)
     Im.Text("A market sells both, under Structures.", right, line + 20, 13, Im.DIM, 0.8)
   end
-  local shown = 16
+  local shown = 13
   local top = Im.Scroll("tohand", right - 4, line, 448, shown * 26, #hand, shown)
   for row = 1, shown do
     local entry = hand[row + top]
@@ -1825,6 +1825,26 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
     end
     line += 26
   end
+
+  -- Its running since it was anchored, priced: what it has burnt
+  -- against what it has brought up, and what a day of it costs and
+  -- brings. (The corporation's books have every tower's: the Wallet tab.)
+  local running = status.running
+  line = y + 78 + 26 + shown * 26 + 12
+  Im.Heading("RUNNING", right, line, 16, Im.DIM)
+  Im.TextRight("in credits' worth, since it was anchored", right + 440, line + 2, 12, Im.DIM)
+  line += 26
+  Im.Text(`Fuel burnt: {Format.Whole(running.used)} blocks`, right, line, 13, Im.DIM)
+  Im.TextRight(`-{Format.Whole(running.usedWorth)}`, right + 440, line, 13, if running.used > 0 then Im.WARN else Im.DIM)
+  line += 20
+  Im.Text(`Brought up: {Format.Whole(running.raised)}` .. (if running.robbed > 0 then `, and {Format.Whole(running.robbed)} carried off`
+    else ""), right, line, 13, Im.DIM)
+  Im.TextRight(`+{Format.Whole(running.raisedWorth - running.robbedWorth)}`, right + 440, line, 13,
+    if running.raised > 0 then GOOD else Im.DIM)
+  line += 20
+  Im.Text("A day, as it stands", right, line, 13, Im.DIM)
+  Im.TextRight(`+{Format.Whole(running.yieldADay)}  -{Format.Whole(running.fuelADay)}`, right + 440, line, 13,
+    if running.yieldADay >= running.fuelADay and running.yieldADay > 0 then GOOD elseif status.lit then Im.WARN else Im.DIM)
 end
 
 -- ---------------------------------------------------------------------
@@ -1836,6 +1856,92 @@ end
 local books = "mine"
 local corporationName = ""
 local corporationAmount = 0
+-- And which of the corporation's two pages: its journal, or its books
+-- by head with the towers on them.
+local byHead = false
+
+-- The corporation's books: on the left what has come in and gone out
+-- under each head, and what that makes; on the right the pilot's
+-- towers, each with what it has burnt, brought up and lost since it
+-- was anchored, priced, and what a day of it costs and brings.
+local function drawBooks(corporation: Core.CorporationInfo, left: number, top: number)
+  local line = top
+  Im.Heading("BY HEAD", left, line, 14, Im.DIM)
+  Im.TextRight("since it was founded", left + 400, line + 1, 12, Im.DIM)
+  line += 24
+  if #corporation.heads == 0 then
+    Im.Text("Nothing has been earned or spent yet.", left, line, 13, Im.DIM, 0.8)
+    line += 22
+  end
+  for _, head in corporation.heads do
+    Im.Text(head.name, left, line, 14, Im.TEXT)
+    Im.TextRight((if head.amount >= 0 then "+" else "") .. Format.Whole(head.amount), left + 400, line, 14,
+      if head.amount >= 0 then GOOD else Im.WARN)
+    line += 22
+  end
+  local net = corporation.earned - corporation.spent
+  Im.Fill(left, line + 2, 400, 1, Im.DIM, 0.4)
+  line += 8
+  Im.Text("Which makes", left, line, 14, Im.DIM)
+  Im.TextRight((if net >= 0 then "+" else "") .. Format.Whole(net), left + 400, line, 14, if net >= 0 then GOOD else Im.WARN)
+  line += 34
+  -- (the towers, all told: what they have burnt against what they have brought up, in credits' worth)
+  local burnt, raised, robbed, fuelADay, yieldADay = 0, 0, 0, 0, 0
+  for _, tower in corporation.towers do
+    burnt += tower.running.usedWorth
+    raised += tower.running.raisedWorth
+    robbed += tower.running.robbedWorth
+    fuelADay += tower.running.fuelADay
+    yieldADay += tower.running.yieldADay
+  end
+  if #corporation.towers > 0 then
+    Im.Heading("THE TOWERS, ALL TOLD", left, line, 14, Im.DIM)
+    Im.TextRight("in credits' worth", left + 400, line + 1, 12, Im.DIM)
+    line += 24
+    local told: { { name: string, worth: number, gain: boolean } } = {
+      { name = "Brought up", worth = raised, gain = true }, { name = "Carried off by raiders", worth = robbed, gain = false },
+      { name = "Fuel burnt", worth = burnt, gain = false },
+    }
+    for _, row in told do
+      Im.Text(row.name, left, line, 14, Im.TEXT)
+      Im.TextRight((if row.worth == 0 then "" elseif row.gain then "+" else "-") .. Format.Whole(row.worth), left + 400, line, 14,
+        if row.worth == 0 then Im.DIM elseif row.gain then GOOD else Im.WARN)
+      line += 22
+    end
+    Im.Text("A day, as they stand", left, line, 14, Im.DIM)
+    Im.TextRight(`+{Format.Whole(yieldADay)}  -{Format.Whole(fuelADay)}`, left + 400, line, 14,
+      if yieldADay >= fuelADay then GOOD else Im.WARN)
+  end
+
+  local right = left + 470
+  line = top
+  Im.Heading(`TOWERS  {#corporation.towers}`, right, line, 14, Im.DIM)
+  line += 24
+  if #corporation.towers == 0 then
+    Im.Text("You have no tower. One is anchored at a moon, from the hold.", right, line, 13, Im.DIM, 0.8)
+  end
+  local visible = 5
+  local first = Im.Scroll("corporation towers", right - 4, line, 440, visible * 68, #corporation.towers, visible)
+  for row = 1, visible do
+    local tower = corporation.towers[row + first]
+    if tower == nil then
+      break
+    end
+    local running = tower.running
+    Im.Text(shorten(tower.name, 38), right, line, 14, Im.TEXT)
+    Im.TextRight(if tower.lit then tower.system else `{tower.system}: DARK`, right + 436, line + 1, 12, if tower.lit then Im.DIM else Im.WARN)
+    local what = if running.material ~= "" then Types.Info(running.material).name else "nothing under it"
+    Im.Text(`burnt {Format.Whole(running.used)} blocks ({Format.Whole(running.usedWorth)})`, right, line + 21, 12, Im.DIM)
+    Im.TextRight(if running.material == "" then what
+      else `{Format.Whole(running.raised)} {what} up ({Format.Whole(running.raisedWorth)})`
+        .. (if running.robbed > 0 then `, {Format.Whole(running.robbed)} lost` else ""), right + 436, line + 21, 12,
+      if running.robbed > 0 then Im.WARN else Im.DIM)
+    Im.Text(`a day: {Format.Whole(running.fuelADay)} of fuel`, right, line + 39, 12, Im.DIM)
+    Im.TextRight(if running.yieldADay > 0 then `brings up {Format.Whole(running.yieldADay)}` else "brings up nothing", right + 436,
+      line + 39, 12, if running.yieldADay > running.fuelADay then GOOD else Im.DIM)
+    line += 68
+  end
+end
 
 local function drawWallet(session: Session.Session, game: Core.Game, x: number, y: number)
   local top = y + 78
@@ -1899,7 +2005,18 @@ local function drawWallet(session: Session.Session, game: Core.Game, x: number, 
     if Im.Button("Take out", left + 816, top + 34, 92, 26, (Session.CanDo(session, withdraw)), "Corporation:withdraw") then
       Session.Do(session, withdraw)
     end
+    -- Its two pages: the journal, and the books by head.
+    if Im.Toggle("Journal", x + 500, top - 6, 90, 26, not byHead, "Corporation:journal") then
+      byHead = false
+    end
+    if Im.Toggle("Books", x + 594, top - 6, 90, 26, byHead, "Corporation:books") then
+      byHead = true
+    end
     line = top + 84
+    if byHead then
+      drawBooks(corporation, left, line)
+      return
+    end
   else
     Im.Heading("BALANCE", left, top, 16, Im.DIM)
     Im.Heading(Format.Credits(game.state.wallet), left + 110, top - 4, 22, Im.TEXT)

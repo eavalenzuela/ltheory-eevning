@@ -399,7 +399,11 @@ export type Entry = { tick: number, amount: number, reason: string, balance: num
 -- is founded) and when it was founded, its own credits and their recent
 -- history, and all it has earned and spent since (what its founder has
 -- paid in and taken out aside).
-export type Corporation = { name: string, founded: number, wallet: number, journal: { Entry }, earned: number, spent: number }
+-- 'books': what has come in (more than nothing) and gone out (less) under
+-- each head, by the reason it was posted for: the same credits as
+-- 'earned' and 'spent', told apart (Assets/Corporation.HEADS).
+export type Corporation = { name: string, founded: number, wallet: number, journal: { Entry }, earned: number, spent: number,
+  books: { [string]: number } }
 
 -- A facility of a colony (Assets/Colonies): its number there, what kind
 -- it is ("extractor", "processor" or "storage"), and what it is set on
@@ -436,6 +440,10 @@ export type Starbase = {
   -- The tick pirates next come for it (Tactical/Raids; 0: they do not,
   -- where order is kept), and how many times they have.
   raid: number, raids: number,
+  -- Its running, since it was anchored: the fuel blocks it has burnt,
+  -- the units its drill has brought up, and the units raiders have
+  -- carried off.
+  used: number, raised: number, robbed: number,
 }
 
 export type State = {

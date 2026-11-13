@@ -80,7 +80,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 58
+Core.SAVE_VERSION = 59
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -310,6 +310,17 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- save from before has given any.
   [49] = function(state: any)
     state.couriers = state.couriers or {}
+  end,
+  -- 59: a corporation keeps its books by head, and a tower keeps count
+  -- of its running. A save from before has what was earned and spent
+  -- under no head, and its towers begin their count now.
+  [58] = function(state: any)
+    state.corporation.books = state.corporation.books or {}
+    for _, starbase in state.starbases do
+      starbase.used = starbase.used or 0
+      starbase.raised = starbase.raised or 0
+      starbase.robbed = starbase.robbed or 0
+    end
   end,
   -- 58: a station's seventh agent has defence jobs. No agent of a save
   -- from before has given any.
@@ -1151,9 +1162,17 @@ end
 -- first; all it has earned and spent; what founding one costs; and how
 -- many more pilots than Leadership commands it has places for (as it
 -- is, and as it would be).
+-- ('heads': its books by head, what has come in under each and what has
+-- gone out, in the books' own order and only the heads with anything
+-- under them; the last, "Earlier", is whatever a save from before the
+-- books were kept by head had earned and spent. 'towers': the pilot's
+-- towers, each with where it is and how its running stands, which are
+-- the pilot's whether or not there is a corporation.)
+export type HeadRow = { name: string, amount: number }
+export type TowerRow = { id: number, name: string, system: string, lit: boolean, running: Starbases.Running }
 export type CorporationInfo = {
   founded: boolean, name: string, since: number, wallet: number, journal: { State.Entry }, earned: number, spent: number,
-  fee: number, staff: number, wages: number,
+  fee: number, staff: number, wages: number, heads: { HeadRow }, towers: { TowerRow },
 }
 function Query.Corporation(game: Game): CorporationInfo
   local state = game.state
@@ -1163,10 +1182,36 @@ function Query.Corporation(game: Game): CorporationInfo
   for _, id in state.fleetIds do
     wages += state.fleet[id].wage
   end
+  local heads: { HeadRow } = {}
+  local earned, spent = 0, 0
+  for _, head in Corporation.HEADS do
+    local amount = corporation.books[head.reason] or 0
+    if amount ~= 0 then
+      table.insert(heads, { name = head.name, amount = amount })
+      earned += math.max(0, amount)
+      spent += math.max(0, -amount)
+    end
+  end
+  -- (a head takes money one way: so what is under no head is the rest of each)
+  if corporation.earned - earned > 0 then
+    table.insert(heads, { name = "Earlier earnings", amount = corporation.earned - earned })
+  end
+  if corporation.spent - spent > 0 then
+    table.insert(heads, { name = "Earlier spending", amount = -(corporation.spent - spent) })
+  end
+  local towers: { TowerRow } = {}
+  for _, id in state.starbaseIds do
+    local starbase = state.starbases[id]
+    local body = Space.Object(state, id)
+    if starbase.owner == "player" and body then
+      table.insert(towers, { id = id, name = body.name, system = state.galaxy.systems[Space.SystemOf(state, id)].name,
+        lit = Starbases.Lit(state, starbase), running = Starbases.Running(state, starbase) })
+    end
+  end
   return {
     founded = Corporation.Founded(state), name = corporation.name, since = corporation.founded, wallet = corporation.wallet,
     journal = corporation.journal, earned = corporation.earned, spent = corporation.spent, fee = Corporation.FEE,
-    staff = Corporation.STAFF, wages = wages,
+    staff = Corporation.STAFF, wages = wages, heads = heads, towers = towers,
   }
 end
 
@@ -1511,6 +1556,8 @@ export type StarbaseStatus = {
   -- at most (0 and 0 where order is kept, and nobody comes).
   defence: number, batteries: number, patrol: number,
   raidLeast: number, raidMost: number,
+  -- Its running since it was anchored, priced (Starbases.Running).
+  running: Starbases.Running,
 }
 function Query.Starbase(game: Game, id: number): StarbaseStatus?
   local state = game.state
@@ -1539,6 +1586,7 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
       else 0,
     defence = defence, batteries = batteries, patrol = patrol,
     raidLeast = if raids then raids[1] else 0, raidMost = if raids then raids[2] else 0,
+    running = Starbases.Running(state, starbase),
   }
 end
 
