@@ -55,6 +55,11 @@ local said: { [string]: string } = {}
 -- How far each scrolling list is scrolled, by name.
 local scrolls: { [string]: number } = {}
 
+-- A part of the window that something drawn last is going to cover (the
+-- map, which goes over everything): until that is drawn, the cursor is
+-- not on anything there. (x, y, and the far corner.)
+local covered: { number }? = nil
+
 Im.TEXT = vector.create(0.82, 0.86, 0.9)
 Im.DIM = vector.create(0.5, 0.55, 0.6)
 Im.ACCENT = Colors.Primary
@@ -83,8 +88,21 @@ function Im.Begin()
     downAt = nil
   end
   held = false
+  covered = nil
   seen, seenNow = seenNow, {}
   pressNow, pressNext = pressNext, nil
+end
+
+-- Say that a part of the window is going to be covered by what is drawn
+-- last: from here on the cursor is on nothing there (a button under it
+-- is not clicked, a list under it is not scrolled) until Im.Uncover,
+-- which what covers it calls as it begins to draw.
+function Im.Cover(x: number, y: number, w: number, h: number)
+  covered = { x, y, x + w, y + h }
+end
+
+function Im.Uncover()
+  covered = nil
 end
 
 -- Press a button by name on the next frame, as a click would: for
@@ -156,6 +174,10 @@ function Im.Release()
 end
 
 local function inside(x: number, y: number, w: number, h: number): boolean
+  local under = covered
+  if under and cursor.x >= under[1] and cursor.x < under[3] and cursor.y >= under[2] and cursor.y < under[4] then
+    return false
+  end
   return cursor.x >= x and cursor.x < x + w and cursor.y >= y and cursor.y < y + h
 end
 

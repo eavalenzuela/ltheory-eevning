@@ -883,6 +883,11 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       local entries = Core.Query.Overview(game)
       local left, top = w.pos.x, w.pos.y
       local right, bottom = left + w.size.x, top + w.size.y
+      -- (the map, open, goes over everything: the mouse is the map's
+      -- where it is, and not for what is drawn under it)
+      if Map.IsOpen() then
+        Im.Cover(Map.Covers(left, top, w.size.x, w.size.y))
+      end
 
       -- Through a gate the view whites out, under everything written on it.
       if scene.veil > 0 then

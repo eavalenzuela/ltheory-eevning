@@ -24,6 +24,38 @@ until GameDebug.Press('Map')
 frames 3
 lua assert(GameDebug.CanPress('Map:close'), 'the map did not open')
 lua assert(not GameDebug.CanPress('Autopilot'), 'with nowhere to go there is no autopilot to switch on')
+
+# The map is looked at nearer and further: by its buttons, by the wheel
+# (about what the cursor is on), and dragged about with the left button.
+lua assert(GameDebug.MapZoom() == 1 and select(2, GameDebug.MapZoom()) == 40, 'the map should open on all forty systems')
+until GameDebug.Press('Map:here')
+frames 60
+lua _G.near, _G.sighted, _G.named = GameDebug.MapZoom()
+lua assert(_G.near == 2 and _G.sighted < 40 and _G.named, 'Here should look twice as near, at fewer systems, each with its name')
+lua _G.mx, _G.my = GameDebug.MapWhere(GameDebug.System())
+lua assert(math.abs(_G.mx - 810) < 2 and math.abs(_G.my - 550) < 2, 'the system the pilot is in should be in the middle of the map')
+move 810 550
+frames 2
+scroll 2
+frames 60
+lua assert(math.abs(GameDebug.MapZoom() - 3.125) < 0.01, 'two notches of the wheel should near it by a quarter twice')
+lua _G.mx, _G.my = GameDebug.MapWhere(GameDebug.System())
+lua assert(math.abs(_G.mx - 810) < 2 and math.abs(_G.my - 550) < 2, 'what the cursor is on should stay under it')
+mousedown Left
+frames 2
+move 910 600
+frames 3
+mouseup Left
+frames 3
+lua _G.mx, _G.my = GameDebug.MapWhere(GameDebug.System())
+lua assert(math.abs(_G.mx - 910) < 2 and math.abs(_G.my - 600) < 2, 'the left button held should drag the map')
+lua assert(GameDebug.MapPicked() == 0, 'a drag is not a click')
+click Left 910 600
+frames 3
+lua assert(GameDebug.MapPicked() == GameDebug.System(), 'a click on a system should pick it')
+until GameDebug.Press('Map:fit')
+frames 80
+lua assert(GameDebug.MapZoom() == 1 and select(2, GameDebug.MapZoom()) == 40, 'Fit should show all the galaxy again')
 lua _G.far, _G.jumps, _G.id = GameDebug.Far()
 lua print('going to', _G.far, 'which is', _G.jumps, 'jumps off')
 lua assert(_G.jumps >= 4, 'a galaxy of forty should have somewhere four jumps off that is not lawless')

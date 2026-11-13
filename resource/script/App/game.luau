@@ -1051,6 +1051,29 @@ function Debug.MapView(turn: number?, tilt: number?): (number, number)
   return Map.View(turn, tilt)
 end
 
+-- How near the map is looked at (1: all of the galaxy), how many systems
+-- are in sight on it, and whether each has its name by it. Given how
+-- near, it is looked at so from the next frame; given a system (its
+-- number), with that system in the middle.
+function Debug.MapZoom(to: number?, system: number?): (number, number, boolean)
+  return Map.Zoom(to, system)
+end
+
+-- Where a system is on the map, in the window (it may be off the map's
+-- edge), or nothing if the map has not been drawn; and the system
+-- picked on it (0: none).
+function Debug.MapWhere(system: number): (number?, number?)
+  local at = Map.Where(system)
+  if at then
+    return at.x, at.y
+  end
+  return nil, nil
+end
+
+function Debug.MapPicked(): number
+  return Map.Picked()
+end
+
 function Debug.JumpWithin(): number
   local drive = Core.Query.JumpDrive(session.game)
   local here = Core.Query.Player(session.game).system

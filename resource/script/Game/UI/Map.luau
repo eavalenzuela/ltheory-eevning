@@ -21,6 +21,15 @@
 -- "Map:left" and "Map:right" turn it a step. For a hull with a jump
 -- drive the sphere its drive reaches is drawn round where the pilot is
 -- (it grows with the skill), and the systems inside it are picked out.
+--
+-- And it is looked at as near as is wanted: the wheel over the map nears
+-- it and draws back, about what the cursor is on; the left button held
+-- drags it about; "Map:in" and "Map:out" are a notch of the wheel,
+-- "Map:fit" is all of it again, and "Map:here" (or a double click on a
+-- system) puts the pilot's system (or that one) in the middle, near
+-- enough to read. As fewer systems are in sight the map says more: the
+-- constellations' names, then every system's. A measure in the corner
+-- says how long so many light years are.
 
 local Colors = require("@lt/Colors")
 local Core = require("@lt/Core/Api")
@@ -60,6 +69,39 @@ local bySecurity = false  -- colour by security, not by whose
 local TURNED, TILTED = 0.5, 0.75
 local yaw, pitch = TURNED, TILTED
 local dragged: vector? = nil
+-- How near it is looked at: 1 is the whole galaxy, and so many times
+-- nearer than that. 'zoom' is what it is now and 'zoomTo' what it is
+-- easing to. (The nearest it goes is by how many systems there are:
+-- Map.Nearest.)
+local NEARER = 1.25       -- a notch of the wheel, or a press of + or -
+local zoom, zoomTo = 1, 1
+-- What the middle of the map is on, when it is looked at nearer than the
+-- whole: a place in the galaxy (light years, with its height), or nil
+-- for the middle of all of it. And where the middle is on its way there
+-- ('look' eases to 'focus').
+local focus: vector? = nil
+local look: vector? = nil
+-- While it nears or draws back: the place in the galaxy that stays where
+-- it is in the window (what the cursor is on, for the wheel), and where
+-- in the window that is, in pixels from the middle of the map.
+local hold: { place: vector, at: vector }? = nil
+-- The left button, held from a press on the map: where it went down,
+-- where the cursor was a frame ago, the system it went down on, and
+-- whether it has gone far enough to be a drag (which moves the map) and
+-- not a click (which picks the system).
+local grab: { from: vector, last: vector, on: number, moved: boolean }? = nil
+-- What a script has asked for (Map.Zoom), until the map is next drawn.
+local asked: { zoom: number?, on: number? }? = nil
+-- How many systems were in sight on the map as it was last drawn, and
+-- whether each had its name by it.
+local inView, allNamed = 0, false
+-- Where the map's own middle was in the window as it was last drawn, and
+-- how near it was looked at: where a system is in the window follows.
+local shownFrom, shownNear = vector.zero, 1
+-- With so many regions in sight or fewer, they are named; with so many
+-- systems in sight or fewer, the constellations are; and with so many
+-- or fewer, every system is.
+local REGIONS, CONSTELLATIONS, NAMES = 48, 160, 60
 
 -- What is made once: where each system is on the map (in pixels from
 -- the map's middle), the gates as one icon, and the systems as an icon
@@ -77,8 +119,19 @@ type Drawn = {
   gates: Icon,
   -- (each system's stalk to the plane, and the plane's edge)
   stalks: Icon,
-  owned: { { icon: Icon, color: vector } },
-  banded: { { icon: Icon, color: vector } },
+  -- (how big a system's dot is, in pixels, when all the galaxy is shown;
+  -- and how near the map was looked at when the dots were last made: an
+  -- icon is drawn as many times bigger as the map is nearer, dots and
+  -- all, so they are made that many times smaller, and made again as it
+  -- nears)
+  -- (the dots are an icon for every colour, by whose the systems are or
+  -- by how safe: whichever is shown, and made again for the other)
+  dot: number, near: number, bySecurity: boolean,
+  dots: { { icon: Icon, color: vector } },
+  -- (the middle of each region's systems and of each constellation's,
+  -- where its name goes)
+  regionsAt: { [number]: vector },
+  constellationsAt: { [number]: vector },
 }
 local drawn: Drawn? = nil
 
@@ -108,6 +161,32 @@ function Map.View(turn: number?, tilt: number?): (number, number)
   return yaw, pitch
 end
 
+-- The nearest a map of so many systems is looked at: near enough that
+-- neighbours stand a few hundred pixels apart.
+function Map.Nearest(count: number): number
+  return math.max(4, 0.4 * math.sqrt(count))
+end
+
+-- How near the map is looked at, how many systems are in sight on it,
+-- and whether each has its name by it. Given how near, it is looked at
+-- so (at once, not eased) from the next frame it is drawn; given a
+-- system, with that system in the middle. For scripts.
+function Map.Zoom(to: number?, on: number?): (number, number, boolean)
+  if to or on then
+    asked = { zoom = to, on = on }
+  end
+  return zoom, inView, allNamed
+end
+
+-- Where a system was in the window when the map was last drawn (it may
+-- be off the map's edge), or nil if the map has not been drawn. For
+-- scripts, which click on one.
+function Map.Where(system: number): vector?
+  local made = drawn
+  local at = if made then made.at[system] else nil
+  return if at then shownFrom + at * shownNear else nil
+end
+
 -- Where a place in the galaxy (light years, 'z' its height) is on a map
 -- looked at so, in light years across and down the screen from the
 -- place 'middle'.
@@ -118,14 +197,60 @@ local function seen(x: number, y: number, z: number, middle: vector, turn: numbe
   return vector.create(rx, ry * math.sin(tilt) - z * math.cos(tilt))
 end
 
+-- Where a place in the galaxy is on the map as it was made (pixels from
+-- its middle, with all the galaxy shown); and the other way about: the
+-- place in the galaxy, at a height, that is at a point of it.
+local function fitted(made: Drawn, place: vector): vector
+  return seen(place.x, place.y, place.z, made.middle, made.yaw, made.pitch) * made.scale - made.shift
+end
+
+local function placed(made: Drawn, point: vector, z: number): vector
+  local across = (point.x + made.shift.x) / made.scale
+  local down = (point.y + made.shift.y) / made.scale
+  local ry = (down + z * math.cos(made.pitch)) / math.sin(made.pitch)
+  local c, sn = math.cos(made.yaw), math.sin(made.yaw)
+  return vector.create(made.middle.x + across * c + ry * sn, made.middle.y - across * sn + ry * c, z)
+end
+
 local function colorOf(faction: string): vector
   return WHOSE[faction] or UNCLAIMED
+end
+
+-- How many times bigger a system's dot is with the map looked at so
+-- near: a little, so that it is still a dot.
+local function swollen(near: number): number
+  return math.min(2.2, near ^ 0.45)
+end
+
+-- The systems as icons, one for every colour they are drawn in (by how
+-- safe they are, or by whose): a dot each, bigger for a homeworld, for a
+-- map looked at so near. (A box glyph: a circle glyph is a point of
+-- light with a halo, not a disc.)
+local function dotted(systems: { Galaxy.SystemNode }, at: { vector }, dot: number, near: number, safety: boolean)
+  : { { icon: Icon, color: vector } }
+  local icons: { [string]: Icon? } = {}
+  local list: { { icon: Icon, color: vector } } = {}
+  local grown = dot * swollen(near) / near
+  for id, system in systems do
+    local size = if system.home then grown * 1.7 else grown
+    local key = if safety then Galaxy.Band(system.security) else system.owner
+    local its: Icon? = icons[key]
+    if not its then
+      local fresh = Icon_Create()
+      icons[key] = fresh
+      table.insert(list, { icon = fresh, color = if safety then BAND[key] else colorOf(key) })
+      its = fresh
+    end
+    Icon_AddGlyph(its, Glyph_Box(at[id], vector.create(size, size), 1, 1))
+  end
+  return list
 end
 
 -- ('round' and 'reach': a sphere to leave room for, round a system and
 -- so many light years out from it, for a hull with a jump drive; 0 and
 -- 0 for none.)
-local function make(galaxy: Galaxy.Galaxy, epoch: number, width: number, height: number, round: number, reach: number): Drawn
+-- ('near': how near the map is looked at, for the size of the dots.)
+local function make(galaxy: Galaxy.Galaxy, epoch: number, width: number, height: number, round: number, reach: number, near: number): Drawn
   local systems = galaxy.systems
   local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
   for _, system in systems do
@@ -180,47 +305,48 @@ local function make(galaxy: Galaxy.Galaxy, epoch: number, width: number, height:
       end
     end
   end
-  -- A dot a system: bigger for a homeworld, and smaller as there are
-  -- more. (A box glyph: a circle glyph is a point of light with a halo,
-  -- not a disc.)
-  local dot = if #systems > 150 then 2 elseif #systems > 40 then 2.6 else 3.4
-  local owned: { [string]: Icon? } = {}
-  local banded: { [string]: Icon? } = {}
-  local ownedList: { { icon: Icon, color: vector } } = {}
-  local bandedList: { { icon: Icon, color: vector } } = {}
+  -- A dot a system, smaller as there are more.
+  local dot = if #systems > 1200 then 1.4 elseif #systems > 150 then 2 elseif #systems > 40 then 2.6 else 3.4
+  local dots = dotted(systems, at, dot, near, bySecurity)
+  -- Where the regions' names go, and the constellations'.
+  local regionsAt: { [number]: vector } = {}
+  local constellationsAt: { [number]: vector } = {}
+  local regionCount: { [number]: number } = {}
+  local constellationCount: { [number]: number } = {}
   for id, system in systems do
-    local size = if system.home then dot * 1.7 else dot
-    local mine: Icon? = owned[system.owner]
-    if not mine then
-      local fresh = Icon_Create()
-      owned[system.owner] = fresh
-      table.insert(ownedList, { icon = fresh, color = colorOf(system.owner) })
-      mine = fresh
-    end
-    Icon_AddGlyph(mine, Glyph_Box(at[id], vector.create(size, size), 1, 1))
-    local band = Galaxy.Band(system.security)
-    local its: Icon? = banded[band]
-    if not its then
-      local fresh = Icon_Create()
-      banded[band] = fresh
-      table.insert(bandedList, { icon = fresh, color = BAND[band] })
-      its = fresh
-    end
-    Icon_AddGlyph(its, Glyph_Box(at[id], vector.create(size, size), 1, 1))
+    regionsAt[system.region] = (regionsAt[system.region] or vector.zero) + at[id]
+    regionCount[system.region] = (regionCount[system.region] or 0) + 1
+    constellationsAt[system.constellation] = (constellationsAt[system.constellation] or vector.zero) + at[id]
+    constellationCount[system.constellation] = (constellationCount[system.constellation] or 0) + 1
+  end
+  for id, count in regionCount do
+    regionsAt[id] /= count
+  end
+  for id, count in constellationCount do
+    constellationsAt[id] /= count
   end
   return { epoch = epoch, width = width, height = height, yaw = yaw, pitch = pitch, scale = scale, middle = middle, shift = shift,
-    round = round, reach = reach, at = at, gates = gates, stalks = stalks, owned = ownedList, banded = bandedList }
+    round = round, reach = reach, at = at, gates = gates, stalks = stalks, dot = dot, near = near, bySecurity = bySecurity, dots = dots,
+    regionsAt = regionsAt, constellationsAt = constellationsAt }
+end
+
+-- The part of a window the map takes up when it is open: where it is,
+-- and how wide and how high. (It goes over everything, so what is drawn
+-- before it leaves the mouse alone there: Im.Cover.)
+function Map.Covers(left: number, top: number, width: number, height: number): (number, number, number, number)
+  local w, h = math.min(width - 80, 1400), math.min(height - 150, 820)
+  return left + (width - w) / 2, top + (height - h) / 2 - 10, w, h
 end
 
 function Map.Draw(session: Session.Session, left: number, top: number, width: number, height: number)
   if not open then
     return
   end
+  Im.Uncover()
   local game = session.game
   local galaxy = game.state.galaxy
   local systems = galaxy.systems
-  local w, h = math.min(width - 80, 1400), math.min(height - 150, 820)
-  local x, y = left + (width - w) / 2, top + (height - h) / 2 - 10
+  local x, y, w, h = Map.Covers(left, top, width, height)
   Im.Panel(x, y, w, h)
   -- (a panel lets what is behind it show; a map is read, so it does not)
   Im.Fill(x, y, w, h, vector.create(0.02, 0.03, 0.045), 0.97)
@@ -250,14 +376,35 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   if Im.Button(">", x + 598, y + 8, 28, 26, true, "Map:right") then
     yaw += math.pi / 12
   end
+  -- How near it is looked at: a notch nearer or further, all of it
+  -- again, and the pilot's system in the middle. (The wheel over the map
+  -- nears it by hand, and the left button drags it: below.)
+  local limit = Map.Nearest(#systems)
+  local step, fit, toHere = 0, false, false
+  if Im.Button("-", x + 644, y + 8, 28, 26, zoomTo > 1, "Map:out") then
+    step = -1
+  end
+  if Im.Button("+", x + 676, y + 8, 28, 26, zoomTo < limit, "Map:in") then
+    step = 1
+  end
+  if Im.Button("Fit", x + 708, y + 8, 44, 26, zoomTo > 1, "Map:fit") then
+    fit = true
+  end
+  if Im.Button("Here", x + 756, y + 8, 54, 26, true, "Map:here") then
+    toHere = true
+  end
+  if zoom > 1 then
+    Im.Text(string.format("x%.1f", zoom), x + 820, y + 14, 12, Im.DIM)
+  end
 
   -- The map.
   local mapW, mapH = w - SIDE - 16, h - 56
+  local mapX, mapY = x + 8, y + 48
   local kept = drawn
   local made: Drawn
   -- (the right button held over the map turns it and tilts it)
   local pointer = Im.Cursor()
-  local onMap = pointer.x >= x + 8 and pointer.x <= x + 8 + mapW and pointer.y >= y + 48 and pointer.y <= y + 48 + mapH
+  local onMap = Im.Inside(mapX, mapY, mapW, mapH)
   if Mouse_RightDown() and (dragged ~= nil or onMap) then
     local was = dragged or pointer
     yaw += (pointer.x - was.x) * 0.008
@@ -268,12 +415,21 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   end
   -- (a hull with a jump drive has the sphere it reaches drawn round where
   -- the pilot is, and the map leaves room for it)
+  local player = Core.Query.Player(game)
+  local here = player.system
   local reaching = Core.Query.JumpDrive(game)
-  local round = if reaching then Core.Query.Player(game).system else 0
+  local round = if reaching then here else 0
   local reach = if reaching then reaching.range else 0
-  if kept == nil or kept.epoch ~= session.epoch or kept.width ~= mapW or kept.height ~= mapH or #kept.at ~= #systems
+  if kept ~= nil and (kept.epoch ~= session.epoch or #kept.at ~= #systems) then
+    kept = nil
+  end
+  if kept == nil then
+    -- (another galaxy: all of it, to begin with)
+    zoom, zoomTo, focus, look, hold, grab = 1, 1, nil, nil, nil, nil
+  end
+  if kept == nil or kept.width ~= mapW or kept.height ~= mapH
     or kept.yaw ~= yaw or kept.pitch ~= pitch or kept.round ~= round or kept.reach ~= reach then
-    made = make(galaxy, session.epoch, mapW, mapH, round, reach)
+    made = make(galaxy, session.epoch, mapW, mapH, round, reach, zoom)
     drawn = made
     if systems[picked] == nil then
       picked = 0
@@ -281,33 +437,214 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   else
     made = kept
   end
-  local centre = vector.create(x + 8 + mapW / 2, y + 48 + mapH / 2)
-  Im.Fill(x + 8, y + 48, mapW, mapH, vector.create(0.015, 0.02, 0.03), 0.85)
-  -- The regions' names, each over the middle of its systems, under
-  -- everything else.
-  for _, region in galaxy.regions do
-    local sum, count = vector.create(0, 0), 0
-    for id, system in systems do
-      if system.region == region.id then
-        sum += made.at[id]
-        count += 1
+  local centre = vector.create(mapX + mapW / 2, mapY + mapH / 2)
+
+  -- How near it is looked at, and what its middle is on. 'pan' is where
+  -- the middle of the window is on the map as it was made (pixels of it
+  -- with all the galaxy shown): with all of it shown that is its own
+  -- middle and nowhere else, and from twice as near it is anywhere on it.
+  local function bounded(p: vector): vector
+    local slack = math.clamp(zoom - 1, 0, 1)
+    return vector.create(math.clamp(p.x, -mapW / 2 * slack, mapW / 2 * slack), math.clamp(p.y, -mapH / 2 * slack, mapH / 2 * slack))
+  end
+  local function whereIs(id: number): vector
+    local system = systems[id]
+    return vector.create(system.x, system.y, system.z)
+  end
+  local function level(): number
+    local on = focus
+    return if on then on.z else 0
+  end
+  -- (a system in the middle, and near enough that every system in sight
+  -- round it has its name by it: twice as near as all the galaxy at the
+  -- least, which is how near anywhere on the map can be the middle)
+  local function centred(id: number)
+    focus, hold = whereIs(id), nil
+    local middle = made.at[id]
+    local to = math.clamp(zoomTo, math.min(2, limit), limit)
+    while to < limit do
+      local about = 0
+      for _, at in made.at do
+        if math.abs(at.x - middle.x) * to <= mapW / 2 and math.abs(at.y - middle.y) * to <= mapH / 2 then
+          about += 1
+        end
+      end
+      if about <= NAMES then
+        break
+      end
+      to = math.min(limit, to * NEARER)
+    end
+    zoomTo = to
+  end
+  -- (where it was as it was last drawn)
+  local resting = look or focus
+  local pan = if resting then bounded(fitted(made, resting)) else vector.zero
+  local want = asked
+  if want then
+    asked = nil
+    zoom = math.clamp(want.zoom or zoom, 1, limit)
+    zoomTo, hold = zoom, nil
+    local on = want.on
+    if on and systems[on] then
+      focus = whereIs(on)
+      look = focus
+    end
+  end
+  if fit then
+    zoomTo, hold = 1, nil
+  end
+  if toHere then
+    centred(here)
+  end
+  -- (a notch: of the wheel, about what the cursor is on; or of the
+  -- buttons, about the middle of what is shown, and from all of the
+  -- galaxy about the system picked, or the one the pilot is in)
+  local notches = step + (if onMap then Mouse_GetScrollDelta() else 0)
+  if notches ~= 0 then
+    local to = math.clamp(zoomTo * NEARER ^ notches, 1, limit)
+    if to ~= zoomTo then
+      zoomTo = to
+      if step == 0 then
+        local at = pointer - centre
+        hold = { place = placed(made, pan + at / zoom, level()), at = at }
+      elseif zoom <= 1.001 then
+        local place = whereIs(if picked ~= 0 then picked else here)
+        hold = { place = place, at = (fitted(made, place) - pan) * zoom }
+      else
+        hold = nil
       end
     end
-    if count > 0 then
-      local label = string.upper(region.name)
-      local middle = centre + sum / count
+  end
+  local share = 1 - math.exp(-18 * math.clamp(FrameTimer_Get(), 1 / 240, 0.1))
+  if zoom ~= zoomTo then
+    zoom *= (zoomTo / zoom) ^ share
+    if math.abs(zoomTo / zoom - 1) < 0.004 then
+      zoom = zoomTo
+    end
+  end
+  local holding, aim = hold, focus
+  if holding then
+    pan = bounded(fitted(made, holding.place) - holding.at / zoom)
+    focus = placed(made, pan, level())
+    look = focus
+    if zoom == zoomTo then
+      hold = nil
+    end
+  elseif aim then
+    local from = look or placed(made, vector.zero, aim.z)
+    local now = from + (aim - from) * share
+    if vector.magnitude(aim - now) * made.scale * zoom < 0.5 then
+      now = aim
+    end
+    look = now
+    pan = bounded(fitted(made, now))
+  else
+    pan = vector.zero
+  end
+  -- (the left button held and moved drags the map about)
+  local grabbed = grab
+  if grabbed and Mouse_LeftDown() then
+    grabbed.moved = grabbed.moved or vector.magnitude(pointer - grabbed.from) > 5
+    if grabbed.moved and zoom > 1 then
+      pan = bounded(pan - (pointer - grabbed.last) / zoom)
+      focus = placed(made, pan, level())
+      look, hold = focus, nil
+    end
+    grabbed.last = pointer
+  end
+  if zoom == 1 and zoomTo == 1 then
+    focus, look, hold = nil, nil, nil
+    pan = vector.zero
+  end
+  if math.abs(zoom / made.near - 1) > 0.08 or (zoom == zoomTo and made.near ~= zoom) or made.bySecurity ~= bySecurity then
+    made.dots = dotted(systems, made.at, made.dot, zoom, bySecurity)
+    made.near, made.bySecurity = zoom, bySecurity
+  end
+  -- Where things are in the window: the map's own middle, and a system.
+  local origin = centre - pan * zoom
+  shownFrom, shownNear = origin, zoom
+  local function spot(id: number): vector
+    return origin + made.at[id] * zoom
+  end
+  local function sighted(p: vector, by: number): boolean
+    return p.x >= mapX - by and p.x <= mapX + mapW + by and p.y >= mapY - by and p.y <= mapY + mapH + by
+  end
+
+  -- Which systems are in sight, and which of them the cursor is on.
+  local hot, nearest = 0, 14 ^ 2
+  local count = 0
+  local few: { number } = {}
+  for id, at in made.at do
+    local sx, sy = origin.x + at.x * zoom, origin.y + at.y * zoom
+    if sx >= mapX and sx <= mapX + mapW and sy >= mapY and sy <= mapY + mapH then
+      count += 1
+      if count <= NAMES then
+        few[count] = id
+      end
+      if onMap then
+        local d2 = (sx - pointer.x) ^ 2 + (sy - pointer.y) ^ 2
+        if d2 < nearest then
+          hot, nearest = id, d2
+        end
+      end
+    end
+  end
+  inView, allNamed = count, zoom > 1 and count <= NAMES
+  -- A click on a system picks it (a click: the button let go where it
+  -- went down, not a drag of the map), and a double click puts it in the
+  -- middle.
+  if Im.Pressed() and onMap then
+    grab = { from = pointer, last = pointer, on = hot, moved = false }
+    if Im.DoublePressed() and hot ~= 0 then
+      centred(hot)
+    end
+  end
+  local down = grab
+  if down and not Mouse_LeftDown() then
+    if not down.moved and hot ~= 0 and hot == down.on then
+      picked = hot
+    end
+    grab = nil
+  end
+
+  Im.Fill(mapX, mapY, mapW, mapH, vector.create(0.015, 0.02, 0.03), 0.85)
+  ClipRegion_Push(vector.create(mapX, mapY), vector.create(mapW, mapH))
+  -- The regions' names, each over the middle of its systems, under
+  -- everything else; and, with few enough systems in sight, the
+  -- constellations'.
+  -- (a region's name is drawn while few enough of them are in sight to
+  -- be read: a galaxy of thousands, all of it shown, would be under them)
+  local regional: { number } = {}
+  for _, region in galaxy.regions do
+    local at = made.regionsAt[region.id]
+    if at and sighted(origin + at * zoom, 160) then
+      table.insert(regional, region.id)
+    end
+  end
+  if #regional <= REGIONS then
+    for _, id in regional do
+      local label = string.upper(galaxy.regions[id].name)
+      local middle = origin + made.regionsAt[id] * zoom
       Im.Text(label, middle.x - Im.TextWidth(label, 15) / 2, middle.y - 8, 15, Im.DIM, 0.85)
     end
   end
-  Icon_Draw(made.stalks, centre, 1, Im.DIM, 0.22)
-  Icon_Draw(made.gates, centre, 1, Im.DIM, 0.35)
-  local groups: { { icon: Icon, color: vector } } = if bySecurity then made.banded else made.owned
-  for _, group in groups do
-    Icon_Draw(group.icon, centre, 1, group.color, 0.95)
+  if zoom > 1 and count <= CONSTELLATIONS then
+    for _, constellation in galaxy.constellations do
+      local at = made.constellationsAt[constellation.id]
+      local middle = if at then origin + at * zoom else nil
+      if middle and sighted(middle, 100) then
+        -- (in capitals as a region's is, but small: a system's name is not)
+        local label = string.upper(constellation.name)
+        Im.Text(label, middle.x - Im.TextWidth(label, 11) / 2, middle.y + 14, 11, Im.DIM, 0.6)
+      end
+    end
+  end
+  Icon_Draw(made.stalks, origin, zoom, Im.DIM, 0.22)
+  Icon_Draw(made.gates, origin, zoom, Im.DIM, 0.35)
+  for _, group in made.dots do
+    Icon_Draw(group.icon, origin, zoom, group.color, 0.95)
   end
 
-  local player = Core.Query.Player(game)
-  local here = player.system
   local route = Session.Route(session)
   -- (the systems the pilot's jobs lie in, in order of their ids)
   local jobSystems: { number } = {}
@@ -316,27 +653,16 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   end
   table.sort(jobSystems)
   for index = 2, #route do
-    Glyph_Draw(Glyph_Line(centre + made.at[route[index - 1]], centre + made.at[route[index]], 1, 1), 0, 1, Colors.White, 0.9)
+    Glyph_Draw(Glyph_Line(spot(route[index - 1]), spot(route[index]), 1, 1), 0, 1, Colors.White, 0.9)
   end
 
-  -- Which system the cursor is on, and a click picks it.
-  local cursor = Im.Cursor()
-  local hot, nearest = 0, 14 ^ 2
-  if cursor.x >= x + 8 and cursor.x <= x + 8 + mapW and cursor.y >= y + 48 and cursor.y <= y + 48 + mapH then
-    for id, at in made.at do
-      local d2 = (centre.x + at.x - cursor.x) ^ 2 + (centre.y + at.y - cursor.y) ^ 2
-      if d2 < nearest then
-        hot, nearest = id, d2
-      end
-    end
-  end
-  if hot ~= 0 and Im.Pressed() then
-    picked = hot
-  end
+  -- (the systems that have their names by them already)
+  local named: { [number]: boolean } = {}
   local function mark(id: number, radius: number, color: vector, label: boolean)
-    local p = centre + made.at[id]
+    local p = spot(id)
     Glyph_Draw(Glyph_Ring(p, radius, 1, 1, 0), 0, 1, color, 0.95)
-    if label then
+    if label and not named[id] then
+      named[id] = true
       Im.Text(systems[id].name, p.x + radius + 4, p.y - 8, 13, Im.TEXT)
     end
   end
@@ -351,28 +677,33 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   if reaching then
     local home = systems[here]
     local function place(px: number, py: number, pz: number): vector
-      return centre + seen(px, py, pz, made.middle, made.yaw, made.pitch) * made.scale - made.shift
+      return origin + (seen(px, py, pz, made.middle, made.yaw, made.pitch) * made.scale - made.shift) * zoom
     end
-    Glyph_Draw(Glyph_Ring(centre + made.at[here], reach * made.scale, 1, 1, 0), 0, 1, NEXT, 0.55)
-    local STEPS = 48
+    Glyph_Draw(Glyph_Ring(spot(here), reach * made.scale * zoom, 1, 1, 0), 0, 1, NEXT, 0.55)
+    -- (in more steps the nearer it is looked at: it is a ring, not a polygon)
+    local STEPS = math.clamp(math.ceil(48 * math.sqrt(zoom)), 48, 160)
     for ring = 1, 3 do
       local before: vector? = nil
-      for step = 0, STEPS do
-        local angle = step / STEPS * 2 * math.pi
+      for index = 0, STEPS do
+        local angle = index / STEPS * 2 * math.pi
         local c, sn = reach * math.cos(angle), reach * math.sin(angle)
         local point = if ring == 1 then place(home.x + c, home.y + sn, home.z)
           elseif ring == 2 then place(home.x + c, home.y, home.z + sn)
           else place(home.x, home.y + c, home.z + sn)
-        if before then
+        if before and (sighted(before, 0) or sighted(point, 0)) then
           Glyph_Draw(Glyph_Line(before, point, 1, 1), 0, 1, NEXT, if ring == 1 then 0.35 else 0.16)
         end
         before = point
       end
     end
+    local ringed = 4.5 * swollen(zoom)
     for id in systems do
       if id ~= here and Galaxy.Apart(galaxy, here, id) <= reach then
         within += 1
-        Glyph_Draw(Glyph_Ring(centre + made.at[id], 4.5, 1, 1, 0), 0, 1, NEXT, 0.5)
+        local p = spot(id)
+        if sighted(p, ringed) then
+          Glyph_Draw(Glyph_Ring(p, ringed, 1, 1, 0), 0, 1, NEXT, 0.5)
+        end
       end
     end
     for _, beacon in reaching.beacons do
@@ -408,6 +739,35 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   if hot ~= 0 and hot ~= here and hot ~= picked and hot ~= session.destination then
     mark(hot, 8, Im.DIM, true)
   end
+  -- Looked at near enough that few are in sight, every system has its
+  -- name by it.
+  if allNamed then
+    -- (clear of the ring a system within a jump drive's reach has round it)
+    local beside = 4.5 * swollen(zoom) + 5
+    for _, id in few do
+      if not named[id] then
+        local p = spot(id)
+        Im.Text(systems[id].name, p.x + beside, p.y - 8, 12, Im.TEXT, 0.72)
+      end
+    end
+  end
+  -- A measure: how long so many light years are, across the window.
+  -- (Across it, that is so however the map is turned; up and down it, a
+  -- tilt shortens them.)
+  local perLightYear = made.scale * zoom
+  local measure = 1
+  for _, many in { 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000 } do
+    if many * perLightYear <= 150 then
+      measure = many
+    end
+  end
+  local mx, my = mapX + 16, mapY + mapH - 16
+  local long = measure * perLightYear
+  Glyph_Draw(Glyph_Line(vector.create(mx, my), vector.create(mx + long, my), 1, 1), 0, 1, Im.DIM, 0.9)
+  Glyph_Draw(Glyph_Line(vector.create(mx, my - 4), vector.create(mx, my + 4), 1, 1), 0, 1, Im.DIM, 0.9)
+  Glyph_Draw(Glyph_Line(vector.create(mx + long, my - 4), vector.create(mx + long, my + 4), 1, 1), 0, 1, Im.DIM, 0.9)
+  Im.Text(`{measure} ly`, mx + long + 8, my - 8, 12, Im.DIM)
+  ClipRegion_Pop()
 
   -- The panel: the system picked (or the one the pilot is in), and the
   -- way there.
