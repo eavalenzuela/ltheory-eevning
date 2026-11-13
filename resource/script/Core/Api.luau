@@ -24,6 +24,7 @@ local Drones = require("@lt/Core/Tactical/Drones")
 local Dscan = require("@lt/Core/Tactical/Dscan")
 local Factions = require("@lt/Core/Data/Factions")
 local Fleet = require("@lt/Core/Tactical/Fleet")
+local Jumping = require("@lt/Core/Tactical/Jumping")
 local Keeps = require("@lt/Core/Tactical/Keeps")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Careers = require("@lt/Core/Character/Careers")
@@ -934,6 +935,7 @@ local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true
 local SITE_COMMANDS = { Scan = true, LaunchProbe = true, RecallProbes = true }
 local HACK_COMMANDS = { StartHack = true, HackNode = true, AbandonHack = true }
 local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones = true }
+local JUMP_COMMANDS = { JumpDrive = true }
 local IMPLANT_COMMANDS = { PlugImplant = true, UnplugImplant = true }
 local FLEET_COMMANDS = { HirePilot = true, AssignShip = true, DismissPilot = true, FleetOrder = true }
 local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true, RedeemLoyalty = true }
@@ -974,6 +976,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Sites.Validate(state, command)
   elseif DRONE_COMMANDS[command.kind] then
     return Drones.Validate(state, command)
+  elseif JUMP_COMMANDS[command.kind] then
+    return Jumping.Validate(state, command)
   elseif FLEET_COMMANDS[command.kind] then
     return Fleet.Validate(state, command)
   elseif IMPLANT_COMMANDS[command.kind] then
@@ -1071,6 +1075,8 @@ function Core.Step(game: Game)
       Sites.Apply(state, command, game.events)
     elseif ok and DRONE_COMMANDS[command.kind] then
       Drones.Apply(state, command, game.events)
+    elseif ok and JUMP_COMMANDS[command.kind] then
+      Jumping.Apply(state, command, game.events)
     elseif ok and FLEET_COMMANDS[command.kind] then
       Fleet.Apply(state, command, game.events)
     elseif ok and IMPLANT_COMMANDS[command.kind] then
@@ -1861,6 +1867,27 @@ end
 -- drill (and for what is no moon).
 function Query.Deposit(game: Game, moon: number): Moons.Deposit?
   return Starbases.Deposit(game.state, moon)
+end
+
+-- The pilot's jump drive (Tactical/Jumping): nil for a hull with none.
+-- How far it reaches, the fuel blocks in the hold and the seconds until
+-- it is ready (0: now); and, for a system, how far that is, what fuel
+-- it would take, and whether the jump can be made now ('why': why not).
+export type JumpDriveStatus = { range: number, held: number, cooling: number, distance: number, fuel: number, ready: boolean, why: string }
+function Query.JumpDrive(game: Game, system: number?): JumpDriveStatus?
+  local state = game.state
+  local ship = state.player.ship
+  if not Jumping.Fitted(state, ship) then
+    return nil
+  end
+  local ball = state.balls[ship]
+  local here = if ball then ball.system else Space.SystemOf(state, state.ships[ship].docked)
+  local to = system or 0
+  local known = state.galaxy.systems[to] ~= nil and to ~= here
+  local distance = if known then Jumping.Distance(state, here, to) else 0
+  local ok, why = Jumping.Validate(state, { kind = "JumpDrive", actor = ship, target = to })
+  return { range = Jumping.Range(state, ship), held = Jumping.Held(state, ship), cooling = Jumping.Cooling(state, ship),
+    distance = distance, fuel = if known then Jumping.Fuel(state, ship, distance) else 0, ready = ok, why = why or "" }
 end
 
 -- A tower the pirates hold a moon with (Tactical/Keeps), asked for by

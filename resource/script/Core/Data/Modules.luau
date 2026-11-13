@@ -381,6 +381,26 @@ local modules: { ModuleType } = {
     cpu = 5, powergrid = 1, volume = 1, basePrice = 8000, passive = {},
     hex = { kind = "armor", range = 3000, strength = 18, duration = 5, capacitor = 6 }, internal = true,
   },
+  -- What a fighter and a bomber carry (Data/Drones): of no use on a
+  -- ship either. A fighter's cannon is a quick gun that follows what it
+  -- fires at and takes a cruiser's rounds, for ships of any size. A
+  -- bomber's rack throws a siege dreadnought's missiles, slowly: for
+  -- what is big and stands still, and next to nothing to a frigate.
+  -- (First figures.)
+  {
+    id = "fighter.cannon", name = "Fighter Cannon", slot = "high", hardpoint = "turret",
+    cpu = 20, powergrid = 20, volume = 10, basePrice = 300000, passive = {},
+    weapon = { family = "projectile", duration = 2.5, capacitor = 0, damageMultiplier = 5.0,
+      optimal = 3000, falloff = 9000, tracking = 300, clip = 200, reload = 8, size = 2 },
+    internal = true, requires = { { skill = "fighters", level = 1 } },
+  },
+  {
+    id = "bomber.rack", name = "Bomber Torpedo Rack", slot = "high", hardpoint = "launcher",
+    cpu = 20, powergrid = 20, volume = 10, basePrice = 900000, passive = {},
+    weapon = { family = "missile", duration = 14, capacitor = 0, damageMultiplier = 1.5,
+      optimal = 0, falloff = 0, tracking = 0, clip = 12, reload = 30, size = 4 },
+    internal = true, requires = { { skill = "fighters", level = 3 } },
+  },
 
   -- Speed, capacitor, cargo
   {

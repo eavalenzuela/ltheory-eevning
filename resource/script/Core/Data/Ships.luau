@@ -629,15 +629,49 @@ for _, base in table.clone(types) do
   end
 end
 
+-- What a fighter and a bomber fly as (Data/Drones): bigger, tougher and
+-- quicker than any drone, and nobody's to board, sell or build apart.
+-- (They have no tech 2 make. First figures.)
+table.insert(types, {
+  id = "drone.hull.fighter", name = "Fighter", class = "drone", lineage = "", basePrice = 4000000, volume = 150,
+  mass = 2500000, inertia = 2.0, maxVelocity = 700, warpSpeed = 5, radius = 14,
+  shield = 500, armor = 450, hull = 550, shieldRecharge = 400,
+  shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 45,
+  cpu = 100, powergrid = 100, highs = 1, mids = 0, lows = 0, turrets = 1, launchers = 0,
+  capacitor = 600, capacitorRecharge = 150,
+  scanResolution = 450, lockRange = 60000, maxTargets = 1, cargo = 4000,
+  restricted = true, rigs = 0, drones = 0,
+})
+table.insert(types, {
+  id = "drone.hull.bomber", name = "Bomber", class = "drone", lineage = "", basePrice = 12000000, volume = 300,
+  mass = 6000000, inertia = 2.0, maxVelocity = 420, warpSpeed = 5, radius = 22,
+  shield = 900, armor = 900, hull = 1100, shieldRecharge = 600,
+  shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 80,
+  cpu = 100, powergrid = 100, highs = 1, mids = 0, lows = 0, turrets = 0, launchers = 1,
+  capacitor = 900, capacitorRecharge = 200,
+  scanResolution = 300, lockRange = 90000, maxTargets = 1, cargo = 4000,
+  restricted = true, rigs = 0, drones = 0,
+})
+
 local Ships = { list = types, byId = {} :: { [string]: ShipType } }
+
+-- The classes with a bay for fighters, and what each launches from it
+-- (the project owner's ladder: a carrier fighters, a supercarrier and
+-- an ultracapital fighters and bombers).
+Ships.CRAFT = {
+  carrier = { fighter = true },
+  supercarrier = { fighter = true, bomber = true },
+  ultracapital = { fighter = true, bomber = true },
+} :: { [string]: { [string]: boolean } }
 
 Ships.RIGS = 3
 Ships.CALIBRATION = 400
 -- Drones a hull controls, by its class.
 -- (A carrier's are what it fights with, and a capital industrial's what
 -- it works with: they control twice a battleship's, a supercarrier
--- three times, and have the bays for many times as many. Fighters and
--- bombers, which are theirs alone, are not made yet.)
+-- three times, and have the bays for many times as many. A fighter or
+-- a bomber is one of what a hull controls, as a drone is: Ships.CRAFT,
+-- Tactical/Drones.)
 Ships.DRONES = { frigate = 1, destroyer = 2, cruiser = 4, battleship = 5, industrial = 2, barge = 3,
   attackbattlecruiser = 2, battlecruiser = 5, carrier = 10, dreadnought = 5, siegedreadnought = 5, capitalindustrial = 10,
   supercarrier = 15, ultracapital = 25 } :: { [string]: number }

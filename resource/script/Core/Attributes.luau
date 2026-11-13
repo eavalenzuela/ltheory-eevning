@@ -80,7 +80,9 @@ end
 -- The modifiers of a fit, and of the pilot's skills, that apply to 'on'
 -- (and, for weapons, 'family'). A skill's bonus is its value times its
 -- level, and is never penalised.
-local function gather(fitted: { Fitted }, on: string, family: string?, levels: Levels?): { [string]: Pending }
+-- ('stealth': the hull is built to go unseen, and a cloak that runs on
+-- it does not slow it: Data/Ships.)
+local function gather(fitted: { Fitted }, on: string, family: string?, levels: Levels?, stealth: boolean?): { [string]: Pending }
   local pending: { [string]: Pending } = {}
   if levels then
     -- in the skill list's order, so the arithmetic is the same every time
@@ -104,7 +106,7 @@ local function gather(fitted: { Fitted }, on: string, family: string?, levels: L
         collect(pending, modifier)
       end
     end
-    if module and f.running and module.boost then
+    if module and f.running and module.boost and not (stealth and module.cloak) then
       for _, modifier in module.boost do
         if modifier.on == on and (on == "ship" or modifier.family == family) then
           collect(pending, modifier)
@@ -132,7 +134,7 @@ function Attributes.Ship(hull: Ships.ShipType, fitted: { Fitted }, levels: Level
       base[`{name}.{index}`] = source[name][index]
     end
   end
-  local pending = gather(fitted, "ship", nil, levels)
+  local pending = gather(fitted, "ship", nil, levels, hull.stealth)
   local stats: Stats = {}
   for name, value in base do
     local p = pending[name]

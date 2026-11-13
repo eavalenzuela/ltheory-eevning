@@ -25,6 +25,9 @@ export type Ship = {
   -- The hired pilot who flies it (Tactical/Fleet), by their id; 0 for
   -- a ship the player flies themselves, or that nobody does.
   pilot: number,
+  -- The tick its jump drive last fired, if it has one and it has
+  -- (Tactical/Jumping): the drive cools from then.
+  jumped: number?,
 }
 
 -- A target being locked, or locked. Times are game seconds (tick * TICK).

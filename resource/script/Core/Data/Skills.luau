@@ -67,6 +67,8 @@ local skills: { Skill } = {
     note = "Level 1 to fly capital industrials." },
   { id = "navigation", name = "Navigation", rank = 1, start = 0, requires = {}, bonus = ship("maxVelocity", 0.05),
     note = "5% more speed a level." },
+  { id = "jump.drives", name = "Jump Drive Operation", rank = 6, start = -1, requires = { { skill = "navigation", level = 4 } },
+    note = "Level 1 to use a jump drive, and a tenth further a level." },
   { id = "evasive.maneuvering", name = "Evasive Maneuvering", rank = 2, start = -1,
     requires = { { skill = "navigation", level = 2 } }, bonus = ship("inertia", -0.04), note = "4% quicker to turn a level." },
   { id = "propulsion", name = "Afterburners", rank = 1, start = 0, requires = {}, note = "Level 1 to fit an afterburner." },
@@ -120,6 +122,8 @@ local skills: { Skill } = {
   { id = "salvaging", name = "Salvaging", rank = 3, start = -1, requires = {},
     note = "Level 1 to fit a salvager. 10% likelier to bring something off each cycle a level." },
   -- Company
+  { id = "fighters", name = "Fighters", rank = 8, start = -1, requires = { { skill = "drones", level = 5 } },
+    note = "Level 1 to launch fighters from a carrier, level 3 for bombers; and four more of either in hand a level." },
   { id = "drones", name = "Drones", rank = 2, start = 0, requires = {},
     note = "One more drone out at once a level, as far as the hull controls. Level 4 for a tech 2 drone." },
   { id = "leadership", name = "Leadership", rank = 4, start = 1, requires = {},

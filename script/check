@@ -110,6 +110,9 @@
 #   game-siege  a tower under siege (test/scenario/siege.txt): sealed
 #               when its shield is failing, the siege broken when it opens,
 #               and then the tower lost
+#   game-carrier  a carrier (test/scenario/carrier.txt): ten fighters
+#               launched and called back, and a jump by its drive from
+#               the map
 #   game-keep   a moon the pirates hold (test/scenario/keep.txt): their
 #               tower sealed when its shield is failing, opened and
 #               destroyed, and the pilot's own anchored at the moon
@@ -317,6 +320,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/siege.txt
   step game-keep 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 340 \
     --script test/scenario/keep.txt
+  step game-carrier 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 440 \
+    --script test/scenario/carrier.txt
   step game-patrol 0 timeout 600 bin/launch game --no-present --fixed-step 60 --timeout 500 \
     --script test/scenario/patrol.txt
   step game-dig 0 timeout 800 bin/launch game --no-present --fixed-step 60 --timeout 740 \

@@ -23,6 +23,7 @@ local Mining = require("@lt/Core/Tactical/Mining")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Rng = require("@lt/Core/Kernel/Rng")
+local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
@@ -84,6 +85,16 @@ local function cloakOf(state: State.State, ball: State.Ball): State.Item?
     end
   end
   return nil
+end
+
+-- How near something has to come to a ship to break its cloak: the
+-- cloak's reach, and half of that for a hull built to go unseen (which
+-- its cloak does not slow either: Core/Attributes).
+Combat.STEALTH = 0.5
+local function reachOf(state: State.State, ball: State.Ball, cloak: Modules.ModuleType): number
+  local ship = state.ships[ball.id]
+  local hull = if ship then Ships.byId[ship.type] else nil
+  return (cloak.cloak :: any).reach * (if hull and hull.stealth then Combat.STEALTH else 1)
 end
 
 -- Whether a ship is cloaked: nobody can target it.
@@ -199,7 +210,7 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
           return false, "somebody has you targeted"
         end
       end
-      local near = crowding(state, ball, module.cloak.reach)
+      local near = crowding(state, ball, reachOf(state, ball, module))
       if near then
         return false, `too near {near} to cloak`
       end
@@ -770,7 +781,7 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
     local ball = state.balls[id]
     local cloak = cloakOf(state, ball)
     if cloak then
-      local near = crowding(state, ball, (Modules.byId[cloak.type].cloak :: any).reach)
+      local near = crowding(state, ball, reachOf(state, ball, Modules.byId[cloak.type]))
       if near then
         local _, index = findRunning(ball, cloak.id)
         stop(state, ball, index, `too near {near}`, events)

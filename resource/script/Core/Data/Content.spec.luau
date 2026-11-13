@@ -453,7 +453,8 @@ suite:Case("every weapon takes ammunition of its own size and no other; larger r
       end
     end
   end
-  t.eq(weapons, 6 * 4 + 4, "six forms of turret and a launcher, in four sizes")
+  -- (and a fighter's cannon and a bomber's rack, which only they carry)
+  t.eq(weapons, 6 * 4 + 4 + 2, "six forms of turret and a launcher, in four sizes, and what a fighter and a bomber carry")
   for _, form in { "laser.pulse", "laser.beam", "autocannon", "artillery", "blaster", "railgun" } do
     local small, medium, large = Modules.byId[form .. ".small"], Modules.byId[form .. ".medium"], Modules.byId[form .. ".large"]
     -- (and the fourth size, which only a siege dreadnought has the powergrid for)
@@ -535,7 +536,9 @@ suite:Case("every human warship can carry a full rack of its own faction's weapo
               `{hull.id}: ten large and ten medium ({form}) take {cpu} of {hull.cpu} cpu and {powergrid} of {hull.powergrid} MW`)
           end
           for _, module in Modules.list do
-            t.ok(module.weapon == nil or module.weapon.size < 4 or module.powergrid > hull.powergrid, `{hull.id} could carry a {module.id}`)
+            -- (but for what only a bomber carries, which is nothing a ship fits)
+            t.ok(module.weapon == nil or module.weapon.size < 4 or module.internal or module.powergrid > hull.powergrid,
+              `{hull.id} could carry a {module.id}`)
           end
         end
       end
@@ -677,8 +680,9 @@ suite:Case("every weapon, repairer, extender, plate and mining laser has a tech 
     end
   end
   -- 28 weapons, 2 repairers, an extender and a plate in three sizes each, two mining lasers and a gas harvester,
-  -- the repairers for another ship (shield and armour, in three sizes), and the two things only a drone carries.
-  t.eq(improved, 28 + 4 * 3 + 3 + 2 * 3 + 2)
+  -- the repairers for another ship (shield and armour, in three sizes), and the four things only a drone, a
+  -- fighter or a bomber carries.
+  t.eq(improved, 28 + 4 * 3 + 3 + 2 * 3 + 4)
   t.ok(Modules.Improved("projector.entanglement") == nil and Modules.Improved("rig.shield") == nil)
   t.eq({ Modules.SizeOf(Modules.byId["autocannon.medium.ii"]), Modules.SizeOf(Modules.byId["shield.extender.large"]),
     Modules.SizeOf(Modules.byId["miner.small"]) }, { 2, 3, 1 })
@@ -826,11 +830,46 @@ suite:Case("every drone has a tech 2 make: a tougher, quicker hull with the tech
       local blueprint = assert(Blueprints.byProduct[drone.id], drone.id)
       t.eq({ Types.Info(drone.id).scarce, Types.Info(blueprint.id).scarce, blueprint.invented } :: { any }, { true, true, true } :: { any })
       t.eq({ blueprint.materials[1].type, blueprint.materials[1].quantity } :: { any }, { base.id, 1 } :: { any })
+    elseif drone.craft then
+      -- (a fighter and a bomber have no tech 2 make: their own case)
+      t.eq({ drone.base, Drones.Improved(drone.id) } :: { any }, { nil, nil } :: { any })
     else
       t.eq({ drone.base, drone.level, Types.Info(drone.id).scarce } :: { any }, { nil, 1, nil } :: { any })
     end
   end
   t.eq(improved, 4)
+end)
+
+suite:Case("a fighter and a bomber are craft a carrier launches: bigger, tougher and harder-hitting than a drone, with a bay only on the hulls for them", function(t)
+  local fighter, bomber, drone = Drones.byId["drone.fighter"], Drones.byId["drone.bomber"], Drones.byId["drone.medium"]
+  t.eq({ fighter.craft, fighter.skill, fighter.level, bomber.craft, bomber.skill, bomber.level } :: { any },
+    { "fighter", "fighters", 1, "bomber", "fighters", 3 } :: { any })
+  for _, craft in { fighter, bomber } do
+    local hull, gun = Ships.byId[craft.hull], Modules.byId[craft.gun]
+    t.eq({ hull.class, hull.restricted, Types.Get(hull.id), gun.internal } :: { any }, { "drone", true, nil, true } :: { any }, craft.id)
+    t.ok(Attributes.Check(hull, { gun.id }), `{gun.id} does not fit {hull.id}`)
+    -- (what it is loaded with is of the size its weapon takes)
+    t.eq(assert(Modules.chargeById[craft.charge]).size, assert(gun.weapon).size, craft.id)
+    local plain = Ships.byId[drone.hull]
+    t.ok(hull.shield + hull.armor + hull.hull > 3 * (plain.shield + plain.armor + plain.hull) and craft.volume > 10 * drone.volume, craft.id)
+    -- A thing to buy and to build, as a drone is.
+    t.eq({ Types.Info(craft.id).category, Blueprints.byProduct[craft.id] ~= nil } :: { any }, { "drone", true } :: { any }, craft.id)
+  end
+  -- A fighter's gun does several medium drones' work; a bomber's missile is the heaviest there is.
+  local cannon, light = assert(Modules.byId["fighter.cannon"].weapon), assert(Modules.byId[drone.gun].weapon)
+  t.ok(cannon.damageMultiplier / cannon.duration > 3 * light.damageMultiplier / light.duration and cannon.tracking > light.tracking)
+  t.eq(assert(Modules.byId["bomber.rack"].weapon).size, 4)
+  -- The bays: a carrier's is for fighters, a supercarrier's and an ultracapital's for bombers too, and nothing else has one.
+  for _, hull in Ships.list do
+    local bay = Ships.CRAFT[hull.class]
+    t.eq(bay ~= nil, hull.class == "carrier" or hull.class == "supercarrier" or hull.class == "ultracapital", hull.id)
+    if bay then
+      t.eq({ bay.fighter, bay.bomber } :: { any }, { true, if hull.class == "carrier" then nil else true } :: { any }, hull.id)
+      -- (and room in it for more of them than it has out at once)
+      t.ok(assert(hull.bay) >= assert(hull.drones) * fighter.volume, `{hull.id} has not the bay for the fighters it controls`)
+    end
+  end
+  t.ok(Skills.byId.fighters ~= nil)
 end)
 
 suite:Case("fittings come in three sizes, each for a larger ship than the last", function(t)

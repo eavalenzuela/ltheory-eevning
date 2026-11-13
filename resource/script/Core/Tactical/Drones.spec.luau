@@ -422,4 +422,76 @@ suite:Case("a repair drone goes to whoever of its side has lost most armour and 
   t.eq(state.drones[drone.id].target, 0)
 end)
 
+suite:Case("a carrier launches fighters, a supercarrier bombers too, and the Fighters skill is how many a pilot has in hand", function(t)
+  -- A battleship has no bay for one, whatever is in its drone bay.
+  local other = (flying("battleship.owari", 0, 5))
+  other.state.skills.fighters = 5
+  Items.Add(other.state, "drone.fighter", 2, other.state.player.ship, "dronebay")
+  t.eq(refused(other, { kind = "LaunchDrones", actor = 0 }), "this hull has no bay for a fighter")
+  -- (with a drone beside them the drone goes out, and the fighters stay)
+  Items.Add(other.state, "drone.light", 1, other.state.player.ship, "dronebay")
+  t.ok((submit(other, { kind = "LaunchDrones", actor = 0 })))
+  t.eq({ Core.Query.Drones(other).out, carried(other) }, { 1, 2 })
+
+  -- A carrier: fighters want the Fighters skill, and bombers a bay it has not.
+  local game, me = flying("carrier.azayake", 0, 5)
+  local state = game.state
+  Items.Add(state, "drone.fighter", 12, me.id, "dronebay")
+  t.eq(refused(game, { kind = "LaunchDrones", actor = 0 }), "needs Fighters 1 for what is in the bay")
+  -- Each level is four more in hand beside what Drones gives: at one, nine of the carrier's ten.
+  state.skills.fighters = 1
+  t.eq({ Drones.Max(state, me.id), Ships.byId["carrier.azayake"].drones } :: { any }, { 9, 10 } :: { any })
+  state.skills.fighters = 2
+  t.eq(Drones.Max(state, me.id), 10)
+  t.ok((submit(game, { kind = "LaunchDrones", actor = 0 })))
+  t.eq({ Core.Query.Drones(game).out, carried(game) }, { 10, 2 })
+  local out = Drones.Out(state, me.id)
+  for _, craft in out do
+    t.eq({ craft.type, state.ships[craft.ship].type } :: { any }, { "drone.fighter", "drone.hull.fighter" } :: { any })
+  end
+  -- They fight what they are pointed at: a pirate destroyer does not last a minute against ten.
+  local prey = Pirates.Spawn(state, Pirates.kindById.jackal, me.system, me.x + 5000, me.y, me.z, me.grid)
+  state.pilots[prey.id] = nil
+  State.RemoveId(state.pilotIds, prey.id)
+  t.ok((submit(game, { kind = "EngageDrones", actor = 0, target = prey.id })))
+  steps(game, 60)
+  t.eq(state.balls[prey.id], nil, "ten fighters should have destroyed it")
+  -- Called back, they are in the bay again.
+  t.ok((submit(game, { kind = "RecallDrones", actor = 0 })))
+  for _ = 1, 200 do
+    Core.Step(game)
+    if Core.Query.Drones(game).out == 0 then
+      break
+    end
+  end
+  t.eq({ Core.Query.Drones(game).out, carried(game) }, { 0, 12 })
+  -- A bomber is not a carrier's to launch.
+  for _, item in Items.In(state, me.id, "dronebay") do
+    Items.Take(state, item, item.quantity)
+  end
+  Items.Add(state, "drone.bomber", 2, me.id, "dronebay")
+  state.skills.fighters = 5
+  t.eq(refused(game, { kind = "LaunchDrones", actor = 0 }), "this hull has no bay for a bomber")
+
+  -- A supercarrier's: at Fighters 2 bombers want more skill, and at 3 they go out.
+  local great, flagship = flying("supercarrier.nullo", 0, 5)
+  Items.Add(great.state, "drone.bomber", 4, flagship.id, "dronebay")
+  great.state.skills.fighters = 2
+  t.eq(refused(great, { kind = "LaunchDrones", actor = 0 }), "needs Fighters 3 for what is in the bay")
+  great.state.skills.fighters = 3
+  t.ok((submit(great, { kind = "LaunchDrones", actor = 0 })))
+  t.eq({ Core.Query.Drones(great).out, great.state.ships[Drones.Out(great.state, flagship.id)[1].ship].type } :: { any },
+    { 4, "drone.hull.bomber" } :: { any })
+  -- What a bomber throws is for what is big: it takes a pirates' tower apart, and hardly marks a frigate.
+  local tower = Pirates.Spawn(great.state, Pirates.kindById.keep, flagship.system, flagship.x + 9000, flagship.y, flagship.z, flagship.grid)
+  local whole = tower.vitals.shield
+  t.ok((submit(great, { kind = "EngageDrones", actor = 0, target = tower.id })))
+  steps(great, 120)
+  local harm = whole - tower.vitals.shield
+  t.ok(harm > 10000, `four bombers took {harm} off a tower's shield in two minutes`)
+  -- Out, they are in the save.
+  local data, length = Core.Save(great)
+  t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(great))
+end)
+
 return suite

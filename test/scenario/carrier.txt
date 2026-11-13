@@ -1,0 +1,68 @@
+# A carrier's fighters and its jump drive, in the game app (script/check
+# runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/carrier.txt
+#
+# The Talmar's carrier, the Scoppo, is flown (a cheat), with the skills
+# for it: Drones at five, Fighters at two, Jump Drive Operation at one.
+# Ten fighters are given and go into its bay, and fuel blocks into its
+# hold. Out in space the ten are launched, more than the Drones skill
+# alone would hold, and called back. Then the map is opened on the
+# farthest system its drive reaches, which says how far that is and what
+# fuel it takes, and the jump is made: the carrier is there, the fuel is
+# burnt, and the drive is cooling.
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Fly('carrier.scoppo'), 'no carrier')
+lua GameDebug.Train('drones', 5)
+lua GameDebug.Train('fighters', 2)
+lua GameDebug.Train('jump.drives', 1)
+lua assert(GameDebug.Give('drone.fighter', 10) and GameDebug.Give('fuel.block', 600))
+until GameDebug.Press('Fitting')
+frames 3
+until GameDebug.Press('ToBay:drone.fighter')
+until select(2, GameDebug.Drones()) == 10
+until GameDebug.Press('ToHold:fuel.block')
+until GameDebug.Hold('fuel.block') == 600
+lua assert(select(3, GameDebug.Drones()) == 10, 'a carrier with Fighters 2 should have ten in hand, and has ' .. select(3, GameDebug.Drones()))
+
+# Out in space: ten fighters out, and back.
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 10
+until GameDebug.Press('Drones:launch')
+until GameDebug.Drones() == 10
+lua assert(select(2, GameDebug.Drones()) == 0, 'the bay should be empty')
+frames 20
+until GameDebug.Press('Drones:recall')
+lua GameDebug.TimeScale(4)
+patience 300
+until GameDebug.Drones() == 0
+lua GameDebug.TimeScale(1)
+lua assert(select(2, GameDebug.Drones()) == 10, 'the ten should be in the bay again')
+
+# The jump drive: the farthest system it reaches, on the map, and there.
+lua _G.to, _G.name = GameDebug.JumpReach()
+lua assert(_G.to ~= 0, 'the drive should reach somewhere')
+lua _G.home = GameDebug.System()
+lua assert(select(6, GameDebug.JumpDrive(_G.to)), 'the jump should be ready: ' .. select(7, GameDebug.JumpDrive(_G.to)))
+lua _G.fuel = select(5, GameDebug.JumpDrive(_G.to))
+lua assert(_G.fuel > 0 and _G.fuel <= 600, 'it should take fuel, and no more than there is: ' .. _G.fuel)
+lua assert(GameDebug.MapOn(_G.to))
+frames 5
+until GameDebug.Press('Map:jump')
+until GameDebug.System() == _G.to
+frames 10
+lua assert(GameDebug.InSpace(), 'the carrier should be out in space there')
+lua assert(GameDebug.Hold('fuel.block') == 600 - _G.fuel, 'the fuel should be burnt')
+lua assert(select(3, GameDebug.JumpDrive()) > 0, 'the drive should be cooling')
+lua assert(GameDebug.Hull() == 'carrier.scoppo')
+# (and not back again at once)
+lua assert(GameDebug.MapOn(_G.home))
+frames 5
+lua assert(not GameDebug.CanPress('Map:jump'), 'a drive that has just fired should not fire again')
+
+echo carrier scenario passed
+quit

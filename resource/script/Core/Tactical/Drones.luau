@@ -56,9 +56,15 @@ Drones.SCOOP = 2500
 -- How far off a drone orbits what it is fighting, and its owner.
 local FIGHT, STATION = 800, 600
 
+-- How many more a pilot has in hand for each level of the Fighters
+-- skill, on a hull with a bay for them.
+Drones.WING = 4
+
 -- How many drones a ship can have out at once: what its hull controls,
 -- or the pilot's Drones skill if that is less (a ship that is not the
--- pilot's is held only by its hull).
+-- pilot's is held only by its hull). On a hull with a bay for fighters
+-- each level of the Fighters skill is four more in hand, fighters,
+-- bombers or drones: a carrier controls more than Drones alone allows.
 function Drones.Max(state: State.State, ship: number): number
   local record = state.ships[ship]
   local hull = if record then Ships.byId[record.type] else nil
@@ -66,7 +72,31 @@ function Drones.Max(state: State.State, ship: number): number
     return 0
   end
   local levels = Items.Levels(state, ship)
-  return math.min(hull.drones or 0, if levels then math.max(0, levels.drones or 0) else hull.drones or 0)
+  if levels == nil then
+    return hull.drones or 0
+  end
+  local hand = math.max(0, levels.drones or 0)
+  if Ships.CRAFT[hull.class] then
+    hand += Drones.WING * math.max(0, levels.fighters or 0)
+  end
+  return math.min(hull.drones or 0, hand)
+end
+
+-- Why a ship cannot launch one of a kind, if it cannot: its hull has no
+-- bay for it, or whoever flies it has not the skill.
+function Drones.Cannot(state: State.State, ship: number, type: Kinds.DroneType): string?
+  local record = state.ships[ship]
+  local hull = Ships.byId[record.type]
+  local craft = type.craft
+  if craft and not (Ships.CRAFT[hull.class] and Ships.CRAFT[hull.class][craft]) then
+    return `this hull has no bay for a {string.lower(type.name)}`
+  end
+  local levels = Items.Levels(state, ship)
+  local skill = type.skill or "drones"
+  if levels and math.max(0, levels[skill] or 0) < type.level then
+    return `needs {if skill == "fighters" then "Fighters" else "Drones"} {type.level} for what is in the bay`
+  end
+  return nil
 end
 
 -- The Drones skill of whoever flies a ship: the pilot's own, or a hired
@@ -180,15 +210,18 @@ function Drones.Validate(state: State.State, command: State.Command): (boolean, 
     elseif #out >= Drones.Max(state, ship.id) then
       return false, if Drones.Max(state, ship.id) == 0 then "needs Drones 1" else "as many drones are out as can be controlled"
     end
-    -- (a tech 2 drone takes more of the skill than a plain one)
-    local least = math.huge
+    -- (a tech 2 drone takes more of the skill than a plain one, and a
+    -- fighter or a bomber a bay for it and a skill of its own: something
+    -- in the bay has to be what this ship and its pilot can launch)
+    local why: string? = nil
     for _, stack in carried(state, ship.id) do
-      least = math.min(least, Kinds.byId[stack.type].level)
+      local cannot = Drones.Cannot(state, ship.id, Kinds.byId[stack.type])
+      if cannot == nil then
+        return true
+      end
+      why = why or cannot
     end
-    if Drones.Skill(state, ship.id) < least then
-      return false, `needs Drones {least} for what is in the bay`
-    end
-    return true
+    return false, why
   elseif kind == "RecallDrones" then
     return #out > 0, if #out > 0 then nil else "no drones are out"
   elseif kind == "EngageDrones" then
@@ -221,10 +254,10 @@ function Drones.Apply(state: State.State, command: State.Command, events: { Even
   if kind == "LaunchDrones" then
     -- As many as there is room to control, from the stacks in the hold.
     local room = Drones.Max(state, ship.id) - #Drones.Out(state, ship.id)
-    local skill = Drones.Skill(state, ship.id)
     for _, stack in carried(state, ship.id) do
-      -- (what the pilot has not the skill for stays in the bay)
-      while room > 0 and state.items[stack.id] and Kinds.byId[stack.type].level <= skill do
+      -- (what the pilot has not the skill for, or the hull the bay for,
+      -- stays where it is)
+      while room > 0 and state.items[stack.id] and Drones.Cannot(state, ship.id, Kinds.byId[stack.type]) == nil do
         local type = Kinds.byId[stack.type]
         Items.Take(state, stack, 1)
         local drone = Space.NewShip(state, type.hull, type.name, ship.owner, 0)

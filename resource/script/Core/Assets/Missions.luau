@@ -868,7 +868,8 @@ function Missions.Store(faction: string): { Stock }
     local families: { [string]: boolean } = { [own.weapon] = true, missile = own.launchers >= 0.3 }
     for _, module in Modules.list do
       local blueprint = Blueprints.byProduct[module.id]
-      if module.tech == 2 and module.weapon and families[module.weapon.family] and blueprint then
+      -- (what only a drone or a fighter carries is not a thing a store sells drawings of)
+      if module.tech == 2 and module.weapon and families[module.weapon.family] and blueprint and not module.internal then
         table.insert(stock, { type = blueprint.id, points = math.ceil(module.basePrice / 400), credits = 0, standing = 2 })
       end
     end

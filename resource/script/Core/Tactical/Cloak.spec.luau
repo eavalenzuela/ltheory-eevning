@@ -4,6 +4,7 @@
 local Core = require("@lt/Core/Api")
 local Items = require("@lt/Core/Assets/Items")
 local Pirates = require("@lt/Core/Tactical/Pirates")
+local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Test = require("@lt/Tool/Test")
@@ -156,6 +157,47 @@ suite:Case("a cloaked ship can warp, and comes out of warp still cloaked", funct
   local loaded = Core.Load(data, length)
   t.eq(Core.Hash(loaded), Core.Hash(game))
   t.ok(Core.Query.Cloaked(loaded, loaded.state.player.ship))
+end)
+
+suite:Case("a hull built to go unseen keeps its speed under a cloak, and only what comes within a kilometre switches it off", function(t)
+  -- The Talmar's tech 2 hauler, the Tarantula, is such a hull; their plain hauler is not.
+  t.eq({ Ships.byId["industrial.tarantula"].stealth, Ships.byId["industrial.sunfish"].stealth } :: { any }, { true, nil } :: { any })
+  local function aboard(type: string): (Core.Game, State.Ball, State.Item)
+    local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+    local state = game.state
+    local ship = Space.NewShip(state, type, "Runner", "player", state.player.home)
+    state.player.ship = ship.id
+    state.skills.cloaking = 1
+    local cloak = Items.Equip(state, ship.id, "cloak.device", nil)
+    assert(submit(game, { kind = "Undock", actor = 0 }))
+    local me = state.balls[ship.id]
+    me.x += 5e7
+    me.vx, me.vy, me.vz = 0, 0, 0
+    Space.AssignGrid(state, me)
+    assert(submit(game, { kind = "Stop", actor = 0 }))
+    return game, me, cloak
+  end
+  -- The plain hauler under a cloak flies at a quarter of its speed; the Tarantula at all of it.
+  local plain, slow, device = aboard("industrial.sunfish")
+  local was = slow.maxVelocity
+  t.ok((submit(plain, { kind = "ActivateModule", actor = 0, item = device.id })))
+  t.near(slow.maxVelocity, was * 0.25, 1)
+  local game, me, cloak = aboard("industrial.tarantula")
+  local state = game.state
+  local fast = me.maxVelocity
+  t.ok((submit(game, { kind = "ActivateModule", actor = 0, item = cloak.id })))
+  t.eq({ Core.Query.Cloaked(game, me.id), me.maxVelocity } :: { any }, { true, fast } :: { any })
+  -- Something a kilometre and a half off does not switch it off, as it would a plain hull's; inside a kilometre, it does.
+  local trader = Space.NewShip(state, "industrial.hauler", "Trader", "civilian", 0)
+  local other = Space.Launch(state, trader, me.system, me.x + 1500 + me.radius + 200, me.y, me.z)
+  steps(game, 3)
+  t.eq(Core.Query.Cloaked(game, me.id), true)
+  other.x = me.x + 600 + me.radius + other.radius
+  steps(game, 2)
+  t.eq(Core.Query.Cloaked(game, me.id), false)
+  -- And it cannot be switched on again that near, though it could at a kilometre and a half.
+  local why = tostring(refused(game, { kind = "ActivateModule", actor = 0, item = cloak.id }))
+  t.ok(string.find(why, "too near", 1, true) ~= nil, `within a kilometre: {why}`)
 end)
 
 return suite

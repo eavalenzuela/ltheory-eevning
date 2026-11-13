@@ -176,6 +176,9 @@ function Session.Notice(session: Session, event: Space.Event)
       .. (if event.left > 0 then `: {event.left} blocks there was no room for are left behind` else ""))
   elseif kind == "FleetUnposted" then
     Session.Say(session, `{event.name} has no post there any more, and waits`)
+  elseif kind == "Jumped" and event.ship == mine and event.drive then
+    local system = session.game.state.galaxy.systems[event.to]
+    Session.Say(session, string.format("Jump drive: %s, %.1f light years", if system then system.name else "there", event.distance or 0))
   elseif kind == "Jumped" and event.ship == mine then
     -- (say so when the kind of space changes: what waits at a belt does)
     local _, was = Core.Query.Security(session.game, event.from)

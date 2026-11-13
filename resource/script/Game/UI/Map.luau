@@ -9,7 +9,8 @@
 -- Game/UI/Im; the systems and gates are drawn from icons made once for
 -- a galaxy and a window size. Its buttons' names, for a script
 -- (Im.Press): "Map:close", "Map:factions", "Map:security",
--- "Map:destination", "Map:clear", "Map:safest", "Map:autopilot".
+-- "Map:destination", "Map:clear", "Map:safest", "Map:autopilot", and
+-- "Map:jump" for a hull with a jump drive.
 
 local Colors = require("@lt/Colors")
 local Core = require("@lt/Core/Api")
@@ -310,7 +311,33 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
     and session.destination ~= 0 then
     session.autopilot = not session.autopilot
   end
-  line += 44
+  line += 40
+  -- A hull with a jump drive: how far it reaches, what the system shown
+  -- would take, and the jump itself ("Map:jump"), which says why not
+  -- when it cannot be made.
+  local drive = Core.Query.JumpDrive(game, shown)
+  if drive then
+    Im.Heading("JUMP DRIVE", px, line, 14, Im.DIM)
+    Im.TextRight(string.format("reaches %.1f ly", drive.range), px + SIDE - 24, line + 1, 12, Im.DIM)
+    line += 22
+    if shown == here then
+      Im.Text(`{Format.Whole(drive.held)} fuel blocks in the hold` .. (if drive.cooling > 0
+        then `, cooling {Format.Duration(drive.cooling)}` else ""), px, line, 13, Im.DIM)
+      line += 24
+    else
+      Im.Text(string.format("%.1f light years: %s fuel blocks of %s", drive.distance, Format.Whole(drive.fuel), Format.Whole(drive.held)),
+        px, line, 13, if drive.distance <= drive.range and drive.held >= drive.fuel then Im.TEXT else Im.WARN)
+      line += 22
+      if Im.Button("Jump", px, line, 90, 28, drive.ready, "Map:jump") then
+        Session.Do(session, { kind = "JumpDrive", actor = 0, target = shown })
+      end
+      if not drive.ready then
+        Im.Text(drive.why, px + 98, line + 7, 12, Im.WARN)
+      end
+      line += 36
+    end
+  end
+  line += 4
   if session.destination ~= 0 then
     Im.Text(`Going to {systems[session.destination].name}: {math.max(0, #route - 1)} jumps`, px, line, 13, Im.ACCENT)
     line += 20

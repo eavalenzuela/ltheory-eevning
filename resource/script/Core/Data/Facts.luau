@@ -199,16 +199,20 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
       `The tech 2 make of the {nameOf(hull.base)}: rebuilt to take more and fit more. Nobody sells one. Its blueprint is invented from the plain hull's, and it is built of the plain hull.`
     elseif faction then faction.note
     else ""
-  -- What it is built with that others of its class are not. (Marked on
-  -- the hull: neither does anything yet.)
+  -- What it is built with that others of its class are not: a jump
+  -- drive (Tactical/Jumping), or to go unseen (Tactical/Combat).
   if hull.jump or hull.stealth then
     local built = section(sheet, "Built with")
     if hull.jump then
-      row(built, "Jump drive", "yes (jump drives are not in the game yet)")
+      row(built, "Jump drive", "reaches 20 light years without a gate, on fuel blocks")
     end
     if hull.stealth then
-      row(built, "Stealth", "yes (it does nothing of its own yet)")
+      row(built, "Stealth", "a cloak does not slow it, and is broken only from half as far")
     end
+  end
+  -- (and what it launches, if it has a bay for more than drones)
+  if hull.class == "carrier" or hull.class == "supercarrier" or hull.class == "ultracapital" then
+    row(section(sheet, "Launches"), "From its bay", if hull.class == "carrier" then "drones and fighters" else "drones, fighters and bombers")
   end
 
   local defence = section(sheet, "Defence")

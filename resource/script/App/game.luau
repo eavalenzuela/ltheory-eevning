@@ -19,6 +19,7 @@ local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Hacking = require("@lt/Core/Tactical/Hacking")
 local Keeps = require("@lt/Core/Tactical/Keeps")
+local Map = require("@lt/Game/UI/Map")
 local Planets = require("@lt/Core/Data/Planets")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Attributes = require("@lt/Core/Attributes")
@@ -982,6 +983,44 @@ function Debug.Train(skill: string, level: number)
     return
   end
   session.game.state.skills[skill] = level
+end
+
+-- The pilot's jump drive: how far it reaches, light years (0 for a hull
+-- with none), the fuel blocks in the hold and the seconds it is
+-- cooling; and, for a system (its number), how far that is, the fuel it
+-- would take, whether the jump can be made now, and why not.
+function Debug.JumpDrive(system: number?): (number, number, number, number, number, boolean, string)
+  local drive = Core.Query.JumpDrive(session.game, system)
+  if drive == nil then
+    return 0, 0, 0, 0, 0, false, "this hull has no jump drive"
+  end
+  return drive.range, drive.held, drive.cooling, drive.distance, drive.fuel, drive.ready, drive.why
+end
+
+-- The system farthest off that the pilot's jump drive reaches from
+-- where they are: its number and its name (0 and "" for none, or for a
+-- hull with no drive).
+function Debug.JumpReach(): (number, string)
+  local drive = Core.Query.JumpDrive(session.game)
+  local here = Core.Query.Player(session.game).system
+  local systems = session.game.state.galaxy.systems
+  local best, most = 0, -1
+  for id, system in systems do
+    local far = math.sqrt((system.x - systems[here].x) ^ 2 + (system.y - systems[here].y) ^ 2)
+    if drive and id ~= here and far <= drive.range and far > most then
+      best, most = id, far
+    end
+  end
+  return best, if best ~= 0 then systems[best].name else ""
+end
+
+-- Open the map on a system, as a click on it does (its number).
+function Debug.MapOn(system: number): boolean
+  if session.game.state.galaxy.systems[system] == nil then
+    return false
+  end
+  Map.Open(system)
+  return true
 end
 
 -- The pilot's drones: how many are out, how many are in the hold, and
