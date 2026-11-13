@@ -418,6 +418,27 @@ function Session.Update(session: Session, frameSeconds: number)
   end
 end
 
+-- The way from one system to another (Galaxy.Route), which is not to be
+-- changed by who asks. The map and the readouts ask for the same few
+-- ways every frame, and in a large galaxy a way is some work to find:
+-- one found is kept for the tick it was found in.
+local ways: { [string]: { number } } = {}
+local waysOf = ""
+
+function Session.Way(session: Session, from: number, to: number, safest: boolean?): { number }
+  local stamp = `{session.epoch}:{session.game.state.tick}`
+  if stamp ~= waysOf then
+    ways, waysOf = {}, stamp
+  end
+  local key = `{from}:{to}:{safest == true}`
+  local way = ways[key]
+  if way == nil then
+    way = Galaxy.Route(session.game.state.galaxy, from, to, safest)
+    ways[key] = way
+  end
+  return way
+end
+
 -- The way from where the pilot is to where they mean to go: the systems
 -- in order, the first the one they are in. Empty with nowhere to go.
 function Session.Route(session: Session): { number }
@@ -425,7 +446,7 @@ function Session.Route(session: Session): { number }
   if session.destination == 0 or galaxy.systems[session.destination] == nil then
     return {}
   end
-  return Galaxy.Route(galaxy, Core.Query.Player(session.game).system, session.destination, session.safest)
+  return Session.Way(session, Core.Query.Player(session.game).system, session.destination, session.safest)
 end
 
 -- The autopilot's turn, once a frame: when the ship has nothing to do,

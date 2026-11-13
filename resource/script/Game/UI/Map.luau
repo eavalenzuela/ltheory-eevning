@@ -800,7 +800,7 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   if shown == here then
     Im.Text("You are here.", px, line, 13, Im.DIM)
   else
-    local way = Galaxy.Route(galaxy, here, shown, session.safest)
+    local way = Session.Way(session, here, shown, session.safest)
     local wild = 0
     for index = 2, #way do
       wild += if Galaxy.Band(systems[way[index]].security) == "lawless" then 1 else 0

@@ -3,6 +3,8 @@ local Codec = require("@lt/Core/Persist/Codec")
 local Constants = require("@lt/Core/Data/Constants")
 local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Names = require("@lt/Core/Describe/Names")
+local Rng = require("@lt/Core/Kernel/Rng")
 local System = require("@lt/Core/Describe/System")
 local Test = require("@lt/Tool/Test")
 
@@ -253,6 +255,127 @@ suite:Case("a route is the fewest jumps, or the safest way", function(t)
     t.eq(Galaxy.Route(galaxy, 5, 5), { 5 })
     -- (and it is the same way every time it is asked for)
     t.eq(Galaxy.Route(galaxy, 2, 57, true), Galaxy.Route(galaxy, 2, 57, true))
+  end
+end)
+
+suite:Case("of routes as good, the one through the lower-numbered systems: the way found by looking at every system each time", function(t)
+  local RISK: { [string]: number } = { secure = 0, low = 2, lawless = 30 }
+  -- The plain way of finding it, which a large galaxy is too big for:
+  -- always on from the cheapest system not yet settled, the lowest
+  -- numbered of those, found by looking through them all.
+  local function plainly(galaxy: Galaxy.Galaxy, from: number, to: number, safest: boolean): { number }
+    local systems = galaxy.systems
+    local cost: { number } = table.create(#systems, math.huge)
+    local before: { number } = table.create(#systems, 0)
+    local done: { boolean } = table.create(#systems, false)
+    cost[from] = 0
+    for _ = 1, #systems do
+      local at, least = 0, math.huge
+      for id = 1, #systems do
+        if not done[id] and cost[id] < least then
+          at, least = id, cost[id]
+        end
+      end
+      if at == 0 or at == to then
+        break
+      end
+      done[at] = true
+      for _, neighbor in systems[at].neighbors do
+        local reached = least + 1 + (if safest then RISK[Galaxy.Band(systems[neighbor].security)] else 0)
+        if reached < cost[neighbor] then
+          cost[neighbor], before[neighbor] = reached, at
+        end
+      end
+    end
+    local route: { number } = { to }
+    while route[1] ~= from do
+      table.insert(route, 1, before[route[1]])
+    end
+    return route
+  end
+  for _, count in { 2, 3, 12, 60, 300 } do
+    for seed = 1, 3 do
+      local galaxy = Galaxy.Describe(seed, count)
+      local rng = Rng.For(seed, count, 77)
+      for _ = 1, 40 do
+        local from, to = Rng.Int(rng, count) + 1, Rng.Int(rng, count) + 1
+        for _, safest in { false, true } do
+          t.eq(Galaxy.Route(galaxy, from, to, safest), plainly(galaxy, from, to, safest), `seed {seed}, {count} systems, {from} to {to}`)
+        end
+      end
+    end
+  end
+end)
+
+suite:Case("space nobody holds goes by its survey marks, and nothing else about a galaxy follows from them", function(t)
+  for _, count in { 3, 40, 400 } do
+    local galaxy = Galaxy.Describe(5, count)
+    local marked = 0
+    local seen: { [string]: boolean } = {}
+    for _, system in galaxy.systems do
+      -- (a mark where nobody is, a name where somebody is)
+      t.eq(Names.IsMark(system.name), system.owner == "", `{system.name}, held by "{system.owner}"`)
+      if system.owner == "" then
+        marked += 1
+        -- five letters and figures and a stroke among them, and no vowel
+        t.ok(#system.name == 6 and string.match(system.name, "^[BCDFGHJKLMNPQRSTVWXYZ0-9]+%-[BCDFGHJKLMNPQRSTVWXYZ0-9]+$") ~= nil,
+          `{system.name} is not a survey mark`)
+      else
+        t.ok(string.match(system.name, "^%u%l+$") ~= nil, `{system.name} is not a name`)
+      end
+      t.ok(not seen[system.name], `two systems are called {system.name}`)
+      seen[system.name] = true
+    end
+    t.ok(marked >= 1 and marked == count - math.max(1, math.floor(count * Galaxy.CLAIMED)), `{marked} of {count} systems have marks`)
+    -- The marks are given again and the galaxy is as it was: they come
+    -- of the seed, and of nothing that was drawn to make the rest.
+    local again = Galaxy.Describe(5, count)
+    Galaxy.Marks(again)
+    t.eq(Codec.HashOf(again), Codec.HashOf(galaxy))
+  end
+  -- A mark is made of what is drawn for it and nothing else.
+  t.eq(Names.Mark(Rng.For(9, 9)), Names.Mark(Rng.For(9, 9)))
+end)
+
+suite:Case("a galaxy of thousands of systems is made: every system reached, every one with a name of its own", function(t)
+  -- (there are some 3,700 names of the usual length: beyond them the
+  -- names are longer, and are still names)
+  local count = 6000
+  local galaxy = Galaxy.Describe(2, count)
+  t.eq(#galaxy.systems, count)
+  local hops: { number } = table.create(count, -1)
+  hops[1] = 0
+  local queue = { 1 }
+  local at = 1
+  while at <= #queue do
+    local id = queue[at]
+    at += 1
+    for _, neighbor in galaxy.systems[id].neighbors do
+      if hops[neighbor] < 0 then
+        hops[neighbor] = hops[id] + 1
+        table.insert(queue, neighbor)
+      end
+    end
+  end
+  t.eq(#queue, count, "systems reached from the first")
+  local seen: { [string]: boolean } = {}
+  local longest = 0
+  for _, system in galaxy.systems do
+    t.ok(not seen[system.name], `two systems are called {system.name}`)
+    seen[system.name] = true
+    t.eq(Names.IsMark(system.name), system.owner == "")
+    longest = math.max(longest, #system.name)
+    t.ok(galaxy.regions[system.region] ~= nil and galaxy.constellations[system.constellation].region == system.region)
+  end
+  t.ok(longest > 10 and longest <= 16, `the longest name is {longest} letters`)
+  seen = {}
+  for _, constellation in galaxy.constellations do
+    t.ok(not seen[constellation.name], `two constellations are called {constellation.name}`)
+    seen[constellation.name] = true
+  end
+  -- A route across it is the fewest jumps there are.
+  for _, to in { 2, 777, 3000, count } do
+    t.eq(#Galaxy.Route(galaxy, 1, to) - 1, hops[to])
   end
 end)
 

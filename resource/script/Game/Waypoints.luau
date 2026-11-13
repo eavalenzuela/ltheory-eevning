@@ -21,7 +21,6 @@
 -- mean to go.
 
 local Core = require("@lt/Core/Api")
-local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Session = require("@lt/Game/Session")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -131,7 +130,7 @@ function Waypoints.Of(session: Session.Session): Marks
   local objects = Core.Query.Objects(game, player.system)
   -- The gate of this system that leads the way to another.
   local function toward(system: number): number
-    local route = Galaxy.Route(state.galaxy, player.system, system, session.safest)
+    local route = Session.Way(session, player.system, system, session.safest)
     for _, object in objects do
       if object.kind == "gate" and object.to == route[2] then
         return object.id

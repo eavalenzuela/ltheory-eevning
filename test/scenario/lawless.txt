@@ -34,7 +34,7 @@ lua assert(select(2, GameDebug.Pirates()) == GameDebug.Pirates(), 'a pirate is n
 lua print('low security:', GameDebug.Pirates(), 'pirates,', GameDebug.Distance('Pirate'), 'm off')
 
 # Lawless space.
-lua assert(GameDebug.Order('Jump', 'Noranor'), 'the jump into lawless space was refused')
+lua assert(GameDebug.Order('Jump', 'K-PNDZ'), 'the jump into lawless space was refused')
 until GameDebug.System() == 3
 until GameDebug.Idle()
 lua assert(select(2, GameDebug.Security()) == 'lawless', 'two jumps out should be lawless')

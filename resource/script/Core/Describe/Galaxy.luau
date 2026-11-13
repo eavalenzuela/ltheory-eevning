@@ -13,6 +13,8 @@ local Galaxy = {}
 
 export type SystemNode = {
   id: number,
+  -- A name where somebody holds the system, and where nobody does the
+  -- mark it has in the surveys (Galaxy.Marks).
   name: string,
   x: number,              -- light years on the map
   y: number,
@@ -143,6 +145,22 @@ function Galaxy.Claim(galaxy: Galaxy)
   end
 end
 
+-- Space nobody holds has nobody to name it: its systems go by their
+-- survey marks (Names.Mark). The marks follow from the galaxy's seed
+-- alone, and take nothing from what places the systems, so the map is
+-- the one it would have been and the systems that keep names keep the
+-- same ones. For a galaxy that is being made: a galaxy of a save keeps
+-- the names it has.
+function Galaxy.Marks(galaxy: Galaxy)
+  local rng = Rng.For(galaxy.seed, 3301)
+  local used: { [string]: boolean } = {}
+  for _, system in galaxy.systems do
+    if system.owner == "" then
+      system.name = Names.UnusedMark(rng, used)
+    end
+  end
+end
+
 -- What a jump into a system counts for when the safest way is wanted,
 -- beside the jump itself: nothing where order is kept, a little where
 -- it is thin, and a great deal where there is none, so that a route
@@ -162,22 +180,59 @@ function Galaxy.Route(galaxy: Galaxy, from: number, to: number, safest: boolean?
   local before: { number } = table.create(count, 0)
   local done: { boolean } = table.create(count, false)
   cost[from] = 0
-  for _ = 1, count do
-    local at, least = 0, math.huge
-    for id = 1, count do
-      if not done[id] and cost[id] < least then
-        at, least = id, cost[id]
+  -- The systems reached and not yet settled, as a heap: the least cost
+  -- at its head, and of those as cheap the lower-numbered. A system
+  -- reached again more cheaply is put in again, and what is left of it
+  -- further down is passed over when it comes up.
+  local costs: { number }, ids: { number } = { 0 }, { from }
+  local size = 1
+  while size > 0 do
+    local least, at = costs[1], ids[1]
+    local lastCost, lastId = costs[size], ids[size]
+    costs[size], ids[size] = nil, nil
+    size -= 1
+    if size > 0 then
+      local hole = 1
+      while true do
+        local child = hole * 2
+        if child > size then
+          break
+        end
+        if child < size and (costs[child + 1] < costs[child] or (costs[child + 1] == costs[child] and ids[child + 1] < ids[child])) then
+          child += 1
+        end
+        if costs[child] < lastCost or (costs[child] == lastCost and ids[child] < lastId) then
+          costs[hole], ids[hole] = costs[child], ids[child]
+          hole = child
+        else
+          break
+        end
       end
+      costs[hole], ids[hole] = lastCost, lastId
     end
-    if at == 0 or at == to then
-      break
-    end
-    done[at] = true
-    for _, neighbor in systems[at].neighbors do
-      local step = 1 + (if safest then RISK[Galaxy.Band(systems[neighbor].security)] else 0)
-      if least + step < cost[neighbor] then
-        cost[neighbor] = least + step
-        before[neighbor] = at
+    if not done[at] and least == cost[at] then
+      if at == to then
+        break
+      end
+      done[at] = true
+      for _, neighbor in systems[at].neighbors do
+        local reached = least + 1 + (if safest then RISK[Galaxy.Band(systems[neighbor].security)] else 0)
+        if reached < cost[neighbor] then
+          cost[neighbor] = reached
+          before[neighbor] = at
+          size += 1
+          local hole = size
+          while hole > 1 do
+            local parent = hole // 2
+            if reached < costs[parent] or (reached == costs[parent] and neighbor < ids[parent]) then
+              costs[hole], ids[hole] = costs[parent], ids[parent]
+              hole = parent
+            else
+              break
+            end
+          end
+          costs[hole], ids[hole] = reached, neighbor
+        end
       end
     end
   end
@@ -201,6 +256,97 @@ Galaxy.CONSTELLATION = 5
 
 local REGION_KINDS = { "Reach", "Expanse", "Marches", "Deep", "Verge", "Span", "Drift", "Hollow" }
 
+local SPACING = 4 -- light years between neighbours, roughly
+
+-- Places on the map kept by the square each falls in, so that what is
+-- nearest a place is found without looking at every other. The places
+-- are numbered, and are where 'xs' and 'ys' say.
+type Grid = {
+  cell: number,
+  xs: { number },
+  ys: { number },
+  squares: { [number]: { number } },
+  -- (the squares that have anything in them lie within these)
+  left: number,
+  right: number,
+  low: number,
+  high: number,
+}
+
+local function gridOf(cell: number, xs: { number }, ys: { number }): Grid
+  return { cell = cell, xs = xs, ys = ys, squares = {}, left = math.huge, right = -math.huge, low = math.huge, high = -math.huge }
+end
+
+local function gridAdd(grid: Grid, index: number)
+  local sx, sy = math.floor(grid.xs[index] / grid.cell), math.floor(grid.ys[index] / grid.cell)
+  local key = (sx + 1048576) * 2097152 + (sy + 1048576)
+  local square = grid.squares[key]
+  if square == nil then
+    square = {}
+    grid.squares[key] = square
+  end
+  table.insert(square, index)
+  grid.left, grid.right = math.min(grid.left, sx), math.max(grid.right, sx)
+  grid.low, grid.high = math.min(grid.low, sy), math.max(grid.high, sy)
+end
+
+-- The place in the grid nearest (x, y), and of those as near the
+-- lower-numbered; but none that 'skip' says to pass over. Nil if
+-- there is none. The squares are gone through in rings about the one
+-- (x, y) is in, until nothing in a ring further out could be nearer.
+local function gridNearest(grid: Grid, x: number, y: number, skip: ((number) -> boolean)?): number?
+  local cell, xs, ys, squares = grid.cell, grid.xs, grid.ys, grid.squares
+  local sx, sy = math.floor(x / cell), math.floor(y / cell)
+  local rings = math.max(sx - grid.left, grid.right - sx, sy - grid.low, grid.high - sy)
+  local best: number? = nil
+  local least = math.huge
+  for ring = 0, rings do
+    -- (what is in this ring or beyond is at least a square less than
+    -- the ring away)
+    if ring > 1 and least < ((ring - 1) * cell) ^ 2 * (1 - 1e-9) then
+      break
+    end
+    for dx = -ring, ring do
+      local step = if dx == -ring or dx == ring then 1 else 2 * ring
+      for dy = -ring, ring, math.max(1, step) do
+        local square = squares[(sx + dx + 1048576) * 2097152 + (sy + dy + 1048576)]
+        if square then
+          for _, index in square do
+            local d = (xs[index] - x) ^ 2 + (ys[index] - y) ^ 2
+            if (d < least or (d == least and index < (best :: number))) and not (skip and skip(index)) then
+              best, least = index, d
+            end
+          end
+        end
+      end
+    end
+  end
+  return best
+end
+
+-- Whether anything in the grid is nearer (x, y) than 'within', which
+-- is no more than a square of the grid.
+local function gridCrowded(grid: Grid, x: number, y: number, within: number): boolean
+  local cell, xs, ys, squares = grid.cell, grid.xs, grid.ys, grid.squares
+  local sx, sy = math.floor(x / cell), math.floor(y / cell)
+  for dx = -1, 1 do
+    for dy = -1, 1 do
+      local square = squares[(sx + dx + 1048576) * 2097152 + (sy + dy + 1048576)]
+      if square then
+        for _, index in square do
+          if (xs[index] - x) ^ 2 + (ys[index] - y) ^ 2 < within ^ 2 then
+            return true
+          end
+        end
+      end
+    end
+  end
+  return false
+end
+
+-- (with fewer places than this, looking at every one is as quick)
+local GRIDDED = 16
+
 -- Share 'members' (systems, by id) out into 'count' groups, each joined
 -- up by gates among its own: the hearts of the groups are spread
 -- evenly over the map, and every member goes to the heart fewest jumps
@@ -216,13 +362,14 @@ local function share(systems: { SystemNode }, members: { number }, count: number
   -- move each to the middle of the members nearest it, a few times over,
   -- so that the groups come out much of a size.
   local cx: { number }, cy: { number } = { systems[members[1]].x }, { systems[members[1]].y }
+  -- (how near each member is to the nearest heart so far)
+  local nearSoFar: { number } = table.create(#members, math.huge)
   while #cx < math.min(count, #members) do
+    local newest = #cx
     local best, most = 0, -1
-    for _, id in members do
-      local near = math.huge
-      for index = 1, #cx do
-        near = math.min(near, (systems[id].x - cx[index]) ^ 2 + (systems[id].y - cy[index]) ^ 2)
-      end
+    for at, id in members do
+      local near = math.min(nearSoFar[at], (systems[id].x - cx[newest]) ^ 2 + (systems[id].y - cy[newest]) ^ 2)
+      nearSoFar[at] = near
       if near > most then
         best, most = id, near
       end
@@ -230,14 +377,34 @@ local function share(systems: { SystemNode }, members: { number }, count: number
     table.insert(cx, systems[best].x)
     table.insert(cy, systems[best].y)
   end
+  -- (with many hearts or many members, the nearest is found on a grid:
+  -- the answer is the same, and of those as near the lower-numbered)
+  local gridded = #cx >= GRIDDED
+  local left, right, low, high = math.huge, -math.huge, math.huge, -math.huge
+  for _, id in members do
+    left, right = math.min(left, systems[id].x), math.max(right, systems[id].x)
+    low, high = math.min(low, systems[id].y), math.max(high, systems[id].y)
+  end
   for _ = 1, 8 do
     local sx: { number }, sy: { number }, n: { number } = table.create(#cx, 0), table.create(#cx, 0), table.create(#cx, 0)
+    local grid: Grid? = nil
+    if gridded then
+      local made = gridOf(math.max(1e-3, math.sqrt(math.max(1e-3, right - left) * math.max(1e-3, high - low) / #cx)), cx, cy)
+      for index = 1, #cx do
+        gridAdd(made, index)
+      end
+      grid = made
+    end
     for _, id in members do
       local best, near = 1, math.huge
-      for index = 1, #cx do
-        local d = (systems[id].x - cx[index]) ^ 2 + (systems[id].y - cy[index]) ^ 2
-        if d < near then
-          best, near = index, d
+      if grid then
+        best = gridNearest(grid, systems[id].x, systems[id].y) :: number
+      else
+        for index = 1, #cx do
+          local d = (systems[id].x - cx[index]) ^ 2 + (systems[id].y - cy[index]) ^ 2
+          if d < near then
+            best, near = index, d
+          end
         end
       end
       sx[best] += systems[id].x
@@ -253,12 +420,31 @@ local function share(systems: { SystemNode }, members: { number }, count: number
   -- (a heart is the member nearest each of those places)
   local hearts: { number } = {}
   local taken: { [number]: boolean } = {}
+  local memberGrid: Grid? = nil
+  if gridded then
+    local xs: { number }, ys: { number } = {}, {}
+    for _, id in members do
+      xs[id], ys[id] = systems[id].x, systems[id].y
+    end
+    local made = gridOf(2 * SPACING, xs, ys)
+    for _, id in members do
+      gridAdd(made, id)
+    end
+    memberGrid = made
+  end
+  local function isTaken(id: number): boolean
+    return taken[id] == true
+  end
   for index = 1, #cx do
     local best, near = 0, math.huge
-    for _, id in members do
-      local d = (systems[id].x - cx[index]) ^ 2 + (systems[id].y - cy[index]) ^ 2
-      if not taken[id] and d < near then
-        best, near = id, d
+    if memberGrid then
+      best = gridNearest(memberGrid, cx[index], cy[index], isTaken) or 0
+    else
+      for _, id in members do
+        local d = (systems[id].x - cx[index]) ^ 2 + (systems[id].y - cy[index]) ^ 2
+        if not taken[id] and d < near then
+          best, near = id, d
+        end
       end
     end
     if best ~= 0 then
@@ -344,12 +530,7 @@ function Galaxy.Regions(galaxy: Galaxy)
   local rng = Rng.For(galaxy.seed, 2002)
   local used: { [string]: boolean } = {}
   local function name(): string
-    local made = Names.System(rng)
-    while used[made] do
-      made = Names.System(rng)
-    end
-    used[made] = true
-    return made
+    return Names.Unused(rng, used)
   end
   local all: { number } = {}
   for id = 1, #systems do
@@ -357,14 +538,16 @@ function Galaxy.Regions(galaxy: Galaxy)
   end
   local inRegion, regions = share(systems, all, math.max(1, math.floor(#systems / Galaxy.REGION + 0.5)), Galaxy.REGION // 3)
   galaxy.regions, galaxy.constellations = {}, {}
+  local membersOf: { { number } } = {}
+  for region = 1, regions do
+    membersOf[region] = {}
+  end
+  for id = 1, #systems do
+    table.insert(membersOf[inRegion[id]], id)
+  end
   for region = 1, regions do
     galaxy.regions[region] = { id = region, name = `{name()} {REGION_KINDS[Rng.Int(rng, #REGION_KINDS) + 1]}` }
-    local members: { number } = {}
-    for id = 1, #systems do
-      if inRegion[id] == region then
-        table.insert(members, id)
-      end
-    end
+    local members = membersOf[region]
     if #members > 0 then
       local inConstellation, count = share(systems, members, math.max(1, math.floor(#members / Galaxy.CONSTELLATION + 0.5)), 2)
       local first = #galaxy.constellations
@@ -378,8 +561,6 @@ function Galaxy.Regions(galaxy: Galaxy)
     end
   end
 end
-
-local SPACING = 4 -- light years between neighbours, roughly
 
 -- How far out of the plane of the map a system can lie, as a share of
 -- how far the map is across; and the least and the most that is, light
@@ -426,6 +607,8 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
   local used: { [string]: boolean } = {}
   local radius = SPACING * math.sqrt(count)
 
+  local xs: { number }, ys: { number } = table.create(count, 0), table.create(count, 0)
+  local placed = gridOf(2 * SPACING, xs, ys)
   for id = 1, count do
     -- A place not too close to any earlier system.
     local x, y = 0, 0
@@ -433,22 +616,13 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
       local angle = Rng.Float(rng, 0, 2 * math.pi)
       local r = radius * math.sqrt(Rng.Next(rng))
       x, y = r * math.cos(angle), r * math.sin(angle)
-      local clear = true
-      for _, other in systems do
-        if (other.x - x) ^ 2 + (other.y - y) ^ 2 < (SPACING * 0.6) ^ 2 then
-          clear = false
-          break
-        end
-      end
-      if clear then
+      if not gridCrowded(placed, x, y, SPACING * 0.6) then
         break
       end
     end
-    local name = Names.System(rng)
-    while used[name] do
-      name = Names.System(rng)
-    end
-    used[name] = true
+    xs[id], ys[id] = x, y
+    gridAdd(placed, id)
+    local name = Names.Unused(rng, used)
     systems[id] = { id = id, name = name, x = x, y = y, z = 0, neighbors = {}, owner = "", nearest = "", home = false, hops = 0,
       security = 1, region = 1, constellation = 1 }
   end
@@ -459,28 +633,22 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
       table.insert(systems[b].neighbors, a)
     end
   end
-  local function nearest(id: number, limit: number, skip: { number }): number?
-    local best: number? = nil
-    local bestDistance = math.huge
-    for other = 1, limit do
-      if other ~= id and not table.find(skip, other) then
-        local d = (systems[other].x - systems[id].x) ^ 2 + (systems[other].y - systems[id].y) ^ 2
-        if d < bestDistance then
-          best, bestDistance = other, d
-        end
-      end
-    end
-    return best
-  end
 
   -- A tree first, so every system can be reached: each system gates to
-  -- the nearest one made before it. Then some shortcuts.
+  -- the nearest one made before it. Then some shortcuts: to the nearest
+  -- it has no gate to.
+  local earlier = gridOf(2 * SPACING, xs, ys)
+  gridAdd(earlier, 1)
   for id = 2, count do
-    link(id, nearest(id, id - 1, {}) :: number)
+    link(id, gridNearest(earlier, xs[id], ys[id]) :: number)
+    gridAdd(earlier, id)
   end
   for id = 1, count do
     if count > 3 and Rng.Chance(rng, 0.35) then
-      local other = nearest(id, count, systems[id].neighbors)
+      local gated = systems[id].neighbors
+      local other = gridNearest(earlier, xs[id], ys[id], function(other: number): boolean
+        return other == id or table.find(gated, other) ~= nil
+      end)
       if other then
         link(id, other)
       end
@@ -493,6 +661,7 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
   local galaxy: Galaxy = { seed = seed, systems = systems, regions = {}, constellations = {} }
   Galaxy.Heights(galaxy)
   Galaxy.Claim(galaxy)
+  Galaxy.Marks(galaxy)
   Galaxy.Regions(galaxy)
   return galaxy
 end
