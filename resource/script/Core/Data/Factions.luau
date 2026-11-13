@@ -161,15 +161,38 @@ Factions.list = {
     -- style from each other, because they're designed by different
     -- groups within the confederation. Unifying visual feature is red
     -- and gold highlights. Also, they tend to have a lot of antenna
-    -- masts." The draft says nothing of weapons or defence, nor of what
-    -- the hulls are called: those are as they were.)
+    -- masts." The draft says nothing of weapons or defence: those are as
+    -- they were.)
     id = "orun", name = "Orun", kind = "human", style = "motley", weapon = "hybrid", launchers = 0, tank = "armor",
     note = "Blasters, railguns and sheer bulk. The Confederation's hulls come from yards that agree on nothing: no two are built alike, and all of them wear red and gold and a thicket of aerials. Slow, hard to kill, and they carry a great deal.",
     paint = { primary = { 0.36, 0.37, 0.39 }, secondary = { 0.62, 0.09, 0.07 }, glow = { 1.0, 0.84, 0.50 } },
     shield = 0.9, armor = 1.15, hull = 1.4, velocity = 0.9, mass = 1.12, cpu = 0.95, powergrid = 1.1, capacitor = 1.0,
     lockRange = 0.9, cargo = 1.25, price = 1, mids = 0, lows = 0, hardpoints = 0,
-    hulls = { frigate = "Mastiff", destroyer = "Boar", cruiser = "Aurochs", battleship = "Mammoth", industrial = "Ox",
-      attackbattlecruiser = "Wolverine", battlecruiser = "Bison", carrier = "Roost", dreadnought = "Behemoth", siegedreadnought = "Tusker", capitalindustrial = "Dromedary", supercarrier = "Rookery" },
+    hulls = {},
+    -- (The project owner's list of the Orun's ships, 2026-11-13, with
+    -- the seed each is drawn from in resource/hull/seeds.txt. A tech 2
+    -- hull of theirs is grown from the seed of the hull it comes of, at
+    -- another size. They have no attack battlecruiser, dreadnought or
+    -- supercarrier. The Stag leads a mining fleet: a capital industrial
+    -- as the class is, with the ore hold the fleet's barges fill.)
+    line = {
+      { name = "Skinner", class = "frigate" },
+      { name = "Skiver", class = "frigate", tech = 2, of = "Skinner" },
+      { name = "Knife", class = "frigate" },
+      { name = "Scythe", class = "destroyer" },
+      { name = "Kama", class = "destroyer", tech = 2, of = "Scythe" },
+      { name = "Armer", class = "cruiser" }, { name = "Gladius", class = "cruiser" },
+      { name = "Falchion", class = "cruiser", tech = 2, of = "Gladius" },
+      { name = "Zweihander", class = "battlecruiser" },
+      { name = "Claymore", class = "battleship" },
+      { name = "Katana", class = "carrier" },
+      { name = "Sword", class = "siegedreadnought" },
+      { name = "Scarab", class = "barge" },
+      { name = "Pill", class = "industrial" },
+      { name = "Longhorn", class = "industrial", tech = 2, of = "Pill" },
+      { name = "Tiger", class = "freighter" },
+      { name = "Stag", class = "capitalindustrial" },
+    },
   },
   {
     -- (Lasers and armour by the project owner's decision, 2026-11-10,
@@ -200,8 +223,10 @@ Factions.list = {
     lockRange = 0.85, cargo = 1.2, price = 0.55, mids = 0, lows = 0, hardpoints = 1,
     hulls = { frigate = "Cutthroat", destroyer = "Jackal", cruiser = "Marauder", battleship = "Ravager", industrial = "Fence",
       attackbattlecruiser = "Reaver", battlecruiser = "Brigand", carrier = "Warren", dreadnought = "Tyrant", siegedreadnought = "Despoiler", capitalindustrial = "Hoard", supercarrier = "Matriarch" },
+    -- (the attack battlecruiser from the Kethri, the only people who
+    -- build one since the Orun's ships became the owner's list of them)
     donors = { frigate = "talmar", destroyer = "orun", cruiser = "vessari", battleship = "kethri", industrial = "orun",
-      attackbattlecruiser = "orun", battlecruiser = "vessari", carrier = "orun", dreadnought = "kethri", siegedreadnought = "kethri",
+      attackbattlecruiser = "kethri", battlecruiser = "vessari", carrier = "orun", dreadnought = "kethri", siegedreadnought = "kethri",
       capitalindustrial = "talmar", supercarrier = "kethri" },
   },
 

@@ -188,14 +188,80 @@ suite:Case("the Talmar's ships are the owner's rework of them: each by name, of 
   t.eq({ barge.turrets, barge.launchers, freighter.turrets + freighter.launchers, freighter.rigs } :: { any }, { 3, 0, 0, 0 } :: { any })
   t.ok(freighter.cargo > 30000 and #Skills.Needs(barge.id) == 2)
   -- What they had is gone, and so are the classes their line does not name.
+  -- (A Falchion and a Claymore there are again: the Orun's, by the owner's list of theirs, and nothing of the
+  -- Talmar's.)
   for _, gone in { "frigate.harrier", "destroyer.sabre", "cruiser.falchion", "battleship.claymore", "industrial.packet" } do
-    t.eq(Ships.byId[gone], nil, gone)
+    t.ok(Ships.byId[gone] == nil or Ships.byId[gone].lineage ~= "talmar", gone)
   end
   for _, hull in Ships.list do
     t.ok(hull.lineage ~= "talmar" or (hull.class ~= "attackbattlecruiser" and hull.class ~= "siegedreadnought"), hull.id)
   end
   -- A patrol of theirs flies the first plain hull of a class, and the pirates' frigate is made of it.
   t.eq(Ships.byId["frigate.cutthroat"].donor, "frigate.carvarro")
+end)
+
+suite:Case("the Orun's ships are the owner's list of them: seventeen hulls, four of them tech 2 hulls of their own, with a barge, a freighter and a capital industrial that leads a mining fleet", function(t)
+  local orun = Factions.byId.orun
+  local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, battlecruiser = 300, battleship = 400, carrier = 1000,
+    siegedreadnought = 950, barge = 160, industrial = 180, freighter = 650, capitalindustrial = 700 }
+  -- (name, class, the hull it is the tech 2 make of)
+  local LINE: { { any } } = {
+    { "Skinner", "frigate" }, { "Skiver", "frigate", "Skinner" }, { "Knife", "frigate" },
+    { "Scythe", "destroyer" }, { "Kama", "destroyer", "Scythe" },
+    { "Armer", "cruiser" }, { "Gladius", "cruiser" }, { "Falchion", "cruiser", "Gladius" },
+    { "Zweihander", "battlecruiser" }, { "Claymore", "battleship" }, { "Katana", "carrier" }, { "Sword", "siegedreadnought" },
+    { "Scarab", "barge" }, { "Pill", "industrial" }, { "Longhorn", "industrial", "Pill" }, { "Tiger", "freighter" },
+    { "Stag", "capitalindustrial" },
+  }
+  t.eq(#assert(orun.line), #LINE)
+  local theirs = 0
+  for _, hull in Ships.list do
+    theirs += if hull.lineage == "orun" then 1 else 0
+  end
+  t.eq(theirs, #LINE)
+  for _, entry in LINE do
+    local name: string, class: string, of: string? = entry[1], entry[2], entry[3]
+    local hull = assert(Ships.byId[`{class}.{string.lower(name)}`], `the Orun have no {name}`)
+    t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any }, { `Orun {name}`, class, "orun", RADIUS[class] } :: { any }, name)
+    if of then
+      local base = assert(Ships.byId[`{class}.{string.lower(of)}`])
+      t.eq({ hull.tech, hull.base, Ships.Improved(base.id) } :: { any }, { 2, base.id, hull } :: { any }, name)
+      t.eq(Types.Info(hull.id).scarce, true, name)
+    else
+      t.eq({ hull.tech, Types.Get(hull.id) ~= nil, Blueprints.byProduct[hull.id] ~= nil } :: { any }, { nil, true, true } :: { any }, name)
+      t.ok(#Skills.Needs(hull.id) >= 1, name)
+    end
+    -- An armour people, in every hull that has a turret; and no launcher on any.
+    if hull.turrets > 0 and class ~= "barge" then
+      t.ok(hull.armor > hull.shield, name)
+    end
+    t.eq(hull.launchers, 0, name)
+  end
+  -- (a frigate with two hulls beside it and a cruiser with one: each tech 2 hull comes of the one it says)
+  t.eq(Ships.Improved("frigate.knife"), nil)
+  t.eq(Ships.Improved("cruiser.armer"), nil)
+  -- The Stag leads a mining fleet and does not mine: no hardpoint, and the ore hold the fleet's barges fill.
+  local stag = Ships.byId["capitalindustrial.stag"]
+  t.eq({ stag.turrets + stag.launchers, stag.role, stag.ore } :: { any }, { 0, nil, Ships.ORE.capitalindustrial } :: { any })
+  -- A barge of their own mines as the Quarry does, and a freighter of theirs carries as the Dray does.
+  local barge, freighter = Ships.byId["barge.scarab"], Ships.byId["freighter.tiger"]
+  t.eq({ barge.turrets, barge.launchers, freighter.turrets + freighter.launchers, freighter.rigs } :: { any }, { 3, 0, 0, 0 } :: { any })
+  t.ok(freighter.cargo > 30000 and #Skills.Needs(barge.id) == 2)
+  -- The siege dreadnought: four hardpoints, for the largest guns there are.
+  t.eq(Ships.byId["siegedreadnought.sword"].turrets, 4)
+  -- What they had is gone, and so are the classes their line does not name.
+  for _, gone in { "frigate.mastiff", "destroyer.boar", "cruiser.aurochs", "battleship.mammoth", "industrial.ox" } do
+    t.eq(Ships.byId[gone], nil, gone)
+  end
+  for _, hull in Ships.list do
+    t.ok(hull.lineage ~= "orun" or (hull.class ~= "attackbattlecruiser" and hull.class ~= "dreadnought" and hull.class ~= "supercarrier"),
+      hull.id)
+  end
+  -- The pirates' destroyer, hauler and carrier are made over from theirs; and their attack battlecruiser, which
+  -- was, from the Kethri's, who alone build one now.
+  t.eq({ Ships.byId["destroyer.jackal"].donor, Ships.byId["industrial.fence"].donor, Ships.byId["carrier.warren"].donor,
+    Ships.byId["attackbattlecruiser.reaver"].donor } :: { any },
+    { "destroyer.scythe", "industrial.pill", "carrier.katana", "attackbattlecruiser.stanchion" } :: { any })
 end)
 
 suite:Case("the Vessari's ships are the owner's list of them: an ultracapital four kilometres wide, a mass-miner with ten mining turrets, and two tech 2 hulls of their own", function(t)
@@ -354,9 +420,10 @@ suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in i
       t.eq(Types.Get(hull.id) == nil or Types.Info(hull.id).scarce == nil, true, hull.id)
     end
   end
-  -- The Talmar's three (the Tarantula, the Sugarglider and the Rapa) and the Vessari's two (the Kanau and the
-  -- Akaboshi). The other factions' lines name none yet.
-  t.eq(improved, 5)
+  -- The Talmar's three (the Tarantula, the Sugarglider and the Rapa), the Vessari's two (the Kanau and the
+  -- Akaboshi) and the Orun's four (the Skiver, the Kama, the Falchion and the Longhorn). The Kethri's line
+  -- names none yet.
+  t.eq(improved, 9)
   t.ok(Ships.Improved("frigate.courier") == nil and Ships.Improved("industrial.hauler") == nil and Ships.Improved("capsule") == nil)
 end)
 

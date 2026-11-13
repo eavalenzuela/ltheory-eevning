@@ -23,8 +23,9 @@
 #                    script/hulls seeds 1 40 2 bare frigate
 # The types are in resource/script/Core/Data/Ships.luau: a hull is
 # called <class>.<name>. A faction has one hull of each class, or, where
-# its ships have been gone through one by one (the Talmar's, at the foot
-# of this file), the hulls its line names in
+# its ships have been gone through one by one (the Talmar's, the
+# Vessari's and the Orun's, at the foot of this file), the hulls its
+# line names in
 # resource/script/Core/Data/Factions.luau: several of a class, or none.
 # And there are anybody's (frigate.courier, frigate.prospector,
 # barge.quarry, industrial.hauler, freighter.dray). The classes, with
@@ -97,3 +98,23 @@ industrial.mizumushi     23586  5  broad
 industrial.akaboshi      23587  4  broad
 freighter.yoruzake       94483  6  spear
 capitalindustrial.okami  18580  6  spear
+
+# The Orun's ships (the owner's list of them, 2026-11-13). A tech 2 hull
+# of theirs is the seed of the hull it comes of, grown to another size.
+frigate.skinner               9  4  stout
+frigate.skiver                9  8  stout
+frigate.knife                10  3  stout
+destroyer.scythe             14  4  stout
+destroyer.kama               14  5  stout
+cruiser.armer                20  4  stout
+cruiser.gladius              24  4  stout
+cruiser.falchion             24  7  stout
+battlecruiser.zweihander     32  7  stout
+battleship.claymore       89901  5  stout
+carrier.katana            13490  8  tall
+siegedreadnought.sword    45654  8  tall
+barge.scarab              38558  4  stout
+industrial.pill           55650  5  stout
+industrial.longhorn       55650  8  stout
+freighter.tiger           98199  8  tall
+capitalindustrial.stag     7681  5  stout

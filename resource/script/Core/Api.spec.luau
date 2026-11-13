@@ -699,6 +699,47 @@ suite:Case("a save with the tech 2 make of a hull that every hull had opens with
   end
 end)
 
+suite:Case("a save with a hull the Orun had opens with the hull of theirs that stands where it stood", function(t)
+  local game = newGame()
+  local state = game.state
+  local home = Core.Query.Player(game).docked
+  -- (name then, name now: a hull of the class they still build, and two of classes they do not)
+  local WAS: { { string } } = { { "frigate.mastiff", "frigate.skinner" }, { "industrial.ox", "industrial.pill" },
+    { "attackbattlecruiser.wolverine", "battlecruiser.zweihander" }, { "supercarrier.rookery", "carrier.katana" } }
+  local ships: { number } = {}
+  for index, pair in WAS do
+    ships[index] = Space.NewShip(state, pair[2], `Spare {index}`, "player", home).id
+    Items.Add(state, `blueprint.{pair[2]}`, index, home, "hangar")
+  end
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 68
+  for index, pair in WAS do
+    file.state.ships[ships[index]].type = pair[1]
+    for _, item in file.state.items do
+      if item.type == `blueprint.{pair[2]}` then
+        item.type = `blueprint.{pair[1]}`
+      end
+    end
+  end
+  local old, oldLength = Codec.Encode(file)
+  local opened = Core.Load(old, oldLength)
+  for index, pair in WAS do
+    t.eq(opened.state.ships[ships[index]].type, pair[2])
+    local blueprints = 0
+    for _, id in opened.state.itemIds do
+      local item = opened.state.items[id]
+      t.ok(Types.Get(item.type) ~= nil, `an item of a type there is not: {item.type}`)
+      blueprints += if item.type == `blueprint.{pair[2]}` then item.quantity else 0
+    end
+    t.eq(blueprints, index, pair[2])
+  end
+  t.eq(Core.Hash(opened), Core.Hash(game))
+  for _ = 1, 10 do
+    Core.Step(opened)
+  end
+end)
+
 suite:Case("a save from before the map had a height opens with the heights its galaxy would have had", function(t)
   local game = Core.New({ galaxySeed = 3, historySeed = 1, systems = 40 })
   local heights: { number } = {}

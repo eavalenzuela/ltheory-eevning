@@ -83,11 +83,49 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 68
+Core.SAVE_VERSION = 69
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
 -- still opens.
+-- Hulls that are gone, and the hull each has become: whatever a save has
+-- of one, anywhere in it (a ship, a packed hull, a blueprint, an order,
+-- a job), it has of the other.
+local function rehulled(state: any, RENAMED: { [string]: string })
+  local function renamed(value: any): any
+    if type(value) ~= "string" then
+      return value
+    end
+    local now = RENAMED[value]
+    if now then
+      return now
+    elseif string.sub(value, 1, 10) == "blueprint." and RENAMED[string.sub(value, 11)] then
+      return "blueprint." .. RENAMED[string.sub(value, 11)]
+    end
+    return value
+  end
+  local function walk(node: any)
+    local moved: { [any]: any } = {}
+    for key, value in node do
+      if type(value) == "table" then
+        walk(value)
+      elseif type(value) == "string" then
+        node[key] = renamed(value)
+      end
+      if renamed(key) ~= key then
+        moved[key] = renamed(key)
+      end
+    end
+    for key, now in moved do
+      if node[now] == nil then
+        node[now] = node[key]
+      end
+      node[key] = nil
+    end
+  end
+  walk(state)
+end
+
 local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- 9: a market keeps count of goods lost to piracy (none, in a station).
   [8] = function(state: any)
@@ -317,6 +355,22 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- 59: a corporation keeps its books by head, and a tower keeps count
   -- of its running. A save from before has what was earned and spent
   -- under no head, and its towers begin their count now.
+  -- 69: the Orun's ships are the project owner's list of them
+  -- (Data/Factions), as the Talmar's and the Vessari's became theirs.
+  -- The hulls they had are gone, and each is the hull of their line
+  -- that stands where it stood (they build no attack battlecruiser,
+  -- dreadnought or supercarrier now: those are their battlecruiser,
+  -- their siege dreadnought and their carrier), wherever a save has one.
+  [68] = function(state: any)
+    rehulled(state, {
+      ["frigate.mastiff"] = "frigate.skinner", ["destroyer.boar"] = "destroyer.scythe", ["cruiser.aurochs"] = "cruiser.armer",
+      ["battleship.mammoth"] = "battleship.claymore", ["industrial.ox"] = "industrial.pill",
+      ["attackbattlecruiser.wolverine"] = "battlecruiser.zweihander", ["battlecruiser.bison"] = "battlecruiser.zweihander",
+      ["carrier.roost"] = "carrier.katana", ["supercarrier.rookery"] = "carrier.katana",
+      ["dreadnought.behemoth"] = "siegedreadnought.sword", ["siegedreadnought.tusker"] = "siegedreadnought.sword",
+      ["capitalindustrial.dromedary"] = "capitalindustrial.stag",
+    })
+  end,
   -- 68: the map has a height (Describe/Galaxy): each system lies a
   -- little above or below its plane. A galaxy of a save from before is
   -- given the heights it would have had.
