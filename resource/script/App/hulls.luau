@@ -15,6 +15,11 @@
 --                  how many plates it grows, and whether it has decks)
 --   P              the next paint: bare, as the engine made them, then
 --                  each of the game's
+--   F              as a ship: a frigate's guns and engines on it, then a
+--                  destroyer's, a cruiser's, a battleship's, then none.
+--                  The engines go on the ends the hull has astern and
+--                  the guns where the game's rule of hardpoints lets
+--                  them (Hull.GrownShip); it says so if there is no room
 --   K              keep this one: its line goes in cache/hulls-kept.txt
 --   Space          stop it turning, or start it
 --   right-drag turns it, the wheel moves in and out
@@ -24,7 +29,9 @@
 -- same draws through Game/View/Hull (Hull.Grown).
 
 local AppShell = require("@lt/AppShell")
+local Arms = require("@lt/Game/View/Arms")
 local Components = require("@lt/Widget/Components")
+local Effects = require("@lt/Game/View/Effects")
 local Generate = require("@lt/Item/ShipType/Generate")
 local Hull = require("@lt/Game/View/Hull")
 local Im = require("@lt/Game/UI/Im")
@@ -40,6 +47,17 @@ local RADIUS = 1000
 local SIZES = { 1, 4, 9, 12, 16, 25, 36, 49 }
 
 local PAINTS = { "bare", "civil", "vessari", "talmar", "kethri", "vail", "unbound" }
+
+-- What a hull is shown as when it is shown as a ship: how big such a
+-- ship is, what stands on its hardpoints and how many engines it has.
+-- (The game's own sizes for the four classes of warship.)
+type Class = { name: string, metres: number, turret: string, turrets: number, launcher: string, launchers: number, engines: number }
+local CLASSES: { Class } = {
+  { name = "frigate", metres = 42, turret = "autocannon.small", turrets = 2, launcher = "launcher.light", launchers = 1, engines = 2 },
+  { name = "destroyer", metres = 75, turret = "autocannon.small", turrets = 5, launcher = "launcher.light", launchers = 1, engines = 2 },
+  { name = "cruiser", metres = 150, turret = "artillery.medium", turrets = 4, launcher = "launcher.heavy", launchers = 1, engines = 3 },
+  { name = "battleship", metres = 400, turret = "laser.beam.large", turrets = 6, launcher = "launcher.cruise", launchers = 2, engines = 4 },
+}
 
 local KEPT = "cache/hulls-kept.txt"
 
@@ -70,6 +88,10 @@ return AppShell.Create(function(): Widget
   end
 
   local seed, size, paint = 1, 2, 1
+  local class = 0           -- which of CLASSES it is shown as; 0, as a bare hull
+  local fitted = ""         -- how that went: what is on it, or why it is not
+  local extras: { Object } = {}   -- what stands on it
+  local fx: Effects.Fx? = nil     -- its engines' fire
   local shown: Object? = nil
   local key = ""            -- what is shown: its seed, size and paint
   local took = 0            -- how long it took to make, in milliseconds
@@ -83,6 +105,31 @@ return AppShell.Create(function(): Widget
   local note = ""           -- what was last kept
   local models: { [string]: Renderable | Model } = {}
 
+  local ships: { [string]: Hull.Built } = {}
+
+  -- The hull as a ship of a class, or nothing and why. (Painted: a bare
+  -- hull is the generator's own model, which has no engines.)
+  local function ship(as: Class): (Hull.Built?, string)
+    local name = `{seed}:{size}:{paint}:{as.name}`
+    local had = ships[name]
+    if had then
+      return had, ""
+    end
+    local fit: { string } = {}
+    for _ = 1, as.turrets do
+      table.insert(fit, as.turret)
+    end
+    for _ = 1, as.launchers do
+      table.insert(fit, as.launcher)
+    end
+    local built, why = Hull.GrownShip(seed, stepsOf(size), decksOf(size), if PAINTS[paint] == "bare" then "civil" else PAINTS[paint],
+      as.metres, fit, as.turrets, as.launchers, as.engines)
+    if built then
+      ships[name] = built
+    end
+    return built, why
+  end
+
   local function make(): Renderable | Model
     if PAINTS[paint] == "bare" then
       return Generate.Main(SIZES[size], seed)
@@ -91,24 +138,46 @@ return AppShell.Create(function(): Widget
   end
 
   local function show()
-    local now = `{seed}:{size}:{paint}`
+    local now = `{seed}:{size}:{paint}:{class}`
     if now == key then
       return
     end
     key = now
     local old = shown
+    for _, object in extras do
+      Object_Delete(object)
+    end
+    table.clear(extras)
+    local burning = fx
+    if burning then
+      Effects.Clear(burning, false)
+      fx = nil
+    end
     local started = os.clock()
-    local model = models[now] or make()
-    models[now] = model
+    local as: Class? = CLASSES[class]
+    local built: Hull.Built? = nil
+    fitted = ""
+    if as then
+      local why: string
+      built, why = ship(as)
+      fitted = if built then `as a {as.name} of {as.metres} m: {as.turrets} turrets, {as.launchers} launchers, {#built.engines} engines`
+        else `as a {as.name}: no room ({why})`
+    end
+    local plain = `{seed}:{size}:{paint}`
+    local model: Renderable | Model = if built then built.model else models[plain] or make()
+    if built == nil then
+      models[plain] = model
+    end
     took = math.floor((os.clock() - started) * 1000)
     local bound = Renderable_GetBound(model)
     local across = bound.upper - bound.lower
     local scale = RADIUS / (math.max(across.x, across.y, across.z) / 2)
+    -- (its middle in the middle, wherever its own origin is)
+    local shift = (bound.lower + bound.upper) * (-0.5 * scale)
     local object = Object_Scenery({})
     Object_SetRenderable(object, model)
     object:SetScale(vector.create(scale, scale, scale))
-    -- (its middle in the middle, wherever its own origin is)
-    object:SetPos((bound.lower + bound.upper) * (-0.5 * scale))
+    object:SetPos(shift)
     system:AddInterior(object)
     -- (the camera draws the system of what it follows)
     camera:SetTarget(object)
@@ -116,6 +185,45 @@ return AppShell.Create(function(): Widget
       Object_Delete(old)
     end
     shown = object
+    if built and as then
+      -- what it carries, on both mounts of each hardpoint, slewed a
+      -- little to show that it turns; and its engines burning
+      local metres = RADIUS / as.metres
+      local at = 0
+      for _, points in { built.turrets, built.launchers } do
+        for index, point in points do
+          at += 1
+          local piece = Arms.Build(built.fit[at])
+          for _, mount in point do
+            if piece then
+              local rest = mount.fore or vector.create(0, 0, 1)
+              local side = vector.cross(mount.up, rest)
+              local aim = vector.normalize(rest + side * (if index % 2 == 0 then -0.7 else 0.7) + mount.up * 0.35)
+              local base: Object? = nil
+              if piece.base then
+                local made = Object_Scenery({})
+                Object_SetRenderable(made, piece.base)
+                system:AddInterior(made)
+                table.insert(extras, made)
+                base = made
+              end
+              local gun = Object_Scenery({})
+              Object_SetRenderable(gun, piece.gun)
+              system:AddInterior(gun)
+              table.insert(extras, gun)
+              Arms.Place(piece, base, gun, mount.at * scale + shift, mount.up, rest, aim, metres)
+            end
+          end
+        end
+      end
+      local effects = Effects.New(system)
+      local color = vector.create(built.glow[1], built.glow[2], built.glow[3])
+      for index, engine in built.engines do
+        Effects.Thrust(effects, index, engine.at * scale + shift, vector.create(0, 0, -1), engine.radius * scale, 0.75, color, 0)
+      end
+      Effects.Update(effects, 0, {})
+      fx = effects
+    end
   end
   show()
 
@@ -149,21 +257,32 @@ return AppShell.Create(function(): Widget
     if ok and type(text) == "string" then
       had = text
     end
+    local as: Class? = CLASSES[class]
     local line = `seed {seed}  size {size}  ({stepsOf(size)} plates{if decksOf(size) then ", decks" else ""})  paint {PAINTS[paint]}`
+    if as then
+      line ..= `  {fitted}`
+    end
     File_Write(KEPT, had .. line .. "\n")
     note = `kept: {line}  (in {KEPT})`
   end
 
   _G.Hulls = {
     -- Show a hull, still, from the bow quarter: its seed, its size (1 to
-    -- 8) and its paint's name. False if there is no such size or paint.
-    Show = function(toSeed: number, toSize: number?, toPaint: string?): boolean
+    -- 8), its paint's name and, to show it as a ship, the name of a
+    -- class. False if there is no such size, paint or class.
+    Show = function(toSeed: number, toSize: number?, toPaint: string?, toClass: string?): boolean
       local at = table.find(PAINTS, toPaint or PAINTS[paint])
       local big = toSize or size
-      if at == nil or SIZES[big] == nil or toSeed < 0 then
+      local as = 0
+      for index, known in CLASSES do
+        if known.name == toClass then
+          as = index
+        end
+      end
+      if at == nil or SIZES[big] == nil or toSeed < 0 or (toClass ~= nil and as == 0) then
         return false
       end
-      seed, size, paint = math.floor(toSeed), big, at
+      seed, size, paint, class = math.floor(toSeed), big, at, as
       turning, plain = false, true
       turn, tilt, zoom, zoomTo = TURN, TILT, ZOOM, ZOOM
       show()
@@ -173,6 +292,27 @@ return AppShell.Create(function(): Widget
     -- the generator grew for it, and how wide it is for its length.
     Now = function(): (number, number, string, number, number)
       return seed, size, PAINTS[paint], stepsOf(size), beam(seed, size)
+    end,
+    -- Look at it from somewhere else: how far round from the bow (in
+    -- turns of a circle: 0.5 is from astern), how far above (the same,
+    -- 0.25 being from straight over it) and from how many of its
+    -- lengths off. It stays still.
+    Look = function(round: number, above: number?, off: number?)
+      turn, tilt = round * 2 * math.pi, math.clamp((above or 0.05) * 2 * math.pi, -1.5, 1.5)
+      zoom = off or ZOOM
+      zoomTo = zoom
+      turning = false
+    end,
+    -- How the hull shown does as a ship: the class it is shown as (""
+    -- for none), whether it has the room for that class's hardpoints,
+    -- and how many engines it was given.
+    Fitted = function(): (string, boolean, number)
+      local as: Class? = CLASSES[class]
+      if as == nil then
+        return "", false, 0
+      end
+      local built = ship(as)
+      return as.name, built ~= nil, if built then #built.engines else 0
     end,
     -- The first 'count' seeds from 'from' on whose hulls are broad at a
     -- size, with commas between (of the next 'count' times forty).
@@ -202,11 +342,14 @@ return AppShell.Create(function(): Widget
       local only = if broad then "      broad hulls only" else ""
       Im.Text(`size {size} of {#SIZES}: {stepsOf(size)} plates grown{decks}      paint: {PAINTS[paint]}{only}      made in {took} ms`, x, y + 40,
         16, Im.DIM)
+      if fitted ~= "" then
+        Im.Text(fitted, x, y + 64, 16, if string.find(fitted, "no room", 1, true) then Im.WARN else Im.TEXT)
+      end
       if note ~= "" then
-        Im.Text(note, x, y + 64, 14, Im.ACCENT)
+        Im.Text(note, x, y + 90, 14, Im.ACCENT)
       end
       local foot = w.pos.y + w.size.y - 54
-      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      B: broad only      [ / ]: size      P: paint      K: keep      Space: turn",
+      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      B: broad only      [ / ]: size      P: paint      F: as a ship      K: keep      Space: turn",
         x, foot, 15, Im.DIM)
       Im.Text("right-drag turns it, the wheel moves in and out", x, foot + 22, 15, Im.DIM)
     end,
@@ -226,6 +369,7 @@ return AppShell.Create(function(): Widget
       if Key_Pressed(Key_RBracket()) then size = math.min(#SIZES, size + 1) end
       if Key_Pressed(Key_LBracket()) then size = math.max(1, size - 1) end
       if Key_Pressed(Key_P()) then paint = paint % #PAINTS + 1 end
+      if Key_Pressed(Key_F()) then class = (class + 1) % (#CLASSES + 1) end
       if Key_Pressed(Key_Space()) then turning = not turning end
       if Key_Pressed(Key_K()) then keep() end
       show()

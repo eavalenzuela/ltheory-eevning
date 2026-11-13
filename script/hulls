@@ -2,9 +2,9 @@
 """script/hulls: sheets of the hulls the engine's first generator makes
 (App/hulls.luau), taken off the screen.
 
-  script/hulls seeds [FROM [COUNT [SIZE [PAINT]]]]
+  script/hulls seeds [FROM [COUNT [SIZE [PAINT [AS]]]]]
         COUNT seeds from FROM on (40 from 1), each at SIZE (2) in PAINT (bare)
-  script/hulls broad [FROM [COUNT [SIZE [PAINT]]]]
+  script/hulls broad [FROM [COUNT [SIZE [PAINT [AS]]]]]
         the same, but only of the seeds whose hulls are broad (at least a
         third as wide as they are long): most of what the generator grows
         is long and thin
@@ -18,6 +18,10 @@ and, from 4 up, with a broad deck under each. It made a frigate at 2 and
 its biggest hulls at about 5.
 PAINT is bare (as the engine made them), civil, vessari, talmar, kethri,
 vail or unbound.
+AS shows each hull as a ship: frigate, destroyer, cruiser or battleship.
+It is given that class's guns and engines where the game's rule of
+hardpoints lets them stand, and "no room" is written on a hull that has
+not the room for them (a bare hull is then shown in the civil paint).
 
 The sheet is written to cache/hulls/ and its name printed. Every picture
 has its seed (or size, or paint) written on it.
@@ -33,6 +37,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
 PAINTS = ["bare", "civil", "vessari", "talmar", "kethri", "vail", "unbound"]
+CLASSES = ["frigate", "destroyer", "cruiser", "battleship"]
 PLATES = [3, 4, 5, 5, 6, 7, 8, 9]
 DECKS = [False, False, False, True, True, True, True, True]
 
@@ -94,6 +99,9 @@ def main():
         count = number(rest, 1, 40, 1, 400, "how many")
         size = number(rest, 2, 2, 1, 8, "the size")
         colour = paint(rest, 3, "bare")
+        if len(rest) > 4 and rest[4] not in CLASSES:
+            usage(f"no class called '{rest[4]}'")
+        shown = rest[4] if len(rest) > 4 else None
         seeds = list(range(first, first + count))
         what = f"seeds {first} to {first + count - 1}"
         if kind == "broad":
@@ -109,19 +117,19 @@ def main():
                 print(f"hulls: no broad hull in the {40 * count} seeds from {first}", file=sys.stderr)
                 sys.exit(1)
             what = f"the {len(seeds)} broad ones from seed {first} to {seeds[-1]}"
-        shots = [(seed, size, colour, f"seed {seed}") for seed in seeds]
-        title = f"The generator's hulls: {what}, {describe(size)}, {colour}"
-        name = f"{kind}-{seeds[0]}-{seeds[-1]}-size{size}-{colour}"
+        shots = [(seed, size, colour, f"seed {seed}", shown) for seed in seeds]
+        title = f"The generator's hulls: {what}, {describe(size)}, {colour}" + (f", as a {shown}" if shown else "")
+        name = f"{kind}-{seeds[0]}-{seeds[-1]}-size{size}-{colour}" + (f"-{shown}" if shown else "")
     elif kind == "sizes":
         seed = number(rest, 0, None, 0, 10 ** 9, "the seed")
         colour = paint(rest, 1, "bare")
-        shots = [(seed, size, colour, describe(size)) for size in range(1, 9)]
+        shots = [(seed, size, colour, describe(size), None) for size in range(1, 9)]
         title = f"The generator's hulls: seed {seed} at every size, {colour}"
         name = f"sizes-seed{seed}-{colour}"
     elif kind == "paints":
         seed = number(rest, 0, None, 0, 10 ** 9, "the seed")
         size = number(rest, 1, 2, 1, 8, "the size")
-        shots = [(seed, size, colour, colour) for colour in PAINTS]
+        shots = [(seed, size, colour, colour, None) for colour in PAINTS]
         title = f"The generator's hulls: seed {seed}, {describe(size)}, in every paint"
         name = f"paints-seed{seed}-size{size}"
     else:
@@ -129,12 +137,16 @@ def main():
 
     lines = ["frames 10"]
     files = []
-    for index, (seed, size, colour, _) in enumerate(shots):
+    for index, (seed, size, colour, _, shown) in enumerate(shots):
         file = f"{name}-{index:04d}"
         files.append(os.path.join(taken, file + ".png"))
         if os.path.exists(files[-1]):
             os.remove(files[-1])
-        lines += [f"lua assert(Hulls.Show({seed}, {size}, '{colour}'))", "frames 6", f"shot {file}", "frames 2"]
+        if shown:
+            lines += [f"lua assert(Hulls.Show({seed}, {size}, '{colour}', '{shown}'))", f"lua print('FIT', {index}, Hulls.Fitted())"]
+        else:
+            lines += [f"lua assert(Hulls.Show({seed}, {size}, '{colour}'))"]
+        lines += ["frames 6", f"shot {file}", "frames 2"]
     lines += ["echo hulls sheet taken", "quit"]
     with open(script, "w") as out:
         out.write("\n".join(lines) + "\n")
@@ -144,6 +156,15 @@ def main():
         tail = "\n".join(line for line in run.stdout.splitlines() if "[Warning]" not in line)[-2000:]
         print(f"hulls: the run failed (exit {run.returncode}, {len(missing)} of {len(files)} pictures missing)\n{tail}", file=sys.stderr)
         sys.exit(1)
+
+    # (which of them had no room for their class's hardpoints)
+    cramped = set()
+    for line in run.stdout.splitlines():
+        fields = line.split("\t")
+        if fields[0] == "FIT" and len(fields) >= 4 and fields[3] != "true":
+            cramped.add(int(fields[1]))
+    if any(shot[4] for shot in shots):
+        print(f"{len(shots) - len(cramped)} of {len(shots)} have room for a {shots[0][4]}'s hardpoints")
 
     from PIL import Image, ImageDraw, ImageFont
     try:
@@ -161,6 +182,8 @@ def main():
         x, y = (index % columns) * wide, bar + (index // columns) * high
         sheet.paste(Image.open(file).convert("RGB").resize((wide, high), Image.LANCZOS), (x, y))
         draw.text((x + 10, y + 8), shot[3], fill=(255, 255, 255), font=small, stroke_width=2, stroke_fill=(0, 0, 0))
+        if index in cramped:
+            draw.text((x + 10, y + 34), "no room", fill=(255, 170, 90), font=small, stroke_width=2, stroke_fill=(0, 0, 0))
     out = os.path.join(folder, f"sheet-{name}.png")
     sheet.save(out)
     print(os.path.join(ROOT, out))
