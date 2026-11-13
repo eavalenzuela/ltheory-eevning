@@ -1,0 +1,103 @@
+# A moon the pirates hold, and the taking of it, in the game app
+# (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/keep.txt
+#
+# Pirates hold moons with towers of their own only where nobody keeps
+# order, so they are made to hold the nearest one here (a cheat). Their
+# tower's place is on the overview, the moon says whose it is, and no
+# tower is anchored there. At their tower there are its batteries. Hurt
+# (a cheat: an industrial does not hurt it at all) it calls a pack, and
+# with its shield under a quarter it seals itself for four hours: the
+# pack goes, and it cannot be locked. Opened early (a cheat) it has
+# nothing to seal with again, and is destroyed: its bounty is paid, its
+# wreck holds what it had drawn from the moon, its place is off the
+# overview, and the moon takes the pilot's tower.
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Fly('industrial.caravan'), 'the Caravan could not be flown')
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua _G.moon, _G.stuff = GameDebug.Moon()
+lua assert(_G.moon ~= '', 'no moon with anything under it')
+lua assert(GameDebug.Keep() == -1, 'nobody should hold a moon where order is kept')
+lua _G.keep = GameDebug.KeepRaise()
+lua assert(_G.keep == _G.moon .. ' - Pirate Tower', 'the pirates should hold the nearest moon, and it is ' .. _G.keep)
+frames 5
+lua assert(GameDebug.Select(_G.keep), 'their place should be on the overview')
+
+# At the moon: it is theirs, and takes no tower.
+lua GameDebug.TimeScale(30)
+lua _G.warped = GameDebug.Order('WarpTo', _G.moon)
+until not _G.warped or GameDebug.InWarp()
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Give('tower.vessari.small', 1))
+lua assert(GameDebug.Select(_G.moon), 'no such moon to select')
+frames 3
+lua assert(GameDebug.Selected() == _G.moon)
+lua assert(not GameDebug.CanPress('Anchor tower'), 'a moon the pirates hold should take no tower')
+
+# To their tower: it stands with its batteries round it.
+lua GameDebug.TimeScale(30)
+lua _G.warped = GameDebug.Order('WarpTo', _G.keep)
+until not _G.warped or GameDebug.InWarp()
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+frames 5
+lua assert(GameDebug.Pirates() == 4, 'a tower and three batteries should be there, and there are ' .. GameDebug.Pirates())
+lua assert(GameDebug.Keep() == 1 and select(3, GameDebug.Keep()) == 3 and select(4, GameDebug.Keep()), 'it should be whole, with its batteries and its charges')
+lua assert(GameDebug.Lock('Pirate Tower'), 'their tower should be something to lock')
+
+# Hurt, it calls for help, and a pack comes.
+lua GameDebug.Peaceful(false)
+lua assert(GameDebug.KeepHit(0.8))
+until GameDebug.Pirates() > 4
+
+# Its shield under a quarter: it seals for its four hours. The pack
+# goes, and it cannot be locked.
+lua assert(GameDebug.KeepHit(0.2))
+until select(2, GameDebug.Keep()) > 0
+lua GameDebug.Peaceful(true)
+frames 5
+lua assert(select(2, GameDebug.Keep()) > 14000 and select(2, GameDebug.Keep()) <= 14400, 'it should be sealed for four hours')
+lua assert(not select(4, GameDebug.Keep()), 'its charges should be burnt')
+lua assert(GameDebug.Pirates() == 4, 'those who came should have gone when it sealed, and there are ' .. GameDebug.Pirates())
+lua assert(not GameDebug.Lock('Pirate Tower'), 'a sealed tower should not be locked')
+
+# Opened (a cheat), it has nothing to seal with again.
+lua assert(GameDebug.KeepOpen())
+until select(2, GameDebug.Keep()) == 0
+lua assert(GameDebug.Lock('Pirate Tower'), 'an open one should be locked again')
+lua assert(GameDebug.KeepHit(0.1))
+frames 20
+lua assert(select(2, GameDebug.Keep()) == 0, 'it should have nothing to seal with a second time')
+
+# Destroyed: its bounty, its wreck with what it had, its place gone.
+lua _G.before = GameDebug.Wallet()
+lua assert(GameDebug.KeepHit(0))
+until GameDebug.Keep() == -1
+frames 5
+lua assert(GameDebug.Wallet() - _G.before >= 500000, 'its bounty should be paid')
+lua assert(not GameDebug.Select(_G.keep), 'its place should be off the overview')
+lua assert(GameDebug.Select('Pirate Tower Wreck'), 'what is left of it should lie where it was')
+lua GameDebug.TimeScale(10)
+lua assert(GameDebug.Order('Approach', 'Pirate Tower Wreck'))
+until GameDebug.Order('Loot', 'Pirate Tower Wreck')
+until GameDebug.Hold(_G.stuff) > 0
+lua GameDebug.TimeScale(1)
+
+# And the moon is anybody's: the pilot's tower goes up there.
+lua GameDebug.TimeScale(30)
+lua _G.warped = GameDebug.Order('WarpTo', _G.moon)
+until not _G.warped or GameDebug.InWarp()
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Select(_G.moon), 'no such moon to select')
+frames 3
+until GameDebug.Press('Anchor tower')
+until GameDebug.Tower() == 'anchoring'
+
+echo keep scenario passed
+quit

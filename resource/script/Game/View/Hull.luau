@@ -3043,6 +3043,61 @@ for size = 1, 3 do
   designs[`works.tower.{size}`] = { faction = "civil", draw = collarOf(size), sheets = 3.0, turrets = {}, launchers = {}, fit = {} }
 end
 
+-- The Pirate Tower, what the pirates hold a moon with (Core/Tactical/
+-- Keeps): somebody's control tower once, taken and made over. A spine of
+-- girder, tall; three storeys of armour stacked on it, no two of them
+-- square to each other, the middle one lit; round its waist the collar
+-- of shield emitters, a third of the ring gone and what is left of it
+-- patched; a store of crates and a tank lashed on under the lowest
+-- storey; and masts at its head. It has nothing to shoot with: that is
+-- what its batteries are for. (A v0.)
+local function keep(b: Builder)
+  truss(b, v(0, -0.95, 0), v(0, 0.78, 0), 0.16, 9, v(1, 0, 0))
+  truss(b, v(0, -0.95, 0), v(0, 0.78, 0), 0.16, 9, v(0, 0, 1))
+  block(b, PLATING, v(0, 0.02, 0), v(0.25, 0.19, 0.25), nil, 0.08)
+  for _, face in { -1, 1 } do
+    block(b, GLOW, v(face * 0.253, 0.05, 0), v(0.004, 0.03, 0.15), nil, 0.3)
+    block(b, GLOW, v(0, 0.05, face * 0.253), v(0.15, 0.03, 0.004), nil, 0.3)
+  end
+  block(b, PLATING, v(0, 0.38, 0), v(0.18, 0.13, 0.18), v(math.pi / 4, 0, 0), 0.10)
+  block(b, PATCH, v(0.02, 0.60, 0.01), v(0.12, 0.07, 0.14), v(math.pi / 9, 0, 0), 0.10)
+  block(b, PLATING, v(0, -0.36, 0), v(0.20, 0.12, 0.20), v(math.pi / 8, 0, 0), 0.10)
+  block(b, PATCH, v(0.21, -0.34, 0.05), v(0.025, 0.09, 0.11), v(math.pi / 8, 0, 0), 0.1)
+  block(b, FRAME, v(0, -0.93, 0), v(0.11, 0.03, 0.11), v(math.pi / 4, 0, 0), 0.2)
+  block(b, GLOW, v(0, -0.97, 0), v(0.04, 0.012, 0.04), nil, 0.4)
+  -- the collar: nine joints of twelve, an emitter at every third
+  local joints = 12
+  local function at(index: number, out: number): vector
+    local angle = index * 2 * math.pi / joints
+    return v(math.cos(angle) * out, 0.02, math.sin(angle) * out)
+  end
+  for index = 0, 8 do
+    if index < 8 then
+      beam(b, FRAME, at(index, 0.92), at(index + 1, 0.92), 0.022, 0.1)
+    end
+    if index % 3 == 0 then
+      -- (tall enough that none of them is a small part, to go missing
+      -- from under its lamps: Plates' patching)
+      block(b, if index == 3 then PATCH else PLATING, at(index, 0.92), v(0.07, 0.125, 0.07), v(-index * 2 * math.pi / joints, 0, 0), 0.2)
+      if index ~= 3 then
+        block(b, GLOW, at(index, 0.92) + v(0, 0.133, 0), v(0.04, 0.008, 0.04), nil, 0.5)
+        block(b, GLOW, at(index, 0.92) - v(0, 0.133, 0), v(0.04, 0.008, 0.04), nil, 0.5)
+      end
+      beam(b, FRAME, at(index, 0.26), at(index, 0.86), 0.014, 0.1)
+    end
+  end
+  -- (a spoke that holds nothing any more)
+  beam(b, FRAME, at(10, 0.26), at(10, 0.58), 0.014, 0.1)
+  -- its stores, under the lowest storey
+  crate(b, v(0.13, -0.60, 0.10), v(0.10, 0.07, 0.12))
+  crate(b, v(-0.14, -0.63, -0.06), v(0.08, 0.09, 0.10), PATCH)
+  crate(b, v(-0.02, -0.76, 0.12), v(0.09, 0.05, 0.08))
+  tank(b, v(0.16, -0.70, -0.12), 0.07, 0.15)
+  mast(b, v(0.03, 0.67, 0.02), 0.32, 0.03)
+  mast(b, v(-0.08, 0.67, -0.07), 0.20, -0.04)
+end
+designs["works.keep"] = { faction = "unbound", draw = keep, patch = PATCHED, sheets = 4.0, turrets = {}, launchers = {}, fit = {} }
+
 for size = 1, 4 do
   designs[`works.rig.{size}`] = { faction = "civil", draw = rigOf(size), sheets = 3.0 + 0.6 * size, turrets = {}, launchers = {}, fit = {} }
 end

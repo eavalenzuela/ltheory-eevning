@@ -116,6 +116,9 @@ local KINDS: { Kind } = {
     fit = all(times(3, "launcher.light"), { { "armor.plate.200mm" }, { "damage.control" } }) },
   { id = "redoubt", hull = "works.redoubt", name = "Pirate Redoubt", range = 0, bounty = 45000, tags = 5,
     fit = all(times(4, "launcher.heavy"), { { "armor.plate.medium" }, { "damage.control" }, { "ballistic.control" } }) },
+  -- And a tower of their own, holding a moon (Tactical/Keeps): it does
+  -- nothing itself, and is what the place is about.
+  { id = "keep", hull = "works.keep", name = "Pirate Tower", range = 0, bounty = 500000, tags = 12, fit = {} },
   -- Not one of the ladder: a mender has little to shoot with. It keeps
   -- the rest of its pack whole, and is the one to shoot first.
   { id = "mender", hull = "frigate.cutthroat", name = "Pirate Mender", range = 4500, bounty = 25000, tags = 1,
@@ -324,8 +327,10 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   local hidden = state.sites[site.id]
   -- (a stronghold is a captain's: the first of whoever keeps it)
   local stronghold = hidden ~= nil and hidden.kind == "combat" and hidden.depth > 0
-  if hidden and hidden.kind == "mission" then
-    -- (who is at a place made for a job is the job's business: Tactical/Assault)
+  if hidden and (hidden.kind == "mission" or hidden.kind == "keep") then
+    -- (who is at a place made for a job is the job's business:
+    -- Tactical/Assault. And who is at a tower of the pirates' own is the
+    -- tower's: Tactical/Keeps.)
     return
   elseif hidden and hidden.kind == "combat" then
     -- (and a stronghold has the worst there is, wherever it is)
@@ -531,7 +536,7 @@ function Pirates.Think(state: State.State, events: { Event })
     -- clear out of their camp stay in it: Tactical/Assault.)
     local kept = state.sites[pilot.home]
     local company = prey ~= nil or (player ~= nil and player.system == ball.system and player.grid == ball.grid)
-      or (kept ~= nil and kept.kind == "mission" and not kept.gone)
+      or (kept ~= nil and (kept.kind == "mission" or kept.kind == "keep") and not kept.gone)
     pilot.alone = if company then 0 else pilot.alone + 1
     if pilot.alone > PATIENCE then
       Space.RemoveBall(state, ball)

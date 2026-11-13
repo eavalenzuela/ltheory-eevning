@@ -542,7 +542,8 @@ function Sites.Step(state: State.State, events: { Event })
   for _, site in here do
     -- (a place made for a job is not one of the system's own, and goes
     -- when the job does)
-    if site.kind == "mission" then
+    -- (nor is the place of a tower the pirates hold a moon with: Tactical/Keeps)
+    if site.kind == "mission" or site.kind == "keep" then
       left -= 1
       continue
     end

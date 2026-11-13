@@ -414,7 +414,13 @@ suite:Case("a gate is watched only in lawless space, and not every time", functi
       for _ = 1, 100 do
         Core.Step(game)
       end
-      t.eq(#game.state.pilotIds, 0)
+      -- (nobody who flies: a tower the pirates hold a moon with, and its batteries, are no watch on a gate)
+      local flying = 0
+      for _, id in game.state.pilotIds do
+        local ball = game.state.balls[id]
+        flying += if ball and ball.maxVelocity > 0 then 1 else 0
+      end
+      t.eq(flying, 0)
     end
   end
   t.ok(camps >= 5 and camps <= 20, `{camps} of 30 lawless gates were watched`)

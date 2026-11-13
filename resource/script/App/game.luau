@@ -18,6 +18,7 @@ local Context = require("@lt/Game/UI/Context")
 local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Hacking = require("@lt/Core/Tactical/Hacking")
+local Keeps = require("@lt/Core/Tactical/Keeps")
 local Planets = require("@lt/Core/Data/Planets")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Attributes = require("@lt/Core/Attributes")
@@ -700,6 +701,76 @@ function Debug.Unseal(): boolean
     return false
   end
   starbase.sealed = state.tick + 2
+  return true
+end
+
+-- The pirates' tower in the pilot's system (the first, if they hold
+-- several moons there): how much of its shield is left (0 to 1), the
+-- seconds it stays sealed (0 when it is not), how many of its batteries
+-- stand, and whether it has anything to seal with. -1 and nothing for a
+-- system with none.
+local function keepHere(): State.Keep?
+  local state = session.game.state
+  local system = Core.Query.Player(session.game).system
+  for _, id in state.keepIds do
+    if state.keeps[id].system == system then
+      return state.keeps[id]
+    end
+  end
+  return nil
+end
+
+function Debug.Keep(): (number, number, number, boolean)
+  local keep = keepHere()
+  local status = if keep then Core.Query.Keep(session.game, keep.id) else nil
+  local core = if keep then session.game.state.balls[keep.core] else nil
+  if status == nil or core == nil then
+    return -1, 0, 0, false
+  end
+  return core.vitals.shield / math.max(1, core.vitals.shieldMax), status.sealed, status.batteries, status.charged
+end
+
+-- Cheats, for a scripted taking of a moon. KeepRaise: pirates hold the
+-- nearest moon with something under it, wherever the pilot is (they do
+-- it of themselves only where nobody keeps order): the name of their
+-- tower's place, "" if no moon would do. KeepHit: its shield is brought
+-- to a share of what it has; with 0 the pilot has destroyed it.
+-- KeepOpen: a sealed one opens in a moment. Each is false with no keep.
+function Debug.KeepRaise(): string
+  local state = session.game.state
+  for _, entry in Core.Query.Overview(session.game) do
+    local moon = if entry.kind == "moon" and Core.Query.Deposit(session.game, entry.id) then Space.Object(state, entry.id) else nil
+    local keep = if moon then Keeps.Raise(state, moon, session.game.events) else nil
+    if keep then
+      local place = Space.Object(state, keep.id)
+      return if place then place.name else ""
+    end
+  end
+  return ""
+end
+
+function Debug.KeepHit(share: number): boolean
+  local state = session.game.state
+  local keep = keepHere()
+  local core = if keep then state.balls[keep.core] else nil
+  if core == nil then
+    return false
+  end
+  if share <= 0 then
+    Aftermath.Destroy(state, core.id, state.player.ship, session.game.events)
+  else
+    core.vitals.shield = share * core.vitals.shieldMax
+  end
+  return true
+end
+
+function Debug.KeepOpen(): boolean
+  local state = session.game.state
+  local keep = keepHere()
+  if keep == nil or keep.sealed == 0 then
+    return false
+  end
+  keep.sealed = state.tick + 2
   return true
 end
 

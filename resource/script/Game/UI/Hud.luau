@@ -64,7 +64,7 @@ local TAGS: { [string]: string } = {
 
 -- What a site (Tactical/Sites) is called, by the variety of its place.
 local SITES: { [string]: string } = { ["site.combat"] = "pirate den", ["site.ore"] = "hidden belt", ["site.relic"] = "derelict",
-  ["site.gas"] = "vapour field", ["site.data"] = "listening post", ["site.mission"] = "camp to clear" }
+  ["site.gas"] = "vapour field", ["site.data"] = "listening post", ["site.mission"] = "camp to clear", ["site.keep"] = "pirate tower" }
 
 -- Whether a row of the overview is a vault (Core/Tactical/Sites): a
 -- wreck to the Core, and not one to the pilot.
@@ -510,6 +510,19 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     local deposit = Core.Query.Deposit(session.game, entry.id)
     what = if deposit then `moon: {deposit.material.name}, {Moons.Word(deposit.richness)}` else "moon: nothing under it"
     tone = if deposit then NEXT else Im.DIM
+    -- (and whether it is anybody's to put one at: Tactical/Keeps)
+    if Core.Query.Keep(session.game, entry.id) then
+      what ..= ": pirates hold it"
+      tone = Im.WARN
+    end
+  end
+  -- (the pirates' tower, or its place, says how it stands)
+  local held = if entry.variety == "site.keep" or entry.variety == "works.keep" then Core.Query.Keep(session.game, entry.id) else nil
+  if held then
+    what = if held.sealed > 0 then `pirate tower: SEALED, opens in {Format.Duration(held.sealed)}`
+      elseif held.resupplied > 0 then `pirate tower: nothing to seal with for {Format.Duration(held.resupplied)}`
+      else `pirate tower: {held.batteries} {if held.batteries == 1 then "battery" else "batteries"} round it`
+    tone = if held.sealed > 0 then Im.DIM elseif held.resupplied > 0 then NEXT else Im.WARN
   end
   if entry.kind == "gate" and entry.variety == "passage" then
     -- (a camp's gate: shut until its room is cleared)

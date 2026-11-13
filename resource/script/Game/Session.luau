@@ -273,6 +273,20 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `The siege of {if body then body.name else "your tower"} is broken: nobody of them is left`)
   elseif kind == "StarbaseCharged" then
     Session.Say(session, `Sealing charges aboard: {event.charges}`)
+  elseif kind == "KeepSighted" then
+    local moon = Core.Query.Body(session.game, event.moon)
+    Session.Say(session, `Pirates hold {if moon then moon.name else "a moon here"} with a tower of their own: nobody anchors there until it is brought down`)
+  elseif kind == "KeepCalled" then
+    Session.Say(session, `{event.name} is calling for help: a pack is coming`)
+  elseif kind == "KeepSealed" then
+    Session.Say(session, `{event.name} has SEALED itself for {event.hours} {if event.hours == 1 then "hour" else "hours"}: `
+      .. `nothing can touch it until it opens, and a day after that it is resupplied`)
+  elseif kind == "KeepOpened" then
+    Session.Say(session, `{event.name} has opened: it has nothing to seal with again until it is resupplied`)
+  elseif kind == "KeepRestocked" then
+    Session.Say(session, `{event.name} has been resupplied: it is whole again`)
+  elseif kind == "KeepLost" then
+    Session.Say(session, `{event.name} is brought down: {event.moonName} is nobody's now, and takes a tower`)
   elseif kind == "MoonDrilled" and event.full then
     local body = Core.Query.Body(session.game, event.station)
     Session.Say(session, `{if body then body.name else "A tower"} has no room for more {Types.Info(event.type).name}: its drill stands idle`)

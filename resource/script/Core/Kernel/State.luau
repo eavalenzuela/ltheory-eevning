@@ -468,6 +468,15 @@ export type Starbase = {
   core: number, charges: number, sealed: number, siege: number,
 }
 
+-- A tower of the pirates' own, holding a moon (Tactical/Keeps): 'id' is
+-- its place (a site), 'moon' the moon it holds, 'core' the ship that is
+-- the tower. 'sealed' is the tick it comes out of being sealed (0 when
+-- it is not), 'charges' the hours it can seal for, 'restock' the tick
+-- it is resupplied (0 when it need not be), and 'called' and 'calls'
+-- when it last called for help and how many times since it last opened.
+export type Keep = { id: number, system: number, moon: number, core: number, sealed: number, charges: number, restock: number,
+  called: number, calls: number }
+
 export type State = {
   galaxySeed: number,     -- layout; a galaxy can be shared by its seed
   historySeed: number,    -- every roll made during play
@@ -498,6 +507,11 @@ export type State = {
   trades: { [number]: { [string]: { TradeDay } } },
   starbases: { [number]: Starbase },  -- by the id of the station the tower is
   starbaseIds: { number },
+  -- The pirates' own towers (Tactical/Keeps), by the id of their place;
+  -- and the systems whose keeps have been put up.
+  keeps: { [number]: Keep },
+  keepIds: { number },
+  keepsSeen: { [number]: boolean },
   colonies: { [number]: Colony },     -- by the id of the planet
   colonyIds: { number },
   balls: { [number]: Ball },

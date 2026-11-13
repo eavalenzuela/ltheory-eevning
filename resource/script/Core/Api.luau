@@ -24,6 +24,7 @@ local Drones = require("@lt/Core/Tactical/Drones")
 local Dscan = require("@lt/Core/Tactical/Dscan")
 local Factions = require("@lt/Core/Data/Factions")
 local Fleet = require("@lt/Core/Tactical/Fleet")
+local Keeps = require("@lt/Core/Tactical/Keeps")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Careers = require("@lt/Core/Character/Careers")
 local Corporation = require("@lt/Core/Assets/Corporation")
@@ -81,7 +82,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 62
+Core.SAVE_VERSION = 63
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -315,6 +316,14 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- 59: a corporation keeps its books by head, and a tower keeps count
   -- of its running. A save from before has what was earned and spent
   -- under no head, and its towers begin their count now.
+  -- 63: pirates hold the rarest moons where nobody keeps order, with
+  -- towers of their own. A save from before has none up yet: they are
+  -- put up as the pilot comes to each system again.
+  [62] = function(state: any)
+    state.keeps = state.keeps or {}
+    state.keepIds = state.keepIds or {}
+    state.keepsSeen = state.keepsSeen or {}
+  end,
   -- 62: a tower can be shot at, seals itself and can be lost. One of a
   -- save from before has nothing to seal with and nobody after it, and
   -- is given what stands for it under fire as the game goes on.
@@ -704,6 +713,7 @@ function Core.New(options: Options): Game
     trades = {},
     starbases = {},
     starbaseIds = {},
+    keeps = {}, keepIds = {}, keepsSeen = {},
     colonies = {},
     colonyIds = {},
     balls = {},
@@ -931,6 +941,7 @@ function Core.Step(game: Game)
   Market.Step(state, game.events)
   Starbases.Step(state, game.events)
   Raids.Step(state, game.events)
+  Keeps.Step(state, game.events)
   Colonies.Step(state, game.events)
   Industry.Step(state, game.events)
   Training.Step(state, game.events)
@@ -1056,8 +1067,10 @@ function Query.Overview(game: Game): { Entry }
     local gone = object.kind == "asteroid" and Mining.Left(state, object) <= 0
     -- (a site is on the overview once it has been found, and while the
     -- pilot is at it: Tactical/Sites)
+    -- (the place of a tower the pirates held is gone with the tower,
+    -- whoever is there: its wreck says where it was)
     local site = state.sites[object.id]
-    if site and not onGrid and Sites.Hidden(state, object.id) then
+    if site and (not onGrid or site.kind == "keep") and Sites.Hidden(state, object.id) then
       gone = true
     end
     -- (and where a tower was taken down there is nothing)
@@ -1674,6 +1687,32 @@ end
 -- drill (and for what is no moon).
 function Query.Deposit(game: Game, moon: number): Moons.Deposit?
   return Starbases.Deposit(game.state, moon)
+end
+
+-- A tower the pirates hold a moon with (Tactical/Keeps), asked for by
+-- its place, by the moon, or by the tower itself; nil for anything
+-- else. 'sealed': the seconds until it opens (0 while it is open);
+-- 'charged': whether it has anything to seal with; 'resupplied': the
+-- seconds until it is whole again and has (0 if nothing is on its way);
+-- 'batteries': how many of them stand.
+export type KeepStatus = {
+  site: number, moon: number, core: number, name: string,
+  sealed: number, charged: boolean, resupplied: number, batteries: number,
+}
+function Query.Keep(game: Game, id: number): KeepStatus?
+  local state = game.state
+  local keep = state.keeps[id] or Keeps.At(state, id) or Keeps.Of(state, id)
+  if keep == nil then
+    return nil
+  end
+  local place = Space.Object(state, keep.id)
+  return {
+    site = keep.id, moon = keep.moon, core = keep.core, name = if place then place.name else "Pirate Tower",
+    sealed = if Keeps.Sealed(state, keep) then (keep.sealed - state.tick) * Constants.TICK else 0,
+    charged = keep.charges > 0,
+    resupplied = if keep.charges == 0 and keep.restock > state.tick then (keep.restock - state.tick) * Constants.TICK else 0,
+    batteries = Keeps.Batteries(state, keep),
+  }
 end
 
 -- The pilot's drones: how many are in the drone bay, how many are out,

@@ -30,7 +30,7 @@ Scanner.HEIGHT = 440
 
 local GOOD = vector.create(0.45, 0.85, 0.55)
 local KINDS: { [string]: string } = { combat = "pirate den", ore = "hidden belt", gas = "vapour field", relic = "derelict",
-  data = "listening post", mission = "camp to clear" }
+  data = "listening post", mission = "camp to clear", keep = "pirate tower" }
 
 local open = false
 local side: "signals" | "directional" = "signals"

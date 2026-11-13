@@ -141,6 +141,13 @@ local function lockable(state: State.State, ball: State.Ball, target: number): (
   if tower and Starbases.Sealed(state, tower) then
     return false, "the tower has sealed itself"
   end
+  -- (nor is one of the pirates' own: Tactical/Keeps, seen here by the state alone)
+  for _, keepId in state.keepIds do
+    local keep = state.keeps[keepId]
+    if keep.core == target and keep.sealed ~= 0 and state.tick < keep.sealed then
+      return false, "the tower has sealed itself"
+    end
+  end
   return true
 end
 

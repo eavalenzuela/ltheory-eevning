@@ -295,6 +295,19 @@ for level, rig in {
   })
 end
 
+-- A tower of the pirates' own, holding a moon (Tactical/Keeps): about
+-- half of a pilot's small one to bring down, and nobody's to build.
+table.insert(types, {
+  id = "works.keep", name = "Pirate Tower", class = "works", lineage = "", basePrice = 2000000, volume = 1000000,
+  mass = 400000000, inertia = 1, maxVelocity = 0, warpSpeed = 1, radius = 300,
+  shield = 60000, armor = 20000, hull = 20000, shieldRecharge = 10800,
+  shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 2000,
+  cpu = 600, powergrid = 2000, highs = 0, mids = 0, lows = 0, turrets = 0, launchers = 0,
+  capacitor = 2500, capacitorRecharge = 240,
+  scanResolution = 100, lockRange = 60000, maxTargets = 1, cargo = 0,
+  restricted = true,
+})
+
 -- What stands for a pilot's control tower where it is shot at
 -- (Assets/Starbases, Tactical/Raids): a thing at the tower's heart with
 -- the tower's shield, armour and structure (Data/Structures), which

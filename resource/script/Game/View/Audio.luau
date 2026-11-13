@@ -131,6 +131,7 @@ local SMALL_BLAST, SMALL = "atmosphere/small_hull_explosion_01.wav", 100
 local AIR_FADE = 2.5
 local SITES: { [string]: string } = {
   ["site.gas"] = "gas", ["site.relic"] = "relic", ["site.data"] = "data", ["site.combat"] = "pirates", ["site.ore"] = "belt",
+  ["site.keep"] = "pirates",
 }
 
 -- How near a planet people live on its chatter is heard: within this

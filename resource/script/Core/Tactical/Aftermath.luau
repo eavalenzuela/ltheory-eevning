@@ -12,6 +12,7 @@
 -- too, the pilot wakes at home in one.
 
 local Assault = require("@lt/Core/Tactical/Assault")
+local Keeps = require("@lt/Core/Tactical/Keeps")
 local Raids = require("@lt/Core/Tactical/Raids")
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
@@ -130,6 +131,8 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   -- the rig a job was to hold is that job lost)
   if pilot then
     Assault.Fell(state, pilot.home, id, hull.class == "works", events)
+    -- (and a tower the pirates held a moon with is that moon free)
+    Keeps.Fell(state, id, pilot.home, events)
   else
     Assault.Lost(state, id, events)
     -- (and what stood for a pilot's tower under fire is the tower lost)

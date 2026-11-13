@@ -277,6 +277,13 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
     if moon == nil or Space.SystemOf(state, moon.id) ~= ball.system then
       return false, "a tower is anchored at a moon"
     end
+    -- (not at one the pirates hold with a tower of their own, from
+    -- however near: Tactical/Keeps)
+    for _, keepId in state.keepIds do
+      if state.keeps[keepId].moon == moon.id then
+        return false, "pirates hold that moon: bring their tower down first"
+      end
+    end
     if Space.Distance(ball :: any, moon :: any) > moon.radius * Starbases.REACH then
       return false, "too far from the moon"
     end

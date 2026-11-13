@@ -102,7 +102,12 @@ suite:Case("a system the pilot comes to has its sites, as many as its kind of sp
     ball.system = system
     Space.AssignGrid(game.state, ball)
     Core.Step(game)
-    t.eq(#Sites.In(game.state, system), Sites.COUNT[Galaxy.Band(game.state.galaxy.systems[system].security)])
+    -- (its own sites: a moon the pirates hold with a tower is a place of another kind)
+    local own = 0
+    for _, site in Sites.In(game.state, system) do
+      own += if site.kind == "keep" then 0 else 1
+    end
+    t.eq(own, Sites.COUNT[Galaxy.Band(game.state.galaxy.systems[system].security)])
   end
 end)
 
