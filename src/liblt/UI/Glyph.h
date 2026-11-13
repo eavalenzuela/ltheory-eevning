@@ -37,6 +37,11 @@ struct GlyphT : public RefCounted {
 
   virtual Glyph Transform(V2 const& offset, V2 const& scale) = 0;
 
+  /* Put the glyph where an icon that anchors it has worked out it goes
+   * (IconT::View): a line from 'a' to 'b'; a box at 'a', of size 'b'.
+   * A glyph of another kind stays where it is. */
+  virtual void Place(V2 const& a, V2 const& b) {}
+
   FIELDS {}
 };
 

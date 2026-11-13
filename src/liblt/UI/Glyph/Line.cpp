@@ -51,6 +51,11 @@ namespace {
       return Shader_Create("widget.jsl", "ui/line.jsl");
     }
 
+    void Place(V2 const& a, V2 const& b) {
+      args.p1 = a;
+      args.p2 = b;
+    }
+
     Type GetVertexFormat() const {
       return Type_Get<LineVertex>();
     }

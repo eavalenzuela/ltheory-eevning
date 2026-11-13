@@ -26,6 +26,11 @@ namespace {
       return Shader_Create("widget.jsl", "ui/box.jsl");
     }
 
+    void Place(V2 const& a, V2 const& b) {
+      args.position = a;
+      args.size = b;
+    }
+
     Type GetVertexFormat() const {
       return Type_Get<BoxVertex>();
     }

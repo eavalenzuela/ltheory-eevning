@@ -102,10 +102,36 @@ local shownFrom, shownNear = vector.zero, 1
 -- systems in sight or fewer, the constellations are; and with so many
 -- or fewer, every system is.
 local REGIONS, CONSTELLATIONS, NAMES = 48, 160, 60
+-- And with more systems in sight than this, the chart is drawn fainter.
+local CROWD = 2500
 
--- What is made once: where each system is on the map (in pixels from
--- the map's middle), the gates as one icon, and the systems as an icon
--- for every colour they are drawn in.
+-- What is made once for a galaxy: its gates as an icon, and its systems
+-- as an icon for every colour they are drawn in. Their glyphs stand at
+-- places in space (Icon_AddLine3, Icon_AddBox3: light years from the
+-- galaxy's middle), so however the map is turned, moved or neared, the
+-- engine is told how it is looked at (Icon_View) and nothing is made
+-- again: a galaxy of thousands is turned as lightly as one of forty.
+type Chart = {
+  epoch: number, count: number,
+  -- (the middle of the galaxy, light years, and the corners of its plane)
+  middle: vector,
+  corners: { vector },
+  gates: Icon,
+  -- (each system's stalk to the plane; and the plane's edge)
+  stalks: Icon,
+  edge: Icon,
+  -- (how big a system's dot is, in pixels, however near the map is
+  -- looked at: before it swells a little with nearness)
+  dot: number,
+  -- (the dots are an icon for every colour, by whose the systems are or
+  -- by how safe: whichever is shown, and made again for the other)
+  bySecurity: boolean,
+  dots: { { icon: Icon, color: vector } },
+}
+local chart: Chart? = nil
+
+-- What follows from how the map is looked at: where each system is on
+-- it (in pixels from the map's middle, with all the galaxy shown).
 type Drawn = {
   epoch: number, width: number, height: number,
   -- (how it was looked at when it was made, how many pixels a light
@@ -116,18 +142,10 @@ type Drawn = {
   -- how far it reaches; 0 and 0 for none)
   round: number, reach: number,
   at: { vector },
-  gates: Icon,
-  -- (each system's stalk to the plane, and the plane's edge)
-  stalks: Icon,
-  -- (how big a system's dot is, in pixels, when all the galaxy is shown;
-  -- and how near the map was looked at when the dots were last made: an
-  -- icon is drawn as many times bigger as the map is nearer, dots and
-  -- all, so they are made that many times smaller, and made again as it
-  -- nears)
-  -- (the dots are an icon for every colour, by whose the systems are or
-  -- by how safe: whichever is shown, and made again for the other)
-  dot: number, near: number, bySecurity: boolean,
-  dots: { { icon: Icon, color: vector } },
+  -- (how near the map was looked at when the dots were last given
+  -- their size: an icon is drawn as many times bigger as the map is
+  -- nearer, dots and all, so they are that many times smaller on it)
+  near: number,
   -- (the middle of each region's systems and of each constellation's,
   -- where its name goes)
   regionsAt: { [number]: vector },
@@ -223,16 +241,14 @@ local function swollen(near: number): number
 end
 
 -- The systems as icons, one for every colour they are drawn in (by how
--- safe they are, or by whose): a dot each, bigger for a homeworld, for a
--- map looked at so near. (A box glyph: a circle glyph is a point of
--- light with a halo, not a disc.)
-local function dotted(systems: { Galaxy.SystemNode }, at: { vector }, dot: number, near: number, safety: boolean)
-  : { { icon: Icon, color: vector } }
+-- safe they are, or by whose): a dot each at its place in space, bigger
+-- for a homeworld. (A box glyph: a circle glyph is a point of light
+-- with a halo, not a disc.)
+local function dotted(systems: { Galaxy.SystemNode }, middle: vector, safety: boolean): { { icon: Icon, color: vector } }
   local icons: { [string]: Icon? } = {}
   local list: { { icon: Icon, color: vector } } = {}
-  local grown = dot * swollen(near) / near
-  for id, system in systems do
-    local size = if system.home then grown * 1.7 else grown
+  for _, system in systems do
+    local size = if system.home then 1.7 else 1
     local key = if safety then Galaxy.Band(system.security) else system.owner
     local its: Icon? = icons[key]
     if not its then
@@ -241,16 +257,13 @@ local function dotted(systems: { Galaxy.SystemNode }, at: { vector }, dot: numbe
       table.insert(list, { icon = fresh, color = if safety then BAND[key] else colorOf(key) })
       its = fresh
     end
-    Icon_AddGlyph(its, Glyph_Box(at[id], vector.create(size, size), 1, 1))
+    Icon_AddBox3(its, vector.create(system.x - middle.x, system.y - middle.y, system.z), vector.create(size, size))
   end
   return list
 end
 
--- ('round' and 'reach': a sphere to leave room for, round a system and
--- so many light years out from it, for a hull with a jump drive; 0 and
--- 0 for none.)
--- ('near': how near the map is looked at, for the size of the dots.)
-local function make(galaxy: Galaxy.Galaxy, epoch: number, width: number, height: number, round: number, reach: number, near: number): Drawn
+-- A galaxy's chart: made once, whatever is done with the map after.
+local function charted(galaxy: Galaxy.Galaxy, epoch: number, safety: boolean): Chart
   local systems = galaxy.systems
   local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
   for _, system in systems do
@@ -258,22 +271,86 @@ local function make(galaxy: Galaxy.Galaxy, epoch: number, width: number, height:
     minY, maxY = math.min(minY, system.y), math.max(maxY, system.y)
   end
   local middle = vector.create((minX + maxX) / 2, (minY + maxY) / 2)
-  -- (as it is looked at: every system, and the place on the plane under
-  -- it, and the room all of that takes)
-  local low, high = vector.create(math.huge, math.huge), vector.create(-math.huge, -math.huge)
-  local over: { vector } = {}
-  local under: { vector } = {}
-  for id, system in systems do
-    over[id] = seen(system.x, system.y, system.z, middle, yaw, pitch)
-    under[id] = seen(system.x, system.y, 0, middle, yaw, pitch)
-    low, high = vector.min(low, vector.min(over[id], under[id])), vector.max(high, vector.max(over[id], under[id]))
+  local function place(system: Galaxy.SystemNode, z: number): vector
+    return vector.create(system.x - middle.x, system.y - middle.y, z)
   end
-  -- (and the edge of the plane, a little outside the outermost systems;
-  -- and the sphere, which is a circle however it is looked at)
+  local stalks = Icon_Create()
+  for _, system in systems do
+    if math.abs(system.z) > 0.05 then
+      Icon_AddLine3(stalks, place(system, system.z), place(system, 0))
+    end
+  end
+  -- (the edge of the plane, a little outside the outermost systems)
   local edge = 0.04 * math.max(maxX - minX, maxY - minY)
   local corners = { vector.create(minX - edge, minY - edge), vector.create(maxX + edge, minY - edge),
     vector.create(maxX + edge, maxY + edge), vector.create(minX - edge, maxY + edge) }
-  for _, corner in corners do
+  local rim = Icon_Create()
+  for index, corner in corners do
+    local following = corners[index % 4 + 1]
+    Icon_AddLine3(rim, vector.create(corner.x - middle.x, corner.y - middle.y, 0),
+      vector.create(following.x - middle.x, following.y - middle.y, 0))
+  end
+  local gates = Icon_Create()
+  for id, system in systems do
+    for _, neighbor in system.neighbors do
+      if neighbor > id then
+        Icon_AddLine3(gates, place(system, system.z), place(systems[neighbor], systems[neighbor].z))
+      end
+    end
+  end
+  return { epoch = epoch, count = #systems, middle = middle, corners = corners, gates = gates, stalks = stalks, edge = rim,
+    -- A dot a system, smaller as there are more.
+    dot = if #systems > 1200 then 1.4 elseif #systems > 150 then 2 elseif #systems > 40 then 2.6 else 3.4,
+    bySecurity = safety, dots = dotted(systems, middle, safety) }
+end
+
+-- Have the chart's icons looked at as the map is: all of them, or with
+-- 'dotsOnly' the dots alone, which are a size for how near it is.
+local function view(its: Chart, made: Drawn, near: number, dotsOnly: boolean?)
+  local c, sn = math.cos(made.yaw), math.sin(made.yaw)
+  local right = vector.create(c, -sn, 0)
+  local down = vector.create(sn * math.sin(made.pitch), c * math.sin(made.pitch), -math.cos(made.pitch))
+  local offset = -made.shift
+  if not dotsOnly then
+    Icon_View(its.gates, right, down, offset, made.scale, 1)
+    Icon_View(its.stalks, right, down, offset, made.scale, 1)
+    Icon_View(its.edge, right, down, offset, made.scale, 1)
+  end
+  for _, group in its.dots do
+    Icon_View(group.icon, right, down, offset, made.scale, its.dot * swollen(near) / near)
+  end
+  made.near = near
+end
+
+-- ('round' and 'reach': a sphere to leave room for, round a system and
+-- so many light years out from it, for a hull with a jump drive; 0 and
+-- 0 for none.)
+-- ('near': how near the map is looked at, for the size of the dots.)
+local function make(galaxy: Galaxy.Galaxy, its: Chart, width: number, height: number, round: number, reach: number, near: number): Drawn
+  local systems = galaxy.systems
+  local middle = its.middle
+  -- (as it is looked at: every system, and the place on the plane under
+  -- it, and the room all of that takes. This is done again for every
+  -- frame the map is turned in, so it is done plainly: what 'seen' does,
+  -- with the turn and the tilt worked out once.)
+  local c, sn = math.cos(yaw), math.sin(yaw)
+  local slant, rise = math.sin(pitch), math.cos(pitch)
+  local low, high = vector.create(math.huge, math.huge), vector.create(-math.huge, -math.huge)
+  local over: { vector } = table.create(#systems)
+  for id, system in systems do
+    local dx, dy = system.x - middle.x, system.y - middle.y
+    local across, down = dx * c - dy * sn, (dx * sn + dy * c) * slant
+    local above = vector.create(across, down - system.z * rise)
+    over[id] = above
+    low, high = vector.min(low, above), vector.max(high, above)
+    if down < low.y or down > high.y then
+      local below = vector.create(across, down)
+      low, high = vector.min(low, below), vector.max(high, below)
+    end
+  end
+  -- (and the edge of the plane; and the sphere, which is a circle
+  -- however it is looked at)
+  for _, corner in its.corners do
     local p = seen(corner.x, corner.y, 0, middle, yaw, pitch)
     low, high = vector.min(low, p), vector.max(high, p)
   end
@@ -282,52 +359,32 @@ local function make(galaxy: Galaxy.Galaxy, epoch: number, width: number, height:
   end
   local scale = math.min((width - 2 * MARGIN) / math.max(1e-3, high.x - low.x), (height - 2 * MARGIN) / math.max(1e-3, high.y - low.y))
   local shift = (low + high) / 2 * scale
-  local at: { vector } = {}
-  for id in systems do
-    at[id] = over[id] * scale - shift
-  end
-  local stalks = Icon_Create()
-  for id, system in systems do
-    if math.abs(system.z) > 0.05 and vector.magnitude(over[id] - under[id]) * scale > 1.5 then
-      Icon_AddGlyph(stalks, Glyph_Line(at[id], under[id] * scale - shift, 1, 1))
-    end
-  end
-  for index, corner in corners do
-    local following = corners[index % 4 + 1]
-    Icon_AddGlyph(stalks, Glyph_Line(seen(corner.x, corner.y, 0, middle, yaw, pitch) * scale - shift,
-      seen(following.x, following.y, 0, middle, yaw, pitch) * scale - shift, 1, 1))
-  end
-  local gates = Icon_Create()
-  for id, system in systems do
-    for _, neighbor in system.neighbors do
-      if neighbor > id then
-        Icon_AddGlyph(gates, Glyph_Line(at[id], at[neighbor], 1, 1))
-      end
-    end
-  end
-  -- A dot a system, smaller as there are more.
-  local dot = if #systems > 1200 then 1.4 elseif #systems > 150 then 2 elseif #systems > 40 then 2.6 else 3.4
-  local dots = dotted(systems, at, dot, near, bySecurity)
+  local at: { vector } = table.create(#systems)
   -- Where the regions' names go, and the constellations'.
-  local regionsAt: { [number]: vector } = {}
-  local constellationsAt: { [number]: vector } = {}
-  local regionCount: { [number]: number } = {}
-  local constellationCount: { [number]: number } = {}
+  local regions, constellations = #galaxy.regions, #galaxy.constellations
+  local regionsAt: { [number]: vector } = table.create(regions, vector.zero)
+  local constellationsAt: { [number]: vector } = table.create(constellations, vector.zero)
+  local regionCount: { number } = table.create(regions, 0)
+  local constellationCount: { number } = table.create(constellations, 0)
   for id, system in systems do
-    regionsAt[system.region] = (regionsAt[system.region] or vector.zero) + at[id]
-    regionCount[system.region] = (regionCount[system.region] or 0) + 1
-    constellationsAt[system.constellation] = (constellationsAt[system.constellation] or vector.zero) + at[id]
-    constellationCount[system.constellation] = (constellationCount[system.constellation] or 0) + 1
+    local p = over[id] * scale - shift
+    at[id] = p
+    local region, constellation = system.region, system.constellation
+    regionsAt[region] += p
+    regionCount[region] += 1
+    constellationsAt[constellation] += p
+    constellationCount[constellation] += 1
   end
-  for id, count in regionCount do
-    regionsAt[id] /= count
+  for id = 1, regions do
+    regionsAt[id] = if regionCount[id] > 0 then regionsAt[id] / regionCount[id] else nil :: any
   end
-  for id, count in constellationCount do
-    constellationsAt[id] /= count
+  for id = 1, constellations do
+    constellationsAt[id] = if constellationCount[id] > 0 then constellationsAt[id] / constellationCount[id] else nil :: any
   end
-  return { epoch = epoch, width = width, height = height, yaw = yaw, pitch = pitch, scale = scale, middle = middle, shift = shift,
-    round = round, reach = reach, at = at, gates = gates, stalks = stalks, dot = dot, near = near, bySecurity = bySecurity, dots = dots,
-    regionsAt = regionsAt, constellationsAt = constellationsAt }
+  local made: Drawn = { epoch = its.epoch, width = width, height = height, yaw = yaw, pitch = pitch, scale = scale, middle = middle,
+    shift = shift, round = round, reach = reach, at = at, near = near, regionsAt = regionsAt, constellationsAt = constellationsAt }
+  view(its, made, near)
+  return made
 end
 
 -- The part of a window the map takes up when it is open: where it is,
@@ -420,8 +477,14 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   local reaching = Core.Query.JumpDrive(game)
   local round = if reaching then here else 0
   local reach = if reaching then reaching.range else 0
-  if kept ~= nil and (kept.epoch ~= session.epoch or #kept.at ~= #systems) then
+  local had = chart
+  local its: Chart
+  if had == nil or had.epoch ~= session.epoch or had.count ~= #systems then
+    its = charted(galaxy, session.epoch, bySecurity)
+    chart = its
     kept = nil
+  else
+    its = had
   end
   if kept == nil then
     -- (another galaxy: all of it, to begin with)
@@ -429,7 +492,7 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   end
   if kept == nil or kept.width ~= mapW or kept.height ~= mapH
     or kept.yaw ~= yaw or kept.pitch ~= pitch or kept.round ~= round or kept.reach ~= reach then
-    made = make(galaxy, session.epoch, mapW, mapH, round, reach, zoom)
+    made = make(galaxy, its, mapW, mapH, round, reach, zoom)
     drawn = made
     if systems[picked] == nil then
       picked = 0
@@ -556,9 +619,11 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
     focus, look, hold = nil, nil, nil
     pan = vector.zero
   end
-  if math.abs(zoom / made.near - 1) > 0.08 or (zoom == zoomTo and made.near ~= zoom) or made.bySecurity ~= bySecurity then
-    made.dots = dotted(systems, made.at, made.dot, zoom, bySecurity)
-    made.near, made.bySecurity = zoom, bySecurity
+  if its.bySecurity ~= bySecurity then
+    its.dots, its.bySecurity = dotted(systems, its.middle, bySecurity), bySecurity
+    view(its, made, zoom, true)
+  elseif made.near ~= zoom then
+    view(its, made, zoom, true)
   end
   -- Where things are in the window: the map's own middle, and a system.
   local origin = centre - pan * zoom
@@ -639,10 +704,20 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
       end
     end
   end
-  Icon_Draw(made.stalks, origin, zoom, Im.DIM, 0.22)
-  Icon_Draw(made.gates, origin, zoom, Im.DIM, 0.35)
-  for _, group in made.dots do
-    Icon_Draw(group.icon, origin, zoom, group.color, 0.95)
+  -- (of the chart, what comes within the map: with the map looked at
+  -- near that is little of it, and the rest costs nothing)
+  local from, to = vector.create(mapX - 8, mapY - 8), vector.create(mapX + mapW + 8, mapY + mapH + 8)
+  -- (every glyph has a glow to it, and thousands of them in sight at
+  -- once add up to a white cloud: past CROWD of them they are fainter)
+  local faint = if count > CROWD then math.max(0.12, (CROWD / count) ^ 1.2) else 1
+  Icon_DrawWithin(its.edge, origin, zoom, Im.DIM, 0.22, from, to)
+  -- (looked at from straight over, a stalk is a point under its system)
+  if math.cos(pitch) > 0.02 then
+    Icon_DrawWithin(its.stalks, origin, zoom, Im.DIM, 0.22 * faint, from, to)
+  end
+  Icon_DrawWithin(its.gates, origin, zoom, Im.DIM, 0.35 * faint, from, to)
+  for _, group in its.dots do
+    Icon_DrawWithin(group.icon, origin, zoom, group.color, 0.95 * math.sqrt(faint), from, to)
   end
 
   local route = Session.Route(session)
