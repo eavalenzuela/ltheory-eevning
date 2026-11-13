@@ -649,7 +649,7 @@ local function drawBoosters(session: Session.Session, x: number, foot: number)
   if rows == 0 then
     return
   end
-  local width, height = 276, 30 + rows * 22
+  local width, height = 316, 30 + rows * 22
   local y = foot - height
   Im.Panel(x, y, width, height)
   Im.Heading("BOOSTERS", x + 10, y + 7, 13, Im.DIM)
@@ -662,8 +662,8 @@ local function drawBoosters(session: Session.Session, x: number, foot: number)
       -- (how much of its time is left, as a bar and in figures: the bar
       -- in the colour of a warning for one that sat badly, whose ill
       -- effect is at work too)
-      Im.Fill(x + 108, line + 6, 90, 5, Im.DIM, 0.25)
-      Im.Fill(x + 108, line + 6, 90 * math.clamp(row.left / math.max(row.whole, Boosters.SECONDS), 0, 1), 5,
+      Im.Fill(x + 148, line + 6, 90, 5, Im.DIM, 0.25)
+      Im.Fill(x + 148, line + 6, 90 * math.clamp(row.left / math.max(row.whole, Boosters.SECONDS), 0, 1), 5,
         if row.wrong then Im.WARN else Im.ACCENT, 0.95)
       Im.TextRight(Format.Duration(row.left), x + width - 10, line, 12, Im.DIM)
       line += 22
@@ -673,7 +673,7 @@ local function drawBoosters(session: Session.Session, x: number, foot: number)
     if shown < rows then
       shown += 1
       Info.Name(row.booster.id, row.booster.name, x + 10, line, 13, if row.refused then Im.DIM else Im.TEXT)
-      Im.Text(`x{row.quantity}`, x + 108, line, 12, Im.DIM)
+      Im.Text(`x{row.quantity}`, x + 148, line, 12, Im.DIM)
       local take: State.Command = { kind = "TakeBooster", actor = 0, item = row.item }
       if Im.Button("Take", x + width - 74, line - 2, 64, 20, row.refused == nil,
         `Booster:{string.sub(row.booster.id, #"booster." + 1)}`) then

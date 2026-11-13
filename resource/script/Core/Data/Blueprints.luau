@@ -280,11 +280,19 @@ add(Planets.CENTRE.id, Planets.CENTRE.name, MIX.ship, Planets.CENTRE.basePrice, 
 
 -- A booster is made of its gas, and of silicon to hold it: nothing a
 -- station sells is the gas, so it is made by whoever went and got it.
+-- A mild one takes half of both, and a strong one is made of two of
+-- the plain one and as much of both again.
 for _, booster in Boosters.list do
+  local share = if booster.strength == Boosters.MILD then 2 else 1
+  local materials: { { type: string, quantity: number } } = { { type = booster.gas, quantity = Boosters.GAS // share },
+    { type = "mineral.silicon", quantity = Boosters.SILICON // share } }
+  if booster.strength == Boosters.STRONG then
+    table.insert(materials, 1, { type = Boosters.Plain(booster).id, quantity = Boosters.DOSES })
+  end
   local blueprint: Blueprint = {
     id = "blueprint." .. booster.id, product = booster.id, name = booster.name .. " Booster Blueprint", perRun = 1, seconds = 300,
-    materials = { { type = booster.gas, quantity = Boosters.GAS }, { type = "mineral.silicon", quantity = Boosters.SILICON } },
-    basePrice = Boosters.PRICE * 10,
+    materials = materials,
+    basePrice = booster.price * 10,
   }
   table.insert(Blueprints.list, blueprint)
   Blueprints.byId[blueprint.id] = blueprint

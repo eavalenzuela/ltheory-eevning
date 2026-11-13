@@ -52,7 +52,7 @@ local function give(game: Core.Game, type: string, quantity: number?): State.Ite
   return Items.Add(game.state, type, quantity or 1, game.state.player.home, "hangar")
 end
 
-suite:Case("there are two boosters of each of three kinds, each made of its kind's gas and of nothing a station sells", function(t)
+suite:Case("there are two boosters of each of three kinds, in three strengths, each made of its kind's gas and of nothing a station sells", function(t)
   local kinds = { 0, 0, 0 }
   local gases: { [number]: string } = {}
   for _, booster in Boosters.list do
@@ -74,18 +74,29 @@ suite:Case("there are two boosters of each of three kinds, each made of its kind
       t.eq(table.find(booster.gives, modifier) ~= nil, good, `{booster.id}: {modifier.attribute}`)
       t.eq(table.find(booster.takes, modifier) ~= nil, not good, `{booster.id}: {modifier.attribute}`)
     end
-    t.ok(better >= 1 and worse == 1, `{booster.id} gives {better} and takes {worse}`)
+    -- (a mild one takes nothing: it never sits badly)
+    local mild = booster.strength == Boosters.MILD
+    t.ok(better >= 1 and worse == (if mild then 0 else 1), `{booster.id} gives {better} and takes {worse}`)
+    t.eq({ mild, booster.wrong == 0, booster.cost == "" }, { mild, mild, mild })
     t.eq(#booster.gives + #booster.takes, #booster.passive)
     -- An item nobody sells, with a sheet, and drawings that anybody does.
     local info = Types.Info(booster.id)
-    t.eq({ info.category, info.scarce, info.basePrice } :: { any }, { "goods", true, Boosters.PRICE } :: { any })
+    t.eq({ info.category, info.scarce, info.basePrice } :: { any }, { "goods", true, booster.price } :: { any })
     t.eq(assert(Facts.Of(booster.id)).kind, "Booster")
     local blueprint = assert(Blueprints.byProduct[booster.id])
-    t.eq({ blueprint.materials[1].type, blueprint.materials[1].quantity, blueprint.invented } :: { any },
-      { booster.gas, Boosters.GAS, nil } :: { any })
+    t.eq(blueprint.invented, nil)
+    if booster.strength == Boosters.STRONG then
+      -- (two of the plain one, and a plain one's makings again)
+      t.eq({ blueprint.materials[1].type, blueprint.materials[1].quantity, blueprint.materials[2].type, blueprint.materials[2].quantity } :: { any },
+        { Boosters.Plain(booster).id, Boosters.DOSES, booster.gas, Boosters.GAS } :: { any })
+    else
+      t.eq({ blueprint.materials[1].type, blueprint.materials[1].quantity } :: { any },
+        { booster.gas, if mild then Boosters.GAS // 2 else Boosters.GAS } :: { any })
+    end
     t.eq(Types.Info(blueprint.id).scarce, nil)
   end
-  t.eq(kinds, { 2, 2, 2 })
+  t.eq(kinds, { 6, 6, 6 })
+  t.eq(#Boosters.list, 18)
   t.ok(gases[1] ~= gases[2] and gases[2] ~= gases[3] and gases[1] ~= gases[3])
   for _, gas in Ores.gases do
     local info = Types.Info(gas.id)
@@ -233,6 +244,75 @@ suite:Case("a booster sits badly one time in two, less often with Tolerance, and
   file.state.boosters[1].wrong = nil
   local old, oldLength = Codec.Encode(file)
   t.eq(Core.Load(old, oldLength).state.boosters[1].wrong, true)
+end)
+
+suite:Case("a mild booster does half the good and never sits badly; a strong one does half as much again, sits badly oftener and takes more when it does", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local ship = state.player.ship
+  local before = Items.ShipStats(state, ship)
+  local mild, plain, strong = Boosters.byId["booster.thickskin.mild"], Boosters.byId["booster.thickskin"], Boosters.byId["booster.thickskin.strong"]
+  t.eq({ mild.name, plain.name, strong.name }, { "Mild Thickskin", "Thickskin", "Strong Thickskin" })
+  t.eq({ mild.strength, plain.strength, strong.strength }, { Boosters.MILD, Boosters.PLAIN, Boosters.STRONG })
+  t.eq({ Types.Info(mild.id).name, Boosters.Plain(strong).id }, { "Mild Thickskin Booster", plain.id })
+  t.eq({ mild.note, strong.note, strong.cost, mild.cost }, { "7.5% more armor.", "22.5% more armor.", "12% less speed.", "" })
+  -- What each is in the chances: never, one time in two, and oftener; Tolerance helps where there is anything to help.
+  t.eq({ select(2, Boosting.Odds(state, mild)), select(2, Boosting.Odds(state, plain)), select(2, Boosting.Odds(state)) }, { 0, 0.5, 0.5 })
+  t.near(select(2, Boosting.Odds(state, strong)), 0.65, 1e-9)
+  state.skills.tolerance = 5
+  t.eq(select(2, Boosting.Odds(state, mild)), 0)
+  t.near(select(2, Boosting.Odds(state, strong)), 0.65 - 5 * Boosters.TOLERANCE, 1e-9)
+  state.skills.tolerance = 0
+
+  -- Sixty doses of each: what each does to the ship, and how often it sat badly.
+  local function doses(booster: Boosters.Booster, good: number, ill: number): number
+    local bad = 0
+    for _ = 1, 60 do
+      t.ok((submit(game, { kind = "TakeBooster", actor = 0, item = give(game, booster.id).id })))
+      local boosted = state.boosters[1]
+      local now = Items.ShipStats(state, ship)
+      t.near(now.armor, before.armor * good, 1e-6)
+      t.near(now.maxVelocity, before.maxVelocity * (if boosted.wrong then ill else 1), 1e-6)
+      bad += if boosted.wrong then 1 else 0
+      state.boosters = {}
+    end
+    return bad
+  end
+  local gently, hard = doses(mild, 1.075, 1), doses(strong, 1.225, 0.88)
+  print(string.format("     strengths: of 60 doses, %d mild ones sat badly and %d strong ones", gently, hard))
+  t.eq(gently, 0)
+  t.ok(hard >= 28 and hard <= 50, `{hard} of 60 strong doses sat badly`)
+
+  -- One of a kind at a time, whatever the strength.
+  t.ok((submit(game, { kind = "TakeBooster", actor = 0, item = give(game, mild.id).id })))
+  t.eq(refused(game, { kind = "TakeBooster", actor = 0, item = give(game, strong.id).id }),
+    "Mild Thickskin is still at work: one of a kind at a time")
+  t.eq(refused(game, { kind = "TakeBooster", actor = 0, item = give(game, "booster.halo.strong").id }),
+    "Mild Thickskin is still at work: one of a kind at a time")
+  -- And what is at work is in the save.
+  local data, length = Core.Save(game)
+  t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
+end)
+
+suite:Case("a strong booster is built of two plain ones and a plain one's makings; a mild one of half a plain one's", function(t)
+  for _, booster in Boosters.list do
+    local blueprint = Blueprints.byProduct[booster.id]
+    local cost = 0
+    for _, material in blueprint.materials do
+      cost += material.quantity * Types.Info(material.type).basePrice
+    end
+    local plain = Blueprints.byProduct[Boosters.Plain(booster).id]
+    local makings = 0
+    for _, material in plain.materials do
+      makings += material.quantity * Types.Info(material.type).basePrice
+    end
+    if booster.strength == Boosters.STRONG then
+      t.eq(cost, makings + Boosters.DOSES * Types.Info(Boosters.Plain(booster).id).basePrice, booster.id)
+      t.ok(Types.Info(booster.id).basePrice > 2 * Types.Info(Boosters.Plain(booster).id).basePrice, "a strong one should be worth more than what went into it")
+    elseif booster.strength == Boosters.MILD then
+      t.eq({ #blueprint.materials, cost }, { 2, makings / 2 })
+    end
+  end
 end)
 
 return suite

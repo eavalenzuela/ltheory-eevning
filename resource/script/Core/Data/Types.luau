@@ -145,7 +145,7 @@ for _, gas in Ores.gases do
 end
 for _, booster in Boosters.list do
   byId[booster.id] = { id = booster.id, name = booster.name .. " Booster", category = "goods", volume = Boosters.VOLUME,
-    basePrice = Boosters.PRICE, scarce = true }
+    basePrice = booster.price, scarce = true }
 end
 
 -- Every type id, in order: the order markets list them in.

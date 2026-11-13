@@ -12,29 +12,61 @@
 -- wait for it to wear off before taking another of that kind
 -- (Character/Boosters has the rules).
 --
+-- Each comes in three strengths (Boosters.STRENGTHS). The plain one is
+-- as above. A mild one does half the good and never sits badly: it is
+-- made of half of everything. A strong one does half as much good
+-- again, sits badly oftener, and takes half as much again when it does:
+-- it is made of two of the plain one and as much gas and silicon again,
+-- so somebody has to have made those first.
+--
 -- Two skills are for them (Data/Skills): Pharmacology makes one last a
 -- fifth longer a level, and Tolerance makes its ill effect strike less
--- often, to one time in ten.
---
--- (Not yet: boosters of other strengths.)
+-- often, to one time in ten for a plain one.
 
 local Modules = require("@lt/Core/Data/Modules")
 
 export type Booster = {
   id: string,
   name: string,
+  -- The booster it is a strength of ("redline"), and which strength: 1
+  -- mild, 2 plain, 3 strong (Boosters.STRENGTHS).
+  family: string,
+  strength: number,
   kind: number,           -- 1 to 3: the gunner's, the hull's, the ship's
   gas: string,            -- what it is made from (Data/Ores)
   gives: { Modules.Modifier },  -- the good it does,
   takes: { Modules.Modifier },  -- and what it costs when it sits badly;
   passive: { Modules.Modifier },  -- the two together
   note: string,           -- what it gives
-  cost: string,           -- what it may take
+  cost: string,           -- what it may take ("" for one that never sits badly)
+  wrong: number,          -- the chance that it sits badly, before any skill
+  price: number,
 }
 
--- (as it is written below: 'passive' is worked out)
-type Written = { id: string, name: string, kind: number, gas: string, gives: { Modules.Modifier }, takes: { Modules.Modifier },
-  note: string, cost: string }
+-- A strength: what it is called, how much of the plain booster's good
+-- it does and how much of its ill, the chance that it sits badly, and
+-- what one is listed at.
+export type Strength = { name: string, suffix: string, good: number, ill: number, wrong: number, price: number }
+
+-- (as it is written below, for a strength: 'k' scales the good it does
+-- and 'c' what it costs)
+type Written = { family: string, name: string, kind: number, gas: string,
+  make: (k: number, c: number) -> ({ Modules.Modifier }, { Modules.Modifier }, string, string) }
+
+-- A factor that is so much more than one, or so much less: to four
+-- places, so that a tenth more is 1.1 and seven hundredths less 0.93,
+-- as they are written.
+local function more(share: number): number
+  return math.floor((1 + share) * 10000 + 0.5) / 10000
+end
+local function less(share: number): number
+  return math.floor((1 - share) * 10000 + 0.5) / 10000
+end
+
+-- A share as it is said: "10%", "7.5%".
+local function pct(value: number): string
+  return (string.gsub(string.format("%.1f", value), "%.0$", "")) .. "%"
+end
 
 local FAMILIES = { "laser", "projectile", "hybrid", "missile" }
 local TURRETS = { "laser", "projectile", "hybrid" }
@@ -81,38 +113,73 @@ Boosters.TOLERANCE = 0.08
 Boosters.VOLUME = 0.2
 Boosters.PRICE = 18000
 -- What a run of a booster's blueprint takes of its gas, and of silicon
--- (Data/Blueprints).
+-- (Data/Blueprints); and of the plain booster, for a strong one.
 Boosters.GAS = 40
 Boosters.SILICON = 150
+Boosters.DOSES = 2
+
+-- The strengths, in order. (The plain one's figures are the ones above.
+-- The others are first figures, mine.)
+Boosters.MILD, Boosters.PLAIN, Boosters.STRONG = 1, 2, 3
+Boosters.STRENGTHS = {
+  { name = "Mild", suffix = ".mild", good = 0.5, ill = 0, wrong = 0, price = Boosters.PRICE // 2 },
+  { name = "", suffix = "", good = 1, ill = 1, wrong = Boosters.WRONG, price = Boosters.PRICE },
+  -- (two plain ones and a plain one's makings are in it, at the share of
+  -- its price that anything's makings are: Data/Blueprints)
+  { name = "Strong", suffix = ".strong", good = 1.5, ill = 1.5, wrong = Boosters.WRONG + 0.15, price = Boosters.PRICE * 13 // 3 },
+} :: { Strength }
 
 local written: { Written } = {
-  { id = "booster.redline", name = "Redline", kind = 1, gas = "gas.amber",
-    gives = weapons(FAMILIES, "damageMultiplier", 1.10), takes = all(ship("shield", 0.90)),
-    note = "Every weapon does 10% more damage.", cost = "10% less shield." },
-  { id = "booster.deadeye", name = "Deadeye", kind = 1, gas = "gas.amber",
-    gives = all(weapons(TURRETS, "tracking", 1.25), weapons(TURRETS, "optimal", 1.15)), takes = all(ship("maxVelocity", 0.93)),
-    note = "Turrets track 25% better and reach 15% further.", cost = "7% less speed." },
-  { id = "booster.thickskin", name = "Thickskin", kind = 2, gas = "gas.verdant",
-    gives = all(ship("armor", 1.15)), takes = all(ship("maxVelocity", 0.92)),
-    note = "15% more armor.", cost = "8% less speed." },
-  { id = "booster.halo", name = "Halo", kind = 2, gas = "gas.verdant",
-    gives = all(ship("shield", 1.15), ship("shieldRecharge", 0.88)), takes = all(ship("capacitor", 0.92)),
-    note = "15% more shield, and it comes back 12% sooner.", cost = "8% less capacitor." },
-  { id = "booster.longburn", name = "Longburn", kind = 3, gas = "gas.azure",
-    gives = all(ship("capacitorRecharge", 0.80)), takes = all(ship("lockRange", 0.85)),
-    note = "The capacitor refills 20% sooner.", cost = "15% less targeting range." },
-  { id = "booster.slipstream", name = "Slipstream", kind = 3, gas = "gas.azure",
-    gives = all(ship("maxVelocity", 1.15), ship("inertia", 0.90)), takes = all(ship("armor", 0.92)),
-    note = "15% more speed, and 10% quicker to turn.", cost = "8% less armor." },
+  { family = "redline", name = "Redline", kind = 1, gas = "gas.amber", make = function(k: number, c: number)
+    return weapons(FAMILIES, "damageMultiplier", more(0.10 * k)), all(ship("shield", less(0.10 * c))),
+      `Every weapon does {pct(10 * k)} more damage.`, `{pct(10 * c)} less shield.`
+  end },
+  { family = "deadeye", name = "Deadeye", kind = 1, gas = "gas.amber", make = function(k: number, c: number)
+    return all(weapons(TURRETS, "tracking", more(0.25 * k)), weapons(TURRETS, "optimal", more(0.15 * k))), all(ship("maxVelocity", less(0.07 * c))),
+      `Turrets track {pct(25 * k)} better and reach {pct(15 * k)} further.`, `{pct(7 * c)} less speed.`
+  end },
+  { family = "thickskin", name = "Thickskin", kind = 2, gas = "gas.verdant", make = function(k: number, c: number)
+    return all(ship("armor", more(0.15 * k))), all(ship("maxVelocity", less(0.08 * c))),
+      `{pct(15 * k)} more armor.`, `{pct(8 * c)} less speed.`
+  end },
+  { family = "halo", name = "Halo", kind = 2, gas = "gas.verdant", make = function(k: number, c: number)
+    return all(ship("shield", more(0.15 * k)), ship("shieldRecharge", less(0.12 * k))), all(ship("capacitor", less(0.08 * c))),
+      `{pct(15 * k)} more shield, and it comes back {pct(12 * k)} sooner.`, `{pct(8 * c)} less capacitor.`
+  end },
+  { family = "longburn", name = "Longburn", kind = 3, gas = "gas.azure", make = function(k: number, c: number)
+    return all(ship("capacitorRecharge", less(0.20 * k))), all(ship("lockRange", less(0.15 * c))),
+      `The capacitor refills {pct(20 * k)} sooner.`, `{pct(15 * c)} less targeting range.`
+  end },
+  { family = "slipstream", name = "Slipstream", kind = 3, gas = "gas.azure", make = function(k: number, c: number)
+    return all(ship("maxVelocity", more(0.15 * k)), ship("inertia", less(0.10 * k))), all(ship("armor", less(0.08 * c))),
+      `{pct(15 * k)} more speed, and {pct(10 * k)} quicker to turn.`, `{pct(8 * c)} less armor.`
+  end },
 }
 
+-- Every booster, family by family: the plain one first (as the list
+-- was before there were strengths), then the mild and the strong.
 Boosters.list = {} :: { Booster }
 Boosters.byId = {} :: { [string]: Booster }
 for _, each in written do
-  local booster: Booster = { id = each.id, name = each.name, kind = each.kind, gas = each.gas, gives = each.gives, takes = each.takes,
-    passive = all(each.gives, each.takes), note = each.note, cost = each.cost }
-  table.insert(Boosters.list, booster)
-  Boosters.byId[booster.id] = booster
+  for _, strength in { Boosters.PLAIN, Boosters.MILD, Boosters.STRONG } do
+    local how = Boosters.STRENGTHS[strength]
+    local gives, takes, note, cost = each.make(how.good, how.ill)
+    if how.ill == 0 then
+      takes, cost = {}, ""
+    end
+    local booster: Booster = {
+      id = "booster." .. each.family .. how.suffix, name = if how.name ~= "" then `{how.name} {each.name}` else each.name,
+      family = each.family, strength = strength, kind = each.kind, gas = each.gas, gives = gives, takes = takes,
+      passive = all(gives, takes), note = note, cost = cost, wrong = how.wrong, price = how.price,
+    }
+    table.insert(Boosters.list, booster)
+    Boosters.byId[booster.id] = booster
+  end
+end
+
+-- The plain booster a strong one is made of.
+function Boosters.Plain(booster: Booster): Booster
+  return Boosters.byId["booster." .. booster.family]
 end
 
 return Boosters
