@@ -424,7 +424,7 @@ function Starbases.Apply(state: State.State, command: State.Command, events: { E
     for _, wingId in state.fleetIds do
       local wing = state.fleet[wingId]
       local at = table.find(wing.stops, id)
-      if wing.base == id or wing.post == id or at then
+      if wing.base == id or wing.post == id or at or table.find(wing.drops, id) then
         wing.order = "stay"
         wing.base = if wing.base == id then state.player.home else wing.base
         wing.post = if wing.post == id then 0 else wing.post
@@ -433,6 +433,7 @@ function Starbases.Apply(state: State.State, command: State.Command, events: { E
           at = table.find(wing.stops, id)
         end
         wing.leg = 0
+        wing.drops, wing.turn = {}, 0
         table.insert(events, { kind = "FleetUnposted", pilot = wing.id, name = wing.name, station = id })
       end
     end

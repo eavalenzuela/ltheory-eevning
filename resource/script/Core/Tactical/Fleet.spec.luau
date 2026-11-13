@@ -1954,4 +1954,63 @@ suite:Case("a fleet is in the save, and an older save has none", function(t)
   t.eq(Core.Hash(opened), Core.Hash(fresh))
 end)
 
+suite:Case("a round that carries to several stations takes a load to each in turn", function(t)
+  local game, second = docked()
+  local state = game.state
+  local home = state.player.home
+  local wing = hired(game, second)
+  local market, plain = others(game, 1)
+  -- A station is carried to once, is not where the goods are, and there are only so many.
+  local function haul(drops: { number }): State.Command
+    return { kind = "FleetOrder", actor = 0, what = "haul", pilot = wing.id, target = market, type = "ore", drops = drops }
+  end
+  t.eq(refused(game, haul({ market })), "a station is carried to once a round, and is not one collected at")
+  t.eq(refused(game, haul({ home })), "a station is carried to once a round, and is not one collected at")
+  t.eq(refused(game, haul({ plain, plain })), "a station is carried to once a round, and is not one collected at")
+  t.eq(refused(game, haul({ plain, 1, 2, 3 })), `a round carries to {Fleet.DROPS} stations, at most`)
+  t.eq(refused(game, haul({ 999999 })), "that is not a station to carry to")
+  -- More ore at home than three holds take, and the round set: to the market, and to the other station as well.
+  Items.Add(state, "ore.ferrite", 500000, home, "hangar")
+  t.ok((submit(game, haul({ plain }))))
+  t.eq({ wing.order, wing.base, #wing.drops, wing.drops[1], wing.turn, Fleet.Drop(wing) } :: { any },
+    { "haul", market, 1, plain, 0, market } :: { any })
+  t.eq(Core.Query.Fleet(game)[1].drops, 2)
+  Core.TakeEvents(game)
+  local went: { number } = {}
+  for _ = 1, 20000 do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      if event.kind == "HaulDelivered" then
+        table.insert(went, event.station)
+        t.ok(event.units > 0)
+      end
+    end
+    if #went >= 3 then
+      break
+    end
+  end
+  -- A load to each in turn, the station named first, and round again.
+  t.eq(went, { market, plain, market })
+  t.ok(count(game, market, "hangar", "ore.ferrite") > count(game, plain, "hangar", "ore.ferrite")
+    and count(game, plain, "hangar", "ore.ferrite") > 0, "the ore is not at the two stations as two loads and one")
+  t.eq(Fleet.Drop(wing), plain)
+  -- It is in the save; and a save from before there were such rounds opens with none.
+  local data, length = Core.Save(game)
+  t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 60
+  for _, each in file.state.fleet do
+    each.drops, each.turn = nil, nil
+  end
+  local old, oldLength = Codec.Encode(file)
+  local loaded = Core.Load(old, oldLength)
+  t.eq({ #loaded.state.fleet[wing.id].drops, loaded.state.fleet[wing.id].turn }, { 0, 0 })
+  -- A plain order to haul afterwards carries to the one station again.
+  local other, ship = docked()
+  local hand = hired(other, ship)
+  hand.drops, hand.turn = { plain }, 1
+  t.ok((submit(other, { kind = "FleetOrder", actor = 0, what = "haul", pilot = hand.id, target = market, type = "ore" })))
+  t.eq({ #hand.drops, hand.turn, Fleet.Drop(hand) }, { 0, 0, market })
+end)
+
 return suite

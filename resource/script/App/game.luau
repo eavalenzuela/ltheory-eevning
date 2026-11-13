@@ -1835,13 +1835,15 @@ end
 -- whether they are told to sell it, and whether somebody is after them
 -- with the player elsewhere; and, for one set to haul, how many
 -- stations their round collects at; and, for one sent to buy, how many
--- are still to be bought. "" and 0 for nobody.
-function Debug.Crew(n: number): (string, number, number, number, number, boolean, boolean, number, number)
+-- are still to be bought; how many stations a haul carries to, a load
+-- to each in turn; and the word for how they stand toward the pilot
+-- ("steady", "devoted" and so on). "" and 0 for nobody.
+function Debug.Crew(n: number): (string, number, number, number, number, boolean, boolean, number, number, number, string)
   local row = Core.Query.Fleet(session.game)[n]
   if row == nil then
-    return "", 0, 0, 0, 0, false, false, 0, 0
+    return "", 0, 0, 0, 0, false, false, 0, 0, 0, ""
   end
-  return row.doing, row.hauled, row.experience, row.skill, row.earned, row.sells, row.hunted, #row.stops, row.need
+  return row.doing, row.hauled, row.experience, row.skill, row.earned, row.sells, row.hunted, #row.stops, row.need, row.drops, row.mood
 end
 
 -- A cheat, for a round of several stations to have something to

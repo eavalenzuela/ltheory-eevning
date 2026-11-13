@@ -224,6 +224,8 @@ end
 Fleet.CARGO = { "ore", "mineral", "moon", "planetary", "component", "all" }
 -- The stations a haul can collect at, the one the ship is docked at among them.
 Fleet.STOPS = 5
+-- And how many stations it carries to, at most: a load to each in turn.
+Fleet.DROPS = 4
 -- How many jumps off a market can be, to be offered as a place to send
 -- a pilot to buy at. (They will go further, sent.)
 Fleet.SHOPS = 5
@@ -497,6 +499,22 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
       elseif #Galaxy.Route(state.galaxy, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, to.id)) == 0 then
         return false, "there is no way there"
       end
+      -- (and the further stations to carry to, a load to each in turn)
+      local drops: { number } = command.drops or {}
+      if #drops + 1 > Fleet.DROPS then
+        return false, `a round carries to {Fleet.DROPS} stations, at most`
+      end
+      for index, id in drops do
+        local drop = Space.Object(state, id)
+        local built = state.starbases[id]
+        if drop == nil or drop.kind ~= "station" or (built ~= nil and built.ready > state.tick) then
+          return false, "that is not a station to carry to"
+        elseif id == to.id or id == theirs.docked or table.find(drops, id) ~= index or table.find(command.stops or {}, id) then
+          return false, "a station is carried to once a round, and is not one collected at"
+        elseif #Galaxy.Route(state.galaxy, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, id)) == 0 then
+          return false, "there is no way there"
+        end
+      end
       -- (and the further stations to collect at, if it is a round of several)
       local stops: { number } = command.stops or {}
       if #stops + 1 > Fleet.STOPS then
@@ -617,7 +635,7 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     Corporation.Spend(state, found.fee, "hiring", events)
     local wing: State.Wingman = { id = State.NewId(state), name = found.name, skill = found.skill, wage = found.wage,
       paid = state.tick, ship = 0, order = "follow", target = 0, post = 0, base = 0, hauled = 0, experience = 0,
-      stops = {}, leg = 0, want = "", need = 0, limit = 0, keep = 0, retry = 0,
+      stops = {}, leg = 0, drops = {}, turn = 0, want = "", need = 0, limit = 0, keep = 0, retry = 0,
       cargo = "", sell = false, earned = 0, ward = 0, alarm = false, loyalty = Fleet.LOYALTY.start }
     state.fleet[wing.id] = wing
     table.insert(state.fleetIds, wing.id)
@@ -672,6 +690,8 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     for _, id in further do
       table.insert(wing.stops, id)
     end
+    -- (and where else it is carried to: the first load to the station named)
+    wing.drops, wing.turn = table.clone(command.drops or {}), 0
     table.insert(events, { kind = "FleetOrdered", what = "haul", target = wing.base })
   elseif kind == "FleetOrder" and (command.what == "buy" or command.what == "stock") then
     -- To the market named, and back to the station their ship is docked
@@ -685,6 +705,7 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
     -- (a standing order works out what is missing each time it looks)
     wing.need, wing.keep, wing.retry = if standing then 0 else command.quantity :: number, if standing then command.quantity :: number else 0, 0
     wing.stops, wing.leg = {}, 0
+    wing.drops, wing.turn = {}, 0
     table.insert(events, { kind = "FleetOrdered", what = command.what, target = market, pilot = wing.id, name = wing.name,
       type = wing.want, quantity = command.quantity, price = wing.limit })
   elseif kind == "FleetOrder" then
@@ -907,6 +928,13 @@ local function stocked(state: State.State, station: number, kind: string): boole
   return false
 end
 
+-- Where a hauler's next load goes: the station it is all carried to,
+-- or, of a round that carries to several, the one whose turn it is.
+function Fleet.Drop(wing: State.Wingman): number
+  local turn = wing.turn % (1 + #wing.drops)
+  return if turn == 0 then wing.base else wing.drops[turn]
+end
+
 -- Where a pilot set to haul goes next, and why: the next station of
 -- their round, after the last one loaded at, that has something for
 -- them ("collect"), unless the hold is full; with none, the station it
@@ -930,7 +958,7 @@ function Fleet.HaulGoal(state: State.State, wing: State.Wingman, ship: State.Shi
     end
   end
   if carrying then
-    return wing.base, "deliver"
+    return Fleet.Drop(wing), "deliver"
   end
   return wing.stops[1] or wing.post, "wait"
 end
@@ -940,8 +968,8 @@ end
 -- carried to with it, and round again; and with nothing to carry
 -- anywhere, they wait at the first.
 local function carry(state: State.State, wing: State.Wingman, ship: State.Ship, events: { Event })
-  local to = Space.Object(state, wing.base)
-  if to == nil or #wing.stops == 0 or Space.Object(state, wing.stops[1]) == nil then
+  local to = Space.Object(state, Fleet.Drop(wing))
+  if to == nil or to.kind ~= "station" or #wing.stops == 0 or Space.Object(state, wing.stops[1]) == nil then
     wing.order = "stay"
     return
   end
@@ -954,6 +982,8 @@ local function carry(state: State.State, wing: State.Wingman, ship: State.Ship, 
         table.insert(events, { kind = "HaulDelivered", pilot = wing.id, name = wing.name, units = units, station = to.id, revenue = revenue })
         -- (a point of experience for every hundred cubic metres brought)
         learn(state, wing, volume // 100, events)
+        -- (and the next load is the next station's, of a round that carries to several)
+        wing.turn = (wing.turn + 1) % (1 + #wing.drops)
       end
       -- (and the round begins again)
       wing.leg = 0

@@ -1244,6 +1244,8 @@ local haulTo: { [number]: number } = {}
 -- And the further stations they would collect at on the way, in the
 -- order they were added (a round of several: Core/Tactical/Fleet).
 local haulAlso: { [number]: { number } } = {}
+-- (and the stations picked as more to carry to, by the pilot's id)
+local haulMore: { [number]: { number } } = {}
 local CARGO: { [string]: string } = { ore = "ore", mineral = "minerals", moon = "moon ore", planetary = "planetary", component = "components",
   all = "all goods" }
 
@@ -1382,7 +1384,7 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
         haulWhat[row.id] = what % #Fleet.CARGO + 1
       end
       local target = targets[to]
-      if Im.Button(if target then shorten(`to {target.name}`, 20) else "nowhere to carry to", right + 116, line + 42, 144, 24, #targets > 1,
+      if Im.Button(if target then shorten(`to {target.name}`, 17) else "nowhere to go", right + 116, line + 42, 124, 24, #targets > 1,
         `Haul:to:{index}`) then
         haulTo[row.id] = to % #targets + 1
       end
@@ -1391,15 +1393,27 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
       local also: { number } = haulAlso[row.id] or {}
       haulAlso[row.id] = also
       local added = if target then table.find(also, target.id) else nil
-      if Im.Toggle("+", right + 264, line + 42, 24, 24, added ~= nil, `Haul:also:{index}`) and target then
+      if Im.Toggle("+", right + 244, line + 42, 22, 24, added ~= nil, `Haul:also:{index}`) and target then
         if added then
           table.remove(also, added)
         elseif #also + 1 < Fleet.STOPS then
           table.insert(also, target.id)
         end
       end
+      -- (or as one more to carry to: a load to each in turn, the one
+      -- picked last first. Pressed again, it is not one.)
+      local more: { number } = haulMore[row.id] or {}
+      haulMore[row.id] = more
+      local dropped = if target then table.find(more, target.id) else nil
+      if Im.Toggle("&", right + 268, line + 42, 22, 24, dropped ~= nil, `Haul:drop:{index}`) and target then
+        if dropped then
+          table.remove(more, dropped)
+        elseif #more + 1 < Fleet.DROPS then
+          table.insert(more, target.id)
+        end
+      end
       local haul: State.Command = { kind = "FleetOrder", actor = 0, what = "haul", pilot = row.id, target = if target then target.id else 0,
-        type = kind, stops = if #also > 0 then table.clone(also) else nil }
+        type = kind, stops = if #also > 0 then table.clone(also) else nil, drops = if #more > 0 then table.clone(more) else nil }
       local can, whyNot = Session.CanDo(session, haul)
       if Im.Button("Haul", right + 292, line + 42, 48, 24, can, `Haul:go:{index}`) then
         Session.Do(session, haul)
@@ -1417,6 +1431,16 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
           table.insert(names, if stop then shorten(stop.name, 22) else "?")
         end
         note = `Collecting here, then at {table.concat(names, ", ")}` .. (if target and not added then `; to {target.name}` else "; + is another, then pick where to")
+      end
+      if #more > 0 then
+        -- (and where else it is carried to, a load to each in turn)
+        local names: { string } = {}
+        for _, id in more do
+          local drop = Core.Query.Body(game, id)
+          table.insert(names, if drop then shorten(drop.name, 22) else "?")
+        end
+        note = (if target and not dropped then `A load to {shorten(target.name, 22)}, then to ` else "A load in turn to ")
+          .. table.concat(names, ", ") .. (if #also > 0 then " (collecting at more than here)" else "")
       end
     else
       -- Out flying: called back, they come to where you are.

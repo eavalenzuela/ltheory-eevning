@@ -81,7 +81,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 60
+Core.SAVE_VERSION = 61
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -315,6 +315,14 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- 59: a corporation keeps its books by head, and a tower keeps count
   -- of its running. A save from before has what was earned and spent
   -- under no head, and its towers begin their count now.
+  -- 61: a hauler's round can carry to several stations. None of a save
+  -- from before does.
+  [60] = function(state: any)
+    for _, wing in state.fleet do
+      wing.drops = wing.drops or {}
+      wing.turn = wing.turn or 0
+    end
+  end,
   -- 60: a hired pilot has a loyalty. Those of a save from before stand
   -- where one newly signed on does.
   [59] = function(state: any)
@@ -1687,6 +1695,7 @@ export type FleetRow = {
   from: string,       -- the name of the station it is carried from (the first, of a round of several),
   to: string,         -- and of the one it is carried to
   stops: { string },  -- the names of every station collected at, in order
+  drops: number,      -- how many stations it carries to, a load to each in turn (1: the one)
   -- for one sent to buy ('from' is the market's name and 'to' that of
   -- the station it is brought to): the name of the thing, and how many
   -- are still to be bought; and for one who keeps it in stock, how many
@@ -1712,7 +1721,7 @@ function Query.Fleet(game: Game): { FleetRow }
       mood = Fleet.Mood(wing.loyalty), order = wing.order, target = wing.target,
       ship = 0, shipName = "", hull = "", where = "no ship", near = false, distance = 0, shield = 1, armor = 1, structure = 1,
       doing = "no ship", hauled = wing.hauled, experience = wing.experience,
-      cargo = wing.cargo, from = "", to = "", stops = {}, sells = wing.sell, earned = wing.earned,
+      cargo = wing.cargo, from = "", to = "", stops = {}, drops = 1, sells = wing.sell, earned = wing.earned,
       want = "", need = 0, keep = 0,
       post = "", ward = "", hunted = wing.alarm,
       needed = if wing.skill >= Fleet.BEST then 0 else Fleet.Needed(wing.skill),
@@ -1737,12 +1746,14 @@ function Query.Fleet(game: Game): { FleetRow }
         row.doing = if ball == nil then "unloading" elseif ball.intent and ball.intent.kind == "dock" then "taking ore in"
           elseif ball.grid == wing.post then "mining" else "going to the belt"
       elseif wing.order == "haul" then
-        local from, to = Space.Object(state, wing.post), Space.Object(state, wing.base)
+        -- ('to': where the load they have, or the next, is going)
+        local from, to = Space.Object(state, wing.post), Space.Object(state, Fleet.Drop(wing))
         row.from, row.to = if from then from.name else "?", if to then to.name else "?"
         for _, stop in wing.stops do
           local object = Space.Object(state, stop)
           table.insert(row.stops, if object then object.name else "?")
         end
+        row.drops = 1 + #wing.drops
         local laden = false
         for _, item in Items.In(state, ship.id, "cargo") do
           laden = laden or Fleet.Carries(wing.cargo, item.type)
@@ -1750,7 +1761,7 @@ function Query.Fleet(game: Game): { FleetRow }
         -- (out flying: on the way to deliver, to the next station of the round, or back to the first)
         local _, why = Fleet.HaulGoal(state, wing, ship)
         row.doing = if ball then (if why == "collect" and laden then "collecting" elseif laden then "carrying" else "going back for more")
-          elseif ship.docked == wing.base then "unloading"
+          elseif ship.docked == Fleet.Drop(wing) then "unloading"
           elseif laden then "loading" else "waiting for cargo"
       elseif wing.order == "buy" or wing.order == "stock" then
         local from, to = Space.Object(state, wing.post), Space.Object(state, wing.base)

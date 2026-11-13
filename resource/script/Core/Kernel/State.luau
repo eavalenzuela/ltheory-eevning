@@ -241,6 +241,7 @@ export type Command = {
   hours: number?,     -- the length of an extractor's programme
   pilot: number?,     -- a hired pilot, by their id
   stops: { number }?, -- for a haul: the further stations to collect at, in order
+  drops: { number }?, -- and the further stations to carry to, a load to each in turn
 }
 
 -- A standing offer at a station's market. A sell order's goods and a buy
@@ -323,6 +324,10 @@ export type Wingman = {
   -- the first), and how far round them this round has got (the place
   -- in that list of the last one loaded at; 0 before the first).
   stops: { number }, leg: number,
+  -- And the further stations carried to, beside 'base': a load goes to
+  -- each in turn, 'base' first. 'turn' is whose turn it is (0 for
+  -- 'base', then the place in 'drops').
+  drops: { number }, turn: number,
   -- For one sent to "buy": the type of thing ('want'), how many of it
   -- are still to be bought ('need'), and the most to pay for one, on
   -- the average of a purchase ('limit'). It is bought at the station
