@@ -15,6 +15,10 @@
 --                  how many plates it grows, and whether it has decks)
 --   P              the next paint: bare, as the engine made them, then
 --                  each of the game's
+--   S              the next style: the generator's own numbers, then the
+--                  other sets of them there are (Hull.STYLES: how long
+--                  its rows are, how far it may reach, how it is bent,
+--                  how far its plates' edges are eased)
 --   F              as a ship: a frigate's guns and engines on it, then a
 --                  destroyer's, a cruiser's, a battleship's, then none.
 --                  The engines go on the ends the hull has astern and
@@ -41,6 +45,7 @@ local SceneView = require("@lt/SceneView")
 local RADIUS = 1000
 
 local SIZES = Hull.SIZES
+local STYLES = Hull.STYLES
 
 local PAINTS = { "bare", "civil", "vessari", "talmar", "kethri", "vail", "unbound" }
 
@@ -84,7 +89,7 @@ return AppShell.Create(function(): Widget
     interior:Advance()
   end
 
-  local seed, size, paint = 1, 2, 1
+  local seed, size, paint, style = 1, 2, 1, 1
   local class = 0           -- which of CLASSES it is shown as; 0, as a bare hull
   local fitted = ""         -- how that went: what is on it, or why it is not
   local dim = true          -- what is shown is bare metal, and is lit as that is
@@ -108,7 +113,7 @@ return AppShell.Create(function(): Widget
   -- The hull as a ship of a class, or nothing and why. (Painted: a bare
   -- hull is the generator's own model, which has no engines.)
   local function ship(as: Class): (Hull.Built?, string)
-    local name = `{seed}:{size}:{paint}:{as.name}`
+    local name = `{seed}:{size}:{paint}:{style}:{as.name}`
     local had = ships[name]
     if had then
       return had, ""
@@ -121,7 +126,7 @@ return AppShell.Create(function(): Widget
       table.insert(fit, as.launcher)
     end
     local built, why = Hull.GrownShip(seed, stepsOf(size), decksOf(size), if PAINTS[paint] == "bare" then "civil" else PAINTS[paint],
-      as.metres, fit, as.turrets, as.launchers, as.engines)
+      as.metres, fit, as.turrets, as.launchers, as.engines, STYLES[style].name)
     if built then
       ships[name] = built
     end
@@ -130,13 +135,14 @@ return AppShell.Create(function(): Widget
 
   local function make(): Renderable | Model
     if PAINTS[paint] == "bare" then
-      return Generate.Main(SIZES[size], seed)
+      -- (the generator's own model, where the style is its own)
+      return if style == 1 then Generate.Main(SIZES[size], seed) else Hull.GrownBare(seed, stepsOf(size), decksOf(size), STYLES[style].name)
     end
-    return Hull.Grown(seed, stepsOf(size), decksOf(size), PAINTS[paint]).model
+    return Hull.Grown(seed, stepsOf(size), decksOf(size), PAINTS[paint], STYLES[style].name).model
   end
 
   local function show()
-    local now = `{seed}:{size}:{paint}:{class}`
+    local now = `{seed}:{size}:{paint}:{style}:{class}`
     if now == key then
       return
     end
@@ -165,7 +171,7 @@ return AppShell.Create(function(): Widget
       end
     end
     dim = built == nil and PAINTS[paint] == "bare"
-    local plain = `{seed}:{size}:{paint}`
+    local plain = `{seed}:{size}:{paint}:{style}`
     local model: Renderable | Model = if built then built.model else models[plain] or make()
     if built == nil then
       models[plain] = model
@@ -173,7 +179,11 @@ return AppShell.Create(function(): Widget
     took = math.floor((os.clock() - started) * 1000)
     local bound = Renderable_GetBound(model)
     local across = bound.upper - bound.lower
-    local scale = RADIUS / (math.max(across.x, across.y, across.z) / 2)
+    -- (as big as fits, seen from off the bow: a picture is wider than
+    -- it is high, and a hull as broad as it is long is longest corner
+    -- to corner)
+    local box = vector.create(across.x, 1.7 * across.y, across.z)
+    local scale = RADIUS / math.max(math.max(box.x, box.y, box.z) / 2, 0.4 * vector.magnitude(box))
     -- (its middle in the middle, wherever its own origin is)
     local shift = (bound.lower + bound.upper) * (-0.5 * scale)
     local object = Object_Scenery({})
@@ -230,8 +240,8 @@ return AppShell.Create(function(): Widget
   show()
 
   -- How wide a seed's hull is for its length, at the size shown.
-  local function beam(of: number, big: number): number
-    local across = Hull.GrownShape(of, stepsOf(big), decksOf(big))
+  local function beam(of: number, big: number, how: number?): number
+    local across = Hull.GrownShape(of, stepsOf(big), decksOf(big), STYLES[how or style].name)
     return across.x / across.z
   end
 
@@ -260,7 +270,7 @@ return AppShell.Create(function(): Widget
       had = text
     end
     local as: Class? = CLASSES[class]
-    local line = `seed {seed}  size {size}  ({stepsOf(size)} plates{if decksOf(size) then ", decks" else ""})  paint {PAINTS[paint]}`
+    local line = `seed {seed}  size {size}  ({stepsOf(size)} plates{if decksOf(size) then ", decks" else ""})  style {STYLES[style].name}  paint {PAINTS[paint]}`
     if as then
       line ..= `  {fitted}`
     end
@@ -270,9 +280,10 @@ return AppShell.Create(function(): Widget
 
   _G.Hulls = {
     -- Show a hull, still, from the bow quarter: its seed, its size (1 to
-    -- 8), its paint's name and, to show it as a ship, the name of a
-    -- class. False if there is no such size, paint or class.
-    Show = function(toSeed: number, toSize: number?, toPaint: string?, toClass: string?): boolean
+    -- 8), its paint's name, the name of a class to show it as a ship of
+    -- (or nil), and its style's name (the generator's own, if not said).
+    -- False if there is no such size, paint, class or style.
+    Show = function(toSeed: number, toSize: number?, toPaint: string?, toClass: string?, toStyle: string?): boolean
       local at = table.find(PAINTS, toPaint or PAINTS[paint])
       local big = toSize or size
       local as = 0
@@ -281,19 +292,26 @@ return AppShell.Create(function(): Widget
           as = index
         end
       end
-      if at == nil or SIZES[big] == nil or toSeed < 0 or (toClass ~= nil and as == 0) then
+      local how = if toStyle == nil then 1 else 0
+      for index, known in STYLES do
+        if known.name == toStyle then
+          how = index
+        end
+      end
+      if at == nil or SIZES[big] == nil or toSeed < 0 or (toClass ~= nil and as == 0) or how == 0 then
         return false
       end
-      seed, size, paint, class = math.floor(toSeed), big, at, as
+      seed, size, paint, class, style = math.floor(toSeed), big, at, as, how
       turning, plain = false, true
       turn, tilt, zoom, zoomTo = TURN, TILT, ZOOM, ZOOM
       show()
       return true
     end,
     -- What is shown: its seed, its size, its paint, how many plates
-    -- the generator grew for it, and how wide it is for its length.
-    Now = function(): (number, number, string, number, number)
-      return seed, size, PAINTS[paint], stepsOf(size), beam(seed, size)
+    -- the generator grew for it, how wide it is for its length, and
+    -- its style.
+    Now = function(): (number, number, string, number, number, string)
+      return seed, size, PAINTS[paint], stepsOf(size), beam(seed, size), STYLES[style].name
     end,
     -- Look at it from somewhere else: how far round from the bow (in
     -- turns of a circle: 0.5 is from astern), how far above (the same,
@@ -317,13 +335,20 @@ return AppShell.Create(function(): Widget
       return as.name, built ~= nil, if built then #built.engines else 0
     end,
     -- The first 'count' seeds from 'from' on whose hulls are broad at a
-    -- size, with commas between (of the next 'count' times forty).
-    Broad = function(from: number, count: number, big: number): string
+    -- size and in a style (the generator's own, if not named), with
+    -- commas between (of the next 'count' times forty).
+    Broad = function(from: number, count: number, big: number, inStyle: string?): string
       local found: { string } = {}
       local at = math.max(0, math.floor(from))
       local last = at + 40 * count
+      local how = 1
+      for index, known in STYLES do
+        if known.name == inStyle then
+          how = index
+        end
+      end
       while #found < count and at < last and SIZES[big] ~= nil do
-        if beam(at, big) >= BROAD then
+        if beam(at, big, how) >= BROAD then
           table.insert(found, tostring(at))
         end
         at += 1
@@ -342,8 +367,8 @@ return AppShell.Create(function(): Widget
       Im.Text(`SEED {seed}`, x, y, 30, Im.TEXT)
       local decks = if decksOf(size) then ", decks under" else ""
       local only = if broad then "      broad hulls only" else ""
-      Im.Text(`size {size} of {#SIZES}: {stepsOf(size)} plates grown{decks}      paint: {PAINTS[paint]}{only}      made in {took} ms`, x, y + 40,
-        16, Im.DIM)
+      Im.Text(`size {size} of {#SIZES}: {stepsOf(size)} plates grown{decks}      style: {STYLES[style].name}      paint: {PAINTS[paint]}{only}      made in {took} ms`,
+        x, y + 40, 16, Im.DIM)
       if fitted ~= "" then
         Im.Text(fitted, x, y + 64, 16, if string.find(fitted, "no room", 1, true) then Im.WARN else Im.TEXT)
       end
@@ -351,7 +376,7 @@ return AppShell.Create(function(): Widget
         Im.Text(note, x, y + 90, 14, Im.ACCENT)
       end
       local foot = w.pos.y + w.size.y - 54
-      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      B: broad only      [ / ]: size      P: paint      F: as a ship      K: keep      Space: turn",
+      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      B: broad only      [ / ]: size      S: style      P: paint      F: as a ship      K: keep      Space: turn",
         x, foot, 15, Im.DIM)
       Im.Text("right-drag turns it, the wheel moves in and out", x, foot + 22, 15, Im.DIM)
     end,
@@ -371,6 +396,10 @@ return AppShell.Create(function(): Widget
       if Key_Pressed(Key_RBracket()) then size = math.min(#SIZES, size + 1) end
       if Key_Pressed(Key_LBracket()) then size = math.max(1, size - 1) end
       if Key_Pressed(Key_P()) then paint = paint % #PAINTS + 1 end
+      if Key_Pressed(Key_S()) then
+        style = style % #STYLES + 1
+        step(0)
+      end
       if Key_Pressed(Key_F()) then class = (class + 1) % (#CLASSES + 1) end
       if Key_Pressed(Key_Space()) then turning = not turning end
       if Key_Pressed(Key_K()) then keep() end

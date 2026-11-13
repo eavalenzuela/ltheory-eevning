@@ -2,13 +2,16 @@
 #
 # One hull to a line: its type, a seed, and a size from 1 to 8 (how many
 # plates the generator grows: 3, 4, 5, 5, 6, 7, 8, 9, and from size 4 up
-# a broad deck under each). A hull named here is drawn as that seed makes
+# a broad deck under each); and after those, if it is not to be in the
+# generator's own style, a style: stout, broad, tall, spear, slab, soft.
+# A hull named here is drawn as that seed makes
 # it, in its own paint, with its engines and hardpoints put on by rule,
 # in place of the design drawn for it in Game/View/Hull.luau. A line that
 # starts with # is not read.
 #
-# Find seeds with:   bin/launch hulls        (F shows one as a ship)
-#                    script/hulls broad 1 40 5 civil cruiser
+# Find seeds with:   bin/launch hulls        (S goes round the styles,
+#                                             F shows one as a ship)
+#                    script/hulls seeds 1 40 2 civil frigate stout
 # The types are in resource/script/Core/Data/Ships.luau (frigate.courier,
 # frigate.prospector, barge.quarry, industrial.hauler, freighter.dray,
 # and each faction's: frigate.javelin, cruiser.trellis, ...).
@@ -16,4 +19,5 @@
 # If a seed has not the room for a hull's hardpoints the game says so
 # when it starts and draws the hull as it was.
 #
-# frigate.prospector   36   2
+# frigate.prospector   12   2
+# frigate.courier       7   2   stout

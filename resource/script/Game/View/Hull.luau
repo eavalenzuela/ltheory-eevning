@@ -358,13 +358,64 @@ end
 -- off toward the nose; 'hump': how far the middle is lifted, out to
 -- 'crown' either side of the centre line. (The generator's own: 0.5
 -- from 1.0, and 1.0 out to 1.25.)
-type Warps = { spread: number, bow: number, hump: number, crown: number }
+-- ('taper': over how long the spread falls off, squared; a quarter, if
+-- not said, which is abrupt: the generator's.)
+type Warps = { spread: number, bow: number, hump: number, crown: number, taper: number? }
 type Bend = (p: vector) -> vector
 local OLD: Warps = { spread = 0.5, bow = 1.0, hump = 1.0, crown = 1.25 }
 
+-- A style: the generator's own numbers, which it never varied. With
+-- other numbers the same growing makes another family of hulls.
+export type Style = {
+  name: string,
+  -- The most plates it lays in a row along the hull (its own: 5).
+  rows: number,
+  -- Whether a row stops where the hull may reach no further (its own
+  -- ran on past, which is where its long thin hulls come from).
+  held: boolean,
+  -- How far the hull may reach each way from its middle (3, 2, 6).
+  bound: vector,
+  -- The two plates it starts from, as half-sizes: one across, one along.
+  cross: { vector },
+  -- How far a plate's edges are eased (0.25).
+  eased: number,
+  warps: Warps,
+}
+
+-- The styles there are, the generator's own first. (All but that one
+-- are first drafts, for the owner's eye: 'stout' keeps its rows short
+-- and inside its bounds, 'broad' is low and wide with more of a hump,
+-- 'tall' is narrow and deep, 'spear' long with a nose drawn out, 'slab'
+-- flat with hard edges, 'soft' rounded.)
+Hull.STYLES = {
+  { name = "old", rows = 5, held = false, bound = v(3, 2, 6), cross = { v(2.0, 0.5, 0.5), v(0.5, 1.0, 2.0) }, eased = 0.25, warps = OLD },
+  { name = "stout", rows = 3, held = true, bound = v(3, 2, 5), cross = { v(2.0, 0.5, 0.5), v(0.5, 1.0, 2.0) }, eased = 0.25, warps = OLD },
+  { name = "broad", rows = 3, held = true, bound = v(4.5, 1.5, 5), cross = { v(2.6, 0.4, 0.6), v(0.6, 0.8, 2.0) }, eased = 0.25,
+    warps = { spread = 0.7, bow = 1.0, hump = 1.3, crown = 1.6, taper = 1.5 } },
+  { name = "tall", rows = 3, held = true, bound = v(2.2, 3.2, 5.5), cross = { v(1.4, 0.6, 0.5), v(0.5, 1.5, 2.0) }, eased = 0.25,
+    warps = { spread = 0.3, bow = 1.5, hump = 0.5, crown = 1.0 } },
+  { name = "spear", rows = 4, held = true, bound = v(2.2, 1.6, 7), cross = { v(1.5, 0.4, 0.5), v(0.45, 0.8, 2.6) }, eased = 0.25,
+    warps = { spread = 0.6, bow = -1.0, hump = 0.8, crown = 0.9, taper = 9 } },
+  { name = "slab", rows = 3, held = true, bound = v(3.5, 1.6, 5.5), cross = { v(2.2, 0.4, 0.6), v(0.6, 0.8, 2.2) }, eased = 0.07,
+    warps = { spread = 0.5, bow = 0.5, hump = 0.25, crown = 2.0, taper = 4 } },
+  { name = "soft", rows = 3, held = true, bound = v(3, 2.2, 5), cross = { v(2.0, 0.6, 0.6), v(0.6, 1.1, 2.0) }, eased = 0.5,
+    warps = { spread = 0.5, bow = 1.0, hump = 1.2, crown = 1.0, taper = 1.5 } },
+} :: { Style }
+
+-- The style of a name: the generator's own, if there is none of that name.
+local function styleOf(name: string?): Style
+  for _, style in Hull.STYLES do
+    if style.name == name then
+      return style
+    end
+  end
+  return Hull.STYLES[1]
+end
+
 local function warped(w: Warps, middle: vector?): (Bend, Bend)
+  local taper = w.taper or 0.25
   local function out(z: number): number
-    return w.spread * math.exp(-(math.max(0, z - w.bow) ^ 2) / 0.25)
+    return w.spread * math.exp(-(math.max(0, z - w.bow) ^ 2) / taper)
   end
   local function lift(x: number): number
     -- (less half of it: the hull stays about its own middle)
@@ -453,17 +504,17 @@ end
 -- the middle of the hull comes to once it is bent (the generator
 -- centred its hulls), and 'across' how far it then reaches each way.
 type Plate = { center: vector, size: vector, part: number }
-type Growth = { plates: { Plate }, middle: vector, across: vector }
+type Growth = { plates: { Plate }, middle: vector, across: vector, style: Style }
 
-local function growth(seed: number, steps: number, decks: boolean): Growth
+local function growth(seed: number, steps: number, decks: boolean, style: Style): Growth
   local rng = RNG_MTG(Int.Signed(seed + 102))
   type Box = { center: vector, size: vector }
   local boxes: { Box } = {
-    { center = v(0, 0, 0), size = v(2.0, 0.5, 0.5) },
-    { center = v(0, 0, 0), size = v(0.5, 1.0, 2.0) },
+    { center = v(0, 0, 0), size = style.cross[1] },
+    { center = v(0, 0, 0), size = style.cross[2] },
   }
   local slight: { Box } = {}
-  local lower, upper = v(-3, -2, -6), v(3, 2, 6)
+  local lower, upper = -style.bound, style.bound
   local axes = { v(-1, 0, 0), v(1, 0, 0), v(0, -1, 0), v(0, 1, 0), v(0, 0, -1), v(0, 0, 1) }
   for step = 1, steps do
     rng:Int(#boxes)
@@ -471,7 +522,11 @@ local function growth(seed: number, steps: number, decks: boolean): Growth
     local dir = axes[rng:Int(6) + 1]
     local size = box.size * rng:Vec3(v(0.9, 0.9, 0.9), v(0.99, 0.99, 0.99))
     local center = vector.clamp(box.center + dir * (box.size + size), lower + size, upper - size)
-    for _ = 1, rng:Int(1, 5) do
+    for row = 1, rng:Int(1, style.rows) do
+      -- (a row that is held stops where the hull may reach no further)
+      if style.held and row > 1 and center.z + size.z > upper.z then
+        break
+      end
       table.insert(boxes, { center = center, size = size })
       table.insert(slight, { center = center, size = size * v(0.5, 0.5, 1.5) })
       center += size * v(0, 0, 3)
@@ -492,7 +547,7 @@ local function growth(seed: number, steps: number, decks: boolean): Growth
       table.insert(plates, { center = box.center * under, size = box.size * wide, part = FRAME })
     end
   end
-  local plain = warped(OLD)
+  local plain = warped(style.warps)
   local low, high = v(math.huge, math.huge, math.huge), v(-math.huge, -math.huge, -math.huge)
   for _, plate in plates do
     for corner = 0, 7 do
@@ -503,16 +558,16 @@ local function growth(seed: number, steps: number, decks: boolean): Growth
       end
     end
   end
-  return { plates = plates, middle = (low + high) / 2, across = high - low }
+  return { plates = plates, middle = (low + high) / 2, across = high - low, style = style }
 end
 
 -- A hull as the generator grew one: its plates, and its bend about
 -- where its middle comes to.
 local function grown(b: Builder, g: Growth)
   for _, plate in g.plates do
-    twin(b, plate.part, plate.center, plate.size)
+    twin(b, plate.part, plate.center, plate.size, g.style.eased)
   end
-  local bend, unbend = warped(OLD, g.middle)
+  local bend, unbend = warped(g.style.warps, g.middle)
   Plates.Bend(b, bend, unbend)
   bending = bend
 end
@@ -2082,10 +2137,10 @@ end
 -- quarter of it, and a foot may reach out over the easing as far as the
 -- face has fallen away under it by no more than 'gap'. 'half' is half
 -- the plate that way and 'deep' half its thickness.
-local function flatOf(half: number, deep: number, gap: number): number
-  local fall = EASED * deep
+local function flatOf(half: number, deep: number, gap: number, eased: number): number
+  local fall = eased * deep
   local over = if gap >= fall then 1 else math.sqrt(1 - (1 - gap / fall) ^ 2)
-  return half * (1 - EASED + EASED * over)
+  return half * (1 - eased + eased * over)
 end
 
 -- The places on a hull's plates where a foot that reaches 'reach' has
@@ -2093,7 +2148,7 @@ end
 -- it: on top of them ('up' is +y), under them (-y), or on their
 -- starboard faces (+x). In the generator's units, as the hull is before
 -- its bend.
-local function standsOf(boxes: { Box }, up: vector, reach: number, gap: number): { vector }
+local function standsOf(boxes: { Box }, up: vector, reach: number, gap: number, eased: number): { vector }
   -- (which of x and y the face looks along, and which it lies across)
   local out = if up.x ~= 0 then v(1, 0, 0) else v(0, 1, 0)
   local across = if up.x ~= 0 then v(0, 1, 0) else v(1, 0, 0)
@@ -2101,8 +2156,8 @@ local function standsOf(boxes: { Box }, up: vector, reach: number, gap: number):
   local found: { vector } = {}
   for _, box in boxes do
     local deep = vector.dot(box.size, out)
-    local wide = flatOf(vector.dot(box.size, across), deep, gap)
-    local room = flatOf(box.size.z, deep, gap) - reach
+    local wide = flatOf(vector.dot(box.size, across), deep, gap, eased)
+    local room = flatOf(box.size.z, deep, gap, eased) - reach
     -- (the starboard faces of the plates to starboard: their twins have the port ones)
     if box.part ~= FRAME and wide >= reach and room >= 0 and (up.x == 0 or box.center.x > 0) then
       local level = vector.dot(box.center, out) + way * deep
@@ -2150,7 +2205,7 @@ end
 -- before it, the first being the one nearest the bow.
 local function shipOf(g: Growth, metres: number, fit: { string }, turrets: number, launchers: number, engines: number): (Ship?, string)
   local boxes = boxesOf(g)
-  local bend = warped(OLD, g.middle)
+  local bend = warped(g.style.warps, g.middle)
   local ship: Ship = { growth = g, ends = endsOf(boxes, engines), turrets = {}, launchers = {} }
   local wanted = turrets + launchers
   if wanted == 0 then
@@ -2170,7 +2225,7 @@ local function shipOf(g: Growth, metres: number, fit: { string }, turrets: numbe
   type Stand = { at: vector, mount: Mount }
   local function stands(up: vector, mirrored: boolean?): { Stand }
     local out: { Stand } = {}
-    for _, p in standsOf(boxes, up, reach / GROWN, gap / GROWN) do
+    for _, p in standsOf(boxes, up, reach / GROWN, gap / GROWN, g.style.eased) do
       local at = if mirrored then p * v(-1, 1, 1) else p
       local mount = bentBy(bend, at, if mirrored then -up else up)
       if Plates.Rests(scratch, mount.at, mount.up, v(0, 0, 1), reach, gap) then
@@ -2612,7 +2667,7 @@ local designs: { [string]: Design } = {
 -- of, carrying what that design is shown with, on the hardpoints the
 -- hull has by the data. Nothing, and why, if there is no such hull or
 -- the seed has not the room for its hardpoints.
-local function seeded(type: string, seed: number, size: number): (Design?, string)
+local function seeded(type: string, seed: number, size: number, style: string?): (Design?, string)
   local hull = Ships.byId[type]
   local had = designs[type]
   if hull == nil or had == nil then
@@ -2626,7 +2681,10 @@ local function seeded(type: string, seed: number, size: number): (Design?, strin
   end
   local steps, decks = Hull.GrownSize(size)
   local engines = if hull.radius < 60 then 2 elseif hull.radius < 200 then 3 else 4
-  local ship, why = shipOf(growth(seed, steps, decks), hull.radius, fit, hull.turrets, hull.launchers, engines)
+  if style and styleOf(style).name ~= style then
+    return nil, `there is no style called '{style}'`
+  end
+  local ship, why = shipOf(growth(seed, steps, decks, styleOf(style)), hull.radius, fit, hull.turrets, hull.launchers, engines)
   if ship == nil then
     return nil, why
   end
@@ -2650,9 +2708,9 @@ do
   local ok, text = pcall(File_Read, Hull.SEEDS)
   if ok and type(text) == "string" then
     for line in string.gmatch(text, "[^\r\n]+") do
-      local name, seed, size = string.match(line, "^%s*([%a%d%._]+)%s+(%d+)%s+(%d+)%s*$")
+      local name, seed, size, style = string.match(line, "^%s*([%a%d%._]+)%s+(%d+)%s+(%d+)%s*(%a*)%s*$")
       if name and string.sub(name, 1, 1) ~= "#" then
-        local design, why = seeded(name, tonumber(seed) or 0, tonumber(size) or 0)
+        local design, why = seeded(name, tonumber(seed) or 0, tonumber(size) or 0, if style ~= "" then style else nil)
         if design then
           designs[name] = design
         else
@@ -3096,10 +3154,10 @@ end
 -- four for a frigate and six for the biggest); 'decks': with the broad
 -- flat plates under, as its bigger hulls had. No hardpoints, and no
 -- engines.
-function Hull.Grown(seed: number, steps: number, decks: boolean, paint: string?): Built
+function Hull.Grown(seed: number, steps: number, decks: boolean, paint: string?, style: string?): Built
   local b = Plates.New(seed * 1.37, MANNER_FINE)
   table.clear(exhausts)
-  grown(b, growth(seed, steps, decks))
+  grown(b, growth(seed, steps, decks, styleOf(style)))
   -- (in a faction's paint, if one is named: the civil blue-grey if not)
   local look = Hull.looks[paint or "civil"] or Hull.looks.civil
   local model, lower, upper, meshes = Plates.Finish(b, look, nil)
@@ -3111,8 +3169,33 @@ end
 -- How far such a hull reaches across, up and down, and along, without
 -- making it: to tell the broad ones from the long thin ones, which are
 -- most of what the generator grows.
-function Hull.GrownShape(seed: number, steps: number, decks: boolean): vector
-  return growth(seed, steps, decks).across
+function Hull.GrownShape(seed: number, steps: number, decks: boolean, style: string?): vector
+  return growth(seed, steps, decks, styleOf(style)).across
+end
+
+-- Such a hull as the engine made them: bare metal, with no paint, and
+-- nothing lit. (Of the generator's own style it is plate for plate what
+-- Item/ShipType/Generate makes.)
+function Hull.GrownBare(seed: number, steps: number, decks: boolean, style: string?): Model
+  local g = growth(seed, steps, decks, styleOf(style))
+  local mesh = PlateMesh_Create(12)
+  local zero = v(0, 0, 0)
+  for _, plate in g.plates do
+    PlateMesh_AddPlate(mesh, plate.center, plate.size, zero, g.style.eased)
+    PlateMesh_AddPlate(mesh, plate.center * v(-1, 1, 1), plate.size * 0.99, zero, g.style.eased)
+  end
+  local bend = warped(g.style.warps, g.middle)
+  PlateMesh_AddWarp(mesh, Warp_Custom({
+    GetDelta = function(_, p: vector): vector
+      -- (the bend is in a hull's units, and these plates in the generator's)
+      return bend(p * GROWN) / GROWN - p
+    end,
+  }))
+  local made = PlateMesh_GetMesh(mesh)
+  Mesh_ComputeOcclusion(made)
+  local model = Model_Create()
+  Model_Add(model, made, Material_Metal())
+  return model
 end
 
 -- A generated hull as a ship: 'metres' in radius, with engines on the
@@ -3120,8 +3203,8 @@ end
 -- launcher hardpoints, put where the rule of hardpoints allows. Nothing,
 -- and why, if the hull has not the room for them.
 function Hull.GrownShip(seed: number, steps: number, decks: boolean, paint: string?, metres: number, fit: { string }, turrets: number,
-  launchers: number, engines: number): (Built?, string)
-  local ship, why = shipOf(growth(seed, steps, decks), metres, fit, turrets, launchers, engines)
+  launchers: number, engines: number, style: string?): (Built?, string)
+  local ship, why = shipOf(growth(seed, steps, decks, styleOf(style)), metres, fit, turrets, launchers, engines)
   if ship == nil then
     return nil, why
   end
@@ -3305,8 +3388,8 @@ end
 -- a tech 2 make of it are not changed: resource/hull/seeds.txt, read
 -- when the game starts, does it for them too). False, and why, if there
 -- is no such hull or the seed has not the room for its hardpoints.
-function Hull.Seed(type: string, seed: number, size: number): (boolean, string)
-  local design, why = seeded(type, math.floor(seed), size)
+function Hull.Seed(type: string, seed: number, size: number, style: string?): (boolean, string)
+  local design, why = seeded(type, math.floor(seed), size, style)
   if design == nil then
     return false, why
   end

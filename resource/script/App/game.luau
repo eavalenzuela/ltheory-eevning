@@ -1391,9 +1391,10 @@ end
 -- seeds are looked through). A ship already in the scene keeps its
 -- looks until it is drawn again: undock, or board another. False, and
 -- why, if there is no such hull or the seed has not the room for its
--- hardpoints. (resource/hull/seeds.txt does the same for good.)
-function Debug.HullSeed(type: string, seed: number, size: number): (boolean, string)
-  return Hull.Seed(type, seed, size)
+-- hardpoints. 'style' names one of the generator's styles (Hull.STYLES),
+-- its own if not said. (resource/hull/seeds.txt does the same for good.)
+function Debug.HullSeed(type: string, seed: number, size: number, style: string?): (boolean, string)
+  return Hull.Seed(type, seed, size, style)
 end
 
 -- What is set in the menu's options: whether there is sound, and how
