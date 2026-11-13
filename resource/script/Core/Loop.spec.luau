@@ -25,7 +25,7 @@ export type Log = {
   hash: string,
 }
 
--- Play until the pilot is aboard a Javelin, or 'limit' ticks have passed.
+-- Play until the pilot is aboard a Akashi, or 'limit' ticks have passed.
 local function play(t: Test.Context, historySeed: number, limit: number): (Core.Game, Log)
   local game = Core.New({ galaxySeed = 1, historySeed = historySeed, peaceful = true })
   local state = game.state
@@ -173,8 +173,8 @@ local function play(t: Test.Context, historySeed: number, limit: number): (Core.
     log.trips += 1
   end
 
-  local function wantJavelin(): boolean
-    local cost = Core.Query.BuyCost(game, home, "frigate.javelin", 1)
+  local function wantAkashi(): boolean
+    local cost = Core.Query.BuyCost(game, home, "frigate.akashi", 1)
     return cost ~= nil and state.wallet >= cost and state.skills.frigates >= 2
   end
 
@@ -230,19 +230,19 @@ local function play(t: Test.Context, historySeed: number, limit: number): (Core.
   must({ kind = "TrainSkill", actor = 0, type = "electronics" })
   must({ kind = "TrainSkill", actor = 0, type = "frigates" })
 
-  while state.tick < limit and not wantJavelin() do
+  while state.tick < limit and not wantAkashi() do
     mineAHold()
     atTheStation()
   end
-  if wantJavelin() then
-    must({ kind = "BuyNow", actor = 0, type = "frigate.javelin", quantity = 1 })
-    must({ kind = "Assemble", actor = 0, item = (stack("frigate.javelin") :: State.Item).id })
+  if wantAkashi() then
+    must({ kind = "BuyNow", actor = 0, type = "frigate.akashi", quantity = 1 })
+    must({ kind = "Assemble", actor = 0, item = (stack("frigate.akashi") :: State.Item).id })
     local ships = Core.Query.Ships(game, home)
     must({ kind = "BoardShip", actor = 0, target = ships[#ships].id })
   end
   log.ticks = state.tick
   log.hash = Core.Hash(game)
-  t.ok(Types.Get("frigate.javelin") ~= nil)
+  t.ok(Types.Get("frigate.akashi") ~= nil)
   return game, log
 end
 
@@ -250,9 +250,9 @@ suite:Case("a new pilot mines, refines, builds, sells and trains their way into 
   local game, log = play(t, 1, 40000)
   local state = game.state
   local hours = log.ticks / 3600
-  print(string.format("     loop: aboard a Javelin after %.1f game hours, %d trips, %d rounds built, wallet %d",
+  print(string.format("     loop: aboard a Akashi after %.1f game hours, %d trips, %d rounds built, wallet %d",
     hours, log.trips, log.rounds, state.wallet))
-  t.eq(Core.Query.Player(game).hull.id, "frigate.javelin")
+  t.eq(Core.Query.Player(game).hull.id, "frigate.akashi")
   t.ok(hours > 1 and hours < 6, `it took {hours} game hours`)
   -- every part of the loop was used
   for _, kind in { "Mined", "Reprocessed", "JobStarted", "JobDone", "OrderPlaced", "OrderFilled", "Sold", "Bought",

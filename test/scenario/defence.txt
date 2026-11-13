@@ -30,7 +30,7 @@ lua assert(not GameDebug.CanPress('Complete:1'), 'a rig is not held by taking th
 
 # A destroyer to do it in, and out to the rig: by the autopilot, where
 # the rig is in the next system.
-lua assert(GameDebug.Fly('destroyer.halberd'), 'no destroyer')
+lua assert(GameDebug.Fly('destroyer.nozomi'), 'no destroyer')
 until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()
 frames 5
@@ -58,7 +58,7 @@ patience 1500
 until GameDebug.Engage() == 0 and select(4, GameDebug.Defence()) == select(5, GameDebug.Defence())
 lua assert(select(2, GameDebug.Defence()) == select(3, GameDebug.Defence()), 'every wave should have come')
 lua assert(select(6, GameDebug.Defence()) > 0, 'the rig should be standing')
-lua assert(GameDebug.Hull() == 'destroyer.halberd', 'the destroyer should have come through it')
+lua assert(GameDebug.Hull() == 'destroyer.nozomi', 'the destroyer should have come through it')
 
 # Held. Home, to be paid, and the agent has another.
 lua GameDebug.TimeScale(16)

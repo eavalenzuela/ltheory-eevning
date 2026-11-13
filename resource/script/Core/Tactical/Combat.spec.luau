@@ -519,7 +519,7 @@ suite:Case("a raider carries a warp disruptor, and a pilot it catches cannot war
     t.ok(Modules.byId[entry[1]].hex == nil, "a scout should hold nobody")
   end
 
-  local a = arena("battleship.bastion", {}, "frigate.courier", {}, 60000)
+  local a = arena("battleship.owari", {}, "frigate.courier", {}, 60000)
   local state = a.game.state
   local pirate = Pirates.Spawn(state, raider, 1, a.me.x + 6000, a.me.y, a.me.z, a.me.grid)
   local planet = 0

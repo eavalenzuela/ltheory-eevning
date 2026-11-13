@@ -386,7 +386,7 @@ suite:Case("in secure space the police come for a marked pilot, follow them, and
 end)
 
 suite:Case("the police come in what it takes: destroyers for a small ship, cruisers for a cruiser, battleships for a battleship", function(t)
-  for _, case in { { "frigate.courier", "destroyer", 1 }, { "cruiser.cuirass", "cruiser", 2 }, { "battleship.bastion", "battleship", 3 } } :: { { any } } do
+  for _, case in { { "frigate.courier", "destroyer", 1 }, { "cruiser.ouyou", "cruiser", 2 }, { "battleship.owari", "battleship", 3 } } :: { { any } } do
     local game = busy()
     local state = game.state
     move(game, 1)

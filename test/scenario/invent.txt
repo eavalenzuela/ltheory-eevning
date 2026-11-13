@@ -39,9 +39,9 @@ lua assert(GameDebug.Hangar('blueprint.autocannon.small.ii') <= 1)
 # that has none offers no inventing. The Talmar's hauler, the Sunfish,
 # has the Tarantula: its blueprint offers that, and wants more to work
 # it out than a module does, sixteen datacores.
-lua assert(GameDebug.Give('blueprint.frigate.javelin', 1))
+lua assert(GameDebug.Give('blueprint.frigate.akashi', 1))
 frames 3
-lua assert(GameDebug.Blueprint('blueprint.frigate.javelin'), 'no such blueprint')
+lua assert(GameDebug.Blueprint('blueprint.frigate.akashi'), 'no such blueprint')
 frames 3
 lua assert(not GameDebug.CanPress('Invent'), 'a hull with no tech 2 make should offer no inventing')
 lua assert(GameDebug.Give('blueprint.industrial.sunfish', 1) and GameDebug.Give('datacore', 15))

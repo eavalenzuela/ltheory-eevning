@@ -57,6 +57,8 @@ local skills: { Skill } = {
     note = "Level 1 to fly dreadnoughts and siege dreadnoughts." },
   { id = "supercarriers", name = "Supercarriers", rank = 16, start = -1, requires = { { skill = "carriers", level = 4 } },
     note = "Level 1 to fly supercarriers." },
+  { id = "ultracapitals", name = "Ultracapitals", rank = 20, start = -1, requires = { { skill = "carriers", level = 5 } },
+    note = "Level 1 to fly an ultracapital." },
   { id = "industrials", name = "Industrials", rank = 3, start = -1, requires = { { skill = "frigates", level = 2 } },
     note = "To fly haulers." },
   { id = "freighters", name = "Freighters", rank = 8, start = -1, requires = { { skill = "industrials", level = 4 } },

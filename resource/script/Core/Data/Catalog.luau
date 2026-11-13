@@ -37,8 +37,8 @@ for index, faction in Factions.list do
 end
 
 local CLASSES: { [string]: number } = { frigate = 1, destroyer = 2, cruiser = 3, attackbattlecruiser = 4, battlecruiser = 5,
-  battleship = 6, carrier = 7, siegedreadnought = 8, dreadnought = 9, supercarrier = 10, industrial = 11, capitalindustrial = 12,
-  freighter = 13, barge = 14, capsule = 15 }
+  battleship = 6, carrier = 7, siegedreadnought = 8, dreadnought = 9, supercarrier = 10, ultracapital = 10.2, industrial = 11,
+  capitalindustrial = 12, freighter = 13, barge = 14, capsule = 15 }
 
 -- Kinds of module, by the start of the type's id.
 local MODULES: { { any } } = {

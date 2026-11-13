@@ -368,7 +368,7 @@ suite:Case("a save from the version before still opens", function(t)
   local old, oldLength = Codec.Encode(file)
   t.eq(Core.Hash(Core.Load(old, oldLength)), Core.Hash(game))
   -- Version 9 had the Kethri's missile frigate, the Spindle, which is now
-  -- the Vessari Javelin: whatever was one comes through as the other.
+  -- the Vessari Akashi: whatever was one comes through as the other.
   local renamed = Codec.Decode(data, length)
   renamed.saveVersion = 9
   local item = 0
@@ -380,7 +380,7 @@ suite:Case("a save from the version before still opens", function(t)
   t.ok(item ~= 0, "the starting hangar has rounds in it to turn into a hull")
   renamed.state.items[item].type = "frigate.spindle"
   old, oldLength = Codec.Encode(renamed)
-  t.eq(Core.Load(old, oldLength).state.items[item].type, "frigate.javelin")
+  t.eq(Core.Load(old, oldLength).state.items[item].type, "frigate.akashi")
   -- one from before any migration is still refused
   file.saveVersion = 3
   old, oldLength = Codec.Encode(file)
@@ -659,36 +659,37 @@ suite:Case("a save with the hulls the Talmar had opens with the hulls they have:
   t.eq(Core.Hash(opened), Core.Hash(game))
 end)
 
-suite:Case("a save with the tech 2 make of a hull that every hull had opens with the plain hull, and what was fitted to it in its hold", function(t)
+suite:Case("a save with the tech 2 make of a hull that every hull had opens with the plain hull, and what was fitted to it in its hold; and a hull the Vessari had is the one they have", function(t)
   local game = newGame()
   local state = game.state
   local home = Core.Query.Player(game).docked
-  local spare = Space.NewShip(state, "frigate.javelin", "Spare", "player", home)
+  local spare = Space.NewShip(state, "frigate.akashi", "Spare", "player", home)
   -- (a gun fitted to it: put there by hand, the ship being nobody's to fit just now)
   local gun = Items.Add(state, "autocannon.small", 1, spare.id, "cargo")
   gun.place, gun.slot = "high", 1
-  Items.Add(state, "blueprint.frigate.javelin", 1, home, "hangar")
+  Items.Add(state, "blueprint.frigate.akashi", 1, home, "hangar")
   Items.Add(state, "drone.light.ii", 2, home, "hangar")
   local data, length = Core.Save(game)
-  -- (as it was when there was a Javelin II: that ship is one, and the blueprint is its)
+  -- (as it was when the Vessari's frigate was the Javelin and there was a Javelin II: that ship is one, and
+  -- the blueprint is its)
   local file = Codec.Decode(data, length)
   file.saveVersion = 65
   file.state.ships[spare.id].type = "frigate.javelin.ii"
   for _, item in file.state.items do
-    if item.type == "blueprint.frigate.javelin" then
+    if item.type == "blueprint.frigate.akashi" then
       item.type = "blueprint.frigate.javelin.ii"
     end
   end
   local old, oldLength = Codec.Encode(file)
   local opened = Core.Load(old, oldLength)
-  t.eq(opened.state.ships[spare.id].type, "frigate.javelin")
+  t.eq(opened.state.ships[spare.id].type, "frigate.akashi")
   local fitted, held, blueprints, drones = 0, 0, 0, 0
   for _, id in opened.state.itemIds do
     local item = opened.state.items[id]
     t.ok(Types.Get(item.type) ~= nil, `an item of a type there is not: {item.type}`)
     fitted += if item.holder == spare.id and item.place == "high" then 1 else 0
     held += if item.holder == spare.id and item.place == "cargo" and item.type == "autocannon.small" then 1 else 0
-    blueprints += if item.type == "blueprint.frigate.javelin" then item.quantity else 0
+    blueprints += if item.type == "blueprint.frigate.akashi" then item.quantity else 0
     -- (a drone has its "II" still, as a module has)
     drones += if item.type == "drone.light.ii" then item.quantity else 0
   end

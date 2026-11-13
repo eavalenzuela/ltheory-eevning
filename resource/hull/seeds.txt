@@ -29,22 +29,25 @@
 # And there are anybody's (frigate.courier, frigate.prospector,
 # barge.quarry, industrial.hauler, freighter.dray). The classes, with
 # how big a ship of each is (its radius: half its length) and the
-# Vessari hull of it:
+# Kethri hull of it:
 #
-#   frigate               42 m   frigate.javelin
-#   destroyer             75 m   destroyer.halberd
-#   cruiser              150 m   cruiser.cuirass
-#   industrial           180 m   industrial.caravan
-#   attackbattlecruiser  200 m   attackbattlecruiser.glaive
-#   battlecruiser        300 m   battlecruiser.pavise
-#   battleship           400 m   battleship.bastion
+#   frigate               42 m   frigate.lancer
+#   destroyer             75 m   destroyer.gantry
+#   cruiser              150 m   cruiser.trellis
+#   industrial           180 m   industrial.lighter
+#   attackbattlecruiser  200 m   attackbattlecruiser.stanchion
+#   battlecruiser        300 m   battlecruiser.buttress
+#   battleship           400 m   battleship.spire
 #   barge                160 m   (a faction's own: the Talmar's barge.anteater)
 #   freighter            650 m   (a faction's own: the Talmar's freighter.rhino)
-#   capitalindustrial    700 m   capitalindustrial.emporium
-#   siegedreadnought     950 m   siegedreadnought.trebuchet
-#   carrier             1000 m   carrier.citadel
-#   dreadnought         1300 m   dreadnought.rampart
-#   supercarrier        1300 m   supercarrier.stronghold
+#   capitalindustrial    700 m   capitalindustrial.derrick
+#   siegedreadnought     950 m   siegedreadnought.obelisk
+#   carrier             1000 m   carrier.concourse
+#   dreadnought         1300 m   dreadnought.colonnade
+#   supercarrier        1300 m   supercarrier.arcade
+#   ultracapital         (each its own size: the Vessari's
+#                         ultracapital.daiichi is 2,060 m, four
+#                         kilometres wide)
 #
 # (The names of the hulls from the attack battlecruiser on are first
 # drafts, in resource/script/Core/Data/Factions.luau. Until a line here
@@ -78,3 +81,19 @@ freighter.rhino             22  4
 freighter.sugarglider       40  8
 capitalindustrial.jaguar    28  7
 capitalindustrial.rapa      28  8
+
+# The Vessari's ships (the owner's list of them, 2026-11-13).
+frigate.akashi           59800  6  broad
+frigate.kabuto           21311  6  broad
+destroyer.nozomi         81099  5  broad
+destroyer.kanau          81099  6  broad
+cruiser.ouyou              601  8  broad
+battlecruiser.naishou    47254  7  spear
+battleship.owari          8434  8  broad
+battleship.yoake         76306  7  broad
+carrier.azayake           4616  7  broad
+ultracapital.daiichi      6004  8  broad
+industrial.mizumushi     23586  5  broad
+industrial.akaboshi      23587  4  broad
+freighter.yoruzake       94483  6  spear
+capitalindustrial.okami  18580  6  spear

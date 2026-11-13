@@ -28,7 +28,7 @@ lua assert(not GameDebug.CanPress('Complete:1'), 'a tender is not seen through b
 
 # A destroyer to do it in, and out to the route: by the autopilot, where
 # it is in the next system.
-lua assert(GameDebug.Fly('destroyer.halberd'), 'no destroyer')
+lua assert(GameDebug.Fly('destroyer.nozomi'), 'no destroyer')
 until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()
 frames 5
@@ -54,7 +54,7 @@ patience 400
 until GameDebug.Engage() >= 0 and (select(4, GameDebug.Defence()) == 1 or GameDebug.Defence() == '')
 lua assert(GameDebug.Defence() ~= '', 'the tender was lost')
 lua assert(not GameDebug.Select('Light Tender'), 'the tender should be gone once it is clear')
-lua assert(GameDebug.Hull() == 'destroyer.halberd', 'the destroyer should have come through it')
+lua assert(GameDebug.Hull() == 'destroyer.nozomi', 'the destroyer should have come through it')
 
 # Through. Home, to be paid, and the agent's next is a rig.
 lua GameDebug.TimeScale(16)

@@ -82,7 +82,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 66
+Core.SAVE_VERSION = 67
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -316,6 +316,52 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- 59: a corporation keeps its books by head, and a tower keeps count
   -- of its running. A save from before has what was earned and spent
   -- under no head, and its towers begin their count now.
+  -- 67: the Vessari's ships are the project owner's list of them
+  -- (Data/Factions), as the Talmar's became theirs: the hulls they had
+  -- are gone, and each is the hull of their line that stands where it
+  -- stood, wherever a save has one.
+  [66] = function(state: any)
+    local RENAMED: { [string]: string } = {
+      ["frigate.javelin"] = "frigate.akashi", ["destroyer.halberd"] = "destroyer.nozomi", ["cruiser.cuirass"] = "cruiser.ouyou",
+      ["battleship.bastion"] = "battleship.owari", ["industrial.caravan"] = "industrial.mizumushi",
+      ["attackbattlecruiser.glaive"] = "battlecruiser.naishou", ["battlecruiser.pavise"] = "battlecruiser.naishou",
+      ["carrier.citadel"] = "carrier.azayake", ["supercarrier.stronghold"] = "carrier.azayake",
+      ["dreadnought.rampart"] = "battleship.owari", ["siegedreadnought.trebuchet"] = "battleship.owari",
+      ["capitalindustrial.emporium"] = "capitalindustrial.okami",
+    }
+    local function renamed(value: any): any
+      if type(value) ~= "string" then
+        return value
+      end
+      local now = RENAMED[value]
+      if now then
+        return now
+      elseif string.sub(value, 1, 10) == "blueprint." and RENAMED[string.sub(value, 11)] then
+        return "blueprint." .. RENAMED[string.sub(value, 11)]
+      end
+      return value
+    end
+    local function walk(node: any)
+      local moved: { [any]: any } = {}
+      for key, value in node do
+        if type(value) == "table" then
+          walk(value)
+        elseif type(value) == "string" then
+          node[key] = renamed(value)
+        end
+        if renamed(key) ~= key then
+          moved[key] = renamed(key)
+        end
+      end
+      for key, now in moved do
+        if node[now] == nil then
+          node[now] = node[key]
+        end
+        node[key] = nil
+      end
+    end
+    walk(state)
+  end,
   -- 66: a ship has no "II" (the owner's ruling: a tech 2 ship is a hull
   -- of its own, where a faction's line names one). What a save has of
   -- the tech 2 make of a hull that every hull had, it has of the plain
@@ -329,9 +375,14 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       end
       local base = string.sub(value, 1, -4)
       local named = if string.sub(base, 1, 10) == "blueprint." then string.sub(base, 11) else base
-      local hull = Ships.byId[named]
-      -- (a hull's, and not a drone's: a drone has its "II" still)
-      return if hull and hull.class ~= "drone" and Ships.byId[named .. ".ii"] == nil then base else value
+      -- (a hull's, by the class its name begins with, and not a drone's
+      -- or a module's: those have their "II" still. By the name, and not
+      -- by the hulls there are now: a hull of then may have another name
+      -- since, which the migrations after this one give it.)
+      local class = string.match(named, "^(%a+)%.")
+      local HULLS = { frigate = true, destroyer = true, cruiser = true, battlecruiser = true, attackbattlecruiser = true,
+        battleship = true, industrial = true, barge = true, freighter = true, capitalindustrial = true }
+      return if class and HULLS[class] and Ships.byId[value] == nil then base else value
     end
     local refitted: { [number]: boolean } = {}
     for id, ship in state.ships or {} do

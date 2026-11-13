@@ -70,19 +70,19 @@ suite:Case("a drone is an item with a blueprint and a hull of its own, and hulls
     t.eq({ hull.class, hull.restricted, hull.drones } :: { any }, { "drone", true, 0 } :: { any })
     t.eq(Types.Get(kind.hull), nil)
   end
-  t.eq({ Ships.byId["frigate.courier"].drones, Ships.byId["cruiser.cuirass"].drones, Ships.byId["battleship.bastion"].drones,
+  t.eq({ Ships.byId["frigate.courier"].drones, Ships.byId["cruiser.ouyou"].drones, Ships.byId["battleship.owari"].drones,
     Ships.byId["capsule"].drones } :: { any }, { 1, 4, 5, 0 } :: { any })
 end)
 
 suite:Case("drones are launched from the hold, as many as the hull controls and the pilot has the skill for", function(t)
   local docked = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   t.eq(refused(docked, { kind = "LaunchDrones", actor = 0 }), "docked")
-  local none = flying("cruiser.cuirass", 0, 5)
+  local none = flying("cruiser.ouyou", 0, 5)
   t.eq(refused(none, { kind = "LaunchDrones", actor = 0 }), "no drones in the drone bay")
-  local green = flying("cruiser.cuirass", 3, 0)
+  local green = flying("cruiser.ouyou", 3, 0)
   t.eq(refused(green, { kind = "LaunchDrones", actor = 0 }), "needs Drones 1")
   -- A cruiser controls four: a pilot with Drones 2 has two out, and with Drones 5, four.
-  local game = flying("cruiser.cuirass", 6, 2)
+  local game = flying("cruiser.ouyou", 6, 2)
   t.ok((submit(game, { kind = "LaunchDrones", actor = 0 })))
   local status = Core.Query.Drones(game)
   t.eq({ status.carried, status.out, status.max }, { 4, 2, 2 })
@@ -106,7 +106,7 @@ end)
 
 suite:Case("a tech 2 drone takes Drones 4 to have out, and flies a tougher hull with the tech 2 make of what it carries", function(t)
   -- With only tech 2 drones in the bay, a pilot short of the skill launches none.
-  local game, me = flying("cruiser.cuirass", 0, 3)
+  local game, me = flying("cruiser.ouyou", 0, 3)
   local state = game.state
   Items.Add(state, "drone.light.ii", 2, me.id, "dronebay")
   t.eq(refused(game, { kind = "LaunchDrones", actor = 0 }), "needs Drones 4 for what is in the bay")
@@ -133,7 +133,7 @@ suite:Case("a tech 2 drone takes Drones 4 to have out, and flies a tougher hull 
   end
   t.eq(seen, 2)
   -- The others of them: a mining drone and a repair drone of the tech 2 make carry the tech 2 make of their tools.
-  local other, ship = flying("cruiser.cuirass", 0, 5)
+  local other, ship = flying("cruiser.ouyou", 0, 5)
   Items.Add(other.state, "drone.mining.ii", 1, ship.id, "dronebay")
   Items.Add(other.state, "drone.repair.ii", 1, ship.id, "dronebay")
   t.ok((submit(other, { kind = "LaunchDrones", actor = 0 })))
@@ -146,7 +146,7 @@ suite:Case("a tech 2 drone takes Drones 4 to have out, and flies a tougher hull 
 end)
 
 suite:Case("a drone keeps station on its owner, fights what it is pointed at, and comes back when it is called", function(t)
-  local game, me = flying("cruiser.cuirass", 2, 5)
+  local game, me = flying("cruiser.ouyou", 2, 5)
   local state = game.state
   t.ok((submit(game, { kind = "LaunchDrones", actor = 0 })))
   steps(game, 5)
@@ -183,7 +183,7 @@ suite:Case("a drone keeps station on its owner, fights what it is pointed at, an
 end)
 
 suite:Case("a drone goes for whoever attacks its owner, and what it destroys is its owner's doing", function(t)
-  local game, me = flying("battleship.bastion", 5, 5)
+  local game, me = flying("battleship.owari", 5, 5)
   local state = game.state
   t.ok((submit(game, { kind = "LaunchDrones", actor = 0 })))
   local scout = Pirates.Spawn(state, Pirates.SCOUT, me.system, me.x + 5000, me.y, me.z, me.grid)
@@ -206,7 +206,7 @@ suite:Case("a drone goes for whoever attacks its owner, and what it destroys is 
 end)
 
 suite:Case("a pilot whose drones fire on somebody who is no pirate is marked for it", function(t)
-  local game, me = flying("cruiser.cuirass", 2, 5)
+  local game, me = flying("cruiser.ouyou", 2, 5)
   local state = game.state
   t.ok((submit(game, { kind = "LaunchDrones", actor = 0 })))
   local trader = Space.NewShip(state, "industrial.hauler", "Trader", "civilian", 0)
@@ -218,7 +218,7 @@ suite:Case("a pilot whose drones fire on somebody who is no pirate is marked for
 end)
 
 suite:Case("when its owner warps or docks, a drone that is near is taken aboard and one that is not is lost", function(t)
-  local game, me = flying("cruiser.cuirass", 2, 5)
+  local game, me = flying("cruiser.ouyou", 2, 5)
   local state = game.state
   t.ok((submit(game, { kind = "LaunchDrones", actor = 0 })))
   steps(game, 3)
@@ -252,7 +252,7 @@ suite:Case("when its owner warps or docks, a drone that is near is taken aboard 
 end)
 
 suite:Case("drones out are in the save, and an older save has none", function(t)
-  local game = flying("cruiser.cuirass", 3, 5)
+  local game = flying("cruiser.ouyou", 3, 5)
   t.ok((submit(game, { kind = "LaunchDrones", actor = 0 })))
   steps(game, 10)
   local data, length = Core.Save(game)
@@ -277,7 +277,7 @@ suite:Case("drones go into a ship's drone bay at a station, as many as it has ro
   local home = state.player.home
   state.skills.drones = 5
   -- A Courier's bay is ten cubic metres: two light drones, or one of the bigger kinds.
-  t.eq({ Ships.byId["frigate.courier"].bay, Ships.byId["cruiser.cuirass"].bay, Ships.byId["capsule"].bay }, { 10, 50, 0 })
+  t.eq({ Ships.byId["frigate.courier"].bay, Ships.byId["cruiser.ouyou"].bay, Ships.byId["capsule"].bay }, { 10, 50, 0 })
   local lights = Items.Add(state, "drone.light", 3, home, "hangar")
   local rounds = Items.In(state, home, "hangar")[1]
   t.eq(refused(game, { kind = "MoveItems", actor = 0, item = rounds.id, to = "dronebay", quantity = 1 }), "only drones go in a drone bay")
@@ -389,7 +389,7 @@ suite:Case("a mining drone cuts the rock its owner is working, brings the ore ba
 end)
 
 suite:Case("a repair drone goes to whoever of its side has lost most armour and mends them", function(t)
-  local game, me = flying("cruiser.cuirass", 1, 5)
+  local game, me = flying("cruiser.ouyou", 1, 5)
   local state = game.state
   Items.Add(state, "drone.repair", 1, me.id, "dronebay")
   t.ok((submit(game, { kind = "LaunchDrones", actor = 0 })))

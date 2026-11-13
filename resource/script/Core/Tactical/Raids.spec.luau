@@ -217,11 +217,11 @@ suite:Case("a hired pilot set to hold the place counts for the ship they fly", f
       want = "", need = 0, limit = 0, keep = 0, retry = 0, loyalty = 40, drops = {}, turn = 0 }
     table.insert(state.fleetIds, id)
   end
-  guard(901, "destroyer.halberd", "patrol", station)
+  guard(901, "destroyer.nozomi", "patrol", station)
   t.eq({ Raids.Defence(state, starbase) }, { Raids.PATROL.destroyer, 0, 1 })
   -- (one who is only following, or holds somewhere else, is not holding this place)
-  guard(902, "destroyer.halberd", "follow", station)
-  guard(903, "destroyer.halberd", "patrol", station + 1)
+  guard(902, "destroyer.nozomi", "follow", station)
+  guard(903, "destroyer.nozomi", "patrol", station + 1)
   t.eq({ Raids.Defence(state, starbase) }, { Raids.PATROL.destroyer, 0, 1 })
   -- A destroyer is worth a battery; with a battery beside it, a raid in low security at its weakest is met.
   table.insert(starbase.modules, { type = "battery.gun", ready = state.tick })

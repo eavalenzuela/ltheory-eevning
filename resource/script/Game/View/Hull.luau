@@ -2930,11 +2930,16 @@ local STAND_SIZES: { [string]: { number } } = { frigate = { 1 }, destroyer = { 1
   attackbattlecruiser = { 3 }, battlecruiser = { 2 }, dreadnought = { 3, 2 }, siegedreadnought = { 4 } }
 local function standFit(hull: Ships.ShipType): { string }
   local faction = Factions.byId[hull.lineage]
-  local gun = STAND_GUN[if faction then faction.weapon else "projectile"] or "autocannon"
+  local family = if faction then faction.weapon else "projectile"
   local sizes = STAND_SIZES[hull.class] or { 1 }
   local fit: { string } = {}
   for index = 1, hull.turrets do
-    table.insert(fit, `{gun}.{STAND_WORD[sizes[(index - 1) % #sizes + 1]]}`)
+    local size = sizes[(index - 1) % #sizes + 1]
+    -- (a mass-miner's turrets are for mining; and a projectile people's
+    -- bigger guns are artillery, as the Vessari's hulls were drawn with)
+    table.insert(fit, if hull.role == "miner" then "miner.strip"
+      elseif family == "projectile" and size >= 2 then `artillery.{STAND_WORD[size]}`
+      else `{STAND_GUN[family] or "autocannon"}.{STAND_WORD[size]}`)
   end
   for index = 1, hull.launchers do
     table.insert(fit, STAND_RACK[sizes[(index - 1) % #sizes + 1]])

@@ -252,9 +252,9 @@ suite:Case("a rig goes into a hull of its size and no other, and one in a bigger
   t.ok(Core.Submit(game, { kind = "Fit", actor = state.player.ship, item = small.id }))
   Core.Step(game)
   -- A cruiser of the pilot's, with a medium rig in it; and another, in the hangar, with a large one that is its own size.
-  local cruiser = Space.NewShip(state, "cruiser.cuirass", "Cruiser", "player", home)
+  local cruiser = Space.NewShip(state, "cruiser.ouyou", "Cruiser", "player", home)
   local inCruiser = Items.Equip(state, cruiser.id, "rig.engine.medium", nil)
-  local battleship = Space.NewShip(state, "battleship.bastion", "Battleship", "player", home)
+  local battleship = Space.NewShip(state, "battleship.owari", "Battleship", "player", home)
   local inBattleship = Items.Equip(state, battleship.id, "rig.shield.large", nil)
   -- As a save from before rigs had sizes would have them: every one the rig there was, whatever it is in.
   local data, length = Core.Save(game)

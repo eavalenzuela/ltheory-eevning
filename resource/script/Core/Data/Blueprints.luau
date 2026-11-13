@@ -126,7 +126,7 @@ end
 local LARGE = 3
 local HULL_SIZE: { [string]: number } = { frigate = 1, destroyer = 1, cruiser = 2, industrial = 2, barge = 2, attackbattlecruiser = 2,
   battlecruiser = 2, battleship = 3, freighter = 3, carrier = 3, dreadnought = 3, siegedreadnought = 3, capitalindustrial = 3,
-  supercarrier = 3 }
+  supercarrier = 3, ultracapital = 3 }
 
 -- 'mix' is how the mineral part of the cost is split; 'parts', if
 -- given, the components (and what is made on planets) that take

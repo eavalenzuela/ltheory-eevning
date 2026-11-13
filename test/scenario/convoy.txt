@@ -30,7 +30,7 @@ lua assert(select(7, GameDebug.Defence()) == GameDebug.System(), 'a convoy is in
 lua assert(not GameDebug.CanPress('Complete:1'), 'a tender is not seen in by taking the job')
 
 # A destroyer to do it in, and out to the route.
-lua assert(GameDebug.Fly('destroyer.halberd'), 'no destroyer')
+lua assert(GameDebug.Fly('destroyer.nozomi'), 'no destroyer')
 until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()
 frames 5
@@ -59,7 +59,7 @@ lua assert(select(2, GameDebug.Defence()) == select(3, GameDebug.Defence()), 'th
 patience 500
 until GameDebug.Engage() >= 0 and (select(4, GameDebug.Defence()) == 2 or GameDebug.Defence() == '')
 lua assert(GameDebug.Defence() ~= '', 'the tender was lost off the station')
-lua assert(GameDebug.Hull() == 'destroyer.halberd', 'the destroyer should have come through it')
+lua assert(GameDebug.Hull() == 'destroyer.nozomi', 'the destroyer should have come through it')
 
 # In. Paid at the station, and the agent's next is a rig.
 lua assert(GameDebug.Order('Dock', 'home'), 'docking at home was refused')

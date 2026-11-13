@@ -16,7 +16,7 @@
 wait 2
 lua GameDebug.Peaceful(true)
 lua assert(GameDebug.Docked(), 'a new game starts docked')
-lua assert(GameDebug.Fly('industrial.caravan'), 'the Caravan could not be flown')
+lua assert(GameDebug.Fly('industrial.mizumushi'), 'the Mizumushi could not be flown')
 lua GameDebug.Grant(5000000)
 wait 1.5
 lua assert(GameDebug.Market('tower.vessari.small'))
@@ -90,7 +90,7 @@ lua assert(GameDebug.Tower() == 'dark', 'a sealed tower gives nothing')
 
 # A destroyer for the pilot, the tower opened, and they are back: seen
 # off, every one of them, the siege is broken and the tower stands.
-lua assert(GameDebug.Fly('destroyer.halberd', true), 'no destroyer')
+lua assert(GameDebug.Fly('destroyer.nozomi', true), 'no destroyer')
 until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()
 frames 5
@@ -103,7 +103,7 @@ patience 500
 until GameDebug.Engage() == 0 and select(4, GameDebug.Siege()) == 0
 lua GameDebug.TimeScale(1)
 lua assert(GameDebug.Tower() == 'lit', 'the tower should stand, and be lit again')
-lua assert(GameDebug.Hull() == 'destroyer.halberd', 'the destroyer should have come through it')
+lua assert(GameDebug.Hull() == 'destroyer.nozomi', 'the destroyer should have come through it')
 
 # Once more, and what stands for it is destroyed: the tower is lost.
 lua assert(GameDebug.Besiege(9))

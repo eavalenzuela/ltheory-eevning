@@ -62,7 +62,7 @@ suite:Case("a station asks a little over the going price and bids a little under
   t.near(iron.bid, 4 * 0.98, 0.001)
   -- A hull: ten in stock, so the first one off the shelf is dearer than
   -- normal: 10 * ln(10/9) of base, plus the spread.
-  local javelin = Core.Query.Quote(game, home, "frigate.javelin")
+  local javelin = Core.Query.Quote(game, home, "frigate.akashi")
   t.eq(javelin.stock, 10)
   t.near(assert(javelin.ask), 400000 * 10 * math.log(10 / 9) * 1.02, 0.01)
   t.near(javelin.bid, 400000 * 10 * math.log(11 / 10) * 0.98, 0.01)
@@ -93,16 +93,16 @@ end)
 suite:Case("buying takes the price for each unit in turn, and the price rises behind it", function(t)
   local game, home = newGame()
   game.state.wallet = 10000000
-  local before = assert(Core.Query.Quote(game, home, "frigate.javelin").ask)
-  local cost = assert(Core.Query.BuyCost(game, home, "frigate.javelin", 5))
+  local before = assert(Core.Query.Quote(game, home, "frigate.akashi").ask)
+  local cost = assert(Core.Query.BuyCost(game, home, "frigate.akashi", 5))
   -- half the shelf: 10 * ln(10/5) of base each way round, plus spread
   t.eq(cost, math.ceil(400000 * 10 * math.log(2) * 1.02))
   t.ok(cost > 5 * before, "five cost more than five times the first")
-  order(t, game, { kind = "BuyNow", actor = 0, type = "frigate.javelin", quantity = 5 })
+  order(t, game, { kind = "BuyNow", actor = 0, type = "frigate.akashi", quantity = 5 })
   t.eq(game.state.wallet, 10000000 - cost)
-  t.eq(hangar(game, "frigate.javelin"), 5)
-  t.ok(assert(Core.Query.Quote(game, home, "frigate.javelin").ask) > 1.8 * before, "and the next is dearer still")
-  t.eq(refused(game, { kind = "BuyNow", actor = 0, type = "frigate.javelin", quantity = 6 }), "the station has not that many")
+  t.eq(hangar(game, "frigate.akashi"), 5)
+  t.ok(assert(Core.Query.Quote(game, home, "frigate.akashi").ask) > 1.8 * before, "and the next is dearer still")
+  t.eq(refused(game, { kind = "BuyNow", actor = 0, type = "frigate.akashi", quantity = 6 }), "the station has not that many")
   game.state.wallet = 10
   t.eq(refused(game, { kind = "BuyNow", actor = 0, type = "shield.extender.small", quantity = 1 }), "not enough credits")
   t.eq(refused(game, { kind = "BuyNow", actor = 0, type = "no.such.thing", quantity = 1 }), "no such item type")
@@ -250,13 +250,13 @@ suite:Case("a thin market moves against an order: one hull more than a station w
   local game, home = newGame()
   local state = game.state
   state.wallet = 1000000
-  local quote = Core.Query.Quote(game, home, "frigate.javelin")
+  local quote = Core.Query.Quote(game, home, "frigate.akashi")
   -- ten on the shelves at 400,000: the eleventh is worth less, and the
   -- tenth, to someone who wants it gone from them, more
   t.near(quote.sellAt, 400000 * 10 * math.log(11 / 10) * 1.02, 0.01)
   t.near(assert(quote.buyAt), 400000 * 10 * math.log(10 / 9) * 0.98, 0.01)
   t.ok(quote.sellAt < 390000 and assert(quote.buyAt) > 410000)
-  local hulls = Items.Add(state, "frigate.javelin", 3, home, "hangar")
+  local hulls = Items.Add(state, "frigate.akashi", 3, home, "hangar")
   order(t, game, { kind = "PlaceOrder", actor = 0, to = "sell", item = hulls.id, quantity = 3,
     price = math.floor(quote.sellAt) - 500 })
   local placed = Core.Query.Orders(game, home)[1]
@@ -281,7 +281,7 @@ local function settle(t: Test.Context, game: Core.Game, type: string, want: numb
 end
 
 suite:Case("buying and selling the same thing at one station never pays, however skilled the trader", function(t)
-  local lots: { { any } } = { { "mineral.copper", 100 }, { "shield.extender.small", 1 }, { "ammo.emp", 200 }, { "frigate.javelin", 1 } }
+  local lots: { { any } } = { { "mineral.copper", 100 }, { "shield.extender.small", 1 }, { "ammo.emp", 200 }, { "frigate.akashi", 1 } }
   local START = 10000000
   local boughtByOrder, soldByOrder = 0, 0
   for _, skilled in { false, true } do
@@ -444,15 +444,15 @@ suite:Case("a hull can be bought, assembled, boarded and flown", function(t)
   local state = game.state
   state.wallet = 600000
   local first = state.player.ship
-  order(t, game, { kind = "BuyNow", actor = 0, type = "frigate.javelin", quantity = 1 })
-  t.eq(hangar(game, "frigate.javelin"), 1)
+  order(t, game, { kind = "BuyNow", actor = 0, type = "frigate.akashi", quantity = 1 })
+  t.eq(hangar(game, "frigate.akashi"), 1)
   t.eq(refused(game, { kind = "Assemble", actor = 0, item = stack(game, "ammo.emp").id }), "that is not a hull")
-  order(t, game, { kind = "Assemble", actor = 0, item = stack(game, "frigate.javelin").id })
-  t.eq(hangar(game, "frigate.javelin"), 0)
+  order(t, game, { kind = "Assemble", actor = 0, item = stack(game, "frigate.akashi").id })
+  t.eq(hangar(game, "frigate.akashi"), 0)
   local ships = Core.Query.Ships(game, home)
   t.eq(#ships, 2)
   local javelin = ships[2]
-  t.eq({ javelin.type, javelin.docked, javelin.owner } :: { any }, { "frigate.javelin", home, "player" } :: { any })
+  t.eq({ javelin.type, javelin.docked, javelin.owner } :: { any }, { "frigate.akashi", home, "player" } :: { any })
   t.eq(refused(game, { kind = "BoardShip", actor = 0, target = first }), "already aboard")
   t.eq(refused(game, { kind = "BoardShip", actor = 0, target = javelin.id }), "needs Frigates 2",
     "a new pilot has not trained for a combat frigate")
@@ -464,9 +464,9 @@ suite:Case("a hull can be bought, assembled, boarded and flown", function(t)
   Core.Submit(game, { kind = "Undock", actor = javelin.id })
   Core.Step(game)
   local ball = assert(Core.Query.Ball(game, javelin.id))
-  -- (a Javelin's top speed, with the pilot's Navigation as it is)
+  -- (a Akashi's top speed, with the pilot's Navigation as it is)
   t.eq(ball.maxVelocity, 325)
-  t.eq(Core.Query.Player(game).hull.id, "frigate.javelin")
+  t.eq(Core.Query.Player(game).hull.id, "frigate.akashi")
 end)
 
 suite:Case("a pilot who docks a capsule where they keep a ship is put in that ship", function(t)
@@ -540,8 +540,8 @@ suite:Case("a faction's stations have its own hulls and weapons at anybody's pri
     end
   end
   local vessari, kethri, orun = assert(stations.vessari), assert(stations.kethri), assert(stations.orun)
-  t.eq({ Market.Leaning("vessari", "frigate.javelin") } :: { any }, { 1, false } :: { any })
-  t.eq({ Market.Leaning("kethri", "frigate.javelin") } :: { any }, { Market.FOREIGN_HULL, true } :: { any })
+  t.eq({ Market.Leaning("vessari", "frigate.akashi") } :: { any }, { 1, false } :: { any })
+  t.eq({ Market.Leaning("kethri", "frigate.akashi") } :: { any }, { Market.FOREIGN_HULL, true } :: { any })
   t.eq({ Market.Leaning("kethri", "frigate.courier") } :: { any }, { 1, false } :: { any })
   t.eq({ Market.Leaning("kethri", "laser.pulse.small") } :: { any }, { 1, false } :: { any })
   t.eq({ Market.Leaning("vessari", "laser.pulse.small") } :: { any }, { Market.FOREIGN_ARMS, false } :: { any })
@@ -549,16 +549,16 @@ suite:Case("a faction's stations have its own hulls and weapons at anybody's pri
   t.eq({ Market.Leaning("orun", "missile.light.em") } :: { any }, { Market.FOREIGN_ARMS, false } :: { any })
   t.eq({ Market.Leaning("orun", "blaster.small") } :: { any }, { 1, false } :: { any })
   t.eq({ Market.Leaning("orun", "mineral.iron") } :: { any }, { 1, false } :: { any })
-  -- A Javelin is the Vessari's: ten on their shelves, four on the Kethri's, and dearer there.
-  local here, there = Core.Query.Quote(game, vessari, "frigate.javelin"), Core.Query.Quote(game, kethri, "frigate.javelin")
+  -- A Akashi is the Vessari's: ten on their shelves, four on the Kethri's, and dearer there.
+  local here, there = Core.Query.Quote(game, vessari, "frigate.akashi"), Core.Query.Quote(game, kethri, "frigate.akashi")
   t.eq({ here.stock, there.stock }, { 10, Market.FOREIGN_STOCK })
-  t.ok(there.bid > here.bid * 1.2, `a Javelin fetches {there.bid} among the Kethri and {here.bid} at home`)
+  t.ok(there.bid > here.bid * 1.2, `a Akashi fetches {there.bid} among the Kethri and {here.bid} at home`)
   t.ok(assert(there.ask) > assert(here.ask) * 1.5, "a hull bought where it is not made should cost half as much again, and more")
   -- So carrying one from where it is made to where it is not pays, tax and all.
   state.wallet = 10000000
-  local cost = assert(Core.Query.BuyCost(game, vessari, "frigate.javelin", 1))
-  Items.Add(state, "frigate.javelin", 1, kethri, "hangar")
-  t.ok(Core.Query.SellValue(game, kethri, "frigate.javelin", 1) > cost * 1.03, "a hull carried to another faction's space should sell at a profit")
+  local cost = assert(Core.Query.BuyCost(game, vessari, "frigate.akashi", 1))
+  Items.Add(state, "frigate.akashi", 1, kethri, "hangar")
+  t.ok(Core.Query.SellValue(game, kethri, "frigate.akashi", 1) > cost * 1.03, "a hull carried to another faction's space should sell at a profit")
   -- And so do the Kethri's lasers among the Orun, by the hold.
   local lasers = assert(Core.Query.BuyCost(game, kethri, "laser.pulse.small", 5))
   t.ok(Core.Query.SellValue(game, orun, "laser.pulse.small", 5) > lasers * 1.03, "lasers carried to the Orun should sell at a profit")

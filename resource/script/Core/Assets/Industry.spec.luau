@@ -482,7 +482,7 @@ suite:Case("a tech 2 hull is invented from the plain hull's blueprint, built of 
   t.eq({ assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.freighter.rhino"])).datacores,
     assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.capitalindustrial.jaguar"])).datacores }, { 64, 128 })
   -- (a hull whose faction names no tech 2 make of it has none, nor has a tech 2 hull one of its own)
-  for _, plain in { "frigate.courier", "frigate.javelin", "battleship.bastion", "barge.quarry", "frigate.carvarro", "industrial.armadillo" } do
+  for _, plain in { "frigate.courier", "frigate.akashi", "battleship.owari", "barge.quarry", "frigate.carvarro", "industrial.armadillo" } do
     t.eq(Industry.InventionPlan(state, Blueprints.byId["blueprint." .. plain]), nil, plain)
     t.eq(Ships.byId[plain .. ".ii"], nil, plain)
   end

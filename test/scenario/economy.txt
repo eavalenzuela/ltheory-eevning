@@ -123,21 +123,21 @@ until GameDebug.Orders() == 0
 lua GameDebug.TimeScale(1)
 lua assert(GameDebug.Wallet() > _G.before + 1800, 'the order did not pay')
 
-# Buy a Javelin's hull and assemble it.
+# Buy a Akashi's hull and assemble it.
 lua GameDebug.Grant(500000)
 wait 1.5
-lua assert(GameDebug.Market('frigate.javelin'))
+lua assert(GameDebug.Market('frigate.akashi'))
 frames 3
 until GameDebug.Press('BuyNow')
-until GameDebug.Hangar('frigate.javelin') == 1
+until GameDebug.Hangar('frigate.akashi') == 1
 until GameDebug.Press('Ships')
 frames 3
-until GameDebug.Press('Assemble:frigate.javelin')
+until GameDebug.Press('Assemble:frigate.akashi')
 until GameDebug.Ships() == 2
 
 # It cannot be flown yet. Train Frigates to level 2, then board it.
 frames 3
-lua assert(not GameDebug.CanPress('Board:2'), 'an untrained pilot should not be able to board a Javelin')
+lua assert(not GameDebug.CanPress('Board:2'), 'an untrained pilot should not be able to board a Akashi')
 until GameDebug.Press('Skills')
 frames 3
 lua assert(GameDebug.Skill('frigates') == 1)
@@ -149,7 +149,7 @@ lua GameDebug.TimeScale(1)
 until GameDebug.Press('Ships')
 frames 3
 until GameDebug.Press('Board:2')
-until GameDebug.Hull() == 'frigate.javelin'
+until GameDebug.Hull() == 'frigate.akashi'
 
 # And it flies.
 until GameDebug.Press('UNDOCK')

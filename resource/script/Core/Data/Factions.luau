@@ -78,7 +78,12 @@ export type Faction = {
 -- 'stealth': it is built to go unseen. (Neither a jump drive nor what
 -- stealth is to be is made yet: they are marked here, and said on the
 -- hull's sheet.)
-export type Hull = { name: string, class: string, role: string?, tech: number?, of: string?, jump: boolean?, stealth: boolean? }
+-- 'role' "miner" is a capital industrial that mines for itself (a
+-- mass-miner): 'hardpoints' is then how many mining turrets it has.
+-- 'radius' is how big it is, m, for a hull of a class that has no size
+-- of its own (an ultracapital).
+export type Hull = { name: string, class: string, role: string?, tech: number?, of: string?, jump: boolean?, stealth: boolean?,
+  hardpoints: number?, radius: number? }
 
 Factions.list = {
   -- The four human factions.
@@ -93,8 +98,27 @@ Factions.list = {
     paint = { primary = { 0.72, 0.58, 0.30 }, secondary = { 0.22, 0.20, 0.18 }, glow = { 1.0, 0.75, 0.35 } },
     shield = 0.8, armor = 1.35, hull = 1.05, velocity = 0.92, mass = 1.1, cpu = 1.1, powergrid = 0.95, capacitor = 0.9,
     lockRange = 1.1, cargo = 1.15, price = 1, mids = -1, lows = 1, hardpoints = 0,
-    hulls = { frigate = "Javelin", destroyer = "Halberd", cruiser = "Cuirass", battleship = "Bastion", industrial = "Caravan",
-      attackbattlecruiser = "Glaive", battlecruiser = "Pavise", carrier = "Citadel", dreadnought = "Rampart", siegedreadnought = "Trebuchet", capitalindustrial = "Emporium", supercarrier = "Stronghold" },
+    hulls = {},
+    -- (The project owner's list of the Vessari's ships, 2026-11-13, with
+    -- the seed each is drawn from in resource/hull/seeds.txt. They have
+    -- no attack battlecruiser, dreadnought, siege dreadnought or
+    -- supercarrier, and no barge of their own. Their ultracapital is
+    -- four kilometres wide: the hull its seed grows is very nearly as
+    -- wide as it is long, so it is 2,060 m in radius.)
+    line = {
+      { name = "Akashi", class = "frigate" }, { name = "Kabuto", class = "frigate" },
+      { name = "Nozomi", class = "destroyer" },
+      { name = "Kanau", class = "destroyer", tech = 2, of = "Nozomi" },
+      { name = "Ouyou", class = "cruiser" },
+      { name = "Naishou", class = "battlecruiser" },
+      { name = "Owari", class = "battleship" }, { name = "Yoake", class = "battleship" },
+      { name = "Azayake", class = "carrier" },
+      { name = "Daiichi", class = "ultracapital", radius = 2060 },
+      { name = "Mizumushi", class = "industrial" },
+      { name = "Akaboshi", class = "industrial", tech = 2, of = "Mizumushi" },
+      { name = "Yoruzake", class = "freighter" },
+      { name = "Okami", class = "capitalindustrial", role = "miner", hardpoints = 10 },
+    },
   },
   {
     -- (After the project owner's draft, 2026-11-10: humans, an
@@ -177,7 +201,7 @@ Factions.list = {
     hulls = { frigate = "Cutthroat", destroyer = "Jackal", cruiser = "Marauder", battleship = "Ravager", industrial = "Fence",
       attackbattlecruiser = "Reaver", battlecruiser = "Brigand", carrier = "Warren", dreadnought = "Tyrant", siegedreadnought = "Despoiler", capitalindustrial = "Hoard", supercarrier = "Matriarch" },
     donors = { frigate = "talmar", destroyer = "orun", cruiser = "vessari", battleship = "kethri", industrial = "orun",
-      attackbattlecruiser = "orun", battlecruiser = "vessari", carrier = "orun", dreadnought = "kethri", siegedreadnought = "vessari",
+      attackbattlecruiser = "orun", battlecruiser = "vessari", carrier = "orun", dreadnought = "kethri", siegedreadnought = "kethri",
       capitalindustrial = "talmar", supercarrier = "kethri" },
   },
 

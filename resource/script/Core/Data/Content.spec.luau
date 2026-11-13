@@ -198,6 +198,64 @@ suite:Case("the Talmar's ships are the owner's rework of them: each by name, of 
   t.eq(Ships.byId["frigate.cutthroat"].donor, "frigate.carvarro")
 end)
 
+suite:Case("the Vessari's ships are the owner's list of them: an ultracapital four kilometres wide, a mass-miner with ten mining turrets, and two tech 2 hulls of their own", function(t)
+  local vessari = Factions.byId.vessari
+  local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, battlecruiser = 300, battleship = 400, carrier = 1000, ultracapital = 2060,
+    industrial = 180, freighter = 650, capitalindustrial = 700 }
+  -- (name, class, the hull it is the tech 2 make of)
+  local LINE: { { any } } = {
+    { "Akashi", "frigate" }, { "Kabuto", "frigate" }, { "Nozomi", "destroyer" }, { "Kanau", "destroyer", "Nozomi" }, { "Ouyou", "cruiser" },
+    { "Naishou", "battlecruiser" }, { "Owari", "battleship" }, { "Yoake", "battleship" }, { "Azayake", "carrier" },
+    { "Daiichi", "ultracapital" }, { "Mizumushi", "industrial" }, { "Akaboshi", "industrial", "Mizumushi" },
+    { "Yoruzake", "freighter" }, { "Okami", "capitalindustrial" },
+  }
+  t.eq(#assert(vessari.line), #LINE)
+  local theirs = 0
+  for _, hull in Ships.list do
+    theirs += if hull.lineage == "vessari" then 1 else 0
+  end
+  t.eq(theirs, #LINE)
+  for _, entry in LINE do
+    local name: string, class: string, of: string? = entry[1], entry[2], entry[3]
+    local hull = assert(Ships.byId[`{class}.{string.lower(name)}`], `the Vessari have no {name}`)
+    t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any }, { `Vessari {name}`, class, "vessari", RADIUS[class] } :: { any }, name)
+    if of then
+      local base = assert(Ships.byId[`{class}.{string.lower(of)}`])
+      t.eq({ hull.tech, hull.base, Ships.Improved(base.id) } :: { any }, { 2, base.id, hull } :: { any }, name)
+      t.eq(Types.Info(hull.id).scarce, true, name)
+    else
+      t.eq({ hull.tech, Types.Get(hull.id) ~= nil, Blueprints.byProduct[hull.id] ~= nil } :: { any }, { nil, true, true } :: { any }, name)
+      t.ok(#Skills.Needs(hull.id) >= 1, name)
+    end
+    -- An armour people, in every warship; and mostly launchers.
+    if class ~= "industrial" and class ~= "freighter" and class ~= "capitalindustrial" then
+      t.ok(hull.armor > hull.shield, name)
+      t.ok(hull.launchers >= hull.turrets, name)
+    end
+  end
+  -- The ultracapital: no hardpoint, and a bay for what it launches many times a supercarrier's.
+  local great = Ships.byId["ultracapital.daiichi"]
+  t.eq({ great.turrets + great.launchers, Ships.Capital(great.class) } :: { any }, { 0, true } :: { any })
+  t.ok(assert(great.bay) > 5 * Ships.BAY.supercarrier and assert(great.drones) > Ships.DRONES.supercarrier)
+  t.eq(Skills.Needs(great.id)[1].skill, "ultracapitals")
+  -- The mass-miner: a capital industrial with ten mining turrets, and the fitting for ten strip miners.
+  local miner, strip = Ships.byId["capitalindustrial.okami"], Modules.byId["miner.strip"]
+  t.eq({ miner.turrets, miner.launchers, miner.role } :: { any }, { 10, 0, "miner" } :: { any })
+  t.ok(miner.highs >= 10 and 10 * strip.cpu <= miner.cpu and 10 * strip.powergrid <= miner.powergrid)
+  -- (the Talmar's capital industrial, which commands and does not mine, has none)
+  t.eq(Ships.byId["capitalindustrial.jaguar"].turrets, 0)
+  -- What they had is gone, and so are the classes their line does not name.
+  for _, gone in { "frigate.javelin", "destroyer.halberd", "cruiser.cuirass", "battleship.bastion", "industrial.caravan" } do
+    t.eq(Ships.byId[gone], nil, gone)
+  end
+  for _, hull in Ships.list do
+    t.ok(hull.lineage ~= "vessari" or (hull.class ~= "attackbattlecruiser" and hull.class ~= "dreadnought"
+      and hull.class ~= "siegedreadnought" and hull.class ~= "supercarrier" and hull.class ~= "barge"), hull.id)
+  end
+  -- The pirates' cruiser is made over from theirs.
+  t.eq(Ships.byId["cruiser.marauder"].donor, "cruiser.ouyou")
+end)
+
 suite:Case("every pirate hull is somebody else's, cheaper, quicker and thinner-skinned", function(t)
   local pirates = Factions.byId.unbound
   local donors = assert(pirates.donors)
@@ -296,8 +354,9 @@ suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in i
       t.eq(Types.Get(hull.id) == nil or Types.Info(hull.id).scarce == nil, true, hull.id)
     end
   end
-  -- The Talmar's three: the Tarantula, the Sugarglider and the Rapa. (The other factions' lines name none yet.)
-  t.eq(improved, 3)
+  -- The Talmar's three (the Tarantula, the Sugarglider and the Rapa) and the Vessari's two (the Kanau and the
+  -- Akaboshi). The other factions' lines name none yet.
+  t.eq(improved, 5)
   t.ok(Ships.Improved("frigate.courier") == nil and Ships.Improved("industrial.hauler") == nil and Ships.Improved("capsule") == nil)
 end)
 
@@ -351,7 +410,7 @@ suite:Case("every hull for sale can be built from ore, and has skills a pilot ca
 end)
 
 suite:Case("a freighter is a hold and nothing else: ten times a hauler's, nothing to fight with, slow, and a skill of its own", function(t)
-  local dray, mule, bastion = Ships.byId["freighter.dray"], Ships.byId["industrial.hauler"], Ships.byId["battleship.bastion"]
+  local dray, mule, bastion = Ships.byId["freighter.dray"], Ships.byId["industrial.hauler"], Ships.byId["battleship.owari"]
   t.eq({ dray.class, dray.lineage, dray.restricted, dray.tech } :: { any }, { "freighter", "", nil, nil } :: { any })
   t.ok(dray.cargo >= 10 * mule.cargo, `a freighter holds {dray.cargo} m3 and a hauler {mule.cargo}`)
   -- Nothing to fight with, nowhere to put it, and no rigs: a few low slots are all there is to fit.
@@ -782,10 +841,10 @@ suite:Case("fittings come in three sizes, each for a larger ship than the last",
     t.ok(string.find(medium.name, "Medium") ~= nil and string.find(large.name, "Large") ~= nil, medium.name)
     t.ok(#Skills.Needs(large.id) == 1 and Skills.byId[Skills.Needs(large.id)[1].skill] ~= nil, family)
     -- a cruiser can power a medium one and not a large; a battleship can power a large
-    t.ok(medium.powergrid < 0.3 * Ships.byId["cruiser.cuirass"].powergrid, family)
-    t.ok(large.powergrid > Ships.byId["cruiser.cuirass"].powergrid or family == "capacitor.battery" or family == "shield.extender"
+    t.ok(medium.powergrid < 0.3 * Ships.byId["cruiser.ouyou"].powergrid, family)
+    t.ok(large.powergrid > Ships.byId["cruiser.ouyou"].powergrid or family == "capacitor.battery" or family == "shield.extender"
       or family == "shield.booster", family)
-    t.ok(large.powergrid < 0.3 * Ships.byId["battleship.bastion"].powergrid, family)
+    t.ok(large.powergrid < 0.3 * Ships.byId["battleship.owari"].powergrid, family)
   end
   t.ok(assert(Modules.byId["armor.plate.large"]).passive[1].value > 8 * 520 - 1)
   t.ok(assert(assert(Modules.byId["shield.booster.large"]).repair).amount > 8 * 26)

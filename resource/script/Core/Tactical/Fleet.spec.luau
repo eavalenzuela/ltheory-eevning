@@ -152,7 +152,7 @@ suite:Case("a hired pilot is given a ship of the player's that is docked there a
   t.eq(refused(game, { kind = "AssignShip", actor = 0, pilot = wing.id, target = state.player.ship }), "that is the ship you are flying")
   t.eq(refused(game, { kind = "AssignShip", actor = 0, pilot = wing.id, target = 0 }), `{wing.name} has no ship`)
   -- A cruiser wants a better pilot, and so does a module that wants a skill at 2.
-  local cruiser = Space.NewShip(state, "cruiser.cuirass", "Big", "player", state.player.home)
+  local cruiser = Space.NewShip(state, "cruiser.ouyou", "Big", "player", state.player.home)
   t.eq(refused(game, { kind = "AssignShip", actor = 0, pilot = wing.id, target = cruiser.id }),
     `{wing.name} is grade 1: a cruiser wants a pilot of grade 3`)
   local hard = Space.NewShip(state, "frigate.courier", "Hard", "player", state.player.home)
@@ -1664,7 +1664,7 @@ local function warship(): (Core.Game, State.Wingman, State.Ship)
   local state = game.state
   state.wallet = 10000000
   state.skills.leadership = 2
-  local ship = Space.NewShip(state, "destroyer.halberd", "Escort", "player", state.player.home)
+  local ship = Space.NewShip(state, "destroyer.nozomi", "Escort", "player", state.player.home)
   for _ = 1, Ships.byId[ship.type].turrets do
     Items.Equip(state, ship.id, "autocannon.small", "ammo.fusion")
   end

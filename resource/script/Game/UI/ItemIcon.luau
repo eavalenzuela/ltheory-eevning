@@ -148,7 +148,8 @@ local BY_CATEGORY: { [string]: string } = {
   skillbook = "book", goods = "crate", structure = "crate", planetary = "crate", moon = "rock", drone = "gear", implant = "gear",
 }
 local CLASS_PIPS: { [string]: number } = { frigate = 1, destroyer = 1, cruiser = 2, battleship = 3, industrial = 2, barge = 2, freighter = 3,
-  attackbattlecruiser = 3, battlecruiser = 2, carrier = 3, dreadnought = 3, siegedreadnought = 3, capitalindustrial = 3, supercarrier = 3 }
+  attackbattlecruiser = 3, battlecruiser = 2, carrier = 3, dreadnought = 3, siegedreadnought = 3, capitalindustrial = 3, supercarrier = 3,
+  ultracapital = 3 }
 
 -- The pictogram, the size (0 for none, else 1 to 3) and the category of
 -- a type.

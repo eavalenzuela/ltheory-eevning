@@ -13,7 +13,7 @@ wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
 lua GameDebug.Peaceful(true)
 lua GameDebug.Grant(3000000)
-lua assert(GameDebug.Spare('destroyer.halberd'), 'no destroyer')
+lua assert(GameDebug.Spare('destroyer.nozomi'), 'no destroyer')
 frames 3
 until GameDebug.Press('Crew')
 until GameDebug.Tab() == 'Crew'

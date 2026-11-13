@@ -168,7 +168,7 @@ end
 -- The ship a level is for: a frigate with a pilot of little skill, and
 -- on up. And the range it fights at.
 local FOR: { { any } } = {
-  { "frigate.javelin", 2, 2000 }, { "destroyer.halberd", 3, 2500 }, { "cruiser.paestro", 4, 5000 }, { "battleship.bastion", 4, 12000 },
+  { "frigate.akashi", 2, 2000 }, { "destroyer.nozomi", 3, 2500 }, { "cruiser.paestro", 4, 5000 }, { "battleship.owari", 4, 12000 },
 }
 
 suite:Case("a plain ship of the class a level is for comes through every camp of that level, and the class below it through few", function(t)

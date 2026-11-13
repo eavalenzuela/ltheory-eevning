@@ -13,7 +13,7 @@
 wait 2
 lua GameDebug.Peaceful(true)
 lua assert(GameDebug.Docked(), 'a new game starts docked')
-lua assert(GameDebug.Fly('industrial.caravan'), 'the Caravan could not be flown')
+lua assert(GameDebug.Fly('industrial.mizumushi'), 'the Mizumushi could not be flown')
 lua GameDebug.Grant(5000000)
 wait 1.5
 

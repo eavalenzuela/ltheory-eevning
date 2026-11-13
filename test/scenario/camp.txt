@@ -34,7 +34,7 @@ lua assert(select(7, GameDebug.Assault()) == 2, 'this camp has two rooms')
 lua assert(select(6, GameDebug.Assault()) == 1, 'only the first room should be found')
 lua assert(select(3, GameDebug.Assault()) == 3 and select(5, GameDebug.Assault()) == 2, 'three waves, and two works to destroy')
 
-lua assert(GameDebug.Fly('cruiser.cuirass', true), 'no cruiser')
+lua assert(GameDebug.Fly('cruiser.ouyou', true), 'no cruiser')
 until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()
 frames 5
@@ -75,14 +75,14 @@ lua assert(select(2, GameDebug.Works()) == 1, 'the battery should have its launc
 # Whatever is nearest, until the depot and the battery are destroyed.
 # That is the job, whoever of the camp's keepers is left.
 patience 200
-until (GameDebug.Engage(12000) >= 0 and GameDebug.Works() == 0) or GameDebug.Hull() ~= 'cruiser.cuirass'
-lua assert(GameDebug.Hull() == 'cruiser.cuirass', 'the cruiser should have come through it')
+until (GameDebug.Engage(12000) >= 0 and GameDebug.Works() == 0) or GameDebug.Hull() ~= 'cruiser.ouyou'
+lua assert(GameDebug.Hull() == 'cruiser.ouyou', 'the cruiser should have come through it')
 lua assert(select(4, GameDebug.Assault()) == 2, 'two works destroyed should be the job done')
 
 # Whoever is about is seen off, so as to get away. Home, to be paid.
 patience 200
-until GameDebug.Engage(12000) == 0 or GameDebug.Hull() ~= 'cruiser.cuirass'
-lua assert(GameDebug.Hull() == 'cruiser.cuirass', 'the cruiser should have come through the rest of them')
+until GameDebug.Engage(12000) == 0 or GameDebug.Hull() ~= 'cruiser.ouyou'
+lua assert(GameDebug.Hull() == 'cruiser.ouyou', 'the cruiser should have come through the rest of them')
 lua assert(GameDebug.Order('Dock', 'home'), 'docking at home was refused')
 patience 300
 until GameDebug.Docked()

@@ -26,7 +26,7 @@ lua assert(select(3, GameDebug.Assault()) == 2 and select(5, GameDebug.Assault()
 lua assert(not GameDebug.CanPress('Complete:1'), 'a camp is not cleared by taking the job')
 
 # A destroyer to do it in, and out to the camp.
-lua assert(GameDebug.Fly('destroyer.halberd'), 'no destroyer')
+lua assert(GameDebug.Fly('destroyer.nozomi'), 'no destroyer')
 until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()
 frames 5
@@ -48,7 +48,7 @@ until GameDebug.Pirates() == 2
 lua assert(select(2, GameDebug.Assault()) == 2, 'the second wave should be out')
 patience 900
 until GameDebug.Engage() == 0 and select(4, GameDebug.Assault()) == 5
-lua assert(GameDebug.Hull() == 'destroyer.halberd', 'the destroyer should have come through it')
+lua assert(GameDebug.Hull() == 'destroyer.nozomi', 'the destroyer should have come through it')
 
 # Cleared. Home, to be paid, and the agent has another.
 lua assert(GameDebug.Order('Dock', 'home'), 'docking at home was refused')
