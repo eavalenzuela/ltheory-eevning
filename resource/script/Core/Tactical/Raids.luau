@@ -53,6 +53,7 @@ local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Moons = require("@lt/Core/Data/Moons")
 local Pirates = require("@lt/Core/Tactical/Pirates")
+local Reactions = require("@lt/Core/Data/Reactions")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
@@ -322,7 +323,8 @@ function Raids.Step(state: State.State, events: { Event })
         local taken, type = 0, ""
         -- (out of the pilot's hangar there and the corporation's alike)
         for _, item in Items.Stored(state, id) do
-          if Moons.byId[item.type] then
+          -- (and at what its reactor has made of that)
+          if Moons.byId[item.type] or Reactions.byId[item.type] then
             local units = math.floor(item.quantity * share)
             if units > 0 then
               taken += units

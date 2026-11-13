@@ -273,6 +273,12 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `The siege of {if body then body.name else "your tower"} is broken: nobody of them is left`)
   elseif kind == "StarbaseCharged" then
     Session.Say(session, `Sealing charges aboard: {event.charges}`)
+  elseif kind == "ReactionSet" then
+    Session.Say(session, if event.type == "" then "The reactor is making nothing" else `The reactor is making {Types.Info(event.type).name}`)
+  elseif kind == "ReactorIdle" then
+    local body = Core.Query.Body(session.game, event.station)
+    Session.Say(session, `{if body then body.name else "A tower"} has not the {Types.Info(event.want).name} for more {Types.Info(event.type).name}: `
+      .. `its reactor stands idle`)
   elseif kind == "KeepSighted" then
     local moon = Core.Query.Body(session.game, event.moon)
     Session.Say(session, `Pirates hold {if moon then moon.name else "a moon here"} with a tower of their own: nobody anchors there until it is brought down`)

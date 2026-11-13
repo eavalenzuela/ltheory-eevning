@@ -26,6 +26,7 @@ local Hud = require("@lt/Game/UI/Hud")
 local Icons = require("@lt/Icons")
 local Hull = require("@lt/Game/View/Hull")
 local Im = require("@lt/Game/UI/Im")
+local Reactions = require("@lt/Core/Data/Reactions")
 local Scanner = require("@lt/Game/UI/Scanner")
 local Planet = require("@lt/Game/View/Planet")
 local Scene = require("@lt/Game/View/Scene")
@@ -847,6 +848,33 @@ function Debug.Drill(): (string, string, number, number, number)
   local deposit = drilling.deposit :: any
   return if not drilling.anchored then "none" elseif not drilling.online then "waiting"
     elseif drilling.stored >= drilling.room then "full" else "drilling", deposit.material.id, drilling.perHour, drilling.stored, drilling.room
+end
+
+-- How the reactor stands at the starbase the pilot put up last: "none"
+-- (no reactor), "waiting" (one that is not working yet, or has no
+-- power), "nothing" (making nothing), "idle" (too little to make it
+-- of) or "making"; and what it is set to make ("" for nothing), and how
+-- many units it has made since the tower was anchored.
+function Debug.Reactor(): (string, string, number)
+  local state = session.game.state
+  local id = state.starbaseIds[#state.starbaseIds]
+  local status = if id then Core.Query.Starbase(session.game, id) else nil
+  if status == nil or not status.reacting.anchored then
+    return "none", "", 0
+  end
+  local reacting = status.reacting
+  return if not reacting.online then "waiting" elseif reacting.making == nil then "nothing" elseif reacting.starved then "idle" else "making",
+    if reacting.making then reacting.making.id else "", state.starbases[id].composed
+end
+
+-- What a reactor makes of a moon material: the composite's id, and the
+-- other material it is made of ("" and "" for what is no moon material).
+function Debug.Composite(material: string): (string, string)
+  local composite = Reactions.Of(material)
+  if composite == nil then
+    return "", ""
+  end
+  return composite.id, if composite.from[1] == material then composite.from[2] else composite.from[1]
 end
 
 -- The running of the starbase the pilot put up last, since it was

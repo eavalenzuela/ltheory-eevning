@@ -532,6 +532,53 @@ local MODULES: { [string]: (b: Builder) -> () } = {
     block(b, GLOW, v(0.20, 0.22, 0.474), v(0.08, 0.02, 0.004), nil, 0.3)
     mast(b, v(0.05, 0.85, 0.04), 0.15, 0.01)
   end,
+  -- A reactor: a vessel of eight sides in a cage of girders, banded in
+  -- warning and lit at its waist; a feed drum out on an arm either side
+  -- of it, one for each thing it is fed, piped in at the top; what it
+  -- makes let down into a hopper under it; and a stack on its head, lit
+  -- where it vents.
+  ["array.reactor"] = function(b)
+    -- the vessel
+    block(b, PLATING, v(0, 0.02, 0), v(0.27, 0.36, 0.27), nil, 0.3)
+    block(b, PLATING, v(0, 0.02, 0), v(0.27, 0.36, 0.27), v(math.pi / 4, 0, 0), 0.3)
+    block(b, TRIM, v(0, 0.30, 0), v(0.30, 0.018, 0.30), v(math.pi / 8, 0, 0), 0.3)
+    block(b, TRIM, v(0, -0.26, 0), v(0.30, 0.018, 0.30), v(math.pi / 8, 0, 0), 0.3)
+    windows(b, v(0, 0.02, 0), 0.272, 3, 0.022)
+    -- its cage
+    for _, x in { -0.40, 0.40 } do
+      for _, z in { -0.40, 0.40 } do
+        beam(b, FRAME, v(x, -0.50, z), v(x, 0.50, z), 0.028)
+      end
+    end
+    for _, y in { -0.50, 0.50 } do
+      for _, z in { -0.40, 0.40 } do
+        beam(b, FRAME, v(-0.40, y, z), v(0.40, y, z), 0.024)
+      end
+      for _, x in { -0.40, 0.40 } do
+        beam(b, FRAME, v(x, y, -0.40), v(x, y, 0.40), 0.024)
+      end
+    end
+    beam(b, FRAME, v(-0.40, -0.50, 0.40), v(0.40, 0.50, 0.40), 0.014)
+    beam(b, FRAME, v(0.40, -0.50, -0.40), v(-0.40, 0.50, -0.40), 0.014)
+    -- the stack, and where it vents
+    block(b, FRAME, v(0, 0.50, 0), v(0.12, 0.13, 0.12), nil, 0.3)
+    block(b, PLATING, v(0, 0.74, 0), v(0.075, 0.13, 0.075), v(math.pi / 4, 0, 0), 0.3)
+    block(b, GLOW, v(0, 0.88, 0), v(0.05, 0.012, 0.05), v(math.pi / 4, 0, 0), 0.45)
+    -- a feed drum either side, on an arm, piped in at the top
+    for index, side in { -1, 1 } do
+      local at = v(side * 0.74, 0.10 * side, 0.06 * side)
+      drum(b, at, 0.15, 0.58, if index == 1 then PATCH else PLATING)
+      beam(b, FRAME, v(side * 0.40, -0.10, 0), at + v(-side * 0.14, -0.14, 0), 0.026)
+      beam(b, FRAME, v(side * 0.40, 0.20, 0), at + v(-side * 0.14, 0.14, 0), 0.020)
+      conduit(b, { at + v(0, 0.30, 0), at + v(-side * 0.16, 0.44, 0), v(side * 0.20, 0.44, 0) }, 0.028)
+    end
+    -- the hopper under it
+    block(b, FRAME, v(0, -0.44, 0), v(0.10, 0.08, 0.10), nil, 0.3)
+    block(b, PLATING, v(0, -0.68, 0), v(0.22, 0.14, 0.18), nil, 0.1)
+    block(b, TRIM, v(0, -0.535, 0), v(0.225, 0.012, 0.185), nil, 0.1)
+    block(b, GLOW, v(0.224, -0.68, 0), v(0.004, 0.03, 0.10), nil, 0.3)
+    mast(b, v(0.38, 0.52, -0.38), 0.34, 0.02)
+  end,
   -- A habitat: decks on a spine, the widest in the middle and the rest
   -- smaller toward both ends, their ports lit; a dome at the top, a
   -- lesser one turned down at the bottom.

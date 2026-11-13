@@ -11,10 +11,11 @@
 -- and the rare two only where nobody keeps it: the better the deposit,
 -- the further from help the tower that works it.
 --
--- What they are for: the tech 2 make of anything is built with some
--- (Data/Blueprints): small things of the common grade, cruiser-sized
--- things of the middle one, and the largest of the rare. Stations
--- trade in them, thinly.
+-- What they are for: a tower's reactor makes a composite of the two of
+-- a grade (Data/Reactions), and the tech 2 make of anything is built
+-- with some of that (Data/Blueprints): small things of the common
+-- grade's, cruiser-sized things of the middle one's, and the largest of
+-- the rare. Stations trade in them, thinly.
 --
 -- (Every figure here is a first proposal, to be played and judged.)
 
@@ -103,20 +104,6 @@ end
 -- Units an hour a drill brings up from a deposit.
 function Moons.PerHour(deposit: Deposit): number
   return math.floor(Moons.YIELD * deposit.richness + 0.5)
-end
-
--- The material the tech 2 make of something is built with, by how big
--- the thing is (1 small: a frigate, a destroyer, a small module or a
--- drone; 2 medium; 3 large): one of that grade's two, 'turn' about, so
--- that both of a grade are wanted.
-function Moons.For(size: number, turn: number): Material
-  local of: { Material } = {}
-  for _, material in Moons.materials do
-    if material.grade == math.clamp(size, 1, 3) then
-      table.insert(of, material)
-    end
-  end
-  return of[turn % #of + 1]
 end
 
 return Moons

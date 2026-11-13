@@ -82,7 +82,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 63
+Core.SAVE_VERSION = 64
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -316,6 +316,16 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- 59: a corporation keeps its books by head, and a tower keeps count
   -- of its running. A save from before has what was earned and spent
   -- under no head, and its towers begin their count now.
+  -- 64: a tower can have a reactor, which makes a composite of what
+  -- drills bring up. One of a save from before is making nothing.
+  [63] = function(state: any)
+    for _, starbase in state.starbases do
+      starbase.reaction = starbase.reaction or ""
+      starbase.reacted = starbase.reacted or state.tick
+      starbase.composed = starbase.composed or 0
+      starbase.starved = starbase.starved or false
+    end
+  end,
   -- 63: pirates hold the rarest moons where nobody keeps order, with
   -- towers of their own. A save from before has none up yet: they are
   -- put up as the pilot comes to each system again.
@@ -766,7 +776,8 @@ local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true, StartResearch = t
 local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true }
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true, ModifyOrder = true }
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
-local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true, UnanchorTower = true }
+local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true, UnanchorTower = true,
+  SetReaction = true }
 local SITE_COMMANDS = { Scan = true, LaunchProbe = true, RecallProbes = true }
 local HACK_COMMANDS = { StartHack = true, HackNode = true, AbandonHack = true }
 local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones = true }
@@ -1605,6 +1616,13 @@ export type StarbaseStatus = {
   moon: string,
   drilling: Starbases.Drilling,
   next: number,
+  -- How its reactor stands (Assets/Starbases): whether one is anchored
+  -- and online, what it is set to make, how much of what that is made
+  -- of is in the hangars, and whether it stood idle last for want of
+  -- it; and the seconds until its next batch (0 when it is making
+  -- nothing).
+  reacting: Starbases.Reacting,
+  reacts: number,
   -- What it has against a raid (Tactical/Raids): its strength, how
   -- many batteries of it are online and how many hired pilots hold the
   -- place; and how strong the raids that come there are, at least and
@@ -1639,13 +1657,16 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
   local ship = state.ships[state.player.ship]
   local moon = Space.Object(state, Starbases.Moon(state, starbase))
   local drilling = Starbases.Drilling(state, starbase)
+  local reacting = Starbases.Reacting(state, starbase)
   local defence, batteries, patrol = Raids.Defence(state, starbase)
   local raids = Raids.STRENGTH[Raids.Band(state, starbase)]
   return {
     tower = Structures.towerById[starbase.tower], mine = ship ~= nil and ship.owner == starbase.owner,
     anchored = Starbases.Anchored(state, starbase), wait = math.max(0, starbase.ready - state.tick) * Constants.TICK, lit = lit,
     fuel = starbase.fuel, hours = Starbases.Hours(starbase), powergrid = powergrid, cpu = cpu, modules = modules,
-    moon = if moon then moon.name else "", drilling = drilling,
+    moon = if moon then moon.name else "", drilling = drilling, reacting = reacting,
+    reacts = if reacting.online and reacting.making then math.max(0, starbase.reacted + 3600 / Constants.TICK - state.tick) * Constants.TICK
+      else 0,
     next = if drilling.online and drilling.deposit then math.max(0, starbase.drilled + 3600 / Constants.TICK - state.tick) * Constants.TICK
       else 0,
     defence = defence, batteries = batteries, patrol = patrol,

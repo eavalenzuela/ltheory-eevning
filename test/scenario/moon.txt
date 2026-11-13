@@ -6,6 +6,10 @@
 # flown to. A tower, fuel and a Moon Drill are given, the tower is
 # anchored there and lit, and the drill anchored at it. An hour on, an
 # hour's worth of what is under the moon is in the tower's hangar.
+# Then a Reactor Array is anchored and set to make the composite that
+# material goes into, the other material it is made of is given (a
+# cheat: that is another moon's), and an hour on a batch of the
+# composite is in the hangar, a batch of each material gone into it.
 
 wait 2
 lua GameDebug.Peaceful(true)
@@ -62,6 +66,35 @@ lua assert(GameDebug.Hangar(_G.material) == select(4, GameDebug.Drill()), 'and i
 lua assert(GameDebug.Tally() > 0, 'the tower should have burnt fuel by now')
 lua assert(select(2, GameDebug.Tally()) == select(4, GameDebug.Drill()), 'what came up should be on the tower count')
 lua assert(select(3, GameDebug.Tally()) == 0 and select(4, GameDebug.Tally()) > 0 and select(5, GameDebug.Tally()) > 0)
+frames 3
+
+# A reactor: anchored, and making nothing until it is told what.
+lua assert(GameDebug.Reactor() == 'none', 'no reactor should be anchored yet')
+lua assert(GameDebug.Give('array.reactor', 1))
+frames 3
+until GameDebug.Press('Anchor:array.reactor')
+lua GameDebug.TimeScale(10)
+until GameDebug.Reactor() == 'nothing'
+lua GameDebug.TimeScale(1)
+# It is set to make what the moon's material goes into, with the other
+# thing that is made of to hand. An hour on a batch is in the hangar.
+lua _G.composite, _G.other = GameDebug.Composite(_G.material)
+lua assert(_G.composite ~= '', 'what is under the moon should go into something')
+lua assert(GameDebug.Give(_G.other, 300))
+frames 3
+until GameDebug.Press('React:' .. _G.composite)
+until GameDebug.Reactor() == 'making'
+lua assert(select(2, GameDebug.Reactor()) == _G.composite)
+lua GameDebug.TimeScale(60)
+patience 200
+until GameDebug.Hangar(_G.composite) > 0
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Hangar(_G.composite) == 100, 'an hour should make a batch')
+lua assert(GameDebug.Hangar(_G.other) == 200, 'a batch of the other material should have gone into it')
+lua assert(select(3, GameDebug.Reactor()) == 100, 'what was made should be on the tower count')
+# Told to make nothing, it stops.
+until GameDebug.Press('React:off')
+until GameDebug.Reactor() == 'nothing'
 frames 3
 
 echo moon scenario passed

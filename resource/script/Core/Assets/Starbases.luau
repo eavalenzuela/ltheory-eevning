@@ -31,6 +31,13 @@
 --     array online); with no room for more the drill stands idle until
 --     some is taken away. One drill to a tower, and none at a moon with
 --     nothing under it.
+--   - A tower with a reactor online makes a composite of the two moon
+--     materials of a grade (Data/Reactions): every hour the tower is
+--     lit, a batch of each out of the tower's hangars and a batch of
+--     the composite into them. Which composite is the owner's to set
+--     (SetReaction), moored there. With too little of either material
+--     the reactor stands idle until there is more. One reactor to a
+--     tower.
 --
 -- Pirates come for a tower where order is thin (Tactical/Raids), and
 -- its batteries fire on them (Tactical/Batteries).
@@ -48,6 +55,7 @@ local Corporation = require("@lt/Core/Assets/Corporation")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Moons = require("@lt/Core/Data/Moons")
+local Reactions = require("@lt/Core/Data/Reactions")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Structures = require("@lt/Core/Data/Structures")
@@ -190,6 +198,34 @@ function Starbases.Drilling(state: State.State, starbase: State.Starbase): Drill
     perHour = if deposit then Moons.PerHour(deposit) else 0, stored = stored,
     room = Moons.SILO + Moons.STORAGE * online(state, starbase, Structures.STORAGE),
   }
+end
+
+-- How a starbase's reactor stands: whether one is anchored and whether
+-- it is online, what it is set to make (nil: nothing), how many units
+-- of each thing that is made of are in the tower's hangars (in the
+-- order of the composite's 'from'), and whether it stood idle last for
+-- want of them.
+export type Reacting = { anchored: boolean, online: boolean, making: Reactions.Composite?, have: { number }, starved: boolean }
+function Starbases.Reacting(state: State.State, starbase: State.Starbase): Reacting
+  local anchored = false
+  for _, module in starbase.modules do
+    anchored = anchored or module.type == Structures.REACTOR
+  end
+  local making = Reactions.byId[starbase.reaction]
+  local have: { number } = {}
+  if making then
+    for index, from in making.from do
+      have[index] = 0
+      -- (in the pilot's hangar there or the corporation's)
+      for _, item in Items.Stored(state, starbase.id) do
+        if item.type == from then
+          have[index] += item.quantity
+        end
+      end
+    end
+  end
+  return { anchored = anchored, online = online(state, starbase, Structures.REACTOR) > 0, making = making, have = have,
+    starved = starbase.starved }
 end
 
 -- Whether a starbase has a module online that gives a service.
@@ -349,6 +385,20 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
       elseif drilling.deposit == nil then
         return false, "this moon has nothing worth a drill"
       end
+    elseif module.id == Structures.REACTOR and Starbases.Reacting(state, starbase).anchored then
+      -- (and one reactor to a tower)
+      return false, "the tower has a reactor already"
+    end
+    return true
+  elseif kind == "SetReaction" then
+    -- What the tower's reactor makes: a composite ('type'), or nothing ("").
+    local what = command.type or ""
+    if not Starbases.Reacting(state, starbase).anchored then
+      return false, "no reactor is anchored here"
+    elseif what ~= "" and Reactions.byId[what] == nil then
+      return false, "a reactor makes no such thing"
+    elseif what == starbase.reaction then
+      return false, if what == "" then "the reactor is making nothing" else "the reactor is making that already"
     end
     return true
   elseif kind == "UnanchorModule" then
@@ -399,7 +449,7 @@ function Starbases.Raise(state: State.State, system: number, moon: System.Object
   })
   state.starbases[id] = { id = id, tower = tower.id, owner = owner, ready = state.tick + ticks(tower.anchor), fuel = 0,
     burnt = state.tick, modules = {}, drilled = state.tick, raid = 0, raids = 0, used = 0, raised = 0, robbed = 0,
-    core = 0, charges = 0, sealed = 0, siege = 0 }
+    core = 0, charges = 0, sealed = 0, siege = 0, reaction = "", reacted = state.tick, composed = 0, starved = false }
   State.InsertId(state.starbaseIds, id)
   return id
 end
@@ -512,10 +562,17 @@ function Starbases.Apply(state: State.State, command: State.Command, events: { E
     Items.Take(state, item, 1)
     table.insert(starbase.modules, { type = module.id, ready = state.tick + ticks(module.anchor) })
     table.insert(events, { kind = "ModuleAnchored", station = starbase.id, module = module.id })
+  elseif kind == "SetReaction" then
+    starbase.reaction, starbase.reacted, starbase.starved = command.type or "", state.tick, false
+    table.insert(events, { kind = "ReactionSet", station = starbase.id, type = starbase.reaction })
   elseif kind == "UnanchorModule" then
     for index = #starbase.modules, 1, -1 do
       if starbase.modules[index].type == command.type then
         table.remove(starbase.modules, index)
+        if command.type == Structures.REACTOR then
+          -- (a reactor taken down is making nothing when it goes up again)
+          starbase.reaction, starbase.starved = "", false
+        end
         Items.Add(state, command.type :: string, 1, starbase.id, "hangar")
         table.insert(events, { kind = "ModuleUnanchored", station = starbase.id, module = command.type })
         break
@@ -602,6 +659,49 @@ local function feed(state: State.State, starbase: State.Starbase, events: { Even
   end
 end
 
+-- A reactor's hour is up: a batch of the composite it is set to make,
+-- of a batch of each thing that is made of, out of the tower's hangars
+-- (the corporation's before the pilot's own) and into them. With too
+-- little of either it stands idle, and says so the first time.
+local function react(state: State.State, starbase: State.Starbase, events: { Event })
+  local making = Reactions.byId[starbase.reaction]
+  if making == nil then
+    return
+  end
+  local stored = Items.In(state, starbase.id, "corporate")
+  for _, item in Items.In(state, starbase.id, "hangar") do
+    table.insert(stored, item)
+  end
+  for _, from in making.from do
+    local have = 0
+    for _, item in stored do
+      have += if item.type == from then item.quantity else 0
+    end
+    if have < Reactions.BATCH then
+      if not starbase.starved then
+        starbase.starved = true
+        table.insert(events, { kind = "ReactorIdle", station = starbase.id, type = making.id, want = from })
+      end
+      return
+    end
+  end
+  for _, from in making.from do
+    local left = Reactions.BATCH
+    for _, item in stored do
+      if item.type == from and left > 0 then
+        local take = math.min(left, item.quantity)
+        left -= take
+        Items.Take(state, item, take)
+      end
+    end
+  end
+  -- (what a reactor makes is the business's, as what a drill brings up is)
+  Items.Add(state, making.id, Reactions.BATCH, starbase.id, Corporation.Store(state))
+  starbase.composed += Reactions.BATCH
+  starbase.starved = false
+  table.insert(events, { kind = "Reacted", station = starbase.id, type = making.id, units = Reactions.BATCH })
+end
+
 function Starbases.Step(state: State.State, events: { Event })
   for _, id in state.starbaseIds do
     local starbase = state.starbases[id]
@@ -645,6 +745,22 @@ function Starbases.Step(state: State.State, events: { Event })
             full = drilling.stored + units >= drilling.room })
         end
       end
+    end
+    -- (the reactor: its hour runs from when it came online and was set
+    -- to make something, and only while the tower is lit)
+    local began = 0
+    if starbase.reaction ~= "" and Starbases.Lit(state, starbase) then
+      for _, module in starbase.modules do
+        if module.type == Structures.REACTOR and state.tick >= module.ready then
+          began = math.max(starbase.reacted, module.ready)
+        end
+      end
+    end
+    if began == 0 then
+      starbase.reacted = state.tick
+    elseif state.tick - began >= HOUR then
+      starbase.reacted = began + HOUR
+      react(state, starbase, events)
     end
     if Starbases.Lit(state, starbase) then
       local every = interval(Structures.towerById[starbase.tower])

@@ -13,6 +13,7 @@ local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
 local Moons = require("@lt/Core/Data/Moons")
 local Planets = require("@lt/Core/Data/Planets")
+local Reactions = require("@lt/Core/Data/Reactions")
 local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
 
@@ -102,6 +103,11 @@ function Catalog.Group(id: string): (string, number, number)
   elseif category == "planetary" then
     return if Planets.rawById[id] then "Raw materials" else "Processed materials", if Planets.rawById[id] then 1 else 2, 0
   elseif category == "moon" then
+    -- (what a reactor makes of them comes after them all, by grade)
+    local composite = Reactions.byId[id]
+    if composite then
+      return "Composites", 4, composite.grade
+    end
     -- (by grade: the common, the middle and the rare)
     local grade = Moons.byId[id].grade
     return if grade == 1 then "Common moon materials" elseif grade == 2 then "Uncommon moon materials" else "Rare moon materials", grade, 0

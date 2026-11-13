@@ -58,7 +58,7 @@ export type Tower = {
 -- it serves the tower itself.
 -- (One of Structures.SERVICES: "market", "fitting", "refining",
 -- "industry", "research", "storage", "quarters", "defence",
--- "extraction".)
+-- "extraction", "reaction".)
 export type Service = string
 
 export type ModuleType = {
@@ -85,12 +85,15 @@ export type ColonyShip = {
 
 Structures.SIZES = { "small", "medium", "large" }
 Structures.SERVICES = { "market", "fitting", "refining", "industry", "research", "storage", "quarters", "defence",
-  "extraction" } :: { Service }
+  "extraction", "reaction" } :: { Service }
 -- The drill a pilot's tower gets at its moon with (Assets/Starbases,
 -- Data/Moons), and the array that makes room for more of what it
 -- brings up.
 Structures.DRILL = "array.drill"
 Structures.STORAGE = "array.storage"
+-- And the reactor that makes a composite of what drills bring up
+-- (Data/Reactions).
+Structures.REACTOR = "array.reactor"
 
 -- A tower by size. Its supply doubles with each size, and so does the
 -- fuel it burns (ten, twenty and forty blocks an hour).
@@ -144,6 +147,10 @@ local modules: { ModuleType } = {
   -- (what a pilot's tower is at a moon for: Data/Moons)
   { id = "array.drill", name = "Moon Drill", service = "extraction", radius = 320, powergrid = 600, cpu = 300, anchor = 60,
     pilot = true, volume = 2500, basePrice = 4000000 },
+  -- (and what makes something to build with of what a drill brings up:
+  -- Data/Reactions)
+  { id = "array.reactor", name = "Reactor Array", service = "reaction", radius = 300, powergrid = 500, cpu = 400, anchor = 60,
+    pilot = true, volume = 2500, basePrice = 3500000 },
   { id = "battery.gun", name = "Gun Battery", service = "defence", radius = 150, powergrid = 200, cpu = 60, anchor = 20,
     pilot = true, volume = 500, basePrice = 600000 },
   { id = "battery.missile", name = "Missile Battery", service = "defence", radius = 150, powergrid = 120, cpu = 120, anchor = 20,

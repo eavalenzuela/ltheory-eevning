@@ -466,6 +466,12 @@ export type Starbase = {
   -- have come to bring it down, and will be back when it opens (0
   -- when nobody has).
   core: number, charges: number, sealed: number, siege: number,
+  -- Its reactor (Data/Reactions): the composite it is set to make (""
+  -- for nothing), the tick it last made a batch (or was last not
+  -- making one: it counts from when it can), the units it has made
+  -- since the tower was anchored, and whether it stood idle last for
+  -- want of what the composite is made of.
+  reaction: string, reacted: number, composed: number, starved: boolean,
 }
 
 -- A tower of the pirates' own, holding a moon (Tactical/Keeps): 'id' is

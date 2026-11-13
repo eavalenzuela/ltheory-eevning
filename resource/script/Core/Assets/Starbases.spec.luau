@@ -7,6 +7,7 @@ local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Items = require("@lt/Core/Assets/Items")
 local Moons = require("@lt/Core/Data/Moons")
+local Reactions = require("@lt/Core/Data/Reactions")
 local Space = require("@lt/Core/Tactical/Space")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
@@ -14,6 +15,7 @@ local Stations = require("@lt/Core/Assets/Stations")
 local Structures = require("@lt/Core/Data/Structures")
 local System = require("@lt/Core/Describe/System")
 local Test = require("@lt/Tool/Test")
+local Types = require("@lt/Core/Data/Types")
 
 local suite = Test.Suite("Starbases")
 
@@ -708,6 +710,135 @@ suite:Case("a save from before there were starbases opens with none", function(t
   t.eq(#loaded.state.starbaseIds, 0)
   t.eq(Core.Query.Starbase(loaded, loaded.state.player.home), nil)
   t.eq(Core.Hash(loaded), Core.Hash(game))
+end)
+
+suite:Case("a composite is made of the two moon materials of its grade, and is worth a quarter more than they are", function(t)
+  t.eq(#Reactions.composites, 3)
+  for grade, composite in Reactions.composites do
+    t.eq({ composite.grade, #composite.from }, { grade, 2 })
+    local worth = 0
+    for _, from in composite.from do
+      t.eq(Moons.byId[from].grade, grade, `{from} in {composite.id}`)
+      t.eq(Reactions.Of(from), composite)
+      worth += Moons.byId[from].basePrice
+    end
+    t.eq(composite.basePrice, math.floor(worth * (1 + Reactions.MARGIN) + 0.5))
+    t.eq(Reactions.For(grade), composite)
+    -- (kept and traded with what it is made of)
+    local info = Types.Info(composite.id)
+    t.eq({ info.name, info.category, info.basePrice } :: { any }, { composite.name, "moon", composite.basePrice } :: { any })
+  end
+  t.eq(Reactions.Of("ore.ferrite"), nil)
+end)
+
+suite:Case("a tower with a reactor online makes a composite of what it is given, a batch an hour, out of its hangars and into them", function(t)
+  local game, station = moored(t, 1000)
+  local state = game.state
+  local starbase = state.starbases[station]
+  local glass = Reactions.byId["composite.saltglass"]
+  local function has(type: string): number
+    local units = 0
+    for _, item in Items.Stored(state, station) do
+      units += if item.type == type then item.quantity else 0
+    end
+    return units
+  end
+  local function give(type: string, units: number)
+    Items.Add(state, type, units, station, "hangar")
+  end
+  -- (so many ticks: how often it said it stood idle in them)
+  local function idled(count: number): number
+    local said = 0
+    for _ = 1, count do
+      Core.Step(game)
+      for _, event in Core.TakeEvents(game) do
+        said += if event.kind == "ReactorIdle" then 1 else 0
+      end
+    end
+    return said
+  end
+  -- With no reactor there is nothing to set.
+  t.eq(refused(game, { kind = "SetReaction", actor = 0, type = glass.id }), "no reactor is anchored here")
+  local status = assert(Core.Query.Starbase(game, station))
+  t.eq({ status.reacting.anchored, status.reacting.online, status.reacting.making, status.reacts } :: { any }, { false, false, nil, 0 } :: { any })
+  -- One is anchored: one, and no second. It makes nothing until it is told what.
+  anchor(t, game, "array.reactor")
+  t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "array.reactor", 1).id }), "the tower has a reactor already")
+  t.eq(refused(game, { kind = "SetReaction", actor = 0, type = "composite.nothing" }), "a reactor makes no such thing")
+  t.eq(refused(game, { kind = "SetReaction", actor = 0, type = "" }), "the reactor is making nothing")
+  give(glass.from[1], 250)
+  give(glass.from[2], 250)
+  t.eq(idled(3700), 0)
+  t.eq(has(glass.id), 0)
+  -- Told, with both things to hand: a batch an hour, of a batch of each.
+  for _, item in Items.Stored(state, station) do
+    if item.type == glass.from[2] then
+      Items.Take(state, item, item.quantity)
+    end
+  end
+  order(t, game, { kind = "SetReaction", actor = 0, type = glass.id })
+  Core.Step(game)
+  t.eq(refused(game, { kind = "SetReaction", actor = 0, type = glass.id }), "the reactor is making that already")
+  status = assert(Core.Query.Starbase(game, station))
+  t.eq({ status.reacting.online, status.reacting.making, status.reacting.have[1], status.reacting.have[2] } :: { any },
+    { true, glass, 250, 0 } :: { any })
+  t.ok(status.reacts > 3500 and status.reacts <= 3600, `the first hour should be nearly all to come, not {status.reacts} s`)
+  -- With only one of the two it stands idle, and says so the once.
+  local idle = stepUntil(game, "ReactorIdle", 3700)
+  t.eq({ idle.station, idle.type, idle.want } :: { any }, { station, glass.id, glass.from[2] } :: { any })
+  t.eq(idled(2 * 3600), 0)
+  t.eq({ has(glass.id), starbase.starved } :: { any }, { 0, true } :: { any })
+  -- The other comes, and it goes to work at its next hour.
+  give(glass.from[2], 250)
+  local made = stepUntil(game, "Reacted", 3700)
+  t.eq({ made.station, made.type, made.units } :: { any }, { station, glass.id, Reactions.BATCH } :: { any })
+  t.eq({ has(glass.from[1]), has(glass.from[2]), has(glass.id), starbase.starved } :: { any }, { 150, 150, 100, false } :: { any })
+  -- It is in the save, part of the way through an hour.
+  steps(game, 1000)
+  local data, length = Core.Save(game)
+  local loaded = Core.Load(data, length)
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  steps(game, 2600)
+  steps(loaded, 2600)
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  t.eq({ has(glass.from[1]), has(glass.from[2]), has(glass.id), starbase.composed }, { 50, 50, 200, 200 })
+  -- Too little left for a third: idle again, and said again.
+  t.eq(idled(3700), 1)
+  t.eq(has(glass.id), 200)
+  -- A dark tower makes nothing, and lit again its hour begins again: nothing is owed for the dark.
+  give(glass.from[1], 100)
+  give(glass.from[2], 100)
+  starbase.fuel = 0
+  steps(game, 2 * 3600 + 10)
+  t.eq(has(glass.id), 200)
+  order(t, game, { kind = "Fuel", actor = 0, item = carry(game, FUEL, 500).id })
+  steps(game, 3500)
+  t.eq(has(glass.id), 200)
+  steps(game, 200)
+  t.eq(has(glass.id), 300)
+  -- Told to make nothing, it stops; and one taken down is making nothing when it goes up again.
+  give(glass.from[1], 300)
+  give(glass.from[2], 300)
+  order(t, game, { kind = "SetReaction", actor = 0, type = "" })
+  steps(game, 3700)
+  t.eq(has(glass.id), 300)
+  order(t, game, { kind = "SetReaction", actor = 0, type = glass.id })
+  Core.Step(game)
+  order(t, game, { kind = "UnanchorModule", actor = 0, type = "array.reactor" })
+  Core.Step(game)
+  t.eq(starbase.reaction, "")
+  steps(game, 3700)
+  t.eq(has(glass.id), 300)
+  -- A tower of a save from before there were reactors is making nothing.
+  local file = Codec.Decode(Core.Save(game))
+  file.saveVersion = 63
+  for _, tower in file.state.starbases do
+    tower.reaction, tower.reacted, tower.composed, tower.starved = nil, nil, nil, nil
+  end
+  local old, oldLength = Codec.Encode(file)
+  local opened = Core.Load(old, oldLength)
+  local was = opened.state.starbases[station]
+  t.eq({ was.reaction, was.composed, was.starved } :: { any }, { "", 0, false } :: { any })
 end)
 
 suite:Case("towers, modules and fuel are bought, and built from blueprints", function(t)

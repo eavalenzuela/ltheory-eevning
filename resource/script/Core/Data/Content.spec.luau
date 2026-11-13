@@ -9,6 +9,7 @@ local Moons = require("@lt/Core/Data/Moons")
 local Ores = require("@lt/Core/Data/Ores")
 local Drones = require("@lt/Core/Data/Drones")
 local Attributes = require("@lt/Core/Attributes")
+local Reactions = require("@lt/Core/Data/Reactions")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Test = require("@lt/Tool/Test")
@@ -173,14 +174,15 @@ suite:Case("every hull of a human line, and each mining hull, has a tech 2 make:
       t.eq({ Types.Info(hull.id).scarce, Types.Info(blueprint.id).scarce, blueprint.invented } :: { any }, { true, true, true } :: { any })
       t.eq({ blueprint.materials[1].type, blueprint.materials[1].quantity } :: { any }, { base.id, 1 } :: { any })
       local rare, components, moon = 0, 0, 0
-      -- (and of what is drilled out of a moon: one material, of the grade for a hull its size)
+      -- (and of what a reactor makes of what is drilled out of moons: one composite, of the grade for a hull its size)
       local grade = if hull.class == "battleship" or hull.class == "freighter" then 3
         elseif hull.class == "frigate" or hull.class == "destroyer" then 1 else 2
       for index, material in blueprint.materials do
-        local drilled = Moons.byId[material.type]
-        if drilled then
+        local reacted = Reactions.byId[material.type]
+        t.eq(Moons.byId[material.type], nil, `{blueprint.id} should be built of nothing as it comes out of a moon`)
+        if reacted then
           moon += 1
-          t.eq(drilled.grade, grade, `{material.type} in {blueprint.id}`)
+          t.eq(reacted.grade, grade, `{material.type} in {blueprint.id}`)
         elseif index > 1 then
           t.ok(fromOre(material.type), `{material.type} in {blueprint.id} comes from no ore`)
           components += if Components.byId[material.type] then 1 else 0
@@ -188,7 +190,7 @@ suite:Case("every hull of a human line, and each mining hull, has a tech 2 make:
         end
       end
       t.ok(components >= 5 and rare == 2, `{hull.id} is built of {components} components and {rare} rare minerals`)
-      t.eq(moon, 1, `{hull.id} should call for one moon material`)
+      t.eq(moon, 1, `{hull.id} should call for one composite`)
     else
       -- (and every hull that should have one, has)
       local should = hull.id == "frigate.prospector" or hull.id == "barge.quarry"
@@ -401,8 +403,10 @@ suite:Case("components are made from minerals, and modules from components and m
           t.eq({ material.type, material.quantity } :: { any }, { module.base, 1 } :: { any })
           continue
         end
-        -- (and of one thing drilled out of a moon, which nothing plain is)
-        if Moons.byId[material.type] then
+        -- (and of one thing a reactor makes of what is drilled out of
+        -- moons, which nothing plain is; and of nothing as it comes up)
+        t.eq(Moons.byId[material.type], nil, `{material.type} in {blueprint.id}`)
+        if Reactions.byId[material.type] then
           moon += 1
           continue
         end
@@ -414,7 +418,7 @@ suite:Case("components are made from minerals, and modules from components and m
         t.ok(fromOre(material.type), `{material.type} in {blueprint.id}`)
       end
       t.ok(components >= 1 and minerals >= 2, module.id)
-      t.eq(moon, if module.tech == 2 then 1 else 0, `{module.id} and what is drilled out of moons`)
+      t.eq(moon, if module.tech == 2 then 1 else 0, `{module.id} and what is made of what is drilled out of moons`)
     end
   end
   -- what is fired is still made straight from minerals

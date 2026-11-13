@@ -74,7 +74,8 @@
 #               as a ghost with nothing mounted, and off it is itself
 #   game-moon   a tower drilling its moon (test/scenario/moon.txt): a
 #               moon with something under it found, a tower and a drill
-#               anchored there, and an hour's worth in its hangar
+#               anchored there, and an hour's worth in its hangar; then
+#               a reactor anchored, and a batch of a composite made
 #   game-orders  an order's price changed (test/scenario/orders.txt): a
 #               sell order placed, its price set to another from the
 #               list of the pilot's orders, and the order cancelled
@@ -274,7 +275,7 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/errand.txt
   step game-cloak 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/cloak.txt
-  step game-moon 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
+  step game-moon 0 timeout 700 bin/launch game --no-present --fixed-step 60 --timeout 600 \
     --script test/scenario/moon.txt
   step game-orders 0 timeout 300 bin/launch game --no-present --fixed-step 60 --timeout 200 \
     --script test/scenario/orders.txt

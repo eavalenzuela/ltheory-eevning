@@ -11,6 +11,7 @@ local Modules = require("@lt/Core/Data/Modules")
 local Moons = require("@lt/Core/Data/Moons")
 local Ores = require("@lt/Core/Data/Ores")
 local Planets = require("@lt/Core/Data/Planets")
+local Reactions = require("@lt/Core/Data/Reactions")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Structures = require("@lt/Core/Data/Structures")
@@ -89,6 +90,13 @@ byId[Planets.CENTRE.id] = { id = Planets.CENTRE.id, name = Planets.CENTRE.name, 
 -- What a tower's drill brings up out of a moon (Data/Moons).
 for _, material in Moons.materials do
   byId[material.id] = { id = material.id, name = material.name, category = "moon", volume = material.volume, basePrice = material.basePrice }
+end
+
+-- And what a tower's reactor makes of that (Data/Reactions): kept and
+-- traded with it.
+for _, composite in Reactions.composites do
+  byId[composite.id] = { id = composite.id, name = composite.name, category = "moon", volume = composite.volume,
+    basePrice = composite.basePrice }
 end
 
 -- Drones, as they are in a hold.

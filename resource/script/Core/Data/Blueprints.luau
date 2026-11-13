@@ -20,9 +20,9 @@ local Boosters = require("@lt/Core/Data/Boosters")
 local Components = require("@lt/Core/Data/Components")
 local Drones = require("@lt/Core/Data/Drones")
 local Modules = require("@lt/Core/Data/Modules")
-local Moons = require("@lt/Core/Data/Moons")
 local Ores = require("@lt/Core/Data/Ores")
 local Planets = require("@lt/Core/Data/Planets")
+local Reactions = require("@lt/Core/Data/Reactions")
 local Ships = require("@lt/Core/Data/Ships")
 local Structures = require("@lt/Core/Data/Structures")
 
@@ -80,32 +80,30 @@ end
 
 local Blueprints = { list = {} :: { Blueprint }, byId = {} :: { [string]: Blueprint }, byProduct = {} :: { [string]: Blueprint } }
 
--- What a part costs: a component, something made on a planet, or
--- something drilled out of a moon.
+-- What a part costs: a component, something made on a planet, or what
+-- a reactor makes of what is drilled out of moons.
 local function priceOf(part: string): number
   local component = Components.byId[part]
-  local material = Moons.byId[part]
-  return if component then component.basePrice elseif material then material.basePrice else Planets.productById[part].basePrice
+  local composite = Reactions.byId[part]
+  return if component then component.basePrice elseif composite then composite.basePrice else Planets.productById[part].basePrice
 end
 
 -- The parts of the tech 2 make of something: the parts of the plain
--- one, and a moon material of the grade its size calls for (1 small, 2
--- medium, 3 large), which takes 'share' of what the parts cost between
--- them (so the whole costs what it did). Which of a grade's two goes
--- round with every tech 2 thing there is, so that both are wanted.
--- A module or a drone is a fifth moon material by cost of parts. A
--- hull is a twenty-fifth: it costs so much more than what is fitted to
--- it that a fifth of a battleship would be more than a tower brings up
--- in a week.
+-- one, and the composite its size calls for (1 small, 2 medium, 3
+-- large: Data/Reactions), which takes 'share' of what the parts cost
+-- between them (so the whole costs what it did). A composite is made
+-- of both moon materials of its grade, so both are wanted.
+-- A module or a drone is a fifth composite by cost of parts. A hull is
+-- a twenty-fifth: it costs so much more than what is fitted to it that
+-- a fifth of a battleship would be more than a tower brings up in a
+-- week.
 local MOON_SHARE, MOON_HULL = 0.2, 0.04
-local turn = 0
 local function advanced(parts: { { any } }, size: number, share: number): { { any } }
   local all: { { any } } = {}
   for _, part in parts do
     table.insert(all, { part[1], part[2] * (1 - share) })
   end
-  turn += 1
-  table.insert(all, { Moons.For(size, turn).id :: any, share })
+  table.insert(all, { Reactions.For(size).id :: any, share })
   return all
 end
 

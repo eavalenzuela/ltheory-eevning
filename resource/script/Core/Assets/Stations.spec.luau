@@ -115,8 +115,8 @@ suite:Case("a station's tower is of the faction whose homeworld is nearest, and 
           t.eq(object.variety, "colony ship")
           t.eq(object.radius, 5000)
           t.ok(string.find(object.name, " - Colony ship %d+$") ~= nil, `'{object.name}' is not named as a colony ship`)
-          -- (all but a moon drill: that is a tower's, at a moon)
-          t.eq(#Stations.Services(state, object.id), #Structures.SERVICES - 1)
+          -- (all but a moon drill and a reactor: those are a tower's, at a moon)
+          t.eq(#Stations.Services(state, object.id), #Structures.SERVICES - 2)
         else
           t.ok(node.nearest ~= "kethri", "a station among the Kethri should be a colony ship")
           t.eq(Structures.towerById[makeup.tower :: string].faction, node.nearest)

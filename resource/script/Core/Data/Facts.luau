@@ -19,6 +19,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Moons = require("@lt/Core/Data/Moons")
 local Planets = require("@lt/Core/Data/Planets")
+local Reactions = require("@lt/Core/Data/Reactions")
 local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
 
@@ -503,6 +504,17 @@ function Facts.Of(type: string): Sheet?
       row(section(sheet, "Use"), "Called for by", `{usedIn(type)} blueprints`)
     end
     trade(sheet, type)
+  elseif category == "moon" and Reactions.byId[type] then
+    local composite = Reactions.byId[type]
+    sheet.kind = "Composite"
+    sheet.note = "Made in the reactor of a tower, of the two moon materials of its grade. What the tech 2 make of anything is built with."
+    local made = section(sheet, "Reacted from")
+    for _, from in composite.from do
+      row(made, nameOf(from), `{whole(Reactions.BATCH)} an hour`, from)
+    end
+    row(made, "Makes", `{whole(Reactions.BATCH)} an hour`)
+    row(section(sheet, "Use"), "Called for by", `{usedIn(type)} blueprints`)
+    trade(sheet, type)
   elseif category == "moon" then
     local material = Moons.byId[type]
     sheet.kind = "Moon material"
@@ -513,7 +525,10 @@ function Facts.Of(type: string): Sheet?
     local has = section(sheet, "Deposit")
     row(has, "Grade", if material.grade == 1 then "common" elseif material.grade == 2 then "uncommon" else "rare")
     row(has, "A drill brings up", `{whole(Moons.YIELD * Moons.POOREST)} to {whole(Moons.YIELD * Moons.RICHEST)} an hour`)
-    row(section(sheet, "Use"), "Called for by", `{usedIn(type)} blueprints`)
+    local into = Reactions.Of(type)
+    if into then
+      row(section(sheet, "Use"), "A reactor makes of it", into.name, into.id)
+    end
     trade(sheet, type)
   elseif category == "structure" and type == Planets.CENTRE.id then
     sheet.kind = "Command centre"

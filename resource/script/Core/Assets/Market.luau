@@ -41,7 +41,6 @@ local Economy = require("@lt/Core/Strategic/Economy")
 local Factions = require("@lt/Core/Data/Factions")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
-local Moons = require("@lt/Core/Data/Moons")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
@@ -553,7 +552,7 @@ function Market.Sell(state: State.State, station: number, item: State.Item, quan
   Items.Take(state, item, quantity)
   if business then
     -- (what a drill brought up is a head of its own on the books)
-    Corporation.Earn(state, net, if Moons.byId[type] then "moon sale" else "market sale", events)
+    Corporation.Earn(state, net, if Types.Info(type).category == "moon" then "moon sale" else "market sale", events)
   else
     Wallet.Pay(state, net, "market sale", events)
   end

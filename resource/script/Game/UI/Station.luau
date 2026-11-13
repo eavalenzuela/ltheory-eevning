@@ -20,6 +20,7 @@ local Info = require("@lt/Game/UI/Info")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
+local Reactions = require("@lt/Core/Data/Reactions")
 local Session = require("@lt/Game/Session")
 local Assault = require("@lt/Core/Tactical/Assault")
 local Ships = require("@lt/Core/Data/Ships")
@@ -1867,7 +1868,9 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
     Im.Text("No fuel and no modules in the hold or the hangar.", right, line, 13, Im.DIM, 0.8)
     Im.Text("A market sells both, under Structures.", right, line + 20, 13, Im.DIM, 0.8)
   end
-  local shown = 13
+  -- (a tower with a reactor has that under the list, and a shorter list)
+  local reacting = status.reacting
+  local shown = if reacting.anchored then 10 else 13
   local top = Im.Scroll("tohand", right - 4, line, 448, shown * 26, #hand, shown)
   for row = 1, shown do
     local entry = hand[row + top]
@@ -1899,6 +1902,51 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
   -- brings. (The corporation's books have every tower's: the Wallet tab.)
   local running = status.running
   line = y + 78 + 26 + shown * 26 + 12
+  if reacting.anchored then
+    -- Its reactor: what it is set to make (a press sets it, and "Off"
+    -- stops it), what of each thing that is made of there is in the
+    -- hangars, and when the next batch is.
+    local making = reacting.making
+    -- (whether there is too little of either thing for its next batch)
+    local short = false
+    if making then
+      for index in making.from do
+        short = short or reacting.have[index] < Reactions.BATCH
+      end
+    end
+    Im.Heading("REACTOR", right, line, 16, Im.DIM)
+    Im.TextRight(if not reacting.online then "not working: the tower is dark, or it is not online yet"
+      elseif making == nil then "making nothing"
+      elseif reacting.starved then "idle: not enough to make it of"
+      elseif short then `not enough for the batch due in {Format.Duration(status.reacts)}`
+      else `{Format.Whole(Reactions.BATCH)} more in {Format.Duration(status.reacts)}`, right + 440, line + 2, 12,
+      if reacting.online and making and not reacting.starved and not short then GOOD elseif making or not reacting.online then Im.WARN
+        else Im.DIM)
+    line += 24
+    local across = right
+    for _, composite in Reactions.composites do
+      local wide = Im.TextWidth(composite.name, 13) + 18
+      if Im.Toggle(composite.name, across, line, wide, 21, making == composite, `React:{composite.id}`) and making ~= composite then
+        Session.Do(session, { kind = "SetReaction", actor = 0, type = composite.id })
+      end
+      across += wide + 6
+    end
+    if Im.Button("Off", across, line, 40, 21, making ~= nil, "React:off") then
+      Session.Do(session, { kind = "SetReaction", actor = 0, type = "" })
+    end
+    line += 26
+    if making then
+      local parts: { string } = {}
+      for index, from in making.from do
+        table.insert(parts, `{Types.Info(from).name} {Format.Whole(reacting.have[index])}`)
+      end
+      Im.Text(shorten(`{table.concat(parts, "   ")}`, 44), right, line, 13, if short then Im.WARN else Im.TEXT)
+      Im.TextRight(`{Format.Whole(Reactions.BATCH)} of each an hour`, right + 440, line, 12, Im.DIM)
+    else
+      Im.Text("It makes a composite of the two moon materials of a grade.", right, line, 13, Im.DIM, 0.8)
+    end
+    line += 28
+  end
   Im.Heading("RUNNING", right, line, 16, Im.DIM)
   Im.TextRight("in credits' worth, since it was anchored", right + 440, line + 2, 12, Im.DIM)
   line += 26
