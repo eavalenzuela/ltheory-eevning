@@ -44,6 +44,7 @@
 -- Not yet: taking a tower down, more than one owner.
 
 local Constants = require("@lt/Core/Data/Constants")
+local Corporation = require("@lt/Core/Assets/Corporation")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Moons = require("@lt/Core/Data/Moons")
@@ -147,7 +148,8 @@ function Starbases.Drilling(state: State.State, starbase: State.Starbase): Drill
   end
   local stored = 0
   if deposit then
-    for _, item in Items.In(state, starbase.id, "hangar") do
+    -- (in the pilot's hangar there or the corporation's: the one silo)
+    for _, item in Items.Stored(state, starbase.id) do
       if item.type == deposit.material.id then
         stored += item.quantity
       end
@@ -210,14 +212,15 @@ local function mooredAt(state: State.State, command: State.Command): State.Starb
 end
 
 -- An item a moored ship may use: in its own hold, or in the hangar of
--- the station it is moored at.
+-- the station it is moored at (the pilot's own, or their corporation's).
 local function toHand(state: State.State, command: State.Command): State.Item?
   local ship = state.ships[command.actor]
   local item = state.items[command.item or 0]
   if ship == nil or item == nil or item.slot ~= 0 then
     return nil
   end
-  if (item.holder == ship.id and item.place == "cargo") or (ship.docked ~= 0 and item.holder == ship.docked and item.place == "hangar") then
+  if (item.holder == ship.id and item.place == "cargo")
+    or (ship.docked ~= 0 and item.holder == ship.docked and Items.IsStore(item.place)) then
     return item
   end
   return nil
@@ -414,12 +417,17 @@ function Starbases.Running(state: State.State, starbase: State.Starbase): Runnin
 end
 
 -- A tower with nothing in its tank takes what fuel is in its own
--- hangar, a day's worth at a time.
+-- hangar, a day's worth at a time (the corporation's fuel before the
+-- pilot's own).
 local function feed(state: State.State, starbase: State.Starbase, events: { Event })
   if starbase.fuel > 0 or not Starbases.Anchored(state, starbase) then
     return
   end
+  local fuel = Items.In(state, starbase.id, "corporate")
   for _, item in Items.In(state, starbase.id, "hangar") do
+    table.insert(fuel, item)
+  end
+  for _, item in fuel do
     if item.type == Structures.FUEL.id and starbase.fuel == 0 then
       local take = math.min(item.quantity, Structures.towerById[starbase.tower].fuel * 24)
       Items.Take(state, item, take)
@@ -452,7 +460,8 @@ function Starbases.Step(state: State.State, events: { Event })
       if deposit then
         local units = math.min(drilling.perHour, drilling.room - drilling.stored)
         if units > 0 then
-          Items.Add(state, deposit.material.id, units, id, "hangar")
+          -- (what a drill brings up is the business's: Corporation.Store)
+          Items.Add(state, deposit.material.id, units, id, Corporation.Store(state))
           starbase.raised += units
           -- ('full': that was the last it has room for)
           table.insert(events, { kind = "MoonDrilled", station = id, type = deposit.material.id, units = units,

@@ -1249,6 +1249,8 @@ export type AssetsAt = {
   here: boolean,        -- the pilot is docked there (or it is the hold)
   ships: { State.Ship },
   items: { State.Item },
+  -- (what is in the hangar the pilot's corporation has there)
+  business: { State.Item },
   volume: number,       -- of the items, m3
   worth: number,        -- of items and hulls, at base prices
 }
@@ -1265,7 +1267,7 @@ function Query.Assets(game: Game): { AssetsAt }
       place = {
         station = station, name = if object then object.name else `{me.name}: hold`, system = system,
         systemName = state.galaxy.systems[system].name, here = station == 0 or station == me.docked,
-        ships = {}, items = {}, volume = 0, worth = 0,
+        ships = {}, items = {}, business = {}, volume = 0, worth = 0,
       }
       places[station] = place
       table.insert(order, station)
@@ -1275,10 +1277,10 @@ function Query.Assets(game: Game): { AssetsAt }
   for _, id in state.itemIds do
     local item = state.items[id]
     local hold = item.holder == me.id and item.place == "cargo"
-    if hold or (item.place == "hangar" and Space.Object(state, item.holder) ~= nil) then
+    if hold or (Items.IsStore(item.place) and Space.Object(state, item.holder) ~= nil) then
       local place = at(if hold then 0 else item.holder)
       local info = Types.Info(item.type)
-      table.insert(place.items, item)
+      table.insert(if item.place == "corporate" then place.business else place.items, item)
       place.volume += item.quantity * info.volume
       place.worth += item.quantity * info.basePrice
     end

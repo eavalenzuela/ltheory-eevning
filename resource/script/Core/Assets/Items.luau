@@ -2,8 +2,9 @@
 -- Items: where everything a pilot owns is, and the orders that move it
 -- (fit, unfit, load, move between hangar and cargo).
 --
--- An item is a stack of one type in one place: a station's hangar, a
--- ship's cargo hold, or a slot in one of a ship's racks. Loose stacks of
+-- An item is a stack of one type in one place: a station's hangar (the
+-- pilot's own, or their corporation's there: "corporate"), a ship's
+-- cargo hold, or a slot in one of a ship's racks. Loose stacks of
 -- the same type in the same place merge. A fitted module is always a
 -- stack of one. A weapon's loaded charge is recorded on the weapon.
 --
@@ -11,6 +12,7 @@
 -- station.
 
 local Attributes = require("@lt/Core/Attributes")
+local Corporation = require("@lt/Core/Assets/Corporation")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
@@ -33,6 +35,24 @@ function Items.In(state: State.State, holder: number, place: string?): { State.I
   for _, id in state.itemIds do
     local item = state.items[id]
     if item.holder == holder and (place == nil or item.place == place) then
+      table.insert(found, item)
+    end
+  end
+  return found
+end
+
+-- Whether a place is one of the two a station keeps things in for a
+-- pilot: their own hangar, or their corporation's.
+function Items.IsStore(place: string): boolean
+  return place == "hangar" or place == "corporate"
+end
+
+-- What a station keeps for a pilot, in both: in id order.
+function Items.Stored(state: State.State, station: number): { State.Item }
+  local found = {}
+  for _, id in state.itemIds do
+    local item = state.items[id]
+    if item.holder == station and Items.IsStore(item.place) then
       table.insert(found, item)
     end
   end
@@ -157,7 +177,8 @@ end
 
 -- Add 'quantity' of a type to a hangar or hold, merging with a stack that
 -- is already there. Returns the stack.
-function Items.Add(state: State.State, type: string, quantity: number, holder: number, place: "hangar" | "cargo" | "dronebay"): State.Item
+function Items.Add(state: State.State, type: string, quantity: number, holder: number,
+  place: "hangar" | "corporate" | "cargo" | "dronebay"): State.Item
   assert(Types.Get(type), `no item type '{type}'`)
   assert(quantity > 0 and quantity % 1 == 0, "a quantity is a positive whole number")
   for _, item in Items.In(state, holder, place) do
@@ -230,7 +251,7 @@ local function sharedStation(state: State.State, ship: State.Ship, item: State.I
   if ship.docked == 0 then
     return nil, "not docked"
   end
-  local here = item.holder == ship.docked and item.place == "hangar"
+  local here = item.holder == ship.docked and Items.IsStore(item.place)
   local aboard = item.holder == ship.id
   if not (here or aboard) then
     return nil, "that item is not here"
@@ -334,6 +355,13 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
         return false, "already in the hangar"
       end
       return true
+    elseif command.to == "corporate" then
+      if not Corporation.Founded(state) then
+        return false, "there is no corporation to give it to"
+      elseif item.place == "corporate" then
+        return false, "already in the corporation's hangar"
+      end
+      return true
     elseif command.to == "dronebay" then
       -- (drones, and as many as the bay has room for)
       if item.place == "dronebay" then
@@ -420,6 +448,8 @@ function Items.Apply(state: State.State, command: State.Command, events: { Event
       Items.Add(state, type, quantity, ship.id, "cargo")
     elseif command.to == "dronebay" then
       Items.Add(state, type, quantity, ship.id, "dronebay")
+    elseif command.to == "corporate" then
+      Items.Add(state, type, quantity, station, "corporate")
     else
       Items.Add(state, type, quantity, station, "hangar")
     end

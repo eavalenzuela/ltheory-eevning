@@ -847,8 +847,9 @@ local function travel(state: State.State, me: State.Ball, system: number, events
 end
 
 -- Unload what a docked ship holds of a kind at the station it is docked
--- at: into the player's hangar there, or to the market, for a pilot who
--- sells, if the station has one and trades in the thing. Returns the
+-- at: into the business's hangar there (the corporation's, or with no
+-- corporation the player's own: Corporation.Store), or to the market,
+-- for a pilot who sells, if the station has one and trades in the thing. Returns the
 -- units unloaded, what selling made, and the volume of it all.
 local function unload(state: State.State, wing: State.Wingman, ship: State.Ship, kind: string, events: { Event }): (number, number, number)
   local station = ship.docked
@@ -861,7 +862,7 @@ local function unload(state: State.State, wing: State.Wingman, ship: State.Ship,
       if sells and Market.Index(item.type) then
         revenue += Market.Sell(state, station, item, item.quantity, events, true)
       else
-        Items.Add(state, item.type, item.quantity, station, "hangar")
+        Items.Add(state, item.type, item.quantity, station, Corporation.Store(state))
         Items.Take(state, item, item.quantity)
       end
     end
@@ -871,9 +872,9 @@ local function unload(state: State.State, wing: State.Wingman, ship: State.Ship,
   return units, revenue, volume
 end
 
--- Whether the player's hangar at a station has anything of a kind.
+-- Whether the business's hangar at a station has anything of a kind.
 local function stocked(state: State.State, station: number, kind: string): boolean
-  for _, item in Items.In(state, station, "hangar") do
+  for _, item in Items.In(state, station, Corporation.Store(state)) do
     if Fleet.Carries(kind, item.type) and item.quantity > 0 then
       return true
     end
@@ -938,7 +939,7 @@ local function carry(state: State.State, wing: State.Wingman, ship: State.Ship, 
       end
       local free = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
       local loaded = false
-      for _, item in Items.In(state, ship.docked, "hangar") do
+      for _, item in Items.In(state, ship.docked, Corporation.Store(state)) do
         if Fleet.Carries(wing.cargo, item.type) then
           local each = Types.Info(item.type).volume
           local take = if each > 0 then math.min(item.quantity, math.floor(free / each)) else item.quantity
@@ -1012,7 +1013,7 @@ local function shop(state: State.State, wing: State.Wingman, ship: State.Ship, e
       for _, item in Items.In(state, ship.id, "cargo") do
         if item.type == wing.want then
           units += item.quantity
-          Items.Add(state, item.type, item.quantity, home.id, "hangar")
+          Items.Add(state, item.type, item.quantity, home.id, Corporation.Store(state))
           Items.Take(state, item, item.quantity)
         end
       end
@@ -1033,7 +1034,7 @@ local function shop(state: State.State, wing: State.Wingman, ship: State.Ship, e
           return
         end
         local have = 0
-        for _, item in Items.In(state, home.id, "hangar") do
+        for _, item in Items.In(state, home.id, Corporation.Store(state)) do
           have += if item.type == wing.want then item.quantity else 0
         end
         local fits = if info.volume > 0 then math.floor(room / info.volume) else wing.keep

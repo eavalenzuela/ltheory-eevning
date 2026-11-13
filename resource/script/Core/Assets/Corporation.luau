@@ -27,8 +27,15 @@
 -- always were: everything here that pays or is paid falls through to
 -- the wallet.
 --
--- (The beginning of the corporation. Not yet: hangars of its own,
--- anybody else's corporation.)
+--   - it has a hangar of its own at every station, beside the pilot's:
+--     what the hired pilots bring in is put there and what they carry
+--     away is taken from there, and they leave the pilot's own hangar
+--     alone. A tower's drill fills it, raiders rob it, and what the
+--     pilot sells out of it is paid to the corporation's account. The
+--     pilot moves things across, docked (Assets/Items: "corporate").
+--
+-- (Not yet: jobs built from what is in its hangar, orders placed from
+-- it, anybody else's corporation.)
 
 local State = require("@lt/Core/Kernel/State")
 local Wallet = require("@lt/Core/Assets/Wallet")
@@ -69,6 +76,12 @@ end
 
 function Corporation.Founded(state: State.State): boolean
   return state.corporation.name ~= ""
+end
+
+-- Where at a station the business keeps its goods: the corporation's
+-- hangar there, and before there is a corporation the pilot's own.
+function Corporation.Store(state: State.State): "hangar" | "corporate"
+  return if Corporation.Founded(state) then "corporate" else "hangar"
 end
 
 -- How many pilots more than their Leadership commands the pilot can

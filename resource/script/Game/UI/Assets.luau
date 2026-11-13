@@ -43,7 +43,7 @@ local function shorten(text: string, limit: number): string
 end
 
 -- A line of the list: a place's heading, a ship there, or a stack.
-type Line = { place: Core.AssetsAt?, ship: State.Ship?, item: State.Item? }
+type Line = { place: Core.AssetsAt?, ship: State.Ship?, item: State.Item?, label: string? }
 
 function Assets.Draw(session: Session.Session, x: number, y: number)
   if not open then
@@ -79,6 +79,20 @@ function Assets.Draw(session: Session.Session, x: number, y: number)
     for _, item in items do
       table.insert(lines, { item = item })
     end
+    -- (and what the corporation has there, under its own line)
+    if #place.business > 0 then
+      table.insert(lines, { label = "the corporation's" })
+      local theirs = table.clone(place.business)
+      table.sort(theirs, function(a: State.Item, b: State.Item): boolean
+        if a.type ~= b.type then
+          return Catalog.Before(a.type, b.type)
+        end
+        return a.id < b.id
+      end)
+      for _, item in theirs do
+        table.insert(lines, { item = item })
+      end
+    end
   end
   Im.Text(`{#places} places`, left, y + 42, 13, Im.DIM)
   Im.TextRight(`worth {Format.Whole(worth)} cr with the wallet`, right, y + 42, 13, Im.TEXT)
@@ -93,7 +107,9 @@ function Assets.Draw(session: Session.Session, x: number, y: number)
     end
     local at = top + (row - 1) * ROW
     local place, ship, item = line.place, line.ship, line.item
-    if place then
+    if line.label then
+      Im.Text(line.label, left + 10, at + 4, 12, Im.ACCENT)
+    elseif place then
       Im.Fill(left - 4, at + 1, width - 24, ROW - 3, Im.DIM, 0.12)
       Im.Text(shorten(place.name, 34), left, at + 4, 13, if place.here then Im.TEXT else Im.ACCENT)
       Im.TextRight(if place.station == 0 then `{string.format("%.0f", place.volume)} m3` else place.systemName, right - 4, at + 4, 12,

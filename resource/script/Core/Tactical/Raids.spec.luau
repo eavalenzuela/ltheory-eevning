@@ -133,6 +133,22 @@ suite:Case("with nothing against it a raid carries off most of what the drill br
   t.ok(state.starbases[station] ~= nil and Starbases.Lit(state, starbase))
 end)
 
+suite:Case("a raid robs the corporation's hangar at a tower as it does the pilot's own", function(t)
+  local game = galaxy()
+  local state = game.state
+  local station, starbase = tower(game, "lawless")
+  Items.Add(state, "moon.promethite", 1000, station, "hangar")
+  Items.Add(state, "moon.promethite", 500, station, "corporate")
+  Core.Step(game)
+  local raid = raided(game, starbase)
+  t.eq(raid.outcome, "robbed")
+  local theirs = 0
+  for _, item in Items.In(state, station, "corporate") do
+    theirs += if item.type == "moon.promethite" then item.quantity else 0
+  end
+  t.eq({ stored(game, station, "moon.promethite"), theirs, raid.taken }, { 200, 100, 1200 })
+end)
+
 suite:Case("batteries online stand against a raid: enough of them beat it off, and too few lose less", function(t)
   local game = galaxy()
   local state = game.state

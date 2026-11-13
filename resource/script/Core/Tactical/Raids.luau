@@ -136,7 +136,8 @@ function Raids.Step(state: State.State, events: { Event })
         -- They get in at what the drill has brought up, and the drill.
         local share = math.min(Raids.MOST, (strength - defence) / strength)
         local taken, type = 0, ""
-        for _, item in Items.In(state, id, "hangar") do
+        -- (out of the pilot's hangar there and the corporation's alike)
+        for _, item in Items.Stored(state, id) do
           if Moons.byId[item.type] then
             local units = math.floor(item.quantity * share)
             if units > 0 then

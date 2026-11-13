@@ -33,6 +33,7 @@ local Settings = require("@lt/Game/Settings")
 local Station = require("@lt/Game/UI/Station")
 local Info = require("@lt/Game/UI/Info")
 local Menu = require("@lt/Game/UI/Menu")
+local Corporation = require("@lt/Core/Assets/Corporation")
 local Items = require("@lt/Core/Assets/Items")
 local Keys = require("@lt/Game/UI/Keys")
 local Modules = require("@lt/Core/Data/Modules")
@@ -631,6 +632,20 @@ function Debug.Hangar(type: string): number
     end
   end
   return 0
+end
+
+-- How many of a type are in the corporation's hangar at the station
+-- docked at (the home station's, in space), and how many stacks it has
+-- there in all.
+function Debug.CorpHangar(type: string): (number, number)
+  local player = Core.Query.Player(session.game)
+  local station = if player.docked ~= 0 then player.docked else session.game.state.player.home
+  local units, stacks = 0, 0
+  for _, item in Core.Query.Items(session.game, station, "corporate") do
+    stacks += 1
+    units += if item.type == type then item.quantity else 0
+  end
+  return units, stacks
 end
 
 -- The level of a skill; -1 if it has not been learned.
@@ -1836,7 +1851,8 @@ function Debug.Stock(n: number, type: string, quantity: number): boolean
   if target == nil then
     return false
   end
-  Items.Add(game.state, type, quantity, target.id, "hangar")
+  -- (where the hired pilots collect: the corporation's hangar, once there is a corporation)
+  Items.Add(game.state, type, quantity, target.id, Corporation.Store(game.state))
   return true
 end
 

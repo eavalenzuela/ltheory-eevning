@@ -91,8 +91,10 @@ export type Item = {
   type: string,       -- Data/Types id
   quantity: number,
   holder: number,     -- the ship it is in or on, or the station whose hangar it is in
-  -- ("dronebay" is a ship's drone bay: Tactical/Drones)
-  place: "hangar" | "cargo" | "dronebay" | "high" | "mid" | "low" | "rig",
+  -- ("dronebay" is a ship's drone bay: Tactical/Drones. "corporate" is
+  -- the hangar the pilot's corporation has at a station, beside the
+  -- pilot's own: Assets/Corporation)
+  place: "hangar" | "corporate" | "cargo" | "dronebay" | "high" | "mid" | "low" | "rig",
   slot: number,       -- within its rack, from 1; 0 unless fitted
   charge: string,     -- for a fitted weapon: the charge type loaded, or ""
   rounds: number,     -- and the shots left in the clip
@@ -230,7 +232,7 @@ export type Command = {
   item: number?,      -- the item acted on
   other: number?,     -- a second item (the charge, when loading a weapon)
   quantity: number?,
-  to: string?,        -- "cargo" or "hangar"; for an order, "buy" or "sell"
+  to: string?,        -- "cargo", "hangar", "corporate" or "dronebay"; for an order, "buy" or "sell"
   type: string?,      -- an item type, when there is no item yet (buying)
   price: number?,     -- credits per unit, for a limit order
   order: number?,     -- an order's id

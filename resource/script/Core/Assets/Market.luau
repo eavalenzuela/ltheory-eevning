@@ -474,8 +474,11 @@ function Market.Validate(state: State.State, command: State.Command): (boolean, 
 
   elseif kind == "SellNow" or (kind == "PlaceOrder" and command.to == "sell") then
     local item = state.items[command.item or 0]
-    if item == nil or item.holder ~= station or item.place ~= "hangar" then
+    if item == nil or item.holder ~= station or not Items.IsStore(item.place) then
       return false, "that is not in the hangar here"
+    elseif kind == "PlaceOrder" and item.place ~= "hangar" then
+      -- (an order is the pilot's own: what it fetches is paid to them)
+      return false, "an order is placed from your own hangar"
     end
     local quantity = command.quantity or item.quantity
     if not wholeQuantity(quantity) or quantity > item.quantity then
@@ -540,8 +543,8 @@ end
 -- is on the station's books. Returns what was paid. (The item is the
 -- pilot's own, wherever it is: in the hangar there, or in the hold of a
 -- ship of theirs docked there.) 'business': it is a hired pilot who
--- sells, and what it fetches is the corporation's, if there is one
--- (Assets/Corporation).
+-- sells, or it is sold out of the corporation's hangar, and what it
+-- fetches is the corporation's, if there is one (Assets/Corporation).
 function Market.Sell(state: State.State, station: number, item: State.Item, quantity: number, events: { Event },
   business: boolean?): number
   local type = item.type
@@ -597,7 +600,8 @@ function Market.Apply(state: State.State, command: State.Command, events: { Even
 
   elseif kind == "SellNow" then
     local item = state.items[command.item :: number]
-    Market.Sell(state, station, item, command.quantity or item.quantity, events)
+    -- (what is sold out of the corporation's hangar is paid to the corporation)
+    Market.Sell(state, station, item, command.quantity or item.quantity, events, item.place == "corporate")
 
   elseif kind == "PlaceOrder" then
     local price = command.price :: number

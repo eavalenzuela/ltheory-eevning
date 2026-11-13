@@ -1787,15 +1787,15 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
     line += 26
   end
 
-  -- What there is to hand, in the hold and in the tower's hangar, to
-  -- burn or to anchor.
+  -- What there is to hand, in the hold and in the tower's hangar (the
+  -- pilot's own there, and the corporation's), to burn or to anchor.
   local right = x + 480
   line = y + 78
   local hand: { { item: State.Item, where: string } } = {}
-  for _, place in { "cargo", "hangar" } do
+  for _, place in { "cargo", "hangar", "corporate" } do
     for _, item in Core.Query.Items(game, if place == "cargo" then player.ship else station, place) do
       if item.type == Structures.FUEL.id or Structures.moduleById[item.type] then
-        table.insert(hand, { item = item, where = if place == "cargo" then "hold" else "hangar" })
+        table.insert(hand, { item = item, where = if place == "cargo" then "hold" elseif place == "hangar" then "hangar" else "corporation" })
       end
     end
   end
@@ -1860,9 +1860,9 @@ end
 local books = "mine"
 local corporationName = ""
 local corporationAmount = 0
--- And which of the corporation's two pages: its journal, or its books
--- by head with the towers on them.
-local byHead = false
+-- And which of the corporation's pages: its journal, its books by
+-- head with the towers on them, or its hangar at the station.
+local corporationPage: "journal" | "books" | "hangar" = "journal"
 
 -- The corporation's books: on the left what has come in and gone out
 -- under each head, and what that makes; on the right the pilot's
@@ -1947,6 +1947,67 @@ local function drawBooks(corporation: Core.CorporationInfo, left: number, top: n
   end
 end
 
+-- The corporation's hangar at the station: what is in it on the left,
+-- each stack to be taken into the pilot's own hangar or sold for the
+-- corporation's account; and the pilot's own hangar on the right, each
+-- stack to be given.
+local function drawCorporateHangar(session: Session.Session, game: Core.Game, station: number, left: number, top: number)
+  local function sorted(place: string): { State.Item }
+    local items = table.clone(Core.Query.Items(game, station, place))
+    table.sort(items, function(a: State.Item, b: State.Item): boolean
+      if a.type ~= b.type then
+        return Catalog.Before(a.type, b.type)
+      end
+      return a.id < b.id
+    end)
+    return items
+  end
+  local visible = 11
+  local width = 440
+  for column, place in { "corporate", "hangar" } do
+    local x = left + (column - 1) * (width + 28)
+    local items = sorted(place)
+    Im.Heading(if place == "corporate" then `THE CORPORATION'S HANGAR HERE  {#items}` else `YOUR HANGAR HERE  {#items}`, x, top, 16, Im.DIM)
+    local line = top + 26
+    if #items == 0 then
+      Im.Text(if place == "corporate" then "Nothing: what your pilots bring in here is put here." else "nothing here", x, line, 13, Im.DIM, 0.8)
+    end
+    local first = Im.Scroll(if place == "corporate" then "corporate hangar" else "own hangar", x - 4, line, width, visible * 24, #items, visible)
+    for row = 1, visible do
+      local item = items[row + first]
+      if item == nil then
+        break
+      end
+      local info = Types.Info(item.type)
+      local name = shorten(info.name, 24)
+      ItemIcon.Draw(item.type, x, line + 1, 20)
+      Info.Name(item.type, name, x + 26, line + 3, 13, Im.TEXT)
+      Im.Text(`x{Format.Whole(item.quantity)}`, x + 30 + Im.TextWidth(name, 13), line + 3, 12, Im.DIM)
+      if place == "corporate" then
+        local take: State.Command = { kind = "MoveItems", actor = 0, item = item.id, to = "hangar" }
+        if Im.Button("Take", x + width - 116, line, 52, 21, (Session.CanDo(session, take)), `FromCorp:{item.type}`) then
+          Session.Do(session, take)
+        end
+        local sell: State.Command = { kind = "SellNow", actor = 0, item = item.id, quantity = item.quantity }
+        if Im.Button("Sell", x + width - 60, line, 52, 21, (Session.CanDo(session, sell)), `SellCorp:{item.type}`) then
+          Session.Do(session, sell)
+        end
+      else
+        local give: State.Command = { kind = "MoveItems", actor = 0, item = item.id, to = "corporate" }
+        if Im.Button("Give", x + width - 60, line, 52, 21, (Session.CanDo(session, give)), `ToCorp:{item.type}`) then
+          Session.Do(session, give)
+        end
+      end
+      line += 24
+    end
+  end
+  local foot = top + 26 + visible * 24 + 10
+  Im.Text("Your hired pilots put what they bring in into the corporation's hangar and carry away what is in it; they leave your own alone.",
+    left, foot, 13, Im.DIM)
+  Im.Text("What is sold out of it is paid to the corporation's account. A tower's drill fills the corporation's hangar there.", left,
+    foot + 19, 13, Im.DIM)
+end
+
 local function drawWallet(session: Session.Session, game: Core.Game, x: number, y: number)
   local top = y + 78
   local left = x + 16
@@ -2009,16 +2070,22 @@ local function drawWallet(session: Session.Session, game: Core.Game, x: number, 
     if Im.Button("Take out", left + 816, top + 34, 92, 26, (Session.CanDo(session, withdraw)), "Corporation:withdraw") then
       Session.Do(session, withdraw)
     end
-    -- Its two pages: the journal, and the books by head.
-    if Im.Toggle("Journal", x + 500, top - 6, 90, 26, not byHead, "Corporation:journal") then
-      byHead = false
+    -- Its pages: the journal, the books by head, and its hangar here.
+    if Im.Toggle("Journal", x + 404, top - 6, 90, 26, corporationPage == "journal", "Corporation:journal") then
+      corporationPage = "journal"
     end
-    if Im.Toggle("Books", x + 594, top - 6, 90, 26, byHead, "Corporation:books") then
-      byHead = true
+    if Im.Toggle("Books", x + 498, top - 6, 90, 26, corporationPage == "books", "Corporation:books") then
+      corporationPage = "books"
+    end
+    if Im.Toggle("Hangar", x + 592, top - 6, 90, 26, corporationPage == "hangar", "Corporation:hangar") then
+      corporationPage = "hangar"
     end
     line = top + 84
-    if byHead then
+    if corporationPage == "books" then
       drawBooks(corporation, left, line)
+      return
+    elseif corporationPage == "hangar" then
+      drawCorporateHangar(session, game, Core.Query.Player(game).docked, left, line)
       return
     end
   else

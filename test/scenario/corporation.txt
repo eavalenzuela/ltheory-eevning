@@ -80,5 +80,30 @@ lua assert(select(4, GameDebug.Books()) == 0, 'no tower is on the books')
 until GameDebug.Press('Corporation:journal')
 frames 3
 
+# Its hangar here: empty, until the pilot gives it some of the rounds
+# the starter kit came with. They are taken back, given again, and sold
+# for the corporation's account.
+until GameDebug.Press('Corporation:hangar')
+frames 3
+lua assert(select(2, GameDebug.CorpHangar('ammo.emp')) == 0, 'the corporation should have nothing here yet')
+lua _G.rounds = GameDebug.Hangar('ammo.emp')
+lua assert(_G.rounds > 0, 'the starter kit should have rounds in it')
+until GameDebug.Press('ToCorp:ammo.emp')
+until GameDebug.CorpHangar('ammo.emp') == _G.rounds
+lua assert(GameDebug.Hangar('ammo.emp') == 0, 'the rounds should have left the hangar of the pilot')
+frames 3
+until GameDebug.Press('FromCorp:ammo.emp')
+until GameDebug.Hangar('ammo.emp') == _G.rounds
+frames 3
+until GameDebug.Press('ToCorp:ammo.emp')
+until GameDebug.CorpHangar('ammo.emp') == _G.rounds
+frames 3
+lua _G.account = select(2, GameDebug.Corporation())
+lua _G.own = GameDebug.Wallet()
+until GameDebug.Press('SellCorp:ammo.emp')
+until GameDebug.CorpHangar('ammo.emp') == 0
+lua assert(select(2, GameDebug.Corporation()) > _G.account, 'the sale should have been paid to the corporation')
+lua assert(GameDebug.Wallet() == _G.own, 'and none of it to the pilot')
+
 echo corporation scenario passed
 quit

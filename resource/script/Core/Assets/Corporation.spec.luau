@@ -302,6 +302,164 @@ end)
 -- market and sells it. A tower with a drill runs beside. Every credit that
 -- moved is under a head, every unit of ore that was cut is somewhere
 -- or was sold, and the tower's count is what its tank and hangar say.
+-- How many of a type a station holds in a place.
+local function kept(game: Core.Game, station: number, place: string, type: string): number
+  local units = 0
+  for _, item in Items.In(game.state, station, place) do
+    units += if item.type == type then item.quantity else 0
+  end
+  return units
+end
+
+-- The first stack of a type in a place at a station.
+local function stackIn(game: Core.Game, station: number, place: string, type: string): State.Item
+  for _, item in Items.In(game.state, station, place) do
+    if item.type == type then
+      return item
+    end
+  end
+  error(`no {type} in the {place} there`, 2)
+end
+
+suite:Case("the corporation has a hangar of its own at a station, beside the pilot's: things are given to it and taken back, docked", function(t)
+  -- With no corporation there is none.
+  local plain = rich(100000)
+  local home = plain.state.player.home
+  t.eq(refused(plain, { kind = "MoveItems", actor = 0, item = stackIn(plain, home, "hangar", "ammo.emp").id, to = "corporate" }),
+    "there is no corporation to give it to")
+  t.eq(Corporation.Store(plain.state), "hangar")
+
+  local game = founded(100000)
+  local state = game.state
+  t.eq(Corporation.Store(state), "corporate")
+  local had = kept(game, home, "hangar", "ammo.emp")
+  t.ok(had >= 300, "the starter kit should have rounds to give")
+  t.ok((submit(game, { kind = "MoveItems", actor = 0, item = stackIn(game, home, "hangar", "ammo.emp").id, to = "corporate", quantity = 200 })))
+  t.eq({ kept(game, home, "corporate", "ammo.emp"), kept(game, home, "hangar", "ammo.emp") }, { 200, had - 200 })
+  local moved = said(game, "ItemsMoved")
+  t.eq({ #moved, moved[1].to, moved[1].quantity } :: { any }, { 1, "corporate", 200 } :: { any })
+  -- (a second lot joins the first: one stack of a type to a hangar)
+  t.ok((submit(game, { kind = "MoveItems", actor = 0, item = stackIn(game, home, "hangar", "ammo.emp").id, to = "corporate", quantity = 50 })))
+  t.eq(#Items.In(state, home, "corporate"), 1)
+  local theirs = stackIn(game, home, "corporate", "ammo.emp")
+  t.eq(theirs.quantity, 250)
+  t.eq(refused(game, { kind = "MoveItems", actor = 0, item = theirs.id, to = "corporate" }), "already in the corporation's hangar")
+  -- Back out of it: to the pilot's hangar, and straight into the hold.
+  t.ok((submit(game, { kind = "MoveItems", actor = 0, item = theirs.id, to = "hangar", quantity = 100 })))
+  t.ok((submit(game, { kind = "MoveItems", actor = 0, item = theirs.id, to = "cargo", quantity = 30 })))
+  t.eq({ kept(game, home, "corporate", "ammo.emp"), kept(game, home, "hangar", "ammo.emp"), kept(game, state.player.ship, "cargo", "ammo.emp") },
+    { 120, had - 150, 30 })
+  -- What is in it is to hand like anything else at the station: a module is fitted straight from it.
+  local module = stackIn(game, home, "hangar", "shield.extender.small")
+  t.ok((submit(game, { kind = "MoveItems", actor = 0, item = module.id, to = "corporate" })))
+  t.ok(refused(game, { kind = "Fit", actor = 0, item = stackIn(game, home, "corporate", "shield.extender.small").id }) ~= "that item is not here")
+  -- It is the station's: out in space it is nobody's to move.
+  local data, length = Core.Save(game)
+  t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
+  t.ok((submit(game, { kind = "Undock", actor = 0 })))
+  for _ = 1, 30 do
+    Core.Step(game)
+  end
+  t.eq(refused(game, { kind = "MoveItems", actor = 0, item = stackIn(game, home, "corporate", "ammo.emp").id, to = "hangar" }), "not docked")
+end)
+
+suite:Case("what is sold out of the corporation's hangar is paid to the corporation, under sales; an order is placed from the pilot's own", function(t)
+  local game = founded(100000)
+  local state = game.state
+  local home = state.player.home
+  t.ok((submit(game, { kind = "MoveItems", actor = 0, item = stackIn(game, home, "hangar", "ammo.emp").id, to = "corporate", quantity = 300 })))
+  local theirs = stackIn(game, home, "corporate", "ammo.emp")
+  t.eq(refused(game, { kind = "PlaceOrder", actor = 0, to = "sell", item = theirs.id, quantity = 100, price = 50 }),
+    "an order is placed from your own hangar")
+  Core.TakeEvents(game)
+  local wallet, account = state.wallet, state.corporation.wallet
+  t.ok((submit(game, { kind = "SellNow", actor = 0, item = theirs.id, quantity = 100 })))
+  local sold = said(game, "Sold")
+  t.eq(#sold, 1)
+  local revenue: number = sold[1].revenue
+  t.ok(revenue > 0, "the rounds fetched nothing")
+  t.eq({ state.wallet - wallet, state.corporation.wallet - account, state.corporation.books["market sale"] }, { 0, revenue, revenue })
+  t.eq(kept(game, home, "corporate", "ammo.emp"), 200)
+  -- And the pilot's own rounds are the pilot's own, as they were.
+  t.ok((submit(game, { kind = "SellNow", actor = 0, item = stackIn(game, home, "hangar", "ammo.emp").id, quantity = 100 })))
+  t.ok(state.wallet > wallet and state.corporation.wallet == account + revenue, "the pilot's own sale was not paid to the pilot")
+end)
+
+suite:Case("a hired pilot works out of the corporation's hangar and leaves the pilot's own alone", function(t)
+  local game = founded(2000000)
+  local state = game.state
+  local home = state.player.home
+  -- A hauler, with a hired pilot in it.
+  local mule = Space.NewShip(state, "industrial.hauler", "Mule", "player", home)
+  state.skills.leadership = 1
+  t.ok((submit(game, { kind = "HirePilot", actor = 0, what = Core.Query.Candidates(game, home)[1].key })))
+  local wing = state.fleet[state.fleetIds[#state.fleetIds]]
+  t.ok((submit(game, { kind = "AssignShip", actor = 0, pilot = wing.id, target = mule.id })))
+  -- Ore at home in both hangars, and the hauler set to carry ore to the nearest other station.
+  local from = Space.Object(state, home) :: System.Object
+  local other, least = 0, math.huge
+  for _, object in Space.Describe(state, 1).objects do
+    if object.kind == "station" and object.id ~= home and Space.Distance(from :: any, object :: any) < least then
+      other, least = object.id, Space.Distance(from :: any, object :: any)
+    end
+  end
+  assert(other ~= 0, "the home system wants a second station")
+  Items.Add(state, "ore.ferrite", 400, home, "hangar")
+  Items.Add(state, "ore.ferrite", 700, home, "corporate")
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "haul", pilot = wing.id, target = other, type = "ore" })))
+  local delivered = 0
+  for _ = 1, 4000 do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      if event.kind == "HaulDelivered" then
+        delivered += event.units
+      end
+    end
+    if delivered > 0 then
+      break
+    end
+  end
+  -- The corporation's ore went, to the corporation's hangar there. The pilot's own did not move.
+  t.eq(delivered, 700)
+  t.eq({ kept(game, home, "hangar", "ore.ferrite"), kept(game, home, "corporate", "ore.ferrite") }, { 400, 0 })
+  t.eq({ kept(game, other, "corporate", "ore.ferrite"), kept(game, other, "hangar", "ore.ferrite") }, { 700, 0 })
+end)
+
+suite:Case("a tower's drill fills the corporation's hangar there, its one silo counts both hangars, and a dark tower burns the corporation's fuel first", function(t)
+  local game = founded(100000)
+  local state = game.state
+  local moon: System.Object? = nil
+  for _, object in Space.Describe(state, 1).objects do
+    if object.kind == "moon" and moon == nil and Starbases.Deposit(state, object.id) then
+      moon = object
+    end
+  end
+  local under = assert(moon, "the home system wants a moon with something under it")
+  local small = Structures.towerById["tower.vessari.small"]
+  local base = Starbases.Raise(state, 1, under, small, "player", under.x + under.radius * 5, under.y, under.z)
+  local starbase = state.starbases[base]
+  starbase.ready, starbase.burnt, starbase.drilled, starbase.fuel = state.tick, state.tick, state.tick, 600
+  table.insert(starbase.modules, { type = Structures.DRILL, ready = state.tick })
+  local deposit = assert(Starbases.Deposit(state, under.id))
+  local material = deposit.material.id
+  -- (some of it the pilot's own already: the silo is one)
+  Items.Add(state, material, 100, base, "hangar")
+  for _ = 1, 3600 + 5 do
+    Core.Step(game)
+  end
+  local hour = Starbases.Drilling(state, starbase).perHour
+  t.eq({ kept(game, base, "corporate", material), kept(game, base, "hangar", material) }, { hour, 100 })
+  t.eq(Starbases.Drilling(state, starbase).stored, hour + 100)
+  -- A tank run dry: the corporation's fuel is burnt before the pilot's own.
+  Items.Add(state, Structures.FUEL.id, 500, base, "hangar")
+  Items.Add(state, Structures.FUEL.id, 500, base, "corporate")
+  starbase.fuel = 0
+  Core.Step(game)
+  local day = small.fuel * 24
+  t.eq({ starbase.fuel, kept(game, base, "corporate", Structures.FUEL.id), kept(game, base, "hangar", Structures.FUEL.id) },
+    { day, 500 - day, 500 })
+end)
+
 suite:Case("fifty game-hours of mining and hauling with a tower run beside, and the books balance", function(t)
   local game = founded(30000000)
   local state = game.state
@@ -378,10 +536,12 @@ suite:Case("fifty game-hours of mining and hauling with a tower run beside, and 
   table.insert(starbase.modules, { type = Structures.DRILL, ready = state.tick })
   local deposit = assert(Starbases.Deposit(state, under.id))
 
-  -- Where every unit of ore is: the two holds and the two hangars.
+  -- Where every unit of ore is: the two holds, and the hangars at the two stations (the
+  -- corporation's, where its pilots put it, and the pilot's own, where none of it should be).
   local function held(): { [string]: number }
     local found: { [string]: number } = {}
-    for _, place in { { digger.id, "cargo" }, { mule.id, "cargo" }, { depot, "hangar" }, { market, "hangar" } } :: { { any } } do
+    for _, place in { { digger.id, "cargo" }, { mule.id, "cargo" }, { depot, "corporate" }, { market, "corporate" },
+      { depot, "hangar" }, { market, "hangar" } } :: { { any } } do
       for _, item in Items.In(state, place[1], place[2]) do
         if string.sub(item.type, 1, 4) == "ore." then
           found[item.type] = (found[item.type] or 0) + item.quantity
@@ -456,11 +616,18 @@ suite:Case("fifty game-hours of mining and hauling with a tower run beside, and 
   end
   t.eq(counted, cut, "an ore was cut that the count does not know")
   t.ok(cut >= brought and brought >= carried, `{cut} cut, {brought} brought in, {carried} carried`)
-  -- The tower: what it has burnt is what has gone from its tank, and what it has brought up is in its hangar.
+  -- The tower: what it has burnt is what has gone from its tank, and what it has brought up is
+  -- in the corporation's hangar there, none of it in the pilot's own.
   t.eq({ starbase.used, fuel - starbase.fuel }, { 50 * small.fuel, 50 * small.fuel })
   local stored = 0
-  for _, item in Items.In(state, base, "hangar") do
+  for _, item in Items.In(state, base, "corporate") do
     stored += if item.type == deposit.material.id then item.quantity else 0
+  end
+  t.eq(#Items.In(state, base, "hangar"), 0)
+  for _, place in { depot, market } do
+    for _, item in Items.In(state, place, "hangar") do
+      t.ok(string.sub(item.type, 1, 4) ~= "ore.", "a hired pilot put ore in the pilot's own hangar")
+    end
   end
   t.eq({ starbase.raised, starbase.robbed }, { stored, 0 })
   t.ok(stored > 0, "the drill brought nothing up")

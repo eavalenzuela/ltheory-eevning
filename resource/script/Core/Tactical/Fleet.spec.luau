@@ -1533,7 +1533,8 @@ suite:Case("a market some jumps off is on the list without its system being put 
   t.ok(waitFor(game, 6000, function()
     return wing.order == "stay"
   end), "the errand did not end")
-  t.eq({ count(game, home, "hangar", type), second.docked }, { 200, home })
+  -- (what the corporation paid for is put in the corporation's hangar)
+  t.eq({ count(game, home, "corporate", type), count(game, home, "hangar", type), second.docked }, { 200, 0, home })
   t.eq({ account - state.corporation.wallet, state.wallet }, { there.cost, wallet })
 end)
 
