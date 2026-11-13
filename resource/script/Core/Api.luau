@@ -60,6 +60,7 @@ local System = require("@lt/Core/Describe/System")
 local Traffic = require("@lt/Core/Tactical/Traffic")
 local Training = require("@lt/Core/Character/Training")
 local Types = require("@lt/Core/Data/Types")
+local Vapour = require("@lt/Core/Tactical/Vapour")
 
 local Core = {}
 
@@ -1012,6 +1013,7 @@ export type Entry = {
   variety: string,
   hostile: boolean,   -- a ship that will fire on the pilot: a pirate, or a patrol that has taken them for a criminal
   own: boolean,       -- a ship of the pilot's side: a drone of theirs, or a hired pilot's
+  veiled: boolean?,   -- a ship in a cloud of gas: locked only from close in (Tactical/Vapour)
 }
 
 -- What the player's ship can see: everything on its grid, and every
@@ -1043,7 +1045,8 @@ function Query.Overview(game: Game): { Entry }
     if id ~= me.id and ball.system == me.system and ball.grid == me.grid and me.grid ~= 0 then
       local entry: Entry = { id = id, kind = ball.kind :: string, name = ball.name,
         distance = Space.Gap(me :: any, ball :: any), onGrid = true, variety = state.ships[id].type,
-        hostile = state.ships[id].owner == "pirates" or state.pilots[id] ~= nil, own = state.ships[id].owner == "player" }
+        hostile = state.ships[id].owner == "pirates" or state.pilots[id] ~= nil, own = state.ships[id].owner == "player",
+        veiled = Vapour.In(state, ball) }
       table.insert(entries, entry)
     end
   end
@@ -1122,6 +1125,13 @@ end
 -- Whether a ship is cloaked: nobody can target it.
 function Query.Cloaked(game: Game, ship: number): boolean
   return Combat.Cloaked(game.state, ship)
+end
+
+-- Whether a ship is in a cloud of gas (Tactical/Vapour): it is locked,
+-- and locks, only from close in. And how close that is, in metres.
+function Query.Veiled(game: Game, ship: number): (boolean, number)
+  local ball = game.state.balls[ship]
+  return ball ~= nil and Vapour.In(game.state, ball), Vapour.SIGHT
 end
 
 -- The chance a fitted turret would hit a target now, or nil.

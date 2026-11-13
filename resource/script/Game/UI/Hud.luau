@@ -49,6 +49,10 @@ end
 
 -- The light a jump through a gate whites the view out with.
 local VEIL = vector.create(0.80, 0.92, 1.0)
+-- What a cloud of gas does to the view from inside it, and how far it
+-- has come on (0 to 1).
+local HAZE = vector.create(0.78, 0.74, 0.66)
+local haze = 0
 
 local TAGS: { [string]: string } = {
   sun = "SUN", planet = "PLN", moon = "MON", belt = "BLT", asteroid = "AST",
@@ -335,6 +339,10 @@ local function drawOverview(session: Session.Session, all: { Core.Entry }, x: nu
       if goal then NEXT else Im.DIM)
     Im.Text(entry.name, x + 52, rowY + 3, 14, color)
     Im.TextRight(Format.Distance(entry.distance), x + width - 12, rowY + 3, 14, color)
+    -- (a ship in a cloud of gas says so, before its distance: it is locked only from close in)
+    if entry.veiled then
+      Im.TextRight("in vapour", x + width - 86, rowY + 4, 12, Im.ACCENT)
+    end
     if clicked then
       session.selected = entry.id
     end
@@ -741,6 +749,12 @@ local function drawNavigation(session: Session.Session, ball: State.Ball, x: num
   -- (and whether anybody can see the ship at all)
   if Core.Query.Cloaked(game, ball.id) then
     Im.Text("CLOAKED", x + 400, y + 12, 13, Im.ACCENT)
+  else
+    -- (or only from close in: in a cloud of gas. Said over the panel, where there is room for it)
+    local veiled, sight = Core.Query.Veiled(game, ball.id)
+    if veiled then
+      Im.Text(`IN VAPOUR: nothing locks you from beyond {Format.Distance(sight)}, nor you it`, x + 14, y - 20, 13, Im.ACCENT)
+    end
   end
   local inWarp = ball.warp ~= nil and ball.warp.stage == "warp"
   local stop = Keys.Did("stop") and not inWarp
@@ -791,6 +805,14 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       -- Through a gate the view whites out, under everything written on it.
       if scene.veil > 0 then
         Im.Fill(left, top, w.size.x, w.size.y, VEIL, math.min(1, scene.veil))
+      end
+      -- And in a cloud of gas it is hazed, a little: it comes on and
+      -- goes off over a second or so. (A grey box of being in a cloud.)
+      local veiled = ball ~= nil and (Core.Query.Veiled(game, ball.id))
+      haze += ((if veiled then 1 else 0) - haze) * 0.05
+      if haze > 0.01 then
+        -- (a fill's alpha is not linear: this is about a tenth of the way to the haze's colour)
+        Im.Fill(left, top, w.size.x, w.size.y, HAZE, 0.36 * haze)
       end
 
       -- (with a right click's menu up, a click is the menu's: Context.Draw)

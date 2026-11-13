@@ -41,6 +41,7 @@ local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local Vapour = require("@lt/Core/Tactical/Vapour")
 local Surges = require("@lt/Core/Tactical/Surges")
 local System = require("@lt/Core/Describe/System")
 
@@ -540,9 +541,12 @@ function Pirates.Think(state: State.State, events: { Event })
       continue
     end
 
-    -- (what a camp is built of stands where it was put)
-    if ball.maxVelocity > 0 and not (ball.mode == "orbit" and ball.target == prey.id) then
-      give(state, { kind = "Orbit", actor = id, target = prey.id, range = pilot.range }, events)
+    -- (what a camp is built of stands where it was put; and with the
+    -- vapour between them, whoever fights from far off comes in close:
+    -- Tactical/Vapour)
+    local range = if Vapour.Between(state, ball, prey) then math.min(pilot.range, Vapour.CLOSE) else pilot.range
+    if ball.maxVelocity > 0 and not (ball.mode == "orbit" and ball.target == prey.id and ball.range == range) then
+      give(state, { kind = "Orbit", actor = id, target = prey.id, range = range }, events)
     end
     local locked = false
     local targeted = false

@@ -26,6 +26,7 @@ local Rng = require("@lt/Core/Kernel/Rng")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
+local Vapour = require("@lt/Core/Tactical/Vapour")
 local Vitals = require("@lt/Core/Tactical/Vitals")
 
 local Combat = {}
@@ -130,6 +131,9 @@ local function lockable(state: State.State, ball: State.Ball, target: number): (
     return false, "target is not on grid"
   elseif Space.Gap(ball :: any, body) > ball.vitals.lockRange then
     return false, "out of targeting range"
+  elseif other and Space.Gap(ball :: any, body) > Vapour.Sight(state, ball, other) then
+    -- (a ship in a cloud of gas is locked, and locks, only from close in: Tactical/Vapour)
+    return false, "lost in the vapour"
   end
   return true
 end

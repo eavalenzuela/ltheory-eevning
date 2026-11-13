@@ -124,6 +124,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local Vapour = require("@lt/Core/Tactical/Vapour")
 local Stations = require("@lt/Core/Assets/Stations")
 local System = require("@lt/Core/Describe/System")
 local Types = require("@lt/Core/Data/Types")
@@ -735,9 +736,12 @@ end
 -- Fight 'prey': orbit it at a range the ship's weapons like, lock it,
 -- and switch on everything there is for another ship and for a fight.
 local function fight(state: State.State, me: State.Ball, prey: State.Ball, events: { Event })
-  if not (me.mode == "orbit" and me.target == prey.id) then
+  -- (with the vapour between them they come in close: Tactical/Vapour)
+  local veiled = Vapour.Between(state, me, prey)
+  if not (me.mode == "orbit" and me.target == prey.id) or (veiled and me.range > Vapour.CLOSE) then
     local reach = Items.Offence(state, me.id).range
-    give(state, { kind = "Orbit", actor = me.id, target = prey.id, range = math.clamp(reach * 0.6, 1000, 15000) }, events)
+    give(state, { kind = "Orbit", actor = me.id, target = prey.id,
+      range = math.min(math.clamp(reach * 0.6, 1000, 15000), if veiled then Vapour.CLOSE else math.huge) }, events)
   end
   local locked, targeted = false, false
   for _, lock in me.vitals.locks do

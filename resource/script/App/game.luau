@@ -486,6 +486,18 @@ function Debug.SelfDestruct()
   end
 end
 
+-- Whether the pilot's ship is in a cloud of gas (where it is locked,
+-- and locks, only from close in), how close that is in metres, and how
+-- many of the other ships on the overview are in one.
+function Debug.Veiled(): (boolean, number, number)
+  local veiled, sight = Core.Query.Veiled(session.game, session.game.state.player.ship)
+  local others = 0
+  for _, entry in Core.Query.Overview(session.game) do
+    others += if entry.veiled then 1 else 0
+  end
+  return veiled, sight, others
+end
+
 -- No pirates come while this is on.
 function Debug.Peaceful(on: boolean)
   session.game.state.peaceful = on

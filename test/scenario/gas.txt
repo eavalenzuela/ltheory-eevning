@@ -49,6 +49,24 @@ until GameDebug.Running() == 1
 until GameDebug.Hold('gas.amber') >= 42
 lua assert(GameDebug.Order('Stop'))
 
+# The cloud is cover. Standing off it the ship is in the clear. Flown
+# into it, it is in the vapour: a pirate eight kilometres off cannot be
+# locked, and is locked when it has come in to within five.
+lua assert(not GameDebug.Veiled(), 'a ship standing off a cloud is not in its vapour')
+lua assert(select(2, GameDebug.Veiled()) == 5000, 'the vapour should hide a ship from beyond five kilometres')
+lua assert(GameDebug.Order('Approach', 'Amber Vapour', 0), 'the approach was refused')
+until GameDebug.Veiled()
+lua assert(GameDebug.Order('Stop'))
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Pirate('scout', 8000), 'no pirate')
+frames 3
+lua assert(GameDebug.Distance('Pirate Scout') > 5000, 'the pirate should be beyond what the vapour lets through')
+lua assert(not GameDebug.Lock('Pirate Scout'), 'a ship in the vapour should lock nothing eight kilometres off')
+patience 120
+until GameDebug.Lock('Pirate Scout')
+lua assert(GameDebug.Distance('Pirate Scout') <= 5000, 'the lock should have waited for the pirate to come in close')
+lua GameDebug.TimeScale(16)
+
 # Home, and the gas into a booster.
 lua assert(GameDebug.Order('Dock', 'home'), 'dock was refused')
 until GameDebug.Docked()
