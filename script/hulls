@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""script/hulls: sheets of the hulls the engine's first generator makes
+(App/hulls.luau), taken off the screen.
+
+  script/hulls seeds [FROM [COUNT [SIZE [PAINT]]]]
+        COUNT seeds from FROM on (40 from 1), each at SIZE (2) in PAINT (bare)
+  script/hulls broad [FROM [COUNT [SIZE [PAINT]]]]
+        the same, but only of the seeds whose hulls are broad (at least a
+        third as wide as they are long): most of what the generator grows
+        is long and thin
+  script/hulls sizes SEED [PAINT]
+        one seed at each of the eight sizes
+  script/hulls paints SEED [SIZE]
+        one seed in every paint
+
+SIZE is 1 to 8: how many plates the generator grows (3, 4, 5, 5, 6, 7, 8, 9)
+and, from 4 up, with a broad deck under each. It made a frigate at 2 and
+its biggest hulls at about 5.
+PAINT is bare (as the engine made them), civil, vessari, talmar, kethri,
+vail or unbound.
+
+The sheet is written to cache/hulls/ and its name printed. Every picture
+has its seed (or size, or paint) written on it.
+
+To go through the seeds by hand, in a window:  bin/launch hulls
+(Left and Right step the seed, [ and ] the size, P the paint, K keeps
+one in cache/hulls-kept.txt.)
+"""
+import os
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(ROOT)
+PAINTS = ["bare", "civil", "vessari", "talmar", "kethri", "vail", "unbound"]
+PLATES = [3, 4, 5, 5, 6, 7, 8, 9]
+DECKS = [False, False, False, True, True, True, True, True]
+
+
+def usage(why=None):
+    if why:
+        print(f"hulls: {why}\n", file=sys.stderr)
+    print(__doc__, file=sys.stderr)
+    sys.exit(2)
+
+
+def number(args, at, default, low, high, what):
+    if len(args) <= at:
+        if default is None:
+            usage(f"{what} is wanted")
+        return default
+    try:
+        value = int(args[at])
+    except ValueError:
+        usage(f"{what} is a whole number, not '{args[at]}'")
+    if value < low or value > high:
+        usage(f"{what} is from {low} to {high}")
+    return value
+
+
+def paint(args, at, default):
+    if len(args) <= at:
+        return default
+    if args[at] not in PAINTS:
+        usage(f"no paint called '{args[at]}'")
+    return args[at]
+
+
+def describe(size):
+    return f"size {size} ({PLATES[size - 1]} plates{', decks' if DECKS[size - 1] else ''})"
+
+
+def launch(script, limit, taken):
+    """Run the browser off the screen on a script of commands; its output."""
+    # (bin/launch takes a scripted run off the desktop by itself)
+    env = dict(os.environ)
+    env.setdefault("DRI_PRIME", "1")
+    return subprocess.run(["bin/launch", "hulls", "--no-present", "--fixed-step", "60", "--scale", "2", "--timeout", str(limit),
+                           "--out", taken, "--script", script], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+
+def main():
+    args = sys.argv[1:]
+    if not args or args[0] in ("-h", "--help", "help"):
+        usage()
+    kind, rest = args[0], args[1:]
+    folder = os.path.join("cache", "hulls")
+    taken = os.path.join(folder, "shots")
+    os.makedirs(taken, exist_ok=True)
+    script = os.path.join(folder, "sheet.txt")
+    # (each picture: its seed, its size, its paint, and what is written on it)
+    if kind == "seeds" or kind == "broad":
+        first = number(rest, 0, 1, 0, 10 ** 9, "the first seed")
+        count = number(rest, 1, 40, 1, 400, "how many")
+        size = number(rest, 2, 2, 1, 8, "the size")
+        colour = paint(rest, 3, "bare")
+        seeds = list(range(first, first + count))
+        what = f"seeds {first} to {first + count - 1}"
+        if kind == "broad":
+            # (the browser says which they are: it has the generator)
+            with open(script, "w") as out:
+                out.write(f"frames 2\nlua print('BROAD ' .. Hulls.Broad({first}, {count}, {size}))\nquit\n")
+            found = [line for line in launch(script, 60, taken).stdout.splitlines() if line.startswith("BROAD")]
+            if not found:
+                print("hulls: the browser did not say which seeds are broad", file=sys.stderr)
+                sys.exit(1)
+            seeds = [int(seed) for seed in found[0][6:].split(",") if seed.strip()]
+            if not seeds:
+                print(f"hulls: no broad hull in the {40 * count} seeds from {first}", file=sys.stderr)
+                sys.exit(1)
+            what = f"the {len(seeds)} broad ones from seed {first} to {seeds[-1]}"
+        shots = [(seed, size, colour, f"seed {seed}") for seed in seeds]
+        title = f"The generator's hulls: {what}, {describe(size)}, {colour}"
+        name = f"{kind}-{seeds[0]}-{seeds[-1]}-size{size}-{colour}"
+    elif kind == "sizes":
+        seed = number(rest, 0, None, 0, 10 ** 9, "the seed")
+        colour = paint(rest, 1, "bare")
+        shots = [(seed, size, colour, describe(size)) for size in range(1, 9)]
+        title = f"The generator's hulls: seed {seed} at every size, {colour}"
+        name = f"sizes-seed{seed}-{colour}"
+    elif kind == "paints":
+        seed = number(rest, 0, None, 0, 10 ** 9, "the seed")
+        size = number(rest, 1, 2, 1, 8, "the size")
+        shots = [(seed, size, colour, colour) for colour in PAINTS]
+        title = f"The generator's hulls: seed {seed}, {describe(size)}, in every paint"
+        name = f"paints-seed{seed}-size{size}"
+    else:
+        usage(f"'{kind}' is not seeds, broad, sizes or paints")
+
+    lines = ["frames 10"]
+    files = []
+    for index, (seed, size, colour, _) in enumerate(shots):
+        file = f"{name}-{index:04d}"
+        files.append(os.path.join(taken, file + ".png"))
+        if os.path.exists(files[-1]):
+            os.remove(files[-1])
+        lines += [f"lua assert(Hulls.Show({seed}, {size}, '{colour}'))", "frames 6", f"shot {file}", "frames 2"]
+    lines += ["echo hulls sheet taken", "quit"]
+    with open(script, "w") as out:
+        out.write("\n".join(lines) + "\n")
+    run = launch(script, 60 + 4 * len(shots), taken)
+    missing = [file for file in files if not os.path.exists(file)]
+    if run.returncode != 0 or missing or "hulls sheet taken" not in run.stdout:
+        tail = "\n".join(line for line in run.stdout.splitlines() if "[Warning]" not in line)[-2000:]
+        print(f"hulls: the run failed (exit {run.returncode}, {len(missing)} of {len(files)} pictures missing)\n{tail}", file=sys.stderr)
+        sys.exit(1)
+
+    from PIL import Image, ImageDraw, ImageFont
+    try:
+        big = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
+        small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+    except OSError:
+        big = small = ImageFont.load_default()
+    columns = 4 if len(shots) <= 8 else 5
+    wide, high, bar = 480, 270, 44
+    rows = (len(shots) + columns - 1) // columns
+    sheet = Image.new("RGB", (columns * wide, bar + rows * high), (12, 14, 18))
+    draw = ImageDraw.Draw(sheet)
+    draw.text((12, 9), title, fill=(235, 235, 235), font=big)
+    for index, (file, shot) in enumerate(zip(files, shots)):
+        x, y = (index % columns) * wide, bar + (index // columns) * high
+        sheet.paste(Image.open(file).convert("RGB").resize((wide, high), Image.LANCZOS), (x, y))
+        draw.text((x + 10, y + 8), shot[3], fill=(255, 255, 255), font=small, stroke_width=2, stroke_fill=(0, 0, 0))
+    out = os.path.join(folder, f"sheet-{name}.png")
+    sheet.save(out)
+    print(os.path.join(ROOT, out))
+
+
+main()

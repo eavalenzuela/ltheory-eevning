@@ -58,8 +58,14 @@ A script works the station screens by pressing buttons by name, which runs the s
 | `bin/launch APP --console` | A Luau prompt in the terminal that started the app: type a line, it runs in the app's VM. The harness command `lua CODE` does the same from a script. |
 | `script/goldens [NAME ...]` | Runs the golden-screenshot scenarios and compares each with its stored image. |
 | `script/goldens --update [NAME ...]` | Stores this run's screenshots as the golden images. |
+| `bin/launch hulls` | The hull browser (`App/hulls.luau`), in a window, for a person: the hulls the engine's first generator makes (`Item/ShipType/Generate`), one at a time by seed. Left and Right step the seed, Down and Up ten at a time, R picks one at random, B has only the broad ones stepped to (most of what it grows is long and thin), `[` and `]` change the size (1 to 8: how many plates it grows, and from 4 up a deck under each), P goes round the paints (bare, as the engine made them, then the game's: civil, vessari, talmar, kethri, vail, unbound), K writes the one shown to `cache/hulls-kept.txt`, Space stops it turning; a right drag turns it and the wheel moves in and out. |
+| `script/hulls seeds [FROM [COUNT [SIZE [PAINT]]]]` | A sheet of COUNT seeds from FROM on (40 from 1) at a size (2) in a paint (bare), each with its seed written on it, taken off the screen; the sheet's name is printed (`cache/hulls/sheet-...png`). About a second a hull. |
+| `script/hulls broad [FROM [COUNT [SIZE [PAINT]]]]` | The same of only the broad hulls: those at least a third as wide as they are long. |
+| `script/hulls sizes SEED [PAINT]`, `script/hulls paints SEED [SIZE]` | One seed at each of the eight sizes, or in every paint. |
 
 `bin/launch APP --do "COMMANDS" --out DIR` drives an app with scripted input and saves screenshots; see `docs/harness.md`.
+
+A script drives the hull browser with `Hulls.Show(seed, size, paint)` (the hull, still, from off the bow, with nothing written over it; false if there is no such size or paint), `Hulls.Now()` (the seed, size and paint shown, the plates grown for it and how wide it is for its length) and `Hulls.Broad(from, count, size)` (the first so many broad seeds from one on, with commas between). A hull is what its seed and size make it whatever the paint: the bare one is the generator's own model and a painted one is the same draws through `Hull.Grown`, and `Hull.GrownShape` gives how far one reaches each way without making it.
 
 ## Sounds
 

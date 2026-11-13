@@ -432,12 +432,17 @@ local function cabin(b: Builder, center: vector, half: vector)
   mid(b, GLOW, center + v(0, half.y * 0.25, half.z + 0.005), v(half.x * 0.72, half.y * 0.26, 0.03), 0.4)
 end
 
--- A hull as the generator grew one, from a seed: 'steps' plates grown
--- off a cross of two, each in a row of one to five along the hull with
--- a slighter one through it, and (with 'decks') a broad flat one under
--- each. The draws are the generator's own, in its order, and so is the
--- bend. (Hull.Grown, for looking through what it makes.)
-local function grown(b: Builder, seed: number, steps: number, decks: boolean)
+-- What the generator grows from a seed: 'steps' plates grown off a
+-- cross of two, each in a row of one to five along the hull with a
+-- slighter one through it, and (with 'decks') a broad flat one under
+-- each. The draws are the generator's own, in its order. Each plate
+-- stands for itself and its twin on the other side; 'middle' is where
+-- the middle of the hull comes to once it is bent (the generator
+-- centred its hulls), and 'across' how far it then reaches each way.
+type Plate = { center: vector, size: vector, part: number }
+type Growth = { plates: { Plate }, middle: vector, across: vector }
+
+local function growth(seed: number, steps: number, decks: boolean): Growth
   local rng = RNG_MTG(Int.Signed(seed + 102))
   type Box = { center: vector, size: vector }
   local boxes: { Box } = {
@@ -461,39 +466,40 @@ local function grown(b: Builder, seed: number, steps: number, decks: boolean)
   end
   local wide = v(1.25, 0.50, 2.00)
   local under = v(1, -0.5, 1)
-  -- (bent about where its middle comes to, as the generator centred its hulls)
+  local plates: { Plate } = {}
+  for _, box in boxes do
+    table.insert(plates, { center = box.center, size = box.size, part = PLATING })
+    if decks then
+      table.insert(plates, { center = box.center * under, size = box.size * wide, part = PATCH })
+    end
+  end
+  for _, box in slight do
+    table.insert(plates, { center = box.center, size = box.size, part = FRAME })
+    if decks then
+      table.insert(plates, { center = box.center * under, size = box.size * wide, part = FRAME })
+    end
+  end
   local plain = warped(OLD)
   local low, high = v(math.huge, math.huge, math.huge), v(-math.huge, -math.huge, -math.huge)
-  local function reach(center: vector, size: vector)
+  for _, plate in plates do
     for corner = 0, 7 do
       local way = v(if corner % 2 == 0 then -1 else 1, if (corner // 2) % 2 == 0 then -1 else 1, if corner // 4 == 0 then -1 else 1)
       for _, side in { 1, -1 } do
-        local at = plain((center + size * way) * v(side, 1, 1) * GROWN)
+        local at = plain((plate.center + plate.size * way) * v(side, 1, 1) * GROWN)
         low, high = vector.min(low, at), vector.max(high, at)
       end
     end
   end
-  for _, list in { boxes, slight } do
-    for _, box in list do
-      reach(box.center, box.size)
-      if decks then
-        reach(box.center * under, box.size * wide)
-      end
-    end
+  return { plates = plates, middle = (low + high) / 2, across = high - low }
+end
+
+-- A hull as the generator grew one: its plates, and its bend about
+-- where its middle comes to.
+local function grown(b: Builder, g: Growth)
+  for _, plate in g.plates do
+    twin(b, plate.part, plate.center, plate.size)
   end
-  for _, box in boxes do
-    twin(b, PLATING, box.center, box.size)
-    if decks then
-      twin(b, PATCH, box.center * under, box.size * wide)
-    end
-  end
-  for _, box in slight do
-    twin(b, FRAME, box.center, box.size)
-    if decks then
-      twin(b, FRAME, box.center * under, box.size * wide)
-    end
-  end
-  local bend, unbend = warped(OLD, (low + high) / 2)
+  local bend, unbend = warped(OLD, g.middle)
   Plates.Bend(b, bend, unbend)
   bending = bend
 end
@@ -2731,19 +2737,27 @@ end
 
 -- A hull as the engine's first generator grows one from a seed, in the
 -- game's paint: for looking through what it makes (the viewer's
--- "grown-"). 'steps': how many plates it grows off its cross (it grew
+-- "grown-", and the hull browser, App/hulls). 'steps': how many plates it grows off its cross (it grew
 -- four for a frigate and six for the biggest); 'decks': with the broad
 -- flat plates under, as its bigger hulls had. No hardpoints, and no
 -- engines.
-function Hull.Grown(seed: number, steps: number, decks: boolean): Built
+function Hull.Grown(seed: number, steps: number, decks: boolean, paint: string?): Built
   local b = Plates.New(seed * 1.37, MANNER_FINE)
   table.clear(exhausts)
-  grown(b, seed, steps, decks)
-  local look = Hull.looks.civil
+  grown(b, growth(seed, steps, decks))
+  -- (in a faction's paint, if one is named: the civil blue-grey if not)
+  local look = Hull.looks[paint or "civil"] or Hull.looks.civil
   local model, lower, upper, meshes = Plates.Finish(b, look, nil)
   local size = upper - lower
   return { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = {}, launchers = {}, fit = {}, engines = {},
     glow = look.fire or look.glow, lower = lower, upper = upper, hanging = {}, meshes = meshes }
+end
+
+-- How far such a hull reaches across, up and down, and along, without
+-- making it: to tell the broad ones from the long thin ones, which are
+-- most of what the generator grows.
+function Hull.GrownShape(seed: number, steps: number, decks: boolean): vector
+  return growth(seed, steps, decks).across
 end
 
 -- A built hull as it is drawn cloaked: its own shape, as light bending
