@@ -1117,22 +1117,24 @@ end
 -- are, the ships destroyed and how many there are, how much of the rig
 -- is left, 0 to 1 (-1 until the pilot has been there), the system the
 -- place is in, and whether it is an escort: a tender to see through,
--- of which what is done and wanted is 1, the tender getting there.
-function Debug.Defence(): (string, number, number, number, number, number, number, boolean)
+-- of which what is done and wanted is 1, the tender getting there (or,
+-- for a convoy, 2: the tender getting away from its place, and in to
+-- the station; the ninth value says whether it is one).
+function Debug.Defence(): (string, number, number, number, number, number, number, boolean, boolean)
   for _, held in Core.Query.Missions(session.game).inHand do
     local mission = held.mission
     if held.line == "defence" then
       local place = Core.Query.Body(session.game, mission.site)
       return if place then place.name else "?", mission.wave, #mission.waves, mission.done, mission.need, held.ward, mission.system,
-        mission.aim == "escort"
+        mission.aim == "escort" or mission.aim == "convoy", mission.aim == "convoy"
     end
   end
-  return "", 0, 0, 0, 0, -1, 0, false
+  return "", 0, 0, 0, 0, -1, 0, false, false
 end
 
 -- How many defence jobs the seventh agent of the station docked at has
--- given (every third is an escort); with a number, a cheat that makes
--- it so.
+-- given (every third is an escort, and every sixth a convoy); with a
+-- number, a cheat that makes it so.
 function Debug.Holds(set: number?): number
   local state = session.game.state
   local station = Core.Query.Player(session.game).docked

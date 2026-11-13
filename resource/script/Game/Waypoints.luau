@@ -65,7 +65,8 @@ local function stop(game: Core.Game, ship: number, mission: State.Mission): (num
     return mission.site, mission.system
   elseif mission.kind == "assault" then
     local done = if mission.aim == "fetch" then aboard(game, ship, mission.type) >= mission.need else mission.done >= mission.need
-    if done or mission.site == 0 then
+    -- (a convoy's tender that has left its place is to be followed in to the station)
+    if done or mission.site == 0 or (mission.aim == "convoy" and mission.done >= 1) then
       return mission.station, home
     end
     -- (the room the pilot has got to: the last whose way is found; or,

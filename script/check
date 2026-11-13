@@ -106,6 +106,9 @@
 #               then the next one's rig lost and the job with it
 #   game-escort  an escort (test/scenario/escort.txt): a tender seen out
 #               of its place while pirates come for it, and the job paid
+#   game-convoy  a convoy (test/scenario/convoy.txt): a tender seen out of
+#               its place, followed to the station the job is from, and
+#               seen in to dock past the wave that was waiting there
 #   game-patrol  a hired pilot left to patrol a belt (test/scenario/patrol.txt):
 #               pirates come for them with the player docked, and are seen off
 #   game-dig    a mining contract (test/scenario/dig.txt): taken, its
@@ -301,6 +304,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/defence.txt
   step game-escort 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 340 \
     --script test/scenario/escort.txt
+  step game-convoy 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 440 \
+    --script test/scenario/convoy.txt
   step game-patrol 0 timeout 600 bin/launch game --no-present --fixed-step 60 --timeout 500 \
     --script test/scenario/patrol.txt
   step game-dig 0 timeout 800 bin/launch game --no-present --fixed-step 60 --timeout 740 \

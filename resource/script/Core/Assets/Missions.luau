@@ -149,22 +149,31 @@ local SUPPLIES = { "ore.ferrite", "ore.cuprite", "ore.silicate", "mineral.iron",
 function Missions.Line(mission: State.Mission): string
   if mission.level <= 0 then
     return ""
-  elseif mission.kind == "assault" and (mission.aim == "hold" or mission.aim == "escort" or mission.aim == "lost") then
+  elseif mission.kind == "assault" and (mission.aim == "hold" or Assault.Tender(mission.aim) or mission.aim == "lost") then
     return "defence"
   end
   return mission.kind
 end
 
--- Whether a defence job is an escort (a tender to see through) and not
--- a rig to hold: by what it is to do, or was, if it is lost.
+-- Whether a defence job is an escort (a tender to see through, or in to
+-- the station) and not a rig to hold: by what it is to do, or was, if it
+-- is lost.
 function Missions.Escort(mission: State.Mission): boolean
-  return mission.kind == "assault" and (mission.aim == "escort" or (mission.aim == "lost" and mission.type == "escort"))
+  return mission.kind == "assault" and (Assault.Tender(mission.aim) or (mission.aim == "lost" and Assault.Tender(mission.type)))
+end
+
+-- And whether it is a convoy: the tender is to be seen in to the
+-- station the job is from.
+function Missions.Convoy(mission: State.Mission): boolean
+  return mission.kind == "assault" and (mission.aim == "convoy" or (mission.aim == "lost" and mission.type == "convoy"))
 end
 
 -- What an offer is called, for the lists.
 function Missions.Title(mission: State.Mission): string
   if mission.kind == "bounty" then
     return `Bounty: {mission.need} {if mission.need == 1 then "pirate" else "pirates"}`
+  elseif Missions.Convoy(mission) then
+    return `Convoy, level {mission.level}: a tender in past {(Assault.Count(mission.waves))}`
   elseif Missions.Escort(mission) then
     return `Escort, level {mission.level}: a tender past {(Assault.Count(mission.waves))}`
   elseif Missions.Line(mission) == "defence" then
@@ -568,17 +577,27 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
     local next = node.neighbors[Rng.Int(rng, math.max(1, #node.neighbors)) + 1]
     local where = if next ~= nil and Rng.Chance(rng, 1 / 3) and Assault.Room(state, next) then next else system
     local waves = Assault.Plan(rng, level)
-    -- (every third job of theirs is an escort: a tender to see through, which is the one thing it counts)
-    local aim = if held % Assault.ESCORTS == Assault.ESCORTS - 1 then "escort" else "hold"
+    -- (every third job of theirs is an escort: a tender to see through,
+    -- which is the one thing it counts; and every other one of those a
+    -- convoy, whose tender is to be seen in to this station: from a
+    -- place in this system, and it counts getting away and getting in)
+    local aim = if held % Assault.CONVOYS == Assault.CONVOYS - 1 and #waves >= 2 then "convoy"
+      elseif held % Assault.ESCORTS == Assault.ESCORTS - 1 then "escort" else "hold"
+    if aim == "convoy" then
+      where = system
+    end
     local pay, credit = Assault.Pay(level, waves, aim)
     local reward = math.floor(pay * bonus)
     if Assault.Room(state, where) then
       table.insert(offers, {
         id = 0, key = `{station}:h{held}:{level}`, kind = "assault", station = station, faction = node.nearest, system = where,
-        need = if aim == "escort" then 1 else (Assault.Count(waves)), done = 0, type = "", to = station, reward = reward,
+        need = if aim == "convoy" then 2 elseif aim == "escort" then 1 else (Assault.Count(waves)), done = 0, type = "", to = station,
+        reward = reward,
         standing = credit, taken = 0,
         agent = Missions.Agent(state, station, Missions.OFFERS + 4), loyalty = math.max(1, reward // Missions.LOYALTY),
-        slot = Missions.OFFERS + 4, level = level, waves = waves, wave = 0, site = 0, rooms = {}, ends = { #waves }, aim = aim,
+        -- (a convoy's last wave is not for the place: it waits at the station)
+        slot = Missions.OFFERS + 4, level = level, waves = waves, wave = 0, site = 0, rooms = {},
+        ends = { if aim == "convoy" then #waves - 1 else #waves }, aim = aim,
         mark = 0,
       })
     end
@@ -634,9 +653,9 @@ function Missions.Ready(state: State.State, ship: State.Ship, mission: State.Mis
     end
   elseif mission.kind == "assault" and mission.aim == "lost" then
     return false, if Missions.Escort(mission) then "the tender is destroyed" else "the rig is destroyed"
-  elseif mission.kind == "assault" and mission.aim == "escort" then
+  elseif mission.kind == "assault" and Assault.Tender(mission.aim) then
     if mission.done < mission.need then
-      return false, "the tender is still to see through"
+      return false, if mission.aim == "convoy" then "the tender is still to see in" else "the tender is still to see through"
     end
   elseif mission.kind == "bounty" or (mission.kind == "assault" and mission.aim ~= "fetch") then
     if mission.done < mission.need then

@@ -71,8 +71,16 @@
 -- part of the job (though their bounties are the pilot's), and no wave
 -- comes after. A tender destroyed is the job lost.
 --
+-- And every sixth is a convoy (the aim "convoy"): the same tender, in
+-- the system the job is from, but where it gets clear of the place it
+-- warps on to the station the job is from, lands some way off it
+-- (Assault.CONVOY_IN) and flies in to dock. All the waves but the last
+-- come for it at the place; the last is waiting where it lands. The
+-- job is to see it in: it is done when the tender docks, and not
+-- before. It pays more than an escort does (Assault.CONVOY_PAY).
+--
 -- (Security and mining missions, cut down. Not yet: a camp that is not
--- pirates', a thing to be defended that flies.)
+-- pirates', a convoy that goes on through a gate.)
 
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
@@ -273,6 +281,20 @@ function Assault.Count(waves: { { string } }): (number, number)
   return ships, bounty
 end
 
+-- Whether an aim is a tender's: one to see through ("escort"), or in to
+-- the station the job is from ("convoy").
+function Assault.Tender(aim: string?): boolean
+  return aim == "escort" or aim == "convoy"
+end
+
+-- A convoy: how far off the station its tender lands, what the job pays
+-- beside a camp of its level cleared, how far from the tender the last
+-- wave is waiting, and which of the agent's jobs it is (every sixth).
+Assault.CONVOY_IN = 20000
+Assault.CONVOY_PAY = 1.5
+Assault.CONVOY_WAIT = { 12000, 18000 }
+Assault.CONVOYS = 6
+
 -- What a job at a camp pays (before what the pilot's standing adds),
 -- and the standing it is worth. (A camp that is to be razed has what
 -- it is built of to pay for beside its keepers.)
@@ -282,7 +304,8 @@ function Assault.Pay(level: number, waves: { { string } }, aim: string?): (numbe
     bounty += select(2, Assault.Count({ Assault.WORKS[level] }))
   end
   local pay = math.floor(Assault.SHARE * bounty) + Assault.BASE * level
-  return if aim == "hold" or aim == "escort" then math.floor(pay * Assault.HOLD_PAY) else pay, Assault.CREDIT * level
+  local more = if aim == "convoy" then Assault.CONVOY_PAY elseif aim == "hold" or aim == "escort" then Assault.HOLD_PAY else 1
+  return math.floor(pay * more), Assault.CREDIT * level
 end
 
 -- What a job of an aim counts: the ships of the camp, what it is built
@@ -322,7 +345,7 @@ function Assault.Open(state: State.State, mission: State.Mission, events: { Even
   local last: State.Site? = nil
   for room = 1, #mission.ends do
     local site = Sites.Stake(state, mission.system, rng, if mission.kind == "mining" then "Ore Pocket"
-      elseif mission.aim == "hold" then "Survey Rig" elseif mission.aim == "escort" then "Convoy Route" else "Pirate Camp", last,
+      elseif mission.aim == "hold" then "Survey Rig" elseif Assault.Tender(mission.aim) then "Convoy Route" else "Pirate Camp", last,
       NUMERALS[room])
     if site == nil then
       break
@@ -515,9 +538,9 @@ function Assault.Fell(state: State.State, home: number, ship: number, works: boo
 end
 
 -- Whether a job is a defence job with its ward still to keep: a rig to
--- hold, or a tender to see through.
+-- hold, or a tender to see through, or in.
 function Assault.Warded(mission: State.Mission): boolean
-  return mission.kind == "assault" and (mission.aim == "hold" or mission.aim == "escort")
+  return mission.kind == "assault" and (mission.aim == "hold" or Assault.Tender(mission.aim))
 end
 
 -- A ship has been destroyed: if it was the rig a defence job was to
@@ -528,7 +551,7 @@ function Assault.Lost(state: State.State, ship: number, events: { Event })
   for _, id in state.missionIds do
     local mission = state.missions[id]
     if Assault.Warded(mission) and mission.mark ~= 0 and mission.mark == ship and mission.done < mission.need then
-      table.insert(events, { kind = "WardLost", mission = mission.id, station = mission.station, escort = mission.aim == "escort" })
+      table.insert(events, { kind = "WardLost", mission = mission.id, station = mission.station, escort = Assault.Tender(mission.aim) })
       mission.type = mission.aim
       mission.aim = "lost"
     end
@@ -542,29 +565,95 @@ local function heading(state: State.State, mission: State.Mission): (number, num
   return math.cos(angle), math.sin(angle)
 end
 
+-- A wave of a job's comes: its ships, so far out from a point of a
+-- grid, all round it. They are of the job's place ('home') wherever
+-- they come: they stay while the job is in hand, and go when it ends.
+local function comes(state: State.State, mission: State.Mission, system: number, home: number, grid: number, x: number, y: number,
+  z: number, least: number, most: number, events: { Event })
+  mission.wave += 1
+  local wave = mission.waves[mission.wave]
+  local rng = Rng.For(state.historySeed, mission.id, mission.wave, 43)
+  for index, kind in wave do
+    local angle = Rng.Float(rng, 0, 2 * math.pi)
+    local out = Rng.Float(rng, least, most)
+    local ball = Pirates.Spawn(state, Pirates.kindById[kind], system, x + out * math.cos(angle), y + Rng.Float(rng, -3000, 3000),
+      z + out * math.sin(angle), home)
+    -- (the camp's chief is the first of the last wave)
+    if mission.aim == "chief" and mission.wave == #mission.waves and index == 1 then
+      mission.mark = ball.id
+      ball.name = "Pirate Chief"
+      state.ships[ball.id].name = "Pirate Chief"
+      state.pilots[ball.id].bounty *= Assault.CHIEF
+    end
+    table.insert(events, { kind = "BallAdded", ball = ball.id })
+  end
+  table.insert(events, { kind = "PiratesArrived", grid = grid, count = #wave, wave = mission.wave, of = #mission.waves,
+    chief = mission.aim == "chief" and mission.wave == #mission.waves, hold = mission.aim == "hold",
+    escort = Assault.Tender(mission.aim), convoy = mission.aim == "convoy" and grid == mission.station })
+end
+
+-- A tender is out of the game: it has got clear, or got in.
+local function gone(state: State.State, id: number)
+  for _, item in Items.In(state, id, nil) do
+    Items.Take(state, item, item.quantity)
+  end
+  state.ships[id] = nil
+  State.RemoveId(state.shipIds, id)
+end
+
 -- Once a tick, wherever the pilot is: a tender that has got far enough
 -- out from the middle of its place is clear, and gone, and the job is
--- done.
+-- done; or, for a convoy, it warps on to the station the job is from,
+-- where the last wave is waiting for it, flies in, and docks, and the
+-- job is done then.
 local function arrive(state: State.State, events: { Event })
   for _, id in state.missionIds do
     local mission = state.missions[id]
-    local ball = if mission.kind == "assault" and mission.aim == "escort" and mission.done < mission.need then state.balls[mission.mark]
-      else nil
-    local place = if ball then Space.Object(state, mission.site) else nil
-    if ball and place then
-      local far = math.sqrt((ball.x - place.x) ^ 2 + (ball.y - place.y) ^ 2 + (ball.z - place.z) ^ 2)
-      if far >= Assault.TENDER_OUT then
-        Space.RemoveBall(state, ball)
-        for _, item in Items.In(state, ball.id, nil) do
-          Items.Take(state, item, item.quantity)
+    local tender = mission.kind == "assault" and Assault.Tender(mission.aim) and mission.done < mission.need and mission.mark ~= 0
+    local ball = if tender then state.balls[mission.mark] else nil
+    local ship = if tender then state.ships[mission.mark] else nil
+    local place = if tender then Space.Object(state, mission.site) else nil
+    if tender and mission.aim == "convoy" and mission.done >= 1 then
+      -- On its way in, or there.
+      if ship and ship.docked == mission.station then
+        gone(state, ship.id)
+        mission.done = mission.need
+        table.insert(events, { kind = "AssaultCleared", mission = mission.id, station = mission.station, aim = mission.aim })
+      elseif ball and ball.warp == nil then
+        if ball.grid == mission.station then
+          if mission.wave < #mission.waves then
+            comes(state, mission, ball.system, mission.site, ball.grid, ball.x, ball.y, ball.z, Assault.CONVOY_WAIT[1],
+              Assault.CONVOY_WAIT[2], events)
+            state.spawned[ball.grid] = state.tick
+          end
+          if ball.intent == nil then
+            Space.Apply(state, { kind = "Dock", actor = ball.id, target = mission.station }, events)
+          end
+        else
+          -- (it fell short, or was held: on again as soon as it can be)
+          local on: State.Command = { kind = "WarpTo", actor = ball.id, target = mission.station, range = Assault.CONVOY_IN }
+          if Space.Validate(state, on) then
+            Space.Apply(state, on, events)
+          end
         end
-        state.ships[ball.id] = nil
-        State.RemoveId(state.shipIds, ball.id)
+      end
+    elseif ball and place then
+      local far = math.sqrt((ball.x - place.x) ^ 2 + (ball.y - place.y) ^ 2 + (ball.z - place.z) ^ 2)
+      local away: State.Command = { kind = "WarpTo", actor = ball.id, target = mission.station, range = Assault.CONVOY_IN }
+      if far >= Assault.TENDER_OUT and mission.aim == "convoy" and Space.Validate(state, away) then
+        Space.Apply(state, away, events)
+        mission.done = 1
+        table.insert(events, { kind = "WardAway", mission = mission.id, station = mission.station, ward = ball.id })
+      elseif far >= Assault.TENDER_OUT and mission.aim == "escort" then
+        Space.RemoveBall(state, ball)
+        gone(state, ball.id)
         mission.done = mission.need
         table.insert(events, { kind = "BallRemoved", ball = ball.id, reason = "warped" })
         table.insert(events, { kind = "AssaultCleared", mission = mission.id, station = mission.station, aim = mission.aim })
       elseif ball.mode ~= "goto" then
-        -- (it keeps on its way out, whatever has happened to it)
+        -- (it keeps on its way out, whatever has happened to it: and a
+        -- convoy's tender that is held out of warp keeps on too, until
+        -- it is let go)
         local x, z = heading(state, mission)
         Space.Apply(state, { kind = "Goto", actor = ball.id, x = x, y = 0, z = z }, events)
       end
@@ -614,7 +703,7 @@ function Assault.Step(state: State.State, events: { Event })
   -- off straight out from it. ('mark' is it.) It is the faction's, and
   -- nobody's enemy.
   if Assault.Warded(mission) and mission.mark == 0 then
-    local escort = mission.aim == "escort"
+    local escort = Assault.Tender(mission.aim)
     local rng = Rng.For(state.historySeed, mission.id, 71)
     local angle = Rng.Float(rng, 0, 2 * math.pi)
     local out = if escort then Assault.TENDER_FROM else Rng.Float(rng, Assault.RIG_OUT[1], Assault.RIG_OUT[2])
@@ -630,8 +719,9 @@ function Assault.Step(state: State.State, events: { Event })
       Space.Apply(state, { kind = "Goto", actor = rig.id, x = math.cos(angle), y = 0, z = math.sin(angle) }, events)
     end
   end
-  -- (nobody comes for a tender that has got clear)
-  if mission.aim == "escort" and mission.done >= mission.need then
+  -- (nobody comes for a tender that has got clear, nor to the place a
+  -- convoy's has left)
+  if Assault.Tender(mission.aim) and mission.done >= 1 then
     return
   end
   if mission.wave >= mission.ends[room] then
@@ -648,30 +738,11 @@ function Assault.Step(state: State.State, events: { Event })
   elseif since < Assault.BREATHER then
     return
   end
-  mission.wave += 1
   if Assault.Warded(mission) then
     state.spawned[me.grid] = state.tick
   end
-  local wave = mission.waves[mission.wave]
-  local rng = Rng.For(state.historySeed, mission.id, mission.wave, 43)
-  for index, kind in wave do
-    -- Somewhere 25 to 35 km out from the middle of the place.
-    local angle = Rng.Float(rng, 0, 2 * math.pi)
-    local out = Rng.Float(rng, 25000, 35000)
-    local ball = Pirates.Spawn(state, Pirates.kindById[kind], me.system,
-      place.x + out * math.cos(angle), place.y + Rng.Float(rng, -3000, 3000), place.z + out * math.sin(angle), place.id)
-    -- (the camp's chief is the first of the last wave)
-    if mission.aim == "chief" and mission.wave == #mission.waves and index == 1 then
-      mission.mark = ball.id
-      ball.name = "Pirate Chief"
-      state.ships[ball.id].name = "Pirate Chief"
-      state.pilots[ball.id].bounty *= Assault.CHIEF
-    end
-    table.insert(events, { kind = "BallAdded", ball = ball.id })
-  end
-  table.insert(events, { kind = "PiratesArrived", grid = place.id, count = #wave, wave = mission.wave, of = #mission.waves,
-    chief = mission.aim == "chief" and mission.wave == #mission.waves, hold = mission.aim == "hold",
-    escort = mission.aim == "escort" })
+  -- Somewhere 25 to 35 km out from the middle of the place.
+  comes(state, mission, me.system, place.id, place.id, place.x, place.y, place.z, 25000, 35000, events)
 end
 
 return Assault

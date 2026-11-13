@@ -1476,17 +1476,21 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
     if mission.kind == "bounty" then
       local _, band = Core.Query.Security(game, mission.system)
       return `in {game.state.galaxy.systems[mission.system].name} ({band or "?"} space): {mission.done} of {mission.need} destroyed`
-    elseif mission.kind == "assault" and (mission.aim == "hold" or mission.aim == "escort" or mission.aim == "lost") then
+    elseif mission.kind == "assault" and (mission.aim == "hold" or Assault.Tender(mission.aim) or mission.aim == "lost") then
       -- (where the rig is, or the tender; and, once the job is taken, how it is going and how the thing is)
       local name = game.state.galaxy.systems[mission.system].name
       local place = if mission.site ~= 0 then Core.Query.Body(game, mission.site) else nil
-      local escort = mission.aim == "escort"
+      local escort = Assault.Tender(mission.aim)
+      local convoy = mission.aim == "convoy"
       if place == nil then
         -- (they do not wait their turn, as a camp's keepers do)
         return `in {name}: {#mission.waves} waves, {Assault.PRESS // 60} minutes apart`
-          .. (if escort then ", while it flies out" else "")
+          .. (if convoy then ", the last off this station" elseif escort then ", while it flies out" else "")
       elseif mission.done >= mission.need then
-        return `{place.name}, in {name}: {if escort then "through" else "held"}`
+        return `{place.name}, in {name}: {if convoy then "in" elseif escort then "through" else "held"}`
+      elseif convoy and mission.done >= 1 then
+        -- (away from its place, and on its way in)
+        return `away to the station: see it in to dock` .. (if ward >= 0 then `, the tender at {math.ceil(ward * 100)}%` else "")
       elseif ward < 0 then
         return `{place.name}, in {name}: they come when you do`
       elseif escort then

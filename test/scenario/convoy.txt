@@ -1,0 +1,83 @@
+# A convoy, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/convoy.txt
+#
+# Every sixth job of a station's seventh agent is a convoy, and the
+# agent here is made to have given five already. The job is taken, which
+# puts a convoy route on the overview, in the station's own system. A
+# destroyer is given to do it in. The tender sets off from the place as
+# an escort's does, and whoever comes for it is fought while it flies.
+# Clear of the place, it warps on to the station the job is from, and
+# the job is half done. The pilot follows. The last wave was waiting for
+# the tender off the station, and is fought there while the tender flies
+# in. When it docks the job is done, and paid for at the station.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Holds(5) == 5, 'the agent should have given five jobs')
+until GameDebug.Press('Missions')
+until GameDebug.Tab() == 'Missions'
+frames 3
+lua assert(GameDebug.Offer('defence') == 7, 'the seventh agent should have a job')
+until GameDebug.Press('Accept:defence')
+until select(2, GameDebug.Missions()) == 1
+frames 3
+lua assert(select(9, GameDebug.Defence()), 'the sixth job of the agent should be a convoy')
+lua assert(select(8, GameDebug.Defence()), 'and a convoy is an escort')
+lua assert(string.sub(GameDebug.Defence(), 1, 12) == 'Convoy Route', 'the job should have its place')
+lua assert(select(5, GameDebug.Defence()) == 2, 'a convoy wants two things, the tender away and the tender in')
+lua assert(select(7, GameDebug.Defence()) == GameDebug.System(), 'a convoy is in the system of its station')
+lua assert(not GameDebug.CanPress('Complete:1'), 'a tender is not seen in by taking the job')
+
+# A destroyer to do it in, and out to the route.
+lua assert(GameDebug.Fly('destroyer.halberd'), 'no destroyer')
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 5
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('WarpTo', 'Convoy Route'), 'warp to the route was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+
+# The tender is there, and setting off. Those who come for it are fought
+# as they come, until it is clear of the place and away to the station.
+until select(6, GameDebug.Defence()) == 1
+lua assert(GameDebug.Select('Light Tender'), 'the tender should be on the overview')
+until GameDebug.Pirates() >= 1
+patience 400
+until GameDebug.Engage() >= 0 and (select(4, GameDebug.Defence()) >= 1 or GameDebug.Defence() == '')
+lua assert(GameDebug.Defence() ~= '', 'the tender was lost at its place')
+lua assert(select(4, GameDebug.Defence()) == 1, 'the tender should be away, and not yet in')
+lua assert(GameDebug.Next('job') >= 1, 'the job should have a place to go next')
+
+# After it, to the station: the last wave was waiting there. They are
+# fought while the tender flies in, until it docks.
+lua assert(GameDebug.Order('WarpTo', 'home'), 'warp to the station was refused')
+patience 400
+until GameDebug.Idle() and (GameDebug.Pirates() >= 1 or select(4, GameDebug.Defence()) == 2 or GameDebug.Defence() == '')
+lua assert(select(2, GameDebug.Defence()) == select(3, GameDebug.Defence()), 'the last wave should have come, at the station')
+patience 500
+until GameDebug.Engage() >= 0 and (select(4, GameDebug.Defence()) == 2 or GameDebug.Defence() == '')
+lua assert(GameDebug.Defence() ~= '', 'the tender was lost off the station')
+lua assert(GameDebug.Hull() == 'destroyer.halberd', 'the destroyer should have come through it')
+
+# In. Paid at the station, and the agent's next is a rig.
+lua assert(GameDebug.Order('Dock', 'home'), 'docking at home was refused')
+patience 300
+until GameDebug.Docked()
+lua GameDebug.TimeScale(1)
+until GameDebug.Press('Missions')
+until GameDebug.Tab() == 'Missions'
+frames 3
+lua _G.before = GameDebug.Wallet()
+until GameDebug.Press('Complete:1')
+until select(3, GameDebug.Missions()) == 1
+lua assert(GameDebug.Wallet() > _G.before + 5000, 'the job did not pay')
+frames 3
+lua assert(GameDebug.Holds() == 6 and GameDebug.Offer('defence') == 7, 'the agent should have another job')
+until GameDebug.Press('Accept:defence')
+until select(2, GameDebug.Missions()) == 1
+lua assert(not select(8, GameDebug.Defence()), 'the seventh job should be a rig to hold')
+
+echo convoy scenario passed
+quit

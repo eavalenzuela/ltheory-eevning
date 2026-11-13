@@ -420,12 +420,13 @@ local function give(state: State.State, command: State.Command, events: { Event 
 end
 
 -- The rig a job is to hold at a place, or the tender it is to see
--- through there (Tactical/Assault's defence job, seen here by the state
--- alone), if it is there: its ball.
+-- through there, or in to its station (Tactical/Assault's defence job,
+-- seen here by the state alone), if it is there: its ball.
 local function ward(state: State.State, system: number, grid: number): State.Ball?
   for _, id in state.missionIds do
     local mission = state.missions[id]
-    if mission.kind == "assault" and (mission.aim == "hold" or mission.aim == "escort") and mission.site == grid then
+    local here = mission.site == grid or (mission.aim == "convoy" and mission.station == grid)
+    if mission.kind == "assault" and (mission.aim == "hold" or mission.aim == "escort" or mission.aim == "convoy") and here then
       local rig = state.balls[mission.mark]
       if rig and rig.system == system and rig.grid == grid then
         return rig
