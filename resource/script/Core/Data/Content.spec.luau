@@ -375,6 +375,7 @@ suite:Case("components are made from minerals, and modules from components and m
     hullShare += part[2]
   end
   t.near(hullShare, 1, 1e-9)
+  local composites = 0
   for _, module in Modules.list do
     -- (a custom make is found and not built: its own case)
     if module.meta then
@@ -418,7 +419,11 @@ suite:Case("components are made from minerals, and modules from components and m
         t.ok(fromOre(material.type), `{material.type} in {blueprint.id}`)
       end
       t.ok(components >= 1 and minerals >= 2, module.id)
-      t.eq(moon, if module.tech == 2 then 1 else 0, `{module.id} and what is made of what is drilled out of moons`)
+      -- (by the owner's ruling only the large tech 2 modules call for it: the small and the medium do not)
+      local large = string.find(module.id, ".large", 1, true) ~= nil
+        or (string.find(module.id, ".medium", 1, true) == nil and module.weapon ~= nil and module.weapon.size >= 3)
+      t.eq(moon, if module.tech == 2 and large then 1 else 0, `{module.id} and what is made of what is drilled out of moons`)
+      composites += moon
     end
   end
   -- what is fired is still made straight from minerals
@@ -440,6 +445,7 @@ suite:Case("components are made from minerals, and modules from components and m
   end
   t.eq(safe, 0)
   t.ok(wild >= 130 and wild <= 150, `{wild} rocks in a thousand`)
+  t.ok(composites > 0, "some large tech 2 module should call for a composite")
 end)
 
 suite:Case("every weapon, repairer, extender, plate and mining laser has a tech 2 make: better, dearer to fit, and nobody's to buy", function(t)

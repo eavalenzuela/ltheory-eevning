@@ -9,11 +9,13 @@
 -- composite by itself: the other material is drilled at another moon,
 -- or bought.
 --
--- The composites are what the tech 2 make of anything is built with
--- (Data/Blueprints): small things of the common one, cruiser-sized
--- things of the middle one, and the largest of the rare. Stations trade
--- in them, thinly, as they do in the materials: nobody needs a reactor
--- to begin.
+-- The composites are what tech 2 hulls are built with, and the tech 2
+-- modules that are large or larger (Data/Blueprints; the small and the
+-- medium tech 2 modules call for none, by the project owner's ruling):
+-- frigates and destroyers of the common one, cruiser-sized hulls of
+-- the middle one, and the largest hulls and the large modules of the
+-- rare. Stations trade in them, thinly, as they do in the materials:
+-- nobody needs a reactor to begin.
 --
 -- (Every figure here is a first proposal, to be played and judged.)
 
@@ -56,8 +58,7 @@ for grade, named in NAMES do
 end
 
 -- The composite the tech 2 make of something is built with, by how big
--- the thing is (1 small: a frigate, a destroyer, a small module or a
--- drone; 2 medium; 3 large).
+-- the thing is (1 small: a frigate or a destroyer; 2 medium; 3 large).
 function Reactions.For(size: number): Composite
   return Reactions.composites[math.clamp(size, 1, #Reactions.composites)]
 end

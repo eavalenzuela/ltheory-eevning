@@ -12,10 +12,11 @@
 -- the further from help the tower that works it.
 --
 -- What they are for: a tower's reactor makes a composite of the two of
--- a grade (Data/Reactions), and the tech 2 make of anything is built
--- with some of that (Data/Blueprints): small things of the common
--- grade's, cruiser-sized things of the middle one's, and the largest of
--- the rare. Stations trade in them, thinly.
+-- a grade (Data/Reactions), and tech 2 hulls and the large tech 2
+-- modules are built with some of that (Data/Blueprints): frigates and
+-- destroyers of the common grade's, cruiser-sized hulls of the middle
+-- one's, and the largest hulls and the large modules of the rare.
+-- Stations trade in them, thinly.
 --
 -- (Every figure here is a first proposal, to be played and judged.)
 

@@ -88,15 +88,21 @@ local function priceOf(part: string): number
   return if component then component.basePrice elseif composite then composite.basePrice else Planets.productById[part].basePrice
 end
 
--- The parts of the tech 2 make of something: the parts of the plain
--- one, and the composite its size calls for (1 small, 2 medium, 3
--- large: Data/Reactions), which takes 'share' of what the parts cost
--- between them (so the whole costs what it did). A composite is made
--- of both moon materials of its grade, so both are wanted.
--- A module or a drone is a fifth composite by cost of parts. A hull is
--- a twenty-fifth: it costs so much more than what is fitted to it that
--- a fifth of a battleship would be more than a tower brings up in a
--- week.
+-- The parts of the tech 2 make of something that calls for what moons
+-- give: the parts of the plain one, and the composite its size calls
+-- for (1 small, 2 medium, 3 large: Data/Reactions), which takes 'share'
+-- of what the parts cost between them (so the whole costs what it did).
+-- A composite is made of both moon materials of its grade, so both are
+-- wanted.
+--
+-- Which do (the project owner's ruling, 2026-11-12): every tech 2 hull,
+-- and the tech 2 modules that are large or larger. The small and the
+-- medium tech 2 modules do not, and so neither does a drone, which is a
+-- small gun on a small engine.
+--
+-- A large module is a fifth composite by cost of parts. A hull is a
+-- twenty-fifth: it costs so much more than what is fitted to it that a
+-- fifth of a battleship would be more than a tower brings up in a week.
 local MOON_SHARE, MOON_HULL = 0.2, 0.04
 local function advanced(parts: { { any } }, size: number, share: number): { { any } }
   local all: { { any } } = {}
@@ -116,6 +122,8 @@ local function moduleSize(module: Modules.ModuleType): number
   end
   return if module.weapon then module.weapon.size else 1
 end
+-- (the size from which a tech 2 module calls for a composite)
+local LARGE = 3
 local HULL_SIZE: { [string]: number } = { frigate = 1, destroyer = 1, cruiser = 2, industrial = 2, barge = 2, battleship = 3, freighter = 3 }
 
 -- 'mix' is how the mineral part of the cost is split; 'parts', if
@@ -182,11 +190,12 @@ for _, module in Modules.list do
     continue
   elseif module.tech == 2 and module.base then
     -- A tech 2 module is built of the plain one, and of what makes the
-    -- difference: components and the rare minerals. Its blueprint is
-    -- not for sale.
+    -- difference: components and the rare minerals, and for a large
+    -- one a composite. Its blueprint is not for sale.
     local base = Modules.byId[module.base]
+    local size = moduleSize(module)
     add(module.id, module.name, MIX.tech2, module.basePrice - base.basePrice, 1, 600 + module.basePrice // 100,
-      advanced(moduleParts(module), moduleSize(module), MOON_SHARE))
+      if size >= LARGE then advanced(moduleParts(module), size, MOON_SHARE) else moduleParts(module))
     local blueprint = Blueprints.byProduct[module.id]
     table.insert(blueprint.materials, 1, { type = base.id, quantity = 1 })
     blueprint.basePrice = module.basePrice * 10
@@ -245,7 +254,7 @@ for _, drone in Drones.list do
   if plain then
     -- (a tech 2 drone is built of the plain one, the same parts over
     -- again and the rare minerals; and its blueprint is not for sale)
-    add(drone.id, drone.name, MIX.tech2, drone.basePrice - plain.basePrice, 1, 600, advanced(parts, 1, MOON_SHARE))
+    add(drone.id, drone.name, MIX.tech2, drone.basePrice - plain.basePrice, 1, 600, parts)
     local blueprint = Blueprints.byProduct[drone.id]
     table.insert(blueprint.materials, 1, { type = plain.id, quantity = 1 })
     blueprint.basePrice = drone.basePrice * 10

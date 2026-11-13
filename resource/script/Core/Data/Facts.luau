@@ -507,7 +507,7 @@ function Facts.Of(type: string): Sheet?
   elseif category == "moon" and Reactions.byId[type] then
     local composite = Reactions.byId[type]
     sheet.kind = "Composite"
-    sheet.note = "Made in the reactor of a tower, of the two moon materials of its grade. What the tech 2 make of anything is built with."
+    sheet.note = "Made in the reactor of a tower, of the two moon materials of its grade. What tech 2 hulls and the large tech 2 modules are built with."
     local made = section(sheet, "Reacted from")
     for _, from in composite.from do
       row(made, nameOf(from), `{whole(Reactions.BATCH)} an hour`, from)
