@@ -6,11 +6,27 @@
 #include "Warp.h"
 
 #include "Array.h"
+#include "Location.h"
+#include "OS.h"
 #include "Renderer.h"
 #include "Shader.h"
 #include "Texture2D.h"
 #include "GL.h"
 #include "Math.h"
+
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+
+#ifdef LIBLT_WINDOWS
+  #include <process.h>
+  #define LT_PROCESS_ID _getpid
+#else
+  #include <unistd.h>
+  #define LT_PROCESS_ID getpid
+#endif
 
 /* Max vertex-surfel pairs evaluated per occlusion draw call. Roughly 30ms on
    a mid-range dGPU, leaving lots of headroom under driver GPU timeouts. */
@@ -130,9 +146,115 @@ DefineFunction(PlateMesh_Create) {
   return self;
 }
 
+/* A mesh's occlusion follows from where its vertices are, which way they
+   face and what triangles they make, and from nothing else; and working
+   it out takes seconds for a hull. So it is kept on disk, in the cache
+   directory, under a hash of those, and the next time the same mesh is
+   made it is read back. A mesh that has changed at all has another hash,
+   so nothing kept is ever stale. LT_OCCLUSION_CACHE=0 in the environment
+   turns the keeping off (nothing is read, and nothing written). */
+namespace {
+  const char kOcclusionMagic[4] = { 'L', 'T', 'A', 'O' };
+  const uint32_t kOcclusionVersion = 1;
+
+  struct OcclusionHeader {
+    char magic[4];
+    uint32_t version;
+    uint32_t vertices;
+    uint32_t indices;
+  };
+
+  bool OcclusionCacheOn() {
+    static int on = -1;
+    if (on < 0) {
+      char const* said = getenv("LT_OCCLUSION_CACHE");
+      on = (said && said[0] == '0') ? 0 : 1;
+    }
+    return on == 1;
+  }
+
+  /* (FNV-1a, 64 bits. Not 'u', which is where the occlusion is written,
+     nor 'v', which it does not depend on.) */
+  String OcclusionCachePath(Mesh const& m) {
+    uint64_t hash = 14695981039346656037ULL;
+    auto feed = [&hash](void const* data, size_t bytes) {
+      unsigned char const* d = (unsigned char const*)data;
+      for (size_t i = 0; i < bytes; ++i) {
+        hash ^= d[i];
+        hash *= 1099511628211ULL;
+      }
+    };
+    for (size_t i = 0; i < m->vertices.size(); ++i) {
+      feed(&m->vertices[i].p, sizeof(V3));
+      feed(&m->vertices[i].n, sizeof(V3));
+    }
+    if (m->indices.size())
+      feed(m->indices.data(), m->indices.size() * sizeof(m->indices[0]));
+    char name[64];
+    snprintf(name, sizeof(name), "occlusion_%016llx.bin", (unsigned long long)hash);
+    return Location_Cache(name)->ToString();
+  }
+
+  bool OcclusionCacheRead(String const& path, Mesh const& m) {
+    std::ifstream stream(path.c_str(), std::ios::binary);
+    if (!stream)
+      return false;
+    OcclusionHeader header;
+    if (!stream.read((char*)&header, sizeof(header))
+        || memcmp(header.magic, kOcclusionMagic, 4) != 0
+        || header.version != kOcclusionVersion
+        || header.vertices != (uint32_t)m->vertices.size()
+        || header.indices != (uint32_t)m->indices.size())
+      return false;
+    Array<float> kept(m->vertices.size());
+    if (m->vertices.size()
+        && !stream.read((char*)kept.data(), m->vertices.size() * sizeof(float)))
+      return false;
+    for (size_t i = 0; i < m->vertices.size(); ++i)
+      m->vertices[i].u = kept[i];
+    return true;
+  }
+
+  /* (Written beside where it goes and moved there whole, so that nobody
+     reads half of one.) */
+  void OcclusionCacheWrite(String const& path, Mesh const& m) {
+    char suffix[32];
+    snprintf(suffix, sizeof(suffix), ".%u.tmp", (unsigned)LT_PROCESS_ID());
+    String partial = path + suffix;
+    std::ofstream stream(partial.c_str(), std::ios::binary);
+    if (!stream) {
+      OS_CreatePath(partial.c_str());
+      stream.clear();
+      stream.open(partial.c_str(), std::ios::binary);
+      if (!stream)
+        return;
+    }
+    OcclusionHeader header;
+    memcpy(header.magic, kOcclusionMagic, 4);
+    header.version = kOcclusionVersion;
+    header.vertices = (uint32_t)m->vertices.size();
+    header.indices = (uint32_t)m->indices.size();
+    stream.write((char const*)&header, sizeof(header));
+    for (size_t i = 0; i < m->vertices.size(); ++i)
+      stream.write((char const*)&m->vertices[i].u, sizeof(float));
+    stream.close();
+    if (!stream.good() || rename(partial.c_str(), path.c_str()) != 0)
+      remove(partial.c_str());
+  }
+}
+
 DefineFunction(Mesh_ComputeOcclusion) {
   AUTO_FRAME;
   Mesh const& m = args.mesh;
+
+  String kept;
+  if (OcclusionCacheOn()) {
+    kept = OcclusionCachePath(m);
+    if (OcclusionCacheRead(kept, m)) {
+      m->version++;
+      return;
+    }
+  }
 
   Vector<V4> points;
   Vector<V4> normals;
@@ -218,4 +340,7 @@ DefineFunction(Mesh_ComputeOcclusion) {
   for (size_t i = 0; i < m->vertices.size(); ++i)
     m->vertices[i].u = result[i];
   m->version++;
+
+  if (OcclusionCacheOn())
+    OcclusionCacheWrite(kept, m);
 }
