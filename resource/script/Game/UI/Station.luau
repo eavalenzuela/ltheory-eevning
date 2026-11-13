@@ -549,9 +549,14 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
   if #hold == 0 then
     Im.Text("empty", left, line, 14, Im.DIM, 0.6)
   end
+  -- (three lines of it; two on a hull with an ore hold, which has the
+  -- third: below)
+  local oreSize, oreUsed = Core.Query.OreHold(game, ship)
+  local shown = if oreSize > 0 then 2 else 3
   for index, item in hold do
-    if index > 3 then
-      Im.Text(`and {#hold - 3} more`, left, line, 13, Im.DIM)
+    if index > shown then
+      Im.Text(`and {#hold - shown} more`, left + (if oreSize > 0 then 150 else 0), line - (if oreSize > 0 then 24 * shown + 22 else 0), 13,
+        Im.DIM)
       break
     end
     local held = shorten(Types.Info(item.type).name, 18)
@@ -578,6 +583,22 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
           Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "hangar" })
         end
         bx += 142
+      end
+    end
+  end
+
+  -- The ore hold of a hull that has one (a capital industrial), on the
+  -- hold's third line: how full it is, and a button that puts all of it
+  -- in the hangar ("OreToHangar"), where it can be refined or sold.
+  -- (What is in it, stack by stack, is on the assets window.)
+  if oreSize > 0 then
+    line = y + 78 + 24 + visible * 24 + 8 + 24 + 2 * 24
+    Im.Heading(string.format("ORE HOLD  %s / %s m3", Format.Whole(math.floor(oreUsed + 0.5)), Format.Whole(oreSize)), left, line + 4, 13,
+      Im.DIM)
+    local stacks = Core.Query.Items(game, ship, "orehold")
+    if Im.Button("To hangar", left + 200, line, 74, 21, #stacks > 0, "OreToHangar") then
+      for _, item in stacks do
+        Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "hangar" })
       end
     end
   end

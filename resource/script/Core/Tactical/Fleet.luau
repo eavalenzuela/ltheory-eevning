@@ -18,6 +18,12 @@
 -- with the player. They undock when the player does and dock when the
 -- player does, warp where the player warps and jump where the player
 -- jumps, and one left behind makes their own way after, gate by gate.
+-- One whose ship has a jump drive uses it instead, to go after the
+-- player or wherever their orders send them: where a beacon is lit
+-- within its reach and the fuel is in its hold (Tactical/Jumping), it
+-- jumps, waiting first for a drive that is cooling or a capacitor that
+-- is short; where not, it goes by the gates, and a pilot who cannot
+-- follow the player's own jump says why.
 -- On the player's grid they fight whatever they have been pointed at;
 -- with nothing pointed out, whoever is attacking anybody of the fleet;
 -- and otherwise they keep station. One with a remote repairer fitted
@@ -31,6 +37,13 @@
 -- and wherever the player goes. Somebody after them at the belt sends
 -- them in early. At a vapour field it is the same with a gas
 -- harvester: cloud after cloud, and the gas brought in.
+--
+-- With a ship of the player's at the belt that has an ore hold (a
+-- capital industrial: Data/Ships), nobody goes in: a pilot with a full
+-- hold flies across to it, puts the ore in its ore hold, and goes back
+-- to the rocks, for as long as there is room there. The ship with the
+-- hold is the player's own or a hired pilot's; one that is itself set
+-- to mine takes its ore hold in to the station when that is full.
 --
 -- They fly with the orders anybody's ship does, so everything that
 -- holds for a ship holds for theirs. What they destroy is the
@@ -114,6 +127,7 @@ local Drones = require("@lt/Core/Tactical/Drones")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Mend = require("@lt/Core/Tactical/Mend")
 local Items = require("@lt/Core/Assets/Items")
+local Jumping = require("@lt/Core/Tactical/Jumping")
 local Market = require("@lt/Core/Assets/Market")
 local Modules = require("@lt/Core/Data/Modules")
 local Names = require("@lt/Core/Describe/Names")
@@ -891,8 +905,23 @@ local function side(state: State.State): { number }
   return ids
 end
 
--- The next gate on the way to a system.
+-- On the way to a system: by its own drive, for a ship that has one,
+-- if a beacon is lit there within its reach and the fuel is aboard
+-- (waiting where it is for a drive that is cooling or a capacitor that
+-- is short); and otherwise the next gate on the way.
 local function travel(state: State.State, me: State.Ball, system: number, events: { Event })
+  if Jumping.Fitted(state, me.id) and not (me.intent and me.intent.kind == "jump") then
+    local jump: State.Command = { kind = "JumpDrive", actor = me.id, target = system }
+    if Jumping.Validate(state, jump) then
+      Jumping.Apply(state, jump, events)
+      return
+    elseif Jumping.Soon(state, me.id, system) then
+      if me.mode ~= "stop" then
+        give(state, { kind = "Stop", actor = me.id }, events)
+      end
+      return
+    end
+  end
   if not (me.intent and me.intent.kind == "jump") then
     local route = Galaxy.Route(state.galaxy, me.system, system)
     local gate = System.GateTo(Space.Describe(state, me.system), route[2])
@@ -911,8 +940,9 @@ local function unload(state: State.State, wing: State.Wingman, ship: State.Ship,
   local station = ship.docked
   local sells = wing.sell and Stations.Has(state, station, "market")
   local units, revenue, volume = 0, 0, 0
-  for _, item in Items.In(state, ship.id, "cargo") do
-    if Fleet.Carries(kind, item.type) then
+  -- (what is in the hold, and in the ore hold of a hull that has one)
+  for _, item in Items.In(state, ship.id, nil) do
+    if (item.place == "cargo" or item.place == "orehold") and Fleet.Carries(kind, item.type) then
       units += item.quantity
       volume += item.quantity * Types.Info(item.type).volume
       if sells and Market.Index(item.type) then
@@ -1190,6 +1220,51 @@ local function guarded(state: State.State, wing: State.Wingman, me: State.Ball):
   return false
 end
 
+-- How near a ship with an ore hold a miner has to be to put ore across
+-- to it, m between the hulls.
+Fleet.HANDOVER = 2500
+
+-- The ship of the player's with room in its ore hold that is out at the
+-- place a miner is at: the nearest, if there are several. (Not the
+-- miner's own.)
+local function tender(state: State.State, me: State.Ball): State.Ball?
+  local found: State.Ball?, least = nil, math.huge
+  local ids = { state.player.ship }
+  for _, id in state.fleetIds do
+    table.insert(ids, state.fleet[id].ship)
+  end
+  for _, id in ids do
+    local ball = state.balls[id]
+    if ball and id ~= me.id and ball.system == me.system and ball.grid == me.grid and ball.warp == nil then
+      local size, used = Items.OreHold(state, id)
+      local far = Space.Distance(ball :: any, me :: any)
+      if size - used >= 1 and far < least then
+        found, least = ball, far
+      end
+    end
+  end
+  return found
+end
+
+-- Put what ore (and gas) a ship has in its hold across into another's
+-- ore hold, as much as there is room for. Returns the units put across.
+local function handOver(state: State.State, me: State.Ball, to: State.Ball): number
+  local moved = 0
+  for _, item in Items.In(state, me.id, "cargo") do
+    if Items.IsOre(item.type) then
+      local size, used = Items.OreHold(state, to.id)
+      local fits = math.min(item.quantity, math.floor((size - used + 1e-9) / Types.Info(item.type).volume))
+      if fits > 0 then
+        local type = item.type
+        Items.Take(state, item, fits)
+        Items.Add(state, type, fits, to.id, "orehold")
+        moved += fits
+      end
+    end
+  end
+  return moved
+end
+
 -- What a pilot set to mine does: to the belt, a rock after another
 -- until the hold is full, in to the station with it, and out again.
 -- Somebody after the fleet at the belt sends them in early.
@@ -1235,7 +1310,38 @@ local function work(state: State.State, wing: State.Wingman, ship: State.Ship, e
   -- have a guard there to see to it), and so does a full hold or a belt
   -- with nothing left (Tactical/Digger).
   local hunted = Pirates.Hunting(state, me) ~= 0 and not guarded(state, wing, me)
-  if hunted or not Digger.Work(state, me, post, events) then
+  -- (on the way across to a ship with an ore hold, a hold of ore stays
+  -- on its way: the lasers are not asked again until it is put across)
+  local crossing = not hunted and me.mode == "approach" and state.balls[me.target] ~= nil
+    and Items.OreHold(state, me.target) > 0 and Items.CargoUsed(state, me.id) > 0
+  if hunted or crossing or not Digger.Work(state, me, post, events) then
+    -- With a ship of the player's here that has room in its ore hold,
+    -- the ore goes across to that, and nobody goes in.
+    local to = if hunted then nil else tender(state, me)
+    local laden = false
+    for _, item in Items.In(state, ship.id, "cargo") do
+      laden = laden or Items.IsOre(item.type)
+    end
+    if to and laden then
+      if Space.Gap(me :: any, to :: any) > Fleet.HANDOVER then
+        if not (me.mode == "approach" and me.target == to.id) then
+          me.vitals.locks = {}
+          give(state, { kind = "Approach", actor = ship.id, target = to.id, range = Fleet.HANDOVER * 0.5 }, events)
+        end
+        return
+      end
+      local units = handOver(state, me, to)
+      if units > 0 then
+        wing.hauled += units
+        table.insert(events, { kind = "OreHandedOver", pilot = wing.id, name = wing.name, units = units, to = to.id, aboard = to.name,
+          gas = Digger.Gassy(state, post) })
+        learn(state, wing, units // 50, events)
+        if me.mode ~= "stop" then
+          give(state, { kind = "Stop", actor = ship.id }, events)
+        end
+        return
+      end
+    end
     -- (the drones in first, unless there is no time for it)
     if callIn(state, me) and not hunted then
       return
@@ -1393,6 +1499,14 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
     return
   end
   mend(state, me, me.vitals.scrambled or wing.target ~= 0, events)
+  -- The one they go with has just gone by their jump drive, and this
+  -- ship has a drive that cannot follow (no fuel for it, say): its pilot
+  -- says why, and goes by the gates.
+  if lead and mine.jumped == state.tick and lead.system ~= me.system and Jumping.Fitted(state, me.id)
+    and not Jumping.Soon(state, me.id, lead.system) then
+    local _, why = Jumping.Validate(state, { kind = "JumpDrive", actor = me.id, target = lead.system })
+    table.insert(events, { kind = "FleetCannotJump", pilot = wing.id, name = wing.name, why = why or "" })
+  end
 
   -- A pilot who is held where they are fights whoever is doing it.
   -- (and one set to guard stands and fights whoever is after anybody

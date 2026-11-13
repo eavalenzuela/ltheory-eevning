@@ -24,9 +24,14 @@
 -- both.) What it had out and near comes with it, as into a warp
 -- (Tactical/Drones).
 --
--- (Every figure is a first proposal. Not yet: anybody but the pilot
--- jumping; a choice between beacons in one system; anybody else's
--- beacon; space a drive does not reach into.)
+-- A hired pilot whose ship has a drive uses it (Tactical/Fleet): to go
+-- after the pilot, or wherever their orders send them, they jump where a
+-- beacon is lit within reach and the fuel is aboard, and go by the gates
+-- where not.
+--
+-- (Every figure is a first proposal. Not yet: a choice between beacons
+-- in one system; anybody else's beacon; space a drive does not reach
+-- into.)
 
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
@@ -152,6 +157,25 @@ function Jumping.Beacon(state: State.State, ship: number, system: number): Beaco
     end
   end
   return nil
+end
+
+-- Whether a ship that cannot jump to a system now will be able to with
+-- nothing done but waiting: there is a beacon lit there within its
+-- reach, whoever flies it can use the drive, and the fuel is aboard.
+-- (What is left to be in the way passes: a drive that is cooling, a
+-- capacitor that is short, a scrambler.)
+function Jumping.Soon(state: State.State, ship: number, to: number): boolean
+  local ball = state.balls[ship]
+  if ball == nil or not Jumping.Fitted(state, ship) or state.galaxy.systems[to] == nil or to == ball.system
+    or Jumping.Beacon(state, ship, to) == nil then
+    return false
+  end
+  local levels = Items.Levels(state, ship)
+  if levels and math.max(0, levels[Jumping.SKILL] or 0) < 1 then
+    return false
+  end
+  local distance = Jumping.Distance(state, ball.system, to)
+  return distance <= Jumping.Range(state, ship) and Jumping.Held(state, ship) >= Jumping.Fuel(state, ship, distance)
 end
 
 function Jumping.Validate(state: State.State, command: State.Command): (boolean, string?)

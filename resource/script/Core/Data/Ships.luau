@@ -48,6 +48,11 @@ export type ShipType = {
   -- And the room it has for them, m3: its drone bay, apart from its
   -- hold. By its class too.
   bay: number?,
+  -- An ore hold, m3: a second hold, for ore and gas and nothing else,
+  -- which what the ship mines goes into, and what the barges of its
+  -- pilot's fleet mine beside it (Tactical/Fleet). A capital
+  -- industrial's, by its class; nil or 0 for none.
+  ore: number?,
   -- Rig slots, and the calibration the rigs in them share (Data/Modules).
   -- Every hull but the capsule has three and 400: given below, to all.
   rigs: number?,
@@ -227,8 +232,7 @@ local CLASS: { [string]: Standard } = {
     shield = 85000, armor = 85000, hull = 80000, recharge = 6500, signature = 3400, cpu = 1100, powergrid = 410000,
     highs = 5, mids = 6, lows = 7, hardpoints = 4, capacitor = 70000, capacitorRecharge = 4500,
     scan = 50, lock = 160000, targets = 8, cargo = 5000, skill = "dreadnoughts", level = 1, exact = true },
-  -- (its hold is for what a fleet's barges bring it: that hold, and the
-  -- bringing, are not made yet)
+  -- (what a fleet's barges bring it goes in its ore hold: Ships.ORE)
   capitalindustrial = { price = 900000000, volume = 800000, mass = 900000000, inertia = 0.045, velocity = 70, warp = 1.6, radius = 700,
     shield = 40000, armor = 45000, hull = 60000, recharge = 5000, signature = 2800, cpu = 800, powergrid = 20000,
     highs = 3, mids = 5, lows = 4, hardpoints = 0, capacitor = 30000, capacitorRecharge = 3200,
@@ -679,6 +683,10 @@ Ships.DRONES = { frigate = 1, destroyer = 2, cruiser = 4, battleship = 5, indust
 Ships.BAY = { frigate = 10, destroyer = 25, cruiser = 50, battleship = 125, industrial = 25, barge = 50,
   attackbattlecruiser = 25, battlecruiser = 75, carrier = 2500, dreadnought = 250, siegedreadnought = 250, capitalindustrial = 1000,
   supercarrier = 6000, ultracapital = 40000 } :: { [string]: number }
+-- And the room in its ore hold, m3, for the classes that have one: a
+-- capital industrial's is forty and more of a mining barge's holds.
+-- (A first figure.)
+Ships.ORE = { capitalindustrial = 150000 } :: { [string]: number }
 -- Whether a class is a capital.
 function Ships.Capital(class: string): boolean
   return CAPITAL[class] == true
@@ -700,6 +708,7 @@ for _, t in types do
   t.rigs = t.rigs or (if t.class == "capsule" then 0 else Ships.RIGS)
   t.drones = t.drones or Ships.DRONES[t.class] or 0
   t.bay = t.bay or Ships.BAY[t.class] or 0
+  t.ore = t.ore or Ships.ORE[t.class] or 0
   t.calibration = t.calibration or Ships.CALIBRATION
 end
 

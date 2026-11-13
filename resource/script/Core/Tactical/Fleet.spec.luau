@@ -15,8 +15,10 @@ local Rng = require("@lt/Core/Kernel/Rng")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
+local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
 local Stations = require("@lt/Core/Assets/Stations")
+local Structures = require("@lt/Core/Data/Structures")
 local System = require("@lt/Core/Describe/System")
 local Types = require("@lt/Core/Data/Types")
 local Test = require("@lt/Tool/Test")
@@ -634,6 +636,121 @@ suite:Case("a hired pilot with a mining laser is set to mine a belt: the hold is
   t.ok(waitFor(game, 600, function()
     return second.docked == home
   end), "the pilot did not come back when called")
+end)
+
+-- The player in a capital industrial out at a belt of the home system,
+-- and a hired pilot there with them, with a Prospector to mine in.
+local function tending(hull: string): (Core.Game, State.Wingman, State.Ship, State.Ball, number)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  state.wallet = 10000000
+  local second = Space.NewShip(state, "frigate.prospector", "Digger", "player", state.player.home)
+  Items.Equip(state, second.id, "miner.small", nil)
+  Items.Equip(state, second.id, "miner.small", nil)
+  local wing = hired(game, second, 2)
+  local great = Space.NewShip(state, hull, "Tender", "player", state.player.home)
+  state.player.ship = great.id
+  local rocks = belt(game, 1)
+  local at = assert(Space.Object(state, rocks))
+  local me = Space.Launch(state, great, 1, at.x + 4000, at.y, at.z)
+  assert(me.grid == rocks, "the capital should be at the belt")
+  -- (the pilot comes out after the player, and to where the player is)
+  assert(waitFor(game, 900, function()
+    local ball = state.balls[second.id]
+    return ball ~= nil and ball.grid == rocks
+  end), "the hired pilot did not come out to the belt")
+  return game, wing, second, me, rocks
+end
+
+suite:Case("an ore hold takes ore and gas and nothing else; what its ship mines goes into it before the hold", function(t)
+  -- (a capital industrial has one, and nothing else has)
+  t.eq({ Ships.byId["capitalindustrial.jaguar"].ore, Ships.byId["capitalindustrial.okami"].ore, Ships.byId["freighter.dray"].ore,
+    Ships.byId["barge.quarry"].ore } :: { any }, { Ships.ORE.capitalindustrial, Ships.ORE.capitalindustrial, 0, 0 } :: { any })
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local home = state.player.home
+  local ore, rounds = Items.Add(state, "ore.ferrite", 1000, home, "hangar"), Items.Add(state, "ammo.emp", 100, home, "hangar")
+  t.eq(refused(game, { kind = "MoveItems", actor = 0, item = ore.id, to = "orehold" }), "this hull has no ore hold")
+  local great = Space.NewShip(state, "capitalindustrial.okami", "Miner", "player", home)
+  state.player.ship = great.id
+  t.eq(refused(game, { kind = "MoveItems", actor = 0, item = rounds.id, to = "orehold" }), "only ore and gas go in an ore hold")
+  t.ok((submit(game, { kind = "MoveItems", actor = 0, item = ore.id, to = "orehold", quantity = 400 })))
+  t.eq({ Core.Query.OreHold(game, great.id) } :: { any }, { Ships.ORE.capitalindustrial, 400 * Ores.byId["ore.ferrite"].volume } :: { any })
+  t.eq(oreIn(game, great.id, "orehold"), 400)
+  -- (no more than there is room for)
+  local filler = Items.Add(state, "ore.iridite", 200000, home, "hangar")
+  t.eq(refused(game, { kind = "MoveItems", actor = 0, item = filler.id, to = "orehold" }), "not enough room in the ore hold")
+  -- And out of it again, to the hangar.
+  t.ok((submit(game, { kind = "MoveItems", actor = 0, item = Items.In(state, great.id, "orehold")[1].id, to = "hangar" })))
+  t.eq({ oreIn(game, great.id, "orehold"), oreIn(game, home, "hangar") } :: { any }, { 0, 201000 } :: { any })
+
+  -- Out at a belt with mining lasers: what it cuts goes into the ore hold, and the hold stays as it was.
+  for _ = 1, 4 do
+    Items.Equip(state, great.id, "miner.small", nil)
+  end
+  local rocks = belt(game, 1)
+  local at = assert(Space.Object(state, rocks))
+  local me = Space.Launch(state, great, 1, at.x + 4000, at.y, at.z)
+  local held = Items.CargoUsed(state, great.id)
+  t.ok(waitFor(game, 600, function()
+    Digger.Work(state, me, at, {})
+    return oreIn(game, great.id, "orehold") > 0
+  end), "nothing went into the ore hold")
+  t.eq({ oreIn(game, great.id, "cargo"), Items.CargoUsed(state, great.id) } :: { any }, { 0, held } :: { any })
+  -- With the ore hold full, the hold takes it.
+  local size, used = Items.OreHold(state, great.id)
+  Items.Add(state, "ore.iridite", math.floor((size - used) / Ores.byId["ore.iridite"].volume), great.id, "orehold")
+  t.ok(waitFor(game, 600, function()
+    Digger.Work(state, me, at, {})
+    return oreIn(game, great.id, "cargo") > 0
+  end), "with the ore hold full nothing went into the hold")
+  -- (and it is all in the save)
+  local data, length = Core.Save(game)
+  t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
+end)
+
+suite:Case("with a ship of the player's at the belt that has room in its ore hold, a hired miner puts the ore across to it and does not go in", function(t)
+  local game, wing, second, me, rocks = tending("capitalindustrial.jaguar")
+  local state = game.state
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "mine" })))
+  t.eq({ wing.order, wing.post } :: { any }, { "mine", rocks } :: { any })
+  -- A hold is filled, and put across: the pilot never docks with it.
+  local across, aboard, docked = 0, "", false
+  t.ok(waitFor(game, 5000, function()
+    for _, event in Core.TakeEvents(game) do
+      if event.kind == "OreHandedOver" and event.pilot == wing.id then
+        across += event.units
+        aboard = event.aboard
+        t.eq(event.to, me.id)
+      end
+    end
+    docked = docked or (state.tick > 60 and second.docked ~= 0)
+    return across > 0
+  end), "no ore was put across")
+  t.ok(not docked, "the pilot went in to the station with it")
+  t.eq({ aboard, oreIn(game, me.id, "orehold"), oreIn(game, second.id, "cargo"), wing.hauled } :: { any },
+    { "Tender", across, 0, across } :: { any })
+  t.ok(Space.Gap(state.balls[second.id] :: any, me :: any) <= Fleet.HANDOVER, "the ore was put across from too far off")
+  -- (most of a Prospector's hold of it)
+  t.ok(across > 200, `only {across} units were put across`)
+  -- And back to the rocks, and cutting.
+  t.ok(waitFor(game, 900, function()
+    return oreIn(game, second.id, "cargo") > 0
+  end), "the pilot did not go back to the rocks")
+  -- With no room left in the ore hold, the next hold goes in to the station as it always did.
+  local size, used = Items.OreHold(state, me.id)
+  Items.Add(state, "ore.iridite", math.floor((size - used) / Ores.byId["ore.iridite"].volume), me.id, "orehold")
+  local delivered = 0
+  t.ok(waitFor(game, 5000, function()
+    for _, event in Core.TakeEvents(game) do
+      if event.kind == "OreDelivered" and event.pilot == wing.id then
+        delivered += event.units
+      end
+      t.ok(event.kind ~= "OreHandedOver", "ore was put across with no room for it")
+    end
+    return delivered > 0
+  end), "with the ore hold full no ore was brought in")
+  t.eq(wing.hauled, across + delivered)
 end)
 
 suite:Case("at a vapour field a hired pilot with a gas harvester draws the gas and brings it in, as a miner does ore", function(t)
@@ -2033,6 +2150,148 @@ suite:Case("a hired pilot with a jump beacon generator fitted keeps it running w
   t.eq(#Jumping.Beacons(state, me.id), 1)
   -- (and it is nothing they switch on for a fight and off after it, as they do a hardener)
   t.ok(theirs.vitals.capacitor > 0.2 * theirs.vitals.capacitorMax, "the generator should not run a frigate dry")
+end)
+
+-- A galaxy of forty with the player out at home in a carrier with a
+-- jump drive, a hired pilot of the best grade beside them in another,
+-- the skill for the drive, and a system within its reach with a tower
+-- of the player's in it, a Jump Beacon lit (and one at home).
+local function carriers(): (Core.Game, State.Wingman, State.Ship, State.Ball, number)
+  local game, second = docked("carrier.scoppo", 40)
+  local state = game.state
+  local wing = hired(game, second, 5)
+  local home = state.player.home
+  local great = Space.NewShip(state, "carrier.scoppo", "Flag", "player", home)
+  state.player.ship = great.id
+  local station = assert(Space.Object(state, home))
+  local me = Space.Launch(state, great, Space.SystemOf(state, home), station.x + 4e6, station.y, station.z)
+  assert(waitFor(game, 900, function()
+    local ball = state.balls[second.id]
+    return ball ~= nil and ball.grid == me.grid and ball.warp == nil
+  end), "the hired pilot did not come out to the player")
+  state.skills[Jumping.SKILL] = 1
+  -- (the farthest system the drive reaches)
+  local to, most = 0, -1
+  for id in state.galaxy.systems do
+    local far = Jumping.Distance(state, me.system, id)
+    if id ~= me.system and far <= Jumping.RANGE and far > most then
+      to, most = id, far
+    end
+  end
+  assert(to ~= 0, "the galaxy should have a system within a drive's reach")
+  for _, system in { to, me.system } do
+    local raised = false
+    for _, object in Space.Describe(state, system).objects do
+      if object.kind == "moon" and not raised then
+        local id = Starbases.Raise(state, system, object, Structures.towerById["tower.vessari.small"], "player",
+          object.x + object.radius * 3, object.y, object.z)
+        local starbase = state.starbases[id]
+        starbase.ready, starbase.fuel, starbase.burnt = state.tick, 100000, state.tick
+        table.insert(starbase.modules, { type = Structures.BEACON, ready = state.tick })
+        raised = true
+      end
+    end
+    assert(raised, `system {system} has no moon to put a tower at`)
+  end
+  return game, wing, second, me, to
+end
+
+suite:Case("a hired pilot whose ship has a jump drive jumps after the player; waits for a drive that is cooling; and without the fuel says so and goes by the gates", function(t)
+  local game, wing, second, me, to = carriers()
+  local state = game.state
+  local home = me.system
+  local mine = state.ships[me.id]
+  local function ready(ball: State.Ball)
+    ball.vitals.capacitor = ball.vitals.capacitorMax
+  end
+  local function said(): string?
+    local why: string? = nil
+    for _, event in Core.TakeEvents(game) do
+      if event.kind == "FleetCannotJump" and event.pilot == wing.id then
+        why = event.why
+      end
+    end
+    return why
+  end
+  Items.Add(state, Structures.FUEL.id, 5000, me.id, "cargo")
+  Items.Add(state, Structures.FUEL.id, 5000, second.id, "cargo")
+  local theirs = state.balls[second.id]
+  ready(me)
+  ready(theirs)
+  -- The player jumps: the hired pilot's carrier jumps too, to the same beacon, on its own fuel.
+  Core.TakeEvents(game)
+  t.ok((submit(game, { kind = "JumpDrive", actor = 0, target = to })))
+  t.eq(me.system, to)
+  t.ok(waitFor(game, 5, function()
+    return theirs.system == to
+  end), "the hired pilot did not jump after the player")
+  t.eq(said(), nil)
+  t.ok(theirs.grid == me.grid and Jumping.Held(state, second.id) < 5000 and Jumping.Cooling(state, second.id) > 0,
+    "it should have come out at the same beacon, with fuel burnt and the drive cooling")
+  -- Back the other way before the hired pilot's drive has cooled: they wait where they are, and jump when it has.
+  mine.jumped = nil
+  ready(me)
+  ready(theirs)
+  t.ok((submit(game, { kind = "JumpDrive", actor = 0, target = home })))
+  t.eq(me.system, home)
+  steps(game, 20)
+  t.eq({ theirs.system, theirs.intent == nil, theirs.warp == nil, said() } :: { any }, { to, true, true, nil } :: { any })
+  ready(theirs)
+  t.ok(waitFor(game, math.ceil(Jumping.COOLDOWN) + 20, function()
+    ready(theirs)
+    return theirs.system == home
+  end), "the hired pilot did not jump when the drive had cooled")
+  -- With no fuel aboard, they say why and set off by the gates.
+  t.ok(waitFor(game, 600, function()
+    return Jumping.Cooling(state, second.id) == 0 and theirs.grid == me.grid and theirs.warp == nil
+  end), "the two did not come together again")
+  for _, item in Items.In(state, second.id, "cargo") do
+    if item.type == Structures.FUEL.id then
+      Items.Take(state, item, item.quantity)
+    end
+  end
+  mine.jumped = nil
+  ready(me)
+  ready(theirs)
+  Core.TakeEvents(game)
+  t.ok((submit(game, { kind = "JumpDrive", actor = 0, target = to })))
+  local why = tostring(said())
+  t.ok(string.find(why, "fuel blocks", 1, true) ~= nil, why)
+  t.ok(waitFor(game, 60, function()
+    return theirs.warp ~= nil or (theirs.intent ~= nil and theirs.intent.kind == "jump")
+  end), "without the fuel the hired pilot did not set off by the gates")
+  t.eq(theirs.system, home)
+  -- (said once, and not again every tick they are on their way)
+  steps(game, 10)
+  t.eq(said(), nil)
+end)
+
+suite:Case("a hired pilot in a carrier launches its fighters at whoever the fleet fights, and calls them in after", function(t)
+  local game, second = docked("carrier.scoppo")
+  local state = game.state
+  Items.Add(state, "drone.fighter", 12, second.id, "dronebay")
+  local wing = hired(game, second, 5)
+  t.eq(Fleet.Cannot(state, wing, second), nil)
+  -- (ten: what a carrier controls, which a pilot of that grade has in hand and to spare)
+  t.eq(Drones.Max(state, second.id), Ships.DRONES.carrier)
+  local me = adrift(game, second)
+  steps(game, 20)
+  t.eq({ dronesOf(game, second.id) }, { 12, 0 })
+  local raider = Pirates.Spawn(state, Pirates.kindById.raider, me.system, me.x + 9000, me.y, me.z, me.grid)
+  t.ok(waitFor(game, 40, function()
+    return select(2, dronesOf(game, second.id)) == Ships.DRONES.carrier
+  end), "the hired pilot's fighters did not go out")
+  for _, drone in Drones.Out(state, second.id) do
+    t.eq({ drone.type, drone.owner, drone.target } :: { any }, { "drone.fighter", second.id, raider.id } :: { any })
+  end
+  -- They see to it, and come in again.
+  t.ok(waitFor(game, 600, function()
+    return state.balls[raider.id] == nil
+  end), "the fighters did not destroy the raider")
+  t.ok(waitFor(game, 300, function()
+    return select(2, dronesOf(game, second.id)) == 0
+  end), "the fighters were not called in")
+  t.eq((dronesOf(game, second.id)), 12)
 end)
 
 return suite

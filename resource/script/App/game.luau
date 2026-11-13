@@ -797,6 +797,17 @@ function Debug.Orders(): number
 end
 
 -- How full the hold is, as a share.
+-- The ore hold of the pilot's ship: how big it is, and how much is in
+-- it, m3 (nothing and nothing for a hull with none). Given a type of
+-- ore and how many, so many are put in it first.
+function Debug.OreHold(type: string?, quantity: number?): (number, number)
+  local state = session.game.state
+  if type and quantity and Core.Query.OreHold(session.game, state.player.ship) > 0 then
+    Items.Add(state, type, quantity, state.player.ship, "orehold")
+  end
+  return Core.Query.OreHold(session.game, state.player.ship)
+end
+
 function Debug.HoldFull(): number
   local ship = session.game.state.player.ship
   return Core.Query.CargoUsed(session.game, ship) / math.max(1, Core.Query.Stats(session.game, ship).cargo)

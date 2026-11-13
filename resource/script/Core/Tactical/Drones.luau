@@ -130,19 +130,31 @@ end
 
 -- Put what a drone has in its hold into its owner's, as much as fits.
 -- Returns the units moved.
+-- (Ore goes into its owner's ore hold first, where the owner has one.)
 local function unload(state: State.State, drone: State.Drone): number
-  local free = Items.ShipStats(state, drone.owner).cargo - Items.CargoUsed(state, drone.owner)
   local moved = 0
   for _, item in Items.In(state, drone.ship, "cargo") do
-    local volume = Types.Info(item.type).volume
-    local fits = math.min(item.quantity, math.floor((free + 1e-9) / volume))
-    if fits > 0 then
-      local type = item.type
-      Items.Take(state, item, fits)
-      Items.Add(state, type, fits, drone.owner, "cargo")
-      free -= fits * volume
-      moved += fits
+    local free = Items.ShipStats(state, drone.owner).cargo - Items.CargoUsed(state, drone.owner)
+    local type = item.type
+    local fits: number
+    if Items.IsOre(type) then
+      -- (taken out of the drone only as it is known to fit: what does
+      -- not stays aboard the drone)
+      local volume = Types.Info(type).volume
+      local size, used = Items.OreHold(state, drone.owner)
+      fits = math.min(item.quantity, math.floor((free + 1e-9) / volume) + math.floor((size - used + 1e-9) / volume))
+      if fits > 0 then
+        Items.Take(state, item, fits)
+        Items.StowOre(state, drone.owner, type, fits, free)
+      end
+    else
+      fits = math.min(item.quantity, math.floor((free + 1e-9) / Types.Info(type).volume))
+      if fits > 0 then
+        Items.Take(state, item, fits)
+        Items.Add(state, type, fits, drone.owner, "cargo")
+      end
     end
+    moved += fits
   end
   return moved
 end

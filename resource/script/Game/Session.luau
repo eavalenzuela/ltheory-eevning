@@ -221,6 +221,10 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `Your capsule is destroyed, and your {if event.count == 1 then "implant" else `{event.count} implants`} with it`)
   elseif kind == "Bookmarked" then
     Session.Say(session, `Marked: {event.name}. It is on the overview, to warp back to`)
+  elseif kind == "FleetCannotJump" then
+    Session.Say(session, `{event.name} cannot jump after you ({event.why}), and is coming by the gates`)
+  elseif kind == "OreHandedOver" then
+    Session.Say(session, `{event.name} put {event.units} units of {if event.gas then "gas" else "ore"} aboard {event.aboard}`)
   elseif kind == "OreDelivered" or kind == "HaulDelivered" then
     local body = Core.Query.Body(session.game, event.station)
     Session.Say(session, `{event.name} brought in {event.units} units{if kind ~= "OreDelivered" then "" elseif event.gas then " of gas" else " of ore"} to `

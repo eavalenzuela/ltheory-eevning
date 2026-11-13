@@ -515,11 +515,14 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       -- As much as the cycle yields, the rock has left and the hold takes.
       -- (an ore, off a rock; or a gas, off a cloud)
       local ore: { id: string, volume: number } = Ores.byId[rock.variety] or Ores.gasById[rock.variety]
+      -- (the hold, and before it the ore hold of a hull that has one)
       local free = Vitals.Stats(state, state.ships[ball.id], v).cargo - Items.CargoUsed(state, ball.id)
+      local oreSize, oreUsed = Items.OreHold(state, ball.id)
       -- A practised miner gets 5% more for each level after the first.
       local levels = Items.Levels(state, ball.id)
       local skilled = 1 + 0.05 * math.max(0, (if levels then levels.mining or 0 else 0) - 1)
-      local units = math.min(math.floor(miner.volume * skilled / ore.volume), math.floor((free + 1e-9) / ore.volume))
+      local units = math.min(math.floor(miner.volume * skilled / ore.volume),
+        math.floor((free + 1e-9) / ore.volume) + math.floor((oreSize - oreUsed + 1e-9) / ore.volume))
       if units <= 0 then
         stop(state, ball, index, "the hold is full", events)
         return false
@@ -527,7 +530,7 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       units = Mining.Take(state, rock, units)
       v.capacitor -= miner.capacitor
       if units > 0 then
-        Items.Add(state, ore.id, units, ball.id, "cargo")
+        Items.StowOre(state, ball.id, ore.id, units, free)
         table.insert(events, { kind = "Mined", ball = ball.id, item = item.id, rock = rock.id, ore = ore.id, units = units })
       end
       if Mining.Left(state, rock) <= 0 then

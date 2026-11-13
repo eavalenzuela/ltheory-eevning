@@ -1338,6 +1338,12 @@ function Query.CargoUsed(game: Game, ship: number): number
   return Items.CargoUsed(game.state, ship)
 end
 
+-- A ship's ore hold: how big it is, m3 (0: its hull has none), and the
+-- cubic metres in it. (What is in it: Query.Items(game, ship, "orehold").)
+function Query.OreHold(game: Game, ship: number): (number, number)
+  return Items.OreHold(game.state, ship)
+end
+
 -- What repairing the player's docked ship would cost.
 function Query.RepairCost(game: Game): number
   return Aftermath.RepairCost(game.state, game.state.ships[game.state.player.ship])
@@ -1497,7 +1503,7 @@ function Query.Assets(game: Game): { AssetsAt }
   end
   for _, id in state.itemIds do
     local item = state.items[id]
-    local hold = item.holder == me.id and item.place == "cargo"
+    local hold = item.holder == me.id and (item.place == "cargo" or item.place == "orehold")
     if hold or (Items.IsStore(item.place) and Space.Object(state, item.holder) ~= nil) then
       local place = at(if hold then 0 else item.holder)
       local info = Types.Info(item.type)

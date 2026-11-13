@@ -80,8 +80,10 @@ function Digger.Work(state: State.State, me: State.Ball, post: System.Object, ev
     end
   end
   -- Nothing is cutting: the hold is full, the rock is gone, or it is time to begin.
-  local capacity = Items.ShipStats(state, me.id).cargo
-  local used = Items.CargoUsed(state, me.id)
+  -- (the hold, and with it the ore hold of a hull that has one)
+  local oreSize, oreUsed = Items.OreHold(state, me.id)
+  local capacity = Items.ShipStats(state, me.id).cargo + oreSize
+  local used = Items.CargoUsed(state, me.id) + oreUsed
   if capacity - used < math.max(2, 0.03 * capacity) then
     return false
   end

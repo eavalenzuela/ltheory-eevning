@@ -4,7 +4,9 @@
 --
 -- An item is a stack of one type in one place: a station's hangar (the
 -- pilot's own, or their corporation's there: "corporate"), a ship's
--- cargo hold, or a slot in one of a ship's racks. Loose stacks of
+-- cargo hold, its drone bay, its ore hold if it has one (a capital
+-- industrial's: ore and gas and nothing else), or a slot in one of a
+-- ship's racks. Loose stacks of
 -- the same type in the same place merge. A fitted module is always a
 -- stack of one. A weapon's loaded charge is recorded on the weapon.
 --
@@ -14,6 +16,7 @@
 local Attributes = require("@lt/Core/Attributes")
 local Corporation = require("@lt/Core/Assets/Corporation")
 local Modules = require("@lt/Core/Data/Modules")
+local Ores = require("@lt/Core/Data/Ores")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local State = require("@lt/Core/Kernel/State")
@@ -172,13 +175,32 @@ function Items.BayUsed(state: State.State, ship: number): number
   return used
 end
 
+-- Whether a type is what an ore hold takes: an ore, or a gas.
+function Items.IsOre(type: string): boolean
+  return Types.Info(type).category == "ore" or Ores.gasById[type] ~= nil
+end
+
+-- How big a ship's ore hold is, m3 (0: its hull has none), and the cubic
+-- metres in it.
+function Items.OreHold(state: State.State, ship: number): (number, number)
+  local record = state.ships[ship]
+  local size = if record then Ships.byId[record.type].ore or 0 else 0
+  local used = 0
+  if size > 0 then
+    for _, item in Items.In(state, ship, "orehold") do
+      used += item.quantity * Types.Info(item.type).volume
+    end
+  end
+  return size, used
+end
+
 -- ---------------------------------------------------------------------
 -- Making and moving
 
 -- Add 'quantity' of a type to a hangar or hold, merging with a stack that
 -- is already there. Returns the stack.
 function Items.Add(state: State.State, type: string, quantity: number, holder: number,
-  place: "hangar" | "corporate" | "cargo" | "dronebay"): State.Item
+  place: "hangar" | "corporate" | "cargo" | "dronebay" | "orehold"): State.Item
   assert(Types.Get(type), `no item type '{type}'`)
   assert(quantity > 0 and quantity % 1 == 0, "a quantity is a positive whole number")
   for _, item in Items.In(state, holder, place) do
@@ -204,6 +226,24 @@ function Items.Take(state: State.State, item: State.Item, quantity: number)
     state.items[item.id] = nil
     State.RemoveId(state.itemIds, item.id)
   end
+end
+
+-- Take ore (or gas) aboard a ship: into its ore hold, if it has one,
+-- while there is room there, and what is left over into its hold.
+-- 'free' is the room in its hold, m3 (which goes by its fit as it is:
+-- the caller has it). Returns how many units were taken aboard.
+function Items.StowOre(state: State.State, ship: number, type: string, units: number, free: number): number
+  local volume = Types.Info(type).volume
+  local size, used = Items.OreHold(state, ship)
+  local first = math.min(units, math.max(0, math.floor((size - used + 1e-9) / volume)))
+  if first > 0 then
+    Items.Add(state, type, first, ship, "orehold")
+  end
+  local rest = math.min(units - first, math.max(0, math.floor((free + 1e-9) / volume)))
+  if rest > 0 then
+    Items.Add(state, type, rest, ship, "cargo")
+  end
+  return first + rest
 end
 
 -- Fit a new module straight onto a ship, loaded if a charge is named:
@@ -362,6 +402,19 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
         return false, "already in the corporation's hangar"
       end
       return true
+    elseif command.to == "orehold" then
+      -- (ore and gas, and as much as the ore hold has room for)
+      local size, used = Items.OreHold(state, ship.id)
+      if item.place == "orehold" then
+        return false, "already in the ore hold"
+      elseif size == 0 then
+        return false, "this hull has no ore hold"
+      elseif not Items.IsOre(item.type) then
+        return false, "only ore and gas go in an ore hold"
+      elseif quantity * Types.Info(item.type).volume > size - used + 1e-9 then
+        return false, "not enough room in the ore hold"
+      end
+      return true
     elseif command.to == "dronebay" then
       -- (drones, and as many as the bay has room for)
       if item.place == "dronebay" then
@@ -448,6 +501,8 @@ function Items.Apply(state: State.State, command: State.Command, events: { Event
       Items.Add(state, type, quantity, ship.id, "cargo")
     elseif command.to == "dronebay" then
       Items.Add(state, type, quantity, ship.id, "dronebay")
+    elseif command.to == "orehold" then
+      Items.Add(state, type, quantity, ship.id, "orehold")
     elseif command.to == "corporate" then
       Items.Add(state, type, quantity, station, "corporate")
     else

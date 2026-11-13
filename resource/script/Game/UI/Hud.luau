@@ -91,6 +91,8 @@ local OURS = vector.create(0.45, 0.85, 0.55)
 -- they have planned, the place a job is done or paid.
 local NEXT = vector.create(1.0, 0.80, 0.28)
 local CAPACITOR = vector.create(1.0, 0.9, 0.5)
+-- (how full an ore hold is: the colour of rock)
+local ORE = vector.create(0.66, 0.56, 0.44)
 
 -- ---------------------------------------------------------------------
 -- Bracket icons, one per kind, built on first use.
@@ -632,16 +634,23 @@ local function drawTargets(session: Session.Session, game: Core.Game, ball: Stat
   end
 end
 
--- The ship's own condition.
-local function drawStatus(ball: State.Ball, x: number, y: number)
+-- The ship's own condition; and, for a hull with an ore hold, how full
+-- that is, m3 (the panel grows upward by a row for it: its foot stays
+-- where it is).
+local function drawStatus(game: Core.Game, ball: State.Ball, x: number, y: number)
   local v = ball.vitals
-  Im.Panel(x, y, 220, 100)
   local rows: { { label: string, value: number, max: number, color: vector } } = {
     { label = "Shield", value = v.shield, max = v.shieldMax, color = SHIELD },
     { label = "Armor", value = v.armor, max = v.armorMax, color = ARMOR },
     { label = "Hull", value = v.hull, max = v.hullMax, color = HULL },
     { label = "Capacitor", value = v.capacitor, max = v.capacitorMax, color = CAPACITOR },
   }
+  local oreSize, oreUsed = Core.Query.OreHold(game, ball.id)
+  if oreSize > 0 then
+    table.insert(rows, { label = "Ore hold", value = oreUsed, max = oreSize, color = ORE })
+    y -= 22
+  end
+  Im.Panel(x, y, 220, 12 + #rows * 22)
   for index, row in rows do
     local rowY = y + 10 + (index - 1) * 22
     Im.Text(row.label, x + 10, rowY - 2, 13, Im.DIM)
@@ -995,7 +1004,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         -- row and the fleet's panel, which end 464 px in, clear)
         drawRack(session, game, ball, left + w.size.x / 2, bottom - 172, math.max(400, w.size.x - 2 * 476))
         drawNavigation(session, ball, navX, bottom - 86, 520)
-        drawStatus(ball, navX - 232, bottom - 120)
+        drawStatus(game, ball, navX - 232, bottom - 120)
       else
         local stationX = left + (w.size.x - Station.WIDTH) / 2
         Station.Draw(session, game, player, stationX, top + 130, Scene.Dressed(game, player.ship, player.hull.id, player.hull.radius))
