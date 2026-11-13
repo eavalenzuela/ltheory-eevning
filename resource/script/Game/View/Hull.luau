@@ -340,6 +340,19 @@ local EASED = 0.25      -- how far the generator eased a plate's edges
 -- but the smallest have their edges eased finely)
 local MANNER_FINE = 0.04
 
+-- The sizes a generated hull comes in, 1 to 8: the generator's own
+-- measure of a hull (the root of its mass, more or less). It grows two
+-- plates and the root of this more, and from ten up lays a broad deck
+-- under every plate. (It made a frigate at about 5, and the biggest
+-- hull a pilot flew at about 18.)
+Hull.SIZES = { 1, 4, 9, 12, 16, 25, 36, 49 }
+
+-- How many plates the generator grows at a size, and whether with decks.
+function Hull.GrownSize(size: number): (number, boolean)
+  local measure = Hull.SIZES[size] or Hull.SIZES[2]
+  return 2 + math.floor(math.sqrt(measure)), measure >= 10
+end
+
 -- The two warps, as one bend and the way back (Plates.Bend). 'spread':
 -- how far each side is pushed out; 'bow': from where along z that falls
 -- off toward the nose; 'hump': how far the middle is lifted, out to
@@ -2594,6 +2607,62 @@ local designs: { [string]: Design } = {
   },
 }
 
+-- A hull of the game's drawn as the generator grows one from a seed,
+-- at a size (Hull.SIZES): in the paint of the design it takes the place
+-- of, carrying what that design is shown with, on the hardpoints the
+-- hull has by the data. Nothing, and why, if there is no such hull or
+-- the seed has not the room for its hardpoints.
+local function seeded(type: string, seed: number, size: number): (Design?, string)
+  local hull = Ships.byId[type]
+  local had = designs[type]
+  if hull == nil or had == nil then
+    return nil, "there is no such hull"
+  elseif Hull.SIZES[size] == nil then
+    return nil, `sizes are 1 to {#Hull.SIZES}`
+  end
+  local fit = table.clone(had.fit)
+  while #fit < hull.turrets + hull.launchers do
+    table.insert(fit, if #fit < hull.turrets then "autocannon.small" else "launcher.light")
+  end
+  local steps, decks = Hull.GrownSize(size)
+  local engines = if hull.radius < 60 then 2 elseif hull.radius < 200 then 3 else 4
+  local ship, why = shipOf(growth(seed, steps, decks), hull.radius, fit, hull.turrets, hull.launchers, engines)
+  if ship == nil then
+    return nil, why
+  end
+  local design: Design = {
+    faction = had.faction, look = had.look, sheets = had.sheets, even = had.even, fine = MANNER_FINE,
+    draw = function(b: Builder)
+      grown(b, ship.growth)
+      jets(b, ship.ends)
+    end,
+    turrets = ship.turrets, launchers = ship.launchers, fit = fit,
+  }
+  return design, ""
+end
+
+-- The hulls that are drawn by seed: resource/hull/seeds.txt, a hull's
+-- type, a seed and a size to a line. (Read here, before the designs that
+-- follow other designs are made: a pirate's copy and a tech 2 make are
+-- of the hull as it is drawn.)
+Hull.SEEDS = "resource/hull/seeds.txt"
+do
+  local ok, text = pcall(File_Read, Hull.SEEDS)
+  if ok and type(text) == "string" then
+    for line in string.gmatch(text, "[^\r\n]+") do
+      local name, seed, size = string.match(line, "^%s*([%a%d%._]+)%s+(%d+)%s+(%d+)%s*$")
+      if name and string.sub(name, 1, 1) ~= "#" then
+        local design, why = seeded(name, tonumber(seed) or 0, tonumber(size) or 0)
+        if design then
+          designs[name] = design
+        else
+          print(`{Hull.SEEDS}: {name} is not drawn from seed {seed} at size {size}: {why}`)
+        end
+      end
+    end
+  end
+end
+
 -- How much of a pirate's ship is not as its builders left it.
 local PATCHED = 0.8
 
@@ -3229,6 +3298,26 @@ function Hull.Wreck(type: string): Wreckage
   local result: Wreckage = { pieces = pieces, radius = radius }
   wrecks[type] = result
   return result
+end
+
+-- Draw a hull of the game's from a seed from now on (what is already in
+-- the scene stays as it is until it is made again; a pirate's copy and
+-- a tech 2 make of it are not changed: resource/hull/seeds.txt, read
+-- when the game starts, does it for them too). False, and why, if there
+-- is no such hull or the seed has not the room for its hardpoints.
+function Hull.Seed(type: string, seed: number, size: number): (boolean, string)
+  local design, why = seeded(type, math.floor(seed), size)
+  if design == nil then
+    return false, why
+  end
+  designs[type] = design
+  for key in built do
+    if key == type or string.sub(key, 1, #type + 1) == type .. ":" then
+      built[key] = nil
+    end
+  end
+  wrecks[type] = nil
+  return true, ""
 end
 
 return Hull

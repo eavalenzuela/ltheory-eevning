@@ -40,11 +40,7 @@ local SceneView = require("@lt/SceneView")
 -- How big a hull is drawn, whatever it is.
 local RADIUS = 1000
 
--- The sizes: the generator's own measure of a hull (the root of its
--- mass, more or less). It grows two plates and the root of this more,
--- and from ten up lays a broad deck under every plate. (It made a
--- frigate at about 5, and the biggest hull a pilot flew at about 18.)
-local SIZES = { 1, 4, 9, 12, 16, 25, 36, 49 }
+local SIZES = Hull.SIZES
 
 local PAINTS = { "bare", "civil", "vessari", "talmar", "kethri", "vail", "unbound" }
 
@@ -65,11 +61,12 @@ local KEPT = "cache/hulls-kept.txt"
 local BROAD = 1 / 3
 
 local function stepsOf(size: number): number
-  return 2 + math.floor(math.sqrt(SIZES[size]))
+  return (Hull.GrownSize(size))
 end
 
 local function decksOf(size: number): boolean
-  return SIZES[size] >= 10
+  local _, decks = Hull.GrownSize(size)
+  return decks
 end
 
 return AppShell.Create(function(): Widget
@@ -90,6 +87,7 @@ return AppShell.Create(function(): Widget
   local seed, size, paint = 1, 2, 1
   local class = 0           -- which of CLASSES it is shown as; 0, as a bare hull
   local fitted = ""         -- how that went: what is on it, or why it is not
+  local dim = true          -- what is shown is bare metal, and is lit as that is
   local extras: { Object } = {}   -- what stands on it
   local fx: Effects.Fx? = nil     -- its engines' fire
   local shown: Object? = nil
@@ -162,7 +160,11 @@ return AppShell.Create(function(): Widget
       built, why = ship(as)
       fitted = if built then `as a {as.name} of {as.metres} m: {as.turrets} turrets, {as.launchers} launchers, {#built.engines} engines`
         else `as a {as.name}: no room ({why})`
+      if built and PAINTS[paint] == "bare" then
+        fitted ..= "   (in the civil paint: the bare hull is the generator's own, without engines)"
+      end
     end
+    dim = built == nil and PAINTS[paint] == "bare"
     local plain = `{seed}:{size}:{paint}`
     local model: Renderable | Model = if built then built.model else models[plain] or make()
     if built == nil then
@@ -395,7 +397,7 @@ return AppShell.Create(function(): Widget
         -- (the light over the camera's shoulder, as it must be: the
         -- engine's star in view whites the picture out; and less of it
         -- on bare metal, which burns out in what paint is judged by)
-        local bright = if PAINTS[paint] == "bare" then 0.5 else 1.15
+        local bright = if dim then 0.5 else 1.15
         Star_SetColor(light, vector.create(bright, bright, bright))
         local side = vector.normalize(vector.cross(vector.create(0, 1, 0), eye))
         light:SetPos(vector.normalize(eye + side * (0.5 * vector.magnitude(eye)) + vector.create(0, 0.7 * vector.magnitude(eye), 0)) * 500000)

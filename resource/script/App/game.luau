@@ -1386,6 +1386,16 @@ function Debug.Hulls(): number
   return #found
 end
 
+-- Draw a hull type from a seed of the old generator's from now on, at
+-- a size from 1 to 8 (Hull.Seed: the browser, bin/launch hulls, is where
+-- seeds are looked through). A ship already in the scene keeps its
+-- looks until it is drawn again: undock, or board another. False, and
+-- why, if there is no such hull or the seed has not the room for its
+-- hardpoints. (resource/hull/seeds.txt does the same for good.)
+function Debug.HullSeed(type: string, seed: number, size: number): (boolean, string)
+  return Hull.Seed(type, seed, size)
+end
+
 -- What is set in the menu's options: whether there is sound, and how
 -- loud its effects and its music are, of 100. (A script's run stays as
 -- silent as it was whatever is set.)
