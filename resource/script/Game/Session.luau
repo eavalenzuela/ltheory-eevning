@@ -68,7 +68,7 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "PiratesArrived" and event.wave then
     Session.Say(session, `Wave {event.wave} of {event.of}: ` .. (if event.chief then "the camp's chief is out"
       .. (if event.count > 1 then `, with {event.count - 1} more` else "")
-      elseif event.convoy then `{event.count} {if event.count == 1 then "pirate was" else "pirates were"} waiting for the tender off the station`
+      elseif event.convoy then `{event.count} {if event.count == 1 then "pirate was" else "pirates were"} waiting for the tender where it landed`
       elseif event.hold or event.escort then `{event.count} {if event.count == 1 then "pirate has" else "pirates have"} come for the `
         .. (if event.escort then "tender" else "rig")
       else `{event.count} {if event.count == 1 then "ship" else "ships"} of the camp's`))
@@ -89,15 +89,15 @@ function Session.Notice(session: Session, event: Space.Event)
     local aim: string = event.aim
     Session.Say(session, `{if aim == "chief" then "The chief is destroyed" elseif aim == "raze" then "The camp is razed"
       elseif aim == "hold" then "The rig is held" elseif aim == "escort" then "The tender is through, and gone"
-      elseif aim == "convoy" then "The tender is in"
+      elseif aim == "convoy" then (if event.through then "The tender is through the gate" else "The tender is in")
       else "The camp is cleared"}: `
       .. `{if body then body.name else "the station"} will pay for it`)
   elseif kind == "WardSighted" then
     Session.Say(session, if event.escort then "The tender is here, and setting off: keep it flying until it is clear"
       else "The survey rig is here: keep it standing, and destroy whoever comes for it")
   elseif kind == "WardAway" then
-    local body = Core.Query.Body(session.game, event.station)
-    Session.Say(session, `The tender is clear, and away to {if body then body.name else "the station"}: follow it, and see it in to dock`)
+    local body = Core.Query.Body(session.game, event.to or event.station)
+    Session.Say(session, `The tender is clear, and away to {if body then body.name else "the station"}: follow it, and see it in`)
   elseif kind == "WardLost" then
     Session.Say(session, if event.escort then "The tender is destroyed" else "The survey rig is destroyed")
   elseif kind == "MissionFailed" then

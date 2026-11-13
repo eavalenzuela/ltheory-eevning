@@ -1777,23 +1777,31 @@ end)
 -- already, so that the next is a convoy; that one, of a level, taken,
 -- and the pilot at the place with the tender sighted: the game and the
 -- job.
-local function inbound(level: number): (Core.Game, State.Mission)
-  local game = newGame()
-  local state = game.state
-  state.standings.vessari = math.max(0, Assault.STANDING[level])
-  state.holds[state.player.home] = Assault.CONVOYS - 1
-  local offer = assert(defences(game, state.player.home)[level], "no defence job of that level")
-  assert(Missions.Convoy(offer), "the agent's sixth job should be a convoy")
-  assert(submit(game, { kind = "AcceptMission", actor = 0, what = offer.key }))
-  local mission = state.missions[state.missionIds[1]]
-  assert(submit(game, { kind = "Undock", actor = 0 }))
-  at(game, mission.site)
-  Core.TakeEvents(game)
-  steps(game, 2)
-  return game, mission
+-- ('abroad': one whose place is in a neighbour's system, the pilot put
+-- there by hand; else one in the station's own.)
+local function inbound(level: number, abroad: boolean?): (Core.Game, State.Mission)
+  for seed = 1, 200 do
+    local game = newGame(seed)
+    local state = game.state
+    state.standings.vessari = math.max(0, Assault.STANDING[level])
+    state.holds[state.player.home] = Assault.CONVOYS - 1
+    local offer = defences(game, state.player.home)[level]
+    if offer and (offer.system ~= 1) == (abroad == true) then
+      assert(Missions.Convoy(offer), "the agent's sixth job should be a convoy")
+      assert(submit(game, { kind = "AcceptMission", actor = 0, what = offer.key }))
+      local mission = state.missions[state.missionIds[1]]
+      assert(submit(game, { kind = "Undock", actor = 0 }))
+      state.balls[state.player.ship].system = mission.system
+      at(game, mission.site)
+      Core.TakeEvents(game)
+      steps(game, 2)
+      return game, mission
+    end
+  end
+  error(`no history seed up to 200 has a level {level} convoy {if abroad then "in a neighbour's system" else "in the home system"}`)
 end
 
-suite:Case("every sixth job of the seventh agent's is a convoy: a tender to see in to the station, from a place in its own system, for more pay", function(t)
+suite:Case("every sixth job of the seventh agent's is a convoy: a tender to see in to the station, or to the gate that leads to it, for more pay", function(t)
   local game = newGame()
   local state = game.state
   local home = state.player.home
@@ -1804,8 +1812,9 @@ suite:Case("every sixth job of the seventh agent's is a convoy: a tender to see 
   for level, offer in offers do
     local ships = Assault.Count(offer.waves)
     -- Two things to count: the tender getting away from the place, and getting in. The last wave is kept for the station.
-    t.eq({ offer.aim, offer.system, offer.need, #offer.ends, offer.ends[1], offer.to } :: { any },
-      { "convoy", Space.SystemOf(state, home), 2, 1, #offer.waves - 1, home } :: { any })
+    t.eq({ offer.aim, offer.need, #offer.ends, offer.ends[1] } :: { any }, { "convoy", 2, 1, #offer.waves - 1 } :: { any })
+    -- (in the station's system, or a neighbour's)
+    t.ok(offer.system == 1 or table.find(state.galaxy.systems[1].neighbors, offer.system) ~= nil, `a convoy in system {offer.system}`)
     t.ok(#offer.waves >= 2, "a convoy wants a wave for the place and one for the station")
     t.eq(Missions.Title(offer), `Convoy, level {level}: a tender in past {ships}`)
     local escort, convoy = Assault.Pay(level, offer.waves, "escort"), Assault.Pay(level, offer.waves, "convoy")
@@ -1932,6 +1941,65 @@ suite:Case("a convoy's tender destroyed off the station is the job lost, as one 
   t.near(credit - Missions.Standing(state, "vessari"), 2 * mission.standing, 1e-9)
   -- (and those who were waiting for it are gone with the job)
   t.eq(#keepers(game, mission.site), 0)
+end)
+
+suite:Case("a convoy in a neighbour's system is seen to the gate that leads home, and through it", function(t)
+  local game, mission = inbound(1, true)
+  local state = game.state
+  local home = state.player.home
+  t.ok(mission.system ~= 1)
+  local gate = assert(Space.Object(state, mission.to), "the convoy is going nowhere")
+  t.eq({ gate.kind, gate.to, Space.SystemOf(state, gate.id) } :: { any }, { "gate", 1, mission.system } :: { any })
+  local place = assert(Space.Object(state, mission.site))
+  local ward = assert(state.ships[mission.mark], "no tender")
+  local ball = assert(state.balls[ward.id], "the tender is not in space")
+  -- Clear of its place, it is away to the gate.
+  Core.TakeEvents(game)
+  local scale = (Assault.TENDER_OUT + 100) / math.sqrt((ball.x - place.x) ^ 2 + (ball.y - place.y) ^ 2 + (ball.z - place.z) ^ 2)
+  ball.x, ball.y, ball.z = place.x + (ball.x - place.x) * scale, place.y + (ball.y - place.y) * scale, place.z + (ball.z - place.z) * scale
+  steps(game, 1)
+  local away = said(game, "WardAway")
+  t.ok(away ~= nil and (away :: any).to == gate.id, "nobody said the tender was away to the gate")
+  t.eq(mission.done, 1)
+  sweep(game, mission.site)
+  -- It lands off the gate, the last wave is there, and it makes for the gate.
+  local landed = false
+  for _ = 1, 900 do
+    Core.Step(game)
+    if state.balls[ward.id] and ball.warp == nil and ball.grid == gate.id then
+      landed = true
+      break
+    end
+  end
+  t.ok(landed, "the tender did not get to the gate")
+  steps(game, 2)
+  t.eq({ mission.wave, #keepers(game, mission.site) }, { #mission.waves, #mission.waves[#mission.waves] })
+  t.ok(ball.intent ~= nil and (ball.intent :: any).kind == "jump" and (ball.intent :: any).target == gate.id, "the tender is not making for the gate")
+  -- Seen off, it goes through: and the job is done, and the tender no part of the game.
+  sweep(game, mission.site)
+  Core.TakeEvents(game)
+  local through = 0
+  for tick = 1, 900 do
+    Core.Step(game)
+    if mission.done >= mission.need then
+      through = tick
+      break
+    end
+  end
+  t.ok(through > 0, "the tender did not get through")
+  local cleared = said(game, "AssaultCleared")
+  t.ok(cleared ~= nil and (cleared :: any).aim == "convoy" and (cleared :: any).through == true, "nobody said the tender was through the gate")
+  t.eq({ mission.done, state.ships[ward.id], state.balls[ward.id] } :: { any }, { 2, nil, nil } :: { any })
+  -- In the save, and paid at the station.
+  local data, length = Core.Save(game)
+  t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
+  state.balls[state.player.ship].system = 1
+  goHome(game)
+  local had = state.wallet
+  t.ok((submit(game, { kind = "CompleteMission", actor = 0, target = mission.id })))
+  t.eq(state.wallet - had, mission.reward)
+  t.eq(state.sites[mission.site].gone, true)
+  t.ok(home == mission.station)
 end)
 
 return suite

@@ -71,16 +71,18 @@
 -- part of the job (though their bounties are the pilot's), and no wave
 -- comes after. A tender destroyed is the job lost.
 --
--- And every sixth is a convoy (the aim "convoy"): the same tender, in
--- the system the job is from, but where it gets clear of the place it
--- warps on to the station the job is from, lands some way off it
--- (Assault.CONVOY_IN) and flies in to dock. All the waves but the last
--- come for it at the place; the last is waiting where it lands. The
--- job is to see it in: it is done when the tender docks, and not
--- before. It pays more than an escort does (Assault.CONVOY_PAY).
+-- And every sixth is a convoy (the aim "convoy"): the same tender, but
+-- where it gets clear of the place it warps on to where it is going
+-- ('to'): the station the job is from, if the place is in that
+-- station's system, and if it is in a neighbour's, the gate that leads
+-- back there. It lands some way off (Assault.CONVOY_IN) and flies in,
+-- to dock or to go through. All the waves but the last come for it at
+-- the place; the last is waiting where it lands. The job is to see it
+-- in: it is done when the tender docks, or is through the gate, and
+-- not before. It pays more than an escort does (Assault.CONVOY_PAY).
 --
 -- (Security and mining missions, cut down. Not yet: a camp that is not
--- pirates', a convoy that goes on through a gate.)
+-- pirates', a convoy to follow through its gate and on.)
 
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
@@ -367,6 +369,17 @@ function Assault.Open(state: State.State, mission: State.Mission, events: { Even
     end
   end
   mission.site = mission.rooms[1] or 0
+  -- (where a convoy's tender is going: the job's station, or from a
+  -- neighbour's system the gate that leads to it)
+  if mission.aim == "convoy" then
+    local home = Space.SystemOf(state, mission.station)
+    local gate = if mission.system ~= home then System.GateTo(Space.Describe(state, mission.system), home) else nil
+    mission.to = if mission.system == home then mission.station elseif gate then gate.id else 0
+    if mission.to == 0 then
+      -- (nowhere to go: it is a plain escort, to see clear of its place)
+      mission.aim, mission.need, mission.ends = "escort", 1, { #mission.waves }
+    end
+  end
   if mission.site ~= 0 then
     table.insert(events, { kind = "SiteAppeared", site = mission.site, system = mission.system, what = "mission" })
   end
@@ -589,7 +602,7 @@ local function comes(state: State.State, mission: State.Mission, system: number,
   end
   table.insert(events, { kind = "PiratesArrived", grid = grid, count = #wave, wave = mission.wave, of = #mission.waves,
     chief = mission.aim == "chief" and mission.wave == #mission.waves, hold = mission.aim == "hold",
-    escort = Assault.Tender(mission.aim), convoy = mission.aim == "convoy" and grid == mission.station })
+    escort = Assault.Tender(mission.aim), convoy = mission.aim == "convoy" and grid == mission.to })
 end
 
 -- A tender is out of the game: it has got clear, or got in.
@@ -603,9 +616,10 @@ end
 
 -- Once a tick, wherever the pilot is: a tender that has got far enough
 -- out from the middle of its place is clear, and gone, and the job is
--- done; or, for a convoy, it warps on to the station the job is from,
--- where the last wave is waiting for it, flies in, and docks, and the
--- job is done then.
+-- done; or, for a convoy, it warps on to where it is going (the job's
+-- station, or the gate that leads to it), where the last wave is
+-- waiting for it, flies in, and docks or goes through, and the job is
+-- done then.
 local function arrive(state: State.State, events: { Event })
   for _, id in state.missionIds do
     local mission = state.missions[id]
@@ -615,23 +629,30 @@ local function arrive(state: State.State, events: { Event })
     local place = if tender then Space.Object(state, mission.site) else nil
     if tender and mission.aim == "convoy" and mission.done >= 1 then
       -- On its way in, or there.
-      if ship and ship.docked == mission.station then
-        gone(state, ship.id)
+      local dest = Space.Object(state, mission.to)
+      if (ship and ship.docked == mission.to) or (ball and ball.system ~= mission.system) then
+        -- (docked, or through the gate: either way it is no part of the game any more)
+        if ball then
+          Space.RemoveBall(state, ball)
+          table.insert(events, { kind = "BallRemoved", ball = ball.id, reason = "left" })
+        end
+        gone(state, mission.mark)
         mission.done = mission.need
-        table.insert(events, { kind = "AssaultCleared", mission = mission.id, station = mission.station, aim = mission.aim })
-      elseif ball and ball.warp == nil then
-        if ball.grid == mission.station then
+        table.insert(events, { kind = "AssaultCleared", mission = mission.id, station = mission.station, aim = mission.aim,
+          through = dest ~= nil and dest.kind == "gate" })
+      elseif ball and dest and ball.warp == nil then
+        if ball.grid == mission.to then
           if mission.wave < #mission.waves then
             comes(state, mission, ball.system, mission.site, ball.grid, ball.x, ball.y, ball.z, Assault.CONVOY_WAIT[1],
               Assault.CONVOY_WAIT[2], events)
             state.spawned[ball.grid] = state.tick
           end
           if ball.intent == nil then
-            Space.Apply(state, { kind = "Dock", actor = ball.id, target = mission.station }, events)
+            Space.Apply(state, { kind = if dest.kind == "gate" then "Jump" else "Dock", actor = ball.id, target = mission.to }, events)
           end
         else
           -- (it fell short, or was held: on again as soon as it can be)
-          local on: State.Command = { kind = "WarpTo", actor = ball.id, target = mission.station, range = Assault.CONVOY_IN }
+          local on: State.Command = { kind = "WarpTo", actor = ball.id, target = mission.to, range = Assault.CONVOY_IN }
           if Space.Validate(state, on) then
             Space.Apply(state, on, events)
           end
@@ -639,11 +660,11 @@ local function arrive(state: State.State, events: { Event })
       end
     elseif ball and place then
       local far = math.sqrt((ball.x - place.x) ^ 2 + (ball.y - place.y) ^ 2 + (ball.z - place.z) ^ 2)
-      local away: State.Command = { kind = "WarpTo", actor = ball.id, target = mission.station, range = Assault.CONVOY_IN }
+      local away: State.Command = { kind = "WarpTo", actor = ball.id, target = mission.to, range = Assault.CONVOY_IN }
       if far >= Assault.TENDER_OUT and mission.aim == "convoy" and Space.Validate(state, away) then
         Space.Apply(state, away, events)
         mission.done = 1
-        table.insert(events, { kind = "WardAway", mission = mission.id, station = mission.station, ward = ball.id })
+        table.insert(events, { kind = "WardAway", mission = mission.id, station = mission.station, ward = ball.id, to = mission.to })
       elseif far >= Assault.TENDER_OUT and mission.aim == "escort" then
         Space.RemoveBall(state, ball)
         gone(state, ball.id)

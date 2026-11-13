@@ -425,7 +425,7 @@ end
 local function ward(state: State.State, system: number, grid: number): State.Ball?
   for _, id in state.missionIds do
     local mission = state.missions[id]
-    local here = mission.site == grid or (mission.aim == "convoy" and mission.station == grid)
+    local here = mission.site == grid or (mission.aim == "convoy" and mission.to == grid)
     if mission.kind == "assault" and (mission.aim == "hold" or mission.aim == "escort" or mission.aim == "convoy") and here then
       local rig = state.balls[mission.mark]
       if rig and rig.system == system and rig.grid == grid then

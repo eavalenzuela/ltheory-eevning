@@ -1485,12 +1485,15 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
       if place == nil then
         -- (they do not wait their turn, as a camp's keepers do)
         return `in {name}: {#mission.waves} waves, {Assault.PRESS // 60} minutes apart`
-          .. (if convoy then ", the last off this station" elseif escort then ", while it flies out" else "")
+          .. (if convoy then (if mission.system == Core.Query.Player(game).system then ", the last off this station" else ", the last at the gate home")
+            elseif escort then ", while it flies out" else "")
       elseif mission.done >= mission.need then
         return `{place.name}, in {name}: {if convoy then "in" elseif escort then "through" else "held"}`
       elseif convoy and mission.done >= 1 then
         -- (away from its place, and on its way in)
-        return `away to the station: see it in to dock` .. (if ward >= 0 then `, the tender at {math.ceil(ward * 100)}%` else "")
+        local dest = Core.Query.Body(game, mission.to)
+        return `away to {if dest then shorten(dest.name, 28) else "the station"}: see it in`
+          .. (if ward >= 0 then `, the tender at {math.ceil(ward * 100)}%` else "")
       elseif ward < 0 then
         return `{place.name}, in {name}: they come when you do`
       elseif escort then

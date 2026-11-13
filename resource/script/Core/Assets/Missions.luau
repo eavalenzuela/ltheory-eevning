@@ -579,13 +579,11 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
     local waves = Assault.Plan(rng, level)
     -- (every third job of theirs is an escort: a tender to see through,
     -- which is the one thing it counts; and every other one of those a
-    -- convoy, whose tender is to be seen in to this station: from a
-    -- place in this system, and it counts getting away and getting in)
+    -- convoy, whose tender is to be seen in to this station, or, from a
+    -- neighbour's system, to the gate that leads here and through it:
+    -- it counts getting away and getting in)
     local aim = if held % Assault.CONVOYS == Assault.CONVOYS - 1 and #waves >= 2 then "convoy"
       elseif held % Assault.ESCORTS == Assault.ESCORTS - 1 then "escort" else "hold"
-    if aim == "convoy" then
-      where = system
-    end
     local pay, credit = Assault.Pay(level, waves, aim)
     local reward = math.floor(pay * bonus)
     if Assault.Room(state, where) then
