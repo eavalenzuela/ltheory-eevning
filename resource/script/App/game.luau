@@ -1013,7 +1013,8 @@ function Debug.Stat(name: string): number
 end
 
 -- What the nth agent of the station docked at thinks of the pilot (1
--- to 3 the day's, 4 the assaults', 5 the mining contracts'); with
+-- to 3 the day's, 4 the assaults', 5 the mining contracts', 6 the
+-- courier contracts', 7 the defence jobs'); with
 -- 'set', a cheat that makes it so.
 function Debug.Regard(agent: number, set: number?): number
   local state = session.game.state
@@ -1033,23 +1034,56 @@ function Debug.Missions(): (number, number, number, number)
 end
 
 -- Which of the jobs the station docked at offers is the first of a kind
--- ("bounty", "courier", "supply", "assault", "mining"): its place in
--- the Core's list, or 0 for none. (The day's three are "Accept:<n>" on
--- the screen, by their place among themselves; an assault and a mining
--- contract are "Accept:assault" and "Accept:mining", at the level the
--- list shows: "Level:<kind>:up" and "Level:<kind>:down" step it, and
--- GameDebug.Level(kind, n) sets it.)
+-- ("bounty", "courier", "supply", "assault", "mining", "defence"): its
+-- place in the Core's list, or 0 for none. (The day's three are
+-- "Accept:<n>" on the screen, by their place among themselves; the
+-- four agents whose work has levels have "Accept:assault",
+-- "Accept:mining", "Accept:courier" and "Accept:defence", at the level
+-- the list shows: "Level:<kind>:up" and "Level:<kind>:down" step it,
+-- and GameDebug.Level(kind, n) sets it.)
 function Debug.Offer(kind: string): number
   for index, offer in Core.Query.Missions(session.game).offers do
-    if offer.mission.kind == kind then
+    -- (a defence job is an assault to the rules, and not to anybody asking)
+    if offer.line == kind or (offer.mission.kind == kind and offer.line ~= "defence") then
       return index
     end
   end
   return 0
 end
 
--- The level of a kind of job ("assault", "mining") the Missions tab
--- shows; given one, it is set to that. 0: the hardest there is.
+-- The first defence job in hand: the name of the place its rig is at
+-- ("" with none in hand), the waves that have come and how many there
+-- are, the ships destroyed and how many there are, how much of the rig
+-- is left, 0 to 1 (-1 until the pilot has been there), and the system
+-- the place is in.
+function Debug.Defence(): (string, number, number, number, number, number, number)
+  for _, held in Core.Query.Missions(session.game).inHand do
+    local mission = held.mission
+    if held.line == "defence" then
+      local place = Core.Query.Body(session.game, mission.site)
+      return if place then place.name else "?", mission.wave, #mission.waves, mission.done, mission.need, held.ward, mission.system
+    end
+  end
+  return "", 0, 0, 0, 0, -1, 0
+end
+
+-- A cheat, for a scripted loss: the rig of the first defence job in
+-- hand is destroyed, as if by whoever came for it. False if no such
+-- rig stands.
+function Debug.Sink(): boolean
+  local state = session.game.state
+  for _, held in Core.Query.Missions(session.game).inHand do
+    if held.line == "defence" and state.balls[held.mission.mark] then
+      Aftermath.Destroy(state, held.mission.mark, 0, session.game.events)
+      return true
+    end
+  end
+  return false
+end
+
+-- The level of a kind of job ("assault", "mining", "courier",
+-- "defence") the Missions tab shows; given one, it is set to that. 0:
+-- the hardest there is.
 function Debug.Level(kind: string, to: number?): number
   return Station.Level(kind, to)
 end
@@ -1133,7 +1167,7 @@ end
 function Debug.Assault(): (string, number, number, number, number, number, number, string)
   for _, held in Core.Query.Missions(session.game).inHand do
     local mission = held.mission
-    if mission.kind == "assault" then
+    if held.line == "assault" then
       local camp = Core.Query.Body(session.game, mission.site)
       local open = 0
       for _, room in mission.rooms do

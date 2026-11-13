@@ -14,7 +14,7 @@ lua GameDebug.Peaceful(true)
 lua assert(GameDebug.Docked(), 'a new game starts docked')
 until GameDebug.Press('Missions')
 frames 3
-lua assert(GameDebug.Missions() == 6, 'a station offers three jobs a day, and an assault, a mining contract and a courier contract')
+lua assert(GameDebug.Missions() == 7, 'a station offers three jobs a day, and an assault, a mining contract, a courier contract and a defence job')
 lua assert(not GameDebug.CanPress('Complete:1'), 'with no job in hand there is none to finish')
 
 # Take all three: each leaves the list of offers for the list in hand.
@@ -24,7 +24,7 @@ until GameDebug.Press('Accept:1')
 until select(2, GameDebug.Missions()) == 2
 until GameDebug.Press('Accept:1')
 until select(2, GameDebug.Missions()) == 3
-lua assert(GameDebug.Missions() == 3, 'a job taken should no longer be offered')
+lua assert(GameDebug.Missions() == 4, 'a job taken should no longer be offered')
 lua assert(GameDebug.Offer('assault') == 1 and GameDebug.Offer('mining') == 2, 'the assault and the mining contract should be what is left')
 lua assert(GameDebug.Hangar('cargo.sealed') == 90, 'the courier\'s cargo should be in the hangar')
 frames 3

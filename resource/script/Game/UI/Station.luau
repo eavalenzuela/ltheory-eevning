@@ -21,6 +21,7 @@ local ItemIcon = require("@lt/Game/UI/ItemIcon")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Session = require("@lt/Game/Session")
+local Assault = require("@lt/Core/Tactical/Assault")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local State = require("@lt/Core/Kernel/State")
@@ -1453,12 +1454,13 @@ end
 -- the jobs offered.)
 local storeOpen = false
 
--- The level of assault, and of mining contract, the list shows: the
+-- The level of each line of work with levels that the list shows: the
 -- hardest there is, until the pilot steps it down.
 local ladder: { [string]: number } = {}
 
--- Which level of a kind of job ("assault", "mining") the list shows:
--- given one, it is set to that. 0: the hardest there is.
+-- Which level of a line of work ("assault", "mining", "courier",
+-- "defence") the list shows: given one, it is set to that. 0: the
+-- hardest there is.
 function Station.Level(kind: string, to: number?): number
   if to then
     ladder[kind] = to
@@ -1470,10 +1472,24 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
   local status = Core.Query.Missions(game)
   local left, right = x + 16, x + 480
   local line = y + 78
-  local function about(mission: State.Mission, jumps: number): string
+  local function about(mission: State.Mission, jumps: number, ward: number): string
     if mission.kind == "bounty" then
       local _, band = Core.Query.Security(game, mission.system)
       return `in {game.state.galaxy.systems[mission.system].name} ({band or "?"} space): {mission.done} of {mission.need} destroyed`
+    elseif mission.kind == "assault" and (mission.aim == "hold" or mission.aim == "lost") then
+      -- (where the rig is; and, once the job is taken, how it is going and how the rig is)
+      local name = game.state.galaxy.systems[mission.system].name
+      local place = if mission.site ~= 0 then Core.Query.Body(game, mission.site) else nil
+      if place == nil then
+        -- (they do not wait their turn, as a camp's keepers do)
+        return `in {name}: {#mission.waves} waves, {Assault.PRESS // 60} minutes apart`
+      elseif mission.done >= mission.need then
+        return `{place.name}, in {name}: held`
+      elseif ward < 0 then
+        return `{place.name}, in {name}: they come when you do`
+      end
+      return `{place.name}, {name}: wave {mission.wave} of {#mission.waves}, {mission.done}/{mission.need} down, the rig at `
+        .. `{math.ceil(ward * 100)}%`
     elseif mission.kind == "assault" then
       -- (where the camp is; and, once the job is taken, how it is going)
       local name = game.state.galaxy.systems[mission.system].name
@@ -1548,9 +1564,9 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
     Im.Text("Nothing more today.", left, line, 14, Im.DIM, 0.8)
   end
   -- The day's jobs, each a row; then the fourth agent's assault, the
-  -- fifth's mining contract and the sixth's courier contract, a row
-  -- each: the level shown is stepped up and down, as far as the pilot's
-  -- standing has opened.
+  -- fifth's mining contract, the sixth's courier contract and the
+  -- seventh's defence job, a row each: the level shown is stepped up
+  -- and down, as far as the pilot's standing has opened.
   local offers: { Core.MissionStatus } = if storeOpen then {} else status.offers
   local function offered(offer: Core.MissionStatus, id: string, kind: string?, level: number, levels: number)
     -- (a job with levels says its level in a word less: the steps beside it say the rest)
@@ -1559,7 +1575,7 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
     Im.TextRight(Format.Credits(offer.mission.reward), left + 356, line, 15, GOOD)
     local accept: State.Command = { kind = "AcceptMission", actor = 0, what = offer.mission.key }
     local can, whyNot = Session.CanDo(session, accept)
-    Im.Text(if can then shorten(about(offer.mission, offer.jumps), 44) else shorten(tostring(whyNot), 44), left, line + 21, 12,
+    Im.Text(if can then shorten(about(offer.mission, offer.jumps, offer.ward), 44) else shorten(tostring(whyNot), 44), left, line + 21, 12,
       if can then Im.DIM else Im.WARN)
     -- (who gives it, what they think of the pilot once they think anything, and the points it is worth)
     local thinks = if offer.regard ~= 0 then string.format(" (%.1f)", offer.regard) else ""
@@ -1585,10 +1601,10 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
       offered(offer, `Accept:{daily}`, nil, 0, 0)
     end
   end
-  for _, kind in { "assault", "mining", "courier" } do
+  for _, kind in { "assault", "mining", "courier", "defence" } do
     local levels: { Core.MissionStatus } = {}
     for _, offer in offers do
-      if offer.mission.kind == kind and offer.mission.level > 0 then
+      if offer.line == kind then
         table.insert(levels, offer)
       end
     end
@@ -1601,7 +1617,7 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
   -- What every faction thinks of the pilot (it is their stations' fees,
   -- their jobs' pay and, at the worst, their patrols' guns).
   if not storeOpen then
-    line = y + 78 + 30 + 6 * 50 + 16
+    line = y + 78 + 30 + 7 * 50 + 16
     Im.Heading("STANDINGS", left, line, 14, Im.DIM)
     for index, row in Core.Query.Standings(game) do
       local sx = left + (index - 1) * 110
@@ -1623,7 +1639,9 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
   for index, held in status.inHand do
     Im.Text(held.title, right, line, 15, Im.TEXT)
     Im.TextRight(Format.Credits(held.mission.reward), right + 430, line, 15, GOOD)
-    Im.Text(shorten(about(held.mission, held.jumps), 68), right, line + 21, 12, Im.DIM)
+    -- (a rig that is going down says so in the colour of a warning)
+    Im.Text(shorten(about(held.mission, held.jumps, held.ward), 68), right, line + 21, 12,
+      if held.ward >= 0 and held.ward < 0.5 and held.mission.done < held.mission.need then Im.WARN else Im.DIM)
     -- (how long it can still be kept: in the colour of a warning at the last)
     Im.TextRight(Format.Duration(held.left), right + 430, line + 21, 12, if held.left < 6 * 3600 then Im.WARN else Im.DIM)
     local complete: State.Command = { kind = "CompleteMission", actor = 0, target = held.mission.id }

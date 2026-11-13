@@ -67,7 +67,8 @@ suite:Case("a station offers three jobs a day, the same however often it is aske
         table.insert(offers, offer)
       end
     end
-    t.eq({ #offers, #every }, { Missions.OFFERS, Missions.OFFERS + 3 })
+    -- (and the seventh's defence jobs)
+    t.eq({ #offers, #every }, { Missions.OFFERS, Missions.OFFERS + 4 })
     for _, offer in offers do
       kinds[offer.kind] = (kinds[offer.kind] or 0) + 1
       t.ok(offer.reward > 0 and offer.need > 0 and offer.standing > 0, `{Missions.Title(offer)} pays {offer.reward}`)
@@ -89,7 +90,7 @@ suite:Case("a station offers three jobs a day, the same however often it is aske
   end
   t.ok((kinds.bounty or 0) > 3 and (kinds.courier or 0) > 3 and (kinds.supply or 0) > 3, "a kind of job is hardly ever offered")
   t.eq(#Missions.Offers(newGame().state, 99999), 0)
-  t.eq(#Core.Query.Missions(newGame()).offers, 6)
+  t.eq(#Core.Query.Missions(newGame()).offers, 7)
 end)
 
 suite:Case("a job is taken at its station, once, and a pilot has five in hand at most", function(t)
@@ -215,14 +216,15 @@ suite:Case("a job abandoned costs standing, and jobs are in the save", function(
   local old, oldLength = Codec.Encode(file)
   local before = Core.Load(old, oldLength)
   t.eq({ #before.state.missionIds, before.state.missionsDone, Missions.Standing(before.state, "vessari") }, { 0, 0, 0 })
-  t.eq(#Core.Query.Missions(before).offers, 6)
+  t.eq(#Core.Query.Missions(before).offers, 7)
 end)
 
 -- The assaults a station offers, by level.
 local function assaults(game: Core.Game, station: number): { State.Mission }
   local found: { State.Mission } = {}
   for _, offer in Missions.Offers(game.state, station) do
-    if offer.kind == "assault" then
+    -- (the fourth agent's: a defence job, the seventh's, is an assault only to the rules)
+    if Missions.Line(offer) == "assault" then
       table.insert(found, offer)
     end
   end
@@ -342,8 +344,8 @@ suite:Case("the fourth agent has an assault on a pirate camp, at each level the 
   -- One from a station at a time: taking one takes the others off the list, and the agent's next is another job.
   t.ok((submit(game, { kind = "AcceptMission", actor = 0, what = offers[2].key })))
   t.eq({ #assaults(game, home), state.assaults[home] }, { 0, 1 })
-  -- (and the one courier contract a galaxy of three systems has room for)
-  t.eq(#Missions.Offers(state, home), Missions.OFFERS + 4 + 1, "the day's three are still offered, and the mining contracts")
+  -- (and the one courier contract a galaxy of three systems has room for, and the four defence jobs)
+  t.eq(#Missions.Offers(state, home), Missions.OFFERS + 4 + 1 + 4, "the day's three are still offered, and the mining contracts")
   local mine = state.missions[state.missionIds[1]]
   t.ok((submit(game, { kind = "AbandonMission", actor = 0, target = mine.id })))
   -- (giving it up cost standing: put that back, to see all four again)
@@ -1427,6 +1429,199 @@ suite:Case("a courier contract hands its crates over, is carried in as many trip
   file.state.couriers = nil
   local old, oldLength = Codec.Encode(file)
   t.eq(Core.Load(old, oldLength).state.couriers, {})
+end)
+
+-- The defence jobs a station offers, by level.
+local function defences(game: Core.Game, station: number): { State.Mission }
+  local found: { State.Mission } = {}
+  for _, offer in Missions.Offers(game.state, station) do
+    if Missions.Line(offer) == "defence" then
+      table.insert(found, offer)
+    end
+  end
+  return found
+end
+
+-- A game in which the home station's defence job of a level is in its
+-- own system, that job taken, and the pilot at the place with the rig
+-- sighted: the game and the job.
+local function rig(level: number): (Core.Game, State.Mission)
+  for seed = 1, 200 do
+    local game = newGame(seed)
+    local state = game.state
+    state.standings.vessari = Assault.STANDING[level]
+    local offer = defences(game, state.player.home)[level]
+    if offer and offer.system == 1 then
+      assert(submit(game, { kind = "AcceptMission", actor = 0, what = offer.key }))
+      local mission = state.missions[state.missionIds[1]]
+      assert(submit(game, { kind = "Undock", actor = 0 }))
+      at(game, mission.site)
+      Core.TakeEvents(game)
+      steps(game, 2)
+      return game, mission
+    end
+  end
+  error(`no history seed up to 200 has a level {level} defence job in the home system`)
+end
+
+-- Take the pilot home: put by the home station, and docked there.
+local function goHome(game: Core.Game)
+  local state = game.state
+  local home = state.player.home
+  local me = state.balls[state.player.ship]
+  local station = assert(Space.Object(state, home))
+  me.x, me.y, me.z = station.x + station.radius + 500, station.y, station.z
+  Space.AssignGrid(state, me)
+  assert(submit(game, { kind = "Dock", actor = 0, target = home }))
+  for _ = 1, 600 do
+    if state.ships[state.player.ship].docked == home then
+      return
+    end
+    Core.Step(game)
+  end
+  error("the pilot did not get home")
+end
+
+suite:Case("the seventh agent has a defence job at each level the pilot's standing opens: a rig to hold against a camp's worth of waves", function(t)
+  local game = newGame()
+  local state = game.state
+  local home = state.player.home
+  for _, case in { { -3, 0 }, { 0, 1 }, { 1, 2 }, { 3, 3 }, { 5, 4 } } do
+    state.standings.vessari = case[1]
+    t.eq(#defences(game, home), case[2], `at a standing of {case[1]}`)
+  end
+  for level, offer in defences(game, home) do
+    -- An assault to the rules, to hold; one place; as many to destroy as its waves bring.
+    t.eq({ offer.kind, offer.aim, offer.level, #offer.ends, offer.ends[1], offer.slot } :: { any },
+      { "assault", "hold", level, 1, #offer.waves, Missions.OFFERS + 4 } :: { any })
+    t.eq(offer.need, (Assault.Count(offer.waves)))
+    t.eq(Missions.Title(offer), `Defence, level {level}: a rig against {offer.need}`)
+    -- It pays a quarter more than clearing a camp of the same keepers would.
+    -- (before what the agent adds for a pilot they think well of)
+    local clear = Assault.Pay(level, offer.waves, "clear")
+    local hold = Assault.Pay(level, offer.waves, "hold")
+    t.eq(hold, math.floor(clear * Assault.HOLD_PAY))
+    t.ok(offer.reward >= hold)
+    t.ok(offer.agent ~= "", "nobody gives it")
+  end
+  -- It is not the fourth agent's: each has their own, and taking the one leaves the other.
+  t.eq(#assaults(game, home), 4)
+  t.ok(defences(game, home)[1].agent ~= assaults(game, home)[1].agent)
+  t.ok((submit(game, { kind = "AcceptMission", actor = 0, what = defences(game, home)[2].key })))
+  t.eq({ #defences(game, home), #assaults(game, home), state.holds[home] }, { 0, 4, 1 })
+  t.eq(Missions.Line(state.missions[state.missionIds[1]]), "defence")
+end)
+
+suite:Case("at the place the rig stands from when the pilot comes, most of those who come go for it, and with all of them down and the rig standing the job is done", function(t)
+  local game, mission = rig(2)
+  local state = game.state
+  local home = state.player.home
+  -- The place is on the charts under its own name, and the rig is there: the faction's, a works, a few kilometres out.
+  local place = assert(Space.Object(state, mission.site))
+  t.ok(string.find(place.name, "Survey Rig", 1, true) ~= nil, `the place is called {place.name}`)
+  local ward = assert(state.ships[mission.mark], "no rig")
+  local ball = assert(state.balls[ward.id], "the rig is not in space")
+  t.eq({ ward.type, ward.owner, Ships.byId[ward.type].class, ball.grid } :: { any }, { Assault.RIGS[2], "vessari", "works", mission.site } :: { any })
+  local out = math.sqrt((ball.x - place.x) ^ 2 + (ball.z - place.z) ^ 2)
+  t.ok(out >= Assault.RIG_OUT[1] and out <= Assault.RIG_OUT[2], `the rig is {out} m out`)
+  t.eq(state.pilots[ward.id], nil, "the rig is nobody's to fly")
+  -- The first wave came with the pilot; nobody waits for anybody.
+  local first = keepers(game, mission.site)
+  t.eq({ #first, mission.wave, mission.done }, { #mission.waves[1], 1, 0 })
+  -- Two in three of them are after the rig, the rest after the pilot: over the three waves, by what they have picked.
+  steps(game, Assault.PRESS - 5)
+  t.eq(mission.wave, 1, "the second wave came early")
+  steps(game, 10)
+  t.eq({ mission.wave, #keepers(game, mission.site) }, { 2, #mission.waves[1] + #mission.waves[2] }, "the second wave waits for nobody")
+  steps(game, Assault.PRESS + 5)
+  t.eq({ mission.wave, #keepers(game, mission.site) }, { 3, mission.need })
+  local onRig, onPilot = 0, 0
+  for _, id in keepers(game, mission.site) do
+    local prey = state.pilots[id].prey
+    onRig += if prey == ward.id then 1 else 0
+    onPilot += if prey == state.player.ship then 1 else 0
+  end
+  t.eq(onRig + onPilot, mission.need)
+  t.ok(onRig >= onPilot and onRig > 0, `{onRig} are on the rig and {onPilot} on the pilot`)
+  -- Whoever is after the rig is who the pilot's drones and hired pilots go for.
+  t.ok(Pirates.Hunting(state, state.balls[state.player.ship]) ~= 0)
+  -- The rig has taken hurt by now, and stands.
+  t.ok(ball.vitals.shield < ball.vitals.shieldMax, "nobody has fired on the rig")
+  t.ok(state.missions[mission.id] ~= nil and state.balls[ward.id] ~= nil)
+  -- All of them down: done, said so, and nobody else comes.
+  Core.TakeEvents(game)
+  for index, id in keepers(game, mission.site) do
+    Aftermath.Destroy(state, id, state.player.ship, game.events)
+    t.eq(mission.done, index)
+  end
+  local held = said(game, "AssaultCleared")
+  t.ok(held ~= nil and (held :: any).aim == "hold", "nobody said the rig was held")
+  steps(game, Assault.PRESS + Assault.BREATHER + 5)
+  t.eq({ #keepers(game, mission.site), mission.wave }, { 0, 3 })
+  -- In the save, with the rig out.
+  local data, length = Core.Save(game)
+  t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
+  -- Paid at the station; and the rig goes when the job does.
+  goHome(game)
+  local wallet, credit = state.wallet, Missions.Standing(state, "vessari")
+  t.ok((submit(game, { kind = "CompleteMission", actor = 0, target = mission.id })))
+  t.eq(state.wallet - wallet, mission.reward)
+  t.ok(Missions.Standing(state, "vessari") > credit)
+  t.eq({ state.ships[ward.id], state.balls[ward.id], state.sites[mission.site].gone } :: { any }, { nil, nil, true } :: { any })
+  -- The agent's next is another.
+  local next = defences(game, home)
+  t.ok(#next > 0 and next[1].key ~= mission.key, "the agent has the same job again")
+end)
+
+suite:Case("a rig destroyed is the job lost, at once, at the cost of having given it up; and one given up takes its rig with it", function(t)
+  local game, mission = rig(1)
+  local state = game.state
+  local ward = mission.mark
+  local first = keepers(game, mission.site)
+  t.ok(#first > 0)
+  local credit = Missions.Standing(state, "vessari")
+  local agent = Missions.Regard(state, mission.station, mission.slot)
+  Core.TakeEvents(game)
+  -- Whoever destroys it.
+  Aftermath.Destroy(state, ward, first[1], game.events)
+  steps(game, 1)
+  local lost, failed = false, false
+  for _, event in Core.TakeEvents(game) do
+    lost = lost or (event.kind == "WardLost" and event.mission == mission.id)
+    failed = failed or (event.kind == "MissionFailed" and event.mission == mission.id)
+  end
+  t.ok(lost and failed, "nobody said the rig was destroyed and the job lost")
+  t.eq({ state.missions[mission.id], #state.missionIds, state.sites[mission.site].gone } :: { any }, { nil, 0, true } :: { any })
+  t.near(credit - Missions.Standing(state, "vessari"), 2 * mission.standing, 1e-9)
+  t.near(agent - Missions.Regard(state, mission.station, mission.slot), Missions.REGARD.lost, 1e-9)
+  t.eq(#keepers(game, mission.site), 0, "those who came for it are still about")
+  t.eq(state.missionsDone, 0)
+  -- The agent has another, when the pilot is back (to one the faction still gives work to: the least it
+  -- does at was where this pilot stood).
+  goHome(game)
+  t.eq(#defences(game, state.player.home), 0)
+  state.standings.vessari = 0
+  local again = defences(game, state.player.home)
+  t.ok(#again == 1 and again[1].key ~= mission.key, "the agent should have another job, and not the one that was lost")
+
+  -- Given up with the rig standing: the rig goes with the place.
+  local other, job = rig(1)
+  local standing = other.state.ships[job.mark]
+  t.ok(standing ~= nil)
+  goHome(other)
+  t.ok((submit(other, { kind = "AbandonMission", actor = 0, target = job.id })))
+  t.eq({ other.state.ships[job.mark], other.state.balls[job.mark], #keepers(other, job.site) } :: { any }, { nil, nil, 0 } :: { any })
+
+  -- A save from before there were defence jobs: no agent has given any.
+  local plain = newGame()
+  local now, nowLength = Core.Save(plain)
+  local file = Codec.Decode(now, nowLength)
+  file.saveVersion = 57
+  file.state.holds = nil
+  local old, oldLength = Codec.Encode(file)
+  local loaded = Core.Load(old, oldLength)
+  t.eq(loaded.state.holds, {})
+  t.eq(Core.Hash(loaded), Core.Hash(plain))
 end)
 
 return suite

@@ -47,6 +47,14 @@
 -- same terms: so much of an ore to bring in, from a pocket of it made
 -- for the contract and put on the charts when it is taken.
 --
+-- A seventh has defence jobs, in the assaults' levels and on their
+-- terms: a survey rig of the faction's to hold against the waves a
+-- camp of the level would have, who come for it and do not wait their
+-- turn. The rig standing when the last of them is destroyed, it is
+-- paid, a quarter more than clearing a camp of them would be; the rig
+-- destroyed, the job is lost at once, at the cost of having given it
+-- up (Tactical/Assault, which it is an assault to: the aim "hold").
+--
 -- A sixth has courier contracts, in levels of their own: sealed cargo
 -- to a station some jumps off, more of it and farther the higher the
 -- level (Missions.RUNS). The first is a frigate's hold over one to
@@ -131,10 +139,25 @@ local DAY = math.ceil(86400 / Constants.TICK)
 local HEAD: { [string]: number } = { secure = 9000, low = 30000, lawless = 90000 }
 local SUPPLIES = { "ore.ferrite", "ore.cuprite", "ore.silicate", "mineral.iron", "mineral.silicon", "mineral.copper" }
 
+-- Whose line of work a job is: "assault", "defence", "mining" or
+-- "courier" for the four agents whose work has levels (the fourth to
+-- the seventh), and "" for one of the day's three. (A defence job is an
+-- assault to the rules, with the aim "hold": Tactical/Assault.)
+function Missions.Line(mission: State.Mission): string
+  if mission.level <= 0 then
+    return ""
+  elseif mission.kind == "assault" and (mission.aim == "hold" or mission.aim == "lost") then
+    return "defence"
+  end
+  return mission.kind
+end
+
 -- What an offer is called, for the lists.
 function Missions.Title(mission: State.Mission): string
   if mission.kind == "bounty" then
     return `Bounty: {mission.need} {if mission.need == 1 then "pirate" else "pirates"}`
+  elseif Missions.Line(mission) == "defence" then
+    return `Defence, level {mission.level}: a rig against {mission.need}`
   elseif mission.kind == "assault" then
     local ships = Assault.Count(mission.waves)
     return `Assault, level {mission.level}: ` .. (if mission.aim == "chief" then "the chief of a camp"
@@ -431,12 +454,14 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
   -- The fourth agent's, and the fifth's: an assault and a mining
   -- contract at each level the pilot's standing opens, unless one of
   -- this station's of the kind is in hand already.
-  local assaulting, digging, running = false, false, false
+  local assaulting, digging, running, holding = false, false, false, false
   for _, id in state.missionIds do
     local held = state.missions[id]
-    assaulting = assaulting or (held.kind == "assault" and held.station == station)
-    digging = digging or (held.kind == "mining" and held.station == station)
-    running = running or (held.kind == "courier" and held.level > 0 and held.station == station)
+    local line = Missions.Line(held)
+    assaulting = assaulting or (line == "assault" and held.station == station)
+    digging = digging or (line == "mining" and held.station == station)
+    running = running or (line == "courier" and held.station == station)
+    holding = holding or (line == "defence" and held.station == station)
   end
   -- (as many levels as the faction's standing opens, or as the agent's
   -- own regard does, whichever is more; none from an agent whose
@@ -520,6 +545,30 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
       })
     end
   end
+  -- The seventh agent's: a defence job at each level the pilot's
+  -- standing opens, unless one of this station's is in hand. A survey
+  -- rig of the faction's, in this system or a neighbour's, and the
+  -- waves a camp of the level would have coming for it, in the one place.
+  local held = state.holds[station] or 0
+  for level = 1, if holding then 0 else topOf(Missions.OFFERS + 4) do
+    local bonus = paying(Missions.OFFERS + 4)
+    local rng = Rng.For(state.historySeed, station, held, level, 127)
+    -- (one time in three the rig is in a neighbour's system)
+    local next = node.neighbors[Rng.Int(rng, math.max(1, #node.neighbors)) + 1]
+    local where = if next ~= nil and Rng.Chance(rng, 1 / 3) and Assault.Room(state, next) then next else system
+    local waves = Assault.Plan(rng, level)
+    local pay, credit = Assault.Pay(level, waves, "hold")
+    local reward = math.floor(pay * bonus)
+    if Assault.Room(state, where) then
+      table.insert(offers, {
+        id = 0, key = `{station}:h{held}:{level}`, kind = "assault", station = station, faction = node.nearest, system = where,
+        need = (Assault.Count(waves)), done = 0, type = "", to = station, reward = reward, standing = credit, taken = 0,
+        agent = Missions.Agent(state, station, Missions.OFFERS + 4), loyalty = math.max(1, reward // Missions.LOYALTY),
+        slot = Missions.OFFERS + 4, level = level, waves = waves, wave = 0, site = 0, rooms = {}, ends = { #waves }, aim = "hold",
+        mark = 0,
+      })
+    end
+  end
   return offers
 end
 
@@ -569,6 +618,8 @@ function Missions.Ready(state: State.State, ship: State.Ship, mission: State.Mis
     if mission.done < mission.need then
       return false, "the camp's chief is still to destroy"
     end
+  elseif mission.kind == "assault" and mission.aim == "lost" then
+    return false, "the rig is destroyed"
   elseif mission.kind == "bounty" or (mission.kind == "assault" and mission.aim ~= "fetch") then
     if mission.done < mission.need then
       return false, `{mission.need - mission.done} still to destroy`
@@ -668,6 +719,10 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
           if offer.level > 0 then
             state.couriers[offer.station] = (state.couriers[offer.station] or 0) + 1
           end
+        elseif offer.kind == "assault" and offer.aim == "hold" then
+          -- (the seventh agent's next is another; and where the rig is, is on the charts)
+          state.holds[offer.station] = (state.holds[offer.station] or 0) + 1
+          Assault.Open(state, offer, events)
         elseif offer.kind == "assault" then
           -- (the agent's next is another job; and the camp is on the charts)
           state.assaults[offer.station] = (state.assaults[offer.station] or 0) + 1
@@ -718,8 +773,20 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
 end
 
 -- Once a minute: a job kept past its time lapses, as if it had been
--- given up.
+-- given up. And at once: a defence job whose rig has been destroyed is
+-- lost (Tactical/Assault marks it), as one given up is.
 function Missions.Step(state: State.State, events: { Event })
+  for _, id in table.clone(state.missionIds) do
+    local mission = state.missions[id]
+    if mission.kind == "assault" and mission.aim == "lost" then
+      local title = Missions.Title(mission)
+      Assault.Close(state, mission, events)
+      standing(state, mission.faction, -2 * mission.standing)
+      regarded(state, mission, -Missions.REGARD.lost)
+      close(state, mission)
+      table.insert(events, { kind = "MissionFailed", mission = mission.id, title = title })
+    end
+  end
   if state.tick % 60 ~= 0 then
     return
   end

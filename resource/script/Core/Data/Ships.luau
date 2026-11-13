@@ -269,6 +269,31 @@ for _, works in {
   })
 end
 
+-- What a defence job is to hold (Tactical/Assault): a survey rig, which
+-- stands where it was put as a camp's works do, and is somebody's who
+-- is nobody's enemy. A size for each level of the job: it has to stand
+-- while the waves that level brings are seen off, and no longer (with
+-- every one of them on it and nobody in their way, about six minutes).
+-- (And it is bigger than the ships that level is flown in: it is what
+-- the place is about.) Nobody sells one or has a blueprint for it.
+for level, rig in {
+  { name = "Small Survey Rig", radius = 120, shield = 900, armor = 1400, hull = 1700 },
+  { name = "Survey Rig", radius = 180, shield = 2700, armor = 4300, hull = 5500 },
+  { name = "Large Survey Rig", radius = 280, shield = 5000, armor = 8000, hull = 11000 },
+  { name = "Great Survey Rig", radius = 420, shield = 10000, armor = 15000, hull = 20000 },
+} do
+  table.insert(types, {
+    id = `works.rig.{level}`, name = rig.name, class = "works", lineage = "", basePrice = 500000 * level, volume = 100000 * level,
+    mass = 40000000 * level, inertia = 1, maxVelocity = 0, warpSpeed = 1, radius = rig.radius,
+    shield = rig.shield, armor = rig.armor, hull = rig.hull, shieldRecharge = 1800,
+    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 300 + 100 * level,
+    cpu = 600, powergrid = 2000, highs = 0, mids = 2, lows = 3, turrets = 0, launchers = 0,
+    capacitor = 2500, capacitorRecharge = 240,
+    scanResolution = 320, lockRange = 60000, maxTargets = 3, cargo = 600,
+    restricted = true,
+  })
+end
+
 -- Hulls no faction owns: anyone builds them.
 table.insert(types, {
   id = "frigate.prospector", name = "Prospector", class = "frigate", lineage = "", basePrice = 180000, volume = 2500,

@@ -367,6 +367,13 @@ export type Site = { id: number, system: number, kind: string, code: string, str
 -- or "raze" it ('need' things it is built of, which stand in the last
 -- room once the pilot has been there: 'mark' is the first of them).
 --
+-- A defence job (the seventh agent's) is an assault to the rules, with
+-- the aim "hold": the place is where a rig of the faction's stands
+-- ('mark' is the rig's ship, once the pilot has been there), and the
+-- waves are those who come for it ('need' ships, of which 'done' are
+-- destroyed). The aim is "lost" from when the rig is destroyed until
+-- the job is ended for it, which is within the tick.
+--
 -- A "mining" contract has a place made for it too: a pocket of rocks of
 -- the ore 'type', of which 'need' units are to be brought in ('aim' is
 -- "dig"). Its 'waves' are whoever turns up there to dispute it: none,
@@ -503,6 +510,8 @@ export type State = {
   digs: { [number]: number },
   -- And how many courier contracts its sixth.
   couriers: { [number]: number },
+  -- And how many defence jobs its seventh.
+  holds: { [number]: number },
   standings: { [string]: number },
   -- Loyalty points with each faction, earned by its jobs and spent at
   -- its stations (a faction not here has none).

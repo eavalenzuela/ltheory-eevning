@@ -2352,6 +2352,82 @@ do
     fit = { "launcher.heavy", "launcher.heavy", "launcher.heavy", "launcher.heavy" } }
 end
 
+-- The Survey Rig, what a defence job is to hold (Core/Tactical/Assault):
+-- anybody's, and no ship, so no bow and no engines. A square deck with
+-- its edges in warning paint; a derrick of four legs over the middle of
+-- it, a lamp at its head; under the deck the drum of its instruments
+-- and a long probe let down from that, lit at the tip; an outrigger to
+-- a pad at each corner; the crew's house on the deck to one side, lit,
+-- and a dish on a post at the far corner. The bigger ones (there are
+-- four sizes) carry more: tanks slung under the deck, then a second
+-- house and a stand of masts, then a mast at every pad. (A v0.)
+local function rigOf(size: number): (b: Builder) -> ()
+  return function(b: Builder)
+    -- the deck
+    block(b, PLATING, v(0, 0, 0), v(0.46, 0.035, 0.46), nil, 0.06)
+    for _, side in { -1, 1 } do
+      block(b, TRIM, v(side * 0.43, 0.037, 0), v(0.03, 0.004, 0.46))
+      block(b, TRIM, v(0, 0.037, side * 0.43), v(0.40, 0.004, 0.03))
+    end
+    -- the derrick, braced twice on the way up
+    local top = v(0, 0.86, 0)
+    for _, x in { -1, 1 } do
+      for _, z in { -1, 1 } do
+        beam(b, FRAME, v(x * 0.24, 0.03, z * 0.24), top + v(x * 0.03, 0, z * 0.03), 0.022, 0.1)
+      end
+    end
+    for _, share in { 0.33, 0.66 } do
+      local wide = 0.24 - 0.21 * share
+      local y = 0.03 + 0.83 * share
+      for _, side in { -1, 1 } do
+        beam(b, FRAME, v(-wide, y, side * wide), v(wide, y, side * wide), 0.014, 0.1)
+        beam(b, FRAME, v(side * wide, y, -wide), v(side * wide, y, wide), 0.014, 0.1)
+      end
+    end
+    block(b, GLOW, top + v(0, 0.02, 0), v(0.035, 0.02, 0.035), nil, 0.3)
+    -- the instruments under the deck, and the probe
+    block(b, PATCH, v(0, -0.17, 0), v(0.18, 0.13, 0.18), nil, 0.45)
+    block(b, FRAME, v(0, -0.31, 0), v(0.10, 0.03, 0.10), nil, 0.3)
+    beam(b, FRAME, v(0, -0.32, 0), v(0, -0.84, 0), 0.028, 0.1)
+    block(b, GLOW, v(0, -0.86, 0), v(0.04, 0.03, 0.04), nil, 0.4)
+    -- an outrigger to a pad at each corner, strutted from under the deck
+    for _, x in { -1, 1 } do
+      for _, z in { -1, 1 } do
+        beam(b, FRAME, v(x * 0.44, 0, z * 0.44), v(x * 0.74, -0.06, z * 0.74), 0.026, 0.1)
+        beam(b, FRAME, v(x * 0.20, -0.20, z * 0.20), v(x * 0.74, -0.06, z * 0.74), 0.016, 0.1)
+        block(b, PLATING, v(x * 0.76, -0.06, z * 0.76), v(0.07, 0.05, 0.07), nil, 0.2)
+        if size >= 4 then
+          mast(b, v(x * 0.76, -0.01, z * 0.76), 0.30, 0)
+        end
+      end
+    end
+    -- the crew's house, to port and forward
+    block(b, PATCH, v(-0.26, 0.11, 0.24), v(0.13, 0.075, 0.16), nil, 0.15)
+    ports(b, v(-0.125, 0.12, 0.12), v(-0.125, 0.12, 0.36), 3, 0.014)
+    -- the dish, on a post at the far corner
+    beam(b, FRAME, v(0.32, 0.03, -0.32), v(0.32, 0.30, -0.32), 0.018, 0.1)
+    block(b, PATCH, v(0.32, 0.33, -0.32), v(0.13, 0.022, 0.13), nil, 0.5)
+    block(b, FRAME, v(0.32, 0.36, -0.32), v(0.09, 0.010, 0.09), nil, 0.5)
+    beam(b, FRAME, v(0.32, 0.36, -0.32), v(0.32, 0.46, -0.32), 0.010, 0.1)
+    if size >= 2 then
+      -- tanks slung under the deck, either side of the instruments
+      tank(b, v(0.32, -0.11, 0.06), 0.07, 0.24)
+      tank(b, v(-0.32, -0.11, -0.06), 0.07, 0.24, PLATING)
+    end
+    if size >= 3 then
+      -- a second house, aft, and a stand of masts by it
+      block(b, PLATING, v(-0.24, 0.10, -0.28), v(0.15, 0.065, 0.11), nil, 0.15)
+      ports(b, v(-0.085, 0.11, -0.36), v(-0.085, 0.11, -0.20), 2, 0.014)
+      mast(b, v(-0.34, 0.165, -0.30), 0.34, 0.02)
+      mast(b, v(0.30, 0.035, 0.32), 0.26, -0.02)
+    end
+  end
+end
+
+for size = 1, 4 do
+  designs[`works.rig.{size}`] = { faction = "civil", draw = rigOf(size), sheets = 3.0 + 0.6 * size, turrets = {}, launchers = {}, fit = {} }
+end
+
 -- ---------------------------------------------------------------------
 
 export type Built = {

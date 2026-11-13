@@ -51,8 +51,19 @@
 -- pilot does, once. (Ore of the kind from anywhere else does as well:
 -- the pocket is where it is to be had.)
 --
+-- A defence job (a station's seventh agent's work) is the other way
+-- about: the place is not the pirates' but a survey rig of the
+-- faction's, which stands there from when the pilot first comes
+-- (Assault.RIGS: a bigger one a level), and the pirates come for it,
+-- in the waves a camp of the level would have, one room's worth. Most
+-- of them go for the rig and not for the pilot (Tactical/Pirates). The
+-- job is to see every one of them off with the rig still standing: a
+-- rig destroyed is the job lost, at once, as a job given up is. And
+-- they set the pace: a wave that is not down two minutes after it came
+-- has the next one come anyway (Assault.PRESS).
+--
 -- (Security and mining missions, cut down. Not yet: a camp that is not
--- pirates'.)
+-- pirates', a thing to be defended that flies.)
 
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
@@ -84,7 +95,19 @@ Assault.BREATHER = 20
 Assault.SHARE = 0.6
 Assault.BASE = 5000
 Assault.CREDIT = 0.15
--- What a job may be to do, and how likely each is.
+-- What a defence job is to hold, by its level (Data/Ships), how far
+-- from the middle of the place it stands, and what such a job pays
+-- beside what a camp of the same keepers would: holding is harder than
+-- clearing.
+Assault.RIGS = { "works.rig.1", "works.rig.2", "works.rig.3", "works.rig.4" }
+Assault.RIG_OUT = { 2000, 4000 }
+Assault.HOLD_PAY = 1.25
+-- How long after a wave has come for a rig the next one does, whether
+-- or not the first is destroyed (seconds): at a camp its keepers wait
+-- their turn, and those who come for a rig do not.
+Assault.PRESS = 120
+-- What a job may be to do, and how likely each is. (A defence job is
+-- always to "hold", and is not one of these: it is another agent's.)
 Assault.AIMS = { "clear", "raze", "chief", "fetch" }
 local ODDS = { 0.3, 0.2, 0.25, 0.25 }
 -- What a camp of each level is built of (kinds of Tactical/Pirates, of
@@ -241,7 +264,8 @@ function Assault.Pay(level: number, waves: { { string } }, aim: string?): (numbe
   if aim == "raze" then
     bounty += select(2, Assault.Count({ Assault.WORKS[level] }))
   end
-  return math.floor(Assault.SHARE * bounty) + Assault.BASE * level, Assault.CREDIT * level
+  local pay = math.floor(Assault.SHARE * bounty) + Assault.BASE * level
+  return if aim == "hold" then math.floor(pay * Assault.HOLD_PAY) else pay, Assault.CREDIT * level
 end
 
 -- What a job of an aim counts: the ships of the camp, what it is built
@@ -280,8 +304,8 @@ function Assault.Open(state: State.State, mission: State.Mission, events: { Even
   local rng = Rng.For(state.historySeed, mission.id, 59)
   local last: State.Site? = nil
   for room = 1, #mission.ends do
-    local site = Sites.Stake(state, mission.system, rng, if mission.kind == "mining" then "Ore Pocket" else "Pirate Camp", last,
-      NUMERALS[room])
+    local site = Sites.Stake(state, mission.system, rng, if mission.kind == "mining" then "Ore Pocket"
+      elseif mission.aim == "hold" then "Survey Rig" else "Pirate Camp", last, NUMERALS[room])
     if site == nil then
       break
     end
@@ -363,6 +387,20 @@ function Assault.Close(state: State.State, mission: State.Mission, events: { Eve
     Sites.Release(state, room, events)
     state.spawned[room] = nil
   end
+  -- (and the rig a defence job was to hold, if it still stands)
+  local rig = if mission.aim == "hold" or mission.aim == "lost" then state.ships[mission.mark] else nil
+  if rig then
+    local ball = state.balls[rig.id]
+    if ball then
+      Space.RemoveBall(state, ball)
+      table.insert(events, { kind = "BallRemoved", ball = rig.id, reason = "left" })
+    end
+    for _, item in Items.In(state, rig.id, nil) do
+      Items.Take(state, item, item.quantity)
+    end
+    state.ships[rig.id] = nil
+    State.RemoveId(state.shipIds, rig.id)
+  end
   local container = if mission.aim == "fetch" then state.wrecks[mission.mark] else nil
   if container then
     for _, item in Items.In(state, container.id, nil) do
@@ -424,7 +462,9 @@ function Assault.Fell(state: State.State, home: number, ship: number, works: boo
     return
   end
   local was = mission.done
-  if mission.aim == (if works then "raze" else "clear") then
+  -- (a camp to clear, and a rig to hold, count the ships that come; a camp to raze, what it is built of)
+  local counts = if works then mission.aim == "raze" else mission.aim == "clear" or mission.aim == "hold"
+  if counts then
     mission.done = math.min(mission.need, mission.done + 1)
   elseif mission.aim == "chief" and ship == mission.mark then
     mission.done = mission.need
@@ -456,9 +496,22 @@ function Assault.Fell(state: State.State, home: number, ship: number, works: boo
   end
 end
 
+-- A ship has been destroyed: if it was the rig a defence job was to
+-- hold, the job is lost. (Assets/Missions ends it: it is marked here.)
+function Assault.Lost(state: State.State, ship: number, events: { Event })
+  for _, id in state.missionIds do
+    local mission = state.missions[id]
+    if mission.kind == "assault" and mission.aim == "hold" and mission.mark ~= 0 and mission.mark == ship then
+      mission.aim = "lost"
+      table.insert(events, { kind = "WardLost", mission = mission.id, station = mission.station })
+    end
+  end
+end
+
 -- Once a tick: in a room of a camp that the pilot is in, with nobody of
 -- it left and a wave of that room's still to come, it comes (the first
--- at once, the others after a breather).
+-- at once, the others after a breather). Where the job is to hold a
+-- rig, the next comes anyway once the last has been there long enough.
 function Assault.Step(state: State.State, events: { Event })
   local me = state.balls[state.player.ship]
   if me == nil or me.grid == 0 or Ships.byId[state.ships[me.id].type].class == "capsule" then
@@ -490,14 +543,39 @@ function Assault.Step(state: State.State, events: { Event })
     end
     table.insert(events, { kind = "WorksSighted", mission = mission.id, grid = place.id, count = #works })
   end
-  if mission.wave >= mission.ends[room] or #keepers(state, me.grid) > 0 then
+  -- What a defence job is to hold stands there from when the pilot
+  -- first comes: a few kilometres from the middle of the place. ('mark'
+  -- is it.) It is the faction's, and nobody's enemy.
+  if mission.aim == "hold" and mission.mark == 0 then
+    local rng = Rng.For(state.historySeed, mission.id, 71)
+    local angle = Rng.Float(rng, 0, 2 * math.pi)
+    local out = Rng.Float(rng, Assault.RIG_OUT[1], Assault.RIG_OUT[2])
+    local hull = Ships.byId[Assault.RIGS[math.clamp(mission.level, 1, #Assault.RIGS)]]
+    local rig = Space.NewShip(state, hull.id, hull.name, mission.faction, 0)
+    local ball = Space.Launch(state, rig, me.system, place.x + out * math.cos(angle), place.y + Rng.Float(rng, -500, 500),
+      place.z + out * math.sin(angle))
+    mission.mark = rig.id
+    table.insert(events, { kind = "BallAdded", ball = ball.id })
+    table.insert(events, { kind = "WardSighted", mission = mission.id, grid = place.id, ward = rig.id })
+  end
+  if mission.wave >= mission.ends[room] then
     return
   end
   local last = state.spawned[me.grid]
-  if last ~= nil and (state.tick - last) * Constants.TICK < Assault.BREATHER then
+  local since = if last ~= nil then (state.tick - last) * Constants.TICK else math.huge
+  if #keepers(state, me.grid) > 0 then
+    -- (whoever comes for a rig does not wait for those before them to
+    -- be destroyed: so long after one wave came, the next does)
+    if mission.aim ~= "hold" or since < Assault.PRESS then
+      return
+    end
+  elseif since < Assault.BREATHER then
     return
   end
   mission.wave += 1
+  if mission.aim == "hold" then
+    state.spawned[me.grid] = state.tick
+  end
   local wave = mission.waves[mission.wave]
   local rng = Rng.For(state.historySeed, mission.id, mission.wave, 43)
   for index, kind in wave do
@@ -516,7 +594,7 @@ function Assault.Step(state: State.State, events: { Event })
     table.insert(events, { kind = "BallAdded", ball = ball.id })
   end
   table.insert(events, { kind = "PiratesArrived", grid = place.id, count = #wave, wave = mission.wave, of = #mission.waves,
-    chief = mission.aim == "chief" and mission.wave == #mission.waves })
+    chief = mission.aim == "chief" and mission.wave == #mission.waves, hold = mission.aim == "hold" })
 end
 
 return Assault

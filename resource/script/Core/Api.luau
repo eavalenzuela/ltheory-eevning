@@ -80,7 +80,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 57
+Core.SAVE_VERSION = 58
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -310,6 +310,11 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- save from before has given any.
   [49] = function(state: any)
     state.couriers = state.couriers or {}
+  end,
+  -- 58: a station's seventh agent has defence jobs. No agent of a save
+  -- from before has given any.
+  [57] = function(state: any)
+    state.holds = state.holds or {}
   end,
   -- 57: a hired pilot can be set to keep a thing in stock. Nobody of a
   -- save from before has been.
@@ -627,6 +632,7 @@ function Core.New(options: Options): Game
     assaults = {},
     digs = {},
     couriers = {},
+    holds = {},
     standings = {},
     loyalty = {},
     regard = {},
@@ -1913,9 +1919,12 @@ end
 -- that faction; and what its store has, with whether each can be had
 -- now and if not, why not.)
 -- ('regard': what the agent who gives it thinks of the pilot. 'jumps':
--- for a courier job, how far its cargo is to be carried.)
+-- for a courier job, how far its cargo is to be carried. 'line': whose
+-- line of work it is, Missions.Line. 'ward': for a defence job whose
+-- rig stands, how much of the rig is left, 0 to 1; -1 for any other,
+-- and until the pilot has been there.)
 export type MissionStatus = { mission: State.Mission, title: string, ready: boolean, why: string, left: number, regard: number,
-  jumps: number }
+  jumps: number, line: string, ward: number }
 export type StoreRow = { stock: Missions.Stock, name: string, can: boolean, why: string }
 export type MissionsStatus = { offers: { MissionStatus }, inHand: { MissionStatus }, faction: string, standing: number, done: number,
   loyalty: number, store: { StoreRow } }
@@ -1929,7 +1938,7 @@ function Query.Missions(game: Game): MissionsStatus
     for _, offer in Missions.Offers(state, ship.docked) do
       table.insert(offers, { mission = offer, title = Missions.Title(offer), ready = false, why = "", left = 0,
         regard = Missions.Regard(state, offer.station, offer.slot),
-        jumps = if offer.kind == "courier" then Missions.Jumps(state, offer) else 0 })
+        jumps = if offer.kind == "courier" then Missions.Jumps(state, offer) else 0, line = Missions.Line(offer), ward = -1 })
     end
     local node = state.galaxy.systems[Space.SystemOf(state, ship.docked)]
     faction = if Factions.byId[node.nearest] then Factions.byId[node.nearest].name else ""
@@ -1945,9 +1954,17 @@ function Query.Missions(game: Game): MissionsStatus
   local inHand: { MissionStatus } = {}
   for _, mission in Missions.InHand(state) do
     local ready, why = Missions.Ready(state, ship, mission)
+    local line = Missions.Line(mission)
+    -- (what is left of the rig a defence job is to hold: of all it has, shield, armour and hull)
+    local rig = if line == "defence" then state.balls[mission.mark] else nil
+    local ward = -1
+    if rig then
+      local vitals = rig.vitals
+      ward = (vitals.shield + vitals.armor + vitals.hull) / math.max(1, vitals.shieldMax + vitals.armorMax + vitals.hullMax)
+    end
     table.insert(inHand, { mission = mission, title = Missions.Title(mission), ready = ready, why = why or "",
       left = Missions.Left(state, mission), regard = Missions.Regard(state, mission.station, mission.slot),
-      jumps = if mission.kind == "courier" then Missions.Jumps(state, mission) else 0 })
+      jumps = if mission.kind == "courier" then Missions.Jumps(state, mission) else 0, line = line, ward = ward })
   end
   return { offers = offers, inHand = inHand, faction = faction, standing = standing, done = state.missionsDone,
     loyalty = loyalty, store = store }

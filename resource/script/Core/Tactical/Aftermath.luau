@@ -125,9 +125,12 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   local velocity = { ball.vx, ball.vy, ball.vz }
   Space.RemoveBall(state, ball)
   forget(state, id)
-  -- (one that kept a camp a job is to clear counts toward the job)
+  -- (one that kept a camp a job is to clear counts toward the job; and
+  -- the rig a job was to hold is that job lost)
   if pilot then
     Assault.Fell(state, pilot.home, id, hull.class == "works", events)
+  else
+    Assault.Lost(state, id, events)
   end
 
   -- (a bounty is on the pilot, not the hull: a scout in a patched frigate

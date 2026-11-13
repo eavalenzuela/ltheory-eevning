@@ -68,6 +68,7 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "PiratesArrived" and event.wave then
     Session.Say(session, `Wave {event.wave} of {event.of}: ` .. (if event.chief then "the camp's chief is out"
       .. (if event.count > 1 then `, with {event.count - 1} more` else "")
+      elseif event.hold then `{event.count} {if event.count == 1 then "pirate has" else "pirates have"} come for the rig`
       else `{event.count} {if event.count == 1 then "ship" else "ships"} of the camp's`))
   elseif kind == "PiratesArrived" and event.away then
     -- (somewhere else, for a hired pilot: they say so themselves when they are gone for)
@@ -84,8 +85,15 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "AssaultCleared" then
     local body = Core.Query.Body(session.game, event.station)
     local aim: string = event.aim
-    Session.Say(session, `{if aim == "chief" then "The chief is destroyed" elseif aim == "raze" then "The camp is razed" else "The camp is cleared"}: `
+    Session.Say(session, `{if aim == "chief" then "The chief is destroyed" elseif aim == "raze" then "The camp is razed"
+      elseif aim == "hold" then "The rig is held" else "The camp is cleared"}: `
       .. `{if body then body.name else "the station"} will pay for it`)
+  elseif kind == "WardSighted" then
+    Session.Say(session, "The survey rig is here: keep it standing, and destroy whoever comes for it")
+  elseif kind == "WardLost" then
+    Session.Say(session, "The survey rig is destroyed")
+  elseif kind == "MissionFailed" then
+    Session.Say(session, `A job is lost: {event.title}`)
   elseif kind == "CorporationFounded" then
     Session.Say(session, `{event.name} is founded: your hired pilots work for it from now on`)
   elseif kind == "WorksSighted" then

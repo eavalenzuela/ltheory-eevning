@@ -418,6 +418,21 @@ local function give(state: State.State, command: State.Command, events: { Event 
   return false
 end
 
+-- The rig a job is to hold at a place (Tactical/Assault's defence
+-- job, seen here by the state alone), if it stands there: its ball.
+local function ward(state: State.State, system: number, grid: number): State.Ball?
+  for _, id in state.missionIds do
+    local mission = state.missions[id]
+    if mission.kind == "assault" and mission.aim == "hold" and mission.site == grid then
+      local rig = state.balls[mission.mark]
+      if rig and rig.system == system and rig.grid == grid then
+        return rig
+      end
+    end
+  end
+  return nil
+end
+
 -- What a pirate here would go for: the nearest ship of the pilot's
 -- side (their own, or a hired pilot's) that is worth shooting. One
 -- pirate in three goes for a drone instead when any are out, and any
@@ -448,21 +463,31 @@ local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
       consider(state.balls[id], true)
     end
   end
+  -- Where a job is to hold a rig, two pirates in three go for the rig,
+  -- and any of them does with nobody else to go for.
+  local rig = ward(state, ball.system, ball.grid)
+  if rig and (best == nil or ball.id % 3 ~= 0) then
+    return rig
+  end
   if drone and (best == nil or Rng.Chance(Rng.For(state.historySeed, ball.id, 53), 1 / 3)) then
     return drone
   end
   return best
 end
 
--- Whoever on a ship's grid is after anybody of the pilot's side, the
--- nearest to that ship first: what its drones and its fleet go for
--- when nothing has been pointed out to them. 0 for nobody.
+-- Whoever on a ship's grid is after anybody of the pilot's side (or
+-- after the rig a job of the pilot's is to hold there), the nearest to
+-- that ship first: what its drones and its fleet go for when nothing
+-- has been pointed out to them. 0 for nobody.
 function Pirates.Hunting(state: State.State, near: State.Ball): number
   local best, least = 0, math.huge
+  -- (and whoever is after the rig a job of the pilot's is to hold here)
+  local rig = ward(state, near.system, near.grid)
   for _, id in state.pilotIds do
     local other = state.balls[id]
     local prey = state.ships[state.pilots[id].prey]
-    if other and prey and prey.owner == "player" and other.system == near.system and other.grid == near.grid then
+    if other and prey and (prey.owner == "player" or (rig ~= nil and prey.id == rig.id)) and other.system == near.system
+      and other.grid == near.grid then
       local far = Space.Distance(other :: any, near :: any)
       if far < least then
         best, least = id, far

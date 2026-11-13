@@ -1,0 +1,110 @@
+# A defence job, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/defence.txt
+#
+# The home station's seventh agent has a defence job for a pilot nobody
+# knows yet: level 1, a survey rig to hold, in this system. The job is
+# taken, which puts the rig's place on the overview. A destroyer is
+# given to do it in. The rig is there when the pilot is, and so is the
+# first of those who come for it. Every one of them destroyed with the
+# rig standing, the job is paid for at home, where the agent has
+# another. That one is taken too, and its rig lost: the job goes with it.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+until GameDebug.Press('Missions')
+until GameDebug.Tab() == 'Missions'
+frames 3
+lua assert(GameDebug.Offer('defence') == 7, 'the defence job should be the last of the seven')
+lua assert(GameDebug.Defence() == '', 'no defence job is in hand yet')
+lua assert(not GameDebug.CanPress('Level:defence:up'), 'only one level is open to a pilot nobody knows')
+until GameDebug.Press('Accept:defence')
+until select(2, GameDebug.Missions()) == 1
+frames 3
+lua assert(GameDebug.Offer('defence') == 0, 'a station gives one defence job at a time')
+lua assert(GameDebug.Offer('assault') == 4, 'the assault is another agent work, and still offered')
+lua assert(GameDebug.Assault() == '', 'a defence job is no assault to anybody asking')
+lua assert(string.sub(GameDebug.Defence(), 1, 10) == 'Survey Rig', 'the job should have its place')
+lua assert(select(6, GameDebug.Defence()) == -1, 'the rig is not there until the pilot is')
+lua assert(not GameDebug.CanPress('Complete:1'), 'a rig is not held by taking the job')
+
+# A destroyer to do it in, and out to the rig: by the autopilot, where
+# the rig is in the next system.
+lua assert(GameDebug.Fly('destroyer.halberd'), 'no destroyer')
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 5
+lua _G.there = select(7, GameDebug.Defence())
+lua GameDebug.TimeScale(16)
+lua if _G.there ~= GameDebug.System() then assert(GameDebug.Destination(_G.there) >= 1) assert(GameDebug.Autopilot(true)) end
+patience 900
+until GameDebug.System() == _G.there
+until not GameDebug.Autopilot()
+lua GameDebug.TimeScale(1)
+frames 5
+lua assert(GameDebug.Count('site') == 1, 'the place should be on the overview')
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('WarpTo', 'Survey Rig'), 'warp to the rig was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+
+# The rig is there, whole, and those who come for it. They are fought
+# as they come, until the last of them is down.
+until select(6, GameDebug.Defence()) == 1
+lua assert(GameDebug.Select('Small Survey Rig'), 'the rig should be on the overview')
+until GameDebug.Pirates() >= 1
+lua assert(select(2, GameDebug.Defence()) == 1, 'the first wave should be out')
+patience 1500
+until GameDebug.Engage() == 0 and select(4, GameDebug.Defence()) == select(5, GameDebug.Defence())
+lua assert(select(2, GameDebug.Defence()) == select(3, GameDebug.Defence()), 'every wave should have come')
+lua assert(select(6, GameDebug.Defence()) > 0, 'the rig should be standing')
+lua assert(GameDebug.Hull() == 'destroyer.halberd', 'the destroyer should have come through it')
+
+# Held. Home, to be paid, and the agent has another.
+lua GameDebug.TimeScale(16)
+lua if GameDebug.System() ~= 1 then assert(GameDebug.Destination(1) >= 1) assert(GameDebug.Autopilot(true)) end
+patience 900
+until GameDebug.System() == 1
+until not GameDebug.Autopilot()
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('Dock', 'home'), 'docking at home was refused')
+patience 300
+until GameDebug.Docked()
+lua GameDebug.TimeScale(1)
+until GameDebug.Press('Missions')
+until GameDebug.Tab() == 'Missions'
+frames 3
+lua _G.before = GameDebug.Wallet()
+until GameDebug.Press('Complete:1')
+until select(3, GameDebug.Missions()) == 1
+lua assert(GameDebug.Wallet() > _G.before + 5000, 'the job did not pay')
+frames 3
+lua assert(GameDebug.Offer('defence') == 7, 'the agent should have another job')
+
+# The next one, and its rig lost: the job is gone at once, and it is
+# held against the pilot.
+lua _G.standing = select(4, GameDebug.Missions())
+until GameDebug.Press('Accept:defence')
+until select(2, GameDebug.Missions()) == 1
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 5
+lua _G.there = select(7, GameDebug.Defence())
+lua GameDebug.TimeScale(16)
+lua if _G.there ~= GameDebug.System() then assert(GameDebug.Destination(_G.there) >= 1) assert(GameDebug.Autopilot(true)) end
+patience 900
+until GameDebug.System() == _G.there
+until not GameDebug.Autopilot()
+lua GameDebug.TimeScale(8)
+frames 5
+lua assert(GameDebug.Order('WarpTo', 'Survey Rig'), 'warp to the second rig was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+until select(6, GameDebug.Defence()) >= 0
+lua assert(GameDebug.Sink(), 'no rig to lose')
+until select(2, GameDebug.Missions()) == 0
+lua assert(GameDebug.Defence() == '', 'the job should be gone with its rig')
+lua GameDebug.TimeScale(1)
+
+echo defence scenario passed
+quit
