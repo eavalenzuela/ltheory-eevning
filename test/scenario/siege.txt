@@ -1,0 +1,119 @@
+# A tower under siege, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/siege.txt
+#
+# A tower is bought with fuel and two sealing charges, anchored at a
+# moon, moored at, fuelled and charged. Then those who would bring it
+# down are made to come (a cheat: nobody would, where order is kept).
+# With the pilot moored there it is a pack that arrives, and most of it
+# goes for the tower. Its shield is brought to under a quarter (a cheat
+# again: an industrial does not fight), and it seals itself, an hour for
+# each charge: those who came are gone, and nothing can touch it. It is
+# opened early (a cheat), they are back, and a destroyer sees them off:
+# the siege is broken and the tower stands. Then they come once more,
+# what stands for the tower is destroyed, and the tower is lost: the
+# pilot is out in space, and all that is left of it is its wreck.
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Fly('industrial.caravan'), 'the Caravan could not be flown')
+lua GameDebug.Grant(5000000)
+wait 1.5
+lua assert(GameDebug.Market('tower.vessari.small'))
+frames 3
+until GameDebug.Press('BuyNow')
+until GameDebug.Hangar('tower.vessari.small') == 1
+lua assert(GameDebug.Market('fuel.block'))
+frames 3
+lua GameDebug.Enter('Quantity', 100)
+frames 2
+until GameDebug.Press('BuyNow')
+until GameDebug.Hangar('fuel.block') == 100
+# Sealing charges are sold where fuel is.
+lua assert(GameDebug.Market('fuel.seal'), 'the market should have sealing charges')
+frames 3
+lua GameDebug.Enter('Quantity', 2)
+frames 2
+until GameDebug.Press('BuyNow')
+until GameDebug.Hangar('fuel.seal') == 2
+until GameDebug.Press('Fitting')
+frames 3
+until GameDebug.Press('ToHold:tower.vessari.small')
+until GameDebug.Hold('tower.vessari.small') == 1
+until GameDebug.Press('ToHold:fuel.block')
+until GameDebug.Hold('fuel.block') == 100
+until GameDebug.Press('ToHold:fuel.seal')
+until GameDebug.Hold('fuel.seal') == 2
+
+# To a moon, the tower anchored there, moored at, fuelled and charged.
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua GameDebug.TimeScale(30)
+lua _G.warped = GameDebug.Order('WarpTo', 'moon')
+until not _G.warped or GameDebug.InWarp()
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Select('moon'), 'no moon to select')
+frames 3
+until GameDebug.Press('Anchor tower')
+until GameDebug.Tower() == 'anchoring'
+lua GameDebug.TimeScale(10)
+until GameDebug.Tower() == 'dark'
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Siege() == 1, 'an anchored tower should have its shield, whole')
+lua assert(GameDebug.Select('Control Tower'), 'what stands for the tower should be on the overview')
+lua assert(GameDebug.Order('Dock', 'Starbase'), 'the tower refused its owner')
+until GameDebug.Docked()
+frames 3
+until GameDebug.Press('Fuel:hold')
+until GameDebug.Tower() == 'lit'
+until GameDebug.Press('Seal:hold')
+until select(2, GameDebug.Siege()) == 2
+lua assert(GameDebug.Hold('fuel.seal') == 0, 'the charges should be out of the hold')
+
+# They come to bring it down, and with the pilot moored there it is a
+# pack that arrives.
+lua GameDebug.Peaceful(false)
+lua assert(GameDebug.Besiege(6))
+until select(4, GameDebug.Siege()) == 6
+frames 10
+lua assert(GameDebug.Tower() == 'lit' and select(3, GameDebug.Siege()) == 0, 'it should not have sealed yet')
+
+# Its shield under a quarter: it seals, for an hour a charge. They go,
+# and it gives nothing.
+lua assert(GameDebug.TowerHit(0.2))
+until select(3, GameDebug.Siege()) > 0
+lua assert(select(3, GameDebug.Siege()) > 7000 and select(3, GameDebug.Siege()) <= 7200, 'two charges should seal it for two hours')
+lua assert(select(2, GameDebug.Siege()) == 0, 'the charges should be burnt')
+lua assert(select(4, GameDebug.Siege()) == 6, 'those who came will be back')
+lua assert(GameDebug.Tower() == 'dark', 'a sealed tower gives nothing')
+
+# A destroyer for the pilot, the tower opened, and they are back: seen
+# off, every one of them, the siege is broken and the tower stands.
+lua assert(GameDebug.Fly('destroyer.halberd', true), 'no destroyer')
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 5
+lua assert(GameDebug.Pirates() == 0, 'those who came should have gone when it sealed')
+lua assert(not GameDebug.Lock('Control Tower'), 'a sealed tower should not be locked')
+lua assert(GameDebug.Unseal())
+until select(3, GameDebug.Siege()) == 0 and GameDebug.Pirates() >= 1
+lua GameDebug.TimeScale(8)
+patience 500
+until GameDebug.Engage() == 0 and select(4, GameDebug.Siege()) == 0
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Tower() == 'lit', 'the tower should stand, and be lit again')
+lua assert(GameDebug.Hull() == 'destroyer.halberd', 'the destroyer should have come through it')
+
+# Once more, and what stands for it is destroyed: the tower is lost.
+lua assert(GameDebug.Besiege(9))
+until select(4, GameDebug.Siege()) == 9
+lua assert(GameDebug.TowerHit(0))
+until GameDebug.Tower() == 'none'
+frames 5
+lua assert(GameDebug.InSpace(), 'the pilot should still be out in space')
+lua assert(not GameDebug.Select('Starbase'), 'the tower should be off the overview')
+lua assert(GameDebug.Select('Control Tower Wreck'), 'what is left of it should lie where it was')
+
+echo siege scenario passed
+quit

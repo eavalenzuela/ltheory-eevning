@@ -71,6 +71,8 @@ for _, module in Structures.modules do
 end
 byId[Structures.FUEL.id] = { id = Structures.FUEL.id, name = Structures.FUEL.name, category = "structure",
   volume = Structures.FUEL.volume, basePrice = Structures.FUEL.basePrice }
+byId[Structures.SEAL.id] = { id = Structures.SEAL.id, name = Structures.SEAL.name, category = "structure",
+  volume = Structures.SEAL.volume, basePrice = Structures.SEAL.basePrice }
 
 -- What a colony takes out of a planet and makes of it, and the command
 -- centre a colony starts from.

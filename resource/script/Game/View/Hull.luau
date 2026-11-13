@@ -3015,6 +3015,34 @@ local function rigOf(size: number): (b: Builder) -> ()
   end
 end
 
+-- What stands for a pilot's control tower where it is shot at
+-- (Assets/Starbases): the tower itself is drawn as a station is, and
+-- this is the collar of shield emitters round its waist: a ring of
+-- girder with an emitter at every third joint, lit, on spokes from a
+-- hub. Bigger towers have more to the ring.
+local function collarOf(size: number): (b: Builder) -> ()
+  return function(b: Builder)
+    local joints = 9 + 3 * size
+    local function at(index: number, out: number): vector
+      local angle = index * 2 * math.pi / joints
+      return v(math.cos(angle) * out, 0, math.sin(angle) * out)
+    end
+    for index = 0, joints - 1 do
+      beam(b, FRAME, at(index, 0.95), at(index + 1, 0.95), 0.022, 0.1)
+      if index % 3 == 0 then
+        block(b, PLATING, at(index, 0.95), v(0.07, 0.11, 0.07), v(-index * 2 * math.pi / joints, 0, 0), 0.2)
+        block(b, GLOW, at(index, 0.95) + v(0, 0.118, 0), v(0.04, 0.008, 0.04), nil, 0.5)
+        block(b, GLOW, at(index, 0.95) - v(0, 0.118, 0), v(0.04, 0.008, 0.04), nil, 0.5)
+        beam(b, FRAME, at(index, 0.12), at(index, 0.88), 0.014, 0.1)
+      end
+    end
+    block(b, FRAME, v(0, 0, 0), v(0.10, 0.10, 0.10), v(0, 0, math.pi / 4), 0.3)
+  end
+end
+for size = 1, 3 do
+  designs[`works.tower.{size}`] = { faction = "civil", draw = collarOf(size), sheets = 3.0, turrets = {}, launchers = {}, fit = {} }
+end
+
 for size = 1, 4 do
   designs[`works.rig.{size}`] = { faction = "civil", draw = rigOf(size), sheets = 3.0 + 0.6 * size, turrets = {}, launchers = {}, fit = {} }
 end

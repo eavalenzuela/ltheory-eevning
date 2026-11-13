@@ -433,6 +433,15 @@ local function ward(state: State.State, system: number, grid: number): State.Bal
       end
     end
   end
+  -- (and a pilot's tower that somebody has come to bring down: what
+  -- stands for it there, unless it has sealed itself. Tactical/Raids)
+  local tower = state.starbases[grid]
+  if tower and tower.siege > 0 and not (tower.sealed ~= 0 and state.tick < tower.sealed) then
+    local core = state.balls[tower.core]
+    if core and core.system == system and core.grid == grid then
+      return core
+    end
+  end
   return nil
 end
 

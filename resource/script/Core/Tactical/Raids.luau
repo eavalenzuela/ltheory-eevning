@@ -18,12 +18,35 @@
 --     up. They carry off a share of the moon material in the tower's
 --     hangar, the bigger the more they outmatch the defence (never all
 --     of it), and the drill is out for an hour.
--- Nothing else of the pilot's is touched, and the tower stands: a raid
--- is after what can be carried, and what a drill brings up is lying in
--- the open.
+-- Nothing else of the pilot's is touched, and the tower stands: such a
+-- raid is after what can be carried, and what a drill brings up is
+-- lying in the open.
 --
--- (Every figure is a first proposal. Not yet: a raid that takes a
--- tower down, or a tower that holds out on a timer.)
+-- Where nobody keeps order at all, a raid the defence does not match is
+-- no robbery: it is a siege. They have come to bring the tower down.
+--   - A tower has a shield, armour and a structure (Data/Structures),
+--     and a thing at its heart that stands for it where it is shot at
+--     (its core: Assets/Starbases). With the pilot there the pack
+--     arrives and most of it goes for the core; it is fought as any
+--     fight is.
+--   - When its shield is down to a quarter (Raids.QUARTER), a lit tower
+--     with sealing charges aboard seals itself: an hour for each charge.
+--     Sealed, nothing can touch it and it does nothing; those who came
+--     go away. They are back the moment it opens, with its shield where
+--     it was: that is the pilot's warning, and the time they have to be
+--     there with whatever they can bring.
+--   - With the pilot somewhere else it is settled at once: the first
+--     time, the shield is brought to the quarter and the tower seals,
+--     if it can; and when they come back, a defence that matches them
+--     sees them off, and one that does not loses the tower.
+--   - A tower with no charge to burn does not seal. One whose core is
+--     destroyed is lost: the tower, what was anchored on it and what
+--     was in its hangars, all of it. A ship moored there is put out
+--     into space, and one left there is found at the home station.
+-- A tower that has seen a siege off mends: its shield by itself, and
+-- its armour and structure a twentieth an hour while it is lit.
+--
+-- (Every figure is a first proposal.)
 
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
@@ -56,6 +79,11 @@ Raids.PATROL = { frigate = 1, destroyer = 2, cruiser = 4, battleship = 8 } :: { 
 -- drill is out after they have been (seconds).
 Raids.MOST = 0.8
 Raids.DOWN = 3600
+-- The share of its shield at which a tower seals itself, and comes out
+-- with; and the share of its armour and structure a lit tower mends in
+-- an hour.
+Raids.QUARTER = 0.25
+Raids.MEND = 0.05
 
 -- How safe a starbase's system is: "secure", "low" or "lawless".
 function Raids.Band(state: State.State, starbase: State.Starbase): string
@@ -111,22 +139,178 @@ local function present(state: State.State, starbase: State.Starbase): boolean
   return ball ~= nil and ball.grid == starbase.id and ball.system == Space.SystemOf(state, starbase.id)
 end
 
--- Once a tick: a raid that is due comes.
+-- Those who came for a starbase go: there is nothing for them to shoot at.
+local function withdraw(state: State.State, id: number, events: { Event })
+  for _, pilotId in table.clone(state.pilotIds) do
+    local pilot = state.pilots[pilotId]
+    local ball = state.balls[pilotId]
+    if pilot.home == id and ball then
+      Space.RemoveBall(state, ball)
+      for _, item in Items.In(state, pilotId, nil) do
+        Items.Take(state, item, item.quantity)
+      end
+      state.ships[pilotId] = nil
+      State.RemoveId(state.shipIds, pilotId)
+      state.pilots[pilotId] = nil
+      State.RemoveId(state.pilotIds, pilotId)
+      table.insert(events, { kind = "BallRemoved", ball = pilotId, reason = "left" })
+    end
+  end
+end
+
+-- A tower seals itself, if it can: lit, with a charge to burn. An hour
+-- for each charge it has; those who came for it go, and are back when
+-- it opens. True if it did.
+function Raids.Seal(state: State.State, starbase: State.Starbase, events: { Event }): boolean
+  if starbase.charges <= 0 or not Starbases.Lit(state, starbase) then
+    return false
+  end
+  local hours = starbase.charges
+  starbase.sealed = state.tick + hours * HOUR
+  starbase.charges = 0
+  local core = state.balls[starbase.core]
+  if core then
+    core.vitals.shield = math.max(core.vitals.shield, Raids.QUARTER * core.vitals.shieldMax)
+  end
+  withdraw(state, starbase.id, events)
+  table.insert(events, { kind = "TowerSealed", station = starbase.id, hours = hours, opens = starbase.sealed, strength = starbase.siege })
+  return true
+end
+
+-- A tower is lost: brought down, with what was anchored on it and what
+-- was in its hangars. A ship of the pilot's moored there is put out
+-- into space where it was; any other of theirs is found at the home
+-- station.
+function Raids.Lose(state: State.State, starbase: State.Starbase, events: { Event })
+  local id = starbase.id
+  local object = Space.Object(state, id)
+  local name = if object then object.name else "the tower"
+  local mine = state.ships[state.player.ship]
+  if mine and mine.docked == id then
+    Space.Apply(state, { kind = "Undock", actor = mine.id }, events)
+  end
+  for _, shipId in state.shipIds do
+    local ship = state.ships[shipId]
+    if ship.docked == id then
+      ship.docked = state.player.home
+    end
+  end
+  local lost = 0
+  for _, item in Items.Stored(state, id) do
+    lost += 1
+    Items.Take(state, item, item.quantity)
+  end
+  for _, jobId in table.clone(state.jobIds) do
+    if state.jobs[jobId].station == id then
+      state.jobs[jobId] = nil
+      State.RemoveId(state.jobIds, jobId)
+    end
+  end
+  withdraw(state, id, events)
+  local modules = #starbase.modules
+  Starbases.Remove(state, id, events)
+  table.insert(events, { kind = "TowerLost", station = id, name = name, tower = starbase.tower, modules = modules, stacks = lost })
+end
+
+-- A ship has been destroyed: if it was what stands for a tower under
+-- fire, the tower is lost.
+function Raids.CoreLost(state: State.State, ship: number, events: { Event })
+  local starbase = Starbases.OfCore(state, ship)
+  if starbase then
+    starbase.core = 0
+    Raids.Lose(state, starbase, events)
+  end
+end
+
+-- Whether a starbase is under siege: somebody has come to bring it
+-- down, and is there or will be back.
+function Raids.Besieged(state: State.State, starbase: State.Starbase): boolean
+  return starbase.siege > 0
+end
+
+-- Once a tick: a tower that was sealed opens; one whose shield is failing
+-- seals; a raid that is due comes; and a lit tower mends.
 function Raids.Step(state: State.State, events: { Event })
-  for _, id in state.starbaseIds do
+  for _, id in table.clone(state.starbaseIds) do
     local starbase = state.starbases[id]
     local band = Raids.Band(state, starbase)
     local ranges = Raids.STRENGTH[band]
-    if ranges == nil or not Starbases.Anchored(state, starbase) then
+    local core = state.balls[starbase.core]
+    -- Sealed, and its time is up: it opens, with its shield where it
+    -- was, and those who came for it are back.
+    if starbase.sealed ~= 0 and state.tick >= starbase.sealed then
+      starbase.sealed = 0
+      if core then
+        core.vitals.shield = Raids.QUARTER * core.vitals.shieldMax
+      end
+      table.insert(events, { kind = "TowerOpened", station = id, siege = starbase.siege > 0 })
+      if starbase.siege > 0 then
+        starbase.raid = state.tick
+      end
+    end
+    local sealed = Starbases.Sealed(state, starbase)
+    -- Under fire, with its shield down to the quarter: it seals, if it can.
+    if core and not sealed and core.vitals.shield <= Raids.QUARTER * core.vitals.shieldMax and starbase.siege > 0 then
+      sealed = Raids.Seal(state, starbase, events)
+    end
+    -- (and a lit tower mends: a twentieth of its armour and structure an hour)
+    if core and Starbases.Lit(state, starbase) and (state.tick + id) % HOUR == 0 then
+      core.vitals.armor = math.min(core.vitals.armorMax, core.vitals.armor + Raids.MEND * core.vitals.armorMax)
+      core.vitals.hull = math.min(core.vitals.hullMax, core.vitals.hull + Raids.MEND * core.vitals.hullMax)
+    end
+    if sealed then
+      -- (nobody comes for a sealed tower: there is nothing to be had)
+    elseif (ranges == nil and starbase.siege == 0) or not Starbases.Anchored(state, starbase) then
       starbase.raid = 0
     elseif starbase.raid == 0 then
       starbase.raid = due(state, starbase)
     elseif state.tick >= starbase.raid and not state.peaceful then
       local rng = Rng.For(state.historySeed, starbase.id, starbase.raids, 823)
-      local strength = ranges[1] + Rng.Int(rng, ranges[2] - ranges[1] + 1)
+      -- (those who were sent away by its sealing are the same who come back)
+      local back = starbase.siege > 0
+      local strength = if back or ranges == nil then starbase.siege else ranges[1] + Rng.Int(rng, ranges[2] - ranges[1] + 1)
       local defence = Raids.Defence(state, starbase)
       local station = Space.Object(state, id)
-      if present(state, starbase) and station then
+      -- Where nobody keeps order, a raid the defence does not match is
+      -- a siege: they have come for the tower itself.
+      local siege = back or (band == "lawless" and defence < strength and core ~= nil)
+      local here = present(state, starbase) and station ~= nil
+      starbase.raids += 1
+      starbase.raid = due(state, starbase)
+      if siege and here and station then
+        -- The pilot is there: they come, and it is fought. Most of them
+        -- go for the tower (Tactical/Pirates).
+        starbase.siege = strength
+        Pirates.Arrive(state, Space.SystemOf(state, id), station, band, false, events)
+        table.insert(events, { kind = "TowerRaided", station = id, outcome = "siege", strength = strength, defence = defence, taken = 0,
+          back = back })
+      elseif siege and back then
+        -- They are back, and nobody is there but what the tower has.
+        starbase.siege = 0
+        if defence >= strength then
+          table.insert(events, { kind = "TowerRaided", station = id, outcome = "beaten", strength = strength, defence = defence, taken = 0,
+            back = true })
+        else
+          table.insert(events, { kind = "TowerRaided", station = id, outcome = "lost", strength = strength, defence = defence, taken = 0,
+            back = true })
+          Raids.Lose(state, starbase, events)
+        end
+      elseif siege then
+        -- The first time, with nobody there: its shield is brought to
+        -- the quarter, and it seals if it can. One that cannot is lost.
+        starbase.siege = strength
+        table.insert(events, { kind = "TowerRaided", station = id, outcome = "siege", strength = strength, defence = defence, taken = 0,
+          back = false })
+        if core then
+          core.vitals.shield = Raids.QUARTER * core.vitals.shieldMax
+        end
+        if not Raids.Seal(state, starbase, events) then
+          starbase.siege = 0
+          table.insert(events, { kind = "TowerRaided", station = id, outcome = "lost", strength = strength, defence = defence, taken = 0,
+            back = false })
+          Raids.Lose(state, starbase, events)
+        end
+      elseif here and station then
         -- The pilot is there: they come, and it is fought.
         Pirates.Arrive(state, Space.SystemOf(state, id), station, band, false, events)
         table.insert(events, { kind = "TowerRaided", station = id, outcome = "fought", strength = strength, defence = defence, taken = 0 })
@@ -156,12 +340,25 @@ function Raids.Step(state: State.State, events: { Event })
         table.insert(events, { kind = "TowerRaided", station = id, outcome = "robbed", strength = strength, defence = defence,
           taken = taken, type = type })
       end
-      starbase.raids += 1
-      starbase.raid = due(state, starbase)
     elseif state.tick >= starbase.raid then
       -- (a game with no pirates in it has no raids: ask again later)
       starbase.raids += 1
       starbase.raid = due(state, starbase)
+    end
+    -- A siege that was fought is over when nobody of it is left and the
+    -- tower is not sealed: they have been seen off. (Not in the moment
+    -- before they come, or come back.)
+    local coming = starbase.raid ~= 0 and state.tick >= starbase.raid
+    if state.starbases[id] and starbase.siege > 0 and not Starbases.Sealed(state, starbase) and not coming
+      and state.tick > (state.spawned[id] or 0) + 2 then
+      local about = false
+      for _, pilotId in state.pilotIds do
+        about = about or (state.pilots[pilotId].home == id and state.balls[pilotId] ~= nil)
+      end
+      if not about then
+        starbase.siege = 0
+        table.insert(events, { kind = "SiegeBroken", station = id })
+      end
     end
   end
 end

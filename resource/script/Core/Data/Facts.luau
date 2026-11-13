@@ -538,6 +538,11 @@ function Facts.Of(type: string): Sheet?
       row(has, "CPU", `{whole(tower.cpu)} tf`)
       row(has, "Burns", `{tower.fuel} blocks an hour`, Structures.FUEL.id)
       row(has, "Anchors in", seconds(tower.anchor))
+      local stands = section(sheet, "Under fire")
+      row(stands, "Shield", whole(tower.shield))
+      row(stands, "Armour", whole(tower.armor))
+      row(stands, "Structure", whole(tower.hull))
+      row(stands, "Seals for", `{tower.bay} hours at most: a charge an hour`, Structures.SEAL.id)
     elseif anchored then
       sheet.kind = "Structure module"
       sheet.note = "Anchored inside a tower's field and run from the tower's power. Whoever built the tower, the module is the same."

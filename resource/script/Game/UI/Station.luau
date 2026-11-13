@@ -1738,7 +1738,9 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
     Session.Do(session, { kind = "UnanchorTower", actor = 0 })
   end
   line += 30
-  if status.lit then
+  if status.sealed > 0 then
+    Im.Text(`SEALED: nothing can touch it, and it does nothing. It opens in {Format.Duration(status.sealed)}.`, left, line, 13, Im.WARN)
+  elseif status.lit then
     Im.Text("Lit: its field is up and its modules have power.", left, line, 13, GOOD)
   else
     Im.Text("DARK: no fuel. Its field is down and its modules give nothing.", left, line, 13, Im.WARN)
@@ -1793,6 +1795,28 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
       elseif status.defence >= status.raidLeast then Im.TEXT else Im.WARN)
     Im.TextRight(`raids here come {status.raidLeast} to {status.raidMost} strong`, left + 400, line, 13, Im.DIM)
   end
+  line += 20
+  -- Under fire: what is left of its shield, its armour and its
+  -- structure, the sealing charges it has, and who is after it.
+  local function share(value: number): string
+    return `{math.ceil(value * 100)}%`
+  end
+  local hurt = status.shield < 0.999 or status.armor < 0.999 or status.hull < 0.999
+  Im.Text(`Shield {share(status.shield)}   armour {share(status.armor)}   structure {share(status.hull)}`, left, line, 13,
+    if hurt then Im.WARN else Im.DIM)
+  Im.TextRight(`sealing charges {status.charges} / {status.bay}`, left + 400, line, 13,
+    if status.charges == 0 and status.besieged then Im.WARN else Im.DIM)
+  line += 20
+  if status.siege > 0 then
+    Im.Text(if status.sealed > 0 then `They will be back when it opens: {status.siege} strong against your {status.defence}.`
+      else `UNDER SIEGE: {status.siege} strong against your {status.defence}.`, left, line, 13, Im.WARN)
+  elseif status.besieged then
+    Im.Text(if status.charges > 0 then `A raid it does not match is a siege here: it seals for {status.charges} h at a quarter shield.`
+      else "A raid it does not match is a siege here, and with no charge it does not seal.", left, line, 13,
+      if status.charges > 0 then Im.DIM else Im.WARN)
+  else
+    Im.Text("Nobody comes to bring a tower down here.", left, line, 13, Im.DIM, 0.8)
+  end
   line += 26
 
   -- What is anchored round it.
@@ -1801,7 +1825,7 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
   if #status.modules == 0 then
     Im.Text("Nothing yet. A module to hand is anchored from the list on the right.", left, line, 13, Im.DIM, 0.8)
   end
-  local visible = 5
+  local visible = 4
   local first = Im.Scroll("anchored", left - 4, line, 420, visible * 26, #status.modules, visible)
   for row = 1, visible do
     local module = status.modules[row + first]
@@ -1832,7 +1856,7 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
   local hand: { { item: State.Item, where: string } } = {}
   for _, place in { "cargo", "hangar", "corporate" } do
     for _, item in Core.Query.Items(game, if place == "cargo" then player.ship else station, place) do
-      if item.type == Structures.FUEL.id or Structures.moduleById[item.type] then
+      if item.type == Structures.FUEL.id or item.type == Structures.SEAL.id or Structures.moduleById[item.type] then
         table.insert(hand, { item = item, where = if place == "cargo" then "hold" elseif place == "hangar" then "hangar" else "corporation" })
       end
     end
@@ -1856,10 +1880,12 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
     Info.Name(item.type, name, right + 26, line + 3, 13, Im.TEXT)
     Im.Text(`x{item.quantity}  {entry.where}`, right + 30 + Im.TextWidth(name, 13), line + 3, 12, Im.DIM)
     local fuel = item.type == Structures.FUEL.id
-    local command: State.Command = { kind = if fuel then "Fuel" else "AnchorModule", actor = 0, item = item.id }
+    -- (a sealing charge goes in its bay as fuel goes in its tank)
+    local seal = item.type == Structures.SEAL.id
+    local command: State.Command = { kind = if fuel or seal then "Fuel" else "AnchorModule", actor = 0, item = item.id }
     local can, whyNot = Session.CanDo(session, command)
-    if Im.Button(if fuel then "Fuel" else "Anchor", right + 250, line, 60, 21, can,
-      if fuel then `Fuel:{entry.where}` else `Anchor:{item.type}`) then
+    if Im.Button(if fuel then "Fuel" elseif seal then "Load" else "Anchor", right + 250, line, 60, 21, can,
+      if fuel then `Fuel:{entry.where}` elseif seal then `Seal:{entry.where}` else `Anchor:{item.type}`) then
       Session.Do(session, command)
     end
     if not can then

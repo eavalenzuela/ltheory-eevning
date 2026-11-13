@@ -12,6 +12,7 @@
 -- than 50%.
 
 local Factions = require("@lt/Core/Data/Factions")
+local Structures = require("@lt/Core/Data/Structures")
 
 export type ShipType = {
   id: string,
@@ -290,6 +291,23 @@ for level, rig in {
     cpu = 600, powergrid = 2000, highs = 0, mids = 2, lows = 3, turrets = 0, launchers = 0,
     capacitor = 2500, capacitorRecharge = 240,
     scanResolution = 320, lockRange = 60000, maxTargets = 3, cargo = 600,
+    restricted = true,
+  })
+end
+
+-- What stands for a pilot's control tower where it is shot at
+-- (Assets/Starbases, Tactical/Raids): a thing at the tower's heart with
+-- the tower's shield, armour and structure (Data/Structures), which
+-- nobody flies, sells or builds. Its shield comes back in three hours.
+for size, supply in Structures.SUPPLY do
+  table.insert(types, {
+    id = `works.tower.{size}`, name = `{({ "Small", "Medium", "Large" })[size]} Control Tower`, class = "works", lineage = "", basePrice = supply.basePrice, volume = 1000000,
+    mass = 400000000 * size, inertia = 1, maxVelocity = 0, warpSpeed = 1, radius = 150 + 100 * size,
+    shield = supply.shield, armor = supply.armor, hull = supply.hull, shieldRecharge = 10800,
+    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 2000 * size,
+    cpu = 600, powergrid = 2000, highs = 0, mids = 0, lows = 0, turrets = 0, launchers = 0,
+    capacitor = 2500, capacitorRecharge = 240,
+    scanResolution = 100, lockRange = 60000, maxTargets = 1, cargo = 0,
     restricted = true,
   })
 end

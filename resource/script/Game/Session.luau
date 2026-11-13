@@ -250,9 +250,29 @@ function Session.Notice(session: Session, event: Space.Event)
         .. `. Its defence was {event.defence} against {event.strength}`)
     elseif event.outcome == "beaten" then
       Session.Say(session, `Pirates came for {name} and were beaten off: its defence was {event.defence} against {event.strength}`)
+    elseif event.outcome == "siege" then
+      Session.Say(session, if event.back then `SIEGE: they are back for {name}, {event.strength} strong against its {event.defence}`
+        else `SIEGE: pirates have come to bring {name} down, {event.strength} strong against its {event.defence}`)
+    elseif event.outcome == "lost" then
+      -- (said by the loss itself)
+      return
     else
       Session.Say(session, `Pirates have come for {name}`)
     end
+  elseif kind == "TowerSealed" then
+    local body = Core.Query.Body(session.game, event.station)
+    Session.Say(session, `{if body then body.name else "Your tower"} has SEALED itself for {event.hours} {if event.hours == 1 then "hour" else "hours"}: `
+      .. `nothing can touch it, and they will be back when it opens`)
+  elseif kind == "TowerOpened" then
+    local body = Core.Query.Body(session.game, event.station)
+    Session.Say(session, `{if body then body.name else "Your tower"} has opened` .. (if event.siege then ": they are coming back for it" else ""))
+  elseif kind == "TowerLost" then
+    Session.Say(session, `LOST: {event.name} has been brought down, with what was anchored on it and what was in its hangars`)
+  elseif kind == "SiegeBroken" then
+    local body = Core.Query.Body(session.game, event.station)
+    Session.Say(session, `The siege of {if body then body.name else "your tower"} is broken: nobody of them is left`)
+  elseif kind == "StarbaseCharged" then
+    Session.Say(session, `Sealing charges aboard: {event.charges}`)
   elseif kind == "MoonDrilled" and event.full then
     local body = Core.Query.Body(session.game, event.station)
     Session.Say(session, `{if body then body.name else "A tower"} has no room for more {Types.Info(event.type).name}: its drill stands idle`)

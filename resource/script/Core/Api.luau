@@ -81,7 +81,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 61
+Core.SAVE_VERSION = 62
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -315,6 +315,17 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- 59: a corporation keeps its books by head, and a tower keeps count
   -- of its running. A save from before has what was earned and spent
   -- under no head, and its towers begin their count now.
+  -- 62: a tower can be shot at, seals itself and can be lost. One of a
+  -- save from before has nothing to seal with and nobody after it, and
+  -- is given what stands for it under fire as the game goes on.
+  [61] = function(state: any)
+    for _, starbase in state.starbases do
+      starbase.core = starbase.core or 0
+      starbase.charges = starbase.charges or 0
+      starbase.sealed = starbase.sealed or 0
+      starbase.siege = starbase.siege or 0
+    end
+  end,
   -- 61: a hauler's round can carry to several stations. None of a save
   -- from before does.
   [60] = function(state: any)
@@ -1062,7 +1073,9 @@ function Query.Overview(game: Game): { Entry }
     if id ~= me.id and ball.system == me.system and ball.grid == me.grid and me.grid ~= 0 then
       local entry: Entry = { id = id, kind = ball.kind :: string, name = ball.name,
         distance = Space.Gap(me :: any, ball :: any), onGrid = true, variety = state.ships[id].type,
-        hostile = state.ships[id].owner == "pirates" or state.pilots[id] ~= nil, own = state.ships[id].owner == "player",
+        -- (what stands for the pilot's tower under fire is theirs, as their ships are)
+        hostile = state.ships[id].owner == "pirates" or state.pilots[id] ~= nil,
+        own = state.ships[id].owner == "player" or state.ships[id].owner == "starbase",
         veiled = Vapour.In(state, ball) }
       table.insert(entries, entry)
     end
@@ -1587,6 +1600,15 @@ export type StarbaseStatus = {
   raidLeast: number, raidMost: number,
   -- Its running since it was anchored, priced (Starbases.Running).
   running: Starbases.Running,
+  -- Under fire (Tactical/Raids): how much of its shield, armour and
+  -- structure is left, each 0 to 1; the sealing charges aboard and how
+  -- many its bay holds; the seconds it stays sealed (0 when it is not);
+  -- how strong those are who have come to bring it down (0 when nobody
+  -- has); the ship that stands for it where it is shot at (0 before it
+  -- is anchored); and whether a raid nobody meets would be a siege (it
+  -- is where nobody keeps order).
+  shield: number, armor: number, hull: number,
+  charges: number, bay: number, sealed: number, siege: number, core: number, besieged: boolean,
 }
 function Query.Starbase(game: Game, id: number): StarbaseStatus?
   local state = game.state
@@ -1616,6 +1638,11 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
     defence = defence, batteries = batteries, patrol = patrol,
     raidLeast = if raids then raids[1] else 0, raidMost = if raids then raids[2] else 0,
     running = Starbases.Running(state, starbase),
+    shield = (select(1, Starbases.Health(state, starbase))), armor = (select(2, Starbases.Health(state, starbase))),
+    hull = (select(3, Starbases.Health(state, starbase))),
+    charges = starbase.charges, bay = Structures.towerById[starbase.tower].bay,
+    sealed = if Starbases.Sealed(state, starbase) then (starbase.sealed - state.tick) * Constants.TICK else 0,
+    siege = starbase.siege, core = starbase.core, besieged = Raids.Band(state, starbase) == "lawless",
   }
 end
 

@@ -459,6 +459,13 @@ export type Starbase = {
   -- the units its drill has brought up, and the units raiders have
   -- carried off.
   used: number, raised: number, robbed: number,
+  -- Under fire (Tactical/Raids). 'core' is the ship that stands for it
+  -- where it is shot at (0 until it is anchored); 'charges' the
+  -- sealing charges aboard; 'sealed' the tick it comes out of being
+  -- sealed (0 when it is not); and 'siege' how strong those are who
+  -- have come to bring it down, and will be back when it opens (0
+  -- when nobody has).
+  core: number, charges: number, sealed: number, siege: number,
 }
 
 export type State = {

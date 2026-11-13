@@ -47,6 +47,11 @@ export type Tower = {
   anchor: number,       -- seconds it takes to anchor
   volume: number,       -- m3, packed
   basePrice: number,
+  -- What it takes to bring it down: its shield, its armour and its
+  -- structure. And how many sealing charges it holds: an hour sealed
+  -- for each (Assets/Starbases, Tactical/Raids).
+  shield: number, armor: number, hull: number,
+  bay: number,
 }
 
 -- What a module is for: the service it gives the tower's guests, or how
@@ -90,11 +95,18 @@ Structures.STORAGE = "array.storage"
 -- A tower by size. Its supply doubles with each size, and so does the
 -- fuel it burns (ten, twenty and forty blocks an hour).
 -- Packed, the largest still goes in the hold of any industrial.
+-- (What it takes to bring one down doubles too, near enough: a small
+-- tower's shield is a dozen battleships', and a pack that has it to
+-- itself is some minutes getting it to the quarter where it seals.)
 local SUPPLY = {
-  { powergrid = 1500, cpu = 2000, field = 3000, fuel = 10, anchor = 60, volume = 1500, basePrice = 2000000 },
-  { powergrid = 3000, cpu = 4000, field = 5000, fuel = 20, anchor = 120, volume = 2500, basePrice = 5000000 },
-  { powergrid = 6000, cpu = 8000, field = 7000, fuel = 40, anchor = 240, volume = 3600, basePrice = 12000000 },
+  { powergrid = 1500, cpu = 2000, field = 3000, fuel = 10, anchor = 60, volume = 1500, basePrice = 2000000,
+    shield = 120000, armor = 40000, hull = 40000, bay = 12 },
+  { powergrid = 3000, cpu = 4000, field = 5000, fuel = 20, anchor = 120, volume = 2500, basePrice = 5000000,
+    shield = 250000, armor = 80000, hull = 80000, bay = 18 },
+  { powergrid = 6000, cpu = 8000, field = 7000, fuel = 40, anchor = 240, volume = 3600, basePrice = 12000000,
+    shield = 500000, armor = 160000, hull = 160000, bay = 24 },
 }
+Structures.SUPPLY = SUPPLY
 
 local towers: { Tower } = {}
 for _, faction in Factions.list do
@@ -106,6 +118,7 @@ for _, faction in Factions.list do
         faction = faction.id, size = size, powergrid = SUPPLY[size].powergrid, cpu = SUPPLY[size].cpu,
         field = SUPPLY[size].field, fuel = SUPPLY[size].fuel, anchor = SUPPLY[size].anchor, volume = SUPPLY[size].volume,
         basePrice = SUPPLY[size].basePrice,
+        shield = SUPPLY[size].shield, armor = SUPPLY[size].armor, hull = SUPPLY[size].hull, bay = SUPPLY[size].bay,
       })
     end
   end
@@ -145,6 +158,13 @@ local colonyShips: { ColonyShip } = {
 
 -- What a tower burns. A block is a block, whoever's tower it is for.
 Structures.FUEL = { id = "fuel.block", name = "Fuel Block", volume = 2, basePrice = 300 }
+-- And what seals one: a charge is burnt for each hour a tower holds
+-- out sealed, when its shield is failing.
+Structures.SEAL = { id = "fuel.seal", name = "Sealing Charge", volume = 5, basePrice = 15000 }
+-- The hull that stands for a tower where it is shot at: by its size.
+function Structures.Core(tower: Tower): string
+  return `works.tower.{tower.size}`
+end
 
 Structures.towers = towers
 Structures.modules = modules

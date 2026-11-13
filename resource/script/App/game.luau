@@ -648,6 +648,61 @@ function Debug.CorpHangar(type: string): (number, number)
   return units, stacks
 end
 
+-- How the pilot's newest tower stands under fire: how much of its
+-- shield is left (0 to 1), the sealing charges aboard, the seconds it
+-- stays sealed (0 when it is not), and how strong those are who have
+-- come to bring it down (0 when nobody has). -1 and nothing for no
+-- tower.
+function Debug.Siege(): (number, number, number, number)
+  local state = session.game.state
+  local id = state.starbaseIds[#state.starbaseIds]
+  local status = if id then Core.Query.Starbase(session.game, id) else nil
+  if status == nil then
+    return -1, 0, 0, 0
+  end
+  return status.shield, status.charges, status.sealed, status.siege
+end
+
+-- Cheats, for a scripted siege of the pilot's newest tower, wherever it
+-- is. Besiege: those who would bring it down come now, so strong.
+-- TowerHit: its shield is brought to a share of what it has; with 0,
+-- what stands for it is destroyed, and the tower with it. Unseal: a
+-- sealed one opens in a moment. Each is false with no tower to do it to.
+function Debug.Besiege(strength: number): boolean
+  local state = session.game.state
+  local starbase = state.starbases[state.starbaseIds[#state.starbaseIds] or 0]
+  if starbase == nil then
+    return false
+  end
+  starbase.siege, starbase.raid = strength, state.tick + 1
+  return true
+end
+
+function Debug.TowerHit(share: number): boolean
+  local state = session.game.state
+  local starbase = state.starbases[state.starbaseIds[#state.starbaseIds] or 0]
+  local core = if starbase then state.balls[starbase.core] else nil
+  if core == nil then
+    return false
+  end
+  if share <= 0 then
+    Aftermath.Destroy(state, core.id, 0, session.game.events)
+  else
+    core.vitals.shield = share * core.vitals.shieldMax
+  end
+  return true
+end
+
+function Debug.Unseal(): boolean
+  local state = session.game.state
+  local starbase = state.starbases[state.starbaseIds[#state.starbaseIds] or 0]
+  if starbase == nil or starbase.sealed == 0 then
+    return false
+  end
+  starbase.sealed = state.tick + 2
+  return true
+end
+
 -- The level of a skill; -1 if it has not been learned.
 function Debug.Skill(id: string): number
   return session.game.state.skills[id] or -1

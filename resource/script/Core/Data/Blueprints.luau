@@ -274,6 +274,7 @@ for _, module in Structures.modules do
   add(module.id, module.name, MIX.ship, module.basePrice, 1, math.min(72000, 600 + module.basePrice // 200), STRUCTURE)
 end
 add(Structures.FUEL.id, Structures.FUEL.name, MIX.charge, Structures.FUEL.basePrice, 40, 120, FUEL)
+add(Structures.SEAL.id, Structures.SEAL.name, MIX.charge, Structures.SEAL.basePrice, 1, 300, FUEL)
 -- (a command centre is built as a small hull is, of nothing a colony
 -- makes: the first one has to come from somewhere)
 add(Planets.CENTRE.id, Planets.CENTRE.name, MIX.ship, Planets.CENTRE.basePrice, 1, 600, Components.HULL)

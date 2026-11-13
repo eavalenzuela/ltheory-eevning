@@ -12,6 +12,7 @@
 -- too, the pilot wakes at home in one.
 
 local Assault = require("@lt/Core/Tactical/Assault")
+local Raids = require("@lt/Core/Tactical/Raids")
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
@@ -131,6 +132,8 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     Assault.Fell(state, pilot.home, id, hull.class == "works", events)
   else
     Assault.Lost(state, id, events)
+    -- (and what stood for a pilot's tower under fire is the tower lost)
+    Raids.CoreLost(state, id, events)
   end
 
   -- (a bounty is on the pilot, not the hull: a scout in a patched frigate
