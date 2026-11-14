@@ -223,10 +223,15 @@ local turning = 0
 
 -- What the fitting screen draws of the ship: its hull first, then
 -- whatever stands on it, each with where it stands in the hull's units.
-export type Preview = { { model: Renderable | Model, transform: Transform } }
+export type Preview = { { model: Renderable | Model, transform: Transform, at: vector, look: vector, up: vector, size: number } }
+
+-- ('show' draws the ship as it is in space, in a round window about a
+-- point: Scene.Showcase. Where it cannot, 'preview' is drawn the old
+-- way, as a hologram.)
+export type Show = (cx: number, cy: number, round: number) -> boolean
 
 local function drawWheel(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, cx: number, cy: number,
-  preview: Preview?)
+  preview: Preview?, show: Show?)
   local ship = player.ship
   local hull = player.hull
   local stats = Core.Query.Stats(game, ship)
@@ -234,7 +239,12 @@ local function drawWheel(session: Session.Session, game: Core.Game, player: Core
 
   -- The ship, turning.
   WidgetRenderer_DrawPanelRadial(vector.create(cx, cy), 0, RING - 28, 0, 1, vector.create(0.02, 0.03, 0.045), 0.9, 0.9, 0)
-  if preview and preview[1] then
+  if show and show(cx, cy, RING - 30) then
+    -- (the ship as it is in space: Scene.Showcase has drawn it)
+  elseif preview and preview[1] then
+    -- (A hull of no design of ours, which the scene cannot stand in
+    -- space for the fitting screen: a hologram of it, as every hull was
+    -- shown until 2026-11-13.)
     turning += 0.25 * FrameTimer_Get()
     local bound = Renderable_GetBound(preview[1].model)
     local size = bound.upper - bound.lower
@@ -479,7 +489,7 @@ local function drawFigures(game: Core.Game, player: Core.PlayerInfo, x: number, 
 end
 
 local function drawFitting(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number,
-  preview: Preview?)
+  preview: Preview?, show: Show?)
   local ship = player.ship
   local stats = Core.Query.Stats(game, ship)
 
@@ -639,7 +649,7 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
   if Im.Button("Info", cx + RING - 28, y + 74, 46, 21, true, `Info:{player.hull.id}`) then
     Info.Open(player.hull.id)
   end
-  drawWheel(session, game, player, cx, cy, preview)
+  drawWheel(session, game, player, cx, cy, preview, show)
 
   drawFigures(game, player, x + 672, y + 76, 252)
 end
@@ -2290,7 +2300,7 @@ end
 -- 'preview' is the player's ship as it is fitted, for the fitting
 -- screen to show (Scene.Dressed).
 function Station.Draw(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number,
-  preview: Preview?)
+  preview: Preview?, show: Show?)
   local width, height = Station.WIDTH, Station.HEIGHT
   local ship = player.ship
   local station = Core.Query.Body(game, player.docked)
@@ -2364,7 +2374,7 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
   elseif tab == "Starbase" and own then
     drawStarbase(session, game, player, own, x, y)
   else
-    drawFitting(session, game, player, x, y, preview)
+    drawFitting(session, game, player, x, y, preview, show)
   end
 
   -- What a pilot does here, whatever the tab.

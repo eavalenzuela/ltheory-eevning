@@ -1,0 +1,14 @@
+#include frag.jsl
+
+/* A picture shown in a round window of the interface
+   (WidgetRenderer_DrawPasses): what is outside the circle that just
+   fits the picture is not drawn, and its edge is soft. */
+
+uniform sampler2D texture;
+uniform float alpha;
+
+void main() {
+  vec2 c = uv * 2.0 - 1.0;
+  float mask = 1.0 - smoothstep(0.96, 1.0, length(c));
+  RETURN(vec4(texture2DLod(texture, uv, 0.0).xyz, alpha * mask));
+}

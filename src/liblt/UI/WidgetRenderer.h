@@ -41,6 +41,17 @@ DeclareFunction(WidgetRenderer_DrawRenderable, void,
   float, alpha,
   float, time)
 
+/* Render passes (a camera's, say) into a picture of 'size', and show
+   it at 'pos': the scene's own rendering in a window of the interface,
+   from whatever draws the interface (Widget_Rendered does the same for
+   a whole widget). 'round': only the circle that just fits it. */
+DeclareFunction(WidgetRenderer_DrawPasses, void,
+  Vector<RenderPass>, passes,
+  V2, pos,
+  V2, size,
+  float, alpha,
+  bool, round)
+
 DeclareFunction(WidgetRenderer_DrawTexture, void,
   Texture2D, texture,
   V2, pos,

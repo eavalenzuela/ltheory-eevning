@@ -1032,7 +1032,11 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         drawStatus(game, ball, navX - 232, bottom - 120)
       else
         local stationX = left + (w.size.x - Station.WIDTH) / 2
-        Station.Draw(session, game, player, stationX, top + 130, Scene.Dressed(game, player.ship, player.hull.id, player.hull.radius))
+        -- (the ship on the fitting screen is a thing of the scene, drawn as the scene draws: Scene.Showcase)
+        Station.Draw(session, game, player, stationX, top + 130, Scene.Dressed(game, player.ship, player.hull.id, player.hull.radius),
+          function(cx: number, cy: number, round: number): boolean
+            return Scene.Showcase(scene, game, player.ship, player.hull.id, player.hull.radius, cx, cy, round)
+          end)
         Info.Draw(stationX + Station.WIDTH + 12, top + 130)
       end
       -- (beside the ship's own panels in space, and in the same place docked)
