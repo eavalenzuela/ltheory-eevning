@@ -298,7 +298,8 @@ suite:Case("pirates shoot at a hired pilot's ship and at drones; a ship lost is 
   for index = 1, 3 do
     table.insert(pirates, Pirates.Spawn(state, Pirates.kindById["raider"], me.system, theirs.x + 3000 + 500 * index, theirs.y, theirs.z, me.grid))
   end
-  -- Each goes for the nearer ship of the pilot's side, which is the hired pilot's.
+  -- Each goes for the ship of the pilot's side with least left to lose, which is the hired pilot's (its shield is down).
+  theirs.vitals.shield = 0
   steps(game, 2)
   for _, pirate in pirates do
     t.eq(state.pilots[pirate.id].prey, theirs.id)
@@ -824,6 +825,53 @@ local function dronesOf(game: Core.Game, ship: number): (number, number)
   return aboard, #Drones.Out(game.state, ship)
 end
 
+suite:Case("a pack shoots at one ship: whoever has least left to lose, and whoever mends the others before anybody", function(t)
+  -- The player in a Courier and a hired pilot in a destroyer, which has three times as much to lose, with a
+  -- remote repairer aboard.
+  local game, second = docked("destroyer.jackal")
+  local state = game.state
+  Items.Equip(state, second.id, "remote.armor.small", nil)
+  hired(game, second, 2)
+  local me, theirs = adrift(game, second)
+  local function all(ball: State.Ball): number
+    return ball.vitals.shield + ball.vitals.armor + ball.vitals.hull
+  end
+  t.ok(all(theirs) > 2 * all(me))
+  -- A pack comes in from the destroyer's side, each of them nearer to it than to the Courier. (They are of the
+  -- sort that sees a fight through: breaking off is another case's.)
+  theirs.x = me.x + 3000
+  local pack: { State.Ball } = {}
+  for index = 1, 3 do
+    local raider = Pirates.Spawn(state, Pirates.kindById["raider"], me.system, theirs.x + 4000 + 700 * index, theirs.y + 900 * index,
+      theirs.z, me.grid)
+    state.pilots[raider.id].nerve = nil
+    table.insert(pack, raider)
+  end
+  steps(game, 2)
+  for _, raider in pack do
+    t.ok(Space.Distance(raider :: any, theirs :: any) < Space.Distance(raider :: any, me :: any))
+    t.eq(state.pilots[raider.id].prey, me.id, "every one of the pack should be after the Courier, which has least to lose")
+  end
+  -- The Courier's armour is knocked about, and the hired pilot begins to mend it. Whoever is mending is who a pack
+  -- wants gone: every one of them turns on the destroyer. (The Courier is kept from being finished meanwhile.)
+  me.vitals.armor = me.vitals.armorMax * 0.5
+  t.ok(waitFor(game, 60, function()
+    me.vitals.shield, me.vitals.hull = me.vitals.shieldMax, me.vitals.hullMax
+    me.vitals.armor = math.max(me.vitals.armor, me.vitals.armorMax * 0.3)
+    for _, running in theirs.vitals.running do
+      if running.target == me.id then
+        return true
+      end
+    end
+    return false
+  end), "the hired pilot did not start mending")
+  steps(game, 2)
+  for _, raider in pack do
+    t.eq(state.pilots[raider.id].prey, theirs.id, "the pack should have turned on the ship that is mending")
+    t.eq({ raider.mode, raider.target } :: { any }, { "orbit", theirs.id } :: { any })
+  end
+end)
+
 suite:Case("a hired pilot looses their own drones on whoever they fight, calls them in after, and does not leave them behind", function(t)
   local game, second = docked("destroyer.jackal")
   local state = game.state
@@ -839,6 +887,10 @@ suite:Case("a hired pilot looses their own drones on whoever they fight, calls t
   t.eq(Core.Query.Drones(game).out, 0)
   -- A raider turns up: the drones go out, as many as can be controlled, at whoever the pilot is fighting.
   local raider = Pirates.Spawn(state, Pirates.kindById.raider, me.system, me.x + 9000, me.y, me.z, me.grid)
+  -- (it is after the hired pilot's ship, as it would be if that were the one with least left to lose; and it is
+  -- one that sees a fight through, which is not what this is about)
+  state.pilots[raider.id].prey = theirs.id
+  state.pilots[raider.id].nerve = nil
   t.ok(waitFor(game, 30, function()
     return select(2, dronesOf(game, second.id)) == 2
   end), "the hired pilot's drones did not go out")

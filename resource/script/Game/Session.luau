@@ -170,6 +170,13 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, if event.success then `Invented: {Types.Info(event.product).name} is in the hangar`
       elseif event.used then "The invention came to nothing, and the run of the copy it was worked from is used up"
       else `The invention came to nothing: {Types.Info(event.blueprint).name} is back in the hangar`)
+  elseif kind == "PirateFleeing" or kind == "PirateFled" then
+    -- (only of a fight the pilot is at: a hired pilot's, somewhere else, is theirs to watch)
+    local me = Core.Query.Ball(session.game, mine)
+    if me and me.system == event.system and me.grid == event.grid then
+      Session.Say(session, if kind == "PirateFleeing" then `The {event.name} is breaking off: hold it or finish it, or it is gone`
+        else `The {event.name} got away`)
+    end
   elseif kind == "ContractAccepted" then
     Session.Say(session, `Bought by contract: {event.title}. It is in the hangar`)
   elseif kind == "ContractFilled" then

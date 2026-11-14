@@ -1634,6 +1634,27 @@ function Debug.Pirate(kind: string, far: number?, round: number?): boolean
   return true
 end
 
+-- A cheat: every pirate on the pilot's grid is brought down to a share
+-- of all it has (shield first, then armour, then hull), as if it had
+-- been shot that far. How many there were.
+function Debug.Maul(share: number): number
+  local state = session.game.state
+  local me = state.balls[state.player.ship]
+  local count = 0
+  for _, id in state.pilotIds do
+    local ball = state.balls[id]
+    if me and ball and ball.system == me.system and ball.grid == me.grid then
+      local v = ball.vitals
+      local keep = share * (v.shieldMax + v.armorMax + v.hullMax)
+      v.hull = math.min(v.hullMax, keep)
+      v.armor = math.min(v.armorMax, keep - v.hull)
+      v.shield = math.min(v.shieldMax, keep - v.hull - v.armor)
+      count += 1
+    end
+  end
+  return count
+end
+
 -- How many of the things a pirate camp is built of (hulls of the class
 -- "works") are on the pilot's grid, and how many of them the scene shows
 -- with weapons on them.

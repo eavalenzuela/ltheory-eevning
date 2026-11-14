@@ -220,6 +220,11 @@ export type Pilot = {
   alone: number,      -- ticks since the player was last on its grid
   bounty: number,     -- credits paid to whoever kills it
   tags: number,       -- pirate tags its wreck holds
+  -- How it fights (Tactical/Pirates): the share of itself it has to be
+  -- down to before it breaks off and warps away (nil: it never does),
+  -- and whether it is on its way out now.
+  nerve: number?,
+  fleeing: boolean?,
 }
 
 -- A ship of the traffic: a hauler coming "in" to dock at 'goal' or going

@@ -218,6 +218,152 @@ suite:Case("a mender keeps its pack whole: its repairers go on whichever pirate 
   t.ok(raider.vitals.armor > raider.vitals.armorMax * 0.2 + 100 or state.balls[raider.id] == nil, "the raider's armour was not put back")
 end)
 
+-- A game with the player's ship at rest in open space, a long way from
+-- anything.
+local function inOpenSpace(): (Core.Game, State.Ball)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  assert(Core.Submit(game, { kind = "Undock", actor = state.player.ship }))
+  Core.Step(game)
+  local me = state.balls[state.player.ship]
+  me.x += 4e6
+  me.vx, me.vy, me.vz = 0, 0, 0
+  Space.AssignGrid(state, me)
+  Core.TakeEvents(game)
+  return game, me
+end
+
+-- Bring a ship down to a share of all it has: its shield gone first,
+-- then its armour, then its hull.
+local function hurt(ball: State.Ball, share: number)
+  local v = ball.vitals
+  local keep = share * (v.shieldMax + v.armorMax + v.hullMax)
+  v.hull = math.min(v.hullMax, keep)
+  v.armor = math.min(v.armorMax, keep - v.hull)
+  v.shield = math.min(v.shieldMax, keep - v.hull - v.armor)
+end
+
+suite:Case("a pirate badly hurt breaks off and warps away, with what was on its head; held, it cannot, and fights on", function(t)
+  local game, me = inOpenSpace()
+  local state = game.state
+  local raider = Pirates.Spawn(state, Pirates.kindById["raider"], me.system, me.x + 3000, me.y, me.z, me.grid)
+  local pilot = state.pilots[raider.id]
+  t.eq({ pilot.nerve, pilot.fleeing } :: { any }, { Pirates.NERVE, nil } :: { any })
+  for _ = 1, 10 do
+    Core.Step(game)
+  end
+  t.eq({ pilot.prey, raider.mode } :: { any }, { me.id, "orbit" } :: { any })
+  -- Hurt, but not badly: it stays.
+  hurt(raider, Pirates.NERVE + 0.1)
+  Core.TakeEvents(game)
+  for _ = 1, 5 do
+    Core.Step(game)
+  end
+  t.eq({ pilot.fleeing, raider.warp } :: { any }, { nil, nil } :: { any })
+  -- Badly: it turns for somewhere far off, and says so to whoever is watching.
+  hurt(raider, Pirates.NERVE - 0.05)
+  local wallet = state.wallet
+  local fleeing, fled, removed = nil :: any, nil :: any, nil :: any
+  for _ = 1, 120 do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      fleeing = if event.kind == "PirateFleeing" then event else fleeing
+      fled = if event.kind == "PirateFled" then event else fled
+      removed = if event.kind == "BallRemoved" and event.ball == raider.id then event else removed
+    end
+    if fled then
+      break
+    end
+  end
+  t.eq({ fleeing.ball, fleeing.name } :: { any }, { raider.id, "Pirate Raider" } :: { any })
+  t.eq({ fled.ball, fled.name, removed.reason } :: { any }, { raider.id, "Pirate Raider", "fled" } :: { any })
+  -- It is gone, ship and all: no wreck, no bounty, and nothing of it left in the state.
+  t.eq({ state.balls[raider.id], state.ships[raider.id], state.pilots[raider.id], #state.wreckIds, state.wallet } :: { any },
+    { nil, nil, nil, 0, wallet } :: { any })
+
+  -- Another, with a warp disruptor on it: it cannot warp, and so it fights on. Let go, it is off.
+  local second = Pirates.Spawn(state, Pirates.kindById["raider"], me.system, me.x + 3000, me.y, me.z, me.grid)
+  local disruptor = Items.Equip(state, me.id, "disruptor.warp", nil)
+  state.skills["propulsion.jamming"] = 5
+  t.ok((Core.Submit(game, { kind = "LockTarget", actor = me.id, target = second.id })))
+  local held = false
+  for _ = 1, 60 do
+    Core.Step(game)
+    if not held then
+      held = (Core.Submit(game, { kind = "ActivateModule", actor = me.id, item = disruptor.id, target = second.id }))
+    end
+    if second.vitals.scrambled then
+      break
+    end
+  end
+  t.ok(second.vitals.scrambled, "the raider should be held")
+  hurt(second, 0.1)
+  Core.TakeEvents(game)
+  -- (both kept as they are: who would win is not what this is about)
+  local function hold()
+    if state.balls[second.id] then
+      hurt(second, 0.1)
+    end
+    me.vitals.shield, me.vitals.armor, me.vitals.hull = me.vitals.shieldMax, me.vitals.armorMax, me.vitals.hullMax
+    me.vitals.capacitor = me.vitals.capacitorMax
+  end
+  for _ = 1, 30 do
+    Core.Step(game)
+    hold()
+  end
+  t.ok(state.balls[second.id] ~= nil and second.warp == nil and state.pilots[second.id].fleeing == nil, "a pirate that is held cannot leave")
+  t.eq({ state.pilots[second.id].prey, second.mode } :: { any }, { me.id, "orbit" } :: { any })
+  t.ok((Core.Submit(game, { kind = "DeactivateModule", actor = me.id, item = disruptor.id })))
+  local away = false
+  for _ = 1, 120 do
+    Core.Step(game)
+    hold()
+    for _, event in Core.TakeEvents(game) do
+      away = away or (event.kind == "PirateFled" and event.ball == second.id)
+    end
+  end
+  t.ok(away, "let go, it should have got away")
+end)
+
+suite:Case("not everybody breaks off: a scout does not know when to, a captain will not, and nobody leaves what they are there to defend", function(t)
+  local game, me = inOpenSpace()
+  local state = game.state
+  local function nerveOf(kind: Pirates.Kind): number?
+    local ball = Pirates.Spawn(state, kind, me.system, me.x + 4e5, me.y, me.z, 0)
+    local nerve = state.pilots[ball.id].nerve
+    Aftermath.Destroy(state, ball.id, 0, game.events)
+    return nerve
+  end
+  local raider = Pirates.kindById["raider"]
+  t.eq(nerveOf(Pirates.SCOUT), nil)
+  t.eq(nerveOf(raider), Pirates.NERVE)
+  t.eq(nerveOf(Pirates.kindById["mender"]), Pirates.NERVE)
+  t.eq(nerveOf(Pirates.kindById["ravager"]), Pirates.NERVE)
+  t.eq(nerveOf(Pirates.Graded(raider, 1)), Pirates.NERVE, "a veteran knows when to go")
+  t.eq(nerveOf(Pirates.Graded(raider, 2)), nil, "a captain goes down with the ship")
+  t.eq(nerveOf(Pirates.kindById["battery"]), nil, "what stands where it was put has nowhere to go")
+  -- A scout, cut to pieces, is still there.
+  local scout = Pirates.Spawn(state, Pirates.SCOUT, me.system, me.x + 3000, me.y, me.z, me.grid)
+  for _ = 1, 40 do
+    Core.Step(game)
+    hurt(scout, 0.05)
+  end
+  t.ok(state.balls[scout.id] ~= nil and scout.warp == nil, "a scout should see it through")
+  Aftermath.Destroy(state, scout.id, 0, game.events)
+  -- A raider whose place is a job's camp: the job is to clear them out of it, and they stay to be cleared.
+  local camp = Pirates.Spawn(state, raider, me.system, me.x + 3000, me.y, me.z, me.grid)
+  local mission: any = { id = 4242, kind = "assault", site = me.grid, to = 0, rooms = { me.grid }, taken = state.tick, standing = 0,
+    faction = "", aim = "clear", need = 9, done = 0, mark = 0, waves = {}, wave = 0, ends = {}, level = 1, station = state.player.home,
+    system = me.system, type = "", reward = 0, agent = "", loyalty = 0, slot = 0, key = "" }
+  state.missions[4242] = mission
+  table.insert(state.missionIds, 4242)
+  for _ = 1, 40 do
+    Core.Step(game)
+    hurt(camp, 0.05)
+  end
+  t.ok(state.balls[camp.id] ~= nil and camp.warp == nil and state.pilots[camp.id].fleeing == nil, "a camp's pirate should stay in it")
+end)
+
 suite:Case("what comes follows from how safe the system is", function(t)
   for band, packs in Pirates.PACKS do
     local share = 0

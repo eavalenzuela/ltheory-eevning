@@ -91,8 +91,10 @@ local function fight(hullId: string, level: number, orbit: number, waves: { { st
   -- (the waves in turn, and then, with nobody left flying, what stands)
   for round = 1, #waves + (if #standing > 0 then 1 else 0) do
     for n, kind in waves[round] or {} :: { string } do
-      Pirates.Spawn(state, Pirates.kindById[kind], me.system, me.x + 30000 * math.cos(2.1 * n), me.y, me.z + 30000 * math.sin(2.1 * n),
-        me.grid)
+      local came = Pirates.Spawn(state, Pirates.kindById[kind], me.system, me.x + 30000 * math.cos(2.1 * n), me.y,
+        me.z + 30000 * math.sin(2.1 * n), me.grid)
+      -- (they are a camp's, as far as this goes, and a camp's see it through: nobody breaks off)
+      state.pilots[came.id].nerve = nil
     end
     for _ = 1, 3000 do
       if state.player.ship ~= id or state.balls[id] == nil then

@@ -1,0 +1,55 @@
+# A pirate that breaks off, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/breakoff.txt
+#
+# A pirate that is badly hurt turns for somewhere far off and warps:
+# gone, with what was on its head, unless it is held or finished first.
+# A warp disruptor is fitted to the starter Courier (the module and the
+# skill are given). Out at a belt in a peaceful game a raider is put by
+# the pilot's ship and brought down to a fifth of itself (two cheats):
+# it breaks off and gets away, and there is no wreck and no bounty.
+# Then another, with the disruptor on it: brought as low, it cannot
+# leave, and is still there to be fought.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Give('disruptor.warp', 1))
+lua GameDebug.Train('electronics', 2)
+lua GameDebug.Train('propulsion.jamming', 1)
+until GameDebug.Press('Fit:disruptor.warp')
+until GameDebug.Fitted('disruptor.warp') == 1
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
+until GameDebug.InWarp()
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Pirates() == 0, 'nobody comes in a peaceful game')
+
+# The first: hurt, it goes. No wreck, no bounty.
+lua assert(GameDebug.Pirate('raider', 4000))
+until GameDebug.Pirates() == 1
+wait 2
+lua _G.wallet = GameDebug.Wallet()
+lua assert(GameDebug.Maul(0.2) == 1)
+patience 120
+until GameDebug.Pirates() == 0
+lua assert(GameDebug.Count('wreck') == 0, 'a pirate that got away leaves no wreck')
+lua assert(GameDebug.Wallet() == _G.wallet, 'and pays nothing')
+lua assert(GameDebug.Hull() == 'frigate.courier', 'the pilot should have come through that')
+
+# The second, held: it cannot leave.
+lua assert(GameDebug.Pirate('raider', 4000))
+until GameDebug.Pirates() == 1
+lua assert(GameDebug.Lock('Pirate'), 'the lock was refused')
+until GameDebug.Locked() > 0
+lua assert(GameDebug.Fire() == 3, 'two guns and a disruptor should start')
+until select(2, GameDebug.Held('target'))
+lua assert(GameDebug.Maul(0.2) == 1)
+wait 12
+lua assert(GameDebug.Pirates() == 1 or GameDebug.Count('wreck') == 1, 'a pirate that is held does not get away')
+
+echo breakoff scenario passed
+quit

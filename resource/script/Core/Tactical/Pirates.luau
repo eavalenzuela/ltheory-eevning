@@ -28,6 +28,20 @@
 -- activate), so anything a pirate can do, a pilot can. They ignore
 -- capsules. A pack left alone for a few minutes goes away.
 --
+-- A pack fights as one. Of the ships of the pilot's side in front of
+-- it, it goes for whoever is mending the others, and failing that for
+-- whoever has least left to lose; and every one of the pack makes the
+-- same choice, so what it shoots is shot by all of it. (Each circles
+-- its prey from as far off as its kind likes to fight, which is where
+-- its guns are best: six kilometres for a cruiser and fifteen for a
+-- battleship. Standing farther off than that was tried, and holding
+-- still at that range: either way it did worse, for want of anything
+-- that reaches so far and still hits.) And one that is badly hurt breaks off, turns
+-- for somewhere far away and warps: gone, with what was on its head,
+-- unless it is held or finished first. (Not a scout, who is too green
+-- to know when, nor a captain, who would sooner go down with the ship;
+-- and nobody who is defending their own camp or tower.)
+--
 -- (When the strategic layer arrives, how many come and where will follow
 -- from pirate pressure in the system instead of these fixed rules.)
 
@@ -48,6 +62,10 @@ local System = require("@lt/Core/Describe/System")
 local Pirates = {}
 
 export type Event = { [string]: any }
+
+-- A pirate breaks off when it has this share of itself left (shield,
+-- armour and hull together).
+Pirates.NERVE = 0.25
 
 -- Ticks before a place that had pirates gets more.
 local RESPAWN = 1200
@@ -263,7 +281,10 @@ function Pirates.Spawn(state: State.State, kind: Kind, system: number, x: number
   local ship = Space.NewShip(state, kind.hull, kind.name, "pirates", 0)
   Pirates.Equip(state, ship, kind)
   local ball = Space.Launch(state, ship, system, x, y, z)
-  state.pilots[ship.id] = { ship = ship.id, range = kind.range, prey = 0, home = home, alone = 0, bounty = kind.bounty, tags = kind.tags }
+  state.pilots[ship.id] = { ship = ship.id, range = kind.range, prey = 0, home = home, alone = 0, bounty = kind.bounty, tags = kind.tags,
+    -- (what stands where it was put has nowhere to go, a scout does not
+    -- know when to, and a captain will not)
+    nerve = if kind.range > 0 and kind.id ~= "scout" and kind.grade ~= 2 then Pirates.NERVE else nil }
   table.insert(state.pilotIds, ship.id)
   return ball
 end
@@ -450,25 +471,49 @@ local function ward(state: State.State, system: number, grid: number): State.Bal
   return nil
 end
 
--- What a pirate here would go for: the nearest ship of the pilot's
--- side (their own, or a hired pilot's) that is worth shooting. One
--- pirate in three goes for a drone instead when any are out, and any
--- of them does when there is nothing else.
+-- Whether a ship is mending another: it has something running on
+-- somebody that is for a friend's shield or armour.
+local function mending(state: State.State, ball: State.Ball): boolean
+  for _, running in ball.vitals.running do
+    local item = state.items[running.item]
+    local module = if item then Modules.byId[item.type] else nil
+    if module and running.target ~= 0 and Modules.Mends(module) then
+      return true
+    end
+  end
+  return false
+end
+
+-- What a ship has left to lose: its shield, armour and hull together.
+local function left(ball: State.Ball): number
+  return ball.vitals.shield + ball.vitals.armor + ball.vitals.hull
+end
+
+-- What a pirate here would go for, of the ships of the pilot's side
+-- (their own, or a hired pilot's) that are worth shooting: whoever is
+-- mending the others, and failing that whoever has least left to lose.
+-- It is the same answer for every pirate of a pack, so a pack shoots at
+-- one thing. One pirate in three goes for a drone instead when any are
+-- out (the nearest to it), and any of them does when there is nothing
+-- else.
 local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
-  local best: State.Ball?, least = nil, math.huge
+  local best: State.Ball?, least, mends = nil, math.huge, false
   local drone: State.Ball?, droneLeast = nil, math.huge
   local function consider(other: State.Ball?, small: boolean)
     -- (what is cloaked is not there to be gone for)
     if other == nil or other.system ~= ball.system or other.grid ~= ball.grid or Combat.Cloaked(state, other.id) then
       return
     end
-    local far = Space.Distance(other :: any, ball :: any)
     if small then
+      local far = Space.Distance(other :: any, ball :: any)
       if far < droneLeast then
         drone, droneLeast = other, far
       end
-    elseif far < least and Ships.byId[state.ships[other.id].type].class ~= "capsule" then
-      best, least = other, far
+    elseif Ships.byId[state.ships[other.id].type].class ~= "capsule" then
+      local has, tends = left(other), mending(state, other)
+      if best == nil or (tends and not mends) or (tends == mends and (has < least or (has == least and other.id < best.id))) then
+        best, least, mends = other, has, tends
+      end
     end
   end
   consider(state.balls[state.player.ship], false)
@@ -515,13 +560,63 @@ function Pirates.Hunting(state: State.State, near: State.Ball): number
   return best
 end
 
+-- Whether a place is part of a job's camp, or where a job has pirates
+-- come (Tactical/Assault, seen here by the state alone): those who are
+-- there are there for the job, and see it through.
+local function camped(state: State.State, home: number): boolean
+  for _, id in state.missionIds do
+    local mission = state.missions[id]
+    if mission.kind == "assault" and (mission.site == home or mission.to == home or table.find(mission.rooms, home) ~= nil) then
+      return true
+    end
+  end
+  return false
+end
+
+-- A pirate is gone from the game, ship and all: it went away, or got
+-- away.
+local function gone(state: State.State, id: number, ball: State.Ball, reason: string, events: { Event })
+  Space.RemoveBall(state, ball)
+  for _, item in Items.In(state, id, nil) do
+    Items.Take(state, item, item.quantity)
+  end
+  state.ships[id] = nil
+  State.RemoveId(state.shipIds, id)
+  state.pilots[id] = nil
+  State.RemoveId(state.pilotIds, id)
+  table.insert(events, { kind = "BallRemoved", ball = id, reason = reason })
+end
+
+-- Where a pirate that breaks off makes for: whatever of the system's
+-- planets and its sun is farthest from where it is.
+local function refuge(state: State.State, ball: State.Ball): number
+  local best, most = 0, 0
+  for _, object in Space.Describe(state, ball.system).objects do
+    if object.kind == "planet" or object.kind == "sun" then
+      local far = Space.Distance(object :: any, ball :: any)
+      if far > most then
+        best, most = object.id, far
+      end
+    end
+  end
+  return best
+end
+
 -- Each pirate decides what to do this tick.
 function Pirates.Think(state: State.State, events: { Event })
   local player = state.balls[state.player.ship]
   for _, id in table.clone(state.pilotIds) do
     local pilot = state.pilots[id]
     local ball = state.balls[id]
-    if ball == nil or (ball.warp and ball.warp.stage == "warp") then
+    if ball == nil then
+      continue
+    elseif ball.warp and ball.warp.stage == "warp" then
+      -- (one that broke off is in warp, and away: nobody sees it again)
+      if pilot.fleeing then
+        local name = state.ships[id].name
+        gone(state, id, ball, "fled", events)
+        table.insert(events, { kind = "PirateFled", ball = id, name = name, system = ball.system, grid = pilot.home })
+      end
       continue
     end
 
@@ -530,6 +625,15 @@ function Pirates.Think(state: State.State, events: { Event })
     if prey == nil or prey.system ~= ball.system or prey.grid ~= ball.grid or Combat.Cloaked(state, prey.id) then
       prey = pickPrey(state, ball)
       pilot.prey = if prey then prey.id else 0
+    elseif state.ships[prey.id] and state.ships[prey.id].owner == "player" and state.drones[prey.id] == nil
+      and not mending(state, prey) then
+      -- (and whoever begins to mend the others is gone for, by whoever
+      -- is on a ship that is not mending anybody)
+      local call = pickPrey(state, ball)
+      if call and call.id ~= prey.id and mending(state, call) then
+        prey = call
+        pilot.prey = call.id
+      end
     end
 
     -- Leave if nobody has been here for a while. (Those a job is to
@@ -539,16 +643,30 @@ function Pirates.Think(state: State.State, events: { Event })
       or (kept ~= nil and (kept.kind == "mission" or kept.kind == "keep") and not kept.gone)
     pilot.alone = if company then 0 else pilot.alone + 1
     if pilot.alone > PATIENCE then
-      Space.RemoveBall(state, ball)
-      for _, item in Items.In(state, id, nil) do
-        Items.Take(state, item, item.quantity)
-      end
-      state.ships[id] = nil
-      State.RemoveId(state.shipIds, id)
-      state.pilots[id] = nil
-      State.RemoveId(state.pilotIds, id)
-      table.insert(events, { kind = "BallRemoved", ball = id, reason = "left" })
+      gone(state, id, ball, "left", events)
       continue
+    end
+
+    -- Breaking off. One on its way out goes on with it, unless it has
+    -- been held: then it is in the fight again, and tries again when it
+    -- can. One with the nerve for it, badly hurt, turns for somewhere
+    -- far off and warps (which is refused while its warp is disrupted).
+    -- Nobody leaves a camp or a tower they are there to defend.
+    if pilot.fleeing then
+      if ball.warp then
+        continue
+      end
+      pilot.fleeing = nil
+    end
+    local v = ball.vitals
+    local defending = (kept ~= nil and (kept.kind == "mission" or kept.kind == "keep")) or camped(state, pilot.home)
+    if pilot.nerve and not defending and left(ball) < pilot.nerve * (v.shieldMax + v.armorMax + v.hullMax) then
+      local to = refuge(state, ball)
+      if to ~= 0 and give(state, { kind = "WarpTo", actor = id, target = to, range = 0 }, events) then
+        pilot.fleeing = true
+        table.insert(events, { kind = "PirateFleeing", ball = id, name = state.ships[id].name, system = ball.system, grid = ball.grid })
+        continue
+      end
     end
 
     if prey == nil then
