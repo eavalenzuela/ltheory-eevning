@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# script/balance: the balance report (Tool/balance). Every hull there is
+# on the same standard fit (Core/Fits), with what that comes to and what
+# is out of line: written to cache/balance/balance.html (a page to read:
+# open it in a browser), balance.csv and balance.txt, and the flags
+# printed.
+#
+#   script/balance            write the report, and print what is flagged
+#   script/balance --all      print every hull's line, flagged or not
+#
+# It opens no window and needs no engine: it is the Core's data and
+# rules, read by bin/ltcore.
+set -u
+cd "$(dirname "$0")/.."
+out=cache/balance
+mkdir -p "$out"
+if ! bin/ltcore Tool/balance --out "$out" > "$out/balance.txt" 2>&1; then
+  cat "$out/balance.txt"
+  exit 1
+fi
+if [ "${1:-}" = "--all" ]; then
+  cat "$out/balance.txt"
+else
+  # (a hull's line has its flags after two spaces, at the end: those with any)
+  awk 'NR == 1 || /^balance:/ || $0 ~ /(holds| s)  [^ ]/' "$out/balance.txt"
+fi

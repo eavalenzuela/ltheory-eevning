@@ -46,6 +46,7 @@ local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Skills = require("@lt/Core/Data/Skills")
+local Fits = require("@lt/Core/Fits")
 local Nomads = require("@lt/Core/Tactical/Nomads")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -1967,11 +1968,8 @@ function Debug.Fly(type: string, tank: boolean?): boolean
   -- fits: an afterburner, two shield extenders, a plate, a repairer, a
   -- damage control and another plate, of the hull's size.
   if tank then
-    local size = if hull.class == "battleship" or hull.class == "attackbattlecruiser" or Ships.Capital(hull.class) then "large"
-      elseif hull.class == "cruiser" or hull.class == "battlecruiser" then "medium" else "small"
-    local plate = if size == "small" then "armor.plate.200mm" else "armor.plate." .. size
-    for _, module in { if size == "small" then "afterburner.1mn" else "afterburner." .. size, "shield.extender." .. size,
-      "shield.extender." .. size, plate, "armor.repairer." .. size, "damage.control", plate } do
+    -- (Core/Fits says what a plain tank is: the balance report's is the same)
+    for _, module in Fits.Tank(hull) do
       table.insert(types, module)
       if Modules.byId[module] and Attributes.Check(hull, types) then
         Items.Equip(state, ship.id, module, nil)

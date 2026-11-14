@@ -21,7 +21,7 @@ local Arms = require("@lt/Game/View/Arms")
 local Imported = require("@lt/Game/View/Imported")
 local Int = require("@lt/Int")
 local Plates = require("@lt/Game/View/Plates")
-local Factions = require("@lt/Core/Data/Factions")
+local Fits = require("@lt/Core/Fits")
 local Ships = require("@lt/Core/Data/Ships")
 
 local Hull = {}
@@ -2925,49 +2925,11 @@ local function designOf(type: string): Design?
 end
 
 -- What a hull with no design of its own is shown carrying: its
--- faction's kind of gun and launchers, of the size its class is for
--- (the owner's ladder: a battleship's on an attack battlecruiser, a
--- cruiser's on a battlecruiser, ten of each on a dreadnought, and the
--- largest there are on a siege dreadnought).
-local STAND_GUN: { [string]: string } = { laser = "laser.pulse", projectile = "autocannon", hybrid = "blaster" }
-local STAND_RACK = { "launcher.light", "launcher.heavy", "launcher.cruise", "launcher.siege" }
-local STAND_WORD = { "small", "medium", "large", "xl" }
-local STAND_SIZES: { [string]: { number } } = { frigate = { 1 }, destroyer = { 1 }, cruiser = { 2 }, battleship = { 3 },
-  attackbattlecruiser = { 3 }, battlecruiser = { 2 }, dreadnought = { 3, 2 }, siegedreadnought = { 4 } }
+-- faction's kind of gun and launchers, of the size its class is for.
+-- (Core/Fits says which: it is what such a hull is measured with too,
+-- in the balance report, and the two are not to differ.)
 local function standFit(hull: Ships.ShipType): { string }
-  local faction = Factions.byId[hull.lineage]
-  local family = if faction then faction.weapon else "projectile"
-  local sizes = STAND_SIZES[hull.class] or { 1 }
-  local fit: { string } = {}
-  -- (a hull whose hardpoints are of given sizes, the Kethri's colony
-  -- ship: a gun of its size on each, the biggest first, which have the
-  -- first pick of where to stand; and its launchers likewise)
-  local guns, racks = hull.guns, hull.racks
-  if guns and racks then
-    for size = #guns, 1, -1 do
-      for _ = 1, guns[size] do
-        table.insert(fit, `{STAND_GUN[family] or "autocannon"}.{STAND_WORD[size]}`)
-      end
-    end
-    for size = #racks, 1, -1 do
-      for _ = 1, racks[size] do
-        table.insert(fit, STAND_RACK[size])
-      end
-    end
-    return fit
-  end
-  for index = 1, hull.turrets do
-    local size = sizes[(index - 1) % #sizes + 1]
-    -- (a mass-miner's turrets are for mining; and a projectile people's
-    -- bigger guns are artillery, as the Vessari's hulls were drawn with)
-    table.insert(fit, if hull.role == "miner" then "miner.strip"
-      elseif family == "projectile" and size >= 2 then `artillery.{STAND_WORD[size]}`
-      else `{STAND_GUN[family] or "autocannon"}.{STAND_WORD[size]}`)
-  end
-  for index = 1, hull.launchers do
-    table.insert(fit, STAND_RACK[sizes[(index - 1) % #sizes + 1]])
-  end
-  return fit
+  return Fits.Weapons(hull)
 end
 
 -- How many engines a hull of a size is given, where the seed has the
