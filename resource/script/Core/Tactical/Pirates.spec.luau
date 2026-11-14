@@ -364,6 +364,69 @@ suite:Case("not everybody breaks off: a scout does not know when to, a captain w
   t.ok(state.balls[camp.id] ~= nil and camp.warp == nil and state.pilots[camp.id].fleeing == nil, "a camp's pirate should stay in it")
 end)
 
+suite:Case("a pirate with an afterburner burns it to get to its prey and lets it go where it likes to fight; one of a job's camp does not burn", function(t)
+  local game, me = inOpenSpace()
+  local state = game.state
+  local kind = Pirates.kindById["raider"]
+  t.ok(Pirates.Drives(Modules.byId["afterburner.1mn"]) and not Pirates.Drives(Modules.byId["damage.control"]))
+  local function burning(ball: State.Ball): boolean
+    for _, running in ball.vitals.running do
+      local item = state.items[running.item]
+      if item and Pirates.Drives(Modules.byId[item.type]) and not running.stopping then
+        return true
+      end
+    end
+    return false
+  end
+  -- (the pilot's ship kept whole: who would win is not what this is about)
+  local function steps(count: number, done: (() -> boolean)?): boolean
+    for _ = 1, count do
+      Core.Step(game)
+      me.vitals.shield, me.vitals.armor, me.vitals.hull = me.vitals.shieldMax, me.vitals.armorMax, me.vitals.hullMax
+      if done and done() then
+        return true
+      end
+    end
+    return false
+  end
+  -- Twenty kilometres off: it burns, and comes on at twice its speed.
+  local raider = Pirates.Spawn(state, kind, me.system, me.x + 20000, me.y, me.z, me.grid)
+  state.pilots[raider.id].nerve = nil
+  local plain = raider.maxVelocity
+  steps(4)
+  t.ok(burning(raider), "far from its prey, a raider should burn its afterburner")
+  t.ok(raider.maxVelocity > plain * 1.8, `it does {raider.maxVelocity} m/s burning, and {plain} without`)
+  -- Where it likes to fight, it lets the afterburner go, and circles at its own speed.
+  t.ok(steps(120, function()
+    return Space.Distance(raider :: any, me :: any) < kind.range + Pirates.COAST
+  end), "it did not get there")
+  t.ok(steps(30, function()
+    return not burning(raider) and math.abs(raider.maxVelocity - plain) < 1
+  end), "in its orbit, it should have let the afterburner go")
+  -- Its prey gets away from it: it burns again.
+  me.x += 15000
+  t.ok(steps(15, function()
+    return burning(raider)
+  end), "after a prey that has got away, it should burn again")
+  -- One that breaks off switches it off, to be in warp the sooner.
+  state.pilots[raider.id].nerve = Pirates.NERVE
+  hurt(raider, 0.1)
+  steps(2)
+  t.eq({ state.pilots[raider.id].fleeing, burning(raider) } :: { any }, { true, false } :: { any })
+  steps(120, function()
+    return state.balls[raider.id] == nil
+  end)
+  t.eq(state.balls[raider.id], nil)
+  -- And one that is there to defend a job's camp comes on at its own speed, however far it has to come.
+  state.sites[me.grid] = { id = me.grid, system = me.system, kind = "mission", gone = false } :: any
+  local camp = Pirates.Spawn(state, kind, me.system, me.x + 20000, me.y, me.z, me.grid)
+  for _ = 1, 20 do
+    steps(1)
+    t.ok(not burning(camp), "a camp's raider should not burn")
+  end
+  t.eq({ state.pilots[camp.id].prey, camp.maxVelocity } :: { any }, { me.id, plain } :: { any })
+end)
+
 suite:Case("what comes follows from how safe the system is", function(t)
   for band, packs in Pirates.PACKS do
     local share = 0

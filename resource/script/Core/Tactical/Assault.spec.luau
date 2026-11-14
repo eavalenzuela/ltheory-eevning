@@ -84,6 +84,9 @@ local function fight(hullId: string, level: number, orbit: number, waves: { { st
   me.x += 5e7
   me.vx, me.vy, me.vz = 0, 0, 0
   Space.AssignGrid(state, me)
+  -- (the place is a job's camp, as far as those who come to it can tell: they are there to defend it, so nobody
+  -- breaks off, and they come on at their own speed)
+  state.sites[me.grid] = { id = me.grid, system = me.system, kind = "mission", gone = false } :: any
   local standing: { string } = works or {}
   for n, kind in standing do
     Pirates.Spawn(state, Pirates.kindById[kind], me.system, me.x + 8000 * math.cos(2.1 * n), me.y, me.z + 8000 * math.sin(2.1 * n), me.grid)
@@ -91,10 +94,8 @@ local function fight(hullId: string, level: number, orbit: number, waves: { { st
   -- (the waves in turn, and then, with nobody left flying, what stands)
   for round = 1, #waves + (if #standing > 0 then 1 else 0) do
     for n, kind in waves[round] or {} :: { string } do
-      local came = Pirates.Spawn(state, Pirates.kindById[kind], me.system, me.x + 30000 * math.cos(2.1 * n), me.y,
-        me.z + 30000 * math.sin(2.1 * n), me.grid)
-      -- (they are a camp's, as far as this goes, and a camp's see it through: nobody breaks off)
-      state.pilots[came.id].nerve = nil
+      Pirates.Spawn(state, Pirates.kindById[kind], me.system, me.x + 30000 * math.cos(2.1 * n), me.y, me.z + 30000 * math.sin(2.1 * n),
+        me.grid)
     end
     for _ = 1, 3000 do
       if state.player.ship ~= id or state.balls[id] == nil then

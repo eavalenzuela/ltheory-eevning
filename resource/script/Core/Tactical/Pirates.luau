@@ -26,7 +26,17 @@
 --
 -- Each flies with the same orders a player gives (orbit, lock,
 -- activate), so anything a pirate can do, a pilot can. They ignore
--- capsules. A pack left alone for a few minutes goes away.
+-- capsules. A pack left alone for a few minutes goes away. One that
+-- carries an afterburner burns it to get to its prey, and whenever its
+-- prey gets away from it: it is there sooner, and is not to be walked
+-- away from. Where it likes to fight it lets the afterburner go and
+-- circles at its own speed. (Burning all the while was tried, and
+-- measured: circling at twice the speed, the small ones are not to be
+-- hit by anything big, and a battleship that came through every camp
+-- meant for it came through seven in twenty-four. And those of a job's
+-- camp, or of a tower of their own, do not burn at all: with them
+-- arriving in half the time the same battleship came through thirteen,
+-- and the jobs are laid out level by level for the ship each is for.)
 --
 -- A pack fights as one. Of the ships of the pilot's side in front of
 -- it, it goes for whoever is mending the others, and failing that for
@@ -66,6 +76,22 @@ export type Event = { [string]: any }
 -- A pirate breaks off when it has this share of itself left (shield,
 -- armour and hull together).
 Pirates.NERVE = 0.25
+-- One with an afterburner burns it when its prey is this much farther
+-- off than it likes to fight from, and lets it go when it is within
+-- this much of that.
+Pirates.BURN, Pirates.COAST = 3000, 1000
+
+-- Whether a module that runs on its own ship is one that drives it
+-- harder: an afterburner, or a microwarpdrive.
+function Pirates.Drives(module: Modules.ModuleType): boolean
+  local boost: { Modules.Modifier } = module.boost or {}
+  for _, modifier in boost do
+    if modifier.attribute == "maxVelocity" and modifier.value > 1 then
+      return true
+    end
+  end
+  return false
+end
 
 -- Ticks before a place that had pirates gets more.
 local RESPAWN = 1200
@@ -432,7 +458,7 @@ function Pirates.Populate(state: State.State, events: { Event })
 end
 
 local function give(state: State.State, command: State.Command, events: { Event }): boolean
-  local combat = command.kind == "LockTarget" or command.kind == "ActivateModule"
+  local combat = command.kind == "LockTarget" or command.kind == "ActivateModule" or command.kind == "DeactivateModule"
   if combat then
     if Combat.Validate(state, command) then
       Combat.Apply(state, command, events)
@@ -664,6 +690,14 @@ function Pirates.Think(state: State.State, events: { Event })
       local to = refuge(state, ball)
       if to ~= 0 and give(state, { kind = "WarpTo", actor = id, target = to, range = 0 }, events) then
         pilot.fleeing = true
+        -- (and whatever was driving it harder is switched off: a ship
+        -- is in warp the sooner for not having so far to get up to)
+        for _, running in table.clone(ball.vitals.running) do
+          local item = state.items[running.item]
+          if item and Modules.byId[item.type].boost and not running.stopping then
+            give(state, { kind = "DeactivateModule", actor = id, item = item.id }, events)
+          end
+        end
         table.insert(events, { kind = "PirateFleeing", ball = id, name = state.ships[id].name, system = ball.system, grid = ball.grid })
         continue
       end
@@ -695,16 +729,36 @@ function Pirates.Think(state: State.State, events: { Event })
       give(state, { kind = "LockTarget", actor = id, target = prey.id }, events)
     end
     -- Everything it has for another ship: its guns, and what holds the
-    -- prey where it is (each is refused until it is in reach). And what
+    -- prey where it is (each is refused until it is in reach). What it
+    -- has for itself, from the moment it has somebody to fight: an
+    -- afterburner, or anything else that runs on its own ship. And what
     -- it has for its own side: a remote repairer goes on whoever of the
     -- pack is worst hurt (Tactical/Mend).
     local mends = false
+    local on: { [number]: boolean } = {}
+    for _, running in ball.vitals.running do
+      on[running.item] = true
+    end
     for _, item in Items.Fitted(state, id) do
       local module = Modules.byId[item.type]
       if module.hex and Modules.Mends(module) then
         mends = true
       elseif locked and (module.weapon or module.hex) then
         give(state, { kind = "ActivateModule", actor = id, item = item.id, target = prey.id }, events)
+      elseif module.boost and Pirates.Drives(module) then
+        -- (burnt to get there, and let go once it is there. Not by
+        -- those of a job's camp or a tower, who come on at their own
+        -- speed: the jobs are measured against that, level by level.)
+        local far = Space.Distance(prey :: any, ball :: any)
+        if defending then
+          continue
+        elseif far > range + Pirates.BURN and not on[item.id] then
+          give(state, { kind = "ActivateModule", actor = id, item = item.id }, events)
+        elseif far < range + Pirates.COAST and on[item.id] then
+          give(state, { kind = "DeactivateModule", actor = id, item = item.id }, events)
+        end
+      elseif (module.boost or module.repair) and not on[item.id] then
+        give(state, { kind = "ActivateModule", actor = id, item = item.id }, events)
       end
     end
     if mends then
