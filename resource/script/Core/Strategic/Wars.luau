@@ -293,7 +293,9 @@ local function round(galaxy: Galaxy.Galaxy, wars: State.Wars, seed: number, tick
     elseif operation.stage == "blockade" and age >= 2 * Wars.STAGE then
       operation.stage = "assault"
     end
-    if over == nil and operation.stage ~= "muster" and operation.defence > 0 then
+    -- (where the pilot is the two forces are ships, and what is left of
+    -- each is what they are worth: Tactical/Fronts. No round is reckoned.)
+    if over == nil and operation.stage ~= "muster" and operation.defence > 0 and not operation.shown then
       local rng = Rng.For(seed, tick, operation.id, 811)
       local toAttack = operation.defence * Wars.ATTRITION * Rng.Float(rng, 0.5, 1.5)
       local toDefence = operation.force * Wars.ATTRITION * Rng.Float(rng, 0.5, 1.5)
@@ -304,9 +306,11 @@ local function round(galaxy: Galaxy.Galaxy, wars: State.Wars, seed: number, tick
       if operation.against ~= "" then
         wars.weary[operation.against] = (wars.weary[operation.against] or 0) + toDefence * Wars.WEARY_LOSS
       end
+    end
+    if over == nil and operation.stage ~= "muster" then
       if operation.force <= Wars.BREAK * operation.sent then
         over = "broken"
-      elseif operation.defence <= Wars.BREAK * operation.defended then
+      elseif operation.defence > 0 and operation.defence <= Wars.BREAK * operation.defended then
         -- (what is left of the defence gets away, to fight another day)
         wars.strength[operation.against] = (wars.strength[operation.against] or 0) + operation.defence / 2
         operation.defence = 0

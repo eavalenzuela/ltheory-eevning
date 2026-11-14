@@ -332,6 +332,14 @@ function Session.Notice(session: Session, event: Space.Event)
         elseif from ~= "" then `NEWS: the {by} have taken {name} from the {from}`
         else `NEWS: the {by} have claimed {name}`)
     end
+  elseif kind == "FrontFound" or kind == "FrontCrossed" then
+    -- (the factions' forces where the pilot is: Core/Tactical/Fronts)
+    local function named(id: string): string
+      return if Factions.byId[id] then Factions.byId[id].name else id
+    end
+    Session.Say(session, if kind == "FrontCrossed" then `You have fired on the {named(event.side)}: their ships here are your enemies now`
+      elseif event.siege then `The {named(event.by)} are besieging this system, which the {named(event.against)} hold: the lines are on the overview`
+      else `The {named(event.by)} are claiming this system: their blockade is on the overview`)
   elseif kind == "HaulLost" then
     -- (a hauler that carried the economy's goods is gone: where it was going goes without)
     local node = session.game.state.galaxy.systems[event.system]

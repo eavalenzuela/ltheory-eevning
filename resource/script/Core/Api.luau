@@ -54,6 +54,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Commerce = require("@lt/Core/Strategic/Commerce")
 local Wars = require("@lt/Core/Strategic/Wars")
+local Fronts = require("@lt/Core/Tactical/Fronts")
 local Wormholes = require("@lt/Core/Tactical/Wormholes")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
@@ -98,7 +99,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 76
+Core.SAVE_VERSION = 77
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -385,6 +386,11 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- Nimia; and their hulls are the Nimia's of the owner's list, each
   -- the one that stands where it stood (they build no attack
   -- battlecruiser and no dreadnought but the siege one).
+  -- 77: the factions' forces are ships where the pilot is (Tactical/
+  -- Fronts). A save from before has no front.
+  [76] = function(state: any)
+    state.fronts, state.frontIds = state.fronts or {}, state.frontIds or {}
+  end,
   -- 76: the factions are at odds, and claim the open space between
   -- them (Strategic/Wars). A save from before begins as a new game
   -- does: nobody at war, and nothing claimed.
@@ -1063,7 +1069,7 @@ function Core.New(options: Options): Game
     traffic = {},
     trafficIds = {},
     trafficDue = 0,
-    commerce = commerce, marketDrawn = {}, shocks = {}, wars = Wars.New(galaxy, options.wars == true),
+    commerce = commerce, marketDrawn = {}, shocks = {}, wars = Wars.New(galaxy, options.wars == true), fronts = {}, frontIds = {},
     nomads = {},
     trafficOn = options.traffic == true,
     queue = {},
@@ -1291,6 +1297,8 @@ function Core.Step(game: Game)
     end
   end
   Traffic.Step(state, game.events)
+  -- (the factions' forces, as ships where the pilot is)
+  Fronts.Step(state, game.events, first)
   Pirates.Think(state, game.events)
   Drones.Step(state, game.events)
   Fleet.Step(state, game.events)
@@ -1474,7 +1482,10 @@ function Query.Overview(game: Game): { Entry }
       local entry: Entry = { id = id, kind = ball.kind :: string, name = ball.name,
         distance = Space.Gap(me :: any, ball :: any), onGrid = true, variety = state.ships[id].type,
         -- (what stands for the pilot's tower under fire is theirs, as their ships are)
-        hostile = state.ships[id].owner == "pirates" or state.pilots[id] ~= nil,
+        -- (a ship of a faction's force at a front is nobody's enemy but
+        -- the other force's, until the pilot fires on its side: Tactical/Fronts)
+        hostile = state.ships[id].owner == "pirates"
+          or (state.pilots[id] ~= nil and (state.pilots[id].side == nil or state.pilots[id].foe == true)),
         own = state.ships[id].owner == "player" or state.ships[id].owner == "starbase",
         veiled = Vapour.In(state, ball) }
       table.insert(entries, entry)

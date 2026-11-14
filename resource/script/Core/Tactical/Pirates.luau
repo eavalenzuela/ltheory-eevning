@@ -549,6 +549,24 @@ end
 -- out (the nearest to it), and any of them does when there is nothing
 -- else.
 local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
+  -- A ship of a faction's force at a front (Tactical/Fronts) goes for
+  -- the ships of the other force there: whichever has least left to
+  -- lose. The pilot's side is nothing to it, unless they have fired on
+  -- its side there: then one such ship in two goes for them instead.
+  local own = state.pilots[ball.id]
+  if own and own.side then
+    local foe: State.Ball?, has = nil, math.huge
+    for _, id in state.pilotIds do
+      local other, theirs = state.pilots[id], state.balls[id]
+      if other.side and other.side ~= own.side and theirs and theirs.system == ball.system and theirs.grid == ball.grid
+        and left(theirs) < has then
+        foe, has = theirs, left(theirs)
+      end
+    end
+    if not (own.foe and (foe == nil or ball.id % 2 == 0)) then
+      return foe
+    end
+  end
   local best: State.Ball?, least, mends = nil, math.huge, false
   local drone: State.Ball?, droneLeast = nil, math.huge
   local function consider(other: State.Ball?, small: boolean)

@@ -1,0 +1,37 @@
+# The factions' forces as ships where the pilot is, in the game app
+# (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/front.txt
+#
+# A siege is staged in the nearest open system and the pilot put there.
+# Its lines are a place on the overview. Warped to, the two forces are
+# there as ships and fight each other. They leave the pilot alone until
+# the pilot fires on one side, whose ships are then the pilot's enemies.
+
+wait 2
+lua GameDebug.NewGame(5, 40)
+frames 5
+lua GameDebug.Peaceful(true)
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('Stop'))
+lua _G.where = GameDebug.Front()
+lua assert(_G.where ~= '', 'no siege could be staged')
+wait 1
+lua assert(GameDebug.Fronts() == 1, 'the siege should have a place here')
+lua assert(not select(2, GameDebug.Fronts()), 'and no ships until the pilot is there')
+lua assert(GameDebug.Select('Siege Lines'), 'the lines should be on the overview')
+
+# To the lines: the forces are there, and fight.
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('WarpTo', 'Siege Lines', 30000), 'the warp was refused')
+until GameDebug.InWarp()
+until select(2, GameDebug.Fronts())
+lua GameDebug.TimeScale(1)
+lua assert(select(3, GameDebug.Fronts()) >= 3 and select(4, GameDebug.Fronts()) >= 3, 'both forces should be there as ships')
+lua assert(select(5, GameDebug.Fronts()) == 0, 'none of them is the pilot\'s enemy')
+wait 20
+lua assert(select(3, GameDebug.Traffic()) == 0, 'no ship here should be out to fire on a pilot who has done nothing')
+
+echo front scenario passed
+quit

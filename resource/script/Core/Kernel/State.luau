@@ -237,7 +237,25 @@ export type Pilot = {
   -- and whether it is on its way out now.
   nerve: number?,
   fleeing: boolean?,
+  -- A ship of a faction's force at a front (Tactical/Fronts): the
+  -- faction it fights for, what it is worth of the force's strength,
+  -- and whether the pilot's side is its enemy too (they fired on its
+  -- side there).
+  side: string?,
+  worth: number?,
+  foe: boolean?,
 }
+
+-- A front: an operation of the factions' (Strategic/Wars) as a place in
+-- the system the pilot is in, and, while the pilot is at it ('shown'),
+-- as ships. 'ships' are those there now, by id: whose side each is on,
+-- what it is worth, and whether it is of the force that came (or of the
+-- defence). 'reserve' and 'held' are what each force has beyond its
+-- ships; 'away' counts the ticks since the pilot left the place; and
+-- 'crossed' are the sides the pilot has fired on there.
+export type Front = { operation: number, system: number, site: number, shown: boolean,
+  ships: { [number]: { side: string, worth: number, attacking: boolean } }, reserve: number, held: number, away: number,
+  crossed: { [string]: boolean } }
 
 -- A ship of the traffic: a hauler coming "in" to dock at 'goal' or going
 -- "out" to the gate 'goal', a "patrol" on station at 'goal', a "miner"
@@ -452,7 +470,10 @@ export type Shock = { id: number, constellation: number, class: number, factor: 
 -- has been). A feud is a war between two: its score is the claims 'a'
 -- has taken of 'b', less those 'b' has of 'a'.
 export type Operation = { id: number, by: string, system: number, kind: string, began: number, force: number, sent: number,
-  against: string, defence: number, defended: number, stage: string, relieved: boolean }
+  against: string, defence: number, defended: number, stage: string, relieved: boolean,
+  -- (its forces are ships where the pilot is: Tactical/Fronts. What they
+  -- are worth is what is left of each, and no round is reckoned.)
+  shown: boolean? }
 export type Feud = { a: string, b: string, since: number, score: number }
 -- What is between each two factions (by the pair, "a|b" in the order of
 -- the letters), the wars there are, the truces (by the pair: the tick
@@ -644,8 +665,12 @@ export type State = {
   -- Commerce): the gluts and the shortages there are now, in the order
   -- they began.
   shocks: { Shock },
-  -- The factions at war (Strategic/Wars).
+  -- The factions at war (Strategic/Wars); and their operations in the
+  -- system the pilot is in, as places and ships (Tactical/Fronts), by
+  -- the operation's id.
   wars: Wars,
+  fronts: { [number]: Front },
+  frontIds: { number },
   orders: { [number]: Order },
   orderIds: { number },
   -- The pilot's listings on stations' boards (Assets/Contracts); the

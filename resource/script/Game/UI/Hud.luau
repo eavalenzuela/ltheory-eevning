@@ -65,7 +65,7 @@ local TAGS: { [string]: string } = {
 -- What a site (Tactical/Sites) is called, by the variety of its place.
 local SITES: { [string]: string } = { ["site.combat"] = "pirate den", ["site.ore"] = "hidden belt", ["site.relic"] = "derelict",
   ["site.gas"] = "vapour field", ["site.data"] = "listening post", ["site.mission"] = "camp to clear", ["site.keep"] = "pirate tower",
-  ["site.wormhole"] = "wormhole" }
+  ["site.wormhole"] = "wormhole", ["site.front"] = "two factions' forces: warp here to see the fight" }
 
 -- Whether a row of the overview is a vault (Core/Tactical/Sites): a
 -- wreck to the Core, and not one to the pilot.

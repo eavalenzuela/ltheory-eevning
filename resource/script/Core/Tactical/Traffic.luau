@@ -179,6 +179,25 @@ local function order(state: State.State, command: State.Command, events: { Event
   return false
 end
 
+-- What a ship of a faction's force is (Tactical/Fronts): a hull of its
+-- own of a class with its own guns on it, as its patrols are; for the
+-- pirates, the kind of theirs that flies that class. Nil for a faction
+-- that builds no such hull.
+local PIRATE: { [string]: string } = { frigate = "raider", cruiser = "marauder", battleship = "ravager" }
+function Traffic.Warship(faction: string, class: string): Pirates.Kind?
+  local its = Factions.byId[faction]
+  if its == nil then
+    return nil
+  elseif its.kind == "pirate" then
+    return Pirates.kindById[PIRATE[class] or "raider"]
+  end
+  local kind = patrolKind(its, class)
+  if kind then
+    kind.name = `{its.name} {if class == "battleship" then "Battleship" elseif class == "cruiser" then "Cruiser" else "Frigate"}`
+  end
+  return kind
+end
+
 local function enlist(state: State.State, ship: State.Ship, kind: string, goal: number, system: number)
   state.traffic[ship.id] = { ship = ship.id, kind = kind, goal = goal, system = system, born = state.tick, wait = 0 }
   State.InsertId(state.trafficIds, ship.id)

@@ -56,6 +56,7 @@ local Types = require("@lt/Core/Data/Types")
 local Wallet = require("@lt/Core/Assets/Wallet")
 local Waypoints = require("@lt/Game/Waypoints")
 local Wormholes = require("@lt/Core/Tactical/Wormholes")
+local Wars = require("@lt/Core/Strategic/Wars")
 
 local App = {}
 
@@ -1494,6 +1495,67 @@ function Debug.Wars(): (number, number, number, number)
     claims += 1
   end
   return #wars.feuds, #wars.operations, claims, wars.version
+end
+
+-- The factions' forces where the pilot is (Core/Tactical/Fronts): how
+-- many fronts the system has, whether the first is shown as ships, how
+-- many ships of the force that came are there and how many of the
+-- defence, and how many of all of them count the pilot an enemy.
+function Debug.Fronts(): (number, boolean, number, number, number)
+  local state = session.game.state
+  local front = state.fronts[state.frontIds[1] or 0]
+  local came, held, foes = 0, 0, 0
+  if front then
+    for id, record in front.ships do
+      came += if record.attacking then 1 else 0
+      held += if record.attacking then 0 else 1
+      foes += if state.pilots[id] and state.pilots[id].foe then 1 else 0
+    end
+  end
+  return #state.frontIds, front ~= nil and front.shown, came, held, foes
+end
+
+-- A cheat, for a front to look at without waiting for a war: the pilot,
+-- in space, is put in the nearest open system (one that is nobody's
+-- home), which the second of the galaxy's factions is made to hold and
+-- the first to besiege, with forces of so much strength (120 and 90 if
+-- not said), the siege past its muster. Returns the system's name ("" if
+-- there is nowhere, or the pilot is docked).
+function Debug.Front(force: number?, defence: number?): string
+  local state = session.game.state
+  local me = state.balls[state.player.ship]
+  local holders = Galaxy.Holders(state.galaxy)
+  if me == nil or #holders < 2 then
+    return ""
+  end
+  local best, least = 0, math.huge
+  for id = 1, Galaxy.Charted(state.galaxy) do
+    local node = state.galaxy.systems[id]
+    local home = node.owner ~= "" and state.wars.claims[id] == nil
+    if not home and id ~= me.system and Galaxy.Apart(state.galaxy, me.system, id) < least then
+      best, least = id, Galaxy.Apart(state.galaxy, me.system, id)
+    end
+  end
+  if best == 0 then
+    return ""
+  end
+  local by, against = holders[1], holders[2]
+  state.galaxy.systems[best].owner = against
+  state.wars.claims[best] = against
+  state.wars.version += 1
+  if not Wars.AtWar(state.wars, by, against) then
+    table.insert(state.wars.feuds, { a = by, b = against, since = state.tick, score = 0 })
+  end
+  table.insert(state.wars.operations, { id = state.tick * 16 + 15, by = by, system = best, kind = "siege", began = state.tick - Wars.STAGE - 1,
+    force = force or 120, sent = force or 120, against = against, defence = defence or 90, defended = defence or 90, stage = "blockade",
+    relieved = true })
+  me.system = best
+  me.x, me.y, me.z = 3e9, 0, 0
+  me.vx, me.vy, me.vz = 0, 0, 0
+  me.warp, me.intent = nil, nil
+  Space.AssignGrid(state, me)
+  -- (the scene sees that the pilot is somewhere else, and is made again)
+  return state.galaxy.systems[best].name
 end
 
 -- The last thing the pilot was told (the line under the ship's name), "" if nothing.
