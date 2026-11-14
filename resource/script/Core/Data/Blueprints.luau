@@ -186,6 +186,8 @@ for _, module in Modules.list do
     local blueprint: Blueprint = {
       id = "blueprint." .. module.id, product = module.id, name = module.name .. " Blueprint", perRun = 1, seconds = 600,
       materials = materials, basePrice = module.basePrice * 10,
+      -- (a people's own make is built from drawings nobody sells)
+      rare = if module.lineage then true else nil,
     }
     table.insert(Blueprints.list, blueprint)
     Blueprints.byId[blueprint.id] = blueprint
@@ -212,6 +214,10 @@ for _, module in Modules.list do
     if module.internal then
       Blueprints.byProduct[module.id].invented = true
     end
+    -- (and a people's own make is built from drawings nobody sells)
+    if module.lineage then
+      Blueprints.byProduct[module.id].rare = true
+    end
   end
 end
 for _, charge in Modules.charges do
@@ -232,7 +238,11 @@ for _, charge in Modules.charges do
 end
 for _, hull in Ships.list do
   local plain = if hull.tech == 2 and hull.base then Ships.byId[hull.base] else nil
-  if plain then
+  if hull.restricted then
+    -- (a pirate's hull, or an alien one, tech 2 or plain: nobody has
+    -- the drawings)
+    continue
+  elseif plain then
     -- A tech 2 hull is built of the plain one, and of what makes the
     -- difference: hull components and the rare minerals. Its blueprint
     -- is not for sale.

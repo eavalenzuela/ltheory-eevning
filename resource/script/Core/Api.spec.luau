@@ -745,6 +745,57 @@ suite:Case("a save with a hull the Orun had opens with the hull of theirs that s
   end
 end)
 
+suite:Case("a save from when the Nimia were the Skarn opens with them the Nimia: their space, what they think of the pilot, and their hulls", function(t)
+  -- A galaxy with all eight factions in it, and so with the Nimia holding space.
+  local game = Core.New({ galaxySeed = 2, historySeed = 1, systems = 80, peaceful = true })
+  local state = game.state
+  local theirs = 0
+  for _, system in state.galaxy.systems do
+    theirs += if system.owner == "nimia" then 1 else 0
+  end
+  t.ok(theirs >= 1, "the Nimia hold nothing in a galaxy of eighty")
+  state.standings.nimia = -3
+  -- (name then, name now: hulls of classes they still build, and of two they do not)
+  local WAS: { { string } } = { { "frigate.stinger", "frigate.oon" }, { "cruiser.broodguard", "cruiser.hon" },
+    { "attackbattlecruiser.mauler", "battlecruiser.hoku" }, { "dreadnought.kraken", "siegedreadnought.zzk" },
+    { "capitalindustrial.glutton", "capitalindustrial.zzna" } }
+  local ships: { number } = {}
+  for index, pair in WAS do
+    ships[index] = Space.NewShip(state, pair[2], `Theirs {index}`, "nimia", 0).id
+  end
+  local data, length = Core.Save(game)
+  -- As it was: the Skarn's systems, the Skarn's opinion, the Skarn's ships of the Skarn's hulls.
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 70
+  local old = file.state
+  for _, system in old.galaxy.systems do
+    if system.owner == "nimia" then
+      system.owner = "skarn"
+    end
+  end
+  old.standings.skarn, old.standings.nimia = old.standings.nimia, nil
+  for index, pair in WAS do
+    old.ships[ships[index]].type, old.ships[ships[index]].owner = pair[1], "skarn"
+  end
+  local was, wasLength = Codec.Encode(file)
+  local opened = Core.Load(was, wasLength)
+  local held = 0
+  for _, system in opened.state.galaxy.systems do
+    t.ok(system.owner ~= "skarn", `{system.name} is still the Skarn's`)
+    held += if system.owner == "nimia" then 1 else 0
+  end
+  t.eq(held, theirs)
+  t.eq({ opened.state.standings.nimia, opened.state.standings.skarn } :: { any }, { -3, nil } :: { any })
+  for index, pair in WAS do
+    local ship = opened.state.ships[ships[index]]
+    t.eq({ ship.type, ship.owner } :: { any }, { pair[2], "nimia" } :: { any })
+  end
+  t.eq(Core.Hash(opened), Core.Hash(game))
+  for _ = 1, 10 do
+    Core.Step(opened)
+  end
+end)
+
 suite:Case("a save with a hull the Kethri had opens with the hull of theirs that stands where it stood, and with nothing known of any colony ship lost", function(t)
   local game = newGame()
   local state = game.state

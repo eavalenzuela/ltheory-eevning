@@ -57,6 +57,11 @@ export type Vitals = {
   capacitorMax: number,
   shieldRecharge: number,
   capacitorRecharge: number,
+  -- The share of its armour, and of its hull, a hull that mends by
+  -- itself gets back each second (the Nimia's: Tactical/Combat). Nil or
+  -- 0 for a hull that does not.
+  armorMend: number?,
+  hullMend: number?,
   signature: number,
   scanResolution: number,
   lockRange: number,
@@ -100,7 +105,9 @@ export type Item = {
   -- ("dronebay" is a ship's drone bay: Tactical/Drones. "corporate" is
   -- the hangar the pilot's corporation has at a station, beside the
   -- pilot's own: Assets/Corporation)
-  place: "hangar" | "corporate" | "cargo" | "dronebay" | "orehold" | "high" | "mid" | "low" | "rig",
+  -- ("shipbay" is the bay for packed hulls of a hull that carries ships:
+  -- a logistics capital's, Data/Ships)
+  place: "hangar" | "corporate" | "cargo" | "dronebay" | "orehold" | "shipbay" | "high" | "mid" | "low" | "rig",
   slot: number,       -- within its rack, from 1; 0 unless fitted
   charge: string,     -- for a fitted weapon: the charge type loaded, or ""
   rounds: number,     -- and the shots left in the clip
@@ -238,7 +245,7 @@ export type Command = {
   item: number?,      -- the item acted on
   other: number?,     -- a second item (the charge, when loading a weapon)
   quantity: number?,
-  to: string?,        -- "cargo", "hangar", "corporate", "dronebay" or "orehold"; for an order, "buy" or "sell"
+  to: string?,        -- "cargo", "hangar", "corporate", "dronebay", "orehold" or "shipbay"; for an order, "buy" or "sell"
   type: string?,      -- an item type, when there is no item yet (buying)
   price: number?,     -- credits per unit, for a limit order
   order: number?,     -- an order's id

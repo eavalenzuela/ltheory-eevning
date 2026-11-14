@@ -194,13 +194,32 @@ function Items.OreHold(state: State.State, ship: number): (number, number)
   return size, used
 end
 
+-- Whether a type is what a ship bay takes: a hull, packed.
+function Items.IsHull(type: string): boolean
+  return Ships.byId[type] ~= nil and Types.Get(type) ~= nil
+end
+
+-- How big a ship's bay for ships is, m3 (0: its hull has none: only a
+-- logistics capital has), and the cubic metres of packed hulls in it.
+function Items.ShipBay(state: State.State, ship: number): (number, number)
+  local record = state.ships[ship]
+  local size = if record then Ships.byId[record.type].shipbay or 0 else 0
+  local used = 0
+  if size > 0 then
+    for _, item in Items.In(state, ship, "shipbay") do
+      used += item.quantity * Types.Info(item.type).volume
+    end
+  end
+  return size, used
+end
+
 -- ---------------------------------------------------------------------
 -- Making and moving
 
 -- Add 'quantity' of a type to a hangar or hold, merging with a stack that
 -- is already there. Returns the stack.
 function Items.Add(state: State.State, type: string, quantity: number, holder: number,
-  place: "hangar" | "corporate" | "cargo" | "dronebay" | "orehold"): State.Item
+  place: "hangar" | "corporate" | "cargo" | "dronebay" | "orehold" | "shipbay"): State.Item
   assert(Types.Get(type), `no item type '{type}'`)
   assert(quantity > 0 and quantity % 1 == 0, "a quantity is a positive whole number")
   for _, item in Items.In(state, holder, place) do
@@ -415,6 +434,19 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
         return false, "not enough room in the ore hold"
       end
       return true
+    elseif command.to == "shipbay" then
+      -- (packed hulls, and as many as the bay has room for)
+      local size, used = Items.ShipBay(state, ship.id)
+      if item.place == "shipbay" then
+        return false, "already in the ship bay"
+      elseif size == 0 then
+        return false, "this hull has no ship bay"
+      elseif not Items.IsHull(item.type) then
+        return false, "only packed hulls go in a ship bay"
+      elseif quantity * Types.Info(item.type).volume > size - used + 1e-9 then
+        return false, "not enough room in the ship bay"
+      end
+      return true
     elseif command.to == "dronebay" then
       -- (drones, and as many as the bay has room for)
       if item.place == "dronebay" then
@@ -503,6 +535,8 @@ function Items.Apply(state: State.State, command: State.Command, events: { Event
       Items.Add(state, type, quantity, ship.id, "dronebay")
     elseif command.to == "orehold" then
       Items.Add(state, type, quantity, ship.id, "orehold")
+    elseif command.to == "shipbay" then
+      Items.Add(state, type, quantity, ship.id, "shipbay")
     elseif command.to == "corporate" then
       Items.Add(state, type, quantity, station, "corporate")
     else

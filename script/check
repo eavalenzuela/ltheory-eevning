@@ -142,6 +142,9 @@
 #   game-nomads the Kethri's colony ships (test/scenario/nomads.txt): one
 #               boarded in a galaxy of forty, left, docked at as the ship
 #               it is, ridden to its next system and left there
+#   game-nimia  a hull of the Nimia's (test/scenario/nimia.txt): their
+#               frigate has no shield and takes no shield module, and
+#               half its armour and hull come back by themselves
 #   game-careers  the career agents (test/scenario/careers.txt): a new
 #               pilot takes lessons from two of them, does three, reports
 #               each and is paid, and reads one again in space
@@ -344,6 +347,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/context.txt
   step game-nomads 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 340 \
     --script test/scenario/nomads.txt
+  step game-nimia 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 340 \
+    --script test/scenario/nimia.txt
   step game-careers 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 340 \
     --script test/scenario/careers.txt
   step game-corporation 0 timeout 300 bin/launch game --no-present --fixed-step 60 --timeout 240 \

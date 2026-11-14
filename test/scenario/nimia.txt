@@ -1,0 +1,45 @@
+# A hull of the Nimia's, as its pilot sees it, in the game app
+# (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/nimia.txt
+#
+# The Nimia are the first of the alien peoples to have ships of their
+# own: living metal, with no shield, that mends by itself. An O'on, their
+# frigate, is boarded (a cheat: nobody sells one). It carries blasters,
+# and no shield module goes on it. In space it has no shield to show.
+# With half its armour and half its hull gone, both come back by
+# themselves, the armour sooner.
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Sound(true, 0)
+lua assert(GameDebug.Fly('frigate.oon'), 'there is no frigate of the Nimia to board')
+frames 3
+lua assert(GameDebug.Hull() == 'frigate.oon', 'the pilot is not in the frigate of the Nimia')
+lua assert(GameDebug.Fitted('blaster.small') == 4, 'a frigate of the Nimia carries four blasters, not ' .. GameDebug.Fitted('blaster.small'))
+# (a shield extender is in the first hangar: on this hull its button is greyed out)
+frames 3
+lua assert(GameDebug.WhyNot('Fit:shield.extender.small') == 'greyed out', 'a shield module should not go on a hull with no shield')
+
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('Stop'))
+frames 30
+lua assert(GameDebug.Layers() == -1, 'a hull of the Nimia has no shield')
+lua assert(select(2, GameDebug.Layers()) == 1 and select(3, GameDebug.Layers()) == 1)
+
+# Half of it gone: it comes back by itself, the armour first.
+lua GameDebug.Layers(0.5, 0.5)
+frames 5
+lua assert(select(2, GameDebug.Layers()) < 0.56 and select(3, GameDebug.Layers()) < 0.56)
+lua GameDebug.TimeScale(8)
+patience 600
+until select(2, GameDebug.Layers()) >= 0.999
+lua assert(select(3, GameDebug.Layers()) < 0.9, 'its hull mends slower than its armour')
+until select(3, GameDebug.Layers()) >= 0.999
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Layers() == -1, 'and it has no shield still')
+
+echo nimia scenario passed
+quit

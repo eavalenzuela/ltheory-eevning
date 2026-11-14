@@ -3,6 +3,7 @@
 -- fight turns on, worked out from its hull and fit.
 
 local Attributes = require("@lt/Core/Attributes")
+local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
 local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
@@ -44,6 +45,7 @@ function Vitals.New(state: State.State, ship: State.Ship): State.Vitals
     capacitor = stats.capacitor,
     shieldMax = stats.shield, armorMax = stats.armor, hullMax = stats.hull, capacitorMax = stats.capacitor,
     shieldRecharge = stats.shieldRecharge, capacitorRecharge = stats.capacitorRecharge,
+    armorMend = if stats.armorMend > 0 then stats.armorMend else nil, hullMend = if stats.hullMend > 0 then stats.hullMend else nil,
     signature = stats.signature, scanResolution = stats.scanResolution,
     lockRange = stats.lockRange, maxTargets = stats.maxTargets,
     shieldResonance = resonance(stats, "shieldResonance"),
@@ -64,6 +66,8 @@ function Vitals.Refresh(state: State.State, ball: State.Ball)
   v.shield, v.armor = math.min(v.shield, v.shieldMax), math.min(v.armor, v.armorMax)
   v.hull, v.capacitor = math.min(v.hull, v.hullMax), math.min(v.capacitor, v.capacitorMax)
   v.shieldRecharge, v.capacitorRecharge = stats.shieldRecharge, stats.capacitorRecharge
+  v.armorMend = if stats.armorMend > 0 then stats.armorMend else nil
+  v.hullMend = if stats.hullMend > 0 then stats.hullMend else nil
   -- (a painter on it swells what it shows, and a dampener cuts what it sees)
   v.signature, v.scanResolution = stats.signature * v.paint, stats.scanResolution * v.damp
   v.lockRange, v.maxTargets = stats.lockRange * v.damp, stats.maxTargets
@@ -72,6 +76,23 @@ function Vitals.Refresh(state: State.State, ball: State.Ball)
   v.hullResonance = resonance(stats, "hullResonance")
   -- (an entanglement projector on it takes its share of the speed, whatever the fit)
   ball.maxVelocity, ball.tau = stats.maxVelocity * v.entangle, stats.tau
+end
+
+-- A hull that mends by itself goes on mending in a hangar: once a tick,
+-- every docked ship of such a hull that carries damage has that much
+-- less of it. (In space it is its ball that mends: Tactical/Combat.)
+function Vitals.Mend(state: State.State)
+  for _, id in state.shipIds do
+    local ship = state.ships[id]
+    if ship.docked ~= 0 and (ship.armorDamage > 0 or ship.hullDamage > 0) then
+      local hull = Ships.byId[ship.type]
+      if (hull.armorMend or 0) > 0 or (hull.hullMend or 0) > 0 then
+        local stats = Vitals.Stats(state, ship, nil)
+        ship.armorDamage = math.max(0, ship.armorDamage - stats.armor * stats.armorMend * Constants.TICK)
+        ship.hullDamage = math.max(0, ship.hullDamage - stats.hull * stats.hullMend * Constants.TICK)
+      end
+    end
+  end
 end
 
 -- Remember a ball's damage on its ship, as it docks.

@@ -1864,6 +1864,25 @@ function Debug.Galaxy(): (number, string)
   return #session.game.state.galaxy.systems, Core.Query.Player(session.game).owner
 end
 
+-- How whole the pilot's ship is, in space: the shares of its shield
+-- (-1 for a hull that has none: the Nimia's), its armour and its hull
+-- that it has. Given shares of armour and hull, a cheat: it has those
+-- (to see a hull that mends by itself mend). Nothing, docked.
+function Debug.Layers(armor: number?, hull: number?): (number, number, number)
+  local ball = session.game.state.balls[session.game.state.player.ship]
+  if ball == nil then
+    return 0, 0, 0
+  end
+  local v = ball.vitals
+  if armor then
+    v.armor = armor * v.armorMax
+  end
+  if hull then
+    v.hull = hull * v.hullMax
+  end
+  return if v.shieldMax > 0 then v.shield / v.shieldMax else -1, v.armor / v.armorMax, v.hull / v.hullMax
+end
+
 -- The nomads' first colony fleet (or the one of a number): the system
 -- it is in, what its colony ship is called, in how many seconds it goes,
 -- and the name of the gate it lies off there (the one it will go out

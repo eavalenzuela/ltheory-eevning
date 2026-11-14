@@ -749,6 +749,16 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
     local v = ball.vitals
     v.shield = Gunnery.Recharge(v.shield, v.shieldMax, v.shieldRecharge, Constants.TICK)
     v.capacitor = Gunnery.Recharge(v.capacitor, v.capacitorMax, v.capacitorRecharge, Constants.TICK)
+    -- (A hull that mends by itself, the Nimia's: so much of its armour
+    -- and of its hull comes back each second, evenly, whatever it is
+    -- doing and whatever is being done to it.)
+    local armorMend, hullMend = v.armorMend or 0, v.hullMend or 0
+    if armorMend > 0 and v.armor < v.armorMax then
+      v.armor = math.min(v.armorMax, v.armor + v.armorMax * armorMend * Constants.TICK)
+    end
+    if hullMend > 0 and v.hull < v.hullMax then
+      v.hull = math.min(v.hullMax, v.hull + v.hullMax * hullMend * Constants.TICK)
+    end
 
     for index = #v.locks, 1, -1 do
       local lock = v.locks[index]

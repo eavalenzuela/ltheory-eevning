@@ -105,7 +105,12 @@ local function resists(resonance: { number }): string
 end
 
 -- "maxVelocity" as "max velocity".
+-- (what a hull that mends by itself gets back each second: said as it is)
+local WORDED: { [string]: string } = { armorMend = "armour's mending", hullMend = "hull's mending" }
 local function words(attribute: string): string
+  if WORDED[attribute] then
+    return WORDED[attribute]
+  end
   local spaced = string.gsub(attribute, "(%u)", " %1")
   return string.lower(spaced)
 end
@@ -194,6 +199,7 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
   -- (a hauler built to be shot at is called what it is)
   -- (and so is one built to go unseen, and one built to explore)
   local what = if hull.role == "combat" then "combat hauler"
+    elseif hull.role == "transport" then "logistics capital"
     elseif hull.stealth then `black ops {string.lower(class)}`
     elseif hull.explorer then `exploration {string.lower(class)}`
     else string.lower(class)
@@ -232,10 +238,18 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
   end
 
   local defence = section(sheet, "Defence")
-  row(defence, "Shield", `{whole(hull.shield)} HP`)
+  -- (a hull of the Nimia's has no shield, and mends: Tactical/Combat)
+  local shielded = hull.shield > 0 or hull.class == "capsule"
+  row(defence, "Shield", if shielded then `{whole(hull.shield)} HP` else "none: it carries no shield, and takes no shield module")
   row(defence, "Armour", `{whole(hull.armor)} HP`)
   row(defence, "Hull", `{whole(hull.hull)} HP`)
-  row(defence, "Shield resists (EM / th / kin / exp)", resists(hull.shieldResonance))
+  local armorMend, hullMend = hull.armorMend or 0, hull.hullMend or 0
+  if armorMend > 0 or hullMend > 0 then
+    row(defence, "Mends by itself", `armour {plain(armorMend * 100)}% a second ({seconds(1 / armorMend)} from nothing), hull {plain(hullMend * 100)}% ({seconds(1 / hullMend)})`)
+  end
+  if shielded then
+    row(defence, "Shield resists (EM / th / kin / exp)", resists(hull.shieldResonance))
+  end
   row(defence, "Armour resists", resists(hull.armorResonance))
   row(defence, "Signature", metres(hull.signature))
 
@@ -260,6 +274,9 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
 
   local hold = section(sheet, "Hold")
   row(hold, "Cargo", `{plain(hull.cargo)} m3`)
+  if (hull.shipbay or 0) > 0 then
+    row(hold, "Ship bay", `{whole(hull.shipbay or 0)} m3, for packed hulls`)
+  end
 
   needs(sheet, hull.id)
   if hull.restricted then

@@ -61,6 +61,7 @@ local Stations = require("@lt/Core/Assets/Stations")
 local Structures = require("@lt/Core/Data/Structures")
 local System = require("@lt/Core/Describe/System")
 local Traffic = require("@lt/Core/Tactical/Traffic")
+local Vitals = require("@lt/Core/Tactical/Vitals")
 local Training = require("@lt/Core/Character/Training")
 local Types = require("@lt/Core/Data/Types")
 local Vapour = require("@lt/Core/Tactical/Vapour")
@@ -84,7 +85,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 70
+Core.SAVE_VERSION = 71
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -364,6 +365,24 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- battlecruiser, which is worth more and wants its own skill; the
   -- others their battlecruiser, their battleship and their carrier.)
   -- (And their colony ships roam: Tactical/Nomads.)
+  -- 71: the second of the alien factions is the Nimia (Data/Factions),
+  -- who were a stand-in called the Skarn until the project owner said
+  -- who they are. Whatever a save has of the Skarn (whose a system is,
+  -- what they think of the pilot, a ship of theirs about) it has of the
+  -- Nimia; and their hulls are the Nimia's of the owner's list, each
+  -- the one that stands where it stood (they build no attack
+  -- battlecruiser and no dreadnought but the siege one).
+  [70] = function(state: any)
+    rehulled(state, {
+      skarn = "nimia",
+      ["frigate.stinger"] = "frigate.oon", ["destroyer.render"] = "destroyer.kri", ["cruiser.broodguard"] = "cruiser.hon",
+      ["battleship.leviathan"] = "battleship.rru", ["industrial.gorger"] = "industrial.rikn",
+      ["attackbattlecruiser.mauler"] = "battlecruiser.hoku", ["battlecruiser.carapace"] = "battlecruiser.hoku",
+      ["carrier.broodmother"] = "carrier.takk", ["dreadnought.kraken"] = "siegedreadnought.zzk",
+      ["siegedreadnought.devourer"] = "siegedreadnought.zzk", ["capitalindustrial.glutton"] = "capitalindustrial.zzna",
+      ["supercarrier.hivequeen"] = "supercarrier.yuln",
+    })
+  end,
   [69] = function(state: any)
     state.nomads = state.nomads or {}
     rehulled(state, {
@@ -1112,6 +1131,8 @@ function Core.Step(game: Game)
   state.tick += 1
   local first = #game.events + 1
   Space.Integrate(state, game.events)
+  -- (a hull that mends by itself mends in a hangar too)
+  Vitals.Mend(state)
   local killers = Combat.Step(state, game.events, Batteries.Fire(state, game.events))
   for _, id in table.clone(state.ballIds) do
     local by = killers[id]
@@ -1432,6 +1453,13 @@ end
 -- cubic metres in it. (What is in it: Query.Items(game, ship, "orehold").)
 function Query.OreHold(game: Game, ship: number): (number, number)
   return Items.OreHold(game.state, ship)
+end
+
+-- A ship's bay for ships: how big it is, m3 (0: its hull has none: a
+-- logistics capital has one), and the cubic metres of packed hulls in
+-- it. (What is in it: Query.Items(game, ship, "shipbay").)
+function Query.ShipBay(game: Game, ship: number): (number, number)
+  return Items.ShipBay(game.state, ship)
 end
 
 -- What repairing the player's docked ship would cost.

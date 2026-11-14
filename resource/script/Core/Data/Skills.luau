@@ -25,6 +25,9 @@ export type Skill = {
   -- level (0.05: 5% more a level; -0.03: 3% less).
   bonus: Modules.Modifier?,
   note: string,
+  -- A people's own teaching (a faction's id): no market of anybody
+  -- else's has the book. (The Nimia's two.)
+  faction: string?,
 }
 
 -- Seconds to train each level of a rank 1 skill.
@@ -96,6 +99,15 @@ local skills: { Skill } = {
   { id = "repair.systems", name = "Repair Systems", rank = 1, start = 0, requires = {}, note = "Level 1 to fit armor repairers." },
   { id = "hull.upgrades", name = "Hull Upgrades", rank = 2, start = 0, requires = {}, bonus = ship("armor", 0.05),
     note = "Level 1 to fit plates and membranes; 5% more armor a level." },
+  -- The Nimia's own (the project owner's: "skills that increase repair
+  -- rate"): a hull of theirs mends by itself, and these make it mend
+  -- faster. They do nothing for a hull that does not. (First figures.)
+  { id = "armor.mending", name = "Armour Mending", rank = 3, start = -1, requires = { { skill = "hull.upgrades", level = 3 } },
+    bonus = ship("armorMend", 0.10), faction = "nimia",
+    note = "Level 1 to fit a Mending Lattice; a hull that mends by itself mends its armour 10% faster a level." },
+  { id = "hull.mending", name = "Hull Mending", rank = 4, start = -1, requires = { { skill = "armor.mending", level = 3 } },
+    bonus = ship("hullMend", 0.10), faction = "nimia",
+    note = "A hull that mends by itself mends its hull 10% faster a level." },
   -- Engineering
   { id = "capacitor.management", name = "Capacitor Management", rank = 3, start = -1, requires = {},
     bonus = ship("capacitor", 0.05), note = "5% more capacitor a level." },

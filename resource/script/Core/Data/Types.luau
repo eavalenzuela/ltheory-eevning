@@ -34,7 +34,7 @@ local byId: { [string]: Info } = {}
 
 for _, m in Modules.list do
   byId[m.id] = { id = m.id, name = m.name, category = "module", volume = m.volume, basePrice = m.basePrice,
-    scarce = if m.tech == 2 or m.internal or m.meta then true else nil }
+    scarce = if m.tech == 2 or m.internal or m.meta or m.lineage then true else nil }
 end
 for _, c in Modules.charges do
   byId[c.id] = { id = c.id, name = c.name, category = "charge", volume = c.volume, basePrice = c.basePrice,
@@ -119,7 +119,7 @@ end
 for _, skill in Skills.list do
   if skill.start < 0 then
     byId[Skills.Book(skill.id)] = { id = Skills.Book(skill.id), name = skill.name .. " (skill book)", category = "skillbook",
-      volume = 0.01, basePrice = 25000 * skill.rank }
+      volume = 0.01, basePrice = 25000 * skill.rank, scarce = if skill.faction then true else nil }
   end
 end
 

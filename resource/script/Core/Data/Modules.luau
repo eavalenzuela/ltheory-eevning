@@ -122,6 +122,9 @@ export type ModuleType = {
   -- What only a drone carries (Data/Drones): nobody sells it, finds it
   -- or fits it to a ship.
   internal: boolean?,
+  -- A people's own make (a faction's id): no market of anybody else's
+  -- has it, nor the drawings for it. (The Nimia's mending gear.)
+  lineage: string?,
   -- 2 for a tech 2 module: the improved make of the module 'base',
   -- which nobody sells: it is invented and built (Assets/Industry).
   tech: number?,
@@ -231,6 +234,16 @@ local modules: { ModuleType } = {
     id = "armor.repairer.small", name = "Small Armor Repairer", slot = "low", hardpoint = "",
     cpu = 6, powergrid = 6, volume = 5, basePrice = 8000, passive = {},
     repair = { layer = "armor", amount = 60, duration = 6, capacitor = 40 },
+  },
+  -- The Nimia's own: a low-slot module that makes a hull that mends by
+  -- itself (theirs: Data/Ships' 'armorMend' and 'hullMend') mend half
+  -- as fast again, armour and hull both. More than one, and each does
+  -- less than the last. On a hull that does not mend it does nothing.
+  {
+    id = "mend.lattice", name = "Mending Lattice", slot = "low", hardpoint = "",
+    cpu = 20, powergrid = 2, volume = 5, basePrice = 60000, lineage = "nimia",
+    passive = { ship("armorMend", "mul", 1.5, true), ship("hullMend", "mul", 1.5, true) },
+    requires = { { skill = "armor.mending", level = 1 } },
   },
   {
     id = "armor.membrane", name = "Reactive Membrane", slot = "low", hardpoint = "",
@@ -610,12 +623,14 @@ end
 -- into, and so what it takes to make: three times as much salvage for
 -- a medium rig as for a small one, and three times that for a large.
 local RIG_SIZES: { { any } } = { { "", "Small ", 1 }, { ".medium", "Medium ", 3 }, { ".large", "Large ", 9 } }
-local function rig(id: string, name: string, calibration: number, passive: { Modifier })
+-- ('lineage': a rig that is a people's own make, as a module can be.)
+local function rig(id: string, name: string, calibration: number, passive: { Modifier }, lineage: string?)
   for _, size in RIG_SIZES do
     table.insert(modules, {
       id = "rig." .. id .. size[1], name = size[2] .. name, slot = "rig", hardpoint = "", cpu = 0, powergrid = 0,
       volume = 5 * size[3], basePrice = 24000 * size[3],
       calibration = calibration, passive = passive, requires = { { skill = "jury.rigging", level = 1 } },
+      lineage = lineage,
     })
   end
 end
@@ -630,6 +645,14 @@ rig("capacitor", "Capacitor Flux Rig", 100, { ship("capacitorRecharge", "mul", 0
 rig("projectile", "Projectile Burst Rig", 200, { weapons("projectile", "duration", 0.90), ship("powergrid", "mul", 0.90) })
 rig("laser", "Energy Burst Rig", 200, { weapons("laser", "duration", 0.90), ship("powergrid", "mul", 0.90) })
 rig("hybrid", "Hybrid Burst Rig", 200, { weapons("hybrid", "duration", 0.90), ship("powergrid", "mul", 0.90) })
+-- The Nimia's own (the project owner's: "Faction-specific shipmods,
+-- modules (low slots), and skills that increase repair rate"): worked
+-- into a hull that mends by itself, one has its armour mend three
+-- tenths faster and is the slower for the weight of it, the other its
+-- hull and has less room in the hold. In a hull that does not mend
+-- they do nothing but cost it that. (The figures are first ones.)
+rig("mend.armor", "Living Armour Rig", 150, { ship("armorMend", "mul", 1.30, true), ship("maxVelocity", "mul", 0.95) }, "nimia")
+rig("mend.hull", "Living Hull Rig", 150, { ship("hullMend", "mul", 1.30, true), ship("cargo", "mul", 0.90) }, "nimia")
 
 -- Fittings by size: the small ones are written out above, and a medium
 -- and a large are each of those, scaled for a cruiser and a battleship.

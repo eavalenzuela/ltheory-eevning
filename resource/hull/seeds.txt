@@ -131,3 +131,22 @@ freighter.hiven                44641  4  spear
 barge.pulley                   54504  3  slab
 capitalindustrial.piton        54504  8  slab
 ultracapital.leslarmesdenova   37900  8  old
+
+# The Nimia's ships (the owner's list of them, 2026-11-13): the first of
+# the alien factions to have one. Every one in the generator's "soft"
+# style. A tech 2 hull is its own hull, of the seed of the one it is
+# made of (the Hano, of the Hon).
+frigate.oon                45899  5  soft
+destroyer.kri              31988  4  soft
+cruiser.kava               31965  8  soft
+cruiser.hon                36347  5  soft
+cruiser.hano               36347  8  soft
+battlecruiser.hoku         36727  8  soft
+battleship.rru             46124  5  soft
+siegedreadnought.zzk       96603  8  soft
+carrier.takk               56099  5  soft
+supercarrier.yuln          79319  8  soft
+industrial.rikn            10285  8  soft
+freighter.jojk             10608  4  soft
+capitalindustrial.zzna     34240  8  soft
+capitalindustrial.knuu     56129  5  soft

@@ -200,6 +200,72 @@ suite:Case("the Talmar's ships are the owner's rework of them: each by name, of 
   t.eq(Ships.byId["frigate.cutthroat"].donor, "frigate.carvarro")
 end)
 
+suite:Case("the Nimia's ships are the owner's list of them: fourteen hulls of living metal, with no shield, that mend; a black ops cruiser, and two capital industrials, one for ore and one for ships", function(t)
+  local nimia = Factions.byId.nimia
+  t.eq(Factions.byId.skarn, nil, "the Skarn were a stand-in for the Nimia, and are gone")
+  t.eq({ nimia.name, nimia.kind, nimia.weapon, nimia.launchers } :: { any }, { "Nimia", "alien", "hybrid", 0 } :: { any })
+  local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, battlecruiser = 300, battleship = 400, carrier = 1000,
+    siegedreadnought = 950, supercarrier = 1300, industrial = 180, freighter = 650, capitalindustrial = 700 }
+  -- (name, class, the hull it is the tech 2 make of)
+  local LINE: { { any } } = {
+    { "O'on", "frigate" }, { "Kri", "destroyer" }, { "Ka'va", "cruiser" }, { "Hon", "cruiser" }, { "Hano", "cruiser", "Hon" },
+    { "Hoku", "battlecruiser" }, { "R'ru", "battleship" }, { "Zzk", "siegedreadnought" }, { "Takk", "carrier" },
+    { "Yuln", "supercarrier" }, { "Rikn", "industrial" }, { "Joj'k", "freighter" }, { "Zzna", "capitalindustrial" },
+    { "Knuu", "capitalindustrial" },
+  }
+  t.eq(#assert(nimia.line), #LINE)
+  local theirs = 0
+  for _, hull in Ships.list do
+    theirs += if hull.lineage == "nimia" then 1 else 0
+  end
+  t.eq(theirs, #LINE)
+  for _, entry in LINE do
+    local name: string, class: string, of: string? = entry[1], entry[2], entry[3]
+    -- (a hull's id is its class and the letters of its name: an apostrophe is not one)
+    local id = `{class}.{string.lower((string.gsub(name, "[^%a]", "")))}`
+    local hull = assert(Ships.byId[id], `the Nimia have no {name}`)
+    t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any }, { `Nimia {name}`, class, "nimia", RADIUS[class] } :: { any }, name)
+    -- An alien people's: nothing of theirs is on a human market, and nobody has the drawings.
+    t.eq({ hull.restricted, Types.Get(hull.id), Blueprints.byProduct[hull.id] } :: { any }, { true, nil, nil } :: { any }, name)
+    -- No shield, and armour and hull that mend; more of both than a hull of its class has, to stand in for the shield.
+    t.eq({ hull.shield, hull.armorMend, hull.hullMend } :: { any }, { 0, 0.004, 0.002 } :: { any }, name)
+    t.eq(hull.launchers, 0, name)
+    if of then
+      local base = assert(Ships.byId[`{class}.{string.lower(of)}`])
+      t.eq({ hull.tech, hull.base, Ships.Improved(base.id) } :: { any }, { 2, base.id, hull } :: { any }, name)
+    else
+      t.eq(hull.tech, nil, name)
+      t.ok(#Skills.Needs(hull.id) >= 1, name)
+    end
+    -- Every one has a seed to be drawn from.
+    t.ok(Facts.Of(hull.id) ~= nil, name)
+  end
+  -- The Hano is the black ops make of the Hon, and of no other cruiser of theirs.
+  local hano = Ships.byId["cruiser.hano"]
+  t.eq({ hano.stealth, hano.cloak, hano.base } :: { any }, { true, nil, "cruiser.hon" } :: { any })
+  t.eq(Ships.Improved("cruiser.kava"), nil)
+  -- Their warships carry blasters: a frigate of theirs has a hardpoint more than the plain one, and they are all turrets.
+  local oon = Ships.byId["frigate.oon"]
+  t.eq({ oon.turrets, oon.launchers } :: { any }, { 4, 0 } :: { any })
+  t.ok(oon.lows > oon.mids, "their repair gear goes in low slots, and they have the more of those")
+  -- The Zzna is a mining capital: an ore hold, and no turret. The Knuu carries ships.
+  local zzna, knuu = Ships.byId["capitalindustrial.zzna"], Ships.byId["capitalindustrial.knuu"]
+  t.eq({ zzna.turrets + zzna.launchers, zzna.role, zzna.ore, zzna.shipbay } :: { any }, { 0, nil, Ships.ORE.capitalindustrial, nil } :: { any })
+  t.eq({ knuu.turrets + knuu.launchers, knuu.role, knuu.ore, knuu.shipbay } :: { any }, { 0, "transport", 0, Ships.SHIPBAY } :: { any })
+  -- What a sheet says of one.
+  local sheet = assert(Facts.Of("frigate.oon"))
+  local said: { [string]: string } = {}
+  for _, section in sheet.sections do
+    for _, row in section.rows do
+      said[row.label] = row.value
+    end
+  end
+  t.eq(sheet.kind, "Nimia frigate")
+  t.ok(string.find(said["Shield"], "none", 1, true) ~= nil and said["Mends by itself"] ~= nil, "the sheet does not say it has no shield and mends")
+  t.eq(assert(Facts.Of("capitalindustrial.knuu")).kind, "Nimia logistics capital")
+  t.eq(assert(Facts.Of("cruiser.hano")).kind, "Nimia tech 2 black ops cruiser")
+end)
+
 suite:Case("the Orun's ships are the owner's list of them: seventeen hulls, four of them tech 2 hulls of their own, with a barge, a freighter and a capital industrial that leads a mining fleet", function(t)
   local orun = Factions.byId.orun
   local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, battlecruiser = 300, battleship = 400, carrier = 1000,
@@ -460,7 +526,9 @@ suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in i
       t.eq({ hull.turrets, hull.launchers, hull.highs, hull.radius, hull.mass, hull.drones, hull.bay } :: { any },
         { base.turrets, base.launchers, base.highs, base.radius, base.mass, base.drones, base.bay } :: { any })
       -- More of it to shoot through, and less of every shot gets through.
-      t.ok(hull.shield > 1.25 * base.shield and hull.armor > 1.25 * base.armor and hull.hull > 1.25 * base.hull, hull.id)
+      -- (of what it has: a hull of the Nimia's has no shield, tech 2 or plain)
+      t.ok((hull.shield > 1.25 * base.shield or base.shield == 0) and hull.armor > 1.25 * base.armor and hull.hull > 1.25 * base.hull,
+        hull.id)
       for index = 1, 4 do
         t.near(hull.shieldResonance[index], base.shieldResonance[index] * 0.75, 1e-9)
         t.near(hull.armorResonance[index], base.armorResonance[index] * 0.75, 1e-9)
@@ -480,6 +548,11 @@ suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in i
       t.ok(#needs >= 1 and #needs == #plain, hull.id)
       for index, need in needs do
         t.ok(need.level >= 4 and need.level <= 5 and need.skill == plain[index].skill and need.level > plain[index].level, hull.id)
+      end
+      -- (An alien people's is no more a human's to buy or to build than the hull it comes of: the Nimia's Hano.)
+      if hull.restricted then
+        t.eq({ base.restricted, Types.Get(hull.id), Blueprints.byProduct[hull.id] } :: { any }, { true, nil, nil } :: { any }, hull.id)
+        continue
       end
       -- No station has one to sell, nor its blueprint; it is built of the plain hull, components and what lawless space has.
       local blueprint = assert(Blueprints.byProduct[hull.id], `no blueprint for {hull.id}`)
@@ -517,9 +590,9 @@ suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in i
     end
   end
   -- The Talmar's three (the Tarantula, the Sugarglider and the Rapa), the Vessari's two (the Kanau and the
-  -- Akaboshi) and the Orun's four (the Skiver, the Kama, the Falchion and the Longhorn). The Kethri's line
-  -- names none yet.
-  t.eq(improved, 9)
+  -- Akaboshi), the Orun's four (the Skiver, the Kama, the Falchion and the Longhorn) and the Nimia's one (the
+  -- Hano). The Kethri's line names none yet.
+  t.eq(improved, 10)
   t.ok(Ships.Improved("frigate.courier") == nil and Ships.Improved("industrial.hauler") == nil and Ships.Improved("capsule") == nil)
 end)
 
@@ -531,6 +604,8 @@ suite:Case("what each tech 2 hull is for is the owner's word: to jump, to go uns
     { "destroyer.kanau", nil, nil, nil, nil }, { "industrial.akaboshi", nil, true, nil, nil },
     { "frigate.skiver", nil, true, true, nil }, { "destroyer.kama", nil, nil, nil, nil },
     { "cruiser.falchion", nil, nil, nil, true }, { "industrial.longhorn", nil, true, nil, nil },
+    -- (and the Nimia's one, "blackops" on the owner's list of their ships)
+    { "cruiser.hano", nil, true, nil, nil },
   }
   local said: { [string]: boolean } = {}
   for _, entry in FOR do
@@ -883,7 +958,9 @@ suite:Case("every weapon, repairer, extender, plate and mining laser has a tech 
         { true, true, true } :: { any })
     elseif module.meta == nil then
       -- (what only a drone carries is nobody's to buy either)
-      t.eq({ module.base, Types.Info(module.id).scarce } :: { any }, { nil, if module.internal then true else nil } :: { any })
+      -- (nor a people's own make, on anybody else's market: the Nimia's mending gear)
+      t.eq({ module.base, Types.Info(module.id).scarce } :: { any },
+        { nil, if module.internal or module.lineage then true else nil } :: { any })
       -- (and has a tech 2 make, for a tech 2 drone, and no custom one)
       t.ok(not module.internal or (Modules.Improved(module.id) ~= nil and Modules.Custom(module.id) == nil), module.id)
     end

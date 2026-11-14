@@ -534,6 +534,15 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
       if Im.Button("Bay", left + 178, line, 46, 21, room >= 1 and (Session.CanDo(session, toBay)), `ToBay:{item.type}`) then
         Session.Do(session, toBay)
       end
+    elseif info.category == "ship" and Core.Query.ShipBay(game, ship) > 0 then
+      -- (a packed hull goes in the ship bay of a hull that has one, a
+      -- logistics capital: as many of the stack as there is room for)
+      local size, used = Core.Query.ShipBay(game, ship)
+      local room = math.floor((size - used + 1e-9) / info.volume)
+      local toBay: State.Command = { kind = "MoveItems", actor = 0, item = item.id, to = "shipbay", quantity = math.min(item.quantity, room) }
+      if Im.Button("Bay", left + 178, line, 46, 21, room >= 1 and (Session.CanDo(session, toBay)), `ToShipBay:{item.type}`) then
+        Session.Do(session, toBay)
+      end
     end
     local toHold = Session.CanDo(session, { kind = "MoveItems", actor = 0, item = item.id, to = "cargo" })
     if Im.Button("Hold", left + 228, line, 46, 21, toHold, `ToHold:{item.type}`) then
@@ -552,10 +561,14 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
   -- (three lines of it; two on a hull with an ore hold, which has the
   -- third: below)
   local oreSize, oreUsed = Core.Query.OreHold(game, ship)
-  local shown = if oreSize > 0 then 2 else 3
+  -- (or its ship bay, on a hull that carries ships: it has the one or
+  -- the other, and the same line of the panel)
+  local baySize, bayUsed = Core.Query.ShipBay(game, ship)
+  local second = oreSize > 0 or baySize > 0
+  local shown = if second then 2 else 3
   for index, item in hold do
     if index > shown then
-      Im.Text(`and {#hold - shown} more`, left + (if oreSize > 0 then 150 else 0), line - (if oreSize > 0 then 24 * shown + 22 else 0), 13,
+      Im.Text(`and {#hold - shown} more`, left + (if second then 150 else 0), line - (if second then 24 * shown + 22 else 0), 13,
         Im.DIM)
       break
     end
@@ -597,6 +610,20 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
       Im.DIM)
     local stacks = Core.Query.Items(game, ship, "orehold")
     if Im.Button("To hangar", left + 200, line, 74, 21, #stacks > 0, "OreToHangar") then
+      for _, item in stacks do
+        Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "hangar" })
+      end
+    end
+  elseif baySize > 0 then
+    -- The ship bay of a hull that has one (a logistics capital), on the
+    -- same line: how full it is of packed hulls, and a button that puts
+    -- them all in the hangar ("BayToHangar"). They go in from the
+    -- hangar's list, a hull's "Bay" button.
+    line = y + 78 + 24 + visible * 24 + 8 + 24 + 2 * 24
+    Im.Heading(string.format("SHIP BAY  %s / %s m3", Format.Whole(math.floor(bayUsed + 0.5)), Format.Whole(baySize)), left, line + 4, 13,
+      Im.DIM)
+    local stacks = Core.Query.Items(game, ship, "shipbay")
+    if Im.Button("To hangar", left + 200, line, 74, 21, #stacks > 0, "BayToHangar") then
       for _, item in stacks do
         Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "hangar" })
       end

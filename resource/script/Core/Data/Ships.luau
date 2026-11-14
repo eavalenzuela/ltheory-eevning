@@ -53,6 +53,11 @@ export type ShipType = {
   -- pilot's fleet mine beside it (Tactical/Fleet). A capital
   -- industrial's, by its class; nil or 0 for none.
   ore: number?,
+  -- A ship bay, m3: a second hold for packed hulls and nothing else. A
+  -- logistics capital's, which carries ships where another capital
+  -- industrial carries ore (its faction's line says: 'role'
+  -- "transport"); nil or 0 for none.
+  shipbay: number?,
   -- Rig slots, and the calibration the rigs in them share (Data/Modules).
   -- Every hull but the capsule has three and 400: given below, to all.
   rigs: number?,
@@ -61,6 +66,12 @@ export type ShipType = {
   launchers: number,
   capacitor: number,      -- GJ
   capacitorRecharge: number, -- s
+  -- A hull that mends by itself (the Nimia's: Data/Factions' 'mends'):
+  -- the share of its armour, and of its hull, that comes back each
+  -- second, whatever it is doing (Tactical/Combat). Nil or 0 for a hull
+  -- that does not, which is every other.
+  armorMend: number?,
+  hullMend: number?,
   -- targeting
   scanResolution: number, -- mm; higher locks faster
   lockRange: number,      -- m
@@ -313,6 +324,11 @@ local GUN_CPU = { 12, 28, 58, 115 }
 local RACK_GRID = { 6, 110, 1500, 46000 }
 local RACK_CPU = { 30, 58, 92, 184 }
 
+-- The room a logistics capital has for ships, m3 of packed hulls: one
+-- carrier or siege dreadnought, or a score of battleships, or a fleet
+-- of anything smaller. (A first figure.)
+local SHIPBAY = 1200000
+
 -- A hull of a class as a yard builds it: 'named' is what it is called,
 -- and 'role' what it is beside the plain hull ("combat": a combat
 -- hauler).
@@ -380,6 +396,9 @@ local function yardHull(yard: Factions.Faction, class: string, named: string, ro
     role = role,
     rigs = if class == "freighter" then 0 else nil,
     guns = guns, racks = racks,
+    armorMend = if yard.mends then yard.mends.armor else nil, hullMend = if yard.mends then yard.mends.hull else nil,
+    -- (a logistics capital: a bay for hulls, and no ore hold)
+    shipbay = if role == "transport" then SHIPBAY else nil, ore = if role == "transport" then 0 else nil,
   }
 end
 
@@ -664,6 +683,10 @@ local function rebuiltHull(base: ShipType, id: string, name: string): ShipType
     cargo = if hauler then round(base.cargo * TECH2.cargo) else base.cargo,
     drones = base.drones, bay = base.bay, rigs = base.rigs, calibration = base.calibration,
     tech = 2, base = base.id, role = base.role,
+    -- (and it is whose its base is: an alien hull's tech 2 make is no
+    -- more to be had on a human market than the hull is; and it mends as
+    -- that does)
+    restricted = base.restricted, armorMend = base.armorMend, hullMend = base.hullMend,
   }
 end
 
@@ -774,6 +797,8 @@ Ships.BAY = { frigate = 10, destroyer = 25, cruiser = 50, battleship = 125, indu
 -- capital industrial's is forty and more of a mining barge's holds.
 -- (A first figure.)
 Ships.ORE = { capitalindustrial = 150000 } :: { [string]: number }
+-- (And a logistics capital's bay for ships: above, at the yards.)
+Ships.SHIPBAY = SHIPBAY
 -- Whether a class is a capital.
 function Ships.Capital(class: string): boolean
   return CAPITAL[class] == true

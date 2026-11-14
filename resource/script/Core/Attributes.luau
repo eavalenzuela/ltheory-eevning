@@ -118,8 +118,13 @@ local function gather(fitted: { Fitted }, on: string, family: string?, levels: L
 end
 
 local RESONANCES = { "shieldResonance", "armorResonance", "hullResonance" }
+-- (the last two are what a hull that mends by itself gets back of its
+-- armour and of its hull each second, as a share: nothing, for a hull
+-- that does not, whatever is fitted to it)
 local PLAIN = { "mass", "inertia", "maxVelocity", "warpSpeed", "radius", "shield", "armor", "hull", "shieldRecharge",
   "signature", "cpu", "powergrid", "capacitor", "capacitorRecharge", "scanResolution", "lockRange", "maxTargets", "cargo" }
+
+local MENDS = { "armorMend", "hullMend" }
 
 -- A ship's attributes with this fit, flown by a pilot with these skills
 -- (none, for a ship nobody trained to fly).
@@ -128,6 +133,9 @@ function Attributes.Ship(hull: Ships.ShipType, fitted: { Fitted }, levels: Level
   local source = hull :: any
   for _, name in PLAIN do
     base[name] = source[name]
+  end
+  for _, name in MENDS do
+    base[name] = source[name] or 0
   end
   for _, name in RESONANCES do
     for index = 1, 4 do
@@ -193,6 +201,15 @@ function Attributes.Check(hull: Ships.ShipType, types: { string }, levels: Level
     powergrid += mw
     calibration += module.calibration or 0
     table.insert(fitted, { type = id, running = false })
+  end
+  -- (a hull with no shield has nothing for a shield module to work on:
+  -- the Nimia's)
+  if hull.shield <= 0 and hull.class ~= "capsule" then
+    for _, id in types do
+      if string.sub(id, 1, 7) == "shield." or string.sub(id, 1, 10) == "rig.shield" then
+        return false, "this hull carries no shield"
+      end
+    end
   end
   if slots.high > hull.highs then
     return false, "no free high slot"

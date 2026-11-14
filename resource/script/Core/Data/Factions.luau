@@ -32,9 +32,10 @@ export type Faction = {
   -- Pirate: "patchwork", somebody
   -- else's hull with parts missing and parts bolted on. Alien: "spindle"
   -- long smooth hulls behind a needle prow, banded in two colours (the
-  -- Vail, by their drawings), "carapace" segmented and curled like
-  -- something alive, "monolith" rings and slabs without a seam.
-  style: "slab" | "cloud" | "motley" | "blade" | "patchwork" | "spindle" | "carapace" | "monolith",
+  -- Vail, by their drawings), "liquid" round masses of living metal
+  -- without a seam (the Nimia, by the owner's word), "monolith" rings
+  -- and slabs without a seam.
+  style: "slab" | "cloud" | "motley" | "blade" | "patchwork" | "spindle" | "liquid" | "monolith",
   weapon: string,           -- the turret family its warships carry
   launchers: number,        -- the share of a warship's hardpoints that are launchers
   tank: "armor" | "shield" | "hull",
@@ -56,6 +57,10 @@ export type Faction = {
   mids: number,
   lows: number,
   hardpoints: number,
+  -- Hulls that mend by themselves (the Nimia's): the share of its armour
+  -- and of its hull that a hull of theirs gets back each second. Nil
+  -- for everybody whose hulls do not.
+  mends: { armor: number, hull: number }?,
   -- its hulls, by class
   hulls: { [string]: string },
   -- Or its ships hull by hull, where the project owner has gone through
@@ -92,6 +97,9 @@ export type Faction = {
 -- pilot hacks with a longer buffer (Ships.EXPLORER).
 -- 'role' "miner" is a capital industrial that mines for itself (a
 -- mass-miner): 'hardpoints' is then how many mining turrets it has.
+-- 'role' "transport" is a capital industrial that carries ships (a
+-- logistics capital): it has a bay for packed hulls where another has
+-- an ore hold.
 -- 'radius' is how big it is, m, for a hull of a class that has no size
 -- of its own (an ultracapital).
 -- 'guns' is its hardpoints by the size of weapon each is for (so many
@@ -292,14 +300,52 @@ Factions.list = {
     hulls = { frigate = "Thorn", destroyer = "Barb", cruiser = "Pike", battleship = "Harpoon", industrial = "Drover",
       attackbattlecruiser = "Spur", battlecruiser = "Trident", carrier = "Quiver", dreadnought = "Partisan", siegedreadnought = "Ballista", capitalindustrial = "Herder", supercarrier = "Arsenal" },
   },
+  -- The Nimia (the owner's, 2026-11-13; they were the "Skarn", a
+  -- stand-in of animal ships, until the owner said who they are): "Not
+  -- crystalline aliens, bipedal and bird-like, with liquid-metal,
+  -- bulbous, self-healing ships. No shields, but hull and armor
+  -- self-repair over time. Faction-specific shipmods, modules (low
+  -- slots), and skills that increase repair rate. Short-range plasma
+  -- weapons."
+  -- So a hull of theirs has no shield at all, and its armour and its
+  -- hull mend by themselves ('mends': the share of each that comes back
+  -- in a second, Tactical/Combat), which rigs, a low-slot module and two
+  -- skills of their own make faster (Data/Modules, Data/Skills). Their
+  -- guns are blasters, the short-range hybrid turret, which is what
+  -- fires plasma (weapons are nobody's own, by the owner's rule: this
+  -- is what they carry, and what their hulls are shown with).
+  -- Their ships are the owner's list of them, each a seed in the
+  -- generator's "soft" style (resource/hull/seeds.txt). The figures
+  -- (how much armour and hull stands in for the shield they have not,
+  -- how fast it mends, the slots) are first ones.
+  -- Their mining capital (the Zzna) is taken for a plain capital
+  -- industrial, an ore hold and no turret, as the Orun's and the
+  -- Kethri's are; and their logistics capital (the Knuu, "ship
+  -- transport") for a capital industrial with a bay for packed hulls
+  -- where the others have an ore hold ('role' "transport": Data/Ships).
   {
-    id = "skarn", name = "Skarn", kind = "alien", style = "carapace", weapon = "hybrid", launchers = 0, tank = "armor",
-    note = "Ships that are animals, or were. They close fast, tear at short range, and their plating knits itself back together.",
-    paint = { primary = { 0.30, 0.16, 0.22 }, secondary = { 0.55, 0.50, 0.20 }, glow = { 0.85, 1.0, 0.20 } },
-    shield = 0.4, armor = 1.6, hull = 1.2, velocity = 1.2, mass = 1.0, cpu = 0.8, powergrid = 1.2, capacitor = 0.9,
+    id = "nimia", name = "Nimia", kind = "alien", style = "liquid", weapon = "hybrid", launchers = 0, tank = "armor",
+    note = "Ships of living metal, round and without a seam. They carry no shield: their armour and their hull flow back together by themselves. They close fast and burn at short range, with plasma.",
+    paint = { primary = { 0.62, 0.64, 0.68 }, secondary = { 0.30, 0.34, 0.40 }, glow = { 0.55, 0.85, 1.0 } },
+    shield = 0, armor = 1.8, hull = 1.5, velocity = 1.15, mass = 1.0, cpu = 0.9, powergrid = 1.2, capacitor = 0.9,
     lockRange = 0.7, cargo = 0.8, price = 3, mids = -1, lows = 2, hardpoints = 1,
-    hulls = { frigate = "Stinger", destroyer = "Render", cruiser = "Broodguard", battleship = "Leviathan", industrial = "Gorger",
-      attackbattlecruiser = "Mauler", battlecruiser = "Carapace", carrier = "Broodmother", dreadnought = "Kraken", siegedreadnought = "Devourer", capitalindustrial = "Glutton", supercarrier = "Hivequeen" },
+    mends = { armor = 0.004, hull = 0.002 },
+    hulls = {},
+    line = {
+      { name = "O'on", class = "frigate" },
+      { name = "Kri", class = "destroyer" },
+      { name = "Ka'va", class = "cruiser" }, { name = "Hon", class = "cruiser" },
+      { name = "Hano", class = "cruiser", tech = 2, of = "Hon", stealth = true },
+      { name = "Hoku", class = "battlecruiser" },
+      { name = "R'ru", class = "battleship" },
+      { name = "Zzk", class = "siegedreadnought" },
+      { name = "Takk", class = "carrier" },
+      { name = "Yuln", class = "supercarrier" },
+      { name = "Rikn", class = "industrial" },
+      { name = "Joj'k", class = "freighter" },
+      { name = "Zzna", class = "capitalindustrial" },
+      { name = "Knuu", class = "capitalindustrial", role = "transport" },
+    },
   },
   {
     id = "tessellate", name = "Tessellate", kind = "alien", style = "monolith", weapon = "projectile", launchers = 0.4, tank = "hull",

@@ -650,9 +650,19 @@ local function drawStatus(game: Core.Game, ball: State.Ball, x: number, y: numbe
     { label = "Hull", value = v.hull, max = v.hullMax, color = HULL },
     { label = "Capacitor", value = v.capacitor, max = v.capacitorMax, color = CAPACITOR },
   }
+  -- (a hull with no shield has no row for one: the Nimia's)
+  if v.shieldMax <= 0 then
+    table.remove(rows, 1)
+    y += 22
+  end
   local oreSize, oreUsed = Core.Query.OreHold(game, ball.id)
   if oreSize > 0 then
     table.insert(rows, { label = "Ore hold", value = oreUsed, max = oreSize, color = ORE })
+    y -= 22
+  end
+  local baySize, bayUsed = Core.Query.ShipBay(game, ball.id)
+  if baySize > 0 then
+    table.insert(rows, { label = "Ship bay", value = bayUsed, max = baySize, color = ORE })
     y -= 22
   end
   Im.Panel(x, y, 220, 12 + #rows * 22)

@@ -135,8 +135,11 @@ local function patrolKind(faction: Factions.Faction, class: string): Pirates.Kin
   for _ = 1, 4 do
     table.insert(fit, { LAUNCHERS[size] })
   end
+  -- (a hull with no shield, which mends by itself, has its people's own
+  -- gear where another's shield extender goes: the Nimia's lattice)
+  local mends = (Ships.byId[hull].armorMend or 0) > 0
   for _, module in FITTINGS[size] do
-    table.insert(fit, { module })
+    table.insert(fit, { if mends and string.sub(module, 1, 7) == "shield." then "mend.lattice" else module })
   end
   return { id = "patrol", hull = hull, name = `{faction.name} Patrol`, range = 2500 * size, bounty = 0, tags = 0, fit = fit }
 end
