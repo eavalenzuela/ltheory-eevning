@@ -35,6 +35,7 @@ local Star = require("@lt/Game/View/Star")
 local Starbase = require("@lt/Game/View/Starbase")
 local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
+local Ships = require("@lt/Core/Data/Ships")
 local Motion = require("@lt/Core/Tactical/Motion")
 local Ores = require("@lt/Core/Data/Ores")
 local Session = require("@lt/Game/Session")
@@ -1256,12 +1257,22 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       local color = vector.create(built.glow[1], built.glow[2], built.glow[3])
       -- (a trail three ship-lengths long at full speed; none in warp,
       -- where the scene goes with the ship and it has not moved)
-      local trail = math.clamp(6 * ball.radius / math.max(ball.maxVelocity, 1), 0.8, 20)
+      local trail: number? = math.clamp(6 * ball.radius / math.max(ball.maxVelocity, 1), 0.8, 20)
+      -- (And none behind a carrier or anything bigger: the project
+      -- owner's, 2026-11-13. A hull that size is too slow to draw one out
+      -- behind it, and what was drawn was where its stern had swung as
+      -- it turned, kilometres off to one side. Its engines glow, and
+      -- that is all.)
+      local flown = state.ships[id]
+      local hull = if flown then Ships.byId[flown.type] else nil
+      if hull and Ships.Capital(hull.class) then
+        trail = nil
+      end
       -- (a ship of somebody else's in warp draws its trail out behind it
-      -- for a second and more, however small it is: that is what is seen
-      -- of it going)
+      -- for a second and more, however small it is, and however big:
+      -- that is what is seen of it going)
       if warp and warp.stage == "warp" and id ~= player.ship then
-        trail = math.max(trail, WAKE)
+        trail = math.max(trail or 0, WAKE)
         throttle = wake(at)
       end
       for index, engine in built.engines do
