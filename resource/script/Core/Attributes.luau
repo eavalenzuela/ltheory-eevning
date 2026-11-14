@@ -160,11 +160,17 @@ local RIGS = { "small", "medium", "large" }
 local GUN_SIZES = { "small", "medium", "large", "XL" }
 
 -- What a module asks of a hull to be fitted to it: CPU, tf, and
--- powergrid, MW. (What the module says, but for a cloaking device on a
--- hull built for exploration, which asks only its share: Ships.EXPLORER.)
+-- powergrid, MW. What the module says, but for a cloaking device: it
+-- asks a share of the hull's own CPU beside (Data/Modules: it is very
+-- dear), and a hull built for one, to go unseen or to explore, asks a
+-- tenth of all of it (Ships.CLOAK_FITTING).
 function Attributes.Needs(hull: Ships.ShipType, module: Modules.ModuleType): (number, number)
-  local share = if module.cloak and hull.explorer then Ships.EXPLORER.cloak else 1
-  return module.cpu * share, module.powergrid * share
+  local cloak = module.cloak
+  if cloak == nil then
+    return module.cpu, module.powergrid
+  end
+  local share = if hull.stealth or hull.explorer then Ships.CLOAK_FITTING else 1
+  return (module.cpu + hull.cpu * cloak.cpu) * share, module.powergrid * share
 end
 
 -- Whether a hull can carry these modules at once; if not, why not.

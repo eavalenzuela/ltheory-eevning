@@ -105,8 +105,10 @@ export type ModuleType = {
   salvager: Salvager?,
   -- A cloak: while it runs (it is a 'boost', which is what slows the
   -- ship) nobody can target the ship, and anything that comes within
-  -- 'reach' metres of it switches it off.
-  cloak: { reach: number }?,
+  -- 'reach' metres of it switches it off. 'cpu' is what it asks to be
+  -- fitted, beside the module's own figure: that share of the hull's
+  -- own CPU, whatever the hull (Attributes.Needs).
+  cloak: { reach: number, cpu: number }?,
   -- A jump beacon generator: while it runs, a ship with a jump drive
   -- can jump to the system the ship is in (Tactical/Jumping).
   beacon: boolean?,
@@ -340,11 +342,20 @@ local modules: { ModuleType } = {
   -- cannot be switched on while anybody has the ship targeted, nor
   -- within two kilometres of anything, and anything that comes that
   -- near switches it off.
+  -- It is very dear to fit to a hull that is not built for it (the
+  -- project owner's word, 2026-11-13: "cloaks are usually *very*
+  -- CPU-expensive, on hulls that are not designed for it"): it asks
+  -- three quarters of the hull's own CPU, of a frigate as of a
+  -- battleship, so that a ship with one carries little else. A hull that
+  -- is built for it asks a tenth of that (Ships.CLOAK_FITTING). (That it
+  -- is a share of the hull's, and three quarters, are first figures: a
+  -- plain number of teraflops is nothing to a battleship or more than a
+  -- frigate has.)
   {
     id = "cloak.device", name = "Cloaking Device", slot = "high", hardpoint = "",
-    cpu = 30, powergrid = 1, volume = 5, basePrice = 250000, passive = {},
+    cpu = 0, powergrid = 1, volume = 5, basePrice = 250000, passive = {},
     boost = { ship("maxVelocity", "mul", 0.25) }, boostDuration = 5, boostCapacitor = 2,
-    cloak = { reach = 2000 },
+    cloak = { reach = 2000, cpu = 0.75 },
     requires = { { skill = "cloaking", level = 1 } },
   },
 

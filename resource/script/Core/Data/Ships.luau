@@ -83,7 +83,9 @@ export type ShipType = {
   -- a cloak neither slows it nor is broken from as far; that it has a
   -- cloak of its own, built in (Tactical/Combat: nothing is fitted for
   -- it, and it takes no slot and no capacitor); that it is built for
-  -- exploration (Ships.EXPLORER, below).
+  -- exploration (Ships.EXPLORER, below). A hull built to go unseen or
+  -- to explore fits a cloaking device for a tenth of what it asks of
+  -- another (Ships.CLOAK_FITTING).
   role: string?,
   jump: boolean?,
   stealth: boolean?,
@@ -614,13 +616,21 @@ table.insert(types, {
 -- word, 2026-11-13; one that is for nothing in particular is this
 -- plain make and no more.)
 --
--- An exploration hull: a cloaking device asks a quarter of its CPU and
--- powergrid of it; its scanner makes every scan of a signal worth half
--- as much again (Tactical/Sites); and its pilot has two more codes in
--- the buffer of a hack begun from it (Tactical/Hacking). (The owner's
--- word is "cheaper to fit cloaks and bonuses to probe scanning and
--- hacking": the figures are first ones.)
-local EXPLORER = { cloak = 0.25, scan = 1.5, hack = 2 }
+-- A hull built for a cloak, which is one built to go unseen and one
+-- built to explore: a cloaking device asks a tenth of the CPU and the
+-- powergrid of it that it asks of another hull (Attributes.Needs; the
+-- device is very dear to fit otherwise, Data/Modules). (The owner's
+-- word, of the black ops haulers: "they just get fitting bonuses (e.g.
+-- -90% cpu/pg) to make cloaks not prohibitively expensive to fit", and
+-- of the exploration cruiser "cheaper to fit cloaks": that it is the
+-- same tenth for both is a first figure.)
+local CLOAK_FITTING = 0.1
+-- An exploration hull beside: its scanner makes every scan of a signal
+-- worth half as much again (Tactical/Sites); and its pilot has two more
+-- codes in the buffer of a hack begun from it (Tactical/Hacking). (The
+-- owner's word is "bonuses to probe scanning and hacking": the figures
+-- are first ones.)
+local EXPLORER = { scan = 1.5, hack = 2 }
 local TECH2 = { price = 8, layers = 1.3, resonance = 0.75, fitting = 1.2, velocity = 1.05, lock = 1.2, scan = 1.15, cargo = 1.5 }
 
 local function tougher(resonance: { number }): { number }
@@ -730,8 +740,11 @@ table.insert(types, {
 })
 
 local Ships = { list = types, byId = {} :: { [string]: ShipType } }
--- What an exploration hull has over another (above, at the tech 2 makes).
+-- What an exploration hull has over another, and what share of a
+-- cloaking device's fitting a hull built for a cloak asks (above, at
+-- the tech 2 makes).
 Ships.EXPLORER = EXPLORER
+Ships.CLOAK_FITTING = CLOAK_FITTING
 
 -- The classes with a bay for fighters, and what each launches from it
 -- (the project owner's ladder: a carrier fighters, a supercarrier and

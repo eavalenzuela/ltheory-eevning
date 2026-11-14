@@ -83,12 +83,13 @@ export type Faction = {
 -- by their word: the Vessari's Kanau, the Orun's Kama):
 -- 'stealth': it is built to go unseen (a black ops hull, "one that can
 -- cloak"): a cloak does not slow it, and is broken only from half as
--- far (Tactical/Combat).
+-- far (Tactical/Combat); and a cloaking device, which is very dear to
+-- fit to another hull, asks a tenth as much of it (Ships.CLOAK_FITTING).
 -- 'cloak': it has a cloak of its own, built in: nothing to fit, no slot
 -- taken (Tactical/Combat).
--- 'explorer': it is built for exploration: a cloaking device asks less
--- of it to fit, its scanner works a signal better and its pilot hacks
--- with a longer buffer (Ships.EXPLORER).
+-- 'explorer': it is built for exploration: a cloaking device asks the
+-- same tenth of it to fit, its scanner works a signal better and its
+-- pilot hacks with a longer buffer (Ships.EXPLORER).
 -- 'role' "miner" is a capital industrial that mines for itself (a
 -- mass-miner): 'hardpoints' is then how many mining turrets it has.
 -- 'radius' is how big it is, m, for a hull of a class that has no size

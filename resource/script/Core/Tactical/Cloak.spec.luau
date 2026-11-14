@@ -4,6 +4,7 @@
 
 local Attributes = require("@lt/Core/Attributes")
 local Core = require("@lt/Core/Api")
+local Facts = require("@lt/Core/Data/Facts")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
@@ -311,24 +312,52 @@ suite:Case("a hull's own cloak is a cloak like another: not while targeted nor n
   t.eq({ Core.Query.OwnCloak(loaded, loaded.state.player.ship) } :: { any }, { true, true } :: { any })
 end)
 
-suite:Case("a cloaking device asks a quarter as much of a hull built for exploration", function(t)
-  -- The Orun's tech 2 cruiser, the Falchion, is such a hull (the project owner's word); the Gladius it is made of is not.
-  local falchion, gladius = Ships.byId["cruiser.falchion"], Ships.byId["cruiser.gladius"]
-  t.eq({ falchion.explorer, gladius.explorer } :: { any }, { true, nil } :: { any })
+suite:Case("a cloaking device asks three quarters of a hull's own CPU, of any hull, and a tenth of that of a hull built for one", function(t)
   local device = Modules.byId["cloak.device"]
-  t.eq({ Attributes.Needs(gladius, device) } :: { any }, { device.cpu, device.powergrid } :: { any })
-  t.eq({ Attributes.Needs(falchion, device) } :: { any }, { device.cpu * 0.25, device.powergrid * 0.25 } :: { any })
-  -- (and nothing else asks less of it)
+  t.eq({ (device.cloak :: any).cpu, Ships.CLOAK_FITTING } :: { any }, { 0.75, 0.1 } :: { any })
+  -- It is as dear to a battleship as to a frigate: a ship with one carries little else.
+  for _, id in { "frigate.skinner", "destroyer.scythe", "cruiser.gladius", "battleship.claymore", "industrial.pill", "carrier.katana" } do
+    local hull = Ships.byId[id]
+    t.eq({ Attributes.Needs(hull, device) } :: { any }, { hull.cpu * 0.75, device.powergrid } :: { any }, id)
+    t.eq({ Attributes.Check(hull, { "cloak.device" }) } :: { any }, { true } :: { any }, id)
+  end
+  local frigate = Ships.byId["frigate.skinner"]
+  t.eq({ Attributes.Check(frigate, { "cloak.device", "shield.extender.small", "shield.extender.small" }) } :: { any },
+    { false, string.format("not enough CPU (%.0f of %.0f tf)", frigate.cpu * 0.75 + 40, frigate.cpu) } :: { any })
+  -- A hull built to go unseen asks a tenth: the black ops haulers (the project owner's word: "fitting bonuses
+  -- (e.g. -90% cpu/pg) to make cloaks not prohibitively expensive to fit"), and the Skiver, which has no need.
+  for _, id in { "industrial.longhorn", "industrial.akaboshi", "industrial.tarantula", "frigate.skiver" } do
+    local hull = Ships.byId[id]
+    t.eq(hull.stealth, true, id)
+    local tf, mw = Attributes.Needs(hull, device)
+    t.near(tf, hull.cpu * 0.075, 1e-9, id)
+    t.near(mw, device.powergrid * 0.1, 1e-9, id)
+  end
+  -- And so does a hull built for exploration: the Orun's Falchion, as the Gladius it is made of does not.
+  local falchion, gladius = Ships.byId["cruiser.falchion"], Ships.byId["cruiser.gladius"]
+  t.eq({ falchion.explorer, gladius.explorer, falchion.stealth } :: { any }, { true, nil, nil } :: { any })
+  t.near((Attributes.Needs(falchion, device)), falchion.cpu * 0.075, 1e-9)
+  t.eq((Attributes.Needs(gladius, device)), gladius.cpu * 0.75)
+  -- (and nothing else asks less of it, or more of anybody)
   local analyzer = Modules.byId["analyzer.data"]
   t.eq({ Attributes.Needs(falchion, analyzer) } :: { any }, { analyzer.cpu, analyzer.powergrid } :: { any })
+  t.eq({ Attributes.Needs(gladius, analyzer) } :: { any }, { analyzer.cpu, analyzer.powergrid } :: { any })
   -- What the fitting screen counts is the same.
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
   local ship = Space.NewShip(state, "cruiser.falchion", "Seeker", "player", state.player.home)
   Items.Equip(state, ship.id, "cloak.device", nil)
-  t.eq({ Core.Query.FittingUse(game, ship.id) } :: { any }, { device.cpu * 0.25, device.powergrid * 0.25 } :: { any })
-  -- It is a cloak like any other there: it slows the ship, which is not built to go unseen.
-  t.eq(falchion.stealth, nil)
+  local tf, mw = Core.Query.FittingUse(game, ship.id)
+  t.near(tf, falchion.cpu * 0.075, 1e-9)
+  t.near(mw, device.powergrid * 0.1, 1e-9)
+  -- The device says so on its sheet, and a hull built for it on its own.
+  local said: { [string]: string } = {}
+  for _, section in assert(Facts.Of("cloak.device")).sections do
+    for _, row in section.rows do
+      said[row.label] = row.value
+    end
+  end
+  t.eq({ said["CPU"], said["On a hull built for it"] } :: { any }, { "75% of the hull's own", "10% of both" } :: { any })
 end)
 
 return suite

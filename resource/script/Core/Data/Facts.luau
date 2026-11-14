@@ -217,9 +217,11 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
     if hull.stealth then
       row(built, "Stealth", "a cloak does not slow it, and is broken only from half as far")
     end
+    if hull.stealth or hull.explorer then
+      row(built, "Cloaking device", `fits for {whole(Ships.CLOAK_FITTING * 100)}% of the CPU and powergrid it asks of another hull`)
+    end
     if hull.explorer then
       local has = Ships.EXPLORER
-      row(built, "Cloaking device", `fits for {whole(has.cloak * 100)}% of its CPU and powergrid`)
       row(built, "Scanner", `every scan of a signal is worth {whole((has.scan - 1) * 100)}% more`)
       row(built, "Hacking", `{has.hack} more codes in the buffer`)
     end
@@ -375,8 +377,16 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
   end
 
   local fitting = section(sheet, "Fitting")
-  row(fitting, "CPU", `{plain(module.cpu)} tf`)
+  -- (a cloaking device asks a share of the hull's own: Attributes.Needs)
+  if module.cloak then
+    row(fitting, "CPU", `{whole(module.cloak.cpu * 100)}% of the hull's own`)
+  else
+    row(fitting, "CPU", `{plain(module.cpu)} tf`)
+  end
   row(fitting, "Powergrid", `{plain(module.powergrid)} MW`)
+  if module.cloak then
+    row(fitting, "On a hull built for it", `{whole(Ships.CLOAK_FITTING * 100)}% of both`)
+  end
   needs(sheet, module.id)
   trade(sheet, module.id)
 end

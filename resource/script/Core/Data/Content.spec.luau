@@ -548,6 +548,8 @@ suite:Case("what each tech 2 hull is for is the owner's word: to jump, to go uns
       end
     end
     t.eq({ built["Jump drive"], built["Stealth"], built["Cloak"], built["Scanner"] } :: { any }, { entry[2], entry[3], entry[4], entry[5] } :: { any }, hull.id)
+    -- (a hull built to go unseen or to explore fits a cloaking device cheaply, and says so)
+    t.eq(built["Cloaking device"], if entry[3] or entry[5] then true else nil, hull.id)
     t.eq(string.find(sheet.kind, "black ops", 1, true) ~= nil, entry[3] == true, sheet.kind)
     t.eq(string.find(sheet.kind, "exploration", 1, true) ~= nil, entry[5] == true, sheet.kind)
     -- (a hull that is to cloak with a device has the room for one, and one that explores for its analyzer too)
