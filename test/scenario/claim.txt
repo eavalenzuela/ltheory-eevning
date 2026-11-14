@@ -33,11 +33,15 @@ lua assert(select(4, GameDebug.Claim(_G.system, 'New Haven')) ~= 'New Haven', 'a
 wait 1
 lua assert(select(4, GameDebug.Claim(_G.system)) == 'New Haven', 'the system should have its new name')
 
-# And the map has it in their colour.
+# And the map has it in their colour. Looking at the homeworld, which is
+# somebody's: a war on them is a corporation's to declare, and the pilot
+# has founded none.
 until GameDebug.Press('Map')
 frames 4
 until GameDebug.Press('Map:factions')
 frames 4
+lua assert(not GameDebug.CanPress('Map:war'), 'no war without a corporation to declare it')
+lua assert(not GameDebug.CanPress('Map:peace'), 'and no peace to propose with nobody at war')
 until GameDebug.Press('Map:close')
 
 echo claim scenario passed

@@ -255,7 +255,10 @@ export type Pilot = {
 -- 'crossed' are the sides the pilot has fired on there.
 export type Front = { operation: number, system: number, site: number, shown: boolean,
   ships: { [number]: { side: string, worth: number, attacking: boolean } }, reserve: number, held: number, away: number,
-  crossed: { [string]: boolean } }
+  crossed: { [string]: boolean },
+  -- (what the defence was worth when it was last reckoned: what it is
+  -- worth more than that since has been sent to its relief, and is its)
+  last: number? }
 
 -- A ship of the traffic: a hauler coming "in" to dock at 'goal' or going
 -- "out" to the gate 'goal', a "patrol" on station at 'goal', a "miner"

@@ -1074,6 +1074,34 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
     and session.destination ~= 0 then
     session.autopilot = not session.autopilot
   end
+  -- The corporation's own wars (Core/Assets/Sovereignty): with whoever
+  -- holds the system shown. War is declared, and peace proposed, with a
+  -- button beside the autopilot's; why not, when it cannot be, under it.
+  local holder = systems[shown].owner
+  if Factions.byId[holder] and table.find(Galaxy.Holders(galaxy), holder) then
+    local war = { kind = "DeclareWar", actor = 0, what = holder }
+    local peace = { kind = "ProposePeace", actor = 0, what = holder }
+    local canWar, whyWar = Session.CanDo(session, war)
+    local canPeace, whyPeace = Session.CanDo(session, peace)
+    local fighting = whyWar == "you are at war with them already"
+    if fighting then
+      if Im.Button("Propose peace", px + 158, line, 130, 28, canPeace, "Map:peace") then
+        Session.Do(session, peace)
+      end
+      Im.Text(if canPeace then `You are at war with the {Factions.byId[holder].name}.` else `At war. {tostring(whyPeace)}`, px, line + 33, 11,
+        Im.WARN)
+      line += 16
+    else
+      if Im.Button("Declare war", px + 158, line, 130, 28, canWar, "Map:war") then
+        Session.Do(session, war)
+      end
+      if not canWar then
+        -- (under the two buttons, from the panel's edge: it is a sentence)
+        Im.Text(tostring(whyWar), px, line + 33, 11, Im.DIM)
+        line += 16
+      end
+    end
+  end
   line += 40
   -- A hull with a jump drive: how far it reaches, what the system shown
   -- would take, and the jump itself ("Map:jump"), which says why not

@@ -1,6 +1,7 @@
 --!strict
 -- An open system as the pilot's own (Assets/Sovereignty).
 
+local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Core = require("@lt/Core/Api")
 local Sovereignty = require("@lt/Core/Assets/Sovereignty")
 local Space = require("@lt/Core/Tactical/Space")
@@ -157,6 +158,145 @@ suite:Case("a neighbour that thinks badly of the pilot declares on them and besi
   local again: { any } = said.WarDeclared or {}
   for _, event in again do
     t.ok(event.on ~= "player", "war on the pilot again within the truce")
+  end
+end)
+
+suite:Case("the corporation declares its own wars, takes a faction's claim by besieging it in person, and makes its own peace", function(t)
+  local game, system, neighbour, starbase = claiming(true)
+  local state = game.state
+  local me = state.player.ship
+  local function refused(kind: string, what: string): string?
+    local ok, why = Core.Validate(game, { kind = kind, actor = me, what = what })
+    return if ok then "(accepted)" else why
+  end
+  -- (the system is the neighbour's claim, with the pilot's beacon standing in it: it claims nothing)
+  state.galaxy.systems[system].owner = neighbour
+  state.wars.claims[system] = neighbour
+  t.eq((Core.Query.Claim(game, system)), "contested")
+  -- A war is a corporation's to declare, on somebody who holds space, once.
+  t.eq(refused("DeclareWar", neighbour), "a war is a corporation's to declare: found one first")
+  state.wallet = 50000000
+  assert(Core.Submit(game, { kind = "FoundCorporation", actor = me, what = "Haven Holdings" }))
+  Core.Step(game)
+  t.eq(refused("DeclareWar", "nobody"), "nobody of that name holds space")
+  t.eq(refused("ProposePeace", neighbour), "you are not at war with them")
+  t.eq(refused("DeclareWar", neighbour), "(accepted)")
+  assert(Core.Submit(game, { kind = "DeclareWar", actor = me, what = neighbour }))
+  Core.Step(game)
+  t.ok(Wars.AtWar(state.wars, "player", neighbour))
+  t.ok(Standings.Hostile(state, neighbour), "a faction the corporation is at war with should be the pilot's enemy")
+  t.eq(refused("DeclareWar", neighbour), "you are at war with them already")
+  t.eq(string.sub(refused("ProposePeace", neighbour) or "", 1, 31), "they will not hear of it yet: 2")
+  -- The beacon in their claim is a siege of the pilot's own, within a round: and nothing is reckoned for it unseen.
+  local began: any = nil
+  for _ = 1, 2 * Wars.ROUND do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      began = if event.kind == "OperationBegan" and event.by == "player" then event else began
+    end
+  end
+  t.eq({ began.system, began.against, began.what } :: { any }, { system, neighbour, "siege" } :: { any })
+  local operation: State.Operation? = nil
+  for _, other in state.wars.operations do
+    operation = if other.system == system then other else operation
+  end
+  local siege = assert(operation)
+  t.eq({ siege.by, siege.defence, siege.force } :: { any }, { "player", Wars.GARRISON, Sovereignty.PERSONAL } :: { any })
+  state.wars.strength[neighbour] = 0
+  hours(game, 2)
+  t.eq(state.galaxy.systems[system].owner, neighbour)
+  t.ok(siege.defence >= Wars.GARRISON and siege.force == Sovereignty.PERSONAL, "the siege was fought with nobody there")
+  -- The pilot comes to the lines: the garrison is there as ships, and nobody of the pilot's is put there for them.
+  assert(Core.Submit(game, { kind = "Undock", actor = me }))
+  Core.Step(game)
+  local ball = state.balls[me]
+  ball.system = system
+  ball.x, ball.y, ball.z = 4e9, 0, 0
+  Space.AssignGrid(state, ball)
+  Core.Step(game)
+  local front = assert(state.fronts[siege.id], "the pilot's siege has no lines")
+  local place = assert(Space.Object(state, front.site))
+  ball.x, ball.y, ball.z = place.x, place.y + 30000, place.z
+  Space.AssignGrid(state, ball)
+  Core.Step(game)
+  local garrison = 0
+  for id, record in front.ships do
+    t.eq({ record.side, record.attacking } :: { any }, { neighbour, false } :: { any })
+    garrison += 1
+  end
+  t.ok(garrison >= 2, `{garrison} ships of the garrison are at the lines`)
+  -- They are destroyed: the defence gives way, and the system is the pilot's.
+  for id in front.ships do
+    Aftermath.Destroy(state, id, me, game.events)
+  end
+  local taken: any = nil
+  for _ = 1, 2 * Wars.STAGE do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      taken = if event.kind == "SystemTaken" and event.system == system then event else taken
+    end
+    if taken then
+      break
+    end
+  end
+  t.eq({ taken.by, taken.from }, { "player", neighbour })
+  t.eq({ state.galaxy.systems[system].owner, state.galaxy.systems[system].security } :: { any }, { "player", Wars.ORDER } :: { any })
+  t.eq((Wars.Feud(state.wars, "player", neighbour) :: State.Feud).score, 1)
+  -- Peace is heard once the war is a day old: a truce, and they are the pilot's enemies no longer.
+  state.tick += Wars.LEAST
+  t.eq(refused("ProposePeace", neighbour), "(accepted)")
+  assert(Core.Submit(game, { kind = "ProposePeace", actor = me, what = neighbour }))
+  Core.Step(game)
+  t.eq({ Wars.AtWar(state.wars, "player", neighbour), Wars.Truce(state.wars, "player", neighbour), Standings.Hostile(state, neighbour) } :: { any },
+    { false, true, false } :: { any })
+  t.eq(refused("DeclareWar", neighbour), "there is a truce between you")
+  t.ok(starbase.fuel > 0)
+end)
+
+suite:Case("a system of the pilot's pays a levy by the day, and those who fly for the pilot there stand with it in a siege", function(t)
+  local game, system, neighbour, _ = claiming(true)
+  local state = game.state
+  hours(game, Sovereignty.CLAIM)
+  t.eq(state.galaxy.systems[system].owner, "player")
+  -- (to the pilot, with no corporation: so much for the people there, a day)
+  local wallet = state.wallet
+  local said = hours(game, 24 - Sovereignty.CLAIM)
+  local due = math.floor(Sovereignty.LEVY * state.commerce.nodes[system].population * 24)
+  t.ok(due > 0, "nobody lives in the system")
+  t.eq({ said.LevyPaid[1].amount, said.LevyPaid[1].systems, state.wallet - wallet }, { due, 1, due })
+  -- A hired pilot's ship is in the system when it is besieged: the defence is the tower and them.
+  local ship = Space.NewShip(state, "frigate.courier", "Second", "player", state.player.home)
+  local candidates = Core.Query.Candidates(game, state.player.home)
+  state.wallet = 10000000
+  assert(Core.Submit(game, { kind = "HirePilot", actor = state.player.ship, what = candidates[1].key }))
+  Core.Step(game)
+  local wing = state.fleet[state.fleetIds[#state.fleetIds]]
+  wing.ship, wing.order = ship.id, "stay"
+  local place = Space.Describe(state, system).objects[1]
+  Space.Launch(state, ship, system, place.x + 5e9, 0, 0)
+  state.standings[neighbour] = Standings.HOSTILE - 1
+  state.wars.strength[neighbour] = Wars.SIEGE_FORCE
+  local relief: any = nil
+  for _ = 1, 3 * Sovereignty.HOUR do
+    -- (kept there, whatever its pilot would rather do: this is about who is in the system when the siege comes)
+    local theirs = state.balls[ship.id]
+    if theirs then
+      theirs.system, theirs.warp, theirs.intent = system, nil, nil
+    end
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      relief = if event.kind == "ReliefSent" and event.by == "player" then event else relief
+    end
+    if relief then
+      break
+    end
+  end
+  t.ok(relief ~= nil, "nobody who flies for the pilot stood with their system")
+  t.eq({ relief.system, relief.against, relief.force } :: { any }, { system, neighbour, Sovereignty.POSTED } :: { any })
+  for _, operation in state.wars.operations do
+    if operation.system == system then
+      t.eq(operation.defended, Wars.GARRISON * Wars.TOWER + Sovereignty.POSTED)
+    end
   end
 end)
 

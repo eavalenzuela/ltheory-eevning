@@ -318,6 +318,10 @@ function Session.Notice(session: Session, event: Space.Event)
       return if Factions.byId[id] then Factions.byId[id].name else id
     end
     -- (with the pilot's own corporation: Core/Assets/Sovereignty)
+    if kind == "WarDeclared" and event.by == "player" then
+      Session.Say(session, `NEWS: your corporation has declared war on the {named(event.on)}: they are your enemies from now`)
+      return
+    end
     if (kind == "WarDeclared" and event.on == "player") or (kind == "PeaceMade" and event.b == "player") then
       Session.Say(session, if kind == "WarDeclared" then `NEWS: the {named(event.by)} have declared war on you: they will come for what you hold next to them`
         else `NEWS: the {named(event.a)} have made a truce with you`)
@@ -360,8 +364,12 @@ function Session.Notice(session: Session, event: Space.Event)
       return if Factions.byId[id] then Factions.byId[id].name else id
     end
     Session.Say(session, if kind == "FrontCrossed" then `You have fired on the {named(event.side)}: their ships here are your enemies now`
+      elseif event.by == "player" then `Your siege: the {named(event.against)} garrison is at the lines on the overview. Bring it down and the system is yours`
+      elseif event.against == "player" then `The {named(event.by)} are besieging this system of yours: their lines are on the overview`
       elseif event.siege then `The {named(event.by)} are besieging this system, which the {named(event.against)} hold: the lines are on the overview`
       else `The {named(event.by)} are claiming this system: their blockade is on the overview`)
+  elseif kind == "LevyPaid" then
+    Session.Say(session, `The levy is in: {event.amount} credits from {event.systems} {if event.systems == 1 then "system" else "systems"} of yours`)
   elseif kind == "ClaimLapsed" and event.by == "player" then
     Session.Say(session, `Your claim on {session.game.state.galaxy.systems[event.system].name} has lapsed: no beacon of yours stood lit there`)
   elseif kind == "HaulLost" then

@@ -287,6 +287,10 @@ function Fronts.Step(state: State.State, events: { Event }, first: number)
           end
         end
       end
+      -- (a relief sent since the last reckoning is the defence's, behind its ships)
+      if front.last and operation.defence > front.last then
+        front.held += operation.defence - front.last
+      end
       -- What each force is worth now: its ships that are left, and its reserve.
       local force, defence = front.reserve, front.held
       for ship, record in front.ships do
@@ -304,6 +308,7 @@ function Fronts.Step(state: State.State, events: { Event }, first: number)
         end
       end
       operation.force, operation.defence = force, defence
+      front.last = defence
       if front.away > Fronts.LINGER then
         operation.shown = nil
         withdraw(state, front, events)

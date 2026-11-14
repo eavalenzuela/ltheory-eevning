@@ -2233,7 +2233,8 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
     if how == "claiming" then
       Im.Text(`Claiming this system: {gone} of {takes} hours`, left + 420, line + 3, 13, Im.ACCENT)
     elseif how == "contested" then
-      Im.Text("The beacon claims nothing: the system is somebody's", left + 420, line + 3, 13, Im.WARN)
+      Im.Text("The beacon claims nothing: the system is somebody's.", left + 420, line + 3, 13, Im.WARN)
+      Im.Text("At war with them, it is a siege: their garrison is at the lines.", left + 420, line + 20, 12, Im.DIM)
     elseif how == "held" then
       Im.Text(if gone > 0 then `Yours, but no beacon is lit: let go in {takes - gone} h` else "This system is yours", left + 420, line + 3, 13,
         if gone > 0 then Im.WARN else GOOD)

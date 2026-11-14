@@ -1161,7 +1161,7 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Drones.Validate(state, command)
   elseif JUMP_COMMANDS[command.kind] then
     return Jumping.Validate(state, command)
-  elseif command.kind == "RenameSystem" then
+  elseif command.kind == "RenameSystem" or command.kind == "DeclareWar" or command.kind == "ProposePeace" then
     return Sovereignty.Validate(state, command)
   elseif FLEET_COMMANDS[command.kind] then
     return Fleet.Validate(state, command)
@@ -1266,7 +1266,7 @@ function Core.Step(game: Game)
       Drones.Apply(state, command, game.events)
     elseif ok and JUMP_COMMANDS[command.kind] then
       Jumping.Apply(state, command, game.events)
-    elseif ok and command.kind == "RenameSystem" then
+    elseif ok and (command.kind == "RenameSystem" or command.kind == "DeclareWar" or command.kind == "ProposePeace") then
       Sovereignty.Apply(state, command, game.events)
     elseif ok and FLEET_COMMANDS[command.kind] then
       Fleet.Apply(state, command, game.events)

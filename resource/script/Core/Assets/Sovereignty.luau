@@ -18,14 +18,38 @@
 -- that has claimed a system already keeps it: taking a faction's claim
 -- for the pilot is not built.)
 --
+-- The next steps (the project owner's go-ahead, the same day):
+--
+--   - The corporation declares its own wars and makes its own peace
+--     (DeclareWar, ProposePeace). A war it declares makes the faction
+--     its enemy at once, by what the faction thinks of the pilot; a
+--     peace is heard once the war is a day old, and is a truce of two.
+--   - A faction's claim can be taken: a claim beacon lit in a claim of a
+--     faction the corporation is at war with begins a siege of the
+--     pilot's own. Nothing is reckoned for it unseen: after its muster
+--     the garrison is at the siege lines (Tactical/Fronts), with
+--     whatever its holder sends to its relief, and the pilot and those
+--     who fly for them have to bring it down to a fifth. Then, an hour
+--     from when the beacon was lit at the soonest, the system is theirs.
+--     With the beacon dark, or the war over, the siege is lifted.
+--   - Hired pilots who are in a system of the pilot's when it is
+--     besieged count toward its defence: so much each, with the tower.
+--   - A system of the pilot's pays a levy: so much a day for the people
+--     in it, to the corporation (or, with none founded, the pilot),
+--     unless its lanes are shut.
+--
 -- First figures: six hours to claim, and twelve dark before a claim is
 -- let go.
 
 local Constants = require("@lt/Core/Data/Constants")
+local Corporation = require("@lt/Core/Assets/Corporation")
+local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Space = require("@lt/Core/Tactical/Space")
+local Standings = require("@lt/Core/Assets/Standings")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
+local Wallet = require("@lt/Core/Assets/Wallet")
 local Wars = require("@lt/Core/Strategic/Wars")
 
 local Sovereignty = {}
@@ -37,6 +61,14 @@ export type Event = { [string]: any }
 -- one before it is let go.
 Sovereignty.HOUR = math.ceil(3600 / Constants.TICK)
 Sovereignty.CLAIM, Sovereignty.LAPSE = 6, 12
+-- What the pilot's own siege is reckoned to have sent (themselves: it
+-- is never the less for what happens unseen); what a hired pilot in the
+-- system adds to the defence of a system of the pilot's; and the levy,
+-- credits an hour for a unit of the people who live in a system.
+Sovereignty.PERSONAL = 1000000
+Sovereignty.POSTED = 30
+Sovereignty.LEVY = 4000
+Sovereignty.DAY = 24 * Sovereignty.HOUR
 
 -- The systems in which the pilot has a lit tower with a claim beacon
 -- online.
@@ -87,6 +119,67 @@ function Sovereignty.Step(state: State.State, events: { Event })
     end
   end
   state.wars.spoken = spoken
+  -- Once a round of the wars: the pilot's own sieges, begun and lifted,
+  -- and who of theirs stands with a system of theirs that is besieged.
+  if state.tick % Wars.ROUND == 0 and state.tick > 0 and state.wars.on then
+    local wars = state.wars
+    local at: { [number]: State.Operation } = {}
+    for _, operation in wars.operations do
+      at[operation.system] = operation
+    end
+    for system in lit do
+      local holder = wars.claims[system]
+      if holder and holder ~= Wars.PILOT and at[system] == nil and Wars.AtWar(wars, Wars.PILOT, holder) then
+        local operation: State.Operation = { id = state.tick * 16 + 14, by = Wars.PILOT, system = system, kind = "siege", began = state.tick,
+          force = Sovereignty.PERSONAL, sent = Sovereignty.PERSONAL, against = holder, defence = Wars.GARRISON, defended = Wars.GARRISON,
+          stage = "muster", relieved = false }
+        table.insert(wars.operations, operation)
+        table.insert(events, { kind = "OperationBegan", system = system, by = Wars.PILOT, against = holder, what = "siege" })
+      end
+    end
+    for index = #wars.operations, 1, -1 do
+      local operation = wars.operations[index]
+      if operation.by == Wars.PILOT and not lit[operation.system] then
+        -- (the beacon is dark, or gone: the siege is lifted)
+        table.remove(wars.operations, index)
+        table.insert(events, { kind = "OperationOver", system = operation.system, by = Wars.PILOT, against = operation.against,
+          how = "called off" })
+      elseif operation.against == Wars.PILOT and operation.stage ~= "muster" and not operation.relieved then
+        local posted = 0
+        for _, id in state.fleetIds do
+          local ball = state.balls[state.fleet[id].ship]
+          posted += if ball and ball.system == operation.system then 1 else 0
+        end
+        operation.relieved = true
+        if posted > 0 then
+          operation.defence += posted * Sovereignty.POSTED
+          operation.defended += posted * Sovereignty.POSTED
+          table.insert(events, { kind = "ReliefSent", system = operation.system, by = Wars.PILOT, against = operation.by,
+            force = posted * Sovereignty.POSTED })
+        end
+      end
+    end
+  end
+  -- Once a day: what the pilot's systems pay.
+  if state.tick % Sovereignty.DAY == 0 and state.tick > 0 then
+    local shut = Wars.Blocked(state.wars)
+    local levy, paying = 0, 0
+    for id = 1, Galaxy.Charted(state.galaxy) do
+      local node = state.commerce.nodes[id]
+      if state.galaxy.systems[id].owner == Wars.PILOT and node and not shut[id] then
+        levy += math.floor(Sovereignty.LEVY * node.population * 24)
+        paying += 1
+      end
+    end
+    if levy > 0 then
+      if Corporation.Founded(state) then
+        Corporation.Earn(state, levy, "levy", events)
+      else
+        Wallet.Pay(state, levy, "levy", events)
+      end
+      table.insert(events, { kind = "LevyPaid", amount = levy, systems = paying })
+    end
+  end
   if state.tick % Sovereignty.HOUR ~= 0 or state.tick == 0 then
     return
   end
@@ -130,7 +223,30 @@ function Sovereignty.Step(state: State.State, events: { Event })
 end
 
 function Sovereignty.Validate(state: State.State, command: State.Command): (boolean, string?)
-  if command.kind ~= "RenameSystem" then
+  if command.kind == "DeclareWar" or command.kind == "ProposePeace" then
+    local faction = command.what or ""
+    if Factions.byId[faction] == nil or table.find(Galaxy.Holders(state.galaxy), faction) == nil then
+      return false, "nobody of that name holds space"
+    elseif not state.wars.on then
+      return false, "nobody stirs in this galaxy"
+    elseif not Corporation.Founded(state) then
+      return false, "a war is a corporation's to declare: found one first"
+    end
+    local feud = Wars.Feud(state.wars, Wars.PILOT, faction)
+    if command.kind == "DeclareWar" then
+      if feud then
+        return false, "you are at war with them already"
+      elseif Wars.Truce(state.wars, Wars.PILOT, faction) then
+        return false, "there is a truce between you"
+      end
+      return true
+    elseif feud == nil then
+      return false, "you are not at war with them"
+    elseif state.tick - feud.since < Wars.LEAST then
+      return false, `they will not hear of it yet: {math.ceil((Wars.LEAST - (state.tick - feud.since)) / Sovereignty.HOUR)} hours more`
+    end
+    return true
+  elseif command.kind ~= "RenameSystem" then
     return false, `unknown command '{command.kind}'`
   end
   local node = state.galaxy.systems[command.target or 0]
@@ -151,6 +267,22 @@ function Sovereignty.Validate(state: State.State, command: State.Command): (bool
 end
 
 function Sovereignty.Apply(state: State.State, command: State.Command, events: { Event })
+  if command.kind == "DeclareWar" then
+    local faction = command.what :: string
+    Wars.Declare(state.wars, Wars.PILOT, faction, state.tick)
+    -- (they are the pilot's enemies from now, whatever they thought before)
+    state.standings[faction] = math.min(Standings.Of(state, faction), Standings.HOSTILE - 1)
+    table.insert(events, { kind = "WarDeclared", by = Wars.PILOT, on = faction })
+    return
+  elseif command.kind == "ProposePeace" then
+    local faction = command.what :: string
+    local feud = Wars.Settle(state.wars, Wars.PILOT, faction, state.tick)
+    -- (and they think no worse of the pilot than of anybody they are not at war with)
+    state.standings[faction] = math.max(Standings.Of(state, faction), Standings.HOSTILE + 1)
+    table.insert(events, { kind = "PeaceMade", a = faction, b = Wars.PILOT, score = if feud then feud.score else 0,
+      hours = if feud then (state.tick - feud.since) // Sovereignty.HOUR else 0, winner = "", paid = 0, ceded = 0 })
+    return
+  end
   local node = state.galaxy.systems[command.target :: number]
   local was = node.name
   node.name = Space.PlaceName(command.what or "") :: string

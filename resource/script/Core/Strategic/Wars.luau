@@ -220,6 +220,39 @@ local function take(galaxy: Galaxy.Galaxy, wars: State.Wars, system: number, to:
   wars.version += 1
 end
 
+-- Whether there is a truce between two.
+function Wars.Truce(wars: State.Wars, a: string, b: string): boolean
+  return wars.truces[pair(a, b)] ~= nil
+end
+
+-- A war begun, and a war ended in a truce, for a reason that is
+-- somebody else's (the pilot's corporation says so: Assets/Sovereignty).
+function Wars.Declare(wars: State.Wars, by: string, on: string, tick: number)
+  wars.declared[by] = tick
+  table.insert(wars.feuds, { a = by, b = on, since = tick, score = 0 })
+end
+
+function Wars.Settle(wars: State.Wars, a: string, b: string, tick: number): State.Feud?
+  for index, feud in wars.feuds do
+    if (feud.a == a and feud.b == b) or (feud.a == b and feud.b == a) then
+      table.remove(wars.feuds, index)
+      wars.truces[pair(a, b)] = tick + Wars.TRUCE
+      return feud
+    end
+  end
+  return nil
+end
+
+-- The war between two, if they are at war.
+function Wars.Feud(wars: State.Wars, a: string, b: string): State.Feud?
+  for _, feud in wars.feuds do
+    if (feud.a == a and feud.b == b) or (feud.a == b and feud.b == a) then
+      return feud
+    end
+  end
+  return nil
+end
+
 -- A system changes hands for a reason that is somebody else's (the
 -- pilot's claim, made or let go: Assets/Sovereignty).
 function Wars.Take(galaxy: Galaxy.Galaxy, wars: State.Wars, system: number, to: string)
@@ -338,7 +371,9 @@ local function round(galaxy: Galaxy.Galaxy, wars: State.Wars, seed: number, tick
     end
     -- (where the pilot is the two forces are ships, and what is left of
     -- each is what they are worth: Tactical/Fronts. No round is reckoned.)
-    if over == nil and operation.stage ~= "muster" and operation.defence > 0 and not operation.shown then
+    -- (And the pilot's own siege is fought by the pilot, in person: what
+    -- they have sent is themselves, and nothing is reckoned for it.)
+    if over == nil and operation.stage ~= "muster" and operation.defence > 0 and not operation.shown and operation.by ~= Wars.PILOT then
       local rng = Rng.For(seed, tick, operation.id, 811)
       local toAttack = operation.defence * Wars.ATTRITION * Rng.Float(rng, 0.5, 1.5)
       local toDefence = operation.force * Wars.ATTRITION * Rng.Float(rng, 0.5, 1.5)
