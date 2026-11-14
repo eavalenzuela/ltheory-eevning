@@ -13,6 +13,7 @@ local Catalog = require("@lt/Core/Data/Catalog")
 local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
 local Fleet = require("@lt/Core/Tactical/Fleet")
+local Chart = require("@lt/Game/UI/Chart")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
 local Industry = require("@lt/Core/Assets/Industry")
@@ -57,6 +58,11 @@ local category = "module"
 local chosen = ""
 local quantity = 1
 local sellPrice, buyPrice = 0, 0    -- 0: the best price that fills now
+-- The side of the chosen type that is shown: "trade" (buying, selling
+-- and orders) or "history" (its price day by day).
+local marketPage = "trade"
+-- How many days of a price are shown.
+local HISTORY = 30
 
 -- Where else the thing chosen is to be had (Core.Query.Sources): asked
 -- again when what is asked changes and a couple of times a second, not
@@ -134,6 +140,12 @@ function Station.Choose(type: string): boolean
     end
   end
   return true
+end
+
+-- The side of the market's chosen type that is shown: "trade" or
+-- "history".
+function Station.MarketPage(): string
+  return marketPage
 end
 
 -- Open the industry tab at a blueprint, or at a copy of one, as
@@ -774,7 +786,14 @@ local function drawMarket(session: Session.Session, game: Core.Game, player: Cor
   local untrained = Core.Query.Untrained(game, chosen)
   Im.Text(string.format("%s m3 a unit", tostring(info.volume)), dx, line, 13, Im.DIM)
   if untrained then
-    Im.Text(untrained, dx + 130, line, 13, Im.WARN)
+    Im.Text(shorten(untrained, 30), dx + 110, line, 13, Im.WARN)
+  end
+  -- (the two sides of a type: trading in it, and its price day by day)
+  if Im.Toggle("Trade", dx + 314, line - 5, 64, 22, marketPage == "trade", "Market:trade") then
+    marketPage = "trade"
+  end
+  if Im.Toggle("History", dx + 382, line - 5, 64, 22, marketPage == "history", "Market:history") then
+    marketPage = "history"
   end
   line += 26
   Im.Text("The station asks", dx, line, 14, Im.DIM)
@@ -785,6 +804,44 @@ local function drawMarket(session: Session.Session, game: Core.Game, player: Cor
   Im.Text(Format.Price(quote.bid), dx + 150, line, 14, Im.TEXT)
   Im.TextRight(`{Format.Whole(have)} in your hangar`, dx + 446, line, 14, if have > 0 then Im.TEXT else Im.DIM)
   line += 36
+
+  -- Its price here day by day, and what was traded in it: the going
+  -- price each day closed at, today's being what it is now.
+  local series = Core.Query.PriceHistory(game, station, chosen, HISTORY)
+  local low, high = Chart.Range(series)
+  local units, worth = Chart.Traded(series)
+  local level = high - low < high * 0.002
+  if marketPage == "history" then
+    Im.Heading(`PRICE HERE, {#series} {if #series == 1 then "DAY" else "DAYS"}`, dx, line, 14, Im.DIM)
+    local picked = Chart.Draw(series, dx, line + 24, 446, 170, 44, false)
+    local day = series[picked or #series]
+    -- (the day under the cursor, or today)
+    local said = if picked and picked < #series then `day {day.day + 1} closed at {Format.Price(day.price)}` else `now {Format.Price(day.price)}`
+    if day.volume > 0 then
+      said ..= `, {Format.Whole(day.volume)} traded at {Format.Price(day.value / day.volume)}`
+    end
+    Im.TextRight(said, dx + 446, line + 2, 12, Im.TEXT)
+    line += 24 + 170 + 6 + 44 + 6
+    Im.Text(`day {series[1].day + 1}`, dx, line, 11, Im.DIM)
+    Im.TextRight("today", dx + 446, line, 11, Im.DIM)
+    -- (what the tallest bar stands for)
+    local busiest = Chart.Busiest(series)
+    local scale = if busiest > 0 then `bars: units traded, the tallest {Format.Whole(busiest)}` else "nothing traded in these days"
+    Im.Text(scale, dx + 223 - Im.TextWidth(scale, 11) / 2, line, 11, Im.DIM)
+    line += 24
+    Im.Text("Lowest", dx, line, 13, Im.DIM)
+    Im.Text(Format.Price(low), dx + 80, line, 13, Im.TEXT)
+    Im.Text("Highest", dx + 230, line, 13, Im.DIM)
+    Im.Text(Format.Price(high), dx + 310, line, 13, Im.TEXT)
+    line += 20
+    Im.Text("Traded", dx, line, 13, Im.DIM)
+    Im.Text(if units > 0 then `{Format.Whole(units)} units, at {Format.Price(worth / units)} on average` else "nothing, by you or yours", dx + 80, line,
+      13, if units > 0 then Im.TEXT else Im.DIM)
+    line += 24
+    Im.Wrapped("The price is the station's going price, between what it asks and what it bids. It moves when somebody trades, and comes home when left alone.",
+      dx, line, 446, 12, Im.DIM)
+    return
+  end
 
   -- A trade at once.
   Im.Text("Quantity", dx, line + 5, 14, Im.DIM)
@@ -909,19 +966,15 @@ local function drawMarket(session: Session.Session, game: Core.Game, player: Cor
     else `waits: sellers take {Format.Whole(bestBuy)} or more now`, dx + 80, line, 12, if fillsNow then GOOD else Im.DIM)
   line += 30
 
-  -- What has traded here lately.
-  Im.Heading("TRADED HERE", dx, line, 14, Im.DIM)
-  line += 24
-  local history = Core.Query.History(game, station, chosen)
-  if #history == 0 then
-    Im.Text("nothing yet", dx, line, 13, Im.DIM, 0.7)
-  end
-  for index = #history, math.max(1, #history - 2), -1 do
-    local day = history[index]
-    Im.Text(`day {day.day + 1}`, dx, line, 13, Im.DIM)
-    Im.Text(`{Format.Whole(day.volume)} units`, dx + 80, line, 13, Im.TEXT)
-    Im.TextRight(`average {Format.Price(day.value / math.max(1, day.volume))}`, dx + 446, line, 13, Im.TEXT)
-    line += 20
+  -- Its price here lately, at a glance: clicked, the History side.
+  Im.Heading("PRICE HERE", dx, line, 14, Im.DIM)
+  Im.TextRight(if level then `steady at {Format.Price(high)}` else `{Format.Price(low)} to {Format.Price(high)}`
+    .. (if units > 0 then `, {Format.Whole(units)} traded` else ""), dx + 446, line + 2, 12, Im.DIM)
+  line += 22
+  Chart.Draw(series, dx, line, 446, 30, 10, true)
+  local _, opened = Im.Area("Market:chart", dx, line, 446, 46, true)
+  if opened then
+    marketPage = "history"
   end
 end
 

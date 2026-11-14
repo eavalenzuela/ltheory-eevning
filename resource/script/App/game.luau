@@ -39,6 +39,7 @@ local Info = require("@lt/Game/UI/Info")
 local Menu = require("@lt/Game/UI/Menu")
 local Corporation = require("@lt/Core/Assets/Corporation")
 local Items = require("@lt/Core/Assets/Items")
+local Market = require("@lt/Core/Assets/Market")
 local Keys = require("@lt/Game/UI/Keys")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
@@ -800,6 +801,40 @@ end
 
 function Debug.Jobs(): number
   return #Core.Query.Jobs(session.game, nil)
+end
+
+-- A cheat: so many game days (or part of one) go by at the markets and
+-- nowhere else. The clock is moved on a minute at a time with only the
+-- markets stepped, which drift home and close their days; everything
+-- else finds that time has passed when it next looks. For a script that
+-- wants a month of prices and has not a month.
+function Debug.MarketDays(days: number)
+  local state = session.game.state
+  state.tick -= state.tick % Market.STEP_TICKS
+  for _ = 1, math.floor(days * 86400 / Market.STEP_TICKS + 0.5) do
+    state.tick += Market.STEP_TICKS
+    Market.Step(state, {})
+  end
+end
+
+-- Which side of the market's chosen type is shown: 'trade' or 'history'.
+function Debug.MarketPage(): string
+  return Station.MarketPage()
+end
+
+-- The price history of a type at the station docked at (the home
+-- station's, in space), as the market's History side charts it: how many
+-- days it has, the lowest and the highest price among them, the price
+-- now, and the units traded over them.
+function Debug.PriceHistory(type: string): (number, number, number, number, number)
+  local player = Core.Query.Player(session.game)
+  local station = if player.docked ~= 0 then player.docked else session.game.state.player.home
+  local series = Core.Query.PriceHistory(session.game, station, type)
+  local low, high, units = math.huge, 0, 0
+  for _, day in series do
+    low, high, units = math.min(low, day.price), math.max(high, day.price), units + day.volume
+  end
+  return #series, if #series > 0 then low else 0, high, if #series > 0 then series[#series].price else 0, units
 end
 
 function Debug.Orders(): number

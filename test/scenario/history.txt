@@ -1,0 +1,82 @@
+# A price's history, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/history.txt
+#
+# The Market tab shows the price of the thing chosen day by day: at a
+# glance at the foot of its trading side, and on its History side as a
+# chart, the going price each day closed at above and what was traded
+# each day below. A price nobody has moved is level. Titanium is bought
+# and sold over a month (the days between are a cheat: the markets alone
+# are run on), and the chart has thirty days with the days it was moved
+# on standing out of them, and what was traded.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Grant(20000000)
+lua assert(GameDebug.Market('mineral.titanium'))
+until GameDebug.Tab() == 'Market'
+frames 3
+lua assert(GameDebug.MarketPage() == 'trade', 'the market opens on its trading side')
+
+# On the first day there is one day to show, and nothing has moved it.
+lua _G.days, _G.low, _G.high, _G.now, _G.units = GameDebug.PriceHistory('mineral.titanium')
+lua assert(_G.days == 1 and _G.low == _G.high and _G.units == 0, 'a new market has one day, level, with nothing traded')
+lua _G.rest = _G.now
+
+# Twelve quiet days, and late on the thirteenth a third of the stock is
+# bought: the day closes dear.
+lua GameDebug.MarketDays(12.95)
+lua GameDebug.Enter('Quantity', 30000)
+frames 2
+until GameDebug.Press('BuyNow')
+until GameDebug.Hangar('mineral.titanium') == 30000
+lua GameDebug.MarketDays(0.05)
+frames 2
+lua _G.days, _G.low, _G.high, _G.now, _G.units = GameDebug.PriceHistory('mineral.titanium')
+lua assert(_G.days == 14, 'thirteen days and today, and there are ' .. _G.days)
+lua assert(_G.high > _G.rest * 1.2 and _G.low == _G.rest, 'the day it was bought on should have closed dear')
+lua assert(_G.units == 30000, 'what was bought is what was traded')
+
+# A week on it is sold back, late in the day: that day closes cheap.
+lua GameDebug.MarketDays(6.95)
+until GameDebug.Press('Quantity:all')
+frames 2
+until GameDebug.Press('SellNow')
+until GameDebug.Hangar('mineral.titanium') == 0
+lua GameDebug.MarketDays(0.05)
+frames 2
+lua _G.days, _G.low, _G.high, _G.now, _G.units = GameDebug.PriceHistory('mineral.titanium')
+lua assert(_G.low < _G.rest * 0.9, 'the day it was sold on should have closed cheap')
+lua assert(_G.units == 60000, 'bought and sold: sixty thousand traded')
+
+# A month from the start the chart has thirty days, and the price is
+# home again.
+lua GameDebug.MarketDays(15)
+frames 2
+lua _G.days, _G.low, _G.high, _G.now, _G.units = GameDebug.PriceHistory('mineral.titanium')
+lua assert(_G.days == 30, 'the chart is of thirty days, and has ' .. _G.days)
+lua assert(_G.high > _G.rest * 1.2 and _G.low < _G.rest * 0.9 and _G.units == 60000, 'both days should still be on it')
+lua assert(math.abs(_G.now - _G.rest) < _G.rest * 0.001, 'left alone, the price should be home')
+
+# The History side, from the glance at the foot of the trading side or
+# by its own button, and back.
+until GameDebug.Press('Market:chart')
+frames 3
+lua assert(GameDebug.MarketPage() == 'history', 'the glance should open the History side')
+lua assert(not GameDebug.CanPress('BuyNow'), 'the History side has no trading on it')
+until GameDebug.Press('Market:trade')
+frames 3
+lua assert(GameDebug.MarketPage() == 'trade')
+lua assert(GameDebug.CanPress('BuyNow'), 'the trading side should be back')
+until GameDebug.Press('Market:history')
+frames 3
+lua assert(GameDebug.MarketPage() == 'history')
+
+# Something nobody has touched is level, on either side.
+lua assert(GameDebug.Market('mineral.cobalt'))
+frames 3
+lua _G.days, _G.low, _G.high, _G.now, _G.units = GameDebug.PriceHistory('mineral.cobalt')
+lua assert(_G.days == 30 and _G.low == _G.high and _G.units == 0, 'cobalt was never moved')
+
+echo history scenario passed
+quit

@@ -1586,6 +1586,16 @@ function Query.History(game: Game, station: number, type: string): { State.Trade
   return Market.History(game.state, station, type)
 end
 
+-- A type's going price at a station day by day, with what was traded in
+-- it each day, for the last so many days and today (30 if not said).
+-- Nothing for a type no market deals in.
+function Query.PriceHistory(game: Game, station: number, type: string, span: number?): { Market.ChartDay }
+  if Space.Object(game.state, station) == nil or Market.Index(type) == nil then
+    return {}
+  end
+  return Market.Chart(game.state, station, type, span or 30)
+end
+
 -- The player's ships docked at a station.
 function Query.Ships(game: Game, station: number): { State.Ship }
   return Hangar.Ships(game.state, station)

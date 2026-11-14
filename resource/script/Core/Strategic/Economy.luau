@@ -213,6 +213,11 @@ local function ratioAt(target: number, stock: number): number
   return if stock <= 0 then PRICE_MAX else math.clamp(target / stock, PRICE_MIN, PRICE_MAX)
 end
 
+-- The price a class would have at a node with so much of it in stock.
+function Economy.PriceAt(econ: Economy, node: number, class: number, stock: number): number
+  return econ.classes[class].par * ratioAt(econ.nodes[node].target[class], stock)
+end
+
 -- The value of the goods between two stock levels, low to high, along
 -- the price curve: par at 4x below a quarter of target, par * T / S in
 -- the middle, par / 4 above four times target.

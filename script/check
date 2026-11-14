@@ -82,6 +82,9 @@
 #   game-orders  an order's price changed (test/scenario/orders.txt): a
 #               sell order placed, its price set to another from the
 #               list of the pilot's orders, and the order cancelled
+#   game-history  a price's history (test/scenario/history.txt): a month
+#               of a mineral's price at a station, bought dear one day
+#               and sold cheap another, on the Market tab's History side
 #   game-tackle  holding another ship (test/scenario/tackle.txt): a
 #               entanglement projector and a warp disruptor fitted and used on a pirate
 #   game-salvage  salvaging (test/scenario/salvage.txt): a salvager fitted,
@@ -294,6 +297,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/moon.txt
   step game-orders 0 timeout 300 bin/launch game --no-present --fixed-step 60 --timeout 200 \
     --script test/scenario/orders.txt
+  step game-history 0 timeout 300 bin/launch game --no-present --fixed-step 60 --timeout 200 \
+    --script test/scenario/history.txt
   step game-sites 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/sites.txt
   step game-tackle 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \

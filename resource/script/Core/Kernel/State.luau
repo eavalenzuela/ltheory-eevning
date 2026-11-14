@@ -269,8 +269,13 @@ export type Order = {
   placed: number,     -- tick
 }
 
--- One day's trade in a type at a station.
-export type TradeDay = { day: number, volume: number, value: number }
+-- One day of a type at a station: what was traded in it (units, and
+-- what they went for in all), and the station's going price when the
+-- day ended ('close': nil for the day that is not over yet, and for a
+-- day put down before closes were kept). A day is put down when
+-- something traded in it or its close is not the close before, so a
+-- type nobody has touched has none.
+export type TradeDay = { day: number, volume: number, value: number, close: number? }
 
 -- A manufacturing job: it ends at a tick and its product then appears in
 -- the hangar of the station it runs at.

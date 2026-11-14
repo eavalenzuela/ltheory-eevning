@@ -381,7 +381,10 @@ function Market.SellValue(state: State.State, station: number, type: string, qua
   return math.floor(revenue * (1 - Market.Tax(state, station)))
 end
 
-local function record(state: State.State, station: number, type: string, units: number, value: number)
+-- A day's entry in the history of a type at a station, made if there
+-- is none. (The days are in order, and a day asked for is the last or
+-- the one before it: a trade is today's, and a close is yesterday's.)
+local function entry(state: State.State, station: number, type: string, day: number): State.TradeDay
   local byType = state.trades[station]
   if byType == nil then
     byType = {}
@@ -392,23 +395,123 @@ local function record(state: State.State, station: number, type: string, units: 
     days = {}
     byType[type] = days
   end
-  local day = state.tick // TICKS_PER_DAY
-  local last = days[#days]
-  if last and last.day == day then
-    last.volume += units
-    last.value += value
-  else
-    table.insert(days, { day = day, volume = units, value = value })
-    if #days > HISTORY_DAYS then
-      table.remove(days, 1)
-    end
+  local at = #days
+  while at >= 1 and days[at].day > day do
+    at -= 1
   end
+  if at >= 1 and days[at].day == day then
+    return days[at]
+  end
+  local made: State.TradeDay = { day = day, volume = 0, value = 0 }
+  table.insert(days, at + 1, made)
+  if #days > HISTORY_DAYS then
+    table.remove(days, 1)
+  end
+  return made
+end
+
+local function record(state: State.State, station: number, type: string, units: number, value: number)
+  local today = entry(state, station, type, state.tick // TICKS_PER_DAY)
+  today.volume += units
+  today.value += value
 end
 
 -- The recent days of trade in a type at a station, oldest first.
 function Market.History(state: State.State, station: number, type: string): { State.TradeDay }
   local byType = state.trades[station]
   return if byType and byType[type] then byType[type] else {}
+end
+
+-- The going price of a type at a station: what the station's price is
+-- before its spread, between what it asks and what it bids.
+function Market.Going(state: State.State, station: number, type: string): number
+  local index = assert(Market.Index(type), `no item type '{type}'`)
+  return Economy.Price(Market.For(state, station), 1, index)
+end
+
+-- The last close put down among some days of history, before a day if
+-- one is given: nil if there is none.
+local function lastClose(days: { State.TradeDay }?, before: number?): number?
+  if days then
+    for at = #days, 1, -1 do
+      local close = days[at].close
+      if close and (before == nil or days[at].day < before) then
+        return close
+      end
+    end
+  end
+  return nil
+end
+
+-- What a type's price at a market was before anything moved it: its
+-- price at the stock the market opened with.
+local function resting(econ: Economy.Economy, index: number): number
+  return Economy.PriceAt(econ, 1, index, econ.initial[index])
+end
+
+-- How far a close has to be from the one before to be put down: less
+-- than this and the price has not moved, to anybody reading a chart. (A
+-- market drifting home would otherwise put down a day for ever.)
+local MOVED = 0.0005
+
+-- The day that has just ended, closed: at every market there is, the
+-- going price of each type is put down for that day if something traded
+-- in it that day, or if the price is not what it last closed at. So a
+-- price that does not move costs nothing to keep, and the history of
+-- one that does is whole: between two days put down, it was what the
+-- earlier one closed at.
+local function closeDay(state: State.State)
+  local day = state.tick // TICKS_PER_DAY - 1
+  local ids = Types.Ids()
+  for _, station in state.marketIds do
+    local econ = state.markets[station]
+    local byType = state.trades[station]
+    for index, id in ids do
+      local days = if byType then byType[id] else nil
+      local price = Economy.Price(econ, 1, index)
+      -- (a day something traded in is there already: the last put
+      -- down, or the one before it if today has begun to trade)
+      local traded = false
+      if days then
+        for at = #days, math.max(1, #days - 1), -1 do
+          traded = traded or days[at].day == day
+        end
+      end
+      local known = lastClose(days) or resting(econ, index)
+      if traded or math.abs(price - known) > MOVED * known then
+        entry(state, station, id, day).close = price
+        byType = state.trades[station]
+      end
+    end
+  end
+end
+
+-- A type's price at a station day by day, for the last 'span' days and
+-- today, oldest first: the going price each day closed at (today's is
+-- what it is now), and what was traded in it that day.
+export type ChartDay = { day: number, price: number, volume: number, value: number }
+function Market.Chart(state: State.State, station: number, type: string, span: number): { ChartDay }
+  local econ = Market.For(state, station)
+  local index = assert(Market.Index(type), `no item type '{type}'`)
+  local days = Market.History(state, station, type)
+  local today = state.tick // TICKS_PER_DAY
+  local first = math.max(0, today - span + 1)
+  local price = lastClose(days, first) or resting(econ, index)
+  local at = 1
+  local out: { ChartDay } = {}
+  for day = first, today do
+    while days[at] and days[at].day < day do
+      at += 1
+    end
+    local put = if days[at] and days[at].day == day then days[at] else nil
+    if day == today then
+      price = Economy.Price(econ, 1, index)
+    elseif put and put.close then
+      price = put.close
+    end
+    table.insert(out, { day = day, price = price, volume = if put then put.volume else 0, value = if put then put.value else 0 })
+  end
+  return out
 end
 
 -- The player's standing orders, optionally at one station, in the order
@@ -714,10 +817,15 @@ local function fill(state: State.State, order: State.Order, econ: Economy.Econom
 end
 
 -- Once a game minute: every market drifts back toward normal, and
--- standing orders fill where the price allows.
+-- standing orders fill where the price allows. And once a game day, the
+-- day's closing prices are put down (closeDay).
 function Market.Step(state: State.State, events: { Event })
   if state.tick % Market.STEP_TICKS ~= 0 then
     return
+  end
+  -- (a day that has just ended is closed first, as the markets left it)
+  if state.tick % TICKS_PER_DAY == 0 and state.tick > 0 then
+    closeDay(state)
   end
   for _, station in state.marketIds do
     Economy.Step(state.markets[station], Market.STEP_TICKS / 3600)

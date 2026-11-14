@@ -512,6 +512,160 @@ suite:Case("but not in a ship they have not trained to fly: then the station giv
   t.eq(#Core.Query.Ships(game, home), 2, "the Carvarro waits in the hangar")
 end)
 
+-- A game day at the markets alone, a minute at a time: what Core.Step
+-- does for them, without the rest of the game (which has nothing going
+-- on in it here), so that a spec can let weeks go by.
+local DAY = 86400
+local function upTo(game: Core.Game, tick: number)
+  local state = game.state
+  -- (the markets step on the minute)
+  state.tick -= state.tick % Market.STEP_TICKS
+  while state.tick < tick do
+    state.tick += Market.STEP_TICKS
+    Market.Step(state, {})
+  end
+end
+local function days(game: Core.Game, n: number)
+  upTo(game, game.state.tick - game.state.tick % Market.STEP_TICKS + n * DAY)
+end
+
+suite:Case("a price nobody moves has no history to keep, and its chart is level", function(t)
+  local game, home = newGame()
+  local state = game.state
+  local going = Market.Going(state, home, "mineral.titanium")
+  t.near(going, 60, 1e-9)
+  -- On the first day there is the one day to show: today, at what the price is now.
+  t.eq(Core.Query.PriceHistory(game, home, "mineral.titanium"), { { day = 0, price = going, volume = 0, value = 0 } })
+  days(game, 32)
+  t.eq(state.tick // DAY, 32)
+  t.eq(next(state.trades), nil, "a month of nothing should have put nothing down")
+  -- Thirty days, today the last of them, by default: every one at the price it has always had.
+  local chart = Core.Query.PriceHistory(game, home, "mineral.titanium")
+  t.eq({ #chart, chart[1].day, chart[#chart].day }, { 30, 3, 32 })
+  for _, day in chart do
+    t.eq({ day.price, day.volume, day.value }, { going, 0, 0 })
+  end
+  t.eq(#Core.Query.PriceHistory(game, home, "mineral.titanium", 7), 7)
+  -- What no market deals in has no chart, nor has what is no station.
+  t.eq(Core.Query.PriceHistory(game, home, "copy.ammo.emp"), {})
+  t.eq(Core.Query.PriceHistory(game, 4242, "mineral.titanium"), {})
+end)
+
+suite:Case("a day something traded in is put down with what the price closed at, and a price drifting home each day until it is home", function(t)
+  local game, home = newGame()
+  local state = game.state
+  state.wallet = 10000000
+  local rest = Market.Going(state, home, "mineral.titanium")
+  -- Day 3, four hours before it ends: half the stock is bought, and the price about doubles.
+  upTo(game, 3 * DAY + 20 * 3600)
+  order(t, game, { kind = "BuyNow", actor = 0, type = "mineral.titanium", quantity = 50000 })
+  local spent = 10000000 - state.wallet
+  local moved = Market.Going(state, home, "mineral.titanium")
+  t.ok(moved > rest * 1.9, `the price should about double, and went from {rest} to {moved}`)
+  -- The day is not over: it is put down with its trade and no close, and the chart has today at the price now.
+  local history = Core.Query.History(game, home, "mineral.titanium")
+  t.eq(history, { { day = 3, volume = 50000, value = spent } })
+  local chart = Core.Query.PriceHistory(game, home, "mineral.titanium")
+  t.eq({ #chart, chart[3].price, chart[4].price, chart[4].volume, chart[4].value }, { 4, rest, moved, 50000, spent })
+
+  -- The day ends: it closes at what the price has eased to in those four hours. The day after, in which
+  -- nothing traded, is put down too, at its own close: the price was still on its way home.
+  upTo(game, 4 * DAY)
+  history = Core.Query.History(game, home, "mineral.titanium")
+  local third = assert(history[1].close)
+  t.eq({ #history, history[1].day, history[1].volume }, { 1, 3, 50000 })
+  t.ok(third < moved * 0.8 and third > rest * 1.1, `day 3 should close well between {rest} and {moved}, and closed at {third}`)
+  upTo(game, 5 * DAY)
+  history = Core.Query.History(game, home, "mineral.titanium")
+  t.eq({ #history, history[2].day, history[2].volume, history[2].value }, { 2, 4, 0, 0 })
+  t.ok(assert(history[2].close) < third, "the day after should close nearer home")
+  -- Home, the price is put down no more: weeks on, the history is what it was, and nothing else has any.
+  days(game, 5)
+  history = Core.Query.History(game, home, "mineral.titanium")
+  local put = #history
+  t.ok(put >= 2 and put <= 4, `a price that came home should stop being put down, and has {put} days`)
+  t.near(assert(history[put].close), rest, rest * 0.001)
+  days(game, 5)
+  t.eq(#Core.Query.History(game, home, "mineral.titanium"), put)
+  local others = 0
+  for _, id in { "mineral.iron", "mineral.copper", "ammo.emp", "frigate.akashi" } do
+    others += #Core.Query.History(game, home, id)
+  end
+  t.eq(others, 0)
+
+  -- The chart of those days: level, the jump on day 3, and down again; today is the price now.
+  t.eq(state.tick, 15 * DAY)
+  state.tick = 12 * DAY + 5
+  chart = Market.Chart(state, home, "mineral.titanium", 30)
+  t.eq({ #chart, chart[1].day, chart[13].day }, { 13, 0, 12 })
+  t.eq({ chart[1].price, chart[3].price, chart[4].price, chart[4].volume, chart[5].volume }, { rest, rest, third, 50000, 0 })
+  t.eq(chart[5].price, assert(history[2].close))
+  for index = 5, 12 do
+    t.ok(chart[index].price <= chart[index - 1].price and chart[index].price >= rest * 0.999, `day {chart[index].day} is out of line`)
+  end
+  t.eq(chart[13].price, Market.Going(state, home, "mineral.titanium"))
+  -- A chart that begins after the price last moved begins at what it closed at then.
+  state.tick = 200 * DAY
+  chart = Market.Chart(state, home, "mineral.titanium", 30)
+  t.eq({ #chart, chart[1].price }, { 30, assert(history[put].close) })
+end)
+
+suite:Case("what nobody brings is put down once when a pilot sells some, and stays where that left it", function(t)
+  local game, home = newGame()
+  local state = game.state
+  local type = "autocannon.small.ii"
+  local rest = Market.Going(state, home, type)
+  Items.Add(state, type, 2, home, "hangar")
+  order(t, game, { kind = "SellNow", actor = 0, item = stack(game, type).id, quantity = 2 })
+  local after = Market.Going(state, home, type)
+  t.near(after, rest / 2, 1e-6, "a station that wanted four and has two pays half of what it did with none")
+  days(game, 3)
+  -- One day: the day of the sale. Nothing brings the price back, so nothing more is put down.
+  local history = Core.Query.History(game, home, type)
+  t.eq({ #history, history[1].day, history[1].volume, history[1].close } :: { any }, { 1, 0, 2, after } :: { any })
+  local chart = Core.Query.PriceHistory(game, home, type)
+  t.eq({ #chart, chart[1].price, chart[2].price, chart[4].price }, { 4, after, after, after })
+end)
+
+suite:Case("a history from before closes were kept is read as it is, and thirty days of one are kept", function(t)
+  local game, home = newGame()
+  local state = game.state
+  local rest = Market.Going(state, home, "mineral.iron")
+  -- (as an older save has it: the days something traded in, and no closes)
+  state.trades[home] = { ["mineral.iron"] = { { day = 0, volume = 10, value = 100 }, { day = 2, volume = 5, value = 60 } } }
+  days(game, 4)
+  local chart = Core.Query.PriceHistory(game, home, "mineral.iron")
+  t.eq({ #chart, chart[1].volume, chart[3].volume, chart[3].value }, { 5, 10, 5, 60 })
+  for _, day in chart do
+    t.eq(day.price, rest)
+  end
+  t.eq(#Core.Query.History(game, home, "mineral.iron"), 2, "a price that did not move puts nothing down")
+  -- A trade a day for forty days (the days between gone by in a moment): the last thirty are kept.
+  state.wallet = 10000000
+  for day = 5, 44 do
+    state.tick = day * DAY + 100
+    order(t, game, { kind = "BuyNow", actor = 0, type = "mineral.iron", quantity = 100 })
+  end
+  local history = Core.Query.History(game, home, "mineral.iron")
+  t.eq({ #history, history[1].day, history[30].day, history[30].volume }, { 30, 15, 44, 100 })
+end)
+
+suite:Case("closing prices are in the save", function(t)
+  local game, home = newGame()
+  game.state.wallet = 10000000
+  upTo(game, 20 * 3600)
+  order(t, game, { kind = "BuyNow", actor = 0, type = "mineral.titanium", quantity = 50000 })
+  upTo(game, DAY)
+  local loaded = Core.Load(Core.Save(game))
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  t.eq(Core.Query.History(loaded, home, "mineral.titanium"), Core.Query.History(game, home, "mineral.titanium"))
+  days(game, 2)
+  days(loaded, 2)
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  t.eq(Core.Query.PriceHistory(loaded, home, "mineral.titanium"), Core.Query.PriceHistory(game, home, "mineral.titanium"))
+  t.eq(#Core.Query.History(loaded, home, "mineral.titanium"), 2)
+end)
+
 suite:Case("markets are plain data and survive a save", function(t)
   local game, home = newGame()
   game.state.wallet = 100000
