@@ -446,47 +446,51 @@ local named = ""
 local sentAt = -1
 
 
--- The camera follows what the pilot locks, by itself (the project
+-- The camera follows the pilot's target, by itself (the project
 -- owner's, 2026-11-13: "when you lock (and target) a ship, your camera
 -- should automatically track it, so you don't need to constantly pan
--- with the mouse to keep it in view"). A ship that the pilot has just
--- begun to lock is what the camera follows; so is a locked ship the
--- pilot picks out, by a click or by Tab; and when the one it is on is
--- locked no longer (destroyed, gone, let go), it goes to another that
--- is, the one picked out if that is locked, else the last one locked.
--- A hand on the camera takes it back, and so does C: it is the pilot's
--- until they lock or pick out another. (Ships only: a rock that is
+-- with the mouse to keep it in view", and of several things locked at
+-- once, "The camera would track to the targeted one"). Which thing is
+-- the target is Session.Aim's to say: when that becomes another, and it
+-- is a ship, the camera goes to it; when there is none, it follows
+-- nothing. A hand on the camera takes it back, and so does C: it is the
+-- pilot's until their target is another. (Ships only: a rock that is
 -- being mined does not move, and wants nobody's eye kept on it.)
-local following = { locks = {} :: { [number]: boolean }, selected = 0, on = 0 }
-local function followLocks(session: Session.Session, scene: Scene.Scene, game: Core.Game, ball: State.Ball)
-  local ships: { number } = {}
-  local now: { [number]: boolean } = {}
-  local fresh = 0
-  for _, lock in ball.vitals.locks do
-    if Core.Query.Ball(game, lock.target) then
-      table.insert(ships, lock.target)
-      now[lock.target] = true
-      if not following.locks[lock.target] then
-        fresh = lock.target
-      end
-    end
-  end
+local following = { target = 0, on = 0 }
+local function followTarget(session: Session.Session, scene: Scene.Scene, game: Core.Game)
+  local target = session.target
   -- (taken from it since: by a hand, by C, or by its going from the grid)
   if scene.tracking ~= following.on then
     following.on = 0
   end
-  if fresh ~= 0 then
-    Scene.Track(scene, fresh)
-    following.on = fresh
-  elseif session.selected ~= following.selected and now[session.selected] then
-    Scene.Track(scene, session.selected)
-    following.on = session.selected
-  elseif following.on ~= 0 and not now[following.on] then
-    local next = if now[session.selected] then session.selected else ships[#ships] or 0
-    Scene.Track(scene, next)
-    following.on = next
+  if target ~= following.target then
+    if target ~= 0 and Core.Query.Ball(game, target) then
+      Scene.Track(scene, target)
+      following.on = target
+    elseif following.on ~= 0 then
+      Scene.Track(scene, 0)
+      following.on = 0
+    end
+    following.target = target
   end
-  following.locks, following.selected = now, session.selected
+end
+
+-- What a weapon switched on now fires at (or a mining laser cuts, or a
+-- projector holds): the pilot's target if it is locked; else what is
+-- selected, if that is; else the first thing locked. 0 with nothing.
+local function aimOf(session: Session.Session, ball: State.Ball): number
+  for _, wanted in { session.target, session.selected } do
+    local lock = lockOf(ball, wanted)
+    if lock and lock.locked then
+      return wanted
+    end
+  end
+  for _, lock in ball.vitals.locks do
+    if lock.locked then
+      return lock.target
+    end
+  end
+  return 0
 end
 
 local function drawSelected(session: Session.Session, entries: { Core.Entry }, ball: State.Ball, x: number, y: number, width: number)
@@ -652,19 +656,30 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
   end
 end
 
--- The targets the ship has locked or is locking, in a row.
+-- The targets the ship has locked or is locking, in a row, with how
+-- many it has of how many it can have. One of them is the pilot's
+-- target (Session.Aim), and is lit and says so: a click on another
+-- makes that one it.
 local function drawTargets(session: Session.Session, game: Core.Game, ball: State.Ball, x: number, y: number)
   local now = game.state.tick * Constants.TICK
+  if #ball.vitals.locks > 0 then
+    Im.Text(`TARGETS  {#ball.vitals.locks} / {ball.vitals.maxTargets}`, x, y - 15, 11, Im.DIM)
+  end
   for index, lock in ball.vitals.locks do
     local body = Core.Query.Body(game, lock.target)
     if body then
       local bx = x + (index - 1) * 168
+      local aimed = lock.target == session.target
       Im.Panel(bx, y, 160, 62)
-      local _, clicked = Im.Row(bx, y, 160, 62, lock.target == session.selected)
+      local _, clicked = Im.Row(bx, y, 160, 62, aimed, `Target:{index}`)
       if clicked then
         session.selected = lock.target
+        session.target = lock.target
       end
-      Im.Text(shorten(body.name, 22), bx + 8, y + 5, 14, Im.TEXT)
+      Im.Text(shorten(body.name, if aimed then 15 else 22), bx + 8, y + 5, 14, Im.TEXT)
+      if aimed then
+        Im.TextRight("TARGET", bx + 152, y + 7, 11, Im.ACCENT)
+      end
       if not lock.locked then
         Im.Text(string.format("locking  %.0f s", math.max(0, lock.done - now)), bx + 8, y + 26, 13, Im.WARN)
       else
@@ -855,20 +870,8 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
         -- (on the wreck that is selected: a wreck needs no lock)
         Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id, target = session.selected })
       elseif module.weapon or module.miner or module.hex then
-        -- at the selected target if it is locked, else the first locked one
-        local target = 0
-        local chosen = lockOf(ball, session.selected)
-        if chosen and chosen.locked then
-          target = session.selected
-        else
-          for _, lock in ball.vitals.locks do
-            if lock.locked then
-              target = lock.target
-              break
-            end
-          end
-        end
-        Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id, target = target })
+        -- (at the pilot's target: aimOf)
+        Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id, target = aimOf(session, ball) })
       else
         Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id })
       end
@@ -1043,7 +1046,8 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       local panelX = right - panelWidth - 16
       if ball then
         local navX = left + (w.size.x - 520) / 2
-        drawTargets(session, game, ball, left + 300, top + 16)
+        -- (beside the Guide button, not over it)
+        drawTargets(session, game, ball, left + 430, top + 20)
         -- A key (Tab) picks out the next ship that would fire on the pilot,
         -- nearest first and round again.
         if Keys.Did("next") then
@@ -1063,8 +1067,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         if Keys.Did("camera") then
           Scene.Track(scene, if scene.tracking == session.selected then 0 else session.selected)
         end
-        -- (and it follows what the pilot locks, with no key)
-        followLocks(session, scene, game, ball)
+        -- (and it follows the pilot's target, with no key)
+        Session.Aim(session)
+        followTarget(session, scene, game)
         if scene.tracking ~= 0 then
           -- (what it is on, where that is not what is picked out, whose panel this is over)
           local on = if scene.tracking == session.selected then nil else Core.Query.Body(game, scene.tracking)

@@ -4,6 +4,9 @@
 -- and what happens is compared with what the formulas say should.
 
 local Combat = require("@lt/Core/Tactical/Combat")
+local Vitals = require("@lt/Core/Tactical/Vitals")
+local Ships = require("@lt/Core/Data/Ships")
+local Attributes = require("@lt/Core/Attributes")
 local Core = require("@lt/Core/Api")
 local Gunnery = require("@lt/Core/Tactical/Gunnery")
 local Items = require("@lt/Core/Assets/Items")
@@ -130,6 +133,22 @@ suite:Case("locks have a range and a limit", function(t)
   order(t, a, { kind = "LockTarget", actor = 0, target = extras[2].id })
   Core.Step(a.game)
   t.eq(refused(a, { kind = "LockTarget", actor = 0, target = extras[3].id }), "no more targets can be locked")
+  -- How many is the hull's to say, and its pilot's skill's: a fifth more a level of Target Management, of
+  -- what the hull allows, in whole targets. (A Courier's three are three at one level and four at two.)
+  local courier = Ships.byId["frigate.courier"]
+  for level, most in { 3, 4, 4, 5, 6 } do
+    local stats = Attributes.Ship(courier, {}, { ["target.management"] = level })
+    t.eq(math.floor(stats.maxTargets + 1e-6), most, `a Courier at Target Management {level}`)
+  end
+  t.eq(math.floor(Attributes.Ship(Ships.byId["battleship.owari"], {}, { ["target.management"] = 5 }).maxTargets + 1e-6), 14)
+  -- Trained, and the ship's count brought into line with it (as it is on leaving a station): a fourth lock.
+  state.skills["target.management"] = 2
+  Vitals.Refresh(state, a.me)
+  t.eq(a.me.vitals.maxTargets, 4)
+  t.eq(refused(a, { kind = "LockTarget", actor = 0, target = extras[3].id }), "(accepted)")
+  order(t, a, { kind = "LockTarget", actor = 0, target = extras[3].id })
+  Core.Step(a.game)
+  t.eq(#a.me.vitals.locks, 4)
 end)
 
 suite:Case("autocannons at rest hit as often and as hard as the formula says", function(t)

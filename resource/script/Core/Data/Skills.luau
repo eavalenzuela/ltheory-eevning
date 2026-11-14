@@ -115,6 +115,12 @@ local skills: { Skill } = {
     note = "5% more CPU a level." },
   { id = "engineering", name = "Power Grid Management", rank = 1, start = 0, requires = {}, bonus = ship("powergrid", 0.05),
     note = "5% more powergrid a level." },
+  -- (How many things a ship can have locked at once is its hull's to say,
+  -- and this skill's: the project owner's, 2026-11-13, "ship class
+  -- defines max, along with skills". A fifth more a level, of what the
+  -- hull allows, and whole targets only: Tactical/Vitals. A first figure.)
+  { id = "target.management", name = "Target Management", rank = 2, start = -1, requires = {}, bonus = ship("maxTargets", 0.20),
+    note = "A fifth more targets locked at once a level, of what the hull allows (whole ones only)." },
   { id = "targeting", name = "Long Range Targeting", rank = 2, start = -1, requires = {}, bonus = ship("lockRange", 0.05),
     note = "5% more targeting range a level." },
   -- Industry and trade

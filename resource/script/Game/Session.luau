@@ -21,6 +21,14 @@ export type Session = {
   game: Core.Game,
   clock: Clock.Clock,
   selected: number,           -- id of the selected body, or 0
+  -- The pilot's target: of the things their ship has locked or is
+  -- locking, the one they are at (Session.Aim keeps it). What a weapon
+  -- switched on fires at, and what the camera follows. 0 with nothing
+  -- locked. 'aimed' and 'aimedAt' are what was locked and what was
+  -- selected when it was last looked at, to tell what has changed.
+  target: number,
+  aimed: { [number]: boolean },
+  aimedAt: number,
   events: { Space.Event },    -- the events of the ticks taken this frame
   message: string,            -- the last thing worth telling the player
   messageTick: number,
@@ -50,7 +58,7 @@ local STANDOFF: { [string]: number } = { planet = 1, moon = 1.5, sun = 4 }
 function Session.New(galaxySeed: number, historySeed: number): Session
   return {
     game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, traffic = true }),
-    clock = Clock.New(), selected = 0, events = {}, message = "", messageTick = 0, epoch = 1,
+    clock = Clock.New(), selected = 0, target = 0, aimed = {}, aimedAt = 0, events = {}, message = "", messageTick = 0, epoch = 1,
     destination = 0, autopilot = false, safest = false,
   }
 end
@@ -617,11 +625,50 @@ function Session.Delete(slot: string): boolean
   return Host.Remove(`{SAVE_DIR}/{slot}/state.bin`)
 end
 
+-- The pilot's target (the project owner's, 2026-11-13: "you should be
+-- able to lock multiple targets at once (ship class defines max, along
+-- with skills), and then click to choose which one you are actively
+-- targeting. The camera would track to the targeted one."). A ship has
+-- as many things locked as its hull and its pilot's skill allow; one of
+-- them is the pilot's target. It is the one they pick out: a locked
+-- thing they select, by a click on it or on its panel in the row of
+-- targets, or by a key. Until they pick, it is the first thing they
+-- locked; and when it is locked no longer (destroyed, gone, let go) it
+-- is the selected thing, if that is locked, else the one locked last.
+-- Called once a frame; says what the target is now.
+function Session.Aim(session: Session): number
+  local ball = Core.Query.Ball(session.game, session.game.state.player.ship)
+  if ball == nil then
+    session.target, session.aimed, session.aimedAt = 0, {}, session.selected
+    return 0
+  end
+  local now: { [number]: boolean } = {}
+  local last, fresh = 0, 0
+  for _, lock in ball.vitals.locks do
+    now[lock.target] = true
+    last = lock.target
+    if not session.aimed[lock.target] then
+      fresh = lock.target
+    end
+  end
+  if not now[session.target] then
+    session.target = 0
+  end
+  if session.selected ~= session.aimedAt and now[session.selected] then
+    session.target = session.selected
+  elseif session.target == 0 then
+    session.target = if fresh ~= 0 then fresh elseif now[session.selected] then session.selected else last
+  end
+  session.aimed, session.aimedAt = now, session.selected
+  return session.target
+end
+
 -- Replace the running game with a new one, of so many systems (three,
 -- if nobody says).
 function Session.Restart(session: Session, galaxySeed: number, historySeed: number, systems: number?)
   session.game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, systems = systems, traffic = true })
   session.selected = 0
+  session.target, session.aimed, session.aimedAt = 0, {}, 0
   session.events = { { kind = "Loaded" } }
   session.epoch += 1
   session.destination, session.autopilot = 0, false
@@ -658,6 +705,7 @@ function Session.Load(session: Session, slot: string, away: number?): boolean
   end
   session.game = loaded
   session.selected = 0
+  session.target, session.aimed, session.aimedAt = 0, {}, 0
   session.events = { { kind = "Loaded" } }
   session.epoch += 1
   session.destination, session.autopilot = 0, false

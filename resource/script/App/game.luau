@@ -364,6 +364,14 @@ function Debug.Lock(what: string): boolean
   return Debug.Order("LockTarget", what)
 end
 
+-- The pilot's target (Session.Aim): its name ("" with none), how many
+-- things the ship has locked or is locking, and how many it can have.
+function Debug.Target(): (string, number, number)
+  local ball = Core.Query.Ball(session.game, session.game.state.player.ship)
+  local body = if session.target ~= 0 then Core.Query.Body(session.game, session.target) else nil
+  return if body then body.name else "", if ball then #ball.vitals.locks else 0, if ball then ball.vitals.maxTargets else 0
+end
+
 -- How many targets are locked (not merely being locked).
 function Debug.Locked(): number
   local ball = Core.Query.Ball(session.game, session.game.state.player.ship)

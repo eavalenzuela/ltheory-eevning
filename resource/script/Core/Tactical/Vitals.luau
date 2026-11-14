@@ -47,7 +47,8 @@ function Vitals.New(state: State.State, ship: State.Ship): State.Vitals
     shieldRecharge = stats.shieldRecharge, capacitorRecharge = stats.capacitorRecharge,
     armorMend = if stats.armorMend > 0 then stats.armorMend else nil, hullMend = if stats.hullMend > 0 then stats.hullMend else nil,
     signature = stats.signature, scanResolution = stats.scanResolution,
-    lockRange = stats.lockRange, maxTargets = stats.maxTargets,
+    -- (whole targets: a skill's share of one more is not one more)
+    lockRange = stats.lockRange, maxTargets = math.floor(stats.maxTargets + 1e-6),
     shieldResonance = resonance(stats, "shieldResonance"),
     armorResonance = resonance(stats, "armorResonance"),
     hullResonance = resonance(stats, "hullResonance"),
@@ -70,7 +71,7 @@ function Vitals.Refresh(state: State.State, ball: State.Ball)
   v.hullMend = if stats.hullMend > 0 then stats.hullMend else nil
   -- (a painter on it swells what it shows, and a dampener cuts what it sees)
   v.signature, v.scanResolution = stats.signature * v.paint, stats.scanResolution * v.damp
-  v.lockRange, v.maxTargets = stats.lockRange * v.damp, stats.maxTargets
+  v.lockRange, v.maxTargets = stats.lockRange * v.damp, math.floor(stats.maxTargets + 1e-6)
   v.shieldResonance = resonance(stats, "shieldResonance")
   v.armorResonance = resonance(stats, "armorResonance")
   v.hullResonance = resonance(stats, "hullResonance")

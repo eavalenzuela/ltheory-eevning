@@ -1,0 +1,60 @@
+# Several targets at once, and which of them is the pilot's, in the game
+# app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/targets.txt
+#
+# A ship has as many things locked as its hull allows (a Courier:
+# three). One of them is the pilot's target: the first one locked, until
+# the pilot picks another by a click on its panel in the row of targets.
+# The camera follows the target, and goes to another when the target is
+# another. Let go, the target is one that is still locked.
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua GameDebug.Sound(true, 0)
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('Stop'))
+frames 30
+lua assert(select(3, GameDebug.Target()) == 3, 'a Courier holds three targets, not ' .. select(3, GameDebug.Target()))
+lua assert(GameDebug.Target() == '', 'with nothing locked there is no target')
+lua assert(GameDebug.Pirate('scout', 14000, 0.5) and GameDebug.Pirate('raider', 15000, 2.6), 'no pirates to lock')
+frames 5
+
+# The first thing locked is the target, and the camera goes to it.
+lua assert(GameDebug.Lock('Pirate Scout'), 'the scout would not be locked')
+until GameDebug.Target() == 'Pirate Scout'
+until GameDebug.Tracking() ~= 0
+lua _G.first = GameDebug.Tracking()
+
+# A second lock: two things locked, and the target is still the first.
+lua assert(GameDebug.Lock('Pirate Raider'), 'the raider would not be locked')
+until select(2, GameDebug.Target()) == 2
+frames 10
+lua assert(GameDebug.Target() == 'Pirate Scout', 'a second lock should not take the target from the first')
+lua assert(GameDebug.Tracking() == _G.first, 'nor the camera from it')
+
+# Its panel in the row of targets, clicked: it is the target, and the camera goes to it.
+until GameDebug.Press('Target:2')
+until GameDebug.Target() == 'Pirate Raider'
+until GameDebug.Tracking() ~= _G.first and GameDebug.Tracking() ~= 0
+lua assert(GameDebug.Selected() == 'Pirate Raider', 'a click on a target\'s panel selects it too')
+
+# And the first again, by its panel.
+until GameDebug.Press('Target:1')
+until GameDebug.Target() == 'Pirate Scout'
+until GameDebug.Tracking() == _G.first
+
+# The target let go: the one still locked is the target, and has the camera.
+lua assert(GameDebug.Order('UnlockTarget', 'Pirate Scout'))
+until GameDebug.Target() == 'Pirate Raider'
+until GameDebug.Tracking() ~= _G.first and GameDebug.Tracking() ~= 0
+lua assert(select(2, GameDebug.Target()) == 1)
+
+# And with that one let go, there is no target, and the camera follows nothing.
+lua assert(GameDebug.Order('UnlockTarget', 'Pirate Raider'))
+until GameDebug.Target() == ''
+until GameDebug.Tracking() == 0
+
+echo targets scenario passed
+quit
