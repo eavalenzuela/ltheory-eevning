@@ -110,6 +110,10 @@ Commerce.SETTLED, Commerce.SETTLE_HOURS = 20, 2
 Commerce.SHOCK_CHANCE, Commerce.SHOCKS = 0.6, 4
 Commerce.SHOCK_DAYS = { 3, 6 }
 Commerce.SHORTAGE, Commerce.GLUT = 2.5, 0.4
+-- What is left, after a step, of what was put down as having gone
+-- along a watched lane and nobody was seen carrying; and how full a
+-- hauler's hold is of what it carries.
+Commerce.FORGET, Commerce.FILL = 0.5, 0.9
 -- The share of what a built thing costs that is its materials: what a
 -- local price of them moves (Data/Blueprints prices one so).
 Commerce.MATERIALS = 0.6
@@ -586,7 +590,143 @@ end
 -- are now ('surge': the system pirates are massing in, 0 for none).
 function Commerce.Advance(econ: Economy.Economy, galaxy: Galaxy.Galaxy, surge: number, ticks: number)
   Commerce.Lanes(econ, galaxy, surge)
+  -- (what went along the watched lanes a while ago has long arrived:
+  -- half of what nobody has been seen carrying is forgotten each step)
+  if econ.passed then
+    for _, row in econ.passed do
+      for class = 1, #row do
+        row[class] *= Commerce.FORGET
+      end
+    end
+  end
   Economy.Step(econ, ticks * Constants.TICK / 3600)
+end
+
+-- The haulers a pilot sees carry it for real (the project owner's
+-- ruling; Tactical/Traffic). The economy moves goods along a gate as a
+-- quantity, with nobody to be seen: in the system the pilot is in, what
+-- goes along each lane is put down as it goes (Economy's 'passed'), and
+-- a hauler that comes in by a gate, or leaves by one, has a hold of
+-- what lately came or went that way. While it is on its way those goods
+-- are in its hold and not in the stock of the system they are for: they
+-- are put there when it gets where it is going (Commerce.Deliver), and
+-- if it is destroyed they are in its wreck and the system goes without.
+
+-- Watch the lanes of a system (the one the pilot is in): what was put
+-- down for another is dropped.
+function Commerce.Watch(econ: Economy.Economy, system: number)
+  local watch: number? = if econ.nodes[system] then system else nil
+  if econ.watch == watch then
+    return
+  end
+  local passed: { [number]: { number } } = {}
+  econ.watch, econ.passed = watch, passed
+  if watch == nil then
+    return
+  end
+  -- (and what is on its lanes as the pilot comes: about what the next
+  -- step will send along each, by the prices at their two ends now)
+  local hours = Commerce.STEP * Constants.TICK / 3600
+  for _, edge in econ.edges do
+    if edge.open and (edge.a == watch or edge.b == watch) then
+      local other = if edge.a == watch then edge.b else edge.a
+      local row: { number } = table.create(#econ.classes, 0)
+      for class, info in econ.classes do
+        local here, there = Economy.Price(econ, watch, class) / info.par, Economy.Price(econ, other, class) / info.par
+        local gap = math.abs(here - there) - edge.cost * (info.bulk or 1)
+        if gap > 0 then
+          local amount = edge.conductance * hours * gap / info.par
+          row[class] = if here > there then amount else -amount
+        end
+      end
+      passed[other] = row
+    end
+  end
+end
+
+-- A lane of the watched system that something has lately gone along,
+-- among the systems named (those its gates lead to), and which way: the
+-- system at the other end, and whether the goods went out to it (or
+-- came in from it). Picked by a roll in [0, 1): a lane and a way more
+-- has gone by is likelier, by the root of what that was worth, so that
+-- the busiest lane has most of the haulers and not all of them. Nil if
+-- nothing has gone along any of them.
+function Commerce.Lane(econ: Economy.Economy, among: { number }, roll: number): (number?, boolean)
+  local passed = econ.passed
+  if passed == nil then
+    return nil, false
+  end
+  local lanes: { { other: number, out: boolean, weight: number } } = {}
+  local sum = 0
+  for _, other in among do
+    local row = passed[other]
+    if row then
+      local came, went = 0, 0
+      for class = 1, #row do
+        local worth = row[class] * econ.classes[class].par
+        came = math.max(came, worth)
+        went = math.max(went, -worth)
+      end
+      for _, way in { { came, false }, { went, true } } :: { { any } } do
+        if way[1] > 0 then
+          table.insert(lanes, { other = other, out = way[2], weight = math.sqrt(way[1]) })
+          sum += math.sqrt(way[1])
+        end
+      end
+    end
+  end
+  local at = roll * sum
+  for _, lane in lanes do
+    at -= lane.weight
+    if at < 0 then
+      return lane.other, lane.out
+    end
+  end
+  local last = lanes[#lanes]
+  return if last then last.other else nil, last ~= nil and last.out
+end
+
+-- A hold of what has lately gone along a lane of the watched system,
+-- for a hauler with so many m3 of room: the goods of which most went
+-- that way ('out' to the system at the other end, or in from it), as
+-- many units as there is room for and no more than went. They are taken
+-- out of the stock of the system they were for, and off the record of
+-- the lane. Returns the type, the whole units, and the system (the
+-- node) they are owed to; nothing if nothing went that way, or the
+-- hold has not room for one.
+function Commerce.Load(econ: Economy.Economy, other: number, out: boolean, room: number): (string?, number, number)
+  local watch, passed = econ.watch, econ.passed
+  local row = if passed then passed[other] else nil
+  if watch == nil or row == nil then
+    return nil, 0, 0
+  end
+  local best, most = 0, 0
+  for class = 1, #row do
+    local worth = (if out then -row[class] else row[class]) * econ.classes[class].par
+    if worth > most then
+      best, most = class, worth
+    end
+  end
+  if best == 0 then
+    return nil, 0, 0
+  end
+  local owed = if out then other else watch
+  local type = goods[best]
+  local units = math.floor(math.min(math.abs(row[best]), room * Commerce.FILL / Types.Info(type).volume, econ.nodes[owed].stock[best]))
+  if units < 1 then
+    return nil, 0, 0
+  end
+  Economy.Draw(econ, owed, best, units)
+  row[best] += if out then units else -units
+  return type, units, owed
+end
+
+-- A hauler got where it was going: what it carried is in the stock of
+-- the system it was for.
+function Commerce.Deliver(econ: Economy.Economy, node: number, class: number, amount: number)
+  if econ.nodes[node] then
+    Economy.Give(econ, node, class, amount)
+  end
 end
 
 return Commerce

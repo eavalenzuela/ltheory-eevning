@@ -106,6 +106,14 @@ export type Economy = {
   sold: { number },       -- put in through Sell
   moved: { number },      -- carried along edges (not a source or sink)
   lost: { number },       -- lost on the way, or taken from a stock by force
+  -- A node whose lanes are watched (nil: none), and what has gone along
+  -- each of them since it was last looked at: by the node at the other
+  -- end, then by class, the units that came in to the watched node from
+  -- there (or, less than nothing, went out to it). Whoever watches
+  -- reads it and takes from it (Strategic/Commerce, for the haulers a
+  -- pilot sees: Tactical/Traffic). It is a record and changes nothing.
+  watch: number?,
+  passed: { [number]: { number } }?,
 }
 
 local PRICE_MIN, PRICE_MAX = 0.25, 4
@@ -523,6 +531,17 @@ local function flow(econ: Economy, edge: Edge, rows: { { number } }, bulks: { nu
         to.stock[g] = toStock + arrived
         econ.moved[g] += amount
         econ.lost[g] += amount - arrived
+        local watch = econ.watch
+        if watch and (watch == to.id or watch == from.id) then
+          local passed = econ.passed :: { [number]: { number } }
+          local other = if watch == to.id then from.id else to.id
+          local row = passed[other]
+          if row == nil then
+            row = table.create(#econ.classes, 0)
+            passed[other] = row
+          end
+          row[g] += if watch == to.id then arrived else -arrived
+        end
         local fromRatio, toRatio = ratioAt(fromTarget, fromStock - amount), ratioAt(toTarget, toStock + arrived)
         if ra > rb then
           bRow[g], aRow[g] = fromRatio, toRatio

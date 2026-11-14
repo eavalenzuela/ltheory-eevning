@@ -2,6 +2,7 @@
 -- The galaxy's economy in the real bulk goods (Strategic/Commerce), and
 -- the station markets that deal with it (Assets/Market).
 
+local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Codec = require("@lt/Core/Persist/Codec")
 local Commerce = require("@lt/Core/Strategic/Commerce")
 local Core = require("@lt/Core/Api")
@@ -9,6 +10,7 @@ local Economy = require("@lt/Core/Strategic/Economy")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
+local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local Test = require("@lt/Tool/Test")
 local Types = require("@lt/Core/Data/Types")
@@ -392,6 +394,83 @@ suite:Case("now and then a part of the map is short of something, or has too muc
   for _, left in state.shocks do
     t.ok(left.id ~= 1)
   end
+end)
+
+suite:Case("the haulers a pilot sees carry what the economy sends along the lanes: delivered if they get there, missing if they do not", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, systems = SYSTEMS, peaceful = true, traffic = true, settled = Commerce.SETTLED })
+  local state = game.state
+  local econ = state.commerce
+  assert(Core.Submit(game, { kind = "Undock", actor = state.player.ship }))
+  Core.Step(game)
+  -- (the lanes of the system the pilot is in are watched, from the moment they are there)
+  t.eq(econ.watch, 1)
+  local passed = assert(econ.passed)
+  local going = 0
+  for _, neighbor in state.galaxy.systems[1].neighbors do
+    for class = 1, #econ.classes do
+      going += if passed[neighbor] and passed[neighbor][class] ~= 0 then 1 else 0
+    end
+  end
+  t.ok(going >= 3, `only {going} goods are on the lanes of a homeworld`)
+  local seen: { [number]: boolean } = {}
+  local laden, ballast, delivered, robbed = 0, 0, 0, 0
+  local watched, given = 0, 0
+  local seenClass, seenAmount = 1, 0
+  for _ = 1, 6000 do
+    Core.Step(game)
+    local lost: { [string]: any }? = nil
+    for _, event in Core.TakeEvents(game) do
+      lost = if event.kind == "HaulLost" then event else lost
+    end
+    for _, id in table.clone(state.trafficIds) do
+      local record = state.traffic[id]
+      if not seen[id] and (record.kind == "in" or record.kind == "out") and state.ships[id] then
+        seen[id] = true
+        local carries = record.carries
+        local hold = Items.In(state, id, "cargo")
+        if carries == nil then
+          ballast += 1
+          t.eq(#hold, 0, "a hauler with nothing of the economy's has something aboard")
+        else
+          laden += 1
+          -- What is aboard is what it carries: one of the goods, as much as there is room for, owed to where it is going.
+          local type = Commerce.goods[carries.class]
+          t.eq(#hold, 1)
+          t.eq({ hold[1].type, hold[1].quantity } :: { any }, { type, carries.amount } :: { any })
+          t.ok(carries.amount >= 1 and carries.amount * Types.Info(type).volume <= Ships.byId[state.ships[id].type].cargo * Commerce.FILL + 1e-6)
+          t.eq(carries.node, if record.kind == "in" then 1 else (assert(Space.Object(state, record.goal)) :: any).to)
+          if watched == 0 and robbed ~= 0 then
+            watched, given = id, econ.sold[carries.class]
+            seenClass, seenAmount = carries.class, carries.amount
+          elseif robbed == 0 then
+            -- The first of them is destroyed: its hold is in its wreck, and the system it was for is told it goes without.
+            robbed = id
+            local wrecks = #state.wreckIds
+            Aftermath.Destroy(state, id, state.player.ship, game.events)
+            t.eq(#state.wreckIds, wrecks + 1)
+          end
+        end
+      end
+    end
+    if lost then
+      t.eq({ lost.system, Commerce.Index(lost.type) ~= nil, lost.amount >= 1 } :: { any }, { lost.system, true, true } :: { any })
+      robbed = -1
+    end
+    -- The next gets where it is going: what it carried is in the stock of the system it was for.
+    if watched ~= 0 and state.traffic[watched] == nil and delivered == 0 then
+      delivered = 1
+      t.ok(econ.sold[seenClass] - given >= seenAmount - 1e-6, "what a hauler carried is not in the stock of the system it was for")
+    end
+  end
+  t.ok(laden >= 3, `{laden} haulers had a hold of the economy's goods, and {ballast} were in ballast`)
+  t.eq(robbed, -1, "the system a destroyed hauler was for was never told")
+  t.eq(delivered, 1, "no hauler got where it was going")
+  t.ok(given >= 0)
+  -- (and the books still come out: what was in a hold was out of a stock, and is back in one or lost)
+  for class, residual in Economy.Residual(econ) do
+    t.ok(math.abs(residual) * econ.classes[class].par < 1, `the books are out by {residual} of {econ.classes[class].id}`)
+  end
+  print(`     haulers: {laden} with a hold of the economy's goods and {ballast} in ballast, in a hundred minutes at a homeworld`)
 end)
 
 return suite

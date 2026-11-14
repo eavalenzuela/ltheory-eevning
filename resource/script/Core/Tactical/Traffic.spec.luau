@@ -137,7 +137,7 @@ suite:Case("haulers come in by a gate to dock, and go out from a station to a ga
   t.ok(#state.shipIds <= 1 + Traffic.HAULERS.secure + Traffic.PATROLS.secure + Traffic.MINERS.secure)
 end)
 
-suite:Case("where order is kept a trader is now and then a freighter, with a great deal aboard; nobody flies one where it is not", function(t)
+suite:Case("where order is kept a trader is now and then a freighter, with a great deal of room aboard; nobody flies one where it is not", function(t)
   local freighters, traders, most = 0, 0, 0
   for seed = 1, 4 do
     local game = busy(seed)
@@ -158,7 +158,11 @@ suite:Case("where order is kept a trader is now and then a freighter, with a gre
             freighters += 1
             most = math.max(most, aboard)
             t.eq(ship.name, "Freighter")
-            t.ok(aboard >= 50 * Traffic.FREIGHT, `a freighter with {aboard} units aboard`)
+            -- (what it has aboard is what the economy has sent its way,
+            -- and in a galaxy where nothing has gone anywhere yet that is
+            -- nothing: Strategic/Commerce.spec has haulers with a hold of it)
+            t.eq(aboard, 0)
+            t.ok(Ships.byId[ship.type].cargo >= 5 * Ships.byId["industrial.hauler"].cargo, "a freighter should have many times a hauler's room")
           elseif Ships.byId[ship.type].class == "industrial" then
             traders += 1
           end
@@ -168,7 +172,7 @@ suite:Case("where order is kept a trader is now and then a freighter, with a gre
   end
   t.ok(freighters >= 2, `only {freighters} freighters among the traders of four histories`)
   t.ok(traders > freighters, "most traders should fly a hauler")
-  t.ok(most > 400, "a freighter should carry more than any hauler does")
+  t.eq(most, 0)
   -- Where order is thin, none.
   local wild = busy(1)
   local low = 0

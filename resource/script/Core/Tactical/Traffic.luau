@@ -44,6 +44,7 @@
 -- (A stand-in, like the pirates' rules: when the strategic layer joins
 -- the game, who is about is who its trade and its navies send.)
 
+local Commerce = require("@lt/Core/Strategic/Commerce")
 local Digger = require("@lt/Core/Tactical/Digger")
 local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
@@ -81,14 +82,10 @@ Traffic.MARKED = 900
 local MINER, LASER = "frigate.prospector", "miner.small"
 -- What anybody flies.
 local CIVILIAN = "industrial.hauler"
--- And the freighter a trader flies in secure space, how often one who
--- comes there flies it, and how many times a hauler's load it carries.
+-- And the freighter a trader flies in secure space, and how often one
+-- who comes there flies it.
 local FREIGHTER = "freighter.dray"
 Traffic.FREIGHTERS = 0.3
-Traffic.FREIGHT = 25
--- What a hauler may have aboard, for whoever takes it.
-local CARGO = { "ore.ferrite", "mineral.iron", "mineral.silicon", "planet.water", "planet.alloys", "component.plating" }
-
 local GUNS: { [string]: string } = { projectile = "autocannon", laser = "laser.pulse", hybrid = "blaster" }
 -- What goes on a hull of each size: its guns' and fittings' size, and
 -- its launchers. (The fourth size is what only the largest hulls
@@ -156,6 +153,12 @@ local function remove(state: State.State, id: number, reason: string, events: { 
   for _, item in Items.In(state, id, nil) do
     Items.Take(state, item, item.quantity)
   end
+  -- (a hauler that got where it was going, or went on out of sight:
+  -- what it carried of the economy's is where it was for)
+  local record = state.traffic[id]
+  if record and record.carries then
+    Commerce.Deliver(state.commerce, record.carries.node, record.carries.class, record.carries.amount)
+  end
   if state.ships[id] then
     state.ships[id] = nil
     State.RemoveId(state.shipIds, id)
@@ -219,6 +222,23 @@ local function hauler(state: State.State, system: number, rng: Rng.Rng, events: 
   local owner = if own then keeper else "civilian"
   local gate = gates[Rng.Int(rng, #gates) + 1]
   local outbound = #stations > 0 and Rng.Chance(rng, 0.5)
+  -- It carries what the economy has lately sent along one of the lanes
+  -- here, for real (Strategic/Commerce): so it comes in by a gate goods
+  -- have come by, or goes out by one they have gone by, if any have.
+  -- (A system with no station is passed through: nothing is for it.)
+  local laden = false
+  if #stations > 0 then
+    local beyond: { number } = {}
+    for _, other in gates do
+      table.insert(beyond, other.to)
+    end
+    local busiest, out = Commerce.Lane(state.commerce, beyond, Rng.Next(rng))
+    for _, other in gates do
+      if busiest and other.to == busiest then
+        gate, outbound, laden = other, out, true
+      end
+    end
+  end
   local ship: State.Ship
   if outbound then
     local station = stations[Rng.Int(rng, #stations) + 1]
@@ -240,7 +260,16 @@ local function hauler(state: State.State, system: number, rng: Rng.Rng, events: 
       enlist(state, ship, "out", other.id, system)
     end
   end
-  Items.Add(state, CARGO[Rng.Int(rng, #CARGO) + 1], (50 + Rng.Int(rng, 350)) * (if great then Traffic.FREIGHT else 1), ship.id, "cargo")
+  -- (what it has aboard is the economy's, and is owed to the system it
+  -- is for until it is there. With nothing lately gone its way, it is
+  -- in ballast: nothing comes from nowhere.)
+  if laden then
+    local cargo, units, owed = Commerce.Load(state.commerce, gate.to, outbound, Ships.byId[type].cargo)
+    if cargo then
+      Items.Add(state, cargo, units, ship.id, "cargo")
+      state.traffic[ship.id].carries = { node = owed, class = Commerce.Index(cargo) :: number, amount = units }
+    end
+  end
 end
 
 -- Put a patrol ship of the system's faction on station at a gate (or,
@@ -488,6 +517,12 @@ function Traffic.Step(state: State.State, events: { Event })
       -- is gone for a day before another takes its place.)
       if record.kind == "colony" then
         state.nomads[record.wait] = state.tick + Nomads.GONE
+      end
+      -- (and what a hauler carried of the economy's is in its wreck, or
+      -- nowhere: the system it was for goes without)
+      if record.carries then
+        table.insert(events, { kind = "HaulLost", system = record.carries.node, type = Commerce.goods[record.carries.class],
+          amount = record.carries.amount })
       end
       state.traffic[id] = nil
       State.RemoveId(state.trafficIds, id)

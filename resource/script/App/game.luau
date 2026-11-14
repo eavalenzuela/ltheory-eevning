@@ -1458,6 +1458,32 @@ function Debug.Prices(type: string): (number, number, number, number)
   return here, #list, if list[1] then list[1].level else 1, if list[#list] then list[#list].level else 1
 end
 
+-- The haulers of the traffic in the pilot's system: how many there
+-- are, how many have a hold of the economy's goods, and the name of
+-- what the first of those carries ("" if none does). With 'pick', the
+-- first of those on the pilot's grid is selected.
+function Debug.Hauls(pick: boolean?): (number, number, string)
+  local state = session.game.state
+  local haulers, laden, first = 0, 0, ""
+  for _, id in state.trafficIds do
+    local record = state.traffic[id]
+    if record.kind == "in" or record.kind == "out" then
+      haulers += 1
+      local haul = Core.Query.Haul(session.game, id)
+      if haul then
+        laden += 1
+        first = if first == "" then haul.name else first
+        local ball, mine = state.balls[id], state.balls[state.player.ship]
+        if pick and ball and mine and ball.grid == mine.grid then
+          session.selected = id
+          pick = false
+        end
+      end
+    end
+  end
+  return haulers, laden, first
+end
+
 -- The last thing the pilot was told (the line under the ship's name), "" if nothing.
 function Debug.Said(): string
   return session.message

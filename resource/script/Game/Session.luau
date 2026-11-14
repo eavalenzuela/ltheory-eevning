@@ -312,6 +312,10 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, if kind == "TradeShockOver" then `NEWS: the {if event.shortage then "shortage" else "glut"} of {what} in {where} is over`
       elseif event.shortage then `NEWS: {what} is short in {where}, and dear there, for {event.days} days or so`
       else `NEWS: a glut of {what} in {where}: cheap there for {event.days} days or so`)
+  elseif kind == "HaulLost" then
+    -- (a hauler that carried the economy's goods is gone: where it was going goes without)
+    local node = session.game.state.galaxy.systems[event.system]
+    Session.Say(session, `A hauler is lost with {event.amount} {Types.Info(event.type).name}: {if node then node.name else "where it was going"} goes without`)
   elseif kind == "SurgeBegan" then
     local name = session.game.state.galaxy.systems[event.system].name
     Session.Say(session, `PIRATE SURGE: pirates are massing ` .. (if event.jumps == 0 then `here in {name}`

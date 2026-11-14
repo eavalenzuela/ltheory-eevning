@@ -550,6 +550,11 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
   if entry.kind == "bookmark" then
     what = "a place you marked"
   end
+  -- (a hauler with a hold of what the economy sends along the lanes says so: it is real, and whose)
+  local haul = if entry.kind == "ship" then Core.Query.Haul(session.game, entry.id) else nil
+  if haul then
+    what = `carrying {Format.Whole(haul.amount)} {haul.name} for {haul.system}`
+  end
   if entry.kind == "site" then
     what = SITES[entry.variety] or "site"
   end

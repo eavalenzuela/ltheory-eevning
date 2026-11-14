@@ -245,7 +245,14 @@ export type Pilot = {
 -- done), or one of the "police" come for a marked pilot. It
 -- belongs to the system it was made in, and 'wait' counts its last
 -- moments at a gate.
-export type Traffic = { ship: number, kind: string, goal: number, system: number, born: number, wait: number }
+-- A hauler that carries part of what the economy has sent along a
+-- lane (Strategic/Commerce) has it in its hold, and 'carries' says
+-- whose it is: the system it is owed to (the node, in the economy), the
+-- class of the goods and how many. It is put back in that system's
+-- stock when the hauler gets where it is going, and never if it does
+-- not.
+export type Traffic = { ship: number, kind: string, goal: number, system: number, born: number, wait: number,
+  carries: { node: number, class: number, amount: number }? }
 
 -- A grid that is not anchored to a station, gate or belt: made where a
 -- ship arrived in open space (those anchored to a site use the site's id).

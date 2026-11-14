@@ -1,0 +1,42 @@
+# The galaxy's economy, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/commerce.txt
+#
+# A game begun as the menu begins one has a galaxy that has been going
+# twenty days: iron is not the same price everywhere, a hull is dearer
+# where what it is built of is, and a skill book goes for the same
+# wherever it is sold. The Market tab's History side says where a thing
+# is cheapest and dearest. Outside, the haulers that come and go have a
+# hold of what the economy is sending along the lanes, and the selected
+# one says what it carries and for whom.
+
+wait 2
+lua GameDebug.NewGame(5, 40)
+frames 5
+lua GameDebug.Peaceful(true)
+lua _G.here, _G.count, _G.low, _G.high = GameDebug.Prices('mineral.iron')
+lua assert(_G.count >= 10, 'ten systems or more within reach should have a market')
+lua assert(_G.high / _G.low > 1.08, 'iron should be dearer somewhere than somewhere else')
+lua assert(_G.here ~= 1, 'a galaxy that has been going has moved its prices at home too')
+lua assert(select(4, GameDebug.Prices('frigate.courier')) / select(3, GameDebug.Prices('frigate.courier')) < _G.high / _G.low, 'a hull moves by less than what it is built of')
+lua assert(select(2, GameDebug.Prices('skillbook.mining')) == 0, 'a skill book goes for the same everywhere')
+
+# The Market tab says so.
+lua assert(GameDebug.Market('mineral.iron'))
+until GameDebug.Tab() == 'Market'
+frames 3
+until GameDebug.Press('Market:history')
+frames 3
+lua assert(GameDebug.MarketPage() == 'history')
+
+# Outside: haulers with a hold of the economy's goods.
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('Stop'))
+until select(2, GameDebug.Hauls()) >= 1
+lua assert(select(3, GameDebug.Hauls()) ~= '', 'a laden hauler should carry something with a name')
+until GameDebug.Hauls(true) >= 1 and GameDebug.Selected() ~= ''
+frames 3
+
+echo commerce scenario passed
+quit

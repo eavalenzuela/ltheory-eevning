@@ -1286,6 +1286,15 @@ function Core.Step(game: Game)
   Space.Decide(state, game.events)
   Aftermath.Step(state, game.events)
   Mining.Step(state)
+  -- (the lanes of the system the pilot is in are watched: its haulers
+  -- carry what goes along them, Tactical/Traffic)
+  do
+    local aboard = state.ships[state.player.ship]
+    local flying = state.balls[state.player.ship]
+    if aboard then
+      Commerce.Watch(state.commerce, if flying then flying.system else Space.SystemOf(state, aboard.docked))
+    end
+  end
   -- (the galaxy's economy, every ten minutes: and what is normal at
   -- each station follows it)
   if state.tick % Commerce.STEP == 0 and state.tick > 0 then
@@ -2457,6 +2466,21 @@ function Query.HaulTargets(game: Game, pilot: number, also: number?): { HaulTarg
     found[at] = tail[at - rest + 1]
   end
   return found
+end
+
+-- What a hauler of the traffic has aboard of the economy's (Tactical/
+-- Traffic, Strategic/Commerce): the type, its name, how many, and the
+-- system it is for. Nil for a ship that carries none of it.
+export type HaulInfo = { type: string, name: string, amount: number, system: string }
+function Query.Haul(game: Game, ship: number): HaulInfo?
+  local record = game.state.traffic[ship]
+  local carries = if record then record.carries else nil
+  if carries == nil then
+    return nil
+  end
+  local type = Commerce.goods[carries.class]
+  local node = game.state.galaxy.systems[carries.node]
+  return { type = type, name = Types.Info(type).name, amount = carries.amount, system = if node then node.name else "?" }
 end
 
 -- The gluts and shortages there are across the map now (Strategic/
