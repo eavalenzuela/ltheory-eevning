@@ -170,6 +170,12 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, if event.success then `Invented: {Types.Info(event.product).name} is in the hangar`
       elseif event.used then "The invention came to nothing, and the run of the copy it was worked from is used up"
       else `The invention came to nothing: {Types.Info(event.blueprint).name} is back in the hangar`)
+  elseif kind == "FleetFightOver" and not event.joined then
+    -- (one the pilot was not at: how it came out, and where to read the rest)
+    local came = if event.lost > 0 then (if event.lost == 1 then "a ship was lost" else `{event.lost} ships were lost`)
+      elseif event.held then "your pilots held it" else "your pilots are gone from it"
+    Session.Say(session, `The fight at {event.where} is over: {came}, {event.destroyed} destroyed`
+      .. (if event.fled > 0 then `, {event.fled} got away` else "") .. ". The Crew tab's log has it")
   elseif kind == "FleetWarpCalled" then
     Session.Say(session, if event.expect == 0 then "Fleet warp: nobody is here to go with you"
       elseif event.expect == 1 then "Fleet warp: one pilot is forming up on you" else `Fleet warp: {event.expect} pilots are forming up on you`)

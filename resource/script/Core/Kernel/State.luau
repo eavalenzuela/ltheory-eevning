@@ -282,6 +282,31 @@ export type Order = {
   placed: number,     -- tick
 }
 
+-- A fight the pilot was not at (Tactical/Battles): a hired pilot of
+-- theirs attacked at a place, with them somewhere else. Where and when
+-- ('ended' is 0 while it goes on), who of the pilot's was there, who
+-- came for them (each kind and how many; 'seen' is their ships, so that
+-- nobody is counted twice), what of theirs was destroyed, what of the
+-- pilot's was lost, how many got away, what it paid, and whether the
+-- pilot came to it before it was over.
+export type Tally = { name: string, count: number }
+export type Fight = {
+  id: number,
+  system: number,
+  grid: number,
+  where: string,
+  began: number,
+  ended: number,
+  pilots: { string },
+  seen: { number },
+  attackers: { Tally },
+  destroyed: { Tally },
+  lost: { string },
+  fled: number,
+  bounty: number,
+  joined: boolean,
+}
+
 -- A lot the pilot has put up on a station's board (Assets/Contracts):
 -- so many of a type, for a price in all. The board holds the goods
 -- until somebody takes the lot or its time is up.
@@ -563,6 +588,8 @@ export type State = {
   -- type, how many of a blueprint's copies its builders have had of the
   -- pilot ('units' as they stood at 'tick': they are forgotten by half
   -- every few days).
+  -- The fights the pilot was not at, oldest first (Tactical/Battles).
+  fleetLog: { Fight },
   contracts: { [number]: Listing },
   contractIds: { number },
   contractsTaken: { string },

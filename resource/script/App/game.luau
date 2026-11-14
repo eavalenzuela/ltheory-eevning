@@ -1634,6 +1634,28 @@ function Debug.Pirate(kind: string, far: number?, round: number?): boolean
   return true
 end
 
+-- The fleet's log (the Crew tab's 'Crew:log', and 'Crew:pilots' back):
+-- how many fights are on record, and of the latest how many of those
+-- who came were destroyed, how many ships of the pilot's were lost,
+-- what it paid, and whether it is over.
+function Debug.FleetLog(): (number, number, number, number, boolean)
+  local log = Core.Query.FleetLog(session.game)
+  local last = log[1]
+  if last == nil then
+    return 0, 0, 0, 0, false
+  end
+  local destroyed = 0
+  for _, entry in last.destroyed do
+    destroyed += entry.count
+  end
+  return #log, destroyed, #last.lost, last.bounty, last.ended ~= 0
+end
+
+-- Which side of the Crew tab is shown: 'pilots' or 'log'.
+function Debug.CrewPage(): string
+  return Station.CrewPage()
+end
+
 -- How a fleet's warp stands (the fleet panel's 'Fleet:warp', to what is
 -- selected): whether the pilot's ship is in one, forming up or under
 -- way; how many hired pilots it called to go with it; and how many of

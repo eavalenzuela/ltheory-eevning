@@ -2,6 +2,7 @@
 -- Hired pilots (Tactical/Fleet).
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
+local Battles = require("@lt/Core/Tactical/Battles")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Drones = require("@lt/Core/Tactical/Drones")
@@ -2089,6 +2090,118 @@ suite:Case("a pilot set to patrol holds a place; pirates come for them there wit
   t.ok(waitFor(game, 1300, function()
     return #pirates(game, rocks) > 0
   end), "pirates did not come back at all")
+end)
+
+suite:Case("a fight the pilot is not at goes in the fleet's log: where and when, who came, what was destroyed, and what it paid", function(t)
+  local game, wing, ship = warship()
+  local state = game.state
+  local rocks = belt(game, 1)
+  everybodyTo(game, rocks, { ship })
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "patrol" })))
+  home(game)
+  steps(game, 60)
+  t.eq(Core.Query.FleetLog(game), {})
+  -- Pirates come for the patrol, with the pilot at home: the fight is on record from the moment the pilot says so.
+  state.peaceful = false
+  Core.TakeEvents(game)
+  t.ok(waitFor(game, 60, function()
+    return #state.fleetLog == 1
+  end), "nothing was put down of a pilot attacked on their own")
+  local fight = state.fleetLog[1]
+  local pack = pirates(game, rocks)
+  t.eq({ fight.system, fight.grid, fight.where, fight.ended, fight.joined } :: { any },
+    { 1, rocks, (Space.Object(state, rocks) :: System.Object).name, 0, false } :: { any })
+  t.eq(fight.pilots, { wing.name })
+  t.ok(fight.began > 0 and fight.began <= state.tick)
+  local came = 0
+  for _, entry in fight.attackers do
+    t.ok(string.find(entry.name, "Pirate", 1, true) ~= nil and entry.count >= 1, entry.name)
+    came += entry.count
+  end
+  t.eq({ came, #fight.seen }, { #pack, #pack })
+  local bounties = 0
+  for _, id in pack do
+    bounties += state.pilots[id].bounty
+  end
+  -- It is fought out, and the record is closed: everybody who came destroyed, nobody lost, half their bounties paid.
+  local wallet = state.wallet
+  local over: any = nil
+  t.ok(waitFor(game, 1500, function()
+    for _, event in Core.TakeEvents(game) do
+      over = if event.kind == "FleetFightOver" then event else over
+    end
+    return over ~= nil
+  end), "the fight was never over")
+  local destroyed = 0
+  for _, entry in fight.destroyed do
+    destroyed += entry.count
+  end
+  t.ok(#fight.seen >= #pack, "whoever came later is counted too")
+  t.eq({ destroyed + fight.fled, #fight.lost, fight.joined } :: { any }, { #fight.seen, 0, false } :: { any })
+  t.ok(fight.ended > fight.began)
+  t.eq({ over.fight, over.where, over.destroyed, over.lost, over.fled, over.bounty, over.held, over.joined } :: { any },
+    { fight.id, fight.where, destroyed, 0, fight.fled, fight.bounty, true, false } :: { any })
+  if #fight.seen == #pack and fight.fled == 0 then
+    t.eq({ fight.bounty, state.wallet - wallet }, { bounties // 2, bounties // 2 })
+  end
+  -- The log has it, the latest first; and it is in the save.
+  t.eq(Core.Query.FleetLog(game)[1], fight)
+  local loaded = Core.Load(Core.Save(game))
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  t.eq(Core.Query.FleetLog(loaded), Core.Query.FleetLog(game))
+  -- A save from before there was a log opens with none.
+  local file = Codec.Decode(Core.Save(game))
+  file.saveVersion = 72
+  file.state.fleetLog = nil
+  local old, length = Codec.Encode(file)
+  t.eq(Core.Query.FleetLog(Core.Load(old, length)), {})
+end)
+
+suite:Case("the log of a fight: ships lost, those who got away, the pilot coming to it, and how many are kept", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local rocks = belt(game, 1)
+  local events: { [string]: any } = {}
+  state.tick = 500
+  -- Nothing is put down of a place where no fight is on record.
+  Battles.Destroyed(state, 1, rocks, "Pirate Raider", 7500)
+  Battles.Lost(state, 1, rocks, "Ann Oro", "Vessari Nozomi")
+  Battles.Fled(state, 1, rocks)
+  Battles.Begin(state, 1, 0)
+  t.eq(#state.fleetLog, 0)
+  -- One begun, and what happens there put down as it happens. (Begun twice, it is the one fight.)
+  Battles.Begin(state, 1, rocks)
+  Battles.Begin(state, 1, rocks)
+  t.eq(#state.fleetLog, 1)
+  local fight = state.fleetLog[1]
+  Battles.Destroyed(state, 1, rocks, "Pirate Raider", 7500)
+  Battles.Destroyed(state, 1, rocks, "Pirate Raider", 7500)
+  Battles.Destroyed(state, 1, rocks, "Pirate Jackal", 20000)
+  Battles.Lost(state, 1, rocks, "Ann Oro", "Vessari Nozomi")
+  Battles.Fled(state, 1, rocks)
+  t.eq(fight.destroyed, { { name = "Pirate Raider", count = 2 }, { name = "Pirate Jackal", count = 1 } })
+  t.eq({ fight.lost, fight.pilots, fight.fled, fight.bounty } :: { any }, { { "Ann Oro's Vessari Nozomi" }, { "Ann Oro" }, 1, 35000 } :: { any })
+  -- (what happens somewhere else is not this fight's)
+  Battles.Destroyed(state, 1, rocks + 1, "Pirate Raider", 7500)
+  Battles.Destroyed(state, 2, rocks, "Pirate Raider", 7500)
+  t.eq(fight.bounty, 35000)
+  -- With nobody of the pilot's left there it is over, and says how it came out.
+  Battles.Step(state, events :: any)
+  local over = (events :: any)[1]
+  t.eq({ fight.ended, over.kind, over.destroyed, over.lost, over.fled, over.bounty, over.held, over.joined } :: { any },
+    { state.tick, "FleetFightOver", 3, 1, 1, 35000, false, false } :: { any })
+  -- Over, nothing more is put down of it, and another at the same place is another fight.
+  Battles.Destroyed(state, 1, rocks, "Pirate Raider", 7500)
+  t.eq(fight.bounty, 35000)
+  state.tick += 100
+  Battles.Begin(state, 1, rocks)
+  t.eq({ #state.fleetLog, state.fleetLog[2].began, state.fleetLog[2].ended }, { 2, state.tick, 0 })
+  t.eq(Battles.Log(state)[1], state.fleetLog[2])
+  -- The last forty are kept.
+  for place = 1, Battles.KEPT + 5 do
+    Battles.Begin(state, 3, 1000 + place)
+  end
+  t.eq({ #state.fleetLog, state.fleetLog[#state.fleetLog].grid, state.fleetLog[1].grid }, { Battles.KEPT, 1000 + Battles.KEPT + 5, 1006 })
 end)
 
 suite:Case("a patrol's pilot badly hurt goes in to the nearest station, is mended for what it costs, and goes out again", function(t)

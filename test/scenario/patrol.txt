@@ -60,7 +60,25 @@ until GameDebug.Wallet() > _G.before
 lua print('patrol: bounty paid to the docked player:', GameDebug.Wallet() - _G.before)
 lua assert((GameDebug.Wallet() - _G.before) % 3000 == 0, 'half of a scout\'s bounty at a time')
 lua assert(GameDebug.Crew(1) ~= 'no ship', 'the patrol should have come through it')
+
+# The fight is in the fleet's log, which the Crew tab has: one on record,
+# over once nobody is left of those who came, with what was destroyed
+# and what it paid.
+patience 600
+until select(5, GameDebug.FleetLog())
 lua GameDebug.TimeScale(1)
+lua _G.fights, _G.destroyed, _G.lost, _G.bounty = GameDebug.FleetLog()
+lua assert(_G.fights == 1 and _G.destroyed >= 1 and _G.lost == 0, 'the log should have the one fight, with what was destroyed in it')
+lua assert(_G.bounty == GameDebug.Wallet() - _G.before, 'the log should have what the fight paid')
+until GameDebug.Press('Crew')
+until GameDebug.Tab() == 'Crew'
+lua assert(GameDebug.CrewPage() == 'pilots', 'the Crew tab opens on its pilots')
+until GameDebug.Press('Crew:log')
+frames 3
+lua assert(GameDebug.CrewPage() == 'log')
+until GameDebug.Press('Crew:pilots')
+frames 3
+lua assert(GameDebug.CrewPage() == 'pilots', 'and back to its pilots')
 
 echo patrol scenario passed
 quit

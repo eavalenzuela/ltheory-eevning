@@ -28,6 +28,7 @@ local Jumping = require("@lt/Core/Tactical/Jumping")
 local Keeps = require("@lt/Core/Tactical/Keeps")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Careers = require("@lt/Core/Character/Careers")
+local Battles = require("@lt/Core/Tactical/Battles")
 local Contracts = require("@lt/Core/Assets/Contracts")
 local Corporation = require("@lt/Core/Assets/Corporation")
 local Guide = require("@lt/Core/Character/Guide")
@@ -86,7 +87,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 72
+Core.SAVE_VERSION = 73
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -373,6 +374,11 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- Nimia; and their hulls are the Nimia's of the owner's list, each
   -- the one that stands where it stood (they build no attack
   -- battlecruiser and no dreadnought but the siege one).
+  -- 73: the fights a pilot was not at are kept (Tactical/Battles). A
+  -- save from before has none on record.
+  [72] = function(state: any)
+    state.fleetLog = state.fleetLog or {}
+  end,
   -- 72: stations have boards, where lots change hands by contract
   -- (Assets/Contracts). A save from before has nothing up on any.
   [71] = function(state: any)
@@ -985,6 +991,7 @@ function Core.New(options: Options): Game
     orders = {},
     orderIds = {},
     contracts = {}, contractIds = {}, contractsTaken = {}, contractsHad = {},
+    fleetLog = {},
     trades = {},
     starbases = {},
     starbaseIds = {},
@@ -1634,6 +1641,11 @@ function Query.ContractWorth(game: Game, station: number, type: string, quantity
   end
   local worth = Contracts.Worth(game.state, station, type, quantity)
   return worth, Contracts.Fee(game.state, station, price), Contracts.Chance(price, worth)
+end
+
+-- The fights the pilot was not at, the latest first (Tactical/Battles).
+function Query.FleetLog(game: Game): { State.Fight }
+  return Battles.Log(game.state)
 end
 
 -- The pilot's home: the station they wake at when their capsule is

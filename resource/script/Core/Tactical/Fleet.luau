@@ -118,6 +118,7 @@
 -- (The beginning of M7. Not yet: loyalty.)
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
+local Battles = require("@lt/Core/Tactical/Battles")
 local Combat = require("@lt/Core/Tactical/Combat")
 local Constants = require("@lt/Core/Data/Constants")
 local Corporation = require("@lt/Core/Assets/Corporation")
@@ -1674,10 +1675,13 @@ function Fleet.Step(state: State.State, events: { Event })
         local at = Space.Object(state, ball.grid)
         table.insert(events, { kind = "FleetAttacked", pilot = wing.id, name = wing.name, grid = ball.grid,
           where = if at then at.name else state.galaxy.systems[ball.system].name })
+        -- (and it goes in the log: a fight the pilot is not at)
+        Battles.Begin(state, ball.system, ball.grid)
       end
       wing.alarm = hunted
     end
   end
+  Battles.Step(state, events)
 end
 
 return Fleet

@@ -12,6 +12,7 @@
 -- too, the pilot wakes at home in one.
 
 local Assault = require("@lt/Core/Tactical/Assault")
+local Battles = require("@lt/Core/Tactical/Battles")
 local Keeps = require("@lt/Core/Tactical/Keeps")
 local Raids = require("@lt/Core/Tactical/Raids")
 local Constants = require("@lt/Core/Data/Constants")
@@ -120,6 +121,11 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   end
 
   local wasPlayer = id == state.player.ship
+  -- (a ship a hired pilot flew, lost in a fight the pilot was not at: in its log)
+  local flew = if ship.owner == "player" then state.fleet[ship.pilot] else nil
+  if flew then
+    Battles.Lost(state, ball.system, ball.grid, flew.name, hull.name)
+  end
   -- (a ship of the pilot's that somebody hired was flying is insured as
   -- their own is: Tactical/Fleet sees to the pilot)
   if ship.owner == "player" and ship.pilot ~= 0 then
@@ -167,6 +173,8 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
       -- (which is their corporation's, where they have one)
       Corporation.Earn(state, math.floor(full * Aftermath.AWAY), "bounty", events)
     end
+    -- (in the log of the fight, if it is one the pilot was not at when it began)
+    Battles.Destroyed(state, ball.system, ball.grid, ship.name, if there then full else math.floor(full * Aftermath.AWAY))
     -- (and it counts toward any bounty job the pilot has for this system)
     for _, id in state.missionIds do
       local mission = state.missions[id]

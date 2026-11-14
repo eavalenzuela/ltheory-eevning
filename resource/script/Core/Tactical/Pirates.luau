@@ -55,6 +55,7 @@
 -- (When the strategic layer arrives, how many come and where will follow
 -- from pirate pressure in the system instead of these fixed rules.)
 
+local Battles = require("@lt/Core/Tactical/Battles")
 local Combat = require("@lt/Core/Tactical/Combat")
 local Attributes = require("@lt/Core/Attributes")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
@@ -640,6 +641,8 @@ function Pirates.Think(state: State.State, events: { Event })
       -- (one that broke off is in warp, and away: nobody sees it again)
       if pilot.fleeing then
         local name = state.ships[id].name
+        -- (in the log of the fight it left, if that is one the pilot was not at)
+        Battles.Fled(state, ball.system, pilot.home)
         gone(state, id, ball, "fled", events)
         table.insert(events, { kind = "PirateFled", ball = id, name = name, system = ball.system, grid = pilot.home })
       end

@@ -1616,10 +1616,77 @@ local haulMore: { [number]: { number } } = {}
 local CARGO: { [string]: string } = { ore = "ore", mineral = "minerals", moon = "moon ore", planetary = "planetary", component = "components",
   all = "all goods" }
 
+-- Which side of the Crew tab is shown: "pilots" (hiring, and the pilots
+-- hired) or "log" (the fights the pilot was not at).
+local crewPage = "pilots"
+
+function Station.CrewPage(): string
+  return crewPage
+end
+
+-- A tally of names, in a line: "2 x Pirate Raider, Pirate Jackal".
+local function tallied(tally: { State.Tally }): string
+  local parts: { string } = {}
+  for _, entry in tally do
+    table.insert(parts, if entry.count == 1 then entry.name else `{entry.count} x {entry.name}`)
+  end
+  return table.concat(parts, ", ")
+end
+
+-- The fleet's log (Core/Tactical/Battles): the fights hired pilots had
+-- with the pilot somewhere else, the latest first.
+local function drawFleetLog(game: Core.Game, x: number, y: number, width: number)
+  local log = Core.Query.FleetLog(game)
+  Im.Heading(`FIGHTS YOU WERE NOT AT  {#log}`, x, y, 16, Im.DIM)
+  local line = y + 30
+  if #log == 0 then
+    Im.Text("None on record. When a pilot of yours is attacked while you are somewhere else, how it went is put down here.", x, line, 13,
+      Im.DIM, 0.8)
+    return
+  end
+  local visible = 7
+  local first = Im.Scroll("fleet log", x - 4, line, width + 4, visible * 62, #log, visible)
+  for row = 1, visible do
+    local fight = log[row + first]
+    if fight == nil then
+      break
+    end
+    local rowY = line + (row - 1) * 62
+    local over = fight.ended ~= 0
+    Im.Text(`{Format.Clock(fight.began)}   {shorten(fight.where, 46)}`, x, rowY, 14, Im.TEXT)
+    Im.TextRight(if over then `over in {Format.Duration((fight.ended - fight.began) * Constants.TICK)}`
+      .. (if fight.joined then ", you came to it" else "") else "going on now", x + width - 8, rowY + 1, 12, if over then Im.DIM else Im.WARN)
+    Im.Text(shorten(`{table.concat(fight.pilots, ", ")} against {if #fight.attackers > 0 then tallied(fight.attackers) else "nobody seen"}`, 112),
+      x, rowY + 19, 12, Im.DIM)
+    local came = if #fight.destroyed > 0 then `destroyed: {tallied(fight.destroyed)}` else "nothing destroyed"
+    if fight.fled > 0 then
+      came ..= `, {fight.fled} got away`
+    end
+    Im.Text(shorten(came, 70), x, rowY + 35, 12, Im.TEXT)
+    if #fight.lost > 0 then
+      Im.Text(shorten(`lost: {table.concat(fight.lost, ", ")}`, 44), x + 420, rowY + 35, 12, Im.WARN)
+    end
+    Im.TextRight(if fight.bounty > 0 then `bounty {Format.Credits(fight.bounty)}` else "no bounty", x + width - 8, rowY + 35, 12,
+      if fight.bounty > 0 then GOOD else Im.DIM)
+    Im.Fill(x, rowY + 55, width - 8, 1, Im.DIM, 0.15)
+  end
+end
+
 local function drawCrew(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
   local station = player.docked
   local left, right = x + 16, x + 400
   local line = y + 78
+  -- (the tab's two sides: the pilots, and the log of their fights)
+  if Im.Toggle("Pilots", x + 770, line - 6, 70, 26, crewPage == "pilots", "Crew:pilots") then
+    crewPage = "pilots"
+  end
+  if Im.Toggle("Log", x + 844, line - 6, 80, 26, crewPage == "log", "Crew:log") then
+    crewPage = "log"
+  end
+  if crewPage == "log" then
+    drawFleetLog(game, left, line, 908)
+    return
+  end
   local candidates, most = Core.Query.Candidates(game, station)
   local fleet = Core.Query.Fleet(game)
 
