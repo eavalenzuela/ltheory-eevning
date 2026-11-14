@@ -6,7 +6,8 @@
 # clicked: Space stops the ship, S warps to what is selected, Tab picks
 # out the pirate, Q closes with it, L locks it, F1 to F3 switch on the
 # two guns and the entanglement projector (which the rack would not switch on by a
-# click before this), and D docks at the station selected. On the way
+# click before this), and D docks at the station selected. The camera
+# follows the pirate when C says so, and by itself when it is locked. On the way
 # the place at the belt is marked, and at the end it is warped back to.
 
 wait 2
@@ -64,8 +65,18 @@ until GameDebug.Tracking() == 0
 lua GameDebug.Key('Q')
 until GameDebug.Doing() == 'approach'
 until GameDebug.Distance('Pirate') < 9000
+lua assert(GameDebug.Tracking() == 0, 'the camera was let go, and is the pilot\'s until something is locked')
 lua GameDebug.Key('L')
+# Locking it has the camera follow it again, with no key for that.
+until GameDebug.Tracking() ~= 0
 until GameDebug.Locked() > 0
+# C lets it go, and it stays let go: the lock is not a new one.
+lua GameDebug.Key('C')
+until GameDebug.Tracking() == 0
+frames 30
+lua assert(GameDebug.Tracking() == 0, 'a camera the pilot took back should stay theirs')
+lua GameDebug.Key('C')
+until GameDebug.Tracking() ~= 0
 lua GameDebug.Key('F1')
 lua GameDebug.Key('F2')
 lua GameDebug.Key('F3')
@@ -74,6 +85,8 @@ until GameDebug.Held('target') < 0.5
 lua GameDebug.TimeScale(4)
 until GameDebug.Pirates() == 0
 lua assert(GameDebug.Hull() == 'frigate.courier', 'the player lost the fight')
+# With what it followed destroyed and nothing else locked, the camera follows nothing.
+until GameDebug.Tracking() == 0
 
 lua assert(GameDebug.Select('station'), 'no station on the overview')
 lua GameDebug.Key('D')

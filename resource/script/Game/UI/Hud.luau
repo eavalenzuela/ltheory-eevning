@@ -446,6 +446,49 @@ local named = ""
 local sentAt = -1
 
 
+-- The camera follows what the pilot locks, by itself (the project
+-- owner's, 2026-11-13: "when you lock (and target) a ship, your camera
+-- should automatically track it, so you don't need to constantly pan
+-- with the mouse to keep it in view"). A ship that the pilot has just
+-- begun to lock is what the camera follows; so is a locked ship the
+-- pilot picks out, by a click or by Tab; and when the one it is on is
+-- locked no longer (destroyed, gone, let go), it goes to another that
+-- is, the one picked out if that is locked, else the last one locked.
+-- A hand on the camera takes it back, and so does C: it is the pilot's
+-- until they lock or pick out another. (Ships only: a rock that is
+-- being mined does not move, and wants nobody's eye kept on it.)
+local following = { locks = {} :: { [number]: boolean }, selected = 0, on = 0 }
+local function followLocks(session: Session.Session, scene: Scene.Scene, game: Core.Game, ball: State.Ball)
+  local ships: { number } = {}
+  local now: { [number]: boolean } = {}
+  local fresh = 0
+  for _, lock in ball.vitals.locks do
+    if Core.Query.Ball(game, lock.target) then
+      table.insert(ships, lock.target)
+      now[lock.target] = true
+      if not following.locks[lock.target] then
+        fresh = lock.target
+      end
+    end
+  end
+  -- (taken from it since: by a hand, by C, or by its going from the grid)
+  if scene.tracking ~= following.on then
+    following.on = 0
+  end
+  if fresh ~= 0 then
+    Scene.Track(scene, fresh)
+    following.on = fresh
+  elseif session.selected ~= following.selected and now[session.selected] then
+    Scene.Track(scene, session.selected)
+    following.on = session.selected
+  elseif following.on ~= 0 and not now[following.on] then
+    local next = if now[session.selected] then session.selected else ships[#ships] or 0
+    Scene.Track(scene, next)
+    following.on = next
+  end
+  following.locks, following.selected = now, session.selected
+end
+
 local function drawSelected(session: Session.Session, entries: { Core.Entry }, ball: State.Ball, x: number, y: number, width: number)
   local selected: Core.Entry? = nil
   for _, entry in entries do
@@ -1020,8 +1063,13 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         if Keys.Did("camera") then
           Scene.Track(scene, if scene.tracking == session.selected then 0 else session.selected)
         end
-        if scene.tracking ~= 0 and scene.tracking == session.selected then
-          Im.TextRight("camera following (C)", panelX + panelWidth - 12, top + 2, 11, Im.ACCENT)
+        -- (and it follows what the pilot locks, with no key)
+        followLocks(session, scene, game, ball)
+        if scene.tracking ~= 0 then
+          -- (what it is on, where that is not what is picked out, whose panel this is over)
+          local on = if scene.tracking == session.selected then nil else Core.Query.Body(game, scene.tracking)
+          Im.TextRight(if on then `camera following {on.name} ({Keys.Of("camera")})` else `camera following ({Keys.Of("camera")})`,
+            panelX + panelWidth - 12, top + 2, 11, Im.ACCENT)
         end
         drawSelected(session, entries, ball, panelX, top + 16, panelWidth)
         drawOverview(session, entries, panelX, top + 182, panelWidth, math.min(600, bottom - top - 272), marks)
