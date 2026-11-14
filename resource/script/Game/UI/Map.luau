@@ -242,6 +242,9 @@ local function swollen(near: number): number
   return math.min(2.2, near ^ 0.45)
 end
 
+-- The gluts and shortages across the map (Core.Query.Shocks), as last asked.
+local news = { age = 1000, epoch = -1, list = {} :: { Core.ShockInfo } }
+
 -- The systems of a galaxy that are on the map: all of them, but for
 -- uncharted space (Core/Describe/Galaxy), which is on no map and never
 -- will be (the project owner's ruling). They are the first so many, so
@@ -1027,6 +1030,18 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
     Im.Text(`Pirate surge in {surge.name}: ` .. (if surge.jumps == 0 then "here" elseif surge.jumps == 1 then "1 jump" else `{surge.jumps} jumps`)
       .. `, {Format.Duration(surge.left)} left`, px, line, 12, BAND.lawless)
     line += 20
+  end
+  -- (the gluts and shortages there are: the three nearest. Asked now and then, not every frame.)
+  news.age += 1
+  if news.age > 120 or news.epoch ~= session.epoch then
+    news.age, news.epoch, news.list = 0, session.epoch, Core.Query.Shocks(game)
+  end
+  for index = 1, math.min(3, #news.list) do
+    local shock = news.list[index]
+    local far = if shock.here then "here" elseif shock.jumps < 0 then "no way there" elseif shock.jumps == 1 then "1 jump" else `{shock.jumps} jumps`
+    Im.Text(`{if shock.shortage then "Short" else "Glut"}: {shock.name}, {shock.constellation} ({far}), {Format.Duration(shock.left)} left`,
+      px, line, 12, if shock.shortage then Im.WARN else NEXT)
+    line += 18
   end
   if #jobSystems > 0 then
     -- (the ringed systems: what is in hand there)

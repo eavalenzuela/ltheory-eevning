@@ -431,6 +431,12 @@ export type Wingman = {
 export type Site = { id: number, system: number, kind: string, code: string, strength: number, expires: number, gone: boolean,
   depth: number, led: boolean }
 
+-- A glut or a shortage of something in a part of the map (Strategic/
+-- Commerce): every system of a constellation wants so many times what
+-- it did of one of the goods (more than once: a shortage, and it is
+-- dear there; less: a glut, and it is cheap) until the tick it ends.
+export type Shock = { id: number, constellation: number, class: number, factor: number, began: number, ends: number }
+
 -- A wormhole that is open (Tactical/Wormholes): a way between two
 -- systems that no gate joins, there for a day or so. 'a' is the place
 -- of the end it opened at (a place of its system's description, and a
@@ -602,6 +608,10 @@ export type State = {
   -- in the economy): what is new of that is settled with the system.
   commerce: Economy.Economy,
   marketDrawn: { [number]: { number } },
+  -- What is happening to the trade of a part of the map (Strategic/
+  -- Commerce): the gluts and the shortages there are now, in the order
+  -- they began.
+  shocks: { Shock },
   orders: { [number]: Order },
   orderIds: { number },
   -- The pilot's listings on stations' boards (Assets/Contracts); the

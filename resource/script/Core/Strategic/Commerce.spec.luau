@@ -294,4 +294,104 @@ suite:Case("a new game's galaxy has been going a while: prices are apart across 
   t.ok(state.markets[station] ~= nil)
 end)
 
+suite:Case("now and then a part of the map is short of something, or has too much: dear or cheap there for some days, and then as it was", function(t)
+  local galaxy = Galaxy.Describe(1, SYSTEMS)
+  Galaxy.Deepen(galaxy)
+  local econ = Commerce.New(galaxy)
+  local plain = Commerce.New(galaxy)
+  local shocks: { any } = {}
+  local began, ended, most, shortages = 0, 0, 0, 0
+  local first: { [string]: any }? = nil
+  for tick = Commerce.STEP, 60 * Commerce.DAY, Commerce.STEP do
+    local events: { any } = {}
+    local before: { number } = {}
+    for id = 1, SYSTEMS do
+      before[id] = 0
+    end
+    Commerce.Stir(econ, galaxy, shocks, 1, tick, Commerce.STEP, events)
+    for _, event in events do
+      if event.kind == "TradeShock" then
+        began += 1
+        shortages += if event.shortage then 1 else 0
+        first = first or event
+        t.eq(tick % Commerce.DAY, 0, "a shock begins with a day")
+        t.ok(event.days >= Commerce.SHOCK_DAYS[1] and event.days <= Commerce.SHOCK_DAYS[2])
+        t.ok(Commerce.Index(event.type) ~= nil and event.constellation < #galaxy.constellations, "of one of the goods, in a constellation of the map")
+        -- (dear, or cheap, at once: in its constellation and nowhere else)
+        local class = Commerce.Index(event.type) :: number
+        for id = 1, SYSTEMS do
+          local level = econ.nodes[id].target[class] / plain.nodes[id].target[class]
+          local inside = galaxy.systems[id].constellation == event.constellation
+          if inside then
+            t.near(level, if event.shortage then Commerce.SHORTAGE else Commerce.GLUT, 1e-9)
+          end
+        end
+      elseif event.kind == "TradeShockOver" then
+        ended += 1
+      end
+    end
+    most = math.max(most, #shocks)
+    for index, shock in shocks do
+      for other = index + 1, #shocks do
+        t.ok(shocks[other].constellation ~= shock.constellation, "two things at once in one place")
+      end
+    end
+  end
+  t.ok(began >= 20 and began <= 45, `{began} shocks began in sixty days`)
+  t.ok(shortages >= 5 and began - shortages >= 5, `{shortages} of {began} were shortages`)
+  t.ok(most >= 2 and most <= Commerce.SHOCKS, `{most} at once`)
+  t.eq(began - ended, #shocks)
+  -- (with every one of them over, every system wants what it did)
+  for index = #shocks, 1, -1 do
+    Commerce.Stir(econ, galaxy, shocks, 1, shocks[index].ends + 100 * Commerce.DAY, 1, {})
+  end
+  for id = 1, SYSTEMS do
+    for class = 1, #econ.classes do
+      t.near(econ.nodes[id].target[class] / plain.nodes[id].target[class], 1, 1e-9)
+    end
+  end
+  -- What a shortage does over a day: the thing is dear there at once, and comes in along the gates.
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, systems = SYSTEMS, peaceful = true })
+  local state = game.state
+  local iron = assert(Commerce.Index("mineral.iron"))
+  local where = state.galaxy.systems[1].constellation
+  local shock = { id = 1, constellation = where, class = iron, factor = Commerce.SHORTAGE, began = 0, ends = 3 * Commerce.DAY }
+  table.insert(state.shocks, shock)
+  local stock = 0
+  for id = 1, SYSTEMS do
+    if state.galaxy.systems[id].constellation == where then
+      state.commerce.nodes[id].target[iron] *= shock.factor
+      stock += state.commerce.nodes[id].stock[iron]
+    end
+  end
+  t.near(Commerce.Level(state.commerce, 1, "mineral.iron"), Commerce.SHORTAGE, 1e-9)
+  local news = Core.Query.Shocks(game)
+  t.eq(#news, 1)
+  t.eq({ news[1].type, news[1].shortage, news[1].here, news[1].jumps, news[1].constellation, news[1].left } :: { any },
+    { "mineral.iron", true, true, 0, state.galaxy.constellations[where].name, 3 * 86400 } :: { any })
+  for _ = 1, Commerce.DAY do
+    Core.Step(game)
+  end
+  local after = 0
+  for id = 1, SYSTEMS do
+    after += if state.galaxy.systems[id].constellation == where then state.commerce.nodes[id].stock[iron] else 0
+  end
+  t.ok(after > 1.1 * stock, `the constellation had {math.floor(stock)} iron and has {math.floor(after)}`)
+  t.ok(Commerce.Level(state.commerce, 1, "mineral.iron") < Commerce.SHORTAGE, "iron should be coming in")
+  -- (and it is over when its days are up, and said)
+  local data, length = Core.Save(game)
+  t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
+  local over = false
+  for _ = 1, 2 * Commerce.DAY + Commerce.STEP do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      over = over or (event.kind == "TradeShockOver" and event.type == "mineral.iron" and event.constellation == where)
+    end
+  end
+  t.ok(over, "the shortage never ended")
+  for _, left in state.shocks do
+    t.ok(left.id ~= 1)
+  end
+end)
+
 return suite

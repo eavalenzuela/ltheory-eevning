@@ -388,6 +388,7 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   [74] = function(state: any)
     state.commerce = state.commerce or Commerce.New(state.galaxy)
     state.marketDrawn = state.marketDrawn or {}
+    state.shocks = state.shocks or {}
     for _, econ in state.markets do
       for _, class in econ.classes do
         class.base = class.base or class.par
@@ -1051,7 +1052,7 @@ function Core.New(options: Options): Game
     traffic = {},
     trafficIds = {},
     trafficDue = 0,
-    commerce = commerce, marketDrawn = {},
+    commerce = commerce, marketDrawn = {}, shocks = {},
     nomads = {},
     trafficOn = options.traffic == true,
     queue = {},
@@ -1288,6 +1289,7 @@ function Core.Step(game: Game)
   -- (the galaxy's economy, every ten minutes: and what is normal at
   -- each station follows it)
   if state.tick % Commerce.STEP == 0 and state.tick > 0 then
+    Commerce.Stir(state.commerce, state.galaxy, state.shocks, state.historySeed, state.tick, Commerce.STEP, game.events)
     Commerce.Advance(state.commerce, state.galaxy, state.surge.system, Commerce.STEP)
     Market.Peg(state)
   end
@@ -2454,6 +2456,59 @@ function Query.HaulTargets(game: Game, pilot: number, also: number?): { HaulTarg
   for at = rest, #found do
     found[at] = tail[at - rest + 1]
   end
+  return found
+end
+
+-- The gluts and shortages there are across the map now (Strategic/
+-- Commerce), the nearest to the pilot first: what of, where (the
+-- constellation and its region), how many jumps off the nearest system
+-- of it is (-1 if no gate leads there from where the pilot is), and the
+-- seconds it has left.
+export type ShockInfo = { type: string, name: string, shortage: boolean, constellation: string, region: string, jumps: number,
+  left: number, here: boolean }
+function Query.Shocks(game: Game): { ShockInfo }
+  local state = game.state
+  local galaxy = state.galaxy
+  local here = Query.Player(game).system
+  local found: { ShockInfo } = {}
+  if #state.shocks == 0 then
+    return found
+  end
+  -- (how many jumps off everything is, by the gates)
+  local reach: { [number]: number } = { [here] = 0 }
+  local queue = { here }
+  local at = 1
+  while at <= #queue do
+    local system = queue[at]
+    at += 1
+    for _, neighbor in galaxy.systems[system].neighbors do
+      if reach[neighbor] == nil then
+        reach[neighbor] = reach[system] + 1
+        table.insert(queue, neighbor)
+      end
+    end
+  end
+  for _, shock in state.shocks do
+    local constellation = galaxy.constellations[shock.constellation]
+    local nearest = -1
+    for id = 1, Galaxy.Charted(galaxy) do
+      local jumps = reach[id]
+      if galaxy.systems[id].constellation == shock.constellation and jumps and (nearest < 0 or jumps < nearest) then
+        nearest = jumps
+      end
+    end
+    local type = Commerce.goods[shock.class]
+    table.insert(found, { type = type, name = Types.Info(type).name, shortage = shock.factor > 1, constellation = constellation.name,
+      region = galaxy.regions[constellation.region].name, jumps = nearest, left = math.max(0, shock.ends - state.tick) * Constants.TICK,
+      here = galaxy.systems[here].constellation == shock.constellation })
+  end
+  table.sort(found, function(a: ShockInfo, b: ShockInfo): boolean
+    local far, further = if a.jumps < 0 then math.huge else a.jumps, if b.jumps < 0 then math.huge else b.jumps
+    if far ~= further then
+      return far < further
+    end
+    return a.constellation .. a.type < b.constellation .. b.type
+  end)
   return found
 end
 

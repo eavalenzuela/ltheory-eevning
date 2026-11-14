@@ -51,14 +51,17 @@ local Moons = require("@lt/Core/Data/Moons")
 local Ores = require("@lt/Core/Data/Ores")
 local Planets = require("@lt/Core/Data/Planets")
 local Reactions = require("@lt/Core/Data/Reactions")
+local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
+local State = require("@lt/Core/Kernel/State")
 local System = require("@lt/Core/Describe/System")
 local Types = require("@lt/Core/Data/Types")
 
 local Commerce = {}
 
--- Ticks between the economy's steps: ten game minutes.
+-- Ticks between the economy's steps: ten game minutes. And in a day.
 Commerce.STEP = math.ceil(600 / Constants.TICK)
+Commerce.DAY = math.ceil(86400 / Constants.TICK)
 -- Credits' worth of built things a unit of people uses up in an hour.
 Commerce.SCALE = 400000
 -- How those are shared among what is built: hulls, modules, charges and
@@ -99,6 +102,14 @@ Commerce.ANCHOR = 1.5
 -- things to have come apart across the map. Worked out in steps of so
 -- many hours, which leaves it where the game's own short steps would.
 Commerce.SETTLED, Commerce.SETTLE_HOURS = 20, 2
+-- What happens to a part of the map now and then: the chance on any
+-- day that a glut or a shortage begins somewhere; how many there are at
+-- once, at most; how many days one lasts, at the least and the most;
+-- and how many times what it did a system there wants of the thing,
+-- in a shortage and in a glut.
+Commerce.SHOCK_CHANCE, Commerce.SHOCKS = 0.6, 4
+Commerce.SHOCK_DAYS = { 3, 6 }
+Commerce.SHORTAGE, Commerce.GLUT = 2.5, 0.4
 -- The share of what a built thing costs that is its materials: what a
 -- local price of them moves (Data/Blueprints prices one so).
 Commerce.MATERIALS = 0.6
@@ -504,6 +515,61 @@ function Commerce.Level(econ: Economy.Economy?, system: number, type: string): n
     here += part.share * Economy.Price(econ, system, part.class) / econ.classes[part.class].par
   end
   return 1 + Commerce.MATERIALS * (here - 1)
+end
+
+-- A shock begins or ends: every system of its constellation wants so
+-- many times what it did of the thing (or, ending, what it did again).
+local function want(econ: Economy.Economy, galaxy: Galaxy.Galaxy, shock: State.Shock, factor: number)
+  for id = 1, #econ.nodes do
+    if galaxy.systems[id].constellation == shock.constellation then
+      econ.nodes[id].target[shock.class] *= factor
+    end
+  end
+end
+
+-- What happens to the trade of a part of the map. The shocks that are
+-- over end; and on the first step of a game day, more days than not,
+-- one begins: a constellation of the map, one of the goods, a glut or
+-- a shortage, for some days. A shortage is a part of the map wanting
+-- more of a thing than it has: it is dear there at once, and goes there
+-- along the gates from all round until there is enough, and when it is
+-- over there is too much. A glut is the other way about. Returns
+-- nothing: what began and ended is said in 'events'.
+function Commerce.Stir(econ: Economy.Economy, galaxy: Galaxy.Galaxy, shocks: { State.Shock }, seed: number, tick: number, ticks: number,
+  events: { { [string]: any } })
+  for index = #shocks, 1, -1 do
+    local shock = shocks[index]
+    if tick >= shock.ends then
+      want(econ, galaxy, shock, 1 / shock.factor)
+      table.remove(shocks, index)
+      table.insert(events, { kind = "TradeShockOver", constellation = shock.constellation, type = goods[shock.class],
+        shortage = shock.factor > 1 })
+    end
+  end
+  local day = Commerce.DAY
+  if tick // day == (tick - ticks) // day or #shocks >= Commerce.SHOCKS then
+    return
+  end
+  local rng = Rng.For(seed, tick // day, 707)
+  -- (the constellations of the map: the last is uncharted space's, in a galaxy that has any)
+  local constellations = #galaxy.constellations - (if galaxy.charted then 1 else 0)
+  if constellations < 1 or not Rng.Chance(rng, Commerce.SHOCK_CHANCE) then
+    return
+  end
+  local where = 1 + Rng.Int(rng, constellations)
+  local class = 1 + Rng.Int(rng, #goods)
+  for _, shock in shocks do
+    -- (one thing at a time to a place)
+    if shock.constellation == where then
+      return
+    end
+  end
+  local days = Commerce.SHOCK_DAYS[1] + Rng.Int(rng, Commerce.SHOCK_DAYS[2] - Commerce.SHOCK_DAYS[1] + 1)
+  local shock: State.Shock = { id = tick, constellation = where, class = class,
+    factor = if Rng.Chance(rng, 0.5) then Commerce.SHORTAGE else Commerce.GLUT, began = tick, ends = tick + days * day }
+  table.insert(shocks, shock)
+  want(econ, galaxy, shock, shock.factor)
+  table.insert(events, { kind = "TradeShock", constellation = where, type = goods[class], shortage = shock.factor > 1, days = days })
 end
 
 -- Let so many days go by in an economy all at once, with nothing

@@ -303,6 +303,15 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{event.name} could not buy {event.short} of the {Types.Info(event.type).name}: {event.reason}`)
   elseif kind == "KitReplaced" then
     Session.Say(session, `{event.agent} has handed it over again: it is in the hangar. There is no third time`)
+  elseif kind == "TradeShock" or kind == "TradeShockOver" then
+    -- (what is happening to the trade of a part of the map: Core/Strategic/Commerce)
+    local galaxy = session.game.state.galaxy
+    local constellation = galaxy.constellations[event.constellation]
+    local where = `{constellation.name}, {galaxy.regions[constellation.region].name}`
+    local what = Types.Info(event.type).name
+    Session.Say(session, if kind == "TradeShockOver" then `NEWS: the {if event.shortage then "shortage" else "glut"} of {what} in {where} is over`
+      elseif event.shortage then `NEWS: {what} is short in {where}, and dear there, for {event.days} days or so`
+      else `NEWS: a glut of {what} in {where}: cheap there for {event.days} days or so`)
   elseif kind == "SurgeBegan" then
     local name = session.game.state.galaxy.systems[event.system].name
     Session.Say(session, `PIRATE SURGE: pirates are massing ` .. (if event.jumps == 0 then `here in {name}`
