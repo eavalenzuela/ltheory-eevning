@@ -1,6 +1,7 @@
 --!strict
 -- The facts shown about each type of item (Data/Facts).
 
+local Blueprints = require("@lt/Core/Data/Blueprints")
 local Facts = require("@lt/Core/Data/Facts")
 local Ships = require("@lt/Core/Data/Ships")
 local Test = require("@lt/Tool/Test")
@@ -39,6 +40,24 @@ suite:Case("every type of item has something said about it", function(t)
     end
   end
   t.ok(count > 200, `only {count} types`)
+end)
+
+suite:Case("a copy of a blueprint has the blueprint's sheet, and says it is a copy", function(t)
+  -- (no market lists a copy, so the case above does not come to them)
+  for _, blueprint in Blueprints.list do
+    local id = Blueprints.Copy(blueprint)
+    t.eq(table.find(Types.Ids(), id), nil, id)
+    local sheet = assert(Facts.Of(id), id)
+    local whole = assert(Facts.Of(blueprint.id), blueprint.id)
+    t.eq({ sheet.kind, whole.kind, #sheet.sections } :: { any }, { "Blueprint copy", "Blueprint", #whole.sections } :: { any }, id)
+    t.ok(string.find(sheet.note, "No market deals in copies", 1, true) ~= nil, id)
+    for index, section in sheet.sections do
+      t.eq({ section.title, #section.rows } :: { any }, { whole.sections[index].title, #whole.sections[index].rows } :: { any }, id)
+    end
+  end
+  local sheet = assert(Facts.Of("copy.ammo.emp"))
+  t.eq({ sheet.name, find(sheet, "Shock Rounds"), find(sheet, "Base price") } :: { any },
+    { "Shock Rounds Blueprint Copy", "100 a run", `{Types.Info("copy.ammo.emp").basePrice} cr a run` } :: { any })
 end)
 
 suite:Case("every hull has a sheet, the ones nobody sells too", function(t)

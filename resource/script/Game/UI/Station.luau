@@ -116,7 +116,8 @@ end
 -- Open the market at a type, as clicking through to it would.
 function Station.Choose(type: string): boolean
   local info = Types.Get(type)
-  if info == nil then
+  -- (no market deals in a blueprint copy: there is nothing to open it at)
+  if info == nil or info.unlisted then
     return false
   end
   tab = "Market"
@@ -135,9 +136,10 @@ function Station.Choose(type: string): boolean
   return true
 end
 
--- Open the industry tab at a blueprint, as clicking its row would.
+-- Open the industry tab at a blueprint, or at a copy of one, as
+-- clicking its row would.
 function Station.Blueprint(type: string): boolean
-  if Blueprints.byId[type] == nil then
+  if Blueprints.Of(type) == nil then
     return false
   end
   tab = "Industry"
@@ -932,11 +934,15 @@ local function drawIndustry(session: Session.Session, game: Core.Game, player: C
   local left = x + 16
   local hangar = Core.Query.Items(game, station, "hangar")
 
+  -- On the left, what is here: blueprints (and copies of them), ore, and
+  -- the jobs running. On the right, the blueprint chosen: the job it
+  -- would be, and what a laboratory does with it.
+
   -- Blueprints here.
   local blueprints: { State.Item } = {}
   local ores: { State.Item } = {}
   for _, item in hangar do
-    if Blueprints.byId[item.type] then
+    if Blueprints.Of(item.type) then
       table.insert(blueprints, item)
     elseif Ores.byId[item.type] then
       table.insert(ores, item)
@@ -947,18 +953,21 @@ local function drawIndustry(session: Session.Session, game: Core.Game, player: C
   if #blueprints == 0 then
     Im.Text("None. The market sells them, under Blueprints.", left, line, 14, Im.DIM, 0.8)
   end
-  local visible = 9
+  local visible = 6
   local first = Im.Scroll("blueprints", left - 4, line, 434, visible * 24, #blueprints, visible)
   for row = 1, visible do
     local item = blueprints[row + first]
     if item == nil then
       break
     end
-    local blueprint = Blueprints.byId[item.type]
+    local blueprint, copy = Blueprints.Of(item.type)
+    assert(blueprint)
     local rowY = line + (row - 1) * 24
     local _, clicked = Im.Row(left - 4, rowY, 430, 24, blueprintChosen == item.type)
     Im.Text(shorten(Types.Info(blueprint.product).name, 34), left + 4, rowY + 4, 14, Im.TEXT)
-    Im.TextRight(`makes {blueprint.perRun} a run`, left + 418, rowY + 5, 12, Im.DIM)
+    -- (a copy says how many runs it is still good for)
+    Im.TextRight(if copy then `copy: {Format.Whole(item.quantity)} {if item.quantity == 1 then "run" else "runs"} left`
+      else `makes {blueprint.perRun} a run`, left + 418, rowY + 5, 12, if copy then Im.ACCENT else Im.DIM)
     if clicked then
       blueprintChosen = item.type
       runs = 1
@@ -966,22 +975,75 @@ local function drawIndustry(session: Session.Session, game: Core.Game, player: C
   end
 
   -- Ore to refine.
-  line = top + 26 + visible * 24 + 16
+  line = top + 26 + visible * 24 + 14
   Im.Heading(`ORE HERE  {#ores}`, left, line, 16, Im.DIM)
   line += 26
   if #ores == 0 then
     Im.Text("None. Mine some at a belt and bring it back.", left, line, 14, Im.DIM, 0.8)
   end
-  for index, item in ores do
-    if index > 5 then
+  local oreRows = 3
+  local firstOre = Im.Scroll("ores", left - 4, line, 434, oreRows * 26, #ores, oreRows)
+  for row = 1, oreRows do
+    local item = ores[row + firstOre]
+    if item == nil then
       break
     end
-    Im.Text(`{Types.Info(item.type).name}  x{Format.Whole(item.quantity)}`, left + 4, line + 3, 14, Im.TEXT)
+    local rowY = line + (row - 1) * 26
+    Im.Text(`{Types.Info(item.type).name}  x{Format.Whole(item.quantity)}`, left + 4, rowY + 3, 14, Im.TEXT)
     local can = Session.CanDo(session, { kind = "Reprocess", actor = 0, item = item.id })
-    if Im.Button("Refine", left + 348, line, 70, 22, can, `Refine:{item.type}`) then
+    if Im.Button("Refine", left + 348, rowY, 70, 22, can, `Refine:{item.type}`) then
       Session.Do(session, { kind = "Reprocess", actor = 0, item = item.id })
     end
-    line += 26
+  end
+
+  -- Jobs running, here and elsewhere.
+  calling.left = math.max(0, calling.left - 1)
+  local jobs = Core.Query.Jobs(game, nil)
+  line += oreRows * 26 + 14
+  Im.Heading(`JOBS  {#jobs} / {Core.Query.JobSlots(game)}`, left, line, 16, Im.DIM)
+  line += 26
+  if #jobs == 0 then
+    Im.Text("Nothing is being built.", left, line, 14, Im.DIM, 0.8)
+  end
+  local jobRows = 3
+  local firstJob = Im.Scroll("jobs", left - 4, line, 434, jobRows * 42, #jobs, jobRows)
+  for row = 1, jobRows do
+    local index = row + firstJob
+    local job = jobs[index]
+    if job == nil then
+      break
+    end
+    local rowY = line + (row - 1) * 42
+    local where = Core.Query.Body(game, job.station)
+    local remaining = job.ends - game.state.tick
+    -- (a copying and an inventing are named for what the blueprint
+    -- builds, as the rows above are)
+    local held = Blueprints.Of(job.blueprint)
+    local drawing = if held then held.name else Types.Info(job.blueprint).name
+    local builds = if held then Types.Info(held.product).name else drawing
+    Im.Text(if job.research == "copy" then `Copying, {Format.Whole(job.quantity)} {if job.quantity == 1 then "run" else "runs"}: {shorten(builds, 28)}`
+      elseif job.research == "invent" then `Inventing from a copy: {shorten(builds, 24)}`
+      elseif job.research ~= "" then `Research ({job.research}): {shorten(drawing, 26)}`
+      else `{Format.Whole(job.quantity)} x {shorten(Types.Info(job.product).name, 30)}`, left + 4, rowY, 14, Im.TEXT)
+    Im.TextRight(Format.Duration(remaining * Constants.TICK), left + 418, rowY, 14, Im.TEXT)
+    Im.Text(if job.station == station then "here" else shorten(if where then where.name else "?", 30), left + 4, rowY + 18, 12, Im.DIM)
+    local span = math.max(1, job.ends - job.started)
+    -- (called off where it runs: pressed once it asks, and pressed again
+    -- within a few seconds it is done. What went into the runs not
+    -- finished is lost.)
+    local cancel: State.Command = { kind = "CancelJob", actor = 0, target = job.id }
+    local armed = calling.job == job.id and calling.left > 0
+    if job.station == station and Im.Button(if armed then "Sure?" else "Call off", left + 64, rowY + 16, 76, 20, (Session.CanDo(session, cancel)),
+      `Job:cancel:{index}`) then
+      if armed then
+        Session.Do(session, cancel)
+        calling.job, calling.left = 0, 0
+      else
+        calling.job, calling.left = job.id, 240
+      end
+    end
+    Im.Fill(left + 154, rowY + 23, 264, 4, Im.DIM, 0.25)
+    Im.Fill(left + 154, rowY + 23, 264 * math.clamp(1 - remaining / span, 0, 1), 4, Im.ACCENT, 0.95)
   end
 
   -- The job the chosen blueprint would be.
@@ -992,126 +1054,115 @@ local function drawIndustry(session: Session.Session, game: Core.Game, player: C
   if plan == nil or chosenItem == nil then
     Im.Heading("NEW JOB", dx, line, 16, Im.DIM)
     Im.Text("Choose a blueprint.", dx, line + 28, 14, Im.DIM, 0.8)
-    line += 200
-  else
-    local product = Types.Info(plan.blueprint.product)
-    Im.Heading("NEW JOB", dx, line, 16, Im.DIM)
-    line += 26
-    Im.Text("Runs", dx, line + 5, 14, Im.DIM)
-    runs = Im.Number("Runs", runs, dx + 80, line, 100, 26)
-    -- as many runs as the minerals here allow
-    local most = 100
-    for _, m in plan.blueprint.materials do
-      local _, have = inHangar(game, station, m.type)
-      most = math.min(most, have // m.quantity)
-    end
-    for index, preset in { 1, 10 } do
-      if Im.Button(tostring(preset), dx + 190 + (index - 1) * 52, line, 48, 26, true, `Runs:{preset}`) then
-        runs = preset
-      end
-    end
-    if Im.Button(`Most ({most})`, dx + 294, line, 100, 26, most >= 1, "Runs:most") then
-      runs = most
-    end
-    line += 36
-    Im.Text(`Makes {Format.Whole(plan.quantity)} x {product.name}`, dx, line, 14, Im.TEXT)
-    line += 24
-    for _, m in plan.materials do
-      local enough = m.have >= m.need
-      Im.Text(Types.Info(m.type).name, dx + 12, line, 14, Im.DIM)
-      Im.TextRight(Format.Whole(m.need), dx + 240, line, 14, if enough then Im.TEXT else Im.WARN)
-      Im.TextRight(`{Format.Whole(m.have)} here`, dx + 446, line, 13, if enough then Im.DIM else Im.WARN)
-      line += 20
-    end
-    line += 6
-    Im.Text(`Takes {Format.Duration(plan.seconds)}`, dx, line, 14, Im.TEXT)
-    Im.TextRight(`fee {Format.Credits(plan.fee)}`, dx + 446, line, 14, Im.TEXT)
-    line += 28
-    local job: State.Command = { kind = "StartJob", actor = 0, item = chosenItem.id, quantity = runs }
-    local can, whyNot = Session.CanDo(session, job)
-    if Im.Button("Start job", dx, line, 160, 30, can, "StartJob") then
-      Session.Do(session, job)
-    end
-    if not can then
-      Im.Text(tostring(whyNot), dx + 172, line + 8, 13, Im.WARN)
-    end
-    line += 40
-    -- Research, in a laboratory: what the pilot has learned of this
-    -- design, and the next level of each kind.
-    local research = Core.Query.Research(game, plan.blueprint.id)
-    if research then
-      Im.Text(`Researched: materials -{research.material}%, time -{research.time * 2}%`, dx, line, 13, Im.DIM)
-      line += 22
-      for index, what in { "material", "time" } do
-        local next: Industry.ResearchPlan? = if what == "material" then research.nextMaterial else research.nextTime
-        local study: State.Command = { kind = "StartResearch", actor = 0, item = chosenItem.id, what = what }
-        local canStudy = next ~= nil and (Session.CanDo(session, study))
-        local bx = dx + (index - 1) * 226
-        if Im.Button(if what == "material" then "Research materials" else "Research time", bx, line, 150, 26, canStudy,
-          `Research:{what}`) then
-          Session.Do(session, study)
-        end
-        Im.Text(if next then `{Format.Duration(next.seconds)}` else "done", bx + 156, line - 1, 12, Im.DIM)
-        if next then
-          Im.Text(Format.Credits(next.fee), bx + 156, line + 13, 12, Im.DIM)
-        end
-      end
-      line += 34
-      -- (and the inventing of its tech 2 make, where there is one)
-      local invention = research.invention
-      if invention then
-        local invent: State.Command = { kind = "StartResearch", actor = 0, item = chosenItem.id, what = "invent" }
-        local canInvent, whyNotInvent = Session.CanDo(session, invent)
-        if Im.Button("Invent tech 2", dx, line, 150, 26, canInvent, "Invent") then
-          Session.Do(session, invent)
-        end
-        Im.Text(string.format("%d datacores, %s, %d%% chance", invention.datacores, Format.Duration(invention.seconds),
-          math.floor(invention.chance * 100 + 0.5)), dx + 156, line - 1, 12, Im.DIM)
-        Im.Text(if canInvent then Format.Credits(invention.fee) else shorten(tostring(whyNotInvent), 44), dx + 156, line + 13, 12,
-          if canInvent then Im.DIM else Im.WARN)
-        line += 34
-      end
-    end
+    return
   end
-
-  -- Jobs running, here and elsewhere.
-  calling.left = math.max(0, calling.left - 1)
-  local jobs = Core.Query.Jobs(game, nil)
-  line = math.max(line, top + 250)
-  Im.Heading(`JOBS  {#jobs} / {Core.Query.JobSlots(game)}`, dx, line, 16, Im.DIM)
+  local product = Types.Info(plan.blueprint.product)
+  local _, isCopy = Blueprints.Of(blueprintChosen)
+  Im.Heading(if isCopy then "NEW JOB, FROM A COPY" else "NEW JOB", dx, line, 16, Im.DIM)
   line += 26
-  if #jobs == 0 then
-    Im.Text("Nothing is being built.", dx, line, 14, Im.DIM, 0.8)
+  Im.Text("Runs", dx, line + 5, 14, Im.DIM)
+  runs = Im.Number("Runs", runs, dx + 80, line, 100, 26)
+  -- as many runs as the minerals here allow (and as a copy has left)
+  local most = if isCopy then math.min(100, chosenItem.quantity) else 100
+  for _, m in plan.blueprint.materials do
+    local _, have = inHangar(game, station, m.type)
+    most = math.min(most, have // m.quantity)
   end
-  for index, job in jobs do
-    if index > 6 then
+  for index, preset in { 1, 10 } do
+    if Im.Button(tostring(preset), dx + 190 + (index - 1) * 52, line, 48, 26, true, `Runs:{preset}`) then
+      runs = preset
+    end
+  end
+  if Im.Button(`Most ({most})`, dx + 294, line, 100, 26, most >= 1, "Runs:most") then
+    runs = most
+  end
+  line += 36
+  Im.Text(`Makes {Format.Whole(plan.quantity)} x {product.name}`, dx, line, 14, Im.TEXT)
+  line += 24
+  -- (a hull or a tower is built of a dozen things and more: as many as
+  -- fit, and the wheel for the rest)
+  local materialRows = 7
+  local firstMaterial = Im.Scroll("materials", dx, line, 452, materialRows * 20, #plan.materials, materialRows)
+  for row = 1, materialRows do
+    local m = plan.materials[row + firstMaterial]
+    if m == nil then
       break
     end
-    local where = Core.Query.Body(game, job.station)
-    local remaining = job.ends - game.state.tick
-    Im.Text(if job.research ~= "" then `Research ({job.research}): {shorten(Types.Info(job.blueprint).name, 22)}`
-      else `{Format.Whole(job.quantity)} x {shorten(Types.Info(job.product).name, 26)}`, dx, line, 14, Im.TEXT)
-    Im.TextRight(Format.Duration(remaining * Constants.TICK), dx + 446, line, 14, Im.TEXT)
-    line += 18
-    Im.Text(if job.station == station then "here" else shorten(if where then where.name else "?", 30), dx, line, 12, Im.DIM)
-    local span = math.max(1, job.ends - job.started)
-    -- (called off where it runs: pressed once it asks, and pressed again
-    -- within a few seconds it is done. What went into the runs not
-    -- finished is lost.)
-    local cancel: State.Command = { kind = "CancelJob", actor = 0, target = job.id }
-    local armed = calling.job == job.id and calling.left > 0
-    if job.station == station and Im.Button(if armed then "Sure?" else "Call off", dx + 60, line - 2, 76, 20, (Session.CanDo(session, cancel)),
-      `Job:cancel:{index}`) then
-      if armed then
-        Session.Do(session, cancel)
-        calling.job, calling.left = 0, 0
-      else
-        calling.job, calling.left = job.id, 240
+    local enough = m.have >= m.need
+    Im.Text(Types.Info(m.type).name, dx + 12, line, 14, Im.DIM)
+    Im.TextRight(Format.Whole(m.need), dx + 240, line, 14, if enough then Im.TEXT else Im.WARN)
+    Im.TextRight(`{Format.Whole(m.have)} here`, dx + 440, line, 13, if enough then Im.DIM else Im.WARN)
+    line += 20
+  end
+  line += 6
+  Im.Text(`Takes {Format.Duration(plan.seconds)}`, dx, line, 14, Im.TEXT)
+  Im.TextRight(`fee {Format.Credits(plan.fee)}`, dx + 446, line, 14, Im.TEXT)
+  line += 28
+  local job: State.Command = { kind = "StartJob", actor = 0, item = chosenItem.id, quantity = runs }
+  local can, whyNot = Session.CanDo(session, job)
+  if Im.Button("Start job", dx, line, 160, 30, can, "StartJob") then
+    Session.Do(session, job)
+  end
+  if not can then
+    Im.Text(tostring(whyNot), dx + 172, line + 8, 13, Im.WARN)
+  end
+  line += 40
+  -- The laboratory: what the pilot has learned of this design and the
+  -- next level of each kind, a copy of it, and the inventing of its
+  -- tech 2 make.
+  local research = Core.Query.Research(game, plan.blueprint.id)
+  if research == nil then
+    return
+  end
+  Im.Heading("LABORATORY", dx, line, 14, Im.DIM)
+  Im.TextRight(`researched: materials -{research.material}%, time -{research.time * 2}%`, dx + 446, line + 1, 12, Im.DIM)
+  line += 24
+  if isCopy then
+    Im.Text("Research and copying take the blueprint itself, not a copy.", dx, line, 12, Im.DIM, 0.8)
+    line += 22
+  else
+    for index, what in { "material", "time" } do
+      local next: Industry.ResearchPlan? = if what == "material" then research.nextMaterial else research.nextTime
+      local study: State.Command = { kind = "StartResearch", actor = 0, item = chosenItem.id, what = what }
+      local canStudy = next ~= nil and (Session.CanDo(session, study))
+      local bx = dx + (index - 1) * 226
+      if Im.Button(if what == "material" then "Research materials" else "Research time", bx, line, 150, 26, canStudy,
+        `Research:{what}`) then
+        Session.Do(session, study)
+      end
+      Im.Text(if next then `{Format.Duration(next.seconds)}` else "done", bx + 156, line - 1, 12, Im.DIM)
+      if next then
+        Im.Text(Format.Credits(next.fee), bx + 156, line + 13, 12, Im.DIM)
       end
     end
-    Im.Fill(dx + 150, line + 5, 296, 4, Im.DIM, 0.25)
-    Im.Fill(dx + 150, line + 5, 296 * math.clamp(1 - remaining / span, 0, 1), 4, Im.ACCENT, 0.95)
-    line += 24
+    line += 34
+    -- (a copy good for the runs entered above: what a job or an
+    -- invention can use up in place of the blueprint)
+    local copying = Core.Query.CopyPlan(game, blueprintChosen, math.max(1, runs))
+    if copying then
+      local copy: State.Command = { kind = "StartResearch", actor = 0, item = chosenItem.id, what = "copy", quantity = runs }
+      local canCopy, whyNotCopy = Session.CanDo(session, copy)
+      if Im.Button("Copy", dx, line, 150, 26, canCopy, "Copy") then
+        Session.Do(session, copy)
+      end
+      Im.Text(`a copy good for {Format.Whole(copying.runs)} {if copying.runs == 1 then "run" else "runs"}, {Format.Duration(copying.seconds)}`,
+        dx + 156, line - 1, 12, Im.DIM)
+      Im.Text(if canCopy then Format.Credits(copying.fee) else shorten(tostring(whyNotCopy), 44), dx + 156, line + 13, 12,
+        if canCopy then Im.DIM else Im.WARN)
+      line += 34
+    end
+  end
+  local invention = research.invention
+  if invention then
+    local invent: State.Command = { kind = "StartResearch", actor = 0, item = chosenItem.id, what = "invent" }
+    local canInvent, whyNotInvent = Session.CanDo(session, invent)
+    if Im.Button("Invent tech 2", dx, line, 150, 26, canInvent, "Invent") then
+      Session.Do(session, invent)
+    end
+    Im.Text(string.format("%d datacores, %s, %d%% chance", invention.datacores, Format.Duration(invention.seconds),
+      math.floor(invention.chance * 100 + 0.5)), dx + 156, line - 1, 12, Im.DIM)
+    Im.Text(if canInvent then Format.Credits(invention.fee) else shorten(tostring(whyNotInvent), 44), dx + 156, line + 13, 12,
+      if canInvent then Im.DIM else Im.WARN)
   end
 end
 

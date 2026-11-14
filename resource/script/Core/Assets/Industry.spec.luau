@@ -394,7 +394,177 @@ suite:Case("research wants a laboratory, and is in the save", function(t)
   t.eq({ Industry.Researched(loaded.state, "blueprint.ammo.emp") }, { 0, 1 })
 end)
 
-suite:Case("invention works out a tech 2 blueprint from a plain one, for datacores, and may come to nothing", function(t)
+suite:Case("a laboratory copies a blueprint: a copy good for so many runs, for a fee and half the time of building them", function(t)
+  local game, home = newGame()
+  local state = game.state
+  local blueprint = Blueprints.byId["blueprint.ammo.emp"]
+  -- A copy is an item of its own, by the run: named for its blueprint, among the types and in no market.
+  t.eq({ Blueprints.Copy(blueprint), Blueprints.Of("copy.ammo.emp"), select(2, Blueprints.Of("copy.ammo.emp")) } :: { any },
+    { "copy.ammo.emp", blueprint, true } :: { any })
+  t.eq({ Blueprints.Of("blueprint.ammo.emp") } :: { any }, { blueprint, false } :: { any })
+  t.eq({ Blueprints.Of("ammo.emp") } :: { any }, { nil, false } :: { any })
+  t.eq({ Blueprints.Of("copy.nothing") } :: { any }, { nil, false } :: { any })
+  local info = Types.Info("copy.ammo.emp")
+  t.eq({ info.name, info.category, info.unlisted, info.basePrice } :: { any },
+    { "Shock Rounds Blueprint Copy", "blueprint", true, blueprint.basePrice // 100 } :: { any })
+  t.eq(table.find(Types.Ids(), "copy.ammo.emp"), nil, "no market lists a copy")
+  for _, each in Blueprints.list do
+    local copy = assert(Types.Get(Blueprints.Copy(each)), each.id)
+    t.ok(copy.unlisted and copy.basePrice >= 1 and copy.basePrice * 100 <= each.basePrice + 99, each.id)
+  end
+
+  -- Five runs: 60 s a run to build, so 150 s to copy; and the fee of building them.
+  local item = stack(game, "blueprint.ammo.emp")
+  local plan = assert(Core.Query.CopyPlan(game, "blueprint.ammo.emp", 5))
+  t.eq(plan, { copy = "copy.ammo.emp", runs = 5, seconds = 150, fee = 200 })
+  t.eq(Core.Query.CopyPlan(game, "copy.ammo.emp", 5), nil)
+  t.eq(refused(game, { kind = "StartResearch", actor = 0, item = item.id, what = "copy", quantity = 0 }), "a copy is of 1 to 100 runs")
+  t.eq(refused(game, { kind = "StartResearch", actor = 0, item = item.id, what = "copy", quantity = 101 }), "a copy is of 1 to 100 runs")
+  t.eq(refused(game, { kind = "StartResearch", actor = 0, item = item.id, what = "copy", quantity = 2.5 }), "a copy is of 1 to 100 runs")
+  state.wallet = 199
+  t.eq(refused(game, { kind = "StartResearch", actor = 0, item = item.id, what = "copy", quantity = 5 }), "not enough credits for the fee")
+  state.wallet = 5000
+  Core.TakeEvents(game)
+  order(t, game, { kind = "StartResearch", actor = 0, item = item.id, what = "copy", quantity = 5 })
+  t.eq({ state.wallet, state.journal[#state.journal].reason, hangar(game, "blueprint.ammo.emp") } :: { any },
+    { 4800, "copying fee", 0 } :: { any })
+  local jobs = Core.Query.Jobs(game, home)
+  t.eq({ #jobs, jobs[1].research, jobs[1].blueprint, jobs[1].product, jobs[1].runs, jobs[1].quantity, jobs[1].ends - jobs[1].started } :: { any },
+    { 1, "copy", "blueprint.ammo.emp", "copy.ammo.emp", 5, 5, 150 } :: { any })
+  local done, ticks = stepUntil(game, "CopyDone", 200)
+  t.eq({ done.blueprint, done.copy, done.runs, done.station, ticks } :: { any },
+    { "blueprint.ammo.emp", "copy.ammo.emp", 5, home, 150 } :: { any })
+  t.eq({ hangar(game, "blueprint.ammo.emp"), hangar(game, "copy.ammo.emp"), #Core.Query.Jobs(game) }, { 1, 5, 0 })
+
+  -- A copy is not copied, nor researched: both take the blueprint itself. And no market deals in one.
+  local copy = stack(game, "copy.ammo.emp")
+  for _, what in { "copy", "material", "time" } do
+    t.eq(refused(game, { kind = "StartResearch", actor = 0, item = copy.id, what = what, quantity = 1 }),
+      "that takes the blueprint itself, not a copy", what)
+  end
+  t.eq(refused(game, { kind = "SellNow", actor = 0, item = copy.id, quantity = 1 }), "no market deals in that")
+  t.eq(refused(game, { kind = "PlaceOrder", actor = 0, to = "sell", item = copy.id, quantity = 1, price = 100 }), "no market deals in that")
+  t.eq(refused(game, { kind = "BuyNow", actor = 0, type = "copy.ammo.emp", quantity = 1 }), "no such item type")
+
+  -- Copying takes a place among the jobs, and a laboratory.
+  state.wallet = 100000
+  order(t, game, { kind = "StartResearch", actor = 0, item = stack(game, "blueprint.ammo.emp").id, what = "copy", quantity = 100 })
+  local second = Items.Add(state, "blueprint.autocannon.small", 2, home, "hangar")
+  order(t, game, { kind = "StartResearch", actor = 0, item = second.id, what = "copy", quantity = 1 })
+  t.eq(refused(game, { kind = "StartResearch", actor = 0, item = second.id, what = "copy", quantity = 1 }), "every job slot is in use")
+end)
+
+suite:Case("a job built from a copy uses up the runs it is for, and what its owner has researched counts for it", function(t)
+  local game, home = newGame()
+  local state = game.state
+  Items.Add(state, "copy.ammo.emp", 5, home, "hangar")
+  Items.Add(state, "mineral.iron", 2000, home, "hangar")
+  Items.Add(state, "mineral.silicon", 500, home, "hangar")
+  local copy = stack(game, "copy.ammo.emp")
+  -- A copy has the runs it has: no more are to be had of it.
+  t.eq(refused(game, { kind = "StartJob", actor = 0, item = copy.id, quantity = 6 }), "that copy has 5 runs left")
+  -- It plans as the blueprint does, and what has been researched of the design comes off it too.
+  local plain = assert(Core.Query.JobPlan(game, home, "blueprint.ammo.emp", 3))
+  local plan = assert(Core.Query.JobPlan(game, home, "copy.ammo.emp", 3))
+  t.eq({ plan.quantity, plan.seconds, plan.fee, plan.materials[1].need }, { plain.quantity, plain.seconds, plain.fee, 630 })
+  state.research["blueprint.ammo.emp"] = { material = 10, time = 0 }
+  t.eq(assert(Core.Query.JobPlan(game, home, "copy.ammo.emp", 3)).materials[1].need, 567)
+  state.research["blueprint.ammo.emp"] = nil
+
+  local rounds = hangar(game, "ammo.emp")
+  Core.TakeEvents(game)
+  order(t, game, { kind = "StartJob", actor = 0, item = copy.id, quantity = 3 })
+  t.eq({ hangar(game, "copy.ammo.emp"), hangar(game, "blueprint.ammo.emp"), hangar(game, "mineral.iron") }, { 2, 1, 2000 - 630 })
+  t.eq(Core.Query.Jobs(game, home)[1].blueprint, "copy.ammo.emp")
+  local done = stepUntil(game, "JobDone", 400)
+  t.eq({ done.product, done.quantity } :: { any }, { "ammo.emp", 300 } :: { any })
+  -- The rounds, and nothing else: the three runs are gone, and the blueprint in the hangar is the one that was there.
+  t.eq({ hangar(game, "ammo.emp"), hangar(game, "copy.ammo.emp"), hangar(game, "blueprint.ammo.emp") }, { rounds + 300, 2, 1 })
+  -- The last of it: one run is left, which is said as one.
+  order(t, game, { kind = "StartJob", actor = 0, item = stack(game, "copy.ammo.emp").id, quantity = 1 })
+  t.eq(refused(game, { kind = "StartJob", actor = 0, item = stack(game, "copy.ammo.emp").id, quantity = 2 }), "that copy has 1 run left")
+  -- (the blueprint builds beside it meanwhile: a copy is how one design is at work twice)
+  order(t, game, { kind = "StartJob", actor = 0, item = stack(game, "blueprint.ammo.emp").id, quantity = 1 })
+  stepUntil(game, "JobDone", 400)
+  for _ = 1, 5 do
+    Core.Step(game)
+  end
+  t.eq({ hangar(game, "ammo.emp"), hangar(game, "copy.ammo.emp"), hangar(game, "blueprint.ammo.emp"), #Core.Query.Jobs(game) },
+    { rounds + 500, 1, 1, 0 })
+  order(t, game, { kind = "StartJob", actor = 0, item = stack(game, "copy.ammo.emp").id, quantity = 1 })
+  t.eq(inHangar(game, "copy.ammo.emp"), nil, "a copy with no runs left is no more")
+end)
+
+suite:Case("called off, a job from a copy gives back the runs not used, and a copying the runs copied", function(t)
+  local game, home = newGame()
+  local state = game.state
+  Items.Add(state, "copy.ammo.emp", 5, home, "hangar")
+  Items.Add(state, "mineral.iron", 1050, home, "hangar")
+  Items.Add(state, "mineral.silicon", 225, home, "hangar")
+  local rounds = hangar(game, "ammo.emp")
+  -- Five runs, 288 seconds in all. Called off after 120: two runs are done, and three are the copy's still.
+  order(t, game, { kind = "StartJob", actor = 0, item = stack(game, "copy.ammo.emp").id, quantity = 5 })
+  t.eq(inHangar(game, "copy.ammo.emp"), nil)
+  for _ = 1, 119 do
+    Core.Step(game)
+  end
+  Core.TakeEvents(game)
+  order(t, game, { kind = "CancelJob", actor = 0, target = Core.Query.Jobs(game, home)[1].id })
+  local called: any = nil
+  for _, event in Core.TakeEvents(game) do
+    called = if event.kind == "JobCancelled" then event else called
+  end
+  t.eq({ called.blueprint, called.made, called.quantity, called.back } :: { any }, { "copy.ammo.emp", 200, 500, 3 } :: { any })
+  t.eq({ hangar(game, "ammo.emp"), hangar(game, "copy.ammo.emp"), hangar(game, "blueprint.ammo.emp"), hangar(game, "mineral.iron") },
+    { rounds + 200, 3, 1, 0 })
+
+  -- A copying of ten runs, 300 seconds. Called off after 100: three runs are copied, and the blueprint is back.
+  order(t, game, { kind = "StartResearch", actor = 0, item = stack(game, "blueprint.ammo.emp").id, what = "copy", quantity = 10 })
+  for _ = 1, 99 do
+    Core.Step(game)
+  end
+  Core.TakeEvents(game)
+  order(t, game, { kind = "CancelJob", actor = 0, target = Core.Query.Jobs(game, home)[1].id })
+  for _, event in Core.TakeEvents(game) do
+    called = if event.kind == "JobCancelled" then event else called
+    t.ok(event.kind ~= "CopyDone", "a copying called off is not done")
+  end
+  t.eq({ called.research, called.made, called.quantity, called.back } :: { any }, { "copy", 3, 10, 0 } :: { any })
+  t.eq({ hangar(game, "copy.ammo.emp"), hangar(game, "blueprint.ammo.emp"), #Core.Query.Jobs(game) }, { 6, 1, 0 })
+
+  -- An invention called off gives back the run it was working from, and not its datacores.
+  state.skills.invention = 1
+  state.wallet = 1000000
+  Items.Add(state, Industry.DATACORE, 2, home, "hangar")
+  order(t, game, { kind = "StartResearch", actor = 0, item = stack(game, "copy.ammo.emp").id, what = "invent" })
+  t.eq({ hangar(game, "copy.ammo.emp"), hangar(game, Industry.DATACORE) }, { 5, 0 })
+  order(t, game, { kind = "CancelJob", actor = 0, target = Core.Query.Jobs(game, home)[1].id })
+  t.eq({ hangar(game, "copy.ammo.emp"), hangar(game, Industry.DATACORE), hangar(game, "blueprint.ammo.emp") }, { 6, 0, 1 })
+end)
+
+suite:Case("copying, and a job from a copy, are in the save", function(t)
+  local game, home = newGame()
+  local state = game.state
+  Items.Add(state, "copy.ammo.emp", 4, home, "hangar")
+  Items.Add(state, "mineral.iron", 1000, home, "hangar")
+  Items.Add(state, "mineral.silicon", 1000, home, "hangar")
+  order(t, game, { kind = "StartJob", actor = 0, item = stack(game, "copy.ammo.emp").id, quantity = 3 })
+  order(t, game, { kind = "StartResearch", actor = 0, item = stack(game, "blueprint.ammo.emp").id, what = "copy", quantity = 7 })
+  for _ = 1, 50 do
+    Core.Step(game)
+  end
+  local loaded = Core.Load(Core.Save(game))
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  for _ = 1, 400 do
+    Core.Step(game)
+    Core.Step(loaded)
+  end
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  t.eq({ #Core.Query.Jobs(loaded), Industry.Have(loaded.state, home, "copy.ammo.emp"), Industry.Have(loaded.state, home, "blueprint.ammo.emp") },
+    { 0, 8, 1 })
+end)
+
+suite:Case("invention works out a tech 2 blueprint from a copy of a plain one, for datacores, and may come to nothing", function(t)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
   local home = state.player.home
@@ -411,8 +581,11 @@ suite:Case("invention works out a tech 2 blueprint from a plain one, for datacor
   t.eq({ light.product, light.datacores } :: { any }, { "drone.light.ii", 2 } :: { any })
   t.eq(assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.drone.mining"])).datacores, 4)
   -- A small autocannon has: two datacores, half an hour, three chances in ten.
+  -- It is worked out from a copy, never from the blueprint itself.
   local plain = Items.Add(state, "blueprint.autocannon.small", 1, home, "hangar")
-  local invent: State.Command = { kind = "StartResearch", actor = 0, item = plain.id, what = "invent" }
+  t.eq(refused(game, { kind = "StartResearch", actor = 0, item = plain.id, what = "invent" }), "inventing uses up a copy: copy this first")
+  local copies = Items.Add(state, "copy.autocannon.small", 40, home, "hangar")
+  local invent: State.Command = { kind = "StartResearch", actor = 0, item = copies.id, what = "invent" }
   local plan = assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.autocannon.small"]))
   t.eq({ plan.product, plan.blueprint, plan.datacores, plan.seconds } :: { any },
     { "autocannon.small.ii", "blueprint.autocannon.small.ii", 2, 1800 } :: { any })
@@ -424,19 +597,21 @@ suite:Case("invention works out a tech 2 blueprint from a plain one, for datacor
   t.eq(refused(game, invent), "needs 2 more Datacore")
   Items.Add(state, Industry.DATACORE, 1, home, "hangar")
   t.eq(refused(game, invent), "needs 1 more Datacore")
-  -- Try it until one comes off and one does not: each takes its datacores and fee, and gives the plain blueprint back.
+  -- Try it until one comes off and one does not: each takes its datacores, its fee and a run of the copy, and
+  -- gives none of them back. The blueprint itself stays where it is.
   Items.Add(state, Industry.DATACORE, 99, home, "hangar")
   local won, lost = 0, 0
   for attempt = 1, 30 do
-    local wallet, cores = state.wallet, hangar(game, Industry.DATACORE)
-    order(t, game, { kind = "StartResearch", actor = 0, item = stack(game, "blueprint.autocannon.small").id, what = "invent" })
-    t.eq({ wallet - state.wallet, cores - hangar(game, Industry.DATACORE), hangar(game, "blueprint.autocannon.small") },
-      { plan.fee, 2, 0 })
+    local wallet, cores, runs = state.wallet, hangar(game, Industry.DATACORE), hangar(game, "copy.autocannon.small")
+    order(t, game, { kind = "StartResearch", actor = 0, item = stack(game, "copy.autocannon.small").id, what = "invent" })
+    t.eq({ wallet - state.wallet, cores - hangar(game, Industry.DATACORE), runs - hangar(game, "copy.autocannon.small"),
+      hangar(game, "blueprint.autocannon.small") }, { plan.fee, 2, 1, 1 })
     local had = hangar(game, "blueprint.autocannon.small.ii")
     local event, ticks = stepUntil(game, "InventionDone", 2000)
     t.ok(ticks >= 1790 and ticks <= 1800, `an invention took {ticks} ticks`)
-    t.eq({ event.blueprint, event.product } :: { any }, { "blueprint.autocannon.small", "blueprint.autocannon.small.ii" } :: { any })
-    t.eq(hangar(game, "blueprint.autocannon.small"), 1)
+    t.eq({ event.blueprint, event.product, event.used } :: { any },
+      { "copy.autocannon.small", "blueprint.autocannon.small.ii", true } :: { any })
+    t.eq({ hangar(game, "blueprint.autocannon.small"), runs - hangar(game, "copy.autocannon.small") }, { 1, 1 })
     t.eq(hangar(game, "blueprint.autocannon.small.ii") - had, if event.success then 1 else 0)
     won += if event.success then 1 else 0
     lost += if event.success then 0 else 1
@@ -465,7 +640,7 @@ suite:Case("invention works out a tech 2 blueprint from a plain one, for datacor
   t.eq(refused(game, { kind = "Fit", actor = 0, item = item.id }), "needs Projectile Turrets 4")
 end)
 
-suite:Case("a tech 2 hull is invented from the plain hull's blueprint, built of the plain hull, and wants more skill to board", function(t)
+suite:Case("a tech 2 hull is invented from a copy of the plain hull's blueprint, built of the plain hull, and wants more skill to board", function(t)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
   local home = state.player.home
@@ -488,18 +663,18 @@ suite:Case("a tech 2 hull is invented from the plain hull's blueprint, built of 
   end
   t.eq(Industry.InventionPlan(state, Blueprints.byId["blueprint.industrial.tarantula"]), nil)
 
-  Items.Add(state, "blueprint.industrial.sunfish", 1, home, "hangar")
+  Items.Add(state, "copy.industrial.sunfish", 20, home, "hangar")
   Items.Add(state, Industry.DATACORE, 400, home, "hangar")
   local tries = 0
   while hangar(game, "blueprint.industrial.tarantula") == 0 and tries < 20 do
     tries += 1
-    order(t, game, { kind = "StartResearch", actor = 0, item = stack(game, "blueprint.industrial.sunfish").id, what = "invent" })
+    order(t, game, { kind = "StartResearch", actor = 0, item = stack(game, "copy.industrial.sunfish").id, what = "invent" })
     local event, ticks = stepUntil(game, "InventionDone", 8000)
     t.ok(ticks >= 7190 and ticks <= 7200, `inventing a hauler took {ticks} ticks`)
     t.eq(event.product, "blueprint.industrial.tarantula")
   end
   t.eq(hangar(game, "blueprint.industrial.tarantula"), 1, `nothing came of {tries} tries`)
-  t.eq(hangar(game, Industry.DATACORE), 400 - 16 * tries)
+  t.eq({ hangar(game, Industry.DATACORE), hangar(game, "copy.industrial.sunfish") }, { 400 - 16 * tries, 20 - tries })
 
   -- Built of the plain hull and of what makes the difference. Without the plain hull, nothing.
   local made = Blueprints.byId["blueprint.industrial.tarantula"]

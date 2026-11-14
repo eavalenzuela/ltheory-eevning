@@ -148,16 +148,23 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `The order for {Types.Info(event.type).name} is at {event.price} credits now, from {event.was}`
       .. (if event.fee > 0 then `: the broker took {event.fee}` else ""))
   elseif kind == "JobCancelled" then
-    Session.Say(session, if event.research ~= "" then `Called off: the {Types.Info(event.blueprint).name} is back in the hangar`
+    -- (of a copy, the runs not used come back: 'back' is how many)
+    local copy = (event.back or 0) > 0
+    Session.Say(session, if event.research == "copy" then `Called off: {event.made} of {event.quantity} runs were copied. The blueprint is back in the hangar`
+      elseif event.research ~= "" then `Called off: the {Types.Info(event.blueprint).name} is back in the hangar`
       elseif event.made > 0 then `Called off: {event.made} of {event.quantity} {Types.Info(event.product).name} were made. What went into the rest is lost`
-      else `Called off: nothing was made yet, and what went into it is lost. The blueprint is back in the hangar`)
+        .. (if copy then `, and the copy has its {event.back} runs not used` else "")
+      else `Called off: nothing was made yet, and what went into it is lost. The {if copy then "copy" else "blueprint"} is back in the hangar`)
   elseif kind == "JobDone" then
     Session.Say(session, `Built: {event.quantity} x {Types.Info(event.product).name}`)
   elseif kind == "ResearchDone" then
     Session.Say(session, `Research done: {Types.Info(event.blueprint).name}, {event.what} level {event.level}`)
   elseif kind == "InventionDone" then
     Session.Say(session, if event.success then `Invented: {Types.Info(event.product).name} is in the hangar`
+      elseif event.used then "The invention came to nothing, and the run of the copy it was worked from is used up"
       else `The invention came to nothing: {Types.Info(event.blueprint).name} is back in the hangar`)
+  elseif kind == "CopyDone" then
+    Session.Say(session, `Copied: {Types.Info(event.blueprint).name}, a copy good for {event.runs} {if event.runs == 1 then "run" else "runs"}`)
   elseif kind == "ShipAssembled" then
     Session.Say(session, "The hull is assembled: board it from the Ships tab")
   elseif kind == "StarbaseAnchored" then

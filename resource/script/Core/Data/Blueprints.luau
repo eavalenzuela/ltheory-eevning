@@ -8,7 +8,10 @@
 -- sells for: building is worth it, and the gap pays for the blueprint
 -- and the builder's time.
 --
--- A blueprint is not used up; it costs ten times its product.
+-- A blueprint is not used up; it costs ten times its product. A copy of
+-- one is: a laboratory makes copies of a blueprint, good for so many
+-- runs each, and a run built from a copy is a run the copy has no more
+-- (Assets/Industry).
 --
 -- The tech 2 make of a module, a hull or a drone is built of the plain
 -- one, of the parts and the rare minerals that make the difference,
@@ -324,6 +327,28 @@ for _, booster in Boosters.list do
   table.insert(Blueprints.list, blueprint)
   Blueprints.byId[blueprint.id] = blueprint
   Blueprints.byProduct[booster.id] = blueprint
+end
+
+-- A copy of a blueprint is kept as its runs: one unit of "copy.<product>"
+-- is one run, and a stack of twenty is a copy good for twenty.
+Blueprints.COPY = "copy."
+
+-- The item type a copy of a blueprint is.
+function Blueprints.Copy(blueprint: Blueprint): string
+  return Blueprints.COPY .. blueprint.product
+end
+
+-- The blueprint an item type is, and whether it is a copy of it and not
+-- the blueprint itself. Nil for anything else.
+function Blueprints.Of(type: string): (Blueprint?, boolean)
+  local blueprint = Blueprints.byId[type]
+  if blueprint then
+    return blueprint, false
+  elseif string.sub(type, 1, #Blueprints.COPY) == Blueprints.COPY then
+    local copied = Blueprints.byProduct[string.sub(type, #Blueprints.COPY + 1)]
+    return copied, copied ~= nil
+  end
+  return nil, false
 end
 
 -- Jobs a pilot can run at once before any skill adds more.

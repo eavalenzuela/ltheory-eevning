@@ -496,8 +496,12 @@ function Facts.Of(type: string): Sheet?
       trade(sheet, type)
     end
   elseif category == "blueprint" then
-    local blueprint = Blueprints.byId[type]
-    sheet.kind = "Blueprint"
+    local blueprint, copy = Blueprints.Of(type)
+    assert(blueprint)
+    sheet.kind = if copy then "Blueprint copy" else "Blueprint"
+    if copy then
+      sheet.note = "A copy of a blueprint, made in a laboratory from the blueprint itself. Each one is a run: a job built from a copy uses up the runs it is for, and an invention uses up one. What its owner has researched of the design counts for it. No market deals in copies."
+    end
     local to = section(sheet, "Makes")
     row(to, nameOf(blueprint.product), `{blueprint.perRun} a run`, blueprint.product)
     row(to, "A run takes", seconds(blueprint.seconds))
@@ -506,7 +510,7 @@ function Facts.Of(type: string): Sheet?
       row(materials, nameOf(material.type), whole(material.quantity), material.type)
     end
     local market = section(sheet, "Trade")
-    row(market, "Base price", `{whole(blueprint.basePrice)} cr`)
+    row(market, "Base price", if copy then `{whole(Types.Info(type).basePrice)} cr a run` else `{whole(blueprint.basePrice)} cr`)
   elseif category == "implant" then
     local implant = Implants.byId[type]
     sheet.kind = "Implant"

@@ -2,11 +2,14 @@
 #
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/invent.txt
 #
-# A small autocannon's blueprint and two datacores are given. On the
-# Industry tab the blueprint offers the inventing of its tech 2 make,
+# A small autocannon's blueprint and two datacores are given. Inventing
+# is worked out from a copy, so the blueprint is copied first, in the
+# laboratory: on the Industry tab the blueprint offers the copying and
+# no inventing, and the copy offers the inventing of its tech 2 make,
 # which wants the Invention skill. With the skill, it is begun: the
-# datacores and the blueprint go into the laboratory, and half an hour on
-# the blueprint is back, with a tech 2 one beside it if it came off.
+# datacores and a run of the copy go into the laboratory, and half an
+# hour on there is a tech 2 blueprint if it came off. The run of the
+# copy is used either way, and the blueprint itself was never put to it.
 # Then a hull's blueprint is put to the same work (a hauler's that has a
 # tech 2 make of its own name: a hull with none offers nothing), a
 # custom make of a gun is fitted, a tech 2 gun is loaded with tech 2
@@ -20,40 +23,57 @@ frames 3
 lua assert(GameDebug.Blueprint('blueprint.autocannon.small'), 'no such blueprint')
 until GameDebug.Tab() == 'Industry'
 frames 3
-lua assert(not GameDebug.CanPress('Invent'), 'inventing should want its skill')
-lua GameDebug.Train('invention', 1)
-until GameDebug.Press('Invent')
+lua assert(not GameDebug.CanPress('Invent'), 'inventing should want a copy, not the blueprint itself')
+lua GameDebug.Enter('Runs', 3)
+frames 2
+until GameDebug.Press('Copy')
 until GameDebug.Jobs() == 1
-lua assert(GameDebug.Hangar('datacore') == 0, 'the datacores should be used')
 lua assert(GameDebug.Hangar('blueprint.autocannon.small') == 0, 'the blueprint should be in the laboratory')
 lua GameDebug.TimeScale(60)
 patience 300
 until GameDebug.Jobs() == 0
 lua GameDebug.TimeScale(1)
-lua assert(GameDebug.Hangar('blueprint.autocannon.small') == 1, 'the blueprint should be back')
+lua assert(GameDebug.Hangar('blueprint.autocannon.small') == 1, 'the blueprint should be back from the copying')
+lua assert(GameDebug.Hangar('copy.autocannon.small') == 3, 'there should be a copy good for three runs')
+
+lua assert(GameDebug.Blueprint('copy.autocannon.small'), 'no such copy')
+frames 3
+lua assert(not GameDebug.CanPress('Invent'), 'inventing should want its skill')
+lua GameDebug.Train('invention', 1)
+until GameDebug.Press('Invent')
+until GameDebug.Jobs() == 1
+lua assert(GameDebug.Hangar('datacore') == 0, 'the datacores should be used')
+lua assert(GameDebug.Hangar('copy.autocannon.small') == 2, 'a run of the copy should be in the laboratory')
+lua assert(GameDebug.Hangar('blueprint.autocannon.small') == 1, 'the blueprint itself is not put to inventing')
+lua GameDebug.TimeScale(60)
+patience 300
+until GameDebug.Jobs() == 0
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Hangar('copy.autocannon.small') == 2, 'the run of the copy is used, whatever came of it')
 lua print('tech 2 blueprints invented:', GameDebug.Hangar('blueprint.autocannon.small.ii'))
 lua assert(GameDebug.Hangar('blueprint.autocannon.small.ii') <= 1)
 
 # A ship has no "II": a tech 2 ship is a hull of its own that comes of a
-# plain one, where its faction's line names one. The blueprint of a hull
-# that has none offers no inventing. The Talmar's hauler, the Sunfish,
-# has the Tarantula: its blueprint offers that, and wants more to work
-# it out than a module does, sixteen datacores.
-lua assert(GameDebug.Give('blueprint.frigate.akashi', 1))
-frames 3
-lua assert(GameDebug.Blueprint('blueprint.frigate.akashi'), 'no such blueprint')
-frames 3
-lua assert(not GameDebug.CanPress('Invent'), 'a hull with no tech 2 make should offer no inventing')
-lua assert(GameDebug.Give('blueprint.industrial.sunfish', 1) and GameDebug.Give('datacore', 15))
+# plain one, where its faction's line names one. A copy of the blueprint
+# of a hull that has none offers no inventing. The Talmar's hauler, the
+# Sunfish, has the Tarantula: a copy of its blueprint offers that, and
+# wants more to work it out than a module does, sixteen datacores.
+lua assert(GameDebug.Give('copy.frigate.akashi', 1) and GameDebug.Give('datacore', 15))
 lua GameDebug.Grant(5000000)
 frames 3
-lua assert(GameDebug.Blueprint('blueprint.industrial.sunfish'), 'no such blueprint')
+lua assert(GameDebug.Blueprint('copy.frigate.akashi'), 'no such copy')
+frames 3
+lua assert(not GameDebug.CanPress('Invent'), 'a hull with no tech 2 make should offer no inventing')
+lua assert(GameDebug.Give('copy.industrial.sunfish', 1))
+frames 3
+lua assert(GameDebug.Blueprint('copy.industrial.sunfish'), 'no such copy')
 frames 3
 lua assert(not GameDebug.CanPress('Invent'), 'a hauler should want sixteen datacores')
 lua assert(GameDebug.Give('datacore', 1))
 until GameDebug.Press('Invent')
 until GameDebug.Jobs() == 1
 lua assert(GameDebug.Hangar('datacore') == 0, 'the sixteen datacores should be used')
+lua assert(GameDebug.Hangar('copy.industrial.sunfish') == 0, 'the one run of the copy should be used')
 
 # A custom make of a module, as a pirate's wreck now and then has, goes
 # where the plain one does, and wants no more skill than a new pilot has.

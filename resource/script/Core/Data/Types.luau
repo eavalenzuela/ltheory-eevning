@@ -28,6 +28,9 @@ export type Info = {
   -- No station has it to sell unless a pilot sold it there: a tech 2
   -- module, an invented blueprint, a datacore.
   scarce: boolean?,
+  -- No market deals in it at all: a blueprint copy. It is among the
+  -- types, to be had and carried, and not among those markets list.
+  unlisted: boolean?,
 }
 
 local byId: { [string]: Info } = {}
@@ -114,6 +117,11 @@ end
 for _, blueprint in Blueprints.list do
   byId[blueprint.id] = { id = blueprint.id, name = blueprint.name, category = "blueprint", volume = 0.01,
     basePrice = blueprint.basePrice, scarce = blueprint.invented or blueprint.rare }
+  -- And a copy of it, by the run (Data/Blueprints): a hundred runs take
+  -- the room the blueprint does, and are worth about a tenth of what
+  -- they would build.
+  byId[Blueprints.Copy(blueprint)] = { id = Blueprints.Copy(blueprint), name = blueprint.name .. " Copy", category = "blueprint",
+    volume = 0.0001, basePrice = math.max(1, blueprint.basePrice // 100), unlisted = true }
 end
 -- A book for every skill a pilot does not start with.
 for _, skill in Skills.list do
@@ -158,13 +166,16 @@ for _, booster in Boosters.list do
     basePrice = booster.price, scarce = true }
 end
 
--- Every type id, in order: the order markets list them in.
+-- Every type id a market deals in, in order: the order markets list
+-- them in. (Which is every type but the unlisted.)
 local ids: { string } = {}
 
 function Types.Ids(): { string }
   if #ids == 0 then
-    for id in byId do
-      table.insert(ids, id)
+    for id, info in byId do
+      if not info.unlisted then
+        table.insert(ids, id)
+      end
     end
     table.sort(ids)
   end

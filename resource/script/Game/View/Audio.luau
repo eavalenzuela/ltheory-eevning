@@ -225,6 +225,7 @@ local SHIP: { [string]: { any } } = {
 local ANY: { [string]: { any } } = {
   JobStarted = { "productionlab/initiate.ogg", 0.18 }, ResearchStarted = { "productionlab/initiate.ogg", 0.18 },
   JobDone = { "productionlab/complete.ogg", 0.22 }, ResearchDone = { "productionlab/complete.ogg", 0.22 },
+  CopyDone = { "productionlab/complete.ogg", 0.22 },
   SkillTrained = { "ui/objective_complete.ogg", 0.22 }, CommandRejected = { "ui/cancel.ogg", 0.14 },
   PiratesArrived = { "made/ui/alert.ogg", 0.13 }, Marked = { "ui/targetlost.ogg", 0.2 },
   TowerRaided = { "made/ui/alert.ogg", 0.13 }, SurgeBegan = { "made/ui/alert.ogg", 0.11 },

@@ -277,12 +277,17 @@ export type TradeDay = { day: number, volume: number, value: number }
 export type Job = {
   id: number,
   station: number,
+  -- The item the job holds: a blueprint, which its end gives back, or a
+  -- copy of one ("copy.<product>": Data/Blueprints), whose runs it has
+  -- used.
   blueprint: string,
   runs: number,
   product: string,
   quantity: number,   -- units it will make
   -- "" for a job that builds. For research into its blueprint, what is
-  -- being learned: "material" or "time" (it makes nothing).
+  -- being learned: "material" or "time" (it makes nothing). "invent"
+  -- for an invention (its product is the blueprint it hopes for), and
+  -- "copy" for copying (its product is the copy, a unit a run).
   research: string,
   started: number,
   ends: number,

@@ -1700,11 +1700,18 @@ function Query.JobSlots(game: Game): number
   return Industry.JobSlots(game.state)
 end
 
--- What running a blueprint so many times at a station would take, or nil
--- if the type is not a blueprint.
+-- What running a blueprint (or a copy of one) so many times at a station
+-- would take, or nil if the type is neither.
 function Query.JobPlan(game: Game, station: number, type: string, runs: number): Industry.Plan?
-  local blueprint = Blueprints.byId[type]
+  local blueprint = Blueprints.Of(type)
   return if blueprint then Industry.Plan(game.state, station, blueprint, runs) else nil
+end
+
+-- What copying so many runs of a blueprint would take, or nil if the
+-- type is not a blueprint (a copy is not: it cannot be copied).
+function Query.CopyPlan(game: Game, type: string, runs: number): Industry.CopyPlan?
+  local blueprint = Blueprints.byId[type]
+  return if blueprint then Industry.CopyPlan(blueprint, runs) else nil
 end
 
 -- A body by id (a ship in space or a described object), or nil.

@@ -6,6 +6,13 @@
 -- fee, and some time. When the time is up the product and the blueprint
 -- appear in the hangar of the station the job ran at, whether or not the
 -- pilot is there. A pilot runs a couple of jobs at once.
+--
+-- A blueprint builds for ever, and is in one place at a time. A copy of
+-- it is good for so many runs and no more: a laboratory makes copies
+-- from the blueprint, a job built from a copy uses up the runs it is
+-- for, and an invention uses one up whether it comes off or not. So
+-- the blueprint can stay at home, building, while its copies go where
+-- the work is.
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Constants = require("@lt/Core/Data/Constants")
@@ -128,6 +135,10 @@ end
 -- Invention skill. The blueprint it starts from is given back either
 -- way, and a success leaves a blueprint for the tech 2 module beside it,
 -- for good.
+--
+-- It is worked out from a copy of the blueprint, and one run of the
+-- copy is used up by it, whether it comes off or not: the blueprint
+-- itself is never put to it.
 Industry.DATACORE = "datacore"
 -- How big a thing a hull of a class is to invent, where a small module
 -- is 1 and a large one 3: it sets the datacores (two, doubled for each
@@ -172,6 +183,21 @@ end
 -- What the station charges to run it.
 function Industry.JobFee(blueprint: Blueprints.Blueprint, runs: number): number
   return math.ceil(Blueprints.JOB_FEE * Types.Info(blueprint.product).basePrice * blueprint.perRun * runs)
+end
+
+-- Copying: a laboratory makes of a blueprint a copy good for so many
+-- runs. A run takes half as long to copy as to build, and the station
+-- charges for it what it would to build it. The blueprint is in the
+-- laboratory meanwhile, and comes back with the copy.
+Industry.COPY_TIME = 0.5
+
+export type CopyPlan = { copy: string, runs: number, seconds: number, fee: number }
+
+-- What copying so many runs of a blueprint would take, and the item
+-- type the copy is.
+function Industry.CopyPlan(blueprint: Blueprints.Blueprint, runs: number): CopyPlan
+  return { copy = Blueprints.Copy(blueprint), runs = runs, seconds = math.ceil(blueprint.seconds * runs * Industry.COPY_TIME),
+    fee = Industry.JobFee(blueprint, runs) }
 end
 
 export type Plan = {
@@ -240,13 +266,15 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
     return true
 
   elseif command.kind == "StartJob" then
-    local blueprint = Blueprints.byId[item.type]
+    local blueprint, copy = Blueprints.Of(item.type)
     if blueprint == nil then
       return false, "that is not a blueprint"
     end
     local runs = command.quantity or 1
     if runs < 1 or runs % 1 ~= 0 or runs > Industry.MAX_RUNS then
       return false, `a job is for 1 to {Industry.MAX_RUNS} runs`
+    elseif copy and runs > item.quantity then
+      return false, if item.quantity == 1 then "that copy has 1 run left" else `that copy has {item.quantity} runs left`
     elseif (state.skills.industry or 0) < 1 then
       return false, "needs Industry 1"
     elseif #state.jobIds >= Industry.JobSlots(state) then
@@ -264,13 +292,15 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
     return true
 
   elseif command.kind == "StartResearch" then
-    local blueprint = Blueprints.byId[item.type]
+    local blueprint, copy = Blueprints.Of(item.type)
     if blueprint == nil then
       return false, "that is not a blueprint"
     elseif command.what == "invent" then
       local plan = Industry.InventionPlan(state, blueprint)
       if plan == nil then
         return false, "there is no tech 2 make of that to invent"
+      elseif not copy then
+        return false, "inventing uses up a copy: copy this first"
       elseif (state.skills.invention or 0) < 1 then
         return false, "needs Invention 1"
       elseif #state.jobIds >= Industry.JobSlots(state) then
@@ -285,6 +315,22 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
       if have < plan.datacores then
         return false, `needs {plan.datacores - have} more Datacore`
       elseif plan.fee > state.wallet then
+        return false, "not enough credits for the fee"
+      end
+      return true
+    elseif copy then
+      -- (what is learned is learned of the design, and a copy is made
+      -- of the design: neither is to be had from a copy)
+      return false, "that takes the blueprint itself, not a copy"
+    elseif command.what == "copy" then
+      local runs = command.quantity or 1
+      if runs < 1 or runs % 1 ~= 0 or runs > Industry.MAX_RUNS then
+        return false, `a copy is of 1 to {Industry.MAX_RUNS} runs`
+      elseif (state.skills.industry or 0) < 1 then
+        return false, "needs Industry 1"
+      elseif #state.jobIds >= Industry.JobSlots(state) then
+        return false, "every job slot is in use"
+      elseif Industry.CopyPlan(blueprint, runs).fee > state.wallet then
         return false, "not enough credits for the fee"
       end
       return true
@@ -307,9 +353,11 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
 end
 
 -- How many units a job that builds has finished so far: whole runs of
--- it, by how far through its time it is.
+-- it, by how far through its time it is. (And of a job that copies, the
+-- runs copied so far. Research and invention have no runs, and have
+-- made nothing until they are done.)
 function Industry.Made(state: State.State, job: State.Job): number
-  if job.research ~= "" or job.runs < 1 then
+  if job.runs < 1 then
     return 0
   end
   local span = math.max(1, job.ends - job.started)
@@ -321,16 +369,25 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
   if command.kind == "CancelJob" then
     -- Called off: the blueprint comes back, and what the runs already
     -- finished have made. What went into the rest is lost, and the fee.
+    -- (Of a copy, what comes back is the runs not yet used: those the
+    -- job had not got to, or the one an invention was working from.)
     local job = state.jobs[command.target :: number]
     local made = Industry.Made(state, job)
-    Items.Add(state, job.blueprint, 1, job.station, "hangar")
+    local _, copy = Blueprints.Of(job.blueprint)
+    local back = 1
+    if copy then
+      back = if job.runs < 1 then 1 else job.runs - made // math.max(1, job.quantity // job.runs)
+    end
+    if back > 0 then
+      Items.Add(state, job.blueprint, back, job.station, "hangar")
+    end
     if made > 0 then
       Items.Add(state, job.product, made, job.station, "hangar")
     end
     state.jobs[job.id] = nil
     State.RemoveId(state.jobIds, job.id)
     table.insert(events, { kind = "JobCancelled", job = job.id, blueprint = job.blueprint, product = job.product, made = made,
-      quantity = job.quantity, research = job.research, station = job.station })
+      quantity = job.quantity, research = job.research, station = job.station, back = if copy then back else 0 })
     return
   end
   local ship = state.ships[command.actor]
@@ -346,7 +403,8 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
 
   elseif command.kind == "StartJob" then
     local station = ship.docked
-    local plan = Industry.Plan(state, station, Blueprints.byId[item.type], command.quantity or 1)
+    local blueprint, copy = Blueprints.Of(item.type)
+    local plan = Industry.Plan(state, station, blueprint :: Blueprints.Blueprint, command.quantity or 1)
     for _, m in plan.materials do
       local left = m.need
       for _, stack in Items.In(state, station, "hangar") do
@@ -357,11 +415,15 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
         end
       end
     end
-    -- The blueprint is in the job until it is done.
-    Items.Take(state, item, 1)
+    -- The blueprint is in the job until it is done. The runs of a copy
+    -- are in it for good: the job carries the copy's type as its
+    -- blueprint, which is how its end knows there is nothing to give
+    -- back.
+    local held = item.type
+    Items.Take(state, item, if copy then plan.runs else 1)
     Wallet.Pay(state, -plan.fee, "manufacturing fee", events)
     local job: State.Job = {
-      id = State.NewId(state), station = station, blueprint = plan.blueprint.id, runs = plan.runs,
+      id = State.NewId(state), station = station, blueprint = held, runs = plan.runs,
       product = plan.blueprint.product, quantity = plan.quantity, research = "",
       started = state.tick, ends = state.tick + math.ceil(plan.seconds / Constants.TICK),
     }
@@ -370,7 +432,7 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
     table.insert(events, { kind = "JobStarted", job = job.id, product = job.product, quantity = job.quantity, ends = job.ends })
 
   elseif command.kind == "StartResearch" and command.what == "invent" then
-    local blueprint = Blueprints.byId[item.type]
+    local blueprint = Blueprints.Of(item.type) :: Blueprints.Blueprint
     local plan = Industry.InventionPlan(state, blueprint) :: InventionPlan
     local station = ship.docked
     local left = plan.datacores
@@ -381,17 +443,34 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
         left -= take
       end
     end
-    -- The blueprint is in the laboratory until it is done.
+    -- One run of the copy goes into the laboratory, and does not come
+    -- out of it.
+    local held = item.type
     Items.Take(state, item, 1)
     Wallet.Pay(state, -plan.fee, "invention fee", events)
     -- (the job carries the blueprint it hopes to make as its product)
     local job: State.Job = {
-      id = State.NewId(state), station = station, blueprint = blueprint.id, runs = 0, product = plan.blueprint, quantity = 1,
+      id = State.NewId(state), station = station, blueprint = held, runs = 0, product = plan.blueprint, quantity = 1,
       research = "invent", started = state.tick, ends = state.tick + math.ceil(plan.seconds / Constants.TICK),
     }
     state.jobs[job.id] = job
     table.insert(state.jobIds, job.id)
-    table.insert(events, { kind = "ResearchStarted", job = job.id, blueprint = blueprint.id, what = "invent", ends = job.ends })
+    table.insert(events, { kind = "ResearchStarted", job = job.id, blueprint = held, what = "invent", ends = job.ends })
+
+  elseif command.kind == "StartResearch" and command.what == "copy" then
+    local blueprint = Blueprints.byId[item.type]
+    local plan = Industry.CopyPlan(blueprint, command.quantity or 1)
+    -- The blueprint is in the laboratory until it is done.
+    Items.Take(state, item, 1)
+    Wallet.Pay(state, -plan.fee, "copying fee", events)
+    -- (the job carries the copy it is making as its product, a unit a run)
+    local job: State.Job = {
+      id = State.NewId(state), station = ship.docked, blueprint = blueprint.id, runs = plan.runs, product = plan.copy,
+      quantity = plan.runs, research = "copy", started = state.tick, ends = state.tick + math.ceil(plan.seconds / Constants.TICK),
+    }
+    state.jobs[job.id] = job
+    table.insert(state.jobIds, job.id)
+    table.insert(events, { kind = "ResearchStarted", job = job.id, blueprint = blueprint.id, what = "copy", ends = job.ends })
 
   elseif command.kind == "StartResearch" then
     local blueprint = Blueprints.byId[item.type]
@@ -410,25 +489,34 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
 end
 
 -- Each tick: a job whose time is up delivers its product, and its
--- blueprint, to the hangar it ran at.
+-- blueprint, to the hangar it ran at. (Not a copy: the runs of a copy
+-- that went into a job are used.)
 function Industry.Step(state: State.State, events: { Event })
   for _, id in table.clone(state.jobIds) do
     local job = state.jobs[id]
     if job.ends <= state.tick then
-      Items.Add(state, job.blueprint, 1, job.station, "hangar")
+      local blueprint, copy = Blueprints.Of(job.blueprint)
+      if not copy then
+        Items.Add(state, job.blueprint, 1, job.station, "hangar")
+      end
       state.jobs[id] = nil
       State.RemoveId(state.jobIds, id)
       if job.research == "invent" then
         -- It comes off, or it does not: the roll is the job's own, and
         -- the chance is what the pilot's skill makes it when it ends.
-        local plan = Industry.InventionPlan(state, Blueprints.byId[job.blueprint])
+        local plan = if blueprint then Industry.InventionPlan(state, blueprint) else nil
         local chance = if plan then plan.chance else 0
         local success = Rng.Chance(Rng.For(state.historySeed, job.id, 91), chance)
         if success then
           Items.Add(state, job.product, 1, job.station, "hangar")
         end
         table.insert(events, { kind = "InventionDone", job = id, blueprint = job.blueprint, product = job.product,
-          success = success, station = job.station })
+          success = success, station = job.station, used = copy })
+      elseif job.research == "copy" then
+        -- The copy, by the run, beside the blueprint it was made from.
+        Items.Add(state, job.product, job.quantity, job.station, "hangar")
+        table.insert(events, { kind = "CopyDone", job = id, blueprint = job.blueprint, copy = job.product, runs = job.quantity,
+          station = job.station })
       elseif job.research ~= "" then
         -- What was learned is the pilot's from now on.
         local known = state.research[job.blueprint] or { material = 0, time = 0 }

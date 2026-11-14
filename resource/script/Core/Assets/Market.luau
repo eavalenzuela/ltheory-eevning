@@ -477,6 +477,9 @@ function Market.Validate(state: State.State, command: State.Command): (boolean, 
     local item = state.items[command.item or 0]
     if item == nil or item.holder ~= station or not Items.IsStore(item.place) then
       return false, "that is not in the hangar here"
+    elseif Market.Index(item.type) == nil then
+      -- (a blueprint copy: Data/Types' 'unlisted')
+      return false, "no market deals in that"
     elseif kind == "PlaceOrder" and item.place ~= "hangar" then
       -- (an order is the pilot's own: what it fetches is paid to them)
       return false, "an order is placed from your own hangar"

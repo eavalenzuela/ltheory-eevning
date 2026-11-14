@@ -4,8 +4,8 @@
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/economy.txt
 #
 # Fit a mining laser, mine a hold of ore, refine it, build ammunition from
-# the starter blueprint, research the blueprint, sell the ammunition
-# through a standing order, buy a combat
+# the starter blueprint, research the blueprint, copy it and build from
+# the copy, sell the ammunition through a standing order, buy a combat
 # frigate's hull, find it cannot be flown, train for it, and board it.
 #
 # Buttons are pressed by name (GameDebug.Press), which runs the same code
@@ -108,6 +108,39 @@ until GameDebug.Jobs() == 0
 lua GameDebug.TimeScale(1)
 lua assert(select(2, GameDebug.Researched('blueprint.ammo.emp')) == 1, 'the research taught nothing')
 lua assert(GameDebug.Hangar('blueprint.ammo.emp') == 1, 'the blueprint did not come back from the laboratory')
+
+# Copying, in the laboratory: a copy good for two runs. The blueprint is
+# in the laboratory meanwhile, and comes back with its copy. A copy is
+# built from as the blueprint is, and a run built from it is a run it
+# has no more: nothing comes back from that job but the rounds. (And a
+# copy is neither copied nor researched.)
+lua assert(GameDebug.Blueprint('blueprint.ammo.emp'))
+frames 3
+lua GameDebug.Enter('Runs', 2)
+frames 2
+until GameDebug.Press('Copy')
+until GameDebug.Jobs() == 1
+lua assert(GameDebug.Hangar('blueprint.ammo.emp') == 0, 'the blueprint should be in the laboratory')
+lua GameDebug.TimeScale(30)
+until GameDebug.Jobs() == 0
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Hangar('blueprint.ammo.emp') == 1, 'the blueprint did not come back from the copying')
+lua assert(GameDebug.Hangar('copy.ammo.emp') == 2, 'the copying left no copy good for two runs')
+lua assert(GameDebug.Give('mineral.iron', 210) and GameDebug.Give('mineral.silicon', 45))
+lua assert(GameDebug.Blueprint('copy.ammo.emp'), 'a copy should be on the Industry tab')
+frames 3
+lua assert(not GameDebug.CanPress('Copy') and not GameDebug.CanPress('Research:time'), 'a copy is neither copied nor researched')
+until GameDebug.Press('Runs:1')
+frames 2
+lua _G.rounds = GameDebug.Hangar('ammo.emp')
+until GameDebug.Press('StartJob')
+until GameDebug.Jobs() == 1
+lua assert(GameDebug.Hangar('copy.ammo.emp') == 1, 'a run of the copy should be in the job')
+lua GameDebug.TimeScale(30)
+until GameDebug.Jobs() == 0
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Hangar('ammo.emp') == _G.rounds + 100, 'the copy built no rounds')
+lua assert(GameDebug.Hangar('copy.ammo.emp') == 1, 'the run built from a copy should be gone, and no more')
 
 # Sell a hundred of them through a standing order at the price offered.
 lua assert(GameDebug.Market('ammo.emp'))

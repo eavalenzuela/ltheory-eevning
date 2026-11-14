@@ -8,6 +8,7 @@
 --   for _, entry in Catalog.Listing("ship") do
 --     entry.header ("Vessari") or entry.info (a Types.Info)
 
+local Blueprints = require("@lt/Core/Data/Blueprints")
 local Factions = require("@lt/Core/Data/Factions")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
@@ -114,7 +115,9 @@ function Catalog.Group(id: string): (string, number, number)
     local grade = Moons.byId[id].grade
     return if grade == 1 then "Common moon materials" elseif grade == 2 then "Uncommon moon materials" else "Rare moon materials", grade, 0
   elseif category == "blueprint" then
-    local product = string.sub(id, #"blueprint." + 1)
+    -- (a copy goes where the blueprint it is of does)
+    local blueprint = Blueprints.Of(id)
+    local product = if blueprint then blueprint.product else ""
     local made = Types.Get(product)
     local kind = MAKES[if made then made.category else ""]
     if kind then
