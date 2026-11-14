@@ -4,6 +4,7 @@
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Core = require("@lt/Core/Api")
 local Fronts = require("@lt/Core/Tactical/Fronts")
+local Missions = require("@lt/Core/Assets/Missions")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
@@ -196,6 +197,61 @@ suite:Case("a pilot who takes a hand is that side's enemy, is paid by the other,
   Core.Step(game)
   -- (and with the operation over its place is gone, and its ships)
   t.eq({ state.fronts[99], #state.frontIds, state.sites[front.site].gone, fielded(state) } :: { any }, { nil, 0, true, 0 } :: { any })
+end)
+
+suite:Case("war work: a station of a faction with a force at a front has a strike against the other, and a run through the blockade", function(t)
+  local game, system, operation = besieged(120, 90)
+  local state = game.state
+  local home = state.player.home
+  t.eq(state.galaxy.systems[1].nearest, "vessari")
+  -- (the Vessari's station, a few jumps from where they are besieging the Talmar: its first agent has work)
+  local strike: State.Mission? = nil
+  local run: State.Mission? = nil
+  for _, offer in Missions.Offers(state, home) do
+    if offer.kind == "bounty" and offer.type ~= "" then
+      strike = offer
+    elseif offer.kind == "courier" and offer.aim == "blockade" then
+      run = offer
+    end
+  end
+  local job = assert(strike, "no strike is offered")
+  t.eq({ job.type, job.system, job.faction, job.done } :: { any }, { "talmar", system, "vessari", 0 } :: { any })
+  t.ok(job.need >= 2 and job.need <= 4 and job.reward >= job.need * Missions.WAR_HEAD and job.loyalty >= 1)
+  t.eq(Missions.Title(job), `Strike: {job.need} ships of the Talmar force`)
+  if run then
+    t.eq(Space.SystemOf(state, run.to), system)
+    t.eq(Missions.Title(run), `Blockade run: {run.need} m3 of sealed cargo`)
+    t.ok(run.reward > 20000)
+  end
+  -- (a station with nobody's force near has none: with the operation over, the offers are gone)
+  local kept = table.remove(state.wars.operations)
+  for _, offer in Missions.Offers(state, home) do
+    t.ok(not (offer.kind == "bounty" and offer.type ~= ""), "a strike with no front to strike at")
+  end
+  table.insert(state.wars.operations, kept :: State.Operation)
+  -- Taken, it counts the Talmar ships the pilot destroys at the lines, and no pirate, and nobody else's.
+  job.id = State.NewId(state)
+  job.taken = state.tick
+  state.missions[job.id] = job
+  table.insert(state.missionIds, job.id)
+  local front = state.fronts[99]
+  go(game, front.site)
+  Core.Step(game)
+  local destroyed = 0
+  for id, record in front.ships do
+    if record.side == "vessari" and destroyed == 0 then
+      Aftermath.Destroy(state, id, state.player.ship, game.events)
+      destroyed = 1
+    end
+  end
+  t.eq(job.done, 0, "a Vessari ship counted toward a strike against the Talmar")
+  for id, record in front.ships do
+    if record.side == "talmar" and job.done < job.need and state.balls[id] then
+      Aftermath.Destroy(state, id, state.player.ship, game.events)
+    end
+  end
+  t.eq(job.done, math.min(job.need, 5))
+  t.eq(operation.system, system)
 end)
 
 return suite

@@ -1970,7 +1970,12 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
   local left, right = x + 16, x + 480
   local line = y + 78
   local function about(mission: State.Mission, jumps: number, ward: number): string
-    if mission.kind == "bounty" then
+    if mission.kind == "bounty" and mission.type ~= "" then
+      -- (war work: a strike at a front)
+      return `at the lines in {game.state.galaxy.systems[mission.system].name}`
+        .. (if jumps > 0 then `, {jumps} {if jumps == 1 then "jump" else "jumps"} off` else "")
+        .. `: {mission.done} of {mission.need} destroyed`
+    elseif mission.kind == "bounty" then
       local _, band = Core.Query.Security(game, mission.system)
       return `in {game.state.galaxy.systems[mission.system].name} ({band or "?"} space): {mission.done} of {mission.need} destroyed`
     elseif mission.kind == "assault" and (mission.aim == "hold" or Assault.Tender(mission.aim) or mission.aim == "lost") then

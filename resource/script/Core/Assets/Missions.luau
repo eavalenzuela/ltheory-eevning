@@ -112,6 +112,12 @@ local Missions = {}
 export type Event = { [string]: any }
 
 Missions.OFFERS = 3
+-- War work: how many jumps off a force of the station's faction may be
+-- for its agent to have work at it; what a ship of the other force is
+-- paid for, what a run through the blockade pays (for a hold of the
+-- middle size), and what either does for the pilot's standing.
+Missions.WAR_REACH = 6
+Missions.WAR_HEAD, Missions.WAR_RUN, Missions.WAR_STANDING = 80000, 30000, 0.4
 -- The levels of the sixth agent's courier contracts: cubic metres of
 -- sealed cargo (from 'least' to 'most', by 'step'), the jumps it is to
 -- be carried ('near' to 'far'), and what it pays: so much, and so much
@@ -173,7 +179,13 @@ end
 
 -- What an offer is called, for the lists.
 function Missions.Title(mission: State.Mission): string
-  if mission.kind == "bounty" then
+  if mission.kind == "bounty" and mission.type ~= "" then
+    -- (war work: a strike against a faction's force at a front)
+    local enemy = Factions.byId[mission.type]
+    return `Strike: {mission.need} ships of the {if enemy then enemy.name else mission.type} force`
+  elseif mission.kind == "courier" and mission.aim == "blockade" then
+    return `Blockade run: {mission.need} m3 of sealed cargo`
+  elseif mission.kind == "bounty" then
     return `Bounty: {mission.need} {if mission.need == 1 then "pirate" else "pirates"}`
   elseif Missions.Convoy(mission) then
     return `Convoy, level {mission.level}: a tender in past {(Assault.Count(mission.waves))}`
@@ -477,6 +489,60 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
       end
       mission.loyalty = points(mission.reward)
       table.insert(offers, mission)
+    end
+  end
+  -- War work (Strategic/Wars; the project owner's ruling, 2026-11-14):
+  -- where the faction whose station this is has a force at a system
+  -- within a few jumps, besieging it or holding it against a siege, the
+  -- first agent has a strike for the pilot (so many ships of the other
+  -- force destroyed, at its lines: Tactical/Fronts) and, if there is a
+  -- station there to carry to, a run through the blockade with sealed
+  -- cargo. Of the nearest such system. They pay well, and the faction
+  -- thinks the better of whoever does them.
+  do
+    local far = shortest(state.galaxy, system)
+    local nearest: State.Operation? = nil
+    for _, operation in state.wars.operations do
+      local jumps = far[operation.system]
+      if operation.stage ~= "muster" and jumps and jumps <= Missions.WAR_REACH and operation.against ~= ""
+        and (operation.by == node.nearest or operation.against == node.nearest)
+        and (nearest == nil or jumps < far[nearest.system]) then
+        nearest = operation
+      end
+    end
+    if nearest then
+      local enemy = if nearest.by == node.nearest then nearest.against else nearest.by
+      local rng = Rng.For(state.historySeed, station, nearest.id, 89)
+      local bonus = paying(1)
+      local function work(what: string): State.Mission?
+        local key = `{station}:war:{nearest.id}:{what}`
+        if table.find(state.missionsTaken, key) then
+          return nil
+        end
+        return {
+          id = 0, key = key, kind = "bounty", station = station, faction = node.nearest, system = nearest.system, need = 1, done = 0,
+          type = enemy, to = station, reward = 0, standing = Missions.WAR_STANDING, taken = 0,
+          agent = Missions.Agent(state, station, 1), loyalty = 0, slot = 1,
+          level = 0, waves = {}, wave = 0, site = 0, rooms = {}, ends = {}, aim = "", mark = 0,
+        }
+      end
+      local strike = work("strike")
+      if strike then
+        strike.need = 2 + Rng.Int(rng, 3)
+        strike.reward = math.floor(strike.need * Missions.WAR_HEAD * bonus)
+        strike.loyalty = points(strike.reward)
+        table.insert(offers, strike)
+      end
+      local there = stations(state, nearest.system)
+      local run = if #there > 0 and nearest.system ~= system then work("run") else nil
+      if run then
+        run.kind, run.type, run.aim = "courier", Missions.CRATE, "blockade"
+        run.to = there[Rng.Int(rng, #there) + 1].id
+        run.need = 60 + 10 * Rng.Int(rng, 7)
+        run.reward = math.floor(Missions.WAR_RUN * (0.8 + run.need / 200) * bonus)
+        run.loyalty = points(run.reward)
+        table.insert(offers, run)
+      end
     end
   end
   -- The fourth agent's, and the fifth's: an assault and a mining

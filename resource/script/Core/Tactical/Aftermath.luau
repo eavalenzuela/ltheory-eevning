@@ -178,7 +178,19 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     -- (and it counts toward any bounty job the pilot has for this system)
     for _, id in state.missionIds do
       local mission = state.missions[id]
-      if mission.kind == "bounty" and mission.system == ball.system and mission.done < mission.need then
+      -- (a job against the pirates: a strike against a faction's force is counted below)
+      if mission.kind == "bounty" and mission.type == "" and mission.system == ball.system and mission.done < mission.need then
+        mission.done += 1
+      end
+    end
+  end
+  -- A ship of a faction's force at a front (Tactical/Fronts) counts
+  -- toward a strike the pilot has taken against that faction there
+  -- (Assets/Missions: war work).
+  if pilot and pilot.side and by == state.player.ship then
+    for _, id in state.missionIds do
+      local mission = state.missions[id]
+      if mission.kind == "bounty" and mission.type == pilot.side and mission.system == ball.system and mission.done < mission.need then
         mission.done += 1
       end
     end
