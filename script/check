@@ -99,6 +99,9 @@
 #               prices apart across a galaxy twenty days old, the Market
 #               tab's account of where a thing is cheap and dear, and
 #               haulers with a hold of what goes along the lanes
+#   game-wars   the factions (test/scenario/wars.txt): a game that
+#               begins at peace, open systems claimed as hours go by,
+#               and the star map drawn again with them
 #   game-home   home (test/scenario/home.txt): a berth taken aboard a
 #               Kethri colony ship, the ship and the capsule lost, and
 #               the pilot waking there
@@ -333,6 +336,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/wormhole.txt
   step game-commerce 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/commerce.txt
+  step game-wars 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
+    --script test/scenario/wars.txt
   step game-tackle 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/tackle.txt
   step game-salvage 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \

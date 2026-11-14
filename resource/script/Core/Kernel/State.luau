@@ -444,6 +444,31 @@ export type Site = { id: number, system: number, kind: string, code: string, str
 -- dear there; less: a glut, and it is cheap) until the tick it ends.
 export type Shock = { id: number, constellation: number, class: number, factor: number, began: number, ends: number }
 
+-- The factions at war (Strategic/Wars). An operation is a force sent
+-- to a system: to claim an open one nobody holds, or to besiege a claim
+-- of an enemy's ('against': whose, "" for nobody's). 'force' is what is
+-- left of what was 'sent', 'defence' what is left of what 'defended'
+-- (the garrison, and what was sent to its relief: 'relieved' once that
+-- has been). A feud is a war between two: its score is the claims 'a'
+-- has taken of 'b', less those 'b' has of 'a'.
+export type Operation = { id: number, by: string, system: number, kind: string, began: number, force: number, sent: number,
+  against: string, defence: number, defended: number, stage: string, relieved: boolean }
+export type Feud = { a: string, b: string, since: number, score: number }
+-- What is between each two factions (by the pair, "a|b" in the order of
+-- the letters), the wars there are, the truces (by the pair: the tick
+-- each runs out), the open systems that are claimed (by system: whose),
+-- the operations going on, what each faction has to send and how weary
+-- it is, the tick each last declared a war, and a count of the times a
+-- system has changed hands (for whoever draws the map).
+-- ('on': whether any of it goes on. In the game it does; a test that is
+-- about something else has a galaxy where nobody stirs.)
+export type Wars = {
+  on: boolean,
+  relations: { [string]: number }, feuds: { Feud }, truces: { [string]: number }, claims: { [number]: string },
+  operations: { Operation }, strength: { [string]: number }, weary: { [string]: number }, declared: { [string]: number },
+  version: number,
+}
+
 -- A wormhole that is open (Tactical/Wormholes): a way between two
 -- systems that no gate joins, there for a day or so. 'a' is the place
 -- of the end it opened at (a place of its system's description, and a
@@ -619,6 +644,8 @@ export type State = {
   -- Commerce): the gluts and the shortages there are now, in the order
   -- they began.
   shocks: { Shock },
+  -- The factions at war (Strategic/Wars).
+  wars: Wars,
   orders: { [number]: Order },
   orderIds: { number },
   -- The pilot's listings on stations' boards (Assets/Contracts); the

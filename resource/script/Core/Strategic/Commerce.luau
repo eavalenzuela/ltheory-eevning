@@ -94,6 +94,10 @@ Commerce.LOSS = 0.03
 -- A lane into a system where pirates are massing costs so much more,
 -- and loses so much.
 Commerce.SURGE_COST, Commerce.SURGE_LOSS = 0.5, 0.15
+-- And a lane into a system that is blockaded (Strategic/Wars) all but
+-- shut: a thing has to be twice the price there before any of it is
+-- run in, and a fifth of that is lost.
+Commerce.BLOCKADE_COST, Commerce.BLOCKADE_LOSS = 1, 0.2
 -- How fast a homeworld deals with the world beyond: so many times what
 -- it turns over itself.
 Commerce.ANCHOR = 1.5
@@ -482,8 +486,10 @@ function Commerce.New(galaxy: Galaxy.Galaxy): Economy.Economy
 end
 
 -- Set every lane's cost, and what it loses, from how safe its two ends
--- are now: 'surge' is the system pirates are massing in (0 for none).
-function Commerce.Lanes(econ: Economy.Economy, galaxy: Galaxy.Galaxy, surge: number)
+-- are now: 'surge' is the system pirates are massing in (0 for none),
+-- and 'blocked' the systems that are blockaded (Strategic/Wars), whose
+-- lanes are all but shut.
+function Commerce.Lanes(econ: Economy.Economy, galaxy: Galaxy.Galaxy, surge: number, blocked: { [number]: boolean }?)
   for _, edge in econ.edges do
     local a, b = galaxy.systems[edge.a], galaxy.systems[edge.b]
     local least = math.min(a.security, b.security)
@@ -492,6 +498,10 @@ function Commerce.Lanes(econ: Economy.Economy, galaxy: Galaxy.Galaxy, surge: num
     if surge ~= 0 and (edge.a == surge or edge.b == surge) then
       edge.cost += Commerce.SURGE_COST
       edge.loss = Commerce.SURGE_LOSS
+    end
+    if blocked and (blocked[edge.a] or blocked[edge.b]) then
+      edge.cost += Commerce.BLOCKADE_COST
+      edge.loss = math.max(edge.loss, Commerce.BLOCKADE_LOSS)
     end
   end
 end
@@ -588,8 +598,8 @@ end
 
 -- Let the economy's time go by: 'ticks' of it, with the lanes as they
 -- are now ('surge': the system pirates are massing in, 0 for none).
-function Commerce.Advance(econ: Economy.Economy, galaxy: Galaxy.Galaxy, surge: number, ticks: number)
-  Commerce.Lanes(econ, galaxy, surge)
+function Commerce.Advance(econ: Economy.Economy, galaxy: Galaxy.Galaxy, surge: number, ticks: number, blocked: { [number]: boolean }?)
+  Commerce.Lanes(econ, galaxy, surge, blocked)
   -- (what went along the watched lanes a while ago has long arrived:
   -- half of what nobody has been seen carrying is forgotten each step)
   if econ.passed then

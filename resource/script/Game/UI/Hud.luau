@@ -1033,6 +1033,12 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         standing = `ON NO MAP  -  DEPTH {player.depth} OF {player.depths}`
       end
       Im.Text(standing, left + 24, top + 51, 13, if band == "secure" then SAFE elseif band == "low" then Im.WARN else HULL)
+      -- (and whether somebody's fleet has its lanes shut: Core/Strategic/Wars)
+      local blockading, why = Core.Query.Blockade(game)
+      if blockading then
+        Im.Text(`BLOCKADED by the {blockading}: {if why == "siege" then "a siege" else "they are claiming it"}. Little comes in or goes out`,
+          left + 24, top + 107 + 20, 13, Im.WARN)
+      end
       -- (and whether pirates are massing here: Tactical/Surges)
       local surge = Core.Query.Surge(game)
       if surge and surge.system == player.system then

@@ -1,0 +1,35 @@
+# The factions and the open space between them, in the game app
+# (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/wars.txt
+#
+# A game of forty systems begins with nobody at war and nothing claimed.
+# Left to themselves for some hours the factions claim open systems next
+# to what they hold: the count of systems that have changed hands goes
+# up, the star map is drawn again with them in their holders' colours,
+# and what is being done to which system is listed on it.
+
+wait 2
+lua GameDebug.NewGame(5, 40)
+frames 5
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Wars() == 0, 'a game begins with nobody at war')
+lua assert(select(3, GameDebug.Wars()) == 0 and select(4, GameDebug.Wars()) == 0, 'and with nothing claimed')
+
+# Some hours go by.
+lua GameDebug.TimeScale(64)
+until select(2, GameDebug.Wars()) >= 1
+until select(4, GameDebug.Wars()) >= 3
+lua GameDebug.TimeScale(1)
+lua assert(select(3, GameDebug.Wars()) >= 3, 'three open systems or more should be claimed by now')
+
+# And the map says so.
+until GameDebug.Press('Map')
+frames 4
+lua assert(GameDebug.CanPress('Map:close'), 'the map did not open')
+until GameDebug.Press('Map:factions')
+frames 4
+until GameDebug.Press('Map:close')
+
+echo wars scenario passed
+quit

@@ -53,6 +53,7 @@ local Surges = require("@lt/Core/Tactical/Surges")
 local Ships = require("@lt/Core/Data/Ships")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Commerce = require("@lt/Core/Strategic/Commerce")
+local Wars = require("@lt/Core/Strategic/Wars")
 local Wormholes = require("@lt/Core/Tactical/Wormholes")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
@@ -89,11 +90,15 @@ export type Options = {
   -- (Strategic/Commerce); default 0, which is every price the normal
   -- one everywhere. The game's New game gives it Commerce.SETTLED.
   settled: number?,
+  -- Whether the factions stir (Strategic/Wars): claim open space, fall
+  -- out and fight over it. Default false; the game turns it on. A test
+  -- that is about something else has a galaxy where nobody does.
+  wars: boolean?,
 }
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 75
+Core.SAVE_VERSION = 76
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -380,6 +385,12 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- Nimia; and their hulls are the Nimia's of the owner's list, each
   -- the one that stands where it stood (they build no attack
   -- battlecruiser and no dreadnought but the siege one).
+  -- 76: the factions are at odds, and claim the open space between
+  -- them (Strategic/Wars). A save from before begins as a new game
+  -- does: nobody at war, and nothing claimed.
+  [75] = function(state: any)
+    state.wars = state.wars or Wars.New(state.galaxy)
+  end,
   -- 75: the galaxy has an economy, in the real bulk goods (Strategic/
   -- Commerce), and every station's market deals with its system's. A
   -- save from before is given its galaxy's economy as a new game has
@@ -1052,7 +1063,7 @@ function Core.New(options: Options): Game
     traffic = {},
     trafficIds = {},
     trafficDue = 0,
-    commerce = commerce, marketDrawn = {}, shocks = {},
+    commerce = commerce, marketDrawn = {}, shocks = {}, wars = Wars.New(galaxy, options.wars == true),
     nomads = {},
     trafficOn = options.traffic == true,
     queue = {},
@@ -1286,6 +1297,8 @@ function Core.Step(game: Game)
   Space.Decide(state, game.events)
   Aftermath.Step(state, game.events)
   Mining.Step(state)
+  -- (the factions, and what they do about the open space between them)
+  Wars.Step(state.galaxy, state.wars, state.historySeed, state.tick, game.events)
   -- (the lanes of the system the pilot is in are watched: its haulers
   -- carry what goes along them, Tactical/Traffic)
   do
@@ -1299,7 +1312,7 @@ function Core.Step(game: Game)
   -- each station follows it)
   if state.tick % Commerce.STEP == 0 and state.tick > 0 then
     Commerce.Stir(state.commerce, state.galaxy, state.shocks, state.historySeed, state.tick, Commerce.STEP, game.events)
-    Commerce.Advance(state.commerce, state.galaxy, state.surge.system, Commerce.STEP)
+    Commerce.Advance(state.commerce, state.galaxy, state.surge.system, Commerce.STEP, Wars.Blocked(state.wars))
     Market.Peg(state)
   end
   Market.Step(state, game.events)
@@ -2466,6 +2479,71 @@ function Query.HaulTargets(game: Game, pilot: number, also: number?): { HaulTarg
     found[at] = tail[at - rest + 1]
   end
   return found
+end
+
+-- The factions at war (Strategic/Wars), for whoever tells the pilot of
+-- it: the wars there are (who, by name, for how many hours, and how
+-- many claims the first has taken of the second, less what it has
+-- lost), and what is being done to which system: by whom, to whose
+-- claim (nobody's, for an open system being claimed), how far along it
+-- is, how many jumps off it is (-1 if no gate leads there), and whether
+-- its lanes are shut. The nearest first. And how many times a system
+-- has changed hands, for whoever draws the map.
+export type WarInfo = { a: string, b: string, hours: number, score: number }
+export type OperationInfo = { system: number, name: string, by: string, against: string, siege: boolean, stage: string, jumps: number,
+  blockaded: boolean }
+function Query.Wars(game: Game): ({ WarInfo }, { OperationInfo }, number)
+  local state = game.state
+  local galaxy = state.galaxy
+  local function named(id: string): string
+    return if Factions.byId[id] then Factions.byId[id].name else ""
+  end
+  local feuds: { WarInfo } = {}
+  for _, feud in state.wars.feuds do
+    table.insert(feuds, { a = named(feud.a), b = named(feud.b), hours = (state.tick - feud.since) * Constants.TICK // 3600, score = feud.score })
+  end
+  local found: { OperationInfo } = {}
+  if #state.wars.operations > 0 then
+    local here = Query.Player(game).system
+    local reach: { [number]: number } = { [here] = 0 }
+    local queue = { here }
+    local at = 1
+    while at <= #queue do
+      local system = queue[at]
+      at += 1
+      for _, neighbor in galaxy.systems[system].neighbors do
+        if reach[neighbor] == nil then
+          reach[neighbor] = reach[system] + 1
+          table.insert(queue, neighbor)
+        end
+      end
+    end
+    for _, operation in state.wars.operations do
+      table.insert(found, { system = operation.system, name = galaxy.systems[operation.system].name, by = named(operation.by),
+        against = named(operation.against), siege = operation.kind == "siege", stage = operation.stage,
+        jumps = reach[operation.system] or -1, blockaded = operation.stage ~= "muster" })
+    end
+    table.sort(found, function(a: OperationInfo, b: OperationInfo): boolean
+      local far, further = if a.jumps < 0 then math.huge else a.jumps, if b.jumps < 0 then math.huge else b.jumps
+      if far ~= further then
+        return far < further
+      end
+      return a.system < b.system
+    end)
+  end
+  return feuds, found, state.wars.version
+end
+
+-- Who is blockading the system the pilot is in, by name, and what for
+-- ("siege" or "claim"); nothing if nobody is.
+function Query.Blockade(game: Game): (string?, string?)
+  local here = Query.Player(game).system
+  for _, operation in game.state.wars.operations do
+    if operation.system == here and operation.stage ~= "muster" then
+      return if Factions.byId[operation.by] then Factions.byId[operation.by].name else operation.by, operation.kind
+    end
+  end
+  return nil, nil
 end
 
 -- What a hauler of the traffic has aboard of the economy's (Tactical/

@@ -1484,6 +1484,18 @@ function Debug.Hauls(pick: boolean?): (number, number, string)
   return haulers, laden, first
 end
 
+-- The factions at war (Core/Strategic/Wars): how many wars there are,
+-- how many systems something is being done to, how many open systems
+-- are claimed, and how many times a system has changed hands.
+function Debug.Wars(): (number, number, number, number)
+  local wars = session.game.state.wars
+  local claims = 0
+  for _ in wars.claims do
+    claims += 1
+  end
+  return #wars.feuds, #wars.operations, claims, wars.version
+end
+
 -- The last thing the pilot was told (the line under the ship's name), "" if nothing.
 function Debug.Said(): string
   return session.message

@@ -242,6 +242,11 @@ local function swollen(near: number): number
   return math.min(2.2, near ^ 0.45)
 end
 
+-- The factions' wars and what they are doing about them (Core.Query.Wars), as last asked; and how many times a system had
+-- changed hands when the chart was last made.
+local fronts = { age = 1000, epoch = -1, wars = {} :: { Core.WarInfo }, operations = {} :: { Core.OperationInfo } }
+local chartHands = -1
+
 -- The gluts and shortages across the map (Core.Query.Shocks), as last asked.
 local news = { age = 1000, epoch = -1, list = {} :: { Core.ShockInfo } }
 
@@ -523,9 +528,12 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   local reach = if reaching then reaching.range else 0
   local had = chart
   local its: Chart
-  if had == nil or had.epoch ~= session.epoch or had.count ~= #systems then
+  -- (and made again when a system has changed hands: it is drawn in its holder's colour)
+  local hands = game.state.wars.version
+  if had == nil or had.epoch ~= session.epoch or had.count ~= #systems or hands ~= chartHands then
     its = charted(galaxy, session.epoch, bySecurity)
     chart = its
+    chartHands = hands
     kept = nil
   else
     its = had
@@ -849,6 +857,20 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   if session.destination ~= 0 and session.destination ~= here then
     mark(session.destination, 11, Im.ACCENT, true)
   end
+  -- What the factions are doing to which systems (Core/Strategic/Wars):
+  -- a system being claimed or besieged is ringed, twice once its lanes
+  -- are shut. Asked now and then, not every frame.
+  fronts.age += 1
+  if fronts.age > 60 or fronts.epoch ~= session.epoch then
+    fronts.age, fronts.epoch = 0, session.epoch
+    fronts.wars, fronts.operations = Core.Query.Wars(game)
+  end
+  for _, operation in fronts.operations do
+    mark(operation.system, 12, Im.WARN, false)
+    if operation.blockaded then
+      mark(operation.system, 15, Im.WARN, false)
+    end
+  end
   -- Where pirates are massing (Tactical/Surges), ringed twice in red.
   local surge = Core.Query.Surge(game)
   if surge then
@@ -1030,6 +1052,21 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
     Im.Text(`Pirate surge in {surge.name}: ` .. (if surge.jumps == 0 then "here" elseif surge.jumps == 1 then "1 jump" else `{surge.jumps} jumps`)
       .. `, {Format.Duration(surge.left)} left`, px, line, 12, BAND.lawless)
     line += 20
+  end
+  -- (the wars there are, and the two nearest things being done about them)
+  for index = 1, math.min(2, #fronts.wars) do
+    local war = fronts.wars[index]
+    Im.Text(`War: {war.a} and {war.b}, {war.hours} h` .. (if #fronts.wars > 2 and index == 2 then `, and {#fronts.wars - 2} more` else ""), px, line,
+      12, Im.WARN)
+    line += 18
+  end
+  for index = 1, math.min(2, #fronts.operations) do
+    local operation = fronts.operations[index]
+    local far = if operation.jumps == 0 then "here" elseif operation.jumps < 0 then "no way there" elseif operation.jumps == 1 then "1 jump"
+      else `{operation.jumps} jumps`
+    Im.Text(`{if operation.siege then "Siege" else "Claim"}: {operation.name} by the {operation.by}, {operation.stage} ({far})`, px, line, 12,
+      if operation.blockaded then Im.WARN else Im.DIM)
+    line += 18
   end
   -- (the gluts and shortages there are: the three nearest. Asked now and then, not every frame.)
   news.age += 1

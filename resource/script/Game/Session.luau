@@ -58,7 +58,7 @@ local STANDOFF: { [string]: number } = { planet = 1, moon = 1.5, sun = 4 }
 
 function Session.New(galaxySeed: number, historySeed: number): Session
   return {
-    game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, traffic = true }),
+    game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, traffic = true, wars = true }),
     clock = Clock.New(), selected = 0, target = 0, aimed = {}, aimedAt = 0, events = {}, message = "", messageTick = 0, epoch = 1,
     destination = 0, autopilot = false, safest = false,
   }
@@ -312,6 +312,26 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, if kind == "TradeShockOver" then `NEWS: the {if event.shortage then "shortage" else "glut"} of {what} in {where} is over`
       elseif event.shortage then `NEWS: {what} is short in {where}, and dear there, for {event.days} days or so`
       else `NEWS: a glut of {what} in {where}: cheap there for {event.days} days or so`)
+  elseif kind == "WarDeclared" or kind == "PeaceMade" then
+    -- (the factions: Core/Strategic/Wars)
+    local function named(id: string): string
+      return if Factions.byId[id] then Factions.byId[id].name else id
+    end
+    Session.Say(session, if kind == "WarDeclared" then `NEWS: the {named(event.by)} have declared war on the {named(event.on)}`
+      else `NEWS: the {named(event.a)} and the {named(event.b)} have made a truce, after {event.hours} hours of war`)
+  elseif kind == "Blockaded" or kind == "SystemTaken" then
+    -- (said when it is near enough to matter: within a few jumps)
+    local here = Core.Query.Player(session.game).system
+    local way = Session.Way(session, here, event.system)
+    if event.system == here or (#way > 0 and #way - 1 <= 6) then
+      local name = session.game.state.galaxy.systems[event.system].name
+      local by = if Factions.byId[event.by] then Factions.byId[event.by].name else event.by
+      local whose = if kind == "Blockaded" then event.against else event.from
+      local from = if Factions.byId[whose] then Factions.byId[whose].name else ""
+      Session.Say(session, if kind == "Blockaded" then `NEWS: the {by} are blockading {name}` .. (if from ~= "" then `, which the {from} hold` else "")
+        elseif from ~= "" then `NEWS: the {by} have taken {name} from the {from}`
+        else `NEWS: the {by} have claimed {name}`)
+    end
   elseif kind == "HaulLost" then
     -- (a hauler that carried the economy's goods is gone: where it was going goes without)
     local node = session.game.state.galaxy.systems[event.system]
@@ -735,7 +755,7 @@ end
 function Session.Restart(session: Session, galaxySeed: number, historySeed: number, systems: number?)
   -- (a galaxy that has been going a while: its prices have come apart across the map)
   session.game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, systems = systems, traffic = true,
-    settled = Commerce.SETTLED })
+    settled = Commerce.SETTLED, wars = true })
   session.selected = 0
   session.target, session.aimed, session.aimedAt = 0, {}, 0
   session.events = { { kind = "Loaded" } }
