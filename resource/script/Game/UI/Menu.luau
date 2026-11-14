@@ -26,6 +26,8 @@ local Session = require("@lt/Game/Session")
 local Menu = {}
 
 Menu.WIDTH = 560
+-- The most systems a new game's galaxy can be asked to have.
+Menu.SYSTEMS = 5000
 
 -- The slots a pilot saves to by hand. (F9 saves to "quick", and docking
 -- to "auto".)
@@ -293,9 +295,10 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
       seed = math.floor(Host.Time()) % 99991 + 1
     end
     Im.Text("Systems", x + 120, y + 155, 14, Im.DIM)
-    size = math.clamp(math.floor(Im.Number("Systems", size, x + 190, y + 148, 120, 28)), 3, 400)
-    for index, preset in { 3, 40, 120, 400 } do
-      if Im.Button(tostring(preset), x + 322 + (index - 1) * 46, y + 148, 42, 28, true, `Systems:{preset}`) then
+    -- (as many as five thousand: the project owner's, 2026-11-13. It was four hundred.)
+    size = math.clamp(math.floor(Im.Number("Systems", size, x + 190, y + 148, 120, 28)), 3, Menu.SYSTEMS)
+    for index, preset in { 40, 400, 2000, Menu.SYSTEMS } do
+      if Im.Button(tostring(preset), x + 322 + (index - 1) * 56, y + 148, 52, 28, true, `Systems:{preset}`) then
         size = preset
       end
     end

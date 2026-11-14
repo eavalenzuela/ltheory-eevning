@@ -67,6 +67,10 @@ Galaxy.SYSTEMS_A_FACTION = 10
 -- to that as the galaxy has.
 Galaxy.HOME_GATES = 5
 Galaxy.HOME_APART = 100
+-- How many times the homeworlds are drawn at a distance apart before
+-- that distance is given up for a shorter one, in a galaxy with room
+-- for whole territories.
+Galaxy.HOME_DRAWS = 40
 
 -- Whether a faction keeps order in the space it holds. The pirates do
 -- not: what is theirs is lawless, with nobody to patrol it, nobody to
@@ -208,9 +212,14 @@ function Galaxy.Claim(galaxy: Galaxy)
     end
     -- (they are drawn again a tenth nearer one another until every one
     -- has a place: and in a galaxy so small that they are all but on top
-    -- of one another, next door will do)
+    -- of one another, next door will do. In a galaxy with room for whole
+    -- territories a distance is not given up at the first draw that
+    -- fails, since a draw can paint itself into a corner where another
+    -- would not: it is drawn Galaxy.HOME_DRAWS times before it is.)
     local apart = Galaxy.HOME_APART
     local attempt = 0
+    local patience = if each >= Galaxy.TERRITORY then Galaxy.HOME_DRAWS else 1
+    local failed = 0
     while #homes < wanted do
       attempt += 1
       local rng = Rng.For(galaxy.seed, 4407, attempt)
@@ -237,7 +246,11 @@ function Galaxy.Claim(galaxy: Galaxy)
       if #placed == wanted then
         homes = placed
       else
-        apart *= 0.9
+        failed += 1
+        if failed >= patience then
+          apart *= 0.9
+          failed = 0
+        end
       end
     end
   end
@@ -469,7 +482,8 @@ local SPACING = 4 -- light years between neighbours, roughly
 -- How far a gate reaches, light years on the map: when a galaxy's gates
 -- have been made, every one longer than this is taken out again. (The
 -- project owner's, 2026-11-13: "a post-gen step of removing gates with
--- jumps further than x LY", "e.g. 100LY".)
+-- jumps further than x LY", and then "Lower the gate jump removal
+-- length to 50 ly".)
 -- The gates are a tree first, each system to the nearest made before
 -- it, so the first few dozen systems of a big galaxy, which had nothing
 -- near them when they were made, gate right across it: 625 light years
@@ -477,10 +491,14 @@ local SPACING = 4 -- light years between neighbours, roughly
 -- everything a few jumps from everything, however big the galaxy
 -- (ten thousand systems were 38 jumps across, and homeworlds 440 light
 -- years apart 12 jumps), which leaves a faction's space no depth and
--- its borders no meaning. Without them the same galaxy is 67 jumps
--- across and its homeworlds 30 apart. A galaxy narrower than this has
--- no such gate to lose (one of 400 systems is 160 light years across).
-Galaxy.GATE_REACH = 100
+-- its borders no meaning. Without them the same galaxy is 102 jumps
+-- across and its homeworlds 51 apart; and one of five thousand is some
+-- 70 across, with homeworlds 35 apart, where it was 30 and 12. Some
+-- seventy gates of thirteen thousand go, and it is seldom that anything
+-- is cut off by it (a gate or none is put in to join what is). A galaxy
+-- narrower than this has no such gate to lose: one of forty systems is
+-- 50 light years across, and its gates are as they were.
+Galaxy.GATE_REACH = 50
 
 -- Places on the map kept by the square each falls in, so that what is
 -- nearest a place is found without looking at every other. The places
@@ -889,14 +907,34 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
   -- first.
   local reach = Galaxy.GATE_REACH
   local cut = false
+  local first = 0
   for id, system in systems do
     for at = #system.neighbors, 1, -1 do
       local other = system.neighbors[at]
       if (xs[id] - xs[other]) ^ 2 + (ys[id] - ys[other]) ^ 2 > reach * reach then
         table.remove(system.neighbors, at)
         cut = true
+        first += if id == 1 then 1 else 0
       end
     end
+  end
+  -- (The first system is where a pilot starts and is a homeworld
+  -- whatever gates it has (Galaxy.Claim), and a homeworld is to have
+  -- its five: being the first made, it is the one that loses most. So
+  -- for every gate it lost it has one to the nearest system it has
+  -- none to, until it has five again.)
+  for _ = 1, first do
+    local gated = systems[1].neighbors
+    if #gated >= Galaxy.HOME_GATES then
+      break
+    end
+    local other = gridNearest(earlier, xs[1], ys[1], function(other: number): boolean
+      return other == 1 or table.find(gated, other) ~= nil
+    end)
+    if other == nil then
+      break
+    end
+    link(1, other)
   end
   if cut then
     -- (the pieces: which each system is of, and the systems of each)
