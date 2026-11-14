@@ -1,0 +1,83 @@
+# Contracts, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/contracts.txt
+#
+# A station's board is on the Market tab, under Contracts: lots for
+# sale today, lots wanted today, and the pilot's own listings. One of
+# the lots for sale is bought and is in the hangar. What a want asks for
+# is given (a cheat: it is of things a pilot builds) and delivered, and
+# pays. And a copy of a blueprint, which no market deals in, is put up
+# at what it is worth, called off, and put up again so cheap that
+# somebody takes it within the hour, with the pilot on another tab.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Grant(50000000)
+until GameDebug.Press('Market')
+until GameDebug.Tab() == 'Market'
+until GameDebug.Press('Category:contracts')
+frames 3
+lua _G.offers, _G.wants, _G.mine = GameDebug.Board()
+lua assert(_G.offers == 3 and _G.wants == 2 and _G.mine == 0, 'a board has three lots for sale and two wanted')
+
+# The third lot for sale: a few of a module no station sells.
+lua _G.title, _G.price, _G.type, _G.count = GameDebug.Lot('offer', 3)
+lua assert(_G.title ~= '' and _G.price > 0, 'there should be a third lot for sale')
+lua _G.had = GameDebug.Hangar(_G.type)
+lua _G.wallet = GameDebug.Wallet()
+until GameDebug.Press('Contract:buy:3')
+until GameDebug.Hangar(_G.type) == _G.had + _G.count
+lua assert(GameDebug.Wallet() == _G.wallet - _G.price, 'the lot should cost what it said')
+frames 3
+lua assert(select(1, GameDebug.Board()) == 2, 'a lot bought is off the board')
+lua assert(not GameDebug.CanPress('Contract:buy:3'))
+
+# The first lot wanted: given what it asks for, it is delivered and pays.
+lua _G.title, _G.pays, _G.type, _G.count = GameDebug.Lot('want', 1)
+lua assert(_G.title ~= '' and _G.pays > 0, 'there should be a lot wanted')
+frames 3
+lua assert(not GameDebug.CanPress('Contract:fill:1') or GameDebug.Hangar(_G.type) >= _G.count, 'a want is filled from the hangar')
+lua _G.had = GameDebug.Hangar(_G.type)
+lua assert(GameDebug.Give(_G.type, _G.count))
+lua _G.wallet = GameDebug.Wallet()
+until GameDebug.Press('Contract:fill:1')
+until GameDebug.Hangar(_G.type) == _G.had
+lua assert(GameDebug.Wallet() == _G.wallet + _G.pays, 'the want should pay what it said')
+frames 3
+lua assert(select(2, GameDebug.Board()) == 1, 'a want filled is off the board')
+
+# A copy good for forty runs, put up at what it is worth: on the board,
+# and out of the hangar. Called off, it is back.
+lua assert(GameDebug.Give('copy.autocannon.small', 40))
+frames 3
+lua assert(GameDebug.BoardItem('copy.autocannon.small'))
+frames 3
+lua assert(GameDebug.CanPress('Contract:list'), 'a stack chosen can be put up')
+until GameDebug.Press('Contract:list')
+until select(3, GameDebug.Board()) == 1
+lua assert(GameDebug.Hangar('copy.autocannon.small') == 0, 'what is up on the board is not in the hangar')
+frames 3
+until GameDebug.Press('Contract:cancel:1')
+until select(3, GameDebug.Board()) == 0
+lua assert(GameDebug.Hangar('copy.autocannon.small') == 40, 'a listing called off is back in the hangar')
+
+# Up again at a tenth of that: somebody takes it within the hour, and
+# pays, while the pilot is on another tab.
+frames 3
+until GameDebug.Press('Contract:item:copy.autocannon.small')
+frames 3
+lua GameDebug.Enter('ContractPrice', 3000)
+frames 3
+lua _G.wallet = GameDebug.Wallet()
+until GameDebug.Press('Contract:list')
+until select(3, GameDebug.Board()) == 1
+until GameDebug.Press('Fitting')
+lua GameDebug.TimeScale(60)
+patience 200
+until GameDebug.Wallet() > _G.wallet
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Wallet() == _G.wallet - 90 + 2940, 'the broker takes three in a hundred of 3,000, and the tax two')
+lua assert(select(3, GameDebug.Board()) == 0 and GameDebug.Hangar('copy.autocannon.small') == 0, 'the lot is sold')
+
+echo contracts scenario passed
+quit

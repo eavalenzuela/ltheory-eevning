@@ -269,6 +269,19 @@ export type Order = {
   placed: number,     -- tick
 }
 
+-- A lot the pilot has put up on a station's board (Assets/Contracts):
+-- so many of a type, for a price in all. The board holds the goods
+-- until somebody takes the lot or its time is up.
+export type Listing = {
+  id: number,
+  station: number,
+  type: string,
+  quantity: number,
+  price: number,      -- credits for the lot
+  placed: number,     -- tick
+  ends: number,       -- tick
+}
+
 -- One day of a type at a station: what was traded in it (units, and
 -- what they went for in all), and the station's going price when the
 -- day ended ('close': nil for the day that is not over yet, and for a
@@ -532,6 +545,15 @@ export type State = {
   marketIds: { number },
   orders: { [number]: Order },
   orderIds: { number },
+  -- The pilot's listings on stations' boards (Assets/Contracts); the
+  -- keys of the lots of the boards taken today; and, by station and by
+  -- type, how many of a blueprint's copies its builders have had of the
+  -- pilot ('units' as they stood at 'tick': they are forgotten by half
+  -- every few days).
+  contracts: { [number]: Listing },
+  contractIds: { number },
+  contractsTaken: { string },
+  contractsHad: { [number]: { [string]: { units: number, tick: number } } },
   -- trades[station][type]: recent days of trade, oldest first
   trades: { [number]: { [string]: { TradeDay } } },
   starbases: { [number]: Starbase },  -- by the id of the station the tower is

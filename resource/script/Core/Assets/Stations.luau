@@ -97,6 +97,7 @@ local NEEDS: { [string]: Structures.Service } = {
   StartJob = INDUSTRY,
   StartResearch = RESEARCH,
   BuyNow = MARKET, SellNow = MARKET, PlaceOrder = MARKET, ModifyOrder = MARKET,
+  AcceptContract = MARKET, FillContract = MARKET, ListContract = MARKET,
 }
 
 -- Whether the station a command is given at can carry it out. (A

@@ -28,6 +28,7 @@ local Jumping = require("@lt/Core/Tactical/Jumping")
 local Keeps = require("@lt/Core/Tactical/Keeps")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Careers = require("@lt/Core/Character/Careers")
+local Contracts = require("@lt/Core/Assets/Contracts")
 local Corporation = require("@lt/Core/Assets/Corporation")
 local Guide = require("@lt/Core/Character/Guide")
 local Hacking = require("@lt/Core/Tactical/Hacking")
@@ -85,7 +86,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 71
+Core.SAVE_VERSION = 72
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -372,6 +373,14 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- Nimia; and their hulls are the Nimia's of the owner's list, each
   -- the one that stands where it stood (they build no attack
   -- battlecruiser and no dreadnought but the siege one).
+  -- 72: stations have boards, where lots change hands by contract
+  -- (Assets/Contracts). A save from before has nothing up on any.
+  [71] = function(state: any)
+    state.contracts = state.contracts or {}
+    state.contractIds = state.contractIds or {}
+    state.contractsTaken = state.contractsTaken or {}
+    state.contractsHad = state.contractsHad or {}
+  end,
   [70] = function(state: any)
     rehulled(state, {
       skarn = "nimia",
@@ -975,6 +984,7 @@ function Core.New(options: Options): Game
     marketIds = {},
     orders = {},
     orderIds = {},
+    contracts = {}, contractIds = {}, contractsTaken = {}, contractsHad = {},
     trades = {},
     starbases = {},
     starbaseIds = {},
@@ -1032,6 +1042,7 @@ local AFTERMATH_COMMANDS = { Loot = true, Repair = true }
 local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true, StartResearch = true, CancelJob = true }
 local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true }
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true, ModifyOrder = true }
+local CONTRACT_COMMANDS = { AcceptContract = true, FillContract = true, ListContract = true, CancelContract = true }
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true, SetHome = true }
 local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true, UnanchorTower = true,
   SetReaction = true }
@@ -1063,6 +1074,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Industry.Validate(state, command)
   elseif MARKET_COMMANDS[command.kind] then
     return Market.Validate(state, command)
+  elseif CONTRACT_COMMANDS[command.kind] then
+    return Contracts.Validate(state, command)
   elseif HANGAR_COMMANDS[command.kind] then
     return Hangar.Validate(state, command)
   elseif STARBASE_COMMANDS[command.kind] then
@@ -1164,6 +1177,8 @@ function Core.Step(game: Game)
       Industry.Apply(state, command, game.events)
     elseif ok and MARKET_COMMANDS[command.kind] then
       Market.Apply(state, command, game.events)
+    elseif ok and CONTRACT_COMMANDS[command.kind] then
+      Contracts.Apply(state, command, game.events)
     elseif ok and HANGAR_COMMANDS[command.kind] then
       Hangar.Apply(state, command, game.events)
     elseif ok and STARBASE_COMMANDS[command.kind] then
@@ -1227,6 +1242,7 @@ function Core.Step(game: Game)
   Aftermath.Step(state, game.events)
   Mining.Step(state)
   Market.Step(state, game.events)
+  Contracts.Step(state, game.events)
   Starbases.Step(state, game.events)
   Raids.Step(state, game.events)
   Keeps.Step(state, game.events)
@@ -1584,6 +1600,40 @@ end
 
 function Query.History(game: Game, station: number, type: string): { State.TradeDay }
   return Market.History(game.state, station, type)
+end
+
+-- A station's board (Assets/Contracts): the lots it has for sale today
+-- and the lots it wants, each with how much of it is in the pilot's
+-- hangar there; the pilot's own listings everywhere, each with what it
+-- is worth where it is up and the chance an hour that it is taken; and
+-- how many listings a pilot can have up.
+export type BoardLot = { lot: Contracts.Lot, have: { number } }
+export type BoardListing = { listing: State.Listing, worth: number, chance: number, left: number, here: boolean }
+export type Board = { lots: { BoardLot }, listings: { BoardListing }, limit: number }
+function Query.Contracts(game: Game, station: number): Board
+  local state = game.state
+  local lots: { BoardLot } = {}
+  for _, lot in Contracts.Board(state, station) do
+    table.insert(lots, { lot = lot, have = Contracts.Have(state, station, lot.stacks) })
+  end
+  local listings: { BoardListing } = {}
+  for _, listing in Contracts.Listings(state) do
+    local worth = Contracts.Worth(state, listing.station, listing.type, listing.quantity)
+    table.insert(listings, { listing = listing, worth = worth, chance = Contracts.Chance(listing.price, worth),
+      left = math.max(0, listing.ends - state.tick) * Constants.TICK, here = listing.station == station })
+  end
+  return { lots = lots, listings = listings, limit = Contracts.LISTINGS }
+end
+
+-- What a lot of so many of a type would be worth on a station's board,
+-- what putting it up at a price would cost, and the chance an hour that
+-- somebody takes it at that price.
+function Query.ContractWorth(game: Game, station: number, type: string, quantity: number, price: number): (number, number, number)
+  if Space.Object(game.state, station) == nil or Types.Get(type) == nil or quantity < 1 then
+    return 0, 0, 0
+  end
+  local worth = Contracts.Worth(game.state, station, type, quantity)
+  return worth, Contracts.Fee(game.state, station, price), Contracts.Chance(price, worth)
 end
 
 -- The pilot's home: the station they wake at when their capsule is

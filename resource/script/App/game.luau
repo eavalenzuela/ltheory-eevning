@@ -803,6 +803,37 @@ function Debug.Jobs(): number
   return #Core.Query.Jobs(session.game, nil)
 end
 
+-- The board of the station docked at (the Market tab's Contracts): how
+-- many lots it has for sale today, how many it wants, and how many
+-- listings the pilot has up anywhere.
+function Debug.Board(): (number, number, number)
+  local board = Core.Query.Contracts(session.game, Core.Query.Player(session.game).docked)
+  local offers, wants = 0, 0
+  for _, entry in board.lots do
+    offers += if entry.lot.side == "offer" then 1 else 0
+    wants += if entry.lot.side == "want" then 1 else 0
+  end
+  return offers, wants, #board.listings
+end
+
+-- A lot of that board, by its side ('offer' or 'want') and place: its
+-- title, its price (what it costs, or pays), the type of the first
+-- thing in it and how many of that. Nothing and 0 if it is not there.
+function Debug.Lot(side: string, slot: number): (string, number, string, number)
+  for _, entry in Core.Query.Contracts(session.game, Core.Query.Player(session.game).docked).lots do
+    if entry.lot.side == side and entry.lot.slot == slot then
+      return entry.lot.title, entry.lot.price, entry.lot.stacks[1].type, entry.lot.stacks[1].quantity
+    end
+  end
+  return "", 0, "", 0
+end
+
+-- Open the market's board with a type of the hangar chosen to put up,
+-- as clicking its row under New listing would.
+function Debug.BoardItem(type: string): boolean
+  return Station.Contract(type)
+end
+
 -- The pilot's home, where they wake when their capsule is destroyed:
 -- the station's name, whether the pilot is docked there, and how many
 -- jumps off it is. (It is made of the station docked at with the

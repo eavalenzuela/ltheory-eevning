@@ -170,6 +170,20 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, if event.success then `Invented: {Types.Info(event.product).name} is in the hangar`
       elseif event.used then "The invention came to nothing, and the run of the copy it was worked from is used up"
       else `The invention came to nothing: {Types.Info(event.blueprint).name} is back in the hangar`)
+  elseif kind == "ContractAccepted" then
+    Session.Say(session, `Bought by contract: {event.title}. It is in the hangar`)
+  elseif kind == "ContractFilled" then
+    Session.Say(session, `Delivered by contract: {event.title}`)
+  elseif kind == "ContractListed" then
+    Session.Say(session, `Up on the board: {event.quantity} x {Types.Info(event.type).name}, for {event.price} credits`)
+  elseif kind == "ContractSold" then
+    local where = Core.Query.Body(session.game, event.station)
+    Session.Say(session, `Sold by contract at {if where then where.name else "a station"}: {event.quantity} x {Types.Info(event.type).name}`)
+  elseif kind == "ContractExpired" then
+    local where = Core.Query.Body(session.game, event.station)
+    Session.Say(session, `Nobody took {event.quantity} x {Types.Info(event.type).name} at {if where then where.name else "a station"}: it is back in the hangar there`)
+  elseif kind == "ContractCancelled" then
+    Session.Say(session, `Taken down: {event.quantity} x {Types.Info(event.type).name} is back in the hangar`)
   elseif kind == "CopyDone" then
     Session.Say(session, `Copied: {Types.Info(event.blueprint).name}, a copy good for {event.runs} {if event.runs == 1 then "run" else "runs"}`)
   elseif kind == "ShipAssembled" then
