@@ -170,6 +170,9 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, if event.success then `Invented: {Types.Info(event.product).name} is in the hangar`
       elseif event.used then "The invention came to nothing, and the run of the copy it was worked from is used up"
       else `The invention came to nothing: {Types.Info(event.blueprint).name} is back in the hangar`)
+  elseif kind == "FleetWarpCalled" then
+    Session.Say(session, if event.expect == 0 then "Fleet warp: nobody is here to go with you"
+      elseif event.expect == 1 then "Fleet warp: one pilot is forming up on you" else `Fleet warp: {event.expect} pilots are forming up on you`)
   elseif kind == "PirateFleeing" or kind == "PirateFled" then
     -- (only of a fight the pilot is at: a hired pilot's, somewhere else, is theirs to watch)
     local me = Core.Query.Ball(session.game, mine)
@@ -548,7 +551,7 @@ end
 -- from the autopilot.)
 function Session.Order(session: Session, kind: string, target: number?, range: number?): boolean
   session.autopilot = false
-  if kind == "WarpTo" and target then
+  if (kind == "WarpTo" or kind == "FleetWarp") and target then
     -- (a world or a sun is warped to from well off it: a distance asked
     -- for is that much farther off again)
     local body = Core.Query.Body(session.game, target)

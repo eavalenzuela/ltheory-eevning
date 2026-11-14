@@ -1,0 +1,54 @@
+# A fleet's warp, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/fleetwarp.txt
+#
+# Money and a destroyer are given, and a pilot good enough for it is
+# hired and given it. Out of the station the pilot selects the belt and
+# warps the fleet there with the fleet panel's button: the Courier,
+# which is ready in a few seconds, waits for the destroyer to turn, both
+# go into warp in the same moment, and the hired pilot is there when the
+# pilot arrives, where a pilot who only follows comes in after.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Peaceful(true)
+lua GameDebug.Grant(20000000)
+lua assert(GameDebug.Spare('destroyer.nozomi'), 'no second ship')
+frames 3
+until GameDebug.Press('Crew')
+until GameDebug.Tab() == 'Crew'
+lua assert(GameDebug.Candidate(2) > 0, 'nobody good enough for a destroyer is looking for work today')
+until GameDebug.Press('Hire:' .. GameDebug.Candidate(2))
+until GameDebug.Fleet() == 1
+frames 3
+until GameDebug.Press('Give:1:1')
+until select(3, GameDebug.Fleet()) == 1
+
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+until select(2, GameDebug.Fleet()) == 1
+lua assert(not GameDebug.FleetWarp(), 'nothing has been called yet')
+
+# The belt selected, and the fleet warped to it.
+lua assert(GameDebug.Select('belt'), 'no belt to select')
+frames 3
+until GameDebug.Press('Fleet:warp')
+until GameDebug.FleetWarp()
+lua assert(select(2, GameDebug.FleetWarp()) == 1, 'one pilot should be called to go with it')
+lua assert(not GameDebug.InWarp(), 'the pilot waits for the fleet')
+
+# The hired pilot turns for it too. Nobody goes until both are ready,
+# and then both are in warp.
+until select(3, GameDebug.FleetWarp()) == 1
+lua assert(not GameDebug.InWarp(), 'still forming up')
+patience 120
+until GameDebug.InWarp()
+lua assert(select(3, GameDebug.FleetWarp()) == 1, 'the hired pilot should be in warp in the same moment')
+lua GameDebug.TimeScale(8)
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+lua assert(select(2, GameDebug.Fleet()) == 1, 'the hired pilot should be there when the pilot arrives')
+lua assert(not GameDebug.FleetWarp(), 'arrived, the fleet warp is over')
+
+echo fleetwarp scenario passed
+quit

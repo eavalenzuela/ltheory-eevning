@@ -172,7 +172,8 @@ local function describe(game: Core.Game, ball: State.Ball): string
   local intent = ball.intent
   local warp = ball.warp
   if warp then
-    local verb = if warp.stage == "warp" then "Warping to" else "Aligning to"
+    -- (a fleet's warp waits for the fleet: Core/Tactical/Space)
+    local verb = if warp.stage == "warp" then "Warping to" elseif warp.gang then "Fleet forming up for" else "Aligning to"
     return `{verb} {name(warp.target)}`
   elseif intent then
     return `{if intent.kind == "dock" then "Docking at" else "Jumping through"} {name(intent.target)}`
@@ -1242,8 +1243,14 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           Session.Do(session, guard)
         end
         if one and not canGuard then
-          Im.Text(if string.sub(tostring(whyNotGuard), 1, 4) == "pick" then "select another pilot's ship" else "", left + 334, fy + 41, 11,
+          Im.Text(if string.sub(tostring(whyNotGuard), 1, 4) == "pick" then "select another's ship" else "", left + 36, fy + 41, 11,
             Im.DIM)
+        end
+        -- (to what is selected, all together: those who follow form up on
+        -- the pilot, and everybody goes at once and arrives at once)
+        local canWarp = Session.Can(session, "FleetWarp", session.selected)
+        if Im.Button("Warp fleet", left + 368, fy + 34, 88, 26, canWarp, "Fleet:warp") then
+          Session.Order(session, "FleetWarp", session.selected)
         end
         for index, row in fleet do
           local ry = fy + 64 + (index - 1) * 22

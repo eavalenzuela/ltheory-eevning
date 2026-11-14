@@ -395,13 +395,33 @@ function Fleet.Flying(state: State.State, ship: number): State.Wingman?
   return nil
 end
 
+-- The hired pilots who would go with a fleet warp the pilot called now:
+-- those told to follow, whose ships are on the pilot's grid and not held
+-- there.
+local function mustered(state: State.State, lead: State.Ball): number
+  local count = 0
+  for _, id in state.fleetIds do
+    local wing = state.fleet[id]
+    local ball = state.balls[wing.ship]
+    if wing.order == "follow" and ball and ball.system == lead.system and ball.grid == lead.grid and lead.grid ~= 0
+      and not ball.vitals.scrambled and not (ball.warp and ball.warp.stage == "warp") then
+      count += 1
+    end
+  end
+  return count
+end
+
 function Fleet.Validate(state: State.State, command: State.Command): (boolean, string?)
   local ship = state.ships[command.actor]
   if ship == nil or ship.id ~= state.player.ship then
     return false, "no such ship"
   end
   local kind = command.kind
-  if kind == "HirePilot" then
+  if kind == "FleetWarp" then
+    -- A warp, as any other: whatever would stop the pilot's own ship
+    -- warping there stops this.
+    return Space.Validate(state, { kind = "WarpTo", actor = command.actor, target = command.target, range = command.range })
+  elseif kind == "HirePilot" then
     if ship.docked == 0 then
       return false, "not docked"
     end
@@ -646,7 +666,17 @@ end
 function Fleet.Apply(state: State.State, command: State.Command, events: { Event })
   local ship = state.ships[command.actor]
   local kind = command.kind
-  if kind == "HirePilot" then
+  if kind == "FleetWarp" then
+    -- The pilot's own ship turns for its warp, and calls those who
+    -- follow it to go with it: they join as they are ready (the drones
+    -- in first), and all go together (Tactical/Space's fleet warp).
+    Space.Apply(state, { kind = "WarpTo", actor = command.actor, target = command.target, range = command.range }, events)
+    local lead = state.balls[ship.id]
+    local expect = mustered(state, lead)
+    Space.CallFleet(state, lead, expect)
+    table.insert(events, { kind = "FleetWarpCalled", ball = lead.id, target = command.target, expect = expect })
+    return
+  elseif kind == "HirePilot" then
     local found = candidate(state, ship.docked, command.what :: string) :: Candidate
     local day = state.tick // DAY
     if state.hiredDay ~= day then
@@ -1545,6 +1575,11 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
     local going = lead.warp
     if going then
       if me.warp and me.warp.target == going.target then
+        return
+      end
+      -- (a fleet's warp: to a place of its own beside where the player
+      -- will arrive, and off when everybody is ready)
+      if going.gang == lead.id and Space.JoinWarp(state, me, lead, place) then
         return
       end
       -- (as far off it as the player means to arrive)

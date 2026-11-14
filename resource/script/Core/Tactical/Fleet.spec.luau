@@ -825,6 +825,150 @@ local function dronesOf(game: Core.Game, ship: number): (number, number)
   return aboard, #Drones.Out(game.state, ship)
 end
 
+-- The first planet on the pilot's overview.
+local function aPlanet(game: Core.Game): number
+  for _, entry in Core.Query.Overview(game) do
+    if entry.kind == "planet" then
+      return entry.id
+    end
+  end
+  error("no planet on the overview")
+end
+
+suite:Case("a fleet warp: nobody goes until the slowest is ready, all go in one tick at the slowest's speed, and arrive together, each in a place of its own", function(t)
+  -- The pilot in a Courier, which turns and warps fast, and a hired pilot in a battleship, which does neither.
+  local game, second = docked("battleship.owari")
+  hired(game, second, 4)
+  local me, theirs = adrift(game, second)
+  t.ok(theirs.warpSpeed < me.warpSpeed and theirs.tau > me.tau, "the battleship should be the slow one, to turn and in warp")
+  local planet = aPlanet(game)
+  -- Alone, the Courier would be off in a few seconds, at its own speed.
+  local alone = Core.Load(Core.Save(game))
+  assert(Core.Submit(alone, { kind = "WarpTo", actor = alone.state.player.ship, target = planet }))
+  local quick, own = 0, 0
+  for tick = 1, 60 do
+    Core.Step(alone)
+    for _, event in Core.TakeEvents(alone) do
+      if event.kind == "WarpStarted" and event.ball == me.id then
+        quick, own = tick, event.duration
+      end
+    end
+    if quick > 0 then
+      break
+    end
+  end
+  t.ok(quick > 0 and quick < 20, `alone, a Courier is in warp in {quick} ticks`)
+
+  Core.TakeEvents(game)
+  t.eq(refused(game, { kind = "FleetWarp", actor = 0, target = 4242 }), "no such target")
+  t.ok((submit(game, { kind = "FleetWarp", actor = 0, target = planet })))
+  local called: any = nil
+  for _, event in Core.TakeEvents(game) do
+    called = if event.kind == "FleetWarpCalled" then event else called
+  end
+  t.eq({ called.ball, called.target, called.expect } :: { any }, { me.id, planet, 1 } :: { any })
+  local going = assert(me.warp)
+  t.eq({ going.stage, going.gang, going.expect } :: { any }, { "align", me.id, 1 } :: { any })
+  -- The hired pilot joins it, turning for a place of their own beside where the pilot will arrive.
+  steps(game, 2)
+  local joined = assert(theirs.warp, "the hired pilot did not join the fleet's warp")
+  t.eq({ joined.stage, joined.gang, joined.target } :: { any }, { "align", me.id, planet } :: { any })
+  local apart = math.sqrt((joined.tx - going.tx) ^ 2 + (joined.ty - going.ty) ^ 2 + (joined.tz - going.tz) ^ 2)
+  t.near(apart, Space.FLEET_RING + me.radius + theirs.radius, 1)
+
+  -- The Courier is ready long before the battleship, and waits. Then both go in the one tick, for as long.
+  local started: { [number]: number }, lasting: { [number]: number } = {}, {}
+  local waited = 0
+  for tick = 1, 200 do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      if event.kind == "WarpStarted" then
+        started[event.ball], lasting[event.ball] = tick, event.duration
+      end
+    end
+    if started[me.id] or started[theirs.id] then
+      waited = tick
+      break
+    end
+  end
+  t.eq({ started[me.id], started[theirs.id] }, { waited, waited })
+  t.ok(waited > quick + 3, `the Courier should have waited for the battleship: it went after {waited} ticks, and alone after {quick}`)
+  t.near(lasting[me.id], lasting[theirs.id], 0.01)
+  t.ok(lasting[me.id] > own * 1.2, `at the battleship's speed the warp takes {lasting[me.id]} s, and at the Courier's own {own}`)
+
+  -- And they arrive in the one tick, the ring's width apart.
+  local landed = 0
+  for tick = 1, 400 do
+    Core.Step(game)
+    local out = (if me.warp == nil then 1 else 0) + (if theirs.warp == nil then 1 else 0)
+    if out > 0 then
+      t.eq(out, 2, "one arrived before the other")
+      landed = tick
+      break
+    end
+  end
+  t.ok(landed > 0, "they did not arrive")
+  t.near(Space.Distance(me :: any, theirs :: any), Space.FLEET_RING + me.radius + theirs.radius, 60)
+  t.eq({ me.grid ~= 0, me.grid == theirs.grid }, { true, true })
+end)
+
+suite:Case("a fleet's warp is for those who follow: it does not wait for ever, called off it is off for everybody, and it is in the save", function(t)
+  local game, second = docked("battleship.owari")
+  local wing = hired(game, second, 4)
+  local me, theirs = adrift(game, second)
+  local planet = aPlanet(game)
+  -- Told to stay, a pilot is not waited for and does not go with it: the pilot's own ship is off at once.
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "stay" })))
+  t.ok((submit(game, { kind = "FleetWarp", actor = 0, target = planet })))
+  t.eq(assert(me.warp).expect, 0)
+  t.ok(waitFor(game, 20, function()
+    return me.warp ~= nil and me.warp.stage == "warp"
+  end), "with nobody to wait for, the pilot should be in warp in a few seconds")
+  -- (the one told to stay is on their way in to dock, which is what staying is, and is no part of the fleet's warp)
+  t.ok(theirs.warp == nil or theirs.warp.gang == nil, "a pilot told to stay should not go with the fleet")
+  t.eq(assert(theirs.intent).kind, "dock")
+
+  -- Called off: the pilot gives another order while the fleet is forming up, and the hired pilot stops too.
+  game, second = docked("battleship.owari")
+  wing = hired(game, second, 4)
+  me, theirs = adrift(game, second)
+  planet = aPlanet(game)
+  t.ok((submit(game, { kind = "FleetWarp", actor = 0, target = planet })))
+  steps(game, 3)
+  t.ok(theirs.warp ~= nil and theirs.warp.gang == me.id)
+  -- (in the save, forming up: the two games go on alike)
+  local loaded = Core.Load(Core.Save(game))
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  t.ok((submit(game, { kind = "Stop", actor = 0 })))
+  steps(game, 2)
+  t.eq({ me.warp, theirs.warp } :: { any }, { nil, nil } :: { any })
+  t.ok(theirs.mode == "stop" or theirs.mode == "keep", `the hired pilot is on '{theirs.mode}'`)
+  for _ = 1, 300 do
+    Core.Step(loaded)
+  end
+  local mine, other = loaded.state.balls[me.id], loaded.state.balls[theirs.id]
+  t.ok(mine.warp == nil and other.warp == nil and mine.grid == other.grid and mine.grid ~= me.grid, "the saved fleet should have warped and arrived together")
+
+  -- Somebody expected who never comes: the fleet waits its minute and goes with who is ready.
+  game, second = docked("battleship.owari")
+  wing = hired(game, second, 4)
+  me, theirs = adrift(game, second)
+  planet = aPlanet(game)
+  t.ok((submit(game, { kind = "FleetWarp", actor = 0, target = planet })))
+  assert(me.warp).expect = 2
+  local went = 0
+  for tick = 1, Space.FLEET_WAIT + 20 do
+    Core.Step(game)
+    if me.warp and me.warp.stage == "warp" then
+      went = tick
+      break
+    end
+  end
+  t.ok(went >= Space.FLEET_WAIT - 2 and went <= Space.FLEET_WAIT + 2, `the fleet went after {went} ticks`)
+  t.eq(assert(theirs.warp).stage, "warp", "whoever was ready should have gone with it")
+  t.eq(wing.order, "follow")
+end)
+
 suite:Case("a pack shoots at one ship: whoever has least left to lose, and whoever mends the others before anybody", function(t)
   -- The player in a Courier and a hired pilot in a destroyer, which has three times as much to lose, with a
   -- remote repairer aboard.

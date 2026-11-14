@@ -450,6 +450,126 @@ function beginWarp(ball: State.Ball, target: Body, range: number)
   }
 end
 
+-- A fleet's warp. The ship that calls one is turning for its warp
+-- already (an ordinary order to warp: Tactical/Fleet gives it); this
+-- says that so many others are to go with it. They join as they are
+-- ready, each turning for a place of its own in a ring about where the
+-- caller will arrive, and nobody goes until all of them are pointed the
+-- right way and moving: then all go in the one tick, at the warp speed
+-- of the slowest, and so arrive together. A fleet does not wait for
+-- ever: after FLEET_WAIT the caller goes with whoever is ready, and
+-- the rest come on by themselves. Called off (any other order to the
+-- caller), those who had turned to go with it stop.
+Space.FLEET_WAIT = math.ceil(60 / Constants.TICK)
+-- How far out the ring is that a fleet arrives in, and how many places
+-- it has before another, wider one begins.
+Space.FLEET_RING, Space.FLEET_PLACES = 750, 6
+
+-- A ship that is turning for its warp calls its fleet to go with it.
+function Space.CallFleet(state: State.State, ball: State.Ball, expect: number)
+  local warp = ball.warp
+  if warp and warp.stage == "align" then
+    warp.gang, warp.called, warp.expect = ball.id, state.tick, expect
+  end
+end
+
+-- A ship joins the fleet warp another has called, in a place of the
+-- ring ('place': 1 for the first to join, and on). False if there is
+-- none to join, or the ship cannot warp there.
+function Space.JoinWarp(state: State.State, ball: State.Ball, lead: State.Ball, place: number): boolean
+  local going = lead.warp
+  if going == nil or going.gang ~= lead.id or going.stage ~= "align" or ball.vitals.scrambled or ball.grid ~= lead.grid then
+    return false
+  end
+  local body = Space.Body(state, going.target) or Space.Marked(state, going.target)
+  if body == nil then
+    return false
+  end
+  -- (the ring lies across the line from the body to where the caller arrives)
+  local ux, uy, uz = unit(going.tx - body.x, going.ty - body.y, going.tz - body.z)
+  if ux == 0 and uy == 0 and uz == 0 then
+    ux = 1
+  end
+  local px, py, pz
+  if math.abs(uy) < 0.99 then
+    px, py, pz = unit(-uy * ux, 1 - uy * uy, -uy * uz)
+  else
+    px, py, pz = unit(1 - ux * ux, -ux * uy, -ux * uz)
+  end
+  local qx, qy, qz = uy * pz - uz * py, uz * px - ux * pz, ux * py - uy * px
+  local ring = (place - 1) // Space.FLEET_PLACES
+  local angle = 2 * math.pi * ((place - 1) % Space.FLEET_PLACES) / Space.FLEET_PLACES + ring * 0.5
+  local out = Space.FLEET_RING * (1 + ring) + ball.radius + lead.radius
+  local x = going.tx + out * (math.cos(angle) * px + math.sin(angle) * qx)
+  local y = going.ty + out * (math.cos(angle) * py + math.sin(angle) * qy)
+  local z = going.tz + out * (math.cos(angle) * pz + math.sin(angle) * qz)
+  if (x - ball.x) ^ 2 + (y - ball.y) ^ 2 + (z - ball.z) ^ 2 < Constants.WARP_MIN_DISTANCE ^ 2 then
+    return false
+  end
+  ball.intent = nil
+  setMode(ball, "align", 0, 0)
+  ball.dx, ball.dy, ball.dz = unit(x - ball.x, y - ball.y, z - ball.z)
+  ball.warp = {
+    stage = "align", target = going.target, tx = x, ty = y, tz = z,
+    startTick = 0, fx = 0, fy = 0, fz = 0, ux = 0, uy = 0, uz = 0, gang = lead.id,
+  }
+  return true
+end
+
+-- Whether a ship turning for its warp is pointed the right way and
+-- moving fast enough to go.
+local function aligned(ball: State.Ball): boolean
+  local speed = math.sqrt(ball.vx ^ 2 + ball.vy ^ 2 + ball.vz ^ 2)
+  local along = ball.vx * ball.dx + ball.vy * ball.dy + ball.vz * ball.dz
+  return speed >= Constants.WARP_ALIGN_SPEED * ball.maxVelocity and along >= Constants.WARP_ALIGN_COS * speed
+end
+
+-- How the fleet warps stand this tick, by the ship that called each:
+-- whether it goes now, and the warp speed and the sublight speed of the
+-- slowest of those who go (what all of them warp at). Those who had
+-- turned to go with a fleet warp that has been called off stop; those
+-- left behind by one that has gone are on their own.
+type Gang = { go: boolean, warpSpeed: number, maxVelocity: number, ready: number }
+local function gangs(state: State.State): { [number]: Gang }
+  local found: { [number]: Gang } = {}
+  for _, id in state.ballIds do
+    local ball = state.balls[id]
+    local warp = ball.warp
+    if warp and warp.gang and warp.stage == "align" then
+      local lead = state.balls[warp.gang]
+      local theirs = if lead then lead.warp else nil
+      if theirs == nil or theirs.gang ~= warp.gang or lead.grid ~= ball.grid then
+        -- (called off, or the caller is gone)
+        if ball.id ~= warp.gang then
+          ball.warp = nil
+          setMode(ball, "stop", 0, 0)
+        else
+          warp.gang, warp.called, warp.expect = nil, nil, nil
+        end
+      elseif theirs.stage == "warp" then
+        -- (it went without this one)
+        warp.gang = nil
+      elseif aligned(ball) then
+        local gang = found[warp.gang]
+        if gang == nil then
+          gang = { go = false, warpSpeed = math.huge, maxVelocity = math.huge, ready = 0 }
+          found[warp.gang] = gang
+        end
+        gang.ready += 1
+        gang.warpSpeed = math.min(gang.warpSpeed, ball.warpSpeed)
+        gang.maxVelocity = math.min(gang.maxVelocity, ball.maxVelocity)
+      end
+    end
+  end
+  for id, gang in found do
+    local lead = state.balls[id]
+    local warp = lead.warp :: State.Warp
+    -- (the caller itself has to be ready. then: everybody, or time is up)
+    gang.go = aligned(lead) and (gang.ready >= 1 + (warp.expect or 0) or state.tick - (warp.called or 0) >= Space.FLEET_WAIT)
+  end
+  return found
+end
+
 -- ---------------------------------------------------------------------
 -- Commands
 
@@ -740,6 +860,7 @@ end
 -- Act on where ships are, and steer them for the coming second.
 function Space.Decide(state: State.State, events: { Event })
   local regrid = false
+  local fleets = gangs(state)
   for _, id in table.clone(state.ballIds) do
     local ball = state.balls[id]
     local warp = ball.warp
@@ -774,15 +895,17 @@ function Space.Decide(state: State.State, events: { Event })
 
     if warp and ball.warp == warp then
       -- Aligning: enter warp once moving the right way fast enough.
-      local speed = math.sqrt(ball.vx ^ 2 + ball.vy ^ 2 + ball.vz ^ 2)
-      local along = ball.vx * ball.dx + ball.vy * ball.dy + ball.vz * ball.dz
-      if speed >= Constants.WARP_ALIGN_SPEED * ball.maxVelocity and along >= Constants.WARP_ALIGN_COS * speed then
+      -- (one of a fleet's warp waits for the fleet, and goes at the
+      -- speed of its slowest)
+      local fleet = if warp.gang then fleets[warp.gang] else nil
+      if aligned(ball) and (warp.gang == nil or (fleet ~= nil and fleet.go)) then
         local ux, uy, uz, distance = unit(warp.tx - ball.x, warp.ty - ball.y, warp.tz - ball.z)
         warp.stage = "warp"
         warp.startTick = state.tick
         warp.fx, warp.fy, warp.fz = ball.x, ball.y, ball.z
         warp.ux, warp.uy, warp.uz = ux, uy, uz
-        warp.plan = Motion.PlanWarp(distance, ball.warpSpeed, ball.maxVelocity)
+        warp.plan = Motion.PlanWarp(distance, if fleet then fleet.warpSpeed else ball.warpSpeed,
+          if fleet then fleet.maxVelocity else ball.maxVelocity)
         ball.grid = 0
         ball.tvx, ball.tvy, ball.tvz = 0, 0, 0
         -- Locks and running modules do not survive entering warp (a

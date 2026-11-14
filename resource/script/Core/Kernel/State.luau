@@ -131,6 +131,14 @@ export type Warp = {
   uy: number,
   uz: number,
   plan: Motion.WarpPlan?,
+  -- A fleet's warp (Tactical/Fleet): 'gang' is the ship that called it
+  -- (its own id, on that ship), and those who go with it wait for one
+  -- another before they go, and go at one speed. On the ship that called
+  -- it: 'called' is the tick it did, and 'expect' how many are to go
+  -- with it.
+  gang: number?,
+  called: number?,
+  expect: number?,
 }
 
 export type Mode = "stop" | "goto" | "approach" | "orbit" | "keep" | "align"

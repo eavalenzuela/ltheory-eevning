@@ -1634,6 +1634,27 @@ function Debug.Pirate(kind: string, far: number?, round: number?): boolean
   return true
 end
 
+-- How a fleet's warp stands (the fleet panel's 'Fleet:warp', to what is
+-- selected): whether the pilot's ship is in one, forming up or under
+-- way; how many hired pilots it called to go with it; and how many of
+-- them are in it now, turned for it or in warp with the pilot.
+function Debug.FleetWarp(): (boolean, number, number)
+  local state = session.game.state
+  local me = state.balls[state.player.ship]
+  local warp = if me then me.warp else nil
+  if me == nil or warp == nil or warp.gang ~= me.id then
+    return false, 0, 0
+  end
+  local with = 0
+  for _, id in state.fleetIds do
+    local ball = state.balls[state.fleet[id].ship]
+    if ball and ball.warp and ball.warp.gang == me.id and ball.warp.stage == warp.stage then
+      with += 1
+    end
+  end
+  return true, warp.expect or 0, with
+end
+
 -- A cheat: every pirate on the pilot's grid is brought down to a share
 -- of all it has (shield first, then armour, then hull), as if it had
 -- been shot that far. How many there were.
