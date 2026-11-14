@@ -1395,25 +1395,30 @@ end
 
 -- Wormholes (Core/Tactical/Wormholes). A cheat, for one to go through
 -- without waiting for a day that has one: a wormhole in the system the
--- pilot is in, leading to uncharted space of a depth (1 to 3: 1 if not
--- said), of a size (1 to 3: a great one if not said), found already
--- unless 'hidden'. Returns its place and its name (0 and "" if none
--- could be opened).
+-- pilot is in, leading to uncharted space of a depth (1 to 5: 1 if not
+-- said; of the nearest depth there is, in a galaxy that has no system
+-- of that one), of a size (1 to 3: a great one if not said), found
+-- already unless 'hidden'. Returns its place and its name (0 and "" if
+-- none could be opened).
 function Debug.Wormhole(depth: number?, size: number?, hidden: boolean?): (number, string)
   local state = session.game.state
   local me = state.balls[state.player.ship]
   if me == nil then
     return 0, ""
   end
+  local to, least = 0, math.huge
   for id = Galaxy.Charted(state.galaxy) + 1, #state.galaxy.systems do
-    if state.galaxy.systems[id].depth == (depth or 1) and id ~= me.system then
-      local hole = Wormholes.Open(state, me.system, id, Rng.For(state.historySeed, state.tick, 59), session.game.events, size or 3,
-        not hidden)
-      local place = if hole then Space.Object(state, hole.a) else nil
-      return if place then place.id else 0, if place then place.name else ""
+    local off = math.abs((state.galaxy.systems[id].depth or 1) - (depth or 1))
+    if id ~= me.system and off < least then
+      to, least = id, off
     end
   end
-  return 0, ""
+  if to == 0 then
+    return 0, ""
+  end
+  local hole = Wormholes.Open(state, me.system, to, Rng.For(state.historySeed, state.tick, 59), session.game.events, size or 3, not hidden)
+  local place = if hole then Space.Object(state, hole.a) else nil
+  return if place then place.id else 0, if place then place.name else ""
 end
 
 -- The wormholes open in the system the pilot is in: how many, how many

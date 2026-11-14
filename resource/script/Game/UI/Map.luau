@@ -439,13 +439,14 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   if where.uncharted then
     Im.Heading("ON NO MAP", x + w / 2 - Im.HeadingWidth("ON NO MAP", 34) / 2, y + h / 2 - 70, 34, Im.TEXT)
     local lines = {
-      `{where.systemName} is in uncharted space, depth {where.depth} of 3.`,
+      `{where.systemName} is in uncharted space, depth {where.depth} of {where.depths}.`,
       "No gate leads here and no chart shows it: there is no route to plot.",
       "The way out is a wormhole. Open the scanner, scan until one is found, warp to it and go through.",
       "There is always one open, and the one you came by stays for most of a day.",
       -- (what the header's "depth" is, for whoever wonders)
-      "Depth is how far in a system lies, 1 to 3: the deeper, the worse the pirates, the more there is to find,",
-      "and the less often a wormhole leads straight back to the map.",
+      "Depth is how far in a system lies. A wormhole from the map comes out at the first or the second,",
+      "and one that leads on goes a step deeper at most. The deeper, the less often one leads straight back.",
+      "As far as the third, the deeper the worse the pirates and the more there is to find. Past it, not even pirates go.",
     }
     for index, text in lines do
       Im.Text(text, x + w / 2 - Im.TextWidth(text, 15) / 2, y + h / 2 - 28 + index * 24, 15, if index == 1 then Im.WARN else Im.DIM)

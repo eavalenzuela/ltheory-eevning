@@ -21,8 +21,12 @@
 --     there, and a new pilot's first system is as it was.)
 --   - A system of uncharted space has one of its own every day, which
 --     leads back to the map or on to another uncharted system: back
---     more often than not near the edge, deeper more often than not
---     far in.
+--     more often than not near the edge, and seldom from far in.
+--   - Depth is a ladder. A wormhole from the map comes out at the first
+--     depth, or now and then the second; one that leads on from a
+--     system leads to its own depth, a step deeper or a step back, and
+--     never further. So the fifth depth is four wormholes from the map
+--     at the least, and the way straight back (below) is one.
 --   - A wormhole is one of three sizes, and nothing bigger than its
 --     size gets through: a frigate or a destroyer through any, a
 --     cruiser or a battlecruiser through a broad or a great one, a
@@ -72,7 +76,13 @@ Wormholes.LIFE = { math.ceil(57600 / Constants.TICK), math.ceil(86400 / Constant
 Wormholes.CHANCE = { secure = 0.1, low = 0.2, lawless = 0.3 } :: { [string]: number }
 -- The chance that the one an uncharted system has each day leads back
 -- to the map, by the system's depth.
-Wormholes.OUT = { 0.6, 0.4, 0.25 }
+Wormholes.OUT = { 0.6, 0.45, 0.3, 0.2, 0.1 }
+-- The depth a wormhole from the map comes out at: how often the first,
+-- how often the second.
+Wormholes.ENTRY = { 0.8, 0.2 }
+-- Where one that leads on from an uncharted system leads: how often a
+-- step deeper, and how often to the same depth (the rest, a step back).
+Wormholes.DEEPER, Wormholes.LEVEL = 0.5, 0.3
 -- The sizes: how often a wormhole is of each, and what each is called.
 Wormholes.SIZES = { 0.3, 0.45, 0.25 }
 Wormholes.SIZE_NAMES = { "narrow", "broad", "great" }
@@ -272,21 +282,40 @@ function Wormholes.Close(state: State.State, hole: State.Wormhole, events: { Eve
   close(state, hole, events)
 end
 
--- A system of uncharted space, picked by a roll: any but 'but'. Nil if
--- the galaxy has none (or only that one).
-local function deep(state: State.State, rng: Rng.Rng, but: number): number?
-  local charted = Galaxy.Charted(state.galaxy)
-  local count = #state.galaxy.systems - charted
-  if count < 1 or (count == 1 and but == charted + 1) then
-    return nil
-  end
-  for _ = 1, 20 do
-    local pick = charted + 1 + Rng.Int(rng, count)
-    if pick ~= but then
-      return pick
+-- A system of uncharted space of a depth, picked by a roll: any but
+-- 'but'. With none of that depth (a small galaxy has not every depth),
+-- one of the nearest depth there is. Nil if the galaxy has none (or
+-- only that one).
+local function deep(state: State.State, rng: Rng.Rng, but: number, depth: number): number?
+  local systems = state.galaxy.systems
+  local found: { number } = {}
+  local least = math.huge
+  for id = Galaxy.Charted(state.galaxy) + 1, #systems do
+    if id ~= but then
+      local off = math.abs((systems[id].depth or 1) - depth)
+      if off < least then
+        found, least = { id }, off
+      elseif off == least then
+        table.insert(found, id)
+      end
     end
   end
-  return nil
+  return if #found > 0 then found[Rng.Int(rng, #found) + 1] else nil
+end
+
+-- The system of uncharted space a wormhole opening in a system leads
+-- to (Wormholes.Open is given it): for one of the map, one at the edge;
+-- for one of uncharted space, one a step deeper, level or a step back.
+-- Nil if there is nowhere.
+function Wormholes.Onward(state: State.State, from: number, rng: Rng.Rng): number?
+  local node = state.galaxy.systems[from]
+  if not node.uncharted then
+    return deep(state, rng, from, if Rng.Chance(rng, Wormholes.ENTRY[1]) then 1 else 2)
+  end
+  local depth = node.depth or 1
+  local roll = Rng.Next(rng)
+  local step = if roll < Wormholes.DEEPER then 1 elseif roll < Wormholes.DEEPER + Wormholes.LEVEL then 0 else -1
+  return deep(state, rng, from, math.clamp(depth + step, 1, #Galaxy.DEPTHS))
 end
 
 -- Once a tick. Wormholes out of time close. Then, in the system the
@@ -318,10 +347,10 @@ function Wormholes.Step(state: State.State, events: { Event })
     if node.uncharted then
       local depth = math.clamp(node.depth or 1, 1, #Wormholes.OUT)
       local out = Rng.Chance(rng, Wormholes.OUT[depth])
-      local to = if out then nil else deep(state, rng, system)
+      local to = if out then nil else Wormholes.Onward(state, system, rng)
       Wormholes.Open(state, system, to or (1 + Rng.Int(rng, charted)), rng, events)
     elseif not node.home and Rng.Chance(rng, Wormholes.CHANCE[Galaxy.Band(node.security)] or 0) then
-      local to = deep(state, rng, system)
+      local to = Wormholes.Onward(state, system, rng)
       if to then
         Wormholes.Open(state, system, to, rng, events)
       end

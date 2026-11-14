@@ -235,7 +235,7 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "Jumped" and event.ship == mine and event.wormhole then
     -- (through a wormhole: into uncharted space, or out of it)
     local node = session.game.state.galaxy.systems[event.to]
-    Session.Say(session, if node.uncharted then `Through the wormhole: {node.name}, on no map. Depth {node.depth or 1} of 3`
+    Session.Say(session, if node.uncharted then `Through the wormhole: {node.name}, on no map. Depth {node.depth or 1} of {#Galaxy.DEPTHS}`
       else `Through the wormhole: {node.name}, back on the map`)
   elseif kind == "WormholeClosed" and event.found and event.system == Core.Query.Player(session.game).system then
     Session.Say(session, `{event.name} has closed`)

@@ -1025,7 +1025,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       local standing = string.format("%s  -  %s  %.1f", whose, BANDS[band or "secure"], player.security)
       -- (off the map: nobody's, and how deep in it lies says what lives there)
       if player.uncharted then
-        standing = `ON NO MAP  -  DEPTH {player.depth} OF 3`
+        standing = `ON NO MAP  -  DEPTH {player.depth} OF {player.depths}`
       end
       Im.Text(standing, left + 24, top + 51, 13, if band == "secure" then SAFE elseif band == "low" then Im.WARN else HULL)
       -- (and whether pirates are massing here: Tactical/Surges)

@@ -119,7 +119,7 @@ suite:Case("a galaxy has as many systems again that are on no map, and its map i
   for id = 1, #plain.regions do
     t.eq(galaxy.regions[id], plain.regions[id])
   end
-  local depths = { 0, 0, 0 }
+  local depths = { 0, 0, 0, 0, 0 }
   local names: { [string]: boolean } = {}
   for id = 1, SYSTEMS do
     names[galaxy.systems[id].name] = true
@@ -133,12 +133,16 @@ suite:Case("a galaxy has as many systems again that are on no map, and its map i
     t.ok(not names[system.name], `{system.name} is the name of two systems`)
     names[system.name] = true
     local depth = system.depth :: number
-    t.ok(depth >= 1 and depth <= 3 and depth % 1 == 0)
+    t.ok(depth >= 1 and depth <= #Galaxy.DEPTHS and depth % 1 == 0)
     depths[depth] += 1
     -- (no gate leads there, from anywhere)
     t.eq(#Galaxy.Route(galaxy, 1, id), 0)
   end
-  t.ok(depths[1] > depths[2] and depths[2] > depths[3] and depths[3] >= 1, `depths: {depths[1]}, {depths[2]}, {depths[3]}`)
+  -- (five depths, every one of them somewhere, and the edge the commonest)
+  t.eq({ #Galaxy.DEPTHS, Galaxy.PIRATE_DEPTH }, { 5, 3 })
+  for depth = 1, 5 do
+    t.ok(depths[depth] >= 1 and depths[depth] <= depths[1], `depths: {table.concat(depths, ", ")}`)
+  end
   -- (it follows from the seed, and is done once)
   local again = Galaxy.Describe(1, SYSTEMS)
   Galaxy.Deepen(again)
@@ -161,6 +165,7 @@ end)
 suite:Case("a system of the map has a wormhole on some days, more often where order is thin: a signal, found by scanning", function(t)
   local game = inSpace()
   local state = game.state
+  local entries = { 0, 0 }
   local function days(system: number): number
     local ball = state.balls[state.player.ship]
     put(game, system, ball.x, ball.y, ball.z)
@@ -177,6 +182,10 @@ suite:Case("a system of the map has a wormhole on some days, more often where or
           local hole = state.wormholes[event.wormhole]
           t.eq({ hole.from, hole.a, hole.b } :: { any }, { system, event.site, 0 } :: { any })
           t.ok(state.galaxy.systems[hole.to].uncharted, "a wormhole of the map leads off it")
+          -- (to the edge of it: the first depth, or now and then the second)
+          local into = state.galaxy.systems[hole.to].depth :: number
+          t.ok(into <= 2, `a wormhole of the map led to depth {into}`)
+          entries[into] += 1
           t.ok(hole.closes - hole.opened >= Wormholes.LIFE[1] and hole.closes - hole.opened <= Wormholes.LIFE[2])
           t.ok(hole.size >= 1 and hole.size <= 3)
         end
@@ -192,6 +201,7 @@ suite:Case("a system of the map has a wormhole on some days, more often where or
   print(`     wormholes: on {safe} days of 300 where order is kept, and {wild} where it is not`)
   -- (and never at a homeworld)
   t.eq({ state.galaxy.systems[1].home, days(1) } :: { any }, { true, 0 } :: { any })
+  t.ok(entries[1] > 2 * entries[2] and entries[2] >= 5, `{entries[1]} came out at the first depth and {entries[2]} at the second`)
 
   -- One that is there: not on the overview, a signal on the scanner,
   -- found in a scan or two, and then a place to warp to.
@@ -270,7 +280,7 @@ suite:Case("a ship goes through a wormhole and comes out beside its far end, whi
     Wormholes.At(state, hole.b) == hole, Wormholes.Beyond(hole, hole.b) } :: { any }, { true, true, true, 1 } :: { any })
   -- Uncharted space: no station, no gate, nobody's, and the pilot is in it.
   local player = Core.Query.Player(game)
-  t.eq({ player.system, player.uncharted, player.depth } :: { any }, { deep, true, 2 } :: { any })
+  t.eq({ player.system, player.uncharted, player.depth, player.depths } :: { any }, { deep, true, 2, 5 } :: { any })
   for _, entry in Core.Query.Overview(game) do
     t.ok(entry.kind ~= "station" and entry.kind ~= "gate", `{entry.name} is in uncharted space`)
   end
@@ -385,7 +395,9 @@ suite:Case("always a way out: uncharted space the pilot is in is never left with
   local game = inSpace()
   local state = game.state
   local charted = Galaxy.Charted(state.galaxy)
-  for depth = 1, 3 do
+  local taken: { [number]: number } = {}
+  local led = 0
+  for depth = 1, 5 do
     local deep = ofDepth(game, depth)
     local hole = opened(game, 1, deep, 1)
     through(t, game, hole.a)
@@ -408,11 +420,18 @@ suite:Case("always a way out: uncharted space the pilot is in is never left with
           out += if opened.to <= charted then 1 else 0
           deeper += if opened.to > charted then 1 else 0
           t.ok(opened.to ~= deep, "a wormhole leads to where it is")
+          -- (a ladder: one that leads on goes a step deeper, level or a step back, and no further)
+          local onward = state.galaxy.systems[opened.to].depth
+          if onward then
+            t.ok(math.abs(onward - depth) <= 1, `a wormhole at depth {depth} led to depth {onward}`)
+            taken[onward - depth] = (taken[onward - depth] or 0) + 1
+          end
         end
       end
     end
     t.ok(least >= 1, `uncharted space was left with {least} wormholes open`)
-    t.ok(out >= 1 and out + deeper >= 9, `{out} led out and {deeper} deeper in ten days at depth {depth}`)
+    t.ok(out + deeper >= 9, `{out} led out and {deeper} on in ten days at depth {depth}`)
+    led += out
     -- With every one of them closed under the pilot, another opens at
     -- once: a great one, that leads back to the map.
     for _, open in Wormholes.In(state, deep) do
@@ -432,6 +451,10 @@ suite:Case("always a way out: uncharted space the pilot is in is never left with
     t.ok(home.to <= charted and not state.galaxy.systems[home.to].uncharted, "the way out led further in")
     put(game, 1, 4e9, 0, 0)
   end
+  -- (over fifty days at the five depths: some led straight out, and of
+  -- those that led on, every kind of step was taken)
+  t.ok(led >= 10 and (taken[1] or 0) >= 5 and (taken[0] or 0) >= 3 and (taken[-1] or 0) >= 2,
+    `{led} out, {taken[1] or 0} deeper, {taken[0] or 0} level, {taken[-1] or 0} back`)
   -- (and a system of the map is not owed one: with whatever it had
   -- today closed, it has none)
   steps(game, 3)
@@ -502,6 +525,30 @@ suite:Case("what lives in uncharted space is worse the deeper in, and there is m
     end
     t.ok(count >= 3, `{count} pirates came to a belt at depth {depth}`)
     t.ok(worst >= (if depth == 1 then 3 else 4), `the worst of a pack at depth {depth} was of rank {worst}`)
+  end
+  -- Past the third depth not even pirates live: nobody comes to a belt
+  -- however long a ship sits there, there is no den and no tower of
+  -- theirs, and there is no more to find than at the third.
+  for depth = 4, 5 do
+    local game = inSpace(depth, true)
+    local state = game.state
+    local deep = ofDepth(game, depth)
+    local belt: System.Object? = nil
+    for _, object in Space.Describe(state, deep).objects do
+      if object.kind == "belt" and belt == nil then
+        belt = object
+      end
+    end
+    local at = assert(belt, "the system has no belt")
+    put(game, deep, at.x + 500, at.y, at.z)
+    steps(game, 900)
+    t.eq({ #state.pilotIds, #state.keepIds }, { 0, 0 })
+    local own = 0
+    for _, site in Sites.In(state, deep) do
+      t.ok(site.kind ~= "combat" and site.kind ~= "keep", `a {site.kind} site at depth {depth}`)
+      own += if site.kind == "wormhole" then 0 else 1
+    end
+    t.eq(own, Sites.COUNT.lawless + Galaxy.PIRATE_DEPTH)
   end
   -- (the packs of each depth, as they are written: nothing below a
   -- cruiser leads one past the edge, and the deepest are led by a

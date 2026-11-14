@@ -43,8 +43,10 @@ export type SystemNode = {
   constellation: number,
   -- A system of uncharted space (Galaxy.Deepen): no gate leads to it and
   -- it is on no map. It is come to through a wormhole, and left by
-  -- one. 'depth' is how far in it lies, 1 to 3: what lives there is
-  -- worse the deeper. Nil and nil for a system of the map.
+  -- one. 'depth' is how far in it lies, 1 to 5: what lives there is
+  -- worse the deeper, as far as the third, and past that not even
+  -- pirates live (Galaxy.PIRATE_DEPTH). Nil and nil for a system of
+  -- the map.
   uncharted: boolean?,
   depth: number?,
 }
@@ -895,11 +897,17 @@ end
 -- They come after the systems of the map, by id, and nothing of the
 -- map is changed by their being there: each has a place of its own (to
 -- be told apart by, and for nothing else), no neighbours, no owner and
--- no order kept, a survey mark for a name, and a depth, 1 to 3: half of
--- them are at the first, a third at the second and the rest at the
--- third. They follow from the galaxy's seed alone. Done once: a galaxy
--- that has its uncharted space is left as it is.
-Galaxy.DEPTHS = { 0.5, 0.35, 0.15 }
+-- no order kept, a survey mark for a name, and a depth, 1 to 5: fewer
+-- of them the deeper (the shares below, which are first figures). They
+-- follow from the galaxy's seed alone. Done once: a galaxy that has
+-- its uncharted space is left as it is.
+--
+-- The depths (the project owner's, 2026-11-14: "add 2 more levels, 4
+-- and 5, which not even pirates inhabit. We'll have a faction that
+-- dwells there"): pirates live as far in as the third, and the fourth
+-- and the fifth are nobody's until whoever dwells there is written.
+Galaxy.DEPTHS = { 0.34, 0.26, 0.2, 0.12, 0.08 }
+Galaxy.PIRATE_DEPTH = 3
 function Galaxy.Deepen(galaxy: Galaxy)
   if galaxy.charted then
     return

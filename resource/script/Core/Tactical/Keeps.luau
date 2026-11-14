@@ -162,6 +162,10 @@ function Keeps.Settle(state: State.State, system: number, events: { Event })
   if Galaxy.Band(state.galaxy.systems[system].security) ~= "lawless" then
     return
   end
+  -- (nor past the depth of uncharted space that pirates live at)
+  if (state.galaxy.systems[system].depth or 0) > Galaxy.PIRATE_DEPTH then
+    return
+  end
   local moons: { System.Object } = {}
   for _, object in Space.Describe(state, system).objects do
     local deposit = if object.kind == "moon" then Starbases.Deposit(state, object.id) else nil

@@ -123,7 +123,10 @@ suite:Case("where nobody keeps order pirates hold every moon with the rarest und
     local before = #state.keepIds
     Core.Step(game)
     local here = #state.keepIds - before
-    if band == "lawless" then
+    if (node.depth or 0) > Galaxy.PIRATE_DEPTH then
+      -- (past the third depth of uncharted space not even pirates live)
+      t.eq(here, 0, `a keep where no pirate lives, in system {id}`)
+    elseif band == "lawless" then
       lawless += 1
       t.eq(here, #rare(game, id), `system {id}`)
       held += here

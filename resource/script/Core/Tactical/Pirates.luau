@@ -208,7 +208,8 @@ Pirates.PACKS = PACKS
 -- in the system lies: at the edge what lawless space brings, and
 -- further in nothing smaller than a cruiser leads a pack. With how
 -- many times as likely each of them is to be a veteran or a captain.
--- (First figures.)
+-- (First figures.) As far in as pirates live, which is the third depth
+-- (Galaxy.PIRATE_DEPTH): past it nobody comes to anything, yet.
 local DEEP: { { { any } } } = {
   PACKS.lawless,
   { { 0.4, { "marauder", "mender", "jackal", "raider" } }, { 0.35, { "marauder", "marauder", "mender" } },
@@ -376,6 +377,10 @@ end
 local function populate(state: State.State, me: State.Ball, away: boolean, events: { Event })
   local site = Space.Object(state, me.grid)
   if site == nil then
+    return
+  end
+  -- (past the depth pirates live at there are none: Describe/Galaxy)
+  if (state.galaxy.systems[me.system].depth or 0) > Galaxy.PIRATE_DEPTH then
     return
   end
   -- (where pirates are massing, the system is a kind of space worse

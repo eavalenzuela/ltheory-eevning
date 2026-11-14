@@ -51,7 +51,9 @@ Sites.COUNT = { secure = 2, low = 3, lawless = 4 } :: { [string]: number }
 -- In uncharted space (Tactical/Wormholes) there is more to find the
 -- deeper in a system lies: so many more sites a step of its depth, and
 -- what is in a den's stores, a derelict or a vault is so many times as
--- much again a step.
+-- much again a step. As far in as pirates live (Galaxy.PIRATE_DEPTH):
+-- past that there is no more of it than at their deepest, and no den,
+-- until whoever dwells there is written to say what there is.
 Sites.DEEPER, Sites.RICHER = 1, 0.5
 -- Ticks between one look at a system's sites and the next: what has been
 -- cleaned out goes, and if there is room for another, one comes.
@@ -259,13 +261,27 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
   end
   local band = Galaxy.Band(state.galaxy.systems[system].security)
   -- (how far into uncharted space the system lies: 0 on the map)
-  local sunk = state.galaxy.systems[system].depth or 0
+  local lies = state.galaxy.systems[system].depth or 0
+  local sunk = math.min(lies, Galaxy.PIRATE_DEPTH)
   local roll, kind = Rng.Next(rng), "relic"
   for index, share in ODDS[band] do
     roll -= share
     if roll < 0 then
       kind = KINDS[index]
       break
+    end
+  end
+  -- (no den where not even pirates live: one of the other kinds, as
+  -- often as each is beside the others)
+  if kind == "combat" and lies > Galaxy.PIRATE_DEPTH then
+    local again = Rng.Next(rng) * (1 - ODDS[band][1])
+    kind = "relic"
+    for index = 2, #KINDS do
+      again -= ODDS[band][index]
+      if again < 0 then
+        kind = KINDS[index]
+        break
+      end
     end
   end
   local deep = depth or 0
@@ -575,7 +591,7 @@ function Sites.Step(state: State.State, events: { Event })
   end
   local band = Galaxy.Band(state.galaxy.systems[system].security)
   -- (and uncharted space has more of them, the deeper in)
-  local count = Sites.COUNT[band] + Sites.DEEPER * (state.galaxy.systems[system].depth or 0)
+  local count = Sites.COUNT[band] + Sites.DEEPER * math.min(state.galaxy.systems[system].depth or 0, Galaxy.PIRATE_DEPTH)
   -- (a system new to the pilot is found with all of its sites; after
   -- that they come one at a time)
   local wanted = if state.sitesSeen[system] == nil then count - left else math.min(1, count - left)

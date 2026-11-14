@@ -1340,10 +1340,12 @@ export type PlayerInfo = {
   owner: string,      -- the name of the faction whose system it is; "" if nobody's
   region: string,     -- the names of the region and the constellation it is in
   constellation: string,
-  -- Whether the system is of uncharted space (Tactical/Wormholes), and
-  -- how deep in it lies (1 to 3: 0 for a system of the map).
+  -- Whether the system is of uncharted space (Tactical/Wormholes), how
+  -- deep in it lies (0 for a system of the map), and how many depths
+  -- there are.
   uncharted: boolean,
   depth: number,
+  depths: number,
 }
 
 function Query.Player(game: Game): PlayerInfo
@@ -1357,6 +1359,7 @@ function Query.Player(game: Game): PlayerInfo
     region = state.galaxy.regions[state.galaxy.systems[system].region].name,
     constellation = state.galaxy.constellations[state.galaxy.systems[system].constellation].name,
     uncharted = state.galaxy.systems[system].uncharted == true, depth = state.galaxy.systems[system].depth or 0,
+    depths = #Galaxy.DEPTHS,
   }
 end
 
