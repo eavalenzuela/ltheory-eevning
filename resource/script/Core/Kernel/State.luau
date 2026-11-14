@@ -497,6 +497,25 @@ export type Wars = {
   spoken: { [number]: boolean }?,
 }
 
+-- The corporation's members (Assets/Members): pilots who have joined
+-- it and do as they see fit. A member has a trade ("miner", "fighter",
+-- "hauler" or "scout"), a people (whose hulls they fly), a hull of
+-- their own, the tax they will bear, credits of their own, what they
+-- have earned and paid in tax in all, the system they are working in
+-- and at what, the call they are answering (0: none), the days running
+-- their earnings have been thin, and what they have kept today.
+export type Member = { id: number, name: string, trade: string, people: string, hull: string, bears: number, wealth: number,
+  earned: number, paid: number, joined: number, system: number, doing: string, call: number, lean: number, day: number }
+-- Somebody who would join: who has applied (and waits until a tick), or
+-- is open to it at a station today.
+export type Applicant = { key: string, name: string, trade: string, people: string, hull: string, bears: number, until_: number }
+-- A call the pilot has posted: what for ("defend", "mine", "haul" or
+-- "scout"), which system, and the credits a day it pays each member who
+-- answers it.
+export type Call = { id: number, kind: string, system: number, reward: number, posted: number }
+export type Membership = { tax: number, members: { [number]: Member }, memberIds: { number }, applicants: { Applicant },
+  calls: { Call }, invited: { string }, invitedDay: number }
+
 -- A wormhole that is open (Tactical/Wormholes): a way between two
 -- systems that no gate joins, there for a day or so. 'a' is the place
 -- of the end it opened at (a place of its system's description, and a
@@ -682,6 +701,9 @@ export type State = {
   -- the hours a claim beacon of theirs has stood in one that is not
   -- theirs yet, and the hours one that is theirs has been without one.
   sovereignty: { progress: { [number]: number }, dark: { [number]: number } },
+  -- The corporation's members, those who would join, the calls posted
+  -- for them, and the tax they pay (Assets/Members).
+  membership: Membership,
   orders: { [number]: Order },
   orderIds: { number },
   -- The pilot's listings on stations' boards (Assets/Contracts); the

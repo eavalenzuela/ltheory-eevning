@@ -368,6 +368,14 @@ function Session.Notice(session: Session, event: Space.Event)
       elseif event.against == "player" then `The {named(event.by)} are besieging this system of yours: their lines are on the overview`
       elseif event.siege then `The {named(event.by)} are besieging this system, which the {named(event.against)} hold: the lines are on the overview`
       else `The {named(event.by)} are claiming this system: their blockade is on the overview`)
+  elseif kind == "MemberApplied" then
+    Session.Say(session, `{event.name}, a {event.trade}, has applied to join the corporation: Wallet, Corporation, Members`)
+  elseif kind == "MemberJoined" then
+    Session.Say(session, `{event.name} has joined the corporation, and is off to {session.game.state.galaxy.systems[event.system].name}`)
+  elseif kind == "MemberLeft" then
+    Session.Say(session, `{event.name} has left the corporation: {event.why}`)
+  elseif kind == "MemberUpgraded" then
+    Session.Say(session, `{event.name} has bought a {Types.Info(event.hull).name} out of their own earnings`)
   elseif kind == "LevyPaid" then
     Session.Say(session, `The levy is in: {event.amount} credits from {event.systems} {if event.systems == 1 then "system" else "systems"} of yours`)
   elseif kind == "ClaimLapsed" and event.by == "player" then

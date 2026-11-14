@@ -1137,6 +1137,25 @@ function Debug.BeaconAt(system: number): boolean
   return false
 end
 
+-- The corporation's members (Core/Assets/Members): how many there are,
+-- how many there is room for, how many have applied and wait, how many
+-- at the station docked at are open to joining, the tax (per cent),
+-- And how many calls are posted.
+function Debug.Members(): (number, number, number, number, number, number)
+  local info = Core.Query.Membership(session.game)
+  return #info.members, info.room, #info.applicants, #info.open, math.floor(info.tax * 100 + 0.5), #info.calls
+end
+
+-- The nth member: their name, trade, what they are doing, the system
+-- they are in by name, and what they have earned in all.
+function Debug.Member(n: number): (string, string, string, string, number)
+  local member = Core.Query.Membership(session.game).members[n]
+  if member == nil then
+    return "", "", "", "", 0
+  end
+  return member.name, member.trade, member.doing, member.system, member.earned
+end
+
 -- Sovereignty (Core/Assets/Sovereignty). A cheat, for a claim to look
 -- at without building a tower: a lit tower of the pilot's with a Claim
 -- Beacon online, at a moon of the nearest open system nobody holds (one

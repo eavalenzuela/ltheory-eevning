@@ -2482,12 +2482,131 @@ local corporationName = ""
 local corporationAmount = 0
 -- And which of the corporation's pages: its journal, its books by
 -- head with the towers on them, or its hangar at the station.
-local corporationPage: "journal" | "books" | "hangar" = "journal"
+local corporationPage: "journal" | "books" | "hangar" | "members" = "journal"
 
 -- The corporation's books: on the left what has come in and gone out
 -- under each head, and what that makes; on the right the pilot's
 -- towers, each with what it has burnt, brought up and lost since it
 -- was anchored, priced, and what a day of it costs and brings.
+-- The corporation's members (Core/Assets/Members): the tax, who they
+-- are and what each is doing, who would join, and the calls posted for
+-- them. A call is posted with the buttons at the foot: what for
+-- ("Call:kind" goes round the four), where ("Call:where" goes round the
+-- systems the corporation has a place in), and what it pays a day.
+local callKind, callWhere, callReward = 1, 1, 0
+-- (the tax as typed, per cent: -1 until the page has been looked at)
+local taxTyped = -1
+local CALL_KINDS = { "defend", "mine", "haul", "scout" }
+local function drawMembers(session: Session.Session, left: number, top: number)
+  local game = session.game
+  local info = Core.Query.Membership(game)
+  local line = top
+  local function percent(share: number): string
+    return `{math.floor(share * 100 + 0.5)}%`
+  end
+  Im.Heading(`MEMBERS  {#info.members} OF {info.room}`, left, line, 14, Im.DIM)
+  Im.Text("Tax", left + 250, line + 1, 13, Im.DIM)
+  if taxTyped < 0 then
+    taxTyped = math.floor(info.tax * 100 + 0.5)
+  end
+  taxTyped = math.max(0, math.floor(Im.Number("Members:tax", taxTyped, left + 284, line - 4, 50, 24)))
+  local setTax: State.Command = { kind = "SetTax", actor = 0, quantity = taxTyped }
+  if Im.Button("Set", left + 340, line - 4, 44, 24, taxTyped ~= math.floor(info.tax * 100 + 0.5) and (Session.CanDo(session, setTax)),
+    "Members:settax") then
+    Session.Do(session, setTax)
+  end
+  Im.Text("% of what each earns. Over what a member will bear, they leave.", left + 394, line + 1, 12, Im.DIM)
+  line += 26
+  if #info.members == 0 then
+    Im.Text("Nobody yet. Pilots apply as the corporation has more to offer, and some at stations are open to being asked.", left, line, 12,
+      Im.DIM)
+    line += 20
+  end
+  local rows = 6
+  local first = Im.Scroll("members", left - 4, line, 860, rows * 20, #info.members, rows)
+  for index = first + 1, math.min(#info.members, first + rows) do
+    local member = info.members[index]
+    Im.Text(shorten(member.name, 22), left, line, 13, Im.TEXT)
+    Im.Text(member.trade, left + 170, line, 13, Im.DIM)
+    Im.Text(shorten(member.hull, 20), left + 236, line, 13, Im.DIM)
+    Im.Text(shorten(`{member.doing} in {member.system}` .. (if member.called then " (a call)" else ""), 34), left + 390, line, 13,
+      if member.doing == "idle" then Im.WARN else Im.TEXT)
+    Im.TextRight(`paid {Format.Whole(member.paid)}`, left + 760, line, 12, Im.DIM)
+    if Im.Button("Expel", left + 770, line - 2, 56, 18, true, `Member:expel:{index}`) then
+      Session.Do(session, { kind = "ExpelMember", actor = 0, target = member.id })
+    end
+    line += 20
+  end
+  line = top + 26 + math.max(1, math.min(rows, math.max(1, #info.members))) * 20 + 8
+  -- Who would join: those who applied, and those open to it here.
+  Im.Heading("WOULD JOIN", left, line, 14, Im.DIM)
+  line += 22
+  local shown = 0
+  local function candidate(one: Core.ApplicantInfo, here: boolean, index: number)
+    Im.Text(shorten(one.name, 22), left, line, 13, Im.TEXT)
+    Im.Text(one.trade, left + 170, line, 13, Im.DIM)
+    Im.Text(shorten(one.hull, 20), left + 236, line, 13, Im.DIM)
+    Im.Text(`bears {percent(one.bears)}` .. (if here then ", is here" else ", has applied"), left + 390, line, 12,
+      if one.bears + 1e-9 < info.tax then Im.WARN else Im.DIM)
+    local command: State.Command = { kind = if here then "InviteMember" else "AcceptMember", actor = 0, what = one.key }
+    if Im.Button(if here then "Invite" else "Accept", left + 620, line - 2, 64, 18, (Session.CanDo(session, command)),
+      if here then `Member:invite:{index}` else `Member:accept:{index}`) then
+      Session.Do(session, command)
+    end
+    if not here and Im.Button("Decline", left + 690, line - 2, 64, 18, true, `Member:decline:{index}`) then
+      Session.Do(session, { kind = "DeclineMember", actor = 0, what = one.key })
+    end
+    line += 20
+    shown += 1
+  end
+  for index, one in info.applicants do
+    candidate(one, false, index)
+  end
+  for index, one in info.open do
+    candidate(one, true, index)
+  end
+  if shown == 0 then
+    Im.Text("Nobody is waiting, and nobody here is open to it today.", left, line, 12, Im.DIM)
+    line += 20
+  end
+  line += 8
+  -- The calls.
+  Im.Heading("CALLS", left, line, 14, Im.DIM)
+  Im.Text("Not orders: a member answers one that suits their trade and pays better than what they were doing.", left + 70, line + 1, 12,
+    Im.DIM)
+  line += 22
+  for index, call in info.calls do
+    Im.Text(`{call.kind} in {call.system}`, left, line, 13, Im.TEXT)
+    Im.Text(if call.reward > 0 then `{Format.Whole(call.reward)} cr a day each` else "no reward", left + 236, line, 13, Im.DIM)
+    Im.Text(`{call.answering} answering`, left + 420, line, 13, if call.answering > 0 then GOOD else Im.DIM)
+    if Im.Button("Call off", left + 620, line - 2, 64, 18, true, `Call:cancel:{index}`) then
+      Session.Do(session, { kind = "CancelCall", actor = 0, target = call.id })
+    end
+    line += 20
+  end
+  if #info.places > 0 then
+    callKind = math.clamp(callKind, 1, #CALL_KINDS)
+    callWhere = math.clamp(callWhere, 1, #info.places)
+    if Im.Button(CALL_KINDS[callKind], left, line, 80, 24, true, "Call:kind") then
+      callKind = callKind % #CALL_KINDS + 1
+    end
+    if Im.Button(shorten(info.places[callWhere].name, 16), left + 86, line, 140, 24, true, "Call:where") then
+      callWhere = callWhere % #info.places + 1
+    end
+    callReward = Im.Number("Call:reward", callReward, left + 236, line, 110, 24)
+    Im.Text("cr a day", left + 352, line + 5, 12, Im.DIM)
+    local post: State.Command = { kind = "PostCall", actor = 0, what = CALL_KINDS[callKind], target = info.places[callWhere].id,
+      quantity = math.max(0, math.floor(callReward)) }
+    local can, why = Session.CanDo(session, post)
+    if Im.Button("Post call", left + 420, line, 90, 24, can, "Call:post") then
+      Session.Do(session, post)
+    end
+    if not can and why then
+      Im.Text(shorten(why, 46), left + 520, line + 5, 12, Im.DIM)
+    end
+  end
+end
+
 local function drawBooks(corporation: Core.CorporationInfo, left: number, top: number)
   local line = top
   Im.Heading("BY HEAD", left, line, 14, Im.DIM)
@@ -2700,12 +2819,18 @@ local function drawWallet(session: Session.Session, game: Core.Game, x: number, 
     if Im.Toggle("Hangar", x + 592, top - 6, 90, 26, corporationPage == "hangar", "Corporation:hangar") then
       corporationPage = "hangar"
     end
+    if Im.Toggle("Members", x + 686, top - 6, 90, 26, corporationPage == "members", "Corporation:members") then
+      corporationPage = "members"
+    end
     line = top + 84
     if corporationPage == "books" then
       drawBooks(corporation, left, line)
       return
     elseif corporationPage == "hangar" then
       drawCorporateHangar(session, game, Core.Query.Player(game).docked, left, line)
+      return
+    elseif corporationPage == "members" then
+      drawMembers(session, left, line)
       return
     end
   else

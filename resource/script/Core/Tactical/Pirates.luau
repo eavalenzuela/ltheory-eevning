@@ -411,6 +411,15 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   end
   local last = state.spawned[site.id]
   local wait = (if away then RESPAWN * Pirates.AWAY else RESPAWN) / (if surging then Surges.SOONER else 1)
+  -- (a place is left alone longer where members of the pilot's
+  -- corporation hunt: half as long again for each who fights and is
+  -- working in the system. Assets/Members)
+  for _, id in state.membership.memberIds do
+    local member = state.membership.members[id]
+    if member.trade == "fighter" and member.system == me.system then
+      wait *= 1.5
+    end
+  end
   if (last and state.tick - last < wait) or pirateOnGrid(state, me.system, site.id) then
     return
   end

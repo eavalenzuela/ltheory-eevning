@@ -1,0 +1,61 @@
+# The corporation's members, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/members.txt
+#
+# A corporation is founded. Its Members page has nobody yet, and two
+# pilots at the station who are open to joining. The tax is set, one of
+# them is asked and joins, in a ship of their own, and is at their own
+# work within the hour: what they earn is theirs, and a share of it is
+# the corporation's. A call is posted for the home system and called off.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Credits(900000)
+until GameDebug.Press('Wallet')
+until GameDebug.Tab() == 'Wallet'
+frames 3
+until GameDebug.Press('Wallet:corporation')
+frames 3
+lua GameDebug.Type('Corporation:name', 'Haven Holdings')
+frames 3
+until GameDebug.Press('Corporation:found')
+until GameDebug.Corporation() == 'Haven Holdings'
+frames 3
+until GameDebug.Press('Corporation:members')
+frames 4
+lua assert(GameDebug.Members() == 0, 'a new corporation has no members')
+lua assert(select(2, GameDebug.Members()) >= 4, 'and room for a few')
+lua assert(select(4, GameDebug.Members()) == 2, 'two pilots at the station should be open to joining')
+lua assert(select(5, GameDebug.Members()) == 10, 'the tax begins at ten per cent')
+
+# The tax: eight per cent, which anybody will bear.
+lua GameDebug.Enter('Members:tax', 8)
+frames 3
+until GameDebug.Press('Members:settax')
+until select(5, GameDebug.Members()) == 8
+frames 3
+
+# One of them is asked, and joins.
+until GameDebug.Press('Member:invite:1')
+until GameDebug.Members() == 1
+frames 3
+lua assert(select(4, GameDebug.Members()) == 1, 'one who has joined is not open to joining')
+lua assert(GameDebug.Member(1) ~= '' and select(2, GameDebug.Member(1)) ~= '', 'the member should have a name and a trade')
+lua _G.account = select(2, GameDebug.Corporation())
+
+# An hour, and they have been at their own work.
+lua GameDebug.TimeScale(64)
+until select(5, GameDebug.Member(1)) > 0 or select(3, GameDebug.Member(1)) == 'idle'
+lua GameDebug.TimeScale(1)
+lua assert(select(3, GameDebug.Member(1)) ~= '', 'a member should be doing something, or idle')
+
+# A call, posted and called off.
+until GameDebug.Press('Call:post')
+until select(6, GameDebug.Members()) == 1
+frames 3
+lua assert(GameDebug.CanPress('Call:cancel:1'), 'the call should be listed, with its button')
+until GameDebug.Press('Call:cancel:1')
+until select(6, GameDebug.Members()) == 0
+
+echo members scenario passed
+quit

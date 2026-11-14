@@ -45,6 +45,7 @@ local Constants = require("@lt/Core/Data/Constants")
 local Corporation = require("@lt/Core/Assets/Corporation")
 local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Members = require("@lt/Core/Assets/Members")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local Starbases = require("@lt/Core/Assets/Starbases")
@@ -150,12 +151,14 @@ function Sovereignty.Step(state: State.State, events: { Event })
           local ball = state.balls[state.fleet[id].ship]
           posted += if ball and ball.system == operation.system then 1 else 0
         end
+        -- (and the corporation's members who fight, and are working there: Assets/Members)
+        local _, stands = Members.Watching(state, operation.system)
+        local force = posted * Sovereignty.POSTED + stands
         operation.relieved = true
-        if posted > 0 then
-          operation.defence += posted * Sovereignty.POSTED
-          operation.defended += posted * Sovereignty.POSTED
-          table.insert(events, { kind = "ReliefSent", system = operation.system, by = Wars.PILOT, against = operation.by,
-            force = posted * Sovereignty.POSTED })
+        if force > 0 then
+          operation.defence += force
+          operation.defended += force
+          table.insert(events, { kind = "ReliefSent", system = operation.system, by = Wars.PILOT, against = operation.by, force = force })
         end
       end
     end

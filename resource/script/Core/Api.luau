@@ -56,6 +56,7 @@ local Commerce = require("@lt/Core/Strategic/Commerce")
 local Wars = require("@lt/Core/Strategic/Wars")
 local Fronts = require("@lt/Core/Tactical/Fronts")
 local Sovereignty = require("@lt/Core/Assets/Sovereignty")
+local Members = require("@lt/Core/Assets/Members")
 local Wormholes = require("@lt/Core/Tactical/Wormholes")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
@@ -100,7 +101,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 78
+Core.SAVE_VERSION = 79
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -387,6 +388,12 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- Nimia; and their hulls are the Nimia's of the owner's list, each
   -- the one that stands where it stood (they build no attack
   -- battlecruiser and no dreadnought but the siege one).
+  -- 79: a corporation has members (Assets/Members). A save from before
+  -- has none, and nobody waiting.
+  [78] = function(state: any)
+    state.membership = state.membership or { tax = Members.TAX, members = {}, memberIds = {}, applicants = {}, calls = {}, invited = {},
+      invitedDay = -1 }
+  end,
   -- 78: the pilot can claim open space (Assets/Sovereignty). A save
   -- from before has no claim begun.
   [77] = function(state: any)
@@ -1076,6 +1083,7 @@ function Core.New(options: Options): Game
     trafficIds = {},
     trafficDue = 0,
     commerce = commerce, marketDrawn = {}, shocks = {}, wars = Wars.New(galaxy, options.wars == true), fronts = {}, frontIds = {}, sovereignty = { progress = {}, dark = {} },
+    membership = { tax = Members.TAX, members = {}, memberIds = {}, applicants = {}, calls = {}, invited = {}, invitedDay = -1 },
     nomads = {},
     trafficOn = options.traffic == true,
     queue = {},
@@ -1163,6 +1171,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Jumping.Validate(state, command)
   elseif command.kind == "RenameSystem" or command.kind == "DeclareWar" or command.kind == "ProposePeace" then
     return Sovereignty.Validate(state, command)
+  elseif Members.COMMANDS[command.kind] then
+    return Members.Validate(state, command)
   elseif FLEET_COMMANDS[command.kind] then
     return Fleet.Validate(state, command)
   elseif IMPLANT_COMMANDS[command.kind] then
@@ -1268,6 +1278,8 @@ function Core.Step(game: Game)
       Jumping.Apply(state, command, game.events)
     elseif ok and (command.kind == "RenameSystem" or command.kind == "DeclareWar" or command.kind == "ProposePeace") then
       Sovereignty.Apply(state, command, game.events)
+    elseif ok and Members.COMMANDS[command.kind] then
+      Members.Apply(state, command, game.events)
     elseif ok and FLEET_COMMANDS[command.kind] then
       Fleet.Apply(state, command, game.events)
     elseif ok and IMPLANT_COMMANDS[command.kind] then
@@ -1328,6 +1340,8 @@ function Core.Step(game: Game)
   Wars.Step(state.galaxy, state.wars, state.historySeed, state.tick, game.events, hostile)
   -- (and the pilot's own claims on it)
   Sovereignty.Step(state, game.events)
+  -- (and the corporation's members, at their own work)
+  Members.Step(state, game.events)
   -- (the lanes of the system the pilot is in are watched: its haulers
   -- carry what goes along them, Tactical/Traffic)
   do
@@ -2569,6 +2583,54 @@ function Query.Wars(game: Game): ({ WarInfo }, { OperationInfo }, number)
     end)
   end
   return feuds, found, state.wars.version
+end
+
+-- The corporation's members (Assets/Members), for whoever shows them:
+-- the tax, how many there are and how many there is room for; each
+-- member (who, of what trade, in what hull, where and at what, what
+-- they have earned and paid in all, and whether they are answering a
+-- call); those who have applied; those open to joining at the station
+-- the pilot is docked at; the calls posted, with how many answer each;
+-- and the systems a call can be for.
+export type MemberInfo = { id: number, name: string, trade: string, hull: string, system: string, doing: string, earned: number,
+  paid: number, bears: number, called: boolean }
+export type ApplicantInfo = { key: string, name: string, trade: string, hull: string, bears: number }
+export type CallInfo = { id: number, kind: string, system: string, reward: number, answering: number }
+export type MembershipInfo = { tax: number, room: number, members: { MemberInfo }, applicants: { ApplicantInfo }, open: { ApplicantInfo },
+  calls: { CallInfo }, places: { { id: number, name: string } } }
+function Query.Membership(game: Game): MembershipInfo
+  local state = game.state
+  local membership = state.membership
+  local function hullName(id: string): string
+    return if Ships.byId[id] then Ships.byId[id].name else id
+  end
+  local function waiting(list: { State.Applicant }): { ApplicantInfo }
+    local found: { ApplicantInfo } = {}
+    for _, one in list do
+      table.insert(found, { key = one.key, name = one.name, trade = one.trade, hull = hullName(one.hull), bears = one.bears })
+    end
+    return found
+  end
+  local info: MembershipInfo = { tax = membership.tax, room = Members.Room(state), members = {}, applicants = waiting(membership.applicants),
+    open = waiting(Members.Open(state, Query.Player(game).docked)), calls = {}, places = {} }
+  for _, member in Members.List(state) do
+    local node = state.galaxy.systems[member.system]
+    table.insert(info.members, { id = member.id, name = member.name, trade = member.trade, hull = hullName(member.hull),
+      system = if node then node.name else "?", doing = member.doing, earned = member.earned, paid = member.paid, bears = member.bears,
+      called = member.call ~= 0 })
+  end
+  for _, call in membership.calls do
+    local answering = 0
+    for _, member in Members.List(state) do
+      answering += if member.call == call.id then 1 else 0
+    end
+    table.insert(info.calls, { id = call.id, kind = call.kind, system = state.galaxy.systems[call.system].name, reward = call.reward,
+      answering = answering })
+  end
+  for _, system in Members.Places(state) do
+    table.insert(info.places, { id = system, name = state.galaxy.systems[system].name })
+  end
+  return info
 end
 
 -- How a system stands for the pilot's claim on it (Assets/
