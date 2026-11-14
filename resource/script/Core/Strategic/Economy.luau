@@ -49,6 +49,10 @@ export type Class = {
   -- multiplied by this. Ore is bulky for its price and electronics are
   -- not. 1 if absent.
   bulk: number?,
+  -- A station's market only (Assets/Market): what its par is where
+  -- every price is normal. Its par follows what the system it is in
+  -- makes of that (Strategic/Commerce).
+  base: number?,
 }
 
 export type Amount = { class: number, amount: number }
@@ -278,6 +282,23 @@ function Economy.Take(econ: Economy, node: number, class: number, quantity: numb
   stock[class] -= taken
   econ.lost[class] += taken
   return taken
+end
+
+-- Goods that leave a node's stock for a market that deals with it (a
+-- station's, with the system it is in: Assets/Market), and goods that
+-- come to it from one: no price is worked out, the market having paid
+-- its own. Draw returns how much was there to take.
+function Economy.Draw(econ: Economy, node: number, class: number, quantity: number): number
+  local stock = econ.nodes[node].stock
+  local taken = math.clamp(quantity, 0, stock[class])
+  stock[class] -= taken
+  econ.bought[class] += taken
+  return taken
+end
+
+function Economy.Give(econ: Economy, node: number, class: number, quantity: number)
+  econ.nodes[node].stock[class] += quantity
+  econ.sold[class] += quantity
 end
 
 -- Put goods into a node's stock; returns what they fetched.

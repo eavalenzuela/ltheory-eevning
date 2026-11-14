@@ -264,6 +264,16 @@ suite:Case("a thin market moves against an order: one hull more than a station w
   minutes(game, 300)
   t.eq(placed.quantity, 2, "one sells; the next waits for the wider world to take up the first")
   minutes(game, 3000)
+  -- (what is normal here has moved a little in two days, with what the
+  -- system has of what a hull is built of: Strategic/Commerce. An order
+  -- left over what the station now asks for the eleventh is brought
+  -- down to it, as its owner would.)
+  local now = Core.Query.Quote(game, home, "frigate.akashi")
+  if placed.quantity == 2 and now.sellAt < placed.price + 500 then
+    t.near(now.stock, 10, 0.5, "the wider world has not taken up the first")
+    order(t, game, { kind = "ModifyOrder", actor = 0, order = placed.id, price = math.floor(now.sellAt) - 500 })
+    minutes(game, 60)
+  end
   t.ok(placed.quantity < 2, "which it does, in time")
 end)
 

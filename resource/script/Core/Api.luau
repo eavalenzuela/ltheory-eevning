@@ -52,6 +52,7 @@ local Raids = require("@lt/Core/Tactical/Raids")
 local Surges = require("@lt/Core/Tactical/Surges")
 local Ships = require("@lt/Core/Data/Ships")
 local Sites = require("@lt/Core/Tactical/Sites")
+local Commerce = require("@lt/Core/Strategic/Commerce")
 local Wormholes = require("@lt/Core/Tactical/Wormholes")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
@@ -84,11 +85,15 @@ export type Options = {
   -- Other ships about (Tactical/Traffic); default false. The game turns
   -- it on. A test that is about one ship has the galaxy to itself.
   traffic: boolean?,
+  -- Game days the galaxy's economy has been going when the game begins
+  -- (Strategic/Commerce); default 0, which is every price the normal
+  -- one everywhere. The game's New game gives it Commerce.SETTLED.
+  settled: number?,
 }
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 74
+Core.SAVE_VERSION = 75
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -375,6 +380,20 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- Nimia; and their hulls are the Nimia's of the owner's list, each
   -- the one that stands where it stood (they build no attack
   -- battlecruiser and no dreadnought but the siege one).
+  -- 75: the galaxy has an economy, in the real bulk goods (Strategic/
+  -- Commerce), and every station's market deals with its system's. A
+  -- save from before is given its galaxy's economy as a new game has
+  -- it, and its markets keep what they had: what was normal at each is
+  -- what it is pegged from.
+  [74] = function(state: any)
+    state.commerce = state.commerce or Commerce.New(state.galaxy)
+    state.marketDrawn = state.marketDrawn or {}
+    for _, econ in state.markets do
+      for _, class in econ.classes do
+        class.base = class.base or class.par
+      end
+    end
+  end,
   -- 74: uncharted space, and the wormholes into it (Tactical/Wormholes).
   -- A galaxy from before has as many systems added to it that are on no
   -- map, after its own, and nothing of its own is changed.
@@ -947,6 +966,10 @@ function Core.New(options: Options): Game
   local galaxy = Galaxy.Describe(options.galaxySeed, options.systems or 3)
   -- (and as many systems again that are on no map: Tactical/Wormholes)
   Galaxy.Deepen(galaxy)
+  local commerce = Commerce.New(galaxy)
+  if (options.settled or 0) > 0 then
+    Commerce.Settle(commerce, galaxy, options.settled :: number)
+  end
   local state: State.State = {
     galaxySeed = options.galaxySeed,
     historySeed = options.historySeed,
@@ -1028,6 +1051,7 @@ function Core.New(options: Options): Game
     traffic = {},
     trafficIds = {},
     trafficDue = 0,
+    commerce = commerce, marketDrawn = {},
     nomads = {},
     trafficOn = options.traffic == true,
     queue = {},
@@ -1261,6 +1285,12 @@ function Core.Step(game: Game)
   Space.Decide(state, game.events)
   Aftermath.Step(state, game.events)
   Mining.Step(state)
+  -- (the galaxy's economy, every ten minutes: and what is normal at
+  -- each station follows it)
+  if state.tick % Commerce.STEP == 0 and state.tick > 0 then
+    Commerce.Advance(state.commerce, state.galaxy, state.surge.system, Commerce.STEP)
+    Market.Peg(state)
+  end
   Market.Step(state, game.events)
   Contracts.Step(state, game.events)
   Starbases.Step(state, game.events)
@@ -2425,6 +2455,52 @@ function Query.HaulTargets(game: Game, pilot: number, also: number?): { HaulTarg
     found[at] = tail[at - rest + 1]
   end
   return found
+end
+
+-- What a type goes for across the map (Strategic/Commerce): in the
+-- pilot's system, as a share of its normal price, and in every system
+-- within so many jumps that has a station to trade at, the cheapest
+-- first (and of those as cheap, the nearest). Nothing for a type that
+-- goes for the same everywhere (what is built of none of the goods).
+Core.PRICE_REACH = 10
+export type PriceAt = { system: number, name: string, jumps: number, level: number }
+function Query.Prices(game: Game, type: string, reach: number?): (number, { PriceAt })
+  local state = game.state
+  local here = Query.Player(game).system
+  local commerce = state.commerce
+  local found: { PriceAt } = {}
+  if commerce.nodes[here] == nil or (Commerce.Index(type) == nil and #Commerce.Bill(type) == 0) then
+    return 1, found
+  end
+  local jumps: { [number]: number } = { [here] = 0 }
+  local queue = { here }
+  local at = 1
+  while at <= #queue do
+    local system = queue[at]
+    at += 1
+    -- (a system with a station: where there are people enough to say so)
+    if system ~= here and commerce.nodes[system].population > 0.2 then
+      table.insert(found, { system = system, name = state.galaxy.systems[system].name, jumps = jumps[system],
+        level = Commerce.Level(commerce, system, type) })
+    end
+    if jumps[system] < (reach or Core.PRICE_REACH) then
+      for _, neighbor in state.galaxy.systems[system].neighbors do
+        if jumps[neighbor] == nil and commerce.nodes[neighbor] then
+          jumps[neighbor] = jumps[system] + 1
+          table.insert(queue, neighbor)
+        end
+      end
+    end
+  end
+  table.sort(found, function(a: PriceAt, b: PriceAt): boolean
+    if a.level ~= b.level then
+      return a.level < b.level
+    elseif a.jumps ~= b.jumps then
+      return a.jumps < b.jumps
+    end
+    return a.system < b.system
+  end)
+  return Commerce.Level(commerce, here, type), found
 end
 
 -- Where else a thing can be bought: the markets within a few jumps

@@ -8,6 +8,7 @@ local Core = require("@lt/Core/Api")
 local Fleet = require("@lt/Core/Tactical/Fleet")
 local Factions = require("@lt/Core/Data/Factions")
 local Format = require("@lt/Game/Format")
+local Commerce = require("@lt/Core/Strategic/Commerce")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
@@ -719,7 +720,9 @@ end
 -- Replace the running game with a new one, of so many systems (three,
 -- if nobody says).
 function Session.Restart(session: Session, galaxySeed: number, historySeed: number, systems: number?)
-  session.game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, systems = systems, traffic = true })
+  -- (a galaxy that has been going a while: its prices have come apart across the map)
+  session.game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, systems = systems, traffic = true,
+    settled = Commerce.SETTLED })
   session.selected = 0
   session.target, session.aimed, session.aimedAt = 0, {}, 0
   session.events = { { kind = "Loaded" } }

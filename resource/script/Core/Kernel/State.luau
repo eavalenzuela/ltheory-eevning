@@ -595,6 +595,13 @@ export type State = {
   -- station itself will sell and buy, as a one-node economy.
   markets: { [number]: Economy.Economy },
   marketIds: { number },
+  -- The galaxy's economy, in the real bulk goods (Strategic/Commerce):
+  -- a node a system of the map, by the system's id. And, for each
+  -- station's market, how much of each of those goods it has had of
+  -- its system so far, less what it has given it (by the goods' class
+  -- in the economy): what is new of that is settled with the system.
+  commerce: Economy.Economy,
+  marketDrawn: { [number]: { number } },
   orders: { [number]: Order },
   orderIds: { number },
   -- The pilot's listings on stations' boards (Assets/Contracts); the

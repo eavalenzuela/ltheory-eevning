@@ -34,9 +34,16 @@
 -- so whatever path the stock takes, coming back to where it started
 -- gains at most the two spreads.)
 --
--- (When the strategic layer arrives these markets will be derived from
--- the stocks of the system they are in, not from a fixed normal level.)
+-- The wider world is the system the station is in (Strategic/Commerce,
+-- the galaxy's economy in the real bulk goods). What is normal at a
+-- station is what its system makes of it: a thing goes for more where
+-- the system is short of it, or of what it is built of, and for less
+-- where there is a glut (Market.Peg). And what a station has of its
+-- system, or gives it, as its stock drifts back, is the system's own:
+-- a hold of ore sold at a station is in its system's stock within
+-- hours, and goes on from there along the gates.
 
+local Commerce = require("@lt/Core/Strategic/Commerce")
 local Economy = require("@lt/Core/Strategic/Economy")
 local Factions = require("@lt/Core/Data/Factions")
 local Items = require("@lt/Core/Assets/Items")
@@ -182,8 +189,8 @@ local function open(name: string, variety: string, faction: string): Economy.Eco
   local classes: { Economy.Class } = {}
   for _, id in Types.Ids() do
     local info = Types.Info(id)
-    table.insert(classes, { id = id, par = info.basePrice * (tastes[info.category] or 1) * (Market.Leaning(faction, id)), cover = 0,
-      need = 0 })
+    local par = info.basePrice * (tastes[info.category] or 1) * (Market.Leaning(faction, id))
+    table.insert(classes, { id = id, par = par, cover = 0, need = 0, base = par })
   end
   local econ = Economy.New(classes, {})
   local node = Economy.AddNode(econ, name, 0)
@@ -275,7 +282,46 @@ function Market.For(state: State.State, station: number): Economy.Economy
     at -= 1
   end
   table.insert(state.marketIds, at, station)
+  -- (and what is normal there is what its system makes of it, from the first look)
+  Market.Peg(state, station)
   return econ
+end
+
+-- Set what is normal at a station's market by what its system makes of
+-- it now (every type's par: its own, times what the type goes for in
+-- the system), and settle with the system what the market has had of
+-- it, or given it, since this was last done: of the goods the economy
+-- stocks. With no station named: every market there is.
+function Market.Peg(state: State.State, station: number?)
+  local commerce = state.commerce
+  local which: { number } = if station then { station } else state.marketIds
+  for _, id in which do
+    local econ = state.markets[id]
+    local system = Space.SystemOf(state, id)
+    if econ and commerce.nodes[system] then
+      for _, class in econ.classes do
+        class.par = (class.base or class.par) * Commerce.Level(commerce, system, class.id)
+      end
+      local drawn = state.marketDrawn[id]
+      if drawn == nil then
+        drawn = table.create(#Commerce.goods, 0)
+        state.marketDrawn[id] = drawn
+      end
+      for good, type in Commerce.goods do
+        local index = Market.Index(type)
+        if index then
+          local net = econ.anchorIn[index] - econ.anchorOut[index]
+          local owed = net - (drawn[good] or 0)
+          if owed > 0 then
+            Economy.Draw(commerce, system, good, owed)
+          elseif owed < 0 then
+            Economy.Give(commerce, system, good, -owed)
+          end
+          drawn[good] = net
+        end
+      end
+    end
+  end
 end
 
 export type Quote = {
@@ -341,7 +387,11 @@ function Market.Asks(state: State.State, station: number, type: string, quantity
   if units < 1 then
     return 0, 0
   end
-  return units, math.ceil(Economy.BuyCost(econ, 1, index, units) :: number)
+  -- (a market nobody has looked at yet is as its system would have it,
+  -- Market.Peg: what is normal there, times what the type goes for in
+  -- the system)
+  local level = if state.markets[station] then 1 else Commerce.Level(state.commerce, Space.SystemOf(state, station), type)
+  return units, math.ceil((Economy.BuyCost(econ, 1, index, units) :: number) * level)
 end
 
 -- How many of a type, 'most' at most, a station's market will sell now

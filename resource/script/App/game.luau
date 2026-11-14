@@ -1450,6 +1450,14 @@ function Debug.CloseWormholes(): number
   return #open
 end
 
+-- What a type goes for across the map (Core.Query.Prices): where the
+-- pilot is, as a share of its normal price; how many systems within
+-- reach have a market; and the lowest and the highest of those.
+function Debug.Prices(type: string): (number, number, number, number)
+  local here, list = Core.Query.Prices(session.game, type)
+  return here, #list, if list[1] then list[1].level else 1, if list[#list] then list[#list].level else 1
+end
+
 -- The last thing the pilot was told (the line under the ship's name), "" if nothing.
 function Debug.Said(): string
   return session.message

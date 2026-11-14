@@ -64,6 +64,9 @@ local marketPage = "trade"
 -- How many days of a price are shown.
 local HISTORY = 30
 
+-- What the thing chosen goes for across the map (Core.Query.Prices).
+local across = { key = "", age = 0, here = 1, list = {} :: { Core.PriceAt } }
+
 -- Where else the thing chosen is to be had (Core.Query.Sources): asked
 -- again when what is asked changes and a couple of times a second, not
 -- every frame.
@@ -1013,7 +1016,8 @@ local function drawMarket(session: Session.Session, game: Core.Game, player: Cor
   local level = high - low < high * 0.002
   if marketPage == "history" then
     Im.Heading(`PRICE HERE, {#series} {if #series == 1 then "DAY" else "DAYS"}`, dx, line, 14, Im.DIM)
-    local picked = Chart.Draw(series, dx, line + 24, 446, 170, 44, false)
+    -- (not so tall as it was: what the thing goes for across the map is under it)
+    local picked = Chart.Draw(series, dx, line + 24, 446, 116, 36, false)
     local day = series[picked or #series]
     -- (the day under the cursor, or today)
     local said = if picked and picked < #series then `day {day.day + 1} closed at {Format.Price(day.price)}` else `now {Format.Price(day.price)}`
@@ -1021,7 +1025,7 @@ local function drawMarket(session: Session.Session, game: Core.Game, player: Cor
       said ..= `, {Format.Whole(day.volume)} traded at {Format.Price(day.value / day.volume)}`
     end
     Im.TextRight(said, dx + 446, line + 2, 12, Im.TEXT)
-    line += 24 + 170 + 6 + 44 + 6
+    line += 24 + 116 + 6 + 36 + 6
     Im.Text(`day {series[1].day + 1}`, dx, line, 11, Im.DIM)
     Im.TextRight("today", dx + 446, line, 11, Im.DIM)
     -- (what the tallest bar stands for)
@@ -1037,9 +1041,42 @@ local function drawMarket(session: Session.Session, game: Core.Game, player: Cor
     Im.Text("Traded", dx, line, 13, Im.DIM)
     Im.Text(if units > 0 then `{Format.Whole(units)} units, at {Format.Price(worth / units)} on average` else "nothing, by you or yours", dx + 80, line,
       13, if units > 0 then Im.TEXT else Im.DIM)
-    line += 24
-    Im.Wrapped("The price is the station's going price, between what it asks and what it bids. It moves when somebody trades, and comes home when left alone.",
-      dx, line, 446, 12, Im.DIM)
+    line += 26
+    -- What it goes for across the map: here, and where it is cheapest
+    -- and dearest within reach (Core.Query.Prices). Asked again now
+    -- and then, not every frame.
+    local key = `{station}:{chosen}`
+    across.age += 1
+    if across.key ~= key or across.age > 120 then
+      across.key, across.age = key, 0
+      across.here, across.list = Core.Query.Prices(game, chosen)
+    end
+    local function percent(level: number): string
+      local off = math.floor((level - 1) * 100 + 0.5)
+      return if off == 0 then "normal" elseif off > 0 then `{off}% over` else `{-off}% under`
+    end
+    Im.Heading(`ACROSS THE MAP, {Core.PRICE_REACH} JUMPS`, dx, line, 14, Im.DIM)
+    Im.TextRight(`this system: {percent(across.here)}`, dx + 446, line + 2, 12, Im.TEXT)
+    line += 22
+    if #across.list == 0 then
+      Im.Text("It goes for the same everywhere: it is built of nothing that is traded in bulk.", dx, line, 12, Im.DIM)
+      line += 18
+    else
+      Im.Text("Cheapest", dx, line, 12, Im.DIM)
+      Im.Text("Dearest", dx + 228, line, 12, Im.DIM)
+      line += 16
+      for row = 1, math.min(3, #across.list) do
+        local cheap, dear = across.list[row], across.list[#across.list + 1 - row]
+        local function put(at: Core.PriceAt, x: number, tone: vector)
+          Im.Text(shorten(at.name, 16), x, line, 12, Im.TEXT)
+          Im.Text(percent(at.level), x + 112, line, 12, tone)
+          Im.Text(`{at.jumps} j`, x + 186, line, 12, Im.DIM)
+        end
+        put(cheap, dx, GOOD)
+        put(dear, dx + 228, Im.WARN)
+        line += 16
+      end
+    end
     return
   end
 
