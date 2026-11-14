@@ -150,6 +150,12 @@ suite:Case("a derelict's hold is sealed, and is hacked by a ship with a data ana
     state.skills.hacking = level
     t.eq(Hacking.Buffer(state), room, `at Hacking {level}`)
   end
+  -- And two more from a hull built for exploration (the Orun's Falchion), which a plain cruiser has not.
+  local seeker = Space.NewShip(state, "cruiser.falchion", "Seeker", "player", 0)
+  local cruiser = Space.NewShip(state, "cruiser.gladius", "Plain", "player", 0)
+  t.eq({ Hacking.Buffer(state, seeker.id), Hacking.Buffer(state, cruiser.id) } :: { any }, { 11, 9 } :: { any })
+  state.skills.hacking = 1
+  t.eq({ Hacking.Buffer(state, seeker.id), Hacking.Buffer(state, cruiser.id) } :: { any }, { 7, 5 } :: { any })
   -- The pirates' stores at a den are not sealed.
   for seed = 1, 20 do
     local other = Core.New({ galaxySeed = 1, historySeed = seed, peaceful = true })

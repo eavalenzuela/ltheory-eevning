@@ -137,6 +137,13 @@ suite:Case("scanning brings every signal nearer, a scan at a time, and a found s
   state.skills.astrometrics = 5
   t.near(Sites.Gain(state, "ore"), 1.5 / Sites.SCANS.ore, 1e-6)
   t.eq(Sites.Gain(state, "combat"), 1)
+  -- And so does a hull built for exploration: half as much again from the Orun's Falchion, and nothing from
+  -- the Gladius it is made of.
+  local seeker = Space.NewShip(state, "cruiser.falchion", "Seeker", "player", 0)
+  local cruiser = Space.NewShip(state, "cruiser.gladius", "Plain", "player", 0)
+  t.near(Sites.Gain(state, "ore", seeker.id), 1.5 * 1.5 / Sites.SCANS.ore, 1e-6)
+  t.near(Sites.Gain(state, "ore", cruiser.id), 1.5 / Sites.SCANS.ore, 1e-6)
+  t.eq(Sites.Gain(state, "combat", seeker.id), 1)
   -- Not from a station.
   local docked = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   t.eq({ Core.Validate(docked, { kind = "Scan", actor = docked.state.player.ship }) } :: { any }, { false, "docked" } :: { any })

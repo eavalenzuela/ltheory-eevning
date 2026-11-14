@@ -36,6 +36,7 @@ local Mining = require("@lt/Core/Tactical/Mining")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Rng = require("@lt/Core/Kernel/Rng")
+local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -71,12 +72,17 @@ local KINDS = { "combat", "ore", "gas", "relic", "data" }
 Sites.VAULT = "Data Vault"
 
 -- What a scan adds to a site's signal: all of it at once for a den.
-function Sites.Gain(state: State.State, kind: string): number
+-- ('ship' is the ship that scans: a hull built for exploration makes
+-- every scan worth half as much again, Ships.EXPLORER.)
+function Sites.Gain(state: State.State, kind: string, ship: number?): number
   local scans = Sites.SCANS[kind] or 1
   if scans <= 0 then
     return 1
   end
-  return (1 + 0.1 * math.max(0, state.skills.astrometrics or 0)) / scans + 1e-9
+  local scanner = state.ships[ship or 0]
+  local hull = if scanner then Ships.byId[scanner.type] else nil
+  local built = if hull and hull.explorer then Ships.EXPLORER.scan else 1
+  return (1 + 0.1 * math.max(0, state.skills.astrometrics or 0)) * built / scans + 1e-9
 end
 
 -- Probes. A scan probe is put out where the ship is and stays there
@@ -634,7 +640,7 @@ function Sites.Apply(state: State.State, command: State.Command, events: { Event
       local probes, near = Sites.Covered(state, site, ball)
       local reach = if near then 1 else Sites.ALONE[site.kind] or 1
       if site.strength < reach then
-        site.strength = math.min(reach, site.strength + Sites.Gain(state, site.kind) * (1 + probes))
+        site.strength = math.min(reach, site.strength + Sites.Gain(state, site.kind, ball.id) * (1 + probes))
       end
       if site.strength >= 1 then
         found += 1

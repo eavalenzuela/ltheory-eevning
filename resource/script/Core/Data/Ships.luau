@@ -79,11 +79,16 @@ export type ShipType = {
   base: string?,
   -- What it is beside the plain hull of its class, where a faction's
   -- line says (Data/Factions): "combat" for a combat hauler; that it has
-  -- a jump drive; that it is built to go unseen. (The last two are
-  -- marked and not yet made.)
+  -- a jump drive (Tactical/Jumping); that it is built to go unseen, and
+  -- a cloak neither slows it nor is broken from as far; that it has a
+  -- cloak of its own, built in (Tactical/Combat: nothing is fitted for
+  -- it, and it takes no slot and no capacitor); that it is built for
+  -- exploration (Ships.EXPLORER, below).
   role: string?,
   jump: boolean?,
   stealth: boolean?,
+  cloak: boolean?,
+  explorer: boolean?,
   -- Its turret hardpoints by the size of gun each is for, where they are
   -- not all alike: so many for small guns, for medium, for large and for
   -- XL; and its launcher hardpoints likewise. A weapon goes on a
@@ -390,6 +395,7 @@ for _, yard in Factions.list do
         end
         local hull = yardHull(yard, named.class, named.name, named.role, own, named.guns)
         hull.jump, hull.stealth, hull.rare = named.jump, named.stealth, named.rare
+        hull.cloak, hull.explorer = named.cloak, named.explorer
         hull.radius = named.radius or hull.radius
         -- (a hull written out by hand above, under the name the line has
         -- for it, is that hull: the Kethri's frigate)
@@ -602,6 +608,19 @@ table.insert(types, {
 -- (Data/Skills). Nobody sells one: its blueprint is invented from the
 -- plain hull's, and it is built of the plain hull and of what lawless
 -- space has (Data/Blueprints, Assets/Industry).
+-- What a tech 2 make is for beside that, where its faction's line says
+-- (Data/Factions): to go unseen, with a cloak of its own or with one
+-- fitted, or to explore. (Which hull is for what is the project owner's
+-- word, 2026-11-13; one that is for nothing in particular is this
+-- plain make and no more.)
+--
+-- An exploration hull: a cloaking device asks a quarter of its CPU and
+-- powergrid of it; its scanner makes every scan of a signal worth half
+-- as much again (Tactical/Sites); and its pilot has two more codes in
+-- the buffer of a hack begun from it (Tactical/Hacking). (The owner's
+-- word is "cheaper to fit cloaks and bonuses to probe scanning and
+-- hacking": the figures are first ones.)
+local EXPLORER = { cloak = 0.25, scan = 1.5, hack = 2 }
 local TECH2 = { price = 8, layers = 1.3, resonance = 0.75, fitting = 1.2, velocity = 1.05, lock = 1.2, scan = 1.15, cargo = 1.5 }
 
 local function tougher(resonance: { number }): { number }
@@ -653,6 +672,7 @@ for _, yard in Factions.list do
       local from = assert(base, `{yard.name}'s {entry.name} is the tech 2 make of a hull they do not build`)
       local hull = rebuiltHull(from, `{entry.class}.{string.lower((string.gsub(entry.name, "[^%a]", "")))}`, `{yard.name} {entry.name}`)
       hull.jump, hull.stealth = entry.jump or from.jump, entry.stealth or from.stealth
+      hull.cloak, hull.explorer = entry.cloak or from.cloak, entry.explorer or from.explorer
       table.insert(types, hull)
     end
   end
@@ -710,6 +730,8 @@ table.insert(types, {
 })
 
 local Ships = { list = types, byId = {} :: { [string]: ShipType } }
+-- What an exploration hull has over another (above, at the tech 2 makes).
+Ships.EXPLORER = EXPLORER
 
 -- The classes with a bay for fighters, and what each launches from it
 -- (the project owner's ladder: a carrier fighters, a supercarrier and

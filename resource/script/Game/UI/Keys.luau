@@ -36,6 +36,7 @@ Keys.ACTIONS = {
   { id = "dock", label = "Dock, or jump", key = "D" },
   { id = "lock", label = "Lock, or unlock", key = "L" },
   { id = "stop", label = "Stop the ship", key = "Space" },
+  { id = "cloak", label = "Hull's own cloak", key = "K" },
   { id = "next", label = "Next hostile ship", key = "Tab" },
   { id = "camera", label = "Camera follows", key = "C" },
   { id = "map", label = "Star map", key = "M" },

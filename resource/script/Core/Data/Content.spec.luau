@@ -523,6 +523,50 @@ suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in i
   t.ok(Ships.Improved("frigate.courier") == nil and Ships.Improved("industrial.hauler") == nil and Ships.Improved("capsule") == nil)
 end)
 
+suite:Case("what each tech 2 hull is for is the owner's word: to jump, to go unseen, to explore, or nothing beside being tech 2", function(t)
+  -- (hull, jump drive, built to go unseen, a cloak of its own, built for exploration)
+  local FOR: { { any } } = {
+    { "industrial.tarantula", nil, true, nil, nil }, { "freighter.sugarglider", true, nil, nil, nil },
+    { "capitalindustrial.rapa", true, nil, nil, nil },
+    { "destroyer.kanau", nil, nil, nil, nil }, { "industrial.akaboshi", nil, true, nil, nil },
+    { "frigate.skiver", nil, true, true, nil }, { "destroyer.kama", nil, nil, nil, nil },
+    { "cruiser.falchion", nil, nil, nil, true }, { "industrial.longhorn", nil, true, nil, nil },
+  }
+  local said: { [string]: boolean } = {}
+  for _, entry in FOR do
+    local hull = assert(Ships.byId[entry[1]], `no {entry[1]}`)
+    said[hull.id] = true
+    t.eq({ hull.tech, hull.jump, hull.stealth, hull.cloak, hull.explorer } :: { any }, { 2, entry[2], entry[3], entry[4], entry[5] } :: { any }, hull.id)
+    -- What it is for is on its sheet, where it is for anything.
+    local sheet = assert(Facts.Of(hull.id))
+    local built: { [string]: boolean } = {}
+    for _, section in sheet.sections do
+      if section.title == "Built with" then
+        for _, row in section.rows do
+          built[row.label] = true
+        end
+      end
+    end
+    t.eq({ built["Jump drive"], built["Stealth"], built["Cloak"], built["Scanner"] } :: { any }, { entry[2], entry[3], entry[4], entry[5] } :: { any }, hull.id)
+    t.eq(string.find(sheet.kind, "black ops", 1, true) ~= nil, entry[3] == true, sheet.kind)
+    t.eq(string.find(sheet.kind, "exploration", 1, true) ~= nil, entry[5] == true, sheet.kind)
+    -- (a hull that is to cloak with a device has the room for one, and one that explores for its analyzer too)
+    if entry[3] and not entry[4] then
+      t.eq({ Attributes.Check(hull, { "cloak.device" }) } :: { any }, { true } :: { any }, hull.id)
+    elseif entry[5] then
+      t.eq({ Attributes.Check(hull, { "cloak.device", "analyzer.data" }) } :: { any }, { true } :: { any }, hull.id)
+    end
+  end
+  -- Those are all the tech 2 hulls there are, and no plain hull is built for any of it but to jump.
+  for _, hull in Ships.list do
+    if hull.tech == 2 then
+      t.ok(said[hull.id], `{hull.id} is a tech 2 hull nobody has said the purpose of`)
+    else
+      t.eq({ hull.stealth, hull.cloak, hull.explorer } :: { any }, { nil, nil, nil } :: { any }, hull.id)
+    end
+  end
+end)
+
 suite:Case("every hull for sale can be built from ore, and has skills a pilot can train", function(t)
   for _, hull in Ships.list do
     if hull.class ~= "capsule" and not hull.restricted and hull.tech ~= 2 then

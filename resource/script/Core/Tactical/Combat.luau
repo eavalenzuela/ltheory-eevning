@@ -97,10 +97,40 @@ local function reachOf(state: State.State, ball: State.Ball, cloak: Modules.Modu
   return (cloak.cloak :: any).reach * (if hull and hull.stealth then Combat.STEALTH else 1)
 end
 
+-- A hull's own cloak (Data/Ships 'cloak': the hull has one built in).
+-- There is nothing to fit and nothing in a slot: the pilot switches it
+-- on with "Cloak" and off with "Uncloak", and it is on for as long as
+-- 'vitals.cloaked' says. It is the cloaking device in every way but
+-- these: it does not slow the ship, it asks no capacitor, and it goes
+-- off the moment it is told to. (First figures, those: the project
+-- owner's word is that the hull "has a built-in cloak".)
+Combat.OWN_CLOAK = "cloak.device"   -- the device a hull's own cloak is, for how near breaks it
+local function ownCloak(state: State.State, ball: State.Ball): boolean
+  local ship = state.ships[ball.id]
+  local hull = if ship then Ships.byId[ship.type] else nil
+  return hull ~= nil and hull.cloak == true
+end
+
+-- How near something has to come to break the cloak a ship is under,
+-- its own or a fitted one's: nil for a ship that is under none.
+local function hiddenWithin(state: State.State, ball: State.Ball): number?
+  if ball.vitals.cloaked then
+    return reachOf(state, ball, Modules.byId[Combat.OWN_CLOAK])
+  end
+  local cloak = cloakOf(state, ball)
+  return if cloak then reachOf(state, ball, Modules.byId[cloak.type]) else nil
+end
+
 -- Whether a ship is cloaked: nobody can target it.
 function Combat.Cloaked(state: State.State, id: number): boolean
   local ball = state.balls[id]
-  return ball ~= nil and cloakOf(state, ball) ~= nil
+  return ball ~= nil and (ball.vitals.cloaked == true or cloakOf(state, ball) ~= nil)
+end
+
+-- Whether a hull has a cloak of its own: its pilot can "Cloak".
+function Combat.HasCloak(state: State.State, id: number): boolean
+  local ball = state.balls[id]
+  return ball ~= nil and ownCloak(state, ball)
 end
 
 -- What is within 'reach' of a ship on its grid, if anything: another
@@ -129,6 +159,23 @@ local function crowding(state: State.State, ball: State.Ball, reach: number): st
     end
   end
   return nil
+end
+
+-- Whether a ship can go under a cloak now, one that anything within
+-- 'reach' breaks: not while anybody has it targeted, nor that near
+-- anything.
+local function mayCloak(state: State.State, ball: State.Ball, reach: number): (boolean, string?)
+  for _, id in state.ballIds do
+    local other = state.balls[id]
+    if id ~= ball.id and other.system == ball.system and other.grid == ball.grid and findLock(other, ball.id) then
+      return false, "somebody has you targeted"
+    end
+  end
+  local near = crowding(state, ball, reach)
+  if near then
+    return false, `too near {near} to cloak`
+  end
+  return true
 end
 
 local function lockable(state: State.State, ball: State.Ball, target: number): (boolean, string?)
@@ -178,8 +225,20 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
   end
   local kind = command.kind
   -- (a cloaked ship does nothing but fly, and switch its cloak off)
-  if (kind == "LockTarget" or kind == "ActivateModule") and cloakOf(state, ball) then
+  if (kind == "LockTarget" or kind == "ActivateModule") and Combat.Cloaked(state, ball.id) then
     return false, "cloaked"
+  end
+
+  -- A hull's own cloak, on and off.
+  if kind == "Cloak" then
+    if not ownCloak(state, ball) then
+      return false, "this hull has no cloak of its own"
+    elseif Combat.Cloaked(state, ball.id) then
+      return false, "cloaked already"
+    end
+    return mayCloak(state, ball, reachOf(state, ball, Modules.byId[Combat.OWN_CLOAK]))
+  elseif kind == "Uncloak" then
+    return ball.vitals.cloaked == true, "not under the hull's own cloak"
   end
 
   if kind == "LockTarget" then
@@ -204,17 +263,7 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
       return false, "already running"
     end
     if module.cloak then
-      for _, id in state.ballIds do
-        local other = state.balls[id]
-        if id ~= ball.id and other.system == ball.system and other.grid == ball.grid and findLock(other, ball.id) then
-          return false, "somebody has you targeted"
-        end
-      end
-      local near = crowding(state, ball, reachOf(state, ball, module))
-      if near then
-        return false, `too near {near} to cloak`
-      end
-      return true
+      return mayCloak(state, ball, reachOf(state, ball, module))
     end
     if module.weapon then
       local lock = findLock(ball, command.target or 0)
@@ -326,6 +375,17 @@ function Combat.Apply(state: State.State, command: State.Command, events: { Even
   elseif kind == "DeactivateModule" then
     local running = findRunning(ball, command.item :: number) :: State.Running
     running.stopping = true
+
+  elseif kind == "Cloak" then
+    -- Everything goes off, and every lock is let go.
+    ball.vitals.running, ball.vitals.locks = {}, {}
+    ball.vitals.cloaked = true
+    Vitals.Refresh(state, ball)
+    table.insert(events, { kind = "Cloaked", ball = ball.id })
+
+  elseif kind == "Uncloak" then
+    ball.vitals.cloaked = nil
+    table.insert(events, { kind = "Decloaked", ball = ball.id, by = "" })
   end
 end
 
@@ -782,12 +842,16 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
   local any = false
   for _, id in state.ballIds do
     local ball = state.balls[id]
-    local cloak = cloakOf(state, ball)
-    if cloak then
-      local near = crowding(state, ball, reachOf(state, ball, Modules.byId[cloak.type]))
+    local reach = hiddenWithin(state, ball)
+    if reach then
+      local near = crowding(state, ball, reach)
       if near then
-        local _, index = findRunning(ball, cloak.id)
-        stop(state, ball, index, `too near {near}`, events)
+        local cloak = cloakOf(state, ball)
+        if cloak then
+          local _, index = findRunning(ball, cloak.id)
+          stop(state, ball, index, `too near {near}`, events)
+        end
+        ball.vitals.cloaked = nil
         table.insert(events, { kind = "Decloaked", ball = id, by = near })
       else
         hidden[id] = true

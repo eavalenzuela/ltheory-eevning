@@ -1,8 +1,11 @@
 --!strict
--- The cloaking device (Data/Modules' 'cloak', Tactical/Combat).
+-- The cloaking device (Data/Modules' 'cloak', Tactical/Combat), and the
+-- cloak a hull has of its own (Data/Ships' 'cloak').
 
+local Attributes = require("@lt/Core/Attributes")
 local Core = require("@lt/Core/Api")
 local Items = require("@lt/Core/Assets/Items")
+local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
@@ -198,6 +201,134 @@ suite:Case("a hull built to go unseen keeps its speed under a cloak, and only wh
   -- And it cannot be switched on again that near, though it could at a kilometre and a half.
   local why = tostring(refused(game, { kind = "ActivateModule", actor = 0, item = cloak.id }))
   t.ok(string.find(why, "too near", 1, true) ~= nil, `within a kilometre: {why}`)
+end)
+
+-- The pilot in open space in a hull of a given type, with nothing fitted.
+local function flying(type: string): (Core.Game, State.Ball)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local ship = Space.NewShip(state, type, "Runner", "player", state.player.home)
+  state.player.ship = ship.id
+  assert(submit(game, { kind = "Undock", actor = 0 }))
+  local me = state.balls[ship.id]
+  me.x += 5e7
+  me.vx, me.vy, me.vz = 0, 0, 0
+  Space.AssignGrid(state, me)
+  assert(submit(game, { kind = "Stop", actor = 0 }))
+  return game, me
+end
+
+suite:Case("a hull with a cloak of its own cloaks with nothing fitted: at its full speed and for no capacitor, until it is told to stop", function(t)
+  -- The Orun's tech 2 frigate, the Skiver, is such a hull (the project owner's word); the Skinner it is made of is not.
+  t.eq({ Ships.byId["frigate.skiver"].cloak, Ships.byId["frigate.skiver"].stealth } :: { any }, { true, true } :: { any })
+  t.eq({ Ships.byId["frigate.skinner"].cloak, Ships.byId["frigate.skinner"].stealth } :: { any }, { nil, nil } :: { any })
+  local plain = flying("frigate.skinner")
+  t.eq({ Core.Query.OwnCloak(plain, plain.state.player.ship) } :: { any }, { false, false } :: { any })
+  t.eq(refused(plain, { kind = "Cloak", actor = 0 }), "this hull has no cloak of its own")
+
+  local game, me = flying("frigate.skiver")
+  local state = game.state
+  t.eq(#Items.Fitted(state, me.id), 0)
+  t.eq({ Core.Query.OwnCloak(game, me.id) } :: { any }, { true, false } :: { any })
+  t.eq(refused(game, { kind = "Uncloak", actor = 0 }), "not under the hull's own cloak")
+  local fast = me.maxVelocity
+  Core.TakeEvents(game)
+  t.ok((submit(game, { kind = "Cloak", actor = 0 })))
+  t.eq({ Core.Query.Cloaked(game, me.id), me.maxVelocity } :: { any }, { true, fast } :: { any })
+  t.eq({ Core.Query.OwnCloak(game, me.id) } :: { any }, { true, true } :: { any })
+  local told = false
+  for _, event in Core.TakeEvents(game) do
+    told = told or (event.kind == "Cloaked" and event.ball == me.id)
+  end
+  t.ok(told, "nobody said the cloak was on")
+  t.eq(refused(game, { kind = "Cloak", actor = 0 }), "cloaked already")
+  -- Nothing is locked from under it, as from under any cloak.
+  local trader = Space.NewShip(state, "industrial.hauler", "Trader", "civilian", 0)
+  local other = Space.Launch(state, trader, me.system, me.x + 9000, me.y, me.z)
+  t.eq(refused(game, { kind = "LockTarget", actor = 0, target = other.id }), "cloaked")
+  t.eq({ Core.Validate(game, { kind = "LockTarget", actor = other.id, target = me.id }) } :: { any }, { false, "no such target" } :: { any })
+  -- It asks no capacitor: with none at all it stays on.
+  me.vitals.capacitor = 0
+  steps(game, 30)
+  t.ok(Core.Query.Cloaked(game, me.id), "the hull's own cloak went off for want of capacitor")
+  -- Told to stop, it is off at once, and says so.
+  t.ok((submit(game, { kind = "Uncloak", actor = 0 })))
+  t.eq(Core.Query.Cloaked(game, me.id), false)
+  local off = false
+  for _, event in Core.TakeEvents(game) do
+    off = off or (event.kind == "Decloaked" and event.ball == me.id and event.by == "")
+  end
+  t.ok(off, "nobody said the cloak was off")
+  t.eq(refused(game, { kind = "LockTarget", actor = 0, target = other.id }), "(accepted)")
+end)
+
+suite:Case("a hull's own cloak is a cloak like another: not while targeted nor near anything, broken by what comes near, kept through a warp and a save", function(t)
+  local game, me = flying("frigate.skiver")
+  local state = game.state
+  local trader = Space.NewShip(state, "industrial.hauler", "Trader", "civilian", 0)
+  local other = Space.Launch(state, trader, me.system, me.x + 9000, me.y, me.z)
+  -- Not while anybody has it targeted.
+  table.insert(other.vitals.locks, { target = me.id, done = 0, locked = true })
+  t.eq(refused(game, { kind = "Cloak", actor = 0 }), "somebody has you targeted")
+  other.vitals.locks = {}
+  -- Not within a kilometre of anything (it is built to go unseen: half the two kilometres of a plain hull).
+  other.x = me.x + 600 + me.radius + other.radius
+  t.eq(refused(game, { kind = "Cloak", actor = 0 }), "too near Trader to cloak")
+  other.x = me.x + 1500 + me.radius + other.radius
+  t.ok((submit(game, { kind = "Cloak", actor = 0 })))
+  steps(game, 3)
+  t.eq(Core.Query.Cloaked(game, me.id), true)
+  -- What comes within the kilometre switches it off.
+  Core.TakeEvents(game)
+  other.x = me.x + 600 + me.radius + other.radius
+  steps(game, 2)
+  t.eq({ Core.Query.Cloaked(game, me.id), me.vitals.cloaked } :: { any }, { false, nil } :: { any })
+  local told = false
+  for _, event in Core.TakeEvents(game) do
+    told = told or (event.kind == "Decloaked" and event.ball == me.id and event.by == "Trader")
+  end
+  t.ok(told, "nobody said what switched the cloak off")
+  -- It lasts a warp, and is in the save as it is.
+  other.x = me.x + 9000
+  t.ok((submit(game, { kind = "Cloak", actor = 0 })))
+  t.ok((submit(game, { kind = "Bookmark", actor = 0 })))
+  local mark = Core.Query.Bookmarks(game)[1]
+  mark.x += 3e7
+  t.ok((submit(game, { kind = "WarpTo", actor = 0, target = mark.id })))
+  local warped = false
+  for _ = 1, 600 do
+    Core.Step(game)
+    warped = warped or (me.warp ~= nil and me.warp.stage == "warp")
+    if warped and me.warp == nil then
+      break
+    end
+  end
+  t.ok(warped and me.warp == nil, "the cloaked ship did not make its warp")
+  t.ok(Core.Query.Cloaked(game, me.id), "the hull's own cloak did not last the warp")
+  local data, length = Core.Save(game)
+  local loaded = Core.Load(data, length)
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  t.eq({ Core.Query.OwnCloak(loaded, loaded.state.player.ship) } :: { any }, { true, true } :: { any })
+end)
+
+suite:Case("a cloaking device asks a quarter as much of a hull built for exploration", function(t)
+  -- The Orun's tech 2 cruiser, the Falchion, is such a hull (the project owner's word); the Gladius it is made of is not.
+  local falchion, gladius = Ships.byId["cruiser.falchion"], Ships.byId["cruiser.gladius"]
+  t.eq({ falchion.explorer, gladius.explorer } :: { any }, { true, nil } :: { any })
+  local device = Modules.byId["cloak.device"]
+  t.eq({ Attributes.Needs(gladius, device) } :: { any }, { device.cpu, device.powergrid } :: { any })
+  t.eq({ Attributes.Needs(falchion, device) } :: { any }, { device.cpu * 0.25, device.powergrid * 0.25 } :: { any })
+  -- (and nothing else asks less of it)
+  local analyzer = Modules.byId["analyzer.data"]
+  t.eq({ Attributes.Needs(falchion, analyzer) } :: { any }, { analyzer.cpu, analyzer.powergrid } :: { any })
+  -- What the fitting screen counts is the same.
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local ship = Space.NewShip(state, "cruiser.falchion", "Seeker", "player", state.player.home)
+  Items.Equip(state, ship.id, "cloak.device", nil)
+  t.eq({ Core.Query.FittingUse(game, ship.id) } :: { any }, { device.cpu * 0.25, device.powergrid * 0.25 } :: { any })
+  -- It is a cloak like any other there: it slows the ship, which is not built to go unseen.
+  t.eq(falchion.stealth, nil)
 end)
 
 return suite

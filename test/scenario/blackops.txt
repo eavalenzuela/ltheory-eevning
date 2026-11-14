@@ -1,0 +1,54 @@
+# A hull with a cloak of its own, as its pilot sees it, in the game app
+# (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/blackops.txt
+#
+# The Orun's Skiver is boarded with nothing fitted for it: there is no
+# cloaking device in its rack. Its cloak is a button of the navigation
+# panel, and a key (K). At a belt the key puts it on: the ship is drawn
+# as the light bending round it, and nothing can be locked from inside
+# it. The button takes it off again, and the hull is back. (How near
+# anything may be is the Core's to say, and its specs': a hull built to
+# go unseen cloaks within sight of the station it has just left.)
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+# (with the sound on at no loudness: a cloak going on has a sound, which is then played without a noise)
+lua GameDebug.Sound(true, 0)
+lua assert(GameDebug.Fly('frigate.skiver'), 'there is no Skiver to board')
+frames 3
+lua assert(GameDebug.Hull() == 'frigate.skiver', 'the pilot is not in the Skiver')
+lua assert(GameDebug.Fitted('cloak.device') == 0, 'a hull with a cloak of its own was given a device')
+lua assert(GameDebug.KeyOf('cloak') == 'K', 'the cloak of a hull has no key')
+
+# In space its cloak is a button of the navigation panel.
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('Stop'))
+frames 30
+lua assert(GameDebug.WhyNot('Cloak') == 'it can be', 'a hull with a cloak of its own shows no button for it')
+lua assert(not GameDebug.Ghost(), 'a ship that is not cloaked is drawn as itself')
+
+# At a belt the key puts it on.
+lua assert(GameDebug.Select('belt'), 'no belt on the overview')
+lua GameDebug.Key('S')
+lua GameDebug.TimeScale(8)
+until GameDebug.InWarp()
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Order('Stop'))
+lua GameDebug.Key('K')
+until GameDebug.Ghost()
+frames 10
+lua assert(select(2, GameDebug.Ghost()) == 0, 'a cloaked ship should have nothing drawn on its hardpoints')
+lua assert(GameDebug.Select('asteroid'), 'no rock on the overview')
+lua assert(not GameDebug.Order('LockTarget', 'asteroid'), 'nothing is locked from inside a cloak')
+
+# The button takes it off again: the hull is back.
+until GameDebug.Press('Cloak')
+until not GameDebug.Ghost()
+lua assert(GameDebug.Order('LockTarget', 'asteroid'), 'out of its cloak the ship locks what it likes')
+
+echo blackops scenario passed
+quit

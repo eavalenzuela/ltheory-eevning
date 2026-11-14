@@ -1007,7 +1007,8 @@ end
 
 -- Which module carries out a kind of command.
 local ASSET_COMMANDS = { Fit = true, Unfit = true, LoadCharge = true, MoveItems = true }
-local COMBAT_COMMANDS = { LockTarget = true, UnlockTarget = true, ActivateModule = true, DeactivateModule = true }
+local COMBAT_COMMANDS = { LockTarget = true, UnlockTarget = true, ActivateModule = true, DeactivateModule = true,
+  Cloak = true, Uncloak = true }
 local AFTERMATH_COMMANDS = { Loot = true, Repair = true }
 local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true, StartResearch = true, CancelJob = true }
 local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true }
@@ -1401,10 +1402,11 @@ end
 -- CPU and powergrid a ship's fit uses.
 function Query.FittingUse(game: Game, ship: number): (number, number)
   local cpu, powergrid = 0, 0
+  local hull = Ships.byId[game.state.ships[ship].type]
   for _, item in Items.Fitted(game.state, ship) do
-    local module = Modules.byId[item.type]
-    cpu += module.cpu
-    powergrid += module.powergrid
+    local tf, mw = Attributes.Needs(hull, Modules.byId[item.type])
+    cpu += tf
+    powergrid += mw
   end
   return cpu, powergrid
 end
@@ -1427,6 +1429,14 @@ end
 -- Whether a ship is cloaked: nobody can target it.
 function Query.Cloaked(game: Game, ship: number): boolean
   return Combat.Cloaked(game.state, ship)
+end
+
+-- A hull's own cloak (one built in: Data/Ships 'cloak'): whether a
+-- ship in space has one, and whether it is on. (On with "Cloak", off
+-- with "Uncloak".)
+function Query.OwnCloak(game: Game, ship: number): (boolean, boolean)
+  local ball = game.state.balls[ship]
+  return Combat.HasCloak(game.state, ship), ball ~= nil and ball.vitals.cloaked == true
 end
 
 -- Whether a ship is in a cloud of gas (Tactical/Vapour): it is locked,

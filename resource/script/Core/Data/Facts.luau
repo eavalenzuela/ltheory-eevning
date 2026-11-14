@@ -192,7 +192,11 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
   local called = Ships.CLASS_NAMES[hull.class]
   local class = if called then called[1] else string.upper(string.sub(hull.class, 1, 1)) .. string.sub(hull.class, 2)
   -- (a hauler built to be shot at is called what it is)
-  local what = if hull.role == "combat" then "combat hauler" else string.lower(class)
+  -- (and so is one built to go unseen, and one built to explore)
+  local what = if hull.role == "combat" then "combat hauler"
+    elseif hull.stealth then `black ops {string.lower(class)}`
+    elseif hull.explorer then `exploration {string.lower(class)}`
+    else string.lower(class)
   sheet.kind = if faction then `{faction.name} {if hull.tech == 2 then "tech 2 " else ""}{what}` else class
   sheet.note = if hull.donor then `Made over from the {nameOf(hull.donor)}.`
     elseif hull.tech == 2 and hull.base then
@@ -200,14 +204,24 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
     elseif faction then faction.note
     else ""
   -- What it is built with that others of its class are not: a jump
-  -- drive (Tactical/Jumping), or to go unseen (Tactical/Combat).
-  if hull.jump or hull.stealth then
+  -- drive (Tactical/Jumping), to go unseen or a cloak of its own
+  -- (Tactical/Combat), or to explore (Ships.EXPLORER).
+  if hull.jump or hull.stealth or hull.cloak or hull.explorer then
     local built = section(sheet, "Built with")
     if hull.jump then
       row(built, "Jump drive", "reaches 20 light years without a gate, to a beacon, on fuel blocks")
     end
+    if hull.cloak then
+      row(built, "Cloak", "its own, built in: nothing to fit, no slot and no capacitor")
+    end
     if hull.stealth then
       row(built, "Stealth", "a cloak does not slow it, and is broken only from half as far")
+    end
+    if hull.explorer then
+      local has = Ships.EXPLORER
+      row(built, "Cloaking device", `fits for {whole(has.cloak * 100)}% of its CPU and powergrid`)
+      row(built, "Scanner", `every scan of a signal is worth {whole((has.scan - 1) * 100)}% more`)
+      row(built, "Hacking", `{has.hack} more codes in the buffer`)
     end
   end
   -- (and what it launches, if it has a bay for more than drones)

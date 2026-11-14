@@ -159,6 +159,14 @@ end
 local RIGS = { "small", "medium", "large" }
 local GUN_SIZES = { "small", "medium", "large", "XL" }
 
+-- What a module asks of a hull to be fitted to it: CPU, tf, and
+-- powergrid, MW. (What the module says, but for a cloaking device on a
+-- hull built for exploration, which asks only its share: Ships.EXPLORER.)
+function Attributes.Needs(hull: Ships.ShipType, module: Modules.ModuleType): (number, number)
+  local share = if module.cloak and hull.explorer then Ships.EXPLORER.cloak else 1
+  return module.cpu * share, module.powergrid * share
+end
+
 -- Whether a hull can carry these modules at once; if not, why not.
 function Attributes.Check(hull: Ships.ShipType, types: { string }, levels: Levels?): (boolean, string?)
   local slots = { high = 0, mid = 0, low = 0, rig = 0 }
@@ -174,8 +182,9 @@ function Attributes.Check(hull: Ships.ShipType, types: { string }, levels: Level
     if module.hardpoint ~= "" then
       hardpoints[module.hardpoint] += 1
     end
-    cpu += module.cpu
-    powergrid += module.powergrid
+    local tf, mw = Attributes.Needs(hull, module)
+    cpu += tf
+    powergrid += mw
     calibration += module.calibration or 0
     table.insert(fitted, { type = id, running = false })
   end

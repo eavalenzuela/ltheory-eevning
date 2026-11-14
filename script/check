@@ -72,6 +72,9 @@
 #   game-cloak  a cloak as its pilot sees it (test/scenario/cloak.txt): it
 #               will not run by a station, at a belt the ship is drawn
 #               as a ghost with nothing mounted, and off it is itself
+#   game-blackops  a hull with a cloak of its own (test/scenario/blackops.txt):
+#               the Orun's Skiver, with no device fitted, cloaks by its
+#               key and comes out of it by its button
 #   game-moon   a tower drilling its moon (test/scenario/moon.txt): a
 #               moon with something under it found, a tower and a drill
 #               anchored there, and an hour's worth in its hangar; then
@@ -278,6 +281,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/errand.txt
   step game-cloak 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/cloak.txt
+  step game-blackops 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
+    --script test/scenario/blackops.txt
   step game-moon 0 timeout 700 bin/launch game --no-present --fixed-step 60 --timeout 600 \
     --script test/scenario/moon.txt
   step game-orders 0 timeout 300 bin/launch game --no-present --fixed-step 60 --timeout 200 \

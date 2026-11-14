@@ -839,7 +839,8 @@ local function drawNavigation(session: Session.Session, ball: State.Ball, x: num
   end
   -- (and whether anybody can see the ship at all)
   if Core.Query.Cloaked(game, ball.id) then
-    Im.Text("CLOAKED", x + 400, y + 12, 13, Im.ACCENT)
+    -- (up against the buttons, and not under them)
+    Im.TextRight("CLOAKED", x + width - 104, y + 12, 13, Im.ACCENT)
   else
     -- (or only from close in: in a cloud of gas. Said over the panel, where there is room for it)
     local veiled, sight = Core.Query.Veiled(game, ball.id)
@@ -851,6 +852,15 @@ local function drawNavigation(session: Session.Session, ball: State.Ball, x: num
   local stop = Keys.Did("stop") and not inWarp
   if Im.Button("STOP", x + width - 92, y + 8, 80, 24, not inWarp) or stop then
     Session.Order(session, "Stop")
+  end
+  -- (and a hull with a cloak of its own has it here, on and off: there
+  -- is no module of it in the rack. Tactical/Combat)
+  local has, on = Core.Query.OwnCloak(game, ball.id)
+  if has then
+    local key = Keys.Did("cloak") and not inWarp
+    if Im.Button(if on then "UNCLOAK" else "CLOAK", x + width - 92, y + 36, 80, 24, not inWarp, "Cloak") or key then
+      Session.Do(session, { kind = if on then "Uncloak" else "Cloak", actor = 0 })
+    end
   end
 end
 

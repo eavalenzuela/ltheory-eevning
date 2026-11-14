@@ -129,9 +129,12 @@ function Hack.Draw(session: Session.Session, x: number, y: number)
   -- The buffer: what has been picked, and the room there is left.
   local foot = gridY + tall + 16
   Im.Text("Buffer", left, foot + 6, 13, Im.DIM)
+  -- (as wide as there is room for: a pilot good at it in a hull built
+  -- for it has eleven)
+  local each = math.min(42, math.floor((right - left - 60) / hack.room))
   for at = 1, hack.room do
     local code = hack.buffer[at]
-    chip(code or "", left + 60 + (at - 1) * 42, foot, 38, 28, if code then Im.ACCENT else Im.DIM, if code then 0.42 else 0.3, Im.TEXT)
+    chip(code or "", left + 60 + (at - 1) * each, foot, each - 4, 28, if code then Im.ACCENT else Im.DIM, if code then 0.42 else 0.3, Im.TEXT)
   end
   local begun = #hack.buffer > 0
   local next = if not begun then "The first pick is anywhere in the top row."

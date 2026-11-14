@@ -77,10 +77,18 @@ export type Faction = {
 -- beside the plain hull of that class. 'role' "combat" is a hauler
 -- built to be shot at (a combat hauler). 'tech' 2 with 'of' is the tech
 -- 2 make of another hull of the line, by that hull's name: a hull of
--- its own, with its own name and looks. 'jump': it has a jump drive.
--- 'stealth': it is built to go unseen. (Neither a jump drive nor what
--- stealth is to be is made yet: they are marked here, and said on the
--- hull's sheet.)
+-- its own, with its own name and looks. 'jump': it has a jump drive
+-- (Tactical/Jumping). What a tech 2 hull is for, where the project
+-- owner has said (one that says nothing is the plain tech 2 make, and
+-- by their word: the Vessari's Kanau, the Orun's Kama):
+-- 'stealth': it is built to go unseen (a black ops hull, "one that can
+-- cloak"): a cloak does not slow it, and is broken only from half as
+-- far (Tactical/Combat).
+-- 'cloak': it has a cloak of its own, built in: nothing to fit, no slot
+-- taken (Tactical/Combat).
+-- 'explorer': it is built for exploration: a cloaking device asks less
+-- of it to fit, its scanner works a signal better and its pilot hacks
+-- with a longer buffer (Ships.EXPLORER).
 -- 'role' "miner" is a capital industrial that mines for itself (a
 -- mass-miner): 'hardpoints' is then how many mining turrets it has.
 -- 'radius' is how big it is, m, for a hull of a class that has no size
@@ -91,7 +99,7 @@ export type Faction = {
 -- each size its builders make their share launchers (Data/Ships).
 -- 'rare': nobody sells it, nor the blueprint for it.
 export type Hull = { name: string, class: string, role: string?, tech: number?, of: string?, jump: boolean?, stealth: boolean?,
-  hardpoints: number?, radius: number?, guns: { number }?, rare: boolean? }
+  cloak: boolean?, explorer: boolean?, hardpoints: number?, radius: number?, guns: { number }?, rare: boolean? }
 
 Factions.list = {
   -- The four human factions.
@@ -123,7 +131,7 @@ Factions.list = {
       { name = "Azayake", class = "carrier" },
       { name = "Daiichi", class = "ultracapital", radius = 2060 },
       { name = "Mizumushi", class = "industrial" },
-      { name = "Akaboshi", class = "industrial", tech = 2, of = "Mizumushi" },
+      { name = "Akaboshi", class = "industrial", tech = 2, of = "Mizumushi", stealth = true },
       { name = "Yoruzake", class = "freighter" },
       { name = "Okami", class = "capitalindustrial", role = "miner", hardpoints = 10 },
     },
@@ -185,19 +193,19 @@ Factions.list = {
     -- as the class is, with the ore hold the fleet's barges fill.)
     line = {
       { name = "Skinner", class = "frigate" },
-      { name = "Skiver", class = "frigate", tech = 2, of = "Skinner" },
+      { name = "Skiver", class = "frigate", tech = 2, of = "Skinner", stealth = true, cloak = true },
       { name = "Knife", class = "frigate" },
       { name = "Scythe", class = "destroyer" },
       { name = "Kama", class = "destroyer", tech = 2, of = "Scythe" },
       { name = "Armer", class = "cruiser" }, { name = "Gladius", class = "cruiser" },
-      { name = "Falchion", class = "cruiser", tech = 2, of = "Gladius" },
+      { name = "Falchion", class = "cruiser", tech = 2, of = "Gladius", explorer = true },
       { name = "Zweihander", class = "battlecruiser" },
       { name = "Claymore", class = "battleship" },
       { name = "Katana", class = "carrier" },
       { name = "Sword", class = "siegedreadnought" },
       { name = "Scarab", class = "barge" },
       { name = "Pill", class = "industrial" },
-      { name = "Longhorn", class = "industrial", tech = 2, of = "Pill" },
+      { name = "Longhorn", class = "industrial", tech = 2, of = "Pill", stealth = true },
       { name = "Tiger", class = "freighter" },
       { name = "Stag", class = "capitalindustrial" },
     },

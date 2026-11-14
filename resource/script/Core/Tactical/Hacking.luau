@@ -55,6 +55,7 @@
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Rng = require("@lt/Core/Kernel/Rng")
+local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 
@@ -110,10 +111,13 @@ Hacking.ANALYZER = "analyzer.data"
 local DATACORE = "datacore"
 
 -- The pilot's buffer: five codes, and one more for every level of
--- Hacking after the first.
-function Hacking.Buffer(state: State.State): number
+-- Hacking after the first. (And two more in a hack begun from 'ship',
+-- if its hull is built for exploration: Ships.EXPLORER.)
+function Hacking.Buffer(state: State.State, ship: number?): number
   local level = math.max(1, state.skills.hacking or 0)
-  return Hacking.BUFFER + level - 1
+  local from = state.ships[ship or 0]
+  local hull = if from then Ships.byId[from.type] else nil
+  return Hacking.BUFFER + level - 1 + (if hull and hull.explorer then Ships.EXPLORER.hack else 0)
 end
 
 -- The cells of a matrix that can be picked now: those not picked yet
@@ -328,7 +332,7 @@ function Hacking.Apply(state: State.State, command: State.Command, events: { Eve
     local sealed = Hacking.LockOf(state.wrecks[command.target :: number])
     local cells, keys = lock(state, command.target :: number, sealed)
     state.hack = { wreck = command.target :: number, size = sealed.size, cells = cells, used = table.create(#cells, false),
-      buffer = {}, room = Hacking.Buffer(state), keys = keys, along = "row", line = 1, ends = 0 }
+      buffer = {}, room = Hacking.Buffer(state, command.actor), keys = keys, along = "row", line = 1, ends = 0 }
     table.insert(events, { kind = "HackStarted", wreck = command.target })
     return
   end

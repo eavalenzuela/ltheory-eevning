@@ -155,7 +155,7 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
   end
   local w = Menu.WIDTH
   local h = if page == "load" or page == "save" then 420 elseif page == "pause" then 390 elseif page == "main" then 370
-    elseif page == "keys" then 520 else 340
+    elseif page == "keys" then 550 else 340
   local x, y = left + (width - w) / 2, top + (height - h) / 2 - 40
   -- (the game behind is dimmed, so the menu is what there is to read)
   Im.Fill(left, top, width, height, vector.create(0, 0, 0), 0.45)

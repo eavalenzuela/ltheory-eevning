@@ -75,6 +75,9 @@ export type Vitals = {
   damp: number,
   locks: { Lock },          -- in the order they were asked for
   running: { Running },     -- in the order they were switched on
+  -- Its hull's own cloak is on: a hull with one built in
+  -- (Tactical/Combat). Nil for off, and for every other hull.
+  cloaked: boolean?,
 }
 
 -- A missile in flight: it lands at 'impact' and does its damage then.
