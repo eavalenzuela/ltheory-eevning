@@ -212,8 +212,13 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
   -- What it is built with that others of its class are not: a jump
   -- drive (Tactical/Jumping), to go unseen or a cloak of its own
   -- (Tactical/Combat), or to explore (Ships.EXPLORER).
-  if hull.jump or hull.stealth or hull.cloak or hull.explorer then
+  if hull.jump or hull.stealth or hull.cloak or hull.explorer or hull.affinity then
     local built = section(sheet, "Built with")
+    -- (the kind of damage its faction's ships lean to: Data/Ships' affinity)
+    if hull.affinity then
+      local kind = ({ "EM", "thermal", "kinetic", "explosive" })[hull.affinity]
+      row(built, "Affinity", `{kind}: its weapons do {whole(Ships.AFFINITY * 100)}% more {kind} damage, and it lets {whole(Ships.AFFINITY * 100)}% less of it through`)
+    end
     if hull.jump then
       row(built, "Jump drive", "reaches 20 light years without a gate, to a beacon, on fuel blocks")
     end
@@ -311,6 +316,8 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
       row(to, "Optimal range", metres(weapon.optimal))
       row(to, "Falloff", metres(weapon.falloff))
       row(to, "Tracking", plain(weapon.tracking))
+    elseif (weapon.flight or 1) ~= 1 then
+      row(to, "Range", `{whole((weapon.flight or 1) * 100)}% of its missile's`)
     else
       row(to, "Range", "its missile's")
     end

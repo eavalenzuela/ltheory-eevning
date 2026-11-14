@@ -23,6 +23,9 @@ lua assert(_G.offers == 3 and _G.wants == 2 and _G.mine == 0, 'a board has three
 # The third lot for sale: a few of a module no station sells.
 lua _G.title, _G.price, _G.type, _G.count = GameDebug.Lot('offer', 3)
 lua assert(_G.title ~= '' and _G.price > 0, 'there should be a third lot for sale')
+# (whatever it asks is granted on top: some of what no station sells is very dear)
+lua GameDebug.Grant(_G.price)
+frames 3
 lua _G.had = GameDebug.Hangar(_G.type)
 lua _G.wallet = GameDebug.Wallet()
 until GameDebug.Press('Contract:buy:3')

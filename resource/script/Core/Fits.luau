@@ -87,20 +87,26 @@ function Fits.Tank(hull: Ships.ShipType): { string }
 end
 
 -- The charge a weapon is measured with: the first there is of its
--- family and size (the plain make, not a tech 2 one). Nil for what is
--- not a weapon, or takes none.
-function Fits.Charge(type: string): string?
+-- family and size (the plain make, not a tech 2 one), and on a hull
+-- that leans to a kind of damage (Data/Ships' affinity) the first of
+-- that kind, where the weapon fires any. Nil for what is not a weapon,
+-- or takes none.
+function Fits.Charge(type: string, hull: Ships.ShipType?): string?
   local module = Modules.byId[type]
   local weapon = if module then module.weapon else nil
   if weapon == nil then
     return nil
   end
+  local first: string? = nil
   for _, charge in Modules.charges do
     if charge.family == weapon.family and charge.size == weapon.size and charge.tech ~= 2 then
-      return charge.id
+      first = first or charge.id
+      if hull and hull.affinity and charge.damage[hull.affinity] > 0 then
+        return charge.id
+      end
     end
   end
-  return nil
+  return first
 end
 
 -- What of a standard fit does not go on a hull, and why.

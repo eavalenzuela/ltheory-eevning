@@ -66,8 +66,12 @@ end
 local function fight(hullId: string, level: number, orbit: number, waves: { { string } }, works: { string }?): (boolean, number)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
+  -- (the plain skills, every one at the level: not the crafts of a trade, which nothing is laid out on the
+  -- footing that a pilot has, and which make all of this easier for one who does)
   for _, skill in Skills.list do
-    state.skills[skill.id] = level
+    if not skill.craft then
+      state.skills[skill.id] = level
+    end
   end
   local ship = Space.NewShip(state, hullId, "Test", "player", state.player.home)
   for _, entry in plain(hullId) do

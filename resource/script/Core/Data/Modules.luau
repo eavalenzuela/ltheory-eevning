@@ -35,6 +35,12 @@ export type Weapon = {
   reload: number,           -- s to load a fresh clip
   -- 1 small, 2 medium, 3 large: it takes charges of its own size only.
   size: number,
+  -- launchers: how long its missiles fly, as a share of what the
+  -- missile flies by itself, and how wide their blast is, likewise (1
+  -- where not said: a short-range launcher throws its missiles a third
+  -- as far, and a flight computer changes both)
+  flight: number?,
+  blast: number?,
 }
 
 export type Repair = {
@@ -275,6 +281,11 @@ local modules: { ModuleType } = {
     passive = { weapons("projectile", "damageMultiplier", 1.10), weapons("projectile", "duration", 0.895) },
   },
   {
+    id = "flux.coil", name = "Flux Coil", slot = "low", hardpoint = "",
+    cpu = 20, powergrid = 1, volume = 5, basePrice = 25000,
+    passive = { weapons("hybrid", "damageMultiplier", 1.10), weapons("hybrid", "duration", 0.895) },
+  },
+  {
     id = "ballistic.control", name = "Guidance Computer", slot = "low", hardpoint = "",
     cpu = 30, powergrid = 1, volume = 5, basePrice = 25000,
     passive = { weapons("missile", "damageMultiplier", 1.10), weapons("missile", "duration", 0.895) },
@@ -282,11 +293,27 @@ local modules: { ModuleType } = {
   {
     id = "tracking.enhancer", name = "Tracking Enhancer", slot = "low", hardpoint = "",
     cpu = 10, powergrid = 1, volume = 5, basePrice = 18000,
-    passive = {
-      weapons("laser", "tracking", 1.095), weapons("projectile", "tracking", 1.095),
-      weapons("laser", "optimal", 1.10), weapons("projectile", "optimal", 1.10),
-      weapons("laser", "falloff", 1.20), weapons("projectile", "falloff", 1.20),
-    },
+    -- (every turret there is: "turret" is every family but missiles, Core/Attributes)
+    passive = { weapons("turret", "tracking", 1.095), weapons("turret", "optimal", 1.10), weapons("turret", "falloff", 1.20) },
+  },
+  -- What is switched on to help the weapons (the project owner's,
+  -- 2026-11-14: "tracking and range computers for turrets and guidance
+  -- modules for missiles", with no scripts): each does more than what is
+  -- only bolted on, for a mid slot and capacitor while it runs.
+  {
+    id = "computer.tracking", name = "Tracking Computer", slot = "mid", hardpoint = "",
+    cpu = 30, powergrid = 1, volume = 5, basePrice = 30000, passive = {},
+    boost = { weapons("turret", "tracking", 1.25) }, boostDuration = 10, boostCapacitor = 6,
+  },
+  {
+    id = "computer.range", name = "Ranging Computer", slot = "mid", hardpoint = "",
+    cpu = 30, powergrid = 1, volume = 5, basePrice = 30000, passive = {},
+    boost = { weapons("turret", "optimal", 1.15), weapons("turret", "falloff", 1.25) }, boostDuration = 10, boostCapacitor = 6,
+  },
+  {
+    id = "computer.flight", name = "Flight Computer", slot = "mid", hardpoint = "",
+    cpu = 30, powergrid = 1, volume = 5, basePrice = 30000, passive = {},
+    boost = { weapons("missile", "flight", 1.2), weapons("missile", "blast", 0.85) }, boostDuration = 10, boostCapacitor = 6,
   },
 
   -- What is left of a ship is worth something to whoever takes the
@@ -496,18 +523,74 @@ local function missile(id: string, name: string, damage: { number }): ChargeType
     velocity = 3750, flightTime = 5, explosionRadius = 40, explosionVelocity = 170 }
 end
 
+-- What a weapon fires does one kind of damage (the project owner's
+-- ruling, 2026-11-14): a projectile round, a hybrid charge and a missile
+-- come in all four kinds (EM, thermal, kinetic, explosive), and each
+-- kind in three reaches: a short one that hits hardest, a standard one,
+-- and a long one that hits least. Twelve of each, a size. (A laser's
+-- crystals are EM and thermal only, and are as they were: three, by
+-- reach.) A round is named for its kind and its reach.
+--
+-- The kinds, in the order damage is always given in; and for each
+-- family, what a round of each kind is called and what one of each
+-- reach is, with the damage a small one does at each reach.
+local KINDS = { "em", "thermal", "kinetic", "explosive" }
+local REACHES = { { id = "short", range = 0.5 }, { id = "standard", range = 1.0 }, { id = "long", range = 1.6 } }
+type Rounds = { family: string, id: string, kinds: { string }, forms: { string }, damage: { number },
+  -- (the three there were before there were twelve keep the ids they had: kind and reach, and the id)
+  kept: { { any } } }
+local ROUNDS: { Rounds } = {
+  { family = "projectile", id = "ammo", kinds = { "Shock", "Incendiary", "Penetrator", "Burst" }, forms = { "Canister", "Rounds", "Sabot" },
+    damage = { 12, 8, 6 }, kept = { { 1, 1, "ammo.emp" }, { 4, 1, "ammo.fusion" }, { 3, 2, "ammo.sabot" } } },
+  { family = "hybrid", id = "charge", kinds = { "Ion", "Plasma", "Iron", "Blast" }, forms = { "Charge", "Slug", "Needle" },
+    damage = { 11, 9, 7 }, kept = { { 2, 1, "charge.plasma" }, { 3, 2, "charge.slug" }, { 3, 3, "charge.needle" } } },
+}
+
+-- The id of a family's round of a kind and a reach.
+local function roundId(rounds: Rounds, kind: number, reach: number): string
+  for _, kept in rounds.kept do
+    if kept[1] == kind and kept[2] == reach then
+      return kept[3]
+    end
+  end
+  return `{rounds.id}.{KINDS[kind]}.{REACHES[reach].id}`
+end
+
 local charges: { ChargeType } = {
   -- Crystals are not used up.
   turretCharge("crystal.multifrequency", "Wide-band Crystal", "laser", { 7, 5, 0, 0 }, 0.5),
   turretCharge("crystal.standard", "Standard Crystal", "laser", { 5, 3, 0, 0 }, 1.0),
   turretCharge("crystal.radio", "Long-wave Crystal", "laser", { 5, 0, 0, 0 }, 1.6),
-  turretCharge("ammo.emp", "Shock Rounds", "projectile", { 9, 0, 1, 2 }, 0.5),
-  turretCharge("ammo.fusion", "Burst Rounds", "projectile", { 0, 0, 2, 10 }, 0.5),
-  turretCharge("ammo.sabot", "Penetrator Rounds", "projectile", { 0, 0, 6, 2 }, 1.0),
-  missile("missile.light.kinetic", "Lance Light Missile", { 0, 0, 83, 0 }),
-  missile("missile.light.explosive", "Breaker Light Missile", { 0, 0, 0, 83 }),
-  missile("missile.light.thermal", "Ember Light Missile", { 0, 83, 0, 0 }),
 }
+-- (projectile rounds first, as they always were; the hybrids' come
+-- after the missiles, below, as theirs did)
+local function addRounds(rounds: Rounds)
+  for kind = 1, 4 do
+    for reach = 1, 3 do
+      local damage = { 0, 0, 0, 0 }
+      damage[kind] = rounds.damage[reach]
+      table.insert(charges, turretCharge(roundId(rounds, kind, reach), `{rounds.kinds[kind]} {rounds.forms[reach]}`, rounds.family, damage,
+        REACHES[reach].range))
+    end
+  end
+end
+addRounds(ROUNDS[1])
+
+-- A missile of a kind comes in three reaches too: the missile itself, a
+-- rocket (half the flight, three tenths more in the warhead) and a
+-- javelin (six tenths more flight, a quarter less in the warhead).
+-- (the missile itself first: it is what a launcher is loaded with where nobody says)
+local MISSILE_REACH = { { id = "", form = "Missile", damage = 1, flight = 1 }, { id = ".short", form = "Rocket", damage = 1.3, flight = 0.5 },
+  { id = ".long", form = "Javelin", damage = 0.75, flight = 1.6 } }
+for _, kind in { { "kinetic", "Lance", 3 }, { "explosive", "Breaker", 4 }, { "thermal", "Ember", 2 } } :: { { any } } do
+  for _, reach in MISSILE_REACH do
+    local damage = { 0, 0, 0, 0 }
+    damage[kind[3]] = 83 * reach.damage
+    local made = missile(`missile.light.{kind[1]}{reach.id}`, `{kind[2]} Light {reach.form}`, damage)
+    made.flightTime *= reach.flight
+    table.insert(charges, made)
+  end
+end
 
 -- ---------------------------------------------------------------------
 -- The rest of the armoury, made from tables
@@ -608,6 +691,58 @@ for index, launcher in LAUNCHERS do
     weapon = { family = "missile", duration = launcher.duration, capacitor = 0, damageMultiplier = 1.0,
       optimal = 0, falloff = 0, tracking = 0, clip = launcher.clip, reload = launcher.reload, size = index + 1 },
     requires = needs("missiles", index + 1),
+  })
+end
+
+-- And the short-range launcher of each size (the project owner's,
+-- 2026-11-14: a long and a short make of every weapon at every size, as
+-- turrets have; the names and figures are first ones). It takes the
+-- missiles its size of launcher takes, and throws them a third as far,
+-- eight times in the time the long one throws five: what a blaster is
+-- to a railgun. It is a little easier to fit, and holds half as many
+-- again.
+local CLOSE = { flight = 0.35, duration = 0.62, fitting = 0.85, price = 0.9, clip = 1.5 }
+local SHORT_LAUNCHERS = {
+  { id = "launcher.rocket", name = "Rocket Launcher", long = "launcher.light" },
+  { id = "launcher.assault", name = "Assault Launcher", long = "launcher.heavy" },
+  { id = "launcher.torpedo", name = "Torpedo Launcher", long = "launcher.cruise" },
+  { id = "launcher.bombard", name = "Bombardment Launcher", long = "launcher.siege" },
+}
+for size, short in SHORT_LAUNCHERS do
+  local long: ModuleType? = nil
+  for _, module in modules do
+    if module.id == short.long then
+      long = module
+    end
+  end
+  local base = (assert(long, short.long).weapon) :: Weapon
+  table.insert(modules, {
+    id = short.id, name = short.name, slot = "high", hardpoint = "launcher",
+    cpu = math.floor((long :: ModuleType).cpu * CLOSE.fitting + 0.5), powergrid = math.max(1, math.floor((long :: ModuleType).powergrid * CLOSE.fitting + 0.5)),
+    volume = SIZE_VOLUME[size], basePrice = (long :: ModuleType).basePrice * CLOSE.price, passive = {},
+    weapon = { family = "missile", duration = base.duration * CLOSE.duration, capacitor = 0, damageMultiplier = 1.0,
+      optimal = 0, falloff = 0, tracking = 0, clip = math.floor(base.clip * CLOSE.clip), reload = base.reload, size = size,
+      flight = CLOSE.flight },
+    requires = needs("missiles", size),
+  })
+end
+
+-- Hardeners against one kind of damage (the project owner's, 2026-11-14:
+-- "type-specific hardeners"): switched on, a shield's lets half as much
+-- of its kind through, and an armour's likewise, where the plain Shield
+-- Hardener and the Reactive Membrane take a quarter and a seventh off
+-- every kind. So a ship can be made ready for who it is going to meet.
+local HARDENED = 0.5
+for kind, word in { "EM", "Thermal", "Kinetic", "Explosive" } do
+  table.insert(modules, {
+    id = `shield.hardener.{KINDS[kind]}`, name = `{word} Shield Hardener`, slot = "mid", hardpoint = "",
+    cpu = 26, powergrid = 1, volume = 5, basePrice = 18000, passive = {},
+    boost = { ship(`shieldResonance.{kind}`, "mul", HARDENED, true) }, boostDuration = 10, boostCapacitor = 10,
+  })
+  table.insert(modules, {
+    id = `armor.hardener.{KINDS[kind]}`, name = `{word} Armor Hardener`, slot = "low", hardpoint = "",
+    cpu = 24, powergrid = 1, volume = 5, basePrice = 18000, passive = {},
+    boost = { ship(`armorResonance.{kind}`, "mul", HARDENED, true) }, boostDuration = 10, boostCapacitor = 8,
   })
 end
 
@@ -753,10 +888,12 @@ table.insert(modules, {
 
 -- Ammunition by size. The small charges are written out above; the
 -- medium and large ones are those, larger. And what the hybrids fire.
-table.insert(charges, turretCharge("charge.plasma", "Plasma Charge", "hybrid", { 0, 6, 5, 0 }, 0.5))
-table.insert(charges, turretCharge("charge.slug", "Slug Charge", "hybrid", { 0, 3, 6, 0 }, 1.0))
-table.insert(charges, turretCharge("charge.needle", "Needle Charge", "hybrid", { 0, 2, 5, 0 }, 1.6))
-table.insert(charges, missile("missile.light.em", "Arc Light Missile", { 83, 0, 0, 0 }))
+addRounds(ROUNDS[2])
+for _, reach in MISSILE_REACH do
+  local made = missile(`missile.light.em{reach.id}`, `Arc Light {reach.form}`, { 83 * reach.damage, 0, 0, 0 })
+  made.flightTime *= reach.flight
+  table.insert(charges, made)
+end
 
 local MISSILE_SIZES = {
   { id = "heavy", title = "Heavy", damage = 190, velocity = 4300, flight = 6.5, radius = 140, speed = 85, volume = 0.03, price = 180 },
@@ -784,13 +921,16 @@ for _, small in table.clone(charges) do
 end
 for index, sized in MISSILE_SIZES do
   for _, kind in MISSILE_KINDS do
-    local damage = { 0, 0, 0, 0 }
-    damage[kind[3]] = sized.damage
-    table.insert(charges, {
-      id = `missile.{sized.id}.{kind[1]}`, name = `{kind[2]} {sized.title} Missile`, family = "missile", size = index + 1,
-      volume = sized.volume, basePrice = sized.price, damage = damage, rangeMultiplier = 1,
-      velocity = sized.velocity, flightTime = sized.flight, explosionRadius = sized.radius, explosionVelocity = sized.speed,
-    })
+    for _, reach in MISSILE_REACH do
+      local damage = { 0, 0, 0, 0 }
+      damage[kind[3]] = sized.damage * reach.damage
+      table.insert(charges, {
+        id = `missile.{sized.id}.{kind[1]}{reach.id}`, name = `{kind[2]} {sized.title} {reach.form}`, family = "missile", size = index + 1,
+        volume = sized.volume, basePrice = sized.price, damage = damage, rangeMultiplier = 1,
+        velocity = sized.velocity, flightTime = sized.flight * reach.flight, explosionRadius = sized.radius,
+        explosionVelocity = sized.speed,
+      })
+    end
   end
 end
 
@@ -892,7 +1032,8 @@ for _, base in table.clone(modules) do
         volume = base.volume, basePrice = base.basePrice * make.price, passive = passive,
         weapon = if weapon then { family = weapon.family, duration = weapon.duration, capacitor = weapon.capacitor,
           damageMultiplier = weapon.damageMultiplier * make.damage, optimal = weapon.optimal, falloff = weapon.falloff,
-          tracking = weapon.tracking, clip = weapon.clip, reload = weapon.reload, size = weapon.size } else nil,
+          tracking = weapon.tracking, clip = weapon.clip, reload = weapon.reload, size = weapon.size,
+          flight = weapon.flight, blast = weapon.blast } else nil,
         repair = if repair then { layer = repair.layer, amount = repair.amount * make.amount, duration = repair.duration,
           capacitor = repair.capacitor } else nil,
         miner = if miner then { volume = miner.volume * make.amount, duration = miner.duration, capacitor = miner.capacitor,

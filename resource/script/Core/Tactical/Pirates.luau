@@ -131,14 +131,17 @@ local function all(...: { { string } }): { { string } }
 end
 
 -- A scout is a raider's hull with one gun on it and nothing else: what
--- a new pilot in a Courier can beat. A raider carries a warp disruptor
+-- a new pilot in a Courier can beat. Between them the kinds fire every
+-- kind of damage there is (a scout and a jackal explosive, a raider
+-- kinetic, a marauder thermal, a ravager EM): they are nobody's hulls
+-- and nobody's guns, and no faction's ships are proof against a pack. A raider carries a warp disruptor
 -- and a destroyer an entanglement projector (and each the other's, if it has the room):
 -- away from where order is kept, a pack holds what it catches.
 local KINDS: { Kind } = {
   { id = "scout", hull = "frigate.cutthroat", name = "Pirate Scout", range = 1500, bounty = 6000, tags = 1,
     fit = { { "autocannon.small", "ammo.fusion" } } },
   { id = "raider", hull = "frigate.cutthroat", name = "Pirate Raider", range = 2000, bounty = 15000, tags = 1,
-    fit = all(times(3, "autocannon.small", "ammo.fusion"), times(1, "launcher.light"),
+    fit = all(times(3, "autocannon.small", "ammo.kinetic.short"), times(1, "launcher.light"),
       { { "disruptor.warp" }, { "afterburner.1mn" }, { "armor.plate.200mm" }, { "damage.control" }, { "gyrostabilizer" },
         { "projector.entanglement" } }) },
   { id = "jackal", hull = "destroyer.jackal", name = "Pirate Jackal", range = 3000, bounty = 40000, tags = 2,
@@ -146,11 +149,11 @@ local KINDS: { Kind } = {
       { { "projector.entanglement" }, { "afterburner.1mn" }, { "armor.plate.200mm" }, { "damage.control" }, { "gyrostabilizer" },
         { "disruptor.warp" }, { "armor.plate.200mm" } }) },
   { id = "marauder", hull = "cruiser.marauder", name = "Pirate Marauder", range = 6000, bounty = 120000, tags = 4,
-    fit = all(times(5, "autocannon.medium"), times(3, "launcher.heavy"),
+    fit = all(times(5, "autocannon.medium", "ammo.thermal.short.medium"), times(3, "launcher.heavy"),
       { { "armor.plate.medium" }, { "damage.control" }, { "gyrostabilizer" }, { "gyrostabilizer" }, { "ballistic.control" },
         { "disruptor.warp" }, { "painter.target" }, { "shield.extender.medium" }, { "shield.extender.medium" } }) },
   { id = "ravager", hull = "battleship.ravager", name = "Pirate Ravager", range = 15000, bounty = 400000, tags = 10,
-    fit = all(times(6, "artillery.large"), times(4, "launcher.cruise"),
+    fit = all(times(6, "artillery.large", "ammo.emp.large"), times(4, "launcher.cruise"),
       { { "armor.plate.large" }, { "damage.control" }, { "gyrostabilizer" }, { "armor.plate.large" }, { "shield.extender.large" } }) },
   -- Not of the ladder either: what a camp is built of (Tactical/Assault).
   -- They stand where they are. The stores do nothing; the emplacements

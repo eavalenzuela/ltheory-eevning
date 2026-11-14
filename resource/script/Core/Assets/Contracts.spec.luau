@@ -365,6 +365,7 @@ suite:Case("boards are in the save, and a save from before there were any opens 
   order(t, game, { kind = "ListContract", actor = 0, item = stack(game, "copy.ammo.emp").id, quantity = 100, price = 1000 })
   hours(game, 1)
   order(t, game, { kind = "ListContract", actor = 0, item = stack(game, "copy.ammo.emp").id, quantity = 100, price = 19000 })
+  state.wallet = lot(game, home, "offer", 3).price
   order(t, game, { kind = "AcceptContract", actor = 0, target = 3 })
   t.eq({ #state.contractIds, #state.contractsTaken, state.contractsHad[home]["copy.ammo.emp"].units } :: { any }, { 1, 1, 100 } :: { any })
   local loaded = Core.Load(Core.Save(game))

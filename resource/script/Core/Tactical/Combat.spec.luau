@@ -308,10 +308,11 @@ suite:Case("a missile lands after its flight and does less to a small target", f
   t.near(shot.flight, flight, 1e-9)
   local hit, ticks = stepUntil(a, "MissileHit", 10)
   t.eq(ticks, math.ceil(flight))
-  -- 83 kinetic, times 38/40 for a courier's signature against a 40 m blast
-  t.near(hit.damage, 83 * 38 / 40, 1e-9)
+  -- 83 kinetic, and 15% more from a Talmar hull, which leans to kinetic; times 38/40 for a courier's signature
+  -- against a 40 m blast
+  t.near(hit.damage, 83 * 1.15 * 38 / 40, 1e-9)
   -- and the shield lets 60% of kinetic through
-  t.near(a.foe.vitals.shieldMax - a.foe.vitals.shield, 83 * 38 / 40 * 0.6, 1.5)
+  t.near(a.foe.vitals.shieldMax - a.foe.vitals.shield, 83 * 1.15 * 38 / 40 * 0.6, 1.5)
   t.eq(launcher.rounds, 29)
 end)
 

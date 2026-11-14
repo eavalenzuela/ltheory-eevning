@@ -93,6 +93,10 @@ export type Missile = {
   charge: string,
   damage: { number },
   impact: number,
+  -- How wide its blast is, as a share of the missile's own: what its
+  -- launcher, a flight computer and its pilot's fusing made of it when
+  -- it was fired. (Nil: as the missile is.)
+  blast: number?,
 }
 
 -- A stack of items of one type in one place. A fitted module is a stack

@@ -488,9 +488,11 @@ local function fireTurret(state: State.State, ball: State.Ball, running: State.R
   local quality = Gunnery.Quality(roll, chance)
   local total = 0
   if quality > 0 then
+    -- (more of the kind its hull leans to: Data/Ships' affinity)
+    local hull = Ships.byId[state.ships[ball.id].type]
     local damage = {}
     for index = 1, 4 do
-      damage[index] = charge.damage[index] * weapon.damageMultiplier * quality
+      damage[index] = charge.damage[index] * weapon.damageMultiplier * quality * Ships.Dealt(hull, index)
       total += damage[index]
     end
     table.insert(hits, { target = target.id, by = ball.id, damage = damage })
@@ -505,17 +507,23 @@ local function fireMissile(state: State.State, ball: State.Ball, item: State.Ite
   local charge = Modules.chargeById[item.charge]
   local flight = Space.Distance(ball :: any, target) / charge.velocity
   local outcome = "launched"
-  -- (how long it flies: longer for a pilot who has learned Long Burn)
-  local flies = charge.flightTime * (1 + Combat.LONG_BURN * Skills.Level(Items.Levels(state, ball.id), "long.burn"))
+  -- (how long it flies: as its launcher throws it, a short-range one a
+  -- third as far, and longer for a pilot who has learned Long Burn. And
+  -- how wide its blast will be: as its launcher and whatever is helping
+  -- it make it, and tighter for one who has learned Proximity Fusing.)
+  local levels = Items.Levels(state, ball.id)
+  local flies = charge.flightTime * (weapon.flight or 1) * (1 + Combat.LONG_BURN * Skills.Level(levels, "long.burn"))
   if flight > flies then
     outcome = "out of range"
   else
+    local hull = Ships.byId[state.ships[ball.id].type]
     local damage = {}
     for index = 1, 4 do
-      damage[index] = charge.damage[index] * weapon.damageMultiplier
+      damage[index] = charge.damage[index] * weapon.damageMultiplier * Ships.Dealt(hull, index)
     end
     table.insert(state.missiles, { from = ball.id, to = target.id, item = item.id, charge = charge.id,
-      damage = damage, impact = now(state) + flight })
+      damage = damage, impact = now(state) + flight,
+      blast = (weapon.blast or 1) * (1 - Combat.FUSING * Skills.Level(levels, "proximity.fusing")) })
   end
   table.insert(events, { kind = "Shot", from = ball.id, item = item.id, to = target.id, family = "missile",
     outcome = outcome, damage = 0, flight = math.min(flight, flies) })
@@ -803,10 +811,8 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
       local charge = Modules.chargeById[missile.charge]
       if target then
         local speed = math.sqrt(target.vx ^ 2 + target.vy ^ 2 + target.vz ^ 2)
-        -- (a tighter blast from a pilot who has learned Proximity Fusing,
-        -- if the ship that fired it is still there to have set the fuse)
-        local fused = if state.ships[missile.from] then Skills.Level(Items.Levels(state, missile.from), "proximity.fusing") else 0
-        local factor = Gunnery.MissileFactor(target.vitals.signature, speed, charge.explosionRadius * (1 - Combat.FUSING * fused),
+        -- (its blast as wide as it was made when it was fired)
+        local factor = Gunnery.MissileFactor(target.vitals.signature, speed, charge.explosionRadius * (missile.blast or 1),
           charge.explosionVelocity)
         local damage, total = {}, 0
         for i = 1, 4 do

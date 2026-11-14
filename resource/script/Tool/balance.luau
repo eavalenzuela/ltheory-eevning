@@ -123,12 +123,13 @@ local function measure(hull: Ships.ShipType): Row
     weapons += if module.hardpoint ~= "" then 1 else 0
     if module.weapon then
       local weapon = Attributes.Weapon(idle, type, nil)
-      local charge = Fits.Charge(type)
+      -- (loaded with the kind of damage the hull leans to, where it leans to one, and doing more of it)
+      local charge = Fits.Charge(type, hull)
       local loaded = if charge then Modules.chargeById[charge] else nil
       if loaded then
         local hit = 0
         for index = 1, 4 do
-          hit += loaded.damage[index] * weapon.damageMultiplier
+          hit += loaded.damage[index] * weapon.damageMultiplier * Ships.Dealt(hull, index)
         end
         volley += hit
         dps += hit / weapon.duration

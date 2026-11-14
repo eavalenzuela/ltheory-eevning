@@ -51,6 +51,9 @@ local MODULES: { { any } } = {
   { "disruptor.", "Electronic warfare", 10 }, { "painter.", "Electronic warfare", 10 }, { "damper.", "Electronic warfare", 10 },
   { "neutraliser.", "Electronic warfare", 10 }, { "jammer.", "Electronic warfare", 10 }, { "cloak.", "Electronic warfare", 10 }, { "analyzer.", "Electronic warfare", 10 },
   { "remote.", "Remote repair", 11 }, { "rig.", "Rigs", 12 },
+  -- (what makes the weapons better: bolted on, or switched on)
+  { "heat.", "Weapon upgrades", 4.5 }, { "gyrostabilizer", "Weapon upgrades", 4.5 }, { "flux.", "Weapon upgrades", 4.5 },
+  { "ballistic.", "Weapon upgrades", 4.5 }, { "tracking.", "Weapon upgrades", 4.5 }, { "computer.", "Weapon upgrades", 4.5 },
 }
 local MISSILES = { "Light missiles", "Heavy missiles", "Cruise missiles" }
 local MAKES: { [string]: { any } } = {

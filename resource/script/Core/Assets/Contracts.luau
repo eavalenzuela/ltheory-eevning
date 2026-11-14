@@ -211,14 +211,14 @@ function Contracts.Board(state: State.State, station: number): { Lot }
       table.insert(lot.stacks, 1, { type = hull.id, quantity = 1 })
       local loaded: { [string]: boolean } = {}
       for _, type in fit do
-        local charge = Fits.Charge(type)
+        local charge = Fits.Charge(type, hull)
         if charge and not loaded[charge] then
           loaded[charge] = true
           -- (crystals are not used up: one a gun. Rounds by the few hundred.)
           local crystal = Modules.chargeById[charge].family == "laser"
           local guns = 0
           for _, other in fit do
-            guns += if Fits.Charge(other) == charge then 1 else 0
+            guns += if Fits.Charge(other, hull) == charge then 1 else 0
           end
           table.insert(lot.stacks, { type = charge, quantity = if crystal then guns else 200 * guns })
         end

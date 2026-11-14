@@ -57,6 +57,12 @@ export type Faction = {
   mids: number,
   lows: number,
   hardpoints: number,
+  -- The kind of damage its ships lean to (the project owner's ruling,
+  -- 2026-11-14: "the 4 human factions each have one ship damage
+  -- affinity, which they both deal out more and guard better against";
+  -- which is whose is theirs too): 1 EM, 2 thermal, 3 kinetic, 4
+  -- explosive. Nil for the pirates and the aliens, who are a mix.
+  affinity: number?,
   -- Hulls that mend by themselves (the Nimia's): the share of its armour
   -- and of its hull that a hull of theirs gets back each second. Nil
   -- for everybody whose hulls do not.
@@ -119,6 +125,7 @@ Factions.list = {
     -- are projectile ones, which suits that; the sketch
     -- does not say.)
     id = "vessari", name = "Vessari", kind = "human", style = "slab", weapon = "projectile", launchers = 0.7, tank = "armor",
+    affinity = 4,
     note = "Missiles and heavy armour. Blocky, hard-working hulls with their conduits bare and their engines out on struts: a merchant people's ships, built to be hit and keep flying.",
     paint = { primary = { 0.72, 0.58, 0.30 }, secondary = { 0.22, 0.20, 0.18 }, glow = { 1.0, 0.75, 0.35 } },
     shield = 0.8, armor = 1.35, hull = 1.05, velocity = 0.92, mass = 1.1, cpu = 1.1, powergrid = 0.95, capacitor = 0.9,
@@ -152,6 +159,7 @@ Factions.list = {
     -- point of reference. The draft says nothing of weapons or defence:
     -- those are as they were.)
     id = "talmar", name = "Talmar", kind = "human", style = "cloud", weapon = "projectile", launchers = 0.35, tank = "shield",
+    affinity = 3,
     note = "Guns, missiles and shields. Hulls like clouds: rounded, lobed and blistered, without a corner on them, fast for their class.",
     paint = { primary = { 0.62, 0.66, 0.70 }, secondary = { 0.15, 0.32, 0.55 }, glow = { 0.45, 0.75, 1.0 } },
     shield = 1.2, armor = 0.85, hull = 0.95, velocity = 1.1, mass = 0.92, cpu = 1.1, powergrid = 0.95, capacitor = 0.95,
@@ -189,6 +197,7 @@ Factions.list = {
     -- masts." The draft says nothing of weapons or defence: those are as
     -- they were.)
     id = "orun", name = "Orun", kind = "human", style = "motley", weapon = "hybrid", launchers = 0, tank = "armor",
+    affinity = 2,
     note = "Blasters, railguns and sheer bulk. The Confederation's hulls come from yards that agree on nothing: no two are built alike, and all of them wear red and gold and a thicket of aerials. Slow, hard to kill, and they carry a great deal.",
     paint = { primary = { 0.36, 0.37, 0.39 }, secondary = { 0.62, 0.09, 0.07 }, glow = { 1.0, 0.84, 0.50 } },
     shield = 0.9, armor = 1.15, hull = 1.4, velocity = 0.9, mass = 1.12, cpu = 0.95, powergrid = 1.1, capacitor = 1.0,
@@ -230,6 +239,7 @@ Factions.list = {
     -- hardpoints in ten are launchers. Their frigate, the hull written
     -- out by hand in Data/Ships, is small enough to be all lasers.)
     id = "kethri", name = "Kethri", kind = "human", style = "blade", weapon = "laser", launchers = 0.2, tank = "armor", nomad = true,
+    affinity = 1,
     note = "Lasers, with missiles beside them, and armour. Nomads, who keep no stations and live aboard colony ships ten kilometres long. Their hulls are blades in flat grey plate, sharp at every edge, each with its conning tower: deep capacitors, long sight, and never out of ammunition.",
     paint = { primary = { 0.24, 0.30, 0.46 }, secondary = { 0.80, 0.80, 0.84 }, glow = { 0.55, 0.60, 1.0 } },
     shield = 0.85, armor = 1.25, hull = 1.0, velocity = 0.97, mass = 1.03, cpu = 0.95, powergrid = 1.1, capacitor = 1.15,

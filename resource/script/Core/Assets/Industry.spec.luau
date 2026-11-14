@@ -406,7 +406,7 @@ suite:Case("a laboratory copies a blueprint: a copy good for so many runs, for a
   t.eq({ Blueprints.Of("copy.nothing") } :: { any }, { nil, false } :: { any })
   local info = Types.Info("copy.ammo.emp")
   t.eq({ info.name, info.category, info.unlisted, info.basePrice } :: { any },
-    { "Shock Rounds Blueprint Copy", "blueprint", true, blueprint.basePrice // 100 } :: { any })
+    { "Shock Canister Blueprint Copy", "blueprint", true, blueprint.basePrice // 100 } :: { any })
   t.eq(table.find(Types.Ids(), "copy.ammo.emp"), nil, "no market lists a copy")
   for _, each in Blueprints.list do
     local copy = assert(Types.Get(Blueprints.Copy(each)), each.id)

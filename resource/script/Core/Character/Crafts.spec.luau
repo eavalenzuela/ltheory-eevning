@@ -25,10 +25,13 @@ local Types = require("@lt/Core/Data/Types")
 
 local suite = Test.Suite("Crafts")
 
--- The crafts, in the order of the skill list.
-local CRAFTS = { "deflection", "windage", "salvo.drill", "long.burn", "proximity.fusing", "swarm.tactics", "wayfinding", "running.dark",
-  "stowage", "lean.burn", "snapshot", "reactor.trim", "field.harmonics", "dispersal", "glancing.angles", "compartmentation",
-  "bench.science", "draughtsmanship", "ledger.keeping", "hard.bargaining", "protocol", "patronage", "paymaster", "triangulation" }
+-- The crafts, in the order of the skill list: the skills the data marks as one.
+local CRAFTS: { string } = {}
+for _, skill in Skills.list do
+  if skill.craft then
+    table.insert(CRAFTS, skill.id)
+  end
+end
 
 local function newGame(): (Core.Game, number)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
@@ -171,15 +174,17 @@ suite:Case("Long Burn has a missile fly farther, and Proximity Fusing has more o
   t.ok(fire ~= nil and shot.flight > 5, `it should fly longer than five seconds, and flew {shot.flight}`)
 
   -- A Courier is smaller than a light missile's blast: 38/40 of it lands. With the blast a fifth tighter, all of it.
+  -- (The missile is kinetic and the hull a Talmar's, which leans to kinetic: 15% more in it to begin with.)
+  local warhead = 83 * (1 + Ships.AFFINITY)
   game, me, foe = arena("frigate.carvarro", fit, 10000)
-  t.near(assert(fire(game, me, foe, "MissileHit", 12)).damage, 83 * 38 / 40, 1e-9)
+  t.near(assert(fire(game, me, foe, "MissileHit", 12)).damage, warhead * 38 / 40, 1e-9)
   game, me, foe = arena("frigate.carvarro", fit, 10000)
   game.state.skills["proximity.fusing"] = 5
-  t.near(assert(fire(game, me, foe, "MissileHit", 12)).damage, 83, 1e-9)
-  -- (two levels: a blast of 36.8 m, and 38 m of ship: all of it still)
+  t.near(assert(fire(game, me, foe, "MissileHit", 12)).damage, warhead, 1e-9)
+  -- (one level: a blast of 38.4 m, and 38 m of ship)
   game, me, foe = arena("frigate.carvarro", fit, 10000)
   game.state.skills["proximity.fusing"] = 1
-  t.near(assert(fire(game, me, foe, "MissileHit", 12)).damage, 83 * 38 / (40 * (1 - Combat.FUSING)), 1e-9)
+  t.near(assert(fire(game, me, foe, "MissileHit", 12)).damage, warhead * 38 / (40 * (1 - Combat.FUSING)), 1e-9)
 end)
 
 suite:Case("Swarm Tactics has a pilot's drones hit harder, and nobody else's guns", function(t)

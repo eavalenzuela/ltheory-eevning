@@ -111,14 +111,15 @@ local function gather(fitted: { Fitted }, on: string, family: string?, levels: L
     local implant = Implants.byId[f.type]
     local passive: { Modules.Modifier } = if module then module.passive elseif implant then implant.passive
       elseif f.spared then Boosters.byId[f.type].gives else Boosters.byId[f.type].passive
+    -- (for weapons, "turret" is every family of turret: every one but missiles)
     for _, modifier in passive do
-      if modifier.on == on and (on == "ship" or modifier.family == family) then
+      if modifier.on == on and (on == "ship" or modifier.family == family or (modifier.family == "turret" and family ~= "missile")) then
         collect(pending, modifier)
       end
     end
     if module and f.running and module.boost and not (stealth and module.cloak) then
       for _, modifier in module.boost do
-        if modifier.on == on and (on == "ship" or modifier.family == family) then
+        if modifier.on == on and (on == "ship" or modifier.family == family or (modifier.family == "turret" and family ~= "missile")) then
           collect(pending, modifier)
         end
       end
@@ -168,6 +169,9 @@ function Attributes.Weapon(fitted: { Fitted }, type: string, levels: Levels?): M
   local weapon = assert(Modules.byId[type].weapon, `{type} is not a weapon`)
   local pending = gather(fitted, "weapons", weapon.family, levels)
   local out = table.clone(weapon) :: any
+  -- (how far its missiles fly and how wide their blast is, as shares of
+  -- the missile's own: 1 where the weapon does not say)
+  out.flight, out.blast = out.flight or 1, out.blast or 1
   for name, p in pending do
     out[name] = resolve(out[name], p)
   end

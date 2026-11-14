@@ -102,6 +102,12 @@ export type ShipType = {
   stealth: boolean?,
   cloak: boolean?,
   explorer: boolean?,
+  -- The kind of damage it leans to, as its faction's ships do (Data/
+  -- Factions): 1 EM, 2 thermal, 3 kinetic, 4 explosive. Its weapons do
+  -- AFFINITY more of that kind, and its shield, armour and hull let
+  -- that much less of it through (which is in its resonances already).
+  -- Nil for a hull that leans to none.
+  affinity: number?,
   -- Its turret hardpoints by the size of gun each is for, where they are
   -- not all alike: so many for small guns, for medium, for large and for
   -- XL; and its launcher hardpoints likewise. A weapon goes on a
@@ -116,6 +122,21 @@ export type ShipType = {
 local SHIELD = { 1.0, 0.8, 0.6, 0.5 }
 local ARMOR = { 0.5, 0.65, 0.75, 0.9 }
 local HULL = { 0.67, 0.67, 0.67, 0.67 }
+-- How much more of its own kind of damage a hull with an affinity
+-- deals, and how much less of it each of its layers lets through (the
+-- project owner's figure, 2026-11-14).
+local AFFINITY = 0.15
+
+-- A layer's resonances for a hull that leans to a kind of damage: what
+-- every hull's are, with that much less of its own kind let through.
+local function leaning(resonance: { number }, kind: number?): { number }
+  if kind == nil then
+    return resonance
+  end
+  local out = table.clone(resonance)
+  out[kind] *= 1 - AFFINITY
+  return out
+end
 
 local types: { ShipType } = {
   -- The ship every pilot starts with, and gets again for nothing after
@@ -379,7 +400,8 @@ local function yardHull(yard: Factions.Faction, class: string, named: string, ro
     warpSpeed = s.warp, radius = s.radius,
     shield = round(s.shield * yard.shield * layers), armor = round(s.armor * yard.armor * layers),
     hull = round(s.hull * yard.hull * layers),
-    shieldRecharge = s.recharge, shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL,
+    shieldRecharge = s.recharge, shieldResonance = leaning(SHIELD, yard.affinity), armorResonance = leaning(ARMOR, yard.affinity),
+    hullResonance = leaning(HULL, yard.affinity), affinity = yard.affinity,
     signature = s.signature,
     cpu = round(s.cpu * yard.cpu * fitting + gunCpu), powergrid = round(s.powergrid * yard.powergrid * fitting + gunGrid),
     highs = math.max(s.highs, hardpoints) + (if sized then s.highs else 0),
@@ -687,6 +709,8 @@ local function rebuiltHull(base: ShipType, id: string, name: string): ShipType
     -- more to be had on a human market than the hull is; and it mends as
     -- that does)
     restricted = base.restricted, armorMend = base.armorMend, hullMend = base.hullMend,
+    -- (and it leans as its base does: the resonances it was made from have that in them)
+    affinity = base.affinity,
   }
 end
 
@@ -762,6 +786,19 @@ table.insert(types, {
   restricted = true, rigs = 0, drones = 0,
 })
 
+-- A human faction's hull that was written out by hand, and not built
+-- from its faction's figures, leans as its faction does all the same
+-- (and so does the tech 2 make of one).
+for _, hull in types do
+  local faction = Factions.byId[hull.lineage]
+  if faction and faction.affinity and hull.affinity == nil then
+    hull.affinity = faction.affinity
+    hull.shieldResonance = leaning(hull.shieldResonance, faction.affinity)
+    hull.armorResonance = leaning(hull.armorResonance, faction.affinity)
+    hull.hullResonance = leaning(hull.hullResonance, faction.affinity)
+  end
+end
+
 local Ships = { list = types, byId = {} :: { [string]: ShipType } }
 -- What an exploration hull has over another, and what share of a
 -- cloaking device's fitting a hull built for a cloak asks (above, at
@@ -800,6 +837,15 @@ Ships.ORE = { capitalindustrial = 150000 } :: { [string]: number }
 -- (And a logistics capital's bay for ships: above, at the yards.)
 Ships.SHIPBAY = SHIPBAY
 -- Whether a class is a capital.
+Ships.AFFINITY = AFFINITY
+
+-- How much of a kind of damage (1 EM, 2 thermal, 3 kinetic, 4
+-- explosive) a hull's weapons deal, as a share of what they would on a
+-- hull that leans to nothing: more of the kind it leans to.
+function Ships.Dealt(hull: ShipType, kind: number): number
+  return if hull.affinity == kind then 1 + AFFINITY else 1
+end
+
 function Ships.Capital(class: string): boolean
   return CAPITAL[class] == true
 end

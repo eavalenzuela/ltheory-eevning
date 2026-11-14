@@ -140,19 +140,21 @@ function Items.Offence(state: State.State, ship: number): Offence
   local fit = Items.Fit(state, ship, nil)
   local levels = Items.Levels(state, ship)
   local out: Offence = { volley = 0, dps = 0, kinds = { 0, 0, 0, 0 }, range = 0 }
+  local hull = Ships.byId[state.ships[ship].type]
   for _, item in Items.Fitted(state, ship) do
     if Modules.byId[item.type].weapon and item.charge ~= "" then
       local weapon = Attributes.Weapon(fit, item.type, levels)
       local charge = Modules.chargeById[item.charge]
       for index = 1, 4 do
-        local hit = charge.damage[index] * weapon.damageMultiplier
+        -- (more of the kind its hull leans to: Data/Ships' affinity)
+        local hit = charge.damage[index] * weapon.damageMultiplier * Ships.Dealt(hull, index)
         out.volley += hit
         out.dps += hit / weapon.duration
         out.kinds[index] += hit / weapon.duration
       end
       -- (a missile flies 5% longer a level of Long Burn: Tactical/Combat's LONG_BURN)
       out.range = math.max(out.range, if weapon.optimal > 0 then weapon.optimal * charge.rangeMultiplier + weapon.falloff
-        else charge.velocity * charge.flightTime * (1 + 0.05 * Skills.Level(levels, "long.burn")))
+        else charge.velocity * charge.flightTime * (weapon.flight or 1) * (1 + 0.05 * Skills.Level(levels, "long.burn")))
     end
   end
   return out
