@@ -22,10 +22,16 @@
 -- worn down by every gate that joins what one holds to what the other
 -- does. Under WAR_BELOW they are at war, as soon as one of them is free
 -- to say so. A faction that goes to war with a much weaker one
--- frightens the rest, and loses with all of them. A war wearies both:
--- by the hour, by what each loses, by each claim taken from it. When
--- they have had enough between them there is a truce, for a day at
--- least.
+-- frightens the rest, and loses with all of them: and one of them that
+-- by then thinks badly enough of it, and well enough of its victim,
+-- joins the war against it, border or no border (a coalition: what it
+-- adds is one more war to weary the aggressor). A war wearies both: by
+-- the hour, by what each loses, by each claim taken from it. When they
+-- have had enough between them there is a truce, for two days at least,
+-- and it has terms: the side that took more claims than it lost is paid
+-- a share of what the other has to send, and, if it took a good many
+-- more, is handed one more claim of the other's that lies next to what
+-- it holds.
 --
 -- War. A faction at war lays siege to its enemy's claims that lie next
 -- to what it holds: the same hour of muster, blockade and assault, but
@@ -98,6 +104,12 @@ Wars.DAY = math.ceil(86400 * SECOND)
 Wars.TRUCE_AT = -25
 Wars.TRUCE = 2 * Wars.DAY
 Wars.BULLY, Wars.FRIGHT = 1.5, 10
+-- A coalition: a faction joins a war against one it thinks this badly
+-- of, or worse, beside one it thinks this well of, or better.
+Wars.JOIN_BELOW, Wars.JOIN_BESIDE = -30, 0
+-- Terms: the side ahead by so many claims is paid this share of what
+-- the other has to send, and ahead by so many is handed a claim too.
+Wars.TERMS, Wars.TRIBUTE, Wars.CEDE = 1, 0.25, 3
 -- What wearies a faction at war: an hour of it, a point of force lost,
 -- a claim taken from it. Two at war make a truce when they are this
 -- weary between them, or either is quite worn out.
@@ -395,7 +407,34 @@ local function diplomacy(galaxy: Galaxy.Galaxy, wars: State.Wars, tick: number, 
       wars.truces[key] = tick + Wars.TRUCE
       wars.relations[key] = Wars.TRUCE_AT
       wars.weary[feud.a], wars.weary[feud.b] = a / 2, b / 2
-      table.insert(events, { kind = "PeaceMade", a = feud.a, b = feud.b, score = feud.score, hours = (tick - feud.since) // Wars.HOUR })
+      -- The terms: to whoever took more claims than it lost.
+      local winner, loser = "", ""
+      if math.abs(feud.score) >= Wars.TERMS then
+        winner, loser = if feud.score > 0 then feud.a else feud.b, if feud.score > 0 then feud.b else feud.a
+      end
+      local paid, ceded = 0, 0
+      if winner ~= "" then
+        paid = math.floor((wars.strength[loser] or 0) * Wars.TRIBUTE)
+        wars.strength[loser] = (wars.strength[loser] or 0) - paid
+        wars.strength[winner] = math.min(Wars.MOST, (wars.strength[winner] or 0) + paid)
+        if math.abs(feud.score) >= Wars.CEDE then
+          -- (the lowest-numbered claim of the loser's next to what the winner holds, that nothing is being done to)
+          for id = 1, Galaxy.Charted(galaxy) do
+            if ceded == 0 and wars.claims[id] == loser and at(wars, id) == nil then
+              for _, neighbor in galaxy.systems[id].neighbors do
+                if galaxy.systems[neighbor].owner == winner then
+                  ceded = id
+                end
+              end
+            end
+          end
+          if ceded ~= 0 then
+            take(galaxy, wars, ceded, winner)
+          end
+        end
+      end
+      table.insert(events, { kind = "PeaceMade", a = feud.a, b = feud.b, score = feud.score, hours = (tick - feud.since) // Wars.HOUR,
+        winner = winner, paid = paid, ceded = ceded })
     end
   end
   -- (a faction at peace with everybody rests)
@@ -430,6 +469,15 @@ local function diplomacy(galaxy: Galaxy.Galaxy, wars: State.Wars, tick: number, 
               if third ~= first and third ~= second then
                 local with = pair(first, third)
                 wars.relations[with] = math.max(-100, (wars.relations[with] or 0) - Wars.FRIGHT)
+                -- (and one that thinks badly enough of it by now, and
+                -- well enough of its victim, joins against it)
+                if wars.relations[with] <= Wars.JOIN_BELOW and (wars.relations[pair(second, third)] or 0) >= Wars.JOIN_BESIDE
+                  and wars.truces[with] == nil and not Wars.AtWar(wars, first, third)
+                  and tick - (wars.declared[third] or -Wars.DAY) >= Wars.DAY then
+                  wars.declared[third] = tick
+                  table.insert(wars.feuds, { a = third, b = first, since = tick, score = 0 })
+                  table.insert(events, { kind = "CoalitionJoined", by = third, against = first, beside = second })
+                end
               end
             end
           end

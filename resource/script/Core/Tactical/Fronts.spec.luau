@@ -223,6 +223,15 @@ suite:Case("war work: a station of a faction with a force at a front has a strik
     t.eq(Missions.Title(run), `Blockade run: {run.need} m3 of sealed cargo`)
     t.ok(run.reward > 20000)
   end
+  -- (and the seventh agent an escort to the front: of the first level for a pilot nobody knows, and no higher than the second)
+  local escort: State.Mission? = nil
+  for _, offer in Missions.Offers(state, home) do
+    escort = if Missions.Escort(offer) and string.find(offer.key, ":war:", 1, true) then offer else escort
+  end
+  local tender = assert(escort, "no escort to the front is offered")
+  t.eq({ tender.system, tender.aim, tender.kind, tender.faction, tender.level } :: { any }, { system, "escort", "assault", "vessari", 1 } :: { any })
+  t.ok(tender.reward > 0 and tender.standing >= Missions.WAR_STANDING)
+  t.eq(string.sub(Missions.Title(tender), 1, 19), "Escort to the front")
   -- (a station with nobody's force near has none: with the operation over, the offers are gone)
   local kept = table.remove(state.wars.operations)
   for _, offer in Missions.Offers(state, home) do

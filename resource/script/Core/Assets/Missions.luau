@@ -118,6 +118,8 @@ Missions.OFFERS = 3
 -- middle size), and what either does for the pilot's standing.
 Missions.WAR_REACH = 6
 Missions.WAR_HEAD, Missions.WAR_RUN, Missions.WAR_STANDING = 80000, 30000, 0.4
+-- (And how many times an escort's pay an escort to the front is paid.)
+Missions.WAR_ESCORT = 1.5
 -- The levels of the sixth agent's courier contracts: cubic metres of
 -- sealed cargo (from 'least' to 'most', by 'step'), the jumps it is to
 -- be carried ('near' to 'far'), and what it pays: so much, and so much
@@ -189,6 +191,9 @@ function Missions.Title(mission: State.Mission): string
     return `Bounty: {mission.need} {if mission.need == 1 then "pirate" else "pirates"}`
   elseif Missions.Convoy(mission) then
     return `Convoy, level {mission.level}: a tender in past {(Assault.Count(mission.waves))}`
+  elseif Missions.Escort(mission) and string.find(mission.key, ":war:", 1, true) then
+    -- (war work: the escort is at the system the faction's force is at)
+    return `Escort to the front, level {mission.level}: a tender past {(Assault.Count(mission.waves))}`
   elseif Missions.Escort(mission) then
     return `Escort, level {mission.level}: a tender past {(Assault.Count(mission.waves))}`
   elseif Missions.Line(mission) == "defence" then
@@ -499,6 +504,7 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
   -- station there to carry to, a run through the blockade with sealed
   -- cargo. Of the nearest such system. They pay well, and the faction
   -- thinks the better of whoever does them.
+  local front: State.Operation? = nil
   do
     local far = shortest(state.galaxy, system)
     local nearest: State.Operation? = nil
@@ -510,6 +516,7 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         nearest = operation
       end
     end
+    front = nearest
     if nearest then
       local enemy = if nearest.by == node.nearest then nearest.against else nearest.by
       local rng = Rng.For(state.historySeed, station, nearest.id, 89)
@@ -670,6 +677,28 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         -- (a convoy's last wave is not for the place: it waits at the station)
         slot = Missions.OFFERS + 4, level = level, waves = waves, wave = 0, site = 0, rooms = {},
         ends = { if aim == "convoy" then #waves - 1 else #waves }, aim = aim,
+        mark = 0,
+      })
+    end
+  end
+  -- War work, the third kind: an escort to the front. The seventh agent
+  -- has a tender to be seen through at the system the faction's force
+  -- is at: the job is their escort (Tactical/Assault), of the first or
+  -- second level as the pilot's standing opens, and is paid more for
+  -- where it is. (Who comes for the tender is who comes for any: the
+  -- pirates a war draws. Not yet the other force's own ships.)
+  if front and not holding and topOf(Missions.OFFERS + 4) >= 1 and Assault.Room(state, front.system) then
+    local key = `{station}:war:{front.id}:escort`
+    if not table.find(state.missionsTaken, key) then
+      local level = math.min(2, topOf(Missions.OFFERS + 4))
+      local waves = Assault.Plan(Rng.For(state.historySeed, station, front.id, 131), level)
+      local pay, credit = Assault.Pay(level, waves, "escort")
+      local reward = math.floor(pay * Missions.WAR_ESCORT * paying(Missions.OFFERS + 4))
+      table.insert(offers, {
+        id = 0, key = key, kind = "assault", station = station, faction = node.nearest, system = front.system, need = 1, done = 0,
+        type = "", to = station, reward = reward, standing = math.max(credit, Missions.WAR_STANDING), taken = 0,
+        agent = Missions.Agent(state, station, Missions.OFFERS + 4), loyalty = points(reward),
+        slot = Missions.OFFERS + 4, level = level, waves = waves, wave = 0, site = 0, rooms = {}, ends = { #waves }, aim = "escort",
         mark = 0,
       })
     end

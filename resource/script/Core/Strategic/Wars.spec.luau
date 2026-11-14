@@ -163,4 +163,92 @@ suite:Case("the wars are in the save, a game steps them, and a save from before 
   t.eq(Core.Hash(Core.Load(old, oldLength)), Core.Hash(fresh))
 end)
 
+suite:Case("a faction that falls on a much weaker one is joined against, and a truce has terms: tribute, and a claim handed over", function(t)
+  local galaxy = Galaxy.Describe(1, SYSTEMS)
+  Galaxy.Deepen(galaxy)
+  local wars = Wars.New(galaxy)
+  local holders = Galaxy.Holders(galaxy)
+  -- Two who share a border, and a third.
+  local a, b = "", ""
+  for id = 1, SYSTEMS do
+    for _, neighbor in galaxy.systems[id].neighbors do
+      local one, other = galaxy.systems[id].owner, galaxy.systems[neighbor].owner
+      if a == "" and one ~= "" and other ~= "" and one ~= other then
+        a, b = one, other
+      end
+    end
+  end
+  t.ok(a ~= "", "no two factions share a border")
+  local c = ""
+  for _, holder in holders do
+    c = if c == "" and holder ~= a and holder ~= b then holder else c
+  end
+  local function key(x: string, y: string): string
+    return if x < y then `{x}|{y}` else `{y}|{x}`
+  end
+  wars.relations[key(a, b)] = -70
+  wars.relations[key(a, c)] = -25
+  wars.relations[key(b, c)] = 15
+  wars.strength[a], wars.strength[b] = 300, 0
+  local events: { any } = {}
+  Wars.Step(galaxy, wars, 1, Wars.HOUR, events)
+  local declared, joined = nil :: any, nil :: any
+  for _, event in events do
+    declared = if event.kind == "WarDeclared" then event else declared
+    joined = if event.kind == "CoalitionJoined" then event else joined
+  end
+  t.eq({ declared.by, declared.on }, { a, b })
+  t.eq({ joined.by, joined.against, joined.beside }, { c, a, b })
+  t.ok(Wars.AtWar(wars, a, b) and Wars.AtWar(wars, a, c) and not Wars.AtWar(wars, b, c))
+  t.ok(Wars.Between(wars, a, c) <= Wars.JOIN_BELOW)
+  -- (one that thinks well of the aggressor, or ill of its victim, stays out of it: nobody else joined)
+  local feuds = #wars.feuds
+  t.eq(feuds, 2)
+
+  -- Terms. The first has taken three claims more than it lost, and both have had enough.
+  local fresh = Galaxy.Describe(1, SYSTEMS)
+  Galaxy.Deepen(fresh)
+  local peace = Wars.New(fresh)
+  local claim = 0
+  for id = 1, SYSTEMS do
+    if fresh.systems[id].owner == "" and claim == 0 then
+      for _, neighbor in fresh.systems[id].neighbors do
+        if fresh.systems[neighbor].owner == a then
+          claim = id
+        end
+      end
+    end
+  end
+  t.ok(claim ~= 0, "no open system lies next to what the first holds")
+  fresh.systems[claim].owner = b
+  peace.claims[claim] = b
+  table.insert(peace.feuds, { a = a, b = b, since = 0, score = 3 })
+  peace.weary[a], peace.weary[b] = 0.5, 0.9
+  -- (the first with too little to send for another siege just now: a claim under siege is not handed over)
+  peace.strength[a], peace.strength[b] = 20, 200
+  events = {}
+  Wars.Step(fresh, peace, 1, 30 * Wars.HOUR, events)
+  local made = nil :: any
+  for _, event in events do
+    made = if event.kind == "PeaceMade" then event else made
+  end
+  t.eq({ made.a, made.b, made.winner, made.paid, made.ceded, made.hours } :: { any }, { a, b, a, 50, claim, 30 } :: { any })
+  t.eq({ fresh.systems[claim].owner, peace.claims[claim], #peace.feuds } :: { any }, { a, a, 0 } :: { any })
+  t.ok(peace.strength[a] >= 70 and peace.strength[a] < 100, `the winner has {peace.strength[a]} to send`)
+  t.ok(peace.strength[b] >= 150 and peace.strength[b] < 180, `the loser has {peace.strength[b]} to send`)
+  t.eq(Wars.AtWar(peace, a, b), false)
+  t.ok(peace.truces[key(a, b)] == 30 * Wars.HOUR + Wars.TRUCE)
+  -- (an even war has none)
+  local even = Wars.New(fresh)
+  table.insert(even.feuds, { a = a, b = b, since = 0, score = 0 })
+  even.weary[a], even.weary[b] = 0.7, 0.7
+  events = {}
+  Wars.Step(fresh, even, 1, 30 * Wars.HOUR, events)
+  for _, event in events do
+    if event.kind == "PeaceMade" then
+      t.eq({ event.winner, event.paid, event.ceded } :: { any }, { "", 0, 0 } :: { any })
+    end
+  end
+end)
+
 return suite

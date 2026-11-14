@@ -317,8 +317,18 @@ function Session.Notice(session: Session, event: Space.Event)
     local function named(id: string): string
       return if Factions.byId[id] then Factions.byId[id].name else id
     end
+    local terms = ""
+    if kind == "PeaceMade" and event.winner ~= "" then
+      local ceded = session.game.state.galaxy.systems[event.ceded]
+      terms = `. The {named(event.winner)} have the better of it` .. (if ceded then `, and {ceded.name}` else "")
+    end
     Session.Say(session, if kind == "WarDeclared" then `NEWS: the {named(event.by)} have declared war on the {named(event.on)}`
-      else `NEWS: the {named(event.a)} and the {named(event.b)} have made a truce, after {event.hours} hours of war`)
+      else `NEWS: the {named(event.a)} and the {named(event.b)} have made a truce, after {event.hours} hours of war{terms}`)
+  elseif kind == "CoalitionJoined" then
+    local function named(id: string): string
+      return if Factions.byId[id] then Factions.byId[id].name else id
+    end
+    Session.Say(session, `NEWS: the {named(event.by)} have joined the {named(event.beside)} against the {named(event.against)}`)
   elseif kind == "Blockaded" or kind == "SystemTaken" then
     -- (said when it is near enough to matter: within a few jumps)
     local here = Core.Query.Player(session.game).system
