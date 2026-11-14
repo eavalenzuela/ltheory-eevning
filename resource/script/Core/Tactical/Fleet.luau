@@ -174,10 +174,13 @@ function Fleet.Mood(loyalty: number): string
   return if loyalty >= Fleet.LOYALTY.devoted then "devoted" elseif loyalty >= 60 then "loyal" elseif loyalty >= 25 then "steady" else "wary"
 end
 
--- What a hired pilot is paid a day: their grade's wage, and a tenth
--- less of it for one who is devoted.
-function Fleet.Due(wing: State.Wingman): number
-  return if wing.loyalty >= Fleet.LOYALTY.devoted then math.floor(wing.wage * (1 - Fleet.LOYALTY.less)) else wing.wage
+-- What a hired pilot is paid a day: their grade's wage, a tenth less of
+-- it for one who is devoted, and 4% less a level for an employer who
+-- has learned Paymaster (Data/Skills).
+Fleet.PAYMASTER = 0.04
+function Fleet.Due(state: State.State, wing: State.Wingman): number
+  local wage = wing.wage * (1 - Fleet.PAYMASTER * math.max(0, state.skills.paymaster or 0))
+  return math.floor(if wing.loyalty >= Fleet.LOYALTY.devoted then wage * (1 - Fleet.LOYALTY.less) else wage)
 end
 
 -- What a pilot of a skill is paid a day, and what it costs to sign them.
@@ -1597,7 +1600,7 @@ function Fleet.Step(state: State.State, events: { Event })
   for place, id in table.clone(state.fleetIds) do
     local wing = state.fleet[id]
     if state.tick - wing.paid >= DAY then
-      local due = Fleet.Due(wing)
+      local due = Fleet.Due(state, wing)
       if Corporation.Afford(state, due) then
         Corporation.Spend(state, due, "wages", events)
         wing.loyalty = math.min(Fleet.LOYALTY.most, wing.loyalty + Fleet.LOYALTY.paid)

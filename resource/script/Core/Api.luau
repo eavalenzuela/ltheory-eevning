@@ -1559,7 +1559,7 @@ function Query.Corporation(game: Game): CorporationInfo
   -- (what its pilots are paid a day, all told)
   local wages = 0
   for _, id in state.fleetIds do
-    wages += Fleet.Due(state.fleet[id])
+    wages += Fleet.Due(state, state.fleet[id])
   end
   local heads: { HeadRow } = {}
   local earned, spent = 0, 0
@@ -1622,7 +1622,7 @@ function Query.Contracts(game: Game, station: number): Board
     table.insert(listings, { listing = listing, worth = worth, chance = Contracts.Chance(listing.price, worth),
       left = math.max(0, listing.ends - state.tick) * Constants.TICK, here = listing.station == station })
   end
-  return { lots = lots, listings = listings, limit = Contracts.LISTINGS }
+  return { lots = lots, listings = listings, limit = Contracts.Limit(state) }
 end
 
 -- What a lot of so many of a type would be worth on a station's board,
@@ -1790,7 +1790,7 @@ end
 -- type is not a blueprint (a copy is not: it cannot be copied).
 function Query.CopyPlan(game: Game, type: string, runs: number): Industry.CopyPlan?
   local blueprint = Blueprints.byId[type]
-  return if blueprint then Industry.CopyPlan(blueprint, runs) else nil
+  return if blueprint then Industry.CopyPlan(game.state, blueprint, runs) else nil
 end
 
 -- A body by id (a ship in space or a described object), or nil.
@@ -2223,7 +2223,7 @@ function Query.Fleet(game: Game): { FleetRow }
     local wing = state.fleet[id]
     local ship = state.ships[wing.ship]
     local row: FleetRow = {
-      id = wing.id, name = wing.name, skill = wing.skill, wage = Fleet.Due(wing), loyalty = wing.loyalty,
+      id = wing.id, name = wing.name, skill = wing.skill, wage = Fleet.Due(state, wing), loyalty = wing.loyalty,
       mood = Fleet.Mood(wing.loyalty), order = wing.order, target = wing.target,
       ship = 0, shipName = "", hull = "", where = "no ship", near = false, distance = 0, shield = 1, armor = 1, structure = 1,
       doing = "no ship", hauled = wing.hauled, experience = wing.experience,

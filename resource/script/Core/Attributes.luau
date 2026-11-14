@@ -87,10 +87,20 @@ local function gather(fitted: { Fitted }, on: string, family: string?, levels: L
   if levels then
     -- in the skill list's order, so the arithmetic is the same every time
     for _, skill in Skills.list do
-      local bonus = skill.bonus
       local level = levels[skill.id] or 0
-      if bonus and level > 0 and bonus.on == on and (on == "ship" or bonus.family == family) then
-        pendingFor(pending, bonus.attribute).plain *= 1 + bonus.value * level
+      if level > 0 then
+        local function apply(bonus: Modules.Modifier)
+          -- ("turret": every family of turret, which is every family but missiles)
+          if bonus.on == on and (on == "ship" or bonus.family == family or (bonus.family == "turret" and family ~= "missile")) then
+            pendingFor(pending, bonus.attribute).plain *= 1 + bonus.value * level
+          end
+        end
+        if skill.bonus then
+          apply(skill.bonus)
+        end
+        for _, bonus in skill.bonuses or {} :: { Modules.Modifier } do
+          apply(bonus)
+        end
       end
     end
   end

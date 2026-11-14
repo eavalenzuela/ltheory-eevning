@@ -1101,14 +1101,14 @@ suite:Case("loyalty grows with the days paid and with a grade gained, a devoted 
   -- Paid day after day, to the most there is.
   local days = (L.devoted - L.start) // L.paid
   steps(game, days * Fleet.DAY + 5)
-  t.eq({ wing.loyalty, Fleet.Mood(wing.loyalty), Fleet.Due(wing) } :: { any },
+  t.eq({ wing.loyalty, Fleet.Mood(wing.loyalty), Fleet.Due(state, wing) } :: { any },
     { L.devoted, "devoted", math.floor(wing.wage * (1 - L.less)) } :: { any })
   -- Devoted, they are paid a tenth less: and that is what the crew list and the corporation's wages say.
   local before = state.wallet
   steps(game, Fleet.DAY)
-  t.eq(before - state.wallet, Fleet.Due(wing))
+  t.eq(before - state.wallet, Fleet.Due(state, wing))
   local row = Core.Query.Fleet(game)[1]
-  t.eq({ row.wage, row.loyalty, row.mood } :: { any }, { Fleet.Due(wing), wing.loyalty, "devoted" } :: { any })
+  t.eq({ row.wage, row.loyalty, row.mood } :: { any }, { Fleet.Due(state, wing), wing.loyalty, "devoted" } :: { any })
   steps(game, 20 * Fleet.DAY)
   t.eq(wing.loyalty, L.most)
   -- A ship destroyed under them: they are back on the list, less loyal than they were.

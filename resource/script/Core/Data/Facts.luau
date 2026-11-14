@@ -654,6 +654,9 @@ function Facts.Of(type: string): Sheet?
       if skill.bonus then
         modifier(to, skill.bonus, true)
       end
+      for _, bonus in skill.bonuses or {} :: { Modules.Modifier } do
+        modifier(to, bonus, true)
+      end
       if #skill.requires > 0 then
         local required = section(sheet, "Requires")
         for _, need in skill.requires do

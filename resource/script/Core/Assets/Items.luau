@@ -150,8 +150,9 @@ function Items.Offence(state: State.State, ship: number): Offence
         out.dps += hit / weapon.duration
         out.kinds[index] += hit / weapon.duration
       end
+      -- (a missile flies 5% longer a level of Long Burn: Tactical/Combat's LONG_BURN)
       out.range = math.max(out.range, if weapon.optimal > 0 then weapon.optimal * charge.rangeMultiplier + weapon.falloff
-        else charge.velocity * charge.flightTime)
+        else charge.velocity * charge.flightTime * (1 + 0.05 * Skills.Level(levels, "long.burn")))
     end
   end
   return out

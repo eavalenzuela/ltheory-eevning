@@ -100,6 +100,9 @@ end
 Industry.RESEARCH_LEVELS = 10
 Industry.MATERIAL_SAVED = 0.01
 Industry.TIME_SAVED = 0.02
+-- What a level of two of a pilot's crafts takes off the time (Data/
+-- Skills): Bench Science off research, Draughtsmanship off copying.
+Industry.BENCH, Industry.DRAUGHT = 0.05, 0.05
 
 -- The levels a pilot has researched of a blueprint: materials, time.
 function Industry.Researched(state: State.State, blueprint: string): (number, number)
@@ -123,7 +126,9 @@ function Industry.ResearchPlan(state: State.State, blueprint: Blueprints.Bluepri
   end
   return {
     what = what, level = level + 1,
-    seconds = math.ceil((300 + 0.5 * math.min(7200, blueprint.seconds)) * 1.5 ^ level),
+    -- (5% quicker for each level of Bench Science)
+    seconds = math.ceil((300 + 0.5 * math.min(7200, blueprint.seconds)) * 1.5 ^ level
+      * (1 - Industry.BENCH * math.max(0, state.skills["bench.science"] or 0))),
     fee = math.ceil(blueprint.basePrice * 0.02 * (level + 1)),
   }
 end
@@ -194,9 +199,10 @@ Industry.COPY_TIME = 0.5
 export type CopyPlan = { copy: string, runs: number, seconds: number, fee: number }
 
 -- What copying so many runs of a blueprint would take, and the item
--- type the copy is.
-function Industry.CopyPlan(blueprint: Blueprints.Blueprint, runs: number): CopyPlan
-  return { copy = Blueprints.Copy(blueprint), runs = runs, seconds = math.ceil(blueprint.seconds * runs * Industry.COPY_TIME),
+-- type the copy is. (5% quicker for each level of Draughtsmanship.)
+function Industry.CopyPlan(state: State.State, blueprint: Blueprints.Blueprint, runs: number): CopyPlan
+  local quicker = 1 - Industry.DRAUGHT * math.max(0, state.skills.draughtsmanship or 0)
+  return { copy = Blueprints.Copy(blueprint), runs = runs, seconds = math.ceil(blueprint.seconds * runs * Industry.COPY_TIME * quicker),
     fee = Industry.JobFee(blueprint, runs) }
 end
 
@@ -330,7 +336,7 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
         return false, "needs Industry 1"
       elseif #state.jobIds >= Industry.JobSlots(state) then
         return false, "every job slot is in use"
-      elseif Industry.CopyPlan(blueprint, runs).fee > state.wallet then
+      elseif Industry.CopyPlan(state, blueprint, runs).fee > state.wallet then
         return false, "not enough credits for the fee"
       end
       return true
@@ -459,7 +465,7 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
 
   elseif command.kind == "StartResearch" and command.what == "copy" then
     local blueprint = Blueprints.byId[item.type]
-    local plan = Industry.CopyPlan(blueprint, command.quantity or 1)
+    local plan = Industry.CopyPlan(state, blueprint, command.quantity or 1)
     -- The blueprint is in the laboratory until it is done.
     Items.Take(state, item, 1)
     Wallet.Pay(state, -plan.fee, "copying fee", events)

@@ -36,6 +36,7 @@
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
+local Skills = require("@lt/Core/Data/Skills")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
 local Modules = require("@lt/Core/Data/Modules")
@@ -56,6 +57,8 @@ Jumping.FURTHER = 0.1
 Jumping.SKILL = "jump.drives"
 -- Kilograms of hull a fuel block takes a light year.
 Jumping.FUEL_MASS = 50000000
+-- What a level of Lean Burn takes off the fuel of a jump (Data/Skills).
+Jumping.LEAN = 0.05
 -- The share of its capacitor a ship has to have to jump, and the share
 -- it is left with.
 Jumping.CAPACITOR = 0.7
@@ -89,7 +92,9 @@ end
 -- The fuel blocks a ship burns to jump so far.
 function Jumping.Fuel(state: State.State, ship: number, distance: number): number
   local hull = Ships.byId[state.ships[ship].type]
-  return math.max(1, math.ceil(distance * hull.mass / Jumping.FUEL_MASS))
+  -- (less of it, for a pilot who has learned Lean Burn)
+  local lean = 1 - Jumping.LEAN * Skills.Level(Items.Levels(state, ship), "lean.burn")
+  return math.max(1, math.ceil(distance * hull.mass / Jumping.FUEL_MASS * lean - 1e-9))
 end
 
 -- The fuel blocks in a ship's hold.

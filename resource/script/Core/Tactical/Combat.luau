@@ -24,6 +24,7 @@ local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
+local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
@@ -32,6 +33,12 @@ local Vapour = require("@lt/Core/Tactical/Vapour")
 local Vitals = require("@lt/Core/Tactical/Vitals")
 
 local Combat = {}
+
+-- What three of a pilot's crafts come to, a level (Data/Skills): a
+-- missile's flight longer by this share (Long Burn), its blast tighter
+-- by this (Proximity Fusing), and a drone's gun doing this much more
+-- (Swarm Tactics).
+Combat.LONG_BURN, Combat.FUSING, Combat.SWARM = 0.05, 0.04, 0.04
 
 -- What a salvager brings off a wreck (Data/Types).
 local SALVAGE = { "salvage.plates", "salvage.circuits", "salvage.conduits" }
@@ -498,7 +505,9 @@ local function fireMissile(state: State.State, ball: State.Ball, item: State.Ite
   local charge = Modules.chargeById[item.charge]
   local flight = Space.Distance(ball :: any, target) / charge.velocity
   local outcome = "launched"
-  if flight > charge.flightTime then
+  -- (how long it flies: longer for a pilot who has learned Long Burn)
+  local flies = charge.flightTime * (1 + Combat.LONG_BURN * Skills.Level(Items.Levels(state, ball.id), "long.burn"))
+  if flight > flies then
     outcome = "out of range"
   else
     local damage = {}
@@ -509,7 +518,7 @@ local function fireMissile(state: State.State, ball: State.Ball, item: State.Ite
       damage = damage, impact = now(state) + flight })
   end
   table.insert(events, { kind = "Shot", from = ball.id, item = item.id, to = target.id, family = "missile",
-    outcome = outcome, damage = 0, flight = math.min(flight, charge.flightTime) })
+    outcome = outcome, damage = 0, flight = math.min(flight, flies) })
 end
 
 -- Run every cycle of one module that has come due. Returns false if the
@@ -528,6 +537,11 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
 
     if module.weapon then
       local weapon = Attributes.Weapon(Vitals.Fit(state, ball), item.type, Items.Levels(state, ball.id))
+      -- (a drone's gun does more for an owner who has learned Swarm Tactics)
+      local drone = state.drones[ball.id]
+      if drone and state.ships[drone.owner] then
+        weapon.damageMultiplier *= 1 + Combat.SWARM * Skills.Level(Items.Levels(state, drone.owner), "swarm.tactics")
+      end
       local lock = findLock(ball, running.target)
       local target = Space.Body(state, running.target)
       if lock == nil or not lock.locked or target == nil then
@@ -789,7 +803,11 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
       local charge = Modules.chargeById[missile.charge]
       if target then
         local speed = math.sqrt(target.vx ^ 2 + target.vy ^ 2 + target.vz ^ 2)
-        local factor = Gunnery.MissileFactor(target.vitals.signature, speed, charge.explosionRadius, charge.explosionVelocity)
+        -- (a tighter blast from a pilot who has learned Proximity Fusing,
+        -- if the ship that fired it is still there to have set the fuse)
+        local fused = if state.ships[missile.from] then Skills.Level(Items.Levels(state, missile.from), "proximity.fusing") else 0
+        local factor = Gunnery.MissileFactor(target.vitals.signature, speed, charge.explosionRadius * (1 - Combat.FUSING * fused),
+          charge.explosionVelocity)
         local damage, total = {}, 0
         for i = 1, 4 do
           damage[i] = missile.damage[i] * factor

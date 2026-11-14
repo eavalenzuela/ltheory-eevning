@@ -28,6 +28,9 @@ local State = require("@lt/Core/Kernel/State")
 
 local Standings = {}
 
+-- What a level of Protocol adds to a rise in a faction's regard (Data/Skills).
+Standings.PROTOCOL = 0.05
+
 export type Event = { [string]: any }
 
 Standings.HOSTILE = -5
@@ -51,6 +54,11 @@ end
 function Standings.Change(state: State.State, faction: string, by: number, events: { Event }?)
   if Factions.byId[faction] == nil or by == 0 then
     return
+  end
+  -- (what is done for a faction counts for more from a pilot who has
+  -- learned Protocol; what is done against it counts as it did)
+  if by > 0 then
+    by *= 1 + Standings.PROTOCOL * math.max(0, state.skills.protocol or 0)
   end
   local now = math.clamp(Standings.Of(state, faction) + by, -10, 10)
   state.standings[faction] = now

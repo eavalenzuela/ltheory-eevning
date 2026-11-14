@@ -22,8 +22,12 @@ export type Skill = {
   start: number,          -- the level a new pilot has; -1 if it must be learned from a book
   requires: { Need },     -- to train it at all
   -- A modifier on the ship or its weapons; its 'value' is the change per
-  -- level (0.05: 5% more a level; -0.03: 3% less).
+  -- level (0.05: 5% more a level; -0.03: 3% less). For weapons, the
+  -- family "turret" is every turret there is, whatever it fires.
   bonus: Modules.Modifier?,
+  -- More of them, for a skill that does the same to several things at
+  -- once (a layer's four resistances).
+  bonuses: { Modules.Modifier }?,
   note: string,
   -- A people's own teaching (a faction's id): no market of anybody
   -- else's has the book. (The Nimia's two.)
@@ -39,6 +43,15 @@ end
 
 local function weapons(family: string, attribute: string, perLevel: number): Modules.Modifier
   return { on = "weapons", family = family, attribute = attribute, op = "mul", value = perLevel }
+end
+
+-- The same change to what a layer lets through of each kind of damage.
+local function resists(layer: string, perLevel: number): { Modules.Modifier }
+  local all: { Modules.Modifier } = {}
+  for kind = 1, 4 do
+    table.insert(all, ship(`{layer}Resonance.{kind}`, perLevel))
+  end
+  return all
 end
 
 local skills: { Skill } = {
@@ -174,6 +187,66 @@ local skills: { Skill } = {
   -- Finding things
   { id = "astrometrics", name = "Astrometrics", rank = 3, start = 0, requires = {},
     note = "Each scan brings a hidden site 10% nearer to found a level." },
+
+  -- The crafts of each trade (2026-11-14: the rest of the tree, with
+  -- the project owner's word on it: "don't just name them what they
+  -- upgrade"). Each is named for what a pilot learns to do, and says in
+  -- its note what comes of it. None gates anything: they make a pilot
+  -- better at what they can do already. Every figure is a first one.
+  -- Gunnery
+  { id = "deflection", name = "Deflection Shooting", rank = 2, start = -1, requires = { { skill = "weapon.upgrades", level = 2 } },
+    bonus = weapons("turret", "tracking", 0.05), note = "Turrets follow a crossing target 5% better a level." },
+  { id = "windage", name = "Windage", rank = 2, start = -1, requires = { { skill = "weapon.upgrades", level = 2 } },
+    bonus = weapons("turret", "falloff", 0.05), note = "Turrets keep their aim 5% farther past their best range a level." },
+  { id = "salvo.drill", name = "Salvo Drill", rank = 2, start = -1, requires = { { skill = "missiles", level = 2 } },
+    bonus = weapons("missile", "duration", -0.03), note = "Launchers fire 3% faster a level." },
+  { id = "long.burn", name = "Long Burn", rank = 2, start = -1, requires = { { skill = "missiles", level = 2 } },
+    note = "A missile flies 5% longer a level, and so that much farther." },
+  { id = "proximity.fusing", name = "Proximity Fusing", rank = 3, start = -1, requires = { { skill = "missiles", level = 3 } },
+    note = "A missile's blast is 4% tighter a level: more of it lands on a small ship." },
+  { id = "swarm.tactics", name = "Swarm Tactics", rank = 3, start = -1, requires = { { skill = "drones", level = 3 } },
+    note = "Your drones' guns do 4% more a level." },
+  -- Flying
+  { id = "wayfinding", name = "Wayfinding", rank = 2, start = -1, requires = { { skill = "navigation", level = 2 } },
+    bonus = ship("warpSpeed", 0.05), note = "5% faster in warp a level." },
+  { id = "running.dark", name = "Running Dark", rank = 3, start = -1, requires = { { skill = "navigation", level = 3 } },
+    bonus = ship("signature", -0.02), note = "A 2% smaller signature a level: slower to be locked, and less of a missile lands." },
+  { id = "stowage", name = "Stowage", rank = 1, start = -1, requires = {}, bonus = ship("cargo", 0.05),
+    note = "A hold takes 5% more a level." },
+  { id = "lean.burn", name = "Lean Burn", rank = 4, start = -1, requires = { { skill = "jump.drives", level = 2 } },
+    note = "A jump burns 5% less fuel a level." },
+  { id = "snapshot", name = "Snapshot", rank = 2, start = -1, requires = { { skill = "electronics", level = 2 } },
+    bonus = ship("scanResolution", 0.05), note = "Locks 5% quicker a level." },
+  -- Keeping the ship whole
+  { id = "reactor.trim", name = "Reactor Trim", rank = 2, start = -1, requires = { { skill = "engineering", level = 2 } },
+    bonus = ship("capacitorRecharge", -0.05), note = "The capacitor recharges 5% quicker a level." },
+  { id = "field.harmonics", name = "Field Harmonics", rank = 2, start = -1, requires = { { skill = "shield.operation", level = 2 } },
+    bonus = ship("shieldRecharge", -0.05), note = "The shield recharges 5% quicker a level." },
+  { id = "dispersal", name = "Dispersal", rank = 3, start = -1, requires = { { skill = "shield.operation", level = 3 } },
+    bonuses = resists("shield", -0.02), note = "A shield lets 2% less of everything through a level." },
+  { id = "glancing.angles", name = "Glancing Angles", rank = 3, start = -1, requires = { { skill = "hull.upgrades", level = 3 } },
+    bonuses = resists("armor", -0.02), note = "Armour lets 2% less of everything through a level." },
+  { id = "compartmentation", name = "Compartmentation", rank = 2, start = -1, requires = { { skill = "hull.upgrades", level = 2 } },
+    bonus = ship("hull", 0.05), note = "5% more hull a level." },
+  -- Making and selling
+  { id = "bench.science", name = "Bench Science", rank = 3, start = -1, requires = { { skill = "industry", level = 2 } },
+    note = "Research into a blueprint takes 5% less time a level." },
+  { id = "draughtsmanship", name = "Draughtsmanship", rank = 2, start = -1, requires = { { skill = "industry", level = 2 } },
+    note = "Copying a blueprint takes 5% less time a level." },
+  { id = "ledger.keeping", name = "Ledger Keeping", rank = 2, start = -1, requires = {},
+    note = "Two more lots up on the stations' boards at a time a level." },
+  -- Working for people
+  { id = "hard.bargaining", name = "Hard Bargaining", rank = 3, start = -1, requires = {},
+    note = "A station's jobs pay 3% more a level." },
+  { id = "protocol", name = "Protocol", rank = 3, start = -1, requires = {},
+    note = "What you do for a faction counts 5% more with it a level." },
+  { id = "patronage", name = "Patronage", rank = 3, start = -1, requires = { { skill = "protocol", level = 2 } },
+    note = "A job done earns 5% more loyalty points a level." },
+  { id = "paymaster", name = "Paymaster", rank = 3, start = -1, requires = { { skill = "leadership", level = 2 } },
+    note = "Hired pilots are paid 4% less a day a level." },
+  -- Finding things
+  { id = "triangulation", name = "Triangulation", rank = 3, start = -1, requires = { { skill = "astrometrics", level = 2 } },
+    note = "Each scan probe near a signal is worth 10% more a level." },
 }
 
 local Skills = {
@@ -185,6 +258,12 @@ local Skills = {
 
 for _, skill in skills do
   Skills.byId[skill.id] = skill
+end
+
+-- A pilot's level in a skill: 0 for one they have not learned, and for
+-- a ship nobody trained to fly (whose levels are nil).
+function Skills.Level(levels: { [string]: number }?, id: string): number
+  return if levels then math.max(0, levels[id] or 0) else 0
 end
 
 -- Seconds to train a skill from 'level - 1' to 'level'.

@@ -133,6 +133,9 @@ Missions.IN_HAND = 5
 Missions.CRATE = "cargo.sealed"
 -- Credits of a job's pay to a loyalty point.
 Missions.LOYALTY = 400
+-- What a level of two of a pilot's crafts adds (Data/Skills): Hard
+-- Bargaining to what a job pays, Patronage to the loyalty points it earns.
+Missions.BARGAIN, Missions.PATRON = 0.03, 0.05
 -- Ticks a job in hand may be kept before it lapses: three days.
 Missions.LIMIT = 3 * math.ceil(86400 / Constants.TICK)
 -- Ticks in the day a station's offers last.
@@ -418,7 +421,12 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
   local system = Space.SystemOf(state, station)
   local node = state.galaxy.systems[system]
   local day = state.tick // DAY
-  local factions = 1 + 0.03 * Missions.Standing(state, node.nearest)
+  -- (and what a pilot who has learned Hard Bargaining gets out of anybody)
+  local factions = (1 + 0.03 * Missions.Standing(state, node.nearest)) * (1 + Missions.BARGAIN * math.max(0, state.skills["hard.bargaining"] or 0))
+  -- (the loyalty points a job's pay earns: more for one who has learned Patronage)
+  local function points(reward: number): number
+    return math.max(1, math.floor(reward / Missions.LOYALTY * (1 + Missions.PATRON * math.max(0, state.skills.patronage or 0))))
+  end
   -- (what an agent pays: for the faction's standing, and for their own regard)
   local function paying(slot: number): number
     return factions * (1 + Missions.REGARD.pay * math.max(0, Missions.Regard(state, station, slot)))
@@ -467,7 +475,7 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         mission.reward = math.floor(mission.need * Types.Info(mission.type).basePrice * 1.5 * bonus)
         mission.standing = 0.1
       end
-      mission.loyalty = math.max(1, mission.reward // Missions.LOYALTY)
+      mission.loyalty = points(mission.reward)
       table.insert(offers, mission)
     end
   end
@@ -509,7 +517,7 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         id = 0, key = `{station}:a{given}:{level}`, kind = "assault", station = station, faction = node.nearest, system = where,
         need = Assault.Need(aim, level, waves), done = 0, type = if aim == "fetch" then Assault.LOOT else "", to = station,
         reward = reward, standing = credit, taken = 0,
-        agent = Missions.Agent(state, station, Missions.OFFERS + 1), loyalty = math.max(1, reward // Missions.LOYALTY),
+        agent = Missions.Agent(state, station, Missions.OFFERS + 1), loyalty = points(reward),
         slot = Missions.OFFERS + 1, level = level, waves = waves, wave = 0, site = 0, rooms = {}, ends = ends, aim = aim, mark = 0,
       })
     end
@@ -528,7 +536,7 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
       table.insert(offers, {
         id = 0, key = `{station}:d{dug}:{level}`, kind = "mining", station = station, faction = node.nearest, system = where,
         need = units, done = 0, type = ore, to = station, reward = reward, standing = credit, taken = 0,
-        agent = Missions.Agent(state, station, Missions.OFFERS + 2), loyalty = math.max(1, reward // Missions.LOYALTY),
+        agent = Missions.Agent(state, station, Missions.OFFERS + 2), loyalty = points(reward),
         slot = Missions.OFFERS + 2, level = level, waves = if #pack > 0 then { pack } else {}, wave = 0, site = 0, rooms = {},
         ends = { if #pack > 0 then 1 else 0 }, aim = "dig", mark = 0,
       })
@@ -560,7 +568,7 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         id = 0, key = `{station}:c{run}:{level}`, kind = "courier", station = station, faction = node.nearest,
         system = Space.SystemOf(state, to.id), need = need, done = 0, type = Missions.CRATE, to = to.id, reward = reward,
         standing = Missions.RUN_CREDIT * level, taken = 0,
-        agent = Missions.Agent(state, station, Missions.OFFERS + 3), loyalty = math.max(1, reward // Missions.LOYALTY),
+        agent = Missions.Agent(state, station, Missions.OFFERS + 3), loyalty = points(reward),
         slot = Missions.OFFERS + 3, level = level, waves = {}, wave = 0, site = 0, rooms = {}, ends = {}, aim = aim, mark = 0,
       })
     end
@@ -592,7 +600,7 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         need = if aim == "convoy" then 2 elseif aim == "escort" then 1 else (Assault.Count(waves)), done = 0, type = "", to = station,
         reward = reward,
         standing = credit, taken = 0,
-        agent = Missions.Agent(state, station, Missions.OFFERS + 4), loyalty = math.max(1, reward // Missions.LOYALTY),
+        agent = Missions.Agent(state, station, Missions.OFFERS + 4), loyalty = points(reward),
         -- (a convoy's last wave is not for the place: it waits at the station)
         slot = Missions.OFFERS + 4, level = level, waves = waves, wave = 0, site = 0, rooms = {},
         ends = { if aim == "convoy" then #waves - 1 else #waves }, aim = aim,

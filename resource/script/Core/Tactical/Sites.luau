@@ -93,6 +93,7 @@ end
 -- (or the ship itself) is that near it. The scanner says which planet
 -- a signal is by, which is where to take a probe.
 Sites.PROBE = "probe.scan"
+Sites.TRIANGULATION = 0.1     -- what a level of that craft adds to a probe's worth (Data/Skills)
 Sites.PROBES = 4              -- a pilot has so many out at once, at most
 Sites.PROBE_LIFE = 3600       -- ticks
 Sites.PROBE_RANGE = Constants.AU
@@ -640,7 +641,9 @@ function Sites.Apply(state: State.State, command: State.Command, events: { Event
       local probes, near = Sites.Covered(state, site, ball)
       local reach = if near then 1 else Sites.ALONE[site.kind] or 1
       if site.strength < reach then
-        site.strength = math.min(reach, site.strength + Sites.Gain(state, site.kind, ball.id) * (1 + probes))
+        -- (and each probe is worth a tenth more a level of Triangulation)
+        local worth = 1 + Sites.TRIANGULATION * math.max(0, state.skills.triangulation or 0)
+        site.strength = math.min(reach, site.strength + Sites.Gain(state, site.kind, ball.id) * (1 + probes * worth))
       end
       if site.strength >= 1 then
         found += 1

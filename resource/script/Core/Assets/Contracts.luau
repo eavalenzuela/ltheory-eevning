@@ -66,6 +66,13 @@ Contracts.WANTS = 2
 -- How long a pilot's listing stays up, and how many they can have up.
 Contracts.LASTS = 7 * DAY
 Contracts.LISTINGS = 10
+-- (and so many more for each level of Ledger Keeping: Data/Skills)
+Contracts.LEDGER = 2
+
+-- How many listings a pilot can have up at once.
+function Contracts.Limit(state: State.State): number
+  return Contracts.LISTINGS + Contracts.LEDGER * math.max(0, state.skills["ledger.keeping"] or 0)
+end
 -- A listing asking this share of its worth or less is taken within the
 -- hour; asking more than that share, never. Between the two, the chance
 -- an hour runs from the one figure down to the other.
@@ -401,8 +408,8 @@ function Contracts.Validate(state: State.State, command: State.Command): (boolea
       return false, "no such quantity"
     elseif price < 1 or price % 1 ~= 0 then
       return false, "no such price"
-    elseif #state.contractIds >= Contracts.LISTINGS then
-      return false, `{Contracts.LISTINGS} listings at a time`
+    elseif #state.contractIds >= Contracts.Limit(state) then
+      return false, `{Contracts.Limit(state)} listings at a time`
     elseif Contracts.Fee(state, station, price) > state.wallet then
       return false, "not enough credits for the broker"
     end
