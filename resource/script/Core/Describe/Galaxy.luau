@@ -466,6 +466,22 @@ local REGION_KINDS = { "Reach", "Expanse", "Marches", "Deep", "Verge", "Span", "
 
 local SPACING = 4 -- light years between neighbours, roughly
 
+-- How far a gate reaches, light years on the map: when a galaxy's gates
+-- have been made, every one longer than this is taken out again. (The
+-- project owner's, 2026-11-13: "a post-gen step of removing gates with
+-- jumps further than x LY", "e.g. 100LY".)
+-- The gates are a tree first, each system to the nearest made before
+-- it, so the first few dozen systems of a big galaxy, which had nothing
+-- near them when they were made, gate right across it: 625 light years
+-- of an 800 light year map at ten thousand systems. Those few gates put
+-- everything a few jumps from everything, however big the galaxy
+-- (ten thousand systems were 38 jumps across, and homeworlds 440 light
+-- years apart 12 jumps), which leaves a faction's space no depth and
+-- its borders no meaning. Without them the same galaxy is 67 jumps
+-- across and its homeworlds 30 apart. A galaxy narrower than this has
+-- no such gate to lose (one of 400 systems is 160 light years across).
+Galaxy.GATE_REACH = 100
+
 -- Places on the map kept by the square each falls in, so that what is
 -- nearest a place is found without looking at every other. The places
 -- are numbered, and are where 'xs' and 'ys' say.
@@ -864,6 +880,71 @@ function Galaxy.Describe(seed: number, count: number): Galaxy
       if other then
         link(id, other)
       end
+    end
+  end
+  -- No gate reaches farther than Galaxy.GATE_REACH: the ones that do
+  -- are taken out. What that cuts off from the rest (seldom anything:
+  -- the long gates are few, and the shortcuts go round most) is joined
+  -- to it again by the shortest gate that does it, the smallest piece
+  -- first.
+  local reach = Galaxy.GATE_REACH
+  local cut = false
+  for id, system in systems do
+    for at = #system.neighbors, 1, -1 do
+      local other = system.neighbors[at]
+      if (xs[id] - xs[other]) ^ 2 + (ys[id] - ys[other]) ^ 2 > reach * reach then
+        table.remove(system.neighbors, at)
+        cut = true
+      end
+    end
+  end
+  if cut then
+    -- (the pieces: which each system is of, and the systems of each)
+    local piece: { number } = table.create(count, 0)
+    local members: { { number } } = {}
+    for id = 1, count do
+      if piece[id] == 0 then
+        local queue = { id }
+        piece[id] = #members + 1
+        local head = 1
+        while head <= #queue do
+          for _, next in systems[queue[head]].neighbors do
+            if piece[next] == 0 then
+              piece[next] = #members + 1
+              table.insert(queue, next)
+            end
+          end
+          head += 1
+        end
+        table.insert(members, queue)
+      end
+    end
+    for _ = 2, #members do
+      -- The smallest piece there is, the earliest of those as small.
+      local least = 0
+      for index, of in members do
+        if #of > 0 and (least == 0 or #of < #members[least]) then
+          least = index
+        end
+      end
+      -- Its system nearest a system of another piece, and that one.
+      local from, to, gap = 0, 0, math.huge
+      for _, id in members[least] do
+        local other = gridNearest(earlier, xs[id], ys[id], function(other: number): boolean
+          return piece[other] == least
+        end) :: number
+        local d = (xs[id] - xs[other]) ^ 2 + (ys[id] - ys[other]) ^ 2
+        if d < gap or (d == gap and id < from) then
+          from, to, gap = id, other, d
+        end
+      end
+      link(from, to)
+      local into = piece[to]
+      for _, id in members[least] do
+        piece[id] = into
+        table.insert(members[into], id)
+      end
+      members[least] = {}
     end
   end
   for _, system in systems do

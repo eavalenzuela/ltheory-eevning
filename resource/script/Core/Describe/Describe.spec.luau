@@ -444,6 +444,64 @@ suite:Case("a galaxy of thousands of systems is made: every system reached, ever
   end
 end)
 
+suite:Case("no gate reaches farther than a hundred light years, so a galaxy of thousands is many jumps across, and it is whole for all that", function(t)
+  -- Every system reached from the first, how far the farthest is, and the longest gate.
+  local function survey(galaxy: Galaxy.Galaxy): (number, number, number)
+    local hops: { number } = table.create(#galaxy.systems, -1)
+    hops[1] = 0
+    local queue = { 1 }
+    local at, longest, far = 1, 0, 0
+    while at <= #queue do
+      local id = queue[at]
+      at += 1
+      local system = galaxy.systems[id]
+      for _, neighbor in system.neighbors do
+        local other = galaxy.systems[neighbor]
+        longest = math.max(longest, math.sqrt((system.x - other.x) ^ 2 + (system.y - other.y) ^ 2))
+        t.ok(table.find(other.neighbors, id) ~= nil, "a gate that runs one way")
+        if hops[neighbor] < 0 then
+          hops[neighbor] = hops[id] + 1
+          far = math.max(far, hops[neighbor])
+          table.insert(queue, neighbor)
+        end
+      end
+    end
+    return #queue, far, longest
+  end
+  t.eq(Galaxy.GATE_REACH, 100)
+  -- A galaxy of four thousand is 500 light years across. With gates as long as they came, it was a few
+  -- jumps from anywhere to anywhere; with none over a hundred light years it has depth.
+  local count = 4000
+  local galaxy = Galaxy.Describe(3, count)
+  local reached, far, longest = survey(galaxy)
+  t.eq(reached, count, "systems reached from the first")
+  t.ok(longest <= 100, `a gate of {longest} light years`)
+  Galaxy.GATE_REACH = math.huge
+  local loose = Galaxy.Describe(3, count)
+  local _, near, uncut = survey(loose)
+  t.ok(uncut > 250, `the longest gate, left alone, was {uncut} light years`)
+  t.ok(far >= near * 1.5, `{far} jumps from the first system to the farthest, and {near} with the long gates`)
+  -- A reach so short that the galaxy falls to pieces: every piece is joined to the rest again, by a gate
+  -- between neighbours. (A galaxy is made the same way whatever the reach: same seed, same systems.)
+  Galaxy.GATE_REACH = 12
+  local tight = Galaxy.Describe(3, count)
+  local whole, _, joined = survey(tight)
+  Galaxy.GATE_REACH = 100
+  t.eq(whole, count, "systems reached from the first, with gates of twelve light years")
+  t.ok(joined <= 24, `a gate of {joined} light years where none was to be over twelve`)
+  for id, system in tight.systems do
+    t.eq({ system.x, system.y } :: { any }, { galaxy.systems[id].x, galaxy.systems[id].y } :: { any })
+  end
+  -- A galaxy narrower than the reach loses nothing by it.
+  Galaxy.GATE_REACH = math.huge
+  local small = Galaxy.Describe(1, 40)
+  Galaxy.GATE_REACH = 100
+  local same = Galaxy.Describe(1, 40)
+  for id, system in small.systems do
+    t.eq(system.neighbors, same.systems[id].neighbors)
+  end
+end)
+
 suite:Case("a galaxy is shared out into regions and constellations, each of systems that gates join, each with a name of its own", function(t)
   for _, count in { 1, 3, 40, 150, 400 } do
     local galaxy = Galaxy.Describe(7, count)
