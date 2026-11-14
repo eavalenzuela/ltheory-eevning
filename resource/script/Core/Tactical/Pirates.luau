@@ -605,6 +605,27 @@ local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
   if drone and (best == nil or Rng.Chance(Rng.For(state.historySeed, ball.id, 53), 1 / 3)) then
     return drone
   end
+  -- Pirates rob the trade (Strategic/Commerce: the haulers a pilot sees
+  -- carry what the economy sends along the lanes). A pirate with nobody
+  -- of the pilot's to go for goes for a hauler on its grid, the nearest;
+  -- and one in three does while there is somebody. What it destroys is
+  -- in the wreck, and the system it was for goes without.
+  if best == nil or Rng.Chance(Rng.For(state.historySeed, ball.id, 67), 1 / 3) then
+    local hauler: State.Ball?, near = nil, math.huge
+    for _, id in state.trafficIds do
+      local record, other = state.traffic[id], state.balls[id]
+      if (record.kind == "in" or record.kind == "out") and other and other.system == ball.system and other.grid == ball.grid
+        and not (other.warp and other.warp.stage == "warp") then
+        local far = Space.Distance(other :: any, ball :: any)
+        if far < near then
+          hauler, near = other, far
+        end
+      end
+    end
+    if hauler then
+      return hauler
+    end
+  end
   return best
 end
 

@@ -32,12 +32,14 @@
 -- says how long so many light years are.
 
 local Colors = require("@lt/Colors")
+local Commerce = require("@lt/Core/Strategic/Commerce")
 local Core = require("@lt/Core/Api")
 local Factions = require("@lt/Core/Data/Factions")
 local Format = require("@lt/Game/Format")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Im = require("@lt/Game/UI/Im")
 local Session = require("@lt/Game/Session")
+local Types = require("@lt/Core/Data/Types")
 local Waypoints = require("@lt/Game/Waypoints")
 
 local Map = {}
@@ -64,6 +66,31 @@ local BAND_NAME: { [string]: string } = { secure = "Secure space", low = "Low se
 local open = false
 local picked = 0          -- the system picked on the map, or 0
 local bySecurity = false  -- colour by security, not by whose
+-- Or by what a thing goes for (Core/Strategic/Commerce): the type whose
+-- price the map shows, "" for none (the layer is off). And the five
+-- bands a price is drawn in: fifths of the systems that have a market,
+-- from the cheapest to the dearest (a thing is seldom dear everywhere or
+-- cheap everywhere, and where it is, the map still says where to buy and
+-- where to sell), with the grey of a system that has no market. 'under'
+-- is where each band ends, as a share of the normal price: worked out
+-- when the layer is made.
+local priceOf = ""
+local priceRange = { 1, 1 }
+-- The thing the price layer is to show when it is next switched on
+-- (Map.Price), and what the dots drawn now are of ("": whose, or how safe).
+local priceWanted = ""
+local dotsOf = ""
+local PRICES: { { key: string, under: number, name: string, color: vector } } = {
+  { key = "p1", under = 0.88, name = "the cheapest fifth", color = vector.create(0.25, 0.85, 0.45) },
+  { key = "p2", under = 0.96, name = "cheaper than most", color = vector.create(0.55, 0.8, 0.6) },
+  { key = "p3", under = 1.04, name = "middling", color = vector.create(0.75, 0.75, 0.75) },
+  { key = "p4", under = 1.12, name = "dearer than most", color = vector.create(0.95, 0.7, 0.35) },
+  { key = "p5", under = math.huge, name = "the dearest fifth", color = vector.create(0.95, 0.35, 0.3) },
+}
+local PRICE_COLOR: { [string]: vector } = {}
+for _, band in PRICES do
+  PRICE_COLOR[band.key] = band.color
+end
 -- How the map is looked at: how far it is turned about the upright
 -- (radians), and how steeply it is looked down on (a quarter turn is
 -- from straight over it). And where the cursor was a frame ago, while
@@ -158,6 +185,19 @@ local drawn: Drawn? = nil
 function Map.Open(system: number?)
   open = true
   picked = system or picked
+end
+
+-- The thing whose price the map shows, "" for none. Given a type, the
+-- price layer shows that one when it is next switched on; with 'now',
+-- it is switched on.
+function Map.Price(type: string?, now: boolean?): string
+  if type and Types.Get(type) then
+    priceWanted = type
+    if now or priceOf ~= "" then
+      priceOf = type
+    end
+  end
+  return priceOf
 end
 
 function Map.Close()
@@ -273,17 +313,20 @@ end
 -- safe they are, or by whose): a dot each at its place in space, bigger
 -- for a homeworld. (A box glyph: a circle glyph is a point of light
 -- with a halo, not a disc.)
-local function dotted(systems: { Galaxy.SystemNode }, middle: vector, safety: boolean): { { icon: Icon, color: vector } }
+-- ('priced': with the price layer on, what band each system's price of
+-- the thing is in, or nil for a system with no market.)
+local function dotted(systems: { Galaxy.SystemNode }, middle: vector, safety: boolean,
+  priced: ((Galaxy.SystemNode) -> string?)?): { { icon: Icon, color: vector } }
   local icons: { [string]: Icon? } = {}
   local list: { { icon: Icon, color: vector } } = {}
   for _, system in systems do
     local size = if system.home then 1.7 else 1
-    local key = if safety then Galaxy.Band(system.security) else system.owner
+    local key = if priced then priced(system) or "" elseif safety then Galaxy.Band(system.security) else system.owner
     local its: Icon? = icons[key]
     if not its then
       local fresh = Icon_Create()
       icons[key] = fresh
-      table.insert(list, { icon = fresh, color = if safety then BAND[key] else colorOf(key) })
+      table.insert(list, { icon = fresh, color = if priced then PRICE_COLOR[key] or UNCLAIMED elseif safety then BAND[key] else colorOf(key) })
       its = fresh
     end
     Icon_AddBox3(its, vector.create(system.x - middle.x, system.y - middle.y, system.z), vector.create(size, size))
@@ -461,11 +504,15 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
     end
     return
   end
-  if Im.Toggle("Factions", x + 260, y + 8, 100, 26, not bySecurity, "Map:factions") then
-    bySecurity = false
+  if Im.Toggle("Factions", x + 240, y + 8, 84, 26, not bySecurity and priceOf == "", "Map:factions") then
+    bySecurity, priceOf = false, ""
   end
-  if Im.Toggle("Security", x + 364, y + 8, 100, 26, bySecurity, "Map:security") then
-    bySecurity = true
+  if Im.Toggle("Security", x + 328, y + 8, 84, 26, bySecurity and priceOf == "", "Map:security") then
+    bySecurity, priceOf = true, ""
+  end
+  -- (what a thing goes for across the map: the thing last looked at in a market, or iron)
+  if Im.Toggle("Prices", x + 416, y + 8, 76, 26, priceOf ~= "", "Map:prices") then
+    priceOf = if priceOf ~= "" then "" elseif priceWanted ~= "" then priceWanted else "mineral.iron"
   end
   -- How it is looked at: flat (from straight over) or from a slant, and
   -- turned a step either way. (The right button, held, turns and tilts
@@ -671,8 +718,41 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
     focus, look, hold = nil, nil, nil
     pan = vector.zero
   end
-  if its.bySecurity ~= bySecurity then
-    its.dots, its.bySecurity = dotted(systems, its.middle, bySecurity), bySecurity
+  -- (the price layer is made again when the thing changes, and when the economy has stepped)
+  local layer = if priceOf ~= "" then `{priceOf}:{game.state.commerce.steps}` else ""
+  if its.bySecurity ~= bySecurity or layer ~= dotsOf then
+    local commerce = game.state.commerce
+    local priced: ((Galaxy.SystemNode) -> string?)? = nil
+    if priceOf ~= "" then
+      -- (where the fifths fall, of the systems that have a market)
+      local levels: { number } = {}
+      for _, system in systems do
+        local node = commerce.nodes[system.id]
+        if node and node.population > 0.2 then
+          table.insert(levels, Commerce.Level(commerce, system.id, priceOf))
+        end
+      end
+      table.sort(levels)
+      for fifth = 1, 4 do
+        PRICES[fifth].under = if #levels > 0 then levels[math.max(1, math.ceil(#levels * fifth / 5))] + 1e-9 else 1
+      end
+      priceRange = { levels[1] or 1, levels[#levels] or 1 }
+      priced = function(system: Galaxy.SystemNode): string?
+        local node = commerce.nodes[system.id]
+        if node == nil or node.population <= 0.2 then
+          return nil
+        end
+        local level = Commerce.Level(commerce, system.id, priceOf)
+        for _, band in PRICES do
+          if level < band.under then
+            return band.key
+          end
+        end
+        return nil
+      end
+    end
+    its.dots, its.bySecurity = dotted(systems, its.middle, bySecurity, priced), bySecurity
+    dotsOf = layer
     view(its, made, zoom, true)
   elseif made.near ~= zoom then
     view(its, made, zoom, true)
@@ -1095,10 +1175,20 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   -- What the colours mean: the kinds of space, or the factions that hold
   -- any of this galaxy.
   local holders = Galaxy.Holders(galaxy)
-  line = y + h - 60 - 18 * (if bySecurity then 3 else #holders + 1)
-  Im.Heading(if bySecurity then "SECURITY" else "WHOSE", px, line, 14, Im.DIM)
+  line = y + h - 60 - 18 * (if priceOf ~= "" then 6 elseif bySecurity then 3 else #holders + 1)
+  Im.Heading(if priceOf ~= "" then `PRICE OF {string.upper(Types.Info(priceOf).name)}` elseif bySecurity then "SECURITY" else "WHOSE", px, line,
+    14, Im.DIM)
   line += 22
-  if bySecurity then
+  if priceOf ~= "" then
+    for _, shade in PRICES do
+      Im.Fill(px, line + 3, 10, 10, shade.color, 0.95)
+      Im.Text(shade.name, px + 18, line, 13, Im.DIM)
+      line += 18
+    end
+    Im.Fill(px, line + 3, 10, 10, UNCLAIMED, 0.95)
+    Im.Text(string.format("No market there   (%+d%% to %+d%% of normal)", math.floor((priceRange[1] - 1) * 100 + 0.5),
+      math.floor((priceRange[2] - 1) * 100 + 0.5)), px + 18, line, 13, Im.DIM)
+  elseif bySecurity then
     for _, name in { "secure", "low", "lawless" } do
       Im.Fill(px, line + 3, 10, 10, BAND[name], 0.95)
       Im.Text(BAND_NAME[name], px + 18, line, 13, Im.DIM)

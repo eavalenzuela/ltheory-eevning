@@ -254,4 +254,45 @@ suite:Case("war work: a station of a faction with a force at a front has a strik
   t.eq(operation.system, system)
 end)
 
+suite:Case("what a force has beyond its ships comes in as they are lost, a ship at a time", function(t)
+  local game, _, operation = besieged(300, 90)
+  local state = game.state
+  local front = state.fronts[99]
+  go(game, front.site)
+  Core.Step(game)
+  local function attackers(): number
+    local count = 0
+    for _, record in front.ships do
+      count += if record.attacking then 1 else 0
+    end
+    return count
+  end
+  t.eq(attackers(), Fronts.SHIPS)
+  local reserve = front.reserve
+  t.ok(reserve >= 50, `a force of 300 has {reserve} in reserve`)
+  -- (with every place taken, nobody comes)
+  for _ = 1, 2 * Fronts.REINFORCE do
+    Core.Step(game)
+  end
+  t.ok(front.reserve == reserve or attackers() < Fronts.SHIPS, "a ship came in with no room for it")
+  -- One of them is lost: within a minute another is there, the biggest the reserve comes to, and the reserve is less by it.
+  local before = front.reserve
+  for id, record in front.ships do
+    if record.attacking and attackers() == Fronts.SHIPS then
+      Aftermath.Destroy(state, id, 0, game.events)
+      front.ships[id] = nil
+    end
+  end
+  local came = false
+  for _ = 1, 2 * Fronts.REINFORCE do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      came = came or (event.kind == "FrontReinforced" and event.side == "vessari")
+    end
+  end
+  t.ok(came, "nobody came in for a ship that was lost")
+  t.ok(front.reserve <= before - 4, `the reserve was {before} and is {front.reserve}`)
+  t.ok(operation.force <= 300)
+end)
+
 return suite

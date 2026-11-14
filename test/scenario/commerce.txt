@@ -29,6 +29,14 @@ until GameDebug.Press('Market:history')
 frames 3
 lua assert(GameDebug.MarketPage() == 'history')
 
+# And the star map has it all: its price layer, of the thing chosen.
+until GameDebug.Press('Market:map')
+frames 4
+lua assert(GameDebug.CanPress('Map:prices'), 'the map should be open, on what iron goes for')
+until GameDebug.Press('Map:factions')
+frames 3
+until GameDebug.Press('Map:close')
+
 # Outside: haulers with a hold of the economy's goods.
 until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()

@@ -30,9 +30,12 @@
 --   - When the pilot leaves the place the ships are taken away, and
 --     what they were worth goes on fighting unseen.
 --
--- (First figures. Not yet: the reserve coming in as ships are lost;
--- ships warping in when a relief is sent; anything a pilot can do in a
--- blockade but fight.)
+--   - What a force has beyond its ships is its reserve, and comes in:
+--     every so often a side that has room for another ship and reserve
+--     enough for one has one more, the biggest its reserve comes to.
+--
+-- (First figures. Not yet: anything a pilot can do in a blockade but
+-- fight.)
 
 local Constants = require("@lt/Core/Data/Constants")
 local Factions = require("@lt/Core/Data/Factions")
@@ -56,6 +59,8 @@ export type Event = { [string]: any }
 Fronts.WORTH = { { class = "battleship", worth = 50, most = 2 }, { class = "cruiser", worth = 16, most = 3 },
   { class = "frigate", worth = 4, most = 8 } } :: { { class: string, worth: number, most: number } }
 Fronts.SHIPS = 8
+-- Ticks between one ship of a side's reserve coming in and the next.
+Fronts.REINFORCE = math.ceil(45 / Constants.TICK)
 -- The variety of a front's place.
 Fronts.VARIETY = "site.front"
 -- How far from the middle of the place each side is put, metres.
@@ -124,27 +129,62 @@ local function withdraw(state: State.State, front: State.Front, events: { Event 
   front.shown = false
 end
 
--- Put a side's ships at a front: so far from its middle, on the side
--- 'sign' says.
+-- Put one ship of a side at a front: of a class, so far from the
+-- front's middle on the side 'sign' says, at a place along its line.
+-- Whether it could be (a faction that builds no such hull, and no
+-- frigate, has none).
+local function one(state: State.State, front: State.Front, place: any, side: string, attacking: boolean, class: string, worth: number,
+  sign: number, along: number, rng: Rng.Rng, events: { Event }): boolean
+  local kind = Traffic.Warship(side, class) or Traffic.Warship(side, "frigate")
+  if kind == nil then
+    return false
+  end
+  local ship = Space.NewShip(state, kind.hull, kind.name, side, 0)
+  Pirates.Equip(state, ship, kind)
+  local ball = Space.Launch(state, ship, front.system, place.x + sign * Fronts.APART + Rng.Float(rng, -2500, 2500),
+    place.y + Rng.Float(rng, -2000, 2000), place.z + along * 1500)
+  state.pilots[ship.id] = { ship = ship.id, range = kind.range, prey = 0, home = front.site, alone = 0, bounty = 0, tags = 0,
+    side = side, worth = worth }
+  State.InsertId(state.pilotIds, ship.id)
+  front.ships[ship.id] = { side = side, worth = worth, attacking = attacking }
+  table.insert(events, { kind = "BallAdded", ball = ball.id })
+  return true
+end
+
+-- Put a side's ships at a front. Returns what is left over: its reserve.
 local function field(state: State.State, front: State.Front, place: any, side: string, attacking: boolean, strength: number,
   sign: number, events: { Event }): number
   local ships, reserve = Fronts.Muster(strength)
   local rng = Rng.For(state.historySeed, front.operation, if attacking then 1 else 2, 907)
   for index, wanted in ships do
-    local kind = Traffic.Warship(side, wanted.class) or Traffic.Warship(side, "frigate")
-    if kind == nil then
+    if not one(state, front, place, side, attacking, wanted.class, wanted.worth, sign, index - #ships / 2, rng, events) then
       reserve += wanted.worth
-      continue
     end
-    local ship = Space.NewShip(state, kind.hull, kind.name, side, 0)
-    Pirates.Equip(state, ship, kind)
-    local ball = Space.Launch(state, ship, front.system, place.x + sign * Fronts.APART + Rng.Float(rng, -2500, 2500),
-      place.y + Rng.Float(rng, -2000, 2000), place.z + (index - #ships / 2) * 1500)
-    state.pilots[ship.id] = { ship = ship.id, range = kind.range, prey = 0, home = front.site, alone = 0, bounty = 0, tags = 0,
-      side = side, worth = wanted.worth }
-    State.InsertId(state.pilotIds, ship.id)
-    front.ships[ship.id] = { side = side, worth = wanted.worth, attacking = attacking }
-    table.insert(events, { kind = "BallAdded", ball = ball.id })
+  end
+  return reserve
+end
+
+-- A ship of a side's reserve comes in, if the side has room for one and
+-- reserve enough: the biggest its reserve comes to. Returns the reserve
+-- that is left.
+local function reinforce(state: State.State, front: State.Front, place: any, side: string, attacking: boolean, reserve: number,
+  events: { Event }): number
+  local there = 0
+  for _, record in front.ships do
+    there += if record.attacking == attacking then 1 else 0
+  end
+  if side == "" or there >= Fronts.SHIPS then
+    return reserve
+  end
+  for _, kind in Fronts.WORTH do
+    if reserve >= kind.worth then
+      local rng = Rng.For(state.historySeed, front.operation, state.tick, if attacking then 3 else 4, 909)
+      if one(state, front, place, side, attacking, kind.class, kind.worth, if attacking then -1 else 1, Rng.Float(rng, -4, 4), rng, events) then
+        table.insert(events, { kind = "FrontReinforced", site = front.site, side = side })
+        return reserve - kind.worth
+      end
+      return reserve
+    end
   end
   return reserve
 end
@@ -224,6 +264,14 @@ function Fronts.Step(state: State.State, events: { Event }, first: number)
               Wallet.Pay(state, Fronts.PAY * victim.worth, `war bounty, {Factions.byId[other].name}`, events)
             end
           end
+        end
+      end
+      -- (what each side has in reserve comes in, a ship at a time)
+      local place = Space.Object(state, front.site)
+      if place and state.tick % Fronts.REINFORCE == 0 then
+        front.reserve = reinforce(state, front, place, operation.by, true, front.reserve, events)
+        if operation.defence > 0 then
+          front.held = reinforce(state, front, place, operation.against, false, front.held, events)
         end
       end
       -- (the defence has given way, by the round's reckoning: what is left of it goes)

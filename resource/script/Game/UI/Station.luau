@@ -19,6 +19,7 @@ local Im = require("@lt/Game/UI/Im")
 local Industry = require("@lt/Core/Assets/Industry")
 local Info = require("@lt/Game/UI/Info")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
+local Map = require("@lt/Game/UI/Map")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Reactions = require("@lt/Core/Data/Reactions")
@@ -1056,7 +1057,12 @@ local function drawMarket(session: Session.Session, game: Core.Game, player: Cor
       return if off == 0 then "normal" elseif off > 0 then `{off}% over` else `{-off}% under`
     end
     Im.Heading(`ACROSS THE MAP, {Core.PRICE_REACH} JUMPS`, dx, line, 14, Im.DIM)
-    Im.TextRight(`this system: {percent(across.here)}`, dx + 446, line + 2, 12, Im.TEXT)
+    Im.TextRight(`this system: {percent(across.here)}`, dx + 366, line + 2, 12, Im.TEXT)
+    -- (and the whole of it, on the star map: its price layer, of this thing)
+    if Im.Button("On map", dx + 376, line - 4, 70, 22, #across.list > 0, "Market:map") then
+      Map.Price(chosen, true)
+      Map.Open()
+    end
     line += 22
     if #across.list == 0 then
       Im.Text("It goes for the same everywhere: it is built of nothing that is traded in bulk.", dx, line, 12, Im.DIM)

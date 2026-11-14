@@ -10,6 +10,7 @@ local Economy = require("@lt/Core/Strategic/Economy")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
+local Pirates = require("@lt/Core/Tactical/Pirates")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local Test = require("@lt/Tool/Test")
@@ -471,6 +472,43 @@ suite:Case("the haulers a pilot sees carry what the economy sends along the lane
     t.ok(math.abs(residual) * econ.classes[class].par < 1, `the books are out by {residual} of {econ.classes[class].id}`)
   end
   print(`     haulers: {laden} with a hold of the economy's goods and {ballast} in ballast, in a hundred minutes at a homeworld`)
+end)
+
+suite:Case("pirates rob the trade: with nobody else to go for they go for a hauler on their grid, and some do anyway", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, systems = SYSTEMS, peaceful = true })
+  local state = game.state
+  assert(Core.Submit(game, { kind = "Undock", actor = state.player.ship }))
+  Core.Step(game)
+  local me = state.balls[state.player.ship]
+  -- Three raiders and a trader out in open space, the pilot among them.
+  me.x, me.y, me.z = 6e9, 0, 0
+  Space.AssignGrid(state, me)
+  local raiders: { number } = {}
+  for index = 1, 6 do
+    table.insert(raiders, Pirates.Spawn(state, Pirates.kindById["raider"], 1, 6e9 + 9000 + 500 * index, 0, 0, me.grid).id)
+  end
+  local trader = Space.NewShip(state, "industrial.hauler", "Trader", "civilian", 0)
+  local hull = Space.Launch(state, trader, 1, 6e9 + 15000, 0, 2000)
+  state.traffic[trader.id] = { ship = trader.id, kind = "out", goal = 0, system = 1, born = state.tick, wait = 0 }
+  table.insert(state.trafficIds, trader.id)
+  Pirates.Think(state, game.events)
+  local onMe, onTrader = 0, 0
+  for _, id in raiders do
+    onMe += if state.pilots[id].prey == me.id then 1 else 0
+    onTrader += if state.pilots[id].prey == hull.id then 1 else 0
+  end
+  t.eq(onMe + onTrader, 6)
+  t.ok(onMe >= 2 and onTrader >= 1, `{onMe} of six went for the pilot and {onTrader} for the trader`)
+  -- With the pilot gone from there, every one of them goes for the trader.
+  me.x = -6e9
+  Space.AssignGrid(state, me)
+  for _, id in raiders do
+    state.pilots[id].prey = 0
+  end
+  Pirates.Think(state, game.events)
+  for _, id in raiders do
+    t.eq(state.pilots[id].prey, hull.id)
+  end
 end)
 
 return suite
