@@ -30,6 +30,11 @@
 --   - When the pilot leaves the place the ships are taken away, and
 --     what they were worth goes on fighting unseen.
 --
+--   - At a siege of a system of the pilot's own there are no ships of
+--     theirs but the ones that are: the pilot's, those of whoever flies
+--     for them, and those of the corporation's members who fight and
+--     are working in the system, each in their own hull under their
+--     own name (Assets/Members).
 --   - What a force has beyond its ships is its reserve, and comes in:
 --     every so often a side that has room for another ship and reserve
 --     enough for one has one more, the biggest its reserve comes to.
@@ -40,14 +45,17 @@
 local Constants = require("@lt/Core/Data/Constants")
 local Factions = require("@lt/Core/Data/Factions")
 local Items = require("@lt/Core/Assets/Items")
+local Members = require("@lt/Core/Assets/Members")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Rng = require("@lt/Core/Kernel/Rng")
+local Ships = require("@lt/Core/Data/Ships")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
 local Traffic = require("@lt/Core/Tactical/Traffic")
 local Wallet = require("@lt/Core/Assets/Wallet")
+local Wars = require("@lt/Core/Strategic/Wars")
 
 local Fronts = {}
 
@@ -133,13 +141,16 @@ end
 -- front's middle on the side 'sign' says, at a place along its line.
 -- Whether it could be (a faction that builds no such hull, and no
 -- frigate, has none).
+-- ('people' and 'name': for a ship that is somebody's own and fights
+-- for a side that builds none, a member of the pilot's corporation: the
+-- hull is their people's, and it goes by their name.)
 local function one(state: State.State, front: State.Front, place: any, side: string, attacking: boolean, class: string, worth: number,
-  sign: number, along: number, rng: Rng.Rng, events: { Event }): boolean
-  local kind = Traffic.Warship(side, class) or Traffic.Warship(side, "frigate")
+  sign: number, along: number, rng: Rng.Rng, events: { Event }, people: string?, name: string?): boolean
+  local kind = Traffic.Warship(people or side, class) or Traffic.Warship(people or side, "frigate")
   if kind == nil then
     return false
   end
-  local ship = Space.NewShip(state, kind.hull, kind.name, side, 0)
+  local ship = Space.NewShip(state, kind.hull, name or kind.name, if people then "member" else side, 0)
   Pirates.Equip(state, ship, kind)
   local ball = Space.Launch(state, ship, front.system, place.x + sign * Fronts.APART + Rng.Float(rng, -2500, 2500),
     place.y + Rng.Float(rng, -2000, 2000), place.z + along * 1500)
@@ -243,6 +254,24 @@ function Fronts.Step(state: State.State, events: { Event }, first: number)
         -- whoever flies for them: its defence is what it is, unseen)
         front.held = if Factions.byId[operation.against] and operation.defence > 0
           then field(state, front, place, operation.against, false, operation.defence, 1, events) else operation.defence
+        -- (and of the pilot's own, those of the corporation's members
+        -- who fight and are working in the system are there, each in
+        -- their own ship, for what they add to its defence: Assets/Members)
+        if operation.against == Wars.PILOT then
+          local rng = Rng.For(state.historySeed, front.operation, 911)
+          local along = 0
+          for _, member in Members.List(state) do
+            local hull = Ships.byId[member.hull]
+            if member.trade == "fighter" and member.system == front.system and hull then
+              local worth = Members.Stands(member)
+              along += 1
+              if worth > 0 and front.held >= worth
+                and one(state, front, place, Wars.PILOT, false, hull.class, worth, 1, along, rng, events, member.people, member.name) then
+                front.held -= worth
+              end
+            end
+          end
+        end
       end
     elseif front.shown then
       front.away = if here then 0 else front.away + 1

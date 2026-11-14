@@ -1524,7 +1524,8 @@ function Query.Overview(game: Game): { Entry }
         -- the other force's, until the pilot fires on its side: Tactical/Fronts)
         hostile = state.ships[id].owner == "pirates"
           or (state.pilots[id] ~= nil and (state.pilots[id].side == nil or state.pilots[id].foe == true)),
-        own = state.ships[id].owner == "player" or state.ships[id].owner == "starbase",
+        -- (and a member of the pilot's corporation, in their own ship: Assets/Members)
+        own = state.ships[id].owner == "player" or state.ships[id].owner == "starbase" or state.ships[id].owner == "member",
         veiled = Vapour.In(state, ball) }
       table.insert(entries, entry)
     end

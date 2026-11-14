@@ -4,6 +4,7 @@
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Core = require("@lt/Core/Api")
 local Fronts = require("@lt/Core/Tactical/Fronts")
+local Members = require("@lt/Core/Assets/Members")
 local Missions = require("@lt/Core/Assets/Missions")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
@@ -302,6 +303,60 @@ suite:Case("what a force has beyond its ships comes in as they are lost, a ship 
   t.ok(came, "nobody came in for a ship that was lost")
   t.ok(front.reserve <= before - 4, `the reserve was {before} and is {front.reserve}`)
   t.ok(operation.force <= 300)
+end)
+
+suite:Case("at a siege of a system of the pilot's own, the corporation's members who fight there are in it, in their own ships", function(t)
+  local game, system, operation = besieged(120, 150)
+  local state = game.state
+  -- (the system is the pilot's, and the Vessari are at war with them)
+  state.galaxy.systems[system].owner = "player"
+  state.wars.claims[system] = "player"
+  operation.against = "player"
+  state.wars.feuds = { { a = "vessari", b = "player", since = state.tick, score = 0 } }
+  local function fighter(name: string, hull: string, where: number): State.Member
+    local member: State.Member = { id = State.NewId(state), name = name, trade = "fighter", people = "talmar", hull = hull, bears = 0.3,
+      wealth = 0, earned = 0, paid = 0, joined = 0, system = where, doing = "hunting", call = 0, lean = 0, day = 0 }
+    state.membership.members[member.id] = member
+    table.insert(state.membership.memberIds, member.id)
+    return member
+  end
+  local here = fighter("Ada Brook", "frigate.akashi", system)
+  local away = fighter("Cal Dane", "frigate.akashi", 1)
+  local miner = fighter("Ivo Marr", "frigate.courier", system)
+  miner.trade = "miner"
+  local front = state.fronts[99]
+  go(game, front.site)
+  Core.Step(game)
+  -- One ship on the defending side: the member who fights and is working here, under their own name, for what they add.
+  local defenders: { number } = {}
+  for id, record in front.ships do
+    if not record.attacking then
+      table.insert(defenders, id)
+      t.eq({ record.side, record.worth, state.ships[id].name, state.ships[id].owner, state.pilots[id].side } :: { any },
+        { "player", Members.Stands(here), "Ada Brook", "member", "player" } :: { any })
+    end
+  end
+  t.eq(#defenders, 1)
+  t.eq(front.held, 150 - Members.Stands(here))
+  t.ok(away.system == 1 and Members.Stands(miner) == 0)
+  -- (it is one of the pilot's own, to whoever lists what is there)
+  local own = false
+  for _, entry in Core.Query.Overview(game) do
+    own = own or (entry.id == defenders[1] and entry.own and not entry.hostile)
+  end
+  t.ok(own, "a member's ship is not shown as one of the pilot's side")
+  -- It fights the besiegers, and they it.
+  local at, by = 0, 0
+  for _ = 1, 300 do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      if event.kind == "Shot" then
+        at += if event.to == defenders[1] then 1 else 0
+        by += if event.from == defenders[1] then 1 else 0
+      end
+    end
+  end
+  t.ok(at > 0 and by > 0, `the member's ship fired {by} times and was fired on {at} times`)
 end)
 
 return suite

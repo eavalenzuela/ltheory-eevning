@@ -184,6 +184,17 @@ function Members.List(state: State.State): { State.Member }
   return found
 end
 
+-- What a member who fights adds to the defence of a system of the
+-- pilot's: so much for a frigate, and as much again for each class of
+-- hull over. Nothing, for a member of another trade.
+function Members.Stands(member: State.Member): number
+  if member.trade ~= "fighter" then
+    return 0
+  end
+  local hull = Ships.byId[member.hull]
+  return Members.STANDS * (if hull then table.find(LADDER.fighter, hull.class) or 1 else 1)
+end
+
 -- How many fighter members are working in a system (for whoever asks
 -- how well it is watched: Tactical/Pirates), and what they add to its
 -- defence (Assets/Sovereignty).
@@ -193,9 +204,7 @@ function Members.Watching(state: State.State, system: number): (number, number)
     local member = state.membership.members[id]
     if member.trade == "fighter" and member.system == system then
       count += 1
-      local hull = Ships.byId[member.hull]
-      local rung = if hull then table.find(LADDER.fighter, hull.class) or 1 else 1
-      stands += Members.STANDS * rung
+      stands += Members.Stands(member)
     end
   end
   return count, stands
