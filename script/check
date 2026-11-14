@@ -91,6 +91,10 @@
 #   game-fleetwarp  a fleet's warp (test/scenario/fleetwarp.txt): the
 #               pilot waits for a hired pilot's slower ship to turn,
 #               both go into warp together and arrive together
+#   game-wormhole  wormholes and uncharted space (test/scenario/
+#               wormhole.txt): a signal scanned down, gone through to a
+#               system on no map, every way out closed and another
+#               opening, found, and taken back to the map
 #   game-home   home (test/scenario/home.txt): a berth taken aboard a
 #               Kethri colony ship, the ship and the capsule lost, and
 #               the pilot waking there
@@ -321,6 +325,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/fleetwarp.txt
   step game-sites 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/sites.txt
+  step game-wormhole 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
+    --script test/scenario/wormhole.txt
   step game-tackle 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/tackle.txt
   step game-salvage 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \

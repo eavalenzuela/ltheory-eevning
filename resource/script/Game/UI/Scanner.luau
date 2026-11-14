@@ -30,7 +30,7 @@ Scanner.HEIGHT = 440
 
 local GOOD = vector.create(0.45, 0.85, 0.55)
 local KINDS: { [string]: string } = { combat = "pirate den", ore = "hidden belt", gas = "vapour field", relic = "derelict",
-  data = "listening post", mission = "camp to clear", keep = "pirate tower" }
+  data = "listening post", mission = "camp to clear", keep = "pirate tower", wormhole = "wormhole" }
 
 local open = false
 local side: "signals" | "directional" = "signals"
@@ -167,7 +167,19 @@ function Scanner.Draw(session: Session.Session, x: number, y: number, look: vect
     drawDirectional(session, x, y, width, height, look)
     return
   end
-  local sites, wait, probes = Core.Query.Sites(game)
+  local listed, wait, probes = Core.Query.Sites(game)
+  -- (what is still to be found first: what is found is on the overview too)
+  local sites: { Core.SiteStatus } = {}
+  for _, site in listed do
+    if not site.found then
+      table.insert(sites, site)
+    end
+  end
+  for _, site in listed do
+    if site.found then
+      table.insert(sites, site)
+    end
+  end
   local scan: State.Command = { kind = "Scan", actor = 0 }
   local can, whyNot = Session.CanDo(session, scan)
   if Im.Button("Scan", left, y + 44, 110, 28, can, "Scan") then
@@ -193,13 +205,16 @@ function Scanner.Draw(session: Session.Session, x: number, y: number, look: vect
   if #sites == 0 then
     Im.Text("Nothing but what is on the charts.", left, line, 13, Im.DIM, 0.8)
   end
-  for index, site in sites do
-    if index > 7 then
-      break
-    end
+  -- (seven at a time: the wheel brings the rest)
+  local first = Im.Scroll("signals", left - 4, line, width - 24, 7 * 38, #sites, 7)
+  for index = first + 1, math.min(#sites, first + 7) do
+    local site = sites[index]
     Im.Text(site.name, left, line, 14, if site.found then Im.TEXT else Im.DIM)
     -- (what it is; or which planet it is by, and whether it wants a probe taken there)
-    local about = if site.found then KINDS[site.kind] or site.kind
+    -- (a wormhole says how big a hull it lets through)
+    local through = if site.found and site.kind == "wormhole" then Core.Query.Wormhole(game, site.id) else nil
+    local about = if through then `{through.sizeName} wormhole: up to {through.lets}`
+      elseif site.found then KINDS[site.kind] or site.kind
       elseif site.faint then `too faint: wants a probe by {site.near}`
       elseif site.near ~= "" then `by {site.near}` .. (if site.probes > 0 then `, {site.probes} {if site.probes == 1 then "probe" else "probes"} on it` else "")
       else "unresolved"

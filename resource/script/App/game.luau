@@ -55,6 +55,7 @@ local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
 local Wallet = require("@lt/Core/Assets/Wallet")
 local Waypoints = require("@lt/Game/Waypoints")
+local Wormholes = require("@lt/Core/Tactical/Wormholes")
 
 local App = {}
 
@@ -1174,7 +1175,8 @@ function Debug.JumpWithin(): number
   local drive = Core.Query.JumpDrive(session.game)
   local here = Core.Query.Player(session.game).system
   local count = 0
-  for id in session.game.state.galaxy.systems do
+  -- (the systems of the map: no drive goes to the others)
+  for id = 1, Galaxy.Charted(session.game.state.galaxy) do
     count += if drive and id ~= here and Galaxy.Apart(session.game.state.galaxy, here, id) <= drive.range then 1 else 0
   end
   return count
@@ -1389,6 +1391,79 @@ function Debug.Sites(kind: string?): (number, number, string)
     end
   end
   return #sites, found, name
+end
+
+-- Wormholes (Core/Tactical/Wormholes). A cheat, for one to go through
+-- without waiting for a day that has one: a wormhole in the system the
+-- pilot is in, leading to uncharted space of a depth (1 to 3: 1 if not
+-- said), of a size (1 to 3: a great one if not said), found already
+-- unless 'hidden'. Returns its place and its name (0 and "" if none
+-- could be opened).
+function Debug.Wormhole(depth: number?, size: number?, hidden: boolean?): (number, string)
+  local state = session.game.state
+  local me = state.balls[state.player.ship]
+  if me == nil then
+    return 0, ""
+  end
+  for id = Galaxy.Charted(state.galaxy) + 1, #state.galaxy.systems do
+    if state.galaxy.systems[id].depth == (depth or 1) and id ~= me.system then
+      local hole = Wormholes.Open(state, me.system, id, Rng.For(state.historySeed, state.tick, 59), session.game.events, size or 3,
+        not hidden)
+      local place = if hole then Space.Object(state, hole.a) else nil
+      return if place then place.id else 0, if place then place.name else ""
+    end
+  end
+  return 0, ""
+end
+
+-- The wormholes open in the system the pilot is in: how many, how many
+-- of them found, and the place of the first that is found (0 if none).
+function Debug.Wormholes(): (number, number, number)
+  local state = session.game.state
+  local player = Core.Query.Player(session.game)
+  local found, first = 0, 0
+  local open = Wormholes.In(state, player.system)
+  for _, hole in open do
+    for _, place in { hole.a, hole.b } do
+      local site = state.sites[place]
+      if site and site.system == player.system and site.strength >= 1 then
+        found += 1
+        first = if first == 0 then place else first
+      end
+    end
+  end
+  return #open, found, first
+end
+
+-- Close every wormhole open in the system the pilot is in, now. Returns how many.
+function Debug.CloseWormholes(): number
+  local state = session.game.state
+  local open = Wormholes.In(state, Core.Query.Player(session.game).system)
+  for _, hole in open do
+    Wormholes.Close(state, hole, session.game.events)
+  end
+  return #open
+end
+
+-- The last thing the pilot was told (the line under the ship's name), "" if nothing.
+function Debug.Said(): string
+  return session.message
+end
+
+-- Whether the pilot is in uncharted space, and how deep.
+function Debug.Uncharted(): (boolean, number)
+  local player = Core.Query.Player(session.game)
+  return player.uncharted, player.depth
+end
+
+-- What the selected-item panel would say of a wormhole: where it leads,
+-- its size by name, and whether the pilot's ship fits.
+function Debug.WormholeInfo(place: number): (string, string, boolean)
+  local info = Core.Query.Wormhole(session.game, place)
+  if info == nil then
+    return "", "", false
+  end
+  return info.leads, info.sizeName, info.fits
 end
 
 -- A cheat, for a site to work without the finding of it (which is the
@@ -2009,7 +2084,8 @@ end
 -- How many systems the galaxy has, and the name of the faction whose
 -- the pilot's is ("" if nobody's).
 function Debug.Galaxy(): (number, string)
-  return #session.game.state.galaxy.systems, Core.Query.Player(session.game).owner
+  -- (the systems of the map: uncharted space is as many again, and is not counted)
+  return Galaxy.Charted(session.game.state.galaxy), Core.Query.Player(session.game).owner
 end
 
 -- How whole the pilot's ship is, in space: the shares of its shield

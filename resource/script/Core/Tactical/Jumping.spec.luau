@@ -63,7 +63,8 @@ local function reach(game: Core.Game, from: number, range: number): (number, num
   local state = game.state
   local inside, outside = 0, 0
   local most, least = -1, math.huge
-  for id in state.galaxy.systems do
+  -- (the systems of the map: no drive goes to the others, Tactical/Wormholes)
+  for id = 1, Galaxy.Charted(state.galaxy) do
     local far = Jumping.Distance(state, from, id)
     if id ~= from and far <= range and far > most then
       inside, most = id, far

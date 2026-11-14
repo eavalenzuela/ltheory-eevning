@@ -67,7 +67,14 @@ suite:Case("a system the pilot comes to has its sites, as many as its kind of sp
   for seed = 1, 20 do
     local game = inSpace(seed)
     local state = game.state
-    local here = Sites.In(state, 1)
+    -- (a wormhole, on a day one is open there, is a signal and not one
+    -- of the system's sites: Tactical/Wormholes)
+    local here: { State.Site } = {}
+    for _, site in Sites.In(state, 1) do
+      if site.kind ~= "wormhole" then
+        table.insert(here, site)
+      end
+    end
     t.eq(#here, Sites.COUNT.secure)
     for _, site in here do
       kinds[site.kind] = (kinds[site.kind] or 0) + 1
@@ -85,8 +92,9 @@ suite:Case("a system the pilot comes to has its sites, as many as its kind of sp
         t.eq(entry.kind, "site")
       end
     end
+    -- (the scanner lists a wormhole among the signals, on a day one is open there)
     local listed, wait = Core.Query.Sites(game)
-    t.eq({ #listed, wait }, { Sites.COUNT.secure, 0 })
+    t.eq({ #listed, wait }, { #Sites.In(state, 1), 0 })
     for _, row in listed do
       t.ok(row.found or (row.kind == "" and string.sub(row.name, 1, 7) == "Signal "), "an unfound site should say nothing of itself")
     end

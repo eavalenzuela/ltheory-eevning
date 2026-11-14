@@ -674,8 +674,9 @@ suite:Case("a save from before pirates had bounties of their own keeps what they
   for _, pilot in file.state.pilots do
     pilot.bounty, pilot.tags = nil, nil
   end
-  for _, system in file.state.galaxy.systems do
-    system.security = nil
+  -- (the systems of the map: uncharted space came later, and nobody keeps order there)
+  for id = 1, file.state.galaxy.charted do
+    file.state.galaxy.systems[id].security = nil
   end
   local old, oldLength = Codec.Encode(file)
   local loaded = Core.Load(old, oldLength)

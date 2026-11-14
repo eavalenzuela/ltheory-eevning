@@ -1,0 +1,87 @@
+# Wormholes and uncharted space, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/wormhole.txt
+#
+# A homeworld has no wormhole. One is opened here by hand, hidden: it
+# is a signal on the scanner and nothing on the overview until two scans
+# find it. Then it is a place to warp to and go through. On the other
+# side is uncharted space: no station, no gate, on no map, and the hole
+# the ship came out of is there to go back by. With every wormhole there
+# closed under the pilot, another opens at once, to be found by scanning,
+# and it leads back to the map.
+
+wait 2
+lua GameDebug.Peaceful(true)
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('Stop'))
+wait 1
+lua assert(GameDebug.Wormholes() == 0, 'a homeworld should have no wormhole of its own')
+lua assert(not GameDebug.Uncharted(), 'a new game starts on the map')
+lua _G.signals = GameDebug.Sites()
+
+# A wormhole here, not found yet: a signal, and not on the overview.
+lua _G.hole, _G.name = GameDebug.Wormhole(1, 3, true)
+lua assert(_G.hole ~= 0 and string.sub(_G.name, 1, 9) == 'Wormhole ', 'no wormhole could be opened')
+lua assert(GameDebug.Wormholes() == 1 and select(2, GameDebug.Wormholes()) == 0, 'the wormhole should be open and unfound')
+until GameDebug.Press('Scanner')
+frames 3
+lua assert(GameDebug.Sites() == _G.signals + 1, 'the wormhole should be one more signal on the scanner')
+lua assert(not GameDebug.Select('wormhole'), 'an unfound wormhole should not be on the overview')
+
+# Scans, until it is found (two, for a pilot with no skill at it).
+until GameDebug.Press('Scan')
+until not GameDebug.CanPress('Scan')
+until GameDebug.CanPress('Scan')
+until GameDebug.Press('Scan')
+until select(2, GameDebug.Wormholes()) == 1
+lua assert(GameDebug.Select('wormhole'), 'a found wormhole should be on the overview')
+lua assert(select(3, GameDebug.Sites('wormhole')) == _G.name, 'the scanner should say it is a wormhole')
+lua assert(GameDebug.WormholeInfo(_G.hole) == 'uncharted space', 'nobody has been through: only the kind of space is known')
+lua assert(select(2, GameDebug.WormholeInfo(_G.hole)) == 'great' and select(3, GameDebug.WormholeInfo(_G.hole)), 'a great wormhole lets a frigate through')
+until GameDebug.Press('Scanner:close')
+
+# To it, and through.
+lua GameDebug.TimeScale(16)
+lua assert(GameDebug.Order('Jump', 'wormhole'), 'the jump was refused')
+until GameDebug.System() ~= 1
+lua GameDebug.TimeScale(1)
+wait 1
+lua assert(GameDebug.Uncharted() and select(2, GameDebug.Uncharted()) == 1, 'the far side should be uncharted space of the first depth')
+lua assert(GameDebug.Count('station') == 0 and GameDebug.Count('gate') == 0, 'uncharted space has no station and no gate')
+lua assert(GameDebug.Distance('wormhole') < 20000, 'the ship should be beside the hole it came out of')
+lua assert(GameDebug.WormholeInfo(select(3, GameDebug.Wormholes())) ~= 'charted space', 'the way back is known by name now')
+
+# The map has nothing to show of it.
+until GameDebug.Press('Map')
+frames 3
+lua assert(GameDebug.CanPress('Map:close'), 'the map did not open')
+lua assert(not GameDebug.CanPress('Map:here'), 'uncharted space should have no map to look at')
+until GameDebug.Press('Map:close')
+
+# Always a way out: with every wormhole here closed, another opens at once.
+wait 1
+lua assert(GameDebug.CloseWormholes() >= 1)
+wait 2
+lua assert(not GameDebug.Select('wormhole'), 'a closed wormhole should be off the overview')
+lua assert(string.find(GameDebug.Said(), 'has closed', 1, true), 'the pilot should be told it closed')
+lua assert(GameDebug.Wormholes() == 1 and select(2, GameDebug.Wormholes()) == 0, 'another should have opened, to be found')
+until GameDebug.Press('Scanner')
+until GameDebug.CanPress('Scan')
+until GameDebug.Press('Scan')
+until not GameDebug.CanPress('Scan')
+until GameDebug.CanPress('Scan')
+until GameDebug.Press('Scan')
+until select(2, GameDebug.Wormholes()) == 1
+until GameDebug.Press('Scanner:close')
+lua assert(GameDebug.WormholeInfo(select(3, GameDebug.Wormholes())) == 'charted space', 'the way out should lead to the map')
+lua GameDebug.TimeScale(16)
+lua assert(GameDebug.Order('Jump', 'wormhole'), 'the jump out was refused')
+until not GameDebug.Uncharted()
+lua GameDebug.TimeScale(1)
+wait 1
+lua assert(string.find(GameDebug.Said(), 'back on the map', 1, true), 'the pilot should be told they are back')
+lua assert(GameDebug.Count('gate') >= 1, 'a system of the map has its gates')
+
+echo wormhole scenario passed
+quit

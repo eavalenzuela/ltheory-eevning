@@ -24,7 +24,10 @@ local System = {}
 -- ("gone": what was a pilot's tower before it was taken down. An
 -- object's place in the list is its id, so the place is kept; it is no
 -- body, no station and no grid's middle from then on: Assets/Starbases.)
-export type Kind = "sun" | "planet" | "moon" | "belt" | "asteroid" | "station" | "gate" | "gone"
+-- ("wormhole": an end of one, Tactical/Wormholes. A place added to a
+-- description in play, as a site's is, and never one a system is
+-- described with.)
+export type Kind = "sun" | "planet" | "moon" | "belt" | "asteroid" | "station" | "gate" | "gone" | "wormhole"
 
 export type Object = {
   id: number,
@@ -146,7 +149,9 @@ function System.Describe(galaxy: Galaxy.Galaxy, id: number): Description
   -- (A colony ship used to lie moored where a station would have been.
   -- A system described then, in a save from then, has them still: a
   -- save keeps the places it was made with.)
-  local stationCount = if Structures.ColonyShip(node.nearest) then 0 else 1 + Rng.Int(rng, 3)
+  -- And none in uncharted space (Galaxy.Deepen), where nobody lives:
+  -- nor a gate, since it has no neighbours.
+  local stationCount = if node.uncharted or Structures.ColonyShip(node.nearest) then 0 else 1 + Rng.Int(rng, 3)
   for s = 1, stationCount do
     local host = hosts[Rng.Int(rng, #hosts) + 1]
     local x, y, z = around(host.x, host.y, host.z, host.radius * Rng.Float(rng, 2.5, 4))
@@ -179,9 +184,11 @@ function System.Describe(galaxy: Galaxy.Galaxy, id: number): Description
 end
 
 -- The gate in 'description' that leads to 'destination', if there is one.
+-- (A stargate: not a wormhole, and not a gate on to a room of a camp,
+-- whose destination is a place.)
 function System.GateTo(description: Description, destination: number): Object?
   for _, object in description.objects do
-    if object.kind == "gate" and object.to == destination then
+    if object.kind == "gate" and object.variety == "" and object.to == destination then
       return object
     end
   end

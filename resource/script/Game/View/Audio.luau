@@ -154,7 +154,8 @@ function Audio.Where(game: Core.Game): string
   -- themselves), and on some kinds of planet: there, or near one of
   -- those, there is chatter.
   local inhabited = place ~= nil and place.kind == "station" and state.starbases[at] == nil
-  if not inhabited and me and not (me.warp and me.warp.stage == "warp") then
+  -- (and nobody lives in uncharted space, whatever kind of planet is there)
+  if not inhabited and me and not (me.warp and me.warp.stage == "warp") and not player.uncharted then
     for _, object in Core.Query.Objects(game, player.system) do
       if object.kind == "planet" and Planet.Inhabited(object.variety) then
         local far = math.sqrt((object.x - me.x) ^ 2 + (object.y - me.y) ^ 2 + (object.z - me.z) ^ 2) - object.radius

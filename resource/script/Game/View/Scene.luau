@@ -677,12 +677,38 @@ function Scene.Arms(scene: Scene, ship: number): (number, number)
   return count, off
 end
 
+-- What a wormhole is drawn with (Core/Tactical/Wormholes): a unit
+-- sphere, to be scaled, with the engine's own shader for one, which
+-- looks into it from wherever the eye is. (A grey box of a wormhole:
+-- nothing shows of where it leads.)
+local hole: Model? = nil
+local function wormhole(): Model
+  local kept = hole
+  if kept then
+    return kept
+  end
+  local shader = ShaderInstance_Create(Shader_Create("npm.jsl", "wormhole.jsl"))
+  ShaderInstance_SetState(shader, "BlendModeAdditive")
+  ShaderInstance_SetState(shader, "ZWritableOff")
+  ShaderInstance_SetState(shader, "CullModeDisabled")
+  ShaderInstance_Link(shader)
+  local made = Model_Create()
+  Model_AddShell(made, Mesh_BoxSphere(16, true), shader)
+  hole = made
+  return made
+end
+
 local function makeStatic(object: SystemData.Object): Object
   local made: Object
   if object.kind == "asteroid" then
     -- (An asteroid cannot be named: the engine object has no such part.)
     made = Object_Asteroid(object.seed)
     made:SetScale(vector.create(object.radius, object.radius, object.radius))
+  elseif object.kind == "wormhole" then
+    made = Object_Scenery({})
+    Object_SetRenderable(made, wormhole())
+    made:SetScale(vector.create(object.radius, object.radius, object.radius))
+    made:SetName(object.name)
   else
     -- A gate: a ring, facing out of the system, the way its jump goes.
     -- (A station is a tower and what is anchored round it: makeStation.)
@@ -869,6 +895,12 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
       local kind = Planet.KindOf(object.kind, object.variety)
       if kind then
         local world = Planet.New(kind, object.seed, if object.kind == "moon" then MOON_MAP else WORLD_MAP)
+        -- (nobody lives in uncharted space: a world of a kind people
+        -- live on has no cities' lights there, Core/Describe/Galaxy)
+        local its = Planet.kinds[kind]
+        if its and (its.settings.cityLights or 0) > 0 and game.state.galaxy.systems[system].uncharted then
+          Planet.Set(world, "cityLights", 0)
+        end
         scene.worlds[object.id] = world
         body = world.body
       else
@@ -1173,6 +1205,8 @@ function Scene.Sync(scene: Scene, session: Session.Session)
           scene.proxies[object.id] = makeCloud(scene, object,
             vector.create(object.x - scene.ox, object.y - scene.oy, object.z - scene.oz), container)
           scene.statics[object.id] = object
+        elseif object.kind == "wormhole" and Core.Query.Wormhole(game, object.id) == nil then
+          -- (a wormhole that has closed: the place is kept, and nothing is there)
         elseif object.kind ~= "belt" then
           local made = makeStatic(object)
           container:AddInterior(made)
@@ -1221,6 +1255,18 @@ function Scene.Sync(scene: Scene, session: Session.Session)
           lobe:SetScale(vector.create(size, size, size))
         end
       end
+    end
+  end
+
+  -- A wormhole that has closed is gone from where it was.
+  for id, static in scene.statics do
+    if static.kind == "wormhole" and Core.Query.Wormhole(game, id) == nil then
+      local proxy: Object? = scene.proxies[id]
+      if proxy then
+        Object_Delete(proxy)
+      end
+      scene.proxies[id] = nil
+      scene.statics[id] = nil
     end
   end
 

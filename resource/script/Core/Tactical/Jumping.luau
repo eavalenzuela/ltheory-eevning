@@ -174,6 +174,8 @@ function Jumping.Soon(state: State.State, ship: number, to: number): boolean
   if ball == nil or not Jumping.Fitted(state, ship) or state.galaxy.systems[to] == nil or to == ball.system
     or Jumping.Beacon(state, ship, to) == nil then
     return false
+  elseif state.galaxy.systems[to].uncharted or state.galaxy.systems[ball.system].uncharted then
+    return false
   end
   local levels = Items.Levels(state, ship)
   if levels and math.max(0, levels[Jumping.SKILL] or 0) < 1 then
@@ -202,6 +204,9 @@ function Jumping.Validate(state: State.State, command: State.Command): (boolean,
     return false, "no such system"
   elseif to == ball.system then
     return false, "that is the system you are in"
+  elseif state.galaxy.systems[to].uncharted or state.galaxy.systems[ball.system].uncharted then
+    -- (a drive works out its jump from the map: Tactical/Wormholes)
+    return false, "no drive finds its way in or out of uncharted space"
   elseif Jumping.Beacon(state, ship.id, to) == nil then
     return false, "no beacon is lit there"
   end

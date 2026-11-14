@@ -204,6 +204,20 @@ local PACKS: { [string]: { { any } } } = {
     { 0.2, { "marauder", "jackal", "raider" } }, { 0.05, { "ravager", "mender", "jackal" } } },
 }
 Pirates.PACKS = PACKS
+-- And what comes in uncharted space (Tactical/Wormholes), by how deep
+-- in the system lies: at the edge what lawless space brings, and
+-- further in nothing smaller than a cruiser leads a pack. With how
+-- many times as likely each of them is to be a veteran or a captain.
+-- (First figures.)
+local DEEP: { { { any } } } = {
+  PACKS.lawless,
+  { { 0.4, { "marauder", "mender", "jackal", "raider" } }, { 0.35, { "marauder", "marauder", "mender" } },
+    { 0.25, { "ravager", "mender", "jackal" } } },
+  { { 0.4, { "ravager", "mender", "marauder", "jackal" } }, { 0.35, { "ravager", "marauder", "marauder", "mender" } },
+    { 0.25, { "ravager", "ravager", "mender", "mender" } } },
+}
+Pirates.DEEP = DEEP
+Pirates.DEEP_KEEN = { 2, 2.5, 3 }
 
 -- The charge a weapon is loaded with when nobody says: the first there
 -- is of its family and size.
@@ -402,7 +416,9 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
     return
   end
   local roll = Rng.Next(rng)
-  local packs = PACKS[band]
+  -- (in uncharted space, what its depth brings)
+  local deep = math.min(#DEEP, state.galaxy.systems[me.system].depth or 0)
+  local packs: { { any } } = if deep > 0 then DEEP[deep] else PACKS[band]
   local pack: { string } = packs[#packs][2]
   for _, entry in packs do
     roll -= entry[1]
@@ -417,7 +433,8 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   if hidden == nil and site.kind == "belt" and state.galaxy.systems[me.system].home and #pack > 1 then
     pack = { pack[1] }
   end
-  bring(state, me.system, site, band, pack, stronghold, rng, away, events, if surging then Surges.GRADED else 1)
+  bring(state, me.system, site, band, pack, stronghold, rng, away, events,
+    if deep > 0 then Pirates.DEEP_KEEN[deep] elseif surging then Surges.GRADED else 1)
 end
 
 -- Bring a pack to a place for a reason that is somebody else's (a raid

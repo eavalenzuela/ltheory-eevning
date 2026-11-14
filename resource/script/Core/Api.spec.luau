@@ -852,8 +852,9 @@ suite:Case("a save from before the map had a height opens with the heights its g
   local data, length = Core.Save(game)
   local file = Codec.Decode(data, length)
   file.saveVersion = 67
-  for _, system in file.state.galaxy.systems do
-    system.z = nil
+  -- (the systems of the map: uncharted space came later, and has no height)
+  for id = 1, file.state.galaxy.charted do
+    file.state.galaxy.systems[id].z = nil
   end
   local old, oldLength = Codec.Encode(file)
   local opened = Core.Load(old, oldLength)

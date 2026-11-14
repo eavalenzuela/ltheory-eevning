@@ -64,7 +64,8 @@ local TAGS: { [string]: string } = {
 
 -- What a site (Tactical/Sites) is called, by the variety of its place.
 local SITES: { [string]: string } = { ["site.combat"] = "pirate den", ["site.ore"] = "hidden belt", ["site.relic"] = "derelict",
-  ["site.gas"] = "vapour field", ["site.data"] = "listening post", ["site.mission"] = "camp to clear", ["site.keep"] = "pirate tower" }
+  ["site.gas"] = "vapour field", ["site.data"] = "listening post", ["site.mission"] = "camp to clear", ["site.keep"] = "pirate tower",
+  ["site.wormhole"] = "wormhole" }
 
 -- Whether a row of the overview is a vault (Core/Tactical/Sites): a
 -- wreck to the Core, and not one to the pilot.
@@ -579,6 +580,18 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
       else `pirate tower: {held.batteries} {if held.batteries == 1 then "battery" else "batteries"} round it`
     tone = if held.sealed > 0 then Im.DIM elseif held.resupplied > 0 then NEXT else Im.WARN
   end
+  -- (a wormhole says where it leads, how big a hull it lets through,
+  -- and how long it has: Core/Tactical/Wormholes)
+  local through = if entry.variety == "site.wormhole" then Core.Query.Wormhole(session.game, entry.id) else nil
+  if through then
+    -- (short: the line shares its row with how far off the thing is.
+    -- What a size lets through is on the scanner's row for it, and in
+    -- the refusal if the ship is too big.)
+    local left = if through.left >= 3600 then `{through.left // 3600} h left` else `{math.max(1, through.left // 60)} min left`
+    what = if through.fits then `{through.sizeName} wormhole to {through.leads}, {left}`
+      else `{through.sizeName} wormhole: nothing over {through.lets} fits`
+    tone = if through.fits then NEXT else Im.WARN
+  end
   if entry.kind == "gate" and entry.variety == "passage" then
     -- (a camp's gate: shut until its room is cleared)
     what = if Session.Can(session, "Jump", entry.id) then "the camp's gate: open" else "the camp's gate: shut"
@@ -613,7 +626,7 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     { label = if Context.Range("WarpTo") > 0 then `Warp to {Context.Distance(Context.Range("WarpTo"))}` else "Warp to", kind = "WarpTo",
       range = Context.Range("WarpTo") },
     { label = "Align", kind = "AlignTo" },
-    if entry.kind == "gate" then { label = if entry.variety == "passage" then "Go through" else "Jump", kind = "Jump" }
+    if entry.kind == "gate" or through then { label = if entry.variety == "passage" or through then "Go through" else "Jump", kind = "Jump" }
       elseif entry.kind == "bookmark" then { label = "Forget", kind = "ForgetBookmark" }
       elseif entry.kind == "moon" then { label = "Anchor tower", kind = "AnchorTower" }
       elseif entry.kind == "planet" then { label = "Colony", kind = "Colony" }
@@ -1003,12 +1016,17 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       -- Where we are and what we have.
       Im.Heading(string.upper(player.systemName), left + 24, top + 18, 30, Im.TEXT)
       -- (and where that is: its constellation and its region)
-      Im.Text(`{player.constellation}, {player.region}`, left + 24 + Im.HeadingWidth(string.upper(player.systemName), 30) + 16, top + 30, 13,
-        Im.DIM)
+      -- (uncharted space is all one: Core/Describe/Galaxy)
+      Im.Text(if player.uncharted then player.region else `{player.constellation}, {player.region}`,
+        left + 24 + Im.HeadingWidth(string.upper(player.systemName), 30) + 16, top + 30, 13, Im.DIM)
       -- (how safe it is here: what comes to a belt follows from it)
       local _, band = Core.Query.Security(game, player.system)
       local whose = if player.owner ~= "" then string.upper(player.owner) else "UNCLAIMED"
       local standing = string.format("%s  -  %s  %.1f", whose, BANDS[band or "secure"], player.security)
+      -- (off the map: nobody's, and how deep in it lies says what lives there)
+      if player.uncharted then
+        standing = `ON NO MAP  -  DEPTH {player.depth} OF 3`
+      end
       Im.Text(standing, left + 24, top + 51, 13, if band == "secure" then SAFE elseif band == "low" then Im.WARN else HULL)
       -- (and whether pirates are massing here: Tactical/Surges)
       local surge = Core.Query.Surge(game)

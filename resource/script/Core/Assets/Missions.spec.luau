@@ -375,7 +375,8 @@ suite:Case("taking an assault puts its camp on the charts: a place of its own, f
   steps(game, 2 * Sites.CHECK + 5)
   local own = 0
   for _, other in Sites.In(state, 1) do
-    own += if other.kind == "mission" then 0 else 1
+    -- (nor is a wormhole, on a day one is open there)
+    own += if other.kind == "mission" or other.kind == "wormhole" then 0 else 1
   end
   t.eq({ own, site.gone } :: { any }, { Sites.COUNT.secure, false } :: { any })
   t.eq(#keepers(game, site.id), 0, "somebody came to a camp nobody is at")

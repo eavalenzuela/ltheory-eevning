@@ -41,6 +41,12 @@ export type SystemNode = {
   -- its constellation within that, by their ids.
   region: number,
   constellation: number,
+  -- A system of uncharted space (Galaxy.Deepen): no gate leads to it and
+  -- it is on no map. It is come to through a wormhole, and left by
+  -- one. 'depth' is how far in it lies, 1 to 3: what lives there is
+  -- worse the deeper. Nil and nil for a system of the map.
+  uncharted: boolean?,
+  depth: number?,
 }
 
 -- A region is a score or so of systems that lie together, and a
@@ -184,7 +190,8 @@ end
 -- game, ownership and security are what its powers make them.)
 function Galaxy.Claim(galaxy: Galaxy)
   local systems = galaxy.systems
-  local count = #systems
+  -- (the systems of the map: uncharted space is nobody's to claim)
+  local count = galaxy.charted or #systems
   local factions = Factions.list
   local wanted = math.clamp(count // Galaxy.SYSTEMS_A_FACTION, 1, #factions)
   local each = math.max(1, math.min(Galaxy.TERRITORY, math.floor(count * Galaxy.CLAIMED / wanted)))
@@ -337,7 +344,8 @@ function Galaxy.Claim(galaxy: Galaxy)
     end
   end
 
-  for id, system in systems do
+  for id = 1, count do
+    local system = systems[id]
     local index = whose[id]
     local faction = if index > 0 then factions[index] else nil
     system.owner = if faction then faction.id else ""
@@ -379,10 +387,16 @@ function Galaxy.Marks(galaxy: Galaxy)
   local rng = Rng.For(galaxy.seed, 3301)
   local used: { [string]: boolean } = {}
   for _, system in galaxy.systems do
-    if system.owner == "" then
+    if system.owner == "" and not system.uncharted then
       system.name = Names.UnusedMark(rng, used)
     end
   end
+end
+
+-- How many of a galaxy's systems are of the map: every one, for a
+-- galaxy with no uncharted space.
+function Galaxy.Charted(galaxy: Galaxy): number
+  return galaxy.charted or #galaxy.systems
 end
 
 -- What a jump into a system counts for when the safest way is wanted,
@@ -395,7 +409,7 @@ local RISK: { [string]: number } = { secure = 0, low = 2, lawless = 30 }
 -- The way from one system to another: the systems in order, both ends
 -- included (one system, if they are the same). The fewest jumps, or
 -- with 'safest' the least dangerous way. Of ways as good, the one
--- through the lower-numbered systems.
+-- through the lower-numbered systems. Empty if there is no way.
 function Galaxy.Route(galaxy: Galaxy, from: number, to: number, safest: boolean?): { number }
   local systems = galaxy.systems
   assert(systems[from] and systems[to], "no such system")
@@ -460,6 +474,11 @@ function Galaxy.Route(galaxy: Galaxy, from: number, to: number, safest: boolean?
       end
     end
   end
+  -- (no way at all, to or from a system no gate leads to: uncharted
+  -- space, Galaxy.Deepen)
+  if cost[to] == math.huge then
+    return {}
+  end
   local route: { number } = { to }
   while route[1] ~= from do
     table.insert(route, 1, before[route[1]])
@@ -472,6 +491,10 @@ export type Galaxy = {
   systems: { SystemNode },  -- systems[id]
   regions: { Region },      -- regions[id]
   constellations: { Constellation },
+  -- How many of the systems are of the map: the first so many. The
+  -- rest, if there are any, are uncharted space (Galaxy.Deepen). Nil
+  -- for a galaxy that has none: they all are.
+  charted: number?,
 }
 
 -- Systems to a region, and to a constellation, more or less.
@@ -767,27 +790,42 @@ local function share(systems: { SystemNode }, members: { number }, count: number
   return group, groups
 end
 
+-- Uncharted space (Galaxy.Deepen) is one region and one constellation,
+-- after the map's: put them in the lists, and every uncharted system in
+-- them. For a galaxy that has uncharted space, whose map has its own.
+local function wilds(galaxy: Galaxy)
+  local region: Region = { id = #galaxy.regions + 1, name = "Uncharted space" }
+  table.insert(galaxy.regions, region)
+  local constellation: Constellation = { id = #galaxy.constellations + 1, name = "Uncharted", region = region.id }
+  table.insert(galaxy.constellations, constellation)
+  for id = (galaxy.charted or #galaxy.systems) + 1, #galaxy.systems do
+    galaxy.systems[id].region, galaxy.systems[id].constellation = region.id, constellation.id
+  end
+end
+
 -- Give the galaxy its regions and constellations, and every system its
 -- place in them. They follow from the galaxy's seed and its gates, so
--- a galaxy always has the same.
+-- a galaxy always has the same. (The systems of the map: uncharted
+-- space is a region by itself, whatever the map's are.)
 function Galaxy.Regions(galaxy: Galaxy)
   local systems = galaxy.systems
+  local charted = galaxy.charted or #systems
   local rng = Rng.For(galaxy.seed, 2002)
   local used: { [string]: boolean } = {}
   local function name(): string
     return Names.Unused(rng, used)
   end
   local all: { number } = {}
-  for id = 1, #systems do
+  for id = 1, charted do
     all[id] = id
   end
-  local inRegion, regions = share(systems, all, math.max(1, math.floor(#systems / Galaxy.REGION + 0.5)), Galaxy.REGION // 3)
+  local inRegion, regions = share(systems, all, math.max(1, math.floor(charted / Galaxy.REGION + 0.5)), Galaxy.REGION // 3)
   galaxy.regions, galaxy.constellations = {}, {}
   local membersOf: { { number } } = {}
   for region = 1, regions do
     membersOf[region] = {}
   end
-  for id = 1, #systems do
+  for id = 1, charted do
     table.insert(membersOf[inRegion[id]], id)
   end
   for region = 1, regions do
@@ -805,6 +843,9 @@ function Galaxy.Regions(galaxy: Galaxy)
       end
     end
   end
+  if galaxy.charted then
+    wilds(galaxy)
+  end
 end
 
 -- How far out of the plane of the map a system can lie, as a share of
@@ -821,7 +862,10 @@ Galaxy.RELIEF_LEAST, Galaxy.RELIEF_MOST = 2, 25
 -- heights is given the ones it would have had.
 function Galaxy.Heights(galaxy: Galaxy)
   local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
-  for _, system in galaxy.systems do
+  -- (the systems of the map: uncharted space has no place on it)
+  local charted = galaxy.charted or #galaxy.systems
+  for id = 1, charted do
+    local system = galaxy.systems[id]
     minX, maxX = math.min(minX, system.x), math.max(maxX, system.x)
     minY, maxY = math.min(minY, system.y), math.max(maxY, system.y)
   end
@@ -829,7 +873,8 @@ function Galaxy.Heights(galaxy: Galaxy)
   local high = math.clamp(Galaxy.RELIEF * span, Galaxy.RELIEF_LEAST, Galaxy.RELIEF_MOST)
   local rng = Rng.For(galaxy.seed, 7411)
   local a, b, c = Rng.Float(rng, 0, 2 * math.pi), Rng.Float(rng, 0, 2 * math.pi), Rng.Float(rng, 0, 2 * math.pi)
-  for _, system in galaxy.systems do
+  for id = 1, charted do
+    local system = galaxy.systems[id]
     local u, v = (system.x - minX) / span * 2 * math.pi, (system.y - minY) / span * 2 * math.pi
     local wave = 0.6 * math.sin(1.3 * u + a) * math.cos(0.9 * v + b) + 0.4 * math.sin(2.1 * (u + v) + c)
     local own = Rng.Float(Rng.For(galaxy.seed, system.id, 7412), -0.15, 0.15)
@@ -843,6 +888,48 @@ end
 function Galaxy.Apart(galaxy: Galaxy, from: number, to: number): number
   local a, b = galaxy.systems[from], galaxy.systems[to]
   return if a and b then math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2 + (a.z - b.z) ^ 2) else math.huge
+end
+
+-- Uncharted space: as many systems again as the map has (the project
+-- owner's ruling, 2026-11-14), which no gate leads to and no map shows.
+-- They come after the systems of the map, by id, and nothing of the
+-- map is changed by their being there: each has a place of its own (to
+-- be told apart by, and for nothing else), no neighbours, no owner and
+-- no order kept, a survey mark for a name, and a depth, 1 to 3: half of
+-- them are at the first, a third at the second and the rest at the
+-- third. They follow from the galaxy's seed alone. Done once: a galaxy
+-- that has its uncharted space is left as it is.
+Galaxy.DEPTHS = { 0.5, 0.35, 0.15 }
+function Galaxy.Deepen(galaxy: Galaxy)
+  if galaxy.charted then
+    return
+  end
+  local count = #galaxy.systems
+  galaxy.charted = count
+  local used: { [string]: boolean } = {}
+  for _, system in galaxy.systems do
+    used[system.name] = true
+  end
+  local rng = Rng.For(galaxy.seed, 4401)
+  local radius = SPACING * math.sqrt(count)
+  for index = 1, count do
+    local angle = Rng.Float(rng, 0, 2 * math.pi)
+    local out = radius * math.sqrt(Rng.Next(rng))
+    local roll, depth = Rng.Next(rng), #Galaxy.DEPTHS
+    for at, share in Galaxy.DEPTHS do
+      roll -= share
+      if roll < 0 then
+        depth = at
+        break
+      end
+    end
+    table.insert(galaxy.systems, {
+      id = count + index, name = Names.UnusedMark(rng, used), x = out * math.cos(angle), y = out * math.sin(angle), z = 0,
+      neighbors = {}, owner = "", nearest = "", home = false, hops = 99, security = 0, region = 0, constellation = 0,
+      uncharted = true, depth = depth,
+    })
+  end
+  wilds(galaxy)
 end
 
 function Galaxy.Describe(seed: number, count: number): Galaxy

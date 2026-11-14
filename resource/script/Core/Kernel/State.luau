@@ -431,6 +431,16 @@ export type Wingman = {
 export type Site = { id: number, system: number, kind: string, code: string, strength: number, expires: number, gone: boolean,
   depth: number, led: boolean }
 
+-- A wormhole that is open (Tactical/Wormholes): a way between two
+-- systems that no gate joins, there for a day or so. 'a' is the place
+-- of the end it opened at (a place of its system's description, and a
+-- site: a scanner finds it), and 'from' that system; 'to' is the system
+-- it leads to, and 'b' the place of the end there, which is 0 until
+-- somebody has gone through (the far end is nowhere until then).
+-- 'size' is how big a hull it lets through, 1 to 3 (Wormholes.RANK).
+export type Wormhole = { id: number, a: number, from: number, b: number, to: number, opened: number, closes: number, size: number,
+  code: string }
+
 -- A job a station has for a pilot (Assets/Missions): a "bounty" (destroy
 -- 'need' pirates in 'system'; 'done' so far), a "courier" run (carry
 -- 'need' of 'type' to the station 'to'), or a "supply" order (bring
@@ -672,6 +682,12 @@ export type State = {
   sitesDue: { [number]: number },
   sitesSeen: { [number]: boolean },
   scanReady: number,
+  -- The wormholes that are open (Tactical/Wormholes), in the order they
+  -- opened; and the last day each system was asked whether one opens
+  -- in it (by system id).
+  wormholes: { [number]: Wormhole },
+  wormholeIds: { number },
+  wormholesRolled: { [number]: number },
   -- The hack the pilot has under way, if any.
   hack: Hack?,
   -- The scan probes the pilot has out, in the order they were put out.

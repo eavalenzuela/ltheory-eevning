@@ -21,6 +21,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
 local System = require("@lt/Core/Describe/System")
 local Vitals = require("@lt/Core/Tactical/Vitals")
+local Wormholes = require("@lt/Core/Tactical/Wormholes")
 
 local Space = {}
 
@@ -412,20 +413,38 @@ local function jump(state: State.State, ball: State.Ball, gate: System.Object, e
     return
   end
   local from = ball.system
-  local arrival = System.GateTo(Space.Describe(state, gate.to), from) :: System.Object
+  local to, far = gate.to, nil :: System.Object?
+  if gate.kind == "wormhole" then
+    -- A wormhole (Tactical/Wormholes) leads where it leads, and the ship
+    -- comes out beside its far end: which is made now, if this is the
+    -- first ship through. One that has closed on the way leads nowhere.
+    local hole = Wormholes.At(state, gate.id)
+    local site = state.sites[gate.id]
+    far = if hole and site and not site.gone then Wormholes.Far(state, hole, gate.id) else nil
+    if hole == nil or far == nil then
+      ball.intent = nil
+      table.insert(events, { kind = "JumpFailed", ship = ball.id, gate = gate.id, why = "that wormhole has closed" })
+      return
+    end
+    to = Wormholes.Beyond(hole, gate.id)
+  else
+    far = System.GateTo(Space.Describe(state, to), from)
+  end
+  local arrival = far :: System.Object
   -- A point a fixed distance from the far gate, in a direction rolled for
   -- this jump.
   local rng = Rng.For(state.historySeed, state.tick, ball.id, 31)
   local ux, uy, uz = unit(Rng.Float(rng, -1, 1), Rng.Float(rng, -0.3, 0.3), Rng.Float(rng, -1, 1))
   local out = arrival.radius + Constants.JUMP_ARRIVAL_DISTANCE + ball.radius
-  ball.system = gate.to
+  ball.system = to
   ball.x, ball.y, ball.z = arrival.x + ux * out, arrival.y + uy * out, arrival.z + uz * out
   ball.vx, ball.vy, ball.vz = 0, 0, 0
   setMode(ball, "stop", 0, 0)
   ball.warp = nil
   ball.intent = nil
   Space.AssignGrid(state, ball)
-  table.insert(events, { kind = "Jumped", ship = ball.id, from = from, to = gate.to, gate = gate.id, arrival = arrival.id })
+  table.insert(events, { kind = "Jumped", ship = ball.id, from = from, to = to, gate = gate.id, arrival = arrival.id,
+    wormhole = gate.kind == "wormhole" })
 end
 
 -- ---------------------------------------------------------------------
@@ -658,7 +677,14 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
         return false, "not a station"
       end
     elseif kind == "Jump" then
-      if what ~= "gate" then
+      if what == "wormhole" then
+        -- (through a wormhole: only one that is open, found, and big
+        -- enough for the hull)
+        local ok, why = Wormholes.Passable(state, target.id, ship)
+        if not ok then
+          return false, why
+        end
+      elseif what ~= "gate" then
         return false, "not a stargate"
       end
     elseif kind == "WarpTo" then

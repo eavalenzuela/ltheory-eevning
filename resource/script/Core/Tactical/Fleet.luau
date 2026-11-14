@@ -144,6 +144,7 @@ local Stations = require("@lt/Core/Assets/Stations")
 local System = require("@lt/Core/Describe/System")
 local Types = require("@lt/Core/Data/Types")
 local Vitals = require("@lt/Core/Tactical/Vitals")
+local Wormholes = require("@lt/Core/Tactical/Wormholes")
 
 local Fleet = {}
 
@@ -958,9 +959,21 @@ local function travel(state: State.State, me: State.Ball, system: number, events
   end
   if not (me.intent and me.intent.kind == "jump") then
     local route = Galaxy.Route(state.galaxy, me.system, system)
-    local gate = System.GateTo(Space.Describe(state, me.system), route[2])
+    local gate = if route[2] then System.GateTo(Space.Describe(state, me.system), route[2]) else nil
     if gate then
       give(state, { kind = "Jump", actor = me.id, target = gate.id }, events)
+      return
+    end
+    -- (no gate goes there: by a wormhole that does, if one is open here
+    -- that the ship gets through. A step at a time: a pilot left further
+    -- behind than that has no way to follow, Tactical/Wormholes.)
+    local ship = state.ships[me.id]
+    for _, hole in Wormholes.In(state, me.system) do
+      local near = if hole.from == me.system then hole.a else hole.b
+      if Wormholes.Beyond(hole, near) == system and Wormholes.Passable(state, near, ship) then
+        give(state, { kind = "Jump", actor = me.id, target = near }, events)
+        return
+      end
     end
   end
 end

@@ -313,6 +313,11 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
     if moon == nil or Space.SystemOf(state, moon.id) ~= ball.system then
       return false, "a tower is anchored at a moon"
     end
+    -- (not in uncharted space, for now: nothing that keeps a tower
+    -- going finds its way there, Tactical/Wormholes)
+    if state.galaxy.systems[ball.system].uncharted then
+      return false, "no tower can be kept in uncharted space yet"
+    end
     -- (not at one the pirates hold with a tower of their own, from
     -- however near: Tactical/Keeps)
     for _, keepId in state.keepIds do

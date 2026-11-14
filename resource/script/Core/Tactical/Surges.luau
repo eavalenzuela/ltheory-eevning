@@ -102,7 +102,8 @@ local function candidates(state: State.State): { { number } }
   end
   local found: { { number } } = {}
   for id = 1, #systems do
-    if jumps[id] and Galaxy.Band(systems[id].security) ~= "secure" then
+    -- (never in uncharted space, which nobody has news of)
+    if jumps[id] and Galaxy.Band(systems[id].security) ~= "secure" and not systems[id].uncharted then
       table.insert(found, { id, jumps[id] })
     end
   end

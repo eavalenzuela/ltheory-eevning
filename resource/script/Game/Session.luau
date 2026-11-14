@@ -232,6 +232,15 @@ function Session.Notice(session: Session, event: Space.Event)
     local system = session.game.state.galaxy.systems[event.to]
     Session.Say(session, string.format("Jump drive: %s, %.1f light years, out at %s", if system then system.name else "there",
       event.distance or 0, tostring(event.beacon or "the beacon")))
+  elseif kind == "Jumped" and event.ship == mine and event.wormhole then
+    -- (through a wormhole: into uncharted space, or out of it)
+    local node = session.game.state.galaxy.systems[event.to]
+    Session.Say(session, if node.uncharted then `Through the wormhole: {node.name}, on no map. Depth {node.depth or 1} of 3`
+      else `Through the wormhole: {node.name}, back on the map`)
+  elseif kind == "WormholeClosed" and event.found and event.system == Core.Query.Player(session.game).system then
+    Session.Say(session, `{event.name} has closed`)
+  elseif kind == "JumpFailed" and event.ship == mine then
+    Session.Say(session, `No way through: {event.why}`)
   elseif kind == "Jumped" and event.ship == mine then
     -- (say so when the kind of space changes: what waits at a belt does)
     local _, was = Core.Query.Security(session.game, event.from)

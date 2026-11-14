@@ -48,6 +48,11 @@ export type Event = { [string]: any }
 
 -- Sites a system has at once, by how safe it is.
 Sites.COUNT = { secure = 2, low = 3, lawless = 4 } :: { [string]: number }
+-- In uncharted space (Tactical/Wormholes) there is more to find the
+-- deeper in a system lies: so many more sites a step of its depth, and
+-- what is in a den's stores, a derelict or a vault is so many times as
+-- much again a step.
+Sites.DEEPER, Sites.RICHER = 1, 0.5
 -- Ticks between one look at a system's sites and the next: what has been
 -- cleaned out goes, and if there is room for another, one comes.
 Sites.CHECK = 600
@@ -58,7 +63,9 @@ Sites.SCAN = 8
 -- Scans it takes to find a site of a kind with no skill at it (a den is
 -- found before the first). Each level of Astrometrics makes every scan
 -- worth a tenth more.
-Sites.SCANS = { combat = 0, ore = 3, gas = 3, relic = 4, data = 5 } :: { [string]: number }
+-- (A wormhole is a signal like the rest, and not one of a system's
+-- count of sites: Tactical/Wormholes opens and closes them.)
+Sites.SCANS = { combat = 0, ore = 3, gas = 3, relic = 4, data = 5, wormhole = 2 } :: { [string]: number }
 local NAMES: { [string]: string } = { combat = "Pirate Den", ore = "Hidden Belt", gas = "Vapour Field", relic = "Derelict",
   data = "Listening Post" }
 -- How likely each kind is, by how safe the system is, in the order of
@@ -98,7 +105,7 @@ Sites.PROBES = 4              -- a pilot has so many out at once, at most
 Sites.PROBE_LIFE = 3600       -- ticks
 Sites.PROBE_RANGE = Constants.AU
 -- How far the ship's scanner alone gets with a site of a kind (1: all the way).
-Sites.ALONE = { combat = 1, ore = 1, gas = 1, relic = 0.5, data = 0.5 } :: { [string]: number }
+Sites.ALONE = { combat = 1, ore = 1, gas = 1, relic = 0.5, data = 0.5, wormhole = 1 } :: { [string]: number }
 
 -- The probes a pilot has out in a system, in the order they were put out.
 function Sites.Probes(state: State.State, system: number): { State.Probe }
@@ -251,6 +258,8 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
     return nil
   end
   local band = Galaxy.Band(state.galaxy.systems[system].security)
+  -- (how far into uncharted space the system lies: 0 on the map)
+  local sunk = state.galaxy.systems[system].depth or 0
   local roll, kind = Rng.Next(rng), "relic"
   for index, share in ODDS[band] do
     roll -= share
@@ -318,7 +327,7 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
     end
   elseif kind == "data" then
     -- Vaults, each locked, with what was written down in them.
-    local rich = if band == "secure" then 1 elseif band == "low" then 2 else 3
+    local rich = math.floor((if band == "secure" then 1 elseif band == "low" then 2 else 3) * (1 + Sites.RICHER * sunk) + 0.5)
     for _ = 1, 2 + Rng.Int(rng, 2) do
       local wreck = addWreck(state, Sites.VAULT, system, place.id,
         x + Rng.Float(rng, -5000, 5000), y + Rng.Float(rng, -1200, 1200), z + Rng.Float(rng, -5000, 5000), 90, expires)
@@ -331,7 +340,8 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
     end
   else
     -- Hulls adrift (or, at a den, the pirates' stores) with things aboard.
-    local rich = (if band == "secure" then 1 elseif band == "low" then 2 else 4) * (1 + 2 * deep)
+    local rich = math.floor((if band == "secure" then 1 elseif band == "low" then 2 else 4) * (1 + 2 * deep)
+      * (1 + Sites.RICHER * sunk) + 0.5)
     local hulls = if kind == "combat" then 1 else 2 + Rng.Int(rng, 2)
     for h = 1, hulls do
       local wreck = addWreck(state, if kind == "combat" then "Pirate Stores" else "Derelict Hull", system, place.id,
@@ -550,7 +560,8 @@ function Sites.Step(state: State.State, events: { Event })
     -- (a place made for a job is not one of the system's own, and goes
     -- when the job does)
     -- (nor is the place of a tower the pirates hold a moon with: Tactical/Keeps)
-    if site.kind == "mission" or site.kind == "keep" then
+    -- (nor a wormhole, which comes and goes by itself: Tactical/Wormholes)
+    if site.kind == "mission" or site.kind == "keep" or site.kind == "wormhole" then
       left -= 1
       continue
     end
@@ -563,9 +574,11 @@ function Sites.Step(state: State.State, events: { Event })
     end
   end
   local band = Galaxy.Band(state.galaxy.systems[system].security)
+  -- (and uncharted space has more of them, the deeper in)
+  local count = Sites.COUNT[band] + Sites.DEEPER * (state.galaxy.systems[system].depth or 0)
   -- (a system new to the pilot is found with all of its sites; after
   -- that they come one at a time)
-  local wanted = if state.sitesSeen[system] == nil then Sites.COUNT[band] - left else math.min(1, Sites.COUNT[band] - left)
+  local wanted = if state.sitesSeen[system] == nil then count - left else math.min(1, count - left)
   state.sitesSeen[system] = true
   for index = 1, wanted do
     make(state, system, Rng.For(state.historySeed, state.tick, system, index, 91), events)

@@ -242,6 +242,25 @@ local function swollen(near: number): number
   return math.min(2.2, near ^ 0.45)
 end
 
+-- The systems of a galaxy that are on the map: all of them, but for
+-- uncharted space (Core/Describe/Galaxy), which is on no map and never
+-- will be (the project owner's ruling). They are the first so many, so
+-- a system's id is its place in this list as it is in the galaxy's.
+-- (Worked out once for a galaxy and kept beside it.)
+local maps: { [any]: { Galaxy.SystemNode } } = setmetatable({}, { __mode = "k" }) :: any
+local function mapped(galaxy: Galaxy.Galaxy): { Galaxy.SystemNode }
+  local count = Galaxy.Charted(galaxy)
+  if count >= #galaxy.systems then
+    return galaxy.systems
+  end
+  local kept = maps[galaxy]
+  if kept == nil or #kept ~= count then
+    kept = table.move(galaxy.systems, 1, count, 1, {})
+    maps[galaxy] = kept
+  end
+  return kept
+end
+
 -- The systems as icons, one for every colour they are drawn in (by how
 -- safe they are, or by whose): a dot each at its place in space, bigger
 -- for a homeworld. (A box glyph: a circle glyph is a point of light
@@ -266,7 +285,7 @@ end
 
 -- A galaxy's chart: made once, whatever is done with the map after.
 local function charted(galaxy: Galaxy.Galaxy, epoch: number, safety: boolean): Chart
-  local systems = galaxy.systems
+  local systems = mapped(galaxy)
   local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
   for _, system in systems do
     minX, maxX = math.min(minX, system.x), math.max(maxX, system.x)
@@ -329,7 +348,7 @@ end
 -- 0 for none.)
 -- ('near': how near the map is looked at, for the size of the dots.)
 local function make(galaxy: Galaxy.Galaxy, its: Chart, width: number, height: number, round: number, reach: number, near: number): Drawn
-  local systems = galaxy.systems
+  local systems = mapped(galaxy)
   local middle = its.middle
   -- (as it is looked at: every system, and the place on the plane under
   -- it, and the room all of that takes. This is done again for every
@@ -404,7 +423,7 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   Im.Uncover()
   local game = session.game
   local galaxy = game.state.galaxy
-  local systems = galaxy.systems
+  local systems = mapped(galaxy)
   local x, y, w, h = Map.Covers(left, top, width, height)
   Im.Panel(x, y, w, h)
   -- (a panel lets what is behind it show; a map is read, so it does not)
@@ -412,6 +431,25 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
   Im.Heading(`GALAXY  {#systems} SYSTEMS`, x + 16, y + 12, 16, Im.DIM)
   if Im.Button("x", x + w - 38, y + 10, 24, 24, true, "Map:close") then
     open = false
+    return
+  end
+  -- In uncharted space there is no map to look at: where the pilot is
+  -- is on none, and nothing on this one is anywhere from there.
+  local where = Core.Query.Player(game)
+  if where.uncharted then
+    Im.Heading("ON NO MAP", x + w / 2 - Im.HeadingWidth("ON NO MAP", 34) / 2, y + h / 2 - 70, 34, Im.TEXT)
+    local lines = {
+      `{where.systemName} is in uncharted space, depth {where.depth} of 3.`,
+      "No gate leads here and no chart shows it: there is no route to plot.",
+      "The way out is a wormhole. Open the scanner, scan until one is found, warp to it and go through.",
+      "There is always one open, and the one you came by stays for most of a day.",
+      -- (what the header's "depth" is, for whoever wonders)
+      "Depth is how far in a system lies, 1 to 3: the deeper, the worse the pirates, the more there is to find,",
+      "and the less often a wormhole leads straight back to the map.",
+    }
+    for index, text in lines do
+      Im.Text(text, x + w / 2 - Im.TextWidth(text, 15) / 2, y + h / 2 - 28 + index * 24, 15, if index == 1 then Im.WARN else Im.DIM)
+    end
     return
   end
   if Im.Toggle("Factions", x + 260, y + 8, 100, 26, not bySecurity, "Map:factions") then

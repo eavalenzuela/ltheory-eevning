@@ -52,6 +52,7 @@ local Raids = require("@lt/Core/Tactical/Raids")
 local Surges = require("@lt/Core/Tactical/Surges")
 local Ships = require("@lt/Core/Data/Ships")
 local Sites = require("@lt/Core/Tactical/Sites")
+local Wormholes = require("@lt/Core/Tactical/Wormholes")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local Colonies = require("@lt/Core/Assets/Colonies")
@@ -87,7 +88,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 73
+Core.SAVE_VERSION = 74
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -374,6 +375,14 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- Nimia; and their hulls are the Nimia's of the owner's list, each
   -- the one that stands where it stood (they build no attack
   -- battlecruiser and no dreadnought but the siege one).
+  -- 74: uncharted space, and the wormholes into it (Tactical/Wormholes).
+  -- A galaxy from before has as many systems added to it that are on no
+  -- map, after its own, and nothing of its own is changed.
+  [73] = function(state: any)
+    Galaxy.Deepen(state.galaxy)
+    state.wormholes, state.wormholeIds = state.wormholes or {}, state.wormholeIds or {}
+    state.wormholesRolled = state.wormholesRolled or {}
+  end,
   -- 73: the fights a pilot was not at are kept (Tactical/Battles). A
   -- save from before has none on record.
   [72] = function(state: any)
@@ -936,6 +945,8 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
 -- in system 1.
 function Core.New(options: Options): Game
   local galaxy = Galaxy.Describe(options.galaxySeed, options.systems or 3)
+  -- (and as many systems again that are on no map: Tactical/Wormholes)
+  Galaxy.Deepen(galaxy)
   local state: State.State = {
     galaxySeed = options.galaxySeed,
     historySeed = options.historySeed,
@@ -968,6 +979,7 @@ function Core.New(options: Options): Game
     sitesDue = {},
     sitesSeen = {},
     scanReady = 0,
+    wormholes = {}, wormholeIds = {}, wormholesRolled = {},
     probes = {},
     probeIds = {},
     drones = {},
@@ -1222,6 +1234,7 @@ function Core.Step(game: Game)
   end
   Boosting.Step(state, game.events)
   Sites.Step(state, game.events)
+  Wormholes.Step(state, game.events)
   Hacking.Step(state, game.events)
   Missions.Step(state, game.events)
   Standings.Step(state)
@@ -1327,6 +1340,10 @@ export type PlayerInfo = {
   owner: string,      -- the name of the faction whose system it is; "" if nobody's
   region: string,     -- the names of the region and the constellation it is in
   constellation: string,
+  -- Whether the system is of uncharted space (Tactical/Wormholes), and
+  -- how deep in it lies (1 to 3: 0 for a system of the map).
+  uncharted: boolean,
+  depth: number,
 }
 
 function Query.Player(game: Game): PlayerInfo
@@ -1339,6 +1356,7 @@ function Query.Player(game: Game): PlayerInfo
     owner = if Factions.byId[state.galaxy.systems[system].owner] then Factions.byId[state.galaxy.systems[system].owner].name else "",
     region = state.galaxy.regions[state.galaxy.systems[system].region].name,
     constellation = state.galaxy.constellations[state.galaxy.systems[system].constellation].name,
+    uncharted = state.galaxy.systems[system].uncharted == true, depth = state.galaxy.systems[system].depth or 0,
   }
 end
 
@@ -1381,7 +1399,8 @@ function Query.Overview(game: Game): { Entry }
     -- (the place of a tower the pirates held is gone with the tower,
     -- whoever is there: its wreck says where it was)
     local site = state.sites[object.id]
-    if site and (not onGrid or site.kind == "keep") and Sites.Hidden(state, object.id) then
+    -- (and a wormhole that has closed is not there, whoever is beside it)
+    if site and (not onGrid or site.kind == "keep" or site.kind == Wormholes.KIND) and Sites.Hidden(state, object.id) then
       gone = true
     end
     -- (and where a tower was taken down there is nothing)
@@ -1974,6 +1993,30 @@ function Query.Directional(game: Game, toward: number?, angle: number, range: nu
   local ship = game.state.player.ship
   local ok, why = Dscan.Can(game.state, ship, toward, angle, along)
   return Dscan.Scan(game.state, ship, toward, angle, range, along), ok, why
+end
+
+-- The wormhole one of whose ends a place is, while it is open
+-- (Tactical/Wormholes): where it leads, as far as anybody knows; how
+-- big it is, by name, and the biggest hull it lets through; how many
+-- seconds it has left; and whether the pilot's ship would get through
+-- now, with why not if it would not.
+export type WormholeInfo = { id: number, leads: string, size: number, sizeName: string, lets: string, left: number, fits: boolean,
+  why: string }
+function Query.Wormhole(game: Game, place: number): WormholeInfo?
+  local state = game.state
+  local hole = Wormholes.At(state, place)
+  local site = state.sites[place]
+  if hole == nil or site == nil or site.gone then
+    return nil
+  end
+  local ship = state.ships[state.player.ship]
+  local fits, why = false, "no ship"
+  if ship then
+    local ok, reason = Wormholes.Passable(state, place, ship)
+    fits, why = ok, reason or ""
+  end
+  return { id = hole.id, leads = Wormholes.Leads(state, hole, place), size = hole.size, sizeName = Wormholes.SIZE_NAMES[hole.size],
+    lets = Wormholes.LETS[hole.size], left = math.max(0, hole.closes - state.tick) * Constants.TICK, fits = fits, why = why }
 end
 
 -- Whether a site is one the pilot can see on the overview: found, and
