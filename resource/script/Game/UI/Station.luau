@@ -2496,10 +2496,26 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
   local training = Core.Query.Training(game)
   if #training > 0 then
     local now = training[1]
-    Im.Text(`Training {Skills.byId[now.skill].name} {now.level}: {Format.Duration(now.left)}`, x + 332, bottom + 7, 13, Im.DIM)
+    Im.Text(shorten(`Training {Skills.byId[now.skill].name} {now.level}: {Format.Duration(now.left)}`, 36), x + 332, bottom + 7, 13, Im.DIM)
   else
     Im.Text("No skill in training", x + 332, bottom + 7, 13, Im.WARN)
   end
+  -- Home: where the pilot wakes when their capsule is destroyed. It is
+  -- made of this station here, for a fee; and where it is somewhere
+  -- else, the button says how far off.
+  local home = Core.Query.Home(game)
+  local move: State.Command = { kind = "SetHome", actor = 0 }
+  local canMove, whyNotMove = Session.CanDo(session, move)
+  if Im.Button(if home.here then "Home is here" else `Make home  {Format.Credits(home.fee)}`, x + width - 352, bottom, 166, 28,
+    canMove, "SetHome") then
+    Session.Do(session, move)
+  end
+  -- (beside the word DOCKED, at the head of the screen: where home is,
+  -- or why it cannot be made of this station)
+  local far = if home.jumps < 0 then "out of reach" elseif home.jumps == 0 then "in this system"
+    elseif home.jumps == 1 then "1 jump off" else `{home.jumps} jumps off`
+  Im.Text(if home.here then "your home" elseif canMove then shorten(`home: {home.name}, {far}`, 58)
+    else shorten(`home is {far}: {tostring(whyNotMove)}`, 58), x + 96, y + 14, 11, if home.here or canMove then Im.DIM else Im.WARN)
   if Im.Button("Save", x + width - 176, bottom, 76, 28, true) then
     Session.Save(session, "quick")
   end

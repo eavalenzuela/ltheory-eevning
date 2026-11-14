@@ -1032,7 +1032,7 @@ local AFTERMATH_COMMANDS = { Loot = true, Repair = true }
 local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true, StartResearch = true, CancelJob = true }
 local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true }
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true, ModifyOrder = true }
-local HANGAR_COMMANDS = { Assemble = true, BoardShip = true }
+local HANGAR_COMMANDS = { Assemble = true, BoardShip = true, SetHome = true }
 local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true, UnanchorTower = true,
   SetReaction = true }
 local SITE_COMMANDS = { Scan = true, LaunchProbe = true, RecallProbes = true }
@@ -1584,6 +1584,25 @@ end
 
 function Query.History(game: Game, station: number, type: string): { State.TradeDay }
   return Market.History(game.state, station, type)
+end
+
+-- The pilot's home: the station they wake at when their capsule is
+-- destroyed, its name and the system it is in, how many jumps off that
+-- is from where the pilot is (0 in the same system, -1 if there is no
+-- way), whether the pilot is docked there, and what a station charges
+-- to be made home.
+export type HomeInfo = { station: number, name: string, system: string, jumps: number, here: boolean, fee: number }
+function Query.Home(game: Game): HomeInfo
+  local state = game.state
+  local home = state.player.home
+  local object = Space.Object(state, home)
+  local system = Space.SystemOf(state, home)
+  local ship = state.ships[state.player.ship]
+  local ball = state.balls[state.player.ship]
+  local at = if ship.docked ~= 0 then Space.SystemOf(state, ship.docked) elseif ball then ball.system else system
+  local route = Galaxy.Route(state.galaxy, at, system)
+  return { station = home, name = if object then object.name else "?", system = state.galaxy.systems[system].name,
+    jumps = #route - 1, here = ship.docked == home, fee = Hangar.HOME_FEE }
 end
 
 -- A type's going price at a station day by day, with what was traded in

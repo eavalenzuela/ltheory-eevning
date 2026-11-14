@@ -82,6 +82,9 @@
 #   game-orders  an order's price changed (test/scenario/orders.txt): a
 #               sell order placed, its price set to another from the
 #               list of the pilot's orders, and the order cancelled
+#   game-home   home (test/scenario/home.txt): a berth taken aboard a
+#               Kethri colony ship, the ship and the capsule lost, and
+#               the pilot waking there
 #   game-history  a price's history (test/scenario/history.txt): a month
 #               of a mineral's price at a station, bought dear one day
 #               and sold cheap another, on the Market tab's History side
@@ -299,6 +302,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/orders.txt
   step game-history 0 timeout 300 bin/launch game --no-present --fixed-step 60 --timeout 200 \
     --script test/scenario/history.txt
+  step game-home 0 timeout 900 bin/launch game --no-present --fixed-step 60 --timeout 800 \
+    --script test/scenario/home.txt
   step game-sites 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/sites.txt
   step game-tackle 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \

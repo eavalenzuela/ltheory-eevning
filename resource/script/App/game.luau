@@ -803,6 +803,15 @@ function Debug.Jobs(): number
   return #Core.Query.Jobs(session.game, nil)
 end
 
+-- The pilot's home, where they wake when their capsule is destroyed:
+-- the station's name, whether the pilot is docked there, and how many
+-- jumps off it is. (It is made of the station docked at with the
+-- button 'SetHome', at the foot of the docked screen.)
+function Debug.Home(): (string, boolean, number)
+  local home = Core.Query.Home(session.game)
+  return home.name, home.here, home.jumps
+end
+
 -- A cheat: so many game days (or part of one) go by at the markets and
 -- nowhere else. The clock is moved on a minute at a time with only the
 -- markets stepped, which drift home and close their days; everything

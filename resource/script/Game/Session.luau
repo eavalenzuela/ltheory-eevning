@@ -126,7 +126,14 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{sign}{math.abs(event.amount)} credits ({event.reason})`)
   elseif kind == "Ejected" then
     Session.Say(session, "Your ship is lost. You are in your capsule: warp to a station")
-  elseif kind == "ShipGranted" or kind == "Respawned" then
+  elseif kind == "Respawned" then
+    -- (at home: the station the pilot keeps a berth at)
+    local home = Core.Query.Body(session.game, event.station)
+    Session.Say(session, `You wake at home, {if home then home.name else "your station"}, and have been given a new ship`)
+  elseif kind == "HomeMoved" then
+    local home = Core.Query.Body(session.game, event.station)
+    Session.Say(session, `{if home then home.name else "This station"} is your home now: lose your capsule, and you wake here`)
+  elseif kind == "ShipGranted" then
     Session.Say(session, "You have been given a new ship")
   elseif kind == "ModuleStopped" and event.ball == mine and event.reason ~= "switched off" then
     Session.Say(session, `A module stopped: {event.reason}`)

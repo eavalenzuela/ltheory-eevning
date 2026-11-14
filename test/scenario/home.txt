@@ -1,0 +1,59 @@
+# Home, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/home.txt
+#
+# Home is the station a pilot wakes at when their capsule is destroyed:
+# where the game began, until they take a berth somewhere else. In a
+# galaxy of forty the pilot is put aboard a Kethri colony ship (a cheat:
+# it is a long way), finds that a berth wants its fee, pays it with the
+# button at the foot of the docked screen, and has the colony ship for
+# home. Then out of it, the ship lost and the capsule after it: and the
+# pilot wakes aboard the colony ship, in a new ship, and not where the
+# game began.
+
+wait 2
+lua GameDebug.NewGame(3, 40)
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+frames 3
+lua _G.first, _G.here = GameDebug.Home()
+lua assert(_G.here, 'a new game begins at home')
+lua assert(not GameDebug.CanPress('SetHome'), 'the station that is home is not to be made home')
+
+# Aboard the colony ship: home is somewhere else now, some jumps off,
+# and a berth here costs more than a new pilot has.
+lua _G.ship = GameDebug.Moor('kethri')
+lua assert(_G.ship ~= '', 'the Kethri should have a colony ship to board')
+wait 2
+lua assert(GameDebug.Docked())
+lua assert(not select(2, GameDebug.Home()), 'home should be where the game began still')
+lua assert(select(3, GameDebug.Home()) >= 1, 'and that is some jumps off')
+lua assert(not GameDebug.CanPress('SetHome'), 'a berth wants its fee')
+lua GameDebug.Grant(20000)
+frames 3
+lua _G.wallet = GameDebug.Wallet()
+until GameDebug.Press('SetHome')
+until select(2, GameDebug.Home())
+lua assert(GameDebug.Wallet() == _G.wallet - 10000, 'the berth should cost ten thousand')
+lua assert(GameDebug.Home() ~= _G.first, 'home should be the colony ship now')
+frames 3
+lua assert(not GameDebug.CanPress('SetHome'))
+
+# Out of it (it may be crossing its system in warp, and the button then
+# waits), the ship lost, and the capsule too: the pilot wakes at home.
+patience 600
+until GameDebug.Press('UNDOCK') and GameDebug.InSpace()
+wait 2
+lua GameDebug.SelfDestruct()
+wait 0.5
+lua assert(GameDebug.Hull() == 'capsule', 'the pilot should be in a capsule')
+lua GameDebug.SelfDestruct()
+until GameDebug.Docked()
+wait 2
+lua assert(GameDebug.Hull() == 'frigate.courier', 'a pilot who wakes is given a ship')
+lua assert(select(2, GameDebug.Home()), 'the pilot should have woken aboard the colony ship')
+lua assert(GameDebug.System() == GameDebug.Nomads(), 'and is where its fleet is')
+
+echo home scenario passed
+quit

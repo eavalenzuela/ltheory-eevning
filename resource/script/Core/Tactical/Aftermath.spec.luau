@@ -3,11 +3,14 @@
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Core = require("@lt/Core/Api")
+local Hangar = require("@lt/Core/Assets/Hangar")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
+local Nomads = require("@lt/Core/Tactical/Nomads")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local Stations = require("@lt/Core/Assets/Stations")
 local Test = require("@lt/Tool/Test")
 
 local suite = Test.Suite("Aftermath")
@@ -296,6 +299,96 @@ suite:Case("losing the capsule too: the pilot wakes at home", function(t)
   t.eq({ player.docked, player.hull.id } :: { any }, { game.state.player.home, "frigate.courier" } :: { any })
   t.eq(game.state.wallet, wallet, "a capsule is not insured")
   t.eq(#game.state.wreckIds, 1, "and leaves no wreck")
+end)
+
+suite:Case("home is the station a pilot takes a berth at, for a fee: it is where they wake", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local ship = state.ships[state.player.ship]
+  local first = state.player.home
+  -- A new game's home is where it begins.
+  local home = Core.Query.Home(game)
+  t.eq({ home.station, home.here, home.jumps, home.fee } :: { any }, { first, true, 0, Hangar.HOME_FEE } :: { any })
+  t.eq(home.name, assert(Space.Object(state, first)).name)
+  t.eq(refused(game, { kind = "SetHome", actor = 0 }), "this is your home already")
+  -- Another station of the same system: docked there, it can be made home by whoever has the fee.
+  local second: any = nil
+  for _, object in Core.Query.Objects(game, 1) do
+    if object.kind == "station" and object.id ~= first then
+      second = object
+    end
+  end
+  assert(second, "the first system should have a second station")
+  ship.docked = second.id
+  home = Core.Query.Home(game)
+  t.eq({ home.station, home.here, home.jumps } :: { any }, { first, false, 0 } :: { any })
+  t.eq(state.wallet, 5000)
+  t.eq(refused(game, { kind = "SetHome", actor = 0 }), "not enough credits for the berth")
+  state.wallet = 50000
+  -- (a tower of the pilot's own has no berths: this one is forged for the asking)
+  state.starbases[second.id] = {} :: any
+  t.eq(refused(game, { kind = "SetHome", actor = 0 }), "a tower has no berth to wake in")
+  state.starbases[second.id] = nil
+  Core.TakeEvents(game)
+  order(t, game, { kind = "SetHome", actor = 0 })
+  local moved = stepUntil(game, "HomeMoved", 3)
+  t.eq({ moved.station, moved.was, moved.fee }, { second.id, first, Hangar.HOME_FEE })
+  t.eq({ state.player.home, state.wallet, state.journal[#state.journal].reason } :: { any }, { second.id, 40000, "home berth" } :: { any })
+  home = Core.Query.Home(game)
+  t.eq({ home.station, home.here, home.name } :: { any }, { second.id, true, second.name } :: { any })
+  t.eq(refused(game, { kind = "SetHome", actor = 0 }), "this is your home already")
+  -- In space there is no making a home of anything.
+  order(t, game, { kind = "Undock", actor = 0 })
+  for _ = 1, 20 do
+    Core.Step(game)
+  end
+  t.eq(refused(game, { kind = "SetHome", actor = 0 }), "not docked")
+  -- The ship lost, and the capsule: the pilot wakes at the new home, and not where the game began.
+  Aftermath.Destroy(state, me(game).id, 0, game.events)
+  Core.TakeEvents(game)
+  Aftermath.Destroy(state, me(game).id, 0, game.events)
+  local woke: any = nil
+  for _, event in Core.TakeEvents(game) do
+    woke = if event.kind == "Respawned" then event else woke
+  end
+  local player = Core.Query.Player(game)
+  t.eq({ woke.station, player.docked, player.hull.id } :: { any }, { second.id, second.id, "frigate.courier" } :: { any })
+  -- It is in the save.
+  local loaded = Core.Load(Core.Save(game))
+  t.eq({ loaded.state.player.home, Core.Hash(loaded) } :: { any }, { second.id, Core.Hash(game) } :: { any })
+end)
+
+suite:Case("a colony ship can be home: the pilot wakes aboard it, wherever it has got to", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true, traffic = true, systems = 40 })
+  local state = game.state
+  local ship = state.ships[state.player.ship]
+  local station = Nomads.StationId(1)
+  ship.docked = station
+  Space.Describe(state, Space.SystemOf(state, station))
+  state.wallet = 50000
+  order(t, game, { kind = "SetHome", actor = 0 })
+  stepUntil(game, "HomeMoved", 3)
+  local home = Core.Query.Home(game)
+  t.eq({ home.station, home.here } :: { any }, { station, true } :: { any })
+  t.eq(home.name, assert(Space.Object(state, station)).name)
+  -- Back where the game began, a long way off: home is so many jumps away, and the capsule lost there wakes aboard.
+  local first = Stations.Starter(state)
+  ship.docked = first
+  home = Core.Query.Home(game)
+  t.ok(home.jumps >= 1 and not home.here, `the colony ship should be some jumps off, and is {home.jumps}`)
+  order(t, game, { kind = "Undock", actor = 0 })
+  for _ = 1, 20 do
+    Core.Step(game)
+  end
+  Aftermath.Destroy(state, me(game).id, 0, game.events)
+  Aftermath.Destroy(state, me(game).id, 0, game.events)
+  local player = Core.Query.Player(game)
+  t.eq({ player.docked, player.hull.id } :: { any }, { station, "frigate.courier" } :: { any })
+  for _ = 1, 120 do
+    Core.Step(game)
+  end
+  t.eq(Core.Query.Player(game).docked, station)
+  t.eq(Core.Query.Player(game).system, Space.SystemOf(state, station), "the pilot is where the colony ship is")
 end)
 
 suite:Case("repairs cost in proportion to the damage and need the money", function(t)
