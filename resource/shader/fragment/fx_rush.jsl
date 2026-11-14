@@ -1,0 +1,21 @@
+/* A line of light going by a ship in warp: soft across, bright toward
+   its head and thinning away behind. (Additive. uv.x runs across, uv.y
+   along, from the head to the tail.) */
+
+#include frag.jsl
+#include math.jsl
+
+uniform vec3 fxColor;
+uniform float fxFade;       /* how bright, 0 to 1 */
+uniform float fxAge;        /* not used: every streak piece is given one */
+
+void main() {
+  float x = abs(2.0 * uv.x - 1.0);
+  float y = uv.y;
+  float core = exp(-x * 10.0);
+  float glow = 0.35 * exp(-x * 3.0);
+  float along = smoothstep(0.0, 0.08, y) * pow(1.0 - y, 1.6);
+  float edge = 1.0 - smoothstep(0.6, 1.0, x);
+  float a = (core + glow) * along * edge * fxFade;
+  RETURN(vec4(mix(fxColor, vec3(1.0), 0.6 * core), 1.0) * a);
+}

@@ -1594,6 +1594,15 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     end
   end
 
+  -- The pilot's own ship in warp: the place going by it, in lines.
+  local warping = if me then me.warp else nil
+  local own: vector? = scene.screen[player.ship]
+  if me and warping and warping.stage == "warp" and own then
+    Effects.Rush(fx, scene.warp, own, vector.create(warping.ux, warping.uy, warping.uz), me.radius, scene.time)
+  else
+    Effects.Rush(fx, 0, vector.create(0, 0, 0), vector.create(0, 0, 1), 1, scene.time)
+  end
+
   Effects.Update(fx, scene.time, scene.screen)
 
   -- (docked in a colony ship, it is that ship the camera is on)

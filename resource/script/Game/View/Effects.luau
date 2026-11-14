@@ -90,6 +90,7 @@ export type Fx = {
   pools: { [string]: { Piece } },
   made: { Piece },        -- every piece there is, in use or put away
   seed: number,
+  rush: { Piece },        -- the lines going by the pilot's ship in warp (Effects.Rush)
 }
 
 Effects.looks = {
@@ -173,7 +174,7 @@ function Effects.LookOf(type: string): (Look?, number)
 end
 
 function Effects.New(container: Object): Fx
-  return { container = container, effects = {}, flashes = {}, burns = {}, frame = 0, pools = {}, made = {}, seed = 0 }
+  return { container = container, effects = {}, flashes = {}, burns = {}, frame = 0, pools = {}, made = {}, seed = 0, rush = {} }
 end
 
 local streakMesh: Mesh? = nil
@@ -564,6 +565,57 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
   fx.frame += 1
 end
 
+-- The pilot's own ship in warp: the dust and the light of the place it
+-- is crossing, drawn out into lines that go by it, a tunnel of them
+-- about the way it goes. (The project owner's go-ahead, 2026-11-13: it
+-- was a wider view and a banner, and nothing going by.)
+-- 'depth' is how deep into the warp it is, from 0 (not at all: they are
+-- put away) to 1; 'at' is the ship in the scene, 'ahead' the way it
+-- goes, and 'radius' its own, which everything here is a multiple of:
+-- a bigger ship is seen from farther off, and has a wider tunnel.
+-- Each line keeps its own place round the ship and its own speed, comes
+-- from far ahead and goes far behind, and comes again.
+local RUSH = 110
+local RUSH_NEAR, RUSH_FAR = 3, 46       -- how far off the ship's way they run, radii
+local RUSH_SPAN = 170                   -- how far ahead they come from, and go behind, radii
+local RUSH_COLOR = vector.create(0.62, 0.80, 1.0)
+
+local function scatter(index: number, salt: number): number
+  local x = math.sin(index * 12.9898 + salt * 78.233) * 43758.5453
+  return x - math.floor(x)
+end
+
+function Effects.Rush(fx: Fx, depth: number, at: vector, ahead: vector, radius: number, now: number)
+  if depth <= 0.001 then
+    for _, piece in fx.rush do
+      give(fx, piece)
+    end
+    table.clear(fx.rush)
+    return
+  end
+  while #fx.rush < RUSH do
+    table.insert(fx.rush, take(fx, "fx_rush.jsl", true))
+  end
+  -- (two ways across the way it goes)
+  local across = vector.cross(ahead, if math.abs(ahead.y) < 0.9 then vector.create(0, 1, 0) else vector.create(1, 0, 0))
+  across = vector.normalize(across)
+  local over = vector.cross(ahead, across)
+  local span = RUSH_SPAN * radius
+  for index, piece in fx.rush do
+    local angle = 2 * math.pi * scatter(index, 1)
+    local off = radius * (RUSH_NEAR + (RUSH_FAR - RUSH_NEAR) * scatter(index, 2) ^ 1.4)
+    -- (so many spans a second: the nearer lines seem the faster for being near)
+    local speed = 0.9 + 1.5 * scatter(index, 3)
+    local along = span - ((now * speed + scatter(index, 4)) % 1) * 2 * span
+    local length = radius * (10 + 70 * depth) * (0.5 + scatter(index, 5))
+    local head = at + across * (off * math.cos(angle)) + over * (off * math.sin(angle)) + ahead * along
+    lay(piece, head, head + ahead * length, radius * 0.05)
+    -- (dimmest far ahead and far behind, where it comes and goes)
+    local ends = 1 - math.abs(along) / span
+    paint(piece, RUSH_COLOR, depth * (0.25 + 0.75 * scatter(index, 6)) * math.min(1, 3 * ends), 0)
+  end
+end
+
 -- Drop every effect. 'gone' says the container has been deleted, and
 -- the pieces with it; otherwise they are taken out of it.
 function Effects.Clear(fx: Fx, gone: boolean)
@@ -577,6 +629,7 @@ function Effects.Clear(fx: Fx, gone: boolean)
   table.clear(fx.burns)
   table.clear(fx.pools)
   table.clear(fx.made)
+  table.clear(fx.rush)
 end
 
 return Effects
