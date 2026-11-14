@@ -100,6 +100,10 @@ Structures.STORAGE = "array.storage"
 Structures.REACTOR = "array.reactor"
 -- And the beacon a jump drive comes out at (Tactical/Jumping).
 Structures.BEACON = "array.beacon"
+-- And the beacon that claims an open system for whoever keeps the
+-- tower it is anchored at (Assets/Sovereignty). (Its service, "claim",
+-- is a pilot's tower's and no station's: it is not one of the list.)
+Structures.CLAIM = "array.claim"
 
 -- A tower by size. Its supply doubles with each size, and so does the
 -- fuel it burns (ten, twenty and forty blocks an hour).
@@ -160,6 +164,9 @@ local modules: { ModuleType } = {
   -- (what a ship with a jump drive comes out at: Tactical/Jumping)
   { id = "array.beacon", name = "Jump Beacon", service = "beacon", radius = 220, powergrid = 300, cpu = 250, anchor = 60,
     pilot = true, volume = 2000, basePrice = 2500000 },
+  -- (what makes an open system a pilot's own: Assets/Sovereignty)
+  { id = "array.claim", name = "Claim Beacon", service = "claim", radius = 260, powergrid = 400, cpu = 300, anchor = 120,
+    pilot = true, volume = 2500, basePrice = 12000000 },
   { id = "battery.gun", name = "Gun Battery", service = "defence", radius = 150, powergrid = 200, cpu = 60, anchor = 20,
     pilot = true, volume = 500, basePrice = 600000 },
   { id = "battery.missile", name = "Missile Battery", service = "defence", radius = 150, powergrid = 120, cpu = 120, anchor = 20,

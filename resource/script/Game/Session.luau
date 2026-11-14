@@ -317,6 +317,12 @@ function Session.Notice(session: Session, event: Space.Event)
     local function named(id: string): string
       return if Factions.byId[id] then Factions.byId[id].name else id
     end
+    -- (with the pilot's own corporation: Core/Assets/Sovereignty)
+    if (kind == "WarDeclared" and event.on == "player") or (kind == "PeaceMade" and event.b == "player") then
+      Session.Say(session, if kind == "WarDeclared" then `NEWS: the {named(event.by)} have declared war on you: they will come for what you hold next to them`
+        else `NEWS: the {named(event.a)} have made a truce with you`)
+      return
+    end
     local terms = ""
     if kind == "PeaceMade" and event.winner ~= "" then
       local ceded = session.game.state.galaxy.systems[event.ceded]
@@ -333,10 +339,16 @@ function Session.Notice(session: Session, event: Space.Event)
     -- (said when it is near enough to matter: within a few jumps)
     local here = Core.Query.Player(session.game).system
     local way = Session.Way(session, here, event.system)
-    if event.system == here or (#way > 0 and #way - 1 <= 6) then
-      local name = session.game.state.galaxy.systems[event.system].name
+    local name = session.game.state.galaxy.systems[event.system].name
+    local whose = if kind == "Blockaded" then event.against else event.from
+    if event.by == "player" then
+      Session.Say(session, `{name} is yours: the claim stands, and order is kept there`)
+    elseif whose == "player" then
       local by = if Factions.byId[event.by] then Factions.byId[event.by].name else event.by
-      local whose = if kind == "Blockaded" then event.against else event.from
+      Session.Say(session, if kind == "Blockaded" then `NEWS: the {by} are blockading {name}, which is yours: its lines are a place to fight at`
+        else `NEWS: the {by} have taken {name} from you`)
+    elseif event.system == here or (#way > 0 and #way - 1 <= 6) then
+      local by = if Factions.byId[event.by] then Factions.byId[event.by].name else event.by
       local from = if Factions.byId[whose] then Factions.byId[whose].name else ""
       Session.Say(session, if kind == "Blockaded" then `NEWS: the {by} are blockading {name}` .. (if from ~= "" then `, which the {from} hold` else "")
         elseif from ~= "" then `NEWS: the {by} have taken {name} from the {from}`
@@ -350,6 +362,8 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, if kind == "FrontCrossed" then `You have fired on the {named(event.side)}: their ships here are your enemies now`
       elseif event.siege then `The {named(event.by)} are besieging this system, which the {named(event.against)} hold: the lines are on the overview`
       else `The {named(event.by)} are claiming this system: their blockade is on the overview`)
+  elseif kind == "ClaimLapsed" and event.by == "player" then
+    Session.Say(session, `Your claim on {session.game.state.galaxy.systems[event.system].name} has lapsed: no beacon of yours stood lit there`)
   elseif kind == "HaulLost" then
     -- (a hauler that carried the economy's goods is gone: where it was going goes without)
     local node = session.game.state.galaxy.systems[event.system]

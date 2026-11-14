@@ -1,0 +1,44 @@
+# An open system as the pilot's own, in the game app (script/check runs
+# this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/claim.txt
+#
+# A lit tower of the pilot's with a Claim Beacon is put at a moon of the
+# nearest open system nobody holds. Its claim is counted by the hour.
+# After six the system is the pilot's: it is told so, it has order kept
+# in it, and it can be given a name.
+
+wait 2
+lua GameDebug.NewGame(5, 40)
+frames 5
+lua GameDebug.Peaceful(true)
+lua _G.system = GameDebug.ClaimAt()
+lua assert(_G.system ~= 0, 'no open system with a moon to claim')
+lua assert(GameDebug.Claim(_G.system) == 'claiming', 'a beacon in an open system should be claiming it')
+lua assert(select(2, GameDebug.Claim(_G.system)) == 0, 'and have stood no time yet')
+
+# Six hours go by.
+lua GameDebug.TimeScale(128)
+until select(2, GameDebug.Claim(_G.system)) >= 1
+until select(2, GameDebug.Claim(_G.system)) >= 2
+until select(2, GameDebug.Claim(_G.system)) >= 3
+until select(2, GameDebug.Claim(_G.system)) >= 4
+until select(2, GameDebug.Claim(_G.system)) >= 5
+until GameDebug.Claim(_G.system) == 'held'
+lua GameDebug.TimeScale(1)
+lua assert(string.find(GameDebug.Said(), 'is yours', 1, true), 'the pilot should be told the system is theirs')
+
+# It is theirs to name.
+lua assert(select(4, GameDebug.Claim(_G.system, 'New Haven')) ~= 'New Haven', 'a name is taken on the next tick, not before')
+wait 1
+lua assert(select(4, GameDebug.Claim(_G.system)) == 'New Haven', 'the system should have its new name')
+
+# And the map has it in their colour.
+until GameDebug.Press('Map')
+frames 4
+until GameDebug.Press('Map:factions')
+frames 4
+until GameDebug.Press('Map:close')
+
+echo claim scenario passed
+quit

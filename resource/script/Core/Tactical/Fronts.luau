@@ -239,7 +239,9 @@ function Fronts.Step(state: State.State, events: { Event }, first: number)
         front.shown, front.away = true, 0
         operation.shown = true
         front.reserve = field(state, front, place, operation.by, true, operation.force, -1, events)
-        front.held = if operation.against ~= "" and operation.defence > 0
+        -- (a system of the pilot's own has no ships but the pilot's, and
+        -- whoever flies for them: its defence is what it is, unseen)
+        front.held = if Factions.byId[operation.against] and operation.defence > 0
           then field(state, front, place, operation.against, false, operation.defence, 1, events) else operation.defence
       end
     elseif front.shown then
@@ -259,7 +261,8 @@ function Fronts.Step(state: State.State, events: { Event }, first: number)
           if event.kind == "BallDestroyed" then
             local other = if victim.attacking then operation.against else operation.by
             Standings.Change(state, victim.side, -Fronts.GRUDGE * victim.worth, events)
-            if other ~= "" then
+            -- (nobody pays the pilot for defending what is their own: Assets/Sovereignty)
+            if Factions.byId[other] then
               Standings.Change(state, other, Fronts.THANKS * victim.worth, events)
               Wallet.Pay(state, Fronts.PAY * victim.worth, `war bounty, {Factions.byId[other].name}`, events)
             end

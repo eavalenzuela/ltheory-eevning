@@ -118,6 +118,22 @@ Wars.ENOUGH = 1.2
 -- (And no war is over in less than so long.)
 Wars.LEAST = math.ceil(24 * 3600 * SECOND)
 
+-- The pilot's corporation, as a holder of open space (Assets/
+-- Sovereignty): it is no faction, and has no home. What is between it
+-- and a faction is what that faction thinks of the pilot (their
+-- standings), and not kept here: a faction that is hostile to the pilot
+-- and holds space next to a system of theirs declares on them, besieges
+-- it as it would an enemy's claim, and makes a truce when it has had
+-- enough, or thinks better of them. And a system of the pilot's has
+-- order kept in it, so much (the project owner's ruling: a faction's
+-- claim is as lawless as it was, and the pilot's is not).
+Wars.PILOT = "player"
+Wars.ORDER = 0.35
+-- (And a system of the pilot's is held by a tower and its guns, where
+-- a faction's claim has a garrison: it is worth so many garrisons to
+-- whoever besieges it with the pilot somewhere else.)
+Wars.TOWER = 3
+
 local function pair(a: string, b: string): string
   return if a < b then `{a}|{b}` else `{b}|{a}`
 end
@@ -189,6 +205,12 @@ end
 -- A system changes hands: to a faction, or ("") to nobody.
 local function take(galaxy: Galaxy.Galaxy, wars: State.Wars, system: number, to: string)
   local node = galaxy.systems[system]
+  -- (order is kept in a system of the pilot's, and goes with them)
+  if to == Wars.PILOT then
+    node.security = Wars.ORDER
+  elseif node.owner == Wars.PILOT then
+    node.security = 0
+  end
   node.owner = to
   if to ~= "" then
     wars.claims[system] = to
@@ -196,6 +218,12 @@ local function take(galaxy: Galaxy.Galaxy, wars: State.Wars, system: number, to:
     wars.claims[system] = nil
   end
   wars.version += 1
+end
+
+-- A system changes hands for a reason that is somebody else's (the
+-- pilot's claim, made or let go: Assets/Sovereignty).
+function Wars.Take(galaxy: Galaxy.Galaxy, wars: State.Wars, system: number, to: string)
+  take(galaxy, wars, system, to)
 end
 
 local function operationsOf(wars: State.Wars, faction: string): number
@@ -259,7 +287,8 @@ local function think(galaxy: Galaxy.Galaxy, wars: State.Wars, faction: string, t
           if at(wars, neighbor) == nil and not node.home then
             if theirs and theirs ~= faction and Wars.AtWar(wars, faction, theirs) then
               siege = if siege == 0 or neighbor < siege then neighbor else siege
-            elseif node.owner == "" then
+            elseif node.owner == "" and not (wars.spoken and wars.spoken[neighbor]) then
+              -- (not one the pilot's beacon stands in: it is spoken for)
               claim = if claim == 0 or neighbor < claim then neighbor else claim
             end
           end
@@ -275,10 +304,10 @@ local function think(galaxy: Galaxy.Galaxy, wars: State.Wars, faction: string, t
     if target ~= 0 then
       mine -= force
       local against = wars.claims[target] or ""
+      local garrison = if against == Wars.PILOT then Wars.GARRISON * Wars.TOWER elseif against ~= "" then Wars.GARRISON else 0
       local operation: State.Operation = { id = tick * 16 + #wars.operations, by = faction, system = target,
         kind = if against ~= "" then "siege" else "claim", began = tick, force = force, sent = force, against = against,
-        defence = if against ~= "" then Wars.GARRISON else 0, defended = if against ~= "" then Wars.GARRISON else 0, stage = "muster",
-        relieved = false }
+        defence = garrison, defended = garrison, stage = "muster", relieved = false }
       table.insert(wars.operations, operation)
       table.insert(events, { kind = "OperationBegan", system = target, by = faction, against = against, what = operation.kind })
     end
@@ -296,7 +325,9 @@ local function round(galaxy: Galaxy.Galaxy, wars: State.Wars, seed: number, tick
     local over: string? = nil
     if operation.stage == "muster" and age >= Wars.STAGE then
       -- (somebody else has it by now: there is nothing to claim)
-      if operation.kind == "claim" and galaxy.systems[operation.system].owner ~= "" then
+      -- (or the pilot's beacon stands in it, and it is spoken for)
+      if operation.kind == "claim" and (galaxy.systems[operation.system].owner ~= ""
+        or (wars.spoken ~= nil and wars.spoken[operation.system] == true)) then
         over = "called off"
       else
         operation.stage = "blockade"
@@ -366,8 +397,41 @@ end
 -- An hour of diplomacy: what is between every two factions is worn by
 -- their borders and comes back toward where it settles; wars begin;
 -- wars weary; truces are made, and run out.
-local function diplomacy(galaxy: Galaxy.Galaxy, wars: State.Wars, tick: number, events: { Event })
+local function diplomacy(galaxy: Galaxy.Galaxy, wars: State.Wars, tick: number, events: { Event }, hostile: { [string]: boolean })
   local holders = Galaxy.Holders(galaxy)
+  -- The pilot's corporation: a faction that is hostile to the pilot and
+  -- holds space next to a system of theirs declares on them, if there
+  -- is no truce between them; and one that is at war with them and
+  -- hostile no longer makes a truce.
+  local beside: { [string]: boolean } = {}
+  for system, owner in wars.claims do
+    if owner == Wars.PILOT then
+      for _, neighbor in galaxy.systems[system].neighbors do
+        local other = galaxy.systems[neighbor].owner
+        if other ~= "" and other ~= Wars.PILOT then
+          beside[other] = true
+        end
+      end
+    end
+  end
+  for _, faction in holders do
+    local key = pair(faction, Wars.PILOT)
+    if hostile[faction] and beside[faction] and wars.truces[key] == nil and not Wars.AtWar(wars, faction, Wars.PILOT)
+      and tick - (wars.declared[faction] or -Wars.DAY) >= Wars.DAY then
+      wars.declared[faction] = tick
+      table.insert(wars.feuds, { a = faction, b = Wars.PILOT, since = tick, score = 0 })
+      table.insert(events, { kind = "WarDeclared", by = faction, on = Wars.PILOT })
+    end
+  end
+  for index = #wars.feuds, 1, -1 do
+    local feud = wars.feuds[index]
+    if feud.b == Wars.PILOT and not hostile[feud.a] then
+      table.remove(wars.feuds, index)
+      wars.truces[pair(feud.a, Wars.PILOT)] = tick + Wars.TRUCE
+      table.insert(events, { kind = "PeaceMade", a = feud.a, b = Wars.PILOT, score = feud.score, hours = (tick - feud.since) // Wars.HOUR,
+        winner = "", paid = 0, ceded = 0 })
+    end
+  end
   local borders: { [string]: number } = {}
   for id = 1, Galaxy.Charted(galaxy) do
     local owner = galaxy.systems[id].owner
@@ -405,7 +469,10 @@ local function diplomacy(galaxy: Galaxy.Galaxy, wars: State.Wars, tick: number, 
       table.remove(wars.feuds, index)
       local key = pair(feud.a, feud.b)
       wars.truces[key] = tick + Wars.TRUCE
-      wars.relations[key] = Wars.TRUCE_AT
+      -- (what is between a faction and the pilot is the pilot's standing with it, and is not kept here)
+      if feud.b ~= Wars.PILOT then
+        wars.relations[key] = Wars.TRUCE_AT
+      end
       wars.weary[feud.a], wars.weary[feud.b] = a / 2, b / 2
       -- The terms: to whoever took more claims than it lost.
       local winner, loser = "", ""
@@ -488,7 +555,9 @@ local function diplomacy(galaxy: Galaxy.Galaxy, wars: State.Wars, tick: number, 
 end
 
 -- Once a tick. (Most ticks nothing is due.)
-function Wars.Step(galaxy: Galaxy.Galaxy, wars: State.Wars, seed: number, tick: number, events: { Event })
+-- ('hostile': the factions that are hostile to the pilot now, by what
+-- they think of them. Nobody, if it is not said.)
+function Wars.Step(galaxy: Galaxy.Galaxy, wars: State.Wars, seed: number, tick: number, events: { Event }, hostile: { [string]: boolean }?)
   if tick <= 0 or not wars.on then
     return
   end
@@ -503,7 +572,7 @@ function Wars.Step(galaxy: Galaxy.Galaxy, wars: State.Wars, seed: number, tick: 
     think(galaxy, wars, holders[phase // slot + 1], tick, events)
   end
   if tick % Wars.HOUR == 0 then
-    diplomacy(galaxy, wars, tick, events)
+    diplomacy(galaxy, wars, tick, events, hostile or {})
   end
 end
 

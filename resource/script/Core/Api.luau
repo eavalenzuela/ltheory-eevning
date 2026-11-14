@@ -55,6 +55,7 @@ local Sites = require("@lt/Core/Tactical/Sites")
 local Commerce = require("@lt/Core/Strategic/Commerce")
 local Wars = require("@lt/Core/Strategic/Wars")
 local Fronts = require("@lt/Core/Tactical/Fronts")
+local Sovereignty = require("@lt/Core/Assets/Sovereignty")
 local Wormholes = require("@lt/Core/Tactical/Wormholes")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
@@ -99,7 +100,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 77
+Core.SAVE_VERSION = 78
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -386,6 +387,11 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- Nimia; and their hulls are the Nimia's of the owner's list, each
   -- the one that stands where it stood (they build no attack
   -- battlecruiser and no dreadnought but the siege one).
+  -- 78: the pilot can claim open space (Assets/Sovereignty). A save
+  -- from before has no claim begun.
+  [77] = function(state: any)
+    state.sovereignty = state.sovereignty or { progress = {}, dark = {} }
+  end,
   -- 77: the factions' forces are ships where the pilot is (Tactical/
   -- Fronts). A save from before has no front.
   [76] = function(state: any)
@@ -1069,7 +1075,7 @@ function Core.New(options: Options): Game
     traffic = {},
     trafficIds = {},
     trafficDue = 0,
-    commerce = commerce, marketDrawn = {}, shocks = {}, wars = Wars.New(galaxy, options.wars == true), fronts = {}, frontIds = {},
+    commerce = commerce, marketDrawn = {}, shocks = {}, wars = Wars.New(galaxy, options.wars == true), fronts = {}, frontIds = {}, sovereignty = { progress = {}, dark = {} },
     nomads = {},
     trafficOn = options.traffic == true,
     queue = {},
@@ -1155,6 +1161,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Drones.Validate(state, command)
   elseif JUMP_COMMANDS[command.kind] then
     return Jumping.Validate(state, command)
+  elseif command.kind == "RenameSystem" then
+    return Sovereignty.Validate(state, command)
   elseif FLEET_COMMANDS[command.kind] then
     return Fleet.Validate(state, command)
   elseif IMPLANT_COMMANDS[command.kind] then
@@ -1258,6 +1266,8 @@ function Core.Step(game: Game)
       Drones.Apply(state, command, game.events)
     elseif ok and JUMP_COMMANDS[command.kind] then
       Jumping.Apply(state, command, game.events)
+    elseif ok and command.kind == "RenameSystem" then
+      Sovereignty.Apply(state, command, game.events)
     elseif ok and FLEET_COMMANDS[command.kind] then
       Fleet.Apply(state, command, game.events)
     elseif ok and IMPLANT_COMMANDS[command.kind] then
@@ -1305,8 +1315,19 @@ function Core.Step(game: Game)
   Space.Decide(state, game.events)
   Aftermath.Step(state, game.events)
   Mining.Step(state)
-  -- (the factions, and what they do about the open space between them)
-  Wars.Step(state.galaxy, state.wars, state.historySeed, state.tick, game.events)
+  -- (the factions, and what they do about the open space between them:
+  -- and about the pilot's, those that think badly of the pilot)
+  local hostile: { [string]: boolean }? = nil
+  if state.wars.on and state.tick % Wars.HOUR == 0 then
+    local those: { [string]: boolean } = {}
+    for _, faction in Galaxy.Holders(state.galaxy) do
+      those[faction] = Standings.Hostile(state, faction)
+    end
+    hostile = those
+  end
+  Wars.Step(state.galaxy, state.wars, state.historySeed, state.tick, game.events, hostile)
+  -- (and the pilot's own claims on it)
+  Sovereignty.Step(state, game.events)
   -- (the lanes of the system the pilot is in are watched: its haulers
   -- carry what goes along them, Tactical/Traffic)
   do
@@ -1417,7 +1438,10 @@ function Query.Player(game: Game): PlayerInfo
   return {
     ship = ship.id, shipName = ship.name, hull = Ships.byId[ship.type], docked = ship.docked,
     system = system, systemName = state.galaxy.systems[system].name, security = state.galaxy.systems[system].security,
-    owner = if Factions.byId[state.galaxy.systems[system].owner] then Factions.byId[state.galaxy.systems[system].owner].name else "",
+    -- (a system of the pilot's own is their corporation's, by its name: Assets/Sovereignty)
+    owner = if Factions.byId[state.galaxy.systems[system].owner] then Factions.byId[state.galaxy.systems[system].owner].name
+      elseif state.galaxy.systems[system].owner == Wars.PILOT then (if Corporation.Founded(state) then state.corporation.name else "Yours")
+      else "",
     region = state.galaxy.regions[state.galaxy.systems[system].region].name,
     constellation = state.galaxy.constellations[state.galaxy.systems[system].constellation].name,
     uncharted = state.galaxy.systems[system].uncharted == true, depth = state.galaxy.systems[system].depth or 0,
@@ -2507,7 +2531,9 @@ function Query.Wars(game: Game): ({ WarInfo }, { OperationInfo }, number)
   local state = game.state
   local galaxy = state.galaxy
   local function named(id: string): string
-    return if Factions.byId[id] then Factions.byId[id].name else ""
+    return if Factions.byId[id] then Factions.byId[id].name
+      elseif id == Wars.PILOT then (if Corporation.Founded(state) then state.corporation.name else "you")
+      else ""
   end
   local feuds: { WarInfo } = {}
   for _, feud in state.wars.feuds do
@@ -2543,6 +2569,14 @@ function Query.Wars(game: Game): ({ WarInfo }, { OperationInfo }, number)
     end)
   end
   return feuds, found, state.wars.version
+end
+
+-- How a system stands for the pilot's claim on it (Assets/
+-- Sovereignty): "held", "claiming", "contested" or "none", with the
+-- hours gone and the hours it takes (for one that is held: the hours it
+-- has been without a beacon, and the hours before it is let go).
+function Query.Claim(game: Game, system: number): (string, number, number)
+  return Sovereignty.Status(game.state, system)
 end
 
 -- Who is blockading the system the pilot is in, by name, and what for

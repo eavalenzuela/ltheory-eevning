@@ -65,6 +65,9 @@ local marketPage = "trade"
 -- How many days of a price are shown.
 local HISTORY = 30
 
+-- The name typed for a system of the pilot's own (the Starbase tab).
+local claimName = ""
+
 -- What the thing chosen goes for across the map (Core.Query.Prices).
 local across = { key = "", age = 0, here = 1, list = {} :: { Core.PriceAt } }
 
@@ -2221,6 +2224,26 @@ local function drawStarbase(session: Session.Session, game: Core.Game, player: C
   -- pressed when it cannot be, it says why not)
   if Im.Button("Take down", left + 300, line - 1, 100, 24, true, "Tower:down") then
     Session.Do(session, { kind = "UnanchorTower", actor = 0 })
+  end
+  -- The pilot's claim on the system (Core/Assets/Sovereignty): how a
+  -- beacon here stands, and, once the system is theirs, a name for it.
+  do
+    local here = Core.Query.Player(game).system
+    local how, gone, takes = Core.Query.Claim(game, here)
+    if how == "claiming" then
+      Im.Text(`Claiming this system: {gone} of {takes} hours`, left + 420, line + 3, 13, Im.ACCENT)
+    elseif how == "contested" then
+      Im.Text("The beacon claims nothing: the system is somebody's", left + 420, line + 3, 13, Im.WARN)
+    elseif how == "held" then
+      Im.Text(if gone > 0 then `Yours, but no beacon is lit: let go in {takes - gone} h` else "This system is yours", left + 420, line + 3, 13,
+        if gone > 0 then Im.WARN else GOOD)
+      claimName = Im.Words("Claim:name", claimName, left + 420, line + 24, 190, 24, 32, "a name for it")
+      local rename: State.Command = { kind = "RenameSystem", actor = 0, target = here, what = claimName }
+      if Im.Button("Rename", left + 616, line + 24, 70, 24, claimName ~= "" and (Session.CanDo(session, rename)), "Claim:rename") then
+        Session.Do(session, rename)
+        claimName = ""
+      end
+    end
   end
   line += 30
   if status.sealed > 0 then

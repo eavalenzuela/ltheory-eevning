@@ -1137,6 +1137,46 @@ function Debug.BeaconAt(system: number): boolean
   return false
 end
 
+-- Sovereignty (Core/Assets/Sovereignty). A cheat, for a claim to look
+-- at without building a tower: a lit tower of the pilot's with a Claim
+-- Beacon online, at a moon of the nearest open system nobody holds (one
+-- that has a moon). Returns the system (0 if there is none).
+function Debug.ClaimAt(): number
+  local state = session.game.state
+  local here = Core.Query.Player(session.game).system
+  local best, least, at: any = 0, math.huge, nil
+  for id = 1, Galaxy.Charted(state.galaxy) do
+    local node = state.galaxy.systems[id]
+    if node.owner == "" and Galaxy.Apart(state.galaxy, here, id) < least then
+      for _, object in Space.Describe(state, id).objects do
+        if object.kind == "moon" and Galaxy.Apart(state.galaxy, here, id) < least then
+          best, least, at = id, Galaxy.Apart(state.galaxy, here, id), object
+        end
+      end
+    end
+  end
+  if best == 0 then
+    return 0
+  end
+  local id = Starbases.Raise(state, best, at, Structures.towerById["tower.vessari.small"], "player", at.x + at.radius * 3, at.y, at.z)
+  local starbase = state.starbases[id]
+  starbase.ready, starbase.fuel, starbase.burnt = state.tick, 100000, state.tick
+  table.insert(starbase.modules, { type = Structures.CLAIM, ready = state.tick })
+  return best
+end
+
+-- How the pilot's claim on a system stands ("held", "claiming",
+-- "contested" or "none"), the hours gone and the hours it takes, and
+-- the system's name. And, given a name, the system is renamed first if
+-- it is the pilot's to name.
+function Debug.Claim(system: number, name: string?): (string, number, number, string)
+  if name then
+    Session.Do(session, { kind = "RenameSystem", actor = 0, target = system, what = name })
+  end
+  local how, gone, takes = Core.Query.Claim(session.game, system)
+  return how, gone, takes, session.game.state.galaxy.systems[system].name
+end
+
 function Debug.Beacons(): number
   local drive = Core.Query.JumpDrive(session.game)
   return if drive then #drive.beacons else 0

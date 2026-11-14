@@ -488,6 +488,10 @@ export type Wars = {
   relations: { [string]: number }, feuds: { Feud }, truces: { [string]: number }, claims: { [number]: string },
   operations: { Operation }, strength: { [string]: number }, weary: { [string]: number }, declared: { [string]: number },
   version: number,
+  -- (the open systems the pilot is claiming, with a beacon that has not
+  -- stood long enough yet: no faction begins a claim of one. Assets/
+  -- Sovereignty says which.)
+  spoken: { [number]: boolean }?,
 }
 
 -- A wormhole that is open (Tactical/Wormholes): a way between two
@@ -671,6 +675,10 @@ export type State = {
   wars: Wars,
   fronts: { [number]: Front },
   frontIds: { number },
+  -- The pilot's claims on open space (Assets/Sovereignty), by system:
+  -- the hours a claim beacon of theirs has stood in one that is not
+  -- theirs yet, and the hours one that is theirs has been without one.
+  sovereignty: { progress: { [number]: number }, dark: { [number]: number } },
   orders: { [number]: Order },
   orderIds: { number },
   -- The pilot's listings on stations' boards (Assets/Contracts); the

@@ -105,6 +105,9 @@
 #   game-front  the factions' forces on grid (test/scenario/front.txt):
 #               a siege staged where the pilot is, its lines warped to,
 #               and both forces there as ships that leave the pilot be
+#   game-claim  sovereignty (test/scenario/claim.txt): a claim beacon
+#               at a tower, six hours, and an open system that is the
+#               pilot's and takes a name
 #   game-home   home (test/scenario/home.txt): a berth taken aboard a
 #               Kethri colony ship, the ship and the capsule lost, and
 #               the pilot waking there
@@ -343,6 +346,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/wars.txt
   step game-front 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/front.txt
+  step game-claim 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
+    --script test/scenario/claim.txt
   step game-tackle 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/tackle.txt
   step game-salvage 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \

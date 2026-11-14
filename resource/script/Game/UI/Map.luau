@@ -52,7 +52,9 @@ local UNCLAIMED = vector.create(0.34, 0.35, 0.38)
 local NEXT = vector.create(1.0, 0.80, 0.28)
 -- A faction's colour on the map. (Not its hull paint, which is chosen
 -- to look right on a hull: several of them are greys and browns.)
+-- (the last: the pilot's own, what their corporation has claimed. Core/Assets/Sovereignty)
 local WHOSE: { [string]: vector } = {
+  player = vector.create(0.78, 1.0, 0.15),
   vessari = vector.create(1.0, 0.72, 0.28), talmar = vector.create(0.45, 0.78, 1.0),
   orun = vector.create(0.55, 0.9, 0.5), kethri = vector.create(0.82, 0.55, 1.0),
   unbound = vector.create(0.95, 0.38, 0.32), vail = vector.create(0.25, 0.85, 0.80),
@@ -1202,6 +1204,9 @@ function Map.Draw(session: Session.Session, left: number, top: number, width: nu
     end
     Im.Fill(px, line + 3, 10, 10, UNCLAIMED, 0.95)
     Im.Text("Nobody's", px + 18, line, 13, Im.DIM)
+    -- (and the pilot's own, beside it)
+    Im.Fill(px + 110, line + 3, 10, 10, colorOf("player"), 0.95)
+    Im.Text("Yours", px + 128, line, 13, Im.DIM)
   end
 end
 
