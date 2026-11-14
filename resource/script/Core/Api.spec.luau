@@ -416,31 +416,36 @@ end)
 suite:Case("a save from before the Kethri were nomads has their stations as colony ships and their towers as Vessari ones", function(t)
   local game = Core.New({ galaxySeed = 3, historySeed = 1, systems = 40, peaceful = true })
   local state = game.state
-  -- A system of the Kethri's that has been seen, and a market of theirs
-  -- that has been looked at.
-  local theirs, station = 0, 0
+  -- A system of the Kethri's that has been seen. (There is no station
+  -- in it now: among the Kethri there are none but the colony ships
+  -- that roam. In a save from then there was one, which is put back
+  -- here as it was, after everything else of the system, with the
+  -- market it had: that of a station that has been looked at.)
+  local theirs = 0
   for system = 1, 40 do
     if theirs == 0 and state.galaxy.systems[system].nearest == "kethri" then
-      for _, object in Space.Describe(state, system).objects do
-        if object.kind == "station" and station == 0 then
-          theirs, station = system, object.id
-        end
-      end
+      theirs = system
     end
   end
-  t.ok(station ~= 0, "no station among the Kethri in a galaxy of forty")
-  Core.Query.Quote(game, station, "ore.ferrite")
+  t.ok(theirs ~= 0, "no system of the Kethri's in a galaxy of forty")
+  local host = 0
+  for _, object in Space.Describe(state, theirs).objects do
+    t.ok(object.kind ~= "station", "a station among the Kethri")
+    host = if object.kind == "moon" or (host == 0 and object.kind == "planet") then object.id else host
+  end
+  Core.Query.Quote(game, state.player.home, "ore.ferrite")
   local data, length = Core.Save(game)
   -- As it was: a station there of a kind and size, and a Kethri tower in
   -- the pilot's hangar, one anchored, and one in a market's list.
   local file = Codec.Decode(data, length)
   file.saveVersion = 41
   local old = file.state
-  for _, object in old.systems[theirs].objects do
-    if object.id == station then
-      object.name, object.variety, object.radius = "Somewhere IV - Moon 2 - Trade hub 1", "trade hub", 6400
-    end
-  end
+  local station = theirs * 10000 + #old.systems[theirs].objects + 1
+  table.insert(old.systems[theirs].objects, { id = station, kind = "station", name = "Somewhere IV - Moon 2 - Trade hub 1",
+    x = 1e9, y = 0, z = 1e9, radius = 6400, seed = 7, parent = host, site = station, variety = "trade hub", to = 0 })
+  old.markets[station] = Codec.Decode(Codec.Encode(old.markets[state.player.home]))
+  table.insert(old.marketIds, station)
+  table.sort(old.marketIds)
   local item = 0
   for id, held in old.items do
     if held.type == "ammo.emp" then

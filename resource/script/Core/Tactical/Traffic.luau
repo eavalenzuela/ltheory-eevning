@@ -36,7 +36,10 @@
 -- gate from the system it was in, crosses to the gate it will go out
 -- by, and lies off that until it goes. It is there for the pilot who is
 -- there to see it, as all of this is; and it fights whoever its people
--- would fight, with everything it has.
+-- would fight, with everything it has. It is a station too, the only
+-- kind its people have: a pilot docks at it (Tactical/Space), and for a
+-- pilot who is aboard it is there with its fleet round it, as it is for
+-- one in space beside it.
 --
 -- (A stand-in, like the pirates' rules: when the strategic layer joins
 -- the game, who is about is who its trade and its navies send.)
@@ -95,7 +98,7 @@ local LAUNCHERS = { "launcher.light", "launcher.heavy", "launcher.cruise", "laun
 -- How far off the gate it lies by a colony ship keeps, and how far off
 -- the colony ship the nearest of its support fleet: metres between
 -- surfaces.
-Traffic.COLONY_OFF = 30000
+Traffic.COLONY_OFF = Nomads.OFF
 Traffic.ESCORT_OFF = 3000
 local FITTINGS = {
   { "afterburner.1mn", "armor.plate.200mm", "damage.control", "shield.extender.small" },
@@ -613,8 +616,11 @@ function Traffic.Step(state: State.State, events: { Event })
   end
 
   -- A colony fleet that is in this system and is not here yet. (With
-  -- the pilot in space: nobody watches from a hangar.)
-  if mine then
+  -- the pilot in space: nobody watches from a hangar. But a pilot docked
+  -- in a colony ship is aboard one of them, and it is there with its
+  -- fleet round it: it is what they see from its hangar, and what they
+  -- come out beside.)
+  if mine or Nomads.FleetOf(state.galaxy, me.docked) then
     for _, fleet in fleets do
       if not here[fleet.index] and not Nomads.Gone(state, fleet) and (Nomads.At(fleet, state.tick)) == system then
         colonyFleet(state, system, fleet, Rng.For(state.historySeed, state.tick, system, fleet.index, 61), events)

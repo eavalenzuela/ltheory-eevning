@@ -314,6 +314,8 @@ function Session.Notice(session: Session, event: Space.Event)
       else `{event.name} has been let go`)
   elseif kind == "PilotUnpaid" then
     Session.Say(session, `{event.name} could not be paid today: they stay, and think the less of it ({Fleet.Mood(event.loyalty)})`)
+  elseif kind == "ColonyShipMoved" then
+    Session.Say(session, `{event.name} has gone on to {session.game.state.galaxy.systems[event.to].name}, and you with it`)
   elseif kind == "Cloaked" and event.ball == mine then
     Session.Say(session, "Cloaked: nobody can target you, and you can target nobody")
   elseif kind == "Decloaked" and event.ball == mine then

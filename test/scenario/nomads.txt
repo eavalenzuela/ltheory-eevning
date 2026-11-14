@@ -2,43 +2,70 @@
 #
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/nomads.txt
 #
-# The Kethri have no stations: where another people has one, a colony
-# ship lies, ten kilometres long, with everything aboard. A galaxy of
-# forty has Kethri systems in it. The pilot is put aboard the first
-# colony ship there is (a cheat: it is a long way), finds every service
-# a station gives, leaves it, sees it for what it is, and moors again.
+# The Kethri have no stations. Their colony ships are their stations,
+# ten kilometres long with everything aboard, and none of them lies
+# still: each goes round their space with its fleet, a quarter of an
+# hour to a system. A galaxy of forty has Kethri systems in it. The
+# pilot is put aboard the first colony ship there is (a cheat: it is a
+# long way), finds the services a station gives, leaves it, sees it in
+# space as the ship it is with its fleet round it, docks at that ship,
+# and stays aboard while it goes on to its next system: then comes out
+# there.
 
 wait 2
 lua GameDebug.NewGame(3, 40)
 wait 2
+lua GameDebug.Peaceful(true)
 lua assert(GameDebug.Docked(), 'a new game starts docked')
 lua _G.ship = GameDebug.Moor('kethri')
-lua assert(string.find(_G.ship, 'Colony ship') ~= nil, 'the Kethri station should be a colony ship, not ' .. _G.ship)
+lua assert(_G.ship == 'Les Larmes de Nova', 'the Kethri have a colony ship to board, not ' .. _G.ship)
 wait 2
 lua assert(GameDebug.Docked())
+lua _G.first = GameDebug.System()
+lua assert(_G.first == GameDebug.Nomads(), 'aboard a colony ship the pilot is where its fleet is')
+lua assert(select(2, GameDebug.Galaxy()) == 'Kethri', 'a colony ship is in the Kethri\'s own space')
 
-# Everything is aboard: the market, fitting, and a hull to buy.
+# Everything is aboard: the market, and fitting.
 until GameDebug.Press('Market')
 until GameDebug.Tab() == 'Market'
 until GameDebug.Press('Fitting')
 until GameDebug.Tab() == 'Fitting'
 
-# Out of it: it is there, it is what the overview says it is, and it is
-# as big as it should be.
+# Out of it: it is a ship in space, with its fleet, and the overview has it.
 until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()
 wait 3
 lua assert(GameDebug.Order('Stop'))
+lua assert(GameDebug.System() == _G.first)
 lua assert(GameDebug.Select(_G.ship), 'the colony ship should be on the overview')
 lua assert(GameDebug.LookAt(_G.ship, 60))
 wait 2
 lua GameDebug.Zoom(300, nil, 0.5)
 wait 2
 
-# And back aboard.
-lua assert(GameDebug.Order('Dock', _G.ship))
+# And back aboard: docking at the ship.
+lua assert(GameDebug.Order('Dock', _G.ship), 'a colony ship is to be docked at')
 patience 240
 until GameDebug.Docked()
+lua assert(GameDebug.System() == _G.first)
+
+# It goes on to its next system, and the pilot with it. (Time is run on:
+# a colony ship stays a quarter of an hour.)
+lua GameDebug.TimeScale(40)
+patience 600
+until GameDebug.System() ~= _G.first
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Docked(), 'the pilot is still aboard')
+lua assert(GameDebug.System() == GameDebug.Nomads(), 'the pilot went where the colony ship went')
+wait 2
+
+# Out again, in the new system, beside it. (It may be crossing the
+# system in warp when it has only just come: there is no going out of
+# it then, and the button waits.)
+patience 600
+until GameDebug.Press('UNDOCK') and GameDebug.InSpace()
+lua assert(GameDebug.System() ~= _G.first, 'the pilot came out where the colony ship went')
+lua assert(GameDebug.Select(_G.ship), 'the colony ship should be on the overview of the system it went to')
 
 echo nomads scenario passed
 quit

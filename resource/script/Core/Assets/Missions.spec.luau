@@ -1308,8 +1308,11 @@ end
 suite:Case("the sixth agent has courier contracts in levels: a frigate's hold over a few jumps, a hauler's over many, then more than a hauler holds, then a freighter's", function(t)
   local seen = { 0, 0, 0, 0 }
   local wild, bulk = 0, 0
+  -- (A galaxy of forty with room for every level: the seventh. Most have not, now that there is no station
+  -- among the Kethri for a contract to go to: where the farthest station is no farther than the level
+  -- below goes, a level is not offered.)
   for seed = 1, 12 do
-    local game = Core.New({ galaxySeed = 1, historySeed = seed, peaceful = true, systems = 40 })
+    local game = Core.New({ galaxySeed = 7, historySeed = seed, peaceful = true, systems = 40 })
     local state = game.state
     local home = state.player.home
     -- One level for a pilot nobody knows; the second at a standing of 1, or for a pilot the agent knows.

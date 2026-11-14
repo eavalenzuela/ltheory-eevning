@@ -39,7 +39,8 @@ export type Object = {
   -- The grid anchor it sits on: itself for a station, gate or belt, its
   -- belt for an asteroid, 0 for the sun, planets and moons.
   site: number,
-  -- planet type, station type ("colony ship" for a nomad faction's),
+  -- planet type, station type ("colony ship" for a nomad faction's,
+  -- which is of no system's description: Tactical/Space),
   -- star class, an asteroid's ore; "" if none
   variety: string,
   to: number,         -- a gate's destination system; 0 otherwise
@@ -138,18 +139,19 @@ function System.Describe(galaxy: Galaxy.Galaxy, id: number): Description
     orbit *= Rng.Float(rng, 1.5, 2.1)
   end
 
-  local stationCount = 1 + Rng.Int(rng, 3)
+  -- Stations: one to three. But none among nomads (the project owner's,
+  -- 2026-11-13: "they're all roaming colony ships, no stationary ones"):
+  -- the only places to dock in their space are the colony ships that go
+  -- through it (Tactical/Nomads), which are of no system's description.
+  -- (A colony ship used to lie moored where a station would have been.
+  -- A system described then, in a save from then, has them still: a
+  -- save keeps the places it was made with.)
+  local stationCount = if Structures.ColonyShip(node.nearest) then 0 else 1 + Rng.Int(rng, 3)
   for s = 1, stationCount do
     local host = hosts[Rng.Int(rng, #hosts) + 1]
     local x, y, z = around(host.x, host.y, host.z, host.radius * Rng.Float(rng, 2.5, 4))
     local variety = STATIONS[Rng.Int(rng, #STATIONS) + 1]
     local radius = Rng.Float(rng, 2000, 8000)
-    -- (among nomads it is a colony ship that lies there, and its radius
-    -- is half the length of the ship)
-    local ship = Structures.ColonyShip(node.nearest)
-    if ship then
-      variety, radius = System.COLONY_SHIP, ship.length / 2
-    end
     local station = add("station", `{host.name} - {string.upper(string.sub(variety, 1, 1))}{string.sub(variety, 2)} {s}`,
       x, y, z, radius, host.id, variety)
     station.site = station.id

@@ -493,6 +493,11 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     -- (a station to moor at, and a ship: it says the second)
     what = "colony ship"
   end
+  if entry.kind == "ship" and Core.Query.Berth(session.game, entry.id) then
+    -- (and the nomads' are ships that are stations: it says so, since
+    -- Dock is the thing to do with one)
+    what = "colony ship: dock here"
+  end
   if entry.kind == "bookmark" then
     what = "a place you marked"
   end

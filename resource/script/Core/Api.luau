@@ -1185,6 +1185,19 @@ function Core.Step(game: Game)
   Assault.Step(state, game.events)
   Surges.Step(state, game.events)
   Pirates.Populate(state, game.events)
+  -- (a pilot docked in a colony ship of the nomads goes where it goes:
+  -- it has gone on to its next system, and they are there with it)
+  local berth = state.ships[state.player.ship]
+  local carrier = if berth and berth.docked ~= 0 then Nomads.FleetOf(state.galaxy, berth.docked) else nil
+  if carrier then
+    local now, from = Nomads.At(carrier, state.tick)
+    -- (and the system they are in is one that has been seen, whether or
+    -- not they have ever flown into it)
+    Space.Describe(state, now)
+    if state.tick % Nomads.STAY == 0 and now ~= from then
+      table.insert(game.events, { kind = "ColonyShipMoved", station = berth.docked, name = carrier.name, from = from, to = now })
+    end
+  end
   Traffic.Step(state, game.events)
   Pirates.Think(state, game.events)
   Drones.Step(state, game.events)
@@ -2370,6 +2383,28 @@ function Query.Nomads(game: Game): { NomadStatus }
       leaves = (sighting.leaves - game.state.tick) * Constants.TICK })
   end
   return found
+end
+
+-- A colony ship of the nomads is a ship in space and a station
+-- (Tactical/Nomads, Tactical/Space). The station a ship in space is, if
+-- it is one of theirs: nil for any other ship. (To dock at the ship is
+-- to dock at the station.)
+function Query.Berth(game: Game, ship: number): number?
+  return Nomads.Berth(game.state, ship)
+end
+
+-- And the other way: whether a station is a colony ship, and the ship
+-- it is in space (0 when it is not there to be seen: nobody of the
+-- pilot's is in its system, or it is gone); and, for a pilot aboard, the
+-- system it goes to next and in how many seconds.
+function Query.Carrier(game: Game, station: number): (boolean, number, number, number)
+  local fleet = Nomads.FleetOf(game.state.galaxy, station)
+  if fleet == nil then
+    return false, 0, 0, 0
+  end
+  local ball = Nomads.Ball(game.state, fleet)
+  local _, _, next, _, goes = Nomads.At(fleet, game.state.tick)
+  return true, if ball then ball.id else 0, next, (goes - game.state.tick) * Constants.TICK
 end
 
 -- What each human faction thinks of the pilot, in the order of the

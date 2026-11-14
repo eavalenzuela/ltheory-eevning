@@ -4,6 +4,7 @@
 local Core = require("@lt/Core/Api")
 local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
+local Nomads = require("@lt/Core/Tactical/Nomads")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Test = require("@lt/Tool/Test")
@@ -539,7 +540,10 @@ suite:Case("a faction's stations have its own hulls and weapons at anybody's pri
       end
     end
   end
-  local vessari, kethri, orun = assert(stations.vessari), assert(stations.kethri), assert(stations.orun)
+  -- (the Kethri have none there, or anywhere: the place to trade among them is a colony ship of theirs)
+  t.eq(stations.kethri, nil)
+  local vessari, kethri, orun = assert(stations.vessari), Nomads.StationId(1), assert(stations.orun)
+  t.eq(Nomads.Fleets(state.galaxy)[1].faction, "kethri")
   t.eq({ Market.Leaning("vessari", "frigate.akashi") } :: { any }, { 1, false } :: { any })
   t.eq({ Market.Leaning("kethri", "frigate.akashi") } :: { any }, { Market.FOREIGN_HULL, true } :: { any })
   t.eq({ Market.Leaning("kethri", "frigate.courier") } :: { any }, { 1, false } :: { any })

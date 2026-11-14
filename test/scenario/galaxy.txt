@@ -97,7 +97,7 @@ lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused')
 until GameDebug.Docked()
 lua GameDebug.TimeScale(1)
 frames 10
-lua assert(select(2, GameDebug.Galaxy()) == 'Kethri', 'the far system in this galaxy should be the Kethri\'s')
+lua assert(select(2, GameDebug.Galaxy()) == 'Talmar', 'the far system in this galaxy should be the Talmar\'s')
 
 echo galaxy scenario passed
 quit

@@ -7,10 +7,12 @@ local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
+local Names = require("@lt/Core/Describe/Names")
 local Nomads = require("@lt/Core/Tactical/Nomads")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local Stations = require("@lt/Core/Assets/Stations")
 local Test = require("@lt/Tool/Test")
 local Traffic = require("@lt/Core/Tactical/Traffic")
 
@@ -52,7 +54,7 @@ local function fleetOf(state: State.State): ({ number }, { number })
   return colony, escorts
 end
 
-suite:Case("a colony fleet goes round its people's space a gate at a time, a quarter of an hour to a system; and there is a fleet for every thirty systems", function(t)
+suite:Case("a colony fleet goes round its people's space a gate at a time, a quarter of an hour to a system; and there is a fleet for every ten systems", function(t)
   for _, count in { 40, 400, 2000 } do
     for seed = 1, 3 do
       local galaxy = Galaxy.Describe(seed, count)
@@ -66,7 +68,7 @@ suite:Case("a colony fleet goes round its people's space a gate at a time, a qua
       t.eq(#fleets, math.max(1, held // Nomads.SPAN), `seed {seed}, {count} systems, where the Kethri hold {held}`)
       for index, fleet in fleets do
         t.eq({ fleet.index, fleet.faction, fleet.hull } :: { any }, { index, "kethri", "ultracapital.leslarmesdenova" } :: { any })
-        t.eq(fleet.name, if index == 1 then "Les Larmes de Nova" else `Les Larmes de Nova {if index == 2 then "II" else "III"}`)
+        t.eq(fleet.name, if index == 1 then "Les Larmes de Nova" else `Les Larmes de Nova {Names.Roman(index)}`)
         -- The walk: from the homeworld, through their own space and no other, each step a gate, and back
         -- round to where it began.
         local walk = fleet.walk
@@ -292,6 +294,117 @@ suite:Case("a pilot the Kethri would fight is fought by the colony fleet, and on
     t.eq(state.pilots[id], nil)
   end
   t.eq(state.balls[colony[1]].mode, "orbit")
+end)
+
+suite:Case("a colony ship is a station: a pilot docks at the ship, has its hangar and its market, and goes where it goes", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true, traffic = true, systems = 40 })
+  local state = game.state
+  local me = state.player.ship
+  local fleet = Nomads.Fleets(state.galaxy)[1]
+  local station = Nomads.StationId(fleet.index)
+  -- (well into a stay, so that there is time to dock)
+  state.tick = 4 * Nomads.STAY + 100
+  local system, _, to = Nomads.At(fleet, state.tick)
+  t.ok(to ~= system, "the first fleet of forty systems has somewhere to go")
+  -- Nobody is there to see it: it is a place all the same, off the gate it will go out by.
+  local unseen = assert(Space.Object(state, station))
+  local gate = assert(Space.Peek(state, unseen.parent))
+  t.eq({ unseen.kind, unseen.variety, gate.kind, gate.to } :: { any }, { "station", "colony ship", "gate", to } :: { any })
+  t.eq(Space.SystemOf(state, station), system)
+  move(game, system)
+  steps(game, 3)
+  local colony, escorts = fleetOf(state)
+  local ship = colony[1]
+  local carrier = state.balls[ship]
+  -- The ship in space is that station, and where the ship is, it is.
+  t.eq({ Nomads.Berth(state, ship), Nomads.Berth(state, escorts[1]), Nomads.Berth(state, me) } :: { any }, { station, nil, nil } :: { any })
+  local place = assert(Space.Object(state, station))
+  t.eq({ place.x, place.y, place.z, place.radius } :: { any }, { carrier.x, carrier.y, carrier.z, 5000 } :: { any })
+  -- Nothing else of the fleet is to be docked at.
+  t.eq({ Core.Validate(game, { kind = "Dock", actor = me, target = escorts[1] }) } :: { any }, { false, "not a station" } :: { any })
+  -- Docking at the ship is docking at the station: from beside it, at once.
+  local mine = state.balls[me]
+  mine.x, mine.y, mine.z = carrier.x + carrier.radius + mine.radius + 1000, carrier.y, carrier.z
+  mine.vx, mine.vy, mine.vz = 0, 0, 0
+  Space.AssignGrid(state, mine)
+  t.ok((Core.Submit(game, { kind = "Dock", actor = me, target = ship })))
+  steps(game, 3)
+  t.eq(state.ships[me].docked, station)
+  local player = Core.Query.Player(game)
+  t.eq({ player.docked, player.system, player.owner } :: { any }, { station, system, "Kethri" } :: { any })
+  -- It has what a station has: a market at the Kethri's prices, and a hangar.
+  t.ok(Stations.Has(state, station, "market") and Stations.Has(state, station, "fitting"))
+  local quote = Core.Query.Quote(game, station, "ore.ferrite")
+  t.ok(quote.bid > 0 and assert(quote.ask) > quote.bid)
+  state.wallet = 1000000
+  t.ok((Core.Submit(game, { kind = "BuyNow", actor = me, type = "ammo.emp", quantity = 200 })))
+  Core.Step(game)
+  local bought = 0
+  for _, item in Items.In(state, station, "hangar") do
+    bought += if item.type == "ammo.emp" then item.quantity else 0
+  end
+  t.eq(bought, 200)
+  -- Its fleet is still round it, for the pilot aboard to see.
+  t.eq({ #(fleetOf(state)) }, { 1 })
+  -- It is in the save, and the game goes on the same from it.
+  local data, length = Core.Save(game)
+  local loaded = Core.Load(data, length)
+  t.eq(Core.Hash(loaded), Core.Hash(game))
+  t.eq(Core.Query.Player(loaded).system, system)
+
+  -- Its time here up, it goes on, and the pilot aboard goes with it, and what is in its hangar.
+  Core.TakeEvents(game)
+  steps(game, 5 * Nomads.STAY - state.tick)
+  t.eq(Core.Query.Player(game).system, to)
+  t.eq(Space.SystemOf(state, station), to)
+  local told = false
+  for _, event in Core.TakeEvents(game) do
+    if event.kind == "ColonyShipMoved" then
+      told = true
+      t.eq({ event.station, event.from, event.to, event.name } :: { any }, { station, system, to, fleet.name } :: { any })
+    end
+  end
+  t.ok(told, "nobody said the colony ship had gone on")
+  for _, item in Items.In(state, station, "hangar") do
+    t.eq(item.holder, station)
+  end
+  -- It is there in the new system, with its fleet: come in by the gate it came by. While it is in warp
+  -- across the system there is no going out of it; when it lies still again, there is.
+  steps(game, 2)
+  local there = fleetOf(state)
+  t.eq(#there, 1)
+  t.eq(state.balls[there[1]].system, to)
+  local refused, out = false, false
+  for _ = 1, 600 do
+    local ok, why = Core.Validate(game, { kind = "Undock", actor = me })
+    local ball = state.balls[there[1]]
+    if ball.warp and ball.warp.stage == "warp" then
+      refused = true
+      t.eq({ ok, why } :: { any }, { false, "the colony ship is in warp" } :: { any })
+    elseif refused or ball.warp == nil then
+      t.ok(ok, tostring(why))
+      out = true
+      break
+    end
+    Core.Step(game)
+  end
+  t.ok(out, "the colony ship never came to rest")
+  t.ok((Core.Submit(game, { kind = "Undock", actor = me })))
+  Core.Step(game)
+  local outside = assert(state.balls[me], "the pilot is not in space")
+  local beside = state.balls[there[1]]
+  t.eq(outside.system, to)
+  local off = math.sqrt((outside.x - beside.x) ^ 2 + (outside.y - beside.y) ^ 2 + (outside.z - beside.z) ^ 2)
+  t.ok(off < 12000, `the pilot came out {off} m from the colony ship`)
+  -- A colony ship that has been destroyed is no place to dock until another has taken its place.
+  state.nomads[fleet.index] = state.tick + 1000
+  t.eq({ Core.Validate(game, { kind = "Dock", actor = me, target = station }) } :: { any }, { false, "that colony ship is gone" } :: { any })
+  state.nomads[fleet.index] = nil
+  t.eq({ Core.Validate(game, { kind = "Dock", actor = me, target = station }) } :: { any }, { true } :: { any })
+  -- And a ship that meant to dock at one that has gone on stops where it is.
+  move(game, system)
+  steps(game, 2)
+  t.eq({ Core.Validate(game, { kind = "Dock", actor = me, target = station }) } :: { any }, { false, "target is in another system" } :: { any })
 end)
 
 return suite

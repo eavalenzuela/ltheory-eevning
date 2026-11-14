@@ -14,6 +14,7 @@
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
 local Motion = require("@lt/Core/Tactical/Motion")
+local Nomads = require("@lt/Core/Tactical/Nomads")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
@@ -69,10 +70,24 @@ function Space.Describe(state: State.State, system: number): System.Description
   return description
 end
 
+-- (A colony ship of the nomads as the station it is: below, after Space.Glance.)
+local colonyStation: (state: State.State, fleet: Nomads.Fleet) -> System.Object
+
+-- The fleet whose colony ship a station is, if it is one: by its id.
+function Space.Colony(state: State.State, id: number): Nomads.Fleet?
+  return Nomads.FleetOf(state.galaxy, id)
+end
+
 -- The described object with this id, if its system has been described.
+-- (And a colony ship of the nomads, which is a station of no system's
+-- description, wherever it is now.)
 function Space.Object(state: State.State, id: number): System.Object?
   if id <= 0 or id >= Constants.FIRST_DYNAMIC_ID then
     return nil
+  end
+  local fleet = Nomads.FleetOf(state.galaxy, id)
+  if fleet then
+    return colonyStation(state, fleet)
   end
   local description = state.systems[id // SPAN]
   return if description then description.objects[id % SPAN] else nil
@@ -105,9 +120,53 @@ function Space.Glance(state: State.State, system: number): System.Description
   return description
 end
 
+-- A colony ship of the nomads, as the station it is (Tactical/Nomads):
+-- an object like a described one, but of no system's description. It
+-- is in the system its fleet is in at this tick, where its ship is if
+-- that is in space to be seen, and otherwise off the gate it will leave
+-- by, on the side away from the sun. It is made each time it is asked
+-- for (nothing of it is kept: it follows from the galaxy, the tick and
+-- where its ship is).
+function colonyStation(state: State.State, fleet: Nomads.Fleet): System.Object
+  local system, _, to = Nomads.At(fleet, state.tick)
+  local hull = Ships.byId[fleet.hull]
+  -- (a system nobody has been to has its gates too)
+  local description = Space.Glance(state, system)
+  local gate: System.Object? = nil
+  for _, object in description.objects do
+    if object.kind == "gate" and object.variety ~= "passage" and (gate == nil or object.to == to) then
+      gate = object
+      if object.to == to then
+        break
+      end
+    end
+  end
+  local x, y, z, site = 0, 0, 0, 0
+  local ball = Nomads.Ball(state, fleet)
+  if ball and ball.system == system then
+    x, y, z, site = ball.x, ball.y, ball.z, ball.grid
+  elseif gate then
+    local far = math.sqrt(gate.x ^ 2 + gate.y ^ 2 + gate.z ^ 2)
+    local out = gate.radius + Nomads.OFF + hull.radius
+    local ux, uy, uz = 1, 0, 0
+    if far > 0 then
+      ux, uy, uz = gate.x / far, gate.y / far, gate.z / far
+    end
+    x, y, z, site = gate.x + ux * out, gate.y + uy * out, gate.z + uz * out, gate.site
+  end
+  return {
+    id = Nomads.StationId(fleet.index), kind = "station", name = fleet.name, x = x, y = y, z = z, radius = hull.radius,
+    seed = 0, parent = if gate then gate.id else 0, site = site, variety = System.COLONY_SHIP, to = 0,
+  }
+end
+
 -- The described object with this id, whether or not its system has
 -- been described yet (Space.Glance).
 function Space.Peek(state: State.State, id: number): System.Object?
+  local fleet = Nomads.FleetOf(state.galaxy, id)
+  if fleet then
+    return colonyStation(state, fleet)
+  end
   if id <= 0 or id >= Constants.FIRST_DYNAMIC_ID or state.galaxy.systems[id // SPAN] == nil then
     return nil
   end
@@ -154,6 +213,11 @@ function Space.SystemOf(state: State.State, id: number): number
   local wreck = state.wrecks[id]
   if wreck then
     return wreck.system
+  end
+  -- (a colony ship of the nomads is in the system its fleet is in now)
+  local fleet = Nomads.FleetOf(state.galaxy, id)
+  if fleet then
+    return (Nomads.At(fleet, state.tick))
   end
   return if id < Constants.FIRST_DYNAMIC_ID then id // SPAN else 0
 end
@@ -302,13 +366,18 @@ end
 
 local function undock(state: State.State, ship: State.Ship, events: { Event })
   local station = Space.Object(state, ship.docked) :: System.Object
-  local host = Space.Object(state, station.parent) :: System.Object
+  -- (a colony ship lies by a gate, or in a system with none by nothing)
+  local host = Space.Object(state, station.parent)
   -- Leave on the side facing away from the body the station sits by.
-  local ux, uy, uz = unit(station.x - host.x, station.y - host.y, station.z - host.z)
+  local ux, uy, uz = 1, 0, 0
+  if host then
+    ux, uy, uz = unit(station.x - host.x, station.y - host.y, station.z - host.z)
+  end
   local hull = Ships.byId[ship.type]
   local out = station.radius + Constants.UNDOCK_DISTANCE + hull.radius
+  local system = Space.SystemOf(state, station.id)
   ship.docked = 0
-  local ball = addBall(state, ship, station.id // SPAN, station.x + ux * out, station.y + uy * out, station.z + uz * out)
+  local ball = addBall(state, ship, system, station.x + ux * out, station.y + uy * out, station.z + uz * out)
   -- Ships leave a station at full speed and keep going until told otherwise.
   ball.vx, ball.vy, ball.vz = ux * ball.maxVelocity, uy * ball.maxVelocity, uz * ball.maxVelocity
   setMode(ball, "goto", 0, 0)
@@ -392,7 +461,17 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
   end
   local kind = command.kind
   if kind == "Undock" then
-    return ship.docked ~= 0, if ship.docked ~= 0 then nil else "not docked"
+    if ship.docked == 0 then
+      return false, "not docked"
+    end
+    -- (out of a colony ship that is in warp there is no going: it is
+    -- between two places)
+    local fleet = Nomads.FleetOf(state.galaxy, ship.docked)
+    local carrier = if fleet then Nomads.Ball(state, fleet) else nil
+    if carrier and carrier.warp and carrier.warp.stage == "warp" then
+      return false, "the colony ship is in warp"
+    end
+    return true
   elseif kind == "ForgetBookmark" then
     return state.bookmarks[command.target or 0] ~= nil, "no such place is marked"
   elseif kind == "RenameBookmark" then
@@ -434,6 +513,19 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
     if target == nil or target.id == ball.id then
       return false, "no such target"
     end
+    -- (a colony ship of the nomads is a ship and a station: to dock at
+    -- the ship is to dock at the station it is)
+    if kind == "Dock" then
+      local berth = Nomads.Berth(state, target.id)
+      if berth then
+        target = Space.Object(state, berth) :: any
+      end
+      local fleet = Nomads.FleetOf(state.galaxy, (target :: Body).id)
+      if fleet and Nomads.Gone(state, fleet) then
+        return false, "that colony ship is gone"
+      end
+    end
+    target = target :: Body
     if Space.SystemOf(state, target.id) ~= ball.system then
       return false, "target is in another system"
     end
@@ -511,6 +603,13 @@ function Space.Apply(state: State.State, command: State.Command, events: { Event
     return
   end
   local target = (Space.Body(state, command.target :: number) or Space.Marked(state, command.target :: number)) :: Body
+  -- (docking at a colony ship is docking at the station it is: Validate)
+  if kind == "Dock" then
+    local berth = Nomads.Berth(state, target.id)
+    if berth then
+      target = Space.Object(state, berth) :: any
+    end
+  end
   if kind == "Approach" then
     setMode(ball, "approach", target.id, range)
   elseif kind == "KeepAtRange" then
@@ -654,7 +753,13 @@ function Space.Decide(state: State.State, events: { Event })
     if intent then
       local target = Space.Object(state, intent.target) :: System.Object
       local limit = if intent.kind == "dock" then Constants.DOCK_RANGE else Constants.JUMP_RANGE
-      if Space.Gap(ball :: any, target :: any) <= limit then
+      -- (a colony ship that has gone on to its next system is not docked
+      -- at from this one: the ship that meant to stops where it is)
+      if Space.SystemOf(state, target.id) ~= ball.system then
+        ball.intent = nil
+        ball.warp = nil
+        setMode(ball, "stop", 0, 0)
+      elseif Space.Gap(ball :: any, target :: any) <= limit then
         if intent.kind == "dock" then
           dock(state, ball, target.id, events)
           regrid = true

@@ -8,8 +8,8 @@
 -- into more of their space and back again, so that each step of it is
 -- a jump through a gate, and every system of theirs that their own
 -- space reaches sees it come by. It stays a quarter of an hour in each.
--- A people has a fleet for every thirty systems it holds, and one at
--- the least, spaced out along the same walk.
+-- A people has a fleet for every ten systems it holds, and one at the
+-- least, spaced out along the same walk.
 --
 -- Where a fleet is follows from the galaxy and the tick and from
 -- nothing else. The ships themselves are only there where the pilot is
@@ -21,6 +21,17 @@
 -- (First figures, all of them: how long a fleet stays, how many there
 -- are, and what a support fleet is made of. The project owner's word is
 -- that the colony ship roams their space with its support fleet in tow.)
+--
+-- A colony ship is a station too, and the only kind such a people has
+-- (the project owner's, 2026-11-13: "they're all roaming colony ships,
+-- no stationary ones"): a pilot docks at it, and it has its hangar, its
+-- market and its agents aboard, which go where it goes. So a pilot
+-- docked in one, the ships and the goods they left there, and a pilot
+-- hired to wait there, all travel with it; and the same ship is at a
+-- different star when the pilot comes back for what is aboard. As a
+-- station it has an id like any other, which is not of any one system:
+-- Nomads.StationId. (Where it is as a place, and what docking at it is:
+-- Tactical/Space, which asks here whose a station is and where.)
 
 local Constants = require("@lt/Core/Data/Constants")
 local Factions = require("@lt/Core/Data/Factions")
@@ -33,8 +44,18 @@ local Structures = require("@lt/Core/Data/Structures")
 local Nomads = {}
 
 -- Systems to a colony fleet: a people has one for every so many of the
--- systems it holds, and one at least.
-Nomads.SPAN = 30
+-- systems it holds, and one at least. (One to thirty at first, when a
+-- people had a colony ship moored in every system beside: they are the
+-- only places to dock in its space now, so there are three times as
+-- many.)
+Nomads.SPAN = 10
+-- How far off the gate it lies by a colony ship keeps, metres between
+-- them.
+Nomads.OFF = 30000
+-- The stations that colony ships are have ids of a system no galaxy
+-- has: this one (ids are system * Constants.STRUCTURE_ID_SPAN + index,
+-- and a galaxy is a few thousand systems). A fleet's is its index there.
+Nomads.SYSTEM = 90000
 -- Ticks a fleet stays in a system.
 Nomads.STAY = math.floor(900 / Constants.TICK + 0.5)
 -- Ticks a colony ship that was destroyed is gone for.
@@ -138,6 +159,42 @@ function Nomads.At(fleet: Fleet, tick: number): (number, number, number, number,
   local stay = tick // Nomads.STAY
   local step = (stay + fleet.start) % #walk
   return walk[step + 1], walk[(step - 1) % #walk + 1], walk[(step + 1) % #walk + 1], stay * Nomads.STAY, (stay + 1) * Nomads.STAY
+end
+
+-- The id of the station a fleet's colony ship is.
+function Nomads.StationId(index: number): number
+  return Nomads.SYSTEM * Constants.STRUCTURE_ID_SPAN + index
+end
+
+-- The fleet whose colony ship a station is, by the station's id: nil
+-- for the id of anything else.
+function Nomads.FleetOf(galaxy: Galaxy.Galaxy, id: number): Fleet?
+  if id // Constants.STRUCTURE_ID_SPAN ~= Nomads.SYSTEM then
+    return nil
+  end
+  return Nomads.Fleets(galaxy)[id % Constants.STRUCTURE_ID_SPAN]
+end
+
+-- A fleet's colony ship as a ship in space, if it is there to be seen
+-- (Tactical/Traffic puts it there, where the pilot is): its ball.
+function Nomads.Ball(state: State.State, fleet: Fleet): State.Ball?
+  for _, id in state.trafficIds do
+    local record = state.traffic[id]
+    if record.kind == "colony" and record.wait == fleet.index then
+      return state.balls[id]
+    end
+  end
+  return nil
+end
+
+-- The station a ship in space is, if it is a colony ship: its id. Nil
+-- for any other ship. (To dock at the ship is to dock at the station.)
+function Nomads.Berth(state: State.State, ball: number): number?
+  local record = state.traffic[ball]
+  if record == nil or record.kind ~= "colony" or state.balls[ball] == nil then
+    return nil
+  end
+  return Nomads.StationId(record.wait)
 end
 
 -- Whether a fleet's colony ship is gone: destroyed, and not yet

@@ -893,6 +893,9 @@ function Scene.Sync(scene: Scene, session: Session.Session)
 
   -- Where the player is, and which grid to show.
   local grid = 0
+  -- (docked in a colony ship: what it lies by, for the camera to be on
+  -- until the ship itself is there to be on)
+  local beside = 0
   scene.warp = 0
   if me then
     scene.eyeX, scene.eyeY, scene.eyeZ = ballAt(me, state.tick, since)
@@ -909,9 +912,13 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       scene.warpSeconds = math.max(0, plan.total - elapsed)
     end
   else
-    local station = objects[player.docked % Constants.STRUCTURE_ID_SPAN]
+    -- (a colony ship of the nomads is a station of no system's list: it
+    -- is where its ship is, on whatever grid that is)
+    local roaming = Core.Query.Carrier(game, player.docked)
+    local station = if roaming then Core.Query.Body(game, player.docked) :: any else objects[player.docked % Constants.STRUCTURE_ID_SPAN]
     scene.eyeX, scene.eyeY, scene.eyeZ = station.x, station.y, station.z
-    grid = station.id
+    grid = if roaming then station.site else station.id
+    beside = if roaming then station.parent else 0
     if not scene.docked then
       -- Just docked (or the game has begun docked): bring the camera in
       -- on the tower, from the side the sun is on and a little round
@@ -1448,7 +1455,13 @@ function Scene.Sync(scene: Scene, session: Session.Session)
 
   Effects.Update(fx, scene.time, scene.screen)
 
-  scene.focus = scene.proxies[if me then player.ship else player.docked]
+  -- (docked in a colony ship, it is that ship the camera is on)
+  -- (the ship itself, when it is in space to be seen: until then, and
+  -- the moment a pilot is put aboard one, the gate it lies by. The
+  -- camera is never left on something of a system that is gone.)
+  local _, carrier = Core.Query.Carrier(game, player.docked)
+  scene.focus = scene.proxies[if me then player.ship elseif carrier ~= 0 then carrier else player.docked]
+    or (if me == nil then scene.proxies[beside] else nil)
 end
 
 -- Have the camera keep something in view past the ship (by its id),

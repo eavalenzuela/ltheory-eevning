@@ -5,6 +5,7 @@
 local Core = require("@lt/Core/Api")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
+local Nomads = require("@lt/Core/Tactical/Nomads")
 local Stations = require("@lt/Core/Assets/Stations")
 local Structures = require("@lt/Core/Data/Structures")
 local Test = require("@lt/Tool/Test")
@@ -98,36 +99,62 @@ suite:Case("a ship in space is not refused for want of a station's module", func
   t.ok(Stations.Validate(game.state, { kind = "BuyNow", actor = player.ship, type = "ammo.emp", quantity = 1 }))
 end)
 
-suite:Case("a station's tower is of the faction whose homeworld is nearest, and among nomads it is a colony ship", function(t)
+suite:Case("a station's tower is of the faction whose homeworld is nearest of those who build them; the nomads have no station anywhere but their colony ships, which roam", function(t)
   local game = Core.New({ galaxySeed = 3, historySeed = 1, systems = 40, peaceful = true })
   local state = game.state
   local seen: { [string]: boolean } = {}
+  local theirs = 0
   for system = 1, 40 do
     local node = state.galaxy.systems[system]
+    local stations = 0
     for _, object in Space.Describe(state, system).objects do
       if object.kind == "station" then
+        stations += 1
         local makeup = assert(Stations.Makeup(state, object.id))
-        local class = makeup.ship
-        if class then
-          -- (ten kilometres of ship, and all that a station gives aboard it)
-          t.eq(node.nearest, "kethri")
-          t.eq(Structures.colonyShipById[class].faction, node.nearest)
-          t.eq(object.variety, "colony ship")
-          t.eq(object.radius, 5000)
-          t.ok(string.find(object.name, " - Colony ship %d+$") ~= nil, `'{object.name}' is not named as a colony ship`)
-          -- (all but a moon drill, a reactor and a jump beacon: those are a pilot's tower's)
-          t.eq(#Stations.Services(state, object.id), #Structures.SERVICES - 3)
-        else
-          t.ok(node.nearest ~= "kethri", "a station among the Kethri should be a colony ship")
-          t.eq(Structures.towerById[makeup.tower :: string].faction, node.nearest)
-        end
+        -- (a tower, whoever's: no colony ship lies moored anywhere)
+        t.eq(makeup.ship, nil, object.name)
+        t.ok(object.variety ~= "colony ship", object.name)
+        t.eq(Structures.towerById[makeup.tower :: string].faction, node.nearest)
         seen[node.nearest] = true
       end
     end
+    -- Among the Kethri there is no station at all; and their towers are nowhere, since they build none: a
+    -- system nobody holds has the towers of the nearest people who do.
+    if node.owner == "kethri" then
+      theirs += 1
+      t.eq({ stations, node.nearest } :: { any }, { 0, "kethri" } :: { any }, node.name)
+    else
+      t.ok(stations >= 1 and node.nearest ~= "kethri", `{node.name}: {stations} stations, of the {node.nearest}`)
+    end
   end
-  for _, faction in { "vessari", "talmar", "orun", "kethri" } do
+  t.ok(theirs >= 1, "the Kethri hold nothing in a galaxy of forty")
+  for _, faction in { "vessari", "talmar", "orun" } do
     t.ok(seen[faction], `no station of the {faction} in a galaxy of forty`)
   end
+  t.eq(seen.kethri, nil)
+  -- Their stations are their colony ships: each a station with an id of its own, in whatever system its
+  -- fleet is in now, with everything aboard that a station gives.
+  local fleets = Nomads.Fleets(state.galaxy)
+  t.ok(#fleets >= 1)
+  for _, fleet in fleets do
+    local id = Nomads.StationId(fleet.index)
+    t.eq(fleet.faction, "kethri")
+    local object = assert(Space.Object(state, id), "a colony ship is not a place")
+    t.eq({ object.id, object.kind, object.variety, object.radius, object.name } :: { any },
+      { id, "station", "colony ship", 5000, fleet.name } :: { any })
+    local makeup = assert(Stations.Makeup(state, id))
+    t.eq(Structures.colonyShipById[makeup.ship :: string].faction, "kethri")
+    -- (all but a moon drill, a reactor and a jump beacon: those are a pilot's tower's)
+    t.eq(#Stations.Services(state, id), #Structures.SERVICES - 3)
+    local system = Space.SystemOf(state, id)
+    t.eq(system, (Nomads.At(fleet, state.tick)))
+    t.eq(state.galaxy.systems[system].owner, "kethri")
+    -- It lies off a gate of that system, which is what it is said to be by.
+    local gate = assert(Space.Peek(state, object.parent))
+    t.eq({ gate.kind, gate.id // 10000 } :: { any }, { "gate", system } :: { any })
+  end
+  -- An id that is nobody's colony ship is no place.
+  t.eq(Space.Object(state, Nomads.StationId(#fleets + 1)), nil)
   -- (and a pilot still starts at a station that has everything, in the first faction's space)
   t.eq(state.galaxy.systems[1].owner, "vessari")
   t.eq(Core.Query.Player(game).owner, "Vessari")

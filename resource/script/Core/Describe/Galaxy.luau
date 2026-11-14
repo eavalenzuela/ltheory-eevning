@@ -344,13 +344,16 @@ function Galaxy.Claim(galaxy: Galaxy)
     system.home = index > 0 and homes[index] == id
     system.hops = hops[id]
     -- (whose towers the stations are: the holder's, if they are people;
-    -- else the people's whose homeworld is nearest on the map)
+    -- else the people's whose homeworld is nearest on the map, of those
+    -- who build towers: a people who keep no stations, the nomads, have
+    -- none in anybody else's space either. Their own space has none at
+    -- all: Describe/System.)
     if faction and faction.kind == "human" then
       system.nearest = faction.id
     else
       local best, least = 1, math.huge
       for other, home in homes do
-        if factions[other].kind == "human" and apart2(id, home) < least then
+        if factions[other].kind == "human" and not factions[other].nomad and apart2(id, home) < least then
           best, least = other, apart2(id, home)
         end
       end

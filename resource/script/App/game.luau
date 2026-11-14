@@ -46,6 +46,7 @@ local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Skills = require("@lt/Core/Data/Skills")
+local Nomads = require("@lt/Core/Tactical/Nomads")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Structures = require("@lt/Core/Data/Structures")
@@ -1771,13 +1772,24 @@ end
 -- A cheat, for looking at places a long way off: while docked, the
 -- pilot and the ship they are aboard are moored at the first station of
 -- another system instead. 'what' is the system's number, or a faction's
--- id for the first system whose stations are that faction's. The name
--- of the station; "" if not docked, or there is no such place.
+-- id for the first system whose stations are that faction's; and for a
+-- people who have no stations but their colony ships (the Kethri), the
+-- first of those, wherever it is. The name of the station; "" if not
+-- docked, or there is no such place.
 function Debug.Moor(what: number | string): string
   local state = session.game.state
   local ship = state.ships[state.player.ship]
   if ship == nil or ship.docked == 0 then
     return ""
+  end
+  for index, fleet in Nomads.Fleets(state.galaxy) do
+    if fleet.faction == what then
+      ship.docked = Nomads.StationId(index)
+      -- (the system it is in is seen, as it would be had the pilot flown there)
+      Space.Describe(state, Space.SystemOf(state, ship.docked))
+      session.selected = 0
+      return fleet.name
+    end
   end
   for id, node in state.galaxy.systems do
     if id == what or node.nearest == what then
@@ -1823,14 +1835,20 @@ function Debug.Autopilot(on: boolean?): boolean
 end
 
 -- The system farthest (in jumps, by the safest way) from where the
--- pilot is that is not lawless: its name, how many jumps it is, and its
--- number. Somewhere to send an autopilot.
+-- pilot is that is not lawless and has a station in it (the nomads'
+-- space has none: their colony ships are their stations, and roam): its
+-- name, how many jumps it is, and its number. Somewhere to send an
+-- autopilot, and to dock at the end of it.
 function Debug.Far(): (string, number, number)
   local galaxy = session.game.state.galaxy
   local here = Core.Query.Player(session.game).system
   local best, most = here, 0
   for id, system in galaxy.systems do
-    if system.security >= 0.3 then
+    local moorings = false
+    for _, object in Space.Glance(session.game.state, id).objects do
+      moorings = moorings or object.kind == "station"
+    end
+    if system.security >= 0.3 and moorings then
       local jumps = #Galaxy.Route(galaxy, here, id, true) - 1
       if jumps > most then
         best, most = id, jumps
@@ -1969,7 +1987,7 @@ function Debug.Loyalty(points: number?): number
   if docked == 0 then
     return 0
   end
-  local faction = state.galaxy.systems[docked // 10000].nearest
+  local faction = state.galaxy.systems[Core.Query.Player(session.game).system].nearest
   if points then
     state.loyalty[faction] = points
   end

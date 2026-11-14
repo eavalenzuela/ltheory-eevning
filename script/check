@@ -140,7 +140,8 @@
 #               on the overview, and orbit, keep and warp at a distance
 #               picked from it
 #   game-nomads the Kethri's colony ships (test/scenario/nomads.txt): one
-#               boarded in a galaxy of forty, left, looked at and moored at
+#               boarded in a galaxy of forty, left, docked at as the ship
+#               it is, ridden to its next system and left there
 #   game-careers  the career agents (test/scenario/careers.txt): a new
 #               pilot takes lessons from two of them, does three, reports
 #               each and is paid, and reads one again in space

@@ -46,6 +46,11 @@ function Stations.Makeup(state: State.State, id: number): Structures.Makeup?
   if starbase then
     return Starbases.Makeup(starbase)
   end
+  -- (a colony ship of the nomads is its people's, wherever it is)
+  local fleet = Space.Colony(state, id)
+  if fleet then
+    return Structures.Makeup(object.variety, object.radius, fleet.faction, false)
+  end
   -- (its tower is of the faction whose homeworld is nearest: a station in
   -- space nobody holds was still built by somebody)
   local faction = state.galaxy.systems[Space.SystemOf(state, id)].nearest
