@@ -23,6 +23,10 @@
 # Inside, LT_OFFSCREEN is set, and a command run through this again is
 # simply run.
 #
+# The screen it has is 1920 by 1080, the size the game's window is in a
+# script's run. LT_OFFSCREEN_SIZE=WxH gives it another (with --size WxH
+# to the game, to see the interface at that size).
+#
 # Without sway it falls back on xvfb-run, which draws in software and is
 # many times slower (script/check's time limits are not set for it), and
 # without that it refuses: it never opens a window on the desktop.
@@ -67,7 +71,7 @@ trap '[ -n "$sway_pid" ] && kill "$sway_pid" 2>/dev/null; exit 143' TERM INT HUP
 chmod +x "$work/run"
 
 cat > "$work/config" <<EOF
-output HEADLESS-1 resolution 1920x1080 position 0 0
+output HEADLESS-1 resolution ${LT_OFFSCREEN_SIZE:-1920x1080} position 0 0
 xwayland enable
 default_border none
 default_floating_border none

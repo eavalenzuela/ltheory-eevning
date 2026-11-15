@@ -47,6 +47,12 @@ lua assert(not GameDebug.CanPress('Music volume'), 'with the sound off the slide
 until GameDebug.Press('Menu:sound')
 frames 3
 lua assert(GameDebug.Options() == true)
+# How the game's window opens: a click goes on to the next way of the list, and round again.
+lua assert(GameDebug.WindowChoice() == '', 'at first the window is as the game sees fit')
+until GameDebug.Press('Menu:window')
+until GameDebug.WindowChoice() == 'borderless'
+until GameDebug.Press('Menu:window')
+until GameDebug.WindowChoice() == '1920x1080'
 # Keys: each thing a key does can be given another. Stopping is Space.
 # Its button is clicked, and the next key pressed (X, on the keyboard)
 # is its key.

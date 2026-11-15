@@ -40,6 +40,10 @@ A small program of its own (Rust; it cross-builds for Windows in seconds). The i
 - Where the distribution is: `launcher.txt` beside it (`url = …`, written on the first run, or by `--url`), else the address it was built with (`LT_DIST_URL`). `--no-play`: update only.
 - What the game saves (`save/`: saved games, settings) is in the same folder, and is nothing the launcher installed: an update leaves it alone.
 
+## The game's window
+
+How the window opens is a setting (the options' Window; `window=` in `save/settings.txt`, which the program reads as it starts, so a change is for the next start): **Automatic** (a window of 1920 by 1080 where the screen is bigger than that, and otherwise the screen's own size with no border), **Fits the screen** (always that), or a window of **1920 by 1080** or **2560 by 1440**. A run that is a script's, or is given `--size`, is 1920 by 1080 as it always was. `LT_OFFSCREEN_SIZE=WxH script/offscreen ... --size WxH` shows the interface at another size where nobody sees it.
+
 ## The NAS
 
 `deploy/compose.yml` is the drop-in for the NAS's own repository (`services/ltheory/compose.yml`): one static file server (`caddy file-server`, ranges, no listing) over `/tank/ltheory/dist` on port 5008. The game has no server: it is played on the machine it is installed on.
@@ -48,7 +52,7 @@ The first time: the folder made on the NAS, the service added to its repository 
 
 ## Not yet
 
-- A window that fits the screen it is on: the game opens at 1920 by 1080, with a border.
+- An interface that fits a screen smaller than 1920 by 1080: it is laid out in pixels for that size and more, and on a smaller screen its panels lie over one another. (It wants drawing at a scale, which is not built.)
 - An icon for the programs, and for the Linux desktop's entry.
 - A list of what changed for players (the portal lists the commits since the last release).
 - The Linux build is the laptop's own: it wants the same libraries the laptop has.

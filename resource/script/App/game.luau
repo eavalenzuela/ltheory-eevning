@@ -1166,6 +1166,12 @@ function Debug.Inventory(): (number, string, number, boolean)
   return Inventory.Showing()
 end
 
+-- How the game's own window is set to open (the options' Window,
+-- 'Menu:window'): '' for as the game sees fit, 'borderless', or a size.
+function Debug.WindowChoice(): string
+  return Menu.WindowChoice()
+end
+
 -- Where a window is (Game/UI/Windows), by its id ('inventory'): its
 -- corner, its size, and whether it is open. Nothing for no such window.
 function Debug.Window(id: string): (number, number, number, number, boolean)
@@ -2757,6 +2763,11 @@ function App:Initialize()
   end)
   -- (and where the windows that are moved about were left: App:OnUpdate keeps it)
   Windows.Restore(settings.windows)
+  -- (and how the game's window opens, which the program reads as it starts)
+  Menu.Window(settings.window, function(choice: string)
+    settings.window = choice
+    Settings.Save(settings)
+  end)
   -- (and the keys a person has changed, kept when one changes hands)
   Keys.Import(settings.keys)
   Menu.Keys(function()

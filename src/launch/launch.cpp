@@ -10,7 +10,11 @@
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <string>
 #include <vector>
+
+#include <SFML/Window/VideoMode.hpp>
 
 #include "Harness.h"
 
@@ -68,7 +72,7 @@ struct Launcher : public Program {
 #endif
   }
 
-  Launcher(String const& appName, V2U const& size, Harness& harness) :
+  Launcher(String const& appName, V2U const& size, bool border, Harness& harness) :
     appName(appName),
     harness(harness),
     luauApp(0),
@@ -78,7 +82,10 @@ struct Launcher : public Program {
     if (!OS_IsDir("resource"))
       OS_ChangeDir("../");
     /* (the game goes by its name: the rest are tools, and go by theirs) */
-    window = Window_Create(appName == "game" ? "Limitless Space" : "App Launcher", size, true, false);
+    window = Window_Create(appName == "game" ? "Limitless Space" : "App Launcher", size, border, false);
+    /* (one with no border is the screen's own size, and goes where the screen begins) */
+    if (!border)
+      window->SetPosition(V2I(0, 0));
     window->SetSync(false);
     Renderer_Initialize();
   }
@@ -235,6 +242,34 @@ static bool Installed(char const* program) {
   return name.size() && name != "launch" && name != "launch.exe";
 }
 
+/* How the game's window opens when somebody plays it: as the options
+   have it (save/settings.txt, "window=": "borderless", at the screen's
+   own size with no border, or "WxH", a window of that size), and with
+   nothing set, 1920 by 1080 where the screen is bigger than that and
+   borderless where it is not, since a window that does not fit its
+   screen is no use. (A run that is a script's, or is given --size, is
+   the size it always was.) */
+static void WindowAsSet(V2U& size, bool& border) {
+  std::string choice;
+  std::ifstream file("save/settings.txt");
+  for (std::string line; std::getline(file, line); ) {
+    if (line.rfind("window=", 0) == 0)
+      choice = line.substr(7);
+  }
+  while (choice.size() && (choice.back() == '\r' || choice.back() == ' '))
+    choice.pop_back();
+  sf::VideoMode screen = sf::VideoMode::getDesktopMode();
+  unsigned w = 0, h = 0;
+  if (choice == "borderless" || (choice.empty() && (screen.width <= size.x || screen.height <= size.y))) {
+    if (screen.width >= 640 && screen.height >= 480) {
+      size = V2U(screen.width, screen.height);
+      border = false;
+    }
+  }
+  else if (sscanf(choice.c_str(), "%ux%u", &w, &h) == 2 && w >= 640 && h >= 480)
+    size = V2U(w, h);
+}
+
 int main(int argc, char const* argv[]) {
   char const* played[] = { argc > 0 ? argv[0] : "launch", "game" };
   if (argc < 2 && Installed(argc > 0 ? argv[0] : nullptr)) {
@@ -254,6 +289,8 @@ int main(int argc, char const* argv[]) {
   bool console = false;
   bool scripted = false;
   bool onDesktop = false;
+  bool sized = false;
+  bool border = true;
   for (int i = 2; i < argc; ++i) {
     String opt = argv[i];
     if (opt == "--no-present") {
@@ -296,6 +333,7 @@ int main(int argc, char const* argv[]) {
         return 1;
       }
       size = V2U(w, h);
+      sized = true;
     }
     else if (opt == "--timeout")
       harness.timeout = (float)atof(value.c_str());
@@ -342,7 +380,14 @@ int main(int argc, char const* argv[]) {
   }
 #endif
 
-  Launcher launcher(argv[1], size, harness);
+  /* (the game, with somebody at it: its window is as they set it) */
+  if (String(argv[1]) == "game" && !sized && !(scripted || !present || fixedHz > 0 || selftest.size())) {
+    WindowAsSet(size, border);
+    printf("window: %u by %u, %s\n", (unsigned)size.x, (unsigned)size.y, border ? "with a border" : "no border");
+    fflush(stdout);
+  }
+
+  Launcher launcher(argv[1], size, border, harness);
 
   if (!present)
     launcher.window->SetPresent(false);

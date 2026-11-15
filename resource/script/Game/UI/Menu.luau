@@ -61,6 +61,24 @@ function Menu.Sound(on: boolean, effectsLevel: number, musicLevel: number,
   soundOn, effects, music, setSound = on, effectsLevel, musicLevel, set
 end
 
+-- How the game's window opens (Game/Settings: "" for as the game sees
+-- fit, "borderless", or a size), and the asking for it to be otherwise:
+-- the game keeps it (Menu.Window), and it is so from the next start.
+-- (no size under 1920 by 1080 is offered: the interface is laid out for
+-- that and more, and has no way yet of being drawn smaller)
+local WINDOWS = { "", "borderless", "1920x1080", "2560x1440" }
+local window = ""
+local setWindow: ((choice: string) -> ())? = nil
+
+function Menu.Window(choice: string, set: (choice: string) -> ())
+  window, setWindow = choice, set
+end
+
+-- How the window is set to open now ("": as the game sees fit).
+function Menu.WindowChoice(): string
+  return window
+end
+
 -- The action a key is being listened for (the keys page), or "". And
 -- what the game does when a key has changed hands (it keeps them:
 -- Menu.Keys).
@@ -159,6 +177,10 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
   local h = if page == "load" or page == "save" then 420 elseif page == "pause" then 390 elseif page == "main" then 370
     elseif page == "keys" then 550 else 340
   local x, y = left + (width - w) / 2, top + (height - h) / 2 - 40
+  -- (the options have a line more than they had, under what was there: what is above stays where it was)
+  if page == "options" then
+    h = 392
+  end
   -- (the game behind is dimmed, so the menu is what there is to read)
   Im.Fill(left, top, width, height, vector.create(0, 0, 0), 0.45)
   Im.Panel(x, y, w, h)
@@ -169,7 +191,7 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
   end
 
   if page == "main" then
-    Im.Heading("LIMIT THEORY", cx - 118, y + 26, 30, Im.TEXT)
+    Im.Heading("LIMITLESS SPACE", cx - Im.HeadingWidth("LIMITLESS SPACE", 30) / 2, y + 26, 30, Im.TEXT)
     local newest = saves[1]
     if button("Continue", 0, newest ~= nil, "Menu:continue") and newest then
       if Session.Load(session, newest.slot) then
@@ -245,6 +267,16 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
     if Im.Button("Keys", cx - 130, y + 240, 260, 34, true, "Menu:keys") then
       page = "keys"
     end
+    -- How the game's window opens: a click goes on to the next way. It
+    -- is so from the next time the game is started.
+    Im.Text("Window", labelX, y + 299, 15, Im.TEXT)
+    local shown = if window == "" then "Automatic" elseif window == "borderless" then "Fits the screen"
+      else (string.gsub(window, "x", " x "))
+    if Im.Button(shown, sliderX, y + 294, 150, 28, setWindow ~= nil, "Menu:window") and setWindow then
+      window = WINDOWS[(table.find(WINDOWS, window) or 0) % #WINDOWS + 1]
+      setWindow(window)
+    end
+    Im.Text("from the next start", sliderX + 160, y + 300, 12, Im.DIM)
     if Im.Button("Back", cx - 130, y + h - 50, 260, 34, true, "Menu:back") then
       page = root
     end
