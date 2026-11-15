@@ -1628,6 +1628,14 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       -- system by one of its gates, or into it by one.
       if event.from == player.system then
         lightGate(scene, fx, event.gate, 0.7)
+        -- (and one that went by its own drive, or in the field of
+        -- another's: a light where it was)
+        local was: vector? = scene.screen[event.ship]
+        if event.drive and was then
+          local size = event.radius or 300
+          Effects.Burst(fx, was, JUMP_LIGHT, 2.2 * size, 0, 0.7, scene.time)
+          Effects.Burst(fx, was, JUMP_LIGHT, 6 * size, 1, 1.0, scene.time)
+        end
       end
       if event.to == player.system then
         lightGate(scene, fx, event.arrival, 0.7)

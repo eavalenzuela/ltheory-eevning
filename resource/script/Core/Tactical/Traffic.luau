@@ -41,14 +41,46 @@
 -- pilot who is aboard it is there with its fleet round it, as it is for
 -- one in space beside it.
 --
+-- And a people whose yards build a jumpship for it work the belts of
+-- their own space in fleets (the Vail, whose Archangel's jump drive has
+-- a field; the project owner's, 2026-11-15, of whether they should:
+-- "yes, but only in their space. They jump back to friendly stations.
+-- Warp disrupting a ship prevents the archangel from jumping it."):
+--   - A fleet is their mining barges cutting rock, the capital
+--     industrial that leads them, whose ore hold the barges empty into,
+--     and the jumpship, which keeps by them. In a system of theirs with
+--     a belt on the chart there is one at work on about half the days,
+--     if there is a station of theirs in another system for it to run
+--     to, within its drive's reach.
+--   - When anything of it is hit, when a pirate comes on its grid, or a
+--     pilot its people fight does, the jumpship makes its drive ready
+--     (Traffic.SPOOL), while the fleet leaves its work and closes on
+--     it; and then it jumps, with every ship of the fleet that is
+--     within its field and that nothing holds (Tactical/Jumping's rule
+--     of who a field takes). They are gone to that station, and no
+--     fleet works the system again for a while (Traffic.FLEET_AWAY).
+--   - A barge that is warp disrupted, or too far off, is left: it makes
+--     for a station in the system when it can, as a miner does. The
+--     jumpship itself is a capital, and is held only by a capital warp
+--     disruptor (Tactical/Combat): held, it waits, and jumps when it is
+--     let go.
+--   - A fleet whose leader's ore hold is full goes home the same way,
+--     with nobody after it. A fleet whose jumpship is destroyed is not
+--     replaced for a day, and what is left of it goes in to dock.
+--   (How many barges, how often, the warning and the waits are first
+--   figures, and not the owner's.)
+--
 -- (A stand-in, like the pirates' rules: when the strategic layer joins
 -- the game, who is about is who its trade and its navies send.)
 
 local Commerce = require("@lt/Core/Strategic/Commerce")
+local Constants = require("@lt/Core/Data/Constants")
 local Digger = require("@lt/Core/Tactical/Digger")
 local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
+local Jumping = require("@lt/Core/Tactical/Jumping")
+local Mining = require("@lt/Core/Tactical/Mining")
 local Nomads = require("@lt/Core/Tactical/Nomads")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Rng = require("@lt/Core/Kernel/Rng")
@@ -57,6 +89,7 @@ local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
 local System = require("@lt/Core/Describe/System")
+local Types = require("@lt/Core/Data/Types")
 
 local Traffic = {}
 
@@ -78,6 +111,30 @@ Traffic.MINERS = { secure = 2, low = 1, lawless = 0 } :: { [string]: number }
 Traffic.POLICE = 4
 -- Ticks a pilot stays marked after firing on somebody who is no pirate.
 Traffic.MARKED = 900
+-- Mining fleets (above). The chance, by the day, that a system of a
+-- people who fly them has one at work; the barges in one; the ticks
+-- from the alarm to the jump; and the ticks a system is without a fleet
+-- after one has jumped out of it, and after one has lost its jumpship.
+Traffic.FLEETS = 0.5
+Traffic.FLEET_BARGES = 4
+Traffic.SPOOL = 20
+Traffic.FLEET_AWAY = 1800
+Traffic.FLEET_LOST = math.ceil(86400 / Constants.TICK)
+-- A ship of a fleet has been hit when its shield is under this share of
+-- what it holds.
+Traffic.FLEET_HIT = 0.9
+-- What a fleet's barge cuts with.
+local STRIP = "miner.strip"
+-- What a fleet's ships are in the traffic: its jumpship, the capital
+-- industrial that leads it, and its barges.
+local FLEET_JUMP, FLEET_BOSS, FLEET_BARGE = "fleet.jump", "fleet.boss", "fleet.barge"
+local FLEET_KINDS: { [string]: boolean } = { [FLEET_JUMP] = true, [FLEET_BOSS] = true, [FLEET_BARGE] = true }
+-- How far a fleet's drive reaches, light years: as far as anybody's
+-- does who has learned all there is of it (Tactical/Jumping).
+local FLEET_REACH = Jumping.RANGE * (1 + 5 * Jumping.FURTHER)
+-- And how many gates off its people's nearest station is looked for.
+local REFUGE_JUMPS = 6
+local DAY = math.ceil(86400 / Constants.TICK)
 -- What a miner flies, and cuts with.
 local MINER, LASER = "frigate.prospector", "miner.small"
 -- What anybody flies.
@@ -388,6 +445,204 @@ local function pirateNear(state: State.State, ball: State.Ball): boolean
   return false
 end
 
+-- ---------------------------------------------------------------------
+-- Mining fleets
+
+-- The hull a people's mining fleets jump out by: one of theirs whose
+-- jump drive has a field, if their yards build one.
+local function jumpship(faction: string): Ships.ShipType?
+  for _, hull in Ships.list do
+    if hull.lineage == faction and hull.jump and (hull.jumpField or 0) > 0 and hull.tech ~= 2 then
+      return hull
+    end
+  end
+  return nil
+end
+
+-- Where a fleet of a people's that jumps out of a system goes: the
+-- nearest system of theirs by the gates, other than that one, which is
+-- within 'reach' light years and has a station; its number, and the
+-- station. 0 and nothing, if there is none within a few gates.
+function Traffic.Refuge(state: State.State, system: number, faction: string, reach: number): (number, System.Object?)
+  local systems = state.galaxy.systems
+  local depth: { [number]: number } = { [system] = 0 }
+  local queue: { number } = { system }
+  local at = 1
+  while at <= #queue do
+    local id = queue[at]
+    at += 1
+    if id ~= system and Galaxy.Keeper(systems[id]) == faction and Galaxy.Apart(state.galaxy, system, id) <= reach then
+      for _, object in Space.Describe(state, id).objects do
+        if object.kind == "station" and state.starbases[object.id] == nil then
+          return id, object
+        end
+      end
+    end
+    if depth[id] < REFUGE_JUMPS then
+      for _, neighbor in systems[id].neighbors do
+        if depth[neighbor] == nil then
+          depth[neighbor] = depth[id] + 1
+          table.insert(queue, neighbor)
+        end
+      end
+    end
+  end
+  return 0, nil
+end
+
+-- Whether a mining fleet is to be at work in a system now: it is the
+-- space of a people who fly them (they build the barge, the capital
+-- industrial and the jumpship), the fleet that works it is not away,
+-- and the day's roll for the system says so. (Whether it has a belt
+-- and a station to run to is seen to when the fleet is put there.)
+function Traffic.FleetDue(state: State.State, system: number): boolean
+  local node = state.galaxy.systems[system]
+  local keeper = if node then Galaxy.Keeper(node) else ""
+  if keeper == "" or jumpship(keeper) == nil or hullOf(keeper, "barge") == nil or hullOf(keeper, "capitalindustrial") == nil then
+    return false
+  elseif (state.miningFleets[system] or 0) > state.tick then
+    return false
+  end
+  return Rng.Chance(Rng.For(state.historySeed, system, state.tick // DAY, 173), Traffic.FLEETS)
+end
+
+-- Put a mining fleet at one of a system's belts: the jumpship, the
+-- capital industrial beside it, and the barges about them, all well
+-- within the jumpship's field. Whether it was put.
+local function miningFleet(state: State.State, system: number, rng: Rng.Rng, events: { Event }): boolean
+  local keeper = Galaxy.Keeper(state.galaxy.systems[system])
+  local faction = Factions.byId[keeper]
+  local lead, boss, barge = jumpship(keeper), hullOf(keeper, "capitalindustrial"), hullOf(keeper, "barge")
+  local belts: { System.Object } = {}
+  for _, object in Space.Describe(state, system).objects do
+    if object.kind == "belt" and state.sites[object.id] == nil then
+      table.insert(belts, object)
+    end
+  end
+  if faction == nil or lead == nil or boss == nil or barge == nil or #belts == 0 then
+    return false
+  end
+  -- (and somewhere to run to: they work no system they could not leave)
+  if (Traffic.Refuge(state, system, keeper, FLEET_REACH)) == 0 then
+    return false
+  end
+  local belt = belts[Rng.Int(rng, #belts) + 1]
+  local x, y, z = near(rng, belt, 6000, 12000)
+  -- (beside the first of its rocks with anything left in it, if it has
+  -- one: the barges begin where the work is, with the others by them)
+  for _, object in Space.Describe(state, system).objects do
+    if Mining.Rock(object) and object.site == belt.id and Mining.Left(state, object) > 0 then
+      x, y, z = object.x + object.radius + 4000, object.y, object.z
+      break
+    end
+  end
+  local function put(type: string, kind: string, dx: number, dy: number, dz: number): State.Ship
+    local ship = Space.NewShip(state, type, Ships.byId[type].name, keeper, 0)
+    local ball = Space.Launch(state, ship, system, x + dx, y + dy, z + dz)
+    table.insert(events, { kind = "BallAdded", ball = ball.id })
+    enlist(state, ship, kind, belt.id, system)
+    return ship
+  end
+  put(lead.id, FLEET_JUMP, 0, 0, 0)
+  put(boss, FLEET_BOSS, 2600, 300, 0)
+  -- (the barges on the side of the jumpship away from their leader)
+  for index = 1, Traffic.FLEET_BARGES do
+    local angle = math.pi / 2 + math.pi * (index - 0.5) / Traffic.FLEET_BARGES
+    local ship = put(barge, FLEET_BARGE, 2600 * math.cos(angle), if index % 2 == 0 then 250 else -250, 2600 * math.sin(angle))
+    for _ = 1, Ships.byId[barge].turrets do
+      Items.Equip(state, ship.id, STRIP, nil)
+    end
+  end
+  table.insert(events, { kind = "MiningFleetArrived", faction = keeper, system = system, belt = belt.id, name = belt.name,
+    ships = Traffic.FLEET_BARGES + 2 })
+  return true
+end
+
+-- A fleet's jumpship makes its drive ready, if it is not doing so
+-- already ('why': "attacked", or "full").
+local function alarm(state: State.State, jump: number, why: string, events: { Event })
+  local record, ball = state.traffic[jump], state.balls[jump]
+  if record and ball and record.wait == 0 then
+    record.wait = state.tick + Traffic.SPOOL
+    table.insert(events, { kind = "FleetSpooling", ship = jump, name = ball.name, grid = ball.grid, system = ball.system,
+      seconds = Traffic.SPOOL * Constants.TICK, why = why })
+  end
+end
+
+-- Put what ore a ship has in its hold across into another's ore hold,
+-- as much as there is room for: how many units went across.
+local function handOver(state: State.State, from: number, to: number): number
+  local moved = 0
+  for _, item in Items.In(state, from, "cargo") do
+    if Items.IsOre(item.type) then
+      local size, used = Items.OreHold(state, to)
+      local fits = math.min(item.quantity, math.floor((size - used + 1e-9) / Types.Info(item.type).volume))
+      if fits > 0 then
+        local type = item.type
+        Items.Take(state, item, fits)
+        Items.Add(state, type, fits, to, "orehold")
+        moved += fits
+      end
+    end
+  end
+  return moved
+end
+
+-- A ship of the traffic that has done with what it was at makes for
+-- the nearest station, as a ship coming in to dock does; and is taken
+-- away if there is none.
+local function goHome(state: State.State, id: number, events: { Event })
+  local record, ball = state.traffic[id], state.balls[id]
+  local station = if ball then nearestStation(state, ball) else nil
+  if record and ball and station then
+    ball.vitals.locks = {}
+    record.kind, record.goal, record.born = "home", station.id, state.tick
+    order(state, { kind = "Dock", actor = id, target = station.id }, events)
+  else
+    remove(state, id, "left", events)
+  end
+end
+
+-- A fleet's jumpship jumps: itself, and every ship of its fleet within
+-- its field that nothing holds (Jumping.Along says who a field takes).
+-- They are gone to a station of their people's in another system, and
+-- the system is without a fleet for a while. What is left makes for a
+-- station here. (With nowhere of theirs within reach any more, nobody
+-- jumps: they all make for a station here.)
+local function evacuate(state: State.State, jump: number, system: number, events: { Event })
+  local ball = state.balls[jump]
+  local name, grid = ball.name, ball.grid
+  local to, station = Traffic.Refuge(state, system, state.ships[jump].owner, Jumping.Range(state, jump))
+  local going: { number } = {}
+  if station then
+    table.insert(going, jump)
+    for _, id in Jumping.Along(state, jump) do
+      local record = state.traffic[id]
+      if record and FLEET_KINDS[record.kind] then
+        table.insert(going, id)
+      end
+    end
+  end
+  local gone: { [number]: boolean } = {}
+  for _, id in going do
+    gone[id] = true
+    table.insert(events, { kind = "Jumped", ship = id, from = system, to = to, gate = 0, arrival = (station :: System.Object).id,
+      drive = true, along = if id ~= jump then jump else nil, radius = state.balls[id].radius })
+    remove(state, id, "jumped", events)
+  end
+  local left = 0
+  for _, id in table.clone(state.trafficIds) do
+    local record = state.traffic[id]
+    if record and FLEET_KINDS[record.kind] and record.system == system and not gone[id] and state.ships[id] then
+      left += 1
+      goHome(state, id, events)
+    end
+  end
+  state.miningFleets[system] = state.tick + Traffic.FLEET_AWAY
+  table.insert(events, { kind = "FleetJumped", ship = jump, name = name, grid = grid, system = system, to = to,
+    station = if station then station.name else "", took = math.max(0, #going - 1), left = left, jumped = station ~= nil })
+end
+
 -- The police: two ships of the system's faction, out of warp a few
 -- kilometres from the marked pilot. They come in what it takes: in
 -- destroyers for anything small, in cruisers for a cruiser, and in
@@ -543,15 +798,41 @@ function Traffic.Step(state: State.State, events: { Event })
       outBy[record.wait] = record.goal
     end
   end
+  -- (the mining fleet here, if there is one: its jumpship, the ship
+  -- that leads it, its barges in the order of their ids, and whether
+  -- anything of it has been hit)
+  local fleetJump, fleetBoss, fleetSize, fleetHit = 0, 0, 0, false
+  local fleetBarges: { number } = {}
+  for _, id in state.trafficIds do
+    local record = state.traffic[id]
+    local there = state.balls[id]
+    if FLEET_KINDS[record.kind] and record.system == system and state.ships[id] and there then
+      fleetSize += 1
+      if record.kind == FLEET_JUMP then
+        fleetJump = id
+      elseif record.kind == FLEET_BOSS then
+        fleetBoss = id
+      else
+        table.insert(fleetBarges, id)
+      end
+      fleetHit = fleetHit or there.vitals.shield < Traffic.FLEET_HIT * there.vitals.shieldMax
+    end
+  end
   for _, id in table.clone(state.trafficIds) do
     local record = state.traffic[id]
     local ship = state.ships[id]
     local ball = state.balls[id]
-    if ship == nil then
+    if record == nil then
+      -- (taken away already this tick: a fleet's ship that jumped with its jumpship)
+      continue
+    elseif ship == nil then
       -- (destroyed: whoever did it has seen to the rest. A colony ship
       -- is gone for a day before another takes its place.)
       if record.kind == "colony" then
         state.nomads[record.wait] = state.tick + Nomads.GONE
+      elseif record.kind == FLEET_JUMP then
+        -- (and a mining fleet that has lost its jumpship is not replaced for a day)
+        state.miningFleets[record.system] = state.tick + Traffic.FLEET_LOST
       end
       -- (and what a hauler carried of the economy's is in its wreck, or
       -- nowhere: the system it was for goes without)
@@ -601,6 +882,56 @@ function Traffic.Step(state: State.State, events: { Event })
           elseif gate == 0 then
             -- (its colony ship is gone: it stays where it is)
             order(state, { kind = "Stop", actor = id }, events)
+          end
+        end
+      end
+    elseif record.kind == FLEET_JUMP then
+      -- A mining fleet's jumpship. Anything of the fleet hit, a pirate
+      -- on its grid, or a pilot its people fight: it makes its drive
+      -- ready, and when that is done it jumps, unless it is held (which
+      -- takes a capital's disruptor). Until then it keeps by its barges.
+      if ball and ball.warp == nil then
+        local threat = fleetHit or pirateNear(state, ball) or (marked and mine ~= nil and mine.grid == ball.grid and mine.grid ~= 0)
+        if record.wait == 0 and threat then
+          alarm(state, id, "attacked", events)
+        elseif record.wait ~= 0 and state.tick >= record.wait and not ball.vitals.scrambled then
+          evacuate(state, id, system, events)
+        elseif record.wait == 0 and ball.intent == nil then
+          local by = fleetBarges[1] or fleetBoss
+          if by ~= 0 and not (ball.mode == "orbit" and ball.target == by) then
+            order(state, { kind = "Orbit", actor = id, target = by, range = 2500 }, events)
+          end
+        end
+      end
+    elseif record.kind == FLEET_BOSS or record.kind == FLEET_BARGE then
+      local leader = state.traffic[fleetJump]
+      if fleetJump == 0 or leader == nil then
+        -- (its jumpship is gone, by its drive or for good: in to dock)
+        goHome(state, id, events)
+      elseif leader.wait ~= 0 then
+        -- (the alarm: it leaves what it is at and makes for the
+        -- jumpship, to be inside its field when the drive is ready)
+        if ball and ball.warp == nil and not (ball.mode == "approach" and ball.target == fleetJump) then
+          order(state, { kind = "Approach", actor = id, target = fleetJump, range = 1000 }, events)
+        end
+      elseif ball and ball.warp == nil and ball.intent == nil then
+        if record.kind == FLEET_BOSS then
+          -- (the ship that leads them keeps by its barges)
+          local by = fleetBarges[1] or 0
+          if by ~= 0 and not (ball.mode == "orbit" and ball.target == by) then
+            order(state, { kind = "Orbit", actor = id, target = by, range = 1500 }, events)
+          end
+        else
+          -- A barge cuts rock (Tactical/Digger). With its hold full it
+          -- empties it into the ore hold of the ship that leads the
+          -- fleet; and when that will take no more (or is lost), or the
+          -- belt is cut out, the fleet has done and goes home.
+          local post = Space.Object(state, record.goal)
+          if post == nil or not Digger.Work(state, ball, post, events) then
+            local to = state.balls[fleetBoss]
+            if to == nil or to.grid ~= ball.grid or handOver(state, id, fleetBoss) == 0 then
+              alarm(state, fleetJump, "full", events)
+            end
           end
         end
       end
@@ -715,6 +1046,11 @@ function Traffic.Step(state: State.State, events: { Event })
   end
   if miners < Traffic.MINERS[band] and Galaxy.Keeper(state.galaxy.systems[system]) ~= "" then
     miner(state, system, rng, events)
+  end
+  -- A mining fleet, in the space of a people who fly them. (By a roll
+  -- of its own, so that nothing else about who comes follows from it.)
+  if fleetSize == 0 and Traffic.FleetDue(state, system) then
+    miningFleet(state, system, Rng.For(state.historySeed, state.tick, system, 179), events)
   end
   -- The police, for a marked pilot in secure space: wherever they are.
   if marked and mine and mine.grid ~= 0 and band == "secure" and lawmen < Traffic.POLICE then

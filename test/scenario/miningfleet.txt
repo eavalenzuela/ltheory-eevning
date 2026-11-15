@@ -1,0 +1,64 @@
+# A mining fleet of the Vail's, in the game app (script/check runs
+# this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/miningfleet.txt
+#
+# A galaxy of a hundred systems has the Vail in it. The pilot is put at
+# a station in a system of theirs where a mining fleet is at work today
+# (a cheat), in a warship (a cheat), with the Vail thinking neither well
+# nor ill of them. Out in space the fleet is there before long: its
+# jumpship, the capital industrial that leads it, and four barges, at a
+# belt. Nothing frightens it while nobody does anything. The pilot warps
+# to the belt, closes on a barge and fires on it: the jumpship makes its
+# drive ready, and when it is ready the fleet is gone, and no fleet
+# works the system for a while.
+#
+# covers: Core/Tactical/Traffic Core/Tactical/Jumping
+
+wait 2
+lua GameDebug.NewGame(1, 100)
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua _G.system = GameDebug.MiningSystem('vail')
+lua assert(_G.system ~= 0, 'no system of the Vail has a mining fleet at work today')
+lua assert(GameDebug.Moor(_G.system) ~= '', 'no station there to be put at')
+wait 1
+lua assert(GameDebug.System() == _G.system and select(2, GameDebug.Galaxy()) == 'Vail', 'the pilot should be in the Vail space')
+lua assert(GameDebug.Fly('destroyer.nozomi', true), 'no warship')
+lua GameDebug.Standing('vail', 0)
+
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+# The fleet is at its belt before long: six ships, and nothing has frightened it.
+patience 90
+until GameDebug.MiningFleet() == 6
+lua _G.belt = select(3, GameDebug.MiningFleet())
+lua assert(_G.belt ~= '', 'the fleet should be at a belt')
+frames 120
+lua assert(select(2, GameDebug.MiningFleet()) == 0, 'nobody has done anything, and the jumpship should not be making ready')
+
+# To the belt, and at a barge.
+lua assert(GameDebug.Order('WarpTo', _G.belt), 'the belt should be there to warp to')
+patience 120
+until GameDebug.InWarp()
+patience 400
+until GameDebug.Idle() and not GameDebug.InWarp()
+frames 30
+lua assert(GameDebug.MiningFleet() == 6 and select(2, GameDebug.MiningFleet()) == 0, 'a pilot they have nothing against does not frighten them')
+lua assert(GameDebug.Select('Archangel') and GameDebug.Select('Embrace'), 'the jumpship and the ship that leads the fleet should be on the overview')
+lua assert(GameDebug.Order('Approach', 'Panacea', 1500), 'a barge should be there to close on')
+lua assert(GameDebug.Lock('Panacea'))
+patience 300
+until GameDebug.Locked() >= 1 and GameDebug.TargetGap() < 3000
+lua assert(GameDebug.Fire() >= 1, 'nothing to fire with')
+# Fired on, the jumpship makes its drive ready, and then the fleet is gone.
+patience 60
+until select(2, GameDebug.MiningFleet()) > 0
+patience 120
+until select(4, GameDebug.MiningFleet()) > 0
+lua assert(GameDebug.MiningFleet() == 0, 'what is left of the fleet should be a fleet no more, and there are ' .. GameDebug.MiningFleet())
+lua assert(not GameDebug.Select('Archangel'), 'the jumpship should be gone')
+
+echo miningfleet scenario passed
+quit

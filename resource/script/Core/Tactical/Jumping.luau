@@ -31,15 +31,16 @@
 -- ship within so far of its hull when it jumps (Jumping.Along):
 --   - Friendly is of its own side: whose the ship is, and for a ship of
 --     the pilot's, the corporation's members' too.
---   - A ship in warp is not taken, nor one with a warp scrambler on it:
---     what holds a ship holds it.
+--   - A ship in warp is not taken, nor one that is warp disrupted (the
+--     owner's, the same day: "Warp disrupting a ship prevents the
+--     archangel from jumping it").
 --   - A ship that is taken needs no drive, no fuel, no skill and no
 --     capacitor of its own, and its own drive (if it has one) is not
 --     set cooling. It comes out as far from the hull that took it, and
 --     the same way off, as it was: at rest, with nothing running and
 --     nothing locked. The drive burns no more fuel for a ship taken.
---   (All but the field and its depth are first rules, and not the
---   owner's.)
+--   (Who is friendly, the ship in warp, and what a ship taken needs
+--   and costs are first rules, and not the owner's.)
 --
 -- A hired pilot whose ship has a drive uses it (Tactical/Fleet): to go
 -- after the pilot, or wherever their orders send them, they jump where a
@@ -326,7 +327,7 @@ function Jumping.Apply(state: State.State, command: State.Command, events: { Eve
   Vitals.Refresh(state, ball)
   -- (a jump, to everything that minds one: 'gate' is 0 for a drive's)
   table.insert(events, { kind = "Jumped", ship = ball.id, from = from, to = to, gate = 0, arrival = beacon.id, drive = true,
-    distance = distance, beacon = beacon.name, took = #along })
+    distance = distance, beacon = beacon.name, took = #along, radius = ball.radius })
   -- Every ship its field took: as far from it, and the same way off, as
   -- it was. ('along': the ship whose drive it was.)
   for _, id in along do
@@ -341,7 +342,7 @@ function Jumping.Apply(state: State.State, command: State.Command, events: { Eve
     Space.AssignGrid(state, other)
     Vitals.Refresh(state, other)
     table.insert(events, { kind = "Jumped", ship = id, from = from, to = to, gate = 0, arrival = beacon.id, drive = true,
-      distance = distance, beacon = beacon.name, along = ball.id })
+      distance = distance, beacon = beacon.name, along = ball.id, radius = other.radius })
   end
 end
 

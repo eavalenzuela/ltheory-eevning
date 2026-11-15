@@ -114,7 +114,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 85
+Core.SAVE_VERSION = 86
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -421,6 +421,11 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- supercarrier now: a hauler of theirs is their freighter, which is
   -- what carries for them; the others their dreadnought and their
   -- carrier.)
+  -- 86: mining fleets work the belts of a people who have a jumpship
+  -- for them (Tactical/Traffic). A save from before has none away.
+  [85] = function(state: any)
+    state.miningFleets = state.miningFleets or {}
+  end,
   -- 85: the Vail's Archangel is their ultracapital, where it was the
   -- tech 2 make of their capital industrial for a day.
   [84] = function(state: any)
@@ -1179,6 +1184,7 @@ function Core.New(options: Options): Game
     commerce = commerce, marketDrawn = {}, shocks = {}, wars = Wars.New(galaxy, options.wars == true), fronts = {}, frontIds = {}, sovereignty = { progress = {}, dark = {} },
     membership = { tax = Members.TAX, members = {}, memberIds = {}, applicants = {}, calls = {}, invited = {}, invitedDay = -1 },
     nomads = {},
+    miningFleets = {},
     trafficOn = options.traffic == true,
     queue = {},
   }

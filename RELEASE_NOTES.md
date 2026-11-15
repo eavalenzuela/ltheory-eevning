@@ -6,6 +6,12 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## The Vail's mining fleets, and a disruptor for capitals
+
+- In the Vail's own space, mining fleets work the belts: four Panacea barges, the Embrace that leads them, and an Archangel standing by.
+- Attack one and the Archangel makes its jump drive ready. Twenty seconds later it jumps to a Vail station in another system, with every ship of the fleet within 5 km of it. A barge you have warp disrupted is left behind, and so is one too far off.
+- A capital ship is no longer held by an ordinary Warp Disruptor. It takes the new Capital Warp Disruptor, which only a capital can fit. That goes for your own capitals too.
+
 ## The Archangel, and a jump drive that takes a fleet with it
 
 - The Vail's Archangel is their ultracapital now: half as big again as their capital industrial, the Embrace.

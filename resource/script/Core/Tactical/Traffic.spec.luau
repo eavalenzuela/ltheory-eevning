@@ -5,6 +5,7 @@ local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
+local Jumping = require("@lt/Core/Tactical/Jumping")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
@@ -485,6 +486,140 @@ suite:Case("an alien faction keeps order in its own space, in its own hulls; the
   for _, id in state.trafficIds do
     t.eq(state.ships[id].owner, "civilian")
   end
+end)
+
+suite:Case("the Vail work the belts of their own space in fleets, which jump out to a station of theirs when one of them is hit: all but what is held or too far off", function(t)
+  -- (a galaxy of a hundred systems has all the factions in it)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true, traffic = true, systems = 100 })
+  local state = game.state
+  -- Nobody else flies them: not where the pilot begins, whatever the day's roll.
+  local home = Space.SystemOf(state, state.player.home)
+  t.ok(Galaxy.Keeper(state.galaxy.systems[home]) ~= "vail")
+  t.eq(Traffic.FleetDue(state, home), false)
+  -- A system of the Vail's where a fleet is at work today: one with a belt on the chart, and a station of
+  -- theirs in another system for the fleet to run to.
+  local system, refuge = 0, 0
+  local theirs, due = 0, 0
+  for id, node in state.galaxy.systems do
+    if Galaxy.Keeper(node) == "vail" then
+      theirs += 1
+      if Traffic.FleetDue(state, id) then
+        due += 1
+        local belt = false
+        for _, object in Space.Describe(state, id).objects do
+          belt = belt or (object.kind == "belt" and state.sites[object.id] == nil)
+        end
+        local to, station = Traffic.Refuge(state, id, "vail", 30)
+        if system == 0 and belt and station then
+          system, refuge = id, to
+          t.ok(to ~= id and Galaxy.Keeper(state.galaxy.systems[to]) == "vail" and station.kind == "station")
+        end
+      end
+    end
+  end
+  -- (about half of their systems, by the day)
+  t.ok(theirs >= 4 and due >= 1 and due < theirs, `{due} of the Vail's {theirs} systems have a fleet due`)
+  t.ok(system ~= 0, "no system of the Vail's has a fleet at work with a belt and somewhere to run to")
+  -- (and not in one whose fleet is away)
+  state.miningFleets[system] = state.tick + 50
+  t.eq(Traffic.FleetDue(state, system), false)
+  state.miningFleets[system] = nil
+
+  move(game, system)
+  steps(game, 2 * Traffic.INTERVAL)
+  local jump, boss, barges = ofKind(state, "fleet.jump"), ofKind(state, "fleet.boss"), ofKind(state, "fleet.barge")
+  t.eq({ #jump, #boss, #barges }, { 1, 1, Traffic.FLEET_BARGES })
+  t.eq({ state.ships[jump[1]].type, state.ships[boss[1]].type, state.ships[barges[1]].type },
+    { "ultracapital.archangel", "capitalindustrial.embrace", "barge.panacea" })
+  for _, id in { jump[1], boss[1], barges[1], barges[4] } do
+    t.eq({ state.ships[id].owner, state.balls[id].system } :: { any }, { "vail", system } :: { any })
+  end
+  -- Every one of them is within the jumpship's field, and each barge has its strip miners.
+  local along: { [number]: boolean } = {}
+  for _, id in Jumping.Along(state, jump[1]) do
+    along[id] = true
+  end
+  t.ok(along[boss[1]], "the ship that leads the fleet is outside the jumpship's field")
+  for _, id in barges do
+    t.ok(along[id], "a barge is outside the jumpship's field")
+    t.eq(#Items.Fitted(state, id), Ships.byId["barge.panacea"].turrets)
+  end
+  -- They work: before long a barge is cutting, and nobody has taken fright.
+  steps(game, 240)
+  local cutting = 0
+  for _, id in barges do
+    cutting += if #state.balls[id].vitals.running > 0 or Items.CargoUsed(state, id) > 0 then 1 else 0
+  end
+  t.ok(cutting >= 1, "no barge of the fleet is cutting rock")
+  t.eq({ #ofKind(state, "fleet.jump"), state.traffic[jump[1]].wait }, { 1, 0 })
+
+  -- One of them is hit: the jumpship makes its drive ready.
+  local hit = state.balls[barges[2]]
+  hit.vitals.shield = 0.5 * hit.vitals.shieldMax
+  Core.Step(game)
+  t.eq(state.traffic[jump[1]].wait, state.tick + Traffic.SPOOL)
+  -- (and the fleet leaves its work and closes on it)
+  for _, id in barges do
+    t.eq({ state.balls[id].mode, state.balls[id].target } :: { any }, { "approach", jump[1] } :: { any })
+  end
+  -- (the last ticks by the traffic's own step, so that what is set here by hand stands)
+  -- Held itself (which takes a capital's disruptor), it does not jump when the drive is ready.
+  local lead = state.balls[jump[1]]
+  state.traffic[jump[1]].wait = state.tick
+  lead.vitals.scrambled = true
+  local events: { Traffic.Event } = {}
+  Traffic.Step(state, events)
+  t.eq({ #ofKind(state, "fleet.jump"), #ofKind(state, "fleet.barge") }, { 1, Traffic.FLEET_BARGES })
+  -- Let go, it jumps: with the fleet, but for a barge that is warp disrupted and one that has strayed too far.
+  lead.vitals.scrambled = false
+  -- (wherever their work has taken them by now, they are put where this is about: the ship that leads them
+  -- and three barges close by the jumpship, and the fourth barge well outside its field)
+  for index, id in { boss[1], barges[1], barges[2], barges[4] } do
+    local ball = state.balls[id]
+    ball.x, ball.y, ball.z = lead.x + lead.radius + ball.radius + 1500, lead.y + 600 * index, lead.z
+    ball.warp = nil
+  end
+  local held, strayed = state.balls[barges[1]], state.balls[barges[3]]
+  held.vitals.scrambled = true
+  strayed.x, strayed.y, strayed.z, strayed.warp = lead.x + 20000, lead.y, lead.z, nil
+  events = {}
+  Traffic.Step(state, events)
+  t.eq({ state.ships[jump[1]], state.ships[boss[1]], state.ships[barges[2]], state.ships[barges[4]] } :: { any }, {})
+  t.eq({ state.balls[barges[1]] ~= nil, state.balls[barges[3]] ~= nil }, { true, true })
+  -- (the two that were left make for a station here, as a miner does)
+  t.eq({ state.traffic[barges[1]].kind, state.traffic[barges[3]].kind }, { "home", "home" })
+  local jumped, said = 0, nil :: any
+  for _, event in events do
+    if event.kind == "Jumped" then
+      jumped += 1
+      t.eq({ event.from, event.to, event.drive } :: { any }, { system, refuge, true } :: { any })
+    elseif event.kind == "FleetJumped" then
+      said = event
+    end
+  end
+  t.eq(jumped, 4)
+  t.eq({ said.took, said.left, said.to, said.jumped } :: { any }, { 3, 2, refuge, true } :: { any })
+  -- No fleet works the system again for a while.
+  t.eq({ state.miningFleets[system], Traffic.FleetDue(state, system) } :: { any }, { state.tick + Traffic.FLEET_AWAY, false } :: { any })
+  held.vitals.scrambled = false
+  steps(game, 3 * Traffic.INTERVAL)
+  t.eq(#ofKind(state, "fleet.jump"), 0)
+
+  -- A fleet that loses its jumpship is not replaced for a day.
+  state.miningFleets[system] = nil
+  steps(game, 2 * Traffic.INTERVAL)
+  local again = ofKind(state, "fleet.jump")
+  t.eq(#again, 1)
+  local lost = state.ships[again[1]]
+  Space.RemoveBall(state, state.balls[lost.id])
+  state.ships[lost.id] = nil
+  State.RemoveId(state.shipIds, lost.id)
+  Core.Step(game)
+  t.eq(state.miningFleets[system], state.tick + Traffic.FLEET_LOST)
+  -- (and what is left of it goes in to dock)
+  Core.Step(game)
+  t.eq({ #ofKind(state, "fleet.boss"), #ofKind(state, "fleet.barge") }, { 0, 0 })
+  steps(game, 20)
 end)
 
 return suite

@@ -855,6 +855,10 @@ export type State = {
   -- the tick until which its colony ship is gone, for one that has been
   -- destroyed.
   nomads: { [number]: number },
+  -- The mining fleets (Tactical/Traffic): by a system's number, the
+  -- tick until which the fleet that works it is away, for one that has
+  -- jumped out or been lost.
+  miningFleets: { [number]: number },
   research: { [string]: Research },   -- by blueprint id (Assets/Industry)
   -- Jobs in hand (Assets/Missions), which of today's offers have been
   -- taken, how many jobs have been finished, and the pilot's standing

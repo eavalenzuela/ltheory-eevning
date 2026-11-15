@@ -523,6 +523,40 @@ suite:Case("a warp disruptor keeps its target out of warp, and reaches twice as 
   t.eq(refused(a, { kind = "ActivateModule", actor = 0, item = disruptor.id, target = far }), "no locked target")
 end)
 
+suite:Case("a capital is held only by a capital warp disruptor, which only a capital fits", function(t)
+  local plain, capital = Modules.byId["disruptor.warp"], Modules.byId["disruptor.warp.capital"]
+  t.eq({ plain.capital, capital.capital, assert(capital.hex).kind } :: { any }, { nil, true, "scramble" } :: { any })
+  t.ok(assert(capital.hex).range > assert(plain.hex).range and assert(capital.hex).capacitor > assert(plain.hex).capacitor)
+  -- Only a capital fits one: a battleship does not, and a carrier does.
+  t.eq({ Attributes.Check(Ships.byId["battleship.owari"], { "disruptor.warp.capital" }) } :: { any },
+    { false, "only a capital fits that" } :: { any })
+  t.eq((Attributes.Check(Ships.byId["carrier.azayake"], { "disruptor.warp.capital" })), true)
+  t.eq((Attributes.Check(Ships.byId["battleship.owari"], { "disruptor.warp" })), true)
+  -- A plain disruptor does nothing to a capital: it is refused, and one that is running on it all the same
+  -- holds nothing.
+  local a = arena("frigate.courier", { { "disruptor.warp" } }, "carrier.azayake", {}, 15000)
+  t.eq({ Combat.Capital(a.game.state, a.foe.id), Combat.Capital(a.game.state, a.me.id) }, { true, false })
+  lockFoe(t, a)
+  local disruptor = modules(a)[1]
+  t.eq(refused(a, { kind = "ActivateModule", actor = 0, item = disruptor.id, target = a.foe.id }),
+    "a capital is held only by a capital warp disruptor")
+  table.insert(a.me.vitals.running, { item = disruptor.id, target = a.foe.id, next = 0, stopping = false, cycles = 0 })
+  gather(a, 3, "none")
+  t.eq(a.foe.vitals.scrambled, false)
+  -- A capital's holds a capital, from half as far again.
+  local b = arena("carrier.azayake", { { "disruptor.warp.capital" } }, "carrier.scoppo", {}, 25000)
+  lockFoe(t, b)
+  order(t, b, { kind = "ActivateModule", actor = 0, item = modules(b)[1].id, target = b.foe.id })
+  local held = stepUntil(b, "Held", 3)
+  t.eq({ held.ball, held.scrambled } :: { any }, { b.foe.id, true } :: { any })
+  t.eq(b.foe.vitals.scrambled, true)
+  -- And anything smaller.
+  local c = arena("carrier.azayake", { { "disruptor.warp.capital" } }, "battleship.owari", {}, 25000)
+  lockFoe(t, c)
+  order(t, c, { kind = "ActivateModule", actor = 0, item = modules(c)[1].id, target = c.foe.id })
+  t.eq(stepUntil(c, "Held", 3).scrambled, true)
+end)
+
 suite:Case("a raider carries a warp disruptor, and a pilot it catches cannot warp away", function(t)
   local raider = Pirates.kindById["raider"]
   local fitted: { [string]: boolean } = {}

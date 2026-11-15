@@ -56,6 +56,7 @@ local Nomads = require("@lt/Core/Tactical/Nomads")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Structures = require("@lt/Core/Data/Structures")
+local Traffic = require("@lt/Core/Tactical/Traffic")
 local Types = require("@lt/Core/Data/Types")
 local Wallet = require("@lt/Core/Assets/Wallet")
 local Waypoints = require("@lt/Game/Waypoints")
@@ -1237,6 +1238,49 @@ end
 function Debug.SystemOf(id: number): number
   local ball = session.game.state.balls[id]
   return if ball and session.game.state.ships[id] then ball.system else 0
+end
+
+-- The first system of a people's space where a mining fleet is at work
+-- today (Core/Tactical/Traffic): one with a belt on the chart, and a
+-- station of theirs in another system for the fleet to run to. Its
+-- number; 0 if there is none (or they fly no such fleets).
+function Debug.MiningSystem(faction: string): number
+  local state = session.game.state
+  for id, node in state.galaxy.systems do
+    if Galaxy.Keeper(node) == faction and Traffic.FleetDue(state, id) then
+      local belt = false
+      for _, object in Space.Describe(state, id).objects do
+        belt = belt or (object.kind == "belt" and state.sites[object.id] == nil)
+      end
+      if belt and (Traffic.Refuge(state, id, faction, 30)) ~= 0 then
+        return id
+      end
+    end
+  end
+  return 0
+end
+
+-- The mining fleet in the system the pilot is in: how many ships of it
+-- are in space (its jumpship, the ship that leads it and its barges),
+-- the seconds until its jumpship's drive is ready (0: it is not making
+-- ready), the name of the belt it works ("" with no fleet here), and
+-- the seconds until a fleet works the system again (0: none is away).
+function Debug.MiningFleet(): (number, number, string, number)
+  local state = session.game.state
+  local here = Core.Query.Player(session.game).system
+  local count, ready, belt = 0, 0, ""
+  for _, id in state.trafficIds do
+    local record = state.traffic[id]
+    if string.sub(record.kind, 1, 6) == "fleet." and record.system == here and state.balls[id] then
+      count += 1
+      local post = Space.Object(state, record.goal)
+      belt = if post then post.name else belt
+      if record.kind == "fleet.jump" and record.wait ~= 0 then
+        ready = math.max(1, record.wait - state.tick)
+      end
+    end
+  end
+  return count, ready, belt, math.max(0, (state.miningFleets[here] or 0) - state.tick)
 end
 
 -- The system farthest off that the pilot's jump drive reaches from

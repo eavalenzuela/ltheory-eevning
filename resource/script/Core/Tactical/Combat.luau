@@ -223,6 +223,14 @@ end
 -- ---------------------------------------------------------------------
 -- Orders
 
+-- Whether a thing in space is a ship of a capital class: what a plain
+-- warp disruptor does not hold, and a capital's does (Data/Modules).
+function Combat.Capital(state: State.State, id: number): boolean
+  local ship = state.ships[id]
+  local hull = if ship then Ships.byId[ship.type] else nil
+  return hull ~= nil and Ships.Capital(hull.class)
+end
+
 function Combat.Validate(state: State.State, command: State.Command): (boolean, string?)
   local ship = state.ships[command.actor]
   if ship == nil then
@@ -319,6 +327,8 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
         return false, "that is not a ship"
       elseif Space.Gap(ball :: any, target :: any) > module.hex.range then
         return false, "out of range"
+      elseif module.hex.kind == "scramble" and not module.capital and Combat.Capital(state, target.id) then
+        return false, "a capital is held only by a capital warp disruptor"
       end
       return true
     elseif module.repair or module.boost then
@@ -862,7 +872,10 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
         if hex.kind == "entangle" then
           entangles[target] = math.min(entangles[target] or 1, hex.strength)
         elseif hex.kind == "scramble" then
-          scrambles[target] = true
+          -- (a capital is held by a capital's disruptor and by no other)
+          if Modules.byId[item.type].capital or not Combat.Capital(state, target) then
+            scrambles[target] = true
+          end
         elseif hex.kind == "paint" then
           paints[target] = math.max(paints[target] or 1, hex.strength)
         elseif hex.kind == "damp" then

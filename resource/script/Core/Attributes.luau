@@ -216,6 +216,14 @@ function Attributes.Check(hull: Ships.ShipType, types: { string }, levels: Level
     calibration += module.calibration or 0
     table.insert(fitted, { type = id, running = false })
   end
+  -- (a capital's module goes on a capital and on nothing smaller)
+  if not Ships.Capital(hull.class) then
+    for _, id in types do
+      if Modules.byId[id].capital then
+        return false, "only a capital fits that"
+      end
+    end
+  end
   -- (a hull with no shield has nothing for a shield module to work on:
   -- the Nimia's)
   if hull.shield <= 0 and hull.class ~= "capsule" then

@@ -62,7 +62,8 @@ export type Miner = {
 
 -- What a module does to another ship while it runs on it. An "entangle" cuts
 -- the target's top speed to 'strength' of what it was; a "scramble"
--- keeps it out of warp; a "paint" makes its signature 'strength' times
+-- keeps it out of warp (a capital only if the module is a capital's:
+-- ModuleType's 'capital'); a "paint" makes its signature 'strength' times
 -- as big; a "damp" cuts how far it can lock and how fast to 'strength'
 -- of what they were; a "neut" takes 'strength' GJ from its capacitor
 -- each cycle; and a "jam" has a chance of 'strength' each cycle of
@@ -121,6 +122,10 @@ export type ModuleType = {
   -- A data analyzer: fitted, it lets the ship hack a sealed hold from
   -- within its range (Tactical/Hacking).
   analyzer: { range: number }?,
+  -- A capital's module: only a hull of a capital class fits it
+  -- (Attributes.Check). And of a warp disruptor, that it holds a capital
+  -- too, which a plain one does not (Tactical/Combat).
+  capital: boolean?,
   -- What it is called for short, where there is not room for its name.
   short: string?,
   -- Skills a pilot needs to fit it. (Where absent, Data/Skills says.)
@@ -353,6 +358,17 @@ local modules: { ModuleType } = {
     cpu = 26, powergrid = 1, volume = 5, basePrice = 45000, passive = {},
     hex = { kind = "scramble", range = 20000, strength = 1, duration = 5, capacitor = 8 },
     requires = { { skill = "propulsion.jamming", level = 1 } },
+  },
+  -- And the one that holds a capital. A plain warp disruptor does
+  -- nothing to a hull of a capital class (the project owner's rule,
+  -- 2026-11-15: "Warp disrupting the archangel itself only works with a
+  -- capital warp disruptor, same as other capitals"); this one holds
+  -- anything, and only a capital fits it. (Its figures are first ones.)
+  {
+    id = "disruptor.warp.capital", name = "Capital Warp Disruptor", slot = "mid", hardpoint = "",
+    cpu = 60, powergrid = 1500, volume = 40, basePrice = 4000000, passive = {}, capital = true,
+    hex = { kind = "scramble", range = 30000, strength = 1, duration = 5, capacitor = 80 },
+    requires = { { skill = "propulsion.jamming", level = 4 } },
   },
 
   -- The rest of electronic warfare: making a ship easier to hit, harder
