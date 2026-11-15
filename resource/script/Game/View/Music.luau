@@ -2,10 +2,11 @@
 -- Music: what plays under the game, by where the pilot is and what is
 -- happening to them.
 --
--- There are three moods. Docked, at a station. In a fight: while there
+-- There are four moods. Docked, at a station. In a fight: while there
 -- is a pirate on the pilot's grid, or shots are passing between the
--- pilot's ship and anybody, and for a while after. And space, which is
--- everything else. Each has its pieces (resource/sound/made/music, made
+-- pilot's ship and anybody, and for a while after. The deep: space no
+-- chart shows, on the far side of a wormhole, when there is no fight.
+-- And space, which is everything else. Each has its pieces (resource/sound/made/music, made
 -- by script/soundgen in the manner the owner chose: strings, a warm
 -- drone, the occasional piano key).
 --
@@ -31,9 +32,13 @@ local Music = {}
 type Piece = { file: string, seconds: number }
 
 local PIECES: { [string]: { Piece } } = {
-  space = { { file = "made/music/space1.ogg", seconds = 120 }, { file = "made/music/space2.ogg", seconds = 120 } },
-  docked = { { file = "made/music/docked1.ogg", seconds = 120 } },
-  combat = { { file = "made/music/combat1.ogg", seconds = 120 } },
+  space = { { file = "made/music/space1.ogg", seconds = 120 }, { file = "made/music/space2.ogg", seconds = 120 },
+    { file = "made/music/space3.ogg", seconds = 120 }, { file = "made/music/space4.ogg", seconds = 120 } },
+  docked = { { file = "made/music/docked1.ogg", seconds = 120 }, { file = "made/music/docked2.ogg", seconds = 120 } },
+  combat = { { file = "made/music/combat1.ogg", seconds = 120 }, { file = "made/music/combat2.ogg", seconds = 120 } },
+  -- (space3, space4, docked2, combat2 and deep1 were made on the night of
+  -- 2026-11-15 and are in until the owner's ear says otherwise)
+  deep = { { file = "made/music/deep1.ogg", seconds = 120 } },
 }
 
 -- How loud music is, of what the sound is set to.
@@ -49,7 +54,7 @@ local LEAD = 5
 type Playing = { sound: Sound?, level: number }
 
 export type Music = {
-  mood: string,                 -- "docked", "space", "combat"; "" before the first frame
+  mood: string,                 -- "docked", "space", "deep", "combat"; "" before the first frame
   file: string,                 -- the piece playing; "" for none
   seconds: number,              -- how long that piece is
   began: number,                -- when it began (the sound's own time)
@@ -131,7 +136,9 @@ function Music.Update(music: Music, session: Session.Session, time: number, fram
     end
   end
 
-  local mood = if player.docked ~= 0 then "docked" elseif time - music.threat < Music.HOLD then "combat" else "space"
+  local node = state.galaxy.systems[player.system]
+  local mood = if player.docked ~= 0 then "docked" elseif time - music.threat < Music.HOLD then "combat"
+    elseif node and node.uncharted then "deep" else "space"
   if mood ~= music.mood then
     begin(music, mood, time, master)
   elseif #PIECES[mood] > 1 and time - music.began > music.seconds - LEAD then

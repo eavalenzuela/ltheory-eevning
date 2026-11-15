@@ -31,6 +31,7 @@ local Scanner = require("@lt/Game/UI/Scanner")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
 local Ships = require("@lt/Core/Data/Ships")
+local Splash = require("@lt/Game/UI/Splash")
 local State = require("@lt/Core/Kernel/State")
 local Station = require("@lt/Game/UI/Station")
 local Waypoints = require("@lt/Game/Waypoints")
@@ -1002,9 +1003,17 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
     PostDraw = function(_, w: Widget)
       local wasOver = overInterface
       Im.Begin()
+      -- The splash is over everything while it is up: nothing behind it
+      -- is drawn (or pressed) until its black begins to clear.
+      if Splash.Hides() then
+        Splash.Draw(w.pos.x, w.pos.y, w.size.x, w.size.y, math.min(0.1, FrameTimer_Get()))
+        overInterface = true
+        return
+      end
       -- A menu is all there is while it is up.
       if Menu.IsOpen() then
         Menu.Draw(session, w.pos.x, w.pos.y, w.size.x, w.size.y)
+        Splash.Draw(w.pos.x, w.pos.y, w.size.x, w.size.y, math.min(0.1, FrameTimer_Get()))
         overInterface = true
         return
       end
@@ -1398,6 +1407,8 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Im.Overlay(right, bottom)
       -- The menu a right click brought up, over all of that.
       Context.Draw(session, entries, left, top, right, bottom)
+      -- (and the last of the splash, clearing, where there was no menu under it)
+      Splash.Draw(w.pos.x, w.pos.y, w.size.x, w.size.y, math.min(0.1, FrameTimer_Get()))
       Keys.EndFrame()
       overInterface = Im.over
     end,

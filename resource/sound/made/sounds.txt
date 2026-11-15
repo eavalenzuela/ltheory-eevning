@@ -77,3 +77,43 @@ atmosphere/vapour    | 20 | loop | A spaceship inside a thin cloud of gas in spa
 atmosphere/derelict  | 20 | loop | A dead radio channel beside an abandoned wreck in deep space: quiet empty static, a slow faint electronic warble that comes and goes, a lonely distress beacon blip far apart, eerie, sparse, no music, no voice
 atmosphere/listening | 20 | loop | An old automated listening post still transmitting to nobody: soft static, quiet streams of data chirps and modem-like tones fading in and out, a faint carrier hum underneath, mysterious, sparse, no music, no voice
 atmosphere/pirates   | 20 | loop | Intercepted pirate radio traffic on a scratchy channel: distorted unintelligible rough voices in short bursts, between bursts of static and squelch clicks, menacing, sparse, no music
+
+# 2026-11-15, made in one night at the owner's asking ("more music",
+# "more sound effects") and heard by nobody yet: the owner's ear has the
+# last word on each (docs/tools.md says where the listening page is).
+# More music, in the same manner; and a piece for space no chart shows.
+music/space3       | 120 | music | Slow ambient music for watching a distant sun rise over a ringed planet: soft sustained strings in slow chords, a deep warm drone, a single piano note now and then with long reverb, a faint high shimmer of violins, no drums, no vocals, vast, serene, quietly hopeful, cinematic
+music/space4       | 120 | music | Slow ambient music for crossing empty space far from anywhere: low sustained cellos and a deep warm drone, sparse lonely piano notes in the middle register with long reverb, long silences between phrases, no drums, no vocals, vast, solitary, a little melancholy, cinematic
+music/docked2      | 120 | music | Warm, quiet ambient music for a busy trade station seen through a hangar window: gentle sustained strings, a soft felt piano playing a slow rising figure with long pauses, a faint low hum, no drums, no vocals, safe, homely, unhurried, cinematic
+music/combat2      | 120 | music | Tense underscore for a hard-fought battle between starships: a driving low string ostinato in short bows, a deep pulsing drone, stabbing sparse piano notes in the low register, rising string swells that never resolve, sparse distant orchestral percussion, no drum kit, no vocals, dark, urgent, relentless, cinematic
+music/deep1        | 120 | music | Eerie slow ambient music for uncharted space beyond a wormhole: thin high sustained strings with slow slides in pitch, a very deep cold drone, rare isolated piano notes with very long reverb, a faint distant metallic resonance, no drums, no vocals, vast, uneasy, mysterious, cinematic
+
+# What had no sound of its own, or only one of the engine's old ones
+# picked by its name and never heard: a cloak, a mutator, a deal, the
+# hacking game, drones, word of something going on, a salvager, a repair,
+# a drive lit, loot taken, a coat of paint, a hull nearly gone.
+ui/cloak           | 1.5 | once | A starship cloaking device engaging: a soft descending electronic shimmer that folds away into silence, smooth, subtle, no music, no voice
+ui/decloak         | 1.2 | once | A starship cloaking device dropping: a quick rising electronic shimmer ending in a soft pop of static, subtle, no music, no voice
+ui/mutate          | 2.2 | once | An unstable alien device rewriting a piece of machinery: a wet organic crackle under a warbling electronic whine that bends up and down in pitch, ending in a sharp settling click, strange, no music, no voice
+ui/trade           | 0.8 | once | A short soft confirmation tone on a trading terminal as a deal goes through: a muted two-note electronic blip with a faint metallic tick, clean, quiet, no music, no voice
+ui/hack-pick       | 0.5 | once | A single code cell being selected on a hacking terminal: one short crisp digital blip with a tiny click, dry, quiet, no music, no voice
+ui/hack-won        | 1.4 | once | A security lock being broken by a hacker: a fast run of rising digital tones ending in a bright unlocking clunk, satisfying, short, no music, no voice
+ui/hack-lost       | 1.4 | once | A hacking attempt failing: a descending run of harsh digital tones ending in a dull locked-out buzz, short, not loud, no music, no voice
+ui/news            | 1.2 | once | A soft incoming bulletin tone on a starship comms panel: three gentle rising electronic notes with a faint radio crackle, calm, clean, no music, no voice
+ui/invasion        | 2.5 | once | A grave fleet-wide alarm on a starship bridge: three slow deep horn-like warning tones with a low ominous swell under them, heavy, serious, not shrill, no music, no voice
+ui/loot            | 0.8 | once | Cargo being pulled aboard a spaceship: a short mechanical clunk of a magnetic grapple and a latch closing, dry, no music, no voice
+ui/paint           | 1.4 | once | A robotic arm spraying a quick coat of paint on metal in a hangar: a short pressurised hiss sweeping past with a faint servo whir, clean, no music, no voice
+ui/critical        | 1.6 | once | A hull breach warning inside a damaged starship: two harsh urgent klaxon pulses over a faint hiss of escaping air, alarming but short, no music, no voice
+ui/splash          | 4.0 | once | An opening title swell for a space game: a deep warm drone rising with soft sustained strings into one clear resonant piano note with long reverb, then fading, vast, calm, cinematic, no drums, no voice
+drone/launch       | 1.0 | once | A small combat drone launching from a starship bay: a pneumatic thump and a quick high electric whir flying away, short, no music, no voice
+drone/return       | 1.0 | once | A small drone docking back into a starship bay: a quick approaching electric whir cut off by a soft magnetic clamp clunk, short, no music, no voice
+module/repair      | 1.3 | once | A starship armour repair system cycling: a short burst of welding crackle and a ratcheting mechanical whir, industrial, muffled through the hull, no music, no voice
+module/shield      | 1.2 | once | A starship shield booster pulsing: a short rising energy hum that blooms into a soft shimmering wash and fades, smooth, no music, no voice
+module/salvage     | 1.5 | once | A salvage beam cutting scrap from a wreck in space, heard through the hull: a short grinding buzz with a clatter of loose metal, industrial, no music, no voice
+module/drive       | 1.5 | once | A starship afterburner igniting: a sharp ignition pop and a rapidly rising roar of thrust that levels off, muffled through the hull, powerful, no music, no voice
+explosion/small1   | 2.0 | once | A small spacecraft or drone blowing apart, heard through the hull from a distance: a sharp crack, a short muffled boom and a brief scatter of debris, no music, no voice
+explosion/large1   | 6.0 | once | A huge capital starship breaking up, heard through the hull from a distance: a long chain of deep muffled detonations, groaning tearing metal, and a slow low rumbling tail, enormous, cinematic, no music, no voice
+
+# The air of space no chart shows, and a mining laser at work.
+atmosphere/deep    | 20 | loop | Eerie ambience of uncharted deep space beyond a wormhole: a very low hollow drone, slow distant whale-like resonances, faint irregular electrical ticking, cold, empty, unsettling, seamless, no music, no voice
+loop/mining        | 8.0 | loop | A mining laser boring steadily into an asteroid, heard from inside the ship: a steady deep electric hum with a continuous gritty sizzle of vaporising rock, seamless, constant, no music, no voice

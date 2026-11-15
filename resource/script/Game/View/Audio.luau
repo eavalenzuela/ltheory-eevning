@@ -57,6 +57,7 @@
 
 local Core = require("@lt/Core/Api")
 local Im = require("@lt/Game/UI/Im")
+local Modules = require("@lt/Core/Data/Modules")
 local Music = require("@lt/Game/View/Music")
 local Planet = require("@lt/Game/View/Planet")
 local Session = require("@lt/Game/Session")
@@ -85,6 +86,9 @@ export type Audio = {
   passed: number,
   engine: Sound?,
   warp: Sound?,
+  mining: Sound?,                 -- a mining laser's loop, once one has run
+  miningNow: number,
+  critical: boolean,              -- whether the hull's warning has been given since the hull was last sound
   struck: number,                 -- missiles that have landed on the pilot's ship, for taking the sounds of it in turn
   engineNow: number,              -- their loudness now, eased toward what the game asks
   warpNow: number,
@@ -114,6 +118,8 @@ local AIR: { [string]: { { any } } } = {
   ["relic.b"] = { { "atmosphere/metallic_creaking_wrecks_02.wav", 0.16 }, { "made/atmosphere/derelict.ogg", 0.02 } },
   data = { { "made/atmosphere/listening.ogg", 0.05 } },
   pirates = { { "made/atmosphere/pirates.ogg", 0.04 } },
+  -- (space no chart shows, where the place has no air of its own: made 2026-11-15, and heard by nobody yet)
+  deep = { { "made/atmosphere/deep.ogg", 0.035 } },
 }
 -- More voices, heard over the chatter of a place that has more than a
 -- little of it, now and then: one of these, once, and the next a
@@ -142,7 +148,7 @@ local NEAR_WORLD = 1.5
 -- Which air the place the pilot is at has ("": none): by what the
 -- place is; and where people live, comms chatter, by how busy the
 -- system is.
-function Audio.Where(game: Core.Game): string
+local function whereOf(game: Core.Game): string
   local state = game.state
   local player = Core.Query.Player(game)
   local me = state.balls[state.player.ship]
@@ -189,6 +195,18 @@ function Audio.Where(game: Core.Game): string
   return SITES[place.variety] or "belt"
 end
 
+function Audio.Where(game: Core.Game): string
+  local air = whereOf(game)
+  -- (in space no chart shows, wherever nothing else is heard: its own)
+  if air == "" then
+    local player = Core.Query.Player(game)
+    if player.uncharted and player.docked == 0 then
+      return "deep"
+    end
+  end
+  return air
+end
+
 -- The loops of the pilot's own ship, and how loud each is at its most:
 -- the engines at full burn, and deep in warp.
 local ENGINE, ENGINE_LEVEL = "made/loop/engine.ogg", 0.12
@@ -210,18 +228,40 @@ local SHIELD_HIT, HULL_HIT = "made/impact/shield1.ogg", "made/impact/hull1.ogg"
 local OWN: { [string]: { any } } = {
   WarpStarted = { "jumpdrive/activate.ogg", 0.25 }, WarpEnded = { "jumpdrive/deactivate.ogg", 0.22 },
   LockCompleted = { "ui/targetacquired.ogg", 0.18 }, LockLost = { "ui/targetlost.ogg", 0.14 },
-  -- (a cloak going on, and one broken by something come too near: two
-  -- of the engine's old interface sounds, picked by their names and
-  -- heard by nobody yet)
-  Cloaked = { "ui/cruise_engage.wav", 0.14 }, Decloaked = { "ui/camera_toggle.wav", 0.16 },
+  -- (a cloak going on, and one broken by something come too near; a
+  -- salvager's cut: made 2026-11-15 with the rest of that night's, and
+  -- heard by nobody yet. The cloak's were two of the engine's old
+  -- interface sounds before, picked by their names.)
+  Cloaked = { "made/ui/cloak.ogg", 0.14 }, Decloaked = { "made/ui/decloak.ogg", 0.16 },
   Scanned = { "made/ui/scan.ogg", 0.07 },
+  Salvaged = { "made/module/salvage.ogg", 0.10 },
 }
+-- What mends the pilot's own ship, each time it does, by what it mends
+-- (quiet, and not one on top of another: a repairer runs for minutes).
+local MENDED: { [string]: { any } } = {
+  armor = { "made/module/repair.ogg", 0.06 }, shield = { "made/module/shield.ogg", 0.06 }, hull = { "made/module/repair.ogg", 0.06 },
+}
+-- A drive lit on the pilot's own ship (an afterburner, a microwarpdrive).
+local DRIVE, DRIVE_LEVEL = "made/module/drive.ogg", 0.12
+-- Something going on that the pilot has word of, by its kind: an
+-- invasion is graver than the rest, and a surge is the pirates' alert.
+local WORD: { [string]: { any } } = {
+  invasion = { "made/ui/invasion.ogg", 0.15 }, surge = { "made/ui/alert.ogg", 0.11 }, sighting = { "made/ui/news.ogg", 0.12 },
+  disaster = { "made/ui/news.ogg", 0.12 }, windfall = { "made/ui/news.ogg", 0.12 },
+}
+-- A ship this big across or bigger breaks up long and deep (a capital).
+local GREAT_BLAST, GREAT = "made/explosion/large1.ogg", 900
+-- The pilot's hull down to this share of itself: a warning, once, until
+-- it has been above the other again.
+local CRITICAL, CRITICAL_OVER = 0.3, 0.5
+local MINING, MINING_LEVEL = "made/loop/mining.ogg", 0.07
 -- How loud somebody else's warp drive is, right beside the pilot; and a
 -- gate that somebody else goes through.
 local OTHERS_WARP = 0.12
 local OTHERS_GATE = 0.12
 local SHIP: { [string]: { any } } = {
   Jumped = { "made/gate/jump.ogg", 0.28 }, Docked = { "ui/confirm.ogg", 0.18 }, Undocked = { "ui/activate.ogg", 0.18 },
+  Looted = { "made/ui/loot.ogg", 0.14 },
 }
 local ANY: { [string]: { any } } = {
   JobStarted = { "productionlab/initiate.ogg", 0.18 }, ResearchStarted = { "productionlab/initiate.ogg", 0.18 },
@@ -229,15 +269,19 @@ local ANY: { [string]: { any } } = {
   CopyDone = { "productionlab/complete.ogg", 0.22 },
   SkillTrained = { "ui/objective_complete.ogg", 0.22 }, CommandRejected = { "ui/cancel.ogg", 0.14 },
   PiratesArrived = { "made/ui/alert.ogg", 0.13 }, Marked = { "ui/targetlost.ogg", 0.2 },
-  TowerRaided = { "made/ui/alert.ogg", 0.13 }, HappeningBegan = { "made/ui/alert.ogg", 0.11 },
+  TowerRaided = { "made/ui/alert.ogg", 0.13 },
   StarbaseAnchored = { "made/ui/placed.ogg", 0.2 }, ColonyDeployed = { "made/ui/placed.ogg", 0.2 },
   LessonReady = { "made/ui/placed.ogg", 0.2 }, LessonDone = { "ui/objective_complete.ogg", 0.22 },
+  -- (the night of 2026-11-15's: a module out of a mutator, a deal done
+  -- on a market, a coat of paint, a lock in a derelict's hold opened)
+  Mutated = { "made/ui/mutate.ogg", 0.18 }, Bought = { "made/ui/trade.ogg", 0.13 }, Sold = { "made/ui/trade.ogg", 0.13 },
+  OrderFilled = { "made/ui/trade.ogg", 0.10 }, Painted = { "made/ui/paint.ogg", 0.16 }, HackKey = { "made/ui/hack-pick.ogg", 0.12 },
 }
 
 function Audio.New(): Audio
   return {
     enabled = not Host.scripted, master = 1, musicLevel = 1, time = 0, last = {}, place = nil, placeIs = "", engine = nil, warp = nil,
-    engineNow = 0, warpNow = 0, played = 0, struck = 0, music = Music.New(), air = {}, airIs = "", airAsked = -10,
+    engineNow = 0, warpNow = 0, mining = nil, miningNow = 0, critical = false, played = 0, struck = 0, music = Music.New(), air = {}, airIs = "", airAsked = -10,
     passing = 0, passed = 0,
   }
 end
@@ -254,7 +298,8 @@ function Audio.Set(audio: Audio, enabled: boolean, master: number?, music: numbe
     Sound_Delete(audio.place)
     Sound_Delete(audio.engine)
     Sound_Delete(audio.warp)
-    audio.place, audio.engine, audio.warp, audio.placeIs = nil, nil, nil, ""
+    Sound_Delete(audio.mining)
+    audio.place, audio.engine, audio.warp, audio.mining, audio.placeIs = nil, nil, nil, nil, ""
     for _, air in audio.air do
       Sound_Delete(air.sound)
     end
@@ -277,6 +322,14 @@ local function play(audio: Audio, file: string, volume: number, key: string?, ga
   local sound = Sound_Play2D(file, volume * audio.master)
   if pitch and pitch ~= 1 then
     Sound_SetPitch(sound, pitch)
+  end
+end
+
+-- A sound of the program's own, that no event of the game brings: the
+-- splash's. Heard if the sound is on.
+function Audio.Once(audio: Audio, file: string, volume: number)
+  if audio.enabled then
+    play(audio, file, volume)
   end
 end
 
@@ -333,11 +386,38 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
       if (event.radius or 40) <= SMALL then
         -- (a small one: the owner's, as it is)
         play(audio, SMALL_BLAST, 0.3 * reach(far, 12000), "blast", 0.2)
+      elseif (event.radius or 40) >= GREAT then
+        -- (a capital: long and deep, and heard from further off)
+        play(audio, GREAT_BLAST, 0.6 * reach(far, 30000), "great", 1.0)
       else
         play(audio, "made/explosion/ship1.ogg", (0.3 + 0.3 * size) * reach(far, 12000), nil, 0.2, 1.1 - 0.5 * size)
       end
     elseif OWN[kind] and event.ball == mine then
-      play(audio, OWN[kind][1], OWN[kind][2])
+      play(audio, OWN[kind][1], OWN[kind][2], nil, 0.4)
+    elseif kind == "Repaired" and event.ball == mine and MENDED[event.layer] then
+      play(audio, MENDED[event.layer][1], MENDED[event.layer][2], "mended", 2.5)
+    elseif kind == "ModuleStarted" and event.ball == mine then
+      local item = state.items[event.item]
+      if item and (string.sub(item.type, 1, 12) == "afterburner." or string.sub(item.type, 1, 4) == "mwd.") then
+        play(audio, DRIVE, DRIVE_LEVEL, "drive", 1.0)
+      end
+    elseif kind == "HappeningBegan" then
+      -- (only what the pilot has word of: what begins too far off to be told of is not sounded)
+      local word = WORD[event.happening]
+      if word and (event.jumps or -1) >= 0 then
+        play(audio, word[1], word[2], "word", 0.5)
+      end
+    elseif kind == "HackDone" then
+      -- (not one that was left, or drifted out of reach: those were not lost at the lock)
+      if event.success then
+        play(audio, "made/ui/hack-won.ogg", 0.16)
+      elseif event.reason ~= "left" and event.reason ~= "out of reach" then
+        play(audio, "made/ui/hack-lost.ogg", 0.13)
+      end
+    elseif kind == "DroneLaunched" and event.owner == mine then
+      play(audio, "made/drone/launch.ogg", 0.10, "drone", 0.15)
+    elseif kind == "DroneScooped" and event.owner == mine then
+      play(audio, "made/drone/return.ogg", 0.10, "drone", 0.15)
     elseif me and ((kind == "Jumped" and event.ship ~= mine and (event.from == me.system or event.to == me.system))
       or ((kind == "BallAdded" or kind == "BallRemoved") and event.gate)) then
       -- Somebody else through a gate near by, either way, or the
@@ -434,6 +514,35 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
   if audio.engine == nil then
     audio.engine = Sound_Play2DLooped(ENGINE, 0)
     audio.warp = Sound_Play2DLooped(WARP, 0)
+  end
+  -- A mining laser of the pilot's own at work: its loop, while one runs.
+  local cutting = 0
+  if me and not session.clock.paused then
+    for _, running in me.vitals.running do
+      local item = state.items[running.item]
+      local module = if item then Modules.byId[item.type] else nil
+      if module and module.miner then
+        cutting = 1
+        break
+      end
+    end
+  end
+  audio.miningNow += (MINING_LEVEL * cutting - audio.miningNow) * ease
+  if audio.mining == nil and cutting > 0 then
+    audio.mining = Sound_Play2DLooped(MINING, 0)
+  end
+  if audio.mining then
+    Sound_SetVolume(audio.mining, audio.miningNow * audio.master)
+  end
+  -- The pilot's hull nearly gone: a warning, once each time it comes to that.
+  if me then
+    local share = me.vitals.hull / math.max(1, me.vitals.hullMax)
+    if share < CRITICAL and not audio.critical then
+      audio.critical = true
+      play(audio, "made/ui/critical.ogg", 0.16, "critical", 5)
+    elseif share > CRITICAL_OVER then
+      audio.critical = false
+    end
   end
   -- (every frame, so that turning the sound up or down is heard at once)
   if audio.place then

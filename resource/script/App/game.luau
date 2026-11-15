@@ -39,6 +39,7 @@ local Starbases = require("@lt/Core/Assets/Starbases")
 local Station = require("@lt/Game/UI/Station")
 local Info = require("@lt/Game/UI/Info")
 local Menu = require("@lt/Game/UI/Menu")
+local Splash = require("@lt/Game/UI/Splash")
 local Corporation = require("@lt/Core/Assets/Corporation")
 local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
@@ -525,6 +526,16 @@ function Debug.People(): (string, string)
     end
   end
   return people, ""
+end
+
+-- The splash a person is shown when the game starts (Game/UI/Splash):
+-- how far through it is ("rise", "stand", "clear"; "" when it is not
+-- up). Given true, it is begun, for a script, which is not shown it.
+function Debug.Splash(begin: boolean?): string
+  if begin then
+    Splash.Begin()
+  end
+  return Splash.Stage()
 end
 
 -- Destroy the player's own ship, as if it had been shot down.
@@ -2897,6 +2908,8 @@ function App:Initialize()
   -- behind it. A script goes straight into that game.
   if not Host.scripted then
     Menu.OpenMain(session)
+    -- (and before the menu, the splash)
+    Splash.Begin()
   end
   pointer = not Host.scripted
 
@@ -2922,8 +2935,12 @@ function App:Initialize()
     end,
     PreUpdate = function()
       local frame = math.min(0.1, FrameTimer_Get())
-      if Key_Pressed(Key_Escape()) then
+      -- (Escape sends the splash on its way, and does nothing else while it is up)
+      if Key_Pressed(Key_Escape()) and not Splash.Hides() then
         Menu.Toggle(session)
+      end
+      if Splash.Began() then
+        Audio.Once(audio, "made/ui/splash.ogg", 0.3)
       end
       -- (where the windows were left is kept, for the next run)
       if Windows.Changed() and not Host.scripted then

@@ -6,6 +6,12 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## A night's work
+
+- The game opens on a splash: its mark and its name come up out of black, and any key or a click sends it on to the menu.
+- More music: two more pieces for space, one more for a station and one more for a fight, and a piece of its own for space no chart shows. A mood now goes through its pieces in turn.
+- Sounds for what had none: a cloak going on and coming off, a module coming out of a mutator, a deal done on a market, a lock in a derelict opened or lost, drones going out and coming back, armour and shield being mended, an afterburner lit, a salvager's cut, loot taken aboard, a mining laser at work, a capital ship breaking up, and a warning when your hull is nearly gone. Word of an invasion has a graver sound than the rest, and what begins too far away to be told of is no longer sounded at all. Uncharted space has an air of its own.
+
 ## Better makes of a module
 
 - Each of the four peoples has its own make of what it is known for, and of one useful thing besides: Vessari launchers, armour and cargo extensions; Talmar autocannons, artillery, shields and tracking; Orun blasters, railguns, armour and engines; Kethri lasers, armour and capacitor. A people's make gives 15% more than the plain module (more than a Custom make, less than Tech 2), fits the same and needs no more skill. Their own stations sell a few, at about six times the price, to a pilot they think well of (standing 2 or better), and about one job in five at their stations pays in one instead of credits: the job's line says which.

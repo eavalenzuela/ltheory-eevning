@@ -15,6 +15,8 @@ game-docked | game        | wait 3; lua GameDebug.Zoom(4, 0.6, 1.25); wait 1; sh
 game-market | game        | wait 2; until GameDebug.Press('Market'); frames 3; lua GameDebug.Market('ammo.emp'); frames 3; lua GameDebug.Zoom(4, 0.6, 1.25); wait 1; shot golden; quit
 game-skills | game        | wait 2; until GameDebug.Press('Skills'); until GameDebug.Press('Train:lasers'); lua GameDebug.Zoom(4, 0.6, 1.25); wait 1.5; shot golden; quit
 game-belt   | game        | wait 2; lua GameDebug.Peaceful(true); lua GameDebug.Order('Undock'); until GameDebug.InSpace(); lua GameDebug.TimeScale(8); lua GameDebug.Order('WarpTo', 'belt'); until GameDebug.InWarp(); until GameDebug.Idle(); lua GameDebug.Order('Orbit', 'asteroid', 5000); lua GameDebug.Zoom(14, 1.0, 1.2); wait 8; shot golden; quit
+# The splash a person is shown before the menu (Game/UI/Splash), standing.
+game-splash | game        | wait 1; lua GameDebug.Splash(true); wait 2.6; lua assert(GameDebug.Splash() == 'stand'); shot golden; quit
 # Every kind of body in one picture, and every weapon landing its shot
 # (App/viewer.luau: a view held still, with nothing read from its files).
 bodies      | viewer      | lua assert(Viewer.Show('gallery')); frames 40; shot golden; quit

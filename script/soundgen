@@ -28,6 +28,13 @@ heard until then, and fades out over the 'seconds' after.
     script/soundgen NAME...         make these (if not there yet)
     script/soundgen --force NAME... make these again
     script/soundgen --list          say what is listed and what is there
+    script/soundgen --page NAME...  write cache/soundgen/listen.html, a page
+                                    with a player for each of these (all of
+                                    them, with no names), for the owner's
+                                    ear; NAME=OLD puts the sound it would
+                                    take the place of beside it (OLD is a
+                                    path under resource/sound); asks nobody
+                                    for anything
     script/soundgen --check         fail if a script names a sound that is
                                     not there (the engine plays silence for
                                     one, and says nothing), or if the list
@@ -208,9 +215,40 @@ def check():
     return wrong
 
 
+def page(sounds, names, beside):
+    """A page to listen by: each sound with its player, what was asked
+    for, and (where it is to take another's place) the other beside it."""
+    import html
+    out = os.path.join(RAW, "listen.html")
+    os.makedirs(RAW, exist_ok=True)
+    rows = []
+    for sound in sounds:
+        if names and sound["name"] not in names:
+            continue
+        made = os.path.join(OUT, sound["name"] + ".ogg")
+        if not os.path.exists(made):
+            continue
+        old = beside.get(sound["name"])
+        other = (f'<div class="old"><span>in the game before</span><audio controls preload="none" src="{html.escape(os.path.join(SOUNDS, old))}"></audio>'
+                 f'<code>{html.escape(old)}</code></div>') if old else ""
+        rows.append(f'<section><h2>{html.escape(sound["name"])} <small>{sound["seconds"]:g} s, {sound["kind"]}</small></h2>'
+                    f'<audio controls preload="none"{" loop" if sound["kind"] == "loop" else ""} src="{html.escape(made)}"></audio>'
+                    f'{other}<p>{html.escape(sound["text"])}</p></section>')
+    with open(out, "w") as f:
+        f.write("<!doctype html><meta charset=utf-8><title>Sounds to hear</title><style>"
+                "body{font:15px/1.45 system-ui,sans-serif;max-width:860px;margin:24px auto;padding:0 16px;background:#11151a;color:#d6dee6}"
+                "section{border-top:1px solid #2a323b;padding:12px 0}h2{font-size:16px;margin:0 0 6px}small{color:#8a97a5;font-weight:normal}"
+                "audio{width:100%;height:34px}p{color:#9aa7b4;margin:6px 0 0;font-size:13px}.old{margin-top:6px}"
+                ".old span{color:#e0b060;font-size:12px}code{color:#8a97a5;font-size:12px}</style>"
+                f"<h1>Sounds to hear ({len(rows)})</h1><p>Made by script/soundgen. Loops play round until stopped.</p>" + "".join(rows))
+    print(f"soundgen: {len(rows)} sounds on {out}")
+
+
 def main():
     args = sys.argv[1:]
     force = "--force" in args
+    beside = dict(arg.split("=", 1) for arg in args if not arg.startswith("--") and "=" in arg)
+    args = [arg.split("=", 1)[0] for arg in args]
     names = [arg for arg in args if not arg.startswith("--")]
     sounds = listed()
     known = {sound["name"] for sound in sounds}
@@ -223,6 +261,9 @@ def main():
             print(line)
         print(f"soundgen: {len(wrong)} wrong" if wrong else "soundgen: every sound a script names is there, and the list and what is made agree")
         sys.exit(1 if wrong else 0)
+    if "--page" in args:
+        page(sounds, names, beside)
+        return
     if "--list" in args:
         for sound in sounds:
             there = os.path.exists(os.path.join(OUT, sound["name"] + ".ogg"))
