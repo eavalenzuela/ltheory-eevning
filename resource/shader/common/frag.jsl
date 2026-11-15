@@ -12,7 +12,13 @@ FRAG_IN vec3 vertcolor;
 uniform int prepass;
 
 /* (what a shader gives is a number, whatever it worked out: global.jsl) */
-#define RETURN(x)  { fragment_color0 = asNumber(x); return; }
+/* (Trial 1 of 3, 2026-11-14: a shader that only has a colour to give
+   says in so many words that it gives the surface nothing. Left unsaid
+   it is whatever the driver likes, which is the likely cause of the
+   dark specks on an AMD card. It went out once with two other changes
+   and the sky went black in warp there: it is back by itself to see
+   whether it was the one.) */
+#define RETURN(x)  { fragment_color0 = asNumber(x); fragment_color1 = vec4(0.0); return; }
 
 const int MATERIAL_PHONG = 0;
 const int MATERIAL_COOKT = 1;

@@ -6,6 +6,10 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Trial 1 of 3 for the dark specks
+
+- One of the three withdrawn changes is back by itself, to find which of them blacked the sky in warp on AMD cards: effects that only add light (the stars, the warp streaks, glows) now say outright that they change nothing of the surface under them. To look for: is the sky right in warp, and are the dark specks on bright things gone?
+
 ## The sky in warp, put back
 
 - The last release's change for the dark specks made the whole sky go black in warp on some graphics cards (AMD's, on Windows). That change is withdrawn: the sky is as it was, and so, for now, are the specks. They will be gone for properly once it is known which part of the change the card took badly.
