@@ -30,12 +30,13 @@ export type Faction = {
   -- sharp at every edge, each with its conning tower (the Kethri, by
   -- theirs).
   -- Pirate: "patchwork", somebody
-  -- else's hull with parts missing and parts bolted on. Alien: "spindle"
-  -- long smooth hulls behind a needle prow, banded in two colours (the
-  -- Vail, by their drawings), "liquid" round masses of living metal
-  -- without a seam (the Nimia, by the owner's word), "monolith" rings
-  -- and slabs without a seam.
-  style: "slab" | "cloud" | "motley" | "blade" | "patchwork" | "spindle" | "liquid" | "monolith",
+  -- else's hull with parts missing and parts bolted on. Alien: "wedge"
+  -- broad flat hulls drawn to a point, stepped with decks and towers,
+  -- some with one side not the other's twin (the Vail, by the owner's
+  -- picks of them from the generator), "liquid" round masses of living
+  -- metal without a seam (the Nimia, by the owner's word), "monolith"
+  -- rings and slabs without a seam.
+  style: "slab" | "cloud" | "motley" | "blade" | "patchwork" | "wedge" | "liquid" | "monolith",
   weapon: string,           -- the turret family its warships carry
   launchers: number,        -- the share of a warship's hardpoints that are launchers
   tank: "armor" | "shield" | "hull",
@@ -294,21 +295,54 @@ Factions.list = {
 
   -- The three alien factions. Nothing of theirs is sold on a human
   -- market, and nobody has a blueprint for it.
+  --
   -- The Vail (the owner's, 2026-11-11): aliens who go on two legs and
-  -- crew their ships as people do. What their ships look like is from
-  -- the owner's drawings (docs/concepts/vail): a needle prow before a
-  -- long smooth hull, banded in brown and charcoal, lit in amber. Their
-  -- weapons, their defences and the figures below are still what was
-  -- put here before the drawings came, and the hulls' names are
-  -- stand-ins: none of it is the owner's yet.
+  -- crew their ships as people do.
+  -- Their ships are the owner's list of them (2026-11-15, the "Vail
+  -- Ship Rework"): seventeen hulls by name, each a seed in the
+  -- generator's triangular styles (resource/hull/seeds.txt), some with
+  -- their sides unalike. The list takes the place of the hulls there
+  -- were: five modelled from the owner's drawings (docs/concepts/vail,
+  -- script/modelgen; the models are kept, and are no hull of the game
+  -- now) and seven stand-ins. They build no hauler, no siege
+  -- dreadnought and no supercarrier.
+  -- Three of the seventeen are tech 2 hulls. The Aberration is the
+  -- Adoration's, of its seed: what it is for is not said, so it is the
+  -- plain tech 2 make until it is. The Interstition is "black ops":
+  -- built to go unseen, as the Nimia's Hano is; it is taken for the make
+  -- of the Enervation, the one plain cruiser they build, though its seed
+  -- is its own. The Archangel ("mining fleet jumpship") is the
+  -- Embrace's, of its seed, with a jump drive. The Embrace ("mining
+  -- fleet boss") leads a mining fleet as the Orun's Stag does: a capital
+  -- industrial as the class is, with the ore hold the fleet's barges
+  -- fill.
+  -- Their weapons, their defences and the figures below are still what
+  -- was put here before any of it came: none of that is the owner's yet.
+  -- (Their towers and their paint are still from the drawings: brown
+  -- and charcoal, lit in amber.)
   {
-    id = "vail", name = "Vail", kind = "alien", style = "spindle", weapon = "laser", launchers = 0, tank = "shield",
-    note = "Ships like thrown spears: a needle prow before a long hull banded in brown and black, lit in amber. Beams of great reach, behind shields that mend in moments.",
+    id = "vail", name = "Vail", kind = "alien", style = "wedge", weapon = "laser", launchers = 0, tank = "shield",
+    note = "Ships like spearheads: broad flat hulls drawn to a point, stepped with decks and towers, and some with one side not the other's twin. Beams of great reach, behind shields that mend in moments.",
     paint = { primary = { 0.40, 0.27, 0.16 }, secondary = { 0.14, 0.14, 0.14 }, glow = { 1.0, 0.66, 0.24 } },
     shield = 1.5, armor = 0.5, hull = 0.6, velocity = 1.05, mass = 0.8, cpu = 1.3, powergrid = 1.3, capacitor = 1.5,
     lockRange = 1.4, cargo = 0.5, price = 3, mids = 2, lows = -2, hardpoints = 0,
-    hulls = { frigate = "Thorn", destroyer = "Barb", cruiser = "Pike", battleship = "Harpoon", industrial = "Drover",
-      attackbattlecruiser = "Spur", battlecruiser = "Trident", carrier = "Quiver", dreadnought = "Partisan", siegedreadnought = "Ballista", capitalindustrial = "Herder", supercarrier = "Arsenal" },
+    hulls = {},
+    line = {
+      { name = "Prostration", class = "frigate" }, { name = "Undulation", class = "frigate" },
+      { name = "Exaltation", class = "destroyer" }, { name = "Adoration", class = "destroyer" },
+      { name = "Aberration", class = "destroyer", tech = 2, of = "Adoration" },
+      { name = "Enervation", class = "cruiser" },
+      { name = "Interstition", class = "cruiser", tech = 2, of = "Enervation", stealth = true },
+      { name = "Intervention", class = "attackbattlecruiser" },
+      { name = "Innocence", class = "battlecruiser" },
+      { name = "Penance", class = "battleship" }, { name = "Extravagance", class = "battleship" },
+      { name = "Accordance", class = "carrier" },
+      { name = "Awe", class = "dreadnought" },
+      { name = "Panacea", class = "barge" },
+      { name = "Indulgence", class = "freighter" },
+      { name = "Embrace", class = "capitalindustrial" },
+      { name = "Archangel", class = "capitalindustrial", tech = 2, of = "Embrace", jump = true },
+    },
   },
   -- The Nimia (the owner's, 2026-11-13; they were the "Skarn", a
   -- stand-in of animal ships, until the owner said who they are): "Not

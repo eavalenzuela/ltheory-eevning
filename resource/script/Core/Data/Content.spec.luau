@@ -266,6 +266,67 @@ suite:Case("the Nimia's ships are the owner's list of them: fourteen hulls of li
   t.eq(assert(Facts.Of("cruiser.hano")).kind, "Nimia tech 2 black ops cruiser")
 end)
 
+suite:Case("the Vail's ships are the owner's list of them: seventeen hulls, three of them tech 2 hulls of their own (one black ops, one that jumps), and no hauler, siege dreadnought or supercarrier", function(t)
+  local vail = Factions.byId.vail
+  t.eq({ vail.name, vail.kind } :: { any }, { "Vail", "alien" } :: { any })
+  local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, attackbattlecruiser = 200, battlecruiser = 300, battleship = 400,
+    carrier = 1000, dreadnought = 1300, barge = 160, freighter = 650, capitalindustrial = 700 }
+  -- (name, class, the hull it is the tech 2 make of)
+  local LINE: { { any } } = {
+    { "Prostration", "frigate" }, { "Undulation", "frigate" }, { "Exaltation", "destroyer" }, { "Adoration", "destroyer" },
+    { "Aberration", "destroyer", "Adoration" }, { "Enervation", "cruiser" }, { "Interstition", "cruiser", "Enervation" },
+    { "Intervention", "attackbattlecruiser" }, { "Innocence", "battlecruiser" }, { "Penance", "battleship" },
+    { "Extravagance", "battleship" }, { "Accordance", "carrier" }, { "Awe", "dreadnought" }, { "Panacea", "barge" },
+    { "Indulgence", "freighter" }, { "Embrace", "capitalindustrial" }, { "Archangel", "capitalindustrial", "Embrace" },
+  }
+  t.eq(#assert(vail.line), #LINE)
+  local theirs = 0
+  for _, hull in Ships.list do
+    theirs += if hull.lineage == "vail" then 1 else 0
+    -- The hulls they had before the list are gone, and the classes the list has none of are not built.
+    t.ok(hull.lineage ~= "vail" or (hull.class ~= "industrial" and hull.class ~= "siegedreadnought" and hull.class ~= "supercarrier"), hull.id)
+  end
+  t.eq(theirs, #LINE)
+  t.eq({ Ships.byId["frigate.thorn"], Ships.byId["battleship.harpoon"], Ships.byId["industrial.drover"] } :: { any }, {})
+  for _, entry in LINE do
+    local name: string, class: string, of: string? = entry[1], entry[2], entry[3]
+    local id = `{class}.{string.lower(name)}`
+    local hull = assert(Ships.byId[id], `the Vail have no {name}`)
+    t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any }, { `Vail {name}`, class, "vail", RADIUS[class] } :: { any }, name)
+    -- An alien people's: nothing of theirs is on a human market, and nobody has the drawings.
+    t.eq({ hull.restricted, Types.Get(hull.id), Blueprints.byProduct[hull.id] } :: { any }, { true, nil, nil } :: { any }, name)
+    -- Their guns are all turrets, and their hulls have a shield (they are not the Nimia).
+    t.eq(hull.launchers, 0, name)
+    t.ok(hull.shield > 0 and hull.armorMend == nil, name)
+    if of then
+      local base = assert(Ships.byId[`{class}.{string.lower(of)}`])
+      t.eq({ hull.tech, hull.base, Ships.Improved(base.id) } :: { any }, { 2, base.id, hull } :: { any }, name)
+    else
+      t.eq(hull.tech, nil, name)
+      t.ok(#Skills.Needs(hull.id) >= 1, name)
+    end
+    t.ok(Facts.Of(hull.id) ~= nil, name)
+  end
+  -- The owner's ladder holds for them: four of a battleship's guns on the attack battlecruiser, eight on the
+  -- battlecruiser, twenty on the dreadnought, none on the carrier; a barge's three are for mining.
+  local function guns(id: string): number
+    return Ships.byId[id].turrets + Ships.byId[id].launchers
+  end
+  t.eq({ guns("attackbattlecruiser.intervention"), guns("battlecruiser.innocence"), guns("dreadnought.awe"), guns("carrier.accordance"),
+    guns("barge.panacea"), guns("freighter.indulgence"), guns("capitalindustrial.embrace") }, { 4, 8, 20, 0, 3, 0, 0 })
+  -- A patrol of theirs flies the first plain hull of a class.
+  t.eq({ Ships.Improved("frigate.prostration"), Ships.Improved("destroyer.exaltation"), Ships.Improved("battleship.penance") } :: { any }, {})
+  -- What each tech 2 hull is for: the Interstition goes unseen, the Archangel jumps, and the Aberration is
+  -- the plain make (what it is for is not said yet).
+  local aberration, interstition, archangel = Ships.byId["destroyer.aberration"], Ships.byId["cruiser.interstition"],
+    Ships.byId["capitalindustrial.archangel"]
+  t.eq({ aberration.stealth, aberration.cloak, aberration.jump, aberration.explorer } :: { any }, {})
+  t.eq({ interstition.stealth, interstition.cloak, interstition.jump } :: { any }, { true, nil, nil } :: { any })
+  t.eq({ archangel.jump, archangel.stealth, archangel.ore } :: { any }, { true, nil, Ships.byId["capitalindustrial.embrace"].ore } :: { any })
+  t.eq(assert(Facts.Of("cruiser.interstition")).kind, "Vail tech 2 black ops cruiser")
+  t.eq(assert(Facts.Of("frigate.undulation")).kind, "Vail frigate")
+end)
+
 suite:Case("the Orun's ships are the owner's list of them: seventeen hulls, four of them tech 2 hulls of their own, with a barge, a freighter and a capital industrial that leads a mining fleet", function(t)
   local orun = Factions.byId.orun
   local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, battlecruiser = 300, battleship = 400, carrier = 1000,
@@ -590,9 +651,10 @@ suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in i
     end
   end
   -- The Talmar's three (the Tarantula, the Sugarglider and the Rapa), the Vessari's two (the Kanau and the
-  -- Akaboshi), the Orun's four (the Skiver, the Kama, the Falchion and the Longhorn) and the Nimia's one (the
-  -- Hano). The Kethri's line names none yet.
-  t.eq(improved, 10)
+  -- Akaboshi), the Orun's four (the Skiver, the Kama, the Falchion and the Longhorn), the Nimia's one (the
+  -- Hano) and the Vail's three (the Aberration, the Interstition and the Archangel). The Kethri's line names
+  -- none yet.
+  t.eq(improved, 13)
   t.ok(Ships.Improved("frigate.courier") == nil and Ships.Improved("industrial.hauler") == nil and Ships.Improved("capsule") == nil)
 end)
 
@@ -606,6 +668,10 @@ suite:Case("what each tech 2 hull is for is the owner's word: to jump, to go uns
     { "cruiser.falchion", nil, nil, nil, true }, { "industrial.longhorn", nil, true, nil, nil },
     -- (and the Nimia's one, "blackops" on the owner's list of their ships)
     { "cruiser.hano", nil, true, nil, nil },
+    -- (and the Vail's three, by the owner's list of their ships: "t2 destroyer", which says nothing more;
+    -- "t2 cruiser (black ops)"; "t2 capital industrial (mining fleet jumpship)")
+    { "destroyer.aberration", nil, nil, nil, nil }, { "cruiser.interstition", nil, true, nil, nil },
+    { "capitalindustrial.archangel", true, nil, nil, nil },
   }
   local said: { [string]: boolean } = {}
   for _, entry in FOR do

@@ -26,7 +26,8 @@
 --                  destroyer's, a cruiser's, a battleship's, then each
 --                  class of the ladder above (attack battlecruiser,
 --                  battlecruiser, capital industrial, siege dreadnought,
---                  carrier, dreadnought, supercarrier), then none.
+--                  carrier, dreadnought, supercarrier), then the three
+--                  that work (hauler, mining barge, freighter), then none.
 --                  The engines go on the ends the hull has astern and
 --                  the guns where the game's rule of hardpoints lets
 --                  them (Hull.GrownShip); it says so if there is no room
@@ -75,6 +76,11 @@ local CLASSES: { Class } = {
   { name = "carrier", metres = 1000, turret = "laser.beam.large", turrets = 0, launcher = "launcher.cruise", launchers = 0, engines = 6 },
   { name = "dreadnought", metres = 1300, turret = "laser.beam.large", turrets = 10, launcher = "launcher.heavy", launchers = 10, engines = 6 },
   { name = "supercarrier", metres = 1300, turret = "laser.beam.large", turrets = 0, launcher = "launcher.cruise", launchers = 0, engines = 6 },
+  -- (and the classes that work: a hauler's one gun, a mining barge's
+  -- three strip miners, and a freighter, which has no hardpoint)
+  { name = "industrial", metres = 180, turret = "autocannon.small", turrets = 1, launcher = "launcher.light", launchers = 0, engines = 3 },
+  { name = "barge", metres = 160, turret = "miner.strip", turrets = 3, launcher = "launcher.light", launchers = 0, engines = 3 },
+  { name = "freighter", metres = 650, turret = "autocannon.small", turrets = 0, launcher = "launcher.light", launchers = 0, engines = 4 },
 }
 
 local KEPT = "cache/hulls-kept.txt"

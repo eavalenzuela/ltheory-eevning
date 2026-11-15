@@ -114,7 +114,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 83
+Core.SAVE_VERSION = 84
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -414,6 +414,23 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- 83: a paint is the pilot's for good once it is made theirs
   -- (Assets/Paintwork), where one was used up by a painting before. What
   -- a ship of theirs is painted in, in a save from before, is theirs.
+  -- 84: the Vail's ships are the project owner's list of them
+  -- (Data/Factions), the second of the alien factions' to be. The hulls
+  -- they had are gone, and each is the hull of their line that stands
+  -- where it stood. (They build no hauler, siege dreadnought or
+  -- supercarrier now: a hauler of theirs is their freighter, which is
+  -- what carries for them; the others their dreadnought and their
+  -- carrier.)
+  [83] = function(state: any)
+    rehulled(state, {
+      ["frigate.thorn"] = "frigate.prostration", ["destroyer.barb"] = "destroyer.exaltation", ["cruiser.pike"] = "cruiser.enervation",
+      ["battleship.harpoon"] = "battleship.penance", ["industrial.drover"] = "freighter.indulgence",
+      ["attackbattlecruiser.spur"] = "attackbattlecruiser.intervention", ["battlecruiser.trident"] = "battlecruiser.innocence",
+      ["carrier.quiver"] = "carrier.accordance", ["supercarrier.arsenal"] = "carrier.accordance",
+      ["dreadnought.partisan"] = "dreadnought.awe", ["siegedreadnought.ballista"] = "dreadnought.awe",
+      ["capitalindustrial.herder"] = "capitalindustrial.embrace",
+    })
+  end,
   [82] = function(state: any)
     state.paints = state.paints or {}
     for _, id in state.shipIds do

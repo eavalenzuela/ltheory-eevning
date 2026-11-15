@@ -4,7 +4,9 @@
 # plates the generator grows: 3, 4, 5, 5, 6, 7, 8, 9, and from size 4 up
 # a broad deck under each); and after those, in any order, if they are
 # wanted: a style, if it is not to be in the generator's own (stout,
-# broad, tall, spear, slab, soft), and the word painted.
+# broad, tall, spear, slab, soft, triangular, asymmetrical,
+# triangular_v2; and any of them with +asym after it, as stout+asym,
+# has its two sides unalike), and the word painted.
 #
 # A hull named here is drawn as that seed makes it, in place of the
 # design drawn for it in Game/View/Hull.luau: the generator's own mesh
@@ -35,7 +37,7 @@
 #   cruiser              150 m   cruiser.ouyou
 #   barge                160 m   barge.pulley
 #   industrial           180 m   industrial.porter
-#   attackbattlecruiser  200 m   (nobody's but the pirates' and the aliens')
+#   attackbattlecruiser  200 m   attackbattlecruiser.intervention
 #   battlecruiser        300 m   battlecruiser.extremis
 #   battleship           400 m   battleship.teardrop
 #   freighter            650 m   freighter.hiven
@@ -150,3 +152,26 @@ industrial.rikn            10285  8  soft
 freighter.jojk             10608  4  soft
 capitalindustrial.zzna     34240  8  soft
 capitalindustrial.knuu     56129  5  soft
+
+# The Vail's ships (the owner's rework of them, 2026-11-15): every one
+# in the generator's triangular styles, some with their sides unalike. A
+# tech 2 hull is its own hull: the Aberration of the Adoration's seed
+# and the Archangel of the Embrace's, each grown bigger and (the
+# Archangel) lopsided; the Interstition of a seed of its own.
+frigate.prostration                54567  4  triangular
+frigate.undulation                 54710  4  triangular_v2
+destroyer.exaltation                4507  5  triangular_v2
+destroyer.adoration                54807  4  triangular+asym
+destroyer.aberration               54807  8  triangular+asym
+cruiser.enervation                 61797  4  triangular_v2
+cruiser.interstition               83868  5  triangular_v2
+attackbattlecruiser.intervention   54697  5  triangular_v2
+battlecruiser.innocence            61161  4  triangular_v2
+battleship.penance                 95937  8  triangular_v2+asym
+battleship.extravagance            54671  6  triangular_v2+asym
+carrier.accordance                 54690  6  triangular_v2
+dreadnought.awe                    71413  8  triangular_v2
+barge.panacea                      54634  4  triangular_v2
+freighter.indulgence               54633  4  triangular_v2+asym
+capitalindustrial.embrace          54903  4  triangular_v2
+capitalindustrial.archangel        54903  8  triangular_v2+asym

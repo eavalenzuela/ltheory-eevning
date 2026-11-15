@@ -3053,6 +3053,10 @@ type Design = {
 }
 
 local designs: { [string]: Design } = {
+  -- (The five hulls of the Vail's that were modelled from the owner's
+  -- drawings. Their ships are the owner's list of generator seeds since
+  -- 2026-11-15, and none of these is a hull of the game now: the
+  -- drawings of them are kept, as the Talmar's are further down.)
   -- The Vail's frigate, modelled from the owner's first drawing
   -- (script/modelgen): a gun on the back and one beneath where the hull
   -- is highest and flattest, and a pair abreast on the broad of it aft.
@@ -3504,12 +3508,14 @@ do
   local ok, text = pcall(File_Read, Hull.SEEDS)
   if ok and type(text) == "string" then
     for line in string.gmatch(text, "[^\r\n]+") do
-      local name, seed, size, words = string.match(line, "^%s*([%a%d%._]+)%s+(%d+)%s+(%d+)%s*([%a%s]-)%s*$")
+      local name, seed, size, words = string.match(line, "^%s*([%a%d%._]+)%s+(%d+)%s+(%d+)%s*([%w%s_%+]-)%s*$")
       if name and string.sub(name, 1, 1) ~= "#" then
-        -- (after the size, in any order: a style, and "painted")
+        -- (after the size, in any order: a style, and "painted". A
+        -- style's name may have a figure and a line in it, and
+        -- Hull.ASYM after it: triangular_v2+asym.)
         local style: string? = nil
         local painted = false
-        for word in string.gmatch(words or "", "%a+") do
+        for word in string.gmatch(words or "", "[%w_%+]+") do
           if word == "painted" then
             painted = true
           else

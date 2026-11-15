@@ -796,6 +796,35 @@ suite:Case("a save from when the Nimia were the Skarn opens with them the Nimia:
   end
 end)
 
+suite:Case("a save with a hull the Vail had opens with the hull of theirs that stands where it stood", function(t)
+  local game = newGame()
+  local state = game.state
+  -- (name then, name now: hulls of classes they still build, and of the three they do not)
+  local WAS: { { string } } = { { "frigate.thorn", "frigate.prostration" }, { "battleship.harpoon", "battleship.penance" },
+    { "attackbattlecruiser.spur", "attackbattlecruiser.intervention" }, { "industrial.drover", "freighter.indulgence" },
+    { "siegedreadnought.ballista", "dreadnought.awe" }, { "supercarrier.arsenal", "carrier.accordance" } }
+  local ships: { number } = {}
+  for index, pair in WAS do
+    ships[index] = Space.NewShip(state, pair[2], `Theirs {index}`, "vail", 0).id
+  end
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 83
+  for index, pair in WAS do
+    file.state.ships[ships[index]].type = pair[1]
+  end
+  local old, oldLength = Codec.Encode(file)
+  local opened = Core.Load(old, oldLength)
+  for index, pair in WAS do
+    local ship = opened.state.ships[ships[index]]
+    t.eq({ ship.type, ship.owner } :: { any }, { pair[2], "vail" } :: { any })
+  end
+  t.eq(Core.Hash(opened), Core.Hash(game))
+  for _ = 1, 10 do
+    Core.Step(opened)
+  end
+end)
+
 suite:Case("a save with a hull the Kethri had opens with the hull of theirs that stands where it stood, and with nothing known of any colony ship lost", function(t)
   local game = newGame()
   local state = game.state

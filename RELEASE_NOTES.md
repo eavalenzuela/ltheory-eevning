@@ -6,6 +6,11 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## The Vail's ships
+
+- The Vail fly ships of their own now: seventeen hulls, broad flat wedges drawn to a point, some with one side not the other's twin. Frigates Prostration and Undulation, destroyers Exaltation, Adoration and Aberration, cruisers Enervation and Interstition, the attack battlecruiser Intervention, the battlecruiser Innocence, battleships Penance and Extravagance, the carrier Accordance, the dreadnought Awe, the mining barge Panacea, the freighter Indulgence, and the capital industrials Embrace and Archangel.
+- A save from before opens as it was: a Vail ship in it becomes the ship of the new line that stands where it stood.
+
 ## Anti-aliasing, made sure of
 
 - The dark specks some graphics cards drew with anti-aliasing on went away when its last step was reworked, but by luck: the way it looked textures up left a detail to the driver. It now says that detail itself, on every lookup, so the picture no longer depends on the card.
