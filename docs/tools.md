@@ -14,6 +14,8 @@ Everything here runs from the repository root after `python3 configure.py build`
 
 ## Is the tree healthy?
 
+`script/shaderlint` puts every shader together as the engine does and looks for what a strict graphics driver refuses and this machine's lets pass: names that some version of GLSL keeps for itself (`active`, `sample`, ...), and anything the Khronos reference compiler will not take as GLSL 1.20 (and, with `--modern`, as a current GLSL). Its header says how to get that compiler without root. `script/check` runs it.
+
 | Command | What it does |
 |---|---|
 | `script/check` | Type check, engine-free specs, and the launcher's exit codes, each paired with a planted failure that must be caught. Exits 0 only if every step did what it should. |

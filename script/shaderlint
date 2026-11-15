@@ -1,0 +1,183 @@
+#!/usr/bin/env python3
+"""script/shaderlint: every shader through a strict compiler, and a look
+for names that a graphics driver may refuse.
+
+    script/shaderlint            all of resource/shader/vertex and fragment
+    script/shaderlint NAME ...   only the shaders whose path has NAME in it
+    script/shaderlint --modern   also compile each as a current GLSL
+                                 (4.60, compatibility): what a driver with
+                                 one front end for every version may see
+    script/shaderlint --known    list what is found and let be, and why
+
+The shaders are written to GLSL 1.20 and are compiled by whatever driver
+the machine has. The drivers differ in what they let pass: the game's
+own machine (Mesa) takes things that another (AMD's on Windows, which
+refused `active` as a name) does not. So each shader is put together as
+the engine puts it together (src/liblt/LTE/Shader.cpp: `#version 120`,
+`#include` of resource/shader/common, `#output`) and then:
+
+  - its names are looked at: a word that any version of GLSL keeps for
+    itself (a keyword of a later version, or one set aside for later) is
+    not a name a shader here may use, whatever version it says it is;
+  - it is compiled by the Khronos reference compiler (glslangValidator),
+    which holds to the letter of the version, if that is installed: the
+    system's, or a copy unpacked from Ubuntu's package without root:
+
+      mkdir -p ~/.local/opt/glslang-debs && cd ~/.local/opt/glslang-debs
+      apt-get download glslang-tools
+      dpkg-deb -x glslang-tools_*.deb ~/.local/opt/glslang
+
+Exits 1 if anything was found.
+"""
+
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SHADERS = os.path.join(REPO, "resource", "shader")
+
+# Words that are not names: keywords of GLSL after 1.20, and the words
+# every version sets aside. (What 1.20 itself uses as a keyword is not
+# here: the compiler knows those.)
+KEPT = set("""
+active sample filter common partition resource smooth flat noperspective patch layout precise subroutine
+coherent volatile restrict readonly writeonly shared buffer superp atomic_uint
+uint uvec2 uvec3 uvec4 double dvec2 dvec3 dvec4 dmat2 dmat3 dmat4
+switch case default lowp mediump highp precision
+asm class union enum typedef template this packed goto inline noinline public static extern external interface
+long short half fixed unsigned input output hvec2 hvec3 hvec4 fvec2 fvec3 fvec4
+sizeof cast namespace using
+isampler1D isampler2D isampler3D isamplerCube usampler1D usampler2D usampler3D usamplerCube
+sampler2DRect sampler3DRect sampler2DRectShadow sampler1DArray sampler2DArray samplerBuffer sampler2DMS
+image1D image2D image3D imageCube
+""".split())
+
+
+# What is found and is known, and why it is let be: a part of a file's
+# path, a part of what is said of it, and the reason.
+KNOWN = [
+    ("common/smaa.jsl", "line continuation", "SMAA's own header, as its authors wrote it: drivers take it, with a warning"),
+    ("common/smaa.jsl", "End of input in comment", "the same: its banner has lines that end in a backslash"),
+    ("common/field.jsl", "FIELDFN", "defined by whoever builds the shader (SDFMesh.cpp gives it in the header)"),
+    ("fragment/terrain.jsl", "", "not used by anything: an old shader, broken as it stands"),
+    ("fragment/material/mineral.jsl", "", "not used by anything: an old shader, broken as it stands"),
+    ("fragment/post/distancefog.jsl", "", "not used by anything: an old shader, broken as it stands"),
+    ("fragment/ui/rect.jsl", "", "not used by anything that runs: an old shader, broken as it stands"),
+]
+
+
+def read(path):
+    with open(path, encoding="utf-8", errors="replace") as f:
+        return f.read()
+
+
+def assemble(path, seen=None):
+    """The shader as the engine gives it to the driver, and for each of
+    its lines the file and line it came from."""
+    lines, origins = [], []
+    for number, line in enumerate(read(path).split("\n"), 1):
+        tokens = line[1:].split(" ") if line.startswith("#") else []
+        if tokens and tokens[0] == "include" and len(tokens) == 2:
+            inner, where = assemble(os.path.join(SHADERS, "common", tokens[1]))
+            lines += inner
+            origins += where
+        elif tokens and tokens[0] == "output" and len(tokens) == 4:
+            count = next((int(c) for c in "234" if c in tokens[2]), 1)
+            lines.append(f"#define {tokens[3]} gl_FragData[{tokens[1]}].{'xyzw'[:count]}")
+            origins.append((path, number))
+        else:
+            lines.append(line)
+            origins.append((path, number))
+    return lines, origins
+
+
+def uncommented(lines):
+    """The lines with what is in comments blanked out."""
+    text = "\n".join(lines)
+    text = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S)
+    text = re.sub(r"//[^\n]*", "", text)
+    return text.split("\n")
+
+
+def names(lines, origins):
+    found = []
+    for at, line in enumerate(uncommented(lines)):
+        if line.lstrip().startswith("#"):
+            # (a directive's own words are not names: '#extension', '#define' of one is looked at below)
+            line = re.sub(r"^\s*#\s*\w+", "", line)
+        for word in re.findall(r"[A-Za-z_]\w*", line):
+            if word in KEPT:
+                found.append((origins[at], f"'{word}' is a word GLSL keeps for itself: not a name"))
+    return found
+
+
+def compiler():
+    for name in ("glslangValidator", os.path.expanduser("~/.local/opt/glslang/usr/bin/glslangValidator")):
+        path = shutil.which(name) or (name if os.path.isfile(name) else None)
+        if path:
+            return path
+    return None
+
+
+def compiled(tool, stage, lines, origins, modern):
+    source = "\n".join(lines)
+    head = "#version 460 compatibility\n" if modern else "#version 120\n"
+    # (one line of prelude, so the compiler's line n is ours n - 1)
+    out = subprocess.run([tool, "--stdin", "-S", stage], input=head + source, capture_output=True, text=True)
+    found = []
+    for line in (out.stdout + out.stderr).split("\n"):
+        m = re.match(r"(ERROR|WARNING): (?:\d+|stdin):(\d+): (.*)", line)
+        if not m or "compilation terminated" in line or "compilation errors" in line:
+            continue
+        at = int(m.group(2)) - 2
+        where = origins[at] if 0 <= at < len(origins) else ("?", 0)
+        if m.group(1) == "ERROR":
+            found.append((where, ("as a current GLSL: " if modern else "") + m.group(3)))
+    return found
+
+
+def main():
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    modern = "--modern" in sys.argv
+    tool = compiler()
+    if tool is None:
+        print("shaderlint: no glslangValidator (see this script's header): names only")
+    problems, count = [], 0
+    for stage, folder in (("vert", "vertex"), ("frag", "fragment")):
+        for root, _, files in sorted(os.walk(os.path.join(SHADERS, folder))):
+            for name in sorted(files):
+                path = os.path.join(root, name)
+                if args and not any(a in path for a in args):
+                    continue
+                count += 1
+                lines, origins = assemble(path)
+                found = names(lines, origins)
+                if tool:
+                    found += compiled(tool, stage, lines, origins, False)
+                    if modern:
+                        found += compiled(tool, stage, lines, origins, True)
+                for where, what in found:
+                    problems.append((os.path.relpath(path, REPO), os.path.relpath(where[0], REPO), where[1], what))
+    seen, known = set(), 0
+    for shader, file, line, what in problems:
+        key = (file, line, what)
+        if key in seen:
+            continue
+        seen.add(key)
+        reason = next((why for part, said, why in KNOWN if part in file and said in what), None)
+        if reason:
+            known += 1
+            if "--known" in sys.argv:
+                print(f"{file}:{line}: {what}   (known: {reason})")
+        else:
+            print(f"{file}:{line}: {what}   (in {shader})")
+    found = len(seen) - known
+    print(f"shaderlint: {count} shaders, {found} thing(s) found" + (f", {known} known and let be (--known lists them)" if known else ""))
+    return 1 if found else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -11,13 +11,9 @@ VERT_IN vec3 vertex_normal;
 VERT_IN vec2 vertex_uv;
 VERT_IN vec3 vertex_color;
 
-#define VS_PROLOGUE                                                            \
-  vec4 vp = vec4(vertex_position, 1.0);                                        \
-  vec4 vn = vec4(vertex_normal, 0.0);                                          \
-  uv = vertex_uv;                                                              \
-  vec4 worldPos = WORLD * vp;                                                  \
-  float u = vertex_uv.x;                                                       \
-  float v = vertex_uv.y;
+/* (on one line: GLSL 1.20 has no carrying a line on to the next, and a
+   driver that holds to that says so, or refuses) */
+#define VS_PROLOGUE vec4 vp = vec4(vertex_position, 1.0); vec4 vn = vec4(vertex_normal, 0.0); uv = vertex_uv; vec4 worldPos = WORLD * vp; float u = vertex_uv.x; float v = vertex_uv.y;
 
 VERT_OUT float linearDepth;
 VERT_OUT vec2 uv;

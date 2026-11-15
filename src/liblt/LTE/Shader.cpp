@@ -17,7 +17,9 @@
 #include "V4.h"
 #include "VectorMap.h"
 
+#include <set>
 #include <sstream>
+#include <string>
 #include <iostream>
 
 const String kVersionDirective = "#version 120\n";
@@ -118,11 +120,22 @@ namespace {
       int compileStatus = GL_GetShaderI(id, GL_ShaderProperty::CompileStatus);
 
       if (compileStatus == 0) {
+        /* What the driver's compiler says, first: it is what is wanted.
+           Then the shader as it was given, once for each that fails (one
+           that fails is asked for again and again, and is a thousand
+           lines). And on with the game: nobody is waited for at a
+           keyboard that a game with no console does not have, and the
+           next shader that fails says so in the same run. */
         Log_Error("Failed to compile shader.");
-        PrintSource();
         Log_Message("Compiler Log:");
         Log_Message(GetLog());
-        getchar();
+        static std::set<std::string> shown;
+        if (shown.insert(std::string(source.c_str())).second) {
+          Log_Message("The shader, as it was given to the compiler:");
+          PrintSource();
+        }
+        else
+          Log_Message("(the shader is as it was printed the first time it failed)");
         return false;
       }
       return true;

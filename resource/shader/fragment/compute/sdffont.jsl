@@ -15,8 +15,8 @@ void main() {
   for (float y = -radius; y <= radius; y += 1.0) {
     for (float x = -radius; x <= radius; x += 1.0) {
       vec2 offset = vec2(x, y);
-      float sample = getDistance(texture2D(bitmap, uv + offset / frame).x);
-      d = min(d, length(offset) + sample);
+      float near = getDistance(texture2D(bitmap, uv + offset / frame).x);
+      d = min(d, length(offset) + near);
     }
   }
 

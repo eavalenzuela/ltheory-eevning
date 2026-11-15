@@ -58,11 +58,11 @@ void main() {
   /* Spots: an umbra inside a penumbra, in belts either side of the
      equator, and bright ground round them. */
   float belt = smoothstep(0.85, 0.45, abs(dir.y)) * smoothstep(0.02, 0.12, abs(dir.y));
-  float active = wn_fbm(dir * 3.2 + s + 20.0, 5, 0.6) + 0.04 * wn_fbm(dir * 30.0 + s, 3, 0.6);
+  float activity = wn_fbm(dir * 3.2 + s + 20.0, 5, 0.6) + 0.04 * wn_fbm(dir * 30.0 + s, 3, 0.6);
   float limit = mix(0.50, 0.16, spots);
-  float penumbra = coarse * belt * smoothstep(limit, limit + 0.035, active);
-  float umbra = coarse * belt * smoothstep(limit + 0.05, limit + 0.085, active);
-  float bright = coarse * belt * smoothstep(limit - 0.16, limit - 0.02, active) * (1.0 - penumbra);
+  float penumbra = coarse * belt * smoothstep(limit, limit + 0.035, activity);
+  float umbra = coarse * belt * smoothstep(limit + 0.05, limit + 0.085, activity);
+  float bright = coarse * belt * smoothstep(limit - 0.16, limit - 0.02, activity) * (1.0 - penumbra);
 
   float light = 1.0 + fine * 0.30 * (cell - 0.55) + coarse * 0.20 * mottle + 0.22 * bright;
   light *= 1.0 - 0.50 * penumbra - 0.35 * umbra;

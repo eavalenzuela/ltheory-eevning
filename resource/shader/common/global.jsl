@@ -1,4 +1,8 @@
 #extension GL_EXT_gpu_shader4 : enable
+/* (a fragment shader's texture lookups at a level it names, texture2DLod
+   and textureCubeLod, are this extension's in GLSL 1.20: a driver that
+   holds to the letter wants it asked for) */
+#extension GL_ARB_shader_texture_lod : enable
 
 #define V2T vec2
 #define V3T vec3

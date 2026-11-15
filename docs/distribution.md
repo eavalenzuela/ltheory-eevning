@@ -50,6 +50,16 @@ How the window opens is a setting (the options' Window; `window=` in `save/setti
 
 The first time: the folder made on the NAS, the service added to its repository and started (`make ltheory`), then `script/publish`. After that a publish only syncs files.
 
+## What a real Windows machine showed
+
+The first release was checked under Wine, which draws with this machine's own driver. On the owner's Windows machine (an AMD driver) the star's shader was refused: it used `active` as a name, which later versions of GLSL keep for themselves, and that driver holds a GLSL 1.20 shader to it. Wine could not have shown it. Since then:
+
+- `script/shaderlint` checks every shader for such names and compiles each with the Khronos reference compiler, strictly as GLSL 1.20 and as a current GLSL. What it found and is mended: `active` and `sample` used as names (the star, the lighting every lit thing uses, the font and irradiance bakes), a texture lookup that wants an extension asked for, macros carried over several lines, a stray semicolon and a missing one.
+- A shader that fails no longer stops the game to wait for a key: it says what the driver's compiler said, prints the shader once, and goes on, so that one run shows every shader that fails.
+- The Windows game asks for the screen's own pixels (a guess at the next thing: with Windows' text scaled to 125%, a program that does not ask is told the screen is smaller than it is).
+
+It is still not known to run on that machine: the reference compiler is not that driver.
+
 ## The icon, the log and the notes
 
 - `script/icon` draws the game's icon (a stand-in mark until the owner has one of their own: `script/icon PICTURE.png` makes the files from a picture) and writes `resource/icon/limitless-space.png` and `.ico`, both committed. The Windows programs have it compiled in (the game by CMake, the launcher by its `build.rs`), the game's window sets it as it opens, and the Linux desktop's entry points at the install's copy.

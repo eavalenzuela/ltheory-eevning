@@ -17,6 +17,11 @@
 #               rejected by the type checker
 #   specs       bin/ltcore Tool/specs: the engine-free test suites
 #   specs-fail  a planted failing suite must make the runner exit non-zero
+#   shaders     script/shaderlint: every shader as the engine puts it
+#               together, looked at for names GLSL keeps for itself and
+#               compiled by the Khronos reference compiler if that is
+#               there (a driver that holds to the letter refuses what
+#               this machine's lets pass)
 #   sounds      script/soundgen --check: every sound a script names is
 #               there (the engine plays silence for a missing one and says
 #               nothing), and the list of made sounds matches what is made
@@ -297,6 +302,7 @@ rm -f "$planted"
 step specs 0 bin/ltcore Tool/specs
 step specs-fail 1 bin/ltcore Tool/specs --file Tool/selftest/failing.planted
 step sounds 0 script/soundgen --check
+step shaders 0 script/shaderlint --modern
 
 if [ "$fast" -eq 0 ]; then
   step launch-pass 0 timeout 120 bin/launch selftest/pass
