@@ -1,0 +1,57 @@
+# A station's field, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/field.txt
+#
+# Every station is a tower with a field round it, and nothing is locked
+# or shot across the field (Core/Tactical/Fields). The station's
+# batteries stand outside it, on the overview as things to shoot at. The
+# pilot leaves the station, which puts them outside, and approaches it,
+# which takes them in to the tower: they are told so. A pirate comes: it
+# cannot be locked from in there, and it cannot come in. The pilot flies
+# out to one of the batteries, is told so, and locks the pirate, which
+# the batteries see to.
+#
+# covers: Core/Tactical/Fields Core/Tactical/Batteries Core/Data/Structures Game/View/Starbase
+
+wait 2
+lua GameDebug.Sound(true, 0)
+until GameDebug.Press('UNDOCK') and GameDebug.InSpace()
+lua assert(GameDebug.Order('Stop'))
+frames 120
+
+# The batteries stand in space, and the pilot is outside the field.
+lua assert(GameDebug.Posts() >= 2, 'the station has no batteries standing outside it')
+lua assert(select(2, GameDebug.Posts()) == 0, 'and none of them should be down')
+lua assert(GameDebug.Select('Gun Battery'), 'a battery should be on the overview')
+lua assert(GameDebug.Field() == '', 'a ship that has just left a station is outside its field')
+
+# An approach to the station goes in to its tower.
+lua assert(GameDebug.Order('Approach', 'home', 0), 'the approach was refused')
+lua GameDebug.TimeScale(4)
+patience 90
+until GameDebug.Field() ~= ''
+lua GameDebug.TimeScale(1)
+frames 5
+lua assert(string.find(GameDebug.Said(), 'Inside the station', 1, true), 'the pilot was not told they were inside the field, but ' .. GameDebug.Said())
+
+# A pirate, outside: not to be locked from in here.
+lua assert(GameDebug.Pirate('raider', 9000, 0.5), 'no pirate')
+frames 30
+lua assert(not GameDebug.Lock('Pirate Raider'), 'a pirate outside the field was locked from inside it')
+lua assert(string.find(GameDebug.Said(), 'field is between you', 1, true), 'and the pilot should be told why, not ' .. GameDebug.Said())
+lua _G.shield = GameDebug.Condition()
+
+# Out to a battery, which is outside: the pilot is told, and the pirate can be locked.
+lua assert(GameDebug.Order('Approach', 'Gun Battery', 300), 'no battery to fly to')
+lua GameDebug.TimeScale(4)
+until GameDebug.Field() == ''
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Condition() >= _G.shield, 'something reached the pilot through the field')
+# (the batteries may have dealt with it by now: then there is nothing left to lock, which is as good)
+until GameDebug.Lock('Pirate Raider') or GameDebug.Pirates() == 0
+patience 180
+until GameDebug.Pirates() == 0
+lua assert(GameDebug.Battery() > 0, 'the batteries did not fire on the pirate')
+
+echo field scenario passed
+quit

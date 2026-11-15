@@ -479,13 +479,23 @@ for _, works in {
   { id = "works.depot", name = "Depot", radius = 150, shield = 700, armor = 1800, hull = 2200, signature = 600, launchers = 0, bulk = 4 },
   { id = "works.battery", name = "Battery", radius = 60, shield = 350, armor = 500, hull = 600, signature = 180, launchers = 3, bulk = 1 },
   { id = "works.redoubt", name = "Redoubt", radius = 110, shield = 1000, armor = 1800, hull = 1800, signature = 420, launchers = 4, bulk = 3 },
-} do
+  -- A station's batteries (Tactical/Batteries): they stand outside its
+  -- field, where they are shot at as anything is. Each takes about as
+  -- much destroying as a cruiser of the pirates' (mine: a pack has to
+  -- mean it, and a lone frigate is a long time about it).
+  { id = "works.battery.gun", name = "Gun Battery", radius = 60, shield = 1500, armor = 2500, hull = 2500, signature = 300, launchers = 0,
+    turrets = 3, bulk = 2 },
+  { id = "works.battery.missile", name = "Missile Battery", radius = 60, shield = 1500, armor = 2500, hull = 2500, signature = 300,
+    launchers = 3, bulk = 2 },
+} :: { { id: string, name: string, radius: number, shield: number, armor: number, hull: number, signature: number, launchers: number,
+  turrets: number?, bulk: number } } do
+  local turrets = works.turrets or 0
   table.insert(types, {
     id = works.id, name = works.name, class = "works", lineage = "", basePrice = 250000 * works.bulk, volume = 100000 * works.bulk,
     mass = 40000000 * works.bulk, inertia = 1, maxVelocity = 0, warpSpeed = 1, radius = works.radius,
     shield = works.shield, armor = works.armor, hull = works.hull, shieldRecharge = 900,
     shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = works.signature,
-    cpu = 600, powergrid = 2000, highs = works.launchers, mids = 2, lows = 3, turrets = 0, launchers = works.launchers,
+    cpu = 600, powergrid = 2000, highs = works.launchers + turrets, mids = 2, lows = 3, turrets = turrets, launchers = works.launchers,
     capacitor = 2500, capacitorRecharge = 240,
     scanResolution = 320, lockRange = 60000, maxTargets = 3, cargo = 600 * works.bulk,
     restricted = true,

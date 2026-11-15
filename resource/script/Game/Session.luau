@@ -253,6 +253,12 @@ function Session.Notice(session: Session, event: Space.Event)
     end
   elseif kind == "BatteryFired" and event.to == mine then
     Session.Say(session, "The station's batteries are firing on you")
+  elseif kind == "FieldEntered" then
+    Session.Say(session, "Inside the station's field: nothing outside it can lock you, nor you anything outside")
+  elseif kind == "FieldLeft" then
+    Session.Say(session, "Out of the station's field")
+  elseif kind == "BatteryLost" and event.own then
+    Session.Say(session, "A battery of your tower has been destroyed: it will be built again")
   elseif kind == "RigDestroyed" then
     Session.Say(session, `{Types.Info(event.type).name} taken out: it is destroyed`)
   elseif kind == "Salvaged" and event.ball == mine then

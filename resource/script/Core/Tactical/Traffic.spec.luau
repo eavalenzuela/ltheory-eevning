@@ -63,10 +63,20 @@ local function move(game: Core.Game, system: number)
   Space.AssignGrid(state, ball)
 end
 
+-- How many ships there are, not counting the batteries of the station
+-- the pilot is at, which stand in space as ships do (Tactical/Batteries).
+local function shipsOf(state: State.State): number
+  local count = #state.shipIds
+  for _, id in state.batteries.balls do
+    count -= if id ~= 0 and state.ships[id] then 1 else 0
+  end
+  return count
+end
+
 suite:Case("a game with no traffic has none, and a secure system fills up to what it should have and no more", function(t)
   local quiet = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   steps(quiet, 600)
-  t.eq({ #quiet.state.trafficIds, #quiet.state.shipIds }, { 0, 1 })
+  t.eq({ #quiet.state.trafficIds, shipsOf(quiet.state) }, { 0, 1 })
 
   local game = busy()
   local state = game.state
@@ -100,7 +110,7 @@ suite:Case("a game with no traffic has none, and a secure system fills up to wha
     end
   end
   -- Nothing but the traffic and the pilot's own, and nothing of a ship that has gone.
-  t.eq(#state.shipIds, 1 + #state.trafficIds)
+  t.eq(shipsOf(state), 1 + #state.trafficIds)
   for _, id in state.itemIds do
     local item = state.items[id]
     t.ok(item.holder == state.player.home or state.ships[item.holder] ~= nil, `an item is held by {item.holder}, which is gone`)
@@ -134,7 +144,7 @@ suite:Case("haulers come in by a gate to dock, and go out from a station to a ga
   t.ok(docked >= 3, `only {docked} haulers docked in fifty minutes`)
   t.ok(jumped >= 3, `only {jumped} haulers left by a gate in fifty minutes`)
   -- (the pilot's own, and no more than the haulers, patrols and miners a secure system has)
-  t.ok(#state.shipIds <= 1 + Traffic.HAULERS.secure + Traffic.PATROLS.secure + Traffic.MINERS.secure)
+  t.ok(shipsOf(state) <= 1 + Traffic.HAULERS.secure + Traffic.PATROLS.secure + Traffic.MINERS.secure)
 end)
 
 suite:Case("where order is kept a trader is now and then a freighter, with a great deal of room aboard; nobody flies one where it is not", function(t)

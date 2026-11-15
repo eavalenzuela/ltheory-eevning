@@ -1070,14 +1070,21 @@ end
 -- (Describe/System), and 'seed' its seed. The field is the station's
 -- radius; the tower stands in the middle of it; its modules stand round
 -- it inside the field, the big ones nearer, on several levels and clear
--- of each other; its batteries stand near the edge, high and low.
+-- of each other; its batteries stand outside it, high and low.
 --
 -- 'given' is what the station is made of, if the game has said
 -- (Core.Query.Station): its tower then says whose it is. Without it,
 -- it is what a station of that kind and size would be that is nobody's
 -- starting place. 'dark' is a tower with no fuel: it has no field.
+--
+-- Its batteries stand outside the field (Core/Tactical/Fields: nothing
+-- fires across it), where the game says (Structures.Post). In the game
+-- they are things in space as ships are, there to be shot at, and are
+-- drawn as those (Core/Tactical/Batteries): 'bare' leaves them out of
+-- what is laid out here, and 'down' are those of them that have been
+-- destroyed and not built again, by their place in the station's order.
 function Starbase.Layout(variety: string, radius: number, seed: number, faction: string?, given: Structures.Makeup?,
-  dark: boolean?): Layout
+  dark: boolean?, bare: boolean?, down: { number }?): Layout
   local makeup = given or Structures.Makeup(variety, radius, faction or "vessari")
   local class = makeup.ship
   if class then
@@ -1101,6 +1108,7 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
   -- angle, on three levels, batteries farthest out.
   local start = dice(seed) * 2 * math.pi
   local arrays, batteries = 0, 0
+  local posts: { Part } = {}
   for _, id in makeup.modules do
     local module = Structures.moduleById[id]
     local model = Starbase.Module(id)
@@ -1108,9 +1116,19 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
     local angle, out, height
     if battery then
       batteries += 1
-      angle = start + 1.1 + batteries * 2.399963
-      out = radius * 0.80
-      height = radius * (if batteries % 2 == 0 then 0.34 else -0.30)
+      if bare or (down and table.find(down, batteries)) then
+        continue
+      end
+      -- (outside the field, where the game stands it)
+      local x, y, z = Structures.Post(radius, seed, batteries)
+      local post = vector.create(x, y, z)
+      local away = vector.normalize(vector.create(x, 0, z))
+      table.insert(posts, {
+        id = id, model = model.model, at = post, look = away, scale = module.radius / model.radius, radius = module.radius,
+        arm = if id == "battery.missile" then "launcher.cruise" else GUNS[math.floor(dice(seed + batteries * 3.7) * #GUNS) + 1],
+        unit = BATTERY,
+      })
+      continue
     else
       arrays += 1
       angle = start + arrays * 2.399963
@@ -1124,10 +1142,6 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
       look = if id == "array.assembly" then vector.create(-flat.z, 0, flat.x) else flat,
       scale = module.radius / model.radius, radius = module.radius,
     }
-    if battery then
-      part.arm = if id == "battery.missile" then "launcher.cruise" else GUNS[math.floor(dice(seed + batteries * 3.7) * #GUNS) + 1]
-      part.unit = BATTERY
-    end
     table.insert(layout.modules, part)
   end
 
@@ -1157,6 +1171,10 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
         a.at *= (radius * 0.94 - a.radius) / far
       end
     end
+  end
+  -- (the batteries are where they are: outside all that)
+  for _, post in posts do
+    table.insert(layout.modules, post)
   end
   return layout
 end

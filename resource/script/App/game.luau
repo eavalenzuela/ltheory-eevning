@@ -2142,6 +2142,27 @@ function Debug.Battery(): number
   return scene.volleys
 end
 
+-- How many batteries of the station the pilot is at stand in space now
+-- (outside its field, where they can be shot at), and how many of its
+-- are down.
+function Debug.Posts(): (number, number)
+  local state = session.game.state
+  local standing = 0
+  for _, id in state.batteries.balls do
+    standing += if id ~= 0 and state.balls[id] then 1 else 0
+  end
+  local _, down = Core.Query.Batteries(session.game, state.batteries.station)
+  return standing, #down
+end
+
+-- The station whose field the pilot's ship is inside, by name: "" when
+-- it is inside none.
+function Debug.Field(): string
+  local id = Core.Query.Field(session.game)
+  local station = if id ~= 0 then Space.Object(session.game.state, id) else nil
+  return if station then station.name else ""
+end
+
 -- Whether the factions' patrols take the pilot for a criminal just now.
 function Debug.Marked(): boolean
   return session.game.state.tick < session.game.state.player.marked

@@ -349,6 +349,12 @@ suite:Case("some of a pack go for a drone rather than its owner, and a drone des
   t.eq((after[me.id] or 0) + (after[drone.id] or 0), 12)
   t.ok((after[drone.id] or 0) >= 1, "nobody went for the drone")
   t.ok((after[me.id] or 0) > (after[drone.id] or 0), `most of a pack should go for the ship: {after[me.id] or 0} did, and {after[drone.id] or 0} for the drone`)
+  -- (all of them on the drone now: what is asked next is what a drone
+  -- that is destroyed leaves, and not whether the few who chose it get
+  -- it before the rest get its owner, which is how the dice fall)
+  for _, pirate in hunters do
+    state.pilots[pirate.id].prey = drone.id
+  end
   local wrecks = #state.wreckIds
   local gone = false
   t.ok(waitFor(game, 600, function()

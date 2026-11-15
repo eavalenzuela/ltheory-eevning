@@ -817,6 +817,14 @@ local function targetVelocity(state: State.State, ball: State.Ball): (number, nu
   local gain = 1 / (4 * ball.tau)
 
   if mode == "approach" then
+    -- (an approach to a station, right up to it, comes in to its tower:
+    -- through its field, which keeps out whoever it keeps out, and
+    -- inside which nothing outside can lock the ship or be locked from
+    -- it. Tactical/Fields. Docking is done from the field's edge on the
+    -- way, as it always was; and a colony ship is all hull.)
+    if ball.range == 0 and target.kind == "station" and Nomads.FleetOf(state.galaxy, target.id) == nil then
+      excess = distance - target.radius * Constants.TOWER_SHARE - ball.radius
+    end
     local speed = math.clamp(excess * gain, 0, top)
     return ux * speed, uy * speed, uz * speed
   elseif mode == "keep" then

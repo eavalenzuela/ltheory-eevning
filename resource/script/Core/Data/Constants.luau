@@ -30,6 +30,11 @@ Constants.JUMP_RANGE = 2500
 Constants.JUMP_ARRIVAL_DISTANCE = 12000
 -- A ship leaves a station this far from its surface, at top speed.
 Constants.UNDOCK_DISTANCE = 1500
+-- How much of a station's radius is its tower's own: the rest is the
+-- field round it (Tactical/Fields). A ship that approaches a station
+-- comes in to the tower. (The view draws the tower this size too:
+-- Game/View/Starbase.)
+Constants.TOWER_SHARE = 0.28
 
 -- Balls within this distance of a grid's anchor are on that grid.
 Constants.GRID_RADIUS = 1000000

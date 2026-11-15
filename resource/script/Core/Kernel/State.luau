@@ -666,6 +666,23 @@ export type Starbase = {
   reaction: string, reacted: number, composed: number, starved: boolean,
 }
 
+-- A station's batteries, where the pilot is (Tactical/Batteries): they
+-- stand outside its field as ships do, while the pilot is there.
+-- 'at' is the place last looked at (a station whose batteries do not
+-- change is not gone through again each tick), 'station' is whose
+-- stand now (0 for nobody's), 'kinds' what each is in
+-- the station's own order ("battery.gun", "battery.missile"), and
+-- 'balls' the ship that is each (0 for one that is down). 'down' is
+-- every battery anywhere that has been destroyed and not yet built
+-- again: whose, which of them, and the tick it is back.
+export type Batteries = {
+  at: number,
+  station: number,
+  kinds: { string },
+  balls: { number },
+  down: { { station: number, index: number, back: number } },
+}
+
 -- A tower of the pirates' own, holding a moon (Tactical/Keeps): 'id' is
 -- its place (a site), 'moon' the moon it holds, 'core' the ship that is
 -- the tower. 'sealed' is the tick it comes out of being sealed (0 when
@@ -765,7 +782,11 @@ export type State = {
   gridIds: { number },
   -- 'marked' is the tick until which the factions' patrols take the
   -- pilot for a criminal (Tactical/Traffic); 0 if they never have.
-  player: { ship: number, home: number, marked: number },
+  -- 'field' is the station whose field the pilot's ship is inside
+  -- (Tactical/Fields), while it is inside one.
+  player: { ship: number, home: number, marked: number, field: number? },
+  -- The batteries of the station the pilot is at (Tactical/Batteries).
+  batteries: Batteries,
   -- The other ships about (Tactical/Traffic), by ship id, and the tick
   -- at which somebody new is next looked for.
   traffic: { [number]: Traffic },

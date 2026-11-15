@@ -6,6 +6,14 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## A station's field is a wall
+
+- Nothing shoots across a station's field, in or out. Inside it nothing outside can lock you, and you can lock nothing outside: a missile already on its way stops at the field.
+- A station's batteries now stand outside its field, where they can shoot and be shot at. They are on the overview (Gun Battery, Missile Battery). One that is destroyed is rebuilt in two hours.
+- To go inside, approach the station (Approach, or Q with it selected): you fly in to the tower, and are told when you cross the field. Docking still works from the field's edge, as before.
+- Pirates cannot come in, and neither can you while the patrols have you marked: the field puts you out. Pirates who were after you go for the batteries, or circle the field firing on the tower, and give up after a few minutes.
+- Your own tower's field is up while it has fuel, and stays up when the tower seals itself. Raiders shoot at it from outside.
+
 ## A frigate of your own, and windows that move
 
 - A new pilot begins in a frigate of the people whose station they start at (at a Vessari one, an Akashi), cheaply fitted: one small gun, one light missile launcher and a plate of armour, with a slot left free, and the skills to fit all of it. The old Courier is no longer where anybody begins. (A game already begun keeps the ship it has.)

@@ -799,14 +799,20 @@ end
 -- A pilot's own starbase is not always what it was: its modules come
 -- and go, and its field with its fuel. What stands there is written
 -- down ('standing'), so that it is put up again when that changes.
+-- (And any station's batteries stand in space as things to shoot at
+-- while the pilot is on its grid, drawn as those, and are part of what
+-- is put up here when they are not: Core/Tactical/Batteries. Which of
+-- the two it is, and which of them are down, is written down too.)
 local function standing(game: Core.Game, id: number): string?
+  local posted, down = Core.Query.Batteries(game, id)
+  local parts = { if posted then "posted" else "laid", table.concat(down, ",") }
   local status = Core.Query.Starbase(game, id)
-  if status == nil then
-    return nil
-  end
-  local parts = { status.tower.id, if status.lit then "lit" else "dark" }
-  for _, module in status.modules do
-    table.insert(parts, module.type)
+  if status then
+    table.insert(parts, status.tower.id)
+    table.insert(parts, if status.field then "field" else "dark")
+    for _, module in status.modules do
+      table.insert(parts, module.type)
+    end
   end
   return table.concat(parts, " ")
 end
@@ -814,8 +820,11 @@ end
 local function makeStation(scene: Scene, game: Core.Game, object: SystemData.Object, at: vector, container: Object): Object
   local makeup = Core.Query.Station(game, object.id)
   local status = Core.Query.Starbase(game, object.id)
-  local dark = status ~= nil and not status.lit
-  local raised = Starbase.Raise(Starbase.Layout(object.variety, object.radius, object.seed, nil, makeup, dark), container, at, 1)
+  -- (a tower that has sealed itself keeps its field: Core/Tactical/Fields)
+  local dark = status ~= nil and not status.field
+  local posted, down = Core.Query.Batteries(game, object.id)
+  local raised = Starbase.Raise(Starbase.Layout(object.variety, object.radius, object.seed, nil, makeup, dark, posted, down),
+    container, at, 1)
   local tower = table.remove(raised, 1) :: Object
   tower:SetName(object.name)
   scene.works[object.id] = raised
@@ -1532,11 +1541,17 @@ function Scene.Sync(scene: Scene, session: Session.Session)
           event.outcome, event.flight or 0, struck(to), scene.time, if scene.screen[-event.item] then -event.item else nil)
       end
     elseif event.kind == "BatteryFired" then
-      -- (from the station's side of its field toward what it fires on:
-      -- which battery it was is not followed yet)
+      -- (from the battery that fired, where it stands outside the
+      -- field: Core/Tactical/Batteries. A colony ship's are aboard it,
+      -- and a gate's are the gate's: from that, then.)
       local to = state.balls[event.to]
       local station = objects[event.station % Constants.STRUCTURE_ID_SPAN]
-      if to and station and scene.screen[event.station] then
+      local from = state.balls[event.from]
+      if to and from and scene.screen[event.from] then
+        scene.volleys += 1
+        Effects.Fire(fx, if event.missile then "launcher.cruise" else "artillery.large", event.from, event.to, from.radius, to.radius,
+          "hit", 0, struck(to), scene.time, nil)
+      elseif to and station and scene.screen[event.station] then
         scene.volleys += 1
         Effects.Fire(fx, if event.missile then "launcher.cruise" else "artillery.large", event.station, event.to, station.radius * 0.35,
           to.radius, "hit", 0, struck(to), scene.time, nil)

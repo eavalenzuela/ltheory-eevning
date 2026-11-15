@@ -70,16 +70,37 @@ end
 -- Lock a ship and open fire with everything.
 local function attack(t: Test.Context, game: Core.Game, target: number)
   order(t, game, { kind = "LockTarget", actor = 0, target = target })
-  stepUntil(game, "LockCompleted", 40)
+  -- (until the pilot's own lock is made: somebody else's may be made first)
+  local locked = false
+  for _ = 1, 40 do
+    Core.Step(game)
+    for _, lock in me(game).vitals.locks do
+      locked = locked or (lock.target == target and lock.locked)
+    end
+    if locked then
+      break
+    end
+  end
+  t.ok(locked, "the lock was not made in forty seconds")
   for _, item in Items.Fitted(game.state, game.state.player.ship) do
     order(t, game, { kind = "ActivateModule", actor = 0, item = item.id, target = target })
   end
 end
 
--- A pirate scout at rest 'distance' metres from the player.
+-- A pirate scout at rest 'distance' metres from the player: on the far
+-- side of them from the station they are at, if they are at one (a
+-- pirate is kept out of a station's field, and nothing is locked across
+-- it: Tactical/Fields).
 local function scoutAt(game: Core.Game, distance: number): State.Ball
   local ball = me(game)
-  return Pirates.Spawn(game.state, Pirates.SCOUT, ball.system, ball.x + distance, ball.y, ball.z, ball.grid)
+  local ux, uy, uz = 1, 0, 0
+  local station = Space.Object(game.state, ball.grid)
+  local far = if station then Space.Distance(station :: any, ball :: any) else 0
+  if station and far > 0 then
+    ux, uy, uz = (ball.x - station.x) / far, (ball.y - station.y) / far, (ball.z - station.z) / far
+  end
+  return Pirates.Spawn(game.state, Pirates.SCOUT, ball.system, ball.x + ux * distance, ball.y + uy * distance, ball.z + uz * distance,
+    ball.grid)
 end
 
 suite:Case("killing a pirate leaves a wreck with its tag, and pays the bounty", function(t)
@@ -527,8 +548,9 @@ suite:Case("pirates ignore a capsule, and leave a place nobody is in", function(
     Core.Step(game)
   end
   t.eq(#game.state.pilotIds, 0)
+  -- (what else is about is the batteries of the station the capsule came home to)
   for _, id in game.state.shipIds do
-    t.eq(game.state.ships[id].owner, "player", `{count} pirates should have left`)
+    t.ok(game.state.ships[id].owner ~= "pirates", `{count} pirates should have left`)
   end
 end)
 

@@ -17,6 +17,7 @@
 
 local Constants = require("@lt/Core/Data/Constants")
 local Attributes = require("@lt/Core/Attributes")
+local Fields = require("@lt/Core/Tactical/Fields")
 local Gunnery = require("@lt/Core/Tactical/Gunnery")
 local Items = require("@lt/Core/Assets/Items")
 local Mining = require("@lt/Core/Tactical/Mining")
@@ -195,7 +196,10 @@ local function lockable(state: State.State, ball: State.Ball, target: number): (
   local other = state.balls[target]
   if other and other.grid ~= ball.grid then
     return false, "target is not on grid"
-  elseif Space.Gap(ball :: any, body) > ball.vitals.lockRange then
+  elseif Fields.Between(state, ball, body) then
+    -- (nothing is locked across a station's field, in or out: Tactical/Fields)
+    return false, Fields.REFUSED
+  elseif Fields.Gap(state, ball, body) > ball.vitals.lockRange then
     return false, "out of targeting range"
   elseif other and Space.Gap(ball :: any, body) > Vapour.Sight(state, ball, other) then
     -- (a ship in a cloud of gas is locked, and locks, only from close in: Tactical/Vapour)
@@ -459,7 +463,7 @@ local function turretChance(state: State.State, ball: State.Ball, item: State.It
   end
   -- (a charge may make the gun track better or worse: Data/Modules)
   return Gunnery.HitChance(angular, weapon.tracking * (charge.tracking or 1), signature(state, target),
-    Space.Gap(ball :: any, target), weapon.optimal * charge.rangeMultiplier, weapon.falloff)
+    Fields.Gap(state, ball, target), weapon.optimal * charge.rangeMultiplier, weapon.falloff)
 end
 
 -- The chance a fitted, loaded turret would hit a target now, or nil if
@@ -505,7 +509,9 @@ end
 local function fireMissile(state: State.State, ball: State.Ball, item: State.Item, weapon: Modules.Weapon,
   target: Space.Body, events: { Event })
   local charge = Modules.chargeById[item.charge]
-  local flight = Space.Distance(ball :: any, target) / charge.velocity
+  -- (as far as its target's surface is, and for a tower in its field that is the field: Tactical/Fields)
+  local flight = math.min(Space.Distance(ball :: any, target), Fields.Gap(state, ball, target) + ball.radius + target.radius)
+    / charge.velocity
   local outcome = "launched"
   -- (how long it flies: as its launcher throws it, a short-range one a
   -- third as far, and longer for a pilot who has learned Long Burn. And
@@ -809,7 +815,20 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
     else
       local target = state.balls[missile.to]
       local charge = Modules.chargeById[missile.charge]
-      if target then
+      -- (one whose target has gone into a station's field since it was
+      -- launched, or come out of the one it was launched in, comes to
+      -- nothing against the field: Tactical/Fields. With nobody left
+      -- where it came from, it is the target being inside that stops it.)
+      local from = state.balls[missile.from]
+      local stopped = false
+      if target and from then
+        stopped = Fields.Between(state, from, target :: any)
+      elseif target then
+        local field = Fields.Around(state, target)
+        local starbase = if field then state.starbases[field.id] else nil
+        stopped = field ~= nil and not (starbase ~= nil and starbase.core == target.id)
+      end
+      if target and not stopped then
         local speed = math.sqrt(target.vx ^ 2 + target.vy ^ 2 + target.vz ^ 2)
         -- (its blast as wide as it was made when it was fired)
         local factor = Gunnery.MissileFactor(target.vitals.signature, speed, charge.explosionRadius * (missile.blast or 1),

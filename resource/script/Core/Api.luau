@@ -15,6 +15,7 @@
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Assault = require("@lt/Core/Tactical/Assault")
 local Batteries = require("@lt/Core/Tactical/Batteries")
+local Fields = require("@lt/Core/Tactical/Fields")
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Codec = require("@lt/Core/Persist/Codec")
 local Combat = require("@lt/Core/Tactical/Combat")
@@ -108,7 +109,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 80
+Core.SAVE_VERSION = 81
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -398,6 +399,12 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- 80: a member's ship is in space where the pilot is, and can be lost
   -- (Tactical/Fellows). A member of a save from before has none out and
   -- has lost none; and one who mines has the frigate that is built for it.
+  -- 81: a station's batteries stand outside its field as things to
+  -- shoot at (Tactical/Batteries). A save from before has none standing
+  -- and none down: they are stood the next time the pilot is there.
+  [80] = function(state: any)
+    state.batteries = state.batteries or { at = 0, station = 0, kinds = {}, balls = {}, down = {} }
+  end,
   [79] = function(state: any)
     for _, id in state.membership.memberIds do
       local member = state.membership.members[id]
@@ -1084,6 +1091,7 @@ function Core.New(options: Options): Game
     starbases = {},
     starbaseIds = {},
     keeps = {}, keepIds = {}, keepsSeen = {},
+    batteries = { at = 0, station = 0, kinds = {}, balls = {}, down = {} },
     colonies = {},
     colonyIds = {},
     balls = {},
@@ -1277,8 +1285,12 @@ function Core.Step(game: Game)
   state.tick += 1
   local first = #game.events + 1
   Space.Integrate(state, game.events)
+  -- (whoever a station keeps out of its field is put out of it: Tactical/Fields)
+  Fields.Step(state, game.events)
   -- (a hull that mends by itself mends in a hangar too)
   Vitals.Mend(state)
+  -- (the batteries of the station the pilot is at stand outside its field: Tactical/Batteries)
+  Batteries.Stand(state, game.events)
   local killers = Combat.Step(state, game.events, Batteries.Fire(state, game.events))
   for _, id in table.clone(state.ballIds) do
     local by = killers[id]
@@ -2272,6 +2284,7 @@ export type StarbaseStatus = {
   anchored: boolean,      -- its anchoring is done
   wait: number,           -- seconds until it is, if it is not
   lit: boolean,           -- and it has fuel
+  field: boolean,         -- and its field is up (Tactical/Fields: lit, or sealed with fuel aboard)
   fuel: number,           -- blocks aboard
   hours: number,          -- that they will last
   powergrid: number,      -- drawn by its modules
@@ -2333,6 +2346,7 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
   return {
     tower = Structures.towerById[starbase.tower], mine = ship ~= nil and ship.owner == starbase.owner,
     anchored = Starbases.Anchored(state, starbase), wait = math.max(0, starbase.ready - state.tick) * Constants.TICK, lit = lit,
+    field = Fields.Of(state, id) ~= nil,
     fuel = starbase.fuel, hours = Starbases.Hours(starbase), powergrid = powergrid, cpu = cpu, modules = modules,
     moon = if moon then moon.name else "", drilling = drilling, reacting = reacting,
     reacts = if reacting.online and reacting.making then math.max(0, starbase.reacted + 3600 / Constants.TICK - state.tick) * Constants.TICK
@@ -3258,6 +3272,30 @@ end
 -- its modules give. Nil and none if 'id' is not a station.
 function Query.Station(game: Game, id: number): (Structures.Makeup?, { Structures.Service })
   return Stations.Makeup(game.state, id), Stations.Services(game.state, id)
+end
+
+-- A station's batteries (Tactical/Batteries): whether they stand in
+-- space now as things to shoot at (they do while the pilot is on the
+-- station's grid, and its field is up), and which of them, by their
+-- place in the station's own order, are down: destroyed and not built
+-- again yet.
+function Query.Batteries(game: Game, station: number): (boolean, { number })
+  local record = game.state.batteries
+  local lost: { number } = {}
+  for _, entry in record.down do
+    if entry.station == station and game.state.tick < entry.back then
+      table.insert(lost, entry.index)
+    end
+  end
+  table.sort(lost)
+  return record.station == station, lost
+end
+
+-- The station whose field the pilot's ship is inside (Tactical/Fields):
+-- nothing outside it can be locked from there, and nothing outside can
+-- lock the ship. 0 when it is inside none.
+function Query.Field(game: Game): number
+  return game.state.player.field or 0
 end
 
 -- A ship's ball, or nil if it is docked.

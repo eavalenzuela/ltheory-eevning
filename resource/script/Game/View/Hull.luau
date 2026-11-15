@@ -3269,6 +3269,33 @@ do
   end
   designs["works.battery"] = { faction = "unbound", draw = battery, patch = PATCHED, turrets = {}, launchers = guns,
     fit = { "launcher.light", "launcher.light", "launcher.light" } }
+  -- A station's batteries (Core/Tactical/Batteries), which stand
+  -- outside its field: the same drum in good repair, with its whole
+  -- belt and no boom, guns on the decks of the one and launchers on
+  -- the other.
+  local function post(b: Builder)
+    block(b, PLATING, v(0, 0, 0), v(0.52, BATTERY_DECK, 0.52), nil, 0.08)
+    block(b, PLATING, v(0, 0, 0), v(0.52, BATTERY_DECK, 0.52), v(math.pi / 4, 0, 0), 0.08)
+    for index = 0, 7 do
+      local angle = index * math.pi / 4 + math.pi / 8
+      block(b, PLATING, v(0.60 * math.sin(angle), 0, 0.60 * math.cos(angle)), v(0.17, 0.13, 0.035), v(angle, 0, 0), 0.12)
+    end
+    for _, side in { -1, 1 } do
+      block(b, FRAME, v(0, side * (BATTERY_DECK + 0.015), 0), v(0.07, 0.02, 0.07), v(math.pi / 4, 0, 0), 0.2)
+      block(b, GLOW, v(0, side * (BATTERY_DECK + 0.04), 0), v(0.035, 0.008, 0.035), nil, 0.3)
+    end
+  end
+  local function mounts(): { Hardpoint }
+    local points: { Hardpoint } = {}
+    for _, at in BATTERY_GUNS do
+      table.insert(points, over(at + v(0, BATTERY_DECK, 0), at - v(0, BATTERY_DECK, 0)))
+    end
+    return points
+  end
+  designs["works.battery.gun"] = { faction = "civil", draw = post, turrets = mounts(), launchers = {},
+    fit = { "autocannon.small", "autocannon.small", "autocannon.small" } }
+  designs["works.battery.missile"] = { faction = "civil", draw = post, turrets = {}, launchers = mounts(),
+    fit = { "launcher.light", "launcher.light", "launcher.light" } }
   local heavy: { Hardpoint } = {}
   for index = 1, 4 do
     local at = bastionAt(index)

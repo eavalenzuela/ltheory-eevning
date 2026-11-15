@@ -57,6 +57,7 @@
 
 local Battles = require("@lt/Core/Tactical/Battles")
 local Combat = require("@lt/Core/Tactical/Combat")
+local Fields = require("@lt/Core/Tactical/Fields")
 local Attributes = require("@lt/Core/Attributes")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
@@ -584,8 +585,10 @@ local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
   local best: State.Ball?, least, mends = nil, math.huge, false
   local drone: State.Ball?, droneLeast = nil, math.huge
   local function consider(other: State.Ball?, small: boolean)
-    -- (what is cloaked is not there to be gone for)
-    if other == nil or other.system ~= ball.system or other.grid ~= ball.grid or Combat.Cloaked(state, other.id) then
+    -- (what is cloaked is not there to be gone for, nor what a station's
+    -- field stands in front of: Tactical/Fields)
+    if other == nil or other.system ~= ball.system or other.grid ~= ball.grid or Combat.Cloaked(state, other.id)
+      or Fields.Between(state, ball, other :: any) then
       return
     end
     if small then
@@ -627,6 +630,23 @@ local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
   if drone and (best == nil or Rng.Chance(Rng.For(state.historySeed, ball.id, 53), 1 / 3)) then
     return drone
   end
+  -- A station's batteries stand outside its field and fire on a pirate
+  -- (Tactical/Batteries, seen here by the state alone): one pirate in
+  -- three goes for the nearest of them, and any does with nobody else
+  -- to go for.
+  if state.ships[ball.id].owner == "pirates" and state.batteries.station == ball.grid
+    and (best == nil or Rng.Chance(Rng.For(state.historySeed, ball.id, 71), 1 / 3)) then
+    local gun: State.Ball?, near = nil, math.huge
+    for _, standing in state.batteries.balls do
+      local other = state.balls[standing]
+      if other and Space.Distance(other :: any, ball :: any) < near then
+        gun, near = other, Space.Distance(other :: any, ball :: any)
+      end
+    end
+    if gun then
+      return gun
+    end
+  end
   -- Pirates rob the trade (Strategic/Commerce: the haulers a pilot sees
   -- carry what the economy sends along the lanes). A pirate with nobody
   -- of the pilot's to go for goes for a hauler on its grid, the nearest;
@@ -637,7 +657,7 @@ local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
     for _, id in state.trafficIds do
       local record, other = state.traffic[id], state.balls[id]
       if (record.kind == "in" or record.kind == "out") and other and other.system == ball.system and other.grid == ball.grid
-        and not (other.warp and other.warp.stage == "warp") then
+        and not (other.warp and other.warp.stage == "warp") and not Fields.Between(state, ball, other :: any) then
         local far = Space.Distance(other :: any, ball :: any)
         if far < near then
           hauler, near = other, far
@@ -717,6 +737,34 @@ local function refuge(state: State.State, ball: State.Ball): number
   return best
 end
 
+-- The station on a pirate's grid whose field somebody it would go for
+-- is inside (the pilot, their hired pilots, the members of their
+-- corporation), with the pirate outside it: nil if there is none.
+local function sheltering(state: State.State, ball: State.Ball): System.Object?
+  local field = Fields.Of(state, ball.grid)
+  if field == nil or Fields.Within(field, ball :: any) then
+    return nil
+  end
+  local function inside(other: State.Ball?): boolean
+    return other ~= nil and other.system == ball.system and other.grid == ball.grid and Fields.Within(field, other :: any)
+      and Ships.byId[state.ships[other.id].type].class ~= "capsule"
+  end
+  if inside(state.balls[state.player.ship]) then
+    return field
+  end
+  for _, id in state.fleetIds do
+    if inside(state.balls[state.fleet[id].ship]) then
+      return field
+    end
+  end
+  for _, id in state.membership.memberIds do
+    if inside(state.balls[state.membership.members[id].ship]) then
+      return field
+    end
+  end
+  return nil
+end
+
 -- Each pirate decides what to do this tick.
 function Pirates.Think(state: State.State, events: { Event })
   local player = state.balls[state.player.ship]
@@ -739,7 +787,8 @@ function Pirates.Think(state: State.State, events: { Event })
 
     -- Prey: a ship of the pilot's side, if one is here and worth shooting.
     local prey: State.Ball? = state.balls[pilot.prey]
-    if prey == nil or prey.system ~= ball.system or prey.grid ~= ball.grid or Combat.Cloaked(state, prey.id) then
+    if prey == nil or prey.system ~= ball.system or prey.grid ~= ball.grid or Combat.Cloaked(state, prey.id)
+      or Fields.Between(state, ball, prey :: any) then
       prey = pickPrey(state, ball)
       pilot.prey = if prey then prey.id else 0
     elseif state.ships[prey.id] and state.ships[prey.id].owner == "player" and state.drones[prey.id] == nil
@@ -756,7 +805,10 @@ function Pirates.Think(state: State.State, events: { Event })
     -- Leave if nobody has been here for a while. (Those a job is to
     -- clear out of their camp stay in it: Tactical/Assault.)
     local kept = state.sites[pilot.home]
-    local company = prey ~= nil or (player ~= nil and player.system == ball.system and player.grid == ball.grid)
+    -- (a pilot inside a station's field is nobody to those it keeps
+    -- out: with nothing there they can shoot at, they go. Tactical/Fields)
+    local company = prey ~= nil
+      or (player ~= nil and player.system == ball.system and player.grid == ball.grid and not Fields.Between(state, ball, player :: any))
       or (kept ~= nil and (kept.kind == "mission" or kept.kind == "keep") and not kept.gone)
     pilot.alone = if company then 0 else pilot.alone + 1
     if pilot.alone > PATIENCE then
@@ -795,6 +847,35 @@ function Pirates.Think(state: State.State, events: { Event })
     end
 
     if prey == nil then
+      -- Somebody a pirate would go for has gone into the field of the
+      -- station here, where it cannot follow and cannot lock them: it
+      -- turns on the tower (the owner's ruling, 2026-11-14), circling
+      -- the field and firing on what it is hung on. Nobody's tower but
+      -- a pilot's own takes any harm from it (that one is gone for as
+      -- 'ward' says, above), so it is a show of temper: with nothing
+      -- else there to shoot at, it has gone by the time its patience has.
+      local tower = if state.ships[id].owner == "pirates" then sheltering(state, ball) else nil
+      if tower then
+        if ball.maxVelocity > 0 and not (ball.mode == "orbit" and ball.target == tower.id and ball.range == pilot.range) then
+          give(state, { kind = "Orbit", actor = id, target = tower.id, range = pilot.range }, events)
+        end
+        local locked, targeted = false, false
+        for _, lock in ball.vitals.locks do
+          if lock.target == tower.id then
+            targeted, locked = true, lock.locked
+          end
+        end
+        if not targeted then
+          give(state, { kind = "LockTarget", actor = id, target = tower.id }, events)
+        elseif locked then
+          for _, item in Items.Fitted(state, id) do
+            if Modules.byId[item.type].weapon then
+              give(state, { kind = "ActivateModule", actor = id, item = item.id, target = tower.id }, events)
+            end
+          end
+        end
+        continue
+      end
       if ball.mode ~= "stop" then
         give(state, { kind = "Stop", actor = id }, events)
       end
@@ -805,8 +886,17 @@ function Pirates.Think(state: State.State, events: { Event })
     -- vapour between them, whoever fights from far off comes in close:
     -- Tactical/Vapour)
     local range = if Vapour.Between(state, ball, prey) then math.min(pilot.range, Vapour.CLOSE) else pilot.range
-    if ball.maxVelocity > 0 and not (ball.mode == "orbit" and ball.target == prey.id and ball.range == range) then
-      give(state, { kind = "Orbit", actor = id, target = prey.id, range = range }, events)
+    -- (a pilot's tower stands in the middle of its field, which keeps a
+    -- pirate out: it is circled at the field, and shot at from there.
+    -- Tactical/Fields)
+    local circle = prey.id
+    local field = Fields.Of(state, ball.grid)
+    local stood = if field then state.starbases[field.id] else nil
+    if field and stood and stood.core == prey.id then
+      circle = field.id
+    end
+    if ball.maxVelocity > 0 and not (ball.mode == "orbit" and ball.target == circle and ball.range == range) then
+      give(state, { kind = "Orbit", actor = id, target = circle, range = range }, events)
     end
     local locked = false
     local targeted = false
@@ -840,7 +930,7 @@ function Pirates.Think(state: State.State, events: { Event })
         -- (burnt to get there, and let go once it is there. Not by
         -- those of a job's camp or a tower, who come on at their own
         -- speed: the jobs are measured against that, level by level.)
-        local far = Space.Distance(prey :: any, ball :: any)
+        local far = if circle ~= prey.id then Fields.Gap(state, ball, prey :: any) else Space.Distance(prey :: any, ball :: any)
         if defending then
           continue
         elseif far > range + Pirates.BURN and not on[item.id] then

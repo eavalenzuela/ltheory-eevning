@@ -253,6 +253,22 @@ function Structures.SizeFor(radius: number): number
   return if radius < 4000 then 1 elseif radius < 6000 then 2 else 3
 end
 
+-- How far beyond a station's field its batteries stand, m.
+Structures.POST_OUT = 750
+
+-- Where a battery of a station stands, from the station's middle: the
+-- 'index'th of them (1, 2, ...) of a station of this radius and seed.
+-- Outside the field (Tactical/Fields: nothing fires across it, so what
+-- fires for a station cannot be inside it), round it by turns of the
+-- golden angle, above and below by turns. The game stands them there
+-- (Tactical/Batteries) and the view draws them there (Game/View/Starbase).
+function Structures.Post(radius: number, seed: number, index: number): (number, number, number)
+  local turn = (seed % 6283) / 1000 + 1.1 + index * 2.399963
+  local lift = if index % 2 == 0 then 0.36 else -0.32
+  local out = radius + Structures.POST_OUT
+  return out * math.cos(lift) * math.cos(turn), out * math.sin(lift), out * math.cos(lift) * math.sin(turn)
+end
+
 -- What a station is made of. A tower ('tower', its type) and the
 -- modules anchored round it; or a colony ship ('ship', its class), and
 -- then 'modules' are what it has aboard, which give what they would
