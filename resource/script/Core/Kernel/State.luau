@@ -505,7 +505,20 @@ export type Wars = {
 -- and at what, the call they are answering (0: none), the days running
 -- their earnings have been thin, and what they have kept today.
 export type Member = { id: number, name: string, trade: string, people: string, hull: string, bears: number, wealth: number,
-  earned: number, paid: number, joined: number, system: number, doing: string, call: number, lean: number, day: number }
+  earned: number, paid: number, joined: number, system: number, doing: string, call: number, lean: number, day: number,
+  -- Their ship, where the pilot is to see it (Tactical/Fellows): the
+  -- ship (0: none is out), what it is at ("work", "out" on its way to
+  -- it, "home" on its way in, "front" at a siege's lines; and with no
+  -- ship "rest" in a station, "away" beyond a gate, or ""), the place
+  -- that is for, the tick it began, a count of ticks it has waited
+  -- there, and the tick before which they do not come out again.
+  ship: number, task: string, goal: number, since: number, wait: number, back: number,
+  -- What they have lost: the tick until which they are out of work,
+  -- finding another ship, and how many ships have gone.
+  refit: number, lost: number,
+  -- What a hauler's ship has aboard of the economy's, and the system it
+  -- is for (as a hauler of the traffic: Tactical/Traffic).
+  carries: { node: number, class: number, amount: number }? }
 -- Somebody who would join: who has applied (and waits until a tick), or
 -- is open to it at a station today.
 export type Applicant = { key: string, name: string, trade: string, people: string, hull: string, bears: number, until_: number }

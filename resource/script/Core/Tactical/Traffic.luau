@@ -114,20 +114,18 @@ local function hullOf(faction: string, class: string): string?
   return nil
 end
 
--- What a patrol ship of a faction is: a hull of its own of a class,
--- with its own kind of gun on every hardpoint, of the size the hull
--- carries (a frigate's and a destroyer's are small, a cruiser's medium,
--- a battleship's large).
-local function patrolKind(faction: Factions.Faction, class: string): Pirates.Kind?
-  local hull = hullOf(faction.id, class)
-  if hull == nil then
-    return nil
-  end
+-- A hull as a ship that fights, fitted as a people's patrols are: the
+-- kind of gun named (a people's own; anybody's, with none named) on
+-- every hardpoint, of the size the hull carries (a frigate's and a
+-- destroyer's are small, a cruiser's medium, a battleship's large), its
+-- launchers, and what keeps it alive. ('name': what it goes by.)
+function Traffic.Fitted(hull: string, weapon: string?, name: string): Pirates.Kind
+  local class = Ships.byId[hull].class
   -- (a battlecruiser carries a cruiser's guns: the owner's ladder)
   local size = if class == "battleship" or class == "carrier" then 3 elseif class == "cruiser" or class == "battlecruiser" then 2 else 1
   local fit: { { string } } = {}
   for _ = 1, 8 do
-    table.insert(fit, { `{GUNS[faction.weapon] or "autocannon"}.{SIZES[size]}` })
+    table.insert(fit, { `{GUNS[weapon or ""] or "autocannon"}.{SIZES[size]}` })
   end
   for _ = 1, 4 do
     table.insert(fit, { LAUNCHERS[size] })
@@ -138,7 +136,17 @@ local function patrolKind(faction: Factions.Faction, class: string): Pirates.Kin
   for _, module in FITTINGS[size] do
     table.insert(fit, { if mends and string.sub(module, 1, 7) == "shield." then "mend.lattice" else module })
   end
-  return { id = "patrol", hull = hull, name = `{faction.name} Patrol`, range = 2500 * size, bounty = 0, tags = 0, fit = fit }
+  return { id = "patrol", hull = hull, name = name, range = 2500 * size, bounty = 0, tags = 0, fit = fit }
+end
+
+-- What a patrol ship of a faction is: a hull of its own of a class,
+-- with its own kind of gun on every hardpoint.
+local function patrolKind(faction: Factions.Faction, class: string): Pirates.Kind?
+  local hull = hullOf(faction.id, class)
+  if hull == nil then
+    return nil
+  end
+  return Traffic.Fitted(hull, faction.weapon, `{faction.name} Patrol`)
 end
 
 -- Take a ship of the traffic out of the game: its ball, what it

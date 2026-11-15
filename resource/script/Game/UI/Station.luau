@@ -2529,9 +2529,10 @@ local function drawMembers(session: Session.Session, left: number, top: number)
     Im.Text(shorten(member.name, 22), left, line, 13, Im.TEXT)
     Im.Text(member.trade, left + 170, line, 13, Im.DIM)
     Im.Text(shorten(member.hull, 20), left + 236, line, 13, Im.DIM)
-    Im.Text(shorten(`{member.doing} in {member.system}` .. (if member.called then " (a call)" else ""), 34), left + 390, line, 13,
-      if member.doing == "idle" then Im.WARN else Im.TEXT)
-    Im.TextRight(`paid {Format.Whole(member.paid)}`, left + 760, line, 12, Im.DIM)
+    Im.Text(shorten(`{member.doing} in {member.system}` .. (if member.called then " (a call)" else ""), 30), left + 390, line, 13,
+      if member.doing == "idle" or member.doing == "refitting" then Im.WARN else Im.TEXT)
+    -- (and what they have lost, if they have: it is theirs to bear)
+    Im.TextRight(`paid {Format.Whole(member.paid)}` .. (if member.lost > 0 then `, {member.lost} lost` else ""), left + 760, line, 12, Im.DIM)
     if Im.Button("Expel", left + 770, line - 2, 56, 18, true, `Member:expel:{index}`) then
       Session.Do(session, { kind = "ExpelMember", actor = 0, target = member.id })
     end

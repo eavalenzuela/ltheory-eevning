@@ -416,7 +416,7 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   -- working in the system. Assets/Members)
   for _, id in state.membership.memberIds do
     local member = state.membership.members[id]
-    if member.trade == "fighter" and member.system == me.system then
+    if member.trade == "fighter" and member.system == me.system and state.tick >= member.refit then
       wait *= 1.5
     end
   end
@@ -562,12 +562,17 @@ local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
   -- the ships of the other force there: whichever has least left to
   -- lose. The pilot's side is nothing to it, unless they have fired on
   -- its side there: then one such ship in two goes for them instead.
+  -- (And a ship that fights for the pilot's side, a member of their
+  -- corporation in their own ship, goes for the pirates there too:
+  -- Tactical/Fellows.)
   local own = state.pilots[ball.id]
   if own and own.side then
     local foe: State.Ball?, has = nil, math.huge
     for _, id in state.pilotIds do
       local other, theirs = state.pilots[id], state.balls[id]
-      if other.side and other.side ~= own.side and theirs and theirs.system == ball.system and theirs.grid == ball.grid
+      local against = if other.side then other.side ~= own.side
+        else own.side == "player" and state.ships[id] ~= nil and state.ships[id].owner == "pirates"
+      if against and theirs and theirs.system == ball.system and theirs.grid == ball.grid
         and left(theirs) < has then
         foe, has = theirs, left(theirs)
       end
@@ -598,6 +603,14 @@ local function pickPrey(state: State.State, ball: State.Ball): State.Ball?
   consider(state.balls[state.player.ship], false)
   for _, id in state.fleetIds do
     consider(state.balls[state.fleet[id].ship], false)
+  end
+  -- (and, to a pirate, the corporation's members, each in their own
+  -- ship: Tactical/Fellows. Not to a patrol or the police, who are after
+  -- a pilot for what the pilot did: a member answers for themselves.)
+  if state.ships[ball.id].owner == "pirates" then
+    for _, id in state.membership.memberIds do
+      consider(state.balls[state.membership.members[id].ship], false)
+    end
   end
   for _, id in state.droneIds do
     if state.ships[id] and state.ships[id].owner == "player" then
@@ -649,7 +662,9 @@ function Pirates.Hunting(state: State.State, near: State.Ball): number
   for _, id in state.pilotIds do
     local other = state.balls[id]
     local prey = state.ships[state.pilots[id].prey]
-    if other and prey and (prey.owner == "player" or (rig ~= nil and prey.id == rig.id)) and other.system == near.system
+    -- (or after a member of the pilot's corporation: Tactical/Fellows)
+    if other and prey and (prey.owner == "player" or prey.owner == "member" or (rig ~= nil and prey.id == rig.id))
+      and other.system == near.system
       and other.grid == near.grid then
       local far = Space.Distance(other :: any, near :: any)
       if far < least then

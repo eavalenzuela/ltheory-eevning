@@ -374,6 +374,11 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{event.name} has joined the corporation, and is off to {session.game.state.galaxy.systems[event.system].name}`)
   elseif kind == "MemberLeft" then
     Session.Say(session, `{event.name} has left the corporation: {event.why}`)
+  elseif kind == "MemberLost" and event.hull ~= "" then
+    -- (one the pilot's own side destroyed says so by leaving: the line after this)
+    local where = session.game.state.galaxy.systems[event.system]
+    Session.Say(session, `{event.name} has lost their {Types.Info(event.was).name}{if where then ` in {where.name}` else ""}: `
+      .. (if event.hull == event.was then "they have the price of another" else `a {Types.Info(event.hull).name} is what they can afford`))
   elseif kind == "MemberUpgraded" then
     Session.Say(session, `{event.name} has bought a {Types.Info(event.hull).name} out of their own earnings`)
   elseif kind == "LevyPaid" then

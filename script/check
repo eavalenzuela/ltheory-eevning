@@ -111,6 +111,9 @@
 #   game-members  the corporation's members (test/scenario/
 #               members.txt): a pilot at the station asked to join, the
 #               tax set, an hour of their own work, a call posted
+#   game-fellows  the members as ships (test/scenario/fellows.txt): a
+#               miner at a belt, a hauler out by a gate, a fighter who
+#               comes to a pirate, and a ship lost that is its owner's
 #   game-home   home (test/scenario/home.txt): a berth taken aboard a
 #               Kethri colony ship, the ship and the capsule lost, and
 #               the pilot waking there
@@ -353,6 +356,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/claim.txt
   step game-members 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/members.txt
+  step game-fellows 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
+    --script test/scenario/fellows.txt
   step game-tackle 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/tackle.txt
   step game-salvage 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \

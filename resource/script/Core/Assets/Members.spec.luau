@@ -61,7 +61,8 @@ local function member(game: Core.Game, trade: string, bears: number?): State.Mem
   local state = game.state
   local hull = { miner = "frigate.courier", fighter = "frigate.akashi", hauler = "industrial.hauler", scout = "frigate.courier" }
   local one: State.Member = { id = State.NewId(state), name = "Test " .. trade, trade = trade, people = "vessari", hull = hull[trade],
-    bears = bears or 0.3, wealth = 0, earned = 0, paid = 0, joined = state.tick, system = 1, doing = "idle", call = 0, lean = 0, day = 0 }
+    bears = bears or 0.3, wealth = 0, earned = 0, paid = 0, joined = state.tick, system = 1, doing = "idle", call = 0, lean = 0, day = 0,
+    ship = 0, task = "", goal = 0, since = 0, wait = 0, back = 0, refit = 0, lost = 0 }
   state.membership.members[one.id] = one
   table.insert(state.membership.memberIds, one.id)
   return one

@@ -1,0 +1,81 @@
+# The corporation's members as ships, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/fellows.txt
+#
+# A corporation is founded, and three pilots join it (by a cheat, so
+# that they are of the trades the test is about): a miner, a hauler and
+# a fighter. Each has a ship of their own in the system, at their work.
+# The hauler goes out by a gate. The pilot goes to the belt the miner is
+# at, and the miner is there, one of the pilot's own. A pirate comes, as
+# one does where a pilot is: and the fighter comes from their post and
+# fights it. And a ship that is destroyed is its owner's loss: they are
+# out of work until they have another.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua GameDebug.Credits(900000)
+until GameDebug.Press('Wallet')
+until GameDebug.Tab() == 'Wallet'
+frames 3
+until GameDebug.Press('Wallet:corporation')
+frames 3
+lua GameDebug.Type('Corporation:name', 'Haven Holdings')
+frames 3
+until GameDebug.Press('Corporation:found')
+until GameDebug.Corporation() == 'Haven Holdings'
+
+# Three join.
+lua assert(GameDebug.Enlist('miner', 'Mara Quill'), 'the miner was not taken')
+until GameDebug.Members() == 1
+lua assert(GameDebug.Enlist('hauler', 'Tam Rask'), 'the hauler was not taken')
+until GameDebug.Members() == 2
+lua assert(GameDebug.Enlist('fighter', 'Ines Vale'), 'the fighter was not taken')
+until GameDebug.Members() == 3
+
+# Each has a ship out in the system the pilot is in, at their work.
+until GameDebug.Fellow(1) ~= 0 and GameDebug.Fellow(2) ~= 0 and GameDebug.Fellow(3) ~= 0
+lua assert(select(2, GameDebug.Fellow(1)) == 'work', 'the miner should be at their belt')
+lua assert(select(5, GameDebug.Fellow(1)) == 'frigate.prospector', 'a miner flies a mining frigate')
+lua assert(select(6, GameDebug.Fellow(3)) == 'on patrol', 'the fighter should be on patrol')
+lua _G.belt = select(3, GameDebug.Fellow(1))
+lua assert(_G.belt ~= '', 'the miner is at no belt')
+
+# The hauler comes and goes: before long it has gone out by a gate.
+lua GameDebug.TimeScale(16)
+until select(2, GameDebug.Fellow(2)) == 'away'
+lua assert(GameDebug.Fellow(2) == 0, 'a hauler beyond the gate has no ship here')
+lua GameDebug.TimeScale(1)
+
+# The pilot goes to the miner's belt: and the miner is there, one of their own.
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('WarpTo', _G.belt), 'warp to the belt was refused')
+until GameDebug.InWarp()
+lua GameDebug.TimeScale(4)
+until GameDebug.Idle()
+lua GameDebug.TimeScale(1)
+until GameDebug.Distance('Mara Quill') < 200000
+lua assert(GameDebug.Select('Mara Quill'), 'the miner is not on the overview')
+frames 5
+lua _G.doing = select(6, GameDebug.Fellow(1))
+lua assert(_G.doing == 'cutting rock' or _G.doing == 'going in', 'the miner should be at the rock, or running from whoever came: ' .. _G.doing)
+
+# A pirate comes, if one has not already (one does, where a pilot is). The fighter comes from their post.
+lua if GameDebug.Pirates() == 0 then assert(GameDebug.Pirate('raider', 20000), 'no pirate came') end
+lua GameDebug.TimeScale(4)
+until select(6, GameDebug.Fellow(3)) == 'fighting'
+lua assert(GameDebug.Distance('Ines Vale') < 200000, 'the fighter should have come to where the pirate is')
+until GameDebug.Pirates() == 0
+lua GameDebug.TimeScale(1)
+lua assert(select(4, GameDebug.Fellow(3)) == 0, 'the fighter should have come through it')
+
+# A ship that is destroyed is its owner's loss.
+until GameDebug.Fellow(3) ~= 0
+lua assert(GameDebug.Unship(3), 'the fighter had no ship to lose')
+until select(4, GameDebug.Fellow(3)) == 1
+lua assert(GameDebug.Fellow(3) == 0, 'one who has lost their ship has none out')
+lua assert(select(3, GameDebug.Member(3)) == 'refitting', 'and is finding another')
+until string.find(GameDebug.Said(), 'has lost their', 1, true) ~= nil
+
+echo fellows scenario passed
+quit

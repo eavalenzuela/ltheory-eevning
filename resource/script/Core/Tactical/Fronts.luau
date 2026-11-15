@@ -44,6 +44,7 @@
 
 local Constants = require("@lt/Core/Data/Constants")
 local Factions = require("@lt/Core/Data/Factions")
+local Fellows = require("@lt/Core/Tactical/Fellows")
 local Items = require("@lt/Core/Assets/Items")
 local Members = require("@lt/Core/Assets/Members")
 local Pirates = require("@lt/Core/Tactical/Pirates")
@@ -110,6 +111,11 @@ end
 
 -- Take a ship of a front away (it is not destroyed: nobody sees it go).
 local function dismiss(state: State.State, id: number, events: { Event })
+  -- (a member's own ship is theirs still: they are at their work again, Tactical/Fellows)
+  local member = Members.Of(state, id)
+  if member then
+    member.ship, member.task = 0, ""
+  end
   local ball = state.balls[id]
   if ball then
     Space.RemoveBall(state, ball)
@@ -141,17 +147,20 @@ end
 -- front's middle on the side 'sign' says, at a place along its line.
 -- Whether it could be (a faction that builds no such hull, and no
 -- frigate, has none).
--- ('people' and 'name': for a ship that is somebody's own and fights
--- for a side that builds none, a member of the pilot's corporation: the
--- hull is their people's, and it goes by their name.)
+-- ('member': for a ship that is somebody's own and fights for a side
+-- that builds none, a member of the pilot's corporation: it is their
+-- own hull, and goes by their name.)
 local function one(state: State.State, front: State.Front, place: any, side: string, attacking: boolean, class: string, worth: number,
-  sign: number, along: number, rng: Rng.Rng, events: { Event }, people: string?, name: string?): boolean
-  local kind = Traffic.Warship(people or side, class) or Traffic.Warship(people or side, "frigate")
+  sign: number, along: number, rng: Rng.Rng, events: { Event }, member: State.Member?): boolean
+  local kind = if member then Fellows.Kind(member) else Traffic.Warship(side, class) or Traffic.Warship(side, "frigate")
   if kind == nil then
     return false
   end
-  local ship = Space.NewShip(state, kind.hull, name or kind.name, if people then "member" else side, 0)
+  local ship = Space.NewShip(state, kind.hull, kind.name, if member then "member" else side, 0)
   Pirates.Equip(state, ship, kind)
+  if member then
+    member.ship, member.task, member.goal, member.since = ship.id, "front", front.site, state.tick
+  end
   local ball = Space.Launch(state, ship, front.system, place.x + sign * Fronts.APART + Rng.Float(rng, -2500, 2500),
     place.y + Rng.Float(rng, -2000, 2000), place.z + along * 1500)
   state.pilots[ship.id] = { ship = ship.id, range = kind.range, prey = 0, home = front.site, alone = 0, bounty = 0, tags = 0,
@@ -262,12 +271,16 @@ function Fronts.Step(state: State.State, events: { Event }, first: number)
           local along = 0
           for _, member in Members.List(state) do
             local hull = Ships.byId[member.hull]
-            if member.trade == "fighter" and member.system == front.system and hull then
+            -- (not one who has lost their ship and has not another yet)
+            if member.trade == "fighter" and member.system == front.system and hull and state.tick >= member.refit then
               local worth = Members.Stands(member)
               along += 1
-              if worth > 0 and front.held >= worth
-                and one(state, front, place, Wars.PILOT, false, hull.class, worth, 1, along, rng, events, member.people, member.name) then
-                front.held -= worth
+              if worth > 0 and front.held >= worth then
+                -- (from wherever in the system they were: Tactical/Fellows)
+                Members.Recall(state, member, events)
+                if one(state, front, place, Wars.PILOT, false, hull.class, worth, 1, along, rng, events, member) then
+                  front.held -= worth
+                end
               end
             end
           end

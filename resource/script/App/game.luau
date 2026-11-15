@@ -20,6 +20,7 @@ local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Hacking = require("@lt/Core/Tactical/Hacking")
 local Keeps = require("@lt/Core/Tactical/Keeps")
 local Map = require("@lt/Game/UI/Map")
+local Members = require("@lt/Core/Assets/Members")
 local Planets = require("@lt/Core/Data/Planets")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Attributes = require("@lt/Core/Attributes")
@@ -1154,6 +1155,58 @@ function Debug.Member(n: number): (string, string, string, string, number)
     return "", "", "", "", 0
   end
   return member.name, member.trade, member.doing, member.system, member.earned
+end
+
+-- A cheat, for the members' ships to look at without waiting for
+-- somebody of the right trade: somebody of a trade ('miner', 'fighter',
+-- 'hauler' or 'scout') and a name applies to the corporation and is
+-- taken, in the hull of a class that trade flies (its first, if none
+-- is named). They are a member a tick later. False with no corporation.
+function Debug.Enlist(trade: string, name: string, class: string?): boolean
+  local state = session.game.state
+  if not Corporation.Founded(state) then
+    return false
+  end
+  local home = state.galaxy.systems[Space.SystemOf(state, state.player.home)]
+  local people = if home then home.nearest else ""
+  local first = { miner = "frigate", fighter = "frigate", hauler = "industrial", scout = "frigate" }
+  local hull = Members.HullFor(trade, people, class or first[trade] or "frigate")
+  if hull == nil then
+    return false
+  end
+  local key = `cheat:{State.NewId(state)}`
+  table.insert(state.membership.applicants, { key = key, name = name, trade = trade, people = people, hull = hull, bears = 0.3,
+    until_ = state.tick + Members.DAY })
+  return Session.Do(session, { kind = "AcceptMember", actor = 0, what = key })
+end
+
+-- The nth member's ship where the pilot is (Core/Tactical/Fellows): the
+-- ship (0: none is out), what it is at ('work', 'out', 'home', 'rest',
+-- 'away', 'front' or ''), the name of the place that is for, how many
+-- ships they have lost, the hull they fly, and what the ship says it
+-- is doing ('' with none out).
+function Debug.Fellow(n: number): (number, string, string, number, string, string)
+  local state = session.game.state
+  local member = state.membership.members[state.membership.memberIds[n] or 0]
+  if member == nil then
+    return 0, "", "", 0, "", ""
+  end
+  local place = Space.Object(state, member.goal)
+  local fellow = Core.Query.Fellow(session.game, member.ship)
+  return member.ship, member.task, if place then place.name else "", member.lost, member.hull, if fellow then fellow.doing else ""
+end
+
+-- A cheat: the nth member's ship is destroyed, by nobody in particular.
+-- False if they have none out.
+function Debug.Unship(n: number): boolean
+  local state = session.game.state
+  local member = state.membership.members[state.membership.memberIds[n] or 0]
+  if member == nil or member.ship == 0 or state.balls[member.ship] == nil then
+    return false
+  end
+  Aftermath.Destroy(state, member.ship, 0, session.game.events)
+  Members.Lost(state, member, 0, session.game.events)
+  return true
 end
 
 -- Sovereignty (Core/Assets/Sovereignty). A cheat, for a claim to look

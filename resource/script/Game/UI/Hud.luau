@@ -555,6 +555,11 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
   if haul then
     what = `carrying {Format.Whole(haul.amount)} {haul.name} for {haul.system}`
   end
+  -- (and a ship that is a member's of the pilot's corporation says whose it is, and what it is at)
+  local fellow = if entry.kind == "ship" then Core.Query.Fellow(session.game, entry.id) else nil
+  if fellow then
+    what = `member, {fellow.trade}: {fellow.doing}`
+  end
   if entry.kind == "site" then
     what = SITES[entry.variety] or "site"
   end

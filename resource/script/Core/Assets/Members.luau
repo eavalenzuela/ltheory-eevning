@@ -25,9 +25,9 @@
 -- How it is worked out (first figures, all of them). A member works by
 -- the hour in one of the systems the corporation has a place in: where
 -- the pilot's home is, where a tower of theirs stands, and what they
--- hold. Nothing of them is a ship until the pilot is where they are
--- (that is for the view of it, later): what they do is done to the
--- galaxy all the same.
+-- hold. What they do is done to the galaxy wherever the pilot is; and
+-- where the pilot is, they are there to be seen at it, each in their
+-- own ship (Tactical/Fellows).
 --
 --   - A miner digs the ore that goes for most there, and sells it to the
 --     system: it is in the system's stock, in the economy.
@@ -44,12 +44,19 @@
 -- Once a day each member looks at where they would do best, calls
 -- counted, and goes there; buys the next hull of their trade if they
 -- have the price of it and a fifth over; and thinks about leaving.
+--
+-- A ship of theirs that is destroyed is their loss, and nobody else's:
+-- they are out of work for a while finding another, and what they fly
+-- next is the best of their trade they have the price of, no better
+-- than the one that went (the first of it, whatever they have). One
+-- whose ship the pilot's own side destroys is a member no longer.
 
 local Commerce = require("@lt/Core/Strategic/Commerce")
 local Constants = require("@lt/Core/Data/Constants")
 local Corporation = require("@lt/Core/Assets/Corporation")
 local Economy = require("@lt/Core/Strategic/Economy")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Items = require("@lt/Core/Assets/Items")
 local Names = require("@lt/Core/Describe/Names")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
@@ -107,6 +114,8 @@ Members.BETTER = 1.1
 -- each fighter member in the system.
 Members.STANDS = 15
 Members.WATCH = 0.5
+-- How long a member who has lost a ship is out of work, finding another.
+Members.REFIT = 2 * Members.HOUR
 -- A call: the kinds there are, and the trade each is for.
 Members.CALLS = { defend = "fighter", mine = "miner", haul = "hauler", scout = "scout" } :: { [string]: string }
 Members.CALLS_MOST = 6
@@ -133,6 +142,18 @@ local function hullOf(faction: string, class: string): string?
   end
   return plain
 end
+
+-- The hull of a class somebody of a trade flies. (A miner's frigate is
+-- the one that is built for it, whoever they are: nobody cuts rock in a
+-- warship.)
+local MINING = "frigate.prospector"
+local function hullFor(trade: string, faction: string, class: string): string?
+  if trade == "miner" and class == "frigate" and Ships.byId[MINING] then
+    return MINING
+  end
+  return hullOf(faction, class)
+end
+Members.HullFor = hullFor
 
 -- The systems the corporation has a place in: where the pilot's home
 -- is, where a tower of theirs stands, and what they hold. In the order
@@ -202,12 +223,59 @@ function Members.Watching(state: State.State, system: number): (number, number)
   local count, stands = 0, 0
   for _, id in state.membership.memberIds do
     local member = state.membership.members[id]
-    if member.trade == "fighter" and member.system == system then
+    -- (not one who has lost their ship, and has not another yet)
+    if member.trade == "fighter" and member.system == system and state.tick >= member.refit then
       count += 1
       stands += Members.Stands(member)
     end
   end
   return count, stands
+end
+
+-- The member whose ship a ship is, if it is one's.
+function Members.Of(state: State.State, ship: number): State.Member?
+  if ship == 0 then
+    return nil
+  end
+  for _, id in state.membership.memberIds do
+    if state.membership.members[id].ship == ship then
+      return state.membership.members[id]
+    end
+  end
+  return nil
+end
+
+-- A member's ship is taken out of space, or out of the station it is
+-- in: it is not destroyed, they have gone in, or on, or the pilot is no
+-- longer there to see it ('reason' and 'gate': for the view, as for a
+-- ship of the traffic). What a hauler's had aboard of the economy's is
+-- where it was for.
+function Members.Recall(state: State.State, member: State.Member, events: { Event }, reason: string?, gate: number?)
+  local id = member.ship
+  member.ship = 0
+  if member.carries then
+    Commerce.Deliver(state.commerce, member.carries.node, member.carries.class, member.carries.amount)
+    member.carries = nil
+  end
+  if id == 0 then
+    return
+  end
+  local ball = state.balls[id]
+  if ball then
+    Space.RemoveBall(state, ball)
+    table.insert(events, { kind = "BallRemoved", ball = id, reason = reason or "left", gate = gate })
+  end
+  for _, item in Items.In(state, id, nil) do
+    Items.Take(state, item, item.quantity)
+  end
+  if state.ships[id] then
+    state.ships[id] = nil
+    State.RemoveId(state.shipIds, id)
+  end
+  if state.pilots[id] then
+    state.pilots[id] = nil
+    State.RemoveId(state.pilotIds, id)
+  end
 end
 
 -- What a member's hull earns an hour at their trade, anywhere.
@@ -264,6 +332,8 @@ local function bestHaul(state: State.State, system: number): (number, number, nu
   end
   return best, to, most
 end
+-- (for whoever puts a hauler's ship in space: Tactical/Fellows)
+Members.Haul = bestHaul
 
 -- What a member would earn in an hour in a system, at their trade, as
 -- things are there now (before any tax, and before any call's reward).
@@ -328,6 +398,11 @@ end
 local function work(state: State.State, member: State.Member, events: { Event })
   local system = member.system
   local commerce = state.commerce
+  -- (one who has lost their ship earns nothing until they have another)
+  if state.tick < member.refit then
+    member.doing = "refitting"
+    return
+  end
   local earned = Members.Prospect(state, member, system)
   if earned <= 0 then
     member.doing = "idle"
@@ -375,9 +450,44 @@ end
 
 -- A member is gone from the corporation.
 local function leave(state: State.State, member: State.Member, why: string, events: { Event })
+  Members.Recall(state, member, events)
   state.membership.members[member.id] = nil
   State.RemoveId(state.membership.memberIds, member.id)
   table.insert(events, { kind = "MemberLeft", member = member.id, name = member.name, trade = member.trade, why = why })
+end
+
+-- A member's ship has been destroyed ('by': the ship that did it). It
+-- is their loss: they are out of work while they find another, which is
+-- the best of their trade they have the price of, no better than the
+-- one that went; and the first of it, whatever they have. (What a
+-- hauler's had aboard is in its wreck, or nowhere.) One whose ship the
+-- pilot's own side destroyed leaves.
+function Members.Lost(state: State.State, member: State.Member, by: number, events: { Event })
+  local was = member.hull
+  member.ship, member.task, member.carries = 0, "", nil
+  member.lost += 1
+  local killer = state.ships[by]
+  if by == state.player.ship or (killer ~= nil and killer.owner == "player") then
+    table.insert(events, { kind = "MemberLost", member = member.id, name = member.name, trade = member.trade, was = was, hull = "",
+      system = member.system, lost = member.lost })
+    leave(state, member, "fired on by their own", events)
+    return
+  end
+  local ladder = LADDER[member.trade]
+  local hull = Ships.byId[was]
+  local rung = if hull then table.find(ladder, hull.class) or 1 else 1
+  for at = rung, 1, -1 do
+    local next = hullFor(member.trade, member.people, ladder[at])
+    if next and (at == 1 or member.wealth >= Types.Info(next).basePrice) then
+      member.wealth = math.max(0, member.wealth - Types.Info(next).basePrice)
+      member.hull = next
+      break
+    end
+  end
+  member.refit = state.tick + Members.REFIT
+  member.doing = "refitting"
+  table.insert(events, { kind = "MemberLost", member = member.id, name = member.name, trade = member.trade, was = was, hull = member.hull,
+    system = member.system, lost = member.lost })
 end
 
 -- A member's day: what a call pays them, whether they stay, a better
@@ -409,10 +519,13 @@ local function reckon(state: State.State, member: State.Member, places: { number
   local hull = Ships.byId[member.hull]
   local ladder = LADDER[member.trade]
   local rung = if hull then table.find(ladder, hull.class) or #ladder else #ladder
-  local next = if rung < #ladder then hullOf(member.people, ladder[rung + 1]) else nil
+  local next = if rung < #ladder then hullFor(member.trade, member.people, ladder[rung + 1]) else nil
   if next and member.wealth >= 1.2 * Types.Info(next).basePrice then
     member.wealth -= Types.Info(next).basePrice
     member.hull = next
+    -- (the ship they were out in is gone in, for the new one)
+    Members.Recall(state, member, events)
+    member.task = ""
     table.insert(events, { kind = "MemberUpgraded", member = member.id, name = member.name, hull = next })
   end
   local best, answered, worth = choose(state, member, places)
@@ -434,7 +547,7 @@ local function candidate(state: State.State, rng: Rng.Rng, key: string, waits: n
   local rung = if #ladder > 1 and Rng.Chance(rng, 0.25) then 2 else 1
   local faction = people(state)
   return { key = key, name = Names.Person(rng), trade = trade, people = faction,
-    hull = hullOf(faction, ladder[rung]) or hullOf("", ladder[1]) or "frigate.courier",
+    hull = hullFor(trade, faction, ladder[rung]) or hullFor(trade, "", ladder[1]) or "frigate.courier",
     bears = math.floor(Rng.Float(rng, Members.BEARS[1], Members.BEARS[2]) * 100 + 0.5) / 100, until_ = waits }
 end
 
@@ -460,7 +573,8 @@ local function join(state: State.State, applicant: State.Applicant, events: { Ev
   local places = Members.Places(state)
   local member: State.Member = { id = State.NewId(state), name = applicant.name, trade = applicant.trade, people = applicant.people,
     hull = applicant.hull, bears = applicant.bears, wealth = 0, earned = 0, paid = 0, joined = state.tick,
-    system = places[1] or Space.SystemOf(state, state.player.home), doing = "idle", call = 0, lean = 0, day = 0 }
+    system = places[1] or Space.SystemOf(state, state.player.home), doing = "idle", call = 0, lean = 0, day = 0,
+    ship = 0, task = "", goal = 0, since = 0, wait = 0, back = 0, refit = 0, lost = 0 }
   state.membership.members[member.id] = member
   table.insert(state.membership.memberIds, member.id)
   local best, answered = choose(state, member, places)

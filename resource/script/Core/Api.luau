@@ -23,6 +23,7 @@ local Attributes = require("@lt/Core/Attributes")
 local Drones = require("@lt/Core/Tactical/Drones")
 local Dscan = require("@lt/Core/Tactical/Dscan")
 local Factions = require("@lt/Core/Data/Factions")
+local Fellows = require("@lt/Core/Tactical/Fellows")
 local Fleet = require("@lt/Core/Tactical/Fleet")
 local Jumping = require("@lt/Core/Tactical/Jumping")
 local Keeps = require("@lt/Core/Tactical/Keeps")
@@ -101,7 +102,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 79
+Core.SAVE_VERSION = 80
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -388,6 +389,21 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- Nimia; and their hulls are the Nimia's of the owner's list, each
   -- the one that stands where it stood (they build no attack
   -- battlecruiser and no dreadnought but the siege one).
+  -- 80: a member's ship is in space where the pilot is, and can be lost
+  -- (Tactical/Fellows). A member of a save from before has none out and
+  -- has lost none; and one who mines has the frigate that is built for it.
+  [79] = function(state: any)
+    for _, id in state.membership.memberIds do
+      local member = state.membership.members[id]
+      member.ship, member.task, member.goal = member.ship or 0, member.task or "", member.goal or 0
+      member.since, member.wait, member.back = member.since or 0, member.wait or 0, member.back or 0
+      member.refit, member.lost = member.refit or 0, member.lost or 0
+      local hull = Ships.byId[member.hull]
+      if member.trade == "miner" and hull and hull.class == "frigate" then
+        member.hull = Members.HullFor("miner", member.people, "frigate") or member.hull
+      end
+    end
+  end,
   -- 79: a corporation has members (Assets/Members). A save from before
   -- has none, and nobody waiting.
   [78] = function(state: any)
@@ -1319,6 +1335,8 @@ function Core.Step(game: Game)
     end
   end
   Traffic.Step(state, game.events)
+  -- (the corporation's members, as ships where the pilot is)
+  Fellows.Step(state, game.events, first)
   -- (the factions' forces, as ships where the pilot is)
   Fronts.Step(state, game.events, first)
   Pirates.Think(state, game.events)
@@ -2589,12 +2607,14 @@ end
 -- The corporation's members (Assets/Members), for whoever shows them:
 -- the tax, how many there are and how many there is room for; each
 -- member (who, of what trade, in what hull, where and at what, what
--- they have earned and paid in all, and whether they are answering a
--- call); those who have applied; those open to joining at the station
+-- they have earned and paid in all, whether they are answering a
+-- call, their ship where the pilot is to see it (0: none is out), and
+-- how many ships they have lost); those who have applied; those open to
+-- joining at the station
 -- the pilot is docked at; the calls posted, with how many answer each;
 -- and the systems a call can be for.
 export type MemberInfo = { id: number, name: string, trade: string, hull: string, system: string, doing: string, earned: number,
-  paid: number, bears: number, called: boolean }
+  paid: number, bears: number, called: boolean, ship: number, lost: number }
 export type ApplicantInfo = { key: string, name: string, trade: string, hull: string, bears: number }
 export type CallInfo = { id: number, kind: string, system: string, reward: number, answering: number }
 export type MembershipInfo = { tax: number, room: number, members: { MemberInfo }, applicants: { ApplicantInfo }, open: { ApplicantInfo },
@@ -2618,7 +2638,7 @@ function Query.Membership(game: Game): MembershipInfo
     local node = state.galaxy.systems[member.system]
     table.insert(info.members, { id = member.id, name = member.name, trade = member.trade, hull = hullName(member.hull),
       system = if node then node.name else "?", doing = member.doing, earned = member.earned, paid = member.paid, bears = member.bears,
-      called = member.call ~= 0 })
+      called = member.call ~= 0, ship = member.ship, lost = member.lost })
   end
   for _, call in membership.calls do
     local answering = 0
@@ -2667,6 +2687,34 @@ function Query.Haul(game: Game, ship: number): HaulInfo?
   local type = Commerce.goods[carries.class]
   local node = game.state.galaxy.systems[carries.node]
   return { type = type, name = Types.Info(type).name, amount = carries.amount, system = if node then node.name else "?" }
+end
+
+-- A ship that is a member's of the pilot's corporation (Tactical/
+-- Fellows): whose, of what trade, and what it is at, in a few words.
+-- Nil for any other ship.
+export type FellowInfo = { member: number, name: string, trade: string, doing: string }
+function Query.Fellow(game: Game, ship: number): FellowInfo?
+  local state = game.state
+  local member = Members.Of(state, ship)
+  if member == nil then
+    return nil
+  end
+  local doing = "surveying"
+  if member.task == "front" then
+    doing = "at the lines"
+  elseif member.task == "home" then
+    doing = if member.trade == "fighter" then "going in to mend" else "going in"
+  elseif member.trade == "miner" then
+    doing = if member.task == "out" then "on the way to the belt" else "cutting rock"
+  elseif member.trade == "hauler" then
+    local carries = member.carries
+    local node = if carries then state.galaxy.systems[carries.node] else nil
+    doing = if carries then `hauling {carries.amount} {Types.Info(Commerce.goods[carries.class]).name} for {if node then node.name else "?"}`
+      else "hauling, in ballast"
+  elseif member.trade == "fighter" then
+    doing = if state.pilots[ship] then "fighting" elseif member.task == "out" then "on the way to their post" else "on patrol"
+  end
+  return { member = member.id, name = member.name, trade = member.trade, doing = doing }
 end
 
 -- The gluts and shortages there are across the map now (Strategic/
