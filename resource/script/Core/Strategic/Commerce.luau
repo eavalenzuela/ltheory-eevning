@@ -486,16 +486,20 @@ function Commerce.New(galaxy: Galaxy.Galaxy): Economy.Economy
 end
 
 -- Set every lane's cost, and what it loses, from how safe its two ends
--- are now: 'surge' is the system pirates are massing in (0 for none),
--- and 'blocked' the systems that are blockaded (Strategic/Wars), whose
--- lanes are all but shut.
-function Commerce.Lanes(econ: Economy.Economy, galaxy: Galaxy.Galaxy, surge: number, blocked: { [number]: boolean }?)
+-- are now: 'surge' is where pirates are massing (the systems they are
+-- massing in, Strategic/Happenings; or one system's number, 0 for
+-- none), and 'blocked' the systems that are blockaded (Strategic/Wars),
+-- whose lanes are all but shut.
+function Commerce.Lanes(econ: Economy.Economy, galaxy: Galaxy.Galaxy, surge: number | { [number]: boolean },
+  blocked: { [number]: boolean }?)
+  local many: { [number]: boolean }? = if type(surge) == "table" then surge else nil
+  local one: number = if type(surge) == "number" then surge else 0
   for _, edge in econ.edges do
     local a, b = galaxy.systems[edge.a], galaxy.systems[edge.b]
     local least = math.min(a.security, b.security)
     edge.cost = Commerce.COST_JUMP + Commerce.COST_RISK * (1 - least)
     edge.loss = if Galaxy.Band(least) == "lawless" then Commerce.LOSS else 0
-    if surge ~= 0 and (edge.a == surge or edge.b == surge) then
+    if (many and (many[edge.a] or many[edge.b])) or (one ~= 0 and (edge.a == one or edge.b == one)) then
       edge.cost += Commerce.SURGE_COST
       edge.loss = Commerce.SURGE_LOSS
     end
@@ -504,6 +508,24 @@ function Commerce.Lanes(econ: Economy.Economy, galaxy: Galaxy.Galaxy, surge: num
       edge.loss = math.max(edge.loss, Commerce.BLOCKADE_LOSS)
     end
   end
+end
+
+-- How much trade each system's lanes can carry, by the system's number:
+-- what its open lanes would move at a given difference in price. It is
+-- what pirates come for (Strategic/Happenings).
+function Commerce.Carries(econ: Economy.Economy, systems: number): { number }
+  local carries: { number } = table.create(systems, 0)
+  for _, edge in econ.edges do
+    if edge.open then
+      if edge.a <= systems then
+        carries[edge.a] += edge.conductance
+      end
+      if edge.b <= systems then
+        carries[edge.b] += edge.conductance
+      end
+    end
+  end
+  return carries
 end
 
 -- What a type goes for in a system, as a share of its normal price: for
@@ -598,7 +620,7 @@ end
 
 -- Let the economy's time go by: 'ticks' of it, with the lanes as they
 -- are now ('surge': the system pirates are massing in, 0 for none).
-function Commerce.Advance(econ: Economy.Economy, galaxy: Galaxy.Galaxy, surge: number, ticks: number, blocked: { [number]: boolean }?)
+function Commerce.Advance(econ: Economy.Economy, galaxy: Galaxy.Galaxy, surge: number | { [number]: boolean }, ticks: number, blocked: { [number]: boolean }?)
   Commerce.Lanes(econ, galaxy, surge, blocked)
   -- (what went along the watched lanes a while ago has long arrived:
   -- half of what nobody has been seen carrying is forgotten each step)

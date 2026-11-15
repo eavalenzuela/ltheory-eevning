@@ -51,7 +51,7 @@ local Nomads = require("@lt/Core/Tactical/Nomads")
 local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Raids = require("@lt/Core/Tactical/Raids")
-local Surges = require("@lt/Core/Tactical/Surges")
+local Happenings = require("@lt/Core/Strategic/Happenings")
 local Ships = require("@lt/Core/Data/Ships")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Commerce = require("@lt/Core/Strategic/Commerce")
@@ -109,7 +109,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 81
+Core.SAVE_VERSION = 82
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -402,6 +402,24 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- 81: a station's batteries stand outside its field as things to
   -- shoot at (Tactical/Batteries). A save from before has none standing
   -- and none down: they are stood the next time the pilot is there.
+  -- 82: what is going on in the galaxy is a list (Strategic/Happenings),
+  -- and pirates mass where the pressure says, several places at once. A
+  -- save from before had one surge at most: it is on the list, if it was
+  -- on, and every system's pressure begins as a new game's would.
+  [81] = function(state: any)
+    local old = state.surge
+    state.surge = nil
+    -- (a save that has the list already keeps it)
+    if state.happenings then
+      return
+    end
+    state.happenings = Happenings.None(state)
+    if old and old.system and old.system ~= 0 then
+      state.happenings.count = 1
+      table.insert(state.happenings.list, { id = 1, kind = Happenings.SURGE, what = "pirates", system = old.system, place = 0,
+        began = state.tick, ends = old.ends, strength = 1, stage = 1, kills = old.kills or 0, name = "" })
+    end
+  end,
   [80] = function(state: any)
     state.batteries = state.batteries or { at = 0, station = 0, kinds = {}, balls = {}, down = {} }
   end,
@@ -1102,7 +1120,8 @@ function Core.New(options: Options): Game
     pilots = {},
     pilotIds = {},
     spawned = {},
-    surge = { system = 0, ends = 0, next = 0, kills = 0, count = 0 },
+    happenings = { list = {}, count = 0, pressure = {}, marks = {}, steps = 0, version = 0, sightingDue = 0, placeDue = 0,
+      invasionDue = 0 },
     peaceful = options.peaceful == true,
     rocks = {},
     rockIds = {},
@@ -1138,7 +1157,7 @@ function Core.New(options: Options): Game
   state.player.ship = ship.id
   state.player.home = home.id
   state.wallet = 5000
-  state.surge = Surges.None(state)
+  state.happenings = Happenings.None(state)
 
   local MISSILES = { "missile.light.em", "missile.light.thermal", "missile.light.kinetic", "missile.light.explosive" }
   local missile = MISSILES[(if people then people.affinity else nil) or 3] or MISSILES[3]
@@ -1369,7 +1388,7 @@ function Core.Step(game: Game)
   Missions.Step(state, game.events)
   Standings.Step(state)
   Assault.Step(state, game.events)
-  Surges.Step(state, game.events)
+  Happenings.Step(state, game.events)
   Pirates.Populate(state, game.events)
   -- (a pilot docked in a colony ship of the nomads goes where it goes:
   -- it has gone on to its next system, and they are there with it)
@@ -1423,7 +1442,11 @@ function Core.Step(game: Game)
   -- each station follows it)
   if state.tick % Commerce.STEP == 0 and state.tick > 0 then
     Commerce.Stir(state.commerce, state.galaxy, state.shocks, state.historySeed, state.tick, Commerce.STEP, game.events)
-    Commerce.Advance(state.commerce, state.galaxy, state.surge.system, Commerce.STEP, Wars.Blocked(state.wars))
+    -- (and where pirates mass follows the economy: where order is thin and the lanes rich. Strategic/Happenings)
+    local ship = state.ships[state.player.ship]
+    local at = if ship == nil then 1 elseif state.balls[ship.id] then state.balls[ship.id].system else Space.SystemOf(state, ship.docked)
+    Happenings.Press(state, game.events, at, Commerce.Carries(state.commerce, Galaxy.Charted(state.galaxy)))
+    Commerce.Advance(state.commerce, state.galaxy, Happenings.Surging(state), Commerce.STEP, Wars.Blocked(state.wars))
     Market.Peg(state)
   end
   Market.Step(state, game.events)
@@ -2364,27 +2387,83 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
   }
 end
 
+-- Everything that is going on in the galaxy (Strategic/Happenings), the
+-- nearest to the pilot first: what kind it is and which of its kind,
+-- what it is called, where (the system, its name, and the name of the
+-- place in it, if it is at one), how many jumps off (-1 for what is
+-- farther than a pilot would go for it, which comes last), the seconds
+-- it has left, how far it has got, and whether it is where the pilot is.
+-- (How far each is, is worked out again when the list changes or the
+-- pilot's system does, not every time it is asked: a screen asks often.)
+export type HappeningInfo = {
+  id: number,
+  kind: string,
+  what: string,
+  name: string,
+  system: number,
+  where: string,
+  place: number,
+  jumps: number,
+  left: number,
+  stage: number,
+  strength: number,
+  kills: number,
+  here: boolean,
+}
+local happeningsFar = { galaxy = nil :: any, from = 0, version = -1, jumps = {} :: { [number]: number } }
+function Query.Happenings(game: Game): { HappeningInfo }
+  local state = game.state
+  local all = state.happenings
+  local here = Query.Player(game).system
+  if happeningsFar.galaxy ~= state.galaxy or happeningsFar.from ~= here or happeningsFar.version ~= all.version then
+    happeningsFar.galaxy, happeningsFar.from, happeningsFar.version = state.galaxy, here, all.version
+    happeningsFar.jumps = Happenings.Reach(state, here, Happenings.FAR)
+  end
+  local found: { HappeningInfo } = {}
+  for _, one in all.list do
+    local node = state.galaxy.systems[one.system]
+    table.insert(found, { id = one.id, kind = one.kind, what = one.what, name = one.name, system = one.system,
+      where = if node then node.name else "", place = one.place, jumps = happeningsFar.jumps[one.system] or -1,
+      left = math.max(0, one.ends - state.tick) * Constants.TICK, stage = one.stage, strength = one.strength, kills = one.kills,
+      here = one.system == here })
+  end
+  table.sort(found, function(a: HappeningInfo, b: HappeningInfo): boolean
+    local fa, fb = if a.jumps < 0 then math.huge else a.jumps, if b.jumps < 0 then math.huge else b.jumps
+    if fa ~= fb then
+      return fa < fb
+    end
+    return a.id < b.id
+  end)
+  return found
+end
+
+-- What happenings have left behind them (Strategic/Happenings): the
+-- system, its name, how much firmer or thinner its order is for it,
+-- the seconds until it is put back, and what left it.
+export type AftermathInfo = { system: number, name: string, delta: number, left: number, why: string }
+function Query.Aftermath(game: Game): { AftermathInfo }
+  local state = game.state
+  local found: { AftermathInfo } = {}
+  for _, mark in state.happenings.marks do
+    local node = state.galaxy.systems[mark.system]
+    table.insert(found, { system = mark.system, name = if node then node.name else "", delta = mark.now - mark.was,
+      left = math.max(0, mark.ends - state.tick) * Constants.TICK, why = mark.why })
+  end
+  return found
+end
+
 -- Where pirates are massing (Tactical/Surges), if anywhere: the system
 -- and its name, how many jumps from the pilot it is, the seconds the
 -- surge has left, and how many pirates have been destroyed there
 -- since it began. Nil with none on.
 export type SurgeInfo = { system: number, name: string, jumps: number, left: number, kills: number }
--- (How far off it is, is worked out when the surge or the pilot's
--- system changes, not every time it is asked: a screen asks every frame.)
-local surgeFar = { galaxy = nil :: any, from = 0, to = 0, jumps = 0 }
 function Query.Surge(game: Game): SurgeInfo?
-  local state = game.state
-  local surge = state.surge
-  if surge.system == 0 then
-    return nil
+  for _, one in Query.Happenings(game) do
+    if one.kind == Happenings.SURGE and one.jumps >= 0 then
+      return { system = one.system, name = one.where, jumps = one.jumps, left = one.left, kills = one.kills }
+    end
   end
-  local here = Query.Player(game).system
-  if surgeFar.galaxy ~= state.galaxy or surgeFar.from ~= here or surgeFar.to ~= surge.system then
-    surgeFar.galaxy, surgeFar.from, surgeFar.to = state.galaxy, here, surge.system
-    surgeFar.jumps = math.max(0, #Galaxy.Route(state.galaxy, here, surge.system) - 1)
-  end
-  return { system = surge.system, name = state.galaxy.systems[surge.system].name, jumps = surgeFar.jumps,
-    left = math.max(0, surge.ends - state.tick) * Constants.TICK, kills = surge.kills }
+  return nil
 end
 
 -- What is under a moon, by the moon's id (Data/Moons): the material and

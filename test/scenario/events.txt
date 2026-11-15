@@ -1,0 +1,47 @@
+# What is going on in the galaxy, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/events.txt
+#
+# A galaxy of forty. Nothing is going on at first. Pirates are made to
+# mass in the nearest system of thin order (a cheat: where and when they
+# do is the galaxy's own business, Core/Strategic/Happenings), and the
+# pilot is told so in a line. The Events button opens the events window,
+# which has it, with how far off it is. Its button sets the pilot's
+# course there. The star map has it ringed. Something farther off than
+# news travels is on the list too, and nobody is told of it.
+#
+# covers: Core/Strategic/Happenings Core/Tactical/Surges Game/UI/Events
+
+wait 2
+lua GameDebug.NewGame(1, 40)
+wait 2
+lua GameDebug.Peaceful(true)
+lua GameDebug.Sound(true, 0)
+lua assert(GameDebug.Happenings() == 0, 'nothing should be going on in a game that has just begun')
+
+# Pirates mass a jump or two off: the pilot is told.
+lua _G.where, _G.jumps = GameDebug.Happen('surge', 'pirates')
+lua assert(_G.where ~= '' and _G.jumps >= 1, 'nowhere for a surge')
+patience 20
+until string.find(GameDebug.Said(), 'PIRATE SURGE', 1, true)
+lua assert(string.find(GameDebug.Said(), _G.where, 1, true), 'the pilot was not told where the surge is, but ' .. GameDebug.Said())
+lua assert(select(2, GameDebug.Happenings('surge')) == 1)
+lua assert(GameDebug.Surge() ~= 0 and select(2, GameDebug.Surge()) == _G.jumps, 'the surge should be the one a pilot is told of')
+
+# The events window has it, and its button sets the course.
+until GameDebug.Press('Events')
+until GameDebug.CanPress('Events:course:1')
+lua assert(GameDebug.Destination() == -1, 'no course should be set yet')
+until GameDebug.Press('Events:course:1')
+until GameDebug.Destination() == _G.jumps
+frames 40
+lua assert(not GameDebug.CanPress('Events:course:1'), 'a course that is set is not to be set again')
+until GameDebug.Press('events:close')
+
+# The map has it too.
+until GameDebug.Press('Map')
+frames 30
+until GameDebug.Press('Map:close')
+
+echo events scenario passed
+quit

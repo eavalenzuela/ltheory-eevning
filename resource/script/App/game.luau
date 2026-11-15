@@ -15,6 +15,7 @@ local Audio = require("@lt/Game/View/Audio")
 local Colors = require("@lt/Colors")
 local Colony = require("@lt/Game/UI/Colony")
 local Context = require("@lt/Game/UI/Context")
+local Happenings = require("@lt/Core/Strategic/Happenings")
 local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Hacking = require("@lt/Core/Tactical/Hacking")
@@ -2636,6 +2637,52 @@ end
 -- 0), and where it is looking from: its yaw and pitch.
 function Debug.Tracking(): (number, number, number)
   return scene.tracking, scene.yaw, scene.pitch
+end
+
+-- Begin something going on (Core/Strategic/Happenings), a cheat: a kind
+-- ("surge", "invasion", "sighting", "disaster", "windfall") and which of
+-- its kind, in a system (a number or a name: the nearest system of thin
+-- order if none is given), for so many hours, called 'name' if it is
+-- called anything. Returns the system's name and how many jumps off it
+-- is ("" and -1 if there is nowhere for it).
+function Debug.Happen(kind: string, what: string?, where: (number | string)?, hours: number?, name: string?): (string, number)
+  local state = session.game.state
+  local here = Core.Query.Player(session.game).system
+  local far = Happenings.Reach(state, here, Happenings.FAR)
+  local system = 0
+  if type(where) == "number" then
+    system = where
+  elseif type(where) == "string" then
+    for id, node in state.galaxy.systems do
+      system = if node.name == where then id else system
+    end
+  else
+    local least = math.huge
+    for id = 1, Galaxy.Charted(state.galaxy) do
+      local jumps = far[id]
+      if jumps and jumps > 0 and jumps < least and Galaxy.Band(state.galaxy.systems[id].security) ~= "secure" then
+        system, least = id, jumps
+      end
+    end
+  end
+  if state.galaxy.systems[system] == nil then
+    return "", -1
+  end
+  Happenings.Begin(state, kind, what or "", system, 0, math.floor((hours or 2) * 3600), 1, name or "", session.game.events,
+    Happenings.Reach(state, here, Happenings.HEARD))
+  return state.galaxy.systems[system].name, far[system] or -1
+end
+
+-- How many things are going on (Core.Query.Happenings), how many of them
+-- are of a kind (all of them, if none is named), and how many marks
+-- have been left behind.
+function Debug.Happenings(kind: string?): (number, number, number)
+  local list = Core.Query.Happenings(session.game)
+  local of = 0
+  for _, one in list do
+    of += if kind == nil or one.kind == kind then 1 else 0
+  end
+  return #list, of, #Core.Query.Aftermath(session.game)
 end
 
 -- Where pirates are massing (Tactical/Surges): the system's id (0 with

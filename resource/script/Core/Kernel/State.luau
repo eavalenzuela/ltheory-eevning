@@ -214,11 +214,54 @@ export type Wreck = {
 -- whether it is in the buffer yet); and where the next pick has to be:
 -- 'along' a "row" or a "column", and which 'line' of those.
 export type HackKey = { name: string, codes: { string }, done: boolean }
--- Pirates massing in a system (Tactical/Surges): the system (0: none is
--- on), the tick it ends, the tick the next begins, how many pirates
--- have been destroyed there since it began, and how many surges there
--- have been.
-export type Surge = { system: number, ends: number, next: number, kills: number, count: number }
+-- Something going on in the galaxy that a pilot could go to
+-- (Strategic/Happenings): pirates massing in a system, a force come out
+-- of a wormhole to take one, something rare seen for an hour or two, a
+-- place struck by luck good or bad. 'kind' is which of those ("surge",
+-- "invasion", "sighting", "disaster", "windfall") and 'what' which of
+-- its kind. 'system' is where, and 'place' the station, gate or site of
+-- it that it is at (0 for the whole system, or for a place that is not
+-- made until the pilot comes). 'began' and 'ends' are ticks. 'strength'
+-- is how much of it there is left, 'stage' how far it has got, 'kills'
+-- what has been destroyed of it where the pilot was, and 'name' what it
+-- is called, if it has a name of its own.
+export type Happening = {
+  id: number,
+  kind: string,
+  what: string,
+  system: number,
+  place: number,
+  began: number,
+  ends: number,
+  strength: number,
+  stage: number,
+  kills: number,
+  name: string,
+}
+
+-- What a happening has left behind it for a few days: a system's order
+-- thinner or firmer than it was. 'was' is the security it had, 'now'
+-- what it was made (if it is anything else when the time comes,
+-- somebody else has changed it since, and it is left alone), 'ends' the
+-- tick it is put back, and 'why' the kind of happening that left it.
+export type Aftermath = { system: number, was: number, now: number, ends: number, why: string }
+
+-- Everything that is going on (Strategic/Happenings): those on now, the
+-- oldest first; how many there have ever been; how near each charted
+-- system is to a surge, 0 to 1, by the system's number; what has been
+-- left behind; how many times the pressure has been worked out; and
+-- the tick each of the kinds that come by the clock is next due.
+export type Happenings = {
+  list: { Happening },
+  count: number,
+  pressure: { number },
+  marks: { Aftermath },
+  steps: number,
+  version: number,
+  sightingDue: number,
+  placeDue: number,
+  invasionDue: number,
+}
 
 -- A booster at work on the pilot (Data/Boosters), the tick it wears
 -- off at, and whether it sat badly: its ill effect is at work too.
@@ -772,7 +815,7 @@ export type State = {
   pilots: { [number]: Pilot },  -- by ship id
   pilotIds: { number },
   spawned: { [number]: number },  -- by grid: the tick pirates last appeared there
-  surge: Surge,           -- where pirates are massing, if anywhere (Tactical/Surges)
+  happenings: Happenings, -- what is going on in the galaxy (Strategic/Happenings)
   peaceful: boolean,      -- no pirates come (for tests, and for sightseeing)
   -- Asteroids that have been mined, by id: the units left, and the tick
   -- mining began (they grow back some hours later). A rock not listed is whole.

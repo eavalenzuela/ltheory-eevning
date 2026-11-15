@@ -35,6 +35,7 @@ local Colors = require("@lt/Colors")
 local Commerce = require("@lt/Core/Strategic/Commerce")
 local Core = require("@lt/Core/Api")
 local Factions = require("@lt/Core/Data/Factions")
+local Events = require("@lt/Game/UI/Events")
 local Format = require("@lt/Game/Format")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Im = require("@lt/Game/UI/Im")
@@ -953,11 +954,20 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
       mark(operation.system, 15, Im.WARN, false)
     end
   end
-  -- Where pirates are massing (Tactical/Surges), ringed twice in red.
-  local surge = Core.Query.Surge(game)
-  if surge then
-    mark(surge.system, 13, BAND.lawless, surge.system ~= here and surge.system ~= session.destination)
-    mark(surge.system, 16, BAND.lawless, false)
+  -- What is going on (Core/Strategic/Happenings): each system something
+  -- is on in is ringed in the colour of its kind, a surge and an
+  -- invasion twice. The nearest few are named.
+  local going = Events.List(session)
+  local surge: Core.HappeningInfo? = nil
+  for index, one in going do
+    local colour = Events.Colour(one.kind)
+    mark(one.system, 13, colour, index <= 4 and one.system ~= here and one.system ~= session.destination)
+    if one.kind == "surge" or one.kind == "invasion" then
+      mark(one.system, 16, colour, false)
+    end
+    if surge == nil and one.kind == "surge" then
+      surge = one
+    end
   end
   -- Where the pilot is next to go, in the gold the overview picks such
   -- places out in: the next system of the way to the destination, and
@@ -1158,9 +1168,15 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
       line += 20
     end
   end
-  if surge then
-    Im.Text(`Pirate surge in {surge.name}: ` .. (if surge.jumps == 0 then "here" elseif surge.jumps == 1 then "1 jump" else `{surge.jumps} jumps`)
-      .. `, {Format.Duration(surge.left)} left`, px, line, 12, BAND.lawless)
+  -- (the nearest three things going on, by what they are called)
+  for index, one in going do
+    if index > 3 then
+      break
+    end
+    local title = Events.Title(one)
+    Im.Text(`{title} in {one.where}: ` .. (if one.here then "here" elseif one.jumps < 0 then "far off"
+      elseif one.jumps == 1 then "1 jump" else `{one.jumps} jumps`) .. `, {Format.Duration(one.left)} left`, px, line, 12,
+      Events.Colour(one.kind))
     line += 20
   end
   -- (the wars there are, and the two nearest things being done about them)

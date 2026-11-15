@@ -6,6 +6,13 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Things going on
+
+- Pirates now mass where the galaxy says they would: in systems where order is thin and trade is rich, several at once across the map, instead of one surge at a time near you. Destroying pirates in a system holds a surge off, and ten destroyed during one breaks it.
+- A surge that runs its course leaves that system a little less safe for three days. One that is broken leaves it a little safer.
+- A new Events button at the foot of the screen opens a list of everything going on, nearest first: where, how many jumps, how long it has left, and a button to set course there. The star map rings each such system.
+- More kinds are coming to the same list: invasions, rare sightings, and good and bad luck at stations and belts.
+
 ## Trial 1 of 3 for the dark specks
 
 - One of the three withdrawn changes is back by itself, to find which of them blacked the sky in warp on AMD cards: effects that only add light (the stars, the warp streaks, glows) now say outright that they change nothing of the surface under them. To look for: is the sky right in warp, and are the dark specks on bright things gone?

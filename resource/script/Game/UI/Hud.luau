@@ -8,6 +8,7 @@
 -- through queries and acts on it only through the Session.
 
 local Assets = require("@lt/Game/UI/Assets")
+local Events = require("@lt/Game/UI/Events")
 local Boosters = require("@lt/Core/Data/Boosters")
 local Colony = require("@lt/Game/UI/Colony")
 local Colors = require("@lt/Colors")
@@ -1027,6 +1028,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       -- (and the windows go over what is drawn before them: Game/UI/Windows)
       Inventory.Frame(session, player.docked ~= 0)
       Assets.Frame(session)
+      Events.Frame(session)
       Windows.Begin(left, top, right, bottom)
 
       -- Through a gate the view whites out, under everything written on it.
@@ -1215,6 +1217,14 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           Map.Close()
         else
           Map.Open()
+        end
+      end
+      -- (what is going on in the galaxy: a window of its own, Game/UI/Events)
+      if Im.Button("Events", left + 468, bottom - 54, 64, 34, true) then
+        if Events.IsOpen() then
+          Events.Close()
+        else
+          Events.Open()
         end
       end
       Colony.Draw(session, left + 16, top + 130)

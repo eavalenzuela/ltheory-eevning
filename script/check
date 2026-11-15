@@ -124,6 +124,9 @@
 #   game-fellows  the members as ships (test/scenario/fellows.txt): a
 #               miner at a belt, a hauler out by a gate, a fighter who
 #               comes to a pirate, and a ship lost that is its owner's
+#   game-events what is going on in the galaxy (test/scenario/events.txt):
+#               a surge begun, the pilot told, the events window and
+#               its course button, the map
 #   game-field  a station's field (test/scenario/field.txt): batteries
 #               standing outside it, an approach that goes in to the
 #               tower, a pirate that cannot be locked from in there, and
@@ -375,6 +378,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/fellows.txt
   step game-field 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/field.txt
+  step game-events 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
+    --script test/scenario/events.txt
   step game-inventory 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/inventory.txt
   step game-tackle 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \

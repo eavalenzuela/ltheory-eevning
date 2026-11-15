@@ -395,14 +395,33 @@ function Session.Notice(session: Session, event: Space.Event)
     -- (a hauler that carried the economy's goods is gone: where it was going goes without)
     local node = session.game.state.galaxy.systems[event.system]
     Session.Say(session, `A hauler is lost with {event.amount} {Types.Info(event.type).name}: {if node then node.name else "where it was going"} goes without`)
-  elseif kind == "SurgeBegan" then
+  elseif kind == "HappeningBegan" and event.jumps >= 0 then
+    -- (what begins within a few jumps is said: Core/Strategic/Happenings. The rest is in the events window.)
     local name = session.game.state.galaxy.systems[event.system].name
-    Session.Say(session, `PIRATE SURGE: pirates are massing ` .. (if event.jumps == 0 then `here in {name}`
-      elseif event.jumps == 1 then `in {name}, a jump off` else `in {name}, {event.jumps} jumps off`)
-      .. `. For two hours what is on their heads is doubled there`)
-  elseif kind == "SurgeEnded" then
+    local where = if event.jumps == 0 then `here in {name}` elseif event.jumps == 1 then `in {name}, a jump off`
+      else `in {name}, {event.jumps} jumps off`
+    if event.happening == "surge" then
+      Session.Say(session, `PIRATE SURGE: pirates are massing {where}. For two hours what is on their heads is doubled there`)
+    elseif event.happening == "invasion" then
+      Session.Say(session, `INVASION: something has come out of the deep {where}, and means to stay`)
+    elseif event.happening == "sighting" then
+      Session.Say(session, `SEEN {where}: ` .. (if event.what == "captain" then `{event.name}, a pirate captain`
+        elseif event.what == "derelict" then "a derelict hull, adrift" else `a wandering trader, {event.name}`))
+    elseif event.happening == "disaster" then
+      Session.Say(session, `NEWS: ` .. (if event.what == "gate" then `the gate to {event.name} is closed for repairs, {where}`
+        else `{event.name} is out of use {where}`))
+    elseif event.happening == "windfall" then
+      Session.Say(session, `NEWS: a rich belt has been found {where}`)
+    end
+  elseif kind == "HappeningEnded" and (event.kills > 0 or event.system == Core.Query.Player(session.game).system) then
     local name = session.game.state.galaxy.systems[event.system].name
-    Session.Say(session, `The surge in {name} is over` .. (if event.kills > 0 then `: {event.kills} pirates were destroyed there` else ""))
+    if event.happening == "surge" then
+      Session.Say(session, (if event.outcome == "broken" then `The surge in {name} is broken` else `The surge in {name} is over`)
+        .. (if event.kills > 0 then `: {event.kills} pirates were destroyed there` else ""))
+    elseif event.happening == "invasion" then
+      Session.Say(session, if event.outcome == "beaten" then `The invasion of {name} is beaten: what is left of them has gone back`
+        else `The invaders have left {name}, in their own time`)
+    end
   elseif kind == "TowerRaided" then
     local body = Core.Query.Body(session.game, event.station)
     local name = if body then body.name else "your tower"
