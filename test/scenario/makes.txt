@@ -1,0 +1,62 @@
+# The better makes of a module, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/makes.txt
+#
+# A people's stations sell their own makes of what they are known for,
+# to a pilot they think well of. At the station a new pilot begins at,
+# one of its people's own makes is on the market and is not to be
+# bought. With their good opinion (a cheat) it is. A mutator is given:
+# from the module's own menu in the inventory it is put through, and
+# what comes out is another module, said in a line. Then an officer's
+# make of whatever the ship has in its first high slot is given, by
+# their name, fitted in its place, and flown.
+#
+# covers: Core/Data/Modules Core/Assets/Mutators Core/Assets/Market
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua GameDebug.Sound(true, 0)
+lua _G.people, _G.make = GameDebug.People()
+lua assert(_G.make ~= '', 'the people here have no makes of their own: ' .. _G.people)
+lua GameDebug.Grant(2000000)
+wait 1.5
+
+# Their own make is on their market, and not for a pilot they do not know.
+lua assert(GameDebug.Market(_G.make), 'their own make is not on their market: ' .. _G.make)
+frames 5
+lua assert(not GameDebug.CanPress('BuyNow'), 'a stranger should not be sold a people\'s own make')
+lua GameDebug.Standing(_G.people, 3)
+until GameDebug.CanPress('BuyNow')
+until GameDebug.Press('BuyNow')
+until GameDebug.Hangar(_G.make) == 1
+
+# Through a mutator, from its own menu: it comes out another module.
+lua assert(GameDebug.Give('mutator', 1))
+until GameDebug.Press('Inv:place:hangar')
+until select(2, GameDebug.Inventory()) == 'hangar'
+until GameDebug.Press('Inv:menu:' .. _G.make)
+until GameDebug.CanPress('Menu:Mutate (cannot be undone)')
+until GameDebug.Press('Menu:Mutate (cannot be undone)')
+until GameDebug.Hangar(_G.make) == 0
+patience 20
+until string.find(GameDebug.Said(), 'Mutated:', 1, true)
+lua assert(GameDebug.Hangar('mutator') == 0, 'the mutator should be used up')
+
+# An officer's make of what the ship has in its first high slot, by their name: fitted in its place, and flown.
+lua _G.had = GameDebug.Slotted('high', 1)
+lua assert(_G.had ~= '', 'nothing in the first high slot to have an officer\'s make of')
+lua _G.theirs = _G.had .. '.officer@Mara_Venn'
+lua assert(GameDebug.Give(_G.theirs, 1), 'no such officer\'s module: ' .. _G.theirs)
+lua _G.fitted = GameDebug.Fitted()
+until GameDebug.Press('Fitting')
+until GameDebug.Tab() == 'Fitting'
+until GameDebug.Press('Unfit:high1')
+until GameDebug.Fitted() == _G.fitted - 1
+until GameDebug.Press('Fit:' .. _G.theirs)
+until GameDebug.Fitted(_G.theirs) == 1
+until GameDebug.Press('UNDOCK') and GameDebug.InSpace()
+frames 90
+lua assert(GameDebug.Fitted(_G.theirs) == 1)
+
+echo makes scenario passed
+quit

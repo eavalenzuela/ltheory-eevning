@@ -142,14 +142,18 @@ suite:Case("a captain: their camp is a place when the pilot is in the system, th
     wreck = if state.wrecks[id].name == "Mara Venn Wreck" then id else wreck
   end
   t.ok(wreck ~= 0, "the captain left no wreck")
-  local customs, tags = 0, 0
+  local customs, tags, theirs, mutators = 0, 0, 0, 0
   for _, item in Items.In(state, wreck, nil) do
     local module = Modules.byId[item.type]
     customs += if module and module.meta == 1 then item.quantity else 0
     tags += if item.type == "tag.pirate" then item.quantity else 0
+    -- (and, an officer by name, modules that are theirs: better than a masterwork, and called by their name)
+    theirs += if module and module.officer == "Mara Venn" and module.meta == 4 then item.quantity else 0
+    mutators += if item.type == "mutator" then item.quantity else 0
   end
   t.ok(customs >= Sightings.PRIZES, `only {customs} custom makes in the wreck`)
   t.ok(tags >= Sightings.TAGS, `only {tags} tags in the wreck`)
+  t.eq({ theirs, mutators }, { Sightings.THEIRS, Sightings.MUTATORS }, "an officer's own modules, and a mutator")
   -- (and the camp is let go)
   t.ok(state.sites[one.place].gone)
 

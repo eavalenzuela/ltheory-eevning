@@ -219,6 +219,19 @@ local function actionsFor(session: Session.Session, view: View?, item: State.Ite
         end
       end })
   end
+  -- A module in the hangar is put through a mutator from its own menu
+  -- (Core/Assets/Mutators): it cannot be undone, and the menu says so.
+  -- Where it cannot be done (no mutator there, or the module has been
+  -- through one), the entry is there only if there is a mutator to use.
+  if info.category == "module" and shown.kind == "hangar" then
+    local mutate: State.Command = { kind = "Mutate", actor = 0, item = item.id }
+    local can, why = Session.CanDo(session, mutate)
+    if can then
+      add("Mutate (cannot be undone)", `Mutate:{type}`, mutate, nil, true)
+    elseif why == "it has been through a mutator already" then
+      add("Mutated already", nil, nil, nil, false)
+    end
+  end
   -- A skill book is learned from its own menu, wherever it lies in
   -- reach (the hangar here, or the hold): and where it cannot be, the
   -- menu says why.

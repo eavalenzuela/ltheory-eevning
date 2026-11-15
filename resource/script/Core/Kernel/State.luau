@@ -640,6 +640,10 @@ export type Mission = {
   slot: number,
   level: number, waves: { { string } }, wave: number, site: number,
   rooms: { number }, ends: { number }, aim: string, mark: number,
+  -- What it pays with in place of credits, where it does: a module of
+  -- the people's own make (Data/Modules), put in the hangar of the
+  -- station it is handed in at.
+  prize: string?,
 }
 
 -- What a pilot has researched of a blueprint: levels of each kind.

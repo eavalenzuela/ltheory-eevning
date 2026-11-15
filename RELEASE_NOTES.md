@@ -6,6 +6,13 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Better makes of a module
+
+- Each of the four peoples has its own make of what it is known for, and of one useful thing besides: Vessari launchers, armour and cargo extensions; Talmar autocannons, artillery, shields and tracking; Orun blasters, railguns, armour and engines; Kethri lasers, armour and capacitor. A people's make gives 15% more than the plain module (more than a Custom make, less than Tech 2), fits the same and needs no more skill. Their own stations sell a few, at about six times the price, to a pilot they think well of (standing 2 or better), and about one job in five at their stations pays in one instead of credits: the job's line says which.
+- Officers. A named pirate captain that is sighted, the leader of an invasion and the commander of a pirate tower each carry modules of their own, with their name on them: better than a Masterwork in everything, and easier to fit. They are only ever found in that officer's wreck.
+- Mutators. A mutator puts a module through once, and what comes out is another module: what it gives, how hard it is to fit, what it draws and how far it reaches are each thrown again, anywhere from a quarter worse to three tenths better. It cannot be undone and cannot be done twice. Right-click a module in a station's hangar and choose "Mutate" (a mutator has to be in the same hangar). Mutators come from officers' wrecks and from some derelicts.
+- An officer's module and a mutated one are not sold on any market: what you find is what there is.
+
 ## Three things from play
 
 - A ship sent somewhere from a standstill no longer snaps to face it: the hull comes round as it gets under way, quickly for a frigate and slowly for a big ship.

@@ -430,6 +430,17 @@ end
 
 -- What a station offers today, less what has been taken. Each is a
 -- mission as it would be if taken (its id is 0 until it is).
+-- A people's own makes of module (Data/Modules), by the people: what
+-- their agents now and then pay with. And how often.
+local OWN: { [string]: { Modules.ModuleType } } = {}
+for _, module in Modules.list do
+  if module.meta == 3 and module.lineage then
+    OWN[module.lineage] = OWN[module.lineage] or {}
+    table.insert(OWN[module.lineage], module)
+  end
+end
+Missions.PRIZE = 0.2
+
 function Missions.Offers(state: State.State, station: number): { State.Mission }
   local object = Space.Object(state, station)
   if object == nil or object.kind ~= "station" or state.starbases[station] then
@@ -703,6 +714,26 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
       })
     end
   end
+  -- Now and then a job pays with one of the people's own makes of
+  -- module in place of credits (the owner's, 2026-11-15): one job in
+  -- five, where the people have a make worth about what the job pays,
+  -- or somewhat more. (By a roll of its own, so that nothing else about
+  -- the day's jobs is changed by it.)
+  for _, offer in offers do
+    local makes = OWN[offer.faction]
+    if makes and offer.reward > 0 and Rng.Chance(Rng.For(state.historySeed, station, day, offer.slot, 151), Missions.PRIZE) then
+      local fitting: { string } = {}
+      for _, module in makes do
+        if module.basePrice >= offer.reward * 0.8 and module.basePrice <= offer.reward * 2 then
+          table.insert(fitting, module.id)
+        end
+      end
+      if #fitting > 0 then
+        offer.prize = fitting[Rng.Int(Rng.For(state.historySeed, station, day, offer.slot, 157), #fitting) + 1]
+        offer.reward = 0
+      end
+    end
+  end
   return offers
 end
 
@@ -887,6 +918,10 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
     -- (a place made for the job goes with it)
     Assault.Close(state, mission, events)
     Wallet.Pay(state, mission.reward, "mission reward", events)
+    -- (or what it pays with: into the hangar there)
+    if mission.prize and Types.Get(mission.prize) then
+      Items.Add(state, mission.prize, 1, ship.docked, "hangar")
+    end
     standing(state, mission.faction, mission.standing)
     -- (and whoever gave it thinks the better of the pilot)
     regarded(state, mission, if mission.level > 0 then Missions.REGARD.levelled * (1 + mission.level) else Missions.REGARD.daily)
@@ -894,6 +929,7 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
     close(state, mission)
     state.missionsDone += 1
     table.insert(events, { kind = "MissionCompleted", mission = mission.id, title = Missions.Title(mission), reward = mission.reward,
+      prize = mission.prize,
       faction = mission.faction, standing = Missions.Standing(state, mission.faction), loyalty = mission.loyalty,
       agent = mission.agent, regard = Missions.Regard(state, mission.station, mission.slot) })
   elseif kind == "AbandonMission" then

@@ -32,6 +32,7 @@
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
+local Names = require("@lt/Core/Describe/Names")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Sites = require("@lt/Core/Tactical/Sites")
@@ -52,6 +53,9 @@ local HOUR = math.floor(3600 / Constants.TICK + 0.5)
 -- moon's radii.
 Keeps.GRADE = 3
 Keeps.OUT = 5
+-- What its commander leaves when it falls: so many modules of their own, and so many mutators.
+Keeps.THEIRS = 2
+Keeps.MUTATORS = 2
 -- Its batteries: how many, and how far from it they stand, m.
 Keeps.BATTERIES = 3
 Keeps.RING = { 5000, 8000 }
@@ -215,6 +219,12 @@ function Keeps.Fell(state: State.State, ship: number, home: number, events: { Ev
     local rng = Rng.For(state.historySeed, keep.id, 953)
     Items.Add(state, deposit.material.id, Keeps.STOCK[1] + Rng.Int(rng, Keeps.STOCK[2] - Keeps.STOCK[1] + 1), wreck.id, "cargo")
     Items.Add(state, Structures.SEAL.id, Keeps.CHARGES, wreck.id, "cargo")
+  end
+  -- (and what was its commander's: an officer, by name, who flew nothing
+  -- and kept what such a one keeps. Tactical/Pirates' Officer)
+  if wreck and wreck.system == keep.system then
+    local rng = Rng.For(state.historySeed, keep.id, 967)
+    Pirates.Officer(state, wreck.id, Names.Person(rng), nil, rng, Keeps.THEIRS, Keeps.MUTATORS)
   end
   state.keeps[keep.id] = nil
   State.RemoveId(state.keepIds, keep.id)

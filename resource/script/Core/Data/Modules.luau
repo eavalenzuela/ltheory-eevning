@@ -142,7 +142,22 @@ export type ModuleType = {
   -- the pirates have, better than tech 2 and as easy to fit as a custom
   -- make. Only their captains fit them (Tactical/Pirates), and only a
   -- captain's wreck has one.
+  -- 3 for a people's own make (the owner's, 2026-11-15): what one of
+  -- the four peoples builds of the kinds of module it is known for,
+  -- better than the custom make and short of tech 2. 'lineage' says
+  -- whose: their stations sell it, to a pilot they think well of.
+  -- 4 for an officer's: the module 'base' as a named officer of the
+  -- pirates carried it, better than a masterwork, and called by their
+  -- name. Only that officer's wreck has it.
   meta: number?,
+  -- A module that has been put through a mutator: every figure of it
+  -- moved, each its own way, for better or for worse. 'rolls' are how
+  -- far, in hundredths (what it gives, how easy it is to fit, how little
+  -- it draws, how far it reaches: more is better, of each).
+  mutated: boolean?,
+  rolls: { number }?,
+  -- The officer whose it was, for an officer's.
+  officer: string?,
 }
 
 export type ChargeType = {
@@ -1047,6 +1062,143 @@ for _, base in table.clone(modules) do
   end
 end
 
+-- ---------------------------------------------------------------------
+-- A module made over, generally: every figure of it by a factor.
+-- 'output' is on what it gives (a weapon's damage, what a repairer
+-- mends, what a laser cuts, what a plate or an extender holds, and the
+-- good of every other thing it does to its ship or its weapons),
+-- 'fitting' on its CPU and powergrid, 'capacitor' on what it draws, and
+-- 'reach' on how far it reaches. (The three makes above are older than
+-- this, and are worked out their own way: they change nothing but
+-- damage, amount and fitting.)
+
+-- Attributes of which less is the better: what a module does to one of
+-- these is good when it makes it smaller.
+local function lessIsBetter(attribute: string): boolean
+  return string.find(attribute, "Resonance", 1, true) ~= nil or attribute == "capacitorRecharge" or attribute == "shieldRecharge"
+    or attribute == "signature" or attribute == "mass" or attribute == "inertia"
+end
+
+-- A modifier with the good it does made 'output' times as much. What
+-- it costs its ship (a cargo extension's speed, a drive's mass) is left.
+local function bettered(m: Modifier, output: number): Modifier
+  local value = m.value
+  local less = lessIsBetter(m.attribute)
+  if m.op == "mul" then
+    if (value > 1 and not less) or (value < 1 and less) then
+      value = 1 + (value - 1) * output
+      -- (nothing is made nothing, or less: a tenth of it is always left)
+      if less then
+        value = math.max(0.1, value)
+      end
+    end
+  elseif (value > 0 and not less) or (value < 0 and less) then
+    value *= output
+  end
+  return { on = m.on, family = m.family, attribute = m.attribute, op = m.op, value = value, stack = m.stack }
+end
+
+-- ('amount', where it is given, is on everything a module gives but a
+-- weapon's damage, in place of 'output': the older makes have the two
+-- apart, and a make that is to be better than one of them has to be.)
+type Tune = { output: number, amount: number?, fitting: number, capacitor: number, reach: number, price: number }
+
+local function resized(n: number, by: number): number
+  if n <= 0 then
+    return n
+  end
+  return math.max(1, if by < 1 then math.floor(n * by) else math.ceil(n * by))
+end
+
+local function made(base: ModuleType, id: string, name: string, tune: Tune): ModuleType
+  local amount = tune.amount or tune.output
+  local passive: { Modifier } = {}
+  for _, m in base.passive do
+    table.insert(passive, bettered(m, amount))
+  end
+  local boost: { Modifier }? = nil
+  if base.boost then
+    local list: { Modifier } = {}
+    for _, m in base.boost do
+      table.insert(list, bettered(m, amount))
+    end
+    boost = list
+  end
+  local weapon, repair, miner, hex = base.weapon, base.repair, base.miner, base.hex
+  local mends = hex ~= nil and (hex.kind == "shield" or hex.kind == "armor")
+  local out = table.clone(base)
+  out.id, out.name = id, name
+  out.cpu, out.powergrid = resized(base.cpu, tune.fitting), resized(base.powergrid, tune.fitting)
+  out.basePrice = math.floor(base.basePrice * tune.price)
+  out.passive, out.boost = passive, boost
+  out.boostCapacitor = if base.boostCapacitor then base.boostCapacitor * tune.capacitor else nil
+  if weapon then
+    local w = table.clone(weapon)
+    w.damageMultiplier, w.capacitor = weapon.damageMultiplier * tune.output, weapon.capacitor * tune.capacitor
+    w.optimal, w.falloff = weapon.optimal * tune.reach, weapon.falloff * tune.reach
+    out.weapon = w
+  end
+  if repair then
+    local r = table.clone(repair)
+    r.amount, r.capacitor = repair.amount * amount, repair.capacitor * tune.capacitor
+    out.repair = r
+  end
+  if miner then
+    local m = table.clone(miner)
+    m.volume, m.capacitor, m.range = miner.volume * amount, miner.capacitor * tune.capacitor, miner.range * tune.reach
+    out.miner = m
+  end
+  if hex then
+    local h = table.clone(hex)
+    h.strength = if mends then hex.strength * amount else hex.strength
+    h.capacitor, h.range = hex.capacitor * tune.capacitor, hex.range * tune.reach
+    out.hex = h
+  end
+  -- (it is a make of the plain module its base is a make of, and wants the skills of what it was made from)
+  out.base = base.base or base.id
+  return out
+end
+
+-- ---------------------------------------------------------------------
+-- A people's own make (the owner's rulings, 2026-11-15: "Speciality,
+-- plus one utility each"). Each of the four peoples builds its own make
+-- of the kinds of module it is known for: the weapons its warships
+-- carry, what it keeps them whole with, and one other thing. Fifteen
+-- parts in a hundred more of what the module gives, as easy to fit as
+-- the plain one, and no more skill: better than the custom make, short
+-- of tech 2. Their stations sell them, to a pilot they think well of
+-- (Assets/Market), and their agents now and then pay with one
+-- (Assets/Missions). Nobody has the drawings.
+--
+-- (Which other thing is whose is my proposal, for the owner to correct:
+-- the Vessari carry more, the Talmar aim better, the Orun go faster,
+-- the Kethri have the capacitor for their lasers.)
+local PEOPLES: { { id: string, name: string, makes: { string } } } = {
+  { id = "vessari", name = "Vessari", makes = { "launcher.", "armor.plate", "armor.repairer", "armor.membrane", "armor.hardener",
+    "cargo.expander" } },
+  { id = "talmar", name = "Talmar", makes = { "autocannon.", "artillery.", "shield.extender", "shield.booster", "shield.hardener",
+    "computer.tracking", "tracking.enhancer" } },
+  { id = "orun", name = "Orun", makes = { "blaster.", "railgun.", "armor.plate", "armor.repairer", "armor.membrane", "armor.hardener",
+    "afterburner.", "mwd." } },
+  { id = "kethri", name = "Kethri", makes = { "laser.pulse", "laser.beam", "armor.plate", "armor.repairer", "armor.membrane",
+    "armor.hardener", "capacitor.battery", "capacitor.recharger" } },
+}
+local PEOPLE_TUNE: Tune = { output = 1.15, fitting = 1, capacitor = 1, reach = 1, price = 6 }
+for _, base in table.clone(modules) do
+  if not base.tech and not base.meta and not base.internal and not base.lineage and base.slot ~= "rig" then
+    for _, people in PEOPLES do
+      for _, prefix in people.makes do
+        if string.sub(base.id, 1, #prefix) == prefix then
+          local own = made(base, `{base.id}.{people.id}`, `{people.name} {base.name}`, PEOPLE_TUNE)
+          own.meta, own.lineage = 3, people.id
+          table.insert(modules, own)
+          break
+        end
+      end
+    end
+  end
+end
+
 local Modules = {
   list = modules,
   byId = {} :: { [string]: ModuleType },
@@ -1074,6 +1226,111 @@ end
 function Modules.Custom(id: string): ModuleType?
   local better = Modules.byId[id .. ".custom"]
   return if better and better.meta then better else nil
+end
+
+-- ---------------------------------------------------------------------
+-- An officer's module, and a mutated one: each is a module by itself,
+-- and what it is, is in what it is called. There is no list of them:
+-- a module's id says whose it was ("autocannon.small.officer@Mara_Venn")
+-- or how it came out of the mutator ("autocannon.small~40253055": four
+-- figures, each from 00 to 55, which is 25 parts in a hundred worse to
+-- 30 better), and the module is worked out from that when it is first
+-- asked for. Two with the same id are the same module, in any game.
+
+-- An officer's: better than a masterwork in everything (the owner's:
+-- "A new tier above it"). A third more damage from a weapon (a
+-- masterwork's is a quarter) and 45 parts in a hundred more of what
+-- anything else gives (a masterwork's is 35), easier to fit than a
+-- masterwork, a little easier on the capacitor and a little longer in
+-- reach. (The figures are mine.)
+local OFFICER_TUNE: Tune = { output = 1.32, amount = 1.45, fitting = 0.85, capacitor = 0.9, reach = 1.05, price = 40 }
+local OFFICER = ".officer@"
+-- A mutation: each figure anywhere from a quarter worse to three tenths
+-- better (the owner's: "A gamble, wide"), in hundredths.
+Modules.WORST, Modules.BEST = -25, 30
+Modules.ROLLS = 4
+
+local function derived(id: string): ModuleType?
+  local cut = string.find(id, "~", 1, true)
+  if cut then
+    local base = Modules.byId[string.sub(id, 1, cut - 1)]
+    local code = string.sub(id, cut + 1)
+    if base == nil or base.mutated or #code ~= 2 * Modules.ROLLS or string.find(code, "^%d+$") == nil then
+      return nil
+    end
+    local rolls: { number } = {}
+    for index = 1, Modules.ROLLS do
+      local roll = (tonumber(string.sub(code, 2 * index - 1, 2 * index)) :: number) + Modules.WORST
+      if roll > Modules.BEST then
+        return nil
+      end
+      rolls[index] = roll
+    end
+    local out = made(base, id, `Mutated {base.name}`, { output = 1 + rolls[1] / 100, fitting = 1 - rolls[2] / 100,
+      capacitor = 1 - rolls[3] / 100, reach = 1 + rolls[4] / 100, price = 1.5 })
+    out.mutated, out.rolls = true, rolls
+    out.meta = base.meta or 5
+    return out
+  end
+  local at = string.find(id, OFFICER, 1, true)
+  if at then
+    local base = Modules.byId[string.sub(id, 1, at - 1)]
+    local who = string.sub(id, at + #OFFICER)
+    -- (of the plain modules there is a masterwork of: what a captain fits)
+    if base == nil or base.tech or base.meta or who == "" or rawget(Modules.byId, base.id .. ".master") == nil then
+      return nil
+    end
+    local name = (string.gsub(who, "_", " "))
+    local out = made(base, id, `{name}'s {base.name}`, OFFICER_TUNE)
+    out.meta, out.officer = 4, name
+    return out
+  end
+  return nil
+end
+
+setmetatable(Modules.byId :: any, { __index = function(known: { [string]: ModuleType }, id: any): ModuleType?
+  if type(id) ~= "string" then
+    return nil
+  end
+  local found = derived(id)
+  if found then
+    rawset(known, id, found)
+  end
+  return found
+end })
+
+-- The id of a module as an officer of a name carried it; nil if it is
+-- no module an officer carries.
+function Modules.Officer(id: string, name: string): string?
+  local made = `{id}{OFFICER}{(string.gsub(name, " ", "_"))}`
+  return if Modules.byId[made] then made else nil
+end
+
+-- The id of a module as it comes out of a mutator with these rolls
+-- (hundredths, WORST to BEST, one for each figure); nil if it cannot
+-- be mutated (it has been already, or it is no module).
+function Modules.Mutated(id: string, rolls: { number }): string?
+  local code = ""
+  for index = 1, Modules.ROLLS do
+    code ..= string.format("%02d", math.clamp(math.floor((rolls[index] or 0) + 0.5), Modules.WORST, Modules.BEST) - Modules.WORST)
+  end
+  local made = `{id}~{code}`
+  return if Modules.byId[made] then made else nil
+end
+
+-- The peoples that have makes of their own, and a people's make of a
+-- module, if they have one.
+function Modules.Peoples(): { string }
+  local ids: { string } = {}
+  for _, people in PEOPLES do
+    table.insert(ids, people.id)
+  end
+  return ids
+end
+
+function Modules.Own(id: string, people: string): ModuleType?
+  local better = rawget(Modules.byId, `{id}.{people}`)
+  return if better and better.meta == 3 then better else nil
 end
 
 -- The masterwork of a module, if it has one.

@@ -1981,7 +1981,10 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
     -- (a job with levels says its level in a word less: the steps beside it say the rest)
     Im.Text(shorten(if kind then (string.gsub(offer.title, ", level", "", 1)) else offer.title, if kind then 30 else 34), left, line, 15,
       Im.TEXT)
-    Im.TextRight(Format.Credits(offer.mission.reward), left + 356, line, 15, GOOD)
+    -- (or what it pays with: one of the people's own makes)
+    local pays = offer.mission.prize
+    Im.TextRight(if pays then shorten(Types.Info(pays).name, 30) else Format.Credits(offer.mission.reward), left + 356, line,
+      if pays then 13 else 15, GOOD)
     local accept: State.Command = { kind = "AcceptMission", actor = 0, what = offer.mission.key }
     local can, whyNot = Session.CanDo(session, accept)
     Im.Text(if can then shorten(about(offer.mission, offer.jumps, offer.ward), 44) else shorten(tostring(whyNot), 44), left, line + 21, 12,
@@ -2050,7 +2053,9 @@ local function drawMissions(session: Session.Session, game: Core.Game, x: number
   end
   for index, held in status.inHand do
     Im.Text(held.title, right, line, 15, Im.TEXT)
-    Im.TextRight(Format.Credits(held.mission.reward), right + 430, line, 15, GOOD)
+    local paid = held.mission.prize
+    Im.TextRight(if paid then shorten(Types.Info(paid).name, 30) else Format.Credits(held.mission.reward), right + 430, line,
+      if paid then 13 else 15, GOOD)
     -- (a rig that is going down says so in the colour of a warning)
     Im.Text(shorten(about(held.mission, held.jumps, held.ward), 68), right, line + 21, 12,
       if held.ward >= 0 and held.ward < 0.5 and held.mission.done < held.mission.need then Im.WARN else Im.DIM)

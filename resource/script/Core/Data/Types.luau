@@ -152,6 +152,9 @@ local goods: { Info } = {
   -- What an invention is worked out from (Assets/Industry): found in
   -- derelicts (Tactical/Sites), and nowhere to be bought.
   { id = "datacore", name = "Datacore", category = "goods", volume = 0.1, basePrice = 30000, scarce = true },
+  -- What a module is put through to come out changed (Assets/Mutators):
+  -- found in what a named officer leaves, and nowhere to be bought.
+  { id = "mutator", name = "Mutator", category = "goods", volume = 1, basePrice = 300000, scarce = true },
 }
 for _, g in goods do
   byId[g.id] = g
@@ -182,13 +185,27 @@ function Types.Ids(): { string }
   return ids
 end
 
+-- (An officer's module, and a mutated one, is a module by itself, worked
+-- out from its id when it is first asked for: Data/Modules. No market
+-- deals in one.)
+local function single(id: string): Info?
+  local module = Modules.byId[id]
+  if module == nil then
+    return nil
+  end
+  local info: Info = { id = module.id, name = module.name, category = "module", volume = module.volume, basePrice = module.basePrice,
+    scarce = true, unlisted = true }
+  byId[id] = info
+  return info
+end
+
 function Types.Get(id: string): Info?
-  return byId[id]
+  return byId[id] or single(id)
 end
 
 -- For code that already knows the id is good.
 function Types.Info(id: string): Info
-  return assert(byId[id], `no item type '{id}'`)
+  return assert(byId[id] or single(id), `no item type '{id}'`)
 end
 
 return Types

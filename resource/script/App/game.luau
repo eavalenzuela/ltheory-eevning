@@ -503,6 +503,30 @@ function Debug.Fitted(type: string?): number
   return count
 end
 
+-- What is fitted in a slot of the pilot's ship ('high', 1): its type,
+-- '' for an empty one. (For a script that is to put something in the
+-- place of whatever a pilot begins with, without naming it.)
+function Debug.Slotted(place: string, slot: number): string
+  for _, item in Core.Query.Fitted(session.game, session.game.state.player.ship) do
+    if item.place == place and item.slot == slot then
+      return item.type
+    end
+  end
+  return ""
+end
+
+-- The people whose space the pilot is in, by id, and the first of that
+-- people's own makes of a module ('' where they have none: Data/Modules).
+function Debug.People(): (string, string)
+  local people = session.game.state.galaxy.systems[Core.Query.Player(session.game).system].nearest
+  for _, module in Modules.list do
+    if module.meta == 3 and module.lineage == people then
+      return people, module.id
+    end
+  end
+  return people, ""
+end
+
 -- Destroy the player's own ship, as if it had been shot down.
 function Debug.SelfDestruct()
   local ship = session.game.state.player.ship

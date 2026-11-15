@@ -35,6 +35,7 @@
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Happenings = require("@lt/Core/Strategic/Happenings")
+local Names = require("@lt/Core/Describe/Names")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Sites = require("@lt/Core/Tactical/Sites")
@@ -70,6 +71,12 @@ Invasions.REINFORCE = 40
 Invasions.TURN = { "raider", "jackal", "raider", "raider", "jackal", "marauder" }
 -- How far from the middle of their lines they come up, m.
 Invasions.OUT = 12000
+-- The last of them to come up is whoever leads them: an officer, by
+-- name, a captain of this, and what is theirs is in the wreck
+-- (Tactical/Pirates' Officer): so many modules, and so many mutators.
+Invasions.LEADER = "marauder"
+Invasions.THEIRS = 2
+Invasions.MUTATORS = 2
 -- What beating one pays, and what the system's keeper thinks of it.
 Invasions.REWARD = 400000
 Invasions.THANKS = 0.4
@@ -167,10 +174,18 @@ local function fight(state: State.State, one: State.Happening, me: State.Ball?, 
   if me and place and me.grid == one.place and alive < math.min(Invasions.WAVE, one.strength)
     and (alive == 0 or state.tick % Invasions.REINFORCE == 0) then
     local sent = Invasions.FORCE - one.strength + alive
-    local kind = Pirates.kindById[Invasions.TURN[sent % #Invasions.TURN + 1]]
+    -- (the last of them is their leader, by name)
+    local last = one.strength - alive == 1
+    local kind = if last then Pirates.Graded(Pirates.kindById[Invasions.LEADER], 2)
+      else Pirates.kindById[Invasions.TURN[sent % #Invasions.TURN + 1]]
     local turn = Rng.Float(rng, 0, 2 * math.pi)
     local ball = Pirates.Spawn(state, kind, one.system, place.x + Invasions.OUT * math.cos(turn), place.y + Rng.Float(rng, -1500, 1500),
       place.z + Invasions.OUT * math.sin(turn), one.place)
+    if last then
+      one.name = Names.Person(Rng.For(state.historySeed, one.id, 1327))
+      ball.name = one.name
+      state.ships[ball.id].name = one.name
+    end
     table.insert(events, { kind = "BallAdded", ball = ball.id })
     one.ref = alive + 1
   end
@@ -241,6 +256,17 @@ function Invasions.Step(state: State.State, here: number, events: { Event })
   all.invasionDue = state.tick + math.floor(Rng.Float(rng, Invasions.EVERY[1], Invasions.EVERY[2]) * HOUR)
   Happenings.End(state, one, if beaten then "beaten" else "over", events)
   if beaten then
+    -- (what was their leader's is in what is left of them)
+    if one.name ~= "" then
+      for index = #state.wreckIds, 1, -1 do
+        local wreck = state.wrecks[state.wreckIds[index]]
+        if wreck.system == one.system and wreck.name == one.name .. " Wreck" then
+          Pirates.Officer(state, wreck.id, one.name, Pirates.Graded(Pirates.kindById[Invasions.LEADER], 2), rng, Invasions.THEIRS,
+            Invasions.MUTATORS)
+          break
+        end
+      end
+    end
     local keeper = if Galaxy.Keeper(node) ~= "" then Galaxy.Keeper(node) else node.nearest
     Wallet.Pay(state, Invasions.REWARD, `the thanks of {node.name}`, events)
     Standings.Change(state, keeper, Invasions.THANKS, events)

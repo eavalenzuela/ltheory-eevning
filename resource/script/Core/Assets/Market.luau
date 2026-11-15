@@ -148,6 +148,12 @@ end
 Market.FOREIGN_HULL = 1.4
 Market.FOREIGN_ARMS = 1.25
 Market.FOREIGN_STOCK = 4
+-- A people's own makes of modules (Data/Modules): how many of each a
+-- station of theirs keeps, and what they have to think of a pilot to
+-- sell them one (the owner's, 2026-11-15: sold to a pilot in good
+-- standing. The figure is mine).
+Market.OWN_STOCK = 3
+Market.OWN_STANDING = 2
 
 -- The kinds of weapon a faction's own ships carry: its turrets, and
 -- missiles if a fair share of its hardpoints are launchers.
@@ -201,7 +207,14 @@ local function open(name: string, variety: string, faction: string): Economy.Eco
     if few then
       normal = math.min(normal, Market.FOREIGN_STOCK)
     end
-    if info.scarce then
+    local own = Modules.byId[id]
+    if own and own.meta == 3 and own.lineage == faction then
+      -- A people's own make, at one of their stations: a few, which
+      -- their yards make good.
+      Economy.SetTarget(econ, node, index, Market.OWN_STOCK)
+      Economy.SetStock(econ, node, index, Market.OWN_STOCK)
+      econ.nodes[node].anchor[index] = Market.OWN_STOCK * 0.25
+    elseif info.scarce then
       -- Nobody brings these: a station has what pilots have sold it,
       -- would like a few, and pays well while it has none.
       Economy.SetTarget(econ, node, index, 4)
@@ -609,6 +622,11 @@ function Market.Validate(state: State.State, command: State.Command): (boolean, 
       return false, "no such quantity"
     end
     local quantity = command.quantity :: number
+    -- (a people's own make is sold to those they think well of, and to nobody else)
+    local own = Modules.byId[type]
+    if own and own.meta == 3 and own.lineage and Standings.Of(state, own.lineage) < Market.OWN_STANDING then
+      return false, `the {Factions.byId[own.lineage].name} sell their own makes to those they think well of (standing {Market.OWN_STANDING})`
+    end
     if kind == "BuyNow" then
       local cost = Market.BuyCost(state, station, type, quantity)
       if cost == nil then

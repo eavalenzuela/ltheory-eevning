@@ -300,7 +300,21 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     elseif module.hardpoint ~= "" then `{slot} {module.hardpoint}`
     else `{slot} module`
   -- (a make of another module: what it is the make of, and how it is come by)
-  if module.meta == 2 and module.base then
+  local cut = string.find(module.id, "~", 1, true)
+  local people = if module.lineage then Factions.byId[module.lineage] else nil
+  if module.mutated and cut then
+    sheet.note = `The {nameOf(string.sub(module.id, 1, cut - 1))} as it came out of a mutator: what it gives, how it fits, what it draws and how far it reaches were each thrown again, once. It cannot go through another, and no market deals in one.`
+    -- (how each figure came out: a quarter worse to three tenths better)
+    local to = section(sheet, "Mutation")
+    for index, label in { "What it gives", "Fitting", "Capacitor draw", "Reach" } do
+      local roll = (module.rolls or {})[index] or 0
+      row(to, label, if roll == 0 then "as it was" else `{whole(math.abs(roll))}% {if roll > 0 then "better" else "worse"}`)
+    end
+  elseif module.officer and module.base then
+    sheet.note = `{module.officer}'s own {nameOf(module.base)}: better than a masterwork, easier to fit, and no harder to use than the plain one. It was in their wreck and nowhere else, and no market deals in one.`
+  elseif module.meta == 3 and people and module.base then
+    sheet.note = `The {people.name}' own make of the {nameOf(module.base)}: better than the plain one, and no harder to fit or to use. Their stations sell it to pilots they think well of, and their agents now and then pay a job with one.`
+  elseif module.meta == 2 and module.base then
     sheet.note = `The {nameOf(module.base)} made over by the best hands the pirates have: better than any that is built to a drawing, easy to fit, and no harder to use than the plain one. Nobody sells or builds one. Only a pirate captain fits them, and now and then one outlives the captain's ship.`
   elseif module.meta and module.base then
     sheet.note = `The {nameOf(module.base)} as somebody has worked it over: a little better, easier to fit, and no harder to use. Nobody sells or builds one. They are found in pirates' wrecks and in their stores.`

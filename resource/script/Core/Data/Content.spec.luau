@@ -977,7 +977,8 @@ end)
 suite:Case("the same modules have a custom make, between the plain one and tech 2, and a masterwork past it: easier to fit, and only ever found", function(t)
   local customs, masterworks = 0, 0
   for _, module in Modules.list do
-    if module.meta then
+    -- (a people's own make is meta 3, and has a spec of its own: Data/Makes.spec)
+    if module.meta and module.meta <= 2 then
       local master = module.meta == 2
       customs += if master then 0 else 1
       masterworks += if master then 1 else 0

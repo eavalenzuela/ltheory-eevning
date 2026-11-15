@@ -562,8 +562,22 @@ function Session.Notice(session: Session, event: Space.Event)
     -- (and what whoever gave it thinks of the pilot now, where it was somebody)
     local thinks = if event.agent and event.agent ~= "" and (event.regard or 0) ~= 0
       then string.format("; %s %.1f", event.agent, event.regard) else ""
-    Session.Say(session, string.format("Job done: +%d credits, +%d loyalty points, standing %.1f%s", event.reward, event.loyalty or 0,
-      event.standing, thinks))
+    -- (a job that paid with one of the people's own makes says which: it is in the hangar there)
+    if event.prize then
+      Session.Say(session, string.format("Job done: paid with a %s (in the hangar here), +%d loyalty points, standing %.1f%s",
+        Types.Info(event.prize).name, event.loyalty or 0, event.standing, thinks))
+    else
+      Session.Say(session, string.format("Job done: +%d credits, +%d loyalty points, standing %.1f%s", event.reward, event.loyalty or 0,
+        event.standing, thinks))
+    end
+  elseif kind == "Mutated" then
+    -- (how each figure came out: what it gives, its fitting, its draw, its reach)
+    local rolls = event.rolls :: { number }
+    local function signed(n: number): string
+      return if n >= 0 then `+{n}%` else `{n}%`
+    end
+    Session.Say(session, `Mutated: {Types.Info(event.from).name} came out giving {signed(rolls[1])}, fitting {signed(rolls[2])}, `
+      .. `draw {signed(rolls[3])}, reach {signed(rolls[4])} (more is better of each)`)
   elseif kind == "MissionExpired" then
     Session.Say(session, `A job has lapsed: {event.title}. It was kept too long`)
   elseif kind == "LoyaltyRedeemed" then

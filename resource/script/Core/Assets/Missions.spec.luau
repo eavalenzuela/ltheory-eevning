@@ -24,6 +24,20 @@ local function newGame(historySeed: number?): Core.Game
   return Core.New({ galaxySeed = 1, historySeed = historySeed or 1, peaceful = true })
 end
 
+-- What a job pays, against the credits it is worth: that many, or (one
+-- job in five at a people's own station: Missions.PRIZE) no credits and
+-- one of that people's own makes of a module, worth about as much.
+local function pays(t: Test.Context, offer: State.Mission, credits: number)
+  local prize = offer.prize
+  if prize then
+    local make = Types.Info(prize)
+    t.eq(offer.reward, 0, "a job that pays in a module pays no credits beside")
+    t.ok(make.basePrice >= credits * 0.8 and make.basePrice <= credits * 2, `{make.name} for a job worth {credits}`)
+  else
+    t.eq(offer.reward, credits)
+  end
+end
+
 local function submit(game: Core.Game, command: State.Command): (boolean, string?)
   command.actor = game.state.player.ship
   local ok, why = Core.Submit(game, command)
@@ -71,14 +85,15 @@ suite:Case("a station offers three jobs a day, the same however often it is aske
     t.eq({ #offers, #every }, { Missions.OFFERS, Missions.OFFERS + 4 })
     for _, offer in offers do
       kinds[offer.kind] = (kinds[offer.kind] or 0) + 1
-      t.ok(offer.reward > 0 and offer.need > 0 and offer.standing > 0, `{Missions.Title(offer)} pays {offer.reward}`)
+      t.ok((offer.reward > 0 or offer.prize ~= nil) and offer.need > 0 and offer.standing > 0, `{Missions.Title(offer)} pays {offer.reward}`)
       t.eq({ offer.id, offer.done, offer.station, offer.faction } :: { any }, { 0, 0, state.player.home, "vessari" } :: { any })
       if offer.kind == "courier" then
         local to = assert(Space.Object(state, offer.to))
         t.ok(to.kind == "station" and to.id ~= offer.station, "a courier run goes to another station")
         t.ok(offer.need <= 130, "a courier's cargo should go in a frigate's hold")
       elseif offer.kind == "supply" then
-        t.ok(offer.reward > offer.need * Types.Info(offer.type).basePrice, "a supply order should pay more than the goods are worth")
+        t.ok(offer.prize ~= nil or offer.reward > offer.need * Types.Info(offer.type).basePrice,
+          "a supply order should pay more than the goods are worth")
       else
         t.ok(table.find(state.galaxy.systems[1].neighbors, offer.system) ~= nil or offer.system == 1)
       end
@@ -331,11 +346,12 @@ suite:Case("the fourth agent has an assault on a pirate camp, at each level the 
         bounty += Pirates.kindById[kind].bounty
       end
     end
-    t.eq(offer.reward, math.floor((math.floor(0.6 * bounty) + 5000 * level) * (1 + 0.03 * 5)))
+    local worth = math.floor((math.floor(0.6 * bounty) + 5000 * level) * (1 + 0.03 * 5))
+    pays(t, offer, worth)
     t.near(offer.standing, 0.15 * level, 1e-9)
-    t.eq(offer.loyalty, offer.reward // Missions.LOYALTY)
-    t.ok(offer.reward > last, "a harder camp should pay more")
-    last = offer.reward
+    t.eq(offer.loyalty, worth // Missions.LOYALTY)
+    t.ok(worth > last, "a harder camp should pay more")
+    last = worth
     t.eq(Missions.Title(offer), `Assault, level {level}: ` .. (if offer.aim == "chief" then "the chief of a camp"
       elseif offer.aim == "fetch" then `{offer.need} crates a camp took`
       elseif offer.aim == "raze" then (if offer.need == 1 then "a camp's store" else `a camp's {offer.need} works`)
@@ -945,10 +961,11 @@ suite:Case("the fifth agent has a mining contract at each level the pilot's stan
     local volume = offer.need * ore.volume
     t.near(volume, ({ 300, 900, 2500, 7000 })[level], 61, `level {level} wants {volume} m3`)
     -- It pays three tenths over what the ore is worth, and three thousand a level, and what the pilot's standing adds.
-    t.eq(offer.reward, math.floor((math.floor(1.3 * offer.need * ore.basePrice) + 3000 * level) * (1 + 0.03 * 5)))
+    local worth = math.floor((math.floor(1.3 * offer.need * ore.basePrice) + 3000 * level) * (1 + 0.03 * 5))
+    pays(t, offer, worth)
     t.near(offer.standing, 0.1 * level, 1e-9)
-    t.ok(offer.reward > last, "a bigger contract should pay more")
-    last = offer.reward
+    t.ok(worth > last, "a bigger contract should pay more")
+    last = worth
     t.eq(Missions.Title(offer), `Mining, level {level}: {offer.need} {ore.name}`)
     -- Nobody disputes the first two; a pack turns up at the others.
     t.eq({ #offer.waves, #offer.ends, offer.ends[1] }, if level <= 2 then { 0, 1, 0 } else { 1, 1, 1 })
@@ -1060,7 +1077,12 @@ suite:Case("a job comes from an agent, the same people at a station every day, a
   for slot, offer in today do
     t.ok(#offer.agent > 4, "a job from nobody")
     t.eq(offer.agent, Missions.Agent(state, home, slot))
-    t.eq(offer.loyalty, math.max(1, offer.reward // Missions.LOYALTY))
+    -- (a job that pays in a module is worth the points of what it would have paid)
+    if offer.prize then
+      t.ok(offer.loyalty >= 1)
+    else
+      t.eq(offer.loyalty, math.max(1, offer.reward // Missions.LOYALTY))
+    end
     table.insert(names, offer.agent)
   end
   t.ok(names[1] ~= names[2] and names[2] ~= names[3])

@@ -322,6 +322,43 @@ function Pirates.Equip(state: State.State, ship: State.Ship, kind: Kind)
   end
 end
 
+-- What a named officer of the pirates leaves, beside what any captain
+-- does (the owner's, 2026-11-15: officer modules "dropped by
+-- high-ranking npcs/enemies", a tier above the masterwork, each by its
+-- officer's name): so many of the modules they carried, as theirs
+-- (Data/Modules), and so many mutators (Assets/Mutators), into their
+-- wreck. 'kind' is what they flew, for what they carried: without one
+-- (the commander of a tower, who flew nothing), what such a one would.
+local COMMANDED = { "launcher.heavy", "autocannon.medium", "armor.repairer.medium", "armor.plate.medium", "shield.extender.medium" }
+function Pirates.Officer(state: State.State, wreck: number, name: string, kind: Kind?, rng: Rng.Rng, count: number, mutators: number)
+  local roots: { string } = {}
+  local carried: { string } = {}
+  if kind then
+    for _, entry in Pirates.Fit(kind) do
+      table.insert(carried, entry[1])
+    end
+  else
+    carried = COMMANDED
+  end
+  for _, id in carried do
+    local module = Modules.byId[id]
+    local root = if module then module.base or module.id else nil
+    if root and Modules.Officer(root, name) and not table.find(roots, root) then
+      table.insert(roots, root)
+    end
+  end
+  for _ = 1, count do
+    if #roots == 0 then
+      break
+    end
+    local root = table.remove(roots, Rng.Int(rng, #roots) + 1) :: string
+    Items.Add(state, Modules.Officer(root, name) :: string, 1, wreck, "cargo")
+  end
+  if mutators > 0 then
+    Items.Add(state, "mutator", mutators, wreck, "cargo")
+  end
+end
+
 -- A pirate ship of a kind, in space at a point.
 function Pirates.Spawn(state: State.State, kind: Kind, system: number, x: number, y: number, z: number, home: number): State.Ball
   local ship = Space.NewShip(state, kind.hull, kind.name, "pirates", 0)

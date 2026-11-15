@@ -7,6 +7,8 @@ local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Happenings = require("@lt/Core/Strategic/Happenings")
 local Invasions = require("@lt/Core/Tactical/Invasions")
+local Items = require("@lt/Core/Assets/Items")
+local Modules = require("@lt/Core/Data/Modules")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
@@ -179,6 +181,19 @@ suite:Case("where the pilot is: their lines and the way they came, a few of them
   end
   t.ok(state.sites[one.place].gone)
   t.eq(Happenings.In(state, me.system, Happenings.DISASTER), nil, "no works are left out of use after one that was beaten")
+  -- The last of them was their leader, an officer by name: what was theirs is in the wreck.
+  t.ok(over[1].name ~= "", "the leader of an invasion has a name")
+  local theirs, mutators = 0, 0
+  for _, id in state.wreckIds do
+    if state.wrecks[id].name == over[1].name .. " Wreck" then
+      for _, item in Items.In(state, id, nil) do
+        local module = Modules.byId[item.type]
+        theirs += if module and module.officer == over[1].name then item.quantity else 0
+        mutators += if item.type == "mutator" then item.quantity else 0
+      end
+    end
+  end
+  t.eq({ theirs, mutators }, { Invasions.THEIRS, Invasions.MUTATORS })
 end)
 
 return suite

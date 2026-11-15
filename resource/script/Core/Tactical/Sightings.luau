@@ -53,8 +53,14 @@ Sightings.LASTS = { captain = { 1, 2 }, derelict = { 1.5, 3 }, trader = { 2, 4 }
 Sightings.ODDS = { captain = 0.4, derelict = 0.35, trader = 0.25 }
 -- What a captain is, by the space they are in, and who is with them;
 -- how many times a captain's price is on their head; and what is in
--- the wreck beside what any captain's has: custom makes, and tags.
+-- the wreck beside what any captain's has: custom makes, and tags; and,
+-- since they are an officer by name, modules that are theirs and a
+-- mutator (Tactical/Pirates' Officer).
 Sightings.CAPTAIN = { low = "jackal", lawless = "marauder" }
+Sightings.THEIRS = 2
+Sightings.MUTATORS = 1
+-- The share of derelicts that have a mutator aboard.
+Sightings.ABOARD = 0.5
 Sightings.ESCORT = { low = { "raider", "raider" }, lawless = { "jackal", "raider", "raider" } }
 Sightings.BOUNTY = 3
 Sightings.PRIZES = 3
@@ -152,6 +158,9 @@ local function captain(state: State.State, one: State.Happening, me: State.Ball?
       if wreck.system == one.system and wreck.name == one.name .. " Wreck" then
         Sites.Prizes(state, rng, wreck.id, Sightings.PRIZES)
         Items.Add(state, "tag.pirate", Sightings.TAGS, wreck.id, "cargo")
+        local band = if Galaxy.Band(state.galaxy.systems[one.system].security) == "lawless" then "lawless" else "low"
+        Pirates.Officer(state, wreck.id, one.name, Pirates.Graded(Pirates.kindById[Sightings.CAPTAIN[band]], 2), rng, Sightings.THEIRS,
+          Sightings.MUTATORS)
         break
       end
     end
@@ -172,6 +181,16 @@ local function derelict(state: State.State, one: State.Happening, events: { Even
     -- (found already, and there as long as the sighting is)
     site.strength, site.expires = 1, one.ends
     one.place = site.id
+    -- (and one in two has a mutator aboard: Assets/Mutators)
+    if Rng.Chance(Rng.For(state.historySeed, one.id, 1313), Sightings.ABOARD) then
+      for _, id in state.wreckIds do
+        local wreck = state.wrecks[id]
+        if wreck.system == one.system and wreck.grid == site.id then
+          Items.Add(state, "mutator", 1, wreck.id, "cargo")
+          break
+        end
+      end
+    end
   end
   local site = state.sites[one.place]
   return if site == nil or site.gone then "taken" else nil
