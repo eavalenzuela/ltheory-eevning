@@ -19,6 +19,8 @@
 #include <SFML/Window/VideoMode.hpp>
 #ifdef _WIN32
 #include <io.h>
+/* (declared here and not by way of windows.h, whose names get in the engine's way) */
+extern "C" __declspec(dllimport) int __stdcall SetProcessDPIAware(void);
 #endif
 
 #include "Harness.h"
@@ -282,6 +284,13 @@ static void WindowAsSet(V2U& size, bool& border) {
 }
 
 int main(int argc, char const* argv[]) {
+#ifdef _WIN32
+  /* The screen's own pixels, whatever Windows has its text scaled to:
+     without this a screen of 1920 by 1080 at 125% is given out as 1536
+     by 864, the window is made that size and stretched, and an
+     interface laid out for 1920 by 1080 does not fit it. */
+  SetProcessDPIAware();
+#endif
   char const* played[] = { argc > 0 ? argv[0] : "launch", "game" };
   if (argc < 2 && Installed(argc > 0 ? argv[0] : nullptr)) {
     argc = 2;
