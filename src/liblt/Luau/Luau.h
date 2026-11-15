@@ -24,6 +24,11 @@ struct lua_State;
 /* The shared state, created and bound on first use. */
 LT_API lua_State* Luau_GetState();
 
+/* Print what the script is in the middle of (its call stack), if a
+ * state has been made: for whoever reports a failure of the engine,
+ * which is most often an engine function a script called. */
+LT_API void Luau_PrintTrace();
+
 /* Discard the state (and every loaded module), e.g. to reload scripts. */
 LT_API void Luau_Reset();
 

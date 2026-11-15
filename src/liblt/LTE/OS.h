@@ -34,4 +34,10 @@ LT_API bool OS_Spawn(String const& path);
 
 LT_API void OS_WriteDump(String const& path);
 
+/* Print the native call stack of whoever calls, on the program's
+ * output. On Windows the frames are addresses, each with how far it is
+ * into the program as loaded: script/crashtrace turns those into
+ * functions and lines, from the program that was published. */
+LT_API void OS_PrintBacktrace();
+
 #endif

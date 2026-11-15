@@ -7,6 +7,7 @@ Everything here runs from the repository root after `python3 configure.py build`
 | Command | What it does |
 |---|---|
 | `script/build-windows` | Cross-builds the game for Windows with MinGW-w64 into `build/windows/bin/launch.exe` (its header says where the compilers come from). To try it where no window opens on the desktop: `script/offscreen wine build/windows/bin/launch.exe game --no-present --fixed-step 60 --script test/scenario/menu.txt`. |
+| `script/crashtrace [LOG [EXE]]` | Turns the native stack a Windows crash left in an installed game's `log.txt` into functions and lines. When an assertion fails or the program crashes, the engine writes on its output the assertion, what it was doing, the script's call stack (`Luau_PrintTrace`) and the native stack (`OS_PrintBacktrace`: on Windows, addresses with how far each is into the program, `+0x...`). This reads the log (a file, or piped in) and resolves each against the program that was published (`build/publish/windows/bin/launch.exe`, or `EXE`): it must be the build that crashed. |
 | `script/publish --local` | Builds the last commit clean for Linux and Windows and stages a release in `build/publish/dist` (an install's files, the manifest, the launchers, the portal page). Nothing leaves the machine. |
 | `script/publish` | The same, then syncs it to the NAS. Only when the owner asks for a release. |
 

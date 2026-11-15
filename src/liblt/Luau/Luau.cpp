@@ -2017,6 +2017,16 @@ lua_State* Luau_GetState() {
   return gL;
 }
 
+void Luau_PrintTrace() {
+  if (!gL) {
+    printf("Script stack: (no script has been run)\n");
+    return;
+  }
+  char const* trace = lua_debugtrace(gL);
+  printf("Script stack:\n%s\n", trace && trace[0] ? trace : "  (no script is running)");
+  fflush(stdout);
+}
+
 void Luau_Reset() {
   if (!gL)
     return;

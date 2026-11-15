@@ -5,6 +5,8 @@
 #include "LTE/StackFrame.h"
 #include "LTE/Window.h"
 
+#include "Luau/Luau.h"
+
 #include <csignal>
 #include <ctime>
 #include <iostream>
@@ -30,6 +32,21 @@ void PrintAssert(
 }
 
 void LTE_ASSERT_FAILURE(const char* file, int line, const char* statement) {
+  /* Say it first where whoever is asked what went wrong will look: on
+     the program's output (an installed game's log.txt), with what the
+     engine was doing, what the script was in the middle of, and the
+     native stack (on Windows as addresses: script/crashtrace turns them
+     into lines). Once: a failure while saying it is not said again. */
+  static bool reporting = false;
+  if (!reporting) {
+    reporting = true;
+    PrintAssert(std::cout, file, line, statement);
+    std::cout << " Doing : " << StackFrame_Get() << '\n' << std::flush;
+    Luau_PrintTrace();
+    OS_PrintBacktrace();
+    reporting = false;
+  }
+
   /* Write a log of assertions. */ {
     std::ofstream log((OS_GetUserDataPath() + "logAsserts.txt").c_str(), std::ios::app);
     PrintAssert(log, file, line, statement);

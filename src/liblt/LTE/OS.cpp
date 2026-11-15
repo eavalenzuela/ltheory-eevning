@@ -2,6 +2,7 @@
 #include "Profiler.h"
 #include "ProgramLog.h"
 #include "StackFrame.h"
+#include "Luau/Luau.h"
 #include "String.h"
 
 #include <csignal>
@@ -32,6 +33,7 @@
 #else
 
   #include <dirent.h>
+  #include <execinfo.h>
   #include <spawn.h>
   #include <unistd.h>
 
@@ -57,19 +59,62 @@ void IntHandler(int value) {
   ExitOnSignal(value);
 }
 
+void OS_PrintBacktrace() {
+  void* frames[62];
+#ifdef LIBLT_WINDOWS
+  USHORT count = CaptureStackBackTrace(0, 62, frames, NULL);
+  char* base = (char*)GetModuleHandleA(NULL);
+  printf("Native stack (%u frames; the program is loaded at %p):\n", (unsigned)count, (void*)base);
+  for (USHORT i = 0; i < count; ++i)
+    printf("  %p +0x%llx\n", frames[i], (unsigned long long)((char*)frames[i] - base));
+#else
+  int count = backtrace(frames, 62);
+  printf("Native stack (%d frames):\n", count);
+  fflush(stdout);
+  backtrace_symbols_fd(frames, count, fileno(stdout));
+#endif
+  fflush(stdout);
+}
+
 void SegHandler(int value) {
   /* Restore the default action first: a second fault while reporting this
      one then ends the process instead of re-entering the handler. */
   signal(SIGSEGV, SIG_DFL);
   printf("\nAccess Violation\n");
+  printf(" Doing : %s\n", StackFrame_Get().c_str());
+  fflush(stdout);
+  Luau_PrintTrace();
+  OS_PrintBacktrace();
   StackFrame_Print();
   ExitOnSignal(value);
 }
 
 #ifdef LIBLT_WINDOWS
+  /* Windows tells of a crash by an exception nobody handled: say what it
+     was and where, on the program's output (an installed game's
+     log.txt), and end. (Once: a second while saying it is left to
+     Windows.) */
   LONG __stdcall Win32SegHandler(EXCEPTION_POINTERS* pExcept) {
-    SegHandler(0);
-    return 0;
+    static bool reporting = false;
+    if (reporting)
+      return EXCEPTION_CONTINUE_SEARCH;
+    reporting = true;
+    char* base = (char*)GetModuleHandleA(NULL);
+    if (pExcept && pExcept->ExceptionRecord) {
+      EXCEPTION_RECORD* record = pExcept->ExceptionRecord;
+      printf("\nThe program has crashed: exception 0x%08lx at %p +0x%llx\n",
+        (unsigned long)record->ExceptionCode, record->ExceptionAddress,
+        (unsigned long long)((char*)record->ExceptionAddress - base));
+    } else
+      printf("\nThe program has crashed\n");
+    printf(" Doing : %s\n", StackFrame_Get().c_str());
+    fflush(stdout);
+    Luau_PrintTrace();
+    OS_PrintBacktrace();
+    fflush(stdout);
+    fflush(stderr);
+    TerminateProcess(GetCurrentProcess(), 128 + 11);
+    return EXCEPTION_EXECUTE_HANDLER;
   }
 #endif
 
@@ -86,6 +131,8 @@ void OS_ConfigureSignalHandlers() {
   signal(SIGABRT, IntHandler);
   signal(SIGINT, IntHandler);
   signal(SIGSEGV, SegHandler);
+#else
+  SetUnhandledExceptionFilter(Win32SegHandler);
 #endif
 }
 

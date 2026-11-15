@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# script/crashtrace [LOG [EXE]]: turn the native stack a Windows crash
+# left in log.txt into functions and lines.
+#
+# The engine, when an assertion fails or it crashes, writes what it was
+# doing, the script's call stack and the native call stack on its output
+# (src/liblt/Common.cpp, LTE/OS.cpp: an installed game's log.txt). On
+# Windows the native stack is addresses, each with how far it is into
+# the program as it was loaded ("+0x..."). This reads a log (a file, or
+# what is piped in) and says the function and the line each is in, from
+# the program that was published: build/publish/windows/bin/launch.exe,
+# or the EXE given. It must be the very build that crashed.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+LOG="${1:--}"
+EXE="${2:-$REPO/build/publish/windows/bin/launch.exe}"
+TOOLS="$HOME/.local/opt/mingw/usr/bin"
+tool() {
+    if command -v "x86_64-w64-mingw32-$1" >/dev/null; then echo "x86_64-w64-mingw32-$1"; else echo "$TOOLS/x86_64-w64-mingw32-$1"; fi
+}
+[[ -f "$EXE" ]] || { echo "no program at $EXE" >&2; exit 1; }
+BASE="$("$(tool objdump)" -p "$EXE" | awk '/^ImageBase/ { print $2 }')"
+OFFSETS="$(cat "$LOG" | tr -d '\r' | grep -oE '\+0x[0-9a-fA-F]+' | sed 's/^+//' || true)"
+[[ -n "$OFFSETS" ]] || { echo "no stack in the log (no line with +0x...)" >&2; exit 1; }
+for offset in $OFFSETS; do
+    address="$(printf '0x%x' $(( 0x$BASE + offset )))"
+    printf '%-12s ' "+$offset"
+    "$(tool addr2line)" -f -C -i -p -e "$EXE" "$address" | sed "s|$REPO/build/publish/src/||g; 2,\$s|^|             |"
+done

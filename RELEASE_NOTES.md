@@ -6,6 +6,10 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## When it fails, it says where
+
+- If the game stops on an error, `log.txt` in the game's folder now says what it was doing when it did: send that file.
+
 ## Paints for good, and a Graphics page
 
 - A paint or a design is now yours for good. Buy one, open the fitting screen, and it is on the list at its left, marked new: click it and it is yours (the thing bought is used up) and on your ship. From then on every paint and design you own is on that list for any ship you fly: click one to switch, as often as you like, for nothing. The first row of each list takes it off. (You can also right-click one in the inventory and choose "Make it yours".)
