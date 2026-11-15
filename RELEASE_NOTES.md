@@ -9,6 +9,7 @@ the lines beginning `- ` under it.
 ## A night's work
 
 - The game opens on a splash: its mark and its name come up out of black, and any key or a click sends it on to the menu.
+- The ship generator has two more styles to draw hulls in: triangular (a dagger of stepped decks with a conning tower) and asymmetrical (one side heavier than the other, often with an outrigger). No ship in the game is drawn in them yet: they are there to pick seeds from (`bin/launch hulls`, S for the style).
 - More music: two more pieces for space, one more for a station and one more for a fight, and a piece of its own for space no chart shows. A mood now goes through its pieces in turn.
 - Sounds for what had none: a cloak going on and coming off, a module coming out of a mutator, a deal done on a market, a lock in a derelict opened or lost, drones going out and coming back, armour and shield being mended, an afterburner lit, a salvager's cut, loot taken aboard, a mining laser at work, a capital ship breaking up, and a warning when your hull is nearly gone. Word of an invasion has a graver sound than the rest, and what begins too far away to be told of is no longer sounded at all. Uncharted space has an air of its own.
 

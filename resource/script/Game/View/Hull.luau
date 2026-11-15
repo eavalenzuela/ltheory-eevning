@@ -372,7 +372,13 @@ end
 -- from 1.0, and 1.0 out to 1.25.)
 -- ('taper': over how long the spread falls off, squared; a quarter, if
 -- not said, which is abrupt: the generator's.)
-type Warps = { spread: number, bow: number, hump: number, crown: number, taper: number? }
+-- ('wedge': the share of its width the hull keeps at its bow, narrowing
+-- evenly from its stern, which makes a triangle of it from above; and
+-- 'thin' the share of its height it keeps there. 1, if not said: the
+-- generator narrowed nothing. 'aft' and 'fore' are where the hull's own
+-- stern and bow are, which the growing fills in.)
+type Warps = { spread: number, bow: number, hump: number, crown: number, taper: number?, wedge: number?, thin: number?,
+  aft: number?, fore: number? }
 type Bend = (p: vector) -> vector
 local OLD: Warps = { spread = 0.5, bow = 1.0, hump = 1.0, crown = 1.25 }
 
@@ -392,13 +398,33 @@ export type Style = {
   -- How far a plate's edges are eased (0.25).
   eased: number,
   warps: Warps,
+  -- A hull that is not the same on both sides (the generator's always
+  -- were). 'lop': the chance that what is grown off the hull is grown
+  -- on one side of it only, and everything grown off that with it.
+  -- 'slip': how far along the hull, at most, one whole side is slid
+  -- from the other. 'less': the least that the lighter side may be of
+  -- the heavier (it is the same plates, made that much smaller and
+  -- drawn in toward the middle). 'boom': the chance of a long pod held
+  -- out on struts from the heavier side. None of them, if not said.
+  lop: number?,
+  slip: number?,
+  less: number?,
+  boom: number?,
+  -- A flat deck under the whole of it from stern to bow, which a wedge
+  -- makes a triangle of: how far past the grown plates it reaches each
+  -- side (1: no further than they), and how thick it is. By the seed
+  -- there are smaller ones on it, and under it. None, if not said.
+  deck: { reach: number, thick: number }?,
 }
 
 -- The styles there are, the generator's own first. (All but that one
 -- are first drafts, for the owner's eye: 'stout' keeps its rows short
 -- and inside its bounds, 'broad' is low and wide with more of a hump,
 -- 'tall' is narrow and deep, 'spear' long with a nose drawn out, 'slab'
--- flat with hard edges, 'soft' rounded.)
+-- flat with hard edges, 'soft' rounded. And two the owner asked for by
+-- name, 2026-11-15: 'triangular', a flat hull broad at the stern that
+-- comes to a point at the bow, and 'asymmetrical', the generator's own
+-- hull with one side of it not the other's twin.)
 Hull.STYLES = {
   { name = "old", rows = 5, held = false, bound = v(3, 2, 6), cross = { v(2.0, 0.5, 0.5), v(0.5, 1.0, 2.0) }, eased = 0.25, warps = OLD },
   { name = "stout", rows = 3, held = true, bound = v(3, 2, 5), cross = { v(2.0, 0.5, 0.5), v(0.5, 1.0, 2.0) }, eased = 0.25, warps = OLD },
@@ -412,6 +438,11 @@ Hull.STYLES = {
     warps = { spread = 0.5, bow = 0.5, hump = 0.25, crown = 2.0, taper = 4 } },
   { name = "soft", rows = 3, held = true, bound = v(3, 2.2, 5), cross = { v(2.0, 0.6, 0.6), v(0.6, 1.1, 2.0) }, eased = 0.5,
     warps = { spread = 0.5, bow = 1.0, hump = 1.2, crown = 1.0, taper = 1.5 } },
+  { name = "triangular", rows = 3, held = true, bound = v(3.2, 1.5, 5), cross = { v(2.2, 0.45, 0.8), v(0.7, 0.8, 2.6) }, eased = 0.12,
+    warps = { spread = 0.1, bow = -2.0, hump = 0.3, crown = 1.8, taper = 12, wedge = 0.06, thin = 0.55 },
+    deck = { reach = 1.12, thick = 0.26 } },
+  { name = "asymmetrical", rows = 4, held = true, bound = v(3.2, 2, 5.5), cross = { v(2.0, 0.5, 0.5), v(0.5, 1.0, 2.0) }, eased = 0.25,
+    warps = OLD, lop = 0.45, slip = 1.0, less = 0.55, boom = 0.45 },
 } :: { Style }
 
 -- The style of a name: the generator's own, if there is none of that name.
@@ -433,19 +464,29 @@ local function warped(w: Warps, middle: vector?): (Bend, Bend)
     -- (less half of it: the hull stays about its own middle)
     return w.hump * (math.exp(-math.max(0, math.abs(x) - w.crown)) - 0.5)
   end
+  -- (a wedge: how much of its width, and of its height, the hull has
+  -- left at z, from all of it at its stern to its shares at its bow)
+  local wedge, thin = w.wedge or 1, w.thin or 1
+  local aft, fore = w.aft or -6, w.fore or 6
+  local function along(z: number): number
+    return math.clamp((z - aft) / math.max(0.01, fore - aft), 0, 1)
+  end
   local off = middle or v(0, 0, 0)
   local function bend(p: vector): vector
     local x, y, z = p.x / GROWN, p.y / GROWN, p.z / GROWN
     local side = if x > 0 then 1 elseif x < 0 then -1 else 0
-    return vector.create(x + side * out(z), y + lift(x), z) * GROWN - off
+    local t = along(z)
+    local narrowed = x * (1 - (1 - wedge) * t)
+    return vector.create(narrowed + side * out(z), y * (1 - (1 - thin) * t) + lift(narrowed), z) * GROWN - off
   end
   local function unbend(p: vector): vector
     p += off
     local x, y, z = p.x / GROWN, p.y / GROWN, p.z / GROWN
     local wide = out(z)
+    local t = along(z)
     -- (what lies between the two halves was on the centre line)
     local was = if x > wide then x - wide elseif x < -wide then x + wide else 0
-    return vector.create(was, y - lift(was), z) * GROWN
+    return vector.create(was / (1 - (1 - wedge) * t), (y - lift(was)) / (1 - (1 - thin) * t), z) * GROWN
   end
   return bend, unbend
 end
@@ -515,71 +556,228 @@ end
 -- stands for itself and its twin on the other side; 'middle' is where
 -- the middle of the hull comes to once it is bent (the generator
 -- centred its hulls), and 'across' how far it then reaches each way.
-type Plate = { center: vector, size: vector, part: number }
-type Growth = { plates: { Plate }, middle: vector, across: vector, style: Style }
+-- ('single': it has no twin. Only in a style whose hulls are not the
+-- same on both sides.) 'warps' are the style's, with where this hull's
+-- own stern and bow are.
+type Plate = { center: vector, size: vector, part: number, single: boolean? }
+type Growth = { plates: { Plate }, middle: vector, across: vector, style: Style, warps: Warps }
 
 local function growth(seed: number, steps: number, decks: boolean, style: Style): Growth
   local rng = RNG_MTG(Int.Signed(seed + 102))
-  type Box = { center: vector, size: vector }
+  -- ('side': 0 for a plate that has its twin, 1 or -1 for one that is on that side of the hull only)
+  type Box = { center: vector, size: vector, side: number }
   local boxes: { Box } = {
-    { center = v(0, 0, 0), size = style.cross[1] },
-    { center = v(0, 0, 0), size = style.cross[2] },
+    { center = v(0, 0, 0), size = style.cross[1], side = 0 },
+    { center = v(0, 0, 0), size = style.cross[2], side = 0 },
   }
   local slight: { Box } = {}
   local lower, upper = -style.bound, style.bound
   local axes = { v(-1, 0, 0), v(1, 0, 0), v(0, -1, 0), v(0, 1, 0), v(0, 0, -1), v(0, 0, 1) }
+  -- A hull that is not the same on both sides: which side has the
+  -- more of it, and how far the other is slid along. (By dice of their
+  -- own: the generator's draws are what they always were, so a seed is
+  -- the same hull in every style, as far as the style lets it be.)
+  local lop, slip, less = style.lop or 0, 0, 1
+  local lopped = 0
+  local heavy = 1
+  local dice: RNG? = nil
+  if lop > 0 or (style.slip or 0) > 0 or style.less or style.boom then
+    local own = RNG_MTG(Int.Signed(seed + 7001))
+    heavy = if own:Int(2) == 0 then 1 else -1
+    slip = (style.slip or 0) * own:Float(0.3, 1.0) * (if own:Int(2) == 0 then 1 else -1)
+    less = if style.less then own:Float(style.less, math.min(1, style.less + 0.3)) else 1
+    dice = own
+  end
   for step = 1, steps do
     rng:Int(#boxes)
     local box = boxes[step]
     local dir = axes[rng:Int(6) + 1]
     local size = box.size * rng:Vec3(v(0.9, 0.9, 0.9), v(0.99, 0.99, 0.99))
     local center = vector.clamp(box.center + dir * (box.size + size), lower + size, upper - size)
+    -- (what is grown off one side only is on that side only; and what
+    -- is grown off both may be: then it is put by whichever of its
+    -- plate and the plate's twin is on that side)
+    local side = box.side
+    if side == 0 and dice and dice:Float() < lop then
+      side = if dice:Float() < 0.7 then heavy else -heavy
+      center = v(side * math.abs(center.x), center.y, center.z)
+      -- (one that lies across the centre line makes no side heavier)
+      if math.abs(center.x) >= size.x then
+        lopped += 1
+      end
+    end
     for row = 1, rng:Int(1, style.rows) do
       -- (a row that is held stops where the hull may reach no further)
       if style.held and row > 1 and center.z + size.z > upper.z then
         break
       end
-      table.insert(boxes, { center = center, size = size })
-      table.insert(slight, { center = center, size = size * v(0.5, 0.5, 1.5) })
+      table.insert(boxes, { center = center, size = size, side = side })
+      table.insert(slight, { center = center, size = size * v(0.5, 0.5, 1.5), side = side })
       center += size * v(0, 0, 3)
     end
   end
   local wide = v(1.25, 0.50, 2.00)
   local under = v(1, -0.5, 1)
   local plates: { Plate } = {}
-  for _, box in boxes do
-    table.insert(plates, { center = box.center, size = box.size, part = PLATING })
-    if decks then
-      table.insert(plates, { center = box.center * under, size = box.size * wide, part = PATCH })
+  -- A box as the plates it is: itself and its twin; or, in a hull whose
+  -- one side is slid along from the other, one each side, the one on
+  -- the light side slid (not one that lies across the centre line: that
+  -- is the hull's spine, and stays); or itself alone. And the deck
+  -- under it the same way.
+  local lopsided = slip ~= 0 or less ~= 1
+  -- (where a plate is on the lighter side: drawn in toward the middle
+  -- of the hull and made smaller, as all of that side is, and slid along)
+  local function lighter(center: vector, size: vector): (vector, vector)
+    return center * less + v(0, 0, slip), size * less
+  end
+  local function lay(box: Box, part: number, deck: number?)
+    local across = math.abs(box.center.x) < box.size.x
+    local function put(center: vector, size: vector, single: boolean?)
+      table.insert(plates, { center = center, size = size, part = part, single = single })
+      if decks and deck then
+        table.insert(plates, { center = center * under, size = size * wide, part = deck, single = single })
+      end
     end
+    if box.side ~= 0 then
+      if box.center.x * heavy < 0 and not across then
+        local center, size = lighter(box.center, box.size)
+        put(center, size, true)
+      else
+        put(box.center, box.size, true)
+      end
+    elseif not lopsided or across then
+      put(box.center, box.size)
+    else
+      local out = math.abs(box.center.x)
+      put(v(heavy * out, box.center.y, box.center.z), box.size, true)
+      local center, size = lighter(v(-heavy * out, box.center.y, box.center.z), box.size * 0.99)
+      put(center, size, true)
+    end
+  end
+  for _, box in boxes do
+    lay(box, PLATING, PATCH)
   end
   for _, box in slight do
-    table.insert(plates, { center = box.center, size = box.size, part = FRAME })
-    if decks then
-      table.insert(plates, { center = box.center * under, size = box.size * wide, part = FRAME })
+    lay(box, FRAME, FRAME)
+  end
+  -- How far the plates reach, so far.
+  local function reaches(): (vector, vector)
+    local least, most = v(math.huge, math.huge, math.huge), v(-math.huge, -math.huge, -math.huge)
+    for _, plate in plates do
+      least, most = vector.min(least, plate.center - plate.size), vector.max(most, plate.center + plate.size)
+      if not plate.single then
+        least = vector.min(least, plate.center * v(-1, 1, 1) - plate.size)
+        most = vector.max(most, plate.center * v(-1, 1, 1) + plate.size)
+      end
+    end
+    return least, most
+  end
+  -- A boom: a long pod held out from the heavier side on two struts.
+  -- (By the dice; and always where nothing else has made one side of
+  -- the hull unlike the other.)
+  if dice and style.boom and (dice:Float() < style.boom or lopped == 0) then
+    local least, most = reaches()
+    local edge = if heavy > 0 then most.x else -least.x
+    local long = (most.z - least.z) / 2 * dice:Float(0.45, 0.75)
+    local pod = v(dice:Float(0.4, 0.62), dice:Float(0.4, 0.7), long)
+    local gap = dice:Float(0.3, 0.7)
+    -- (astern of the middle, more often than not: it has an engine in its end)
+    local at = v(heavy * (edge + gap + pod.x), dice:Float(-0.4, 0.4), (least.z + most.z) / 2 + dice:Float(-1, 0.6) * long * 0.5)
+    table.insert(plates, { center = at, size = pod, part = PLATING, single = true })
+    -- (a slighter plate through it, as every plate the generator laid had)
+    table.insert(plates, { center = at, size = pod * v(0.5, 0.5, 1.25), part = FRAME, single = true })
+    local reach = (edge + gap) / 2 + 0.3
+    for _, along in { -0.45, 0.45 } do
+      table.insert(plates, { center = v(heavy * reach, at.y, at.z + along * long), size = v(reach, pod.y * 0.45, 0.3), part = FRAME,
+        single = true })
     end
   end
-  local plain = warped(style.warps)
+  -- The decks: one under the whole hull, from a little astern of it to
+  -- a nose past its bow, and by the seed one or two smaller on that,
+  -- from the stern forward, and one under it. (Each is one plate on the
+  -- centre line: the wedge makes a triangle of it.)
+  local deck = style.deck
+  if deck then
+    local own = RNG_MTG(Int.Signed(seed + 9001))
+    local least, most = reaches()
+    local half = math.max(most.x, -least.x) * deck.reach * own:Float(0.95, 1.15)
+    local aft, fore = least.z - own:Float(0.1, 0.7), most.z + own:Float(0.4, 1.6)
+    local long = (fore - aft) / 2
+    -- (no slimmer than a dagger: a long hull has a deck broad enough for its length)
+    half = math.max(half, long * own:Float(0.42, 0.62))
+    local level = own:Float(-0.45, -0.1)
+    local kind = own:Int(10)
+    if kind < 3 then
+      -- (forked: two decks with a gap between them, which the wedge closes at the bow)
+      local gap = half * own:Float(0.12, 0.3)
+      table.insert(plates, { center = v((half + gap) / 2, level, aft + long), size = v((half - gap) / 2, deck.thick, long), part = PLATING })
+    else
+      table.insert(plates, { center = v(0, level, aft + long), size = v(half, deck.thick, long), part = PLATING, single = true })
+    end
+    if kind >= 7 then
+      -- (barbed: a broader deck over the after part of it)
+      local back = long * own:Float(0.35, 0.5)
+      table.insert(plates, { center = v(0, level, aft + back), size = v(half * own:Float(1.25, 1.5), deck.thick * 0.8, back), part = PLATING,
+        single = true })
+    end
+    local top = level + deck.thick
+    local span, far = half, long
+    for _ = 1, own:Int(0, 2) do
+      span, far = span * own:Float(0.6, 0.8), far * own:Float(0.62, 0.82)
+      local thick = deck.thick * own:Float(0.9, 1.5)
+      table.insert(plates, { center = v(0, top + thick, aft + own:Float(0, 0.3) + far), size = v(span, thick, far), part = PATCH,
+        single = true })
+      top += 2 * thick
+    end
+    -- (and more often than not a conning tower astern: a neck, and a bar across the head of it)
+    if own:Int(10) < 7 then
+      local at = aft + far * own:Float(0.25, 0.5)
+      local neck = v(span * own:Float(0.18, 0.3), deck.thick * own:Float(1.4, 2.4), far * own:Float(0.1, 0.16))
+      local high = math.max(top, most.y * 0.6)
+      table.insert(plates, { center = v(0, high + neck.y, at), size = neck, part = PLATING, single = true })
+      table.insert(plates, { center = v(0, high + 2 * neck.y + deck.thick * 0.6, at), size = v(neck.x * own:Float(2.2, 3.2), deck.thick * 0.6,
+        neck.z * 0.8), part = PATCH, single = true })
+    end
+    if own:Int(2) == 0 then
+      local thick = deck.thick * own:Float(0.8, 1.3)
+      local belly, back = half * own:Float(0.4, 0.6), long * own:Float(0.5, 0.7)
+      table.insert(plates, { center = v(0, level - deck.thick - thick, aft + own:Float(0.2, 0.8) + back), size = v(belly, thick, back),
+        part = PATCH, single = true })
+    end
+  end
+  -- (where its stern and bow are, for a style that narrows toward the bow)
+  local warps = table.clone(style.warps)
+  local aft, fore = math.huge, -math.huge
+  for _, plate in plates do
+    aft, fore = math.min(aft, plate.center.z - plate.size.z), math.max(fore, plate.center.z + plate.size.z)
+  end
+  warps.aft, warps.fore = aft, fore
+  local plain = warped(warps)
   local low, high = v(math.huge, math.huge, math.huge), v(-math.huge, -math.huge, -math.huge)
   for _, plate in plates do
     for corner = 0, 7 do
       local way = v(if corner % 2 == 0 then -1 else 1, if (corner // 2) % 2 == 0 then -1 else 1, if corner // 4 == 0 then -1 else 1)
-      for _, side in { 1, -1 } do
+      local sides: { number } = if plate.single then { 1 } else { 1, -1 }
+      for _, side in sides do
         local at = plain((plate.center + plate.size * way) * v(side, 1, 1) * GROWN)
         low, high = vector.min(low, at), vector.max(high, at)
       end
     end
   end
-  return { plates = plates, middle = (low + high) / 2, across = high - low, style = style }
+  return { plates = plates, middle = (low + high) / 2, across = high - low, style = style, warps = warps }
 end
 
 -- A hull as the generator grew one: its plates, and its bend about
 -- where its middle comes to.
 local function grown(b: Builder, g: Growth)
   for _, plate in g.plates do
-    twin(b, plate.part, plate.center, plate.size, g.style.eased)
+    if plate.single then
+      mid(b, plate.part, plate.center, plate.size, g.style.eased)
+    else
+      twin(b, plate.part, plate.center, plate.size, g.style.eased)
+    end
   end
-  local bend, unbend = warped(g.style.warps, g.middle)
+  local bend, unbend = warped(g.warps, g.middle)
   Plates.Bend(b, bend, unbend)
   bending = bend
 end
@@ -2084,7 +2282,7 @@ local function boxesOf(g: Growth): { Box }
   local out: { Box } = {}
   for _, plate in g.plates do
     table.insert(out, { center = plate.center, size = plate.size, part = plate.part })
-    if plate.center.x ~= 0 then
+    if plate.center.x ~= 0 and not plate.single then
       table.insert(out, { center = plate.center * v(-1, 1, 1), size = plate.size * 0.99, part = plate.part })
     end
   end
@@ -2371,7 +2569,7 @@ end
 -- before it, the first being the one nearest the bow.
 local function shipOf(g: Growth, metres: number, fit: { string }, turrets: number, launchers: number, engines: number): (Ship?, string)
   local boxes = boxesOf(g)
-  local bend = warped(g.style.warps, g.middle)
+  local bend = warped(g.warps, g.middle)
   local ship: Ship = { growth = g, ends = endsOf(boxes, engines), turrets = {}, launchers = {}, seats = {} }
   local wanted = turrets + launchers
   if wanted == 0 then
@@ -3633,9 +3831,11 @@ function Hull.GrownBare(seed: number, steps: number, decks: boolean, style: stri
   local zero = v(0, 0, 0)
   for _, plate in g.plates do
     PlateMesh_AddPlate(mesh, plate.center, plate.size, zero, g.style.eased)
-    PlateMesh_AddPlate(mesh, plate.center * v(-1, 1, 1), plate.size * 0.99, zero, g.style.eased)
+    if not plate.single then
+      PlateMesh_AddPlate(mesh, plate.center * v(-1, 1, 1), plate.size * 0.99, zero, g.style.eased)
+    end
   end
-  local bend = warped(g.style.warps, g.middle)
+  local bend = warped(g.warps, g.middle)
   PlateMesh_AddWarp(mesh, Warp_Custom({
     GetDelta = function(_, p: vector): vector
       -- (the bend is in a hull's units, and these plates in the generator's)

@@ -13,7 +13,9 @@
   script/hulls styles SEED [SIZE] [PAINT] [CLASS]   one seed in every style
 
 The numbers come first and in that order; the words after them, in any
-order.
+order. The word "above" among them takes every picture from straight
+over the hull, its bow to the right, in place of from the bow quarter
+(what a hull's plan is, is seen from there).
 
 SIZE is 1 to 8: how many plates the generator grows (3, 4, 5, 5, 6, 7, 8, 9)
 and, from 4 up, with a broad deck under each. It made a frigate at 2 and
@@ -31,8 +33,9 @@ on seats let into it. "no room" is written on a hull that has not the
 room for them even so. (A bare hull stays bare: the generator's own
 mesh and metal.)
 STYLE is the set of the generator's own numbers the hull is grown with:
-old (its own; this if none is named), stout, broad, tall, spear, slab or
-soft (Hull.STYLES in resource/script/Game/View/Hull.luau).
+old (its own; this if none is named), stout, broad, tall, spear, slab,
+soft, triangular or asymmetrical (Hull.STYLES in
+resource/script/Game/View/Hull.luau).
 
 The sheet is written to cache/hulls/ and its name printed. Every picture
 has its seed (or size, paint or style) written on it.
@@ -50,7 +53,7 @@ os.chdir(ROOT)
 PAINTS = ["bare", "civil", "vessari", "talmar", "kethri", "vail", "unbound"]
 CLASSES = ["frigate", "destroyer", "cruiser", "battleship", "attackbattlecruiser", "battlecruiser", "capitalindustrial",
            "siegedreadnought", "carrier", "dreadnought", "supercarrier"]
-STYLES = ["old", "stout", "broad", "tall", "spear", "slab", "soft"]
+STYLES = ["old", "stout", "broad", "tall", "spear", "slab", "soft", "triangular", "asymmetrical"]
 PLATES = [3, 4, 5, 5, 6, 7, 8, 9]
 DECKS = [False, False, False, True, True, True, True, True]
 FOLDER = os.path.join("cache", "hulls")
@@ -90,6 +93,8 @@ def main():
     if kind not in ("seeds", "broad", "sizes", "paints", "styles"):
         usage(f"'{kind}' is not seeds, broad, sizes, paints or styles")
     numbers, colour, shown, style = [], None, None, None
+    above = "above" in rest
+    rest = [word for word in rest if word != "above"]
     for word in rest:
         if word.isdigit():
             if colour or shown or style:
@@ -114,8 +119,8 @@ def main():
         return numbers[at]
 
     os.makedirs(TAKEN, exist_ok=True)
-    how = (f", {style}" if style and kind != "styles" else "") + (f", as a {shown}" if shown else "")
-    tag = (f"-{style}" if style and kind != "styles" else "") + (f"-{shown}" if shown else "")
+    how = (f", {style}" if style and kind != "styles" else "") + (f", as a {shown}" if shown else "") + (", from above" if above else "")
+    tag = (f"-{style}" if style and kind != "styles" else "") + (f"-{shown}" if shown else "") + ("-above" if above else "")
     paint = colour or "bare"
     # (each picture: its seed, its size, its paint, its style, and what is written on it)
     if kind in ("seeds", "broad"):
@@ -166,6 +171,9 @@ def main():
         if os.path.exists(files[-1]):
             os.remove(files[-1])
         lines += [f"lua assert(Hulls.Show({seed}, {size}, '{each}', {lua(shown)}, {lua(grown)}))"]
+        if above:
+            # (a quarter of the way round, so that the bow is to the right, and as nearly over it as the browser looks)
+            lines += ["lua Hulls.Look(0.25, 0.238, 2.6)"]
         if shown:
             lines += [f"lua print('FIT', {index}, Hulls.Fitted())"]
         lines += ["frames 6", f"shot {file}", "frames 2"]
