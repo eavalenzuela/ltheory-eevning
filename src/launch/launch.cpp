@@ -14,7 +14,12 @@
 #include <string>
 #include <vector>
 
+#include <SFML/Graphics/Image.hpp>
+#include <SFML/Graphics/RenderWindow.hpp>
 #include <SFML/Window/VideoMode.hpp>
+#ifdef _WIN32
+#include <io.h>
+#endif
 
 #include "Harness.h"
 
@@ -86,6 +91,12 @@ struct Launcher : public Program {
     /* (one with no border is the screen's own size, and goes where the screen begins) */
     if (!border)
       window->SetPosition(V2I(0, 0));
+    /* (and the game's window has the game's icon: script/icon) */
+    if (appName == "game") {
+      sf::Image icon;
+      if (OS_IsFile("resource/icon/limitless-space.png") && icon.loadFromFile("resource/icon/limitless-space.png"))
+        ((sf::RenderWindow*)window->GetImplData())->setIcon(icon.getSize().x, icon.getSize().y, icon.getPixelsPtr());
+    }
     window->SetSync(false);
     Renderer_Initialize();
   }
@@ -275,6 +286,14 @@ int main(int argc, char const* argv[]) {
   if (argc < 2 && Installed(argc > 0 ? argv[0] : nullptr)) {
     argc = 2;
     argv = played;
+    /* Nobody is listening to an installed game (on Windows it has no
+       console at all): what it says is kept beside it, in log.txt, as
+       it is said, for whoever is asked what went wrong. */
+    if (freopen("log.txt", "w", stdout)) {
+      setvbuf(stdout, nullptr, _IONBF, 0);
+      dup2(fileno(stdout), fileno(stderr));
+      setvbuf(stderr, nullptr, _IONBF, 0);
+    }
   }
   if (argc < 2 || argv[1][0] == '-') {
     Usage();

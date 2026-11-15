@@ -85,6 +85,10 @@ fi
 MINGW_BIN="$(dirname "$GCC")"
 echo "== building (the launchers)"
 export LT_RELEASE="$RELEASE" CARGO_TARGET_DIR="$WORK/target"
+# (the Windows launcher's own icon, the game's: compiled in by its build.rs)
+if [[ -f "$WORK/src/resource/icon/limitless-space.ico" ]]; then
+    export LT_WINDOWS_ICON="$WORK/src/resource/icon/limitless-space.ico" WINDRES="$MINGW_BIN/x86_64-w64-mingw32-windres"
+fi
 if [[ -n "$DIST_URL" ]]; then export LT_DIST_URL="$DIST_URL"; else unset LT_DIST_URL; fi
 export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER="$GCC" CC_x86_64_pc_windows_gnu="$GCC" \
     AR_x86_64_pc_windows_gnu="$MINGW_BIN/x86_64-w64-mingw32-ar"
@@ -107,26 +111,60 @@ cp -p "$LAUNCHER_WIN" "$FILES/LimitlessSpaceLauncher.exe"
 # (what the game reads: all of resource/ but the tests of the rules, which nobody plays)
 rsync -a --delete --exclude '*.spec.luau' "$WORK/src/resource/" "$FILES/resource/"
 cp -p "$WORK/src/LICENSE" "$WORK/src/NOTICE.md" "$FILES/"
+[[ -f "$WORK/src/RELEASE_NOTES.md" ]] && cp -p "$WORK/src/RELEASE_NOTES.md" "$FILES/"
 cp -p "$FILES/LimitlessSpaceLauncher.exe" "$FILES/limitless-space-launcher" "$DIST/"
 PREV="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["release"].rsplit("-",1)[-1])' "$DIST/manifest.json" 2>/dev/null || true)"
 "$LAUNCHER" manifest "$DIST" --release "$RELEASE" --title "$TITLE"
 
-# The portal page: the release, what changed since the last, the launchers.
+# The portal page: the release, what is new in it in words for whoever
+# plays (RELEASE_NOTES.md, as committed: its first section is this
+# release's, the ones under it the releases' before), and the launchers.
+# With no notes, the commits since the last release stand in for them.
 if [[ -n "$PREV" ]] && git cat-file -e "$PREV" 2>/dev/null; then
     CHANGES="$(git log --format='%s' "$PREV..$SHA")"
 else
     CHANGES="$(git log --format='%s' -10 "$SHA")"
 fi
-python3 - "$DIST" "$RELEASE" "$CHANGES" "$TITLE" <<'PY'
-import html, json, sys
-dist, release, changes, title = sys.argv[1:5]
+NOTES="$(git show "$SHA:RELEASE_NOTES.md" 2>/dev/null || true)"
+# (a release whose notes begin as the last one's did has not had its own written)
+HEAD_NOW="$(printf '%s\n' "$NOTES" | grep -m1 '^## ' || true)"
+if [[ -n "$HEAD_NOW" && -f "$WORK/notes.last" && "$HEAD_NOW" == "$(cat "$WORK/notes.last")" ]]; then
+    echo "note: RELEASE_NOTES.md still begins with the last release's section (\"${HEAD_NOW#\#\# }\")."
+fi
+python3 - "$DIST" "$RELEASE" "$CHANGES" "$TITLE" "$NOTES" <<'PY'
+import html, json, re, sys
+dist, release, changes, title, notes = sys.argv[1:6]
 name = html.escape(title or "The game")
 m = json.load(open(f"{dist}/manifest.json"))
 size = sum(f["s"] for f in m["files"]) / 1e6
-items = "\n".join(f"<li>{html.escape(c)}</li>" for c in changes.splitlines() if c.strip()) or "<li>(nothing new)</li>"
+
+def inline(text):
+    # (what is between backticks is a name: a file's, a key's)
+    return re.sub(r"`([^`]+)`", r"<code>\1</code>", html.escape(text))
+
+sections = []
+for line in notes.splitlines():
+    if line.startswith("## "):
+        sections.append((line[3:].strip(), []))
+    elif line.startswith("- ") and sections:
+        sections[-1][1].append(line[2:].strip())
+if sections:
+    heading = inline(sections[0][0])
+    items = "\n".join(f"<li>{inline(i)}</li>" for i in sections[0][1]) or "<li>(nothing said)</li>"
+    before = "".join(
+        f"<div class=\"card\"><strong>Before that: {inline(h)}</strong><ul>\n" + "\n".join(f"<li>{inline(i)}</li>" for i in its) + "\n</ul></div>\n"
+        for h, its in sections[1:4])
+else:
+    heading = "In this release"
+    items = "\n".join(f"<li>{html.escape(c)}</li>" for c in changes.splitlines() if c.strip()) or "<li>(nothing new)</li>"
+    before = ""
+icon = "files/resource/icon/limitless-space.png" if any(f["p"] == "resource/icon/limitless-space.png" for f in m["files"]) else ""
+favicon = f"<link rel=\"icon\" href=\"{icon}\">" if icon else ""
+badge = f"<img src=\"{icon}\" alt=\"\" width=\"56\" height=\"56\" style=\"float:left; margin:0 14px 0 0; border-radius:12px\">" if icon else ""
 page = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{name}</title>
+{favicon}
 <style>
 :root {{ --bg:#f3f4f7; --fg:#1b1d22; --muted:#626873; --card:#fcfcfe; --line:#d5d9e2; --accent:#2f5f9f; }}
 @media (prefers-color-scheme: dark) {{ :root {{ --bg:#0f1218; --fg:#e3e6ec; --muted:#8e96a4; --card:#171b23; --line:#2b313c; --accent:#7fb0e6; }} }}
@@ -137,7 +175,7 @@ h1 {{ margin:0 0 4px; font-size:28px; }} .muted {{ color:var(--muted); }}
 a.button {{ display:inline-block; background:var(--accent); color:var(--bg); text-decoration:none; padding:10px 16px; border-radius:8px; margin:4px 8px 4px 0; font-weight:600; }}
 ol li, ul li {{ margin:4px 0; }} code {{ font-size:14px; }}
 </style></head><body><main>
-<h1>{name}</h1>
+{badge}<h1>{name}</h1>
 <div class="muted">Release {html.escape(release)} · {size:.0f} MB installed</div>
 <div class="card">
 <a class="button" href="LimitlessSpaceLauncher.exe">Launcher for Windows</a>
@@ -150,10 +188,10 @@ On Linux, mark it executable first: <code>chmod +x limitless-space-launcher</cod
 <li>Start the game with the launcher from then on: it updates it first. Saved games are kept in the same folder.</li>
 </ol>
 </div>
-<div class="card"><strong>In this release</strong><ul>
+<div class="card"><strong>{"In this release: " + heading if sections else heading}</strong><ul>
 {items}
 </ul></div>
-</main></body></html>
+{before}</main></body></html>
 """
 open(f"{dist}/index.html", "w").write(page)
 PY
@@ -162,6 +200,7 @@ if [[ $LOCAL == 1 ]]; then
     echo "== staged $RELEASE in $DIST (local: nothing sent). Try it: python3 -m http.server -d $DIST $PORT"
     exit 0
 fi
+[[ -n "$HEAD_NOW" ]] && printf '%s\n' "$HEAD_NOW" > "$WORK/notes.last"
 
 if [[ -n "$TITLE" ]]; then
     git tag -f -a -m "$TITLE" "release/$RELEASE" "$SHA" >/dev/null

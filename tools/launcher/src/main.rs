@@ -383,7 +383,7 @@ fn encode(s: &str) -> String {
 }
 
 /// On Linux, `~/.local/share/applications/limitless-space.desktop`: the game in the desktop's app list, this
-/// launcher behind it, and the install's `limitless-space.png` its icon if a release has one. Rewritten when it
+/// launcher behind it, and the install's icon (`resource/icon/limitless-space.png`) its icon. Rewritten when it
 /// differs (the install moved); nothing elsewhere.
 fn desktop_entry(dir: &Path) {
     if !cfg!(target_os = "linux") {
@@ -391,7 +391,7 @@ fn desktop_entry(dir: &Path) {
     }
     let (Some(home), Ok(exe)) = (std::env::var_os("HOME"), std::env::current_exe()) else { return };
     let apps = PathBuf::from(home).join(".local/share/applications");
-    let icon = dir.join("limitless-space.png");
+    let icon = dir.join("resource/icon/limitless-space.png");
     let text = format!(
         "[Desktop Entry]\nType=Application\nName={NAME}\nExec=\"{}\"\nPath={}\nIcon={}\nTerminal=false\nCategories=Game;\n",
         exe.display(),

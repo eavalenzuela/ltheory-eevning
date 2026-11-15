@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""script/icon: the game's icon, for its programs, its window and its
+place in a desktop's list of applications.
+
+    script/icon              draw the mark and write the icon's files
+    script/icon PICTURE.png  make the files from a picture of one's own
+                             (square, 256 pixels or more)
+
+Writes resource/icon/limitless-space.png (256 by 256) and
+resource/icon/limitless-space.ico (the sizes Windows asks for). Both are
+committed: a release compiles the .ico into the Windows programs
+(script/build-windows, script/publish) and carries the .png.
+
+The mark it draws is a stand-in until the game has one of its owner's:
+a path that turns back on itself and has no end, in the interface's blue
+on the dark of space, with one bright point on it.
+"""
+
+import math
+import os
+import sys
+
+from PIL import Image, ImageDraw, ImageFilter
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.path.join(REPO, "resource", "icon")
+SIZE = 256
+OVER = 4  # drawn this many times bigger, then brought down: smooth edges
+
+
+def mark():
+    n = SIZE * OVER
+    image = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    # The ground: a rounded square, nearly black, a little bluer at its middle.
+    draw.rounded_rectangle((0, 0, n - 1, n - 1), radius=n * 0.2, fill=(8, 12, 20, 255))
+    glow = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+    ImageDraw.Draw(glow).ellipse((n * 0.15, n * 0.2, n * 0.85, n * 0.8), fill=(22, 52, 84, 150))
+    image = Image.alpha_composite(image, glow.filter(ImageFilter.GaussianBlur(n * 0.12)))
+    mask = Image.new("L", (n, n), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, n - 1, n - 1), radius=n * 0.2, fill=255)
+    image.putalpha(mask)
+
+    # The path: a figure of eight lying on its side (a lemniscate), tilted a little.
+    def at(t):
+        a = n * 0.36
+        d = 1 + math.sin(t) ** 2
+        x, y = a * math.cos(t) / d, a * math.sin(t) * math.cos(t) / d * 1.25
+        tilt = math.radians(-14)
+        return (n / 2 + x * math.cos(tilt) - y * math.sin(tilt), n / 2 + x * math.sin(tilt) + y * math.cos(tilt))
+
+    # (drawn as discs set close along it: a wide line has seams where it turns)
+    points = [at(2 * math.pi * i / 3000) for i in range(3000)]
+
+    def stroke(colour, width):
+        layer = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+        pen = ImageDraw.Draw(layer)
+        for x, y in points:
+            pen.ellipse((x - width / 2, y - width / 2, x + width / 2, y + width / 2), fill=colour)
+        return layer
+
+    image = Image.alpha_composite(image, stroke((51, 178, 255, 190), n * 0.05).filter(ImageFilter.GaussianBlur(n * 0.022)))
+    image = Image.alpha_composite(image, stroke((130, 212, 255, 255), n * 0.026))
+
+    # The bright point on it: a ship, or a star, as one likes.
+    sx, sy = at(math.radians(322))
+    flare = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+    ImageDraw.Draw(flare).ellipse((sx - n * 0.085, sy - n * 0.085, sx + n * 0.085, sy + n * 0.085), fill=(255, 190, 140, 200))
+    image = Image.alpha_composite(image, flare.filter(ImageFilter.GaussianBlur(n * 0.03)))
+    point = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+    ImageDraw.Draw(point).ellipse((sx - n * 0.034, sy - n * 0.034, sx + n * 0.034, sy + n * 0.034), fill=(255, 246, 232, 255))
+    image = Image.alpha_composite(image, point)
+    image.putalpha(Image.composite(image.getchannel("A"), Image.new("L", (n, n), 0), mask))
+    return image.resize((SIZE, SIZE), Image.LANCZOS)
+
+
+def main():
+    if len(sys.argv) > 1:
+        image = Image.open(sys.argv[1]).convert("RGBA")
+        if image.width != image.height or image.width < SIZE:
+            sys.exit("icon: the picture has to be square, and 256 pixels or more")
+        image = image.resize((SIZE, SIZE), Image.LANCZOS)
+    else:
+        image = mark()
+    os.makedirs(OUT, exist_ok=True)
+    image.save(os.path.join(OUT, "limitless-space.png"))
+    image.save(os.path.join(OUT, "limitless-space.ico"), sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+    print("icon: wrote resource/icon/limitless-space.png and .ico")
+
+
+if __name__ == "__main__":
+    main()

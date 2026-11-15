@@ -50,9 +50,13 @@ How the window opens is a setting (the options' Window; `window=` in `save/setti
 
 The first time: the folder made on the NAS, the service added to its repository and started (`make ltheory`), then `script/publish`. After that a publish only syncs files.
 
+## The icon, the log and the notes
+
+- `script/icon` draws the game's icon (a stand-in mark until the owner has one of their own: `script/icon PICTURE.png` makes the files from a picture) and writes `resource/icon/limitless-space.png` and `.ico`, both committed. The Windows programs have it compiled in (the game by CMake, the launcher by its `build.rs`), the game's window sets it as it opens, and the Linux desktop's entry points at the install's copy.
+- The Windows game is a program with no console of its own. An installed game, started with nothing said (on either system), keeps what it says in `log.txt` in its folder, as it is said: the first thing to ask for when something goes wrong.
+- `RELEASE_NOTES.md`, at the top of the repository, says what each release brings in words for whoever plays it, the newest first. The portal page shows its first section as the release's own and the next three under it; a publish whose notes still begin with the last release's section says so. With no notes the commits since the last release stand in.
+
 ## Not yet
 
 - An interface that fits a screen smaller than 1920 by 1080: it is laid out in pixels for that size and more, and on a smaller screen its panels lie over one another. (It wants drawing at a scale, which is not built.)
-- An icon for the programs, and for the Linux desktop's entry.
-- A list of what changed for players (the portal lists the commits since the last release).
 - The Linux build is the laptop's own: it wants the same libraries the laptop has.

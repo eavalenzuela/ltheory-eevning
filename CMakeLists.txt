@@ -190,7 +190,11 @@ foreach(TARGET ${TARGETS})
   # (the resource script is Visual Studio's own, in its own encoding: MinGW's
   # tool cannot read it, and a program built with it goes without)
   if(MINGW)
-    add_executable(${TARGET} ${PROJECT_SOURCE_DIR}/src/${TARGET}/${TARGET}.cpp)
+    # (its own, with the game's icon: script/icon makes that. And no console
+    # of its own: what it says is kept in a file, src/launch)
+    enable_language(RC)
+    file(WRITE ${CMAKE_BINARY_DIR}/icon.rc "1 ICON \"${PROJECT_SOURCE_DIR}/resource/icon/limitless-space.ico\"\n")
+    add_executable(${TARGET} WIN32 ${PROJECT_SOURCE_DIR}/src/${TARGET}/${TARGET}.cpp ${CMAKE_BINARY_DIR}/icon.rc)
   else()
     add_executable(${TARGET} ${PROJECT_SOURCE_DIR}/src/${TARGET}/${TARGET}.cpp src/resources.rc)
   endif()
