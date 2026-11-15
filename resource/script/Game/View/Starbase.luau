@@ -946,22 +946,34 @@ local PAINTS: { [string]: { Plates.Look } } = {
 local LYING: { [string]: boolean } = { talmar = true }
 
 -- The towers as they are grown (Hull.GrownTower: the owner's list of
--- 2026-11-15, "new tower models"), by faction: the manner of it,
--- whether it is square in plan, how many masts stand out of its top,
--- and the seed of each of its three sizes. A seed is a tower: any whole
--- number is another. (These are first picks, and mine.) The towers
+-- 2026-11-15, "new tower models"), by faction: for each of its three
+-- sizes, a pick. A pick is what the tower browser shows and keeps
+-- (bin/launch towers, App/towers.luau: the owner, 2026-11-15, "a
+-- generator for them, so I can pick seeds and styles"): a seed, the
+-- size it is grown at (1 to 8: one plate more than that is grown), the
+-- style it is grown in (Hull.TOWER_STYLES), whether it is square in
+-- plan (eight of every plate about its upright, where it is otherwise
+-- four), and how many masts stand out of its top. A seed is a tower:
+-- any whole number is another. (These are first picks, and mine: the
+-- owner's go here as the browser's kept lines say them.) The towers
 -- drawn by hand before them (TOWERS) are kept, and are what is built
 -- with Starbase.GROWN false.
 Starbase.GROWN = true
-local GROWN: { [string]: { manner: string, square: boolean, masts: number, seeds: { number } } } = {
-  vessari = { manner = "blocky", square = true, masts = 0, seeds = { 3, 11, 20 } },
-  talmar = { manner = "cloud", square = false, masts = 0, seeds = { 5, 14, 9 } },
-  orun = { manner = "spar", square = false, masts = 5, seeds = { 2, 7, 16 } },
-  nimia = { manner = "poured", square = false, masts = 0, seeds = { 4, 8, 13 } },
-  vail = { manner = "blocky", square = false, masts = 2, seeds = { 6, 12, 17 } },
+export type Pick = { seed: number, size: number, style: string, square: boolean, masts: number }
+local function pick(seed: number, size: number, style: string, square: boolean, masts: number): Pick
+  return { seed = seed, size = size, style = style, square = square, masts = masts }
+end
+local GROWN: { [string]: { Pick } } = {
+  vessari = { pick(3, 2, "blocky", true, 0), pick(11, 4, "blocky", true, 0), pick(20, 6, "blocky", true, 0) },
+  talmar = { pick(5, 2, "cloud", false, 0), pick(14, 4, "cloud", false, 0), pick(9, 6, "cloud", false, 0) },
+  orun = { pick(2, 2, "spar", false, 5), pick(7, 4, "spar", false, 5), pick(16, 6, "spar", false, 5) },
+  nimia = { pick(4, 2, "poured", false, 0), pick(8, 4, "poured", false, 0), pick(13, 6, "poured", false, 0) },
+  vail = { pick(6, 2, "blocky", false, 2), pick(12, 4, "blocky", false, 2), pick(17, 6, "blocky", false, 2) },
 }
--- How many plates are grown for a tower of each size.
-local GROWN_STEPS = { 3, 5, 7 }
+-- The sizes a tower can be grown at: how many plates are grown for each.
+Starbase.TOWER_SIZES = { 2, 3, 4, 5, 6, 7, 8, 9 }
+-- The paints a tower can be shown in by the browser: the factions whose look there is.
+Starbase.TOWER_PAINTS = { "vessari", "talmar", "orun", "kethri", "nimia", "vail", "civil" }
 
 local made: { [string]: Made } = {}
 
@@ -984,16 +996,28 @@ end
 function Starbase.Tower(faction: string, size: number): Made
   if Starbase.GROWN then
     local owner = if GROWN[faction] and Hull.looks[faction] then faction elseif GROWN[faction] and PAINTS[faction] then faction else "vessari"
-    local grown = GROWN[owner]
+    local grown = GROWN[owner][size]
     local paints = PAINTS[owner]
     return finish(`tower.grown.{owner}.{size}`, function(b: Builder)
-      Hull.GrownTower(b, grown.seeds[size], GROWN_STEPS[size], grown.manner, grown.square, grown.masts)
+      Hull.GrownTower(b, grown.seed, Starbase.TOWER_SIZES[grown.size], grown.style, grown.square, grown.masts)
     end, if paints then paints[size] else Hull.looks[owner], 4.5 + 2.5 * size, 0.04)
   end
   local designs = TOWERS[faction] or TOWERS.vessari
   local owner = if TOWERS[faction] then faction else "vessari"
   local paints = PAINTS[owner]
   return finish(`tower.{owner}.{size}`, designs[size], if paints then paints[size] else Hull.looks[owner], 4.5 + 2.5 * size, 0.11)
+end
+
+-- A tower as the generator grows it from a pick, in a faction's paint
+-- (one of Starbase.TOWER_PAINTS): for the tower browser. It lies along
+-- z, its top toward +z. Made once and kept.
+function Starbase.Grown(chosen: Pick, paint: string): Made
+  local paints = PAINTS[paint]
+  local look = if paints then paints[2] else Hull.looks[paint] or Hull.looks.vessari
+  local shade = math.clamp((chosen.size + 1) // 2, 1, 3)
+  return finish(`tower.pick.{chosen.seed}.{chosen.size}.{chosen.style}.{chosen.square}.{chosen.masts}.{paint}`, function(b: Builder)
+    Hull.GrownTower(b, chosen.seed, Starbase.TOWER_SIZES[chosen.size] or 5, chosen.style, chosen.square, chosen.masts)
+  end, look, 4.5 + 2.5 * shade, 0.04)
 end
 
 -- A faction's tower of a size as a thing to put in a scene (Raise): its

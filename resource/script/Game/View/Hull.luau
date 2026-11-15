@@ -818,10 +818,28 @@ local TOWERS: { [string]: Style } = {
   -- (smooth and close, as if poured: for a people whose things are not built of plate)
   poured = { name = "tower.poured", rows = 2, held = true, bound = v(1.6, 1.6, 5), cross = { v(1.1, 0.7, 1.2), v(0.8, 0.8, 2.4) },
     eased = 0.5, warps = { spread = 0, bow = 0, hump = 0, crown = 1, spindle = 0.1 } },
+  -- Four more, for the owner to pick among (2026-11-15: "a generator
+  -- for them, so I can pick seeds and styles"). Each is a first one,
+  -- and mine.
+  -- (stout: short for its girth, in heavy blocks)
+  stout = { name = "tower.stout", rows = 3, held = true, bound = v(2.4, 2.4, 4.2), cross = { v(1.7, 0.6, 0.9), v(0.8, 0.8, 1.6) },
+    eased = 0.12, warps = { spread = 0, bow = 0, hump = 0, crown = 1, spindle = 0.3 } },
+  -- (needle: very tall and very thin)
+  needle = { name = "tower.needle", rows = 6, held = true, bound = v(1.0, 1.0, 8.5), cross = { v(0.7, 0.25, 0.4), v(0.28, 0.28, 3.2) },
+    eased = 0.15, warps = { spread = 0, bow = 0, hump = 0, crown = 1, spindle = 0.35 } },
+  -- (bulb: swollen about its middle and drawn hard in to its ends)
+  bulb = { name = "tower.bulb", rows = 3, held = true, bound = v(2.3, 2.3, 4.8), cross = { v(1.5, 0.8, 1.1), v(0.9, 0.9, 1.9) },
+    eased = 0.5, warps = { spread = 0, bow = 0, hump = 0, crown = 1, spindle = 0.05 } },
+  -- (fins: broad thin plates standing out from a slim body)
+  fins = { name = "tower.fins", rows = 4, held = true, bound = v(2.6, 2.6, 6), cross = { v(1.9, 0.16, 1.0), v(0.4, 0.4, 2.4) },
+    eased = 0.1, warps = { spread = 0, bow = 0, hump = 0, crown = 1, spindle = 0.2 } },
 }
 
+-- The manners a tower can be grown in, in the order they are shown in.
+Hull.TOWER_STYLES = { "blocky", "cloud", "spar", "poured", "stout", "needle", "bulb", "fins" }
+
 -- Draw such a tower: from a seed, 'steps' plates grown, in a manner
--- ("blocky", "cloud", "spar" or "poured"). 'square': it is square in
+-- (one of Hull.TOWER_STYLES). 'square': it is square in
 -- plan, every plate there eight times. 'masts': so many thin masts
 -- stand out of its top. It lies along z, its top toward +z.
 function Hull.GrownTower(b: Builder, seed: number, steps: number, manner: string, square: boolean?, masts: number?)
