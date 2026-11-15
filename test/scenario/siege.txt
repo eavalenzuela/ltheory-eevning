@@ -13,6 +13,8 @@
 # the siege is broken and the tower stands. Then they come once more,
 # what stands for the tower is destroyed, and the tower is lost: the
 # pilot is out in space, and all that is left of it is its wreck.
+#
+# covers: Core/Tactical/Raids Core/Assets/Starbases Core/Tactical/Fields
 wait 2
 lua GameDebug.Peaceful(true)
 lua assert(GameDebug.Docked(), 'a new game starts docked')

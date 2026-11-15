@@ -8,6 +8,8 @@
 # to what they hold: the count of systems that have changed hands goes
 # up, the star map is drawn again with them in their holders' colours,
 # and what is being done to which system is listed on it.
+#
+# covers: Core/Strategic/Wars Core/Assets/Sovereignty Game/UI/Map
 
 wait 2
 lua GameDebug.NewGame(5, 40)

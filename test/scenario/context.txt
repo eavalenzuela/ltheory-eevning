@@ -15,6 +15,8 @@
 # right click on empty space brings up has what there is in the system
 # to go to, by kind: a station picked from it is selected, and the menu
 # becomes the one for that station.
+#
+# covers: Game/UI/Context
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

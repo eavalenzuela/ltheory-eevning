@@ -9,6 +9,8 @@
 # first of those who come for it. Every one of them destroyed with the
 # rig standing, the job is paid for at home, where the agent has
 # another. That one is taken too, and its rig lost: the job goes with it.
+#
+# covers: Core/Tactical/Assault Core/Assets/Missions
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

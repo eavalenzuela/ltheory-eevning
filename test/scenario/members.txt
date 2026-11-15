@@ -7,6 +7,8 @@
 # them is asked and joins, in a ship of their own, and is at their own
 # work within the hour: what they earn is theirs, and a share of it is
 # the corporation's. A call is posted for the home system and called off.
+#
+# covers: Core/Assets/Members Core/Assets/Corporation
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

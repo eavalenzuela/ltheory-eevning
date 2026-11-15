@@ -13,6 +13,8 @@
 # there: the jump is refused. A tower of the pilot's with a Jump Beacon
 # is put there (a cheat), and the jump is made: the carrier is there
 # beside the tower, the fuel is burnt, and the drive is cooling.
+#
+# covers: Core/Tactical/Drones Core/Tactical/Jumping Core/Data/Drones
 
 wait 2
 lua GameDebug.Peaceful(true)

@@ -10,6 +10,8 @@
 # one does where a pilot is: and the fighter comes from their post and
 # fights it. And a ship that is destroyed is its owner's loss: they are
 # out of work until they have another.
+#
+# covers: Core/Tactical/Fellows Core/Assets/Members
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

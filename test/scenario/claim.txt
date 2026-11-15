@@ -7,6 +7,8 @@
 # nearest open system nobody holds. Its claim is counted by the hour.
 # After six the system is the pilot's: it is told so, it has order kept
 # in it, and it can be given a name.
+#
+# covers: Core/Assets/Sovereignty Core/Assets/Starbases
 
 wait 2
 lua GameDebug.NewGame(5, 40)

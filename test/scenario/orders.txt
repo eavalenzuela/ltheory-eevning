@@ -7,6 +7,8 @@
 # 45 is typed there and set, the order is at 45, and the broker has had
 # three in a hundred of what the order gained. Then it is cancelled, and
 # the copper is back.
+#
+# covers: Core/Assets/Market
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

@@ -9,6 +9,8 @@
 # the ship came out of is there to go back by. With every wormhole there
 # closed under the pilot, another opens at once, to be found by scanning,
 # and it leads back to the map.
+#
+# covers: Core/Tactical/Wormholes Game/UI/Scanner
 
 wait 2
 lua GameDebug.Peaceful(true)

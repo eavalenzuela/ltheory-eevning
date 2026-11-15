@@ -10,6 +10,8 @@
 # home. Then out of it, the ship lost and the capsule after it: and the
 # pilot wakes aboard the colony ship, in a new ship, and not where the
 # game began.
+#
+# covers: Core/Assets/Hangar Core/Tactical/Aftermath Core/Tactical/Nomads
 
 wait 2
 lua GameDebug.NewGame(3, 40)

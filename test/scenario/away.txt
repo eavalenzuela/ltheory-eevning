@@ -7,6 +7,8 @@
 # goes on while the game is not being played: two levels are queued, the
 # game is saved, and the save is opened as if an hour had gone by since
 # it was made. Both levels are trained, and nothing else has moved.
+#
+# covers: Core/Character/Training Game/Clock
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

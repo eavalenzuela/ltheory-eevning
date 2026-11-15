@@ -14,6 +14,8 @@
 # And no hull of any faction has a hardpoint on a surface too small for
 # what stands on it: the whole foot of every weapon, at its real size
 # beside its hull, has hull under it (the project owner's rule).
+#
+# covers: Game/View/Arms Game/View/Hull
 
 wait 2
 lua assert(GameDebug.Fly('cruiser.ouyou'), 'the Ouyou could not be flown')

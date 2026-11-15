@@ -8,6 +8,8 @@
 # which is ready in a few seconds, waits for the destroyer to turn, both
 # go into warp in the same moment, and the hired pilot is there when the
 # pilot arrives, where a pilot who only follows comes in after.
+#
+# covers: Core/Tactical/Fleet
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

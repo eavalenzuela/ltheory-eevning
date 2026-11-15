@@ -6,6 +6,8 @@
 # starter frigate's two mid slots (the modules and the skill for them are
 # given), and switched on with its guns on the pirate that comes to the
 # belt: the pirate is slowed and cannot warp, and does not last.
+#
+# covers: Core/Tactical/Combat Core/Data/Modules
 
 wait 2
 # (the ship the pilot begins in, whatever it is: what is asked later is whether they are still in it)

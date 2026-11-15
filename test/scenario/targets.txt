@@ -8,6 +8,8 @@
 # the pilot picks another by a click on its panel in the row of targets.
 # The camera follows the target, and goes to another when the target is
 # another. Let go, the target is one that is still locked.
+#
+# covers: Core/Tactical/Combat
 
 wait 2
 lua GameDebug.Peaceful(true)

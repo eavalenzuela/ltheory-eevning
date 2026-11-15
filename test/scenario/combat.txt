@@ -5,6 +5,9 @@
 # Fit a module by clicking in the inventory, undock, go to a belt, wait
 # for the pirate that turns up there, lock it, orbit and open fire, loot its
 # wreck, then lose the ship, fly the capsule home and be given a new one.
+#
+# covers: Core/Tactical/Combat Core/Tactical/Aftermath Core/Tactical/Pirates Core/Tactical/Gunnery Game/View/Effects
+# smoke: yes
 
 wait 2
 # (the ship the pilot begins in, whatever it is: what is asked later is whether they are still in it)

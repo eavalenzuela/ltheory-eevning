@@ -16,6 +16,8 @@
 # nearest is fought, ships and works as they come, until the works are
 # destroyed, which is the job. Then whoever is still there is seen off,
 # and the job is paid at home.
+#
+# covers: Core/Tactical/Assault Core/Assets/Missions
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

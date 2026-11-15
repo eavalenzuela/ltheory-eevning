@@ -7,6 +7,8 @@
 # down from orbit, raise an extractor and a processor on what the planet
 # has, start a programme, and take what is made up into the hold. Only
 # the price of it all is granted.
+#
+# covers: Core/Assets/Colonies Core/Data/Planets Game/UI/Colony
 
 wait 2
 lua GameDebug.Peaceful(true)

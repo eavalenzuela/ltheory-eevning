@@ -14,6 +14,8 @@
 # tech 2 make of its own name: a hull with none offers nothing), a
 # custom make of a gun is fitted, a tech 2 gun is loaded with tech 2
 # rounds, and a tech 2 hull is flown.
+#
+# covers: Core/Assets/Industry Core/Data/Blueprints
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

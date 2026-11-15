@@ -9,6 +9,8 @@
 # is cheapest and dearest. Outside, the haulers that come and go have a
 # hold of what the economy is sending along the lanes, and the selected
 # one says what it carries and for whom.
+#
+# covers: Core/Strategic/Commerce Core/Assets/Market
 
 wait 2
 lua GameDebug.NewGame(5, 40)

@@ -10,6 +10,8 @@
 # fought while it flies. When it has got far enough out it is clear,
 # and gone, and the job is paid for at home: whoever was left is no
 # part of it. The agent's next job is a rig to hold again.
+#
+# covers: Core/Tactical/Assault Core/Assets/Missions
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

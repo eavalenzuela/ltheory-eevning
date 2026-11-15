@@ -10,6 +10,8 @@
 # it breaks off and gets away, and there is no wreck and no bounty.
 # Then another, with the disruptor on it: brought as low, it cannot
 # leave, and is still there to be fought.
+#
+# covers: Core/Tactical/Pirates Core/Tactical/Combat
 
 wait 2
 # (the ship the pilot begins in, whatever it is: what is asked later is whether they are still in it)

@@ -9,6 +9,8 @@
 # and no shield module goes on it. In space it has no shield to show.
 # With half its armour and half its hull gone, both come back by
 # themselves, the armour sooner.
+#
+# covers: Core/Tactical/Vitals Core/Data/Factions
 
 wait 2
 lua GameDebug.Peaceful(true)

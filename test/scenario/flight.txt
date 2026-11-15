@@ -7,6 +7,9 @@
 # loaded and played out again, and must end in the same state. Any
 # assertion that fails, or any 'until' that never comes true, fails the run.
 # (A semicolon separates commands even inside a comment, so none here.)
+#
+# covers: Core/Tactical/Space Core/Tactical/Motion Core/Persist/Codec
+# smoke: yes
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

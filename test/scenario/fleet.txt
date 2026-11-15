@@ -8,6 +8,9 @@
 # the player fires on nothing: the hired pilot is pointed at it, destroys
 # it, and the bounty is the player's. Then through the gate to the next
 # system and into a station there, the hired pilot after them all the way.
+#
+# covers: Core/Tactical/Fleet
+# smoke: yes
 
 wait 2
 # (the ship the pilot begins in, whatever it is: what is asked later is whether they are still in it)

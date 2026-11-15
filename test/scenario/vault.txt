@@ -11,6 +11,8 @@
 # than the clock allows, which costs nothing, and then played by the
 # best way through the matrix there is, well inside the time. Then the
 # vault is open, with what was in it.
+#
+# covers: Core/Tactical/Hacking Core/Tactical/Sites
 
 wait 2
 lua GameDebug.Peaceful(true)

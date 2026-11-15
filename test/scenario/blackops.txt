@@ -10,6 +10,8 @@
 # it. The button takes it off again, and the hull is back. (How near
 # anything may be is the Core's to say, and its specs': a hull built to
 # go unseen cloaks within sight of the station it has just left.)
+#
+# covers: Core/Tactical/Combat Game/UI/Keys
 
 wait 2
 lua GameDebug.Peaceful(true)

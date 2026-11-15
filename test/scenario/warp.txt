@@ -7,6 +7,8 @@
 # they are not taken out of the scene the moment the warp begins, nor
 # put in only when it is over. In the middle of the warp, with nothing
 # near, nothing stands in the scene.
+#
+# covers: Core/Tactical/Space
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

@@ -8,6 +8,8 @@
 # belts have the rare ores. The pirates fly hulls of their own, which
 # the scene must draw as those hulls with their weapons on them. A new
 # pilot's starter frigate is no match for any of it: it looks, and gets away.
+#
+# covers: Core/Tactical/Pirates Core/Describe/Galaxy Core/Assets/Standings
 
 wait 2
 # (the ship the pilot begins in, whatever it is: what is asked later is whether they are still in it)

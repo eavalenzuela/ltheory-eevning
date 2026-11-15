@@ -12,6 +12,8 @@
 #
 # Buttons are pressed by name (GameDebug.Press), which runs the same code
 # a click does.
+#
+# covers: Core/Character/Careers Core/Character/Guide Game/UI/Careers Game/UI/Guide
 
 wait 2
 lua GameDebug.Peaceful(true)

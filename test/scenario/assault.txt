@@ -9,6 +9,8 @@
 # With those destroyed the second comes: two. With those destroyed
 # the camp is cleared, and the job is paid for at home, where the agent
 # has another.
+#
+# covers: Core/Tactical/Assault Core/Assets/Missions
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

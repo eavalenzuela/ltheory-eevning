@@ -7,6 +7,8 @@
 # one. At a belt it is launched, and when the pirate comes it goes for
 # it without being told, beside the Courier's own guns. Called back, it
 # is in the bay again.
+#
+# covers: Core/Tactical/Drones Core/Data/Drones
 
 wait 2
 # (the ship the pilot begins in, whatever it is: what is asked later is whether they are still in it)

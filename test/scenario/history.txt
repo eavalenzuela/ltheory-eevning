@@ -9,6 +9,8 @@
 # and sold over a month (the days between are a cheat: the markets alone
 # are run on), and the chart has thirty days with the days it was moved
 # on standing out of them, and what was traded.
+#
+# covers: Core/Assets/Market Game/UI/Chart
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

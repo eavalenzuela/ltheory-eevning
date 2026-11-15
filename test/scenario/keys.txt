@@ -9,6 +9,8 @@
 # click before this), and D docks at the station selected. The camera
 # follows the pirate when C says so, and by itself when it is locked. On the way
 # the place at the belt is marked, and at the end it is warped back to.
+#
+# covers: Game/UI/Keys Core/Tactical/Combat
 
 wait 2
 # (the ship the pilot begins in, whatever it is: what is asked later is whether they are still in it)

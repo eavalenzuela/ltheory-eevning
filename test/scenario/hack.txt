@@ -10,6 +10,8 @@
 # It is left before a pick, which costs nothing, and begun again and
 # played, by the best way through the matrix there is. Then the hold is
 # open, with everything in it.
+#
+# covers: Core/Tactical/Hacking Game/UI/Hack
 
 wait 2
 lua GameDebug.Peaceful(true)

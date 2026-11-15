@@ -8,6 +8,8 @@
 # play, go back to the opening menu, load the save, look the assets
 # over, and throw the save away. (A script's saves are kept under
 # cache/, apart from anybody's own.)
+#
+# covers: Game/UI/Menu Game/Settings Core/Persist/Codec
 
 wait 2
 lua assert(GameDebug.Menu() == '', 'a script starts in the game, not at the menu')

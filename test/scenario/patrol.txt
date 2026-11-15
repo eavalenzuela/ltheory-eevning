@@ -8,6 +8,8 @@
 # Then pirates are let loose: they come for the pilot at the belt, who
 # says so, fights them and sees them off, and half of the bounty is in
 # the player's wallet without the player having left the station.
+#
+# covers: Core/Tactical/Fleet Core/Tactical/Pirates
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

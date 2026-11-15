@@ -7,6 +7,8 @@
 # Its lines are a place on the overview. Warped to, the two forces are
 # there as ships and fight each other. They leave the pilot alone until
 # the pilot fires on one side, whose ships are then the pilot's enemies.
+#
+# covers: Core/Tactical/Fronts Core/Strategic/Wars
 
 wait 2
 lua GameDebug.NewGame(5, 40)

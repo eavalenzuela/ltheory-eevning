@@ -11,6 +11,8 @@
 # panel at the foot of the screen, and the ship is at once what the
 # booster makes it. Out in space the panel is still there, counting
 # down.
+#
+# covers: Core/Tactical/Vapour Core/Tactical/Mining
 
 wait 2
 lua GameDebug.Peaceful(true)

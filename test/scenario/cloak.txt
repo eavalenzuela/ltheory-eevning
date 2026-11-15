@@ -9,6 +9,8 @@
 # round it and not as a hull, with nothing on its hardpoints. Nothing
 # can be locked from inside it. Switched off, the hull is back, and its
 # gun with it.
+#
+# covers: Core/Tactical/Combat
 
 wait 2
 lua GameDebug.Peaceful(true)

@@ -6,6 +6,8 @@
 # It is here because nothing else shows a slow frame. Sixteen planets
 # made as movable objects once cost 140 ms a frame, each of them a dot on
 # the screen, and every picture of them looked right.
+#
+# covers: Game/View/Scene Game/View/Planet Game/View/Star
 lua GameDebug.Order('Undock')
 until GameDebug.InSpace()
 frames 30

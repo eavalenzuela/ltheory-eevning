@@ -7,6 +7,8 @@
 # too: the fight for one is the combat scenario's). What comes off is in
 # the hold. The wreck had a pirate's tag aboard, so it waits to be
 # looted, and cannot be salvaged twice.
+#
+# covers: Core/Tactical/Aftermath Core/Tactical/Combat
 
 wait 2
 lua GameDebug.Peaceful(true)

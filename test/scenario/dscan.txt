@@ -13,6 +13,8 @@
 # the camera, with nothing picked out: looking toward the near wreck it
 # has both, and looking toward the sun, neither. Last, a place is marked
 # and given a name of the pilot's own, in the panel of what is selected.
+#
+# covers: Core/Tactical/Dscan Game/UI/Scanner
 
 wait 2
 lua GameDebug.Peaceful(true)

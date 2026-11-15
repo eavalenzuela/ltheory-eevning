@@ -7,6 +7,8 @@
 # overview. Three scans resolve them. Then they are places like any
 # other: warp to the first, the vapour field, and its clouds are there
 # to draw off (gas.txt does that).
+#
+# covers: Core/Tactical/Sites Core/Tactical/Vapour Game/UI/Scanner
 
 wait 2
 lua GameDebug.Peaceful(true)

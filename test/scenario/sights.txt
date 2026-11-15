@@ -8,6 +8,8 @@
 # planets turn. And where the pilot is next to go is picked out on the
 # overview: the gate of the way they have planned, and the station a
 # finished lesson is reported at.
+#
+# covers: Game/Waypoints Game/View/Planet
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

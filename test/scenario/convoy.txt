@@ -11,6 +11,8 @@
 # the job is half done. The pilot follows. The last wave was waiting for
 # the tender off the station, and is fought there while the tender flies
 # in. When it docks the job is done, and paid for at the station.
+#
+# covers: Core/Tactical/Assault Core/Assets/Missions Core/Tactical/Batteries
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

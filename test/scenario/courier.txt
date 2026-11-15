@@ -8,6 +8,8 @@
 # a way that keeps out of lawless space. It is taken on the Missions
 # tab, the crates are put in the hold, the autopilot flies the way, the
 # ship docks where the cargo goes, and the contract is paid there.
+#
+# covers: Core/Assets/Missions
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

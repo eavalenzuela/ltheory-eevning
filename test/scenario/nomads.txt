@@ -11,6 +11,8 @@
 # space as the ship it is with its fleet round it, docks at that ship,
 # and stays aboard while it goes on to its next system: then comes out
 # there.
+#
+# covers: Core/Tactical/Nomads Core/Assets/Stations
 
 wait 2
 lua GameDebug.NewGame(3, 40)

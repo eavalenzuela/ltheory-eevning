@@ -13,6 +13,9 @@
 # there and live, then presses it. The price of the hull is granted:
 # earning it takes hours of game time, and the headless Loop spec is what
 # proves it can be done.
+#
+# covers: Core/Tactical/Mining Core/Assets/Industry Core/Assets/Market Core/Assets/Hangar Core/Character/Training
+# smoke: yes
 
 wait 2
 # (sound, which a script does not otherwise get: at no loudness, so that its

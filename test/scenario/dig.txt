@@ -10,6 +10,8 @@
 # pocket are four rocks of the ore. They are cut, one after another,
 # until the hold has what the contract wants. Home, and the contract
 # is paid.
+#
+# covers: Core/Tactical/Digger Core/Tactical/Mining Core/Assets/Missions
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

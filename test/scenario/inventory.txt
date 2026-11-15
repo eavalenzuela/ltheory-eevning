@@ -10,6 +10,9 @@
 # is as it was left there (shut), and opens. Something goes over the
 # side into a container, which is a place in reach, and all of it is
 # taken back. And a wreck is opened in the window, to take from.
+#
+# covers: Game/UI/Inventory Game/UI/Windows Game/UI/Assets Core/Assets/Items
+# smoke: yes
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

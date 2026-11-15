@@ -10,6 +10,8 @@
 # material goes into, the other material it is made of is given (a
 # cheat: that is another moon's), and an hour on a batch of the
 # composite is in the hangar, a batch of each material gone into it.
+#
+# covers: Core/Assets/Starbases Core/Data/Moons
 
 wait 2
 lua GameDebug.Peaceful(true)

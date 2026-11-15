@@ -10,6 +10,8 @@
 # for more. More is given, and that goes too. Then the haul is made a
 # round of two stations to collect at, and what is at both is brought
 # to a third.
+#
+# covers: Core/Tactical/Fleet Core/Assets/Market
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

@@ -1,0 +1,366 @@
+#!/usr/bin/env python3
+"""Which tests does a change need, and no more (docs/tools.md).
+
+  script/affected                 what the uncommitted changes need
+  script/affected --since REF     what everything changed since REF needs
+  script/affected PATH...         what a change to those files needs
+  script/affected --run           the same, and run it
+
+The whole of the tests is three quarters of an hour, and is run only
+when the project's owner says (script/check). A fix or a feature gets
+ten minutes of tests before it is published (their ruling, 2026-11-14):
+this picks what those ten minutes go on, from what was changed.
+
+How a changed file picks its tests:
+
+  a game script (resource/script/**.luau)
+      specs      its own (X.spec.luau) and every spec that requires it
+                 by name. More than SUITE of them, and it is the whole
+                 suite, which is a minute and a half.
+      scenarios  those that say they cover it: each test/scenario/*.txt
+                 has a line `# covers: Core/Tactical/Fields ...` at the
+                 foot of its heading, naming the scripts it is about
+                 (not every script it happens to run through).
+                 A hub (HUBS, below: what nearly every scenario runs
+                 through) picks the smoke scenarios instead, those
+                 marked `# smoke: yes`, and the rest that name it are
+                 listed and left.
+      pictures   the game's golden pictures, for a script of the view
+                 or the interface.
+  a scenario      itself, if its steps were changed and not only its comments.
+  a spec          itself.
+  a shader        script/shaderlint --modern, and every golden picture.
+  engine source   a rebuild, then the smoke scenarios.
+  anything else   nothing.
+
+--run does it: the type check, the specs, the scenarios (six at a time,
+on a copy of the scripts taken when it starts, so the tree can be
+edited meanwhile), the pictures. It says how long each took, and
+remembers (cache/affected-times.txt) for the next estimate. It will not
+start more than BUDGET seconds of tests unless told --over-budget:
+that is a thing to ask the owner about first.
+"""
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SCRIPTS = os.path.join(REPO, "resource", "script")
+SCENARIOS = os.path.join(REPO, "test", "scenario")
+TIMES = os.path.join(REPO, "cache", "affected-times.txt")
+
+BUDGET = 600            # seconds of tests for one fix or feature
+SUITE = 15              # more spec files than this: run them all
+SUITE_SECONDS = 90
+SPEC_SECONDS = 5        # one spec file, when nothing is known of it
+SCENARIO_SECONDS = 150  # one scenario, when nothing is known of it
+GOLDEN_SECONDS = 20     # one golden picture
+PARALLEL = 6
+
+# What nearly every scenario runs through. A change to one of these is
+# checked by the smoke scenarios, not by every scenario that names it.
+HUBS = {
+    "Core/Api", "Core/Attributes", "Core/Kernel/State", "Core/Tactical/Space", "Core/Tactical/Combat",
+    "Core/Assets/Items", "Core/Data/Ships", "Core/Data/Modules", "Core/Data/Constants",
+    "Game/Session", "Game/UI/Im", "Game/UI/Hud", "Game/UI/Station", "Game/View/Scene", "App/game",
+}
+GAME_GOLDENS = ["game-docked", "game-market", "game-skills", "game-belt"]
+
+
+def sh(*args):
+    return subprocess.run(args, cwd=REPO, capture_output=True, text=True).stdout
+
+
+def changed(argv):
+    """The files a change is, relative to the repository."""
+    paths = [a for a in argv if not a.startswith("--")]
+    if "--since" in argv:
+        ref = argv[argv.index("--since") + 1]
+        paths = [p for p in paths if p != ref]
+        return sorted(set(sh("git", "diff", "--name-only", ref).split()) | set(paths))
+    if paths:
+        return sorted(os.path.relpath(os.path.abspath(p), REPO) for p in paths)
+    new = sh("git", "ls-files", "--others", "--exclude-standard", "resource/script", "resource/shader", "test", "src").split()
+    return sorted(set(sh("git", "diff", "--name-only", "HEAD").split()) | set(new))
+
+
+def steps_changed(file):
+    """Whether a scenario's steps were changed, and not only its comments (a new one: yes)."""
+    diff = sh("git", "diff", "HEAD", "--", file)
+    if not diff:
+        return sh("git", "ls-files", "--", file) == ""
+    for line in diff.splitlines():
+        if line[:1] in "+-" and not line.startswith(("+++", "---")):
+            text = line[1:].strip()
+            if text and not text.startswith("#"):
+                return True
+    return False
+
+
+def modules():
+    """Every game script by its name ("Core/Tactical/Fields"), and what each spec requires by name."""
+    names, needs = set(), {}
+    for folder, _, files in os.walk(SCRIPTS):
+        for file in files:
+            if not file.endswith(".luau"):
+                continue
+            path = os.path.join(folder, file)
+            name = os.path.relpath(path, SCRIPTS)[: -len(".luau")]
+            if name.endswith(".spec"):
+                with open(path, errors="replace") as text:
+                    needs[name] = set(re.findall(r'require\("@lt/([^"]+)"\)', text.read()))
+            else:
+                names.add(name)
+    return names, needs
+
+
+def scenarios():
+    """Each scenario: what it says it covers, and whether it is one of the smoke ones."""
+    found = {}
+    for file in sorted(os.listdir(SCENARIOS)):
+        if not file.endswith(".txt"):
+            continue
+        covers, smoke = [], False
+        with open(os.path.join(SCENARIOS, file), errors="replace") as text:
+            for line in text:
+                if not line.startswith("#"):
+                    break
+                if line.startswith("# covers:"):
+                    covers = line[len("# covers:"):].split()
+                elif line.startswith("# smoke:"):
+                    smoke = line.split(":", 1)[1].strip() == "yes"
+        found[file[: -len(".txt")]] = (covers, smoke)
+    return found
+
+
+def times():
+    known = {}
+    if os.path.exists(TIMES):
+        with open(TIMES) as text:
+            for line in text:
+                parts = line.split()
+                if len(parts) == 2:
+                    known[parts[0]] = float(parts[1])
+    return known
+
+
+def remember(known):
+    os.makedirs(os.path.dirname(TIMES), exist_ok=True)
+    with open(TIMES, "w") as text:
+        for name in sorted(known):
+            text.write(f"{name} {known[name]:.0f}\n")
+
+
+def pick(files):
+    names, needs = modules()
+    tagged = scenarios()
+    smoke = sorted(name for name, (_, is_smoke) in tagged.items() if is_smoke)
+    plan = {"specs": set(), "scenarios": set(), "goldens": set(), "lint": False, "rebuild": False, "why": [], "left": {}}
+
+    def say(file, what):
+        plan["why"].append((file, what))
+
+    for file in files:
+        if file.startswith("resource/script/") and file.endswith(".luau"):
+            name = file[len("resource/script/"): -len(".luau")]
+            if name.endswith(".spec"):
+                plan["specs"].add(name)
+                say(file, "itself")
+                continue
+            own = name + ".spec"
+            specs = {spec for spec, wants in needs.items() if name in wants}
+            if own in needs:
+                specs.add(own)
+            plan["specs"] |= specs
+            naming = sorted(s for s, (covers, _) in tagged.items() if name in covers)
+            if name in HUBS:
+                plan["scenarios"] |= set(smoke)
+                left = [s for s in naming if s not in smoke]
+                if left:
+                    plan["left"][name] = left
+                say(file, f"a hub: {len(specs)} spec file(s), the smoke scenarios")
+            else:
+                plan["scenarios"] |= set(naming)
+                say(file, f"{len(specs)} spec file(s), " + (", ".join(naming) if naming else "no scenario covers it"))
+            if name.startswith("Game/View/") or name.startswith("Game/UI/"):
+                plan["goldens"] |= set(GAME_GOLDENS)
+        elif file.startswith("test/scenario/") and file.endswith(".txt"):
+            # (a scenario whose comments alone were changed does what it did)
+            if steps_changed(file):
+                plan["scenarios"].add(os.path.basename(file)[: -len(".txt")])
+                say(file, "itself")
+        elif file.startswith("resource/shader/"):
+            plan["lint"] = True
+            plan["goldens"].add("*")
+            say(file, "the shader lint and every golden picture")
+        elif file.startswith("src/") or file == "CMakeLists.txt":
+            plan["rebuild"] = True
+            plan["scenarios"] |= set(smoke)
+            say(file, "a rebuild, then the smoke scenarios")
+        elif file.startswith("test/golden/"):
+            plan["goldens"].add(os.path.basename(file)[: -len(".png")])
+            say(file, "itself")
+    plan["scenarios"] = sorted(s for s in plan["scenarios"] if s in tagged)
+    # (what something else picked is not left)
+    for hub in list(plan["left"]):
+        plan["left"][hub] = [s for s in plan["left"][hub] if s not in plan["scenarios"]]
+        if not plan["left"][hub]:
+            del plan["left"][hub]
+    plan["whole"] = len(plan["specs"]) > SUITE
+    plan["specs"] = sorted(plan["specs"])
+    return plan
+
+
+def estimate(plan, known):
+    specs = SUITE_SECONDS if plan["whole"] else sum(known.get("spec:" + s, SPEC_SECONDS) for s in plan["specs"])
+    each = sorted((known.get(s, SCENARIO_SECONDS) for s in plan["scenarios"]), reverse=True)
+    # (six at a time: about the longest of them, or the lot shared out, whichever is more)
+    batch = max(each[0], sum(each) / PARALLEL) if each else 0
+    pictures = 10 * GOLDEN_SECONDS if "*" in plan["goldens"] else len(plan["goldens"]) * GOLDEN_SECONDS
+    return specs, batch, pictures
+
+
+def show(plan, known):
+    for file, what in plan["why"]:
+        print(f"  {file}: {what}")
+    specs, batch, pictures = estimate(plan, known)
+    print()
+    if plan["rebuild"]:
+        print("rebuild    the engine changed: build it first (python3 configure.py build)")
+    if plan["lint"]:
+        print("lint       script/shaderlint --modern")
+    print("types      bin/luaucheck")
+    if plan["whole"]:
+        print(f"specs      the whole suite ({len(plan['specs'])} files are touched): about {specs:.0f} s")
+    elif plan["specs"]:
+        print(f"specs      {len(plan['specs'])} file(s), about {specs:.0f} s: " + " ".join(s[: -len('.spec')] for s in plan["specs"]))
+    else:
+        print("specs      none")
+    if plan["scenarios"]:
+        print(f"scenarios  {len(plan['scenarios'])}, about {batch:.0f} s at {PARALLEL} at a time: " + " ".join(plan["scenarios"]))
+    else:
+        print("scenarios  none")
+    for hub, left in sorted(plan["left"].items()):
+        print(f"           (also name {hub}, and are left: {' '.join(left)})")
+    if plan["goldens"]:
+        print(f"pictures   about {pictures:.0f} s: " + ("all of them" if "*" in plan["goldens"] else " ".join(sorted(plan["goldens"]))))
+    total = specs + batch + pictures
+    print(f"\nabout {total / 60:.1f} minutes of tests (the budget for a fix or a feature is {BUDGET // 60}).")
+    return total
+
+
+def run(plan, known):
+    failed = []
+    started = time.time()
+
+    def step(name, args, cwd=REPO, limit=900):
+        begun = time.time()
+        try:
+            done = subprocess.run(args, cwd=cwd, capture_output=True, text=True, errors="replace", timeout=limit)
+            code, out = done.returncode, done.stdout + done.stderr
+        except subprocess.TimeoutExpired as late:
+            code, out = 124, (late.stdout or b"").decode(errors="replace") if isinstance(late.stdout, bytes) else (late.stdout or "")
+        return name, code, out, time.time() - begun
+
+    def report(name, ok, seconds, note=""):
+        print(f"  {'ok  ' if ok else 'FAIL'}  {name:<28} {seconds:6.0f} s  {note}", flush=True)
+        if not ok:
+            failed.append(name)
+
+    if plan["lint"]:
+        name, code, out, took = step("shaderlint", ["script/shaderlint", "--modern"])
+        report(name, code == 0, took, out.strip().splitlines()[-1] if out.strip() else "")
+    name, code, out, took = step("types", ["bin/luaucheck"])
+    report(name, code == 0 and " 0 error(s)" in out, took, out.strip().splitlines()[-1] if out.strip() else "")
+
+    # The scenarios run on a copy of the scripts as they are now: the tree can be edited while they do.
+    copy = os.path.join(REPO, "cache", "affected-run")
+    futures = []
+    pool = ThreadPoolExecutor(PARALLEL)
+    if plan["scenarios"]:
+        shutil.rmtree(copy, ignore_errors=True)
+        os.makedirs(os.path.join(copy, "resource"))
+        os.makedirs(os.path.join(copy, "test"))
+        for child in os.listdir(os.path.join(REPO, "resource")):
+            source = os.path.join(REPO, "resource", child)
+            if child == "script":
+                shutil.copytree(source, os.path.join(copy, "resource", "script"))
+            else:
+                os.symlink(source, os.path.join(copy, "resource", child))
+        shutil.copytree(SCENARIOS, os.path.join(copy, "test", "scenario"))
+        for child in ("bin", "cache", "save", "script", "ext", "build"):
+            if os.path.exists(os.path.join(REPO, child)):
+                os.symlink(os.path.join(REPO, child), os.path.join(copy, child))
+        for child in (".luaurc", "RELEASE_TITLE"):
+            if os.path.exists(os.path.join(REPO, child)):
+                shutil.copy(os.path.join(REPO, child), copy)
+        for scenario in plan["scenarios"]:
+            futures.append(pool.submit(step, scenario, ["bin/launch", "game", "--no-present", "--fixed-step", "60", "--timeout", "800",
+                                                        "--script", f"test/scenario/{scenario}.txt"], copy, 900))
+
+    if plan["whole"]:
+        name, code, out, took = step("specs (whole suite)", ["bin/ltcore", "Tool/specs"])
+        lines = [line for line in out.splitlines() if line.startswith("FAIL") or line.startswith("specs:")]
+        report(name, code == 0 and not any(line.startswith("FAIL") for line in lines), took, lines[-1] if lines else "")
+        for line in lines[:-1]:
+            print("        " + line)
+    else:
+        for spec in plan["specs"]:
+            name, code, out, took = step("spec " + spec[: -len(".spec")], ["bin/ltcore", "Tool/specs", "--file", spec], limit=300)
+            lines = [line for line in out.splitlines() if line.startswith("FAIL") or line.startswith("specs:")]
+            ok = code == 0 and not any(line.startswith("FAIL") for line in lines)
+            report(name, ok, took, lines[-1] if lines else "")
+            for line in lines[:-1]:
+                print("        " + line)
+            if ok:
+                known["spec:" + spec] = took
+
+    for future in futures:
+        name, code, out, took = future.result()
+        errors = [line for line in out.splitlines() if "LUAU ERROR" in line or "HARNESS ERROR" in line]
+        ok = code == 0 and not errors
+        report("scenario " + name, ok, took, "" if ok else (errors[0][:150] if errors else f"exit {code}"))
+        if ok:
+            known[name] = took
+    pool.shutdown()
+
+    if plan["goldens"]:
+        wanted = [] if "*" in plan["goldens"] else sorted(plan["goldens"])
+        name, code, out, took = step("pictures", ["script/goldens"] + wanted)
+        report(name, code == 0, took, out.strip().splitlines()[-1] if out.strip() else "")
+        for line in out.splitlines():
+            if line.strip().startswith("FAIL"):
+                print("        " + line.strip())
+    remember(known)
+    print(f"\n{'FAILED: ' + ', '.join(failed) if failed else 'all passed'}, in {(time.time() - started) / 60:.1f} minutes.")
+    return 1 if failed else 0
+
+
+def main(argv):
+    if "--help" in argv or "-h" in argv:
+        print(__doc__)
+        return 0
+    files = changed([a for a in argv if a not in ("--run", "--over-budget")])
+    if not files:
+        print("nothing is changed.")
+        return 0
+    known = times()
+    plan = pick(files)
+    total = show(plan, known)
+    if "--run" not in argv:
+        return 0
+    if plan["rebuild"]:
+        print("\nThe engine changed: build it first, then run this again.")
+    if total > BUDGET and "--over-budget" not in argv:
+        print(f"\nThat is over the budget. Cut it down by naming files, or ask the owner and pass --over-budget.")
+        return 2
+    print()
+    return run(plan, known)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
