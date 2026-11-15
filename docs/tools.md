@@ -2,6 +2,16 @@
 
 Everything here runs from the repository root after `python3 configure.py build`.
 
+## A release
+
+| Command | What it does |
+|---|---|
+| `script/build-windows` | Cross-builds the game for Windows with MinGW-w64 into `build/windows/bin/launch.exe` (its header says where the compilers come from). To try it where no window opens on the desktop: `script/offscreen wine build/windows/bin/launch.exe game --no-present --fixed-step 60 --script test/scenario/menu.txt`. |
+| `script/publish --local` | Builds the last commit clean for Linux and Windows and stages a release in `build/publish/dist` (an install's files, the manifest, the launchers, the portal page). Nothing leaves the machine. |
+| `script/publish` | The same, then syncs it to the NAS. Only when the owner asks for a release. |
+
+`docs/distribution.md` says how the launcher (`tools/launcher`) and the NAS's side work.
+
 ## Is the tree healthy?
 
 | Command | What it does |

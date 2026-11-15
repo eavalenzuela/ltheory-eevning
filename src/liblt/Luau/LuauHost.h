@@ -31,6 +31,10 @@
 
 #include <dirent.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+/* (declared here and not by way of windows.h, whose names get in the engine's way) */
+extern "C" __declspec(dllimport) int __stdcall MoveFileExA(char const* from, char const* to, unsigned long flags);
+#endif
 #include <time.h>
 #include <unistd.h>
 
@@ -104,9 +108,16 @@ namespace LuauHost {
     return Write(L, "ab");
   }
 
-  /* Host.Rename(from, to) -> boolean.  Atomic within one filesystem. */
+  /* Host.Rename(from, to) -> boolean.  Atomic within one filesystem.
+     (What is there under the new name is replaced: a save is written
+     beside the one before it and renamed over it. Windows' rename will
+     not do that, and is asked for it by its own name.) */
   inline int Rename(lua_State* L) {
+#ifdef _WIN32
+    lua_pushboolean(L, MoveFileExA(luaL_checkstring(L, 1), luaL_checkstring(L, 2), 1 /* MOVEFILE_REPLACE_EXISTING */) != 0);
+#else
     lua_pushboolean(L, rename(luaL_checkstring(L, 1), luaL_checkstring(L, 2)) == 0);
+#endif
     return 1;
   }
 
@@ -123,6 +134,15 @@ namespace LuauHost {
     return 1;
   }
 
+  /* (one directory: on Windows it has no permissions to be given) */
+  inline int MakeOneDir(char const* path) {
+#ifdef _WIN32
+    return mkdir(path);
+#else
+    return mkdir(path, 0777);
+#endif
+  }
+
   /* Host.MakeDir(path) -> boolean.  Creates missing parents too; true if
      the directory exists afterwards. */
   inline int MakeDir(lua_State* L) {
@@ -130,7 +150,7 @@ namespace LuauHost {
     for (size_t i = 1; i <= path.size(); ++i) {
       if (i == path.size() || path[i] == '/') {
         std::string part = path.substr(0, i);
-        if (mkdir(part.c_str(), 0777) != 0 && errno != EEXIST) {
+        if (MakeOneDir(part.c_str()) != 0 && errno != EEXIST) {
           lua_pushboolean(L, false);
           return 1;
         }

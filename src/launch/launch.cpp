@@ -1,8 +1,12 @@
 /* Luau's header first: the engine defines an 'error' macro. */
 #include "lua.h"
 
+/* (the console and the hidden re-run are for whoever works on the game,
+   on Linux: a Windows build is the game alone, and has neither) */
+#ifndef _WIN32
 #include <poll.h>
 #include <unistd.h>
+#endif
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
@@ -42,6 +46,7 @@ struct Launcher : public Program {
 
   /* Run whatever complete lines have arrived on stdin, without waiting. */
   void PollConsole() {
+#ifndef _WIN32
     struct pollfd fd = { 0, POLLIN, 0 };
     while (poll(&fd, 1, 0) > 0 && (fd.revents & (POLLIN | POLLHUP))) {
       char buffer[1024];
@@ -60,6 +65,7 @@ struct Launcher : public Program {
         consoleLine = "";
       }
     }
+#endif
   }
 
   Launcher(String const& appName, V2U const& size, Harness& harness) :
@@ -71,7 +77,8 @@ struct Launcher : public Program {
   {
     if (!OS_IsDir("resource"))
       OS_ChangeDir("../");
-    window = Window_Create("App Launcher", size, true, false);
+    /* (the game goes by its name: the rest are tools, and go by theirs) */
+    window = Window_Create(appName == "game" ? "Limitless Space" : "App Launcher", size, true, false);
     window->SetSync(false);
     Renderer_Initialize();
   }
@@ -217,7 +224,23 @@ void Usage() {
     "                   failures reach the exit status: segv or assert\n");
 }
 
+/* Whether this program is an install's (docs/distribution.md): it has
+   been given another name than its own, LimitlessSpace.exe or
+   limitless-space. Started with nothing said, such a one is the game. */
+static bool Installed(char const* program) {
+  String name = program ? program : "";
+  size_t slash = name.find_last_of("/\\");
+  if (slash != String::npos)
+    name = name.substr(slash + 1);
+  return name.size() && name != "launch" && name != "launch.exe";
+}
+
 int main(int argc, char const* argv[]) {
+  char const* played[] = { argc > 0 ? argv[0] : "launch", "game" };
+  if (argc < 2 && Installed(argc > 0 ? argv[0] : nullptr)) {
+    argc = 2;
+    argv = played;
+  }
   if (argc < 2 || argv[1][0] == '-') {
     Usage();
     return argc < 2 ? 0 : 1;
@@ -304,6 +327,7 @@ int main(int argc, char const* argv[]) {
      its own with no screen, on the same graphics card), unless it is
      there already or the window has been asked for. It never falls back
      on the desktop by itself. */
+#ifndef LIBLT_WINDOWS
   if ((scripted || !present || fixedHz > 0 || selftest.size()) && !onDesktop && !getenv("LT_OFFSCREEN")) {
     std::vector<char*> args;
     args.push_back((char*)"script/offscreen");
@@ -316,6 +340,7 @@ int main(int argc, char const* argv[]) {
            "       Run it from the top of the repository, or give --on-desktop to open the window.\n", strerror(errno));
     return 1;
   }
+#endif
 
   Launcher launcher(argv[1], size, harness);
 

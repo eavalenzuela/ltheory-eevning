@@ -1,0 +1,18 @@
+[package]
+name = "limitless-launcher"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Installs and updates the game from the NAS's distribution, then starts it
+# (docs/distribution.md). Kept small and apart from the game: it cross-builds
+# for Windows in seconds and has nothing to break when the game does.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10.8"
+# Plain HTTP (a LAN service): no TLS.
+ureq = { version = "2.12", default-features = false }
+
+[profile.release]
+strip = true

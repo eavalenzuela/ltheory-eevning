@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+# Publish a release (docs/distribution.md): the game built from the last
+# commit for Linux and for Windows as one version (`<date>-<commit>`), and
+# its distribution (an install's files, their manifest, the portal page,
+# the launchers) synced to the NAS, where a file server hands it to the
+# launchers on the LAN.
+#
+# Usage: script/publish [--local]
+#   --local   build and stage only (nothing leaves this machine): the
+#             release is in $WORK/dist, to try the launcher against
+#             (`python3 -m http.server -d $WORK/dist 5008`, then
+#             `limitless-space-launcher --url http://127.0.0.1:5008/`).
+#
+# Built from a clean copy of HEAD ($WORK/src, a git worktree): what is not
+# committed is not released. Nothing is pushed anywhere, and nothing is
+# tagged but here (`release/<release>`): the repository goes to its remote
+# when its owner says, as ever.
+#
+# Where the NAS is is not written in the repository: LT_NAS_HOST (its
+# address on the LAN) and LT_NAS_USER (who to be there) are read from the
+# environment, or from lines of .env (which is not committed):
+#
+#   LT_NAS_HOST=192.0.2.10
+#   LT_NAS_USER=somebody
+#
+# The release's title is the committed RELEASE_TITLE at the top of the
+# repository: on the portal, in the manifest, and the tag's message.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+WORK="${LT_PUBLISH_DIR:-$REPO/build/publish}"
+setting() {  # a setting: the environment's, else .env's, else nothing
+    local value="${!1:-}"
+    if [[ -z "$value" && -f "$REPO/.env" ]]; then
+        value="$(grep -oP "^$1=\K.*" "$REPO/.env" | tail -1 | tr -d '\r"' || true)"
+    fi
+    printf '%s' "$value"
+}
+NAS_HOST="$(setting LT_NAS_HOST)"
+NAS_USER="$(setting LT_NAS_USER)"
+PORT="${LT_DIST_PORT:-5008}"
+NAS_DIST="${LT_NAS_DIST:-/tank/ltheory/dist}"
+LOCAL=0
+[[ "${1:-}" == "--local" ]] && LOCAL=1
+if [[ $LOCAL == 0 && ( -z "$NAS_HOST" || -z "$NAS_USER" ) ]]; then
+    echo "Where is the NAS? Set LT_NAS_HOST and LT_NAS_USER (in the environment or in .env), or use --local." >&2
+    exit 1
+fi
+DIST_URL=""
+[[ -n "$NAS_HOST" ]] && DIST_URL="http://$NAS_HOST:$PORT/"
+
+cd "$REPO"
+SHA="$(git rev-parse --short=8 HEAD)"
+RELEASE="$(date +%Y.%m.%d)-$SHA"
+TITLE="$(git show "$SHA:RELEASE_TITLE" 2>/dev/null | head -1 | tr -d '\r' || true)"
+if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+    echo "note: uncommitted changes are not in this release (it is built from $SHA)."
+fi
+echo "== release $RELEASE${TITLE:+, \"$TITLE\"}"
+
+# The source: HEAD, clean. (The libraries that are submodules are taken
+# from this checkout's own copies, not fetched.)
+mkdir -p "$WORK"
+if [[ -d "$WORK/src" ]]; then
+    git -C "$WORK/src" checkout -q --detach "$SHA"
+else
+    git worktree add -q --detach "$WORK/src" "$SHA"
+fi
+for module in ext/SFML ext/luau; do
+    git -C "$WORK/src" config "submodule.$module.url" "$REPO/$module"
+done
+git -C "$WORK/src" -c protocol.file.allow=always submodule update -q --init
+
+# The builds: Linux and Windows, one version; and the launcher for each.
+echo "== building (Linux)"
+cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLT_OUTPUT_DIR="$WORK/linux/bin" -S "$WORK/src" -B "$WORK/linux" >/dev/null
+cmake --build "$WORK/linux" --target launch -j "$(nproc)" | tail -1
+echo "== building (Windows)"
+"$WORK/src/script/build-windows" "$WORK/src" "$WORK/windows" | tail -1
+GCC="$(command -v x86_64-w64-mingw32-gcc-posix || command -v x86_64-w64-mingw32-gcc || true)"
+if [[ -z "$GCC" && -x "$HOME/.local/opt/mingw/usr/bin/x86_64-w64-mingw32-gcc-posix" ]]; then
+    GCC="$HOME/.local/opt/mingw/usr/bin/x86_64-w64-mingw32-gcc-posix"
+fi
+[[ -n "$GCC" ]] || { echo "No MinGW-w64 GCC (see script/build-windows)." >&2; exit 1; }
+MINGW_BIN="$(dirname "$GCC")"
+echo "== building (the launchers)"
+export LT_RELEASE="$RELEASE" CARGO_TARGET_DIR="$WORK/target"
+if [[ -n "$DIST_URL" ]]; then export LT_DIST_URL="$DIST_URL"; else unset LT_DIST_URL; fi
+export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER="$GCC" CC_x86_64_pc_windows_gnu="$GCC" \
+    AR_x86_64_pc_windows_gnu="$MINGW_BIN/x86_64-w64-mingw32-ar"
+(cd "$WORK/src/tools/launcher" && cargo build -q --release && cargo build -q --release --target x86_64-pc-windows-gnu)
+LAUNCHER="$WORK/target/release/limitless-launcher"
+LAUNCHER_WIN="$WORK/target/x86_64-pc-windows-gnu/release/limitless-launcher.exe"
+
+# The distribution: files/ is an install's tree; beside it the manifest,
+# the portal, the launchers to download.
+echo "== staging"
+DIST="$WORK/dist"
+FILES="$DIST/files"
+mkdir -p "$FILES"
+# (the programs without what a debugger wants: a tenth the size)
+strip -o "$FILES/limitless-space" "$WORK/linux/bin/launch"
+strip -o "$FILES/liblt.so" "$WORK/linux/bin/liblt.so"
+"$MINGW_BIN/x86_64-w64-mingw32-strip" -o "$FILES/LimitlessSpace.exe" "$WORK/windows/bin/launch.exe"
+cp -p "$LAUNCHER" "$FILES/limitless-space-launcher"
+cp -p "$LAUNCHER_WIN" "$FILES/LimitlessSpaceLauncher.exe"
+# (what the game reads: all of resource/ but the tests of the rules, which nobody plays)
+rsync -a --delete --exclude '*.spec.luau' "$WORK/src/resource/" "$FILES/resource/"
+cp -p "$WORK/src/LICENSE" "$WORK/src/NOTICE.md" "$FILES/"
+cp -p "$FILES/LimitlessSpaceLauncher.exe" "$FILES/limitless-space-launcher" "$DIST/"
+PREV="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["release"].rsplit("-",1)[-1])' "$DIST/manifest.json" 2>/dev/null || true)"
+"$LAUNCHER" manifest "$DIST" --release "$RELEASE" --title "$TITLE"
+
+# The portal page: the release, what changed since the last, the launchers.
+if [[ -n "$PREV" ]] && git cat-file -e "$PREV" 2>/dev/null; then
+    CHANGES="$(git log --format='%s' "$PREV..$SHA")"
+else
+    CHANGES="$(git log --format='%s' -10 "$SHA")"
+fi
+python3 - "$DIST" "$RELEASE" "$CHANGES" "$TITLE" <<'PY'
+import html, json, sys
+dist, release, changes, title = sys.argv[1:5]
+name = html.escape(title or "The game")
+m = json.load(open(f"{dist}/manifest.json"))
+size = sum(f["s"] for f in m["files"]) / 1e6
+items = "\n".join(f"<li>{html.escape(c)}</li>" for c in changes.splitlines() if c.strip()) or "<li>(nothing new)</li>"
+page = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{name}</title>
+<style>
+:root {{ --bg:#f3f4f7; --fg:#1b1d22; --muted:#626873; --card:#fcfcfe; --line:#d5d9e2; --accent:#2f5f9f; }}
+@media (prefers-color-scheme: dark) {{ :root {{ --bg:#0f1218; --fg:#e3e6ec; --muted:#8e96a4; --card:#171b23; --line:#2b313c; --accent:#7fb0e6; }} }}
+body {{ margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, sans-serif; }}
+main {{ max-width:720px; margin:0 auto; padding:32px 16px; }}
+h1 {{ margin:0 0 4px; font-size:28px; }} .muted {{ color:var(--muted); }}
+.card {{ background:var(--card); border:1px solid var(--line); border-radius:10px; padding:20px; margin:20px 0; }}
+a.button {{ display:inline-block; background:var(--accent); color:var(--bg); text-decoration:none; padding:10px 16px; border-radius:8px; margin:4px 8px 4px 0; font-weight:600; }}
+ol li, ul li {{ margin:4px 0; }} code {{ font-size:14px; }}
+</style></head><body><main>
+<h1>{name}</h1>
+<div class="muted">Release {html.escape(release)} · {size:.0f} MB installed</div>
+<div class="card">
+<a class="button" href="LimitlessSpaceLauncher.exe">Launcher for Windows</a>
+<a class="button" href="limitless-space-launcher">Launcher for Linux</a>
+<ol>
+<li>Make an empty folder for the game (it needs about {size:.0f} MB), for example <code>D:\\LimitlessSpace</code>.</li>
+<li>Put the launcher in it and run it. The first run downloads the game; later runs fetch only what changed.
+On Windows, SmartScreen may warn the first time: choose <em>More info</em>, then <em>Run anyway</em>.
+On Linux, mark it executable first: <code>chmod +x limitless-space-launcher</code>.</li>
+<li>Start the game with the launcher from then on: it updates it first. Saved games are kept in the same folder.</li>
+</ol>
+</div>
+<div class="card"><strong>In this release</strong><ul>
+{items}
+</ul></div>
+</main></body></html>
+"""
+open(f"{dist}/index.html", "w").write(page)
+PY
+
+if [[ $LOCAL == 1 ]]; then
+    echo "== staged $RELEASE in $DIST (local: nothing sent). Try it: python3 -m http.server -d $DIST $PORT"
+    exit 0
+fi
+
+if [[ -n "$TITLE" ]]; then
+    git tag -f -a -m "$TITLE" "release/$RELEASE" "$SHA" >/dev/null
+else
+    git tag -f "release/$RELEASE" "$SHA" >/dev/null
+fi
+
+NAS="$NAS_USER@$NAS_HOST"
+echo "== syncing the distribution to the NAS ($NAS_DIST)"
+ssh "$NAS" "mkdir -p $NAS_DIST/files"
+rsync -aL --delete --info=progress2 "$FILES/" "$NAS:$NAS_DIST/files/"
+# The manifest last: a launcher never sees a release whose files are not there yet.
+rsync -a "$DIST/LimitlessSpaceLauncher.exe" "$DIST/limitless-space-launcher" "$DIST/index.html" "$NAS:$NAS_DIST/"
+rsync -a "$DIST/manifest.json" "$NAS:$NAS_DIST/"
+# The file server: started if it is not running (it has nothing to restart for: it serves what is there).
+if ! ssh "$NAS" "docker ps --format '{{.Names}}' | grep -qx ltheory-dist"; then
+    ssh "$NAS" "cd /apps/infra && make ltheory"
+fi
+echo "== published $RELEASE${TITLE:+, \"$TITLE\"}: $DIST_URL"

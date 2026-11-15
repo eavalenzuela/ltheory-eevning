@@ -14,3 +14,6 @@ resource/script/engine.d.luau
 
 # Keys for outside services (never committed)
 /.env
+
+# The launcher's own build (tools/launcher; a release builds it elsewhere: script/publish)
+/tools/launcher/target/

@@ -12,13 +12,19 @@
 
 #ifdef LIBLT_WINDOWS
 
+  /* (in small letters, as they are on a disk that tells the two apart:
+     the build for Windows is made on Linux, with MinGW) */
   #include "process.h"
-  #include "Shlobj.h"
-  #include "DbgHelp.h"
-  #include "windirent.h"
+  #include "shlobj.h"
+  #include "dbghelp.h"
+  #ifdef _MSC_VER
+    #include "windirent.h"
+  #else
+    #include <dirent.h>
+  #endif
   #include "windows.h"
-  #include "Tchar.h"
-  #include "Direct.h"
+  #include "tchar.h"
+  #include "direct.h"
 
   #undef CreateDirectory
   #undef MessageBox
@@ -61,7 +67,7 @@ void SegHandler(int value) {
 }
 
 #ifdef LIBLT_WINDOWS
-  LONG _stdcall Win32SegHandler(EXCEPTION_POINTERS* pExcept) {
+  LONG __stdcall Win32SegHandler(EXCEPTION_POINTERS* pExcept) {
     SegHandler(0);
     return 0;
   }
@@ -205,7 +211,7 @@ bool OS_Spawn(String const& path) {
 
 void OS_WriteDump(String const& path) {
 #ifdef LIBLT_WINDOWS
-  typedef BOOL (_stdcall *pDumpFn)
+  typedef BOOL (__stdcall *pDumpFn)
     (HANDLE hProcess, DWORD ProcessId, HANDLE hFile, MINIDUMP_TYPE DumpType,
      PMINIDUMP_EXCEPTION_INFORMATION ExceptionParam,
      PMINIDUMP_USER_STREAM_INFORMATION UserStreamParam,

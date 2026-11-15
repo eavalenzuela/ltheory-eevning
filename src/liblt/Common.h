@@ -40,7 +40,14 @@ typedef uint64_t uint64;
 
 #endif
 
-#ifdef LIBLT_WINDOWS
+#if defined(LIBLT_WINDOWS) && !defined(_MSC_VER)
+
+  /* Windows, built with MinGW: the engine is a static library there
+     (CMakeLists.txt), with nothing to export, and the warnings below
+     are another compiler's. */
+  #define LT_API
+
+#elif defined(LIBLT_WINDOWS)
 
   #define LT_API __declspec(dllexport)
 

@@ -20,18 +20,23 @@ set(LUAU_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(LUAU_BUILD_CLI ON CACHE BOOL "" FORCE)
 add_subdirectory(ext/luau)
 
+# Where the programs go: bin/, beside the source, unless a build says
+# otherwise (the Windows build, which must not put its own over the
+# Linux ones: script/build-windows).
+set(LT_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/bin" CACHE PATH "Where the built programs are put")
+
 function (configure_output_dir target)
   set_target_properties (${target} PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin"
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin"
-    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
+    RUNTIME_OUTPUT_DIRECTORY "${LT_OUTPUT_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${LT_OUTPUT_DIR}"
+    ARCHIVE_OUTPUT_DIRECTORY "${LT_OUTPUT_DIR}")
 
   foreach (config ${CMAKE_CONFIGURATION_TYPES})
     string (TOUPPER ${config} config)
     set_target_properties (${target} PROPERTIES
-      RUNTIME_OUTPUT_DIRECTORY_${config} "${CMAKE_SOURCE_DIR}/bin"
-      LIBRARY_OUTPUT_DIRECTORY_${config} "${CMAKE_SOURCE_DIR}/bin"
-      ARCHIVE_OUTPUT_DIRECTORY_${config} "${CMAKE_SOURCE_DIR}/bin")
+      RUNTIME_OUTPUT_DIRECTORY_${config} "${LT_OUTPUT_DIR}"
+      LIBRARY_OUTPUT_DIRECTORY_${config} "${LT_OUTPUT_DIR}"
+      ARCHIVE_OUTPUT_DIRECTORY_${config} "${LT_OUTPUT_DIR}")
   endforeach (config)
 endfunction ()
 
@@ -76,7 +81,33 @@ include_directories(src/liblt
   ext/luau/Compiler/include)
 
 # Get ext libraries
-if(WINDOWS)
+if(MINGW)
+
+  # Windows, cross-compiled with MinGW-w64 (cmake/mingw-w64.cmake). GLEW is
+  # compiled from ext/glew, with its own header in place of the old one in
+  # include/; FreeType is the copy SFML carries for MinGW; and the engine
+  # is one static library, linked into the program (a DLL of it would have
+  # more names to export than a DLL can).
+  include_directories(BEFORE ext/glew/shim)
+  add_library(glew STATIC ext/glew/src/glew.c)
+  target_include_directories(glew PUBLIC ext/glew/include)
+  target_compile_definitions(glew PUBLIC GLEW_STATIC GLEW_NO_GLU)
+  add_compile_definitions(GLEW_STATIC GLEW_NO_GLU LIBLT_STATIC)
+
+  set(LINK_LIBRARIES
+      glew
+      ${PROJECT_SOURCE_DIR}/ext/SFML/extlibs/libs-mingw/x64/libfreetype.a
+      sfml-graphics
+      sfml-network
+      sfml-system
+      sfml-window
+      winmm
+      gdi32
+      ws2_32
+      ole32
+      dbghelp)
+
+elseif(WINDOWS)
 
   file(GLOB_RECURSE EXTLIB extlib/win32/*.lib)
   set(LINK_LIBRARIES
@@ -127,7 +158,11 @@ set(LINK_LIBRARIES ${LINK_LIBRARIES} ${OPENGL_LIBRARIES})
 
 # Build shared libary
 file(GLOB_RECURSE LIBLT_SRC src/liblt/*.cpp)
-add_library(lt SHARED ${LIBLT_SRC} ext/miniaudio/miniaudio.c)
+if(MINGW)
+  add_library(lt STATIC ${LIBLT_SRC} ext/miniaudio/miniaudio.c)
+else()
+  add_library(lt SHARED ${LIBLT_SRC} ext/miniaudio/miniaudio.c)
+endif()
 target_link_libraries(lt ${LINK_LIBRARIES} ${EXTLIB} Luau.VM Luau.Compiler Luau.CodeGen)
 configure_output_dir(lt)
 
@@ -152,11 +187,21 @@ set(TARGETS
 
 foreach(TARGET ${TARGETS})
   
-  add_executable(${TARGET} ${PROJECT_SOURCE_DIR}/src/${TARGET}/${TARGET}.cpp src/resources.rc)
+  # (the resource script is Visual Studio's own, in its own encoding: MinGW's
+  # tool cannot read it, and a program built with it goes without)
+  if(MINGW)
+    add_executable(${TARGET} ${PROJECT_SOURCE_DIR}/src/${TARGET}/${TARGET}.cpp)
+  else()
+    add_executable(${TARGET} ${PROJECT_SOURCE_DIR}/src/${TARGET}/${TARGET}.cpp src/resources.rc)
+  endif()
   target_link_libraries(${TARGET} ${LINK_LIBRARIES})
   configure_output_dir(${TARGET})
 
 endforeach(TARGET)
+
+# (the tools below are for whoever works on the game, on Linux: a Windows
+# build is the game alone)
+if(NOT MINGW)
 
 # luaucheck: type-checks Luau scripts against definitions generated from the
 # engine's reflection (C++17, with exceptions, like Luau's analysis library)
@@ -174,15 +219,24 @@ target_link_libraries(ltcore Luau.VM Luau.Compiler Luau.CodeGen)
 set_source_files_properties(src/ltcore/ltcore.cpp PROPERTIES COMPILE_FLAGS "-std=c++17 -fexceptions")
 configure_output_dir(ltcore)
 
+endif()
+
 # Link dynamic targets to the shared lib
 foreach(TARGET ${TARGETS})
 
-  target_link_libraries(${TARGET} lt)
+  if(MINGW)
+    # (all of the static library, and not only what the program names:
+    # most of the engine is known to it by what registers itself when the
+    # program starts, which nothing names)
+    target_link_libraries(${TARGET} -Wl,--whole-archive lt -Wl,--no-whole-archive)
+  else()
+    target_link_libraries(${TARGET} lt)
+  endif()
 
 endforeach(TARGET)
 
 # Set target properties
-if(WINDOWS)
+if(MSVC)
 
   # No exception handling
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHs")
@@ -230,5 +284,11 @@ else()
 
   # Enable SSE / SSE2
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse -msse2")
+
+  # A Windows program that needs nothing beside it but its own files: the
+  # compiler's runtime is linked in, and it opens no console of its own.
+  if(MINGW)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -static-libgcc -static-libstdc++")
+  endif()
 
 endif()

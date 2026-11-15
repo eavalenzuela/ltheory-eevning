@@ -1,0 +1,31 @@
+# ltheory: the game's distribution on the LAN (port 5008): the portal page,
+# the launchers, and every release's files for their installs and updates
+# (docs/distribution.md). The game itself has no server: it is played on
+# the machine it is installed on.
+#
+# For the NAS's own repository: services/ltheory/compose.yml (this file,
+# as is). Nothing is built on the box: script/publish on the laptop builds
+# a release and syncs its files to /tank/ltheory/dist, and `make ltheory`
+# starts this.
+#
+# Before the first `make ltheory`: mkdir -p /tank/ltheory/dist, as whoever
+# script/publish is there as.
+services:
+  ltheory-dist:
+    image: caddy:2-alpine
+    container_name: ltheory-dist
+    # Static files with ranges (a broken download carries on); no listing.
+    command: caddy file-server --root /srv --listen :5008
+    ports:
+      - "5008:5008"
+    volumes:
+      - /tank/ltheory/dist:/srv:ro
+    labels:
+      # (The caddy image also exposes 80, 443 and 2019, unused: probe the port it serves on.)
+      - tender.probe.port=5008
+    restart: unless-stopped
+
+networks:
+  default:
+    name: apps
+    external: true

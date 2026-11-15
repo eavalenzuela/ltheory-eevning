@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Cross-build the game for Windows (x86_64) on Linux, with MinGW-w64.
+#
+# Usage: script/build-windows [SOURCE [OUT]]
+#
+#   SOURCE   the source tree to build (this repository, if not said)
+#   OUT      where to build it (build/windows under the source, if not said):
+#            the program is OUT/bin/launch.exe, which needs nothing beside
+#            it but resource/
+#
+# The compilers are the system's (apt install g++-mingw-w64-x86-64-posix)
+# if they are there, else a copy unpacked from Ubuntu's packages without
+# root, in ~/.local/opt/mingw:
+#
+#   mkdir -p ~/.local/opt/mingw-debs && cd ~/.local/opt/mingw-debs
+#   apt-get download gcc-mingw-w64-x86-64-posix gcc-mingw-w64-x86-64-posix-runtime \
+#     g++-mingw-w64-x86-64-posix gcc-mingw-w64-base binutils-mingw-w64-x86-64 \
+#     mingw-w64-x86-64-dev mingw-w64-common
+#   for f in *.deb; do dpkg-deb -x "$f" ~/.local/opt/mingw; done
+#
+# (cmake/mingw-w64.cmake finds either.) GLEW is compiled from ext/glew, and
+# FreeType is the copy SFML carries for MinGW: nothing else is wanted.
+#
+# The Linux programs in bin/ are not touched. To try the result where no
+# window opens on the desktop: script/offscreen wine build/windows/bin/launch.exe game ...
+set -euo pipefail
+
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+SRC="${1:-$REPO}"
+OUT="${2:-$SRC/build/windows}"
+
+cmake -DCMAKE_TOOLCHAIN_FILE="$SRC/cmake/mingw-w64.cmake" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DLT_OUTPUT_DIR="$OUT/bin" -S "$SRC" -B "$OUT" >/dev/null
+cmake --build "$OUT" --target launch -j "$(nproc)"
+echo "built $OUT/bin/launch.exe"

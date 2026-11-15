@@ -25,7 +25,7 @@ Under ElevenLabs' terms the account holder keeps all rights in what they generat
 | `ext/luau` | MIT (`ext/luau/LICENSE.txt`) |
 | `ext/miniaudio` | Public domain or MIT No Attribution, at your choice (`ext/miniaudio/LICENSE`) |
 | FreeType (`include/FreeType`, binaries in `extbin/`, `extlib/`) | FreeType License |
-| GLEW (`include/Glew`, binaries) | Modified BSD and MIT |
+| GLEW (`include/Glew`, binaries; and its source, version 2.2.0, in `ext/glew`, which the Windows build compiles) | Modified BSD and MIT (`ext/glew/LICENSE.txt`) |
 | ENet (`include/enet`, binaries) | MIT |
 | zlib (`extbin/win32/zlib1.dll`) | zlib |
 | libsndfile (`extbin/osx/sndfile.framework`) | LGPL 2.1 or later |
