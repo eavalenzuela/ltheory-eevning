@@ -81,8 +81,9 @@ lua assert(GameDebug.Give('autocannon.small.custom', 1))
 until GameDebug.Press('Fitting')
 until GameDebug.Tab() == 'Fitting'
 frames 3
+lua _G.fitted = GameDebug.Fitted()
 until GameDebug.Press('Unfit:high1')
-until GameDebug.Fitted('autocannon.small') == 0
+until GameDebug.Fitted() == _G.fitted - 1
 until GameDebug.Press('Fit:autocannon.small.custom')
 until GameDebug.Fitted('autocannon.small.custom') == 1
 
@@ -93,8 +94,9 @@ lua assert(GameDebug.Give('ammo.fusion.ii', 300) and GameDebug.Give('autocannon.
 lua GameDebug.Train('projectiles', 4)
 frames 3
 lua assert(not GameDebug.CanPress('Load:ammo.fusion.ii'), 'tech 2 rounds should want a tech 2 gun')
+lua _G.fitted = GameDebug.Fitted()
 until GameDebug.Press('Unfit:high1')
-until GameDebug.Fitted('autocannon.small') == 0
+until GameDebug.Fitted() == _G.fitted - 1
 until GameDebug.Press('Fit:autocannon.small.ii')
 until GameDebug.Fitted('autocannon.small.ii') == 1
 frames 3

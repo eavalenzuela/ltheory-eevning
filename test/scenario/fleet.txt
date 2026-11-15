@@ -10,6 +10,8 @@
 # system and into a station there, the hired pilot after them all the way.
 
 wait 2
+# (the ship the pilot begins in, whatever it is: what is asked later is whether they are still in it)
+lua _G.mine = GameDebug.Hull()
 lua assert(GameDebug.Docked(), 'a new game starts docked')
 lua GameDebug.Grant(1000000)
 lua assert(GameDebug.Spare('frigate.courier'), 'no second ship')
@@ -53,7 +55,7 @@ until GameDebug.Pirates() == 0
 lua GameDebug.TimeScale(1)
 frames 5
 lua assert(GameDebug.Wallet() > _G.before, 'the bounty for what a hired pilot destroys is the player s')
-lua assert(GameDebug.Hull() == 'frigate.akashi', 'the player lost their ship')
+lua assert(GameDebug.Hull() == _G.mine, 'the player lost their ship')
 lua assert(GameDebug.Fleet() == 1 and select(2, GameDebug.Fleet()) == 1, 'the hired pilot should still be there')
 lua assert(select(3, GameDebug.Crew(1)) > 0, 'the hired pilot should have learned something from it')
 

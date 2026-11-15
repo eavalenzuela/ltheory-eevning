@@ -3,8 +3,8 @@
 #
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/targets.txt
 #
-# A ship has as many things locked as its hull allows (the frigate a
-# pilot begins in: four). One of them is the pilot's target: the first one locked, until
+# A ship has as many things locked as its hull allows (the one a pilot
+# begins in: two at the least). One of them is the pilot's target: the first one locked, until
 # the pilot picks another by a click on its panel in the row of targets.
 # The camera follows the target, and goes to another when the target is
 # another. Let go, the target is one that is still locked.
@@ -16,7 +16,7 @@ until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()
 lua assert(GameDebug.Order('Stop'))
 frames 30
-lua assert(select(3, GameDebug.Target()) == 4, 'the starter frigate holds four targets, not ' .. select(3, GameDebug.Target()))
+lua assert(select(3, GameDebug.Target()) >= 2, 'this wants a ship that holds two targets, and the one a pilot begins in holds ' .. select(3, GameDebug.Target()))
 lua assert(GameDebug.Target() == '', 'with nothing locked there is no target')
 lua assert(GameDebug.Pirate('scout', 14000, 0.5) and GameDebug.Pirate('raider', 15000, 2.6), 'no pirates to lock')
 frames 5

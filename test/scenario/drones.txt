@@ -9,6 +9,8 @@
 # is in the bay again.
 
 wait 2
+# (the ship the pilot begins in, whatever it is: what is asked later is whether they are still in it)
+lua _G.mine = GameDebug.Hull()
 lua assert(GameDebug.Docked(), 'a new game starts docked')
 lua assert(GameDebug.Give('drone.light', 2))
 lua GameDebug.Train('drones', 2)
@@ -45,7 +47,7 @@ lua GameDebug.TimeScale(2)
 lua assert(GameDebug.Fire() == 2, 'both guns should open fire')
 until GameDebug.Pirates() == 0
 lua GameDebug.TimeScale(1)
-lua assert(GameDebug.Hull() == 'frigate.akashi', 'the player lost the fight')
+lua assert(GameDebug.Hull() == _G.mine, 'the player lost the fight')
 lua assert(GameDebug.Drones() == 1, 'the drone should still be out')
 
 # Back aboard.

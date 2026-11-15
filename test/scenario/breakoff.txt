@@ -12,6 +12,8 @@
 # leave, and is still there to be fought.
 
 wait 2
+# (the ship the pilot begins in, whatever it is: what is asked later is whether they are still in it)
+lua _G.mine = GameDebug.Hull()
 lua assert(GameDebug.Docked(), 'a new game starts docked')
 lua GameDebug.Peaceful(true)
 lua assert(GameDebug.Give('disruptor.warp', 1))
@@ -38,7 +40,7 @@ patience 120
 until GameDebug.Pirates() == 0
 lua assert(GameDebug.Count('wreck') == 0, 'a pirate that got away leaves no wreck')
 lua assert(GameDebug.Wallet() == _G.wallet, 'and pays nothing')
-lua assert(GameDebug.Hull() == 'frigate.akashi', 'the pilot should have come through that')
+lua assert(GameDebug.Hull() == _G.mine, 'the pilot should have come through that')
 
 # The second, held: it cannot leave.
 lua assert(GameDebug.Pirate('raider', 4000))

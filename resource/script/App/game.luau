@@ -489,11 +489,13 @@ function Debug.Condition(): (number, number, number)
   return v.shield / v.shieldMax, v.armor / v.armorMax, v.hull / v.hullMax
 end
 
--- How many modules of a type are fitted.
-function Debug.Fitted(type: string): number
+-- How many modules of a type the pilot's ship has fitted; of every type,
+-- with no type given (what a script counts when it is not to depend on
+-- which ship and which fit a pilot begins with).
+function Debug.Fitted(type: string?): number
   local count = 0
   for _, item in Core.Query.Fitted(session.game, session.game.state.player.ship) do
-    if item.type == type then
+    if type == nil or item.type == type then
       count += 1
     end
   end

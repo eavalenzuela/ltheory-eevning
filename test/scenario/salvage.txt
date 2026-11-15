@@ -14,8 +14,9 @@ lua assert(GameDebug.Docked(), 'a new game starts docked')
 lua assert(GameDebug.Give('salvager.small', 1))
 lua GameDebug.Train('salvaging', 5)
 frames 3
+lua _G.fitted = GameDebug.Fitted()
 until GameDebug.Press('Unfit:high2')
-until GameDebug.Fitted('autocannon.small') == 1
+until GameDebug.Fitted() == _G.fitted - 1
 until GameDebug.Press('Fit:salvager.small')
 until GameDebug.Fitted('salvager.small') == 1
 

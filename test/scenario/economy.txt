@@ -22,8 +22,9 @@ lua GameDebug.Peaceful(true)
 lua assert(GameDebug.Docked(), 'a new game starts docked')
 
 # Fitting: a mining laser in place of one gun.
+lua _G.fitted = GameDebug.Fitted()
 until GameDebug.Press('Unfit:high1')
-until GameDebug.Fitted('autocannon.small') == 0
+until GameDebug.Fitted() == _G.fitted - 1
 until GameDebug.Press('Fit:miner.small')
 until GameDebug.Fitted('miner.small') == 1
 

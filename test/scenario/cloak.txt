@@ -2,7 +2,8 @@
 #
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/cloak.txt
 #
-# A cloaking device is given and fitted in place of the launcher. By
+# A cloaking device is given and fitted in the second high slot, in
+# place of what the pilot's ship began with there. By
 # the station it will not run: something is too near. At a belt it
 # does: the HUD says so, and the ship is drawn as the light bending
 # round it and not as a hull, with nothing on its hardpoints. Nothing
@@ -18,8 +19,9 @@ lua assert(GameDebug.Give('cloak.device', 1))
 lua GameDebug.Train('electronics', 5)
 lua GameDebug.Train('cloaking', 5)
 frames 3
+lua _G.fitted = GameDebug.Fitted()
 until GameDebug.Press('Unfit:high2')
-until GameDebug.Fitted('launcher.light') == 0
+until GameDebug.Fitted() == _G.fitted - 1
 until GameDebug.Press('Fit:cloak.device')
 until GameDebug.Fitted('cloak.device') == 1
 

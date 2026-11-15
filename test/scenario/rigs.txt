@@ -29,9 +29,10 @@ until GameDebug.Press('Fitting')
 frames 3
 lua assert(not GameDebug.CanPress('Fit:rig.hull'), 'a rig should want Jury Rigging')
 lua GameDebug.Train('jury.rigging', 1)
+lua _G.fitted = GameDebug.Fitted()
 until GameDebug.Press('Fit:rig.hull')
 until GameDebug.Fitted('rig.hull') == 1
-lua assert(GameDebug.Fitted('autocannon.small') == 1 and GameDebug.Fitted('launcher.light') == 1, 'a rig should take none of the other slots')
+lua assert(GameDebug.Fitted() == _G.fitted + 1, 'a rig should take none of the other slots')
 
 # Taken out, it is destroyed.
 frames 3

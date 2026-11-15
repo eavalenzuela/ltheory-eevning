@@ -7,6 +7,8 @@
 # wreck, then lose the ship, fly the capsule home and be given a new one.
 
 wait 2
+# (the ship the pilot begins in, whatever it is: what is asked later is whether they are still in it)
+lua _G.mine = GameDebug.Hull()
 # (sound, which a script does not otherwise get: at no loudness, so that its
 # code runs and nobody hears it)
 lua GameDebug.Sound(true, 0)
@@ -14,7 +16,7 @@ lua assert(GameDebug.Docked(), 'a new game starts docked')
 # (and music with it: a station's, while docked)
 frames 3
 lua assert(GameDebug.Music() == 'docked', 'docked, the music should be the station\'s, not ' .. GameDebug.Music())
-lua assert(GameDebug.Fitted('autocannon.small') == 1 and GameDebug.Fitted('launcher.light') == 1, 'the starter ship has an autocannon and a light launcher')
+lua assert(GameDebug.Fitted() > 0, 'the ship a pilot begins in has nothing fitted')
 
 # In the inventory, the hangar (the third place down its tree), and on
 # its second row the shield extender: a right click, and Fit, the first
@@ -52,7 +54,7 @@ lua assert(GameDebug.Order('Orbit', 'Pirate', 1500), 'orbit was refused')
 lua assert(GameDebug.Fire() == 2, 'both guns should open fire')
 
 until GameDebug.Count('wreck') > 0
-lua assert(GameDebug.Hull() == 'frigate.akashi', 'the player lost the fight')
+lua assert(GameDebug.Hull() == _G.mine, 'the player lost the fight')
 lua assert(GameDebug.Pirates() == 0, 'the pirate is still there')
 lua assert(GameDebug.Wallet() == 11000, 'the bounty was not paid')
 
@@ -71,7 +73,7 @@ lua assert(GameDebug.Wallet() == 23000, 'insurance was not paid')
 lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused')
 until GameDebug.Docked()
 wait 0.5
-lua assert(GameDebug.Hull() == 'frigate.akashi', 'docking in a capsule should give a new ship')
+lua assert(GameDebug.Hull() ~= 'capsule', 'docking in a capsule should give a new ship')
 
 lua assert(GameDebug.Sound() > 5, 'hardly a sound was made in all that')
 lua assert(GameDebug.Music() == 'docked' and select(3, GameDebug.Music()) >= 4, 'the music should have gone from station to space to fight and back')

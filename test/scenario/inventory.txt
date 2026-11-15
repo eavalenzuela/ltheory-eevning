@@ -137,8 +137,9 @@ until GameDebug.Press('inventory:2:close')
 until GameDebug.Inventory() == 1
 
 # A module carried onto the fitting screen is fitted: a mining laser, in place of one gun.
+lua _G.fitted = GameDebug.Fitted()
 until GameDebug.Press('Unfit:high1')
-until GameDebug.Fitted('autocannon.small') == 0
+until GameDebug.Fitted() == _G.fitted - 1
 until GameDebug.CanPress('Inv:item:miner.small')
 lua assert(GameDebug.Carry('Inv:item:miner.small', 'Fitting:onto'), 'the module or the fitting screen was not there')
 until GameDebug.Fitted('miner.small') == 1

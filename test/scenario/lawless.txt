@@ -10,6 +10,8 @@
 # pilot's starter frigate is no match for any of it: it looks, and gets away.
 
 wait 2
+# (the ship the pilot begins in, whatever it is: what is asked later is whether they are still in it)
+lua _G.mine = GameDebug.Hull()
 # (the sound, at no loudness, so that what is heard of a fight is run: missiles land on the pilot here)
 lua GameDebug.Sound(true, 0)
 lua assert(GameDebug.Docked(), 'a new game starts docked')
@@ -50,7 +52,7 @@ lua assert(GameDebug.Distance('Cobaltite') < 1e9 or GameDebug.Distance('Iridite'
 # And away, to the one station there is here.
 lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused')
 until GameDebug.Docked()
-lua assert(GameDebug.Hull() == 'frigate.akashi', 'the pilot did not get away')
+lua assert(GameDebug.Hull() == _G.mine, 'the pilot did not get away')
 
 echo lawless scenario passed
 quit

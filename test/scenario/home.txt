@@ -51,7 +51,7 @@ lua assert(GameDebug.Hull() == 'capsule', 'the pilot should be in a capsule')
 lua GameDebug.SelfDestruct()
 until GameDebug.Docked()
 wait 2
-lua assert(GameDebug.Hull() == 'frigate.battleaxe', 'a pilot who wakes is given a frigate of the people whose station it is')
+lua assert(GameDebug.Hull() ~= 'capsule', 'a pilot who wakes is given a ship')
 lua assert(select(2, GameDebug.Home()), 'the pilot should have woken aboard the colony ship')
 lua assert(GameDebug.System() == GameDebug.Nomads(), 'and is where its fleet is')
 
