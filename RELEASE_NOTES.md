@@ -6,6 +6,10 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Anti-aliasing, made sure of
+
+- The dark specks some graphics cards drew with anti-aliasing on went away when its last step was reworked, but by luck: the way it looked textures up left a detail to the driver. It now says that detail itself, on every lookup, so the picture no longer depends on the card.
+
 ## More paint, and the factions' liveries
 
 - Sixteen more paints and sixteen more designs on the market (Market, Paints). Camouflage: Woodland, Desert, Arctic, Urban and Void, with blots, digital squares and splinters to lay on them. Gaudy: Bubblegum, Limelight, Hot Rod, Jester, Gilded, Savanna and Tropic, with polka dots, candy stripes, harlequin diamonds, leopard spots, flames and zigzags. Police: Patrol, Interceptor, Hi-Vis and Marshal, with Battenburg blocks, a chequer band, hazard bars, a waistband and a sash. And Quarters and Tail Bands.

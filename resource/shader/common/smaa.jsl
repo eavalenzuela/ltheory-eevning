@@ -372,7 +372,14 @@ uniform vec2 rcpFrame;
 //-----------------------------------------------------------------------------
 // Porting Functions
 #define SMAATexture2D sampler2D
-#define SMAASample(tex, coord) texture2D(tex, coord)
+/* Every lookup is at a level it names (0: none of these textures has
+   any other). The pass looks textures up inside loops and inside
+   branches on what a pixel holds, where a lookup that leaves the level
+   to be worked out is undefined: a driver may compile it either way,
+   and on the owner's graphics card it came out as dark specks until
+   the shader about it was laid out otherwise (2026-11-15). The
+   method's own code names the level too. */
+#define SMAASample(tex, coord) texture2DLod(tex, coord, 0.0)
 #define SMAALerp(a, b, t) mix(a, b, t)
 #define SMAAMad(a, b, c) (a * b + c)
 #define SMAASaturate(a) clamp(a, 0.0, 1.0)
