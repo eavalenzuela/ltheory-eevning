@@ -547,6 +547,53 @@ function Debug.Trying(): (string, string)
   return session.trying.paint or "", session.trying.design or ""
 end
 
+-- For a picture of the scene alone: the interface is not drawn (and is
+-- again, given true).
+function Debug.Hud(on: boolean)
+  Hud.Hide(not on)
+end
+
+-- A cheat, for a picture: a ship of a hull type stood still by the
+-- pilot's own in space, so far to its right, above it and ahead of it
+-- (metres, by the way the pilot's ship is drawn pointing), pointing the
+-- same way, with what its design is shown with on its hardpoints, and
+-- in a paint and a design if they are named. It is nobody's and does
+-- nothing. Its id; 0 if the pilot is not in space or there is no such
+-- hull.
+function Debug.Pose(type: string, right: number, up: number, ahead: number, paint: string?, design: string?): number
+  local state = session.game.state
+  local me = state.balls[state.player.ship]
+  local hull = Ships.byId[type]
+  if me == nil or hull == nil then
+    return 0
+  end
+  local ship = Space.NewShip(state, hull.id, hull.name, if hull.lineage ~= "" then hull.lineage else "player", 0)
+  local built = Hull.Build(type)
+  local types: { string } = {}
+  local shown: { string } = if built then built.fit else {}
+  for _, module in shown do
+    table.insert(types, module)
+    if Modules.byId[module] and Attributes.Check(hull, types) then
+      Items.Equip(state, ship.id, module, nil)
+    else
+      table.remove(types)
+    end
+  end
+  ship.paint = if paint and paint ~= "" then paint else nil
+  ship.design = if ship.paint and design and design ~= "" then design else nil
+  local look = Scene.Heading(scene, me.id)
+  local side = vector.cross(vector.create(0, 1, 0), look)
+  side = if vector.magnitude(side) > 1e-3 then vector.normalize(side) else vector.create(1, 0, 0)
+  local over = vector.cross(look, side)
+  local at = side * right + over * up + look * ahead
+  local ball = Space.Launch(state, ship, me.system, me.x + at.x, me.y + at.y, me.z + at.z)
+  ball.grid = me.grid
+  table.insert(session.game.events, { kind = "BallAdded", ball = ball.id })
+  Scene.Pose(scene, ball.id, look)
+  Scene.Pose(scene, me.id, look)
+  return ball.id
+end
+
 -- The splash a person is shown when the game starts (Game/UI/Splash):
 -- how far through it is ("rise", "stand", "clear"; "" when it is not
 -- up). Given true, it is begun, for a script, which is not shown it.

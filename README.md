@@ -1,35 +1,59 @@
-# Limit Theory (old engine): an offline space sandbox
+# Limitless Space
 
-A single-player space game built on the old C++ Limit Theory engine. You fly by giving your ship orders, and make a living mining, building, trading, running missions and fighting pirates in a generated galaxy of up to 400 systems.
+An offline, single-player space sandbox. You fly by giving your ship orders, and make a living mining, building, trading, running jobs and fighting in a generated galaxy of up to five thousand star systems, where eight peoples hold space, trade, and go to war over it whether you are there or not.
 
-It is a work in progress. The systems are playable from end to end; the ships, stations and sounds are first-pass placeholders ("grey box").
+![A fleet holding off a planet's night side, the sun on its limb](docs/screenshots/fleet-eclipse.jpg)
+
+It is built on the old C++ Limit Theory engine, and it is a work in progress. The systems are playable from end to end; the ships, stations and sounds are still first passes.
+
+| | |
+|---|---|
+| ![A battleship and its escorts in their paint](docs/screenshots/fleet-sunlit.jpg) | ![A station: its tower and the modules anchored round it](docs/screenshots/station.jpg) |
+| A battleship in its owner's paint, with escorts and a carrier | A station is a tower with modules anchored round it |
+| ![The star map of a six-hundred-system galaxy, coloured by who holds what](docs/screenshots/star-map.jpg) | ![The fitting screen, with the ship as it is in space](docs/screenshots/fitting.jpg) |
+| The star map: six hundred systems, coloured by who holds them | Fitting: the ship is shown as it is in space |
+| ![The market's paints, with a paint being looked at](docs/screenshots/market-paints.jpg) | ![One hull in sixteen paints and designs](docs/screenshots/paints.jpg) |
+| Paints and designs are bought on the market, and can be tried on first | One hull, sixteen coats |
+
+## What is in the game
+
+- **Flight by orders**: approach, orbit, keep at range, align, warp, dock, jump through gates, with an autopilot and a star map.
+- **Ships and fitting**: frigates to battleships, haulers and capitals for four human peoples, the pirates and the first of the aliens, with turrets, launchers, drones, electronic warfare, cloaks, rigs and tech 2.
+- **Better gear to find**: custom and masterwork modules in pirate wrecks, each people's own make for those in good standing with them, named officers who carry modules of their own, and mutators that throw a module's figures again, for better or worse.
+- **Combat**: target locking, tracking and range, shields, armour and hull, wrecks to loot and salvage, insurance, and a capsule to get home in.
+- **Industry**: mining, refining, manufacturing from blueprints, research and invention, moon mining and reactions, and planetary colonies.
+- **Trade**: a market at each station with buy and sell orders, over an economy of real materials that moves along the gates, with shortages, convoys and prices that differ by who owns the station.
+- **Things to do**: career agents who show a new pilot the ropes, daily jobs, combat camps, mining and courier contracts, standings and loyalty stores, sites to scan down, derelicts to hack, and space no chart shows on the far side of wormholes.
+- **A world that moves**: the peoples fight wars over open space and systems change hands; pirates mass where order is thin; invasions come out of the deep; rare captains, traders and derelicts are sighted; gates close and rich belts are found. An events window and the star map say what is going on.
+- **A character**: skills that train in real time, including while the game is closed, and implants.
+- **Company**: hired pilots who follow, mine, haul, patrol and guard; a corporation of your own with members who work for themselves and pay it a tax; starbases of your own, and systems claimed in your name.
+- **Paint**: paints and designs for your ship, bought on the market and tried on before you buy.
+- **Saves**, music, and sound.
+
+## The ship generator
+
+Most hulls in the game are grown from a seed by the engine's old ship generator, which has nine styles to grow them in. `bin/launch hulls` goes through seeds by hand, and `script/hulls` makes sheets of them.
+
+| | |
+|---|---|
+| ![Twenty hulls of the triangular style as battleships](docs/screenshots/style-triangular.jpg) | ![Twenty hulls of the asymmetrical style as cruisers](docs/screenshots/style-asymmetrical.jpg) |
+| The triangular style, as battleships | The asymmetrical style, as cruisers |
+
+Towers are grown the same way and stood on end: ![The Vessari towers in their three sizes](docs/screenshots/towers.jpg)
 
 ## Where this comes from
 
 This is a fork of the old C++ implementation of Limit Theory, its engine (LTE) and its scripting language, written by Josh Parnell from 2012 to 2015 and released into the public domain. What has changed in this fork:
 
 - The scripts are [Luau](https://luau.org) (typed Lua); the engine's own scripting language is gone. See `docs/luau.md`.
-- It builds and runs on 64-bit Linux.
-- There is a new game on top of the engine (`bin/launch game`). All of its state and rules live in a deterministic, engine-free Luau core, and the engine draws what the core says. The old prototype is still in the tree as `ltheory`.
+- It builds and runs on 64-bit Linux, and is cross-built for Windows.
+- There is a new game on top of the engine (`bin/launch game`). All of its state and rules live in a deterministic, engine-free Luau core, and the engine draws what the core says. The old prototype is still there as `bin/launch ltheory`.
 
-`docs/roadmap.md` has the plan and, at its top, what is built so far.
-
-## What is in the game
-
-- **Flight by orders**: approach, orbit, keep at range, align, warp, dock, jump through gates, with an autopilot and a star map.
-- **Ships and fitting**: frigates to battleships and haulers for four human factions and the pirates, a freighter for anybody, with turrets, launchers, drones, electronic warfare, cloaks, rigs and tech 2 gear.
-- **Combat**: target locking, tracking and range, shields, armour and hull, wrecks to loot and salvage, insurance, and a capsule to get home in.
-- **Industry**: mining, refining, manufacturing from blueprints, research and invention, and planetary colonies.
-- **Trade**: a market at each station with buy and sell orders, where prices differ by who owns the station.
-- **Things to do**: career agents who show a new pilot the ropes, daily jobs, combat camps, mining contracts and courier contracts from agents, standings and loyalty stores, sites to scan down, derelicts and vaults to hack, gas to harvest and make into boosters.
-- **A character**: skills that train in real time, including while the game is closed, and implants.
-- **Company**: hired pilots who follow, mine, haul, patrol and guard, with drones of their own; a corporation of your own for them to work for, with its own account and books; starbases of your own with anchored modules.
-- **A world**: security that falls away from each faction's homeworld, police and gate guns where order is kept, other ships going about their business.
-- **Saves**, music, and sound.
+`docs/roadmap.md` has the plan and, at its top, what is built so far. `RELEASE_NOTES.md` says what each release brought.
 
 ## Requirements
 
-64-bit Linux is what this fork is built and tested on (Ubuntu, GCC 15, CMake 4.2, Mesa). The original targeted Windows with Visual Studio; that has not been tried here.
+64-bit Linux is what this fork is built and tested on (Ubuntu, GCC 15, CMake 4.2, Mesa). A Windows build is cross-compiled from Linux with MinGW-w64 (`script/build-windows`); building on Windows itself, as the original did with Visual Studio, has not been tried here.
 
 On Debian or Ubuntu:
 
@@ -69,7 +93,7 @@ bin/launch game
 
 On a laptop with two graphics cards, `DRI_PRIME=1 bin/launch game` runs it on the faster one.
 
-The game opens on a menu: continue, new game (pick a seed and a galaxy size), load, options (sound on or off, and the loudness of effects and music), quit. A new game starts you docked at a station with a small ship. That station has five career agents (the Careers tab), who each teach a way of making a living in a few short lessons and pay for them; the Guide button lists everything else there is to do, and shows the lessons you have in hand while you are in space.
+The game opens on a splash (any key sends it on) and then a menu: continue, new game (pick a seed and a galaxy size), load, options (sound on or off, and the loudness of effects and music), quit. A new game starts you docked at a station with a small ship. That station has five career agents (the Careers tab), who each teach a way of making a living in a few short lessons and pay for them; the Guide button lists everything else there is to do, and shows the lessons you have in hand while you are in space.
 
 | | |
 |---|---|

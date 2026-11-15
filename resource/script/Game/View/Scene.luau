@@ -173,6 +173,9 @@ export type Scene = {
   arms: { [number]: Armed },          -- what is on the hardpoints of each ship of our own design
   armsTick: number,                   -- the tick the arms were last checked against the fits
   ghosts: { [number]: boolean },      -- the ships drawn cloaked now (Hull.Ghost in place of the hull)
+  -- Ships stood somewhere for a picture (Scene.Pose): the way each is
+  -- to point while it stands still.
+  poses: { [number]: vector },
   armsTime: number,                   -- when (scene time) the turrets were last swung
 }
 
@@ -236,7 +239,7 @@ function Scene.New(camera: Camera): Scene
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6, tracking = 0,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
     wreckage = {}, works = {}, offsets = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
-    standing = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0, ghosts = {}, headings = {}, turned = 0,
+    standing = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0, ghosts = {}, poses = {}, headings = {}, turned = 0,
   }
 end
 
@@ -324,6 +327,17 @@ end
 export type Part = { model: Renderable | Model, transform: Transform, at: vector, look: vector, up: vector, size: number }
 
 local dressed: { key: string, parts: { Part } }? = nil
+
+-- A ship stood somewhere for a picture: the way it is to point while
+-- it stands still. And the way a ship is drawn pointing now (straight
+-- ahead along z, if it has never moved).
+function Scene.Pose(scene: Scene, ship: number, heading: vector)
+  scene.poses[ship] = vector.normalize(heading)
+end
+
+function Scene.Heading(scene: Scene, ship: number): vector
+  return scene.headings[ship] or vector.create(0, 0, 1)
+end
 
 -- A paint and a design being tried on the ship the fitting screen
 -- shows, before either is bought: the ship is shown in them, and is
@@ -1431,6 +1445,11 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         else
           proxy:SetLook(heading)
         end
+      elseif scene.poses[id] and designed[proxy] then
+        -- (stood there for a picture: it points the way it was stood)
+        local heading = scene.poses[id]
+        scene.headings[id] = heading
+        Object_SetAxes(proxy, heading, if math.abs(heading.y) < 0.98 then vector.create(0, 1, 0) else vector.create(1, 0, 0))
       end
       scene.screen[id] = at
     elseif existing then

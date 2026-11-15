@@ -997,6 +997,14 @@ Windows.Kind("map", function(_: Windows.Window, x: number, y: number, w: number,
 end)
 Windows.Screen("map", "map", 1400, 820, { { 0, 0, 232, 40 }, { 0, 0, 1400, 6 } })
 
+-- Whether the interface is drawn at all: not, for a picture of the
+-- scene alone (Hud.Hide, and GameDebug.Hud in the game app).
+local hidden = false
+
+function Hud.Hide(on: boolean)
+  hidden = on
+end
+
 function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
   -- Expanded, so that it covers the window: a bare widget has no size.
   return Components.Expand(Widget_Luau(Widget_Create(), {
@@ -1015,6 +1023,11 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         Menu.Draw(session, w.pos.x, w.pos.y, w.size.x, w.size.y)
         Splash.Draw(w.pos.x, w.pos.y, w.size.x, w.size.y, math.min(0.1, FrameTimer_Get()))
         overInterface = true
+        return
+      end
+      -- (and nothing at all, for a picture of the scene alone)
+      if hidden then
+        overInterface = false
         return
       end
       local game = session.game
