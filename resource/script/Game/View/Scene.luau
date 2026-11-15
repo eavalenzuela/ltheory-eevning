@@ -34,6 +34,7 @@ local Planet = require("@lt/Game/View/Planet")
 local Star = require("@lt/Game/View/Star")
 local Starbase = require("@lt/Game/View/Starbase")
 local Modules = require("@lt/Core/Data/Modules")
+local Paints = require("@lt/Core/Data/Paints")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Ships = require("@lt/Core/Data/Ships")
 local Motion = require("@lt/Core/Tactical/Motion")
@@ -43,6 +44,12 @@ local State = require("@lt/Core/Kernel/State")
 local SystemData = require("@lt/Core/Describe/System")
 
 local Scene = {}
+
+-- Whether a faction's own ships are drawn in its livery, and its police
+-- in theirs (Core/Data/Paints, Paints.Dress), where nobody has painted
+-- them otherwise. (A first shot, the owner's of 2026-11-15: false has
+-- every such ship as it left the yard, as they all were before.)
+Scene.LIVERIES = true
 
 export type Placed = { object: Object, x: number, y: number, z: number, radius: number }
 
@@ -1396,8 +1403,15 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       else
         -- (a pirate's is in the pirates' paint, and a veteran's or a captain's in their own)
         local theirs = state.ships[id].owner == "pirates"
+        -- (and one nobody has painted is in its faction's livery, or its police's: Paints.Dress)
+        local paint, figure = state.ships[id].paint, state.ships[id].design
+        -- (a ship, that is: a battery or a store that stands where it was put is as it was built)
+        if paint == nil and Scene.LIVERIES and not theirs and string.sub(state.ships[id].type, 1, 6) ~= "works." then
+          local record = state.traffic[id]
+          paint, figure = Paints.Dress(state.ships[id].owner, record ~= nil and record.kind == "police")
+        end
         proxy = makeShip(state.ships[id].type, ball.radius, theirs, if theirs then Pirates.Rank(state.ships[id].name) else nil,
-          state.ships[id].paint, state.ships[id].design)
+          paint, figure)
         proxy:SetName(ball.name)
         container:AddInterior(proxy)
         scene.proxies[id] = proxy

@@ -10,7 +10,8 @@
 -- pilot's own (UnlockPaint), the thing is used up and the paint is
 -- theirs for good: state.paints. That is done where the thing is: in
 -- the hangar of the station they are docked at, or in the hold of the
--- ship they fly.
+-- ship they fly. A faction's livery brings with it the design that
+-- faction's ships wear on it.
 --
 -- Docked, the ship the pilot is in is painted in any paint that is
 -- theirs, and has any design that is theirs laid on it, as often as
@@ -49,6 +50,17 @@ local function lying(state: State.State, ship: State.Ship, type: string): State.
     end
   end
   return nil
+end
+
+-- A paint or a design becomes the pilot's: and with a livery, the
+-- design that faction's ships wear on it.
+local function give(state: State.State, type: string, events: { Event })
+  state.paints[type] = true
+  local paint = Paints.paintById[type]
+  if paint and paint.wears then
+    state.paints[paint.wears] = true
+  end
+  table.insert(events, { kind = "PaintUnlocked", type = type, with = if paint then paint.wears else nil })
 end
 
 function Paintwork.Validate(state: State.State, command: State.Command): (boolean, string?)
@@ -104,8 +116,7 @@ function Paintwork.Apply(state: State.State, command: State.Command, events: { E
     local item = state.items[command.item :: number]
     local type = item.type
     Items.Take(state, item, 1)
-    state.paints[type] = true
-    table.insert(events, { kind = "PaintUnlocked", type = type })
+    give(state, type, events)
   elseif kind == "StripPaint" then
     if command.what == "design" then
       ship.design = nil
@@ -118,8 +129,7 @@ function Paintwork.Apply(state: State.State, command: State.Command, events: { E
     local type = command.type :: string
     if not state.paints[type] then
       Items.Take(state, lying(state, ship, type) :: State.Item, 1)
-      state.paints[type] = true
-      table.insert(events, { kind = "PaintUnlocked", type = type })
+      give(state, type, events)
     end
     if Paints.paintById[type] then
       ship.paint = type

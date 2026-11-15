@@ -48,6 +48,7 @@ local Economy = require("@lt/Core/Strategic/Economy")
 local Factions = require("@lt/Core/Data/Factions")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
+local Paints = require("@lt/Core/Data/Paints")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
@@ -211,13 +212,15 @@ local function open(name: string, variety: string, faction: string): Economy.Eco
       normal = math.min(normal, Market.FOREIGN_STOCK)
     end
     local own = Modules.byId[id]
-    if own and own.meta == 3 and own.lineage == faction then
-      -- A people's own make, at one of their stations: a few, which
-      -- their yards make good.
+    local livery = Paints.paintById[id]
+    if (own and own.meta == 3 and own.lineage == faction) or (livery and livery.faction == faction) then
+      -- A people's own make, or their livery, at one of their stations:
+      -- a few, which their yards make good.
       Economy.SetTarget(econ, node, index, Market.OWN_STOCK)
       Economy.SetStock(econ, node, index, Market.OWN_STOCK)
       econ.nodes[node].anchor[index] = Market.OWN_STOCK * 0.25
-    elseif info.scarce then
+    elseif info.scarce or (livery and livery.faction) then
+      -- (another people's livery is as scarce: nobody brings it)
       -- Nobody brings these: a station has what pilots have sold it,
       -- would like a few, and pays well while it has none.
       Economy.SetTarget(econ, node, index, 4)
@@ -629,6 +632,11 @@ function Market.Validate(state: State.State, command: State.Command): (boolean, 
     local own = Modules.byId[type]
     if own and own.meta == 3 and own.lineage and Standings.Of(state, own.lineage) < Market.OWN_STANDING then
       return false, `the {Factions.byId[own.lineage].name} sell their own makes to those they think well of (standing {Market.OWN_STANDING})`
+    end
+    -- (and so is their livery)
+    local livery = Paints.paintById[type]
+    if livery and livery.faction and Standings.Of(state, livery.faction) < Market.OWN_STANDING then
+      return false, `the {Factions.byId[livery.faction].name} sell their livery to those they think well of (standing {Market.OWN_STANDING})`
     end
     if kind == "BuyNow" then
       local cost = Market.BuyCost(state, station, type, quantity)

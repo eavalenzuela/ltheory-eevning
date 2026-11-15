@@ -6,6 +6,13 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## More paint, and the factions' liveries
+
+- Sixteen more paints and sixteen more designs on the market (Market, Paints). Camouflage: Woodland, Desert, Arctic, Urban and Void, with blots, digital squares and splinters to lay on them. Gaudy: Bubblegum, Limelight, Hot Rod, Jester, Gilded, Savanna and Tropic, with polka dots, candy stripes, harlequin diamonds, leopard spots, flames and zigzags. Police: Patrol, Interceptor, Hi-Vis and Marshal, with Battenburg blocks, a chequer band, hazard bars, a waistband and a sash. And Quarters and Tail Bands.
+- Some designs are now in two colours: the second is the colour the paint marks things in, and each paint's page says what it is.
+- Each of the four human factions has a livery of its own: its colours, and the design its ships wear on them. Its stations sell it to a pilot it thinks well of (standing 2), and the design comes with the paint.
+- A faction's own ships now fly in its livery, and the police of every faction in white and blue with Battenburg blocks.
+
 ## Looking inside the anti-aliasing
 
 - The Graphics page has two more controls at its foot, for finding a fault in the picture: what the anti-aliasing shows (the picture, the edges it found, or the weights it made of them), and how it blends (the game's own way, or the plain way of the method). Neither is kept: the game starts with the picture and its own blend.

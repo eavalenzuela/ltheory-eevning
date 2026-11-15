@@ -7,6 +7,7 @@ local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
 local Paints = require("@lt/Core/Data/Paints")
 local State = require("@lt/Core/Kernel/State")
+local Stations = require("@lt/Core/Assets/Stations")
 local Test = require("@lt/Tool/Test")
 local Types = require("@lt/Core/Data/Types")
 
@@ -134,6 +135,60 @@ suite:Case("a save from when a paint was used up by a painting: what the pilot's
   local opened = Core.Load(old, oldLength).state
   t.eq({ opened.paints["paint.cobalt"], opened.paints["design.tiger"], opened.paints["paint.onyx"] } :: { any }, { true, true, nil } :: { any })
   t.eq(opened.ships[ship.id].paint, "paint.cobalt")
+end)
+
+suite:Case("a faction's livery is its own: sold at its stations to a pilot it thinks well of, with its design, and worn by its ships", function(t)
+  local Factions = require("@lt/Core/Data/Factions")
+  for _, faction in Factions.list do
+    local livery = Paints.liveryOf[faction.id]
+    if faction.kind == "human" then
+      t.ok(livery ~= nil and livery.group == "livery", `the {faction.name} have no livery`)
+      t.ok(Paints.designById[livery.wears or ""] ~= nil, `{livery.id} wears no design`)
+      t.eq({ Paints.Dress(faction.id, false) } :: { any }, { livery.id, livery.wears } :: { any })
+      t.eq({ Paints.Dress(faction.id, true) } :: { any }, { Paints.POLICE.paint, Paints.POLICE.design } :: { any })
+    else
+      -- (nobody has said what the others' are)
+      t.eq(livery, nil, `{faction.name} have a livery`)
+    end
+  end
+  t.ok(Paints.paintById[Paints.POLICE.paint] ~= nil and Paints.designById[Paints.POLICE.design] ~= nil)
+  t.eq({ Paints.Dress("player", false) } :: { any }, {})
+  t.eq({ Paints.Dress("pirates", true) } :: { any }, {})
+
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local home = state.player.home
+  local people = Stations.People(state, home)
+  local theirs = Paints.liveryOf[people]
+  local others: Paints.Paint? = nil
+  for _, paint in Paints.paints do
+    if paint.faction and paint.faction ~= people then
+      others = others or paint
+    end
+  end
+  assert(theirs and others, `no livery to buy where the {people} are`)
+  state.wallet = 10000000
+  -- Theirs is there to be had, a few of them; somebody else's is not.
+  t.ok(Market.BuyCost(state, home, theirs.id, Market.OWN_STOCK) ~= nil, `{theirs.id} is not in stock at one of its people's stations`)
+  t.eq(Market.BuyCost(state, home, others.id, 1), nil, `{others.id} is in stock at a station of {people}'s`)
+  -- But not to a pilot they do not know.
+  state.standings[people] = 0
+  local why = refused(game, { kind = "BuyNow", actor = 0, type = theirs.id, quantity = 1 })
+  t.ok(why ~= nil and string.find(why, "think well of", 1, true) ~= nil, tostring(why))
+  state.standings[people] = Market.OWN_STANDING
+  act(t, game, { kind = "BuyNow", actor = 0, type = theirs.id, quantity = 1 })
+  -- Made theirs, the design its ships wear comes with it.
+  local bought: State.Item? = nil
+  for _, item in Items.In(state, home, "hangar") do
+    bought = if item.type == theirs.id then item else bought
+  end
+  assert(bought, "the livery bought is not in the hangar")
+  act(t, game, { kind = "UnlockPaint", actor = 0, item = bought.id })
+  t.eq({ state.paints[theirs.id], state.paints[theirs.wears :: string] } :: { any }, { true, true } :: { any })
+  act(t, game, { kind = "Paint", actor = 0, type = theirs.id })
+  act(t, game, { kind = "Paint", actor = 0, type = theirs.wears })
+  local ship = state.ships[state.player.ship]
+  t.eq({ ship.paint, ship.design } :: { any }, { theirs.id, theirs.wears } :: { any })
 end)
 
 suite:Case("a paint is bought on a market like anything else", function(t)

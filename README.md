@@ -27,7 +27,7 @@ It is built on the old C++ Limit Theory engine, and it is a work in progress. Th
 - **A world that moves**: the peoples fight wars over open space and systems change hands; pirates mass where order is thin; invasions come out of the deep; rare captains, traders and derelicts are sighted; gates close and rich belts are found. An events window and the star map say what is going on.
 - **A character**: skills that train in real time, including while the game is closed, and implants.
 - **Company**: hired pilots who follow, mine, haul, patrol and guard; a corporation of your own with members who work for themselves and pay it a tax; starbases of your own, and systems claimed in your name.
-- **Paint**: paints and designs for your ship, bought on the market, tried on before you buy, yours for good once bought, and switched between on the fitting screen.
+- **Paint**: paints and designs for your ship (camouflage, gaudy, police, and plain), bought on the market, tried on before you buy, yours for good once bought, and switched between on the fitting screen. Each human faction has a livery its own ships fly in, sold to pilots it thinks well of.
 - **Saves**, music, and sound.
 
 ## The ship generator
