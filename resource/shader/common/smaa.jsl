@@ -986,6 +986,43 @@ float4 SMAABlendingWeightCalculationPS(
 }
 
 //-----------------------------------------------------------------------------
+// Neighborhood blending as the method's authors wrote it: the pixel is
+// mixed with the one neighbour its heaviest weight points at, with no
+// change of gamma about the mixing. (The pass above it in this file is
+// this program's own: every weight, and the mixing done in gamma space.
+// This one is here to be switched to, RenderPass_SMAASet, when a fault
+// in the picture is being run down to its step.)
+
+float4 SMAANeighborhoodBlendingPlainPS(
+  float2 uv,
+  SMAATexture2D colorTex,
+  SMAATexture2D blendTex)
+{
+  float4 a;
+  a.xz = SMAASample(blendTex, uv).xz;
+  a.y = SMAASample(blendTex, uv + SMAA_PIXEL_SIZE * float2(0.0, 1.0)).g;
+  a.w = SMAASample(blendTex, uv + SMAA_PIXEL_SIZE * float2(1.0, 0.0)).a;
+
+  float4 here = SMAASample(colorTex, uv);
+  if (dot(a, float4(1.0, 1.0, 1.0, 1.0)) < 1e-5)
+    return here;
+
+  // left against right, and top against bottom:
+  float2 way;
+  way.x = a.a > a.b ? a.a : -a.b;
+  way.y = a.g > a.r ? a.g : -a.r;
+  // and of those two, the heavier:
+  if (abs(way.x) > abs(way.y))
+    way.y = 0.0;
+  else
+    way.x = 0.0;
+
+  float4 there = SMAASample(colorTex, uv + sign(way) * SMAA_PIXEL_SIZE);
+  float much = max(abs(way.x), abs(way.y));
+  return SMAALerp(here, there, much);
+}
+
+//-----------------------------------------------------------------------------
 // Neighborhood Blending Pixel Shader (Third Pass)
 
 float4 SMAANeighborhoodBlendingPS(

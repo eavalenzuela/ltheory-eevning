@@ -6,6 +6,10 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Looking inside the anti-aliasing
+
+- The Graphics page has two more controls at its foot, for finding a fault in the picture: what the anti-aliasing shows (the picture, the edges it found, or the weights it made of them), and how it blends (the game's own way, or the plain way of the method). Neither is kept: the game starts with the picture and its own blend.
+
 ## Starting with the sound off
 
 - The game stopped as it started if sound was switched off in the options. It starts now. (Switching sound off in the options while nothing was playing stopped it the same way.)

@@ -12,6 +12,10 @@
 #include "ThirdParty/SMAA_SearchTex.h"
 
 namespace {
+  /* What is shown, and how the last step blends (RenderPass_SMAASet). */
+  int gView = 0;
+  bool gPlainBlend = false;
+
   struct SMAA : public RenderPassT {
     Texture2D areaTex;
     Texture2D searchTex;
@@ -66,6 +70,12 @@ namespace {
       Renderer_DrawFSQ();
       state->tertiary->Unbind();
 
+      /* (asked for the edges: they are the picture) */
+      if (gView == 1) {
+        Swap(state->primary, state->tertiary);
+        return;
+      }
+
       DrawState_Link(weightPass);
       (*weightPass)
         ("edgeBuffer", state->tertiary)
@@ -78,11 +88,18 @@ namespace {
       Renderer_DrawFSQ();
       state->secondary->Unbind();
 
+      /* (asked for the weights: they are the picture) */
+      if (gView == 2) {
+        Swap(state->primary, state->secondary);
+        return;
+      }
+
 #if 1
       DrawState_Link(blendPass);
       (*blendPass)
         ("texture", state->primary)
-        ("blendWeights", state->secondary);
+        ("blendWeights", state->secondary)
+        ("plainBlend", gPlainBlend ? 1.0f : 0.0f);
 
       state->tertiary->Bind(0);
       Renderer_SetShader(*blendPass);
@@ -99,4 +116,9 @@ namespace {
 
 DefineFunction(RenderPass_SMAA) {
   return new SMAA;
+}
+
+DefineFunction(RenderPass_SMAASet) {
+  gView = args.view;
+  gPlainBlend = args.plainBlend;
 }

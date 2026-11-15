@@ -1296,6 +1296,17 @@ function Debug.Graphics(id: string?, on: boolean?): string
   return Graphics.Off()
 end
 
+-- What the anti-aliasing shows (1 its picture, 2 its edges, 3 its
+-- weights) and whether it blends the plain way (Game/View/Graphics,
+-- the foot of the options' Graphics page: 'Graphics:view',
+-- 'Graphics:blend'). Given, they are set first.
+function Debug.AntiAliasing(view: number?, plain: boolean?): (number, boolean)
+  if view then
+    Graphics.AntiAliasing(view, plain == true)
+  end
+  return Graphics.View(), Graphics.Plain()
+end
+
 -- How the game's own window is set to open (the options' Window,
 -- 'Menu:window'): '' for as the game sees fit, 'borderless', or a size.
 function Debug.WindowChoice(): string

@@ -107,6 +107,20 @@ until GameDebug.Press('Graphics:bloom')
 until GameDebug.Graphics() == 'flares'
 until GameDebug.Press('Menu:allon')
 until GameDebug.Graphics() == ''
+# (and inside the anti-aliasing: what it shows goes round its three views, and its blend goes the plain way and back)
+lua assert(GameDebug.AntiAliasing() == 1 and not select(2, GameDebug.AntiAliasing()))
+until GameDebug.Press('Graphics:view')
+until GameDebug.AntiAliasing() == 2
+until GameDebug.Press('Graphics:view')
+until GameDebug.AntiAliasing() == 3
+frames 5
+until GameDebug.Press('Graphics:view')
+until GameDebug.AntiAliasing() == 1
+until GameDebug.Press('Graphics:blend')
+until select(2, GameDebug.AntiAliasing())
+frames 5
+until GameDebug.Press('Graphics:blend')
+until not select(2, GameDebug.AntiAliasing())
 until GameDebug.Press('Menu:back')
 frames 3
 lua assert(GameDebug.CanPress('Menu:keys'), 'back from the graphics is the options')

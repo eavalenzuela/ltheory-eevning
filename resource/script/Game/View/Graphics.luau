@@ -89,6 +89,32 @@ function Graphics.Off(): string
   return table.concat(ids, ",")
 end
 
+-- For running a fault down inside the anti-aliasing, which is three
+-- steps in one pass: what the pass shows (its picture, the edges its
+-- first step found, or the weights its second made of them), and
+-- whether its last step blends in the plain way of the method's
+-- authors in place of this program's own. Neither is kept: a game
+-- starts with the picture and its own blend. (The owner found, with
+-- the switches above, that the dark specks on their graphics card come
+-- of this pass: 2026-11-15.)
+Graphics.VIEWS = { "The picture", "Its edges", "Its weights" }
+
+local view, plain = 1, false
+
+function Graphics.View(): number
+  return view
+end
+
+function Graphics.Plain(): boolean
+  return plain
+end
+
+-- Show a view (1 to #Graphics.VIEWS) and blend the plain way or not.
+function Graphics.AntiAliasing(shown: number, plainBlend: boolean)
+  view, plain = math.clamp(math.floor(shown), 1, #Graphics.VIEWS), plainBlend
+  RenderPass_SMAASet(view - 1, plain)
+end
+
 -- Set every stage from what the settings kept (Graphics.Off's): what
 -- is named is off and everything else is on. A name that is no
 -- stage's is passed over.

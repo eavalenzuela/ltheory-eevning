@@ -17,6 +17,7 @@
 -- "Menu:main", "Menu:quit", "Menu:back", "Menu:start", "Menu:random",
 -- "Menu:options", "Menu:sound", "Menu:keys", "Menu:defaults",
 -- "Menu:graphics", "Menu:allon", "Graphics:<stage>" (Game/View/Graphics),
+-- "Graphics:view", "Graphics:blend",
 -- "Key:<action>", "Load:<slot>", "Save:<slot>", "Delete:<slot>"; the
 -- seed field is "Seed", and the two sliders are "Effects volume" and
 -- "Music volume" (Im.Enter).
@@ -187,7 +188,7 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
   end
   local w = Menu.WIDTH
   local h = if page == "load" or page == "save" then 420 elseif page == "pause" then 390 elseif page == "main" then 370
-    elseif page == "keys" or page == "graphics" then 550 else 340
+    elseif page == "keys" then 550 elseif page == "graphics" then 640 else 340
   local x, y = left + (width - w) / 2, top + (height - h) / 2 - 40
   -- (the options have a line more than they had, under what was there: what is above stays where it was)
   if page == "options" then
@@ -350,6 +351,23 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
           setGraphics()
         end
       end
+    end
+    -- Inside the anti-aliasing, for running a fault down to one of its
+    -- steps: what it shows, and how its last step blends. A click goes
+    -- on to the next. Not kept: a game starts with the picture and the
+    -- program's own blend.
+    local foot = y + 112 + #Graphics.STAGES * 37 + 8
+    Im.Fill(x + 30, foot - 5, w - 60, 1, Im.DIM, 0.35)
+    Im.Text("Anti-aliasing shows", x + 30, foot + 6, 14, Im.TEXT)
+    Im.Text("for finding a fault: the edges it found, or the weights it made of them", x + 30, foot + 24, 11, Im.DIM)
+    if Im.Button(Graphics.VIEWS[Graphics.View()], x + w - 30 - 130, foot + 8, 130, 26, true, "Graphics:view") then
+      Graphics.AntiAliasing(Graphics.View() % #Graphics.VIEWS + 1, Graphics.Plain())
+    end
+    Im.Text("Anti-aliasing blends", x + 30, foot + 43, 14, Im.TEXT)
+    Im.Text("for finding a fault: the game's own way, or the plain way of the method", x + 30, foot + 61, 11, Im.DIM)
+    if Im.Button(if Graphics.Plain() then "The plain way" else "Its own way", x + w - 30 - 130, foot + 45, 130, 26, true,
+      "Graphics:blend") then
+      Graphics.AntiAliasing(Graphics.View(), not Graphics.Plain())
     end
     if Im.Button("All on", cx - 266, y + h - 50, 260, 34, not Graphics.AllOn(), "Menu:allon") then
       Graphics.Apply("")
