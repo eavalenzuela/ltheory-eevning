@@ -23,5 +23,5 @@ void main() {
     tw += w1 + w2;
   }
 
-  RETURN(vec4(c / tw, 1.0));
+  RETURN(vec4(asLight(c / tw), 1.0));
 }

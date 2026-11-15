@@ -44,14 +44,18 @@ void main() {
     vec3 V = normalize(p - eye);
     vec3 L = normalize(starPos - p);
     vec3 refl = normalize(reflect(V, N));
-    vec3 refr = normalize(refract(V, N, 1.0 / 1.15));
+    /* (light that cannot get in at all is bent nowhere: refract gives
+       nothing then, and nothing has no direction. It goes the way of
+       the reflection.) */
+    vec3 bent = refract(V, N, 1.0 / 1.15);
+    vec3 refr = (dot(bent, bent) > 0.0) ? normalize(bent) : refl;
     float fresnel = pow2(1.0 - saturate(dot(N, refl)));
 
     light +=
       0.3 * toLinear(textureCube(envMap, refr).xyz) +
       4.0 * fresnel * specColor * toLinear(textureCube(envMap, refl).xyz);
 
-    float specular = 16.0 * exp(-sqrt(256.0 * (1.0 - dot(L, refl))));
+    float specular = 16.0 * exp(-sqrt(256.0 * max(0.0, 1.0 - dot(L, refl))));
     float transmission = 
       0.1 * exp(-32.0 * (1.0 - dot(L, refr))) + 
       4.0 * exp(-512.0 * (1.0 - dot(L, refr)));
@@ -94,5 +98,5 @@ void main() {
     light = vec3(1.0);
   }
 
-  RETURN(vec4(light, 1.0));
+  RETURN(vec4(asLight(light), 1.0));
 }

@@ -6,6 +6,10 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## No more dark boxes
+
+- On some graphics cards (AMD's, on Windows) ships and station modules sat in large dark rectangles. A few pixels were being worked out as something that is no number at all, and the glow that spreads bright light spread those too. They are now caught before they can spread, and the places they came from are mended.
+
 ## Mended for Windows, and an icon
 
 - The star could not be drawn on some graphics cards (AMD's, on Windows), which stopped the game as it started: its shaders, and every other one, have been gone through for what such a driver refuses.

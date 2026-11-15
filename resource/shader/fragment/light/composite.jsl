@@ -46,5 +46,5 @@ void main() {
     getFog(ro, rd, farPlane, occlusion),
     getFoginess(farPlane));
 
-  RETURN(vec4(toGamma(mix(bg, fg, albedo.w)), 1.0));
+  RETURN(vec4(toGamma(asLight(mix(bg, fg, albedo.w))), 1.0));
 }

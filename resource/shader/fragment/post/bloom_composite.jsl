@@ -13,8 +13,8 @@ const float weightDark = 0.5;
 void main() {
   vec3 c1 = texture2D(texture1, uv).xyz;
   vec3 c2 = texture2D(texture2, uv).xyz;
-  c1 = max(vec3(0), c1);
-  c2 = max(vec3(0), c2);
+  c1 = asLight(c1);
+  c2 = asLight(c2);
 
   float l1 = pow(c1.x * c1.y * c1.z, 1.0 / 3.0);
   float l2 = (c2.x + c2.y + c2.z) / 3.0;

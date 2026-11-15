@@ -42,7 +42,9 @@ void main() {
 
     vec3 V = normalize(p - eye);
     vec3 refl = normalize(reflect(V, N));
-    vec3 refr = normalize(refract(V, N, 1.0 / 1.15));
+    /* (as in light/global.jsl: light that cannot get in is bent nowhere) */
+    vec3 bent = refract(V, N, 1.0 / 1.15);
+    vec3 refr = (dot(bent, bent) > 0.0) ? normalize(bent) : refl;
     float fresnel = pow2(1.0 - saturate(dot(N, refl)));
 
     for (int i = 0; i < kMaxLights; ++i) {
@@ -74,5 +76,5 @@ void main() {
   }
   
   light *= kDynamicLightMult;
-  RETURN(vec4(light, 1.0));
+  RETURN(vec4(asLight(light), 1.0));
 }

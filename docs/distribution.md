@@ -58,7 +58,11 @@ The first release was checked under Wine, which draws with this machine's own dr
 - A shader that fails no longer stops the game to wait for a key: it says what the driver's compiler said, prints the shader once, and goes on, so that one run shows every shader that fails.
 - The Windows game asks for the screen's own pixels (a guess at the next thing: with Windows' text scaled to 125%, a program that does not ask is told the screen is smaller than it is).
 
-It is still not known to run on that machine: the reference compiler is not that driver.
+With that it ran there, and showed the next thing: ships and station modules in large dark rectangles, square to the screen. A pixel worked out as no number at all (a division of nothing by nothing, an angle asked of no direction) is one black dot; but the bloom blurs the bright picture at a low size, and blurs such a pixel into a rectangle. This machine's driver turns such a thing into a number wherever a shader takes a minimum, a maximum or a clamp; that one's lets it through. It was reproduced here by putting such pixels in on purpose, behind those accidents. Since then:
+
+- `asNumber` and `asLight` (`common/global.jsl`) say what min, max and clamp do not: what is no number is nothing. They are written as comparisons, which such a thing fails every one of. Every fragment shader's result goes through the first; albedo, the lighting passes' results, what the bloom takes in, blurs and puts back, and what the tonemap takes in go through the second.
+- The places such things came from: the normal a surface is stored by took an angle with `atan(0, 0)` for a face square to the world (every flat face of a station module that is not turned); a root of a number that may be a hair under nothing; light bent into ice that cannot get in.
+- Checked here: with such pixels put in ahead of the guards, the rectangles are gone and only the pixels themselves are dark; and all ten goldens match, so nothing that was right has changed.
 
 ## The icon, the log and the notes
 
