@@ -6,8 +6,11 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
-## The game has an icon, and keeps to itself
+## Mended for Windows, and an icon
 
+- The star could not be drawn on some graphics cards (AMD's, on Windows), which stopped the game as it started: its shaders, and every other one, have been gone through for what such a driver refuses.
+- If something still fails to draw, the game says so in `log.txt` and carries on, where before it stopped and waited.
+- On a screen with Windows' text scaled up (125%, 150%), the game now uses the screen's real size.
 - The game and its launcher have an icon of their own, on the desktop and in the taskbar.
 - On Windows the game no longer opens a black console window beside itself. What it has to say is kept in `log.txt`, in the game's folder: send that along if something goes wrong.
 - This page now says what changed in words meant for players.
