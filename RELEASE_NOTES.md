@@ -6,9 +6,9 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
-## Dark specks on bright things
+## The sky in warp, put back
 
-- On some graphics cards (AMD's, on Windows) small dark specks in the pattern of the background stars showed on anything bright. The likely cause is mended: the stars, and every other effect that only adds light, left part of what the lighting reads unsaid, and such a driver filled it with whatever it had. Not yet seen on such a card: say if they are still there.
+- The last release's change for the dark specks made the whole sky go black in warp on some graphics cards (AMD's, on Windows). That change is withdrawn: the sky is as it was, and so, for now, are the specks. They will be gone for properly once it is known which part of the change the card took badly.
 
 ## A station's field is a wall
 

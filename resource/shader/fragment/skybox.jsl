@@ -9,8 +9,5 @@ void main() {
   c = toLinear(c);
   outputAlbedo(c);
   outputAlpha(1.0);
-  /* (the sky has no surface, but what is asked for is given: frag.jsl) */
-  outputNormal(vec3(0.0, 0.0, 1.0));
-  outputRoughness(0.0);
   outputMaterial(MATERIAL_NOSHADE);
 }

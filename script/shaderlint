@@ -66,6 +66,11 @@ KNOWN = [
     ("fragment/material/mineral.jsl", "", "not used by anything: an old shader, broken as it stands"),
     ("fragment/post/distancefog.jsl", "", "not used by anything: an old shader, broken as it stands"),
     ("fragment/ui/rect.jsl", "", "not used by anything that runs: an old shader, broken as it stands"),
+    # (These two were completed on 2026-11-14, with RETURN made to give the surface nothing in so many words,
+    # and on the owner's AMD card the whole sky went black in warp. All three were taken back the same day.
+    # Which of them did it is not known: not to be done again blind.)
+    ("fragment/skybox.jsl", "and not outputNormal", "completing it was withdrawn: see above"),
+    ("fragment/solidcolor.jsl", "and not outputAlpha", "completing it was withdrawn: see above"),
 ]
 
 

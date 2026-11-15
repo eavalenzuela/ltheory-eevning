@@ -6,8 +6,6 @@ FRAG_IN vec3 normal;
 
 void main() {
   outputAlbedo(color);
-  /* (and how much of it is there, which was left unsaid: frag.jsl) */
-  outputAlpha(1.0);
   outputNormal(normalize(normal));
   outputMaterial(MATERIAL_NOSHADE);
   outputRoughness(0.);
