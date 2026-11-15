@@ -1144,6 +1144,10 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             session.selected = if after ~= 0 then after else first
           end
         end
+        -- (out of the station, nothing is being tried on the ship any more)
+        if session.trying.paint or session.trying.design then
+          session.trying = {}
+        end
         -- A key (C) has the camera follow what is selected, and again lets it go.
         if Keys.Did("camera") then
           Scene.Track(scene, if scene.tracking == session.selected then 0 else session.selected)
@@ -1170,6 +1174,8 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         -- with the other windows, below.
         -- (the ship on the fitting screen is a thing of the scene, drawn as the scene draws: Scene.Showcase)
         Windows.Default("station", left + (w.size.x - Station.WIDTH) / 2, top + 130)
+        -- (and in whatever paint is being tried on it: Session.Try)
+        Scene.Try(session.trying.paint, session.trying.design)
         dockedAs = { session = session, game = game, player = player,
           preview = Scene.Dressed(game, player.ship, player.hull.id, player.hull.radius),
           show = function(cx: number, cy: number, round: number): boolean

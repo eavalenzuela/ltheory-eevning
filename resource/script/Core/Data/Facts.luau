@@ -15,6 +15,7 @@ local Implants = require("@lt/Core/Data/Implants")
 local Factions = require("@lt/Core/Data/Factions")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
+local Paints = require("@lt/Core/Data/Paints")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Moons = require("@lt/Core/Data/Moons")
@@ -532,6 +533,16 @@ function Facts.Of(type: string): Sheet?
     end
     local market = section(sheet, "Trade")
     row(market, "Base price", if copy then `{whole(Types.Info(type).basePrice)} cr a run` else `{whole(blueprint.basePrice)} cr`)
+  elseif category == "paint" then
+    local paint, design = Paints.paintById[type], Paints.designById[type]
+    if paint then
+      sheet.kind = "Paint for a ship"
+      sheet.note = paint.note .. " Put on the ship you are in from the hangar, docked: it is used up, and the ship keeps it until it is painted again or stripped. It changes nothing but how the ship looks."
+    elseif design then
+      sheet.kind = "Design for a ship"
+      sheet.note = design.note .. " Laid over a ship's paint, in the colour that paint has for designs: it needs a paint under it. It is used up, and the ship keeps it until another is laid on or it is stripped."
+    end
+    trade(sheet, type)
   elseif category == "implant" then
     local implant = Implants.byId[type]
     sheet.kind = "Implant"

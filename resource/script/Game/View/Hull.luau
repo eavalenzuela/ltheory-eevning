@@ -20,6 +20,7 @@
 local Arms = require("@lt/Game/View/Arms")
 local Imported = require("@lt/Game/View/Imported")
 local Int = require("@lt/Int")
+local Paints = require("@lt/Core/Data/Paints")
 local Plates = require("@lt/Game/View/Plates")
 local Fits = require("@lt/Core/Fits")
 local Ships = require("@lt/Core/Data/Ships")
@@ -3713,24 +3714,53 @@ function Hull.Types(): { string }
   return out
 end
 
+-- A paint a pilot has had put on a hull, and the design laid on that
+-- (Core/Data/Paints), as a look: the paint's colours, new and clean,
+-- with what is lit on the hull lit as its builder lit it ('yard': the
+-- look it left the yard in). Nothing, with no such paint.
+local function coatOf(paint: string?, figure: string?, yard: Look): Look?
+  local set = if paint then Paints.paintById[paint] else nil
+  if set == nil then
+    return nil
+  end
+  local laid = if figure then Paints.designById[figure] else nil
+  -- (new paint is brighter than a yard's: a quarter over what the numbers say, and no more than white)
+  local function fresh(colour: { number }): { number }
+    return { math.min(1, colour[1] * 1.25), math.min(1, colour[2] * 1.25), math.min(1, colour[3] * 1.25) }
+  end
+  return {
+    plating = fresh(set.plating), patch = fresh(set.patch), frame = fresh(set.frame), trim = fresh(set.trim), glow = yard.glow,
+    fire = yard.fire, wear = 0.10, rust = 0.02, sheets = yard.sheets, mottle = 0, lights = yard.lights,
+    design = if laid then laid.figure else nil, designScale = if laid then laid.scale else nil, designPaint = fresh(set.accent),
+  }
+end
+
 -- The model of a hull type and how big it came out, or nil if nobody
 -- has designed it. Made once and kept. 'pirate' asks for the hull as a
 -- pirate flies it, whoever built it: patched, and in their paint (a
 -- pirate hull is that anyway). 'rank': it is a pirate veteran's (1) or
--- a captain's (2), and is painted as theirs are.
-function Hull.Build(type: string, pirate: boolean?, rank: number?): Built?
+-- a captain's (2), and is painted as theirs are. 'paint' and 'figure':
+-- the paint its pilot has had it painted in, and the design on that
+-- (Core/Data/Paints; not a pirate's). A hull drawn from a seed is
+-- painted on its own mesh, as finely made as it is bare.
+function Hull.Build(type: string, pirate: boolean?, rank: number?, paint: string?, figure: string?): Built?
   local design = designOf(type)
   if design == nil then
     return nil
   end
   local patched = pirate == true and design.patch == nil
   local ranked = if pirate == true and rank == 1 then Hull.looks.veteran elseif pirate == true and rank == 2 then Hull.looks.captain else nil
+  local yard: Look = design.look or Hull.looks[design.faction] or Hull.looks.civil
+  -- (what is lit on a hull that left the yard bare is lit as its builder's hulls are)
+  local coat = if pirate then nil
+    else coatOf(paint, figure, if yard.bare then Hull.looks[design.faction] or Hull.looks.civil else yard)
   local key = (if patched then type .. ":pirate" else type) .. (if ranked then `:{rank}` else "")
+    .. (if coat then `:{paint}:{figure or ""}` else "")
   local made = built[key]
   if made then
     return made
   end
-  local look = ranked or (if patched then Hull.looks.unbound else design.look or Hull.looks[design.faction] or Hull.looks.civil)
+  local look = coat or ranked or (if patched then Hull.looks.unbound else yard)
   -- (its hardpoints, if they are where the building of it says)
   local place = design.place
   if place then

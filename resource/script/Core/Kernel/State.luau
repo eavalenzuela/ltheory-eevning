@@ -33,6 +33,10 @@ export type Ship = {
   -- than the plainest hull would (Tactical/Aftermath), or losing what
   -- cost nothing would be a living.
   given: boolean?,
+  -- What it is painted in, and the design laid on that (Data/Paints,
+  -- Assets/Paintwork): nothing, for a ship as it left the yard.
+  paint: string?,
+  design: string?,
 }
 
 -- A target being locked, or locked. Times are game seconds (tick * TICK).

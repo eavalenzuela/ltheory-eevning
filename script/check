@@ -134,6 +134,9 @@
 #               a people's own make refused to a stranger and sold to a
 #               friend, a module put through a mutator from its menu,
 #               an officer's make fitted and flown
+#   game-paint  a ship painted (test/scenario/paint.txt): a paint tried
+#               on from the market, bought, put on from its menu, a
+#               design over it, flown, and stripped
 #   game-events what is going on in the galaxy (test/scenario/events.txt):
 #               a surge begun, the pilot told, the events window and
 #               its course button, the map
@@ -396,6 +399,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/books.txt
   step game-makes 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/makes.txt
+  step game-paint 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
+    --script test/scenario/paint.txt
   step game-inventory 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \
     --script test/scenario/inventory.txt
   step game-tackle 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \

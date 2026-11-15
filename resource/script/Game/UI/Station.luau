@@ -22,6 +22,7 @@ local ItemIcon = require("@lt/Game/UI/ItemIcon")
 local Map = require("@lt/Game/UI/Map")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
+local Paints = require("@lt/Core/Data/Paints")
 local Reactions = require("@lt/Core/Data/Reactions")
 local Session = require("@lt/Game/Session")
 local Assault = require("@lt/Core/Tactical/Assault")
@@ -53,7 +54,7 @@ local dockedAt = 0    -- the station the screen was last drawn for
 local CATEGORIES: { { string } } = {
   { "module", "Modules" }, { "charge", "Charges" }, { "drone", "Drones" }, { "ship", "Ships" }, { "structure", "Structures" }, { "ore", "Ore" }, { "mineral", "Minerals" },
   { "moon", "Moon" }, { "planetary", "Planetary" }, { "component", "Components" },
-  { "blueprint", "Blueprints" }, { "skillbook", "Skill books" }, { "implant", "Implants" }, { "goods", "Goods" },
+  { "blueprint", "Blueprints" }, { "skillbook", "Skill books" }, { "implant", "Implants" }, { "paint", "Paints" }, { "goods", "Goods" },
 }
 local category = "module"
 local chosen = ""
@@ -537,6 +538,32 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
   end
   Im.Wrapped("Fitted from the inventory: right-click a module or a charge in the hangar, or carry it here.", x + 16, y + 84, 150, 12,
     Im.DIM)
+  -- What the ship is painted in (Core/Assets/Paintwork), and what is
+  -- being tried on it: at the foot of the screen's left side.
+  do
+    local own = game.state.ships[player.ship]
+    local paint = if own and own.paint then Paints.paintById[own.paint] else nil
+    local design = if own and own.design then Paints.designById[own.design] else nil
+    local px, py = x + 16, y + 418
+    Im.Text("PAINT", px, py, 11, Im.ACCENT)
+    Im.Text(if paint then paint.name .. (if design then `, {design.name}` else "") else "As it left the yard", px, py + 16, 13,
+      if paint then Im.TEXT else Im.DIM)
+    if paint and Im.Button("Strip", px + 150, py + 12, 54, 22, (Session.CanDo(session, { kind = "StripPaint", actor = 0 })), "Paint:strip") then
+      Session.Do(session, { kind = "StripPaint", actor = 0 })
+    end
+    local trying = session.trying
+    if trying.paint or trying.design then
+      local tried = if trying.paint then Paints.paintById[trying.paint] else nil
+      local laid = if trying.design then Paints.designById[trying.design] else nil
+      local what = (if tried then tried.name else "") .. (if tried and laid then ", " else "") .. (if laid then laid.name else "")
+      Im.Text(`Trying on: {what}`, px, py + 40, 13, Im.WARN)
+      Im.Text(if laid and tried == nil and paint == nil then "a design shows on a paint: try a paint too" else "not bought, not painted", px,
+        py + 56, 11, Im.DIM)
+      if Im.Button("Stop", px + 150, py + 44, 54, 22, true, "Try:stop") then
+        Session.Try(session, nil)
+      end
+    end
+  end
 
   -- The ship: its name over the wheel.
   local cx, cy = x + 334, y + 296
@@ -865,6 +892,11 @@ local function drawMarket(session: Session.Session, game: Core.Game, player: Cor
   Im.Heading(shorten(info.name, 28), dx + 36, top - 4, 20, Im.TEXT)
   if Im.Button("Info", dx + 392, top - 4, 54, 22, true, `Info:{chosen}`) then
     Info.Open(chosen)
+  end
+  -- (a paint or a design is tried on the ship before it is bought: the fitting screen shows the ship in it)
+  if info.category == "paint" and Im.Button("Try on", dx + 316, top - 4, 70, 22, true, `Try:{chosen}`) then
+    Session.Try(session, chosen)
+    tab = "Fitting"
   end
   local line = top + 28
   local untrained = Core.Query.Untrained(game, chosen)

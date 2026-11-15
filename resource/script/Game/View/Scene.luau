@@ -96,6 +96,10 @@ type Showcase = {
   passes: any,
   drawn: number,                      -- scene.time when it was last shown
   turn: number,
+  -- How many frames it has been asked for. A camera just made is not
+  -- where it is told to be until the scene has next been stepped: what
+  -- it sees before that is whatever lies at the middle of the system.
+  frames: number,
 }
 
 export type Scene = {
@@ -249,9 +253,10 @@ end
 -- engine's ships.
 local designed: { [Object]: Hull.Built } = setmetatable({} :: any, { __mode = "k" })
 
--- ('pirate': it is a pirate's, and looks it.)
-local function makeShip(type: string, radius: number, pirate: boolean, rank: number?): Object
-  local built = Hull.Build(type, pirate, rank)
+-- ('pirate': it is a pirate's, and looks it. 'paint' and 'design': what
+-- its pilot has had it painted in: Core/Assets/Paintwork.)
+local function makeShip(type: string, radius: number, pirate: boolean, rank: number?, paint: string?, design: string?): Object
+  local built = Hull.Build(type, pirate, rank, paint, design)
   if built then
     local object = Object_Scenery({})
     Object_SetRenderable(object, built.model)
@@ -320,18 +325,41 @@ export type Part = { model: Renderable | Model, transform: Transform, at: vector
 
 local dressed: { key: string, parts: { Part } }? = nil
 
+-- A paint and a design being tried on the ship the fitting screen
+-- shows, before either is bought: the ship is shown in them, and is
+-- not painted. Nothing of either, to show it as it is.
+local tried: { paint: string?, design: string? } = {}
+
+function Scene.Try(paint: string?, design: string?)
+  tried.paint, tried.design = paint, design
+end
+
+function Scene.Trying(): (string?, string?)
+  return tried.paint, tried.design
+end
+
 -- A ship as it is fitted, for the interface to draw: its hull, and on a
 -- hull of our own design what stands on its hardpoints, at rest, with a
 -- cover on each one left empty. 'radius' is the hull's, in metres. (The
 -- last one asked for is kept, and made again only when the fit changes.)
+-- The hull of a ship as the interface shows it: in the paint it has,
+-- and the design on that; or in what is being tried on it before it is
+-- bought (Scene.Try). And what it is painted in, so shown.
+local function hullOf(game: Core.Game, ship: number, type: string): (Hull.Built?, string?, string?)
+  local own = game.state.ships[ship]
+  local paint: string? = tried.paint or (if own then own.paint else nil)
+  local design: string? = tried.design or (if own then own.design else nil)
+  return Hull.Build(type, nil, nil, paint, design), paint, design
+end
+
 function Scene.Dressed(game: Core.Game, ship: number, type: string, radius: number): { Part }
-  local built = Hull.Build(type)
+  local built, paint, design = hullOf(game, ship, type)
   if built == nil then
     return { { model = Scene.Preview(type, radius), transform = Transform_Identity(), at = vector.create(0, 0, 0),
       look = vector.create(0, 0, 1), up = vector.create(0, 1, 0), size = 1 } }
   end
   local fitted = Core.Query.Fitted(game, ship)
-  local key = `{ship}:{type}`
+  local key = `{ship}:{type}:{paint or ""}:{design or ""}`
   for _, item in fitted do
     if item.place == "high" then
       key ..= ` {item.id}:{item.type}`
@@ -395,7 +423,8 @@ end
 function Scene.Showcase(scene: Scene, game: Core.Game, ship: number, type: string, radius: number, cx: number, cy: number,
   round: number): boolean
   local container = scene.container
-  local built = Hull.Build(type)
+  -- (the hull as it is painted: a painted one is not drawn the size a bare one is)
+  local built = hullOf(game, ship, type)
   if container == nil or built == nil then
     return false
   end
@@ -417,7 +446,8 @@ function Scene.Showcase(scene: Scene, game: Core.Game, ship: number, type: strin
     local passes = New.Vector_Reference_RenderPassT()
     passes:Append(RenderPass_Clear(0))
     passes:Append(RenderPass_Camera(camera))
-    show = { container = container, key = key, pieces = pieces, camera = camera, passes = passes, drawn = scene.time, turn = turn }
+    show = { container = container, key = key, pieces = pieces, camera = camera, passes = passes, drawn = scene.time, turn = turn,
+      frames = 0 }
     scene.showcase = show
   end
   local shown = show :: Showcase
@@ -463,7 +493,11 @@ function Scene.Showcase(scene: Scene, game: Core.Game, ship: number, type: strin
   camera:SetRelativeLookAt(middle)
   camera:SetRigidity(100000)
   camera:SetFov(SHOWCASE_FOV)
-  WidgetRenderer_DrawPasses(shown.passes, vector.create(cx - round, cy - round), vector.create(2 * round, 2 * round), 1, true)
+  -- (not in the frame it is made, nor the next: its camera is not yet where it looks from)
+  shown.frames += 1
+  if shown.frames > 2 then
+    WidgetRenderer_DrawPasses(shown.passes, vector.create(cx - round, cy - round), vector.create(2 * round, 2 * round), 1, true)
+  end
   return true
 end
 
@@ -1348,7 +1382,8 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       else
         -- (a pirate's is in the pirates' paint, and a veteran's or a captain's in their own)
         local theirs = state.ships[id].owner == "pirates"
-        proxy = makeShip(state.ships[id].type, ball.radius, theirs, if theirs then Pirates.Rank(state.ships[id].name) else nil)
+        proxy = makeShip(state.ships[id].type, ball.radius, theirs, if theirs then Pirates.Rank(state.ships[id].name) else nil,
+          state.ships[id].paint, state.ships[id].design)
         proxy:SetName(ball.name)
         container:AddInterior(proxy)
         scene.proxies[id] = proxy

@@ -528,6 +528,25 @@ function Debug.People(): (string, string)
   return people, ""
 end
 
+-- What the pilot's ship is painted in, and the design on that
+-- (Core/Assets/Paintwork): '' for none of either. Given a paint's id
+-- (and a design's), a cheat: the ship is painted so, with nothing
+-- bought or used up ('' strips it).
+function Debug.Paint(paint: string?, design: string?): (string, string)
+  local ship = session.game.state.ships[session.game.state.player.ship]
+  if paint then
+    ship.paint = if paint ~= "" then paint else nil
+    ship.design = if paint ~= "" and design and design ~= "" then design else nil
+  end
+  return ship.paint or "", ship.design or ""
+end
+
+-- The paint and the design being tried on the ship the fitting screen
+-- shows (Session.Try): '' for none of either.
+function Debug.Trying(): (string, string)
+  return session.trying.paint or "", session.trying.design or ""
+end
+
 -- The splash a person is shown when the game starts (Game/UI/Splash):
 -- how far through it is ("rise", "stand", "clear"; "" when it is not
 -- up). Given true, it is begun, for a script, which is not shown it.

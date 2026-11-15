@@ -108,6 +108,9 @@ local function normalStock(info: Types.Info): number
     return if hull and Ships.Capital(hull.class) then 2 else 10
   elseif info.category == "implant" then
     return 12
+  elseif info.category == "paint" then
+    -- (a yard's paint shop keeps a few of each)
+    return 8
   elseif info.category == "goods" then
     return 40
   elseif info.category == "blueprint" or info.category == "skillbook" then

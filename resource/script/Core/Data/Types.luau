@@ -10,6 +10,7 @@ local Implants = require("@lt/Core/Data/Implants")
 local Modules = require("@lt/Core/Data/Modules")
 local Moons = require("@lt/Core/Data/Moons")
 local Ores = require("@lt/Core/Data/Ores")
+local Paints = require("@lt/Core/Data/Paints")
 local Planets = require("@lt/Core/Data/Planets")
 local Reactions = require("@lt/Core/Data/Reactions")
 local Ships = require("@lt/Core/Data/Ships")
@@ -22,7 +23,7 @@ export type Info = {
   id: string,
   name: string,
   category: "module" | "charge" | "goods" | "ore" | "mineral" | "component" | "ship" | "blueprint" | "skillbook" | "structure"
-    | "planetary" | "drone" | "implant" | "moon",
+    | "planetary" | "drone" | "implant" | "moon" | "paint",
   volume: number,     -- m3 per unit
   basePrice: number,  -- credits per unit
   -- No station has it to sell unless a pilot sold it there: a tech 2
@@ -112,6 +113,14 @@ end
 for _, implant in Implants.list do
   byId[implant.id] = { id = implant.id, name = implant.name, category = "implant", volume = Implants.VOLUME,
     basePrice = Implants.Price(implant) }
+end
+
+-- (paints and designs for a ship: Data/Paints)
+for _, paint in Paints.paints do
+  byId[paint.id] = { id = paint.id, name = Paints.ItemName(paint.id), category = "paint", volume = Paints.VOLUME, basePrice = paint.price }
+end
+for _, design in Paints.designs do
+  byId[design.id] = { id = design.id, name = Paints.ItemName(design.id), category = "paint", volume = Paints.VOLUME, basePrice = design.price }
 end
 
 for _, blueprint in Blueprints.list do

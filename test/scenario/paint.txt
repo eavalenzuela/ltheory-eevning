@@ -1,0 +1,70 @@
+# A ship painted, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/paint.txt
+#
+# Paints and designs are things a market sells. One is tried on the
+# ship from its market page, which paints nothing: the fitting screen
+# shows the ship in it, and says so. Bought, it is put on the ship from
+# its own menu in the inventory and used up. A design is laid over it
+# the same way. The fitting screen strips both off. And a painted ship
+# flies as itself.
+#
+# covers: Core/Assets/Paintwork Core/Data/Paints Game/View/Plates
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua GameDebug.Sound(true, 0)
+lua GameDebug.Grant(1000000)
+wait 1.5
+lua local paint, design = GameDebug.Paint() assert(paint == '' and design == '', 'a new ship should be as it left the yard')
+
+# Tried on, from the market: nothing is painted, and the fitting screen has it.
+lua assert(GameDebug.Market('paint.cobalt'), 'no market deals in the paint')
+until GameDebug.CanPress('Try:paint.cobalt')
+until GameDebug.Press('Try:paint.cobalt')
+until GameDebug.Tab() == 'Fitting'
+lua assert(GameDebug.Trying() == 'paint.cobalt' and GameDebug.Paint() == '', 'trying a paint should not paint the ship')
+until GameDebug.CanPress('Try:stop')
+frames 20
+until GameDebug.Press('Try:stop')
+until GameDebug.Trying() == ''
+
+# Bought, and put on from its menu: it is used up.
+lua assert(GameDebug.Market('paint.cobalt'))
+until GameDebug.CanPress('BuyNow')
+until GameDebug.Press('BuyNow')
+until GameDebug.Hangar('paint.cobalt') == 1
+until GameDebug.Press('Inv:place:hangar')
+until select(2, GameDebug.Inventory()) == 'hangar'
+until GameDebug.Press('Inv:menu:paint.cobalt')
+until GameDebug.CanPress('Menu:Paint the ship with it (uses it up)')
+until GameDebug.Press('Menu:Paint the ship with it (uses it up)')
+until GameDebug.Paint() == 'paint.cobalt'
+lua assert(GameDebug.Hangar('paint.cobalt') == 0, 'the paint should be used up')
+patience 20
+until string.find(GameDebug.Said(), 'painted', 1, true)
+
+# A design over it, the same way.
+lua assert(GameDebug.Give('design.hoops', 1))
+until GameDebug.Press('Inv:menu:design.hoops')
+until GameDebug.CanPress('Menu:Paint the ship with it (uses it up)')
+until GameDebug.Press('Menu:Paint the ship with it (uses it up)')
+until select(2, GameDebug.Paint()) == 'design.hoops'
+until GameDebug.Press('Fitting')
+until GameDebug.Tab() == 'Fitting'
+frames 30
+
+# Out in space the ship is as it was painted, and back at the station it is stripped.
+until GameDebug.Press('UNDOCK') and GameDebug.InSpace()
+frames 90
+lua local paint, design = GameDebug.Paint() assert(paint == 'paint.cobalt' and design == 'design.hoops')
+lua GameDebug.Order('Dock', 'home')
+patience 240
+until not GameDebug.InSpace()
+until GameDebug.Press('Fitting')
+until GameDebug.CanPress('Paint:strip')
+until GameDebug.Press('Paint:strip')
+until GameDebug.Paint() == ''
+
+echo paint scenario passed
+quit

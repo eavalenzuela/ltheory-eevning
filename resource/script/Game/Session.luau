@@ -10,6 +10,7 @@ local Factions = require("@lt/Core/Data/Factions")
 local Format = require("@lt/Game/Format")
 local Commerce = require("@lt/Core/Strategic/Commerce")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Paints = require("@lt/Core/Data/Paints")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -43,6 +44,10 @@ export type Session = {
   -- game is replaced by a save or by a new one, so that whoever keeps
   -- something made for the last game (the scene) knows to make it again.
   epoch: number,
+  -- A paint and a design being tried on the ship the fitting screen
+  -- shows, before either is bought (Session.Try): nothing of either,
+  -- when the ship is shown as it is.
+  trying: { paint: string?, design: string? },
 }
 
 -- Where saves are kept. A script's saves go somewhere of their own, so
@@ -60,8 +65,21 @@ function Session.New(galaxySeed: number, historySeed: number): Session
   return {
     game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, traffic = true, wars = true, starter = true }),
     clock = Clock.New(), selected = 0, target = 0, aimed = {}, aimedAt = 0, events = {}, message = "", messageTick = 0, epoch = 1,
-    destination = 0, autopilot = false, safest = false,
+    destination = 0, autopilot = false, safest = false, trying = {},
   }
+end
+
+-- Try a paint or a design on the ship the fitting screen shows, before
+-- it is bought (Core/Data/Paints): the ship is shown in it, and is not
+-- painted. With nothing named, the trying is over.
+function Session.Try(session: Session, type: string?)
+  if type == nil then
+    session.trying = {}
+  elseif Paints.paintById[type] then
+    session.trying.paint = type
+  elseif Paints.designById[type] then
+    session.trying.design = type
+  end
 end
 
 function Session.Say(session: Session, text: string)
@@ -569,6 +587,16 @@ function Session.Notice(session: Session, event: Space.Event)
     else
       Session.Say(session, string.format("Job done: +%d credits, +%d loyalty points, standing %.1f%s", event.reward, event.loyalty or 0,
         event.standing, thinks))
+    end
+  elseif kind == "Painted" and event.ship == session.game.state.player.ship then
+    -- (what was being tried on is over with: the ship is what it is)
+    session.trying = {}
+    if event.stripped then
+      Session.Say(session, "The ship is stripped back to how it left the yard")
+    else
+      local design = if event.design then Paints.designById[event.design] else nil
+      local paint = if event.paint then Paints.paintById[event.paint] else nil
+      Session.Say(session, `The ship is painted: {if paint then paint.name else "no paint"}{if design then `, with {design.name}` else ""}`)
     end
   elseif kind == "Mutated" then
     -- (how each figure came out: what it gives, its fitting, its draw, its reach)

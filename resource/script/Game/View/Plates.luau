@@ -30,6 +30,12 @@ export type Look = {
   sheets: number,       -- sheets of plating to a unit of the model
   mottle: number?,      -- how unlike one sheet is to the next, 0 to 1 (a patchwork); 0 if not said
   lights: number?,      -- how many sheets have a lit port in them, 0 to 1; 0 if not said
+  -- A design laid over the plating (Core/Data/Paints): which figure,
+  -- how many of it to the hull's length, and the colour it is laid on
+  -- in. None, if not said.
+  design: number?,
+  designScale: number?,
+  designPaint: { number }?,
   -- No paint at all: the engine's own bare metal, as its first
   -- generator's hulls were (and then nothing of the thing is lit, and
   -- the colours above are only what its wreck is charred from).
@@ -758,6 +764,20 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
   ShaderInstance_SetFloat(skin, "sheets", sheets or look.sheets)
   ShaderInstance_SetFloat(skin, "mottle", look.mottle or 0)
   ShaderInstance_SetFloat(skin, "lights", look.lights or 0)
+  -- (a design is laid out from the middle of the thing, in halves of
+  -- its length: so it is measured first, as a bare model of itself)
+  local middle, half = ZERO, 1
+  if (look.design or 0) > 0 then
+    local probe = Model_Create()
+    Model_Add(probe, mesh, Material_Metal())
+    local box = Renderable_GetBound(probe)
+    middle, half = (box.lower + box.upper) / 2, math.max(0.001, (box.upper.z - box.lower.z) / 2)
+  end
+  ShaderInstance_SetFloat(skin, "design", look.design or 0)
+  ShaderInstance_SetFloat(skin, "designScale", look.designScale or 1)
+  ShaderInstance_SetVec3(skin, "designMiddle", middle)
+  ShaderInstance_SetFloat(skin, "designHalf", half)
+  ShaderInstance_SetVec3(skin, "paintDesign", color(look.designPaint or look.trim))
   ShaderInstance_Link(skin)
 
   local model = Model_Create()

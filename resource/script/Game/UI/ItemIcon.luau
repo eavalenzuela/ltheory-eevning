@@ -8,6 +8,7 @@
 --
 --   ItemIcon.Draw("laser.pulse.medium", x, y, 28)
 
+local Paints = require("@lt/Core/Data/Paints")
 local Types = require("@lt/Core/Data/Types")
 local Ships = require("@lt/Core/Data/Ships")
 
@@ -196,6 +197,30 @@ end
 -- Draw the icon of a type with its top-left corner at (x, y), 'size'
 -- pixels square.
 function ItemIcon.Draw(type: string, x: number, y: number, size: number)
+  -- A paint is a swatch of itself: its plating's colour, with the colour
+  -- of what it marks and of its designs in a band along the foot. A
+  -- design is a tile with bars across.
+  local paint, design = Paints.paintById[type], Paints.designById[type]
+  if paint or design then
+    local round = math.max(2, size / 8)
+    local function colour(c: { number }): vector
+      -- (as bright on a tile as on a hull in the sun)
+      return vector.create(c[1], c[2], c[3]) * 1.5
+    end
+    if paint then
+      WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(size, size), colour(paint.plating), 1, 1, round)
+      WidgetRenderer_DrawPanel(vector.create(x, y + size * 0.62), vector.create(size / 2, size * 0.38), colour(paint.patch), 1, 1, 0)
+      WidgetRenderer_DrawPanel(vector.create(x + size / 2, y + size * 0.62), vector.create(size / 2, size * 0.38), colour(paint.accent), 1, 1, 0)
+      WidgetRenderer_DrawPanel(vector.create(x, y + size * 0.56), vector.create(size, size * 0.07), colour(paint.trim), 1, 1, 0)
+    else
+      WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(size, size), vector.create(0.30, 0.33, 0.38), 0.8, 0.9, round)
+      for bar = 0, 2 do
+        WidgetRenderer_DrawPanel(vector.create(x + size * 0.16, y + size * (0.2 + 0.24 * bar)), vector.create(size * 0.68, size * 0.11),
+          vector.create(0.92, 0.95, 1.0), 0.9, 0.9, 0)
+      end
+    end
+    return
+  end
   local name, pips, category = ItemIcon.Parts(type)
   local tile = TILE[category] or TILE.goods
   WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(size, size), tile, 0.55, 0.9, math.max(2, size / 8))

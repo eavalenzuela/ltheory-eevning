@@ -37,6 +37,11 @@ uniform float rust;         /* how rusted, 0 to 1 */
 uniform float sheets;       /* sheets of plating to a unit of the hull */
 uniform float mottle;       /* how unlike one sheet is to the next, 0 to 1: a patchwork */
 uniform float lights;       /* how many of its sheets have a lit port in them, 0 to 1 */
+uniform float design;       /* the figure laid over its plating (Core/Data/Paints): 0 none */
+uniform float designScale;  /* how many of the figure to half the hull's length */
+uniform vec3 designMiddle;  /* the middle of the hull, and half its length: the figure is laid out from there */
+uniform float designHalf;
+uniform vec3 paintDesign;   /* the colour the figure is laid on in */
 
 vec3 lin(vec3 c) {
   return pow(c, vec3(2.2));
@@ -59,6 +64,53 @@ float seams(vec2 q) {
 
 float sheetHash(vec2 cell, float salt) {
   return fract(sin(dot(cell, vec2(127.1, 311.7)) + salt * 17.3) * 43758.5453);
+}
+
+/* How much of a design's colour there is at a place on the hull, 0 to
+   1. 'p' is the place from the hull's middle in halves of its length
+   (x across it, z along it toward the bow, 1 at the bow), so a figure
+   is the same on a hull of any size. */
+float designAt(vec3 p) {
+  float k = designScale;
+  float m = 0.0;
+  if (design < 1.5) {
+    /* a broad stripe down the middle, and a thin one either side of it */
+    float x = abs(p.x) * k;
+    float broad = 1.0 - smoothstep(0.30, 0.34, x);
+    float thin = smoothstep(0.50, 0.54, x) * (1.0 - smoothstep(0.64, 0.68, x));
+    m = max(broad, thin);
+  } else if (design < 2.5) {
+    /* hoops round the hull */
+    float f = abs(fract(p.z * k) - 0.5);
+    m = 1.0 - smoothstep(0.15, 0.18, f);
+  } else if (design < 3.5) {
+    /* chevrons: bands that meet on the middle line */
+    float f = abs(fract((p.z + abs(p.x)) * k) - 0.5);
+    m = 1.0 - smoothstep(0.15, 0.18, f);
+  } else if (design < 4.5) {
+    /* one side and the other */
+    m = smoothstep(-0.008, 0.008, p.x);
+  } else if (design < 5.5) {
+    /* the bow, from so far forward of the middle */
+    m = smoothstep(-0.012, 0.012, p.z - k);
+  } else if (design < 6.5) {
+    /* dazzle: a grid askew, each square cut corner to corner, and each half its own */
+    vec2 q = vec2(p.x + 0.55 * p.z, p.z - 0.40 * p.x + 0.30 * p.y) * k;
+    vec2 cell = floor(q);
+    vec2 f = fract(q);
+    float corner = step(f.x, f.y);
+    m = step(0.5, sheetHash(cell + vec2(corner * 0.37, corner * 0.61), 9.0));
+  } else if (design < 7.5) {
+    /* tiger: stripes that waver */
+    float w = p.z * k + 0.35 * sin(p.x * k * 2.3 + p.y * 3.1) + 0.7 * wn_noise(p * 3.0);
+    float f = abs(fract(w) - 0.5) * 2.0;
+    m = smoothstep(0.50, 0.58, f);
+  } else {
+    /* chequers */
+    vec2 c = floor(vec2(p.x + p.y * 0.5, p.z) * k);
+    m = abs(mod(c.x + c.y, 2.0));
+  }
+  return m;
 }
 
 void main() {
@@ -84,6 +136,9 @@ void main() {
 
   bool bare = part > 1.5 && part < 2.5;
   vec3 paint = part < 0.5 ? paintPlating : (part < 1.5 ? paintPatch : (bare ? paintFrame : paintTrim));
+  /* (a design is laid over the plating and the plates patched in, and over nothing else) */
+  if (design > 0.5 && part < 1.5)
+    paint = mix(paint, paintDesign, designAt((p - designMiddle) / max(designHalf, 0.001)));
   /* (each plate a little lighter or darker, and off in hue, than the next) */
   paint *= 0.68 + 0.58 * own;
   paint = mix(paint, vec3(dot(paint, vec3(0.33))), 0.25 * sin(own * 40.0) + 0.1);

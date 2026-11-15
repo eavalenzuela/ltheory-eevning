@@ -54,6 +54,7 @@ local Raids = require("@lt/Core/Tactical/Raids")
 local Happenings = require("@lt/Core/Strategic/Happenings")
 local Sightings = require("@lt/Core/Tactical/Sightings")
 local Mutators = require("@lt/Core/Assets/Mutators")
+local Paintwork = require("@lt/Core/Assets/Paintwork")
 local Mishaps = require("@lt/Core/Tactical/Mishaps")
 local Invasions = require("@lt/Core/Tactical/Invasions")
 local Ships = require("@lt/Core/Data/Ships")
@@ -1270,6 +1271,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Training.Validate(state, command)
   elseif Mutators.COMMANDS[command.kind] then
     return Mutators.Validate(state, command)
+  elseif Paintwork.COMMANDS[command.kind] then
+    return Paintwork.Validate(state, command)
   end
   local ok, why = Space.Validate(state, command)
   -- (through a camp's gate, only when the camp says it is open: Tactical/Assault)
@@ -1377,6 +1380,8 @@ function Core.Step(game: Game)
       Members.Apply(state, command, game.events)
     elseif ok and Mutators.COMMANDS[command.kind] then
       Mutators.Apply(state, command, game.events)
+    elseif ok and Paintwork.COMMANDS[command.kind] then
+      Paintwork.Apply(state, command, game.events)
     elseif ok and FLEET_COMMANDS[command.kind] then
       Fleet.Apply(state, command, game.events)
     elseif ok and IMPLANT_COMMANDS[command.kind] then
