@@ -178,6 +178,13 @@ rsync -a "$DIST/LimitlessSpaceLauncher.exe" "$DIST/limitless-space-launcher" "$D
 rsync -a "$DIST/manifest.json" "$NAS:$NAS_DIST/"
 # The file server: started if it is not running (it has nothing to restart for: it serves what is there).
 if ! ssh "$NAS" "docker ps --format '{{.Names}}' | grep -qx ltheory-dist"; then
-    ssh "$NAS" "cd /apps/infra && make ltheory"
+    if ssh "$NAS" "test -f /apps/infra/services/ltheory/compose.yml"; then
+        ssh "$NAS" "cd /apps/infra && make ltheory"
+    else
+        # (the NAS's own repository has to have the service first: deploy/compose.yml)
+        echo "== $RELEASE is on the NAS, but nothing serves it yet: /apps/infra has no services/ltheory there."
+        echo "   Once it has (deploy/compose.yml, by way of the NAS's repository): make ltheory, in /apps/infra."
+        exit 0
+    fi
 fi
 echo "== published $RELEASE${TITLE:+, \"$TITLE\"}: $DIST_URL"
