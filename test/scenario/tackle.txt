@@ -3,7 +3,7 @@
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/tackle.txt
 #
 # An entanglement projector and a warp disruptor are fitted to the starter
-# Courier's two mid slots (the modules and the skill for them are
+# starter frigate's two mid slots (the modules and the skill for them are
 # given), and switched on with its guns on the pirate that comes to the
 # belt: the pirate is slowed and cannot warp, and does not last.
 
@@ -42,7 +42,7 @@ lua assert(GameDebug.Held() == 1 and not select(2, GameDebug.Held()), 'a scout h
 lua GameDebug.TimeScale(4)
 until GameDebug.Pirates() == 0
 lua GameDebug.TimeScale(1)
-lua assert(GameDebug.Hull() == 'frigate.courier', 'the player lost the fight')
+lua assert(GameDebug.Hull() == 'frigate.akashi', 'the player lost the fight')
 
 echo tackle scenario passed
 quit

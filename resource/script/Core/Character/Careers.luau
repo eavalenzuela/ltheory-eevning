@@ -191,7 +191,7 @@ Careers.list = {
         end,
         frigate = true,
         says = "Five more pirates, and you are no longer new at this. A bounty job from the Missions tab pays for the same "
-          .. "kills twice. There is a combat frigate of ours here for you when it is done: it wants Frigates at level 2." },
+          .. "kills twice. There is another frigate of ours here for you when it is done: a second hull is a ship to lose." },
     },
   },
   {
@@ -238,6 +238,9 @@ Careers.list = {
         says = "A drone left behind when you warp or dock is lost, unless it is close by. Recall brings it in. Launch, "
           .. "recall, and wait until it is aboard. What I pay for this one is for the next: it signs a pilot." },
       { title = "Somebody to fly with", aim = "Hire a pilot", on = "PilotHired", need = 1, kit = {}, credits = 12000,
+        -- (the plain Courier, which anybody can fly: the first pilot a
+        -- new corporation can afford has not the skill for a people's own
+        -- frigate, which the pilot themselves begins in)
         gifts = { { type = "frigate.courier", quantity = 1 }, { type = "miner.small", quantity = 1 } },
         says = "Crew tab: pilots looking for work, each with a fee to sign and a wage a day. The first on the list here "
           .. "is always somebody new, and cheap. Hire them. Leadership says how many you command: one, to begin with." },
@@ -309,18 +312,13 @@ end
 
 -- Whose station the agents are at.
 local function faction(state: State.State): string
-  return state.galaxy.systems[Space.SystemOf(state, Careers.Station(state))].nearest
+  return Stations.People(state, Careers.Station(state))
 end
 
 -- The combat frigate that faction builds (the plain one, if it builds none).
 function Careers.Frigate(state: State.State): string
-  local whose = faction(state)
-  for _, hull in Ships.list do
-    if hull.class == "frigate" and hull.lineage == whose and hull.tech ~= 2 then
-      return hull.id
-    end
-  end
-  return "frigate.courier"
+  -- (the one a pilot begins in: Data/Ships)
+  return Ships.Starter(faction(state))
 end
 
 -- What finishing a lesson gives beside its credits.

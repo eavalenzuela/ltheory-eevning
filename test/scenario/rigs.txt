@@ -4,7 +4,7 @@
 #
 # A rig is built of what is salvaged from wrecks. The salvage, the
 # blueprint and the skill are given (salvaging is the salvage scenario's).
-# Build a Bulkhead Rig, fit it to the Courier, where it goes in a slot
+# Build a Bulkhead Rig, fit it to the starter frigate, where it goes in a slot
 # of its own, and take it out again, which destroys it.
 
 wait 2
@@ -31,7 +31,7 @@ lua assert(not GameDebug.CanPress('Fit:rig.hull'), 'a rig should want Jury Riggi
 lua GameDebug.Train('jury.rigging', 1)
 until GameDebug.Press('Fit:rig.hull')
 until GameDebug.Fitted('rig.hull') == 1
-lua assert(GameDebug.Fitted('autocannon.small') == 2, 'a rig should take none of the other slots')
+lua assert(GameDebug.Fitted('autocannon.small') == 1 and GameDebug.Fitted('launcher.light') == 1, 'a rig should take none of the other slots')
 
 # Taken out, it is destroyed.
 frames 3

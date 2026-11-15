@@ -29,6 +29,15 @@ export type Window = {
   open: boolean,
   -- (whatever its kind keeps: what it is showing, how)
   state: any,
+  -- A screen that was a panel before there were windows, and draws all
+  -- of itself (its own ground, its own heading, its own way of being
+  -- shut): it is given no title and no corner, is the size it is, and
+  -- is moved by the parts of itself that are nothing to press (each x,
+  -- y, width and height from its own corner).
+  grips: { { number } }?,
+  -- Whether somebody has put it somewhere: until then it is where
+  -- whoever draws the screen says it goes (Windows.Default).
+  moved: boolean,
 }
 
 -- The height of a window's title, which what is in it is drawn under.
@@ -62,10 +71,12 @@ function Windows.Make(id: string, kind: string, title: string, x: number, y: num
   state: any): Window
   local window = windows[id]
   if window == nil then
-    window = { id = id, kind = kind, title = title, x = x, y = y, w = w, h = h, minW = minW, minH = minH, open = false, state = state }
+    window = { id = id, kind = kind, title = title, x = x, y = y, w = w, h = h, minW = minW, minH = minH, open = false, state = state,
+      moved = false }
     local was = remembered[id]
     if was then
       window.x, window.y, window.w, window.h = was[1], was[2], math.max(minW, was[3]), math.max(minH, was[4])
+      window.moved = true
     end
     windows[id] = window
     table.insert(order, id)
@@ -75,6 +86,31 @@ end
 
 function Windows.Get(id: string): Window?
   return windows[id]
+end
+
+-- A window that is a screen of its own drawing (see 'grips'): made if
+-- there is none, of the size given, which it keeps.
+function Windows.Screen(id: string, kind: string, w: number, h: number, grips: { { number } }): Window
+  local window = Windows.Make(id, kind, "", 0, 0, w, h, w, h, nil)
+  window.grips = grips
+  window.w, window.h, window.minW, window.minH = w, h, w, h
+  return window
+end
+
+-- Where a window goes, and how big it is, until somebody has put it
+-- somewhere: said every frame by whoever knows where the screen's
+-- middle is. (A window of a size of its own keeps that size.)
+function Windows.Default(id: string, x: number, y: number, w: number?, h: number?)
+  local window = windows[id]
+  if window == nil then
+    return
+  end
+  if w and h and window.grips then
+    window.w, window.h, window.minW, window.minH = w, h, w, h
+  end
+  if not window.moved then
+    window.x, window.y = x, y
+  end
 end
 
 -- The windows of a kind there are, open or not, in the order they were made.
@@ -178,8 +214,13 @@ function Windows.Restore(text: string)
     remembered[id] = was
     local window = windows[id]
     if window then
-      window.x, window.y, window.w, window.h = was[1], was[2], math.max(window.minW, was[3]), math.max(window.minH, was[4])
+      window.x, window.y = was[1], was[2]
+      -- (a screen of its own drawing is the size it is)
+      if window.grips == nil then
+        window.w, window.h = math.max(window.minW, was[3]), math.max(window.minH, was[4])
+      end
       window.open = was[5] == 1
+      window.moved = true
     end
   end
 end
@@ -226,6 +267,9 @@ function Windows.Draw()
     if window == nil or not window.open or not Mouse_LeftDown() then
       held = nil
       changed = true
+      if window then
+        window.moved = true
+      end
     elseif hold.size then
       window.w, window.h = cursor.x + hold.dx - window.x, cursor.y + hold.dy - window.y
       keep(window)
@@ -250,6 +294,29 @@ function Windows.Draw()
     end
     Im.Shield(over)
     local x, y, w, h = window.x, window.y, window.w, window.h
+    local grips = window.grips
+    if grips then
+      -- A screen of its own drawing: it is brought forward and moved
+      -- as any window is, by the parts of it that are nothing to press,
+      -- and draws the rest itself.
+      if Im.Pressed() and Im.Inside(x, y, w, h) then
+        raise = window.id
+        for _, grip in grips do
+          if held == nil and Im.Inside(x + grip[1], y + grip[2], grip[3], grip[4]) then
+            held = { id = window.id, dx = cursor.x - x, dy = cursor.y - y, size = false }
+            -- (from here it is where it is put, and not where it would be by itself)
+            window.moved = true
+          end
+        end
+      end
+      -- (nor does what lies under it show through: it may be over another window now)
+      Im.Fill(x + 2, y + 2, w - 4, h - 4, BACKING, 1)
+      local draw = kinds[window.kind]
+      if draw then
+        draw(window, x, y, w, h)
+      end
+      continue
+    end
     -- (what lies under a window does not show through it: it may be another window, or a screen)
     Im.Fill(x + 2, y + 2, w - 4, h - 4, BACKING, 1)
     Im.Panel(x, y, w, h)

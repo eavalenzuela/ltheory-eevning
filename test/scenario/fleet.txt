@@ -53,7 +53,7 @@ until GameDebug.Pirates() == 0
 lua GameDebug.TimeScale(1)
 frames 5
 lua assert(GameDebug.Wallet() > _G.before, 'the bounty for what a hired pilot destroys is the player s')
-lua assert(GameDebug.Hull() == 'frigate.courier', 'the player lost their ship')
+lua assert(GameDebug.Hull() == 'frigate.akashi', 'the player lost their ship')
 lua assert(GameDebug.Fleet() == 1 and select(2, GameDebug.Fleet()) == 1, 'the hired pilot should still be there')
 lua assert(select(3, GameDebug.Crew(1)) > 0, 'the hired pilot should have learned something from it')
 

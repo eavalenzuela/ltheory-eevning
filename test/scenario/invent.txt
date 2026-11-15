@@ -81,14 +81,14 @@ lua assert(GameDebug.Give('autocannon.small.custom', 1))
 until GameDebug.Press('Fitting')
 until GameDebug.Tab() == 'Fitting'
 frames 3
-until GameDebug.Press('Unfit:high2')
-until GameDebug.Fitted('autocannon.small') == 1
+until GameDebug.Press('Unfit:high1')
+until GameDebug.Fitted('autocannon.small') == 0
 until GameDebug.Press('Fit:autocannon.small.custom')
 until GameDebug.Fitted('autocannon.small.custom') == 1
 
-# Tech 2 rounds go into a tech 2 gun and no other: with a plain gun and
-# a custom one fitted there is nothing to load them into, and with a
-# tech 2 autocannon in place of one there is.
+# Tech 2 rounds go into a tech 2 gun and no other: with the custom gun
+# fitted there is nothing to load them into, and with a tech 2
+# autocannon in its place there is.
 lua assert(GameDebug.Give('ammo.fusion.ii', 300) and GameDebug.Give('autocannon.small.ii', 1))
 lua GameDebug.Train('projectiles', 4)
 frames 3

@@ -244,7 +244,15 @@ local function hauler(state: State.State, system: number, rng: Rng.Rng, events: 
   -- apart, so that nothing else about who comes follows from it)
   local great = own == nil and Galaxy.Band(node.security) == "secure"
     and Rng.Chance(Rng.For(state.historySeed, state.tick, system, 131), Traffic.FREIGHTERS)
-  local type = own or (if great then FREIGHTER else CIVILIAN)
+  -- A trader who is nobody's flies what is built thereabouts all the
+  -- same: the hull of the people whose space it is, or where it is
+  -- nobody's of the people nearest. (The owner's, 2026-11-14: no ship
+  -- about is one of the plain hulls nobody's yards build. Those are left
+  -- for a people who build no such hull.)
+  local yard = if keeper ~= "" then keeper else node.nearest
+  local plain = if great then hullOf(yard, "freighter") or hullOf(yard, "industrial") or FREIGHTER
+    else hullOf(yard, "industrial") or CIVILIAN
+  local type = own or plain
   local name = if own then `{Factions.byId[keeper].name} Hauler` elseif great then "Freighter" else "Trader"
   local owner = if own then keeper else "civilian"
   local gate = gates[Rng.Int(rng, #gates) + 1]

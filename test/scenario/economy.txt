@@ -5,8 +5,8 @@
 #
 # Fit a mining laser, mine a hold of ore, refine it, build ammunition from
 # the starter blueprint, research the blueprint, copy it and build from
-# the copy, sell the ammunition through a standing order, buy a combat
-# frigate's hull, find it cannot be flown, train for it, and board it.
+# the copy, sell the ammunition through a standing order, buy a
+# destroyer's hull, find it cannot be flown, train for it, and board it.
 #
 # Buttons are pressed by name (GameDebug.Press), which runs the same code
 # a click does. "until GameDebug.Press(...)" waits for the button to be
@@ -23,7 +23,7 @@ lua assert(GameDebug.Docked(), 'a new game starts docked')
 
 # Fitting: a mining laser in place of one gun.
 until GameDebug.Press('Unfit:high1')
-until GameDebug.Fitted('autocannon.small') == 1
+until GameDebug.Fitted('autocannon.small') == 0
 until GameDebug.Press('Fit:miner.small')
 until GameDebug.Fitted('miner.small') == 1
 
@@ -156,33 +156,47 @@ until GameDebug.Orders() == 0
 lua GameDebug.TimeScale(1)
 lua assert(GameDebug.Wallet() > _G.before + 1800, 'the order did not pay')
 
-# Buy a Akashi's hull and assemble it.
-lua GameDebug.Grant(500000)
+# Buy a destroyer's hull and assemble it.
+lua GameDebug.Grant(5000000)
 wait 1.5
-lua assert(GameDebug.Market('frigate.akashi'))
+lua assert(GameDebug.Market('destroyer.nozomi'))
 frames 3
 until GameDebug.Press('BuyNow')
-until GameDebug.Hangar('frigate.akashi') == 1
+until GameDebug.Hangar('destroyer.nozomi') == 1
 until GameDebug.Press('Ships')
 frames 3
-until GameDebug.Press('Assemble:frigate.akashi')
+until GameDebug.Press('Assemble:destroyer.nozomi')
 until GameDebug.Ships() == 2
 
-# It cannot be flown yet. Train Frigates to level 2, then board it.
+# It cannot be flown yet: destroyers are a skill of their own, learned
+# from a book, which wants Frigates 3 first. Train that, buy the book,
+# learn it, train its first level, then board the ship.
 frames 3
-lua assert(not GameDebug.CanPress('Board:2'), 'an untrained pilot should not be able to board a Akashi')
+lua assert(not GameDebug.CanPress('Board:2'), 'an untrained pilot should not be able to board a destroyer')
 until GameDebug.Press('Skills')
 frames 3
-lua assert(GameDebug.Skill('frigates') == 1)
+lua assert(GameDebug.Skill('frigates') == 2, 'a pilot begins able to fly the frigate they begin in')
 until GameDebug.Press('Train:frigates')
 until GameDebug.Training() == 1
 lua GameDebug.TimeScale(60)
-until GameDebug.Skill('frigates') == 2
+until GameDebug.Skill('frigates') == 3
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Market('book.destroyers'))
+frames 3
+until GameDebug.Press('BuyNow')
+until GameDebug.Hangar('book.destroyers') == 1
+until GameDebug.Press('Skills')
+frames 3
+until GameDebug.Press('Learn:destroyers')
+until GameDebug.Press('Train:destroyers')
+until GameDebug.Training() == 1
+lua GameDebug.TimeScale(60)
+until GameDebug.Skill('destroyers') == 1
 lua GameDebug.TimeScale(1)
 until GameDebug.Press('Ships')
 frames 3
 until GameDebug.Press('Board:2')
-until GameDebug.Hull() == 'frigate.akashi'
+until GameDebug.Hull() == 'destroyer.nozomi'
 
 # And it flies.
 until GameDebug.Press('UNDOCK')

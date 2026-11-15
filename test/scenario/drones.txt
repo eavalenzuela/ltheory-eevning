@@ -45,7 +45,7 @@ lua GameDebug.TimeScale(2)
 lua assert(GameDebug.Fire() == 2, 'both guns should open fire')
 until GameDebug.Pirates() == 0
 lua GameDebug.TimeScale(1)
-lua assert(GameDebug.Hull() == 'frigate.courier', 'the player lost the fight')
+lua assert(GameDebug.Hull() == 'frigate.akashi', 'the player lost the fight')
 lua assert(GameDebug.Drones() == 1, 'the drone should still be out')
 
 # Back aboard.

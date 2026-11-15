@@ -2,7 +2,7 @@
 #
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/gas.txt
 #
-# A Gas Harvester goes on the starter Courier in place of a gun (the
+# A Gas Harvester goes on the starter frigate in place of a gun (the
 # module and the skill for it are given). A vapour field is given too,
 # found already (finding one is the scanner's work: sites.txt). The
 # ship warps to it, goes up to the nearest cloud and draws gas off it,
@@ -19,7 +19,7 @@ lua assert(GameDebug.Give('miner.gas', 1))
 lua GameDebug.Train('mining', 2)
 frames 3
 until GameDebug.Press('Unfit:high1')
-until GameDebug.Fitted('autocannon.small') == 1
+until GameDebug.Fitted('autocannon.small') == 0
 until GameDebug.Press('Fit:miner.gas')
 until GameDebug.Fitted('miner.gas') == 1
 

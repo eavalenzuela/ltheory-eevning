@@ -2,7 +2,7 @@
 #
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/hack.txt
 #
-# A Data Analyzer goes into one of the starter Courier's mid slots (the
+# A Data Analyzer goes into one of the starter frigate's mid slots (the
 # module and the skill for it are given). A wreck with a sealed hold is
 # given too (a derelict's hulls have them: finding one is the scanner's
 # work). It cannot be looted. The hack is begun from what is selected:

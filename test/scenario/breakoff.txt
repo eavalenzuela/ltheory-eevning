@@ -4,7 +4,7 @@
 #
 # A pirate that is badly hurt turns for somewhere far off and warps:
 # gone, with what was on its head, unless it is held or finished first.
-# A warp disruptor is fitted to the starter Courier (the module and the
+# A warp disruptor is fitted to the starter frigate (the module and the
 # skill are given). Out at a belt in a peaceful game a raider is put by
 # the pilot's ship and brought down to a fifth of itself (two cheats):
 # it breaks off and gets away, and there is no wreck and no bounty.
@@ -38,7 +38,7 @@ patience 120
 until GameDebug.Pirates() == 0
 lua assert(GameDebug.Count('wreck') == 0, 'a pirate that got away leaves no wreck')
 lua assert(GameDebug.Wallet() == _G.wallet, 'and pays nothing')
-lua assert(GameDebug.Hull() == 'frigate.courier', 'the pilot should have come through that')
+lua assert(GameDebug.Hull() == 'frigate.akashi', 'the pilot should have come through that')
 
 # The second, held: it cannot leave.
 lua assert(GameDebug.Pirate('raider', 4000))

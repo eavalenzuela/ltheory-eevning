@@ -537,7 +537,7 @@ suite:Case("what the pilot owns is listed place by place, the hold and where the
   t.eq({ here.station, here.here, here.system, #here.ships, here.ships[1].id } :: { any },
     { home, true, 1, 1, state.player.ship } :: { any })
   t.eq(#here.items, #Core.Query.Items(game, home, "hangar"))
-  local worth = Ships.byId["frigate.courier"].basePrice
+  local worth = Ships.byId[state.ships[state.player.ship].type].basePrice
   for _, item in here.items do
     worth += item.quantity * Types.Info(item.type).basePrice
   end

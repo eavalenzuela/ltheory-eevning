@@ -2,7 +2,7 @@
 #
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/vault.txt
 #
-# A Data Analyzer goes into one of the starter Courier's mid slots (the
+# A Data Analyzer goes into one of the starter frigate's mid slots (the
 # module and the skill for it are given). A listening post is given
 # too, found already (finding one is the scanner's work, and wants a
 # probe: sites.txt). The ship warps to it and goes up to a vault. The

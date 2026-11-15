@@ -58,7 +58,7 @@ local STANDOFF: { [string]: number } = { planet = 1, moon = 1.5, sun = 4 }
 
 function Session.New(galaxySeed: number, historySeed: number): Session
   return {
-    game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, traffic = true, wars = true }),
+    game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, traffic = true, wars = true, starter = true }),
     clock = Clock.New(), selected = 0, target = 0, aimed = {}, aimedAt = 0, events = {}, message = "", messageTick = 0, epoch = 1,
     destination = 0, autopilot = false, safest = false,
   }
@@ -808,7 +808,7 @@ end
 function Session.Restart(session: Session, galaxySeed: number, historySeed: number, systems: number?)
   -- (a galaxy that has been going a while: its prices have come apart across the map)
   session.game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, systems = systems, traffic = true,
-    settled = Commerce.SETTLED, wars = true })
+    settled = Commerce.SETTLED, wars = true, starter = true })
   session.selected = 0
   session.target, session.aimed, session.aimedAt = 0, {}, 0
   session.events = { { kind = "Loaded" } }

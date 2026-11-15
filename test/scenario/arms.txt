@@ -3,7 +3,7 @@
 #
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/arms.txt
 #
-# The other scenarios fly the starter courier, which is one of the
+# The other scenarios fly the starter frigate, which is one of the
 # engine's ships and carries nothing to see. Here the pilot is put in a
 # Vessari cruiser with the fit its design is drawn with: its weapons
 # must be on its hardpoints when it undocks (each on both mounts of its

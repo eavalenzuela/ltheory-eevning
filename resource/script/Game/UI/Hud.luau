@@ -974,6 +974,27 @@ end
 
 -- ---------------------------------------------------------------------
 
+-- The docked screen and the star map are windows (Game/UI/Windows) that
+-- draw themselves as they did when they were panels: each is moved by
+-- its heading, where there is nothing to press, and by a strip along
+-- its top. What they draw with is set down each frame, before the
+-- windows are drawn.
+local dockedAs: { session: Session.Session, game: Core.Game, player: Core.PlayerInfo, preview: any, show: any }? = nil
+local mapOf: Session.Session? = nil
+Windows.Kind("station", function(_: Windows.Window, x: number, y: number)
+  local now = dockedAs
+  if now then
+    Station.Draw(now.session, now.game, now.player, x, y, now.preview, now.show)
+  end
+end)
+Windows.Screen("station", "station", Station.WIDTH, Station.HEIGHT, { { 0, 0, 356, 34 }, { 0, 0, Station.WIDTH, 10 } })
+Windows.Kind("map", function(_: Windows.Window, x: number, y: number, w: number, h: number)
+  if mapOf then
+    Map.DrawAt(mapOf, x, y, w, h)
+  end
+end)
+Windows.Screen("map", "map", 1400, 820, { { 0, 0, 232, 40 }, { 0, 0, 1400, 6 } })
+
 function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
   -- Expanded, so that it covers the window: a bare widget has no size.
   return Components.Expand(Widget_Luau(Widget_Create(), {
@@ -992,10 +1013,16 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       local entries = Core.Query.Overview(game)
       local left, top = w.pos.x, w.pos.y
       local right, bottom = left + w.size.x, top + w.size.y
-      -- (the map, open, goes over everything: the mouse is the map's
-      -- where it is, and not for what is drawn under it)
-      if Map.IsOpen() then
-        Im.Cover(Map.Covers(left, top, w.size.x, w.size.y))
+      -- (the map is a window, in the middle of the screen until it is put
+      -- somewhere: open when the map is)
+      mapOf = session
+      Windows.Default("map", Map.Covers(left, top, w.size.x, w.size.y))
+      if Map.IsOpen() ~= Windows.IsOpen("map") then
+        if Map.IsOpen() then
+          Windows.Open("map")
+        else
+          Windows.Close("map")
+        end
       end
       -- (and the windows go over what is drawn before them: Game/UI/Windows)
       Inventory.Frame(session, player.docked ~= 0)
@@ -1127,13 +1154,26 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         drawNavigation(session, ball, navX, bottom - 86, 520)
         drawStatus(game, ball, navX - 232, bottom - 120)
       else
-        local stationX = left + (w.size.x - Station.WIDTH) / 2
+        -- The docked screen is a window (Game/UI/Windows): in the middle
+        -- until it is put somewhere, moved by its heading, and drawn
+        -- with the other windows, below.
         -- (the ship on the fitting screen is a thing of the scene, drawn as the scene draws: Scene.Showcase)
-        Station.Draw(session, game, player, stationX, top + 130, Scene.Dressed(game, player.ship, player.hull.id, player.hull.radius),
-          function(cx: number, cy: number, round: number): boolean
+        Windows.Default("station", left + (w.size.x - Station.WIDTH) / 2, top + 130)
+        dockedAs = { session = session, game = game, player = player,
+          preview = Scene.Dressed(game, player.ship, player.hull.id, player.hull.radius),
+          show = function(cx: number, cy: number, round: number): boolean
             return Scene.Showcase(scene, game, player.ship, player.hull.id, player.hull.radius, cx, cy, round)
-          end)
-        Info.Draw(stationX + Station.WIDTH + 12, top + 130)
+          end }
+        if not Windows.IsOpen("station") then
+          Windows.Open("station")
+        end
+        local stationAt = Windows.Get("station")
+        if stationAt then
+          Info.Draw(stationAt.x + Station.WIDTH + 12, stationAt.y)
+        end
+      end
+      if ball and Windows.IsOpen("station") then
+        Windows.Close("station")
       end
       -- (beside the ship's own panels in space, and in the same place docked)
       drawBoosters(session, left + (w.size.x - 520) / 2 + 532, bottom - 20)
@@ -1348,8 +1388,6 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Im.Overlay(right, bottom)
       -- The menu a right click brought up, over all of that.
       Context.Draw(session, entries, left, top, right, bottom)
-      -- (the map goes over everything else)
-      Map.Draw(session, left, top, w.size.x, w.size.y)
       Keys.EndFrame()
       overInterface = Im.over
     end,

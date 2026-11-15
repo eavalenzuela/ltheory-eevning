@@ -84,7 +84,7 @@ until GameDebug.Running() == 3
 until GameDebug.Held('target') < 0.5
 lua GameDebug.TimeScale(4)
 until GameDebug.Pirates() == 0
-lua assert(GameDebug.Hull() == 'frigate.courier', 'the player lost the fight')
+lua assert(GameDebug.Hull() == 'frigate.akashi', 'the player lost the fight')
 # With what it followed destroyed and nothing else locked, the camera follows nothing.
 until GameDebug.Tracking() == 0
 

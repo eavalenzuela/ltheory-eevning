@@ -7,7 +7,7 @@
 # nobody keeps order at all: the packs have cruisers in them, and the
 # belts have the rare ores. The pirates fly hulls of their own, which
 # the scene must draw as those hulls with their weapons on them. A new
-# pilot's Courier is no match for any of it: it looks, and gets away.
+# pilot's starter frigate is no match for any of it: it looks, and gets away.
 
 wait 2
 # (the sound, at no loudness, so that what is heard of a fight is run: missiles land on the pilot here)
@@ -50,7 +50,7 @@ lua assert(GameDebug.Distance('Cobaltite') < 1e9 or GameDebug.Distance('Iridite'
 # And away, to the one station there is here.
 lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused')
 until GameDebug.Docked()
-lua assert(GameDebug.Hull() == 'frigate.courier', 'the pilot did not get away')
+lua assert(GameDebug.Hull() == 'frigate.akashi', 'the pilot did not get away')
 
 echo lawless scenario passed
 quit

@@ -88,6 +88,36 @@ mouseup Left
 frames 2
 lua assert(select(3, GameDebug.Window('inventory')) == 520 and select(4, GameDebug.Window('inventory')) == 590, 'the window should be the size its corner was dragged to')
 
+# The docked screen is a window too: it goes where its heading is dragged.
+lua _G.sx, _G.sy = GameDebug.Window('station')
+lua assert(_G.sx == 490 and _G.sy == 130, 'the docked screen should be in the middle at first: ' .. _G.sx .. ', ' .. _G.sy)
+move 560 144
+frames 2
+mousedown Left
+frames 2
+move 600 164
+frames 2
+mouseup Left
+frames 2
+lua assert(GameDebug.Window('station') == 530 and select(2, GameDebug.Window('station')) == 150, 'the docked screen should have gone with its heading')
+lua assert(GameDebug.CanPress('UNDOCK'), 'and it is the docked screen still')
+
+# And the star map: opened, dragged by its heading, and shut.
+until GameDebug.Press('Map')
+until select(5, GameDebug.Window('map'))
+lua assert(GameDebug.Window('map') == 260 and select(2, GameDebug.Window('map')) == 120, 'the map should be in the middle at first')
+move 360 140
+frames 2
+mousedown Left
+frames 2
+move 330 170
+frames 2
+mouseup Left
+frames 2
+lua assert(GameDebug.Window('map') == 230 and select(2, GameDebug.Window('map')) == 150, 'the map should have gone with its heading')
+until GameDebug.Press('Map:close')
+until not select(5, GameDebug.Window('map'))
+
 # The hold has a window of its own, beside the first.
 until GameDebug.Press('Inv:beside:cargo')
 until GameDebug.Inventory() == 2
@@ -108,7 +138,7 @@ until GameDebug.Inventory() == 1
 
 # A module carried onto the fitting screen is fitted: a mining laser, in place of one gun.
 until GameDebug.Press('Unfit:high1')
-until GameDebug.Fitted('autocannon.small') == 1
+until GameDebug.Fitted('autocannon.small') == 0
 until GameDebug.CanPress('Inv:item:miner.small')
 lua assert(GameDebug.Carry('Inv:item:miner.small', 'Fitting:onto'), 'the module or the fitting screen was not there')
 until GameDebug.Fitted('miner.small') == 1

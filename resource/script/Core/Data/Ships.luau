@@ -882,6 +882,21 @@ function Ships.RigSize(t: ShipType): number
   return RIG_SIZE[t.class] or 0
 end
 
+-- The frigate a pilot begins in, where a people's space is where they
+-- begin: that people's own frigate, the first of its plain ones. (The
+-- owner's, 2026-11-14: a pilot begins in a cheaply fitted frigate of the
+-- people about them, and not in the Courier, which nobody's yards
+-- build.) The Courier, where nobody builds one, or they keep theirs to
+-- themselves.
+function Ships.Starter(faction: string): string
+  for _, hull in Ships.list do
+    if hull.class == "frigate" and hull.lineage == faction and faction ~= "" and hull.tech ~= 2 and not hull.restricted then
+      return hull.id
+    end
+  end
+  return "frigate.courier"
+end
+
 -- The tech 2 make of a hull, if it has one.
 function Ships.Improved(id: string): ShipType?
   -- (the one its faction's line names, which is called what it is called)

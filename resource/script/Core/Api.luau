@@ -90,6 +90,12 @@ export type Options = {
   -- Other ships about (Tactical/Traffic); default false. The game turns
   -- it on. A test that is about one ship has the galaxy to itself.
   traffic: boolean?,
+  -- What the pilot begins in. Default false: the plain Courier with two
+  -- small guns, which a test of something else can count on. The game
+  -- turns it on: a frigate of the people whose space the pilot begins
+  -- in, cheaply fitted, and the skill to fly it (the owner's,
+  -- 2026-11-14).
+  starter: boolean?,
   -- Game days the galaxy's economy has been going when the game begins
   -- (Strategic/Commerce); default 0, which is every price the normal
   -- one everywhere. The game's New game gives it Commerce.SETTLED.
@@ -1107,20 +1113,52 @@ function Core.New(options: Options): Game
   -- (the starter station: the one that has a module for everything)
   local home = Space.Object(state, Stations.Starter(state))
   assert(home, "the first system has no station")
-  local ship = Space.NewShip(state, "frigate.courier", "Courier", "player", home.id)
+  -- The ship a pilot begins in: a frigate of the people whose station
+  -- they begin at, cheaply fitted (Data/Ships). A small gun on each turret
+  -- hardpoint, one light launcher if the hull takes any, loaded with the
+  -- missile of that people's own kind, and one plate of armour, with the
+  -- skills to fit them, and a high slot left free for what the first
+  -- lessons hand out.
+  local people = Factions.byId[Stations.People(state, home.id)]
+  local hull = Ships.byId[if options.starter then Ships.Starter(if people then people.id else "") else "frigate.courier"]
+  -- (a pilot can fly what they begin in)
+  for _, need in Skills.Needs(hull.id) do
+    state.skills[need.skill] = math.max(state.skills[need.skill] or 0, need.level)
+  end
+  local ship = Space.NewShip(state, hull.id, (string.gsub(hull.name, "^%S+ ", "")), "player", home.id)
+  ship.given = true
   state.player.ship = ship.id
   state.player.home = home.id
   state.wallet = 5000
   state.surge = Surges.None(state)
 
-  -- A starter fit and a few things to try in the hangar: some of them
-  -- need a skill trained first, and the blueprint needs minerals.
-  Items.Equip(state, ship.id, "autocannon.small", "ammo.emp")
-  Items.Equip(state, ship.id, "autocannon.small", "ammo.emp")
+  local MISSILES = { "missile.light.em", "missile.light.thermal", "missile.light.kinetic", "missile.light.explosive" }
+  local missile = MISSILES[(if people then people.affinity else nil) or 3] or MISSILES[3]
+  for _ = 1, hull.turrets do
+    Items.Equip(state, ship.id, "autocannon.small", "ammo.emp")
+  end
+  local launcher = hull.launchers > 0 and hull.highs > hull.turrets + 1
+  if launcher then
+    Items.Equip(state, ship.id, "launcher.light", missile)
+  end
+  if hull.lows >= 1 and hull.lineage ~= "" then
+    Items.Equip(state, ship.id, "armor.plate.200mm", nil)
+  end
+  -- (and can fit again whatever they take off it)
+  for _, item in Items.Fitted(state, ship.id) do
+    for _, need in Skills.Needs(item.type) do
+      state.skills[need.skill] = math.max(state.skills[need.skill] or 0, need.level)
+    end
+  end
+  -- And a few things to try in the hangar: some of them need a skill
+  -- trained first, and the blueprint needs minerals.
   for _, kit in { { "ammo.emp", 600 }, { "ammo.fusion", 400 }, { "shield.extender.small", 1 }, { "afterburner.1mn", 1 },
     { "armor.repairer.small", 1 }, { "laser.pulse.small", 1 }, { "crystal.multifrequency", 1 },
     { "miner.small", 1 }, { "blueprint.ammo.emp", 1 } } :: { { any } } do
     Items.Add(state, kit[1], kit[2], home.id, "hangar")
+  end
+  if launcher then
+    Items.Add(state, missile, 200, home.id, "hangar")
   end
   return { state = state, events = {} }
 end

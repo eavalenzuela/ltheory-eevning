@@ -461,23 +461,23 @@ local function make(galaxy: Galaxy.Galaxy, its: Chart, width: number, height: nu
   return made
 end
 
--- The part of a window the map takes up when it is open: where it is,
--- and how wide and how high. (It goes over everything, so what is drawn
--- before it leaves the mouse alone there: Im.Cover.)
+-- The part of the screen the map takes up at first: where it is, and
+-- how wide and how high.
 function Map.Covers(left: number, top: number, width: number, height: number): (number, number, number, number)
   local w, h = math.min(width - 80, 1400), math.min(height - 150, 820)
   return left + (width - w) / 2, top + (height - h) / 2 - 10, w, h
 end
 
-function Map.Draw(session: Session.Session, left: number, top: number, width: number, height: number)
+-- The map, in the place it has: it is a window (Game/UI/Windows, which
+-- Game/UI/Hud makes it), moved by its heading, and starts where
+-- Map.Covers says.
+function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h: number)
   if not open then
     return
   end
-  Im.Uncover()
   local game = session.game
   local galaxy = game.state.galaxy
   local systems = mapped(galaxy)
-  local x, y, w, h = Map.Covers(left, top, width, height)
   Im.Panel(x, y, w, h)
   -- (a panel lets what is behind it show; a map is read, so it does not)
   Im.Fill(x, y, w, h, vector.create(0.02, 0.03, 0.045), 0.97)

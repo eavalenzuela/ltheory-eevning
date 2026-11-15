@@ -37,7 +37,8 @@ type Pilot = {
 }
 
 local function new(seed: number): Pilot
-  local game = Core.New({ galaxySeed = 1, historySeed = seed })
+  -- (in what a pilot of the game begins in: a frigate of the people's own, cheaply fitted)
+  local game = Core.New({ galaxySeed = 1, historySeed = seed, starter = true })
   return { game = game, state = game.state, home = game.state.player.home, lost = false, bounties = 0, killedAt = 0, fled = 0,
     ticks = 0, events = {} }
 end
@@ -626,11 +627,13 @@ suite:Case("a new pilot flies the command career to its end on what the lessons 
     lesson(p, "CompleteLesson", "command")
     -- A ship for them: the hull assembled, the laser fitted to it, and given.
     lesson(p, "AcceptLesson", "command")
-    must(p, { kind = "Assemble", actor = 0, item = assert(stock(p, "frigate.courier")).id })
+    -- (the plain Courier: the pilot hired has not the skill for a people's own frigate)
+    local given = "frigate.courier"
+    must(p, { kind = "Assemble", actor = 0, item = assert(stock(p, given)).id })
     local second = 0
     for _, id in state.shipIds do
       local ship = state.ships[id]
-      second = if id ~= mine and ship.docked == p.home and ship.type == "frigate.courier" and ship.owner == "player" then id else second
+      second = if id ~= mine and ship.docked == p.home and ship.type == given and ship.owner == "player" then id else second
     end
     t.ok(second ~= 0, "the hull was not assembled")
     must(p, { kind = "BoardShip", actor = 0, target = second })

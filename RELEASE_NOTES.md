@@ -6,6 +6,13 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## A frigate of your own, and windows that move
+
+- A new pilot begins in a frigate of the people whose station they start at (at a Vessari one, an Akashi), cheaply fitted: one small gun, one light missile launcher and a plate of armour, with a slot left free, and the skills to fit all of it. The old Courier is no longer where anybody begins. (A game already begun keeps the ship it has.)
+- A pilot who wakes with no ship is given a bare frigate of the people whose station it is. A ship that was given pays little when it is lost (12,000 credits, as before): ships you buy or build are insured for what they are.
+- The docked screen and the star map are windows now: drag either by its heading to put it where you like. They stay where you leave them.
+- Traders fly the haulers and freighters of the people whose space they are in, and no longer the plain hulls nobody's yards build.
+
 ## No more dark boxes
 
 - On some graphics cards (AMD's, on Windows) ships and station modules sat in large dark rectangles. A few pixels were being worked out as something that is no number at all, and the glow that spreads bright light spread those too. They are now caught before they can spread, and the places they came from are mended.

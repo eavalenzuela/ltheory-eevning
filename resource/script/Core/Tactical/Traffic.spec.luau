@@ -154,7 +154,11 @@ suite:Case("where order is kept a trader is now and then a freighter, with a gre
           for _, item in Items.In(state, id, "cargo") do
             aboard += item.quantity
           end
-          if ship.type == "freighter.dray" then
+          -- (the hauler or the freighter of the people whose space it is: no trader flies a plain hull)
+          local class = Ships.byId[ship.type].class
+          t.ok(Ships.byId[ship.type].lineage ~= "" or (class ~= "industrial" and class ~= "freighter"),
+            `a trader in somebody's space flies a {ship.type}`)
+          if class == "freighter" then
             freighters += 1
             most = math.max(most, aboard)
             t.eq(ship.name, "Freighter")

@@ -8,6 +8,8 @@ local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Nomads = require("@lt/Core/Tactical/Nomads")
 local Pirates = require("@lt/Core/Tactical/Pirates")
+local Ships = require("@lt/Core/Data/Ships")
+local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Stations = require("@lt/Core/Assets/Stations")
@@ -299,6 +301,44 @@ suite:Case("losing the capsule too: the pilot wakes at home", function(t)
   t.eq({ player.docked, player.hull.id } :: { any }, { game.state.player.home, "frigate.courier" } :: { any })
   t.eq(game.state.wallet, wallet, "a capsule is not insured")
   t.eq(#game.state.wreckIds, 1, "and leaves no wreck")
+end)
+
+suite:Case("the frigate a pilot of the game begins in: a people's own, fitted with what they can fit, insured as the plainest hull", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true, starter = true })
+  local state = game.state
+  local ship = state.ships[state.player.ship]
+  local hull = Ships.byId[ship.type]
+  t.eq(hull.class, "frigate")
+  t.ok(hull.lineage ~= "", "a frigate some people build, and not the plain Courier")
+  t.eq(hull.lineage, Stations.People(state, state.player.home), "of the people whose station the pilot begins at")
+  t.eq(Skills.Missing(Skills.Needs(hull.id), state.skills), nil, "which the pilot can fly")
+  local highs = 0
+  for _, item in Items.Fitted(state, ship.id) do
+    t.eq(Skills.Missing(Skills.Needs(item.type), state.skills), nil, `and can fit {item.type} to again`)
+    highs += if item.place == "high" then 1 else 0
+  end
+  t.ok(highs >= 1 and highs < hull.highs, "armed, with a high slot left free")
+
+  -- Lost: it pays what a Courier would, not two fifths of what such a
+  -- frigate costs, and the one the pilot wakes in is no better insured.
+  Core.Submit(game, { kind = "Undock", actor = ship.id })
+  Core.Step(game)
+  local wallet = state.wallet
+  Aftermath.Destroy(state, ship.id, 0, game.events)
+  t.eq(state.wallet, wallet + 12000, "a ship that was given pays as the plainest hull does")
+  Aftermath.Destroy(state, me(game).id, 0, game.events)
+  local woke = state.ships[state.player.ship]
+  t.eq({ woke.type, woke.docked, woke.given } :: { any }, { hull.id, state.player.home, true } :: { any })
+  t.eq(#Items.Fitted(state, woke.id), 0, "the one a pilot wakes in is bare")
+  -- (and a ship that was paid for is insured for what it is)
+  local bought = Space.NewShip(state, hull.id, "Bought", "player", state.player.home)
+  order(t, game, { kind = "BoardShip", actor = 0, target = bought.id })
+  Core.Step(game)
+  Core.Submit(game, { kind = "Undock", actor = bought.id })
+  Core.Step(game)
+  wallet = state.wallet
+  Aftermath.Destroy(state, bought.id, 0, game.events)
+  t.eq(state.wallet, wallet + math.floor(hull.basePrice * 0.4))
 end)
 
 suite:Case("home is the station a pilot takes a berth at, for a fee: it is where they wake", function(t)

@@ -57,6 +57,21 @@ function Stations.Makeup(state: State.State, id: number): Structures.Makeup?
   return Structures.Makeup(object.variety, object.radius, faction, id == Stations.Starter(state))
 end
 
+-- Whose a station is: the nomads' whose colony ship it is, and else the
+-- people who built its tower (those whose homeworld is nearest, in held
+-- space and in open space alike). "" for what is no station.
+function Stations.People(state: State.State, id: number): string
+  local object = Space.Peek(state, id)
+  if object == nil or object.kind ~= "station" then
+    return ""
+  end
+  local fleet = Space.Colony(state, id)
+  if fleet then
+    return fleet.faction
+  end
+  return state.galaxy.systems[Space.SystemOf(state, id)].nearest
+end
+
 -- Whether a station has a module that gives a service.
 function Stations.Has(state: State.State, id: number, service: Structures.Service): boolean
   -- (a pilot's own gives only what is online, and nothing when it is dark)

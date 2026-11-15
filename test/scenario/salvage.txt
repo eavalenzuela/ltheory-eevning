@@ -2,7 +2,7 @@
 #
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/salvage.txt
 #
-# A salvager goes on the starter Courier in place of one gun (the module
+# A salvager goes on the starter frigate in place of one gun (the module
 # and the skill for it are given), and strips a wreck (which is given
 # too: the fight for one is the combat scenario's). What comes off is in
 # the hold. The wreck had a pirate's tag aboard, so it waits to be

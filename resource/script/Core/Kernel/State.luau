@@ -28,6 +28,11 @@ export type Ship = {
   -- The tick its jump drive last fired, if it has one and it has
   -- (Tactical/Jumping): the drive cools from then.
   jumped: number?,
+  -- True for a ship a station gave for nothing: the one a pilot begins
+  -- in, and the one a pilot with none wakes in. Lost, it pays no more
+  -- than the plainest hull would (Tactical/Aftermath), or losing what
+  -- cost nothing would be a living.
+  given: boolean?,
 }
 
 -- A target being locked, or locked. Times are game seconds (tick * TICK).

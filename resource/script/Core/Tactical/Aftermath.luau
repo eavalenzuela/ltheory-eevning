@@ -26,6 +26,7 @@ local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
+local Stations = require("@lt/Core/Assets/Stations")
 local Surges = require("@lt/Core/Tactical/Surges")
 local Types = require("@lt/Core/Data/Types")
 local Corporation = require("@lt/Core/Assets/Corporation")
@@ -51,7 +52,26 @@ Aftermath.KEPT_CHANCE = KEPT_CHANCE
 -- pilots destroyed with the pilot somewhere else: the rest is theirs.
 Aftermath.AWAY = 0.5
 local INSURANCE = 0.4        -- of the hull's base price, paid without asking
-local STARTER = "frigate.courier"
+-- What a lost ship's insurance pays. A ship that was given pays as the
+-- plain Courier does, whatever it is: enough to begin again with, and
+-- not a price for throwing away what cost nothing. (Mine: the people's
+-- frigate is worth thirteen Couriers.)
+local function cover(ship: State.Ship, hull: Ships.ShipType): number
+  local worth = if ship.given then math.min(hull.basePrice, Ships.byId["frigate.courier"].basePrice) else hull.basePrice
+  return math.floor(worth * INSURANCE)
+end
+
+-- (the hull a pilot with no ship is given: the one a pilot begins in,
+-- bare. Data/Ships says which, by whose station it is they wake at.)
+-- (If the pilot has not the skill for that people's frigate, the plain
+-- Courier, which anybody can fly: a ship that cannot be flown is none.)
+local function starter(state: State.State, station: number): (string, string)
+  local hull = Ships.byId[Ships.Starter(Stations.People(state, station))]
+  if Skills.Missing(Skills.Needs(hull.id), state.skills) then
+    hull = Ships.byId["frigate.courier"]
+  end
+  return hull.id, (string.gsub(hull.name, "^%S+ ", ""))
+end
 
 Aftermath.LOOT_RANGE = LOOT_RANGE
 
@@ -129,7 +149,7 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   -- (a ship of the pilot's that somebody hired was flying is insured as
   -- their own is: Tactical/Fleet sees to the pilot)
   if ship.owner == "player" and ship.pilot ~= 0 then
-    pay(state, math.floor(hull.basePrice * INSURANCE), "insurance", events)
+    pay(state, cover(ship, hull), "insurance", events)
   end
   local velocity = { ball.vx, ball.vy, ball.vz }
   Space.RemoveBall(state, ball)
@@ -196,7 +216,7 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     end
   end
   if wasPlayer and hull.class ~= "capsule" then
-    pay(state, math.floor(hull.basePrice * INSURANCE), "insurance", events)
+    pay(state, cover(ship, hull), "insurance", events)
     local pod = Space.NewShip(state, "capsule", "Capsule", "player", 0)
     local out = Space.Launch(state, pod, ball.system, ball.x, ball.y, ball.z)
     out.vx, out.vy, out.vz = velocity[1], velocity[2], velocity[3]
@@ -211,7 +231,9 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     end
     -- (and whatever boosters were at work on them)
     state.boosters = {}
-    local fresh = Space.NewShip(state, STARTER, "Courier", "player", state.player.home)
+    local granted, called = starter(state, state.player.home)
+    local fresh = Space.NewShip(state, granted, called, "player", state.player.home)
+    fresh.given = true
     state.player.ship = fresh.id
     table.insert(events, { kind = "Respawned", ship = fresh.id, station = state.player.home })
   end
@@ -239,7 +261,9 @@ function Aftermath.Step(state: State.State, events: { Event })
       state.player.ship = own.id
       table.insert(events, { kind = "ShipBoarded", ship = own.id, from = ship.id })
     else
-      local fresh = Space.NewShip(state, STARTER, "Courier", "player", station)
+      local granted, called = starter(state, station)
+      local fresh = Space.NewShip(state, granted, called, "player", station)
+      fresh.given = true
       state.player.ship = fresh.id
       table.insert(events, { kind = "ShipGranted", ship = fresh.id, station = station })
     end
