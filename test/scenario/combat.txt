@@ -2,7 +2,7 @@
 #
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/combat.txt
 #
-# Fit a module by clicking in the fitting screen, undock, go to a belt, wait
+# Fit a module by clicking in the inventory, undock, go to a belt, wait
 # for the pirate that turns up there, lock it, orbit and open fire, loot its
 # wreck, then lose the ship, fly the capsule home and be given a new one.
 
@@ -16,9 +16,16 @@ frames 3
 lua assert(GameDebug.Music() == 'docked', 'docked, the music should be the station\'s, not ' .. GameDebug.Music())
 lua assert(GameDebug.Fitted('autocannon.small') == 2, 'the starter ship has two autocannons')
 
-# The Fit button on the second hangar row, the shield extender (1920x1080).
+# In the inventory, the hangar (the third place down its tree), and on
+# its second row the shield extender: a right click, and Fit, the first
+# thing its menu offers (1920x1080, the window where it is at first).
 # (The hangar is set out by kind: lasers, then shields.)
-click Left 707 267
+click Left 70 242
+frames 3
+click Right 230 252
+frames 3
+lua assert(GameDebug.CanPress('Menu:Fit'), 'a right click on a module in the hangar should offer to fit it')
+click Left 260 268
 wait 1
 lua assert(GameDebug.Fitted('shield.extender.small') == 1, 'clicking Fit did not fit the extender')
 

@@ -41,7 +41,7 @@ Guide.steps = {
     how = "Mark, at the top of the overview." },
 
   { id = "mine", group = "Making a living", title = "Mine an asteroid", on = "Mined", mine = "ball",
-    how = "Fit the Mining Laser in the hangar. At a belt, lock a rock (L) and switch it on." },
+    how = "Right-click the Mining Laser in the hangar: Fit. At a belt, lock a rock (L), switch it on." },
   { id = "refine", group = "Making a living", title = "Refine ore into minerals", on = "Reprocessed", mine = "ship",
     how = "Industry tab, at a station with a refining array." },
   { id = "sell", group = "Making a living", title = "Sell something", on = "Sold",
@@ -60,14 +60,14 @@ Guide.steps = {
     how = "Industry tab, from a copy: Invent tech 2. It wants datacores, which derelicts have." },
 
   { id = "fit", group = "Fighting", title = "Fit a module", on = "Fitted",
-    how = "Fitting tab: a module in the hangar goes into a free slot." },
+    how = "Inventory, Hangar: right-click a module and Fit, or carry it to the Fitting tab." },
   { id = "kill", group = "Fighting", title = "Destroy a pirate", on = "WalletChanged",
     also = function(event: Event): boolean
       return event.reason == "bounty"
     end,
     how = "They come to belts. <next> picks one out, <lock> locks it, <rack1> and <rack2> fire." },
   { id = "loot", group = "Fighting", title = "Loot a wreck", on = "Looted", mine = "ship",
-    how = "Approach the wreck (<approach>), then Loot." },
+    how = "Approach the wreck (<approach>), then Loot: it opens in the inventory. Loot all." },
   { id = "salvage", group = "Fighting", title = "Salvage a wreck", on = "Salvaged", mine = "ball",
     how = "A Salvager wants the Salvaging skill. What it brings off builds rigs." },
   { id = "drones", group = "Fighting", title = "Launch a drone", on = "DroneLaunched", mine = "owner",

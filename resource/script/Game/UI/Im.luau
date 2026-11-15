@@ -60,6 +60,30 @@ local scrolls: { [string]: number } = {}
 -- not on anything there. (x, y, and the far corner.)
 local covered: { number }? = nil
 
+-- And the parts of the window that windows drawn later lie over
+-- (Game/UI/Windows): the cursor is on nothing there either, for whatever
+-- is drawn under them. (Each x, y, and the far corner.)
+local shields: { { number } } = {}
+
+-- What is being carried about by the mouse (Im.Grab, Im.Drop): what was
+-- pressed on and has not moved yet, what is in hand, and what was let
+-- go this frame, for the first place that asks for it. And a carrying a
+-- script has asked for by the names of where from and where to.
+type Carried = { payload: any, label: string, at: vector }
+local grabbed: Carried? = nil
+local carrying: Carried? = nil
+local letGo: any = nil
+local staged: { from: string, to: string, payload: any, armed: boolean, age: number }? = nil
+
+-- The menu that is up (Im.OpenMenu): whose it is, where, what it
+-- offers, and which of those can be had; the click it was given this
+-- frame, kept from everything under it; and what was picked from it,
+-- for its owner to ask after.
+type Menu = { id: string, x: number, y: number, labels: { string }, enabled: { boolean } }
+local menu: Menu? = nil
+local menuClick, menuRight = false, false
+local picked: { id: string, index: number }? = nil
+
 Im.TEXT = vector.create(0.82, 0.86, 0.9)
 Im.DIM = vector.create(0.5, 0.55, 0.6)
 Im.ACCENT = Colors.Primary
@@ -89,8 +113,35 @@ function Im.Begin()
   end
   held = false
   covered = nil
+  shields = {}
   seen, seenNow = seenNow, {}
   pressNow, pressNext = pressNext, nil
+  -- What is carried: let go when the button comes up, and in hand once
+  -- it has moved from where it was pressed.
+  letGo = nil
+  if carrying then
+    if not Mouse_LeftDown() then
+      letGo, carrying = carrying.payload, nil
+    end
+  elseif grabbed then
+    if not Mouse_LeftDown() then
+      grabbed = nil
+    elseif vector.magnitude(cursor - grabbed.at) > CLICK_NEAR then
+      carrying, grabbed = grabbed, nil
+    end
+  end
+  -- (with a menu up, a click is the menu's, and nobody else's)
+  menuClick, menuRight = false, false
+  if menu then
+    menuClick, menuRight = pressed, rightPressed
+    pressed, rightPressed, double = false, false, false
+  end
+end
+
+-- Say which parts of the window are under windows that are drawn later:
+-- from here on the cursor is on nothing there (Game/UI/Windows).
+function Im.Shield(rects: { { number } })
+  shields = rects
 end
 
 -- Say that a part of the window is going to be covered by what is drawn
@@ -177,6 +228,11 @@ local function inside(x: number, y: number, w: number, h: number): boolean
   local under = covered
   if under and cursor.x >= under[1] and cursor.x < under[3] and cursor.y >= under[2] and cursor.y < under[4] then
     return false
+  end
+  for _, over in shields do
+    if cursor.x >= over[1] and cursor.x < over[3] and cursor.y >= over[2] and cursor.y < over[4] then
+      return false
+    end
   end
   return cursor.x >= x and cursor.x < x + w and cursor.y >= y and cursor.y < y + h
 end
@@ -512,6 +568,164 @@ function Im.Row(x: number, y: number, w: number, h: number, selected: boolean, i
     Im.Fill(x, y, w, h, Im.ACCENT, 0.1)
   end
   return hot, (hot and pressed) or scripted, hot and double
+end
+
+-- Something a script can do by name that has no button of its own
+-- (what a menu offers for a thing, which a script cannot point at):
+-- true on the frame a script presses it (Im.Press). It is there to be
+-- asked after with Im.Has, enabled or not, like a button.
+function Im.Hook(name: string, enabled: boolean): boolean
+  if seenNow[name] == nil or enabled then
+    seenNow[name] = enabled
+  end
+  if enabled and pressNow == name then
+    pressNow = nil
+    return true
+  end
+  return false
+end
+
+-- ---------------------------------------------------------------------
+-- Carrying things about
+
+-- Something that can be picked up and carried: pressed on and moved, it
+-- is in hand ('payload', whatever its owner makes of it; 'label' is
+-- what is drawn at the cursor while it is carried). 'id' is its name
+-- for a script (Im.Carry).
+function Im.Grab(id: string, payload: any, label: string, x: number, y: number, w: number, h: number)
+  seenNow[id] = true
+  if staged and staged.from == id and not staged.armed then
+    staged.payload, staged.armed = payload, true
+  end
+  if pressed and carrying == nil and inside(x, y, w, h) then
+    grabbed = { payload = payload, label = label, at = cursor }
+  end
+end
+
+-- What is in hand, if anything is.
+function Im.Carried(): any
+  return if carrying then carrying.payload else nil
+end
+
+-- Somewhere a carried thing can be put down: what was let go on it this
+-- frame, if anything was (the first place that asks has it, so what
+-- lies inside another asks first). It is lit while something is held
+-- over it. 'id' is its name for a script (Im.Carry).
+function Im.Drop(id: string, x: number, y: number, w: number, h: number): any
+  seenNow[id] = true
+  if staged and staged.armed and staged.to == id then
+    local payload = staged.payload
+    staged = nil
+    return payload
+  end
+  if letGo ~= nil and inside(x, y, w, h) then
+    local payload = letGo
+    letGo = nil
+    return payload
+  end
+  if carrying and inside(x, y, w, h) then
+    Im.Fill(x, y, w, h, Im.ACCENT, 0.1)
+  end
+  return nil
+end
+
+-- Carry what is named 'from' to what is named 'to', as a hand would:
+-- for scripted runs. False if either was not drawn last frame.
+function Im.Carry(from: string, to: string): boolean
+  if seen[from] == nil or seen[to] == nil then
+    return false
+  end
+  staged = { from = from, to = to, payload = nil, armed = false, age = 0 }
+  return true
+end
+
+-- ---------------------------------------------------------------------
+-- A menu
+
+-- Put up a menu at a point: a list of things to pick from, some of
+-- which may not be had now. Its owner asks what was picked with
+-- Im.Picked, by the 'id' it gave. One menu is up at a time.
+function Im.OpenMenu(id: string, x: number, y: number, labels: { string }, enabled: { boolean }?)
+  local can: { boolean } = {}
+  for index in labels do
+    can[index] = enabled == nil or enabled[index] ~= false
+  end
+  menu = { id = id, x = x, y = y, labels = labels, enabled = can }
+  picked = nil
+end
+
+function Im.MenuOpen(): boolean
+  return menu ~= nil
+end
+
+-- What was picked from the menu of that id, once: its place in the
+-- list. Nil if nothing has been.
+function Im.Picked(id: string): number?
+  local was = picked
+  if was and was.id == id then
+    picked = nil
+    return was.index
+  end
+  return nil
+end
+
+local MENU_ROW = 24
+
+-- Draw the menu that is up, and what is in hand, over everything: once
+-- a frame, after all else. A click on something the menu offers picks
+-- it; a click anywhere else puts the menu away. (A script picks by
+-- name: "Menu:" and the label.)
+function Im.Overlay(right: number, bottom: number)
+  local up = menu
+  if up then
+    local width = 120
+    for _, label in up.labels do
+      width = math.max(width, Im.TextWidth(label, 13) + 28)
+    end
+    local height = #up.labels * MENU_ROW + 8
+    local x, y = math.min(up.x, right - width - 4), math.min(up.y, bottom - height - 4)
+    WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(width, height), vector.create(0.04, 0.07, 0.1), 0.97, 1, 5)
+    Im.over = true
+    local chosen = 0
+    for index, label in up.labels do
+      local ry = y + 4 + (index - 1) * MENU_ROW
+      local can = up.enabled[index]
+      local name = `Menu:{label}`
+      seenNow[name] = can
+      local scripted = can and pressNow == name
+      if scripted then
+        pressNow = nil
+      end
+      local hot = can and cursor.x >= x and cursor.x < x + width and cursor.y >= ry and cursor.y < ry + MENU_ROW
+      if hot then
+        Im.Fill(x + 2, ry, width - 4, MENU_ROW, Im.ACCENT, 0.2)
+      end
+      Im.Text(label, x + 14, ry + 5, 13, if can then Im.TEXT else Im.DIM, if can then 1 else 0.6)
+      if scripted or (hot and menuClick) then
+        chosen = index
+      end
+    end
+    if chosen ~= 0 then
+      picked = { id = up.id, index = chosen }
+      menu = nil
+    elseif menuClick or menuRight then
+      menu = nil
+    end
+  end
+  local hand = carrying
+  if hand then
+    Im.over = true
+    local width = Im.TextWidth(hand.label, 13) + 18
+    WidgetRenderer_DrawPanel(vector.create(cursor.x + 14, cursor.y + 10), vector.create(width, 24), vector.create(0.1, 0.3, 0.45), 0.9, 0.95, 4)
+    Im.Text(hand.label, cursor.x + 23, cursor.y + 15, 13, Im.TEXT)
+  end
+  -- (a carrying a script asked for, whose ends never showed, is forgotten)
+  if staged then
+    staged.age += 1
+    if staged.age > 6 then
+      staged = nil
+    end
+  end
 end
 
 return Im

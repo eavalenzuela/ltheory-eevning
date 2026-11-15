@@ -58,6 +58,8 @@ local Wallet = require("@lt/Core/Assets/Wallet")
 local Waypoints = require("@lt/Game/Waypoints")
 local Wormholes = require("@lt/Core/Tactical/Wormholes")
 local Wars = require("@lt/Core/Strategic/Wars")
+local Windows = require("@lt/Game/UI/Windows")
+local Inventory = require("@lt/Game/UI/Inventory")
 
 local App = {}
 
@@ -1155,6 +1157,56 @@ function Debug.Member(n: number): (string, string, string, string, number)
     return "", "", "", "", 0
   end
   return member.name, member.trade, member.doing, member.system, member.earned
+end
+
+-- The inventory (Game/UI/Inventory): how many of its windows are open,
+-- and of the first what kind of place it shows ('cargo', 'hangar',
+-- 'wreck', ...), how many stacks are listed there, and whether as icons.
+function Debug.Inventory(): (number, string, number, boolean)
+  return Inventory.Showing()
+end
+
+-- Where a window is (Game/UI/Windows), by its id ('inventory'): its
+-- corner, its size, and whether it is open. Nothing for no such window.
+function Debug.Window(id: string): (number, number, number, number, boolean)
+  local window = Windows.Get(id)
+  if window == nil then
+    return 0, 0, 0, 0, false
+  end
+  return window.x, window.y, window.w, window.h, window.open
+end
+
+-- Carry what is named 'from' to what is named 'to', as a hand with the
+-- mouse would (Im.Carry): a stack of the inventory to a place in its
+-- tree, GameDebug.Carry('Inv:item:ore.ferrite', 'Inv:onto:hangar').
+-- False if either was not drawn last frame.
+function Debug.Carry(from: string, to: string): boolean
+  return Im.Carry(from, to)
+end
+
+-- How many of a type there are in a place of the pilot's: 'cargo',
+-- 'hangar', 'dronebay', 'orehold' or 'corporate' (the ship's own, or
+-- the station's docked at); or in the wreck or container nearest the
+-- ship, 'wreck'.
+function Debug.Stacked(type: string, place: string): number
+  local state = session.game.state
+  local ship = state.ships[state.player.ship]
+  local holder, where: string? = ship.id, place
+  if place == "hangar" or place == "corporate" then
+    holder = ship.docked
+  elseif place == "wreck" then
+    holder, where = 0, nil
+    for _, entry in Core.Query.Places(session.game) do
+      if holder == 0 and (entry.kind == "wreck" or entry.kind == "can") then
+        holder = entry.holder
+      end
+    end
+  end
+  local count = 0
+  for _, item in Items.In(state, holder, where) do
+    count += if item.type == type then item.quantity else 0
+  end
+  return count
 end
 
 -- A cheat, for the members' ships to look at without waiting for
@@ -2703,6 +2755,8 @@ function App:Initialize()
       Settings.Save(settings)
     end
   end)
+  -- (and where the windows that are moved about were left: App:OnUpdate keeps it)
+  Windows.Restore(settings.windows)
   -- (and the keys a person has changed, kept when one changes hands)
   Keys.Import(settings.keys)
   Menu.Keys(function()
@@ -2741,6 +2795,11 @@ function App:Initialize()
       local frame = math.min(0.1, FrameTimer_Get())
       if Key_Pressed(Key_Escape()) then
         Menu.Toggle(session)
+      end
+      -- (where the windows were left is kept, for the next run)
+      if Windows.Changed() and not Host.scripted then
+        settings.windows = Windows.Layout()
+        Settings.Save(settings)
       end
       if not Menu.IsOpen() then
         if Keys.Did("pause") then

@@ -512,157 +512,34 @@ end
 local function drawFitting(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number,
   preview: Preview?, show: Show?)
   local ship = player.ship
-  local stats = Core.Query.Stats(game, ship)
 
-  -- The hangar, to fit from, and the hold.
-  local left = x + 16
-  local columnWidth = 284
-  local line = y + 78
-  -- (set out as the market is: modules, then charges, and so on)
-  local hangar = table.clone(Core.Query.Items(game, player.docked, "hangar"))
-  table.sort(hangar, function(a: State.Item, b: State.Item): boolean
-    if a.type ~= b.type then
-      return Catalog.Before(a.type, b.type)
-    end
-    return a.id < b.id
-  end)
-  Im.Heading(`HANGAR  {#hangar}`, left, line, 16, Im.DIM)
-  line += 24
-  if #hangar == 0 then
-    Im.Text("nothing here", left, line, 14, Im.DIM, 0.6)
-  end
-  local visible = 12
-  local first = Im.Scroll("hangar", left - 4, line, columnWidth, visible * 24, #hangar, visible)
-  for row = 1, visible do
-    local item = hangar[row + first]
-    if item == nil then
-      break
-    end
-    local info = Types.Info(item.type)
-    local name = shorten(info.name, 18)
-    ItemIcon.Draw(item.type, left, line + 1, 20)
-    Info.Name(item.type, name, left + 26, line + 3, 13, Im.TEXT)
-    Im.Text(`x{item.quantity}`, left + 30 + Im.TextWidth(name, 13), line + 3, 12, Im.DIM)
-    if info.category == "module" then
-      local can = Session.CanDo(session, { kind = "Fit", actor = 0, item = item.id })
-      if Im.Button("Fit", left + 178, line, 46, 21, can, `Fit:{item.type}`) then
+  -- What a ship is fitted from is the inventory (Game/UI/Inventory): a
+  -- module carried here from it is fitted, and a charge is loaded into
+  -- a weapon that takes it. ("Fitting:onto", to a script: Im.Carry.)
+  local carried = Im.Drop("Fitting:onto", x, y + 64, Station.WIDTH, Station.HEIGHT - 64)
+  if carried and carried.items then
+    for _, id in carried.items :: { number } do
+      local item = game.state.items[id]
+      local category = if item then Types.Info(item.type).category else ""
+      if item and category == "module" then
         Session.Do(session, { kind = "Fit", actor = 0, item = item.id })
-      end
-    elseif info.category == "charge" then
-      local weapon = weaponFor(game, ship, item)
-      if Im.Button("Load", left + 178, line, 46, 21, weapon ~= nil, `Load:{item.type}`) and weapon then
-        Session.Do(session, { kind = "LoadCharge", actor = 0, item = weapon.id, other = item.id })
-      end
-    elseif info.category == "ore" then
-      local can = Session.CanDo(session, { kind = "Reprocess", actor = 0, item = item.id })
-      if Im.Button("Refine", left + 178, line, 46, 21, can, `Refine:{item.type}`) then
-        Session.Do(session, { kind = "Reprocess", actor = 0, item = item.id })
-      end
-    elseif info.category == "drone" then
-      -- (a drone goes in the drone bay: as many of the stack as there is room for)
-      local room = math.floor((Core.Query.Drones(game).bay - Core.Query.Drones(game).bayUsed + 1e-9) / info.volume)
-      local toBay: State.Command = { kind = "MoveItems", actor = 0, item = item.id, to = "dronebay", quantity = math.min(item.quantity, room) }
-      if Im.Button("Bay", left + 178, line, 46, 21, room >= 1 and (Session.CanDo(session, toBay)), `ToBay:{item.type}`) then
-        Session.Do(session, toBay)
-      end
-    elseif info.category == "ship" and Core.Query.ShipBay(game, ship) > 0 then
-      -- (a packed hull goes in the ship bay of a hull that has one, a
-      -- logistics capital: as many of the stack as there is room for)
-      local size, used = Core.Query.ShipBay(game, ship)
-      local room = math.floor((size - used + 1e-9) / info.volume)
-      local toBay: State.Command = { kind = "MoveItems", actor = 0, item = item.id, to = "shipbay", quantity = math.min(item.quantity, room) }
-      if Im.Button("Bay", left + 178, line, 46, 21, room >= 1 and (Session.CanDo(session, toBay)), `ToShipBay:{item.type}`) then
-        Session.Do(session, toBay)
-      end
-    end
-    local toHold = Session.CanDo(session, { kind = "MoveItems", actor = 0, item = item.id, to = "cargo" })
-    if Im.Button("Hold", left + 228, line, 46, 21, toHold, `ToHold:{item.type}`) then
-      Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "cargo" })
-    end
-    line += 24
-  end
-
-  line = y + 78 + 24 + visible * 24 + 8
-  Im.Heading(string.format("HOLD  %.1f / %.0f m3", Core.Query.CargoUsed(game, ship), stats.cargo), left, line, 16, Im.DIM)
-  line += 24
-  local hold = Core.Query.Items(game, ship, "cargo")
-  if #hold == 0 then
-    Im.Text("empty", left, line, 14, Im.DIM, 0.6)
-  end
-  -- (three lines of it; two on a hull with an ore hold, which has the
-  -- third: below)
-  local oreSize, oreUsed = Core.Query.OreHold(game, ship)
-  -- (or its ship bay, on a hull that carries ships: it has the one or
-  -- the other, and the same line of the panel)
-  local baySize, bayUsed = Core.Query.ShipBay(game, ship)
-  local second = oreSize > 0 or baySize > 0
-  local shown = if second then 2 else 3
-  for index, item in hold do
-    if index > shown then
-      Im.Text(`and {#hold - shown} more`, left + (if second then 150 else 0), line - (if second then 24 * shown + 22 else 0), 13,
-        Im.DIM)
-      break
-    end
-    local held = shorten(Types.Info(item.type).name, 18)
-    ItemIcon.Draw(item.type, left, line + 1, 20)
-    Info.Name(item.type, held, left + 26, line + 3, 13, Im.TEXT)
-    Im.Text(`x{item.quantity}`, left + 30 + Im.TextWidth(held, 13), line + 3, 12, Im.DIM)
-    if Im.Button("Hangar", left + 214, line, 60, 21, true, `ToHangar:{item.type}`) then
-      Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "hangar" })
-    end
-    line += 24
-  end
-
-  -- The drone bay, under the hold: what is in it, a stack to a line.
-  local drones = Core.Query.Drones(game)
-  if drones.bay > 0 then
-    line = y + 78 + 24 + visible * 24 + 8 + 24 + 3 * 24 + 2
-    Im.Heading(string.format("DRONE BAY  %.0f / %.0f m3", drones.bayUsed, drones.bay), left, line, 13, Im.DIM)
-    -- (a click on a stack puts it back in the hangar)
-    local bx = left
-    for index, item in Core.Query.Items(game, ship, "dronebay") do
-      if index <= 2 then
-        local label = shorten(`{item.quantity} {Types.Info(item.type).name}`, 21)
-        if Im.Button(label, bx, line + 17, 138, 20, true, `FromBay:{item.type}`) then
-          Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "hangar" })
+      elseif item and category == "charge" then
+        local weapon = weaponFor(game, ship, item)
+        if weapon then
+          Session.Do(session, { kind = "LoadCharge", actor = 0, item = weapon.id, other = item.id })
+        else
+          Session.Say(session, `Nothing fitted takes {Types.Info(item.type).name}`)
         end
-        bx += 142
+      elseif item then
+        Session.Say(session, `{Types.Info(item.type).name} is not something a ship is fitted with`)
       end
     end
   end
-
-  -- The ore hold of a hull that has one (a capital industrial), on the
-  -- hold's third line: how full it is, and a button that puts all of it
-  -- in the hangar ("OreToHangar"), where it can be refined or sold.
-  -- (What is in it, stack by stack, is on the assets window.)
-  if oreSize > 0 then
-    line = y + 78 + 24 + visible * 24 + 8 + 24 + 2 * 24
-    Im.Heading(string.format("ORE HOLD  %s / %s m3", Format.Whole(math.floor(oreUsed + 0.5)), Format.Whole(oreSize)), left, line + 4, 13,
-      Im.DIM)
-    local stacks = Core.Query.Items(game, ship, "orehold")
-    if Im.Button("To hangar", left + 200, line, 74, 21, #stacks > 0, "OreToHangar") then
-      for _, item in stacks do
-        Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "hangar" })
-      end
-    end
-  elseif baySize > 0 then
-    -- The ship bay of a hull that has one (a logistics capital), on the
-    -- same line: how full it is of packed hulls, and a button that puts
-    -- them all in the hangar ("BayToHangar"). They go in from the
-    -- hangar's list, a hull's "Bay" button.
-    line = y + 78 + 24 + visible * 24 + 8 + 24 + 2 * 24
-    Im.Heading(string.format("SHIP BAY  %s / %s m3", Format.Whole(math.floor(bayUsed + 0.5)), Format.Whole(baySize)), left, line + 4, 13,
-      Im.DIM)
-    local stacks = Core.Query.Items(game, ship, "shipbay")
-    if Im.Button("To hangar", left + 200, line, 74, 21, #stacks > 0, "BayToHangar") then
-      for _, item in stacks do
-        Session.Do(session, { kind = "MoveItems", actor = 0, item = item.id, to = "hangar" })
-      end
-    end
-  end
+  Im.Wrapped("Fitted from the inventory: right-click a module or a charge in the hangar, or carry it here.", x + 16, y + 84, 150, 12,
+    Im.DIM)
 
   -- The ship: its name over the wheel.
-  local cx, cy = x + 480, y + 296
+  local cx, cy = x + 334, y + 296
   local title = string.upper(shorten(player.hull.name, 20))
   local titleWidth = Im.TextWidth(title, 15) * 1.12
   ItemIcon.Draw(player.hull.id, cx + RING - 42 - titleWidth - 28, y + 74, 22)
@@ -672,7 +549,7 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
   end
   drawWheel(session, game, player, cx, cy, preview, show)
 
-  drawFigures(game, player, x + 672, y + 76, 252)
+  drawFigures(game, player, x + 526, y + 76, 252)
 end
 
 -- ---------------------------------------------------------------------

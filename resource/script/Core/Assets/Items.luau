@@ -334,6 +334,107 @@ local function freeSlot(state: State.State, ship: number, rack: string, size: nu
   return 0
 end
 
+-- Another ship of the pilot's own that lies in the station a ship is
+-- docked in, with nobody flying it: its holds are in reach from there.
+local function berthed(state: State.State, ship: State.Ship, other: number): State.Ship?
+  local its = state.ships[other]
+  if its and its.id ~= ship.id and ship.docked ~= 0 and its.docked == ship.docked and its.owner == "player" and its.pilot == 0 then
+    return its
+  end
+  return nil
+end
+
+-- Whether a move is one that can be made. What can be moved is what is
+-- aboard the ship (in space too: from one of its holds to another), and,
+-- docked, what is in the station's stores or aboard another ship of the
+-- pilot's that lies there. Where it can go: a hold of the ship's, or
+-- ('target') of another ship of the pilot's that lies there; and,
+-- docked, the station's stores.
+local function validateMove(state: State.State, ship: State.Ship, item: State.Item, command: State.Command): (boolean, string?)
+  if item.slot > 0 then
+    return false, "unfit it first"
+  end
+  local aboard = item.holder == ship.id
+  local stored = ship.docked ~= 0 and item.holder == ship.docked and Items.IsStore(item.place)
+  if not (aboard or stored or berthed(state, ship, item.holder) ~= nil) then
+    -- (what is in a station's stores is the station's to move: out in space it is nobody's)
+    return false, if ship.docked ~= 0 then "that item is not here" elseif Items.IsStore(item.place) then "not docked"
+      else "that item is not aboard"
+  end
+  local quantity = command.quantity or item.quantity
+  if quantity <= 0 or quantity % 1 ~= 0 or quantity > item.quantity then
+    return false, "no such quantity"
+  end
+  local into = ship
+  if command.target and command.target ~= 0 and command.target ~= ship.id then
+    local other = berthed(state, ship, command.target)
+    if other == nil then
+      return false, "no ship of yours lies here by that name"
+    end
+    into = other
+  end
+  local to = command.to
+  local there = item.holder == into.id and item.place == to
+  local volume = quantity * Types.Info(item.type).volume
+  if to == "cargo" then
+    if there then
+      return false, "already in the hold"
+    end
+    local free = Items.ShipStats(state, into.id).cargo - Items.CargoUsed(state, into.id)
+    if volume > free + 1e-9 then
+      return false, "not enough room in the hold"
+    end
+    return true
+  elseif to == "hangar" or to == "corporate" then
+    if ship.docked == 0 then
+      return false, "not docked"
+    elseif to == "hangar" then
+      return item.place ~= "hangar" or item.holder ~= ship.docked, "already in the hangar"
+    elseif not Corporation.Founded(state) then
+      return false, "there is no corporation to give it to"
+    end
+    return item.place ~= "corporate", "already in the corporation's hangar"
+  elseif to == "orehold" then
+    -- (ore and gas, and as much as the ore hold has room for)
+    local size, used = Items.OreHold(state, into.id)
+    if there then
+      return false, "already in the ore hold"
+    elseif size == 0 then
+      return false, "this hull has no ore hold"
+    elseif not Items.IsOre(item.type) then
+      return false, "only ore and gas go in an ore hold"
+    elseif volume > size - used + 1e-9 then
+      return false, "not enough room in the ore hold"
+    end
+    return true
+  elseif to == "shipbay" then
+    -- (packed hulls, and as many as the bay has room for)
+    local size, used = Items.ShipBay(state, into.id)
+    if there then
+      return false, "already in the ship bay"
+    elseif size == 0 then
+      return false, "this hull has no ship bay"
+    elseif not Items.IsHull(item.type) then
+      return false, "only packed hulls go in a ship bay"
+    elseif volume > size - used + 1e-9 then
+      return false, "not enough room in the ship bay"
+    end
+    return true
+  elseif to == "dronebay" then
+    -- (drones, and as many as the bay has room for)
+    local bay = Ships.byId[into.type].bay or 0
+    if there then
+      return false, "already in the drone bay"
+    elseif Types.Info(item.type).category ~= "drone" then
+      return false, "only drones go in a drone bay"
+    elseif volume > bay - Items.BayUsed(state, into.id) + 1e-9 then
+      return false, if bay == 0 then "this hull has no drone bay" else "not enough room in the drone bay"
+    end
+    return true
+  end
+  return false, "move it where?"
+end
+
 function Items.Validate(state: State.State, command: State.Command): (boolean, string?)
   local ship = state.ships[command.actor]
   if ship == nil then
@@ -342,6 +443,9 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
   local item = state.items[command.item or 0]
   if item == nil then
     return false, "no such item"
+  end
+  if command.kind == "MoveItems" then
+    return validateMove(state, ship, item, command)
   end
   local station, why = sharedStation(state, ship, item)
   if station == nil then
@@ -395,75 +499,6 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
     end
     return true
 
-  elseif kind == "MoveItems" then
-    if item.slot > 0 then
-      return false, "unfit it first"
-    end
-    local quantity = command.quantity or item.quantity
-    if quantity <= 0 or quantity % 1 ~= 0 or quantity > item.quantity then
-      return false, "no such quantity"
-    end
-    if command.to == "cargo" then
-      if item.place == "cargo" then
-        return false, "already in the hold"
-      end
-      local free = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
-      if quantity * Types.Info(item.type).volume > free + 1e-9 then
-        return false, "not enough room in the hold"
-      end
-      return true
-    elseif command.to == "hangar" then
-      if item.place == "hangar" then
-        return false, "already in the hangar"
-      end
-      return true
-    elseif command.to == "corporate" then
-      if not Corporation.Founded(state) then
-        return false, "there is no corporation to give it to"
-      elseif item.place == "corporate" then
-        return false, "already in the corporation's hangar"
-      end
-      return true
-    elseif command.to == "orehold" then
-      -- (ore and gas, and as much as the ore hold has room for)
-      local size, used = Items.OreHold(state, ship.id)
-      if item.place == "orehold" then
-        return false, "already in the ore hold"
-      elseif size == 0 then
-        return false, "this hull has no ore hold"
-      elseif not Items.IsOre(item.type) then
-        return false, "only ore and gas go in an ore hold"
-      elseif quantity * Types.Info(item.type).volume > size - used + 1e-9 then
-        return false, "not enough room in the ore hold"
-      end
-      return true
-    elseif command.to == "shipbay" then
-      -- (packed hulls, and as many as the bay has room for)
-      local size, used = Items.ShipBay(state, ship.id)
-      if item.place == "shipbay" then
-        return false, "already in the ship bay"
-      elseif size == 0 then
-        return false, "this hull has no ship bay"
-      elseif not Items.IsHull(item.type) then
-        return false, "only packed hulls go in a ship bay"
-      elseif quantity * Types.Info(item.type).volume > size - used + 1e-9 then
-        return false, "not enough room in the ship bay"
-      end
-      return true
-    elseif command.to == "dronebay" then
-      -- (drones, and as many as the bay has room for)
-      if item.place == "dronebay" then
-        return false, "already in the drone bay"
-      elseif Types.Info(item.type).category ~= "drone" then
-        return false, "only drones go in a drone bay"
-      end
-      local free = (hull.bay or 0) - Items.BayUsed(state, ship.id)
-      if quantity * Types.Info(item.type).volume > free + 1e-9 then
-        return false, if (hull.bay or 0) == 0 then "this hull has no drone bay" else "not enough room in the drone bay"
-      end
-      return true
-    end
-    return false, "move it where?"
   end
   return false, `unknown command '{kind}'`
 end
@@ -531,15 +566,17 @@ function Items.Apply(state: State.State, command: State.Command, events: { Event
   elseif kind == "MoveItems" then
     local quantity = command.quantity or item.quantity
     local type = item.type
+    -- (into a hold of this ship's, or of another of the pilot's that lies here)
+    local into = if command.target and command.target ~= 0 and state.ships[command.target] then command.target else ship.id
     Items.Take(state, item, quantity)
     if command.to == "cargo" then
-      Items.Add(state, type, quantity, ship.id, "cargo")
+      Items.Add(state, type, quantity, into, "cargo")
     elseif command.to == "dronebay" then
-      Items.Add(state, type, quantity, ship.id, "dronebay")
+      Items.Add(state, type, quantity, into, "dronebay")
     elseif command.to == "orehold" then
-      Items.Add(state, type, quantity, ship.id, "orehold")
+      Items.Add(state, type, quantity, into, "orehold")
     elseif command.to == "shipbay" then
-      Items.Add(state, type, quantity, ship.id, "shipbay")
+      Items.Add(state, type, quantity, into, "shipbay")
     elseif command.to == "corporate" then
       Items.Add(state, type, quantity, station, "corporate")
     else

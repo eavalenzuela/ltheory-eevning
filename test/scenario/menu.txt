@@ -126,12 +126,16 @@ lua assert(GameDebug.Seed() == 7 and GameDebug.InSpace(), 'the save did not brin
 lua assert(GameDebug.Tick() >= _G.tick and GameDebug.Tick() < _G.tick + 3, 'the save is not from when it was made')
 
 # What the pilot owns, from anywhere: here, the hangar left behind.
+# (it is opened from the inventory, which in space is shut until it is asked for)
+until GameDebug.Press('Inventory')
 until GameDebug.Press('Assets')
 frames 3
-lua assert(GameDebug.CanPress('Assets:close'), 'the assets window did not open')
+lua assert(GameDebug.CanPress('assets:close'), 'the assets window did not open')
+until GameDebug.Press('assets:close')
+until not GameDebug.CanPress('assets:close')
 until GameDebug.Press('Colonies')
 frames 3
-lua assert(not GameDebug.CanPress('Assets:close'), 'the colonies window should take the assets window\'s place')
+lua assert(GameDebug.CanPress('Colony:close'), 'the colonies window did not open')
 until GameDebug.Press('Colony:close')
 
 # And the save is thrown away.

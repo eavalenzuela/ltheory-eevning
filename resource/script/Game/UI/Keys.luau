@@ -40,6 +40,7 @@ Keys.ACTIONS = {
   { id = "next", label = "Next hostile ship", key = "Tab" },
   { id = "camera", label = "Camera follows", key = "C" },
   { id = "map", label = "Star map", key = "M" },
+  { id = "inventory", label = "Inventory", key = "I" },
   { id = "pause", label = "Pause", key = "P" },
   { id = "rack1", label = "Module 1", key = "F1" },
   { id = "rack2", label = "Module 2", key = "F2" },
@@ -136,7 +137,8 @@ end
 local listening = false
 function Keys.Did(id: string): boolean
   local key = bound[id]
-  return key ~= nil and not listening and pressed(key)
+  -- (not while a field has the keyboard: a letter typed into it is a letter)
+  return key ~= nil and not listening and not Im.Typing() and pressed(key)
 end
 
 -- While a key is being listened for (the keys screen, giving an action

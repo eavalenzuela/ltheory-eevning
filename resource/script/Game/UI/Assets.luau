@@ -2,9 +2,9 @@
 -- The assets window: everything the pilot owns, place by place: the
 -- hold, and every station with a ship or goods of theirs in it.
 --
--- Open in space or docked, from the Assets button. Drawn every frame
--- with Game/UI/Im; it only reads the Core. Its close button is
--- "Assets:close" (Im.Press).
+-- A window (Game/UI/Windows), open in space or docked: from the
+-- inventory's "All assets" button. It only reads the Core. Its close
+-- button is "assets:close" (Im.Press).
 
 local Catalog = require("@lt/Core/Data/Catalog")
 local Core = require("@lt/Core/Api")
@@ -16,6 +16,7 @@ local Session = require("@lt/Game/Session")
 local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
 local Types = require("@lt/Core/Data/Types")
+local Windows = require("@lt/Game/UI/Windows")
 
 local Assets = {}
 
@@ -24,18 +25,25 @@ Assets.HEIGHT = 660
 
 local ROW = 24
 
-local open = false
+-- The window's id, and whose game it shows (Assets.Frame).
+local ID = "assets"
+local current: Session.Session? = nil
 
 function Assets.Open()
-  open = true
+  Windows.Open(ID)
 end
 
 function Assets.Close()
-  open = false
+  Windows.Close(ID)
 end
 
 function Assets.IsOpen(): boolean
-  return open
+  return Windows.IsOpen(ID)
+end
+
+-- Once a frame, before the windows are drawn: whose game it is.
+function Assets.Frame(session: Session.Session)
+  current = session
 end
 
 local function shorten(text: string, limit: number): string
@@ -45,19 +53,13 @@ end
 -- A line of the list: a place's heading, a ship there, or a stack.
 type Line = { place: Core.AssetsAt?, ship: State.Ship?, item: State.Item?, label: string? }
 
-function Assets.Draw(session: Session.Session, x: number, y: number)
-  if not open then
+local function draw(_: Windows.Window, x: number, y: number, width: number, height: number)
+  local session = current
+  if session == nil then
     return
   end
   local game = session.game
-  local width, height = Assets.WIDTH, Assets.HEIGHT
   local left, right = x + 16, x + width - 16
-  Im.Panel(x, y, width, height)
-  Im.Heading("ASSETS", left, y + 12, 16, Im.DIM)
-  if Im.Button("x", x + width - 38, y + 10, 24, 24, true, "Assets:close") then
-    open = false
-    return
-  end
 
   local places = Core.Query.Assets(game)
   local worth = game.state.wallet
@@ -94,11 +96,11 @@ function Assets.Draw(session: Session.Session, x: number, y: number)
       end
     end
   end
-  Im.Text(`{#places} places`, left, y + 42, 13, Im.DIM)
-  Im.TextRight(`worth {Format.Whole(worth)} cr with the wallet`, right, y + 42, 13, Im.TEXT)
+  Im.Text(`{#places} places`, left, y + 10, 13, Im.DIM)
+  Im.TextRight(`worth {Format.Whole(worth)} cr with the wallet`, right, y + 10, 13, Im.TEXT)
 
-  local top = y + 70
-  local visible = (height - 86) // ROW
+  local top = y + 36
+  local visible = math.max(1, (height - 46) // ROW)
   local first = Im.Scroll("assets", left - 4, top, width - 24, visible * ROW, #lines, visible)
   for row = 1, visible do
     local line = lines[row + first]
@@ -127,5 +129,8 @@ function Assets.Draw(session: Session.Session, x: number, y: number)
     end
   end
 end
+
+Windows.Kind(ID, draw)
+Windows.Make(ID, ID, "Assets", 494, 130, Assets.WIDTH, Assets.HEIGHT, 340, 240, nil)
 
 return Assets

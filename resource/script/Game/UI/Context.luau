@@ -32,6 +32,7 @@
 local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
+local Inventory = require("@lt/Game/UI/Inventory")
 local Session = require("@lt/Game/Session")
 
 local Context = {}
@@ -312,7 +313,12 @@ function Context.Draw(session: Session.Session, entries: { Core.Entry }, left: n
       out = ""
     end
     if clicked and distances == nil then
-      Session.Order(session, row.kind, entry.id, row.range)
+      -- (a wreck or a container is opened: what is in it is in the inventory, to take or to leave)
+      if row.kind == "Loot" then
+        Inventory.Show(entry.id)
+      else
+        Session.Order(session, row.kind, entry.id, row.range)
+      end
       picked = true
     end
     if distances and out == row.kind then

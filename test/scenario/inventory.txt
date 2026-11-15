@@ -1,0 +1,155 @@
+# The inventory window, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/inventory.txt
+#
+# Docked, the inventory is open: the ship's holds and the station's
+# hangar, place by place. A stack is carried from the hangar to the
+# hold, as much as there is room for. A place has a window of its own,
+# beside the first. A stack's menu moves some of it, asking how many. A
+# module carried onto the fitting screen is fitted. In space the window
+# is as it was left there (shut), and opens. Something goes over the
+# side into a container, which is a place in reach, and all of it is
+# taken back. And a wreck is opened in the window, to take from.
+
+wait 2
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Inventory() == 1, 'docked, the inventory should be open')
+lua assert(select(2, GameDebug.Inventory()) == 'cargo', 'and showing the hold')
+lua GameDebug.Give('ore.ferrite', 5000)
+lua GameDebug.Give('scrap.metal', 14)
+
+# The hangar: as a list, and as icons.
+until GameDebug.Press('Inv:place:hangar')
+until select(2, GameDebug.Inventory()) == 'hangar'
+lua _G.stacks = select(3, GameDebug.Inventory())
+lua assert(_G.stacks >= 2, 'the hangar should list what is in it')
+until GameDebug.Press('Inv:view')
+until select(4, GameDebug.Inventory())
+until GameDebug.Press('Inv:view')
+until not select(4, GameDebug.Inventory())
+
+# A word in the filter: only what it is part of.
+lua GameDebug.Type('Inv:filter', 'ferr')
+until select(3, GameDebug.Inventory()) == 1
+lua GameDebug.Type('Inv:filter', '')
+until select(3, GameDebug.Inventory()) == _G.stacks
+
+# A stack is carried by hand, with the mouse: the scrap is taken hold of
+# in the hangar's list and let go on the hold in the tree. (The window is where
+# it is at first, in a script's run: 16, 130.)
+lua _G.scrap = GameDebug.Stacked('scrap.metal', 'hangar')
+lua assert(_G.scrap == 14 and GameDebug.Stacked('scrap.metal', 'cargo') == 0, 'the scrap should be in the hangar')
+until GameDebug.Press('Inv:menu:ore.ferrite')
+until GameDebug.CanPress('Menu:Info')
+# (a click anywhere else puts a menu away, and is nobody else's click)
+click Left 900 900
+frames 3
+lua assert(not GameDebug.CanPress('Menu:Info'), 'a click off a menu should put it away')
+lua GameDebug.Type('Inv:filter', 'scrap')
+until select(3, GameDebug.Inventory()) == 1
+move 230 228
+frames 2
+mousedown Left
+frames 2
+move 180 220
+frames 2
+move 70 182
+frames 2
+mouseup Left
+until GameDebug.Stacked('scrap.metal', 'cargo') > 0
+lua assert(GameDebug.Stacked('scrap.metal', 'cargo') + GameDebug.Stacked('scrap.metal', 'hangar') == 14, 'nothing should be lost on the way')
+lua GameDebug.Type('Inv:filter', '')
+
+# And by name, as a script does it: a stack bigger than the hold, of which as much goes as there is room for.
+until GameDebug.CanPress('Inv:item:ore.ferrite')
+lua assert(GameDebug.Carry('Inv:item:ore.ferrite', 'Inv:onto:cargo'), 'the stack or the hold was not there to carry between')
+until GameDebug.Stacked('ore.ferrite', 'cargo') > 0
+lua assert(GameDebug.Stacked('ore.ferrite', 'hangar') > 0, 'more than the hold has room for should stay in the hangar')
+lua assert(GameDebug.Stacked('ore.ferrite', 'cargo') + GameDebug.Stacked('ore.ferrite', 'hangar') == 5000, 'nothing should be lost on the way')
+
+# And the window goes where its title is dragged, and is as big as its corner is dragged to.
+lua assert(GameDebug.Window('inventory') == 16 and select(2, GameDebug.Window('inventory')) == 130, 'the window should be where it is at first')
+move 200 146
+frames 2
+mousedown Left
+frames 2
+move 260 196
+frames 2
+mouseup Left
+frames 2
+lua assert(GameDebug.Window('inventory') == 76 and select(2, GameDebug.Window('inventory')) == 180, 'the window should have gone with its title')
+move 540 734
+frames 2
+mousedown Left
+frames 2
+move 590 764
+frames 2
+mouseup Left
+frames 2
+lua assert(select(3, GameDebug.Window('inventory')) == 520 and select(4, GameDebug.Window('inventory')) == 590, 'the window should be the size its corner was dragged to')
+
+# The hold has a window of its own, beside the first.
+until GameDebug.Press('Inv:beside:cargo')
+until GameDebug.Inventory() == 2
+until GameDebug.CanPress('Inv2:item:ore.ferrite')
+
+# A stack's menu: some of it, back to the hangar.
+lua _G.held = GameDebug.Stacked('ore.ferrite', 'cargo')
+until GameDebug.Press('Inv2:menu:ore.ferrite')
+until GameDebug.CanPress('Menu:Move some...')
+until GameDebug.Press('Menu:Move some...')
+until GameDebug.CanPress('Inv2:move')
+lua GameDebug.Enter('Inv2:some', 7)
+frames 3
+until GameDebug.Press('Inv2:move')
+until GameDebug.Stacked('ore.ferrite', 'cargo') == _G.held - 7
+until GameDebug.Press('inventory:2:close')
+until GameDebug.Inventory() == 1
+
+# A module carried onto the fitting screen is fitted: a mining laser, in place of one gun.
+until GameDebug.Press('Unfit:high1')
+until GameDebug.Fitted('autocannon.small') == 1
+until GameDebug.CanPress('Inv:item:miner.small')
+lua assert(GameDebug.Carry('Inv:item:miner.small', 'Fitting:onto'), 'the module or the fitting screen was not there')
+until GameDebug.Fitted('miner.small') == 1
+
+# In space the window is as it was left there: shut, until it is opened.
+lua GameDebug.Give('scrap.metal', 14)
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 5
+lua assert(GameDebug.Inventory() == 0, 'in space the inventory should be shut until it is opened')
+until GameDebug.Press('Inventory')
+until GameDebug.Inventory() == 1
+lua assert(select(2, GameDebug.Inventory()) == 'cargo', 'in space it shows the hold')
+
+# Over the side: a container, which is a place in reach. And all of it back.
+lua _G.held = GameDebug.Stacked('ore.ferrite', 'cargo')
+until GameDebug.Press('Inv:menu:ore.ferrite')
+until GameDebug.CanPress('Menu:Jettison')
+until GameDebug.Press('Menu:Jettison')
+until GameDebug.Stacked('ore.ferrite', 'cargo') == 0
+until GameDebug.CanPress('Inv:place:can')
+lua assert(GameDebug.Stacked('ore.ferrite', 'wreck') == _G.held, 'what went over the side should be in the container')
+until GameDebug.Press('Inv:place:can')
+until select(2, GameDebug.Inventory()) == 'can'
+until GameDebug.Press('Inv:lootall')
+until GameDebug.Stacked('ore.ferrite', 'cargo') == _G.held
+# (and the container, empty, is gone)
+until not GameDebug.CanPress('Inv:place:can')
+until select(2, GameDebug.Inventory()) == 'cargo'
+
+# A wreck is opened in the window, to take from: a thing at a time, or all of it.
+lua assert(GameDebug.Wreck(), 'no wreck was put there')
+until GameDebug.Select('wreck')
+until GameDebug.CanPress('Loot')
+until GameDebug.Press('Loot')
+until select(2, GameDebug.Inventory()) == 'wreck'
+lua _G.stacks = select(3, GameDebug.Inventory())
+lua assert(_G.stacks >= 1, 'the wreck should list what is in it')
+until GameDebug.CanPress('Inv:lootall')
+until GameDebug.Press('Inv:lootall')
+until not GameDebug.CanPress('Inv:place:wreck')
+
+echo inventory scenario passed
+quit

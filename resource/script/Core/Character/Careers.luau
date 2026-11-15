@@ -119,7 +119,8 @@ Careers.list = {
           return event.units
         end,
         kit = { { type = "miner.small", quantity = 1 } },
-        says = "Fit this Mining Laser (Fitting tab: a gun can come out to make room). At a belt, lock a rock (L) and switch "
+        says = "Fit this Mining Laser (Fitting tab: a gun can come out to make room; then right-click the laser in the "
+          .. "inventory's hangar, Fit). At a belt, lock a rock (L) and switch "
           .. "the laser on. The ore comes into the hold a load a minute." },
       { title = "Ore to minerals", aim = "Refine ore", on = "Reprocessed", mine = "ship", need = 1, kit = {}, credits = 3000, gifts = {},
         says = "Ore is bulky and cheap. Refined, it is the minerals everything is built from. Industry tab, here: refine "
@@ -165,8 +166,9 @@ Careers.list = {
     lessons = {
       { title = "Fit for it", aim = "Fit a module", on = "Fitted", need = 1, kit = {}, credits = 2000,
         gifts = { { type = "ammo.emp", quantity = 500 } },
-        says = "A ship is what is fitted to it. Fitting tab: the Small Shield Extender in your hangar goes into a free mid "
-          .. "slot. If it is in already, take it out and put it back: I want to see that you can." },
+        says = "A ship is what is fitted to it. In the inventory, right-click the Small Shield Extender in your hangar and "
+          .. "Fit: it goes into a free mid slot. If it is in already, take it out (Fitting tab) and put it back: I want to "
+          .. "see that you can." },
       { title = "First pirate", aim = "Destroy a pirate", on = "WalletChanged", need = 1, kit = {}, credits = 6000,
         also = function(event: Event): boolean
           return event.reason == "bounty"
@@ -176,7 +178,8 @@ Careers.list = {
           .. "it (W) while you shoot: a moving ship is harder to hit. If your shield goes, warp out." },
       { title = "What they leave", aim = "Loot a wreck", on = "Looted", mine = "ship", need = 1, kit = {}, credits = 4000,
         gifts = { { type = "book.salvaging", quantity = 1 }, { type = "salvager.small", quantity = 1 } },
-        says = "A destroyed ship leaves a wreck, and what it carried is in it. Approach the wreck (<approach>) and Loot. Pirate "
+        says = "A destroyed ship leaves a wreck, and what it carried is in it. Approach the wreck (<approach>) and Loot: it "
+          .. "opens in the inventory, and Loot all takes it. Pirate "
           .. "tags sell, and so does the rest." },
       { title = "Nothing wasted", aim = "Salvage a wreck", on = "Salvaged", mine = "ball", need = 1, kit = {}, credits = 6000,
         gifts = { { type = "armor.plate.200mm", quantity = 1 } },

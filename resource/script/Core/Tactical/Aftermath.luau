@@ -298,9 +298,65 @@ function Aftermath.Validate(state: State.State, command: State.Command): (boolea
     elseif wreck.locked then
       return false, "its hold is sealed: it has to be hacked"
     end
+    -- (one thing out of it, and so many: as much as there is room for)
+    if command.item then
+      local item = state.items[command.item]
+      if item == nil or item.holder ~= wreck.id then
+        return false, "that is not in it"
+      end
+      local quantity = command.quantity or item.quantity
+      if quantity <= 0 or quantity % 1 ~= 0 or quantity > item.quantity then
+        return false, "no such quantity"
+      end
+      local free = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
+      if quantity * Types.Info(item.type).volume > free + 1e-9 then
+        return false, "not enough room in the hold"
+      end
+    end
+    return true
+  elseif command.kind == "Jettison" then
+    -- Something out of a hold of the ship's, into space: into a
+    -- container, which is put out for it, or ('target') into one that
+    -- is there already.
+    local ball = state.balls[ship.id]
+    local item = state.items[command.item or 0]
+    if ball == nil then
+      return false, "docked"
+    elseif ball.warp and ball.warp.stage == "warp" then
+      return false, "in warp"
+    elseif item == nil or item.holder ~= ship.id then
+      return false, "that item is not aboard"
+    elseif item.slot > 0 then
+      return false, "unfit it first"
+    end
+    local quantity = command.quantity or item.quantity
+    if quantity <= 0 or quantity % 1 ~= 0 or quantity > item.quantity then
+      return false, "no such quantity"
+    end
+    if command.target and command.target ~= 0 then
+      local can = state.wrecks[command.target]
+      if can == nil or not can.can then
+        return false, "not a container"
+      elseif can.system ~= ball.system or Space.Gap(ball :: any, can :: any) > LOOT_RANGE then
+        return false, "too far away"
+      end
+    end
     return true
   end
   return false, `unknown command '{command.kind}'`
+end
+
+-- A container of the pilot's in reach of a ship, if there is one: the
+-- nearest.
+local function canNear(state: State.State, ball: State.Ball): State.Wreck?
+  local best: State.Wreck?, least = nil, LOOT_RANGE
+  for _, id in state.wreckIds do
+    local wreck = state.wrecks[id]
+    if wreck.can and wreck.system == ball.system and Space.Gap(ball :: any, wreck :: any) <= least then
+      best, least = wreck, Space.Gap(ball :: any, wreck :: any)
+    end
+  end
+  return best
 end
 
 function Aftermath.Apply(state: State.State, command: State.Command, events: { Event })
@@ -311,14 +367,47 @@ function Aftermath.Apply(state: State.State, command: State.Command, events: { E
     table.insert(events, { kind = "ShipRepaired", ship = ship.id })
     return
   end
+  if command.kind == "Jettison" then
+    local ball = state.balls[ship.id]
+    local item = state.items[command.item :: number]
+    local quantity = command.quantity or item.quantity
+    local type = item.type
+    local there = if command.target and command.target ~= 0 then state.wrecks[command.target] else canNear(state, ball)
+    local can: State.Wreck
+    if there then
+      can = there
+    else
+      -- (a little way off the ship, on the side it is not going)
+      local made: State.Wreck = {
+        id = State.NewId(state), kind = "wreck", name = "Cargo Container", system = ball.system, grid = ball.grid,
+        x = ball.x + ball.radius + 60, y = ball.y - 20, z = ball.z + 40, radius = 12, hull = "", expires = state.tick + WRECK_LIFETIME,
+        -- (there is nothing of it to salvage, and nothing to hack)
+        salvaged = true, locked = false, lock = "", can = true,
+      }
+      state.wrecks[made.id] = made
+      table.insert(state.wreckIds, made.id)
+      table.insert(events, { kind = "WreckAdded", wreck = made.id })
+      can = made
+    end
+    Items.Take(state, item, quantity)
+    Items.Add(state, type, quantity, can.id, "cargo")
+    -- (it lasts from when something was last put in it)
+    can.expires = state.tick + WRECK_LIFETIME
+    table.insert(events, { kind = "Jettisoned", ship = ship.id, type = type, quantity = quantity, can = can.id })
+    return
+  end
   -- Loot: take what fits, biggest value first is the pilot's problem; in
-  -- the wreck's order here.
+  -- the wreck's order here. (Or, with a thing named, that thing and no
+  -- other: so many of it.)
   local wreck = state.wrecks[command.target :: number]
   local free = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
   local taken, left = 0, 0
   for _, item in Items.In(state, wreck.id, nil) do
     local volume = Types.Info(item.type).volume
     local fits = math.min(item.quantity, math.floor((free + 1e-9) / volume))
+    if command.item then
+      fits = if item.id == command.item then math.min(fits, command.quantity or item.quantity) else 0
+    end
     if fits > 0 then
       local type = item.type
       left += item.quantity - fits

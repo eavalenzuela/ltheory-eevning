@@ -197,6 +197,7 @@ export type Wreck = {
   hull: string,       -- the Data/Ships id of the ship it was ("" in a save from before this was kept)
   expires: number,    -- the tick it disappears
   salvaged: boolean,  -- a salvager has had what the hull itself was worth
+  can: boolean?,      -- a container a pilot put out, and no wreck of anything (Tactical/Aftermath)
   locked: boolean,    -- its hold is sealed: nothing is looted until it has been hacked (Tactical/Hacking)
   lock: string,       -- the kind of lock that seals it ("": a hold's; "vault": Tactical/Hacking)
 }

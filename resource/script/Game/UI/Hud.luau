@@ -18,6 +18,7 @@ local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Guide = require("@lt/Game/UI/Guide")
 local Im = require("@lt/Game/UI/Im")
+local Inventory = require("@lt/Game/UI/Inventory")
 local Info = require("@lt/Game/UI/Info")
 local Keys = require("@lt/Game/UI/Keys")
 local Map = require("@lt/Game/UI/Map")
@@ -32,6 +33,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
 local Station = require("@lt/Game/UI/Station")
 local Waypoints = require("@lt/Game/Waypoints")
+local Windows = require("@lt/Game/UI/Windows")
 local Moons = require("@lt/Core/Data/Moons")
 local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
@@ -371,7 +373,6 @@ local function drawOverview(session: Session.Session, all: { Core.Entry }, x: nu
     else
       Scanner.Open()
       Colony.Close()
-      Assets.Close()
       Guide.Close()
     end
   end
@@ -661,14 +662,18 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
       -- (what a planet has, the colony there, and the putting down of one)
       if Im.Button(order.label, bx, by, buttonWidth, 26, true) then
         Colony.Open(entry.id)
-        Assets.Close()
       end
     else
       local can = Session.Can(session, order.kind, entry.id, order.range)
       local key = ORDER_KEYS[order.kind]
       local pressed = key ~= nil and Keys.Did(key) and can
       if Im.Button(order.label, bx, by, buttonWidth, 26, can) or pressed then
-        Session.Order(session, order.kind, entry.id, order.range)
+        -- (a wreck or a container is opened: what is in it is in the inventory, to take or to leave)
+        if order.kind == "Loot" then
+          Inventory.Show(entry.id)
+        else
+          Session.Order(session, order.kind, entry.id, order.range)
+        end
       end
       -- (a right click on one that is given at a distance: its distances,
       -- for the one this button gives it at from now on)
@@ -992,6 +997,10 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       if Map.IsOpen() then
         Im.Cover(Map.Covers(left, top, w.size.x, w.size.y))
       end
+      -- (and the windows go over what is drawn before them: Game/UI/Windows)
+      Inventory.Frame(session, player.docked ~= 0)
+      Assets.Frame(session)
+      Windows.Begin(left, top, right, bottom)
 
       -- Through a gate the view whites out, under everything written on it.
       if scene.veil > 0 then
@@ -1064,7 +1073,6 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         else
           Guide.Open()
           Colony.Close()
-          Assets.Close()
           Scanner.Close()
         end
       end
@@ -1140,22 +1148,29 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           Colony.Close()
         else
           Colony.Open()
-          Assets.Close()
           Scanner.Close()
           Guide.Close()
         end
       end
-      if Im.Button("Assets", left + 334, bottom - 54, 70, 34, true) then
+      -- What is in reach, and the moving of it: a window that goes where
+      -- it is put (Game/UI/Inventory). Everything the pilot owns
+      -- anywhere, the assets window, is opened from it.
+      if Im.Button("Inventory", left + 334, bottom - 54, 84, 34, true) or (Keys.Did("inventory") and not Im.Typing()) then
+        if Inventory.IsOpen() then
+          Inventory.Close()
+        else
+          Inventory.Open()
+        end
+      end
+      if Inventory.WantsAssets() then
+        -- (a window of its own, which goes where it is put: Game/UI/Assets)
         if Assets.IsOpen() then
           Assets.Close()
         else
           Assets.Open()
-          Colony.Close()
-          Scanner.Close()
-          Guide.Close()
         end
       end
-      if Im.Button("Map", left + 408, bottom - 54, 56, 34, true) or Keys.Did("map") then
+      if Im.Button("Map", left + 422, bottom - 54, 42, 34, true) or Keys.Did("map") then
         if Map.IsOpen() then
           Map.Close()
         else
@@ -1163,7 +1178,6 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         end
       end
       Colony.Draw(session, left + 16, top + 130)
-      Assets.Draw(session, left + 16, top + 130)
       Guide.Draw(session, left + 16, top + 130)
       if ball then
         Scanner.Draw(session, left + 16, top + 130, scene.camera:GetLook())
@@ -1328,6 +1342,10 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           end
         end
       end
+      -- The windows, over all of that: and over them the menu one of
+      -- them has up, and whatever is being carried from one to another.
+      Windows.Draw()
+      Im.Overlay(right, bottom)
       -- The menu a right click brought up, over all of that.
       Context.Draw(session, entries, left, top, right, bottom)
       -- (the map goes over everything else)

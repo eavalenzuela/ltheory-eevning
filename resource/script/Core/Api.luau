@@ -1129,7 +1129,7 @@ end
 local ASSET_COMMANDS = { Fit = true, Unfit = true, LoadCharge = true, MoveItems = true }
 local COMBAT_COMMANDS = { LockTarget = true, UnlockTarget = true, ActivateModule = true, DeactivateModule = true,
   Cloak = true, Uncloak = true }
-local AFTERMATH_COMMANDS = { Loot = true, Repair = true }
+local AFTERMATH_COMMANDS = { Loot = true, Repair = true, Jettison = true }
 local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true, StartResearch = true, CancelJob = true }
 local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true }
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true, ModifyOrder = true }
@@ -1610,6 +1610,73 @@ function Query.FittingUse(game: Game, ship: number): (number, number)
     powergrid += mw
   end
   return cpu, powergrid
+end
+
+-- The places the pilot's things are in that are in reach now, for
+-- whoever shows them (the inventory window): the holds of the ship they
+-- fly; docked, the station's hangar, the holds of their other ships
+-- that lie there, and the corporation's hangar; in space, the wrecks and
+-- containers near enough to take from. Each with a key that is its own,
+-- a name, what kind of place it is ("cargo", "orehold", "dronebay",
+-- "shipbay", "hangar", "corporate", "wreck" or "can"), whose it is and
+-- which of its stores (Query.Items takes the two), how much it holds
+-- and has in it, m3 (0 and 0 for a place with no limit), how far in it
+-- is set under the one above, and whether it is sealed (a wreck that
+-- has to be hacked).
+export type PlaceInfo = { key: string, name: string, kind: string, holder: number, place: string, capacity: number, used: number,
+  indent: number, sealed: boolean }
+function Query.Places(game: Game): { PlaceInfo }
+  local state = game.state
+  local found: { PlaceInfo } = {}
+  local mine = state.ships[state.player.ship]
+  if mine == nil then
+    return found
+  end
+  local function holds(ship: State.Ship, name: string, indent: number)
+    table.insert(found, { key = `ship:{ship.id}:cargo`, name = name, kind = "cargo", holder = ship.id, place = "cargo",
+      capacity = Items.ShipStats(state, ship.id).cargo, used = Items.CargoUsed(state, ship.id), indent = indent, sealed = false })
+    local oreSize, oreUsed = Items.OreHold(state, ship.id)
+    if oreSize > 0 then
+      table.insert(found, { key = `ship:{ship.id}:orehold`, name = "Ore hold", kind = "orehold", holder = ship.id, place = "orehold",
+        capacity = oreSize, used = oreUsed, indent = indent + 1, sealed = false })
+    end
+    local bay = Ships.byId[ship.type].bay or 0
+    if bay > 0 then
+      table.insert(found, { key = `ship:{ship.id}:dronebay`, name = "Drone bay", kind = "dronebay", holder = ship.id, place = "dronebay",
+        capacity = bay, used = Items.BayUsed(state, ship.id), indent = indent + 1, sealed = false })
+    end
+    local baySize, bayUsed = Items.ShipBay(state, ship.id)
+    if baySize > 0 then
+      table.insert(found, { key = `ship:{ship.id}:shipbay`, name = "Ship bay", kind = "shipbay", holder = ship.id, place = "shipbay",
+        capacity = baySize, used = bayUsed, indent = indent + 1, sealed = false })
+    end
+  end
+  holds(mine, `{mine.name} (hold)`, 0)
+  if mine.docked ~= 0 then
+    table.insert(found, { key = `station:{mine.docked}:hangar`, name = "Hangar", kind = "hangar", holder = mine.docked, place = "hangar",
+      capacity = 0, used = 0, indent = 0, sealed = false })
+    for _, id in state.shipIds do
+      local other = state.ships[id]
+      if other.id ~= mine.id and other.docked == mine.docked and other.owner == "player" and other.pilot == 0
+        and Ships.byId[other.type].class ~= "capsule" then
+        holds(other, `{other.name} (hold)`, 1)
+      end
+    end
+    if Corporation.Founded(state) then
+      table.insert(found, { key = `station:{mine.docked}:corporate`, name = "Corporation hangar", kind = "corporate", holder = mine.docked,
+        place = "corporate", capacity = 0, used = 0, indent = 0, sealed = false })
+    end
+  else
+    local ball = state.balls[mine.id]
+    for _, id in state.wreckIds do
+      local wreck = state.wrecks[id]
+      if ball and wreck.system == ball.system and Space.Gap(ball :: any, wreck :: any) <= Aftermath.LOOT_RANGE then
+        table.insert(found, { key = `wreck:{wreck.id}`, name = wreck.name, kind = if wreck.can then "can" else "wreck", holder = wreck.id,
+          place = "cargo", capacity = 0, used = 0, indent = 0, sealed = wreck.locked })
+      end
+    end
+  end
+  return found
 end
 
 function Query.CargoUsed(game: Game, ship: number): number

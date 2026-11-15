@@ -10,13 +10,14 @@
 local Settings = {}
 
 -- (effects and music: 0 to 100; keys: "action:key,action:key", only
--- those a person has changed)
-export type Settings = { sound: boolean, effects: number, music: number, keys: string }
+-- those a person has changed; windows: where the windows that are
+-- moved about were left, as Game/UI/Windows writes it)
+export type Settings = { sound: boolean, effects: number, music: number, keys: string, windows: string }
 
 local PATH = "save/settings.txt"
 
 function Settings.Load(): Settings
-  local settings: Settings = { sound = true, effects = 70, music = 70, keys = "" }
+  local settings: Settings = { sound = true, effects = 70, music = 70, keys = "", windows = "" }
   local file = if Host.scripted then nil else Host.ReadFile(PATH)
   if file then
     local found: { [string]: string } = {}
@@ -35,6 +36,7 @@ function Settings.Load(): Settings
     settings.effects = level(found.effects, both)
     settings.music = level(found.music, both)
     settings.keys = found.keys or ""
+    settings.windows = found.windows or ""
   end
   return settings
 end
@@ -45,7 +47,7 @@ function Settings.Save(settings: Settings)
   end
   Host.MakeDir("save")
   Host.WriteFile(PATH, `sound={if settings.sound then 1 else 0}\neffects={settings.effects}\nmusic={settings.music}\n`
-    .. `keys={settings.keys}\n`)
+    .. `keys={settings.keys}\nwindows={settings.windows}\n`)
 end
 
 return Settings
