@@ -34,15 +34,18 @@ room for them even so. (A bare hull stays bare: the generator's own
 mesh and metal.)
 STYLE is the set of the generator's own numbers the hull is grown with:
 old (its own; this if none is named), stout, broad, tall, spear, slab,
-soft, triangular or asymmetrical (Hull.STYLES in
-resource/script/Game/View/Hull.luau).
+soft, triangular, asymmetrical or triangular_v2 (Hull.STYLES in
+resource/script/Game/View/Hull.luau). The word "asym" among the words
+grows every hull of the sheet with its two sides unalike, whatever its
+style.
 
 The sheet is written to cache/hulls/ and its name printed. Every picture
 has its seed (or size, paint or style) written on it.
 
 To go through the seeds by hand, in a window:  bin/launch hulls
-(Left and Right step the seed, [ and ] the size, S the style, P the paint,
-F shows it as a ship, K keeps one in cache/hulls-kept.txt.)
+(Left and Right step the seed, [ and ] the size, S the style, A its sides
+alike or not, P the paint, F shows it as a ship, K keeps one in
+cache/hulls-kept.txt.)
 """
 import os
 import subprocess
@@ -53,7 +56,8 @@ os.chdir(ROOT)
 PAINTS = ["bare", "civil", "vessari", "talmar", "kethri", "vail", "unbound"]
 CLASSES = ["frigate", "destroyer", "cruiser", "battleship", "attackbattlecruiser", "battlecruiser", "capitalindustrial",
            "siegedreadnought", "carrier", "dreadnought", "supercarrier"]
-STYLES = ["old", "stout", "broad", "tall", "spear", "slab", "soft", "triangular", "asymmetrical"]
+STYLES = ["old", "stout", "broad", "tall", "spear", "slab", "soft", "triangular", "asymmetrical", "triangular_v2"]
+ASYM = "+asym"
 PLATES = [3, 4, 5, 5, 6, 7, 8, 9]
 DECKS = [False, False, False, True, True, True, True, True]
 FOLDER = os.path.join("cache", "hulls")
@@ -94,7 +98,8 @@ def main():
         usage(f"'{kind}' is not seeds, broad, sizes, paints or styles")
     numbers, colour, shown, style = [], None, None, None
     above = "above" in rest
-    rest = [word for word in rest if word != "above"]
+    asym = "asym" in rest
+    rest = [word for word in rest if word not in ("above", "asym")]
     for word in rest:
         if word.isdigit():
             if colour or shown or style:
@@ -118,9 +123,12 @@ def main():
             usage(f"{what} is from {low} to {high}")
         return numbers[at]
 
+    # (with "asym", every hull is its style with its sides unalike: the style's name with "+asym" after it)
+    def grown_as(each):
+        return (each or "old") + ASYM if asym else each
     os.makedirs(TAKEN, exist_ok=True)
-    how = (f", {style}" if style and kind != "styles" else "") + (f", as a {shown}" if shown else "") + (", from above" if above else "")
-    tag = (f"-{style}" if style and kind != "styles" else "") + (f"-{shown}" if shown else "") + ("-above" if above else "")
+    how = (f", {style}" if style and kind != "styles" else "") + (", sides unalike" if asym else "") + (f", as a {shown}" if shown else "") + (", from above" if above else "")
+    tag = (f"-{style}" if style and kind != "styles" else "") + ("-asym" if asym else "") + (f"-{shown}" if shown else "") + ("-above" if above else "")
     paint = colour or "bare"
     # (each picture: its seed, its size, its paint, its style, and what is written on it)
     if kind in ("seeds", "broad"):
@@ -170,7 +178,7 @@ def main():
         files.append(os.path.join(TAKEN, file + ".png"))
         if os.path.exists(files[-1]):
             os.remove(files[-1])
-        lines += [f"lua assert(Hulls.Show({seed}, {size}, '{each}', {lua(shown)}, {lua(grown)}))"]
+        lines += [f"lua assert(Hulls.Show({seed}, {size}, '{each}', {lua(shown)}, {lua(grown_as(grown))}))"]
         if above:
             # (a quarter of the way round, so that the bow is to the right, and as nearly over it as the browser looks)
             lines += ["lua Hulls.Look(0.25, 0.238, 2.6)"]

@@ -418,6 +418,14 @@ export type Style = {
   -- side (1: no further than they), and how thick it is. By the seed
   -- there are smaller ones on it, and under it. None, if not said.
   deck: { reach: number, thick: number }?,
+  -- The same kind of hull with far more left to the seed (the owner,
+  -- 2026-11-15, of the first: "really good, but they are too same-y.
+  -- There needs to be more noise/variety in them"): how sharp its point
+  -- and how thin its bow, what plan its deck has (whole, forked, a hull
+  -- with wings, a swallowtail), what stands on it and where, what hangs
+  -- under it, and small panels and dark lines over its deck. 'reach'
+  -- and 'thick' as a deck's. None, if not said.
+  wedges: { reach: number, thick: number }?,
 }
 
 -- The styles there are, the generator's own first. (All but that one
@@ -427,7 +435,9 @@ export type Style = {
 -- flat with hard edges, 'soft' rounded. And two the owner asked for by
 -- name, 2026-11-15: 'triangular', a flat hull broad at the stern that
 -- comes to a point at the bow, and 'asymmetrical', the generator's own
--- hull with one side of it not the other's twin.)
+-- hull with one side of it not the other's twin. And of those, the same
+-- day: 'triangular_v2', the triangle with more left to the seed; and
+-- any style at all with its sides unalike, Hull.ASYM.)
 Hull.STYLES = {
   { name = "old", rows = 5, held = false, bound = v(3, 2, 6), cross = { v(2.0, 0.5, 0.5), v(0.5, 1.0, 2.0) }, eased = 0.25, warps = OLD },
   { name = "stout", rows = 3, held = true, bound = v(3, 2, 5), cross = { v(2.0, 0.5, 0.5), v(0.5, 1.0, 2.0) }, eased = 0.25, warps = OLD },
@@ -446,16 +456,44 @@ Hull.STYLES = {
     deck = { reach = 1.12, thick = 0.26 } },
   { name = "asymmetrical", rows = 4, held = true, bound = v(3.2, 2, 5.5), cross = { v(2.0, 0.5, 0.5), v(0.5, 1.0, 2.0) }, eased = 0.25,
     warps = OLD, lop = 0.45, slip = 1.0, less = 0.55, boom = 0.45 },
+  -- (the triangle again, with far more left to the seed: Style.wedges)
+  { name = "triangular_v2", rows = 4, held = true, bound = v(3.4, 1.6, 5.2), cross = { v(2.2, 0.45, 0.8), v(0.7, 0.8, 2.6) }, eased = 0.12,
+    warps = { spread = 0.1, bow = -2.0, hump = 0.3, crown = 1.8, taper = 12, wedge = 0.06, thin = 0.55 },
+    wedges = { reach = 1.1, thick = 0.26 } },
 } :: { Style }
+
+-- Any style can be had with its two sides not each other's twin: its
+-- name with this after it ("stout+asym"). (The owner, 2026-11-15, of
+-- the style that was only that: "almost like a variant of stout or one
+-- of the other styles. Is it possible to add asymmetry to the others
+-- with e.g. a symmetry toggle?") It is the style's own numbers with the
+-- 'asymmetrical' style's lop, slip, less and boom.
+Hull.ASYM = "+asym"
+local lopsided: { [string]: Style } = {}
 
 -- The style of a name: the generator's own, if there is none of that name.
 local function styleOf(name: string?): Style
+  local base, asym = name, false
+  if name and #name > #Hull.ASYM and string.sub(name, -#Hull.ASYM) == Hull.ASYM then
+    base, asym = string.sub(name, 1, #name - #Hull.ASYM), true
+  end
+  local found = Hull.STYLES[1]
   for _, style in Hull.STYLES do
-    if style.name == name then
-      return style
+    if style.name == base then
+      found = style
     end
   end
-  return Hull.STYLES[1]
+  if not asym then
+    return found
+  end
+  local kept = lopsided[found.name]
+  if kept == nil then
+    kept = table.clone(found)
+    kept.name = found.name .. Hull.ASYM
+    kept.lop, kept.slip, kept.less, kept.boom = found.lop or 0.45, found.slip or 1.0, found.less or 0.55, found.boom or 0.45
+    lopsided[found.name] = kept
+  end
+  return kept
 end
 
 local function warped(w: Warps, middle: vector?): (Bend, Bend)
@@ -755,8 +793,140 @@ local function growth(seed: number, steps: number, decks: boolean, style: Style)
         part = PATCH, single = true })
     end
   end
+  -- The triangle with more left to the seed (Style.wedges). By dice of
+  -- its own, so that nothing above draws otherwise for it.
+  local sharp: number? = nil     -- how much of its width the hull has left at its bow, if the seed says
+  local slim: number? = nil      -- and of its height
+  local arch: number? = nil      -- and how far its back is humped
+  local wedges = style.wedges
+  if wedges then
+    local own = RNG_MTG(Int.Signed(seed + 9101))
+    local least, most = reaches()
+    local T = wedges.thick
+    -- (from a needle to a blunt snout; from a blade to a slab; flat-backed or arched)
+    sharp, slim, arch = own:Float(0.04, 0.34), own:Float(0.38, 0.9), own:Float(0, 0.7)
+    local half = math.max(most.x, -least.x) * wedges.reach * own:Float(0.9, 1.3)
+    local aft, fore = least.z - own:Float(0.1, 0.9), most.z + own:Float(0.2, 1.8)
+    local long = (fore - aft) / 2
+    -- (from a dart to a broad delta)
+    half = math.max(half, long * own:Float(0.35, 0.78))
+    local level = own:Float(-0.5, -0.05)
+    local middle = aft + long
+    -- (in a hull whose sides are unalike, what stands on it stands to its heavier side)
+    local lean = if dice then heavy else 0
+    local function one(part: number, center: vector, size: vector)
+      table.insert(plates, { center = center, size = size, part = part, single = true })
+    end
+    local function both(part: number, center: vector, size: vector)
+      table.insert(plates, { center = center, size = size, part = part })
+    end
+    -- The plan of its deck.
+    local plan = own:Int(10)
+    if plan < 2 then
+      -- (forked: two decks with a gap between, which the wedge closes at the bow)
+      local gap = half * own:Float(0.12, 0.3)
+      both(PLATING, v((half + gap) / 2, level, middle), v((half - gap) / 2, T, long))
+    elseif plan < 5 then
+      -- (a hull with wings: a slimmer deck the whole length, and a broad thin one about the after part of it)
+      local inner = half * own:Float(0.42, 0.66)
+      one(PLATING, v(0, level, middle), v(inner, T, long))
+      local back = long * own:Float(0.38, 0.72)
+      one(PLATING, v(0, level - T * own:Float(0.2, 0.9), aft + own:Float(0, 0.5) + back), v(half * own:Float(1.0, 1.35), T * 0.7, back))
+    elseif plan < 7 then
+      -- (a swallowtail: the whole deck, and a prong astern of each quarter)
+      one(PLATING, v(0, level, middle), v(half, T, long))
+      local prong = long * own:Float(0.14, 0.3)
+      both(PLATING, v(half * own:Float(0.55, 0.72), level, aft - prong * 0.9), v(half * own:Float(0.2, 0.3), T * 0.9, prong))
+    else
+      one(PLATING, v(0, level, middle), v(half, T, long))
+      if own:Int(3) == 0 then
+        -- (barbed: a broader deck over the after part of it)
+        local back = long * own:Float(0.3, 0.5)
+        one(PLATING, v(0, level, aft + back), v(half * own:Float(1.2, 1.5), T * 0.8, back))
+      end
+    end
+    -- Decks on the deck: none to three, each smaller than the one under
+    -- it, and anywhere along it; now and then two ridges where one would be.
+    local top = level + T
+    local span, far = half, long
+    for _ = 1, own:Int(0, 3) do
+      span, far = span * own:Float(0.5, 0.85), far * own:Float(0.45, 0.85)
+      local thick = T * own:Float(0.7, 1.7)
+      local from = aft + own:Float(0, 1) * 2 * (long - far) * own:Float(0, 0.7)
+      if own:Int(4) == 0 then
+        both(PATCH, v(span * 0.62, top + thick, from + far), v(span * 0.3, thick, far))
+      else
+        one(PATCH, v(lean * span * 0.15, top + thick, from + far), v(span, thick, far))
+      end
+      top += 2 * thick
+    end
+    -- What stands on it: nothing, a conning tower, two of them abreast,
+    -- or a spine along its back.
+    local stands = own:Int(10)
+    local high = math.max(top, most.y * 0.6)
+    if stands >= 3 and stands < 6 then
+      local at = aft + far * own:Float(0.2, 0.9)
+      local neck = v(span * own:Float(0.16, 0.3), T * own:Float(1.4, 2.6), far * own:Float(0.08, 0.16))
+      one(PLATING, v(lean * span * 0.4, high + neck.y, at), neck)
+      one(PATCH, v(lean * span * 0.4, high + 2 * neck.y + T * 0.6, at), v(neck.x * own:Float(2.0, 3.2), T * 0.6, neck.z * 0.8))
+    elseif stands >= 6 and stands < 8 then
+      local at = aft + far * own:Float(0.2, 0.7)
+      local neck = v(span * own:Float(0.1, 0.18), T * own:Float(1.2, 2.2), far * own:Float(0.08, 0.2))
+      both(PLATING, v(span * own:Float(0.4, 0.7), high + neck.y, at), neck)
+    elseif stands >= 8 then
+      local ridge = v(span * own:Float(0.08, 0.16), T * own:Float(0.8, 1.8), far * own:Float(0.5, 0.95))
+      one(PLATING, v(lean * span * 0.3, high + ridge.y, aft + own:Float(0.1, 0.6) + ridge.z), ridge)
+    end
+    -- (a bridge forward, as often as not: a low house with a lit front)
+    if own:Int(5) < 2 then
+      local at = aft + 2 * long * own:Float(0.5, 0.72)
+      local house = v(half * own:Float(0.1, 0.2), T * own:Float(0.6, 1.1), long * own:Float(0.05, 0.1))
+      one(PATCH, v(0, level + T + house.y, at), house)
+      one(GLOW, v(0, level + T + house.y * 1.2, at + house.z + 0.01), v(house.x * 0.7, house.y * 0.25, 0.03))
+    end
+    -- Under it: nothing, a smaller deck, or a keel.
+    local below = own:Int(4)
+    if below == 0 then
+      local thick = T * own:Float(0.8, 1.3)
+      local back = long * own:Float(0.45, 0.72)
+      one(PATCH, v(0, level - T - thick, aft + own:Float(0.2, 0.8) + back), v(half * own:Float(0.35, 0.6), thick, back))
+    elseif below == 1 then
+      local deep = T * own:Float(1.6, 3.2)
+      local back = long * own:Float(0.3, 0.6)
+      one(PLATING, v(0, level - T - deep, aft + own:Float(0.3, 1.2) + back), v(half * own:Float(0.05, 0.1), deep, back))
+    end
+    -- (pods at its quarters, now and then: on the heavier side alone, where it has one)
+    if own:Int(5) < 2 then
+      local pod = v(half * own:Float(0.08, 0.14), T * own:Float(1.2, 2.0), long * own:Float(0.22, 0.42))
+      local at = v(half * own:Float(0.78, 0.98), level + own:Float(-0.3, 0.3) * T, aft + own:Float(-0.2, 0.3) * long + pod.z)
+      if lean ~= 0 then
+        one(PLATING, at * v(lean, 1, 1), pod)
+        one(FRAME, at * v(lean, 1, 1), pod * v(0.5, 0.5, 1.2))
+      else
+        both(PLATING, at, pod)
+        both(FRAME, at, pod * v(0.5, 0.5, 1.2))
+      end
+    end
+    -- (blocks out of its stern, where engines go)
+    for index = 1, own:Int(0, 3) do
+      local block = v(half * own:Float(0.07, 0.16), T * own:Float(0.9, 1.6), long * own:Float(0.06, 0.14))
+      both(PLATING, v(half * (index - 0.5) / 3.6, level + own:Float(-0.2, 0.4) * T, aft - block.z * 0.7), block)
+    end
+    -- Noise over its deck: small raised panels, and dark lines let into it.
+    for _ = 1, own:Int(3, 9) do
+      local panel = v(half * own:Float(0.05, 0.17), T * own:Float(0.14, 0.42), long * own:Float(0.03, 0.13))
+      both(PATCH, v(half * own:Float(0.12, 0.8), level + T + panel.y, aft + 2 * long * own:Float(0.04, 0.8)), panel)
+    end
+    for _ = 1, own:Int(1, 3) do
+      local line = long * own:Float(0.35, 0.85)
+      both(FRAME, v(half * own:Float(0.15, 0.75), level + T + 0.012, aft + own:Float(0.05, 0.5) * long + line), v(half * 0.022, 0.02, line))
+    end
+  end
   -- (where its stern and bow are, for a style that narrows toward the bow)
   local warps = table.clone(style.warps)
+  if sharp and slim and arch then
+    warps.wedge, warps.thin, warps.hump = sharp, slim, arch
+  end
   local aft, fore = math.huge, -math.huge
   for _, plate in plates do
     aft, fore = math.min(aft, plate.center.z - plate.size.z), math.max(fore, plate.center.z + plate.size.z)

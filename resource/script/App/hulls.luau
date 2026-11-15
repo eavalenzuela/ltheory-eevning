@@ -19,6 +19,9 @@
 --                  other sets of them there are (Hull.STYLES: how long
 --                  its rows are, how far it may reach, how it is bent,
 --                  how far its plates' edges are eased)
+--   A              its two sides alike, or not: any style can be had
+--                  with one side of the hull not the other's twin
+--                  (Hull.ASYM: what is kept says "+asym" after the style)
 --   F              as a ship: a frigate's guns and engines on it, then a
 --                  destroyer's, a cruiser's, a battleship's, then each
 --                  class of the ladder above (attack battlecruiser,
@@ -104,6 +107,11 @@ return AppShell.Create(function(): Widget
   end
 
   local seed, size, paint, style = 1, 2, 1, 1
+  local asym = false        -- its two sides are not each other's twin (Hull.ASYM: any style can be had so)
+  -- The name of the style shown (or of another), with that.
+  local function named(how: number?): string
+    return STYLES[how or style].name .. (if asym then Hull.ASYM else "")
+  end
   local class = 0           -- which of CLASSES it is shown as; 0, as a bare hull
   local fitted = ""         -- how that went: what is on it, or why it is not
   local dim = true          -- what is shown is bare metal, and is lit as that is
@@ -129,7 +137,7 @@ return AppShell.Create(function(): Widget
   -- with its engines let into it and seats for its guns where it needs
   -- them.)
   local function ship(as: Class): (Hull.Built?, string)
-    local name = `{seed}:{size}:{paint}:{style}:{as.name}`
+    local name = `{seed}:{size}:{paint}:{style}:{asym}:{as.name}`
     local had = ships[name]
     if had then
       return had, ""
@@ -142,7 +150,7 @@ return AppShell.Create(function(): Widget
       table.insert(fit, as.launcher)
     end
     local built, why = Hull.GrownShip(seed, stepsOf(size), decksOf(size), PAINTS[paint],
-      as.metres, fit, as.turrets, as.launchers, as.engines, STYLES[style].name)
+      as.metres, fit, as.turrets, as.launchers, as.engines, named())
     if built then
       ships[name] = built
     end
@@ -152,13 +160,13 @@ return AppShell.Create(function(): Widget
   local function make(): Renderable | Model
     if PAINTS[paint] == "bare" then
       -- (the generator's own model, where the style is its own)
-      return if style == 1 then Generate.Main(SIZES[size], seed) else Hull.GrownBare(seed, stepsOf(size), decksOf(size), STYLES[style].name)
+      return if style == 1 and not asym then Generate.Main(SIZES[size], seed) else Hull.GrownBare(seed, stepsOf(size), decksOf(size), named())
     end
-    return Hull.Grown(seed, stepsOf(size), decksOf(size), PAINTS[paint], STYLES[style].name).model
+    return Hull.Grown(seed, stepsOf(size), decksOf(size), PAINTS[paint], named()).model
   end
 
   local function show()
-    local now = `{seed}:{size}:{paint}:{style}:{class}`
+    local now = `{seed}:{size}:{paint}:{style}:{asym}:{class}`
     if now == key then
       return
     end
@@ -184,7 +192,7 @@ return AppShell.Create(function(): Widget
         else `as a {as.name}: no room ({why})`
     end
     dim = PAINTS[paint] == "bare"
-    local plain = `{seed}:{size}:{paint}:{style}`
+    local plain = `{seed}:{size}:{paint}:{style}:{asym}`
     local model: Renderable | Model = if built then built.model else models[plain] or make()
     if built == nil then
       models[plain] = model
@@ -254,7 +262,7 @@ return AppShell.Create(function(): Widget
 
   -- How wide a seed's hull is for its length, at the size shown.
   local function beam(of: number, big: number, how: number?): number
-    local across = Hull.GrownShape(of, stepsOf(big), decksOf(big), STYLES[how or style].name)
+    local across = Hull.GrownShape(of, stepsOf(big), decksOf(big), named(how))
     return across.x / across.z
   end
 
@@ -283,7 +291,7 @@ return AppShell.Create(function(): Widget
       had = text
     end
     local as: Class? = CLASSES[class]
-    local line = `seed {seed}  size {size}  ({stepsOf(size)} plates{if decksOf(size) then ", decks" else ""})  style {STYLES[style].name}  paint {PAINTS[paint]}`
+    local line = `seed {seed}  size {size}  ({stepsOf(size)} plates{if decksOf(size) then ", decks" else ""})  style {named()}  paint {PAINTS[paint]}`
     if as then
       line ..= `  {fitted}`
     end
@@ -305,16 +313,19 @@ return AppShell.Create(function(): Widget
           as = index
         end
       end
+      -- (a style's name with Hull.ASYM after it is that style with its sides unalike)
+      local lop = toStyle ~= nil and #toStyle > #Hull.ASYM and string.sub(toStyle, -#Hull.ASYM) == Hull.ASYM
+      local base = if lop and toStyle then string.sub(toStyle, 1, #toStyle - #Hull.ASYM) else toStyle
       local how = if toStyle == nil then 1 else 0
       for index, known in STYLES do
-        if known.name == toStyle then
+        if known.name == base then
           how = index
         end
       end
       if at == nil or SIZES[big] == nil or toSeed < 0 or (toClass ~= nil and as == 0) or how == 0 then
         return false
       end
-      seed, size, paint, class, style = math.floor(toSeed), big, at, as, how
+      seed, size, paint, class, style, asym = math.floor(toSeed), big, at, as, how, lop
       turning, plain = false, true
       turn, tilt, zoom, zoomTo = TURN, TILT, ZOOM, ZOOM
       show()
@@ -324,7 +335,7 @@ return AppShell.Create(function(): Widget
     -- the generator grew for it, how wide it is for its length, and
     -- its style.
     Now = function(): (number, number, string, number, number, string)
-      return seed, size, PAINTS[paint], stepsOf(size), beam(seed, size), STYLES[style].name
+      return seed, size, PAINTS[paint], stepsOf(size), beam(seed, size), named()
     end,
     -- Look at it from somewhere else: how far round from the bow (in
     -- turns of a circle: 0.5 is from astern), how far above (the same,
@@ -380,7 +391,7 @@ return AppShell.Create(function(): Widget
       Im.Text(`SEED {seed}`, x, y, 30, Im.TEXT)
       local decks = if decksOf(size) then ", decks under" else ""
       local only = if broad then "      broad hulls only" else ""
-      Im.Text(`size {size} of {#SIZES}: {stepsOf(size)} plates grown{decks}      style: {STYLES[style].name}      paint: {PAINTS[paint]}{only}      made in {took} ms`,
+      Im.Text(`size {size} of {#SIZES}: {stepsOf(size)} plates grown{decks}      style: {STYLES[style].name}      {if asym then "sides unalike" else "sides alike"}      paint: {PAINTS[paint]}{only}      made in {took} ms`,
         x, y + 40, 16, Im.DIM)
       if fitted ~= "" then
         Im.Text(fitted, x, y + 64, 16, if string.find(fitted, "no room", 1, true) then Im.WARN else Im.TEXT)
@@ -389,7 +400,7 @@ return AppShell.Create(function(): Widget
         Im.Text(note, x, y + 90, 14, Im.ACCENT)
       end
       local foot = w.pos.y + w.size.y - 54
-      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      B: broad only      [ / ]: size      S: style      P: paint      F: as a ship      K: keep      Space: turn",
+      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      B: broad only      [ / ]: size      S: style      A: sides alike or not      P: paint      F: as a ship      K: keep      Space: turn",
         x, foot, 15, Im.DIM)
       Im.Text("right-drag turns it, the wheel moves in and out", x, foot + 22, 15, Im.DIM)
     end,
@@ -411,6 +422,10 @@ return AppShell.Create(function(): Widget
       if Key_Pressed(Key_P()) then paint = paint % #PAINTS + 1 end
       if Key_Pressed(Key_S()) then
         style = style % #STYLES + 1
+        step(0)
+      end
+      if Key_Pressed(Key_A()) then
+        asym = not asym
         step(0)
       end
       if Key_Pressed(Key_F()) then class = (class + 1) % (#CLASSES + 1) end

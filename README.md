@@ -32,7 +32,7 @@ It is built on the old C++ Limit Theory engine, and it is a work in progress. Th
 
 ## The ship generator
 
-Most hulls in the game are grown from a seed by the engine's old ship generator, which has nine styles to grow them in. `bin/launch hulls` goes through seeds by hand, and `script/hulls` makes sheets of them. The stations' towers are grown the same way, in eight styles of their own: `bin/launch towers` goes through those, and `script/towers` makes sheets of them.
+Most hulls in the game are grown from a seed by the engine's old ship generator, which has ten styles to grow them in, any of them with its two sides alike or not. `bin/launch hulls` goes through seeds by hand, and `script/hulls` makes sheets of them. The stations' towers are grown the same way, in eight styles of their own: `bin/launch towers` goes through those, and `script/towers` makes sheets of them.
 
 | | |
 |---|---|
