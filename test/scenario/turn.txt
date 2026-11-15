@@ -1,0 +1,37 @@
+# A hull comes round to the way it is going, in the game app
+# (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/turn.txt
+#
+# A ship at rest that is sent somewhere is moving that way at once (it
+# has no way on to turn from), and its hull was drawn pointing there at
+# once. It turns to it now, at a rate of its own. Out of the station the
+# pilot's ship is stopped, pointing the way it left. It is sent back to
+# the station, which is straight behind it: a moment later it is under
+# way and its hull is still a long way from pointing there, and some
+# seconds later it has come round.
+#
+# covers: Game/View/Scene
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua GameDebug.Sound(true, 0)
+until GameDebug.Press('UNDOCK') and GameDebug.InSpace()
+frames 30
+lua assert(GameDebug.Turning() >= 0 and GameDebug.Turning() < 0.02, 'a ship under way points the way it goes')
+lua assert(GameDebug.Order('Stop'))
+patience 60
+until GameDebug.Turning() == -1
+
+# Sent straight back the way it came.
+lua assert(GameDebug.Order('Approach', 'home', 0), 'the approach was refused')
+until GameDebug.Turning() >= 0
+lua _G.first = GameDebug.Turning()
+lua assert(_G.first > 0.25, 'a ship sent the other way from rest should not be drawn pointing there at once: it is ' .. _G.first .. ' of a turn off')
+# (it is coming round)
+frames 45
+lua assert(GameDebug.Turning() < _G.first, 'the hull is not turning')
+until GameDebug.Turning() >= 0 and GameDebug.Turning() < 0.02
+
+echo turn scenario passed
+quit

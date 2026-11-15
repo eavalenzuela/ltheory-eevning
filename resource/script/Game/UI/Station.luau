@@ -1383,11 +1383,21 @@ local function drawSkills(session: Session.Session, game: Core.Game, player: Cor
     Im.Text(shorten(skill.note, 37), left + 252, rowY + 5, 12, Im.DIM)
     local bx = left + 504
     if info.level < 0 then
+      -- (the book, in the hangar here or in the hold of the pilot's ship)
       local book = inHangar(game, station, Skills.Book(skill.id))
+      if book == nil then
+        for _, item in Core.Query.Items(game, game.state.player.ship, "cargo") do
+          book = if item.type == Skills.Book(skill.id) then item else book
+        end
+      end
       if book then
-        local can = Session.CanDo(session, { kind = "LearnSkill", actor = 0, item = book.id })
+        local can, why = Session.CanDo(session, { kind = "LearnSkill", actor = 0, item = book.id })
         if Im.Button("Learn", bx, rowY + 1, 84, 21, can, `Learn:{skill.id}`) then
           Session.Do(session, { kind = "LearnSkill", actor = 0, item = book.id })
+        end
+        -- (and why not, where it cannot be: it wants another skill first)
+        if not can and why then
+          Im.Text(shorten(why, 24), bx + 90, rowY + 5, 11, Im.WARN)
         end
       elseif Im.Button("Buy book", bx, rowY + 1, 84, 21, true, `Book:{skill.id}`) then
         Station.Choose(Skills.Book(skill.id))

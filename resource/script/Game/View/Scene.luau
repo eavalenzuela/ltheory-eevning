@@ -127,6 +127,11 @@ export type Scene = {
   warpLeft: number,                   -- metres still to go
   warpSeconds: number,                -- and seconds
   time: number,                       -- seconds the scene has been running, for effects
+  -- The way each ship's hull points, by its id, and the game's time when
+  -- they were last turned: a hull comes round to the way it is going at
+  -- a rate of its own, and does not snap to it.
+  headings: { [number]: vector },
+  turned: number,
   fx: Effects.Fx?,                    -- weapon fire and the like, in this system's container
   mining: { [number]: number },       -- when each mining module's beam was last begun, by its item
   wreckage: { [number]: Wrecked },    -- the pieces of each wreck on the grid
@@ -227,7 +232,7 @@ function Scene.New(camera: Camera): Scene
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6, tracking = 0,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
     wreckage = {}, works = {}, offsets = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
-    standing = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0, ghosts = {},
+    standing = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0, ghosts = {}, headings = {}, turned = 0,
   }
 end
 
@@ -862,6 +867,7 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
     dropWorks(scene, id)
   end
   clear(scene, scene.proxies)
+  table.clear(scene.headings)
   clear(scene, scene.celestials)
   table.clear(scene.worlds)
   if scene.container then
@@ -1309,6 +1315,12 @@ function Scene.Sync(scene: Scene, session: Session.Session)
   -- Ships on the grid (in warp, the player's own, and those where it
   -- has been and is going while they are near).
   scene.passing = 0
+  -- (how much of the game's time has gone by since their hulls were last
+  -- turned: none in a game that is paused, and no more than a moment's
+  -- worth after a jump or a load)
+  local gameNow = (state.tick + since) * Constants.TICK
+  local turnedFor = math.clamp(gameNow - scene.turned, 0, 2)
+  scene.turned = gameNow
   for _, id in state.ballIds do
     local ball = state.balls[id]
     local shown = ball.system == player.system and (id == player.ship or inScene[ball.grid] == true)
@@ -1355,7 +1367,30 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       proxy:SetPos(at)
       local speed = math.sqrt(vx * vx + vy * vy + vz * vz)
       if speed > 1 then
-        local heading = vector.create(vx / speed, vy / speed, vz / speed)
+        -- The hull comes round to the way the ship is going, and does not
+        -- snap to it: a ship at rest that is sent somewhere is moving
+        -- that way at once (it has no way on to turn from), and it was
+        -- drawn pointing there at once. (The owner's, 2026-11-15.) It
+        -- turns as fast as it answers its helm: half a turn in about
+        -- the time it takes to align, a big hull slowly.
+        local wanted = vector.create(vx / speed, vy / speed, vz / speed)
+        local had: vector? = scene.headings[id]
+        local heading: vector = had or wanted
+        if had then
+          local angle = math.acos(math.clamp(vector.dot(heading, wanted), -1, 1))
+          local step = turnedFor * math.pi / math.clamp(ball.tau * 1.5, 1, 14)
+          if angle <= step or angle < 1e-4 then
+            heading = wanted
+          else
+            local axis = vector.cross(heading, wanted)
+            if vector.magnitude(axis) < 1e-5 then
+              -- (straight about: round by its own upright, or by its side if it is on end)
+              axis = vector.cross(heading, if math.abs(heading.y) < 0.98 then vector.create(0, 1, 0) else vector.create(1, 0, 0))
+            end
+            heading = vector.normalize(about(heading, vector.normalize(axis), step))
+          end
+        end
+        scene.headings[id] = heading
         if designed[proxy] then
           Object_SetAxes(proxy, heading, if math.abs(heading.y) < 0.98 then vector.create(0, 1, 0) else vector.create(1, 0, 0))
         else
@@ -1368,6 +1403,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       Object_Delete(existing)
       scene.proxies[id] = nil
       scene.ghosts[id] = nil
+      scene.headings[id] = nil
     end
   end
   -- Wrecks on the grid: the hull each was, in pieces (Hull.Wreck). The

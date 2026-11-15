@@ -76,12 +76,14 @@ function Training.Validate(state: State.State, command: State.Command): (boolean
   local kind = command.kind
 
   if kind == "LearnSkill" then
-    if ship.docked == 0 then
-      return false, "not docked"
-    end
+    -- (a book is read where it is: in the hangar of the station the
+    -- pilot is docked at, or in the hold of the ship they fly, docked or
+    -- not. The owner, 2026-11-15, was given one and found no way to use it.)
     local item = state.items[command.item or 0]
-    if item == nil or item.holder ~= ship.docked or item.place ~= "hangar" then
-      return false, "that is not in the hangar here"
+    local inHangar = item ~= nil and ship.docked ~= 0 and item.holder == ship.docked and item.place == "hangar"
+    local inHold = item ~= nil and item.holder == ship.id and item.place == "cargo"
+    if item == nil or not (inHangar or inHold) then
+      return false, "that is not in the hangar here, nor in the hold"
     end
     local skill = Training.BookSkill(item.type)
     if skill == nil then

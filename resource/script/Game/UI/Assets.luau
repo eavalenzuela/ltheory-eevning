@@ -3,8 +3,10 @@
 -- hold, and every station with a ship or goods of theirs in it.
 --
 -- A window (Game/UI/Windows), open in space or docked: from the
--- inventory's "All assets" button. It only reads the Core. Its close
--- button is "assets:close" (Im.Press).
+-- inventory's "All assets" button. It only reads the Core, and sets the
+-- session's destination: a station somewhere else has a button
+-- ("Assets:course:<station>") that sets the pilot's course for its
+-- system. Its close button is "assets:close" (Im.Press).
 
 local Catalog = require("@lt/Core/Data/Catalog")
 local Core = require("@lt/Core/Api")
@@ -114,8 +116,17 @@ local function draw(_: Windows.Window, x: number, y: number, width: number, heig
     elseif place then
       Im.Fill(left - 4, at + 1, width - 24, ROW - 3, Im.DIM, 0.12)
       Im.Text(shorten(place.name, 34), left, at + 4, 13, if place.here then Im.TEXT else Im.ACCENT)
-      Im.TextRight(if place.station == 0 then `{string.format("%.0f", place.volume)} m3` else place.systemName, right - 4, at + 4, 12,
-        Im.DIM)
+      -- (a station somewhere else: its system, and a button that sets the
+      -- pilot's course there. The owner's, 2026-11-15.)
+      local elsewhere = place.station ~= 0 and place.system ~= Core.Query.Player(game).system
+      Im.TextRight(if place.station == 0 then `{string.format("%.0f", place.volume)} m3` else place.systemName,
+        right - (if elsewhere then 96 else 4), at + 4, 12, Im.DIM)
+      if elsewhere then
+        local set = session.destination == place.system
+        if Im.Button(if set then "Course set" else "Set course", right - 88, at + 1, 86, ROW - 3, not set, `Assets:course:{place.station}`) then
+          session.destination = place.system
+        end
+      end
     elseif ship then
       local hull = Ships.byId[ship.type]
       ItemIcon.Draw(hull.id, left + 10, at + 2, 20)

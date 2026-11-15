@@ -1,0 +1,54 @@
+# Skill books, and the way to a station with something of the pilot's in
+# it, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/books.txt
+#
+# A skill book is learned from its own menu in the inventory, in the
+# hangar or in the hold, docked or in space. Where it cannot be, its
+# menu says why. Two are given: Industrials, which a new pilot can
+# learn, and Destroyers, which wants more of Frigates first. The first
+# is learned from the hangar. A second copy of it is carried to the
+# hold, and its menu there says it is known already.
+#
+# Then the pilot is moored somewhere else (a cheat), with what they left
+# at home still there. The assets window lists the station it is in,
+# with a button that sets the pilot's course for it.
+#
+# covers: Core/Character/Training Game/UI/Inventory Game/UI/Assets
+
+wait 2
+lua GameDebug.NewGame(1, 40)
+wait 2
+lua GameDebug.Peaceful(true)
+lua GameDebug.Sound(true, 0)
+lua assert(GameDebug.Give('book.industrials', 2) and GameDebug.Give('book.destroyers', 1))
+lua assert(GameDebug.Skill('industrials') == -1, 'a new pilot should not know Industrials')
+until GameDebug.Press('Inv:place:hangar')
+
+# One that cannot be learned yet says why, and cannot be pressed.
+until GameDebug.Press('Inv:menu:book.destroyers')
+until GameDebug.CanPress('Menu:To hold')
+lua assert(not GameDebug.CanPress('Menu:Learn this skill'), 'Destroyers should want Frigates 3 first')
+lua assert(GameDebug.CanPress('Menu:To hold'), 'the menu did not come up')
+until GameDebug.Press('Menu:To hold')
+frames 30
+
+# One that can, is.
+until GameDebug.Press('Inv:menu:book.industrials')
+until GameDebug.CanPress('Menu:Learn this skill')
+until GameDebug.Press('Menu:Learn this skill')
+until GameDebug.Skill('industrials') == 0
+lua assert(GameDebug.Hangar('book.industrials') == 1, 'one book should be used up, and one left')
+
+# Moored somewhere else, the assets window knows the way back to what was left at home.
+lua _G.elsewhere = GameDebug.Moor(2)
+lua assert(_G.elsewhere ~= '', 'nowhere else to moor')
+wait 2
+until GameDebug.Press('Assets')
+until GameDebug.CanPress('Assets:course:' .. GameDebug.HomeId())
+lua assert(GameDebug.Destination() == -1)
+until GameDebug.Press('Assets:course:' .. GameDebug.HomeId())
+until GameDebug.Destination() >= 1
+
+echo books scenario passed
+quit

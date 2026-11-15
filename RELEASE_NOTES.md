@@ -6,6 +6,12 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Three things from play
+
+- A ship sent somewhere from a standstill no longer snaps to face it: the hull comes round as it gets under way, quickly for a frigate and slowly for a big ship.
+- Skill books: right-click a book in the inventory and choose "Learn this skill". It works from the hangar or from your hold, docked or in space, and if the skill needs another first the menu says which. (The Skills tab's Learn button now finds a book in your hold too.)
+- The assets window has a "Set course" button beside every station that holds something of yours in another system.
+
 ## Things going on
 
 - Pirates now mass where the galaxy says they would: in systems where order is thin and trade is rich, several at once across the map, instead of one surge at a time near you. Destroying pirates in a system holds a surge off, and ten destroyed during one breaks it.

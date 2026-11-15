@@ -2138,6 +2138,30 @@ function Debug.Engage(range: number?, works: boolean?): number
   return count
 end
 
+-- How far the pilot's hull is drawn from pointing the way the ship is
+-- going, in turns of a circle (0 to 0.5): a hull comes round to its
+-- way at a rate of its own (Game/View/Scene). -1 where there is nothing
+-- to say (docked, or hardly moving).
+function Debug.Turning(): number
+  local state = session.game.state
+  local ball = state.balls[state.player.ship]
+  local heading: vector? = scene.headings[state.player.ship]
+  if ball == nil or not heading then
+    return -1
+  end
+  local speed = math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy + ball.vz * ball.vz)
+  if speed <= 1 then
+    return -1
+  end
+  local along = (heading.x * ball.vx + heading.y * ball.vy + heading.z * ball.vz) / speed
+  return math.acos(math.clamp(along, -1, 1)) / (2 * math.pi)
+end
+
+-- The id of the station that is the pilot's home, for a button that is named by it.
+function Debug.HomeId(): number
+  return session.game.state.player.home
+end
+
 -- How many volleys of a station's batteries the scene has shown.
 function Debug.Battery(): number
   return scene.volleys

@@ -175,6 +175,19 @@ suite:Case("a skill a pilot does not start with is learned from its book, once i
   t.eq(refused(game, { kind = "LearnSkill", actor = 0, item = books.id }), "already known")
   order(t, game, { kind = "TrainSkill", actor = 0, type = "rapid.firing" })
   t.eq(Core.Query.Training(game)[1].seconds, 120)
+
+  -- A book is read where it is: from the hold of the pilot's ship too, docked or out in space. Somebody else's is not.
+  local held = Items.Add(state, "book.industrials", 1, state.player.ship, "cargo")
+  state.skills.frigates = 2
+  local far = Items.Add(state, "book.destroyers", 1, home + 1, "hangar")
+  t.eq(refused(game, { kind = "LearnSkill", actor = 0, item = far.id }), "that is not in the hangar here, nor in the hold")
+  t.eq(state.skills.industrials, nil)
+  order(t, game, { kind = "Undock", actor = 0 })
+  Core.Step(game)
+  t.eq(state.ships[state.player.ship].docked, 0)
+  order(t, game, { kind = "LearnSkill", actor = 0, item = held.id })
+  Core.Step(game)
+  t.eq(state.skills.industrials, 0, "a book in the hold should be learned out in space")
 end)
 
 suite:Case("the queue holds ten levels, stops at level five, and cancelling drops a skill's later levels too", function(t)

@@ -219,6 +219,14 @@ local function actionsFor(session: Session.Session, view: View?, item: State.Ite
         end
       end })
   end
+  -- A skill book is learned from its own menu, wherever it lies in
+  -- reach (the hangar here, or the hold): and where it cannot be, the
+  -- menu says why.
+  if info.category == "skillbook" and (shown.kind == "hangar" or shown.holder == own) then
+    local learn: State.Command = { kind = "LearnSkill", actor = 0, item = item.id }
+    local can, why = Session.CanDo(session, learn)
+    add(if can then "Learn this skill" else `Learn ({why or "not now"})`, `Learn:{type}`, learn, nil, can)
+  end
   if shown.kind == "wreck" or shown.kind == "can" then
     add("Take", nil, { kind = "Loot", actor = 0, target = shown.holder, item = item.id })
   elseif shown.kind == "hangar" then
