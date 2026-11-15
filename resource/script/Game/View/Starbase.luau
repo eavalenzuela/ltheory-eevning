@@ -945,6 +945,24 @@ local PAINTS: { [string]: { Plates.Look } } = {
 -- The factions whose towers are drawn lying along z and stood up.
 local LYING: { [string]: boolean } = { talmar = true }
 
+-- The towers as they are grown (Hull.GrownTower: the owner's list of
+-- 2026-11-15, "new tower models"), by faction: the manner of it,
+-- whether it is square in plan, how many masts stand out of its top,
+-- and the seed of each of its three sizes. A seed is a tower: any whole
+-- number is another. (These are first picks, and mine.) The towers
+-- drawn by hand before them (TOWERS) are kept, and are what is built
+-- with Starbase.GROWN false.
+Starbase.GROWN = true
+local GROWN: { [string]: { manner: string, square: boolean, masts: number, seeds: { number } } } = {
+  vessari = { manner = "blocky", square = true, masts = 0, seeds = { 3, 11, 20 } },
+  talmar = { manner = "cloud", square = false, masts = 0, seeds = { 5, 14, 9 } },
+  orun = { manner = "spar", square = false, masts = 5, seeds = { 2, 7, 16 } },
+  nimia = { manner = "poured", square = false, masts = 0, seeds = { 4, 8, 13 } },
+  vail = { manner = "blocky", square = false, masts = 2, seeds = { 6, 12, 17 } },
+}
+-- How many plates are grown for a tower of each size.
+local GROWN_STEPS = { 3, 5, 7 }
+
 local made: { [string]: Made } = {}
 
 local function finish(key: string, draw: (b: Builder) -> (), look: Plates.Look, sheets: number, fine: number): Made
@@ -964,6 +982,14 @@ end
 -- The model of a faction's tower of a size (1 to 3). A faction whose
 -- tower nobody has drawn yet gets the Vessari's.
 function Starbase.Tower(faction: string, size: number): Made
+  if Starbase.GROWN then
+    local owner = if GROWN[faction] and Hull.looks[faction] then faction elseif GROWN[faction] and PAINTS[faction] then faction else "vessari"
+    local grown = GROWN[owner]
+    local paints = PAINTS[owner]
+    return finish(`tower.grown.{owner}.{size}`, function(b: Builder)
+      Hull.GrownTower(b, grown.seeds[size], GROWN_STEPS[size], grown.manner, grown.square, grown.masts)
+    end, if paints then paints[size] else Hull.looks[owner], 4.5 + 2.5 * size, 0.04)
+  end
   local designs = TOWERS[faction] or TOWERS.vessari
   local owner = if TOWERS[faction] then faction else "vessari"
   local paints = PAINTS[owner]
@@ -975,7 +1001,8 @@ end
 -- way its drawing lies.
 function Starbase.TowerPart(faction: string, size: number, at: vector, towerRadius: number): Part
   local made = Starbase.Tower(faction, size)
-  local lying = LYING[faction] == true and TOWERS[faction] ~= nil
+  -- (a grown tower lies along z, whoever's it is)
+  local lying = Starbase.GROWN or (LYING[faction] == true and TOWERS[faction] ~= nil)
   return {
     id = `tower.{faction}.{size}`, model = made.model, at = at,
     look = if lying then vector.create(0, 1, 0) else vector.create(0, 0, 1),

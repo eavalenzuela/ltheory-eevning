@@ -378,8 +378,10 @@ end
 -- 'thin' the share of its height it keeps there. 1, if not said: the
 -- generator narrowed nothing. 'aft' and 'fore' are where the hull's own
 -- stern and bow are, which the growing fills in.)
+-- ('spindle': the share of its girth a thing keeps at both its ends,
+-- swelling to all of it at its middle: a tower's. Not, if not said.)
 type Warps = { spread: number, bow: number, hump: number, crown: number, taper: number?, wedge: number?, thin: number?,
-  aft: number?, fore: number? }
+  aft: number?, fore: number?, spindle: number? }
 type Bend = (p: vector) -> vector
 local OLD: Warps = { spread = 0.5, bow = 1.0, hump = 1.0, crown = 1.25 }
 
@@ -472,22 +474,29 @@ local function warped(w: Warps, middle: vector?): (Bend, Bend)
   local function along(z: number): number
     return math.clamp((z - aft) / math.max(0.01, fore - aft), 0, 1)
   end
+  -- (a spindle: how much of its girth the thing has left, so far along)
+  local spindle = w.spindle
+  local function girth(t: number): number
+    return if spindle then 1 - (1 - spindle) * math.abs(2 * t - 1) ^ 1.7 else 1
+  end
   local off = middle or v(0, 0, 0)
   local function bend(p: vector): vector
     local x, y, z = p.x / GROWN, p.y / GROWN, p.z / GROWN
     local side = if x > 0 then 1 elseif x < 0 then -1 else 0
     local t = along(z)
-    local narrowed = x * (1 - (1 - wedge) * t)
-    return vector.create(narrowed + side * out(z), y * (1 - (1 - thin) * t) + lift(narrowed), z) * GROWN - off
+    local round = girth(t)
+    local narrowed = x * (1 - (1 - wedge) * t) * round
+    return vector.create(narrowed + side * out(z), y * (1 - (1 - thin) * t) * round + lift(narrowed), z) * GROWN - off
   end
   local function unbend(p: vector): vector
     p += off
     local x, y, z = p.x / GROWN, p.y / GROWN, p.z / GROWN
     local wide = out(z)
     local t = along(z)
+    local round = girth(t)
     -- (what lies between the two halves was on the centre line)
     local was = if x > wide then x - wide elseif x < -wide then x + wide else 0
-    return vector.create(was / (1 - (1 - wedge) * t), (y - lift(was)) / (1 - (1 - thin) * t), z) * GROWN
+    return vector.create(was / ((1 - (1 - wedge) * t) * round), (y - lift(was)) / ((1 - (1 - thin) * t) * round), z) * GROWN
   end
   return bend, unbend
 end
@@ -781,6 +790,95 @@ local function grown(b: Builder, g: Growth)
   local bend, unbend = warped(g.warps, g.middle)
   Plates.Bend(b, bend, unbend)
   bending = bend
+end
+
+-- ---------------------------------------------------------------------
+-- A tower grown the way the generator grows a hull (for the stations:
+-- Game/View/Starbase). (The owner's list of 2026-11-15: "new tower
+-- models"; and what they said of the generator on 2026-11-12, that its
+-- hulls read better than what is drawn by hand.) The same growing, with
+-- a tower's numbers: slim, and long along z, which is the tower's own
+-- upright (whoever draws it stands it up). Every plate is there four
+-- times, about the tower's upright, or eight where the tower is square
+-- in plan; a spine runs through all of it and out past both ends; and
+-- the whole is a spindle: widest at its middle, drawn in to both ends,
+-- with nothing about it that would stand on a floor (the owner's rule
+-- for anything anchored in space).
+local SPINDLE: Warps = { spread = 0, bow = 0, hump = 0, crown = 1, spindle = 0.16 }
+local TOWERS: { [string]: Style } = {
+  -- (blocky, hard at its edges: the Vessari's manner)
+  blocky = { name = "tower.blocky", rows = 4, held = true, bound = v(1.7, 1.7, 6), cross = { v(1.25, 0.45, 0.7), v(0.5, 0.5, 2.2) },
+    eased = 0.08, warps = SPINDLE },
+  -- (rounded, swelling: the Talmar's)
+  cloud = { name = "tower.cloud", rows = 3, held = true, bound = v(1.9, 1.9, 5.5), cross = { v(1.3, 0.6, 0.9), v(0.65, 0.65, 2.0) },
+    eased = 0.5, warps = { spread = 0, bow = 0, hump = 0, crown = 1, spindle = 0.22 } },
+  -- (thin, tall, in long members: the Orun's)
+  spar = { name = "tower.spar", rows = 5, held = true, bound = v(1.4, 1.4, 7), cross = { v(1.0, 0.32, 0.5), v(0.36, 0.36, 2.6) },
+    eased = 0.25, warps = { spread = 0, bow = 0, hump = 0, crown = 1, spindle = 0.3 } },
+  -- (smooth and close, as if poured: for a people whose things are not built of plate)
+  poured = { name = "tower.poured", rows = 2, held = true, bound = v(1.6, 1.6, 5), cross = { v(1.1, 0.7, 1.2), v(0.8, 0.8, 2.4) },
+    eased = 0.5, warps = { spread = 0, bow = 0, hump = 0, crown = 1, spindle = 0.1 } },
+}
+
+-- Draw such a tower: from a seed, 'steps' plates grown, in a manner
+-- ("blocky", "cloud", "spar" or "poured"). 'square': it is square in
+-- plan, every plate there eight times. 'masts': so many thin masts
+-- stand out of its top. It lies along z, its top toward +z.
+function Hull.GrownTower(b: Builder, seed: number, steps: number, manner: string, square: boolean?, masts: number?)
+  local style = TOWERS[manner] or TOWERS.blocky
+  local g = growth(seed, steps, false, style)
+  local aft, fore = math.huge, -math.huge
+  for _, plate in g.plates do
+    aft, fore = math.min(aft, plate.center.z - plate.size.z), math.max(fore, plate.center.z + plate.size.z)
+  end
+  local function put(part: number, center: vector, size: vector)
+    -- (once each side of the upright, each way; and a plate on an axis is there once for it)
+    local xs: { number } = if center.x == 0 then { 1 } else { 1, -1 }
+    local ys: { number } = if center.y == 0 then { 1 } else { 1, -1 }
+    for _, sx in xs do
+      for _, sy in ys do
+        block(b, part, center * v(sx, sy, 1) * GROWN, size * GROWN, nil, style.eased)
+      end
+    end
+  end
+  for _, plate in g.plates do
+    put(plate.part, plate.center, plate.size)
+    if square and math.abs(plate.center.x - plate.center.y) > 0.05 then
+      put(plate.part, v(plate.center.y, plate.center.x, plate.center.z), v(plate.size.y, plate.size.x, plate.size.z) * 0.99)
+    end
+  end
+  -- the spine, out past both ends: a spire above and a tail below, with a lamp at each
+  local reach = (fore - aft) * 0.22
+  local top, foot = fore + reach, aft - reach * 1.3
+  put(PLATING, v(0, 0, (top + foot) / 2), v(0.3, 0.3, (top - foot) / 2))
+  put(GLOW, v(0, 0, top + 0.03), v(0.5, 0.5, 0.05))
+  put(GLOW, v(0, 0, foot - 0.03), v(0.5, 0.5, 0.05))
+  -- a lit band round the waist, and a collar either side of it
+  local waist = (fore + aft) / 2
+  local wide = 0
+  for _, plate in g.plates do
+    if math.abs(plate.center.z - waist) < plate.size.z + 0.4 then
+      wide = math.max(wide, math.abs(plate.center.x) + plate.size.x, math.abs(plate.center.y) + plate.size.y)
+    end
+  end
+  wide = math.max(wide, 0.9)
+  -- (the collars stand out past the body a little: where ships moor)
+  put(TRIM, v(0, 0, waist + 0.34), v(wide * 1.10, wide * 1.10, 0.07))
+  put(GLOW, v(0, 0, waist), v(wide * 1.02, wide * 1.02, 0.05))
+  put(TRIM, v(0, 0, waist - 0.34), v(wide * 1.10, wide * 1.10, 0.07))
+  -- masts out of the top, each its own length (the Orun's manner), with a lamp on the tallest
+  for index = 1, masts or 0 do
+    local around = index * 2.4 + seed
+    local out = 0.5 + 0.12 * (index % 3)
+    local long = (fore - aft) * (0.10 + 0.05 * ((index * 7 + seed) % 4))
+    local at = v(math.cos(around) * out, math.sin(around) * out, fore - 0.6 + long)
+    block(b, FRAME, at * GROWN, v(0.05, 0.05, long) * GROWN, nil, 0.3)
+    block(b, if index == 1 then GLOW else TRIM, (at + v(0, 0, long + 0.05)) * GROWN, v(0.09, 0.09, 0.05) * GROWN, nil, 0.3)
+  end
+  local warps = table.clone(style.warps)
+  warps.aft, warps.fore = foot, top
+  local bend, unbend = warped(warps, v(0, 0, (top + foot) / 2 * GROWN))
+  Plates.Bend(b, bend, unbend)
 end
 
 -- The Prospector, a mining frigate: anybody's. A keel with a bar across
