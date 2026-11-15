@@ -6,6 +6,7 @@
 #include "LTE/DrawState.h"
 #include "LTE/Meshes.h"
 #include "LTE/Renderer.h"
+#include "LTE/RenderPasses.h"
 #include "LTE/RenderStyle.h"
 #include "LTE/Shader.h"
 #include "LTE/Texture2D.h"
@@ -81,7 +82,10 @@ namespace {
 
         lights.clear();
 
-        if (Settings_Bool("Graphics/Dynamic Lighting", true)()) {
+        /* (Switched off, "Local Lights", no light is added; what is lit
+         * is still put together below.) */
+        if (Settings_Bool("Graphics/Dynamic Lighting", true)() &&
+            RenderPass_IsEnabled("Local Lights")) {
           for (size_t i = 0; i < state->lights.size(); ++i) {
             Light* light = (Light*)state->lights[i];
             if (!light->parent)

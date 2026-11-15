@@ -6,6 +6,13 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Paints for good, and a Graphics page
+
+- A paint or a design is now yours for good. Buy one, open the fitting screen, and it is on the list at its left, marked new: click it and it is yours (the thing bought is used up) and on your ship. From then on every paint and design you own is on that list for any ship you fly: click one to switch, as often as you like, for nothing. The first row of each list takes it off. (You can also right-click one in the inventory and choose "Make it yours".)
+- A paint's page on the market says when it is yours already.
+- If you painted a ship before this release, what your ships are painted in is yours.
+- Options has a Graphics page: a switch for each stage the picture is made in (sun and sky light, lights near things, glows and beams, particles, lens flares, bloom, tone mapping, colour grading, anti-aliasing, dither). All on is the game as it is meant to look. If something in the picture looks wrong on your machine, switch stages off one at a time: the one that makes it go away is where the fault is.
+
 ## A night's work
 
 - The game opens on a splash: its mark and its name come up out of black, and any key or a click sends it on to the menu.

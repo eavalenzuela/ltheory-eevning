@@ -7,9 +7,9 @@
 -- plates that are not like the rest, what is marked on it, its bare
 -- structure, and the colour a design is laid on in. A design is a
 -- figure laid over the plating in that last colour: a stripe, hoops, a
--- cap on the bow. Each is a thing bought on a market and used up by
--- putting it on a ship (Assets/Paintwork); the ship keeps it until it
--- is painted again or stripped.
+-- cap on the bow. Each is a thing bought on a market, and used up by
+-- being made the pilot's own (Assets/Paintwork): it is then theirs for
+-- good, and any ship they fly is painted in it as often as they like.
 --
 -- A design needs a paint under it: a hull as it left the yard is in
 -- its builder's colours or in bare metal, and a design has no colour

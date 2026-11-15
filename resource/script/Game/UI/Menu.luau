@@ -6,7 +6,9 @@
 -- from it, Keys is where each thing a key does (Game/UI/Keys) is given
 -- the key a person likes: its button is clicked, and the next key
 -- pressed is its key (Escape leaves it as it was). A key another thing
--- had changes hands: that one gets the key this one gave up.
+-- had changes hands: that one gets the key this one gave up. And
+-- Graphics is where each stage the picture is made in is switched off
+-- and on (Game/View/Graphics).
 --
 -- While a menu is up the game stands still and nothing else of the
 -- interface is drawn (Game/UI/Hud asks Menu.IsOpen). Drawn every frame
@@ -14,11 +16,13 @@
 -- "Menu:continue", "Menu:new", "Menu:load", "Menu:save", "Menu:resume",
 -- "Menu:main", "Menu:quit", "Menu:back", "Menu:start", "Menu:random",
 -- "Menu:options", "Menu:sound", "Menu:keys", "Menu:defaults",
+-- "Menu:graphics", "Menu:allon", "Graphics:<stage>" (Game/View/Graphics),
 -- "Key:<action>", "Load:<slot>", "Save:<slot>", "Delete:<slot>"; the
 -- seed field is "Seed", and the two sliders are "Effects volume" and
 -- "Music volume" (Im.Enter).
 
 local Format = require("@lt/Game/Format")
+local Graphics = require("@lt/Game/View/Graphics")
 local Im = require("@lt/Game/UI/Im")
 local Keys = require("@lt/Game/UI/Keys")
 local Session = require("@lt/Game/Session")
@@ -34,8 +38,8 @@ Menu.SYSTEMS = 5000
 local SLOTS = { "save 1", "save 2", "save 3", "save 4", "save 5" }
 
 -- "": no menu. "main" is the opening menu and "pause" the one in play;
--- "new", "load", "save" and "options" are their pages, and "keys" is a
--- page of options.
+-- "new", "load", "save" and "options" are their pages, and "keys" and
+-- "graphics" are pages of options.
 local page = ""
 local root = "main"       -- where Back goes
 local seed = 1
@@ -87,6 +91,14 @@ local setKeys: (() -> ())? = nil
 
 function Menu.Keys(set: () -> ())
   setKeys = set
+end
+
+-- What the game does when a stage of the picture has been switched (it
+-- keeps what is off: Menu.Graphics).
+local setGraphics: (() -> ())? = nil
+
+function Menu.Graphics(set: () -> ())
+  setGraphics = set
 end
 
 -- The action the keys page is listening for a key for, or "".
@@ -175,7 +187,7 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
   end
   local w = Menu.WIDTH
   local h = if page == "load" or page == "save" then 420 elseif page == "pause" then 390 elseif page == "main" then 370
-    elseif page == "keys" then 550 else 340
+    elseif page == "keys" or page == "graphics" then 550 else 340
   local x, y = left + (width - w) / 2, top + (height - h) / 2 - 40
   -- (the options have a line more than they had, under what was there: what is above stays where it was)
   if page == "options" then
@@ -264,8 +276,11 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
       end
     end
     -- (the page is as tall as it was before it had this button: what is above stays where it was)
-    if Im.Button("Keys", cx - 130, y + 240, 260, 34, true, "Menu:keys") then
+    if Im.Button("Keys", cx - 130, y + 240, 126, 34, true, "Menu:keys") then
       page = "keys"
+    end
+    if Im.Button("Graphics", cx + 4, y + 240, 126, 34, true, "Menu:graphics") then
+      page = "graphics"
     end
     -- How the game's window opens: a click goes on to the next way. It
     -- is so from the next time the game is started.
@@ -313,6 +328,33 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
       asking = ""
       if setKeys then
         setKeys()
+      end
+    end
+    if Im.Button("Back", cx + 6, y + h - 50, 260, 34, true, "Menu:back") then
+      page = "options"
+    end
+  elseif page == "graphics" then
+    -- Each stage the picture is made in, with a switch: off, the stage
+    -- is left out of every frame from the next one, and is kept so.
+    Im.Heading("GRAPHICS", cx - Im.HeadingWidth("GRAPHICS", 26) / 2, y + 26, 26, Im.TEXT)
+    Im.Wrapped("The stages the picture is made in. All on is the game as it is meant to look: switch one off to see what it "
+      .. "does, or to find which one a fault in the picture comes from.", x + 30, y + 64, w - 60, 13, Im.DIM)
+    for index, stage in Graphics.STAGES do
+      local rowY = y + 112 + (index - 1) * 37
+      local on = Graphics.IsOn(stage.id)
+      Im.Text(stage.label, x + 30, rowY, 14, if on then Im.TEXT else Im.DIM)
+      Im.Text(stage.note, x + 30, rowY + 18, 11, Im.DIM)
+      if Im.Toggle(if on then "On" else "Off", x + w - 30 - 84, rowY + 2, 84, 26, on, `Graphics:{stage.id}`) then
+        Graphics.Switch(stage.id, not on)
+        if setGraphics then
+          setGraphics()
+        end
+      end
+    end
+    if Im.Button("All on", cx - 266, y + h - 50, 260, 34, not Graphics.AllOn(), "Menu:allon") then
+      Graphics.Apply("")
+      if setGraphics then
+        setGraphics()
       end
     end
     if Im.Button("Back", cx + 6, y + h - 50, 260, 34, true, "Menu:back") then

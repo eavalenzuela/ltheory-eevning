@@ -53,47 +53,87 @@ suite:Case("every paint and design is a thing a market deals in, and each has it
   end
 end)
 
-suite:Case("docked, a paint in the hangar is put on the ship and used up; a design wants a paint under it; and both come off", function(t)
+suite:Case("a paint made the pilot's is used up and theirs for good: a ship is painted in it and out of it for nothing", function(t)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
   local home = state.player.home
   local ship = state.ships[state.player.ship]
-  t.eq({ ship.paint, ship.design } :: { any }, {})
+  t.eq({ ship.paint, ship.design, next(state.paints) } :: { any }, {})
   t.eq(refused(game, { kind = "StripPaint", actor = 0 }), "the ship is as it left the yard")
-  t.eq(refused(game, { kind = "Paint", actor = 0, item = 424242 }), "that is not in the hangar here")
+  t.eq(refused(game, { kind = "UnlockPaint", actor = 0, item = 424242 }), "that is not in the hangar here, nor in the hold")
   local crimson = Items.Add(state, "paint.crimson", 2, home, "hangar")
   local hoops = Items.Add(state, "design.hoops", 1, home, "hangar")
   local ore = Items.Add(state, "ore.ferrite", 5, home, "hangar")
-  t.eq(refused(game, { kind = "Paint", actor = 0, item = ore.id }), "that is neither a paint nor a design")
-  t.eq(refused(game, { kind = "Paint", actor = 0, item = hoops.id }), "a design needs a paint under it: paint the ship first")
-  local told = assert(act(t, game, { kind = "Paint", actor = 0, item = crimson.id }), "nothing was said of the painting")
+  t.eq(refused(game, { kind = "UnlockPaint", actor = 0, item = ore.id }), "that is neither a paint nor a design")
+  t.eq(refused(game, { kind = "Paint", actor = 0, type = "ore.ferrite" }), "that is neither a paint nor a design")
+  t.eq(refused(game, { kind = "Paint", actor = 0, type = "paint.onyx" }), "that is not one of yours: a market sells it")
+
+  -- Made theirs: one is used up, and the ship is not painted by it.
+  act(t, game, { kind = "UnlockPaint", actor = 0, item = crimson.id })
+  t.eq({ state.paints["paint.crimson"], crimson.quantity, ship.paint } :: { any }, { true, 1, nil } :: { any })
+  t.eq(refused(game, { kind = "UnlockPaint", actor = 0, item = crimson.id }), "it is yours already")
+  -- Painted in it: nothing more is used.
+  t.eq(refused(game, { kind = "Paint", actor = 0, type = "design.hoops" }), "a design needs a paint under it: paint the ship first")
+  local told = assert(act(t, game, { kind = "Paint", actor = 0, type = "paint.crimson" }), "nothing was said of the painting")
   t.eq({ told.ship, told.with, told.paint, told.design } :: { any }, { ship.id, "paint.crimson", "paint.crimson", nil } :: { any })
   t.eq({ ship.paint, ship.design, crimson.quantity } :: { any }, { "paint.crimson", nil, 1 } :: { any })
-  t.eq(refused(game, { kind = "Paint", actor = 0, item = crimson.id }), "the ship is in that paint already")
-  -- The design over it, and then another paint under the design: each takes the place of what was there.
-  act(t, game, { kind = "Paint", actor = 0, item = hoops.id })
-  t.eq({ ship.paint, ship.design } :: { any }, { "paint.crimson", "design.hoops" } :: { any })
+  t.eq(refused(game, { kind = "Paint", actor = 0, type = "paint.crimson" }), "the ship is in that paint already")
+  -- One that lies in the hangar and is not theirs yet is made theirs by the painting.
+  act(t, game, { kind = "Paint", actor = 0, type = "design.hoops" })
+  t.eq({ ship.paint, ship.design, state.paints["design.hoops"] } :: { any }, { "paint.crimson", "design.hoops", true } :: { any })
   t.eq(state.items[hoops.id], nil, "the design should be used up")
-  local onyx = Items.Add(state, "paint.onyx", 1, home, "hangar")
-  act(t, game, { kind = "Paint", actor = 0, item = onyx.id })
+  t.eq(refused(game, { kind = "Paint", actor = 0, type = "design.hoops" }), "the ship has that design already")
+  -- One in the hold is made theirs from there; and the ship goes from one paint to another and back, the design staying.
+  local onyx = Items.Add(state, "paint.onyx", 1, ship.id, "cargo")
+  act(t, game, { kind = "UnlockPaint", actor = 0, item = onyx.id })
+  t.eq(state.items[onyx.id], nil)
+  act(t, game, { kind = "Paint", actor = 0, type = "paint.onyx" })
   t.eq({ ship.paint, ship.design } :: { any }, { "paint.onyx", "design.hoops" } :: { any })
+  act(t, game, { kind = "Paint", actor = 0, type = "paint.crimson" })
+  t.eq({ ship.paint, ship.design, crimson.quantity } :: { any }, { "paint.crimson", "design.hoops", 1 } :: { any })
+  -- The design comes off alone.
+  act(t, game, { kind = "StripPaint", actor = 0, what = "design" })
+  t.eq({ ship.paint, ship.design } :: { any }, { "paint.crimson", nil } :: { any })
+  t.eq(refused(game, { kind = "StripPaint", actor = 0, what = "design" }), "the ship has no design on it")
+  act(t, game, { kind = "Paint", actor = 0, type = "design.hoops" })
+
   -- It is in the save.
   local bytes, length = Core.Save(game)
   local loaded = Core.Load(bytes, length)
   t.eq(Core.Hash(loaded), Core.Hash(game))
-  t.eq(loaded.state.ships[ship.id].paint, "paint.onyx")
-  -- Out in space there is no painting; and back in, it is stripped, and nothing is given back.
+  t.eq({ loaded.state.ships[ship.id].paint, loaded.state.paints["paint.onyx"], loaded.state.paints["design.hoops"] } :: { any },
+    { "paint.crimson", true, true } :: { any })
+
+  -- Out in space there is no painting, but a paint in the hold can be made theirs; and back to the yard's, what is theirs stays theirs.
+  local bone = Items.Add(state, "paint.bone", 1, ship.id, "cargo")
   act(t, game, { kind = "Undock", actor = 0 })
-  t.eq(refused(game, { kind = "Paint", actor = 0, item = crimson.id }), "not docked")
+  t.eq(refused(game, { kind = "Paint", actor = 0, type = "paint.onyx" }), "not docked")
   t.eq(refused(game, { kind = "StripPaint", actor = 0 }), "not docked")
+  act(t, game, { kind = "UnlockPaint", actor = 0, item = bone.id })
+  t.eq(state.paints["paint.bone"], true)
   local again = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local theirs = again.state.ships[again.state.player.ship]
   theirs.paint, theirs.design = "paint.onyx", "design.hoops"
+  again.state.paints["paint.onyx"], again.state.paints["design.hoops"] = true, true
   local stripped = assert(act(t, again, { kind = "StripPaint", actor = 0 }))
-  t.eq({ stripped.stripped, theirs.paint, theirs.design } :: { any }, { true, nil, nil } :: { any })
-  t.eq(#Items.In(again.state, again.state.player.home, "hangar"), #Items.In(Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true }).state,
-    again.state.player.home, "hangar"))
-  local _ = Codec
+  t.eq({ stripped.stripped, theirs.paint, theirs.design, again.state.paints["paint.onyx"] } :: { any }, { true, nil, nil, true } :: { any })
+  act(t, again, { kind = "Paint", actor = 0, type = "paint.onyx" })
+  t.eq(theirs.paint, "paint.onyx")
+end)
+
+suite:Case("a save from when a paint was used up by a painting: what the pilot's ships are in is theirs", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local ship = state.ships[state.player.ship]
+  ship.paint, ship.design = "paint.cobalt", "design.tiger"
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 82
+  file.state.paints = nil
+  local old, oldLength = Codec.Encode(file)
+  local opened = Core.Load(old, oldLength).state
+  t.eq({ opened.paints["paint.cobalt"], opened.paints["design.tiger"], opened.paints["paint.onyx"] } :: { any }, { true, true, nil } :: { any })
+  t.eq(opened.ships[ship.id].paint, "paint.cobalt")
 end)
 
 suite:Case("a paint is bought on a market like anything else", function(t)

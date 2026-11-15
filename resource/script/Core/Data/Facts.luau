@@ -537,10 +537,10 @@ function Facts.Of(type: string): Sheet?
     local paint, design = Paints.paintById[type], Paints.designById[type]
     if paint then
       sheet.kind = "Paint for a ship"
-      sheet.note = paint.note .. " Put on the ship you are in from the hangar, docked: it is used up, and the ship keeps it until it is painted again or stripped. It changes nothing but how the ship looks."
+      sheet.note = paint.note .. " Made yours from its menu in the inventory, it is used up and the paint is yours for good: any ship you fly is painted in it, and in any other of yours, from the list on the fitting screen, as often as you like. It changes nothing but how the ship looks."
     elseif design then
       sheet.kind = "Design for a ship"
-      sheet.note = design.note .. " Laid over a ship's paint, in the colour that paint has for designs: it needs a paint under it. It is used up, and the ship keeps it until another is laid on or it is stripped."
+      sheet.note = design.note .. " Laid over a ship's paint, in the colour that paint has for designs: it needs a paint under it. Made yours from its menu in the inventory, it is used up and the design is yours for good, on the fitting screen's list."
     end
     trade(sheet, type)
   elseif category == "implant" then

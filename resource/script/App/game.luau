@@ -25,6 +25,7 @@ local Members = require("@lt/Core/Assets/Members")
 local Planets = require("@lt/Core/Data/Planets")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Attributes = require("@lt/Core/Attributes")
+local Graphics = require("@lt/Game/View/Graphics")
 local Hud = require("@lt/Game/UI/Hud")
 local Icons = require("@lt/Icons")
 local Hull = require("@lt/Game/View/Hull")
@@ -530,15 +531,29 @@ end
 
 -- What the pilot's ship is painted in, and the design on that
 -- (Core/Assets/Paintwork): '' for none of either. Given a paint's id
--- (and a design's), a cheat: the ship is painted so, with nothing
--- bought or used up ('' strips it).
+-- (and a design's), a cheat: the ship is painted so and they are the
+-- pilot's, with nothing bought or used up ('' strips it).
 function Debug.Paint(paint: string?, design: string?): (string, string)
-  local ship = session.game.state.ships[session.game.state.player.ship]
+  local state = session.game.state
+  local ship = state.ships[state.player.ship]
   if paint then
     ship.paint = if paint ~= "" then paint else nil
     ship.design = if paint ~= "" and design and design ~= "" then design else nil
+    -- (and they are the pilot's, as anything a ship of theirs is in is)
+    if ship.paint then
+      state.paints[ship.paint] = true
+    end
+    if ship.design then
+      state.paints[ship.design] = true
+    end
   end
   return ship.paint or "", ship.design or ""
+end
+
+-- Whether a paint or a design is the pilot's for good
+-- (Core/Assets/Paintwork).
+function Debug.HasPaint(type: string): boolean
+  return session.game.state.paints[type] == true
 end
 
 -- The paint and the design being tried on the ship the fitting screen
@@ -1268,6 +1283,17 @@ end
 -- 'wreck', ...), how many stacks are listed there, and whether as icons.
 function Debug.Inventory(): (number, string, number, boolean)
   return Inventory.Showing()
+end
+
+-- The stages of the picture that are switched off (Game/View/Graphics,
+-- the options' Graphics page), as their ids with commas between: ''
+-- when all are on. Given a stage's id and whether it is to be on, that
+-- one is switched first.
+function Debug.Graphics(id: string?, on: boolean?): string
+  if id then
+    assert(Graphics.Switch(id, on == true), `no stage of the picture is called {id}`)
+  end
+  return Graphics.Off()
 end
 
 -- How the game's own window is set to open (the options' Window,
@@ -2961,6 +2987,13 @@ function App:Initialize()
   -- (and how the game's window opens, which the program reads as it starts)
   Menu.Window(settings.window, function(choice: string)
     settings.window = choice
+    Settings.Save(settings)
+  end)
+  -- (and the stages of the picture a person has switched off, which the
+  -- engine is told at each start, and which are kept when one is switched)
+  Graphics.Apply(settings.graphics)
+  Menu.Graphics(function()
+    settings.graphics = Graphics.Off()
     Settings.Save(settings)
   end)
   -- (and the keys a person has changed, kept when one changes hands)

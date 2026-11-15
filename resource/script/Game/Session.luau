@@ -598,6 +598,8 @@ function Session.Notice(session: Session, event: Space.Event)
       local paint = if event.paint then Paints.paintById[event.paint] else nil
       Session.Say(session, `The ship is painted: {if paint then paint.name else "no paint"}{if design then `, with {design.name}` else ""}`)
     end
+  elseif kind == "PaintUnlocked" then
+    Session.Say(session, `{Paints.ItemName(event.type)} is yours for good: it is on the fitting screen's list`)
   elseif kind == "Mutated" then
     -- (how each figure came out: what it gives, its fitting, its draw, its reach)
     local rolls = event.rolls :: { number }

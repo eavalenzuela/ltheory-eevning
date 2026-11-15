@@ -27,7 +27,7 @@ It is built on the old C++ Limit Theory engine, and it is a work in progress. Th
 - **A world that moves**: the peoples fight wars over open space and systems change hands; pirates mass where order is thin; invasions come out of the deep; rare captains, traders and derelicts are sighted; gates close and rich belts are found. An events window and the star map say what is going on.
 - **A character**: skills that train in real time, including while the game is closed, and implants.
 - **Company**: hired pilots who follow, mine, haul, patrol and guard; a corporation of your own with members who work for themselves and pay it a tax; starbases of your own, and systems claimed in your name.
-- **Paint**: paints and designs for your ship, bought on the market and tried on before you buy.
+- **Paint**: paints and designs for your ship, bought on the market, tried on before you buy, yours for good once bought, and switched between on the fitting screen.
 - **Saves**, music, and sound.
 
 ## The ship generator
@@ -93,7 +93,7 @@ bin/launch game
 
 On a laptop with two graphics cards, `DRI_PRIME=1 bin/launch game` runs it on the faster one.
 
-The game opens on a splash (any key sends it on) and then a menu: continue, new game (pick a seed and a galaxy size), load, options (sound on or off, and the loudness of effects and music), quit. A new game starts you docked at a station with a small ship. That station has five career agents (the Careers tab), who each teach a way of making a living in a few short lessons and pay for them; the Guide button lists everything else there is to do, and shows the lessons you have in hand while you are in space.
+The game opens on a splash (any key sends it on) and then a menu: continue, new game (pick a seed and a galaxy size), load, options (sound on or off, the loudness of effects and music, the keys, how the window opens, and a Graphics page with a switch for each stage the picture is made in), quit. A new game starts you docked at a station with a small ship. That station has five career agents (the Careers tab), who each teach a way of making a living in a few short lessons and pay for them; the Guide button lists everything else there is to do, and shows the lessons you have in hand while you are in space.
 
 | | |
 |---|---|

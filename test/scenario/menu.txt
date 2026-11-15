@@ -9,7 +9,7 @@
 # over, and throw the save away. (A script's saves are kept under
 # cache/, apart from anybody's own.)
 #
-# covers: Game/UI/Menu Game/Settings Core/Persist/Codec
+# covers: Game/UI/Menu Game/Settings Game/View/Graphics Core/Persist/Codec
 
 wait 2
 lua assert(GameDebug.Menu() == '', 'a script starts in the game, not at the menu')
@@ -89,6 +89,24 @@ lua assert(GameDebug.KeyOf('stop') == 'Space' and GameDebug.KeyOf('approach') ==
 until GameDebug.Press('Menu:back')
 frames 3
 lua assert(GameDebug.CanPress('Menu:keys'), 'back from the keys is the options')
+
+# The graphics page: a stage of the picture is switched off and on again, and all go on together.
+until GameDebug.Press('Menu:graphics')
+until GameDebug.Menu() == 'graphics'
+lua assert(GameDebug.Graphics() == '', 'every stage of the picture should be on at first')
+lua assert(not GameDebug.CanPress('Menu:allon'), 'with every stage on there is nothing to put back')
+until GameDebug.Press('Graphics:bloom')
+until GameDebug.Graphics() == 'bloom'
+until GameDebug.Press('Graphics:flares')
+until GameDebug.Graphics() == 'flares,bloom'
+frames 5
+until GameDebug.Press('Graphics:bloom')
+until GameDebug.Graphics() == 'flares'
+until GameDebug.Press('Menu:allon')
+until GameDebug.Graphics() == ''
+until GameDebug.Press('Menu:back')
+frames 3
+lua assert(GameDebug.CanPress('Menu:keys'), 'back from the graphics is the options')
 until GameDebug.Press('Menu:back')
 frames 3
 lua assert(GameDebug.CanPress('Menu:options'), 'back from the options is the menu they were opened from')

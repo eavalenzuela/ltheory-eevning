@@ -2,6 +2,7 @@
 
 #include "LTE/DrawState.h"
 #include "LTE/Renderer.h"
+#include "LTE/RenderPasses.h"
 #include "LTE/RenderStyle.h"
 #include "LTE/Shader.h"
 #include "LTE/Texture2D.h"
@@ -22,6 +23,16 @@ namespace {
     void OnRender(DrawState* state) {
       Texture2D const& lightBuffer = state->color[2];
       // Texture2D lightBuffer = state->smallColor[0];
+
+      /* Global light accumulation. (Switched off, "Global Light", the
+       * buffer is still cleared: the local lights are added to it, and
+       * what is lit is put together from it, whatever this does.) */
+      if (!RenderPass_IsEnabled("Global Light")) {
+        lightBuffer->Bind(0);
+        Renderer_Clear();
+        lightBuffer->Unbind();
+        return;
+      }
 
       /* Global light accumulation. */ {
         lightBuffer->Bind(0);

@@ -4,10 +4,12 @@
 #
 # Paints and designs are things a market sells. One is tried on the
 # ship from its market page, which paints nothing: the fitting screen
-# shows the ship in it, and says so. Bought, it is put on the ship from
-# its own menu in the inventory and used up. A design is laid over it
-# the same way. The fitting screen strips both off. And a painted ship
-# flies as itself.
+# shows the ship in it, and says so. Bought, it lies in the hangar and
+# is on the fitting screen's list, marked new: picked there it is made
+# the pilot's for good (and used up) and the ship is in it. One is made
+# theirs from its menu in the inventory too, which paints nothing. What
+# is theirs is switched between on the list for nothing, and comes off
+# there. And a painted ship flies as itself.
 #
 # covers: Core/Assets/Paintwork Core/Data/Paints Game/View/Plates
 
@@ -29,32 +31,46 @@ frames 20
 until GameDebug.Press('Try:stop')
 until GameDebug.Trying() == ''
 
-# Bought, and put on from its menu: it is used up.
+# Bought, it is on the fitting screen's list: picked there it is the pilot's, used up, and on the ship.
 lua assert(GameDebug.Market('paint.cobalt'))
 until GameDebug.CanPress('BuyNow')
 until GameDebug.Press('BuyNow')
 until GameDebug.Hangar('paint.cobalt') == 1
-until GameDebug.Press('Inv:place:hangar')
-until select(2, GameDebug.Inventory()) == 'hangar'
-until GameDebug.Press('Inv:menu:paint.cobalt')
-until GameDebug.CanPress('Menu:Paint the ship with it (uses it up)')
-until GameDebug.Press('Menu:Paint the ship with it (uses it up)')
+lua assert(not GameDebug.HasPaint('paint.cobalt'), 'a paint bought is not the pilot own until it is made so')
+until GameDebug.Press('Fitting')
+until GameDebug.Tab() == 'Fitting'
+until GameDebug.CanPress('Paint:paint.cobalt')
+until GameDebug.Press('Paint:paint.cobalt')
 until GameDebug.Paint() == 'paint.cobalt'
-lua assert(GameDebug.Hangar('paint.cobalt') == 0, 'the paint should be used up')
+lua assert(GameDebug.Hangar('paint.cobalt') == 0 and GameDebug.HasPaint('paint.cobalt'), 'the paint should be used up, and the pilot own')
 patience 20
 until string.find(GameDebug.Said(), 'painted', 1, true)
 
-# A design over it, the same way.
+# A design made theirs from its menu in the inventory: used up, and not on the ship until it is picked.
 lua assert(GameDebug.Give('design.hoops', 1))
+until GameDebug.Press('Inv:place:hangar')
+until select(2, GameDebug.Inventory()) == 'hangar'
 until GameDebug.Press('Inv:menu:design.hoops')
-until GameDebug.CanPress('Menu:Paint the ship with it (uses it up)')
-until GameDebug.Press('Menu:Paint the ship with it (uses it up)')
+until GameDebug.CanPress('Menu:Make it yours (uses it up)')
+until GameDebug.Press('Menu:Make it yours (uses it up)')
+until GameDebug.HasPaint('design.hoops')
+lua assert(GameDebug.Hangar('design.hoops') == 0 and select(2, GameDebug.Paint()) == '', 'made the pilot own, a design is not yet on the ship')
+until GameDebug.CanPress('Paint:design.hoops')
+until GameDebug.Press('Paint:design.hoops')
 until select(2, GameDebug.Paint()) == 'design.hoops'
-until GameDebug.Press('Fitting')
-until GameDebug.Tab() == 'Fitting'
+
+# Another paint, and back to the first: nothing more is used, and the design stays.
+lua assert(GameDebug.Give('paint.onyx', 1))
+until GameDebug.CanPress('Paint:paint.onyx')
+until GameDebug.Press('Paint:paint.onyx')
+until GameDebug.Paint() == 'paint.onyx'
+lua assert(GameDebug.Hangar('paint.onyx') == 0)
+until GameDebug.Press('Paint:paint.cobalt')
+until GameDebug.Paint() == 'paint.cobalt'
+lua assert(select(2, GameDebug.Paint()) == 'design.hoops')
 frames 30
 
-# Out in space the ship is as it was painted, and back at the station it is stripped.
+# Out in space the ship is as it was painted. Back at the station the design comes off, then the paint, and both are still theirs.
 until GameDebug.Press('UNDOCK') and GameDebug.InSpace()
 frames 90
 lua local paint, design = GameDebug.Paint() assert(paint == 'paint.cobalt' and design == 'design.hoops')
@@ -62,9 +78,15 @@ lua GameDebug.Order('Dock', 'home')
 patience 240
 until not GameDebug.InSpace()
 until GameDebug.Press('Fitting')
-until GameDebug.CanPress('Paint:strip')
-until GameDebug.Press('Paint:strip')
+until GameDebug.CanPress('Paint:plain')
+until GameDebug.Press('Paint:plain')
+until select(2, GameDebug.Paint()) == ''
+lua assert(GameDebug.Paint() == 'paint.cobalt')
+until GameDebug.Press('Paint:bare')
 until GameDebug.Paint() == ''
+lua assert(GameDebug.HasPaint('paint.cobalt') and GameDebug.HasPaint('design.hoops'))
+until GameDebug.Press('Paint:paint.onyx')
+until GameDebug.Paint() == 'paint.onyx'
 
 echo paint scenario passed
 quit

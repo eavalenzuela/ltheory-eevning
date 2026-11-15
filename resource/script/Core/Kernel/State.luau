@@ -762,6 +762,9 @@ export type State = {
   skills: { [string]: number },
   training: { { skill: string, level: number } },
   trainingStarted: number,
+  -- The paints and designs that are the pilot's for good, by their ids
+  -- (Assets/Paintwork): any ship of theirs is painted in any of them.
+  paints: { [string]: boolean },
   jobs: { [number]: Job },
   jobIds: { number },
   wallet: number,         -- the player's credits

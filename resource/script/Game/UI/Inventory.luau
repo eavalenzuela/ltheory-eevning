@@ -232,18 +232,22 @@ local function actionsFor(session: Session.Session, view: View?, item: State.Ite
       add("Mutated already", nil, nil, nil, false)
     end
   end
-  -- A paint or a design is put on the ship from its own menu, in the
-  -- hangar (Core/Assets/Paintwork): and where it cannot be, the menu
-  -- says why. Either can be tried on the ship first, which paints
+  -- A paint or a design is made the pilot's own from its menu, wherever
+  -- it lies in reach (the hangar here, or the hold): it is used up, and
+  -- is theirs for good on the fitting screen's list
+  -- (Core/Assets/Paintwork). Where it cannot be, the menu says why.
+  -- Docked, either can be tried on the ship first, which paints
   -- nothing: the fitting screen shows the ship in it.
-  if info.category == "paint" and shown.kind == "hangar" then
-    local paint: State.Command = { kind = "Paint", actor = 0, item = item.id }
-    local can, why = Session.CanDo(session, paint)
-    add(if can then "Paint the ship with it (uses it up)" else `Paint ({why or "not now"})`, `Paint:{type}`, paint, nil, can)
-    add("Try it on the ship", `Try:{type}`, nil, function()
-      Session.Try(session, type)
-      Station.Show("Fitting")
-    end, true)
+  if info.category == "paint" and (shown.kind == "hangar" or shown.holder == own) then
+    local unlock: State.Command = { kind = "UnlockPaint", actor = 0, item = item.id }
+    local can, why = Session.CanDo(session, unlock)
+    add(if can then "Make it yours (uses it up)" else `Make it yours ({why or "not now"})`, `Unlock:{type}`, unlock, nil, can)
+    if shown.kind == "hangar" then
+      add("Try it on the ship", `Try:{type}`, nil, function()
+        Session.Try(session, type)
+        Station.Show("Fitting")
+      end, true)
+    end
   end
   -- A skill book is learned from its own menu, wherever it lies in
   -- reach (the hangar here, or the hold): and where it cannot be, the

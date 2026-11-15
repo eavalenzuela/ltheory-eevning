@@ -510,6 +510,118 @@ local function drawFigures(game: Core.Game, player: Core.PlayerInfo, x: number, 
   figure("Warp speed", string.format("%.1f AU/s", stats.warpSpeed), x, line, width)
 end
 
+-- What the ship is painted in, as two lists down the left of the fitting
+-- screen: the paints that are the pilot's, and their designs
+-- (Core/Assets/Paintwork). A row is clicked and the ship is in it, as
+-- often as they like; the first row of each takes it off. One that lies
+-- bought in the hangar here and is not yet theirs is on the list too,
+-- marked new: clicked, it is made theirs (and used up) and put on. And
+-- under them, what is being tried on (Session.Try), which paints
+-- nothing. (The owner's ruling, 2026-11-15: "Unlocked for good, switch
+-- via a list in fitting screen".)
+--
+-- To a script a row is "Paint:<id>" with the paint's or the design's
+-- id, the first rows are "Paint:bare" and "Paint:plain", and what ends
+-- a trying on is "Try:stop".
+local PAINT_ROW = 20
+local PAINT_ROWS, DESIGN_ROWS = 7, 5
+
+local function drawPaints(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number, width: number)
+  local own = game.state.ships[player.ship]
+  local mine = game.state.paints
+  if own == nil then
+    return
+  end
+  -- (what is theirs, and what lies in the hangar here to be made theirs, each in the order it is listed in)
+  type Line = { id: string, name: string, new: State.Item? }
+  local here: { [string]: State.Item } = {}
+  for _, item in Core.Query.Items(game, player.docked, "hangar") do
+    if Paints.paintById[item.type] or Paints.designById[item.type] then
+      here[item.type] = item
+    end
+  end
+  -- (what is new comes first, where it is seen)
+  local function lines(first: string, ids: { string }, names: { string }): { Line }
+    local found: { Line } = { { id = "", name = first } }
+    for index, id in ids do
+      if not mine[id] and here[id] then
+        table.insert(found, { id = id, name = names[index], new = here[id] })
+      end
+    end
+    for index, id in ids do
+      if mine[id] then
+        table.insert(found, { id = id, name = names[index] })
+      end
+    end
+    return found
+  end
+  local ids: { string }, names: { string } = {}, {}
+  for _, one in Paints.paints do
+    table.insert(ids, one.id)
+    table.insert(names, one.name)
+  end
+  local paints = lines("As built", ids, names)
+  ids, names = {}, {}
+  for _, one in Paints.designs do
+    table.insert(ids, one.id)
+    table.insert(names, one.name)
+  end
+  local designs = lines("No design", ids, names)
+
+  -- One list: its heading, and its rows; what the ship has is marked.
+  local function list(title: string, name: string, rows: { Line }, visible: number, top: number, has: string?, bare: string): number
+    Im.Text(title, x, top, 11, Im.ACCENT)
+    top += 16
+    local first = Im.Scroll(name, x, top, width, visible * PAINT_ROW, #rows, visible)
+    for row = 1, math.min(visible, #rows - first) do
+      local line = rows[row + first]
+      local at = top + (row - 1) * PAINT_ROW
+      local command: State.Command = if line.id == "" then { kind = "StripPaint", actor = 0, what = if bare == "plain" then "design" else nil }
+        else { kind = "Paint", actor = 0, type = line.id }
+      local selected = (has or "") == line.id
+      local _, clicked = Im.Row(x, at, width - 5, PAINT_ROW, selected, `Paint:{if line.id == "" then bare else line.id}`)
+      local stack = line.new
+      local can = selected or (Session.CanDo(session, command))
+      if line.id ~= "" then
+        ItemIcon.Draw(line.id, x + 3, at + 3, 14)
+      end
+      -- (a name too long for its row is cut to what fits)
+      local label, room = line.name, width - (if line.id ~= "" then 22 else 4) - (if stack then 36 else 8)
+      while #label > 4 and Im.TextWidth(label, 13) > room do
+        label = string.sub(label, 1, #label - 2) .. "."
+      end
+      Im.Text(label, x + (if line.id ~= "" then 22 else 4), at + 3, 13, Im.TEXT, if can then 1 else 0.45)
+      if stack then
+        Im.TextRight("new", x + width - 10, at + 4, 11, Im.ACCENT)
+      end
+      -- (refused, the session says why)
+      if clicked and not selected then
+        Session.Do(session, command)
+      end
+    end
+    return top + visible * PAINT_ROW
+  end
+
+  local foot = list("PAINT", "fitting:paints", paints, PAINT_ROWS, y, own.paint, "bare")
+  if #paints == 1 and #designs == 1 then
+    Im.Wrapped("None of your own yet: the market sells paints and designs (Paints).", x, y + 16 + PAINT_ROW + 4, width, 12, Im.DIM)
+  end
+  foot = list("DESIGN", "fitting:designs", designs, DESIGN_ROWS, foot + 8, own.design, "plain")
+
+  local trying = session.trying
+  if trying.paint or trying.design then
+    local tried = if trying.paint then Paints.paintById[trying.paint] else nil
+    local laid = if trying.design then Paints.designById[trying.design] else nil
+    local what = (if tried then tried.name else "") .. (if tried and laid then ", " else "") .. (if laid then laid.name else "")
+    Im.Text("Trying on:", x, foot + 8, 11, Im.WARN)
+    Im.Text(shorten(what, 22), x, foot + 22, 13, Im.WARN)
+    Im.Text(if laid and tried == nil and own.paint == nil then "a design shows on a paint" else "not yours, not painted", x, foot + 40, 11, Im.DIM)
+    if Im.Button("Stop", x + width - 54, foot + 2, 54, 20, true, "Try:stop") then
+      Session.Try(session, nil)
+    end
+  end
+end
+
 local function drawFitting(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number,
   preview: Preview?, show: Show?)
   local ship = player.ship
@@ -538,32 +650,7 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
   end
   Im.Wrapped("Fitted from the inventory: right-click a module or a charge in the hangar, or carry it here.", x + 16, y + 84, 150, 12,
     Im.DIM)
-  -- What the ship is painted in (Core/Assets/Paintwork), and what is
-  -- being tried on it: at the foot of the screen's left side.
-  do
-    local own = game.state.ships[player.ship]
-    local paint = if own and own.paint then Paints.paintById[own.paint] else nil
-    local design = if own and own.design then Paints.designById[own.design] else nil
-    local px, py = x + 16, y + 418
-    Im.Text("PAINT", px, py, 11, Im.ACCENT)
-    Im.Text(if paint then paint.name .. (if design then `, {design.name}` else "") else "As it left the yard", px, py + 16, 13,
-      if paint then Im.TEXT else Im.DIM)
-    if paint and Im.Button("Strip", px + 150, py + 12, 54, 22, (Session.CanDo(session, { kind = "StripPaint", actor = 0 })), "Paint:strip") then
-      Session.Do(session, { kind = "StripPaint", actor = 0 })
-    end
-    local trying = session.trying
-    if trying.paint or trying.design then
-      local tried = if trying.paint then Paints.paintById[trying.paint] else nil
-      local laid = if trying.design then Paints.designById[trying.design] else nil
-      local what = (if tried then tried.name else "") .. (if tried and laid then ", " else "") .. (if laid then laid.name else "")
-      Im.Text(`Trying on: {what}`, px, py + 40, 13, Im.WARN)
-      Im.Text(if laid and tried == nil and paint == nil then "a design shows on a paint: try a paint too" else "not bought, not painted", px,
-        py + 56, 11, Im.DIM)
-      if Im.Button("Stop", px + 150, py + 44, 54, 22, true, "Try:stop") then
-        Session.Try(session, nil)
-      end
-    end
-  end
+  drawPaints(session, game, player, x + 16, y + 156, 144)
 
   -- The ship: its name over the wheel.
   local cx, cy = x + 334, y + 296
@@ -901,6 +988,10 @@ local function drawMarket(session: Session.Session, game: Core.Game, player: Cor
   local line = top + 28
   local untrained = Core.Query.Untrained(game, chosen)
   Im.Text(string.format("%s m3 a unit", tostring(info.volume)), dx, line, 13, Im.DIM)
+  -- (a paint or a design that is the pilot's for good is not needed twice)
+  if info.category == "paint" and game.state.paints[chosen] then
+    Im.Text("yours already: on the fitting screen's list", dx + 110, line, 13, Im.ACCENT)
+  end
   if untrained then
     Im.Text(shorten(untrained, 30), dx + 110, line, 13, Im.WARN)
   end

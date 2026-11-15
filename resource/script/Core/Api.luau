@@ -114,7 +114,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 82
+Core.SAVE_VERSION = 83
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -411,6 +411,23 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- and pirates mass where the pressure says, several places at once. A
   -- save from before had one surge at most: it is on the list, if it was
   -- on, and every system's pressure begins as a new game's would.
+  -- 83: a paint is the pilot's for good once it is made theirs
+  -- (Assets/Paintwork), where one was used up by a painting before. What
+  -- a ship of theirs is painted in, in a save from before, is theirs.
+  [82] = function(state: any)
+    state.paints = state.paints or {}
+    for _, id in state.shipIds do
+      local ship = state.ships[id]
+      if ship.owner == "player" then
+        if ship.paint then
+          state.paints[ship.paint] = true
+        end
+        if ship.design then
+          state.paints[ship.design] = true
+        end
+      end
+    end
+  end,
   [81] = function(state: any)
     local old = state.surge
     state.surge = nil
@@ -1067,6 +1084,7 @@ function Core.New(options: Options): Game
     skills = Skills.Starting(),
     training = {},
     trainingStarted = 0,
+    paints = {},
     jobs = {},
     research = {},
     missions = {},
