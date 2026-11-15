@@ -114,6 +114,26 @@ def names(lines, origins):
     return found
 
 
+# What a fragment shader is asked for, by the helpers of frag.jsl that
+# give each part: a shader that gives some of them gives them all. What
+# is left unsaid is whatever the driver likes (this machine's puts
+# nothing there, a strict one what it finds lying about), and the
+# lighting reads it. (A shader that only has a colour gives it with
+# RETURN, which says nothing for the rest.)
+OUTPUTS = ("outputAlbedo", "outputAlpha", "outputNormal", "outputRoughness", "outputMaterial")
+
+
+def unwritten(path, lines, origins):
+    """The parts of its output a fragment shader's own file does not give, if it gives any."""
+    own = [text for text, origin in zip(uncommented(lines), origins) if origin[0] == path]
+    body = "\n".join(own)
+    given = [name for name in OUTPUTS if re.search(r"\b" + name + r"\s*\(", body)]
+    if not given or len(given) == len(OUTPUTS):
+        return []
+    return [((path, 1), "gives " + ", ".join(given) + " and not " + ", ".join(n for n in OUTPUTS if n not in given)
+             + ": every part of what a shader is asked for is to be given")]
+
+
 def compiler():
     for name in ("glslangValidator", os.path.expanduser("~/.local/opt/glslang/usr/bin/glslangValidator")):
         path = shutil.which(name) or (name if os.path.isfile(name) else None)
@@ -155,6 +175,8 @@ def main():
                 count += 1
                 lines, origins = assemble(path)
                 found = names(lines, origins)
+                if stage == "frag":
+                    found += unwritten(path, lines, origins)
                 if tool:
                     found += compiled(tool, stage, lines, origins, False)
                     if modern:

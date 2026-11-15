@@ -11,8 +11,15 @@ FRAG_IN vec3 vertcolor;
 
 uniform int prepass;
 
-/* (what a shader gives is a number, whatever it worked out: global.jsl) */
-#define RETURN(x)  { fragment_color0 = asNumber(x); return; }
+/* (what a shader gives is a number, whatever it worked out: global.jsl)
+   (And it gives both of what it is asked for. A shader that only has a
+   colour to give says nothing of the surface: no normal, no roughness,
+   no material. Left unsaid, that is whatever the driver likes: this
+   one's own puts nothing there, and a strict one puts what it finds
+   lying about, which for a pass that adds its light to what is there,
+   the stars for one, spoils the surface under every one of its quads
+   for the lighting that comes after. Nothing is what it adds.) */
+#define RETURN(x)  { fragment_color0 = asNumber(x); fragment_color1 = vec4(0.0); return; }
 
 const int MATERIAL_PHONG = 0;
 const int MATERIAL_COOKT = 1;

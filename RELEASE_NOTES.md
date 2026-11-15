@@ -6,6 +6,10 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Dark specks on bright things
+
+- On some graphics cards (AMD's, on Windows) small dark specks in the pattern of the background stars showed on anything bright. The likely cause is mended: the stars, and every other effect that only adds light, left part of what the lighting reads unsaid, and such a driver filled it with whatever it had. Not yet seen on such a card: say if they are still there.
+
 ## A station's field is a wall
 
 - Nothing shoots across a station's field, in or out. Inside it nothing outside can lock you, and you can lock nothing outside: a missile already on its way stops at the field.
