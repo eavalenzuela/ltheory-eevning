@@ -412,10 +412,13 @@ local RISK: { [string]: number } = { secure = 0, low = 2, lawless = 30 }
 -- included (one system, if they are the same). The fewest jumps, or
 -- with 'safest' the least dangerous way. Of ways as good, the one
 -- through the lower-numbered systems. Empty if there is no way.
-function Galaxy.Route(galaxy: Galaxy, from: number, to: number, safest: boolean?): { number }
+function Galaxy.Route(galaxy: Galaxy, from: number, to: number, safest: boolean?, closed: { [number]: boolean }?): { number }
   local systems = galaxy.systems
   assert(systems[from] and systems[to], "no such system")
   local count = #systems
+  -- ('closed': the gates nothing goes through now, each by the number
+  -- its two systems make, a * (count + 1) + b. Tactical/Mishaps)
+  local span = count + 1
   local cost: { number } = table.create(count, math.huge)
   local before: { number } = table.create(count, 0)
   local done: { boolean } = table.create(count, false)
@@ -457,6 +460,9 @@ function Galaxy.Route(galaxy: Galaxy, from: number, to: number, safest: boolean?
       done[at] = true
       for _, neighbor in systems[at].neighbors do
         local reached = least + 1 + (if safest then RISK[Galaxy.Band(systems[neighbor].security)] else 0)
+        if closed and closed[at * span + neighbor] then
+          continue
+        end
         if reached < cost[neighbor] then
           cost[neighbor] = reached
           before[neighbor] = at

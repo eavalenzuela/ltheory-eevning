@@ -10,7 +10,10 @@
 # course there. The star map has it ringed. Something farther off than
 # news travels is on the list too, and nobody is told of it.
 #
-# covers: Core/Strategic/Happenings Core/Tactical/Surges Game/UI/Events
+# Then a rich belt is found in the pilot's own system (a cheat too):
+# out of the station, it is a place on the overview.
+#
+# covers: Core/Strategic/Happenings Core/Tactical/Surges Core/Tactical/Sightings Core/Tactical/Mishaps Core/Tactical/Invasions Game/UI/Events
 
 wait 2
 lua GameDebug.NewGame(1, 40)
@@ -42,6 +45,13 @@ until GameDebug.Press('events:close')
 until GameDebug.Press('Map')
 frames 30
 until GameDebug.Press('Map:close')
+
+# Good luck, where the pilot is: a rich belt, on the overview once they are out to see it.
+lua assert(GameDebug.Happen('windfall', 'belt', 1, 20) ~= '', 'nowhere for a belt')
+lua assert(select(2, GameDebug.Happenings('windfall')) == 1)
+until GameDebug.Press('UNDOCK') and GameDebug.InSpace()
+patience 30
+until GameDebug.Select('Rich Belt')
 
 echo events scenario passed
 quit

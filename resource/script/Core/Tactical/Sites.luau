@@ -197,6 +197,8 @@ local function prizes(state: State.State, rng: Rng.Rng, wreck: number, count: nu
     Items.Add(state, customs[Rng.Int(rng, #customs) + 1].id, 1, wreck, "cargo")
   end
 end
+-- (for whoever else leaves a rich wreck: Tactical/Sightings)
+Sites.Prizes = prizes
 
 -- The skill books there are: what a vault now and then has one of.
 local books: { string } = {}

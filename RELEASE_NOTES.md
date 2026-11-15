@@ -11,7 +11,9 @@ the lines beginning `- ` under it.
 - Pirates now mass where the galaxy says they would: in systems where order is thin and trade is rich, several at once across the map, instead of one surge at a time near you. Destroying pirates in a system holds a surge off, and ten destroyed during one breaks it.
 - A surge that runs its course leaves that system a little less safe for three days. One that is broken leaves it a little safer.
 - A new Events button at the foot of the screen opens a list of everything going on, nearest first: where, how many jumps, how long it has left, and a button to set course there. The star map rings each such system.
-- More kinds are coming to the same list: invasions, rare sightings, and good and bad luck at stations and belts.
+- Sightings, every hour or two within a few jumps: a named pirate captain with an escort and a wreck worth taking, a derelict hull already found for you, or a wandering trader whose rare stock is on a station's contract board while they stay.
+- Luck at places, every few hours: a station's refinery, yards or laboratory out of use for a day, a gate closed for repairs (routes and the autopilot go round it), or a rich belt of rare ore.
+- Invasions: now and then a force comes out of wormhole space into a system and digs in for four hours. Its lines are on the overview; fight it there and the system's keeper pays 400,000 when the last of them is gone. Left alone, it shuts the works of that system's stations and leaves the place less safe for days. (For now the invaders are pirates.)
 
 ## Trial 1 of 3 for the dark specks
 

@@ -413,6 +413,10 @@ function Session.Notice(session: Session, event: Space.Event)
     elseif event.happening == "windfall" then
       Session.Say(session, `NEWS: a rich belt has been found {where}`)
     end
+  elseif kind == "HappeningStage" and (event.system == Core.Query.Player(session.game).system or event.system == session.destination) then
+    local name = session.game.state.galaxy.systems[event.system].name
+    Session.Say(session, if event.stage == 2 then `The invaders in {name} are landed, and dug in`
+      else `The invaders in {name} are at its stations: every works there has stopped`)
   elseif kind == "HappeningEnded" and (event.kills > 0 or event.system == Core.Query.Player(session.game).system) then
     local name = session.game.state.galaxy.systems[event.system].name
     if event.happening == "surge" then
@@ -421,6 +425,12 @@ function Session.Notice(session: Session, event: Space.Event)
     elseif event.happening == "invasion" then
       Session.Say(session, if event.outcome == "beaten" then `The invasion of {name} is beaten: what is left of them has gone back`
         else `The invaders have left {name}, in their own time`)
+    elseif event.happening == "sighting" and event.what == "captain" and event.outcome == "taken" then
+      Session.Say(session, `{event.name} is destroyed: what they carried is in the wreck`)
+    elseif event.happening == "sighting" and event.what == "captain" then
+      Session.Say(session, `{event.name} has moved on`)
+    elseif event.happening == "sighting" and event.what == "trader" then
+      Session.Say(session, `{event.name} has moved on, and their stock with them`)
     end
   elseif kind == "TowerRaided" then
     local body = Core.Query.Body(session.game, event.station)
@@ -610,7 +620,7 @@ function Session.Way(session: Session, from: number, to: number, safest: boolean
   local key = `{from}:{to}:{safest == true}`
   local way = ways[key]
   if way == nil then
-    way = Galaxy.Route(session.game.state.galaxy, from, to, safest)
+    way = Galaxy.Route(session.game.state.galaxy, from, to, safest, Core.Query.Closed(session.game))
     ways[key] = way
   end
   return way

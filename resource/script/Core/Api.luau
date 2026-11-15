@@ -52,6 +52,9 @@ local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Raids = require("@lt/Core/Tactical/Raids")
 local Happenings = require("@lt/Core/Strategic/Happenings")
+local Sightings = require("@lt/Core/Tactical/Sightings")
+local Mishaps = require("@lt/Core/Tactical/Mishaps")
+local Invasions = require("@lt/Core/Tactical/Invasions")
 local Ships = require("@lt/Core/Data/Ships")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Commerce = require("@lt/Core/Strategic/Commerce")
@@ -1269,6 +1272,10 @@ local function validate(state: State.State, command: State.Command): (boolean, s
   -- (through a camp's gate, only when the camp says it is open: Tactical/Assault)
   if ok and command.kind == "Jump" then
     local gate = Space.Object(state, command.target or 0)
+    -- (nor through a gate that is closed for repairs: Tactical/Mishaps)
+    if gate and gate.kind == "gate" and gate.to ~= 0 and Mishaps.Shut(state, Space.SystemOf(state, gate.id), gate.to) then
+      return false, "the gate is closed for repairs"
+    end
     if gate and gate.variety == Assault.GATE then
       return Assault.Passable(state, gate)
     end
@@ -1389,6 +1396,16 @@ function Core.Step(game: Game)
   Standings.Step(state)
   Assault.Step(state, game.events)
   Happenings.Step(state, game.events)
+  -- (and what is seen for an hour or two within reach of the pilot: Tactical/Sightings)
+  do
+    local ship = state.ships[state.player.ship]
+    local at = if ship == nil then 1 elseif state.balls[ship.id] then state.balls[ship.id].system else Space.SystemOf(state, ship.docked)
+    Sightings.Step(state, at, game.events)
+    -- (and the luck of places: Tactical/Mishaps)
+    Mishaps.Step(state, at, game.events)
+    -- (and whoever comes out of the deep to stay: Tactical/Invasions)
+    Invasions.Step(state, at, game.events)
+  end
   Pirates.Populate(state, game.events)
   -- (a pilot docked in a colony ship of the nomads goes where it goes:
   -- it has gone on to its next system, and they are there with it)
@@ -2435,6 +2452,12 @@ function Query.Happenings(game: Game): { HappeningInfo }
     return a.id < b.id
   end)
   return found
+end
+
+-- The gates that are closed for repairs (Tactical/Mishaps), as
+-- Galaxy.Route wants them: nil when none is.
+function Query.Closed(game: Game): { [number]: boolean }?
+  return Mishaps.Closed(game.state)
 end
 
 -- What happenings have left behind them (Strategic/Happenings): the

@@ -63,6 +63,8 @@ local HOUR = math.ceil(3600 / Constants.TICK)
 -- How many lots a station's board has for sale each day, and wants.
 Contracts.OFFERS = 3
 Contracts.WANTS = 2
+-- How many lots a wandering trader has while they lie at a station.
+Contracts.TRADER = 3
 -- How long a pilot's listing stays up, and how many they can have up.
 Contracts.LASTS = 7 * DAY
 Contracts.LISTINGS = 10
@@ -249,6 +251,39 @@ function Contracts.Board(state: State.State, station: number): { Lot }
     end
     table.insert(lots, lot)
   end
+  -- A wandering trader lying at the station (Tactical/Sightings, seen
+  -- here by the state alone) has three lots of their own while they
+  -- stay: modules no station sells, for less than a board asks, and a
+  -- copy of a design no station has, for less than one is ever let go
+  -- for. Each is theirs once: taken, it is gone until the next of them.
+  for _, one in state.happenings.list do
+    if one.kind == "sighting" and one.what == "trader" and one.place == station then
+      for slot = 1, Contracts.TRADER do
+        local key = `{station}:trader{one.id}:offer:{slot}`
+        if table.find(state.contractsTaken, key) then
+          continue
+        end
+        local rng = Rng.For(state.historySeed, station, one.id, slot, 139)
+        local lot: Lot = { key = key, side = "offer", slot = Contracts.OFFERS + slot, title = "", stacks = {}, price = 0, worth = 0 }
+        if slot == Contracts.TRADER and #invented > 0 then
+          local blueprint = invented[Rng.Int(rng, #invented) + 1]
+          local runs = 2 + Rng.Int(rng, 4)
+          lot.stacks = { { type = Blueprints.Copy(blueprint), quantity = runs } }
+          lot.title = `{one.name}: {Types.Info(blueprint.product).name}, a copy, {runs} runs`
+          lot.worth = Contracts.Base(lot.stacks)
+          lot.price = math.ceil(lot.worth * Rng.Float(rng, 0.9, 1.2))
+        else
+          local module = rare[Rng.Int(rng, #rare) + 1]
+          local count = 1 + Rng.Int(rng, 2)
+          lot.stacks = { { type = module.id, quantity = count } }
+          lot.title = `{one.name}: {count} x {module.name}`
+          lot.worth = Contracts.Base(lot.stacks)
+          lot.price = math.ceil(lot.worth * Rng.Float(rng, 0.65, 0.9))
+        end
+        table.insert(lots, lot)
+      end
+    end
+  end
   for slot = 1, Contracts.WANTS do
     local key = keyOf(station, day, "want", slot)
     if table.find(state.contractsTaken, key) or #wanted == 0 then
@@ -433,7 +468,17 @@ local function take(state: State.State, key: string)
   table.insert(state.contractsTaken, key)
   local day = `:{state.tick // DAY}:`
   for index = #state.contractsTaken, 1, -1 do
-    if not string.find(state.contractsTaken[index], day, 1, true) then
+    local taken = state.contractsTaken[index]
+    -- (a wandering trader's lot is theirs, not a day's: it is kept as
+    -- long as they are there)
+    local trader = tonumber(string.match(taken, ":trader(%d+):"))
+    local staying = false
+    if trader then
+      for _, one in state.happenings.list do
+        staying = staying or one.id == trader
+      end
+    end
+    if not staying and not string.find(taken, day, 1, true) then
       table.remove(state.contractsTaken, index)
     end
   end

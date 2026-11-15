@@ -16,6 +16,7 @@
 -- for it. Mooring, keeping things in the hangar, the wallet and
 -- training are not any module's: they can be done at any station.
 
+local Constants = require("@lt/Core/Data/Constants")
 local Space = require("@lt/Core/Tactical/Space")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
@@ -73,7 +74,28 @@ function Stations.People(state: State.State, id: number): string
 end
 
 -- Whether a station has a module that gives a service.
+-- Whether something going on has put a station's service out of use
+-- (Strategic/Happenings, seen here by the state alone): its works are
+-- being mended (Tactical/Mishaps), or invaders are at the stations of
+-- its system (Tactical/Invasions), which stops every works there. The
+-- seconds until it is mended, if that is known; nil if it is in use.
+local WORKS: { [string]: boolean } = { refining = true, industry = true, research = true }
+function Stations.Out(state: State.State, id: number, service: Structures.Service): number?
+  for _, one in state.happenings.list do
+    if one.kind == "disaster" and one.place == id and one.what == service then
+      return math.max(0, one.ends - state.tick) * Constants.TICK
+    elseif one.kind == "invasion" and one.stage >= 3 and WORKS[service] and state.starbases[id] == nil
+      and one.system == Space.SystemOf(state, id) then
+      return math.max(0, one.ends - state.tick) * Constants.TICK
+    end
+  end
+  return nil
+end
+
 function Stations.Has(state: State.State, id: number, service: Structures.Service): boolean
+  if Stations.Out(state, id, service) then
+    return false
+  end
   -- (a pilot's own gives only what is online, and nothing when it is dark)
   local starbase = state.starbases[id]
   if starbase then
@@ -134,6 +156,10 @@ function Stations.Validate(state: State.State, command: State.Command): (boolean
   end
   if Stations.Makeup(state, ship.docked) == nil or Stations.Has(state, ship.docked, service) then
     return true
+  end
+  local out = Stations.Out(state, ship.docked, service)
+  if out then
+    return false, `the {Structures.Provider(service)} here is out of use, for {math.ceil(out / 3600)} h more`
   end
   return false, `this station has no {Structures.Provider(service)}`
 end

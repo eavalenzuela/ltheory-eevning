@@ -224,7 +224,9 @@ export type HackKey = { name: string, codes: { string }, done: boolean }
 -- made until the pilot comes). 'began' and 'ends' are ticks. 'strength'
 -- is how much of it there is left, 'stage' how far it has got, 'kills'
 -- what has been destroyed of it where the pilot was, and 'name' what it
--- is called, if it has a name of its own.
+-- is called, if it has a name of its own. 'ref' is another thing it
+-- turns on, by its number, where it has one: the ship a sighted captain
+-- flies, the system a closed gate leads to.
 export type Happening = {
   id: number,
   kind: string,
@@ -237,6 +239,7 @@ export type Happening = {
   stage: number,
   kills: number,
   name: string,
+  ref: number?,
 }
 
 -- What a happening has left behind it for a few days: a system's order
