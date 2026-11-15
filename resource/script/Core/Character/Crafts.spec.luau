@@ -264,7 +264,11 @@ suite:Case("the crafts of making, trading and working for people: what each come
   local patron = Missions.Offers(state, home)
   for index, offer in dearer do
     t.eq(patron[index].reward, offer.reward)
-    t.near(patron[index].loyalty, math.floor(offer.reward / Missions.LOYALTY * 1.25), 1, offer.kind)
+    -- (a job that pays with a module in place of credits, Missions.PRIZE, pays no credits to count the points
+    -- from: it earns the points of the pay the module stands for)
+    if offer.prize == nil then
+      t.near(patron[index].loyalty, math.floor(offer.reward / Missions.LOYALTY * 1.25), 1, offer.kind)
+    end
     t.ok(patron[index].loyalty >= offer.loyalty)
   end
 

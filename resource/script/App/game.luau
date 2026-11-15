@@ -572,9 +572,10 @@ end
 -- pilot's own in space, so far to its right, above it and ahead of it
 -- (metres, by the way the pilot's ship is drawn pointing), pointing the
 -- same way, with what its design is shown with on its hardpoints, and
--- in a paint and a design if they are named. It is nobody's and does
--- nothing. Its id; 0 if the pilot is not in space or there is no such
--- hull.
+-- in a paint and a design if they are named. It does nothing. It is
+-- its builders' (a Vail hull is the Vail's), and a hull that is
+-- nobody's make (the Quarry, the Hauler) is the pilot's. Its id; 0 if
+-- the pilot is not in space or there is no such hull.
 function Debug.Pose(type: string, right: number, up: number, ahead: number, paint: string?, design: string?): number
   local state = session.game.state
   local me = state.balls[state.player.ship]
@@ -1217,6 +1218,25 @@ function Debug.JumpDrive(system: number?): (number, number, number, number, numb
     return 0, 0, 0, 0, 0, false, "this hull has no jump drive"
   end
   return drive.range, drive.held, drive.cooling, drive.distance, drive.fuel, drive.ready, drive.why
+end
+
+-- The field of the pilot's jump drive (Core/Tactical/Jumping): how deep
+-- it is, m (0 for a drive that has none, and for a hull with no drive),
+-- and how many friendly ships are within it now, which a jump would
+-- take with the pilot's.
+function Debug.JumpField(): (number, number)
+  local drive = Core.Query.JumpDrive(session.game)
+  if drive == nil then
+    return 0, 0
+  end
+  return drive.field, drive.along
+end
+
+-- The system a ship is out in space in (its id: what Debug.Pose gives);
+-- 0 for one that is not in space, or is no ship.
+function Debug.SystemOf(id: number): number
+  local ball = session.game.state.balls[id]
+  return if ball and session.game.state.ships[id] then ball.system else 0
 end
 
 -- The system farthest off that the pilot's jump drive reaches from

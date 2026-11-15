@@ -266,18 +266,18 @@ suite:Case("the Nimia's ships are the owner's list of them: fourteen hulls of li
   t.eq(assert(Facts.Of("cruiser.hano")).kind, "Nimia tech 2 black ops cruiser")
 end)
 
-suite:Case("the Vail's ships are the owner's list of them: seventeen hulls, three of them tech 2 hulls of their own (one black ops, one that jumps), and no hauler, siege dreadnought or supercarrier", function(t)
+suite:Case("the Vail's ships are the owner's list of them: seventeen hulls, two of them tech 2 hulls of their own (one black ops), an ultracapital whose jump drive has a field, and no hauler, siege dreadnought or supercarrier", function(t)
   local vail = Factions.byId.vail
   t.eq({ vail.name, vail.kind } :: { any }, { "Vail", "alien" } :: { any })
   local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, attackbattlecruiser = 200, battlecruiser = 300, battleship = 400,
-    carrier = 1000, dreadnought = 1300, barge = 160, freighter = 650, capitalindustrial = 700 }
+    carrier = 1000, dreadnought = 1300, barge = 160, freighter = 650, capitalindustrial = 700, ultracapital = 1050 }
   -- (name, class, the hull it is the tech 2 make of)
   local LINE: { { any } } = {
     { "Prostration", "frigate" }, { "Undulation", "frigate" }, { "Exaltation", "destroyer" }, { "Adoration", "destroyer" },
     { "Aberration", "destroyer", "Adoration" }, { "Enervation", "cruiser" }, { "Interstition", "cruiser", "Enervation" },
     { "Intervention", "attackbattlecruiser" }, { "Innocence", "battlecruiser" }, { "Penance", "battleship" },
     { "Extravagance", "battleship" }, { "Accordance", "carrier" }, { "Awe", "dreadnought" }, { "Panacea", "barge" },
-    { "Indulgence", "freighter" }, { "Embrace", "capitalindustrial" }, { "Archangel", "capitalindustrial", "Embrace" },
+    { "Indulgence", "freighter" }, { "Embrace", "capitalindustrial" }, { "Archangel", "ultracapital" },
   }
   t.eq(#assert(vail.line), #LINE)
   local theirs = 0
@@ -316,13 +316,34 @@ suite:Case("the Vail's ships are the owner's list of them: seventeen hulls, thre
     guns("barge.panacea"), guns("freighter.indulgence"), guns("capitalindustrial.embrace") }, { 4, 8, 20, 0, 3, 0, 0 })
   -- A patrol of theirs flies the first plain hull of a class.
   t.eq({ Ships.Improved("frigate.prostration"), Ships.Improved("destroyer.exaltation"), Ships.Improved("battleship.penance") } :: { any }, {})
-  -- What each tech 2 hull is for: the Interstition goes unseen, the Archangel jumps, and the Aberration is
-  -- the plain make (what it is for is not said yet).
-  local aberration, interstition, archangel = Ships.byId["destroyer.aberration"], Ships.byId["cruiser.interstition"],
-    Ships.byId["capitalindustrial.archangel"]
+  -- What each tech 2 hull is for: the Interstition goes unseen, and the Aberration is the plain make (the
+  -- owner's word for both).
+  local aberration, interstition = Ships.byId["destroyer.aberration"], Ships.byId["cruiser.interstition"]
   t.eq({ aberration.stealth, aberration.cloak, aberration.jump, aberration.explorer } :: { any }, {})
   t.eq({ interstition.stealth, interstition.cloak, interstition.jump } :: { any }, { true, nil, nil } :: { any })
-  t.eq({ archangel.jump, archangel.stealth, archangel.ore } :: { any }, { true, nil, Ships.byId["capitalindustrial.embrace"].ore } :: { any })
+  -- The Archangel is their ultracapital (the owner's: "roughly 1.5x as large as the plain Embrace", with a
+  -- jump drive whose field takes every friendly ship within 5 km): half as big again as the Embrace, a jump
+  -- drive with a field, and no hardpoint. It was the tech 2 make of the Embrace for a day, and is not.
+  local archangel, embrace, awe = Ships.byId["ultracapital.archangel"], Ships.byId["capitalindustrial.embrace"], Ships.byId["dreadnought.awe"]
+  t.eq(Ships.byId["capitalindustrial.archangel"], nil)
+  t.eq({ archangel.radius / embrace.radius, archangel.jump, archangel.jumpField, archangel.tech, archangel.turrets + archangel.launchers } :: { any },
+    { 1.5, true, 5000, nil, 0 } :: { any })
+  t.eq({ embrace.jump, embrace.jumpField, Ships.Improved(embrace.id) } :: { any }, {})
+  -- So much smaller than the class is written for, it is that much less of one in bulk: heavier than the
+  -- capital industrial it comes of and lighter than their dreadnought, which is bigger; where the Vessari's
+  -- ultracapital, which is as big as the class, is as the class is.
+  t.ok(archangel.mass > embrace.mass and archangel.mass < 2 * embrace.mass and archangel.mass < awe.mass, `it masses {archangel.mass}`)
+  t.ok(archangel.shield > embrace.shield and archangel.shield < 1.2 * awe.shield, `its shield is {archangel.shield}`)
+  local daiichi = Ships.byId["ultracapital.daiichi"]
+  t.ok(daiichi.mass > 5 * archangel.mass and (daiichi.bay or 0) == Ships.BAY.ultracapital and (archangel.bay or 0) < Ships.BAY.ultracapital)
+  local sheet = assert(Facts.Of("ultracapital.archangel"))
+  local built: { [string]: boolean } = {}
+  for _, section in sheet.sections do
+    for _, row in section.rows do
+      built[row.label] = true
+    end
+  end
+  t.eq({ sheet.kind, built["Jump drive"], built["Jump field"] } :: { any }, { "Vail ultracapital", true, true } :: { any })
   t.eq(assert(Facts.Of("cruiser.interstition")).kind, "Vail tech 2 black ops cruiser")
   t.eq(assert(Facts.Of("frigate.undulation")).kind, "Vail frigate")
 end)
@@ -652,9 +673,8 @@ suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in i
   end
   -- The Talmar's three (the Tarantula, the Sugarglider and the Rapa), the Vessari's two (the Kanau and the
   -- Akaboshi), the Orun's four (the Skiver, the Kama, the Falchion and the Longhorn), the Nimia's one (the
-  -- Hano) and the Vail's three (the Aberration, the Interstition and the Archangel). The Kethri's line names
-  -- none yet.
-  t.eq(improved, 13)
+  -- Hano) and the Vail's two (the Aberration and the Interstition). The Kethri's line names none yet.
+  t.eq(improved, 12)
   t.ok(Ships.Improved("frigate.courier") == nil and Ships.Improved("industrial.hauler") == nil and Ships.Improved("capsule") == nil)
 end)
 
@@ -668,10 +688,9 @@ suite:Case("what each tech 2 hull is for is the owner's word: to jump, to go uns
     { "cruiser.falchion", nil, nil, nil, true }, { "industrial.longhorn", nil, true, nil, nil },
     -- (and the Nimia's one, "blackops" on the owner's list of their ships)
     { "cruiser.hano", nil, true, nil, nil },
-    -- (and the Vail's three, by the owner's list of their ships: "t2 destroyer", which says nothing more;
-    -- "t2 cruiser (black ops)"; "t2 capital industrial (mining fleet jumpship)")
+    -- (and the Vail's two, by the owner's list of their ships: "t2 destroyer", of which the owner said
+    -- "plain t2 package"; and "t2 cruiser (black ops)")
     { "destroyer.aberration", nil, nil, nil, nil }, { "cruiser.interstition", nil, true, nil, nil },
-    { "capitalindustrial.archangel", true, nil, nil, nil },
   }
   local said: { [string]: boolean } = {}
   for _, entry in FOR do

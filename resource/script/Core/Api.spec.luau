@@ -799,10 +799,12 @@ end)
 suite:Case("a save with a hull the Vail had opens with the hull of theirs that stands where it stood", function(t)
   local game = newGame()
   local state = game.state
-  -- (name then, name now: hulls of classes they still build, and of the three they do not)
+  -- (name then, name now: hulls of classes they still build, and of the three they do not; and the Archangel,
+  -- which was a capital industrial in the first day of their list, and is their ultracapital)
   local WAS: { { string } } = { { "frigate.thorn", "frigate.prostration" }, { "battleship.harpoon", "battleship.penance" },
     { "attackbattlecruiser.spur", "attackbattlecruiser.intervention" }, { "industrial.drover", "freighter.indulgence" },
-    { "siegedreadnought.ballista", "dreadnought.awe" }, { "supercarrier.arsenal", "carrier.accordance" } }
+    { "siegedreadnought.ballista", "dreadnought.awe" }, { "supercarrier.arsenal", "carrier.accordance" },
+    { "capitalindustrial.archangel", "ultracapital.archangel" } }
   local ships: { number } = {}
   for index, pair in WAS do
     ships[index] = Space.NewShip(state, pair[2], `Theirs {index}`, "vail", 0).id

@@ -114,8 +114,12 @@ export type Faction = {
 -- class carries: the Kethri's colony ship has 140, of every size. Of
 -- each size its builders make their share launchers (Data/Ships).
 -- 'rare': nobody sells it, nor the blueprint for it.
+-- 'jumpField': its jump drive has a field, so many metres deep: every
+-- friendly ship within it goes where the hull goes when it jumps
+-- (Tactical/Jumping). The Vail's Archangel, by the owner's word.
 export type Hull = { name: string, class: string, role: string?, tech: number?, of: string?, jump: boolean?, stealth: boolean?,
-  cloak: boolean?, explorer: boolean?, hardpoints: number?, radius: number?, guns: { number }?, rare: boolean? }
+  cloak: boolean?, explorer: boolean?, hardpoints: number?, radius: number?, guns: { number }?, rare: boolean?,
+  jumpField: number? }
 
 Factions.list = {
   -- The four human factions.
@@ -306,16 +310,25 @@ Factions.list = {
   -- script/modelgen; the models are kept, and are no hull of the game
   -- now) and seven stand-ins. They build no hauler, no siege
   -- dreadnought and no supercarrier.
-  -- Three of the seventeen are tech 2 hulls. The Aberration is the
-  -- Adoration's, of its seed: what it is for is not said, so it is the
-  -- plain tech 2 make until it is. The Interstition is "black ops":
-  -- built to go unseen, as the Nimia's Hano is; it is taken for the make
-  -- of the Enervation, the one plain cruiser they build, though its seed
-  -- is its own. The Archangel ("mining fleet jumpship") is the
-  -- Embrace's, of its seed, with a jump drive. The Embrace ("mining
-  -- fleet boss") leads a mining fleet as the Orun's Stag does: a capital
-  -- industrial as the class is, with the ore hold the fleet's barges
-  -- fill.
+  -- Two of the seventeen are tech 2 hulls. The Aberration is the
+  -- Adoration's, of its seed, and the plain tech 2 make (the owner's
+  -- word: "aberration is plain t2 package"). The Interstition is "black
+  -- ops": built to go unseen, as the Nimia's Hano is; it is taken for
+  -- the make of the Enervation, the one plain cruiser they build,
+  -- though its seed is its own. The Embrace ("mining fleet boss") leads
+  -- a mining fleet as the Orun's Stag does: a capital industrial as the
+  -- class is, with the ore hold the fleet's barges fill.
+  -- The Archangel ("mining fleet jumpship" on the list) is their
+  -- ultracapital, by the owner's word the same day: "roughly 1.5x as
+  -- large as the plain Embrace, but its real feature is that it has an
+  -- AOE jump drive, allowing it to jump any friendly ships within a
+  -- certain distance (5km). This allows it to evac its mining fleet."
+  -- So it is 1,050 m in radius where the Embrace is 700, of the
+  -- Embrace's seed grown bigger, and its jump drive has a field five
+  -- kilometres deep ('jumpField': Tactical/Jumping). It is a hull of
+  -- its own in that class and no tech 2 make (a tech 2 make is of its
+  -- hull's class), and being so much smaller than the class is written
+  -- for it is that much less of one in bulk (Data/Ships).
   -- Their weapons, their defences and the figures below are still what
   -- was put here before any of it came: none of that is the owner's yet.
   -- (Their towers and their paint are still from the drawings: brown
@@ -341,7 +354,7 @@ Factions.list = {
       { name = "Panacea", class = "barge" },
       { name = "Indulgence", class = "freighter" },
       { name = "Embrace", class = "capitalindustrial" },
-      { name = "Archangel", class = "capitalindustrial", tech = 2, of = "Embrace", jump = true },
+      { name = "Archangel", class = "ultracapital", radius = 1050, jump = true, jumpField = 5000 },
     },
   },
   -- The Nimia (the owner's, 2026-11-13; they were the "Skarn", a

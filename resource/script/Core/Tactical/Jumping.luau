@@ -24,6 +24,23 @@
 -- both.) What it had out and near comes with it, as into a warp
 -- (Tactical/Drones).
 --
+-- A drive with a field (Data/Ships' 'jumpField': the Vail's Archangel,
+-- by the project owner's word, 2026-11-15: "an AOE jump drive, allowing
+-- it to jump any friendly ships within a certain distance (5km). This
+-- allows it to evac its mining fleet") takes with it every friendly
+-- ship within so far of its hull when it jumps (Jumping.Along):
+--   - Friendly is of its own side: whose the ship is, and for a ship of
+--     the pilot's, the corporation's members' too.
+--   - A ship in warp is not taken, nor one with a warp scrambler on it:
+--     what holds a ship holds it.
+--   - A ship that is taken needs no drive, no fuel, no skill and no
+--     capacitor of its own, and its own drive (if it has one) is not
+--     set cooling. It comes out as far from the hull that took it, and
+--     the same way off, as it was: at rest, with nothing running and
+--     nothing locked. The drive burns no more fuel for a ship taken.
+--   (All but the field and its depth are first rules, and not the
+--   owner's.)
+--
 -- A hired pilot whose ship has a drive uses it (Tactical/Fleet): to go
 -- after the pilot, or wherever their orders send them, they jump where a
 -- beacon is lit within reach and the fuel is aboard, and go by the gates
@@ -73,6 +90,49 @@ function Jumping.Fitted(state: State.State, ship: number): boolean
   local record = state.ships[ship]
   local hull = if record then Ships.byId[record.type] else nil
   return hull ~= nil and hull.jump == true
+end
+
+-- How deep the field of a ship's drive is, m: 0 for a drive that has
+-- none, and for a hull with no drive.
+function Jumping.Field(state: State.State, ship: number): number
+  local record = state.ships[ship]
+  local hull = if record then Ships.byId[record.type] else nil
+  return if hull and hull.jump then hull.jumpField or 0 else 0
+end
+
+-- Whether two ships are of one side: the same owner's, or the pilot's
+-- and a member's of the pilot's corporation.
+local function friendly(one: string, other: string): boolean
+  local function ours(owner: string): boolean
+    return owner == "player" or owner == "member"
+  end
+  return one == other or (ours(one) and ours(other))
+end
+
+-- The ships a jump of this ship's would take with it, in the order of
+-- their ids: every friendly ship out in space within the field of its
+-- drive (between their hulls), that is not in warp and has no warp
+-- scrambler on it. None, for a drive with no field. (Not its drones,
+-- nor anybody's: those go with the ship that has them out, as into a
+-- warp, Tactical/Drones.)
+function Jumping.Along(state: State.State, ship: number): { number }
+  local taken: { number } = {}
+  local field = Jumping.Field(state, ship)
+  local record, ball = state.ships[ship], state.balls[ship]
+  if field <= 0 or record == nil or ball == nil then
+    return taken
+  end
+  for _, id in state.shipIds do
+    local other, there = state.ships[id], state.balls[id]
+    if id ~= ship and there and there.system == ball.system and not there.warp and not there.vitals.scrambled
+      and friendly(record.owner, other.owner) and Ships.byId[other.type].class ~= "drone" then
+      local dx, dy, dz = there.x - ball.x, there.y - ball.y, there.z - ball.z
+      if math.sqrt(dx * dx + dy * dy + dz * dz) - ball.radius - there.radius <= field then
+        table.insert(taken, id)
+      end
+    end
+  end
+  return taken
 end
 
 -- How far a ship's drive reaches, light years, with whoever flies it.
@@ -249,6 +309,9 @@ function Jumping.Apply(state: State.State, command: State.Command, events: { Eve
   ball.vitals.running, ball.vitals.locks = {}, {}
   ship.jumped = state.tick
   local beacon = Jumping.Beacon(state, ship.id, to) :: Beacon
+  -- (what its field takes with it, and where each is from it now)
+  local along = Jumping.Along(state, ship.id)
+  local wasX, wasY, wasZ = ball.x, ball.y, ball.z
   -- (a point so far from it, in a direction rolled for this jump)
   local rng = Rng.For(state.historySeed, state.tick, ball.id, 37)
   local angle = Rng.Float(rng, 0, 2 * math.pi)
@@ -263,7 +326,23 @@ function Jumping.Apply(state: State.State, command: State.Command, events: { Eve
   Vitals.Refresh(state, ball)
   -- (a jump, to everything that minds one: 'gate' is 0 for a drive's)
   table.insert(events, { kind = "Jumped", ship = ball.id, from = from, to = to, gate = 0, arrival = beacon.id, drive = true,
-    distance = distance, beacon = beacon.name })
+    distance = distance, beacon = beacon.name, took = #along })
+  -- Every ship its field took: as far from it, and the same way off, as
+  -- it was. ('along': the ship whose drive it was.)
+  for _, id in along do
+    local other = state.balls[id]
+    other.vitals.running, other.vitals.locks = {}, {}
+    other.system = to
+    other.x, other.y, other.z = ball.x + (other.x - wasX), ball.y + (other.y - wasY), ball.z + (other.z - wasZ)
+    other.vx, other.vy, other.vz = 0, 0, 0
+    other.tvx, other.tvy, other.tvz = 0, 0, 0
+    other.mode, other.target = "stop", 0
+    other.warp, other.intent = nil, nil
+    Space.AssignGrid(state, other)
+    Vitals.Refresh(state, other)
+    table.insert(events, { kind = "Jumped", ship = id, from = from, to = to, gate = 0, arrival = beacon.id, drive = true,
+      distance = distance, beacon = beacon.name, along = ball.id })
+  end
 end
 
 return Jumping

@@ -249,8 +249,11 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{event.name} has no post there any more, and waits`)
   elseif kind == "Jumped" and event.ship == mine and event.drive then
     local system = session.game.state.galaxy.systems[event.to]
-    Session.Say(session, string.format("Jump drive: %s, %.1f light years, out at %s", if system then system.name else "there",
-      event.distance or 0, tostring(event.beacon or "the beacon")))
+    -- (by its own drive, with whoever its field took; or in the field of another's)
+    local with = if event.along then ", in another ship's field"
+      elseif (event.took or 0) > 0 then `, with {event.took} {if event.took == 1 then "ship" else "ships"} in its field` else ""
+    Session.Say(session, string.format("Jump drive: %s, %.1f light years, out at %s%s", if system then system.name else "there",
+      event.distance or 0, tostring(event.beacon or "the beacon"), with))
   elseif kind == "Jumped" and event.ship == mine and event.wormhole then
     -- (through a wormhole: into uncharted space, or out of it)
     local node = session.game.state.galaxy.systems[event.to]

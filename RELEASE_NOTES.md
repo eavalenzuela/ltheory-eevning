@@ -6,6 +6,12 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## The Archangel, and a jump drive that takes a fleet with it
+
+- The Vail's Archangel is their ultracapital now: half as big again as their capital industrial, the Embrace.
+- Its jump drive has a field. When it jumps, every friendly ship within 5 km of its hull goes with it, and comes out standing about it as it stood. A ship in warp, or one with a warp scrambler on it, is left behind.
+- The map's jump panel says how many ships are within the field, and a hull's sheet says if its drive has one.
+
 ## The Vail's ships
 
 - The Vail fly ships of their own now: seventeen hulls, broad flat wedges drawn to a point, some with one side not the other's twin. Frigates Prostration and Undulation, destroyers Exaltation, Adoration and Aberration, cruisers Enervation and Interstition, the attack battlecruiser Intervention, the battlecruiser Innocence, battleships Penance and Extravagance, the carrier Accordance, the dreadnought Awe, the mining barge Panacea, the freighter Indulgence, and the capital industrials Embrace and Archangel.

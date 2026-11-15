@@ -1,0 +1,68 @@
+# A jump drive with a field, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/fleetjump.txt
+#
+# The Vail's ultracapital, the Archangel, is flown (a cheat), with Jump
+# Drive Operation at one and fuel blocks in its hold. Its drive has a
+# field five kilometres deep: when it jumps, every friendly ship within
+# that of its hull goes with it. Out in space four barges are stood
+# about it (a cheat): two of the pilot's within the field, one of the
+# pilot's too far off, and one of the Vail's own close by, which is no
+# friend of a pilot's ship. The drive says two are within its field. A
+# tower with a Jump Beacon is put in the farthest system the drive
+# reaches (a cheat), and the jump is made from the map. The Archangel is
+# there, and the two with it, as far from it as they were. The other two
+# are where they were.
+#
+# covers: Core/Tactical/Jumping
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Fly('ultracapital.archangel'), 'no Archangel')
+lua GameDebug.Train('jump.drives', 1)
+lua assert(GameDebug.Give('fuel.block', 700))
+until GameDebug.Press('Fitting')
+frames 3
+until GameDebug.Press('ToHold:fuel.block')
+until GameDebug.Hold('fuel.block') == 700
+
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 10
+lua assert(GameDebug.Order('Stop'))
+frames 30
+# Its field, and nobody within it yet.
+lua _G.field, _G.before = GameDebug.JumpField()
+lua assert(_G.field == 5000, 'the Archangel should have a field of 5000 m, and has ' .. _G.field)
+# Four barges about it: so far to its right, above it and ahead of it.
+lua _G.near = GameDebug.Pose('barge.quarry', 3000, 0, 0)
+lua _G.above = GameDebug.Pose('barge.quarry', 0, 5000, 0)
+lua _G.far = GameDebug.Pose('barge.quarry', 0, 0, 9500)
+lua _G.theirs = GameDebug.Pose('barge.panacea', -3000, 0, 0)
+lua assert(_G.near > 0 and _G.above > 0 and _G.far > 0 and _G.theirs > 0, 'the barges should stand about it')
+frames 5
+lua assert(select(2, GameDebug.JumpField()) == _G.before + 2, 'two more should be within its field, and there are ' .. select(2, GameDebug.JumpField()) - _G.before)
+
+# The jump, from the map, to a beacon.
+lua _G.to, _G.name = GameDebug.JumpReach()
+lua assert(_G.to ~= 0, 'the drive should reach somewhere')
+lua _G.home = GameDebug.System()
+lua assert(GameDebug.BeaconAt(_G.to), 'no moon there to put a tower at')
+lua assert(GameDebug.MapOn(_G.to))
+frames 5
+lua assert(select(6, GameDebug.JumpDrive(_G.to)), 'the jump should be ready: ' .. select(7, GameDebug.JumpDrive(_G.to)))
+until GameDebug.Press('Map:jump')
+until GameDebug.System() == _G.to
+frames 10
+lua assert(GameDebug.InSpace() and GameDebug.Hull() == 'ultracapital.archangel')
+# The two within its field came with it, and stand about it as they did.
+lua assert(GameDebug.SystemOf(_G.near) == _G.to and GameDebug.SystemOf(_G.above) == _G.to, 'the two within its field should have come with it')
+lua assert(select(2, GameDebug.JumpField()) == 2, 'the two should be within its field still, and there are ' .. select(2, GameDebug.JumpField()))
+# The one too far off, and the one that is the Vail's, are where they were.
+lua assert(GameDebug.SystemOf(_G.far) == _G.home, 'the barge too far off should be where it was')
+lua assert(GameDebug.SystemOf(_G.theirs) == _G.home, 'the barge that is not of the same side should be where it was')
+lua assert(select(3, GameDebug.JumpDrive()) > 0, 'the drive should be cooling')
+
+echo fleetjump scenario passed
+quit

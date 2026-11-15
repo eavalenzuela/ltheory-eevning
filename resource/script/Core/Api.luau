@@ -114,7 +114,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 84
+Core.SAVE_VERSION = 85
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -421,6 +421,11 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- supercarrier now: a hauler of theirs is their freighter, which is
   -- what carries for them; the others their dreadnought and their
   -- carrier.)
+  -- 85: the Vail's Archangel is their ultracapital, where it was the
+  -- tech 2 make of their capital industrial for a day.
+  [84] = function(state: any)
+    rehulled(state, { ["capitalindustrial.archangel"] = "ultracapital.archangel" })
+  end,
   [83] = function(state: any)
     rehulled(state, {
       ["frigate.thorn"] = "frigate.prostration", ["destroyer.barb"] = "destroyer.exaltation", ["cruiser.pike"] = "cruiser.enervation",
@@ -2548,9 +2553,12 @@ end
 -- And the beacons lit for the pilot, wherever they are: each one's
 -- system, whose it is ("tower" or "ship") and its name, how far off its
 -- system is, and whether that is within the drive's reach.
+-- 'field': how deep the drive's field is, m (0: it has none), and
+-- 'along': how many friendly ships are within it now, which a jump
+-- would take with the pilot's.
 export type JumpBeacon = { system: number, kind: string, name: string, distance: number, reached: boolean }
 export type JumpDriveStatus = { range: number, held: number, cooling: number, distance: number, fuel: number, ready: boolean, why: string,
-  beacons: { JumpBeacon } }
+  beacons: { JumpBeacon }, field: number, along: number }
 function Query.JumpDrive(game: Game, system: number?): JumpDriveStatus?
   local state = game.state
   local ship = state.player.ship
@@ -2572,7 +2580,7 @@ function Query.JumpDrive(game: Game, system: number?): JumpDriveStatus?
   end
   return { range = range, held = Jumping.Held(state, ship), cooling = Jumping.Cooling(state, ship),
     distance = distance, fuel = if known then Jumping.Fuel(state, ship, distance) else 0, ready = ok, why = why or "",
-    beacons = beacons }
+    beacons = beacons, field = Jumping.Field(state, ship), along = #Jumping.Along(state, ship) }
 end
 
 -- A tower the pirates hold a moon with (Tactical/Keeps), asked for by

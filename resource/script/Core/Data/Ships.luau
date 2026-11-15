@@ -102,6 +102,11 @@ export type ShipType = {
   stealth: boolean?,
   cloak: boolean?,
   explorer: boolean?,
+  -- A jump drive with a field, m: when the hull jumps, every friendly
+  -- ship within so far of it goes where it goes (Tactical/Jumping). Nil
+  -- for a drive that takes its own hull and no more, which is every
+  -- other.
+  jumpField: number?,
   -- The kind of damage it leans to, as its faction's ships do (Data/
   -- Factions): 1 EM, 2 thermal, 3 kinetic, 4 explosive. Its weapons do
   -- AFFINITY more of that kind, and its shield, armour and hull let
@@ -345,6 +350,10 @@ local GUN_CPU = { 12, 28, 58, 115 }
 local RACK_GRID = { 6, 110, 1500, 46000 }
 local RACK_CPU = { 30, 58, 92, 184 }
 
+-- The room in an ultracapital's bay, m3 (Ships.BAY, below, has it by
+-- class: here for the yards, which give a small one less).
+local ULTRA_BAY = 40000
+
 -- The room a logistics capital has for ships, m3 of packed hulls: one
 -- carrier or siege dreadnought, or a score of battleships, or a fleet
 -- of anything smaller. (A first figure.)
@@ -358,8 +367,19 @@ local SHIPBAY = 1200000
 -- ('sized' is its hardpoints by the size of weapon each is for, where
 -- its faction's line says: so many small, medium, large and XL. Of each
 -- size its builders make their share launchers, as of any hull.)
-local function yardHull(yard: Factions.Faction, class: string, named: string, role: string?, own: number?, sized: { number }?): ShipType
+-- ('radius' is how big it is, where its faction's line says. An
+-- ultracapital has no size of its own, and what the class is written
+-- for is one of two kilometres: one that is smaller is that much less
+-- of one in bulk, as the cube of its size. Its mass, its price, what it
+-- takes to destroy, its capacitor, its hold and its bay are so much
+-- less. The Vail's Archangel, a little over a kilometre, is a seventh
+-- of the class: half as heavy again as the capital industrial it comes
+-- of. A bigger one is as the class is: the Vessari's, the Kethri's.
+-- A first rule, and not the owner's.)
+local function yardHull(yard: Factions.Faction, class: string, named: string, role: string?, own: number?, sized: { number }?,
+  radius: number?): ShipType
   local s = CLASS[class]
+  local bulk = if class == "ultracapital" and radius and radius < s.radius then (radius / s.radius) ^ 3 else 1
   local gunGrid, gunCpu, racked = 0, 0, 0
   local guns: { number }?, racks: { number }? = nil, nil
   if sized then
@@ -395,11 +415,11 @@ local function yardHull(yard: Factions.Faction, class: string, named: string, ro
   end
   return {
     id = `{class}.{string.lower((string.gsub(named, "[^%a]", "")))}`, name = `{yard.name} {named}`, class = class, lineage = yard.id,
-    basePrice = round(s.price * yard.price * (if combat then COMBAT_HAULER.price else 1)), volume = s.volume,
-    mass = round(s.mass * yard.mass), inertia = s.inertia, maxVelocity = round(s.velocity * yard.velocity),
-    warpSpeed = s.warp, radius = s.radius,
-    shield = round(s.shield * yard.shield * layers), armor = round(s.armor * yard.armor * layers),
-    hull = round(s.hull * yard.hull * layers),
+    basePrice = round(s.price * yard.price * bulk * (if combat then COMBAT_HAULER.price else 1)), volume = s.volume,
+    mass = round(s.mass * yard.mass * bulk), inertia = s.inertia, maxVelocity = round(s.velocity * yard.velocity),
+    warpSpeed = s.warp, radius = radius or s.radius,
+    shield = round(s.shield * yard.shield * layers * bulk), armor = round(s.armor * yard.armor * layers * bulk),
+    hull = round(s.hull * yard.hull * layers * bulk),
     shieldRecharge = s.recharge, shieldResonance = leaning(SHIELD, yard.affinity), armorResonance = leaning(ARMOR, yard.affinity),
     hullResonance = leaning(HULL, yard.affinity), affinity = yard.affinity,
     signature = s.signature,
@@ -408,9 +428,10 @@ local function yardHull(yard: Factions.Faction, class: string, named: string, ro
     mids = math.max(if s.mids == 0 then 0 else 1, s.mids + (if s.mids == 0 then 0 else yard.mids) + (if combat then COMBAT_HAULER.slots else 0)),
     lows = math.max(1, s.lows + yard.lows + (if combat then COMBAT_HAULER.slots else 0)),
     turrets = hardpoints - launchers, launchers = launchers,
-    capacitor = round(s.capacitor * yard.capacitor), capacitorRecharge = s.capacitorRecharge,
+    capacitor = round(s.capacitor * yard.capacitor * bulk), capacitorRecharge = s.capacitorRecharge,
     scanResolution = s.scan, lockRange = round(s.lock * yard.lockRange), maxTargets = s.targets,
-    cargo = round(s.cargo * (if WORKING[class] then yard.cargo else 1) * (if combat then COMBAT_HAULER.cargo else 1)),
+    cargo = round(s.cargo * bulk * (if WORKING[class] then yard.cargo else 1) * (if combat then COMBAT_HAULER.cargo else 1)),
+    bay = if bulk < 1 then round(ULTRA_BAY * bulk) else nil,
     requires = if class == "barge" then { { skill = "mining", level = 4 }, { skill = "industrials", level = 1 } }
       else { { skill = s.skill, level = s.level } },
     restricted = if yard.kind ~= "human" then true else nil,
@@ -436,10 +457,10 @@ for _, yard in Factions.list do
         for _, count in bySize do
           own = (own or 0) + count
         end
-        local hull = yardHull(yard, named.class, named.name, named.role, own, named.guns)
+        local hull = yardHull(yard, named.class, named.name, named.role, own, named.guns, named.radius)
         hull.jump, hull.stealth, hull.rare = named.jump, named.stealth, named.rare
         hull.cloak, hull.explorer = named.cloak, named.explorer
-        hull.radius = named.radius or hull.radius
+        hull.jumpField = named.jumpField
         -- (a hull written out by hand above, under the name the line has
         -- for it, is that hull: the Kethri's frigate)
         local written = false
@@ -740,6 +761,7 @@ for _, yard in Factions.list do
       local hull = rebuiltHull(from, `{entry.class}.{string.lower((string.gsub(entry.name, "[^%a]", "")))}`, `{yard.name} {entry.name}`)
       hull.jump, hull.stealth = entry.jump or from.jump, entry.stealth or from.stealth
       hull.cloak, hull.explorer = entry.cloak or from.cloak, entry.explorer or from.explorer
+      hull.jumpField = entry.jumpField or from.jumpField
       table.insert(types, hull)
     end
   end
@@ -839,7 +861,7 @@ Ships.DRONES = { frigate = 1, destroyer = 2, cruiser = 4, battleship = 5, indust
 -- And the room in its drone bay, m3: what it controls, and spares.
 Ships.BAY = { frigate = 10, destroyer = 25, cruiser = 50, battleship = 125, industrial = 25, barge = 50,
   attackbattlecruiser = 25, battlecruiser = 75, carrier = 2500, dreadnought = 250, siegedreadnought = 250, capitalindustrial = 1000,
-  supercarrier = 6000, ultracapital = 40000 } :: { [string]: number }
+  supercarrier = 6000, ultracapital = ULTRA_BAY } :: { [string]: number }
 -- And the room in its ore hold, m3, for the classes that have one: a
 -- capital industrial's is forty and more of a mining barge's holds.
 -- (A first figure.)

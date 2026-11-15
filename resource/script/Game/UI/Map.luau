@@ -1122,6 +1122,12 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
     Im.TextRight(string.format("reaches %.1f ly: %d %s", drive.range, within, if within == 1 then "system" else "systems"),
       px + SIDE - 24, line + 1, 12, NEXT)
     line += 22
+    -- (a drive with a field: how deep, and who is within it now)
+    if drive.field > 0 then
+      Im.Text(`Its field takes every friendly ship within {Format.Distance(drive.field)}: {drive.along} now`, px, line, 12,
+        if drive.along > 0 then Im.TEXT else Im.DIM)
+      line += 20
+    end
     if shown == here then
       Im.Text(`{Format.Whole(drive.held)} fuel blocks in the hold` .. (if drive.cooling > 0
         then `, cooling {Format.Duration(drive.cooling)}` else ""), px, line, 13, Im.DIM)

@@ -223,6 +223,9 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
     if hull.jump then
       row(built, "Jump drive", "reaches 20 light years without a gate, to a beacon, on fuel blocks")
     end
+    if hull.jump and hull.jumpField then
+      row(built, "Jump field", `takes with it every friendly ship within {whole(hull.jumpField / 1000)} km that is not in warp or scrambled`)
+    end
     if hull.cloak then
       row(built, "Cloak", "its own, built in: nothing to fit, no slot and no capacitor")
     end

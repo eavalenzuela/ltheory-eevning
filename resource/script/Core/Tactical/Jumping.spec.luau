@@ -200,4 +200,78 @@ suite:Case("a ship of the pilot's fleet with a beacon generator running lights t
   t.eq(#Jumping.Beacons(state, me.id), 0)
 end)
 
+suite:Case("a drive with a field takes every friendly ship within five kilometres with it: not one too far off, in warp, scrambled or somebody else's", function(t)
+  -- (the Vail's Archangel has one; the Talmar's jump carrier has a drive and no field)
+  local hull = Ships.byId["ultracapital.archangel"]
+  t.eq({ hull.jump, hull.jumpField, Ships.byId["carrier.scoppo"].jumpField } :: { any }, { true, 5000, nil } :: { any })
+  local plain = (flying("carrier.scoppo"))
+  t.eq({ Jumping.Field(plain.state, plain.state.player.ship), assert(Core.Query.JumpDrive(plain)).field }, { 0, 0 })
+
+  local game, me = flying("ultracapital.archangel")
+  local state = game.state
+  state.skills[Jumping.SKILL] = 1
+  local home = me.system
+  local to = reach(game, home, Jumping.RANGE * (1 + Jumping.FURTHER))
+  local lit = tower(game, to)
+  -- A ship beside it: whose it is, how far off between the two hulls, and which way (1 along x, 2 up, 3 along z).
+  local function beside(name: string, owner: string, gap: number, way: number): State.Ball
+    local ship = Space.NewShip(state, "barge.panacea", name, owner, 0)
+    local off = me.radius + Ships.byId[ship.type].radius + gap
+    local ball = Space.Launch(state, ship, home, me.x + (if way == 1 then off else 0), me.y + (if way == 2 then off else 0),
+      me.z + (if way == 3 then off else 0))
+    t.eq(ball.radius, Ships.byId[ship.type].radius)
+    return ball
+  end
+  local near = beside("Near", "player", 1000, 1)
+  local member = beside("Member", "member", 4990, 2)
+  local far = beside("Far", "player", 5010, 3)
+  local stranger = beside("Stranger", "civilian", 500, 1)
+  local held = beside("Held", "player", 2000, 3)
+  local away = beside("Away", "player", 3000, 2)
+  held.vitals.scrambled = true;
+  (away :: any).warp = {}
+  -- Who a jump would take, in the order of their ids; and what the pilot is told of the drive.
+  t.eq(Jumping.Along(state, me.id), { near.id, member.id })
+  local status = assert(Core.Query.JumpDrive(game, to))
+  t.eq({ status.field, status.along }, { 5000, 2 })
+  -- (one that was held is taken once it is let go)
+  held.vitals.scrambled = false
+  t.eq(Jumping.Along(state, me.id), { near.id, member.id, held.id })
+  held.vitals.scrambled = true
+
+  local distance = Jumping.Distance(state, home, to)
+  local fuel = Jumping.Fuel(state, me.id, distance)
+  Items.Add(state, Structures.FUEL.id, fuel + 10, me.id, "cargo")
+  me.vitals.capacitor = me.vitals.capacitorMax
+  near.vx, near.mode = 30, "goto"
+  local wasNear = { near.x - me.x, near.y - me.y, near.z - me.z }
+  local wasMember = { member.x - me.x, member.y - me.y, member.z - me.z }
+  local command: State.Command = { kind = "JumpDrive", actor = me.id, target = to }
+  t.eq({ Jumping.Validate(state, command) } :: { any }, { true } :: { any })
+  local events: { Jumping.Event } = {}
+  Jumping.Apply(state, command, events)
+  -- The hull went, and the two within its field with it: each as far from it, and the same way off, as it was, at rest.
+  t.eq({ me.system, near.system, member.system }, { to, to, to })
+  t.near(near.x - me.x, wasNear[1], 1e-6)
+  t.near(member.y - me.y, wasMember[2], 1e-6)
+  t.eq({ near.vx, near.mode, #near.vitals.running, #near.vitals.locks } :: { any }, { 0, "stop", 0, 0 } :: { any })
+  t.ok(near.grid == me.grid and me.grid ~= 0, "what it took is not on its grid")
+  -- The others are where they were.
+  t.eq({ far.system, stranger.system, held.system, away.system }, { home, home, home, home })
+  -- It burned what its own mass takes and no more, and only its own drive is cooling.
+  t.eq(Jumping.Held(state, me.id), 10)
+  t.eq({ state.ships[me.id].jumped, state.ships[near.id].jumped } :: { any }, { state.tick, nil } :: { any })
+  -- What is said of it: a jump for each, the taken ones' saying whose field it was.
+  local said: { [number]: any } = {}
+  for _, event in events do
+    t.eq({ event.kind, event.from, event.to, event.drive, event.arrival } :: { any }, { "Jumped", home, to, true, lit } :: { any })
+    said[event.ship] = event
+  end
+  t.eq(#events, 3)
+  t.eq({ said[me.id].took, said[me.id].along, said[near.id].along, said[member.id].along } :: { any }, { 2, nil, me.id, me.id } :: { any })
+  for _ = 1, 10 do
+    Core.Step(game)
+  end
+end)
+
 return suite
