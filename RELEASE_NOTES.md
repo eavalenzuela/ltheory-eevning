@@ -6,6 +6,10 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Starting with the sound off
+
+- The game stopped as it started if sound was switched off in the options. It starts now. (Switching sound off in the options while nothing was playing stopped it the same way.)
+
 ## When it fails, it says where
 
 - If the game stops on an error, `log.txt` in the game's folder now says what it was doing when it did: send that file.

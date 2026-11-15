@@ -9,7 +9,11 @@ VoidFreeFunction(Sound_Delete,
   "Mark 'sound' for deletion",
   Sound, sound)
 {
-  sound->Delete();
+  /* (no sound is nothing to be rid of: a script that keeps a sound it
+     may not have made hands this nil, and the engine stopped on it. The
+     owner's machine, 2026-11-15: started with the sound off.) */
+  if (sound)
+    sound->Delete();
 } FunctionAlias(Sound_Delete, Delete);
 
 FreeFunction(float, Sound_GetDuration,

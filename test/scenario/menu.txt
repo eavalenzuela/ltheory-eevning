@@ -14,6 +14,9 @@
 wait 2
 lua assert(GameDebug.Menu() == '', 'a script starts in the game, not at the menu')
 lua assert(GameDebug.Seed() == 1)
+# (Sound switched off with nothing playing, as a game started with the sound off has it: the engine stopped on that once.)
+lua GameDebug.Sound(false)
+frames 3
 
 # The opening menu: a new game, from a seed.
 lua assert(GameDebug.Menu('main') == 'main')

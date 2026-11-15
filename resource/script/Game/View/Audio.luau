@@ -294,11 +294,21 @@ function Audio.Set(audio: Audio, enabled: boolean, master: number?, music: numbe
   audio.master = master or audio.master
   audio.musicLevel = music or master or audio.musicLevel
   if not enabled then
-    -- (Sound_Delete takes nothing for an answer)
-    Sound_Delete(audio.place)
-    Sound_Delete(audio.engine)
-    Sound_Delete(audio.warp)
-    Sound_Delete(audio.mining)
+    -- (only what is going: the engine stopped on being handed no sound
+    -- to be rid of, which is what a game started with the sound off
+    -- has. The owner's machine, 2026-11-15.)
+    if audio.place then
+      Sound_Delete(audio.place)
+    end
+    if audio.engine then
+      Sound_Delete(audio.engine)
+    end
+    if audio.warp then
+      Sound_Delete(audio.warp)
+    end
+    if audio.mining then
+      Sound_Delete(audio.mining)
+    end
     audio.place, audio.engine, audio.warp, audio.mining, audio.placeIs = nil, nil, nil, nil, ""
     for _, air in audio.air do
       Sound_Delete(air.sound)
