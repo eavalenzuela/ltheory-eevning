@@ -6,8 +6,9 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
-## The Drowned
+## The Drowned, and jobs that pay
 
+- Jobs pay five times the credits they did, every kind of them: a first assault on a pirate camp about 100,000 where it was 20,000, a bounty 45,000 a pirate where it was 9,000, and so on up the levels. Loyalty points are earned as they were.
 - The last of the alien peoples: the Drowned, whose windowless ships are full of fluid, and whom nobody has seen alive. They hold nothing on the map. They are met in the two deepest levels of uncharted space, past where even pirates go.
 - Fifteen ships of theirs, each with a lesser hull out on one flank that houses its cloak: from the frigates Cairn and Charon to the dreadnought The Reaper and the ultracapital The End.
 - At a belt in the deep they come for you under their cloaks, unseen and unannounced until they are in reach. They hit harder than pirates and take longer to kill.

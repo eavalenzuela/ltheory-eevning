@@ -258,7 +258,11 @@ suite:Case("the crafts of making, trading and working for people: what each come
   t.eq(#dearer, #plain)
   for index, offer in plain do
     t.eq({ dearer[index].kind, dearer[index].need } :: { any }, { offer.kind, offer.need } :: { any })
-    t.near(dearer[index].reward, offer.reward * 1.15, 2, offer.kind)
+    -- (where both pay in credits: one job in five pays with a module worth about its credits, Missions.PRIZE,
+    -- and what is worth about 15% more is not always the same module, or any)
+    if offer.prize == nil and dearer[index].prize == nil then
+      t.near(dearer[index].reward, offer.reward * 1.15, 2, offer.kind)
+    end
   end
   state.skills.patronage = 5
   local patron = Missions.Offers(state, home)
@@ -267,7 +271,7 @@ suite:Case("the crafts of making, trading and working for people: what each come
     -- (a job that pays with a module in place of credits, Missions.PRIZE, pays no credits to count the points
     -- from: it earns the points of the pay the module stands for)
     if offer.prize == nil then
-      t.near(patron[index].loyalty, math.floor(offer.reward / Missions.LOYALTY * 1.25), 1, offer.kind)
+      t.near(patron[index].loyalty, math.floor(offer.reward / (Missions.LOYALTY * Missions.PAY) * 1.25), 1, offer.kind)
     end
     t.ok(patron[index].loyalty >= offer.loyalty)
   end

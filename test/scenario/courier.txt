@@ -54,10 +54,16 @@ lua GameDebug.TimeScale(1)
 until GameDebug.Press('Missions')
 until GameDebug.Tab() == 'Missions'
 frames 3
+# (in credits, or now and then in a module of the people's own make,
+# which goes to the hangar: whichever this job's is)
 lua _G.before = GameDebug.Wallet()
+lua _G.credits, _G.prize = GameDebug.Pays(1)
+lua _G.had = if _G.prize == '' then 0 else GameDebug.Hangar(_G.prize)
 until GameDebug.Press('Complete:1')
 until select(2, GameDebug.Missions()) == 0
-lua assert(GameDebug.Wallet() >= _G.before + 3000, 'the contract did not pay')
+lua assert(_G.credits > 15000 or _G.prize ~= '', 'the contract should be worth doing')
+lua assert(GameDebug.Wallet() >= _G.before + _G.credits, 'the contract did not pay')
+lua assert(_G.prize == '' or GameDebug.Hangar(_G.prize) == _G.had + 1, 'what the contract pays with is not in the hangar')
 lua assert(GameDebug.Hold('cargo.sealed') == 0, 'the crates should have been handed over')
 
 echo courier scenario passed

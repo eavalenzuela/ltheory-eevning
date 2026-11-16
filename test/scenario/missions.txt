@@ -43,17 +43,25 @@ until GameDebug.Press('BuyNow')
 until GameDebug.Hangar('ore.cuprite') == 500
 until GameDebug.Press('Missions')
 frames 3
+# (what it pays: half again what its ore is worth, five times over. In
+# credits, or now and then in a module of the people's own make, which
+# goes to the hangar: whichever this order's is)
 lua _G.before = GameDebug.Wallet()
+lua _G.credits, _G.prize, _G.points = GameDebug.Pays(2)
+lua _G.had = if _G.prize == '' then 0 else GameDebug.Hangar(_G.prize)
 until GameDebug.Press('Complete:2')
 until select(3, GameDebug.Missions()) == 1
-lua assert(GameDebug.Wallet() == _G.before + 11250, 'the supply order did not pay what it offered')
+lua assert(_G.credits == 5 * 11250 or _G.prize ~= '', 'the supply order should offer five times 11250')
+lua assert(GameDebug.Wallet() == _G.before + _G.credits, 'the supply order did not pay what it offered')
+lua assert(_G.prize == '' or GameDebug.Hangar(_G.prize) == _G.had + 1, 'what the supply order pays with is not in the hangar')
 lua assert(GameDebug.Hangar('ore.cuprite') == 0, 'the ore was not taken')
 lua assert(select(4, GameDebug.Missions()) > 0, 'a job done should raise the pilot\'s standing')
 lua _G.standing = select(4, GameDebug.Missions())
 
 # The supply order earned loyalty points with the station's faction: a
-# point for every four hundred credits. Its store sells for them.
-lua assert(GameDebug.Loyalty() == 11250 // 400, 'the job done should have earned its loyalty points')
+# point for every two thousand credits. Its store sells for them.
+lua assert(_G.points == 11250 // 400, 'paying five times as much should not have made points cheaper')
+lua assert(GameDebug.Loyalty() == _G.points, 'the job done should have earned its loyalty points')
 until GameDebug.Press('LoyaltyStore')
 frames 3
 lua assert(not GameDebug.CanPress('Redeem:datacore'), 'a datacore is fifty points')

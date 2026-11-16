@@ -27,7 +27,8 @@
 -- standing of having given it up.
 --
 -- A finished job also earns loyalty points with the faction, a point
--- for every four hundred credits of its pay, and a faction's stations
+-- for every two thousand credits of its pay (Missions.LOYALTY, times
+-- Missions.PAY), and a faction's stations
 -- have a store where they are spent (with some credits beside): on
 -- datacores, on implants, and on the blueprints of the tech 2 makes of
 -- the faction's own kinds of weapon, which are otherwise only to be
@@ -139,7 +140,17 @@ Missions.WILD_CHANCE = 0.5
 Missions.RUN_CREDIT = 0.1
 Missions.IN_HAND = 5
 Missions.CRATE = "cargo.sealed"
--- Credits of a job's pay to a loyalty point.
+-- What every job's credits are multiplied by, whatever the job and
+-- whoever gives it. (The owner, of a playtest, 2026-11-15: "jobs pay
+-- far too little in credits. We could easily 5x the credit payouts and
+-- still be under-powered. Frigates cost 400k+, so at 20k for starter
+-- combat missions you'd be running 80 combat missions just to replace
+-- one lost frigate (or buy a new one)." The figures below are what a
+-- job paid before that, and are kept as they were: this is the one
+-- number to change to pay more, or less.)
+Missions.PAY = 5
+-- Credits of a job's pay to a loyalty point, as its pay was before
+-- Missions.PAY: what a job earns in points is not changed by it.
 Missions.LOYALTY = 400
 -- What a level of two of a pilot's crafts adds (Data/Skills): Hard
 -- Bargaining to what a job pays, Patronage to the loyalty points it earns.
@@ -453,11 +464,12 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
   local factions = (1 + 0.03 * Missions.Standing(state, node.nearest)) * (1 + Missions.BARGAIN * math.max(0, state.skills["hard.bargaining"] or 0))
   -- (the loyalty points a job's pay earns: more for one who has learned Patronage)
   local function points(reward: number): number
-    return math.max(1, math.floor(reward / Missions.LOYALTY * (1 + Missions.PATRON * math.max(0, state.skills.patronage or 0))))
+    return math.max(1, math.floor(reward / (Missions.LOYALTY * Missions.PAY) * (1 + Missions.PATRON * math.max(0, state.skills.patronage or 0))))
   end
-  -- (what an agent pays: for the faction's standing, and for their own regard)
+  -- (what an agent pays: Missions.PAY times what the job's figures come
+  -- to, and more for the faction's standing and for their own regard)
   local function paying(slot: number): number
-    return factions * (1 + Missions.REGARD.pay * math.max(0, Missions.Regard(state, station, slot)))
+    return Missions.PAY * factions * (1 + Missions.REGARD.pay * math.max(0, Missions.Regard(state, station, slot)))
   end
   local offers: { State.Mission } = {}
   for slot = 1, Missions.OFFERS do

@@ -53,11 +53,12 @@ end
 
 -- A game whose starter station offers a job of a kind today, that job
 -- taken: the game and the mission. (Which seed offers what is looked for.)
-local function taken(t: Test.Context, kind: string): (Core.Game, State.Mission)
+local function taken(t: Test.Context, kind: string, credits: boolean?): (Core.Game, State.Mission)
   for seed = 1, 40 do
     local game = newGame(seed)
     for _, offer in Missions.Offers(game.state, game.state.player.home) do
-      if offer.kind == kind then
+      -- ('credits': one that pays in them, and not in a module, for a case that counts what it pays)
+      if offer.kind == kind and not (credits and offer.prize) then
         t.ok((submit(game, { kind = "AcceptMission", actor = 0, what = offer.key })))
         return game, game.state.missions[game.state.missionIds[1]]
       end
@@ -340,16 +341,16 @@ suite:Case("the fourth agent has an assault on a pirate camp, at each level the 
     end
     t.eq({ #offer.rooms, offer.mark }, { 0, 0 })
     -- It pays six tenths of the bounties on them (and on what the camp is built of, where that is the job)
-    -- and five thousand a level, and what the pilot's standing adds.
+    -- and five thousand a level, Missions.PAY times over, and what the pilot's standing adds.
     if offer.aim == "raze" then
       for _, kind in Assault.WORKS[level] do
         bounty += Pirates.kindById[kind].bounty
       end
     end
-    local worth = math.floor((math.floor(0.6 * bounty) + 5000 * level) * (1 + 0.03 * 5))
+    local worth = math.floor((math.floor(0.6 * bounty) + 5000 * level) * (Missions.PAY * (1 + 0.03 * 5)))
     pays(t, offer, worth)
     t.near(offer.standing, 0.15 * level, 1e-9)
-    t.eq(offer.loyalty, worth // Missions.LOYALTY)
+    t.eq(offer.loyalty, worth // (Missions.LOYALTY * Missions.PAY))
     t.ok(worth > last, "a harder camp should pay more")
     last = worth
     t.eq(Missions.Title(offer), `Assault, level {level}: ` .. (if offer.aim == "chief" then "the chief of a camp"
@@ -960,8 +961,9 @@ suite:Case("the fifth agent has a mining contract at each level the pilot's stan
     t.eq(offer.need % 100, 0)
     local volume = offer.need * ore.volume
     t.near(volume, ({ 300, 900, 2500, 7000 })[level], 61, `level {level} wants {volume} m3`)
-    -- It pays three tenths over what the ore is worth, and three thousand a level, and what the pilot's standing adds.
-    local worth = math.floor((math.floor(1.3 * offer.need * ore.basePrice) + 3000 * level) * (1 + 0.03 * 5))
+    -- It pays three tenths over what the ore is worth, and three thousand a level, Missions.PAY times over, and
+    -- what the pilot's standing adds.
+    local worth = math.floor((math.floor(1.3 * offer.need * ore.basePrice) + 3000 * level) * (Missions.PAY * (1 + 0.03 * 5)))
     pays(t, offer, worth)
     t.near(offer.standing, 0.1 * level, 1e-9)
     t.ok(worth > last, "a bigger contract should pay more")
@@ -1081,7 +1083,8 @@ suite:Case("a job comes from an agent, the same people at a station every day, a
     if offer.prize then
       t.ok(offer.loyalty >= 1)
     else
-      t.eq(offer.loyalty, math.max(1, offer.reward // Missions.LOYALTY))
+      -- (a point for so many credits of what it paid before Missions.PAY: paying more has not made points cheaper)
+      t.eq(offer.loyalty, math.max(1, offer.reward // (Missions.LOYALTY * Missions.PAY)))
     end
     table.insert(names, offer.agent)
   end
@@ -1206,7 +1209,7 @@ suite:Case("a job kept more than three days lapses, at the cost of having given 
 end)
 
 suite:Case("an agent has a regard of their own for the pilot: more with every job of theirs finished, less with one given up, and they pay for it", function(t)
-  local game, mission = taken(t, "supply")
+  local game, mission = taken(t, "supply", true)
   local state = game.state
   local home = state.player.home
   t.ok(mission.slot >= 1 and mission.slot <= Missions.OFFERS)
@@ -1378,7 +1381,7 @@ suite:Case("the sixth agent has courier contracts in levels: a frigate's hold ov
         t.eq(Missions.Title(offer), `Courier, level {level}: {offer.need} m3`)
       end
       -- It pays for the volume and the way, and standing by its level.
-      t.eq(offer.reward, math.floor((run.base + run.rate * offer.need * jumps) * (1 + 0.03 * 10)))
+      t.eq(offer.reward, math.floor((run.base + run.rate * offer.need * jumps) * (Missions.PAY * (1 + 0.03 * 10))))
       t.near(offer.standing, Missions.RUN_CREDIT * level, 1e-9)
     end
   end

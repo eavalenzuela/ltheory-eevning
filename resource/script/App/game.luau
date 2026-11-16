@@ -2029,14 +2029,15 @@ function Debug.Missions(): (number, number, number, number)
 end
 
 -- What a job in hand pays (the first, or the nth, oldest first): its
--- credits, and the type of the module it pays with in their place ("",
--- for most: Missions.PRIZE). -1 and "" where there is no such job.
-function Debug.Pays(nth: number?): (number, string)
+-- credits, the type of the module it pays with in their place ("", for
+-- most: Missions.PRIZE), and the loyalty points it earns. -1, "" and 0
+-- where there is no such job.
+function Debug.Pays(nth: number?): (number, string, number)
   local held = Core.Query.Missions(session.game).inHand[nth or 1]
   if held == nil then
-    return -1, ""
+    return -1, "", 0
   end
-  return held.mission.reward, held.mission.prize or ""
+  return held.mission.reward, held.mission.prize or "", held.mission.loyalty
 end
 
 -- Which of the jobs the station docked at offers is the first of a kind

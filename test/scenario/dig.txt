@@ -90,7 +90,7 @@ lua _G.credits, _G.prize = GameDebug.Pays(1)
 lua _G.had = if _G.prize == '' then 0 else GameDebug.Hangar(_G.prize)
 until GameDebug.Press('Complete:1')
 until select(3, GameDebug.Missions()) == 1
-lua assert(_G.credits > 15000 or _G.prize ~= '', 'the contract should be worth doing')
+lua assert(_G.credits > 75000 or _G.prize ~= '', 'the contract should be worth doing')
 lua assert(GameDebug.Wallet() >= _G.before + _G.credits, 'the contract did not pay')
 lua assert(_G.prize == '' or GameDebug.Hangar(_G.prize) == _G.had + 1, 'what the contract pays with is not in the hangar')
 frames 3
