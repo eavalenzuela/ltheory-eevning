@@ -142,6 +142,7 @@ local function draw(_: Windows.Window, x: number, y: number, width: number, heig
 end
 
 Windows.Kind(ID, draw)
-Windows.Make(ID, ID, "Assets", 494, 130, Assets.WIDTH, Assets.HEIGHT, 340, 240, nil)
+Windows.Make(ID, ID, "Assets", 538, 130, Assets.WIDTH, Assets.HEIGHT, 340, 240, nil)
+Windows.Icon(ID, "inventory")
 
 return Assets

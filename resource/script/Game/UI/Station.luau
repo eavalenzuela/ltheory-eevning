@@ -2493,6 +2493,12 @@ end
 -- corporation's); the name a corporation would be founded under; and
 -- how much is to go into its account or come out of it.
 local books = "mine"
+
+-- Which of the wallet's books is open: "mine" or "corporation" (for the
+-- dock, which has a button for each: Game/UI/Dock).
+function Station.Books(): string
+  return books
+end
 local corporationName = ""
 local corporationAmount = 0
 -- And which of the corporation's pages: its journal, its books by

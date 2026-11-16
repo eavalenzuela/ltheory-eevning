@@ -58,17 +58,22 @@ local function broken(text: string, limit: number): (string, string)
   return string.sub(text, 1, at - 1), string.sub(text, at + 1)
 end
 
+-- How big the guide is drawn (it is as tall as what it lists).
+function Guide.Size(session: Session.Session): (number, number)
+  local rows = Core.Query.Guide(session.game)
+  local groups = 0
+  for index, row in rows do
+    groups += if index == 1 or rows[index - 1].step.group ~= row.step.group then 1 else 0
+  end
+  return Guide.WIDTH, 46 + #rows * ROW + groups * 30 + 78
+end
+
 function Guide.Draw(session: Session.Session, x: number, y: number)
   if not open then
     return
   end
   local rows, count = Core.Query.Guide(session.game)
-  local groups = 0
-  for index, row in rows do
-    groups += if index == 1 or rows[index - 1].step.group ~= row.step.group then 1 else 0
-  end
-  local width = Guide.WIDTH
-  local height = 46 + #rows * ROW + groups * 30 + 78
+  local width, height = Guide.Size(session)
   local left = x + 16
   Im.Panel(x, y, width, height)
   Im.Heading(`GUIDE  {count} / {#rows}`, left, y + 12, 16, Im.DIM)

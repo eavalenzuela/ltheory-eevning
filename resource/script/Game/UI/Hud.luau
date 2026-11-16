@@ -16,6 +16,7 @@ local Components = require("@lt/Widget/Components")
 local Constants = require("@lt/Core/Data/Constants")
 local Context = require("@lt/Game/UI/Context")
 local Core = require("@lt/Core/Api")
+local Dock = require("@lt/Game/UI/Dock")
 local Format = require("@lt/Game/Format")
 local Guide = require("@lt/Game/UI/Guide")
 local Im = require("@lt/Game/UI/Im")
@@ -34,6 +35,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local Splash = require("@lt/Game/UI/Splash")
 local State = require("@lt/Core/Kernel/State")
 local Station = require("@lt/Game/UI/Station")
+local Theme = require("@lt/Game/UI/Theme")
 local Waypoints = require("@lt/Game/Waypoints")
 local Windows = require("@lt/Game/UI/Windows")
 local Moons = require("@lt/Core/Data/Moons")
@@ -374,8 +376,6 @@ local function drawOverview(session: Session.Session, all: { Core.Entry }, x: nu
       Scanner.Close()
     else
       Scanner.Open()
-      Colony.Close()
-      Guide.Close()
     end
   end
   -- The columns' heads: a click lists by that column, and another turns
@@ -982,23 +982,42 @@ local function drawNavigation(session: Session.Session, ball: State.Ball, x: num
   end
 end
 
-local function drawClock(session: Session.Session, x: number, y: number)
+-- The clock, in the foot of the dock (Game/UI/Dock): to stop time and
+-- let it run, how fast it is running, and to run it slower and faster.
+-- (A script's names are what they were when it was a strip at the foot
+-- of the screen: "pause" or "run", "Clock:slower", "Clock:faster".)
+local function drawClock(session: Session.Session, x: number, bottom: number)
   local clock = session.clock
-  -- (178 px wide: with the four buttons beside it, the strip ends 464 px
-  -- in, where the rows over it do)
-  Im.Panel(x, y, 178, 34)
-  if Im.Button("-", x + 4, y + 5, 24, 24, clock.scale > 1, "Clock:slower") then
-    clock.scale = math.max(1, clock.scale / 2)
+  local width = Dock.WIDTH
+  local y = bottom - Dock.FOOT
+  Im.Flat(x + 12, y, width - 24, 1, Theme.EDGE)
+  local name = if clock.paused then "run" else "pause"
+  Im.Flat(x + 6, y + 10, width - 12, 24, Theme.CONTROL, 0.92)
+  local toggled, onPause = Im.IconButton(name, x + 6, y + 10, width - 12, 24, true, name, if clock.paused then Theme.CAUTION else Theme.TEXT)
+  if toggled then
+    clock.paused = not clock.paused
   end
-  Im.Text(if clock.paused then "paused" else `time x{clock.scale}`, x + 36, y + 9, 14, if clock.paused then Im.WARN else Im.TEXT)
+  if onPause then
+    Im.Tip(if clock.paused then "Let time run" else "Stop time", nil, Keys.Of("pause"), x + width + 6, y + 8)
+  end
+  local speed = if clock.paused then "paused" else `x{clock.scale}`
+  Im.Strong(speed, x + (width - Im.StrongWidth(speed, 13)) / 2, y + 39, 13, if clock.paused then Theme.CAUTION else Theme.TEXT)
   -- (time is run faster only at a station)
   local docked = Core.Query.Player(session.game).docked ~= 0
-  if Im.Button("+", x + 98, y + 5, 24, 24, docked and clock.scale < 16, "Clock:faster") then
+  Im.Flat(x + 6, y + 58, 19, 20, Theme.CONTROL, 0.92)
+  Im.Flat(x + 27, y + 58, 19, 20, Theme.CONTROL, 0.92)
+  local slower, onSlower = Im.IconButton("minus", x + 6, y + 58, 19, 20, clock.scale > 1, "Clock:slower", Theme.TEXT)
+  if slower then
+    clock.scale = math.max(1, clock.scale / 2)
+  end
+  local faster, onFaster = Im.IconButton("plus", x + 27, y + 58, 19, 20, docked and clock.scale < 16, "Clock:faster", Theme.TEXT)
+  if faster then
     clock.scale = math.min(16, clock.scale * 2)
     clock.forced = false
   end
-  if Im.Button(if clock.paused then "run" else "pause", x + 126, y + 5, 48, 24, true) then
-    clock.paused = not clock.paused
+  if onSlower or onFaster then
+    Im.Tip(if onSlower then "Run time slower" else "Run time faster", if docked then nil else "Time runs faster only at a station", nil,
+      x + width + 6, y + 56)
   end
 end
 
@@ -1024,6 +1043,46 @@ Windows.Kind("map", function(_: Windows.Window, x: number, y: number, w: number,
   end
 end)
 Windows.Screen("map", "map", 1400, 820, { { 0, 0, 232, 40 }, { 0, 0, 1400, 6 } })
+-- (it lies over the others, and nothing is put clear of it)
+Windows.Auto("map", false, true)
+
+-- The guide, the colonies, the scanner and what is said of a type of
+-- thing were panels at a place of their own, the one the inventory
+-- opens at, and lay under it or over it. They are windows now, drawn as
+-- they were: each is moved by its heading, opens clear of the others,
+-- and is where it was left. (Open and shut are still each one's own to
+-- say: the window follows.)
+local paneOf: { session: Session.Session, look: vector? }? = nil
+Windows.Kind("guide", function(_: Windows.Window, x: number, y: number)
+  if paneOf then
+    Guide.Draw(paneOf.session, x, y)
+  end
+end)
+Windows.Kind("colony", function(_: Windows.Window, x: number, y: number)
+  if paneOf then
+    Colony.Draw(paneOf.session, x, y)
+  end
+end)
+Windows.Kind("scanner", function(_: Windows.Window, x: number, y: number)
+  if paneOf then
+    Scanner.Draw(paneOf.session, x, y, paneOf.look)
+  end
+end)
+Windows.Kind("info", function(_: Windows.Window, x: number, y: number)
+  Info.Draw(x, y)
+end)
+for _, pane in { { "guide", Guide.WIDTH, 600, 150 }, { "colony", Colony.WIDTH, Colony.HEIGHT, 150 }, { "scanner", Scanner.WIDTH, Scanner.HEIGHT, 120 },
+  { "info", Info.WIDTH, Info.HEIGHT, Info.WIDTH - 48 } } :: { { any } } do
+  Windows.Screen(pane[1], pane[1], pane[2], pane[3], { { 0, 0, pane[4], 40 }, { 0, 0, pane[2] - 48, 8 } })
+  Windows.Auto(pane[1], true)
+end
+
+-- The dock's buttons that are a station's own: each is a tab of the
+-- docked screen, until it is a window of its own.
+local TAB_OF: { [string]: string } = { fitting = "Fitting", ships = "Ships", market = "Market", industry = "Industry", jobs = "Missions",
+  skills = "Skills", wallet = "Wallet", crew = "Crew", corporation = "Wallet" }
+-- (how many jobs are in hand, counted once a tick and not once a frame)
+local jobsTick, jobsInHand = -1, 0
 
 -- Whether the interface is drawn at all: not, for a picture of the
 -- scene alone (Hud.Hide, and GameDebug.Hud in the game app).
@@ -1079,7 +1138,11 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Inventory.Frame(session, player.docked ~= 0)
       Assets.Frame(session)
       Events.Frame(session)
-      Windows.Begin(left, top, right, bottom)
+      -- The dock is down the left edge (Game/UI/Dock): the windows keep
+      -- clear of it, and what was set out from the screen's left edge
+      -- is set out from the dock's.
+      local edge = left + Dock.WIDTH
+      Windows.Begin(edge, top, right, bottom)
 
       -- Through a gate the view whites out, under everything written on it.
       if scene.veil > 0 then
@@ -1111,49 +1174,56 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         drawBrackets(session, scene, entries, w, ball, marks)
       end
 
-      -- Where we are and what we have.
-      Im.Heading(string.upper(player.systemName), left + 24, top + 18, 30, Im.TEXT)
-      -- (and where that is: its constellation and its region)
-      -- (uncharted space is all one: Core/Describe/Galaxy)
-      Im.Text(if player.uncharted then player.region else `{player.constellation}, {player.region}`,
-        left + 24 + Im.HeadingWidth(string.upper(player.systemName), 30) + 16, top + 30, 13, Im.DIM)
+      -- Where we are and what we have: a panel of its own in the corner,
+      -- beside the dock. The system, how safe it is and whose, where in
+      -- it the pilot is, and the ship and the wallet.
+      local whereX, whereY = edge + 8, top + 12
+      local system = string.upper(player.systemName)
       -- (how safe it is here: what comes to a belt follows from it)
       local _, band = Core.Query.Security(game, player.system)
-      local whose = if player.owner ~= "" then string.upper(player.owner) else "UNCLAIMED"
-      local standing = string.format("%s  -  %s  %.1f", whose, BANDS[band or "secure"], player.security)
+      local tone = if player.uncharted then Theme.BAD elseif band == "secure" then Theme.GOOD elseif band == "low" then Theme.CAUTION else Theme.BAD
       -- (off the map: nobody's, and how deep in it lies says what lives there)
-      if player.uncharted then
-        standing = `ON NO MAP  -  DEPTH {player.depth} OF {player.depths}`
+      local safety = if player.uncharted then `DEPTH {player.depth} OF {player.depths}`
+        else string.format("%.1f %s", player.security, BANDS[band or "secure"])
+      local whose = if player.uncharted then "On no map" elseif player.owner ~= "" then player.owner else "Unclaimed"
+      -- (and where that is: its constellation and its region; uncharted space is all one: Core/Describe/Galaxy)
+      local region = if player.uncharted then player.region else `{player.constellation}, {player.region}`
+      local berth = if player.docked ~= 0 then Core.Query.Body(game, player.docked) else nil
+      local place = if player.docked == 0 then "In space" elseif berth then `Docked: {berth.name}` else "Docked"
+      local craft = `{player.shipName}  -  {player.hull.name}`
+      local wallet = `{Format.Whole(game.state.wallet)} cr`
+      local whereWidth = math.max(300, Im.HeadingWidth(system, 26) + 28,
+        Im.StrongWidth(safety, 11) + Im.StrongWidth(whose, 13) + Im.TextWidth(region, 13) + 60, Im.TextWidth(place, 13) + 28,
+        Im.TextWidth(craft, 13) + Im.StrongWidth(wallet, 13) + 48)
+      local whereHeight = 94
+      Im.Frame(whereX, whereY, whereWidth, whereHeight)
+      Im.Flat(whereX, whereY, 3, whereHeight, tone)
+      Im.Heading(system, whereX + 14, whereY + 9, 26, Theme.TEXT)
+      local across = whereX + 14
+      across += Im.Pill(safety, across, whereY + 38, tone) + 10
+      Im.Strong(whose, across, whereY + 38, 13, Theme.CAUTION)
+      Im.Text(region, across + Im.StrongWidth(whose, 13) + 10, whereY + 38, 13, Theme.DIM)
+      Im.Text(place, whereX + 14, whereY + 56, 13, Theme.TEXT)
+      Im.Text(craft, whereX + 14, whereY + 73, 13, Theme.DIM)
+      Im.Strong(wallet, whereX + whereWidth - 12 - Im.StrongWidth(wallet, 13), whereY + 73, 13, Theme.TEXT)
+      -- Under it, what is being said: the last thing that happened, and
+      -- what is the matter with the system, if anything is.
+      local said = whereY + whereHeight + 4
+      if session.message ~= "" and game.state.tick - session.messageTick < 10 then
+        Im.Text(session.message, whereX + 2, said, 16, Im.WARN)
+        said += 22
       end
-      Im.Text(standing, left + 24, top + 51, 13, if band == "secure" then SAFE elseif band == "low" then Im.WARN else HULL)
+      -- (whether pirates are massing here: Tactical/Surges)
+      local surge = Core.Query.Surge(game)
+      if surge and surge.system == player.system then
+        Im.Text(`PIRATE SURGE  bounties doubled, {Format.Duration(surge.left)} left`, whereX + 2, said, 13, Theme.BAD)
+        said += 18
+      end
       -- (and whether somebody's fleet has its lanes shut: Core/Strategic/Wars)
       local blockading, why = Core.Query.Blockade(game)
       if blockading then
         Im.Text(`BLOCKADED by the {blockading}: {if why == "siege" then "a siege" else "they are claiming it"}. Little comes in or goes out`,
-          left + 24, top + 107 + 20, 13, Im.WARN)
-      end
-      -- (and whether pirates are massing here: Tactical/Surges)
-      local surge = Core.Query.Surge(game)
-      if surge and surge.system == player.system then
-        Im.Text(`PIRATE SURGE  bounties doubled, {Format.Duration(surge.left)} left`, left + 24 + Im.TextWidth(standing, 13) + 16, top + 51, 13,
-          HULL)
-      end
-      Im.Text(`{player.shipName}  -  {player.hull.name}`, left + 24, top + 68, 15, Im.DIM)
-      Im.Text(`{Format.Whole(game.state.wallet)} credits`, left + 24, top + 87, 15, Im.DIM)
-      if session.message ~= "" and game.state.tick - session.messageTick < 10 then
-        Im.Text(session.message, left + 24, top + 107, 16, Im.WARN)
-      end
-      -- The guide: what there is to do, and how much of it is done. Its
-      -- window takes the place the colonies and assets windows take.
-      local steps, guided = Core.Query.Guide(game)
-      if Im.Button(`Guide  {guided} / {#steps}`, left + 300, top + 60, 118, 28, true, "Guide") then
-        if Guide.IsOpen() then
-          Guide.Close()
-        else
-          Guide.Open()
-          Colony.Close()
-          Scanner.Close()
-        end
+          whereX + 2, said, 13, Theme.CAUTION)
       end
 
       if scene.warp > 0 and ball and ball.warp then
@@ -1166,10 +1236,13 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
 
       local panelWidth = 372
       local panelX = right - panelWidth - 16
+      -- The ship's own panels are in the middle of the foot of the screen:
+      -- or as far right of it as leaves the rows beside the dock (the
+      -- fleet's, the drones': 440 px wide) and the ship's state clear.
+      local navX = math.max(left + (w.size.x - 520) / 2, edge + 8 + 440 + 8 + 232)
       if ball then
-        local navX = left + (w.size.x - 520) / 2
-        -- (beside the Guide button, not over it)
-        drawTargets(session, game, ball, left + 430, top + 20)
+        -- (beside the corner's panel, not over it)
+        drawTargets(session, game, ball, whereX + whereWidth + 12, top + 20)
         -- A key (Tab) picks out the next ship that would fire on the pilot,
         -- nearest first and round again.
         if Keys.Did("next") then
@@ -1206,7 +1279,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         drawOverview(session, entries, panelX, top + 182, panelWidth, math.min(600, bottom - top - 272), marks)
         -- (over the ship's own panel, and no wider than leaves the drones'
         -- row and the fleet's panel, which end 464 px in, clear)
-        drawRack(session, game, ball, left + w.size.x / 2, bottom - 172, math.max(400, w.size.x - 2 * 476))
+        drawRack(session, game, ball, navX + 260, bottom - 172, math.max(400, w.size.x - 2 * 476))
         drawNavigation(session, ball, navX, bottom - 86, 520)
         drawStatus(game, ball, navX - 232, bottom - 120)
       else
@@ -1214,7 +1287,8 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         -- until it is put somewhere, moved by its heading, and drawn
         -- with the other windows, below.
         -- (the ship on the fitting screen is a thing of the scene, drawn as the scene draws: Scene.Showcase)
-        Windows.Default("station", left + (w.size.x - Station.WIDTH) / 2, top + 130)
+        -- (and clear of the inventory, where that opens beside the dock)
+        Windows.Default("station", math.max(left + (w.size.x - Station.WIDTH) / 2, edge + 8 + 470 + 4), top + 130)
         -- (and in whatever paint is being tried on it: Session.Try)
         Scene.Try(session.trying.paint, session.trying.design)
         dockedAs = { session = session, game = game, player = player,
@@ -1225,36 +1299,100 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         if not Windows.IsOpen("station") then
           Windows.Open("station")
         end
-        local stationAt = Windows.Get("station")
-        if stationAt then
-          Info.Draw(stationAt.x + Station.WIDTH + 12, stationAt.y)
-        end
       end
       if ball and Windows.IsOpen("station") then
         Windows.Close("station")
       end
       -- (beside the ship's own panels in space, and in the same place docked)
-      drawBoosters(session, left + (w.size.x - 520) / 2 + 532, bottom - 20)
-      drawClock(session, left + 24, bottom - 54)
-      -- Colonies are run from anywhere, in space or docked, and what
-      -- the pilot owns can be looked over from anywhere. The two windows
-      -- take the same place: opening one closes the other.
-      -- (these end 464 px in, short of the ship's own panel, which in
-      -- space begins 468 px in on a screen 1920 wide: a button put on the
-      -- end of the row has to be made room for, not hung over that panel)
-      if Im.Button("Colonies", left + 206, bottom - 54, 72, 34, true) then
-        if Colony.IsOpen() then
-          Colony.Close()
-        else
-          Colony.Open()
-          Scanner.Close()
-          Guide.Close()
+      drawBoosters(session, navX + 532, bottom - 20)
+      -- The dock, down the left edge (Game/UI/Dock): drawn before the
+      -- windows, which keep clear of it, so that what one of its buttons
+      -- opens is drawn this same frame.
+      local docked = ball == nil
+      if jobsTick ~= game.state.tick then
+        jobsTick, jobsInHand = game.state.tick, #Core.Query.Missions(game).inHand
+      end
+      local steps, guided = Core.Query.Guide(game)
+      local pressed = Dock.Draw(w.pos.x, top, bottom, function(id: string): Dock.State
+        local tab = TAB_OF[id]
+        if tab then
+          -- (a station's own: a tab of the docked screen for now, and the wallet's two books a button each)
+          local shown = docked and Windows.IsOpen("station") and Station.Tab() == tab
+          if tab == "Wallet" then
+            shown = shown and (Station.Books() == "corporation") == (id == "corporation")
+          end
+          return { open = shown, can = docked, note = if docked then nil else "At a station only",
+            badge = if id == "jobs" then jobsInHand else nil }
+        elseif id == "inventory" then
+          return { open = Inventory.IsOpen(), can = true, key = Keys.Of("inventory") }
+        elseif id == "map" then
+          return { open = Map.IsOpen(), can = true, key = Keys.Of("map") }
+        elseif id == "scanner" then
+          return { open = not docked and Scanner.IsOpen(), can = not docked, note = if docked then "In space only" else nil }
+        elseif id == "colonies" then
+          return { open = Colony.IsOpen(), can = true }
+        elseif id == "events" then
+          return { open = Events.IsOpen(), can = true }
+        elseif id == "guide" then
+          return { open = Guide.IsOpen(), can = true, note = `{guided} of {#steps} done` }
+        end
+        return { open = false, can = true, key = "Esc" }
+      end)
+      drawClock(session, w.pos.x, bottom)
+      if pressed then
+        local tab = TAB_OF[pressed]
+        if tab then
+          Station.Show(tab)
+          Windows.Raise("station")
+          -- (the wallet's two books are pressed for, as a hand would: next frame, when the tab is drawn)
+          if tab == "Wallet" then
+            Im.Press(if pressed == "corporation" then "Wallet:corporation" else "Wallet:mine")
+          end
+        elseif pressed == "inventory" then
+          if Inventory.IsOpen() then
+            Inventory.Close()
+          else
+            Inventory.Open()
+          end
+        elseif pressed == "map" then
+          if Map.IsOpen() then
+            Map.Close()
+          else
+            Map.Open()
+          end
+        elseif pressed == "scanner" then
+          if Scanner.IsOpen() then
+            Scanner.Close()
+          else
+            Scanner.Open()
+          end
+        elseif pressed == "colonies" then
+          if Colony.IsOpen() then
+            Colony.Close()
+          else
+            Colony.Open()
+          end
+        elseif pressed == "events" then
+          if Events.IsOpen() then
+            Events.Close()
+          else
+            Events.Open()
+          end
+        elseif pressed == "guide" then
+          if Guide.IsOpen() then
+            Guide.Close()
+          else
+            Guide.Open()
+          end
+        elseif pressed == "menu" then
+          Menu.Toggle(session)
         end
       end
       -- What is in reach, and the moving of it: a window that goes where
-      -- it is put (Game/UI/Inventory). Everything the pilot owns
-      -- anywhere, the assets window, is opened from it.
-      if Im.Button("Inventory", left + 282, bottom - 54, 76, 34, true) or (Keys.Did("inventory") and not Im.Typing()) then
+      -- it is put (Game/UI/Inventory), opened from the dock or by its
+      -- key. Everything the pilot owns anywhere, the assets window, is
+      -- opened from it.
+      if Keys.Did("inventory") and not Im.Typing() then
         if Inventory.IsOpen() then
           Inventory.Close()
         else
@@ -1269,28 +1407,45 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           Assets.Open()
         end
       end
-      if Im.Button("Map", left + 362, bottom - 54, 42, 34, true) or Keys.Did("map") then
+      if Keys.Did("map") then
         if Map.IsOpen() then
           Map.Close()
         else
           Map.Open()
         end
       end
-      -- (what is going on in the galaxy: a window of its own, Game/UI/Events)
-      if Im.Button("Events", left + 408, bottom - 54, 56, 34, true) then
-        if Events.IsOpen() then
-          Events.Close()
-        else
-          Events.Open()
+      -- The guide, the colonies, the scanner and what is said of a type
+      -- of thing: each a window (above), open when the thing is. Where
+      -- nobody has put one it is beside the dock, or beside the docked
+      -- screen for what is said of a thing: and from there finds itself
+      -- a place clear of what is open (Windows.Open).
+      paneOf = { session = session, look = if ball then scene.camera:GetLook() else nil }
+      local function pane(id: string, open: boolean, x: number, y: number, width: number, height: number)
+        Windows.Default(id, x, y, width, height)
+        if open ~= Windows.IsOpen(id) then
+          if open then
+            Windows.Open(id)
+          else
+            Windows.Close(id)
+          end
         end
       end
-      Colony.Draw(session, left + 16, top + 130)
-      Guide.Draw(session, left + 16, top + 130)
+      local guideWidth, guideHeight = Guide.Size(session)
+      pane("guide", Guide.IsOpen(), edge + 8, top + 130, guideWidth, guideHeight)
+      pane("colony", Colony.IsOpen(), edge + 8, top + 130, Colony.WIDTH, Colony.HEIGHT)
+      pane("scanner", ball ~= nil and Scanner.IsOpen(), edge + 8, top + 130, Scanner.WIDTH, Scanner.HEIGHT)
+      local stationAt = Windows.Get("station")
+      if ball == nil and stationAt then
+        pane("info", Info.Showing() ~= "", stationAt.x + Station.WIDTH + 12, stationAt.y, Info.WIDTH, Info.HEIGHT)
+      else
+        pane("info", Info.Showing() ~= "", panelX - Info.WIDTH - 12, top + 130, Info.WIDTH, Info.HEIGHT)
+      end
       if ball then
-        Scanner.Draw(session, left + 16, top + 130, scene.camera:GetLook())
         -- (a hack under way has the middle of the screen)
         Hack.Draw(session, left + (w.size.x - Hack.WIDTH) / 2, top + 150)
       end
+      -- (from here down, what was set out from the screen's left edge is set out from the dock's)
+      left = edge - 16
       -- Where the pilot means to go, and the autopilot's switch: a row
       -- of its own over the buttons at the foot of the screen (beside
       -- them is the ship's own panel, in space), whatever else is open.
@@ -1449,8 +1604,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           end
         end
       end
-      -- The windows, over all of that: and over them the menu one of
-      -- them has up, and whatever is being carried from one to another.
+      -- The windows, over all of that; and over them the menu one of
+      -- them has up, whatever is being carried from one to another, and
+      -- what is said of the thing the cursor is on.
       Windows.Draw()
       Im.Overlay(right, bottom)
       -- The menu a right click brought up, over all of that.

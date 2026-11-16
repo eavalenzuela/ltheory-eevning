@@ -157,6 +157,7 @@ local function draw(_: Windows.Window, x: number, y: number, width: number, heig
 end
 
 Windows.Kind(ID, draw)
-Windows.Make(ID, ID, "Events", 520, 150, Events.WIDTH, Events.HEIGHT, 480, 200, nil)
+Windows.Make(ID, ID, "Events", 564, 150, Events.WIDTH, Events.HEIGHT, 480, 200, nil)
+Windows.Icon(ID, "events")
 
 return Events

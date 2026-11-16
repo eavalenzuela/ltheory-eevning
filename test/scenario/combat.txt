@@ -25,12 +25,12 @@ lua assert(GameDebug.Fitted() > 0, 'the ship a pilot begins in has nothing fitte
 # its second row the shield extender: a right click, and Fit, the first
 # thing its menu offers (1920x1080, the window where it is at first).
 # (The hangar is set out by kind: lasers, then shields.)
-click Left 70 242
+click Left 114 242
 frames 3
-click Right 230 252
+click Right 274 252
 frames 3
 lua assert(GameDebug.CanPress('Menu:Fit'), 'a right click on a module in the hangar should offer to fit it')
-click Left 260 268
+click Left 304 268
 wait 1
 lua assert(GameDebug.Fitted('shield.extender.small') == 1, 'clicking Fit did not fit the extender')
 

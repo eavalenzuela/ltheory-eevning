@@ -1,0 +1,25 @@
+#!/bin/bash
+# Draw the mock-up pages to pictures: docs/design/interface/shoot [m1 m2 m3 m4]
+#
+# The pages are plain HTML with the game's own fonts and colours, over
+# captures of the game with its interface hidden. They are drawn by a
+# headless browser with a profile of its own (never one that somebody may
+# have open), inside the hidden desktop (script/offscreen): no window is
+# opened anywhere. The pictures land in out/, which is not kept.
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+REPO="$(cd "$HERE/../../.." && pwd)"
+mkdir -p "$HERE/font" "$HERE/out" "$HERE/profile"
+for face in Regular Medium SemiBold; do
+  cp "$REPO/resource/font/Rajdhani/$face.ttf" "$HERE/font/Rajdhani-$face.ttf"
+done
+cp "$REPO/resource/font/Iceland/Regular.ttf" "$HERE/font/Iceland-Regular.ttf"
+cd "$REPO"
+for name in "${@:-m1 m2 m3 m4}"; do
+  for page in $name; do
+    rm -f "$HERE/out/$page.png"
+    timeout 90 script/offscreen firefox --headless --no-remote --profile "$HERE/profile" --window-size 1920,1080 \
+      --screenshot "$HERE/out/$page.png" "file://$HERE/$page.html" > "$HERE/out/$page.log" 2>&1 || true
+    echo "$page: $(ls -la "$HERE/out/$page.png" 2>/dev/null | awk '{print $5}') bytes"
+  done
+done

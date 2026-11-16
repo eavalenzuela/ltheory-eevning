@@ -9,6 +9,8 @@
 
 local Colors = require("@lt/Colors")
 local Fonts = require("@lt/Fonts")
+local Icons = require("@lt/Game/UI/Icons")
+local Theme = require("@lt/Game/UI/Theme")
 
 local Im = {}
 
@@ -84,6 +86,11 @@ local menu: Menu? = nil
 local menuClick, menuRight = false, false
 local picked: { id: string, index: number }? = nil
 
+-- What is said of the thing the cursor is on, this frame (Im.Tip): its
+-- name, a line more, the key that does it; and where, if not by the cursor.
+type Tip = { title: string, note: string?, key: string?, x: number?, y: number? }
+local tip: Tip? = nil
+
 Im.TEXT = vector.create(0.82, 0.86, 0.9)
 Im.DIM = vector.create(0.5, 0.55, 0.6)
 Im.ACCENT = Colors.Primary
@@ -114,6 +121,7 @@ function Im.Begin()
   held = false
   covered = nil
   shields = {}
+  tip = nil
   seen, seenNow = seenNow, {}
   pressNow, pressNext = pressNext, nil
   -- What is carried: let go when the button comes up, and in hand once
@@ -306,6 +314,85 @@ end
 -- A rectangle of solid colour.
 function Im.Fill(x: number, y: number, w: number, h: number, color: vector, alpha: number)
   WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), color, alpha, alpha, 0)
+end
+
+-- ---------------------------------------------------------------------
+-- The new look's own (Game/UI/Theme): plain grounds, hairlines, and
+-- what is said of the thing the cursor is on.
+
+-- A plain rectangle: the colour as it is given, to its edge and no
+-- further (the panel shader's plain fill, asked for by a bevel under
+-- zero: no shading, no light along its top, no shadow about it).
+function Im.Flat(x: number, y: number, w: number, h: number, color: vector, alpha: number?)
+  WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), color, 1, alpha or 1, -1)
+end
+
+-- The four hairlines about a rectangle, inside it.
+function Im.Edge(x: number, y: number, w: number, h: number, color: vector, alpha: number?)
+  Im.Flat(x, y, w, 1, color, alpha)
+  Im.Flat(x, y + h - 1, w, 1, color, alpha)
+  Im.Flat(x, y + 1, 1, h - 2, color, alpha)
+  Im.Flat(x + w - 1, y + 1, 1, h - 2, color, alpha)
+end
+
+-- A panel of the new look: its ground and a hairline about it (a
+-- stronger one for what is in front). The camera ignores the mouse
+-- while it is over one, as over any panel.
+function Im.Frame(x: number, y: number, w: number, h: number, strong: boolean?)
+  Im.Flat(x, y, w, h, Theme.PANEL, 0.94)
+  Im.Edge(x, y, w, h, if strong then Theme.EDGE_STRONG else Theme.EDGE)
+  if inside(x, y, w, h) then
+    Im.over = true
+  end
+end
+
+-- Text a little heavier than Im.Text's: a name, a figure that matters.
+function Im.Strong(s: string, x: number, y: number, size: number, color: vector, alpha: number?)
+  WidgetRenderer_DrawText(Fonts.Medium(), s, vector.create(x, y + 0.8 * size), size, color, alpha or 1, false)
+end
+
+function Im.StrongWidth(s: string, size: number): number
+  return WidgetRenderer_GetTextSize(Fonts.Medium(), s, size).x
+end
+
+-- A word or two on a tint of its own colour (what a thing is: secure,
+-- hostile, a target). Returns how wide it came to.
+function Im.Pill(s: string, x: number, y: number, color: vector): number
+  local width = Im.StrongWidth(s, 11) + 12
+  Im.Flat(x, y, width, 16, color, 0.18)
+  Im.Strong(s, x + 6, y + 2, 11, color)
+  return width
+end
+
+-- Say something of the thing the cursor is on, for this frame: its name,
+-- a line more (what it is, or why it cannot be had), and the key that
+-- does it. It is drawn last, over everything, by the cursor: or at
+-- (x, y), for a thing that has a place of its own to say it in.
+function Im.Tip(title: string, note: string?, key: string?, x: number?, y: number?)
+  tip = { title = title, note = note, key = key, x = x, y = y }
+end
+
+-- A button that is a sign and no words (Game/UI/Icons); true on the
+-- frame it is clicked, and whether the cursor is on it (for whoever
+-- says what it is, with Im.Tip). 'id' is its name for a script.
+function Im.IconButton(icon: string, x: number, y: number, w: number, h: number, enabled: boolean, id: string, color: vector?): (boolean, boolean)
+  if seenNow[id] == nil or enabled then
+    seenNow[id] = enabled
+  end
+  local scripted = enabled and pressNow == id
+  if scripted then
+    pressNow = nil
+  end
+  local hot = inside(x, y, w, h)
+  if hot and enabled then
+    Im.Flat(x, y, w, h, Theme.CONTROL_HOT, 0.9)
+  end
+  Icons.Draw(icon, x + w / 2, y + h / 2, math.min(w, h) * 0.26,
+    if not enabled then Theme.FAINT elseif hot then Theme.TEXT else (color or Theme.DIM), 1)
+  if hot and enabled and pressed then
+    clicked = true
+  end
+  return scripted or (enabled and hot and pressed), hot
 end
 
 -- A button; true on the frame it is clicked. A disabled one is drawn
@@ -710,6 +797,32 @@ function Im.Overlay(right: number, bottom: number)
       menu = nil
     elseif menuClick or menuRight then
       menu = nil
+    end
+  end
+  -- What was said of the thing the cursor is on: with no menu up and
+  -- nothing in hand.
+  local say = tip
+  if say and up == nil and carrying == nil then
+    local titleWidth = Im.TextWidth(say.title, 13)
+    local keyWidth = if say.key then Im.TextWidth(say.key, 12) + 10 else 0
+    local width = titleWidth + (if say.key then keyWidth + 10 else 0)
+    if say.note then
+      width = math.max(width, Im.TextWidth(say.note, 12))
+    end
+    width += 20
+    local height = if say.note then 45 else 28
+    local x = math.min(say.x or cursor.x + 16, right - width - 4)
+    local y = math.min(say.y or cursor.y + 20, bottom - height - 4)
+    Im.Flat(x, y, width, height, vector.create(0.05, 0.075, 0.105), 1)
+    Im.Edge(x, y, width, height, Theme.EDGE_STRONG)
+    Im.Text(say.title, x + 10, y + 7, 13, Theme.TEXT)
+    if say.key then
+      local kx = x + 10 + titleWidth + 10
+      Im.Edge(kx, y + 6, keyWidth, 17, Theme.EDGE_STRONG)
+      Im.Text(say.key, kx + 5, y + 8, 12, Theme.DIM)
+    end
+    if say.note then
+      Im.Text(say.note, x + 10, y + 26, 12, Theme.DIM)
     end
   end
   local hand = carrying

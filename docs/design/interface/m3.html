@@ -1,0 +1,135 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="mock.css">
+<style>
+  .fit .thead, .fit .row { grid-template-columns: 1fr 38px 38px 30px; column-gap: 8px; }
+  .wheel { position: relative; width: 448px; height: 430px; margin: 0 auto; }
+  .wheel .ship { position: absolute; left: 112px; top: 103px; width: 224px; height: 224px; border-radius: 50%; background: url(plates/ship.jpg);
+    border: 1px solid var(--line2); }
+  .wheel .ring { position: absolute; left: 64px; top: 55px; width: 320px; height: 320px; border-radius: 50%; border: 1px solid var(--line); }
+  .slot { position: absolute; width: 42px; height: 42px; background: rgba(17, 24, 34, 0.96); border: 1px solid var(--line2); display: flex;
+    align-items: center; justify-content: center; color: #cfe0f0; }
+  .slot.empty { border-style: dashed; border-color: var(--line2); background: rgba(8, 12, 18, 0.8); }
+  .slot.sel { border: 2px solid var(--accent); box-shadow: 0 0 0 3px rgba(51, 179, 255, 0.18); }
+  .wl { position: absolute; font: 600 11px R; letter-spacing: 1.2px; color: var(--dim); }
+  .res { display: grid; grid-template-columns: 54px 50px repeat(4, 1fr); column-gap: 4px; row-gap: 4px; align-items: center; }
+  .res .hd { font: 600 10px R; letter-spacing: 0.6px; text-transform: uppercase; text-align: right; }
+  .rc { position: relative; text-align: right; padding: 1px 4px 3px; background: rgba(17, 24, 34, 0.8); font-size: 13px; }
+  .rc i { position: absolute; left: 0; bottom: 0; height: 2px; }
+  .use { display: grid; grid-template-columns: 76px 1fr 96px; align-items: center; column-gap: 10px; row-gap: 7px; }
+  .sk .row { grid-template-columns: 1fr 66px 126px; column-gap: 8px; height: 27px; }
+  .pips { display: flex; gap: 2px; } .pips i { width: 10px; height: 10px; background: rgba(128, 140, 153, 0.22); }
+  .pips i.f { background: var(--accent); } .pips i.q { background: rgba(51, 179, 255, 0.35); outline: 1px solid var(--accent); outline-offset: -1px; }
+  .pips.big i { width: 22px; height: 12px; }
+  .q .row { grid-template-columns: 14px 150px 1fr 70px 20px; column-gap: 10px; height: 28px; }
+  .grab { color: var(--faint); letter-spacing: -1px; }
+</style></head>
+<body class="docked">
+<script src="mock.js"></script>
+<script>
+dock({ open: ['fitting', 'skills'], badge: { jobs: 2 } });
+where({ system: 'Rasisos', security: '1.0 secure', owner: 'Vessari', region: 'Ulos, Belaron Drift',
+  at: 'Docked: Rasisos III - Moon 2 - Refinery 1 <span class="dim">&nbsp;your home</span>', ship: 'Akashi &nbsp;-&nbsp; Vessari Akashi', wallet: '49,724,599' });
+
+// ---- Fitting: what fits the slot picked on the left, the ship in the middle, what it comes to on the right.
+const C = [224, 215], RAD = 160;
+const slot = (deg, icon, cls) => { const a = deg * Math.PI / 180;
+  return `<div class="slot ${cls || ''}" style="left:${C[0] + RAD * Math.cos(a) - 21}px;top:${C[1] + RAD * Math.sin(a) - 21}px">${icon ? ic(icon, 22, 1.5) : ''}</div>`; };
+const fitRows = [
+  ['g', 'Fits now', '3'], ['gun', 'Small Autocannon', '6', '3', '1', 'hot'], ['module', 'Mining Laser', '10', '4', '3'], ['module', 'Salvager', '8', '2', '1'],
+  ['g', 'Does not yet', '2'], ['laser', 'Small Pulse Laser', '8', '4', '2', 'no', 'needs Laser Turrets 1'], ['gun', 'Medium Autocannon', '18', '39', '1', 'no', 'needs 19 MW more'],
+];
+const fitHtml = fitRows.map(r => r[0] === 'g'
+  ? `<div class="row group" style="grid-template-columns:1fr auto"><div>${r[1]}</div><div class="faint">${r[2]}</div></div>`
+  : `<div class="row ${r[5] === 'hot' ? 'hot' : ''}" style="${r[6] ? 'height:40px' : ''}"><div class="nm ${r[5] === 'no' ? 'dim' : ''}">${ii(r[0])}<span>${r[1]}${r[6] ? `<div class="bad" style="font-size:12px;line-height:1">${r[6]}</div>` : ''}</span></div>
+      <div class="num dim">${r[2]}</div><div class="num dim">${r[3]}</div><div class="num">${r[4]}</div></div>`).join('');
+const rc = (v, color) => `<div class="rc">${v}<i style="width:${v}%;background:${color}"></i></div>`;
+const EM = '#59a6ff', TH = '#e0604f', KI = '#a3b0bd', EX = '#f2a23d';
+
+put(win({ x: 64, y: 130, w: 1040, h: 720, icon: 'fitting', title: 'Fitting', sub: 'Akashi &nbsp;-&nbsp; Vessari Akashi', focus: true }, `
+  <div class="tabs"><span class="tab on">Fitting</span><span class="tab">Appearance</span><span class="sp"></span><span class="note">drag a module to a slot, or double-click it</span></div>
+  <div class="cols" style="grid-template-columns:312px 1fr 280px">
+    <div class="pane fit">
+      <div class="pad" style="padding-bottom:6px"><div class="dim" style="font-size:12px;margin-bottom:5px">For the slot picked: <span class="acc b6">HIGH 3</span></div>
+        <div class="chips"><span class="chip on">In the hangar</span><span class="chip">On the market here</span></div>
+        <div class="field" style="margin-top:6px">${ic('search', 14, 1.8)}<span>Filter</span></div></div>
+      <div class="thead"><div class="s">Module &nbsp;^</div><div class="num">tf</div><div class="num">MW</div><div class="num">Qty</div></div>
+      <div class="rows" style="flex:none;height:262px">${fitHtml}</div>
+      <div style="border-top:1px solid var(--line);padding:8px 10px 4px" class="h">Charges for the Small Autocannon</div>
+      <div class="rows">
+        <div class="row" style="grid-template-columns:1fr 60px 62px"><div class="nm">${ii('round')}<span>Shock Canister</span></div><div class="num">2,600</div><div class="num good">loaded</div></div>
+        <div class="row" style="grid-template-columns:1fr 60px 62px"><div class="nm">${ii('round')}<span>Burst Canister</span></div><div class="num">400</div><div class="num"><span class="btn sm">Load</span></div></div></div>
+    </div>
+    <div class="pane">
+      <div class="wheel"><div class="ring"></div><div class="ship"></div>
+        ${slot(-114, 'gun')}${slot(-90, 'missile')}${slot(-66, '', 'empty sel')}
+        ${slot(-14, '', 'empty')}${slot(14, '', 'empty')}
+        ${slot(66, 'plate')}${slot(90, '', 'empty')}${slot(114, '', 'empty')}
+        ${slot(166, '', 'empty')}${slot(194, '', 'empty')}
+        <div class="wl" style="left:207px;top:8px">HIGH</div><div class="wl" style="left:414px;top:208px">MID</div>
+        <div class="wl" style="left:210px;top:408px">LOW</div><div class="wl" style="left:6px;top:208px">RIGS</div>
+</div>
+      <div class="pad" style="padding:6px 28px 0"><div class="use">
+        <span class="dim">CPU</span><div class="bar2" style="height:8px"><i style="width:27%;background:var(--accent)"></i></div><span class="num">40 <span class="faint">/ 150 tf</span></span>
+        <span class="dim">Powergrid</span><div class="bar2" style="height:8px"><i style="width:52%;background:var(--armor)"></i></div><span class="num">22 <span class="faint">/ 42 MW</span></span>
+        <span class="dim">Hold</span><div class="bar2" style="height:8px"><i style="width:0%;background:var(--dim)"></i></div><span class="num">0 <span class="faint">/ 135 m3</span></span></div>
+        <div style="display:flex;gap:22px;margin-top:12px;white-space:nowrap"><span><span class="dim">Turret hardpoints</span> &nbsp;1 / 2</span><span><span class="dim">Launcher hardpoints</span> &nbsp;1 / 1</span></div>
+        <div style="display:flex;gap:6px;margin-top:12px;justify-content:flex-end"><span class="btn off">No damage to mend</span><span class="btn">Strip the fit</span></div></div>
+    </div>
+    <div class="pane"><div class="pad">
+      <div class="sec">Capacitor</div>
+      <div class="kv"><span>Holds</span><span>305 GJ</span><span>Recharges in</span><span>3m 05s</span><span>With everything running</span><span class="good">holds at 62%</span></div>
+      <div class="sec">Offence</div>
+      <div class="kv"><span>Damage a second</span><span class="b6">19.2</span><span>A volley</span><span>119</span><span>Reaches</span><span>18.8 km</span></div>
+      <div style="display:flex;height:6px;margin-top:6px;gap:2px"><i style="flex:42;background:${KI}"></i><i style="flex:58;background:${EX}"></i></div>
+      <div style="display:flex;font-size:12px;margin-top:2px" class="dim"><span>kinetic 42%</span><span class="sp"></span><span>explosive 58%</span></div>
+      <div class="sec">Defence</div>
+      <div class="res"><span></span><span class="hd dim">HP</span><span class="hd" style="color:${EM}">EM</span><span class="hd" style="color:${TH}">Therm</span><span class="hd" style="color:${KI}">Kin</span><span class="hd" style="color:${EX}">Expl</span>
+        <span class="dim">Shield</span><span class="num">350</span>${rc(0, EM)}${rc(20, TH)}${rc(40, KI)}${rc(57, EX)}
+        <span class="dim">Armour</span><span class="num">1,171</span>${rc(50, EM)}${rc(35, TH)}${rc(25, KI)}${rc(24, EX)}
+        <span class="dim">Hull</span><span class="num">370</span>${rc(33, EM)}${rc(33, TH)}${rc(33, KI)}${rc(43, EX)}</div>
+      <div class="kv" style="margin-top:6px"><span>Effective</span><span class="b6">2,827 HP</span></div>
+      <div class="sec">Targeting</div>
+      <div class="kv"><span>Lock range</span><span>27.5 km</span><span>Scan resolution</span><span>620 mm</span><span>Signature</span><span>37 m</span></div>
+      <div class="sec">Navigation</div>
+      <div class="kv"><span>Top speed</span><span>325 m/s</span><span>Aligns in</span><span>6.3 s</span><span>Warp speed</span><span>5.0 AU/s</span></div>
+    </div></div>
+  </div>`));
+
+// ---- Skills: groups down the side, what a skill is and opens beside it, the queue along the foot.
+const groups = [['Spaceships', '3 / 12', 'sel'], ['Gunnery', '2 / 9'], ['Missiles', '1 / 8'], ['Navigation', '3 / 6'], ['Engineering', '2 / 7'], ['Armour', '1 / 6'],
+  ['Shields', '0 / 5'], ['Electronics', '1 / 7'], ['Drones', '0 / 5'], ['Mining', '2 / 5'], ['Industry', '2 / 6'], ['Trade', '1 / 5'], ['Leadership', '1 / 4'], ['Science', '0 / 4']];
+const pips = (have, queued = 0, big = '') => `<div class="pips ${big}">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= have ? 'f' : i <= have + queued ? 'q' : ''}"></i>`).join('')}</div>`;
+const skills = [
+  ['Frigates', 2, 1, 'to 3: 1h 12m', '', 'sel'], ['Destroyers', 0, 0, 'book: 45,000 cr', 'acc'], ['Cruisers', 0, 0, 'needs Destroyers 3', 'faint'],
+  ['Battlecruisers', 0, 0, 'needs Cruisers 3', 'faint'], ['Battleships', 0, 0, 'needs Cruisers 4', 'faint'], ['Carriers', 0, 0, 'needs Battleships 4', 'faint'],
+  ['Dreadnoughts', 0, 0, 'needs Battleships 5', 'faint'], ['Supercarriers', 0, 0, 'needs Carriers 5', 'faint'], ['Ultracapitals', 0, 0, 'needs Carriers 5', 'faint'],
+  ['Industrials', 1, 0, 'to 2: 6m 00s', ''], ['Freighters', 0, 0, 'needs Industrials 3', 'faint'], ['Capital Industrials', 0, 0, 'needs Freighters 4', 'faint'],
+];
+put(win({ x: 1116, y: 130, w: 792, h: 720, icon: 'skills', title: 'Skills', sub: '19 of 83 known' }, `
+  <div class="tabs"><span class="tab on">Skills</span><span class="tab">Implants</span><span class="sp"></span>
+    <span class="chips" style="align-self:center"><span class="chip on">All</span><span class="chip">Known</span><span class="chip">Can train now</span><span class="chip">Needs a book</span></span></div>
+  <div class="cols" style="grid-template-columns:176px 1fr 262px;flex:1">
+    <div class="pane tree" style="padding-top:6px">${groups.map(([n, c, f]) => `<div class="t ${f || ''}" style="padding-left:12px"><span>${n}</span><span class="n">${c}</span></div>`).join('')}
+      <div class="faint" style="font-size:11px;padding:10px 12px;line-height:1.2">groups shown are stand-ins until the owner's list</div></div>
+    <div class="pane sk"><div class="rows" style="padding-top:6px">${skills.map(([n, have, q, note, c, sel]) => `<div class="row ${sel || ''}"><div class="${have ? '' : 'dim'}">${n}</div>${pips(have, q)}<div class="num ${c}" style="font-size:13px">${note}</div></div>`).join('')}</div></div>
+    <div class="pane"><div class="pad">
+      <div style="display:flex;align-items:baseline"><span class="b6" style="font-size:18px">Frigates</span><span class="sp"></span><span class="dim">rank 2</span></div>
+      <div style="display:flex;align-items:center;gap:10px;margin:8px 0 10px">${pips(2, 1, 'big')}<span>Level 2</span></div>
+      <div style="line-height:1.3">To fly combat frigates. Every level makes a frigate of yours a little better at what its hull is for.</div>
+      <div class="sec" style="margin-top:14px">Level 3 opens</div>
+      <div class="kv"><span style="color:var(--text)">Destroyers</span><span class="dim">skill</span><span style="color:var(--text)">Vessari Nozomi</span><span class="dim">hull</span><span style="color:var(--text)">and 3 more hulls</span><span></span></div>
+      <div class="sec">Needs</div><div class="dim">Nothing: you began with it.</div>
+      <div class="sec">Training</div>
+      <div class="kv"><span>To level 3</span><span>1h 12m</span><span>To level 5</span><span>2d 04h</span></div>
+      <div style="display:grid;gap:6px;margin-top:12px"><span class="btn off">Level 3 is in the queue</span><span class="btn">Add up to level 5</span></div>
+    </div></div>
+  </div>
+  <div class="q" style="flex:none;border-top:1px solid var(--line2);background:rgba(17,24,34,0.45)">
+    <div style="display:flex;align-items:center;padding:8px 10px 4px"><span class="h">Training &nbsp;3 / 10</span><span class="sp"></span><span class="dim">ends in &nbsp;</span><span class="b6">1h 14m</span></div>
+    <div style="display:flex;height:6px;gap:2px;margin:2px 10px 6px"><i style="flex:1;background:var(--accent)"></i><i style="flex:72;background:rgba(51,179,255,0.45)"></i><i style="flex:1;background:rgba(51,179,255,0.28)"></i></div>
+    <div class="row sel"><span class="grab">::</span><span>Navigation 2</span><div class="bar2"><i style="width:32%;background:var(--accent)"></i></div><span class="num">41 s</span><span class="dim">${ic('close', 12, 1.8)}</span></div>
+    <div class="row"><span class="grab">::</span><span>Frigates 3</span><div class="bar2"></div><span class="num dim">1h 12m</span><span class="dim">${ic('close', 12, 1.8)}</span></div>
+    <div class="row" style="margin-bottom:8px"><span class="grab">::</span><span>Laser Turrets 1</span><div class="bar2"></div><span class="num dim">1m 00s</span><span class="dim">${ic('close', 12, 1.8)}</span></div>
+  </div>`));
+</script>
+</body></html>

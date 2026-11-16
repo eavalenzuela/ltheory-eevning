@@ -669,7 +669,8 @@ local function draw(window: Windows.Window, x: number, y: number, w: number, h: 
 end
 
 Windows.Kind(KIND, draw)
-Windows.Make(Inventory.MAIN, KIND, "Inventory", 16, 130, 470, 560, 380, 240, newView("", true))
+Windows.Make(Inventory.MAIN, KIND, "Inventory", 60, 130, 470, 560, 380, 240, newView("", true))
+Windows.Icon(Inventory.MAIN, "inventory")
 
 -- Whether the assets window has been asked for (once: it is whoever
 -- draws that window that opens it).

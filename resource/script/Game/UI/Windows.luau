@@ -19,7 +19,9 @@
 -- to use it is the inventory, Game/UI/Inventory; the screens that are
 -- fixed panels still can be windows when somebody makes them so.)
 
+local Icons = require("@lt/Game/UI/Icons")
 local Im = require("@lt/Game/UI/Im")
+local Theme = require("@lt/Game/UI/Theme")
 
 local Windows = {}
 
@@ -38,10 +40,20 @@ export type Window = {
   -- Whether somebody has put it somewhere: until then it is where
   -- whoever draws the screen says it goes (Windows.Default).
   moved: boolean,
+  -- The sign beside its title (Game/UI/Icons), if it has one.
+  icon: string?,
+  -- Whether, opened where nobody has put it, it finds itself a place
+  -- clear of the windows that are open (Windows.Open): and whether it
+  -- is in such a place now, which it keeps while it is open.
+  auto: boolean,
+  placed: boolean,
+  -- A window that is meant to lie over the others (the star map):
+  -- nothing is put clear of it.
+  covers: boolean?,
 }
 
 -- The height of a window's title, which what is in it is drawn under.
-Windows.TITLE = 30
+Windows.TITLE = Theme.TITLE
 local BACKING = vector.create(0.025, 0.04, 0.055)
 
 local windows: { [string]: Window } = {}
@@ -72,7 +84,7 @@ function Windows.Make(id: string, kind: string, title: string, x: number, y: num
   local window = windows[id]
   if window == nil then
     window = { id = id, kind = kind, title = title, x = x, y = y, w = w, h = h, minW = minW, minH = minH, open = false, state = state,
-      moved = false }
+      moved = false, auto = true, placed = false }
     local was = remembered[id]
     if was then
       window.x, window.y, window.w, window.h = was[1], was[2], math.max(minW, was[3]), math.max(minH, was[4])
@@ -94,7 +106,27 @@ function Windows.Screen(id: string, kind: string, w: number, h: number, grips: {
   local window = Windows.Make(id, kind, "", 0, 0, w, h, w, h, nil)
   window.grips = grips
   window.w, window.h, window.minW, window.minH = w, h, w, h
+  -- (it is where whoever draws it says, unless it is said otherwise: Windows.Auto)
+  window.auto = false
   return window
+end
+
+-- The sign beside a window's title.
+function Windows.Icon(id: string, icon: string)
+  local window = windows[id]
+  if window then
+    window.icon = icon
+  end
+end
+
+-- Whether a window finds itself a clear place when it is opened where
+-- nobody has put it; and whether it is one that lies over the others.
+function Windows.Auto(id: string, auto: boolean, covers: boolean?)
+  local window = windows[id]
+  if window then
+    window.auto = auto
+    window.covers = covers
+  end
 end
 
 -- Where a window goes, and how big it is, until somebody has put it
@@ -108,7 +140,8 @@ function Windows.Default(id: string, x: number, y: number, w: number?, h: number
   if w and h and window.grips then
     window.w, window.h, window.minW, window.minH = w, h, w, h
   end
-  if not window.moved then
+  -- (one that found itself a place when it was opened keeps it while it is open)
+  if not window.moved and not (window.open and window.placed) then
     window.x, window.y = x, y
   end
 end
@@ -136,10 +169,64 @@ function Windows.Raise(id: string)
   end
 end
 
+-- A place for a window that nobody has put anywhere, clear of the
+-- windows that are open: where it would be by itself, if nothing is
+-- there; else beside one of them, or under one; else a step down and
+-- across from where it would be, for each window in its way. (A new
+-- window opens beside the others and never on top of one.)
+local function place(window: Window)
+  local left, top, right, bottom = screen[1], screen[2], screen[3], screen[4]
+  local others: { Window } = {}
+  for _, id in order do
+    local other = windows[id]
+    if other.open and other ~= window and not other.covers then
+      table.insert(others, other)
+    end
+  end
+  local function clear(x: number, y: number): boolean
+    if x < left or y < top or x + window.w > right or y + window.h > bottom then
+      return false
+    end
+    for _, other in others do
+      if x < other.x + other.w and other.x < x + window.w and y < other.y + other.h and other.y < y + window.h then
+        return false
+      end
+    end
+    return true
+  end
+  if #others == 0 or clear(window.x, window.y) then
+    return
+  end
+  local gap = Theme.GAP
+  for _, other in others do
+    if clear(other.x + other.w + gap, other.y) then
+      window.x, window.y = other.x + other.w + gap, other.y
+      return
+    end
+  end
+  for _, other in others do
+    if clear(other.x, other.y + other.h + gap) then
+      window.x, window.y = other.x, other.y + other.h + gap
+      return
+    end
+  end
+  local step = 0
+  for _, other in others do
+    if window.x < other.x + other.w and other.x < window.x + window.w and window.y < other.y + other.h and other.y < window.y + window.h then
+      step += 1
+    end
+  end
+  window.x, window.y = window.x + 32 * step, window.y + 32 * step
+end
+
 function Windows.Open(id: string)
   local window = windows[id]
   if window then
     if not window.open then
+      if window.auto and not window.moved and not window.covers then
+        place(window)
+        window.placed = true
+      end
       window.open = true
       changed = true
     end
@@ -151,6 +238,7 @@ function Windows.Close(id: string)
   local window = windows[id]
   if window and window.open then
     window.open = false
+    window.placed = false
     changed = true
   end
 end
@@ -237,7 +325,8 @@ local function keep(window: Window)
   local left, top, right, bottom = screen[1], screen[2], screen[3], screen[4]
   window.w = math.clamp(window.w, window.minW, math.max(window.minW, right - left))
   window.h = math.clamp(window.h, window.minH, math.max(window.minH, bottom - top))
-  window.x = math.clamp(window.x, left - window.w + 80, right - 80)
+  -- (never under the dock, which is what the screen's left edge is: Game/UI/Dock)
+  window.x = math.clamp(window.x, left, math.max(left, right - 80))
   window.y = math.clamp(window.y, top, bottom - Windows.TITLE)
 end
 
@@ -317,13 +406,31 @@ function Windows.Draw()
       end
       continue
     end
-    -- (what lies under a window does not show through it: it may be another window, or a screen)
-    Im.Fill(x + 2, y + 2, w - 4, h - 4, BACKING, 1)
-    Im.Panel(x, y, w, h)
-    Im.Fill(x + 1, y + 1, w - 2, Windows.TITLE - 2, Im.ACCENT, if index == #open then 0.16 else 0.07)
-    Im.Heading(string.upper(window.title), x + 12, y + 8, 14, if index == #open then Im.TEXT else Im.DIM)
-    if Im.Button("x", x + w - 28, y + 4, 22, 22, true, `{window.id}:close`) then
+    -- The window's frame (Game/UI/Theme): a plain ground that nothing
+    -- under it shows through (it may lie on another window, or a
+    -- screen), a hairline about it, and its title on a bar that stands
+    -- out of it. The one in front has the stronger line, a line of the
+    -- accent along its top, and its title bright.
+    local front = index == #open
+    Im.Flat(x, y, w, h, Theme.PANEL, 1)
+    Im.Flat(x + 1, y + 1, w - 2, Windows.TITLE - 1, Theme.RAISED, 1)
+    Im.Flat(x + 1, y + Windows.TITLE - 1, w - 2, 1, Theme.EDGE)
+    Im.Edge(x, y, w, h, if front then Theme.EDGE_STRONG else Theme.EDGE)
+    if front then
+      Im.Flat(x, y, w, 2, Theme.ACCENT)
+    end
+    if Im.Inside(x, y, w, h) then
+      Im.over = true
+    end
+    local titleAt = x + 12
+    if window.icon then
+      Icons.Draw(window.icon, x + 18, y + 16, 8, if front then Theme.ACCENT else Theme.DIM, 1)
+      titleAt = x + 34
+    end
+    Im.Heading(string.upper(window.title), titleAt, y + 8, 16, if front then Theme.TEXT else Theme.DIM)
+    if Im.IconButton("close", x + w - 28, y + 4, 24, 23, true, `{window.id}:close`) then
       window.open = false
+      window.placed = false
       changed = true
     end
     if Im.Pressed() and Im.Inside(x, y, w, h) then
@@ -339,8 +446,8 @@ function Windows.Draw()
       draw(window, x, y + Windows.TITLE, w, h - Windows.TITLE)
     end
     -- (the corner it is made bigger and smaller by)
-    Im.Fill(x + w - 12, y + h - 4, 9, 2, Im.DIM, 0.7)
-    Im.Fill(x + w - 4, y + h - 12, 2, 10, Im.DIM, 0.7)
+    Im.Flat(x + w - 12, y + h - 4, 9, 2, Theme.EDGE_STRONG)
+    Im.Flat(x + w - 4, y + h - 12, 2, 10, Theme.EDGE_STRONG)
   end
   Im.Shield({})
   if raise then

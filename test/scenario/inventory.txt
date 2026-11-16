@@ -50,13 +50,13 @@ frames 3
 lua assert(not GameDebug.CanPress('Menu:Info'), 'a click off a menu should put it away')
 lua GameDebug.Type('Inv:filter', 'scrap')
 until select(3, GameDebug.Inventory()) == 1
-move 230 228
+move 274 228
 frames 2
 mousedown Left
 frames 2
-move 180 220
+move 224 220
 frames 2
-move 70 182
+move 114 182
 frames 2
 mouseup Left
 until GameDebug.Stacked('scrap.metal', 'cargo') > 0
@@ -71,21 +71,21 @@ lua assert(GameDebug.Stacked('ore.ferrite', 'hangar') > 0, 'more than the hold h
 lua assert(GameDebug.Stacked('ore.ferrite', 'cargo') + GameDebug.Stacked('ore.ferrite', 'hangar') == 5000, 'nothing should be lost on the way')
 
 # And the window goes where its title is dragged, and is as big as its corner is dragged to.
-lua assert(GameDebug.Window('inventory') == 16 and select(2, GameDebug.Window('inventory')) == 130, 'the window should be where it is at first')
-move 200 146
+lua assert(GameDebug.Window('inventory') == 60 and select(2, GameDebug.Window('inventory')) == 130, 'the window should be where it is at first, beside the dock')
+move 244 146
 frames 2
 mousedown Left
 frames 2
-move 260 196
+move 304 196
 frames 2
 mouseup Left
 frames 2
-lua assert(GameDebug.Window('inventory') == 76 and select(2, GameDebug.Window('inventory')) == 180, 'the window should have gone with its title')
-move 540 734
+lua assert(GameDebug.Window('inventory') == 120 and select(2, GameDebug.Window('inventory')) == 180, 'the window should have gone with its title')
+move 584 734
 frames 2
 mousedown Left
 frames 2
-move 590 764
+move 634 764
 frames 2
 mouseup Left
 frames 2
@@ -93,16 +93,16 @@ lua assert(select(3, GameDebug.Window('inventory')) == 520 and select(4, GameDeb
 
 # The docked screen is a window too: it goes where its heading is dragged.
 lua _G.sx, _G.sy = GameDebug.Window('station')
-lua assert(_G.sx == 490 and _G.sy == 130, 'the docked screen should be in the middle at first: ' .. _G.sx .. ', ' .. _G.sy)
-move 560 144
+lua assert(_G.sx == 534 and _G.sy == 130, 'the docked screen should be beside the inventory at first: ' .. _G.sx .. ', ' .. _G.sy)
+move 604 144
 frames 2
 mousedown Left
 frames 2
-move 600 164
+move 644 164
 frames 2
 mouseup Left
 frames 2
-lua assert(GameDebug.Window('station') == 530 and select(2, GameDebug.Window('station')) == 150, 'the docked screen should have gone with its heading')
+lua assert(GameDebug.Window('station') == 574 and select(2, GameDebug.Window('station')) == 150, 'the docked screen should have gone with its heading')
 lua assert(GameDebug.CanPress('UNDOCK'), 'and it is the docked screen still')
 
 # And the star map: opened, dragged by its heading, and shut.

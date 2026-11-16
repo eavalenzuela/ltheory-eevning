@@ -1,0 +1,147 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="mock.css">
+<style>
+  .mk-list .thead, .mk-list .row { grid-template-columns: 1fr 84px 84px 52px 40px; }
+  .inv .thead, .inv .row { grid-template-columns: 1fr 46px 52px 70px; }
+  .wal .thead, .wal .row { grid-template-columns: 86px 1fr 92px; }
+  .near .row { grid-template-columns: 1fr 56px 78px; height: 23px; padding: 0; }
+  .price { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .price > div { background: rgba(17, 24, 34, 0.7); border: 1px solid var(--line); padding: 6px 9px; }
+  .price .v { font: 600 20px/1.1 R; }
+  .qty { display: flex; gap: 4px; margin-top: 10px; align-items: center; }
+  .qty .field { width: 84px; justify-content: flex-end; color: var(--text); }
+  .ind { padding-left: 18px; } .nm .pill { flex: none; overflow: visible; }
+</style></head>
+<body class="docked">
+<script src="mock.js"></script>
+<script>
+dock({ open: ['inventory', 'market', 'wallet'], badge: { jobs: 2 } });
+where({ system: 'Rasisos', security: '1.0 secure', owner: 'Vessari', region: 'Ulos, Belaron Drift',
+  at: 'Docked: Rasisos III - Moon 2 - Refinery 1 <span class="dim">&nbsp;your home</span>', ship: 'Akashi &nbsp;-&nbsp; Vessari Akashi', wallet: '49,724,599' });
+
+// ---- The market: a window of its own.
+const tree = [
+  [0, 1, 'Modules', ''], [1, 1, 'Weapons', ''], [2, 0, 'Projectile turrets', '8', 'sel'], [2, 0, 'Laser turrets', '8'], [2, 0, 'Hybrid turrets', '8'],
+  [2, 0, 'Missile launchers', '10'], [1, 0, 'Defence', '31', 'c'], [1, 0, 'Propulsion', '9', 'c'], [1, 0, 'Electronics', '22', 'c'],
+  [1, 0, 'Mining and salvage', '7', 'c'], [1, 0, 'Rigs', '12', 'c'],
+  [0, 0, 'Charges', '64', 'c'], [0, 0, 'Drones', '9', 'c'], [0, 0, 'Ships', '71', 'c'], [0, 0, 'Structures', '14', 'c'],
+  [0, 0, 'Materials', '48', 'c'], [0, 0, 'Blueprints', '120', 'c'], [0, 0, 'Skill books', '83', 'c'], [0, 0, 'Implants', '15', 'c'],
+  [0, 0, 'Paints and designs', '18', 'c'], [0, 0, 'Goods', '11', 'c'],
+];
+const treeHtml = tree.map(([depth, open, name, n, f]) =>
+  `<div class="t ${f === 'sel' ? 'sel' : ''}" style="padding-left:${8 + depth * 14}px">${f === 'sel' ? '<span class="c"></span>' : chev(open)}<span>${name}</span><span class="n">${n}</span></div>`).join('');
+
+const items = [
+  ['open', 'gun', 'Small Autocannon', '8,400', '7,900', '412', '1', 'sel'],
+  ['var', 'gun', 'Small Autocannon II', '64,000', '61,200', '38', '-', 't2', 'Tech 2'],
+  ['var', 'gun', 'Vessari Small Autocannon', '212,000', '-', '4', '-', 'fac', 'Faction'],
+  ['shut', 'gun', 'Small Artillery', '11,200', '10,300', '260', '-'],
+  ['shut', 'gun', 'Medium Autocannon', '142,000', '131,500', '96', '-'],
+  ['shut', 'gun', 'Medium Artillery', '168,000', '155,000', '71', '-'],
+  ['shut', 'gun', 'Large Autocannon', '1,480,000', '1,390,000', '22', '-'],
+  ['shut', 'gun', 'Large Artillery', '1,720,000', '1,600,000', '18', '-'],
+  ['shut', 'gun', 'XL Autocannon', '31,400,000', '-', '2', '-', '', '', 'hot'],
+];
+const itemHtml = items.map(([kind, icon, name, ask, bid, stock, have, cls, tier, hot]) => {
+  const sub = kind === 'var';
+  return `<div class="row ${cls === 'sel' ? 'sel' : ''} ${sub ? 'sub' : ''} ${hot || ''}"><div class="nm ${sub ? 'ind' : ''}">${sub ? '' : chev(kind === 'open')}${ii(icon, sub ? cls : '')}<span>${name}</span>${tier ? `<span class="pill ${cls === 't2' ? 'warn' : 'good'}">${tier}</span>` : ''}</div>
+    <div class="num">${ask}</div><div class="num dim">${bid}</div><div class="num dim">${stock}</div><div class="num ${have === '-' ? 'faint' : ''}">${have}</div></div>`;
+}).join('');
+
+const chart = (() => {
+  const pts = [8.9, 8.8, 8.85, 8.7, 8.6, 8.65, 8.5, 8.55, 8.4, 8.3, 8.45, 8.5, 8.35, 8.2, 8.25, 8.3, 8.1, 8.2, 8.35, 8.4, 8.3, 8.45, 8.5, 8.4, 8.35, 8.4];
+  const W = 294, H = 96, lo = 8.0, hi = 9.0;
+  const xy = pts.map((p, i) => [i * W / (pts.length - 1), H - (p - lo) / (hi - lo) * H]);
+  const line = xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  return `<svg width="${W}" height="${H + 2}" style="overflow:visible">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#33b3ff" stop-opacity="0.28"/><stop offset="1" stop-color="#33b3ff" stop-opacity="0"/></linearGradient></defs>
+    ${[0, 0.5, 1].map(t => `<line x1="0" x2="${W}" y1="${t * H}" y2="${t * H}" stroke="rgba(130,160,190,0.14)"/>`).join('')}
+    <polygon points="0,${H} ${line} ${W},${H}" fill="url(#g)"/><polyline points="${line}" fill="none" stroke="#33b3ff" stroke-width="1.6"/>
+    <circle cx="${W}" cy="${xy[xy.length - 1][1]}" r="3" fill="#33b3ff"/></svg>`;
+})();
+
+put(win({ x: 64, y: 130, w: 1130, h: 720, icon: 'market', title: 'Market', sub: 'Rasisos III - Moon 2 - Refinery 1', focus: true }, `
+  <div class="tabs"><span class="tab on">Browse</span><span class="tab">My orders <i>2</i></span><span class="tab">Contracts <i>5</i></span>
+    <span class="sp"></span><span class="note">broker 3.0% &nbsp;-&nbsp; sales tax 2.0%</span></div>
+  <div class="cols" style="grid-template-columns:220px 1fr 316px">
+    <div class="pane"><div class="pad" style="padding-bottom:6px"><div class="field">${ic('search', 14, 1.8)}<span>Search every category</span></div></div>
+      <div class="tree rows">${treeHtml}<div class="thumb" style="top:2px;height:330px"></div></div></div>
+    <div class="pane mk-list">
+      <div class="pad" style="padding-bottom:8px"><div class="chips"><span class="chip on">Sold here</span><span class="chip">I can use</span>
+        <span class="lab">Tier</span><span class="chip on">All</span><span class="chip">Tech 1</span><span class="chip">Tech 2</span><span class="chip">Faction</span></div></div>
+      <div class="thead"><div class="s">Item &nbsp;^</div><div class="num">Ask</div><div class="num">Bid</div><div class="num">Stock</div><div class="num">Have</div></div>
+      <div class="rows">${itemHtml}
+        <div class="tip" style="left:210px;top:228px">XL Autocannon<div class="t2">Capital projectile turret. Needs Capital Projectile Turrets 1.</div><div class="t2 bad">You cannot use it yet.</div></div></div>
+      <div class="foot"><span>7 kinds, 9 shown with their variants</span><span class="sp"></span><span>6 not sold here are hidden</span></div></div>
+    <div class="pane"><div class="pad">
+      <div style="display:flex;gap:10px;align-items:center"><span class="ii big">${ic('gun', 30, 1.5)}</span>
+        <div style="flex:1"><div class="b6" style="font-size:18px;line-height:1.1">Small Autocannon</div><div class="dim" style="font-size:13px">Small projectile turret &nbsp;-&nbsp; 5 m3</div></div>
+        <span class="btn sm">${ic('info', 13, 1.8)} Info</span></div>
+      <div class="price" style="margin-top:12px">
+        <div><div class="dim" style="font-size:12px">The station asks</div><div class="v">8,400 <span class="dim" style="font-size:13px;font-weight:400">cr</span></div><div class="dim" style="font-size:12px">412 in stock</div></div>
+        <div><div class="dim" style="font-size:12px">and bids</div><div class="v">7,900 <span class="dim" style="font-size:13px;font-weight:400">cr</span></div><div class="dim" style="font-size:12px">1 in your hangar</div></div></div>
+      <div class="qty"><span class="dim" style="width:60px">Quantity</span><div class="field">4</div><span class="btn sm">1</span><span class="btn sm">10</span><span class="btn sm">100</span><span class="btn sm">All</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+        <span class="btn big pri">Buy 4 &nbsp;<span class="b6">33,600 cr</span></span><span class="btn big off">Sell 4</span></div>
+      <div class="dim" style="font-size:12px;margin-top:4px;text-align:right">you have 1 to sell</div>
+      <div class="sec" style="margin-top:8px"><span>Price here, 30 days</span><span class="sp"></span><span class="good" style="letter-spacing:0">down 5.6%</span></div>
+      <div style="display:flex;gap:6px"><div>${chart}</div></div>
+      <div style="display:flex;justify-content:space-between;color:var(--faint);font-size:11px;margin-top:2px"><span>day 1</span><span>low 8,100 &nbsp; high 8,900</span><span>today</span></div>
+      <div class="sec"><span>Within 10 jumps</span><span class="sp"></span><span class="btn sm" style="margin:-4px 0;letter-spacing:0;text-transform:none;font-weight:500">Show on map</span></div>
+      <div class="near">
+        <div class="row"><div>Belyn <span class="pill good">cheapest</span></div><div class="num dim">1 jump</div><div class="num good">7,950 cr</div></div>
+        <div class="row"><div>Jorea</div><div class="num dim">2 jumps</div><div class="num">8,300 cr</div></div>
+        <div class="row"><div>Zanisar <span class="pill bad">dearest</span></div><div class="num dim">3 jumps</div><div class="num bad">9,650 cr</div></div></div>
+      <div class="sec"><span>${'Standing orders'}</span><span class="sp"></span><span class="dim" style="letter-spacing:0;text-transform:none;font-weight:400">fill at the pace of the station's customers</span></div>
+      <div style="display:grid;grid-template-columns:44px 84px 1fr;gap:6px;align-items:center">
+        <span class="dim">Sell at</span><div class="field" style="justify-content:flex-end;color:var(--text)">8,350</div><span class="btn sm">Place sell order</span>
+        <span class="dim">Buy at</span><div class="field" style="justify-content:flex-end;color:var(--text)">7,950</div><span class="btn sm">Place buy order</span></div>
+    </div></div>
+  </div>`));
+
+// ---- The inventory: as it is now, with headings by kind.
+const inv = [
+  ['g', 'Modules', '6 kinds'], ['gun', 'Small Autocannon', '1', '5.0', '8,000'], ['laser', 'Small Pulse Laser', '2', '10.0', '18,000'],
+  ['shield', 'Small Shield Extender', '1', '5.0', '7,000'], ['plate', 'Small Armor Repairer', '1', '5.0', '8,000'], ['engine', 'Small Afterburner', '1', '5.0', '9,000'],
+  ['module', 'Mining Laser', '3', '15.0', '45,000'],
+  ['g', 'Charges', '3 kinds'], ['round', 'Shock Canister', '2,600', '6.5', '52,000', 'sel'], ['round', 'Burst Canister', '400', '1.0', '8,000'], ['missile', 'Breaker Light Missile', '200', '3.0', '12,000'],
+  ['g', 'Materials', '3 kinds'], ['ore', 'Ferrite', '5,000', '500.0', '95,000'], ['bar', 'Iron', '3,790', '37.9', '75,800'], ['bar', 'Silicon', '855', '8.6', '34,200'],
+  ['g', 'Ships', '1 kind'], ['ship', 'Vessari Nozomi', '1', '5,000.0', '1,500,000'],
+];
+const invHtml = inv.map(r => r[0] === 'g'
+  ? `<div class="row group" style="grid-template-columns:1fr auto"><div class="nm">${chev(true)}<span>${r[1]}</span></div><div class="faint" style="letter-spacing:0;text-transform:none;font-weight:400">${r[2]}</div></div>`
+  : `<div class="row ${r[5] || ''}"><div class="nm">${ii(r[0])}<span>${r[1]}</span></div><div class="num">${r[2]}</div><div class="num dim">${r[3]}</div><div class="num dim">${r[4]}</div></div>`).join('');
+put(win({ x: 1206, y: 130, w: 540, h: 456, icon: 'inventory', title: 'Inventory', sub: '' }, `
+  <div class="cols inv" style="grid-template-columns:140px 1fr">
+    <div class="pane tree" style="padding-top:8px">
+      <div class="t" style="padding-left:8px">${chev(true)}<span>Akashi</span></div>
+      <div class="t" style="padding-left:22px"><span class="c"></span><span>Hold</span><span class="n">0 / 135</span></div>
+      <div class="t" style="padding-left:22px"><span class="c"></span><span>Drone bay</span><span class="n">0 / 25</span></div>
+      <div class="t sel" style="padding-left:8px"><span class="c"></span><span>Hangar</span><span class="n">13</span></div>
+      <div class="t" style="padding-left:8px"><span class="c"></span><span>Corporation</span><span class="n">2</span></div>
+      <div class="t" style="padding-left:8px;margin-top:8px;border-top:1px solid var(--line)">${chev(false)}<span class="dim">Elsewhere</span><span class="n">3</span></div>
+    </div>
+    <div class="pane">
+      <div class="pad" style="display:flex;gap:6px;padding-bottom:8px"><div class="field" style="flex:1">${ic('search', 14, 1.8)}<span>Filter</span></div><span class="btn">Icons</span></div>
+      <div class="thead"><div class="s">Name &nbsp;^</div><div class="num">Qty</div><div class="num">m3</div><div class="num">Worth</div></div>
+      <div class="rows">${invHtml}<div class="thumb" style="top:2px;height:250px"></div></div>
+      <div class="foot"><span>13 stacks</span><span>6,089 m3</span><span class="sp"></span><span>worth 1,872,000 cr</span></div></div>
+  </div>`));
+
+// ---- The wallet: a small window, with its journal sorted out by kind.
+const journal = [
+  ['day 1, 14:02', 'Sold 400 Shock Canister', '+8,000', 'good'], ['day 1, 14:02', 'Sales tax', '-160', 'bad'], ['day 1, 13:40', 'Bounty: Pirate Scout', '+45,000', 'good'],
+  ['day 1, 12:15', 'Hiring Pell Ulenis', '-30,000', 'bad'], ['day 1, 11:58', 'Manufacturing fee', '-400', 'bad'], ['day 1, 10:30', 'Courier, level 1', '+25,000', 'good'],
+];
+put(win({ x: 1206, y: 598, w: 540, h: 252, icon: 'wallet', title: 'Wallet', sub: '' }, `
+  <div class="pad" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:8px">
+    <div><div class="dim" style="font-size:12px">Balance</div><div class="b6" style="font-size:24px;line-height:1">49,724,599 <span class="dim" style="font-size:14px;font-weight:400">cr</span></div></div>
+    <span class="sp"></span><div class="num"><div class="dim" style="font-size:12px">Today</div><div><span class="good">+78,000</span> &nbsp; <span class="bad">-30,560</span></div></div></div>
+  <div class="pad" style="padding-top:0;padding-bottom:8px"><div class="chips"><span class="chip on">All</span><span class="chip">Trade</span><span class="chip">Jobs</span><span class="chip">Wages</span><span class="chip">Fees</span></div></div>
+  <div class="wal" style="display:flex;flex-direction:column;flex:1;min-height:0">
+    <div class="thead"><div class="s">When &nbsp;v</div><div>What</div><div class="num">Amount</div></div>
+    <div class="rows">${journal.map(([w, what, a, c]) => `<div class="row"><div class="dim">${w}</div><div>${what}</div><div class="num ${c}">${a}</div></div>`).join('')}</div></div>`));
+
+put(`<div class="toasts" style="left:1206px;top:76px"><div class="toast good"><span>Sold 400 Shock Canister</span><span class="good b6">+8,000 cr</span><span class="t">just now</span></div></div>`);
+</script>
+</body></html>

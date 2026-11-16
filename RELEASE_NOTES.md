@@ -6,6 +6,16 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## A dock, and windows that keep out of each other's way
+
+- The first of the interface's rework. Down the left edge of the screen there is now a dock: a button for every window, docked or in space. Hold the cursor on one to see what it is and the key that opens it. It takes the place of the row of buttons at the foot of the screen and of the Guide button.
+- A button whose window is open is marked. Jobs shows how many you have in hand. The ones that are a station's own (Fitting, Ships, Market, Industry, Jobs, Skills, Wallet, Crew, Corporation) open the docked screen at that page, and are dim in space.
+- The clock is at the foot of the dock: stop and run, how fast, slower and faster.
+- The guide, the colonies, the scanner and the information on an item are windows now: drag one by its heading, and it stays where you put it. They used to open on top of the inventory. Opening one no longer shuts another.
+- A window opened for the first time finds itself a clear place beside the ones already open, where there is room.
+- Windows have a new frame, and the system, your ship and your wallet are in a panel of their own in the top left corner.
+- The screens inside the windows are as they were. They are being made over one at a time, the market first.
+
 ## Four small mends to the screens
 
 - The buttons at the foot of the screen (Colonies, Inventory, Map, Events) no longer lie over your ship's Hull and Capacitor readings in space.

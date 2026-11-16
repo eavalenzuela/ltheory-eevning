@@ -54,5 +54,12 @@ void main() {
 
   color.xyz = mix(color.xyz, vec3(0.005), 1.0 - exp(-2.0 * max(0.0, dist)));
   mult = saturate(mult);
-  RETURN(vec4(color.xyz, color.w * mult));
+
+  /* A plain fill, asked for by a bevel under zero (Game/UI/Im's Im.Flat):
+     the colour as it was given and its alpha as it was given, to the
+     box's edge and no further. No shading, no light along the top, no
+     shadow about it. */
+  float plain = step(bevel, -0.5);
+  float within = step(dbox(vec2(x, y), size - 2.0 * shadowSize, 0.0), 0.0);
+  RETURN(vec4(mix(color.xyz, attrib2.xyz, plain), color.w * mix(mult, within, plain)));
 }
