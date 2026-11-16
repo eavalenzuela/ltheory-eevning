@@ -9,8 +9,9 @@
 -- the fights hired pilots had with the pilot somewhere else
 -- (Core/Tactical/Battles).
 --
--- What it draws is what the tab drew, as it was set out there, in the
--- window layer's frame and colours: it has not been set out again. A
+-- Its two pages are the window's tabs, and the pilots hired are a list
+-- that scrolls (the tab showed the first five and no more). The rest is
+-- laid out as the tab was, in the window layer's frame and colours. A
 -- script's names are what they were: "Crew:pilots", "Crew:log",
 -- "Hire:<n>", "Give:<n>:<m>", "Haul:what:<n>", "Haul:to:<n>",
 -- "Haul:also:<n>", "Haul:drop:<n>", "Haul:go:<n>", "Recall:<n>",
@@ -124,13 +125,7 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
   local station = player.docked
   local left, right = x + 16, x + 400
   local line = y + 78
-  -- (the tab's two sides: the pilots, and the log of their fights)
-  if Im.Toggle("Pilots", x + 770, line - 6, 70, 26, crewPage == "pilots", "Crew:pilots") then
-    crewPage = "pilots"
-  end
-  if Im.Toggle("Log", x + 844, line - 6, 80, 26, crewPage == "log", "Crew:log") then
-    crewPage = "log"
-  end
+  -- (its two pages, the pilots and the log of their fights, are the window's tabs)
   if crewPage == "log" then
     drawFleetLog(game, left, line, 908)
     return
@@ -186,8 +181,12 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
   if #fleet == 0 then
     Im.Text("Nobody is hired.", right, line, 14, Theme.DIM, 0.8)
   end
+  local shown = 5
+  local firstPilot = Im.Scroll("crew pilots", right - 6, line, 536, shown * 90, #fleet, shown)
   for index, row in fleet do
-    if index > 5 then
+    if index <= firstPilot then
+      continue
+    elseif index > firstPilot + shown then
       break
     end
     Im.Text(row.name, right, line, 15, Theme.TEXT)
@@ -362,7 +361,7 @@ function Crew.Frame(session: Session.Session, docked: boolean)
   Windows.Berthed(Crew.ID, docked)
 end
 
-Windows.Kind(Crew.ID, function(_: Windows.Window, x: number, y: number)
+Windows.Kind(Crew.ID, function(_: Windows.Window, x: number, y: number, w: number)
   local session = current
   if session == nil then
     return
@@ -374,10 +373,21 @@ Windows.Kind(Crew.ID, function(_: Windows.Window, x: number, y: number)
     return
   end
   local was = Im.Plain(true)
-  drawCrew(session, game, player, x - 4, y - 66)
+  -- Its two pages.
+  local tx = x + 10
+  for _, each in { { "pilots", "Pilots" }, { "log", "Log" } } do
+    local pressed, wide = Im.Tab(each[2], tx, y + 4, 28, crewPage == each[1], `Crew:{each[1]}`)
+    if pressed then
+      crewPage = each[1]
+    end
+    tx += wide + 2
+  end
+  Im.Flat(x + 1, y + 32, w - 2, 1, Theme.EDGE)
+  -- (what is under them is laid out as the tab was, from where its corner would be)
+  drawCrew(session, game, player, x - 4, y - 66 + 32)
   Im.Plain(was)
 end)
-Windows.Make(Crew.ID, Crew.ID, "Crew", 534, 130, 932, 544, 932, 544, nil)
+Windows.Make(Crew.ID, Crew.ID, "Crew", 534, 130, 932, 580, 932, 580, nil)
 Windows.Icon(Crew.ID, "crew")
 
 return Crew

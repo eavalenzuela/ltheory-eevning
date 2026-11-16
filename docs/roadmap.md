@@ -740,6 +740,8 @@ The pictures, and the pages they are drawn from, are `docs/design/interface/` (`
 
 **Being set out again: the wallet (2026-11-16; tests with its group's).** Its two sides are tabs (Mine, Corporation), each journal is on the one list (when, what, amount, balance), and the corporation's pages (journal, books, hangar, members) are behind switches under its figures. Its books, hangar and members are still laid out as they were.
 
+**The crew's window, a little further (2026-11-16; tests with its group's).** Its two pages (Pilots, Log) are the window's tabs, and the pilots hired are a list that scrolls: the tab showed the first five and no more, so a sixth could not be got to. The rest is laid out as it was.
+
 **Still to be decided, by the owner**
 - Whether it scales with the screen, and by a setting.
 - Which first. Proposed, not ruled on: what everything else stands on (one set of colours and sizes, one list that filters and sorts, text for the cursor, where a new window opens), then the windows' frame and the buttons that open them, then the market with the inventory and the assets, then the flying screen, then skills, industry, crew, corporation and jobs, then the map and the menus.
