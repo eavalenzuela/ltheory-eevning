@@ -361,6 +361,7 @@ export type Command = {
   pilot: number?,     -- a hired pilot, by their id
   stops: { number }?, -- for a haul: the further stations to collect at, in order
   drops: { number }?, -- and the further stations to carry to, a load to each in turn
+  station: number?,   -- the station a thing is done at from afar (a contract's)
 }
 
 -- A standing offer at a station's market. A sell order's goods and a buy

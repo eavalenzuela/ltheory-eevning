@@ -2014,6 +2014,47 @@ end
 -- hangar there; the pilot's own listings everywhere, each with what it
 -- is worth where it is up and the chance an hour that it is taken; and
 -- how many listings a pilot can have up.
+-- Every board's lots of a side ("offer" or "want") galaxy-wide (the
+-- owner, 2026-11-16: contracts are "universe-wide"), within so many
+-- jumps of the pilot if 'reach' is given: each with its station, the
+-- station's system, how many jumps off that is and how safe, and, of a
+-- want, how much of it is in the pilot's hangar there. The nearest
+-- first. What is bought is delivered to the hangar of the station it is
+-- at (AcceptContract with 'station').
+export type ContractRow = { station: number, name: string, system: number, systemName: string, jumps: number, band: string,
+  lot: Contracts.Lot, have: { number } }
+local jumpsFrom: { galaxy: any, from: number, jumps: { [number]: number } } = { galaxy = nil, from = 0, jumps = {} }
+function Query.ContractSearch(game: Game, side: string, reach: number?): { ContractRow }
+  local state = game.state
+  local here = Query.Player(game).system
+  if jumpsFrom.galaxy ~= state.galaxy or jumpsFrom.from ~= here then
+    jumpsFrom = { galaxy = state.galaxy, from = here, jumps = Galaxy.Jumps(state.galaxy, here) }
+  end
+  local rows: { ContractRow } = {}
+  for _, placed in Contracts.Everywhere(state) do
+    if placed.lot.side == side then
+      local system = Space.SystemOf(state, placed.station)
+      local jumps = jumpsFrom.jumps[system]
+      if jumps and (reach == nil or jumps <= reach) then
+        local object = Space.Peek(state, placed.station)
+        local node = state.galaxy.systems[system]
+        table.insert(rows, { station = placed.station, name = if object then object.name else "?", system = system, systemName = node.name,
+          jumps = jumps, band = Galaxy.Band(node.security) :: string, lot = placed.lot,
+          have = if side == "want" then Contracts.Have(state, placed.station, placed.lot.stacks) else {} })
+      end
+    end
+  end
+  table.sort(rows, function(a, b)
+    if a.jumps ~= b.jumps then
+      return a.jumps < b.jumps
+    elseif a.station ~= b.station then
+      return a.station < b.station
+    end
+    return a.lot.slot < b.lot.slot
+  end)
+  return rows
+end
+
 export type BoardLot = { lot: Contracts.Lot, have: { number } }
 export type BoardListing = { listing: State.Listing, worth: number, chance: number, left: number, here: boolean }
 export type Board = { lots: { BoardLot }, listings: { BoardListing }, limit: number }

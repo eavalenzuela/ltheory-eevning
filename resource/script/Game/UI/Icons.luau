@@ -73,6 +73,11 @@ local SIGNS: { [string]: () -> { Glyph } } = {
     return all(path({ v(-0.9, 0.8), v(-0.9, -0.1), v(-0.4, 0.2), v(-0.4, -0.1), v(0.1, 0.2), v(0.1, -0.7), v(0.7, -0.7), v(0.7, 0.8) }),
       line(-0.95, 0.8, 0.95, 0.8))
   end,
+  -- a sealed paper: a lot changing hands
+  contracts = function()
+    return all(path({ v(-0.7, -0.8), v(0.35, -0.8), v(0.7, -0.45), v(0.7, 0.85), v(-0.7, 0.85) }, true), path({ v(0.35, -0.8), v(0.35, -0.45), v(0.7, -0.45) }),
+      line(-0.4, -0.3, 0.1, -0.3), line(-0.4, 0.05, 0.4, 0.05), ring(0.2, 0.5, 0.2))
+  end,
   -- a sheet on a board
   jobs = function()
     return all(path({ v(-0.55, -0.65), v(0.55, -0.65), v(0.55, 0.85), v(-0.55, 0.85) }, true),

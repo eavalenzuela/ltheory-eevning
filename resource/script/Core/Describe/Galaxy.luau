@@ -414,6 +414,26 @@ end
 -- through as little of it as it can.
 local RISK: { [string]: number } = { secure = 0, low = 2, lawless = 30 }
 
+-- How many jumps every system is from one, by the gates (nil for one
+-- no gate leads to from it): for whatever lists things galaxy-wide by
+-- how far off they are (Assets/Contracts).
+function Galaxy.Jumps(galaxy: Galaxy, from: number): { [number]: number }
+  local systems = galaxy.systems
+  local jumps: { [number]: number } = { [from] = 0 }
+  local queue, head = { from }, 1
+  while head <= #queue do
+    local at = queue[head]
+    head += 1
+    for _, neighbor in systems[at].neighbors do
+      if jumps[neighbor] == nil then
+        jumps[neighbor] = jumps[at] + 1
+        table.insert(queue, neighbor)
+      end
+    end
+  end
+  return jumps
+end
+
 -- The way from one system to another: the systems in order, both ends
 -- included (one system, if they are the same). The fewest jumps, or
 -- with 'safest' the least dangerous way. Of ways as good, the one

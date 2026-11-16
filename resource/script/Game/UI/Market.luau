@@ -32,6 +32,7 @@ local Core = require("@lt/Core/Api")
 local Fleet = require("@lt/Core/Tactical/Fleet")
 local Format = require("@lt/Game/Format")
 local Icons = require("@lt/Game/UI/Icons")
+local ContractsWindow = require("@lt/Game/UI/Contracts")
 local Fitting = require("@lt/Game/UI/Fitting")
 local SkillSheet = require("@lt/Game/UI/Skills")
 local Im = require("@lt/Game/UI/Im")
@@ -94,10 +95,6 @@ local STANDING = 1.25
 local repriced: { [number]: number } = {}
 
 -- The board: the type chosen to put up, how many and at what.
-local contractItem = ""
-local contractQuantity = 1
-local contractPrice = 0     -- 0: what it is worth here
-local contractFresh = false -- chosen by a script: all of it, and brought into the list
 
 -- Whose game it is (Market.Frame).
 local current: Session.Session? = nil
@@ -284,14 +281,9 @@ end
 
 -- Open the market's board with a type of the hangar chosen to put up,
 -- as clicking its row there would.
+-- (the board is a window of its own since 2026-11-16, galaxy-wide: Game/UI/Contracts)
 function Market.Contract(type: string): boolean
-  if Types.Get(type) == nil then
-    return false
-  end
-  page = "contracts"
-  contractItem, contractPrice, contractFresh = type, 0, true
-  Market.Open()
-  return true
+  return ContractsWindow.Choose(type)
 end
 
 -- Once a frame, before the windows are drawn: whose game it is, and
@@ -368,192 +360,6 @@ local function drawOrders(session: Session.Session, game: Core.Game, station: nu
 end
 
 -- What a lot is made of, in a line.
-local function contents(stacks: { { type: string, quantity: number } }): string
-  local parts: { string } = {}
-  for _, stack in stacks do
-    local name = Types.Info(stack.type).name
-    table.insert(parts, if stack.quantity == 1 then name else `{Format.Whole(stack.quantity)} x {name}`)
-  end
-  return table.concat(parts, ", ")
-end
-
--- How long a listing is likely to wait, by its chance an hour.
-local function waits(chance: number): string
-  return if chance >= 1 then "taken within the hour" elseif chance <= 0 then "nobody will pay that"
-    else `about {math.max(1, math.floor(1 / chance + 0.5))} hours`
-end
-
--- The station's board (Core/Assets/Contracts): lots for sale and lots
--- wanted here today on the left, and on the right the pilot's own
--- listings and the putting up of another.
-local function drawContracts(session: Session.Session, game: Core.Game, station: number, x0: number, y0: number, w: number, h: number)
-  local board = Core.Query.Contracts(game, station)
-  local offers: { Core.BoardLot }, wants: { Core.BoardLot } = {}, {}
-  for _, entry in board.lots do
-    table.insert(if entry.lot.side == "offer" then offers else wants, entry)
-  end
-  local x, y = x0 + 14, y0 + 14
-  local half = math.floor((w - 28 - 34) / 2)
-  Im.Flat(x0 + 14 + half + 17, y0 + 8, 1, h - 16, Theme.EDGE)
-
-  -- For sale here today.
-  heading(`For sale here today  {#offers}`, x, y, half)
-  local line = y + 26
-  if #offers == 0 then
-    Im.Text("Nothing more today. There are other lots tomorrow.", x, line, 13, Theme.DIM)
-  end
-  for _, entry in offers do
-    local lot = entry.lot
-    Im.Strong(List.Cut(lot.title, half - 150, 14, true), x, line, 14, Theme.TEXT)
-    Im.Strong(Format.Credits(lot.price), x + half - Im.StrongWidth(Format.Credits(lot.price), 14), line, 14, Theme.TEXT)
-    Im.Text(List.Cut(contents(lot.stacks), half - 4, 12, false), x, line + 18, 12, Theme.DIM)
-    local buy: State.Command = { kind = "AcceptContract", actor = 0, target = lot.slot }
-    local can, whyNot = Session.CanDo(session, buy)
-    -- (against its base price: under it is a find, well over is dear)
-    Im.Text(if can then `its base price is {Format.Credits(lot.worth)}` else tostring(whyNot), x, line + 35, 12,
-      if not can then Theme.BAD elseif lot.price < lot.worth then Theme.GOOD else Theme.DIM)
-    Im.Tone("primary")
-    if Im.Button("Buy", x + half - 64, line + 31, 64, 22, can, `Contract:buy:{lot.slot}`) then
-      Session.Do(session, buy)
-    end
-    line += 62
-  end
-
-  -- Wanted here today.
-  line = y + 26 + 3 * 62 + 10
-  heading(`Wanted here today  {#wants}`, x, line, half)
-  line += 26
-  if #wants == 0 then
-    Im.Text("Nothing more today.", x, line, 13, Theme.DIM)
-  end
-  for _, entry in wants do
-    local lot = entry.lot
-    Info.Name(lot.stacks[1].type, List.Cut(lot.title, half - 170, 14, false), x, line, 14, Theme.TEXT)
-    local pays = `pays {Format.Credits(lot.price)}`
-    Im.Strong(pays, x + half - Im.StrongWidth(pays, 14), line, 14, Theme.TEXT)
-    local fill: State.Command = { kind = "FillContract", actor = 0, target = lot.slot }
-    local can = Session.CanDo(session, fill)
-    local have = entry.have[1] or 0
-    Im.Text(`{Format.Whole(have)} of {Format.Whole(lot.stacks[1].quantity)} in your hangar here`, x, line + 20, 12,
-      if can then Theme.GOOD else Theme.DIM)
-    if Im.Button("Deliver", x + half - 72, line + 17, 72, 22, can, `Contract:fill:{lot.slot}`) then
-      Session.Do(session, fill)
-    end
-    line += 48
-  end
-
-  -- The pilot's own listings, wherever they are up.
-  local rx = x + half + 34
-  local rw = half
-  heading(`My listings  {#board.listings} / {board.limit}`, rx, y, rw)
-  line = y + 26
-  if #board.listings == 0 then
-    Im.Text("Nothing up. A lot is put up below, for a week.", rx, line, 13, Theme.DIM)
-  end
-  local visible = 4
-  local first = Im.Scroll("listings", rx - 4, line, rw + 8, visible * 34, #board.listings, visible)
-  for row = 1, visible do
-    local entry = board.listings[row + first]
-    if entry == nil then
-      break
-    end
-    local listing = entry.listing
-    local rowY = line + (row - 1) * 34
-    local where = Core.Query.Body(game, listing.station)
-    Im.Text(List.Cut(`{Format.Whole(listing.quantity)} x {Types.Info(listing.type).name}`, rw - 210, 13, false), rx, rowY, 13, Theme.TEXT)
-    Im.Text(Format.Credits(listing.price), rx + rw - 76 - Im.TextWidth(Format.Credits(listing.price), 13), rowY, 13, Theme.TEXT)
-    Im.Text(List.Cut(`{if entry.here then "here" else if where then where.name else "?"}, {Format.Duration(entry.left)} left: {waits(entry.chance)}`,
-      rw - 80, 11, false), rx, rowY + 16, 11, if entry.chance > 0 then Theme.DIM else Theme.BAD)
-    Im.Because("A listing is taken down at the station it is up at")
-    if Im.Button("Cancel", rx + rw - 62, rowY + 2, 62, 22, entry.here, `Contract:cancel:{row + first}`) then
-      Session.Do(session, { kind = "CancelContract", actor = 0, order = listing.id })
-    end
-  end
-
-  -- Another: a stack of the hangar here, so many of it, at a price.
-  line = y + 26 + visible * 34 + 12
-  heading("New listing", rx, line, rw)
-  line += 24
-  -- (what no market deals in comes first: it is what a board is for)
-  local hangar: { State.Item } = {}
-  local stacks = Core.Query.Items(game, station, "hangar")
-  for pass = 1, 2 do
-    for _, item in stacks do
-      if (Types.Info(item.type).unlisted == true) == (pass == 1) then
-        table.insert(hangar, item)
-      end
-    end
-  end
-  local rows = 6
-  if #hangar == 0 then
-    Im.Text("The hangar here is empty.", rx, line, 13, Theme.DIM)
-  end
-  local picked: State.Item? = nil
-  for index, item in hangar do
-    if item.type == contractItem then
-      picked = item
-      if contractFresh then
-        contractQuantity = item.quantity
-        Im.ScrollTo("contract hangar", index - 1)
-      end
-    end
-  end
-  contractFresh = false
-  local top = Im.Scroll("contract hangar", rx - 4, line, rw + 8, rows * 24, #hangar, rows)
-  for row = 1, rows do
-    local item = hangar[row + top]
-    if item == nil then
-      break
-    end
-    local rowY = line + (row - 1) * 24
-    local _, clicked = Im.Row(rx - 4, rowY, rw + 4, 24, item.type == contractItem, `Contract:item:{item.type}`)
-    ItemIcon.Draw(item.type, rx + 2, rowY + 3, 18)
-    Im.Text(List.Cut(Types.Info(item.type).name, rw - 110, 13, false), rx + 28, rowY + 4, 13, Theme.TEXT)
-    local count = `x{Format.Whole(item.quantity)}`
-    Im.Text(count, rx + rw - 8 - Im.TextWidth(count, 12), rowY + 5, 12, Theme.DIM)
-    if clicked then
-      contractItem, contractQuantity, contractPrice = item.type, item.quantity, 0
-      picked = item
-    end
-  end
-  line += rows * 24 + 10
-  if picked == nil then
-    Im.Text("Choose what to put up.", rx, line + 4, 13, Theme.DIM)
-    return
-  end
-  Im.Text("Quantity", rx, line + 5, 13, Theme.DIM)
-  contractQuantity = Im.Number("ContractQuantity", contractQuantity, rx + 70, line, 96, 24)
-  if Im.Button("All", rx + 172, line, 44, 24, true, "Contract:all") then
-    contractQuantity = picked.quantity
-  end
-  local count = math.clamp(math.floor(contractQuantity), 1, picked.quantity)
-  local worth = Core.Query.ContractWorth(game, station, picked.type, count, 1)
-  line += 30
-  Im.Text("Price", rx, line + 5, 13, Theme.DIM)
-  local asked = if contractPrice > 0 then contractPrice else math.max(1, worth)
-  local typed = Im.Number("ContractPrice", asked, rx + 70, line, 96, 24)
-  if typed ~= asked then
-    contractPrice = typed
-    asked = typed
-  end
-  if Im.Button("Worth", rx + 172, line, 60, 24, true, "Contract:worth") then
-    contractPrice = 0
-  end
-  local _, fee, chance = Core.Query.ContractWorth(game, station, picked.type, count, asked)
-  local put: State.Command = { kind = "ListContract", actor = 0, item = picked.id, quantity = contractQuantity, price = asked }
-  local can, whyNot = Session.CanDo(session, put)
-  Im.Tone("primary")
-  Im.Because(if whyNot then tostring(whyNot) else nil)
-  if Im.Button("Put up", rx + rw - 92, line, 92, 24, can, "Contract:list") then
-    Session.Do(session, put)
-    contractPrice = 0
-  end
-  line += 32
-  Im.Text(`worth about {Format.Credits(worth)} here, for the lot. The broker takes {Format.Credits(fee)}.`, rx, line, 12, Theme.DIM)
-  Im.Text(if can then waits(chance) else tostring(whyNot), rx, line + 16, 12,
-    if not can or chance <= 0 then Theme.BAD elseif chance >= 1 then Theme.GOOD else Theme.DIM)
-end
-
 -- The categories, as a tree: each opens to its groups. With a search of
 -- every category over it.
 local function drawTree(x: number, y: number, w: number, h: number)
@@ -1137,10 +943,8 @@ Windows.Kind(Market.ID, function(_: Windows.Window, x: number, y: number, w: num
   end
   -- The pages.
   local orders = #Core.Query.Orders(game, nil)
-  local lots = #Core.Query.Contracts(game, station).lots
   local tx = x + 10
-  for _, each in { { "browse", "Browse", "Market:browse", 0 }, { "orders", "My orders", "Category:orders", orders },
-    { "contracts", "Contracts", "Category:contracts", lots } } :: { { any } } do
+  for _, each in { { "browse", "Browse", "Market:browse", 0 }, { "orders", "My orders", "Category:orders", orders } } :: { { any } } do
     local pressed, wide = Im.Tab(each[2], tx, y + 4, 28, page == each[1], each[3], each[4])
     if pressed then
       page = each[1]
@@ -1155,8 +959,6 @@ Windows.Kind(Market.ID, function(_: Windows.Window, x: number, y: number, w: num
   local top, room = y + 33, h - 34
   if page == "orders" then
     drawOrders(session, game, station, x + 1, top, w - 2, room)
-  elseif page == "contracts" then
-    drawContracts(session, game, station, x, top, w, room)
   else
     local listW = w - TREE_W - DETAIL_W
     drawTree(x + 1, top, TREE_W - 1, room)

@@ -1031,6 +1031,15 @@ function Debug.Lot(side: string, slot: number): (string, number, string, number)
   return "", 0, "", 0
 end
 
+-- Every board's lots of a side ('offer' or 'want'), galaxy-wide, within
+-- so many jumps if given: how many, and the first's station and place
+-- as the contracts' window names its row ("<station>:<slot>").
+function Debug.Contracts(side: string, reach: number?): (number, string)
+  local rows = Core.Query.ContractSearch(session.game, side, reach)
+  local first = rows[1]
+  return #rows, if first then `{first.station}:{first.lot.slot}` else ""
+end
+
 -- Open the market's board with a type of the hangar chosen to put up,
 -- as clicking its row under New listing would.
 function Debug.BoardItem(type: string): boolean

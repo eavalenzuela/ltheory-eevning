@@ -15,6 +15,7 @@ local Colors = require("@lt/Colors")
 local Components = require("@lt/Widget/Components")
 local Constants = require("@lt/Core/Data/Constants")
 local Context = require("@lt/Game/UI/Context")
+local ContractsWindow = require("@lt/Game/UI/Contracts")
 local Core = require("@lt/Core/Api")
 local Dock = require("@lt/Game/UI/Dock")
 local Fitting = require("@lt/Game/UI/Fitting")
@@ -1531,6 +1532,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       SkillSheet.Frame(session)
       IndustryWindow.Frame(session, player.docked ~= 0)
       JobsWindow.Frame(session)
+      ContractsWindow.Frame(session)
       CrewWindow.Frame(session, player.docked ~= 0)
       WalletWindow.Frame(session, player.docked ~= 0)
       SchoolWindow.Frame(session, player.docked ~= 0 and Core.Query.Careers(game).station == player.docked)
@@ -1762,6 +1764,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             note = if docked then nil else "At a station only" }
         elseif id == "crew" then
           return { open = CrewWindow.IsOpen(), can = docked, note = if docked then nil else "At a station only" }
+        elseif id == "contracts" then
+          -- (galaxy-wide, and dealt with from anywhere: Game/UI/Contracts)
+          return { open = ContractsWindow.IsOpen(), can = true }
         elseif id == "fitting" then
           -- (a station's own, and a window of its own: Game/UI/Fitting)
           return { open = Fitting.IsOpen(), can = docked, note = if docked then nil else "At a station only" }
@@ -1817,6 +1822,10 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       if Im.Hook("Missions", true) then
         JobsWindow.Open()
       end
+      -- (the board was a page of the market's: its name opens the contracts' window)
+      if Im.Hook("Category:contracts", true) then
+        ContractsWindow.Open()
+      end
       if Im.Hook("Crew", docked) then
         CrewWindow.Open()
       end
@@ -1837,6 +1846,12 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             WalletWindow.Close()
           else
             WalletWindow.Show(side)
+          end
+        elseif pressed == "contracts" then
+          if ContractsWindow.IsOpen() then
+            ContractsWindow.Close()
+          else
+            ContractsWindow.Open()
           end
         elseif pressed == "crew" then
           if CrewWindow.IsOpen() then

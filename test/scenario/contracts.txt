@@ -10,7 +10,7 @@
 # at what it is worth, called off, and put up again so cheap that
 # somebody takes it within the hour, with the pilot on another tab.
 #
-# covers: Core/Assets/Contracts Game/UI/Market
+# covers: Core/Assets/Contracts Game/UI/Market Game/UI/Contracts
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

@@ -192,12 +192,54 @@ suite:Case("a lot for sale is paid for and is in the hangar, and nobody else has
   state.wallet = next.price
   order(t, game, { kind = "AcceptContract", actor = 0, target = 1 })
   t.eq({ #state.contractsTaken, state.wallet }, { 1, 0 })
-  -- Not from space.
+  -- From space too, naming the station: what is bought is in the hangar
+  -- there (the owner, 2026-11-16: "you can buy any contract, from any
+  -- location"). Naming none, out of a station, there is nothing to take.
   order(t, game, { kind = "Undock", actor = 0 })
   for _ = 1, 20 do
     Core.Step(game)
   end
-  t.eq(refused(game, { kind = "AcceptContract", actor = 0, target = 2 }), "not docked")
+  t.eq(refused(game, { kind = "AcceptContract", actor = 0, target = 2 }), "not docked, and no station named")
+  local far = lot(game, home, "offer", 2)
+  state.wallet = far.price
+  local had = 0
+  for _, item in Items.In(state, home, "hangar") do
+    had += if item.type == far.stacks[1].type then item.quantity else 0
+  end
+  order(t, game, { kind = "AcceptContract", actor = 0, target = 2, station = home })
+  local now = 0
+  for _, item in Items.In(state, home, "hangar") do
+    now += if item.type == far.stacks[1].type then item.quantity else 0
+  end
+  t.eq({ state.wallet, now - had } :: { any }, { 0, far.stacks[1].quantity } :: { any }, "bought from space, delivered to the hangar there")
+  t.eq(Items.In(state, state.player.ship, "cargo") ~= nil, true)
+end)
+
+suite:Case("every board in the galaxy is listed, the nearest first, and a lot taken is off the list", function(t)
+  local game = newGame()
+  local state = game.state
+  local rows = Core.Query.ContractSearch(game, "offer")
+  t.eq(#rows, #Contracts.Stations(state) * Contracts.OFFERS)
+  t.eq({ rows[1].jumps, rows[1].station } :: { any }, { 0, rows[1].station } :: { any })
+  for index = 2, #rows do
+    t.ok(rows[index].jumps >= rows[index - 1].jumps, "the nearest first")
+  end
+  -- (within a reach, no farther)
+  for _, row in Core.Query.ContractSearch(game, "offer", 1) do
+    t.ok(row.jumps <= 1)
+  end
+  -- A lot far off, bought from here: off the list, and in the hangar where it was.
+  local far = rows[#rows]
+  t.ok(far.jumps > 0, "the farthest lot should be some jumps off")
+  state.wallet = far.lot.price
+  order(t, game, { kind = "AcceptContract", actor = 0, target = far.lot.slot, station = far.station })
+  local left = Core.Query.ContractSearch(game, "offer")
+  t.eq(#left, #rows - 1)
+  local there = 0
+  for _, item in Items.In(state, far.station, "hangar") do
+    there += if item.type == far.lot.stacks[1].type then item.quantity else 0
+  end
+  t.ok(there >= far.lot.stacks[1].quantity, "what was bought is in the hangar of the station it was at")
 end)
 
 suite:Case("a lot wanted is filled from the hangar, and pays more than a market would for so many", function(t)
@@ -206,11 +248,11 @@ suite:Case("a lot wanted is filled from the hangar, and pays more than a market 
   local want = lot(game, home, "want", 1)
   local type, count = want.stacks[1].type, want.stacks[1].quantity
   local name = Types.Info(type).name
-  t.eq(refused(game, { kind = "FillContract", actor = 0, target = 1 }), `needs {count} more {name} in the hangar here`)
+  t.eq(refused(game, { kind = "FillContract", actor = 0, target = 1 }), `needs {count} more {name} in your hangar there`)
   Items.Add(state, type, count + 3, home, "hangar")
   if count > 1 then
     Items.Take(state, stack(game, type), 4)
-    t.eq(refused(game, { kind = "FillContract", actor = 0, target = 1 }), `needs 1 more {name} in the hangar here`)
+    t.eq(refused(game, { kind = "FillContract", actor = 0, target = 1 }), `needs 1 more {name} in your hangar there`)
     Items.Add(state, type, 4, home, "hangar")
   end
   -- (what the market here would give for the same lot, sold at once)
@@ -252,7 +294,7 @@ suite:Case("a pilot's listing is held by the board, and taken when its price is 
   t.eq(refused(game, { kind = "ListContract", actor = 0, item = copies.id, quantity = 301, price = 100 }), "no such quantity")
   t.eq(refused(game, { kind = "ListContract", actor = 0, item = copies.id, quantity = 2.5, price = 100 }), "no such quantity")
   t.eq(refused(game, { kind = "ListContract", actor = 0, item = copies.id, quantity = 100, price = 0 }), "no such price")
-  t.eq(refused(game, { kind = "ListContract", actor = 0, item = 4242, quantity = 1, price = 100 }), "that is not in the hangar here")
+  t.eq(refused(game, { kind = "ListContract", actor = 0, item = 4242, quantity = 1, price = 100 }), "that is not in a station's hangar")
   local price = math.floor(worth * 0.8)
   local queried, fee, chance = Core.Query.ContractWorth(game, home, "copy.ammo.emp", 100, price)
   t.eq({ queried, fee, chance }, { worth, math.ceil(price * 0.03), 1 })
@@ -302,7 +344,7 @@ suite:Case("a pilot's listing is held by the board, and taken when its price is 
   t.eq({ #events, events[1].kind, events[1].quantity, #Contracts.Listings(state), hangar(game, "copy.ammo.emp") - had } :: { any },
     { 1, "ContractExpired", 50, 0, 50 } :: { any })
 
-  -- Called off where it is up: the lot is back, and the broker keeps the fee.
+  -- Called off from anywhere (since 2026-11-16): the lot is back in the hangar where it was up, and the broker keeps the fee.
   order(t, game, { kind = "ListContract", actor = 0, item = stack(game, "copy.ammo.emp").id, quantity = 10, price = 100000 })
   t.eq(state.journal[#state.journal].amount, -3000)
   local up = Contracts.Listings(state)[1]
@@ -310,7 +352,7 @@ suite:Case("a pilot's listing is held by the board, and taken when its price is 
   had = hangar(game, "copy.ammo.emp")
   t.eq(refused(game, { kind = "CancelContract", actor = 0, order = 4242 }), "no such listing")
   state.ships[state.player.ship].docked = 4242
-  t.eq(refused(game, { kind = "CancelContract", actor = 0, order = up.id }), "there is no board here")
+  t.eq(refused(game, { kind = "CancelContract", actor = 0, order = up.id }), "(accepted)")
   state.ships[state.player.ship].docked = home
   order(t, game, { kind = "CancelContract", actor = 0, order = up.id })
   t.eq({ state.wallet, hangar(game, "copy.ammo.emp") - had, #Contracts.Listings(state) }, { wallet, 10, 0 })

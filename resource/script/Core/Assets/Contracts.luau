@@ -40,6 +40,7 @@ local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
 local Modules = require("@lt/Core/Data/Modules")
+local Nomads = require("@lt/Core/Tactical/Nomads")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
@@ -88,6 +89,8 @@ Contracts.APPETITE = 250000
 Contracts.FORGET = 3 * DAY
 
 -- Whose a station is: the faction whose homeworld is nearest.
+local tradersAt: (state: State.State, station: number) -> { any }
+
 local function factionOf(state: State.State, station: number): string
   return state.galaxy.systems[Space.SystemOf(state, station)].nearest
 end
@@ -104,9 +107,11 @@ local function pirated(state: State.State, station: number, day: number): boolea
 end
 
 -- Whether a station has a board: one somebody keeps, with a market.
+-- (Any station anywhere: its system need not have been seen. Space.Peek)
 local function hasBoard(state: State.State, station: number): boolean
-  local object = Space.Object(state, station)
+  local object = Space.Peek(state, station)
   return object ~= nil and object.kind == "station" and state.starbases[station] == nil
+    and Nomads.FleetOf(state.galaxy, station) == nil
 end
 
 -- A lot's stacks, with every type once.
@@ -201,9 +206,37 @@ local function keyOf(station: number, day: number, side: string, slot: number): 
   return `{station}:{day}:{side}:{slot}`
 end
 
+-- The wandering traders lying at a station (Tactical/Sightings), found
+-- by an index of them made once a tick: a galaxy of thousands of
+-- systems has many happenings, and every board was looking through
+-- all of them.
+local traders = setmetatable({} :: { [any]: { tick: number, count: number, at: { [number]: { any } } } }, { __mode = "k" })
+tradersAt = function(state: State.State, station: number): { any }
+  local list = state.happenings.list
+  local kept = traders[state]
+  if kept == nil or kept.tick ~= state.tick or kept.count ~= #list then
+    local at: { [number]: { any } } = {}
+    for _, one in list do
+      if one.kind == "sighting" and one.what == "trader" then
+        local here = at[one.place]
+        if here == nil then
+          here = {}
+          at[one.place] = here
+        end
+        table.insert(here, one)
+      end
+    end
+    kept = { tick = state.tick, count = #list, at = at }
+    traders[state] = kept
+  end
+  return kept.at[station] or {}
+end
+
 -- What a station's board has today, less what has been taken: the lots
 -- for sale, then the lots wanted.
-function Contracts.Board(state: State.State, station: number): { Lot }
+-- ('all': the lots taken today as well, for Contracts.Everywhere, which
+-- leaves those out as it is read.)
+function Contracts.Board(state: State.State, station: number, all: boolean?): { Lot }
   if not hasBoard(state, station) then
     return {}
   end
@@ -211,7 +244,7 @@ function Contracts.Board(state: State.State, station: number): { Lot }
   local lots: { Lot } = {}
   for slot = 1, Contracts.OFFERS do
     local key = keyOf(station, day, "offer", slot)
-    if table.find(state.contractsTaken, key) then
+    if not all and table.find(state.contractsTaken, key) then
       continue
     end
     local rng = Rng.For(state.historySeed, station, day, slot, 131)
@@ -278,11 +311,11 @@ function Contracts.Board(state: State.State, station: number): { Lot }
   -- stay: modules no station sells, for less than a board asks, and a
   -- copy of a design no station has, for less than one is ever let go
   -- for. Each is theirs once: taken, it is gone until the next of them.
-  for _, one in state.happenings.list do
-    if one.kind == "sighting" and one.what == "trader" and one.place == station then
+  for _, one in tradersAt(state, station) do
+    do
       for slot = 1, Contracts.TRADER do
         local key = `{station}:trader{one.id}:offer:{slot}`
-        if table.find(state.contractsTaken, key) then
+        if not all and table.find(state.contractsTaken, key) then
           continue
         end
         local rng = Rng.For(state.historySeed, station, one.id, slot, 139)
@@ -308,7 +341,7 @@ function Contracts.Board(state: State.State, station: number): { Lot }
   end
   for slot = 1, Contracts.WANTS do
     local key = keyOf(station, day, "want", slot)
-    if table.find(state.contractsTaken, key) or #wanted == 0 then
+    if (not all and table.find(state.contractsTaken, key)) or #wanted == 0 then
       continue
     end
     local rng = Rng.For(state.historySeed, station, day, slot, 137)
@@ -350,6 +383,72 @@ function Contracts.Have(state: State.State, station: number, stacks: { Stack }):
     have[index] = math.min(have[index], stack.quantity)
   end
   return have
+end
+
+-- ---------------------------------------------------------------------
+-- Every board at once
+
+-- The stations with a board, in every system of the map (not uncharted
+-- space), by their ids: worked out once for a galaxy, from what each
+-- system would be, without its being seen (Space.Glance).
+local boardsOf = setmetatable({} :: { [any]: { number } }, { __mode = "k" })
+function Contracts.Stations(state: State.State): { number }
+  local found = boardsOf[state.galaxy]
+  if found == nil then
+    found = {}
+    for id, node in state.galaxy.systems do
+      if not node.uncharted then
+        for _, object in Space.Glance(state, id).objects do
+          if object.kind == "station" and state.starbases[object.id] == nil then
+            table.insert(found, object.id)
+          end
+        end
+      end
+    end
+    table.sort(found)
+    boardsOf[state.galaxy] = found
+  end
+  return found
+end
+
+-- Every lot on every board today, with the station it is at, less what
+-- has been taken. Every board's lots are worked out once a day (and
+-- again when a wandering trader comes or goes): a galaxy of five
+-- thousand systems has near ten thousand boards and fifty thousand
+-- lots, a second and a quarter. What is taken is left out as it is read.
+export type Placed = { station: number, lot: Lot }
+local everywhere = setmetatable({} :: { [any]: { key: string, lots: { Placed } } }, { __mode = "k" })
+function Contracts.Everywhere(state: State.State): { Placed }
+  local trading = 0
+  for _, one in state.happenings.list do
+    trading += if one.kind == "sighting" and one.what == "trader" then one.id else 0
+  end
+  local key = `{state.tick // DAY}:{trading}`
+  local kept = everywhere[state]
+  if kept == nil or kept.key ~= key then
+    local lots: { Placed } = {}
+    for _, station in Contracts.Stations(state) do
+      for _, lot in Contracts.Board(state, station, true) do
+        table.insert(lots, { station = station, lot = lot })
+      end
+    end
+    kept = { key = key, lots = lots }
+    everywhere[state] = kept
+  end
+  if #state.contractsTaken == 0 then
+    return kept.lots
+  end
+  local taken: { [string]: boolean } = {}
+  for _, gone in state.contractsTaken do
+    taken[gone] = true
+  end
+  local left: { Placed } = {}
+  for _, placed in kept.lots do
+    if not taken[placed.lot.key] then
+      table.insert(left, placed)
+    end
+  end
+  return left
 end
 
 -- ---------------------------------------------------------------------
@@ -414,24 +513,78 @@ function Contracts.Chance(price: number, worth: number): number
   return Contracts.CHANCE.far + (Contracts.CHANCE.near - Contracts.CHANCE.far) * share
 end
 
-local function dockedAt(state: State.State, command: State.Command): (number?, string?)
+-- The station a contract is dealt with at: the one the command names,
+-- wherever the pilot is (the owner, 2026-11-16: contracts are
+-- "universe-wide ... you can buy any contract, from any location", and
+-- what is bought is delivered "in the station they're posted in"); or,
+-- naming none, the one the pilot is docked at.
+local function stationOf(state: State.State, command: State.Command): (number?, string?)
   local ship = state.ships[command.actor]
   if ship == nil then
     return nil, "no such ship"
-  elseif ship.docked == 0 then
-    return nil, "not docked"
-  elseif not hasBoard(state, ship.docked) then
-    return nil, "there is no board here"
   end
-  return ship.docked, nil
+  local station = command.station or ship.docked
+  if station == 0 then
+    return nil, "not docked, and no station named"
+  elseif not hasBoard(state, station) then
+    return nil, "there is no board there"
+  end
+  return station, nil
+end
+
+-- Whether a listing can be put up, or taken down: from wherever the
+-- pilot is.
+local function listable(state: State.State, command: State.Command): (boolean, string?)
+  local kind = command.kind
+  if kind == "ListContract" then
+    -- (put up at the station whose hangar it is in, from wherever the pilot is)
+    local item = state.items[command.item or 0]
+    if item == nil or item.place ~= "hangar" or not hasBoard(state, item.holder) then
+      return false, "that is not in a station's hangar"
+    end
+    local station = item.holder
+    local quantity = command.quantity or item.quantity
+    local price = command.price or 0
+    if quantity < 1 or quantity % 1 ~= 0 or quantity > item.quantity then
+      return false, "no such quantity"
+    elseif price < 1 or price % 1 ~= 0 then
+      return false, "no such price"
+    elseif #state.contractIds >= Contracts.Limit(state) then
+      return false, `{Contracts.Limit(state)} listings at a time`
+    elseif Contracts.Fee(state, station, price) > state.wallet then
+      return false, "not enough credits for the broker"
+    end
+    return true
+
+  elseif kind == "CancelContract" then
+    -- (taken down from wherever the pilot is: its lot goes back to the hangar where it was up)
+    if state.contracts[command.order or 0] == nil then
+      return false, "no such listing"
+    end
+    return true
+  end
+  return false, `unknown command '{kind}'`
 end
 
 function Contracts.Validate(state: State.State, command: State.Command): (boolean, string?)
-  local station, why = dockedAt(state, command)
-  if station == nil then
-    return false, why
-  end
   local kind = command.kind
+  if state.ships[command.actor] == nil then
+    return false, "no such ship"
+  end
+  -- (a listing is put up where its lot lies, and taken down where it is
+  -- up: neither by the station the command names)
+  if kind == "ListContract" or kind == "CancelContract" then
+    return listable(state, command)
+  end
+  local station: number, why: string?
+  do
+    local found, reason = stationOf(state, command)
+    if found == nil then
+      return false, reason
+    end
+    station, why = found, reason
+  end
+  local _ = why
   if kind == "AcceptContract" then
     local lot = Contracts.Lot(state, station, "offer", command.target or 0)
     if lot == nil then
@@ -449,37 +602,11 @@ function Contracts.Validate(state: State.State, command: State.Command): (boolea
     local have = Contracts.Have(state, station, lot.stacks)
     for index, stack in lot.stacks do
       if have[index] < stack.quantity then
-        return false, `needs {stack.quantity - have[index]} more {Types.Info(stack.type).name} in the hangar here`
+        return false, `needs {stack.quantity - have[index]} more {Types.Info(stack.type).name} in your hangar there`
       end
     end
     return true
 
-  elseif kind == "ListContract" then
-    local item = state.items[command.item or 0]
-    if item == nil or item.holder ~= station or item.place ~= "hangar" then
-      return false, "that is not in the hangar here"
-    end
-    local quantity = command.quantity or item.quantity
-    local price = command.price or 0
-    if quantity < 1 or quantity % 1 ~= 0 or quantity > item.quantity then
-      return false, "no such quantity"
-    elseif price < 1 or price % 1 ~= 0 then
-      return false, "no such price"
-    elseif #state.contractIds >= Contracts.Limit(state) then
-      return false, `{Contracts.Limit(state)} listings at a time`
-    elseif Contracts.Fee(state, station, price) > state.wallet then
-      return false, "not enough credits for the broker"
-    end
-    return true
-
-  elseif kind == "CancelContract" then
-    local listing = state.contracts[command.order or 0]
-    if listing == nil then
-      return false, "no such listing"
-    elseif listing.station ~= station then
-      return false, "that listing is at another station"
-    end
-    return true
   end
   return false, `unknown command '{kind}'`
 end
@@ -513,8 +640,15 @@ end
 
 function Contracts.Apply(state: State.State, command: State.Command, events: { Event })
   local ship = state.ships[command.actor]
-  local station = ship.docked
+  local station = command.station or ship.docked
   local kind = command.kind
+  if kind == "AcceptContract" or kind == "FillContract" then
+    -- (a station dealt with from afar is a place of the game's from now on: its system described)
+    Space.Describe(state, Space.SystemOf(state, station))
+  end
+  if kind == "ListContract" then
+    station = state.items[command.item :: number].holder
+  end
   if kind == "AcceptContract" then
     local lot = Contracts.Lot(state, station, "offer", command.target :: number) :: Lot
     Wallet.Pay(state, -lot.price, "contract", events)
