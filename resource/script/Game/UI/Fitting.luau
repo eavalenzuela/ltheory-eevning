@@ -777,13 +777,9 @@ end
 -- ---------------------------------------------------------------------
 -- The window
 
--- Whose game it is, what the wheel draws the ship with (Fitting.Frame),
--- and whether the window was open when the pilot last left a station
--- (it is open at the first: it is what a docked pilot first sees).
+-- Whose game it is, and what the wheel draws the ship with (Fitting.Frame).
 local current: Session.Session? = nil
 local scenery: { preview: Preview?, show: Show? } = {}
-local wasDocked = false
-local openDocked = true
 
 function Fitting.Open()
   Windows.Open(Fitting.ID)
@@ -811,22 +807,12 @@ end
 -- Once a frame, before the windows are drawn: whose game it is, whether
 -- the pilot is docked, and what the wheel draws the ship with (the
 -- scene's: Scene.Dressed and Scene.Showcase). The window is a
--- station's: shut when the pilot undocks, and open again at the next
--- station if it was open when they left the last.
+-- station's (Windows.Berthed), and open at the first: it is what a
+-- docked pilot first sees.
 function Fitting.Frame(session: Session.Session, docked: boolean, preview: Preview?, show: Show?)
   current = session
   scenery = { preview = preview, show = show }
-  if docked ~= wasDocked then
-    if docked then
-      if openDocked then
-        Windows.Open(Fitting.ID)
-      end
-    else
-      openDocked = Windows.IsOpen(Fitting.ID)
-      Windows.Close(Fitting.ID)
-    end
-    wasDocked = docked
-  end
+  Windows.Berthed(Fitting.ID, docked, true)
 end
 
 local LEFT_W, RIGHT_W = 326, 280

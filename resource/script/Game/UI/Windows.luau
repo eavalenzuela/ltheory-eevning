@@ -247,6 +247,32 @@ function Windows.IsOpen(id: string): boolean
   return windows[id] ~= nil and windows[id].open
 end
 
+-- A window that is a station's own (the market, fitting, the ships):
+-- shut when the pilot undocks, and open again at the next station if it
+-- was open when they left the last. Whoever has such a window says once
+-- a frame, before the windows are drawn, whether the pilot is docked.
+-- 'first': it is open at the first station too, before any was left.
+local berthed: { [string]: { was: boolean, open: boolean } } = {}
+
+function Windows.Berthed(id: string, docked: boolean, first: boolean?)
+  local state = berthed[id]
+  if state == nil then
+    state = { was = false, open = first == true }
+    berthed[id] = state
+  end
+  if docked ~= state.was then
+    if docked then
+      if state.open then
+        Windows.Open(id)
+      end
+    else
+      state.open = Windows.IsOpen(id)
+      Windows.Close(id)
+    end
+    state.was = docked
+  end
+end
+
 -- Whether one window is in front of another (both open).
 function Windows.Above(id: string, other: string): boolean
   local a, b = table.find(order, id), table.find(order, other)

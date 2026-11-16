@@ -11,7 +11,7 @@
 # until the hold has what the contract wants. Home, and the contract
 # is paid.
 #
-# covers: Core/Tactical/Digger Core/Tactical/Mining Core/Assets/Missions
+# covers: Core/Tactical/Digger Core/Tactical/Mining Core/Assets/Missions Game/UI/Ships
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

@@ -1,10 +1,11 @@
 --!strict
--- What is left of the docked screen: industry, skills, the ships kept
--- here, the crew, the wallet and the jobs, a tab each; and, at the
+-- What is left of the docked screen: industry, skills, the crew, the
+-- wallet and the jobs, a tab each; and, at the
 -- station a new pilot starts at, the career agents (Game/UI/Careers).
 -- It was the whole of the interface while docked. The market and the
--- fitting of the ship were tabs of it, and are windows of their own now
--- (Game/UI/Market, Game/UI/Fitting), as the rest are to be; and what a
+-- fitting of the ship and the ships kept here were tabs of it, and are
+-- windows of their own now (Game/UI/Market, Game/UI/Fitting,
+-- Game/UI/Ships), as the rest are to be; and what a
 -- pilot does at any station (to undock, to make it home) is beside the
 -- corner's panel (Game/UI/Hud). So it is not open by itself any more:
 -- the dock opens it at a tab, and shuts it.
@@ -40,14 +41,14 @@ local Station = {}
 Station.WIDTH = 940
 Station.HEIGHT = 600
 
-local TABS: { string } = { "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions" }
+local TABS: { string } = { "Industry", "Skills", "Crew", "Wallet", "Missions" }
 -- (and one more at a starbase of the pilot's own: the running of it)
-local OWN: { string } = { "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions", "Starbase" }
+local OWN: { string } = { "Industry", "Skills", "Crew", "Wallet", "Missions", "Starbase" }
 -- (and at the station the career agents are at: them)
-local SCHOOL: { string } = { "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions", "Careers" }
+local SCHOOL: { string } = { "Industry", "Skills", "Crew", "Wallet", "Missions", "Careers" }
 -- The services each tab's doings are done by (Core/Assets/Stations).
 local WANTS: { [string]: { string } } = {
-  Industry = { "refining", "industry", "research" }, Ships = { "fitting" },
+  Industry = { "refining", "industry", "research" },
 }
 local tab = "Industry"
 local dockedAt = 0    -- the station the pilot was last seen docked at (Station.Arrived)
@@ -531,68 +532,6 @@ local function drawSkills(session: Session.Session, game: Core.Game, player: Cor
         if can then Im.TEXT else Im.WARN)
       line += 20
     end
-  end
-end
-
--- ---------------------------------------------------------------------
--- Ships
-
-local function drawShips(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
-  local station = player.docked
-  local top = y + 78
-  local left = x + 16
-  local ships = Core.Query.Ships(game, station)
-  Im.Heading(`YOUR SHIPS HERE  {#ships}`, left, top, 16, Im.DIM)
-  local line = top + 28
-  for index, ship in ships do
-    if index > 8 then
-      Im.Text(`and {#ships - 8} more`, left, line, 13, Im.DIM)
-      line += 26
-      break
-    end
-    local hull = Ships.byId[ship.type]
-    local aboard = ship.id == player.ship
-    Im.Text(ship.name, left, line + 4, 15, Im.TEXT)
-    ItemIcon.Draw(hull.id, left + 192, line + 2, 20)
-    Info.Name(hull.id, hull.name, left + 220, line + 5, 13, Im.DIM)
-    Im.Text(`{#Core.Query.Fitted(game, ship.id)} modules fitted`, left + 420, line + 5, 13, Im.DIM)
-    if aboard then
-      Im.Text("you are aboard", left + 620, line + 5, 13, GOOD)
-    else
-      local board: State.Command = { kind = "BoardShip", actor = 0, target = ship.id }
-      local can, whyNot = Session.CanDo(session, board)
-      if Im.Button("Board", left + 620, line, 90, 26, can, `Board:{index}`) then
-        Session.Do(session, board)
-      end
-      if not can then
-        Im.Text(tostring(whyNot), left + 722, line + 6, 13, Im.WARN)
-      end
-    end
-    line += 32
-  end
-
-  line += 16
-  Im.Heading("HULLS IN THE HANGAR", left, line, 16, Im.DIM)
-  line += 28
-  local any = false
-  for _, item in Core.Query.Items(game, station, "hangar") do
-    local hull = Ships.byId[item.type]
-    if hull then
-      any = true
-      Im.Text(`{hull.name}  x{item.quantity}`, left, line + 4, 15, Im.TEXT)
-      local untrained = Core.Query.Untrained(game, item.type)
-      if untrained then
-        Im.Text(`to fly it: {untrained}`, left + 420, line + 5, 13, Im.WARN)
-      end
-      if Im.Button("Assemble", left + 620, line, 90, 26, (Session.CanDo(session, { kind = "Assemble", actor = 0, item = item.id })),
-        `Assemble:{item.type}`) then
-        Session.Do(session, { kind = "Assemble", actor = 0, item = item.id })
-      end
-      line += 32
-    end
-  end
-  if not any then
-    Im.Text("None. The market sells hulls, under Ships; a bought hull is assembled here.", left, line, 14, Im.DIM, 0.8)
   end
 end
 
@@ -1881,8 +1820,6 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
 
   if tab == "Skills" then
     drawSkills(session, game, player, x, y)
-  elseif tab == "Ships" then
-    drawShips(session, game, player, x, y)
   elseif tab == "Wallet" then
     drawWallet(session, game, x, y)
   elseif tab == "Crew" then

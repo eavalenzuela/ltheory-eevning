@@ -99,11 +99,8 @@ local contractQuantity = 1
 local contractPrice = 0     -- 0: what it is worth here
 local contractFresh = false -- chosen by a script: all of it, and brought into the list
 
--- Whose game it is (Market.Frame), and whether the window was open
--- when the pilot last left a station.
+-- Whose game it is (Market.Frame).
 local current: Session.Session? = nil
-local wasDocked = false
-local openDocked = false
 
 local TREE_W, DETAIL_W = 200, 336
 
@@ -298,22 +295,10 @@ function Market.Contract(type: string): boolean
 end
 
 -- Once a frame, before the windows are drawn: whose game it is, and
--- whether the pilot is docked. The market is a station's: it is shut
--- when the pilot undocks, and open again at the next station if it was
--- open when they left the last.
+-- whether the pilot is docked. The market is a station's (Windows.Berthed).
 function Market.Frame(session: Session.Session, docked: boolean)
   current = session
-  if docked ~= wasDocked then
-    if docked then
-      if openDocked then
-        Windows.Open(Market.ID)
-      end
-    else
-      openDocked = Windows.IsOpen(Market.ID)
-      Windows.Close(Market.ID)
-    end
-    wasDocked = docked
-  end
+  Windows.Berthed(Market.ID, docked)
 end
 
 -- ---------------------------------------------------------------------
