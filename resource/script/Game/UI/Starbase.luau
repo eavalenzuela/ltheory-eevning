@@ -334,6 +334,9 @@ end
 -- where the pilot is docked. Come to a starbase of their own, the window
 -- is open. Anywhere else it is shut.
 local seenAt = -1
+-- (and in front of whatever else opens as the pilot docks, the fitting
+-- window for one: it is brought forward again on the frames after)
+local forward = 0
 
 function Starbase.Frame(session: Session.Session, game: Core.Game, player: Core.PlayerInfo)
   current = session
@@ -341,8 +344,15 @@ function Starbase.Frame(session: Session.Session, game: Core.Game, player: Core.
     seenAt = player.docked
     if Starbase.Here(game, player) then
       Starbase.Open()
+      forward = 2
     else
       Starbase.Close()
+      forward = 0
+    end
+  elseif forward > 0 then
+    forward -= 1
+    if Windows.IsOpen(Starbase.ID) then
+      Windows.Raise(Starbase.ID)
     end
   end
 end
