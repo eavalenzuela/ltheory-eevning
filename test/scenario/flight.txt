@@ -16,8 +16,8 @@ lua assert(GameDebug.Docked(), 'a new game starts docked')
 # Flight is the subject here, so no pirates.
 lua GameDebug.Peaceful(true)
 
-# UNDOCK, at the foot of the fitting screen (1920x1080 window).
-click Left 566 700
+# UNDOCK, in the panel beside the corner's (1920x1080 window, the corner's panel as wide as it is in the first system).
+click Left 446 41
 until GameDebug.InSpace()
 
 lua GameDebug.TimeScale(8)

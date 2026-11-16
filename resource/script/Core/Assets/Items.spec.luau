@@ -275,4 +275,37 @@ suite:Case("a rig goes into a hull of its size and no other, and one in a bigger
   t.eq(frigates, 1, "the frigate's small rig should be as it was")
 end)
 
+suite:Case("a capacitor holds where what it makes good is what is drawn", function(t)
+  -- Nothing drawn: it is full. (And a ship with no capacitor has none to hold.)
+  t.eq({ Items.Holds(100, 100, 0) } :: { any }, { 1 } :: { any })
+  t.eq({ Items.Holds(0, 100, 5) } :: { any }, { 0 } :: { any })
+  -- Drawn on for less than the most it makes good (2.5 a second here):
+  -- it settles on the fuller side of a quarter, where the two are equal.
+  for _, drain in { 0.4, 1, 2, 2.4 } do
+    local holds, lasts = Items.Holds(100, 100, drain)
+    t.ok(holds ~= nil and lasts == nil, `drawn on at {drain}, it should hold`)
+    local r = math.sqrt(holds :: number)
+    t.ok(r > 0.5 and r < 1, `it should settle over a quarter full, not at {holds}`)
+    t.ok(math.abs(100 * (10 / 100) * r * (1 - r) - drain) < 1e-9, "what it makes good there should be what is drawn")
+  end
+  -- The more is drawn, the lower it holds.
+  t.ok((Items.Holds(100, 100, 2) :: number) < (Items.Holds(100, 100, 1) :: number))
+  -- Drawn on for more than it can make good, it runs dry: sooner, the more is drawn.
+  local holds, lasts = Items.Holds(100, 100, 3)
+  t.ok(holds == nil and lasts ~= nil and (lasts :: number) > 100 / 3, "it should last longer than a capacitor that made nothing good")
+  t.ok((select(2, Items.Holds(100, 100, 6)) :: number) < (lasts :: number))
+
+  -- And the pilot's own ship, whatever it is and however it is fitted:
+  -- what the two say of it agree.
+  local game = newGame()
+  local ship = game.state.player.ship
+  local stats = Items.ShipStats(game.state, ship)
+  local capacitor = Items.Capacitor(game.state, ship)
+  t.ok(capacitor.drain >= 0)
+  t.ok(math.abs(capacitor.peak - 2.5 * stats.capacitor / stats.capacitorRecharge) < 1e-9)
+  local shipHolds, shipLasts = Items.Holds(stats.capacitor, stats.capacitorRecharge, capacitor.drain)
+  t.eq({ capacitor.holds, capacitor.lasts } :: { any }, { shipHolds, shipLasts } :: { any })
+  t.ok((capacitor.holds ~= nil) == (capacitor.drain < capacitor.peak or capacitor.drain == 0))
+end)
+
 return suite

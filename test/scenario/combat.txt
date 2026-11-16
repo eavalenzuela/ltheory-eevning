@@ -34,8 +34,8 @@ click Left 304 268
 wait 1
 lua assert(GameDebug.Fitted('shield.extender.small') == 1, 'clicking Fit did not fit the extender')
 
-# UNDOCK, at the foot of the fitting screen.
-click Left 566 700
+# UNDOCK, in the panel beside the corner's (1920x1080, the corner's panel as wide as it is in the first system).
+click Left 446 41
 until GameDebug.InSpace()
 frames 3
 lua assert(GameDebug.Music() == 'space', 'out of the station the music should be space\'s')

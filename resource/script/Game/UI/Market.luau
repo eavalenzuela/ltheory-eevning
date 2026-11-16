@@ -32,6 +32,7 @@ local Core = require("@lt/Core/Api")
 local Fleet = require("@lt/Core/Tactical/Fleet")
 local Format = require("@lt/Game/Format")
 local Icons = require("@lt/Game/UI/Icons")
+local Fitting = require("@lt/Game/UI/Fitting")
 local Im = require("@lt/Game/UI/Im")
 local Info = require("@lt/Game/UI/Info")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
@@ -906,8 +907,7 @@ local function drawDetail(session: Session.Session, game: Core.Game, station: nu
   -- (a paint or a design is tried on the ship before it is bought: the fitting screen shows the ship in it)
   if info.category == "paint" and Im.Button("Try on", infoAt, line + 24, 54, 20, true, `Try:{chosen}`) then
     Session.Try(session, chosen)
-    Station.Show("Fitting")
-    Windows.Raise("station")
+    Fitting.Show("appearance")
   end
   Im.Strong(List.Cut(info.name, dw - 110, 17, true), dx + 50, line, 17, Theme.TEXT)
   local kind = Catalog.Group(chosen)
@@ -1186,5 +1186,6 @@ Windows.Make(Market.ID, Market.ID, "Market", 534, 130, 1130, 720, 1000, 700, nil
 Windows.Icon(Market.ID, "market")
 -- (the docked screen's own way to it: its Skills tab buys a book here)
 Station.Market = Market.Choose
+Fitting.Market = Market.Choose
 
 return Market

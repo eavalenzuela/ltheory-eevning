@@ -160,6 +160,67 @@ function Items.Offence(state: State.State, ship: number): Offence
   return out
 end
 
+-- Where a capacitor comes to rest with so much drawn from it a second,
+-- as a share of full (nil if it does not: more is drawn than it can make
+-- good); and then how long it lasts from full, in seconds.
+--
+-- A capacitor of 'max' that recharges in 'time' makes good
+-- max * (10 / time) * r * (1 - r) a second, r being the root of how
+-- full it is (Tactical/Gunnery's Recharge): most at a quarter full,
+-- 2.5 * max / time. Drawn on for less than that it settles where what it
+-- makes good is what is drawn, on the fuller side of the quarter.
+function Items.Holds(max: number, time: number, drain: number): (number?, number?)
+  if drain <= 0 or max <= 0 or time <= 0 then
+    return if max > 0 then 1 else 0, nil
+  end
+  local k = drain * time / (10 * max)
+  if k < 0.25 then
+    local r = (1 + math.sqrt(1 - 4 * k)) / 2
+    return r * r, nil
+  end
+  -- (it runs dry: a second at a time from full, for an hour at the most)
+  local level, seconds = max, 0
+  while level > 0 and seconds < 3600 do
+    local r = math.sqrt(level / max)
+    level += max * (10 / time) * r * (1 - r) - drain
+    seconds += 1
+  end
+  return nil, seconds
+end
+
+-- What a ship's fit draws from its capacitor with everything it has
+-- that is switched on running, cycle after cycle (GJ a second); the
+-- most its capacitor can make good; and where that leaves it
+-- (Items.Holds): the share of full it holds at, or how long it lasts.
+export type Capacitor = { drain: number, peak: number, holds: number?, lasts: number? }
+
+function Items.Capacitor(state: State.State, ship: number): Capacitor
+  local fit = Items.Fit(state, ship, nil)
+  local levels = Items.Levels(state, ship)
+  local stats = Items.ShipStats(state, ship)
+  local drain = 0
+  for _, item in Items.Fitted(state, ship) do
+    local module = Modules.byId[item.type]
+    if module.weapon then
+      local weapon = Attributes.Weapon(fit, item.type, levels)
+      drain += weapon.capacitor / math.max(0.1, weapon.duration)
+    elseif module.miner then
+      drain += module.miner.capacitor / math.max(0.1, module.miner.duration)
+    elseif module.salvager then
+      drain += module.salvager.capacitor / math.max(0.1, module.salvager.duration)
+    elseif module.hex then
+      drain += module.hex.capacitor / math.max(0.1, module.hex.duration)
+    elseif module.repair then
+      drain += module.repair.capacitor / math.max(0.1, module.repair.duration)
+    elseif module.boost then
+      drain += (module.boostCapacitor or 0) / math.max(0.1, module.boostDuration or 1)
+    end
+  end
+  local holds, lasts = Items.Holds(stats.capacitor, stats.capacitorRecharge, drain)
+  return { drain = drain, peak = if stats.capacitorRecharge > 0 then 2.5 * stats.capacitor / stats.capacitorRecharge else 0,
+    holds = holds, lasts = lasts }
+end
+
 -- Cubic metres in a ship's hold.
 function Items.CargoUsed(state: State.State, ship: number): number
   local used = 0

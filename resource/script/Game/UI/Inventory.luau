@@ -41,6 +41,7 @@
 local Catalog = require("@lt/Core/Data/Catalog")
 local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
+local Fitting = require("@lt/Game/UI/Fitting")
 local Im = require("@lt/Game/UI/Im")
 local Info = require("@lt/Game/UI/Info")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
@@ -48,7 +49,6 @@ local Modules = require("@lt/Core/Data/Modules")
 local Session = require("@lt/Game/Session")
 local State = require("@lt/Core/Kernel/State")
 local Market = require("@lt/Game/UI/Market")
-local Station = require("@lt/Game/UI/Station")
 local Types = require("@lt/Core/Data/Types")
 local Windows = require("@lt/Game/UI/Windows")
 
@@ -246,7 +246,7 @@ local function actionsFor(session: Session.Session, view: View?, item: State.Ite
     if shown.kind == "hangar" then
       add("Try it on the ship", `Try:{type}`, nil, function()
         Session.Try(session, type)
-        Station.Show("Fitting")
+        Fitting.Show("appearance")
       end, true)
     end
   end

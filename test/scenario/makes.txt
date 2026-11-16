@@ -11,7 +11,7 @@
 # make of whatever the ship has in its first high slot is given, by
 # their name, fitted in its place, and flown.
 #
-# covers: Core/Data/Modules Core/Assets/Mutators Core/Assets/Market
+# covers: Core/Data/Modules Core/Assets/Mutators Core/Assets/Market Game/UI/Fitting
 
 wait 2
 lua GameDebug.Peaceful(true)

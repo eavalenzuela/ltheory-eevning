@@ -11,7 +11,7 @@
 # side into a container, which is a place in reach, and all of it is
 # taken back. And a wreck is opened in the window, to take from.
 #
-# covers: Game/UI/Inventory Game/UI/Windows Game/UI/Assets Core/Assets/Items
+# covers: Game/UI/Inventory Game/UI/Windows Game/UI/Assets Core/Assets/Items Game/UI/Fitting
 # smoke: yes
 
 wait 2
@@ -91,9 +91,9 @@ mouseup Left
 frames 2
 lua assert(select(3, GameDebug.Window('inventory')) == 520 and select(4, GameDebug.Window('inventory')) == 590, 'the window should be the size its corner was dragged to')
 
-# The docked screen is a window too: it goes where its heading is dragged.
-lua _G.sx, _G.sy = GameDebug.Window('station')
-lua assert(_G.sx == 534 and _G.sy == 130, 'the docked screen should be beside the inventory at first: ' .. _G.sx .. ', ' .. _G.sy)
+# The fitting window, open beside it since the pilot docked, goes where its heading is dragged.
+lua _G.sx, _G.sy = GameDebug.Window('fitting')
+lua assert(_G.sx == 534 and _G.sy == 130, 'the fitting window should be beside the inventory at first: ' .. _G.sx .. ', ' .. _G.sy)
 move 604 144
 frames 2
 mousedown Left
@@ -102,8 +102,10 @@ move 644 164
 frames 2
 mouseup Left
 frames 2
-lua assert(GameDebug.Window('station') == 574 and select(2, GameDebug.Window('station')) == 150, 'the docked screen should have gone with its heading')
-lua assert(GameDebug.CanPress('UNDOCK'), 'and it is the docked screen still')
+lua assert(GameDebug.Window('fitting') == 574 and select(2, GameDebug.Window('fitting')) == 150, 'the fitting window should have gone with its heading')
+lua assert(select(5, GameDebug.Window('fitting')) and GameDebug.CanPress('Fitting:strip'), 'and it is the fitting window still, and open')
+lua assert(GameDebug.CanPress('UNDOCK'), 'undocking is beside the corner panel, whatever is open')
+lua assert(not select(5, GameDebug.Window('station')), 'the docked screen is not open until a tab of it is asked for')
 
 # And the star map: opened, dragged by its heading, and shut.
 until GameDebug.Press('Map')

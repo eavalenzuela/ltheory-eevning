@@ -1,7 +1,13 @@
 --!strict
--- The interface while docked: the ship's fit, the market, industry,
--- skills, the ships kept here and the wallet, a tab each; and, at the
+-- What is left of the docked screen: industry, skills, the ships kept
+-- here, the crew, the wallet and the jobs, a tab each; and, at the
 -- station a new pilot starts at, the career agents (Game/UI/Careers).
+-- It was the whole of the interface while docked. The market and the
+-- fitting of the ship were tabs of it, and are windows of their own now
+-- (Game/UI/Market, Game/UI/Fitting), as the rest are to be; and what a
+-- pilot does at any station (to undock, to make it home) is beside the
+-- corner's panel (Game/UI/Hud). So it is not open by itself any more:
+-- the dock opens it at a tab, and shuts it.
 --
 -- Drawn every frame with Game/UI/Im. It reads the Core through queries
 -- and acts on it only through the Session. Every button has a name a
@@ -18,9 +24,7 @@ local Im = require("@lt/Game/UI/Im")
 local Industry = require("@lt/Core/Assets/Industry")
 local Info = require("@lt/Game/UI/Info")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
-local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
-local Paints = require("@lt/Core/Data/Paints")
 local Reactions = require("@lt/Core/Data/Reactions")
 local Session = require("@lt/Game/Session")
 local Assault = require("@lt/Core/Tactical/Assault")
@@ -36,17 +40,17 @@ local Station = {}
 Station.WIDTH = 940
 Station.HEIGHT = 600
 
-local TABS: { string } = { "Fitting", "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions" }
+local TABS: { string } = { "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions" }
 -- (and one more at a starbase of the pilot's own: the running of it)
-local OWN: { string } = { "Fitting", "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions", "Starbase" }
+local OWN: { string } = { "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions", "Starbase" }
 -- (and at the station the career agents are at: them)
-local SCHOOL: { string } = { "Fitting", "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions", "Careers" }
+local SCHOOL: { string } = { "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions", "Careers" }
 -- The services each tab's doings are done by (Core/Assets/Stations).
 local WANTS: { [string]: { string } } = {
-  Fitting = { "fitting" }, Industry = { "refining", "industry", "research" }, Ships = { "fitting" },
+  Industry = { "refining", "industry", "research" }, Ships = { "fitting" },
 }
-local tab = "Fitting"
-local dockedAt = 0    -- the station the screen was last drawn for
+local tab = "Industry"
+local dockedAt = 0    -- the station the pilot was last seen docked at (Station.Arrived)
 
 -- (The market was a tab here: it is a window of its own now, Game/UI/Market.)
 
@@ -107,6 +111,38 @@ function Station.Tab(): string
   return tab
 end
 
+-- The tabs there are at the station the pilot is docked at: one more at
+-- a starbase of their own (the running of it), and one more where the
+-- career agents are.
+function Station.Tabs(game: Core.Game, player: Core.PlayerInfo): { string }
+  local starbase = Core.Query.Starbase(game, player.docked)
+  if starbase and starbase.mine then
+    return OWN
+  end
+  return if Core.Query.Careers(game).station == player.docked then SCHOOL else TABS
+end
+
+-- Once a frame while the pilot is docked: whether they have just come
+-- to a starbase of their own, where the running of it is what they have
+-- come for. The screen is then to be opened, and is at that tab.
+function Station.Arrived(game: Core.Game, player: Core.PlayerInfo): boolean
+  if player.docked == dockedAt then
+    return false
+  end
+  dockedAt = player.docked
+  local starbase = Core.Query.Starbase(game, player.docked)
+  if starbase and starbase.mine then
+    tab = "Starbase"
+    return true
+  end
+  return false
+end
+
+-- And once a frame while they are not.
+function Station.Left()
+  dockedAt = 0
+end
+
 -- Open the industry tab at a blueprint, or at a copy of one, as
 -- clicking its row would.
 function Station.Blueprint(type: string): boolean
@@ -118,503 +154,10 @@ function Station.Blueprint(type: string): boolean
     blueprintChosen = type
     runs = 1
   end
+  if Station.Front then
+    Station.Front()
+  end
   return true
-end
-
--- ---------------------------------------------------------------------
--- Fitting: the fit, the hangar and the hold
-
--- The fitted weapon a charge stack would be loaded into: one of its
--- family that is empty, else one holding something else.
-local function weaponFor(game: Core.Game, ship: number, charge: State.Item): State.Item?
-  local family = Modules.chargeById[charge.type].family
-  local other: State.Item? = nil
-  for _, item in Core.Query.Fitted(game, ship) do
-    local weapon = Modules.byId[item.type].weapon
-    -- (one that would take it: of its size, and tech 2 for a tech 2 charge)
-    if weapon and weapon.family == family
-      and (Core.Validate(game, { kind = "LoadCharge", actor = ship, item = item.id, other = charge.id })) then
-      if item.charge == "" then
-        return item
-      elseif item.charge ~= charge.type and other == nil then
-        other = item
-      end
-    end
-  end
-  return other
-end
-
--- The fitting screen. In the middle is the ship,
--- turning, inside a wheel of its slots: high slots along the top, mid
--- slots down the right, low slots along the bottom, and on the left two
--- arcs that fill as the fit uses the hull's CPU and powergrid. A slot
--- shows what is fitted in it, and inside the wheel what a weapon is
--- loaded with. To the right is what the fit comes to: capacitor,
--- offence, defence layer by layer with what each resists, targeting,
--- navigation. To the left are the hangar and the hold, to fit from.
-
-local RING = 150          -- from the middle of the wheel to the middle of a slot
-local SLOT = 36
-
--- Where each rack sits on the wheel, in turns (0 is to the right, a
--- quarter is straight down): the middle of its arc, and how much of the
--- wheel it may take.
-local RACKS: { { any } } = {
-  { "high", "High", 0.75, 0.32 },
-  { "mid", "Mid", 0.02, 0.20 },
-  { "low", "Low", 0.28, 0.28 },
-}
-
-local EM, THERMAL, KINETIC, EXPLOSIVE = vector.create(0.35, 0.62, 1.0), vector.create(1.0, 0.40, 0.30),
-  vector.create(0.72, 0.74, 0.78), vector.create(1.0, 0.70, 0.25)
-local KINDS = { EM, THERMAL, KINETIC, EXPLOSIVE }
-local CPU_COLOR, GRID_COLOR = vector.create(0.40, 0.75, 1.0), vector.create(1.0, 0.62, 0.25)
-local OVER = vector.create(1.0, 0.25, 0.2)
-
-local function onWheel(cx: number, cy: number, radius: number, turn: number): (number, number)
-  local angle = 2 * math.pi * turn
-  return cx + radius * math.cos(angle), cy + radius * math.sin(angle)
-end
-
--- An arc of a ring round (cx, cy), from one turn to another.
-local function arc(cx: number, cy: number, inner: number, outer: number, from: number, to: number, color: vector, alpha: number)
-  if to > from then
-    WidgetRenderer_DrawPanelRadial(vector.create(cx, cy), inner, outer, ((from + to) / 2) % 1, to - from, color, alpha, alpha, 0)
-  end
-end
-
--- A gauge along an arc: how much of 'capacity' is 'used'. It fills from
--- 'from' toward 'to', whichever way round that is.
-local function gauge(cx: number, cy: number, from: number, to: number, used: number, capacity: number, color: vector)
-  arc(cx, cy, RING - 9, RING + 9, math.min(from, to), math.max(from, to), Im.DIM, 0.3)
-  local share = math.min(1, if capacity > 0 then used / capacity else 0)
-  local reached = from + (to - from) * share
-  arc(cx, cy, RING - 9, RING + 9, math.min(from, reached), math.max(from, reached), if used > capacity then OVER else color, 0.95)
-end
-
-local turning = 0
-
--- What the fitting screen draws of the ship: its hull first, then
--- whatever stands on it, each with where it stands in the hull's units.
-export type Preview = { { model: Renderable | Model, transform: Transform, at: vector, look: vector, up: vector, size: number } }
-
--- ('show' draws the ship as it is in space, in a round window about a
--- point: Scene.Showcase. Where it cannot, 'preview' is drawn the old
--- way, as a hologram.)
-export type Show = (cx: number, cy: number, round: number) -> boolean
-
-local function drawWheel(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, cx: number, cy: number,
-  preview: Preview?, show: Show?)
-  local ship = player.ship
-  local hull = player.hull
-  local stats = Core.Query.Stats(game, ship)
-  local cpu, powergrid = Core.Query.FittingUse(game, ship)
-
-  -- The ship, turning.
-  WidgetRenderer_DrawPanelRadial(vector.create(cx, cy), 0, RING - 28, 0, 1, vector.create(0.02, 0.03, 0.045), 0.9, 0.9, 0)
-  if show and show(cx, cy, RING - 30) then
-    -- (the ship as it is in space: Scene.Showcase has drawn it)
-  elseif preview and preview[1] then
-    -- (A hull of no design of ours, which the scene cannot stand in
-    -- space for the fitting screen: a hologram of it, as every hull was
-    -- shown until 2026-11-13.)
-    turning += 0.25 * FrameTimer_Get()
-    local bound = Renderable_GetBound(preview[1].model)
-    local size = bound.upper - bound.lower
-    local fov = math.rad(0.02)
-    local distance = math.max(size.x, size.y, size.z) * 0.47 / math.tan(0.5 * fov)
-    local from = vector.normalize(vector.create(math.cos(turning), 0.42, math.sin(turning))) * distance
-    local side = 2 * (RING - 44)
-    -- (the hull, then what stands on its mounts, in another colour:
-    -- a gun is a few pixels on a big hull, and would not be found in
-    -- the hull's own)
-    for index, part in preview do
-      WidgetRenderer_DrawRenderable(part.model, part.transform, from, -1 * vector.normalize(from), vector.create(0, 1, 0), fov,
-        vector.create(cx - side / 2, cy - side / 2), vector.create(side, side),
-        if index == 1 then vector.create(0.55, 0.80, 1.0) else vector.create(1.0, 0.72, 0.30), if index == 1 then 0.95 else 1.0, turning)
-    end
-  else
-    ItemIcon.Draw(hull.id, cx - 40, cy - 40, 80)
-  end
-
-  -- The rim the slots sit on.
-  arc(cx, cy, RING - 1, RING + 1, 0, 1, Im.DIM, 0.22)
-
-  -- What the fit takes of the hull's CPU and powergrid, on the left.
-  gauge(cx, cy, 0.505, 0.570, cpu, stats.cpu, CPU_COLOR)
-  gauge(cx, cy, 0.495, 0.430, powergrid, stats.powergrid, GRID_COLOR)
-
-  -- The slots.
-  local hint = ""
-  local fitted: { [string]: { [number]: State.Item } } = { high = {}, mid = {}, low = {}, rig = {} }
-  local turretsUsed, launchersUsed = 0, 0
-  for _, item in Core.Query.Fitted(game, ship) do
-    fitted[item.place][item.slot] = item
-    local hardpoint = Modules.byId[item.type].hardpoint
-    if hardpoint == "turret" then
-      turretsUsed += 1
-    elseif hardpoint == "launcher" then
-      launchersUsed += 1
-    end
-  end
-  local counts = { high = hull.highs, mid = hull.mids, low = hull.lows }
-  for _, rack in RACKS do
-    local name: string, label: string, middle: number, span: number = rack[1], rack[2], rack[3], rack[4]
-    local count = counts[name]
-    local pitch = math.min(0.047, span / math.max(1, count))
-    -- (a rack of many slots, as a dreadnought's twenty highs are, has
-    -- them smaller: as wide as the arc has room for each)
-    local size = math.max(14, math.min(SLOT, 2 * math.pi * RING * pitch * 0.94))
-    local small = math.min(20, size * 0.72)
-    -- (its name, inside the wheel at the start of its arc)
-    local lx, ly = onWheel(cx, cy, RING - 4, middle - pitch * (count + 1) / 2 - 0.004)
-    Im.Text(string.upper(label), lx - Im.TextWidth(string.upper(label), 10) / 2, ly - 6, 10, Im.DIM)
-    for slot = 1, count do
-      local turn = middle + (slot - (count + 1) / 2) * pitch
-      local sx, sy = onWheel(cx, cy, RING, turn)
-      local left, top = sx - size / 2, sy - size / 2
-      local item = fitted[name][slot]
-      if item then
-        local module = Modules.byId[item.type]
-        local hot, clicked = Im.Area(`Info:{item.type}`, left, top, size, size, true)
-        ItemIcon.Draw(item.type, left, top, size)
-        if hot then
-          Im.Fill(left, top, size, size, Im.ACCENT, 0.18)
-          hint = `{label} {slot}:  {module.name}`
-        end
-        if clicked then
-          Info.Open(item.type)
-        end
-        -- what it is loaded with, inside the wheel
-        if module.weapon then
-          local ix, iy = onWheel(cx, cy, RING - 36, turn)
-          if item.charge ~= "" then
-            ItemIcon.Draw(item.charge, ix - small / 2, iy - small / 2, small)
-            if hot or Im.Inside(ix - small / 2, iy - small / 2, small, small) then
-              hint = `{label} {slot}:  {module.name},  {Types.Info(item.charge).name}`
-                .. (if module.weapon.clip > 0 then ` x{item.rounds}` else "")
-            end
-          else
-            WidgetRenderer_DrawPanel(vector.create(ix - small / 2, iy - small / 2), vector.create(small, small), Im.WARN, 0.15, 0.6, 3)
-            if hot then
-              hint ..= ",  nothing loaded"
-            end
-          end
-        end
-        -- taking it out: the corner away from the middle
-        local ux, uy = onWheel(sx, sy, size * 0.62, turn)
-        local unfitHot, unfit = Im.Area(`Unfit:{name}{slot}`, ux - 8, uy - 8, 16, 16,
-          (Session.CanDo(session, { kind = "Unfit", actor = 0, item = item.id })))
-        WidgetRenderer_DrawPanel(vector.create(ux - 8, uy - 8), vector.create(16, 16),
-          if unfitHot then OVER else vector.create(0.07, 0.12, 0.17), 0.9, 1, 8)
-        Glyph_Draw(Glyph_Line(vector.create(-1, -1), vector.create(1, 1), 1, 1), vector.create(ux, uy), 3, Im.TEXT, 0.9)
-        Glyph_Draw(Glyph_Line(vector.create(-1, 1), vector.create(1, -1), 1, 1), vector.create(ux, uy), 3, Im.TEXT, 0.9)
-        if unfitHot then
-          hint = `Take the {module.name} out`
-        end
-        if unfit then
-          Session.Do(session, { kind = "Unfit", actor = 0, item = item.id })
-        end
-      else
-        WidgetRenderer_DrawPanel(vector.create(left, top), vector.create(size, size), vector.create(0.22, 0.32, 0.42), 0.18, 0.75, 5)
-        if Im.Inside(left, top, size, size) then
-          hint = `{label} {slot}:  empty`
-        end
-      end
-    end
-  end
-
-  -- The rigs: a row of their own inside the foot of the wheel (the ring
-  -- is full). A rig taken out is destroyed, and its cross says so.
-  local rigs = hull.rigs or 0
-  if rigs > 0 then
-    local size = 30
-    Im.Text("RIGS", cx - Im.TextWidth("RIGS", 10) / 2, cy + 76, 10, Im.DIM)
-    for slot = 1, rigs do
-      local left, top = cx + (slot - (rigs + 1) / 2) * (size + 8) - size / 2, cy + 92
-      local item = fitted.rig[slot]
-      if item then
-        local module = Modules.byId[item.type]
-        local hot, clicked = Im.Area(`Info:{item.type}`, left, top, size, size, true)
-        ItemIcon.Draw(item.type, left, top, size)
-        if hot then
-          Im.Fill(left, top, size, size, Im.ACCENT, 0.18)
-          hint = `Rig {slot}:  {module.name}`
-        end
-        if clicked then
-          Info.Open(item.type)
-        end
-        local ux, uy = left + size, top
-        local unfitHot, unfit = Im.Area(`Unfit:rig{slot}`, ux - 8, uy - 8, 16, 16,
-          (Session.CanDo(session, { kind = "Unfit", actor = 0, item = item.id })))
-        WidgetRenderer_DrawPanel(vector.create(ux - 8, uy - 8), vector.create(16, 16),
-          if unfitHot then OVER else vector.create(0.07, 0.12, 0.17), 0.9, 1, 8)
-        Glyph_Draw(Glyph_Line(vector.create(-1, -1), vector.create(1, 1), 1, 1), vector.create(ux, uy), 3, Im.TEXT, 0.9)
-        Glyph_Draw(Glyph_Line(vector.create(-1, 1), vector.create(1, -1), 1, 1), vector.create(ux, uy), 3, Im.TEXT, 0.9)
-        if unfitHot then
-          hint = `Take the {module.name} out: it will be destroyed`
-        end
-        if unfit then
-          Session.Do(session, { kind = "Unfit", actor = 0, item = item.id })
-        end
-      else
-        WidgetRenderer_DrawPanel(vector.create(left, top), vector.create(size, size), vector.create(0.22, 0.32, 0.42), 0.18, 0.75, 5)
-        if Im.Inside(left, top, size, size) then
-          hint = `Rig {slot}:  empty`
-        end
-      end
-    end
-  end
-
-  -- Hardpoints, as pips: lit for each one in use.
-  local function pips(label: string, used: number, total: number, px: number, py: number)
-    Im.Text(label, px, py, 11, Im.DIM)
-    for index = 1, total do
-      WidgetRenderer_DrawPanel(vector.create(px + 66 + (index - 1) * 11, py + 3), vector.create(7, 7),
-        if index <= used then Im.ACCENT else Im.DIM, if index <= used then 1 else 0.2, if index <= used then 1 else 0.5, 3)
-    end
-  end
-  pips("TURRETS", turretsUsed, hull.turrets, cx - RING - 14, cy - RING - 44)
-  pips("LAUNCHERS", launchersUsed, hull.launchers, cx - RING - 14, cy - RING - 28)
-
-  -- Under the wheel: what the gauges say, and what the cursor is on.
-  local below = cy + RING + 48
-  local cpuText = string.format("CPU  %.0f / %.0f tf", cpu, stats.cpu)
-  local gridText = string.format("Powergrid  %.0f / %.0f MW", powergrid, stats.powergrid)
-  Im.Fill(cx - 170, below + 3, 8, 8, CPU_COLOR, 1)
-  Im.Text(cpuText, cx - 156, below, 13, if cpu > stats.cpu then OVER else Im.TEXT)
-  Im.Fill(cx + 8, below + 3, 8, 8, GRID_COLOR, 1)
-  Im.Text(gridText, cx + 22, below, 13, if powergrid > stats.powergrid then OVER else Im.TEXT)
-  if hint ~= "" then
-    Im.Text(hint, cx - Im.TextWidth(hint, 13) / 2, below + 20, 13, Im.ACCENT)
-  end
-end
-
--- A heading of the column of figures, and the y of its first line.
-local function block(title: string, x: number, y: number, width: number): number
-  Im.Text(title, x, y, 11, Im.ACCENT, 0.9)
-  Im.Fill(x, y + 15, width, 1, Im.DIM, 0.35)
-  return y + 20
-end
-
-local function figure(label: string, value: string, x: number, y: number, width: number): number
-  Im.Text(label, x, y, 13, Im.DIM)
-  Im.TextRight(value, x + width, y, 13, Im.TEXT)
-  return y + 19
-end
-
--- What the fit comes to, down the right.
-local function drawFigures(game: Core.Game, player: Core.PlayerInfo, x: number, y: number, width: number)
-  local stats = Core.Query.Stats(game, player.ship)
-  local offence = Core.Query.Offence(game, player.ship)
-
-  local line = block("CAPACITOR", x, y, width)
-  line = figure("Capacity", string.format("%.0f GJ", stats.capacitor), x, line, width)
-  line = figure("Recharges in", Format.Duration(stats.capacitorRecharge), x, line, width)
-
-  line = block("OFFENCE", x, line + 8, width)
-  line = figure("Damage a second", string.format("%.1f", offence.dps), x, line, width)
-  line = figure("A volley", string.format("%.0f", offence.volley), x, line, width)
-  if offence.dps > 0 then
-    -- how it divides between the four kinds of damage
-    local at = x
-    for index, color in KINDS do
-      local share = offence.kinds[index] / offence.dps
-      Im.Fill(at, line + 4, width * share, 6, color, 0.9)
-      at += width * share
-    end
-    line += 16
-    line = figure("Reaches", Format.Distance(offence.range), x, line, width)
-  end
-
-  -- Each layer: what it has, and what it stops of each kind of damage.
-  line = block("DEFENCE", x, line + 8, width)
-  local effective = 0
-  for _, layer in { { "Shield", "shield" }, { "Armour", "armor" }, { "Hull", "hull" } } do
-    local points = stats[layer[2]]
-    Im.Text(layer[1], x, line, 13, Im.DIM)
-    Im.TextRight(string.format("%.0f", points), x + 104, line, 13, Im.TEXT)
-    local through = 0
-    for index, color in KINDS do
-      local resonance = stats[`{layer[2]}Resonance.{index}`]
-      through += resonance / 4
-      local cell = x + 114 + (index - 1) * ((width - 114) / 4)
-      local cellWidth = (width - 114) / 4 - 3
-      Im.Fill(cell, line + 2, cellWidth, 13, color, 0.14)
-      Im.Fill(cell, line + 2, cellWidth * (1 - resonance), 13, color, 0.55)
-      local text = string.format("%.0f", (1 - resonance) * 100)
-      Im.Text(text, cell + (cellWidth - Im.TextWidth(text, 11)) / 2, line + 2, 11, Im.TEXT)
-    end
-    effective += points / through
-    line += 19
-  end
-  line = figure("Effective", string.format("%.0f HP", effective), x, line + 2, width)
-
-  line = block("TARGETING", x, line + 8, width)
-  line = figure("Lock range", Format.Distance(stats.lockRange), x, line, width)
-  line = figure("Scan resolution", string.format("%.0f mm", stats.scanResolution), x, line, width)
-  line = figure("Signature", string.format("%.0f m", stats.signature), x, line, width)
-
-  line = block("NAVIGATION", x, line + 8, width)
-  line = figure("Top speed", string.format("%.0f m/s", stats.maxVelocity), x, line, width)
-  line = figure("Aligns in", string.format("%.1f s", 1.3863 * stats.tau), x, line, width)
-  figure("Warp speed", string.format("%.1f AU/s", stats.warpSpeed), x, line, width)
-end
-
--- What the ship is painted in, as two lists down the left of the fitting
--- screen: the paints that are the pilot's, and their designs
--- (Core/Assets/Paintwork). A row is clicked and the ship is in it, as
--- often as they like; the first row of each takes it off. One that lies
--- bought in the hangar here and is not yet theirs is on the list too,
--- marked new: clicked, it is made theirs (and used up) and put on. And
--- under them, what is being tried on (Session.Try), which paints
--- nothing. (The owner's ruling, 2026-11-15: "Unlocked for good, switch
--- via a list in fitting screen".)
---
--- To a script a row is "Paint:<id>" with the paint's or the design's
--- id, the first rows are "Paint:bare" and "Paint:plain", and what ends
--- a trying on is "Try:stop".
-local PAINT_ROW = 20
-local PAINT_ROWS, DESIGN_ROWS = 7, 5
-
-local function drawPaints(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number, width: number)
-  local own = game.state.ships[player.ship]
-  local mine = game.state.paints
-  if own == nil then
-    return
-  end
-  -- (what is theirs, and what lies in the hangar here to be made theirs, each in the order it is listed in)
-  type Line = { id: string, name: string, new: State.Item? }
-  local here: { [string]: State.Item } = {}
-  for _, item in Core.Query.Items(game, player.docked, "hangar") do
-    if Paints.paintById[item.type] or Paints.designById[item.type] then
-      here[item.type] = item
-    end
-  end
-  -- (what is new comes first, where it is seen)
-  local function lines(first: string, ids: { string }, names: { string }): { Line }
-    local found: { Line } = { { id = "", name = first } }
-    for index, id in ids do
-      if not mine[id] and here[id] then
-        table.insert(found, { id = id, name = names[index], new = here[id] })
-      end
-    end
-    for index, id in ids do
-      if mine[id] then
-        table.insert(found, { id = id, name = names[index] })
-      end
-    end
-    return found
-  end
-  local ids: { string }, names: { string } = {}, {}
-  for _, one in Paints.paints do
-    table.insert(ids, one.id)
-    table.insert(names, one.name)
-  end
-  local paints = lines("As built", ids, names)
-  ids, names = {}, {}
-  for _, one in Paints.designs do
-    table.insert(ids, one.id)
-    table.insert(names, one.name)
-  end
-  local designs = lines("No design", ids, names)
-
-  -- One list: its heading, and its rows; what the ship has is marked.
-  local function list(title: string, name: string, rows: { Line }, visible: number, top: number, has: string?, bare: string): number
-    Im.Text(title, x, top, 11, Im.ACCENT)
-    top += 16
-    local first = Im.Scroll(name, x, top, width, visible * PAINT_ROW, #rows, visible)
-    for row = 1, math.min(visible, #rows - first) do
-      local line = rows[row + first]
-      local at = top + (row - 1) * PAINT_ROW
-      local command: State.Command = if line.id == "" then { kind = "StripPaint", actor = 0, what = if bare == "plain" then "design" else nil }
-        else { kind = "Paint", actor = 0, type = line.id }
-      local selected = (has or "") == line.id
-      local _, clicked = Im.Row(x, at, width - 5, PAINT_ROW, selected, `Paint:{if line.id == "" then bare else line.id}`)
-      local stack = line.new
-      local can = selected or (Session.CanDo(session, command))
-      if line.id ~= "" then
-        ItemIcon.Draw(line.id, x + 3, at + 3, 14)
-      end
-      -- (a name too long for its row is cut to what fits)
-      local label, room = line.name, width - (if line.id ~= "" then 22 else 4) - (if stack then 36 else 8)
-      while #label > 4 and Im.TextWidth(label, 13) > room do
-        label = string.sub(label, 1, #label - 2) .. "."
-      end
-      Im.Text(label, x + (if line.id ~= "" then 22 else 4), at + 3, 13, Im.TEXT, if can then 1 else 0.45)
-      if stack then
-        Im.TextRight("new", x + width - 10, at + 4, 11, Im.ACCENT)
-      end
-      -- (refused, the session says why)
-      if clicked and not selected then
-        Session.Do(session, command)
-      end
-    end
-    return top + visible * PAINT_ROW
-  end
-
-  local foot = list("PAINT", "fitting:paints", paints, PAINT_ROWS, y, own.paint, "bare")
-  if #paints == 1 and #designs == 1 then
-    Im.Wrapped("None of your own yet: the market sells paints and designs (Paints).", x, y + 16 + PAINT_ROW + 4, width, 12, Im.DIM)
-  end
-  foot = list("DESIGN", "fitting:designs", designs, DESIGN_ROWS, foot + 8, own.design, "plain")
-
-  local trying = session.trying
-  if trying.paint or trying.design then
-    local tried = if trying.paint then Paints.paintById[trying.paint] else nil
-    local laid = if trying.design then Paints.designById[trying.design] else nil
-    local what = (if tried then tried.name else "") .. (if tried and laid then ", " else "") .. (if laid then laid.name else "")
-    Im.Text("Trying on:", x, foot + 8, 11, Im.WARN)
-    Im.Text(shorten(what, 22), x, foot + 22, 13, Im.WARN)
-    Im.Text(if laid and tried == nil and own.paint == nil then "a design shows on a paint" else "not yours, not painted", x, foot + 40, 11, Im.DIM)
-    if Im.Button("Stop", x + width - 54, foot + 2, 54, 20, true, "Try:stop") then
-      Session.Try(session, nil)
-    end
-  end
-end
-
-local function drawFitting(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number,
-  preview: Preview?, show: Show?)
-  local ship = player.ship
-
-  -- What a ship is fitted from is the inventory (Game/UI/Inventory): a
-  -- module carried here from it is fitted, and a charge is loaded into
-  -- a weapon that takes it. ("Fitting:onto", to a script: Im.Carry.)
-  local carried = Im.Drop("Fitting:onto", x, y + 64, Station.WIDTH, Station.HEIGHT - 64)
-  if carried and carried.items then
-    for _, id in carried.items :: { number } do
-      local item = game.state.items[id]
-      local category = if item then Types.Info(item.type).category else ""
-      if item and category == "module" then
-        Session.Do(session, { kind = "Fit", actor = 0, item = item.id })
-      elseif item and category == "charge" then
-        local weapon = weaponFor(game, ship, item)
-        if weapon then
-          Session.Do(session, { kind = "LoadCharge", actor = 0, item = weapon.id, other = item.id })
-        else
-          Session.Say(session, `Nothing fitted takes {Types.Info(item.type).name}`)
-        end
-      elseif item then
-        Session.Say(session, `{Types.Info(item.type).name} is not something a ship is fitted with`)
-      end
-    end
-  end
-  Im.Wrapped("Fitted from the inventory: right-click a module or a charge in the hangar, or carry it here.", x + 16, y + 84, 150, 12,
-    Im.DIM)
-  drawPaints(session, game, player, x + 16, y + 156, 144)
-
-  -- The ship: its name over the wheel.
-  local cx, cy = x + 334, y + 296
-  local title = string.upper(shorten(player.hull.name, 20))
-  local titleWidth = Im.TextWidth(title, 15) * 1.12
-  ItemIcon.Draw(player.hull.id, cx + RING - 42 - titleWidth - 28, y + 74, 22)
-  Im.Heading(title, cx + RING - 42 - titleWidth, y + 77, 15, Im.TEXT)
-  if Im.Button("Info", cx + RING - 28, y + 74, 46, 21, true, `Info:{player.hull.id}`) then
-    Info.Open(player.hull.id)
-  end
-  drawWheel(session, game, player, cx, cy, preview, show)
-
-  drawFigures(game, player, x + 526, y + 76, 252)
 end
 
 -- ---------------------------------------------------------------------
@@ -2285,10 +1828,8 @@ end
 
 -- 'preview' is the player's ship as it is fitted, for the fitting
 -- screen to show (Scene.Dressed).
-function Station.Draw(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number,
-  preview: Preview?, show: Show?)
+function Station.Draw(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
   local width, height = Station.WIDTH, Station.HEIGHT
-  local ship = player.ship
   local station = Core.Query.Body(game, player.docked)
   Im.Panel(x, y, width, height)
   Im.Heading("DOCKED", x + 16, y + 12, 16, Im.DIM)
@@ -2297,20 +1838,14 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
   -- which is what the pilot has come for: it is open on arrival.
   local starbase = Core.Query.Starbase(game, player.docked)
   local own: Core.StarbaseStatus? = if starbase and starbase.mine then starbase else nil
-  if player.docked ~= dockedAt then
-    if own then
-      tab = "Starbase"
-    end
-    dockedAt = player.docked
-  end
   if tab == "Starbase" and own == nil then
-    tab = "Fitting"
+    tab = "Industry"
   end
   -- And where the career agents are, there is them.
   local careers = Core.Query.Careers(game)
   local school = careers.station == player.docked
   if tab == "Careers" and not school then
-    tab = "Fitting"
+    tab = "Industry"
   end
   local tabs: { string } = if own then OWN elseif school then SCHOOL else TABS
   local pitch = (width - 364 - 12) / #tabs
@@ -2344,9 +1879,7 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
     Im.Text("New here? The career agents teach the ropes, and pay: Careers.", x + 16, y + 58, 13, Im.ACCENT)
   end
 
-  if tab == "Industry" then
-    drawIndustry(session, game, player, x, y)
-  elseif tab == "Skills" then
+  if tab == "Skills" then
     drawSkills(session, game, player, x, y)
   elseif tab == "Ships" then
     drawShips(session, game, player, x, y)
@@ -2361,49 +1894,7 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
   elseif tab == "Starbase" and own then
     drawStarbase(session, game, player, own, x, y)
   else
-    drawFitting(session, game, player, x, y, preview, show)
-  end
-
-  -- What a pilot does here, whatever the tab.
-  local bottom = y + height - 44
-  if Im.Button("UNDOCK", x + 16, bottom, 120, 28, true) then
-    Session.Order(session, "Undock")
-  end
-  local canRepair = Session.CanDo(session, { kind = "Repair", actor = 0 })
-  local shipRecord = game.state.ships[ship]
-  local damaged = shipRecord.armorDamage + shipRecord.hullDamage > 0
-  local label = if damaged then `Repair  {Core.Query.RepairCost(game)} cr` else "No damage"
-  if Im.Button(label, x + 146, bottom, 170, 28, canRepair, "Repair") then
-    Session.Do(session, { kind = "Repair", actor = 0 })
-  end
-  local training = Core.Query.Training(game)
-  if #training > 0 then
-    local now = training[1]
-    Im.Text(shorten(`Training {Skills.byId[now.skill].name} {now.level}: {Format.Duration(now.left)}`, 36), x + 332, bottom + 7, 13, Im.DIM)
-  else
-    Im.Text("No skill in training", x + 332, bottom + 7, 13, Im.WARN)
-  end
-  -- Home: where the pilot wakes when their capsule is destroyed. It is
-  -- made of this station here, for a fee; and where it is somewhere
-  -- else, the button says how far off.
-  local home = Core.Query.Home(game)
-  local move: State.Command = { kind = "SetHome", actor = 0 }
-  local canMove, whyNotMove = Session.CanDo(session, move)
-  if Im.Button(if home.here then "Home is here" else `Make home  {Format.Credits(home.fee)}`, x + width - 352, bottom, 166, 28,
-    canMove, "SetHome") then
-    Session.Do(session, move)
-  end
-  -- (beside the word DOCKED, at the head of the screen: where home is,
-  -- or why it cannot be made of this station)
-  local far = if home.jumps < 0 then "out of reach" elseif home.jumps == 0 then "in this system"
-    elseif home.jumps == 1 then "1 jump off" else `{home.jumps} jumps off`
-  Im.Text(if home.here then "your home" elseif canMove then shorten(`home: {home.name}, {far}`, 58)
-    else shorten(`home is {far}: {tostring(whyNotMove)}`, 58), x + 96, y + 14, 11, if home.here or canMove then Im.DIM else Im.WARN)
-  if Im.Button("Save", x + width - 176, bottom, 76, 28, true) then
-    Session.Save(session, "quick")
-  end
-  if Im.Button("Load", x + width - 92, bottom, 76, 28, true) then
-    Session.Load(session, "quick")
+    drawIndustry(session, game, player, x, y)
   end
 end
 

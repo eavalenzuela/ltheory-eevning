@@ -12,7 +12,7 @@
 # and stays aboard while it goes on to its next system: then comes out
 # there.
 #
-# covers: Core/Tactical/Nomads Core/Assets/Stations
+# covers: Core/Tactical/Nomads Core/Assets/Stations Game/UI/Fitting
 
 wait 2
 lua GameDebug.NewGame(3, 40)

@@ -11,7 +11,7 @@
 # is theirs is switched between on the list for nothing, and comes off
 # there. And a painted ship flies as itself.
 #
-# covers: Core/Assets/Paintwork Core/Data/Paints Game/View/Plates
+# covers: Core/Assets/Paintwork Core/Data/Paints Game/View/Plates Game/UI/Fitting
 
 wait 2
 lua GameDebug.Peaceful(true)
@@ -39,6 +39,7 @@ until GameDebug.Hangar('paint.cobalt') == 1
 lua assert(not GameDebug.HasPaint('paint.cobalt'), 'a paint bought is not the pilot own until it is made so')
 until GameDebug.Press('Fitting')
 until GameDebug.Tab() == 'Fitting'
+until GameDebug.Press('Fitting:appearance')
 until GameDebug.CanPress('Paint:paint.cobalt')
 until GameDebug.Press('Paint:paint.cobalt')
 until GameDebug.Paint() == 'paint.cobalt'
@@ -78,6 +79,7 @@ lua GameDebug.Order('Dock', 'home')
 patience 240
 until not GameDebug.InSpace()
 until GameDebug.Press('Fitting')
+until GameDebug.Press('Fitting:appearance')
 until GameDebug.CanPress('Paint:plain')
 until GameDebug.Press('Paint:plain')
 until select(2, GameDebug.Paint()) == ''

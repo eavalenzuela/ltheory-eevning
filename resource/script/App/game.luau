@@ -40,6 +40,7 @@ local Starbase = require("@lt/Game/View/Starbase")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local Station = require("@lt/Game/UI/Station")
 local MarketWindow = require("@lt/Game/UI/Market")
+local FittingWindow = require("@lt/Game/UI/Fitting")
 local Info = require("@lt/Game/UI/Info")
 local Menu = require("@lt/Game/UI/Menu")
 local Splash = require("@lt/Game/UI/Splash")
@@ -806,12 +807,17 @@ function Debug.Blueprint(type: string): boolean
   return Station.Blueprint(type)
 end
 
--- (the market is a window of its own: it is what is shown while it is in front of the docked screen)
+-- What of a station's own is in front: a tab of the docked screen, or
+-- one of the windows that were tabs of it ("Market", "Fitting"). With
+-- none of them open, the tab the docked screen would open at.
 function Debug.Tab(): string
-  if MarketWindow.IsOpen() and (Windows.Above(MarketWindow.ID, "station") or not Windows.IsOpen("station")) then
-    return "Market"
+  local front: string?, name = nil, Station.Tab()
+  for _, each in { { "station", Station.Tab() }, { MarketWindow.ID, "Market" }, { FittingWindow.ID, "Fitting" } } do
+    if Windows.IsOpen(each[1]) and (front == nil or Windows.Above(each[1], front)) then
+      front, name = each[1], each[2]
+    end
   end
-  return Station.Tab()
+  return name
 end
 
 -- How many of an item type are in the hangar of the station docked at

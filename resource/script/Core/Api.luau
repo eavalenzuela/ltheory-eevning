@@ -1765,6 +1765,13 @@ function Query.Offence(game: Game, ship: number): Items.Offence
   return Items.Offence(game.state, ship)
 end
 
+-- What a ship's fit draws from its capacitor with everything running,
+-- and where that leaves it: the share of full it holds at, or how long
+-- it lasts (Assets/Items).
+function Query.Capacitor(game: Game, ship: number): Items.Capacitor
+  return Items.Capacitor(game.state, ship)
+end
+
 -- CPU and powergrid a ship's fit uses.
 function Query.FittingUse(game: Game, ship: number): (number, number)
   local cpu, powergrid = 0, 0

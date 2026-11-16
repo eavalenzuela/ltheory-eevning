@@ -33,6 +33,13 @@ the lines beginning `- ` under it.
 - A locked target's card shows how far off it is and how fast it is going.
 - Your jobs in hand are listed under the corner panel while you are in space.
 - Notices are coloured by what they are: green for a gain, amber for a warning, red for a loss or a refusal.
+- Fitting is a window of its own. Click a slot on the wheel and the list on the left shows what goes in it: from your hangar, or from the market here, with what fits now first and why the rest does not. Double-click a module to fit it. The rigs are on the wheel, up its left.
+- Under the wheel: how much of the hull's CPU, powergrid, calibration and hold the fit takes, repair, and "Strip the fit" (press twice), which sends every module back to the hangar and leaves the rigs.
+- The fitting window says where your capacitor holds with everything running, or how long it lasts.
+- Charges for your fitted weapons are listed under the modules: one button loads every weapon that takes them.
+- Paints and designs are on the fitting window's Appearance page.
+- UNDOCK, "Make home" and what is in training are in a panel beside the corner panel while you are docked. Repair is there too when your ship is damaged.
+- The old docked screen no longer opens by itself. The dock's buttons open it at Industry, Skills, Ships, Crew, Wallet or Jobs, and the same button puts it away. Save and Load are in the menu (Esc).
 - The other screens inside the windows are as they were. They are being made over one at a time.
 
 ## Four small mends to the screens
