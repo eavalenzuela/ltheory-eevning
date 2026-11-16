@@ -4,8 +4,9 @@
 -- draws itself and says whether it was just clicked. There is no widget
 -- tree to rebuild, so a list of a few hundred rows costs what it draws.
 --
--- Coordinates are window pixels. Call Im.Begin once at the start of the
--- frame's drawing.
+-- Coordinates are the interface's units: window pixels at a scale of 1,
+-- and more of them at more (Game/UI/Theme's scale, a setting). Call
+-- Im.Begin once at the start of the frame's drawing.
 
 local Colors = require("@lt/Colors")
 local Fonts = require("@lt/Fonts")
@@ -13,6 +14,40 @@ local Icons = require("@lt/Game/UI/Icons")
 local Theme = require("@lt/Game/UI/Theme")
 
 local Im = {}
+
+-- What draws: a panel, a text and how wide a text is, each given in the
+-- interface's units and handed to the engine in pixels (Theme.scale). At
+-- a scale of 1 they are what they were, to the pixel.
+local function panel(x: number, y: number, w: number, h: number, color: vector, inner: number, alpha: number, bevel: number)
+  local scale = Theme.scale
+  if scale == 1 then
+    WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), color, inner, alpha, bevel)
+    return
+  end
+  -- (its edges on whole pixels: a line a unit thick is one or two of them, and never a blur)
+  local x0, y0 = math.floor(x * scale + 0.5), math.floor(y * scale + 0.5)
+  local x1, y1 = math.floor((x + w) * scale + 0.5), math.floor((y + h) * scale + 0.5)
+  WidgetRenderer_DrawPanel(vector.create(x0, y0), vector.create(math.max(1, x1 - x0), math.max(1, y1 - y0)), color, inner, alpha,
+    if bevel > 0 then bevel * scale else bevel)
+end
+
+local function text(font: Font, s: string, x: number, y: number, size: number, color: vector, alpha: number)
+  local scale = Theme.scale
+  if scale == 1 then
+    WidgetRenderer_DrawText(font, s, vector.create(x, y + 0.8 * size), size, color, alpha, false)
+    return
+  end
+  local big = math.floor(size * scale + 0.5)
+  WidgetRenderer_DrawText(font, s, vector.create(math.floor(x * scale + 0.5), math.floor(y * scale + 0.5) + 0.8 * big), big, color, alpha, false)
+end
+
+local function width(font: Font, s: string, size: number): number
+  local scale = Theme.scale
+  if scale == 1 then
+    return WidgetRenderer_GetTextSize(font, s, size).x
+  end
+  return WidgetRenderer_GetTextSize(font, s, math.floor(size * scale + 0.5)).x / scale
+end
 
 -- True once the cursor has been found over a panel this frame.
 Im.over = false
@@ -107,7 +142,8 @@ Im.WARN = Colors.Secondary
 
 function Im.Begin()
   Im.over = false
-  cursor = Cursor_Get()
+  -- (where the cursor is, in the interface's units: Theme.scale)
+  cursor = Cursor_Get() / Theme.scale
   pressed = Mouse_LeftPressed()
   rightPressed = Mouse_RightPressed()
   clock += FrameTimer_Get()
@@ -257,12 +293,12 @@ end
 Im.Inside = inside
 
 function Im.TextWidth(s: string, size: number): number
-  return WidgetRenderer_GetTextSize(Fonts.Default(), s, size).x
+  return width(Fonts.Default(), s, size)
 end
 
 -- Text with its top-left corner at (x, y).
 function Im.Text(s: string, x: number, y: number, size: number, color: vector, alpha: number?)
-  WidgetRenderer_DrawText(Fonts.Default(), s, vector.create(x, y + 0.8 * size), size, color, alpha or 1, false)
+  text(Fonts.Default(), s, x, y, size, color, alpha or 1)
 end
 
 -- Text ending at x.
@@ -305,16 +341,16 @@ end
 
 -- How wide a heading is.
 function Im.HeadingWidth(s: string, size: number): number
-  return WidgetRenderer_GetTextSize(Fonts.Heading(), s, size).x
+  return width(Fonts.Heading(), s, size)
 end
 
 function Im.Heading(s: string, x: number, y: number, size: number, color: vector)
-  WidgetRenderer_DrawText(Fonts.Heading(), s, vector.create(x, y + 0.8 * size), size, color, 1, false)
+  text(Fonts.Heading(), s, x, y, size, color, 1)
 end
 
 -- A panel background. The camera ignores the mouse while it is over one.
 function Im.Panel(x: number, y: number, w: number, h: number)
-  WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), vector.create(0.03, 0.05, 0.07), 0.9, 0.92, 6)
+  panel(x, y, w, h, vector.create(0.03, 0.05, 0.07), 0.9, 0.92, 6)
   if inside(x, y, w, h) then
     Im.over = true
   end
@@ -322,7 +358,7 @@ end
 
 -- A rectangle of solid colour.
 function Im.Fill(x: number, y: number, w: number, h: number, color: vector, alpha: number)
-  WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), color, alpha, alpha, 0)
+  panel(x, y, w, h, color, alpha, alpha, 0)
 end
 
 -- ---------------------------------------------------------------------
@@ -333,7 +369,7 @@ end
 -- further (the panel shader's plain fill, asked for by a bevel under
 -- zero: no shading, no light along its top, no shadow about it).
 function Im.Flat(x: number, y: number, w: number, h: number, color: vector, alpha: number?)
-  WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), color, 1, alpha or 1, -1)
+  panel(x, y, w, h, color, 1, alpha or 1, -1)
 end
 
 -- The four hairlines about a rectangle, inside it.
@@ -357,11 +393,11 @@ end
 
 -- Text a little heavier than Im.Text's: a name, a figure that matters.
 function Im.Strong(s: string, x: number, y: number, size: number, color: vector, alpha: number?)
-  WidgetRenderer_DrawText(Fonts.Medium(), s, vector.create(x, y + 0.8 * size), size, color, alpha or 1, false)
+  text(Fonts.Medium(), s, x, y, size, color, alpha or 1)
 end
 
 function Im.StrongWidth(s: string, size: number): number
-  return WidgetRenderer_GetTextSize(Fonts.Medium(), s, size).x
+  return width(Fonts.Medium(), s, size)
 end
 
 -- A word or two on a tint of its own colour (what a thing is: secure,
@@ -451,7 +487,7 @@ function Im.Button(label: string, x: number, y: number, w: number, h: number, en
     return scripted or (hot and pressed)
   end
   local base = if hot or scripted then vector.create(0.1, 0.3, 0.45) else vector.create(0.07, 0.12, 0.17)
-  WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), base, 0.9, if enabled then 1 else 0.45, 4)
+  panel(x, y, w, h, base, 0.9, if enabled then 1 else 0.45, 4)
   local size = math.min(15, h - 8)
   Im.Text(label, x + (w - Im.TextWidth(label, size)) / 2, y + (h - size) / 2 - 1, size,
     if enabled then Im.TEXT else Im.DIM, if enabled then 1 else 0.6)
@@ -611,7 +647,7 @@ function Im.Number(name: string, value: number, x: number, y: number, w: number,
     Im.Flat(x, y, w, h, Theme.WELL, 0.9)
     Im.Edge(x, y, w, h, if focused then Theme.ACCENT else Theme.EDGE, if focused then 0.9 else 1)
   else
-    WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), vector.create(0.02, 0.03, 0.04), 0.95, 1, 3)
+    panel(x, y, w, h, vector.create(0.02, 0.03, 0.04), 0.95, 1, 3)
     if focused then
       Im.Fill(x, y + h - 2, w, 2, Im.ACCENT, 0.95)
     end
@@ -663,7 +699,7 @@ function Im.Words(name: string, value: string, x: number, y: number, w: number, 
     Im.Flat(x, y, w, h, Theme.WELL, 0.9)
     Im.Edge(x, y, w, h, if focused then Theme.ACCENT else Theme.EDGE, if focused then 0.9 else 1)
   else
-    WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), vector.create(0.02, 0.03, 0.04), 0.95, 1, 3)
+    panel(x, y, w, h, vector.create(0.02, 0.03, 0.04), 0.95, 1, 3)
     if focused then
       Im.Fill(x, y + h - 2, w, 2, Im.ACCENT, 0.95)
     end
@@ -724,7 +760,7 @@ function Im.Slider(name: string, value: number, low: number, high: number, x: nu
   Im.Fill(x + knob / 2, middle - 2, run, 4, Im.DIM, 0.3)
   Im.Fill(x + knob / 2, middle - 2, run * share, 4, Im.ACCENT, if enabled then 0.9 else 0.3)
   local hot = enabled and (sliding == name or inside(x, y - 4, w, h + 8))
-  WidgetRenderer_DrawPanel(vector.create(x + run * share, y), vector.create(knob, h),
+  panel(x + run * share, y, knob, h,
     if hot then vector.create(0.1, 0.3, 0.45) else vector.create(0.07, 0.12, 0.17), 0.95, if enabled then 1 else 0.45, 4)
   Im.Fill(x + run * share + knob / 2 - 1, y + 4, 2, h - 8, if enabled then Im.TEXT else Im.DIM, if enabled then 0.8 else 0.4)
   return value
@@ -900,7 +936,7 @@ function Im.Overlay(right: number, bottom: number)
     end
     local height = #up.labels * MENU_ROW + 8
     local x, y = math.min(up.x, right - width - 4), math.min(up.y, bottom - height - 4)
-    WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(width, height), vector.create(0.04, 0.07, 0.1), 0.97, 1, 5)
+    panel(x, y, width, height, vector.create(0.04, 0.07, 0.1), 0.97, 1, 5)
     Im.over = true
     local chosen = 0
     for index, label in up.labels do
@@ -958,7 +994,7 @@ function Im.Overlay(right: number, bottom: number)
   if hand then
     Im.over = true
     local width = Im.TextWidth(hand.label, 13) + 18
-    WidgetRenderer_DrawPanel(vector.create(cursor.x + 14, cursor.y + 10), vector.create(width, 24), vector.create(0.1, 0.3, 0.45), 0.9, 0.95, 4)
+    panel(cursor.x + 14, cursor.y + 10, width, 24, vector.create(0.1, 0.3, 0.45), 0.9, 0.95, 4)
     Im.Text(hand.label, cursor.x + 23, cursor.y + 15, 13, Im.TEXT)
   end
   -- (a carrying a script asked for, whose ends never showed, is forgotten)

@@ -15,6 +15,7 @@
 
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
+local Theme = require("@lt/Game/UI/Theme")
 
 local Chart = {}
 
@@ -103,7 +104,8 @@ function Chart.Draw(series: { Day }, x: number, y: number, w: number, h: number,
     local ax, ay = at(index - 1)
     local bx, by = at(index)
     for lift = 0, 1 do
-      Glyph_Draw(Glyph_Line(vector.create(ax, ay + lift), vector.create(bx, by + lift), 1, 1), 0, 1, Im.ACCENT, 0.95)
+      -- (a line is the engine's, in pixels)
+      Glyph_Draw(Glyph_Line(Theme.Point(ax, ay) + vector.create(0, lift), Theme.Point(bx, by) + vector.create(0, lift), 1, 1), 0, 1, Im.ACCENT, 0.95)
     end
   end
   local lastX, lastY = at(count)

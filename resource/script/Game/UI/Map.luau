@@ -39,6 +39,7 @@ local Events = require("@lt/Game/UI/Events")
 local Format = require("@lt/Game/Format")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Im = require("@lt/Game/UI/Im")
+local Theme = require("@lt/Game/UI/Theme")
 local Session = require("@lt/Game/Session")
 local Types = require("@lt/Core/Data/Types")
 local Waypoints = require("@lt/Game/Waypoints")
@@ -845,14 +846,14 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
   -- (every glyph has a glow to it, and thousands of them in sight at
   -- once add up to a white cloud: past CROWD of them they are fainter)
   local faint = if count > CROWD then math.max(0.12, (CROWD / count) ^ 1.2) else 1
-  Icon_DrawWithin(its.edge, origin, zoom, Im.DIM, 0.22, from, to)
+  Icon_DrawWithin(its.edge, origin * Theme.scale, zoom * Theme.scale, Im.DIM, 0.22, from * Theme.scale, to * Theme.scale)
   -- (looked at from straight over, a stalk is a point under its system)
   if math.cos(pitch) > 0.02 then
-    Icon_DrawWithin(its.stalks, origin, zoom, Im.DIM, 0.22 * faint, from, to)
+    Icon_DrawWithin(its.stalks, origin * Theme.scale, zoom * Theme.scale, Im.DIM, 0.22 * faint, from * Theme.scale, to * Theme.scale)
   end
-  Icon_DrawWithin(its.gates, origin, zoom, Im.DIM, 0.35 * faint, from, to)
+  Icon_DrawWithin(its.gates, origin * Theme.scale, zoom * Theme.scale, Im.DIM, 0.35 * faint, from * Theme.scale, to * Theme.scale)
   for _, group in its.dots do
-    Icon_DrawWithin(group.icon, origin, zoom, group.color, 0.95 * math.sqrt(faint), from, to)
+    Icon_DrawWithin(group.icon, origin * Theme.scale, zoom * Theme.scale, group.color, 0.95 * math.sqrt(faint), from * Theme.scale, to * Theme.scale)
   end
 
   local route = Session.Route(session)
@@ -863,14 +864,14 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
   end
   table.sort(jobSystems)
   for index = 2, #route do
-    Glyph_Draw(Glyph_Line(spot(route[index - 1]), spot(route[index]), 1, 1), 0, 1, Colors.White, 0.9)
+    Glyph_Draw(Glyph_Line((spot(route[index - 1])) * Theme.scale, (spot(route[index])) * Theme.scale, 1, 1), 0, 1, Colors.White, 0.9)
   end
 
   -- (the systems that have their names by them already)
   local named: { [number]: boolean } = {}
   local function mark(id: number, radius: number, color: vector, label: boolean)
     local p = spot(id)
-    Glyph_Draw(Glyph_Ring(p, radius, 1, 1, 0), 0, 1, color, 0.95)
+    Glyph_Draw(Glyph_Ring(p * Theme.scale, radius * Theme.scale, 1, 1, 0), 0, 1, color, 0.95)
     if label and not named[id] then
       named[id] = true
       Im.Text(systems[id].name, p.x + radius + 4, p.y - 8, 13, Im.TEXT)
@@ -888,7 +889,7 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
       local corners = { vector.create(p.x - half, p.y - half), vector.create(p.x + half, p.y - half),
         vector.create(p.x + half, p.y + half), vector.create(p.x - half, p.y + half) }
       for index, corner in corners do
-        Glyph_Draw(Glyph_Line(corner, corners[index % 4 + 1], 1, 1), 0, 1, colorOf(fleet.faction), 0.9)
+        Glyph_Draw(Glyph_Line(corner * Theme.scale, (corners[index % 4 + 1]) * Theme.scale, 1, 1), 0, 1, colorOf(fleet.faction), 0.9)
       end
     end
   end
@@ -904,7 +905,7 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
     local function place(px: number, py: number, pz: number): vector
       return origin + (seen(px, py, pz, made.middle, made.yaw, made.pitch) * made.scale - made.shift) * zoom
     end
-    Glyph_Draw(Glyph_Ring(spot(here), reach * made.scale * zoom, 1, 1, 0), 0, 1, NEXT, 0.55)
+    Glyph_Draw(Glyph_Ring((spot(here)) * Theme.scale, (reach * made.scale * zoom) * Theme.scale, 1, 1, 0), 0, 1, NEXT, 0.55)
     -- (in more steps the nearer it is looked at: it is a ring, not a polygon)
     local STEPS = math.clamp(math.ceil(48 * math.sqrt(zoom)), 48, 160)
     for ring = 1, 3 do
@@ -916,7 +917,7 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
           elseif ring == 2 then place(home.x + c, home.y, home.z + sn)
           else place(home.x, home.y + c, home.z + sn)
         if before and (sighted(before, 0) or sighted(point, 0)) then
-          Glyph_Draw(Glyph_Line(before, point, 1, 1), 0, 1, NEXT, if ring == 1 then 0.35 else 0.16)
+          Glyph_Draw(Glyph_Line(before * Theme.scale, point * Theme.scale, 1, 1), 0, 1, NEXT, if ring == 1 then 0.35 else 0.16)
         end
         before = point
       end
@@ -927,7 +928,7 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
         within += 1
         local p = spot(id)
         if sighted(p, ringed) then
-          Glyph_Draw(Glyph_Ring(p, ringed, 1, 1, 0), 0, 1, NEXT, 0.5)
+          Glyph_Draw(Glyph_Ring(p * Theme.scale, ringed * Theme.scale, 1, 1, 0), 0, 1, NEXT, 0.5)
         end
       end
     end
@@ -1011,9 +1012,9 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
   end
   local mx, my = mapX + 16, mapY + mapH - 16
   local long = measure * perLightYear
-  Glyph_Draw(Glyph_Line(vector.create(mx, my), vector.create(mx + long, my), 1, 1), 0, 1, Im.DIM, 0.9)
-  Glyph_Draw(Glyph_Line(vector.create(mx, my - 4), vector.create(mx, my + 4), 1, 1), 0, 1, Im.DIM, 0.9)
-  Glyph_Draw(Glyph_Line(vector.create(mx + long, my - 4), vector.create(mx + long, my + 4), 1, 1), 0, 1, Im.DIM, 0.9)
+  Glyph_Draw(Glyph_Line((vector.create(mx, my)) * Theme.scale, (vector.create(mx + long, my)) * Theme.scale, 1, 1), 0, 1, Im.DIM, 0.9)
+  Glyph_Draw(Glyph_Line((vector.create(mx, my - 4)) * Theme.scale, (vector.create(mx, my + 4)) * Theme.scale, 1, 1), 0, 1, Im.DIM, 0.9)
+  Glyph_Draw(Glyph_Line((vector.create(mx + long, my - 4)) * Theme.scale, (vector.create(mx + long, my + 4)) * Theme.scale, 1, 1), 0, 1, Im.DIM, 0.9)
   Im.Text(`{measure} ly`, mx + long + 8, my - 8, 12, Im.DIM)
   ClipRegion_Pop()
 

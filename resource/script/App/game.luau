@@ -36,6 +36,7 @@ local Planet = require("@lt/Game/View/Planet")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
 local Settings = require("@lt/Game/Settings")
+local Theme = require("@lt/Game/UI/Theme")
 local Starbase = require("@lt/Game/View/Starbase")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local MarketWindow = require("@lt/Game/UI/Market")
@@ -620,6 +621,15 @@ end
 
 -- For a picture of the scene alone: the interface is not drawn (and is
 -- again, given true).
+-- How big the interface is drawn, per cent (100, 125 or 150): given
+-- one, it is set, for this run (the options' setting is a person's).
+function Debug.Scale(percent: number?): number
+  if percent then
+    Theme.Scale(percent / 100)
+  end
+  return math.floor(Theme.Scale() * 100 + 0.5)
+end
+
 function Debug.Hud(on: boolean)
   Hud.Hide(not on)
 end
@@ -3155,6 +3165,15 @@ function App:Initialize()
     settings.window = choice
     Settings.Save(settings)
   end)
+  -- (and how big the interface is drawn: set now, and at once when it is changed)
+  if not Host.scripted then
+    Theme.Scale(settings.scale / 100)
+  end
+  Menu.Scale(settings.scale, function(percent: number)
+    settings.scale = percent
+    Theme.Scale(percent / 100)
+    Settings.Save(settings)
+  end)
   -- (and the stages of the picture a person has switched off, which the
   -- engine is told at each start, and which are kept when one is switched)
   Graphics.Apply(settings.graphics)
@@ -3194,8 +3213,9 @@ function App:Initialize()
     PostDraw = function()
       if pointer then
         local at = Cursor_Get()
-        Icon_Draw(Icons.Cursors.Pointer(), at + vector.create(1, 1), 14, vector.create(0, 0, 0), 0.8)
-        Icon_Draw(Icons.Cursors.Pointer(), at, 14, 4 * Colors.Primary, 0.9)
+        -- (as big as the interface is drawn: Theme.scale)
+        Icon_Draw(Icons.Cursors.Pointer(), at + vector.create(1, 1), 14 * Theme.scale, vector.create(0, 0, 0), 0.8)
+        Icon_Draw(Icons.Cursors.Pointer(), at, 14 * Theme.scale, 4 * Colors.Primary, 0.9)
       end
     end,
     PreUpdate = function()

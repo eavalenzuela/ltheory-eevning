@@ -84,6 +84,21 @@ function Menu.WindowChoice(): string
   return window
 end
 
+-- How big the interface is drawn, per cent (100, 125 or 150), and the
+-- asking for it to be otherwise: the game keeps it and sets it
+-- (Menu.Scale), at once. (The owner's "Yes" to a setting for it,
+-- 2026-11-15.) A size that would leave the screen too short for the
+-- windows is not offered: SCALE_ROOM of the interface's units of height
+-- is the least.
+local SCALES = { 100, 125, 150 }
+local SCALE_ROOM = 800
+local scalePercent = 100
+local setScale: ((percent: number) -> ())? = nil
+
+function Menu.Scale(percent: number, set: (percent: number) -> ())
+  scalePercent, setScale = percent, set
+end
+
 -- The action a key is being listened for (the keys page), or "". And
 -- what the game does when a key has changed hands (it keeps them:
 -- Menu.Keys).
@@ -192,7 +207,7 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
   local x, y = left + (width - w) / 2, top + (height - h) / 2 - 40
   -- (the options have a line more than they had, under what was there: what is above stays where it was)
   if page == "options" then
-    h = 392
+    h = 436
   end
   -- (the game behind is dimmed, so the menu is what there is to read)
   Im.Fill(left, top, width, height, vector.create(0, 0, 0), 0.45)
@@ -293,6 +308,22 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
       setWindow(window)
     end
     Im.Text("from the next start", sliderX + 160, y + 300, 12, Im.DIM)
+    -- How big the interface is drawn: a click goes on to the next size
+    -- the screen has room for. It is so at once.
+    Im.Text("Interface", labelX, y + 343, 15, Im.TEXT)
+    -- (the screen's height in pixels is this page's in units, times the size it is drawn at now)
+    local tall = height * scalePercent / 100
+    local sizes: { number } = {}
+    for _, each in SCALES do
+      if each == 100 or tall / (each / 100) >= SCALE_ROOM then
+        table.insert(sizes, each)
+      end
+    end
+    if Im.Button(`{scalePercent}%`, sliderX, y + 338, 150, 28, setScale ~= nil and #sizes > 1, "Menu:scale") and setScale then
+      scalePercent = sizes[(table.find(sizes, scalePercent) or 0) % #sizes + 1]
+      setScale(scalePercent)
+    end
+    Im.Text(if #sizes > 1 then "how big it is all drawn" else "this screen has room for one size", sliderX + 160, y + 344, 12, Im.DIM)
     if Im.Button("Back", cx - 130, y + h - 50, 260, 34, true, "Menu:back") then
       page = root
     end

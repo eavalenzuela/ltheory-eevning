@@ -9,6 +9,7 @@
 
 local Facts = require("@lt/Core/Data/Facts")
 local Im = require("@lt/Game/UI/Im")
+local Theme = require("@lt/Game/UI/Theme")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
 local Scene = require("@lt/Game/View/Scene")
 local Ships = require("@lt/Core/Data/Ships")
@@ -155,7 +156,7 @@ function Info.Draw(x: number, y: number)
     local from = vector.normalize(vector.create(math.cos(turning), 0.38, math.sin(turning))) * distance
     Im.Fill(left, top, right - left, PICTURE, vector.create(0.02, 0.03, 0.045), 0.9)
     WidgetRenderer_DrawRenderable(model, Transform_Identity(), from, -1 * vector.normalize(from), vector.create(0, 1, 0), fov,
-      vector.create(left + (right - left - PICTURE * 1.6) / 2, top), vector.create(PICTURE * 1.6, PICTURE),
+      Theme.Point(left + (right - left - PICTURE * 1.6) / 2, top), vector.create(Theme.Px(PICTURE * 1.6), Theme.Px(PICTURE)),
       vector.create(0.55, 0.80, 1.0), 0.95, turning)
     top += PICTURE + 10
   end

@@ -15,6 +15,7 @@
 -- asks: Splash.Begin, and GameDebug.Splash in the game app.
 
 local Fonts = require("@lt/Fonts")
+local Theme = require("@lt/Game/UI/Theme")
 local Im = require("@lt/Game/UI/Im")
 local Keys = require("@lt/Game/UI/Keys")
 
@@ -75,7 +76,7 @@ end
 -- A ring some pixels thick: the glyph's own is a hair.
 local function ring(at: vector, radius: number, thick: number, color: vector, alpha: number)
   for step = 0, thick - 1 do
-    Glyph_Draw(Glyph_Ring(at, radius - step * 0.75, 1, 1, 0), 0, 1, color, alpha)
+    Glyph_Draw(Glyph_Ring(at * Theme.scale, (radius - step * 0.75) * Theme.scale, 1, 1, 0), 0, 1, color, alpha)
   end
 end
 
@@ -87,23 +88,25 @@ local function mark(cx: number, cy: number, size: number, alpha: number, turn: n
   ring(left, r, 3, MARK, alpha * 0.95)
   ring(right, r, 3, INK, alpha * 0.85)
   -- (a faint wider ring about both: the reach of it)
-  Glyph_Draw(Glyph_Ring(vector.create(cx, cy), r + apart + 10, 1, 1, 0), 0, 1, MARK, alpha * 0.22)
+  Glyph_Draw(Glyph_Ring((vector.create(cx, cy)) * Theme.scale, (r + apart + 10) * Theme.scale, 1, 1, 0), 0, 1, MARK, alpha * 0.22)
   -- the star where they cross
-  Glyph_Draw(Glyph_Circle(vector.create(cx, cy), 4.5, 1, 1), 0, 1, WARM, alpha)
-  Glyph_Draw(Glyph_Circle(vector.create(cx, cy), 11, 1, 1), 0, 1, WARM, alpha * 0.16)
+  Glyph_Draw(Glyph_Circle((vector.create(cx, cy)) * Theme.scale, 4.5 * Theme.scale, 1, 1), 0, 1, WARM, alpha)
+  Glyph_Draw(Glyph_Circle((vector.create(cx, cy)) * Theme.scale, 11 * Theme.scale, 1, 1), 0, 1, WARM, alpha * 0.16)
   for _, way in { vector.create(1, 0), vector.create(0, 1) } do
-    Glyph_Draw(Glyph_LineFade(vector.create(cx, cy), vector.create(cx, cy) + way * 26, 1, 1), 0, 1, WARM, alpha * 0.7)
-    Glyph_Draw(Glyph_LineFade(vector.create(cx, cy), vector.create(cx, cy) - way * 26, 1, 1), 0, 1, WARM, alpha * 0.7)
+    Glyph_Draw(Glyph_LineFade((vector.create(cx, cy)) * Theme.scale, (vector.create(cx, cy) + way * 26) * Theme.scale, 1, 1), 0, 1, WARM, alpha * 0.7)
+    Glyph_Draw(Glyph_LineFade((vector.create(cx, cy)) * Theme.scale, (vector.create(cx, cy) - way * 26) * Theme.scale, 1, 1), 0, 1, WARM, alpha * 0.7)
   end
   -- a small world going round the further ring
   local world = right + vector.create(math.cos(turn), math.sin(turn)) * r
-  Glyph_Draw(Glyph_Circle(world, 5.5, 1, 1), 0, 1, vector.create(0.02, 0.03, 0.05), alpha)
-  Glyph_Draw(Glyph_Circle(world, 3.5, 1, 1), 0, 1, INK, alpha)
+  Glyph_Draw(Glyph_Circle(world * Theme.scale, 5.5 * Theme.scale, 1, 1), 0, 1, vector.create(0.02, 0.03, 0.05), alpha)
+  Glyph_Draw(Glyph_Circle(world * Theme.scale, 3.5 * Theme.scale, 1, 1), 0, 1, INK, alpha)
 end
 
 local function centred(font: Font?, s: string, cx: number, y: number, size: number, color: vector, alpha: number)
-  local wide = WidgetRenderer_GetTextSize(font, s, size).x
-  WidgetRenderer_DrawText(font, s, vector.create(cx - wide / 2, y + 0.8 * size), size, color, alpha, false)
+  -- (in pixels: the interface's scale is Theme's)
+  local big = Theme.Px(size)
+  local wide = WidgetRenderer_GetTextSize(font, s, big).x
+  WidgetRenderer_DrawText(font, s, vector.create(Theme.Px(cx) - wide / 2, Theme.Px(y) + 0.8 * big), big, color, alpha, false)
 end
 
 -- Draw it over whatever is there, and move it on by a frame of

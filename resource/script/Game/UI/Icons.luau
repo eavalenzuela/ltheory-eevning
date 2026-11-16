@@ -6,6 +6,8 @@
 --
 --   Icons.Draw("market", cx, cy, 11, Theme.DIM, 1)
 
+local Theme = require("@lt/Game/UI/Theme")
+
 local Icons = {}
 
 local function v(x: number, y: number): vector
@@ -218,7 +220,9 @@ function Icons.Draw(name: string, cx: number, cy: number, half: number, color: v
     built[name] = made
     icon = made
   end
-  Icon_Draw(icon :: Icon, vector.create(cx, cy), half, color, alpha or 1)
+  -- (in pixels: the interface's scale is Theme's)
+  local scale = Theme.scale
+  Icon_Draw(icon :: Icon, vector.create(cx * scale, cy * scale), half * scale, color, alpha or 1)
 end
 
 return Icons

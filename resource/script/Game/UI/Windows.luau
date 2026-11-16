@@ -369,11 +369,19 @@ end
 -- Once a frame, before anything is drawn that windows may lie over:
 -- where they are is where the cursor is on nothing, until they are drawn.
 function Windows.Begin(left: number, top: number, right: number, bottom: number)
+  -- (the screen another size than it was, in the interface's units: the
+  -- game's window was made another size, or the interface is drawn at
+  -- another scale. Every window that still fits is brought wholly on to it)
+  local resized = screen[3] - screen[1] ~= right - left or screen[4] - screen[2] ~= bottom - top
   screen = { left, top, right, bottom }
   local rects: { { number } } = {}
   for _, id in order do
     local window = windows[id]
     if window.open then
+      if resized then
+        window.x = math.max(left, math.min(window.x, right - Theme.GAP - window.w))
+        window.y = math.max(top, math.min(window.y, bottom - Theme.GAP - window.h))
+      end
       keep(window)
       table.insert(rects, { window.x, window.y, window.x + window.w, window.y + window.h })
     end

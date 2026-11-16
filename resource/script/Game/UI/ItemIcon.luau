@@ -9,6 +9,7 @@
 --   ItemIcon.Draw("laser.pulse.medium", x, y, 28)
 
 local Paints = require("@lt/Core/Data/Paints")
+local Theme = require("@lt/Game/UI/Theme")
 local Types = require("@lt/Core/Data/Types")
 local Ships = require("@lt/Core/Data/Ships")
 
@@ -197,6 +198,10 @@ end
 -- Draw the icon of a type with its top-left corner at (x, y), 'size'
 -- pixels square.
 function ItemIcon.Draw(type: string, x: number, y: number, size: number)
+  -- (drawn by the engine, in pixels: where it is and how big, by the interface's scale)
+  if Theme.scale ~= 1 then
+    x, y, size = Theme.Px(x), Theme.Px(y), Theme.Px(size)
+  end
   -- A paint is a swatch of itself: its plating's colour, with the colour
   -- of what it marks and of its designs in a band along the foot. A
   -- design is a tile with bars across.

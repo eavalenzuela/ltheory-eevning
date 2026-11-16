@@ -144,7 +144,9 @@ end
 -- An arc of a ring round (cx, cy), from one turn to another.
 local function arc(cx: number, cy: number, inner: number, outer: number, from: number, to: number, color: vector, alpha: number)
   if to > from then
-    WidgetRenderer_DrawPanelRadial(vector.create(cx, cy), inner, outer, ((from + to) / 2) % 1, to - from, color, alpha, alpha, 0)
+    -- (an arc is the engine's, in pixels: Theme.scale)
+    WidgetRenderer_DrawPanelRadial(Theme.Point(cx, cy), inner * Theme.scale, outer * Theme.scale, ((from + to) / 2) % 1, to - from, color, alpha,
+      alpha, 0)
   end
 end
 
@@ -170,7 +172,7 @@ local function drawWheel(session: Session.Session, game: Core.Game, player: Core
   local hull = player.hull
 
   -- The ship, turning.
-  WidgetRenderer_DrawPanelRadial(vector.create(cx, cy), 0, RING - 28, 0, 1, vector.create(0.02, 0.03, 0.045), 0.9, 0.9, 0)
+  WidgetRenderer_DrawPanelRadial(Theme.Point(cx, cy), 0, (RING - 28) * Theme.scale, 0, 1, vector.create(0.02, 0.03, 0.045), 0.9, 0.9, 0)
   if show and show(cx, cy, RING - 30) then
     -- (the ship as it is in space: Scene.Showcase has drawn it)
   elseif preview and preview[1] then
@@ -189,7 +191,7 @@ local function drawWheel(session: Session.Session, game: Core.Game, player: Core
     -- the hull's own)
     for index, part in preview do
       WidgetRenderer_DrawRenderable(part.model, part.transform, from, -1 * vector.normalize(from), vector.create(0, 1, 0), fov,
-        vector.create(cx - side / 2, cy - side / 2), vector.create(side, side),
+        Theme.Point(cx - side / 2, cy - side / 2), vector.create(Theme.Px(side), Theme.Px(side)),
         if index == 1 then vector.create(0.55, 0.80, 1.0) else vector.create(1.0, 0.72, 0.30), if index == 1 then 0.95 else 1.0, turning)
     end
   else

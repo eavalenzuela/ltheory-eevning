@@ -197,24 +197,31 @@ local function lockOf(ball: State.Ball, target: number): State.Lock?
   return nil
 end
 
--- Where a body is on screen, or nil if it is behind the camera.
+-- Where a body is on screen, in the interface's units, or nil if it is
+-- behind the camera.
 local function onScreen(scene: Scene.Scene, id: number): vector?
   local at = scene.screen[id]
   if at then
     local projected = Camera_Project(scene.camera, at)
     if projected.z > 0 then
-      return Position_Frame(projected)
+      return Position_Frame(projected) / Theme.scale
     end
   end
   return nil
 end
 
+-- The window the interface is drawn in: where it is and how big, in the
+-- interface's units.
+type Area = { pos: vector, size: vector }
+
 -- ---------------------------------------------------------------------
 -- In space
 
-local function drawBrackets(session: Session.Session, scene: Scene.Scene, entries: { Core.Entry }, w: Widget,
+local function drawBrackets(session: Session.Session, scene: Scene.Scene, entries: { Core.Entry }, w: Area,
   ball: State.Ball?, marks: Waypoints.Marks)
   local cursor = Im.Cursor()
+  -- (a sign in space is drawn by the engine, in pixels: where it is and how big)
+  local scale = Theme.scale
   local clicked = 0
   local onGrid = false
   local nearest = 14 ^ 2
@@ -231,13 +238,13 @@ local function drawBrackets(session: Session.Session, scene: Scene.Scene, entrie
       local goal = marks[entry.id] ~= nil
       local color = if selected then Colors.White elseif hostile then HULL elseif goal then NEXT elseif entry.own then OURS
         elseif entry.onGrid then Im.ACCENT else Im.DIM
-      Icon_Draw(icon(entry.kind), p, if small then 4 else 8, color, if selected or hot or goal then 1 else 0.7)
+      Icon_Draw(icon(entry.kind), p * scale, (if small then 4 else 8) * scale, color, if selected or hot or goal then 1 else 0.7)
       if goal then
-        Glyph_Draw(Glyph_Ring(p, 12, 1, 1, 0), 0, 1, NEXT, 0.8)
+        Glyph_Draw(Glyph_Ring(p * scale, 12 * scale, 1, 1, 0), 0, 1, NEXT, 0.8)
       end
       if lock then
         -- a ring round a target: closing while it locks, steady once locked
-        Glyph_Draw(Glyph_Ring(p, if lock.locked then 14 else 20, 1, 1, 0), 0, 1, Colors.White, if lock.locked then 0.9 else 0.5)
+        Glyph_Draw(Glyph_Ring(p * scale, (if lock.locked then 14 else 20) * scale, 1, 1, 0), 0, 1, Colors.White, if lock.locked then 0.9 else 0.5)
       end
       if selected or hot then
         Im.Text(entry.name, p.x + 18, p.y - 16, 14, Im.TEXT)
@@ -263,7 +270,7 @@ local function drawBrackets(session: Session.Session, scene: Scene.Scene, entrie
     if clicked ~= 0 then
       Session.Order(session, if onGrid then "Approach" else "WarpTo", clicked, 0)
     else
-      local ray = Camera_GetRay(scene.camera, cursor)
+      local ray = Camera_GetRay(scene.camera, cursor * scale)
       local way = Ray_GetPoint(ray, 1000) - Ray_GetPoint(ray, 0)
       session.autopilot = false
       Session.Do(session, { kind = "Goto", actor = 0, x = way.x, y = way.y, z = way.z })
@@ -1473,7 +1480,9 @@ end
 function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
   -- Expanded, so that it covers the window: a bare widget has no size.
   return Components.Expand(Widget_Luau(Widget_Create(), {
-    PostDraw = function(_, w: Widget)
+    PostDraw = function(_, whole: Widget)
+      -- (the window's size, in the interface's units: Theme.scale)
+      local w: Area = { pos = whole.pos / Theme.scale, size = whole.size / Theme.scale }
       local wasOver = overInterface
       Im.Begin()
       -- The splash is over everything while it is up: nothing behind it
@@ -1725,7 +1734,8 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         -- shows the ship with is the scene's)
         Fitting.Frame(session, true, Scene.Dressed(game, player.ship, player.hull.id, player.hull.radius),
           function(cx: number, cy: number, round: number): boolean
-            return Scene.Showcase(scene, game, player.ship, player.hull.id, player.hull.radius, cx, cy, round)
+            -- (where the scene draws it is the screen's: in pixels)
+            return Scene.Showcase(scene, game, player.ship, player.hull.id, player.hull.radius, Theme.Px(cx), Theme.Px(cy), Theme.Px(round))
           end)
       end
       if ball then

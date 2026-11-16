@@ -48,7 +48,42 @@ Theme.ARMOR = rgb(242, 191, 77)
 Theme.HULL = rgb(217, 89, 77)
 Theme.CAPACITOR = rgb(255, 230, 128)
 
--- Sizes, in pixels of a screen 1080 high.
+-- The interface's scale (the owner's "Yes" to a setting for it,
+-- 2026-11-15): 1, 1.25 or 1.5. Everything the interface draws is set out
+-- in its own units, which are a screen's pixels at 1 and more of them at
+-- more: what draws (Game/UI/Im, and the few that draw past it) turns a
+-- length into pixels with Theme.Px, and whoever takes a length from the
+-- screen (its size, where the cursor is, where a thing in space is seen)
+-- turns it into the interface's with Theme.Units.
+Theme.scale = 1
+
+-- The scale: given one, it is set (to one of the three).
+function Theme.Scale(to: number?): number
+  if to then
+    Theme.scale = if to >= 1.4 then 1.5 elseif to >= 1.15 then 1.25 else 1
+  end
+  return Theme.scale
+end
+
+-- A length of the interface's, in the screen's pixels: whole ones, so
+-- that a hairline is a pixel or two and not a blur.
+function Theme.Px(units: number): number
+  local scale = Theme.scale
+  return if scale == 1 then units else math.floor(units * scale + 0.5)
+end
+
+-- A length of the screen's, in the interface's units.
+function Theme.Units(pixels: number): number
+  return pixels / Theme.scale
+end
+
+-- A point of the interface's, as the engine wants one: in pixels.
+function Theme.Point(x: number, y: number): vector
+  local scale = Theme.scale
+  return if scale == 1 then vector.create(x, y) else vector.create(math.floor(x * scale + 0.5), math.floor(y * scale + 0.5))
+end
+
+-- Sizes, in the interface's units: pixels of a screen 1080 high, at a scale of 1.
 Theme.TITLE = 30      -- a window's title bar
 Theme.DOCK = 52       -- the dock down the left edge
 Theme.ROW = 25        -- a row of a list

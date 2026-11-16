@@ -728,6 +728,12 @@ The pictures, and the pages they are drawn from, are `docs/design/interface/` (`
 - The career agents' window is opened from the panel beside the corner's at their station, by any pilot (the button said so to a new one only). The starbase's is open on arrival at a starbase of the pilot's own, as its tab was, and has a button in the same panel.
 - **`Game/UI/Station` is gone**, and with it the one screen that was the interface while docked: every service is a window, opened from the dock, and the scene is behind them.
 
+**Built so far: the interface's scale (2026-11-16; the owner's "Yes" to a setting for it; its tests owed with its group's).** The options have "Interface": 100%, 125% or 150%, set at once and kept (`save/settings.txt`, `scale`). A size that would leave the screen less than 800 of the interface's units high is not offered (a screen 1080 high has 100% and 125%; one 1440 high has all three).
+- **How:** everything the interface draws is set out in its own units, which are pixels at 100%. `Game/UI/Theme` has the scale; `Game/UI/Im` turns units into pixels in the three things it draws with (a panel, a text, how wide a text is), on whole pixels so that a hairline is a pixel or two and never a blur; and the few that draw past it do the same (`Icons`, `ItemIcon`, the chart's line, the fitting wheel's arcs and its ship, the sheet's hull, the star map's lines and dots, the splash, the brackets in space, the pointer). Whoever takes a length from the screen turns it the other way: the HUD its size and where a thing in space is seen, `Im` where the cursor is.
+- At 100% nothing is drawn differently from before, to the pixel (the same calls with the same numbers).
+- A screen that changes size in the interface's units (the scale changed, or the game's window) brings every open window that still fits wholly back on to it.
+- `GameDebug.Scale(percent)` sets it for a script's run.
+
 **Still to be decided, by the owner**
 - Whether it scales with the screen, and by a setting.
 - Which first. Proposed, not ruled on: what everything else stands on (one set of colours and sizes, one list that filters and sorts, text for the cursor, where a new window opens), then the windows' frame and the buttons that open them, then the market with the inventory and the assets, then the flying screen, then skills, industry, crew, corporation and jobs, then the map and the menus.
