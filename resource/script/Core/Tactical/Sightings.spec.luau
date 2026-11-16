@@ -2,7 +2,9 @@
 -- Something rare, seen for an hour or two (Tactical/Sightings).
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
+local Blueprints = require("@lt/Core/Data/Blueprints")
 local Constants = require("@lt/Core/Data/Constants")
+local Structures = require("@lt/Core/Data/Structures")
 local Contracts = require("@lt/Core/Assets/Contracts")
 local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
@@ -154,6 +156,18 @@ suite:Case("a captain: their camp is a place when the pilot is in the system, th
   t.ok(customs >= Sightings.PRIZES, `only {customs} custom makes in the wreck`)
   t.ok(tags >= Sightings.TAGS, `only {tags} tags in the wreck`)
   t.eq({ theirs, mutators }, { Sightings.THEIRS, Sightings.MUTATORS }, "an officer's own modules, and a mutator")
+  -- (and a copy of a pirate tower's drawings, good for a run or a few, and never the original: the owner's, 2026-11-16)
+  local copies, originals = 0, 0
+  for _, item in Items.In(state, wreck, nil) do
+    local print, copy = Blueprints.Of(item.type)
+    local tower = if print then Structures.towerById[print.product] else nil
+    if tower and tower.faction == "unbound" then
+      copies += if copy then 1 else 0
+      originals += if copy then 0 else 1
+      t.ok(not copy or (item.quantity >= 1 and item.quantity <= Pirates.TOWER_RUNS), `{item.quantity} runs`)
+    end
+  end
+  t.eq({ copies, originals } :: { any }, { 1, 0 } :: { any })
   -- (and the camp is let go)
   t.ok(state.sites[one.place].gone)
 

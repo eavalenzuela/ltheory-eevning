@@ -56,6 +56,7 @@
 -- from pirate pressure in the system instead of these fixed rules.)
 
 local Battles = require("@lt/Core/Tactical/Battles")
+local Blueprints = require("@lt/Core/Data/Blueprints")
 local Combat = require("@lt/Core/Tactical/Combat")
 local Fields = require("@lt/Core/Tactical/Fields")
 local Attributes = require("@lt/Core/Attributes")
@@ -407,7 +408,32 @@ function Pirates.Officer(state: State.State, wreck: number, name: string, kind: 
   if mutators > 0 then
     Items.Add(state, "mutator", mutators, wreck, "cargo")
   end
+  -- And a copy of the drawings of one of the pirates' towers, good for a
+  -- run or a few (the owner, 2026-11-16: "Unbound station BPCs (no BP
+  -- originals), they drop as named pirate boss loot, similar to named
+  -- ship modules"). The small one most often (Pirates.TOWER_COPIES), and
+  -- from dice of its own, so that the rest of what they leave is what it
+  -- was. (Which size how often, and how many runs: mine.)
+  local towers = Blueprints.OfPeople("unbound").towers
+  if #towers > 0 then
+    local drawn = Rng.For(state.historySeed, wreck, 977)
+    local roll, size = Rng.Float(drawn, 0, 1), 1
+    for index, share in Pirates.TOWER_COPIES do
+      roll -= share
+      if roll < 0 then
+        size = index
+        break
+      end
+    end
+    local print = towers[math.min(size, #towers)]
+    Items.Add(state, Blueprints.Copy(print), 1 + Rng.Int(drawn, Pirates.TOWER_RUNS), wreck, "cargo")
+  end
 end
+
+-- How often a named officer's copy is of the small, the medium and the
+-- large pirate tower; and the most runs it is good for.
+Pirates.TOWER_COPIES = { 0.6, 0.3, 0.1 }
+Pirates.TOWER_RUNS = 3
 
 -- A pirate ship of a kind, in space at a point.
 function Pirates.Spawn(state: State.State, kind: Kind, system: number, x: number, y: number, z: number, home: number): State.Ball

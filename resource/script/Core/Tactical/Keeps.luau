@@ -29,6 +29,7 @@
 --
 -- (Every figure is a first proposal: which moons, how strong, how long.)
 
+local Blueprints = require("@lt/Core/Data/Blueprints")
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
@@ -225,6 +226,15 @@ function Keeps.Fell(state: State.State, ship: number, home: number, events: { Ev
   if wreck and wreck.system == keep.system then
     local rng = Rng.For(state.historySeed, keep.id, 967)
     Pirates.Officer(state, wreck.id, Names.Person(rng), nil, rng, Keeps.THEIRS, Keeps.MUTATORS)
+    -- (and the drawings of one of the hulls the pirates build: a pirate
+    -- station destroyed is where those are found. The owner, 2026-11-16:
+    -- "their ship BPs drop from pirate stations when destroyed". The
+    -- original, one a keep, any of their plain hulls alike: mine)
+    local prints = Blueprints.OfPeople("unbound").hulls
+    if #prints > 0 then
+      local drawn = Rng.For(state.historySeed, keep.id, 971)
+      Items.Add(state, prints[Rng.Int(drawn, #prints) + 1].id, 1, wreck.id, "cargo")
+    end
   end
   state.keeps[keep.id] = nil
   State.RemoveId(state.keepIds, keep.id)

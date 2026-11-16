@@ -14,7 +14,9 @@ the lines beginning `- ` under it.
   - its own defence is 15 points better against every kind of damage: armour for the Vessari, Orun and Nimia, shield for the Talmar and Vail, structure for the Unbound.
 - There are now Unbound, Nimia and Vail towers too. A people's tower is sold at its own stations; elsewhere a few are imported, at a higher price.
 - A tower's information sheet lists what its make is better at.
-- The Unbound's, the Nimia's, the Vail's and the Drowned's ships and towers now have blueprints. Nobody sells them yet.
+- The Unbound's, the Nimia's, the Vail's and the Drowned's ships and towers now have blueprints.
+- Unbound ship blueprints are found in the wrecks of pirate towers you destroy, and now and then on a station's contract board outside secure space (dear).
+- Named pirate officers leave a blueprint copy of an Unbound tower, good for a run or a few. Nobody has the original.
 - Markets differ now. A station has plenty of its own faction's ships, towers, guns and ammunition, and only a few of another human faction's, at a higher price.
 - Blueprints are sold only for a station's own faction's things and for things nobody owns, and only at the kind of station that deals in them: ship prints at shipyards, module and ammunition prints at outposts, structure prints at refineries, all of them at trade hubs.
 - Each kind of station keeps plenty of what it trades in (a refinery ore and minerals, a shipyard ships and modules, and so on) and a little of everything else. Trade hubs keep everything.

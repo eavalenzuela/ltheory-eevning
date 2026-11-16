@@ -36,6 +36,7 @@ local Blueprints = require("@lt/Core/Data/Blueprints")
 local Constants = require("@lt/Core/Data/Constants")
 local Economy = require("@lt/Core/Strategic/Economy")
 local Fits = require("@lt/Core/Fits")
+local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
 local Modules = require("@lt/Core/Data/Modules")
@@ -89,6 +90,17 @@ Contracts.FORGET = 3 * DAY
 -- Whose a station is: the faction whose homeworld is nearest.
 local function factionOf(state: State.State, station: number): string
   return state.galaxy.systems[Space.SystemOf(state, station)].nearest
+end
+
+-- Whether a board's blueprint lot today is a pirate hull's print: now
+-- and then (Contracts.PIRATED of days), and only where order is not
+-- kept as it is in secure space. (Both mine.)
+Contracts.PIRATED = 0.12
+-- (from dice of its own: what a board has on the other days is what it had)
+local function pirated(state: State.State, station: number, day: number): boolean
+  local node = state.galaxy.systems[Space.SystemOf(state, station)]
+  return #Blueprints.OfPeople("unbound").hulls > 0 and Galaxy.Band(node.security) ~= "secure"
+    and Rng.Chance(Rng.For(state.historySeed, station, day, 137), Contracts.PIRATED)
 end
 
 -- Whether a station has a board: one somebody keeps, with a market.
@@ -228,6 +240,16 @@ function Contracts.Board(state: State.State, station: number): { Lot }
       lot.title = `{hull.name}, fitted out`
       lot.worth = Contracts.Base(lot.stacks)
       lot.price = math.ceil(lot.worth * Rng.Float(rng, 0.88, 1.06))
+    elseif slot == 2 and pirated(state, station, day) then
+      -- The drawings of a pirate hull, the original, where order is thin
+      -- and such things change hands (the owner, 2026-11-16: their ship
+      -- prints are on the market "via contracts"). Dear.
+      local prints = Blueprints.OfPeople("unbound").hulls
+      local print = prints[Rng.Int(rng, #prints) + 1]
+      lot.stacks = { { type = print.id, quantity = 1 } }
+      lot.title = `{Types.Info(print.product).name}: the blueprint`
+      lot.worth = Contracts.Base(lot.stacks)
+      lot.price = math.ceil(lot.worth * Rng.Float(rng, 1.5, 2.5))
     elseif slot == 2 then
       -- A copy of a blueprint: one a station sells, or now and then a
       -- tech 2 one, good for a few runs and dear.

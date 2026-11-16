@@ -2,7 +2,9 @@
 -- The pirates' own towers, and the bringing down of them (Tactical/Keeps).
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
+local Blueprints = require("@lt/Core/Data/Blueprints")
 local Codec = require("@lt/Core/Persist/Codec")
+local Ships = require("@lt/Core/Data/Ships")
 local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
@@ -244,13 +246,21 @@ suite:Case("a keep destroyed pays its bounty and leaves what it had in its wreck
   t.eq({ state.keeps[keep.id], #state.keepIds == 0 or Keeps.At(state, moon.id) == nil, state.sites[keep.id].gone } :: { any },
     { nil, true, true } :: { any })
   local wreck = state.wrecks[state.wreckIds[#state.wreckIds]]
-  local stock, charges = 0, 0
+  local stock, charges, hullPrints, towerCopies = 0, 0, 0, 0
   for _, item in Items.In(state, wreck.id, "cargo") do
     stock += if item.type == deposit.material.id then item.quantity else 0
     charges += if item.type == Structures.SEAL.id then item.quantity else 0
+    -- (the drawings of a pirate hull, the original: the owner's, 2026-11-16)
+    local print, copy = Blueprints.Of(item.type)
+    local made = if print then Ships.byId[print.product] else nil
+    hullPrints += if print and not copy and made and made.lineage == "unbound" then item.quantity else 0
+    -- (and, its commander an officer by name, a copy of a pirate tower's)
+    local tower = if print then Structures.towerById[print.product] else nil
+    towerCopies += if copy and tower and tower.faction == "unbound" then 1 else 0
   end
   t.ok(stock >= Keeps.STOCK[1] and stock <= Keeps.STOCK[2], `{stock} units of the moon's material in its wreck`)
   t.eq(charges, Keeps.CHARGES)
+  t.eq({ hullPrints, towerCopies } :: { any }, { 1, 1 } :: { any }, "a pirate hull's print, and a copy of a pirate tower's")
   -- The moon takes the pilot's tower now.
   put(game, keep.system, moon)
   local tower = Items.Add(state, "tower.vessari.small", 1, state.player.ship, "cargo")

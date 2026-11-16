@@ -3,6 +3,9 @@
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Codec = require("@lt/Core/Persist/Codec")
+local Constants = require("@lt/Core/Data/Constants")
+local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Space = require("@lt/Core/Tactical/Space")
 local Contracts = require("@lt/Core/Assets/Contracts")
 local Core = require("@lt/Core/Api")
 local Items = require("@lt/Core/Assets/Items")
@@ -385,6 +388,43 @@ suite:Case("boards are in the save, and a save from before there were any opens 
   local opened = Core.Load(old, length)
   t.eq(Core.Hash(opened), Core.Hash(plain))
   t.eq({ #opened.state.contractIds, #opened.state.contractsTaken, #Contracts.Board(opened.state, home) }, { 0, 0, 5 })
+end)
+
+suite:Case("a pirate hull's print is now and then on a board where order is thin, and never in secure space", function(t)
+  -- (the owner, 2026-11-16: the Unbound's ship prints are found "on the market via contracts")
+  local game, home = newGame()
+  local state = game.state
+  local ticks = math.ceil(86400 / Constants.TICK)
+  local lawless = 0
+  for id, node in state.galaxy.systems do
+    if lawless == 0 and Galaxy.Band(node.security) ~= "secure" then
+      for _, object in Space.Describe(state, id).objects do
+        if lawless == 0 and object.kind == "station" then
+          lawless = object.id
+        end
+      end
+    end
+  end
+  t.ok(lawless ~= 0, "no station where order is thin")
+  local function prints(station: number): number
+    local found = 0
+    for day = 0, 199 do
+      state.tick = day * ticks
+      for _, lot in Contracts.Board(state, station) do
+        local stack = lot.stacks[1]
+        local print, copy = Blueprints.Of(stack.type)
+        local hull = if print and not copy then Ships.byId[print.product] else nil
+        if lot.side == "offer" and hull and hull.lineage == "unbound" then
+          found += 1
+          t.ok(lot.price > lot.worth, "a pirate hull's print should be dear")
+        end
+      end
+    end
+    return found
+  end
+  local there, here = prints(lawless), prints(home)
+  t.ok(there >= 10 and there <= 45, `{there} pirate prints in two hundred days where order is thin`)
+  t.eq(here, 0)
 end)
 
 return suite

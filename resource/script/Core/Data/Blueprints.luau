@@ -341,6 +341,32 @@ for _, booster in Boosters.list do
   Blueprints.byProduct[booster.id] = blueprint
 end
 
+-- The prints of a people's plain hulls, and of its towers (small,
+-- medium, large), in the order they are listed: for whatever seeds them
+-- where they are found (the Unbound's: Tactical/Keeps, Tactical/Pirates'
+-- Officer, Assets/Contracts).
+local ofPeople: { [string]: { hulls: { Blueprint }, towers: { Blueprint } } } = {}
+function Blueprints.OfPeople(people: string): { hulls: { Blueprint }, towers: { Blueprint } }
+  local found = ofPeople[people]
+  if found == nil then
+    found = { hulls = {}, towers = {} }
+    for _, hull in Ships.list do
+      local print = Blueprints.byProduct[hull.id]
+      if print and hull.lineage == people and hull.tech ~= 2 then
+        table.insert(found.hulls, print)
+      end
+    end
+    for _, tower in Structures.towers do
+      local print = Blueprints.byProduct[tower.id]
+      if print and tower.faction == people then
+        table.insert(found.towers, print)
+      end
+    end
+    ofPeople[people] = found
+  end
+  return found
+end
+
 -- A copy of a blueprint is kept as its runs: one unit of "copy.<product>"
 -- is one run, and a stack of twenty is a copy good for twenty.
 Blueprints.COPY = "copy."
