@@ -1,33 +1,51 @@
 #!/usr/bin/env python3
-"""script/towers: sheets of the towers the generator grows for the
+"""script/towers: sheets of the towers the generators make for the
 stations (App/towers.luau), taken off the screen.
 
-  script/towers seeds  [FROM [COUNT [SIZE]]] [STYLE] [PAINT] [eight] [masts N]
+  script/towers seeds   [FROM [COUNT [SIZE]]] [words]
         COUNT seeds from FROM on (40 from 1), each at SIZE (4)
-  script/towers styles SEED [SIZE] [PAINT] [eight] [masts N]
-        one seed in every style
-  script/towers sizes  SEED [STYLE] [PAINT] [eight] [masts N]
+  script/towers styles  SEED [SIZE] [words]
+        one seed in every build (or, with "grown", in every grown style)
+  script/towers sizes   SEED [words]
         one seed at each of the eight sizes
+  script/towers manners SEED [SIZE] [words]
+        one seed in each manner: the same tower, made otherwise
+  script/towers folds   SEED [SIZE] [words]
+        one seed as it is, and with each fold said over it
+  script/towers weights SEED [SIZE] [words]
+        one seed as it is, and with its weight in each place
 
 The numbers come first and in that order; the words after them, in any
-order.
+order:
 
-SIZE is 1 to 8: one plate more than that is grown (2 to 9). The game's
-small, middling and large towers are sizes 2, 4 and 6.
-STYLE is blocky (this if none is named), cloud, spar, poured, stout,
-needle, bulb or fins (Hull.TOWER_STYLES in
-resource/script/Game/View/Hull.luau).
-PAINT is vessari (this if none is named), talmar, orun, kethri, nimia,
-vail or civil.
-"eight" has every plate eight times about the tower's upright, where it
-is otherwise four; "masts N" stands N masts (0 to 6) out of its top.
+  a build     pylon, parasol, gantry, ring, stack or mixed (mixed if none
+              is named): a tower built in sections, the shape it cuts
+              (Tower.BUILDS in resource/script/Game/View/Tower.luau)
+  manner M    blocky (if none is named), cloud, spar or poured: how what
+              it is made of is made
+  fold N      2, 3, 4, 6 or 8: how many times a thing is there about its
+              upright, over what its seed says
+  weight W    low, high, middle, ends or beads: where its weight is, over
+              what its seed says
+  a paint     vessari (if none is named), talmar, orun, kethri, nimia,
+              vail or civil
+
+or, of the towers grown as a hull is, which are to go:
+
+  grown S     blocky, cloud, spar, poured, stout, needle, bulb or fins
+              (Hull.TOWER_STYLES in resource/script/Game/View/Hull.luau)
+  eight       every plate eight times about the upright, and not four
+  masts N     N masts (0 to 6) out of its top
+
+SIZE is 1 to 8: how much there is of the tower. The game's small,
+middling and large towers are sizes 2, 4 and 6.
 
 The sheet is written to cache/towers/ and its name printed. Every
-picture has its seed (or style, or size) written on it.
+picture has what it is written on it.
 
 To go through the seeds by hand, in a window:  bin/launch towers
-(Left and Right step the seed, S the style, [ and ] the size, Q four
-sides or eight, M the masts, P the paint, K keeps one in
+(Left and Right step the seed, S the style, [ and ] the size, N the
+manner, F the fold, W the weight, P the paint, K keeps one in
 cache/towers-kept.txt.)
 """
 import os
@@ -36,9 +54,13 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
-STYLES = ["blocky", "cloud", "spar", "poured", "stout", "needle", "bulb", "fins"]
+BUILDS = ["pylon", "parasol", "gantry", "ring", "stack", "mixed"]
+MANNERS = ["blocky", "cloud", "spar", "poured"]
+FOLDS = [2, 3, 4, 6, 8]
+WEIGHTS = ["low", "high", "middle", "ends", "beads"]
+GROWN = ["blocky", "cloud", "spar", "poured", "stout", "needle", "bulb", "fins"]
 PAINTS = ["vessari", "talmar", "orun", "kethri", "nimia", "vail", "civil"]
-PLATES = [2, 3, 4, 5, 6, 7, 8, 9]
+KINDS = ("seeds", "styles", "sizes", "manners", "folds", "weights")
 FOLDER = os.path.join("cache", "towers")
 TAKEN = os.path.join(FOLDER, "shots")
 SCRIPT = os.path.join(FOLDER, "sheet.txt")
@@ -49,10 +71,6 @@ def usage(why=None):
         print(f"towers: {why}\n", file=sys.stderr)
     print(__doc__, file=sys.stderr)
     sys.exit(2)
-
-
-def describe(size):
-    return f"size {size} ({PLATES[size - 1]} plates)"
 
 
 def launch(limit):
@@ -69,32 +87,58 @@ def main():
     if not args or args[0] in ("-h", "--help", "help"):
         usage()
     kind, rest = args[0], args[1:]
-    if kind not in ("seeds", "styles", "sizes"):
-        usage(f"'{kind}' is not seeds, styles or sizes")
-    numbers, style, paint, eight, masts = [], None, None, False, 0
+    if kind not in KINDS:
+        usage(f"'{kind}' is not one of: {', '.join(KINDS)}")
+    numbers = []
+    # (what every picture is of, unless the sheet's kind says otherwise for one)
+    tower = {"style": None, "grown": False, "manner": "blocky", "fold": 0, "weight": "", "eight": False, "masts": 0}
+    paint = None
     words = False
     at = 0
+
+    def after(word, among, what):
+        if at + 1 >= len(rest) or rest[at + 1] not in among:
+            usage(f"{word} wants {what} after it")
+        return rest[at + 1]
+
     while at < len(rest):
         word = rest[at]
         if word == "masts":
-            if at + 1 >= len(rest) or not rest[at + 1].isdigit() or int(rest[at + 1]) > 6:
-                usage("masts wants a number from 0 to 6 after it")
-            masts = int(rest[at + 1])
-            words = True
-            at += 1
+            tower["masts"] = int(after(word, [str(n) for n in range(7)], "a number from 0 to 6"))
+            words, at = True, at + 1
+        elif word == "fold":
+            tower["fold"] = int(after(word, [str(n) for n in FOLDS], "2, 3, 4, 6 or 8"))
+            words, at = True, at + 1
+        elif word == "weight":
+            tower["weight"] = after(word, WEIGHTS, "one of " + ", ".join(WEIGHTS))
+            words, at = True, at + 1
+        elif word == "manner":
+            tower["manner"] = after(word, MANNERS, "one of " + ", ".join(MANNERS))
+            words, at = True, at + 1
+        elif word == "grown":
+            # (by itself, for "styles": every grown style)
+            if at + 1 < len(rest) and rest[at + 1] in GROWN:
+                tower["style"] = rest[at + 1]
+                at += 1
+            tower["grown"], words = True, True
         elif word.isdigit():
             if words:
                 usage("the numbers come before the words")
             numbers.append(int(word))
-        elif word in STYLES:
-            style, words = word, True
+        elif word in BUILDS:
+            tower["style"], words = word, True
         elif word in PAINTS:
             paint, words = word, True
         elif word == "eight":
-            eight, words = True, True
+            tower["eight"], words = True, True
         else:
-            usage(f"'{word}' is not a number, a style, a paint, 'eight' or 'masts N'")
+            usage(f"'{word}' is not a number, a build, a paint, or one of: manner M, fold N, weight W, grown S, eight, masts N")
         at += 1
+    grown = tower["grown"]
+    if tower["style"] is None:
+        tower["style"] = "blocky" if grown else "mixed"
+    if grown and kind in ("manners", "folds", "weights"):
+        usage(f"a tower grown as a hull is has no {kind}")
 
     def number(at, default, low, high, what):
         if len(numbers) <= at:
@@ -107,37 +151,64 @@ def main():
 
     os.makedirs(TAKEN, exist_ok=True)
     colour = paint or "vessari"
-    grown = style or "blocky"
-    how = (", eight sides" if eight else "") + (f", {masts} masts" if masts else "")
-    tag = ("-eight" if eight else "") + (f"-masts{masts}" if masts else "")
-    # (each picture: its seed, its size, its style, and what is written on it)
+
+    def described(shown):
+        """What a tower is, in words: for a sheet's heading."""
+        if grown:
+            return (f"{shown['style']} (grown)" + (", eight sides" if shown["eight"] else "")
+                    + (f", {shown['masts']} masts" if shown["masts"] else ""))
+        return (f"{shown['style']}, {shown['manner']}" + (f", fold {shown['fold']}" if shown["fold"] else "")
+                + (f", weight {shown['weight']}" if shown["weight"] else ""))
+
+    def tagged(shown):
+        """The same, for a file's name."""
+        if grown:
+            return f"grown-{shown['style']}" + ("-eight" if shown["eight"] else "") + (f"-masts{shown['masts']}" if shown["masts"] else "")
+        return (f"{shown['style']}-{shown['manner']}" + (f"-fold{shown['fold']}" if shown["fold"] else "")
+                + (f"-{shown['weight']}" if shown["weight"] else ""))
+
+    # (each picture: its seed, its size, what it is of, and what is written on it)
+    shots = []
     if kind == "seeds":
         first = number(0, 1, 0, 10 ** 9, "the first seed")
         count = number(1, 40, 1, 400, "how many")
         size = number(2, 4, 1, 8, "the size")
-        shots = [(seed, size, grown, f"seed {seed}") for seed in range(first, first + count)]
-        title = f"Towers: seeds {first} to {first + count - 1}, {describe(size)}, {grown}, {colour}{how}"
-        name = f"seeds-{first}-{first + count - 1}-size{size}-{grown}-{colour}{tag}"
-    elif kind == "styles":
+        shots = [(seed, size, tower, f"seed {seed}") for seed in range(first, first + count)]
+        title = f"Towers: seeds {first} to {first + count - 1}, size {size}, {described(tower)}, {colour}"
+        name = f"seeds-{first}-{first + count - 1}-size{size}-{tagged(tower)}-{colour}"
+    elif kind == "sizes":
         seed = number(0, None, 0, 10 ** 9, "the seed")
-        size = number(1, 4, 1, 8, "the size")
-        shots = [(seed, size, each, each) for each in STYLES]
-        title = f"Towers: seed {seed}, {describe(size)}, {colour}, in every style{how}"
-        name = f"styles-seed{seed}-size{size}-{colour}{tag}"
+        shots = [(seed, size, tower, f"size {size}") for size in range(1, 9)]
+        title = f"Towers: seed {seed} at every size, {described(tower)}, {colour}"
+        name = f"sizes-seed{seed}-{tagged(tower)}-{colour}"
     else:
         seed = number(0, None, 0, 10 ** 9, "the seed")
-        shots = [(seed, size, grown, describe(size)) for size in range(1, 9)]
-        title = f"Towers: seed {seed} at every size, {grown}, {colour}{how}"
-        name = f"sizes-seed{seed}-{grown}-{colour}{tag}"
+        size = number(1, 4, 1, 8, "the size")
+        if kind == "styles":
+            each = [(dict(tower, style=style), style) for style in (GROWN if grown else BUILDS)]
+            over = "in every grown style" if grown else f"in every build, {tower['manner']}"
+        elif kind == "manners":
+            each = [(dict(tower, manner=manner), manner) for manner in MANNERS]
+            over = f"{tower['style']}, in every manner"
+        elif kind == "folds":
+            each = [(dict(tower, fold=0), "as the seed says")] + [(dict(tower, fold=fold), f"fold {fold}") for fold in FOLDS]
+            over = f"{tower['style']}, {tower['manner']}, at every fold"
+        else:
+            each = [(dict(tower, weight=""), "as the seed says")] + [(dict(tower, weight=weight), weight) for weight in WEIGHTS]
+            over = f"{tower['style']}, {tower['manner']}, its weight in every place"
+        shots = [(seed, size, shown, label) for shown, label in each]
+        title = f"Towers: seed {seed}, size {size}, {over}, {colour}"
+        name = f"{kind}-seed{seed}-size{size}-{tagged(tower)}-{colour}"
 
     lines = ["frames 10"]
     files = []
-    for index, (seed, size, each, _) in enumerate(shots):
+    for index, (seed, size, shown, _) in enumerate(shots):
         file = f"{name}-{index:04d}"
         files.append(os.path.join(TAKEN, file + ".png"))
         if os.path.exists(files[-1]):
             os.remove(files[-1])
-        lines += [f"lua assert(Towers.Show({seed}, {size}, '{each}', {'true' if eight else 'false'}, {masts}, '{colour}'))",
+        lines += [f"lua assert(Towers.Show({seed}, {size}, '{shown['style']}', {'true' if shown['eight'] else 'false'}, {shown['masts']}, "
+                  f"'{colour}', '{shown['manner']}', {shown['fold']}, '{shown['weight']}'))",
                   "frames 6", f"shot {file}", "frames 2"]
     lines += ["echo towers sheet taken", "quit"]
     with open(SCRIPT, "w") as out:
@@ -156,10 +227,10 @@ def main():
     except OSError:
         big = small = ImageFont.load_default()
     # (a tower stands in the middle of its picture: the middle of it is kept, upright)
-    columns = 8
+    columns = min(8, len(shots))
     wide, high, bar = 300, 420, 44
     rows = (len(shots) + columns - 1) // columns
-    sheet = Image.new("RGB", (columns * wide, bar + rows * high), (12, 14, 18))
+    sheet = Image.new("RGB", (max(columns * wide, 1200), bar + rows * high), (12, 14, 18))
     draw = ImageDraw.Draw(sheet)
     draw.text((12, 9), title, fill=(235, 235, 235), font=big)
     for index, (file, shot) in enumerate(zip(files, shots)):
