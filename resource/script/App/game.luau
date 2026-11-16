@@ -44,6 +44,7 @@ local FittingWindow = require("@lt/Game/UI/Fitting")
 local ShipsWindow = require("@lt/Game/UI/Ships")
 local SkillSheet = require("@lt/Game/UI/Skills")
 local IndustryWindow = require("@lt/Game/UI/Industry")
+local JobsWindow = require("@lt/Game/UI/Jobs")
 local Info = require("@lt/Game/UI/Info")
 local Menu = require("@lt/Game/UI/Menu")
 local Splash = require("@lt/Game/UI/Splash")
@@ -811,12 +812,13 @@ function Debug.Blueprint(type: string): boolean
 end
 
 -- What of a station's own is in front: a tab of the docked screen, or
--- one of the windows that were tabs of it ("Market", "Fitting", "Ships", "Skills", "Industry"). With
+-- one of the windows that were tabs of it ("Market", "Fitting", "Ships", "Skills", "Industry", "Missions"). With
 -- none of them open, the tab the docked screen would open at.
 function Debug.Tab(): string
   local front: string?, name = nil, Station.Tab()
   for _, each in { { "station", Station.Tab() }, { MarketWindow.ID, "Market" }, { FittingWindow.ID, "Fitting" },
-    { ShipsWindow.ID, "Ships" }, { SkillSheet.ID, "Skills" }, { IndustryWindow.ID, "Industry" } } do
+    { ShipsWindow.ID, "Ships" }, { SkillSheet.ID, "Skills" }, { IndustryWindow.ID, "Industry" },
+    { JobsWindow.ID, "Missions" } } do
     if Windows.IsOpen(each[1]) and (front == nil or Windows.Above(each[1], front)) then
       front, name = each[1], each[2]
     end
@@ -2171,7 +2173,7 @@ end
 -- "defence") the Missions tab shows; given one, it is set to that. 0:
 -- the hardest there is.
 function Debug.Level(kind: string, to: number?): number
-  return Station.Level(kind, to)
+  return JobsWindow.Level(kind, to)
 end
 
 -- The first courier contract in hand (the sixth agent's: one with a

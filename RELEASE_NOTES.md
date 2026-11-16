@@ -42,8 +42,9 @@ the lines beginning `- ` under it.
 - Skills are a window of their own, and open in space as well as docked. Pick a skill to see what it does, what its next level opens, what it needs and how long it takes. "Add up to level 5" queues every level left. The training queue is along the foot.
 - Your implants are on the skills window's Implants page.
 - Industry is a window of its own: blueprints, ore and running jobs on the left, and on the right the job the blueprint you picked would be, with the laboratory under it.
+- Jobs are a window of their own, and open in space too: your jobs in hand, with how each is going and how long you can keep it. Docked, it also has the jobs offered, the loyalty store and your standings.
 - Your ships are a window of their own: the ships you have at the station, with Board, and the hulls in the hangar waiting to be assembled.
-- The old docked screen no longer opens by itself. The dock's buttons open it at Crew, Wallet or Jobs, and the same button puts it away. Save and Load are in the menu (Esc).
+- The old docked screen no longer opens by itself. The dock's buttons open it at Crew or Wallet, and the same button puts it away. Save and Load are in the menu (Esc).
 - The other screens inside the windows are as they were. They are being made over one at a time.
 
 ## Four small mends to the screens

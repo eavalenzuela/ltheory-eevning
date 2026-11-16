@@ -10,7 +10,7 @@
 # the camp is cleared, and the job is paid for at home, where the agent
 # has another.
 #
-# covers: Core/Tactical/Assault Core/Assets/Missions
+# covers: Core/Tactical/Assault Core/Assets/Missions Game/UI/Jobs
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

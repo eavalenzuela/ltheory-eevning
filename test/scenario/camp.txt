@@ -17,7 +17,7 @@
 # destroyed, which is the job. Then whoever is still there is seen off,
 # and the job is paid at home.
 #
-# covers: Core/Tactical/Assault Core/Assets/Missions
+# covers: Core/Tactical/Assault Core/Assets/Missions Game/UI/Jobs
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

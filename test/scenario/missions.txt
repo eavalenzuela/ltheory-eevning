@@ -9,7 +9,7 @@
 # which raises the pilot's standing. Give the courier run up, which
 # costs some. The bounty stays in hand.
 #
-# covers: Core/Assets/Missions Core/Assets/Standings
+# covers: Core/Assets/Missions Core/Assets/Standings Game/UI/Jobs
 
 wait 2
 lua GameDebug.Peaceful(true)

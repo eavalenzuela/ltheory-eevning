@@ -9,7 +9,7 @@
 # tab, the crates are put in the hold, the autopilot flies the way, the
 # ship docks where the cargo goes, and the contract is paid there.
 #
-# covers: Core/Assets/Missions
+# covers: Core/Assets/Missions Game/UI/Jobs
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

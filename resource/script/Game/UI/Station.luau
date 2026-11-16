@@ -1,12 +1,12 @@
 --!strict
--- What is left of the docked screen: the crew, the wallet and the jobs,
--- a tab each; and, at the
+-- What is left of the docked screen: the crew and the wallet, a tab
+-- each; and, at the
 -- station a new pilot starts at, the career agents (Game/UI/Careers).
 -- It was the whole of the interface while docked. The market and the
--- fitting of the ship, the ships kept here, the pilot's skills and
--- industry were tabs of it, and are windows of their own now
--- (Game/UI/Market, Game/UI/Fitting, Game/UI/Ships, Game/UI/Skills,
--- Game/UI/Industry), as the rest are to be; and what a
+-- fitting of the ship, the ships kept here, the pilot's skills,
+-- industry and the jobs were tabs of it, and are windows of their own
+-- now (Game/UI/Market, Game/UI/Fitting, Game/UI/Ships, Game/UI/Skills,
+-- Game/UI/Industry, Game/UI/Jobs), as the rest are to be; and what a
 -- pilot does at any station (to undock, to make it home) is beside the
 -- corner's panel (Game/UI/Hud). So it is not open by itself any more:
 -- the dock opens it at a tab, and shuts it.
@@ -26,7 +26,6 @@ local Info = require("@lt/Game/UI/Info")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
 local Reactions = require("@lt/Core/Data/Reactions")
 local Session = require("@lt/Game/Session")
-local Assault = require("@lt/Core/Tactical/Assault")
 local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
 local Moons = require("@lt/Core/Data/Moons")
@@ -38,11 +37,11 @@ local Station = {}
 Station.WIDTH = 940
 Station.HEIGHT = 600
 
-local TABS: { string } = { "Crew", "Wallet", "Missions" }
+local TABS: { string } = { "Crew", "Wallet" }
 -- (and one more at a starbase of the pilot's own: the running of it)
-local OWN: { string } = { "Crew", "Wallet", "Missions", "Starbase" }
+local OWN: { string } = { "Crew", "Wallet", "Starbase" }
 -- (and at the station the career agents are at: them)
-local SCHOOL: { string } = { "Crew", "Wallet", "Missions", "Careers" }
+local SCHOOL: { string } = { "Crew", "Wallet", "Careers" }
 -- The services each tab's doings are done by (Core/Assets/Stations).
 local WANTS: { [string]: { string } } = {
 
@@ -57,7 +56,6 @@ local claimName = ""
 
 
 local GOOD = vector.create(0.45, 0.85, 0.55)
-local HOSTILE = vector.create(0.85, 0.35, 0.3)
 
 -- ---------------------------------------------------------------------
 -- Small pieces
@@ -428,241 +426,6 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
       Im.Text(shorten(note, 84), right, line + 69, 12, Im.DIM)
     end
     line += 90
-  end
-end
-
--- ---------------------------------------------------------------------
--- Missions: the jobs a station has, and the jobs in hand
-
--- (Whether the left of it shows the faction's loyalty store in place of
--- the jobs offered.)
-local storeOpen = false
-
--- The level of each line of work with levels that the list shows: the
--- hardest there is, until the pilot steps it down.
-local ladder: { [string]: number } = {}
-
--- Which level of a line of work ("assault", "mining", "courier",
--- "defence") the list shows: given one, it is set to that. 0: the
--- hardest there is.
-function Station.Level(kind: string, to: number?): number
-  if to then
-    ladder[kind] = to
-  end
-  return ladder[kind] or 0
-end
-
-local function drawMissions(session: Session.Session, game: Core.Game, x: number, y: number)
-  local status = Core.Query.Missions(game)
-  local left, right = x + 16, x + 480
-  local line = y + 78
-  local function about(mission: State.Mission, jumps: number, ward: number): string
-    if mission.kind == "bounty" and mission.type ~= "" then
-      -- (war work: a strike at a front)
-      return `at the lines in {game.state.galaxy.systems[mission.system].name}`
-        .. (if jumps > 0 then `, {jumps} {if jumps == 1 then "jump" else "jumps"} off` else "")
-        .. `: {mission.done} of {mission.need} destroyed`
-    elseif mission.kind == "bounty" then
-      local _, band = Core.Query.Security(game, mission.system)
-      return `in {game.state.galaxy.systems[mission.system].name} ({band or "?"} space): {mission.done} of {mission.need} destroyed`
-    elseif mission.kind == "assault" and (mission.aim == "hold" or Assault.Tender(mission.aim) or mission.aim == "lost") then
-      -- (where the rig is, or the tender; and, once the job is taken, how it is going and how the thing is)
-      local name = game.state.galaxy.systems[mission.system].name
-      local place = if mission.site ~= 0 then Core.Query.Body(game, mission.site) else nil
-      local escort = Assault.Tender(mission.aim)
-      local convoy = mission.aim == "convoy"
-      if place == nil then
-        -- (they do not wait their turn, as a camp's keepers do)
-        return `in {name}: {#mission.waves} waves, {Assault.PRESS // 60} minutes apart`
-          .. (if convoy then (if mission.system == Core.Query.Player(game).system then ", the last off this station" else ", the last at the gate home")
-            elseif escort then ", while it flies out" else "")
-      elseif mission.done >= mission.need then
-        return `{place.name}, in {name}: {if convoy then "in" elseif escort then "through" else "held"}`
-      elseif convoy and mission.done >= 1 then
-        -- (away from its place, and on its way in)
-        local dest = Core.Query.Body(game, mission.to)
-        return `away to {if dest then shorten(dest.name, 28) else "the station"}: see it in`
-          .. (if ward >= 0 then `, the tender at {math.ceil(ward * 100)}%` else "")
-      elseif ward < 0 then
-        return `{place.name}, in {name}: they come when you do`
-      elseif escort then
-        return `{place.name}, {name}: wave {mission.wave} of {#mission.waves}, the tender at {math.ceil(ward * 100)}%`
-      end
-      return `{place.name}, {name}: wave {mission.wave} of {#mission.waves}, {mission.done}/{mission.need} down, the rig at `
-        .. `{math.ceil(ward * 100)}%`
-    elseif mission.kind == "assault" then
-      -- (where the camp is; and, once the job is taken, how it is going)
-      local name = game.state.galaxy.systems[mission.system].name
-      local camp = if mission.site ~= 0 then Core.Query.Body(game, mission.site) else nil
-      local rooms = if #mission.ends == 1 then "one room" else `{#mission.ends} rooms`
-      if camp == nil then
-        return `in {name}: {rooms}, {#mission.waves} waves`
-      elseif mission.aim ~= "fetch" and mission.done >= mission.need then
-        return `{camp.name}, in {name}: done`
-      end
-      -- (how far in the pilot has got: the rooms whose way is found)
-      local open = 0
-      for _, room in mission.rooms do
-        open += if Core.Query.Found(game, room) then 1 else 0
-      end
-      local where = if #mission.rooms > 1 then `room {open} of {#mission.rooms}, ` else ""
-      local how = if mission.aim == "chief" then "the chief comes with the last"
-        elseif mission.aim == "fetch" then "the cargo is in the last room"
-        elseif mission.aim == "raze" then `{mission.done}/{mission.need} of its works razed, in the last room`
-        else `{mission.done}/{mission.need} down`
-      return `{camp.name}, {name}: {where}wave {mission.wave} of {#mission.waves}, {how}`
-    elseif mission.kind == "mining" then
-      -- (where the pocket is; and whether anybody disputes it)
-      local name = game.state.galaxy.systems[mission.system].name
-      local place = if mission.site ~= 0 then Core.Query.Body(game, mission.site) else nil
-      local disputed = if #mission.waves > 0 then ", disputed" else ""
-      return if place then `{place.name}, in {name}{disputed}` else `a pocket in {name}{disputed}`
-    elseif mission.kind == "courier" then
-      -- (where to, and how far that is)
-      local to = Core.Query.Body(game, mission.to)
-      local far = if jumps == 0 then "this system" elseif jumps == 1 then "1 jump" else `{jumps} jumps`
-      return `{far}: to {if to then shorten(to.name, 40) else "?"}`
-    end
-    local at = Core.Query.Body(game, mission.station)
-    return `to {if at then shorten(at.name, 40) else "?"}`
-  end
-
-  Im.Heading(if storeOpen then "LOYALTY STORE" else "JOBS OFFERED HERE", left, line, 16, Im.DIM)
-  -- (the faction's store, and the way back from it)
-  if Im.Toggle(if storeOpen then `Back to the jobs  ({status.loyalty} LP)` else `Loyalty store: {status.loyalty} LP`, left + 230, line - 4,
-    200, 24, storeOpen, "LoyaltyStore") then
-    storeOpen = not storeOpen
-  end
-  line += 30
-  -- The store: what the faction lets a pilot have for loyalty points.
-  if storeOpen then
-    if #status.store == 0 then
-      Im.Text("There is no store here.", left, line, 14, Im.DIM, 0.8)
-    end
-    -- (more than fit: the list scrolls)
-    local visible = 21
-    local first = Im.Scroll("LoyaltyStore", left, line, 440, visible * 20, #status.store, visible)
-    for index, row in status.store do
-      if index <= first then
-        continue
-      elseif index > first + visible then
-        break
-      end
-      Info.Name(row.stock.type, shorten(row.name, 30), left, line + 1, 13, if row.can then Im.TEXT else Im.DIM)
-      if row.can or string.sub(row.why, 1, 5) ~= "needs" then
-        Im.TextRight(`{row.stock.points} LP` .. (if row.stock.credits > 0 then `  {Format.Credits(row.stock.credits)}` else ""),
-          left + 372, line + 2, 12, Im.DIM)
-      else
-        Im.TextRight(shorten(row.why, 36), left + 372, line + 2, 11, Im.WARN)
-      end
-      if Im.Button("Get", left + 380, line, 50, 18, row.can, `Redeem:{row.stock.type}`) then
-        Session.Do(session, { kind = "RedeemLoyalty", actor = 0, type = row.stock.type, quantity = 1 })
-      end
-      line += 20
-    end
-  elseif #status.offers == 0 then
-    Im.Text("Nothing more today.", left, line, 14, Im.DIM, 0.8)
-  end
-  -- The day's jobs, each a row; then the fourth agent's assault, the
-  -- fifth's mining contract, the sixth's courier contract and the
-  -- seventh's defence job, a row each: the level shown is stepped up
-  -- and down, as far as the pilot's standing has opened.
-  local offers: { Core.MissionStatus } = if storeOpen then {} else status.offers
-  local function offered(offer: Core.MissionStatus, id: string, kind: string?, level: number, levels: number)
-    -- (a job with levels says its level in a word less: the steps beside it say the rest)
-    Im.Text(shorten(if kind then (string.gsub(offer.title, ", level", "", 1)) else offer.title, if kind then 30 else 34), left, line, 15,
-      Im.TEXT)
-    -- (or what it pays with: one of the people's own makes)
-    local pays = offer.mission.prize
-    Im.TextRight(if pays then shorten(Types.Info(pays).name, 30) else Format.Credits(offer.mission.reward), left + 356, line,
-      if pays then 13 else 15, GOOD)
-    local accept: State.Command = { kind = "AcceptMission", actor = 0, what = offer.mission.key }
-    local can, whyNot = Session.CanDo(session, accept)
-    Im.Text(if can then shorten(about(offer.mission, offer.jumps, offer.ward), 44) else shorten(tostring(whyNot), 44), left, line + 21, 12,
-      if can then Im.DIM else Im.WARN)
-    -- (who gives it, what they think of the pilot once they think anything, and the points it is worth)
-    local thinks = if offer.regard ~= 0 then string.format(" (%.1f)", offer.regard) else ""
-    Im.TextRight(`{shorten(offer.mission.agent, 16)}{thinks}  +{offer.mission.loyalty} LP`, left + 356, line + 21, 12,
-      if offer.regard > 0 then GOOD elseif offer.regard < 0 then Im.WARN else Im.DIM)
-    if kind and levels > 1 then
-      if Im.Button("<", left + 236, line - 1, 20, 20, level > 1, `Level:{kind}:down`) then
-        ladder[kind] = level - 1
-      end
-      if Im.Button(">", left + 260, line - 1, 20, 20, level < levels, `Level:{kind}:up`) then
-        ladder[kind] = level + 1
-      end
-    end
-    if Im.Button("Accept", left + 364, line + 4, 66, 28, can, id) then
-      Session.Do(session, accept)
-    end
-    line += 50
-  end
-  local daily = 0
-  for _, offer in offers do
-    if offer.mission.level == 0 then
-      daily += 1
-      offered(offer, `Accept:{daily}`, nil, 0, 0)
-    end
-  end
-  for _, kind in { "assault", "mining", "courier", "defence" } do
-    local levels: { Core.MissionStatus } = {}
-    for _, offer in offers do
-      if offer.line == kind then
-        table.insert(levels, offer)
-      end
-    end
-    if #levels > 0 then
-      local level = math.clamp(if (ladder[kind] or 0) == 0 then #levels else ladder[kind], 1, #levels)
-      offered(levels[level], `Accept:{kind}`, kind, level, #levels)
-    end
-  end
-
-  -- What every faction thinks of the pilot (it is their stations' fees,
-  -- their jobs' pay and, at the worst, their patrols' guns).
-  if not storeOpen then
-    line = y + 78 + 30 + 7 * 50 + 16
-    Im.Heading("STANDINGS", left, line, 14, Im.DIM)
-    for index, row in Core.Query.Standings(game) do
-      -- (four to a row: the four human factions, and under them any
-      -- other that has come to think something of the pilot)
-      local sx = left + (index - 1) % 4 * 110
-      local sy = line + (index - 1) // 4 * 44
-      Im.Text(row.name, sx, sy + 24, 13, Im.DIM)
-      Im.Text(string.format("%.1f", row.standing), sx, sy + 42, 15, if row.hostile then HOSTILE elseif row.standing < 0 then Im.WARN else Im.TEXT)
-      if row.hostile then
-        Im.Text("hostile", sx + 44, sy + 44, 12, HOSTILE)
-      end
-    end
-  end
-
-  line = y + 78
-  Im.Heading(`IN HAND  {#status.inHand} / 5`, right, line, 16, Im.DIM)
-  Im.TextRight(`{status.done} done`, right + 430, line + 2, 13, Im.DIM)
-  line += 30
-  if #status.inHand == 0 then
-    Im.Text("No jobs in hand.", right, line, 14, Im.DIM, 0.8)
-  end
-  for index, held in status.inHand do
-    Im.Text(held.title, right, line, 15, Im.TEXT)
-    local paid = held.mission.prize
-    Im.TextRight(if paid then shorten(Types.Info(paid).name, 30) else Format.Credits(held.mission.reward), right + 430, line,
-      if paid then 13 else 15, GOOD)
-    -- (a rig that is going down says so in the colour of a warning)
-    Im.Text(shorten(about(held.mission, held.jumps, held.ward), 68), right, line + 21, 12,
-      if held.ward >= 0 and held.ward < 0.5 and held.mission.done < held.mission.need then Im.WARN else Im.DIM)
-    -- (how long it can still be kept: in the colour of a warning at the last)
-    Im.TextRight(Format.Duration(held.left), right + 430, line + 21, 12, if held.left < 6 * 3600 then Im.WARN else Im.DIM)
-    local complete: State.Command = { kind = "CompleteMission", actor = 0, target = held.mission.id }
-    if Im.Button("Complete", right, line + 42, 90, 24, held.ready, `Complete:{index}`) then
-      Session.Do(session, complete)
-    end
-    if not held.ready then
-      Im.Text(shorten(held.why, 34), right + 100, line + 46, 12, Im.DIM)
-    end
-    if Im.Button("Abandon", right + 350, line + 42, 80, 24, true, `Abandon:{index}`) then
-      Session.Do(session, { kind = "AbandonMission", actor = 0, target = held.mission.id })
-    end
-    line += 84
   end
 end
 
@@ -1410,8 +1173,6 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
 
   if tab == "Wallet" then
     drawWallet(session, game, x, y)
-  elseif tab == "Missions" then
-    drawMissions(session, game, x, y)
   elseif tab == "Careers" then
     drawCareers(session, game, x, y)
   elseif tab == "Starbase" and own then

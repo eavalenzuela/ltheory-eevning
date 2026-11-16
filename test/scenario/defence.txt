@@ -10,7 +10,7 @@
 # rig standing, the job is paid for at home, where the agent has
 # another. That one is taken too, and its rig lost: the job goes with it.
 #
-# covers: Core/Tactical/Assault Core/Assets/Missions
+# covers: Core/Tactical/Assault Core/Assets/Missions Game/UI/Jobs
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
