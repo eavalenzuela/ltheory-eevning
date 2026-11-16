@@ -446,7 +446,11 @@ function Windows.Draw()
       Im.Fill(x + 2, y + 2, w - 4, h - 4, BACKING, 1)
       local draw = kinds[window.kind]
       if draw then
+        -- (in the look, whatever it is: one that has not been gone over
+        -- yet has the look's grounds, edges and buttons all the same)
+        local was = Im.Plain(true)
         draw(window, x, y, w, h)
+        Im.Plain(was)
       end
       continue
     end
@@ -487,7 +491,9 @@ function Windows.Draw()
     end
     local draw = kinds[window.kind]
     if draw and window.open then
+      local was = Im.Plain(true)
       draw(window, x, y + Windows.TITLE, w, h - Windows.TITLE)
+      Im.Plain(was)
     end
     -- (the corner it is made bigger and smaller by)
     Im.Flat(x + w - 12, y + h - 4, 9, 2, Theme.EDGE_STRONG)

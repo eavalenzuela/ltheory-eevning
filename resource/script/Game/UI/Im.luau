@@ -348,17 +348,32 @@ function Im.Heading(s: string, x: number, y: number, size: number, color: vector
   text(Fonts.Heading(), s, x, y, size, color, 1)
 end
 
--- A panel background. The camera ignores the mouse while it is over one.
+-- A panel background. The camera ignores the mouse while it is over
+-- one. (In the new look, Im.Plain, it is the look's panel: a screen
+-- that has not been gone over yet is in the look's grounds and edges
+-- all the same, where whoever draws it asks for that.)
 function Im.Panel(x: number, y: number, w: number, h: number)
-  panel(x, y, w, h, vector.create(0.03, 0.05, 0.07), 0.9, 0.92, 6)
+  if plain then
+    panel(x, y, w, h, Theme.PANEL, 1, 0.94, -1)
+    for _, edge in { { x, y, w, 1 }, { x, y + h - 1, w, 1 }, { x, y, 1, h }, { x + w - 1, y, 1, h } } do
+      panel(edge[1], edge[2], edge[3], edge[4], Theme.EDGE_STRONG, 1, 1, -1)
+    end
+  else
+    panel(x, y, w, h, vector.create(0.03, 0.05, 0.07), 0.9, 0.92, 6)
+  end
   if inside(x, y, w, h) then
     Im.over = true
   end
 end
 
--- A rectangle of solid colour.
+-- A rectangle of solid colour. (In the new look it is a plain one: not
+-- shaded, and with no glow about it.)
 function Im.Fill(x: number, y: number, w: number, h: number, color: vector, alpha: number)
-  panel(x, y, w, h, color, alpha, alpha, 0)
+  if plain then
+    panel(x, y, w, h, color, 1, alpha, -1)
+  else
+    panel(x, y, w, h, color, alpha, alpha, 0)
+  end
 end
 
 -- ---------------------------------------------------------------------
@@ -936,7 +951,11 @@ function Im.Overlay(right: number, bottom: number)
     end
     local height = #up.labels * MENU_ROW + 8
     local x, y = math.min(up.x, right - width - 4), math.min(up.y, bottom - height - 4)
-    panel(x, y, width, height, vector.create(0.04, 0.07, 0.1), 0.97, 1, 5)
+    -- (the look's: a plain ground, and a hairline about it)
+    panel(x, y, width, height, Theme.PANEL, 1, 0.98, -1)
+    for _, edge in { { x, y, width, 1 }, { x, y + height - 1, width, 1 }, { x, y, 1, height }, { x + width - 1, y, 1, height } } do
+      panel(edge[1], edge[2], edge[3], edge[4], Theme.EDGE_STRONG, 1, 1, -1)
+    end
     Im.over = true
     local chosen = 0
     for index, label in up.labels do
@@ -950,7 +969,8 @@ function Im.Overlay(right: number, bottom: number)
       end
       local hot = can and cursor.x >= x and cursor.x < x + width and cursor.y >= ry and cursor.y < ry + MENU_ROW
       if hot then
-        Im.Fill(x + 2, ry, width - 4, MENU_ROW, Im.ACCENT, 0.2)
+        panel(x + 1, ry, width - 2, MENU_ROW, Theme.ACCENT, 1, 0.16, -1)
+        panel(x + 1, ry, 3, MENU_ROW, Theme.ACCENT, 1, 1, -1)
       end
       Im.Text(label, x + 14, ry + 5, 13, if can then Im.TEXT else Im.DIM, if can then 1 else 0.6)
       if scripted or (hot and menuClick) then

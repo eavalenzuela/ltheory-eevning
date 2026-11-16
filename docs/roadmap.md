@@ -734,6 +734,8 @@ The pictures, and the pages they are drawn from, are `docs/design/interface/` (`
 - A screen that changes size in the interface's units (the scale changed, or the game's window) brings every open window that still fits wholly back on to it.
 - `GameDebug.Scale(percent)` sets it for a script's run.
 
+**Built so far: every window and menu in the look's grounds (2026-11-16; tests with the scale's).** What has not been gone over yet (the sheet on a thing, the guide, the scanner, the colonies, the star map, the events, the assets, the inventory, the hacking, the menu and its options, and the four windows taken as they were) is drawn with the look's panel, its plain fills, its buttons, switches, rows and fields all the same: the window layer draws every window so (`Im.Plain`), and under it an old screen's panel is the look's panel and its fills are plain ones. The menus that come up over everything (a right click's, a preset's) are the look's too. None of them is set out again: that is still to do, window by window.
+
 **Still to be decided, by the owner**
 - Whether it scales with the screen, and by a setting.
 - Which first. Proposed, not ruled on: what everything else stands on (one set of colours and sizes, one list that filters and sorts, text for the cursor, where a new window opens), then the windows' frame and the buttons that open them, then the market with the inventory and the assets, then the flying screen, then skills, industry, crew, corporation and jobs, then the map and the menus.

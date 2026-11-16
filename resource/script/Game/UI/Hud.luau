@@ -1494,7 +1494,10 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       end
       -- A menu is all there is while it is up.
       if Menu.IsOpen() then
+        -- (in the look: its panel, its buttons)
+        local wasPlain = Im.Plain(true)
         Menu.Draw(session, w.pos.x, w.pos.y, w.size.x, w.size.y)
+        Im.Plain(wasPlain)
         Splash.Draw(w.pos.x, w.pos.y, w.size.x, w.size.y, math.min(0.1, FrameTimer_Get()))
         overInterface = true
         return
@@ -1967,7 +1970,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       pane("info", Info.Showing() ~= "", (if ball then panelX else right) - Info.WIDTH - 12, top + 130, Info.WIDTH, Info.HEIGHT)
       if ball then
         -- (a hack under way has the middle of the screen)
+        local wasPlain = Im.Plain(true)
         Hack.Draw(session, left + (w.size.x - Hack.WIDTH) / 2, top + 150)
+        Im.Plain(wasPlain)
       end
       -- (from here down, what was set out from the screen's left edge is set out from the dock's)
       left = edge - 16
