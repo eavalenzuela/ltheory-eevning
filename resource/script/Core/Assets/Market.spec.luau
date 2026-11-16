@@ -712,9 +712,10 @@ suite:Case("a faction's stations have its own hulls and weapons at anybody's pri
   t.eq({ Market.Leaning("kethri", "frigate.akashi") } :: { any }, { Market.FOREIGN_HULL, true } :: { any })
   t.eq({ Market.Leaning("kethri", "frigate.courier") } :: { any }, { 1, false } :: { any })
   t.eq({ Market.Leaning("kethri", "laser.pulse.small") } :: { any }, { 1, false } :: { any })
-  t.eq({ Market.Leaning("vessari", "laser.pulse.small") } :: { any }, { Market.FOREIGN_ARMS, false } :: { any })
+  -- (another faction's guns and what they fire: a few, dearer. The owner, 2026-11-16)
+  t.eq({ Market.Leaning("vessari", "laser.pulse.small") } :: { any }, { Market.FOREIGN_ARMS, true } :: { any })
   t.eq({ Market.Leaning("vessari", "launcher.light") } :: { any }, { 1, false } :: { any })
-  t.eq({ Market.Leaning("orun", "missile.light.em") } :: { any }, { Market.FOREIGN_ARMS, false } :: { any })
+  t.eq({ Market.Leaning("orun", "missile.light.em") } :: { any }, { Market.FOREIGN_ARMS, true } :: { any })
   t.eq({ Market.Leaning("orun", "blaster.small") } :: { any }, { 1, false } :: { any })
   t.eq({ Market.Leaning("orun", "mineral.iron") } :: { any }, { 1, false } :: { any })
   -- A Akashi is the Vessari's: ten on their shelves, four on the Kethri's, and dearer there.
@@ -727,13 +728,45 @@ suite:Case("a faction's stations have its own hulls and weapons at anybody's pri
   local cost = assert(Core.Query.BuyCost(game, vessari, "frigate.akashi", 1))
   Items.Add(state, "frigate.akashi", 1, kethri, "hangar")
   t.ok(Core.Query.SellValue(game, kethri, "frigate.akashi", 1) > cost * 1.03, "a hull carried to another faction's space should sell at a profit")
-  -- And so do the Kethri's lasers among the Orun, by the hold.
-  local lasers = assert(Core.Query.BuyCost(game, kethri, "laser.pulse.small", 5))
-  t.ok(Core.Query.SellValue(game, orun, "laser.pulse.small", 5) > lasers * 1.03, "lasers carried to the Orun should sell at a profit")
-  t.ok(Core.Query.SellValue(game, kethri, "laser.pulse.small", 5) < lasers, "nothing sells at a profit where it was bought")
-  -- (and what they fire, by the thousand)
-  local rounds = assert(Core.Query.BuyCost(game, vessari, "ammo.emp", 5000))
-  t.ok(Core.Query.SellValue(game, kethri, "ammo.emp", 5000) > rounds * 1.1, "rounds carried to the Kethri should sell at a profit")
+  -- And so does a Kethri laser among the Orun. (One: another faction's
+  -- guns are a few on a shelf since 2026-11-16, so a hold of them is
+  -- more than its market wants, as a hold of hulls is.)
+  local lasers = assert(Core.Query.BuyCost(game, kethri, "laser.pulse.small", 1))
+  t.ok(Core.Query.SellValue(game, orun, "laser.pulse.small", 1) > lasers * 1.03, "a laser carried to the Orun should sell at a profit")
+  t.ok(Core.Query.SellValue(game, kethri, "laser.pulse.small", 1) < lasers, "nothing sells at a profit where it was bought")
+  t.eq(Core.Query.Quote(game, orun, "laser.pulse.small").stock, Market.FOREIGN_STOCK)
+  -- (and what they fire: as many as a quarter of the few the Kethri keep,
+  -- which is a tenth of what is normal: Market.FOREIGN_CHARGES)
+  local shelf = Core.Query.Quote(game, kethri, "ammo.emp").stock
+  t.ok(shelf >= Market.FOREIGN_STOCK and shelf < Core.Query.Quote(game, vessari, "ammo.emp").stock, `{shelf} rounds on a Kethri shelf`)
+  local some = math.max(1, shelf // 4)
+  local rounds = assert(Core.Query.BuyCost(game, vessari, "ammo.emp", some))
+  t.ok(Core.Query.SellValue(game, kethri, "ammo.emp", some) > rounds * 1.03, `{some} rounds carried to the Kethri should sell at a profit`)
+end)
+
+suite:Case("a station keeps its people's goods, a few of another's, what its kind trades in, and its people's prints", function(t)
+  -- (the owner, 2026-11-16: another faction's goods "A few, dearer";
+  -- prints "Own faction, by station kind"; goods nobody owns "By station kind")
+  local game = Core.New({ galaxySeed = 1, historySeed = 1 })
+  local state = game.state
+  local home = state.player.home
+  local object = assert(Space.Object(state, home))
+  t.eq(object.variety, "trade hub")
+  local function stock(id: string): number
+    return Core.Query.Quote(game, home, id).stock
+  end
+  -- Its people's tower and hull, and another's few.
+  t.ok(stock("tower.vessari.small") > Market.FOREIGN_STOCK and stock("frigate.akashi") > Market.FOREIGN_STOCK)
+  t.eq({ stock("tower.orun.small"), stock("blaster.small") } :: { any }, { Market.FOREIGN_STOCK, Market.FOREIGN_STOCK } :: { any })
+  -- Its people's prints, and nobody else's: a trade hub has every kind of them.
+  t.ok(stock("blueprint.frigate.akashi") > 0 and stock("blueprint.autocannon.small") > 0 and stock("blueprint.shield.extender.small") > 0)
+  t.eq({ stock("blueprint.tower.orun.small"), stock("blueprint.blaster.small") } :: { any }, { 0, 0 } :: { any })
+  -- (and a print it does not sell, it buys for little)
+  local quote = Core.Query.Quote(game, home, "blueprint.blaster.small")
+  t.eq(quote.ask, nil)
+  -- What goes where, by kind.
+  t.eq({ Market.PRINTS.ship, Market.PRINTS.module, Market.PRINTS.structure } :: { any }, { "shipyard", "outpost", "refinery" } :: { any })
+  t.ok(Market.KINDS.refinery.ore and not Market.KINDS.refinery.ship and Market.KINDS.shipyard.ship and Market.KINDS["trade hub"] == nil)
 end)
 
 return suite

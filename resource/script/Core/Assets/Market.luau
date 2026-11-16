@@ -45,6 +45,7 @@
 
 local Commerce = require("@lt/Core/Strategic/Commerce")
 local Economy = require("@lt/Core/Strategic/Economy")
+local Blueprints = require("@lt/Core/Data/Blueprints")
 local Factions = require("@lt/Core/Data/Factions")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
@@ -152,6 +153,9 @@ end
 Market.FOREIGN_HULL = 1.4
 Market.FOREIGN_ARMS = 1.25
 Market.FOREIGN_STOCK = 4
+-- (of another faction's rounds and missiles, which go by the thousand,
+-- "a few" is this share of what is normal, and never fewer than four)
+Market.FOREIGN_CHARGES = 0.1
 -- A people's own makes of modules (Data/Modules): how many of each a
 -- station of theirs keeps, and what they have to think of a pilot to
 -- sell them one (the owner's, 2026-11-15: sold to a pilot in good
@@ -194,9 +198,71 @@ function Market.Leaning(faction: string, id: string): (number, boolean)
   local module, charge = Modules.byId[id], Modules.chargeById[id]
   local family = if module and module.weapon then module.weapon.family elseif charge then charge.family else nil
   if family and not families(faction)[family] then
-    return Market.FOREIGN_ARMS, false
+    -- (the owner, 2026-11-16, of another faction's goods: "A few, dearer")
+    return Market.FOREIGN_ARMS, true
   end
   return 1, false
+end
+
+-- Whether a type is a people's own at its station: one of its hulls, one
+-- of its towers, or a gun or a charge of a family its ships carry.
+-- (Such goods are kept at every station of theirs, whatever its kind.)
+local function owned(faction: string, id: string): boolean
+  local people = Factions.byId[faction]
+  if people == nil then
+    return false
+  end
+  local hull = Ships.byId[id]
+  if hull then
+    return hull.lineage == faction
+  end
+  local tower = Structures.towerById[id]
+  if tower then
+    return tower.faction == faction
+  end
+  local module, charge = Modules.byId[id], Modules.chargeById[id]
+  local family = if module and module.weapon then module.weapon.family elseif charge then charge.family else nil
+  return family ~= nil and families(faction)[family] == true
+end
+
+-- What each kind of station trades in (the owner, 2026-11-16: goods
+-- nobody owns are kept "By station kind"; the lists are mine): a trade
+-- hub everything, and the others what is theirs. Of the rest a station
+-- keeps a little: Market.OFF_KIND of what is normal. (Skill books are
+-- printed to order everywhere; blueprints go by Market.PRINTS.)
+Market.KINDS = {
+  shipyard = { ship = true, module = true, drone = true, component = true, mineral = true, paint = true },
+  refinery = { ore = true, mineral = true, moon = true, planetary = true, structure = true, component = true },
+  outpost = { charge = true, module = true, drone = true, structure = true, implant = true },
+  habitat = { goods = true, implant = true, charge = true, planetary = true, paint = true },
+} :: { [string]: { [string]: boolean } }
+Market.OFF_KIND = 0.25
+
+-- Where the blueprints of a kind of product are sold (the owner,
+-- 2026-11-16: a faction's own and nobody's, "by station kind"; and only
+-- those: another human people's prints are bought in its space): hull
+-- prints at shipyards, module, charge and drone prints at outposts,
+-- structure prints at refineries, components' at shipyards; and every
+-- print a station may sell at a trade hub.
+Market.PRINTS = {
+  ship = "shipyard", module = "outpost", charge = "outpost", drone = "outpost", structure = "refinery", component = "shipyard",
+} :: { [string]: string }
+
+-- Whether a station of a kind and a faction sells the prints of a type.
+local function printed(variety: string, faction: string, id: string): boolean
+  local print = Blueprints.byId[id]
+  if print == nil then
+    return true
+  end
+  if (Market.Leaning(faction, print.product)) > 1 then
+    return false
+  end
+  if Market.KINDS[variety] == nil then
+    -- (a trade hub, or a station of no kind: all of them)
+    return true
+  end
+  local made = Types.Get(print.product)
+  return made ~= nil and Market.PRINTS[made.category] == variety
 end
 
 -- A market as it is on the day it opens: every type there is, at its
@@ -217,11 +283,23 @@ local function open(name: string, variety: string, faction: string): Economy.Eco
     local normal = normalStock(info)
     local _, few = Market.Leaning(faction, id)
     if few then
-      normal = math.min(normal, Market.FOREIGN_STOCK)
+      normal = if info.category == "charge" then math.max(Market.FOREIGN_STOCK, math.floor(normal * Market.FOREIGN_CHARGES))
+        else math.min(normal, Market.FOREIGN_STOCK)
+    end
+    -- (what nobody owns: what the station's kind trades in, and a little of the rest)
+    local kinds = Market.KINDS[variety]
+    if kinds and not kinds[info.category] and info.category ~= "skillbook" and info.category ~= "blueprint"
+      and not owned(faction, id) then
+      normal = math.max(1, math.floor(normal * Market.OFF_KIND))
     end
     local own = Modules.byId[id]
     local livery = Paints.paintById[id]
-    if (own and own.meta == 3 and own.lineage == faction) or (livery and livery.faction == faction) then
+    if info.category == "blueprint" and not info.scarce and not printed(variety, faction, id) then
+      -- Prints this station does not sell: none, and it pays little for one.
+      Economy.SetTarget(econ, node, index, 0)
+      Economy.SetStock(econ, node, index, 0)
+      econ.nodes[node].anchor[index] = 0
+    elseif (own and own.meta == 3 and own.lineage == faction) or (livery and livery.faction == faction) then
       -- A people's own make, or their livery, at one of their stations:
       -- a few, which their yards make good.
       Economy.SetTarget(econ, node, index, Market.OWN_STOCK)
