@@ -396,6 +396,13 @@ local function drawOverview(session: Session.Session, all: { Core.Entry }, x: nu
     overviewScroll -= 3 * Mouse_GetScrollDelta()
   end
   overviewScroll = math.clamp(math.floor(overviewScroll + 0.5), 0, math.max(0, #entries - visible))
+  if #entries > visible then
+    -- (a thumb down the right edge, as Im.Scroll gives every other
+    -- list: without one nothing said that the wheel brings the rest)
+    local track = visible * rowHeight - 4
+    local size = math.max(16, track * visible / #entries)
+    Im.Fill(x + width - 4, top + 2 + (track - size) * overviewScroll / (#entries - visible), 3, size, Im.DIM, 0.6)
+  end
   for row = 1, visible do
     local entry = entries[row + overviewScroll]
     if entry == nil then
@@ -977,18 +984,20 @@ end
 
 local function drawClock(session: Session.Session, x: number, y: number)
   local clock = session.clock
-  Im.Panel(x, y, 214, 34)
-  if Im.Button("-", x + 6, y + 5, 28, 24, clock.scale > 1, "Clock:slower") then
+  -- (178 px wide: with the four buttons beside it, the strip ends 464 px
+  -- in, where the rows over it do)
+  Im.Panel(x, y, 178, 34)
+  if Im.Button("-", x + 4, y + 5, 24, 24, clock.scale > 1, "Clock:slower") then
     clock.scale = math.max(1, clock.scale / 2)
   end
-  Im.Text(if clock.paused then "paused" else `time x{clock.scale}`, x + 44, y + 9, 14, if clock.paused then Im.WARN else Im.TEXT)
+  Im.Text(if clock.paused then "paused" else `time x{clock.scale}`, x + 36, y + 9, 14, if clock.paused then Im.WARN else Im.TEXT)
   -- (time is run faster only at a station)
   local docked = Core.Query.Player(session.game).docked ~= 0
-  if Im.Button("+", x + 118, y + 5, 28, 24, docked and clock.scale < 16, "Clock:faster") then
+  if Im.Button("+", x + 98, y + 5, 24, 24, docked and clock.scale < 16, "Clock:faster") then
     clock.scale = math.min(16, clock.scale * 2)
     clock.forced = false
   end
-  if Im.Button(if clock.paused then "run" else "pause", x + 152, y + 5, 56, 24, true) then
+  if Im.Button(if clock.paused then "run" else "pause", x + 126, y + 5, 48, 24, true) then
     clock.paused = not clock.paused
   end
 end
@@ -1130,7 +1139,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           HULL)
       end
       Im.Text(`{player.shipName}  -  {player.hull.name}`, left + 24, top + 68, 15, Im.DIM)
-      Im.Text(`{game.state.wallet} credits`, left + 24, top + 87, 15, Im.DIM)
+      Im.Text(`{Format.Whole(game.state.wallet)} credits`, left + 24, top + 87, 15, Im.DIM)
       if session.message ~= "" and game.state.tick - session.messageTick < 10 then
         Im.Text(session.message, left + 24, top + 107, 16, Im.WARN)
       end
@@ -1230,9 +1239,10 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       -- Colonies are run from anywhere, in space or docked, and what
       -- the pilot owns can be looked over from anywhere. The two windows
       -- take the same place: opening one closes the other.
-      -- (these end short of the ship's own panel, which in space begins
-      -- 468 px in on a screen 1920 wide)
-      if Im.Button("Colonies", left + 246, bottom - 54, 84, 34, true) then
+      -- (these end 464 px in, short of the ship's own panel, which in
+      -- space begins 468 px in on a screen 1920 wide: a button put on the
+      -- end of the row has to be made room for, not hung over that panel)
+      if Im.Button("Colonies", left + 206, bottom - 54, 72, 34, true) then
         if Colony.IsOpen() then
           Colony.Close()
         else
@@ -1244,7 +1254,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       -- What is in reach, and the moving of it: a window that goes where
       -- it is put (Game/UI/Inventory). Everything the pilot owns
       -- anywhere, the assets window, is opened from it.
-      if Im.Button("Inventory", left + 334, bottom - 54, 84, 34, true) or (Keys.Did("inventory") and not Im.Typing()) then
+      if Im.Button("Inventory", left + 282, bottom - 54, 76, 34, true) or (Keys.Did("inventory") and not Im.Typing()) then
         if Inventory.IsOpen() then
           Inventory.Close()
         else
@@ -1259,7 +1269,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           Assets.Open()
         end
       end
-      if Im.Button("Map", left + 422, bottom - 54, 42, 34, true) or Keys.Did("map") then
+      if Im.Button("Map", left + 362, bottom - 54, 42, 34, true) or Keys.Did("map") then
         if Map.IsOpen() then
           Map.Close()
         else
@@ -1267,7 +1277,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         end
       end
       -- (what is going on in the galaxy: a window of its own, Game/UI/Events)
-      if Im.Button("Events", left + 468, bottom - 54, 64, 34, true) then
+      if Im.Button("Events", left + 408, bottom - 54, 56, 34, true) then
         if Events.IsOpen() then
           Events.Close()
         else

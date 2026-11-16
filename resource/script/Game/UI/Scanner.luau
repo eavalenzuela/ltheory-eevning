@@ -107,6 +107,8 @@ local function drawDirectional(session: Session.Session, x: number, y: number, w
   local _, can, whyNot = Core.Query.Directional(game, toward, angle, range * Constants.AU, along)
   if Im.Button("Scan", left, y + 164, 110, 28, can, "Dscan:scan") then
     sightings = Core.Query.Directional(game, toward, angle, range * Constants.AU, along)
+    -- (a new list is read from its top)
+    Im.ScrollTo("sightings", 0)
     scans += 1
     scannedTick, scannedIn = state.tick, system
     scannedHow = if angle == 360 then `all round, {range} AU`
@@ -127,11 +129,10 @@ local function drawDirectional(session: Session.Session, x: number, y: number, w
   if scannedTick >= 0 and #sightings == 0 then
     Im.Text("Nothing there.", left, line, 13, Im.DIM, 0.8)
   end
-  for index, sighting in sightings do
-    if index > ROWS then
-      Im.Text(`and {#sightings - ROWS} more: narrow the range or the cone`, left, line + 2, 12, Im.DIM)
-      break
-    end
+  -- (eight at a time: the wheel brings the rest, as it does the signals)
+  local first = Im.Scroll("sightings", left - 4, line, width - 24, ROWS * 22, #sightings, ROWS)
+  for index = first + 1, math.min(#sightings, first + ROWS) do
+    local sighting = sightings[index]
     Im.Text(sighting.name, left, line, 14, Im.TEXT)
     Im.Text(sighting.type, left + 210, line + 1, 13, Im.DIM)
     if sighting.onGrid then

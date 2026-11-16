@@ -6,6 +6,13 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Four small mends to the screens
+
+- The buttons at the foot of the screen (Colonies, Inventory, Map, Events) no longer lie over your ship's Hull and Capacitor readings in space.
+- A directional scan lists everything it found: scroll the list with the wheel. It showed the first eight and no more.
+- The overview has a mark down its right edge when there is more of it than fits, as the other lists have. It always scrolled with the wheel; nothing said so.
+- Your credits in the top left corner are written with their thousands apart, as they are everywhere else.
+
 ## The Drowned, and jobs that pay
 
 - Jobs pay five times the credits they did, every kind of them: a first assault on a pirate camp about 100,000 where it was 20,000, a bounty 45,000 a pirate where it was 9,000, and so on up the levels. Loyalty points are earned as they were.
