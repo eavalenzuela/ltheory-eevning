@@ -127,10 +127,13 @@ for _, blueprint in Blueprints.list do
   byId[blueprint.id] = { id = blueprint.id, name = blueprint.name, category = "blueprint", volume = 0.01,
     basePrice = blueprint.basePrice, scarce = blueprint.invented or blueprint.rare }
   -- And a copy of it, by the run (Data/Blueprints): a hundred runs take
-  -- the room the blueprint does, and are worth about a tenth of what
-  -- they would build.
+  -- the room the blueprint does. A run is worth a hundredth of what it
+  -- builds, so a copy of ten runs is a tenth of one of them. (It was a
+  -- tenth a run until 2026-11-16, so that ten runs of a carrier's were
+  -- dearer than the carrier: the owner, "prices in general seem very
+  -- inflated. Look into them". The hundredth is mine.)
   byId[Blueprints.Copy(blueprint)] = { id = Blueprints.Copy(blueprint), name = blueprint.name .. " Copy", category = "blueprint",
-    volume = 0.0001, basePrice = math.max(1, blueprint.basePrice // 100), unlisted = true }
+    volume = 0.0001, basePrice = math.max(1, blueprint.basePrice // 1000), unlisted = true }
 end
 -- A book for every skill a pilot does not start with.
 for _, skill in Skills.list do

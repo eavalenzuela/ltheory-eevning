@@ -15,7 +15,8 @@ the lines beginning `- ` under it.
 - There are now Unbound, Nimia and Vail towers too. A people's tower is sold at its own stations; elsewhere a few are imported, at a higher price.
 - A tower's information sheet lists what its make is better at.
 - The Unbound's, the Nimia's, the Vail's and the Drowned's ships and towers now have blueprints.
-- Unbound ship blueprints are found in the wrecks of pirate towers you destroy, and now and then on a station's contract board outside secure space (dear).
+- Unbound ship blueprints are found in the wrecks of pirate towers you destroy, and rarely on a contract board outside secure space (dear).
+- Blueprint copies cost a tenth of what they did: ten runs cost about a tenth of one of the things they build.
 - Named pirate officers leave a blueprint copy of an Unbound tower, good for a run or a few. Nobody has the original.
 - Contracts are a window of their own on the dock, and galaxy-wide: every station's lots in one list, nearest first, which you can narrow by how far off and by what they are. Buy any of them from anywhere, docked or in space: what you buy is delivered to your hangar at the station it was posted at. A want is delivered to from anywhere too, from your hangar at that station.
 - Your contract listings can be called off from anywhere; the lot goes back to the hangar where it was up.

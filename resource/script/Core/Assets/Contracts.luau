@@ -85,7 +85,9 @@ Contracts.CHANCE = { near = 0.22, far = 0.02 }
 -- What a station's builders will take of one design's copies at its
 -- base price, in credits' worth, before they pay less; and how long
 -- they take to forget half of what they have had.
-Contracts.APPETITE = 250000
+-- (A tenth of what it was until 2026-11-16, when a copy's run came to
+-- be worth a tenth of what it had been: as many runs as before.)
+Contracts.APPETITE = 25000
 Contracts.FORGET = 3 * DAY
 
 -- Whose a station is: the faction whose homeworld is nearest.
@@ -97,14 +99,17 @@ end
 
 -- Whether a board's blueprint lot today is a pirate hull's print: now
 -- and then (Contracts.PIRATED of days), and only where order is not
--- kept as it is in secure space. (Both mine.)
-Contracts.PIRATED = 0.12
+-- kept as it is in secure space. (The owner, 2026-11-16: "One in 500
+-- sounds good", the boards being galaxy-wide now: some twenty a day in
+-- a galaxy of five thousand systems. Not in secure space: mine.)
+Contracts.PIRATED = 1 / 500
 -- (from dice of its own: what a board has on the other days is what it had)
 local function pirated(state: State.State, station: number, day: number): boolean
   local node = state.galaxy.systems[Space.SystemOf(state, station)]
   return #Blueprints.OfPeople("unbound").hulls > 0 and Galaxy.Band(node.security) ~= "secure"
     and Rng.Chance(Rng.For(state.historySeed, station, day, 137), Contracts.PIRATED)
 end
+Contracts.Pirated = pirated
 
 -- Whether a station has a board: one somebody keeps, with a market.
 -- (Any station anywhere: its system need not have been seen. Space.Peek)

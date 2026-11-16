@@ -433,10 +433,11 @@ suite:Case("boards are in the save, and a save from before there were any opens 
 end)
 
 suite:Case("a pirate hull's print is now and then on a board where order is thin, and never in secure space", function(t)
-  -- (the owner, 2026-11-16: the Unbound's ship prints are found "on the market via contracts")
+  -- (the owner, 2026-11-16: the Unbound's ship prints are found "on the
+  -- market via contracts", and of how often, "One in 500")
   local game, home = newGame()
   local state = game.state
-  local ticks = math.ceil(86400 / Constants.TICK)
+  t.near(Contracts.PIRATED, 1 / 500, 1e-12)
   local lawless = 0
   for id, node in state.galaxy.systems do
     if lawless == 0 and Galaxy.Band(node.security) ~= "secure" then
@@ -448,25 +449,25 @@ suite:Case("a pirate hull's print is now and then on a board where order is thin
     end
   end
   t.ok(lawless ~= 0, "no station where order is thin")
-  local function prints(station: number): number
-    local found = 0
-    for day = 0, 199 do
-      state.tick = day * ticks
-      for _, lot in Contracts.Board(state, station) do
-        local stack = lot.stacks[1]
-        local print, copy = Blueprints.Of(stack.type)
-        local hull = if print and not copy then Ships.byId[print.product] else nil
-        if lot.side == "offer" and hull and hull.lineage == "unbound" then
-          found += 1
-          t.ok(lot.price > lot.worth, "a pirate hull's print should be dear")
-        end
-      end
-    end
-    return found
+  -- (one board, many days: about one day in five hundred; never at a secure station)
+  local there, here = 0, 0
+  for day = 0, 49999 do
+    there += if Contracts.Pirated(state, lawless, day) then 1 else 0
+    here += if Contracts.Pirated(state, home, day) then 1 else 0
   end
-  local there, here = prints(lawless), prints(home)
-  t.ok(there >= 10 and there <= 45, `{there} pirate prints in two hundred days where order is thin`)
+  t.ok(there >= 70 and there <= 130, `{there} days of fifty thousand`)
   t.eq(here, 0)
+  -- And on such a day the board's blueprint lot is the print, dear.
+  local ticks = math.ceil(86400 / Constants.TICK)
+  local day = 0
+  while not Contracts.Pirated(state, lawless, day) do
+    day += 1
+  end
+  state.tick = day * ticks
+  local lot = assert(Contracts.Lot(state, lawless, "offer", 2))
+  local print, copy = Blueprints.Of(lot.stacks[1].type)
+  t.ok(print ~= nil and not copy and Ships.byId[print.product].lineage == "unbound", lot.title)
+  t.ok(lot.price > lot.worth, "a pirate hull's print should be dear")
 end)
 
 return suite
