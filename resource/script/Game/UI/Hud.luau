@@ -22,7 +22,10 @@ local Guide = require("@lt/Game/UI/Guide")
 local Im = require("@lt/Game/UI/Im")
 local Inventory = require("@lt/Game/UI/Inventory")
 local Info = require("@lt/Game/UI/Info")
+local ItemIcon = require("@lt/Game/UI/ItemIcon")
+local Icons = require("@lt/Game/UI/Icons")
 local Keys = require("@lt/Game/UI/Keys")
+local List = require("@lt/Game/UI/List")
 local Map = require("@lt/Game/UI/Map")
 local Market = require("@lt/Game/UI/Market")
 local Menu = require("@lt/Game/UI/Menu")
@@ -46,7 +49,6 @@ local Types = require("@lt/Core/Data/Types")
 local Hud = {}
 
 local overInterface = false
-local overviewScroll = 0
 -- How the overview is listed: by which column ("distance", "name" or
 -- "type"), and whether the other way round (farthest first, Z to A).
 local overviewSort, overviewDown = "distance", false
@@ -63,11 +65,6 @@ local VEIL = vector.create(0.80, 0.92, 1.0)
 -- has come on (0 to 1).
 local HAZE = vector.create(0.78, 0.74, 0.66)
 local haze = 0
-
-local TAGS: { [string]: string } = {
-  sun = "SUN", planet = "PLN", moon = "MON", belt = "BLT", asteroid = "AST",
-  station = "STA", gate = "GAT", ship = "SHP", wreck = "WRK", site = "SIT", bookmark = "BKM",
-}
 
 -- What a site (Tactical/Sites) is called, by the variety of its place.
 local SITES: { [string]: string } = { ["site.combat"] = "pirate den", ["site.ore"] = "hidden belt", ["site.relic"] = "derelict",
@@ -98,7 +95,6 @@ local OURS = vector.create(0.45, 0.85, 0.55)
 -- Where the pilot is next to go (Game/Waypoints): the gate of the way
 -- they have planned, the place a job is done or paid.
 local NEXT = vector.create(1.0, 0.80, 0.28)
-local CAPACITOR = vector.create(1.0, 0.9, 0.5)
 -- (how full an ore hold is: the colour of rock)
 local ORE = vector.create(0.66, 0.56, 0.44)
 
@@ -156,20 +152,6 @@ end
 -- Small pieces
 
 -- A bar showing 'value' of 'max'.
-local function bar(x: number, y: number, w: number, h: number, value: number, max: number, color: vector)
-  Im.Fill(x, y, w, h, Im.DIM, 0.25)
-  if max > 0 then
-    Im.Fill(x, y, w * math.clamp(value / max, 0, 1), h, color, 0.95)
-  end
-end
-
-local function shorten(name: string, limit: number): string
-  return if #name > limit then (string.gsub(string.sub(name, 1, limit - 1), "%s+$", "")) .. "." else name
-end
-
-local function whole(n: number): string
-  return tostring(math.floor(n + 0.5))
-end
 
 -- What the ship is doing, in words.
 local function describe(game: Core.Game, ball: State.Ball): string
@@ -289,22 +271,96 @@ local function drawBrackets(session: Session.Session, scene: Scene.Scene, entrie
 end
 
 -- What a row of the overview says a thing is, in three letters.
-local function tagOf(entry: Core.Entry): string
-  return if cloudy(entry) then "GAS" elseif vaulted(entry) then "VLT" else TAGS[entry.kind] or "?"
+
+-- What a thing on the overview is, for its row: a ship says its class,
+-- a battery that it is one; and the sign that stands for it (Game/UI/Icons).
+local CLASS_NAMES: { [string]: string } = { frigate = "Frigate", destroyer = "Destroyer", cruiser = "Cruiser",
+  attackbattlecruiser = "Battlecruiser", battlecruiser = "Battlecruiser", battleship = "Battleship", carrier = "Carrier",
+  siegedreadnought = "Dreadnought", dreadnought = "Dreadnought", supercarrier = "Supercarrier", ultracapital = "Ultracapital",
+  industrial = "Industrial", capitalindustrial = "Industrial", freighter = "Freighter", barge = "Barge", capsule = "Capsule",
+  drone = "Drone" }
+local KIND_NAMES: { [string]: string } = { sun = "Sun", planet = "Planet", moon = "Moon", belt = "Belt", asteroid = "Asteroid",
+  station = "Station", gate = "Gate", wreck = "Wreck", site = "Site", bookmark = "Marked" }
+local KIND_SIGNS: { [string]: string } = { sun = "sun", planet = "planet", moon = "moon", belt = "belt", asteroid = "rock",
+  station = "station", gate = "gate", wreck = "wreck", site = "site", bookmark = "mark" }
+
+-- Whether a ship of the overview is a drone, or a battery of a station's or a tower's.
+local function droneOf(entry: Core.Entry): boolean
+  return entry.kind == "ship" and string.sub(entry.variety, 1, 6) == "drone."
 end
 
--- The overview as it is listed: what the Core gives (nearest first) put
--- in the order the pilot has asked for, by a column; and where the pilot
--- is next to go first, whatever the order: the gate of the way they
--- have planned, the place a job is done or paid.
-local function listed(all: { Core.Entry }, marks: Waypoints.Marks): { Core.Entry }
-  local sorted = all
+local function batteryOf(entry: Core.Entry): boolean
+  return entry.kind == "ship" and string.sub(entry.variety, 1, 6) == "works."
+end
+
+local function typeOf(entry: Core.Entry): string
+  if entry.kind == "ship" then
+    if batteryOf(entry) then
+      return if string.find(entry.variety, "battery", 1, true) then "Battery" else "Structure"
+    end
+    local hull = Ships.byId[entry.variety]
+    return if hull then CLASS_NAMES[hull.class] or "Ship" else "Ship"
+  end
+  return if cloudy(entry) then "Gas cloud" elseif vaulted(entry) then "Vault" else KIND_NAMES[entry.kind] or "?"
+end
+
+local function signOf(entry: Core.Entry): string
+  if entry.kind == "ship" then
+    return if droneOf(entry) then "drone" elseif batteryOf(entry) then "battery" else "ships"
+  end
+  return if cloudy(entry) then "cloud" else KIND_SIGNS[entry.kind] or "site"
+end
+
+-- The overview's presets (the owner's, 2026-11-15: "Default, Combat,
+-- Mining, Exploration, Travel, Salvaging", and of what each lists, "All
+-- of them should also show ships"): what each lists beside the ships,
+-- and how the foot says so. Drones and batteries are of the fight, and
+-- are on Combat's alone.
+local PRESETS: { { string } } = {
+  { "default", "Default", "ships, stations, gates, belts, wrecks, sites, marks" },
+  { "combat", "Combat", "ships, drones, batteries" },
+  { "mining", "Mining", "ships, rocks, gas, belts, stations" },
+  { "exploration", "Exploration", "ships, sites, wormholes, wrecks, marks" },
+  { "travel", "Travel", "ships, stations, gates, planets, moons, belts" },
+  { "salvaging", "Salvaging", "ships, wrecks, containers" },
+}
+local PRESET_KINDS: { [string]: { [string]: boolean } } = {
+  default = { station = true, gate = true, belt = true, wreck = true, site = true, bookmark = true },
+  combat = {},
+  mining = { asteroid = true, belt = true, station = true },
+  exploration = { site = true, wreck = true, bookmark = true },
+  travel = { station = true, gate = true, planet = true, moon = true, belt = true, bookmark = true, sun = true },
+  salvaging = { wreck = true },
+}
+local overviewPreset = "default"
+
+local function inPreset(entry: Core.Entry): boolean
+  if entry.kind == "ship" then
+    return overviewPreset == "combat" or not (droneOf(entry) or batteryOf(entry))
+  end
+  return PRESET_KINDS[overviewPreset][entry.kind] == true
+end
+
+-- The overview as it is listed: what the Core gives (nearest first),
+-- narrowed to what the preset lists, and put in the order the pilot has
+-- asked for, by a column; with where the pilot is next to go first,
+-- whatever the order (the gate of the way they have planned, the place
+-- a job is done or paid). What the pilot is next to go to, has picked
+-- out or has locked is listed whatever the preset ('kept').
+local function listed(all: { Core.Entry }, marks: Waypoints.Marks, kept: { [number]: boolean }): { Core.Entry }
+  local shown: { Core.Entry } = {}
+  for _, entry in all do
+    if inPreset(entry) or marks[entry.id] or kept[entry.id] then
+      table.insert(shown, entry)
+    end
+  end
+  local sorted = shown
   if overviewSort ~= "distance" or overviewDown then
     -- (each with its place as the Core gave it: what is alike by the column stays nearest first)
     local order: { { entry: Core.Entry, key: string, at: number } } = {}
-    for at, entry in all do
+    for at, entry in shown do
       table.insert(order, { entry = entry, at = at,
-        key = if overviewSort == "name" then string.lower(entry.name) elseif overviewSort == "type" then tagOf(entry) else "" })
+        key = if overviewSort == "name" then string.lower(entry.name) elseif overviewSort == "type" then typeOf(entry) else "" })
     end
     local down = overviewDown
     table.sort(order, function(a, b): boolean
@@ -337,6 +393,19 @@ local function listed(all: { Core.Entry }, marks: Waypoints.Marks): { Core.Entry
   return entries
 end
 
+-- What is listed whatever the preset: what is picked out, and what the
+-- ship has locked or is locking.
+local function keptOf(session: Session.Session): { [number]: boolean }
+  local kept: { [number]: boolean } = { [session.selected] = true }
+  local ball = Core.Query.Ball(session.game, Core.Query.Player(session.game).ship)
+  if ball then
+    for _, lock in ball.vitals.locks do
+      kept[lock.target] = true
+    end
+  end
+  return kept
+end
+
 -- How the overview is listed, and (given a column) a way to say so:
 -- the column it is listed by, and whether the other way round. Asking
 -- for the column it is already listed by turns it round.
@@ -344,90 +413,127 @@ function Hud.Sort(by: string?): (string, boolean)
   if by == "distance" or by == "name" or by == "type" then
     overviewDown = if by == overviewSort then not overviewDown else false
     overviewSort = by
-    overviewScroll = 0
+    Im.ScrollTo("overview", 0)
   end
   return overviewSort, overviewDown
+end
+
+-- Which preset the overview is on ("default", "combat", "mining",
+-- "exploration", "travel", "salvaging"): and, given one, that one.
+function Hud.Preset(to: string?): string
+  if to and PRESET_KINDS[to] then
+    overviewPreset = to
+    Im.ScrollTo("overview", 0)
+  end
+  return overviewPreset
 end
 
 -- The names on the overview as it is listed, top first: for a script.
 function Hud.Listed(session: Session.Session): { string }
   local names: { string } = {}
-  for _, entry in listed(Core.Query.Overview(session.game), Waypoints.Of(session)) do
+  for _, entry in listed(Core.Query.Overview(session.game), Waypoints.Of(session), keptOf(session)) do
     table.insert(names, entry.name)
   end
   return names
 end
 
+-- The overview, on the one list (Game/UI/List): a preset to a tab, a
+-- sign for what a thing is, its name in the colour of what it is to the
+-- pilot (hostile, theirs, where they are going), its kind, how far off
+-- it is and, for a ship, how fast it is going. (A script's names:
+-- "Overview:sort:<column>", "Overview:preset:<preset>", and "Bookmark"
+-- and "Scanner" as before.)
+local OVERVIEW_COLUMNS: { List.Column } = {
+  { id = "sign", label = "", width = 16, sort = false }, { id = "name", label = "Name", width = 0 },
+  { id = "type", label = "Type", width = 76 }, { id = "distance", label = "Distance", width = 66, right = true },
+  { id = "speed", label = "m/s", width = 38, right = true, sort = false },
+}
 local function drawOverview(session: Session.Session, all: { Core.Entry }, x: number, y: number, width: number, height: number,
   marks: Waypoints.Marks)
-  local rowHeight = 22
-  local entries = listed(all, marks)
-  Im.Panel(x, y, width, height)
-  Im.Heading(`OVERVIEW  {#entries}`, x + 12, y + 8, 16, Im.DIM)
-  -- (the ship's scanner, for what is on nobody's chart: it takes the
-  -- place the colonies and assets windows take)
-  -- (and the marking of where the ship is, to warp back to: it is on
-  -- the overview from then on, in this system)
+  local game = session.game
+  local entries = listed(all, marks, keptOf(session))
+  local here = Core.Query.Player(game).systemName
+  Im.Frame(x, y, width, height)
+  local was = Im.Plain(true)
+  Im.Heading("OVERVIEW", x + 12, y + 9, 16, Theme.DIM)
+  -- (the marking of where the ship is, to warp back to: it is on the
+  -- overview from then on, in this system; and the ship's scanner, for
+  -- what is on nobody's chart)
   local mark: State.Command = { kind = "Bookmark", actor = 0 }
-  if Im.Button("Mark", x + width - 144, y + 5, 64, 22, (Session.CanDo(session, mark)), "Bookmark") then
+  Im.Because("Not here")
+  if Im.Button("Mark here", x + width - 156, y + 6, 78, 22, (Session.CanDo(session, mark)), "Bookmark") then
     Session.Do(session, mark)
   end
-  if Im.Button("Scan", x + width - 76, y + 5, 64, 22, true, "Scanner") then
+  if Im.Button("Scan", x + width - 72, y + 6, 62, 22, true, "Scanner") then
     if Scanner.IsOpen() then
       Scanner.Close()
     else
       Scanner.Open()
     end
   end
+  -- The presets.
+  local tx = x + 6
+  for _, preset in PRESETS do
+    local wide = Im.StrongWidth(preset[2], 13) + 14
+    local on = overviewPreset == preset[1]
+    local hot, pressed = Im.Area(`Overview:preset:{preset[1]}`, tx, y + 34, wide, 26, true)
+    if on then
+      Im.Flat(tx, y + 34, wide, 26, Theme.ACCENT, 0.07)
+      Im.Flat(tx, y + 58, wide, 2, Theme.ACCENT)
+    elseif hot then
+      Im.Flat(tx, y + 34, wide, 26, Theme.TEXT, 0.04)
+    end
+    Im.Strong(preset[2], tx + 7, y + 40, 13, if on or hot then Theme.TEXT else Theme.DIM)
+    if pressed then
+      Hud.Preset(preset[1])
+    end
+    tx += wide
+  end
+  Im.Flat(x + 1, y + 60, width - 2, 1, Theme.EDGE)
   -- The columns' heads: a click lists by that column, and another turns
   -- it round. The one it is listed by says which way.
-  local function head(column: string, label: string, at: number, right: boolean)
-    local text = if overviewSort == column then label .. (if overviewDown then " v" else " ^") else label
-    local hx = if right then at - Im.TextWidth(text, 11) else at
-    if Im.Link(text, hx, y + 33, 11, if overviewSort == column then Im.TEXT else Im.DIM, `Overview:sort:{column}`) then
-      Hud.Sort(column)
-    end
+  local layout = List.Columns(OVERVIEW_COLUMNS, x, width - 6)
+  local clicked = List.Head("Overview", x + 1, y + 61, width - 2, OVERVIEW_COLUMNS, layout, overviewSort, overviewDown)
+  if clicked then
+    Hud.Sort(clicked)
   end
-  head("type", "TYPE", x + 12, false)
-  head("name", "NAME", x + 52, false)
-  head("distance", "DISTANCE", x + width - 12, true)
-  local top = y + 50
-  local visible = math.max(1, (height - 58) // rowHeight)
-  if Im.Inside(x, y, width, height) then
-    overviewScroll -= 3 * Mouse_GetScrollDelta()
-  end
-  overviewScroll = math.clamp(math.floor(overviewScroll + 0.5), 0, math.max(0, #entries - visible))
-  if #entries > visible then
-    -- (a thumb down the right edge, as Im.Scroll gives every other
-    -- list: without one nothing said that the wheel brings the rest)
-    local track = visible * rowHeight - 4
-    local size = math.max(16, track * visible / #entries)
-    Im.Fill(x + width - 4, top + 2 + (track - size) * overviewScroll / (#entries - visible), 3, size, Im.DIM, 0.6)
-  end
+  local top = y + 61 + List.HEAD
+  local room = height - 61 - List.HEAD - List.FOOT
+  local first, visible = List.Body("overview", x + 1, top, width - 2, room, #entries)
   for row = 1, visible do
-    local entry = entries[row + overviewScroll]
+    local entry = entries[row + first]
     if entry == nil then
       break
     end
-    local rowY = top + (row - 1) * rowHeight
-    local hot, clicked, double = Im.Row(x + 4, rowY, width - 8, rowHeight, entry.id == session.selected)
+    local rowY = top + (row - 1) * List.ROW
+    local hot, picked, double = List.Row(x + 1, rowY, width - 7, entry.id == session.selected)
     if hot and Im.RightPressed() then
       session.selected = entry.id
       Context.Open(entry.id, Im.Cursor().x, Im.Cursor().y)
     end
     local goal = marks[entry.id] ~= nil
-    local color = if entry.hostile then HULL elseif goal then NEXT elseif entry.own then OURS elseif entry.onGrid then Im.TEXT else Im.DIM
-    if goal then
-      Im.Fill(x + 4, rowY + 2, 3, rowHeight - 4, NEXT, 0.95)
+    local color = if entry.hostile then Theme.BAD elseif goal then Theme.CAUTION elseif entry.own then Theme.GOOD
+      elseif entry.onGrid then Theme.TEXT else Theme.DIM
+    if goal or entry.hostile or entry.own then
+      Im.Flat(x + 1, rowY + 3, 3, List.ROW - 6, color)
     end
-    Im.Text(tagOf(entry), x + 12, rowY + 3, 13, if goal then NEXT else Im.DIM)
-    Im.Text(entry.name, x + 52, rowY + 3, 14, color)
-    Im.TextRight(Format.Distance(entry.distance), x + width - 12, rowY + 3, 14, color)
-    -- (a ship in a cloud of gas says so, before its distance: it is locked only from close in)
-    if entry.veiled then
-      Im.TextRight("in vapour", x + width - 86, rowY + 4, 12, Im.ACCENT)
+    Icons.Draw(signOf(entry), layout.sign.x + 8, rowY + 12, 6,
+      if entry.hostile or goal or entry.own then color elseif entry.kind == "ship" and not batteryOf(entry) then Theme.SHIELD else Theme.DIM,
+      if entry.onGrid then 1 else 0.7)
+    -- (a place of this system is called by what is its own: "III - Moon 2
+    -- - Refinery 1", where every row would begin with the system's name)
+    local name = entry.name
+    if entry.kind ~= "ship" and string.sub(name, 1, #here + 1) == here .. " " and #name - #here > 5 then
+      name = string.sub(name, #here + 2)
     end
-    if clicked then
+    List.Text(name, layout.name, rowY, hot, color, 14, false, 0, if name ~= entry.name then entry.name else nil)
+    -- (a ship in a cloud of gas says so, where its kind would be: it is locked only from close in)
+    List.Text(if entry.veiled then "in vapour" else typeOf(entry), layout.type, rowY, false, if entry.veiled then Theme.ACCENT else Theme.DIM, 13)
+    List.Text(Format.Distance(entry.distance), layout.distance, rowY, false, color)
+    local other = if entry.kind == "ship" and entry.onGrid and not batteryOf(entry) then Core.Query.Ball(game, entry.id) else nil
+    List.Text(if other then tostring(math.floor(math.sqrt(other.vx ^ 2 + other.vy ^ 2 + other.vz ^ 2) + 0.5)) else "-", layout.speed, rowY, false,
+      if other then Theme.DIM else Theme.FAINT, 13)
+    if picked then
       session.selected = entry.id
     end
     if double then
@@ -439,6 +545,14 @@ local function drawOverview(session: Session.Session, all: { Core.Entry }, x: nu
       end
     end
   end
+  local says = ""
+  for _, preset in PRESETS do
+    if preset[1] == overviewPreset then
+      says = preset[3]
+    end
+  end
+  List.Foot(x + 1, y + height - List.FOOT, width - 2, `{#entries} of {#all} here`, says)
+  Im.Plain(was)
 end
 
 -- The hired pilot the fleet's orders are for (by their id), or 0: everybody.
@@ -514,13 +628,14 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
       break
     end
   end
-  Im.Panel(x, y, width, 158)
+  Im.Frame(x, y, width, 158)
   if selected == nil then
-    Im.Heading("NOTHING SELECTED", x + 12, y + 8, 16, Im.DIM)
-    Im.Text("Click a bracket or an overview row.", x + 12, y + 36, 14, Im.DIM)
+    Im.Heading("NOTHING SELECTED", x + 12, y + 9, 16, Theme.DIM)
+    Im.Text("Click a bracket or a row of the overview.", x + 12, y + 36, 14, Theme.DIM)
     return
   end
   local entry: Core.Entry = selected
+  local was = Im.Plain(true)
   if entry.kind == "bookmark" then
     -- A place the pilot marked is called what they like: its name is a
     -- field, and what is typed there is its name when the typing is done.
@@ -546,9 +661,14 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     end
   else
     naming = 0
-    Im.Heading(string.upper(entry.name), x + 12, y + 8, 16, Im.TEXT)
+    local name = List.Cut(entry.name, width - 110, 17, true)
+    Im.Strong(name, x + 12, y + 7, 17, Theme.TEXT)
+    -- (and what it is to the pilot)
+    if entry.hostile or entry.own then
+      Im.Pill(if entry.hostile then "HOSTILE" else "YOURS", x + 12 + Im.StrongWidth(name, 17) + 8, y + 9, if entry.hostile then Theme.BAD else Theme.GOOD)
+    end
   end
-  local what = if entry.variety ~= "" and entry.kind ~= "ship" then `{entry.variety} {entry.kind}` else entry.kind
+  local what = if entry.kind == "ship" then string.lower(typeOf(entry)) elseif entry.variety ~= "" then `{entry.variety} {entry.kind}` else entry.kind
   if entry.kind == "station" and entry.variety == "colony ship" then
     -- (a station to moor at, and a ship: it says the second)
     what = "colony ship"
@@ -625,8 +745,9 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
       tone = if band == "secure" then SAFE elseif band == "low" then Im.WARN else HULL
     end
   end
-  Im.Text(what, x + 12, y + 32, 14, tone)
-  Im.TextRight(Format.Distance(entry.distance), x + width - 12, y + 32, 14, Im.TEXT)
+  local far = Format.Distance(entry.distance)
+  Im.Text(List.Cut(what, width - 36 - Im.StrongWidth(far, 14), 14, false), x + 12, y + 32, 14, tone)
+  Im.Strong(far, x + width - 12 - Im.StrongWidth(far, 14), y + 32, 14, Theme.TEXT)
 
   local targeted = lockOf(ball, entry.id) ~= nil
   -- (what is done at a moon is to anchor a tower there: the one in the hold)
@@ -658,6 +779,9 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
   if entry.kind == "wreck" then
     -- (a sealed hold is hacked open before it is looted)
     table.insert(orders, { label = "Hack", kind = "StartHack" })
+  elseif entry.kind == "ship" and Types.Get(entry.variety) then
+    -- (and what there is to know of a hull)
+    table.insert(orders, { label = "Info", kind = "Info" })
   end
   local buttonWidth = (width - 24 - 16) / 3
   for index, order in orders do
@@ -672,6 +796,10 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
       -- (what a planet has, the colony there, and the putting down of one)
       if Im.Button(order.label, bx, by, buttonWidth, 26, true) then
         Colony.Open(entry.id)
+      end
+    elseif order.kind == "Info" then
+      if Im.Button(order.label, bx, by, buttonWidth, 26, true, `Info:{entry.variety}`) then
+        Info.Open(entry.variety)
       end
     else
       local can = Session.Can(session, order.kind, entry.id, order.range)
@@ -693,82 +821,219 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
       end
     end
   end
+  Im.Plain(was)
 end
 
 -- The targets the ship has locked or is locking, in a row, with how
 -- many it has of how many it can have. One of them is the pilot's
 -- target (Session.Aim), and is lit and says so: a click on another
 -- makes that one it.
-local function drawTargets(session: Session.Session, game: Core.Game, ball: State.Ball, x: number, y: number)
+local function drawTargets(session: Session.Session, game: Core.Game, ball: State.Ball, entries: { Core.Entry }, x: number, y: number,
+  room: number)
   local now = game.state.tick * Constants.TICK
-  if #ball.vitals.locks > 0 then
-    Im.Text(`TARGETS  {#ball.vitals.locks} / {ball.vitals.maxTargets}`, x, y - 15, 11, Im.DIM)
-  end
+  local wide, tall, gap = 168, 70, 6
+  local across = math.max(1, (room + gap) // (wide + gap))
   for index, lock in ball.vitals.locks do
     local body = Core.Query.Body(game, lock.target)
     if body then
-      local bx = x + (index - 1) * 168
+      local bx = x + ((index - 1) % across) * (wide + gap)
+      local by = y + ((index - 1) // across) * (tall + gap)
       local aimed = lock.target == session.target
-      Im.Panel(bx, y, 160, 62)
-      local _, clicked = Im.Row(bx, y, 160, 62, aimed, `Target:{index}`)
+      Im.Flat(bx, by, wide, tall, Theme.PANEL, 0.94)
+      Im.Edge(bx, by, wide, tall, if aimed then Theme.ACCENT else Theme.EDGE)
+      if aimed then
+        Im.Flat(bx, by, wide, 2, Theme.ACCENT)
+      end
+      local hot, clicked = Im.Area(`Target:{index}`, bx, by, wide, tall, true)
+      if hot then
+        Im.over = true
+      end
       if clicked then
         session.selected = lock.target
         session.target = lock.target
       end
-      Im.Text(shorten(body.name, if aimed then 15 else 22), bx + 8, y + 5, 14, Im.TEXT)
+      Im.Strong(List.Cut(body.name, wide - (if aimed then 70 else 18), 14, true), bx + 9, by + 7, 14, Theme.TEXT)
       if aimed then
-        Im.TextRight("TARGET", bx + 152, y + 7, 11, Im.ACCENT)
+        Im.Pill("TARGET", bx + wide - 9 - (Im.StrongWidth("TARGET", 11) + 12), by + 7, Theme.ACCENT)
       end
+      -- (how far off it is, and how fast it is going)
+      local far = ""
+      for _, entry in entries do
+        if entry.id == lock.target then
+          far = Format.Distance(entry.distance)
+        end
+      end
+      local other = Core.Query.Ball(game, lock.target)
       if not lock.locked then
-        Im.Text(string.format("locking  %.0f s", math.max(0, lock.done - now)), bx + 8, y + 26, 13, Im.WARN)
+        local left = math.max(0, lock.done - now)
+        Im.Text(string.format("locking  %.0f s", left), bx + 9, by + 27, 13, Theme.CAUTION)
+        Im.Text(far, bx + wide - 9 - Im.TextWidth(far, 13), by + 27, 13, Theme.TEXT)
       else
-        local other = Core.Query.Ball(game, lock.target)
+        if other then
+          local speed = `{math.floor(math.sqrt(other.vx ^ 2 + other.vy ^ 2 + other.vz ^ 2) + 0.5)} m/s`
+          Im.Text(speed, bx + 9, by + 27, 13, Theme.DIM)
+        else
+          Im.Text("locked", bx + 9, by + 27, 13, Theme.DIM)
+        end
+        Im.Text(far, bx + wide - 9 - Im.TextWidth(far, 13), by + 27, 13, Theme.TEXT)
         if other then
           local v = other.vitals
-          bar(bx + 8, y + 28, 144, 5, v.shield, v.shieldMax, SHIELD)
-          bar(bx + 8, y + 36, 144, 5, v.armor, v.armorMax, ARMOR)
-          bar(bx + 8, y + 44, 144, 5, v.hull, v.hullMax, HULL)
-        else
-          Im.Text("locked", bx + 8, y + 26, 13, Im.DIM)
+          for layer, each in { { v.shield, v.shieldMax, Theme.SHIELD }, { v.armor, v.armorMax, Theme.ARMOR }, { v.hull, v.hullMax, Theme.HULL } } :: { { any } } do
+            local ly = by + 46 + (layer - 1) * 6
+            Im.Flat(bx + 9, ly, wide - 18, 4, Theme.DIM, 0.18)
+            if each[2] > 0 then
+              Im.Flat(bx + 9, ly, (wide - 18) * math.clamp(each[1] / each[2], 0, 1), 4, each[3])
+            end
+          end
         end
       end
     end
   end
 end
 
--- The ship's own condition; and, for a hull with an ore hold, how full
--- that is, m3 (the panel grows upward by a row for it: its foot stays
--- where it is).
-local function drawStatus(game: Core.Game, ball: State.Ball, x: number, y: number)
+-- The ship's own console, at the foot of the screen: one panel of the new
+-- look (Game/UI/Theme) for what were two (its condition, and its speed
+-- and what it is doing), with its modules beside it (drawRack).
+--
+-- On the left its three layers and its capacitor: and, for a hull with
+-- an ore hold or a bay for ships, how full that is (the panel grows
+-- upward by a row for each: its foot stays where it is). On the right
+-- how fast it is going, of how fast it can; what it is doing; what
+-- somebody else is doing about it; and its own buttons: to stop, and,
+-- for a hull that has them, its own cloak and the gun along its bow.
+-- Returns where the panel's top is. (A script's names are what they
+-- were: "STOP", "Cloak", "BowGun".)
+local STATE_W, STATE_H = 620, 140
+local function drawState(session: Session.Session, ball: State.Ball, x: number, bottom: number): number
+  local game = session.game
   local v = ball.vitals
   local rows: { { label: string, value: number, max: number, color: vector } } = {
-    { label = "Shield", value = v.shield, max = v.shieldMax, color = SHIELD },
-    { label = "Armor", value = v.armor, max = v.armorMax, color = ARMOR },
-    { label = "Hull", value = v.hull, max = v.hullMax, color = HULL },
-    { label = "Capacitor", value = v.capacitor, max = v.capacitorMax, color = CAPACITOR },
+    { label = "Shield", value = v.shield, max = v.shieldMax, color = Theme.SHIELD },
+    { label = "Armour", value = v.armor, max = v.armorMax, color = Theme.ARMOR },
+    { label = "Hull", value = v.hull, max = v.hullMax, color = Theme.HULL },
   }
   -- (a hull with no shield has no row for one: the Nimia's)
   if v.shieldMax <= 0 then
     table.remove(rows, 1)
-    y += 22
   end
   local oreSize, oreUsed = Core.Query.OreHold(game, ball.id)
   if oreSize > 0 then
     table.insert(rows, { label = "Ore hold", value = oreUsed, max = oreSize, color = ORE })
-    y -= 22
   end
   local baySize, bayUsed = Core.Query.ShipBay(game, ball.id)
   if baySize > 0 then
     table.insert(rows, { label = "Ship bay", value = bayUsed, max = baySize, color = ORE })
-    y -= 22
   end
-  Im.Panel(x, y, 220, 12 + #rows * 22)
-  for index, row in rows do
-    local rowY = y + 10 + (index - 1) * 22
-    Im.Text(row.label, x + 10, rowY - 2, 13, Im.DIM)
-    bar(x + 78, rowY + 3, 92, 8, row.value, row.max, row.color)
-    Im.TextRight(whole(row.value), x + 212, rowY - 2, 13, Im.TEXT)
+  local height = STATE_H + math.max(0, #rows - 3) * 22
+  local y = bottom - 8 - height
+  local split = 286
+  Im.Frame(x, y, STATE_W, height)
+  Im.Flat(x + split, y + 1, 1, height - 2, Theme.EDGE)
+
+  -- Its condition.
+  local line = y + 13
+  for _, row in rows do
+    Im.Text(row.label, x + 14, line, 13, Theme.DIM)
+    Im.Flat(x + 74, line + 4, 106, 8, Theme.DIM, 0.18)
+    if row.max > 0 then
+      Im.Flat(x + 74, line + 4, 106 * math.clamp(row.value / row.max, 0, 1), 8, row.color)
+    end
+    local of = ` / {Format.Whole(math.floor(row.max + 0.5))}`
+    Im.Text(of, x + split - 14 - Im.TextWidth(of, 13), line, 13, Theme.FAINT)
+    local now = Format.Whole(math.floor(row.value + 0.5))
+    Im.Text(now, x + split - 14 - Im.TextWidth(of, 13) - Im.TextWidth(now, 13), line, 13, Theme.TEXT)
+    line += 22
   end
+  -- (its capacitor, in twenty cells)
+  line = y + height - 50
+  Im.Text("Capacitor", x + 14, line, 13, Theme.DIM)
+  local of = ` / {Format.Whole(math.floor(v.capacitorMax + 0.5))}`
+  Im.Text(of, x + split - 14 - Im.TextWidth(of, 13), line, 13, Theme.FAINT)
+  local now = Format.Whole(math.floor(v.capacitor + 0.5))
+  Im.Text(now, x + split - 14 - Im.TextWidth(of, 13) - Im.TextWidth(now, 13), line, 13, Theme.TEXT)
+  local lit = if v.capacitorMax > 0 then math.floor(20 * math.clamp(v.capacitor / v.capacitorMax, 0, 1) + 0.5) else 0
+  local cell = (split - 28 - 19 * 2) / 20
+  for index = 1, 20 do
+    Im.Flat(x + 14 + (index - 1) * (cell + 2), line + 21, cell, 14, Theme.CAPACITOR, if index <= lit then 1 else 0.16)
+  end
+
+  -- Its speed, and what it is doing.
+  local rx, rw = x + split + 14, STATE_W - split - 28
+  local speed = math.sqrt(ball.vx ^ 2 + ball.vy ^ 2 + ball.vz ^ 2)
+  local fast = Format.Speed(speed)
+  Im.Strong(fast, rx, y + 10, 28, Theme.TEXT)
+  Im.Text(`of {Format.Speed(ball.maxVelocity)}`, rx + Im.StrongWidth(fast, 28) + 10, y + 23, 13, Theme.DIM)
+  Im.Flat(rx, y + 48, rw - 98, 6, Theme.DIM, 0.18)
+  if ball.maxVelocity > 0 then
+    Im.Flat(rx, y + 48, (rw - 98) * math.clamp(speed / ball.maxVelocity, 0, 1), 6, Theme.ACCENT)
+  end
+  local doing = describe(game, ball)
+  while #doing > 4 and Im.StrongWidth(doing, 14) > rw - 98 do
+    doing = string.sub(doing, 1, -6) .. "..."
+  end
+  Im.Strong(doing, rx, y + 62, 14, Theme.ACCENT)
+  -- (and what somebody else is doing about either: Tactical/Combat. And
+  -- whether anybody can see the ship at all, or only from close in: in
+  -- a cloud of gas.)
+  local across = rx
+  local function flag(word: string, color: vector)
+    across += Im.Pill(word, across, y + 86, color) + 6
+  end
+  if v.scrambled then
+    flag("WARP SCRAMBLED", Theme.BAD)
+  end
+  if v.entangle < 1 then
+    flag("ENTANGLED", Theme.BAD)
+  end
+  if v.paint > 1 or v.damp < 1 then
+    flag(if v.damp < 1 then "DAMPENED" else "PAINTED", Theme.CAUTION)
+  end
+  if Core.Query.Cloaked(game, ball.id) then
+    flag("CLOAKED", Theme.ACCENT)
+  else
+    local veiled, sight = Core.Query.Veiled(game, ball.id)
+    if veiled then
+      flag("IN VAPOUR", Theme.ACCENT)
+      Im.Text(`nothing locks you from beyond {Format.Distance(sight)}, nor you it`, rx, y + 108, 12, Theme.DIM)
+    end
+  end
+
+  -- Its own buttons.
+  local was = Im.Plain(true)
+  local bx = x + STATE_W - 14 - 84
+  local inWarp = ball.warp ~= nil and ball.warp.stage == "warp"
+  local stop = Keys.Did("stop") and not inWarp
+  Im.Tone("danger")
+  Im.Because("Not in warp")
+  if Im.Button("STOP", bx, y + 12, 84, 28, not inWarp) or stop then
+    Session.Order(session, "Stop")
+  end
+  -- (a hull with a cloak of its own has it here, on and off: there is
+  -- no module of it in the rack. Tactical/Combat)
+  local has, on = Core.Query.OwnCloak(game, ball.id)
+  local by = y + 46
+  if has then
+    local key = Keys.Did("cloak") and not inWarp
+    Im.Because("Not in warp")
+    if Im.Button(if on then "UNCLOAK" else "CLOAK", bx, by, 84, 26, not inWarp, "Cloak") or key then
+      Session.Do(session, { kind = if on then "Uncloak" else "Cloak", actor = 0 })
+    end
+    by += 32
+  end
+  -- (and a hull with a gun of its own, fixed along its bow, fires it
+  -- from here, at what is aimed at: the ship turns for it, and the gun
+  -- fires when it is pointed. Tactical/Combat)
+  local gun = Core.Query.Spinal(game, ball.id)
+  if gun then
+    local key = Keys.Did("bowgun") and not inWarp
+    local label = if gun.aiming then "AIMING" elseif gun.cycling > 0 then `{math.ceil(gun.cycling)} s` else "BOW GUN"
+    if Im.Button(label, bx, by, 84, 26, not inWarp and not gun.aiming and gun.cycling <= 0, "BowGun")
+      or (key and not gun.aiming and gun.cycling <= 0) then
+      Session.Do(session, { kind = "FireSpinal", actor = 0, target = aimOf(session, ball) })
+    end
+  end
+  Im.Plain(was)
+  return y
 end
 
 -- The pilot's boosters (Core/Character/Boosters): those at work, each
@@ -818,167 +1083,197 @@ local function drawBoosters(session: Session.Session, x: number, foot: number)
   end
 end
 
--- The fitted modules, as buttons: click to switch one on or off. A row
--- for each kind of slot that has anything in it: the high slots on top,
--- the mid slots under them, and the low slots (and the rigs) under
--- those, each row in the middle of the screen, the lowest at 'foot'. A row
--- is no wider than 'span': with more in it than fit at their full
--- width, they are drawn narrower. (They were one row, which ran under
--- the ship's own panel with five modules and off the screen with a
--- battleship's.)
-local RACK_ROWS: { [string]: number } = { high = 1, mid = 2, low = 3, rig = 3 }
-local function drawRack(session: Session.Session, game: Core.Game, ball: State.Ball, cx: number, foot: number, span: number)
+-- The fitted modules, as buttons beside the ship's state: click one, or
+-- press its key, to switch it on or off. Three rows (the owner's,
+-- 2026-11-15, with a picture of what was meant: "Rather than
+-- side-by-side, you should have 3 rows"): the high slots on top, the mid
+-- slots under them, the low slots under those, each as long as it needs
+-- to be, from 'x' and no further than 'room' wide. A button is the
+-- thing's sign with its key, how many rounds it has and how far through
+-- its cycle it is: what it is called and what it is doing are said
+-- while the cursor is on it. One that does nothing by itself is dim.
+--
+-- In a row with more in it than STACK_OVER, or than fit, the weapons
+-- that are the same (the same make, loaded with the same thing) are one
+-- button with their number on it, and are switched on and off together
+-- (the owner's: a hull of a hundred and forty hardpoints). The keys go
+-- by the buttons then, the first for the first.
+-- (A script's names: "Rack:<n>", the buttons counted from the first.)
+local RACK_ROWS: { [string]: number } = { high = 1, mid = 2, low = 3 }
+local RACK_LABELS = { "HIGH", "MID", "LOW" }
+local SLOT, SLOT_PITCH = 44, 48
+local STACK_OVER = 8
+type Slot = { items: { State.Item }, first: number, module: Modules.ModuleType }
+
+local function drawRack(session: Session.Session, game: Core.Game, ball: State.Ball, x: number, top: number, room: number)
   local fitted = Core.Query.Fitted(game, ball.id)
   if #fitted == 0 then
     return
   end
-  local now = game.state.tick * Constants.TICK
-  local gap, pitch = 6, 52
-  -- (how many are in each row, and how many rows there are)
   local counts: { number } = { 0, 0, 0 }
   for _, item in fitted do
-    counts[RACK_ROWS[item.place] or 3] += 1
+    local row = RACK_ROWS[item.place]
+    if row then
+      counts[row] += 1
+    end
   end
-  local below: { number } = { 0, 0, 0 }
-  for row = 2, 1, -1 do
-    below[row] = below[row + 1] + (if counts[row + 1] > 0 then 1 else 0)
-  end
-  local placed: { number } = { 0, 0, 0 }
+  local fits = math.max(4, (room - 34) // SLOT_PITCH)
+  local rows: { { Slot } } = { {}, {}, {} }
+  local stacked = false
   for index, item in fitted do
+    local row = RACK_ROWS[item.place]
+    if row == nil then
+      continue
+    end
     local module = Modules.byId[item.type]
-    local row = RACK_ROWS[item.place] or 3
-    local width = math.min(128, math.floor((span + gap) / counts[row]) - gap)
-    local letters = math.max(6, math.floor((width - 16) / 6.2))
-    local bx = cx - (counts[row] * (width + gap) - gap) / 2 + placed[row] * (width + gap)
-    placed[row] += 1
-    local y = foot - below[row] * pitch
-    local running: State.Running? = nil
-    for _, r in ball.vitals.running do
-      if r.item == item.id then
-        running = r
+    local into: Slot? = nil
+    if module.weapon and (counts[row] > STACK_OVER or counts[row] > fits) then
+      for _, slot in rows[row] do
+        if slot.items[1].type == item.type and slot.items[1].charge == item.charge then
+          into = slot
+        end
       end
     end
-    local active = module.weapon ~= nil or module.repair ~= nil or module.boost ~= nil or module.miner ~= nil
-      or module.hex ~= nil or module.salvager ~= nil
-    Im.Panel(bx, y, width, 46)
-    local hot, clicked = Im.Row(bx, y, width, 46, running ~= nil)
-    -- (and by its key: F1 for the first of the rack, until a person says otherwise)
-    local key = Keys.Rack(index)
-    if key and active then
-      Im.TextRight(Keys.Of(key), bx + width - 6, y + 5, 11, Im.DIM)
-      clicked = Keys.Did(key) or clicked
+    if into then
+      table.insert(into.items, item)
+      stacked = true
+    else
+      local slot: Slot = { items = { item }, first = index, module = module }
+      table.insert(rows[row], slot)
     end
-    Im.Text(shorten(module.short or module.name, letters - (if key and active then 2 else 0)), bx + 8, y + 5, 13,
-      if active then Im.TEXT else Im.DIM)
-    local note = if not active then "passive" else ""
-    if module.weapon then
-      note = if item.charge == "" then "empty"
-        elseif module.weapon.clip > 0 then `{item.rounds} rounds`
-        else shorten(Types.Info(item.charge).name, letters)
+  end
+  local runs: { [number]: State.Running } = {}
+  for _, running in ball.vitals.running do
+    runs[running.item] = running
+  end
+  local now = game.state.tick * Constants.TICK
+  local ordinal, pressable = 0, 0
+  for row = 1, 3 do
+    local y = top + (row - 1) * SLOT_PITCH
+    if #rows[row] > 0 then
+      Im.Strong(RACK_LABELS[row], x, y + 17, 10, Theme.DIM)
     end
-    if module.miner then
-      note = if running then "mining" else "idle"
-    end
-    if module.hex then
-      note = if not running then "idle" elseif Modules.Mends(module) then "mending"
-        elseif module.hex.kind == "capacitor" then "feeding" else "holding"
-    end
-    if module.salvager then
-      note = if running then "salvaging" else "idle"
-    end
-    if module.cloak then
-      note = if running then "cloaked" else "idle"
-    end
-    if running then
-      local duration = if module.weapon then module.weapon.duration
-        elseif module.repair then module.repair.duration
-        elseif module.miner then module.miner.duration
-        elseif module.hex then module.hex.duration
-        elseif module.salvager then module.salvager.duration
-        else module.boostDuration or 1
-      bar(bx + 8, y + 38, width - 16, 3, duration - math.max(0, running.next - now), duration, Im.ACCENT)
-      if running.stopping then
-        note = "stopping"
+    for place, slot in rows[row] do
+      ordinal += 1
+      local bx = x + 34 + (place - 1) * SLOT_PITCH
+      if bx + SLOT > x + room then
+        break
       end
-    end
-    Im.Text(note, bx + 8, y + 22, 12, Im.DIM)
-    if clicked and active then
+      local module = slot.module
+      local item = slot.items[1]
+      local running: State.Running? = nil
+      local going = 0
+      for _, each in slot.items do
+        if runs[each.id] then
+          running = running or runs[each.id]
+          going += 1
+        end
+      end
+      local active = module.weapon ~= nil or module.repair ~= nil or module.boost ~= nil or module.miner ~= nil
+        or module.hex ~= nil or module.salvager ~= nil
+      if active then
+        pressable += 1
+      end
+      local hot, clicked = Im.Area(`Rack:{ordinal}`, bx, y, SLOT, SLOT, active)
+      if hot then
+        Im.over = true
+      end
+      -- (on: green; off: a plain button, lighter under the cursor; one that does nothing by itself: dim)
       if running then
-        Session.Do(session, { kind = "DeactivateModule", actor = 0, item = item.id })
-      elseif module.salvager then
-        -- (on the wreck that is selected: a wreck needs no lock)
-        Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id, target = session.selected })
-      elseif module.weapon or module.miner or module.hex then
-        -- (at the pilot's target: aimOf)
-        Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id, target = aimOf(session, ball) })
+        Im.Flat(bx, y, SLOT, SLOT, vector.create(0.11, 0.21, 0.16), 0.94)
+        Im.Edge(bx, y, SLOT, SLOT, Theme.GOOD)
+      elseif active then
+        Im.Flat(bx, y, SLOT, SLOT, if hot then Theme.CONTROL else Theme.RAISED, 0.94)
+        Im.Edge(bx, y, SLOT, SLOT, Theme.EDGE_STRONG)
       else
-        Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id })
+        Im.Flat(bx, y, SLOT, SLOT, Theme.PANEL, 0.7)
+        Im.Edge(bx, y, SLOT, SLOT, Theme.EDGE)
       end
-    end
-    local _ = hot
-  end
-end
-
-local function drawNavigation(session: Session.Session, ball: State.Ball, x: number, y: number, width: number)
-  local game = session.game
-  -- (a hull with a cloak of its own and a gun of its own has three
-  -- buttons down the panel's side, where there is room for two: the
-  -- panel is that much taller, upward, its top level with the panel of
-  -- the ship's shield, armor and hull beside it)
-  local has, on = Core.Query.OwnCloak(game, ball.id)
-  local gun = Core.Query.Spinal(game, ball.id)
-  local more = if has and gun then 34 else 0
-  local pitch = if more > 0 then 30 else 28
-  y -= more
-  Im.Panel(x, y, width, 66 + more)
-  local speed = math.sqrt(ball.vx ^ 2 + ball.vy ^ 2 + ball.vz ^ 2)
-  Im.Heading(Format.Speed(speed), x + 14, y + 8, 26, Im.TEXT)
-  Im.Text(describe(game, ball), x + 14, y + 40, 15, Im.ACCENT)
-  -- how much of its top speed, as a bar
-  bar(x + 150, y + 22, 150, 4, speed, ball.maxVelocity, Im.ACCENT)
-  -- (and what somebody else is doing about either: Tactical/Combat)
-  if ball.vitals.scrambled then
-    Im.Text("WARP SCRAMBLED", x + 310, y + 44, 13, HULL)
-  end
-  if ball.vitals.entangle < 1 then
-    Im.Text("ENTANGLED", x + 310, y + 28, 13, HULL)
-  end
-  if ball.vitals.paint > 1 or ball.vitals.damp < 1 then
-    Im.Text(if ball.vitals.damp < 1 then "DAMPENED" else "PAINTED", x + 310, y + 12, 13, Im.WARN)
-  end
-  -- (and whether anybody can see the ship at all)
-  if Core.Query.Cloaked(game, ball.id) then
-    -- (up against the buttons, and not under them)
-    Im.TextRight("CLOAKED", x + width - 104, y + 12, 13, Im.ACCENT)
-  else
-    -- (or only from close in: in a cloud of gas. Said over the panel, where there is room for it)
-    local veiled, sight = Core.Query.Veiled(game, ball.id)
-    if veiled then
-      Im.Text(`IN VAPOUR: nothing locks you from beyond {Format.Distance(sight)}, nor you it`, x + 14, y - 20, 13, Im.ACCENT)
-    end
-  end
-  local inWarp = ball.warp ~= nil and ball.warp.stage == "warp"
-  local stop = Keys.Did("stop") and not inWarp
-  if Im.Button("STOP", x + width - 92, y + 8, 80, 24, not inWarp) or stop then
-    Session.Order(session, "Stop")
-  end
-  -- (and a hull with a cloak of its own has it here, on and off: there
-  -- is no module of it in the rack. Tactical/Combat)
-  if has then
-    local key = Keys.Did("cloak") and not inWarp
-    if Im.Button(if on then "UNCLOAK" else "CLOAK", x + width - 92, y + 8 + pitch, 80, 24, not inWarp, "Cloak") or key then
-      Session.Do(session, { kind = if on then "Uncloak" else "Cloak", actor = 0 })
-    end
-  end
-  -- (and a hull with a gun of its own, fixed along its bow, fires it
-  -- from here, at what is aimed at: the ship turns for it, and the gun
-  -- fires when it is pointed. Tactical/Combat)
-  if gun then
-    local key = Keys.Did("bowgun") and not inWarp
-    local label = if gun.aiming then "AIMING" elseif gun.cycling > 0 then `{math.ceil(gun.cycling)} s` else "BOW GUN"
-    if Im.Button(label, x + width - 92, y + 8 + (if has then 2 * pitch else pitch), 80, 24, not inWarp and not gun.aiming and gun.cycling <= 0, "BowGun")
-      or (key and not gun.aiming and gun.cycling <= 0) then
-      Session.Do(session, { kind = "FireSpinal", actor = 0, target = aimOf(session, ball) })
+      ItemIcon.Draw(item.type, bx + 9, y + 9, 26)
+      if not active then
+        Im.Flat(bx + 1, y + 1, SLOT - 2, SLOT - 2, Theme.PANEL, 0.6)
+      end
+      -- (by its key: F1 for the first of the rack, until a person says otherwise)
+      local key = Keys.Rack(if stacked then pressable else slot.first)
+      if key and active then
+        Im.Strong(Keys.Of(key), bx + 3, y + 1, 10, Theme.DIM)
+        clicked = Keys.Did(key) or clicked
+      end
+      -- What it is doing, in a word, for whoever asks.
+      local note = if not active then "does its work by itself" else "off"
+      local rounds: number? = nil
+      if module.weapon then
+        if item.charge == "" then
+          note = "empty"
+        elseif module.weapon.clip > 0 then
+          rounds = item.rounds
+          for _, each in slot.items do
+            rounds = math.min(rounds :: number, each.rounds)
+          end
+          note = `{Types.Info(item.charge).name}, {rounds} {if rounds == 1 then "round" else "rounds"}`
+        else
+          note = Types.Info(item.charge).name
+        end
+      end
+      if module.miner then
+        note = if running then "mining" else "idle"
+      end
+      if module.hex then
+        note = if not running then "idle" elseif Modules.Mends(module) then "mending"
+          elseif module.hex.kind == "capacitor" then "feeding" else "holding"
+      end
+      if module.salvager then
+        note = if running then "salvaging" else "idle"
+      end
+      if module.cloak then
+        note = if running then "cloaked" else "idle"
+      end
+      if rounds then
+        local text = tostring(rounds)
+        Im.Strong(text, bx + SLOT - 3 - Im.StrongWidth(text, 11), y + 1, 11, Theme.TEXT)
+      end
+      if #slot.items > 1 then
+        local text = `x{#slot.items}`
+        Im.Flat(bx + 1, y + SLOT - 18, Im.StrongWidth(text, 11) + 6, 13, Theme.PANEL, 0.85)
+        Im.Strong(text, bx + 4, y + SLOT - 18, 11, Theme.ACCENT)
+      end
+      if running then
+        local duration = if module.weapon then module.weapon.duration
+          elseif module.repair then module.repair.duration
+          elseif module.miner then module.miner.duration
+          elseif module.hex then module.hex.duration
+          elseif module.salvager then module.salvager.duration
+          else module.boostDuration or 1
+        Im.Flat(bx + 1, y + SLOT - 5, SLOT - 2, 4, Theme.GOOD, 0.2)
+        Im.Flat(bx + 1, y + SLOT - 5, (SLOT - 2) * math.clamp((duration - math.max(0, running.next - now)) / duration, 0, 1), 4, Theme.GOOD)
+        if running.stopping then
+          note = "stopping"
+        elseif module.weapon and going > 0 then
+          note = `firing: {note}`
+        end
+      end
+      if hot then
+        Im.Tip(if #slot.items > 1 then `{#slot.items} x {module.name}` else module.name, note, if key and active then Keys.Of(key) else nil,
+          bx - 20, top - 54)
+      end
+      if clicked and active then
+        -- (a button of several is all of them: off, if any is on; else on)
+        for _, each in slot.items do
+          if running then
+            if runs[each.id] then
+              Session.Do(session, { kind = "DeactivateModule", actor = 0, item = each.id })
+            end
+          elseif module.salvager then
+            -- (on the wreck that is selected: a wreck needs no lock)
+            Session.Do(session, { kind = "ActivateModule", actor = 0, item = each.id, target = session.selected })
+          elseif module.weapon or module.miner or module.hex then
+            -- (at the pilot's target: aimOf)
+            Session.Do(session, { kind = "ActivateModule", actor = 0, item = each.id, target = aimOf(session, ball) })
+          else
+            Session.Do(session, { kind = "ActivateModule", actor = 0, item = each.id })
+          end
+        end
+      end
     end
   end
 end
@@ -1087,7 +1382,7 @@ Station.Front = function()
   Windows.Raise("station")
 end
 -- (how many jobs are in hand, counted once a tick and not once a frame)
-local jobsTick, jobsInHand = -1, 0
+local jobsTick, jobsHeld = -1, {} :: { Core.MissionStatus }
 
 -- Whether the interface is drawn at all: not, for a picture of the
 -- scene alone (Hud.Hide, and GameDebug.Hud in the game app).
@@ -1212,24 +1507,20 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Im.Text(place, whereX + 14, whereY + 56, 13, Theme.TEXT)
       Im.Text(craft, whereX + 14, whereY + 73, 13, Theme.DIM)
       Im.Strong(wallet, whereX + whereWidth - 12 - Im.StrongWidth(wallet, 13), whereY + 73, 13, Theme.TEXT)
-      -- Under it, what is being said: the last thing that happened, and
-      -- what is the matter with the system, if anything is.
-      local said = whereY + whereHeight + 4
-      if session.message ~= "" and game.state.tick - session.messageTick < 10 then
-        Im.Text(session.message, whereX + 2, said, 16, Im.WARN)
-        said += 22
-      end
+      -- Under it, what is the matter with the system, if anything is.
+      local said = whereY + whereHeight + 6
       -- (whether pirates are massing here: Tactical/Surges)
       local surge = Core.Query.Surge(game)
-      if surge and surge.system == player.system then
+      local surgeHere = surge ~= nil and surge.system == player.system
+      if surge and surgeHere then
         Im.Text(`PIRATE SURGE  bounties doubled, {Format.Duration(surge.left)} left`, whereX + 2, said, 13, Theme.BAD)
-        said += 18
       end
       -- (and whether somebody's fleet has its lanes shut: Core/Strategic/Wars)
       local blockading, why = Core.Query.Blockade(game)
+      local blockadedHere = blockading ~= nil
       if blockading then
         Im.Text(`BLOCKADED by the {blockading}: {if why == "siege" then "a siege" else "they are claiming it"}. Little comes in or goes out`,
-          whereX + 2, said, 13, Theme.CAUTION)
+          whereX + 2, said + (if surgeHere then 18 else 0), 13, Theme.CAUTION)
       end
 
       if scene.warp > 0 and ball and ball.warp then
@@ -1240,15 +1531,62 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         Im.Text(line, cx - Im.TextWidth(line, 16) / 2, top + 154, 16, Im.TEXT)
       end
 
-      local panelWidth = 372
-      local panelX = right - panelWidth - 16
-      -- The ship's own panels are in the middle of the foot of the screen:
-      -- or as far right of it as leaves the rows beside the dock (the
-      -- fleet's, the drones': 440 px wide) and the ship's state clear.
-      local navX = math.max(left + (w.size.x - 520) / 2, edge + 8 + 440 + 8 + 232)
+      local panelWidth = 400
+      local panelX = right - panelWidth - 12
+      -- The ship's own console is at the foot of the screen, a little left
+      -- of its middle, with the modules beside it on the right: or as far
+      -- right as leaves the rows beside the dock (the fleet's, the
+      -- drones': 440 px wide) clear.
+      local consoleX = math.max(edge + 8 + 440 + 8, left + (w.size.x - STATE_W) / 2 - 130)
+      -- (the boosters: over the console's right end in space, and at the foot of the screen docked)
+      local boostersX, boostersFoot = consoleX + STATE_W - 316, bottom - 20
+      -- Beside the corner's panel, under what is locked: the last thing
+      -- that happened, for a few seconds, in the colour of what kind of
+      -- thing it is (Session.Say).
+      local noticeX, noticeY = whereX + whereWidth + 12, top + 12
+      if ball then
+        local room = panelX - 12 - noticeX
+        local perRow = math.max(1, (room + 6) // 174)
+        noticeY += ((#ball.vitals.locks + perRow - 1) // perRow) * 76
+      end
+      if session.message ~= "" and game.state.tick - session.messageTick < 10 then
+        local kind = session.messageKind
+        local tint = if kind == "good" then Theme.GOOD elseif kind == "warn" then Theme.CAUTION elseif kind == "bad" then Theme.BAD else Theme.DIM
+        local wide = Im.TextWidth(session.message, 14) + 26
+        Im.Flat(noticeX, noticeY, wide, 28, Theme.PANEL, 0.94)
+        Im.Edge(noticeX, noticeY, wide, 28, Theme.EDGE)
+        Im.Flat(noticeX, noticeY, 3, 28, tint)
+        Im.Text(session.message, noticeX + 13, noticeY + 6, 14, if kind == "plain" then Theme.TEXT else tint)
+      end
       if ball then
         -- (beside the corner's panel, not over it)
-        drawTargets(session, game, ball, whereX + whereWidth + 12, top + 20)
+        drawTargets(session, game, ball, entries, whereX + whereWidth + 12, top + 12, panelX - 12 - (whereX + whereWidth + 12))
+        -- The jobs in hand, under the corner's panel: what each still
+        -- wants and how long it can be kept. In space they were not to
+        -- be seen at all. (Docked, they are the Jobs page's.)
+        if jobsTick ~= game.state.tick then
+          jobsTick, jobsHeld = game.state.tick, Core.Query.Missions(game).inHand
+        end
+        if #jobsHeld > 0 then
+          local shown = math.min(4, #jobsHeld)
+          local jy = said + (if blockadedHere then 20 else 0) + (if surgeHere then 18 else 0)
+          local tall = 30 + shown * 44 + (if #jobsHeld > shown then 18 else 0)
+          Im.Frame(whereX, jy, whereWidth, tall)
+          Im.Heading(`IN HAND  {#jobsHeld}`, whereX + 12, jy + 8, 15, Theme.DIM)
+          for index = 1, shown do
+            local held = jobsHeld[index]
+            local ry = jy + 30 + (index - 1) * 44
+            Im.Flat(whereX + 1, ry - 2, whereWidth - 2, 1, Theme.EDGE)
+            local kept = Format.Duration(held.left)
+            Im.Text(kept, whereX + whereWidth - 12 - Im.TextWidth(kept, 12), ry + 5, 12, if held.left < 6 * 3600 then Theme.CAUTION else Theme.DIM)
+            Im.Strong(List.Cut(held.title, whereWidth - 36 - Im.TextWidth(kept, 12), 14, true), whereX + 12, ry + 3, 14, Theme.TEXT)
+            Im.Text(List.Cut(if held.ready then "done: hand it in" else held.why, whereWidth - 24, 12, false), whereX + 12, ry + 22, 12,
+              if held.ready then Theme.GOOD else Theme.DIM)
+          end
+          if #jobsHeld > shown then
+            Im.Text(`and {#jobsHeld - shown} more`, whereX + 12, jy + tall - 20, 12, Theme.FAINT)
+          end
+        end
         -- A key (Tab) picks out the next ship that would fire on the pilot,
         -- nearest first and round again.
         if Keys.Did("next") then
@@ -1282,12 +1620,12 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             panelX + panelWidth - 12, top + 2, 11, Im.ACCENT)
         end
         drawSelected(session, entries, ball, panelX, top + 16, panelWidth)
-        drawOverview(session, entries, panelX, top + 182, panelWidth, math.min(600, bottom - top - 272), marks)
-        -- (over the ship's own panel, and no wider than leaves the drones'
-        -- row and the fleet's panel, which end 464 px in, clear)
-        drawRack(session, game, ball, navX + 260, bottom - 172, math.max(400, w.size.x - 2 * 476))
-        drawNavigation(session, ball, navX, bottom - 86, 520)
-        drawStatus(game, ball, navX - 232, bottom - 120)
+        -- (the overview ends short of the modules, which are under it at the foot of the screen)
+        drawOverview(session, entries, panelX, top + 182, panelWidth, math.min(600, bottom - top - 182 - STATE_H - 28), marks)
+        local stateTop = drawState(session, ball, consoleX, bottom)
+        local rackX = consoleX + STATE_W + 10
+        drawRack(session, game, ball, rackX, bottom - 8 - STATE_H, right - 8 - rackX)
+        boostersFoot = stateTop - 8
       else
         -- The docked screen is a window (Game/UI/Windows): in the middle
         -- until it is put somewhere, moved by its heading, and drawn
@@ -1310,14 +1648,15 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         Windows.Close("station")
       end
       -- (beside the ship's own panels in space, and in the same place docked)
-      drawBoosters(session, navX + 532, bottom - 20)
+      drawBoosters(session, boostersX, boostersFoot)
       -- The dock, down the left edge (Game/UI/Dock): drawn before the
       -- windows, which keep clear of it, so that what one of its buttons
       -- opens is drawn this same frame.
       local docked = ball == nil
       if jobsTick ~= game.state.tick then
-        jobsTick, jobsInHand = game.state.tick, #Core.Query.Missions(game).inHand
+        jobsTick, jobsHeld = game.state.tick, Core.Query.Missions(game).inHand
       end
+      local jobsInHand = #jobsHeld
       local steps, guided = Core.Query.Guide(game)
       local pressed = Dock.Draw(w.pos.x, top, bottom, function(id: string): Dock.State
         local tab = TAB_OF[id]
@@ -1466,25 +1805,33 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       end
       -- (from here down, what was set out from the screen's left edge is set out from the dock's)
       left = edge - 16
-      -- Where the pilot means to go, and the autopilot's switch: a row
-      -- of its own over the buttons at the foot of the screen (beside
-      -- them is the ship's own panel, in space), whatever else is open.
+      -- Beside the dock at the foot of the screen, one over another from
+      -- the foot up, each there only when there is something to put in
+      -- it: where the pilot means to go, with the autopilot's switch
+      -- (docked or in space, whatever else is open); the drones; and the
+      -- hired pilots. To the new look.
+      local wasPlain = Im.Plain(true)
+      local stack = bottom - 8
       if session.destination ~= 0 then
         local route = Session.Route(session)
         local name = game.state.galaxy.systems[session.destination].name
-        Im.Panel(left + 24, bottom - 96, 440, 34)
-        Im.Text(`To {name}: {math.max(0, #route - 1)} {if #route == 2 then "jump" else "jumps"}`, left + 36, bottom - 87, 14, Im.ACCENT)
-        if Im.Toggle(if session.autopilot then "Autopilot on" else "Autopilot", left + 338, bottom - 93, 120, 28, session.autopilot,
+        stack -= 34
+        Im.Frame(left + 24, stack, 440, 34)
+        Im.Strong(`To {name}`, left + 36, stack + 9, 14, Theme.CAUTION)
+        Im.Text(`{math.max(0, #route - 1)} {if #route == 2 then "jump" else "jumps"}`, left + 44 + Im.StrongWidth(`To {name}`, 14), stack + 9, 14, Theme.DIM)
+        if Im.Toggle(if session.autopilot then "Autopilot on" else "Autopilot", left + 344, stack + 4, 114, 26, session.autopilot,
           "Autopilot") then
           session.autopilot = not session.autopilot
         end
+        stack -= 8
       end
       -- The drones, if there are any aboard or out: a row over that.
       if ball then
         local drones = Core.Query.Drones(game)
         if drones.carried + drones.out > 0 then
-          local dy = bottom - 138
-          Im.Panel(left + 24, dy, 440, 34)
+          local dy = stack - 34
+          stack = dy - 8
+          Im.Frame(left + 24, dy, 440, 34)
           Im.Text(`DRONES  {drones.out} out, {drones.carried} aboard`, left + 36, dy + 9, 13,
             if drones.out > 0 then Im.TEXT else Im.DIM)
           if Im.Button("Launch", left + 226, dy + 4, 70, 26, (Session.CanDo(session, { kind = "LaunchDrones", actor = 0 })),
@@ -1518,8 +1865,8 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       -- their ships are holding up. Over the drones' row.
       local fleet = Core.Query.Fleet(game)
       if #fleet > 0 then
-        local fy = bottom - 210 - 22 * #fleet
-        Im.Panel(left + 24, fy, 440, 64 + 22 * #fleet)
+        local fy = stack - (64 + 22 * #fleet)
+        Im.Frame(left + 24, fy, 440, 64 + 22 * #fleet)
         -- An order is for everybody, or for the one pilot whose row has
         -- been picked out by a click (and a click again lets them go).
         local one: Core.FleetRow? = nil
@@ -1624,6 +1971,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           end
         end
       end
+      Im.Plain(wasPlain)
       -- The windows, over all of that; and over them the menu one of
       -- them has up, whatever is being carried from one to another, and
       -- what is said of the thing the cursor is on.

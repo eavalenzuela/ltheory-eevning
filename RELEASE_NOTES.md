@@ -20,6 +20,13 @@ the lines beginning `- ` under it.
 - The thing you choose has one page: buy and sell, where else it is sold, its price day by day, what it goes for nearby, and standing orders. The price chart is always there; there is no History side any more.
 - My orders and Contracts are pages of the market's window.
 - A button you cannot press says why when the cursor is on it. A name too long for its column is said in full the same way.
+- In space, your ship's condition, its speed and what it is doing are one panel at the foot of the screen, with its modules beside it in three rows: high slots over mid over low. A module is a button with its key, its rounds and how far through its cycle it is. Hold the cursor on one to see what it is and what it is doing.
+- On a hull with more than eight modules in a row, weapons that are the same are one button with their number on it, switched on and off together.
+- The overview has six presets as tabs: Default, Combat, Mining, Exploration, Travel, Salvaging. Each lists ships and what its name says: rocks are on Mining, planets and moons on Travel, drones and batteries on Combat. Whatever you have selected, locked or are travelling to is always listed.
+- An overview row says what kind of thing it is and, for a ship, how fast it is going. Places in the system you are in are listed without the system's name in front.
+- A locked target's card shows how far off it is and how fast it is going.
+- Your jobs in hand are listed under the corner panel while you are in space.
+- Notices are coloured by what they are: green for a gain, amber for a warning, red for a loss or a refusal.
 - The other screens inside the windows are as they were. They are being made over one at a time.
 
 ## Four small mends to the screens

@@ -34,6 +34,10 @@ export type Session = {
   events: { Space.Event },    -- the events of the ticks taken this frame
   message: string,            -- the last thing worth telling the player
   messageTick: number,
+  -- What kind of thing it is, for the colour it is said in: "good" (a
+  -- gain, a thing done), "warn" (a thing to look to), "bad" (a loss, a
+  -- refusal) or "plain".
+  messageKind: string,
   -- Where the pilot means to go: a system, or 0. With 'autopilot' the
   -- ship flies there itself, gate by gate, by the fewest jumps or (with
   -- 'safest') the least dangerous way (Galaxy.Route).
@@ -64,7 +68,7 @@ local STANDOFF: { [string]: number } = { planet = 1, moon = 1.5, sun = 4 }
 function Session.New(galaxySeed: number, historySeed: number): Session
   return {
     game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, traffic = true, wars = true, starter = true }),
-    clock = Clock.New(), selected = 0, target = 0, aimed = {}, aimedAt = 0, events = {}, message = "", messageTick = 0, epoch = 1,
+    clock = Clock.New(), selected = 0, target = 0, aimed = {}, aimedAt = 0, events = {}, message = "", messageTick = 0, messageKind = "plain", epoch = 1,
     destination = 0, autopilot = false, safest = false, trying = {},
   }
 end
@@ -82,9 +86,14 @@ function Session.Try(session: Session, type: string?)
   end
 end
 
-function Session.Say(session: Session, text: string)
+-- Say something to the player: the last thing said is on the screen for
+-- a few seconds. 'kind' is what kind of thing it is ("good", "warn",
+-- "bad" or "plain"); not given, credits coming in are good news and
+-- anything else is plain.
+function Session.Say(session: Session, text: string, kind: string?)
   session.message = text
   session.messageTick = session.game.state.tick
+  session.messageKind = kind or (if string.sub(text, 1, 1) == "+" then "good" else "plain")
 end
 
 -- Tell the player about an event that concerns them.
@@ -92,7 +101,7 @@ function Session.Notice(session: Session, event: Space.Event)
   local mine = session.game.state.player.ship
   local kind = event.kind
   if kind == "CommandRejected" then
-    Session.Say(session, `{event.command}: {tostring(event.reason)}`)
+    Session.Say(session, `{event.command}: {tostring(event.reason)}`, "bad")
   elseif kind == "PiratesArrived" and event.wave then
     Session.Say(session, `Wave {event.wave} of {event.of}: ` .. (if event.chief then "the camp's chief is out"
       .. (if event.count > 1 then `, with {event.count - 1} more` else "")
@@ -107,7 +116,7 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, (if event.count == 1 then "A pirate has arrived" else `{event.count} pirates have arrived`)
       .. (if (event.captains or 0) > 0 then (if event.count == 1 then ": a captain" else ", a captain among them") else ""))
   elseif kind == "FleetAttacked" then
-    Session.Say(session, `{event.name} is under attack at {event.where}`)
+    Session.Say(session, `{event.name} is under attack at {event.where}`, "warn")
   elseif kind == "PatrolRetired" then
     Session.Say(session, `{event.name} is going in to mend`)
   elseif kind == "WaveDown" then
@@ -129,7 +138,7 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "WardLost" then
     Session.Say(session, if event.escort then "The tender is destroyed" else "The survey rig is destroyed")
   elseif kind == "MissionFailed" then
-    Session.Say(session, `A job is lost: {event.title}`)
+    Session.Say(session, `A job is lost: {event.title}`, "bad")
   elseif kind == "CorporationFounded" then
     Session.Say(session, `{event.name} is founded: your hired pilots work for it from now on`)
   elseif kind == "WorksSighted" then
@@ -144,7 +153,7 @@ function Session.Notice(session: Session, event: Space.Event)
     local sign = if event.amount >= 0 then "+" else "-"
     Session.Say(session, `{sign}{math.abs(event.amount)} credits ({event.reason})`)
   elseif kind == "Ejected" then
-    Session.Say(session, "Your ship is lost. You are in your capsule: warp to a station")
+    Session.Say(session, "Your ship is lost. You are in your capsule: warp to a station", "bad")
   elseif kind == "Respawned" then
     -- (at home: the station the pilot keeps a berth at)
     local home = Core.Query.Body(session.game, event.station)
@@ -155,7 +164,7 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "ShipGranted" then
     Session.Say(session, "You have been given a new ship")
   elseif kind == "ModuleStopped" and event.ball == mine and event.reason ~= "switched off" then
-    Session.Say(session, `A module stopped: {event.reason}`)
+    Session.Say(session, `A module stopped: {event.reason}`, "warn")
   elseif kind == "Looted" and event.ship == mine then
     Session.Say(session, if event.left > 0 then `Looted {event.taken}; {event.left} would not fit` else `Looted {event.taken}`)
   elseif kind == "Mined" and event.ball == mine then
@@ -165,9 +174,9 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "Reprocessed" and event.ship == mine then
     Session.Say(session, `Refined {event.units} units of ore`)
   elseif kind == "LockLost" and event.ball == mine and tostring(event.reason) ~= "unlocked" then
-    Session.Say(session, `Lock lost: {event.reason}`)
+    Session.Say(session, `Lock lost: {event.reason}`, "warn")
   elseif kind == "SkillTrained" then
-    Session.Say(session, `{Skills.byId[event.skill].name} trained to level {event.level}`)
+    Session.Say(session, `{Skills.byId[event.skill].name} trained to level {event.level}`, "good")
   elseif kind == "SkillLearned" then
     Session.Say(session, `Learned {Skills.byId[event.skill].name}: it can be trained now`)
   elseif kind == "OrderChanged" then
@@ -182,7 +191,7 @@ function Session.Notice(session: Session, event: Space.Event)
         .. (if copy then `, and the copy has its {event.back} runs not used` else "")
       else `Called off: nothing was made yet, and what went into it is lost. The {if copy then "copy" else "blueprint"} is back in the hangar`)
   elseif kind == "JobDone" then
-    Session.Say(session, `Built: {event.quantity} x {Types.Info(event.product).name}`)
+    Session.Say(session, `Built: {event.quantity} x {Types.Info(event.product).name}`, "good")
   elseif kind == "ResearchDone" then
     Session.Say(session, `Research done: {Types.Info(event.blueprint).name}, {event.what} level {event.level}`)
   elseif kind == "InventionDone" then

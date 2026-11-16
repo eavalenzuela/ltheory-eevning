@@ -135,6 +135,48 @@ local SIGNS: { [string]: () -> { Glyph } } = {
   minus = function()
     return line(-0.6, 0, 0.6, 0)
   end,
+  -- what a thing out in space is, on its row of the overview
+  drone = function()
+    return all(ring(0, 0, 0.6), line(-0.3, 0, 0.3, 0), line(0, -0.3, 0, 0.3))
+  end,
+  battery = function()
+    return all(path({ v(-0.7, 0.8), v(-0.7, 0.1), v(0.7, 0.1), v(0.7, 0.8) }), path({ v(-0.35, 0.1), v(-0.35, -0.4), v(0.35, -0.4), v(0.35, 0.1) }),
+      line(0, -0.4, 0, -0.9))
+  end,
+  station = function()
+    return all(line(0, -0.9, 0, 0.9), line(-0.5, -0.5, 0.5, -0.5), line(-0.8, 0, 0.8, 0), line(-0.4, 0.5, 0.4, 0.5))
+  end,
+  gate = function()
+    return all(ring(0, 0, 0.8), ring(0, 0, 0.32))
+  end,
+  planet = function()
+    return ring(0, 0, 0.75)
+  end,
+  moon = function()
+    return ring(0, 0, 0.45)
+  end,
+  sun = function()
+    return all(ring(0, 0, 0.42), line(0, -0.95, 0, -0.65), line(0, 0.65, 0, 0.95), line(-0.95, 0, -0.65, 0), line(0.65, 0, 0.95, 0))
+  end,
+  belt = function()
+    return all(path({ v(-0.8, -0.3), v(-0.4, -0.65), v(-0.05, -0.35), v(-0.25, 0.05), v(-0.7, 0.1) }, true),
+      path({ v(0.15, 0.2), v(0.55, 0.05), v(0.85, 0.4), v(0.6, 0.8), v(0.2, 0.65) }, true))
+  end,
+  rock = function()
+    return path({ v(-0.5, -0.7), v(0.3, -0.75), v(0.8, -0.1), v(0.45, 0.7), v(-0.4, 0.7), v(-0.8, 0.05) }, true)
+  end,
+  cloud = function()
+    return all(ring(-0.3, 0.1, 0.42), ring(0.3, 0.1, 0.42), ring(0, -0.3, 0.42))
+  end,
+  wreck = function()
+    return path({ v(-0.8, 0.7), v(-0.35, -0.5), v(0, 0.15), v(0.35, -0.75), v(0.8, 0.7) })
+  end,
+  site = function()
+    return path({ v(0, -0.8), v(0.8, 0.65), v(-0.8, 0.65) }, true)
+  end,
+  mark = function()
+    return all(path({ v(-0.5, -0.8), v(0.5, -0.8), v(0.5, 0.8), v(0, 0.35), v(-0.5, 0.8) }, true))
+  end,
   -- (what is folded, and what is laid open)
   right = function()
     return path({ v(-0.3, -0.6), v(0.35, 0), v(-0.3, 0.6) })
