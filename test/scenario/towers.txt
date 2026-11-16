@@ -9,18 +9,23 @@
 # is that one: what moves of it is in the scene as things of their own,
 # and goes on being moved, with nothing going wrong, for as long as it
 # is watched. Then a tower about a torus and one about a sphere, the
-# same way, and the towers put back as they were, of which nothing moves.
+# same way, and the towers put back as they were: as much of them moves
+# as did before any was tried (nothing, of a people whose towers are
+# still grown as a hull is, and what its picks have, of one whose towers
+# the owner has picked).
 #
 # covers: Game/View/Tower Game/View/Starbase
 
 wait 2
 lua GameDebug.Peaceful(true)
 lua assert(GameDebug.Docked(), 'a new game starts docked')
-lua _G.peoples = { 'vessari', 'talmar', 'orun', 'nimia', 'vail' }
-lua for _, people in _G.peoples do GameDebug.TowerPick(people, 7, 6, 'ring', 'cloud') end
 until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()
 frames 10
+lua _G.asWere = GameDebug.TowerMoving()
+lua _G.peoples = { 'vessari', 'talmar', 'orun', 'nimia', 'vail' }
+lua for _, people in _G.peoples do GameDebug.TowerPick(people, 7, 6, 'ring', 'cloud') end
+frames 20
 
 # Its rings and its lamps are things of their own, and are moved.
 lua _G.pieces, _G.kinds = GameDebug.TowerMoving()
@@ -38,10 +43,10 @@ frames 20
 lua assert(select(2, GameDebug.TowerMoving()):find('spin'), 'the wheel round a tower about a sphere turns')
 wait 2
 
-# And as they were: grown as a hull is, of which nothing moves.
+# And as they were.
 lua for _, people in _G.peoples do GameDebug.TowerPick(people) end
 frames 20
-lua assert(GameDebug.TowerMoving() == 0, 'nothing moves of the towers that are grown as a hull is')
+lua assert(GameDebug.TowerMoving() == _G.asWere, 'the towers put back should move as much as they did, which was ' .. _G.asWere)
 
 echo towers scenario passed
 quit

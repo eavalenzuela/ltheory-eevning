@@ -6,6 +6,12 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## New station towers
+
+- Every people's stations have new towers (the Vessari's, the Talmar's, the Orun's, the Unbound's, the Vail's and the Nimia's): a small, a middling and a large one each, no two alike. Rings turn, dishes scan, panels follow the sun and hazard lamps blink.
+- The Vail's towers are built about a wheel, with a small tower at the end of each spoke. The Nimia's are built about a sphere.
+- The modules round a station keep clear of a broad tower's rings and arms.
+
 ## A dock, and windows that keep out of each other's way
 
 - The first of the interface's rework. Down the left edge of the screen there is now a dock: a button for every window, docked or in space. Hold the cursor on one to see what it is and the key that opens it. It takes the place of the row of buttons at the foot of the screen and of the Guide button.

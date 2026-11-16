@@ -970,16 +970,55 @@ local LYING: { [string]: boolean } = { talmar = true }
 Starbase.GROWN = true
 export type Pick = { seed: number, size: number, style: string, square: boolean, masts: number,
   -- (of a tower built in sections, Game/View/Tower: how it is made, and what is said over its seed)
-  manner: string?, fold: number?, plan: string? }
+  manner: string?, fold: number?, plan: string?,
+  -- (whose look it wears, where that is not its own people's: one of Starbase.TOWER_PAINTS, as the browser's kept line says it)
+  paint: string? }
 local function pick(seed: number, size: number, style: string, square: boolean, masts: number): Pick
   return { seed = seed, size = size, style = style, square = square, masts = masts }
 end
+-- A pick of a tower built in sections, as the browser keeps one: its
+-- seed, its size, its build and its manner; its fold and where its
+-- weight is, where those are said over what its seed says (nil: as the
+-- seed says); and the paint it was kept in.
+local function sections(seed: number, size: number, build: string, manner: string, fold: number?, plan: string?, paint: string?): Pick
+  return { seed = seed, size = size, style = build, square = false, masts = 0, manner = manner, fold = fold, plan = plan, paint = paint }
+end
 local GROWN: { [string]: { Pick } } = {
-  vessari = { pick(3, 2, "blocky", true, 0), pick(11, 4, "blocky", true, 0), pick(20, 6, "blocky", true, 0) },
-  talmar = { pick(5, 2, "cloud", false, 0), pick(14, 4, "cloud", false, 0), pick(9, 6, "cloud", false, 0) },
-  orun = { pick(2, 2, "spar", false, 5), pick(7, 4, "spar", false, 5), pick(16, 6, "spar", false, 5) },
-  nimia = { pick(4, 2, "poured", false, 0), pick(8, 4, "poured", false, 0), pick(13, 6, "poured", false, 0) },
-  vail = { pick(6, 2, "blocky", false, 2), pick(12, 4, "blocky", false, 2), pick(17, 6, "blocky", false, 2) },
+  -- The owner's picks, 2026-11-15 ("vessari towers", a line each as the
+  -- browser keeps them: seed | size | build | manner | fold | weight |
+  -- paint | tower_size): the small, the middling and the large. Every
+  -- one is of size 8, its fold as its seed says, its weight in beads,
+  -- and kept in the Talmar's paint.
+  vessari = { sections(14051, 8, "gantry", "poured", nil, "beads", "talmar"), sections(56725, 8, "parasol", "poured", nil, "beads", "talmar"),
+    sections(41148, 8, "ring", "poured", nil, "beads", "talmar") },
+  -- ("talmar towers", the same day and the same way: three rings in flat
+  -- plate, six-fold, in the civil paint; the large one's weight at its ends.)
+  talmar = { sections(74964, 8, "ring", "blocky", 6, "beads", "civil"), sections(92814, 8, "ring", "blocky", 6, "beads", "civil"),
+    sections(41595, 8, "ring", "blocky", 6, "ends", "civil") },
+  -- ("orun towers", the same day: three of the mixed build in round skins,
+  -- in their own paint; the small one six-fold with its weight at its
+  -- ends, the others' weight in their middles and their fold as their
+  -- seeds say.)
+  orun = { sections(41597, 8, "mixed", "cloud", 6, "ends", "orun"), sections(36333, 8, "mixed", "cloud", nil, "middle", "orun"),
+    sections(74142, 8, "mixed", "cloud", nil, "middle", "orun") },
+  -- ("unbound towers", the same day: the pirates', who had the
+  -- Vessari's until then. Three of the mixed build, two in open frames
+  -- and the large one in flat plate, kept in the paint the browser calls
+  -- the Nimia's: for which, the Nimia having no look of their own yet,
+  -- it shows the Vessari's. They wear what was seen.)
+  unbound = { sections(79278, 8, "mixed", "spar", nil, "middle", "nimia"), sections(44225, 8, "mixed", "spar", nil, "middle", "nimia"),
+    sections(96371, 8, "mixed", "blocky", nil, "middle", "nimia") },
+  -- ("nimia towers", the last of the lists: three about a sphere, as was
+  -- ruled for them, in the Talmar's paint. The small and the middling
+  -- are of size 2, poured, their weight at their ends; the large of size
+  -- 8, in round skins, three-fold, its weight high.)
+  nimia = { sections(27181, 2, "spherical", "poured", nil, "ends", "talmar"), sections(20172, 2, "spherical", "poured", nil, "ends", "talmar"),
+    sections(34670, 8, "spherical", "cloud", 3, "high", "talmar") },
+  -- ("vail towers", the same day: three about a torus, as was ruled for
+  -- them, in round skins and the Orun's paint; of three, six and eight
+  -- spokes, the middling one of size 7.)
+  vail = { sections(66932, 8, "toroidal", "cloud", 3, "middle", "orun"), sections(2582, 7, "toroidal", "cloud", 6, "middle", "orun"),
+    sections(88513, 8, "toroidal", "cloud", 8, "middle", "orun") },
 }
 -- The sizes a tower can be grown at: how many plates are grown for each.
 Starbase.TOWER_SIZES = { 2, 3, 4, 5, 6, 7, 8, 9 }
@@ -1086,14 +1125,24 @@ function Starbase.Tower(faction: string, size: number): Made
   if Starbase.GROWN then
     local owner = if GROWN[faction] and Hull.looks[faction] then faction elseif GROWN[faction] and PAINTS[faction] then faction else "vessari"
     local paints = PAINTS[owner]
+    -- (the look a pick is drawn in: the one it says, or its own people's)
+    local function lookOf(chosen: Pick): Plates.Look
+      local wears = chosen.paint
+      if wears and PAINTS[wears] then
+        return PAINTS[wears][size]
+      elseif wears then
+        -- (a paint with no look of its own is the Vessari's, as the browser shows it: Starbase.Grown)
+        return Hull.looks[wears] or Hull.looks.vessari
+      end
+      return if paints then paints[size] else Hull.looks[owner]
+    end
     local tried = TRIED[`{faction}.{size}`]
     if tried then
-      local look = if paints then paints[size] else Hull.looks[owner]
-      return towerOf(`tower.tried.{owner}.{size}.{tried.seed}.{tried.size}.{tried.style}.{tried.manner}.{tried.fold}.{tried.plan}`, tried, look,
-        4.5 + 2.5 * size)
+      return towerOf(`tower.tried.{owner}.{size}.{tried.seed}.{tried.size}.{tried.style}.{tried.manner}.{tried.fold}.{tried.plan}.{tried.paint}`,
+        tried, lookOf(tried), 4.5 + 2.5 * size)
     end
     local grown = GROWN[owner][size]
-    return towerOf(`tower.grown.{owner}.{size}`, grown, if paints then paints[size] else Hull.looks[owner], 4.5 + 2.5 * size)
+    return towerOf(`tower.grown.{owner}.{size}`, grown, lookOf(grown), 4.5 + 2.5 * size)
   end
   local designs = TOWERS[faction] or TOWERS.vessari
   local owner = if TOWERS[faction] then faction else "vessari"
@@ -1119,11 +1168,23 @@ function Starbase.TowerPart(faction: string, size: number, at: vector, towerRadi
   local made = Starbase.Tower(faction, size)
   -- (a grown tower lies along z, whoever's it is)
   local lying = Starbase.GROWN or (LYING[faction] == true and TOWERS[faction] ~= nil)
+  local scale = towerRadius / made.radius
+  -- (a tower built in sections is not built about its own middle, and
+  -- its ends are not the same way off from where it began: it is stood
+  -- with its middle where the station is, as the browser stands it.
+  -- Until its first was picked, 2026-11-15, one stood as much as half
+  -- its height off)
+  local lower, upper = made.lower, made.upper
+  if lying and lower and upper then
+    at += vector.create(0, -(lower.z + upper.z) * 0.5 * scale, 0)
+  end
   return {
     id = `tower.{faction}.{size}`, model = made.model, at = at,
     look = if lying then vector.create(0, 1, 0) else vector.create(0, 0, 1),
     up = if lying then vector.create(0, 0, -1) else nil,
-    scale = towerRadius / made.radius, radius = towerRadius, movers = made.movers,
+    scale = scale, radius = towerRadius, movers = made.movers,
+    wide = if lying and lower and upper then math.max(math.abs(lower.x), math.abs(upper.x), math.abs(lower.y), math.abs(upper.y)) * scale
+      else nil,
   }
 end
 
@@ -1201,7 +1262,9 @@ local BATTERY = 26
 -- battery, and 'unit' then how many metres one of that weapon's is.
 -- ('up' is which way the model's own top goes, if not up.)
 export type Part = { id: string, model: Model, at: vector, look: vector, up: vector?, scale: number, radius: number, arm: string?,
-  unit: number?, movers: { Mover }? }
+  unit: number?, movers: { Mover }?,
+  -- (of a tower built in sections: how far from its upright it reaches, rings and arms and all)
+  wide: number? }
 
 export type Layout = { tower: Part, modules: { Part }, field: number }
 
@@ -1246,6 +1309,9 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
   local tower = Starbase.TowerPart(owner, type.size, vector.create(0, 0, 0), towerRadius)
   tower.id = type.id
   local layout: Layout = { tower = tower, modules = {}, field = if dark then 0 else radius }
+  -- (how far from the tower's upright the modules keep: clear of a
+  -- narrow tower as they were, and of the rings and arms of a broad one)
+  local clearOf = math.max(towerRadius * 0.55, (tower.wide or 0) * 1.04)
 
   -- Where each would like to be: round the tower by turns of the golden
   -- angle, on three levels, batteries farthest out.
@@ -1275,7 +1341,7 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
     else
       arrays += 1
       angle = start + arrays * 2.399963
-      out = towerRadius * 0.55 + module.radius + radius * (0.10 + 0.07 * (arrays % 3))
+      out = clearOf + module.radius + radius * (0.10 + 0.07 * (arrays % 3))
       height = radius * ({ 0.05, -0.24, 0.30 })[arrays % 3 + 1]
     end
     local flat = vector.create(math.cos(angle), 0, math.sin(angle))
@@ -1305,7 +1371,7 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
       -- (the tower is tall and narrow: stand clear of its axis)
       local flat = vector.create(a.at.x, 0, a.at.z)
       local off = vector.magnitude(flat)
-      local clear = towerRadius * 0.6 + a.radius
+      local clear = clearOf * 1.09 + a.radius
       if off < clear and math.abs(a.at.y) < towerRadius + a.radius then
         a.at += (if off > 1e-3 then flat / off else vector.create(1, 0, 0)) * (clear - off)
       end

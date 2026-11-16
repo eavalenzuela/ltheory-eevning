@@ -234,6 +234,19 @@ function Debug.Veil(): (number, number)
   return scene.veil, scene.system
 end
 
+-- What stands round the towers of the stations in the scene (their
+-- modules, and whatever moves of the towers themselves), each with its
+-- size and where it is from its station: for checking the view.
+function Debug.TowerPieces()
+  for id, works in scene.works do
+    local station = scene.proxies[id]
+    for index, object in works do
+      print(string.format("%d work %d: engine radius %.1f, scale %s, from the station %s", id, index, object:GetRadius(),
+        tostring(object:GetScale()), tostring(if station then object:GetPos() - station:GetPos() else object:GetPos())))
+    end
+  end
+end
+
 -- The engine objects in the scene, with their sizes: for checking the view.
 function Debug.Proxies()
   for id, object in scene.proxies do
@@ -267,11 +280,12 @@ end
 -- those are said over its seed. With no seed, they are what they were.
 -- Everything in the system is made again.
 function Debug.TowerPick(faction: string, seed: number?, size: number?, build: string?, manner: string?, fold: number?, plan: string?,
-  which: number?)
+  which: number?, paint: string?)
   for each = 1, 3 do
     if which == nil or which == each then
+      -- ('paint': whose look it wears, where that is not the people's own)
       Starbase.Try(faction, each, if seed then { seed = seed, size = size or 4, style = build or "mixed", square = false, masts = 0,
-        manner = manner, fold = fold, plan = plan } else nil)
+        manner = manner, fold = fold, plan = plan, paint = paint } else nil)
     end
   end
   scene.system = 0
