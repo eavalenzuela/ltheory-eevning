@@ -930,7 +930,15 @@ local function orunLarge(b: Builder)
   end
 end
 
-export type Made = { model: Model, radius: number }
+-- A piece of a tower that moves (Game/View/Tower): its model, drawn
+-- about its pivot; where its pivot is, in the tower's own measure; and
+-- how it moves.
+export type Mover = { model: Model, pivot: vector, motion: Tower.Motion }
+
+-- Something made: its model and how big it came out. A tower built in
+-- sections has also what moves of it, and the corners of the box that
+-- holds it and all of that, wherever it is turned.
+export type Made = { model: Model, radius: number, movers: { Mover }?, lower: vector?, upper: vector? }
 
 local TOWERS: { [string]: { (b: Builder) -> () } } = {
   vessari = { vessariSmall, vessariMedium, vessariLarge },
@@ -996,15 +1004,6 @@ function Starbase.Sectioned(style: string): boolean
   return table.find(Tower.BUILDS, style) ~= nil
 end
 
--- Draw the tower of a pick.
-local function drawn(b: Builder, chosen: Pick)
-  if Starbase.Sectioned(chosen.style) then
-    Tower.Build(b, { seed = chosen.seed, size = chosen.size, build = chosen.style, manner = chosen.manner or Tower.MANNERS[1],
-      fold = chosen.fold, plan = chosen.plan })
-  else
-    Hull.GrownTower(b, chosen.seed, Starbase.TOWER_SIZES[chosen.size] or 5, chosen.style, chosen.square, chosen.masts)
-  end
-end
 -- The paints a tower can be shown in by the browser: the factions whose look there is.
 Starbase.TOWER_PAINTS = { "vessari", "talmar", "orun", "kethri", "nimia", "vail", "civil" }
 
@@ -1024,16 +1023,77 @@ local function finish(key: string, draw: (b: Builder) -> (), look: Plates.Look, 
   return result
 end
 
+-- The tower of a pick, made: grown as a hull is, or built in sections
+-- with what moves of it apart.
+local function towerOf(key: string, chosen: Pick, look: Plates.Look, sheets: number): Made
+  if not Starbase.Sectioned(chosen.style) then
+    return finish(key, function(b: Builder)
+      Hull.GrownTower(b, chosen.seed, Starbase.TOWER_SIZES[chosen.size] or 5, chosen.style, chosen.square, chosen.masts)
+    end, look, sheets, 0.04)
+  end
+  local kept = made[key]
+  if kept then
+    return kept
+  end
+  local b = Plates.New(#key * 2.31, 0.04)
+  local count = 0
+  local pieces = Tower.Build(b, { seed = chosen.seed, size = chosen.size, build = chosen.style, manner = chosen.manner or Tower.MANNERS[1],
+    fold = chosen.fold, plan = chosen.plan }, function(): Builder
+    count += 1
+    return Plates.New(#key * 2.31 + count * 7.7, 0.04)
+  end)
+  local model, lower, upper = Plates.Finish(b, look, sheets)
+  local movers: { Mover } = {}
+  for _, piece in pieces do
+    if piece.b.kept > 0 then
+      local turning, low, high = Plates.Finish(piece.b, look, sheets)
+      local kind = piece.motion.kind
+      if kind == "blink" then
+        -- (which is where it is)
+        lower, upper = vector.min(lower, low), vector.max(upper, high)
+      elseif kind == "spin" then
+        -- (as far out as it reaches, all the way round the upright)
+        local far = math.max(math.abs(low.x), math.abs(high.x), math.abs(low.y), math.abs(high.y))
+        lower = vector.min(lower, piece.pivot + vector.create(-far, -far, low.z))
+        upper = vector.max(upper, piece.pivot + vector.create(far, far, high.z))
+      else
+        -- (as far as it reaches, whichever way it is turned)
+        local far = math.max(vector.magnitude(low), vector.magnitude(high))
+        lower = vector.min(lower, piece.pivot - vector.create(far, far, far))
+        upper = vector.max(upper, piece.pivot + vector.create(far, far, far))
+      end
+      table.insert(movers, { model = turning, pivot = piece.pivot, motion = piece.motion })
+    end
+  end
+  local size = upper - lower
+  local result: Made = { model = model, radius = math.max(size.x, size.y, size.z) / 2, movers = movers, lower = lower, upper = upper }
+  made[key] = result
+  return result
+end
+
+-- A tower to be tried in the game before it is anybody's
+-- (GameDebug.TowerPick): until the game is closed, a faction's tower of
+-- a size (1 to 3) is this pick; or, with none, what it was. Stations
+-- made before are what they were made as.
+local TRIED: { [string]: Pick? } = {}
+function Starbase.Try(faction: string, size: number, chosen: Pick?)
+  TRIED[`{faction}.{size}`] = chosen
+end
+
 -- The model of a faction's tower of a size (1 to 3). A faction whose
 -- tower nobody has drawn yet gets the Vessari's.
 function Starbase.Tower(faction: string, size: number): Made
   if Starbase.GROWN then
     local owner = if GROWN[faction] and Hull.looks[faction] then faction elseif GROWN[faction] and PAINTS[faction] then faction else "vessari"
-    local grown = GROWN[owner][size]
     local paints = PAINTS[owner]
-    return finish(`tower.grown.{owner}.{size}`, function(b: Builder)
-      drawn(b, grown)
-    end, if paints then paints[size] else Hull.looks[owner], 4.5 + 2.5 * size, 0.04)
+    local tried = TRIED[`{faction}.{size}`]
+    if tried then
+      local look = if paints then paints[size] else Hull.looks[owner]
+      return towerOf(`tower.tried.{owner}.{size}.{tried.seed}.{tried.size}.{tried.style}.{tried.manner}.{tried.fold}.{tried.plan}`, tried, look,
+        4.5 + 2.5 * size)
+    end
+    local grown = GROWN[owner][size]
+    return towerOf(`tower.grown.{owner}.{size}`, grown, if paints then paints[size] else Hull.looks[owner], 4.5 + 2.5 * size)
   end
   local designs = TOWERS[faction] or TOWERS.vessari
   local owner = if TOWERS[faction] then faction else "vessari"
@@ -1048,9 +1108,8 @@ function Starbase.Grown(chosen: Pick, paint: string): Made
   local paints = PAINTS[paint]
   local look = if paints then paints[2] else Hull.looks[paint] or Hull.looks.vessari
   local shade = math.clamp((chosen.size + 1) // 2, 1, 3)
-  return finish(`tower.pick.{chosen.seed}.{chosen.size}.{chosen.style}.{chosen.square}.{chosen.masts}.{chosen.manner}.{chosen.fold}.{chosen.plan}.{paint}`, function(b: Builder)
-    drawn(b, chosen)
-  end, look, 4.5 + 2.5 * shade, 0.04)
+  return towerOf(`tower.pick.{chosen.seed}.{chosen.size}.{chosen.style}.{chosen.square}.{chosen.masts}.{chosen.manner}.{chosen.fold}.{chosen.plan}.{paint}`,
+    chosen, look, 4.5 + 2.5 * shade)
 end
 
 -- A faction's tower of a size as a thing to put in a scene (Raise): its
@@ -1064,7 +1123,7 @@ function Starbase.TowerPart(faction: string, size: number, at: vector, towerRadi
     id = `tower.{faction}.{size}`, model = made.model, at = at,
     look = if lying then vector.create(0, 1, 0) else vector.create(0, 0, 1),
     up = if lying then vector.create(0, 0, -1) else nil,
-    scale = towerRadius / made.radius, radius = towerRadius,
+    scale = towerRadius / made.radius, radius = towerRadius, movers = made.movers,
   }
 end
 
@@ -1142,7 +1201,7 @@ local BATTERY = 26
 -- battery, and 'unit' then how many metres one of that weapon's is.
 -- ('up' is which way the model's own top goes, if not up.)
 export type Part = { id: string, model: Model, at: vector, look: vector, up: vector?, scale: number, radius: number, arm: string?,
-  unit: number? }
+  unit: number?, movers: { Mover }? }
 
 export type Layout = { tower: Part, modules: { Part }, field: number }
 
@@ -1265,12 +1324,82 @@ end
 
 local UP = vector.create(0, 1, 0)
 
+-- A piece of a tower that moves, in a scene: the thing it is there, how
+-- it moves, how big it is drawn, and the tower's own axes there (which
+-- way its drawing's z, y and x go in the scene).
+export type Moving = { object: Object, motion: Tower.Motion, size: number, look: vector, up: vector, right: vector, lit: boolean? }
+
+-- Put what moves of a tower into a scene: for a tower whose middle is
+-- at 'at', drawn 'size' to one of its own units, facing 'look' with
+-- 'up' above it. 'add' makes a thing of a model, in the scene. What is
+-- given back is for Starbase.Animate, every frame.
+function Starbase.Movers(movers: { Mover }?, add: (model: Model) -> Object, at: vector, look: vector, up: vector, size: number): { Moving }
+  local moving: { Moving } = {}
+  local l = vector.normalize(look)
+  local u = vector.normalize(up - l * vector.dot(up, l))
+  local right = vector.cross(u, l)
+  if movers then
+    for _, mover in movers do
+      local object = add(mover.model)
+      object:SetScale(vector.create(size, size, size))
+      object:SetPos(at + (right * mover.pivot.x + u * mover.pivot.y + l * mover.pivot.z) * size)
+      Object_SetAxes(object, l, u)
+      table.insert(moving, { object = object, motion = mover.motion, size = size, look = l, up = u, right = right })
+    end
+  end
+  return moving
+end
+
+-- Move what moves of a tower: 'time' is in seconds, and 'sun' the way
+-- to the sun from where the tower is.
+--   spin    it turns about the tower's upright
+--   scan    what it looks along goes slowly round, a little off the way it looks
+--   track   it turns about its own arm to put its face to the sun
+--   blink   it is lit for a share of its period, and for the rest is not there
+function Starbase.Animate(moving: { Moving }, time: number, sun: vector)
+  for _, piece in moving do
+    local motion = piece.motion
+    local function world(p: vector): vector
+      return piece.right * p.x + piece.up * p.y + piece.look * p.z
+    end
+    if motion.kind == "spin" then
+      local angle = time * (motion.rate or 0)
+      Object_SetAxes(piece.object, piece.look, world(vector.create(-math.sin(angle), math.cos(angle), 0)))
+    elseif motion.kind == "scan" then
+      local toward = motion.toward or vector.create(0, 0, 1)
+      local aside = if math.abs(toward.z) > 0.9 then vector.create(1, 0, 0) else vector.create(0, 0, 1)
+      local one = vector.normalize(vector.cross(toward, aside))
+      local other = vector.cross(toward, one)
+      local round = (time / (motion.period or 60) + (motion.phase or 0)) * 2 * math.pi
+      local cone = motion.cone or 0.3
+      local looks = toward * math.cos(cone) + (one * math.cos(round) + other * math.sin(round)) * math.sin(cone)
+      Object_SetAxes(piece.object, world(looks), world(one))
+    elseif motion.kind == "track" then
+      -- (its own x is along its arm, and its face is its own y)
+      local arm = world(motion.arm or vector.create(1, 0, 0))
+      local face = sun - arm * vector.dot(sun, arm)
+      if vector.magnitude(face) > 0.05 then
+        face = vector.normalize(face)
+        Object_SetAxes(piece.object, vector.cross(arm, face), face)
+      end
+    elseif motion.kind == "blink" then
+      local lit = (time / (motion.period or 1.2) + (motion.phase or 0)) % 1 < (motion.lit or 0.5)
+      if lit ~= piece.lit then
+        piece.lit = lit
+        local size = if lit then piece.size else piece.size * 0.001
+        piece.object:SetScale(vector.create(size, size, size))
+      end
+    end
+  end
+end
+
 -- Put a laid-out station into a scene: its tower, its modules, what
 -- stands on its batteries, and its field (if it has one), as scenery in
 -- 'container' with the station's middle at 'origin'. 'metres' is how
 -- long a metre is there. Returns the objects, the tower first.
-function Starbase.Raise(layout: Layout, container: Object, origin: vector, metres: number): { Object }
+function Starbase.Raise(layout: Layout, container: Object, origin: vector, metres: number): ({ Object }, { Moving })
   local objects: { Object } = {}
+  local moving: { Moving } = {}
   local function scenery(model: Model): Object
     local object = Object_Scenery({})
     Object_SetRenderable(object, model)
@@ -1284,6 +1413,10 @@ function Starbase.Raise(layout: Layout, container: Object, origin: vector, metre
     object:SetScale(vector.create(size, size, size))
     object:SetPos(origin + part.at * metres)
     Object_SetAxes(object, part.look, part.up or UP)
+    -- (and what moves of it, each a thing of its own: Starbase.Animate moves them)
+    for _, piece in Starbase.Movers(part.movers, scenery, origin + part.at * metres, part.look, part.up or UP, size) do
+      table.insert(moving, piece)
+    end
     local arm = if part.arm then Arms.Build(part.arm) else nil
     if arm then
       -- (on the ring of the battery's stand, facing the way the stand does, at rest)
@@ -1303,7 +1436,7 @@ function Starbase.Raise(layout: Layout, container: Object, origin: vector, metre
     field:SetScale(vector.create(size, size, size))
     field:SetPos(origin)
   end
-  return objects
+  return objects, moving
 end
 
 return Starbase

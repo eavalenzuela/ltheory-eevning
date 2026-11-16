@@ -43,6 +43,10 @@
 #               (test/scenario/starbase.txt): buy a tower, fuel and an array,
 #               anchor the tower at a moon, moor, fuel it, anchor the array,
 #               refine there
+#   game-towers  a tower built in sections (test/scenario/towers.txt):
+#               tried in the game by GameDebug.TowerPick, what moves of
+#               it in the scene and moved, a torus and a sphere the same
+#               way, and the towers as they were
 #   game-colony  a pilot works a planet through the game's screens
 #               (test/scenario/colony.txt): buy a command centre, put it
 #               down, raise an extractor and a processor, take goods up
@@ -349,6 +353,8 @@ if [ "$fast" -eq 0 ]; then
     --script test/scenario/arms.txt
   step game-starbase 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/starbase.txt
+  step game-towers 0 timeout 300 bin/launch game --no-present --fixed-step 60 --timeout 240 \
+    --script test/scenario/towers.txt
   step game-colony 0 timeout 400 bin/launch game --no-present --fixed-step 60 --timeout 300 \
     --script test/scenario/colony.txt
   step game-lawless 0 timeout 500 bin/launch game --no-present --fixed-step 60 --timeout 400 \

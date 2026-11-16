@@ -245,7 +245,29 @@ end
 -- What is being built: the builder, how it is made, how many times a
 -- thing is there about the upright, how many sides a solid has, and how
 -- thick the stem is.
-type Work = { b: Builder, m: Manner, fold: number, sides: number, stem: number }
+--
+-- Some of a tower moves (the owner, 2026-11-15: "rotating parts, or even
+-- solar panels that face the sun. rotating habitation rings, radio
+-- antenna dishes, hazard lights, etc."). What moves is drawn as a piece
+-- of its own, about a place of its own (its pivot, in the tower's
+-- measure), with how it moves: whoever puts the tower in a scene puts
+-- each piece there and moves it (Game/View/Starbase's Animate). Pieces
+-- are made only where a maker of them is given ('make'): without one,
+-- everything is drawn into the one builder, still.
+export type Motion = {
+  kind: string,        -- "spin", "scan", "track" or "blink"
+  rate: number?,       -- spin: radians a second, about the tower's upright
+  toward: vector?,     -- scan: the way it looks at the middle of its sweep
+  cone: number?,       -- scan: how far off that it goes, radians
+  arm: vector?,        -- track: the way out along its arm, which it turns about to face the sun
+  period: number?,     -- scan and blink: seconds for once round
+  phase: number?,      -- scan and blink: how far round it starts, 0 to 1
+  lit: number?,        -- blink: the share of its period it is lit for
+}
+export type Piece = { b: Builder, pivot: vector, motion: Motion }
+-- (the lamps that blink: in so many groups, each lit in its turn)
+type Blink = { groups: { Builder }, count: number }
+type Work = { b: Builder, m: Manner, fold: number, sides: number, stem: number, make: (() -> Builder)?, pieces: { Piece }?, blink: Blink? }
 
 -- A solid about the upright through places along it ({ z, out }), as
 -- the manner makes one.
@@ -297,9 +319,38 @@ local function lamps(w: Work, z: number, out: number, count: number, size: numbe
   end
 end
 
--- A lamp at a place.
+-- A lamp at a place: a hazard lamp, which blinks where the tower's
+-- pieces are being made (in a dark housing, which is what is seen of it
+-- when it is not lit), and is else lit and still. One of another paint
+-- is that paint's, and still.
 local function lamp(w: Work, where: vector, size: number, part: number?)
-  block(w.b, part or GLOW, where, v(size, size, size), nil, 0.4)
+  local blink = w.blink
+  if blink and (part == nil or part == GLOW) then
+    blink.count += 1
+    block(blink.groups[blink.count % #blink.groups + 1], GLOW, where, v(size, size, size), nil, 0.4)
+    block(w.b, FRAME, where, v(size * 0.7, size * 0.7, size * 0.7), nil, 0.4)
+  else
+    block(w.b, part or GLOW, where, v(size, size, size), nil, 0.4)
+  end
+end
+
+-- Draw a thing that moves, whose pivot is on the upright at 'z': as a
+-- piece of its own, about its own pivot (which 'draw' is told: it is
+-- then at no height, and 'apart'), where pieces are being made; else
+-- where it is, with the rest.
+local function moving(w: Work, z: number, motion: Motion, draw: (w: Work, z: number, apart: boolean) -> ())
+  local make, pieces = w.make, w.pieces
+  if make and pieces then
+    local piece: Piece = { b = make(), pivot = axis(z), motion = motion }
+    table.insert(pieces, piece)
+    local mine: Work = { b = piece.b, m = w.m, fold = w.fold, sides = w.sides, stem = w.stem }
+    local keptX, keptY = asideX, asideY
+    asideX, asideY = 0, 0
+    draw(mine, 0, true)
+    asideX, asideY = keptX, keptY
+  else
+    draw(w, z, false)
+  end
 end
 
 -- ---------------------------------------------------------------------
@@ -592,25 +643,33 @@ local function racks(w: Work, rng: RNG, z: number, out: number, reach: number)
   local long = reach * rng:Float(0.9, 1.4)
   local panels = rng:Int(2, 4)
   local tall = reach * rng:Float(0.16, 0.3)
-  -- (the panels stand edge on to the tower, or lie flat to its upright)
+  -- (the panels stand edge on to the tower, or lie flat to its upright:
+  -- where they are still. Where they move, each arm turns about itself
+  -- to put its panels' faces to the sun)
   local flat = chance(rng, 0.35)
-  for index = 1, count do
-    local angle = (index - 0.5) / count * TAU
-    beam(w.b, FRAME, at(angle, out * 0.5, z), at(angle, long, z), reach * 0.028 * w.m.thin)
+  local function arm(mine: Work, angle: number, level: number, lying: boolean)
+    beam(mine.b, FRAME, at(angle, out * 0.5, level), at(angle, long, level), reach * 0.028 * mine.m.thin)
     local first = math.max(out * 1.3, long * 0.35)
     local each = (long - first) / panels
     for panel = 1, panels do
       local where = first + (panel - 0.5) * each
       for _, side in { 1, -1 } do
         local off = side * (tall * 0.55 + reach * 0.03)
-        if flat then
-          block(w.b, PATCH, at(angle, where, z) + around(angle + TAU / 4, off), v(each * 0.44, tall * 0.5, 0.008), v(0, 0, angle), 0.05)
+        if lying then
+          block(mine.b, PATCH, at(angle, where, level) + around(angle + TAU / 4, off), v(each * 0.44, tall * 0.5, 0.008), v(0, 0, angle), 0.05)
         else
-          facing(w.b, PATCH, angle, where, z + off, v(each * 0.44, 0.008, tall * 0.5), 0.05)
+          facing(mine.b, PATCH, angle, where, level + off, v(each * 0.44, 0.008, tall * 0.5), 0.05)
         end
       end
     end
-    lamp(w, at(angle, long + reach * 0.03, z), reach * 0.025)
+    lamp(mine, at(angle, long + reach * 0.03, level), reach * 0.025)
+  end
+  for index = 1, count do
+    local angle = (index - 0.5) / count * TAU
+    moving(w, z, { kind = "track", arm = around(angle, 1) }, function(mine: Work, level: number, apart: boolean)
+      -- (apart, it is drawn along its own x, its panels' faces to its own y: Starbase.Animate turns it from there)
+      arm(mine, if apart then 0 else angle, level, flat and not apart)
+    end)
   end
 end
 
@@ -634,26 +693,37 @@ local function band(w: Work, rng: RNG, z: number, out: number, reach: number)
   deck(w, TRIM, z - gap, wide, 0.02)
 end
 
--- (a dish on an arm, looking up the tower or down it. Nothing answers it across the tower)
+-- The bowl of a dish on the upright: from 'z', looking the 'way' along
+-- it (1 up, -1 down), 'wide' at its rim and 'deep', with its feed out
+-- in front of it.
+local function bowl(w: Work, z: number, way: number, wide: number, deep: number)
+  prism(w.b, PATCH, 16, { { z, wide * 0.1 }, { z + way * deep * 0.55, wide * 0.7 }, { z + way * deep, wide } })
+  hoop(w, TRIM, z + way * deep, wide, wide * 0.03)
+  beam(w.b, FRAME, axis(z + way * deep * 0.1), axis(z + way * deep * 1.8), wide * 0.035)
+  lamp(w, axis(z + way * deep * 1.8), wide * 0.06)
+end
+
+-- (a dish on an arm, looking up the tower or down it, and out a little:
+-- where it moves, it goes slowly round about where it looks. Nothing
+-- answers it across the tower)
 local function dish(w: Work, rng: RNG, z: number, out: number, reach: number)
   local angle = rng:Float(0, TAU)
   local far = out * 0.6 + reach * rng:Float(0.5, 0.9)
   local wide = reach * rng:Float(0.22, 0.38)
   local way = if chance(rng, 0.7) then 1 else -1
   local deep = wide * rng:Float(0.3, 0.45)
+  local slow = rng:Float(0, 1)
   limb(w, at(angle, out * 0.5, z), at(angle, far, z), wide * 0.3, v(0, 0, 1), v(0, 0, 1))
-  local centre = at(angle, far, z)
-  local sections: { Plates.Section } = {}
-  for index, place in { { 0.15, 0.1 }, { 0.6, 0.7 }, { 1, 1 } } do
-    local ring = corners(16, wide * place[2])
-    for corner, p in ring do
-      ring[corner] = p + around(angle, far)
-    end
-    sections[index] = { z = z + way * deep * place[1], ring = ring }
-  end
-  Plates.Hard(w.b, PATCH, sections, 0.5)
-  beam(w.b, FRAME, centre + v(0, 0, way * deep * 0.2), centre + v(0, 0, way * deep * 1.7), wide * 0.035)
-  lamp(w, centre + v(0, 0, way * deep * 1.7), wide * 0.06)
+  -- (the bowl is about an upright of its own, at the arm's end)
+  local keptX, keptY = asideX, asideY
+  asideX, asideY = keptX + math.cos(angle) * far, keptY + math.sin(angle) * far
+  local toward = vector.normalize(v(0, 0, way) * math.cos(0.6) + around(angle, 1) * math.sin(0.6))
+  moving(w, z + way * deep * 0.15, { kind = "scan", toward = toward, cone = 0.3, period = 45 + 30 * slow, phase = slow },
+    function(mine: Work, level: number, apart: boolean)
+      -- (apart, it looks up its own z: Starbase.Animate points it)
+      bowl(mine, level, if apart then 1 else way, wide, deep * 0.85)
+    end)
+  asideX, asideY = keptX, keptY
 end
 
 -- (one thing, off to one side: nothing answers it across the tower)
@@ -678,6 +748,20 @@ end
 local SIDES: { [string]: (w: Work, rng: RNG, z: number, out: number, reach: number) -> () } = {
   torus = torus, disc = disc, arms = arms, booms = booms, racks = racks, fins = fins, band = band, dish = dish, pod = pod,
 }
+
+-- Stand a thing out of a tower. (A ring on spokes turns about the
+-- upright, spokes and all, where the tower's pieces are being made:
+-- one way, and the next the other.)
+local function stand(w: Work, kind: string, rng: RNG, z: number, out: number, reach: number)
+  if kind == "torus" then
+    local pieces = w.pieces
+    moving(w, z, { kind = "spin", rate = (if pieces and #pieces % 2 == 1 then -1 else 1) * 0.14 }, function(mine: Work, level: number)
+      SIDES.torus(mine, rng, level, out, reach)
+    end)
+  else
+    SIDES[kind](w, rng, z, out, reach)
+  end
+end
 
 -- ---------------------------------------------------------------------
 -- Ends: a top from 'z' upward and a tail from 'z' downward, where the
@@ -707,11 +791,13 @@ local function top(w: Work, rng: RNG, kind: string, z: number, out: number, reac
   elseif kind == "dish" then
     local wide = math.max(out * 1.1, reach * rng:Float(0.35, 0.6))
     local deep = wide * rng:Float(0.3, 0.5)
+    local slow = rng:Float(0, 1)
     beam(w.b, FRAME, axis(z), axis(z + deep * 0.5), w.stem)
-    prism(w.b, PATCH, 16, { { z + deep * 0.4, wide * 0.12 }, { z + deep * 0.75, wide * 0.7 }, { z + deep, wide } })
-    hoop(w, TRIM, z + deep, wide, wide * 0.03)
-    beam(w.b, FRAME, axis(z + deep * 0.5), axis(z + deep * 1.9), w.stem * 0.35)
-    lamp(w, axis(z + deep * 1.9), w.stem * 0.6)
+    -- (looking up the tower: where it moves, it goes slowly round about that)
+    moving(w, z + deep * 0.4, { kind = "scan", toward = v(0, 0, 1), cone = 0.25, period = 50 + 30 * slow, phase = slow },
+      function(mine: Work, level: number)
+        bowl(mine, level, 1, wide, deep * 0.6)
+      end)
   elseif kind == "cap" then
     local wide = math.max(out * 1.25, reach * rng:Float(0.3, 0.55))
     prism(w.b, PLATING, if w.m.hard then math.max(8, w.sides * 2) else 20, { { z, wide * 0.7 }, { z + wide * 0.08, wide }, { z + wide * 0.16, wide * 0.94 } })
@@ -1045,7 +1131,8 @@ local function small(w: Work, rng: RNG, build: Build, x: number, y: number, z: n
   ends: boolean, thing: boolean)
   local keptX, keptY = asideX, asideY
   asideX, asideY = keptX + x, keptY + y
-  local mine: Work = { b = w.b, m = w.m, fold = w.fold, sides = w.sides, stem = math.max(out * 0.12, w.stem * 0.5) }
+  local mine: Work = { b = w.b, m = w.m, fold = w.fold, sides = w.sides, stem = math.max(out * 0.12, w.stem * 0.5), make = w.make,
+    pieces = w.pieces, blink = w.blink }
   local low = if way > 0 then z elseif way < 0 then z - long else z - long / 2
   local each = long / bodies
   for index = 1, bodies do
@@ -1065,7 +1152,7 @@ local function small(w: Work, rng: RNG, build: Build, x: number, y: number, z: n
     lamp(mine, axis(low - mine.stem), mine.stem * 0.8, TRIM)
   end
   if thing then
-    SIDES[which](mine, thingDice, low + long * 0.5, out, out * 1.5)
+    stand(mine, which, thingDice, low + long * 0.5, out, out * 1.5)
   end
   block(w.b, FRAME, axis(low + long / 2), v(mine.stem, mine.stem, long / 2 + 0.01), nil, 0.3)
   asideX, asideY = keptX, keptY
@@ -1236,12 +1323,15 @@ local function spherical(w: Work, build: Build, rng: RNG, size: number, plan: st
       -- (a wheel round its middle, on spokes)
       local far = radius * extraDice:Float(1.35, 1.75)
       local thick = radius * extraDice:Float(0.05, 0.1)
-      wheel(w, PATCH, 0, far, thick, w.sides * 2, 4)
-      for spoke = 1, math.max(3, w.fold) do
-        local angle = (spoke - 0.5) / math.max(3, w.fold) * TAU
-        limb(w, at(angle, radius * 0.96, 0), at(angle, far - thick * 0.7, 0), thick * 0.5, v(0, 0, 1), v(0, 0, 1))
-      end
-      lamps(w, 0, far + thick, 12, thick * 0.25)
+      -- (which turns about it, spokes and all, where the tower's pieces are being made)
+      moving(w, 0, { kind = "spin", rate = 0.1 }, function(mine: Work, level: number)
+        wheel(mine, PATCH, level, far, thick, w.sides * 2, 4)
+        for spoke = 1, math.max(3, w.fold) do
+          local angle = (spoke - 0.5) / math.max(3, w.fold) * TAU
+          limb(mine, at(angle, radius * 0.96, level), at(angle, far - thick * 0.7, level), thick * 0.5, v(0, 0, 1), v(0, 0, 1))
+        end
+        lamps(mine, level, far + thick, 12, thick * 0.25)
+      end)
     elseif extra == "moon" then
       -- (a lesser ball under it, on the stem)
       local less = radius * extraDice:Float(0.28, 0.42)
@@ -1254,7 +1344,10 @@ local function spherical(w: Work, build: Build, rng: RNG, size: number, plan: st
       -- (a slim wheel standing off over its head, on posts)
       local far = radius * extraDice:Float(0.45, 0.7)
       local high = radius * extraDice:Float(1.12, 1.3)
-      wheel(w, TRIM, high, far, radius * 0.03, w.sides * 2, 4)
+      -- (the wheel turns on its posts)
+      moving(w, high, { kind = "spin", rate = -0.2 }, function(mine: Work, level: number)
+        wheel(mine, TRIM, level, far, radius * 0.03, w.sides * 2, 4)
+      end)
       for post = 1, math.max(3, w.fold) do
         local angle = (post - 0.5) / math.max(3, w.fold) * TAU
         local up = math.acos(math.clamp(far / radius, 0, 1))
@@ -1281,7 +1374,11 @@ end
 local MOST, MOST_OUT = 6, 7
 
 -- Draw a tower. It lies along z, its top toward +z.
-function Tower.Build(b: Builder, spec: Spec)
+-- 'make', if given, makes a builder for each piece of it that moves:
+-- those are what is given back, each with its pivot and how it moves
+-- (a piece may have nothing in it). Without it, all of the tower is
+-- drawn into 'b', and nothing is given back.
+function Tower.Build(b: Builder, spec: Spec, make: (() -> Builder)?): { Piece }
   local build = BUILDS[spec.build] or BUILDS.mixed
   local m = MANNERS[spec.manner] or MANNERS.blocky
   local size = math.clamp(math.floor(spec.size), 1, 8)
@@ -1305,14 +1402,24 @@ function Tower.Build(b: Builder, spec: Spec)
   -- (what is solid in it has so many sides: its fold, or twice it for a tower of few)
   local sides = if fold == 2 then 4 elseif fold == 3 then 6 else fold
   local w: Work = { b = b, m = m, fold = fold, sides = sides, stem = 0.045 * girth * math.max(1, m.thin * 0.8) }
+  local pieces: { Piece } = {}
+  if make then
+    -- (its hazard lamps: two lots of them, lit turn about)
+    local groups: { Builder } = {}
+    for group = 1, 2 do
+      groups[group] = make()
+      table.insert(pieces, { b = groups[group], pivot = v(0, 0, 0), motion = { kind = "blink", period = 1.2, phase = (group - 1) / 2, lit = 0.45 } })
+    end
+    w.make, w.pieces, w.blink = make, pieces, { groups = groups, count = 0 }
+  end
   asideX, asideY = 0, 0
   -- (the two that are not a stem with things along it)
   if spec.build == "toroidal" then
     toroidal(w, build, rng, size, plan, girth)
-    return
+    return pieces
   elseif spec.build == "spherical" then
     spherical(w, build, rng, size, plan, girth)
-    return
+    return pieces
   end
 
   -- What the seed says of every body it might have, of every thing that
@@ -1412,11 +1519,11 @@ function Tower.Build(b: Builder, spec: Spec)
     local body = places[(where + 1) // 2]
     if where % 2 == 1 then
       -- (at a body: somewhere along it)
-      SIDES[thing.kind](w, thing.dice, body.low + (body.high - body.low) * thing.along, body.out, reach)
+      stand(w, thing.kind, thing.dice, body.low + (body.high - body.low) * thing.along, body.out, reach)
     else
       -- (between two)
       local next = places[where // 2 + 1]
-      SIDES[thing.kind](w, thing.dice, (body.high + next.low) / 2, math.min(w.stem * 2.5, body.out), reach)
+      stand(w, thing.kind, thing.dice, (body.high + next.low) / 2, math.min(w.stem * 2.5, body.out), reach)
     end
   end
 
@@ -1439,6 +1546,7 @@ function Tower.Build(b: Builder, spec: Spec)
       lamp(w, tip, w.stem * 0.4, if masts:Int(1, 3) == 1 then GLOW else TRIM)
     end
   end
+  return pieces
 end
 
 return Tower

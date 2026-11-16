@@ -150,6 +150,7 @@ export type Scene = {
   -- Where each of those stands from the station's middle, in the order
   -- of 'works' and after the tower's own (the first): to move them by.
   offsets: { [number]: { vector } },
+  moving: { [number]: { Starbase.Moving } },  -- what moves of each station's tower (they are among its works)
   -- The described bodies there are proxies of (rocks, stations, gates), by id.
   statics: { [number]: SystemData.Object },
   -- The clouds of gas among them: how big each puff of one is when the
@@ -245,7 +246,7 @@ function Scene.New(camera: Camera): Scene
     proxies = {}, celestials = {}, worlds = {}, passing = 0, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6, tracking = 0,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
-    wreckage = {}, works = {}, offsets = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
+    wreckage = {}, works = {}, offsets = {}, moving = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
     standing = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0, ghosts = {}, poses = {}, headings = {}, turned = 0,
   }
 end
@@ -559,6 +560,7 @@ local function dropWorks(scene: Scene, id: number)
     scene.works[id] = nil
   end
   scene.offsets[id] = nil
+  scene.moving[id] = nil
   scene.standing[id] = nil
 end
 
@@ -883,8 +885,11 @@ local function makeStation(scene: Scene, game: Core.Game, object: SystemData.Obj
   -- (a tower that has sealed itself keeps its field: Core/Tactical/Fields)
   local dark = status ~= nil and not status.field
   local posted, down = Core.Query.Batteries(game, object.id)
-  local raised = Starbase.Raise(Starbase.Layout(object.variety, object.radius, object.seed, nil, makeup, dark, posted, down),
+  local raised, moving = Starbase.Raise(Starbase.Layout(object.variety, object.radius, object.seed, nil, makeup, dark, posted, down),
     container, at, 1)
+  if #moving > 0 then
+    scene.moving[object.id] = moving
+  end
   local tower = table.remove(raised, 1) :: Object
   tower:SetName(object.name)
   scene.works[object.id] = raised
@@ -934,6 +939,7 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
   table.clear(scene.mining)
   table.clear(scene.statics)
   table.clear(scene.offsets)
+  table.clear(scene.moving)
   table.clear(scene.clouds)
   scene.focus = nil
   scene.star = nil
@@ -1304,6 +1310,17 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       else
         place(proxy, at)
       end
+    end
+  end
+
+  -- What moves of a station's tower: rings turn, dishes sweep, panels
+  -- face the sun, hazard lamps blink (Starbase.Animate).
+  for id, moving in scene.moving do
+    local proxy: Object? = scene.proxies[id]
+    local star = scene.star
+    if proxy then
+      local sun = if star then star:GetPos() - proxy:GetPos() else vector.create(0, 1, 0)
+      Starbase.Animate(moving, scene.time, if vector.magnitude(sun) > 1 then vector.normalize(sun) else vector.create(0, 1, 0))
     end
   end
 

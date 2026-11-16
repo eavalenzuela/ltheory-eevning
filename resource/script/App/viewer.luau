@@ -622,7 +622,7 @@ return AppShell.Create(function(): Widget
           print(`viewer: the station '{v.kind}' took {math.floor((os.clock() - started) * 1000)} ms to lay out and make`)
           metres = radius / layout.field
         end
-        for _, object in Starbase.Raise(layout, system, vector.create(0, 0, 0), metres) do
+        for _, object in (Starbase.Raise(layout, system, vector.create(0, 0, 0), metres)) do
           table.insert(extras, object)
         end
       elseif v.kind == "arms-sizes" then

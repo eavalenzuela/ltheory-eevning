@@ -94,6 +94,11 @@ return AppShell.Create(function(): Widget
   -- (of a tower built in sections: its manner, and its fold and its plan, 0 being as the seed says)
   local manner, fold, plan = 1, 0, 0
   local shown: Object? = nil
+  -- (what moves of it: rings that turn, dishes, panels that face the
+  -- light, hazard lamps. Each a thing of its own, moved every frame)
+  local moving: { Starbase.Moving } = {}
+  local clock = 0           -- seconds it has been moving for
+  local sunward = vector.create(0, 1, 0)
   local key = ""            -- what is shown
   local took = 0            -- how long it took to make, in milliseconds
   -- (seen from a little above its middle, until it is turned)
@@ -135,7 +140,9 @@ return AppShell.Create(function(): Widget
     local made = Starbase.Grown(chosen(), PAINTS[paint])
     took = math.floor((os.clock() - started) * 1000)
     local bound = Renderable_GetBound(made.model)
-    local across = bound.upper - bound.lower
+    -- (the box that holds it and what moves of it, wherever that is turned)
+    local lower, upper = made.lower or bound.lower, made.upper or bound.upper
+    local across = upper - lower
     -- (it lies along z and is stood up: as tall as fits a picture that
     -- is wider than it is high, and no wider than fits either)
     local scale = RADIUS / math.max(0.92 * across.z / 2, across.x / 2, across.y / 2)
@@ -146,13 +153,24 @@ return AppShell.Create(function(): Widget
     Object_SetAxes(object, vector.create(0, 1, 0), vector.create(0, 0, -1))
     -- (its middle in the middle: it is grown about its own upright, and
     -- its ends are not the same way off from where it began)
-    object:SetPos(vector.create(0, -(bound.lower.z + bound.upper.z) * 0.5 * scale, 0))
+    local middle = vector.create(0, -(lower.z + upper.z) * 0.5 * scale, 0)
+    object:SetPos(middle)
     system:AddInterior(object)
     -- (the camera draws the system of what it follows)
     camera:SetTarget(object)
     if old then
       Object_Delete(old)
     end
+    for _, piece in moving do
+      Object_Delete(piece.object)
+    end
+    moving = Starbase.Movers(made.movers, function(model: Model): Object
+      local piece = Object_Scenery({})
+      Object_SetRenderable(piece, model)
+      system:AddInterior(piece)
+      return piece
+    end, middle, vector.create(0, 1, 0), vector.create(0, 0, -1), scale)
+    Starbase.Animate(moving, clock, sunward)
     shown = object
   end
   show()
@@ -202,6 +220,21 @@ return AppShell.Create(function(): Widget
     -- and where its weight is (0 and "": as the seed says).
     Now = function(): (number, number, string, boolean, number, string, string, number, string)
       return seed, size, STYLES[style], square, masts, PAINTS[paint], MANNERS[manner], FOLDS[fold] or 0, PLANS[plan] or ""
+    end,
+    -- What moves of it, as it is so many seconds on: for a picture of
+    -- it at a time. (It goes on from there.)
+    At = function(seconds: number)
+      clock = seconds
+      Starbase.Animate(moving, clock, sunward)
+    end,
+    -- How many things of it move, and how each does ("spin", "scan",
+    -- "track", "blink"), in a row.
+    Moving = function(): (number, string)
+      local kinds: { string } = {}
+      for _, piece in moving do
+        table.insert(kinds, piece.motion.kind)
+      end
+      return #moving, table.concat(kinds, " ")
     end,
     -- Look at it from somewhere else: how far round (in turns of a
     -- circle), how far above (the same, 0.25 being from straight over
@@ -282,8 +315,12 @@ return AppShell.Create(function(): Widget
         -- engine's star in view whites the picture out)
         Star_SetColor(light, vector.create(1.15, 1.15, 1.15))
         local side = vector.normalize(vector.cross(vector.create(0, 1, 0), eye))
-        light:SetPos(vector.normalize(eye + side * (0.5 * vector.magnitude(eye)) + vector.create(0, 0.7 * vector.magnitude(eye), 0)) * 500000)
+        sunward = vector.normalize(eye + side * (0.5 * vector.magnitude(eye)) + vector.create(0, 0.7 * vector.magnitude(eye), 0))
+        light:SetPos(sunward * 500000)
       end
+      -- (what moves of it, moved: its panels face the light, which is over the camera's shoulder)
+      clock += dt
+      Starbase.Animate(moving, clock, sunward)
     end,
   })))
 

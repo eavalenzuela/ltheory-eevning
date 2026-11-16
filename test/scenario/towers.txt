@@ -1,0 +1,47 @@
+# A tower built in sections, tried in the game app (script/check runs
+# this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/towers.txt
+#
+# The towers of every people that has one are made a pick of the tower
+# browser's (GameDebug.TowerPick: a tower with rings on spokes, which
+# turn, and hazard lamps, which blink). Out of the station, its tower
+# is that one: what moves of it is in the scene as things of their own,
+# and goes on being moved, with nothing going wrong, for as long as it
+# is watched. Then a tower about a torus and one about a sphere, the
+# same way, and the towers put back as they were, of which nothing moves.
+#
+# covers: Game/View/Tower Game/View/Starbase
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua _G.peoples = { 'vessari', 'talmar', 'orun', 'nimia', 'vail' }
+lua for _, people in _G.peoples do GameDebug.TowerPick(people, 7, 6, 'ring', 'cloud') end
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 10
+
+# Its rings and its lamps are things of their own, and are moved.
+lua _G.pieces, _G.kinds = GameDebug.TowerMoving()
+lua assert(_G.pieces >= 3, 'a tower with rings and lamps should have things that move, and has ' .. _G.pieces)
+lua assert(string.find(_G.kinds, 'spin') and string.find(_G.kinds, 'blink'), 'rings turn and lamps blink, and what moves is: ' .. _G.kinds)
+wait 3
+lua assert(GameDebug.TowerMoving() == _G.pieces, 'what moves of a tower should not come or go while it is watched')
+
+# A tower about a torus, and one about a sphere.
+lua for _, people in _G.peoples do GameDebug.TowerPick(people, 3, 8, 'toroidal', 'blocky') end
+frames 20
+lua assert(GameDebug.TowerMoving() >= 1, 'a tower about a torus has its hazard lamps')
+lua for _, people in _G.peoples do GameDebug.TowerPick(people, 3, 8, 'spherical', 'poured') end
+frames 20
+lua assert(select(2, GameDebug.TowerMoving()):find('spin'), 'the wheel round a tower about a sphere turns')
+wait 2
+
+# And as they were: grown as a hull is, of which nothing moves.
+lua for _, people in _G.peoples do GameDebug.TowerPick(people) end
+frames 20
+lua assert(GameDebug.TowerMoving() == 0, 'nothing moves of the towers that are grown as a hull is')
+
+echo towers scenario passed
+quit

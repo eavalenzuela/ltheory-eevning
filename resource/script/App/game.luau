@@ -36,6 +36,7 @@ local Planet = require("@lt/Game/View/Planet")
 local Scene = require("@lt/Game/View/Scene")
 local Session = require("@lt/Game/Session")
 local Settings = require("@lt/Game/Settings")
+local Starbase = require("@lt/Game/View/Starbase")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local Station = require("@lt/Game/UI/Station")
 local Info = require("@lt/Game/UI/Info")
@@ -255,6 +256,37 @@ function Debug.Zoom(zoom: number, yaw: number?, pitch: number?)
   scene.zoom, scene.zoomTarget = zoom, zoom
   scene.yaw = yaw or scene.yaw
   scene.pitch = pitch or scene.pitch
+end
+
+-- A cheat, for looking at a tower in the game before it is anybody's:
+-- until the game is closed, the towers of a faction ("vessari", ...; all
+-- three sizes of them, or the one said: 1, 2 or 3) are a pick of the
+-- tower browser's (bin/launch towers): its seed, its size there (1 to
+-- 8), its build, its manner, and its fold and where its weight is, if
+-- those are said over its seed. With no seed, they are what they were.
+-- Everything in the system is made again.
+function Debug.TowerPick(faction: string, seed: number?, size: number?, build: string?, manner: string?, fold: number?, plan: string?,
+  which: number?)
+  for each = 1, 3 do
+    if which == nil or which == each then
+      Starbase.Try(faction, each, if seed then { seed = seed, size = size or 4, style = build or "mixed", square = false, masts = 0,
+        manner = manner, fold = fold, plan = plan } else nil)
+    end
+  end
+  scene.system = 0
+end
+
+-- How many things of the stations' towers here move, and how each
+-- does ("spin", "scan", "track", "blink"), in a row.
+function Debug.TowerMoving(): (number, string)
+  local kinds: { string } = {}
+  for _, moving in scene.moving do
+    for _, piece in moving do
+      table.insert(kinds, piece.motion.kind)
+    end
+  end
+  table.sort(kinds)
+  return #kinds, table.concat(kinds, " ")
 end
 
 -- Swing the camera round to look past the ship at something:
