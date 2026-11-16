@@ -129,7 +129,9 @@ function Industry.ResearchPlan(state: State.State, blueprint: Blueprints.Bluepri
     -- (5% quicker for each level of Bench Science)
     seconds = math.ceil((300 + 0.5 * math.min(7200, blueprint.seconds)) * 1.5 ^ level
       * (1 - Industry.BENCH * math.max(0, state.skills["bench.science"] or 0))),
-    fee = math.ceil(blueprint.basePrice * 0.02 * (level + 1)),
+    -- (2% of an original at ten times its product a level, as it was
+    -- before originals came down to five times: the same in credits)
+    fee = math.ceil(blueprint.basePrice * 0.02 * 10 / Blueprints.ORIGINAL * (level + 1)),
   }
 end
 

@@ -100,7 +100,7 @@ suite:Case("everything fitted, fired, flown or built into it has a blueprint, an
       local share = cost / (info.basePrice * blueprint.perRun)
       -- (whole components make a cheap thing's bill a little lumpy)
       t.ok(share > 0.5 and share < 0.7, `{id}: materials are {share} of the product's price`)
-      t.eq(blueprint.basePrice, info.basePrice * blueprint.perRun * 10)
+      t.eq(blueprint.basePrice, info.basePrice * blueprint.perRun * Blueprints.ORIGINAL)
     end
   end
   t.eq(count, #Blueprints.list)
@@ -321,7 +321,7 @@ suite:Case("research in a laboratory takes a level at a time off what a blueprin
   local before = Industry.Plan(state, home, blueprint, 10)
   t.eq({ Industry.Researched(state, blueprint.id) }, { 0, 0 })
   local first = assert(Industry.ResearchPlan(state, blueprint, "material"))
-  t.eq({ first.level, first.fee }, { 1, math.ceil(blueprint.basePrice * 0.02) })
+  t.eq({ first.level, first.fee }, { 1, math.ceil(blueprint.basePrice * 0.02 * 10 / Blueprints.ORIGINAL) })
   t.eq({ Core.Validate(game, { kind = "StartResearch", actor = state.player.ship, item = item.id, what = "speed" }) } :: { any },
     { false, "research is into materials or into time" } :: { any })
 
@@ -415,7 +415,7 @@ suite:Case("a laboratory copies a blueprint: a copy good for so many runs, for a
   t.eq({ Blueprints.Of("copy.nothing") } :: { any }, { nil, false } :: { any })
   local info = Types.Info("copy.ammo.emp")
   t.eq({ info.name, info.category, info.unlisted, info.basePrice } :: { any },
-    { "Shock Canister Blueprint Copy", "blueprint", true, blueprint.basePrice // 1000 } :: { any })
+    { "Shock Canister Blueprint Copy", "blueprint", true, blueprint.basePrice // 500 } :: { any })
   t.eq(table.find(Types.Ids(), "copy.ammo.emp"), nil, "no market lists a copy")
   for _, each in Blueprints.list do
     local copy = assert(Types.Get(Blueprints.Copy(each)), each.id)

@@ -87,6 +87,10 @@ end
 
 local Blueprints = { list = {} :: { Blueprint }, byId = {} :: { [string]: Blueprint }, byProduct = {} :: { [string]: Blueprint } }
 
+-- What an original costs, in what it builds: five of them (the owner,
+-- 2026-11-16, asked whether originals should stay at ten: "Lower to 5x").
+Blueprints.ORIGINAL = 5
+
 -- What a part costs: a component, something made on a planet, or what
 -- a reactor makes of what is drilled out of moons.
 local function priceOf(part: string): number
@@ -159,7 +163,7 @@ local function add(product: string, name: string, mix: { [string]: number }, bas
   end
   local blueprint: Blueprint = {
     id = "blueprint." .. product, product = product, name = name .. " Blueprint", perRun = perRun,
-    seconds = seconds, materials = materials, basePrice = basePrice * perRun * 10,
+    seconds = seconds, materials = materials, basePrice = basePrice * perRun * Blueprints.ORIGINAL,
   }
   table.insert(Blueprints.list, blueprint)
   Blueprints.byId[blueprint.id] = blueprint
@@ -189,7 +193,7 @@ for _, module in Modules.list do
     end
     local blueprint: Blueprint = {
       id = "blueprint." .. module.id, product = module.id, name = module.name .. " Blueprint", perRun = 1, seconds = 600,
-      materials = materials, basePrice = module.basePrice * 10,
+      materials = materials, basePrice = module.basePrice * Blueprints.ORIGINAL,
       -- (a people's own make is built from drawings nobody sells)
       rare = if module.lineage then true else nil,
     }
@@ -209,7 +213,7 @@ for _, module in Modules.list do
       if size >= LARGE then advanced(moduleParts(module), size, MOON_SHARE) else moduleParts(module))
     local blueprint = Blueprints.byProduct[module.id]
     table.insert(blueprint.materials, 1, { type = base.id, quantity = 1 })
-    blueprint.basePrice = module.basePrice * 10
+    blueprint.basePrice = module.basePrice * Blueprints.ORIGINAL
     blueprint.invented = true
   else
     add(module.id, module.name, MIX.module, module.basePrice, 1, 120 + module.basePrice // 100, moduleParts(module))
@@ -234,7 +238,7 @@ for _, charge in Modules.charges do
     add(charge.id, charge.name, MIX.tech2, charge.basePrice - plain.basePrice, perRun, 120)
     local blueprint = Blueprints.byProduct[charge.id]
     table.insert(blueprint.materials, 1, { type = plain.id, quantity = perRun })
-    blueprint.basePrice = charge.basePrice * perRun * 10
+    blueprint.basePrice = charge.basePrice * perRun * Blueprints.ORIGINAL
     blueprint.invented = true
   else
     add(charge.id, charge.name, MIX.charge, charge.basePrice, perRun, 60)
@@ -253,7 +257,7 @@ for _, hull in Ships.list do
       advanced(Components.HULL, HULL_SIZE[hull.class] or 1, MOON_HULL))
     local blueprint = Blueprints.byProduct[hull.id]
     table.insert(blueprint.materials, 1, { type = plain.id, quantity = 1 })
-    blueprint.basePrice = hull.basePrice * 10
+    blueprint.basePrice = hull.basePrice * Blueprints.ORIGINAL
     blueprint.invented = true
     -- (an alien people's tech 2 hull, or the pirates', is not invented
     -- by anybody else: its drawings are to be found, as the plain one's)
@@ -285,7 +289,7 @@ for _, drone in Drones.list do
     add(drone.id, drone.name, MIX.tech2, drone.basePrice - plain.basePrice, 1, 600, parts)
     local blueprint = Blueprints.byProduct[drone.id]
     table.insert(blueprint.materials, 1, { type = plain.id, quantity = 1 })
-    blueprint.basePrice = drone.basePrice * 10
+    blueprint.basePrice = drone.basePrice * Blueprints.ORIGINAL
     blueprint.invented = true
   else
     add(drone.id, drone.name, MIX.module, drone.basePrice, 1, 300, parts)
@@ -334,7 +338,7 @@ for _, booster in Boosters.list do
   local blueprint: Blueprint = {
     id = "blueprint." .. booster.id, product = booster.id, name = booster.name .. " Booster Blueprint", perRun = 1, seconds = 300,
     materials = materials,
-    basePrice = booster.price * 10,
+    basePrice = booster.price * Blueprints.ORIGINAL,
   }
   table.insert(Blueprints.list, blueprint)
   Blueprints.byId[blueprint.id] = blueprint

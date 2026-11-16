@@ -131,9 +131,10 @@ for _, blueprint in Blueprints.list do
   -- builds, so a copy of ten runs is a tenth of one of them. (It was a
   -- tenth a run until 2026-11-16, so that ten runs of a carrier's were
   -- dearer than the carrier: the owner, "prices in general seem very
-  -- inflated. Look into them". The hundredth is mine.)
+  -- inflated. Look into them". The hundredth is mine; it stays a
+  -- hundredth of the product whatever an original costs.)
   byId[Blueprints.Copy(blueprint)] = { id = Blueprints.Copy(blueprint), name = blueprint.name .. " Copy", category = "blueprint",
-    volume = 0.0001, basePrice = math.max(1, blueprint.basePrice // 1000), unlisted = true }
+    volume = 0.0001, basePrice = math.max(1, blueprint.basePrice // (100 * Blueprints.ORIGINAL)), unlisted = true }
 end
 -- A book for every skill a pilot does not start with.
 for _, skill in Skills.list do
