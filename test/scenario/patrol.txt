@@ -9,7 +9,7 @@
 # says so, fights them and sees them off, and half of the bounty is in
 # the player's wallet without the player having left the station.
 #
-# covers: Core/Tactical/Fleet Core/Tactical/Pirates
+# covers: Core/Tactical/Fleet Core/Tactical/Pirates Game/UI/Crew
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

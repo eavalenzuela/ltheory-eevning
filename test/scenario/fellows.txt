@@ -11,7 +11,7 @@
 # fights it. And a ship that is destroyed is its owner's loss: they are
 # out of work until they have another.
 #
-# covers: Core/Tactical/Fellows Core/Assets/Members
+# covers: Core/Tactical/Fellows Core/Assets/Members Game/UI/Wallet
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

@@ -14,7 +14,7 @@
 # wreck holds what it had drawn from the moon, its place is off the
 # overview, and the moon takes the pilot's tower.
 #
-# covers: Core/Tactical/Keeps Core/Tactical/Pirates
+# covers: Core/Tactical/Keeps Core/Tactical/Pirates Game/UI/Starbase
 wait 2
 lua GameDebug.Peaceful(true)
 lua assert(GameDebug.Docked(), 'a new game starts docked')

@@ -11,7 +11,7 @@
 # cheat: that is another moon's), and an hour on a batch of the
 # composite is in the hangar, a batch of each material gone into it.
 #
-# covers: Core/Assets/Starbases Core/Data/Moons
+# covers: Core/Assets/Starbases Core/Data/Moons Game/UI/Starbase
 
 wait 2
 lua GameDebug.Peaceful(true)

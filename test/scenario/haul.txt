@@ -11,7 +11,7 @@
 # round of two stations to collect at, and what is at both is brought
 # to a third.
 #
-# covers: Core/Tactical/Fleet Core/Assets/Market
+# covers: Core/Tactical/Fleet Core/Assets/Market Game/UI/Crew
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

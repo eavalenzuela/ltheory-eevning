@@ -9,7 +9,7 @@
 # go into warp in the same moment, and the hired pilot is there when the
 # pilot arrives, where a pilot who only follows comes in after.
 #
-# covers: Core/Tactical/Fleet
+# covers: Core/Tactical/Fleet Game/UI/Crew
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

@@ -38,13 +38,16 @@ local Session = require("@lt/Game/Session")
 local Settings = require("@lt/Game/Settings")
 local Starbase = require("@lt/Game/View/Starbase")
 local Starbases = require("@lt/Core/Assets/Starbases")
-local Station = require("@lt/Game/UI/Station")
 local MarketWindow = require("@lt/Game/UI/Market")
 local FittingWindow = require("@lt/Game/UI/Fitting")
 local ShipsWindow = require("@lt/Game/UI/Ships")
 local SkillSheet = require("@lt/Game/UI/Skills")
 local IndustryWindow = require("@lt/Game/UI/Industry")
 local JobsWindow = require("@lt/Game/UI/Jobs")
+local CrewWindow = require("@lt/Game/UI/Crew")
+local SchoolWindow = require("@lt/Game/UI/School")
+local StarbaseWindow = require("@lt/Game/UI/Starbase")
+local WalletWindow = require("@lt/Game/UI/Wallet")
 local Info = require("@lt/Game/UI/Info")
 local Menu = require("@lt/Game/UI/Menu")
 local Splash = require("@lt/Game/UI/Splash")
@@ -811,14 +814,15 @@ function Debug.Blueprint(type: string): boolean
   return IndustryWindow.Choose(type)
 end
 
--- What of a station's own is in front: a tab of the docked screen, or
--- one of the windows that were tabs of it ("Market", "Fitting", "Ships", "Skills", "Industry", "Missions"). With
--- none of them open, the tab the docked screen would open at.
+-- What of a station's own is in front: the window that was a tab of
+-- the docked screen, by the name its tab had ("Fitting", "Market",
+-- "Ships", "Skills", "Industry", "Missions", "Crew", "Wallet",
+-- "Careers", "Starbase"). "" with none of them open.
 function Debug.Tab(): string
-  local front: string?, name = nil, Station.Tab()
-  for _, each in { { "station", Station.Tab() }, { MarketWindow.ID, "Market" }, { FittingWindow.ID, "Fitting" },
-    { ShipsWindow.ID, "Ships" }, { SkillSheet.ID, "Skills" }, { IndustryWindow.ID, "Industry" },
-    { JobsWindow.ID, "Missions" } } do
+  local front: string?, name = nil, ""
+  for _, each in { { MarketWindow.ID, "Market" }, { FittingWindow.ID, "Fitting" }, { ShipsWindow.ID, "Ships" }, { SkillSheet.ID, "Skills" },
+    { IndustryWindow.ID, "Industry" }, { JobsWindow.ID, "Missions" }, { CrewWindow.ID, "Crew" }, { WalletWindow.ID, "Wallet" },
+    { SchoolWindow.ID, "Careers" }, { StarbaseWindow.ID, "Starbase" } } do
     if Windows.IsOpen(each[1]) and (front == nil or Windows.Above(each[1], front)) then
       front, name = each[1], each[2]
     end
@@ -2303,7 +2307,7 @@ end
 
 -- Which side of the Crew tab is shown: 'pilots' or 'log'.
 function Debug.CrewPage(): string
-  return Station.CrewPage()
+  return CrewWindow.Page()
 end
 
 -- How a fleet's warp stands (the fleet panel's 'Fleet:warp', to what is

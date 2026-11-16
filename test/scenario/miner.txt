@@ -8,7 +8,7 @@
 # cut, brought in to the station nearest the belt, and the pilot goes out
 # for more. Called back, they stop work and come in.
 #
-# covers: Core/Tactical/Fleet Core/Tactical/Mining
+# covers: Core/Tactical/Fleet Core/Tactical/Mining Game/UI/Crew
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

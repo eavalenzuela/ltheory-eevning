@@ -43,7 +43,6 @@ local Modules = require("@lt/Core/Data/Modules")
 local Session = require("@lt/Game/Session")
 local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
-local Station = require("@lt/Game/UI/Station")
 local Structures = require("@lt/Core/Data/Structures")
 local Theme = require("@lt/Game/UI/Theme")
 local Types = require("@lt/Core/Data/Types")
@@ -1171,7 +1170,6 @@ end)
 Windows.Make(Market.ID, Market.ID, "Market", 534, 130, 1130, 720, 1000, 700, nil)
 Windows.Icon(Market.ID, "market")
 -- (the docked screen's own way to it: its Skills tab buys a book here)
-Station.Market = Market.Choose
 Fitting.Market = Market.Choose
 SkillSheet.Market = Market.Choose
 

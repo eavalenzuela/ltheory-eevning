@@ -12,7 +12,7 @@
 # them than Leadership alone commands. And the books are looked at, by
 # head: the signing is all there is under any.
 #
-# covers: Core/Assets/Corporation Core/Assets/Wallet
+# covers: Core/Assets/Corporation Core/Assets/Wallet Game/UI/Crew Game/UI/Wallet
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

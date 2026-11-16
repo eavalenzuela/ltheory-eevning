@@ -8,7 +8,7 @@
 # work within the hour: what they earn is theirs, and a share of it is
 # the corporation's. A call is posted for the home system and called off.
 #
-# covers: Core/Assets/Members Core/Assets/Corporation
+# covers: Core/Assets/Members Core/Assets/Corporation Game/UI/Wallet
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

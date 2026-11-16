@@ -14,7 +14,7 @@
 # line's Keep has the pilot keep that many in the hangar. They go for
 # the two hundred that are missing, and then wait, on the order still.
 #
-# covers: Core/Tactical/Fleet Core/Assets/Market
+# covers: Core/Tactical/Fleet Core/Assets/Market Game/UI/Crew
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

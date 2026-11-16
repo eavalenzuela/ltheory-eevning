@@ -44,7 +44,8 @@ the lines beginning `- ` under it.
 - Industry is a window of its own: blueprints, ore and running jobs on the left, and on the right the job the blueprint you picked would be, with the laboratory under it.
 - Jobs are a window of their own, and open in space too: your jobs in hand, with how each is going and how long you can keep it. Docked, it also has the jobs offered, the loyalty store and your standings.
 - Your ships are a window of their own: the ships you have at the station, with Board, and the hulls in the hangar waiting to be assembled.
-- The old docked screen no longer opens by itself. The dock's buttons open it at Crew or Wallet, and the same button puts it away. Save and Load are in the menu (Esc).
+- Crew, the wallet (with your corporation's side), the career agents and the running of a starbase of your own are windows too. These four are laid out as they were, in the new frame: they are next to be made over.
+- The old docked screen is gone. Every station service is a window you open from the dock, with the station behind them. Save and Load are in the menu (Esc).
 - The other screens inside the windows are as they were. They are being made over one at a time.
 
 ## Four small mends to the screens

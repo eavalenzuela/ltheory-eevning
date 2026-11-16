@@ -2,7 +2,7 @@
 -- The interface. In space: brackets on everything in view, shots drawn
 -- between ships, the overview, the selected item and its orders, locked
 -- targets, the ship's condition, its module rack and the navigation bar.
--- Docked: the station's screens (Game/UI/Station).
+-- Docked: the station's services, each a window of its own (Game/UI/Fitting and the rest).
 --
 -- One widget draws all of it every frame (Game/UI/Im). It reads the Core
 -- through queries and acts on it only through the Session.
@@ -44,7 +44,10 @@ local Skills = require("@lt/Core/Data/Skills")
 local SkillSheet = require("@lt/Game/UI/Skills")
 local Splash = require("@lt/Game/UI/Splash")
 local State = require("@lt/Core/Kernel/State")
-local Station = require("@lt/Game/UI/Station")
+local CrewWindow = require("@lt/Game/UI/Crew")
+local SchoolWindow = require("@lt/Game/UI/School")
+local StarbaseWindow = require("@lt/Game/UI/Starbase")
+local WalletWindow = require("@lt/Game/UI/Wallet")
 local Theme = require("@lt/Game/UI/Theme")
 local Waypoints = require("@lt/Game/Waypoints")
 local Windows = require("@lt/Game/UI/Windows")
@@ -1325,20 +1328,12 @@ end
 
 -- ---------------------------------------------------------------------
 
--- The docked screen and the star map are windows (Game/UI/Windows) that
--- draw themselves as they did when they were panels: each is moved by
--- its heading, where there is nothing to press, and by a strip along
--- its top. What they draw with is set down each frame, before the
--- windows are drawn.
-local dockedAs: { session: Session.Session, game: Core.Game, player: Core.PlayerInfo }? = nil
+-- The star map is a window (Game/UI/Windows) that draws itself as it did
+-- when it was a panel: it is moved by its heading, where there is
+-- nothing to press, and by a strip along its top. Whose it is is set
+-- down each frame, before the windows are drawn. (The docked screen was
+-- another such, until the last of its tabs was a window of its own.)
 local mapOf: Session.Session? = nil
-Windows.Kind("station", function(_: Windows.Window, x: number, y: number)
-  local now = dockedAs
-  if now then
-    Station.Draw(now.session, now.game, now.player, x, y)
-  end
-end)
-Windows.Screen("station", "station", Station.WIDTH, Station.HEIGHT, { { 0, 0, 356, 34 }, { 0, 0, Station.WIDTH, 10 } })
 Windows.Kind("map", function(_: Windows.Window, x: number, y: number, w: number, h: number)
   if mapOf then
     Map.DrawAt(mapOf, x, y, w, h)
@@ -1379,25 +1374,16 @@ for _, pane in { { "guide", Guide.WIDTH, 600, 150 }, { "colony", Colony.WIDTH, C
   Windows.Auto(pane[1], true)
 end
 
--- The dock's buttons that are a station's own: each is a tab of the
--- docked screen, until it is a window of its own.
-local TAB_OF: { [string]: string } = { wallet = "Wallet", crew = "Crew", corporation = "Wallet" }
--- (a tab of the docked screen shown is the docked screen opened, if it
--- is not, and brought in front of the windows about it)
-Station.Front = function()
-  Windows.Open("station")
-  Windows.Raise("station")
-end
-
 -- What a pilot does at any station, in a panel beside the corner's
 -- while they are docked: to undock; to make the station home, for its
 -- fee, with where home is now under it; to mend the ship, where it is
--- damaged (the fitting window mends it too); and, for a new pilot at
--- the station the career agents are at, the way to them. Under those,
--- what is in training. (They were the foot of the docked screen, which
--- is not open by itself any more.) Returns how wide it came to.
+-- damaged (the fitting window mends it too); at the station the career
+-- agents are at, the way to them; and at a starbase of the pilot's own,
+-- the way to its running. Under those, what is in training. (They were
+-- the foot of the docked screen.) Returns how wide it came to.
 --
--- To a script: "UNDOCK", "SetHome", "Station:repair", "Station:careers".
+-- To a script: "UNDOCK", "SetHome", "Station:repair", "Station:careers",
+-- "Station:starbase".
 local function drawBerth(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number): number
   local was = Im.Plain(true)
   local home = Core.Query.Home(game)
@@ -1406,9 +1392,11 @@ local function drawBerth(session: Session.Session, game: Core.Game, player: Core
   local record = game.state.ships[player.ship]
   local damaged = record ~= nil and record.armorDamage + record.hullDamage > 0
   local careers = Core.Query.Careers(game)
+  local school = careers.station == player.docked
   -- (a pilot who has done half of what there is to do without the agents is not new)
-  local school = careers.station == player.docked and not careers.begun and select(2, Core.Query.Guide(game)) < 12
-  local width = 12 + 124 + 8 + 176 + (if damaged then 8 + 168 else 0) + (if school then 8 + 132 else 0) + 12
+  local new = school and not careers.begun and select(2, Core.Query.Guide(game)) < 12
+  local own = StarbaseWindow.Here(game, player)
+  local width = 12 + 124 + 8 + 176 + (if damaged then 8 + 168 else 0) + (if school then 8 + 132 else 0) + (if own then 8 + 110 else 0) + 12
   Im.Frame(x, y, width, 94)
   Im.Tone("primary")
   if Im.Button("UNDOCK", x + 12, y + 12, 124, 34, true) then
@@ -1431,10 +1419,27 @@ local function drawBerth(session: Session.Session, game: Core.Game, player: Core
   end
   if school then
     if Im.Button("Career agents", across, y + 12, 132, 34, true, "Station:careers") then
-      Station.Show("Careers")
+      if SchoolWindow.IsOpen() then
+        SchoolWindow.Close()
+      else
+        SchoolWindow.Open()
+      end
     end
     if Im.Inside(across, y + 12, 132, 34) then
-      Im.Tip("Career agents", "New here? They teach the ropes, and pay")
+      Im.Tip("Career agents", if new then "New here? They teach the ropes, and pay" else "Seven people who teach a way of making a living each")
+    end
+    across += 132 + 8
+  end
+  if own then
+    if Im.Button("Starbase", across, y + 12, 110, 34, true, "Station:starbase") then
+      if StarbaseWindow.IsOpen() then
+        StarbaseWindow.Close()
+      else
+        StarbaseWindow.Open()
+      end
+    end
+    if Im.Inside(across, y + 12, 110, 34) then
+      Im.Tip("Starbase", "The running of this tower of yours")
     end
   end
   -- Under them: where home is (or why this station cannot be made it), and what is in training.
@@ -1514,6 +1519,11 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       SkillSheet.Frame(session)
       IndustryWindow.Frame(session, player.docked ~= 0)
       JobsWindow.Frame(session)
+      CrewWindow.Frame(session, player.docked ~= 0)
+      WalletWindow.Frame(session, player.docked ~= 0)
+      SchoolWindow.Frame(session, player.docked ~= 0 and Core.Query.Careers(game).station == player.docked)
+      -- (the running of a starbase of the pilot's own, which is what they have come there for: open on arrival)
+      StarbaseWindow.Frame(session, game, player)
       Assets.Frame(session)
       Events.Frame(session)
       -- The dock is down the left edge (Game/UI/Dock): the windows keep
@@ -1706,15 +1716,10 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         drawRack(session, game, ball, rackX, bottom - 8 - STATE_H, right - 8 - rackX)
         boostersFoot = stateTop - 8
       else
-        -- The docked screen is a window (Game/UI/Windows): in the middle
-        -- until it is put somewhere, moved by its heading, and drawn
-        -- with the other windows, below.
-        -- (the ship on the fitting screen is a thing of the scene, drawn as the scene draws: Scene.Showcase)
-        -- (and clear of the inventory, where that opens beside the dock)
-        Windows.Default("station", math.max(left + (w.size.x - Station.WIDTH) / 2, edge + 8 + 470 + 4), top + 130)
-        -- (and in whatever paint is being tried on it: Session.Try)
+        -- (the ship in the fitting window is a thing of the scene, drawn
+        -- as the scene draws, Scene.Showcase: and in whatever paint is
+        -- being tried on it, Session.Try)
         Scene.Try(session.trying.paint, session.trying.design)
-        dockedAs = { session = session, game = game, player = player }
         -- (the fitting window, which is a station's own: open when the
         -- pilot docks, if it was when they last left one. What its wheel
         -- shows the ship with is the scene's)
@@ -1722,20 +1727,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           function(cx: number, cy: number, round: number): boolean
             return Scene.Showcase(scene, game, player.ship, player.hull.id, player.hull.radius, cx, cy, round)
           end)
-        -- (the docked screen is opened from the dock, at a tab: but at a
-        -- starbase of the pilot's own, whose running is what they have
-        -- come for, it is open on arrival)
-        if Station.Arrived(game, player) then
-          Windows.Open("station")
-          Windows.Raise("station")
-        end
       end
       if ball then
         Fitting.Frame(session, false, nil, nil)
-        Station.Left()
-        if Windows.IsOpen("station") then
-          Windows.Close("station")
-        end
       end
       -- (beside the ship's own panels in space, and in the same place docked)
       drawBoosters(session, boostersX, boostersFoot)
@@ -1748,21 +1742,13 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       end
       local jobsInHand = #jobsHeld
       local steps, guided = Core.Query.Guide(game)
-      -- (whether one of the dock's buttons that is a tab of the docked
-      -- screen is what that shows now: the wallet's two books a button each)
-      local function tabShown(id: string): boolean
-        local tab = TAB_OF[id]
-        local shown = tab ~= nil and docked and Windows.IsOpen("station") and Station.Tab() == tab
-        if shown and tab == "Wallet" then
-          shown = (Station.Books() == "corporation") == (id == "corporation")
-        end
-        return shown
-      end
       local pressed = Dock.Draw(w.pos.x, top, bottom, function(id: string): Dock.State
-        local tab = TAB_OF[id]
-        if tab then
-          -- (a station's own: a tab of the docked screen, until it is a window of its own)
-          return { open = tabShown(id), can = docked, note = if docked then nil else "At a station only" }
+        if id == "wallet" or id == "corporation" then
+          -- (the wallet's two sides, a button each: Game/UI/Wallet)
+          return { open = WalletWindow.IsOpen() and (WalletWindow.Books() == "corporation") == (id == "corporation"), can = docked,
+            note = if docked then nil else "At a station only" }
+        elseif id == "crew" then
+          return { open = CrewWindow.IsOpen(), can = docked, note = if docked then nil else "At a station only" }
         elseif id == "fitting" then
           -- (a station's own, and a window of its own: Game/UI/Fitting)
           return { open = Fitting.IsOpen(), can = docked, note = if docked then nil else "At a station only" }
@@ -1818,25 +1804,32 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       if Im.Hook("Missions", true) then
         JobsWindow.Open()
       end
-      if docked then
-        for _, name in Station.Tabs(game, player) do
-          if Im.Hook(name, true) then
-            Station.Show(name)
-          end
-        end
+      if Im.Hook("Crew", docked) then
+        CrewWindow.Open()
+      end
+      if Im.Hook("Wallet", docked) then
+        WalletWindow.Open()
+      end
+      if Im.Hook("Careers", docked and Core.Query.Careers(game).station == player.docked) then
+        SchoolWindow.Open()
+      end
+      if Im.Hook("Starbase", docked and StarbaseWindow.Here(game, player)) then
+        StarbaseWindow.Open()
       end
       if pressed then
-        local tab = TAB_OF[pressed]
-        if tab then
-          if tabShown(pressed) then
+        if pressed == "wallet" or pressed == "corporation" then
+          local side = if pressed == "corporation" then "corporation" else "mine"
+          if WalletWindow.IsOpen() and WalletWindow.Books() == side then
             -- (pressed again, it is put away)
-            Windows.Close("station")
+            WalletWindow.Close()
           else
-            Station.Show(tab)
-            -- (the wallet's two books are pressed for, as a hand would: next frame, when the tab is drawn)
-            if tab == "Wallet" then
-              Im.Press(if pressed == "corporation" then "Wallet:corporation" else "Wallet:mine")
-            end
+            WalletWindow.Show(side)
+          end
+        elseif pressed == "crew" then
+          if CrewWindow.IsOpen() then
+            CrewWindow.Close()
+          else
+            CrewWindow.Open()
           end
         elseif pressed == "fitting" then
           if Fitting.IsOpen() then

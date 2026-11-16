@@ -9,7 +9,7 @@
 # it, and the bounty is the player's. Then through the gate to the next
 # system and into a station there, the hired pilot after them all the way.
 #
-# covers: Core/Tactical/Fleet
+# covers: Core/Tactical/Fleet Game/UI/Crew
 # smoke: yes
 
 wait 2

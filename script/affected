@@ -66,7 +66,7 @@ PARALLEL = 6
 HUBS = {
     "Core/Api", "Core/Attributes", "Core/Kernel/State", "Core/Tactical/Space", "Core/Tactical/Combat",
     "Core/Assets/Items", "Core/Data/Ships", "Core/Data/Modules", "Core/Data/Constants",
-    "Game/Session", "Game/UI/Im", "Game/UI/Hud", "Game/UI/Station", "Game/View/Scene", "App/game",
+    "Game/Session", "Game/UI/Im", "Game/UI/Hud", "Game/View/Scene", "App/game",
 }
 GAME_GOLDENS = ["game-docked", "game-market", "game-skills", "game-belt"]
 
