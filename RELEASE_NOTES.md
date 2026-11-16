@@ -6,49 +6,33 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
-## New station towers
+## A new interface, and new station towers
 
-- Every people's stations have new towers (the Vessari's, the Talmar's, the Orun's, the Unbound's, the Vail's and the Nimia's): a small, a middling and a large one each, no two alike. Rings turn, dishes scan, panels follow the sun and hazard lamps blink.
-- The Vail's towers are built about a wheel, with a small tower at the end of each spoke. The Nimia's are built about a sphere.
-- The modules round a station keep clear of a broad tower's rings and arms.
-
-## A dock, and windows that keep out of each other's way
-
-- The first of the interface's rework. Down the left edge of the screen there is now a dock: a button for every window, docked or in space. Hold the cursor on one to see what it is and the key that opens it. It takes the place of the row of buttons at the foot of the screen and of the Guide button.
-- A button whose window is open is marked. Jobs shows how many you have in hand. The ones that are a station's own (Fitting, Ships, Market, Industry, Jobs, Skills, Wallet, Crew, Corporation) open the docked screen at that page, and are dim in space.
-- The clock is at the foot of the dock: stop and run, how fast, slower and faster.
-- The guide, the colonies, the scanner and the information on an item are windows now: drag one by its heading, and it stays where you put it. They used to open on top of the inventory. Opening one no longer shuts another.
-- A window opened for the first time finds itself a clear place beside the ones already open, where there is room.
-- Windows have a new frame, and the system, your ship and your wallet are in a panel of their own in the top left corner.
-- The market is a window of its own, opened from the dock, and the first screen made over. Categories are a tree down its left, each opening to its groups, with a search of every category over it.
-- Its list shows what the station asks and bids, what it has and what you have: click a column's head to sort by it. "Sold here" hides what the station does not sell (it is on at first), "I can use" hides what you have not the skills for, and a tier picks out tech 1, tech 2, a people's own make, or what is only found in wrecks.
-- A thing's other makes (tech 2, a people's own, custom, masterwork) are folded under it: click the mark at its left.
-- The thing you choose has one page: buy and sell, where else it is sold, its price day by day, what it goes for nearby, and standing orders. The price chart is always there; there is no History side any more.
-- My orders and Contracts are pages of the market's window.
+- The whole interface has been made over to one look: flat dark panels with thin edges, one accent colour, and colours that each mean one thing (green for yours and for a gain, amber for a warning or where you are going, red for hostile, a loss or a refusal).
+- Down the left edge of the screen there is a dock: a button for every window, docked or in space. Hold the cursor on one to see what it is and the key that opens it. A button whose window is open is marked, and Jobs shows how many you have in hand. The clock is at its foot: stop and run, how fast, slower and faster.
+- Every station service is a window of its own, opened from the dock: Fitting, Ships, Market, Industry, Jobs, Skills, Wallet, Crew and Corporation. The old docked screen is gone, and the station is seen behind the windows.
+- A window opened for the first time finds a clear place beside the ones already open. Drag one by its title and it stays where you put it. A station's windows shut when you undock and are open again at the next station if they were open when you left.
+- While you are docked, UNDOCK, "Make home" and what is in training are in a panel beside the corner panel. Repair is there when your ship is damaged, the career agents where they are, and "Starbase" at a tower of your own. Save and Load are in the menu (Esc).
+- The system, your ship and your wallet are in a panel of their own in the top left corner.
 - A button you cannot press says why when the cursor is on it. A name too long for its column is said in full the same way.
+- Options has "Interface": draw everything at 100%, 125% or 150% (the sizes your screen has room for). It changes at once.
+- Market: categories are a tree down its left, each opening to its groups, with a search of every category over it. The list shows what the station asks and bids, what it has and what you have: click a column's head to sort by it. "Sold here" hides what the station does not sell, "I can use" hides what you have not the skills for, and a tier picks out tech 1, tech 2, a people's own make, or what is only found in wrecks. A thing's other makes are folded under it.
+- The thing you choose in the market has one page: buy and sell, where else it is sold, its price day by day, what it goes for nearby, and standing orders. My orders and Contracts are pages of the same window.
+- Fitting: click a slot on the wheel and the list on the left shows what goes in it, from your hangar or from the market here, with what fits now first and why the rest does not. Double-click a module to fit it. The rigs are on the wheel. Charges for your fitted weapons are under the list: one button loads every weapon that takes them.
+- Under the fitting wheel: how much of the hull's CPU, powergrid, calibration and hold the fit takes, repair, and "Strip the fit" (press twice), which sends every module back to the hangar and leaves the rigs. Paints and designs are on the Appearance page.
+- The fitting window says where your capacitor holds with everything running, or how long it lasts.
+- Skills open in space as well as docked. Pick a skill to see what it does, what its next level opens, what it needs and how long it takes. "Add up to level 5" queues every level left. The training queue is along the foot, and your implants are on a page of their own.
+- Industry: blueprints, ore and running jobs on the left, and on the right the job the blueprint you picked would be, with the laboratory under it.
+- Jobs open in space too: your jobs in hand, with how each is going and how long you can keep it. Docked, the window also has the jobs offered, the loyalty store and your standings.
+- Ships: the ships you have at the station, with Board, and the hulls in the hangar waiting to be assembled.
+- Wallet: your side and your corporation's are tabs, and the journals are proper lists. Crew: Pilots and Log are tabs, and the list of hired pilots scrolls (it showed five and no more).
 - In space, your ship's condition, its speed and what it is doing are one panel at the foot of the screen, with its modules beside it in three rows: high slots over mid over low. A module is a button with its key, its rounds and how far through its cycle it is. Hold the cursor on one to see what it is and what it is doing.
 - On a hull with more than eight modules in a row, weapons that are the same are one button with their number on it, switched on and off together.
-- The overview has six presets as tabs: Default, Combat, Mining, Exploration, Travel, Salvaging. Each lists ships and what its name says: rocks are on Mining, planets and moons on Travel, drones and batteries on Combat. Whatever you have selected, locked or are travelling to is always listed.
-- An overview row says what kind of thing it is and, for a ship, how fast it is going. Places in the system you are in are listed without the system's name in front.
-- A locked target's card shows how far off it is and how fast it is going.
-- Your jobs in hand are listed under the corner panel while you are in space.
-- Notices are coloured by what they are: green for a gain, amber for a warning, red for a loss or a refusal.
-- Fitting is a window of its own. Click a slot on the wheel and the list on the left shows what goes in it: from your hangar, or from the market here, with what fits now first and why the rest does not. Double-click a module to fit it. The rigs are on the wheel, up its left.
-- Under the wheel: how much of the hull's CPU, powergrid, calibration and hold the fit takes, repair, and "Strip the fit" (press twice), which sends every module back to the hangar and leaves the rigs.
-- The fitting window says where your capacitor holds with everything running, or how long it lasts.
-- Charges for your fitted weapons are listed under the modules: one button loads every weapon that takes them.
-- Paints and designs are on the fitting window's Appearance page.
-- UNDOCK, "Make home" and what is in training are in a panel beside the corner panel while you are docked. Repair is there too when your ship is damaged.
-- Skills are a window of their own, and open in space as well as docked. Pick a skill to see what it does, what its next level opens, what it needs and how long it takes. "Add up to level 5" queues every level left. The training queue is along the foot.
-- Your implants are on the skills window's Implants page.
-- Industry is a window of its own: blueprints, ore and running jobs on the left, and on the right the job the blueprint you picked would be, with the laboratory under it.
-- Jobs are a window of their own, and open in space too: your jobs in hand, with how each is going and how long you can keep it. Docked, it also has the jobs offered, the loyalty store and your standings.
-- Your ships are a window of their own: the ships you have at the station, with Board, and the hulls in the hangar waiting to be assembled.
-- Every window, the menu and the right-click menus now have the same flat look, including the ones not yet rearranged (item information, guide, scanner, colonies, star map).
-- Options has "Interface": draw everything at 100%, 125% or 150% (the sizes your screen has room for). It changes at once.
-- Crew, the wallet (with your corporation's side), the career agents and the running of a starbase of your own are windows too. These four are laid out as they were, in the new frame: they are next to be made over.
-- The old docked screen is gone. Every station service is a window you open from the dock, with the station behind them. Save and Load are in the menu (Esc).
-- The other screens inside the windows are as they were. They are being made over one at a time.
+- The overview has six presets as tabs: Default, Combat, Mining, Exploration, Travel, Salvaging. Each lists ships and what its name says. Whatever you have selected, locked or are travelling to is always listed. A row says what kind of thing it is and, for a ship, how fast it is going.
+- A locked target's card shows how far off it is and how fast it is going. Your jobs in hand are listed under the corner panel while you are in space. Notices are coloured by what they are.
+- Still laid out as they were, inside the new look: the career agents, the running of a starbase, the corporation's books, hangar and members, item information, the guide, the scanner, the colonies and the star map.
+- Every people's stations have new towers (the Vessari's, the Talmar's, the Orun's, the Unbound's, the Vail's and the Nimia's): a small, a middling and a large one each, no two alike. Rings turn, dishes scan, panels follow the sun and hazard lamps blink.
+- The Vail's towers are built about a wheel, with a small tower at the end of each spoke. The Nimia's are built about a sphere. The modules round a station keep clear of a broad tower's rings and arms.
 
 ## Four small mends to the screens
 
