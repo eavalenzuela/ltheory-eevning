@@ -654,12 +654,12 @@ The owner, of a playtest: "we need to rework the UI in general, it's still very 
 
 **Ruled by the owner (2026-11-15)**
 - **Each service is a window of its own** ("Yes, separate windows for services"): the market, the fitting, the skills, the wallet, the jobs and the rest, each opened by itself and several side by side, in place of the one docked screen and its tabs. (As proposed to them: on the layer the inventory uses, `Game/UI/Windows`, opened from a row of buttons down the screen's left edge, and those that make sense in space opened there too.)
-- **The overview's presets:** "Default, Combat, Mining, Exploration, Travel, Salvaging". What each lists is not yet said.
+- **The overview's presets:** "Default, Combat, Mining, Exploration, Travel, Salvaging", and of what each lists, "All of them should also show ships". Proposed to them for the rest, and not otherwise changed by them: Default, stations, gates, belts, wrecks, sites found and marked places; Combat, drones and batteries; Mining, asteroids, gas clouds, belts and stations; Exploration, sites found, wormholes, wrecks and marked places; Travel, stations, gates, planets, moons, belts and marked places; Salvaging, wrecks and cargo containers.
 - **The skills' groups** are theirs to write.
 - **Faults the rework does away with are left for it** ("Leave the ones the rework solves"): the market's last button cut off by the foot of the docked screen, the crew's paragraph running under it, the fixed panes under the inventory. Mended meanwhile: the foot's strip (above), the corner's credits written with their thousands apart, a mark on the overview that it scrolls, and a directional scan's list, which showed eight of what it found and now scrolls.
 
 **Still to be decided, by the owner**
-- What it is to look like: a look of its own, drawn up first as pictures and agreed, before any of it is built.
+- What it is to look like: a look of its own, drawn up first as pictures and agreed, before any of it is built. **Pictures were asked for and given (2026-11-15):** five mock-ups (the docked windows of the market, the inventory and the wallet; the flying screen, and the same with lighter panels; the fitting and the skills; and the parts every window is made of). They are pictures and no part of the game; their verdict is awaited.
 - Whether it scales with the screen, and by a setting.
 - Which first. Proposed, not ruled on: what everything else stands on (one set of colours and sizes, one list that filters and sorts, text for the cursor, where a new window opens), then the windows' frame and the buttons that open them, then the market with the inventory and the assets, then the flying screen, then skills, industry, crew, corporation and jobs, then the map and the menus.
 - How much of the toolkit above (U1 to U19) is to be built for it, and how much of `Game/UI/Im` is kept.
