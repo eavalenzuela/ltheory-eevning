@@ -24,6 +24,7 @@ local Inventory = require("@lt/Game/UI/Inventory")
 local Info = require("@lt/Game/UI/Info")
 local Keys = require("@lt/Game/UI/Keys")
 local Map = require("@lt/Game/UI/Map")
+local Market = require("@lt/Game/UI/Market")
 local Menu = require("@lt/Game/UI/Menu")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
@@ -1079,8 +1080,12 @@ end
 
 -- The dock's buttons that are a station's own: each is a tab of the
 -- docked screen, until it is a window of its own.
-local TAB_OF: { [string]: string } = { fitting = "Fitting", ships = "Ships", market = "Market", industry = "Industry", jobs = "Missions",
+local TAB_OF: { [string]: string } = { fitting = "Fitting", ships = "Ships", industry = "Industry", jobs = "Missions",
   skills = "Skills", wallet = "Wallet", crew = "Crew", corporation = "Wallet" }
+-- (a tab of the docked screen shown is the docked screen brought in front of the windows about it)
+Station.Front = function()
+  Windows.Raise("station")
+end
 -- (how many jobs are in hand, counted once a tick and not once a frame)
 local jobsTick, jobsInHand = -1, 0
 
@@ -1136,6 +1141,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       end
       -- (and the windows go over what is drawn before them: Game/UI/Windows)
       Inventory.Frame(session, player.docked ~= 0)
+      Market.Frame(session, player.docked ~= 0)
       Assets.Frame(session)
       Events.Frame(session)
       -- The dock is down the left edge (Game/UI/Dock): the windows keep
@@ -1325,6 +1331,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             badge = if id == "jobs" then jobsInHand else nil }
         elseif id == "inventory" then
           return { open = Inventory.IsOpen(), can = true, key = Keys.Of("inventory") }
+        elseif id == "market" then
+          -- (a station's own, and a window of its own: Game/UI/Market)
+          return { open = Market.IsOpen(), can = docked, note = if docked then nil else "At a station only" }
         elseif id == "map" then
           return { open = Map.IsOpen(), can = true, key = Keys.Of("map") }
         elseif id == "scanner" then
@@ -1339,6 +1348,11 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         return { open = false, can = true, key = "Esc" }
       end)
       drawClock(session, w.pos.x, bottom)
+      -- (a script that pressed the docked screen's Market tab, when the
+      -- market was one, opens the market's window: it is never shut by this)
+      if Im.Hook("Market", docked) then
+        Market.Open()
+      end
       if pressed then
         local tab = TAB_OF[pressed]
         if tab then
@@ -1353,6 +1367,12 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             Inventory.Close()
           else
             Inventory.Open()
+          end
+        elseif pressed == "market" then
+          if Market.IsOpen() then
+            Market.Close()
+          else
+            Market.Open()
           end
         elseif pressed == "map" then
           if Map.IsOpen() then

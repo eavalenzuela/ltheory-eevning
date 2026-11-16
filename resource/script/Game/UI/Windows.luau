@@ -247,6 +247,12 @@ function Windows.IsOpen(id: string): boolean
   return windows[id] ~= nil and windows[id].open
 end
 
+-- Whether one window is in front of another (both open).
+function Windows.Above(id: string, other: string): boolean
+  local a, b = table.find(order, id), table.find(order, other)
+  return a ~= nil and b ~= nil and windows[id].open and windows[other].open and a > b
+end
+
 -- A window is done with for good (one opened for a place that is gone).
 function Windows.Forget(id: string)
   local at = table.find(order, id)

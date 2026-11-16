@@ -39,6 +39,7 @@ local Settings = require("@lt/Game/Settings")
 local Starbase = require("@lt/Game/View/Starbase")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local Station = require("@lt/Game/UI/Station")
+local MarketWindow = require("@lt/Game/UI/Market")
 local Info = require("@lt/Game/UI/Info")
 local Menu = require("@lt/Game/UI/Menu")
 local Splash = require("@lt/Game/UI/Splash")
@@ -784,14 +785,18 @@ function Debug.Info(type: string): boolean
 end
 
 function Debug.Market(type: string): boolean
-  return Station.Choose(type)
+  return MarketWindow.Choose(type)
 end
 
 function Debug.Blueprint(type: string): boolean
   return Station.Blueprint(type)
 end
 
+-- (the market is a window of its own: it is what is shown while it is in front of the docked screen)
 function Debug.Tab(): string
+  if MarketWindow.IsOpen() and (Windows.Above(MarketWindow.ID, "station") or not Windows.IsOpen("station")) then
+    return "Market"
+  end
   return Station.Tab()
 end
 
@@ -989,7 +994,7 @@ end
 -- Open the market's board with a type of the hangar chosen to put up,
 -- as clicking its row under New listing would.
 function Debug.BoardItem(type: string): boolean
-  return Station.Contract(type)
+  return MarketWindow.Contract(type)
 end
 
 -- The pilot's home, where they wake when their capsule is destroyed:
@@ -1015,9 +1020,11 @@ function Debug.MarketDays(days: number)
   end
 end
 
--- Which side of the market's chosen type is shown: 'trade' or 'history'.
-function Debug.MarketPage(): string
-  return Station.MarketPage()
+-- Which page of the market's window is shown ('browse', 'orders' or
+-- 'contracts'), and the type chosen on it ('' if none).
+function Debug.MarketPage(): (string, string)
+  local chosen, page = MarketWindow.Showing()
+  return page, chosen
 end
 
 -- The price history of a type at the station docked at (the home

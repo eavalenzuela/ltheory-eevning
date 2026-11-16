@@ -47,6 +47,7 @@ local ItemIcon = require("@lt/Game/UI/ItemIcon")
 local Modules = require("@lt/Core/Data/Modules")
 local Session = require("@lt/Game/Session")
 local State = require("@lt/Core/Kernel/State")
+local Market = require("@lt/Game/UI/Market")
 local Station = require("@lt/Game/UI/Station")
 local Types = require("@lt/Core/Data/Types")
 local Windows = require("@lt/Game/UI/Windows")
@@ -293,8 +294,7 @@ local function actionsFor(session: Session.Session, view: View?, item: State.Ite
       add("To corporation hangar", nil, { kind = "MoveItems", actor = 0, item = item.id, to = "corporate" })
     end
     add("Sell", nil, nil, function()
-      Station.Show("Market")
-      Station.Choose(type)
+      Market.Choose(type)
     end)
   elseif shown.holder == own then
     if docked then

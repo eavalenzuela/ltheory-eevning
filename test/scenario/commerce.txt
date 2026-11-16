@@ -10,7 +10,7 @@
 # hold of what the economy is sending along the lanes, and the selected
 # one says what it carries and for whom.
 #
-# covers: Core/Strategic/Commerce Core/Assets/Market
+# covers: Core/Strategic/Commerce Core/Assets/Market Game/UI/Market
 
 wait 2
 lua GameDebug.NewGame(5, 40)
@@ -23,13 +23,12 @@ lua assert(_G.here ~= 1, 'a galaxy that has been going has moved its prices at h
 lua assert(select(4, GameDebug.Prices('frigate.courier')) / select(3, GameDebug.Prices('frigate.courier')) < _G.high / _G.low, 'a hull moves by less than what it is built of')
 lua assert(select(2, GameDebug.Prices('skillbook.mining')) == 0, 'a skill book goes for the same everywhere')
 
-# The Market tab says so.
+# The market's window says so, on the page of the thing chosen.
 lua assert(GameDebug.Market('mineral.iron'))
 until GameDebug.Tab() == 'Market'
 frames 3
-until GameDebug.Press('Market:history')
-frames 3
-lua assert(GameDebug.MarketPage() == 'history')
+lua assert(select(2, GameDebug.MarketPage()) == 'mineral.iron', 'the market should be open at iron')
+lua assert(GameDebug.CanPress('Market:map'), 'what it goes for across the map should be on its page')
 
 # And the star map has it all: its price layer, of the thing chosen.
 until GameDebug.Press('Market:map')

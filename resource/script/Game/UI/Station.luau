@@ -13,13 +13,11 @@ local Catalog = require("@lt/Core/Data/Catalog")
 local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
 local Fleet = require("@lt/Core/Tactical/Fleet")
-local Chart = require("@lt/Game/UI/Chart")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
 local Industry = require("@lt/Core/Assets/Industry")
 local Info = require("@lt/Game/UI/Info")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
-local Map = require("@lt/Game/UI/Map")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Paints = require("@lt/Core/Data/Paints")
@@ -38,55 +36,26 @@ local Station = {}
 Station.WIDTH = 940
 Station.HEIGHT = 600
 
-local TABS: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions" }
+local TABS: { string } = { "Fitting", "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions" }
 -- (and one more at a starbase of the pilot's own: the running of it)
-local OWN: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions", "Starbase" }
+local OWN: { string } = { "Fitting", "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions", "Starbase" }
 -- (and at the station the career agents are at: them)
-local SCHOOL: { string } = { "Fitting", "Market", "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions", "Careers" }
+local SCHOOL: { string } = { "Fitting", "Industry", "Skills", "Ships", "Crew", "Wallet", "Missions", "Careers" }
 -- The services each tab's doings are done by (Core/Assets/Stations).
 local WANTS: { [string]: { string } } = {
-  Fitting = { "fitting" }, Market = { "market" }, Industry = { "refining", "industry", "research" }, Ships = { "fitting" },
+  Fitting = { "fitting" }, Industry = { "refining", "industry", "research" }, Ships = { "fitting" },
 }
 local tab = "Fitting"
 local dockedAt = 0    -- the station the screen was last drawn for
 
--- The market: the category listed, the type shown, and what is entered.
-local CATEGORIES: { { string } } = {
-  { "module", "Modules" }, { "charge", "Charges" }, { "drone", "Drones" }, { "ship", "Ships" }, { "structure", "Structures" }, { "ore", "Ore" }, { "mineral", "Minerals" },
-  { "moon", "Moon" }, { "planetary", "Planetary" }, { "component", "Components" },
-  { "blueprint", "Blueprints" }, { "skillbook", "Skill books" }, { "implant", "Implants" }, { "paint", "Paints" }, { "goods", "Goods" },
-}
-local category = "module"
-local chosen = ""
-local quantity = 1
-local sellPrice, buyPrice = 0, 0    -- 0: the best price that fills now
--- The side of the chosen type that is shown: "trade" (buying, selling
--- and orders) or "history" (its price day by day).
-local marketPage = "trade"
--- How many days of a price are shown.
-local HISTORY = 30
+-- (The market was a tab here: it is a window of its own now, Game/UI/Market.)
 
 -- The name typed for a system of the pilot's own (the Starbase tab).
 local claimName = ""
 
--- What the thing chosen goes for across the map (Core.Query.Prices).
-local across = { key = "", age = 0, here = 1, list = {} :: { Core.PriceAt } }
-
--- Where else the thing chosen is to be had (Core.Query.Sources): asked
--- again when what is asked changes and a couple of times a second, not
--- every frame.
-local elsewhere = { key = "", age = 0, list = {} :: { Core.Source } }
-
 -- The job whose "Call off" has been pressed once, and the frames it
 -- stays asked for: a second press within them calls it off.
 local calling = { job = 0, left = 0 }
-
--- How much over what a market asks now a pilot sent there may pay, a
--- unit, on the average of a purchase: prices move while they fly. And
--- one who is to keep a thing in stock from now on, more: prices move
--- further in a week than in an hour.
-local LEEWAY = 1.1
-local STANDING = 1.25
 
 -- Industry: the blueprint shown and the runs entered.
 local blueprintChosen = ""
@@ -112,11 +81,22 @@ local function inHangar(game: Core.Game, station: number, type: string): (State.
   return nil, 0
 end
 
--- Show a tab, as clicking it would: for scripted runs.
+-- What is done when one of this screen's tabs is shown: it is brought
+-- in front of the windows about it (set by whoever draws the windows,
+-- Game/UI/Hud). And how the market is opened at a type, which is a
+-- window of its own (set by Game/UI/Market, which draws on this and so
+-- cannot be drawn on from here).
+Station.Front = nil :: (() -> ())?
+Station.Market = nil :: ((type: string) -> boolean)?
+
+-- Show a tab, as clicking it would: for scripted runs, and the dock.
 function Station.Show(name: string): boolean
   for _, known in { OWN, SCHOOL } do
     if table.find(known, name) then
       tab = name
+      if Station.Front then
+        Station.Front()
+      end
       return true
     end
   end
@@ -125,35 +105,6 @@ end
 
 function Station.Tab(): string
   return tab
-end
-
--- Open the market at a type, as clicking through to it would.
-function Station.Choose(type: string): boolean
-  local info = Types.Get(type)
-  -- (no market deals in a blueprint copy: there is nothing to open it at)
-  if info == nil or info.unlisted then
-    return false
-  end
-  tab = "Market"
-  category = info.category
-  if chosen ~= type then
-    chosen = type
-    quantity = 1
-    sellPrice, buyPrice = 0, 0
-    -- (bring its row into the list, a little way down from the top)
-    for index, entry in Catalog.Listing(category) do
-      if entry.info and entry.info.id == type then
-        Im.ScrollTo("market", index - 4)
-      end
-    end
-  end
-  return true
-end
-
--- The side of the market's chosen type that is shown: "trade" or
--- "history".
-function Station.MarketPage(): string
-  return marketPage
 end
 
 -- Open the industry tab at a blueprint, or at a copy of one, as
@@ -667,564 +618,6 @@ local function drawFitting(session: Session.Session, game: Core.Game, player: Co
 end
 
 -- ---------------------------------------------------------------------
--- Market
-
--- A price typed for an order and not yet set, by the order's id.
-local repriced: { [number]: number } = {}
-
-local function drawOrders(session: Session.Session, game: Core.Game, station: number, x: number, y: number, width: number)
-  local orders = Core.Query.Orders(game, nil)
-  Im.Heading(`MY ORDERS  {#orders}`, x, y, 16, Im.DIM)
-  if #orders == 0 then
-    Im.Text("No standing orders. Place one from an item's page.", x, y + 30, 14, Im.DIM, 0.8)
-    return
-  end
-  local line = y + 28
-  local visible = 16
-  local first = Im.Scroll("orders", x - 4, line, width, visible * 26, #orders, visible)
-  for row = 1, visible do
-    local order = orders[row + first]
-    if order == nil then
-      break
-    end
-    local here = order.station == station
-    local where = Core.Query.Body(game, order.station)
-    Im.Text(if order.side == "sell" then "SELL" else "BUY", x, line + 4, 12, if order.side == "sell" then Im.WARN else GOOD)
-    Im.Text(`{shorten(Types.Info(order.type).name, 28)}  x{Format.Whole(order.quantity)}`, x + 44, line + 3, 14, Im.TEXT)
-    if here then
-      -- (an order here has its price in a field: another typed there,
-      -- and Set, is its price from then on)
-      local shown = repriced[order.id] or order.price
-      local typed = Im.Number(`OrderPrice:{row + first}`, shown, x + 328, line, 92, 22)
-      repriced[order.id] = if typed ~= order.price then typed else nil :: any
-      local change: State.Command = { kind = "ModifyOrder", actor = 0, order = order.id, price = typed }
-      if Im.Button("Set", x + 424, line, 40, 22, typed ~= order.price and (Session.CanDo(session, change)), `SetOrder:{row + first}`) then
-        Session.Do(session, change)
-        repriced[order.id] = nil
-      end
-      Im.Text("here", x + 474, line + 4, 12, Im.DIM)
-    else
-      Im.TextRight(`at {Format.Credits(order.price)}`, x + 420, line + 3, 14, Im.TEXT)
-      Im.Text(shorten(if where then where.name else "?", 22), x + 436, line + 4, 12, Im.DIM)
-    end
-    if Im.Button("Cancel", x + width - 80, line, 72, 22, here, `CancelOrder:{row + first}`) then
-      Session.Do(session, { kind = "CancelOrder", actor = 0, order = order.id })
-    end
-    line += 26
-  end
-end
-
--- The station's board (Core/Assets/Contracts): lots for sale and lots
--- wanted here today on the left, and on the right the pilot's own
--- listings and the putting up of another.
-local contractItem = ""     -- the type chosen to put up
-local contractQuantity = 1
-local contractPrice = 0     -- 0: what it is worth here
-local contractFresh = false -- chosen by a script: all of it, and brought into the list
-
--- Open the market's board with a type of the hangar chosen to put up,
--- as clicking its row there would.
-function Station.Contract(type: string): boolean
-  if Types.Get(type) == nil then
-    return false
-  end
-  tab = "Market"
-  category = "contracts"
-  contractItem, contractPrice, contractFresh = type, 0, true
-  return true
-end
-
--- What a lot is made of, in a line.
-local function contents(stacks: { { type: string, quantity: number } }, limit: number): string
-  local parts: { string } = {}
-  for _, stack in stacks do
-    local name = Types.Info(stack.type).name
-    table.insert(parts, if stack.quantity == 1 then name else `{Format.Whole(stack.quantity)} x {name}`)
-  end
-  return shorten(table.concat(parts, ", "), limit)
-end
-
--- How long a listing is likely to wait, by its chance an hour.
-local function waits(chance: number): string
-  return if chance >= 1 then "taken within the hour" elseif chance <= 0 then "nobody will pay that"
-    else `about {math.max(1, math.floor(1 / chance + 0.5))} hours`
-end
-
-local function drawContracts(session: Session.Session, game: Core.Game, station: number, x: number, y: number, width: number)
-  local board = Core.Query.Contracts(game, station)
-  local offers: { Core.BoardLot }, wants: { Core.BoardLot } = {}, {}
-  for _, entry in board.lots do
-    table.insert(if entry.lot.side == "offer" then offers else wants, entry)
-  end
-  local half = 366
-
-  -- For sale here today.
-  Im.Heading(`FOR SALE HERE TODAY  {#offers}`, x, y, 16, Im.DIM)
-  local line = y + 28
-  if #offers == 0 then
-    Im.Text("Nothing more today. There are other lots tomorrow.", x, line, 13, Im.DIM, 0.8)
-  end
-  for _, entry in offers do
-    local lot = entry.lot
-    Im.Text(shorten(lot.title, 36), x, line, 14, Im.TEXT)
-    Im.TextRight(Format.Credits(lot.price), x + half, line, 14, Im.TEXT)
-    Im.Text(contents(lot.stacks, 62), x, line + 18, 12, Im.DIM)
-    local buy: State.Command = { kind = "AcceptContract", actor = 0, target = lot.slot }
-    local can, whyNot = Session.CanDo(session, buy)
-    -- (against its base price: under it is a find, well over is dear)
-    Im.Text(if can then `its base price is {Format.Credits(lot.worth)}` else tostring(whyNot), x, line + 35, 12,
-      if not can then Im.WARN elseif lot.price < lot.worth then GOOD else Im.DIM)
-    if Im.Button("Buy", x + half - 64, line + 31, 64, 22, can, `Contract:buy:{lot.slot}`) then
-      Session.Do(session, buy)
-    end
-    line += 62
-  end
-
-  -- Wanted here today.
-  line = y + 28 + 3 * 62 + 8
-  Im.Heading(`WANTED HERE TODAY  {#wants}`, x, line, 16, Im.DIM)
-  line += 28
-  if #wants == 0 then
-    Im.Text("Nothing more today.", x, line, 13, Im.DIM, 0.8)
-  end
-  for _, entry in wants do
-    local lot = entry.lot
-    Info.Name(lot.stacks[1].type, shorten(lot.title, 34), x, line, 14, Im.TEXT)
-    Im.TextRight(`pays {Format.Credits(lot.price)}`, x + half, line, 14, Im.TEXT)
-    local fill: State.Command = { kind = "FillContract", actor = 0, target = lot.slot }
-    local can = Session.CanDo(session, fill)
-    local have = entry.have[1] or 0
-    Im.Text(`{Format.Whole(have)} of {Format.Whole(lot.stacks[1].quantity)} in your hangar here`, x, line + 20, 12, if can then GOOD else Im.DIM)
-    if Im.Button("Deliver", x + half - 72, line + 17, 72, 22, can, `Contract:fill:{lot.slot}`) then
-      Session.Do(session, fill)
-    end
-    line += 48
-  end
-
-  -- The pilot's own listings, wherever they are up.
-  local rx = x + half + 34
-  local rw = width - half - 42
-  Im.Heading(`MY LISTINGS  {#board.listings} / {board.limit}`, rx, y, 16, Im.DIM)
-  line = y + 28
-  if #board.listings == 0 then
-    Im.Text("Nothing up. A lot is put up below, for a week.", rx, line, 13, Im.DIM, 0.8)
-  end
-  local visible = 4
-  local first = Im.Scroll("listings", rx - 4, line, rw + 8, visible * 34, #board.listings, visible)
-  for row = 1, visible do
-    local entry = board.listings[row + first]
-    if entry == nil then
-      break
-    end
-    local listing = entry.listing
-    local rowY = line + (row - 1) * 34
-    local where = Core.Query.Body(game, listing.station)
-    Im.Text(`{Format.Whole(listing.quantity)} x {shorten(Types.Info(listing.type).name, 24)}`, rx, rowY, 13, Im.TEXT)
-    Im.TextRight(Format.Credits(listing.price), rx + rw - 70, rowY, 13, Im.TEXT)
-    Im.Text(shorten(`{if entry.here then "here" else if where then where.name else "?"}, {Format.Duration(entry.left)} left: {waits(entry.chance)}`, 52),
-      rx, rowY + 16, 11, if entry.chance > 0 then Im.DIM else Im.WARN)
-    if Im.Button("Cancel", rx + rw - 62, rowY + 2, 62, 22, entry.here, `Contract:cancel:{row + first}`) then
-      Session.Do(session, { kind = "CancelContract", actor = 0, order = listing.id })
-    end
-  end
-
-  -- Another: a stack of the hangar here, so many of it, at a price.
-  line = y + 28 + visible * 34 + 10
-  Im.Heading("NEW LISTING", rx, line, 16, Im.DIM)
-  line += 26
-  -- (what no market deals in comes first: it is what a board is for)
-  local hangar: { State.Item } = {}
-  local stacks = Core.Query.Items(game, station, "hangar")
-  for pass = 1, 2 do
-    for _, item in stacks do
-      if (Types.Info(item.type).unlisted == true) == (pass == 1) then
-        table.insert(hangar, item)
-      end
-    end
-  end
-  local rows = 5
-  if #hangar == 0 then
-    Im.Text("The hangar here is empty.", rx, line, 13, Im.DIM, 0.8)
-  end
-  local chosen: State.Item? = nil
-  for index, item in hangar do
-    if item.type == contractItem then
-      chosen = item
-      if contractFresh then
-        contractQuantity = item.quantity
-        Im.ScrollTo("contract hangar", index - 1)
-      end
-    end
-  end
-  contractFresh = false
-  local top = Im.Scroll("contract hangar", rx - 4, line, rw + 8, rows * 22, #hangar, rows)
-  for row = 1, rows do
-    local item = hangar[row + top]
-    if item == nil then
-      break
-    end
-    local rowY = line + (row - 1) * 22
-    local _, clicked = Im.Row(rx - 4, rowY, rw + 4, 22, item.type == contractItem, `Contract:item:{item.type}`)
-    ItemIcon.Draw(item.type, rx, rowY + 2, 18)
-    Im.Text(shorten(Types.Info(item.type).name, 34), rx + 24, rowY + 3, 13, Im.TEXT)
-    Im.TextRight(`x{Format.Whole(item.quantity)}`, rx + rw - 6, rowY + 4, 12, Im.DIM)
-    if clicked then
-      contractItem, contractQuantity, contractPrice = item.type, item.quantity, 0
-      chosen = item
-    end
-  end
-  line += rows * 22 + 8
-  if chosen == nil then
-    Im.Text("Choose what to put up.", rx, line + 4, 13, Im.DIM, 0.8)
-    return
-  end
-  Im.Text("Quantity", rx, line + 5, 13, Im.DIM)
-  contractQuantity = Im.Number("ContractQuantity", contractQuantity, rx + 70, line, 96, 24)
-  if Im.Button("All", rx + 172, line, 44, 24, true, "Contract:all") then
-    contractQuantity = chosen.quantity
-  end
-  local count = math.clamp(math.floor(contractQuantity), 1, chosen.quantity)
-  local worth = Core.Query.ContractWorth(game, station, chosen.type, count, 1)
-  line += 28
-  Im.Text("Price", rx, line + 5, 13, Im.DIM)
-  local asked = if contractPrice > 0 then contractPrice else math.max(1, worth)
-  local typed = Im.Number("ContractPrice", asked, rx + 70, line, 96, 24)
-  if typed ~= asked then
-    contractPrice = typed
-    asked = typed
-  end
-  if Im.Button("Worth", rx + 172, line, 60, 24, true, "Contract:worth") then
-    contractPrice = 0
-  end
-  local _, fee, chance = Core.Query.ContractWorth(game, station, chosen.type, count, asked)
-  local put: State.Command = { kind = "ListContract", actor = 0, item = chosen.id, quantity = contractQuantity, price = asked }
-  local can, whyNot = Session.CanDo(session, put)
-  if Im.Button("Put up", rx + rw - 92, line, 92, 24, can, "Contract:list") then
-    Session.Do(session, put)
-    contractPrice = 0
-  end
-  line += 30
-  Im.Text(`worth about {Format.Credits(worth)} here, for the lot. The broker takes {Format.Credits(fee)}.`, rx, line, 12, Im.DIM)
-  Im.Text(if can then waits(chance) else tostring(whyNot), rx, line + 16, 12, if not can or chance <= 0 then Im.WARN elseif chance >= 1 then GOOD else Im.DIM)
-end
-
-local function drawMarket(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
-  local station = player.docked
-  local top = y + 78
-
-  -- What to list.
-  for index, entry in CATEGORIES do
-    if Im.Toggle(entry[2], x + 16, top + (index - 1) * 28, 118, 26, category == entry[1], `Category:{entry[1]}`) then
-      category = entry[1]
-    end
-  end
-  if Im.Toggle("My orders", x + 16, top + #CATEGORIES * 28 + 8, 118, 26, category == "orders", "Category:orders") then
-    category = "orders"
-  end
-  if Im.Toggle("Contracts", x + 16, top + #CATEGORIES * 28 + 38, 118, 26, category == "contracts", "Category:contracts") then
-    category = "contracts"
-  end
-
-  local listX = x + 146
-  if category == "orders" then
-    drawOrders(session, game, station, listX + 4, top, 774)
-    return
-  elseif category == "contracts" then
-    drawContracts(session, game, station, listX + 4, top, 774)
-    return
-  end
-
-  -- The types of the category, group by group under headings
-  -- (Data/Catalog), with what the station asks for one.
-  local list = Catalog.Listing(category)
-  local rowHeight = 22
-  local visible = 20
-  Im.Text("ITEM", listX + 8, top, 12, Im.DIM)
-  Im.TextRight("ASKS", listX + 296, top, 12, Im.DIM)
-  local first = Im.Scroll("market", listX, top + 18, 304, visible * rowHeight, #list, visible)
-  for row = 1, visible do
-    local entry = list[row + first]
-    if entry == nil then
-      break
-    end
-    local rowY = top + 18 + (row - 1) * rowHeight
-    local info = entry.info
-    if info then
-      local _, clicked = Im.Row(listX, rowY, 300, rowHeight, chosen == info.id)
-      local quote = Core.Query.Quote(game, station, info.id)
-      local color = if quote.ask then Im.TEXT else Im.DIM
-      ItemIcon.Draw(info.id, listX + 6, rowY + 2, 18)
-      Im.Text(shorten(info.name, 28), listX + 30, rowY + 3, 13, color)
-      Im.TextRight(if quote.ask then Format.Whole(math.ceil(quote.ask)) else "none", listX + 296, rowY + 3, 13, color)
-      if clicked then
-        Station.Choose(info.id)
-      end
-    else
-      Im.Text(string.upper(entry.header or ""), listX + 6, rowY + 6, 11, Im.ACCENT, 0.9)
-      Im.Fill(listX + 6, rowY + rowHeight - 2, 290, 1, Im.DIM, 0.3)
-    end
-  end
-
-  -- The type chosen.
-  local dx = x + 470
-  local info = Types.Get(chosen)
-  if info == nil then
-    Im.Text("Choose an item to see its prices.", dx, top + 4, 14, Im.DIM, 0.8)
-    return
-  end
-  local quote = Core.Query.Quote(game, station, chosen)
-  local stack, have = inHangar(game, station, chosen)
-  local tax, fee = Core.Query.Fees(game)
-  ItemIcon.Draw(chosen, dx, top - 6, 28)
-  Im.Heading(shorten(info.name, 28), dx + 36, top - 4, 20, Im.TEXT)
-  if Im.Button("Info", dx + 392, top - 4, 54, 22, true, `Info:{chosen}`) then
-    Info.Open(chosen)
-  end
-  -- (a paint or a design is tried on the ship before it is bought: the fitting screen shows the ship in it)
-  if info.category == "paint" and Im.Button("Try on", dx + 316, top - 4, 70, 22, true, `Try:{chosen}`) then
-    Session.Try(session, chosen)
-    tab = "Fitting"
-  end
-  local line = top + 28
-  local untrained = Core.Query.Untrained(game, chosen)
-  Im.Text(string.format("%s m3 a unit", tostring(info.volume)), dx, line, 13, Im.DIM)
-  -- (a paint or a design that is the pilot's for good is not needed twice)
-  if info.category == "paint" and game.state.paints[chosen] then
-    Im.Text("yours already: on the fitting screen's list", dx + 110, line, 13, Im.ACCENT)
-  end
-  if untrained then
-    Im.Text(shorten(untrained, 30), dx + 110, line, 13, Im.WARN)
-  end
-  -- (the two sides of a type: trading in it, and its price day by day)
-  if Im.Toggle("Trade", dx + 314, line - 5, 64, 22, marketPage == "trade", "Market:trade") then
-    marketPage = "trade"
-  end
-  if Im.Toggle("History", dx + 382, line - 5, 64, 22, marketPage == "history", "Market:history") then
-    marketPage = "history"
-  end
-  line += 26
-  Im.Text("The station asks", dx, line, 14, Im.DIM)
-  Im.Text(if quote.ask then Format.Price(quote.ask) else "nothing: it has none", dx + 150, line, 14, Im.TEXT)
-  Im.TextRight(`{Format.Whole(quote.stock)} in stock`, dx + 446, line, 14, Im.DIM)
-  line += 22
-  Im.Text("and bids", dx, line, 14, Im.DIM)
-  Im.Text(Format.Price(quote.bid), dx + 150, line, 14, Im.TEXT)
-  Im.TextRight(`{Format.Whole(have)} in your hangar`, dx + 446, line, 14, if have > 0 then Im.TEXT else Im.DIM)
-  line += 36
-
-  -- Its price here day by day, and what was traded in it: the going
-  -- price each day closed at, today's being what it is now.
-  local series = Core.Query.PriceHistory(game, station, chosen, HISTORY)
-  local low, high = Chart.Range(series)
-  local units, worth = Chart.Traded(series)
-  local level = high - low < high * 0.002
-  if marketPage == "history" then
-    Im.Heading(`PRICE HERE, {#series} {if #series == 1 then "DAY" else "DAYS"}`, dx, line, 14, Im.DIM)
-    -- (not so tall as it was: what the thing goes for across the map is under it)
-    local picked = Chart.Draw(series, dx, line + 24, 446, 116, 36, false)
-    local day = series[picked or #series]
-    -- (the day under the cursor, or today)
-    local said = if picked and picked < #series then `day {day.day + 1} closed at {Format.Price(day.price)}` else `now {Format.Price(day.price)}`
-    if day.volume > 0 then
-      said ..= `, {Format.Whole(day.volume)} traded at {Format.Price(day.value / day.volume)}`
-    end
-    Im.TextRight(said, dx + 446, line + 2, 12, Im.TEXT)
-    line += 24 + 116 + 6 + 36 + 6
-    Im.Text(`day {series[1].day + 1}`, dx, line, 11, Im.DIM)
-    Im.TextRight("today", dx + 446, line, 11, Im.DIM)
-    -- (what the tallest bar stands for)
-    local busiest = Chart.Busiest(series)
-    local scale = if busiest > 0 then `bars: units traded, the tallest {Format.Whole(busiest)}` else "nothing traded in these days"
-    Im.Text(scale, dx + 223 - Im.TextWidth(scale, 11) / 2, line, 11, Im.DIM)
-    line += 24
-    Im.Text("Lowest", dx, line, 13, Im.DIM)
-    Im.Text(Format.Price(low), dx + 80, line, 13, Im.TEXT)
-    Im.Text("Highest", dx + 230, line, 13, Im.DIM)
-    Im.Text(Format.Price(high), dx + 310, line, 13, Im.TEXT)
-    line += 20
-    Im.Text("Traded", dx, line, 13, Im.DIM)
-    Im.Text(if units > 0 then `{Format.Whole(units)} units, at {Format.Price(worth / units)} on average` else "nothing, by you or yours", dx + 80, line,
-      13, if units > 0 then Im.TEXT else Im.DIM)
-    line += 26
-    -- What it goes for across the map: here, and where it is cheapest
-    -- and dearest within reach (Core.Query.Prices). Asked again now
-    -- and then, not every frame.
-    local key = `{station}:{chosen}`
-    across.age += 1
-    if across.key ~= key or across.age > 120 then
-      across.key, across.age = key, 0
-      across.here, across.list = Core.Query.Prices(game, chosen)
-    end
-    local function percent(level: number): string
-      local off = math.floor((level - 1) * 100 + 0.5)
-      return if off == 0 then "normal" elseif off > 0 then `{off}% over` else `{-off}% under`
-    end
-    Im.Heading(`ACROSS THE MAP, {Core.PRICE_REACH} JUMPS`, dx, line, 14, Im.DIM)
-    Im.TextRight(`this system: {percent(across.here)}`, dx + 366, line + 2, 12, Im.TEXT)
-    -- (and the whole of it, on the star map: its price layer, of this thing)
-    if Im.Button("On map", dx + 376, line - 4, 70, 22, #across.list > 0, "Market:map") then
-      Map.Price(chosen, true)
-      Map.Open()
-    end
-    line += 22
-    if #across.list == 0 then
-      Im.Text("It goes for the same everywhere: it is built of nothing that is traded in bulk.", dx, line, 12, Im.DIM)
-      line += 18
-    else
-      Im.Text("Cheapest", dx, line, 12, Im.DIM)
-      Im.Text("Dearest", dx + 228, line, 12, Im.DIM)
-      line += 16
-      for row = 1, math.min(3, #across.list) do
-        local cheap, dear = across.list[row], across.list[#across.list + 1 - row]
-        local function put(at: Core.PriceAt, x: number, tone: vector)
-          Im.Text(shorten(at.name, 16), x, line, 12, Im.TEXT)
-          Im.Text(percent(at.level), x + 112, line, 12, tone)
-          Im.Text(`{at.jumps} j`, x + 186, line, 12, Im.DIM)
-        end
-        put(cheap, dx, GOOD)
-        put(dear, dx + 228, Im.WARN)
-        line += 16
-      end
-    end
-    return
-  end
-
-  -- A trade at once.
-  Im.Text("Quantity", dx, line + 5, 14, Im.DIM)
-  quantity = Im.Number("Quantity", quantity, dx + 80, line, 100, 26)
-  for index, preset in { 1, 10, 100, 1000 } do
-    if Im.Button(Format.Whole(preset), dx + 190 + (index - 1) * 52, line, 48, 26, true, `Quantity:{preset}`) then
-      quantity = preset
-    end
-  end
-  if Im.Button("All", dx + 398, line, 48, 26, have > 0, "Quantity:all") then
-    quantity = have
-  end
-  line += 36
-  local whole = quantity >= 1
-  local cost = if whole then Core.Query.BuyCost(game, station, chosen, quantity) else nil
-  local canBuy, whyNot = Session.CanDo(session, { kind = "BuyNow", actor = 0, type = chosen, quantity = quantity })
-  if Im.Button(if cost then `Buy now   {Format.Credits(cost)}` else "Buy now", dx, line, 218, 30, canBuy, "BuyNow") then
-    Session.Do(session, { kind = "BuyNow", actor = 0, type = chosen, quantity = quantity })
-  end
-  local canSell = stack ~= nil and whole and quantity <= have
-  local value = if canSell then Core.Query.SellValue(game, station, chosen, quantity) else 0
-  if Im.Button(if canSell then `Sell now   {Format.Credits(value)}` else "Sell now", dx + 228, line, 218, 30, canSell, "SellNow")
-    and stack then
-    Session.Do(session, { kind = "SellNow", actor = 0, item = stack.id, quantity = quantity })
-  end
-  line += 34
-  if not canBuy and whole then
-    Im.Text(tostring(whyNot), dx, line, 12, Im.WARN)
-  end
-  line += 18
-
-  -- Where else it is to be had: the best market within a few jumps, what
-  -- it asks, and a hired pilot whose ship is docked here to send for it.
-  -- They buy as many as the quantity above and bring them here.
-  local asked = math.max(1, math.floor(quantity))
-  local key = `{station}:{chosen}:{asked}`
-  elsewhere.age += 1
-  if elsewhere.key ~= key or elsewhere.age > 30 then
-    elsewhere.key, elsewhere.age, elsewhere.list = key, 0, Core.Query.Sources(game, station, chosen, asked)
-  end
-  local best = elsewhere.list[1]
-  if best then
-    local here = if cost then cost / asked else nil
-    Im.Text("Elsewhere", dx, line, 12, Im.DIM)
-    Im.Text(shorten(best.name, 36), dx + 64, line, 12, Im.TEXT)
-    local far = if best.jumps == 0 then "in this system" elseif best.jumps == 1 then `1 jump, in {best.system}`
-      else `{best.jumps} jumps, in {best.system}`
-    Im.Text(shorten(`{far}: {Format.Price(best.each)} each` .. (if best.units < asked then `, has {Format.Whole(best.units)}` else ""), 50),
-      dx + 64, line + 15, 12, if here == nil or best.each < here then GOOD else Im.DIM)
-    -- (who goes: the first of the pilots docked here who is doing nothing else)
-    local goes: Core.FleetRow? = nil
-    for _, row in Core.Query.Fleet(game) do
-      local ship = game.state.ships[row.ship]
-      if goes == nil and ship and ship.docked == station and (row.order == "follow" or row.order == "stay") then
-        -- (one keeping stock here already is busy: called back from the Crew tab first)
-        goes = row
-      end
-    end
-    local fetch: State.Command = { kind = "FleetOrder", actor = 0, what = "buy", pilot = if goes then goes.id else 0, target = best.id,
-      type = chosen, quantity = asked, price = math.ceil(best.each * LEEWAY) }
-    -- (or, as a standing order: so many kept in the hangar here from now on)
-    local keep: State.Command = { kind = "FleetOrder", actor = 0, what = "stock", pilot = if goes then goes.id else 0, target = best.id,
-      type = chosen, quantity = asked, price = math.ceil(best.each * STANDING) }
-    local can, why = false, nil :: string?
-    local canKeep = false
-    if goes then
-      can, why = Session.CanDo(session, fetch)
-      canKeep = (Session.CanDo(session, keep))
-    end
-    if Im.Button(if goes then shorten(`Send {string.match(goes.name, "^%S+") or goes.name}`, 11) else "Send", dx + 318, line, 82, 26,
-      can, "Fetch") then
-      Session.Do(session, fetch)
-    end
-    if Im.Button("Keep", dx + 404, line, 42, 26, canKeep, "Fetch:keep") then
-      Session.Do(session, keep)
-    end
-    if goes and not can and why then
-      Im.Text(shorten(why, 44), dx + 64, line + 30, 11, Im.WARN)
-    end
-  else
-    Im.Text("Elsewhere", dx, line, 12, Im.DIM)
-    Im.Text(`no market within {Fleet.SHOPS} jumps has any`, dx + 64, line, 12, Im.DIM, 0.8)
-  end
-  line += 38
-
-  -- Standing orders.
-  Im.Heading("STANDING ORDERS", dx, line, 14, Im.DIM)
-  Im.TextRight(string.format("broker %.1f%%   sales tax %.1f%%", fee * 100, tax * 100), dx + 446, line + 2, 12, Im.DIM)
-  line += 26
-  local bestSell = math.max(1, math.floor(quote.sellAt))
-  local sellAt = if sellPrice > 0 then sellPrice else bestSell
-  Im.Text("Sell at", dx, line + 5, 14, Im.DIM)
-  local enteredSell = Im.Number("SellPrice", sellAt, dx + 80, line, 100, 26)
-  if enteredSell ~= sellAt then
-    sellPrice = enteredSell
-    sellAt = enteredSell
-  end
-  local sellOrder: State.Command = { kind = "PlaceOrder", actor = 0, to = "sell", item = if stack then stack.id else 0,
-    quantity = quantity, price = sellAt }
-  if Im.Button("Place sell order", dx + 190, line, 256, 26, stack ~= nil and Session.CanDo(session, sellOrder), "PlaceSell") then
-    Session.Do(session, sellOrder)
-  end
-  line += 28
-  Im.Text(if sellAt <= quote.sellAt then `fills at once, at the pace of the station's customers`
-    else `waits: customers pay up to {Format.Whole(bestSell)} now`, dx + 80, line, 12, if sellAt <= quote.sellAt then GOOD else Im.DIM)
-  line += 24
-  local bestBuy = if quote.buyAt then math.ceil(quote.buyAt) else math.ceil(quote.bid)
-  local buyAt = if buyPrice > 0 then buyPrice else bestBuy
-  Im.Text("Buy at", dx, line + 5, 14, Im.DIM)
-  local enteredBuy = Im.Number("BuyPrice", buyAt, dx + 80, line, 100, 26)
-  if enteredBuy ~= buyAt then
-    buyPrice = enteredBuy
-    buyAt = enteredBuy
-  end
-  local buyOrder: State.Command = { kind = "PlaceOrder", actor = 0, to = "buy", type = chosen, quantity = quantity, price = buyAt }
-  if Im.Button("Place buy order", dx + 190, line, 256, 26, (Session.CanDo(session, buyOrder)), "PlaceBuy") then
-    Session.Do(session, buyOrder)
-  end
-  line += 28
-  local fillsNow = quote.buyAt ~= nil and buyAt >= quote.buyAt
-  Im.Text(if fillsNow then `fills at once, at the pace of the station's customers`
-    else `waits: sellers take {Format.Whole(bestBuy)} or more now`, dx + 80, line, 12, if fillsNow then GOOD else Im.DIM)
-  line += 30
-
-  -- Its price here lately, at a glance: clicked, the History side.
-  Im.Heading("PRICE HERE", dx, line, 14, Im.DIM)
-  Im.TextRight(if level then `steady at {Format.Price(high)}` else `{Format.Price(low)} to {Format.Price(high)}`
-    .. (if units > 0 then `, {Format.Whole(units)} traded` else ""), dx + 446, line + 2, 12, Im.DIM)
-  line += 22
-  Chart.Draw(series, dx, line, 446, 30, 10, true)
-  local _, opened = Im.Area("Market:chart", dx, line, 446, 46, true)
-  if opened then
-    marketPage = "history"
-  end
-end
-
--- ---------------------------------------------------------------------
 -- Industry
 
 local function drawIndustry(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
@@ -1523,7 +916,10 @@ local function drawSkills(session: Session.Session, game: Core.Game, player: Cor
           Im.Text(shorten(why, 24), bx + 90, rowY + 5, 11, Im.WARN)
         end
       elseif Im.Button("Buy book", bx, rowY + 1, 84, 21, true, `Book:{skill.id}`) then
-        Station.Choose(Skills.Book(skill.id))
+        -- (the market, at the book: a window of its own)
+        if Station.Market then
+          Station.Market(Skills.Book(skill.id))
+        end
       end
     elseif info.queued < Skills.MAX_LEVEL then
       local can = Session.CanDo(session, { kind = "TrainSkill", actor = 0, type = skill.id })
@@ -2921,6 +2317,9 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
   for index, name in tabs do
     if Im.Toggle(name, x + 364 + (index - 1) * pitch, y + 18, pitch - 4, 28, tab == name) then
       tab = name
+      if Station.Front then
+        Station.Front()
+      end
     end
   end
   -- What can be done here is what the station has a module for: say
@@ -2945,9 +2344,7 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
     Im.Text("New here? The career agents teach the ropes, and pay: Careers.", x + 16, y + 58, 13, Im.ACCENT)
   end
 
-  if tab == "Market" then
-    drawMarket(session, game, player, x, y)
-  elseif tab == "Industry" then
+  if tab == "Industry" then
     drawIndustry(session, game, player, x, y)
   elseif tab == "Skills" then
     drawSkills(session, game, player, x, y)

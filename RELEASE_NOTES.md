@@ -14,7 +14,13 @@ the lines beginning `- ` under it.
 - The guide, the colonies, the scanner and the information on an item are windows now: drag one by its heading, and it stays where you put it. They used to open on top of the inventory. Opening one no longer shuts another.
 - A window opened for the first time finds itself a clear place beside the ones already open, where there is room.
 - Windows have a new frame, and the system, your ship and your wallet are in a panel of their own in the top left corner.
-- The screens inside the windows are as they were. They are being made over one at a time, the market first.
+- The market is a window of its own, opened from the dock, and the first screen made over. Categories are a tree down its left, each opening to its groups, with a search of every category over it.
+- Its list shows what the station asks and bids, what it has and what you have: click a column's head to sort by it. "Sold here" hides what the station does not sell (it is on at first), "I can use" hides what you have not the skills for, and a tier picks out tech 1, tech 2, a people's own make, or what is only found in wrecks.
+- A thing's other makes (tech 2, a people's own, custom, masterwork) are folded under it: click the mark at its left.
+- The thing you choose has one page: buy and sell, where else it is sold, its price day by day, what it goes for nearby, and standing orders. The price chart is always there; there is no History side any more.
+- My orders and Contracts are pages of the market's window.
+- A button you cannot press says why when the cursor is on it. A name too long for its column is said in full the same way.
+- The other screens inside the windows are as they were. They are being made over one at a time.
 
 ## Four small mends to the screens
 

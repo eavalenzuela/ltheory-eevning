@@ -135,6 +135,22 @@ local SIGNS: { [string]: () -> { Glyph } } = {
   minus = function()
     return line(-0.6, 0, 0.6, 0)
   end,
+  -- (what is folded, and what is laid open)
+  right = function()
+    return path({ v(-0.3, -0.6), v(0.35, 0), v(-0.3, 0.6) })
+  end,
+  down = function()
+    return path({ v(-0.6, -0.3), v(0, 0.35), v(0.6, -0.3) })
+  end,
+  up = function()
+    return path({ v(-0.6, 0.3), v(0, -0.35), v(0.6, 0.3) })
+  end,
+  search = function()
+    return all(ring(-0.15, -0.15, 0.55), line(0.25, 0.25, 0.8, 0.8))
+  end,
+  info = function()
+    return all(ring(0, 0, 0.8), line(0, -0.1, 0, 0.45), dot(0, -0.42, 0.07))
+  end,
   plus = function()
     return all(line(-0.6, 0, 0.6, 0), line(0, -0.6, 0, 0.6))
   end,

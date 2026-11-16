@@ -91,6 +91,15 @@ local picked: { id: string, index: number }? = nil
 type Tip = { title: string, note: string?, key: string?, x: number?, y: number? }
 local tip: Tip? = nil
 
+-- Whether the controls are drawn to the new look (Im.Plain): a window
+-- that has been made over says so while it draws, and one that has not
+-- is drawn as it was. And, for the next button only, what it is among
+-- the buttons about it ("primary": the main thing to do; "danger"),
+-- and why it cannot be pressed, said while the cursor is on it.
+local plain = false
+local tone: string? = nil
+local because: string? = nil
+
 Im.TEXT = vector.create(0.82, 0.86, 0.9)
 Im.DIM = vector.create(0.5, 0.55, 0.6)
 Im.ACCENT = Colors.Primary
@@ -408,6 +417,39 @@ function Im.Button(label: string, x: number, y: number, w: number, h: number, en
     pressNow = nil
   end
   local hot = enabled and inside(x, y, w, h)
+  local kind, why = tone, because
+  tone, because = nil, nil
+  if plain then
+    -- The new look: a plain control, lighter under the cursor; the
+    -- main thing to do in the accent, a thing to be careful of in red,
+    -- and one that cannot be pressed faint, saying why when asked.
+    local size = math.min(14, h - 8)
+    if not enabled then
+      Im.Flat(x, y, w, h, Theme.CONTROL, 0.45)
+      Im.Text(label, x + (w - Im.TextWidth(label, size)) / 2, y + (h - size) / 2 - 1, size, Theme.FAINT)
+      if why and inside(x, y, w, h) then
+        Im.Tip(label, why)
+      end
+      return false
+    end
+    if kind == "primary" then
+      Im.Flat(x, y, w, h, Theme.ACCENT, if hot or scripted then 0.34 else 0.22)
+      Im.Edge(x, y, w, h, Theme.ACCENT, 0.6)
+    elseif kind == "danger" then
+      Im.Flat(x, y, w, h, Theme.BAD, if hot or scripted then 0.30 else 0.18)
+      Im.Edge(x, y, w, h, Theme.BAD, 0.55)
+    else
+      Im.Flat(x, y, w, h, if hot or scripted then Theme.CONTROL_HOT else Theme.CONTROL, 0.92)
+      if hot then
+        Im.Edge(x, y, w, h, Theme.EDGE_STRONG)
+      end
+    end
+    Im.Strong(label, x + (w - Im.StrongWidth(label, size)) / 2, y + (h - size) / 2 - 1, size, Theme.TEXT)
+    if hot and pressed then
+      clicked = true
+    end
+    return scripted or (hot and pressed)
+  end
   local base = if hot or scripted then vector.create(0.1, 0.3, 0.45) else vector.create(0.07, 0.12, 0.17)
   WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), base, 0.9, if enabled then 1 else 0.45, 4)
   local size = math.min(15, h - 8)
@@ -417,6 +459,26 @@ function Im.Button(label: string, x: number, y: number, w: number, h: number, en
     clicked = true
   end
   return scripted or (hot and pressed)
+end
+
+-- Draw the controls that follow to the new look, or as they were:
+-- returns what it was before, to be put back.
+function Im.Plain(on: boolean): boolean
+  local was = plain
+  plain = on
+  return was
+end
+
+-- What the next button is among the buttons about it: "primary" (the
+-- main thing to do) or "danger". (The new look's only.)
+function Im.Tone(kind: string)
+  tone = kind
+end
+
+-- Why the next button cannot be pressed, if it cannot: said while the
+-- cursor is on it. (The new look's only.)
+function Im.Because(why: string?)
+  because = why
 end
 
 -- Whether a button has been clicked with the mouse since this was last
@@ -457,11 +519,56 @@ end
 
 -- A button that stays lit while 'on': a tab, or one of a set of choices.
 function Im.Toggle(label: string, x: number, y: number, w: number, h: number, on: boolean, id: string?): boolean
+  if plain then
+    -- The new look: a switch in a hairline, lit in the accent while it is on.
+    local name = id or label
+    local hot, pressedNow = Im.Area(name, x, y, w, h, true)
+    if on then
+      Im.Flat(x, y, w, h, Theme.ACCENT, 0.14)
+      Im.Edge(x, y, w, h, Theme.ACCENT, 0.6)
+    else
+      if hot then
+        Im.Flat(x, y, w, h, Theme.TEXT, 0.05)
+      end
+      Im.Edge(x, y, w, h, Theme.EDGE)
+    end
+    local size = math.min(13, h - 8)
+    Im.Strong(label, x + (w - Im.StrongWidth(label, size)) / 2, y + (h - size) / 2 - 1, size, if on or hot then Theme.TEXT else Theme.DIM)
+    if hot and pressed then
+      clicked = true
+    end
+    return pressedNow
+  end
   local clicked = Im.Button(label, x, y, w, h, true, id)
   if on then
     Im.Fill(x, y + h - 3, w, 3, Im.ACCENT, 0.95)
   end
   return clicked
+end
+
+-- A page of a window, among its pages: lit and underlined while it is
+-- the one shown, with a count beside its name if it has one. Returns
+-- whether it was clicked, and how wide it came to. (The new look's.)
+function Im.Tab(label: string, x: number, y: number, h: number, on: boolean, id: string, count: number?): (boolean, number)
+  local badge = if count and count > 0 then tostring(count) else nil
+  local width = Im.StrongWidth(label, 14) + 24 + (if badge then Im.StrongWidth(badge, 11) + 16 else 0)
+  local hot, pressedNow = Im.Area(id, x, y, width, h, true)
+  if on then
+    Im.Flat(x, y, width, h, Theme.ACCENT, 0.07)
+    Im.Flat(x, y + h - 2, width, 2, Theme.ACCENT)
+  elseif hot then
+    Im.Flat(x, y, width, h, Theme.TEXT, 0.04)
+  end
+  Im.Strong(label, x + 12, y + (h - 14) / 2 - 1, 14, if on or hot then Theme.TEXT else Theme.DIM)
+  if badge then
+    local bx = x + 12 + Im.StrongWidth(label, 14) + 6
+    Im.Flat(bx, y + (h - 15) / 2, Im.StrongWidth(badge, 11) + 10, 15, Theme.CONTROL, 0.92)
+    Im.Strong(badge, bx + 5, y + (h - 15) / 2 + 2, 11, Theme.TEXT)
+  end
+  if hot and pressed then
+    clicked = true
+  end
+  return pressedNow, width
 end
 
 -- A field holding a whole number of at most nine digits. Click it and
@@ -500,9 +607,14 @@ function Im.Number(name: string, value: number, x: number, y: number, w: number,
     value = tonumber(typed) or 0
   end
   local focused = focus == name
-  WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), vector.create(0.02, 0.03, 0.04), 0.95, 1, 3)
-  if focused then
-    Im.Fill(x, y + h - 2, w, 2, Im.ACCENT, 0.95)
+  if plain then
+    Im.Flat(x, y, w, h, Theme.WELL, 0.9)
+    Im.Edge(x, y, w, h, if focused then Theme.ACCENT else Theme.EDGE, if focused then 0.9 else 1)
+  else
+    WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), vector.create(0.02, 0.03, 0.04), 0.95, 1, 3)
+    if focused then
+      Im.Fill(x, y + h - 2, w, 2, Im.ACCENT, 0.95)
+    end
   end
   local size = math.min(15, h - 8)
   local text = if focused then typed .. "_" else tostring(value)
@@ -547,9 +659,14 @@ function Im.Words(name: string, value: string, x: number, y: number, w: number, 
     value = typed
   end
   local focused = focus == name
-  WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), vector.create(0.02, 0.03, 0.04), 0.95, 1, 3)
-  if focused then
-    Im.Fill(x, y + h - 2, w, 2, Im.ACCENT, 0.95)
+  if plain then
+    Im.Flat(x, y, w, h, Theme.WELL, 0.9)
+    Im.Edge(x, y, w, h, if focused then Theme.ACCENT else Theme.EDGE, if focused then 0.9 else 1)
+  else
+    WidgetRenderer_DrawPanel(vector.create(x, y), vector.create(w, h), vector.create(0.02, 0.03, 0.04), 0.95, 1, 3)
+    if focused then
+      Im.Fill(x, y + h - 2, w, 2, Im.ACCENT, 0.95)
+    end
   end
   local size = math.min(15, h - 8)
   if focused then
@@ -626,7 +743,11 @@ function Im.Scroll(name: string, x: number, y: number, w: number, h: number, cou
     -- a thumb down the right edge
     local track = h - 4
     local size = math.max(16, track * visible / count)
-    Im.Fill(x + w - 3, y + 2 + (track - size) * at / (count - visible), 3, size, Im.DIM, 0.6)
+    if plain then
+      Im.Flat(x + w - 4, y + 2 + (track - size) * at / (count - visible), 4, size, Theme.DIM, 0.55)
+    else
+      Im.Fill(x + w - 3, y + 2 + (track - size) * at / (count - visible), 3, size, Im.DIM, 0.6)
+    end
   end
   return at
 end
@@ -649,7 +770,15 @@ function Im.Row(x: number, y: number, w: number, h: number, selected: boolean, i
       pressNow = nil
     end
   end
-  if selected then
+  if plain then
+    -- (picked: a tint, and a bar of the accent at its left; under the cursor: a lighter row)
+    if selected then
+      Im.Flat(x, y, w, h, Theme.ACCENT, 0.13)
+      Im.Flat(x, y, 3, h, Theme.ACCENT)
+    elseif hot then
+      Im.Flat(x, y, w, h, Theme.TEXT, 0.045)
+    end
+  elseif selected then
     Im.Fill(x, y, w, h, Im.ACCENT, 0.22)
   elseif hot then
     Im.Fill(x, y, w, h, Im.ACCENT, 0.1)
