@@ -217,6 +217,10 @@ local function place(window: Window)
     end
   end
   window.x, window.y = window.x + 32 * step, window.y + 32 * step
+  -- (and all of it on the screen, where it is no bigger than that: a
+  -- wide window that opens near the right edge does not go over it)
+  window.x = math.max(left, math.min(window.x, right - gap - window.w))
+  window.y = math.max(top, math.min(window.y, bottom - gap - window.h))
 end
 
 function Windows.Open(id: string)

@@ -33,6 +33,7 @@ local Fleet = require("@lt/Core/Tactical/Fleet")
 local Format = require("@lt/Game/Format")
 local Icons = require("@lt/Game/UI/Icons")
 local Fitting = require("@lt/Game/UI/Fitting")
+local SkillSheet = require("@lt/Game/UI/Skills")
 local Im = require("@lt/Game/UI/Im")
 local Info = require("@lt/Game/UI/Info")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
@@ -1172,5 +1173,6 @@ Windows.Icon(Market.ID, "market")
 -- (the docked screen's own way to it: its Skills tab buys a book here)
 Station.Market = Market.Choose
 Fitting.Market = Market.Choose
+SkillSheet.Market = Market.Choose
 
 return Market

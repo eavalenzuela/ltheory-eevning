@@ -1,11 +1,12 @@
 --!strict
--- What is left of the docked screen: industry, skills, the crew, the
--- wallet and the jobs, a tab each; and, at the
+-- What is left of the docked screen: industry, the crew, the wallet and
+-- the jobs, a tab each; and, at the
 -- station a new pilot starts at, the career agents (Game/UI/Careers).
 -- It was the whole of the interface while docked. The market and the
--- fitting of the ship and the ships kept here were tabs of it, and are
--- windows of their own now (Game/UI/Market, Game/UI/Fitting,
--- Game/UI/Ships), as the rest are to be; and what a
+-- fitting of the ship, the ships kept here and the pilot's skills were
+-- tabs of it, and are windows of their own now (Game/UI/Market,
+-- Game/UI/Fitting, Game/UI/Ships, Game/UI/Skills), as the rest are to
+-- be; and what a
 -- pilot does at any station (to undock, to make it home) is beside the
 -- corner's panel (Game/UI/Hud). So it is not open by itself any more:
 -- the dock opens it at a tab, and shuts it.
@@ -30,7 +31,6 @@ local Reactions = require("@lt/Core/Data/Reactions")
 local Session = require("@lt/Game/Session")
 local Assault = require("@lt/Core/Tactical/Assault")
 local Ships = require("@lt/Core/Data/Ships")
-local Skills = require("@lt/Core/Data/Skills")
 local State = require("@lt/Core/Kernel/State")
 local Moons = require("@lt/Core/Data/Moons")
 local Structures = require("@lt/Core/Data/Structures")
@@ -41,11 +41,11 @@ local Station = {}
 Station.WIDTH = 940
 Station.HEIGHT = 600
 
-local TABS: { string } = { "Industry", "Skills", "Crew", "Wallet", "Missions" }
+local TABS: { string } = { "Industry", "Crew", "Wallet", "Missions" }
 -- (and one more at a starbase of the pilot's own: the running of it)
-local OWN: { string } = { "Industry", "Skills", "Crew", "Wallet", "Missions", "Starbase" }
+local OWN: { string } = { "Industry", "Crew", "Wallet", "Missions", "Starbase" }
 -- (and at the station the career agents are at: them)
-local SCHOOL: { string } = { "Industry", "Skills", "Crew", "Wallet", "Missions", "Careers" }
+local SCHOOL: { string } = { "Industry", "Crew", "Wallet", "Missions", "Careers" }
 -- The services each tab's doings are done by (Core/Assets/Stations).
 local WANTS: { [string]: { string } } = {
   Industry = { "refining", "industry", "research" },
@@ -399,139 +399,6 @@ local function drawIndustry(session: Session.Session, game: Core.Game, player: C
       math.floor(invention.chance * 100 + 0.5)), dx + 156, line - 1, 12, Im.DIM)
     Im.Text(if canInvent then Format.Credits(invention.fee) else shorten(tostring(whyNotInvent), 44), dx + 156, line + 13, 12,
       if canInvent then Im.DIM else Im.WARN)
-  end
-end
-
--- ---------------------------------------------------------------------
--- Skills
-
-local function drawSkills(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number)
-  local station = player.docked
-  local top = y + 78
-  local left = x + 16
-  local skills = Core.Query.Skills(game)
-  local known = 0
-  for _, info in skills do
-    if info.level >= 0 then
-      known += 1
-    end
-  end
-  Im.Heading(`SKILLS  {known} of {#skills}`, left, top, 16, Im.DIM)
-  local rowHeight = 23
-  local visible = 19
-  local line = top + 26
-  local first = Im.Scroll("skills", left - 4, line, 600, visible * rowHeight, #skills, visible)
-  for row = 1, visible do
-    local info = skills[row + first]
-    if info == nil then
-      break
-    end
-    local skill = info.skill
-    local rowY = line + (row - 1) * rowHeight
-    Im.Row(left - 4, rowY, 596, rowHeight, false)
-    Im.Text(skill.name, left, rowY + 4, 14, if info.level >= 0 then Im.TEXT else Im.DIM)
-    for level = 1, Skills.MAX_LEVEL do
-      local px = left + 178 + (level - 1) * 13
-      if level <= info.level then
-        Im.Fill(px, rowY + 7, 10, 10, Im.ACCENT, 0.95)
-      elseif level <= info.queued then
-        Im.Fill(px, rowY + 7, 10, 10, Im.ACCENT, 0.4)
-      else
-        Im.Fill(px, rowY + 7, 10, 10, Im.DIM, 0.25)
-      end
-    end
-    Im.Text(shorten(skill.note, 37), left + 252, rowY + 5, 12, Im.DIM)
-    local bx = left + 504
-    if info.level < 0 then
-      -- (the book, in the hangar here or in the hold of the pilot's ship)
-      local book = inHangar(game, station, Skills.Book(skill.id))
-      if book == nil then
-        for _, item in Core.Query.Items(game, game.state.player.ship, "cargo") do
-          book = if item.type == Skills.Book(skill.id) then item else book
-        end
-      end
-      if book then
-        local can, why = Session.CanDo(session, { kind = "LearnSkill", actor = 0, item = book.id })
-        if Im.Button("Learn", bx, rowY + 1, 84, 21, can, `Learn:{skill.id}`) then
-          Session.Do(session, { kind = "LearnSkill", actor = 0, item = book.id })
-        end
-        -- (and why not, where it cannot be: it wants another skill first)
-        if not can and why then
-          Im.Text(shorten(why, 24), bx + 90, rowY + 5, 11, Im.WARN)
-        end
-      elseif Im.Button("Buy book", bx, rowY + 1, 84, 21, true, `Book:{skill.id}`) then
-        -- (the market, at the book: a window of its own)
-        if Station.Market then
-          Station.Market(Skills.Book(skill.id))
-        end
-      end
-    elseif info.queued < Skills.MAX_LEVEL then
-      local can = Session.CanDo(session, { kind = "TrainSkill", actor = 0, type = skill.id })
-      if Im.Button(`Train {info.queued + 1}`, bx, rowY + 1, 84, 21, can, `Train:{skill.id}`) then
-        Session.Do(session, { kind = "TrainSkill", actor = 0, type = skill.id })
-      end
-    else
-      Im.Text(if info.level >= Skills.MAX_LEVEL then "mastered" else "queued", bx + 14, rowY + 5, 12, Im.DIM)
-    end
-  end
-
-  -- The queue.
-  local dx = x + 628
-  local queue = Core.Query.Training(game)
-  Im.Heading(`TRAINING  {#queue} / {Skills.QUEUE_LENGTH}`, dx, top, 16, Im.DIM)
-  line = top + 26
-  if #queue == 0 then
-    Im.Text("Nothing is training.", dx, line, 14, Im.WARN)
-    Im.Text("Training goes on while you fly.", dx, line + 20, 12, Im.DIM)
-  end
-  for index, entry in queue do
-    Im.Text(`{shorten(Skills.byId[entry.skill].name, 20)} {entry.level}`, dx, line + 2, 14, if index == 1 then Im.TEXT else Im.DIM)
-    Im.TextRight(Format.Duration(entry.left), dx + 262, line + 2, 13, if index == 1 then Im.TEXT else Im.DIM)
-    if Im.Button("x", dx + 272, line, 24, 20, true, `CancelTraining:{index}`) then
-      Session.Do(session, { kind = "CancelTraining", actor = 0, quantity = index })
-    end
-    line += 22
-    if index == 1 then
-      Im.Fill(dx, line, 262, 4, Im.DIM, 0.25)
-      Im.Fill(dx, line, 262 * math.clamp(1 - entry.left / math.max(1, entry.seconds), 0, 1), 4, Im.ACCENT, 0.95)
-      line += 12
-    end
-  end
-
-  -- The pilot's implants: the five places, and what in the hangar could
-  -- go into one. (Under the queue at its longest.)
-  local places, open = Core.Query.Implants(game)
-  line = top + 266
-  Im.Heading("IMPLANTS", dx, line, 14, Im.DIM)
-  line += 22
-  for slot, place in places do
-    local implant = place.implant
-    Im.Text(`{slot}`, dx, line + 2, 12, Im.DIM)
-    if implant then
-      Info.Name(implant.id, shorten(implant.name, 24), dx + 16, line + 2, 13, Im.TEXT)
-      Im.Text(shorten(implant.note, 20), dx + 16 + 150, line + 3, 11, Im.DIM)
-      if Im.Button("x", dx + 272, line, 24, 18, true, `Unplug:{slot}`) then
-        Session.Do(session, { kind = "UnplugImplant", actor = 0, what = implant.id })
-      end
-    else
-      Im.Text(if slot <= open then "empty" else `needs Cybernetics {slot}`, dx + 16, line + 2, 12, Im.DIM, 0.8)
-    end
-    line += 20
-  end
-  local shown = 0
-  for _, item in Core.Query.Items(game, player.docked, "hangar") do
-    if Types.Info(item.type).category == "implant" and shown < 2 then
-      shown += 1
-      line += 4
-      local plug: State.Command = { kind = "PlugImplant", actor = 0, item = item.id }
-      local can, whyNot = Session.CanDo(session, plug)
-      if Im.Button("Plug in", dx, line, 70, 20, can, `Plug:{item.type}`) then
-        Session.Do(session, plug)
-      end
-      Im.Text(shorten(if can then Types.Info(item.type).name else tostring(whyNot), 32), dx + 78, line + 3, 12,
-        if can then Im.TEXT else Im.WARN)
-      line += 20
-    end
   end
 end
 
@@ -1818,9 +1685,7 @@ function Station.Draw(session: Session.Session, game: Core.Game, player: Core.Pl
     Im.Text("New here? The career agents teach the ropes, and pay: Careers.", x + 16, y + 58, 13, Im.ACCENT)
   end
 
-  if tab == "Skills" then
-    drawSkills(session, game, player, x, y)
-  elseif tab == "Wallet" then
+  if tab == "Wallet" then
     drawWallet(session, game, x, y)
   elseif tab == "Crew" then
     drawCrew(session, game, player, x, y)
