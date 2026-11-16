@@ -173,6 +173,38 @@ local KINDS: { Kind } = {
   { id = "mender", hull = "frigate.cutthroat", name = "Pirate Mender", range = 4500, bounty = 25000, tags = 1,
     fit = { { "remote.armor.small" }, { "remote.armor.small" }, { "autocannon.small", "ammo.fusion" }, { "afterburner.1mn" },
       { "armor.plate.200mm" }, { "damage.control" } } },
+  -- And no pirates at all: the Drowned (Data/Factions), who are what is
+  -- met past where pirates live, in the deepest of uncharted space.
+  -- They are flown by a pirate's rules, hunt what a pirate hunts, and
+  -- are as much anybody's friend ("pirates" is what the state calls
+  -- whoever comes for the pilot). Their own hulls, the best make of
+  -- railgun there is on every hardpoint with the round that hits
+  -- hardest in it and coils behind it: hull for hull they hit harder
+  -- than a pirate and take half as much killing again, which is what
+  -- the owner's "dangerous" is taken for. Each kind holds what it
+  -- catches in its own way.
+  -- Nobody pays a bounty on one and it carries no tags: what it is
+  -- worth is in what its hull is made of (Tactical/Aftermath). Every
+  -- one comes under the cloak its hull has, and is not seen until it is
+  -- in reach (Pirates.AMBUSH). (Which hulls, their fits and their reach
+  -- are first figures.)
+  { id = "drowned.cairn", hull = "frigate.cairn", name = "Drowned Cairn", range = 5000, bounty = 0, tags = 0,
+    fit = all(times(3, "railgun.small.master", "charge.kinetic.short"),
+      { { "disruptor.warp" }, { "afterburner.1mn" }, { "flux.coil" }, { "flux.coil" }, { "damage.control" } }) },
+  { id = "drowned.gravestone", hull = "destroyer.gravestone", name = "Drowned Gravestone", range = 7000, bounty = 0, tags = 0,
+    fit = all(times(6, "railgun.small.master", "charge.kinetic.short"),
+      { { "projector.entanglement" }, { "afterburner.1mn" }, { "flux.coil" }, { "flux.coil" }, { "damage.control" } }) },
+  { id = "drowned.casket", hull = "cruiser.casket", name = "Drowned Casket", range = 12000, bounty = 0, tags = 0,
+    fit = all(times(4, "railgun.medium.master", "charge.kinetic.short.medium"),
+      { { "disruptor.warp" }, { "flux.coil" }, { "flux.coil" }, { "flux.coil" }, { "armor.plate.medium" }, { "damage.control" },
+        { "shield.extender.medium" } }) },
+  { id = "drowned.keeper", hull = "battlecruiser.graveyardkeeper", name = "Drowned Graveyard Keeper", range = 14000, bounty = 0, tags = 0,
+    fit = all(times(8, "railgun.medium.master", "charge.kinetic.short.medium"),
+      { { "flux.coil" }, { "flux.coil" }, { "flux.coil" }, { "armor.plate.medium" }, { "damage.control" }, { "shield.extender.medium" } }) },
+  { id = "drowned.coffin", hull = "battleship.coffin", name = "Drowned Coffin", range = 22000, bounty = 0, tags = 0,
+    fit = all(times(7, "railgun.large.master", "charge.kinetic.short.large"),
+      { { "flux.coil" }, { "flux.coil" }, { "flux.coil" }, { "armor.plate.large" }, { "damage.control" }, { "shield.extender.large" },
+        { "disruptor.warp" } }) },
 }
 
 Pirates.kinds = KINDS
@@ -220,6 +252,23 @@ local DEEP: { { { any } } } = {
 }
 Pirates.DEEP = DEEP
 Pirates.DEEP_KEEN = { 2, 2.5, 3 }
+-- And past that, in the fourth depth and the fifth, what the Drowned
+-- send (the project owner's: "They are found in the 'deep' wormhole
+-- systems, and their ships are both dangerous and lucrative"): nothing
+-- smaller than a destroyer leads at the fourth, and a battleship or a
+-- battlecruiser at the fifth. (First figures.)
+local DROWNED: { { { any } } } = {
+  { { 0.4, { "drowned.gravestone", "drowned.cairn", "drowned.cairn" } },
+    { 0.35, { "drowned.casket", "drowned.gravestone", "drowned.cairn" } },
+    { 0.25, { "drowned.keeper", "drowned.casket", "drowned.cairn" } } },
+  { { 0.4, { "drowned.coffin", "drowned.casket", "drowned.gravestone", "drowned.cairn" } },
+    { 0.35, { "drowned.keeper", "drowned.casket", "drowned.casket", "drowned.gravestone" } },
+    { 0.25, { "drowned.coffin", "drowned.coffin", "drowned.keeper", "drowned.cairn" } } },
+}
+Pirates.DROWNED = DROWNED
+-- How near its prey, in its own fighting ranges, a ship that came under
+-- its hull's cloak comes out of it.
+Pirates.AMBUSH = 1.2
 
 -- The charge a weapon is loaded with when nobody says: the first there
 -- is of its family and size.
@@ -273,7 +322,8 @@ end
 -- commands a store.
 local graded: { [string]: Kind } = {}
 for _, kind in KINDS do
-  if Ships.byId[kind.hull].class ~= "works" then
+  -- (nor has what the Drowned send a grade: each is what it is)
+  if Ships.byId[kind.hull].class ~= "works" and string.sub(kind.id, 1, 8) ~= "drowned." then
     local _, got, left = fitOf(kind)
     for grade, rank in Pirates.GRADES do
       local fit: { { string } } = {}
@@ -392,7 +442,7 @@ Pirates.AWAY = 2
 -- ('keen': how many times as likely each is to be a veteran or a captain.)
 local function bring(state: State.State, system: number, site: System.Object, band: string, pack: { string }, stronghold: boolean,
   rng: Rng.Rng, away: boolean, events: { Event }, keen: number?)
-  local captains = 0
+  local captains, unseen = 0, 0
   for index, id in pack do
     local angle = Rng.Float(rng, 0, 2 * math.pi)
     local out = Rng.Float(rng, 25000, 35000)
@@ -404,9 +454,17 @@ local function bring(state: State.State, system: number, site: System.Object, ba
     captains += if grade == 2 then 1 else 0
     local ball = Pirates.Spawn(state, Pirates.Graded(Pirates.kindById[id], grade), system,
       site.x + out * math.cos(angle), site.y + Rng.Float(rng, -3000, 3000), site.z + out * math.sin(angle), site.id)
+    -- (a hull with a cloak of its own comes under it: the Drowned's)
+    if Combat.HasCloak(state, ball.id) then
+      ball.vitals.cloaked = true
+      unseen += 1
+    end
     table.insert(events, { kind = "BallAdded", ball = ball.id })
   end
-  table.insert(events, { kind = "PiratesArrived", grid = site.id, count = #pack, away = away, captains = captains })
+  -- (nobody is told of a pack that nobody can see)
+  if unseen < #pack then
+    table.insert(events, { kind = "PiratesArrived", grid = site.id, count = #pack, away = away, captains = captains })
+  end
 end
 
 -- Bring pirates to where a ship of the pilot's side is, if the place is
@@ -417,10 +475,10 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   if site == nil then
     return
   end
-  -- (past the depth pirates live at there are none: Describe/Galaxy)
-  if (state.galaxy.systems[me.system].depth or 0) > Galaxy.PIRATE_DEPTH then
-    return
-  end
+  -- (past the depth pirates live at there are none, and what comes is
+  -- the Drowned's: Describe/Galaxy)
+  local depth = state.galaxy.systems[me.system].depth or 0
+  local theirs = math.min(#DROWNED, depth - Galaxy.PIRATE_DEPTH)
   -- (where pirates are massing, the system is a kind of space worse
   -- than it is: Tactical/Surges)
   local surging = Surges.On(state, me.system)
@@ -469,8 +527,8 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   end
   local roll = Rng.Next(rng)
   -- (in uncharted space, what its depth brings)
-  local deep = math.min(#DEEP, state.galaxy.systems[me.system].depth or 0)
-  local packs: { { any } } = if deep > 0 then DEEP[deep] else PACKS[band]
+  local deep = math.min(#DEEP, depth)
+  local packs: { { any } } = if theirs > 0 then DROWNED[theirs] elseif deep > 0 then DEEP[deep] else PACKS[band]
   local pack: { string } = packs[#packs][2]
   for _, entry in packs do
     roll -= entry[1]
@@ -485,8 +543,9 @@ local function populate(state: State.State, me: State.Ball, away: boolean, event
   if hidden == nil and site.kind == "belt" and state.galaxy.systems[me.system].home and #pack > 1 then
     pack = { pack[1] }
   end
-  bring(state, me.system, site, band, pack, stronghold, rng, away, events,
-    if deep > 0 then Pirates.DEEP_KEEN[deep] elseif surging then Surges.GRADED else 1)
+  -- (the Drowned have no veterans and no captains: each is what it is)
+  bring(state, me.system, site, band, pack, stronghold and theirs <= 0, rng, away, events,
+    if theirs > 0 then 0 elseif deep > 0 then Pirates.DEEP_KEEN[deep] elseif surging then Surges.GRADED else 1)
 end
 
 -- Bring a pack to a place for a reason that is somebody else's (a raid
@@ -532,6 +591,7 @@ end
 
 local function give(state: State.State, command: State.Command, events: { Event }): boolean
   local combat = command.kind == "LockTarget" or command.kind == "ActivateModule" or command.kind == "DeactivateModule"
+    or command.kind == "Cloak" or command.kind == "Uncloak"
   if combat then
     if Combat.Validate(state, command) then
       Combat.Apply(state, command, events)
@@ -851,6 +911,20 @@ function Pirates.Think(state: State.State, events: { Event })
     if pilot.alone > PATIENCE then
       gone(state, id, ball, "left", events)
       continue
+    end
+
+    -- One that came under its hull's own cloak (the Drowned's) closes
+    -- on its prey unseen, and comes out of it when it is near enough to
+    -- fight. With nobody to go for it lies where it is, under it.
+    if ball.vitals.cloaked then
+      if prey and Space.Gap(ball :: any, prey :: any) <= pilot.range * Pirates.AMBUSH then
+        give(state, { kind = "Uncloak", actor = id }, events)
+      else
+        if prey and not (ball.mode == "approach" and ball.target == prey.id) then
+          give(state, { kind = "Approach", actor = id, target = prey.id, range = pilot.range }, events)
+        end
+        continue
+      end
     end
 
     -- Breaking off. One on its way out goes on with it, unless it has

@@ -414,7 +414,9 @@ local function yardHull(yard: Factions.Faction, class: string, named: string, ro
     end
   end
   return {
-    id = `{class}.{string.lower((string.gsub(named, "[^%a]", "")))}`, name = `{yard.name} {named}`, class = class, lineage = yard.id,
+    -- (a hull whose name begins "The" goes by that alone: "The Reaper")
+    id = `{class}.{string.lower((string.gsub(named, "[^%a]", "")))}`,
+    name = if string.sub(named, 1, 4) == "The " then named else `{yard.name} {named}`, class = class, lineage = yard.id,
     basePrice = round(s.price * yard.price * bulk * (if combat then COMBAT_HAULER.price else 1)), volume = s.volume,
     mass = round(s.mass * yard.mass * bulk), inertia = s.inertia, maxVelocity = round(s.velocity * yard.velocity),
     warpSpeed = s.warp, radius = radius or s.radius,
@@ -459,7 +461,8 @@ for _, yard in Factions.list do
         end
         local hull = yardHull(yard, named.class, named.name, named.role, own, named.guns, named.radius)
         hull.jump, hull.stealth, hull.rare = named.jump, named.stealth, named.rare
-        hull.cloak, hull.explorer = named.cloak, named.explorer
+        -- (every plain hull of a people whose hulls all have a cloak of their own: the Drowned's)
+        hull.cloak, hull.explorer = named.cloak or yard.cloaks, named.explorer
         hull.jumpField = named.jumpField
         -- (a hull written out by hand above, under the name the line has
         -- for it, is that hull: the Kethri's frigate)
@@ -760,7 +763,10 @@ for _, yard in Factions.list do
       local from = assert(base, `{yard.name}'s {entry.name} is the tech 2 make of a hull they do not build`)
       local hull = rebuiltHull(from, `{entry.class}.{string.lower((string.gsub(entry.name, "[^%a]", "")))}`, `{yard.name} {entry.name}`)
       hull.jump, hull.stealth = entry.jump or from.jump, entry.stealth or from.stealth
-      hull.cloak, hull.explorer = entry.cloak or from.cloak, entry.explorer or from.explorer
+      -- (the tech 2 make of a hull of a people whose plain hulls all
+      -- have a cloak of their own has none, unless it is said to: the
+      -- owner's, of the Drowned's two, "no builtin cloak")
+      hull.cloak, hull.explorer = entry.cloak or (if yard.cloaks then nil else from.cloak), entry.explorer or from.explorer
       hull.jumpField = entry.jumpField or from.jumpField
       table.insert(types, hull)
     end

@@ -3,8 +3,9 @@
 --
 -- Four human factions, each with hull designs of its own. The pirates,
 -- whose hulls are other people's, patched together. Three alien
--- factions, whose ships are not built the way humans build. A hull's
--- 'lineage' (Data/Ships) is its faction's id.
+-- factions, whose ships are not built the way humans build: two that
+-- hold space on the map, and one that is met only in the deep of
+-- uncharted space. A hull's 'lineage' (Data/Ships) is its faction's id.
 --
 -- A faction is what makes its ships differ from another's: how they are
 -- shaped, what they shoot, how they take a hit. The numbers here
@@ -34,9 +35,11 @@ export type Faction = {
   -- broad flat hulls drawn to a point, stepped with decks and towers,
   -- some with one side not the other's twin (the Vail, by the owner's
   -- picks of them from the generator), "liquid" round masses of living
-  -- metal without a seam (the Nimia, by the owner's word), "monolith"
-  -- rings and slabs without a seam.
-  style: "slab" | "cloud" | "motley" | "blade" | "patchwork" | "wedge" | "liquid" | "monolith",
+  -- metal without a seam (the Nimia, by the owner's word), "outrigger"
+  -- windowless hulls with a lesser hull out on one side, which houses
+  -- the generator of the cloak each has (the Drowned, by the owner's
+  -- word and picks).
+  style: "slab" | "cloud" | "motley" | "blade" | "patchwork" | "wedge" | "liquid" | "outrigger",
   weapon: string,           -- the turret family its warships carry
   launchers: number,        -- the share of a warship's hardpoints that are launchers
   tank: "armor" | "shield" | "hull",
@@ -83,6 +86,20 @@ export type Faction = {
   -- A people with no fixed place: it builds no towers, and where another
   -- faction has a station it has a colony ship (Data/Structures).
   nomad: boolean?,
+  -- A people of the deep: it holds no space on the map (Describe/
+  -- Galaxy's Claim passes it by), and is met in the deepest of uncharted
+  -- space and nowhere else (Tactical/Pirates). The Drowned.
+  deep: boolean?,
+  -- Every hull of its line that is not a tech 2 make has a cloak of its
+  -- own, built in (Data/Ships' 'cloak'). The Drowned's.
+  cloaks: boolean?,
+  -- The make of gun its warships carry, where that is not the first of
+  -- its family: "railgun", of the hybrids. (The first, if not said: a
+  -- blaster.)
+  gun: string?,
+  -- What a wreck of a hull of theirs has in it beside what the ship
+  -- carried: the stuff the hull is made of (an item's id, Data/Types).
+  wreck: string?,
 }
 
 -- A hull of a faction's line: its name and its class, and what it is
@@ -117,6 +134,9 @@ export type Faction = {
 -- 'jumpField': its jump drive has a field, so many metres deep: every
 -- friendly ship within it goes where the hull goes when it jumps
 -- (Tactical/Jumping). The Vail's Archangel, by the owner's word.
+-- A hull whose name begins "The" goes by that name alone, and every
+-- other by its people's name and its own (Data/Ships): "The Reaper",
+-- and "Drowned Coffin".
 export type Hull = { name: string, class: string, role: string?, tech: number?, of: string?, jump: boolean?, stealth: boolean?,
   cloak: boolean?, explorer: boolean?, hardpoints: number?, radius: number?, guns: { number }?, rare: boolean?,
   jumpField: number? }
@@ -404,14 +424,69 @@ Factions.list = {
       { name = "Knuu", class = "capitalindustrial", role = "transport" },
     },
   },
+  -- The Drowned (the owner's, 2026-11-15; they were the "Tessellate", a
+  -- stand-in of machines, until the owner said who they are): "An
+  -- aquatic alien species who get their name because of both their
+  -- windowless, fluid-filled ships, and because they have never been
+  -- seen or captured alive; any time their ships are captured and
+  -- opened, they are already dead. It's unknown whether this is due to
+  -- suicide to avoid capture, a function of pressure-loss at having
+  -- their hull opened, or some other cause. Some have speculated that
+  -- they have been dead for millennia, preserved in their pressurized
+  -- fluid capsules, and their ship AIs are simply carrying on fighting
+  -- themselves. They are found in the 'deep' wormhole systems, and their
+  -- ships are both dangerous and lucrative, made up of exotic hull
+  -- materials to handle the extreme pressure differential between their
+  -- native environment and space. Their ships' most discernible feature
+  -- - an outrigger-like hull used for housing a special cloaking
+  -- generator - has been adopted into several advanced human ship
+  -- designs. All of their non-t2 hulls have this builtin cloak, which
+  -- does not eat into their CPU/PG for fitting (but obviously does use
+  -- power when running)."
+  -- So they are the people of the deep the fourth and fifth depths of
+  -- uncharted space were kept for ('deep': they hold nothing on the
+  -- map, and are met there and nowhere else, Tactical/Pirates); every
+  -- plain hull of theirs has a cloak of its own ('cloaks'), which takes
+  -- nothing to fit and draws on the capacitor while it is on
+  -- (Tactical/Combat); and a wreck of theirs has the stuff of its hull
+  -- in it ('wreck': Tactical/Aftermath).
+  -- Their ships are the owner's list of them, each a seed in the
+  -- generator's asymmetrical styles (resource/hull/seeds.txt): the
+  -- lesser hull out on one side is the outrigger. Two are tech 2 hulls
+  -- ("no builtin cloak. can fit jumpdrive"): the Rebirth, of the
+  -- Casket, and the Resurrection, of the Cemetery; each has a jump
+  -- drive, and no cloak of its own. The End is their ultracapital and
+  -- their special ship ("special, fixed bow railgun": Data/Ships'
+  -- 'spinal'), and the Griever a capital industrial that mines for
+  -- itself and refines what it mines ("mass-miner, mobile refinery").
+  -- What is not the owner's: that their guns are railguns (the one gun
+  -- of theirs that is named is one), that they hold nothing on the map,
+  -- the name of what their hulls are made of, and every figure. The
+  -- figures are the stand-in's, which suit a heavy hull full of water.
   {
-    id = "tessellate", name = "Tessellate", kind = "alien", style = "monolith", weapon = "projectile", launchers = 0.4, tank = "hull",
-    note = "Machines that build machines. Seamless rings and slabs, slow and patient, that strike from beyond sight and take a long time to break.",
+    id = "drowned", name = "Drowned", kind = "alien", style = "outrigger", weapon = "hybrid", gun = "railgun", launchers = 0, tank = "hull",
+    deep = true, cloaks = true, wreck = "alloy.benthic",
+    note = "Nobody has seen one alive. Their ships are windowless and full of fluid, and whoever is aboard is dead by the time a hull is opened: some say they have been dead for millennia, and the ships fight on by themselves. They are met only in the deepest uncharted space. Every hull carries a cloak in the lesser hull on its flank, and is built of alloys made for crushing depths, which are worth a great deal.",
     paint = { primary = { 0.10, 0.10, 0.12 }, secondary = { 0.75, 0.75, 0.78 }, glow = { 1.0, 0.95, 0.80 } },
     shield = 0.9, armor = 1.1, hull = 2.2, velocity = 0.7, mass = 1.5, cpu = 1.4, powergrid = 1.2, capacitor = 1.2,
     lockRange = 1.6, cargo = 1.0, price = 3, mids = 0, lows = 0, hardpoints = 0,
-    hulls = { frigate = "Tile", destroyer = "Pylon", cruiser = "Annulus", battleship = "Monolith", industrial = "Reliquary",
-      attackbattlecruiser = "Vertex", battlecruiser = "Lattice", carrier = "Matrix", dreadnought = "Polyhedron", siegedreadnought = "Prism", capitalindustrial = "Repository", supercarrier = "Tesseract" },
+    hulls = {},
+    line = {
+      { name = "Cairn", class = "frigate" }, { name = "Charon", class = "frigate" },
+      { name = "Gravestone", class = "destroyer" },
+      { name = "Casket", class = "cruiser" },
+      { name = "Rebirth", class = "cruiser", tech = 2, of = "Casket", jump = true },
+      { name = "Graveyard Keeper", class = "battlecruiser" },
+      { name = "Coffin", class = "battleship" },
+      { name = "Funeral Procession", class = "carrier" },
+      { name = "The Reaper", class = "dreadnought" },
+      { name = "The Mercy", class = "siegedreadnought" },
+      { name = "The End", class = "ultracapital" },
+      { name = "Hearse", class = "industrial" },
+      { name = "Griever", class = "capitalindustrial", role = "miner", hardpoints = 10 },
+      { name = "Cemetery", class = "freighter" },
+      { name = "Resurrection", class = "freighter", tech = 2, of = "Cemetery", jump = true },
+    },
   },
 } :: { Faction }
 

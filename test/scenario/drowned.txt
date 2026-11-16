@@ -1,0 +1,78 @@
+# The Drowned, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/drowned.txt
+#
+# A hull of theirs first: the Cairn, their frigate, is flown (a cheat).
+# It has a cloak of its own, with nothing fitted for it. Out in space
+# the key puts it on, and under it the capacitor is drawn down and
+# settles short of full, with the cloak still on. The button takes it
+# off again.
+#
+# Then where they are met. A wormhole is opened to the fourth depth of
+# uncharted space (a cheat) and gone through: past where pirates live.
+# At a belt there a ship of the Drowned's comes out from under its
+# cloak, in reach. (That they come unseen and unannounced is the
+# specs' to say: Core/Tactical/Wormholes.spec.)
+#
+# covers: Core/Tactical/Pirates Core/Data/Factions
+
+wait 2
+lua GameDebug.Peaceful(true)
+lua assert(GameDebug.Docked(), 'a new game starts docked')
+lua assert(GameDebug.Fly('frigate.cairn'), 'no Cairn')
+lua assert(GameDebug.Fitted('cloak.device') == 0, 'a hull with a cloak of its own was given a device')
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+frames 10
+lua assert(GameDebug.WhyNot('Cloak') == 'it can be', 'a hull of the Drowned should have a cloak of its own to put on, and: ' .. GameDebug.WhyNot('Cloak'))
+# (a cloak does not go on beside a station: out by a planet, where nothing is near)
+lua assert(GameDebug.Order('WarpTo', 'planet'))
+patience 120
+until GameDebug.InWarp()
+lua GameDebug.TimeScale(8)
+patience 600
+until GameDebug.Idle() and not GameDebug.InWarp()
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Order('Stop'))
+frames 30
+lua _G.full = select(2, GameDebug.Capacitor())
+lua GameDebug.Key('K')
+until GameDebug.Ghost()
+# Under it the capacitor is drawn on: it settles short of full, and the cloak stays on.
+lua GameDebug.TimeScale(8)
+until GameDebug.Capacitor() < 0.9 * _G.full
+wait 20
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Ghost(), 'the cloak should still be on')
+lua assert(GameDebug.Capacitor() > 0.6 * _G.full, 'under its own cloak a capacitor should settle well above half, and it is at ' .. GameDebug.Capacitor() / _G.full)
+until GameDebug.Press('Cloak')
+until not GameDebug.Ghost()
+
+# Where they are met: the fourth depth of uncharted space.
+lua GameDebug.Peaceful(false)
+lua _G.hole, _G.name = GameDebug.Wormhole(4, 3)
+lua assert(_G.hole ~= 0, 'no wormhole could be opened')
+lua _G.home = GameDebug.System()
+lua GameDebug.TimeScale(16)
+lua assert(GameDebug.Order('Jump', 'wormhole'), 'the jump was refused')
+patience 600
+until GameDebug.System() ~= _G.home
+lua GameDebug.TimeScale(1)
+wait 1
+lua assert(GameDebug.Uncharted() and select(2, GameDebug.Uncharted()) >= 4, 'the far side should be deep uncharted space, and its depth is ' .. select(2, GameDebug.Uncharted()))
+lua assert(GameDebug.Count('belt') >= 1, 'the system should have a belt')
+lua assert(GameDebug.Order('WarpTo', 'belt'))
+patience 120
+until GameDebug.InWarp()
+lua GameDebug.TimeScale(8)
+patience 600
+until GameDebug.Idle() and not GameDebug.InWarp()
+lua GameDebug.TimeScale(1)
+lua assert(GameDebug.Order('Stop'))
+# They come unseen, and then one of them is out from under its cloak.
+patience 400
+until GameDebug.Select('Drowned')
+lua assert(string.find(GameDebug.Selected(), 'Drowned', 1, true), 'what came out should be a ship of the Drowned, not ' .. GameDebug.Selected())
+
+echo drowned scenario passed
+quit

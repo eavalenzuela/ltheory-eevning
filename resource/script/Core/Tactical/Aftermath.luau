@@ -16,6 +16,7 @@ local Battles = require("@lt/Core/Tactical/Battles")
 local Keeps = require("@lt/Core/Tactical/Keeps")
 local Raids = require("@lt/Core/Tactical/Raids")
 local Constants = require("@lt/Core/Data/Constants")
+local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
@@ -74,6 +75,10 @@ local function starter(state: State.State, station: number): (string, string)
 end
 
 Aftermath.LOOT_RANGE = LOOT_RANGE
+-- Metres of a hull's radius to a unit of what it is made of, in the
+-- wreck of one whose people's hulls are worth having (Data/Factions'
+-- 'wreck').
+Aftermath.STUFF = 20
 
 local function pay(state: State.State, amount: number, reason: string, events: { Event })
   Wallet.Pay(state, amount, reason, events)
@@ -133,7 +138,14 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
         Items.Add(state, found, item.quantity, wreck.id, "cargo")
       end
     end
-    if ship.owner == "pirates" then
+    -- A hull of a people whose hulls are worth having has the stuff of
+    -- it in its wreck, whoever flew it: so much for its size (the
+    -- Drowned's alloy: two units off a frigate, twenty off a
+    -- battleship, a hundred off their ultracapital. A first figure.)
+    local built = Factions.byId[hull.lineage]
+    if built and built.wreck then
+      Items.Add(state, built.wreck, math.max(1, hull.radius // Aftermath.STUFF), wreck.id, "cargo")
+    elseif ship.owner == "pirates" then
       Items.Add(state, "tag.pirate", if pilot then math.max(1, pilot.tags) else 1, wreck.id, "cargo")
       Items.Add(state, "scrap.metal", 1 + Rng.Int(Rng.For(state.historySeed, state.tick, id, 77), 5), wreck.id, "cargo")
     end

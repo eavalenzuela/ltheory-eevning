@@ -34,7 +34,8 @@ suite:Case("a game begins with nobody at war and nothing claimed, and every two 
   local galaxy = Galaxy.Describe(1, SYSTEMS)
   local wars = Wars.New(galaxy)
   local holders = Galaxy.Holders(galaxy)
-  t.eq(#holders, 8)
+  -- (seven: the eighth people of the list is of the deep, and holds nothing on the map)
+  t.eq(#holders, 7)
   t.eq({ #wars.feuds, #wars.operations, next(wars.claims), next(wars.truces) } :: { any }, { 0, 0, nil, nil } :: { any })
   t.eq(Wars.Between(wars, "vessari", "talmar"), 10)
   t.eq(Wars.Between(wars, "talmar", "vessari"), 10)
@@ -67,7 +68,17 @@ suite:Case("only open space changes hands: homes are as they were made, claims a
     for _, owner in wars.claims do
       has += if owner == faction then 1 else 0
     end
-    t.ok(has <= Wars.CLAIMS, `{faction} has {has} claims`)
+    -- (it claims no more open space once it has so many: what it has beyond that it took from somebody,
+    -- by a siege or by the terms of a peace)
+    local won = 0
+    local sieges: { any }, peaces: { any } = said.SystemTaken or {}, said.PeaceMade or {}
+    for _, taken in sieges do
+      won += if taken.by == faction and taken.from ~= "" then 1 else 0
+    end
+    for _, peace in peaces do
+      won += if peace.winner == faction and peace.ceded ~= 0 then 1 else 0
+    end
+    t.ok(has <= Wars.CLAIMS + won, `{faction} has {has} claims, and took {won} of them from somebody`)
     t.ok((wars.strength[faction] or 0) >= 0 and (wars.strength[faction] or 0) <= Wars.MOST)
   end
   -- Every operation was against open space: a claim of what nobody held, or a siege of somebody's claim.

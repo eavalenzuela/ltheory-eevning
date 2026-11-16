@@ -348,6 +348,62 @@ suite:Case("the Vail's ships are the owner's list of them: seventeen hulls, two 
   t.eq(assert(Facts.Of("frigate.undulation")).kind, "Vail frigate")
 end)
 
+suite:Case("the Drowned's ships are the owner's list of them: fifteen hulls, every plain one with a cloak of its own, two tech 2 hulls with a jump drive and no cloak; and they are a people of the deep", function(t)
+  local drowned = Factions.byId.drowned
+  t.eq(Factions.byId.tessellate, nil, "the Tessellate were a stand-in for the Drowned, and are gone")
+  -- A people of the deep: they hold nothing on the map. Every plain hull of theirs has a cloak of its own,
+  -- their guns are railguns, and a wreck of theirs has what its hull is made of in it.
+  t.eq({ drowned.name, drowned.kind, drowned.deep, drowned.cloaks, drowned.weapon, drowned.gun, drowned.launchers, drowned.wreck } :: { any },
+    { "Drowned", "alien", true, true, "hybrid", "railgun", 0, "alloy.benthic" } :: { any })
+  t.ok(Types.Get("alloy.benthic") ~= nil and Types.Info("alloy.benthic").basePrice > 10 * Types.Info("tag.pirate").basePrice)
+  for _, faction in Factions.list do
+    t.eq(faction.deep, if faction.id == "drowned" then true else nil, faction.id)
+  end
+  local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, battlecruiser = 300, battleship = 400, carrier = 1000,
+    dreadnought = 1300, siegedreadnought = 950, ultracapital = 2000, industrial = 180, freighter = 650, capitalindustrial = 700 }
+  -- (name, class, the hull it is the tech 2 make of)
+  local LINE: { { any } } = {
+    { "Cairn", "frigate" }, { "Charon", "frigate" }, { "Gravestone", "destroyer" }, { "Casket", "cruiser" },
+    { "Rebirth", "cruiser", "Casket" }, { "Graveyard Keeper", "battlecruiser" }, { "Coffin", "battleship" },
+    { "Funeral Procession", "carrier" }, { "The Reaper", "dreadnought" }, { "The Mercy", "siegedreadnought" },
+    { "The End", "ultracapital" }, { "Hearse", "industrial" }, { "Griever", "capitalindustrial" }, { "Cemetery", "freighter" },
+    { "Resurrection", "freighter", "Cemetery" },
+  }
+  t.eq(#assert(drowned.line), #LINE)
+  local theirs = 0
+  for _, hull in Ships.list do
+    theirs += if hull.lineage == "drowned" then 1 else 0
+  end
+  t.eq(theirs, #LINE)
+  for _, entry in LINE do
+    local name: string, class: string, of: string? = entry[1], entry[2], entry[3]
+    -- (a hull's id is its class and the letters of its name; and one whose name begins "The" goes by that alone)
+    local id = `{class}.{string.lower((string.gsub(name, "[^%a]", "")))}`
+    local hull = assert(Ships.byId[id], `the Drowned have no {name}`)
+    t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any },
+      { if string.sub(name, 1, 4) == "The " then name else `Drowned {name}`, class, "drowned", RADIUS[class] } :: { any }, name)
+    t.eq({ hull.restricted, Types.Get(hull.id), Blueprints.byProduct[hull.id] } :: { any }, { true, nil, nil } :: { any }, name)
+    t.eq(hull.launchers, 0, name)
+    if of then
+      -- A tech 2 hull of theirs: "no builtin cloak. can fit jumpdrive".
+      local base = assert(Ships.byId[`{class}.{string.lower(of)}`])
+      t.eq({ hull.tech, hull.base, Ships.Improved(base.id), hull.cloak, hull.jump } :: { any }, { 2, base.id, hull, nil, true } :: { any }, name)
+    else
+      t.eq({ hull.tech, hull.cloak, hull.jump } :: { any }, { nil, true, nil } :: { any }, name)
+      t.ok(#Skills.Needs(hull.id) >= 1, name)
+    end
+    t.ok(Facts.Of(hull.id) ~= nil, name)
+  end
+  -- The cloak a hull has of its own takes nothing to fit: a Cairn with every slot it has to fit with.
+  local cairn = Ships.byId["frigate.cairn"]
+  t.eq({ cairn.turrets, cairn.launchers } :: { any }, { 3, 0 } :: { any })
+  -- The Griever mines for itself: ten mining turrets, and an ore hold. The End is their ultracapital.
+  local griever, last = Ships.byId["capitalindustrial.griever"], Ships.byId["ultracapital.theend"]
+  t.eq({ griever.role, griever.turrets, griever.launchers, griever.ore } :: { any }, { "miner", 10, 0, Ships.ORE.capitalindustrial } :: { any })
+  t.eq({ last.name, last.class, last.cloak } :: { any }, { "The End", "ultracapital", true } :: { any })
+  t.eq(assert(Facts.Of("frigate.cairn")).kind, "Drowned frigate")
+end)
+
 suite:Case("the Orun's ships are the owner's list of them: seventeen hulls, four of them tech 2 hulls of their own, with a barge, a freighter and a capital industrial that leads a mining fleet", function(t)
   local orun = Factions.byId.orun
   local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, battlecruiser = 300, battleship = 400, carrier = 1000,
@@ -673,8 +729,9 @@ suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in i
   end
   -- The Talmar's three (the Tarantula, the Sugarglider and the Rapa), the Vessari's two (the Kanau and the
   -- Akaboshi), the Orun's four (the Skiver, the Kama, the Falchion and the Longhorn), the Nimia's one (the
-  -- Hano) and the Vail's two (the Aberration and the Interstition). The Kethri's line names none yet.
-  t.eq(improved, 12)
+  -- Hano), the Vail's two (the Aberration and the Interstition) and the Drowned's two (the Rebirth and the
+  -- Resurrection). The Kethri's line names none yet.
+  t.eq(improved, 14)
   t.ok(Ships.Improved("frigate.courier") == nil and Ships.Improved("industrial.hauler") == nil and Ships.Improved("capsule") == nil)
 end)
 
@@ -691,6 +748,8 @@ suite:Case("what each tech 2 hull is for is the owner's word: to jump, to go uns
     -- (and the Vail's two, by the owner's list of their ships: "t2 destroyer", of which the owner said
     -- "plain t2 package"; and "t2 cruiser (black ops)")
     { "destroyer.aberration", nil, nil, nil, nil }, { "cruiser.interstition", nil, true, nil, nil },
+    -- (and the Drowned's two: each "no builtin cloak. can fit jumpdrive")
+    { "cruiser.rebirth", true, nil, nil, nil }, { "freighter.resurrection", true, nil, nil, nil },
   }
   local said: { [string]: boolean } = {}
   for _, entry in FOR do
@@ -724,7 +783,10 @@ suite:Case("what each tech 2 hull is for is the owner's word: to jump, to go uns
     if hull.tech == 2 then
       t.ok(said[hull.id], `{hull.id} is a tech 2 hull nobody has said the purpose of`)
     else
-      t.eq({ hull.stealth, hull.cloak, hull.explorer } :: { any }, { nil, nil, nil } :: { any }, hull.id)
+      -- (but a plain hull of the Drowned's, every one of which has a cloak of its own)
+      local built = Factions.byId[hull.lineage]
+      t.eq({ hull.stealth, hull.cloak, hull.explorer } :: { any }, { nil, if built and built.cloaks then true else nil, nil } :: { any },
+        hull.id)
     end
   end
 end)

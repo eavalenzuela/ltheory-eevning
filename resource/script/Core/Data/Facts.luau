@@ -227,7 +227,7 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
       row(built, "Jump field", `takes with it every friendly ship within {whole(hull.jumpField / 1000)} km that is not in warp or scrambled`)
     end
     if hull.cloak then
-      row(built, "Cloak", "its own, built in: nothing to fit, no slot and no capacitor")
+      row(built, "Cloak", "its own, built in: nothing to fit and no slot, and it draws on the capacitor while it is on")
     end
     if hull.stealth then
       row(built, "Stealth", "a cloak does not slow it, and is broken only from half as far")

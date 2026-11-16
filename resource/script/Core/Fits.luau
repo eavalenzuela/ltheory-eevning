@@ -33,6 +33,8 @@ local SIZES: { [string]: { number } } = { frigate = { 1 }, destroyer = { 1 }, cr
 function Fits.Weapons(hull: Ships.ShipType): { string }
   local faction = Factions.byId[hull.lineage]
   local family = if faction then faction.weapon else "projectile"
+  -- (the make of gun: its family's first, unless its people carry another: the Drowned's railguns)
+  local gun = if faction and faction.gun then faction.gun else GUN[family] or "autocannon"
   local sizes = SIZES[hull.class] or { 1 }
   local fit: { string } = {}
   -- (a hull whose hardpoints are of given sizes, the Kethri's colony
@@ -42,7 +44,7 @@ function Fits.Weapons(hull: Ships.ShipType): { string }
   if guns and racks then
     for size = #guns, 1, -1 do
       for _ = 1, guns[size] do
-        table.insert(fit, `{GUN[family] or "autocannon"}.{WORD[size]}`)
+        table.insert(fit, `{gun}.{WORD[size]}`)
       end
     end
     for size = #racks, 1, -1 do
@@ -59,7 +61,7 @@ function Fits.Weapons(hull: Ships.ShipType): { string }
     -- hulls were drawn with)
     table.insert(fit, if hull.role == "miner" or hull.class == "barge" then "miner.strip"
       elseif family == "projectile" and size >= 2 then `artillery.{WORD[size]}`
-      else `{GUN[family] or "autocannon"}.{WORD[size]}`)
+      else `{gun}.{WORD[size]}`)
   end
   for index = 1, hull.launchers do
     table.insert(fit, RACK[sizes[(index - 1) % #sizes + 1]])

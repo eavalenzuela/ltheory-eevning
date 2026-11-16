@@ -109,10 +109,23 @@ end
 -- There is nothing to fit and nothing in a slot: the pilot switches it
 -- on with "Cloak" and off with "Uncloak", and it is on for as long as
 -- 'vitals.cloaked' says. It is the cloaking device in every way but
--- these: it does not slow the ship, it asks no capacitor, and it goes
--- off the moment it is told to. (First figures, those: the project
--- owner's word is that the hull "has a built-in cloak".)
+-- these: it does not slow the ship, and it goes off the moment it is
+-- told to. (First figures, those: the project owner's word is that the
+-- hull "has a built-in cloak".) And it draws on the capacitor while it
+-- is on (the owner's, 2026-11-15, of the Drowned's: it "does not eat
+-- into their CPU/PG for fitting (but obviously does use power when
+-- running)"): each second, Combat.OWN_CLOAK_DRAW times what the hull's
+-- capacitor gets back in a second on the average of a full recharge.
+-- So a hull under its own cloak settles at some four fifths of its
+-- capacitor, whatever its size, and one with next to none cannot stay
+-- under it. (How much it draws is a first figure.)
 Combat.OWN_CLOAK = "cloak.device"   -- the device a hull's own cloak is, for how near breaks it
+Combat.OWN_CLOAK_DRAW = 1
+-- What a ship's own cloak draws in a tick, GJ.
+local function ownCloakDraw(ball: State.Ball): number
+  local v = ball.vitals
+  return Combat.OWN_CLOAK_DRAW * v.capacitorMax / math.max(1, v.capacitorRecharge) * Constants.TICK
+end
 local function ownCloak(state: State.State, ball: State.Ball): boolean
   local ship = state.ships[ball.id]
   local hull = if ship then Ships.byId[ship.type] else nil
@@ -254,6 +267,8 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
       return false, "this hull has no cloak of its own"
     elseif Combat.Cloaked(state, ball.id) then
       return false, "cloaked already"
+    elseif ball.vitals.capacitor < ownCloakDraw(ball) then
+      return false, "not enough capacitor to cloak"
     end
     return mayCloak(state, ball, reachOf(state, ball, Modules.byId[Combat.OWN_CLOAK]))
   elseif kind == "Uncloak" then
@@ -908,6 +923,16 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
   local any = false
   for _, id in state.ballIds do
     local ball = state.balls[id]
+    -- (a hull's own cloak draws on its capacitor, and is off when that will not pay)
+    if ball.vitals.cloaked then
+      local draw = ownCloakDraw(ball)
+      if ball.vitals.capacitor < draw then
+        ball.vitals.cloaked = nil
+        table.insert(events, { kind = "Decloaked", ball = id, by = "", spent = true })
+      else
+        ball.vitals.capacitor -= draw
+      end
+    end
     local reach = hiddenWithin(state, ball)
     if reach then
       local near = crowding(state, ball, reach)

@@ -84,7 +84,9 @@ suite:Case("every kind of pirate flies an Unbound hull with a fit the hull takes
     if hull ~= nil and hull.class == "works" then
       continue
     end
-    t.ok(hull ~= nil and hull.lineage == "unbound", `{kind.name} flies '{kind.hull}', which is not the pirates' own`)
+    -- (what is met in the deep is no pirate, and flies its own people's hulls: the Drowned)
+    local own = if string.sub(kind.id, 1, 8) == "drowned." then "drowned" else "unbound"
+    t.ok(hull ~= nil and hull.lineage == own, `{kind.name} flies '{kind.hull}', which is not the pirates' own`)
     local fit = Pirates.Fit(kind)
     local types: { string } = {}
     local weapons = 0
@@ -108,13 +110,63 @@ suite:Case("every kind of pirate flies an Unbound hull with a fit the hull takes
   t.eq(#Pirates.Fit(Pirates.SCOUT), 1)
 end)
 
+suite:Case("what the Drowned send is no pirate: their own hulls with railguns on every hardpoint, no bounty and no tags, and a wreck with what its hull is made of in it", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local sent = 0
+  local last = { dps = 0, hp = 0 }
+  for _, kind in Pirates.kinds do
+    if string.sub(kind.id, 1, 8) ~= "drowned." then
+      continue
+    end
+    sent += 1
+    local hull = Ships.byId[kind.hull]
+    t.eq({ hull.lineage, hull.cloak, kind.bounty, kind.tags, kind.name } :: { any }, { "drowned", true, 0, 0, hull.name } :: { any })
+    local ball = Pirates.Spawn(state, kind, 1, 1e9 + sent * 1e6, 0, 0, 0)
+    -- Railguns on every hardpoint, loaded.
+    local guns = 0
+    for _, item in Items.Fitted(state, ball.id) do
+      if string.sub(item.type, 1, 8) == "railgun." then
+        guns += 1
+        t.ok(item.charge ~= "", `{kind.name}'s railgun is not loaded`)
+      end
+    end
+    t.eq(guns, hull.turrets, kind.name)
+    -- Each is more than the one before.
+    local offence = Items.Offence(state, ball.id)
+    local hp = ball.vitals.shieldMax + ball.vitals.armorMax + ball.vitals.hullMax
+    t.ok(offence.dps > last.dps and hp > last.hp, `{kind.name} does {offence.dps} a second with {hp} hit points`)
+    last = { dps = offence.dps, hp = hp }
+    -- Its wreck: so much of what its hull is made of for its size, and no pirate's tags.
+    local wrecks = #state.wreckIds
+    Aftermath.Destroy(state, ball.id, 0, game.events)
+    t.eq(#state.wreckIds, wrecks + 1)
+    local wreck = state.wrecks[state.wreckIds[#state.wreckIds]]
+    local alloy, tags = 0, 0
+    for _, item in Items.In(state, wreck.id, nil) do
+      alloy += if item.type == "alloy.benthic" then item.quantity else 0
+      tags += if item.type == "tag.pirate" then item.quantity else 0
+    end
+    t.eq({ alloy, tags }, { hull.radius // Aftermath.STUFF, 0 }, kind.name)
+  end
+  t.eq(sent, 5)
+  -- The packs, as they are written: every one of the Drowned's own kinds.
+  for _, packs in Pirates.DROWNED do
+    for _, entry in packs do
+      for _, id in entry[2] do
+        t.ok(string.sub(id, 1, 8) == "drowned." and Pirates.kindById[id] ~= nil, id)
+      end
+    end
+  end
+end)
+
 suite:Case("a bigger pirate hits harder, takes more killing and pays more", function(t)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local last = { dps = 0, hp = 0, bounty = 0, tags = 0 }
   for _, kind in Pirates.kinds do
     -- (a mender is not one of the ladder: it is there for the others;
-    -- nor is what a camp is built of)
-    if kind.id == "mender" or Ships.byId[kind.hull].class == "works" then
+    -- nor is what a camp is built of, nor what the Drowned send)
+    if kind.id == "mender" or Ships.byId[kind.hull].class == "works" or string.sub(kind.id, 1, 8) == "drowned." then
       continue
     end
     local ball = Pirates.Spawn(game.state, kind, 1, 1e9, 0, 0, 0)
@@ -480,9 +532,9 @@ suite:Case("a veteran of a kind fits the custom make of whatever it has one of, 
     t.eq(Pirates.Graded(kind, 0), kind)
     -- (what one is, is told by the name it flies under: whoever draws it asks)
     t.eq({ Pirates.Rank(kind.name), Pirates.Rank(Pirates.Graded(kind, 1).name), Pirates.Rank(Pirates.Graded(kind, 2).name) },
-      if Ships.byId[kind.hull].class == "works" then { 0, 0, 0 } else { 0, 1, 2 }, kind.name)
-    -- (nobody commands a store)
-    if Ships.byId[kind.hull].class == "works" then
+      if Ships.byId[kind.hull].class == "works" or string.sub(kind.id, 1, 8) == "drowned." then { 0, 0, 0 } else { 0, 1, 2 }, kind.name)
+    -- (nobody commands a store, and the Drowned have no veterans and no captains)
+    if Ships.byId[kind.hull].class == "works" or string.sub(kind.id, 1, 8) == "drowned." then
       t.eq({ Pirates.Graded(kind, 1), Pirates.Graded(kind, 2) }, { kind, kind })
       continue
     end

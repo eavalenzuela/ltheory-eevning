@@ -219,7 +219,7 @@ local function flying(type: string): (Core.Game, State.Ball)
   return game, me
 end
 
-suite:Case("a hull with a cloak of its own cloaks with nothing fitted: at its full speed and for no capacitor, until it is told to stop", function(t)
+suite:Case("a hull with a cloak of its own cloaks with nothing fitted: at its full speed, on its capacitor, until it is told to stop or the capacitor will not carry it", function(t)
   -- The Orun's tech 2 frigate, the Skiver, is such a hull (the project owner's word); the Skinner it is made of is not.
   t.eq({ Ships.byId["frigate.skiver"].cloak, Ships.byId["frigate.skiver"].stealth } :: { any }, { true, true } :: { any })
   t.eq({ Ships.byId["frigate.skinner"].cloak, Ships.byId["frigate.skinner"].stealth } :: { any }, { nil, nil } :: { any })
@@ -248,10 +248,14 @@ suite:Case("a hull with a cloak of its own cloaks with nothing fitted: at its fu
   local other = Space.Launch(state, trader, me.system, me.x + 9000, me.y, me.z)
   t.eq(refused(game, { kind = "LockTarget", actor = 0, target = other.id }), "cloaked")
   t.eq({ Core.Validate(game, { kind = "LockTarget", actor = other.id, target = me.id }) } :: { any }, { false, "no such target" } :: { any })
-  -- It asks no capacitor: with none at all it stays on.
-  me.vitals.capacitor = 0
-  steps(game, 30)
-  t.ok(Core.Query.Cloaked(game, me.id), "the hull's own cloak went off for want of capacitor")
+  -- It draws on the capacitor while it is on (the project owner's: a built-in cloak "does not eat into
+  -- their CPU/PG for fitting (but obviously does use power when running)"): under it a full capacitor
+  -- settles at some four fifths, and stays there.
+  me.vitals.capacitor = me.vitals.capacitorMax
+  steps(game, 900)
+  local share = me.vitals.capacitor / me.vitals.capacitorMax
+  t.ok(share > 0.72 and share < 0.86, `under its own cloak the capacitor settled at {share} of full`)
+  t.ok(Core.Query.Cloaked(game, me.id), "the hull's own cloak went off with capacitor to spare")
   -- Told to stop, it is off at once, and says so.
   t.ok((submit(game, { kind = "Uncloak", actor = 0 })))
   t.eq(Core.Query.Cloaked(game, me.id), false)
@@ -261,6 +265,22 @@ suite:Case("a hull with a cloak of its own cloaks with nothing fitted: at its fu
   end
   t.ok(off, "nobody said the cloak was off")
   t.eq(refused(game, { kind = "LockTarget", actor = 0, target = other.id }), "(accepted)")
+  -- With next to nothing in the capacitor it cannot go under it; and under it, a capacitor that is spent
+  -- puts it off, and says that is why.
+  me.vitals.capacitor = 0
+  t.eq(refused(game, { kind = "Cloak", actor = 0 }), "not enough capacitor to cloak")
+  me.vitals.capacitor = me.vitals.capacitorMax
+  t.ok((submit(game, { kind = "Cloak", actor = 0 })))
+  t.eq(Core.Query.Cloaked(game, me.id), true)
+  Core.TakeEvents(game)
+  me.vitals.capacitor = 0
+  steps(game, 1)
+  t.eq(Core.Query.Cloaked(game, me.id), false)
+  local spent = false
+  for _, event in Core.TakeEvents(game) do
+    spent = spent or (event.kind == "Decloaked" and event.ball == me.id and event.spent == true)
+  end
+  t.ok(spent, "nobody said the capacitor would not carry the cloak")
 end)
 
 suite:Case("a hull's own cloak is a cloak like another: not while targeted nor near anything, broken by what comes near, kept through a warp and a save", function(t)

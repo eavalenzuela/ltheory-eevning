@@ -312,6 +312,13 @@ local function think(galaxy: Galaxy.Galaxy, wars: State.Wars, faction: string, t
   end
   if operationsOf(wars, faction) < Wars.OPERATIONS then
     local siege, claim = 0, 0
+    -- (a claim that is on its way counts toward how many it keeps: with
+    -- two on their way at once a faction one short of its most was
+    -- over it when both came home)
+    local claiming = 0
+    for _, operation in wars.operations do
+      claiming += if operation.by == faction and operation.kind == "claim" then 1 else 0
+    end
     for id = 1, Galaxy.Charted(galaxy) do
       if galaxy.systems[id].owner == faction then
         for _, neighbor in galaxy.systems[id].neighbors do
@@ -331,7 +338,7 @@ local function think(galaxy: Galaxy.Galaxy, wars: State.Wars, faction: string, t
     local target, force = 0, 0
     if siege ~= 0 and mine >= Wars.SIEGE_FORCE then
       target, force = siege, math.max(Wars.SIEGE_FORCE, mine * Wars.SIEGE_SHARE)
-    elseif claim ~= 0 and mine >= Wars.CLAIM_FORCE and (claimed[faction] or 0) < Wars.CLAIMS then
+    elseif claim ~= 0 and mine >= Wars.CLAIM_FORCE and (claimed[faction] or 0) + claiming < Wars.CLAIMS then
       target, force = claim, Wars.CLAIM_FORCE
     end
     if target ~= 0 then

@@ -144,6 +144,12 @@ end
 local goods: { Info } = {
   -- Proof of a pirate killed. Worth a bounty to whoever collects them.
   { id = "tag.pirate", name = "Pirate Tag", category = "goods", volume = 0.1, basePrice = 4000 },
+  -- What a hull of the Drowned's is made of (Data/Factions' 'wreck'):
+  -- alloy made to stand between a crushing depth and nothing at all. It
+  -- is in their wrecks, and nowhere else. (Its name and its price are
+  -- first ones: the project owner's word is "exotic hull materials",
+  -- and that their ships are lucrative.)
+  { id = "alloy.benthic", name = "Benthic Alloy", category = "goods", volume = 2, basePrice = 60000 },
   { id = "scrap.metal", name = "Scrap Metal", category = "goods", volume = 0.5, basePrice = 60 },
   -- What a salvager brings off a wreck (Tactical/Combat): the makings of
   -- rigs, and worth selling meanwhile.

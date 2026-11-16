@@ -194,7 +194,13 @@ function Galaxy.Claim(galaxy: Galaxy)
   local systems = galaxy.systems
   -- (the systems of the map: uncharted space is nobody's to claim)
   local count = galaxy.charted or #systems
-  local factions = Factions.list
+  -- (a people of the deep holds nothing on the map: the Drowned)
+  local factions: { Factions.Faction } = {}
+  for _, faction in Factions.list do
+    if not faction.deep then
+      table.insert(factions, faction)
+    end
+  end
   local wanted = math.clamp(count // Galaxy.SYSTEMS_A_FACTION, 1, #factions)
   local each = math.max(1, math.min(Galaxy.TERRITORY, math.floor(count * Galaxy.CLAIMED / wanted)))
   -- (how far apart two systems are on the map, squared)

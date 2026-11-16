@@ -526,9 +526,11 @@ suite:Case("what lives in uncharted space is worse the deeper in, and there is m
     t.ok(count >= 3, `{count} pirates came to a belt at depth {depth}`)
     t.ok(worst >= (if depth == 1 then 3 else 4), `the worst of a pack at depth {depth} was of rank {worst}`)
   end
-  -- Past the third depth not even pirates live: nobody comes to a belt
-  -- however long a ship sits there, there is no den and no tower of
-  -- theirs, and there is no more to find than at the third.
+  -- Past the third depth not even pirates live: what comes to a belt
+  -- there is the Drowned's (Data/Factions), in their own hulls, under
+  -- the cloak each has until it is in reach. There is no den and no
+  -- tower of the pirates', and there is no more to find than at the
+  -- third.
   for depth = 4, 5 do
     local game = inSpace(depth, true)
     local state = game.state
@@ -541,8 +543,33 @@ suite:Case("what lives in uncharted space is worse the deeper in, and there is m
     end
     local at = assert(belt, "the system has no belt")
     put(game, deep, at.x + 500, at.y, at.z)
-    steps(game, 900)
-    t.eq({ #state.pilotIds, #state.keepIds }, { 0, 0 })
+    Core.TakeEvents(game)
+    steps(game, 5)
+    -- A pack has come, and nobody is told: every one of it is under its cloak, and cannot be targeted.
+    t.ok(#state.pilotIds >= 3, `{#state.pilotIds} of the Drowned came to a belt at depth {depth}`)
+    local biggest = 0
+    for _, id in state.pilotIds do
+      local hull = Ships.byId[state.ships[id].type]
+      t.eq({ hull.lineage, hull.cloak, Core.Query.Cloaked(game, id) } :: { any }, { "drowned", true, true } :: { any })
+      t.eq({ Core.Validate(game, { kind = "LockTarget", actor = state.player.ship, target = id }) } :: { any },
+        { false, "no such target" } :: { any })
+      biggest = math.max(biggest, hull.radius)
+    end
+    -- (nothing smaller than a destroyer leads at the fourth depth, and a battlecruiser or a battleship at the fifth)
+    t.ok(biggest >= (if depth == 4 then 75 else 300), `the biggest hull of a pack at depth {depth} is {biggest} m`)
+    for _, event in Core.TakeEvents(game) do
+      t.ok(event.kind ~= "PiratesArrived", "a pack that came unseen was announced")
+    end
+    -- Before long they are in reach, and out from under their cloaks.
+    local out = false
+    for _ = 1, 600 do
+      Core.Step(game)
+      for _, event in Core.TakeEvents(game) do
+        out = out or (event.kind == "Decloaked" and state.pilots[event.ball] ~= nil)
+      end
+    end
+    t.ok(out, `nobody of the Drowned came out from under a cloak at depth {depth}`)
+    t.eq(#state.keepIds, 0)
     local own = 0
     for _, site in Sites.In(state, deep) do
       t.ok(site.kind ~= "combat" and site.kind ~= "keep", `a {site.kind} site at depth {depth}`)

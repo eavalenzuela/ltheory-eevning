@@ -114,7 +114,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 86
+Core.SAVE_VERSION = 87
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -421,6 +421,25 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
   -- supercarrier now: a hauler of theirs is their freighter, which is
   -- what carries for them; the others their dreadnought and their
   -- carrier.)
+  -- 87: the last of the alien factions is the Drowned (Data/Factions),
+  -- who were a stand-in called the Tessellate until the project owner
+  -- said who they are. Whatever a save has of the Tessellate it has of
+  -- the Drowned, and their hulls are the Drowned's of the owner's list,
+  -- each the one that stands where it stood (they build no attack
+  -- battlecruiser and no supercarrier). A galaxy made before keeps who
+  -- holds what: there the Drowned hold on the map what the Tessellate
+  -- held, where in a new one they hold nothing and are met in the deep.
+  [86] = function(state: any)
+    rehulled(state, {
+      tessellate = "drowned",
+      ["frigate.tile"] = "frigate.cairn", ["destroyer.pylon"] = "destroyer.gravestone", ["cruiser.annulus"] = "cruiser.casket",
+      ["battleship.monolith"] = "battleship.coffin", ["industrial.reliquary"] = "industrial.hearse",
+      ["attackbattlecruiser.vertex"] = "battlecruiser.graveyardkeeper", ["battlecruiser.lattice"] = "battlecruiser.graveyardkeeper",
+      ["carrier.matrix"] = "carrier.funeralprocession", ["supercarrier.tesseract"] = "carrier.funeralprocession",
+      ["dreadnought.polyhedron"] = "dreadnought.thereaper", ["siegedreadnought.prism"] = "siegedreadnought.themercy",
+      ["capitalindustrial.repository"] = "capitalindustrial.griever",
+    })
+  end,
   -- 86: mining fleets work the belts of a people who have a jumpship
   -- for them (Tactical/Traffic). A save from before has none away.
   [85] = function(state: any)

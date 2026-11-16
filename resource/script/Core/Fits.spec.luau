@@ -83,7 +83,7 @@ suite:Case("the balance report has a line for every hull that is flown, with fig
     t.ok(row.cpu <= row.cpuMax + 1e-6 and row.powergrid <= row.powergridMax + 1e-6, row.id)
     t.ok(row.burn >= row.speed and row.lasts > 0, row.id)
     -- (it does damage if it has guns: a hull with no hardpoint, or with mining turrets on them, does none)
-    t.eq(row.dps > 0, row.weapons > 0 and row.class ~= "barge" and row.id ~= "capitalindustrial.okami", row.id)
+    t.eq(row.dps > 0, row.weapons > 0 and row.class ~= "barge" and Ships.byId[row.id].role ~= "miner", row.id)
   end
   -- A hull of the Nimia's has no shield and mends; a tech 2 hull takes more to destroy than the one it comes of.
   local oon = byId["frigate.oon"]

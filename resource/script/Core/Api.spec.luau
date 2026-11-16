@@ -796,6 +796,52 @@ suite:Case("a save from when the Nimia were the Skarn opens with them the Nimia:
   end
 end)
 
+suite:Case("a save from when the Drowned were the Tessellate opens with them the Drowned: what they held, what they think of the pilot, and their hulls", function(t)
+  local game = newGame()
+  local state = game.state
+  -- (a galaxy from before had them holding space on the map, where a new one has them in the deep alone:
+  -- a system is theirs here, so that the save has one)
+  local theirs = 0
+  for id, system in state.galaxy.systems do
+    t.ok(system.owner ~= "drowned" and system.owner ~= "tessellate", `a new galaxy has system {id} the Drowned's`)
+    if theirs == 0 and system.owner == "" and not system.uncharted then
+      theirs = id
+    end
+  end
+  t.ok(theirs ~= 0, "the galaxy has no open system to make theirs")
+  state.galaxy.systems[theirs].owner = "drowned"
+  state.standings.drowned = -4
+  -- (name then, name now: hulls of classes they still build, and of the two they do not)
+  local WAS: { { string } } = { { "frigate.tile", "frigate.cairn" }, { "battleship.monolith", "battleship.coffin" },
+    { "industrial.reliquary", "industrial.hearse" }, { "attackbattlecruiser.vertex", "battlecruiser.graveyardkeeper" },
+    { "supercarrier.tesseract", "carrier.funeralprocession" }, { "capitalindustrial.repository", "capitalindustrial.griever" } }
+  local ships: { number } = {}
+  for index, pair in WAS do
+    ships[index] = Space.NewShip(state, pair[2], `Theirs {index}`, "drowned", 0).id
+  end
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  file.saveVersion = 86
+  local old = file.state
+  old.galaxy.systems[theirs].owner = "tessellate"
+  old.standings.tessellate, old.standings.drowned = old.standings.drowned, nil
+  for index, pair in WAS do
+    old.ships[ships[index]].type, old.ships[ships[index]].owner = pair[1], "tessellate"
+  end
+  local was, wasLength = Codec.Encode(file)
+  local opened = Core.Load(was, wasLength)
+  t.eq(opened.state.galaxy.systems[theirs].owner, "drowned")
+  t.eq({ opened.state.standings.drowned, opened.state.standings.tessellate } :: { any }, { -4, nil } :: { any })
+  for index, pair in WAS do
+    local ship = opened.state.ships[ships[index]]
+    t.eq({ ship.type, ship.owner } :: { any }, { pair[2], "drowned" } :: { any })
+  end
+  t.eq(Core.Hash(opened), Core.Hash(game))
+  for _ = 1, 10 do
+    Core.Step(opened)
+  end
+end)
+
 suite:Case("a save with a hull the Vail had opens with the hull of theirs that stands where it stood", function(t)
   local game = newGame()
   local state = game.state

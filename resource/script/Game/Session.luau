@@ -536,7 +536,15 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "Cloaked" and event.ball == mine then
     Session.Say(session, "Cloaked: nobody can target you, and you can target nobody")
   elseif kind == "Decloaked" and event.ball == mine then
-    Session.Say(session, if event.by == "" then "Decloaked" else `Decloaked: too near {event.by}`)
+    Session.Say(session, if event.spent then "Decloaked: the capacitor will not carry the cloak"
+      elseif event.by == "" then "Decloaked" else `Decloaked: too near {event.by}`)
+  elseif kind == "Decloaked" then
+    -- (somebody who came unseen, where the pilot is: Core/Tactical/Pirates)
+    local state = session.game.state
+    local me, it, whose = state.balls[mine], state.balls[event.ball], state.ships[event.ball]
+    if me and it and whose and whose.owner == "pirates" and it.system == me.system and it.grid == me.grid and me.grid ~= 0 then
+      Session.Say(session, `{it.name} has come out from under a cloak`)
+    end
   elseif kind == "Jammed" and event.ball == mine then
     Session.Say(session, "Jammed: your locks are broken")
   elseif kind == "Held" and event.ball == mine then

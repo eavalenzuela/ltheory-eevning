@@ -6,6 +6,15 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## The Drowned
+
+- The last of the alien peoples: the Drowned, whose windowless ships are full of fluid, and whom nobody has seen alive. They hold nothing on the map. They are met in the two deepest levels of uncharted space, past where even pirates go.
+- Fifteen ships of theirs, each with a lesser hull out on one flank that houses its cloak: from the frigates Cairn and Charon to the dreadnought The Reaper and the ultracapital The End.
+- At a belt in the deep they come for you under their cloaks, unseen and unannounced until they are in reach. They hit harder than pirates and take longer to kill.
+- Nobody pays a bounty on them. Their wrecks hold Benthic Alloy, what their hulls are made of, which sells for a great deal.
+- A hull with a cloak of its own now draws on its capacitor while cloaked. It settles at about four fifths of full, and a ship with an empty capacitor cannot cloak.
+- A new game has seven peoples holding space on the map, where there were eight. A save from before keeps its map as it was.
+
 ## The Vail's mining fleets, and a disruptor for capitals
 
 - In the Vail's own space, mining fleets work the belts: four Panacea barges, the Embrace that leads them, and an Archangel standing by.

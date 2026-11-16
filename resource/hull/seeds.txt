@@ -53,9 +53,8 @@
 #                         ultracapital.leslarmesdenova, 5,000 m, ten
 #                         kilometres long)
 #
-# (A pirate's hull is the human hull it was made of, patched. An alien
-# faction's, until a line here names it, is drawn from a seed that
-# follows from its name: a stand-in, with nothing meant by it.)
+# (A pirate's hull is the human hull it was made of, patched. Every
+# alien faction's ships are the owner's list of them now, further down.)
 #
 # If a seed has not the room for a hull's hardpoints even on seats, the
 # game says so when it starts and draws the hull as it was.
@@ -176,3 +175,24 @@ barge.panacea                      54634  4  triangular_v2
 freighter.indulgence               54633  4  triangular_v2+asym
 capitalindustrial.embrace          54903  4  triangular_v2
 ultracapital.archangel             54903  8  triangular_v2+asym
+
+# The Drowned's ships (the owner's list of them, 2026-11-15): the last
+# of the alien factions, and the people of the deepest uncharted space.
+# Every one in the generator's asymmetrical styles: the lesser hull out
+# on one side is the outrigger that houses its cloak. A tech 2 hull is
+# the seed of the hull it comes of, at another size.
+frigate.cairn                    77811  4  asymmetrical
+frigate.charon                   87488  4  asymmetrical
+destroyer.gravestone             36571  4  asymmetrical
+cruiser.casket                   57261  4  asymmetrical
+cruiser.rebirth                  57261  5  asymmetrical
+battlecruiser.graveyardkeeper    11245  4  asymmetrical
+battleship.coffin                29238  4  asymmetrical
+carrier.funeralprocession        25517  5  asymmetrical
+dreadnought.thereaper            37646  4  spear+asym
+siegedreadnought.themercy          172  4  asymmetrical
+ultracapital.theend               6998  5  spear+asym
+industrial.hearse                77813  8  asymmetrical
+capitalindustrial.griever        19182  4  asymmetrical
+freighter.cemetery               15574  8  asymmetrical
+freighter.resurrection           15574  4  asymmetrical

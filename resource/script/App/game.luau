@@ -1240,6 +1240,16 @@ function Debug.SystemOf(id: number): number
   return if ball and session.game.state.ships[id] then ball.system else 0
 end
 
+-- The pilot's capacitor, in space: what is in it, and what it holds.
+-- (0 and 0, docked.)
+function Debug.Capacitor(): (number, number)
+  local ball = Core.Query.Ball(session.game, session.game.state.player.ship)
+  if ball == nil then
+    return 0, 0
+  end
+  return ball.vitals.capacitor, ball.vitals.capacitorMax
+end
+
 -- The first system of a people's space where a mining fleet is at work
 -- today (Core/Tactical/Traffic): one with a belt on the chart, and a
 -- station of theirs in another system for the fleet to run to. Its

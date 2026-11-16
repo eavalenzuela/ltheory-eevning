@@ -146,13 +146,23 @@ suite:Case("the rare ores are in the belts of lawless space and nowhere else", f
   t.ok(tame > wild, "lawless belts are mostly rare ore")
 end)
 
+-- The peoples who hold space on the map: every one of the list but a
+-- people of the deep, who are met in uncharted space and hold nothing
+-- (the Drowned: Data/Factions).
+local HOLD: { Factions.Faction } = {}
+for _, faction in Factions.list do
+  if not faction.deep then
+    table.insert(HOLD, faction)
+  end
+end
+
 suite:Case("every faction has a homeworld and as much space as any other, of a piece where the gates allow; and nobody holds the rest", function(t)
   local shutIn, heldInAll = 0, 0
   for seed = 1, 8 do
     for _, count in { 3, 12, 40, 100, 400 } do
       local galaxy = Galaxy.Describe(seed, count)
       local systems = galaxy.systems
-      local factions = math.clamp(count // Galaxy.SYSTEMS_A_FACTION, 1, #Factions.list)
+      local factions = math.clamp(count // Galaxy.SYSTEMS_A_FACTION, 1, #HOLD)
       local each = math.max(1, math.min(Galaxy.TERRITORY, math.floor(count * Galaxy.CLAIMED / factions)))
       local homes: { [string]: number } = {}
       local held: { [string]: number } = {}
@@ -185,7 +195,9 @@ suite:Case("every faction has a homeworld and as much space as any other, of a p
       -- The first factions of the list, the first of them at the first
       -- system, and every one with as much as any other.
       local holders: { string } = {}
-      for index, faction in Factions.list do
+      -- (the Drowned hold nothing, however big the galaxy)
+      t.eq({ homes.drowned, held.drowned } :: { any }, {})
+      for index, faction in HOLD do
         if index <= factions then
           t.ok(homes[faction.id] ~= nil, `seed {seed}, {count} systems: {faction.id} has no homeworld`)
           t.eq(held[faction.id], each, `seed {seed}, {count} systems: what {faction.id} holds`)
@@ -256,10 +268,11 @@ suite:Case("in a galaxy with room for it a faction holds ninety systems, from a 
         held[system.owner] = (held[system.owner] or 0) + 1
       end
     end
-    t.eq(#homes, #Factions.list)
-    for _, faction in Factions.list do
+    t.eq(#homes, #HOLD)
+    for _, faction in HOLD do
       t.eq(held[faction.id], Galaxy.TERRITORY, `seed {seed}: what {faction.id} holds`)
     end
+    t.eq(held.drowned, nil)
     for index, home in homes do
       t.ok(#systems[home].neighbors >= Galaxy.HOME_GATES, `seed {seed}: a homeworld with {#systems[home].neighbors} gates`)
       for other = index + 1, #homes do
