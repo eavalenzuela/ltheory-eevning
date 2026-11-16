@@ -92,6 +92,11 @@ export type Vitals = {
   -- Its hull's own cloak is on: a hull with one built in
   -- (Tactical/Combat). Nil for off, and for every other hull.
   cloaked: boolean?,
+  -- Its hull's own gun (a gun fixed along the bow: Tactical/Combat):
+  -- what it has been told to fire at, and is aligning to (nil: nothing),
+  -- and the tick it will next be ready to fire at (nil: it is).
+  spinalTarget: number?,
+  spinalReady: number?,
 }
 
 -- A missile in flight: it lands at 'impact' and does its damage then.

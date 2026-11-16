@@ -7,7 +7,9 @@ local Core = require("@lt/Core/Api")
 local Industry = require("@lt/Core/Assets/Industry")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
+local Ores = require("@lt/Core/Data/Ores")
 local Ships = require("@lt/Core/Data/Ships")
+local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Stations = require("@lt/Core/Assets/Stations")
 local Test = require("@lt/Tool/Test")
@@ -725,6 +727,59 @@ suite:Case("nobody sells a tech 2 module, its blueprint or a datacore, and a sta
   end
   -- The plain module is for sale as it always was.
   t.ok(Core.Query.Quote(game, home, "autocannon.small").stock > 0)
+end)
+
+suite:Case("a hull that is a refinery too refines the ore in its own holds where it lies, in space or docked, and puts the minerals in its hold", function(t)
+  -- The Drowned's Griever is such a hull (the project owner's: "mass-miner, mobile refinery"), and nothing else is.
+  for _, hull in Ships.list do
+    t.eq(hull.refinery, if hull.id == "capitalindustrial.griever" then true else nil, hull.id)
+  end
+  local function flying(hull: string): (Core.Game, State.Ship)
+    local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+    local state = game.state
+    local mine = Space.NewShip(state, hull, "Tester", "player", state.player.home)
+    state.player.ship = mine.id
+    return game, mine
+  end
+  local function count(state: State.State, holder: number, place: string, type: string): number
+    local found = 0
+    for _, item in Items.In(state, holder, place) do
+      found += if item.type == type then item.quantity else 0
+    end
+    return found
+  end
+  -- Any other hull's ore is refined at a station, out of the hangar: not out of its hold.
+  local plain, other = flying("capitalindustrial.embrace")
+  local kept = Items.Add(plain.state, "ore.ferrite", 1000, other.id, "orehold")
+  t.eq(refused(plain, { kind = "Reprocess", actor = 0, item = kept.id }), "this hull has no refinery aboard")
+
+  local game, ship = flying("capitalindustrial.griever")
+  local state = game.state
+  local ore = Items.Add(state, "ore.ferrite", 1050, ship.id, "orehold")
+  local few = Items.Add(state, "ore.cuprite", 5, ship.id, "cargo")
+  t.ok(5 < Ores.BATCH)
+  t.eq(refused(game, { kind = "Reprocess", actor = 0, item = few.id }), `refining takes at least {Ores.BATCH} units`)
+  -- Docked, at a station whatever it has for a refinery: the ore out of its ore hold, the minerals into its hold.
+  local used, minerals = Industry.RefineOutput("ore.ferrite", 1050, Industry.RefineYield(state))
+  t.ok(used > 0 and used <= 1050 and #minerals >= 1)
+  order(t, game, { kind = "Reprocess", actor = 0, item = ore.id })
+  t.eq(count(state, ship.id, "orehold", "ore.ferrite"), 1050 - used)
+  for _, m in minerals do
+    t.eq({ count(state, ship.id, "cargo", m.mineral), count(state, state.player.home, "hangar", m.mineral) }, { m.amount, 0 }, m.mineral)
+  end
+  -- In space: the same, out of its hold this time.
+  local more = Items.Add(state, "ore.ferrite", 2 * Ores.BATCH, ship.id, "cargo")
+  order(t, game, { kind = "Undock", actor = 0 })
+  t.ok(state.balls[ship.id] ~= nil, "the Griever should be in space")
+  local had = count(state, ship.id, "cargo", minerals[1].mineral)
+  order(t, game, { kind = "Reprocess", actor = 0, item = more.id })
+  t.eq(count(state, ship.id, "cargo", "ore.ferrite"), 0)
+  t.ok(count(state, ship.id, "cargo", minerals[1].mineral) > had, "nothing came of refining in space")
+  -- With no room in the hold for what would come of it, it is refused.
+  local big = Items.Add(state, "ore.ferrite", 4 * Ores.BATCH, ship.id, "orehold")
+  local hold = Items.ShipStats(state, ship.id).cargo - Items.CargoUsed(state, ship.id)
+  Items.Add(state, "scrap.metal", math.max(1, math.floor(hold / Types.Info("scrap.metal").volume)), ship.id, "cargo")
+  t.eq(refused(game, { kind = "Reprocess", actor = 0, item = big.id }), "no room in the hold for the minerals")
 end)
 
 return suite

@@ -543,6 +543,16 @@ local function aligned(ball: State.Ball): boolean
   return speed >= Constants.WARP_ALIGN_SPEED * ball.maxVelocity and along >= Constants.WARP_ALIGN_COS * speed
 end
 
+-- The same of a ship and a place: whether it is pointed at that place
+-- and moving fast enough, as it would have to be to warp there. (What
+-- a gun fixed along a bow is fired by: Tactical/Combat.)
+function Space.AlignedTo(ball: State.Ball, x: number, y: number, z: number): boolean
+  local dx, dy, dz = unit(x - ball.x, y - ball.y, z - ball.z)
+  local speed = math.sqrt(ball.vx ^ 2 + ball.vy ^ 2 + ball.vz ^ 2)
+  local along = ball.vx * dx + ball.vy * dy + ball.vz * dz
+  return speed >= Constants.WARP_ALIGN_SPEED * ball.maxVelocity and along >= Constants.WARP_ALIGN_COS * speed
+end
+
 -- How the fleet warps stand this tick, by the ship that called each:
 -- whether it goes now, and the warp speed and the sublight speed of the
 -- slowest of those who go (what all of them warp at). Those who had

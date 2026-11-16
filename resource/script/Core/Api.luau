@@ -1263,7 +1263,7 @@ end
 -- Which module carries out a kind of command.
 local ASSET_COMMANDS = { Fit = true, Unfit = true, LoadCharge = true, MoveItems = true }
 local COMBAT_COMMANDS = { LockTarget = true, UnlockTarget = true, ActivateModule = true, DeactivateModule = true,
-  Cloak = true, Uncloak = true }
+  Cloak = true, Uncloak = true, FireSpinal = true }
 local AFTERMATH_COMMANDS = { Loot = true, Repair = true, Jettison = true }
 local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true, StartResearch = true, CancelJob = true }
 local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true }
@@ -1877,6 +1877,23 @@ end
 function Query.OwnCloak(game: Game, ship: number): (boolean, boolean)
   local ball = game.state.balls[ship]
   return Combat.HasCloak(game.state, ship), ball ~= nil and ball.vitals.cloaked == true
+end
+
+-- A hull's own gun, fixed along its bow (Data/Ships' 'spinal'): nil
+-- for a ship that has none, or is not in space. What it is called,
+-- whether it has been told to fire and the ship is turning for its
+-- target, the seconds until it has cycled (0: it has), and the
+-- capacitor a round takes. (Fired with "FireSpinal", at a locked
+-- target.)
+export type SpinalStatus = { name: string, aiming: boolean, cycling: number, capacitor: number }
+function Query.Spinal(game: Game, ship: number): SpinalStatus?
+  local ball = game.state.balls[ship]
+  local gun = Combat.Spinal(game.state, ship)
+  if ball == nil or gun == nil then
+    return nil
+  end
+  return { name = gun.name, aiming = ball.vitals.spinalTarget ~= nil,
+    cycling = math.max(0, ((ball.vitals.spinalReady or 0) - game.state.tick) * Constants.TICK), capacitor = gun.capacitor }
 end
 
 -- Whether a ship is in a cloud of gas (Tactical/Vapour): it is locked,

@@ -83,10 +83,16 @@ lua GameDebug.TimeScale(1)
 until GameDebug.Press('Missions')
 until GameDebug.Tab() == 'Missions'
 frames 3
+# (in credits, or now and then in a module of the people's own make,
+# which goes to the hangar: whichever this contract's is)
 lua _G.before = GameDebug.Wallet()
+lua _G.credits, _G.prize = GameDebug.Pays(1)
+lua _G.had = if _G.prize == '' then 0 else GameDebug.Hangar(_G.prize)
 until GameDebug.Press('Complete:1')
 until select(3, GameDebug.Missions()) == 1
-lua assert(GameDebug.Wallet() > _G.before + 15000, 'the contract did not pay')
+lua assert(_G.credits > 15000 or _G.prize ~= '', 'the contract should be worth doing')
+lua assert(GameDebug.Wallet() >= _G.before + _G.credits, 'the contract did not pay')
+lua assert(_G.prize == '' or GameDebug.Hangar(_G.prize) == _G.had + 1, 'what the contract pays with is not in the hangar')
 frames 3
 lua assert(GameDebug.Offer('mining') == 5, 'the agent should have another contract')
 

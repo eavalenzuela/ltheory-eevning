@@ -557,6 +557,79 @@ suite:Case("a capital is held only by a capital warp disruptor, which only a cap
   t.eq(stepUntil(c, "Held", 3).scrambled, true)
 end)
 
+suite:Case("a gun fixed along a bow is fired by pointing the ship: aligned to its target as for a warp, one round, and then it cycles", function(t)
+  -- The Drowned's ultracapital has one (the project owner's: "special, fixed bow railgun"), and nothing else has.
+  local gun = assert(Ships.byId["ultracapital.theend"].spinal, "The End has no bow gun")
+  for _, hull in Ships.list do
+    t.eq(hull.spinal ~= nil, hull.id == "ultracapital.theend", hull.id)
+  end
+  t.eq({ gun.name, gun.family } :: { any }, { "Bow Railgun", "hybrid" } :: { any })
+  -- A round is a hundred of a siege dreadnought's, and it follows nothing: a capital lying still is hit
+  -- squarely, and a frigate crossing is as good as never hit.
+  local round = gun.damage[1] + gun.damage[2] + gun.damage[3] + gun.damage[4]
+  t.ok(round >= 30000 and gun.duration >= 20, `a round of {round} every {gun.duration} s`)
+  t.eq(Gunnery.HitChance(0, gun.tracking, 3200, 50000, gun.optimal, gun.falloff), 1)
+  t.ok(Gunnery.HitChance(0.02, gun.tracking, 35, 50000, gun.optimal, gun.falloff) < 0.001)
+
+  local plain = arena("carrier.azayake", {}, "carrier.scoppo", {}, 50000)
+  t.eq(Core.Query.Spinal(plain.game, plain.me.id), nil)
+  t.eq(refused(plain, { kind = "FireSpinal", actor = 0, target = plain.foe.id }), "this hull has no gun of its own")
+
+  local a = arena("ultracapital.theend", {}, "carrier.scoppo", {}, 50000)
+  local status = assert(Core.Query.Spinal(a.game, a.me.id))
+  t.eq({ status.name, status.aiming, status.cycling, status.capacitor } :: { any }, { "Bow Railgun", false, 0, gun.capacitor } :: { any })
+  t.eq(refused(a, { kind = "FireSpinal", actor = 0, target = a.foe.id }), "no locked target")
+  lockFoe(t, a)
+  -- Told to fire, the ship turns for its target, and nothing is fired while it is not yet pointed at it.
+  local whole = a.foe.vitals.shield + a.foe.vitals.armor + a.foe.vitals.hull
+  local capacitor = a.me.vitals.capacitor
+  order(t, a, { kind = "FireSpinal", actor = 0, target = a.foe.id })
+  Core.Step(a.game)
+  Core.TakeEvents(a.game)
+  t.eq({ a.me.mode, a.me.vitals.spinalTarget, assert(Core.Query.Spinal(a.game, a.me.id)).aiming } :: { any },
+    { "align", a.foe.id, true } :: { any })
+  t.eq(a.foe.vitals.shield + a.foe.vitals.armor + a.foe.vitals.hull, whole)
+  -- Pointed at it, and moving as it would have to be to warp there, it fires: one round.
+  local shot: any = nil
+  local ticks = 0
+  while shot == nil and ticks < 2400 do
+    ticks += 1
+    Core.Step(a.game)
+    for _, event in Core.TakeEvents(a.game) do
+      if event.kind == "Shot" and event.spinal then
+        shot = event
+        -- (it was aligned when it fired)
+        t.ok(Space.AlignedTo(a.me, a.foe.x, a.foe.y, a.foe.z), "the bow gun fired from a ship that was not pointed at its target")
+      end
+    end
+  end
+  t.ok(shot ~= nil, "the bow gun never fired")
+  t.ok(ticks > 5, `a ship at rest was pointed at its target in {ticks} ticks`)
+  t.eq({ shot.from, shot.to, shot.item, shot.look } :: { any }, { a.me.id, a.foe.id, 0, "railgun.xl" } :: { any })
+  t.ok(shot.outcome ~= "miss" and shot.damage >= 0.49 * round, `a carrier lying still was not hit squarely: {shot.outcome}, {shot.damage}`)
+  local left = a.foe.vitals.shield + a.foe.vitals.armor + a.foe.vitals.hull
+  t.ok(left < whole - 5000, `the round took {whole - left} off a carrier`)
+  -- It took its capacitor, the shot is done with, and the gun is cycling.
+  t.ok(a.me.vitals.capacitor < capacitor - gun.capacitor * 0.5)
+  t.eq(a.me.vitals.spinalTarget, nil)
+  local cycling = assert(Core.Query.Spinal(a.game, a.me.id)).cycling
+  t.ok(cycling > gun.duration - 2 and cycling <= gun.duration, `cycling for {cycling} s`)
+  t.ok(string.find(tostring(refused(a, { kind = "FireSpinal", actor = 0, target = a.foe.id })), "cycling", 1, true) ~= nil)
+  -- Cycled, it can be told again; and any other order to the helm calls the shot off.
+  a.me.vitals.spinalReady = nil
+  a.me.vx, a.me.vy, a.me.vz = 0, 0, 0
+  order(t, a, { kind = "FireSpinal", actor = 0, target = a.foe.id })
+  Core.Step(a.game)
+  t.eq(a.me.vitals.spinalTarget, a.foe.id)
+  order(t, a, { kind = "Stop", actor = 0 })
+  Core.Step(a.game)
+  Core.Step(a.game)
+  t.eq(a.me.vitals.spinalTarget, nil)
+  -- With the capacitor short of a round it is refused.
+  a.me.vitals.capacitor = gun.capacitor - 1
+  t.eq(refused(a, { kind = "FireSpinal", actor = 0, target = a.foe.id }), `needs {gun.capacitor} GJ of capacitor`)
+end)
+
 suite:Case("a raider carries a warp disruptor, and a pilot it catches cannot warp away", function(t)
   local raider = Pirates.kindById["raider"]
   local fitted: { [string]: boolean } = {}

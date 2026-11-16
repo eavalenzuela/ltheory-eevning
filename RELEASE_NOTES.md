@@ -12,6 +12,8 @@ the lines beginning `- ` under it.
 - Fifteen ships of theirs, each with a lesser hull out on one flank that houses its cloak: from the frigates Cairn and Charon to the dreadnought The Reaper and the ultracapital The End.
 - At a belt in the deep they come for you under their cloaks, unseen and unannounced until they are in reach. They hit harder than pirates and take longer to kill.
 - Nobody pays a bounty on them. Their wrecks hold Benthic Alloy, what their hulls are made of, which sells for a great deal.
+- The End, their ultracapital, has a railgun fixed along its bow. Lock a target and press BOW GUN (or G): the ship aligns to the target as it would to warp, and fires one enormous round when it is pointed. It hits capitals and towers squarely and misses small, fast ships.
+- The Griever, their mining capital, has a refinery aboard: right-click ore in its hold and choose Refine aboard, in space or docked.
 - A hull with a cloak of its own now draws on its capacitor while cloaked. It settles at about four fifths of full, and a ship with an empty capacitor cannot cloak.
 - A new game has seven peoples holding space on the map, where there were eight. A save from before keeps its map as it was.
 

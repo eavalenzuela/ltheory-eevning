@@ -1649,7 +1649,8 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       if from and to then
         local item = state.items[event.item]
         -- (from the mouth of the gun, if it is one that is shown)
-        Effects.Fire(fx, if item then item.type else FALLBACK[event.family] or "autocannon", from.id, to.id, from.radius, to.radius,
+        -- (a gun that is part of a hull, and no item, says what it looks like firing: Core/Tactical/Combat)
+        Effects.Fire(fx, if item then item.type elseif event.look then event.look else FALLBACK[event.family] or "autocannon", from.id, to.id, from.radius, to.radius,
           event.outcome, event.flight or 0, struck(to), scene.time, if scene.screen[-event.item] then -event.item else nil)
       end
     elseif event.kind == "BatteryFired" then

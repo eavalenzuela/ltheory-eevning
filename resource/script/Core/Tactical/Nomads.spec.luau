@@ -67,13 +67,13 @@ suite:Case("a colony fleet goes round its people's space a gate at a time, a qua
       end
       -- (a fleet for every ten of the systems of theirs that are of a piece with their homeworld: a fleet goes
       -- by the gates through its people's own space, and what somebody else's space cuts off it does not reach)
-      local reached, within = 0, {} :: { [number]: boolean }
+      local span, within = 0, {} :: { [number]: boolean }
       for _, id in (if fleets[1] then fleets[1].walk else {}) :: { number } do
-        reached += if within[id] then 0 else 1
+        span += if within[id] then 0 else 1
         within[id] = true
       end
-      t.ok(reached >= 1 and reached <= held, `seed {seed}, {count} systems: a fleet reaches {reached} of the {held} the Kethri hold`)
-      t.eq(#fleets, math.max(1, reached // Nomads.SPAN), `seed {seed}, {count} systems, where the Kethri hold {held} and a fleet reaches {reached}`)
+      t.ok(span >= 1 and span <= held, `seed {seed}, {count} systems: a fleet reaches {span} of the {held} the Kethri hold`)
+      t.eq(#fleets, math.max(1, span // Nomads.SPAN), `seed {seed}, {count} systems, where the Kethri hold {held} and a fleet reaches {span}`)
       for index, fleet in fleets do
         t.eq({ fleet.index, fleet.faction, fleet.hull } :: { any }, { index, "kethri", "ultracapital.leslarmesdenova" } :: { any })
         t.eq(fleet.name, if index == 1 then "Les Larmes de Nova" else `Les Larmes de Nova {Names.Roman(index)}`)

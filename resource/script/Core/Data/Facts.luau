@@ -213,7 +213,7 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
   -- What it is built with that others of its class are not: a jump
   -- drive (Tactical/Jumping), to go unseen or a cloak of its own
   -- (Tactical/Combat), or to explore (Ships.EXPLORER).
-  if hull.jump or hull.stealth or hull.cloak or hull.explorer or hull.affinity then
+  if hull.jump or hull.stealth or hull.cloak or hull.explorer or hull.affinity or hull.spinal or hull.refinery then
     local built = section(sheet, "Built with")
     -- (the kind of damage its faction's ships lean to: Data/Ships' affinity)
     if hull.affinity then
@@ -225,6 +225,13 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
     end
     if hull.jump and hull.jumpField then
       row(built, "Jump field", `takes with it every friendly ship within {whole(hull.jumpField / 1000)} km that is not in warp or scrambled`)
+    end
+    if hull.refinery then
+      row(built, "Refinery", "aboard: ore in its hold or its ore hold is refined where it lies, in space or docked")
+    end
+    if hull.spinal then
+      local gun = hull.spinal
+      row(built, gun.name, `fixed along the bow: the ship is aligned to its target to fire it. {whole(gun.damage[1] + gun.damage[2] + gun.damage[3] + gun.damage[4])} a round, every {whole(gun.duration)} s, for {whole(gun.capacitor)} GJ`)
     end
     if hull.cloak then
       row(built, "Cloak", "its own, built in: nothing to fit and no slot, and it draws on the capacitor while it is on")

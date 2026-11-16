@@ -154,6 +154,12 @@ function Stations.Validate(state: State.State, command: State.Command): (boolean
   if service == nil or ship == nil or ship.docked == 0 then
     return true
   end
+  -- (ore refined aboard a hull that is a refinery is none of the
+  -- station's business: Assets/Industry)
+  local aboard = state.items[command.item or 0]
+  if command.kind == "Reprocess" and aboard and aboard.holder == ship.id then
+    return true
+  end
   if Stations.Makeup(state, ship.docked) == nil or Stations.Has(state, ship.docked, service) then
     return true
   end

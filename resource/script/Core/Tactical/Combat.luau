@@ -236,6 +236,27 @@ end
 -- ---------------------------------------------------------------------
 -- Orders
 
+-- The gun a ship's hull has of its own, fixed along its bow, if it has
+-- one (Data/Ships' 'spinal': the Drowned's The End has a railgun).
+--
+-- It is fired by pointing the ship (the project owner's, 2026-11-15:
+-- "It would likely operate via align-to -> fire, to keep it simple,
+-- with the same logic for a correct alignment as the trigger to enter
+-- warp"). "FireSpinal" at a locked target turns the ship for it, as
+-- "AlignTo" does; and once the ship is moving that way, as fast and as
+-- true as it would have to be to warp there (Space.AlignedTo), the gun
+-- fires one round, if it has cycled and the capacitor will pay. It
+-- goes on turning after a target that moves. Any other order to the
+-- helm calls the shot off, and so does losing the lock.
+--
+-- A round is resolved as a turret's is, on the gun's own figures: it
+-- follows nothing, so what is small and crossing is missed.
+function Combat.Spinal(state: State.State, id: number): Ships.Spinal?
+  local ship = state.ships[id]
+  local hull = if ship then Ships.byId[ship.type] else nil
+  return if hull then hull.spinal else nil
+end
+
 -- Whether a thing in space is a ship of a capital class: what a plain
 -- warp disruptor does not hold, and a capital's does (Data/Modules).
 function Combat.Capital(state: State.State, id: number): boolean
@@ -259,6 +280,28 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
   -- (a cloaked ship does nothing but fly, and switch its cloak off)
   if (kind == "LockTarget" or kind == "ActivateModule") and Combat.Cloaked(state, ball.id) then
     return false, "cloaked"
+  end
+
+  -- A hull's own gun, fixed along its bow (Data/Ships' 'spinal').
+  if kind == "FireSpinal" then
+    local gun = Combat.Spinal(state, ball.id)
+    local lock = findLock(ball, command.target or 0)
+    if gun == nil then
+      return false, "this hull has no gun of its own"
+    elseif Combat.Cloaked(state, ball.id) then
+      return false, "cloaked"
+    elseif lock == nil or not lock.locked then
+      return false, "no locked target"
+    elseif Space.Body(state, command.target or 0) == nil then
+      return false, "no such target"
+    end
+    local cycling = (ball.vitals.spinalReady or 0) - state.tick
+    if cycling > 0 then
+      return false, `the {string.lower(gun.name)} is cycling: {math.ceil(cycling * Constants.TICK)} s`
+    elseif ball.vitals.capacitor < gun.capacitor then
+      return false, `needs {gun.capacitor} GJ of capacitor`
+    end
+    return true
   end
 
   -- A hull's own cloak, on and off.
@@ -411,6 +454,28 @@ function Combat.Apply(state: State.State, command: State.Command, events: { Even
   elseif kind == "DeactivateModule" then
     local running = findRunning(ball, command.item :: number) :: State.Running
     running.stopping = true
+
+  elseif kind == "FireSpinal" then
+    -- The ship is turned for its target, as for a warp, and the gun
+    -- fires when it is pointed at it (Combat.Step). Any other order to
+    -- the helm calls it off.
+    local target = Space.Body(state, command.target :: number) :: Space.Body
+    ball.vitals.spinalTarget = target.id
+    local turn: State.Command = { kind = "AlignTo", actor = ball.id, target = target.id }
+    if Space.Validate(state, turn) then
+      Space.Apply(state, turn, events)
+    end
+    table.insert(events, { kind = "SpinalAiming", ball = ball.id, target = target.id })
+    -- (fire on anybody but a pirate marks a pilot, from this as from any gun)
+    local shooter = state.ships[ball.id]
+    local victim = if shooter and shooter.owner == "player" then state.ships[target.id] else nil
+    if victim and shooter and victim.owner ~= "pirates" and victim.owner ~= shooter.owner then
+      if state.tick >= state.player.marked then
+        table.insert(events, { kind = "Marked", owner = victim.owner })
+        Standings.Change(state, Standings.Minds(state, victim.owner, ball.system), Standings.MARKED, events)
+      end
+      state.player.marked = state.tick + MARKED
+    end
 
   elseif kind == "Cloak" then
     -- Everything goes off, and every lock is let go.
@@ -796,6 +861,59 @@ end
 function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): { [number]: number }
   local time = now(state)
   local hits: { Hit } = landed or {}
+
+  -- The guns fixed along a bow (Combat.Spinal): each that has been told
+  -- to fire goes on turning for its target, and fires when the ship is
+  -- pointed at it.
+  for _, id in state.ballIds do
+    local ball = state.balls[id]
+    local v = ball.vitals
+    local aim = v.spinalTarget
+    if aim then
+      local gun = Combat.Spinal(state, id)
+      local target = Space.Body(state, aim)
+      local lock = findLock(ball, aim)
+      if gun == nil or target == nil or lock == nil or not lock.locked or ball.mode ~= "align" or ball.warp ~= nil
+        or Combat.Cloaked(state, id) then
+        -- (called off: the lock is gone, or the helm has other orders)
+        v.spinalTarget = nil
+        table.insert(events, { kind = "SpinalOff", ball = id })
+      else
+        -- (after a target that moves)
+        local far = math.max(1e-6, Space.Distance(ball :: any, target))
+        ball.dx, ball.dy, ball.dz = (target.x - ball.x) / far, (target.y - ball.y) / far, (target.z - ball.z) / far
+        if Space.AlignedTo(ball, target.x, target.y, target.z) and state.tick >= (v.spinalReady or 0) and v.capacitor >= gun.capacitor then
+          v.capacitor -= gun.capacitor
+          v.spinalReady = state.tick + math.ceil(gun.duration / Constants.TICK)
+          v.spinalTarget = nil
+          -- (how fast the target crosses the line of fire, as for a turret)
+          local other = state.balls[target.id]
+          local rx, ry, rz = target.x - ball.x, target.y - ball.y, target.z - ball.z
+          local vx, vy, vz = -ball.vx, -ball.vy, -ball.vz
+          if other then
+            vx, vy, vz = other.vx - ball.vx, other.vy - ball.vy, other.vz - ball.vz
+          end
+          local along = (vx * rx + vy * ry + vz * rz) / far
+          local across = math.sqrt(math.max(0, vx * vx + vy * vy + vz * vz - along * along))
+          local chance = Gunnery.HitChance(across / far, gun.tracking, signature(state, target), Fields.Gap(state, ball, target),
+            gun.optimal, gun.falloff)
+          local quality = Gunnery.Quality(Rng.Next(Rng.For(state.historySeed, state.tick, id, 211)), chance)
+          local total = 0
+          if quality > 0 then
+            local hull = Ships.byId[state.ships[id].type]
+            local damage = {}
+            for index = 1, 4 do
+              damage[index] = gun.damage[index] * quality * Ships.Dealt(hull, index)
+              total += damage[index]
+            end
+            table.insert(hits, { target = target.id, by = id, damage = damage })
+          end
+          table.insert(events, { kind = "Shot", from = id, item = 0, to = target.id, family = gun.family, look = gun.look, spinal = true,
+            outcome = if quality == 0 then "miss" elseif quality == 3 then "wreck" else "hit", damage = total })
+        end
+      end
+    end
+  end
 
   for _, id in table.clone(state.ballIds) do
     local ball = state.balls[id]

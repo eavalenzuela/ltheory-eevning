@@ -259,6 +259,33 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
     end
     return true
   end
+  -- Ore aboard a hull that is a refinery too (Data/Ships' 'refinery':
+  -- the Drowned's Griever, the project owner's "mobile refinery"): in
+  -- its hold or its ore hold, it is refined where it lies, in space or
+  -- docked, for what the pilot would get of it at a station; and the
+  -- minerals go in the hold, which has to have the room for them.
+  local own, held = state.ships[command.actor], state.items[command.item or 0]
+  if command.kind == "Reprocess" and own and held and held.holder == own.id then
+    if not Ships.byId[own.type].refinery then
+      return false, "this hull has no refinery aboard"
+    elseif held.place ~= "cargo" and held.place ~= "orehold" then
+      return false, "that is not in the hold"
+    elseif Ores.byId[held.type] == nil then
+      return false, "that is not ore"
+    elseif held.quantity < Ores.BATCH then
+      return false, `refining takes at least {Ores.BATCH} units`
+    end
+    local used, minerals = Industry.RefineOutput(held.type, held.quantity, Industry.RefineYield(state))
+    local room = Items.ShipStats(state, own.id).cargo - Items.CargoUsed(state, own.id)
+      + (if held.place == "cargo" then used * Types.Info(held.type).volume else 0)
+    for _, m in minerals do
+      room -= m.amount * Types.Info(m.mineral).volume
+    end
+    if room < -1e-6 then
+      return false, "no room in the hold for the minerals"
+    end
+    return true
+  end
   local item, why = inHangar(state, command)
   if item == nil then
     return false, why
@@ -401,11 +428,18 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
   if command.kind == "Reprocess" then
     local type = item.type
     local used, minerals = Industry.RefineOutput(type, item.quantity, Industry.RefineYield(state))
+    -- (aboard a hull that is a refinery: out of its hold, and into it)
+    local aboard = item.holder == ship.id
     Items.Take(state, item, used)
     for _, m in minerals do
-      Items.Add(state, m.mineral, m.amount, ship.docked, "hangar")
+      if aboard then
+        Items.Add(state, m.mineral, m.amount, ship.id, "cargo")
+      else
+        Items.Add(state, m.mineral, m.amount, ship.docked, "hangar")
+      end
     end
-    table.insert(events, { kind = "Reprocessed", ship = ship.id, ore = type, units = used, minerals = minerals })
+    table.insert(events, { kind = "Reprocessed", ship = ship.id, ore = type, units = used, minerals = minerals,
+      aboard = if aboard then true else nil })
 
   elseif command.kind == "StartJob" then
     local station = ship.docked

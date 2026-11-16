@@ -261,6 +261,11 @@ function Session.Notice(session: Session, event: Space.Event)
       else `Through the wormhole: {node.name}, back on the map`)
   elseif kind == "WormholeClosed" and event.found and event.system == Core.Query.Player(session.game).system then
     Session.Say(session, `{event.name} has closed`)
+  elseif kind == "Shot" and event.spinal and event.from == mine then
+    Session.Say(session, if event.outcome == "miss" then "The bow gun fires, and misses"
+      else string.format("The bow gun fires: %s for %d", if event.outcome == "wreck" then "a wrecking hit" else "a hit", event.damage))
+  elseif kind == "SpinalOff" and event.ball == mine then
+    Session.Say(session, "The bow gun stands down: the shot is called off")
   elseif kind == "FleetSpooling" or kind == "FleetJumped" then
     -- A mining fleet's jumpship (Core/Tactical/Traffic): said to a
     -- pilot who is there to see it.

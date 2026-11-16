@@ -134,12 +134,18 @@ export type Faction = {
 -- 'jumpField': its jump drive has a field, so many metres deep: every
 -- friendly ship within it goes where the hull goes when it jumps
 -- (Tactical/Jumping). The Vail's Archangel, by the owner's word.
+-- 'refinery': it is a refinery too: ore in its own holds is refined
+-- aboard, wherever it is (Assets/Industry). The Drowned's Griever, by
+-- the owner's word: "mass-miner, mobile refinery".
+-- 'spinal': it has a gun of its own, fixed along its bow (Data/Ships'
+-- 'spinal', Tactical/Combat). The Drowned's The End, by the owner's
+-- word: "special, fixed bow railgun".
 -- A hull whose name begins "The" goes by that name alone, and every
 -- other by its people's name and its own (Data/Ships): "The Reaper",
 -- and "Drowned Coffin".
 export type Hull = { name: string, class: string, role: string?, tech: number?, of: string?, jump: boolean?, stealth: boolean?,
   cloak: boolean?, explorer: boolean?, hardpoints: number?, radius: number?, guns: { number }?, rare: boolean?,
-  jumpField: number? }
+  jumpField: number?, spinal: boolean?, refinery: boolean? }
 
 Factions.list = {
   -- The four human factions.
@@ -481,9 +487,9 @@ Factions.list = {
       { name = "Funeral Procession", class = "carrier" },
       { name = "The Reaper", class = "dreadnought" },
       { name = "The Mercy", class = "siegedreadnought" },
-      { name = "The End", class = "ultracapital" },
+      { name = "The End", class = "ultracapital", spinal = true },
       { name = "Hearse", class = "industrial" },
-      { name = "Griever", class = "capitalindustrial", role = "miner", hardpoints = 10 },
+      { name = "Griever", class = "capitalindustrial", role = "miner", hardpoints = 10, refinery = true },
       { name = "Cemetery", class = "freighter" },
       { name = "Resurrection", class = "freighter", tech = 2, of = "Cemetery", jump = true },
     },

@@ -913,7 +913,16 @@ end
 
 local function drawNavigation(session: Session.Session, ball: State.Ball, x: number, y: number, width: number)
   local game = session.game
-  Im.Panel(x, y, width, 66)
+  -- (a hull with a cloak of its own and a gun of its own has three
+  -- buttons down the panel's side, where there is room for two: the
+  -- panel is that much taller, upward, its top level with the panel of
+  -- the ship's shield, armor and hull beside it)
+  local has, on = Core.Query.OwnCloak(game, ball.id)
+  local gun = Core.Query.Spinal(game, ball.id)
+  local more = if has and gun then 34 else 0
+  local pitch = if more > 0 then 30 else 28
+  y -= more
+  Im.Panel(x, y, width, 66 + more)
   local speed = math.sqrt(ball.vx ^ 2 + ball.vy ^ 2 + ball.vz ^ 2)
   Im.Heading(Format.Speed(speed), x + 14, y + 8, 26, Im.TEXT)
   Im.Text(describe(game, ball), x + 14, y + 40, 15, Im.ACCENT)
@@ -947,11 +956,21 @@ local function drawNavigation(session: Session.Session, ball: State.Ball, x: num
   end
   -- (and a hull with a cloak of its own has it here, on and off: there
   -- is no module of it in the rack. Tactical/Combat)
-  local has, on = Core.Query.OwnCloak(game, ball.id)
   if has then
     local key = Keys.Did("cloak") and not inWarp
-    if Im.Button(if on then "UNCLOAK" else "CLOAK", x + width - 92, y + 36, 80, 24, not inWarp, "Cloak") or key then
+    if Im.Button(if on then "UNCLOAK" else "CLOAK", x + width - 92, y + 8 + pitch, 80, 24, not inWarp, "Cloak") or key then
       Session.Do(session, { kind = if on then "Uncloak" else "Cloak", actor = 0 })
+    end
+  end
+  -- (and a hull with a gun of its own, fixed along its bow, fires it
+  -- from here, at what is aimed at: the ship turns for it, and the gun
+  -- fires when it is pointed. Tactical/Combat)
+  if gun then
+    local key = Keys.Did("bowgun") and not inWarp
+    local label = if gun.aiming then "AIMING" elseif gun.cycling > 0 then `{math.ceil(gun.cycling)} s` else "BOW GUN"
+    if Im.Button(label, x + width - 92, y + 8 + (if has then 2 * pitch else pitch), 80, 24, not inWarp and not gun.aiming and gun.cycling <= 0, "BowGun")
+      or (key and not gun.aiming and gun.cycling <= 0) then
+      Session.Do(session, { kind = "FireSpinal", actor = 0, target = aimOf(session, ball) })
     end
   end
 end

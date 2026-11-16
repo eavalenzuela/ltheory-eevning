@@ -14,6 +14,18 @@
 local Factions = require("@lt/Core/Data/Factions")
 local Structures = require("@lt/Core/Data/Structures")
 
+-- A gun that is part of a hull, fixed along its bow (ShipType's
+-- 'spinal'): what it is called, the family its fire is drawn and heard
+-- as and the gun it looks like firing, what a round of it does of each
+-- kind of damage, how far it reaches and how well it follows (as a
+-- turret's figures are), the seconds between rounds, and the capacitor
+-- a round takes.
+export type Spinal = {
+  name: string, family: string, look: string,
+  damage: { number }, optimal: number, falloff: number, tracking: number,
+  duration: number, capacitor: number,
+}
+
 export type ShipType = {
   id: string,
   name: string,
@@ -102,6 +114,18 @@ export type ShipType = {
   stealth: boolean?,
   cloak: boolean?,
   explorer: boolean?,
+  -- A refinery aboard (the Drowned's Griever: the project owner's
+  -- "mobile refinery"): ore in the hull's own hold, or its ore hold, is
+  -- refined where it lies, in space or docked, and the minerals go in
+  -- the hold (Assets/Industry). Nil for every other hull, whose ore is
+  -- refined at a station.
+  refinery: boolean?,
+  -- A gun of the hull's own, fixed along its bow (the Drowned's The End:
+  -- the project owner's "special, fixed bow railgun"): nothing is
+  -- fitted for it and it takes no slot. It fires where the ship points,
+  -- so the ship is aligned to its target to fire it, as for a warp
+  -- (Tactical/Combat). Nil for every other hull.
+  spinal: Spinal?,
   -- A jump drive with a field, m: when the hull jumps, every friendly
   -- ship within so far of it goes where it goes (Tactical/Jumping). Nil
   -- for a drive that takes its own hull and no more, which is every
@@ -122,6 +146,18 @@ export type ShipType = {
   racks: { number }?,
   -- Nobody sells it, nor the blueprint for it (Data/Types).
   rare: boolean?,
+}
+
+-- The bow railgun of the Drowned's ultracapital: one round where a
+-- siege dreadnought's largest gun fires a hundred, at a target the
+-- whole ship has been pointed at. It follows nothing: what is small and
+-- crossing is missed, and what is a capital or stands still is hit
+-- squarely. (Every figure is a first one: the owner's word is that it
+-- is a railgun, fixed in the bow, and special.)
+local BOW_RAILGUN: Spinal = {
+  name = "Bow Railgun", family = "hybrid", look = "railgun.xl",
+  damage = { 0, 10000, 30000, 0 }, optimal = 150000, falloff = 60000, tracking = 2,
+  duration = 30, capacitor = 15000,
 }
 
 local SHIELD = { 1.0, 0.8, 0.6, 0.5 }
@@ -464,6 +500,8 @@ for _, yard in Factions.list do
         -- (every plain hull of a people whose hulls all have a cloak of their own: the Drowned's)
         hull.cloak, hull.explorer = named.cloak or yard.cloaks, named.explorer
         hull.jumpField = named.jumpField
+        hull.spinal = if named.spinal then BOW_RAILGUN else nil
+        hull.refinery = named.refinery
         -- (a hull written out by hand above, under the name the line has
         -- for it, is that hull: the Kethri's frigate)
         local written = false

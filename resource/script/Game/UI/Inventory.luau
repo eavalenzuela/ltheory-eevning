@@ -257,6 +257,14 @@ local function actionsFor(session: Session.Session, view: View?, item: State.Ite
     local can, why = Session.CanDo(session, learn)
     add(if can then "Learn this skill" else `Learn ({why or "not now"})`, `Learn:{type}`, learn, nil, can)
   end
+  -- Ore aboard a hull that is a refinery too is refined from its menu,
+  -- where it lies, in space or docked (Core/Assets/Industry: the
+  -- Drowned's Griever). Where it cannot be, the menu says why.
+  if info.category == "ore" and shown.holder == own and Core.Query.Player(game).hull.refinery then
+    local refine: State.Command = { kind = "Reprocess", actor = 0, item = item.id }
+    local can, why = Session.CanDo(session, refine)
+    add(if can then "Refine aboard" else `Refine aboard ({why or "not now"})`, `RefineAboard:{type}`, refine, nil, can)
+  end
   if shown.kind == "wreck" or shown.kind == "can" then
     add("Take", nil, { kind = "Loot", actor = 0, target = shown.holder, item = item.id })
   elseif shown.kind == "hangar" then
