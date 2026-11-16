@@ -21,6 +21,7 @@ local Fitting = require("@lt/Game/UI/Fitting")
 local Format = require("@lt/Game/Format")
 local Guide = require("@lt/Game/UI/Guide")
 local Im = require("@lt/Game/UI/Im")
+local IndustryWindow = require("@lt/Game/UI/Industry")
 local Inventory = require("@lt/Game/UI/Inventory")
 local Info = require("@lt/Game/UI/Info")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
@@ -1379,7 +1380,7 @@ end
 
 -- The dock's buttons that are a station's own: each is a tab of the
 -- docked screen, until it is a window of its own.
-local TAB_OF: { [string]: string } = { industry = "Industry", jobs = "Missions", wallet = "Wallet", crew = "Crew", corporation = "Wallet" }
+local TAB_OF: { [string]: string } = { jobs = "Missions", wallet = "Wallet", crew = "Crew", corporation = "Wallet" }
 -- (a tab of the docked screen shown is the docked screen opened, if it
 -- is not, and brought in front of the windows about it)
 Station.Front = function()
@@ -1510,6 +1511,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Market.Frame(session, player.docked ~= 0)
       ShipsWindow.Frame(session, player.docked ~= 0)
       SkillSheet.Frame(session)
+      IndustryWindow.Frame(session, player.docked ~= 0)
       Assets.Frame(session)
       Events.Frame(session)
       -- The dock is down the left edge (Game/UI/Dock): the windows keep
@@ -1768,6 +1770,8 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         elseif id == "skills" then
           -- (the pilot's own, wherever they are: Game/UI/Skills)
           return { open = SkillSheet.IsOpen(), can = true }
+        elseif id == "industry" then
+          return { open = IndustryWindow.IsOpen(), can = docked, note = if docked then nil else "At a station only" }
         elseif id == "inventory" then
           return { open = Inventory.IsOpen(), can = true, key = Keys.Of("inventory") }
         elseif id == "market" then
@@ -1803,6 +1807,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       end
       if Im.Hook("Skills", true) then
         SkillSheet.Open()
+      end
+      if Im.Hook("Industry", docked) then
+        IndustryWindow.Open()
       end
       if docked then
         for _, name in Station.Tabs(game, player) do
@@ -1841,6 +1848,12 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             SkillSheet.Close()
           else
             SkillSheet.Open()
+          end
+        elseif pressed == "industry" then
+          if IndustryWindow.IsOpen() then
+            IndustryWindow.Close()
+          else
+            IndustryWindow.Open()
           end
         elseif pressed == "inventory" then
           if Inventory.IsOpen() then

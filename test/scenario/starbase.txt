@@ -10,7 +10,7 @@
 # again, into the hold. The industrial and the price of it all are
 # granted. The rest is done as a player does it.
 #
-# covers: Core/Assets/Starbases Core/Data/Structures Game/View/Starbase
+# covers: Core/Assets/Starbases Core/Data/Structures Game/View/Starbase Game/UI/Industry
 # smoke: yes
 
 wait 2

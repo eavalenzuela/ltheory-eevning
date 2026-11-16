@@ -15,7 +15,7 @@
 # custom make of a gun is fitted, a tech 2 gun is loaded with tech 2
 # rounds, and a tech 2 hull is flown.
 #
-# covers: Core/Assets/Industry Core/Data/Blueprints Game/UI/Fitting
+# covers: Core/Assets/Industry Core/Data/Blueprints Game/UI/Fitting Game/UI/Industry
 
 wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')

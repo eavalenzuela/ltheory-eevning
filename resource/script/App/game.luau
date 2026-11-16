@@ -43,6 +43,7 @@ local MarketWindow = require("@lt/Game/UI/Market")
 local FittingWindow = require("@lt/Game/UI/Fitting")
 local ShipsWindow = require("@lt/Game/UI/Ships")
 local SkillSheet = require("@lt/Game/UI/Skills")
+local IndustryWindow = require("@lt/Game/UI/Industry")
 local Info = require("@lt/Game/UI/Info")
 local Menu = require("@lt/Game/UI/Menu")
 local Splash = require("@lt/Game/UI/Splash")
@@ -806,16 +807,16 @@ function Debug.Market(type: string): boolean
 end
 
 function Debug.Blueprint(type: string): boolean
-  return Station.Blueprint(type)
+  return IndustryWindow.Choose(type)
 end
 
 -- What of a station's own is in front: a tab of the docked screen, or
--- one of the windows that were tabs of it ("Market", "Fitting", "Ships", "Skills"). With
+-- one of the windows that were tabs of it ("Market", "Fitting", "Ships", "Skills", "Industry"). With
 -- none of them open, the tab the docked screen would open at.
 function Debug.Tab(): string
   local front: string?, name = nil, Station.Tab()
   for _, each in { { "station", Station.Tab() }, { MarketWindow.ID, "Market" }, { FittingWindow.ID, "Fitting" },
-    { ShipsWindow.ID, "Ships" }, { SkillSheet.ID, "Skills" } } do
+    { ShipsWindow.ID, "Ships" }, { SkillSheet.ID, "Skills" }, { IndustryWindow.ID, "Industry" } } do
     if Windows.IsOpen(each[1]) and (front == nil or Windows.Above(each[1], front)) then
       front, name = each[1], each[2]
     end

@@ -12,7 +12,7 @@
 # booster makes it. Out in space the panel is still there, counting
 # down.
 #
-# covers: Core/Tactical/Vapour Core/Tactical/Mining
+# covers: Core/Tactical/Vapour Core/Tactical/Mining Game/UI/Industry
 
 wait 2
 lua GameDebug.Peaceful(true)

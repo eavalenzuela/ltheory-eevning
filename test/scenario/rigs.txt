@@ -7,7 +7,7 @@
 # Build a Bulkhead Rig, fit it to the starter frigate, where it goes in a slot
 # of its own, and take it out again, which destroys it.
 #
-# covers: Core/Assets/Industry Core/Attributes Core/Fits
+# covers: Core/Assets/Industry Core/Attributes Core/Fits Game/UI/Industry
 
 wait 2
 lua GameDebug.Peaceful(true)
