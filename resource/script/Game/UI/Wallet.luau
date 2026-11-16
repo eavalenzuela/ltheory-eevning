@@ -9,9 +9,10 @@
 -- journal, its books by head with the towers on them, its hangar at the
 -- station and its members (Core/Assets/Members).
 --
--- What it draws is what the tab drew, as it was set out there, in the
--- window layer's frame and colours: it has not been set out again. A
--- script's names are what they were: "Wallet:mine",
+-- Its two sides are tabs, the journals are on the one list, and the
+-- corporation's pages are behind switches. The corporation's books, its
+-- hangar and its members are still laid out as they were in the docked
+-- screen. A script's names are what they were: "Wallet:mine",
 -- "Wallet:corporation", "Corporation:name", "Corporation:found" and the
 -- rest. "Wallet", the tab's name, opens it.
 
@@ -19,6 +20,7 @@ local Catalog = require("@lt/Core/Data/Catalog")
 local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
+local List = require("@lt/Game/UI/List")
 local Info = require("@lt/Game/UI/Info")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
 local Session = require("@lt/Game/Session")
@@ -330,22 +332,63 @@ local function drawCorporateHangar(session: Session.Session, game: Core.Game, st
     foot + 19, 13, Theme.DIM)
 end
 
-local function drawWallet(session: Session.Session, game: Core.Game, x: number, y: number)
-  local top = y + 78
-  local left = x + 16
+local JOURNAL: { List.Column } = {
+  { id = "when", label = "When", width = 140, sort = false }, { id = "what", label = "What", width = 0, sort = false },
+  { id = "amount", label = "Amount", width = 120, right = true, sort = false },
+  { id = "balance", label = "Balance", width = 130, right = true, sort = false },
+}
+
+-- A journal as a list: what has come in and gone out, the newest first.
+local function drawJournal(name: string, journal: { { tick: number, reason: string, amount: number, balance: number } }, x: number, y: number,
+  w: number, h: number)
+  local layout = List.Columns(JOURNAL, x, w - 6)
+  List.Head(name, x, y, w, JOURNAL, layout, "", false)
+  local top = y + List.HEAD
+  if #journal == 0 then
+    Im.Text("Nothing has been paid or earned yet.", x + 12, top + 8, 13, Theme.DIM)
+  end
+  local first, visible = List.Body(name, x, top, w, h - List.HEAD, #journal)
+  for row = 1, visible do
+    local entry = journal[#journal - (row + first) + 1]
+    if entry == nil then
+      break
+    end
+    local rowY = top + (row - 1) * List.ROW
+    local hot = List.Row(x, rowY, w - 5, false)
+    List.Text(Format.Clock(entry.tick), layout.when, rowY, false, Theme.DIM, 13)
+    List.Text(entry.reason, layout.what, rowY, hot, Theme.TEXT, 14)
+    List.Text((if entry.amount >= 0 then "+" else "") .. Format.Whole(entry.amount), layout.amount, rowY, false,
+      if entry.amount >= 0 then Theme.GOOD else Theme.CAUTION, 14)
+    List.Text(Format.Whole(entry.balance), layout.balance, rowY, false, Theme.DIM, 13)
+  end
+end
+
+-- The window's inside: its two sides as tabs, the pilot's journal on
+-- the one list, and the corporation's pages behind switches. (The
+-- corporation's books, hangar and members are still laid out as they
+-- were in the docked screen.)
+local function drawWallet(session: Session.Session, game: Core.Game, x: number, y: number, w: number, h: number)
   local corporation = Core.Query.Corporation(game)
-  if Im.Toggle("Mine", x + 700, top - 6, 80, 26, books == "mine", "Wallet:mine") then
-    books = "mine"
+  local tx = x + 10
+  for _, each in { { "mine", "Mine" }, { "corporation", "Corporation" } } do
+    local pressed, wide = Im.Tab(each[2], tx, y + 4, 28, books == each[1], `Wallet:{each[1]}`)
+    if pressed then
+      books = each[1]
+    end
+    tx += wide + 2
   end
-  if Im.Toggle("Corporation", x + 784, top - 6, 140, 26, books == "corporation", "Wallet:corporation") then
-    books = "corporation"
+  Im.Flat(x + 1, y + 32, w - 2, 1, Theme.EDGE)
+  local left, top = x + 14, y + 46
+  if books ~= "corporation" then
+    Im.Text("Balance", left, top + 7, 13, Theme.DIM)
+    Im.Heading(Format.Credits(game.state.wallet), left + 70, top, 22, Theme.TEXT)
+    drawJournal("journal", Core.Query.Journal(game), x + 1, top + 40, w - 2, y + h - (top + 40) - 4)
+    return
   end
-  local journal = Core.Query.Journal(game)
-  local line = top + 40
-  if books == "corporation" and not corporation.founded then
+  if not corporation.founded then
     -- Nobody's yet: what one is, and the founding of it.
     Im.Heading("NO CORPORATION", left, top, 16, Theme.DIM)
-    line = top + 34
+    local line = top + 34
     for _, text in { "A corporation is the business your hired pilots work for. It has an account of its own:",
       "their signing on, their wages and the mending of their ships come out of it, and what they sell",
       "and the bounties they earn with you elsewhere go into it, so its books say what they make against",
@@ -359,6 +402,8 @@ local function drawWallet(session: Session.Session, game: Core.Game, x: number, 
     corporationName = Im.Words("Corporation:name", corporationName, left + 60, line, 300, 28, 24, "three letters to twenty-four")
     local found: State.Command = { kind = "FoundCorporation", actor = 0, what = corporationName }
     local can, whyNot = Session.CanDo(session, found)
+    Im.Tone("primary")
+    Im.Because(whyNot)
     if Im.Button(`Found it: {Format.Credits(corporation.fee)}`, left + 372, line, 200, 28, can, "Corporation:found") then
       Session.Do(session, found)
       books = "corporation"
@@ -367,82 +412,52 @@ local function drawWallet(session: Session.Session, game: Core.Game, x: number, 
       Im.Text(tostring(whyNot), left + 584, line + 6, 13, Theme.CAUTION)
     end
     return
-  elseif books == "corporation" then
-    journal = corporation.journal
-    Im.Heading(string.upper(corporation.name), left, top, 16, Theme.DIM)
-    Im.Heading(Format.Credits(corporation.wallet), left, top + 24, 22, Theme.TEXT)
-    Im.Text(`founded {Format.Clock(corporation.since)}`, left + 2, top + 54, 12, Theme.DIM)
-    -- Its books: what its pilots have made against what they have cost.
-    local net = corporation.earned - corporation.spent
-    Im.Text("earned", left + 250, top + 26, 12, Theme.DIM)
-    Im.TextRight(Format.Whole(corporation.earned), left + 400, top + 24, 14, Theme.GOOD)
-    Im.Text("spent", left + 250, top + 46, 12, Theme.DIM)
-    Im.TextRight(Format.Whole(corporation.spent), left + 400, top + 44, 14, Theme.CAUTION)
-    Im.Text("which makes", left + 420, top + 26, 12, Theme.DIM)
-    Im.TextRight((if net >= 0 then "+" else "") .. Format.Whole(net), left + 600, top + 24, 14, if net >= 0 then Theme.GOOD else Theme.CAUTION)
-    Im.Text("wages a day", left + 420, top + 46, 12, Theme.DIM)
-    Im.TextRight(Format.Whole(corporation.wages), left + 600, top + 44, 14, Theme.TEXT)
-    -- Into its account from the pilot's own wallet, and out of it.
-    corporationAmount = Im.Number("Corporation:amount", corporationAmount, left + 620, top + 34, 110, 26)
-    local deposit: State.Command = { kind = "CorporationDeposit", actor = 0, quantity = corporationAmount }
-    if Im.Button("Pay in", left + 736, top + 34, 76, 26, (Session.CanDo(session, deposit)), "Corporation:deposit") then
-      Session.Do(session, deposit)
+  end
+  Im.Heading(string.upper(corporation.name), left, top, 16, Theme.DIM)
+  Im.Heading(Format.Credits(corporation.wallet), left, top + 24, 22, Theme.TEXT)
+  Im.Text(`founded {Format.Clock(corporation.since)}`, left + 2, top + 54, 12, Theme.DIM)
+  -- Its books: what its pilots have made against what they have cost.
+  local net = corporation.earned - corporation.spent
+  Im.Text("earned", left + 250, top + 26, 12, Theme.DIM)
+  Im.TextRight(Format.Whole(corporation.earned), left + 400, top + 24, 14, Theme.GOOD)
+  Im.Text("spent", left + 250, top + 46, 12, Theme.DIM)
+  Im.TextRight(Format.Whole(corporation.spent), left + 400, top + 44, 14, Theme.CAUTION)
+  Im.Text("which makes", left + 420, top + 26, 12, Theme.DIM)
+  Im.TextRight((if net >= 0 then "+" else "") .. Format.Whole(net), left + 600, top + 24, 14, if net >= 0 then Theme.GOOD else Theme.CAUTION)
+  Im.Text("wages a day", left + 420, top + 46, 12, Theme.DIM)
+  Im.TextRight(Format.Whole(corporation.wages), left + 600, top + 44, 14, Theme.TEXT)
+  -- Into its account from the pilot's own wallet, and out of it.
+  corporationAmount = Im.Number("Corporation:amount", corporationAmount, left + 620, top + 34, 110, 26)
+  local deposit: State.Command = { kind = "CorporationDeposit", actor = 0, quantity = corporationAmount }
+  local canPay, whyNotPay = Session.CanDo(session, deposit)
+  Im.Because(whyNotPay)
+  if Im.Button("Pay in", left + 736, top + 34, 76, 26, canPay, "Corporation:deposit") then
+    Session.Do(session, deposit)
+  end
+  local withdraw: State.Command = { kind = "CorporationWithdraw", actor = 0, quantity = corporationAmount }
+  local canTake, whyNotTake = Session.CanDo(session, withdraw)
+  Im.Because(whyNotTake)
+  if Im.Button("Take out", left + 816, top + 34, 92, 26, canTake, "Corporation:withdraw") then
+    Session.Do(session, withdraw)
+  end
+  -- Its pages: the journal, the books by head, its hangar here, and its members.
+  local cx = left
+  for _, each in { { "journal", "Journal" }, { "books", "Books" }, { "hangar", "Hangar" }, { "members", "Members" } } do
+    local pressed, wide = List.Chip(each[2], cx, top + 78, corporationPage == each[1], `Corporation:{each[1]}`)
+    if pressed then
+      corporationPage = each[1] :: any
     end
-    local withdraw: State.Command = { kind = "CorporationWithdraw", actor = 0, quantity = corporationAmount }
-    if Im.Button("Take out", left + 816, top + 34, 92, 26, (Session.CanDo(session, withdraw)), "Corporation:withdraw") then
-      Session.Do(session, withdraw)
-    end
-    -- Its pages: the journal, the books by head, and its hangar here.
-    if Im.Toggle("Journal", x + 404, top - 6, 90, 26, corporationPage == "journal", "Corporation:journal") then
-      corporationPage = "journal"
-    end
-    if Im.Toggle("Books", x + 498, top - 6, 90, 26, corporationPage == "books", "Corporation:books") then
-      corporationPage = "books"
-    end
-    if Im.Toggle("Hangar", x + 592, top - 6, 90, 26, corporationPage == "hangar", "Corporation:hangar") then
-      corporationPage = "hangar"
-    end
-    if Im.Toggle("Members", x + 686, top - 6, 90, 26, corporationPage == "members", "Corporation:members") then
-      corporationPage = "members"
-    end
-    line = top + 84
-    if corporationPage == "books" then
-      drawBooks(corporation, left, line)
-      return
-    elseif corporationPage == "hangar" then
-      drawCorporateHangar(session, game, Core.Query.Player(game).docked, left, line)
-      return
-    elseif corporationPage == "members" then
-      drawMembers(session, left, line)
-      return
-    end
+    cx += wide + 4
+  end
+  local line = top + 112
+  if corporationPage == "books" then
+    drawBooks(corporation, left, line)
+  elseif corporationPage == "hangar" then
+    drawCorporateHangar(session, game, Core.Query.Player(game).docked, left, line)
+  elseif corporationPage == "members" then
+    drawMembers(session, left, line)
   else
-    Im.Heading("BALANCE", left, top, 16, Theme.DIM)
-    Im.Heading(Format.Credits(game.state.wallet), left + 110, top - 4, 22, Theme.TEXT)
-  end
-  Im.Text("WHEN", left, line, 12, Theme.DIM)
-  Im.Text("WHAT", left + 150, line, 12, Theme.DIM)
-  Im.TextRight("AMOUNT", left + 600, line, 12, Theme.DIM)
-  Im.TextRight("BALANCE", left + 780, line, 12, Theme.DIM)
-  line += 20
-  if #journal == 0 then
-    Im.Text("Nothing has been paid or earned yet.", left, line, 14, Theme.DIM, 0.8)
-  end
-  local visible = if books == "corporation" then 16 else 18
-  local first = Im.Scroll(if books == "corporation" then "corporation journal" else "journal", left - 4, line, 900, visible * 22, #journal,
-    visible)
-  for row = 1, visible do
-    -- newest first
-    local entry = journal[#journal - (row + first) + 1]
-    if entry == nil then
-      break
-    end
-    local rowY = line + (row - 1) * 22
-    Im.Text(Format.Clock(entry.tick), left, rowY + 3, 13, Theme.DIM)
-    Im.Text(entry.reason, left + 150, rowY + 3, 14, Theme.TEXT)
-    Im.TextRight((if entry.amount >= 0 then "+" else "") .. Format.Whole(entry.amount), left + 600, rowY + 3, 14,
-      if entry.amount >= 0 then Theme.GOOD else Theme.CAUTION)
-    Im.TextRight(Format.Whole(entry.balance), left + 780, rowY + 3, 14, Theme.DIM)
+    drawJournal("corporation journal", corporation.journal, x + 1, line, w - 2, y + h - line - 4)
   end
 end
 
@@ -459,7 +474,7 @@ function Wallet.Frame(session: Session.Session, docked: boolean)
   Windows.Berthed(Wallet.ID, docked)
 end
 
-Windows.Kind(Wallet.ID, function(_: Windows.Window, x: number, y: number)
+Windows.Kind(Wallet.ID, function(_: Windows.Window, x: number, y: number, w: number, h: number)
   local session = current
   if session == nil then
     return
@@ -470,10 +485,10 @@ Windows.Kind(Wallet.ID, function(_: Windows.Window, x: number, y: number)
     return
   end
   local was = Im.Plain(true)
-  drawWallet(session, game, x - 4, y - 66)
+  drawWallet(session, game, x, y, w, h)
   Im.Plain(was)
 end)
-Windows.Make(Wallet.ID, Wallet.ID, "Wallet", 534, 130, 932, 544, 932, 544, nil)
+Windows.Make(Wallet.ID, Wallet.ID, "Wallet", 534, 130, 940, 640, 940, 640, nil)
 Windows.Icon(Wallet.ID, "wallet")
 
 return Wallet
