@@ -67,9 +67,24 @@ local function v(x: number, y: number, z: number): vector
   return vector.create(x, y, z)
 end
 
+-- The upright that things are drawn about: the tower's own, through
+-- the middle of it, or (for a small tower standing off from it: 'aside')
+-- one of its own, so far from that.
+local asideX, asideY = 0, 0
+
+-- So far 'out' at an 'angle' round an upright: the way and the length, from wherever.
+local function around(angle: number, out: number): vector
+  return v(math.cos(angle) * out, math.sin(angle) * out, 0)
+end
+
 -- A point 'out' from the upright, 'angle' round it, 'z' along it.
 local function at(angle: number, out: number, z: number): vector
-  return v(math.cos(angle) * out, math.sin(angle) * out, z)
+  return v(asideX + math.cos(angle) * out, asideY + math.sin(angle) * out, z)
+end
+
+-- A point on the upright, 'z' along it.
+local function axis(z: number): vector
+  return v(asideX, asideY, z)
 end
 
 -- A box turned to face out from the upright at 'angle': 'half' is how
@@ -119,7 +134,7 @@ local function skin(b: Builder, part: number, places: { { number } }, x: number?
   for index, place in places do
     outline[index] = { place[1], math.max(place[2], 0.004), math.max(place[2], 0.004) }
   end
-  Plates.Loft(b, part, outline, x, y)
+  Plates.Loft(b, part, outline, asideX + (x or 0), asideY + (y or 0))
 end
 
 -- How a tower's things are made.
@@ -186,10 +201,18 @@ local BUILDS: { [string]: Build } = {
     sides = { "torus", "disc", "arms", "booms", "racks", "fins", "band", "dish", "pod" },
     tops = { "spire", "dome", "masts", "dish", "cap" }, tails = { "needle", "spikes", "bell", "keel", "weight" },
     girth = 1.0, bare = 0.4, many = 0.8 },
+  -- (about a torus, and about a sphere: what is said here is of the
+  -- structures at the ends of its spokes, and of what is at its poles)
+  toroidal = { folds = { 3, 3, 6, 4, 8 }, plans = { "middle", "middle", "low", "high", "beads" },
+    bodies = { "taper", "taper", "tiers", "pods", "cage" }, sides = { "booms", "fins", "band", "disc" },
+    tops = { "spire", "dome", "masts", "cap" }, tails = { "needle", "spikes", "keel", "weight" }, girth = 1.0, bare = 0, many = 0 },
+  spherical = { folds = { 4, 6, 8, 3 }, plans = { "beads", "beads", "high", "low", "middle", "ends" },
+    bodies = { "taper", "tiers", "cage" }, sides = { "booms", "fins", "band", "disc" },
+    tops = { "spire", "masts", "dish", "dome" }, tails = { "needle", "spikes", "weight", "keel" }, girth = 1.0, bare = 0, many = 0 },
 }
 
 -- The builds a tower can be of, in the order they are shown in.
-Tower.BUILDS = { "pylon", "parasol", "gantry", "ring", "stack", "mixed" }
+Tower.BUILDS = { "pylon", "parasol", "gantry", "ring", "stack", "mixed", "toroidal", "spherical" }
 -- How many times a thing may be there about the upright, and where a
 -- tower's weight may be: what can be said over the seed.
 Tower.FOLDS = { 2, 3, 4, 6, 8 }
@@ -308,13 +331,13 @@ local function tiers(w: Work, rng: RNG, low: number, high: number, out: number, 
       end
     elseif w.m.hard then
       if w.sides == 4 then
-        block(w.b, part, v(0, 0, from + each / 2), v(wide, wide, each / 2 - 0.012), nil, w.m.ease)
+        block(w.b, part, axis(from + each / 2), v(wide, wide, each / 2 - 0.012), nil, w.m.ease)
       else
         prism(w.b, part, w.sides, { { from + 0.012, wide }, { from + each - 0.012, wide } })
       end
       -- (a dark joint between two tiers)
       if tier > 1 then
-        block(w.b, FRAME, v(0, 0, from), v(wide * 0.8, wide * 0.8, 0.014), nil, 0.1)
+        block(w.b, FRAME, axis(from), v(wide * 0.8, wide * 0.8, 0.014), nil, 0.1)
       end
       if lit then
         lamps(w, from + each * where, wide, w.sides * rows, each * 0.05, if w.sides == 4 then TAU / 8 else corner)
@@ -416,9 +439,9 @@ local function lattice(w: Work, rng: RNG, low: number, high: number, out: number
   for index = 1, count do
     local angle = (index - 0.5) / count * TAU
     if w.m.hard then
-      truss(w.b, at(angle, far, low), at(angle, far, high), out * 0.3, math.max(2, math.floor(long / (out * 0.5))), at(angle + TAU / 4, 1, 0))
+      truss(w.b, at(angle, far, low), at(angle, far, high), out * 0.3, math.max(2, math.floor(long / (out * 0.5))), around(angle + TAU / 4, 1))
     else
-      limb(w, at(angle, far, low), at(angle, far, high), out * 0.2, at(angle + TAU / 4, 1, 0), at(angle, 1, 0))
+      limb(w, at(angle, far, low), at(angle, far, high), out * 0.2, around(angle + TAU / 4, 1), around(angle, 1))
     end
   end
   local middle = low + long * rng:Float(0.35, 0.65)
@@ -432,7 +455,7 @@ local function lattice(w: Work, rng: RNG, low: number, high: number, out: number
   local inside = out * rng:Float(0.32, 0.46)
   local from = low + long * rng:Float(0.1, 0.4)
   if w.m.hard then
-    block(w.b, PLATING, v(0, 0, from + inside), v(inside, inside, inside), nil, w.m.ease)
+    block(w.b, PLATING, axis(from + inside), v(inside, inside, inside), nil, w.m.ease)
     lamps(w, from + inside, inside, 4, inside * 0.12, TAU / 8)
   else
     skin(w.b, PLATING, { { from, inside * 0.5 }, { from + inside, inside }, { from + inside * 2, inside * 0.5 } })
@@ -459,7 +482,7 @@ local function pods(w: Work, rng: RNG, low: number, high: number, out: number, u
     end
     -- (held to the stem at two places)
     for _, share in { 0.3, 0.7 } do
-      beam(w.b, FRAME, v(0, 0, low + long * share), at(angle, far, low + long * share), fat * 0.14 * w.m.thin)
+      beam(w.b, FRAME, axis(low + long * share), at(angle, far, low + long * share), fat * 0.14 * w.m.thin)
     end
   end
   hoop(w, TRIM, low + long * 0.5, far + fat * 0.2, fat * 0.07)
@@ -581,7 +604,7 @@ local function racks(w: Work, rng: RNG, z: number, out: number, reach: number)
       for _, side in { 1, -1 } do
         local off = side * (tall * 0.55 + reach * 0.03)
         if flat then
-          block(w.b, PATCH, at(angle, where, z) + at(angle + TAU / 4, off, 0), v(each * 0.44, tall * 0.5, 0.008), v(0, 0, angle), 0.05)
+          block(w.b, PATCH, at(angle, where, z) + around(angle + TAU / 4, off), v(each * 0.44, tall * 0.5, 0.008), v(0, 0, angle), 0.05)
         else
           facing(w.b, PATCH, angle, where, z + off, v(each * 0.44, 0.008, tall * 0.5), 0.05)
         end
@@ -624,7 +647,7 @@ local function dish(w: Work, rng: RNG, z: number, out: number, reach: number)
   for index, place in { { 0.15, 0.1 }, { 0.6, 0.7 }, { 1, 1 } } do
     local ring = corners(16, wide * place[2])
     for corner, p in ring do
-      ring[corner] = p + v(centre.x, centre.y, 0)
+      ring[corner] = p + around(angle, far)
     end
     sections[index] = { z = z + way * deep * place[1], ring = ring }
   end
@@ -647,7 +670,7 @@ local function pod(w: Work, rng: RNG, z: number, out: number, reach: number)
       math.cos(angle) * far, math.sin(angle) * far)
   end
   for _, share in { -0.2, 0.15 } do
-    limb(w, v(0, 0, z + long * share), at(angle, far, z + long * share), fat * 0.25, v(0, 0, 1), nil)
+    limb(w, axis(z + long * share), at(angle, far, z + long * share), fat * 0.25, v(0, 0, 1), nil)
   end
   facing(w.b, GLOW, angle, far + fat * (if w.m.hard then 0.82 else 0.98), z, v(fat * 0.05, fat * 0.5, long * 0.04), 0.3)
 end
@@ -666,8 +689,8 @@ local function top(w: Work, rng: RNG, kind: string, z: number, out: number, reac
     local tall = wide * rng:Float(0.5, 1.0)
     solid(w, PLATING, { { z - tall * 0.3, wide * 0.96 }, { z, wide }, { z + tall * 0.6, wide * 0.7 }, { z + tall, wide * 0.2 } })
     hoop(w, TRIM, z - tall * 0.05, wide * 1.0, wide * 0.035)
-    beam(w.b, FRAME, v(0, 0, z + tall), v(0, 0, z + tall * 1.5), w.stem * 0.5)
-    lamp(w, v(0, 0, z + tall * 1.5), w.stem * 0.8)
+    beam(w.b, FRAME, axis(z + tall), axis(z + tall * 1.5), w.stem * 0.5)
+    lamp(w, axis(z + tall * 1.5), w.stem * 0.8)
   elseif kind == "masts" then
     for index = 1, rng:Int(3, 6) do
       local angle = rng:Float(0, TAU)
@@ -675,7 +698,7 @@ local function top(w: Work, rng: RNG, kind: string, z: number, out: number, reac
       local long = reach * rng:Float(0.5, 1.6)
       beam(w.b, FRAME, at(angle, far, z - 0.05), at(angle, far, z + long), w.stem * 0.3)
       for spar = 1, rng:Int(0, 2) do
-        local half = at(angle + TAU / 4, long * (0.16 - 0.05 * spar), 0)
+        local half = around(angle + TAU / 4, long * (0.16 - 0.05 * spar))
         local where = at(angle, far, z + long * (0.5 + 0.2 * spar))
         beam(w.b, FRAME, where - half, where + half, w.stem * 0.2)
       end
@@ -684,27 +707,27 @@ local function top(w: Work, rng: RNG, kind: string, z: number, out: number, reac
   elseif kind == "dish" then
     local wide = math.max(out * 1.1, reach * rng:Float(0.35, 0.6))
     local deep = wide * rng:Float(0.3, 0.5)
-    beam(w.b, FRAME, v(0, 0, z), v(0, 0, z + deep * 0.5), w.stem)
+    beam(w.b, FRAME, axis(z), axis(z + deep * 0.5), w.stem)
     prism(w.b, PATCH, 16, { { z + deep * 0.4, wide * 0.12 }, { z + deep * 0.75, wide * 0.7 }, { z + deep, wide } })
     hoop(w, TRIM, z + deep, wide, wide * 0.03)
-    beam(w.b, FRAME, v(0, 0, z + deep * 0.5), v(0, 0, z + deep * 1.9), w.stem * 0.35)
-    lamp(w, v(0, 0, z + deep * 1.9), w.stem * 0.6)
+    beam(w.b, FRAME, axis(z + deep * 0.5), axis(z + deep * 1.9), w.stem * 0.35)
+    lamp(w, axis(z + deep * 1.9), w.stem * 0.6)
   elseif kind == "cap" then
     local wide = math.max(out * 1.25, reach * rng:Float(0.3, 0.55))
     prism(w.b, PLATING, if w.m.hard then math.max(8, w.sides * 2) else 20, { { z, wide * 0.7 }, { z + wide * 0.08, wide }, { z + wide * 0.16, wide * 0.94 } })
     lamps(w, z + wide * 0.08, wide * 1.0, 12, wide * 0.02)
-    beam(w.b, FRAME, v(0, 0, z + wide * 0.16), v(0, 0, z + wide * 0.6), w.stem * 0.5)
-    lamp(w, v(0, 0, z + wide * 0.6), w.stem * 0.8)
+    beam(w.b, FRAME, axis(z + wide * 0.16), axis(z + wide * 0.6), w.stem * 0.5)
+    lamp(w, axis(z + wide * 0.6), w.stem * 0.8)
   else
     -- (a spire: thinner by steps, with a lamp at its head)
     local long = reach * rng:Float(0.9, 2.0)
     local thick, from = w.stem * 1.6, z
     for _ = 1, 3 do
-      block(w.b, PLATING, v(0, 0, from + long / 6), v(thick, thick, long / 6), nil, 0.3)
+      block(w.b, PLATING, axis(from + long / 6), v(thick, thick, long / 6), nil, 0.3)
       from += long / 3
       thick *= 0.55
     end
-    lamp(w, v(0, 0, z + long), w.stem * 0.7)
+    lamp(w, axis(z + long), w.stem * 0.7)
   end
 end
 
@@ -725,22 +748,22 @@ local function tail(w: Work, rng: RNG, kind: string, z: number, out: number, rea
       { { z - long, wide * 0.5 }, { z - long * 0.7, wide * 0.32 }, { z - long * 0.2, wide * 0.8 }, { z, wide * 0.6 } })
     hoop(w, TRIM, z - long, wide * 0.5, wide * 0.035)
     local spike = long * rng:Float(0.8, 1.6)
-    beam(w.b, FRAME, v(0, 0, z - long * 0.9), v(0, 0, z - long - spike), w.stem * 0.7)
-    lamp(w, v(0, 0, z - long - spike), w.stem * 0.7)
+    beam(w.b, FRAME, axis(z - long * 0.9), axis(z - long - spike), w.stem * 0.7)
+    lamp(w, axis(z - long - spike), w.stem * 0.7)
   elseif kind == "keel" then
     local long = reach * rng:Float(1.2, 2.4)
-    beam(w.b, PLATING, v(0, 0, z), v(0, 0, z - long), w.stem * 1.1)
+    beam(w.b, PLATING, axis(z), axis(z - long), w.stem * 1.1)
     -- (a spar across its end, and a lamp under it)
     local half = reach * rng:Float(0.15, 0.4)
-    beam(w.b, FRAME, v(-half, 0, z - long * 0.9), v(half, 0, z - long * 0.9), w.stem * 0.4)
-    lamp(w, v(0, 0, z - long - w.stem), w.stem * 0.8)
+    beam(w.b, FRAME, axis(z - long * 0.9) - v(half, 0, 0), axis(z - long * 0.9) + v(half, 0, 0), w.stem * 0.4)
+    lamp(w, axis(z - long - w.stem), w.stem * 0.8)
   elseif kind == "weight" then
     -- (a weight hung under it on the stem)
     local drop = reach * rng:Float(0.4, 1.0)
     local fat = math.max(out * 0.6, reach * rng:Float(0.15, 0.3))
-    beam(w.b, FRAME, v(0, 0, z + 0.02), v(0, 0, z - drop - fat * 0.6), w.stem * 0.8)
+    beam(w.b, FRAME, axis(z + 0.02), axis(z - drop - fat * 0.6), w.stem * 0.8)
     solid(w, PATCH, { { z - drop - fat * 2.4, fat * 0.2 }, { z - drop - fat * 1.4, fat }, { z - drop - fat * 0.6, fat * 0.8 }, { z - drop, fat * 0.3 } })
-    lamp(w, v(0, 0, z - drop - fat * 2.5), w.stem * 0.7)
+    lamp(w, axis(z - drop - fat * 2.5), w.stem * 0.7)
   else
     -- (a needle: long, and to a point)
     local long = reach * rng:Float(1.6, 3.2)
@@ -751,6 +774,508 @@ local function tail(w: Work, rng: RNG, kind: string, z: number, out: number, rea
 end
 
 -- ---------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------
+-- A torus and a sphere, and what stands on them: for the peoples whose
+-- towers are not a stem with things along it. (The owner, 2026-11-15:
+-- "The 2 alien factions in k-space (i.e. not the drowned) will have a
+-- torus and a sphere as their bases": the Vail a torus, with "spokes
+-- from the torus with structures at their ends (not station modules for
+-- now)"; the Nimia a sphere, with "antennas and towers rising from it,
+-- and maybe even hab domes with visible terrain (could use snippets
+-- from the temperate planets)". The domes here have plain ground under
+-- them: a planet's ground wants a second paint on one model, which a
+-- tower has not got yet.)
+
+-- A list in an order the dice say.
+local function shuffled(rng: RNG, list: { string }): { string }
+  local mixed = table.clone(list)
+  for index = #mixed, 2, -1 do
+    local other = rng:Int(1, index)
+    mixed[index], mixed[other] = mixed[other], mixed[index]
+  end
+  return mixed
+end
+
+-- Two ways across a way: for laying a thing out about a line that is
+-- not the upright.
+local function across(way: vector): (vector, vector)
+  local aside = if math.abs(way.z) > 0.9 then v(1, 0, 0) else v(0, 0, 1)
+  local one = vector.normalize(vector.cross(way, aside))
+  return one, vector.cross(way, one)
+end
+
+-- A wheel about the upright at 'z', in one piece: its tube 'thick' in
+-- radius, the middle of the tube 'out' from the upright. One round skin;
+-- or, in plate, of so many straight lengths with so many faces to its
+-- tube; or, in a manner of frames, three rails braced to one another.
+local function wheel(w: Work, part: number, z: number, out: number, thick: number, lengths: number, faces: number)
+  local b = w.b
+  if w.m.frame then
+    local rails = { { out + thick, z }, { out - thick * 0.6, z + thick * 0.9 }, { out - thick * 0.6, z - thick * 0.9 } }
+    local count = math.max(12, lengths)
+    for index = 1, count do
+      local a0, a1 = (index - 1) / count * TAU, index / count * TAU
+      for rail, here in rails do
+        local there = rails[rail % 3 + 1]
+        beam(b, FRAME, at(a0, here[1], here[2]), at(a1, here[1], here[2]), thick * 0.09)
+        beam(b, FRAME, at(a0, here[1], here[2]), at(a0, there[1], there[2]), thick * 0.06)
+        beam(b, FRAME, at(a0, here[1], here[2]), at(a1, there[1], there[2]), thick * 0.05)
+      end
+      -- (and every third length of it is closed in: a cabin)
+      if index % 3 == 0 then
+        local middle = (a0 + a1) / 2
+        facing(b, part, middle, out, z, v(thick * 0.6, out * (a1 - a0) * 0.42, thick * 0.6), w.m.ease)
+      end
+    end
+  elseif w.m.hard then
+    for index = 1, lengths do
+      local a0, a1 = (index - 1) / lengths * TAU, index / lengths * TAU
+      local middle = (at(a0, out, z) + at(a1, out, z)) / 2
+      for face = 1, faces do
+        local f0, f1 = (face - 0.5) / faces * TAU, (face + 0.5) / faces * TAU
+        local p1 = at(a0, out + thick * math.cos(f0), z + thick * math.sin(f0))
+        local p2 = at(a1, out + thick * math.cos(f0), z + thick * math.sin(f0))
+        local p3 = at(a1, out + thick * math.cos(f1), z + thick * math.sin(f1))
+        local p4 = at(a0, out + thick * math.cos(f1), z + thick * math.sin(f1))
+        Plates.Flat(b, part, { p1, p2, p3, p4 }, (p1 + p2 + p3 + p4) / 4 - middle)
+      end
+    end
+  else
+    local round, about = 48, 14
+    local points: { number } = {}
+    for i = 0, round - 1 do
+      for j = 0, about - 1 do
+        local p = at(i / round * TAU, out + thick * math.cos(j / about * TAU), z + thick * math.sin(j / about * TAU))
+        table.insert(points, p.x)
+        table.insert(points, p.y)
+        table.insert(points, p.z)
+      end
+    end
+    local function id(i: number, j: number): number
+      return (i % round) * about + (j % about) + 1
+    end
+    local corners3: { number } = {}
+    for i = 0, round - 1 do
+      for j = 0, about - 1 do
+        local a, c, d, e = id(i, j), id(i + 1, j), id(i + 1, j + 1), id(i, j + 1)
+        for _, corner in { a, c, d, a, d, e } do
+          table.insert(corners3, corner)
+        end
+      end
+    end
+    Plates.Skin(b, part, points, corners3)
+  end
+end
+
+-- A ball on the upright at 'z'. One round skin; or, in plate, faceted,
+-- of so many lengths round it; or, in a manner of frames, a cage of
+-- ribs about a core.
+local function ball(w: Work, part: number, z: number, radius: number, lengths: number)
+  local b = w.b
+  local function faceted(far: number, round: number, bands: number)
+    local centre = axis(z)
+    for band = 1, bands do
+      local l0, l1 = ((band - 1) / bands - 0.5) * math.pi, (band / bands - 0.5) * math.pi
+      for index = 1, round do
+        local a0, a1 = (index - 1) / round * TAU, index / round * TAU
+        local plate: { vector }
+        if band == 1 then
+          plate = { axis(z - far), at(a0, far * math.cos(l1), z + far * math.sin(l1)), at(a1, far * math.cos(l1), z + far * math.sin(l1)) }
+        elseif band == bands then
+          plate = { at(a0, far * math.cos(l0), z + far * math.sin(l0)), at(a1, far * math.cos(l0), z + far * math.sin(l0)), axis(z + far) }
+        else
+          plate = { at(a0, far * math.cos(l0), z + far * math.sin(l0)), at(a1, far * math.cos(l0), z + far * math.sin(l0)),
+            at(a1, far * math.cos(l1), z + far * math.sin(l1)), at(a0, far * math.cos(l1), z + far * math.sin(l1)) }
+        end
+        local middle = v(0, 0, 0)
+        for _, p in plate do
+          middle += p
+        end
+        Plates.Flat(b, part, plate, middle / #plate - centre)
+      end
+    end
+  end
+  if w.m.frame then
+    local ribs = math.max(6, lengths)
+    for index = 1, ribs do
+      local angle = (index - 0.5) / ribs * TAU
+      local points: { vector } = {}
+      for step = 0, 12 do
+        local up = (step / 12 - 0.5) * math.pi
+        points[step + 1] = at(angle, radius * math.cos(up), z + radius * math.sin(up))
+      end
+      Plates.Conduit(b, points, radius * 0.02)
+    end
+    for _, up in { -0.95, -0.5, 0, 0.5, 0.95 } do
+      hoop(w, FRAME, z + radius * math.sin(up), radius * math.cos(up), radius * 0.018)
+    end
+    faceted(radius * 0.56, math.max(6, lengths), 4)
+    for index = 1, ribs do
+      local angle = (index - 0.5) / ribs * TAU
+      beam(b, FRAME, at(angle, radius * 0.5, z), at(angle, radius, z), radius * 0.015)
+    end
+  elseif w.m.hard then
+    faceted(radius, math.max(8, lengths), 6)
+  else
+    local round, bands = 32, 16
+    local points: { number } = { asideX, asideY, z - radius }
+    for band = 1, bands - 1 do
+      local up = (band / bands - 0.5) * math.pi
+      for i = 0, round - 1 do
+        local p = at(i / round * TAU, radius * math.cos(up), z + radius * math.sin(up))
+        table.insert(points, p.x)
+        table.insert(points, p.y)
+        table.insert(points, p.z)
+      end
+    end
+    table.insert(points, asideX)
+    table.insert(points, asideY)
+    table.insert(points, z + radius)
+    local last = 2 + (bands - 1) * round
+    local function id(i: number, band: number): number
+      return if band <= 0 then 1 elseif band >= bands then last else 2 + (band - 1) * round + (i % round)
+    end
+    local corners3: { number } = {}
+    for band = 0, bands - 1 do
+      for i = 0, round - 1 do
+        local a, c, d, e = id(i, band), id(i + 1, band), id(i + 1, band + 1), id(i, band + 1)
+        if band > 0 then
+          for _, corner in { a, c, d } do
+            table.insert(corners3, corner)
+          end
+        end
+        if band < bands - 1 then
+          for _, corner in { a, d, e } do
+            table.insert(corners3, corner)
+          end
+        end
+      end
+    end
+    Plates.Skin(b, part, points, corners3)
+  end
+end
+
+-- Something standing straight out of a surface: from 'foot', the 'way'
+-- it stands, so 'long' and so 'thick' at its foot, in lengths each
+-- thinner than the last, with a lamp at its head. A slim one has spars
+-- across it (an antenna); a stout one a collar and lit ports (a tower).
+local function spike(w: Work, rng: RNG, foot: vector, way: vector, long: number, thick: number)
+  local shares: { number } = if rng:Int(1, 2) == 1 then { 0.5, 0.3, 0.2 } else { 0.62, 0.38 }
+  local parts = { PLATING, PATCH, FRAME }
+  local from, girth = foot - way * thick, thick
+  local one, other = across(way)
+  local slim = thick < long * 0.05
+  for index, share in shares do
+    local reach = long * share
+    beam(w.b, if slim then FRAME else parts[index], from, from + way * (reach + thick), girth, if w.m.hard then 0.12 else 0.4)
+    if index == 1 and not slim then
+      -- (a collar where it steps in, and ports under it)
+      beam(w.b, TRIM, from + way * (reach + thick * 0.7), from + way * (reach + thick), girth * 1.25, 0.1)
+      for _, side in { one, other, -one, -other } do
+        block(w.b, GLOW, from + way * (reach * 0.6 + thick) + side * girth, v(girth * 0.14, girth * 0.14, girth * 0.14), nil, 0.4)
+      end
+    end
+    from += way * (reach + thick * 0.2)
+    girth *= 0.55
+  end
+  local head = foot + way * long
+  if slim then
+    for spar = 1, rng:Int(1, 3) do
+      local where = foot + way * (long * (0.45 + 0.15 * spar))
+      local half = long * (0.14 - 0.03 * spar)
+      beam(w.b, FRAME, where - one * half, where + one * half, thick * 0.6)
+      if spar == 1 then
+        beam(w.b, FRAME, where - other * half, where + other * half, thick * 0.6)
+      end
+    end
+  end
+  lamp(w, head, math.max(thick * 0.5, long * 0.012))
+end
+
+-- A dome on a surface: a ring 'wide' in radius at 'foot', facing the
+-- 'way' it stands, ground inside the ring, ribs over it where glass
+-- would be, and what is built on the ground.
+local function dome(w: Work, rng: RNG, foot: vector, way: vector, wide: number, sunk: number)
+  local one, other = across(way)
+  local round = 14
+  local ground: { vector } = {}
+  for index = 1, round do
+    local angle = index / round * TAU
+    ground[index] = foot + (one * math.cos(angle) + other * math.sin(angle)) * wide
+  end
+  Plates.Flat(w.b, PATCH, ground, way)
+  -- (a wall under its rim, down to what it stands on)
+  for index = 1, round do
+    local a, c = ground[index], ground[index % round + 1]
+    beam(w.b, TRIM, a - way * sunk * 0.5, c - way * sunk * 0.5, math.max(wide * 0.045, sunk * 0.55), 0.2)
+  end
+  local ribs = 8
+  for rib = 1, ribs do
+    local angle = rib / ribs * TAU
+    local out = one * math.cos(angle) + other * math.sin(angle)
+    local points: { vector } = {}
+    for step = 0, 6 do
+      local up = step / 6 * math.pi / 2
+      points[step + 1] = foot + out * (wide * math.cos(up)) + way * (wide * 0.85 * math.sin(up))
+    end
+    Plates.Conduit(w.b, points, wide * 0.022)
+  end
+  -- (a hoop half way up the ribs)
+  local up = math.pi / 4
+  for index = 1, round do
+    local a0, a1 = index / round * TAU, (index + 1) / round * TAU
+    beam(w.b, FRAME, foot + (one * math.cos(a0) + other * math.sin(a0)) * (wide * math.cos(up)) + way * (wide * 0.85 * math.sin(up)),
+      foot + (one * math.cos(a1) + other * math.sin(a1)) * (wide * math.cos(up)) + way * (wide * 0.85 * math.sin(up)), wide * 0.016)
+  end
+  for _ = 1, rng:Int(3, 7) do
+    local angle, far = rng:Float(0, TAU), wide * rng:Float(0, 0.62)
+    local base = foot + (one * math.cos(angle) + other * math.sin(angle)) * far
+    local tall = wide * rng:Float(0.12, 0.5) * (1 - far / wide * 0.6)
+    local broad = wide * rng:Float(0.04, 0.09)
+    beam(w.b, if rng:Int(1, 3) == 1 then GLOW else PLATING, base, base + way * tall, broad, 0.1)
+  end
+end
+
+-- A small tower standing off from the tower's upright: 'x' and 'y' from
+-- it, about 'z' along it ('way': 1 it stands up from there, -1 it hangs
+-- down, 0 its middle is there), 'out' at its widest and so 'long'; of
+-- one body or two, with or without ends, and a thing standing out of it.
+local function small(w: Work, rng: RNG, build: Build, x: number, y: number, z: number, way: number, out: number, long: number, bodies: number,
+  ends: boolean, thing: boolean)
+  local keptX, keptY = asideX, asideY
+  asideX, asideY = keptX + x, keptY + y
+  local mine: Work = { b = w.b, m = w.m, fold = w.fold, sides = w.sides, stem = math.max(out * 0.12, w.stem * 0.5) }
+  local low = if way > 0 then z elseif way < 0 then z - long else z - long / 2
+  local each = long / bodies
+  for index = 1, bodies do
+    local from = low + (index - 1) * each
+    local kind = oneOf(rng, build.bodies)
+    local wide = out * (if bodies > 1 and index == (if way < 0 then 1 else bodies) then 0.7 else 1)
+    BODIES[kind](mine, own(rng), from + each * 0.03, from + each * 0.97, wide, from + each / 2 > z)
+  end
+  local over, under = oneOf(rng, build.tops), oneOf(rng, build.tails)
+  local overDice, underDice, thingDice = own(rng), own(rng), own(rng)
+  local which = oneOf(rng, build.sides)
+  if ends then
+    top(mine, overDice, over, low + long, out * 0.7, out * 1.3)
+    tail(mine, underDice, under, low, out * 0.7, out * 1.3)
+  else
+    lamp(mine, axis(low + long + mine.stem), mine.stem * 0.8)
+    lamp(mine, axis(low - mine.stem), mine.stem * 0.8, TRIM)
+  end
+  if thing then
+    SIDES[which](mine, thingDice, low + long * 0.5, out, out * 1.5)
+  end
+  block(w.b, FRAME, axis(low + long / 2), v(mine.stem, mine.stem, long / 2 + 0.01), nil, 0.3)
+  asideX, asideY = keptX, keptY
+end
+
+-- A tower about a torus: the wheel, spokes out from it with a structure
+-- at the end of each, and more as it is bigger.
+local function toroidal(w: Work, build: Build, rng: RNG, size: number, plan: string, girth: number)
+  local out = girth * rng:Float(0.95, 1.25)
+  local thick = out * rng:Float(0.09, 0.22)
+  local faces = ({ 4, 6, 8, 3 })[rng:Int(1, 4)]
+  -- (in plate it is of many lengths, or of as few straight sides as it has spokes)
+  local cornered = chance(rng, 0.4)
+  local long = out * rng:Float(0.45, 1.0)
+  local unalike = chance(rng, 0.3)
+  local turned = chance(rng, 0.5)
+  local extras = shuffled(rng, { "hub", "crown", "second", "inner" })
+  local endSeed, otherSeed, hubDice, extraDice = rng:Int(1, 2000000000), rng:Int(1, 2000000000), own(rng), own(rng)
+
+  local spokes = math.max(3, w.fold)
+  local lengths = if cornered then spokes else spokes * (if spokes <= 4 then 4 else 2)
+  wheel(w, PLATING, 0, out, thick, lengths, faces)
+  -- (a spoke is at a corner of it, where it has corners; else where the dice say)
+  local function angleOf(index: number): number
+    return (index - (if cornered or turned then 0 else 0.5)) / spokes * TAU
+  end
+  lamps(w, 0, out + thick * (if w.m.hard and cornered then 0.75 else 0.98), lengths * (if cornered then 4 else 1), thick * 0.2,
+    if cornered then 0 else TAU / lengths / 2)
+
+  -- The structures at the ends of its spokes: more of each as it is bigger.
+  local level = (size + 1) // 2
+  local wide, tall = out * (0.09 + 0.035 * level), out * (0.28 + 0.14 * level)
+  for index = 1, spokes do
+    local angle = angleOf(index)
+    local short = unalike and index % 2 == 0
+    local reach = out + thick + long * (if short then 0.55 else 1)
+    limb(w, at(angle, out + thick * 0.7, 0), at(angle, reach, 0), thick * 0.9, v(0, 0, 1), v(0, 0, 1))
+    -- (where its weight is: hung under the spokes, stood on them, or about them; in beads, one up and the next down)
+    local way = if plan == "low" then -1 elseif plan == "high" then 1 elseif plan == "beads" then (if index % 2 == 0 then -1 else 1) else 0
+    local spot = around(angle, reach + wide * 0.5)
+    small(w, RNG_MTG(if short then otherSeed else endSeed), build, spot.x, spot.y, 0, way, wide * (if short then 0.8 else 1),
+      tall * (if short then 0.7 else 1), if level >= 4 then 2 else 1, level >= 2, level >= 3)
+  end
+
+  -- And, a size in two, one thing more.
+  local hub = 0
+  for index = 1, math.min(size // 2, #extras) do
+    local extra = extras[index]
+    if extra == "hub" then
+      -- (something at its middle, on spokes inward)
+      hub = out * 0.2
+      small(w, hubDice, build, 0, 0, 0, 0, hub, out * rng:Float(0.6, 1.0), 1, true, false)
+      for spoke = 1, spokes do
+        local angle = angleOf(spoke)
+        limb(w, at(angle, hub * 0.6, 0), at(angle, out - thick * 0.7, 0), thick * 0.6, v(0, 0, 1), v(0, 0, 1))
+      end
+    elseif extra == "crown" then
+      -- (prongs on the wheel, between its spokes: up, or down where its weight is low)
+      local way = if plan == "low" then -1 else 1
+      local reach = out * extraDice:Float(0.3, 0.7)
+      for prong = 1, spokes do
+        local angle = angleOf(prong) + TAU / spokes / 2
+        beam(w.b, PLATING, at(angle, out, way * thick * 0.6), at(angle, out, way * (thick + reach * 0.6)), thick * 0.22)
+        beam(w.b, FRAME, at(angle, out, way * (thick + reach * 0.6)), at(angle, out, way * (thick + reach)), thick * 0.1)
+        lamp(w, at(angle, out, way * (thick + reach)), thick * 0.14)
+      end
+    elseif extra == "second" then
+      -- (a second wheel: a slimmer one, outside the first where the spokes go through it, or over it)
+      if extraDice:Int(1, 2) == 1 then
+        wheel(w, PATCH, 0, out + thick + long * 0.5, thick * 0.4, lengths, faces)
+      else
+        local up = if plan == "low" then -1 else 1
+        wheel(w, PATCH, up * thick * 2.4, out * 0.92, thick * 0.5, lengths, faces)
+        for post = 1, spokes do
+          local angle = angleOf(post) + TAU / spokes / 2
+          beam(w.b, FRAME, at(angle, out, 0), at(angle, out * 0.92, up * thick * 2.4), thick * 0.12)
+        end
+      end
+    elseif extra == "inner" then
+      -- (things inside the wheel, on short spokes inward)
+      local reach = out * extraDice:Float(0.25, 0.45)
+      local seed = extraDice:Int(1, 2000000000)
+      for spoke = 1, spokes do
+        local angle = angleOf(spoke) + TAU / spokes / 2
+        limb(w, at(angle, out - thick * 0.7, 0), at(angle, out - thick - reach, 0), thick * 0.3, v(0, 0, 1), v(0, 0, 1))
+        local spot = around(angle, out - thick - reach)
+        small(w, RNG_MTG(seed), build, spot.x, spot.y, 0, 0, out * 0.07, out * 0.3, 1, false, false)
+      end
+    end
+  end
+end
+
+-- A tower about a sphere: the ball, a thing at each of its poles, rings
+-- of towers, antennas and domes round it, and more as it is bigger.
+local function spherical(w: Work, build: Build, rng: RNG, size: number, plan: string, girth: number)
+  local radius = girth * rng:Float(0.8, 1.0)
+  local over, under = oneOf(rng, build.tops), oneOf(rng, build.tails)
+  local overDice, underDice = own(rng), own(rng)
+  -- (five places up it that a ring of things can be, in the order the dice say)
+  local order = shuffled(rng, { "1", "2", "3", "4", "5" })
+  local rings: { { kind: string, turn: number, twice: boolean, seed: number, far: number } } = {}
+  for index = 1, 5 do
+    rings[index] = { kind = oneOf(rng, { "tower", "tower", "antenna", "antenna", "dome", "dome", "blister" }), turn = rng:Float(0, 1),
+      twice = chance(rng, 0.3), seed = rng:Int(1, 2000000000), far = rng:Float(0, 1) }
+  end
+  local extras = shuffled(rng, { "girdle", "moon", "halo", "skirt" })
+  local extraDice = own(rng)
+
+  ball(w, PLATING, 0, radius, w.sides * 2)
+  local reach = radius * 0.6
+
+  -- Its rings of things: a size in two, one more.
+  local slots = { -0.98, -0.5, 0, 0.5, 0.98 }
+  local girdled = false
+  for index = 1, math.min(size // 2, #extras) do
+    girdled = girdled or extras[index] == "girdle"
+  end
+  for index = 1, math.clamp(1 + (size + 1) // 2, 2, 5) do
+    local ring = rings[index]
+    local up = slots[tonumber(order[index]) :: number]
+    -- (where its weight is: its things toward one pole, or its middle, or away from its middle)
+    if plan == "low" then
+      up = up * 0.7 - 0.35
+    elseif plan == "high" then
+      up = up * 0.7 + 0.35
+    elseif plan == "middle" then
+      up *= 0.55
+    elseif plan == "ends" then
+      up = if up == 0 then 0.75 else math.sign(up) * (0.55 + 0.35 * math.abs(up))
+    end
+    -- (a wheel round its middle has the middle to itself)
+    if girdled and math.abs(up) < 0.2 then
+      up = 0.3
+    end
+    local count = w.fold * (if ring.twice and ring.kind ~= "dome" then 2 else 1)
+    local level = radius * math.cos(up)
+    for each = 1, count do
+      local angle = (each - 1 + ring.turn) / count * TAU
+      local way = v(math.cos(angle) * math.cos(up), math.sin(angle) * math.cos(up), math.sin(up))
+      local foot = axis(0) + way * radius
+      local dice = RNG_MTG(ring.seed)
+      if ring.kind == "tower" then
+        spike(w, dice, foot - way * radius * 0.04, way, radius * (0.45 + 0.6 * ring.far), radius * (0.06 + 0.03 * ring.far))
+      elseif ring.kind == "antenna" then
+        spike(w, dice, foot - way * radius * 0.04, way, radius * (0.7 + 0.9 * ring.far), radius * 0.018)
+      elseif ring.kind == "dome" then
+        -- (no wider than there is room for so many of them round it there)
+        local wide = math.min(radius * (0.2 + 0.14 * ring.far), level * math.pi / count * 0.8)
+        local sunk = radius - math.sqrt(math.max(radius * radius - wide * wide, 0))
+        dome(w, dice, foot + way * radius * 0.01, way, wide, sunk * (if w.m.hard then 2 else 1) + radius * 0.02)
+      else
+        -- (a blister: a lesser ball half out of it)
+        local keptX, keptY = asideX, asideY
+        local fat = math.min(radius * (0.14 + 0.1 * ring.far), level * math.pi / count * 0.8)
+        asideX, asideY = keptX + way.x * radius, keptY + way.y * radius
+        ball(w, PATCH, way.z * radius, fat, 8)
+        asideX, asideY = keptX, keptY
+        lamp(w, foot + way * fat, fat * 0.12)
+      end
+    end
+  end
+
+  -- And, the other size in two, one thing more.
+  local foot = -radius
+  for index = 1, math.min(size // 2, #extras) do
+    local extra = extras[index]
+    if extra == "girdle" then
+      -- (a wheel round its middle, on spokes)
+      local far = radius * extraDice:Float(1.35, 1.75)
+      local thick = radius * extraDice:Float(0.05, 0.1)
+      wheel(w, PATCH, 0, far, thick, w.sides * 2, 4)
+      for spoke = 1, math.max(3, w.fold) do
+        local angle = (spoke - 0.5) / math.max(3, w.fold) * TAU
+        limb(w, at(angle, radius * 0.96, 0), at(angle, far - thick * 0.7, 0), thick * 0.5, v(0, 0, 1), v(0, 0, 1))
+      end
+      lamps(w, 0, far + thick, 12, thick * 0.25)
+    elseif extra == "moon" then
+      -- (a lesser ball under it, on the stem)
+      local less = radius * extraDice:Float(0.28, 0.42)
+      local drop = radius * extraDice:Float(0.5, 0.9)
+      beam(w.b, FRAME, axis(-radius * 0.95), axis(-radius - drop), w.stem)
+      ball(w, PATCH, -radius - drop - less, less, w.sides * 2)
+      hoop(w, TRIM, -radius - drop - less, less * 1.02, less * 0.04)
+      foot = -radius - drop - 2 * less
+    elseif extra == "halo" then
+      -- (a slim wheel standing off over its head, on posts)
+      local far = radius * extraDice:Float(0.45, 0.7)
+      local high = radius * extraDice:Float(1.12, 1.3)
+      wheel(w, TRIM, high, far, radius * 0.03, w.sides * 2, 4)
+      for post = 1, math.max(3, w.fold) do
+        local angle = (post - 0.5) / math.max(3, w.fold) * TAU
+        local up = math.acos(math.clamp(far / radius, 0, 1))
+        beam(w.b, FRAME, at(angle, far, radius * math.sin(up) * 0.98), at(angle, far, high), radius * 0.012)
+      end
+    elseif extra == "skirt" then
+      -- (long aerials hanging from under it)
+      local count = w.fold * 2
+      for each = 1, count do
+        local angle = (each - 0.5) / count * TAU
+        local long = radius * extraDice:Float(0.5, 1.3)
+        local hang = at(angle, radius * 0.62, -radius * 0.78)
+        beam(w.b, FRAME, hang, hang - v(0, 0, long), radius * 0.012)
+        lamp(w, hang - v(0, 0, long), radius * 0.02, if each % 2 == 0 then GLOW else TRIM)
+      end
+    end
+  end
+
+  top(w, overDice, over, radius * 0.97, radius * 0.3, reach)
+  tail(w, underDice, under, foot + radius * 0.03, radius * 0.3, reach)
+end
 
 -- The most bodies a tower has, and the most things standing out of it.
 local MOST, MOST_OUT = 6, 7
@@ -780,6 +1305,15 @@ function Tower.Build(b: Builder, spec: Spec)
   -- (what is solid in it has so many sides: its fold, or twice it for a tower of few)
   local sides = if fold == 2 then 4 elseif fold == 3 then 6 else fold
   local w: Work = { b = b, m = m, fold = fold, sides = sides, stem = 0.045 * girth * math.max(1, m.thin * 0.8) }
+  asideX, asideY = 0, 0
+  -- (the two that are not a stem with things along it)
+  if spec.build == "toroidal" then
+    toroidal(w, build, rng, size, plan, girth)
+    return
+  elseif spec.build == "spherical" then
+    spherical(w, build, rng, size, plan, girth)
+    return
+  end
 
   -- What the seed says of every body it might have, of every thing that
   -- might stand out of it, and of its ends.
@@ -889,7 +1423,7 @@ function Tower.Build(b: Builder, spec: Spec)
   -- Its ends, and the stem through all of it.
   top(w, overDice, over, head, places[#places].out, reach)
   tail(w, underDice, under, 0, places[1].out, reach)
-  block(b, FRAME, v(0, 0, head / 2), v(w.stem, w.stem, head / 2 + 0.02), nil, 0.3)
+  block(b, FRAME, axis(head / 2), v(w.stem, w.stem, head / 2 + 0.02), nil, 0.3)
 
   -- (in a manner of frames there are masts on everything: by dice that are nobody else's)
   if m.frame then
@@ -900,7 +1434,7 @@ function Tower.Build(b: Builder, spec: Spec)
       local foot = at(angle, body.out * 0.9, body.low + (body.high - body.low) * masts:Float(0.1, 0.9))
       local long = reach * masts:Float(0.5, 1.3)
       local way = if masts:Int(1, 4) == 1 then -1 else 1
-      local tip = foot + at(angle, long * 0.25, way * long)
+      local tip = foot + around(angle, long * 0.25) + v(0, 0, way * long)
       beam(b, FRAME, foot, tip, w.stem * 0.28)
       lamp(w, tip, w.stem * 0.4, if masts:Int(1, 3) == 1 then GLOW else TRIM)
     end

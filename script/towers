@@ -19,7 +19,8 @@ The numbers come first and in that order; the words after them, in any
 order:
 
   a build     pylon, parasol, gantry, ring, stack or mixed (mixed if none
-              is named): a tower built in sections, the shape it cuts
+              is named): a tower built in sections, the shape it cuts;
+              or toroidal or spherical, a tower about a torus or a sphere
               (Tower.BUILDS in resource/script/Game/View/Tower.luau)
   manner M    blocky (if none is named), cloud, spar or poured: how what
               it is made of is made
@@ -54,7 +55,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
-BUILDS = ["pylon", "parasol", "gantry", "ring", "stack", "mixed"]
+BUILDS = ["pylon", "parasol", "gantry", "ring", "stack", "mixed", "toroidal", "spherical"]
 MANNERS = ["blocky", "cloud", "spar", "poured"]
 FOLDS = [2, 3, 4, 6, 8]
 WEIGHTS = ["low", "high", "middle", "ends", "beads"]
@@ -208,8 +209,11 @@ def main():
         if os.path.exists(files[-1]):
             os.remove(files[-1])
         lines += [f"lua assert(Towers.Show({seed}, {size}, '{shown['style']}', {'true' if shown['eight'] else 'false'}, {shown['masts']}, "
-                  f"'{colour}', '{shown['manner']}', {shown['fold']}, '{shown['weight']}'))",
-                  "frames 6", f"shot {file}", "frames 2"]
+                  f"'{colour}', '{shown['manner']}', {shown['fold']}, '{shown['weight']}'))"]
+        if shown["style"] == "toroidal":
+            # (a wheel lying flat is looked at from higher up, or it is seen edge on)
+            lines += ["lua Towers.Look(0.105, 0.085, 2.1)"]
+        lines += ["frames 6", f"shot {file}", "frames 2"]
     lines += ["echo towers sheet taken", "quit"]
     with open(SCRIPT, "w") as out:
         out.write("\n".join(lines) + "\n")
@@ -226,9 +230,11 @@ def main():
         small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
     except OSError:
         big = small = ImageFont.load_default()
-    # (a tower stands in the middle of its picture: the middle of it is kept, upright)
-    columns = min(8, len(shots))
-    wide, high, bar = 300, 420, 44
+    # (a tower stands in the middle of its picture: the middle of it is kept, upright;
+    # or as broad as it is high, for a tower about a torus or a sphere, which is as wide as it is tall)
+    broad = any(shot[2]["style"] in ("toroidal", "spherical") for shot in shots)
+    columns = min(4 if broad else 8, len(shots))
+    wide, high, bar = (600 if broad else 300), 420, 44
     rows = (len(shots) + columns - 1) // columns
     sheet = Image.new("RGB", (max(columns * wide, 1200), bar + rows * high), (12, 14, 18))
     draw = ImageDraw.Draw(sheet)
