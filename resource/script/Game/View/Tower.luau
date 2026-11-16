@@ -1,7 +1,7 @@
 --!strict
 -- Towers built in sections (for the stations: Game/View/Starbase).
 --
--- The towers grown as a hull is (Hull.GrownTower) are all one thing: the
+-- The towers grown as a hull is (Hull.GrownTower, taken out 2026-11-16) were all one thing: the
 -- same plates in fours about a spine, drawn in to a spindle, with a lit
 -- band and two collars at the waist of every one. (The owner, of them,
 -- 2026-11-15: "the tower generator is not very varied right now. All of

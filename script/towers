@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""script/towers: sheets of the towers the generators make for the
+"""script/towers: sheets of the towers the generator makes for the
 stations (App/towers.luau), taken off the screen.
 
   script/towers seeds   [FROM [COUNT [SIZE]]] [words]
         COUNT seeds from FROM on (40 from 1), each at SIZE (4)
   script/towers styles  SEED [SIZE] [words]
-        one seed in every build (or, with "grown", in every grown style)
+        one seed in every build
   script/towers sizes   SEED [words]
         one seed at each of the eight sizes
   script/towers manners SEED [SIZE] [words]
@@ -29,17 +29,10 @@ order:
   weight W    low, high, middle, ends or beads: where its weight is, over
               what its seed says
   a paint     vessari (if none is named), talmar, orun, kethri, nimia,
-              vail or civil
+              vail or civil (one with no look of its own yet is shown
+              in the Vessari's)
 
-or, of the towers grown as a hull is, which are to go:
-
-  grown S     blocky, cloud, spar, poured, stout, needle, bulb or fins
-              (Hull.TOWER_STYLES in resource/script/Game/View/Hull.luau)
-  eight       every plate eight times about the upright, and not four
-  masts N     N masts (0 to 6) out of its top
-
-SIZE is 1 to 8: how much there is of the tower. The game's small,
-middling and large towers are sizes 2, 4 and 6.
+SIZE is 1 to 8: how much there is of the tower.
 
 The sheet is written to cache/towers/ and its name printed. Every
 picture has what it is written on it.
@@ -59,7 +52,6 @@ BUILDS = ["pylon", "parasol", "gantry", "ring", "stack", "mixed", "toroidal", "s
 MANNERS = ["blocky", "cloud", "spar", "poured"]
 FOLDS = [2, 3, 4, 6, 8]
 WEIGHTS = ["low", "high", "middle", "ends", "beads"]
-GROWN = ["blocky", "cloud", "spar", "poured", "stout", "needle", "bulb", "fins"]
 PAINTS = ["vessari", "talmar", "orun", "kethri", "nimia", "vail", "civil"]
 KINDS = ("seeds", "styles", "sizes", "manners", "folds", "weights")
 FOLDER = os.path.join("cache", "towers")
@@ -92,7 +84,7 @@ def main():
         usage(f"'{kind}' is not one of: {', '.join(KINDS)}")
     numbers = []
     # (what every picture is of, unless the sheet's kind says otherwise for one)
-    tower = {"style": None, "grown": False, "manner": "blocky", "fold": 0, "weight": "", "eight": False, "masts": 0}
+    tower = {"style": "mixed", "manner": "blocky", "fold": 0, "weight": ""}
     paint = None
     words = False
     at = 0
@@ -104,10 +96,7 @@ def main():
 
     while at < len(rest):
         word = rest[at]
-        if word == "masts":
-            tower["masts"] = int(after(word, [str(n) for n in range(7)], "a number from 0 to 6"))
-            words, at = True, at + 1
-        elif word == "fold":
+        if word == "fold":
             tower["fold"] = int(after(word, [str(n) for n in FOLDS], "2, 3, 4, 6 or 8"))
             words, at = True, at + 1
         elif word == "weight":
@@ -116,12 +105,6 @@ def main():
         elif word == "manner":
             tower["manner"] = after(word, MANNERS, "one of " + ", ".join(MANNERS))
             words, at = True, at + 1
-        elif word == "grown":
-            # (by itself, for "styles": every grown style)
-            if at + 1 < len(rest) and rest[at + 1] in GROWN:
-                tower["style"] = rest[at + 1]
-                at += 1
-            tower["grown"], words = True, True
         elif word.isdigit():
             if words:
                 usage("the numbers come before the words")
@@ -130,16 +113,9 @@ def main():
             tower["style"], words = word, True
         elif word in PAINTS:
             paint, words = word, True
-        elif word == "eight":
-            tower["eight"], words = True, True
         else:
-            usage(f"'{word}' is not a number, a build, a paint, or one of: manner M, fold N, weight W, grown S, eight, masts N")
+            usage(f"'{word}' is not a number, a build, a paint, or one of: manner M, fold N, weight W")
         at += 1
-    grown = tower["grown"]
-    if tower["style"] is None:
-        tower["style"] = "blocky" if grown else "mixed"
-    if grown and kind in ("manners", "folds", "weights"):
-        usage(f"a tower grown as a hull is has no {kind}")
 
     def number(at, default, low, high, what):
         if len(numbers) <= at:
@@ -155,16 +131,11 @@ def main():
 
     def described(shown):
         """What a tower is, in words: for a sheet's heading."""
-        if grown:
-            return (f"{shown['style']} (grown)" + (", eight sides" if shown["eight"] else "")
-                    + (f", {shown['masts']} masts" if shown["masts"] else ""))
         return (f"{shown['style']}, {shown['manner']}" + (f", fold {shown['fold']}" if shown["fold"] else "")
                 + (f", weight {shown['weight']}" if shown["weight"] else ""))
 
     def tagged(shown):
         """The same, for a file's name."""
-        if grown:
-            return f"grown-{shown['style']}" + ("-eight" if shown["eight"] else "") + (f"-masts{shown['masts']}" if shown["masts"] else "")
         return (f"{shown['style']}-{shown['manner']}" + (f"-fold{shown['fold']}" if shown["fold"] else "")
                 + (f"-{shown['weight']}" if shown["weight"] else ""))
 
@@ -186,8 +157,8 @@ def main():
         seed = number(0, None, 0, 10 ** 9, "the seed")
         size = number(1, 4, 1, 8, "the size")
         if kind == "styles":
-            each = [(dict(tower, style=style), style) for style in (GROWN if grown else BUILDS)]
-            over = "in every grown style" if grown else f"in every build, {tower['manner']}"
+            each = [(dict(tower, style=style), style) for style in BUILDS]
+            over = f"in every build, {tower['manner']}"
         elif kind == "manners":
             each = [(dict(tower, manner=manner), manner) for manner in MANNERS]
             over = f"{tower['style']}, in every manner"
@@ -208,8 +179,8 @@ def main():
         files.append(os.path.join(TAKEN, file + ".png"))
         if os.path.exists(files[-1]):
             os.remove(files[-1])
-        lines += [f"lua assert(Towers.Show({seed}, {size}, '{shown['style']}', {'true' if shown['eight'] else 'false'}, {shown['masts']}, "
-                  f"'{colour}', '{shown['manner']}', {shown['fold']}, '{shown['weight']}'))"]
+        lines += [f"lua assert(Towers.Show({seed}, {size}, '{shown['style']}', '{colour}', '{shown['manner']}', {shown['fold']}, "
+                  f"'{shown['weight']}'))"]
         if shown["style"] == "toroidal":
             # (a wheel lying flat is looked at from higher up, or it is seen edge on)
             lines += ["lua Towers.Look(0.105, 0.085, 2.1)"]

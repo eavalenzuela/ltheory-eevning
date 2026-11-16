@@ -284,8 +284,8 @@ function Debug.TowerPick(faction: string, seed: number?, size: number?, build: s
   for each = 1, 3 do
     if which == nil or which == each then
       -- ('paint': whose look it wears, where that is not the people's own)
-      Starbase.Try(faction, each, if seed then { seed = seed, size = size or 4, style = build or "mixed", square = false, masts = 0,
-        manner = manner, fold = fold, plan = plan, paint = paint } else nil)
+      Starbase.Try(faction, each, if seed then { seed = seed, size = size or 4, style = build or "mixed", manner = manner, fold = fold,
+        plan = plan, paint = paint } else nil)
     end
   end
   scene.system = 0
