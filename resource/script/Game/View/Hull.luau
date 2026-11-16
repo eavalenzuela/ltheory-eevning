@@ -24,6 +24,7 @@ local Paints = require("@lt/Core/Data/Paints")
 local Plates = require("@lt/Game/View/Plates")
 local Fits = require("@lt/Core/Fits")
 local Ships = require("@lt/Core/Data/Ships")
+local Structures = require("@lt/Core/Data/Structures")
 
 local Hull = {}
 
@@ -3787,6 +3788,10 @@ local function collarOf(size: number): (b: Builder) -> ()
 end
 for size = 1, 3 do
   designs[`works.tower.{size}`] = { faction = "civil", draw = collarOf(size), sheets = 3.0, turrets = {}, launchers = {}, fit = {} }
+end
+-- (and each people's tower's own core, since 2026-11-16: the same collar)
+for _, kind in Structures.towers do
+  designs[Structures.Core(kind)] = designs[`works.tower.{kind.size}`]
 end
 
 -- The Pirate Tower, what the pirates hold a moon with (Core/Tactical/

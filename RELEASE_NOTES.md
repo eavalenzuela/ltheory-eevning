@@ -6,6 +6,15 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Towers by their people
+
+- A control tower is now its people's make. On top of the old figures, each people's tower is better at what its people are good at:
+  - its gun batteries fire that people's kind of gun (projectile for the Vessari, Talmar and Unbound, hybrid for the Orun and Nimia, lasers for the Vail) and do 15% more damage;
+  - its missile batteries do 15% more for the Vessari, Talmar and Unbound;
+  - its own defence is 15 points better against every kind of damage: armour for the Vessari, Orun and Nimia, shield for the Talmar and Vail, structure for the Unbound.
+- There are now Unbound, Nimia and Vail towers too. A people's tower is sold at its own stations; elsewhere a few are imported, at a higher price.
+- A tower's information sheet lists what its make is better at.
+
 ## A new interface, and new station towers
 
 - The whole interface has been made over to one look: flat dark panels with thin edges, one accent colour, and colours that each mean one thing (green for yours and for a gain, amber for a warning or where you are going, red for hostile, a loss or a refusal).

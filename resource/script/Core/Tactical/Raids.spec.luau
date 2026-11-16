@@ -324,7 +324,7 @@ suite:Case("a tower has a shield, armour and a structure, and a thing at its hea
   local ship = state.ships[starbase.core]
   local object = assert(Space.Object(state, station))
   t.eq({ ship.type, ship.owner, core.grid, core.x, core.y, core.z, core.maxVelocity } :: { any },
-    { "works.tower.1", "starbase", station, object.x, object.y, object.z, 0 } :: { any })
+    { Structures.Core(Structures.towerById[starbase.tower]), "starbase", station, object.x, object.y, object.z, 0 } :: { any })
   t.eq({ core.vitals.shieldMax, core.vitals.armorMax, core.vitals.hullMax }, { SMALL.shield, SMALL.armor, SMALL.hull })
   t.eq({ Starbases.Health(state, starbase) }, { 1, 1, 1 })
   t.eq(Starbases.OfCore(state, starbase.core), starbase)

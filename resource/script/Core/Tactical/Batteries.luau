@@ -35,6 +35,7 @@ local Combat = require("@lt/Core/Tactical/Combat")
 local Fields = require("@lt/Core/Tactical/Fields")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
+local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -56,6 +57,68 @@ Batteries.REBUILD = 7200
 -- from a missile battery.
 local GUN = { every = 3, damage = { 0, 15, 30, 15 } }
 local MISSILE = { every = 6, damage = { 0, 0, 45, 45 } }
+
+-- A people's tower's gun batteries fire its turret family (the owner,
+-- 2026-11-16): a volley as big as a gun battery's, split between the
+-- four kinds of damage as the family's small tech 1 charges split it,
+-- taken together (the game's own charges: projectile and hybrid all
+-- four alike, lasers EM and thermal). Then the tower's bonus on top
+-- (Structures.TOWER_DAMAGE). A gate's sentries are nobody's people's,
+-- and fire as a gun battery did.
+local VOLLEY = 60
+local FAMILY: { [string]: { number } } = {}
+do
+  local sums: { [string]: { number } } = {}
+  for _, charge in Modules.charges do
+    if charge.size == 1 and (charge.tech == nil or charge.tech == 1) then
+      local sum = sums[charge.family] or { 0, 0, 0, 0 }
+      for kind = 1, 4 do
+        sum[kind] += charge.damage[kind] or 0
+      end
+      sums[charge.family] = sum
+    end
+  end
+  for family, sum in sums do
+    local all = sum[1] + sum[2] + sum[3] + sum[4]
+    if all > 0 then
+      FAMILY[family] = { VOLLEY * sum[1] / all, VOLLEY * sum[2] / all, VOLLEY * sum[3] / all, VOLLEY * sum[4] / all }
+    end
+  end
+end
+
+-- What a battery of a kind does from a tower: its beat, its volley, and
+-- (for the scene) the gun it fires like.
+type Battery = { every: number, damage: { number }, missile: boolean, look: string? }
+-- (the large gun of each family a battery stands as, Game/View/Starbase's too)
+Batteries.LOOKS = { projectile = "artillery.large", hybrid = "railgun.large", laser = "laser.pulse.large" }
+
+local function armed(module: string, tower: Structures.Tower?): Battery?
+  if module == "battery.missile" then
+    local times = if tower then tower.missileBonus else 1
+    local damage = table.clone(MISSILE.damage)
+    for kind = 1, 4 do
+      damage[kind] *= times
+    end
+    return { every = MISSILE.every, damage = damage, missile = true }
+  elseif module == "battery.gun" then
+    local mix = if tower then FAMILY[tower.gun] else nil
+    if tower == nil or mix == nil then
+      return { every = GUN.every, damage = table.clone(GUN.damage), missile = false }
+    end
+    local damage = {}
+    for kind = 1, 4 do
+      damage[kind] = mix[kind] * tower.gunBonus
+    end
+    return { every = GUN.every, damage = damage, missile = false, look = Batteries.LOOKS[tower.gun] }
+  end
+  return nil
+end
+
+-- What a battery of a kind does from a tower: for whoever says so (a sheet, a test).
+function Batteries.Of(module: string, tower: string?): ({ number }?, number)
+  local battery = armed(module, if tower then Structures.towerById[tower] else nil)
+  return if battery then battery.damage else nil, if battery then battery.every else 0
+end
 
 -- The hull that stands for each kind of battery, and what is on it to
 -- be seen (it fires as a battery does, above, and not as its fit would).
@@ -246,12 +309,15 @@ function Batteries.Fire(state: State.State, events: { Event }): { Hit }
   if #targets == 0 then
     return hits
   end
+  local makeup = if sentries > 0 then nil else Stations.Makeup(state, station.id)
   local modules: { string } = if sentries > 0 then table.create(sentries, "battery.gun")
     elseif stands then record.kinds
-    else (Stations.Makeup(state, station.id) :: any).modules
+    else (makeup :: any).modules
+  -- (whose people's tower it is: what its batteries fire, and how hard)
+  local tower = if makeup and makeup.tower then Structures.towerById[makeup.tower] else nil
   local index = 0
   for _, module in modules do
-    local battery = if module == "battery.gun" then GUN elseif module == "battery.missile" then MISSILE else nil
+    local battery = armed(module, tower)
     if battery then
       index += 1
       -- (one that is down fires nothing)
@@ -264,7 +330,7 @@ function Batteries.Fire(state: State.State, events: { Event }): { Hit }
         local target = targets[(index - 1) % #targets + 1]
         table.insert(hits, { target = target, by = from, damage = table.clone(battery.damage) })
         table.insert(events, { kind = "BatteryFired", station = station.id, battery = index, from = from, to = target,
-          missile = battery == MISSILE })
+          missile = battery.missile, look = battery.look })
       end
     end
   end

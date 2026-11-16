@@ -19,6 +19,7 @@
 -- for small things, the middle one for cruiser-sized, the rare for the
 -- largest.
 
+local Factions = require("@lt/Core/Data/Factions")
 local Boosters = require("@lt/Core/Data/Boosters")
 local Components = require("@lt/Core/Data/Components")
 local Drones = require("@lt/Core/Data/Drones")
@@ -297,7 +298,12 @@ for _, part in Components.HULL do
 end
 local FUEL: { { any } } = { { "planet.isotopes", 0.5 }, { "planet.water", 0.3 }, { "planet.catalysts", 0.2 } }
 for _, tower in Structures.towers do
-  add(tower.id, tower.name, MIX.cruiser, tower.basePrice, 1, math.min(72000, 600 + tower.basePrice // 200), STRUCTURE)
+  -- (an alien people's tower and the pirates' are not built from a
+  -- print, as their hulls are not: they are got where they are sold)
+  local people = Factions.byId[tower.faction]
+  if people and people.kind == "human" then
+    add(tower.id, tower.name, MIX.cruiser, tower.basePrice, 1, math.min(72000, 600 + tower.basePrice // 200), STRUCTURE)
+  end
 end
 for _, module in Structures.modules do
   add(module.id, module.name, MIX.ship, module.basePrice, 1, math.min(72000, 600 + module.basePrice // 200), STRUCTURE)

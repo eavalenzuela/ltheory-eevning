@@ -183,6 +183,14 @@ function Market.Leaning(faction: string, id: string): (number, boolean)
     end
     return 1, false
   end
+  -- (a tower is its people's to sell: anybody else's has a few, imported)
+  local tower = Structures.towerById[id]
+  if tower then
+    if tower.faction ~= faction then
+      return Market.FOREIGN_HULL, true
+    end
+    return 1, false
+  end
   local module, charge = Modules.byId[id], Modules.chargeById[id]
   local family = if module and module.weapon then module.weapon.family elseif charge then charge.family else nil
   if family and not families(faction)[family] then

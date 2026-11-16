@@ -619,6 +619,34 @@ for size, supply in Structures.SUPPLY do
   })
 end
 
+-- And the core of each people's tower: the baseline's of its size, with
+-- every resistance of its people's layer so many points higher
+-- (Structures.TOWER_RESIST, the owner's "+15 points").
+for _, tower in Structures.towers do
+  local function harder(resonance: { number }, layer: string): { number }
+    if tower.tank ~= layer then
+      return resonance
+    end
+    local out: { number } = {}
+    for index, through in resonance do
+      out[index] = math.max(0, through - tower.resist)
+    end
+    return out
+  end
+  local size = tower.size
+  table.insert(types, {
+    id = Structures.Core(tower), name = tower.name, class = "works", lineage = "", basePrice = tower.basePrice, volume = 1000000,
+    mass = 400000000 * size, inertia = 1, maxVelocity = 0, warpSpeed = 1, radius = 150 + 100 * size,
+    shield = tower.shield, armor = tower.armor, hull = tower.hull, shieldRecharge = 10800,
+    shieldResonance = harder(SHIELD, "shield"), armorResonance = harder(ARMOR, "armor"), hullResonance = harder(HULL, "hull"),
+    signature = 2000 * size,
+    cpu = 600, powergrid = 2000, highs = 0, mids = 0, lows = 0, turrets = 0, launchers = 0,
+    capacitor = 2500, capacitorRecharge = 240,
+    scanResolution = 100, lockRange = 60000, maxTargets = 1, cargo = 0,
+    restricted = true,
+  })
+end
+
 -- And what an escort is to see through (Tactical/Assault): a tender,
 -- which flies, slowly, and is rather less to shoot at than the rig of
 -- its level: left to itself with those who come for it, it is lost more

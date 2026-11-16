@@ -4,6 +4,7 @@
 local Factions = require("@lt/Core/Data/Factions")
 local Ships = require("@lt/Core/Data/Ships")
 local Structures = require("@lt/Core/Data/Structures")
+local Batteries = require("@lt/Core/Tactical/Batteries")
 local Test = require("@lt/Tool/Test")
 local Types = require("@lt/Core/Data/Types")
 
@@ -11,23 +12,62 @@ local suite = Test.Suite("Structures")
 
 local VARIETIES = { "trade hub", "shipyard", "refinery", "habitat", "outpost" }
 
-suite:Case("each human faction that keeps to a place has a tower in each of three sizes, each twice the last", function(t)
-  local humans = 0
-  for _, faction in Factions.list do
-    if faction.kind == "human" and not faction.nomad then
-      humans += 1
-      local last = 0
-      for size, word in Structures.SIZES do
-        local tower = Structures.towerById[`tower.{faction.id}.{word}`]
-        t.ok(tower ~= nil, `{faction.id} has no {word} tower`)
-        t.eq(tower.size, size)
-        t.eq(tower.faction, faction.id)
-        t.ok(tower.powergrid > last, `the {word} tower supplies no more than the one below it`)
-        last = tower.powergrid
-      end
+suite:Case("each people that holds stations has a tower in each of three sizes, each twice the last", function(t)
+  -- (the human factions that keep to a place, the pirates, the Nimia and
+  -- the Vail: the owner, 2026-11-16. Not the Kethri nor the Drowned)
+  t.eq(Structures.TOWER_PEOPLES, { "vessari", "talmar", "orun", "unbound", "nimia", "vail" })
+  for _, people in Structures.TOWER_PEOPLES do
+    local faction = Factions.byId[people]
+    local last = 0
+    for size, word in Structures.SIZES do
+      local tower = Structures.towerById[`tower.{faction.id}.{word}`]
+      t.ok(tower ~= nil, `{faction.id} has no {word} tower`)
+      t.eq(tower.size, size)
+      t.eq(tower.faction, faction.id)
+      t.ok(tower.powergrid > last, `the {word} tower supplies no more than the one below it`)
+      last = tower.powergrid
+      -- (the baseline's, whoever's it is)
+      t.eq({ tower.cpu, tower.shield, tower.armor, tower.hull, tower.field, tower.fuel } :: { any }, { Structures.SUPPLY[size].cpu,
+        Structures.SUPPLY[size].shield, Structures.SUPPLY[size].armor, Structures.SUPPLY[size].hull, Structures.SUPPLY[size].field,
+        Structures.SUPPLY[size].fuel } :: { any })
     end
   end
-  t.eq(#Structures.towers, humans * 3)
+  t.eq(#Structures.towers, #Structures.TOWER_PEOPLES * 3)
+  t.eq(Structures.towerById["tower.kethri.small"], nil)
+end)
+
+suite:Case("a people's tower is better at what its people are: its guns, its missiles, its layer", function(t)
+  -- (the owner, 2026-11-16: about 15% to the faction's bonuses, the
+  -- gun batteries firing its turret family, missiles too, and "+15 points"
+  -- on every resistance of its layer)
+  t.eq({ Structures.TOWER_DAMAGE, Structures.TOWER_RESIST } :: { any }, { 1.15, 0.15 } :: { any })
+  for _, tower in Structures.towers do
+    local people = Factions.byId[tower.faction]
+    t.eq({ tower.gun, tower.gunBonus, tower.tank, tower.resist } :: { any }, { people.weapon, 1.15, people.tank, 0.15 } :: { any }, tower.id)
+    t.eq(tower.missileBonus, if people.launchers >= 0.3 then 1.15 else 1, tower.id)
+    -- Its core: the baseline's resistances, with its people's layer 15 points better at every kind of damage.
+    local core = assert(Ships.byId[Structures.Core(tower)], `{tower.id} has no core`)
+    local plain = Ships.byId[`works.tower.{tower.size}`]
+    for _, layer in { "shield", "armor", "hull" } do
+      local mine, theirs = (core :: any)[`{layer}Resonance`], (plain :: any)[`{layer}Resonance`]
+      for kind = 1, 4 do
+        t.near(mine[kind], if layer == tower.tank then math.max(0, theirs[kind] - 0.15) else theirs[kind], 1e-12, `{tower.id} {layer} {kind}`)
+      end
+    end
+    t.eq({ core.shield, core.armor, core.hull } :: { any }, { tower.shield, tower.armor, tower.hull } :: { any })
+  end
+  -- The guns: a volley as big as a battery's ever was, of the people's family's kinds, 15% more.
+  for _, tower in Structures.towers do
+    local damage = assert((Batteries.Of("battery.gun", tower.id)))
+    t.near(damage[1] + damage[2] + damage[3] + damage[4], 60 * 1.15, 1e-9, tower.id)
+    if tower.gun == "laser" then
+      t.eq({ damage[3], damage[4] } :: { any }, { 0, 0 } :: { any }, "a laser does no kinetic or explosive damage")
+    end
+    local missile = assert((Batteries.Of("battery.missile", tower.id)))
+    t.near(missile[1] + missile[2] + missile[3] + missile[4], 90 * tower.missileBonus, 1e-9, tower.id)
+  end
+  -- (a gate's sentries are nobody's people's)
+  t.eq((Batteries.Of("battery.gun", nil)), { 0, 15, 30, 15 })
 end)
 
 suite:Case("no module belongs to a faction", function(t)

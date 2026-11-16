@@ -52,6 +52,15 @@ export type Tower = {
   -- for each (Assets/Starbases, Tactical/Raids).
   shield: number, armor: number, hull: number,
   bay: number,
+  -- What its people's tower is better at than the baseline (the owner,
+  -- 2026-11-16): the family its gun batteries fire ("projectile",
+  -- "hybrid", "laser") and how much more they do (1.15: 15% more); how
+  -- much more its missile batteries do (1 for a people that does not
+  -- lean on launchers); and the layer it holds best ("shield", "armor",
+  -- "hull") with how many points every resistance of it has over the
+  -- baseline's (0.15). (Structures.Core is the hull that has them.)
+  gun: string, gunBonus: number, missileBonus: number,
+  tank: string, resist: number,
 }
 
 -- What a module is for: the service it gives the tower's guests, or how
@@ -121,19 +130,40 @@ local SUPPLY = {
 }
 Structures.SUPPLY = SUPPLY
 
+-- The peoples that have towers: the human factions with stations, the
+-- pirates, and the two alien peoples who hold stations (the owner,
+-- 2026-11-16: "Add Unbound, Nimia, Vail"). The Kethri have colony ships
+-- and the Drowned no stations at all.
+Structures.TOWER_PEOPLES = { "vessari", "talmar", "orun", "unbound", "nimia", "vail" }
+
+-- A people's tower is the baseline above with its people's bonuses (the
+-- owner, 2026-11-16, "roughly 15% to their given faction bonuses
+-- (increased damage for their turret types, increased resists for
+-- their defenses)", and of how: the gun batteries fire the people's
+-- turret family, missiles too for a people that leans on launchers, and
+-- the resistances are "+15 points"). The same at every size.
+Structures.TOWER_DAMAGE = 1.15
+Structures.TOWER_RESIST = 0.15
+-- (a people leans on launchers where a fair share of its hardpoints are
+-- launchers: the same share a market of theirs stocks missiles for,
+-- Assets/Market. The threshold is mine)
+Structures.TOWER_LAUNCHERS = 0.3
+
 local towers: { Tower } = {}
-for _, faction in Factions.list do
-  if faction.kind == "human" and not faction.nomad then
-    for size, word in Structures.SIZES do
-      table.insert(towers, {
-        id = `tower.{faction.id}.{word}`,
-        name = `{faction.name} {string.upper(string.sub(word, 1, 1))}{string.sub(word, 2)} Control Tower`,
-        faction = faction.id, size = size, powergrid = SUPPLY[size].powergrid, cpu = SUPPLY[size].cpu,
-        field = SUPPLY[size].field, fuel = SUPPLY[size].fuel, anchor = SUPPLY[size].anchor, volume = SUPPLY[size].volume,
-        basePrice = SUPPLY[size].basePrice,
-        shield = SUPPLY[size].shield, armor = SUPPLY[size].armor, hull = SUPPLY[size].hull, bay = SUPPLY[size].bay,
-      })
-    end
+for _, people in Structures.TOWER_PEOPLES do
+  local faction = Factions.byId[people]
+  for size, word in Structures.SIZES do
+    table.insert(towers, {
+      id = `tower.{faction.id}.{word}`,
+      name = `{faction.name} {string.upper(string.sub(word, 1, 1))}{string.sub(word, 2)} Control Tower`,
+      faction = faction.id, size = size, powergrid = SUPPLY[size].powergrid, cpu = SUPPLY[size].cpu,
+      field = SUPPLY[size].field, fuel = SUPPLY[size].fuel, anchor = SUPPLY[size].anchor, volume = SUPPLY[size].volume,
+      basePrice = SUPPLY[size].basePrice,
+      shield = SUPPLY[size].shield, armor = SUPPLY[size].armor, hull = SUPPLY[size].hull, bay = SUPPLY[size].bay,
+      gun = faction.weapon, gunBonus = Structures.TOWER_DAMAGE,
+      missileBonus = if faction.launchers >= Structures.TOWER_LAUNCHERS then Structures.TOWER_DAMAGE else 1,
+      tank = faction.tank :: string, resist = Structures.TOWER_RESIST,
+    })
   end
 end
 
@@ -184,9 +214,12 @@ Structures.FUEL = { id = "fuel.block", name = "Fuel Block", volume = 2, basePric
 -- And what seals one: a charge is burnt for each hour a tower holds
 -- out sealed, when its shield is failing.
 Structures.SEAL = { id = "fuel.seal", name = "Sealing Charge", volume = 5, basePrice = 15000 }
--- The hull that stands for a tower where it is shot at: by its size.
+-- The hull that stands for a tower where it is shot at: its own, with
+-- its people's resistances (Data/Ships). (Until 2026-11-16 it was one
+-- of three, by size, whoever's the tower was: a save from then keeps
+-- the core it had, and the next tower anchored has its own.)
 function Structures.Core(tower: Tower): string
-  return `works.tower.{tower.size}`
+  return `works.{tower.id}`
 end
 
 Structures.towers = towers

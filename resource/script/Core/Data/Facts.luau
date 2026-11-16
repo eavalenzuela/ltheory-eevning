@@ -664,6 +664,17 @@ function Facts.Of(type: string): Sheet?
       row(stands, "Armour", whole(tower.armor))
       row(stands, "Structure", whole(tower.hull))
       row(stands, "Seals for", `{tower.bay} hours at most: a charge an hour`, Structures.SEAL.id)
+      -- (what its people's tower is better at)
+      local better = section(sheet, `{Factions.byId[tower.faction].name} make`)
+      local percent = function(times: number): string
+        return `{math.floor((times - 1) * 100 + 0.5)}% more damage`
+      end
+      row(better, "Gun batteries", `fire {tower.gun} weapons, {percent(tower.gunBonus)}`)
+      if tower.missileBonus > 1 then
+        row(better, "Missile batteries", percent(tower.missileBonus))
+      end
+      row(better, if tower.tank == "armor" then "Armour" elseif tower.tank == "shield" then "Shield" else "Structure",
+        `every resistance +{math.floor(tower.resist * 100 + 0.5)} points`)
     elseif anchored then
       sheet.kind = "Structure module"
       sheet.note = "Anchored inside a tower's field and run from the tower's power. Whoever built the tower, the module is the same."

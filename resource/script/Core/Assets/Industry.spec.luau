@@ -9,6 +9,8 @@ local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Ships = require("@lt/Core/Data/Ships")
+local Structures = require("@lt/Core/Data/Structures")
+local Factions = require("@lt/Core/Data/Factions")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Stations = require("@lt/Core/Assets/Stations")
@@ -80,6 +82,12 @@ suite:Case("everything fitted, fired, flown or built into it has a blueprint, an
       t.eq(Blueprints.byProduct[id], nil, id)
     elseif info.category == "module" or info.category == "charge" or info.category == "ship" or info.category == "component"
       or info.category == "structure" or info.category == "drone" or Boosters.byId[id] ~= nil then
+      -- (an alien people's tower and the pirates' are not built from a print: Data/Blueprints)
+      local tower = Structures.towerById[id]
+      if tower and Factions.byId[tower.faction].kind ~= "human" then
+        t.eq(Blueprints.byProduct[id], nil, id)
+        continue
+      end
       -- (and a booster, which is made of its gas)
       local blueprint = assert(Blueprints.byProduct[id], `no blueprint for {id}`)
       count += 1

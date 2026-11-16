@@ -1679,11 +1679,12 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       local from = state.balls[event.from]
       if to and from and scene.screen[event.from] then
         scene.volleys += 1
-        Effects.Fire(fx, if event.missile then "launcher.cruise" else "artillery.large", event.from, event.to, from.radius, to.radius,
+        -- (a gun battery fires like its people's guns: Core/Tactical/Batteries)
+        Effects.Fire(fx, if event.missile then "launcher.cruise" else event.look or "artillery.large", event.from, event.to, from.radius, to.radius,
           "hit", 0, struck(to), scene.time, nil)
       elseif to and station and scene.screen[event.station] then
         scene.volleys += 1
-        Effects.Fire(fx, if event.missile then "launcher.cruise" else "artillery.large", event.station, event.to, station.radius * 0.35,
+        Effects.Fire(fx, if event.missile then "launcher.cruise" else event.look or "artillery.large", event.station, event.to, station.radius * 0.35,
           to.radius, "hit", 0, struck(to), scene.time, nil)
       end
     elseif (event.kind == "WarpStarted" or event.kind == "WarpEnded") and event.ball ~= player.ship and grid ~= 0 then

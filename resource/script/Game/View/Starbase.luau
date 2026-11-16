@@ -1230,6 +1230,11 @@ Starbase.TOWER = 0.28
 -- The weapons a battery may carry, of each kind. Which one a given
 -- battery has follows from the station's seed.
 local GUNS = { "artillery.large", "railgun.large", "laser.beam.large", "blaster.large", "laser.pulse.large", "autocannon.large" }
+-- (a people's tower's gun batteries carry its turret family's guns: Core/Tactical/Batteries)
+local FAMILY_GUNS: { [string]: { string } } = {
+  projectile = { "artillery.large", "autocannon.large" }, hybrid = { "railgun.large", "blaster.large" },
+  laser = { "laser.pulse.large", "laser.beam.large" },
+}
 -- Metres to one of a weapon drawing's units, on a battery.
 local BATTERY = 26
 
@@ -1283,6 +1288,7 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
   local type = Structures.towerById[makeup.tower :: string]
   local owner = faction or type.faction
   local towerRadius = radius * Starbase.TOWER
+  local guns = FAMILY_GUNS[type.gun] or GUNS
   local tower = Starbase.TowerPart(owner, type.size, vector.create(0, 0, 0), towerRadius)
   tower.id = type.id
   local layout: Layout = { tower = tower, modules = {}, field = if dark then 0 else radius }
@@ -1311,7 +1317,7 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
       local away = vector.normalize(vector.create(x, 0, z))
       table.insert(posts, {
         id = id, model = model.model, at = post, look = away, scale = module.radius / model.radius, radius = module.radius,
-        arm = if id == "battery.missile" then "launcher.cruise" else GUNS[math.floor(dice(seed + batteries * 3.7) * #GUNS) + 1],
+        arm = if id == "battery.missile" then "launcher.cruise" else guns[math.floor(dice(seed + batteries * 3.7) * #guns) + 1],
         unit = BATTERY,
       })
       continue
