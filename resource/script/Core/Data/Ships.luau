@@ -91,9 +91,15 @@ export type ShipType = {
   cargo: number,          -- m3
   -- Skills a pilot needs to board it. (Where absent, Data/Skills says.)
   requires: { { skill: string, level: number } }?,
-  -- Not sold on an ordinary market, and with no blueprint to be had
-  -- there: a pirate's hull, or an alien one.
+  -- Nobody's to own: what stands for a tower or a battery, a drone, a
+  -- tender. Not an item, and with no blueprint.
   restricted: boolean?,
+  -- An alien people's hull, or the pirates': an item, with a blueprint,
+  -- that no human market sells and nobody sells the blueprint of. Where
+  -- the blueprints are to be found is the owner's to say (2026-11-16:
+  -- "Once there are BPs for everything, we can decide where to seed
+  -- them"). Until 2026-11-16 these were 'restricted', and had neither.
+  foreign: boolean?,
   -- A pirate hull: the hull it was made out of.
   donor: string?,
   -- 2 for a tech 2 hull: the improved make of the hull 'base', which it
@@ -472,7 +478,9 @@ local function yardHull(yard: Factions.Faction, class: string, named: string, ro
     bay = if bulk < 1 then round(ULTRA_BAY * bulk) else nil,
     requires = if class == "barge" then { { skill = "mining", level = 4 }, { skill = "industrials", level = 1 } }
       else { { skill = s.skill, level = s.level } },
-    restricted = if yard.kind ~= "human" then true else nil,
+    foreign = if yard.kind ~= "human" then true else nil,
+    -- (and so not to be bought: its drawings are to be found, Data/Blueprints)
+    rare = if yard.kind ~= "human" then true else nil,
     donor = donor,
     role = role,
     rigs = if class == "freighter" then 0 else nil,
@@ -496,7 +504,7 @@ for _, yard in Factions.list do
           own = (own or 0) + count
         end
         local hull = yardHull(yard, named.class, named.name, named.role, own, named.guns, named.radius)
-        hull.jump, hull.stealth, hull.rare = named.jump, named.stealth, named.rare
+        hull.jump, hull.stealth, hull.rare = named.jump, named.stealth, named.rare or hull.rare
         -- (every plain hull of a people whose hulls all have a cloak of their own: the Drowned's)
         hull.cloak, hull.explorer = named.cloak or yard.cloaks, named.explorer
         hull.jumpField = named.jumpField
@@ -808,7 +816,9 @@ local function rebuiltHull(base: ShipType, id: string, name: string): ShipType
     -- (and it is whose its base is: an alien hull's tech 2 make is no
     -- more to be had on a human market than the hull is; and it mends as
     -- that does)
-    restricted = base.restricted, armorMend = base.armorMend, hullMend = base.hullMend,
+    restricted = base.restricted, foreign = base.foreign, armorMend = base.armorMend, hullMend = base.hullMend,
+    -- (and an alien people's is no more to be bought than its base is)
+    rare = if base.foreign then true else nil,
     -- (and it leans as its base does: the resonances it was made from have that in them)
     affinity = base.affinity,
   }

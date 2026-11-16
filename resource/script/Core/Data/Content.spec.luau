@@ -130,9 +130,12 @@ suite:Case("every faction has a hull of every class, and a bigger class is more 
           t.ok(hull.hull > hull.shield, hull.id)
         end
       end
-      -- only human designs are for sale
-      t.eq(Types.Get(hull.id) ~= nil, faction.kind == "human", hull.id)
-      t.eq(Blueprints.byProduct[hull.id] ~= nil, faction.kind == "human", hull.id)
+      -- every people's hull is an item with drawings; only human designs are for sale (an alien one, or a pirate's, is rare)
+      t.ok(Types.Get(hull.id) ~= nil and Blueprints.byProduct[hull.id] ~= nil, hull.id)
+      t.eq(hull.foreign == true, faction.kind ~= "human", hull.id)
+      if faction.kind ~= "human" then
+        t.ok(hull.rare and Blueprints.byProduct[hull.id].rare, hull.id)
+      end
     end
     t.ok(line[5].cargo > 10 * line[1].cargo, "an industrial carries far more than a frigate")
   end
@@ -225,8 +228,10 @@ suite:Case("the Nimia's ships are the owner's list of them: fourteen hulls of li
     local id = `{class}.{string.lower((string.gsub(name, "[^%a]", "")))}`
     local hull = assert(Ships.byId[id], `the Nimia have no {name}`)
     t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any }, { `Nimia {name}`, class, "nimia", RADIUS[class] } :: { any }, name)
-    -- An alien people's: nothing of theirs is on a human market, and nobody has the drawings.
-    t.eq({ hull.restricted, Types.Get(hull.id), Blueprints.byProduct[hull.id] } :: { any }, { true, nil, nil } :: { any }, name)
+    -- An alien people's: nothing of theirs is on a human market, and its drawings are to be found.
+    -- (since 2026-11-16 an item with drawings, which nobody sells: the owner's "create blueprints for the alien towers and ships")
+    t.ok(hull.foreign and not hull.restricted and hull.rare and Types.Get(hull.id) ~= nil, name)
+    t.ok(Blueprints.byProduct[hull.id] ~= nil and Blueprints.byProduct[hull.id].rare, name)
     -- No shield, and armour and hull that mend; more of both than a hull of its class has, to stand in for the shield.
     t.eq({ hull.shield, hull.armorMend, hull.hullMend } :: { any }, { 0, 0.004, 0.002 } :: { any }, name)
     t.eq(hull.launchers, 0, name)
@@ -293,8 +298,10 @@ suite:Case("the Vail's ships are the owner's list of them: seventeen hulls, two 
     local id = `{class}.{string.lower(name)}`
     local hull = assert(Ships.byId[id], `the Vail have no {name}`)
     t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any }, { `Vail {name}`, class, "vail", RADIUS[class] } :: { any }, name)
-    -- An alien people's: nothing of theirs is on a human market, and nobody has the drawings.
-    t.eq({ hull.restricted, Types.Get(hull.id), Blueprints.byProduct[hull.id] } :: { any }, { true, nil, nil } :: { any }, name)
+    -- An alien people's: nothing of theirs is on a human market, and its drawings are to be found.
+    -- (since 2026-11-16 an item with drawings, which nobody sells: the owner's "create blueprints for the alien towers and ships")
+    t.ok(hull.foreign and not hull.restricted and hull.rare and Types.Get(hull.id) ~= nil, name)
+    t.ok(Blueprints.byProduct[hull.id] ~= nil and Blueprints.byProduct[hull.id].rare, name)
     -- Their guns are all turrets, and their hulls have a shield (they are not the Nimia).
     t.eq(hull.launchers, 0, name)
     t.ok(hull.shield > 0 and hull.armorMend == nil, name)
@@ -382,7 +389,9 @@ suite:Case("the Drowned's ships are the owner's list of them: fifteen hulls, eve
     local hull = assert(Ships.byId[id], `the Drowned have no {name}`)
     t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any },
       { if string.sub(name, 1, 4) == "The " then name else `Drowned {name}`, class, "drowned", RADIUS[class] } :: { any }, name)
-    t.eq({ hull.restricted, Types.Get(hull.id), Blueprints.byProduct[hull.id] } :: { any }, { true, nil, nil } :: { any }, name)
+    -- (since 2026-11-16 an item with drawings, which nobody sells: the owner's "create blueprints for the alien towers and ships")
+    t.ok(hull.foreign and not hull.restricted and hull.rare and Types.Get(hull.id) ~= nil, name)
+    t.ok(Blueprints.byProduct[hull.id] ~= nil and Blueprints.byProduct[hull.id].rare, name)
     t.eq(hull.launchers, 0, name)
     if of then
       -- A tech 2 hull of theirs: "no builtin cloak. can fit jumpdrive".
@@ -688,8 +697,9 @@ suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in i
         t.ok(need.level >= 4 and need.level <= 5 and need.skill == plain[index].skill and need.level > plain[index].level, hull.id)
       end
       -- (An alien people's is no more a human's to buy or to build than the hull it comes of: the Nimia's Hano.)
-      if hull.restricted then
-        t.eq({ base.restricted, Types.Get(hull.id), Blueprints.byProduct[hull.id] } :: { any }, { true, nil, nil } :: { any }, hull.id)
+      if hull.foreign then
+        local found = assert(Blueprints.byProduct[hull.id], `no blueprint for {hull.id}`)
+        t.ok(base.foreign and found.rare and not found.invented and Types.Get(hull.id) ~= nil, hull.id)
         continue
       end
       -- No station has one to sell, nor its blueprint; it is built of the plain hull, components and what lawless space has.

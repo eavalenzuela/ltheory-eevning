@@ -48,8 +48,10 @@ suite:Case("hulls are set out by faction, frigate first", function(t)
       table.insert(headings, entry.header)
     end
   end
-  -- the four human factions, then the hulls that are nobody's design
-  t.eq(headings, { "Vessari", "Talmar", "Orun", "Kethri", "Civilian" })
+  -- every people in the order they are listed (the alien peoples' and the
+  -- pirates' are items since 2026-11-16, built from prints that are
+  -- found), then the hulls that are nobody's design
+  t.eq(headings, { "Vessari", "Talmar", "Orun", "Kethri", "Unbound", "Vail", "Nimia", "Drowned", "Civilian" })
 end)
 
 suite:Case("modules go by what they are, small before large", function(t)

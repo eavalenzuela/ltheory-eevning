@@ -14,6 +14,7 @@ the lines beginning `- ` under it.
   - its own defence is 15 points better against every kind of damage: armour for the Vessari, Orun and Nimia, shield for the Talmar and Vail, structure for the Unbound.
 - There are now Unbound, Nimia and Vail towers too. A people's tower is sold at its own stations; elsewhere a few are imported, at a higher price.
 - A tower's information sheet lists what its make is better at.
+- The Unbound's, the Nimia's, the Vail's and the Drowned's ships and towers now have blueprints. Nobody sells them yet.
 
 ## A new interface, and new station towers
 

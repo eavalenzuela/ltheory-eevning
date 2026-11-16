@@ -243,8 +243,7 @@ end
 for _, hull in Ships.list do
   local plain = if hull.tech == 2 and hull.base then Ships.byId[hull.base] else nil
   if hull.restricted then
-    -- (a pirate's hull, or an alien one, tech 2 or plain: nobody has
-    -- the drawings)
+    -- (nobody's to own: nobody has the drawings)
     continue
   elseif plain then
     -- A tech 2 hull is built of the plain one, and of what makes the
@@ -256,6 +255,12 @@ for _, hull in Ships.list do
     table.insert(blueprint.materials, 1, { type = plain.id, quantity = 1 })
     blueprint.basePrice = hull.basePrice * 10
     blueprint.invented = true
+    -- (an alien people's tech 2 hull, or the pirates', is not invented
+    -- by anybody else: its drawings are to be found, as the plain one's)
+    if hull.foreign then
+      blueprint.invented = nil
+      blueprint.rare = true
+    end
   elseif hull.class ~= "capsule" and not hull.restricted then
     -- (a freighter is as much metal as a battleship, and of the same kinds)
     local mix = if hull.class == "battleship" or hull.class == "freighter" or Ships.Capital(hull.class) then MIX.battleship
@@ -298,11 +303,12 @@ for _, part in Components.HULL do
 end
 local FUEL: { { any } } = { { "planet.isotopes", 0.5 }, { "planet.water", 0.3 }, { "planet.catalysts", 0.2 } }
 for _, tower in Structures.towers do
-  -- (an alien people's tower and the pirates' are not built from a
-  -- print, as their hulls are not: they are got where they are sold)
+  add(tower.id, tower.name, MIX.cruiser, tower.basePrice, 1, math.min(72000, 600 + tower.basePrice // 200), STRUCTURE)
+  -- (an alien people's tower and the pirates' have drawings nobody
+  -- sells, as their hulls have: where they are found is the owner's to say)
   local people = Factions.byId[tower.faction]
-  if people and people.kind == "human" then
-    add(tower.id, tower.name, MIX.cruiser, tower.basePrice, 1, math.min(72000, 600 + tower.basePrice // 200), STRUCTURE)
+  if people and people.kind ~= "human" then
+    Blueprints.byProduct[tower.id].rare = true
   end
 end
 for _, module in Structures.modules do

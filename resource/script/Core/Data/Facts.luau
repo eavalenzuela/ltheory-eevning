@@ -298,7 +298,11 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
   if hull.restricted then
     local to = section(sheet, "Trade")
     row(to, "Worth", `{whole(hull.basePrice)} cr`)
-    row(to, "Sold", "nowhere: not a hull the human factions sell or build")
+    row(to, "Sold", "nowhere: nobody's to own")
+  elseif hull.foreign then
+    local to = section(sheet, "Trade")
+    row(to, "Worth", `{whole(hull.basePrice)} cr`)
+    row(to, "Sold", "by no human market: built from drawings that have to be found")
   elseif hull.class ~= "capsule" then
     trade(sheet, hull.id)
   end
