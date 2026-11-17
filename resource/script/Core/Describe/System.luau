@@ -203,6 +203,17 @@ function System.Describe(galaxy: Galaxy.Galaxy, id: number): Description
         Rng.Float(rng, 600, 1400), field.id, ice.id)
       chunk.site = field.id
     end
+    -- (and rock among the ice: a few asteroids of ore, as a belt has,
+    -- the owner's word of 2026-11-17)
+    local rocks = 4 + Rng.Int(rng, 5)
+    for r = 1, rocks do
+      local along = start + Rng.Float(rng, -0.1, 0.7) * math.pi
+      local out = Rng.Float(rng, 10500, 19000)
+      local ore = Ores.Pick(Rng.Next(rng), wild)
+      local rock = add("asteroid", ore.name, x + out * math.cos(along), y + Rng.Float(rng, -4000, 4000), z + out * math.sin(along),
+        Rng.Float(rng, 150, 700), field.id, ore.id)
+      rock.site = field.id
+    end
   end
 
   assert(#objects < Constants.STRUCTURE_ID_SPAN, "a system has outgrown its id range")

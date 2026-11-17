@@ -30,7 +30,8 @@ ShaderInstance ShadingModel_FlatColor(Color const& color) {
 
 ShaderInstance ShadingModel_Fresnel(
   Generic<Texture2D> const& albedoMap,
-  Generic<Texture2D> const& normalMap)
+  Generic<Texture2D> const& normalMap,
+  V3 const& tint)
 {
   static Shader shader;
   if (!shader)
@@ -39,7 +40,8 @@ ShaderInstance ShadingModel_Fresnel(
   ShaderInstance instance = ShaderInstance_Create(shader);
   (*instance)
     ("albedoMap", albedoMap)
-    ("normalMap", normalMap);
+    ("normalMap", normalMap)
+    ("iceTint", tint);
   DrawState_Link(instance);
   return instance;
 }

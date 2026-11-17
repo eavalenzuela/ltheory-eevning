@@ -11,6 +11,8 @@ uniform mat4 WORLDIT;
 uniform sampler2D albedoMap;
 uniform sampler2D depthBuffer;
 uniform sampler2D normalMap;
+/* What the ice is tinted: white for plain ice (2026-11-17). */
+uniform vec3 iceTint;
 
 #include fdm.jsl
 
@@ -18,7 +20,7 @@ void main() {
   PREPASS
   EARLY_Z
 
-  vec3 c = vec3(1.0);
+  vec3 c = iceTint;
   vec3 bump = sampleFDMBumpmap(normalMap, vertposscaled / 512.0);
   vec3 n = normalize(normal);
 

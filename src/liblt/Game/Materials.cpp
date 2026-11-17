@@ -80,6 +80,26 @@ DefineFunction(Material_Ice) {
   return shader;
 }
 
+DefineFunction(Material_IceDeep) {
+  static ShaderInstance shader;
+  if (!shader) {
+    Generic<Texture2D> ice = Generator_LoadTexture2D(Location_Texture("ice.jpg"));
+    Generic<Texture2D> rock = Generator_LoadTexture2D(Location_Texture("rock.jpg"));
+    shader = ShadingModel_Fresnel(ice, Generator_NormalMap(rock), V3(0.22f, 0.42f, 0.95f));
+  }
+  return shader;
+}
+
+DefineFunction(Material_IcePale) {
+  static ShaderInstance shader;
+  if (!shader) {
+    Generic<Texture2D> ice = Generator_LoadTexture2D(Location_Texture("ice.jpg"));
+    Generic<Texture2D> rock = Generator_LoadTexture2D(Location_Texture("rock.jpg"));
+    shader = ShadingModel_Fresnel(ice, Generator_NormalMap(rock), V3(1.0f, 1.55f, 2.1f));
+  }
+  return shader;
+}
+
 DefineFunction(Material_Metal) {
   static ShaderInstance shader;
   if (!shader) {

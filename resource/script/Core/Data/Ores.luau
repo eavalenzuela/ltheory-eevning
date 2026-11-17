@@ -23,6 +23,10 @@ export type Ore = {
   -- hundred, and found in ice fields, not belts.
   batch: number?,
   ice: boolean?,
+  -- How a chunk of it looks (Game/View/Scene): "shard", sharp and pale
+  -- blue; "deep", soft and dark blue. (2026-11-17, the owner's two looks;
+  -- which ice has which is mine.)
+  look: string?,
 }
 
 local minerals: { Mineral } = {
@@ -78,12 +82,12 @@ local iceProducts: { Mineral } = {
   { id = "ice.salts", name = "Cryo Salts", volume = 0.1, basePrice = 200 },
 }
 local ices: { Ore } = {
-  { id = "ice.rime", name = "Rime Ice", volume = 50, basePrice = 2600, share = 0.7, batch = 1, ice = true,
+  { id = "ice.rime", name = "Rime Ice", volume = 50, basePrice = 2600, share = 0.7, batch = 1, ice = true, look = "shard",
     yields = { { mineral = "ice.heavywater", amount = 40 }, { mineral = "ice.oxygen", amount = 30 }, { mineral = "ice.salts", amount = 10 } } },
-  { id = "ice.glacial", name = "Glacial Ice", volume = 50, basePrice = 4400, share = 0.3, batch = 1, ice = true,
+  { id = "ice.glacial", name = "Glacial Ice", volume = 50, basePrice = 4400, share = 0.3, batch = 1, ice = true, look = "deep",
     yields = { { mineral = "ice.heavywater", amount = 30 }, { mineral = "ice.oxygen", amount = 50 }, { mineral = "ice.salts", amount = 25 } } },
   -- (only where nobody keeps order)
-  { id = "ice.dark", name = "Dark Ice", volume = 50, basePrice = 7400, share = 0, wild = 0.4, batch = 1, ice = true,
+  { id = "ice.dark", name = "Dark Ice", volume = 50, basePrice = 7400, share = 0, wild = 0.4, batch = 1, ice = true, look = "deep",
     yields = { { mineral = "ice.heavywater", amount = 20 }, { mineral = "ice.oxygen", amount = 40 }, { mineral = "ice.salts", amount = 60 } } },
 }
 

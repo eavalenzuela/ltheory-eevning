@@ -2,6 +2,7 @@
 #define ShadingModels_h__
 
 #include "LTE/Generic.h"
+#include "LTE/V3.h"
 
 LT_API ShaderInstance ShadingModel_Debug();
 
@@ -9,7 +10,8 @@ LT_API ShaderInstance ShadingModel_FlatColor(Color const& color);
 
 LT_API ShaderInstance ShadingModel_Fresnel(
   Generic<Texture2D> const& albedoMap,
-  Generic<Texture2D> const& normalMap);
+  Generic<Texture2D> const& normalMap,
+  V3 const& tint = V3(1));
 
 LT_API ShaderInstance ShadingModel_Lambert(
   Generic<Texture2D> const& albedoMap,

@@ -10,6 +10,11 @@ DeclareFunctionNoParams(Material_Grass, ShaderInstance)
 
 DeclareFunctionNoParams(Material_Ice, ShaderInstance)
 
+/* Ice of an ice field (2026-11-17): deep blue, and pale blue. */
+DeclareFunctionNoParams(Material_IceDeep, ShaderInstance)
+
+DeclareFunctionNoParams(Material_IcePale, ShaderInstance)
+
 DeclareFunctionNoParams(Material_Metal, ShaderInstance)
 
 DeclareFunctionNoParams(Material_Rock, ShaderInstance)

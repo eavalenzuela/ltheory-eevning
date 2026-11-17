@@ -788,10 +788,11 @@ local function makeStatic(object: SystemData.Object): Object
   if object.kind == "asteroid" then
     -- (An asteroid cannot be named: the engine object has no such part.)
     made = Object_Asteroid(object.seed)
-    -- (a chunk of an ice field is ice to look at: the engine's own ice,
-    -- smoother and frosted, in place of rock. 2026-11-17)
+    -- (a chunk of an ice field is ice to look at, in place of rock: soft
+    -- and deep blue, or sharp and pale blue, by its ice. 2026-11-17)
     if Ores.Ice(object.variety) then
-      Object_SetRenderable(made, Renderable_Ice(object.seed))
+      Object_SetRenderable(made, if Ores.byId[object.variety].look == "shard" then Renderable_IceShard(object.seed)
+        else Renderable_IceDeep(object.seed))
     end
     made:SetScale(vector.create(object.radius, object.radius, object.radius))
   elseif object.kind == "wormhole" then

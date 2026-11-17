@@ -10,6 +10,14 @@ DeclareFunctionArgBind(Renderable_Asteroid, Renderable,
 DeclareFunctionArgBind(Renderable_Ice, Renderable,
   uint, seed)
 
+/* A chunk of an ice field (2026-11-17): soft and rounded, deep blue; and
+   sharp and faceted, pale blue. */
+DeclareFunctionArgBind(Renderable_IceDeep, Renderable,
+  uint, seed)
+
+DeclareFunctionArgBind(Renderable_IceShard, Renderable,
+  uint, seed)
+
 DeclareFunctionArgBind(Renderable_Imposter, Renderable,
   Renderable, source)
 
