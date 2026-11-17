@@ -11,6 +11,13 @@
   script/hulls sizes  SEED [PAINT] [STYLE]     one seed at each of the eight sizes
   script/hulls paints SEED [SIZE] [STYLE]      one seed in every paint
   script/hulls styles SEED [SIZE] [PAINT] [CLASS]   one seed in every style
+  script/hulls named HULL... [DETAIL...] [both]
+        hulls of resource/hull/seeds.txt by name (cruiser.ouyou), each
+        built as its line has it; with DETAIL words, with that surface
+        detail; with "both", each as its line has it and then with it;
+        with a PAINT, in that paint; with "near", from closer
+DETAIL is any of antennas, pipes, greebles, lights and rivets: the
+hull's surface detail (Game/View/Hull, Hull.DETAILS).
 
 The numbers come first and in that order; the words after them, in any
 order. The word "above" among them takes every picture from straight
@@ -56,6 +63,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
+DETAILS = ["antennas", "pipes", "greebles", "lights", "rivets"]
 PAINTS = ["bare", "civil", "vessari", "talmar", "kethri", "vail", "unbound"]
 CLASSES = ["frigate", "destroyer", "cruiser", "battleship", "attackbattlecruiser", "battlecruiser", "capitalindustrial",
            "siegedreadnought", "carrier", "dreadnought", "supercarrier", "industrial", "barge", "freighter"]
@@ -97,14 +105,19 @@ def main():
     if not args or args[0] in ("-h", "--help", "help"):
         usage()
     kind, rest = args[0], args[1:]
-    if kind not in ("seeds", "broad", "sizes", "paints", "styles"):
-        usage(f"'{kind}' is not seeds, broad, sizes, paints or styles")
+    if kind not in ("seeds", "broad", "sizes", "paints", "styles", "named"):
+        usage(f"'{kind}' is not seeds, broad, sizes, paints, styles or named")
     numbers, colour, shown, style = [], None, None, None
     above = "above" in rest
     asym = "asym" in rest
     # (a cel look: Cel V1 or Cel V2, as the game's Look option draws them)
     look = "cel2" if "cel2" in rest else "cel1" if "cel1" in rest else None
-    rest = [word for word in rest if word not in ("above", "asym", "cel1", "cel2")]
+    both = "both" in rest
+    near = "near" in rest
+    details = [word for word in DETAILS if word in rest]
+    rest = [word for word in rest if word not in ("above", "asym", "cel1", "cel2", "both", "near") and word not in DETAILS]
+    hulls = [word for word in rest if "." in word] if kind == "named" else []
+    rest = [word for word in rest if word not in hulls]
     for word in rest:
         if word.isdigit():
             if colour or shown or style:
@@ -132,11 +145,22 @@ def main():
     def grown_as(each):
         return (each or "old") + ASYM if asym else each
     os.makedirs(TAKEN, exist_ok=True)
-    how = (f", {style}" if style and kind != "styles" else "") + (", sides unalike" if asym else "") + (f", as a {shown}" if shown else "") + (", from above" if above else "") + (f", {look}" if look else "")
-    tag = (f"-{style}" if style and kind != "styles" else "") + ("-asym" if asym else "") + (f"-{shown}" if shown else "") + ("-above" if above else "") + (f"-{look}" if look else "")
+    how = (f", detail: {' '.join(details)}" if details else "") + (f", {style}" if style and kind != "styles" else "") + (", sides unalike" if asym else "") + (f", as a {shown}" if shown else "") + (", from above" if above else "") + (f", {look}" if look else "")
+    tag = ("-" + "-".join(details) if details else "") + (f"-{style}" if style and kind != "styles" else "") + ("-asym" if asym else "") + (f"-{shown}" if shown else "") + ("-above" if above else "") + (f"-{look}" if look else "")
     paint = colour or "bare"
     # (each picture: its seed, its size, its paint, its style, and what is written on it)
-    if kind in ("seeds", "broad"):
+    if kind == "named":
+        if not hulls:
+            usage("named wants the names of hulls, as cruiser.ouyou")
+        shots = []
+        for hull in hulls:
+            if both or not details:
+                shots.append((hull, None, None, None, hull))
+            if details:
+                shots.append((hull, None, None, "detail", f"{hull}: {' '.join(details)}"))
+        title = f"Hulls of the list{how}"
+        name = f"named-{'-'.join(h.split('.')[-1] for h in hulls)[:80]}{tag}"
+    elif kind in ("seeds", "broad"):
         first = number(0, 1, 0, 10 ** 9, "the first seed")
         count = number(1, 40, 1, 400, "how many")
         size = number(2, 2, 1, 8, "the size")
@@ -185,7 +209,17 @@ def main():
         files.append(os.path.join(TAKEN, file + ".png"))
         if os.path.exists(files[-1]):
             os.remove(files[-1])
-        lines += [f"lua assert(Hulls.Show({seed}, {size}, '{each}', {lua(shown)}, {lua(grown_as(grown))}))"]
+        if kind == "named":
+            lines += [f"lua print('FOUND', Hulls.Find('{seed}'))"]
+            if colour:
+                lines += [f"lua assert(Hulls.Paint('{colour}'))"]
+            if grown == "detail":
+                lines += [f"lua Hulls.Detail('{' '.join(details)}')"]
+            lines += ["lua Hulls.Still()"]
+            if near:
+                lines += ["lua Hulls.Look(0.09, 0.07, 1.15)"]
+        else:
+            lines += [f"lua assert(Hulls.Show({seed}, {size}, '{each}', {lua(shown)}, {lua(grown_as(grown))}, {lua(' '.join(details) if details else None)}))"]
         if above:
             # (a quarter of the way round, so that the bow is to the right, and as nearly over it as the browser looks)
             lines += ["lua Hulls.Look(0.25, 0.238, 2.6)"]

@@ -31,7 +31,17 @@
 --                  The engines go on the ends the hull has astern and
 --                  the guns where the game's rule of hardpoints lets
 --                  them (Hull.GrownShip); it says so if there is no room
+--   1 to 5         surface detail, each kind on or off (Hull.DETAILS):
+--                  antennas, pipes, greebles, lights, rivets
+--   the search box (top right; click it, type, Return): a seed, to go
+--                  to it; or a hull's name, or part of one (owari,
+--                  cruiser.ouyou), to build it again as
+--                  resource/hull/seeds.txt has it: its seed, size,
+--                  style and detail, as a ship of its class, painted if
+--                  its line says so. Return again goes to the next hull
+--                  the words fit.
 --   K              keep this one: its line goes in cache/hulls-kept.txt
+--                  (for a hull found by name, as a line of seeds.txt)
 --   Space          stop it turning, or start it
 --   right-drag turns it, the wheel moves in and out
 --
@@ -47,6 +57,7 @@ local Generate = require("@lt/Item/ShipType/Generate")
 local Hull = require("@lt/Game/View/Hull")
 local Im = require("@lt/Game/UI/Im")
 local SceneView = require("@lt/SceneView")
+local Ships = require("@lt/Core/Data/Ships")
 
 -- How big a hull is drawn, whatever it is.
 local RADIUS = 1000
@@ -134,6 +145,24 @@ return AppShell.Create(function(): Widget
   local plain = false       -- nothing written over the picture (a script's sheet)
   local broad = false       -- only broad hulls are stepped to
   local note = ""           -- what was last kept
+  -- Which kinds of surface detail are on (Hull.DETAILS), and as words.
+  local detail: { [string]: boolean } = {}
+  local function detailWords(): string
+    local words: { string } = {}
+    for _, kind in Hull.DETAILS do
+      if detail[kind] then
+        table.insert(words, kind)
+      end
+    end
+    return table.concat(words, " ")
+  end
+  local function detailOf(): Hull.Detail?
+    return Hull.DetailOf(string.split(detailWords(), " "))
+  end
+  local query = ""          -- what is in the search box
+  local found = 0           -- which of the hulls it fits was gone to last
+  local lastSearch = ""     -- and for which words
+  local listed: Hull.SeedLine? = nil   -- the hull of the list gone to by name, while it is what is shown
   local models: { [string]: Renderable | Model } = {}
 
   local ships: { [string]: Hull.Built } = {}
@@ -143,7 +172,7 @@ return AppShell.Create(function(): Widget
   -- with its engines let into it and seats for its guns where it needs
   -- them.)
   local function ship(as: Class): (Hull.Built?, string)
-    local name = `{seed}:{size}:{paint}:{style}:{asym}:{as.name}`
+    local name = `{seed}:{size}:{paint}:{style}:{asym}:{as.name}:{detailWords()}`
     local had = ships[name]
     if had then
       return had, ""
@@ -156,7 +185,7 @@ return AppShell.Create(function(): Widget
       table.insert(fit, as.launcher)
     end
     local built, why = Hull.GrownShip(seed, stepsOf(size), decksOf(size), PAINTS[paint],
-      as.metres, fit, as.turrets, as.launchers, as.engines, named())
+      as.metres, fit, as.turrets, as.launchers, as.engines, named(), detailOf())
     if built then
       ships[name] = built
     end
@@ -164,6 +193,10 @@ return AppShell.Create(function(): Widget
   end
 
   local function make(): Renderable | Model
+    local wanted = detailOf()
+    if wanted then
+      return Hull.Grown(seed, stepsOf(size), decksOf(size), PAINTS[paint], named(), wanted).model
+    end
     if PAINTS[paint] == "bare" then
       -- (the generator's own model, where the style is its own)
       return if style == 1 and not asym then Generate.Main(SIZES[size], seed) else Hull.GrownBare(seed, stepsOf(size), decksOf(size), named())
@@ -172,7 +205,7 @@ return AppShell.Create(function(): Widget
   end
 
   local function show()
-    local now = `{seed}:{size}:{paint}:{style}:{asym}:{class}`
+    local now = `{seed}:{size}:{paint}:{style}:{asym}:{class}:{detailWords()}`
     if now == key then
       return
     end
@@ -198,7 +231,7 @@ return AppShell.Create(function(): Widget
         else `as a {as.name}: no room ({why})`
     end
     dim = PAINTS[paint] == "bare"
-    local plain = `{seed}:{size}:{paint}:{style}:{asym}`
+    local plain = `{seed}:{size}:{paint}:{style}:{asym}:{detailWords()}`
     local model: Renderable | Model = if built then built.model else models[plain] or make()
     if built == nil then
       models[plain] = model
@@ -297,20 +330,106 @@ return AppShell.Create(function(): Widget
       had = text
     end
     local as: Class? = CLASSES[class]
+    local words = detailWords()
     local line = `seed {seed}  size {size}  ({stepsOf(size)} plates{if decksOf(size) then ", decks" else ""})  style {named()}  paint {PAINTS[paint]}`
+      .. (if words ~= "" then `  detail {words}` else "")
     if as then
       line ..= `  {fitted}`
+    end
+    -- (a hull of the list, as its line of resource/hull/seeds.txt would be now)
+    local was = listed
+    if was then
+      local parts = { was.name, tostring(seed), tostring(size) }
+      if style ~= 1 or asym then
+        table.insert(parts, named())
+      end
+      if was.painted then
+        table.insert(parts, "painted")
+      end
+      if words ~= "" then
+        table.insert(parts, words)
+      end
+      line = table.concat(parts, " ")
     end
     File_Write(KEPT, had .. line .. "\n")
     note = `kept: {line}  (in {KEPT})`
   end
 
+  -- Go to what the search box says: a seed, or the next hull of the
+  -- list whose name the words are part of, built as its line has it.
+  local function search(words: string)
+    local text = string.lower(string.match(words, "^%s*(.-)%s*$") or "")
+    if text == "" then
+      return
+    end
+    local number = tonumber(text)
+    if number then
+      seed = math.max(0, math.floor(number))
+      listed = nil
+      note = `seed {seed}`
+      return
+    end
+    local fits: { Hull.SeedLine } = {}
+    for _, line in Hull.SEEDED do
+      if string.find(string.lower(line.name), text, 1, true) then
+        table.insert(fits, line)
+      end
+    end
+    -- (a whole name is that hull alone)
+    for _, line in fits do
+      if string.lower(line.name) == text then
+        fits = { line }
+        break
+      end
+    end
+    if #fits == 0 then
+      note = `no hull of {Hull.SEEDS} is called anything like '{text}'`
+      return
+    end
+    if text ~= lastSearch then
+      found, lastSearch = 0, text
+    end
+    found = found % #fits + 1
+    local line = fits[found]
+    seed, size = line.seed, math.clamp(line.size, 1, #SIZES)
+    -- (its style, and whether its sides are unalike)
+    local wanted = line.style or STYLES[1].name
+    local lop = #wanted > #Hull.ASYM and string.sub(wanted, -#Hull.ASYM) == Hull.ASYM
+    local base = if lop then string.sub(wanted, 1, #wanted - #Hull.ASYM) else wanted
+    style, asym = 1, lop
+    for index, known in STYLES do
+      if known.name == base then
+        style = index
+      end
+    end
+    -- (as a ship of its class; painted as its people's, if its line says painted)
+    local hull = Ships.byId[line.name]
+    class = 0
+    for index, known in CLASSES do
+      if hull and known.name == hull.class then
+        class = index
+      end
+    end
+    paint = 1
+    if line.painted then
+      paint = table.find(PAINTS, if hull then hull.lineage else "civil") or table.find(PAINTS, "civil") or 1
+    end
+    table.clear(detail)
+    for _, kind in line.detail do
+      detail[kind] = true
+    end
+    listed = line
+    note = `{line.name} ({found} of {#fits} that fit '{text}'): seed {line.seed}, size {line.size}{if line.style then ", " .. line.style else ""}`
+      .. (if line.painted then ", painted" else "") .. (if #line.detail > 0 then ", " .. table.concat(line.detail, " ") else "")
+  end
+
   _G.Hulls = {
     -- Show a hull, still, from the bow quarter: its seed, its size (1 to
     -- 8), its paint's name, the name of a class to show it as a ship of
-    -- (or nil), and its style's name (the generator's own, if not said).
+    -- (or nil), its style's name (the generator's own, if not said), and
+    -- the kinds of surface detail it has, as words ("antennas lights").
     -- False if there is no such size, paint, class or style.
-    Show = function(toSeed: number, toSize: number?, toPaint: string?, toClass: string?, toStyle: string?): boolean
+    Show = function(toSeed: number, toSize: number?, toPaint: string?, toClass: string?, toStyle: string?, toDetail: string?): boolean
       local at = table.find(PAINTS, toPaint or PAINTS[paint])
       local big = toSize or size
       local as = 0
@@ -332,10 +451,50 @@ return AppShell.Create(function(): Widget
         return false
       end
       seed, size, paint, class, style, asym = math.floor(toSeed), big, at, as, how, lop
+      table.clear(detail)
+      for word in string.gmatch(toDetail or "", "%a+") do
+        if table.find(Hull.DETAILS, word) then
+          detail[word] = true
+        end
+      end
+      listed = nil
       turning, plain = false, true
       turn, tilt, zoom, zoomTo = TURN, TILT, ZOOM, ZOOM
       show()
       return true
+    end,
+    -- Go to what the search box would: a seed, or a hull of the list by
+    -- name. What it says of it.
+    Find = function(words: string): string
+      search(words)
+      show()
+      return note
+    end,
+    -- The kinds of surface detail on what is shown, as words (none: "").
+    Detail = function(words: string)
+      table.clear(detail)
+      for word in string.gmatch(words, "%a+") do
+        if table.find(Hull.DETAILS, word) then
+          detail[word] = true
+        end
+      end
+      show()
+    end,
+    -- Show it in another paint (one of the browser's: bare, civil, a
+    -- people's). False if there is no such paint.
+    Paint = function(name: string): boolean
+      local at = table.find(PAINTS, name)
+      if at == nil then
+        return false
+      end
+      paint = at
+      show()
+      return true
+    end,
+    -- Hold it still, from the bow quarter, with nothing written over it.
+    Still = function()
+      turning, plain = false, true
+      turn, tilt, zoom, zoomTo = TURN, TILT, ZOOM, ZOOM
     end,
     -- What is shown: its seed, its size, its paint, how many plates
     -- the generator grew for it, how wide it is for its length, and
@@ -402,15 +561,38 @@ return AppShell.Create(function(): Widget
       if fitted ~= "" then
         Im.Text(fitted, x, y + 64, 16, if string.find(fitted, "no room", 1, true) then Im.WARN else Im.TEXT)
       end
+      local on: { string } = {}
+      for index, kind in Hull.DETAILS do
+        table.insert(on, `{index} {kind}: {if detail[kind] then "ON" else "off"}`)
+      end
+      Im.Text("detail      " .. table.concat(on, "      "), x, y + 90, 16, if detailWords() ~= "" then Im.ACCENT else Im.DIM)
       if note ~= "" then
-        Im.Text(note, x, y + 90, 14, Im.ACCENT)
+        Im.Text(note, x, y + 116, 14, Im.ACCENT)
+      end
+      -- (the search box: a seed, or a hull of the list by name)
+      local wide = 320
+      local was = Im.Typing()
+      query = Im.Words("hulls:search", query, w.pos.x + w.size.x - wide - 24, y, wide, 32, 40, "seed, or a hull's name: Return")
+      if was and not Im.Typing() and Key_Pressed(Key_Return()) then
+        search(query)
       end
       local foot = w.pos.y + w.size.y - 54
-      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      B: broad only      [ / ]: size      S: style      A: sides alike or not      P: paint      F: as a ship      K: keep      Space: turn",
+      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      B: broad only      [ / ]: size      S: style      A: sides alike or not      P: paint      F: as a ship      1-5: detail      K: keep      Space: turn",
         x, foot, 15, Im.DIM)
       Im.Text("right-drag turns it, the wheel moves in and out", x, foot + 22, 15, Im.DIM)
     end,
     PostUpdate = function(_, w: Widget)
+      -- (nothing is a key while the search box is being typed in)
+      if Im.Typing() then
+        show()
+        return
+      end
+      for index, key in { Key_N1(), Key_N2(), Key_N3(), Key_N4(), Key_N5() } do
+        if Key_Pressed(key) then
+          local kind = Hull.DETAILS[index]
+          detail[kind] = not detail[kind]
+        end
+      end
       if Key_Pressed(Key_B()) then
         broad = not broad
         step(0)

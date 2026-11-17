@@ -609,7 +609,7 @@ end
 -- same on both sides.) 'warps' are the style's, with where this hull's
 -- own stern and bow are.
 type Plate = { center: vector, size: vector, part: number, single: boolean? }
-type Growth = { plates: { Plate }, middle: vector, across: vector, style: Style, warps: Warps }
+type Growth = { plates: { Plate }, middle: vector, across: vector, style: Style, warps: Warps, seed: number }
 
 local function growth(seed: number, steps: number, decks: boolean, style: Style): Growth
   local rng = RNG_MTG(Int.Signed(seed + 102))
@@ -945,7 +945,7 @@ local function growth(seed: number, steps: number, decks: boolean, style: Style)
       end
     end
   end
-  return { plates = plates, middle = (low + high) / 2, across = high - low, style = style, warps = warps }
+  return { plates = plates, middle = (low + high) / 2, across = high - low, style = style, warps = warps, seed = seed }
 end
 
 -- A hull as the generator grew one: its plates, and its bend about
@@ -2456,7 +2456,10 @@ type End = { at: vector, wide: number, high: number, both: boolean }
 -- A seat: a low block let into the hull for a mount to stand on, where
 -- no face of the hull is flat enough to take the whole foot of one.
 type Seat = { center: vector, half: vector }
-type Ship = { growth: Growth, ends: { End }, turrets: { Hardpoint }, launchers: { Hardpoint }, seats: { Seat } }
+-- ('clear': where its mounts stand, as the hull is before its bend, and
+-- 'reach' how far a foot reaches: its surface detail keeps off them.)
+type Ship = { growth: Growth, ends: { End }, turrets: { Hardpoint }, launchers: { Hardpoint }, seats: { Seat }, clear: { vector },
+  reach: number }
 
 -- Every plate of a growth and its twin, as boxes.
 local function boxesOf(g: Growth): { Box }
@@ -2751,7 +2754,7 @@ end
 local function shipOf(g: Growth, metres: number, fit: { string }, turrets: number, launchers: number, engines: number): (Ship?, string)
   local boxes = boxesOf(g)
   local bend = warped(g.warps, g.middle)
-  local ship: Ship = { growth = g, ends = endsOf(boxes, engines), turrets = {}, launchers = {}, seats = {} }
+  local ship: Ship = { growth = g, ends = endsOf(boxes, engines), turrets = {}, launchers = {}, seats = {}, clear = {}, reach = 0 }
   local wanted = turrets + launchers
   if wanted == 0 then
     return ship, ""
@@ -2896,12 +2899,394 @@ local function shipOf(g: Growth, metres: number, fit: { string }, turrets: numbe
     if stand.seat then
       table.insert(ship.seats, stand.seat)
     end
+    table.insert(ship.clear, stand.at)
   end
+  ship.reach = reach / GROWN
   for index, point in points :: { Hardpoint } do
     local list: { Hardpoint } = if index <= turrets then ship.turrets else ship.launchers
     table.insert(list, point)
   end
   return ship, ""
+end
+
+-- ---------------------------------------------------------------------
+-- Surface detail on a grown hull (B1 on the roadmap; the project
+-- owner's answers of 2026-11-17): what is laid over the hull's own
+-- plates and changes nothing of its shape or its hardpoints, each kind
+-- switched on hull by hull (resource/hull/seeds.txt; the hull browser,
+-- App/hulls). Antennas, which always stand straight out of the face
+-- they are on ("90 degrees from the face"); pipes and conduits along
+-- the faces; greebles (boxes, vents and fins); lights (running lights
+-- red to port and green to starboard, white at the bow, stern and
+-- masthead, and rows of lit windows on the bigger hulls); and rivets
+-- and finer panel lines over the sheets of plating, which are the
+-- shader's (material/hull.jsl). The rest are plates like any other, and
+-- are bent with the hull. By dice of the hull's own seed: a hull is
+-- always detailed the same way. Every figure and size here is mine.
+
+export type Detail = { antennas: boolean?, pipes: boolean?, greebles: boolean?, lights: boolean?, rivets: boolean? }
+-- The kinds, in the order the hull browser's number keys switch them.
+Hull.DETAILS = { "antennas", "pipes", "greebles", "lights", "rivets" }
+
+local LAMP_RED, LAMP_GREEN, LAMP_WHITE = Plates.LAMP_RED, Plates.LAMP_GREEN, Plates.LAMP_WHITE
+local BOW, STERN = v(0, 0, 1), v(0, 0, -1)
+
+-- The half-size of a box that stands 'along' out of a face whose normal
+-- is 'n' (one of the six ways) and is 'one' and 'other' across it (in
+-- the face's first and second ways, as faceWays has them).
+local function faceWays(n: vector): (vector, vector)
+  if n.x ~= 0 then
+    return v(0, 0, 1), v(0, 1, 0)
+  elseif n.y ~= 0 then
+    return v(0, 0, 1), v(1, 0, 0)
+  end
+  return v(1, 0, 0), v(0, 1, 0)
+end
+
+local function standing(n: vector, along: number, one: number, other: number): vector
+  local a, b2 = faceWays(n)
+  local out = v(math.abs(n.x), math.abs(n.y), math.abs(n.z))
+  return out * along + a * one + b2 * other
+end
+
+-- A face of a plate: where its middle is, its normal, how far it reaches
+-- each of its two ways, and whether it is drawn with its twin.
+type Face = { at: vector, n: vector, h1: number, h2: number, twin: boolean }
+
+local function detailed(b: Builder, ship: Ship, detail: Detail, metres: number)
+  local g = ship.growth
+  local boxes = boxesOf(g)
+  for _, seat in ship.seats do
+    table.insert(boxes, { center = seat.center, size = seat.half, part = PLATING })
+  end
+  local rng = RNG_MTG(Int.Signed(g.seed + 9301))
+  -- How big the hull is, in the generator's units, and what a detail's
+  -- sizes are taken from: a bigger ship's are a little finer, and more.
+  local R = math.max(g.across.x, g.across.y, g.across.z) / 2 / GROWN
+  local u = R * math.clamp((150 / math.max(metres, 1)) ^ 0.2, 0.6, 1.25)
+  local more = math.clamp((metres / 150) ^ 0.5, 0.7, 2.5)
+  local EPS = 0.004 * R
+
+  -- (whether a point is in the hull: in a plate, a hair in from its faces)
+  local function inside(p: vector): boolean
+    for _, box in boxes do
+      local d = p - box.center
+      if math.abs(d.x) < box.size.x - 1e-4 and math.abs(d.y) < box.size.y - 1e-4 and math.abs(d.z) < box.size.z - 1e-4 then
+        return true
+      end
+    end
+    return false
+  end
+  -- (and whether it is clear of the mounts and the engines)
+  local function clearOf(p: vector, room: number): boolean
+    local keep = ship.reach * 1.6 + room
+    for _, at in ship.clear do
+      if vector.magnitude(p - at) < keep then
+        return false
+      end
+    end
+    for _, place in ship.ends do
+      local xs: { number } = if place.both then { place.at.x, -place.at.x } else { place.at.x }
+      for _, x in xs do
+        if math.abs(p.x - x) < place.wide * 1.4 + room and math.abs(p.y - place.at.y) < place.high * 1.4 + room
+          and p.z < place.at.z + 0.6 + room then
+          return false
+        end
+      end
+    end
+    return true
+  end
+  -- Whether something standing 'tall' out of a face at 'p', 'w1' by
+  -- 'w2' across it, has the face under all of it and nothing of the
+  -- hull in its way.
+  local function fits(p: vector, n: vector, w1: number, w2: number, tall: number): boolean
+    local a, c = faceWays(n)
+    for _, corner in { { 0, 0 }, { 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 } } do
+      local q = p + a * (corner[1] * w1) + c * (corner[2] * w2)
+      if not inside(q - n * EPS) then
+        return false
+      end
+      for _, up in { 1, 0.5, 0.25, 0.08 } do
+        if inside(q + n * math.max(EPS, tall * up)) then
+          return false
+        end
+      end
+    end
+    return clearOf(p, math.max(w1, w2))
+  end
+
+  -- The faces there are to put things on: of every plate that is not
+  -- slight structure or lit, each of its faces that looks out of the
+  -- hull (for a plate drawn with its twin, the twin's are its own,
+  -- mirrored).
+  local faces: { Face } = {}
+  for _, plate in g.plates do
+    if plate.part ~= FRAME and plate.part ~= GLOW then
+      local side = if plate.single and plate.center.x < 0 then -1 else 1
+      for _, n in { UP, DOWN, STARBOARD * side, BOW, STERN } do
+        local a, c = faceWays(n)
+        local out = v(math.abs(n.x), math.abs(n.y), math.abs(n.z))
+        local at = plate.center + n * vector.dot(plate.size, out)
+        local h1, h2 = vector.dot(plate.size, a), vector.dot(plate.size, c)
+        if h1 > 2 * EPS and h2 > 2 * EPS and not inside(at + n * EPS) then
+          table.insert(faces, { at = at, n = n, h1 = h1, h2 = h2, twin = not plate.single })
+        end
+      end
+    end
+  end
+  if #faces == 0 then
+    return
+  end
+  -- (a place on a face, by the dice: within the middle of it, clear of its eased edges)
+  local function spot(face: Face): vector
+    local a, c = faceWays(face.n)
+    return face.at + a * (face.h1 * rng:Float(-0.72, 0.72)) + c * (face.h2 * rng:Float(-0.72, 0.72))
+  end
+  -- (a face by the dice, the bigger likelier; one looking one of 'ways', if they are named)
+  local function pick(ways: { vector }?): Face?
+    local total = 0
+    local good: { Face } = {}
+    for _, face in faces do
+      local ok = ways == nil
+      if ways then
+        for _, way in ways do
+          if face.n == way or (way == STARBOARD and face.n == PORT) then
+            ok = true
+          end
+        end
+      end
+      if ok then
+        table.insert(good, face)
+        total += face.h1 * face.h2
+      end
+    end
+    if #good == 0 then
+      return nil
+    end
+    local roll = rng:Float(0, total)
+    for _, face in good do
+      roll -= face.h1 * face.h2
+      if roll <= 0 then
+        return face
+      end
+    end
+    return good[#good]
+  end
+  -- Put a box in: with its twin on the other side, where its face has one.
+  local function put(face: Face, part: number, center: vector, half: vector, bevel: number?)
+    if face.twin and center.x > 1e-3 then
+      twin(b, part, center, half, bevel)
+    else
+      mid(b, part, center, half, bevel)
+    end
+  end
+
+  -- Antennas: a mast straight out of its face, on a foot, and now and
+  -- then a crossbar, a pod or a second mast beside it; a lamp on top.
+  if detail.antennas then
+    local count = math.floor(rng:Int(2, 6) * more + 0.5)
+    for _ = 1, count do
+      local face = pick({ UP, UP, STARBOARD, DOWN, BOW })
+      if face then
+        for _ = 1, 8 do
+          local p = spot(face)
+          local n = face.n
+          local tall = u * rng:Float(0.07, 0.2) * (if n == UP then 1.2 else 0.8)
+          local thin = math.max(u * 0.0045, tall * 0.025)
+          if fits(p, n, thin * 3, thin * 3, tall) then
+            put(face, PATCH, p + n * (thin * 0.6), standing(n, thin * 0.6, thin * 3, thin * 3), 0.3)
+            put(face, FRAME, p + n * (tall / 2), standing(n, tall / 2, thin, thin), 0.2)
+            local kind = rng:Int(4)
+            local a, c = faceWays(n)
+            if kind == 1 then
+              put(face, FRAME, p + n * (tall * 0.78), standing(n, thin * 0.8, tall * 0.18, thin * 0.8), 0.2)
+            elseif kind == 2 then
+              put(face, PATCH, p + n * (tall * 0.82), standing(n, tall * 0.07, thin * 3.2, thin * 2.2), 0.3)
+            elseif kind == 3 then
+              local beside = p + c * (tall * 0.09)
+              if fits(beside, n, thin * 2, thin * 2, tall * 0.7) then
+                put(face, FRAME, beside + n * (tall * 0.35), standing(n, tall * 0.35, thin, thin), 0.2)
+              end
+            end
+            if detail.lights then
+              put(face, if n == UP and rng:Int(2) == 0 then LAMP_RED else LAMP_WHITE, p + n * (tall + thin), v(thin, thin, thin) * 1.5, 0.5)
+            end
+            local _ = a
+            break
+          end
+        end
+      end
+    end
+  end
+
+  -- Pipes and conduits: runs of one to three pipes along a face, the
+  -- long way of it, with clamps over them; never over a gap.
+  if detail.pipes then
+    local count = math.floor(rng:Int(4, 9) * more + 0.5)
+    for _ = 1, count do
+      local face = pick({ UP, STARBOARD, STARBOARD, DOWN })
+      if face then
+        local a, c = faceWays(face.n)
+        local long, across, hl, ha = a, c, face.h1, face.h2
+        if face.h2 > face.h1 then
+          long, across, hl, ha = c, a, face.h2, face.h1
+        end
+        local r = u * rng:Float(0.006, 0.011)
+        local length = hl * rng:Float(0.45, 0.9)
+        local start = rng:Float(-hl * 0.85 + length, hl * 0.85) - length
+        local offset = ha * rng:Float(-0.6, 0.6)
+        local runs = rng:Int(1, 3)
+        local good = true
+        local function at(t: number, k: number): vector
+          return face.at + long * (start + t) + across * (offset + k * r * 2.7)
+        end
+        for k = 0, runs - 1 do
+          for step = 0, 8 do
+            local q = at(length * step / 8, k)
+            if not inside(q - face.n * EPS) or inside(q + face.n * (r * 2.2)) or not clearOf(q, r) then
+              good = false
+            end
+          end
+        end
+        if good and length > r * 8 then
+          for k = 0, runs - 1 do
+            local middle = at(length / 2, k)
+            local half = long * (length / 2) + across * r + face.n * r
+            put(face, FRAME, middle + face.n * (r * 1.05), half, 0.9)
+          end
+          -- (the clamps: across all the run, every so far along it)
+          local clamps = math.max(2, math.floor(length / (r * 14)))
+          for index = 0, clamps do
+            local t = length * (0.04 + 0.92 * index / clamps)
+            local middle = (at(t, 0) + at(t, runs - 1)) / 2
+            local half = long * (r * 0.55) + across * (r * (runs - 1) * 1.35 + r * 1.5) + face.n * (r * 1.4)
+            put(face, PATCH, middle + face.n * (r * 1.3), half, 0.3)
+          end
+        end
+      end
+    end
+  end
+
+  -- Greebles: clusters of small boxes on a face, now and then a vent
+  -- (slats over a frame) or a bank of fins.
+  if detail.greebles then
+    local count = math.floor(rng:Int(12, 22) * more + 0.5)
+    for _ = 1, count do
+      local face = pick(nil)
+      if face then
+        local middle = spot(face)
+        local a, c = faceWays(face.n)
+        local spread = u * rng:Float(0.03, 0.08)
+        local kind = rng:Int(5)
+        if kind == 0 then
+          -- (a vent)
+          local w1, w2, high = u * rng:Float(0.018, 0.035), u * rng:Float(0.012, 0.025), u * 0.004
+          if fits(middle, face.n, w1, w2, high * 3) then
+            put(face, FRAME, middle + face.n * high, standing(face.n, high, w1, w2), 0.2)
+            local slats = rng:Int(3, 6)
+            for index = 1, slats do
+              local along = -w1 + 2 * w1 * (index - 0.5) / slats
+              put(face, PATCH, middle + a * along + face.n * (high * 2.2), standing(face.n, high * 0.8, w1 / slats * 0.35, w2 * 0.9), 0.2)
+            end
+          end
+        elseif kind == 1 then
+          -- (a bank of fins)
+          local w1, w2, high = u * rng:Float(0.02, 0.04), u * rng:Float(0.012, 0.022), u * rng:Float(0.008, 0.016)
+          if fits(middle, face.n, w1, w2, high * 2) then
+            local fins = rng:Int(4, 8)
+            for index = 1, fins do
+              local along = -w1 + 2 * w1 * (index - 0.5) / fins
+              put(face, FRAME, middle + a * along + face.n * high, standing(face.n, high, w1 / fins * 0.28, w2), 0.15)
+            end
+          end
+        else
+          -- (boxes, overlapping, of a few sizes)
+          for _ = 1, rng:Int(4, 9) do
+            local p = middle + a * (spread * rng:Float(-1, 1)) + c * (spread * rng:Float(-1, 1))
+            local w1, w2, high = u * rng:Float(0.012, 0.045), u * rng:Float(0.012, 0.045), u * rng:Float(0.005, 0.02)
+            if fits(p, face.n, w1, w2, high * 2) then
+              local part = ({ PATCH, PLATING, FRAME, PATCH })[rng:Int(4) + 1]
+              put(face, part, p + face.n * high, standing(face.n, high, w1, w2), 0.25)
+            end
+          end
+        end
+      end
+    end
+  end
+
+  -- Lights: running lights at the ends of it, red to port and green to
+  -- starboard, white at the bow and stern and on its top; and on a hull
+  -- of a cruiser's size or more, rows of lit windows along its sides.
+  if detail.lights then
+    local lamp = u * 0.007
+    local function farthest(n: vector): Face?
+      local best: Face? = nil
+      local bestReach = -math.huge
+      for _, face in faces do
+        local reach = vector.dot(face.at, n)
+        if face.n == n and reach > bestReach and clearOf(face.at, lamp) then
+          best, bestReach = face, reach
+        end
+      end
+      return best
+    end
+    local starboard = farthest(STARBOARD)
+    if starboard then
+      mid(b, LAMP_GREEN, starboard.at + STARBOARD * lamp, v(lamp, lamp, lamp), 0.5)
+      if starboard.twin then
+        mid(b, LAMP_RED, (starboard.at + STARBOARD * lamp) * v(-1, 1, 1), v(lamp, lamp, lamp), 0.5)
+      end
+    end
+    local port = farthest(PORT)
+    if port then
+      mid(b, LAMP_RED, port.at + PORT * lamp, v(lamp, lamp, lamp), 0.5)
+    end
+    for _, n in { BOW, STERN, UP } do
+      local face = farthest(n)
+      if face then
+        mid(b, LAMP_WHITE, face.at + n * lamp, v(lamp, lamp, lamp), 0.5)
+      end
+    end
+    if metres >= 150 then
+      local window = u * 0.0055
+      local left = math.floor(60 * math.min(more, 1.5))
+      for _ = 1, 6 do
+        local face = pick({ STARBOARD })
+        if face and left > 0 then
+          local a, c = faceWays(face.n)
+          local hl = face.h1
+          local level = face.h2 * rng:Float(-0.4, 0.4)
+          local from, to = -hl * 0.8, hl * 0.8
+          local stepBy = window * rng:Float(3, 5)
+          local z = from
+          while z <= to and left > 0 do
+            local p = face.at + a * z + c * level
+            if fits(p, face.n, window, window * 0.7, window) then
+              put(face, GLOW, p + face.n * (window * 0.15), standing(face.n, window * 0.2, window, window * 0.6), 0.3)
+              left -= 1
+            end
+            z += stepBy
+          end
+        end
+      end
+    end
+  end
+
+  b.rivets = detail.rivets == true
+end
+
+-- A detail from the words of a seed line or a sheet (Hull.DETAILS);
+-- nil if none is among them.
+function Hull.DetailOf(words: { string }): Detail?
+  local detail: Detail = {}
+  local any = false
+  for _, word in words do
+    if table.find(Hull.DETAILS, word) then
+      (detail :: any)[word] = true
+      any = true
+    end
+  end
+  return if any then detail else nil
 end
 
 -- How the Vail's battleship is read: its bridge stands on its back
@@ -3325,7 +3710,7 @@ end
 -- its own mesh, and no paint. Painted, it is drawn as the game's hulls
 -- are, in the paint of the design it takes the place of, or its
 -- faction's.)
-local function grownDesign(ship: Ship, hull: Ships.ShipType, had: Design?, fit: { string }, painted: boolean?): Design
+local function grownDesign(ship: Ship, hull: Ships.ShipType, had: Design?, fit: { string }, painted: boolean?, detail: Detail?): Design
   return {
     faction = if had then had.faction elseif Hull.looks[hull.lineage] then hull.lineage else "civil",
     look = if painted then (if had then had.look else nil) else Hull.looks.bare,
@@ -3335,6 +3720,9 @@ local function grownDesign(ship: Ship, hull: Ships.ShipType, had: Design?, fit: 
       grown(b, ship.growth)
       seated(b, ship.seats)
       jets(b, ship.ends)
+      if detail then
+        detailed(b, ship, detail, hull.radius)
+      end
     end,
     turrets = ship.turrets, launchers = ship.launchers, fit = fit,
   }
@@ -3370,7 +3758,7 @@ end
 -- its faction say), on the hardpoints the hull has by the data.
 -- Nothing, and why, if there is no such hull or the seed has not the
 -- room for its hardpoints.
-local function seeded(type: string, seed: number, size: number, style: string?, painted: boolean?): (Design?, string)
+local function seeded(type: string, seed: number, size: number, style: string?, painted: boolean?, detail: Detail?): (Design?, string)
   local hull = Ships.byId[type]
   local had = designs[type]
   if hull == nil then
@@ -3390,7 +3778,7 @@ local function seeded(type: string, seed: number, size: number, style: string?, 
   if ship == nil then
     return nil, why
   end
-  return grownDesign(ship, hull, had, fit, painted), ""
+  return grownDesign(ship, hull, had, fit, painted, detail), ""
 end
 
 -- The hulls that are drawn by seed: resource/hull/seeds.txt, a hull's
@@ -3398,25 +3786,35 @@ end
 -- follow other designs are made: a pirate's copy and a tech 2 make are
 -- of the hull as it is drawn.)
 Hull.SEEDS = "resource/hull/seeds.txt"
+-- Every hull the list names, as its line has it (for the hull browser,
+-- which can be asked for one by name and build it again).
+export type SeedLine = { name: string, seed: number, size: number, style: string?, painted: boolean, detail: { string } }
+Hull.SEEDED = {} :: { SeedLine }
 do
   local ok, text = pcall(File_Read, Hull.SEEDS)
   if ok and type(text) == "string" then
     for line in string.gmatch(text, "[^\r\n]+") do
       local name, seed, size, words = string.match(line, "^%s*([%a%d%._]+)%s+(%d+)%s+(%d+)%s*([%w%s_%+]-)%s*$")
       if name and string.sub(name, 1, 1) ~= "#" then
-        -- (after the size, in any order: a style, and "painted". A
-        -- style's name may have a figure and a line in it, and
-        -- Hull.ASYM after it: triangular_v2+asym.)
+        -- (after the size, in any order: a style, "painted", and the
+        -- kinds of surface detail it has (Hull.DETAILS). A style's name
+        -- may have a figure and a line in it, and Hull.ASYM after it:
+        -- triangular_v2+asym.)
         local style: string? = nil
         local painted = false
+        local kinds: { string } = {}
         for word in string.gmatch(words or "", "[%w_%+]+") do
           if word == "painted" then
             painted = true
+          elseif table.find(Hull.DETAILS, word) then
+            table.insert(kinds, word)
           else
             style = word
           end
         end
-        local design, why = seeded(name, tonumber(seed) or 0, tonumber(size) or 0, style, painted)
+        table.insert(Hull.SEEDED, { name = name, seed = tonumber(seed) or 0, size = tonumber(size) or 0, style = style, painted = painted,
+          detail = kinds })
+        local design, why = seeded(name, tonumber(seed) or 0, tonumber(size) or 0, style, painted, Hull.DetailOf(kinds))
         if design then
           designs[name] = design
           pending[name] = nil
@@ -4023,12 +4421,21 @@ end
 -- four for a frigate and six for the biggest); 'decks': with the broad
 -- flat plates under, as its bigger hulls had. No hardpoints, and no
 -- engines.
-function Hull.Grown(seed: number, steps: number, decks: boolean, paint: string?, style: string?): Built
-  local b = Plates.New(seed * 1.37, MANNER_FINE)
-  table.clear(exhausts)
-  grown(b, growth(seed, steps, decks, styleOf(style)))
-  -- (in a faction's paint, if one is named: the civil blue-grey if not)
+function Hull.Grown(seed: number, steps: number, decks: boolean, paint: string?, style: string?, detail: Detail?): Built
+  -- (in a faction's paint, if one is named: the civil blue-grey if not;
+  -- bare, as the generator made it, if that is)
   local look = Hull.looks[paint or "civil"] or Hull.looks.civil
+  local b = Plates.New(seed * 1.37, MANNER_FINE, if look.bare then BARE_QUALITY else nil)
+  if look.bare then
+    b.bare, b.scale = true, 1 / GROWN
+  end
+  table.clear(exhausts)
+  local g = growth(seed, steps, decks, styleOf(style))
+  grown(b, g)
+  if detail then
+    -- (with no hardpoints and no engines: as a cruiser, for the sizes of things)
+    detailed(b, { growth = g, ends = {}, turrets = {}, launchers = {}, seats = {}, clear = {}, reach = 0 }, detail, 150)
+  end
   local model, lower, upper, meshes = Plates.Finish(b, look, nil)
   local size = upper - lower
   return { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = {}, launchers = {}, fit = {}, engines = {},
@@ -4074,7 +4481,7 @@ end
 -- launcher hardpoints, put where the rule of hardpoints allows. Nothing,
 -- and why, if the hull has not the room for them.
 function Hull.GrownShip(seed: number, steps: number, decks: boolean, paint: string?, metres: number, fit: { string }, turrets: number,
-  launchers: number, engines: number, style: string?): (Built?, string)
+  launchers: number, engines: number, style: string?, detail: Detail?): (Built?, string)
   local ship, why = shipOf(growth(seed, steps, decks, styleOf(style)), metres, fit, turrets, launchers, engines)
   if ship == nil then
     return nil, why
@@ -4089,6 +4496,9 @@ function Hull.GrownShip(seed: number, steps: number, decks: boolean, paint: stri
   grown(b, ship.growth)
   seated(b, ship.seats)
   jets(b, ship.ends)
+  if detail then
+    detailed(b, ship, detail, metres)
+  end
   local model, lower, upper, meshes = Plates.Finish(b, look, nil)
   local size = upper - lower
   return { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = hardpointsOut(ship.turrets, grow),
@@ -4265,8 +4675,8 @@ end
 -- a tech 2 make of it are not changed: resource/hull/seeds.txt, read
 -- when the game starts, does it for them too). False, and why, if there
 -- is no such hull or the seed has not the room for its hardpoints.
-function Hull.Seed(type: string, seed: number, size: number, style: string?, painted: boolean?): (boolean, string)
-  local design, why = seeded(type, math.floor(seed), size, style, painted)
+function Hull.Seed(type: string, seed: number, size: number, style: string?, painted: boolean?, detail: Detail?): (boolean, string)
+  local design, why = seeded(type, math.floor(seed), size, style, painted, detail)
   if design == nil then
     return false, why
   end

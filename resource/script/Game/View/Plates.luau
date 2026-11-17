@@ -16,6 +16,17 @@ local Plates = {}
 -- The parts a plate can be: the whole number of its tag. (FIRE is an
 -- engine's throat where its fire is not the colour of its lights.)
 Plates.PLATING, Plates.PATCH, Plates.FRAME, Plates.GLOW, Plates.TRIM, Plates.FIRE = 0, 1, 2, 3, 4, 5
+-- And lamps, lit in their own colours whatever the paint: a ship's
+-- running lights, red to port, green to starboard, and white (a hull's
+-- surface detail, Game/View/Hull).
+Plates.LAMP_RED, Plates.LAMP_GREEN, Plates.LAMP_WHITE = 6, 7, 8
+
+-- Whether a part is lit from within (and so is not there on bare metal,
+-- nor in a wreck).
+local function lit(part: number): boolean
+  local kind = math.floor(part)
+  return kind == Plates.GLOW or kind == Plates.FIRE or kind >= Plates.LAMP_RED
+end
 
 -- How a thing is painted and how worn it is.
 export type Look = {
@@ -92,6 +103,9 @@ export type Builder = {
   -- stands on the thing to move out with it.)
   bare: boolean?,
   scale: number?,
+  -- Rivets along the seams of its sheets of plating, and finer lines
+  -- between (a hull's surface detail, Game/View/Hull: material/hull.jsl).
+  rivets: boolean?,
   -- What is not plates: skins lofted through outlines, and what swells
   -- out of them (Plates.Loft, Plates.Fairing). One mesh for all of it.
   skin: Mesh?,
@@ -134,14 +148,14 @@ end
 
 -- Put a plate in; or, building a ruin, perhaps not, or not straight.
 local function add(b: Builder, mesh: PlateMesh, part: number, center: vector, half: vector, turn: vector, bevel: number)
-  if b.bare and (math.floor(part) == Plates.GLOW or math.floor(part) == Plates.FIRE) then
+  if b.bare and lit(part) then
     return
   end
   local tone = own(b)
   local patch = b.patch
   if patch then
     local kind = math.floor(part)
-    if kind ~= Plates.GLOW and kind ~= Plates.FIRE and math.max(half.x, half.y, half.z) < b.fine and dice(b, 11) < patch * 0.30 then
+    if not lit(part) and math.max(half.x, half.y, half.z) < b.fine and dice(b, 11) < patch * 0.30 then
       return
     end
     if kind == Plates.PLATING and dice(b, 12) < patch * 0.40 then
@@ -156,7 +170,7 @@ local function add(b: Builder, mesh: PlateMesh, part: number, center: vector, ha
   local tag = part + tone
   local ruin = b.ruin
   if ruin then
-    if math.floor(part) == Plates.GLOW or math.floor(part) == Plates.FIRE then
+    if lit(part) then
       return
     end
     local size = math.max(half.x, half.y, half.z)
@@ -412,7 +426,7 @@ local function fate(b: Builder, part: number, middle: vector): number?
   local ruin = b.ruin
   if ruin then
     local z = middle.z + (dice(b, 1) - 0.5) * 0.3
-    if kind == Plates.GLOW or kind == Plates.FIRE or z < ruin.from or z >= ruin.to or dice(b, 2) < ruin.loss then
+    if lit(kind) or z < ruin.from or z >= ruin.to or dice(b, 2) < ruin.loss then
       return nil
     end
   end
@@ -540,7 +554,7 @@ function Plates.Skin(b: Builder, part: number, points: { number }, faces: { numb
   local tag = part + own(b)
   local kind = math.floor(part)
   local ruin = b.ruin
-  if ruin and (kind == Plates.GLOW or kind == Plates.FIRE) then
+  if ruin and lit(kind) then
     return
   end
   local skin: Mesh
@@ -764,6 +778,7 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
   ShaderInstance_SetFloat(skin, "sheets", sheets or look.sheets)
   ShaderInstance_SetFloat(skin, "mottle", look.mottle or 0)
   ShaderInstance_SetFloat(skin, "lights", look.lights or 0)
+  ShaderInstance_SetFloat(skin, "rivets", if b.rivets then 1 else 0)
   -- (a design is laid out from the middle of the thing, in halves of
   -- its length: so it is measured first, as a bare model of itself)
   local middle, half = ZERO, 1

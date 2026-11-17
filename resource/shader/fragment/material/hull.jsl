@@ -46,6 +46,9 @@ uniform vec3 paintDesign;   /* the colour the figure is laid on in */
    is in a drawing. No wear, rust or grime, and each plate nearly the
    same tone as the next; the seams kept, lighter. */
 uniform float cel;
+/* Rivets along the seams of each sheet, and a finer line across its
+   middle (a hull's surface detail, Game/View/Hull): 0 none, 1 so. */
+uniform float rivets;
 
 vec3 lin(vec3 c) {
   return pow(c, vec3(2.2));
@@ -64,6 +67,24 @@ float seams(vec2 q) {
   vec2 f = abs(fract(q) - 0.5);
   float d = 0.5 - max(f.x, f.y);
   return 1.0 - smoothstep(0.0, 0.035, d);
+}
+
+/* A rivet: 1 on one. A row of them a little in from each edge of a
+   sheet, eight along its length and five along its width. */
+float rivetAt(vec2 q) {
+  vec2 f = fract(q);
+  float x = (floor(f.x * 8.0) + 0.5) / 8.0;
+  float y = (floor(f.y * 5.0) + 0.5) / 5.0;
+  float edgeY = min(abs(f.y - 0.07), abs(f.y - 0.93));
+  float edgeX = min(abs(f.x - 0.07), abs(f.x - 0.93));
+  float d = min(length(vec2(f.x - x, edgeY * 1.6)), length(vec2(edgeX, (f.y - y) * 1.6)));
+  return 1.0 - smoothstep(0.014, 0.024, d);
+}
+
+/* The finer line across the middle of a sheet: 1 on it. */
+float halfLine(vec2 q) {
+  vec2 f = fract(q);
+  return 1.0 - smoothstep(0.004, 0.012, abs(f.x - 0.5));
 }
 
 float sheetHash(vec2 cell, float salt) {
@@ -248,8 +269,11 @@ void main() {
   vec3 n = normalize(vertnormal);
 
   if ((part > 2.5 && part < 3.5) || part > 4.5) {
-    /* Lit from within: a row of ports, or an engine's throat. */
-    outputAlbedo(lin(part > 4.5 ? paintFire : paintGlow) * (2.2 + 1.2 * wn_noise(p * 9.0)));
+    /* Lit from within: a row of ports, an engine's throat, or a lamp:
+       a running light, red to port, green to starboard, or white. */
+    vec3 within = part > 7.5 ? vec3(1.0, 0.97, 0.9) : (part > 6.5 ? vec3(0.15, 1.0, 0.35) : (part > 5.5 ? vec3(1.0, 0.12, 0.08)
+      : (part > 4.5 ? paintFire : paintGlow)));
+    outputAlbedo(lin(within) * (part > 5.5 ? 3.2 : 2.2 + 1.2 * wn_noise(p * 9.0)));
     outputAlpha(1.0);
     outputNormal(normalize(normal));
     outputMaterial(MATERIAL_NOSHADE);
@@ -318,6 +342,13 @@ void main() {
   vec3 c = bare ? mix(paint, metal, 0.22) : mix(paint, metal, worn);
   c = mix(c, oxide, bare ? 0.6 * rusted : rusted);
   c *= 1.0 - mix(0.30, 0.55, grain) * seam;
+  /* (rivets, dark with a glint on their tops, and the finer line: not
+     on bare structure, nor where the hull is all one flat colour) */
+  if (rivets > 0.5 && !bare) {
+    float rivet = rivetAt(sheet);
+    c = mix(c, c * 0.45 + vec3(0.05), rivet * mix(0.55, 1.0, grain));
+    c *= 1.0 - 0.22 * mix(0.6, 1.0, grain) * halfLine(sheet);
+  }
   /* grime, where the hull is closed in */
   float shut = 1.0 - smoothstep(0.05, 0.65, open);
   c *= 1.0 - 0.5 * shut * grain;
