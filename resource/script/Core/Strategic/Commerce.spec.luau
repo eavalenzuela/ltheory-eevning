@@ -249,6 +249,54 @@ suite:Case("the economy is in the save, and a save from before is given its gala
   t.eq(Core.Query.Quote(opened, opened.state.player.home, "ore.ferrite").bid, Core.Query.Quote(fresh, fresh.state.player.home, "ore.ferrite").bid)
 end)
 
+suite:Case("a save from before a good was added has each of its goods back as itself, and the new one as a new galaxy has it", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, systems = SYSTEMS, peaceful = true })
+  Core.Query.Quote(game, game.state.player.home, "ore.ferrite")
+  for _ = 1, 3 * Commerce.STEP do
+    Core.Step(game)
+  end
+  local goods = Commerce.goods
+  -- (the good the old save did not have: every good after it was a place earlier then)
+  local gone = math.floor(#goods / 2)
+  local stock, target = game.state.commerce.nodes[1].stock[gone + 1], game.state.commerce.nodes[1].target[gone + 1]
+  local data, length = Core.Save(game)
+  local file = Codec.Decode(data, length)
+  local econ = file.state.commerce
+  table.remove(econ.classes, gone)
+  for _, name in { "initial", "produced", "consumed", "used", "anchorIn" } do
+    table.remove(econ[name], gone)
+  end
+  for _, node in econ.nodes do
+    for _, name in { "stock", "target", "anchor", "taste" } do
+      table.remove(node[name], gone)
+    end
+  end
+  for _, drawn in file.state.marketDrawn do
+    table.remove(drawn, gone)
+  end
+  -- (a shortage then of what was class 'gone': the good after the new one)
+  file.state.shocks = { { id = 1, constellation = 1, class = gone, factor = 2, began = 0, ends = 1e9 } }
+  local old, oldLength = Codec.Encode(file)
+  local opened = Core.Load(old, oldLength)
+  local commerce = opened.state.commerce
+  t.eq(#commerce.classes, #goods)
+  for index, class in commerce.classes do
+    t.eq(class.id, goods[index])
+  end
+  t.eq({ commerce.nodes[1].stock[gone + 1], commerce.nodes[1].target[gone + 1], opened.state.shocks[1].class } :: { any },
+    { stock, target, gone + 1 } :: { any })
+  t.ok(commerce.nodes[1].stock[gone] ~= nil)
+  -- (and it plays on: every good has a price everywhere)
+  for _ = 1, 2 * Commerce.STEP do
+    Core.Step(opened)
+  end
+  for node = 1, SYSTEMS do
+    for class = 1, #goods do
+      t.ok(Economy.Price(opened.state.commerce, node, class) > 0)
+    end
+  end
+end)
+
 suite:Case("a new game's galaxy has been going a while: prices are apart across the map, and the pilot can ask where", function(t)
   local fresh = Core.New({ galaxySeed = 1, historySeed = 1, systems = SYSTEMS, peaceful = true })
   local here, list = Core.Query.Prices(fresh, "mineral.iron")

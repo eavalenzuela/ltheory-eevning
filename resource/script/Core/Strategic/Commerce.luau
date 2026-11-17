@@ -492,6 +492,93 @@ function Commerce.New(galaxy: Galaxy.Galaxy): Economy.Economy
   return econ
 end
 
+-- A game saved when the goods were not what they are now: one added (as
+-- the ice of 2026-11-17 added some) or one gone. A class is a good's
+-- place in the sorted list of them, so one added moves every class
+-- after it, and what was saved of one good would be read as another's.
+-- Each is put back with its own good, by name: what the economy had of
+-- a good it still has (its stock, and what each system aims to hold,
+-- with any glut or shortage on it), a new good is as a new galaxy has
+-- it, and one gone is let go, with the hauls and the shocks of it.
+-- Nothing changes if the goods are as they were. Core.Load calls it
+-- for every save, whatever its version.
+function Commerce.Reconcile(state: State.State)
+  local old = state.commerce
+  local same = #old.classes == #goods
+  for index, class in old.classes do
+    same = same and class.id == goods[index]
+  end
+  if same then
+    return
+  end
+  -- (each saved class, and the class its good is now; nil if it is gone)
+  local now: { [number]: number } = {}
+  for index, class in old.classes do
+    now[index] = indexOf[class.id]
+  end
+  local function carry(from: { number }?, to: { number })
+    if from == nil then
+      return
+    end
+    for index, value in from do
+      local at = now[index]
+      if at then
+        to[at] = value
+      end
+    end
+  end
+  local fresh = Commerce.New(state.galaxy)
+  carry(old.initial, fresh.initial)
+  carry(old.produced, fresh.produced)
+  carry(old.consumed, fresh.consumed)
+  carry(old.used, fresh.used)
+  carry(old.anchorIn, fresh.anchorIn)
+  for id, node in old.nodes do
+    local into = fresh.nodes[id]
+    if into then
+      carry(node.stock, into.stock)
+      carry(node.target, into.target)
+      carry(node.anchor, into.anchor)
+      carry(node.taste, into.taste)
+      into.met, into.sales, into.through = node.met, node.sales, node.through
+    end
+  end
+  -- (the lanes are the galaxy's, and what war and pirates have made of them is kept)
+  if #old.edges == #fresh.edges then
+    fresh.edges = old.edges
+  end
+  fresh.hours, fresh.steps = old.hours, old.steps
+  state.commerce = fresh
+  for station, drawn in state.marketDrawn do
+    local moved = table.create(#goods, 0)
+    carry(drawn, moved)
+    state.marketDrawn[station] = moved
+  end
+  local shocks: { State.Shock } = {}
+  for _, shock in state.shocks do
+    local at = now[shock.class]
+    if at then
+      shock.class = at
+      table.insert(shocks, shock)
+    end
+  end
+  state.shocks = shocks
+  local function rehold(carries: { node: number, class: number, amount: number }?): { node: number, class: number, amount: number }?
+    local at = if carries then now[carries.class] else nil
+    if carries == nil or at == nil then
+      return nil
+    end
+    carries.class = at
+    return carries
+  end
+  for _, record in state.traffic do
+    record.carries = rehold(record.carries)
+  end
+  for _, member in state.membership.members do
+    member.carries = rehold(member.carries)
+  end
+end
+
 -- Set every lane's cost, and what it loses, from how safe its two ends
 -- are now: 'surge' is where pirates are massing (the systems they are
 -- massing in, Strategic/Happenings; or one system's number, 0 for

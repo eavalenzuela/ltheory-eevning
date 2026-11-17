@@ -1614,7 +1614,9 @@ function Core.Load(data: buffer, length: number?): Game
   if version ~= Core.SAVE_VERSION then
     error(`Core.Load: the save is version {tostring(file.saveVersion)}; this build reads version {Core.SAVE_VERSION}`, 0)
   end
-  -- (whatever its version, it may be from before an item type was added)
+  -- (whatever its version, it may be from before an item type was
+  -- added: to the galaxy's goods, and to what the markets sell)
+  Commerce.Reconcile(file.state)
   Market.Reconcile(file.state)
   return { state = file.state, events = {} }
 end
