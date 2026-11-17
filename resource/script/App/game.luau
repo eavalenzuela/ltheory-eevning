@@ -2654,6 +2654,11 @@ function Debug.Menu(which: string?): string
   return Menu.Page()
 end
 
+-- Scroll a scrolling list or grid of the interface to a row, by its name (Im.ScrollTo).
+function Debug.ScrollTo(name: string, row: number)
+  Im.ScrollTo(name, row)
+end
+
 -- The characters (Core/Character/Characters): the name and id of the
 -- one the game is played as ("" for none), the one the game itself is
 -- its pilot's, and how many there are.

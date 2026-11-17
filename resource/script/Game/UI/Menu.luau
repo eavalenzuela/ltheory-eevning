@@ -275,11 +275,14 @@ local function drawMaking(session: Session.Session, left: number, top: number, w
   newName = Im.Words("Character name", newName, inner + 60, y + Theme.TITLE + 17, w - 100, 28, Characters.NAME_MOST,
     "what they are called")
   section("FACE", inner, y + Theme.TITLE + 62, w - 40)
-  -- (the game's portraits, rows of eight; the one picked framed in the accent)
-  local size, gap = 64, 6
+  -- (the game's portraits, rows of eight, four rows at a time, scrolling
+  -- down to the rest; the one picked framed in the accent)
+  local size, gap, shown = 64, 6, 4
   local gridY = y + Theme.TITLE + 88
-  for n = 1, Characters.PORTRAITS do
-    local col, row = (n - 1) % 8, (n - 1) // 8
+  local rows = math.ceil(Characters.PORTRAITS / 8)
+  local firstRow = Im.Scroll("faces", inner, gridY, 8 * (size + gap) + 6, shown * (size + gap), rows, shown)
+  for n = firstRow * 8 + 1, math.min(Characters.PORTRAITS, (firstRow + shown) * 8) do
+    local col, row = (n - 1) % 8, (n - 1) // 8 - firstRow
     local bx, by = inner + col * (size + gap), gridY + row * (size + gap)
     Portrait.Draw(`portrait:{n}`, bx, by, size)
     local hot, clicked = Im.Area(`Face:{n}`, bx, by, size, size, true)
@@ -293,7 +296,7 @@ local function drawMaking(session: Session.Session, left: number, top: number, w
       newFace, newPicture = n, ""
     end
   end
-  local below = gridY + math.ceil(Characters.PORTRAITS / 8) * (size + gap) + 8
+  local below = gridY + math.min(rows, shown) * (size + gap) + 8
   Im.Text("Or a picture of your own: the whole path of a .png or .jpg file.", inner, below, 12, Theme.DIM)
   newPicture = Im.Words("Picture file", newPicture, inner, below + 20, w - 40, 28, 240, "C:/Users/you/Pictures/me.png")
   if problem ~= "" then
