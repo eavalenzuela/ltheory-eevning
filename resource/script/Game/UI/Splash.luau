@@ -11,6 +11,13 @@
 -- on the further ring. (A first one, and mine: the owner may have a
 -- mark of their own in mind.)
 --
+-- Behind them, out of the black, a picture: the game's own fleet,
+-- redrawn in the retro-anime manner that is the game's look (the
+-- owner's word of 2026-11-17, "update splash art": a Vessari fleet
+-- posed in the game and cel-shaded, then redrawn by script/artgen;
+-- resource/texture/splash-art.jpg, put to the owner for review). It
+-- fills the screen, cut to it, and a band of shade lies behind the name.
+--
 -- A script is not shown it (its pictures are of the game), unless it
 -- asks: Splash.Begin, and GameDebug.Splash in the game app.
 
@@ -35,6 +42,20 @@ Splash.UNDER = "A  SPACE  SANDBOX  OF  YOUR  OWN"
 local INK = vector.create(0.82, 0.90, 0.97)
 local MARK = vector.create(0.45, 0.78, 1.0)
 local WARM = vector.create(1.0, 0.86, 0.60)
+
+-- The picture behind, loaded the first time it is shown (false if it could not be).
+local ART = "texture/splash-art.jpg"
+local ART_ASPECT = 1.5
+local art: Texture? = nil
+local tried = false
+local function picture(): Texture?
+  if not tried then
+    tried = true
+    local ok, texture = pcall(Texture_LoadFrom, Location_Resource(ART))
+    art = if ok then texture else nil
+  end
+  return art
+end
 
 -- How far through it is, in seconds; negative when it is not up.
 local age = -1
@@ -127,6 +148,23 @@ function Splash.Draw(left: number, top: number, width: number, height: number, s
   Im.Fill(left, top, width, height, vector.create(0, 0, 0), veil)
   local cx, cy = left + width / 2, top + height / 2
   local size = math.clamp(height * 0.34, 180, 420)
+  -- (the picture, cut to fill the screen: it comes up a little behind
+  -- the name, and goes with the black)
+  local texture = picture()
+  if texture then
+    local w, h = width, width / ART_ASPECT
+    if h < height then
+      w, h = height * ART_ASPECT, height
+    end
+    local come = if age < stand then eased(age / (Splash.RISE * 1.3)) else veil
+    WidgetRenderer_DrawTexture(texture, vector.create(Theme.Px(cx - w / 2), Theme.Px(cy - h / 2)), vector.create(Theme.Px(w), Theme.Px(h)),
+      come)
+    -- (a band of shade where the mark and the name stand)
+    local band = size * 1.25
+    Im.Fill(left, cy - size * 0.75, width, band, vector.create(0, 0, 0), 0.45 * come)
+    Im.Fill(left, cy - size * 0.75 - 24, width, 24, vector.create(0, 0, 0), 0.22 * come)
+    Im.Fill(left, cy - size * 0.75 + band, width, 24, vector.create(0, 0, 0), 0.22 * come)
+  end
   mark(cx, cy - size * 0.36, size, shown, age * 0.55 - 1.2)
   local title = math.clamp(height * 0.075, 36, 84)
   centred(Fonts.Heading(), Splash.TITLE, cx, cy + size * 0.14, title, INK, shown)
