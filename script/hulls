@@ -36,7 +36,9 @@ mesh and metal.)
 STYLE is the set of the generator's own numbers the hull is grown with:
 old (its own; this if none is named), stout, broad, tall, spear, slab,
 soft, triangular, asymmetrical or triangular_v2 (Hull.STYLES in
-resource/script/Game/View/Hull.luau). The word "asym" among the words
+resource/script/Game/View/Hull.luau). The word "cel1" or "cel2" draws the
+sheet in that cel look (the game's Options, Graphics, Look). The word
+"asym" among the words
 grows every hull of the sheet with its two sides unalike, whatever its
 style.
 
@@ -100,7 +102,9 @@ def main():
     numbers, colour, shown, style = [], None, None, None
     above = "above" in rest
     asym = "asym" in rest
-    rest = [word for word in rest if word not in ("above", "asym")]
+    # (a cel look: Cel V1 or Cel V2, as the game's Look option draws them)
+    look = "cel2" if "cel2" in rest else "cel1" if "cel1" in rest else None
+    rest = [word for word in rest if word not in ("above", "asym", "cel1", "cel2")]
     for word in rest:
         if word.isdigit():
             if colour or shown or style:
@@ -128,8 +132,8 @@ def main():
     def grown_as(each):
         return (each or "old") + ASYM if asym else each
     os.makedirs(TAKEN, exist_ok=True)
-    how = (f", {style}" if style and kind != "styles" else "") + (", sides unalike" if asym else "") + (f", as a {shown}" if shown else "") + (", from above" if above else "")
-    tag = (f"-{style}" if style and kind != "styles" else "") + ("-asym" if asym else "") + (f"-{shown}" if shown else "") + ("-above" if above else "")
+    how = (f", {style}" if style and kind != "styles" else "") + (", sides unalike" if asym else "") + (f", as a {shown}" if shown else "") + (", from above" if above else "") + (f", {look}" if look else "")
+    tag = (f"-{style}" if style and kind != "styles" else "") + ("-asym" if asym else "") + (f"-{shown}" if shown else "") + ("-above" if above else "") + (f"-{look}" if look else "")
     paint = colour or "bare"
     # (each picture: its seed, its size, its paint, its style, and what is written on it)
     if kind in ("seeds", "broad"):
@@ -173,6 +177,8 @@ def main():
         name = f"styles-seed{seed}-size{size}-{paint}{tag}"
 
     lines = ["frames 10"]
+    if look:
+        lines += ["lua RenderPass_SetEnabled('Smooth Shading', false)", f"lua RenderPass_SetEnabled('Flat Paint', {'true' if look == 'cel2' else 'false'})"]
     files = []
     for index, (seed, size, each, grown, _) in enumerate(shots):
         file = f"{name}-{index:04d}"

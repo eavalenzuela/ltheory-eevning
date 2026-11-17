@@ -8,6 +8,8 @@ It is built on the old C++ Limit Theory engine, and it is a work in progress. Th
 
 ![The splash: a fleet in its livery, redrawn in the game's anime manner, behind the game's name](docs/screenshots/splash.jpg)
 
+*The pictures here are taken in the Cel V2 look.*
+
 | | |
 |---|---|
 | ![A battleship and its escorts in their paint](docs/screenshots/fleet-sunlit.jpg) | ![A station: its tower and the modules anchored round it](docs/screenshots/station.jpg) |
@@ -15,11 +17,11 @@ It is built on the old C++ Limit Theory engine, and it is a work in progress. Th
 | ![The star map of a six-hundred-system galaxy, coloured by who holds what](docs/screenshots/star-map.jpg) | ![The fitting screen, with the ship as it is in space](docs/screenshots/fitting.jpg) |
 | The star map: six hundred systems, coloured by who holds them | Fitting: the ship is shown as it is in space |
 | ![The market's paints, with a paint being looked at](docs/screenshots/market-paints.jpg) | ![One hull in sixteen paints and designs](docs/screenshots/paints.jpg) |
-| Paints and designs are bought on the market, and can be tried on first | One hull, sixteen coats |
+| Paints and designs are bought on the market, and can be tried on first | One cruiser, sixteen coats: plain, camouflage, gaudy, police and a livery |
 
 ![One battleship in the three looks: Standard, Cel V1 and Cel V2](docs/screenshots/looks.jpg)
 
-*One battleship in the three looks (Options, Graphics): Standard, and the two cel-shaded ones, Cel V1 over the worn paint and Cel V2 with the paint laid on flat.*
+*One battleship in the three looks (Options, Graphics): Standard, and the two cel-shaded ones, Cel V1 over the worn paint and Cel V2 with the paint laid on flat. The cel looks are for what is built (ships, stations, towers); rock, ice, planets and the sky stay as they are.*
 
 ## What is in the game
 
@@ -38,7 +40,7 @@ It is built on the old C++ Limit Theory engine, and it is a work in progress. Th
 
 ## The ship generator
 
-Most hulls in the game are grown from a seed by the engine's old ship generator, which has ten styles to grow them in, any of them with its two sides alike or not. `bin/launch hulls` goes through seeds by hand, and `script/hulls` makes sheets of them. The stations' towers are grown the same way, in eight styles of their own: `bin/launch towers` goes through those, and `script/towers` makes sheets of them.
+Most hulls in the game are grown from a seed by the engine's old ship generator, which has ten styles to grow them in, any of them with its two sides alike or not. `bin/launch hulls` goes through seeds by hand, and `script/hulls` makes sheets of them, in any of the looks. The stations' towers are grown the same way, in eight styles of their own: `bin/launch towers` goes through those, and `script/towers` makes sheets of them.
 
 | | |
 |---|---|
