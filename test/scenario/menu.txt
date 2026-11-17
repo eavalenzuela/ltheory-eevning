@@ -107,7 +107,7 @@ until GameDebug.Press('Graphics:bloom')
 until GameDebug.Graphics() == 'flares'
 until GameDebug.Press('Menu:allon')
 until GameDebug.Graphics() == ''
-# (the look: three radio buttons, one lit; it is kept with the stages, and All on leaves it be)
+# (the look: three radio buttons, one lit, kept with the stages, and All on leaves it be)
 lua assert(GameDebug.Look() == 'standard', 'ships are drawn in the standard look at first')
 until GameDebug.Press('Graphics:look:cel1')
 until GameDebug.Look() == 'cel1'

@@ -79,6 +79,15 @@ suite:Case("in a game the pilot is their character: its skills and queue, traine
   state.trainingStarted = state.tick - 30
   Characters.From(state, character, 777)
   t.eq({ character.skills.mining, character.done, character.at, #character.training } :: { any }, { 4, 30, 777, 1 } :: { any })
+  -- (and one with nothing queued leaves when the game's last training
+  -- began as it was: a save loaded plays out as the game did)
+  local idle = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  idle.state.trainingStarted = 7
+  for _ = 1, 20 do
+    Core.Step(idle)
+  end
+  Characters.Into(idle.state, Characters.New("cy", "Cy", "badge:1", 0))
+  t.eq(idle.state.trainingStarted, 7)
   -- A game with no character trains by its ticks, as it always did.
   local plain = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   plain.state.training = { { skill = "mining", level = 1 } }

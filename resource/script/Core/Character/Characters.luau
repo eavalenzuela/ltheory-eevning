@@ -204,7 +204,11 @@ function Characters.Into(state: State.State, character: Character)
     state.skills[skill] = math.max(state.skills[skill] or -1, level)
   end
   state.training = table.clone(character.training)
-  state.trainingStarted = state.tick - math.floor(character.done / Constants.TICK)
+  -- (with nothing queued, when the last began is left as the game had
+  -- it: a save loaded plays out as the game that ran on from it did)
+  if #character.training > 0 then
+    state.trainingStarted = state.tick - math.floor(character.done / Constants.TICK)
+  end
   state.trainingByClock = true
   state.character = character.id
 end
