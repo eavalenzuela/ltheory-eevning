@@ -127,7 +127,7 @@ lua assert(GameDebug.CanPress('Menu:keys'), 'back from the graphics is the optio
 until GameDebug.Press('Menu:back')
 frames 3
 lua assert(GameDebug.CanPress('Menu:options'), 'back from the options is the menu they were opened from')
-until GameDebug.Press('Menu:new')
+until GameDebug.Press('Menu:play')
 frames 3
 lua GameDebug.Enter('Seed', 7)
 frames 3
@@ -161,7 +161,7 @@ lua assert(GameDebug.Tick() > _G.tick, 'the game did not go on after the menu')
 lua assert(GameDebug.Menu('main') == 'main')
 frames 3
 lua assert(GameDebug.CanPress('Menu:continue'), 'with a save there is something to continue')
-until GameDebug.Press('Menu:load')
+until GameDebug.Press('Menu:play')
 frames 3
 until GameDebug.Press('Load:save 5')
 until GameDebug.Menu() == ''
@@ -186,6 +186,9 @@ lua assert(GameDebug.Menu('pause') == 'pause')
 frames 3
 until GameDebug.Press('Menu:load')
 frames 3
+until GameDebug.Press('Delete:save 5')
+frames 3
+lua assert(GameDebug.CanPress('Load:save 5'), 'a save is thrown away only when asked twice')
 until GameDebug.Press('Delete:save 5')
 frames 3
 lua assert(not GameDebug.CanPress('Load:save 5'), 'the deleted save is still listed')

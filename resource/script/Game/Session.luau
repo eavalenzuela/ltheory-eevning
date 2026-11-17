@@ -1109,8 +1109,9 @@ end
 export type SaveInfo = {
   slot: string, system: string, ship: string, docked: boolean, wallet: number, tick: number, time: number,
   -- Whose game it is: their character's id and name ("" in a save from
-  -- before there were characters).
-  character: string, pilot: string,
+  -- before there were characters); and the universe it is in, its seed
+  -- and how many systems (0 in a save from before that was noted).
+  character: string, pilot: string, seed: number, systems: number,
 }
 
 -- Save to save/<slot>/state.bin, by way of a temporary file so a crash
@@ -1132,6 +1133,7 @@ function Session.Save(session: Session, slot: string, quiet: boolean?): boolean
     local meta = `system={player.systemName}\nship={player.hull.name}\ndocked={if player.docked ~= 0 then 1 else 0}\n`
       .. `wallet={session.game.state.wallet}\ntick={session.game.state.tick}\ntime={math.floor(Host.Time())}\n`
       .. `character={id}\npilot={if character then character.name else ""}\n`
+      .. `seed={session.game.state.galaxySeed}\nsystems={#session.game.state.galaxy.systems}\n`
     Host.WriteFile(dir .. "/meta.txt", meta)
   end
   if not quiet then
@@ -1147,7 +1149,7 @@ function Session.Saves(): { SaveInfo }
     if string.sub(name, -1) == "/" then
       local slot = string.sub(name, 1, -2)
       if Host.Exists(`{SAVE_DIR}/{slot}/state.bin`) then
-        local info: SaveInfo = { slot = slot, system = "", ship = "", docked = false, wallet = 0, tick = 0, time = 0, character = "", pilot = "" }
+        local info: SaveInfo = { slot = slot, system = "", ship = "", docked = false, wallet = 0, tick = 0, time = 0, character = "", pilot = "", seed = 0, systems = 0 }
         local meta = Host.ReadFile(`{SAVE_DIR}/{slot}/meta.txt`)
         if meta then
           for key: string, value: string in string.gmatch(buffer.tostring(meta), "(%w+)=([^\n]*)") :: any do
@@ -1167,6 +1169,10 @@ function Session.Saves(): { SaveInfo }
               info.character = value
             elseif key == "pilot" then
               info.pilot = value
+            elseif key == "seed" then
+              info.seed = tonumber(value) or 0
+            elseif key == "systems" then
+              info.systems = tonumber(value) or 0
             end
           end
         end

@@ -16,10 +16,10 @@ wait 2
 lua assert(select(1, GameDebug.Character()) == 'Pilot', 'a script plays as a Pilot made for it')
 lua assert(select(3, GameDebug.Character()) == select(2, GameDebug.Character()), 'the first game is the Pilot\'s')
 
-# A second character, from the menu.
+# A second character, from the menu's characters and games, in its pane.
 lua assert(GameDebug.Menu('main') == 'main')
 frames 3
-until GameDebug.Press('Menu:characters')
+until GameDebug.Press('Menu:play')
 frames 3
 until GameDebug.Press('Menu:newcharacter')
 frames 3
@@ -32,10 +32,8 @@ frames 3
 lua assert(select(1, GameDebug.Character()) == 'Ada Venn', 'the character made is the one played as')
 lua assert(select(4, GameDebug.Character()) == 2, 'there should be two characters')
 
-# A new game, as Ada.
-lua assert(GameDebug.Menu() == 'main')
-until GameDebug.Press('Menu:new')
-frames 3
+# A new game, as Ada, from the same screen.
+lua assert(GameDebug.Menu() == 'play', 'making a character stays on the characters and games')
 until GameDebug.Press('Menu:start')
 frames 10
 lua assert(GameDebug.Menu() == '', 'the game should be under way')
