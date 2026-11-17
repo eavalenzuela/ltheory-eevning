@@ -216,7 +216,7 @@ end
 -- systems has many happenings, and every board was looking through
 -- all of them.
 local traders = setmetatable({} :: { [any]: { tick: number, count: number, at: { [number]: { any } } } }, { __mode = "k" })
-tradersAt = function(state: State.State, station: number): { any }
+local function traderIndex(state: State.State): { [number]: { any } }
   local list = state.happenings.list
   local kept = traders[state]
   if kept == nil or kept.tick ~= state.tick or kept.count ~= #list then
@@ -234,20 +234,60 @@ tradersAt = function(state: State.State, station: number): { any }
     kept = { tick = state.tick, count = #list, at = at }
     traders[state] = kept
   end
-  return kept.at[station] or {}
+  return kept.at
+end
+tradersAt = function(state: State.State, station: number): { any }
+  return traderIndex(state)[station] or {}
+end
+
+-- A hull's lot, fitted out: the hull, what it would be fitted with and
+-- something to fire. The same for every board that has that hull, so
+-- worked out once a hull (it was most of the cost of a board).
+local fittedOut: { [string]: { Stack } } = {}
+local function fitted(hull: Ships.ShipType): { Stack }
+  local found = fittedOut[hull.id]
+  if found == nil then
+    local fit = Fits.Standard(hull)
+    found = gathered(fit, 1)
+    table.insert(found, 1, { type = hull.id, quantity = 1 })
+    local loaded: { [string]: boolean } = {}
+    for _, type in fit do
+      local charge = Fits.Charge(type, hull)
+      if charge and not loaded[charge] then
+        loaded[charge] = true
+        -- (crystals are not used up: one a gun. Rounds by the few hundred.)
+        local crystal = Modules.chargeById[charge].family == "laser"
+        local guns = 0
+        for _, other in fit do
+          guns += if Fits.Charge(other, hull) == charge then 1 else 0
+        end
+        table.insert(found, { type = charge, quantity = if crystal then guns else 200 * guns })
+      end
+    end
+    fittedOut[hull.id] = found
+  end
+  -- (a copy for each lot: nobody's lot shares its stacks with another's)
+  local copy: { Stack } = {}
+  for index, stack in found do
+    copy[index] = { type = stack.type, quantity = stack.quantity }
+  end
+  return copy
 end
 
 -- What a station's board has today, less what has been taken: the lots
 -- for sale, then the lots wanted.
 -- ('all': the lots taken today as well, for Contracts.Everywhere, which
 -- leaves those out as it is read.)
-function Contracts.Board(state: State.State, station: number, all: boolean?): { Lot }
+-- ('part': "daily" for its own lots alone, which change once a day,
+-- "traders" for the wandering traders' alone; nil for both.)
+local function boardOf(state: State.State, station: number, all: boolean?, part: string?): { Lot }
   if not hasBoard(state, station) then
     return {}
   end
   local day = state.tick // DAY
   local lots: { Lot } = {}
-  for slot = 1, Contracts.OFFERS do
+  local daily, trading = part ~= "traders", part ~= "daily"
+  for slot = 1, if daily then Contracts.OFFERS else 0 do
     local key = keyOf(station, day, "offer", slot)
     if not all and table.find(state.contractsTaken, key) then
       continue
@@ -258,23 +298,7 @@ function Contracts.Board(state: State.State, station: number, all: boolean?): { 
       -- A hull, with what it would be fitted with and something to fire.
       local line = hulls(factionOf(state, station))
       local hull = line[Rng.Int(rng, #line) + 1]
-      local fit = Fits.Standard(hull)
-      lot.stacks = gathered(fit, 1)
-      table.insert(lot.stacks, 1, { type = hull.id, quantity = 1 })
-      local loaded: { [string]: boolean } = {}
-      for _, type in fit do
-        local charge = Fits.Charge(type, hull)
-        if charge and not loaded[charge] then
-          loaded[charge] = true
-          -- (crystals are not used up: one a gun. Rounds by the few hundred.)
-          local crystal = Modules.chargeById[charge].family == "laser"
-          local guns = 0
-          for _, other in fit do
-            guns += if Fits.Charge(other, hull) == charge then 1 else 0
-          end
-          table.insert(lot.stacks, { type = charge, quantity = if crystal then guns else 200 * guns })
-        end
-      end
+      lot.stacks = fitted(hull)
       lot.title = `{hull.name}, fitted out`
       lot.worth = Contracts.Base(lot.stacks)
       lot.price = math.ceil(lot.worth * Rng.Float(rng, 0.88, 1.06))
@@ -316,7 +340,8 @@ function Contracts.Board(state: State.State, station: number, all: boolean?): { 
   -- stay: modules no station sells, for less than a board asks, and a
   -- copy of a design no station has, for less than one is ever let go
   -- for. Each is theirs once: taken, it is gone until the next of them.
-  for _, one in tradersAt(state, station) do
+  local lying: { any } = if trading then tradersAt(state, station) else {}
+  for _, one in lying do
     do
       for slot = 1, Contracts.TRADER do
         local key = `{station}:trader{one.id}:offer:{slot}`
@@ -344,7 +369,7 @@ function Contracts.Board(state: State.State, station: number, all: boolean?): { 
       end
     end
   end
-  for slot = 1, Contracts.WANTS do
+  for slot = 1, if daily then Contracts.WANTS else 0 do
     local key = keyOf(station, day, "want", slot)
     if (not all and table.find(state.contractsTaken, key)) or #wanted == 0 then
       continue
@@ -361,6 +386,9 @@ function Contracts.Board(state: State.State, station: number, all: boolean?): { 
       price = math.floor(worth * Rng.Float(rng, 1.1, 1.4)), worth = worth })
   end
   return lots
+end
+function Contracts.Board(state: State.State, station: number, all: boolean?): { Lot }
+  return boardOf(state, station, all)
 end
 
 -- A lot of a station's board today, by its side and place: nil if it is
@@ -395,65 +423,140 @@ end
 
 -- The stations with a board, in every system of the map (not uncharted
 -- space), by their ids: worked out once for a galaxy, from what each
--- system would be, without its being seen (Space.Glance).
-local boardsOf = setmetatable({} :: { [any]: { number } }, { __mode = "k" })
-function Contracts.Stations(state: State.State): { number }
-  local found = boardsOf[state.galaxy]
-  if found == nil then
-    found = {}
-    for id, node in state.galaxy.systems do
-      if not node.uncharted then
-        for _, object in Space.Glance(state, id).objects do
-          if object.kind == "station" and state.starbases[object.id] == nil then
-            table.insert(found, object.id)
-          end
+-- system would be, without its being seen (Space.Glance). That is some
+-- seconds in a galaxy of thousands of systems, so it is done a system
+-- at a time while there is time for it (Contracts.Gather), and all at
+-- once only when it is wanted before that is done.
+type StationsJob = { next: number, found: { number }, done: boolean }
+local stationsOf = setmetatable({} :: { [any]: StationsJob }, { __mode = "k" })
+local function always(): boolean
+  return true
+end
+local function gatherStations(state: State.State, more: () -> boolean): { number }?
+  local job = stationsOf[state.galaxy]
+  if job == nil then
+    job = { next = 1, found = {}, done = false }
+    stationsOf[state.galaxy] = job
+  end
+  local systems = state.galaxy.systems
+  while not job.done do
+    local id = job.next
+    if id > #systems then
+      table.sort(job.found)
+      job.done = true
+      break
+    elseif not more() then
+      return nil
+    end
+    if not systems[id].uncharted then
+      for _, object in Space.Glance(state, id).objects do
+        if object.kind == "station" and state.starbases[object.id] == nil then
+          table.insert(job.found, object.id)
         end
       end
     end
-    table.sort(found)
-    boardsOf[state.galaxy] = found
+    job.next = id + 1
   end
-  return found
+  return job.found
+end
+function Contracts.Stations(state: State.State): { number }
+  return gatherStations(state, always) :: { number }
+end
+
+-- Every board's own lots today (not the wandering traders'): worked out
+-- once a game day, a board at a time while there is time for it.
+export type Placed = { station: number, lot: Lot }
+type LotsJob = { day: number, next: number, lots: { Placed }, done: boolean }
+local dailyOf = setmetatable({} :: { [any]: LotsJob }, { __mode = "k" })
+local function gatherLots(state: State.State, more: () -> boolean): { Placed }?
+  local stations = gatherStations(state, more)
+  if stations == nil then
+    return nil
+  end
+  local day = state.tick // DAY
+  local job = dailyOf[state]
+  if job == nil or job.day ~= day then
+    job = { day = day, next = 1, lots = {}, done = false }
+    dailyOf[state] = job
+  end
+  while not job.done do
+    local station = stations[job.next]
+    if station == nil then
+      job.done = true
+      break
+    elseif not more() then
+      return nil
+    end
+    for _, lot in boardOf(state, station, true, "daily") do
+      table.insert(job.lots, { station = station, lot = lot })
+    end
+    job.next += 1
+  end
+  return job.lots
+end
+
+-- Work toward every board's lots while 'more' says there is time (the
+-- view asks a few milliseconds of every frame, so that they are there
+-- before the contracts are looked at): whether they are all in hand,
+-- and how far along it is, from 0 to 1. Nothing of the game's state is
+-- changed by it.
+function Contracts.Gather(state: State.State, more: () -> boolean): (boolean, number)
+  if gatherLots(state, more) then
+    return true, 1
+  end
+  local systems = stationsOf[state.galaxy]
+  local seen = if systems then (if systems.done then 1 else (systems.next - 1) / math.max(1, #state.galaxy.systems)) else 0
+  local job = dailyOf[state]
+  local boards = if job and systems and systems.done then (job.next - 1) / math.max(1, #systems.found) else 0
+  -- (the systems are the most of it)
+  return false, 0.7 * seen + 0.3 * boards
 end
 
 -- Every lot on every board today, with the station it is at, less what
--- has been taken. Every board's lots are worked out once a day (and
--- again when a wandering trader comes or goes): a galaxy of five
--- thousand systems has near ten thousand boards and fifty thousand
--- lots, a second and a quarter. What is taken is left out as it is read.
-export type Placed = { station: number, lot: Lot }
-local everywhere = setmetatable({} :: { [any]: { key: string, lots: { Placed } } }, { __mode = "k" })
+-- has been taken: each board's own, and the wandering traders' where
+-- they lie. A galaxy of five thousand systems has near ten thousand
+-- boards and fifty thousand lots.
 function Contracts.Everywhere(state: State.State): { Placed }
-  local trading = 0
-  for _, one in state.happenings.list do
-    trading += if one.kind == "sighting" and one.what == "trader" then one.id else 0
+  local lots = gatherLots(state, always) :: { Placed }
+  local index = traderIndex(state)
+  local at: { number } = {}
+  for station in index do
+    table.insert(at, station)
   end
-  local key = `{state.tick // DAY}:{trading}`
-  local kept = everywhere[state]
-  if kept == nil or kept.key ~= key then
-    local lots: { Placed } = {}
-    for _, station in Contracts.Stations(state) do
-      for _, lot in Contracts.Board(state, station, true) do
-        table.insert(lots, { station = station, lot = lot })
-      end
+  table.sort(at)
+  local extra: { Placed } = {}
+  for _, station in at do
+    for _, lot in boardOf(state, station, true, "traders") do
+      table.insert(extra, { station = station, lot = lot })
     end
-    kept = { key = key, lots = lots }
-    everywhere[state] = kept
   end
-  if #state.contractsTaken == 0 then
-    return kept.lots
+  if #state.contractsTaken == 0 and #extra == 0 then
+    return lots
   end
   local taken: { [string]: boolean } = {}
   for _, gone in state.contractsTaken do
     taken[gone] = true
   end
   local left: { Placed } = {}
-  for _, placed in kept.lots do
-    if not taken[placed.lot.key] then
-      table.insert(left, placed)
+  for _, each in { lots, extra } do
+    for _, placed in each do
+      if not taken[placed.lot.key] then
+        table.insert(left, placed)
+      end
     end
   end
   return left
+end
+
+-- What the lots everywhere are as of now: changed when the day turns,
+-- a lot is taken, or a wandering trader comes or goes (for a view that
+-- keeps what it made of them until then).
+function Contracts.Version(state: State.State): string
+  local trading = 0
+  for _, one in state.happenings.list do
+    trading += if one.kind == "sighting" and one.what == "trader" then one.id else 0
+  end
+  return `{state.tick // DAY}:{#state.contractsTaken}:{trading}`
 end
 
 -- ---------------------------------------------------------------------

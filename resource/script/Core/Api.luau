@@ -2022,11 +2022,20 @@ end
 -- first. What is bought is delivered to the hangar of the station it is
 -- at (AcceptContract with 'station').
 export type ContractRow = { station: number, name: string, system: number, systemName: string, jumps: number, band: string,
-  lot: Contracts.Lot, have: { number } }
+  lot: Contracts.Lot }
 local jumpsFrom: { galaxy: any, from: number, jumps: { [number]: number } } = { galaxy = nil, from = 0, jumps = {} }
+-- (what was found is kept until the lots change, the pilot moves to
+-- another system, or another side or reach is asked for: a view asks
+-- every frame, and there are tens of thousands of them)
+local searched = setmetatable({} :: { [any]: { key: string, rows: { ContractRow } } }, { __mode = "k" })
 function Query.ContractSearch(game: Game, side: string, reach: number?): { ContractRow }
   local state = game.state
   local here = Query.Player(game).system
+  local key = `{side}:{reach or "any"}:{here}:{Contracts.Version(state)}`
+  local kept = searched[state]
+  if kept and kept.key == key then
+    return kept.rows
+  end
   if jumpsFrom.galaxy ~= state.galaxy or jumpsFrom.from ~= here then
     jumpsFrom = { galaxy = state.galaxy, from = here, jumps = Galaxy.Jumps(state.galaxy, here) }
   end
@@ -2039,8 +2048,7 @@ function Query.ContractSearch(game: Game, side: string, reach: number?): { Contr
         local object = Space.Peek(state, placed.station)
         local node = state.galaxy.systems[system]
         table.insert(rows, { station = placed.station, name = if object then object.name else "?", system = system, systemName = node.name,
-          jumps = jumps, band = Galaxy.Band(node.security) :: string, lot = placed.lot,
-          have = if side == "want" then Contracts.Have(state, placed.station, placed.lot.stacks) else {} })
+          jumps = jumps, band = Galaxy.Band(node.security) :: string, lot = placed.lot })
       end
     end
   end
@@ -2052,7 +2060,20 @@ function Query.ContractSearch(game: Game, side: string, reach: number?): { Contr
     end
     return a.lot.slot < b.lot.slot
   end)
+  searched[state] = { key = key, rows = rows }
   return rows
+end
+
+-- How much of each stack of a lot the pilot has in their hangar at a
+-- station (for a lot wanted there).
+function Query.ContractHave(game: Game, station: number, stacks: { Contracts.Stack }): { number }
+  return Contracts.Have(game.state, station, stacks)
+end
+
+-- Work toward every board's lots while 'more' says there is time
+-- (Contracts.Gather): whether they are in hand, and how far along.
+function Query.GatherContracts(game: Game, more: () -> boolean): (boolean, number)
+  return Contracts.Gather(game.state, more)
 end
 
 export type BoardLot = { lot: Contracts.Lot, have: { number } }

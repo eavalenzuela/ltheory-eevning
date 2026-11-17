@@ -89,9 +89,22 @@ function Board.Choose(type: string): boolean
   return true
 end
 
--- Once a frame, before the windows are drawn: whose game it is.
+-- How much of each frame goes on gathering every board's lots
+-- (Contracts.Gather), in seconds: a little all the while, so that they
+-- are in hand before the window is opened, and more while it is open
+-- and they are not yet. (A galaxy of thousands of systems is some
+-- seconds of it, which held the game still when it was done at once.)
+Board.WARM, Board.OPEN_WARM = 0.003, 0.012
+local ready, along = false, 0
+
+-- Once a frame, before the windows are drawn: whose game it is, and a
+-- little more of the gathering.
 function Board.Frame(session: Session.Session)
   current = session
+  local stop = os.clock() + (if Board.IsOpen() then Board.OPEN_WARM else Board.WARM)
+  ready, along = Core.Query.GatherContracts(session.game, function()
+    return os.clock() < stop
+  end)
 end
 
 -- ---------------------------------------------------------------------
@@ -145,16 +158,37 @@ end
 -- ---------------------------------------------------------------------
 -- The rows
 
--- The lots of the page, narrowed and sorted.
+-- What each row is of, and its words to search, worked out once a row
+-- (the rows are kept until the lots change: Query.ContractSearch).
+local rowFacts = setmetatable({} :: { [any]: { kind: string, words: string } }, { __mode = "k" })
+local function factsOf(row: Core.ContractRow): { kind: string, words: string }
+  local facts = rowFacts[row]
+  if facts == nil then
+    facts = { kind = kindOf(row.lot), words = string.lower(row.lot.title .. " " .. contents(row.lot.stacks)) }
+    rowFacts[row] = facts
+  end
+  return facts
+end
+
+-- The lots of the page, narrowed and sorted: worked out again only when
+-- the lots, the narrowing or the order change, not every frame.
+type Shown = { from: any, key: string, rows: { Core.ContractRow }, counts: { [string]: number },
+  byPlace: { [string]: Core.ContractRow } }
+local shown: Shown? = nil
 local function rowsOf(game: Core.Game): ({ Core.ContractRow }, { [string]: number })
   local side = if page == "wanted" then "want" else "offer"
   local all = Core.Query.ContractSearch(game, side, reach)
+  local key = `{search}|{kind}|{sortBy}|{sortDown}`
+  if shown and shown.from == all and shown.key == key then
+    return shown.rows, shown.counts
+  end
   local counts: { [string]: number } = { all = 0 }
   local needle = string.lower(search)
   local rows: { Core.ContractRow } = {}
   for _, row in all do
-    local of = kindOf(row.lot)
-    local named = needle == "" or string.find(string.lower(row.lot.title .. " " .. contents(row.lot.stacks)), needle, 1, true) ~= nil
+    local facts = factsOf(row)
+    local of = facts.kind
+    local named = needle == "" or string.find(facts.words, needle, 1, true) ~= nil
     if named then
       counts.all += 1
       counts[of] = (counts[of] or 0) + 1
@@ -181,6 +215,11 @@ local function rowsOf(game: Core.Game): ({ Core.ContractRow }, { [string]: numbe
       return if a.station ~= b.station then a.station < b.station else a.lot.slot < b.lot.slot
     end)
   end
+  local byPlace: { [string]: Core.ContractRow } = {}
+  for _, row in rows do
+    byPlace[`{row.station}:{row.lot.slot}`] = row
+  end
+  shown = { from = all, key = key, rows = rows, counts = counts, byPlace = byPlace }
   return rows, counts
 end
 
@@ -278,12 +317,8 @@ end
 
 -- The right: the lot picked.
 local function drawLot(session: Session.Session, game: Core.Game, rows: { Core.ContractRow }, x: number, y: number, w: number, h: number)
-  local row: Core.ContractRow? = nil
-  for _, each in rows do
-    if each.station == picked.station and each.lot.slot == picked.slot then
-      row = each
-    end
-  end
+  local _ = rows
+  local row: Core.ContractRow? = if shown then shown.byPlace[`{picked.station}:{picked.slot}`] else nil
   local dx, dw = x + 12, w - 24
   if row == nil then
     Im.Text("Choose a lot to see what is in it.", dx, y + 14, 14, Theme.DIM)
@@ -355,7 +390,7 @@ local function drawLot(session: Session.Session, game: Core.Game, rows: { Core.C
   if lot.side == "want" then
     local fill: State.Command = { kind = "FillContract", actor = 0, target = lot.slot, station = row.station }
     local can, whyNot = Session.CanDo(session, fill)
-    local have = row.have[1] or 0
+    local have = Core.Query.ContractHave(game, row.station, lot.stacks)[1] or 0
     Im.Text(`{Format.Whole(have)} of {Format.Whole(lot.stacks[1].quantity)} in your hangar there`, dx, line, 13,
       if can then Theme.GOOD else Theme.DIM)
     line += 22
@@ -562,6 +597,13 @@ Windows.Kind(Board.ID, function(_: Windows.Window, x: number, y: number, w: numb
     drawListings(session, game, x + 1, top, listW - 1, room)
     Im.Flat(x + listW, top, 1, room, Theme.EDGE)
     drawNewListing(session, game, x + listW + 1, top, DETAIL_W - 2, room)
+  elseif not ready then
+    -- (every board's lots are still being gathered: Board.Frame)
+    local words = `Gathering every board's lots: {math.floor(along * 100)}%`
+    Im.Text(words, x + (w - Im.TextWidth(words, 14)) / 2, top + room / 2 - 20, 14, Theme.DIM)
+    local barW = math.min(360, w - 80)
+    Im.Flat(x + (w - barW) / 2, top + room / 2 + 4, barW, 4, Theme.EDGE)
+    Im.Flat(x + (w - barW) / 2, top + room / 2 + 4, barW * along, 4, Theme.ACCENT)
   else
     local rows, counts = rowsOf(game)
     local listW = w - TREE_W - DETAIL_W

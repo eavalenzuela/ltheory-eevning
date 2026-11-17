@@ -1031,6 +1031,14 @@ function Debug.Lot(side: string, slot: number): (string, number, string, number)
   return "", 0, "", 0
 end
 
+-- Whether every board's lots have been gathered yet (the contracts'
+-- window gathers them a little each frame), and how far along.
+function Debug.ContractsReady(): (boolean, number)
+  return Core.Query.GatherContracts(session.game, function()
+    return false
+  end)
+end
+
 -- Every board's lots of a side ('offer' or 'want'), galaxy-wide, within
 -- so many jumps if given: how many, and the first's station and place
 -- as the contracts' window names its row ("<station>:<slot>").
