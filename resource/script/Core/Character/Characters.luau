@@ -45,12 +45,12 @@ export type Character = {
 }
 
 -- How many badges there are (Game/UI/Portrait draws them), and how many
--- portraits the game has: the owner's, 2026-11-17, two sets of sixteen
+-- portraits the game has: the owner's, 2026-11-17, three sets of sixteen
 -- in a drawn manner (a first set, photographic, was put aside on their
 -- word: "get rid of the photoreal portraits"). A face is picked from
 -- these; a badge is what a character made before them has.
 Characters.BADGES = 24
-Characters.PORTRAITS = 32
+Characters.PORTRAITS = 48
 -- The longest a name may be.
 Characters.NAME_MOST = 24
 

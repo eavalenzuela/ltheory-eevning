@@ -1,6 +1,6 @@
 --!strict
 -- A character's face (Core/Character/Characters): one of the game's own
--- portraits (the owner's two drawn sets of sixteen, 2026-11-17:
+-- portraits (the owner's three drawn sets of sixteen, 2026-11-17:
 -- resource/texture/portraits), a badge, or a picture of the player's own.
 --
 -- The owner's ruling, 2026-11-17: "Pick from a set + import". There is
