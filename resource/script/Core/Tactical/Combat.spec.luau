@@ -1039,4 +1039,75 @@ suite:Case("some systems have an ice field by a cold planet; only an ice harvest
   t.eq({ used, out[1].mineral, out[1].amount } :: { any }, { 3, "ice.heavywater", 60 } :: { any })
 end)
 
+-- ---------------------------------------------------------------------
+-- Module expansion, the fourth group (2026-11-16): fleet and capital.
+
+-- A ship of the pilot's own, beside 'a.me' (another of their fleet).
+local function friend(a: Arena, hull: string): State.Ball
+  local state = a.game.state
+  local theirs = Space.NewShip(state, hull, "Friend", "player", 0)
+  local ball = Space.Launch(state, theirs, 1, a.me.x, a.me.y + 3000, a.me.z)
+  ball.grid = a.me.grid
+  return ball
+end
+
+suite:Case("a command burst boosts the owner's ships within its range, its own too, and nobody else's", function(t)
+  local a = arena("cruiser.ouyou", { { "burst.information" } }, "frigate.courier", {}, 3000)
+  local state = a.game.state
+  local mate = friend(a, "frigate.courier")
+  local mine, theirs, foes = a.me.vitals.lockRange, mate.vitals.lockRange, a.foe.vitals.lockRange
+  order(t, a, { kind = "ActivateModule", actor = 0, item = Items.Fitted(state, a.me.id)[1].id })
+  Core.Step(a.game)
+  Core.Step(a.game)
+  t.near(a.me.vitals.lockRange, mine * 1.2, 1e-6)
+  t.near(mate.vitals.lockRange, theirs * 1.2, 1e-6)
+  t.near(a.foe.vitals.lockRange, foes, 1e-6)
+  t.eq(mate.vitals.bursts, { "burst.information" })
+end)
+
+suite:Case("a siege module goes on a dreadnought only, burns cryo salts, and roots the ship while it runs", function(t)
+  t.eq({ Attributes.Check(Ships.byId["cruiser.ouyou"], { "siege.module" }) } :: { any },
+    { false, "only a dreadnought or a siege dreadnought fits that" } :: { any })
+  local a = arena("dreadnought.concorso", { { "siege.module" } }, "frigate.courier", {}, 30000)
+  local state = a.game.state
+  local siege = Items.Fitted(state, a.me.id)[1]
+  t.eq(refused(a, { kind = "ActivateModule", actor = 0, item = siege.id }), "needs 150 Cryo Salts in the hold")
+  Items.Add(state, "ice.salts", 400, a.me.id, "cargo")
+  order(t, a, { kind = "ActivateModule", actor = 0, item = siege.id })
+  Core.Step(a.game)
+  Core.Step(a.game)
+  t.eq({ a.me.vitals.rooted, a.me.maxVelocity, Combat.Held(state, a.me.id, "ice.salts") } :: { any }, { true, 0, 250 } :: { any })
+  local station = state.player.home
+  t.eq(refused(a, { kind = "Dock", actor = 0, target = station }), "rooted to the spot while its module runs")
+end)
+
+suite:Case("a triage module doubles what a carrier's remote repairers put back", function(t)
+  local a = arena("carrier.azayake", { { "triage.module" }, { "remote.armor.small" } }, "frigate.courier", {}, 30000)
+  local state = a.game.state
+  Items.Add(state, "ice.salts", 400, a.me.id, "cargo")
+  local mate = friend(a, "frigate.courier")
+  mate.vitals.armor = 1
+  order(t, a, { kind = "LockTarget", actor = 0, target = mate.id })
+  stepUntil(a, "LockCompleted", 60)
+  local triage, repairer = Items.Fitted(state, a.me.id)[1], Items.Fitted(state, a.me.id)[2]
+  order(t, a, { kind = "ActivateModule", actor = 0, item = triage.id })
+  order(t, a, { kind = "ActivateModule", actor = 0, item = repairer.id, target = mate.id })
+  local mended = stepUntil(a, "Mended", 30)
+  t.eq(mended.amount, assert(Modules.byId["remote.armor.small"].hex).strength * 2)
+end)
+
+suite:Case("an interdiction field keeps everybody but its owner's from warping out of it, until it goes", function(t)
+  local a = arena("destroyer.nozomi", { { "bubble.launcher", "bubble.charge" } }, "frigate.courier", {}, 8000)
+  local state = a.game.state
+  order(t, a, { kind = "ActivateModule", actor = 0, item = Items.Fitted(state, a.me.id)[1].id })
+  local dropped = stepUntil(a, "BubbleDropped", 5)
+  t.eq(dropped.radius, 20000)
+  Core.Step(a.game)
+  t.eq({ a.foe.vitals.scrambled, a.me.vitals.scrambled }, { true, false })
+  for _ = 1, 125 do
+    Core.Step(a.game)
+  end
+  t.eq({ a.foe.vitals.scrambled, state.bubbles } :: { any }, { false, nil } :: { any })
+end)
+
 return suite

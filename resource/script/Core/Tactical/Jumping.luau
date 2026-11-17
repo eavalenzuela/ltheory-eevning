@@ -261,6 +261,8 @@ function Jumping.Validate(state: State.State, command: State.Command): (boolean,
     return false, "in warp"
   elseif ball.vitals.scrambled then
     return false, "warp scrambled"
+  elseif ball.vitals.rooted then
+    return false, "rooted to the spot while its module runs"
   elseif state.galaxy.systems[to] == nil then
     return false, "no such system"
   elseif to == ball.system then

@@ -60,6 +60,8 @@ local MODULES: { { any } } = {
   { "sensor.", "Electronic warfare", 10 }, { "smartbomb.", "Smartbombs", 4.6 },
   { "jump.", "Propulsion", 7 }, { "warp.", "Propulsion", 7 }, { "tractor.", "Mining", 9 }, { "scanner.", "Scanning", 10.5 },
   { "mining.", "Mining", 9 },
+  { "burst.", "Command bursts", 11.5 }, { "siege.", "Capital modules", 11.6 }, { "triage.", "Capital modules", 11.6 },
+  { "industrial.", "Capital modules", 11.6 }, { "bubble.", "Electronic warfare", 10 },
 }
 local MISSILES = { "Light missiles", "Heavy missiles", "Cruise missiles" }
 local MAKES: { [string]: { any } } = {
@@ -107,6 +109,8 @@ function Catalog.Group(id: string): (string, number, number)
       return "Repair paste", 11, 0
     elseif charge.family == "crystal" then
       return "Mining crystals", 12, 0
+    elseif charge.family == "bubble" then
+      return "Interdiction charges", 13, 0
     end
     local order = if charge.family == "laser" then 1 elseif charge.family == "projectile" then 2 else 3
     return if order == 1 then "Laser crystals" elseif order == 2 then "Projectile rounds" else "Hybrid charges", order, charge.size

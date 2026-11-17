@@ -65,6 +65,11 @@ export type Vitals = {
   track: number?,
   guide: number?,
   sensor: number?,
+  -- The command bursts of others its owner's that reach it (their module
+  -- ids, Tactical/Combat), and whether a module of its own roots it to
+  -- the spot (Tactical/Vitals): module expansion, 2026-11-16.
+  bursts: { string }?,
+  rooted: boolean?,
   -- What it has taken of each kind of damage since an adaptive hardener
   -- of its last looked (Tactical/Combat); nil until it has taken any.
   taken: { number }?,
@@ -207,6 +212,10 @@ export type Ball = {
   intent: Intent?,
   vitals: Vitals,
 }
+
+-- An interdiction field: where it is, how wide, whose, and the tick it goes.
+export type Bubble = { id: number, system: number, grid: number, x: number, y: number, z: number, radius: number, owner: string,
+  expires: number }
 
 -- What is left of a destroyed ship: it stays where the ship died, holds
 -- whatever survived (as items whose holder is the wreck), and fades.
@@ -899,6 +908,10 @@ export type State = {
   -- they last did (Tactical/Sides): the other side of a war counts them
   -- its enemy. (Nil in a game saved before 2026-11-16.)
   served: { [string]: number }?,
+  -- Interdiction fields dropped and not yet gone (Tactical/Combat; module
+  -- expansion, 2026-11-16): nobody but their owner's ships warps out of
+  -- one. (Nil when there are none, and in a game saved before.)
+  bubbles: { Bubble }?,
   -- Loyalty points with each faction, earned by its jobs and spent at
   -- its stations (a faction not here has none).
   loyalty: { [string]: number },

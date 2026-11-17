@@ -22,6 +22,7 @@ local Gunnery = require("@lt/Core/Tactical/Gunnery")
 local Items = require("@lt/Core/Assets/Items")
 local Mining = require("@lt/Core/Tactical/Mining")
 local Modules = require("@lt/Core/Data/Modules")
+local Types = require("@lt/Core/Data/Types")
 local Ores = require("@lt/Core/Data/Ores")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
@@ -393,7 +394,16 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
         return false, "a capital is held only by a capital warp disruptor"
       end
       return true
+    elseif module.burns and (Combat.Held(state, ball.id, module.burns.type) < module.burns.quantity) then
+      return false, `needs {module.burns.quantity} {Types.Info(module.burns.type).name} in the hold`
     elseif module.repair or module.boost or module.injector or module.smartbomb then
+      return true
+    elseif module.bubble then
+      if item.charge == "" or item.rounds <= 0 then
+        return false, "nothing loaded"
+      elseif ball.grid == 0 then
+        return false, "in warp"
+      end
       return true
     elseif module.jump then
       -- (a micro jump drive: not while held, and not in warp)
@@ -666,6 +676,27 @@ end
 
 -- Run every cycle of one module that has come due. Returns false if the
 -- module stopped (the caller's index then points at the next one).
+-- The modules running on a ball, by their types.
+local function runningModules(state: State.State, ball: State.Ball): { Modules.ModuleType }
+  local list = {}
+  for _, running in ball.vitals.running do
+    local item = state.items[running.item]
+    if item and Modules.byId[item.type] then
+      table.insert(list, Modules.byId[item.type])
+    end
+  end
+  return list
+end
+
+-- How much of a type a ship has in its hold.
+function Combat.Held(state: State.State, ship: number, type: string): number
+  local held = 0
+  for _, stack in Items.In(state, ship, "cargo") do
+    held += if stack.type == type then stack.quantity else 0
+  end
+  return held
+end
+
 -- How many times its laser's volume a ship's mining laser brings in a
 -- cycle, of an ore or a gas: a practised miner gets 5% more for each
 -- level of Mining after the first; and off a rock, so much more for
@@ -691,6 +722,20 @@ function Combat.Yield(state: State.State, ship: number, item: State.Item, ore: s
   local crystal = if item.charge ~= "" then Modules.chargeById[item.charge] else nil
   if crystal and crystal.ore == ore then
     skilled *= crystal.yieldBy or 1
+  end
+  -- (and a mining command burst that reaches it, or its own)
+  local ball = state.balls[ship]
+  if ball then
+    local best = 1
+    for _, module in runningModules(state, ball) do
+      best = math.max(best, if module.burst then module.burst.mining or 1 else 1)
+    end
+    local bursts: { string } = ball.vitals.bursts or {}
+    for _, id in bursts do
+      local burst = Modules.byId[id].burst
+      best = math.max(best, if burst then burst.mining or 1 else 1)
+    end
+    skilled *= best
   end
   return skilled
 end
@@ -882,15 +927,22 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       end
       v.capacitor -= hex.capacitor
       running.next += hex.duration
+      -- (a triage module running: what is mended and sent, so many times as much)
+      local triage = 1
+      if Modules.Friendly(module) then
+        for _, other in runningModules(state, ball) do
+          triage = math.max(triage, other.triage or 1)
+        end
+      end
       -- A neutraliser, a jammer and a remote repairer do their work a
       -- cycle at a time.
       if hex.kind == "shield" or hex.kind == "armor" then
         local t = target.vitals
         local before = if hex.kind == "shield" then t.shield else t.armor
         if hex.kind == "shield" then
-          t.shield = math.min(t.shieldMax, t.shield + hex.strength)
+          t.shield = math.min(t.shieldMax, t.shield + hex.strength * triage)
         else
-          t.armor = math.min(t.armorMax, t.armor + hex.strength)
+          t.armor = math.min(t.armorMax, t.armor + hex.strength * triage)
         end
         table.insert(events, { kind = "Mended", ball = ball.id, target = target.id, layer = hex.kind,
           amount = (if hex.kind == "shield" then t.shield else t.armor) - before })
@@ -898,7 +950,7 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
         -- (what was taken from this ship's capacitor, into the other's: as much of it as there is room for)
         local t = target.vitals
         local before = t.capacitor
-        t.capacitor = math.min(t.capacitorMax, t.capacitor + hex.strength)
+        t.capacitor = math.min(t.capacitorMax, t.capacitor + hex.strength * triage)
         table.insert(events, { kind = "Fed", ball = ball.id, target = target.id, amount = t.capacitor - before })
       elseif hex.kind == "neut" then
         target.vitals.capacitor = math.max(0, target.vitals.capacitor - hex.strength)
@@ -1101,11 +1153,48 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       table.insert(events, { kind = "CapacitorBoosted", ball = ball.id, item = item.id, amount = gives })
       running.next += module.injector.duration
 
+    elseif module.bubble then
+      -- An interdiction field launcher: a field where the ship is, the
+      -- charge spent, and the launcher off (it reloads from the hold).
+      local takes = assert(Modules.Takes(module))
+      if item.rounds <= 0 then
+        if not reload(state, ball, item, takes.clip) then
+          stop(state, ball, index, "out of charges", events)
+          return false
+        end
+      end
+      local bubbles = state.bubbles or {}
+      state.bubbles = bubbles
+      local owner = state.ships[ball.id].owner
+      local field: State.Bubble = { id = State.NewId(state), system = ball.system, grid = ball.grid, x = ball.x, y = ball.y, z = ball.z,
+        radius = module.bubble.radius, owner = owner, expires = state.tick + math.ceil(module.bubble.lasts / Constants.TICK) }
+      table.insert(bubbles, field)
+      item.rounds -= 1
+      table.insert(events, { kind = "BubbleDropped", ball = ball.id, bubble = field.id, radius = field.radius })
+      stop(state, ball, index, "dropped", events)
+      return false
+
     else
       local cost = module.boostCapacitor or 0
       if v.capacitor < cost then
         stop(state, ball, index, "capacitor empty", events)
         return false
+      end
+      -- (what a siege, triage or industrial core module burns, a cycle's worth)
+      local burns = module.burns
+      if burns then
+        if Combat.Held(state, ball.id, burns.type) < burns.quantity then
+          stop(state, ball, index, `out of {Types.Info(burns.type).name}`, events)
+          return false
+        end
+        local left = burns.quantity
+        for _, stack in Items.In(state, ball.id, "cargo") do
+          if stack.type == burns.type and left > 0 then
+            local taken = math.min(left, stack.quantity)
+            Items.Take(state, stack, taken)
+            left -= taken
+          end
+        end
       end
       v.capacitor -= cost
       -- (an adaptive hardener, after its first cycle: a step of its
@@ -1301,6 +1390,64 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
   end
   state.missiles = flying
 
+  -- Command bursts: each running burst reaches its owner's other ships on
+  -- its grid within its range (twice that from a ship whose industrial
+  -- core runs), and a ship reached is boosted as if it ran it itself.
+  local reached: { [number]: { string } } = {}
+  for _, id in state.ballIds do
+    local from = state.balls[id]
+    local whose = state.ships[id]
+    if whose and from.grid ~= 0 and #from.vitals.running > 0 then
+      local modules = runningModules(state, from)
+      local core = false
+      for _, module in modules do
+        core = core or module.core == true
+      end
+      for _, module in modules do
+        if module.burst then
+          local reach = module.burst.range * (if core then 2 else 1)
+          for _, other in state.ballIds do
+            local to = state.balls[other]
+            local theirs = state.ships[other]
+            if other ~= id and theirs and theirs.owner == whose.owner and to.system == from.system and to.grid == from.grid
+              and Space.Distance(from :: any, to :: any) <= reach then
+              local list = reached[other] or {}
+              reached[other] = list
+              if table.find(list, module.id) == nil then
+                table.insert(list, module.id)
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+  for _, id in state.ballIds do
+    local ball = state.balls[id]
+    local list = reached[id]
+    if list then
+      table.sort(list)
+    end
+    local was = ball.vitals.bursts
+    local same = (was == nil and list == nil) or (was ~= nil and list ~= nil and table.concat(was, ",") == table.concat(list, ","))
+    if not same then
+      ball.vitals.bursts = list
+      Vitals.Refresh(state, ball)
+    end
+  end
+  -- Interdiction fields go when their time is up.
+  local bubbles = state.bubbles
+  if bubbles then
+    for index = #bubbles, 1, -1 do
+      if bubbles[index].expires <= state.tick then
+        table.remove(bubbles, index)
+      end
+    end
+    if #bubbles == 0 then
+      state.bubbles = nil
+    end
+  end
+
   -- Wrecks in tractor beams come toward the ships that pull them, a tick's
   -- worth of the beam's speed, to a kilometre off (module expansion).
   for _, id in state.ballIds do
@@ -1371,6 +1518,16 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
     if points > 0 then
       for _, fitted in Items.Fitted(state, id) do
         points -= Modules.byId[fitted.type].stabilizer or 0
+      end
+    end
+    -- (in somebody else's interdiction field, nobody warps: stabilizers or none)
+    local whose = state.ships[id]
+    if whose and state.bubbles then
+      for _, field in state.bubbles do
+        if field.system == ball.system and field.owner ~= whose.owner
+          and math.sqrt((ball.x - field.x) ^ 2 + (ball.y - field.y) ^ 2 + (ball.z - field.z) ^ 2) <= field.radius then
+          points = math.max(points, 1)
+        end
       end
     end
     local entangle, scrambled, paint, damp = entangles[id] or 1, points > 0, paints[id] or 1, damps[id] or 1

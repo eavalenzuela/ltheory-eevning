@@ -651,6 +651,10 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
   if ball.warp and ball.warp.stage == "warp" then
     return false, "in warp"
   end
+  -- (rooted by a siege, triage or industrial core module: module expansion)
+  if ball.vitals.rooted and (kind == "WarpTo" or kind == "Dock" or kind == "Jump") then
+    return false, "rooted to the spot while its module runs"
+  end
   if kind == "Stop" then
     return true
   elseif kind == "Bookmark" then

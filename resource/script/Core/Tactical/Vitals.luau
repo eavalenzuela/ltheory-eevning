@@ -4,6 +4,7 @@
 
 local Attributes = require("@lt/Core/Attributes")
 local Constants = require("@lt/Core/Data/Constants")
+local Modules = require("@lt/Core/Data/Modules")
 local Items = require("@lt/Core/Assets/Items")
 local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
@@ -22,7 +23,21 @@ function Vitals.Stats(state: State.State, ship: State.Ship, vitals: State.Vitals
       running[r.item] = true
     end
   end
-  return Attributes.Ship(Ships.byId[ship.type], Items.Fit(state, ship.id, running), Items.Levels(state, ship.id))
+  local fit = Items.Fit(state, ship.id, running)
+  -- (and the command bursts of others that reach it, as if they ran on it:
+  -- one of each, and none that it runs itself)
+  if vitals and vitals.bursts then
+    for _, burst in vitals.bursts do
+      local own = false
+      for _, each in fit do
+        own = own or (each.type == burst and each.running)
+      end
+      if not own then
+        table.insert(fit, { type = burst, running = true })
+      end
+    end
+  end
+  return Attributes.Ship(Ships.byId[ship.type], fit, Items.Levels(state, ship.id))
 end
 
 -- The fit as the attribute engine wants it, with what is running.
@@ -79,6 +94,16 @@ function Vitals.Refresh(state: State.State, ball: State.Ball)
   v.hullResonance = resonance(stats, "hullResonance")
   -- (an entanglement projector on it takes its share of the speed, whatever the fit)
   ball.maxVelocity, ball.tau = stats.maxVelocity * v.entangle, stats.tau
+  -- (and a siege, triage or industrial core module running roots it)
+  local rooted = false
+  for _, r in v.running do
+    local item = state.items[r.item]
+    rooted = rooted or (item ~= nil and Modules.byId[item.type] ~= nil and Modules.byId[item.type].immobile == true)
+  end
+  v.rooted = if rooted then true else nil
+  if rooted then
+    ball.maxVelocity = 0
+  end
 end
 
 -- A hull that mends by itself goes on mending in a hangar: once a tick,

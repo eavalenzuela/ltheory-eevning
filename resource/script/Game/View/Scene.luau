@@ -146,6 +146,7 @@ export type Scene = {
   fx: Effects.Fx?,                    -- weapon fire and the like, in this system's container
   mining: { [number]: number },       -- when each mining module's beam was last begun, by its item
   wreckage: { [number]: Wrecked },    -- the pieces of each wreck on the grid
+  bubbles: { [number]: Object },      -- the interdiction fields in the system, by their ids
   works: { [number]: { Object } },    -- what stands round each station's tower: its modules, their guns, its field
   -- Where each of those stands from the station's middle, in the order
   -- of 'works' and after the tower's own (the first): to move them by.
@@ -246,7 +247,7 @@ function Scene.New(camera: Camera): Scene
     proxies = {}, celestials = {}, worlds = {}, passing = 0, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6, tracking = 0,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
-    wreckage = {}, works = {}, offsets = {}, moving = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
+    wreckage = {}, bubbles = {}, works = {}, offsets = {}, moving = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
     standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0, ghosts = {}, poses = {}, headings = {}, turned = 0,
   }
 end
@@ -949,6 +950,7 @@ local function enterSystem(scene: Scene, game: Core.Game, system: number)
     dropWorks(scene, id)
   end
   clear(scene, scene.proxies)
+  clear(scene, scene.bubbles)
   table.clear(scene.headings)
   clear(scene, scene.celestials)
   table.clear(scene.worlds)
@@ -1545,6 +1547,30 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         placeWreck(scene, scene.wreckage[id], at, wreck.radius)
         scene.screen[id] = at
       end
+    end
+  end
+  -- Interdiction fields: a shell of their width where each was dropped,
+  -- while it lasts (module expansion, 2026-11-16).
+  local fields: { [number]: boolean } = {}
+  local dropped: { State.Bubble } = state.bubbles or {}
+  for _, field in dropped do
+    if field.system == player.system then
+      fields[field.id] = true
+      local at = vector.create(field.x - scene.ox, field.y - scene.oy, field.z - scene.oz)
+      if not scene.bubbles[field.id] then
+        local made = Object_Scenery({})
+        Object_SetRenderable(made, Starbase.Bubble())
+        container:AddInterior(made)
+        made:SetScale(vector.create(field.radius, field.radius, field.radius))
+        scene.bubbles[field.id] = made
+      end
+      scene.bubbles[field.id]:SetPos(at)
+    end
+  end
+  for id, shell in scene.bubbles do
+    if not fields[id] then
+      Object_Delete(shell)
+      scene.bubbles[id] = nil
     end
   end
   for id, proxy in scene.proxies do

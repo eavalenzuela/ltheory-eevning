@@ -607,6 +607,8 @@ function Session.Notice(session: Session, event: Space.Event)
     session.scanned = { serial = (if session.scanned then session.scanned.serial else 0) + 1, title = "Survey",
       note = `{#rows} {if #rows == 1 then "rock" else "rocks"} in reach, the nearest first`, rows = rows }
     Session.Say(session, `Survey: {#rows} {if #rows == 1 then "rock" else "rocks"} in reach`)
+  elseif kind == "BubbleDropped" and event.ball == mine then
+    Session.Say(session, `Interdiction field up: nobody else warps out of {Format.Distance(event.radius)} round it for two minutes`)
   elseif kind == "MicroJumped" and event.ball == mine then
     Session.Say(session, `Micro jump: {Format.Distance(event.distance)} on. Your locks are broken`)
   elseif kind == "Tractored" and event.ball == mine then

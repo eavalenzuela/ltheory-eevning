@@ -202,6 +202,24 @@ export type ModuleType = {
   scanner: { kind: "ship" | "cargo" | "survey", range: number, duration: number, capacitor: number }?,
   -- A mining upgrade: ore off a rock so many times as much.
   mining: number?,
+  -- A command burst: what its 'boost' does, on the owner's ships within
+  -- range; a mining burst, ore off a rock so many times as much.
+  burst: { range: number, mining: number? }?,
+  -- The hull classes it goes on, if only some (a siege module a dreadnought's).
+  classes: { string }?,
+  -- While it runs the ship cannot move, warp, jump or dock.
+  immobile: boolean?,
+  -- What it burns out of the hold each cycle.
+  burns: { type: string, quantity: number }?,
+  -- A triage module: remote repair and capacitor sent so many times as much.
+  triage: number?,
+  -- An industrial core: the ship's command bursts reach twice as far.
+  core: boolean?,
+  -- A launcher of interdiction fields: so wide, lasting so many seconds.
+  bubble: { radius: number, lasts: number }?,
+  -- A people's make of a module outside its speciality: shaded to its
+  -- style (Modules.Shade), not the speciality's make.
+  shaded: boolean?,
 }
 
 export type ChargeType = {
@@ -789,6 +807,67 @@ table.insert(modules, {
   requires = { { skill = "mining", level = 4 } },
 })
 
+-- ---------------------------------------------------------------------
+-- Module expansion, the fourth group: fleet and capital (2026-11-16; the
+-- figures mine).
+
+-- Command bursts: while one runs, what it boosts is boosted on every ship
+-- of its owner's within its range, its own ship too (the strongest of a
+-- kind counts, not several: Tactical/Combat).
+local function burst(id: string, name: string, boost: { Modifier }, mining: number?)
+  table.insert(modules, {
+    id = id, name = name, short = "Burst", slot = "mid", hardpoint = "",
+    cpu = 40, powergrid = 30, volume = 10, basePrice = 250000, passive = {},
+    boost = boost, boostDuration = 30, boostCapacitor = 40,
+    burst = { range = 15000, mining = mining },
+    requires = { { skill = "leadership", level = 1 } },
+  })
+end
+burst("burst.shield", "Shield Command Burst", resist("shield", 0.9))
+burst("burst.armor", "Armor Command Burst", { ship("armor", "mul", 1.1, true) })
+burst("burst.skirmish", "Skirmish Command Burst", { ship("maxVelocity", "mul", 1.1, true), ship("signature", "mul", 0.9, true) })
+burst("burst.information", "Information Command Burst", { ship("lockRange", "mul", 1.2, true), ship("scanResolution", "mul", 1.2, true) })
+burst("burst.mining", "Mining Command Burst", {}, 1.1)
+
+-- What roots a capital to the spot for a minute at a time, burning so
+-- much of what is refined from ice each cycle out of the hold.
+local SIEGE: { Modifier } = {}
+for _, family in { "laser", "projectile", "hybrid", "missile" } do
+  table.insert(SIEGE, weapons(family, "damageMultiplier", 2))
+end
+table.insert(modules, {
+  id = "siege.module", name = "Siege Module", short = "Siege", slot = "high", hardpoint = "",
+  cpu = 60, powergrid = 1000, volume = 4000, basePrice = 40000000, passive = {}, capital = true,
+  classes = { "dreadnought", "siegedreadnought" }, immobile = true,
+  boost = SIEGE, boostDuration = 60, boostCapacitor = 0, burns = { type = "ice.salts", quantity = 150 },
+  requires = { { skill = "dreadnoughts", level = 1 } },
+})
+table.insert(modules, {
+  id = "triage.module", name = "Triage Module", short = "Triage", slot = "high", hardpoint = "",
+  cpu = 60, powergrid = 1000, volume = 4000, basePrice = 30000000, passive = {}, capital = true,
+  classes = { "carrier" }, immobile = true, triage = 2,
+  boost = { ship("lockRange", "mul", 1.5, true), ship("scanResolution", "mul", 1.5, true) }, boostDuration = 60, boostCapacitor = 0,
+  burns = { type = "ice.salts", quantity = 150 },
+  requires = { { skill = "carriers", level = 1 } },
+})
+table.insert(modules, {
+  id = "industrial.core", name = "Industrial Core", short = "Ind Core", slot = "high", hardpoint = "",
+  cpu = 50, powergrid = 800, volume = 4000, basePrice = 25000000, passive = {}, capital = true,
+  classes = { "capitalindustrial" }, immobile = true, core = true,
+  boost = {}, boostDuration = 60, boostCapacitor = 0, burns = { type = "ice.heavywater", quantity = 250 },
+  requires = { { skill = "capital.industrials", level = 1 } },
+})
+-- A launcher that drops a field where the ship is, which keeps everybody
+-- but its owner's ships in it from warping off for two minutes: a
+-- destroyer's, one charge a field.
+table.insert(modules, {
+  id = "bubble.launcher", name = "Interdiction Field Launcher", short = "Bubble", slot = "high", hardpoint = "",
+  cpu = 50, powergrid = 15, volume = 10, basePrice = 2500000, passive = {}, classes = { "destroyer" },
+  bubble = { radius = 20000, lasts = 120 },
+  takes = { family = "bubble", size = 0, clip = 1, reload = 15 },
+  requires = { { skill = "propulsion.jamming", level = 3 } },
+})
+
 -- By size: capacitor boosters (each cycle a charge's worth into the
 -- capacitor), ancillary shield boosters (a charge in place of the
 -- capacitor a cycle) and ancillary armour repairers (three times as much
@@ -1215,6 +1294,11 @@ table.insert(charges, {
   id = "paste.nanite", name = "Nanite Repair Paste", family = "paste", size = 0, volume = 0.01, basePrice = 300,
   damage = { 0, 0, 0, 0 }, rangeMultiplier = 1, velocity = 0, flightTime = 0, explosionRadius = 0, explosionVelocity = 0,
 })
+-- What an interdiction field launcher fires (module expansion).
+table.insert(charges, {
+  id = "bubble.charge", name = "Interdiction Field Charge", family = "bubble", size = 0, volume = 5, basePrice = 20000,
+  damage = { 0, 0, 0, 0 }, rangeMultiplier = 1, velocity = 0, flightTime = 0, explosionRadius = 0, explosionVelocity = 0,
+})
 -- Mining crystals, one for each ore, for a modulated laser (module
 -- expansion, 2026-11-16; the figures mine).
 for _, each in { { "ferrite", "Ferrite" }, { "silicate", "Silicate" }, { "cuprite", "Cuprite" }, { "titanite", "Titanite" },
@@ -1473,9 +1557,53 @@ local function made(base: ModuleType, id: string, name: string, tune: Tune): Mod
   end
   if hex then
     local h = table.clone(hex)
-    h.strength = if mends then hex.strength * amount else hex.strength
+    -- (what it does to its target, so much more: since 2026-11-16 for every
+    -- kind but a disruptor's, which holds or does not)
+    local kind = hex.kind
+    h.strength = if mends or kind == "neut" or kind == "nos" or kind == "capacitor" then hex.strength * amount
+      elseif kind == "jam" then math.min(0.95, hex.strength * amount)
+      elseif kind == "paint" or kind == "sensor" then 1 + (hex.strength - 1) * amount
+      elseif kind == "entangle" or kind == "damp" or kind == "track" or kind == "guide" then math.max(0.05, 1 - (1 - hex.strength) * amount)
+      else hex.strength
     h.capacitor, h.range = hex.capacitor * tune.capacitor, hex.range * tune.reach
     out.hex = h
+  end
+  -- (what the module expansion's kinds do, so much more: 2026-11-16)
+  if base.drones then
+    local d = base.drones
+    out.drones = { damage = if d.damage then 1 + (d.damage - 1) * amount else nil,
+      tracking = if d.tracking then 1 + (d.tracking - 1) * amount else nil }
+  end
+  if base.mining then
+    out.mining = 1 + (base.mining - 1) * amount
+  end
+  if base.smartbomb then
+    local b = table.clone(base.smartbomb)
+    local damage = {}
+    for kind, d in base.smartbomb.damage do
+      damage[kind] = d * tune.output
+    end
+    b.damage, b.capacitor, b.range = damage, base.smartbomb.capacitor * tune.capacitor, base.smartbomb.range * tune.reach
+    out.smartbomb = b
+  end
+  if base.adaptive then
+    out.adaptive = { total = math.min(0.9, base.adaptive.total * amount), step = base.adaptive.step }
+  end
+  if base.ancillary then
+    out.ancillary = { factor = 1 + (base.ancillary.factor - 1) * amount }
+  end
+  if base.tractor then
+    local b = table.clone(base.tractor)
+    b.range, b.speed, b.capacitor = b.range * tune.reach, b.speed * amount, b.capacitor * tune.capacitor
+    out.tractor = b
+  end
+  if base.scanner then
+    local b = table.clone(base.scanner)
+    b.range, b.capacitor = b.range * tune.reach, b.capacitor * tune.capacitor
+    out.scanner = b
+  end
+  if base.burst then
+    out.burst = { range = base.burst.range * tune.reach, mining = if base.burst.mining then 1 + (base.burst.mining - 1) * amount else nil }
   end
   -- (it is a make of the plain module its base is a make of, and wants the skills of what it was made from)
   out.base = base.base or base.id
@@ -1496,6 +1624,29 @@ end
 -- (Which other thing is whose is my proposal, for the owner to correct:
 -- the Vessari carry more, the Talmar aim better, the Orun go faster,
 -- the Kethri have the capacitor for their lasers.)
+--
+-- And since 2026-11-16 (module expansion; the owner's answer, "Full line
+-- per people"): every people makes its own of most utility modules too
+-- (propulsion, tank, fitting, weapon upgrades, electronic warfare,
+-- remote repair, drone upgrades), shaded to its style. Its speciality
+-- keeps the make above; the rest of its line is shaded, the figures
+-- and which shade is whose mine: the Vessari's well made and easy to
+-- fit, the Talmar's reaching further, the Orun's giving the most and
+-- hardest to fit, the Kethri's drawing the least capacitor.
+local LINE = { "afterburner.", "mwd.", "overdrive", "nanofiber", "shield.", "armor.", "hull.", "damage.control", "capacitor.", "relay.",
+  "fitting.", "heat.", "gyrostabilizer", "flux.", "ballistic.", "tracking.", "computer.", "projector.", "disruptor.", "painter.",
+  "damper.", "neutraliser.", "jammer.", "ewar.", "drain.", "sensor.", "remote.", "drone.", "warp.stabilizer", "cargo.expander" }
+local SHADES: { [string]: Tune } = {
+  vessari = { output = 1.10, fitting = 0.85, capacitor = 1, reach = 1, price = 5 },
+  talmar = { output = 1.10, fitting = 1, capacitor = 1, reach = 1.15, price = 5 },
+  orun = { output = 1.18, fitting = 1.1, capacitor = 1, reach = 1, price = 5 },
+  kethri = { output = 1.10, fitting = 1, capacitor = 0.8, reach = 1, price = 5 },
+}
+-- What a people's shade is, in words (Data/Facts).
+local SHADE_WORDS: { [string]: string } = {
+  vessari = "a tenth better, and easier to fit", talmar = "a tenth better, and reaching further",
+  orun = "nearly a fifth better, and harder to fit", kethri = "a tenth better, and drawing a fifth less capacitor",
+}
 local PEOPLES: { { id: string, name: string, makes: { string } } } = {
   { id = "vessari", name = "Vessari", makes = { "launcher.", "armor.plate", "armor.repairer", "armor.membrane", "armor.hardener",
     "cargo.expander" } },
@@ -1507,16 +1658,24 @@ local PEOPLES: { { id: string, name: string, makes: { string } } } = {
     "armor.hardener", "capacitor.battery", "capacitor.recharger" } },
 }
 local PEOPLE_TUNE: Tune = { output = 1.15, fitting = 1, capacitor = 1, reach = 1, price = 6 }
+local function starts(id: string, prefixes: { string }): boolean
+  for _, prefix in prefixes do
+    if string.sub(id, 1, #prefix) == prefix then
+      return true
+    end
+  end
+  return false
+end
 for _, base in table.clone(modules) do
   if not base.tech and not base.meta and not base.internal and not base.lineage and base.slot ~= "rig" then
     for _, people in PEOPLES do
-      for _, prefix in people.makes do
-        if string.sub(base.id, 1, #prefix) == prefix then
-          local own = made(base, `{base.id}.{people.id}`, `{people.name} {base.name}`, PEOPLE_TUNE)
-          own.meta, own.lineage = 3, people.id
-          table.insert(modules, own)
-          break
-        end
+      local tune = if starts(base.id, people.makes) then PEOPLE_TUNE
+        elseif not base.capital and not base.classes and starts(base.id, LINE) then SHADES[people.id] else nil
+      if tune then
+        local own = made(base, `{base.id}.{people.id}`, `{people.name} {base.name}`, tune)
+        own.meta, own.lineage = 3, people.id
+        own.shaded = if tune ~= PEOPLE_TUNE then true else nil
+        table.insert(modules, own)
       end
     end
   end
@@ -1667,6 +1826,11 @@ function Modules.Peoples(): { string }
     table.insert(ids, people.id)
   end
   return ids
+end
+
+-- How a people's shade of its line is, in words; nil for none.
+function Modules.Shade(people: string): string?
+  return SHADE_WORDS[people]
 end
 
 function Modules.Own(id: string, people: string): ModuleType?

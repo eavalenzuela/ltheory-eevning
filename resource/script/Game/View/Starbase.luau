@@ -1199,6 +1199,26 @@ local function gate(b: Builder)
   mast(b, v(0.04, 1.21, 0), 0.30, 0.02)
 end
 
+local bubbleShell: Model? = nil
+
+-- An interdiction field (module expansion, 2026-11-16): the field's own
+-- shell, in a warning amber. A unit sphere to be scaled to its radius.
+function Starbase.Bubble(): Model
+  if bubbleShell == nil then
+    local shader = ShaderInstance_Create(Shader_Create("npm.jsl", "field.jsl"))
+    ShaderInstance_SetState(shader, "BlendModeAdditive")
+    ShaderInstance_SetState(shader, "ZWritableOff")
+    ShaderInstance_SetState(shader, "CullModeDisabled")
+    ShaderInstance_SetVec3(shader, "fieldTint", vector.create(1.0, 0.58, 0.22))
+    ShaderInstance_SetFloat(shader, "fieldGlow", 0.35)
+    ShaderInstance_Link(shader)
+    local model = Model_Create()
+    Model_AddShell(model, Mesh_SetU(Mesh_BoxSphere(40, true), 1), shader)
+    bubbleShell = model
+  end
+  return bubbleShell :: Model
+end
+
 -- The model of a stargate. (One for everybody, until gates are somebody's.)
 function Starbase.Gate(): Made
   return finish("gate", gate, WORKS, 4.0, 0.11)

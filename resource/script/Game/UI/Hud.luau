@@ -1193,7 +1193,7 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
       end
       local active = module.weapon ~= nil or module.repair ~= nil or module.boost ~= nil or module.miner ~= nil
         or module.hex ~= nil or module.salvager ~= nil or module.injector ~= nil or module.smartbomb ~= nil
-        or module.jump ~= nil or module.tractor ~= nil or module.scanner ~= nil
+        or module.jump ~= nil or module.tractor ~= nil or module.scanner ~= nil or module.bubble ~= nil
       if active then
         pressable += 1
       end
@@ -1257,6 +1257,12 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
       end
       if module.scanner then
         note = if running then "scanning" else "idle"
+      end
+      if module.burst then
+        note = if running then "bursting" else "idle"
+      end
+      if module.immobile then
+        note = if running then "rooted" else "idle"
       end
       if module.cloak then
         note = if running then "cloaked" else "idle"

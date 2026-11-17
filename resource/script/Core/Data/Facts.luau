@@ -327,6 +327,8 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     end
   elseif module.officer and module.base then
     sheet.note = `{module.officer}'s own {nameOf(module.base)}: better than a masterwork, easier to fit, and no harder to use than the plain one. It was in their wreck and nowhere else, and no market deals in one.`
+  elseif module.meta == 3 and people and module.base and module.shaded then
+    sheet.note = `The {people.name}' own make of the {nameOf(module.base)}: {Modules.Shade(people.id) or "better than the plain one"}, and no harder to use. Their stations sell it to pilots they think well of, and their agents now and then pay with one. Nobody has the drawings.`
   elseif module.meta == 3 and people and module.base then
     sheet.note = `The {people.name}' own make of the {nameOf(module.base)}: better than the plain one, and no harder to fit or to use. Their stations sell it to pilots they think well of, and their agents now and then pay a job with one.`
   elseif module.meta == 2 and module.base then
@@ -431,6 +433,41 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     local to = section(sheet, "Mining upgrade")
     row(to, "Ore off a rock", `{plain(module.mining * 100)}% of what it was, with every laser`)
   end
+  -- (module expansion, 2026-11-16: the fourth group's)
+  if module.burst then
+    local to = section(sheet, "Command burst")
+    row(to, "Reaches", `every ship of its owner's within {metres(module.burst.range)}, its own too; twice as far from a running industrial core`)
+    if module.burst.mining then
+      row(to, "Ore off a rock", `{plain(module.burst.mining * 100)}% of what it was`)
+    end
+    row(to, "Of each kind", "only the strongest counts")
+  end
+  if module.classes then
+    local names = {}
+    for _, class in module.classes do
+      table.insert(names, if Ships.CLASS_NAMES[class] then Ships.CLASS_NAMES[class][2] else class)
+    end
+    row(section(sheet, "Fitted to"), "Only", table.concat(names, " and "))
+  end
+  if module.immobile then
+    local to = section(sheet, "While it runs")
+    row(to, "The ship", "cannot move, warp, jump or dock")
+    if module.triage then
+      row(to, "Remote repair and capacitor sent", `{plain(module.triage)} times as much`)
+    end
+    if module.core then
+      row(to, "Command bursts", "reach twice as far")
+    end
+  end
+  if module.burns then
+    row(section(sheet, "Burns"), "Each cycle", `{plain(module.burns.quantity)} {nameOf(module.burns.type)} from the hold`)
+  end
+  if module.bubble then
+    local to = section(sheet, "Interdiction field")
+    row(to, "Dropped", `where the ship is, {metres(module.bubble.radius)} wide`)
+    row(to, "Lasts", seconds(module.bubble.lasts))
+    row(to, "In it", "nobody but its owner's ships can warp, stabilizers or none")
+  end
   if module.takes and module.takes.family == "crystal" then
     row(section(sheet, "Crystals"), "Takes", "a mining crystal: far more of the crystal's ore, never used up")
   end
@@ -533,6 +570,11 @@ local function chargeSheet(sheet: Sheet, charge: Modules.ChargeType)
   if charge.family == "booster" then
     sheet.kind = `{SIZES[charge.size] or "Small"} capacitor charge`
     row(section(sheet, "Charge"), "Puts into the capacitor", `{plain(charge.injects or 0)} GJ, in a capacitor booster; or a cycle's capacitor, in an ancillary shield booster`)
+    trade(sheet, charge.id)
+    return
+  elseif charge.family == "bubble" then
+    sheet.kind = "Interdiction charge"
+    row(section(sheet, "Charge"), "In an interdiction field launcher", "one field")
     trade(sheet, charge.id)
     return
   elseif charge.family == "crystal" then

@@ -224,6 +224,17 @@ function Attributes.Check(hull: Ships.ShipType, types: { string }, levels: Level
     calibration += module.calibration or 0
     table.insert(fitted, { type = id, running = false })
   end
+  -- (a module for some classes goes on those only: module expansion)
+  for _, id in types do
+    local classes = Modules.byId[id].classes
+    if classes and table.find(classes, hull.class) == nil then
+      local names = {}
+      for _, class in classes do
+        table.insert(names, string.lower(if Ships.CLASS_NAMES[class] then Ships.CLASS_NAMES[class][1] else class))
+      end
+      return false, `only a {table.concat(names, " or a ")} fits that`
+    end
+  end
   -- (a capital's module goes on a capital and on nothing smaller)
   if not Ships.Capital(hull.class) then
     for _, id in types do
