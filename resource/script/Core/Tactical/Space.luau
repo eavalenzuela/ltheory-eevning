@@ -18,6 +18,7 @@ local Nomads = require("@lt/Core/Tactical/Nomads")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
+local Skills = require("@lt/Core/Data/Skills")
 local State = require("@lt/Core/Kernel/State")
 local System = require("@lt/Core/Describe/System")
 local Vitals = require("@lt/Core/Tactical/Vitals")
@@ -619,6 +620,17 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
     local carrier = if fleet then Nomads.Ball(state, fleet) else nil
     if carrier and carrier.warp and carrier.warp.stage == "warp" then
       return false, "the colony ship is in warp"
+    end
+    -- (not with a module fitted the pilot has not the skills for: a ship
+    -- may come so, bought fitted out on a contract, Assets/Contracts;
+    -- the owner, 2026-11-16: "buying a fitted ship from contracts, it should already be assembled with the modules fitted. You just shouldn't be able to undock with it if some of the modules you can't use")
+    if ship.id == state.player.ship then
+      for _, item in Items.Fitted(state, ship.id) do
+        local missing = Skills.Missing(Skills.Needs(item.type), state.skills)
+        if missing then
+          return false, `{Skills.Describe(missing)} for the {Modules.byId[item.type].name} fitted`
+        end
+      end
     end
     return true
   elseif kind == "ForgetBookmark" then

@@ -2789,7 +2789,8 @@ end
 
 -- Another cheat, for looking at hulls: while docked, a hull of a type
 -- from nowhere, boarded whatever the pilot's skills, and fitted with
--- what its design is shown with (Game/View/Hull), loaded, as far as
+-- what its design is shown with (Game/View/Hull; the pilot given the
+-- skills that fit wants, so as to undock with it), loaded, as far as
 -- that fits, with more of what it fires in the hold; and with 'tank',
 -- a plain fit's afterburner, extenders, plates and repairer beside. The
 -- ship stepped out of stays in the hangar. False if not docked, or
@@ -2841,6 +2842,16 @@ function Debug.Fly(type: string, tank: boolean?): boolean
         Items.Equip(state, ship.id, module, nil)
       else
         table.remove(types)
+      end
+    end
+  end
+  -- (and the skills its fit wants, to the levels it wants them, where the
+  -- pilot has less: nobody undocks with a module they cannot use,
+  -- Tactical/Space)
+  for _, item in Items.Fitted(state, ship.id) do
+    for _, need in Skills.Needs(item.type) do
+      if (state.skills[need.skill] or 0) < need.level then
+        state.skills[need.skill] = need.level
       end
     end
   end

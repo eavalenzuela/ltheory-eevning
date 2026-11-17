@@ -57,7 +57,9 @@ export type Stack = { type: string, quantity: number }
 -- What a station's board has today: a lot for sale ('side' "offer",
 -- and 'price' is what it costs) or a lot wanted ("want", and 'price' is
 -- what it pays). 'worth' is the base price of it all.
-export type Lot = { key: string, side: "offer" | "want", slot: number, title: string, stacks: { Stack }, price: number, worth: number }
+export type Lot = { key: string, side: "offer" | "want", slot: number, title: string, stacks: { Stack }, price: number, worth: number,
+  -- (a hull fitted out: bought, it is a ship, assembled and fitted)
+  fitted: boolean? }
 
 local DAY = math.ceil(86400 / Constants.TICK)
 local HOUR = math.ceil(3600 / Constants.TICK)
@@ -325,6 +327,7 @@ local function boardOf(state: State.State, station: number, all: boolean?, part:
       local line = hulls(factionOf(state, station))
       local hull = line[Rng.Int(rng, #line) + 1]
       lot.stacks = fitted(hull)
+      lot.fitted = true
       lot.title = `{hull.name}, fitted out`
       lot.worth = Contracts.Base(lot.stacks)
       lot.price = math.ceil(lot.worth * Rng.Float(rng, 0.88, 1.06))
@@ -797,8 +800,40 @@ function Contracts.Apply(state: State.State, command: State.Command, events: { E
   if kind == "AcceptContract" then
     local lot = Contracts.Lot(state, station, "offer", command.target :: number) :: Lot
     Wallet.Pay(state, -lot.price, "contract", events)
-    for _, stack in lot.stacks do
-      Items.Add(state, stack.type, stack.quantity, station, "hangar")
+    local hull = if lot.fitted then Ships.byId[lot.stacks[1].type] else nil
+    if hull then
+      -- A hull fitted out is a ship at the station, assembled, with its
+      -- modules fitted and its weapons loaded, and the rest of its
+      -- charges in its hold (the owner, 2026-11-16: "buying a fitted ship from contracts, it should already be assembled with the modules fitted. You just shouldn't be able to undock with it if some of the modules you can't use"). Whether the pilot can
+      -- use what is fitted is asked when they undock in it (Tactical/Space).
+      local made = Space.NewShip(state, hull.id, hull.name, "player", station)
+      local left: { [string]: number } = {}
+      for index = 2, #lot.stacks do
+        left[lot.stacks[index].type] = (left[lot.stacks[index].type] or 0) + lot.stacks[index].quantity
+      end
+      for _, type in Fits.Standard(hull) do
+        local charge = Fits.Charge(type, hull)
+        local module = Modules.byId[type]
+        local loaded = charge ~= nil and module.weapon ~= nil and (left[charge] or 0) > 0
+        Items.Equip(state, made.id, type, if loaded then charge else nil)
+        left[type] = math.max(0, (left[type] or 0) - 1)
+        if loaded and charge and module.weapon then
+          left[charge] = math.max(0, left[charge] - module.weapon.clip)
+        end
+      end
+      for index = 2, #lot.stacks do
+        local type = lot.stacks[index].type
+        if (left[type] or 0) > 0 then
+          Items.Add(state, type, left[type], if Modules.chargeById[type] then made.id else station,
+            if Modules.chargeById[type] then "cargo" else "hangar")
+          left[type] = 0
+        end
+      end
+      table.insert(events, { kind = "ShipAssembled", ship = made.id, hull = hull.id })
+    else
+      for _, stack in lot.stacks do
+        Items.Add(state, stack.type, stack.quantity, station, "hangar")
+      end
     end
     take(state, lot.key)
     table.insert(events, { kind = "ContractAccepted", station = station, title = lot.title, price = lot.price })

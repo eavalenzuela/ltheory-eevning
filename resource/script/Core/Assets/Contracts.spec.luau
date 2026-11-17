@@ -13,6 +13,8 @@ local Market = require("@lt/Core/Assets/Market")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
+local Fits = require("@lt/Core/Fits")
+local Skills = require("@lt/Core/Data/Skills")
 local Test = require("@lt/Tool/Test")
 local Types = require("@lt/Core/Data/Types")
 
@@ -159,8 +161,9 @@ end)
 suite:Case("a lot for sale is paid for and is in the hangar, and nobody else has it that day", function(t)
   local game, home = newGame()
   local state = game.state
-  local ship = lot(game, home, "offer", 1)
-  t.eq(refused(game, { kind = "AcceptContract", actor = 0, target = 1 }), if ship.price > state.wallet then "not enough credits" else "(accepted)")
+  -- (a lot of a few modules: a hull bought fitted out is a ship, below)
+  local ship = lot(game, home, "offer", 3)
+  t.eq(refused(game, { kind = "AcceptContract", actor = 0, target = 3 }), if ship.price > state.wallet then "not enough credits" else "(accepted)")
   state.wallet = ship.price + 1000
   t.eq(refused(game, { kind = "AcceptContract", actor = 0, target = 9 }), "that is not on the board")
   local before: { number } = {}
@@ -168,7 +171,7 @@ suite:Case("a lot for sale is paid for and is in the hangar, and nobody else has
     before[index] = hangar(game, stack.type)
   end
   Core.TakeEvents(game)
-  order(t, game, { kind = "AcceptContract", actor = 0, target = 1 })
+  order(t, game, { kind = "AcceptContract", actor = 0, target = 3 })
   t.eq({ state.wallet, state.journal[#state.journal].reason } :: { any }, { 1000, "contract" } :: { any })
   for index, stack in ship.stacks do
     t.eq(hangar(game, stack.type) - before[index], stack.quantity, stack.type)
@@ -179,18 +182,14 @@ suite:Case("a lot for sale is paid for and is in the hangar, and nobody else has
   end
   t.eq({ accepted.title, accepted.price, accepted.station } :: { any }, { ship.title, ship.price, home } :: { any })
   -- It is off the board for the day, and the rest of the board is as it was.
-  t.eq(Contracts.Lot(state, home, "offer", 1), nil)
+  t.eq(Contracts.Lot(state, home, "offer", 3), nil)
   t.eq(#Contracts.Board(state, home), Contracts.OFFERS + Contracts.WANTS - 1)
-  t.eq(refused(game, { kind = "AcceptContract", actor = 0, target = 1 }), "that is not on the board")
-  -- The hull is a hull like any bought one: assembled, it is a ship.
-  order(t, game, { kind = "Assemble", actor = 0, item = stack(game, ship.stacks[1].type).id })
-  local ships = Core.Query.Ships(game, home)
-  t.eq(ships[#ships].type, ship.stacks[1].type)
+  t.eq(refused(game, { kind = "AcceptContract", actor = 0, target = 3 }), "that is not on the board")
   -- Tomorrow there is another in its place, and yesterday's taking is forgotten when the next is taken.
   state.tick = DAY + 10
-  local next = lot(game, home, "offer", 1)
+  local next = lot(game, home, "offer", 3)
   state.wallet = next.price
-  order(t, game, { kind = "AcceptContract", actor = 0, target = 1 })
+  order(t, game, { kind = "AcceptContract", actor = 0, target = 3 })
   t.eq({ #state.contractsTaken, state.wallet }, { 1, 0 })
   -- From space too, naming the station: what is bought is in the hangar
   -- there (the owner, 2026-11-16: "you can buy any contract, from any
@@ -251,6 +250,63 @@ suite:Case("the alien peoples' prints are on boards now and then: the Vail's and
     end
   end
   t.ok((seen.drowned or 0) > 0, "no Drowned print on any board looked at")
+end)
+
+suite:Case("a hull bought fitted out is a ship at the station, assembled, fitted and loaded; and it does not undock with what the pilot cannot use", function(t)
+  -- (the owner, 2026-11-16: "it should already be assembled with the
+  -- modules fitted. You just shouldn't be able to undock with it if some
+  -- of the modules you can't use")
+  local game, home = newGame()
+  local state = game.state
+  local lot = lot(game, home, "offer", 1)
+  t.ok(lot.fitted == true, lot.title)
+  local hull = Ships.byId[lot.stacks[1].type]
+  state.wallet = lot.price
+  Core.TakeEvents(game)
+  order(t, game, { kind = "AcceptContract", actor = 0, target = 1 })
+  local assembled: any = nil
+  for _, event in Core.TakeEvents(game) do
+    assembled = if event.kind == "ShipAssembled" then event else assembled
+  end
+  t.ok(assembled ~= nil, "no ship was assembled")
+  local made = state.ships[assembled.ship]
+  t.eq({ made.type, made.owner, made.docked } :: { any }, { hull.id, "player", home } :: { any })
+  local fit = Fits.Standard(hull)
+  local fitted = Items.Fitted(state, made.id)
+  t.eq(#fitted, #fit, "every module of the lot is fitted")
+  for _, item in Items.In(state, home, "hangar") do
+    t.ok(item.type ~= hull.id, "the hull is not left packaged in the hangar")
+  end
+  for _, item in fitted do
+    local module = Modules.byId[item.type]
+    if module.weapon and Fits.Charge(item.type, hull) then
+      t.ok(item.charge ~= "" and item.rounds > 0, `{module.name} is loaded`)
+    end
+  end
+  -- Boarded by a pilot with the hull's skill and nothing else: not out of the station.
+  for _, need in Skills.Needs(hull.id) do
+    state.skills[need.skill] = need.level
+  end
+  order(t, game, { kind = "BoardShip", actor = 0, target = made.id })
+  local wanting = false
+  local kept = table.clone(state.skills)
+  for _, item in fitted do
+    for _, need in Skills.Needs(item.type) do
+      if (state.skills[need.skill] or 0) < need.level then
+        wanting = true
+      end
+    end
+  end
+  if wanting then
+    local why = refused(game, { kind = "Undock", actor = 0 }) :: string
+    t.ok(string.find(why, "fitted", 1, true) ~= nil, why)
+  end
+  -- With the skills for all of it, out it goes.
+  for _, skill in Skills.list do
+    state.skills[skill.id] = 5
+  end
+  t.eq(refused(game, { kind = "Undock", actor = 0 }), "(accepted)")
+  state.skills = kept
 end)
 
 suite:Case("every board in the galaxy is listed, the nearest first, and a lot taken is off the list", function(t)

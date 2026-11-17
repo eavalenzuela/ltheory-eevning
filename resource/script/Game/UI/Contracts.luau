@@ -408,7 +408,9 @@ local function drawLot(session: Session.Session, game: Core.Game, rows: { Core.C
       Session.Do(session, buy)
     end
     line += 38
-    Im.Wrapped(`What is bought is delivered to your hangar at {row.name}: it stays there until it is fetched.`, dx, line, dw, 12, Theme.DIM)
+    Im.Wrapped(if lot.fitted
+      then `The ship is delivered to {row.name} assembled, with its modules fitted and its guns loaded. It cannot undock with a module you have not the skills for.`
+      else `What is bought is delivered to your hangar at {row.name}: it stays there until it is fetched.`, dx, line, dw, 12, Theme.DIM)
   end
   local _ = h
 end

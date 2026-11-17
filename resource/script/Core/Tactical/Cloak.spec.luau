@@ -41,6 +41,8 @@ local function adrift(): (Core.Game, State.Ball, State.Item)
   local state = game.state
   local gun = Items.Fitted(state, state.player.ship)[1]
   Items.Take(state, gun, 1)
+  -- (with the skill for it: nobody undocks with a module they cannot use)
+  state.skills.cloaking = 1
   local cloak = Items.Equip(state, state.player.ship, "cloak.device", nil)
   assert(submit(game, { kind = "Undock", actor = 0 }))
   local me = state.balls[state.player.ship]
@@ -133,6 +135,9 @@ suite:Case("anything that comes within two kilometres switches a cloak off, and 
   local home = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   Items.Take(home.state, Items.Fitted(home.state, home.state.player.ship)[1], 1)
   local fitted = Items.Equip(home.state, home.state.player.ship, "cloak.device", nil)
+  -- (not without the skill for it)
+  t.eq(refused(home, { kind = "Undock", actor = 0 }), "needs Cloaking 1 for the Cloaking Device fitted")
+  home.state.skills.cloaking = 1
   t.ok((submit(home, { kind = "Undock", actor = 0 })))
   local why = refused(home, { kind = "ActivateModule", actor = 0, item = fitted.id })
   t.ok(why ~= "(accepted)" and string.sub(why or "", 1, 8) == "too near", `at the station's door: {tostring(why)}`)
