@@ -24,7 +24,10 @@ void main() {
   vec4 color1 = texture2D(normalBuffer, uvp);
   vec3 N = decodeNormal(color1.xy);
   float R = color1.z;
-  int material = int(kMaterialCount * color1.w);
+  int material = materialOf(color1.w);
+  /* (what is built is lit as metal is, and only it in the cel looks) */
+  bool made = material == MATERIAL_MADE;
+  if (made) material = MATERIAL_COOKT;
 
   vec3 p = worldRayO + depth * worldRayD;
   vec3 light = vec3(0.0);
@@ -75,7 +78,7 @@ void main() {
       vec3 L = center[i] - p;
       float Lmag = 1.0 / max(kMinDistance, length(L));
       /* (in the second look only: Cel V2) */
-      if (cel > 1.5) {
+      if (cel > 1.5 && made) {
         vec3 Ld = L * Lmag;
         float NLs = dot(N, Ld);
         float tone = 0.45 * smoothstep(-0.02, 0.02, NLs);

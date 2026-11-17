@@ -332,6 +332,6 @@ void main() {
   outputAlbedo(lin(c) * mix(mix(0.75, 0.30, grain), 1.0, smoothstep(0.0, 0.75, open)) * mix(3.6, 4.6, grain));
   outputAlpha(1.0);
   outputNormal(normalize(normal));
-  outputMaterial(MATERIAL_COOKT);
+  outputMaterial(MATERIAL_MADE);
   outputRoughness(rough);
 }

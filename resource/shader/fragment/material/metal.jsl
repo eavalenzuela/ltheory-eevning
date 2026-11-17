@@ -70,7 +70,7 @@ void main() {
   outputAlbedo(c);
   outputAlpha(1.0);
   outputNormal(n);
-  outputMaterial(MATERIAL_COOKT);
+  outputMaterial(MATERIAL_MADE);
   outputRoughness(r);
 #endif
 }

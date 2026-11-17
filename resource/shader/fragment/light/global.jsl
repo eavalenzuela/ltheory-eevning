@@ -41,7 +41,10 @@ void main() {
   vec4 normalmat = texture2D(normalBuffer, uv);
   vec3 N = decodeNormal(normalmat.xy);
   float roughness = normalmat.z;
-  int material = int(kMaterialCount * normalmat.w);
+  int material = materialOf(normalmat.w);
+  /* (what is built is lit as metal is, and only it in the cel looks) */
+  bool made = material == MATERIAL_MADE;
+  if (made) material = MATERIAL_COOKT;
 
   vec3 p = worldRayO + depth * worldRayD;
   float fog = getFoginess(length(p));
@@ -104,7 +107,7 @@ void main() {
        as a silhouette. There are no shadows yet, so the far side of an
        object is simply the side facing away. */
     float NL = saturate(dot(N, L));
-    if (cel > 0.5) {
+    if (cel > 0.5 && made) {
       /* (three flat tones, a hard highlight, and the sky as a flat fill
          in place of its reflection) */
       bool second = cel > 1.5;
@@ -141,5 +144,5 @@ void main() {
     light = vec3(1.0);
   }
 
-  RETURN(vec4(asLight(light), (cel > 0.5 && material != MATERIAL_NOSHADE) ? 1.0 - inkAt(N, depth) : 1.0));
+  RETURN(vec4(asLight(light), (cel > 0.5 && made) ? 1.0 - inkAt(N, depth) : 1.0));
 }

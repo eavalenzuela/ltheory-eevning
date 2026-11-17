@@ -24,7 +24,19 @@ const int MATERIAL_PHONG = 0;
 const int MATERIAL_COOKT = 1;
 const int MATERIAL_ICE = 2;
 const int MATERIAL_NOSHADE = 3;
-const float kMaterialCount = 4.0;
+/* What is built (hulls, stations, towers, all metal): lit as MATERIAL_COOKT
+   is, and in the cel looks drawn in flat tones and inked, where rock,
+   ice, planets and the sky stay as they are (the owner, 2026-11-17:
+   "Cel shading should apply to all manmade items. Backgrounds and
+   environments stay photoreal"). */
+const int MATERIAL_MADE = 4;
+const float kMaterialCount = 5.0;
+
+/* The material a pixel has, from what outputMaterial wrote (to the
+   nearest, so that a buffer of eight bits reads it back the same). */
+int materialOf(float w) {
+  return int(floor(kMaterialCount * w + 0.5));
+}
 
 #if 0
 
