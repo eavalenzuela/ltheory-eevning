@@ -59,6 +59,9 @@ export type Vitals = {
   shield: number,
   armor: number,
   hull: number,
+  -- What it has taken of each kind of damage since an adaptive hardener
+  -- of its last looked (Tactical/Combat); nil until it has taken any.
+  taken: { number }?,
   capacitor: number,
   shieldMax: number,
   armorMax: number,
@@ -127,6 +130,9 @@ export type Item = {
   -- a logistics capital's, Data/Ships)
   place: "hangar" | "corporate" | "cargo" | "dronebay" | "orehold" | "shipbay" | "high" | "mid" | "low" | "rig",
   slot: number,       -- within its rack, from 1; 0 unless fitted
+  -- An adaptive armour hardener's share of resistance for each kind, as
+  -- it has shifted (Data/Modules' 'adaptive'); nil: evenly.
+  adapt: { number }?,
   charge: string,     -- for a fitted weapon: the charge type loaded, or ""
   rounds: number,     -- and the shots left in the clip
 }

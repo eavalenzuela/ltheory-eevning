@@ -362,6 +362,25 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     local to = section(sheet, "Repair")
     row(to, if repair.layer == "shield" then "Shield restored" else "Armour repaired", `{plain(repair.amount)} HP every {seconds(repair.duration)}`)
     row(to, "Capacitor a cycle", `{plain(repair.capacitor)} GJ`)
+    -- (an ancillary one: what a charge does for it)
+    local ancillary, takes = module.ancillary, module.takes
+    if ancillary and takes then
+      row(to, "Loaded", if ancillary.factor > 1 then `{plain(ancillary.factor)} times as much a cycle, a charge a cycle`
+        else "draws no capacitor, a charge a cycle")
+      row(to, "Takes", `{if takes.family == "paste" then "repair paste" else "capacitor charges"}, {takes.clip} at a time, {seconds(takes.reload)} to reload`)
+    end
+  end
+  -- A capacitor booster: what it is loaded with, and how often it gives it.
+  if module.injector and module.takes then
+    local to = section(sheet, "Capacitor booster")
+    row(to, "Puts in", `a charge's worth every {seconds(module.injector.duration)}`)
+    row(to, "Takes", `{string.lower(SIZES[module.takes.size] or "")} capacitor charges, {module.takes.clip} at a time, {seconds(module.takes.reload)} to reload`)
+  end
+  -- An adaptive hardener: how much it holds, and how it shifts.
+  if module.adaptive then
+    local to = section(sheet, "Adaptive hardener")
+    row(to, "Armour resistance", `{plain(module.adaptive.total * 100)}% in all, evenly at first`)
+    row(to, "Each cycle", `{plain(module.adaptive.step * 100)}% moves to the kind of damage taken most`)
   end
   if module.slot == "rig" then
     local to = section(sheet, "Rig")
@@ -454,6 +473,18 @@ local function chargeSheet(sheet: Sheet, charge: Modules.ChargeType)
       elseif plain.rangeMultiplier > 1.3 then "it reaches a quarter further and hits a little harder, and the gun tracks a fifth worse with it"
       else "the gun tracks three tenths better with it and it hits a little harder, at a seventh less range"
     sheet.note = `The tech 2 make of {nameOf(charge.base)}: {how}. Only a tech 2 weapon takes it. Nobody sells it: its blueprint is invented from the plain one's.`
+  end
+  -- (a capacitor charge, and repair paste: what they do, not damage)
+  if charge.family == "booster" then
+    sheet.kind = `{SIZES[charge.size] or "Small"} capacitor charge`
+    row(section(sheet, "Charge"), "Puts into the capacitor", `{plain(charge.injects or 0)} GJ, in a capacitor booster; or a cycle's capacitor, in an ancillary shield booster`)
+    trade(sheet, charge.id)
+    return
+  elseif charge.family == "paste" then
+    sheet.kind = "Repair paste"
+    row(section(sheet, "Charge"), "In an ancillary armour repairer", "three times as much repaired a cycle, a unit a cycle")
+    trade(sheet, charge.id)
+    return
   end
   local to = section(sheet, "Charge")
   row(to, "Damage", damage(charge.damage, 1))

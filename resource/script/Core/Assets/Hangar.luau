@@ -123,8 +123,9 @@ function Hangar.Apply(state: State.State, command: State.Command, events: { Even
     local station = ship.docked
     for _, item in table.clone(Items.In(state, other.id)) do
       local module = Modules.byId[item.type]
-      if item.slot > 0 and module and module.weapon and item.charge ~= "" then
-        local quantity = if module.weapon.clip == 0 then 1 else item.rounds
+      local takes = if module then Modules.Takes(module) else nil
+      if item.slot > 0 and takes and item.charge ~= "" then
+        local quantity = if takes.clip == 0 then 1 else item.rounds
         if quantity > 0 then
           Items.Add(state, item.charge, quantity, station, "hangar")
         end

@@ -54,6 +54,8 @@ local MODULES: { { any } } = {
   -- (what makes the weapons better: bolted on, or switched on)
   { "heat.", "Weapon upgrades", 4.5 }, { "gyrostabilizer", "Weapon upgrades", 4.5 }, { "flux.", "Weapon upgrades", 4.5 },
   { "ballistic.", "Weapon upgrades", 4.5 }, { "tracking.", "Weapon upgrades", 4.5 }, { "computer.", "Weapon upgrades", 4.5 },
+  -- (what the hull has to fit with, and what holds it together: module expansion, 2026-11-16)
+  { "fitting.", "Engineering", 8.5 }, { "relay.", "Engineering", 8.5 }, { "hull.", "Armour", 6 },
 }
 local MISSILES = { "Light missiles", "Heavy missiles", "Cruise missiles" }
 local MAKES: { [string]: { any } } = {
@@ -93,6 +95,12 @@ function Catalog.Group(id: string): (string, number, number)
     local charge = Modules.chargeById[id]
     if charge.family == "missile" then
       return MISSILES[charge.size] or "Missiles", 3 + charge.size, charge.size
+    end
+    -- (a capacitor booster's charges, and repair paste: module expansion, 2026-11-16)
+    if charge.family == "booster" then
+      return "Capacitor charges", 10, charge.size
+    elseif charge.family == "paste" then
+      return "Repair paste", 11, 0
     end
     local order = if charge.family == "laser" then 1 elseif charge.family == "projectile" then 2 else 3
     return if order == 1 then "Laser crystals" elseif order == 2 then "Projectile rounds" else "Hybrid charges", order, charge.size

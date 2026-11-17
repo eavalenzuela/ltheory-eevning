@@ -24,7 +24,7 @@ local Attributes = {}
 -- A module on a ship: its type and whether it is running (its 'boost'
 -- then applies).
 -- ('spared': a booster at work whose ill effect did not strike.)
-export type Fitted = { type: string, running: boolean, spared: boolean? }
+export type Fitted = { type: string, running: boolean, spared: boolean?, adapt: { number }? }
 
 -- A ship's attributes by name: "shield", "maxVelocity", "armorResonance.2", ...
 export type Stats = { [string]: number }
@@ -121,6 +121,14 @@ local function gather(fitted: { Fitted }, on: string, family: string?, levels: L
       for _, modifier in module.boost do
         if modifier.on == on and (on == "ship" or modifier.family == family or (modifier.family == "turret" and family ~= "missile")) then
           collect(pending, modifier)
+        end
+      end
+      -- (an adaptive hardener: its resistance as it has shifted, evenly at first)
+      local adaptive = module.adaptive
+      if adaptive and on == "ship" then
+        for kind = 1, 4 do
+          local share = if f.adapt then f.adapt[kind] else adaptive.total / 4
+          collect(pending, { on = "ship", attribute = `armorResonance.{kind}`, op = "mul", value = 1 - share, stack = true })
         end
       end
     end

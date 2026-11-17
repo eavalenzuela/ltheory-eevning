@@ -1223,10 +1223,11 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
       -- What it is doing, in a word, for whoever asks.
       local note = if not active then "does its work by itself" else "off"
       local rounds: number? = nil
-      if module.weapon then
+      local takes = Modules.Takes(module)
+      if takes then
         if item.charge == "" then
           note = "empty"
-        elseif module.weapon.clip > 0 then
+        elseif takes.clip > 0 then
           rounds = item.rounds
           for _, each in slot.items do
             rounds = math.min(rounds :: number, each.rounds)

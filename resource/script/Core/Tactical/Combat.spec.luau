@@ -793,4 +793,92 @@ suite:Case("a wreck with something aboard stays to be looted after it is salvage
   t.eq(refused(a, { kind = "ActivateModule", actor = 0, item = modules(a)[1].id, target = far }), "out of range")
 end)
 
+-- ---------------------------------------------------------------------
+-- Module expansion, the first group (2026-11-16): fitting and tank.
+
+suite:Case("what the hull has to fit with and holds together by: a co-processor, a reactor unit, the relays and the bulkheads", function(t)
+  local hull = Ships.byId["frigate.akashi"]
+  local bare = Attributes.Ship(hull, {}, nil)
+  local function with(type: string): Attributes.Stats
+    return Attributes.Ship(hull, { { type = type, running = false } }, nil)
+  end
+  t.near(with("fitting.coprocessor").cpu, bare.cpu * 1.1, 1e-6)
+  t.near(with("fitting.reactor").powergrid, bare.powergrid * 1.1, 1e-6)
+  t.near(with("relay.shield").shieldRecharge, bare.shieldRecharge * 0.8, 1e-6)
+  t.near(with("relay.shield").capacitorRecharge, bare.capacitorRecharge * 1.1, 1e-6)
+  t.near(with("relay.capacitor").capacitorRecharge, bare.capacitorRecharge * 0.8, 1e-6)
+  t.near(with("hull.bulkhead").hull, bare.hull * 1.25, 1e-6)
+  t.ok(with("hull.bulkhead").cargo < bare.cargo, "bulkheads take room from the hold")
+end)
+
+suite:Case("a capacitor booster puts a charge into the capacitor each cycle, and reloads from the hold", function(t)
+  local a = arena("frigate.akashi", { { "capacitor.booster.small", "booster.charge.small" } }, "frigate.courier", {}, 20000)
+  local state = a.game.state
+  local booster = Items.Fitted(state, a.me.id)[1]
+  Items.Add(state, "booster.charge.small", 5, a.me.id, "cargo")
+  t.eq({ booster.charge, booster.rounds } :: { any }, { "booster.charge.small", 3 } :: { any })
+  a.me.vitals.capacitor = 10
+  order(t, a, { kind = "ActivateModule", actor = 0, item = booster.id })
+  local boosted = stepUntil(a, "CapacitorBoosted", 5)
+  t.eq(boosted.amount, 100)
+  t.ok(a.me.vitals.capacitor >= 100, `capacitor {a.me.vitals.capacitor}`)
+  t.eq(booster.rounds, 2)
+  -- (three charges, and then a reload of three more from the hold)
+  stepUntil(a, "Reloading", 40)
+  stepUntil(a, "CapacitorBoosted", 30)
+  t.eq(booster.rounds, 2)
+  local left = 0
+  for _, item in Items.In(state, a.me.id, "cargo") do
+    left += if item.type == "booster.charge.small" then item.quantity else 0
+  end
+  t.eq(left, 2)
+end)
+
+suite:Case("an ancillary armour repairer does three times as much with paste, and works on without it", function(t)
+  local a = arena("frigate.akashi", { { "armor.repairer.ancillary.small", "paste.nanite" } }, "frigate.courier", {}, 20000)
+  local state = a.game.state
+  local repairer = Items.Fitted(state, a.me.id)[1]
+  a.me.vitals.armor = 1
+  order(t, a, { kind = "ActivateModule", actor = 0, item = repairer.id })
+  local first = stepUntil(a, "Repaired", 5)
+  t.eq(first.amount, 180)
+  t.eq(repairer.rounds, 7)
+  repairer.rounds = 0
+  local plain = stepUntil(a, "Repaired", 20)
+  t.eq(plain.amount, 60, "with no paste in the hold, it works as a plain one")
+end)
+
+suite:Case("an ancillary shield booster spends a charge in place of the capacitor", function(t)
+  local a = arena("frigate.akashi", { { "shield.booster.ancillary.small", "booster.charge.small" } }, "frigate.courier", {}, 20000)
+  local state = a.game.state
+  local booster = Items.Fitted(state, a.me.id)[1]
+  a.me.vitals.shield = 1
+  local before = a.me.vitals.capacitor
+  order(t, a, { kind = "ActivateModule", actor = 0, item = booster.id })
+  stepUntil(a, "Repaired", 5)
+  t.ok(a.me.vitals.capacitor >= before - 1, "a charged cycle draws no capacitor")
+  t.eq(booster.rounds, 8)
+end)
+
+suite:Case("an adaptive armour hardener shifts its resistance toward what the ship is hit with", function(t)
+  local a = arena("frigate.akashi", { { "armor.hardener.adaptive" } }, "frigate.courier", {}, 20000)
+  local state = a.game.state
+  local hardener = Items.Fitted(state, a.me.id)[1]
+  order(t, a, { kind = "ActivateModule", actor = 0, item = hardener.id })
+  Core.Step(a.game)
+  local even = a.me.vitals.armorResonance[3]
+  -- (kinetic damage, cycle after cycle)
+  for _ = 1, 4 do
+    a.me.vitals.taken = { 0, 0, 100, 0 }
+    for _ = 1, 11 do
+      Core.Step(a.game)
+    end
+  end
+  t.ok(hardener.adapt ~= nil, "nothing shifted")
+  local split = hardener.adapt :: { number }
+  t.ok(split[3] > 0.15, `kinetic {split[3]}`)
+  t.near(split[1] + split[2] + split[3] + split[4], 0.6, 1e-9)
+  t.ok(a.me.vitals.armorResonance[3] < even, "the ship lets less kinetic through")
+end)
+
 return suite

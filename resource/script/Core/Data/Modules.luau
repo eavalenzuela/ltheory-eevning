@@ -163,6 +163,22 @@ export type ModuleType = {
   rolls: { number }?,
   -- The officer whose it was, for an officer's.
   officer: string?,
+  -- What a module that is no weapon is loaded with (Modules.Takes): the
+  -- family and size of charge (size 0: any), how many it holds, and the
+  -- seconds a reload from the hold takes. (Module expansion, 2026-11-16.)
+  takes: { family: string, size: number, clip: number, reload: number }?,
+  -- A capacitor booster: each cycle (s) puts the charge it is loaded
+  -- with into the capacitor, a charge a cycle.
+  injector: { duration: number }?,
+  -- A repairer that does 'factor' times as much a cycle while it has a
+  -- charge loaded, a charge a cycle (an armour one: paste); a shield one
+  -- spends a charge in place of capacitor instead (factor 1).
+  ancillary: { factor: number }?,
+  -- An adaptive hardener: while it runs it holds 'total' of armour
+  -- resistance spread over the four kinds, at first evenly, and each
+  -- cycle moves 'step' of it from the kind the ship took least of to the
+  -- kind it took most of (Tactical/Combat).
+  adaptive: { total: number, step: number }?,
 }
 
 export type ChargeType = {
@@ -186,6 +202,8 @@ export type ChargeType = {
   -- which only a tech 2 weapon takes (below).
   tech: number?,
   base: string?,
+  -- A capacitor charge: GJ it puts into the capacitor (a booster's).
+  injects: number?,
 }
 
 local function ship(attribute: string, op: "add" | "mul", value: number, stack: boolean?): Modifier
@@ -541,6 +559,83 @@ local modules: { ModuleType } = {
     passive = { ship("cargo", "mul", 1.175, true), ship("maxVelocity", "mul", 0.9) },
   },
 }
+
+-- ---------------------------------------------------------------------
+-- Module expansion, the first group: fitting and tank (the owner,
+-- 2026-11-16, asked which groups of new kinds: all four; this is the
+-- first). The figures are mine.
+
+-- What the hull has to fit with: more CPU, or more powergrid (not
+-- penalised against each other: each is the only one of its kind).
+table.insert(modules, {
+  id = "fitting.coprocessor", name = "Co-Processor", slot = "low", hardpoint = "",
+  cpu = 0, powergrid = 1, volume = 5, basePrice = 15000, passive = { ship("cpu", "mul", 1.10) },
+  requires = { { skill = "electronics", level = 2 } },
+})
+table.insert(modules, {
+  id = "fitting.reactor", name = "Reactor Control Unit", slot = "low", hardpoint = "",
+  cpu = 20, powergrid = 0, volume = 5, basePrice = 18000, passive = { ship("powergrid", "mul", 1.10) },
+  requires = { { skill = "engineering", level = 2 } },
+})
+-- A relay: one of the ship's two recharges quicker, the other slower.
+table.insert(modules, {
+  id = "relay.shield", name = "Shield Power Relay", slot = "low", hardpoint = "",
+  cpu = 12, powergrid = 1, volume = 5, basePrice = 12000,
+  passive = { ship("shieldRecharge", "mul", 0.8, true), ship("capacitorRecharge", "mul", 1.1) },
+  requires = { { skill = "shield.operation", level = 2 } },
+})
+table.insert(modules, {
+  id = "relay.capacitor", name = "Capacitor Power Relay", slot = "low", hardpoint = "",
+  cpu = 12, powergrid = 1, volume = 5, basePrice = 12000,
+  passive = { ship("capacitorRecharge", "mul", 0.8, true), ship("shieldRecharge", "mul", 1.1) },
+  requires = { { skill = "engineering", level = 2 } },
+})
+-- More hull, and less room in the hold for the bracing.
+table.insert(modules, {
+  id = "hull.bulkhead", name = "Reinforced Bulkheads", slot = "low", hardpoint = "",
+  cpu = 10, powergrid = 1, volume = 5, basePrice = 10000,
+  passive = { ship("hull", "mul", 1.25, true), ship("cargo", "mul", 0.9) },
+  requires = { { skill = "hull.upgrades", level = 1 } },
+})
+-- An armour hardener that learns: it shifts its resistance toward what
+-- the ship is being hit with.
+table.insert(modules, {
+  id = "armor.hardener.adaptive", name = "Adaptive Armor Hardener", short = "Adaptive", slot = "low", hardpoint = "",
+  cpu = 25, powergrid = 1, volume = 5, basePrice = 30000, passive = {},
+  boost = {}, boostDuration = 10, boostCapacitor = 10,
+  adaptive = { total = 0.6, step = 0.06 },
+  requires = { { skill = "hull.upgrades", level = 3 } },
+})
+-- By size: capacitor boosters (each cycle a charge's worth into the
+-- capacitor), ancillary shield boosters (a charge in place of the
+-- capacitor a cycle) and ancillary armour repairers (three times as much
+-- a cycle while there is paste).
+local ANCILLARY_SIZES: { { any } } = { { "small", "Small", 1 }, { "medium", "Medium", 2 }, { "large", "Large", 3 } }
+for _, each in ANCILLARY_SIZES do
+  local name, title, size = each[1] :: string, each[2] :: string, each[3] :: number
+  local cpuBy, gridBy, priceBy = ({ 1, 1.6, 2.4 })[size], ({ 1, 15, 180 })[size], ({ 1, 8, 60 })[size]
+  local amountBy, cycleBy, capBy = ({ 1, 3.2, 9 })[size], ({ 1, 1.5, 2.25 })[size], ({ 1, 3, 8.5 })[size]
+  table.insert(modules, {
+    id = `capacitor.booster.{name}`, name = `{title} Capacitor Booster`, short = "Cap Booster", slot = "mid", hardpoint = "",
+    cpu = math.floor(20 * cpuBy + 0.5), powergrid = math.floor(10 * gridBy + 0.5), volume = 5 * size, basePrice = 15000 * priceBy,
+    passive = {}, takes = { family = "booster", size = size, clip = 3, reload = 10 }, injector = { duration = 10 * cycleBy },
+    requires = { { skill = "engineering", level = size + 1 } },
+  })
+  table.insert(modules, {
+    id = `shield.booster.ancillary.{name}`, name = `{title} Ancillary Shield Booster`, short = "Ancillary", slot = "mid", hardpoint = "",
+    cpu = math.floor(30 * cpuBy + 0.5), powergrid = math.floor(4 * gridBy + 0.5), volume = 5 * size, basePrice = 20000 * priceBy,
+    passive = {}, repair = { layer = "shield", amount = 40 * amountBy, duration = 3 * cycleBy, capacitor = 30 * capBy },
+    takes = { family = "booster", size = size, clip = 9, reload = 60 }, ancillary = { factor = 1 },
+    requires = { { skill = "shield.operation", level = size + 1 } },
+  })
+  table.insert(modules, {
+    id = `armor.repairer.ancillary.{name}`, name = `{title} Ancillary Armor Repairer`, short = "Ancillary", slot = "low", hardpoint = "",
+    cpu = math.floor(10 * cpuBy + 0.5), powergrid = math.floor(7 * gridBy + 0.5), volume = 5 * size, basePrice = 20000 * priceBy,
+    passive = {}, repair = { layer = "armor", amount = 60 * amountBy, duration = 6 * cycleBy, capacitor = 40 * capBy },
+    takes = { family = "paste", size = 0, clip = 8, reload = 60 }, ancillary = { factor = 3 },
+    requires = { { skill = "repair.systems", level = size + 1 } },
+  })
+end
 
 -- A round costs 20; a crystal, which is never used up, as much as a
 -- hundred and fifty of them.
@@ -922,6 +1017,21 @@ table.insert(modules, {
 -- Ammunition by size. The small charges are written out above; the
 -- medium and large ones are those, larger. And what the hybrids fire.
 addRounds(ROUNDS[2])
+
+-- What the boosters and the ancillary repairers are loaded with (module
+-- expansion, 2026-11-16; the figures mine): capacitor charges by size,
+-- and nanite paste, which any ancillary armour repairer takes.
+for size, each in { { "small", "Small", 100, 1.5, 60 }, { "medium", "Medium", 400, 6, 220 }, { "large", "Large", 1200, 18, 640 } } :: { { any } } do
+  table.insert(charges, {
+    id = `booster.charge.{each[1]}`, name = `{each[2]} Capacitor Charge`, family = "booster", size = size, volume = each[4],
+    basePrice = each[5], damage = { 0, 0, 0, 0 }, rangeMultiplier = 1, velocity = 0, flightTime = 0, explosionRadius = 0,
+    explosionVelocity = 0, injects = each[3],
+  })
+end
+table.insert(charges, {
+  id = "paste.nanite", name = "Nanite Repair Paste", family = "paste", size = 0, volume = 0.01, basePrice = 300,
+  damage = { 0, 0, 0, 0 }, rangeMultiplier = 1, velocity = 0, flightTime = 0, explosionRadius = 0, explosionVelocity = 0,
+})
 for _, reach in MISSILE_REACH do
   local made = missile(`missile.light.em{reach.id}`, `Arc Light {reach.form}`, { 83 * reach.damage, 0, 0, 0 })
   made.flightTime *= reach.flight
@@ -1075,6 +1185,8 @@ for _, base in table.clone(modules) do
           duration = hex.duration, capacitor = hex.capacitor } else nil,
         internal = base.internal,
         tech = make.tech, meta = make.meta, base = base.id,
+        -- (and what it is loaded with, and does with it, as its plain make)
+        takes = base.takes, ancillary = base.ancillary, short = base.short,
       })
     end
   end
@@ -1226,6 +1338,24 @@ local Modules = {
 
 for _, m in modules do
   Modules.byId[m.id] = m
+end
+
+-- What a module is loaded with: a weapon's charges, or a booster's or
+-- an ancillary repairer's (ModuleType.takes). Nil for one that takes none.
+function Modules.Takes(module: ModuleType): { family: string, size: number, clip: number, reload: number }?
+  local weapon = module.weapon
+  if weapon then
+    return { family = weapon.family, size = weapon.size, clip = weapon.clip, reload = weapon.reload }
+  end
+  return module.takes
+end
+
+-- Whether a charge goes in a module (of its family and size; a size 0
+-- takes any of its family; a tech 2 charge only a tech 2 weapon).
+function Modules.Fits(module: ModuleType, charge: ChargeType): boolean
+  local takes = Modules.Takes(module)
+  return takes ~= nil and charge.family == takes.family and (takes.size == 0 or charge.size == takes.size)
+    and not (charge.tech == 2 and module.tech ~= 2)
 end
 
 -- The tech 2 make of a module, if it has one.

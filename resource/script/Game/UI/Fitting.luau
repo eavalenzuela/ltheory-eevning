@@ -85,7 +85,8 @@ local function takers(game: Core.Game, ship: number, charge: State.Item, only: s
   local any = false
   local into: { State.Item } = {}
   for _, item in Core.Query.Fitted(game, ship) do
-    local weapon = Modules.byId[item.type].weapon
+    -- (a weapon, or a module that is loaded as one is: a booster, an ancillary repairer)
+    local weapon = Modules.Takes(Modules.byId[item.type])
     if weapon and weapon.family == family and (only == nil or item.type == only) then
       if item.charge == charge.type then
         any = true
@@ -247,7 +248,7 @@ local function drawWheel(session: Session.Session, game: Core.Game, player: Core
         Im.Flat(left, top, size, size, if hot then Theme.CONTROL_HOT else Theme.CONTROL)
         ItemIcon.Draw(item.type, left + 2, top + 2, size - 4)
         -- what it is loaded with, inside the wheel
-        if module.weapon and row == 0 and size >= 26 then
+        if Modules.Takes(module) and row == 0 and size >= 26 then
           local small = 16
           local ix, iy = onWheel(cx, cy, RING - size / 2 - 5 - small / 2, turn)
           if item.charge ~= "" then
@@ -258,9 +259,15 @@ local function drawWheel(session: Session.Session, game: Core.Game, player: Core
         end
         if hot then
           local note = `{one} slot {slot}`
-          if module.weapon then
+          local takes = Modules.Takes(module)
+          if takes then
             note ..= if item.charge ~= "" then `, loaded with {Types.Info(item.charge).name}`
-              .. (if module.weapon.clip > 0 then ` x{item.rounds}` else "") else ", nothing loaded"
+              .. (if takes.clip > 0 then ` x{item.rounds}` else "") else ", nothing loaded"
+          end
+          -- (an adaptive hardener: where its resistance has gone)
+          if module.adaptive and item.adapt then
+            note ..= string.format(", EM %d%% thermal %d%% kinetic %d%% explosive %d%%", item.adapt[1] * 100, item.adapt[2] * 100,
+              item.adapt[3] * 100, item.adapt[4] * 100)
           end
           Im.Tip(module.name, note)
         end
@@ -630,7 +637,7 @@ local function drawBrowser(session: Session.Session, game: Core.Game, station: n
   end
   -- (and the charges in the hangar that the fitted weapons take: those
   -- of the weapon in the slot picked, if it holds one)
-  local weapon: string? = if inSlot and Modules.byId[inSlot.type].weapon then inSlot.type else nil
+  local weapon: string? = if inSlot and Modules.Takes(Modules.byId[inSlot.type]) then inSlot.type else nil
   local charges: { { item: State.Item, into: { State.Item } } } = {}
   for _, item in Core.Query.Items(game, station, "hangar") do
     local info = Types.Info(item.type)

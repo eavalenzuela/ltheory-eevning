@@ -390,7 +390,7 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
         return false, "a capital is held only by a capital warp disruptor"
       end
       return true
-    elseif module.repair or module.boost then
+    elseif module.repair or module.boost or module.injector then
       return true
     end
     return false, "that module cannot be switched on"
@@ -433,6 +433,10 @@ function Combat.Apply(state: State.State, command: State.Command, events: { Even
       next = now(state) + (if module.miner then module.miner.duration elseif module.salvager then module.salvager.duration else 0),
       stopping = false, cycles = 0,
     })
+    -- (an adaptive hardener starts even again each time it is switched on)
+    if module.adaptive then
+      item.adapt = nil
+    end
     if module.boost then
       Vitals.Refresh(state, ball)
     end
@@ -814,18 +818,54 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
 
     elseif module.repair then
       local repair = module.repair
-      if v.capacitor < repair.capacitor then
+      -- (an ancillary repairer with a charge loaded spends the charge: an
+      -- armour one does so much more for it, a shield one draws no
+      -- capacitor for it; out of charges it reloads from the hold when
+      -- there are more, and works on as a plain one meanwhile)
+      local ancillary, takes = module.ancillary, Modules.Takes(module)
+      local charged = ancillary ~= nil and item.charge ~= "" and item.rounds > 0
+      if ancillary and takes and item.charge ~= "" and item.rounds == 0 and reload(state, ball, item, takes.clip) then
+        running.next = time + takes.reload
+        table.insert(events, { kind = "Reloading", ball = ball.id, item = item.id, time = takes.reload })
+        break
+      end
+      local cost = if charged and ancillary and ancillary.factor == 1 then 0 else repair.capacitor
+      if v.capacitor < cost then
         stop(state, ball, index, "capacitor empty", events)
         return false
       end
-      v.capacitor -= repair.capacitor
-      if repair.layer == "shield" then
-        v.shield = math.min(v.shieldMax, v.shield + repair.amount)
-      else
-        v.armor = math.min(v.armorMax, v.armor + repair.amount)
+      v.capacitor -= cost
+      local amount = repair.amount * (if charged and ancillary then ancillary.factor else 1)
+      if charged then
+        item.rounds -= 1
       end
-      table.insert(events, { kind = "Repaired", ball = ball.id, item = item.id, layer = repair.layer, amount = repair.amount })
+      if repair.layer == "shield" then
+        v.shield = math.min(v.shieldMax, v.shield + amount)
+      else
+        v.armor = math.min(v.armorMax, v.armor + amount)
+      end
+      table.insert(events, { kind = "Repaired", ball = ball.id, item = item.id, layer = repair.layer, amount = amount })
       running.next += repair.duration
+
+    elseif module.injector then
+      -- A capacitor booster: a charge's worth into the capacitor each
+      -- cycle; out of charges, a reload from the hold, or it stops.
+      local takes = Modules.Takes(module) :: { family: string, size: number, clip: number, reload: number }
+      if item.rounds == 0 or item.charge == "" then
+        if item.charge == "" or not reload(state, ball, item, takes.clip) then
+          stop(state, ball, index, "out of charges", events)
+          return false
+        end
+        running.next = time + takes.reload
+        table.insert(events, { kind = "Reloading", ball = ball.id, item = item.id, time = takes.reload })
+        break
+      end
+      local charge = Modules.chargeById[item.charge]
+      local gives = if charge then charge.injects or 0 else 0
+      v.capacitor = math.min(v.capacitorMax, v.capacitor + gives)
+      item.rounds -= 1
+      table.insert(events, { kind = "CapacitorBoosted", ball = ball.id, item = item.id, amount = gives })
+      running.next += module.injector.duration
 
     else
       local cost = module.boostCapacitor or 0
@@ -834,6 +874,35 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
         return false
       end
       v.capacitor -= cost
+      -- (an adaptive hardener, after its first cycle: a step of its
+      -- resistance from the kind the ship took least of to the kind it
+      -- took most of, since it last looked)
+      local adaptive = module.adaptive
+      if adaptive and running.cycles > 0 then
+        local taken = v.taken
+        local split = item.adapt or table.create(4, adaptive.total / 4)
+        if taken and (taken[1] + taken[2] + taken[3] + taken[4]) > 0 then
+          local most, least = 1, 0
+          for kind = 1, 4 do
+            if taken[kind] > taken[most] then
+              most = kind
+            end
+          end
+          for kind = 1, 4 do
+            if kind ~= most and split[kind] > 0 and (least == 0 or taken[kind] < taken[least]) then
+              least = kind
+            end
+          end
+          if least ~= 0 then
+            local moved = math.min(adaptive.step, split[least])
+            split[least] -= moved
+            split[most] += moved
+            item.adapt = split
+            Vitals.Refresh(state, ball)
+          end
+        end
+        v.taken = nil
+      end
       running.next += module.boostDuration or 1
     end
     running.cycles += 1
@@ -849,6 +918,12 @@ local function applyHit(state: State.State, hit: Hit, killers: { [number]: numbe
   local v = ball.vitals
   local layers = { shield = v.shield, armor = v.armor, hull = v.hull }
   local shield, armor, hull = Gunnery.Apply(layers, v.shieldResonance, v.armorResonance, v.hullResonance, hit.damage)
+  -- (what it has taken of each kind, for an adaptive hardener of its)
+  local taken = v.taken or { 0, 0, 0, 0 }
+  for kind = 1, 4 do
+    taken[kind] += hit.damage[kind] or 0
+  end
+  v.taken = taken
   v.shield, v.armor, v.hull = layers.shield, layers.armor, layers.hull
   table.insert(events, { kind = "DamageApplied", ball = ball.id, by = hit.by, shield = shield, armor = armor, hull = hull })
   if v.hull <= 0 and killers[ball.id] == nil then

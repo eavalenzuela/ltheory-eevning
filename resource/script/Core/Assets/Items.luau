@@ -87,7 +87,7 @@ end
 function Items.Fit(state: State.State, ship: number, running: { [number]: boolean }?): { Attributes.Fitted }
   local fit = {}
   for _, item in Items.Fitted(state, ship) do
-    table.insert(fit, { type = item.type, running = running ~= nil and running[item.id] == true })
+    table.insert(fit, { type = item.type, running = running ~= nil and running[item.id] == true, adapt = item.adapt })
   end
   -- (and with it what the pilot has in their own head, for a ship they
   -- fly themselves: Data/Implants)
@@ -354,11 +354,10 @@ function Items.Equip(state: State.State, ship: number, type: string, charge: str
     slot = slot, charge = "", rounds = 0,
   }
   if charge then
-    local weapon = assert(module.weapon, `{type} takes no charge`)
-    assert(Modules.chargeById[charge] and Modules.chargeById[charge].family == weapon.family
-      and Modules.chargeById[charge].size == weapon.size, `{charge} does not fit {type}`)
+    local takes = assert(Modules.Takes(module), `{type} takes no charge`)
+    assert(Modules.chargeById[charge] and Modules.Fits(module, Modules.chargeById[charge]), `{charge} does not fit {type}`)
     item.charge = charge
-    item.rounds = weapon.clip
+    item.rounds = takes.clip
   end
   state.items[item.id] = item
   table.insert(state.itemIds, item.id)
@@ -541,7 +540,8 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
 
   elseif kind == "LoadCharge" then
     local module = Modules.byId[item.type]
-    if item.slot == 0 or item.holder ~= ship.id or module == nil or module.weapon == nil then
+    -- (a weapon, or a module that is loaded as one is: a booster, an ancillary repairer)
+    if item.slot == 0 or item.holder ~= ship.id or module == nil or Modules.Takes(module) == nil then
       return false, "not a fitted weapon"
     end
     local charge = state.items[command.other or 0]
@@ -553,10 +553,11 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
       return false, chargeWhy
     end
     local chargeType = Modules.chargeById[charge.type]
-    if chargeType == nil or chargeType.family ~= module.weapon.family or chargeType.size ~= module.weapon.size then
-      return false, "that does not fit this weapon"
-    elseif chargeType.tech == 2 and module.tech ~= 2 then
+    local takes = Modules.Takes(module) :: { family: string, size: number, clip: number, reload: number }
+    if chargeType and chargeType.tech == 2 and module.tech ~= 2 and takes.family == chargeType.family then
       return false, "a tech 2 charge wants a tech 2 weapon"
+    elseif chargeType == nil or not Modules.Fits(module, chargeType) then
+      return false, if module.weapon then "that does not fit this weapon" else "that does not go in this"
     end
     return true
 
@@ -567,9 +568,10 @@ end
 -- Put a weapon's loaded charge back where loose items go (the hangar).
 local function unload(state: State.State, weapon: State.Item, station: number)
   local module = Modules.byId[weapon.type]
-  if weapon.charge ~= "" and module.weapon then
+  local takes = Modules.Takes(module)
+  if weapon.charge ~= "" and takes then
     -- A crystal is one item; rounds are however many are left.
-    local quantity = if module.weapon.clip == 0 then 1 else weapon.rounds
+    local quantity = if takes.clip == 0 then 1 else weapon.rounds
     if quantity > 0 then
       Items.Add(state, weapon.charge, quantity, station, "hangar")
     end
@@ -611,7 +613,7 @@ function Items.Apply(state: State.State, command: State.Command, events: { Event
     end
 
   elseif kind == "LoadCharge" then
-    local weapon = (Modules.byId[item.type].weapon :: Modules.Weapon)
+    local weapon = Modules.Takes(Modules.byId[item.type]) :: { family: string, size: number, clip: number, reload: number }
     local charge = state.items[command.other :: number]
     local type = charge.type
     unload(state, item, station)
