@@ -507,6 +507,12 @@ function Assault.Passable(state: State.State, gate: System.Object): (boolean, st
   return true
 end
 
+-- Whether a ship is the chief a camp job is to destroy.
+function Assault.Chief(state: State.State, home: number, ship: number): boolean
+  local mission = roomOf(state, home)
+  return mission ~= nil and mission.aim == "chief" and mission.mark == ship
+end
+
 -- A ship that kept a place has been destroyed (Tactical/Aftermath, once
 -- it is gone; 'works' says it was a thing the place is built of): if
 -- the place is a room of a camp, it counts toward the job as the job

@@ -220,6 +220,8 @@ export type ModuleType = {
   -- A people's make of a module outside its speciality: shaded to its
   -- style (Modules.Shade), not the speciality's make.
   shaded: boolean?,
+  -- A pirate site's make (meta 6): its grade, 1 to 3 (Modules.SiteMake).
+  site: number?,
 }
 
 export type ChargeType = {
@@ -1681,6 +1683,41 @@ for _, base in table.clone(modules) do
   end
 end
 
+-- ---------------------------------------------------------------------
+-- The pirate site tier (module expansion, 2026-11-16; the owner's answer
+-- "Yes, pirate site tier"): what the Unbound keep for themselves at their
+-- dens and camps and towers, in three grades by how deep or dangerous the
+-- place is. Better than a people's make, short of an officer's. Of the
+-- modules a captain fits (those with a masterwork) and of the utility
+-- line the peoples make. Only found: in a den's or a stronghold's
+-- stores, a camp chief's wreck, a tower commander's (Tactical/Sites).
+-- The grades' names and figures are mine.
+local SITE_RANKS = { "Raider", "Reaver", "Warlord" }
+local SITE_TUNES: { Tune } = {
+  { output = 1.20, amount = 1.25, fitting = 0.95, capacitor = 0.95, reach = 1, price = 10 },
+  { output = 1.24, amount = 1.32, fitting = 0.9, capacitor = 0.95, reach = 1.02, price = 15 },
+  { output = 1.28, amount = 1.40, fitting = 0.88, capacitor = 0.92, reach = 1.04, price = 25 },
+}
+local siteMakes: { { string } } = { {}, {}, {} }
+local ids: { [string]: boolean } = {}
+for _, module in modules do
+  ids[module.id] = true
+end
+for _, base in table.clone(modules) do
+  if not base.tech and not base.meta and not base.internal and not base.lineage and base.slot ~= "rig" and not base.capital
+    and not base.classes then
+    -- (what a captain fits: what there is a masterwork of)
+    if ids[base.id .. ".master"] or starts(base.id, LINE) then
+      for grade, tune in SITE_TUNES do
+        local own = made(base, `{base.id}.site{grade}`, `Unbound {SITE_RANKS[grade]} {base.name}`, tune)
+        own.meta, own.site = 6, grade
+        table.insert(modules, own)
+        table.insert(siteMakes[grade], own.id)
+      end
+    end
+  end
+end
+
 local Modules = {
   list = modules,
   byId = {} :: { [string]: ModuleType },
@@ -1826,6 +1863,16 @@ function Modules.Peoples(): { string }
     table.insert(ids, people.id)
   end
   return ids
+end
+
+-- The pirate site tier's makes of a grade (1 to 3), by their ids.
+function Modules.SiteMakes(grade: number): { string }
+  return siteMakes[math.clamp(grade, 1, 3)]
+end
+
+-- What a grade of the pirate site tier is called.
+function Modules.SiteRank(grade: number): string
+  return SITE_RANKS[math.clamp(grade, 1, 3)]
 end
 
 -- How a people's shade of its line is, in words; nil for none.

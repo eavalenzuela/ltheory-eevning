@@ -327,6 +327,8 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     end
   elseif module.officer and module.base then
     sheet.note = `{module.officer}'s own {nameOf(module.base)}: better than a masterwork, easier to fit, and no harder to use than the plain one. It was in their wreck and nowhere else, and no market deals in one.`
+  elseif module.site and module.base then
+    sheet.note = `The {nameOf(module.base)} as the Unbound keep it for themselves, of the {Modules.SiteRank(module.site)} grade ({module.site} of 3): better than any people's make, short of an officer's, and no harder to use. Nobody sells or builds one. It is found in pirate dens' and strongholds' stores, in camp chiefs' wrecks, and with the commanders of pirate towers.`
   elseif module.meta == 3 and people and module.base and module.shaded then
     sheet.note = `The {people.name}' own make of the {nameOf(module.base)}: {Modules.Shade(people.id) or "better than the plain one"}, and no harder to use. Their stations sell it to pilots they think well of, and their agents now and then pay with one. Nobody has the drawings.`
   elseif module.meta == 3 and people and module.base then

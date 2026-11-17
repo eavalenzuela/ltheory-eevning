@@ -226,6 +226,8 @@ function Keeps.Fell(state: State.State, ship: number, home: number, events: { Ev
   if wreck and wreck.system == keep.system then
     local rng = Rng.For(state.historySeed, keep.id, 967)
     Pirates.Officer(state, wreck.id, Names.Person(rng), nil, rng, Keeps.THEIRS, Keeps.MUTATORS)
+    -- (and two of the pirate site tier's makes, of the highest grade: module expansion)
+    Sites.Seized(state, Rng.For(state.historySeed, wreck.id, 1603), wreck.id, 3, 2)
     -- (and the drawings of one of the hulls the pirates build: a pirate
     -- station destroyed is where those are found. The owner, 2026-11-16:
     -- "their ship BPs drop from pirate stations when destroyed". The

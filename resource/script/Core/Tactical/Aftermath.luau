@@ -149,6 +149,11 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
       Items.Add(state, "tag.pirate", if pilot then math.max(1, pilot.tags) else 1, wreck.id, "cargo")
       Items.Add(state, "scrap.metal", 1 + Rng.Int(Rng.For(state.historySeed, state.tick, id, 77), 5), wreck.id, "cargo")
     end
+    -- (a camp's chief keeps two of the pirate site tier's makes, of the
+    -- second grade: module expansion)
+    if pilot and Assault.Chief(state, pilot.home, id) then
+      Sites.Seized(state, Rng.For(state.historySeed, wreck.id, 1602), wreck.id, 2, 2)
+    end
     table.insert(events, { kind = "WreckAdded", wreck = wreck.id, of = id })
   end
 

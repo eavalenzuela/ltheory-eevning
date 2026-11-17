@@ -170,8 +170,9 @@ local function loot(state: State.State, rng: Rng.Rng, wreck: number, rich: numbe
   -- custom make: those are the plain one's.)
   if Rng.Chance(rng, 0.5) then
     local module = Modules.list[Rng.Int(rng, #Modules.list) + 1]
-    if (module.tech == 2 or module.meta == 2) and module.base then
-      -- (nor is a masterwork: only a pirate captain has one)
+    if (module.tech == 2 or module.meta == 2 or module.meta == 3 or module.meta == 6) and module.base then
+      -- (nor is a masterwork: only a pirate captain has one; nor a
+      -- people's make, nor the pirate site tier's, which are had elsewhere)
       module = Modules.byId[module.base]
     elseif module.internal then
       module = Modules.byId["miner.small"]
@@ -199,6 +200,16 @@ local function prizes(state: State.State, rng: Rng.Rng, wreck: number, count: nu
 end
 -- (for whoever else leaves a rich wreck: Tactical/Sightings)
 Sites.Prizes = prizes
+
+-- So many of the pirate site tier's makes of a grade, of whatever, into
+-- a wreck (module expansion, 2026-11-16): a den's stores and a
+-- stronghold's, a camp chief's wreck, a tower commander's.
+function Sites.Seized(state: State.State, rng: Rng.Rng, wreck: number, grade: number, count: number)
+  local makes = Modules.SiteMakes(grade)
+  for _ = 1, count do
+    Items.Add(state, makes[Rng.Int(rng, #makes) + 1], 1, wreck, "cargo")
+  end
+end
 
 -- The skill books there are: what a vault now and then has one of.
 local books: { string } = {}
@@ -379,6 +390,15 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
         -- (a den's stores have a custom make of something, and a
         -- stronghold's three)
         prizes(state, rng, wreck, 1 + 2 * deep)
+        -- (and what the Unbound keep for themselves: a den's, of the
+        -- first grade, the second in lawless space; a stronghold's, of
+        -- the second, one for each step down the trail)
+        local seized = Rng.For(state.historySeed, wreck, 1601)
+        if deep > 0 then
+          Sites.Seized(state, seized, wreck, 2, deep)
+        else
+          Sites.Seized(state, seized, wreck, if band == "lawless" then 2 else 1, 1)
+        end
       end
     end
   end
