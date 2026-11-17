@@ -9,8 +9,16 @@ VERT_OUT vec3 worldRayD;
 void main() {
   uv = vertex_uv;
   gl_Position = vec4(vertex_position, 1.);
-  vec4 ray = INVPROJ * vec4(vertex_position.xy, 1., 1.);
-  ray /= ray.w;
+  /* The ray through this corner of the screen, out to the far plane.
+     Taken from the point it passes on the near plane, scaled out: the
+     far plane's own point is not to be had of the inverse projection,
+     whose w there is about 1/farPlane and comes out as nothing in float
+     at some sizes of window (1920 by 1017 among them, 2026-11-17): the
+     ray was then infinite, and everything lit of it no number, which
+     shows black. */
+  vec4 near = INVPROJ * vec4(vertex_position.xy, -1., 1.);
+  near /= near.w;
+  vec3 ray = near.xyz * (farPlane / max(1e-9, -near.z));
   worldRayO = (INVVIEW * vec4(0., 0., 0., 1.)).xyz;
-  worldRayD = (INVVIEW * ray).xyz - worldRayO;
+  worldRayD = (INVVIEW * vec4(ray, 0.)).xyz;
 }
