@@ -60,7 +60,8 @@ end
 -- What refining a stack of ore gives: the units used, and the minerals.
 function Industry.RefineOutput(type: string, quantity: number, yield: number?): (number, { { mineral: string, amount: number } })
   local ore = Ores.byId[type]
-  local batches = quantity // Ores.BATCH
+  local batch = Ores.BatchOf(type)
+  local batches = quantity // batch
   local share = yield or Ores.REFINE_YIELD
   local out = {}
   for _, yield in ore.yields do
@@ -69,7 +70,7 @@ function Industry.RefineOutput(type: string, quantity: number, yield: number?): 
       table.insert(out, { mineral = yield.mineral, amount = amount })
     end
   end
-  return batches * Ores.BATCH, out
+  return batches * batch, out
 end
 
 -- ---------------------------------------------------------------------
@@ -274,8 +275,8 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
       return false, "that is not in the hold"
     elseif Ores.byId[held.type] == nil then
       return false, "that is not ore"
-    elseif held.quantity < Ores.BATCH then
-      return false, `refining takes at least {Ores.BATCH} units`
+    elseif held.quantity < Ores.BatchOf(held.type) then
+      return false, `refining takes at least {Ores.BatchOf(held.type)} units`
     end
     local used, minerals = Industry.RefineOutput(held.type, held.quantity, Industry.RefineYield(state))
     local room = Items.ShipStats(state, own.id).cargo - Items.CargoUsed(state, own.id)
@@ -295,8 +296,8 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
   if command.kind == "Reprocess" then
     if Ores.byId[item.type] == nil then
       return false, "that is not ore"
-    elseif item.quantity < Ores.BATCH then
-      return false, `refining takes at least {Ores.BATCH} units`
+    elseif item.quantity < Ores.BatchOf(item.type) then
+      return false, `refining takes at least {Ores.BatchOf(item.type)} units`
     end
     return true
 

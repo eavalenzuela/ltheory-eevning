@@ -92,7 +92,7 @@ Guide.steps = {
     also = function(event: Event): boolean
       return event.success == true
     end,
-    how = "A Data Analyzer fitted, by a derelict's hull: Hack. Get the safeguards' key in." },
+    how = "A Relic Analyzer fitted, by a derelict's hull: Hack. Get the safeguards' key in." },
   { id = "colony", group = "Getting on", title = "Found a colony on a planet", on = "ColonyDeployed",
     how = "A Colony Command Centre in the hold, in space by a planet: Colony." },
   { id = "tower", group = "Getting on", title = "Anchor a tower of your own", on = "StarbaseAnchored",

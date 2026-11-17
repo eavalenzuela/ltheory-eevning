@@ -42,7 +42,8 @@ function Digger.Lasers(state: State.State, ship: number, gas: boolean?): { State
   if state.ships[ship] then
     for _, item in Items.Fitted(state, ship) do
       local miner = Modules.byId[item.type].miner
-      if miner and (miner.gas == true) == (gas == true) then
+      -- (an ice harvester is neither: 2026-11-16)
+      if miner and (miner.gas == true) == (gas == true) and not miner.ice then
         table.insert(found, item)
       end
     end

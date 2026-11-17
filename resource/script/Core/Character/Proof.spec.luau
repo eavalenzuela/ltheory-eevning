@@ -510,7 +510,8 @@ suite:Case("a new pilot in the starter ship flies the survey career to its end: 
     end
     t.ok((state.skills.hacking or 0) >= 1, "Hacking was not to be had in twenty minutes")
     local learning = p.ticks - began
-    t.ok((fit(p, "analyzer.data")), "the analyzer would not fit")
+    -- (a derelict is opened with a relic analyzer since 2026-11-16)
+    t.ok((fit(p, "analyzer.relic")), "the analyzer would not fit")
     must(p, { kind = "MoveItems", actor = 0, item = assert(stock(p, "probe.scan")).id, to = "cargo" })
     must(p, { kind = "Undock", actor = 0 })
     -- The derelict: scans until the scanner says where a signal it cannot

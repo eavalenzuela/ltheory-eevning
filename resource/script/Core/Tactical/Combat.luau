@@ -358,8 +358,11 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
         return false, "no locked target"
       elseif module.miner.gas and not Mining.Cloud(rock) then
         return false, "not a cloud of gas"
-      elseif rock == nil or not module.miner.gas and not Mining.Rock(rock) then
-        return false, if Mining.Cloud(rock) then "a cloud of gas wants a harvester" else "not an asteroid"
+      elseif module.miner.ice and not Mining.Ice(rock) then
+        return false, "not ice"
+      elseif rock == nil or not module.miner.gas and not module.miner.ice and not Mining.Rock(rock) then
+        return false, if Mining.Cloud(rock) then "a cloud of gas wants a harvester"
+          elseif Mining.Ice(rock) then "ice wants an ice harvester" else "not an asteroid"
       elseif Mining.Left(state, rock) <= 0 then
         return false, if module.miner.gas then "that cloud is drawn off" else "that asteroid is mined out"
       elseif Space.Gap(ball :: any, rock :: any) > module.miner.range then
@@ -391,6 +394,34 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
       end
       return true
     elseif module.repair or module.boost or module.injector or module.smartbomb then
+      return true
+    elseif module.jump then
+      -- (a micro jump drive: not while held, and not in warp)
+      if ball.vitals.scrambled then
+        return false, "warp scrambled"
+      end
+      return true
+    elseif module.tractor then
+      local wreck = state.wrecks[command.target or 0]
+      if wreck == nil or wreck.system ~= ball.system then
+        return false, "that is not a wreck"
+      elseif Space.Gap(ball :: any, wreck :: any) > module.tractor.range then
+        return false, "out of range"
+      end
+      return true
+    elseif module.scanner then
+      if module.scanner.kind == "survey" then
+        return true
+      end
+      local lock = findLock(ball, command.target or 0)
+      local target = state.balls[command.target or 0]
+      if lock == nil or not lock.locked then
+        return false, "no locked target"
+      elseif target == nil or state.ships[target.id] == nil then
+        return false, "that is not a ship"
+      elseif Space.Gap(ball :: any, target :: any) > module.scanner.range then
+        return false, "out of range"
+      end
       return true
     end
     return false, "that module cannot be switched on"
@@ -428,9 +459,12 @@ function Combat.Apply(state: State.State, command: State.Command, events: { Even
     end
     table.insert(ball.vitals.running, {
       item = item.id,
-      target = if module.weapon or module.miner or module.hex or module.salvager then command.target :: number else 0,
-      -- A weapon fires at once; a mining laser delivers at the end of its cycle.
-      next = now(state) + (if module.miner then module.miner.duration elseif module.salvager then module.salvager.duration else 0),
+      target = if module.weapon or module.miner or module.hex or module.salvager or module.tractor
+        or (module.scanner and module.scanner.kind ~= "survey") then command.target :: number else 0,
+      -- A weapon fires at once; a mining laser delivers at the end of its cycle
+      -- (and a scanner reads at the end of its; a micro jump drive jumps when it has spooled).
+      next = now(state) + (if module.miner then module.miner.duration elseif module.salvager then module.salvager.duration
+        elseif module.scanner then module.scanner.duration elseif module.jump then module.jump.spool else 0),
       stopping = false, cycles = 0,
     })
     -- (an adaptive hardener starts even again each time it is switched on)
@@ -632,6 +666,35 @@ end
 
 -- Run every cycle of one module that has come due. Returns false if the
 -- module stopped (the caller's index then points at the next one).
+-- How many times its laser's volume a ship's mining laser brings in a
+-- cycle, of an ore or a gas: a practised miner gets 5% more for each
+-- level of Mining after the first; and off a rock, so much more for
+-- mining upgrades fitted (each the less for those before it) and for
+-- the crystal of its ore loaded (module expansion, 2026-11-16).
+function Combat.Yield(state: State.State, ship: number, item: State.Item, ore: string): number
+  local levels = Items.Levels(state, ship)
+  local skilled = 1 + 0.05 * math.max(0, (if levels then levels.mining or 0 else 0) - 1)
+  if Ores.gasById[ore] or Ores.Ice(ore) then
+    return skilled
+  end
+  local ups = {}
+  for _, fitted in Items.Fitted(state, ship) do
+    local by = Modules.byId[fitted.type].mining
+    if by then
+      table.insert(ups, by)
+    end
+  end
+  table.sort(ups, function(a: number, b: number): boolean return a > b end)
+  for n, by in ups do
+    skilled *= 1 + (by - 1) * Attributes.Penalty(n - 1)
+  end
+  local crystal = if item.charge ~= "" then Modules.chargeById[item.charge] else nil
+  if crystal and crystal.ore == ore then
+    skilled *= crystal.yieldBy or 1
+  end
+  return skilled
+end
+
 local function cycle(state: State.State, ball: State.Ball, index: number, hits: { Hit }, events: { Event }): boolean
   local running = ball.vitals.running[index]
   local item = state.items[running.item]
@@ -735,9 +798,7 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       -- (the hold, and before it the ore hold of a hull that has one)
       local free = Vitals.Stats(state, state.ships[ball.id], v).cargo - Items.CargoUsed(state, ball.id)
       local oreSize, oreUsed = Items.OreHold(state, ball.id)
-      -- A practised miner gets 5% more for each level after the first.
-      local levels = Items.Levels(state, ball.id)
-      local skilled = 1 + 0.05 * math.max(0, (if levels then levels.mining or 0 else 0) - 1)
+      local skilled = Combat.Yield(state, ball.id, item, ore.id)
       -- (a hair over, so that 1,000 units and a fifth more is 1,150 and not 1,149)
       local units = math.min(math.floor(miner.volume * skilled / ore.volume + 1e-6),
         math.floor((free + 1e-9) / ore.volume) + math.floor((oreSize - oreUsed + 1e-9) / ore.volume))
@@ -861,6 +922,107 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
           table.insert(events, { kind = "Jammed", ball = target.id, by = ball.id })
         end
       end
+
+    elseif module.jump then
+      -- A micro jump drive, spooled: the ship goes so far ahead along the
+      -- way it is going (or the way it was told to go, at a stop), its
+      -- locks are broken, and the drive is off.
+      if v.scrambled or ball.warp then
+        stop(state, ball, index, "warp scrambled", events)
+        return false
+      end
+      local dx, dy, dz = ball.vx, ball.vy, ball.vz
+      local speed = math.sqrt(dx * dx + dy * dy + dz * dz)
+      if speed < 1 then
+        dx, dy, dz = ball.dx, ball.dy, ball.dz
+        speed = math.sqrt(dx * dx + dy * dy + dz * dz)
+      end
+      if speed < 1e-9 then
+        dx, dy, dz, speed = 1, 0, 0, 1
+      end
+      local d = module.jump.distance
+      ball.x += dx / speed * d
+      ball.y += dy / speed * d
+      ball.z += dz / speed * d
+      for at = #v.locks, 1, -1 do
+        Combat.DropLock(state, ball, v.locks[at].target, "jumped", events)
+      end
+      Space.AssignGrid(state, ball)
+      table.insert(events, { kind = "MicroJumped", ball = ball.id, distance = d })
+      stop(state, ball, index, "jumped", events)
+      return false
+
+    elseif module.tractor then
+      -- A tractor beam: the wreck comes toward the ship, so fast, until it is
+      -- near; then it is let go.
+      local beam = module.tractor
+      local wreck = state.wrecks[running.target]
+      if wreck == nil or wreck.system ~= ball.system then
+        stop(state, ball, index, "the wreck is gone", events)
+        return false
+      elseif Space.Gap(ball :: any, wreck :: any) > beam.range then
+        stop(state, ball, index, "out of range", events)
+        return false
+      elseif v.capacitor < beam.capacitor then
+        stop(state, ball, index, "capacitor empty", events)
+        return false
+      end
+      local gap = Space.Gap(ball :: any, wreck :: any)
+      local NEAR = 1000
+      if gap <= NEAR then
+        table.insert(events, { kind = "Tractored", ball = ball.id, wreck = wreck.id })
+        stop(state, ball, index, "pulled in", events)
+        return false
+      end
+      v.capacitor -= beam.capacitor
+      -- (it moves a tick at a time: Combat.Tractor; this pays for so many seconds of it)
+      running.next += beam.duration
+
+    elseif module.scanner then
+      -- A scanner reads once, and is off.
+      local scan = module.scanner
+      if v.capacitor < scan.capacitor then
+        stop(state, ball, index, "capacitor empty", events)
+        return false
+      end
+      v.capacitor -= scan.capacitor
+      if scan.kind == "survey" then
+        local rocks = {}
+        for _, object in Space.Describe(state, ball.system).objects do
+          if object.kind == "asteroid" and object.site == ball.grid and Space.Gap(ball :: any, object :: any) <= scan.range
+            and Mining.Left(state, object) > 0 then
+            table.insert(rocks, { id = object.id, variety = object.variety, left = Mining.Left(state, object),
+              distance = Space.Gap(ball :: any, object :: any) })
+          end
+        end
+        table.sort(rocks, function(a: any, b: any): boolean
+          return if a.distance ~= b.distance then a.distance < b.distance else a.id < b.id
+        end)
+        table.insert(events, { kind = "Surveyed", ball = ball.id, rocks = rocks })
+      else
+        local target = state.balls[running.target]
+        local whose = state.ships[running.target]
+        if target == nil or whose == nil or Space.Gap(ball :: any, target :: any) > scan.range then
+          stop(state, ball, index, "out of range", events)
+          return false
+        end
+        local found: { { type: string, quantity: number } } = {}
+        local counted: { [string]: number } = {}
+        local list: { State.Item } = if scan.kind == "ship" then Items.Fitted(state, target.id) else Items.In(state, target.id, "cargo")
+        for _, each in list do
+          local quantity = if scan.kind == "ship" then 1 else each.quantity
+          if counted[each.type] then
+            found[counted[each.type]].quantity += quantity
+          else
+            table.insert(found, { type = each.type, quantity = quantity })
+            counted[each.type] = #found
+          end
+        end
+        table.insert(events, { kind = if scan.kind == "ship" then "ShipScanned" else "CargoScanned", ball = ball.id,
+          target = target.id, name = target.name, hull = whose.type, items = found })
+      end
+      stop(state, ball, index, "scanned", events)
+      return false
 
     elseif module.smartbomb then
       -- A smartbomb: so much damage to every ship within its reach but the
@@ -1139,12 +1301,35 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
   end
   state.missiles = flying
 
+  -- Wrecks in tractor beams come toward the ships that pull them, a tick's
+  -- worth of the beam's speed, to a kilometre off (module expansion).
+  for _, id in state.ballIds do
+    local puller = state.balls[id]
+    for _, running in puller.vitals.running do
+      local item = state.items[running.item]
+      local beam = if item then Modules.byId[item.type].tractor else nil
+      local wreck = if beam then state.wrecks[running.target] else nil
+      if beam and wreck and wreck.system == puller.system then
+        local dx, dy, dz = puller.x - wreck.x, puller.y - wreck.y, puller.z - wreck.z
+        local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+        local room = distance - puller.radius - wreck.radius - 1000
+        if room > 0 and distance > 0 then
+          local step = math.min(room, beam.speed * Constants.TICK)
+          wreck.x += dx / distance * step
+          wreck.y += dy / distance * step
+          wreck.z += dz / distance * step
+          wreck.grid = puller.grid
+        end
+      end
+    end
+  end
+
   -- Who is held: the strongest entanglement projector running on each ship, and
   -- whether a disruptor is. A ship whose lot has changed is told, has
   -- its speed set to match, and if it was getting ready to warp, is not.
   -- (and the strongest painter and the strongest dampener, likewise)
   local entangles: { [number]: number } = {}
-  local scrambles: { [number]: boolean } = {}
+  local scrambles: { [number]: number } = {}
   local paints: { [number]: number } = {}
   local damps: { [number]: number } = {}
   -- (and the strongest tracking and guidance disruptors, and remote sensor booster)
@@ -1160,9 +1345,10 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
         if hex.kind == "entangle" then
           entangles[target] = math.min(entangles[target] or 1, hex.strength)
         elseif hex.kind == "scramble" then
-          -- (a capital is held by a capital's disruptor and by no other)
+          -- (a capital is held by a capital's disruptor and by no other;
+          -- each disruptor a point, against the target's stabilizers)
           if Modules.byId[item.type].capital or not Combat.Capital(state, target) then
-            scrambles[target] = true
+            scrambles[target] = (scrambles[target] or 0) + 1
           end
         elseif hex.kind == "paint" then
           paints[target] = math.max(paints[target] or 1, hex.strength)
@@ -1181,7 +1367,13 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
   for _, id in state.ballIds do
     local ball = state.balls[id]
     local v = ball.vitals
-    local entangle, scrambled, paint, damp = entangles[id] or 1, scrambles[id] == true, paints[id] or 1, damps[id] or 1
+    local points = scrambles[id] or 0
+    if points > 0 then
+      for _, fitted in Items.Fitted(state, id) do
+        points -= Modules.byId[fitted.type].stabilizer or 0
+      end
+    end
+    local entangle, scrambled, paint, damp = entangles[id] or 1, points > 0, paints[id] or 1, damps[id] or 1
     v.track, v.guide = tracks[id], guides[id]
     local sensor = sensors[id]
     if v.sensor ~= sensor then

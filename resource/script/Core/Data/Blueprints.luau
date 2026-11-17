@@ -96,7 +96,9 @@ Blueprints.ORIGINAL = 5
 local function priceOf(part: string): number
   local component = Components.byId[part]
   local composite = Reactions.byId[part]
-  return if component then component.basePrice elseif composite then composite.basePrice else Planets.productById[part].basePrice
+  local product = Ores.mineralById[part]
+  return if component then component.basePrice elseif composite then composite.basePrice elseif product then product.basePrice
+    else Planets.productById[part].basePrice
 end
 
 -- The parts of the tech 2 make of something that calls for what moons
@@ -305,7 +307,9 @@ local STRUCTURE: { { any } } = { { "planet.alloys", 0.17 }, { "planet.ceramics",
 for _, part in Components.HULL do
   table.insert(STRUCTURE, { part[1], part[2] * 0.67 })
 end
-local FUEL: { { any } } = { { "planet.isotopes", 0.5 }, { "planet.water", 0.3 }, { "planet.catalysts", 0.2 } }
+-- (since 2026-11-16, more than half of it what is refined from ice; the shares mine)
+local FUEL: { { any } } = { { "planet.isotopes", 0.2 }, { "planet.water", 0.15 }, { "planet.catalysts", 0.1 }, { "ice.heavywater", 0.2 },
+  { "ice.oxygen", 0.1 }, { "ice.salts", 0.25 } }
 for _, tower in Structures.towers do
   add(tower.id, tower.name, MIX.cruiser, tower.basePrice, 1, math.min(72000, 600 + tower.basePrice // 200), STRUCTURE)
   -- (an alien people's tower and the pirates' have drawings nobody

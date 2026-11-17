@@ -229,7 +229,7 @@ function Commerce.Census(galaxy: Galaxy.Galaxy, id: number): Census
       census.stations[object.variety] = (census.stations[object.variety] or 0) + 1
       people += PEOPLE[object.variety] or 0.5
     elseif object.kind == "asteroid" and Ores.byId[object.variety] then
-      census.ore[object.variety] = (census.ore[object.variety] or 0) + Ores.RockUnits(object.radius)
+      census.ore[object.variety] = (census.ore[object.variety] or 0) + Ores.Units(object.variety, object.radius)
     elseif object.kind == "moon" then
       local deposit = Moons.Deposit(object.seed, band)
       if deposit then
@@ -376,12 +376,19 @@ local function stages(): { Stage }
       end)
     end
   end
-  for _, ore in Ores.list do
+  -- (and ice, since 2026-11-16: refined a block at a time, so a hundred
+  -- blocks yield a hundred times a block's)
+  local mined: { Ores.Ore } = table.clone(Ores.list)
+  for _, ice in Ores.ices do
+    table.insert(mined, ice)
+  end
+  for _, ore in mined do
     local class = indexOf[ore.id]
     local outputs: { Economy.Amount } = {}
+    local per = 100 / (ore.batch or 100)
     for _, yield in ore.yields do
       if indexOf[yield.mineral] then
-        table.insert(outputs, { class = indexOf[yield.mineral], amount = yield.amount * Commerce.YIELD })
+        table.insert(outputs, { class = indexOf[yield.mineral], amount = yield.amount * per * Commerce.YIELD })
       end
     end
     if class then
@@ -389,7 +396,7 @@ local function stages(): { Stage }
         margin = 0.15 }, weight = stationed({ refinery = 1, outpost = 0.3 }) })
     end
   end
-  for _, ore in Ores.list do
+  for _, ore in mined do
     source(ore.id, function(census: Census): number
       return census.ore[ore.id] or 0
     end)

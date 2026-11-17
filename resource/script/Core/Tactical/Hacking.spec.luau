@@ -31,7 +31,7 @@ local function refused(game: Core.Game, command: State.Command): string?
 end
 
 -- A game with a derelict in the first system, the pilot's ship beside
--- one of its hulls, with or without a data analyzer fitted, and the
+-- one of its hulls, with or without a relic analyzer fitted, and the
 -- Hacking skill at a level: the game, the hull, and the site.
 local function beside(fitted: boolean, level: number): (Core.Game, State.Wreck, State.Site)
   for seed = 1, 60 do
@@ -39,7 +39,7 @@ local function beside(fitted: boolean, level: number): (Core.Game, State.Wreck, 
     local state = game.state
     state.skills.hacking = level
     if fitted then
-      Items.Equip(state, state.player.ship, Hacking.ANALYZER, nil)
+      Items.Equip(state, state.player.ship, Hacking.RELIC, nil)
     end
     assert(submit(game, { kind = "Undock", actor = 0 }))
     assert(submit(game, { kind = "Stop", actor = 0 }))
@@ -98,16 +98,16 @@ local function event(game: Core.Game, kind: string): { [string]: any }?
   return found
 end
 
-suite:Case("a derelict's hold is sealed, and is hacked by a ship with a data analyzer from near by", function(t)
+suite:Case("a derelict's hold is sealed, and is hacked by a ship with a relic analyzer from near by", function(t)
   local bare, hull = beside(false, 1)
   t.eq(hull.locked, true)
   t.eq(refused(bare, { kind = "Loot", actor = 0, target = hull.id }), "its hold is sealed: it has to be hacked")
-  t.eq(refused(bare, { kind = "StartHack", actor = 0, target = hull.id }), "needs a Data Analyzer fitted")
+  t.eq(refused(bare, { kind = "StartHack", actor = 0, target = hull.id }), "needs a Relic Analyzer fitted")
   t.eq(refused(bare, { kind = "StartHack", actor = 0, target = 12345 }), "not a wreck")
   t.eq(refused(bare, { kind = "HackNode", actor = 0, pin = 1 }), "no hack is under way")
   -- (the analyzer wants its skill to fit)
   local docked = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
-  local item = Items.Add(docked.state, Hacking.ANALYZER, 1, docked.state.player.home, "hangar")
+  local item = Items.Add(docked.state, Hacking.RELIC, 1, docked.state.player.home, "hangar")
   t.eq(refused(docked, { kind = "Fit", actor = 0, item = item.id }), "needs Hacking 1")
 
   local game, wreck = beside(true, 1)

@@ -182,7 +182,7 @@ local skills: { Skill } = {
     note = "One more place for an implant a level, to five." },
   -- Getting into things
   { id = "hacking", name = "Hacking", rank = 3, start = -1, requires = { { skill = "electronics", level = 2 } },
-    note = "Level 1 to fit a data analyzer; one more code in the buffer for each level after." },
+    note = "Level 1 to fit a relic or data analyzer; one more code in the buffer for each level after." },
   -- Not being seen
   { id = "cloaking", name = "Cloaking", rank = 4, start = -1, requires = { { skill = "electronics", level = 3 } },
     note = "Level 1 to fit a cloaking device." },

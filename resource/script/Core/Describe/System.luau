@@ -179,6 +179,32 @@ function System.Describe(galaxy: Galaxy.Galaxy, id: number): Description
     gate.to = neighbor
   end
 
+  -- An ice field (module expansion, 2026-11-16; how often mine): by an
+  -- ice planet or a gas giant, in some systems, its chunks cut with an
+  -- ice harvester. Last of all, so that what was described before ice
+  -- fields were is where it was, and has the ids it had.
+  local cold: Object? = nil
+  for _, planet in planets do
+    if (planet.variety == "ice" or planet.variety == "gas") and cold == nil then
+      cold = planet
+    end
+  end
+  if cold and not node.uncharted and Rng.Chance(rng, 0.4) then
+    local x, y, z = around(cold.x, cold.y, cold.z, cold.radius * Rng.Float(rng, 5, 9))
+    local field = add("belt", `{cold.name} - Ice Field`, x, y, z, 0, cold.id, "ice")
+    field.site = field.id
+    local start = Rng.Float(rng, 0, 2 * math.pi)
+    local chunks = 8 + Rng.Int(rng, 7)
+    for c = 1, chunks do
+      local along = start + (c / chunks) * math.pi * 0.6
+      local out = Rng.Float(rng, 11000, 18000)
+      local ice = Ores.PickIce(Rng.Next(rng), wild)
+      local chunk = add("asteroid", ice.name, x + out * math.cos(along), y + Rng.Float(rng, -3000, 3000), z + out * math.sin(along),
+        Rng.Float(rng, 600, 1400), field.id, ice.id)
+      chunk.site = field.id
+    end
+  end
+
   assert(#objects < Constants.STRUCTURE_ID_SPAN, "a system has outgrown its id range")
   return { id = id, name = node.name, objects = objects }
 end

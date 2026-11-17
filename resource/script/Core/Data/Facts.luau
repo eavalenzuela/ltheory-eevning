@@ -397,9 +397,42 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
   end
   if module.analyzer then
     local to = section(sheet, "Hacking")
-    row(to, "Opens", "a derelict's sealed hold, by finding the keys of its lock")
+    row(to, "Opens", if module.analyzer.relic then "a derelict's sealed hold, by finding the keys of its lock"
+      else "a listening post's vault, by finding the keys of its lock")
     row(to, "Range", metres(module.analyzer.range))
     row(to, "A level of Hacking", "one more code in the buffer")
+  end
+  -- (module expansion, 2026-11-16: the third group's)
+  if module.jump then
+    local to = section(sheet, "Micro jump drive")
+    row(to, "Throws the ship", `{metres(module.jump.distance)} ahead, the way it is going`)
+    row(to, "Spools up for", seconds(module.jump.spool))
+    row(to, "Then", "every lock is broken; not while warp scrambled")
+  end
+  if module.stabilizer then
+    local to = section(sheet, "Warp stability")
+    row(to, "Against disruption", `{plain(module.stabilizer)} disruptor's worth`)
+  end
+  if module.tractor then
+    local to = section(sheet, "Tractor beam")
+    row(to, "Pulls a wreck", `{plain(module.tractor.speed)} m/s, to a kilometre off`)
+    row(to, "Range", metres(module.tractor.range))
+    row(to, "Capacitor a cycle", `{plain(module.tractor.capacitor)} GJ every {seconds(module.tractor.duration)}`)
+  end
+  if module.scanner then
+    local scan = module.scanner
+    local to = section(sheet, "Scanner")
+    row(to, "Reads", if scan.kind == "ship" then "what a locked ship has fitted" elseif scan.kind == "cargo" then "what a locked ship has in its hold"
+      else "what every rock in reach still holds")
+    row(to, "Range", metres(scan.range))
+    row(to, "Takes", `{seconds(scan.duration)} and {plain(scan.capacitor)} GJ`)
+  end
+  if module.mining then
+    local to = section(sheet, "Mining upgrade")
+    row(to, "Ore off a rock", `{plain(module.mining * 100)}% of what it was, with every laser`)
+  end
+  if module.takes and module.takes.family == "crystal" then
+    row(section(sheet, "Crystals"), "Takes", "a mining crystal: far more of the crystal's ore, never used up")
   end
   if module.cloak then
     local to = section(sheet, "Cloak")
@@ -502,6 +535,11 @@ local function chargeSheet(sheet: Sheet, charge: Modules.ChargeType)
     row(section(sheet, "Charge"), "Puts into the capacitor", `{plain(charge.injects or 0)} GJ, in a capacitor booster; or a cycle's capacitor, in an ancillary shield booster`)
     trade(sheet, charge.id)
     return
+  elseif charge.family == "crystal" then
+    sheet.kind = "Mining crystal"
+    row(section(sheet, "Charge"), "In a modulated laser", `{plain((charge.yieldBy or 1) * 100)}% as much {nameOf(charge.ore or "")} a cycle`)
+    trade(sheet, charge.id)
+    return
   elseif charge.family == "paste" then
     sheet.kind = "Repair paste"
     row(section(sheet, "Charge"), "In an ancillary armour repairer", "three times as much repaired a cycle, a unit a cycle")
@@ -557,16 +595,25 @@ function Facts.Of(type: string): Sheet?
 
   if category == "ore" then
     local ore = Ores.byId[type]
-    sheet.kind = "Ore"
-    sheet.note = if ore.wild then "Found only in lawless space." else "Found in the asteroid belts."
-    local to = section(sheet, "Refines to (per 100 units, at perfect yield)")
+    sheet.kind = if ore.ice then "Ice" else "Ore"
+    sheet.note = if ore.ice then (if ore.share == 0 then "Found only in the ice fields of lawless space; cut with an ice harvester."
+        else "Found in ice fields; cut with an ice harvester.")
+      elseif ore.wild then "Found only in lawless space." else "Found in the asteroid belts."
+    local to = section(sheet, if ore.ice then "Refines to (per block, at perfect yield)" else "Refines to (per 100 units, at perfect yield)")
     for _, yield in ore.yields do
       row(to, nameOf(yield.mineral), whole(yield.amount), yield.mineral)
     end
     trade(sheet, type)
   elseif category == "mineral" then
-    sheet.kind = "Mineral"
+    sheet.kind = if Ores.mineralById[type] and string.sub(type, 1, 4) == "ice." then "Ice product" else "Mineral"
     local to = section(sheet, "Refined from")
+    for _, ice in Ores.ices do
+      for _, yield in ice.yields do
+        if yield.mineral == type then
+          row(to, ice.name, `{whole(yield.amount)} per block`, ice.id)
+        end
+      end
+    end
     for _, ore in Ores.list do
       for _, yield in ore.yields do
         if yield.mineral == type then

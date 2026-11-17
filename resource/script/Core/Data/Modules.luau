@@ -58,6 +58,8 @@ export type Miner = {
   -- It draws gas off a cloud, and does nothing to a rock (as a laser
   -- that cuts rock does nothing to a cloud).
   gas: boolean?,
+  -- It cuts ice, and nothing else (2026-11-16).
+  ice: boolean?,
 }
 
 -- What a module does to another ship while it runs on it. An "entangle" cuts
@@ -124,7 +126,9 @@ export type ModuleType = {
   beacon: boolean?,
   -- A data analyzer: fitted, it lets the ship hack a sealed hold from
   -- within its range (Tactical/Hacking).
-  analyzer: { range: number }?,
+  -- (a relic analyzer, 2026-11-16, opens a derelict's hold; a data
+  -- analyzer, since, a listening post's vaults)
+  analyzer: { range: number, relic: boolean? }?,
   -- A capital's module: only a hull of a capital class fits it
   -- (Attributes.Check). And of a warp disruptor, that it holds a capital
   -- too, which a plain one does not (Tactical/Combat).
@@ -188,6 +192,16 @@ export type ModuleType = {
   -- A smartbomb: each cycle, so much damage of each kind to every ship
   -- within 'range' of it but its owner's own.
   smartbomb: { range: number, damage: { number }, duration: number, capacitor: number }?,
+  -- A micro jump drive: so far ahead, after a spool of so many seconds.
+  jump: { distance: number, spool: number }?,
+  -- A warp stabilizer: points against warp disruption.
+  stabilizer: number?,
+  -- A tractor beam: pulls a wreck so fast toward the ship, from within range.
+  tractor: { range: number, speed: number, duration: number, capacitor: number }?,
+  -- A scanner: a ship's fit, its hold, or the rocks round about.
+  scanner: { kind: "ship" | "cargo" | "survey", range: number, duration: number, capacitor: number }?,
+  -- A mining upgrade: ore off a rock so many times as much.
+  mining: number?,
 }
 
 export type ChargeType = {
@@ -213,6 +227,9 @@ export type ChargeType = {
   base: string?,
   -- A capacitor charge: GJ it puts into the capacitor (a booster's).
   injects: number?,
+  -- A mining crystal: so many times as much of this ore in a modulated laser.
+  ore: string?,
+  yieldBy: number?,
 }
 
 local function ship(attribute: string, op: "add" | "mul", value: number, stack: boolean?): Modifier
@@ -680,6 +697,98 @@ for _, each in { { "small", "Small", 1 }, { "medium", "Medium", 2 }, { "large", 
   end
 end
 
+-- ---------------------------------------------------------------------
+-- Module expansion, the third group: utility and industry (2026-11-16;
+-- the figures mine).
+
+-- A micro jump drive: after a spool, the ship is thrown so far ahead
+-- along the way it is going, and its locks are broken.
+table.insert(modules, {
+  id = "jump.micro", name = "Micro Jump Drive", short = "MJD", slot = "mid", hardpoint = "",
+  cpu = 30, powergrid = 20, volume = 10, basePrice = 600000, passive = {},
+  jump = { distance = 100000, spool = 12 },
+  requires = { { skill = "navigation", level = 4 } },
+})
+-- A warp stabilizer: one point against warp disruption, for so much
+-- worse targeting.
+table.insert(modules, {
+  id = "warp.stabilizer", name = "Warp Core Stabilizer", short = "Stabilizer", slot = "low", hardpoint = "",
+  cpu = 20, powergrid = 1, volume = 5, basePrice = 15000, stabilizer = 1,
+  passive = { ship("lockRange", "mul", 0.7, true), ship("scanResolution", "mul", 0.7, true) },
+  requires = { { skill = "navigation", level = 1 } },
+})
+-- A tractor beam: pulls a wreck or a can to the ship.
+table.insert(modules, {
+  id = "tractor.beam", name = "Tractor Beam", short = "Tractor", slot = "high", hardpoint = "",
+  cpu = 25, powergrid = 1, volume = 5, basePrice = 30000, passive = {},
+  tractor = { range = 20000, speed = 500, duration = 5, capacitor = 5 },
+  requires = { { skill = "salvaging", level = 1 } },
+})
+-- Scanners: what a ship has fitted, what is in its hold, and what the
+-- rocks round about hold.
+table.insert(modules, {
+  id = "scanner.ship", name = "Ship Scanner", slot = "mid", hardpoint = "",
+  cpu = 25, powergrid = 1, volume = 5, basePrice = 12000, passive = {},
+  scanner = { kind = "ship", range = 30000, duration = 5, capacitor = 10 },
+  requires = { { skill = "electronics", level = 1 } },
+})
+table.insert(modules, {
+  id = "scanner.cargo", name = "Cargo Scanner", slot = "mid", hardpoint = "",
+  cpu = 25, powergrid = 1, volume = 5, basePrice = 12000, passive = {},
+  scanner = { kind = "cargo", range = 30000, duration = 5, capacitor = 10 },
+  requires = { { skill = "electronics", level = 1 } },
+})
+table.insert(modules, {
+  id = "scanner.survey", name = "Survey Scanner", slot = "mid", hardpoint = "",
+  cpu = 20, powergrid = 1, volume = 5, basePrice = 10000, passive = {},
+  scanner = { kind = "survey", range = 25000, duration = 5, capacitor = 5 },
+  requires = { { skill = "mining", level = 1 } },
+})
+-- A relic analyzer: what opens a derelict's hold (a data analyzer opens
+-- a listening post's vaults).
+table.insert(modules, {
+  id = "analyzer.relic", name = "Relic Analyzer", slot = "mid", hardpoint = "",
+  cpu = 20, powergrid = 1, volume = 5, basePrice = 60000, passive = {},
+  analyzer = { range = 5000, relic = true },
+  requires = { { skill = "hacking", level = 1 } },
+})
+-- Ice harvesters: a block or so of ice a cycle off an ice field's chunks,
+-- and nothing off anything else; the barge's, a dozen.
+table.insert(modules, {
+  id = "miner.ice", name = "Ice Harvester", short = "Ice Harv", slot = "high", hardpoint = "turret",
+  cpu = 60, powergrid = 12, volume = 10, basePrice = 120000, passive = {},
+  miner = { volume = 100, duration = 60, capacitor = 60, range = 10000, ice = true },
+  requires = { { skill = "mining", level = 3 } },
+})
+table.insert(modules, {
+  id = "miner.ice.strip", name = "Strip Ice Harvester", short = "Strip Ice", slot = "high", hardpoint = "turret",
+  cpu = 80, powergrid = 45, volume = 25, basePrice = 900000, passive = {},
+  miner = { volume = 600, duration = 120, capacitor = 180, range = 12000, ice = true },
+  requires = { { skill = "mining", level = 4 } },
+})
+-- A mining upgrade: so much more off a rock with every laser.
+table.insert(modules, {
+  id = "mining.upgrade", name = "Mining Laser Upgrade", short = "Mining Upg", slot = "low", hardpoint = "",
+  cpu = 35, powergrid = 1, volume = 5, basePrice = 20000, passive = {}, mining = 1.09,
+  requires = { { skill = "mining", level = 2 } },
+})
+-- Modulated lasers: a little less off a rock by themselves, and much
+-- more with the crystal cut for its ore (crystals below; never used up).
+table.insert(modules, {
+  id = "miner.modulated", name = "Modulated Mining Laser", short = "Mod Laser", slot = "high", hardpoint = "turret",
+  cpu = 70, powergrid = 3, volume = 5, basePrice = 90000, passive = {},
+  miner = { volume = 80, duration = 60, capacitor = 60, range = 10000 },
+  takes = { family = "crystal", size = 0, clip = 0, reload = 5 },
+  requires = { { skill = "mining", level = 3 } },
+})
+table.insert(modules, {
+  id = "miner.strip.modulated", name = "Modulated Strip Miner", short = "Mod Strip", slot = "high", hardpoint = "turret",
+  cpu = 90, powergrid = 45, volume = 25, basePrice = 1200000, passive = {},
+  miner = { volume = 640, duration = 120, capacitor = 180, range = 12000 },
+  takes = { family = "crystal", size = 0, clip = 0, reload = 5 },
+  requires = { { skill = "mining", level = 4 } },
+})
+
 -- By size: capacitor boosters (each cycle a charge's worth into the
 -- capacitor), ancillary shield boosters (a charge in place of the
 -- capacitor a cycle) and ancillary armour repairers (three times as much
@@ -1106,6 +1215,16 @@ table.insert(charges, {
   id = "paste.nanite", name = "Nanite Repair Paste", family = "paste", size = 0, volume = 0.01, basePrice = 300,
   damage = { 0, 0, 0, 0 }, rangeMultiplier = 1, velocity = 0, flightTime = 0, explosionRadius = 0, explosionVelocity = 0,
 })
+-- Mining crystals, one for each ore, for a modulated laser (module
+-- expansion, 2026-11-16; the figures mine).
+for _, each in { { "ferrite", "Ferrite" }, { "silicate", "Silicate" }, { "cuprite", "Cuprite" }, { "titanite", "Titanite" },
+  { "cobaltite", "Cobaltite" }, { "iridite", "Iridite" } } :: { { string } } do
+  table.insert(charges, {
+    id = `crystal.{each[1]}`, name = `{each[2]} Mining Crystal`, family = "crystal", size = 0, volume = 1,
+    basePrice = 12000, damage = { 0, 0, 0, 0 }, rangeMultiplier = 1, velocity = 0, flightTime = 0, explosionRadius = 0,
+    explosionVelocity = 0, ore = `ore.{each[1]}`, yieldBy = 1.6,
+  })
+end
 for _, reach in MISSILE_REACH do
   local made = missile(`missile.light.em{reach.id}`, `Arc Light {reach.form}`, { 83 * reach.damage, 0, 0, 0 })
   made.flightTime *= reach.flight
@@ -1254,7 +1373,7 @@ for _, base in table.clone(modules) do
         repair = if repair then { layer = repair.layer, amount = repair.amount * make.amount, duration = repair.duration,
           capacitor = repair.capacitor } else nil,
         miner = if miner then { volume = miner.volume * make.amount, duration = miner.duration, capacitor = miner.capacitor,
-          range = miner.range, gas = miner.gas } else nil,
+          range = miner.range, gas = miner.gas, ice = miner.ice } else nil,
         hex = if hex and mends then { kind = hex.kind, range = hex.range, strength = hex.strength * make.amount,
           duration = hex.duration, capacitor = hex.capacitor } else nil,
         internal = base.internal,

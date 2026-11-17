@@ -19,6 +19,10 @@ export type Ore = {
   -- minerals per 100 units at perfect yield
   wild: number?,          -- its share of the rocks in lawless space, if it is found only there
   yields: { { mineral: string, amount: number } },
+  -- Ice (module expansion, 2026-11-16): refined a unit at a time, not a
+  -- hundred, and found in ice fields, not belts.
+  batch: number?,
+  ice: boolean?,
 }
 
 local minerals: { Mineral } = {
@@ -61,8 +65,32 @@ local gases: { Gas } = {
   { id = "gas.azure", name = "Azure Vapour", volume = 1, basePrice = 240 },
 }
 
+-- Ice (module expansion, 2026-11-16; the names and figures mine): cut
+-- from the chunks of an ice field with an ice harvester, a block at a
+-- time, and refined a block at a time into the ice products, which fuel
+-- blocks are made of (Data/Blueprints). Not in 'list', which is the
+-- belts' ores and the economy's: ice is found only in ice fields, and the
+-- simulation does not trade it yet. Priced, as ore is, at about what it
+-- yields at the base rate.
+local iceProducts: { Mineral } = {
+  { id = "ice.heavywater", name = "Heavy Water", volume = 0.1, basePrice = 40 },
+  { id = "ice.oxygen", name = "Liquid Oxygen", volume = 0.1, basePrice = 50 },
+  { id = "ice.salts", name = "Cryo Salts", volume = 0.1, basePrice = 200 },
+}
+local ices: { Ore } = {
+  { id = "ice.rime", name = "Rime Ice", volume = 50, basePrice = 2600, share = 0.7, batch = 1, ice = true,
+    yields = { { mineral = "ice.heavywater", amount = 40 }, { mineral = "ice.oxygen", amount = 30 }, { mineral = "ice.salts", amount = 10 } } },
+  { id = "ice.glacial", name = "Glacial Ice", volume = 50, basePrice = 4400, share = 0.3, batch = 1, ice = true,
+    yields = { { mineral = "ice.heavywater", amount = 30 }, { mineral = "ice.oxygen", amount = 50 }, { mineral = "ice.salts", amount = 25 } } },
+  -- (only where nobody keeps order)
+  { id = "ice.dark", name = "Dark Ice", volume = 50, basePrice = 7400, share = 0, wild = 0.4, batch = 1, ice = true,
+    yields = { { mineral = "ice.heavywater", amount = 20 }, { mineral = "ice.oxygen", amount = 40 }, { mineral = "ice.salts", amount = 60 } } },
+}
+
 local Ores = {
   list = ores,
+  ices = ices,
+  iceProducts = iceProducts,
   byId = {} :: { [string]: Ore },
   minerals = minerals,
   mineralById = {} :: { [string]: Mineral },
@@ -83,6 +111,42 @@ end
 for _, gas in gases do
   Ores.gasById[gas.id] = gas
 end
+-- (ice is ore to refine: byId has it; and its products are minerals)
+for _, ice in ices do
+  Ores.byId[ice.id] = ice
+end
+for _, product in iceProducts do
+  Ores.mineralById[product.id] = product
+end
+
+-- Whether a thing to be mined is ice.
+function Ores.Ice(variety: string): boolean
+  local ore = Ores.byId[variety]
+  return ore ~= nil and ore.ice == true
+end
+
+-- How many units of an ore are refined at a time.
+function Ores.BatchOf(type: string): number
+  local ore = Ores.byId[type]
+  return if ore and ore.batch then ore.batch else Ores.BATCH
+end
+
+-- How many blocks an ice chunk of a given radius (m) holds when whole.
+function Ores.IceUnits(radius: number): number
+  return math.floor(radius / 4)
+end
+
+-- The ice of a chunk, from a roll in [0, 1): the dark only in lawless space.
+function Ores.PickIce(roll: number, wild: boolean?): Ore
+  local sum = 0
+  for _, ice in ices do
+    sum += if wild then (ice.wild or ice.share * 0.6) else ice.share
+    if roll < sum then
+      return ice
+    end
+  end
+  return ices[1]
+end
 
 -- How many units of ore a rock of a given radius (m) holds when whole.
 function Ores.RockUnits(radius: number): number
@@ -98,7 +162,8 @@ end
 -- What a thing to be mined holds when whole: 'variety' is what it is of
 -- (an ore, for a rock; a gas, for a cloud).
 function Ores.Units(variety: string, radius: number): number
-  return if Ores.gasById[variety] then Ores.CloudUnits(radius) else Ores.RockUnits(radius)
+  return if Ores.gasById[variety] then Ores.CloudUnits(radius) elseif Ores.Ice(variety) then Ores.IceUnits(radius)
+    else Ores.RockUnits(radius)
 end
 
 -- The ore of a rock, from a roll in [0, 1). In lawless space ('wild')

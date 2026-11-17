@@ -51,6 +51,13 @@ end
 for _, mineral in Ores.minerals do
   byId[mineral.id] = { id = mineral.id, name = mineral.name, category = "mineral", volume = mineral.volume, basePrice = mineral.basePrice }
 end
+-- (ice and its products, 2026-11-16)
+for _, ice in Ores.ices do
+  byId[ice.id] = { id = ice.id, name = ice.name, category = "ore", volume = ice.volume, basePrice = ice.basePrice }
+end
+for _, product in Ores.iceProducts do
+  byId[product.id] = { id = product.id, name = product.name, category = "mineral", volume = product.volume, basePrice = product.basePrice }
+end
 
 for _, component in Components.list do
   byId[component.id] = { id = component.id, name = component.name, category = "component", volume = component.volume,

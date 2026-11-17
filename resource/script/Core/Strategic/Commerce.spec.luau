@@ -29,7 +29,8 @@ suite:Case("the goods are the real bulk materials, and what is built is known by
     t.eq(Commerce.Index(id), class)
     t.eq(#Commerce.Bill(id), 0, `{id} is one of the goods, and is built of itself`)
   end
-  t.eq({ kinds.ore, kinds.mineral, kinds.component, kinds.moon } :: { any }, { 6, 6, 8, 9 } :: { any })
+  -- (six ores and three ices, six minerals and three ice products)
+  t.eq({ kinds.ore, kinds.mineral, kinds.component, kinds.moon } :: { any }, { 9, 9, 8, 9 } :: { any })
   t.ok(Commerce.Index("fuel.block") ~= nil and Commerce.Index("gas.amber") ~= nil and Commerce.Index("planet.alloys") ~= nil)
   -- (not what is built, nor what nobody hauls)
   for _, id in { "frigate.courier", "autocannon.small", "ammo.emp", "raw.metals", "datacore", "skillbook.mining" } do

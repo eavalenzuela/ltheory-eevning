@@ -2,8 +2,9 @@
 -- Hacking: getting into the sealed hold of a derelict.
 --
 -- A derelict's hull (Tactical/Sites) has its hold sealed: it is not
--- looted until it has been hacked, by a ship with a Data Analyzer
--- fitted, from within the analyzer's reach.
+-- looted until it has been hacked, by a ship with a Relic Analyzer
+-- fitted, from within the analyzer's reach. (A Data Analyzer until
+-- 2026-11-16; it opens a listening post's vaults now.)
 --
 -- The lock is a matrix of codes, five by five, and three keys: short
 -- runs of codes. The pilot has a buffer, of five codes and one more for
@@ -108,6 +109,15 @@ end
 Hacking.BUFFER = 5
 Hacking.LEASH = 1000        -- m: how much farther off than the analyzer reaches before the hack is ended
 Hacking.ANALYZER = "analyzer.data"
+-- (since 2026-11-16 a derelict's hold is opened with a relic analyzer, and
+-- a vault's with a data analyzer: module expansion)
+Hacking.RELIC = "analyzer.relic"
+
+-- The analyzer a lock is opened with: a relic analyzer for a derelict's
+-- hold, a data analyzer for a vault.
+function Hacking.AnalyzerFor(lock: string): string
+  return if lock == "vault" then Hacking.ANALYZER else Hacking.RELIC
+end
 local DATACORE = "datacore"
 
 -- The pilot's buffer: five codes, and one more for every level of
@@ -217,12 +227,14 @@ local function lock(state: State.State, wreck: number, kind: Lock): ({ string },
   return cells, keys
 end
 
--- How far the ship's analyzer reaches (the best fitted); 0 with none.
-function Hacking.Reach(state: State.State, ship: number): number
+-- How far the ship's analyzer for a kind of lock reaches (the best
+-- fitted; "" a derelict's hold, "vault" a vault); 0 with none.
+function Hacking.Reach(state: State.State, ship: number, lock: string): number
   local reach = 0
+  local relic = lock ~= "vault"
   for _, item in Items.Fitted(state, ship) do
     local analyzer = Modules.byId[item.type].analyzer
-    if analyzer then
+    if analyzer and (analyzer.relic == true) == relic then
       reach = math.max(reach, analyzer.range)
     end
   end
@@ -249,9 +261,9 @@ function Hacking.Validate(state: State.State, command: State.Command): (boolean,
     elseif state.hack then
       return false, "a hack is under way already"
     end
-    local reach = Hacking.Reach(state, ship.id)
+    local reach = Hacking.Reach(state, ship.id, wreck.lock)
     if reach <= 0 then
-      return false, `needs a {Modules.byId[Hacking.ANALYZER].name} fitted`
+      return false, `needs a {Modules.byId[Hacking.AnalyzerFor(wreck.lock)].name} fitted`
     elseif wreck.system ~= ball.system or Space.Gap(ball :: any, wreck :: any) > reach then
       return false, "too far away"
     end
@@ -390,7 +402,7 @@ function Hacking.Step(state: State.State, events: { Event })
   end
   local wreck = state.wrecks[hack.wreck]
   local ball = state.balls[state.player.ship]
-  local reach = Hacking.Reach(state, state.player.ship)
+  local reach = if wreck then Hacking.Reach(state, state.player.ship, wreck.lock) else 0
   if wreck == nil or ball == nil or ball.system ~= wreck.system or reach <= 0
     or Space.Gap(ball :: any, wreck :: any) > reach + Hacking.LEASH then
     if #hack.buffer == 0 or wreck == nil then

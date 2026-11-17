@@ -16,11 +16,11 @@
 wait 2
 lua GameDebug.Peaceful(true)
 lua assert(GameDebug.Docked(), 'a new game starts docked')
-lua assert(GameDebug.Give('analyzer.data', 1))
+lua assert(GameDebug.Give('analyzer.relic', 1))
 lua GameDebug.Train('hacking', 3)
 frames 3
-until GameDebug.Press('Fit:analyzer.data')
-until GameDebug.Fitted('analyzer.data') == 1
+until GameDebug.Press('Fit:analyzer.relic')
+until GameDebug.Fitted('analyzer.relic') == 1
 
 until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()

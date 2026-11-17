@@ -23,7 +23,12 @@ function Mining.Cloud(object: System.Object?): boolean
 end
 
 function Mining.Rock(object: System.Object?): boolean
-  return object ~= nil and object.kind == "asteroid" and Ores.gasById[object.variety] == nil
+  return object ~= nil and object.kind == "asteroid" and Ores.gasById[object.variety] == nil and not Ores.Ice(object.variety)
+end
+
+-- An ice chunk: what an ice harvester cuts, and nothing else does.
+function Mining.Ice(object: System.Object?): boolean
+  return object ~= nil and object.kind == "asteroid" and Ores.Ice(object.variety)
 end
 
 -- Units of ore left in an asteroid.

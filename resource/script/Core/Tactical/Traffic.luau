@@ -405,7 +405,7 @@ local function miner(state: State.State, system: number, rng: Rng.Rng, events: {
   local belts: { System.Object } = {}
   local home = false
   for _, object in Space.Describe(state, system).objects do
-    if object.kind == "belt" and state.sites[object.id] == nil then
+    if object.kind == "belt" and state.sites[object.id] == nil and object.variety ~= "ice" then
       table.insert(belts, object)
     elseif object.kind == "station" and state.starbases[object.id] == nil then
       home = true
@@ -519,7 +519,7 @@ local function miningFleet(state: State.State, system: number, rng: Rng.Rng, eve
   local lead, boss, barge = jumpship(keeper), hullOf(keeper, "capitalindustrial"), hullOf(keeper, "barge")
   local belts: { System.Object } = {}
   for _, object in Space.Describe(state, system).objects do
-    if object.kind == "belt" and state.sites[object.id] == nil then
+    if object.kind == "belt" and state.sites[object.id] == nil and object.variety ~= "ice" then
       table.insert(belts, object)
     end
   end

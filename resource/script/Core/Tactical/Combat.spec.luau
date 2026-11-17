@@ -16,6 +16,9 @@ local Modules = require("@lt/Core/Data/Modules")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Test = require("@lt/Tool/Test")
+local Ores = require("@lt/Core/Data/Ores")
+local Mining = require("@lt/Core/Tactical/Mining")
+local Industry = require("@lt/Core/Assets/Industry")
 
 local suite = Test.Suite("Combat")
 
@@ -24,8 +27,8 @@ type Arena = { game: Core.Game, me: State.Ball, foe: State.Ball }
 -- The player in a hull with a fit, at rest in space, and an opponent
 -- 'distance' metres away (between surfaces), also at rest.
 local function arena(hull: string, fit: { { string } }, foeHull: string, foeFit: { { string } }, distance: number,
-  historySeed: number?): Arena
-  local game = Core.New({ galaxySeed = 1, historySeed = historySeed or 1, peaceful = true })
+  historySeed: number?, systems: number?): Arena
+  local game = Core.New({ galaxySeed = 1, historySeed = historySeed or 1, peaceful = true, systems = systems })
   local state = game.state
   -- Swap the starter ship for the one under test.
   local old = state.player.ship
@@ -925,6 +928,115 @@ suite:Case("a tracking disruptor and a guidance disruptor are set on their targe
   t.eq({ a.foe.vitals.track, a.foe.vitals.guide } :: { any }, { 0.7, 0.7 } :: { any })
   t.near(a.foe.vitals.lockRange, reach * 1.3, 1e-6)
   t.eq(a.me.vitals.track, nil, "nothing on the ship that runs them")
+end)
+
+-- ---------------------------------------------------------------------
+-- Module expansion, the third group (2026-11-16): utility and industry.
+
+suite:Case("a micro jump drive throws the ship 100 km on after its spool, and breaks its locks; not while it is held", function(t)
+  local a = arena("cruiser.ouyou", { { "jump.micro" } }, "frigate.courier", {}, 3000)
+  local drive = Items.Fitted(a.game.state, a.me.id)[1]
+  lockFoe(t, a)
+  local x = a.me.x
+  order(t, a, { kind = "ActivateModule", actor = 0, item = drive.id })
+  local _, ticks = stepUntil(a, "MicroJumped", 20)
+  t.ok(ticks >= 11 and ticks <= 13, `{ticks} ticks to spool`)
+  t.near(a.me.x - x, 100000, 2000)
+  t.eq(#a.me.vitals.locks, 0)
+  a.me.vitals.scrambled = true
+  t.eq(refused(a, { kind = "ActivateModule", actor = 0, item = drive.id }), "warp scrambled")
+end)
+
+suite:Case("a warp stabilizer is a point against a disruptor: a ship with one is not held by one disruptor", function(t)
+  local function held(stabilizers: number): boolean
+    local fit = {}
+    for _ = 1, stabilizers do
+      table.insert(fit, { "warp.stabilizer" })
+    end
+    local a = arena("cruiser.ouyou", { { "disruptor.warp" } }, "frigate.courier", fit, 3000)
+    lockFoe(t, a)
+    order(t, a, { kind = "ActivateModule", actor = 0, item = Items.Fitted(a.game.state, a.me.id)[1].id, target = a.foe.id })
+    Core.Step(a.game)
+    Core.Step(a.game)
+    return a.foe.vitals.scrambled
+  end
+  t.eq({ held(0), held(1) }, { true, false })
+  -- (and it costs the targeting)
+  local hull = Ships.byId["frigate.courier"]
+  t.near(Attributes.Ship(hull, { { type = "warp.stabilizer", running = false } }, nil).lockRange,
+    Attributes.Ship(hull, {}, nil).lockRange * 0.7, 1e-6)
+end)
+
+suite:Case("a tractor beam pulls a wreck to a kilometre off", function(t)
+  local a = arena("cruiser.ouyou", { { "tractor.beam" } }, "frigate.courier", {}, 15000)
+  local state = a.game.state
+  Aftermath.Destroy(state, a.foe.id, a.me.id, a.game.events)
+  local wreck = state.wrecks[state.wreckIds[#state.wreckIds]]
+  order(t, a, { kind = "ActivateModule", actor = 0, item = Items.Fitted(state, a.me.id)[1].id, target = wreck.id })
+  stepUntil(a, "Tractored", 60)
+  t.ok(Space.Gap(a.me :: any, wreck :: any) <= 1001, `{Space.Gap(a.me :: any, wreck :: any)} m off`)
+end)
+
+suite:Case("a ship scanner reads a locked ship's fit, a cargo scanner its hold, and each is off after one reading", function(t)
+  local a = arena("cruiser.ouyou", { { "scanner.ship" }, { "scanner.cargo" } }, "frigate.courier", { { "shield.extender.small" } }, 3000)
+  local state = a.game.state
+  Items.Add(state, "ore.ferrite", 250, a.foe.id, "cargo")
+  lockFoe(t, a)
+  local ship, cargo = Items.Fitted(state, a.me.id)[1], Items.Fitted(state, a.me.id)[2]
+  order(t, a, { kind = "ActivateModule", actor = 0, item = ship.id, target = a.foe.id })
+  local read = stepUntil(a, "ShipScanned", 10)
+  t.eq(read.items, { { type = "shield.extender.small", quantity = 1 } })
+  order(t, a, { kind = "ActivateModule", actor = 0, item = cargo.id, target = a.foe.id })
+  local hold = stepUntil(a, "CargoScanned", 10)
+  t.eq(hold.items, { { type = "ore.ferrite", quantity = 250 } })
+  t.eq(#a.me.vitals.running, 0)
+end)
+
+suite:Case("mining upgrades and a crystal of the rock's ore bring more off a rock; a crystal of another does nothing", function(t)
+  local a = arena("cruiser.ouyou", { { "miner.modulated", "crystal.ferrite" }, { "mining.upgrade" } }, "frigate.courier", {}, 3000)
+  local state = a.game.state
+  local laser = Items.Fitted(state, a.me.id)[1]
+  local base = 1 + 0.05 * math.max(0, (state.skills.mining or 0) - 1)
+  t.near(Combat.Yield(state, a.me.id, laser, "ore.ferrite"), base * 1.6 * 1.09, 1e-9)
+  t.near(Combat.Yield(state, a.me.id, laser, "ore.silicate"), base * 1.09, 1e-9)
+  t.near(Combat.Yield(state, a.me.id, laser, "gas.amber"), base, 1e-9)
+end)
+
+-- Ice (module expansion, 2026-11-16): where there is some, what cuts it,
+-- and what it refines to.
+suite:Case("some systems have an ice field by a cold planet; only an ice harvester cuts its chunks, two blocks a cycle", function(t)
+  local a = arena("frigate.battleaxe", { { "miner.ice" }, { "miner.small" } }, "frigate.courier", {}, 20000, nil, 40)
+  local state = a.game.state
+  local chunk: any = nil
+  local fields = 0
+  local systems = #state.galaxy.systems
+  for system = 1, systems do
+    for _, object in Space.Describe(state, system).objects do
+      if object.kind == "belt" and object.variety == "ice" then
+        fields += 1
+      elseif object.kind == "asteroid" and Ores.Ice(object.variety) and chunk == nil then
+        chunk = object
+      end
+    end
+  end
+  t.ok(fields >= 1 and fields < systems, `{fields} ice fields in {systems} systems`)
+  assert(chunk, "no ice anywhere")
+  t.eq({ Mining.Rock(chunk), Mining.Ice(chunk) }, { false, true })
+  -- (the ship taken to it)
+  local me = a.me
+  me.system = Space.SystemOf(state, chunk.id)
+  me.x, me.y, me.z = chunk.x + chunk.radius + me.radius + 2000, chunk.y, chunk.z
+  Space.AssignGrid(state, me)
+  order(t, a, { kind = "LockTarget", actor = 0, target = chunk.id })
+  stepUntil(a, "LockCompleted", 60)
+  local harvester, laser = Items.Fitted(state, me.id)[1], Items.Fitted(state, me.id)[2]
+  t.eq(refused(a, { kind = "ActivateModule", actor = 0, item = laser.id, target = chunk.id }), "ice wants an ice harvester")
+  order(t, a, { kind = "ActivateModule", actor = 0, item = harvester.id, target = chunk.id })
+  local mined = stepUntil(a, "Mined", 70)
+  t.eq({ mined.ore, mined.units } :: { any }, { chunk.variety, 2 } :: { any })
+  -- (refined a block at a time, into the ice products)
+  local used, out = Industry.RefineOutput("ice.rime", 3, 0.5)
+  t.eq({ used, out[1].mineral, out[1].amount } :: { any }, { 3, "ice.heavywater", 60 } :: { any })
 end)
 
 return suite

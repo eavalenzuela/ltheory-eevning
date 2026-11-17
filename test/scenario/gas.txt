@@ -80,11 +80,12 @@ until GameDebug.Press('Fitting')
 frames 3
 until GameDebug.Press('ToHangar:gas.amber')
 until GameDebug.Hangar('gas.amber') >= 42
+lua _G.gas = GameDebug.Hangar('gas.amber')
 lua assert(GameDebug.Blueprint('blueprint.booster.redline'))
 frames 3
 until GameDebug.Press('StartJob')
 until GameDebug.Jobs() == 1
-lua assert(GameDebug.Hangar('gas.amber') == 2, 'a booster should take forty of its gas')
+lua assert(GameDebug.Hangar('gas.amber') == _G.gas - 40, 'a booster should take forty of its gas')
 lua GameDebug.TimeScale(30)
 until GameDebug.Jobs() == 0
 lua GameDebug.TimeScale(1)

@@ -218,7 +218,7 @@ Careers.list = {
           return event.success == true
         end,
         site = "relic",
-        kit = { { type = "analyzer.data", quantity = 1 }, { type = "probe.scan", quantity = 2 } },
+        kit = { { type = "analyzer.data", quantity = 1 }, { type = "analyzer.relic", quantity = 1 }, { type = "probe.scan", quantity = 2 } },
         gifts = { { type = "cloak.device", quantity = 1 }, { type = "book.cloaking", quantity = 1 } },
         says = "A derelict is adrift in this system. The scanner gets it half way and says which planet it is by: take a "
           .. "probe there and scan again. Its hold is sealed. Train Hacking (it wants CPU Management 2), fit the Data "

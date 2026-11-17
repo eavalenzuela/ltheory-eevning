@@ -107,7 +107,7 @@ local function places(state: State.State, system: number): ({ System.Object }, {
   for _, object in Space.Describe(state, system).objects do
     if object.kind == "gate" and object.variety ~= "passage" then
       table.insert(gates, object)
-    elseif object.kind == "belt" and state.sites[object.id] == nil then
+    elseif object.kind == "belt" and state.sites[object.id] == nil and (object.variety :: string) ~= "ice" then
       table.insert(belts, object)
     elseif object.kind == "station" and (state.starbases[object.id] == nil or state.starbases[object.id].owner == Wars.PILOT) then
       table.insert(stations, object)

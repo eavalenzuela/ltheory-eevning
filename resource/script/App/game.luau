@@ -89,7 +89,8 @@ local ui: Interface
 local function find(what: string): Core.Entry?
   local entries = Core.Query.Overview(session.game)
   for _, entry in entries do
-    if entry.kind == what or (what == "home" and entry.id == session.game.state.player.home) then
+    -- (a belt is an asteroid belt, and no ice field: "Ice Field" finds one of those)
+    if (entry.kind == what and not (what == "belt" and entry.variety == "ice")) or (what == "home" and entry.id == session.game.state.player.home) then
       return entry
     end
   end
@@ -1356,7 +1357,7 @@ function Debug.MiningSystem(faction: string): number
     if Galaxy.Keeper(node) == faction and Traffic.FleetDue(state, id) then
       local belt = false
       for _, object in Space.Describe(state, id).objects do
-        belt = belt or (object.kind == "belt" and state.sites[object.id] == nil)
+        belt = belt or (object.kind == "belt" and state.sites[object.id] == nil and object.variety ~= "ice")
       end
       if belt and (Traffic.Refuge(state, id, faction, 30)) ~= 0 then
         return id

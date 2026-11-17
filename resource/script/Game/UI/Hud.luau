@@ -49,6 +49,7 @@ local CrewWindow = require("@lt/Game/UI/Crew")
 local SchoolWindow = require("@lt/Game/UI/School")
 local StarbaseWindow = require("@lt/Game/UI/Starbase")
 local WalletWindow = require("@lt/Game/UI/Wallet")
+local Scans = require("@lt/Game/UI/Scans")
 local CorporationWindow = require("@lt/Game/UI/Corporation")
 local Theme = require("@lt/Game/UI/Theme")
 local Waypoints = require("@lt/Game/Waypoints")
@@ -1192,6 +1193,7 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
       end
       local active = module.weapon ~= nil or module.repair ~= nil or module.boost ~= nil or module.miner ~= nil
         or module.hex ~= nil or module.salvager ~= nil or module.injector ~= nil or module.smartbomb ~= nil
+        or module.jump ~= nil or module.tractor ~= nil or module.scanner ~= nil
       if active then
         pressable += 1
       end
@@ -1247,6 +1249,15 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
       if module.salvager then
         note = if running then "salvaging" else "idle"
       end
+      if module.tractor then
+        note = if running then "pulling" else "idle"
+      end
+      if module.jump then
+        note = if running then "spooling" else "idle"
+      end
+      if module.scanner then
+        note = if running then "scanning" else "idle"
+      end
       if module.cloak then
         note = if running then "cloaked" else "idle"
       end
@@ -1285,10 +1296,10 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
             if runs[each.id] then
               Session.Do(session, { kind = "DeactivateModule", actor = 0, item = each.id })
             end
-          elseif module.salvager then
+          elseif module.salvager or module.tractor then
             -- (on the wreck that is selected: a wreck needs no lock)
             Session.Do(session, { kind = "ActivateModule", actor = 0, item = each.id, target = session.selected })
-          elseif module.weapon or module.miner or module.hex then
+          elseif module.weapon or module.miner or module.hex or (module.scanner and module.scanner.kind ~= "survey") then
             -- (at the pilot's target: aimOf)
             Session.Do(session, { kind = "ActivateModule", actor = 0, item = each.id, target = aimOf(session, ball) })
           else
@@ -1528,6 +1539,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Events.Frame(session)
       Guide.Frame(session)
       CorporationWindow.Frame(session)
+      Scans.Frame(session)
       -- The dock is down the left edge (Game/UI/Dock): the windows keep
       -- clear of it, and what was set out from the screen's left edge
       -- is set out from the dock's.

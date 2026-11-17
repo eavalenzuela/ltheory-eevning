@@ -33,7 +33,11 @@ export type Session = {
   aimedAt: number,
   events: { Space.Event },    -- the events of the ticks taken this frame
   message: string,            -- the last thing worth telling the player
-  heard: { string },          -- and the last few before it, the newest last (for a script: GameDebug.Heard)
+  heard: { string },
+  -- What a scanner read last (module expansion, 2026-11-16: Game/UI/Scans):
+  -- what was scanned, a word on it, and what was found; 'serial' counts up
+  -- with each reading.
+  scanned: { serial: number, title: string, note: string, rows: { { type: string?, label: string, value: string } } }?,          -- and the last few before it, the newest last (for a script: GameDebug.Heard)
   messageTick: number,
   -- What kind of thing it is, for the colour it is said in: "good" (a
   -- gain, a thing done), "warn" (a thing to look to), "bad" (a loss, a
@@ -578,6 +582,35 @@ function Session.Notice(session: Session, event: Space.Event)
     if me and it and whose and whose.owner == "pirates" and it.system == me.system and it.grid == me.grid and me.grid ~= 0 then
       Session.Say(session, `{it.name} has come out from under a cloak`)
     end
+  elseif (kind == "ShipScanned" or kind == "CargoScanned") and event.ball == mine then
+    local rows = {}
+    local volume = 0
+    for _, each in event.items do
+      local info = Types.Get(each.type)
+      table.insert(rows, { type = each.type, label = if info then info.name else each.type, value = Format.Whole(each.quantity) })
+      volume += (if info then info.volume else 0) * each.quantity
+    end
+    local hull = Types.Get(event.hull)
+    local ship = kind == "ShipScanned"
+    session.scanned = { serial = (if session.scanned then session.scanned.serial else 0) + 1,
+      title = `{event.name}{if hull then ` ({hull.name})` else ""}`,
+      note = if ship then `{#rows} {if #rows == 1 then "kind" else "kinds"} of module fitted`
+        else `{#rows} {if #rows == 1 then "kind" else "kinds"} in the hold, {Format.Whole(volume)} m3`, rows = rows }
+    Session.Say(session, if ship then `Ship scan of {event.name}: {#rows} kinds of module` else `Cargo scan of {event.name}: {#rows} kinds of goods`)
+  elseif kind == "Surveyed" and event.ball == mine then
+    local rows = {}
+    for _, rock in event.rocks do
+      local info = Types.Get(rock.variety)
+      table.insert(rows, { type = rock.variety, label = `{if info then info.name else rock.variety}, {Format.Distance(rock.distance)}`,
+        value = `{Format.Whole(rock.left)} units` })
+    end
+    session.scanned = { serial = (if session.scanned then session.scanned.serial else 0) + 1, title = "Survey",
+      note = `{#rows} {if #rows == 1 then "rock" else "rocks"} in reach, the nearest first`, rows = rows }
+    Session.Say(session, `Survey: {#rows} {if #rows == 1 then "rock" else "rocks"} in reach`)
+  elseif kind == "MicroJumped" and event.ball == mine then
+    Session.Say(session, `Micro jump: {Format.Distance(event.distance)} on. Your locks are broken`)
+  elseif kind == "Tractored" and event.ball == mine then
+    Session.Say(session, "The wreck is pulled in")
   elseif kind == "Jammed" and event.ball == mine then
     Session.Say(session, "Jammed: your locks are broken")
   elseif kind == "Held" and event.ball == mine then
