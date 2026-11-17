@@ -377,8 +377,10 @@ local COMBAT_HAULER = { cargo = 0.45, layers = 2.2, hardpoints = 3, fitting = 1.
 
 -- The classes that are capitals: nobody has a tech 2 make of one, but
 -- where a faction's line names one.
+-- (a freighter among them: the owner, 2026-11-17, "freighters are caps
+-- everywhere")
 local CAPITAL: { [string]: boolean } = { carrier = true, dreadnought = true, siegedreadnought = true, capitalindustrial = true,
-  supercarrier = true, ultracapital = true }
+  supercarrier = true, ultracapital = true, freighter = true }
 
 -- To two figures or so: nobody quotes a hull's armour to the hit point.
 local function round(x: number): number
