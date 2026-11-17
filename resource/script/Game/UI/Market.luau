@@ -974,5 +974,6 @@ Windows.Icon(Market.ID, "market")
 -- (the docked screen's own way to it: its Skills tab buys a book here)
 Fitting.Market = Market.Choose
 SkillSheet.Market = Market.Choose
+Info.Market = Market.Choose
 
 return Market

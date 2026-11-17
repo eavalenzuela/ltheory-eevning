@@ -18,15 +18,15 @@
 local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
+local List = require("@lt/Game/UI/List")
 local Session = require("@lt/Game/Session")
+local Theme = require("@lt/Game/UI/Theme")
 local Windows = require("@lt/Game/UI/Windows")
 
 local Events = {}
 
-Events.WIDTH = 620
-Events.HEIGHT = 420
-
-local ROW = 44
+Events.WIDTH = 1040
+Events.HEIGHT = 520
 
 local ID = "events"
 local current: Session.Session? = nil
@@ -103,61 +103,212 @@ local function far(jumps: number, here: boolean): string
   return if here then "here" elseif jumps < 0 then "far off" elseif jumps == 1 then "1 jump" else `{jumps} jumps`
 end
 
+-- ---------------------------------------------------------------------
+-- The window, laid out as the market is (2026-11-16): what kind of
+-- thing is going on down the left, with how many of each; the one list
+-- in the middle, nearest first, sorted by its heads; and the one picked
+-- on the right, with what it is, where, how long it has, and the way
+-- there. What order is left thinner or firmer after them is a kind of
+-- its own at the foot of the left.
+
+local KINDS: { { string } } = {
+  { "all", "Everything" }, { "surge", "Pirate surges" }, { "invasion", "Invasions" }, { "sighting", "Sightings" },
+  { "disaster", "Disasters" }, { "windfall", "Windfalls" },
+}
+local TREE_W, DETAIL_W = 190, 300
+local COLUMNS: { List.Column } = {
+  { id = "what", label = "Going on", width = 0 }, { id = "where", label = "Where", width = 150 },
+  { id = "jumps", label = "Jumps", width = 56, right = true }, { id = "left", label = "Time left", width = 84, right = true },
+}
+local LEFT_COLUMNS: { List.Column } = {
+  { id = "where", label = "System", width = 0 }, { id = "order", label = "Order", width = 90 },
+  { id = "left", label = "For", width = 84, right = true },
+}
+local kind = "all"
+local sortBy, sortDown = "jumps", false
+local picked = 0
+
+-- (the sort's key for a happening)
+local function keyOf(one: Core.HappeningInfo, by: string): any
+  if by == "what" then
+    return (Events.Title(one))
+  elseif by == "where" then
+    return one.where
+  elseif by == "left" then
+    return one.left
+  end
+  return if one.here then -1 elseif one.jumps < 0 then math.huge else one.jumps
+end
+
+local function drawKinds(list: { Core.HappeningInfo }, behind: { Core.AftermathInfo }, x: number, y: number, w: number)
+  local counts: { [string]: number } = { all = #list }
+  for _, one in list do
+    counts[one.kind] = (counts[one.kind] or 0) + 1
+  end
+  local rows = table.clone(KINDS)
+  table.insert(rows, { "behind", "Left behind" })
+  counts.behind = #behind
+  for index, each in rows do
+    local rowY = y + 8 + (index - 1) * List.ROW + (if each[1] == "behind" then 12 else 0)
+    local _, clicked = List.Row(x, rowY, w - 5, kind == each[1], `Events:kind:{each[1]}`)
+    if each[1] ~= "all" and each[1] ~= "behind" then
+      Im.Flat(x + 8, rowY + 6, 3, List.ROW - 12, Events.Colour(each[1]), 0.9)
+    end
+    Im.Text(List.Cut(each[2], w - 70, 14, false), x + 18, rowY + 5, 14, Theme.TEXT)
+    local count = tostring(counts[each[1]] or 0)
+    Im.Text(count, x + w - 14 - Im.TextWidth(count, 12), rowY + 6, 12, Theme.FAINT)
+    if clicked then
+      kind = each[1]
+      Im.ScrollTo("events list", 0)
+    end
+  end
+end
+
+local function drawList(session: Session.Session, list: { Core.HappeningInfo }, x: number, y: number, w: number, h: number)
+  local rows: { Core.HappeningInfo } = {}
+  for _, one in list do
+    if kind == "all" or one.kind == kind then
+      table.insert(rows, one)
+    end
+  end
+  if sortBy ~= "jumps" or sortDown then
+    table.sort(rows, function(a, b)
+      local x1, y1 = keyOf(a, sortBy), keyOf(b, sortBy)
+      if x1 ~= y1 then
+        return if sortDown then x1 > y1 else x1 < y1
+      end
+      return a.id < b.id
+    end)
+  end
+  local layout = List.Columns(COLUMNS, x, w - 6)
+  local clicked = List.Head("events", x, y, w, COLUMNS, layout, sortBy, sortDown)
+  if clicked then
+    if sortBy ~= clicked then
+      sortBy, sortDown = clicked, false
+    elseif clicked ~= "jumps" and not sortDown then
+      sortDown = true
+    else
+      sortBy, sortDown = "jumps", false
+    end
+  end
+  local top = y + List.HEAD
+  local room = h - List.HEAD - List.FOOT
+  local first, visible = List.Body("events list", x, top, w, room, #rows)
+  if #rows == 0 then
+    Im.Text(if #list == 0 then "Nothing is going on that anybody has word of." else "Nothing of that kind is going on.", x + 12, top + 12,
+      14, Theme.DIM)
+  end
+  for index = 1, visible do
+    local one = rows[index + first]
+    if one == nil then
+      break
+    end
+    local rowY = top + (index - 1) * List.ROW
+    local hot, chosen = List.Row(x, rowY, w - 5, picked == one.id, `Events:pick:{one.id}`)
+    local title, more = Events.Title(one)
+    Im.Flat(layout.what.x, rowY + 6, 3, List.ROW - 12, Events.Colour(one.kind), 0.9)
+    List.Text(title, layout.what, rowY, hot, Events.Colour(one.kind), 14, false, 10, more)
+    List.Text(one.where, layout.where, rowY, hot, Theme.DIM, 13)
+    List.Text(far(one.jumps, one.here), layout.jumps, rowY, false, if one.here then Theme.GOOD else Theme.TEXT, 13)
+    List.Text(Format.Duration(one.left), layout.left, rowY, false, Theme.DIM, 13)
+    if chosen then
+      picked = one.id
+    end
+  end
+  local _ = session
+  List.Foot(x, y + h - List.FOOT, w, `{#rows} going on`, "the nearest first, unless sorted otherwise")
+end
+
+local function drawBehind(behind: { Core.AftermathInfo }, x: number, y: number, w: number, h: number)
+  local layout = List.Columns(LEFT_COLUMNS, x, w - 6)
+  List.Head("events behind", x, y, w, LEFT_COLUMNS, layout, "", false)
+  local top = y + List.HEAD
+  local first, visible = List.Body("events list", x, top, w, h - List.HEAD - List.FOOT, #behind)
+  if #behind == 0 then
+    Im.Text("Nothing that has passed has left a mark.", x + 12, top + 12, 14, Theme.DIM)
+  end
+  for index = 1, visible do
+    local mark = behind[index + first]
+    if mark == nil then
+      break
+    end
+    local rowY = top + (index - 1) * List.ROW
+    local hot = List.Row(x, rowY, w - 5, false)
+    List.Text(mark.name, layout.where, rowY, hot, Theme.TEXT, 14, false, 0, `after {mark.why}`)
+    List.Text(if mark.delta < 0 then "thinner" else "firmer", layout.order, rowY, false, if mark.delta < 0 then Theme.BAD else Theme.GOOD, 13)
+    List.Text(Format.Duration(mark.left), layout.left, rowY, false, Theme.DIM, 13)
+  end
+  List.Foot(x, y + h - List.FOOT, w, `{#behind} left behind`, "order kept thinner or firmer for a while after")
+end
+
+local function drawPicked(session: Session.Session, list: { Core.HappeningInfo }, x: number, y: number, w: number)
+  local one: Core.HappeningInfo? = nil
+  for _, each in list do
+    if each.id == picked then
+      one = each
+    end
+  end
+  local dx, dw = x + 14, w - 28
+  if one == nil then
+    Im.Text("Choose one to see more of it.", dx, y + 14, 14, Theme.DIM)
+    return
+  end
+  local title, more = Events.Title(one)
+  local line = y + 12
+  Im.Pill(({ surge = "surge", invasion = "invasion", sighting = "sighting", disaster = "disaster", windfall = "windfall" })[one.kind]
+    or one.kind, dx, line, Events.Colour(one.kind))
+  line += 26
+  line = Im.Wrapped(title, dx, line, dw, 16, Theme.TEXT) + 4
+  line = Im.Wrapped(more, dx, line, dw, 13, Theme.DIM) + 14
+  Im.Text("WHERE", dx, line, 11, Theme.ACCENT)
+  Im.Flat(dx, line + 15, dw, 1, Theme.EDGE)
+  line += 22
+  Im.Text(List.Cut(one.where, dw, 14, false), dx, line, 14, Theme.TEXT)
+  line += 20
+  Im.Text(if one.here then "this system" else far(one.jumps, one.here), dx, line, 13, if one.here then Theme.GOOD else Theme.DIM)
+  line += 28
+  Im.Text("TIME LEFT", dx, line, 11, Theme.ACCENT)
+  Im.Flat(dx, line + 15, dw, 1, Theme.EDGE)
+  line += 22
+  Im.Text(Format.Duration(one.left), dx, line, 14, Theme.TEXT)
+  line += 34
+  local can = not one.here and one.jumps >= 0 and session.destination ~= one.system
+  Im.Tone("primary")
+  if Im.Button(if session.destination == one.system then "Course set" else "Set course", dx, line, dw, 30, can, "Events:course") then
+    session.destination = one.system
+  end
+  Im.Because(if one.here then "it is here" elseif one.jumps < 0 then "there is no way there from here" else nil)
+end
+
 local function draw(_: Windows.Window, x: number, y: number, width: number, height: number)
   local session = current
   if session == nil then
     return
   end
-  local left, right = x + 16, x + width - 16
   local list, behind = Events.List(session)
-  Im.Text(if #list == 0 then "Nothing is going on that anybody has word of." else `{#list} going on, the nearest first`, left, y + 10, 13,
-    Im.DIM)
-
-  -- (a line for each, and under them what has been left behind, a line each)
-  type Line = { one: Core.HappeningInfo?, mark: Core.AftermathInfo?, heading: string? }
-  local lines: { Line } = {}
+  -- (every event's own button, by its id, for a script: as the rows had them)
   for _, one in list do
-    table.insert(lines, { one = one })
-  end
-  if #behind > 0 then
-    table.insert(lines, { heading = "LEFT BEHIND" })
-    for _, mark in behind do
-      table.insert(lines, { mark = mark })
+    local can = not one.here and one.jumps >= 0 and session.destination ~= one.system
+    if Im.Hook(`Events:course:{one.id}`, can) then
+      session.destination = one.system
     end
   end
-  local top = y + 36
-  local visible = math.max(1, (height - 46) // ROW)
-  local first = Im.Scroll("events", left - 4, top, width - 24, visible * ROW, #lines, visible)
-  for row = 1, visible do
-    local line = lines[row + first]
-    if line == nil then
-      break
-    end
-    local at = top + (row - 1) * ROW
-    local one, mark = line.one, line.mark
-    if line.heading then
-      Im.Text(line.heading, left, at + 16, 12, Im.ACCENT)
-    elseif one then
-      local title, more = Events.Title(one)
-      Im.Fill(left - 4, at + 2, 3, ROW - 6, Events.Colour(one.kind), 0.9)
-      Im.Text(title, left + 6, at + 4, 14, Events.Colour(one.kind))
-      Im.Text(more, left + 6, at + 23, 12, Im.DIM)
-      Im.TextRight(`{one.where}, {far(one.jumps, one.here)}`, right - 108, at + 4, 13, Im.TEXT)
-      Im.TextRight(`{Format.Duration(one.left)} left`, right - 108, at + 23, 12, Im.DIM)
-      local can = not one.here and one.jumps >= 0 and session.destination ~= one.system
-      if Im.Button(if session.destination == one.system then "Course set" else "Set course", right - 98, at + 6, 98, 28, can,
-        `Events:course:{one.id}`) then
-        session.destination = one.system
-      end
-    elseif mark then
-      Im.Text(`{mark.name}: order is {if mark.delta < 0 then "thinner" else "firmer"} there`, left + 6, at + 4, 13, Im.TEXT)
-      Im.Text(`after {mark.why}, for {Format.Duration(mark.left)} more`, left + 6, at + 23, 12, Im.DIM)
-    end
+  local was = Im.Plain(true)
+  drawKinds(list, behind, x + 1, y, TREE_W - 1)
+  Im.Flat(x + TREE_W, y, 1, height, Theme.EDGE)
+  local listW = width - TREE_W - DETAIL_W
+  if kind == "behind" then
+    drawBehind(behind, x + TREE_W + 1, y, listW - 1, height)
+  else
+    drawList(session, list, x + TREE_W + 1, y, listW - 1, height)
   end
+  Im.Flat(x + TREE_W + listW, y, 1, height, Theme.EDGE)
+  drawPicked(session, list, x + TREE_W + listW + 1, y, DETAIL_W - 2)
+  Im.Plain(was)
 end
 
 Windows.Kind(ID, draw)
-Windows.Make(ID, ID, "Events", 564, 150, Events.WIDTH, Events.HEIGHT, 480, 200, nil)
+Windows.Make(ID, ID, "Events", 420, 150, Events.WIDTH, Events.HEIGHT, 860, 360, nil)
 Windows.Icon(ID, "events")
 
 return Events

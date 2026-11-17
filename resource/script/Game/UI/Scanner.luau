@@ -6,9 +6,9 @@
 -- structures are within a range, all round or in a cone pointed at what
 -- is selected or the way the camera looks.
 --
--- Open in space, from the Scan button on the overview. Drawn every
--- frame with Game/UI/Im; it reads the Core through queries and acts on
--- it only through the Session. Its buttons' names, for a script
+-- Open in space, from the Scan button on the overview or the dock: a
+-- window (Game/UI/Windows) since 2026-11-16. It reads the Core through
+-- queries and acts on it only through the Session. Its buttons' names, for a script
 -- (Im.Press): "Scanner:close", "Scanner:signals", "Scanner:directional";
 -- "Scan", "Probe:launch", "Probe:recall" and "SiteWarp:<n>" for the nth
 -- site listed; "Dscan:scan", "Dscan:angle:<degrees>" (360, 90, 30, 10),
@@ -20,20 +20,26 @@ local Core = require("@lt/Core/Api")
 local Dscan = require("@lt/Core/Tactical/Dscan")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
+local List = require("@lt/Game/UI/List")
 local Session = require("@lt/Game/Session")
 local State = require("@lt/Core/Kernel/State")
+local Theme = require("@lt/Game/UI/Theme")
+local Windows = require("@lt/Game/UI/Windows")
 
 local Scanner = {}
 
-Scanner.WIDTH = 468
-Scanner.HEIGHT = 440
-
-local GOOD = vector.create(0.45, 0.85, 0.55)
+Scanner.ID = "scanner"
+Scanner.WIDTH = 820
+Scanner.HEIGHT = 460
 local KINDS: { [string]: string } = { combat = "pirate den", ore = "hidden belt", gas = "vapour field", relic = "derelict",
   data = "listening post", mission = "camp to clear", keep = "pirate tower", wormhole = "wormhole" }
 
 local open = false
 local side: "signals" | "directional" = "signals"
+local current: Session.Session? = nil
+local currentLook: vector? = nil
+-- (whether the window was shown last frame: shut from its corner then, the scanner is shut)
+local shown = false
 
 -- The directional scanner: how it is set, and what its last scan had
 -- (a scan is of a moment: the list stands until the next one).
@@ -45,14 +51,31 @@ local scannedTick = -1      -- the tick of the last
 local scannedIn = 0         -- and the system it was made in
 local scannedHow = ""       -- and how it was set
 
-local ROWS = 8
-
 function Scanner.Open()
   open = true
 end
 
 function Scanner.Close()
   open = false
+end
+
+-- Once a frame, before the windows are drawn: whose game it is, the way
+-- the camera looks, and whether the pilot is in space (the scanner is
+-- shown only there, and open again on the next undocking if it was).
+function Scanner.Frame(session: Session.Session, look: vector?, inSpace: boolean)
+  current, currentLook = session, look
+  if shown and not Windows.IsOpen(Scanner.ID) then
+    open = false
+  end
+  local show = open and inSpace
+  if show ~= Windows.IsOpen(Scanner.ID) then
+    if show then
+      Windows.Open(Scanner.ID)
+    else
+      Windows.Close(Scanner.ID)
+    end
+  end
+  shown = show
 end
 
 function Scanner.IsOpen(): boolean
@@ -64,11 +87,26 @@ function Scanner.Sightings(): ({ Core.Sighting }, number)
   return sightings, scans
 end
 
+-- ---------------------------------------------------------------------
+-- The window (Game/UI/Windows), laid out as the market is since
+-- 2026-11-16: the two sides as pages along the top, what is done on
+-- that side in a strip under them, and what it found as the one list.
+
+local SIGNAL_COLUMNS: { List.Column } = {
+  { id = "name", label = "Signal", width = 0 }, { id = "what", label = "What it is", width = 230 },
+  { id = "strength", label = "Found", width = 150 }, { id = "distance", label = "Distance", width = 90, right = true },
+  { id = "warp", label = "", width = 66 },
+}
+local SIGHT_COLUMNS: { List.Column } = {
+  { id = "name", label = "Name", width = 0 }, { id = "type", label = "Type", width = 220 }, { id = "kind", label = "Kind", width = 90 },
+  { id = "grid", label = "", width = 60, right = true },
+}
+
 -- ('look': the way the camera looks, as the Core has its directions.)
 local function drawDirectional(session: Session.Session, x: number, y: number, width: number, height: number, look: vector?)
   local game = session.game
   local state = game.state
-  local left, right = x + 16, x + width - 16
+  local left = x + 12
   local system = Core.Query.Player(game).system
   -- (a list from another system, or from before a game was loaded, is nobody's)
   if scannedTick > state.tick or (scannedIn ~= 0 and scannedIn ~= system) then
@@ -78,34 +116,42 @@ local function drawDirectional(session: Session.Session, x: number, y: number, w
   local body = if toward then Core.Query.Body(game, toward) else nil
   -- A cone is pointed at what is selected, or the way the camera looks.
   local along: { number }? = if aim == "camera" and look then { look.x, look.y, look.z } else nil
-  Im.Text("Pointed", left, y + 48, 13, Im.DIM)
-  if Im.Toggle("at what is selected", left + 84, y + 42, 170, 24, aim == "selected", "Dscan:aim:selected") then
-    aim = "selected"
-  end
-  if Im.Toggle("where I look", left + 260, y + 42, 170, 24, aim == "camera", "Dscan:aim:camera") then
-    aim = "camera"
-  end
-  local name = if body then body.name else nil
-  if #(name or "") > 40 then
-    name = string.sub(name :: string, 1, 39) .. "."
-  end
-  Im.Text(if along then "the way the camera looks: turn it, and scan" elseif name then name else "nothing: select something to point a cone at",
-    left + 84, y + 72, 13, if along or name then Im.TEXT else Im.DIM)
-  Im.Text("Cone", left, y + 103, 13, Im.DIM)
-  for index, degrees in Dscan.ANGLES do
-    local label = if degrees == 360 then "all round" else `{degrees} deg`
-    if Im.Toggle(label, left + 84 + (index - 1) * 88, y + 96, 82, 26, angle == degrees, `Dscan:angle:{degrees}`) then
+  local cx = left
+  Im.Text("Cone", cx, y + 13, 12, Theme.FAINT)
+  cx += 40
+  for _, degrees in Dscan.ANGLES do
+    local pressed, wide = List.Chip(if degrees == 360 then "All round" else `{degrees} deg`, cx, y + 8, angle == degrees, `Dscan:angle:{degrees}`)
+    if pressed then
       angle = degrees
     end
+    cx += wide + 4
   end
-  Im.Text("Range", left, y + 135, 13, Im.DIM)
-  for index, reach in Dscan.RANGES do
-    if Im.Toggle(`{reach} AU`, left + 84 + (index - 1) * 88, y + 128, 82, 26, range == reach, `Dscan:range:{reach}`) then
+  cx += 14
+  Im.Text("Range", cx, y + 13, 12, Theme.FAINT)
+  cx += 46
+  for _, reach in Dscan.RANGES do
+    local pressed, wide = List.Chip(`{reach} AU`, cx, y + 8, range == reach, `Dscan:range:{reach}`)
+    if pressed then
       range = reach
     end
+    cx += wide + 4
   end
+  cx = left
+  Im.Text("Pointed", cx, y + 45, 12, Theme.FAINT)
+  cx += 56
+  for _, each in { { "selected", "At what is selected" }, { "camera", "Where I look" } } do
+    local pressed, wide = List.Chip(each[2], cx, y + 40, aim == each[1], `Dscan:aim:{each[1]}`)
+    if pressed then
+      aim = each[1] :: any
+    end
+    cx += wide + 4
+  end
+  local name = if body then body.name else nil
+  Im.Text(List.Cut(if along then "the way the camera looks: turn it, and scan" elseif name then name else "nothing: select something to point a cone at",
+    x + width - cx - 150, 13, false), cx + 10, y + 45, 13, if along or name then Theme.TEXT else Theme.DIM)
   local _, can, whyNot = Core.Query.Directional(game, toward, angle, range * Constants.AU, along)
-  if Im.Button("Scan", left, y + 164, 110, 28, can, "Dscan:scan") then
+  Im.Tone("primary")
+  if Im.Button("Scan", x + width - 132, y + 8, 120, 56, can, "Dscan:scan") then
     sightings = Core.Query.Directional(game, toward, angle, range * Constants.AU, along)
     -- (a new list is read from its top)
     Im.ScrollTo("sightings", 0)
@@ -115,59 +161,43 @@ local function drawDirectional(session: Session.Session, x: number, y: number, w
       elseif along then `{angle} deg where the camera looked, {range} AU`
       else `{angle} deg at {name or "?"}, {range} AU`
   end
-  if not can then
-    Im.Text(tostring(whyNot), left + 122, y + 171, 13, Im.DIM)
-  elseif scannedTick >= 0 then
-    local age = math.floor((state.tick - scannedTick) * Constants.TICK)
-    Im.Text(`{#sightings} found, {if age <= 0 then "now" else `{age} s ago`}`, left + 122, y + 171, 13, GOOD)
-    Im.TextRight(scannedHow, right, y + 196, 11, Im.DIM)
-  else
-    Im.Text("ready", left + 122, y + 171, 13, GOOD)
-  end
+  Im.Because(whyNot)
+  Im.Flat(x + 1, y + 72, width - 2, 1, Theme.EDGE)
 
-  local line = y + 214
+  local top = y + 73
+  local layout = List.Columns(SIGHT_COLUMNS, x, width - 6)
+  List.Head("sightings head", x, top, width, SIGHT_COLUMNS, layout, "", false)
+  local body0 = top + List.HEAD
+  local first, visible = List.Body("sightings", x, body0, width, height - (body0 - y) - List.FOOT, #sightings)
   if scannedTick >= 0 and #sightings == 0 then
-    Im.Text("Nothing there.", left, line, 13, Im.DIM, 0.8)
+    Im.Text("Nothing there.", x + 12, body0 + 10, 14, Theme.DIM)
+  elseif scannedTick < 0 then
+    Im.Text("It says what is there and not where: that is worked out by narrowing the range, and the cone, on a thing or where you look.",
+      x + 12, body0 + 10, 13, Theme.DIM)
   end
-  -- (eight at a time: the wheel brings the rest, as it does the signals)
-  local first = Im.Scroll("sightings", left - 4, line, width - 24, ROWS * 22, #sightings, ROWS)
-  for index = first + 1, math.min(#sightings, first + ROWS) do
-    local sighting = sightings[index]
-    Im.Text(sighting.name, left, line, 14, Im.TEXT)
-    Im.Text(sighting.type, left + 210, line + 1, 13, Im.DIM)
-    if sighting.onGrid then
-      Im.TextRight("here", right, line + 1, 12, GOOD)
+  for index = 1, visible do
+    local sighting = sightings[index + first]
+    if sighting == nil then
+      break
     end
-    line += 22
+    local rowY = body0 + (index - 1) * List.ROW
+    local hot = List.Row(x, rowY, width - 5, false)
+    List.Text(sighting.name, layout.name, rowY, hot, Theme.TEXT, 14)
+    List.Text(sighting.type, layout.type, rowY, hot, Theme.DIM, 13)
+    List.Text(sighting.kind, layout.kind, rowY, false, Theme.FAINT, 12)
+    if sighting.onGrid then
+      List.Text("here", layout.grid, rowY, false, Theme.GOOD, 12)
+    end
   end
-  Im.Text("It says what is there and not where: that is worked out by", left, y + height - 46, 12, Im.DIM, 0.8)
-  Im.Text("narrowing the range, and the cone, on a thing or where you look.", left, y + height - 30, 12, Im.DIM, 0.8)
+  local age = if scannedTick >= 0 then math.floor((state.tick - scannedTick) * Constants.TICK) else 0
+  List.Foot(x, y + height - List.FOOT, width,
+    if scannedTick >= 0 then `{#sightings} found, {if age <= 0 then "now" else `{age} s ago`}` elseif can then "ready" else tostring(whyNot),
+    scannedHow)
 end
 
--- ('look': the way the camera looks, for a cone that is pointed by it.)
-function Scanner.Draw(session: Session.Session, x: number, y: number, look: vector?)
-  if not open then
-    return
-  end
+local function drawSignals(session: Session.Session, x: number, y: number, width: number, height: number)
   local game = session.game
-  local width, height = Scanner.WIDTH, Scanner.HEIGHT
-  local left, right = x + 16, x + width - 16
-  Im.Panel(x, y, width, height)
-  Im.Heading("SCANNER", left, y + 12, 16, Im.DIM)
-  if Im.Button("x", x + width - 38, y + 10, 24, 24, true, "Scanner:close") then
-    open = false
-    return
-  end
-  if Im.Toggle("Signals", left + 108, y + 8, 84, 26, side == "signals", "Scanner:signals") then
-    side = "signals"
-  end
-  if Im.Toggle("Directional", left + 196, y + 8, 104, 26, side == "directional", "Scanner:directional") then
-    side = "directional"
-  end
-  if side == "directional" then
-    drawDirectional(session, x, y, width, height, look)
-    return
-  end
+  local left = x + 12
   local listed, wait, probes = Core.Query.Sites(game)
   -- (what is still to be found first: what is found is on the overview too)
   local sites: { Core.SiteStatus } = {}
@@ -183,58 +213,98 @@ function Scanner.Draw(session: Session.Session, x: number, y: number, look: vect
   end
   local scan: State.Command = { kind = "Scan", actor = 0 }
   local can, whyNot = Session.CanDo(session, scan)
-  if Im.Button("Scan", left, y + 44, 110, 28, can, "Scan") then
+  Im.Tone("primary")
+  if Im.Button("Scan", left, y + 8, 110, 28, can, "Scan") then
     Session.Do(session, scan)
   end
-  Im.Text(if wait > 0 then `cycling: {math.ceil(wait)} s` elseif can then "ready" else tostring(whyNot), left + 122, y + 51, 13,
-    if can then GOOD else Im.DIM)
-  Im.TextRight(`{#sites} in this system`, right, y + 51, 13, Im.DIM)
+  Im.Text(if wait > 0 then `cycling: {math.ceil(wait)} s` elseif can then "ready" else tostring(whyNot), left + 122, y + 15, 13,
+    if can then Theme.GOOD else Theme.DIM)
   -- The probes: one put out where the ship is, and all of them called in.
   local launch: State.Command = { kind = "LaunchProbe", actor = 0 }
   local canLaunch, whyNotLaunch = Session.CanDo(session, launch)
-  if Im.Button("Launch probe", left, y + 78, 110, 24, canLaunch, "Probe:launch") then
+  local px = x + width - 12 - 120 - 6 - 90
+  if Im.Button("Launch probe", px, y + 8, 120, 28, canLaunch, "Probe:launch") then
     Session.Do(session, launch)
   end
+  Im.Because(whyNotLaunch)
   local recall: State.Command = { kind = "RecallProbes", actor = 0 }
-  if Im.Button("Recall", left + 116, y + 78, 70, 24, (Session.CanDo(session, recall)), "Probe:recall") then
+  if Im.Button("Recall", px + 126, y + 8, 90, 28, (Session.CanDo(session, recall)), "Probe:recall") then
     Session.Do(session, recall)
   end
-  Im.Text(if probes.out > 0 or canLaunch then `{probes.here} out here, {probes.carried} in the hold` else tostring(whyNotLaunch), left + 196,
-    y + 83, 12, Im.DIM)
+  local probeLine = `{probes.here} probes out here, {probes.carried} in the hold`
+  Im.Text(probeLine, px - 16 - Im.TextWidth(probeLine, 12), y + 16, 12, Theme.DIM)
+  Im.Flat(x + 1, y + 44, width - 2, 1, Theme.EDGE)
 
-  local line = y + 116
+  local top = y + 45
+  local layout = List.Columns(SIGNAL_COLUMNS, x, width - 6)
+  List.Head("signals head", x, top, width, SIGNAL_COLUMNS, layout, "", false)
+  local body0 = top + List.HEAD
+  local first, visible = List.Body("signals", x, body0, width, height - (body0 - y) - List.FOOT, #sites)
   if #sites == 0 then
-    Im.Text("Nothing but what is on the charts.", left, line, 13, Im.DIM, 0.8)
+    Im.Text("Nothing but what is on the charts.", x + 12, body0 + 10, 14, Theme.DIM)
   end
-  -- (seven at a time: the wheel brings the rest)
-  local first = Im.Scroll("signals", left - 4, line, width - 24, 7 * 38, #sites, 7)
-  for index = first + 1, math.min(#sites, first + 7) do
+  for row = 1, visible do
+    local index = row + first
     local site = sites[index]
-    Im.Text(site.name, left, line, 14, if site.found then Im.TEXT else Im.DIM)
-    -- (what it is; or which planet it is by, and whether it wants a probe taken there)
-    -- (a wormhole says how big a hull it lets through)
+    if site == nil then
+      break
+    end
+    local rowY = body0 + (row - 1) * List.ROW
+    local hot = List.Row(x, rowY, width - 5, false)
+    List.Text(site.name, layout.name, rowY, hot, if site.found then Theme.TEXT else Theme.DIM, 14)
+    -- (what it is; or which planet it is by, and whether it wants a probe taken there; a wormhole says how big a hull it lets through)
     local through = if site.found and site.kind == "wormhole" then Core.Query.Wormhole(game, site.id) else nil
     local about = if through then `{through.sizeName} wormhole: up to {through.lets}`
       elseif site.found then KINDS[site.kind] or site.kind
       elseif site.faint then `too faint: wants a probe by {site.near}`
       elseif site.near ~= "" then `by {site.near}` .. (if site.probes > 0 then `, {site.probes} {if site.probes == 1 then "probe" else "probes"} on it` else "")
       else "unresolved"
-    Im.Text(about, left, line + 17, 12, if site.faint then Im.WARN else Im.DIM)
+    List.Text(about, layout.what, rowY, hot, if site.faint then Theme.CAUTION else Theme.DIM, 13)
     -- how far the scanner has got with it
-    Im.Fill(left + 190, line + 8, 110, 5, Im.DIM, 0.25)
-    Im.Fill(left + 190, line + 8, 110 * math.clamp(site.strength, 0, 1), 5, if site.found then GOOD else Im.ACCENT, 0.95)
-    Im.Text(`{math.floor(site.strength * 100)}%`, left + 308, line + 2, 12, Im.DIM)
+    local bar = layout.strength
+    Im.Flat(bar.x, rowY + 10, bar.w - 44, 5, Theme.EDGE)
+    Im.Flat(bar.x, rowY + 10, (bar.w - 44) * math.clamp(site.strength, 0, 1), 5, if site.found then Theme.GOOD else Theme.ACCENT)
+    Im.Text(`{math.floor(site.strength * 100)}%`, bar.x + bar.w - 38, rowY + 5, 12, Theme.DIM)
     if site.found then
-      Im.TextRight(Format.Distance(site.distance), right - 66, line + 18, 11, Im.DIM)
-      if Im.Button("Warp", right - 58, line + 2, 58, 24, (Session.Can(session, "WarpTo", site.id, 0)), `SiteWarp:{index}`) then
+      List.Text(Format.Distance(site.distance), layout.distance, rowY, false, Theme.DIM, 12)
+      if Im.Button("Warp", layout.warp.x + 4, rowY + 2, layout.warp.w - 8, List.ROW - 4, (Session.Can(session, "WarpTo", site.id, 0)),
+        `SiteWarp:{index}`) then
         session.selected = site.id
         Session.Order(session, "WarpTo", site.id, 0)
       end
     end
-    line += 38
   end
-  Im.Text("Every scan brings each signal nearer to found, and a probe", left, y + height - 46, 12, Im.DIM, 0.8)
-  Im.Text("put out by the planet it is near makes each scan worth more.", left, y + height - 30, 12, Im.DIM, 0.8)
+  List.Foot(x, y + height - List.FOOT, width, `{#sites} in this system`,
+    "every scan brings each signal nearer; a probe by the planet it is near makes each scan worth more")
 end
+
+Windows.Kind(Scanner.ID, function(_: Windows.Window, x: number, y: number, width: number, height: number)
+  local session = current
+  if session == nil then
+    return
+  end
+  local was = Im.Plain(true)
+  if Im.Hook("Scanner:close", true) then
+    open = false
+    Windows.Close(Scanner.ID)
+  end
+  local tx = x + 10
+  for _, each in { { "signals", "Signals" }, { "directional", "Directional" } } do
+    local pressed, wide = Im.Tab(each[2], tx, y + 4, 28, side == each[1], `Scanner:{each[1]}`)
+    if pressed then
+      side = each[1] :: any
+    end
+    tx += wide + 2
+  end
+  Im.Flat(x + 1, y + 32, width - 2, 1, Theme.EDGE)
+  if side == "directional" then
+    drawDirectional(session, x, y + 33, width, height - 33, currentLook)
+  else
+    drawSignals(session, x, y + 33, width, height - 33)
+  end
+  Im.Plain(was)
+end)
+Windows.Make(Scanner.ID, Scanner.ID, "Scanner", 300, 150, Scanner.WIDTH, Scanner.HEIGHT, 700, 380, nil)
+Windows.Icon(Scanner.ID, "scanner")
 
 return Scanner

@@ -18,6 +18,8 @@ the lines beginning `- ` under it.
 - Unbound ship blueprints are found in the wrecks of pirate towers you destroy, and rarely on a contract board outside secure space (dear).
 - Blueprint copies cost a tenth of what they did: ten runs cost about a tenth of one of the things they build.
 - Blueprint originals cost half what they did: five times what they build.
+- The events, guide, scanner and colonies windows are set out as the market is: what kind of thing down the left, the list in the middle, and the one picked on the right.
+- Information on an item is a window with tabs: description, attributes, requirements, industry and market (with a button to show it on the market). A ship on its description is drawn as it looks in space, in its base paint, as in the fitting window.
 - A ship bought fitted out on a contract comes assembled, its modules fitted and its guns loaded, with the rest of its rounds in the hold. It waits at the station where it was posted.
 - You cannot undock in a ship with a module fitted that you have not the skills for: the button says which.
 - You can anchor a tower in wormhole space, at any depth. A claim beacon can't go on one there: nobody holds a system in wormhole space.

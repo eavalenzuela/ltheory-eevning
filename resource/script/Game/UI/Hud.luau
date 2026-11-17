@@ -1351,36 +1351,10 @@ Windows.Screen("map", "map", 1400, 820, { { 0, 0, 232, 40 }, { 0, 0, 1400, 6 } }
 -- (it lies over the others, and nothing is put clear of it)
 Windows.Auto("map", false, true)
 
--- The guide, the colonies, the scanner and what is said of a type of
--- thing were panels at a place of their own, the one the inventory
--- opens at, and lay under it or over it. They are windows now, drawn as
--- they were: each is moved by its heading, opens clear of the others,
--- and is where it was left. (Open and shut are still each one's own to
--- say: the window follows.)
-local paneOf: { session: Session.Session, look: vector? }? = nil
-Windows.Kind("guide", function(_: Windows.Window, x: number, y: number)
-  if paneOf then
-    Guide.Draw(paneOf.session, x, y)
-  end
-end)
-Windows.Kind("colony", function(_: Windows.Window, x: number, y: number)
-  if paneOf then
-    Colony.Draw(paneOf.session, x, y)
-  end
-end)
-Windows.Kind("scanner", function(_: Windows.Window, x: number, y: number)
-  if paneOf then
-    Scanner.Draw(paneOf.session, x, y, paneOf.look)
-  end
-end)
-Windows.Kind("info", function(_: Windows.Window, x: number, y: number)
-  Info.Draw(x, y)
-end)
-for _, pane in { { "guide", Guide.WIDTH, 600, 150 }, { "colony", Colony.WIDTH, Colony.HEIGHT, 150 }, { "scanner", Scanner.WIDTH, Scanner.HEIGHT, 120 },
-  { "info", Info.WIDTH, Info.HEIGHT, Info.WIDTH - 48 } } :: { { any } } do
-  Windows.Screen(pane[1], pane[1], pane[2], pane[3], { { 0, 0, pane[4], 40 }, { 0, 0, pane[2] - 48, 8 } })
-  Windows.Auto(pane[1], true)
-end
+-- (The guide, the colonies, the scanner and what is said of a type of
+-- thing were panels drawn by themselves at a place of their own; since
+-- 2026-11-16 each is a window of its own module, set out as the market
+-- is. Where each opens first is said here, below.)
 
 -- What a pilot does at any station, in a panel beside the corner's
 -- while they are docked: to undock; to make the station home, for its
@@ -1540,6 +1514,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       StarbaseWindow.Frame(session, game, player)
       Assets.Frame(session)
       Events.Frame(session)
+      Guide.Frame(session)
       -- The dock is down the left edge (Game/UI/Dock): the windows keep
       -- clear of it, and what was set out from the screen's left edge
       -- is set out from the dock's.
@@ -1966,23 +1941,17 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       -- nobody has put one it is beside the dock, or beside the docked
       -- screen for what is said of a thing: and from there finds itself
       -- a place clear of what is open (Windows.Open).
-      paneOf = { session = session, look = if ball then scene.camera:GetLook() else nil }
-      local function pane(id: string, open: boolean, x: number, y: number, width: number, height: number)
-        Windows.Default(id, x, y, width, height)
-        if open ~= Windows.IsOpen(id) then
-          if open then
-            Windows.Open(id)
-          else
-            Windows.Close(id)
-          end
-        end
-      end
-      local guideWidth, guideHeight = Guide.Size(session)
-      pane("guide", Guide.IsOpen(), edge + 8, top + 130, guideWidth, guideHeight)
-      pane("colony", Colony.IsOpen(), edge + 8, top + 130, Colony.WIDTH, Colony.HEIGHT)
-      pane("scanner", ball ~= nil and Scanner.IsOpen(), edge + 8, top + 130, Scanner.WIDTH, Scanner.HEIGHT)
+      Windows.Default(Colony.ID, edge + 8, top + 130, Colony.WIDTH, Colony.HEIGHT)
+      Colony.Frame(session)
+      Windows.Default(Scanner.ID, edge + 8, top + 130, Scanner.WIDTH, Scanner.HEIGHT)
+      Scanner.Frame(session, if ball then scene.camera:GetLook() else nil, ball ~= nil)
       -- (the sheet on a thing: at the right of the screen docked, and left of the overview in space)
-      pane("info", Info.Showing() ~= "", (if ball then panelX else right) - Info.WIDTH - 12, top + 130, Info.WIDTH, Info.HEIGHT)
+      Windows.Default(Info.ID, (if ball then panelX else right) - Info.WIDTH - 12, top + 130, Info.WIDTH, Info.HEIGHT)
+      local _ = Info.Showing()
+      -- (a hull on its sheet is shown as the scene draws it, in its base paint, as the fitting window shows the pilot's)
+      Info.Show = function(type: string, radius: number, cx: number, cy: number, half: number, aspect: number): boolean
+        return Scene.Showcase(scene, game, 0, type, radius, Theme.Px(cx), Theme.Px(cy), Theme.Px(half), "info", aspect)
+      end
       if ball then
         -- (a hack under way has the middle of the screen)
         local wasPlain = Im.Plain(true)

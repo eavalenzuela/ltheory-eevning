@@ -1,41 +1,50 @@
 --!strict
 -- The guide's window: the things there are to do (Core/Character/Guide),
--- group by group, each ticked when the pilot has done it, and for the
--- one picked out a line on how it is done. And a second page: the
--- career agents and their lessons (Game/UI/Careers), so that what a
--- lesson in hand wants can be read again in space.
+-- each ticked when the pilot has done it, and for the one picked out how
+-- it is done. And a second page: the career agents and their lessons
+-- (Game/UI/Careers), so that what a lesson in hand wants can be read
+-- again in space.
 --
--- Open in space or docked, from the Guide button by the pilot's name.
--- Drawn every frame with Game/UI/Im. Its close button is "Guide:close",
--- and its pages are "Guide:steps" and "Guide:lessons" (Im.Press).
+-- A window (Game/UI/Windows), open in space or docked, from the Guide
+-- button on the dock. Laid out as the market is (2026-11-16): the
+-- groups of things to do down the left, with how many of each are done;
+-- the steps of the group in the middle; and the step picked on the
+-- right, with how it is done. Its pages are "Guide:steps" and
+-- "Guide:lessons", a group "Guide:group:<all, or a group>", a step
+-- "Guide:step:<id>"; it is shut by "guide:close" or "Guide:close".
 
 local Careers = require("@lt/Game/UI/Careers")
 local Core = require("@lt/Core/Api")
 local Im = require("@lt/Game/UI/Im")
 local Keys = require("@lt/Game/UI/Keys")
+local List = require("@lt/Game/UI/List")
 local Session = require("@lt/Game/Session")
+local Theme = require("@lt/Game/UI/Theme")
+local Windows = require("@lt/Game/UI/Windows")
 
 local Guide = {}
 
-Guide.WIDTH = 468
+Guide.ID = "guide"
+Guide.WIDTH, Guide.HEIGHT = 900, 600
 
-local ROW = 20
-local DONE = vector.create(0.45, 0.85, 0.55)
+local TREE_W, DETAIL_W = 200, 320
 
-local open = false
+local current: Session.Session? = nil
 local picked = ""   -- the step whose "how" is shown; "": the first not done
+local group = "all"
 local lessons = false   -- whether the page shown is the career agents'
 
 function Guide.Open()
-  open = true
+  Windows.Open(Guide.ID)
+  Windows.Raise(Guide.ID)
 end
 
 function Guide.Close()
-  open = false
+  Windows.Close(Guide.ID)
 end
 
 function Guide.IsOpen(): boolean
-  return open
+  return Windows.IsOpen(Guide.ID)
 end
 
 -- Which page is shown ("steps" or "lessons"): given one, that one is.
@@ -46,56 +55,46 @@ function Guide.Page(to: string?): string
   return if lessons then "lessons" else "steps"
 end
 
--- A line of text broken in two at a space, if it is longer than 'limit'.
-local function broken(text: string, limit: number): (string, string)
-  if #text <= limit then
-    return text, ""
-  end
-  local at = limit
-  while at > 1 and string.sub(text, at, at) ~= " " do
-    at -= 1
-  end
-  return string.sub(text, 1, at - 1), string.sub(text, at + 1)
+-- Once a frame, before the windows are drawn: whose game it is.
+function Guide.Frame(session: Session.Session)
+  current = session
 end
 
--- How big the guide is drawn (it is as tall as what it lists).
-function Guide.Size(session: Session.Session): (number, number)
-  local rows = Core.Query.Guide(session.game)
-  local groups = 0
-  for index, row in rows do
-    groups += if index == 1 or rows[index - 1].step.group ~= row.step.group then 1 else 0
+local function drawSteps(rows: { Core.GuideRow }, x: number, y: number, w: number, h: number)
+  -- The groups, in the order the steps come in, with how many of each are done.
+  local groups: { string } = {}
+  local done: { [string]: number } = {}
+  local of: { [string]: number } = {}
+  local all = 0
+  for _, row in rows do
+    local name = row.step.group
+    if of[name] == nil then
+      table.insert(groups, name)
+      of[name], done[name] = 0, 0
+    end
+    of[name] += 1
+    done[name] += if row.done then 1 else 0
+    all += if row.done then 1 else 0
   end
-  return Guide.WIDTH, 46 + #rows * ROW + groups * 30 + 78
-end
+  local ty = y + 8
+  local function groupRow(id: string, label: string, have: number, outOf: number)
+    local _, clicked = List.Row(x + 1, ty, TREE_W - 6, group == id, `Guide:group:{id}`)
+    Im.Text(List.Cut(label, TREE_W - 70, 14, false), x + 11, ty + 5, 14, if have == outOf then Theme.DIM else Theme.TEXT)
+    local count = `{have}/{outOf}`
+    Im.Text(count, x + TREE_W - 14 - Im.TextWidth(count, 12), ty + 6, 12, if have == outOf then Theme.GOOD else Theme.FAINT)
+    if clicked and group ~= id then
+      group = id
+      Im.ScrollTo("guide list", 0)
+    end
+    ty += List.ROW
+  end
+  groupRow("all", "Everything", all, #rows)
+  for _, name in groups do
+    groupRow(name, (string.gsub(name, "^%l", string.upper)), done[name], of[name])
+  end
+  Im.Flat(x + TREE_W, y, 1, h, Theme.EDGE)
 
-function Guide.Draw(session: Session.Session, x: number, y: number)
-  if not open then
-    return
-  end
-  local rows, count = Core.Query.Guide(session.game)
-  local width, height = Guide.Size(session)
-  local left = x + 16
-  Im.Panel(x, y, width, height)
-  Im.Heading(`GUIDE  {count} / {#rows}`, left, y + 12, 16, Im.DIM)
-  -- The two pages: the things there are to do, and the career agents.
-  if Im.Toggle("Things to do", x + 150, y + 9, 110, 26, not lessons, "Guide:steps") then
-    lessons = false
-  end
-  if Im.Toggle("Lessons", x + 264, y + 9, 90, 26, lessons, "Guide:lessons") then
-    lessons = true
-  end
-  if Im.Button("x", x + width - 38, y + 10, 24, 24, true, "Guide:close") then
-    open = false
-    return
-  end
-  if lessons then
-    local status = Core.Query.Careers(session.game)
-    local below = Careers.List(status, x + 8, y + 50, width - 16)
-    Careers.Detail(session, status, left, below + 14, width - 32)
-    return
-  end
-
-  -- What is shown at the foot: the step picked out, else the first not done.
+  -- The step picked, else the first not done.
   local shown: Core.GuideRow? = nil
   for _, row in rows do
     if row.step.id == picked then
@@ -111,40 +110,94 @@ function Guide.Draw(session: Session.Session, x: number, y: number)
     end
   end
 
-  local line = y + 44
-  local group = ""
+  -- The steps of the group.
+  local lx = x + TREE_W + 1
+  local listW = w - TREE_W - 1 - DETAIL_W
+  local listed: { Core.GuideRow } = {}
   for _, row in rows do
-    local step = row.step
-    if step.group ~= group then
-      group = step.group
-      Im.Heading(string.upper(group), left, line + 8, 13, Im.DIM)
-      line += 30
+    if group == "all" or row.step.group == group then
+      table.insert(listed, row)
     end
-    local _, clicked = Im.Row(x + 4, line, width - 8, ROW, shown ~= nil and shown.step.id == step.id)
+  end
+  local top = y
+  local first, visible = List.Body("guide list", lx, top, listW, h - List.FOOT, #listed)
+  for index = 1, visible do
+    local row = listed[index + first]
+    if row == nil then
+      break
+    end
+    local rowY = top + (index - 1) * List.ROW
+    local hot, clicked = List.Row(lx, rowY, listW - 5, shown ~= nil and shown.step.id == row.step.id, `Guide:step:{row.step.id}`)
+    -- (a box, filled when it is done)
+    Im.Edge(lx + 10, rowY + 7, 11, 11, if row.done then Theme.GOOD else Theme.EDGE)
+    if row.done then
+      Im.Flat(lx + 13, rowY + 10, 5, 5, Theme.GOOD)
+    end
+    local cell = { x = lx + 30, w = listW - 30 - 60, right = false }
+    List.Text(row.step.title, cell, rowY, hot, if row.done then Theme.DIM else Theme.TEXT, 14)
+    if row.done then
+      Im.TextRight("done", lx + listW - 16, rowY + 6, 12, Theme.GOOD)
+    end
     if clicked then
-      picked = step.id
+      picked = row.step.id
     end
-    -- a box, filled when it is done
-    Im.Fill(left, line + 6, 10, 10, Im.DIM, 0.35)
-    if row.done then
-      Im.Fill(left + 2, line + 8, 6, 6, DONE, 1)
-    end
-    Im.Text(step.title, left + 20, line + 3, 14, if row.done then Im.DIM else Im.TEXT)
-    if row.done then
-      Im.TextRight("done", x + width - 16, line + 4, 12, DONE)
-    end
-    line += ROW
   end
+  List.Foot(lx, y + h - List.FOOT, listW, `{all} of {#rows} done`, "pick one to see how it is done")
+  Im.Flat(lx + listW, y, 1, h, Theme.EDGE)
 
-  line += 10
-  if shown then
-    local first, second = broken(Keys.Say(shown.step.how), 62)
-    Im.Text(if shown.done then shown.step.title else `Next: {shown.step.title}`, left, line, 14, Im.ACCENT)
-    Im.Text(first, left, line + 22, 13, Im.TEXT)
-    Im.Text(second, left, line + 40, 13, Im.TEXT)
-  else
-    Im.Text("Everything here is done.", left, line, 14, DONE)
+  -- How the step picked is done.
+  local dx, dw = lx + listW + 15, DETAIL_W - 30
+  if shown == nil then
+    Im.Wrapped("Everything here is done.", dx, y + 14, dw, 14, Theme.GOOD)
+    return
   end
+  local line = y + 14
+  Im.Pill(if shown.done then "done" else if shown.step.id == picked then "picked" else "next", dx, line,
+    if shown.done then Theme.GOOD else Theme.ACCENT)
+  line += 26
+  line = Im.Wrapped(shown.step.title, dx, line, dw, 17, Theme.TEXT) + 10
+  Im.Text("HOW", dx, line, 11, Theme.ACCENT)
+  Im.Flat(dx, line + 15, dw, 1, Theme.EDGE)
+  line += 22
+  Im.Wrapped(Keys.Say(shown.step.how), dx, line, dw, 13, Theme.TEXT)
 end
+
+Windows.Kind(Guide.ID, function(_: Windows.Window, x: number, y: number, w: number, h: number)
+  local session = current
+  if session == nil then
+    return
+  end
+  local was = Im.Plain(true)
+  if Im.Hook("Guide:close", true) then
+    Guide.Close()
+  end
+  local rows, count = Core.Query.Guide(session.game)
+  -- The two pages: the things there are to do, and the career agents.
+  local tx = x + 10
+  for _, each in { { "steps", "Things to do" }, { "lessons", "Lessons" } } do
+    local pressed, wide = Im.Tab(each[2], tx, y + 4, 28, Guide.Page() == each[1], `Guide:{each[1]}`)
+    if pressed then
+      Guide.Page(each[1])
+    end
+    tx += wide + 2
+  end
+  local note = `{count} of {#rows} done`
+  Im.Text(note, x + w - 12 - Im.TextWidth(note, 12), y + 11, 12, Theme.DIM)
+  Im.Flat(x + 1, y + 32, w - 2, 1, Theme.EDGE)
+  local top, room = y + 33, h - 34
+  if lessons then
+    -- The agents down the left, and the one picked on the right.
+    local status = Core.Query.Careers(session.game)
+    local half = 380
+    Careers.List(status, x + 8, top + 8, half - 16)
+    Im.Flat(x + half, top, 1, room, Theme.EDGE)
+    Careers.Detail(session, status, x + half + 16, top + 12, w - half - 32)
+  else
+    drawSteps(rows, x, top, w, room)
+  end
+  Im.Plain(was)
+end)
+Windows.Make(Guide.ID, Guide.ID, "Guide", 300, 140, Guide.WIDTH, Guide.HEIGHT, 820, 420, nil)
+Windows.Icon(Guide.ID, "guide")
 
 return Guide

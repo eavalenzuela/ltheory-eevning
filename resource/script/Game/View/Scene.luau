@@ -176,7 +176,7 @@ export type Scene = {
   epoch: number,                      -- the game (Session's 'epoch') the scene was made for
   volleys: number,                    -- shots of a station's batteries shown so far
   docked: boolean,                    -- the pilot is docked: the camera is on the station
-  showcase: Showcase?,                -- the ship on the fitting screen, as a thing of the scene (Scene.Showcase)
+  showcases: { [string]: Showcase },  -- a ship shown in a window, as a thing of the scene, by the window (Scene.Showcase)
   zoomAway: number,                   -- the zoom there was before docking, to go back to
   arms: { [number]: Armed },          -- what is on the hardpoints of each ship of our own design
   armsTick: number,                   -- the tick the arms were last checked against the fits
@@ -247,7 +247,7 @@ function Scene.New(camera: Camera): Scene
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6, tracking = 0,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
     wreckage = {}, works = {}, offsets = {}, moving = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
-    standing = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0, ghosts = {}, poses = {}, headings = {}, turned = 0,
+    standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0, ghosts = {}, poses = {}, headings = {}, turned = 0,
   }
 end
 
@@ -334,7 +334,9 @@ end
 -- stands it in the scene, Scene.Showcase.)
 export type Part = { model: Renderable | Model, transform: Transform, at: vector, look: vector, up: vector, size: number }
 
-local dressed: { key: string, parts: { Part } }? = nil
+-- (by key: the fitting window's ship and the information window's hull are each kept)
+local dressedBy: { [string]: { Part } } = {}
+local dressedCount = 0
 
 -- A ship stood somewhere for a picture: the way it is to point while
 -- it stands still. And the way a ship is drawn pointing now (straight
@@ -369,16 +371,17 @@ end
 -- bought (Scene.Try). And what it is painted in, so shown.
 local function hullOf(game: Core.Game, ship: number, type: string): (Hull.Built?, string?, string?)
   local own = game.state.ships[ship]
-  local paint: string? = tried.paint or (if own then own.paint else nil)
-  local design: string? = tried.design or (if own then own.design else nil)
+  -- (a ship of 0 is a hull in its base paint: what is being tried on the pilot's is not on it)
+  local paint: string? = if ship == 0 then nil else tried.paint or (if own then own.paint else nil)
+  local design: string? = if ship == 0 then nil else tried.design or (if own then own.design else nil)
   return Hull.Build(type, nil, nil, paint, design), paint, design
 end
 
-function Scene.Dressed(game: Core.Game, ship: number, type: string, radius: number): { Part }
+function Scene.Dressed(game: Core.Game, ship: number, type: string, radius: number): ({ Part }, string)
   local built, paint, design = hullOf(game, ship, type)
   if built == nil then
     return { { model = Scene.Preview(type, radius), transform = Transform_Identity(), at = vector.create(0, 0, 0),
-      look = vector.create(0, 0, 1), up = vector.create(0, 1, 0), size = 1 } }
+      look = vector.create(0, 0, 1), up = vector.create(0, 1, 0), size = 1 } }, ""
   end
   local fitted = Core.Query.Fitted(game, ship)
   local key = `{ship}:{type}:{paint or ""}:{design or ""}`
@@ -387,8 +390,9 @@ function Scene.Dressed(game: Core.Game, ship: number, type: string, radius: numb
       key ..= ` {item.id}:{item.type}`
     end
   end
-  if dressed and dressed.key == key then
-    return dressed.parts
+  local known = dressedBy[key]
+  if known then
+    return known, key
   end
   local parts: { Part } = { { model = built.model, transform = Transform_Identity(), at = vector.create(0, 0, 0),
     look = vector.create(0, 0, 1), up = vector.create(0, 1, 0), size = 1 } }
@@ -416,8 +420,14 @@ function Scene.Dressed(game: Core.Game, ship: number, type: string, radius: numb
       end
     end
   end)
-  dressed = { key = key, parts = parts }
-  return parts
+  -- (a few at a time: what was dressed long ago is let go)
+  dressedCount += 1
+  if dressedCount > 8 then
+    table.clear(dressedBy)
+    dressedCount = 1
+  end
+  dressedBy[key] = parts
+  return parts, key
 end
 
 -- How far below the scene's own camera the fitting screen's ship is
@@ -425,37 +435,45 @@ end
 local SHOWCASE_BELOW = 3000000
 local SHOWCASE_FOV = 26
 
--- Take the fitting screen's ship out of the scene.
-local function dropShowcase(scene: Scene)
-  local show = scene.showcase
-  if show then
-    for _, piece in show.pieces do
-      Object_Delete(piece.object)
+-- Take a window's ship out of the scene (or every window's, with no slot named).
+local function dropShowcase(scene: Scene, slot: string?)
+  for name, show in scene.showcases do
+    if slot == nil or name == slot then
+      for _, piece in show.pieces do
+        Object_Delete(piece.object)
+      end
+      Object_Delete(show.camera)
+      scene.showcases[name] = nil
     end
-    Object_Delete(show.camera)
-    scene.showcase = nil
   end
 end
+-- (where each window's ship stands, below the eye: apart, so that one window's camera does not see the other's ship)
+local SHOWCASE_SLOTS: { [string]: number } = { fitting = 0, info = 1 }
 
 -- Show a ship as it is fitted, in a round window of the interface whose
 -- middle is (cx, cy), as it would be seen in space where the pilot is:
 -- turning slowly, the sun over the viewer's shoulder. False if it
 -- cannot be (a hull with no design of ours, or before the scene has a
 -- system): the fitting screen then draws it its old way.
+--
+-- ('slot': which window it is for, "fitting" unless said: each has its
+-- own. 'aspect': as much wider than high as it is drawn, for a window
+-- that is not round. A ship of 0 is a hull of the type in its base
+-- paint, with nothing fitted: the information window's.)
 function Scene.Showcase(scene: Scene, game: Core.Game, ship: number, type: string, radius: number, cx: number, cy: number,
-  round: number): boolean
+  round: number, slot: string?, aspect: number?): boolean
+  local name = slot or "fitting"
   local container = scene.container
   -- (the hull as it is painted: a painted one is not drawn the size a bare one is)
   local built = hullOf(game, ship, type)
   if container == nil or built == nil then
     return false
   end
-  local parts = Scene.Dressed(game, ship, type, radius)
-  local key = if dressed then dressed.key else ""
-  local show = scene.showcase
+  local parts, key = Scene.Dressed(game, ship, type, radius)
+  local show = scene.showcases[name]
   if show == nil or show.container ~= container or show.key ~= key then
     local turn = if show then show.turn else 0.6
-    dropShowcase(scene)
+    dropShowcase(scene, name)
     local pieces: { { object: Object, part: Part } } = {}
     for _, part in parts do
       local object = Object_Scenery({})
@@ -470,14 +488,15 @@ function Scene.Showcase(scene: Scene, game: Core.Game, ship: number, type: strin
     passes:Append(RenderPass_Camera(camera))
     show = { container = container, key = key, pieces = pieces, camera = camera, passes = passes, drawn = scene.time, turn = turn,
       frames = 0 }
-    scene.showcase = show
+    scene.showcases[name] = show
   end
   local shown = show :: Showcase
   shown.drawn = scene.time
   shown.turn += 0.25 * FrameTimer_Get()
   -- Where it stands, and turned about its own upright.
   local metre = radius / built.radius     -- a unit of the hull's, in metres
-  local base = vector.create(scene.eyeX - scene.ox, scene.eyeY - scene.oy - SHOWCASE_BELOW, scene.eyeZ - scene.oz)
+  local base = vector.create(scene.eyeX - scene.ox + (SHOWCASE_SLOTS[name] or 2) * SHOWCASE_BELOW, scene.eyeY - scene.oy - SHOWCASE_BELOW,
+    scene.eyeZ - scene.oz)
   local c, s = math.cos(shown.turn), math.sin(shown.turn)
   local function turned(v: vector): vector
     return vector.create(v.x * c + v.z * s, v.y, -v.x * s + v.z * c)
@@ -508,7 +527,8 @@ function Scene.Showcase(scene: Scene, game: Core.Game, ship: number, type: strin
   -- (a model is not always about its own origin: it is its middle that is looked at)
   local bound = Renderable_GetBound(built.model)
   local middle = base + turned((bound.lower + bound.upper) * 0.5) * metre
-  local distance = radius * 1.12 / math.tan(math.rad(SHOWCASE_FOV) / 2)
+  -- (a box is filled more closely than the wheel's round)
+  local distance = radius * (if aspect then 0.8 else 1.12) / math.tan(math.rad(SHOWCASE_FOV) / 2)
   local camera = shown.camera
   camera:SetTarget(shown.pieces[1].object)
   camera:SetRelativePos(middle + toEye * distance)
@@ -518,7 +538,9 @@ function Scene.Showcase(scene: Scene, game: Core.Game, ship: number, type: strin
   -- (not in the frame it is made, nor the next: its camera is not yet where it looks from)
   shown.frames += 1
   if shown.frames > 2 then
-    WidgetRenderer_DrawPasses(shown.passes, vector.create(cx - round, cy - round), vector.create(2 * round, 2 * round), 1, true)
+    local wide = round * (aspect or 1)
+    -- (round for the fitting window's wheel; a box for a window that says how wide)
+    WidgetRenderer_DrawPasses(shown.passes, vector.create(cx - wide, cy - round), vector.create(2 * wide, 2 * round), 1, aspect == nil)
   end
   return true
 end
@@ -1082,8 +1104,10 @@ function Scene.Sync(scene: Scene, session: Session.Session)
   -- (the fitting screen's ship is in the scene only while that screen
   -- shows it: left there, it would be wherever the scene's origin next
   -- put it, for anybody to fly past)
-  if scene.showcase and scene.time - scene.showcase.drawn > 1 then
-    dropShowcase(scene)
+  for name, show in scene.showcases do
+    if scene.time - show.drawn > 1 then
+      dropShowcase(scene, name)
+    end
   end
   if player.system ~= scene.system then
     -- Flown through a gate (and not put somewhere else by a save, a new

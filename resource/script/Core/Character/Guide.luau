@@ -32,7 +32,7 @@ export type Step = {
 
 Guide.steps = {
   { id = "undock", group = "Flying", title = "Undock", on = "Undocked", mine = "ship",
-    how = "UNDOCK, at the foot of the station screen." },
+    how = "UNDOCK, at the top of the screen beside your ship's panel while you are docked." },
   { id = "warp", group = "Flying", title = "Warp somewhere", on = "WarpStarted", mine = "ball",
     how = "Pick a place on the overview, then Warp to (S)." },
   { id = "jump", group = "Flying", title = "Jump to another system", on = "Jumped", mine = "ship",
