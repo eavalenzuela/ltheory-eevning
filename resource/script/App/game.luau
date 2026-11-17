@@ -2660,6 +2660,23 @@ function Debug.NewGame(seed: number, systems: number?)
   Session.Restart(session, seed, seed, systems)
 end
 
+-- The first system with an ice field and a station to moor at (for
+-- looking at ice: Debug.Moor); 0 if there is none.
+function Debug.IceSystem(): number
+  local state = session.game.state
+  for id = 1, #state.galaxy.systems do
+    local field, station = false, false
+    for _, object in Space.Describe(state, id).objects do
+      field = field or (object.kind == "belt" and (object.variety :: string) == "ice")
+      station = station or object.kind == "station"
+    end
+    if field and station then
+      return id
+    end
+  end
+  return 0
+end
+
 -- A cheat, for looking at places a long way off: while docked, the
 -- pilot and the ship they are aboard are moored at the first station of
 -- another system instead. 'what' is the system's number, or a faction's
