@@ -267,7 +267,7 @@ end
 local function drawMaking(session: Session.Session, left: number, top: number, width: number, height: number)
   Im.Uncover()
   Im.Fill(left, top, width, height, vector.create(0, 0, 0), 0.5)
-  local w, h = 600, 420
+  local w, h = 600, 560
   local x, y = left + (width - w) / 2, top + (height - h) / 2
   frame(x, y, w, h, "New character")
   local inner = x + 20
@@ -275,7 +275,7 @@ local function drawMaking(session: Session.Session, left: number, top: number, w
   newName = Im.Words("Character name", newName, inner + 60, y + Theme.TITLE + 17, w - 100, 28, Characters.NAME_MOST,
     "what they are called")
   section("FACE", inner, y + Theme.TITLE + 62, w - 40)
-  -- (the game's portraits, two rows of eight; the one picked framed in the accent)
+  -- (the game's portraits, rows of eight; the one picked framed in the accent)
   local size, gap = 64, 6
   local gridY = y + Theme.TITLE + 88
   for n = 1, Characters.PORTRAITS do
@@ -293,7 +293,7 @@ local function drawMaking(session: Session.Session, left: number, top: number, w
       newFace, newPicture = n, ""
     end
   end
-  local below = gridY + 2 * (size + gap) + 8
+  local below = gridY + math.ceil(Characters.PORTRAITS / 8) * (size + gap) + 8
   Im.Text("Or a picture of your own: the whole path of a .png or .jpg file.", inner, below, 12, Theme.DIM)
   newPicture = Im.Words("Picture file", newPicture, inner, below + 20, w - 40, 28, 240, "C:/Users/you/Pictures/me.png")
   if problem ~= "" then

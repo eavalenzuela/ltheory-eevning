@@ -49,7 +49,8 @@ export type Character = {
 -- are what a face is picked from (a badge is what a character made
 -- before then has, and what one whose picture is lost falls back on).
 Characters.BADGES = 24
-Characters.PORTRAITS = 16
+-- (and their second set of sixteen, drawn in another manner, the same day)
+Characters.PORTRAITS = 32
 -- The longest a name may be.
 Characters.NAME_MOST = 24
 
