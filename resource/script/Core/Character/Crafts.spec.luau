@@ -5,6 +5,7 @@
 local Attributes = require("@lt/Core/Attributes")
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Combat = require("@lt/Core/Tactical/Combat")
+local Constants = require("@lt/Core/Data/Constants")
 local Contracts = require("@lt/Core/Assets/Contracts")
 local Core = require("@lt/Core/Api")
 local Fleet = require("@lt/Core/Tactical/Fleet")
@@ -64,7 +65,8 @@ suite:Case("each craft is a skill with a book, learned and not begun with, and n
       t.ok(table.find(CRAFTS, need.skill) == nil, `{type} should not need {need.skill}`)
     end
   end
-  t.eq(#CRAFTS, 24)
+  -- (24, and since 2026-11-16 eight of towers and colonies and the corporation)
+  t.eq(#CRAFTS, 32)
   t.eq(Skills.Level(nil, "windage"), 0)
   t.eq(Skills.Level({ windage = 3 }, "windage"), 3)
   t.eq(Skills.Level({ windage = -1 }, "windage"), 0)
@@ -348,6 +350,54 @@ suite:Case("Triangulation makes each probe near a signal worth more", function(t
   -- (the pirates' ships have no crafts)
   t.eq(Skills.Level(nil, "triangulation"), 0)
   t.ok(Pirates.NERVE > 0 and Modules.byId["launcher.light"] ~= nil)
+end)
+
+suite:Case("the crafts of towers, colonies and the corporation: what each comes to, and for the pilot's own alone", function(t)
+  -- (the owner, 2026-11-16: "Yes to all your recs")
+  local Batteries = require("@lt/Core/Tactical/Batteries")
+  local Colonies = require("@lt/Core/Assets/Colonies")
+  local Corporation = require("@lt/Core/Assets/Corporation")
+  local Members = require("@lt/Core/Assets/Members")
+  local Sovereignty = require("@lt/Core/Assets/Sovereignty")
+  local Starbases = require("@lt/Core/Assets/Starbases")
+  local Structures = require("@lt/Core/Data/Structures")
+  local game = newGame()
+  local state = game.state
+  t.eq({ Batteries.FIRE_CONTROL, Colonies.DEEP_BORING, Sovereignty.STEWARDSHIP, Members.HOSPITALITY, Members.RENOWN } :: { any },
+    { 0.05, 0.05, 0.05, 2, 0.1 } :: { any })
+  -- Husbandry: a tower of the pilot's burns a twentieth less a level, and nobody else's.
+  local tower = Structures.towers[1]
+  local mine = { tower = tower.id, owner = "player" } :: any
+  local theirs = { tower = tower.id, owner = "pirates" } :: any
+  t.near(Starbases.Burn(state, mine), tower.fuel, 1e-9)
+  state.skills.husbandry = 4
+  t.near(Starbases.Burn(state, mine), tower.fuel * 0.8, 1e-9)
+  t.near(Starbases.Burn(state, theirs), tower.fuel, 1e-9)
+  -- Raising: a tower of the pilot's anchors a tenth quicker a level.
+  local system = Space.SystemOf(state, state.player.home)
+  local moons = {}
+  for _, object in Space.Describe(state, system).objects do
+    if object.kind == "moon" then
+      table.insert(moons, object)
+    end
+  end
+  t.ok(#moons >= 2, "the home system should have two moons")
+  local slow = Starbases.Raise(state, system, moons[1], tower, "player", moons[1].x + 5000, moons[1].y, moons[1].z)
+  state.skills.raising = 5
+  local quick = Starbases.Raise(state, system, moons[2], tower, "player", moons[2].x + 5000, moons[2].y, moons[2].z)
+  t.eq({ state.starbases[slow].ready - state.tick, state.starbases[quick].ready - state.tick },
+    { math.ceil(tower.anchor / Constants.TICK), math.ceil(tower.anchor * 0.5 / Constants.TICK) })
+  -- Muster: one more call at once a level. Hospitality: room for two more members a level, past the most too.
+  t.eq(Members.Calls(state), Members.CALLS_MOST)
+  state.skills.muster = 2
+  t.eq(Members.Calls(state), Members.CALLS_MOST + 2)
+  state.wallet = 80000000
+  assert(Core.Submit(game, { kind = "FoundCorporation", actor = state.player.ship, what = "Haven Holdings" }))
+  Core.Step(game)
+  t.ok(Corporation.Founded(state))
+  local room = Members.Room(state)
+  state.skills.hospitality = 3
+  t.eq(Members.Room(state), room + 6)
 end)
 
 return suite

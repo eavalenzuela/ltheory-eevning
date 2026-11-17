@@ -119,6 +119,13 @@ Members.REFIT = 2 * Members.HOUR
 -- A call: the kinds there are, and the trade each is for.
 Members.CALLS = { defend = "fighter", mine = "miner", haul = "hauler", scout = "scout" } :: { [string]: string }
 Members.CALLS_MOST = 6
+-- What the pilot's skills add (the owner, 2026-11-16, of the skills for structures and the corporation I put to them: "Yes to all your recs"): room for so many more members a
+-- level of Hospitality, applications so much likelier a level of
+-- Renown, and one more call posted at once a level of Muster.
+Members.HOSPITALITY, Members.RENOWN = 2, 0.1
+function Members.Calls(state: State.State): number
+  return Members.CALLS_MOST + math.max(0, state.skills.muster or 0)
+end
 
 -- A member's own people: the faction whose space the pilot's home is in
 -- (they are of the corporation's neighbourhood), or nobody's.
@@ -193,7 +200,9 @@ function Members.Room(state: State.State): number
   for _, id in state.starbaseIds do
     towers += if state.starbases[id].owner == Wars.PILOT then 1 else 0
   end
-  return math.min(Members.ROOM_MOST, Members.ROOM + Members.ROOM_SYSTEM * held + Members.ROOM_TOWER * towers)
+  -- (and two more, past the most there is room for too, a level of the pilot's Hospitality: the owner, 2026-11-16, of the skills for structures and the corporation I put to them: "Yes to all your recs")
+  local more = Members.HOSPITALITY * math.max(0, state.skills.hospitality or 0)
+  return math.min(Members.ROOM_MOST + more, Members.ROOM + Members.ROOM_SYSTEM * held + Members.ROOM_TOWER * towers + more)
 end
 
 -- The members there are, in the order they joined.
@@ -619,7 +628,8 @@ function Members.Step(state: State.State, events: { Event })
   end
   local day = state.tick // Members.DAY
   local rng = Rng.For(state.historySeed, day, 149)
-  local chance = math.min(Members.APPLY_MOST, Members.APPLY + Members.APPLY_SYSTEM * held + Members.APPLY_TOWER * towers)
+  local chance = math.min(Members.APPLY_MOST, (Members.APPLY + Members.APPLY_SYSTEM * held + Members.APPLY_TOWER * towers)
+    * (1 + Members.RENOWN * math.max(0, state.skills.renown or 0)))
   if #membership.applicants < Members.WAITING and #membership.memberIds < Members.Room(state) and Rng.Chance(rng, chance) then
     local applicant = candidate(state, rng, `apply:{day}`, state.tick + Members.WAITS * Members.DAY)
     table.insert(membership.applicants, applicant)
@@ -684,8 +694,8 @@ function Members.Validate(state: State.State, command: State.Command): (boolean,
       return false, "a call is for a system the corporation has a place in"
     elseif (command.quantity or 0) < 0 or (command.quantity or 0) % 1 ~= 0 then
       return false, "a reward is a whole number of credits a day"
-    elseif #membership.calls >= Members.CALLS_MOST then
-      return false, `{Members.CALLS_MOST} calls are posted already`
+    elseif #membership.calls >= Members.Calls(state) then
+      return false, `{Members.Calls(state)} calls are posted already`
     end
     for _, call in membership.calls do
       if call.system == system.id and call.kind == command.what then

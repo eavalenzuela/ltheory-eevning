@@ -1350,7 +1350,7 @@ suite:Case("every skill is in one of the owner's groups, and the groups are thei
     table.insert(names, group.name)
   end
   t.eq(names, { "Piloting", "Navigation", "Weapons", "Missiles", "Drones", "Shields", "Armour and Hull", "Ship Systems",
-    "Targeting", "Electronic Warfare", "Exploration", "Mining", "Industry", "Trade", "Standing", "Command", "Implants and Boosters" })
+    "Targeting", "Electronic Warfare", "Exploration", "Mining", "Industry", "Trade", "Standing", "Structures", "Command", "Implants and Boosters" })
   for _, skill in Skills.list do
     t.ok(Skills.groupOf[skill.id] ~= nil, `{skill.name} is in no group`)
   end

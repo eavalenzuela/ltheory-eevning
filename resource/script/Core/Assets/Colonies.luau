@@ -35,6 +35,8 @@ local Types = require("@lt/Core/Data/Types")
 local Wallet = require("@lt/Core/Assets/Wallet")
 
 local Colonies = {}
+-- So much more an extractor brings up a level of the pilot's Deep Boring.
+Colonies.DEEP_BORING = 0.05
 
 export type Event = { [string]: any }
 
@@ -334,7 +336,9 @@ function Colonies.Step(state: State.State, events: { Event })
           local raw = Planets.rawById[pin.what]
           local room, used = Colonies.Room(colony)
           local fits = math.floor((room - used) / raw.volume + 1e-6)
-          put(colony, raw.id, math.min(Planets.Yield(Planets.Richness(planet.seed, raw.id), pin.cycle), fits))
+          -- (and so much more a level of the pilot's Deep Boring: the owner, 2026-11-16, of the skills for structures and the corporation I put to them: "Yes to all your recs")
+          local more = 1 + Colonies.DEEP_BORING * math.max(0, state.skills["deep.boring"] or 0)
+          put(colony, raw.id, math.min(math.floor(Planets.Yield(Planets.Richness(planet.seed, raw.id), pin.cycle) * more + 1e-6), fits))
           pin.cycle += 1
           pin.next += CYCLE
         end

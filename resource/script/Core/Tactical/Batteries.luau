@@ -56,6 +56,8 @@ Batteries.REBUILD = 7200
 -- between volleys: twenty points a second from a gun battery, fifteen
 -- from a missile battery.
 local GUN = { every = 3, damage = { 0, 15, 30, 15 } }
+-- So much more a battery of the pilot's own tower does a level of Fire Control.
+Batteries.FIRE_CONTROL = 0.05
 local MISSILE = { every = 6, damage = { 0, 0, 45, 45 } }
 
 -- A people's tower's gun batteries fire its turret family (the owner,
@@ -315,6 +317,9 @@ function Batteries.Fire(state: State.State, events: { Event }): { Hit }
     else (makeup :: any).modules
   -- (whose people's tower it is: what its batteries fire, and how hard)
   local tower = if makeup and makeup.tower then Structures.towerById[makeup.tower] else nil
+  -- (a tower of the pilot's own hits harder for their Fire Control: the owner, 2026-11-16, of the skills for structures and the corporation I put to them: "Yes to all your recs")
+  local ours = state.starbases[station.id]
+  local harder = if ours and ours.owner == "player" then 1 + Batteries.FIRE_CONTROL * math.max(0, state.skills["fire.control"] or 0) else 1
   local index = 0
   for _, module in modules do
     local battery = armed(module, tower)
@@ -328,7 +333,11 @@ function Batteries.Fire(state: State.State, events: { Event }): { Hit }
       -- (each on its own beat, and each at its own one of them, in turn)
       if (state.tick + index * 2) % battery.every == 0 then
         local target = targets[(index - 1) % #targets + 1]
-        table.insert(hits, { target = target, by = from, damage = table.clone(battery.damage) })
+        local damage = table.clone(battery.damage)
+        for kind = 1, 4 do
+          damage[kind] *= harder
+        end
+        table.insert(hits, { target = target, by = from, damage = damage })
         table.insert(events, { kind = "BatteryFired", station = station.id, battery = index, from = from, to = target,
           missile = battery.missile, look = battery.look })
       end

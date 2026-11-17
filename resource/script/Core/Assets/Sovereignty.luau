@@ -69,6 +69,8 @@ Sovereignty.CLAIM, Sovereignty.LAPSE = 6, 12
 Sovereignty.PERSONAL = 1000000
 Sovereignty.POSTED = 30
 Sovereignty.LEVY = 4000
+-- So much more levy a level of the pilot's Stewardship (the owner, 2026-11-16, of the skills for structures and the corporation I put to them: "Yes to all your recs").
+Sovereignty.STEWARDSHIP = 0.05
 Sovereignty.DAY = 24 * Sovereignty.HOUR
 
 -- The systems in which the pilot has a lit tower with a claim beacon
@@ -170,7 +172,7 @@ function Sovereignty.Step(state: State.State, events: { Event })
     for id = 1, Galaxy.Charted(state.galaxy) do
       local node = state.commerce.nodes[id]
       if state.galaxy.systems[id].owner == Wars.PILOT and node and not shut[id] then
-        levy += math.floor(Sovereignty.LEVY * node.population * 24)
+        levy += math.floor(Sovereignty.LEVY * node.population * 24 * (1 + Sovereignty.STEWARDSHIP * math.max(0, state.skills.stewardship or 0)))
         paying += 1
       end
     end

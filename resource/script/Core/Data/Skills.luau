@@ -249,6 +249,24 @@ local skills: { Skill } = {
     note = "A job done earns 5% more loyalty points a level." },
   { id = "paymaster", name = "Paymaster", rank = 3, start = -1, craft = true, requires = { { skill = "leadership", level = 2 } },
     note = "Hired pilots are paid 4% less a day a level." },
+  -- Towers and colonies, and the corporation (the owner, 2026-11-16, of the skills for structures and the corporation I put to them: "Yes to all your recs"; the names, ranks,
+  -- needs and figures mine).
+  { id = "husbandry", name = "Husbandry", rank = 3, start = -1, craft = true, requires = { { skill = "anchoring", level = 1 } },
+    note = "A tower of yours burns 5% less fuel a level." },
+  { id = "raising", name = "Raising", rank = 3, start = -1, craft = true, requires = { { skill = "anchoring", level = 2 } },
+    note = "Your towers and their modules anchor 10% quicker a level." },
+  { id = "fire.control", name = "Fire Control", rank = 3, start = -1, craft = true, requires = { { skill = "anchoring", level = 2 } },
+    note = "Your towers' batteries do 5% more damage a level." },
+  { id = "deep.boring", name = "Deep Boring", rank = 3, start = -1, craft = true, requires = {},
+    note = "Your colonies' extractors bring up 5% more a level." },
+  { id = "hospitality", name = "Hospitality", rank = 3, start = -1, craft = true, requires = { { skill = "leadership", level = 2 } },
+    note = "Room for two more members in your corporation a level." },
+  { id = "renown", name = "Renown", rank = 3, start = -1, craft = true, requires = { { skill = "leadership", level = 2 } },
+    note = "Pilots ask to join your corporation 10% more often a level." },
+  { id = "muster", name = "Muster", rank = 4, start = -1, craft = true, requires = { { skill = "leadership", level = 3 } },
+    note = "One more call on your members posted at once a level." },
+  { id = "stewardship", name = "Stewardship", rank = 4, start = -1, craft = true, requires = { { skill = "anchoring", level = 3 } },
+    note = "The systems you hold pay 5% more levy a level." },
   -- Finding things
   { id = "triangulation", name = "Triangulation", rank = 3, start = -1, craft = true, requires = { { skill = "astrometrics", level = 2 } },
     note = "Each scan probe near a signal is worth 10% more a level." },
@@ -268,7 +286,8 @@ end
 -- The skills' groups, as the skills window lists them down its left
 -- (the owner, 2026-11-16, of the groups I put to them: "Hulls ->
 -- Piloting. Flight -> Navigation", and "Combine weapons and gunnery";
--- the rest as they were put). Every
+-- the rest as they were put; and Structures, with Anchoring moved into
+-- it, on their "Yes to all your recs"). Every
 -- skill is in one, and one only.
 export type Group = { id: string, name: string, skills: { string } }
 Skills.GROUPS = {
@@ -294,7 +313,8 @@ Skills.GROUPS = {
   { id = "industry", name = "Industry", skills = { "industry", "mass.production", "invention", "bench.science", "draughtsmanship" } },
   { id = "trade", name = "Trade", skills = { "accounting", "broker.relations", "ledger.keeping" } },
   { id = "standing", name = "Standing", skills = { "protocol", "patronage", "hard.bargaining" } },
-  { id = "command", name = "Command", skills = { "leadership", "paymaster", "anchoring" } },
+  { id = "structures", name = "Structures", skills = { "anchoring", "husbandry", "raising", "fire.control", "deep.boring" } },
+  { id = "command", name = "Command", skills = { "leadership", "paymaster", "hospitality", "renown", "muster", "stewardship" } },
   { id = "enhancement", name = "Implants and Boosters", skills = { "cybernetics", "pharmacology", "tolerance" } },
 } :: { Group }
 -- A skill's group, by the skill's id.

@@ -83,9 +83,20 @@ function Starbases.Kept(state: State.State, owner: string): (number, number)
   return have, Starbases.FIRST + math.max(0, state.skills.anchoring or 0)
 end
 
+-- What the pilot's skills do for a tower of theirs (the owner, 2026-11-16, of the skills for structures and the corporation I put to them: "Yes to all your recs"): so much
+-- less fuel a level of Husbandry, so much quicker to anchor a level of
+-- Raising. Nobody else's tower is the better for them.
+Starbases.HUSBANDRY, Starbases.RAISING = 0.05, 0.1
+local function skilled(state: State.State, starbase: State.Starbase, skill: string): number
+  return if starbase.owner == "player" then math.max(0, state.skills[skill] or 0) else 0
+end
+-- Fuel blocks a tower burns in an hour.
+function Starbases.Burn(state: State.State, starbase: State.Starbase): number
+  return Structures.towerById[starbase.tower].fuel * (1 - Starbases.HUSBANDRY * skilled(state, starbase, "husbandry"))
+end
 -- Ticks between one fuel block and the next, for a tower.
-local function interval(tower: Structures.Tower): number
-  return math.floor(3600 / Constants.TICK / tower.fuel + 0.5)
+local function interval(state: State.State, starbase: State.Starbase): number
+  return math.floor(3600 / Constants.TICK / Starbases.Burn(state, starbase) + 0.5)
 end
 
 -- The ticks a number of seconds takes.
@@ -452,7 +463,8 @@ function Starbases.Raise(state: State.State, system: number, moon: System.Object
     id = id, kind = "station", name = `{moon.name} - Starbase`, x = x, y = y, z = z,
     radius = tower.field, seed = (state.tick * 7919 + id) % 100000, parent = moon.id, site = id, variety = "starbase", to = 0,
   })
-  state.starbases[id] = { id = id, tower = tower.id, owner = owner, ready = state.tick + ticks(tower.anchor), fuel = 0,
+  local quick = 1 - Starbases.RAISING * (if owner == "player" then math.max(0, state.skills.raising or 0) else 0)
+  state.starbases[id] = { id = id, tower = tower.id, owner = owner, ready = state.tick + ticks(tower.anchor * quick), fuel = 0,
     burnt = state.tick, modules = {}, drilled = state.tick, raid = 0, raids = 0, used = 0, raised = 0, robbed = 0,
     core = 0, charges = 0, sealed = 0, siege = 0, reaction = "", reacted = state.tick, composed = 0, starved = false }
   State.InsertId(state.starbaseIds, id)
@@ -565,7 +577,8 @@ function Starbases.Apply(state: State.State, command: State.Command, events: { E
     local item = toHand(state, command) :: State.Item
     local module = Structures.moduleById[item.type]
     Items.Take(state, item, 1)
-    table.insert(starbase.modules, { type = module.id, ready = state.tick + ticks(module.anchor) })
+    table.insert(starbase.modules, { type = module.id,
+      ready = state.tick + ticks(module.anchor * (1 - Starbases.RAISING * skilled(state, starbase, "raising"))) })
     table.insert(events, { kind = "ModuleAnchored", station = starbase.id, module = module.id })
   elseif kind == "SetReaction" then
     starbase.reaction, starbase.reacted, starbase.starved = command.type or "", state.tick, false
@@ -638,7 +651,7 @@ function Starbases.Running(state: State.State, starbase: State.Starbase): Runnin
     raised = starbase.raised, raisedWorth = starbase.raised * price,
     robbed = starbase.robbed, robbedWorth = starbase.robbed * price,
     material = if deposit then deposit.material.id else "",
-    fuelADay = if lit then Structures.towerById[starbase.tower].fuel * 24 * fuel else 0,
+    fuelADay = if lit then Starbases.Burn(state, starbase) * 24 * fuel else 0,
     yieldADay = if lit and drilling.online then drilling.perHour * 24 * price else 0,
   }
 end
@@ -656,7 +669,7 @@ local function feed(state: State.State, starbase: State.Starbase, events: { Even
   end
   for _, item in fuel do
     if item.type == Structures.FUEL.id and starbase.fuel == 0 then
-      local take = math.min(item.quantity, Structures.towerById[starbase.tower].fuel * 24)
+      local take = math.min(item.quantity, math.ceil(Starbases.Burn(state, starbase) * 24))
       Items.Take(state, item, take)
       starbase.fuel, starbase.burnt = take, state.tick
       table.insert(events, { kind = "StarbaseFuelled", station = starbase.id, fuel = take, hangar = true })
@@ -768,7 +781,7 @@ function Starbases.Step(state: State.State, events: { Event })
       react(state, starbase, events)
     end
     if Starbases.Lit(state, starbase) then
-      local every = interval(Structures.towerById[starbase.tower])
+      local every = interval(state, starbase)
       -- (anchoring does not burn: the clock starts when it is done)
       starbase.burnt = math.max(starbase.burnt, starbase.ready)
       while starbase.fuel > 0 and state.tick - starbase.burnt >= every do
