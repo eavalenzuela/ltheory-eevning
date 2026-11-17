@@ -12,12 +12,14 @@
 -- thinks of them: 0 means touching.
 
 local Constants = require("@lt/Core/Data/Constants")
+local Factions = require("@lt/Core/Data/Factions")
 local Items = require("@lt/Core/Assets/Items")
 local Motion = require("@lt/Core/Tactical/Motion")
 local Nomads = require("@lt/Core/Tactical/Nomads")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
+local Sides = require("@lt/Core/Tactical/Sides")
 local Skills = require("@lt/Core/Data/Skills")
 local State = require("@lt/Core/Kernel/State")
 local System = require("@lt/Core/Describe/System")
@@ -697,6 +699,13 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
     if kind == "Dock" then
       if what ~= "station" then
         return false, "not a station"
+      end
+      -- (a side at war shuts its stations to one who has served its foe:
+      -- the owner, 2026-11-16, "Stations shut"; Tactical/Sides)
+      local whose = Sides.StationOf(state, target.id, ball.system)
+      local foe = if ship.owner == "player" and whose ~= "" then Sides.EnemyOf(state, whose) else nil
+      if foe then
+        return false, `the {Factions.byId[whose].name} shut their stations to those on the {Factions.byId[foe].name}' books`
       end
     elseif kind == "Jump" then
       if what == "wormhole" then

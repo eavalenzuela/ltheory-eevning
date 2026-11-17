@@ -75,6 +75,13 @@ export type Node = {
   taste: { number },    -- by class index: how much of a class its people use,
                         -- relative to the class's 'need' (1 for most)
   met: number,          -- share of its population's needs met last step
+  -- Credits' worth sold to its people, and carried in and out along its
+  -- lanes, since whoever reads them last set them to nothing (what a
+  -- system held by the pilot pays them for its trade: Assets/
+  -- Sovereignty). Records: they change nothing. (Nil in an economy
+  -- saved before 2026-11-16.)
+  sales: number?,
+  through: number?,
 }
 
 export type Edge = {
@@ -177,6 +184,7 @@ function Economy.AddNode(econ: Economy, name: string, population: number,
   local node: Node = {
     id = #econ.nodes + 1, name = name, population = population, facilities = {},
     stock = {}, target = {}, anchor = zeros(#econ.classes), taste = taste or table.create(#econ.classes, 1), met = 1,
+    sales = 0, through = 0,
   }
   local given: { { recipe: number, capacity: number } } = facilities or {}
   for _, f in given do
@@ -425,6 +433,8 @@ local function consume(econ: Economy, node: Node, row: { number }, dt: number)
       local amount = math.min(want, stock[g])
       stock[g] -= amount
       consumed[g] += amount
+      -- (sold to its people at what it goes for there)
+      node.sales = (node.sales or 0) + amount * class.par * row[g]
       wanted += base * class.par
       got += math.min(amount, base) * class.par
     end
@@ -530,6 +540,10 @@ local function flow(econ: Economy, edge: Edge, rows: { { number } }, bulks: { nu
         from.stock[g] = fromStock - amount
         to.stock[g] = toStock + arrived
         econ.moved[g] += amount
+        -- (what went out of one and came into the other, at par: the trade through each)
+        local par = econ.classes[g].par
+        from.through = (from.through or 0) + amount * par
+        to.through = (to.through or 0) + arrived * par
         econ.lost[g] += amount - arrived
         local watch = econ.watch
         if watch and (watch == to.id or watch == from.id) then

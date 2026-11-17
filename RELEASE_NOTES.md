@@ -19,6 +19,9 @@ the lines beginning `- ` under it.
 - Blueprint copies cost a tenth of what they did: ten runs cost about a tenth of one of the things they build.
 - Blueprint originals cost half what they did: five times what they build.
 - The events, guide, scanner and colonies windows are set out as the market is: what kind of thing down the left, the list in the middle, and the one picked on the right.
+- The factions' wars can catch you now. Fire on one side's ships at a front, or take a war job for one side, and you are on its books: while that war lasts, and until you have mended your standing with the other side, the other side's patrols and police attack you in their space, their ships at the front go for you from the first, their stations will not let you dock, and where they blockade a system their pickets wait at its gates, one with a warp disruptor. A pilot who has worked for neither side is left alone.
+- A system you hold pays you for its trade as well as the levy: the sales tax on what its markets sell, and transit dues on what goes along its lanes, every day with the levy.
+- Your hired pilots and your corporation's members go round a pirate surge or an invasion when there is a way round, and never through a closed gate.
 - Your corporation has a window of its own, from the dock's Corporation button, docked or in space: Overview (its account, paying in and taking out, what it makes and costs), Books, Members, Hangar and Journal. The Wallet is your own money alone.
 - Assets: every place you have something down the left, with what is there worth; everything at the place picked (or everywhere) as one list, sortable, with a search over all of it; and the place on the right, with Set course.
 - The star map is a window like the rest, its Factions, Security and Prices as tabs.

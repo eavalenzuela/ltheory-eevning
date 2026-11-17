@@ -82,9 +82,11 @@ local Items = require("@lt/Core/Assets/Items")
 local Jumping = require("@lt/Core/Tactical/Jumping")
 local Mining = require("@lt/Core/Tactical/Mining")
 local Nomads = require("@lt/Core/Tactical/Nomads")
+local Modules = require("@lt/Core/Data/Modules")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
+local Sides = require("@lt/Core/Tactical/Sides")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
@@ -262,6 +264,8 @@ function Traffic.Warship(faction: string, class: string): Pirates.Kind?
   end
   return kind
 end
+
+local blockading: (state: State.State, system: number, faction: string) -> boolean
 
 local function enlist(state: State.State, ship: State.Ship, kind: string, goal: number, system: number)
   state.traffic[ship.id] = { ship = ship.id, kind = kind, goal = goal, system = system, born = state.tick, wait = 0 }
@@ -669,6 +673,61 @@ local function police(state: State.State, mine: State.Ball, rng: Rng.Rng, events
   return 2
 end
 
+-- Whether a faction is blockading a system now (or past that, at its
+-- assault).
+blockading = function(state: State.State, system: number, faction: string): boolean
+  for _, operation in state.wars.operations do
+    if operation.system == system and operation.by == faction and (operation.stage == "blockade" or operation.stage == "assault") then
+      return true
+    end
+  end
+  return false
+end
+
+-- Two ships of a blockading side at a gate, out of warp a few
+-- kilometres off it, for the pilot there who is on the other side's
+-- books: the first with a warp disruptor beside its guns. They come in
+-- what the police would (Traffic.PICKETS ships).
+Traffic.PICKETS = 2
+function Traffic.Picket(state: State.State, mine: State.Ball, gate: System.Object, faction: string, rng: Rng.Rng, events: { Event }): number
+  local its = Factions.byId[faction]
+  local flown = Ships.byId[state.ships[mine.id].type].class
+  local class = if flown == "battleship" or flown == "cruiser" then flown else "destroyer"
+  local kind = if its then patrolKind(its, class) or patrolKind(its, "destroyer") or patrolKind(its, "frigate") else nil
+  if its == nil or kind == nil then
+    return 0
+  end
+  for index = 1, Traffic.PICKETS do
+    local fitted = table.clone(kind)
+    if index == 1 then
+      -- (in place of the first of its mid slot's modules, where it has
+      -- one, so that it has the room for it; else beside the rest)
+      fitted.fit = table.clone(kind.fit)
+      local at = nil
+      for position, entry in fitted.fit do
+        local module = Modules.byId[entry[1]]
+        if at == nil and module and module.slot == "mid" then
+          at = position
+        end
+      end
+      if at then
+        fitted.fit[at] = { "disruptor.warp" }
+      else
+        table.insert(fitted.fit, { "disruptor.warp" })
+      end
+    end
+    local ship = Space.NewShip(state, fitted.hull, `{its.name} Picket`, its.id, 0)
+    Pirates.Equip(state, ship, fitted)
+    local x, y, z = near(rng, gate, 3000, 6000)
+    local ball = Space.Launch(state, ship, mine.system, x, y, z)
+    table.insert(events, { kind = "BallAdded", ball = ball.id })
+    enlist(state, ship, "picket", gate.id, mine.system)
+    state.traffic[ship.id].wait = 1
+  end
+  table.insert(events, { kind = "PicketArrived", count = Traffic.PICKETS, faction = its.id, gate = gate.id })
+  return Traffic.PICKETS
+end
+
 -- What a colony ship is as a ship that fights: a weapon of its
 -- hardpoint's size on every hardpoint it has, its people's guns and
 -- launchers, and the largest of everything else.
@@ -784,8 +843,14 @@ function Traffic.Step(state: State.State, events: { Event })
   local system = if mine then mine.system else Space.SystemOf(state, me.docked)
   -- (a pilot the system's faction thinks ill enough of is fought on
   -- sight, mark or no mark: Assets/Standings)
-  local marked = state.tick < state.player.marked or Standings.Hostile(state, Galaxy.Keeper(state.galaxy.systems[system]))
+  local keeper = Galaxy.Keeper(state.galaxy.systems[system])
+  -- (and so is one who has served a side the keeper is at war with, its
+  -- patrols and its police alike: the owner, 2026-11-16, "Enemy of your
+  -- side"; Tactical/Sides)
+  local marked = state.tick < state.player.marked or Standings.Hostile(state, keeper) or Sides.EnemyOf(state, keeper) ~= nil
   local haulers, patrols, miners, lawmen = 0, 0, 0, 0
+  -- (a side's pickets at a gate, by the gate: Traffic.Picket)
+  local picketed: { [number]: boolean } = {}
   -- (the colony fleets, and which of them have their colony ship here)
   local fleets = Nomads.Fleets(state.galaxy)
   local here: { [number]: boolean } = {}
@@ -954,6 +1019,22 @@ function Traffic.Step(state: State.State, events: { Event })
           end
         end
       end
+    elseif record.kind == "picket" then
+      -- A blockade's picket at a gate: it fights one on the other side's
+      -- books who is at its gate, and goes when they have gone from the
+      -- system, or are nobody's enemy, or the blockade is over.
+      local still = mine ~= nil and mine.system == record.system and record.wait ~= 0
+        and Sides.EnemyOf(state, state.ships[id].owner) ~= nil and blockading(state, record.system, state.ships[id].owner)
+      if not still then
+        remove(state, id, "left", events)
+      else
+        picketed[record.goal] = true
+        local sees = mine ~= nil and ball ~= nil and mine.grid == ball.grid and mine.grid ~= 0
+        if sees and state.pilots[id] == nil then
+          state.pilots[id] = { ship = id, range = 2000, prey = 0, home = record.goal, alone = 0, bounty = 0, tags = 0 }
+          State.InsertId(state.pilotIds, id)
+        end
+      end
     elseif record.kind == "police" then
       local fighting = state.pilots[id] ~= nil
       local sees = marked and mine ~= nil and ball ~= nil and mine.grid == ball.grid and mine.grid ~= 0
@@ -1055,6 +1136,22 @@ function Traffic.Step(state: State.State, events: { Event })
   -- The police, for a marked pilot in secure space: wherever they are.
   if marked and mine and mine.grid ~= 0 and band == "secure" and lawmen < Traffic.POLICE then
     police(state, mine, rng, events)
+  end
+  -- A blockade's pickets, for one on the other side's books who comes to
+  -- a gate of the system it holds (the owner, 2026-11-16, "Blockades
+  -- stop you"): two of the blockading side's warships, one with a warp
+  -- disruptor, out of warp at the gate.
+  if mine and mine.grid ~= 0 and not picketed[mine.grid] then
+    local gate = Space.Object(state, mine.grid)
+    if gate and gate.kind == "gate" then
+      for _, operation in state.wars.operations do
+        if operation.system == mine.system and (operation.stage == "blockade" or operation.stage == "assault")
+          and Sides.EnemyOf(state, operation.by) then
+          Traffic.Picket(state, mine, gate, operation.by, rng, events)
+          break
+        end
+      end
+    end
   end
 end
 

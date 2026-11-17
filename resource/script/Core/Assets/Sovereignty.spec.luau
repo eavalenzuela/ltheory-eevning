@@ -263,7 +263,14 @@ suite:Case("a system of the pilot's pays a levy by the day, and those who fly fo
   local said = hours(game, 24 - Sovereignty.CLAIM)
   local due = math.floor(Sovereignty.LEVY * state.commerce.nodes[system].population * 24)
   t.ok(due > 0, "nobody lives in the system")
-  t.eq({ said.LevyPaid[1].amount, said.LevyPaid[1].systems, state.wallet - wallet }, { due, 1, due })
+  -- (and, since 2026-11-16, what its trade pays: the sales tax on what its
+  -- market sold its people, and dues on what went along its lanes, read
+  -- once a day and counted afresh after)
+  local paid = said.LevyPaid[1]
+  t.eq({ paid.amount, paid.systems, state.wallet - wallet } :: { any }, { due, 1, due + paid.tax + paid.dues } :: { any })
+  t.ok(paid.tax > 0, "its people bought nothing all day")
+  -- (counted afresh: what it has sold since is less than the day's)
+  t.ok((state.commerce.nodes[system].sales or 0) < paid.tax / Sovereignty.SALES_TAX, "the day's trade was not set back to nothing")
   -- A hired pilot's ship is in the system when it is besieged: the defence is the tower and them.
   local ship = Space.NewShip(state, "frigate.courier", "Second", "player", state.player.home)
   local candidates = Core.Query.Candidates(game, state.player.home)

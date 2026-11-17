@@ -50,6 +50,7 @@ local Members = require("@lt/Core/Assets/Members")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
+local Sides = require("@lt/Core/Tactical/Sides")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
@@ -300,8 +301,11 @@ function Fronts.Step(state: State.State, events: { Event }, first: number)
             Standings.Change(state, victim.side, -Fronts.OFFENCE, events)
             table.insert(events, { kind = "FrontCrossed", site = front.site, side = victim.side })
           end
+          -- (firing on one side is serving the other: Tactical/Sides)
+          local served = if victim.attacking then operation.against else operation.by
+          Sides.Serve(state, served, events)
           if event.kind == "BallDestroyed" then
-            local other = if victim.attacking then operation.against else operation.by
+            local other = served
             Standings.Change(state, victim.side, -Fronts.GRUDGE * victim.worth, events)
             -- (nobody pays the pilot for defending what is their own: Assets/Sovereignty)
             if Factions.byId[other] then
@@ -339,7 +343,9 @@ function Fronts.Step(state: State.State, events: { Event }, first: number)
         if state.balls[ship] == nil then
           front.ships[ship] = nil
         else
-          if front.crossed[record.side] then
+          -- (a side whose foe the pilot has served counts them its enemy
+          -- from the first: Tactical/Sides)
+          if front.crossed[record.side] or Sides.EnemyOf(state, record.side) then
             state.pilots[ship].foe = true
           end
           if record.attacking then

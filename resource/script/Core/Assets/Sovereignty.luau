@@ -71,6 +71,13 @@ Sovereignty.POSTED = 30
 Sovereignty.LEVY = 4000
 -- So much more levy a level of the pilot's Stewardship (the owner, 2026-11-16, of the skills for structures and the corporation I put to them: "Yes to all your recs").
 Sovereignty.STEWARDSHIP = 0.05
+-- And what a system held pays for its trade, beside the levy (the owner,
+-- 2026-11-16, of what a held system's trade should pay: "Both"): the
+-- sales tax on what its markets sell its people, at the rate a market
+-- charges (Assets/Market), and dues on what is carried in and out along
+-- its lanes, a share of its worth. (The share mine.)
+Sovereignty.SALES_TAX = 0.02
+Sovereignty.DUES = 0.005
 Sovereignty.DAY = 24 * Sovereignty.HOUR
 
 -- The systems in which the pilot has a lit tower with a claim beacon
@@ -168,21 +175,34 @@ function Sovereignty.Step(state: State.State, events: { Event })
   -- Once a day: what the pilot's systems pay.
   if state.tick % Sovereignty.DAY == 0 and state.tick > 0 then
     local shut = Wars.Blocked(state.wars)
-    local levy, paying = 0, 0
+    local levy, paying, tax, dues = 0, 0, 0, 0
     for id = 1, Galaxy.Charted(state.galaxy) do
       local node = state.commerce.nodes[id]
       if state.galaxy.systems[id].owner == Wars.PILOT and node and not shut[id] then
         levy += math.floor(Sovereignty.LEVY * node.population * 24 * (1 + Sovereignty.STEWARDSHIP * math.max(0, state.skills.stewardship or 0)))
+        tax += math.floor(Sovereignty.SALES_TAX * (node.sales or 0))
+        dues += math.floor(Sovereignty.DUES * (node.through or 0))
         paying += 1
       end
-    end
-    if levy > 0 then
-      if Corporation.Founded(state) then
-        Corporation.Earn(state, levy, "levy", events)
-      else
-        Wallet.Pay(state, levy, "levy", events)
+      -- (a day's trade is read once: the next day's is counted afresh)
+      if node then
+        node.sales, node.through = 0, 0
       end
-      table.insert(events, { kind = "LevyPaid", amount = levy, systems = paying })
+    end
+    local function earn(amount: number, reason: string)
+      if amount <= 0 then
+        return
+      elseif Corporation.Founded(state) then
+        Corporation.Earn(state, amount, reason, events)
+      else
+        Wallet.Pay(state, amount, reason, events)
+      end
+    end
+    earn(levy, "levy")
+    earn(tax, "sales tax")
+    earn(dues, "transit dues")
+    if levy > 0 or tax > 0 or dues > 0 then
+      table.insert(events, { kind = "LevyPaid", amount = levy, tax = tax, dues = dues, systems = paying })
     end
   end
   if state.tick % Sovereignty.HOUR ~= 0 or state.tick == 0 then

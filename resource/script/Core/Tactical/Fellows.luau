@@ -42,7 +42,7 @@ local Constants = require("@lt/Core/Data/Constants")
 local Digger = require("@lt/Core/Tactical/Digger")
 local Economy = require("@lt/Core/Strategic/Economy")
 local Factions = require("@lt/Core/Data/Factions")
-local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Happenings = require("@lt/Core/Strategic/Happenings")
 local Items = require("@lt/Core/Assets/Items")
 local Members = require("@lt/Core/Assets/Members")
 local Pirates = require("@lt/Core/Tactical/Pirates")
@@ -232,7 +232,8 @@ end
 local function lane(state: State.State, member: State.Member, system: number, gates: { System.Object }): (System.Object, number, number)
   local class, to, gap = Members.Haul(state, system)
   if class ~= 0 and gap > 0 then
-    local route = Galaxy.Route(state.galaxy, system, to)
+    -- (round a closed gate, and round a surge or an invasion where there is a way round: Strategic/Happenings)
+    local route = Happenings.Way(state, system, to)
     for _, gate in gates do
       if route[2] and gate.to == route[2] then
         return gate, class, to

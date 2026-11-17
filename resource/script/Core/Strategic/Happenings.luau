@@ -145,6 +145,38 @@ function Happenings.Surging(state: State.State): { [number]: boolean }
   return found
 end
 
+-- The systems a ship sent somewhere had better go round, for what is
+-- going on in them: pirates massing there, or an invasion (for the
+-- hired pilots and the corporation's members who plan a way: Galaxy.
+-- Route's 'avoid'; the world events' rulings, 2026-11-14, left this
+-- for later and the owner put it on the list, 2026-11-16).
+function Happenings.Danger(state: State.State): { [number]: boolean }
+  local found: { [number]: boolean } = {}
+  for _, one in state.happenings.list do
+    if one.kind == Happenings.SURGE or one.kind == Happenings.INVASION then
+      found[one.system] = true
+    end
+  end
+  return found
+end
+
+-- The way from one system to another for a ship sent there: through no
+-- gate that is closed (Tactical/Mishaps' disasters), and round what is
+-- dangerous where there is a way round (Happenings.Danger).
+function Happenings.Way(state: State.State, from: number, to: number): { number }
+  local closed: { [number]: boolean }? = nil
+  local span = #state.galaxy.systems + 1
+  for _, one in state.happenings.list do
+    if one.kind == Happenings.DISASTER and one.what == "gate" and one.ref then
+      local found: { [number]: boolean } = closed or {}
+      found[one.system * span + one.ref] = true
+      found[one.ref * span + one.system] = true
+      closed = found
+    end
+  end
+  return Galaxy.Route(state.galaxy, from, to, false, closed, Happenings.Danger(state))
+end
+
 -- Something begins: it is put on the list and said. 'lasts' is in
 -- ticks. Returns it.
 function Happenings.Begin(state: State.State, kind: string, what: string, system: number, place: number, lasts: number,

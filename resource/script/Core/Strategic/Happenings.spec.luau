@@ -214,4 +214,39 @@ suite:Case("a game with no pirates has no surges; what is going on is in the sav
   t.eq((opened :: any).surge, nil)
 end)
 
+suite:Case("a ship sent somewhere goes round a surge or an invasion where there is a way round, and through it where there is none", function(t)
+  -- (the world events' rulings left the ships the pilot sends ignoring
+  -- them; on the owner's list, 2026-11-16)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true, systems = 40 })
+  local state = game.state
+  local galaxy = state.galaxy
+  local round, through = 0, 0
+  for from = 1, math.min(30, Galaxy.Charted(galaxy)) do
+    for to = from + 1, math.min(30, Galaxy.Charted(galaxy)) do
+      local plain = Galaxy.Route(galaxy, from, to)
+      if #plain >= 3 then
+        local middle = plain[2]
+        local way = Galaxy.Route(galaxy, from, to, false, nil, { [middle] = true })
+        t.eq({ way[1], way[#way] }, { from, to }, "the ends are never gone round")
+        if table.find(way, middle) then
+          through += 1
+        else
+          round += 1
+          t.ok(#way - #plain <= Galaxy.AVOID, "a way round no longer than the danger is dear")
+        end
+      end
+    end
+  end
+  t.ok(round > 0, "no way round anything")
+  -- (and Happenings.Way reads the surges and invasions going on)
+  local plain = Galaxy.Route(galaxy, 1, 2)
+  if #plain >= 3 then
+    Happenings.Begin(state, Happenings.SURGE, "pirates", plain[2], 0, 3600, 10, "", {})
+    local way = Happenings.Way(state, 1, 2)
+    t.ok(#way > 0)
+    t.eq(Happenings.Danger(state)[plain[2]], true)
+  end
+  local _ = through
+end)
+
 return suite

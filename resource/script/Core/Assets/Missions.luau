@@ -102,6 +102,7 @@ local Names = require("@lt/Core/Describe/Names")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
+local Sides = require("@lt/Core/Tactical/Sides")
 local State = require("@lt/Core/Kernel/State")
 local System = require("@lt/Core/Describe/System")
 local Ships = require("@lt/Core/Data/Ships")
@@ -940,6 +941,19 @@ function Missions.Apply(state: State.State, command: State.Command, events: { Ev
       Items.Add(state, mission.prize, 1, ship.docked, "hangar")
     end
     standing(state, mission.faction, mission.standing)
+    -- (war work is serving a side: the other side of the war it was for
+    -- thinks the worse of the pilot, and counts them its enemy while the
+    -- war lasts: Tactical/Sides)
+    local operation = tonumber(string.match(mission.key, ":war:(%d+):") or "")
+    if operation then
+      for _, each in state.wars.operations do
+        if each.id == operation then
+          local other = if each.by == mission.faction then each.against else each.by
+          Sides.Serve(state, mission.faction, events)
+          standing(state, other, -Sides.GRUDGE)
+        end
+      end
+    end
     -- (and whoever gave it thinks the better of the pilot)
     regarded(state, mission, if mission.level > 0 then Missions.REGARD.levelled * (1 + mission.level) else Missions.REGARD.daily)
     state.loyalty[mission.faction] = (state.loyalty[mission.faction] or 0) + mission.loyalty

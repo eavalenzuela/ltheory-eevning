@@ -438,7 +438,12 @@ end
 -- included (one system, if they are the same). The fewest jumps, or
 -- with 'safest' the least dangerous way. Of ways as good, the one
 -- through the lower-numbered systems. Empty if there is no way.
-function Galaxy.Route(galaxy: Galaxy, from: number, to: number, safest: boolean?, closed: { [number]: boolean }?): { number }
+-- ('avoid': systems to go round where there is a way round, each as
+-- dear to pass as Galaxy.AVOID jumps; still gone through where there
+-- is none, and an end of the way is never avoided.)
+Galaxy.AVOID = 12
+function Galaxy.Route(galaxy: Galaxy, from: number, to: number, safest: boolean?, closed: { [number]: boolean }?,
+  avoid: { [number]: boolean }?): { number }
   local systems = galaxy.systems
   assert(systems[from] and systems[to], "no such system")
   local count = #systems
@@ -486,6 +491,7 @@ function Galaxy.Route(galaxy: Galaxy, from: number, to: number, safest: boolean?
       done[at] = true
       for _, neighbor in systems[at].neighbors do
         local reached = least + 1 + (if safest then RISK[Galaxy.Band(systems[neighbor].security)] else 0)
+          + (if avoid and avoid[neighbor] and neighbor ~= to then Galaxy.AVOID else 0)
         if closed and closed[at * span + neighbor] then
           continue
         end

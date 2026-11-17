@@ -883,6 +883,10 @@ export type State = {
   -- And how many defence jobs its seventh.
   holds: { [number]: number },
   standings: { [string]: number },
+  -- The sides the pilot has fought or done war work for, and the tick
+  -- they last did (Tactical/Sides): the other side of a war counts them
+  -- its enemy. (Nil in a game saved before 2026-11-16.)
+  served: { [string]: number }?,
   -- Loyalty points with each faction, earned by its jobs and spent at
   -- its stations (a faction not here has none).
   loyalty: { [string]: number },

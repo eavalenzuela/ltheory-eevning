@@ -125,7 +125,7 @@ local Corporation = require("@lt/Core/Assets/Corporation")
 local Digger = require("@lt/Core/Tactical/Digger")
 local DroneKinds = require("@lt/Core/Data/Drones")
 local Drones = require("@lt/Core/Tactical/Drones")
-local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Happenings = require("@lt/Core/Strategic/Happenings")
 local Mend = require("@lt/Core/Tactical/Mend")
 local Items = require("@lt/Core/Assets/Items")
 local Jumping = require("@lt/Core/Tactical/Jumping")
@@ -563,7 +563,7 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
         return false, "that is not a station to carry to"
       elseif to.id == theirs.docked then
         return false, "that is where the goods are"
-      elseif #Galaxy.Route(state.galaxy, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, to.id)) == 0 then
+      elseif #Happenings.Way(state, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, to.id)) == 0 then
         return false, "there is no way there"
       end
       -- (and the further stations to carry to, a load to each in turn)
@@ -578,7 +578,7 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
           return false, "that is not a station to carry to"
         elseif id == to.id or id == theirs.docked or table.find(drops, id) ~= index or table.find(command.stops or {}, id) then
           return false, "a station is carried to once a round, and is not one collected at"
-        elseif #Galaxy.Route(state.galaxy, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, id)) == 0 then
+        elseif #Happenings.Way(state, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, id)) == 0 then
           return false, "there is no way there"
         end
       end
@@ -596,7 +596,7 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
           return false, "what is collected at the station it is carried to is there already"
         elseif id == theirs.docked or table.find(stops, id) ~= index then
           return false, "a station is collected at once a round"
-        elseif #Galaxy.Route(state.galaxy, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, id)) == 0 then
+        elseif #Happenings.Way(state, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, id)) == 0 then
           return false, "there is no way there"
         end
       end
@@ -627,7 +627,7 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
         return false, "that is not a station with a market"
       elseif at.id == theirs.docked then
         return false, "that is this station: buy it here yourself"
-      elseif #Galaxy.Route(state.galaxy, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, at.id)) == 0 then
+      elseif #Happenings.Way(state, Space.SystemOf(state, theirs.docked), Space.SystemOf(state, at.id)) == 0 then
         return false, "there is no way there"
       elseif info.volume > Items.ShipStats(state, theirs.id).cargo then
         return false, `one does not fit in {wing.name}'s hold`
@@ -982,7 +982,8 @@ local function travel(state: State.State, me: State.Ball, system: number, events
     end
   end
   if not (me.intent and me.intent.kind == "jump") then
-    local route = Galaxy.Route(state.galaxy, me.system, system)
+    -- (round a closed gate, and round a surge or an invasion where there is a way round: Strategic/Happenings)
+    local route = Happenings.Way(state, me.system, system)
     local gate = if route[2] then System.GateTo(Space.Describe(state, me.system), route[2]) else nil
     if gate then
       give(state, { kind = "Jump", actor = me.id, target = gate.id }, events)

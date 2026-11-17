@@ -417,6 +417,14 @@ function Session.Notice(session: Session, event: Space.Event)
         elseif from ~= "" then `NEWS: the {by} have taken {name} from the {from}`
         else `NEWS: the {by} have claimed {name}`)
     end
+  elseif kind == "SideTaken" then
+    -- (the pilot has served a side in a war: Core/Tactical/Sides)
+    local side = Factions.byId[event.faction]
+    Session.Say(session, `You are on the {if side then side.name else event.faction}' books now: whoever they are at war with counts you an enemy, `
+      .. "in their space, at the front and at their stations, while the war lasts or until they think better of you", "warn")
+  elseif kind == "PicketArrived" then
+    local side = Factions.byId[event.faction]
+    Session.Say(session, `{if side then side.name else event.faction} pickets at the gate: they hold it against those on their enemy's books`, "bad")
   elseif kind == "FrontFound" or kind == "FrontCrossed" then
     -- (the factions' forces where the pilot is: Core/Tactical/Fronts)
     local function named(id: string): string
@@ -441,7 +449,10 @@ function Session.Notice(session: Session, event: Space.Event)
   elseif kind == "MemberUpgraded" then
     Session.Say(session, `{event.name} has bought a {Types.Info(event.hull).name} out of their own earnings`)
   elseif kind == "LevyPaid" then
-    Session.Say(session, `The levy is in: {event.amount} credits from {event.systems} {if event.systems == 1 then "system" else "systems"} of yours`)
+    local trade = (event.tax or 0) + (event.dues or 0)
+    Session.Say(session, `The levy is in: {Format.Whole(event.amount)} credits from {event.systems} {if event.systems == 1 then "system" else "systems"} of yours`
+      .. (if trade > 0 then `, and {Format.Whole(trade)} from their trade ({Format.Whole(event.tax or 0)} sales tax, {Format.Whole(event.dues or 0)} transit dues)` else ""),
+      "good")
   elseif kind == "ClaimLapsed" and event.by == "player" then
     Session.Say(session, `Your claim on {session.game.state.galaxy.systems[event.system].name} has lapsed: no beacon of yours stood lit there`)
   elseif kind == "HaulLost" then
