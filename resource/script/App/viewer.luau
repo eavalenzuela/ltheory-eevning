@@ -380,11 +380,17 @@ return AppShell.Create(function(): Widget
       return Star.New(class, seed, tweaks), 1
     end
     local hull = string.match(kind, "^hull%-(.+)$")
-    local dressed = if hull then string.match(hull, "^(.+)~livery$") else nil
-    if dressed then
-      -- ("~livery": in the paint its faction's own ships wear in space, if it has one)
+    local dressed, coat = string.match(hull or "", "^([^~]+)~(.+)$")
+    if dressed and coat then
+      -- ("~livery": in the paint its faction's own ships wear in space, if
+      -- it has one; or "~" a paint, and "~" a design on it if any)
       local ship = Ships.byId[dressed]
       local paint, figure = Paints.Dress(if ship then ship.lineage else "", false)
+      if coat ~= "livery" then
+        paint, figure = string.match(coat, "^([^~]+)"), string.match(coat, "~(.+)$")
+        assert(Paints.paintById[paint :: string], `no paint '{paint}'`)
+        assert(figure == nil or Paints.designById[figure], `no design '{figure}'`)
+      end
       local built = assert(Hull.Build(dressed, nil, nil, paint, figure), `no design for the hull '{dressed}'`)
       local object = Object_Scenery({})
       Object_SetRenderable(object, built.model)
@@ -680,7 +686,7 @@ return AppShell.Create(function(): Widget
       end
       local hull = string.match(v.kind, "^hull%-(.+)$")
       if hull then
-        dress((string.gsub(string.gsub(hull, "@%d$", ""), "~livery$", "")), radius)
+        dress((string.gsub(string.gsub(hull, "@%d$", ""), "~.*$", "")), radius)
       end
       camera:SetTarget(stage[1])
       built = key
@@ -723,9 +729,11 @@ return AppShell.Create(function(): Widget
   -- A hull of the game's from the bow quarter, in its faction's livery:
   -- from farther off than the hull views, so that a wide hull has room
   -- in a square about it, which the art is cut to (script/artgen).
-  local function shipView(type: string): View
+  -- ('paint' and 'figure': in that paint and design in place of the livery)
+  local function shipView(type: string, paint: string?, figure: string?): View
     local eye: vector = HULL_VIEWS[1][2] * 1.45
-    return { name = `ship-{type}`, kind = `hull-{type}~livery`, seed = 1, eye = eye, look = CENTRE,
+    local coat = if paint then paint .. (if figure then `~{figure}` else "") else "livery"
+    return { name = `ship-{type}`, kind = `hull-{type}~{coat}`, seed = 1, eye = eye, look = CENTRE,
       light = eye + vector.create(0.5, 0.9, 0.2) * (0.6 * vector.magnitude(eye)) }
   end
 
@@ -762,14 +770,15 @@ return AppShell.Create(function(): Widget
       end
       return #views
     end,
-    -- Hold one hull still as Ships takes it ('type': frigate.akashi).
+    -- Hold one hull still as Ships takes it ('type': frigate.akashi), or
+    -- in a paint ('paint.crimson') and a design on it ('design.flames').
     -- False if it has no design.
-    Ship = function(type: string): boolean
+    Ship = function(type: string, paint: string?, figure: string?): boolean
       if not Hull.Has(type) then
         return false
       end
       params, built, index, frames = {}, "", 0, 0
-      held = shipView(type)
+      held = shipView(type, paint, figure)
       setUp(held :: View)
       return true
     end,
