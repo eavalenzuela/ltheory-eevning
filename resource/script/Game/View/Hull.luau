@@ -2924,7 +2924,13 @@ end
 -- are bent with the hull. By dice of the hull's own seed: a hull is
 -- always detailed the same way. Every figure and size here is mine.
 
-export type Detail = { antennas: boolean?, pipes: boolean?, greebles: boolean?, lights: boolean?, rivets: boolean? }
+-- ('seeds': a kind's own seed, by its name, where it has one: its dice
+-- are its own, so one kind can be thrown again and the rest stay as
+-- they are. The owner, 2026-11-17, of detail laid out from the hull's
+-- seed alone: "it's sort of take-it-or-leave-it. Can they each have
+-- their own seed as well?" 0, or none, is the hull's own.)
+export type Detail = { antennas: boolean?, pipes: boolean?, greebles: boolean?, lights: boolean?, rivets: boolean?,
+  seeds: { [string]: number }? }
 -- The kinds, in the order the hull browser's number keys switch them.
 Hull.DETAILS = { "antennas", "pipes", "greebles", "lights", "rivets" }
 
@@ -2959,7 +2965,14 @@ local function detailed(b: Builder, ship: Ship, detail: Detail, metres: number)
   for _, seat in ship.seats do
     table.insert(boxes, { center = seat.center, size = seat.half, part = PLATING })
   end
-  local rng = RNG_MTG(Int.Signed(g.seed + 9301))
+  -- (the dice of a kind of detail: its own, from the hull's seed, the
+  -- kind, and the kind's own seed)
+  local SALT: { [string]: number } = { antennas = 9301, pipes = 9311, greebles = 9323, lights = 9337 }
+  local function diceOf(kind: string): RNG
+    local own = if detail.seeds then detail.seeds[kind] or 0 else 0
+    return RNG_MTG(Int.Signed(g.seed + SALT[kind] + 7919 * own))
+  end
+  local rng = diceOf("antennas")
   -- How big the hull is, in the generator's units, and what a detail's
   -- sizes are taken from: a bigger ship's are a little finer, and more.
   local R = math.max(g.across.x, g.across.y, g.across.z) / 2 / GROWN
@@ -3084,6 +3097,7 @@ local function detailed(b: Builder, ship: Ship, detail: Detail, metres: number)
   -- Antennas: a mast straight out of its face, on a foot, and now and
   -- then a crossbar, a pod or a second mast beside it; a lamp on top.
   if detail.antennas then
+    rng = diceOf("antennas")
     local count = math.floor(rng:Int(2, 6) * more + 0.5)
     for _ = 1, count do
       local face = pick({ UP, UP, STARBOARD, DOWN, BOW })
@@ -3122,6 +3136,7 @@ local function detailed(b: Builder, ship: Ship, detail: Detail, metres: number)
   -- Pipes and conduits: runs of one to three pipes along a face, the
   -- long way of it, with clamps over them; never over a gap.
   if detail.pipes then
+    rng = diceOf("pipes")
     local count = math.floor(rng:Int(4, 9) * more + 0.5)
     for _ = 1, count do
       local face = pick({ UP, STARBOARD, STARBOARD, DOWN })
@@ -3170,6 +3185,7 @@ local function detailed(b: Builder, ship: Ship, detail: Detail, metres: number)
   -- Greebles: clusters of small boxes on a face, now and then a vent
   -- (slats over a frame) or a bank of fins.
   if detail.greebles then
+    rng = diceOf("greebles")
     local count = math.floor(rng:Int(12, 22) * more + 0.5)
     for _ = 1, count do
       local face = pick(nil)
@@ -3218,6 +3234,7 @@ local function detailed(b: Builder, ship: Ship, detail: Detail, metres: number)
   -- starboard, white at the bow and stern and on its top; and on a hull
   -- of a cruiser's size or more, rows of lit windows along its sides.
   if detail.lights then
+    rng = diceOf("lights")
     local lamp = u * 0.007
     local function farthest(n: vector): Face?
       local best: Face? = nil
@@ -3307,18 +3324,42 @@ end
 -- The generator's units: a plate of size 1 is so many of a model's.
 Hull.GROWN = GROWN
 
--- A detail from the words of a seed line or a sheet (Hull.DETAILS);
--- nil if none is among them.
+-- A detail from the words of a seed line or a sheet (Hull.DETAILS), each
+-- a kind, or a kind and its own seed ("antennas:17"); nil if none is
+-- among them.
 function Hull.DetailOf(words: { string }): Detail?
   local detail: Detail = {}
   local any = false
   for _, word in words do
-    if table.find(Hull.DETAILS, word) then
-      (detail :: any)[word] = true
+    local named, own = string.match(word, "^(%a+):(%d+)$")
+    local kind: string = named or word
+    if table.find(Hull.DETAILS, kind) then
+      (detail :: any)[kind] = true
       any = true
+      if own and tonumber(own) ~= 0 then
+        local seeds = detail.seeds or {}
+        seeds[kind] = tonumber(own) :: number
+        detail.seeds = seeds
+      end
     end
   end
   return if any then detail else nil
+end
+
+-- A detail as the words that say it: the kinds, each with its own seed
+-- after it where it has one ("antennas:17 pipes lights:3").
+function Hull.DetailWords(detail: Detail?): string
+  if detail == nil then
+    return ""
+  end
+  local words: { string } = {}
+  for _, kind in Hull.DETAILS do
+    if (detail :: any)[kind] then
+      local own = if detail.seeds then detail.seeds[kind] or 0 else 0
+      table.insert(words, if own ~= 0 then `{kind}:{own}` else kind)
+    end
+  end
+  return table.concat(words, " ")
 end
 
 -- How the Vail's battleship is read: its bridge stands on its back
@@ -3826,7 +3867,7 @@ do
   local ok, text = pcall(File_Read, Hull.SEEDS)
   if ok and type(text) == "string" then
     for line in string.gmatch(text, "[^\r\n]+") do
-      local name, seed, size, words = string.match(line, "^%s*([%a%d%._]+)%s+(%d+)%s+(%d+)%s*([%w%s_%+]-)%s*$")
+      local name, seed, size, words = string.match(line, "^%s*([%a%d%._]+)%s+(%d+)%s+(%d+)%s*([%w%s_%+:]-)%s*$")
       if name and string.sub(name, 1, 1) ~= "#" then
         -- (after the size, in any order: a style, "painted", and the
         -- kinds of surface detail it has (Hull.DETAILS). A style's name
@@ -3835,10 +3876,10 @@ do
         local style: string? = nil
         local painted = false
         local kinds: { string } = {}
-        for word in string.gmatch(words or "", "[%w_%+]+") do
+        for word in string.gmatch(words or "", "[%w_%+:]+") do
           if word == "painted" then
             painted = true
-          elseif table.find(Hull.DETAILS, word) then
+          elseif table.find(Hull.DETAILS, (string.match(word, "^(%a+)") or word)) then
             table.insert(kinds, word)
           else
             style = word

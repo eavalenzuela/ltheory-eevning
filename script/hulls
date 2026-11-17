@@ -17,7 +17,8 @@
         detail; with "both", each as its line has it and then with it;
         with a PAINT, in that paint; with "near", from closer
 DETAIL is any of antennas, pipes, greebles, lights and rivets: the
-hull's surface detail (Game/View/Hull, Hull.DETAILS).
+hull's surface detail (Game/View/Hull, Hull.DETAILS); each may have its
+own seed after it, as antennas:17 (its own dice: the others stay).
 
 The numbers come first and in that order; the words after them, in any
 order. The word "above" among them takes every picture from straight
@@ -114,8 +115,9 @@ def main():
     look = "cel2" if "cel2" in rest else "cel1" if "cel1" in rest else None
     both = "both" in rest
     near = "near" in rest
-    details = [word for word in DETAILS if word in rest]
-    rest = [word for word in rest if word not in ("above", "asym", "cel1", "cel2", "both", "near") and word not in DETAILS]
+    # (a kind, or a kind and its own seed: "antennas:17")
+    details = [word for word in rest if word.split(":")[0] in DETAILS and (":" not in word or word.split(":")[1].isdigit())]
+    rest = [word for word in rest if word not in ("above", "asym", "cel1", "cel2", "both", "near") and word not in details]
     hulls = [word for word in rest if "." in word] if kind == "named" else []
     rest = [word for word in rest if word not in hulls]
     for word in rest:
@@ -146,7 +148,7 @@ def main():
         return (each or "old") + ASYM if asym else each
     os.makedirs(TAKEN, exist_ok=True)
     how = (f", detail: {' '.join(details)}" if details else "") + (f", {style}" if style and kind != "styles" else "") + (", sides unalike" if asym else "") + (f", as a {shown}" if shown else "") + (", from above" if above else "") + (f", {look}" if look else "")
-    tag = ("-" + "-".join(details) if details else "") + (f"-{style}" if style and kind != "styles" else "") + ("-asym" if asym else "") + (f"-{shown}" if shown else "") + ("-above" if above else "") + (f"-{look}" if look else "")
+    tag = ("-" + "-".join(d.replace(":", "") for d in details) if details else "") + (f"-{style}" if style and kind != "styles" else "") + ("-asym" if asym else "") + (f"-{shown}" if shown else "") + ("-above" if above else "") + (f"-{look}" if look else "")
     paint = colour or "bare"
     # (each picture: its seed, its size, its paint, its style, and what is written on it)
     if kind == "named":

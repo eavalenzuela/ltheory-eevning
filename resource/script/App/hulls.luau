@@ -33,6 +33,9 @@
 --                  them (Hull.GrownShip); it says so if there is no room
 --   1 to 5         surface detail, each kind on or off (Hull.DETAILS):
 --                  antennas, pipes, greebles, lights, rivets
+--   , and .        the seed of the kind last switched, back and on: its
+--                  dice are its own, so it is laid out afresh and the
+--                  others stay (0, the hull's own; kept as "antennas:17")
 --   the search box (top right; click it, type, Return): a seed, to go
 --                  to it; or a hull's name, or part of one (owari,
 --                  cruiser.ouyou), to build it again as
@@ -147,14 +150,32 @@ return AppShell.Create(function(): Widget
   local note = ""           -- what was last kept
   -- Which kinds of surface detail are on (Hull.DETAILS), and as words.
   local detail: { [string]: boolean } = {}
+  -- And each kind's own seed (0: the hull's own), and the kind the
+  -- comma and period keys throw again: the one last switched.
+  local detailSeeds: { [string]: number } = {}
+  local chosen = Hull.DETAILS[1]
   local function detailWords(): string
     local words: { string } = {}
     for _, kind in Hull.DETAILS do
       if detail[kind] then
-        table.insert(words, kind)
+        local own = detailSeeds[kind] or 0
+        table.insert(words, if own ~= 0 then `{kind}:{own}` else kind)
       end
     end
     return table.concat(words, " ")
+  end
+  -- Set the detail from words ("antennas:17 pipes lights:3").
+  local function setDetail(words: { string })
+    table.clear(detail)
+    table.clear(detailSeeds)
+    for _, word in words do
+      local named, own = string.match(word, "^(%a+):(%d+)$")
+      local kind: string = named or word
+      if table.find(Hull.DETAILS, kind) then
+        detail[kind] = true
+        detailSeeds[kind] = tonumber(own or "0") or 0
+      end
+    end
   end
   local function detailOf(): Hull.Detail?
     return Hull.DetailOf(string.split(detailWords(), " "))
@@ -414,10 +435,7 @@ return AppShell.Create(function(): Widget
     if line.painted then
       paint = table.find(PAINTS, if hull then hull.lineage else "civil") or table.find(PAINTS, "civil") or 1
     end
-    table.clear(detail)
-    for _, kind in line.detail do
-      detail[kind] = true
-    end
+    setDetail(line.detail)
     listed = line
     note = `{line.name} ({found} of {#fits} that fit '{text}'): seed {line.seed}, size {line.size}{if line.style then ", " .. line.style else ""}`
       .. (if line.painted then ", painted" else "") .. (if #line.detail > 0 then ", " .. table.concat(line.detail, " ") else "")
@@ -451,12 +469,11 @@ return AppShell.Create(function(): Widget
         return false
       end
       seed, size, paint, class, style, asym = math.floor(toSeed), big, at, as, how, lop
-      table.clear(detail)
-      for word in string.gmatch(toDetail or "", "%a+") do
-        if table.find(Hull.DETAILS, word) then
-          detail[word] = true
-        end
+      local said: { string } = {}
+      for word in string.gmatch(toDetail or "", "[%a%d:]+") do
+        table.insert(said, word)
       end
+      setDetail(said)
       listed = nil
       turning, plain = false, true
       turn, tilt, zoom, zoomTo = TURN, TILT, ZOOM, ZOOM
@@ -472,12 +489,11 @@ return AppShell.Create(function(): Widget
     end,
     -- The kinds of surface detail on what is shown, as words (none: "").
     Detail = function(words: string)
-      table.clear(detail)
-      for word in string.gmatch(words, "%a+") do
-        if table.find(Hull.DETAILS, word) then
-          detail[word] = true
-        end
+      local said: { string } = {}
+      for word in string.gmatch(words, "[%a%d:]+") do
+        table.insert(said, word)
       end
+      setDetail(said)
       show()
     end,
     -- Show it in another paint (one of the browser's: bare, civil, a
@@ -563,7 +579,8 @@ return AppShell.Create(function(): Widget
       end
       local on: { string } = {}
       for index, kind in Hull.DETAILS do
-        table.insert(on, `{index} {kind}: {if detail[kind] then "ON" else "off"}`)
+        local own = detailSeeds[kind] or 0
+        table.insert(on, `{if kind == chosen then ">" else ""}{index} {kind}: {if detail[kind] then "ON" else "off"}{if own ~= 0 then ` #{own}` else ""}`)
       end
       Im.Text("detail      " .. table.concat(on, "      "), x, y + 90, 16, if detailWords() ~= "" then Im.ACCENT else Im.DIM)
       if note ~= "" then
@@ -577,7 +594,7 @@ return AppShell.Create(function(): Widget
         search(query)
       end
       local foot = w.pos.y + w.size.y - 54
-      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      B: broad only      [ / ]: size      S: style      A: sides alike or not      P: paint      F: as a ship      1-5: detail      K: keep      Space: turn",
+      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      B: broad only      [ / ]: size      S: style      A: sides alike or not      P: paint      F: as a ship      1-5: detail      , .: its seed      K: keep      Space: turn",
         x, foot, 15, Im.DIM)
       Im.Text("right-drag turns it, the wheel moves in and out", x, foot + 22, 15, Im.DIM)
     end,
@@ -591,7 +608,15 @@ return AppShell.Create(function(): Widget
         if Key_Pressed(key) then
           local kind = Hull.DETAILS[index]
           detail[kind] = not detail[kind]
+          chosen = kind
         end
+      end
+      -- (comma and period: the seed of the kind last switched, back and on;
+      -- rivets have no dice of their own)
+      local by = if Key_Pressed(Key_Period()) then 1 elseif Key_Pressed(Key_Comma()) then -1 else 0
+      if by ~= 0 and chosen ~= "rivets" then
+        detail[chosen] = true
+        detailSeeds[chosen] = math.max(0, (detailSeeds[chosen] or 0) + by)
       end
       if Key_Pressed(Key_B()) then
         broad = not broad
