@@ -11,8 +11,9 @@
 -- is the one that fires.
 --
 -- A turret is two models: a base that turns on its mount, and a gun
--- that tips up and down in the base's cheeks. A launcher is one model,
--- a rack of tubes that does not move. Both are drawn once, in units of
+-- that tips up and down in the base's cheeks. A launcher is the same:
+-- a ring and pylon that turn, and a rack of tubes that tips up and down
+-- on it (it stood still until 2026-11-16). Both are drawn once, in units of
 -- their own, with the gun's barrel toward +z and the mount under y = 0,
 -- and Arms.SIZE says how many metres a unit is for a small, a medium
 -- and a large weapon.
@@ -60,7 +61,7 @@ Arms.GAP = 0.33 * Arms.FOOT
 Arms.DEEP = Arms.GAP + 0.07 * Arms.FOOT
 
 export type Piece = {
-  base: Model?,           -- the part that turns on the mount; nil for a launcher
+  base: Model?,           -- the part that turns on the mount
   gun: Model,             -- the part that aims (or the whole rack)
   pivot: vector,          -- where the gun's pivot is above the mount, in the drawings' units
   muzzle: vector,         -- where its shots leave, from the pivot, likewise
@@ -212,12 +213,23 @@ local RACKS: { [string]: { any } } = {
   ["launcher.siege"] = { 4, 3, v(1.45, 1.15, 2.9) },
 }
 
--- A rack of tubes on a short pylon on the ring, mouths forward. Returns
--- where its missiles leave.
-local function rack(b: Plates.Builder, columns: number, rows: number, half: vector): vector
-  local center = v(0, half.y + 0.95, 0)
+-- Where a rack's middle is above its mount: its pivot, as a turret's.
+local function rackPivot(half: vector): vector
+  return v(0, half.y + 0.95, 0)
+end
+
+-- What a rack turns on: the ring, and a short pylon on it.
+local function rackBase(b: Plates.Builder, half: vector)
   ring(b)
   block(b, FRAME, v(0, 0.70, -half.z * 0.1), v(half.x * 0.55, 0.28, half.z * 0.42), nil, 0.2)
+end
+
+-- A rack of tubes, mouths forward, drawn about its middle (it turns on
+-- its pylon and tips up and down, as a turret does: the owner,
+-- 2026-11-16, "missile turrets aren't tracking their targets"). Returns
+-- where its missiles leave, from its middle.
+local function rack(b: Plates.Builder, columns: number, rows: number, half: vector): vector
+  local center = v(0, 0, 0)
   block(b, PLATING, center, half, nil, 0.08)
   block(b, TRIM, center + v(0, 0, -half.z * 0.3), v(half.x * 1.04, half.y * 1.04, half.z * 0.10), nil, 0.1)
   block(b, FRAME, center + v(0, 0, half.z), v(half.x * 0.93, half.y * 0.93, half.z * 0.04), nil, 0.1)
@@ -272,8 +284,12 @@ function Arms.Build(type: string): Piece?
   if made == nil then
     if racks then
       local b = Plates.New(#key * 3.1, 0.9)
-      local muzzle = rack(b, racks[1], racks[2], racks[3])
-      made = { base = nil, gun = (Plates.Finish(b, LOOKS.missile)), pivot = v(0, 0, 0), muzzle = muzzle, turns = false, rate = 0, scale = 1 }
+      rackBase(b, racks[3])
+      local base = Plates.Finish(b, LOOKS.missile)
+      local g = Plates.New(#key * 5.3, 0.9)
+      local muzzle = rack(g, racks[1], racks[2], racks[3])
+      made = { base = base, gun = (Plates.Finish(g, LOOKS.missile)), pivot = rackPivot(racks[3]), muzzle = muzzle, turns = true,
+        rate = 1.6, scale = 1 }
     else
       local which = kind :: { string }
       local b = Plates.New(#key * 3.1, 0.9)
@@ -328,7 +344,7 @@ end
 -- Turn a turret toward 'aim' (or back to rest, with nil) for 'seconds',
 -- no faster than it can swing. 'yaw' and 'lift' are where it is now:
 -- radians round from rest, and up from level. Returns where it gets to,
--- and that as the way to point, for Arms.Place. (A launcher stays put.)
+-- and that as the way to point, for Arms.Place.
 function Arms.Swing(piece: Piece, up: vector, fore: vector, aim: vector?, yaw: number, lift: number, seconds: number): (number, number, vector)
   local level, side = frame(up, fore)
   local wantYaw, wantLift = 0, 0
