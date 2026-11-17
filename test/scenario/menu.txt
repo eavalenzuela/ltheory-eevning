@@ -9,7 +9,7 @@
 # over, and throw the save away. (A script's saves are kept under
 # cache/, apart from anybody's own.)
 #
-# covers: Game/UI/Menu Game/Settings Game/View/Graphics Core/Persist/Codec
+# covers: Game/UI/Menu Game/Settings Game/View/Graphics Core/Persist/Codec Game/UI/Character
 
 wait 2
 lua assert(GameDebug.Menu() == '', 'a script starts in the game, not at the menu')
@@ -157,12 +157,10 @@ wait 2
 lua assert(GameDebug.Menu('pause') == 'pause')
 frames 3
 lua _G.tick = GameDebug.Tick()
+# (saved as the character's game, at once: the menu stays up)
 until GameDebug.Press('Menu:save')
 frames 3
-until GameDebug.Press('Save:save 5')
-frames 3
-lua assert(GameDebug.CanPress('Save:save 5'), 'the slot should be there to write over')
-until GameDebug.Press('Menu:back')
+lua assert(GameDebug.Menu() == 'pause', 'saving should leave the menu up')
 frames 30
 lua assert(GameDebug.Tick() == _G.tick, 'the game went on behind the menu')
 until GameDebug.Press('Menu:resume')
@@ -170,13 +168,14 @@ until GameDebug.Menu() == ''
 wait 3
 lua assert(GameDebug.Tick() > _G.tick, 'the game did not go on after the menu')
 
-# Back at the opening menu the save can be gone on from, or loaded by name.
+# Back at the opening menu the character's game can be gone on with, from
+# there or from the character's page.
 lua assert(GameDebug.Menu('main') == 'main')
 frames 3
-lua assert(GameDebug.CanPress('Menu:continue'), 'with a save there is something to continue')
+lua assert(GameDebug.CanPress('Menu:continue'), 'with a game there is something to continue')
 until GameDebug.Press('Menu:play')
 frames 3
-until GameDebug.Press('Load:save 5')
+until GameDebug.Press('Game:continue')
 until GameDebug.Menu() == ''
 lua assert(GameDebug.Seed() == 7 and GameDebug.InSpace(), 'the save did not bring the game back')
 lua assert(GameDebug.Tick() >= _G.tick and GameDebug.Tick() < _G.tick + 3, 'the save is not from when it was made')
@@ -194,17 +193,23 @@ frames 3
 lua assert(GameDebug.CanPress('Colony:close'), 'the colonies window did not open')
 until GameDebug.Press('Colony:close')
 
-# And the save is thrown away.
+# The character's page in play, from the dock.
+until GameDebug.Press('Dock:character')
+frames 3
+lua assert(GameDebug.CanPress('character:close'), 'the character window did not open')
+until GameDebug.Press('character:close')
+
+# And the game is thrown away.
 lua assert(GameDebug.Menu('pause') == 'pause')
 frames 3
 until GameDebug.Press('Menu:load')
 frames 3
-until GameDebug.Press('Delete:save 5')
+until GameDebug.Press('Game:delete')
 frames 3
-lua assert(GameDebug.CanPress('Load:save 5'), 'a save is thrown away only when asked twice')
-until GameDebug.Press('Delete:save 5')
+lua assert(GameDebug.CanPress('Game:continue'), 'a game is thrown away only when asked twice')
+until GameDebug.Press('Game:delete')
 frames 3
-lua assert(not GameDebug.CanPress('Load:save 5'), 'the deleted save is still listed')
+lua assert(not GameDebug.CanPress('Game:continue'), 'the deleted game is still there')
 
 echo menu scenario passed
 quit

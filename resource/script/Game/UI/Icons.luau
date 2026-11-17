@@ -93,6 +93,11 @@ local SIGNS: { [string]: () -> { Glyph } } = {
   wallet = function()
     return all(ring(0, 0, 0.78), path({ v(-0.22, -0.22), v(0.22, -0.22), v(0.22, 0.22), v(-0.22, 0.22) }, true))
   end,
+  -- a face in a frame: the pilot's own (Game/UI/Character)
+  character = function()
+    return all(path({ v(-0.75, -0.85), v(0.75, -0.85), v(0.75, 0.85), v(-0.75, 0.85) }, true), ring(0, -0.25, 0.28),
+      path({ v(-0.5, 0.85), v(-0.42, 0.42), v(-0.18, 0.2), v(0.18, 0.2), v(0.42, 0.42), v(0.5, 0.85) }))
+  end,
   -- somebody
   crew = function()
     return all(ring(0, -0.42, 0.34), path({ v(-0.72, 0.85), v(-0.62, 0.35), v(-0.3, 0.12), v(0.3, 0.12), v(0.62, 0.35), v(0.72, 0.85) }))

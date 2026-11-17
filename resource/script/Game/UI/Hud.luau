@@ -43,6 +43,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local ShipsWindow = require("@lt/Game/UI/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local SkillSheet = require("@lt/Game/UI/Skills")
+local CharacterWindow = require("@lt/Game/UI/Character")
 local Splash = require("@lt/Game/UI/Splash")
 local State = require("@lt/Core/Kernel/State")
 local CrewWindow = require("@lt/Game/UI/Crew")
@@ -1543,6 +1544,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Market.Frame(session, player.docked ~= 0)
       ShipsWindow.Frame(session, player.docked ~= 0)
       SkillSheet.Frame(session)
+      CharacterWindow.Frame(session)
       IndustryWindow.Frame(session, player.docked ~= 0)
       JobsWindow.Frame(session)
       ContractsWindow.Frame(session)
@@ -1792,6 +1794,9 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         elseif id == "skills" then
           -- (the pilot's own, wherever they are: Game/UI/Skills)
           return { open = SkillSheet.IsOpen(), can = true }
+        elseif id == "character" then
+          -- (who the pilot is, wherever they are: Game/UI/Character)
+          return { open = CharacterWindow.IsOpen(), can = true }
         elseif id == "industry" then
           return { open = IndustryWindow.IsOpen(), can = docked, note = if docked then nil else "At a station only" }
         elseif id == "jobs" then
@@ -1892,6 +1897,12 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             ShipsWindow.Close()
           else
             ShipsWindow.Open()
+          end
+        elseif pressed == "character" then
+          if CharacterWindow.IsOpen() then
+            CharacterWindow.Close()
+          else
+            CharacterWindow.Open()
           end
         elseif pressed == "skills" then
           if SkillSheet.IsOpen() then

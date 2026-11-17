@@ -67,7 +67,45 @@ export type Session = {
 
 -- Where saves are kept. A script's saves go somewhere of their own, so
 -- that a test never writes over a save somebody is playing from.
-local SAVE_DIR = if Host.scripted then "cache/test-saves" else "save"
+-- (a script's run saves in a place of its own, which no other run that
+-- is going at the same time can write over: a character's game is its
+-- own slot, and every run's pilot is the same Pilot. A run's place is
+-- cleared away by the runs an hour after it.)
+local TEST_SAVES = "cache/test-saves"
+local function testSaves(): string
+  local now = math.floor(Host.Time())
+  if Host.MakeDir(TEST_SAVES) then
+    for _, name in Host.ListDir(TEST_SAVES) do
+      local made = tonumber(string.match(name, "^run%-(%d+)%-%d+/$") or "")
+      if made and made < now - 3600 then
+        local run = `{TEST_SAVES}/{string.sub(name, 1, -2)}`
+        for _, slot in Host.ListDir(run) do
+          if string.sub(slot, -1) == "/" then
+            local dir = `{run}/{string.sub(slot, 1, -2)}`
+            for _, file in Host.ListDir(dir) do
+              Host.Remove(`{dir}/{file}`)
+            end
+            Host.Remove(dir)
+          else
+            Host.Remove(`{run}/{slot}`)
+          end
+        end
+        Host.Remove(run)
+      end
+    end
+  end
+  return `{TEST_SAVES}/run-{now}-{math.floor((Host.Clock() % 1) * 1000000)}`
+end
+local SAVE_DIR = if Host.scripted then testSaves() else "save"
+-- (the mark a character's slot has once it has been its game:
+-- Session.TakeUpOld)
+local TAKEN = "taken.txt"
+local function markTaken(id: string)
+  local dir = `{SAVE_DIR}/{Session.SlotOf(id)}`
+  if Host.MakeDir(SAVE_DIR) and Host.MakeDir(dir) then
+    Host.WriteFile(`{dir}/{TAKEN}`, "1\n")
+  end
+end
 
 -- How far above its surface a warp to a planet, a moon or the sun ends
 -- when the order gives no range, in the body's radii. (The Core takes a
@@ -204,6 +242,8 @@ function Session.DeleteCharacter(session: Session, id: string)
   if session.character == id then
     Session.Choose(session, "")
   end
+  -- (and its game with it: a character is its game)
+  Session.Delete(Session.SlotOf(id))
 end
 
 -- Where a character's own picture is, to be drawn (Game/UI/Portrait);
@@ -1135,11 +1175,82 @@ function Session.Save(session: Session, slot: string, quiet: boolean?): boolean
       .. `character={id}\npilot={if character then character.name else ""}\n`
       .. `seed={session.game.state.galaxySeed}\nsystems={#session.game.state.galaxy.systems}\n`
     Host.WriteFile(dir .. "/meta.txt", meta)
+    if Session.IsOwn(slot) then
+      markTaken(string.sub(slot, #Session.OWN + 1))
+    end
   end
   if not quiet then
     Session.Say(session, if ok then `Saved to {dir}` else `Could not save to {dir}`)
   end
   return ok
+end
+
+-- A character's game (the owner, 2026-11-17: "One save per character":
+-- a character is its game; picking it continues it, and a new galaxy for
+-- it takes the place of the old). Its save's slot, by the character's
+-- id; and the slot the game in play saves to: its character's, or
+-- "quick" for a game nobody plays as (a script's, before it has one).
+Session.OWN = "pilot-"
+function Session.SlotOf(id: string): string
+  return Session.OWN .. id
+end
+function Session.Own(session: Session): string
+  return if session.character ~= "" then Session.SlotOf(session.character) else "quick"
+end
+-- Whether a slot is a character's own (and not a save from before each
+-- character had one).
+function Session.IsOwn(slot: string): boolean
+  return string.sub(slot, 1, #Session.OWN) == Session.OWN
+end
+
+-- A character's game, if it has one.
+function Session.GameOf(id: string): SaveInfo?
+  local slot = Session.SlotOf(id)
+  for _, info in Session.Saves() do
+    if info.slot == slot then
+      return info
+    end
+  end
+  return nil
+end
+
+-- Saves from before each character had one of its own: a character
+-- that has never had one of its own takes up the newest of those that
+-- were its, as its game (copied: the old save stays where it was until
+-- it is thrown away). Once only: a character whose game has been
+-- thrown away does not take an old one up again (a mark is left in its
+-- slot, TAKEN, when it is first saved or takes one up). Returns how
+-- many were taken up.
+function Session.TakeUpOld(): number
+  local taken = 0
+  local had: { [string]: boolean } = {}
+  local saves = Session.Saves()
+  for _, info in saves do
+    if Session.IsOwn(info.slot) then
+      had[string.sub(info.slot, #Session.OWN + 1)] = true
+    end
+  end
+  for _, character in Session.Characters() do
+    if Host.Exists(`{SAVE_DIR}/{Session.SlotOf(character.id)}/{TAKEN}`) then
+      had[character.id] = true
+    end
+  end
+  -- (the newest first: the first old save of each character is the one)
+  for _, info in saves do
+    if not Session.IsOwn(info.slot) and info.character ~= "" and not had[info.character] and Session.Character(info.character) then
+      local from, to = `{SAVE_DIR}/{info.slot}`, `{SAVE_DIR}/{Session.SlotOf(info.character)}`
+      local data, meta = Host.ReadFile(from .. "/state.bin"), Host.ReadFile(from .. "/meta.txt")
+      if data and Host.MakeDir(to) and Host.WriteFile(to .. "/state.tmp", data) and Host.Rename(to .. "/state.tmp", to .. "/state.bin") then
+        if meta then
+          Host.WriteFile(to .. "/meta.txt", meta)
+        end
+        markTaken(info.character)
+        had[info.character] = true
+        taken += 1
+      end
+    end
+  end
+  return taken
 end
 
 -- The saves there are, the newest first.

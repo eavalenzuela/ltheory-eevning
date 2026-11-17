@@ -18,7 +18,8 @@
 -- "Menu:options", "Menu:sound", "Menu:keys", "Menu:defaults",
 -- "Menu:graphics", "Menu:allon", "Graphics:<stage>" (Game/View/Graphics),
 -- "Graphics:look:<id>" (standard, cel1, cel2), "Graphics:view", "Graphics:blend",
--- "Key:<action>", "Load:<slot>", "Save:<slot>", "Delete:<slot>"; the
+-- "Key:<action>", "Game:continue" and "Game:delete" (the character's
+-- game), "Load:<slot>" and "Delete:<slot>" (an older save); the
 -- seed field is "Seed", and the two sliders are "Effects volume" and
 -- "Music volume" (Im.Enter).
 --
@@ -47,9 +48,11 @@ Menu.WIDTH = 560
 -- The most systems a new game's galaxy can be asked to have.
 Menu.SYSTEMS = 5000
 
--- The slots a pilot saves to by hand. (F9 saves to "quick", and docking
--- to "auto".)
-local SLOTS = { "save 1", "save 2", "save 3", "save 4", "save 5" }
+-- A character is its game (the owner, 2026-11-17: "One save per
+-- character"): it is saved to its own slot (Session.Own), from the menu,
+-- by the save key and on docking; Continue is that game; a new galaxy for
+-- the character takes its place. Saves from before each character had
+-- its own are listed under the character they were of, to be taken up.
 
 -- "": no menu. "main" is the opening menu and "pause" the one in play;
 -- "new", "load", "save" and "options" are their pages, and "keys" and
@@ -68,8 +71,23 @@ local newName, newFace, newPicture, problem, doomed = "", 1, "", "", ""
 local making = false
 
 local function refresh()
-  saves = Session.Saves()
   characters = Session.Characters()
+  Session.TakeUpOld()
+  saves = Session.Saves()
+end
+
+-- A character's game, of the saves listed.
+local function gameOf(id: string): Session.SaveInfo?
+  if id == "" then
+    return nil
+  end
+  local slot = Session.SlotOf(id)
+  for _, info in saves do
+    if info.slot == slot then
+      return info
+    end
+  end
+  return nil
 end
 
 -- Whether sound is on and how loud its effects and its music are (of
@@ -203,14 +221,6 @@ local function describe(info: Session.SaveInfo): string
   return `{info.system}, {if info.docked then "docked" else "in space"}  -  {info.ship}  -  {Format.Whole(info.wallet)} cr  -  {Format.Duration(info.tick)} in`
 end
 
-local function saved(slot: string): Session.SaveInfo?
-  for _, info in saves do
-    if info.slot == slot then
-      return info
-    end
-  end
-  return nil
-end
 
 -- ---------------------------------------------------------------------
 -- The characters and their games, on one screen (the owner, 2026-11-17:
@@ -336,7 +346,7 @@ local function drawPlay(session: Session.Session, left: number, top: number, wid
   if making then
     Im.Cover(left, top, width, height)
   end
-  frame(x, y, w, h, "Characters and games")
+  frame(x, y, w, h, "Characters")
   local inner, body = x + 16, y + Theme.TITLE + 14
   local foot = y + h - 48
 
@@ -394,7 +404,7 @@ local function drawPlay(session: Session.Session, left: number, top: number, wid
       Im.Text(`then {if skill then skill.name else entry.skill} {entry.level}`, rx + 128, body + 40 + (index - 1) * 17, 12, Theme.FAINT)
     end
     Im.Tone("danger")
-    if Im.Button(if doomed == who.id then "Sure? Delete" else "Delete character", rx + rw - 150, body, 150, 28, true,
+    if Im.Button(if doomed == who.id then "Sure? And their game" else "Delete character", rx + rw - 170, body, 170, 28, true,
       `Character:delete:{who.id}`) then
       if doomed == who.id then
         Portrait.Forget(who.portrait)
@@ -406,59 +416,96 @@ local function drawPlay(session: Session.Session, left: number, top: number, wid
       end
     end
 
-    -- Their games, by the universe each is in (and those saved before
-    -- there were characters, which any character may take up).
-    local gamesTop = body + 134
-    local newH = 120
-    section("GAMES", rx, gamesTop, rw, "by universe, the newest first")
-    local rows: { { heading: string?, info: Session.SaveInfo? } } = {}
-    local order: { string } = {}
-    local byKey: { [string]: { Session.SaveInfo } } = {}
-    local titles: { [string]: string } = {}
+    -- What they know: how many skills, and the levels of them all; their
+    -- best few.
+    local known, levels = 0, 0
+    local best: { { name: string, level: number } } = {}
+    for id, level in who.skills do
+      if level > 0 then
+        known += 1
+        levels += level
+        local skill = Skills.byId[id]
+        table.insert(best, { name = if skill then skill.name else id, level = level })
+      end
+    end
+    table.sort(best, function(a, b): boolean
+      if a.level ~= b.level then
+        return a.level > b.level
+      end
+      return a.name < b.name
+    end)
+    local skillsTop = body + 128
+    section("SKILLS", rx, skillsTop, rw, `{known} known, {levels} levels in all`)
+    local tops: { string } = {}
+    for index = 1, math.min(5, #best) do
+      table.insert(tops, `{best[index].name} {best[index].level}`)
+    end
+    Im.Text(List.Cut(if #tops > 0 then table.concat(tops, "   ") else "nothing past what every pilot begins with", rw - 8, 12, false),
+      rx + 4, skillsTop + 26, 12, Theme.DIM)
+
+    -- Their game: the one galaxy they are in, where, in what, and how long.
+    local gameTop = skillsTop + 56
+    local game = gameOf(who.id)
+    section("GAME", rx, gameTop, rw, "a character is its game: it is saved as it goes, and taken up again here")
+    if game then
+      local info = game :: Session.SaveInfo
+      local _, title = universe(info)
+      Im.Strong(List.Cut(title, rw - 200, 13, false), rx + 4, gameTop + 28, 13, Theme.ACCENT)
+      Im.Text(List.Cut(describe(info), rw - 200, 12, false), rx + 4, gameTop + 48, 12, Theme.TEXT)
+      Im.Text(`saved {ago(info.time)}`, rx + 4, gameTop + 66, 11, Theme.FAINT)
+      Im.Tone("primary")
+      if Im.Button("Continue", rx + rw - 180, gameTop + 28, 180, 34, true, "Game:continue") then
+        if Session.Load(session, info.slot) then
+          close(session, false)
+          return
+        end
+      end
+      Im.Tone("danger")
+      if Im.Button(if doomed == "game" then "Sure? Lose it" else "Delete game", rx + rw - 180, gameTop + 66, 180, 24, true,
+        "Game:delete") then
+        if doomed == "game" then
+          Session.Delete(info.slot)
+          doomed = ""
+          refresh()
+        else
+          doomed = "game"
+        end
+      end
+    else
+      Im.Text(`{who.name} is in no galaxy yet: begin one below.`, rx + 4, gameTop + 32, 13, Theme.DIM)
+    end
+
+    -- Saves from before each character had a game of its own: theirs, and
+    -- those of nobody's (taken up, a game becomes this character's).
+    local old: { Session.SaveInfo } = {}
     for _, info in saves do
-      if info.character == who.id or info.character == "" then
-        local key, title = universe(info)
-        if info.character == "" then
-          key, title = "old", "Saved before there were characters: loaded, a game gives its pilot to a character of their own"
+      if not Session.IsOwn(info.slot) and (info.character == who.id or info.character == "") then
+        table.insert(old, info)
+      end
+    end
+    local newH = 120
+    local oldTop = gameTop + 100
+    if #old > 0 then
+      section("OLDER SAVES", rx, oldTop, rw, "from before each character had one game: taken up, one is this character's game")
+      local gameRow = 40
+      local oldListTop = oldTop + 26
+      local oldListH = foot + 32 - newH - 14 - oldListTop
+      local gfirst, gvisible = List.Body("games", rx, oldListTop, rw, oldListH, #old, gameRow)
+      for index = 1, gvisible do
+        local info = old[index + gfirst]
+        if info == nil then
+          break
         end
-        if byKey[key] == nil then
-          byKey[key] = {}
-          titles[key] = title
-          table.insert(order, key)
-        end
-        table.insert(byKey[key], info)
-      end
-    end
-    for _, key in order do
-      table.insert(rows, { heading = titles[key] })
-      for _, info in byKey[key] do
-        table.insert(rows, { info = info })
-      end
-    end
-    local gameRow = 40
-    local gamesListTop = gamesTop + 26
-    local gamesH = foot + 32 - newH - 14 - gamesListTop
-    local gfirst, gvisible = List.Body("games", rx, gamesListTop, rw, gamesH, #rows, gameRow)
-    if #rows == 0 then
-      Im.Text(`{who.name} has no games yet: begin one below.`, rx + 8, gamesListTop + 10, 13, Theme.DIM)
-    end
-    for index = 1, gvisible do
-      local row = rows[index + gfirst]
-      if row == nil then
-        break
-      end
-      local rowY = gamesListTop + (index - 1) * gameRow
-      if row.heading then
-        Im.Strong(List.Cut(row.heading, rw - 16, 12, false), rx + 6, rowY + 18, 12, Theme.ACCENT)
-      elseif row.info then
-        local info = row.info :: Session.SaveInfo
+        local rowY = oldListTop + (index - 1) * gameRow
         local hot = List.Row(rx, rowY, rw - 6, false, nil, gameRow)
         Im.Text(info.slot, rx + 14, rowY + 5, 14, Theme.TEXT)
         Im.Text(List.Cut(describe(info), rw - 330, 12, false), rx + 110, rowY + 4, 12, if hot then Theme.TEXT else Theme.DIM)
         Im.Text(ago(info.time), rx + 110, rowY + 21, 11, Theme.FAINT)
         Im.Tone("primary")
-        if Im.Button("Load", rx + rw - 200, rowY + 6, 80, 28, true, `Load:{info.slot}`) then
+        if Im.Button("Take up", rx + rw - 200, rowY + 6, 80, 28, true, `Load:{info.slot}`) then
           if Session.Load(session, info.slot) then
+            -- (and from now on it is saved as the character's own game)
+            Session.Save(session, Session.Own(session), true)
             close(session, false)
             return
           end
@@ -477,9 +524,10 @@ local function drawPlay(session: Session.Session, left: number, top: number, wid
       end
     end
 
-    -- A new game for them: a universe from its seed and size.
+    -- A new galaxy for them: from its seed and size. (Where they have a
+    -- game, it takes that one's place: asked twice.)
     local ny = foot + 32 - newH
-    section("NEW GAME", rx, ny, rw, "a universe is made from its seed: the same seed and size, the same universe")
+    section("NEW GALAXY", rx, ny, rw, "made from its seed: the same seed and size, the same galaxy")
     Im.Text("Seed", rx, ny + 37, 13, Theme.DIM)
     seed = math.max(1, math.floor(Im.Number("Seed", seed, rx + 60, ny + 30, 110, 28)))
     if Im.Button("Random", rx + 176, ny + 30, 90, 28, true, "Menu:random") then
@@ -493,11 +541,20 @@ local function drawPlay(session: Session.Session, left: number, top: number, wid
         size = preset
       end
     end
-    Im.Tone("primary")
-    if Im.Button(`Begin as {List.Cut(who.name, 160, 14, true)}`, rx + rw - 260, ny + 50, 260, 46, true, "Menu:start") then
-      Session.Restart(session, seed, seed, size)
-      close(session, false)
-      return
+    Im.Tone(if game then "danger" else "primary")
+    local label = if game == nil then `Begin as {List.Cut(who.name, 160, 14, true)}`
+      elseif doomed == "begin" then "Sure? Their galaxy is lost" else "Begin again, in a new galaxy"
+    if Im.Button(label, rx + rw - 260, ny + 50, 260, 46, true, "Menu:start") then
+      if game == nil or doomed == "begin" then
+        doomed = ""
+        Session.Restart(session, seed, seed, size)
+        -- (saved at once: the character's game is this galaxy from now on)
+        Session.Save(session, Session.Own(session), true)
+        close(session, false)
+        return
+      else
+        doomed = "begin"
+      end
     end
   end
   -- (Back, in the title bar)
@@ -511,15 +568,15 @@ end
 
 local function drawPage(session: Session.Session, left: number, top: number, width: number, height: number)
   local w = Menu.WIDTH
-  local h = if page == "save" then 420 elseif page == "pause" then 390 elseif page == "main" then 400
+  local h = if page == "pause" then 390 elseif page == "main" then 400
     elseif page == "keys" then 550 elseif page == "graphics" then 680 else 340
   local x, y = left + (width - w) / 2, top + (height - h) / 2 - 40
   -- (the options have a line more than they had, under what was there: what is above stays where it was)
   if page == "options" then
     h = 436
   end
-  frame(x, y, w, h, if page == "main" then "" else ({ pause = "Paused", options = "Options", keys = "Keys", graphics = "Graphics",
-    save = "Save game" } :: { [string]: string })[page] or "")
+  frame(x, y, w, h, if page == "main" then "" else ({ pause = "Paused", options = "Options", keys = "Keys", graphics = "Graphics" }
+    :: { [string]: string })[page] or "")
   local cx = x + w / 2
   local function button(label: string, row: number, enabled: boolean, id: string): boolean
     return Im.Button(label, cx - 130, y + 96 + row * 44, 260, 34, enabled, id)
@@ -544,12 +601,7 @@ local function drawPage(session: Session.Session, left: number, top: number, wid
     else
       Im.Text("No character yet: make one to play.", x + 46, cardY + 24, 14, Theme.DIM)
     end
-    local newest: Session.SaveInfo? = nil
-    for _, info in saves do
-      if newest == nil and info.character == session.character and session.character ~= "" then
-        newest = info
-      end
-    end
+    local newest = gameOf(session.character)
     local function button(label: string, row: number, enabled: boolean, id: string): boolean
       return Im.Button(label, cx - 150, y + 168 + row * 46, 300, 36, enabled, id)
     end
@@ -563,7 +615,7 @@ local function drawPage(session: Session.Session, left: number, top: number, wid
       local line = List.Cut(describe(newest), w - 60, 12, false)
       Im.Text(line, cx - Im.TextWidth(line, 12) / 2, y + 168 + 40, 12, Theme.DIM)
     end
-    if button("Characters and games", 1.4, true, "Menu:play") then
+    if button("Characters", 1.4, true, "Menu:play") then
       page, making, doomed = "play", #characters == 0, ""
     end
     if button("Options", 2.4, true, "Menu:options") then
@@ -577,10 +629,12 @@ local function drawPage(session: Session.Session, left: number, top: number, wid
     if button("Resume", 0, true, "Menu:resume") then
       close(session, wasPaused)
     end
+    -- (saved as the character's game, at once: the menu stays up)
     if button("Save game", 1, true, "Menu:save") then
-      page = "save"
+      Session.Save(session, Session.Own(session))
+      refresh()
     end
-    if button("Load game", 2, true, "Menu:load") then
+    if button("Characters", 2, true, "Menu:load") then
       page, making, doomed = "play", false, ""
     end
     if button("Options", 3, true, "Menu:options") then
@@ -748,25 +802,6 @@ local function drawPage(session: Session.Session, left: number, top: number, wid
     end
     if Im.Button("Back", cx + 6, y + h - 50, 260, 34, true, "Menu:back") then
       page = "options"
-    end
-  elseif page == "save" then
-    local line = y + 80
-    for _, slot in SLOTS do
-      local info = saved(slot)
-      Im.Text(slot, x + 24, line + 5, 14, Theme.TEXT)
-      Im.Text(if info then describe(info) else "empty", x + 100, line + 2, 12, Theme.DIM, if info then 1 else 0.6)
-      if info then
-        Im.Text(ago(info.time), x + 100, line + 17, 11, Theme.DIM, 0.7)
-      end
-      if Im.Button(if info then "Overwrite" else "Save", x + w - 110, line + 2, 86, 26, true, `Save:{slot}`) then
-        Session.Save(session, slot)
-        refresh()
-      end
-      line += 36
-    end
-    Im.Text(`{Keys.Of("save")} saves to 'quick' at any time, and docking saves to 'auto'.`, x + 24, line + 8, 12, Theme.DIM, 0.8)
-    if Im.Button("Back", cx - 130, y + h - 50, 260, 34, true, "Menu:back") then
-      page = root
     end
   end
 end

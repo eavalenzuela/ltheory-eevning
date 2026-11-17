@@ -45,6 +45,7 @@ Dock.ENTRIES = {
   { id = "industry", name = "Industry", press = "Dock:industry" },
   { id = "jobs", name = "Jobs", press = "Dock:jobs" },
   false,
+  { id = "character", name = "Character", press = "Dock:character" },
   { id = "skills", name = "Skills", press = "Dock:skills" },
   { id = "wallet", name = "Wallet", press = "Dock:wallet" },
   { id = "crew", name = "Crew and fleet", press = "Dock:crew" },

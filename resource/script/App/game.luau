@@ -3345,10 +3345,10 @@ function App:Initialize()
           session.clock.paused = not session.clock.paused
         end
         if Keys.Did("save") then
-          Session.Save(session, "quick")
+          Session.Save(session, Session.Own(session))
         end
         if Keys.Did("load") then
-          Session.Load(session, "quick")
+          Session.Load(session, Session.Own(session))
         end
       end
       autopilot()
@@ -3359,7 +3359,7 @@ function App:Initialize()
       if not Host.scripted then
         for _, event in session.events do
           if event.kind == "Docked" and event.ship == session.game.state.player.ship then
-            Session.Save(session, "auto", true)
+            Session.Save(session, Session.Own(session), true)
           end
         end
       end
