@@ -14,7 +14,7 @@ local function weapon(id: string): Modules.Weapon
   return assert(assert(Modules.byId[id], id).weapon, id)
 end
 
-suite:Case("each of the four peoples has its own make of what it is known for, and of nothing else", function(t)
+suite:Case("each of the four peoples has its own make of what it is known for, and a shaded line of utility modules, and of nothing else", function(t)
   local counts: { [string]: number } = {}
   for _, module in Modules.list do
     if module.meta == 3 then
@@ -23,7 +23,14 @@ suite:Case("each of the four peoples has its own make of what it is known for, a
       local base = assert(Modules.byId[assert(module.base)], module.id)
       t.ok(not base.tech and not base.meta and base.slot ~= "rig", `{module.id} is a make of something that is no plain module`)
       t.eq(module.id, `{base.id}.{people}`)
-      t.eq({ module.cpu, module.powergrid, module.basePrice } :: { any }, { base.cpu, base.powergrid, base.basePrice * 6 } :: { any }, module.id)
+      -- (what it is known for: as easy to fit as the plain one; the rest of
+      -- its line, since 2026-11-16, shaded to its style, and cheaper)
+      if module.shaded then
+        t.eq(module.basePrice, base.basePrice * 5, module.id)
+        t.ok(Modules.Shade(people) ~= nil, people)
+      else
+        t.eq({ module.cpu, module.powergrid, module.basePrice } :: { any }, { base.cpu, base.powergrid, base.basePrice * 6 } :: { any }, module.id)
+      end
       t.eq(Skills.Needs(module.id), Skills.Needs(base.id), `{module.id} wants more skill than the plain one`)
       t.eq(Types.Info(module.id).scarce, true)
       t.eq(Modules.Own(base.id, people), module)
@@ -39,6 +46,12 @@ suite:Case("each of the four peoples has its own make of what it is known for, a
   t.ok(Modules.Own("blaster.small", "orun") and Modules.Own("armor.repairer.small", "orun") and Modules.Own("afterburner.1mn", "orun"))
   t.ok(Modules.Own("laser.pulse.small", "kethri") and Modules.Own("armor.plate.200mm", "kethri") and Modules.Own("capacitor.recharger", "kethri"))
   t.eq({ Modules.Own("laser.pulse.small", "vessari"), Modules.Own("launcher.light", "kethri"), Modules.Own("miner.small", "orun") } :: { any }, {})
+  -- The line: every people makes its own of the utility modules, shaded.
+  local vessari, talmar = assert(Modules.Own("shield.extender.small", "vessari")), assert(Modules.Own("disruptor.warp", "talmar"))
+  t.eq({ vessari.shaded, talmar.shaded } :: { any }, { true, true } :: { any })
+  t.ok(vessari.cpu < Modules.byId["shield.extender.small"].cpu, "the Vessari's are easier to fit")
+  t.ok(assert(talmar.hex).range > assert(Modules.byId["disruptor.warp"].hex).range, "the Talmar's reach further")
+  t.eq({ Modules.Own("siege.module", "orun"), Modules.Own("miner.small", "vessari") } :: { any }, {})
   -- Fifteen parts in a hundred more of what it gives: between the custom make and tech 2.
   t.near(weapon("laser.pulse.small.kethri").damageMultiplier, weapon("laser.pulse.small").damageMultiplier * 1.15, 1e-9)
   t.ok(weapon("laser.pulse.small.kethri").damageMultiplier > weapon("laser.pulse.small.custom").damageMultiplier)

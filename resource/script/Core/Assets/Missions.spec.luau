@@ -293,6 +293,18 @@ local function steps(game: Core.Game, count: number)
   end
 end
 
+-- Step so many ticks with the pilot's ship made whole before each: for a
+-- check of what comes when, which is not about whether the ship lives.
+local function sheltered(game: Core.Game, count: number)
+  for _ = 1, count do
+    local me = game.state.balls[game.state.player.ship]
+    if me then
+      me.vitals.shield, me.vitals.armor, me.vitals.hull = me.vitals.shieldMax, me.vitals.armorMax, me.vitals.hullMax
+    end
+    Core.Step(game)
+  end
+end
+
 suite:Case("the fourth agent has an assault on a pirate camp, at each level the pilot's standing opens", function(t)
   local game = newGame()
   local state = game.state
@@ -1569,11 +1581,13 @@ suite:Case("at the place the rig stands from when the pilot comes, most of those
   local first = keepers(game, mission.site)
   t.eq({ #first, mission.wave, mission.done }, { #mission.waves[1], 1, 0 })
   -- Two in three of them are after the rig, the rest after the pilot: over the three waves, by what they have picked.
-  steps(game, Assault.PRESS - 5)
+  -- (the pilot kept whole meanwhile: whether their ship lives through it
+  -- turns on the dice, and is not what this is about)
+  sheltered(game, Assault.PRESS - 5)
   t.eq(mission.wave, 1, "the second wave came early")
-  steps(game, 10)
+  sheltered(game, 10)
   t.eq({ mission.wave, #keepers(game, mission.site) }, { 2, #mission.waves[1] + #mission.waves[2] }, "the second wave waits for nobody")
-  steps(game, Assault.PRESS + 5)
+  sheltered(game, Assault.PRESS + 5)
   t.eq({ mission.wave, #keepers(game, mission.site) }, { 3, mission.need })
   local onRig, onPilot = 0, 0
   for _, id in keepers(game, mission.site) do
