@@ -18,6 +18,7 @@ the lines beginning `- ` under it.
 - Unbound ship blueprints are found in the wrecks of pirate towers you destroy, and rarely on a contract board outside secure space (dear).
 - Blueprint copies cost a tenth of what they did: ten runs cost about a tenth of one of the things they build.
 - Blueprint originals cost half what they did: five times what they build.
+- Skills are in groups down the left of the Skills window (Piloting, Navigation, Weapons, Missiles and so on), each with how many of its skills you know.
 - Blueprints of the alien peoples' ships and towers turn up on contract boards now and then: the Vail's and the Nimia's in their own space, the Drowned's anywhere outside secure space. They are dear.
 - Freighters are as big as carriers and cost about as much (1.2 billion); jump freighters about 9.6 billion.
 - Earnings are much higher, the more so the bigger the work: pirate bounties (a pirate battleship is worth 2.5 million), every kind of job, mining (lasers cut two and a half times as much, strip miners four times), pirate tags and the Drowned's alloy (five times what they sold for), and salvage (five times as much off a wreck). The aim is about five hours of the work a hull is for to buy the next one up.

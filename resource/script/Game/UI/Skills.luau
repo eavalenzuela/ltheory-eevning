@@ -15,9 +15,9 @@
 -- the buttons that train it, learn it or go for its book. Along the foot
 -- is the training queue.
 --
--- (The owner is to write the skills' groups, which are to go down the
--- left of the list, as the market's categories do: 2026-11-15, "Will
--- write up". Until then there are none: I am not to make them up.)
+-- The skills' groups go down the left of the list, as the market's
+-- categories do (Skills.GROUPS: the owner's, 2026-11-16), each with how
+-- many of its skills the pilot knows.
 --
 -- The Implants page is the pilot's five places and the implants in the
 -- hangar that could go in one.
@@ -28,6 +28,7 @@
 -- "CancelTraining:<n>", "Unplug:<slot>", "Plug:<type>". New with the
 -- window: "Skills:skills" and "Skills:implants" (its pages),
 -- "Skills:show:<all, known, train, book>", "Skills:filter",
+-- "Skills:group:<all, or a group's id>",
 -- "Skills:skill:<skill>" (a row), "Skills:upto" (queue the skill picked
 -- to its last level), and "skills:close".
 
@@ -57,6 +58,9 @@ local current: Session.Session? = nil
 local page = "skills"
 local show = "all"
 local filter = ""
+local group = "all"
+-- The groups' column.
+local TREE_W = 212
 local picked = ""
 -- A skill being queued level after level to its last ("Add up to level
 -- 5"): one level is asked for, and the next when that one is in the queue.
@@ -264,6 +268,8 @@ local function drawImplants(session: Session.Session, game: Core.Game, player: C
 end
 
 Windows.Kind(Sheet.ID, function(_: Windows.Window, x: number, y: number, w: number, h: number)
+  -- (the list's x moves right of the groups' column; the queue is the width of the window)
+  local left = x
   local session = current
   if session == nil then
     return
@@ -379,7 +385,36 @@ Windows.Kind(Sheet.ID, function(_: Windows.Window, x: number, y: number, w: numb
       end
     end
     local detailW = 270
-    local listW = w - detailW
+    -- The groups, down the left: every skill, then each group, with how
+    -- many of its skills are known.
+    local ty = top + 8
+    local function groupRow(id: string, name: string, have: number, of: number)
+      local _, clicked = List.Row(x + 1, ty, TREE_W - 6, group == id, `Skills:group:{id}`)
+      Im.Text(List.Cut(name, TREE_W - 70, 14, false), x + 11, ty + 5, 14, Theme.TEXT)
+      local count = `{have}/{of}`
+      Im.Text(count, x + TREE_W - 14 - Im.TextWidth(count, 12), ty + 6, 12, Theme.FAINT)
+      if clicked and group ~= id then
+        group = id
+        Im.ScrollTo("skills list", 0)
+      end
+      ty += List.ROW
+    end
+    local knownAll = 0
+    for _, info in skills do
+      knownAll += if info.level >= 0 then 1 else 0
+    end
+    groupRow("all", "Every skill", knownAll, #skills)
+    for _, each in Skills.GROUPS do
+      local have = 0
+      for _, id in each.skills do
+        local entry = doing[id]
+        have += if entry and entry.info.level >= 0 then 1 else 0
+      end
+      groupRow(each.id, each.name, have, #each.skills)
+    end
+    Im.Flat(x + TREE_W, top, 1, room, Theme.EDGE)
+    x += TREE_W + 1
+    local listW = w - TREE_W - 1 - detailW
     local cx = x + 10
     for _, each in { { "all", "All" }, { "known", "Known" }, { "train", "Can train now" }, { "book", "Needs a book" } } do
       local pressed, wide = List.Chip(each[2], cx, top + 8, show == each[1], `Skills:show:{each[1]}`)
@@ -398,8 +433,8 @@ Windows.Kind(Sheet.ID, function(_: Windows.Window, x: number, y: number, w: numb
     local rows: { Doing } = {}
     for _, info in skills do
       local each = doing[info.skill.id]
-      local keep = show == "all" or (show == "known" and info.level >= 0) or (show == "train" and each.canTrain)
-        or (show == "book" and info.level < 0)
+      local keep = (show == "all" or (show == "known" and info.level >= 0) or (show == "train" and each.canTrain)
+        or (show == "book" and info.level < 0)) and (group == "all" or (Skills.groupOf[info.skill.id] ~= nil and Skills.groupOf[info.skill.id].id == group))
       if keep and (wanted == "" or string.find(string.lower(info.skill.name), wanted, 1, true)) then
         table.insert(rows, each)
       end
@@ -541,10 +576,10 @@ Windows.Kind(Sheet.ID, function(_: Windows.Window, x: number, y: number, w: numb
       end
     end
   end
-  drawQueue(session, game, x + 1, y + h - QUEUE_H, w - 2)
+  drawQueue(session, game, left + 1, y + h - QUEUE_H, w - 2)
   Im.Plain(was)
 end)
-Windows.Make(Sheet.ID, Sheet.ID, "Skills", 1116, 130, 792, 720, 740, 520, nil)
+Windows.Make(Sheet.ID, Sheet.ID, "Skills", 904, 130, 1004, 720, 952, 520, nil)
 Windows.Icon(Sheet.ID, "skills")
 
 return Sheet

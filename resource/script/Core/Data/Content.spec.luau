@@ -1343,4 +1343,17 @@ suite:Case("fittings come in three sizes, each for a larger ship than the last",
   t.ok(strip.powergrid > Ships.byId["frigate.prospector"].powergrid, "a frigate cannot power one")
 end)
 
+suite:Case("every skill is in one of the owner's groups, and the groups are theirs", function(t)
+  -- (2026-11-16: the groups put to them, with "Hulls -> Piloting. Flight -> Navigation" and "Combine weapons and gunnery")
+  local names = {}
+  for _, group in Skills.GROUPS do
+    table.insert(names, group.name)
+  end
+  t.eq(names, { "Piloting", "Navigation", "Weapons", "Missiles", "Drones", "Shields", "Armour and Hull", "Ship Systems",
+    "Targeting", "Electronic Warfare", "Exploration", "Mining", "Industry", "Trade", "Standing", "Command", "Implants and Boosters" })
+  for _, skill in Skills.list do
+    t.ok(Skills.groupOf[skill.id] ~= nil, `{skill.name} is in no group`)
+  end
+end)
+
 return suite

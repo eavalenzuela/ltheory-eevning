@@ -265,6 +265,48 @@ for _, skill in skills do
   Skills.byId[skill.id] = skill
 end
 
+-- The skills' groups, as the skills window lists them down its left
+-- (the owner, 2026-11-16, of the groups I put to them: "Hulls ->
+-- Piloting. Flight -> Navigation", and "Combine weapons and gunnery";
+-- the rest as they were put). Every
+-- skill is in one, and one only.
+export type Group = { id: string, name: string, skills: { string } }
+Skills.GROUPS = {
+  { id = "piloting", name = "Piloting", skills = { "frigates", "destroyers", "cruisers", "battlecruisers", "battleships", "industrials",
+    "freighters", "capital.industrials", "carriers", "dreadnoughts", "supercarriers", "ultracapitals" } },
+  { id = "navigation", name = "Navigation", skills = { "navigation", "propulsion", "evasive.maneuvering", "jump.drives", "wayfinding",
+    "running.dark", "lean.burn" } },
+  -- (Weapons and Gunnery were two groups as put; the owner: "Combine
+  -- weapons and gunnery". The one name, Weapons, is mine: the sizes in
+  -- it are for launchers too.)
+  { id = "weapons", name = "Weapons", skills = { "weapon.upgrades", "medium.weapons", "large.weapons", "capital.weapons",
+    "projectiles", "lasers", "hybrids", "rapid.firing", "sharpshooter", "deflection", "windage" } },
+  { id = "missiles", name = "Missiles", skills = { "missiles", "salvo.drill", "long.burn", "proximity.fusing" } },
+  { id = "drones", name = "Drones", skills = { "drones", "fighters", "swarm.tactics" } },
+  { id = "shields", name = "Shields", skills = { "shield.operation", "shield.management", "field.harmonics", "dispersal" } },
+  { id = "armour", name = "Armour and Hull", skills = { "repair.systems", "hull.upgrades", "glancing.angles", "compartmentation",
+    "remote.repair", "armor.mending", "hull.mending" } },
+  { id = "systems", name = "Ship Systems", skills = { "electronics", "engineering", "capacitor.management", "reactor.trim", "jury.rigging" } },
+  { id = "targeting", name = "Targeting", skills = { "target.management", "targeting", "snapshot" } },
+  { id = "warfare", name = "Electronic Warfare", skills = { "electronic.warfare", "propulsion.jamming", "cloaking" } },
+  { id = "exploration", name = "Exploration", skills = { "astrometrics", "triangulation", "hacking", "salvaging" } },
+  { id = "mining", name = "Mining", skills = { "mining", "refining", "stowage" } },
+  { id = "industry", name = "Industry", skills = { "industry", "mass.production", "invention", "bench.science", "draughtsmanship" } },
+  { id = "trade", name = "Trade", skills = { "accounting", "broker.relations", "ledger.keeping" } },
+  { id = "standing", name = "Standing", skills = { "protocol", "patronage", "hard.bargaining" } },
+  { id = "command", name = "Command", skills = { "leadership", "paymaster", "anchoring" } },
+  { id = "enhancement", name = "Implants and Boosters", skills = { "cybernetics", "pharmacology", "tolerance" } },
+} :: { Group }
+-- A skill's group, by the skill's id.
+Skills.groupOf = {} :: { [string]: Group }
+for _, group in Skills.GROUPS do
+  for _, id in group.skills do
+    assert(Skills.byId[id], `the skill group {group.name} names a skill there is not: {id}`)
+    assert(Skills.groupOf[id] == nil, `{id} is in two skill groups`)
+    Skills.groupOf[id] = group
+  end
+end
+
 -- A pilot's level in a skill: 0 for one they have not learned, and for
 -- a ship nobody trained to fly (whose levels are nil).
 function Skills.Level(levels: { [string]: number }?, id: string): number
