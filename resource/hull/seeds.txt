@@ -40,10 +40,10 @@
 #   attackbattlecruiser  200 m   attackbattlecruiser.intervention
 #   battlecruiser        300 m   battlecruiser.extremis
 #   battleship           400 m   battleship.teardrop
-#   freighter            650 m   freighter.hiven
 #   capitalindustrial    700 m   capitalindustrial.piton
 #   siegedreadnought     950 m   siegedreadnought.sword
 #   carrier             1000 m   carrier.tennit
+#   freighter           1000 m   freighter.hiven
 #   dreadnought         1300 m   dreadnought.concorso
 #   supercarrier        1300 m   supercarrier.nullo
 #   ultracapital         (each its own size: the Vail's

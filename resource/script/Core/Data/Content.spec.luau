@@ -144,7 +144,7 @@ end)
 suite:Case("the Talmar's ships are the owner's rework of them: each by name, of its class and that class's size, with the tech 2 makes that are hulls of their own", function(t)
   local talmar = Factions.byId.talmar
   local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, battlecruiser = 300, battleship = 400, carrier = 1000, dreadnought = 1300,
-    supercarrier = 1300, industrial = 180, barge = 160, freighter = 650, capitalindustrial = 700 }
+    supercarrier = 1300, industrial = 180, barge = 160, freighter = 1000, capitalindustrial = 700 }
   -- (name, class, the hull it is the tech 2 make of, a jump drive, built to go unseen)
   local LINE: { { any } } = {
     { "Carvarro", "frigate" }, { "Creavo", "frigate" }, { "Meseolo", "destroyer" }, { "Paestro", "cruiser" }, { "Stenanno", "cruiser" },
@@ -208,7 +208,7 @@ suite:Case("the Nimia's ships are the owner's list of them: fourteen hulls of li
   t.eq(Factions.byId.skarn, nil, "the Skarn were a stand-in for the Nimia, and are gone")
   t.eq({ nimia.name, nimia.kind, nimia.weapon, nimia.launchers } :: { any }, { "Nimia", "alien", "hybrid", 0 } :: { any })
   local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, battlecruiser = 300, battleship = 400, carrier = 1000,
-    siegedreadnought = 950, supercarrier = 1300, industrial = 180, freighter = 650, capitalindustrial = 700 }
+    siegedreadnought = 950, supercarrier = 1300, industrial = 180, freighter = 1000, capitalindustrial = 700 }
   -- (name, class, the hull it is the tech 2 make of)
   local LINE: { { any } } = {
     { "O'on", "frigate" }, { "Kri", "destroyer" }, { "Ka'va", "cruiser" }, { "Hon", "cruiser" }, { "Hano", "cruiser", "Hon" },
@@ -275,7 +275,7 @@ suite:Case("the Vail's ships are the owner's list of them: seventeen hulls, two 
   local vail = Factions.byId.vail
   t.eq({ vail.name, vail.kind } :: { any }, { "Vail", "alien" } :: { any })
   local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, attackbattlecruiser = 200, battlecruiser = 300, battleship = 400,
-    carrier = 1000, dreadnought = 1300, barge = 160, freighter = 650, capitalindustrial = 700, ultracapital = 1050 }
+    carrier = 1000, dreadnought = 1300, barge = 160, freighter = 1000, capitalindustrial = 700, ultracapital = 1050 }
   -- (name, class, the hull it is the tech 2 make of)
   local LINE: { { any } } = {
     { "Prostration", "frigate" }, { "Undulation", "frigate" }, { "Exaltation", "destroyer" }, { "Adoration", "destroyer" },
@@ -367,7 +367,7 @@ suite:Case("the Drowned's ships are the owner's list of them: fifteen hulls, eve
     t.eq(faction.deep, if faction.id == "drowned" then true else nil, faction.id)
   end
   local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, battlecruiser = 300, battleship = 400, carrier = 1000,
-    dreadnought = 1300, siegedreadnought = 950, ultracapital = 2000, industrial = 180, freighter = 650, capitalindustrial = 700 }
+    dreadnought = 1300, siegedreadnought = 950, ultracapital = 2000, industrial = 180, freighter = 1000, capitalindustrial = 700 }
   -- (name, class, the hull it is the tech 2 make of)
   local LINE: { { any } } = {
     { "Cairn", "frigate" }, { "Charon", "frigate" }, { "Gravestone", "destroyer" }, { "Casket", "cruiser" },
@@ -416,7 +416,7 @@ end)
 suite:Case("the Orun's ships are the owner's list of them: seventeen hulls, four of them tech 2 hulls of their own, with a barge, a freighter and a capital industrial that leads a mining fleet", function(t)
   local orun = Factions.byId.orun
   local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, battlecruiser = 300, battleship = 400, carrier = 1000,
-    siegedreadnought = 950, barge = 160, industrial = 180, freighter = 650, capitalindustrial = 700 }
+    siegedreadnought = 950, barge = 160, industrial = 180, freighter = 1000, capitalindustrial = 700 }
   -- (name, class, the hull it is the tech 2 make of)
   local LINE: { { any } } = {
     { "Skinner", "frigate" }, { "Skiver", "frigate", "Skinner" }, { "Knife", "frigate" },
@@ -480,7 +480,7 @@ end)
 suite:Case("the Kethri's ships are the owner's list of them: ten hulls, two hardpoints in ten of them launchers, and a colony ship ten kilometres long with 140 hardpoints that nobody sells", function(t)
   local kethri = Factions.byId.kethri
   local RADIUS = { frigate = 42, destroyer = 75, battlecruiser = 300, battleship = 400, carrier = 1000, ultracapital = 5000,
-    barge = 160, industrial = 180, freighter = 650, capitalindustrial = 700 }
+    barge = 160, industrial = 180, freighter = 1000, capitalindustrial = 700 }
   -- (name, class, the hull's own name in its id)
   local LINE: { { string } } = {
     { "Battleaxe", "frigate" }, { "Sentry", "destroyer" }, { "Extremis", "battlecruiser" }, { "Teardrop", "battleship" },
@@ -572,7 +572,7 @@ end)
 suite:Case("the Vessari's ships are the owner's list of them: an ultracapital four kilometres wide, a mass-miner with ten mining turrets, and two tech 2 hulls of their own", function(t)
   local vessari = Factions.byId.vessari
   local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, battlecruiser = 300, battleship = 400, carrier = 1000, ultracapital = 2060,
-    industrial = 180, freighter = 650, capitalindustrial = 700 }
+    industrial = 180, freighter = 1000, capitalindustrial = 700 }
   -- (name, class, the hull it is the tech 2 make of)
   local LINE: { { any } } = {
     { "Akashi", "frigate" }, { "Kabuto", "frigate" }, { "Nozomi", "destroyer" }, { "Kanau", "destroyer", "Nozomi" }, { "Ouyou", "cruiser" },
@@ -864,11 +864,14 @@ suite:Case("a freighter is a hold and nothing else: ten times a hauler's, nothin
   t.ok(Ships.TimeConstant(dray) > 2 * Ships.TimeConstant(bastion) and Ships.TimeConstant(dray) > 2 * Ships.TimeConstant(mule))
   t.ok(dray.maxVelocity < bastion.maxVelocity and dray.warpSpeed < bastion.warpSpeed and dray.warpSpeed < mule.warpSpeed)
   t.ok(dray.hull > dray.shield + dray.armor)
-  -- Bought and built like any hull, of what a battleship is built of, by a pilot with the skill for it,
-  -- which is at the far end of the haulers'.
+  -- Bought and built like any hull, by a pilot with the skill for it, which is at the far end of the
+  -- haulers'; a carrier's size and about its price (the owner, 2026-11-16: "Normally freighters should
+  -- be carrier-sized and roughly the same cost").
   local info = Types.Info(dray.id)
   t.eq({ info.category, info.scarce } :: { any }, { "ship", nil } :: { any })
-  t.ok(dray.basePrice > 50 * mule.basePrice and dray.basePrice < bastion.basePrice)
+  local carrier = Ships.byId["carrier.katana"]
+  t.ok(dray.basePrice > bastion.basePrice and dray.basePrice <= carrier.basePrice)
+  t.eq(dray.radius, carrier.radius)
   t.ok(Blueprints.byProduct[dray.id] ~= nil)
   t.eq(Skills.Needs(dray.id), { { skill = "freighters", level = 1 } })
   t.eq(Skills.byId["freighters"].requires, { { skill = "industrials", level = 4 } })

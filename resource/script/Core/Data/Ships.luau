@@ -225,10 +225,10 @@ local types: { ShipType } = {
   -- slow in it. Anybody's, as the Mule is. (The first of its class:
   -- the factions' own are not drawn yet.)
   {
-    id = "freighter.dray", name = "Dray Freighter", class = "freighter", lineage = "", basePrice = 60000000, volume = 250000,
-    mass = 300000000, inertia = 0.12, maxVelocity = 75, warpSpeed = 1.5, radius = 650,
+    id = "freighter.dray", name = "Dray Freighter", class = "freighter", lineage = "", basePrice = 1200000000, volume = 1000000,
+    mass = 1100000000, inertia = 0.033, maxVelocity = 75, warpSpeed = 1.5, radius = 1000,
     shield = 6000, armor = 9000, hull = 38000, shieldRecharge = 3000,
-    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 900,
+    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 3200,
     cpu = 90, powergrid = 60, highs = 0, mids = 0, lows = 3, turrets = 0, launchers = 0,
     capacitor = 6000, capacitorRecharge = 1200,
     scanResolution = 60, lockRange = 40000, maxTargets = 2, cargo = 40000,
@@ -344,8 +344,13 @@ CLASS.barge = { price = 6000000, volume = 15000, mass = 9000000, inertia = 0.9, 
   shield = 1800, armor = 1500, hull = 2600, recharge = 1100, signature = 160, cpu = 320, powergrid = 160,
   highs = 3, mids = 2, lows = 2, hardpoints = 3, capacitor = 1400, capacitorRecharge = 420,
   scan = 200, lock = 25000, targets = 3, cargo = 3500, skill = "mining", level = 4, exact = true }
-CLASS.freighter = { price = 60000000, volume = 250000, mass = 300000000, inertia = 0.12, velocity = 75, warp = 1.5, radius = 650,
-  shield = 6000, armor = 9000, hull = 38000, recharge = 3000, signature = 900, cpu = 90, powergrid = 60,
+-- (A carrier's size and about its price: the owner, 2026-11-16,
+-- "Normally freighters should be carrier-sized and roughly the same
+-- cost, with t2 jump freighters being 6-10 billion" (eight times this,
+-- as every tech 2 hull is: 9.6 billion). They were 650 m and 60
+-- million. Mine: as heavy as a carrier and as slow to align as before.)
+CLASS.freighter = { price = 1200000000, volume = 1000000, mass = 1100000000, inertia = 0.033, velocity = 75, warp = 1.5, radius = 1000,
+  shield = 6000, armor = 9000, hull = 38000, recharge = 3000, signature = 3200, cpu = 90, powergrid = 60,
   highs = 0, mids = 0, lows = 3, hardpoints = 0, capacitor = 6000, capacitorRecharge = 1200,
   scan = 60, lock = 40000, targets = 2, cargo = 40000, skill = "freighters", level = 1, exact = true }
 -- An ultracapital has no size of its own (each is the size its faction's
