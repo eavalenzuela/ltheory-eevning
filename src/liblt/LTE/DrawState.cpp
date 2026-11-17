@@ -71,10 +71,13 @@ namespace {
     return (float)(Universe_Age() % (kTimeScale * 60))  / (float)kTimeScale;
   }
 
-  /* Cel shading: 1 when "Smooth Shading" is switched off (RenderPass_SetEnabled;
-     light/global.jsl, material/hull.jsl). */
+  /* Cel shading: 0 while "Smooth Shading" is on (RenderPass_SetEnabled);
+     off, 2 while "Flat Paint" is on (Cel V2) and 1 while it is off (Cel
+     V1). light/global.jsl, material/hull.jsl; Game/View/Graphics. */
   float GetCel() {
-    return RenderPass_IsEnabled("Smooth Shading") ? 0.0f : 1.0f;
+    if (RenderPass_IsEnabled("Smooth Shading"))
+      return 0.0f;
+    return RenderPass_IsEnabled("Flat Paint") ? 2.0f : 1.0f;
   }
 
   V2 GetFrame() {

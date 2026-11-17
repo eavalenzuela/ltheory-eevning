@@ -783,9 +783,11 @@ return AppShell.Create(function(): Widget
       return true
     end,
     -- Cel shading on or off (the engine's "Smooth Shading" switched off,
-    -- or on again): a trial of 2026-11-17, light/global.jsl.
-    Cel = function(on: boolean)
+    -- or on again): light/global.jsl. 'worn': the first look of it (Cel
+    -- V1, over the worn paint), not the second (Game/View/Graphics).
+    Cel = function(on: boolean, worn: boolean?)
       RenderPass_SetEnabled("Smooth Shading", not on)
+      RenderPass_SetEnabled("Flat Paint", worn ~= true)
     end,
   }
 

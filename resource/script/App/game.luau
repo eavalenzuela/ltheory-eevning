@@ -1472,6 +1472,16 @@ function Debug.Graphics(id: string?, on: boolean?): string
   return Graphics.Off()
 end
 
+-- The look ships and stations are drawn in (Game/View/Graphics: the
+-- radio buttons 'Graphics:look:<id>' at the head of the options'
+-- Graphics page). Given an id, it is set first.
+function Debug.Look(id: string?): string
+  if id then
+    assert(Graphics.SetLook(id), `no look is called {id}`)
+  end
+  return Graphics.Look()
+end
+
 -- What the anti-aliasing shows (1 its picture, 2 its edges, 3 its
 -- weights) and whether it blends the plain way (Game/View/Graphics,
 -- the foot of the options' Graphics page: 'Graphics:view',

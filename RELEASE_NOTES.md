@@ -13,6 +13,7 @@ the lines beginning `- ` under it.
 - The menus have the same look as the rest of the interface. The main menu shows who you are playing as, with Continue, Characters and games, Options and Quit.
 - Characters and games is one screen: your characters down the left, and on the right the one picked, their games grouped by universe (load or delete each) and a new game. New character opens a pane over it: a name, and one of forty-eight portraits or a picture of your own (the path of a .png or .jpg file).
 - New game and Continue are the chosen character's; loading a save plays as its character. A save from before characters gives its pilot to a new character the first time it is loaded.
+- Options, Graphics has a Look for ships and stations: Standard, as before, or one of two cel-shaded looks drawn in flat tones with inked outlines. Cel V1 keeps the paint's wear and weathering; Cel V2 lays the paint on flat.
 - In a corporation's Members page, your other characters can be asked in at a trade. They work as members do, with their own skills making them better at it and deciding which hulls they move up to, and they never leave over tax or thin pickings.
 
 ## More modules, and ice

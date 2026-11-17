@@ -4,11 +4,12 @@
 #include texturing.jsl
 
 uniform sampler2D normalBuffer;
-/* Cel shading (the owner's ask of 2026-11-17, for the retro-anime look:
-   a trial, in the viewer first): 1 when the engine's "Smooth Shading"
-   is switched off. Sunlight on a hull falls in flat tones in place of a
-   smooth falloff, and surfaces are inked where they end against what
-   is behind them and where they turn sharply. */
+/* Cel shading (the owner's ask of 2026-11-17, for the retro-anime look;
+   the options' looks Cel V1 and Cel V2, Game/View/Graphics): sunlight
+   on a hull falls in flat tones in place of a smooth falloff, and
+   surfaces are inked where they end against what is behind them and
+   where they turn sharply. 0 for none; 1 the first look, over the worn
+   paint and brighter; 2 the second, over flat paint. */
 uniform float cel;
 
 /* How much ink is on this pixel: it is the near side of a jump in depth
@@ -106,13 +107,14 @@ void main() {
     if (cel > 0.5) {
       /* (three flat tones, a hard highlight, and the sky as a flat fill
          in place of its reflection) */
+      bool second = cel > 1.5;
       float NLs = dot(N, L);
-      float tone = mix(0.12, 0.45, smoothstep(-0.02, 0.02, NLs));
+      float tone = mix(second ? 0.12 : 0.10, 0.45, smoothstep(-0.02, 0.02, NLs));
       tone = mix(tone, 1.0, smoothstep(0.38, 0.42, NLs));
       float spec = smoothstep(0.955, 0.965, saturate(dot(R, L)));
-      light += color * (0.35 * tone + 0.5 * spec);
+      light += color * (second ? 0.35 * tone + 0.5 * spec : 2.4 * tone + 1.6 * spec);
       /* (the sky as one flat fill: what it is on average, above and below) */
-      light += 0.08 * (toLinear(textureCube(envMapLF, vec3(0.0, 1.0, 0.0)).xyz) + toLinear(textureCube(envMapLF, vec3(0.0, -1.0, 0.0)).xyz));
+      light += (second ? 0.08 : 0.3) * (toLinear(textureCube(envMapLF, vec3(0.0, 1.0, 0.0)).xyz) + toLinear(textureCube(envMapLF, vec3(0.0, -1.0, 0.0)).xyz));
       /* (the ink goes in the alpha, and is laid on when the light of every
          kind is in: light/composite.jsl) */
       RETURN(vec4(asLight(light), 1.0 - inkAt(N, depth)));

@@ -42,7 +42,7 @@ uniform float designScale;  /* how many of the figure to half the hull's length 
 uniform vec3 designMiddle;  /* the middle of the hull, and half its length: the figure is laid out from there */
 uniform float designHalf;
 uniform vec3 paintDesign;   /* the colour the figure is laid on in */
-/* Cel shading (1; light/global.jsl): the paint is laid on flat, as it
+/* Cel shading, the second look (2, Cel V2; light/global.jsl): the paint is laid on flat, as it
    is in a drawing. No wear, rust or grime, and each plate nearly the
    same tone as the next; the seams kept, lighter. */
 uniform float cel;
@@ -266,7 +266,7 @@ void main() {
     paint = mix(paint, paintTrim, laid.y);
   }
   /* (each plate a little lighter or darker, and off in hue, than the next) */
-  float grain = 1.0 - cel;
+  float grain = 1.0 - step(1.5, cel);
   paint *= mix(0.94 + 0.12 * own, 0.68 + 0.58 * own, grain);
   paint = mix(paint, vec3(dot(paint, vec3(0.33))), (0.25 * sin(own * 40.0) + 0.1) * grain);
 

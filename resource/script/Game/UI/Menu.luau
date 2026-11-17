@@ -17,7 +17,7 @@
 -- "Menu:main", "Menu:quit", "Menu:back", "Menu:start", "Menu:random",
 -- "Menu:options", "Menu:sound", "Menu:keys", "Menu:defaults",
 -- "Menu:graphics", "Menu:allon", "Graphics:<stage>" (Game/View/Graphics),
--- "Graphics:view", "Graphics:blend",
+-- "Graphics:look:<id>" (standard, cel1, cel2), "Graphics:view", "Graphics:blend",
 -- "Key:<action>", "Load:<slot>", "Save:<slot>", "Delete:<slot>"; the
 -- seed field is "Seed", and the two sliders are "Effects volume" and
 -- "Music volume" (Im.Enter).
@@ -512,7 +512,7 @@ end
 local function drawPage(session: Session.Session, left: number, top: number, width: number, height: number)
   local w = Menu.WIDTH
   local h = if page == "save" then 420 elseif page == "pause" then 390 elseif page == "main" then 400
-    elseif page == "keys" then 550 elseif page == "graphics" then 640 else 340
+    elseif page == "keys" then 550 elseif page == "graphics" then 680 else 340
   local x, y = left + (width - w) / 2, top + (height - h) / 2 - 40
   -- (the options have a line more than they had, under what was there: what is above stays where it was)
   if page == "options" then
@@ -698,8 +698,21 @@ local function drawPage(session: Session.Session, left: number, top: number, wid
     -- is left out of every frame from the next one, and is kept so.
     Im.Wrapped("The stages the picture is made in. All on is the game as it is meant to look: switch one off to see what it "
       .. "does, or to find which one a fault in the picture comes from.", x + 30, y + 64, w - 60, 13, Theme.DIM)
+    -- The look hulls are drawn in: one of three, as radio buttons.
+    Im.Text("Look", x + 30, y + 112, 14, Theme.TEXT)
+    Im.Text("how ships and stations are drawn", x + 30, y + 130, 11, Theme.DIM)
+    for index, one in Graphics.LOOKS do
+      local bx = x + w - 30 - (#Graphics.LOOKS - index + 1) * 84 + 4
+      if Im.Toggle(one.label, bx, y + 114, 80, 26, Graphics.Look() == one.id, `Graphics:look:{one.id}`) then
+        Graphics.SetLook(one.id)
+        if setGraphics then
+          setGraphics()
+        end
+      end
+    end
+    Im.Fill(x + 30, y + 112 + 37 - 5, w - 60, 1, Theme.DIM, 0.35)
     for index, stage in Graphics.STAGES do
-      local rowY = y + 112 + (index - 1) * 37
+      local rowY = y + 112 + index * 37
       local on = Graphics.IsOn(stage.id)
       Im.Text(stage.label, x + 30, rowY, 14, if on then Theme.TEXT else Theme.DIM)
       Im.Text(stage.note, x + 30, rowY + 18, 11, Theme.DIM)
@@ -714,7 +727,7 @@ local function drawPage(session: Session.Session, left: number, top: number, wid
     -- steps: what it shows, and how its last step blends. A click goes
     -- on to the next. Not kept: a game starts with the picture and the
     -- program's own blend.
-    local foot = y + 112 + #Graphics.STAGES * 37 + 8
+    local foot = y + 112 + (#Graphics.STAGES + 1) * 37 + 8
     Im.Fill(x + 30, foot - 5, w - 60, 1, Theme.DIM, 0.35)
     Im.Text("Anti-aliasing shows", x + 30, foot + 6, 14, Theme.TEXT)
     Im.Text("for finding a fault: the edges it found, or the weights it made of them", x + 30, foot + 24, 11, Theme.DIM)
@@ -728,7 +741,7 @@ local function drawPage(session: Session.Session, left: number, top: number, wid
       Graphics.AntiAliasing(Graphics.View(), not Graphics.Plain())
     end
     if Im.Button("All on", cx - 266, y + h - 50, 260, 34, not Graphics.AllOn(), "Menu:allon") then
-      Graphics.Apply("")
+      Graphics.StagesOn()
       if setGraphics then
         setGraphics()
       end

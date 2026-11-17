@@ -107,6 +107,19 @@ until GameDebug.Press('Graphics:bloom')
 until GameDebug.Graphics() == 'flares'
 until GameDebug.Press('Menu:allon')
 until GameDebug.Graphics() == ''
+# (the look: three radio buttons, one lit; it is kept with the stages, and All on leaves it be)
+lua assert(GameDebug.Look() == 'standard', 'ships are drawn in the standard look at first')
+until GameDebug.Press('Graphics:look:cel1')
+until GameDebug.Look() == 'cel1'
+lua assert(GameDebug.Graphics() == 'look:cel1')
+until GameDebug.Press('Graphics:bloom')
+until GameDebug.Graphics() == 'bloom,look:cel1'
+until GameDebug.Press('Graphics:look:cel2')
+until GameDebug.Look() == 'cel2'
+until GameDebug.Press('Menu:allon')
+until GameDebug.Graphics() == 'look:cel2'
+until GameDebug.Press('Graphics:look:standard')
+until GameDebug.Graphics() == ''
 # (and inside the anti-aliasing: what it shows goes round its three views, and its blend goes the plain way and back)
 lua assert(GameDebug.AntiAliasing() == 1 and not select(2, GameDebug.AntiAliasing()))
 until GameDebug.Press('Graphics:view')

@@ -43,13 +43,48 @@ Graphics.STAGES = {
   { id = "dither", label = "Dither", note = "fine grain that hides bands in dark sky", pass = "Effect <post/dither.jsl>" },
 } :: { Stage }
 
--- The stages that are off, by id.
+-- How hulls are drawn (the owner's word of 2026-11-17, after a trial of
+-- cel shading in the viewer: "add both the first-pass and 2nd pass
+-- styles, as toggleable options", as radio buttons "Standard, Cel V1,
+-- Cel v2"). Standard is the game as it was; the two cel looks are
+-- shaded in flat tones and inked about their edges, V1 over the worn
+-- paint, V2 over flat paint (light/global.jsl, material/hull.jsl). The
+-- engine knows them as two switches: "Smooth Shading" off is cel, and
+-- "Flat Paint" on (as it is unless switched off) is V2.
+export type Look = { id: string, label: string }
+Graphics.LOOKS = {
+  { id = "standard", label = "Standard" },
+  { id = "cel1", label = "Cel V1" },
+  { id = "cel2", label = "Cel V2" },
+} :: { Look }
+
+-- The stages that are off, by id, and the look.
 local off: { [string]: true } = {}
+local look = "standard"
 
 local function tell()
   for _, stage in Graphics.STAGES do
     RenderPass_SetEnabled(stage.pass, off[stage.id] == nil)
   end
+  RenderPass_SetEnabled("Smooth Shading", look == "standard")
+  RenderPass_SetEnabled("Flat Paint", look ~= "cel1")
+end
+
+-- The look hulls are drawn in (an id of Graphics.LOOKS).
+function Graphics.Look(): string
+  return look
+end
+
+-- Draw in a look. False for an id that is no look's.
+function Graphics.SetLook(id: string): boolean
+  for _, one in Graphics.LOOKS do
+    if one.id == id then
+      look = id
+      tell()
+      return true
+    end
+  end
+  return false
 end
 
 function Graphics.IsOn(id: string): boolean
@@ -77,14 +112,24 @@ function Graphics.AllOn(): boolean
   return next(off) == nil
 end
 
+-- Every stage on again (the look is left as it is).
+function Graphics.StagesOn()
+  off = {}
+  tell()
+end
+
 -- What is off, as the settings keep it: the ids, in the order of the
--- list, with commas between ("" when everything is on).
+-- list, with commas between ("" when everything is on); and after them
+-- the look, "look:" and its id, unless it is the standard one.
 function Graphics.Off(): string
   local ids: { string } = {}
   for _, stage in Graphics.STAGES do
     if off[stage.id] then
       table.insert(ids, stage.id)
     end
+  end
+  if look ~= "standard" then
+    table.insert(ids, `look:{look}`)
   end
   return table.concat(ids, ",")
 end
@@ -120,7 +165,14 @@ end
 -- stage's is passed over.
 function Graphics.Apply(kept: string)
   off = {}
+  look = "standard"
   for id: string in string.gmatch(kept, "[^,%s]+") :: any do
+    local named = string.match(id, "^look:(.+)$")
+    for _, one in Graphics.LOOKS do
+      if one.id == named then
+        look = one.id
+      end
+    end
     for _, stage in Graphics.STAGES do
       if stage.id == id then
         off[id] = true

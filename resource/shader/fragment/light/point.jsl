@@ -74,7 +74,8 @@ void main() {
     for (int i = 0; i < kMaxLights; ++i) {
       vec3 L = center[i] - p;
       float Lmag = 1.0 / max(kMinDistance, length(L));
-      if (cel > 0.5) {
+      /* (in the second look only: Cel V2) */
+      if (cel > 1.5) {
         vec3 Ld = L * Lmag;
         float NLs = dot(N, Ld);
         float tone = 0.45 * smoothstep(-0.02, 0.02, NLs);
