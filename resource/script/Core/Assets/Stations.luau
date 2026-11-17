@@ -145,7 +145,13 @@ function Stations.Validate(state: State.State, command: State.Command): (boolean
     -- (nobody moors at a tower that is still being anchored)
     local starbase = state.starbases[command.target or 0]
     if starbase and not Starbases.Anchored(state, starbase) then
-      return false, "the tower is not anchored yet"
+      return false, if Starbases.Citadel(starbase) then "the citadel is not anchored yet" else "the tower is not anchored yet"
+    end
+    -- (a citadel closed to others is its owner's and their members' alone)
+    local ship = state.ships[command.actor]
+    if starbase and ship and Starbases.Citadel(starbase) and not starbase.open and ship.owner ~= starbase.owner
+      and not (starbase.owner == "player" and ship.owner == "member") then
+      return false, "this citadel is closed to you"
     end
     return true
   end

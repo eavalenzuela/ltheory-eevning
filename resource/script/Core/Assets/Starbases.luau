@@ -78,7 +78,8 @@ Starbases.FIRST = 1
 function Starbases.Kept(state: State.State, owner: string): (number, number)
   local have = 0
   for _, id in state.starbaseIds do
-    have += if state.starbases[id].owner == owner then 1 else 0
+    local starbase = state.starbases[id]
+    have += if starbase.owner == owner and not Structures.towerById[starbase.tower].citadel then 1 else 0
   end
   return have, Starbases.FIRST + math.max(0, state.skills.anchoring or 0)
 end
@@ -90,9 +91,40 @@ Starbases.HUSBANDRY, Starbases.RAISING = 0.05, 0.1
 local function skilled(state: State.State, starbase: State.Starbase, skill: string): number
   return if starbase.owner == "player" then math.max(0, state.skills[skill] or 0) else 0
 end
--- Fuel blocks a tower burns in an hour.
+-- Whether a starbase is a citadel (Data/Structures: the owner's B2).
+function Starbases.Citadel(starbase: State.Starbase): boolean
+  return Structures.towerById[starbase.tower].citadel == true
+end
+
+-- The most tax a citadel's owner may take (mine).
+Starbases.TAX_MOST = 0.15
+
+-- Fuel blocks a tower burns in an hour: a citadel, its own and each
+-- service fitted in it that is online.
 function Starbases.Burn(state: State.State, starbase: State.Starbase): number
-  return Structures.towerById[starbase.tower].fuel * (1 - Starbases.HUSBANDRY * skilled(state, starbase, "husbandry"))
+  local burn = Structures.towerById[starbase.tower].fuel
+  for _, module in starbase.modules do
+    local type = Structures.moduleById[module.type]
+    if type.fuel and state.tick >= module.ready then
+      burn += type.fuel
+    end
+  end
+  return burn * (1 - Starbases.HUSBANDRY * skilled(state, starbase, "husbandry"))
+end
+
+-- What is fitted in a citadel: how many services and batteries, and
+-- how many it has room for.
+function Starbases.Slots(starbase: State.Starbase): (number, number, number, number)
+  local tower = Structures.towerById[starbase.tower]
+  local services, batteries = 0, 0
+  for _, module in starbase.modules do
+    if Structures.moduleById[module.type].service == "defence" then
+      batteries += 1
+    else
+      services += 1
+    end
+  end
+  return services, tower.slots or 0, batteries, tower.defences or 0
 end
 -- Ticks between one fuel block and the next, for a tower.
 local function interval(state: State.State, starbase: State.Starbase): number
@@ -275,9 +307,9 @@ function Starbases.Hours(starbase: State.Starbase): number
 end
 
 -- The moon a command names, if it is one.
-local function moonOf(state: State.State, command: State.Command): System.Object?
+local function moonOf(state: State.State, command: State.Command, planets: boolean?): System.Object?
   local object = Space.Object(state, command.target or 0)
-  return if object and object.kind == "moon" then object else nil
+  return if object and (object.kind == "moon" or (planets and object.kind == "planet")) then object else nil
 end
 
 -- The starbase the ship giving a command is moored at, if it is its
@@ -318,11 +350,13 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
     end
     local item = state.items[command.item or 0]
     if item == nil or item.holder ~= ship.id or item.place ~= "cargo" or Structures.towerById[item.type] == nil then
-      return false, "no control tower in the hold"
+      return false, "no control tower or citadel in the hold"
     end
-    local moon = moonOf(state, command)
+    -- (a citadel is anchored at a moon or a planet, a tower at a moon)
+    local citadel = Structures.towerById[item.type].citadel == true
+    local moon = moonOf(state, command, citadel)
     if moon == nil or Space.SystemOf(state, moon.id) ~= ball.system then
-      return false, "a tower is anchored at a moon"
+      return false, if citadel then "a citadel is anchored at a moon or a planet" else "a tower is anchored at a moon"
     end
     -- (anywhere in uncharted space too, the owner, 2026-11-16: "all of
     -- j-space (wormhole space) should be able to have towers anchored in
@@ -335,15 +369,16 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
       end
     end
     if Space.Distance(ball :: any, moon :: any) > moon.radius * Starbases.REACH then
-      return false, "too far from the moon"
+      return false, if moon.kind == "planet" then "too far from the planet" else "too far from the moon"
     end
     for _, object in Space.Describe(state, ball.system).objects do
       if object.kind == "station" and object.parent == moon.id and state.starbases[object.id] then
-        return false, "that moon has a tower already"
+        return false, `that {moon.kind} has a tower or a citadel already`
       end
     end
+    -- (citadels are not of the towers a pilot's Anchoring lets them keep)
     local have, most = Starbases.Kept(state, ship.owner)
-    if have >= most then
+    if not citadel and have >= most then
       return false, if most == 1 then "you keep one tower: each level of Anchoring is one more"
         else `you keep {most} towers: each level of Anchoring is one more`
     end
@@ -383,7 +418,27 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
     elseif not module.pilot then
       return false, `a pilot cannot anchor a {module.name}`
     elseif not Starbases.Lit(state, starbase) then
-      return false, "the tower is dark"
+      return false, if tower.citadel then "the citadel is dark" else "the tower is dark"
+    end
+    -- A citadel has services fitted in it, and batteries, by the slot;
+    -- and nothing else of a tower's.
+    if tower.citadel then
+      local services, slots, batteries, defences = Starbases.Slots(starbase)
+      if module.service == "defence" then
+        return batteries < defences, `its {defences} battery slots are full`
+      elseif not module.citadel then
+        return false, "a citadel has services fitted, not a tower's modules"
+      elseif services >= slots then
+        return false, `its {slots} service slots are full`
+      end
+      for _, fitted in starbase.modules do
+        if fitted.type == module.id then
+          return false, `it has a {module.name} already`
+        end
+      end
+      return true
+    elseif module.citadel then
+      return false, `a {module.name} is fitted in a citadel`
     end
     local powergrid, cpu = Starbases.Draw(starbase)
     if powergrid + module.powergrid > tower.powergrid then
@@ -416,6 +471,17 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
       return false, "a reactor makes no such thing"
     elseif what == starbase.reaction then
       return false, if what == "" then "the reactor is making nothing" else "the reactor is making that already"
+    end
+    return true
+  elseif kind == "SetAccess" then
+    -- Who may dock at a citadel: 'open', anybody not hostile; and the
+    -- tax ('tax', 0 to Starbases.TAX_MOST) its owner takes of them.
+    if not tower.citadel then
+      return false, "a tower is its owner's alone"
+    end
+    local tax = command.tax or 0
+    if tax < 0 or tax > Starbases.TAX_MOST + 1e-9 then
+      return false, `the tax is from 0 to {math.floor(Starbases.TAX_MOST * 100 + 0.5)}%`
     end
     return true
   elseif kind == "UnanchorModule" then
@@ -461,8 +527,9 @@ function Starbases.Raise(state: State.State, system: number, moon: System.Object
   local id = system * Constants.STRUCTURE_ID_SPAN + #description.objects + 1
   assert(#description.objects + 1 < Constants.STRUCTURE_ID_SPAN, "a system has outgrown its id range")
   table.insert(description.objects, {
-    id = id, kind = "station", name = `{moon.name} - Starbase`, x = x, y = y, z = z,
-    radius = tower.field, seed = (state.tick * 7919 + id) % 100000, parent = moon.id, site = id, variety = "starbase", to = 0,
+    id = id, kind = "station", name = if tower.citadel then `{moon.name} - Citadel` else `{moon.name} - Starbase`, x = x, y = y, z = z,
+    radius = tower.field, seed = (state.tick * 7919 + id) % 100000, parent = moon.id, site = id,
+    variety = if tower.citadel then "citadel" else "starbase", to = 0,
   })
   local quick = 1 - Starbases.RAISING * (if owner == "player" then math.max(0, state.skills.raising or 0) else 0)
   state.starbases[id] = { id = id, tower = tower.id, owner = owner, ready = state.tick + ticks(tower.anchor * quick), fuel = 0,
@@ -541,7 +608,7 @@ function Starbases.Apply(state: State.State, command: State.Command, events: { E
     local ball = state.balls[ship.id]
     local item = state.items[command.item :: number]
     local tower = Structures.towerById[item.type]
-    local moon = moonOf(state, command) :: System.Object
+    local moon = moonOf(state, command, tower.citadel) :: System.Object
     Items.Take(state, item, 1)
     -- (a kilometre or so off the ship that put it there, which is then
     -- inside its field)
@@ -584,6 +651,10 @@ function Starbases.Apply(state: State.State, command: State.Command, events: { E
   elseif kind == "SetReaction" then
     starbase.reaction, starbase.reacted, starbase.starved = command.type or "", state.tick, false
     table.insert(events, { kind = "ReactionSet", station = starbase.id, type = starbase.reaction })
+  elseif kind == "SetAccess" then
+    starbase.open = if command.open then true else nil
+    starbase.tax = if command.open and (command.tax or 0) > 0 then command.tax else nil
+    table.insert(events, { kind = "AccessSet", station = starbase.id, open = starbase.open == true, tax = starbase.tax or 0 })
   elseif kind == "UnanchorModule" then
     for index = #starbase.modules, 1, -1 do
       if starbase.modules[index].type == command.type then

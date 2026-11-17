@@ -12,6 +12,7 @@ local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
+local Starbases = require("@lt/Core/Assets/Starbases")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Wallet = require("@lt/Core/Assets/Wallet")
@@ -88,8 +89,11 @@ function Hangar.Validate(state: State.State, command: State.Command): (boolean, 
       return false, "this is no station"
     elseif ship.docked == state.player.home then
       return false, "this is your home already"
-    elseif state.starbases[ship.docked] then
+    elseif state.starbases[ship.docked] and not Starbases.Citadel(state.starbases[ship.docked]) then
       return false, "a tower has no berth to wake in"
+    elseif state.starbases[ship.docked] and not Starbases.Has(state, state.starbases[ship.docked], "quarters") then
+      -- (a citadel is woken in where it has a clone bay online)
+      return false, "this citadel has no clone bay online"
     elseif Hangar.HOME_FEE > state.wallet then
       return false, "not enough credits for the berth"
     end

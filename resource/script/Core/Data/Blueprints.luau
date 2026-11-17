@@ -311,7 +311,10 @@ end
 local FUEL: { { any } } = { { "planet.isotopes", 0.2 }, { "planet.water", 0.15 }, { "planet.catalysts", 0.1 }, { "ice.heavywater", 0.2 },
   { "ice.oxygen", 0.1 }, { "ice.salts", 0.25 } }
 for _, tower in Structures.towers do
-  add(tower.id, tower.name, MIX.cruiser, tower.basePrice, 1, math.min(72000, 600 + tower.basePrice // 200), STRUCTURE)
+  -- (a citadel of the large size or more takes moon materials, as large
+  -- tech 2 modules do: the owner's ruling of 2026-11-12; the share mine)
+  local parts = if tower.citadel and tower.size >= 3 then advanced(STRUCTURE, 3, MOON_SHARE) else STRUCTURE
+  add(tower.id, tower.name, MIX.cruiser, tower.basePrice, 1, math.min(72000, 600 + tower.basePrice // 200), parts)
   -- (an alien people's tower and the pirates' have drawings nobody
   -- sells, as their hulls have: where they are found is the owner's to say)
   local people = Factions.byId[tower.faction]

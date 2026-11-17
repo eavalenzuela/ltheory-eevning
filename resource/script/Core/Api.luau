@@ -1271,7 +1271,7 @@ local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, Canc
 local CONTRACT_COMMANDS = { AcceptContract = true, FillContract = true, ListContract = true, CancelContract = true }
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true, SetHome = true, Repackage = true }
 local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true, UnanchorTower = true,
-  SetReaction = true }
+  SetReaction = true, SetAccess = true }
 local SITE_COMMANDS = { Scan = true, LaunchProbe = true, RecallProbes = true }
 local HACK_COMMANDS = { StartHack = true, HackNode = true, AbandonHack = true }
 local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones = true }

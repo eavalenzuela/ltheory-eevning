@@ -76,7 +76,9 @@ end
 -- What a starbase is made of, packed for carrying: towers, the modules
 -- anchored round them, and the fuel they burn.
 for _, tower in Structures.towers do
-  byId[tower.id] = { id = tower.id, name = tower.name, category = "structure", volume = tower.volume, basePrice = tower.basePrice }
+  -- (a citadel is built, never brought to a market to sell: Assets/Citadels)
+  byId[tower.id] = { id = tower.id, name = tower.name, category = "structure", volume = tower.volume, basePrice = tower.basePrice,
+    scarce = if tower.citadel then true else nil }
 end
 for _, module in Structures.modules do
   byId[module.id] = { id = module.id, name = module.name, category = "structure", volume = module.volume, basePrice = module.basePrice }

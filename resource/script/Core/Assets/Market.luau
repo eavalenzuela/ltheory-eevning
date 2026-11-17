@@ -187,9 +187,10 @@ function Market.Leaning(faction: string, id: string): (number, boolean)
     end
     return 1, false
   end
-  -- (a tower is its people's to sell: anybody else's has a few, imported)
+  -- (a tower is its people's to sell: anybody else's has a few, imported;
+  -- a citadel is nobody's people's)
   local tower = Structures.towerById[id]
-  if tower then
+  if tower and not tower.citadel then
     if tower.faction ~= faction then
       return Market.FOREIGN_HULL, true
     end

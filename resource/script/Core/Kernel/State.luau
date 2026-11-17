@@ -383,6 +383,9 @@ export type Command = {
   stops: { number }?, -- for a haul: the further stations to collect at, in order
   drops: { number }?, -- and the further stations to carry to, a load to each in turn
   station: number?,   -- the station a thing is done at from afar (a contract's)
+  -- (SetAccess: whether a citadel is open to others, and its tax)
+  open: boolean?,
+  tax: number?,
 }
 
 -- A standing offer at a station's market. A sell order's goods and a buy
@@ -749,6 +752,11 @@ export type Starbase = {
   -- since the tower was anchored, and whether it stood idle last for
   -- want of what the composite is made of.
   reaction: string, reacted: number, composed: number, starved: boolean,
+  -- A citadel's (Assets/Starbases): whether ships not its owner's may
+  -- dock there (any that are not hostile), and the tax its owner takes
+  -- of what is traded and done there, 0 to Starbases.TAX_MOST. Nil for
+  -- a tower, and for a citadel closed to others.
+  open: boolean?, tax: number?,
 }
 
 -- A station's batteries, where the pilot is (Tactical/Batteries): they

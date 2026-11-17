@@ -61,6 +61,13 @@ export type Tower = {
   -- baseline's (0.15). (Structures.Core is the hull that has them.)
   gun: string, gunBonus: number, missileBonus: number,
   tank: string, resist: number,
+  -- A citadel (the owner's B2, 2026-11-17): a station docked inside, of
+  -- nobody's people, with slots for service modules and for batteries
+  -- in place of a tower's powergrid and CPU (Structures.CITADEL_SIZES).
+  -- Nil for a control tower.
+  citadel: boolean?,
+  slots: number?,       -- service modules it can have fitted
+  defences: number?,    -- batteries it can have fitted
 }
 
 -- What a module is for: the service it gives the tower's guests, or how
@@ -81,6 +88,11 @@ export type ModuleType = {
   pilot: boolean,       -- whether a pilot can anchor one at a tower of their own
   volume: number,       -- m3, packed
   basePrice: number,
+  -- A citadel's service module (fitted, not anchored round a tower), and
+  -- the fuel blocks it burns in an hour while it is online. Nil for a
+  -- tower's module.
+  citadel: boolean?,
+  fuel: number?,
 }
 
 -- A class of colony ship: a nomad faction's station. It is a ship, of
@@ -167,6 +179,42 @@ for _, people in Structures.TOWER_PEOPLES do
   end
 end
 
+-- Citadels (B2 on the roadmap; the owner's answers of 2026-11-17): "A
+-- big station you dock in", beside the towers, which stay. Five sizes,
+-- "small through XXL", built from a blueprint at a station, hauled to a
+-- site and anchored as a tower is. What it gives is what is fitted in
+-- it: service modules, each burning fuel while it is online, and
+-- batteries of its own. It is fought as a tower is, and leaves a
+-- derelict hulk when it is brought down (Assets/Citadels). Of no
+-- people: its guns are the baseline's and so is its tank. Every figure
+-- below is mine. Packed, a small one goes in an industrial's hold, the
+-- extra-large in a capital industrial's and the largest in a
+-- freighter's.
+Structures.CITADEL_SIZES = { "small", "medium", "large", "extralarge", "huge" }
+Structures.CITADEL_NAMES = { "Small Citadel", "Medium Citadel", "Large Citadel", "Extra-Large Citadel", "Huge Citadel" }
+Structures.CITADEL = {
+  { field = 4000, fuel = 8, anchor = 2 * 3600, volume = 4000, basePrice = 80000000, shield = 300000, armor = 150000, hull = 150000,
+    bay = 12, slots = 2, defences = 2 },
+  { field = 6000, fuel = 15, anchor = 4 * 3600, volume = 12000, basePrice = 250000000, shield = 600000, armor = 300000, hull = 300000,
+    bay = 18, slots = 3, defences = 4 },
+  { field = 8000, fuel = 30, anchor = 8 * 3600, volume = 25000, basePrice = 900000000, shield = 1200000, armor = 600000, hull = 600000,
+    bay = 24, slots = 5, defences = 6 },
+  { field = 11000, fuel = 60, anchor = 12 * 3600, volume = 30000, basePrice = 3000000000, shield = 2500000, armor = 1200000,
+    hull = 1200000, bay = 36, slots = 6, defences = 8 },
+  { field = 15000, fuel = 120, anchor = 24 * 3600, volume = 40000, basePrice = 10000000000, shield = 5000000, armor = 2500000,
+    hull = 2500000, bay = 48, slots = 8, defences = 10 },
+}
+for size, word in Structures.CITADEL_SIZES do
+  local c = Structures.CITADEL[size]
+  table.insert(towers, {
+    id = `citadel.{word}`, name = Structures.CITADEL_NAMES[size], faction = "", size = size,
+    powergrid = 0, cpu = 0, field = c.field, fuel = c.fuel, anchor = c.anchor, volume = c.volume, basePrice = c.basePrice,
+    shield = c.shield, armor = c.armor, hull = c.hull, bay = c.bay,
+    gun = "projectile", gunBonus = 1, missileBonus = 1, tank = "shield", resist = 0,
+    citadel = true, slots = c.slots, defences = c.defences,
+  })
+end
+
 -- (A pilot cannot anchor a trade hub: a market is the traders who come
 -- to it, and nobody comes to a tower of one pilot's.)
 local modules: { ModuleType } = {
@@ -201,6 +249,23 @@ local modules: { ModuleType } = {
     pilot = true, volume = 500, basePrice = 600000 },
   { id = "battery.missile", name = "Missile Battery", service = "defence", radius = 150, powergrid = 120, cpu = 120, anchor = 20,
     pilot = true, volume = 500, basePrice = 600000 },
+  -- A citadel's service modules: fitted in it, a slot each, burning fuel
+  -- while online. (A citadel open to others has traders come to it: so
+  -- a pilot's citadel may have a market, where a pilot's tower may not.)
+  { id = "service.market", name = "Market Hub", service = "market", radius = 0, powergrid = 0, cpu = 0, anchor = 600, pilot = true,
+    volume = 4000, basePrice = 30000000, citadel = true, fuel = 10 },
+  { id = "service.repair", name = "Repair and Fitting Bay", service = "fitting", radius = 0, powergrid = 0, cpu = 0, anchor = 300,
+    pilot = true, volume = 2000, basePrice = 8000000, citadel = true, fuel = 4 },
+  { id = "service.refinery", name = "Refinery", service = "refining", radius = 0, powergrid = 0, cpu = 0, anchor = 600, pilot = true,
+    volume = 3000, basePrice = 15000000, citadel = true, fuel = 8 },
+  { id = "service.manufacturing", name = "Manufacturing Plant", service = "industry", radius = 0, powergrid = 0, cpu = 0, anchor = 600,
+    pilot = true, volume = 4000, basePrice = 20000000, citadel = true, fuel = 10 },
+  { id = "service.research", name = "Research Laboratory", service = "research", radius = 0, powergrid = 0, cpu = 0, anchor = 600,
+    pilot = true, volume = 3000, basePrice = 18000000, citadel = true, fuel = 8 },
+  { id = "service.clone", name = "Clone Bay", service = "quarters", radius = 0, powergrid = 0, cpu = 0, anchor = 300, pilot = true,
+    volume = 2000, basePrice = 12000000, citadel = true, fuel = 5 },
+  { id = "service.storage", name = "Hangar Expansion", service = "storage", radius = 0, powergrid = 0, cpu = 0, anchor = 300,
+    pilot = true, volume = 2000, basePrice = 5000000, citadel = true, fuel = 2 },
 }
 
 -- The colony ships, by class. (The first of a size of ship above

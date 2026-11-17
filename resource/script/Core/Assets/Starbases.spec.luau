@@ -128,7 +128,7 @@ suite:Case("a tower is anchored from the hold, beside a moon, and nowhere else",
   Core.Step(game)
   local here = aMoon(game)
   t.eq(refused(game, { kind = "AnchorTower", actor = 0, item = tower.id, target = here.id }), "too far from the moon")
-  t.eq(refused(game, { kind = "AnchorTower", actor = 0, item = ore.id, target = here.id }), "no control tower in the hold")
+  t.eq(refused(game, { kind = "AnchorTower", actor = 0, item = ore.id, target = here.id }), "no control tower or citadel in the hold")
   t.eq(refused(game, { kind = "AnchorTower", actor = 0, item = tower.id, target = game.state.player.home }), "a tower is anchored at a moon")
   order(t, game, { kind = "WarpTo", actor = 0, target = here.id })
   Core.Step(game)
@@ -168,7 +168,7 @@ suite:Case("nobody moors at a tower until it is anchored, and a moon takes one t
   local station = stepUntil(game, "StarbaseAnchored", 3).station :: number
   t.eq(refused(game, { kind = "Dock", actor = 0, target = station }), "the tower is not anchored yet")
   local second = carry(game, SMALL.id, 1)
-  t.eq(refused(game, { kind = "AnchorTower", actor = 0, item = second.id, target = moon.id }), "that moon has a tower already")
+  t.eq(refused(game, { kind = "AnchorTower", actor = 0, item = second.id, target = moon.id }), "that moon has a tower or a citadel already")
   steps(game, SMALL.anchor)
   t.ok(assert(Core.Query.Starbase(game, station)).anchored)
   order(t, game, { kind = "Dock", actor = 0, target = station })
@@ -209,7 +209,7 @@ suite:Case("a pilot keeps one tower, and one more for each level of Anchoring", 
   stepUntil(game, "StarbaseAnchored", 3)
   t.eq({ Starbases.Kept(state, "player") }, { 2, 2 })
   t.eq(refused(game, { kind = "AnchorTower", actor = 0, item = carry(game, SMALL.id, 1).id, target = there.id }),
-    "that moon has a tower already")
+    "that moon has a tower or a citadel already")
   -- A pilot begins with the skill at nothing, and one of a save from before is given it so.
   local fresh = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   t.eq(fresh.state.skills.anchoring, 0)
@@ -849,6 +849,107 @@ suite:Case("towers, modules and fuel are bought, and built from blueprints", fun
     t.ok(quote.ask ~= nil and quote.ask > 0, `nobody sells {type} at the starter station`)
     t.ok(Blueprints.byProduct[type] ~= nil, `there is no blueprint for {type}`)
   end
+end)
+
+-- Citadels (the owner's B2, 2026-11-17): a station docked inside, of
+-- the same machinery as a tower.
+local CITADEL = Structures.towerById["citadel.small"]
+
+-- A peaceful game with a small citadel anchored at a planet (or a moon)
+-- and the ship docked in it, fuelled: the game and the station.
+local function inCitadel(t: Test.Context, at: string?): (Core.Game, number)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local citadel = carry(game, CITADEL.id, 1)
+  order(t, game, { kind = "Undock", actor = 0 })
+  Core.Step(game)
+  local body: System.Object? = nil
+  for _, object in Core.Query.Objects(game, 1) do
+    if object.kind == (at or "planet") and body == nil
+      and Core.Validate(game, { kind = "WarpTo", actor = game.state.player.ship, target = object.id }) then
+      body = object
+    end
+  end
+  local there = assert(body, "nothing to warp to")
+  order(t, game, { kind = "WarpTo", actor = 0, target = there.id })
+  stepUntil(game, "WarpEnded", 600)
+  order(t, game, { kind = "AnchorTower", actor = 0, item = citadel.id, target = there.id })
+  local station = stepUntil(game, "StarbaseAnchored", 3).station :: number
+  -- (hours of anchoring, not waited out tick by tick)
+  game.state.starbases[station].ready = game.state.tick
+  Core.Step(game)
+  order(t, game, { kind = "Dock", actor = 0, target = station })
+  stepUntil(game, "Docked", 120)
+  order(t, game, { kind = "Fuel", actor = 0, item = carry(game, FUEL, 2000).id })
+  Core.Step(game)
+  return game, station
+end
+
+suite:Case("a citadel is anchored at a planet or a moon, is not one of the towers a pilot keeps, and is a station called so", function(t)
+  local game, station = inCitadel(t)
+  local object = assert(Space.Object(game.state, station))
+  t.eq({ object.variety, string.sub(object.name, -9) } :: { any }, { "citadel", "- Citadel" } :: { any })
+  t.eq((Starbases.Kept(game.state, "player")), 0)
+  t.ok(Starbases.Citadel(game.state.starbases[station]))
+  -- (a moon takes one too)
+  local again = inCitadel(t, "moon")
+  t.ok(again.state.starbases ~= nil)
+  -- (and it is built from a print, of moon materials from the large size up)
+  local small, large = assert(Blueprints.byProduct["citadel.small"]), assert(Blueprints.byProduct["citadel.large"])
+  local function moon(print: Blueprints.Blueprint): boolean
+    for _, material in print.materials do
+      if Types.Info(material.type).category == "moon" then
+        return true
+      end
+    end
+    return false
+  end
+  t.eq({ moon(small), moon(large) }, { false, true })
+end)
+
+suite:Case("a citadel has services fitted by the slot, and batteries by theirs, and burns fuel for each service online", function(t)
+  local game, station = inCitadel(t)
+  local starbase = game.state.starbases[station]
+  t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "array.refining", 1).id }),
+    "a citadel has services fitted, not a tower's modules")
+  local before = Starbases.Burn(game.state, starbase)
+  t.eq(before, CITADEL.fuel)
+  order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, "service.refinery", 1).id })
+  Core.Step(game)
+  t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "service.refinery", 1).id }), "it has a Refinery already")
+  order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, "service.clone", 1).id })
+  Core.Step(game)
+  t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "service.market", 1).id }), "its 2 service slots are full")
+  -- (the batteries have slots of their own)
+  order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, "battery.gun", 1).id })
+  Core.Step(game)
+  steps(game, Structures.moduleById["service.refinery"].anchor)
+  t.ok(Stations.Has(game.state, station, "refining"))
+  t.eq(Starbases.Burn(game.state, starbase), CITADEL.fuel + 8 + 5)
+  -- (a tower takes no service of a citadel's)
+  t.eq(Starbases.Slots(starbase), 2)
+end)
+
+suite:Case("a citadel with a clone bay online is a place to wake; it is closed to others until its owner opens it, with a tax", function(t)
+  local game, station = inCitadel(t)
+  t.eq(refused(game, { kind = "SetHome", actor = 0 }), "this citadel has no clone bay online")
+  order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, "service.clone", 1).id })
+  steps(game, Structures.moduleById["service.clone"].anchor + 1)
+  game.state.wallet += 1000000
+  order(t, game, { kind = "SetHome", actor = 0 })
+  Core.Step(game)
+  t.eq(game.state.player.home, station)
+  -- (whoever else comes: closed, then open)
+  local other = Space.NewShip(game.state, "frigate.akashi", "A trader", "vessari", 0)
+  local dock: State.Command = { kind = "Dock", actor = other.id, target = station }
+  t.eq({ Stations.Validate(game.state, dock) } :: { any }, { false, "this citadel is closed to you" } :: { any })
+  t.eq(refused(game, { kind = "SetAccess", actor = 0, open = true, tax = 0.5 }), "the tax is from 0 to 15%")
+  order(t, game, { kind = "SetAccess", actor = 0, open = true, tax = 0.05 })
+  Core.Step(game)
+  t.eq({ game.state.starbases[station].open, game.state.starbases[station].tax } :: { any }, { true, 0.05 } :: { any })
+  t.ok((Stations.Validate(game.state, dock)))
+  -- (and a save keeps it)
+  local data, length = Core.Save(game)
+  t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
 end)
 
 return suite

@@ -798,7 +798,28 @@ function Facts.Of(type: string): Sheet?
     trade(sheet, type)
   elseif category == "structure" then
     local tower, anchored = Structures.towerById[type], Structures.moduleById[type]
-    if tower then
+    if tower and tower.citadel then
+      sheet.kind = "Citadel"
+      sheet.note = "A station of your own that ships dock inside. Built at a station, hauled to a moon or planet and anchored; what it offers is what is fitted in it. Brought down, it leaves a derelict hulk."
+      local has = section(sheet, "Citadel")
+      row(has, "Field", `{whole(tower.field)} m`)
+      row(has, "Service slots", whole(tower.slots or 0))
+      row(has, "Battery slots", whole(tower.defences or 0))
+      row(has, "Burns", `{tower.fuel} blocks an hour, and more for each service online`, Structures.FUEL.id)
+      row(has, "Anchors in", seconds(tower.anchor))
+      local stands = section(sheet, "Under fire")
+      row(stands, "Shield", whole(tower.shield))
+      row(stands, "Armour", whole(tower.armor))
+      row(stands, "Structure", whole(tower.hull))
+      row(stands, "Seals for", `{tower.bay} hours at most: a charge an hour`, Structures.SEAL.id)
+    elseif anchored and anchored.citadel then
+      sheet.kind = "Citadel service"
+      sheet.note = "Fitted in a citadel, a slot each. It gives its service there while it is online, and burns fuel for it."
+      local does = section(sheet, "Service")
+      row(does, "Gives", anchored.service)
+      row(does, "Burns", `{anchored.fuel or 0} blocks an hour`, Structures.FUEL.id)
+      row(does, "Comes online in", seconds(anchored.anchor))
+    elseif tower then
       sheet.kind = "Control tower"
       sheet.note = "The heart of a starbase. Anchored at a moon and fed with fuel, it throws a field and powers the modules anchored round it."
       local has = section(sheet, "Tower")

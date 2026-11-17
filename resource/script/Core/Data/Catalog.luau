@@ -116,9 +116,14 @@ function Catalog.Group(id: string): (string, number, number)
     return if order == 1 then "Laser crystals" elseif order == 2 then "Projectile rounds" else "Hybrid charges", order, charge.size
   elseif category == "structure" then
     local tower = Structures.towerById[id]
-    if tower then
+    local module = Structures.moduleById[id]
+    if tower and tower.citadel then
+      return "Citadels", 1, tower.size
+    elseif tower then
       return "Control towers", 1, tower.size
-    elseif Structures.moduleById[id] then
+    elseif module and module.citadel then
+      return "Citadel services", 2, 0
+    elseif module then
       return "Structure modules", 2, 0
     elseif id == Planets.CENTRE.id then
       return "Colonies", 4, 0
