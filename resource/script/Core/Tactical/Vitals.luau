@@ -70,8 +70,10 @@ function Vitals.Refresh(state: State.State, ball: State.Ball)
   v.armorMend = if stats.armorMend > 0 then stats.armorMend else nil
   v.hullMend = if stats.hullMend > 0 then stats.hullMend else nil
   -- (a painter on it swells what it shows, and a dampener cuts what it sees)
-  v.signature, v.scanResolution = stats.signature * v.paint, stats.scanResolution * v.damp
-  v.lockRange, v.maxTargets = stats.lockRange * v.damp, math.floor(stats.maxTargets + 1e-6)
+  -- (and a remote sensor booster on it, the other way)
+  local sensor = v.sensor or 1
+  v.signature, v.scanResolution = stats.signature * v.paint, stats.scanResolution * v.damp * sensor
+  v.lockRange, v.maxTargets = stats.lockRange * v.damp * sensor, math.floor(stats.maxTargets + 1e-6)
   v.shieldResonance = resonance(stats, "shieldResonance")
   v.armorResonance = resonance(stats, "armorResonance")
   v.hullResonance = resonance(stats, "hullResonance")

@@ -59,6 +59,12 @@ export type Vitals = {
   shield: number,
   armor: number,
   hull: number,
+  -- What a tracking disruptor, a guidance disruptor and a remote sensor
+  -- booster on it make of its turrets' tracking and reach, its
+  -- missiles' flight, and its sensors (Tactical/Combat): nil for 1.
+  track: number?,
+  guide: number?,
+  sensor: number?,
   -- What it has taken of each kind of damage since an adaptive hardener
   -- of its last looked (Tactical/Combat); nil until it has taken any.
   taken: { number }?,

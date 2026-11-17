@@ -881,4 +881,50 @@ suite:Case("an adaptive armour hardener shifts its resistance toward what the sh
   t.ok(a.me.vitals.armorResonance[3] < even, "the ship lets less kinetic through")
 end)
 
+-- ---------------------------------------------------------------------
+-- Module expansion, the second group (2026-11-16): combat support.
+
+suite:Case("a smartbomb strikes every other ship within its reach, and not the ship that set it off", function(t)
+  local a = arena("frigate.akashi", { { "smartbomb.em.small" } }, "frigate.courier", {}, 2000)
+  local bomb = Items.Fitted(a.game.state, a.me.id)[1]
+  local shield, mine = a.foe.vitals.shield, a.me.vitals.shield
+  order(t, a, { kind = "ActivateModule", actor = 0, item = bomb.id })
+  local went = stepUntil(a, "Smartbombed", 5)
+  t.eq(went.struck, 1)
+  Core.Step(a.game)
+  t.ok(a.foe.vitals.shield < shield, "the other ship was struck")
+  t.ok(a.me.vitals.shield >= mine, "its own ship was not")
+  -- (and out of its reach, nothing)
+  local far = arena("frigate.akashi", { { "smartbomb.em.small" } }, "frigate.courier", {}, 9000)
+  order(t, far, { kind = "ActivateModule", actor = 0, item = Items.Fitted(far.game.state, far.me.id)[1].id })
+  t.eq(stepUntil(far, "Smartbombed", 5).struck, 0)
+end)
+
+suite:Case("an energy drain takes the target's capacitor into its own ship, while the target's is the fuller", function(t)
+  local a = arena("frigate.akashi", { { "drain.small" } }, "frigate.courier", {}, 3000)
+  lockFoe(t, a)
+  local drain = Items.Fitted(a.game.state, a.me.id)[1]
+  a.me.vitals.capacitor = 10
+  local theirs = a.foe.vitals.capacitor
+  order(t, a, { kind = "ActivateModule", actor = 0, item = drain.id, target = a.foe.id })
+  local drained = stepUntil(a, "Drained", 5)
+  t.eq(drained.amount, 20)
+  t.ok(a.foe.vitals.capacitor < theirs, "taken from the target")
+  t.ok(a.me.vitals.capacitor >= 29, `into its own: {a.me.vitals.capacitor}`)
+end)
+
+suite:Case("a tracking disruptor and a guidance disruptor are set on their target; a remote sensor booster lengthens its reach", function(t)
+  local a = arena("cruiser.ouyou", { { "ewar.tracking" }, { "ewar.guidance" }, { "remote.sensor" } }, "frigate.courier", {}, 3000)
+  lockFoe(t, a)
+  local reach = a.foe.vitals.lockRange
+  for _, item in Items.Fitted(a.game.state, a.me.id) do
+    order(t, a, { kind = "ActivateModule", actor = 0, item = item.id, target = a.foe.id })
+  end
+  Core.Step(a.game)
+  Core.Step(a.game)
+  t.eq({ a.foe.vitals.track, a.foe.vitals.guide } :: { any }, { 0.7, 0.7 } :: { any })
+  t.near(a.foe.vitals.lockRange, reach * 1.3, 1e-6)
+  t.eq(a.me.vitals.track, nil, "nothing on the ship that runs them")
+end)
+
 return suite

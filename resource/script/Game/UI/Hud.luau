@@ -1191,7 +1191,7 @@ local function drawRack(session: Session.Session, game: Core.Game, ball: State.B
         end
       end
       local active = module.weapon ~= nil or module.repair ~= nil or module.boost ~= nil or module.miner ~= nil
-        or module.hex ~= nil or module.salvager ~= nil
+        or module.hex ~= nil or module.salvager ~= nil or module.injector ~= nil or module.smartbomb ~= nil
       if active then
         pressable += 1
       end

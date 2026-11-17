@@ -73,7 +73,10 @@ export type Miner = {
 -- capacitor (which is what the cycle costs the ship that sends it: the
 -- energy is moved, not made).
 export type Hex = {
-  kind: "entangle" | "scramble" | "paint" | "damp" | "neut" | "jam" | "shield" | "armor" | "capacitor",
+  -- (module expansion, 2026-11-16: "track" a tracking disruptor, "guide" a
+  -- guidance disruptor, "nos" an energy drain, "sensor" a remote sensor booster)
+  kind: "entangle" | "scramble" | "paint" | "damp" | "neut" | "jam" | "shield" | "armor" | "capacitor" | "track" | "guide" | "nos"
+    | "sensor",
   range: number,            -- m
   strength: number,
   duration: number,         -- s per cycle
@@ -179,6 +182,12 @@ export type ModuleType = {
   -- cycle moves 'step' of it from the kind the ship took least of to the
   -- kind it took most of (Tactical/Combat).
   adaptive: { total: number, step: number }?,
+  -- What it does for the drones of the ship it is fitted to: their guns'
+  -- damage, and their tracking and reach, so many times.
+  drones: { damage: number?, tracking: number? }?,
+  -- A smartbomb: each cycle, so much damage of each kind to every ship
+  -- within 'range' of it but its owner's own.
+  smartbomb: { range: number, damage: { number }, duration: number, capacitor: number }?,
 }
 
 export type ChargeType = {
@@ -606,6 +615,71 @@ table.insert(modules, {
   adaptive = { total = 0.6, step = 0.06 },
   requires = { { skill = "hull.upgrades", level = 3 } },
 })
+-- ---------------------------------------------------------------------
+-- Module expansion, the second group: combat support (2026-11-16; the
+-- figures mine).
+
+-- What the drones do: hit harder, and track and reach further.
+table.insert(modules, {
+  id = "drone.amplifier", name = "Drone Damage Amplifier", short = "Drone Amp", slot = "low", hardpoint = "",
+  cpu = 20, powergrid = 1, volume = 5, basePrice = 20000, passive = {}, drones = { damage = 1.12 },
+  requires = { { skill = "drones", level = 2 } },
+})
+table.insert(modules, {
+  id = "drone.tracking", name = "Omnidirectional Tracking Link", short = "Drone Link", slot = "mid", hardpoint = "",
+  cpu = 25, powergrid = 1, volume = 5, basePrice = 18000, passive = {}, drones = { tracking = 1.25 },
+  requires = { { skill = "drones", level = 2 } },
+})
+-- Electronic warfare against weapons: turrets track and reach worse, and
+-- missiles fly shorter with wider blasts.
+table.insert(modules, {
+  id = "ewar.tracking", name = "Tracking Disruptor", slot = "mid", hardpoint = "",
+  cpu = 25, powergrid = 1, volume = 5, basePrice = 30000, passive = {},
+  hex = { kind = "track", range = 30000, strength = 0.7, duration = 5, capacitor = 15 },
+  requires = { { skill = "electronic.warfare", level = 2 } },
+})
+table.insert(modules, {
+  id = "ewar.guidance", name = "Guidance Disruptor", slot = "mid", hardpoint = "",
+  cpu = 25, powergrid = 1, volume = 5, basePrice = 30000, passive = {},
+  hex = { kind = "guide", range = 30000, strength = 0.7, duration = 5, capacitor = 15 },
+  requires = { { skill = "electronic.warfare", level = 2 } },
+})
+-- Seeing further and locking quicker: the ship's own, and a friend's.
+table.insert(modules, {
+  id = "sensor.booster", name = "Sensor Booster", slot = "mid", hardpoint = "",
+  cpu = 20, powergrid = 1, volume = 5, basePrice = 16000, passive = {},
+  boost = { ship("lockRange", "mul", 1.3, true), ship("scanResolution", "mul", 1.3, true) }, boostDuration = 10, boostCapacitor = 5,
+  requires = { { skill = "electronics", level = 1 } },
+})
+table.insert(modules, {
+  id = "remote.sensor", name = "Remote Sensor Booster", slot = "mid", hardpoint = "",
+  cpu = 22, powergrid = 1, volume = 5, basePrice = 20000, passive = {},
+  hex = { kind = "sensor", range = 30000, strength = 1.3, duration = 10, capacitor = 10 },
+  requires = { { skill = "electronics", level = 2 } },
+})
+-- By size: energy drains (capacitor taken from the target into the ship,
+-- while the target has the fuller capacitor) and smartbombs of each kind.
+for _, each in { { "small", "Small", 1 }, { "medium", "Medium", 2 }, { "large", "Large", 3 } } :: { { any } } do
+  local name, title, size = each[1] :: string, each[2] :: string, each[3] :: number
+  local cpuBy, gridBy, priceBy = ({ 1, 1.6, 2.4 })[size], ({ 1, 15, 180 })[size], ({ 1, 8, 60 })[size]
+  table.insert(modules, {
+    id = `drain.{name}`, name = `{title} Energy Nosferatu`, short = "Nosferatu", slot = "high", hardpoint = "",
+    cpu = math.floor(15 * cpuBy + 0.5), powergrid = math.floor(8 * gridBy + 0.5), volume = 5 * size, basePrice = 30000 * priceBy,
+    passive = {}, hex = { kind = "nos", range = ({ 7500, 10000, 15000 })[size], strength = ({ 20, 60, 180 })[size], duration = 12, capacitor = 0 },
+    requires = { { skill = "electronic.warfare", level = size } },
+  })
+  for kind, label in { "EM", "Thermal", "Kinetic", "Explosive" } do
+    local damage = { 0, 0, 0, 0 }
+    damage[kind] = ({ 60, 180, 500 })[size]
+    table.insert(modules, {
+      id = `smartbomb.{string.lower(label)}.{name}`, name = `{title} {label} Smartbomb`, short = "Smartbomb", slot = "high", hardpoint = "",
+      cpu = math.floor(25 * cpuBy + 0.5), powergrid = math.floor(20 * gridBy + 0.5), volume = 5 * size, basePrice = 25000 * priceBy,
+      passive = {}, smartbomb = { range = ({ 5000, 6000, 7500 })[size], damage = damage, duration = 10, capacitor = ({ 50, 150, 450 })[size] },
+      requires = { { skill = "weapon.upgrades", level = size + 1 } },
+    })
+  end
+end
+
 -- By size: capacitor boosters (each cycle a charge's worth into the
 -- capacitor), ancillary shield boosters (a charge in place of the
 -- capacitor a cycle) and ancillary armour repairers (three times as much
@@ -1517,10 +1591,10 @@ function Modules.Mends(module: ModuleType): boolean
 end
 
 -- Whether a module that runs on another ship is for a friend (one that
--- mends, or a relay that sends capacitor), where everything else that
--- runs on another ship is for an enemy.
+-- mends, a relay that sends capacitor, or a remote sensor booster), where
+-- everything else that runs on another ship is for an enemy.
 function Modules.Friendly(module: ModuleType): boolean
-  return module.hex ~= nil and (Modules.Mends(module) or module.hex.kind == "capacitor")
+  return module.hex ~= nil and (Modules.Mends(module) or module.hex.kind == "capacitor" or module.hex.kind == "sensor")
 end
 for _, c in charges do
   Modules.chargeById[c.id] = c

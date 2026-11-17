@@ -56,6 +56,8 @@ local MODULES: { { any } } = {
   { "ballistic.", "Weapon upgrades", 4.5 }, { "tracking.", "Weapon upgrades", 4.5 }, { "computer.", "Weapon upgrades", 4.5 },
   -- (what the hull has to fit with, and what holds it together: module expansion, 2026-11-16)
   { "fitting.", "Engineering", 8.5 }, { "relay.", "Engineering", 8.5 }, { "hull.", "Armour", 6 },
+  { "drone.", "Drone upgrades", 9.5 }, { "ewar.", "Electronic warfare", 10 }, { "drain.", "Electronic warfare", 10 },
+  { "sensor.", "Electronic warfare", 10 }, { "smartbomb.", "Smartbombs", 4.6 },
 }
 local MISSILES = { "Light missiles", "Heavy missiles", "Cruise missiles" }
 local MAKES: { [string]: { any } } = {

@@ -76,7 +76,8 @@ function Mend.Tend(state: State.State, me: State.Ball, friends: { number }, even
   for _, item in Items.Fitted(state, me.id) do
     local module = Modules.byId[item.type]
     local hex = module.hex
-    if hex and Modules.Friendly(module) then
+    -- (a remote sensor booster is no mending: hired pilots leave it to the pilot)
+    if hex and Modules.Friendly(module) and hex.kind ~= "sensor" then
       local on: State.Running? = nil
       for _, each in me.vitals.running do
         if each.item == item.id then

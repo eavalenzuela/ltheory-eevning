@@ -494,4 +494,31 @@ suite:Case("a carrier launches fighters, a supercarrier bombers too, and the Fig
   t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(great))
 end)
 
+-- (module expansion, 2026-11-16)
+suite:Case("drone damage amplifiers fitted to the owner make its drones hit harder", function(t)
+  local function harm(amplifiers: number): number
+    local game, me = flying("cruiser.ouyou", 2, 5)
+    local state = game.state
+    -- (two low slots filled each time, so the items' ids, and the rolls hung on them, are the same)
+    for n = 1, 2 do
+      Items.Equip(state, me.id, if n <= amplifiers then "drone.amplifier" else "fitting.coprocessor")
+    end
+    t.ok((submit(game, { kind = "LaunchDrones", actor = 0 })))
+    steps(game, 5)
+    local scout = Pirates.Spawn(state, Pirates.SCOUT, me.system, me.x + 4000, me.y, me.z, me.grid)
+    state.pilots[scout.id] = nil
+    State.RemoveId(state.pilotIds, scout.id)
+    -- (too tough to die in the time)
+    scout.vitals.shield, scout.vitals.shieldMax = 1e7, 1e7
+    t.ok((submit(game, { kind = "EngageDrones", actor = 0, target = scout.id })))
+    steps(game, 60)
+    return 1e7 - scout.vitals.shield
+  end
+  local plain, one, two = harm(0), harm(1), harm(2)
+  t.ok(plain > 0, "the drones did no harm")
+  t.near(one / plain, 1.12, 0.005)
+  -- (a second one does less than the first: stacked like any other)
+  t.ok(two / one > 1 and two / one < 1.12, `{two / one}`)
+end)
+
 return suite

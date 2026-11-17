@@ -390,7 +390,7 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
         return false, "a capital is held only by a capital warp disruptor"
       end
       return true
-    elseif module.repair or module.boost or module.injector then
+    elseif module.repair or module.boost or module.injector or module.smartbomb then
       return true
     end
     return false, "that module cannot be switched on"
@@ -650,6 +650,40 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       local drone = state.drones[ball.id]
       if drone and state.ships[drone.owner] then
         weapon.damageMultiplier *= 1 + Combat.SWARM * Skills.Level(Items.Levels(state, drone.owner), "swarm.tactics")
+        -- (and for what its owner has fitted for its drones: each amplifier
+        -- and link the less for those before it, as stacked modules are)
+        local damages, trackings = {}, {}
+        for _, fitted in Items.Fitted(state, drone.owner) do
+          local helps = Modules.byId[fitted.type].drones
+          if helps and helps.damage then
+            table.insert(damages, helps.damage)
+          end
+          if helps and helps.tracking then
+            table.insert(trackings, helps.tracking)
+          end
+        end
+        table.sort(damages, function(a: number, b: number): boolean return a > b end)
+        table.sort(trackings, function(a: number, b: number): boolean return a > b end)
+        for n, by in damages do
+          weapon.damageMultiplier *= 1 + (by - 1) * Attributes.Penalty(n - 1)
+        end
+        for n, by in trackings do
+          local more = 1 + (by - 1) * Attributes.Penalty(n - 1)
+          weapon.tracking *= more
+          weapon.optimal *= more
+          weapon.falloff *= more
+        end
+      end
+      -- (a tracking disruptor on it: its turrets track and reach the worse;
+      -- a guidance disruptor: its missiles fly the shorter, their blasts the wider)
+      if v.track and weapon.family ~= "missile" then
+        weapon.tracking *= v.track
+        weapon.optimal *= v.track
+        weapon.falloff *= v.track
+      end
+      if v.guide and weapon.family == "missile" then
+        weapon.flight = (weapon.flight or 1) * v.guide
+        weapon.blast = (weapon.blast or 1) / v.guide
       end
       local lock = findLock(ball, running.target)
       local target = Space.Body(state, running.target)
@@ -807,6 +841,18 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
         table.insert(events, { kind = "Fed", ball = ball.id, target = target.id, amount = t.capacitor - before })
       elseif hex.kind == "neut" then
         target.vitals.capacitor = math.max(0, target.vitals.capacitor - hex.strength)
+      elseif hex.kind == "nos" then
+        -- (an energy drain: what it takes goes into the ship's own capacitor,
+        -- while the target's is the fuller of the two)
+        local t = target.vitals
+        local theirs = t.capacitor / math.max(1, t.capacitorMax)
+        local ours = v.capacitor / math.max(1, v.capacitorMax)
+        if theirs >= ours then
+          local taken = math.min(hex.strength, t.capacitor, v.capacitorMax - v.capacitor)
+          t.capacitor -= taken
+          v.capacitor += taken
+          table.insert(events, { kind = "Drained", ball = ball.id, target = target.id, amount = taken })
+        end
       elseif hex.kind == "jam" then
         if Rng.Chance(Rng.For(state.historySeed, state.tick, ball.id, item.id, 67), hex.strength) then
           for at = #target.vitals.locks, 1, -1 do
@@ -815,6 +861,32 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
           table.insert(events, { kind = "Jammed", ball = target.id, by = ball.id })
         end
       end
+
+    elseif module.smartbomb then
+      -- A smartbomb: so much damage to every ship within its reach but the
+      -- owner's own (their ships and their drones), a cycle at a time.
+      local bomb = module.smartbomb
+      if v.capacitor < bomb.capacitor then
+        stop(state, ball, index, "capacitor empty", events)
+        return false
+      end
+      v.capacitor -= bomb.capacitor
+      local owner = state.ships[ball.id].owner
+      local struck = 0
+      for _, other in state.ballIds do
+        local them = state.balls[other]
+        local ship = state.ships[other]
+        local drone = state.drones[other]
+        local ours = (ship ~= nil and ship.owner == owner) or (drone ~= nil and state.ships[drone.owner] ~= nil
+          and state.ships[drone.owner].owner == owner)
+        if other ~= ball.id and them and (ship or drone) and not ours and them.system == ball.system and them.grid == ball.grid
+          and Space.Gap(ball :: any, them :: any) <= bomb.range then
+          table.insert(hits, { target = other, by = ball.id, damage = table.clone(bomb.damage) })
+          struck += 1
+        end
+      end
+      table.insert(events, { kind = "Smartbombed", ball = ball.id, item = item.id, struck = struck })
+      running.next += bomb.duration
 
     elseif module.repair then
       local repair = module.repair
@@ -1075,6 +1147,10 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
   local scrambles: { [number]: boolean } = {}
   local paints: { [number]: number } = {}
   local damps: { [number]: number } = {}
+  -- (and the strongest tracking and guidance disruptors, and remote sensor booster)
+  local tracks: { [number]: number } = {}
+  local guides: { [number]: number } = {}
+  local sensors: { [number]: number } = {}
   for _, id in state.ballIds do
     for _, running in state.balls[id].vitals.running do
       local item = state.items[running.item]
@@ -1092,6 +1168,12 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
           paints[target] = math.max(paints[target] or 1, hex.strength)
         elseif hex.kind == "damp" then
           damps[target] = math.min(damps[target] or 1, hex.strength)
+        elseif hex.kind == "track" then
+          tracks[target] = math.min(tracks[target] or 1, hex.strength)
+        elseif hex.kind == "guide" then
+          guides[target] = math.min(guides[target] or 1, hex.strength)
+        elseif hex.kind == "sensor" then
+          sensors[target] = math.max(sensors[target] or 1, hex.strength)
         end
       end
     end
@@ -1100,6 +1182,12 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
     local ball = state.balls[id]
     local v = ball.vitals
     local entangle, scrambled, paint, damp = entangles[id] or 1, scrambles[id] == true, paints[id] or 1, damps[id] or 1
+    v.track, v.guide = tracks[id], guides[id]
+    local sensor = sensors[id]
+    if v.sensor ~= sensor then
+      v.sensor = sensor
+      Vitals.Refresh(state, ball)
+    end
     if v.entangle ~= entangle or v.scrambled ~= scrambled or v.paint ~= paint or v.damp ~= damp then
       local held = v.entangle ~= entangle or v.scrambled ~= scrambled
       v.entangle, v.scrambled, v.paint, v.damp = entangle, scrambled, paint, damp

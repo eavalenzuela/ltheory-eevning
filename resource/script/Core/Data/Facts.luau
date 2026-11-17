@@ -411,7 +411,8 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     local hex = module.hex
     local titles: { [string]: string } = { entangle = "Gravitic entanglement", scramble = "Warp disruption", paint = "Target painting",
       damp = "Sensor dampening", neut = "Energy neutralising", jam = "Jamming", shield = "Remote shield boosting",
-      armor = "Remote armour repair", capacitor = "Capacitor relay" }
+      armor = "Remote armour repair", capacitor = "Capacitor relay", track = "Tracking disruption", guide = "Guidance disruption",
+      nos = "Energy draining", sensor = "Remote sensor boosting" }
     local does: { [string]: string } = {
       entangle = `top speed cut to {plain(hex.strength * 100)}%`, scramble = "cannot warp",
       paint = `signature {plain(hex.strength * 100)}% of what it was`,
@@ -420,11 +421,32 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
       jam = `{plain(hex.strength * 100)}% chance a cycle of breaking its locks`,
       shield = `{plain(hex.strength)} shield put back a cycle`, armor = `{plain(hex.strength)} armour put back a cycle`,
       capacitor = `{plain(hex.strength)} GJ put into its capacitor a cycle`,
+      track = `its turrets' tracking and range cut to {plain(hex.strength * 100)}%`,
+      guide = `its missiles' flight cut to {plain(hex.strength * 100)}%, their blast that much wider`,
+      nos = `up to {plain(hex.strength)} GJ a cycle taken into this ship's capacitor, while the target's is the fuller`,
+      sensor = `lock range and scan resolution {plain(hex.strength * 100)}% of what they were`,
     }
     local to = section(sheet, titles[hex.kind])
     row(to, "On its target", does[hex.kind])
     row(to, "Range", metres(hex.range))
     row(to, "Capacitor a cycle", `{plain(hex.capacitor)} GJ every {seconds(hex.duration)}`)
+  end
+  -- (module expansion, 2026-11-16: what is done for the drones, and a smartbomb)
+  if module.drones then
+    local to = section(sheet, "Drones")
+    if module.drones.damage then
+      row(to, "Drone damage", `{plain(module.drones.damage * 100)}% of what it was`)
+    end
+    if module.drones.tracking then
+      row(to, "Drone tracking and range", `{plain(module.drones.tracking * 100)}% of what they were`)
+    end
+  end
+  if module.smartbomb then
+    local bomb = module.smartbomb
+    local to = section(sheet, "Smartbomb")
+    row(to, "Damage", damage(bomb.damage, 1))
+    row(to, "Strikes", `every ship and drone within {metres(bomb.range)} that is not its owner's`)
+    row(to, "Capacitor a cycle", `{plain(bomb.capacitor)} GJ every {seconds(bomb.duration)}`)
   end
   if miner then
     local to = section(sheet, "Mining")
