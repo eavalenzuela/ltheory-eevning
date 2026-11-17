@@ -31,6 +31,7 @@ local AppShell = require("@lt/AppShell")
 local Arms = require("@lt/Game/View/Arms")
 local Capital = require("@lt/Game/View/Capital")
 local Effects = require("@lt/Game/View/Effects")
+local Citadel = require("@lt/Game/View/Citadel")
 local Hull = require("@lt/Game/View/Hull")
 local Paints = require("@lt/Core/Data/Paints")
 local Starbase = require("@lt/Game/View/Starbase")
@@ -405,6 +406,18 @@ return AppShell.Create(function(): Widget
       Object_SetRenderable(object, built.model)
       return object, built.radius
     end
+    -- ("citadel-" a size, "~" a paint, "~" the kinds of its detail with
+    -- "+" between: Game/View/Citadel, grown from the view's seed)
+    local big, lop, painted, words = string.match(kind, "^citadel%-(%d)(a?)~([^~]*)~(.*)$")
+    if big then
+      local built = Citadel.Build(seed, tonumber(big) or 1, if painted == "" then nil else painted, (string.gsub(words or "", "%+", " ")),
+        nil, lop == "a")
+      local object = Object_Scenery({})
+      Object_SetRenderable(object, built.model)
+      -- (its middle in the middle)
+      object:SetPos(-(built.lower + built.upper) * 0.5)
+      return object, built.radius
+    end
     local steps, decks = string.match(kind, "^grown%-(%d+)(d?)$")
     if steps then
       local built = Hull.Grown(seed, tonumber(steps) or 4, decks == "d")
@@ -737,6 +750,14 @@ return AppShell.Create(function(): Widget
       light = eye + vector.create(0.5, 0.9, 0.2) * (0.6 * vector.magnitude(eye)) }
   end
 
+  -- A citadel held still, from a little above its side: Game/View/Citadel.
+  local function citadelView(seed: number, size: number, paint: string?, detail: string?, asym: boolean?): View
+    local eye = vector.create(1.3, 0.6, 1.9)
+    return { name = `citadel-{seed}-{size}`,
+      kind = `citadel-{size}{if asym then "a" else ""}~{paint or ""}~{string.gsub(detail or "", " ", "+")}`, seed = seed,
+      eye = eye, look = CENTRE, light = eye + vector.create(0.5, 0.9, 0.2) * (0.6 * vector.magnitude(eye)) }
+  end
+
   _G.Viewer = {
     -- Hold the view called 'name' still, as its kind's own settings make
     -- it. False if there is none.
@@ -779,6 +800,18 @@ return AppShell.Create(function(): Widget
       end
       params, built, index, frames = {}, "", 0, 0
       held = shipView(type, paint, figure)
+      setUp(held :: View)
+      return true
+    end,
+    -- Hold a citadel as Game/View/Citadel grows it: its seed, its size (1
+    -- to 5), its paint (Hull.looks: the civil blue-grey if none) and the
+    -- kinds of its surface detail ("antennas lights", or "" for none).
+    Citadel = function(seed: number, size: number, paint: string?, detail: string?, asym: boolean?): boolean
+      if size < 1 or size > 5 then
+        return false
+      end
+      params, built, index, frames = {}, "", 0, 0
+      held = citadelView(seed, size, paint, detail, asym)
       setUp(held :: View)
       return true
     end,

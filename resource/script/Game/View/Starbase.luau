@@ -28,6 +28,7 @@
 
 local Arms = require("@lt/Game/View/Arms")
 local Capital = require("@lt/Game/View/Capital")
+local Citadel = require("@lt/Game/View/Citadel")
 local Hull = require("@lt/Game/View/Hull")
 local Plates = require("@lt/Game/View/Plates")
 local Structures = require("@lt/Core/Data/Structures")
@@ -1307,9 +1308,19 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
   end
   local type = Structures.towerById[makeup.tower :: string]
   local owner = faction or type.faction
-  local towerRadius = radius * Starbase.TOWER
+  -- (a citadel is as big as it is, the owner's sizes: its field is wider)
+  local towerRadius = if type.citadel and type.reach then type.reach else radius * Starbase.TOWER
   local guns = FAMILY_GUNS[type.gun] or GUNS
-  local tower = Starbase.TowerPart(owner, type.size, vector.create(0, 0, 0), towerRadius)
+  local tower: Part
+  if type.citadel then
+    -- A citadel (Game/View/Citadel): grown, upright, its middle where
+    -- the station is; what is fitted in it is inside it.
+    local made = Citadel.OfSize(type.size, if faction and faction ~= "" then faction else nil)
+    tower = { id = type.id, model = made.model, at = -(made.lower + made.upper) * 0.5 * (towerRadius / made.radius),
+      look = vector.create(0, 0, 1), scale = towerRadius / made.radius, radius = towerRadius }
+  else
+    tower = Starbase.TowerPart(owner, type.size, vector.create(0, 0, 0), towerRadius)
+  end
   tower.id = type.id
   local layout: Layout = { tower = tower, modules = {}, field = if dark then 0 else radius }
   -- (how far from the tower's upright the modules keep: clear of a
@@ -1323,6 +1334,10 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
   local posts: { Part } = {}
   for _, id in makeup.modules do
     local module = Structures.moduleById[id]
+    -- (a citadel's services are fitted inside it: nothing stands round it but its batteries)
+    if module.citadel then
+      continue
+    end
     local model = Starbase.Module(id)
     local battery = module.service == "defence"
     local angle, out, height

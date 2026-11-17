@@ -952,4 +952,51 @@ suite:Case("a citadel with a clone bay online is a place to wake; it is closed t
   t.eq(Core.Hash(Core.Load(data, length)), Core.Hash(game))
 end)
 
+suite:Case("what docks at a citadel goes by its size; what is too big tethers or cannot, and a friendly ship in its field is tethered", function(t)
+  -- (the owner's table: the highest of each that docks, and that tethers)
+  local function berths(class: string): { string }
+    local out: { string } = {}
+    for size = 1, 5 do
+      table.insert(out, Structures.Berth(Structures.towerById[`citadel.{Structures.CITADEL_SIZES[size]}`], class))
+    end
+    return out
+  end
+  t.eq(berths("cruiser"), { "dock", "dock", "dock", "dock", "dock" })
+  t.eq(berths("battleship"), { "tether", "dock", "dock", "dock", "dock" })
+  t.eq(berths("freighter"), { "none", "tether", "dock", "dock", "dock" })
+  t.eq(berths("supercarrier"), { "none", "none", "tether", "dock", "dock" })
+  t.eq(berths("ultracapital"), { "none", "none", "tether", "tether", "dock" })
+  t.eq(Structures.Berth(SMALL, "ultracapital"), "dock")
+  -- (in the game: a battleship is refused at a small citadel's door)
+  local game, station = inCitadel(t)
+  local big = Space.NewShip(game.state, "battleship.owari", "A battleship", "player", 0)
+  t.eq({ Stations.Validate(game.state, { kind = "Dock", actor = big.id, target = station }) } :: { any },
+    { false, "too big to dock here: it tethers, inside the field" } :: { any })
+  -- (and the pilot's own ship, undocked inside the field, is tethered: nobody locks it)
+  order(t, game, { kind = "Undock", actor = 0 })
+  stepUntil(game, "Tethered", 30)
+  local ship = game.state.ships[game.state.player.ship]
+  t.eq(ship.tether, station)
+  local object = assert(Space.Object(game.state, station))
+  local pirate = Space.NewShip(game.state, "frigate.akashi", "A pirate", "pirates", 0)
+  local ball = Space.Launch(game.state, pirate, Space.SystemOf(game.state, station), object.x + 500, object.y, object.z)
+  Space.AssignGrid(game.state, ball)
+  t.eq({ Core.Validate(game, { kind = "LockTarget", actor = pirate.id, target = ship.id }) } :: { any },
+    { false, "it is tethered to a citadel" } :: { any })
+  -- (it mends there, with a repair bay online)
+  local vitals = game.state.balls[ship.id].vitals
+  vitals.armor = vitals.armorMax * 0.5
+  game.state.ships[ship.id].tether = nil
+  order(t, game, { kind = "Dock", actor = 0, target = station })
+  stepUntil(game, "Docked", 120)
+  order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, "service.repair", 1).id })
+  steps(game, Structures.moduleById["service.repair"].anchor + 1)
+  order(t, game, { kind = "Undock", actor = 0 })
+  stepUntil(game, "Tethered", 30)
+  local mended = game.state.balls[ship.id].vitals
+  mended.armor = mended.armorMax * 0.5
+  steps(game, 10)
+  t.ok(mended.armor > mended.armorMax * 0.6, "a tethered ship was not mended")
+end)
+
 return suite

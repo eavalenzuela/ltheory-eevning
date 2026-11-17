@@ -220,6 +220,11 @@ local function lockable(state: State.State, ball: State.Ball, target: number): (
     -- (a ship in a cloud of gas is locked, and locks, only from close in: Tactical/Vapour)
     return false, "lost in the vapour"
   end
+  -- (a ship tethered to a citadel is nobody's to lock: Assets/Starbases)
+  local held = state.ships[target]
+  if held and held.tether then
+    return false, "it is tethered to a citadel"
+  end
   -- (a tower that has sealed itself is nobody's to shoot at: Tactical/Raids)
   local tower = if other then Starbases.OfCore(state, target) else nil
   if tower and Starbases.Sealed(state, tower) then

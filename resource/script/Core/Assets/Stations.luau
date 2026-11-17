@@ -20,6 +20,7 @@ local Constants = require("@lt/Core/Data/Constants")
 local Space = require("@lt/Core/Tactical/Space")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
+local Ships = require("@lt/Core/Data/Ships")
 local Structures = require("@lt/Core/Data/Structures")
 
 local Stations = {}
@@ -149,6 +150,16 @@ function Stations.Validate(state: State.State, command: State.Command): (boolean
     end
     -- (a citadel closed to others is its owner's and their members' alone)
     local ship = state.ships[command.actor]
+    -- (and what is too big to dock at a citadel tethers to it, or cannot)
+    local hull = if ship then Ships.byId[ship.type] else nil
+    if starbase and hull and Starbases.Citadel(starbase) then
+      local berth = Structures.Berth(Structures.towerById[starbase.tower], hull.class)
+      if berth == "tether" then
+        return false, "too big to dock here: it tethers, inside the field"
+      elseif berth == "none" then
+        return false, "too big to dock or tether here"
+      end
+    end
     if starbase and ship and Starbases.Citadel(starbase) and not starbase.open and ship.owner ~= starbase.owner
       and not (starbase.owner == "player" and ship.owner == "member") then
       return false, "this citadel is closed to you"

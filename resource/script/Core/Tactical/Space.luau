@@ -22,6 +22,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local Sides = require("@lt/Core/Tactical/Sides")
 local Skills = require("@lt/Core/Data/Skills")
 local State = require("@lt/Core/Kernel/State")
+local Structures = require("@lt/Core/Data/Structures")
 local System = require("@lt/Core/Describe/System")
 local Vitals = require("@lt/Core/Tactical/Vitals")
 local Wormholes = require("@lt/Core/Tactical/Wormholes")
@@ -378,13 +379,23 @@ local function undock(state: State.State, ship: State.Ship, events: { Event })
     ux, uy, uz = unit(station.x - host.x, station.y - host.y, station.z - host.z)
   end
   local hull = Ships.byId[ship.type]
-  local out = station.radius + Constants.UNDOCK_DISTANCE + hull.radius
+  -- (a citadel's guests come out just past the citadel itself, inside
+  -- its field, and wait there tethered: Assets/Starbases. Out of any
+  -- other station, beyond its field.)
+  local starbase = state.starbases[station.id]
+  local tower = if starbase then Structures.towerById[starbase.tower] else nil
+  local citadel = tower ~= nil and tower.citadel == true and tower.reach ~= nil
+  local out = (if citadel and tower then tower.reach :: number else station.radius) + Constants.UNDOCK_DISTANCE + hull.radius
   local system = Space.SystemOf(state, station.id)
   ship.docked = 0
   local ball = addBall(state, ship, system, station.x + ux * out, station.y + uy * out, station.z + uz * out)
-  -- Ships leave a station at full speed and keep going until told otherwise.
-  ball.vx, ball.vy, ball.vz = ux * ball.maxVelocity, uy * ball.maxVelocity, uz * ball.maxVelocity
-  setMode(ball, "goto", 0, 0)
+  if citadel then
+    setMode(ball, "stop", 0, 0)
+  else
+    -- Ships leave a station at full speed and keep going until told otherwise.
+    ball.vx, ball.vy, ball.vz = ux * ball.maxVelocity, uy * ball.maxVelocity, uz * ball.maxVelocity
+    setMode(ball, "goto", 0, 0)
+  end
   ball.dx, ball.dy, ball.dz = ux, uy, uz
   table.insert(events, { kind = "Undocked", ship = ship.id, station = station.id })
   table.insert(events, { kind = "BallAdded", ball = ball.id })

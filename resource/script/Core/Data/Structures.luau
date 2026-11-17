@@ -68,6 +68,7 @@ export type Tower = {
   citadel: boolean?,
   slots: number?,       -- service modules it can have fitted
   defences: number?,    -- batteries it can have fitted
+  reach: number?,       -- the radius of the citadel itself, m (its field is wider)
 }
 
 -- What a module is for: the service it gives the tower's guests, or how
@@ -191,17 +192,29 @@ end
 -- extra-large in a capital industrial's and the largest in a
 -- freighter's.
 Structures.CITADEL_SIZES = { "small", "medium", "large", "extralarge", "huge" }
+-- How big each is, its radius, and what docks or tethers there (the
+-- owner, 2026-11-17: "Small = 0.5km | Only subcaps below battleships can
+-- dock. Battleships will tether only. Caps+ cannot tether. Medium = 1km
+-- | all subcaps can dock. Caps tether. Supercaps+ cannot tether. Large =
+-- 5km | everything up to caps can dock. Supers+ tether. XLarge = 10km |
+-- everything through supers can dock. Ultras tether. XXLarge = 40km |
+-- everything can dock"; and "freighters are capitals"). By the tier of
+-- a hull (Structures.HullTier): the highest that docks, and the highest
+-- that tethers. Its field reaches half as far again and two kilometres
+-- more (mine).
+Structures.CITADEL_REACH = { 500, 1000, 5000, 10000, 40000 }
+Structures.CITADEL_BERTH = { { 1, 2 }, { 2, 3 }, { 3, 5 }, { 4, 5 }, { 5, 5 } }
 Structures.CITADEL_NAMES = { "Small Citadel", "Medium Citadel", "Large Citadel", "Extra-Large Citadel", "Huge Citadel" }
 Structures.CITADEL = {
-  { field = 4000, fuel = 8, anchor = 2 * 3600, volume = 4000, basePrice = 80000000, shield = 300000, armor = 150000, hull = 150000,
+  { field = 2750, fuel = 8, anchor = 2 * 3600, volume = 4000, basePrice = 80000000, shield = 300000, armor = 150000, hull = 150000,
     bay = 12, slots = 2, defences = 2 },
-  { field = 6000, fuel = 15, anchor = 4 * 3600, volume = 12000, basePrice = 250000000, shield = 600000, armor = 300000, hull = 300000,
+  { field = 3500, fuel = 15, anchor = 4 * 3600, volume = 12000, basePrice = 250000000, shield = 600000, armor = 300000, hull = 300000,
     bay = 18, slots = 3, defences = 4 },
-  { field = 8000, fuel = 30, anchor = 8 * 3600, volume = 25000, basePrice = 900000000, shield = 1200000, armor = 600000, hull = 600000,
+  { field = 9500, fuel = 30, anchor = 8 * 3600, volume = 25000, basePrice = 900000000, shield = 1200000, armor = 600000, hull = 600000,
     bay = 24, slots = 5, defences = 6 },
-  { field = 11000, fuel = 60, anchor = 12 * 3600, volume = 30000, basePrice = 3000000000, shield = 2500000, armor = 1200000,
+  { field = 17000, fuel = 60, anchor = 12 * 3600, volume = 30000, basePrice = 3000000000, shield = 2500000, armor = 1200000,
     hull = 1200000, bay = 36, slots = 6, defences = 8 },
-  { field = 15000, fuel = 120, anchor = 24 * 3600, volume = 40000, basePrice = 10000000000, shield = 5000000, armor = 2500000,
+  { field = 62000, fuel = 120, anchor = 24 * 3600, volume = 40000, basePrice = 10000000000, shield = 5000000, armor = 2500000,
     hull = 2500000, bay = 48, slots = 8, defences = 10 },
 }
 for size, word in Structures.CITADEL_SIZES do
@@ -211,8 +224,29 @@ for size, word in Structures.CITADEL_SIZES do
     powergrid = 0, cpu = 0, field = c.field, fuel = c.fuel, anchor = c.anchor, volume = c.volume, basePrice = c.basePrice,
     shield = c.shield, armor = c.armor, hull = c.hull, bay = c.bay,
     gun = "projectile", gunBonus = 1, missileBonus = 1, tank = "shield", resist = 0,
-    citadel = true, slots = c.slots, defences = c.defences,
+    citadel = true, slots = c.slots, defences = c.defences, reach = Structures.CITADEL_REACH[size],
   })
+end
+
+-- How big a hull is, for where it docks: 1 for anything smaller than a
+-- battleship, 2 a battleship, 3 a capital (a freighter among them: the
+-- owner's word), 4 a supercarrier, 5 an ultracapital. (By the names of
+-- the classes: Data/Ships' classes are not to be had here.)
+local TIERS: { [string]: number } = { battleship = 2, freighter = 3, carrier = 3, dreadnought = 3, siegedreadnought = 3,
+  capitalindustrial = 3, supercarrier = 4, ultracapital = 5 }
+function Structures.HullTier(class: string): number
+  return TIERS[class] or 1
+end
+
+-- What a hull of a class can do at a citadel: "dock", "tether" or
+-- "none". At a tower, or any station that is not a citadel, "dock".
+function Structures.Berth(tower: Tower?, class: string): string
+  if tower == nil or not tower.citadel then
+    return "dock"
+  end
+  local tier = Structures.HullTier(class)
+  local berth = Structures.CITADEL_BERTH[tower.size]
+  return if tier <= berth[1] then "dock" elseif tier <= berth[2] then "tether" else "none"
 end
 
 -- (A pilot cannot anchor a trade hub: a market is the traders who come
@@ -253,13 +287,13 @@ local modules: { ModuleType } = {
   -- while online. (A citadel open to others has traders come to it: so
   -- a pilot's citadel may have a market, where a pilot's tower may not.)
   { id = "service.market", name = "Market Hub", service = "market", radius = 0, powergrid = 0, cpu = 0, anchor = 600, pilot = true,
-    volume = 4000, basePrice = 30000000, citadel = true, fuel = 10 },
+    volume = 3500, basePrice = 30000000, citadel = true, fuel = 10 },
   { id = "service.repair", name = "Repair and Fitting Bay", service = "fitting", radius = 0, powergrid = 0, cpu = 0, anchor = 300,
     pilot = true, volume = 2000, basePrice = 8000000, citadel = true, fuel = 4 },
   { id = "service.refinery", name = "Refinery", service = "refining", radius = 0, powergrid = 0, cpu = 0, anchor = 600, pilot = true,
     volume = 3000, basePrice = 15000000, citadel = true, fuel = 8 },
   { id = "service.manufacturing", name = "Manufacturing Plant", service = "industry", radius = 0, powergrid = 0, cpu = 0, anchor = 600,
-    pilot = true, volume = 4000, basePrice = 20000000, citadel = true, fuel = 10 },
+    pilot = true, volume = 3500, basePrice = 20000000, citadel = true, fuel = 10 },
   { id = "service.research", name = "Research Laboratory", service = "research", radius = 0, powergrid = 0, cpu = 0, anchor = 600,
     pilot = true, volume = 3000, basePrice = 18000000, citadel = true, fuel = 8 },
   { id = "service.clone", name = "Clone Bay", service = "quarters", radius = 0, powergrid = 0, cpu = 0, anchor = 300, pilot = true,

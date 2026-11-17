@@ -55,6 +55,7 @@ local Corporation = require("@lt/Core/Assets/Corporation")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Moons = require("@lt/Core/Data/Moons")
+local Ships = require("@lt/Core/Data/Ships")
 local Reactions = require("@lt/Core/Data/Reactions")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -93,7 +94,8 @@ local function skilled(state: State.State, starbase: State.Starbase, skill: stri
 end
 -- Whether a starbase is a citadel (Data/Structures: the owner's B2).
 function Starbases.Citadel(starbase: State.Starbase): boolean
-  return Structures.towerById[starbase.tower].citadel == true
+  local tower = Structures.towerById[starbase.tower]
+  return tower ~= nil and tower.citadel == true
 end
 
 -- The most tax a citadel's owner may take (mine).
@@ -103,7 +105,7 @@ Starbases.TAX_MOST = 0.15
 -- service fitted in it that is online.
 function Starbases.Burn(state: State.State, starbase: State.Starbase): number
   local burn = Structures.towerById[starbase.tower].fuel
-  for _, module in starbase.modules do
+  for _, module in starbase.modules or {} :: { State.Anchored } do
     local type = Structures.moduleById[module.type]
     if type.fuel and state.tick >= module.ready then
       burn += type.fuel
@@ -865,6 +867,73 @@ function Starbases.Step(state: State.State, events: { Event })
       feed(state, starbase, events)
       if starbase.fuel == 0 then
         table.insert(events, { kind = "StarbaseDark", station = id })
+      end
+    end
+  end
+end
+
+-- Tethering (the owner, 2026-11-17: "Tethering is automatic when a
+-- friendly ship is in range"). A ship of a citadel's own side inside its
+-- field, of a hull that may dock or tether there (Structures.Berth), and
+-- with nothing locked, is tethered to it: nobody can lock it, and with a
+-- repair bay online it is mended as it waits. Its side: the citadel's
+-- owner and, for the pilot's, their corporation's members; and while
+-- the citadel is open, anybody it would not keep out of its field.
+-- Locking anything, leaving the field, or the citadel going dark ends
+-- it. (What it does, and how fast it mends, are mine.)
+Starbases.MEND = 0.02   -- the share of its shield, armour and structure a tethered ship gets back a second
+
+-- Whether a ship is of a citadel's side.
+function Starbases.Friendly(state: State.State, starbase: State.Starbase, ship: State.Ship): boolean
+  if ship.owner == starbase.owner or (starbase.owner == "player" and ship.owner == "member") then
+    return true
+  end
+  if not starbase.open or ship.owner == "pirates" or ship.owner == "starbase" then
+    return false
+  end
+  return not (ship.owner == "player" and state.tick < state.player.marked)
+end
+
+function Starbases.Tether(state: State.State, events: { Event })
+  -- (the lit citadels, by the grid that is each)
+  local at: { [number]: State.Starbase } = {}
+  local any = false
+  for _, id in state.starbaseIds do
+    local starbase = state.starbases[id]
+    if Starbases.Citadel(starbase) and Starbases.Lit(state, starbase) then
+      at[id] = starbase
+      any = true
+    end
+  end
+  local SECOND = Constants.TICK
+  for _, ballId in state.ballIds do
+    local ball = state.balls[ballId]
+    local ship = state.ships[ballId]
+    if ship then
+      local starbase = if any then at[ball.grid] else nil
+      local good = false
+      if starbase and ship.id ~= starbase.core and #ball.vitals.locks == 0 and Starbases.Friendly(state, starbase, ship)
+        and not (ball.warp and ball.warp.stage == "warp") then
+        local object = Space.Object(state, starbase.id)
+        local hull = Ships.byId[ship.type]
+        good = object ~= nil and hull ~= nil and Space.Distance(object :: any, ball :: any) < object.radius
+          and Structures.Berth(Structures.towerById[starbase.tower], hull.class) ~= "none"
+      end
+      if good and starbase then
+        if ship.tether ~= starbase.id then
+          ship.tether = starbase.id
+          table.insert(events, { kind = "Tethered", ship = ship.id, station = starbase.id })
+        end
+        if Starbases.Has(state, starbase, "fitting") then
+          local vitals = ball.vitals
+          local mend = Starbases.MEND * SECOND
+          vitals.shield = math.min(vitals.shieldMax, vitals.shield + vitals.shieldMax * mend)
+          vitals.armor = math.min(vitals.armorMax, vitals.armor + vitals.armorMax * mend)
+          vitals.hull = math.min(vitals.hullMax, vitals.hull + vitals.hullMax * mend)
+        end
+      elseif ship.tether then
+        table.insert(events, { kind = "Untethered", ship = ship.id, station = ship.tether })
+        ship.tether = nil
       end
     end
   end

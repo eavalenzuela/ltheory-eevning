@@ -772,13 +772,16 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
   Im.Strong(far, x + width - 12 - Im.StrongWidth(far, 14), y + 32, 14, Theme.TEXT)
 
   local targeted = lockOf(ball, entry.id) ~= nil
-  -- (what is done at a moon is to anchor a tower there: the one in the hold)
-  local tower = 0
-  if entry.kind == "moon" then
+  -- (what is done at a moon is to anchor a tower there: the one in the
+  -- hold; and at a moon or a planet, a citadel)
+  local tower, citadel = 0, 0
+  if entry.kind == "moon" or entry.kind == "planet" then
     for _, item in Core.Query.Items(session.game, ball.id, "cargo") do
-      if Structures.towerById[item.type] then
+      local type = Structures.towerById[item.type]
+      if type and type.citadel and citadel == 0 then
+        citadel = item.id
+      elseif type and not type.citadel and tower == 0 and entry.kind == "moon" then
         tower = item.id
-        break
       end
     end
   end
@@ -792,12 +795,18 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     { label = "Align", kind = "AlignTo" },
     if entry.kind == "gate" or through then { label = if entry.variety == "passage" or through then "Go through" else "Jump", kind = "Jump" }
       elseif entry.kind == "bookmark" then { label = "Forget", kind = "ForgetBookmark" }
-      elseif entry.kind == "moon" then { label = "Anchor tower", kind = "AnchorTower" }
+      elseif entry.kind == "moon" and (tower ~= 0 or citadel == 0) then { label = "Anchor tower", kind = "AnchorTower" }
+      elseif entry.kind == "moon" then { label = "Anchor citadel", kind = "AnchorTower" }
       elseif entry.kind == "planet" then { label = "Colony", kind = "Colony" }
       else { label = "Dock", kind = "Dock" },
     if targeted then { label = "Unlock", kind = "UnlockTarget" } else { label = "Lock", kind = "LockTarget" },
     { label = "Loot", kind = "Loot" },
   }
+  if entry.kind == "planet" and citadel ~= 0 then
+    table.insert(orders, { label = "Anchor citadel", kind = "AnchorTower" })
+  elseif entry.kind == "moon" and tower ~= 0 and citadel ~= 0 then
+    table.insert(orders, { label = "Anchor citadel", kind = "AnchorTower" })
+  end
   if entry.kind == "wreck" then
     -- (a sealed hold is hacked open before it is looted)
     table.insert(orders, { label = "Hack", kind = "StartHack" })
@@ -810,7 +819,8 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     local column, line = (index - 1) % 3, (index - 1) // 3
     local bx, by = x + 12 + column * (buttonWidth + 8), y + 58 + line * 32
     if order.kind == "AnchorTower" then
-      local command: State.Command = { kind = "AnchorTower", actor = 0, item = tower, target = entry.id }
+      local command: State.Command = { kind = "AnchorTower", actor = 0, item = if order.label == "Anchor citadel" then citadel else tower,
+        target = entry.id }
       if Im.Button(order.label, bx, by, buttonWidth, 26, (Session.CanDo(session, command))) then
         Session.Do(session, command)
       end

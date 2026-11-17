@@ -608,7 +608,7 @@ end
 -- ('single': it has no twin. Only in a style whose hulls are not the
 -- same on both sides.) 'warps' are the style's, with where this hull's
 -- own stern and bow are.
-type Plate = { center: vector, size: vector, part: number, single: boolean? }
+export type Plate = { center: vector, size: vector, part: number, single: boolean? }
 type Growth = { plates: { Plate }, middle: vector, across: vector, style: Style, warps: Warps, seed: number }
 
 local function growth(seed: number, steps: number, decks: boolean, style: Style): Growth
@@ -3274,6 +3274,38 @@ local function detailed(b: Builder, ship: Ship, detail: Detail, metres: number)
 
   b.rivets = detail.rivets == true
 end
+
+-- Plates laid out by something else that is grown (a citadel: Game/View/
+-- Citadel), in the generator's units and unbent: drawn, and detailed as
+-- a hull is ('metres': how big it will be, for the sizes of things).
+-- Each plate is drawn alone unless it has a twin ('single' false).
+function Hull.DrawPlates(b: Builder, plates: { Plate }, eased: number?)
+  for _, plate in plates do
+    if plate.single == false then
+      twin(b, plate.part, plate.center, plate.size, eased)
+    else
+      mid(b, plate.part, plate.center, plate.size, eased)
+    end
+  end
+end
+
+function Hull.DetailPlates(b: Builder, plates: { Plate }, seed: number, detail: Detail, metres: number, keepOff: { vector }?,
+  keepReach: number?)
+  local low, high = v(math.huge, math.huge, math.huge), v(-math.huge, -math.huge, -math.huge)
+  local single: { Plate } = {}
+  for _, plate in plates do
+    low, high = vector.min(low, plate.center - plate.size), vector.max(high, plate.center + plate.size)
+    table.insert(single, { center = plate.center, size = plate.size, part = plate.part, single = plate.single ~= false })
+  end
+  local g: Growth = { plates = single, middle = (low + high) / 2 * GROWN, across = (high - low) * GROWN, style = styleOf(nil),
+    warps = styleOf(nil).warps, seed = seed }
+  -- (what it keeps off, as a hull's detail keeps off its mounts)
+  detailed(b, { growth = g, ends = {}, turrets = {}, launchers = {}, seats = {}, clear = keepOff or {}, reach = (keepReach or 0) / 1.6 },
+    detail, metres)
+end
+
+-- The generator's units: a plate of size 1 is so many of a model's.
+Hull.GROWN = GROWN
 
 -- A detail from the words of a seed line or a sheet (Hull.DETAILS);
 -- nil if none is among them.

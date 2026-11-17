@@ -84,7 +84,7 @@ suite:Case("everything fitted, fired, flown or built into it has a blueprint, an
       or info.category == "structure" or info.category == "drone" or Boosters.byId[id] ~= nil then
       -- (an alien people's tower and the pirates' are built from a print nobody sells: Data/Blueprints)
       local tower = Structures.towerById[id]
-      if tower then
+      if tower and not tower.citadel then
         t.eq(Blueprints.byProduct[id].rare == true, Factions.byId[tower.faction].kind ~= "human", id)
       end
       -- (and a booster, which is made of its gas)

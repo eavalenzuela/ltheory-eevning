@@ -1,0 +1,36 @@
+/* An air shield across a citadel's hangar mouth (Game/View/Citadel): a
+   sheet of force that keeps the air in and lets ships through. Drawn on
+   flat quads with additive blending, no depth writing and both faces,
+   as the field of a tower is (field.jsl): a faint blue sheet, brighter
+   where it is seen edge on, with slow ripples crossing it and a bright
+   line along its edges where it is held. */
+
+#include frag.jsl
+#include math.jsl
+#include color.jsl
+#include lighting.jsl
+#include worldnoise.jsl
+
+FRAG_IN vec3 normal;
+FRAG_IN vec3 position;
+FRAG_IN vec3 vertposscaled;
+FRAG_IN vec3 origin;
+FRAG_IN vec3 scale;
+
+uniform vec3 shieldTint;
+uniform float shieldGlow;
+uniform float time;
+
+void main() {
+  vec3 rd = normalize(position - eye);
+  vec3 n = normalize(normal);
+  float graze = 1.0 - abs(dot(n, rd));
+  /* (where on the sheet: its own 0 to 1 each way, for its edges) */
+  vec2 at = clamp(uv, 0.0, 1.0);
+  float edge = 1.0 - smoothstep(0.0, 0.06, min(min(at.x, 1.0 - at.x), min(at.y, 1.0 - at.y)));
+  vec3 local = vertposscaled / max(max(scale.x, scale.y), max(scale.z, 0.001));
+  float ripple = 0.5 + 0.5 * sin(18.0 * (at.y + 0.15 * wn_fbm(local * 3.0 + vec3(0.0, 0.0, 0.07 * time), 3, 0.55)) - 0.9 * time);
+  float cells = 0.6 + 0.4 * wn_fbm(local * 9.0 + vec3(0.11 * time), 2, 0.6);
+  float a = shieldGlow * (0.16 * cells + 0.10 * ripple + 0.25 * graze + 0.9 * edge);
+  RETURN(vec4(mix(shieldTint, vec3(1.0), 0.4 * edge) * a, 1.0));
+}

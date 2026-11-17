@@ -32,7 +32,8 @@ suite:Case("each people that holds stations has a tower in each of three sizes, 
         Structures.SUPPLY[size].fuel } :: { any })
     end
   end
-  t.eq(#Structures.towers, #Structures.TOWER_PEOPLES * 3)
+  -- (the control towers: the citadels are in the list too, five sizes of nobody's)
+  t.eq(#Structures.towers, #Structures.TOWER_PEOPLES * 3 + #Structures.CITADEL_SIZES)
   t.eq(Structures.towerById["tower.kethri.small"], nil)
 end)
 
@@ -42,6 +43,9 @@ suite:Case("a people's tower is better at what its people are: its guns, its mis
   -- on every resistance of its layer)
   t.eq({ Structures.TOWER_DAMAGE, Structures.TOWER_RESIST } :: { any }, { 1.15, 0.15 } :: { any })
   for _, tower in Structures.towers do
+    if tower.citadel then
+      continue
+    end
     local people = Factions.byId[tower.faction]
     t.eq({ tower.gun, tower.gunBonus, tower.tank, tower.resist } :: { any }, { people.weapon, 1.15, people.tank, 0.15 } :: { any }, tower.id)
     t.eq(tower.missileBonus, if people.launchers >= 0.3 then 1.15 else 1, tower.id)
@@ -58,6 +62,9 @@ suite:Case("a people's tower is better at what its people are: its guns, its mis
   end
   -- The guns: a volley as big as a battery's ever was, of the people's family's kinds, 15% more.
   for _, tower in Structures.towers do
+    if tower.citadel then
+      continue
+    end
     local damage = assert((Batteries.Of("battery.gun", tower.id)))
     t.near(damage[1] + damage[2] + damage[3] + damage[4], 60 * 1.15, 1e-9, tower.id)
     if tower.gun == "laser" then
@@ -172,8 +179,11 @@ suite:Case("a tower, a module and a day's fuel for the largest tower each go, pa
     end
   end
   t.ok(smallest < math.huge, "there is no industrial")
+  -- (a citadel is not: the bigger ones take a capital industrial's hold, or a freighter's)
   for _, tower in Structures.towers do
-    t.ok(tower.volume <= smallest, `{tower.name} is {tower.volume} m3 and the smallest industrial holds {smallest}`)
+    if not tower.citadel then
+      t.ok(tower.volume <= smallest, `{tower.name} is {tower.volume} m3 and the smallest industrial holds {smallest}`)
+    end
   end
   for _, module in Structures.modules do
     t.ok(module.volume <= smallest, `{module.name} is {module.volume} m3 and the smallest industrial holds {smallest}`)

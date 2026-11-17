@@ -118,11 +118,11 @@ function Catalog.Group(id: string): (string, number, number)
     local tower = Structures.towerById[id]
     local module = Structures.moduleById[id]
     if tower and tower.citadel then
-      return "Citadels", 1, tower.size
+      return "Citadels", 5, tower.size
     elseif tower then
       return "Control towers", 1, tower.size
     elseif module and module.citadel then
-      return "Citadel services", 2, 0
+      return "Citadel services", 6, 0
     elseif module then
       return "Structure modules", 2, 0
     elseif id == Planets.CENTRE.id then

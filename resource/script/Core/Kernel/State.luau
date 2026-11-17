@@ -18,6 +18,9 @@ export type Ship = {
   name: string,
   owner: string,    -- "player", or the faction that flies it
   docked: number,   -- station id, or 0 in space
+  -- The citadel it is tethered to, too big to dock there (Assets/
+  -- Starbases): nil when it is not.
+  tether: number?,
   -- Armour and hull points missing. Damage stays with a ship until it is
   -- repaired; shields and capacitor refill by themselves.
   armorDamage: number,
