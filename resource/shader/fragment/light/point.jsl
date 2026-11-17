@@ -11,6 +11,10 @@ uniform vec3 center[kMaxLights];
 
 const float kMinDistance = 0.0001;
 
+/* Cel shading (light/global.jsl): a light near a hull falls on it in flat
+   tones too. */
+uniform float cel;
+
 void main() {
   vec2 uvp = gl_FragCoord.xy * rcpFrame;
   float depth = GetDepthNormalized();
@@ -70,11 +74,21 @@ void main() {
     for (int i = 0; i < kMaxLights; ++i) {
       vec3 L = center[i] - p;
       float Lmag = 1.0 / max(kMinDistance, length(L));
-      light += color[i] * Lmag *
-        cookTorrance(L * Lmag, p, N, R, 1.0);
+      if (cel > 0.5) {
+        vec3 Ld = L * Lmag;
+        float NLs = dot(N, Ld);
+        float tone = 0.45 * smoothstep(-0.02, 0.02, NLs);
+        tone = mix(tone, 1.0, smoothstep(0.38, 0.42, NLs));
+        float spec = smoothstep(0.955, 0.965, saturate(dot(reflect(normalize(p - eye), N), Ld)));
+        light += color[i] * Lmag * (tone + 0.8 * spec);
+      } else {
+        light += color[i] * Lmag *
+          cookTorrance(L * Lmag, p, N, R, 1.0);
+      }
     }
   }
   
   light *= kDynamicLightMult;
-  RETURN(vec4(asLight(light), 1.0));
+  /* (nothing to the alpha, which is the sun's pass's ink: it is added to) */
+  RETURN(vec4(asLight(light), 0.0));
 }

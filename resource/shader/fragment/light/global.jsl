@@ -107,14 +107,15 @@ void main() {
       /* (three flat tones, a hard highlight, and the sky as a flat fill
          in place of its reflection) */
       float NLs = dot(N, L);
-      float tone = mix(0.10, 0.45, smoothstep(-0.02, 0.02, NLs));
+      float tone = mix(0.12, 0.45, smoothstep(-0.02, 0.02, NLs));
       tone = mix(tone, 1.0, smoothstep(0.38, 0.42, NLs));
       float spec = smoothstep(0.955, 0.965, saturate(dot(R, L)));
-      light += color * (2.4 * tone + 1.6 * spec);
+      light += color * (0.35 * tone + 0.5 * spec);
       /* (the sky as one flat fill: what it is on average, above and below) */
-      light += 0.3 * (toLinear(textureCube(envMapLF, vec3(0.0, 1.0, 0.0)).xyz) + toLinear(textureCube(envMapLF, vec3(0.0, -1.0, 0.0)).xyz));
-      light *= 1.0 - inkAt(N, depth);
-      RETURN(vec4(asLight(light), 1.0));
+      light += 0.08 * (toLinear(textureCube(envMapLF, vec3(0.0, 1.0, 0.0)).xyz) + toLinear(textureCube(envMapLF, vec3(0.0, -1.0, 0.0)).xyz));
+      /* (the ink goes in the alpha, and is laid on when the light of every
+         kind is in: light/composite.jsl) */
+      RETURN(vec4(asLight(light), 1.0 - inkAt(N, depth)));
     }
     light += color * NL * (1.5 + 0.5 * min(8.0, cookTorrance(L, p, N, pow2(max(roughness, 0.08)), 1.0)));
 #if 0
@@ -138,5 +139,5 @@ void main() {
     light = vec3(1.0);
   }
 
-  RETURN(vec4(asLight(light), 1.0));
+  RETURN(vec4(asLight(light), (cel > 0.5 && material != MATERIAL_NOSHADE) ? 1.0 - inkAt(N, depth) : 1.0));
 }

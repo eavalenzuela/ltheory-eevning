@@ -3,6 +3,7 @@
 #include "LTE/CubeMap.h"
 #include "LTE/Data.h"
 #include "LTE/Map.h"
+#include "LTE/RenderPasses.h"
 #include "LTE/Renderer.h"
 #include "LTE/ShaderInstance.h"
 #include "LTE/Stack.h"
@@ -70,6 +71,12 @@ namespace {
     return (float)(Universe_Age() % (kTimeScale * 60))  / (float)kTimeScale;
   }
 
+  /* Cel shading: 1 when "Smooth Shading" is switched off (RenderPass_SetEnabled;
+     light/global.jsl, material/hull.jsl). */
+  float GetCel() {
+    return RenderPass_IsEnabled("Smooth Shading") ? 0.0f : 1.0f;
+  }
+
   V2 GetFrame() {
     return Viewport_Get()->size;
   }
@@ -110,6 +117,9 @@ namespace {
 
     /* Time. */
     Link(s, "time", GetGameTime);
+
+    /* Look. */
+    Link(s, "cel", GetCel);
   }
 }
 

@@ -7,10 +7,13 @@ uniform sampler2D albedoBuffer;
 uniform sampler2D lightBuffer;
 uniform sampler2D noiseBuffer;
 uniform vec2 lightPosSS;
+/* Cel shading (light/global.jsl): the ink is in the light's alpha. */
+uniform float cel;
 
 void main() {
   vec4 albedo = texture2D(albedoBuffer, uv);
-  vec3 fg = albedo.xyz * texture2D(lightBuffer, uv).xyz;
+  vec4 lit = texture2D(lightBuffer, uv);
+  vec3 fg = albedo.xyz * lit.xyz * (cel > 0.5 ? saturate(lit.w) : 1.0);
   float depth = GetDepthNormalized() * length(worldRayD);
   float fog = getFoginess(depth);
 
