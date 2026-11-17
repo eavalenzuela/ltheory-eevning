@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+"""script/artgen: the game's art redrawn in its retro-anime manner.
+
+The owner's direction, 2026-11-17: icons for modules and ships, and
+splash art, are made from the game's own pictures (a ship as the
+viewer shows it, cropped) by asking OpenAI's image generator to redraw
+them in the manner of the portraits, without changing their shape.
+Every picture made is the owner's to look at first: what comes back is
+kept in cache/artgen/, and nothing is put into the game from here.
+
+    script/artgen edit IN.png NAME [--style REF.png] [--size WxH]
+                  [--quality low|medium|high] [--model M] [--say TEXT]
+        redraw IN.png; written to cache/artgen/NAME.png, beside
+        NAME.json (what was asked). REF.png, if given, is sent too, as
+        the manner to draw in (one of the portraits). --say adds to what
+        is asked (what the picture is of, say).
+    script/artgen icon CAPTURE.png NAME [--say TEXT] [edit's options]
+        an icon: the middle of a capture cut square (icons are square:
+        the owner, 2026-11-17), redrawn at 1024 by 1024 with a portrait
+        as the manner to draw in (portrait-36, unless --style says)
+    script/artgen crop IN.png OUT.png X Y W H
+        cut a piece out of a picture (a capture), asks nobody anything
+
+The key is read from the environment (OPENAI_API_KEY) or from .env at
+the top of the repository, and is never printed. Nothing is sent but
+the pictures and the words asked.
+"""
+import base64
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.request
+import uuid
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.path.join(ROOT, "cache/artgen")
+MODEL = "gpt-image-2"
+
+# What every picture is asked to be. (Mine, 2026-11-17: to be tuned on
+# the owner's word.)
+STYLE = (
+    "Redraw this picture as a hand-drawn retro anime illustration in the manner of late-1980s and early-1990s "
+    "science-fiction anime and its mecha design sheets: confident black ink linework, flat cel shading in two or "
+    "three tones, a limited, slightly muted palette, a faint grain of printed paper. "
+    "It must stay the same object seen from the same angle: keep its exact silhouette, proportions and outline; "
+    "keep every plate, fin, engine and turret where it is and the size it is; do not add, remove, reshape, "
+    "straighten or tidy any part, and do not add details that are not there. Only the manner of drawing changes."
+)
+STYLE_REF = (
+    " The second picture shows the manner to draw in (its linework, shading, palette and grain): take only its "
+    "manner, none of its content."
+)
+
+
+def key():
+    found = os.environ.get("OPENAI_API_KEY")
+    if not found and os.path.exists(os.path.join(ROOT, ".env")):
+        for line in open(os.path.join(ROOT, ".env")):
+            line = line.strip()
+            if line.startswith("OPENAI_API_KEY="):
+                found = line.split("=", 1)[1].strip().strip('"').strip("'")
+    if not found:
+        sys.exit("artgen: no OPENAI_API_KEY in the environment or in .env")
+    return found
+
+
+def multipart(fields, files):
+    boundary = uuid.uuid4().hex
+    body = bytearray()
+    for name, value in fields:
+        body += f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n".encode()
+    for name, path in files:
+        body += (f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"; filename=\"{os.path.basename(path)}\"\r\n"
+                 "Content-Type: image/png\r\n\r\n").encode()
+        body += open(path, "rb").read() + b"\r\n"
+    body += f"--{boundary}--\r\n".encode()
+    return bytes(body), f"multipart/form-data; boundary={boundary}"
+
+
+def edit(args):
+    if len(args) < 2:
+        sys.exit(__doc__)
+    source, name = args[0], args[1]
+    options = {"--style": None, "--size": "1536x1024", "--quality": "high", "--model": MODEL, "--say": ""}
+    rest = args[2:]
+    while rest:
+        flag = rest.pop(0)
+        if flag not in options or not rest:
+            sys.exit(f"artgen: what is '{flag}'?")
+        options[flag] = rest.pop(0)
+    prompt = STYLE + (STYLE_REF if options["--style"] else "") + (" " + options["--say"] if options["--say"] else "")
+    fields = [("model", options["--model"]), ("prompt", prompt), ("size", options["--size"]),
+              ("quality", options["--quality"]), ("n", "1")]
+    files = [("image[]", source)] + ([("image[]", options["--style"])] if options["--style"] else [])
+    body, kind = multipart(fields + [("input_fidelity", "high")], files)
+    os.makedirs(OUT, exist_ok=True)
+    started = time.time()
+    for attempt in (1, 2):
+        request = urllib.request.Request("https://api.openai.com/v1/images/edits", data=body,
+                                         headers={"Authorization": "Bearer " + key(), "Content-Type": kind})
+        try:
+            answer = json.load(urllib.request.urlopen(request, timeout=600))
+            break
+        except urllib.error.HTTPError as error:
+            said = error.read().decode(errors="replace")
+            # (a model that does not take input_fidelity is asked again without it)
+            if attempt == 1 and "input_fidelity" in said:
+                body, kind = multipart(fields, files)
+                continue
+            sys.exit(f"artgen: the service said {error.code}: {said[:600]}")
+    picture = base64.b64decode(answer["data"][0]["b64_json"])
+    path = os.path.join(OUT, name + ".png")
+    open(path, "wb").write(picture)
+    json.dump({"source": source, "style": options["--style"], "model": options["--model"], "size": options["--size"],
+               "quality": options["--quality"], "prompt": prompt, "usage": answer.get("usage"),
+               "seconds": round(time.time() - started)}, open(os.path.join(OUT, name + ".json"), "w"), indent=1)
+    print(f"artgen: {path} ({round(time.time() - started)} s)")
+
+
+def crop(args):
+    from PIL import Image
+    if len(args) != 6:
+        sys.exit(__doc__)
+    x, y, w, h = (int(a) for a in args[2:])
+    Image.open(args[0]).convert("RGB").crop((x, y, x + w, y + h)).save(args[1])
+
+
+ICON_STYLE = os.path.join(ROOT, "resource/texture/portraits/portrait-36.png")
+
+
+def hull_square(picture):
+    """The square about the hull in a capture of the viewer's
+    (Viewer.Ships): where its paint and metal are, and not the green of
+    the sky or a star's point, with a margin."""
+    small = picture.resize((picture.width // 4, picture.height // 4))
+    w, h = small.size
+    pixels = small.load()
+    rows, cols = [0] * h, [0] * w
+    for y in range(h):
+        for x in range(w):
+            r, g, b = pixels[x, y]
+            # (the sky is dark, or green with little blue in it)
+            if r + g + b > 110 and b > 0.55 * g:
+                rows[y] += 1
+                cols[x] += 1
+    # (a line with only a star or two on it is not the hull)
+    ys = [y for y in range(h) if rows[y] >= 3]
+    xs = [x for x in range(w) if cols[x] >= 3]
+    if not xs or not ys:
+        sys.exit("artgen: no hull found in the capture")
+    x0, x1, y0, y1 = xs[0] * 4, xs[-1] * 4 + 4, ys[0] * 4, ys[-1] * 4 + 4
+    side = int(max(x1 - x0, y1 - y0) * 1.12)
+    cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+    return cx - side // 2, cy - side // 2, side
+
+
+def icon(args):
+    from PIL import Image
+    if len(args) < 2:
+        sys.exit(__doc__)
+    capture, name = args[0], args[1]
+    os.makedirs(OUT, exist_ok=True)
+    square = os.path.join(OUT, name + ".source.png")
+    picture = Image.open(capture).convert("RGB")
+    x, y, side = hull_square(picture)
+    # (a square that runs off the capture is filled out with the dark of space)
+    cut = Image.new("RGB", (side, side), (4, 6, 5))
+    cut.paste(picture.crop((max(0, x), max(0, y), min(picture.width, x + side), min(picture.height, y + side))),
+              (max(0, -x), max(0, -y)))
+    cut.save(square)
+    rest = list(args[2:])
+    if "--style" not in rest:
+        rest += ["--style", ICON_STYLE]
+    if "--size" not in rest:
+        rest += ["--size", "1024x1024"]
+    edit([square, name] + rest)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2 or sys.argv[1] not in ("edit", "crop", "icon"):
+        sys.exit(__doc__)
+    {"edit": edit, "crop": crop, "icon": icon}[sys.argv[1]](sys.argv[2:])

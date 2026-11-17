@@ -32,6 +32,7 @@ local Arms = require("@lt/Game/View/Arms")
 local Capital = require("@lt/Game/View/Capital")
 local Effects = require("@lt/Game/View/Effects")
 local Hull = require("@lt/Game/View/Hull")
+local Paints = require("@lt/Core/Data/Paints")
 local Starbase = require("@lt/Game/View/Starbase")
 local Structures = require("@lt/Core/Data/Structures")
 local Planet = require("@lt/Game/View/Planet")
@@ -379,6 +380,16 @@ return AppShell.Create(function(): Widget
       return Star.New(class, seed, tweaks), 1
     end
     local hull = string.match(kind, "^hull%-(.+)$")
+    local dressed = if hull then string.match(hull, "^(.+)~livery$") else nil
+    if dressed then
+      -- ("~livery": in the paint its faction's own ships wear in space, if it has one)
+      local ship = Ships.byId[dressed]
+      local paint, figure = Paints.Dress(if ship then ship.lineage else "", false)
+      local built = assert(Hull.Build(dressed, nil, nil, paint, figure), `no design for the hull '{dressed}'`)
+      local object = Object_Scenery({})
+      Object_SetRenderable(object, built.model)
+      return object, built.radius
+    end
     if hull then
       -- ("@1": as a pirate veteran flies it; "@2", a captain; "@0", one of the pack)
       local plain, rank = string.match(hull, "^(.+)@(%d)$")
@@ -669,7 +680,7 @@ return AppShell.Create(function(): Widget
       end
       local hull = string.match(v.kind, "^hull%-(.+)$")
       if hull then
-        dress((string.gsub(hull, "@%d$", "")), radius)
+        dress((string.gsub(string.gsub(hull, "@%d$", ""), "~livery$", "")), radius)
       end
       camera:SetTarget(stage[1])
       built = key
@@ -724,6 +735,27 @@ return AppShell.Create(function(): Widget
         end
       end
       return false
+    end,
+    -- Take every hull of a faction ('lineage'; "" for nobody's) that has
+    -- a design, from the bow quarter, in its faction's livery: a picture
+    -- each, "ship-" and its type, then done. For the art made from them
+    -- (script/artgen). Returns how many.
+    Ships = function(lineage: string): number
+      -- (from farther off than the hull views: a wide hull has room in a
+      -- square about it, which the art is cut to)
+      local eye: vector = HULL_VIEWS[1][2] * 1.45
+      views = {}
+      for _, ship in Ships.list do
+        if ship.lineage == lineage and Hull.Has(ship.id) then
+          table.insert(views, { name = `ship-{ship.id}`, kind = `hull-{ship.id}~livery`, seed = 1, eye = eye, look = CENTRE,
+            light = eye + vector.create(0.5, 0.9, 0.2) * (0.6 * vector.magnitude(eye)) })
+        end
+      end
+      params, held, built, index, frames = {}, nil, "", if #views > 0 then 1 else 0, 0
+      if #views > 0 then
+        setUp(views[1])
+      end
+      return #views
     end,
   }
 
