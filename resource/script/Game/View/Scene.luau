@@ -1067,6 +1067,94 @@ local JUMP_OUT = 1.12
 local JUMP_IN = 1.5
 local JUMP_LIGHT = vector.create(0.72, 0.90, 1.0)
 
+-- What the modules of the expansion of 2026-11-16 look like at work
+-- (made 2026-11-17, at the owner's asking for the effects they need,
+-- "I leave it to you to decide what looks good": every look mine).
+-- A smartbomb is a sphere of its damage's colour as wide as it reaches,
+-- with a flash at its heart; a micro jump a flash of jump light where
+-- the ship comes out, and a ring; an interdiction bubble a ring as wide
+-- as its field coming up; a capacitor charge a small warm flash; a
+-- jammed ship crackles pale blue, and a drained one flickers magenta.
+local SMARTBOMB_COLOR: { [string]: vector } = {
+  em = vector.create(0.45, 0.70, 1.0), thermal = vector.create(1.0, 0.50, 0.20),
+  kinetic = vector.create(0.88, 0.88, 0.82), explosive = vector.create(1.0, 0.76, 0.30),
+}
+local BUBBLE_COLOR = vector.create(0.70, 0.40, 1.0)
+local JAMMED_COLOR = vector.create(0.65, 0.88, 1.0)
+local DRAINED_COLOR = vector.create(0.95, 0.35, 0.85)
+local CHARGE_COLOR = vector.create(1.0, 0.92, 0.55)
+local MODULE_FX: { [string]: boolean } = { Smartbombed = true, MicroJumped = true, BubbleDropped = true, CapacitorBoosted = true,
+  Jammed = true, Drained = true }
+
+local function moduleFx(scene: Scene, fx: Effects.Fx, state: any, event: any)
+  local id = if event.kind == "Drained" then event.target else event.ball
+  local ball = state.balls[id]
+  local at: vector? = scene.screen[id]
+  if ball == nil or at == nil then
+    return
+  end
+  local now = scene.time
+  if event.kind == "Smartbombed" then
+    local item = state.items[event.item]
+    local module = if item then Modules.byId[item.type] else nil
+    local reach = if module and module.smartbomb then module.smartbomb.range else 5000
+    local color = SMARTBOMB_COLOR.em
+    for name, each in SMARTBOMB_COLOR do
+      if item and string.find(item.type, name, 1, true) then
+        color = each
+      end
+    end
+    -- (as wide as it reaches would be past the edges of the screen at
+    -- any zoom a pilot flies at: a pulse some tens of the ship across,
+    -- and never past its reach)
+    local wide = math.min(reach, 30 * ball.radius)
+    Effects.Flash(fx, id, vector.create(0, 0, 0), color, wide, 3, 1.1, now)
+    Effects.Flash(fx, id, vector.create(0, 0, 0), color, wide * 0.45, 0, 0.6, now)
+    Effects.Flash(fx, id, vector.create(0, 0, 0), color, 4 * ball.radius, 0, 0.5, now)
+  elseif event.kind == "MicroJumped" then
+    Effects.Flash(fx, id, vector.create(0, 0, 0), JUMP_LIGHT, 3 * ball.radius, 0, 0.6, now)
+    Effects.Flash(fx, id, vector.create(0, 0, 0), JUMP_LIGHT, 8 * ball.radius, 1, 0.9, now)
+  elseif event.kind == "BubbleDropped" then
+    -- (its field is drawn as the shell it is: Game/View/Starbase.Bubble.
+    -- This is the probe going off)
+    Effects.Flash(fx, id, vector.create(0, 0, 0), BUBBLE_COLOR, math.min(event.radius or 5000, 30 * ball.radius), 3, 1.6, now)
+    Effects.Flash(fx, id, vector.create(0, 0, 0), BUBBLE_COLOR, 3 * ball.radius, 0, 0.6, now)
+  elseif event.kind == "CapacitorBoosted" then
+    Effects.Flash(fx, id, vector.create(0, 0, 0), CHARGE_COLOR, 1.6 * ball.radius, 0, 0.35, now)
+  elseif event.kind == "Jammed" then
+    Effects.Flash(fx, id, vector.create(0, 0, 0), JAMMED_COLOR, 1.8 * ball.radius, 1, 0.5, now)
+  elseif event.kind == "Drained" then
+    Effects.Flash(fx, id, vector.create(0, 0, 0), DRAINED_COLOR, 1.4 * ball.radius, 0, 0.4, now)
+  end
+end
+
+-- A module coming on that shows round its ship: a command burst a ring
+-- going out over the fleet; a siege, triage or industrial core a slow
+-- ring and a glow as it locks down; a jump beacon a column of jump light.
+local STARTED: { { prefix: string, color: vector, ring: number, size: number, life: number } } = {
+  { prefix = "burst.", color = vector.create(0.55, 0.85, 1.0), ring = 3, size = 40, life = 1.4 },
+  { prefix = "siege.", color = vector.create(1.0, 0.70, 0.30), ring = 1, size = 4, life = 1.8 },
+  { prefix = "triage.", color = vector.create(0.50, 1.0, 0.60), ring = 1, size = 4, life = 1.8 },
+  { prefix = "industrial.core", color = vector.create(1.0, 0.85, 0.40), ring = 1, size = 4, life = 1.8 },
+  { prefix = "beacon.jump", color = JUMP_LIGHT, ring = 0, size = 6, life = 2.5 },
+}
+
+local function startedFx(scene: Scene, fx: Effects.Fx, state: any, event: any)
+  local item = state.items[event.item]
+  local ball = state.balls[event.ball]
+  local at: vector? = scene.screen[event.ball]
+  if item == nil or ball == nil or at == nil then
+    return
+  end
+  for _, one in STARTED do
+    if string.sub(item.type, 1, #one.prefix) == one.prefix then
+      Effects.Flash(fx, event.ball, vector.create(0, 0, 0), one.color, one.size * ball.radius, one.ring, one.life, scene.time)
+      Effects.Flash(fx, event.ball, vector.create(0, 0, 0), one.color, 1.5 * ball.radius, 0, one.life * 0.6, scene.time)
+      return
+    end
+  end
+end
+
 -- A gate lights when a ship goes through it, either way: a flash at it
 -- as big as the gate, and a ring thrown out from it.
 local function lightGate(scene: Scene, fx: Effects.Fx, id: number, life: number)
@@ -1751,6 +1839,10 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       if at and ball then
         Effects.Burst(fx, at, WAKE_COLOR, 5 * ball.radius, if event.kind == "WarpEnded" then 1 else 0, 0.5, scene.time)
       end
+    elseif MODULE_FX[event.kind] and grid ~= 0 then
+      moduleFx(scene, fx, state, event)
+    elseif event.kind == "ModuleStarted" and grid ~= 0 then
+      startedFx(scene, fx, state, event)
     elseif event.kind == "BallDestroyed" and event.system == player.system and grid ~= 0 then
       local at = vector.create(event.x - scene.ox, event.y - scene.oy, event.z - scene.oz)
       local boom = Object_Explosion(0, 0, 3)

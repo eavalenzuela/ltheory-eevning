@@ -117,3 +117,39 @@ explosion/large1   | 6.0 | once | A huge capital starship breaking up, heard thr
 # The air of space no chart shows, and a mining laser at work.
 atmosphere/deep    | 20 | loop | Eerie ambience of uncharted deep space beyond a wormhole: a very low hollow drone, slow distant whale-like resonances, faint irregular electrical ticking, cold, empty, unsettling, seamless, no music, no voice
 loop/mining        | 8.0 | loop | A mining laser boring steadily into an asteroid, heard from inside the ship: a steady deep electric hum with a continuous gritty sizzle of vaporising rock, seamless, constant, no music, no voice
+
+# The modules of the expansion of 2026-11-16 (made 2026-11-17 at the
+# owner's asking, "do an assessment of which sounds and visual effects
+# are needed", unheard: every description mine). Electronic warfare, a
+# module of the pilot's own coming on, and what is done to the pilot's
+# ship by somebody else's.
+ewar/web           | 1.8 | once | A gravitic entanglement projector on a spaceship locking onto a target: a deep heavy thrum that grabs and drags, a low warbling hum like something thick and viscous, muffled through the hull, no music, no voice
+ewar/disrupt       | 1.4 | once | A warp disruptor on a starship locking onto its target: a short electronic charge-up followed by three hard pulsing lock tones, tense, clean, no music, no voice
+ewar/jam           | 1.2 | once | An electronic countermeasure jammer firing: a harsh burst of electronic static crackle with garbled digital chirps cut short, dry, no music, no voice
+ewar/jammed        | 1.6 | once | A starship's sensors being jammed by the enemy: a sudden fizz of static over the cockpit comms and a descending two-tone warning bleep, unsettling, short, no music, no voice
+ewar/damp          | 1.2 | once | A sensor dampener engaging on a starship: a muffled descending electronic sweep that dulls and smears away, quiet, no music, no voice
+ewar/paint         | 0.9 | once | A target painter marking an enemy ship: two quick precise high electronic tracking beeps and a faint laser hum, clean, no music, no voice
+ewar/tracking      | 1.2 | once | A tracking disruptor scrambling an enemy's guns: a wobbling detuned electronic warble with a short interference buzz, no music, no voice
+ewar/neut          | 1.8 | once | An energy neutraliser draining an enemy ship's power: a powerful deep electric zap followed by a descending sucking whine and crackle, menacing, no music, no voice
+ewar/drain         | 1.5 | once | An energy siphon pulling power from another ship into your own: a rising electrical siphoning hum with a soft gulping pulse at the end, no music, no voice
+
+# Help sent to another ship, and a wreck pulled in.
+module/remote-shield | 1.5 | once | A remote shield transfer beam engaging between two starships: a smooth bright swelling energy hum with a shimmering wash, calm, no music, no voice
+module/remote-armor  | 1.5 | once | A remote armour repair beam engaging between two starships: a nanite stream hissing out with fast metallic ticking and a low hum, industrial, no music, no voice
+module/remote-cap    | 1.4 | once | Energy being transferred from one starship's capacitor to another's: a flowing electric charge hum rising in pitch with a soft crackle, no music, no voice
+module/tractor       | 2.0 | once | A tractor beam locking onto a drifting wreck in space: a low sustained gravitic hum with a slow warbling pull and a faint creak of metal, no music, no voice
+
+# Modules that work on the ship itself, or round it.
+module/smartbomb     | 2.0 | once | A starship firing an electromagnetic smartbomb all around it: a huge sharp pulse blast, crackling discharge rushing outward, and a short ringing tail, powerful, no music, no voice
+module/mjd-spool     | 3.0 | once | A micro jump drive spooling up on a starship: a steadily rising turbine and electric whine with a building pulse, tense, ends abruptly, no music, no voice
+module/mjd-jump      | 1.6 | once | A starship blinking a hundred kilometres ahead with a micro jump drive: a sudden sucking implosion and a sharp thunderclap whoosh, no music, no voice
+module/bubble-launch | 2.2 | once | An interdiction probe launched from a starship: a heavy pneumatic launch thump, then a humming field snapping open around it, no music, no voice
+module/burst         | 1.6 | once | A fleet command burst pulsing out from a starship: a warm resonant electronic whoomp that spreads outward with a soft shimmer, no music, no voice
+module/siege         | 3.0 | once | A starship locking into siege mode: heavy mechanical clamps slamming shut, a hydraulic hiss, and a deep rising power-up hum, massive, industrial, no music, no voice
+module/capbooster    | 1.0 | once | A capacitor booster charge being injected into a starship's capacitor: a chunky cartridge clack and then a quick rising electric surge, no music, no voice
+module/hardener      | 1.0 | once | A starship's defensive hardener switching on: a short clean power-up hum with a faint metallic resonance, subtle, no music, no voice
+module/beacon        | 3.0 | once | A jump beacon being lit on a starship: a deep resonant tone swelling up with a high shimmering ring, like a lighthouse coming on in space, no music, no voice
+
+# A capital ship's own jump drive: the spool, and the jump.
+drive/jump-spool     | 4.0 | once | A capital starship's jump drive spooling up: a massive deep rumbling hum that rises slowly and builds unbearable tension, vast, no music, no voice
+drive/jump           | 3.0 | once | A capital starship's jump drive firing: a colossal deep bass whoomp as space folds and tears, a rush of air and a long fading rumble, cinematic, no music, no voice

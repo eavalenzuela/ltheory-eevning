@@ -117,6 +117,17 @@ Effects.looks = {
   ["remote.shield"] = { kind = "beam", color = { 0.40, 0.75, 1.0 }, width = 4, life = 0.5, held = true },
   ["remote.armor"] = { kind = "beam", color = { 1.0, 0.75, 0.35 }, width = 4, life = 0.5, held = true },
   ["remote.capacitor"] = { kind = "beam", color = { 1.0, 0.95, 0.45 }, width = 4, life = 0.5, held = true },
+  -- (the modules of the expansion of 2026-11-16, made 2026-11-17 at the
+  -- owner's asking for the effects the new modules need; the colours
+  -- mine: a tractor's pale sea green and wide, a sensor booster's
+  -- green, the disruptors of guns and missiles amber, a siphon's
+  -- magenta, a scanner's a thread of pale blue)
+  ["tractor."] = { kind = "beam", color = { 0.55, 1.0, 0.92 }, width = 6, life = 0.5, held = true },
+  ["remote.sensor"] = { kind = "beam", color = { 0.45, 1.0, 0.60 }, width = 2, life = 0.5, held = true },
+  ["ewar."] = { kind = "beam", color = { 1.0, 0.62, 0.25 }, width = 2, life = 0.5, held = true },
+  ["drain."] = { kind = "beam", color = { 0.95, 0.35, 0.85 }, width = 4, life = 0.5, held = true },
+  ["scanner.ship"] = { kind = "beam", color = { 0.60, 0.85, 1.0 }, width = 1.5, life = 0.5, held = true },
+  ["scanner.cargo"] = { kind = "beam", color = { 0.60, 0.85, 1.0 }, width = 1.5, life = 0.5, held = true },
 } :: { [string]: Look }
 
 -- Whether a module's beam is one that stays for as long as it runs (a

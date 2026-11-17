@@ -17,6 +17,12 @@
 
 Under ElevenLabs' terms the account holder keeps all rights in what they generate, except as those terms expressly say otherwise. The owner puts no restriction of their own on these files and publishes them with the rest. Anyone reusing the files elsewhere should read ElevenLabs' terms, which also say how such output may be used.
 
+## Pictures made for this game
+
+`resource/texture/portraits/` holds the character portraits, which the project's owner made and put there for the game. They publish them with the rest.
+
+`resource/texture/splash-art.jpg`, the picture behind the opening splash, is a picture of the game's own ships, posed and drawn by the game, redrawn by OpenAI's image service (`script/artgen`) on the project's owner's account, with one of the portraits given as the manner to draw in. Anyone reusing it elsewhere should read OpenAI's terms on generated output.
+
 ## Third-party code
 
 | | Licence |

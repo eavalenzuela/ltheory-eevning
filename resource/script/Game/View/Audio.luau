@@ -243,6 +243,42 @@ local MENDED: { [string]: { any } } = {
 }
 -- A drive lit on the pilot's own ship (an afterburner, a microwarpdrive).
 local DRIVE, DRIVE_LEVEL = "made/module/drive.ogg", 0.12
+-- A module of the pilot's own switched on, by the start of its type
+-- (the expansion of 2026-11-16's, made 2026-11-17 at the owner's asking
+-- for the sounds it needs, and heard by nobody yet: the descriptions
+-- and the loudness here mine). 'against': heard too, quieter, when
+-- somebody else's is switched on at the pilot's own ship.
+local MODULE_ON: { { prefix: string, file: string, level: number, against: boolean? } } = {
+  { prefix = "projector.entanglement", file = "made/ewar/web.ogg", level = 0.12, against = true },
+  { prefix = "disruptor.", file = "made/ewar/disrupt.ogg", level = 0.11, against = true },
+  { prefix = "jammer.", file = "made/ewar/jam.ogg", level = 0.10 },
+  { prefix = "damper.", file = "made/ewar/damp.ogg", level = 0.09, against = true },
+  { prefix = "painter.", file = "made/ewar/paint.ogg", level = 0.08, against = true },
+  { prefix = "ewar.", file = "made/ewar/tracking.ogg", level = 0.09, against = true },
+  { prefix = "neutraliser.", file = "made/ewar/neut.ogg", level = 0.11, against = true },
+  { prefix = "drain.", file = "made/ewar/drain.ogg", level = 0.10, against = true },
+  { prefix = "remote.shield", file = "made/module/remote-shield.ogg", level = 0.09, against = true },
+  { prefix = "remote.armor", file = "made/module/remote-armor.ogg", level = 0.09, against = true },
+  { prefix = "remote.capacitor", file = "made/module/remote-cap.ogg", level = 0.09, against = true },
+  { prefix = "remote.sensor", file = "made/module/hardener.ogg", level = 0.07 },
+  { prefix = "tractor.", file = "made/module/tractor.ogg", level = 0.09 },
+  { prefix = "jump.micro", file = "made/module/mjd-spool.ogg", level = 0.12 },
+  { prefix = "burst.", file = "made/module/burst.ogg", level = 0.11 },
+  { prefix = "siege.", file = "made/module/siege.ogg", level = 0.14 },
+  { prefix = "triage.", file = "made/module/siege.ogg", level = 0.14 },
+  { prefix = "industrial.core", file = "made/module/siege.ogg", level = 0.14 },
+  { prefix = "shield.hardener", file = "made/module/hardener.ogg", level = 0.07 },
+  { prefix = "armor.hardener", file = "made/module/hardener.ogg", level = 0.07 },
+  { prefix = "beacon.jump", file = "made/module/beacon.ogg", level = 0.13 },
+}
+local function moduleOn(type: string): { prefix: string, file: string, level: number, against: boolean? }?
+  for _, one in MODULE_ON do
+    if string.sub(type, 1, #one.prefix) == one.prefix then
+      return one
+    end
+  end
+  return nil
+end
 -- Something going on that the pilot has word of, by its kind: an
 -- invasion is graver than the rest, and a surge is the pirates' alert.
 local WORD: { [string]: { any } } = {
@@ -410,7 +446,40 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
       local item = state.items[event.item]
       if item and (string.sub(item.type, 1, 12) == "afterburner." or string.sub(item.type, 1, 4) == "mwd.") then
         play(audio, DRIVE, DRIVE_LEVEL, "drive", 1.0)
+      else
+        local on = if item then moduleOn(item.type) else nil
+        if on then
+          play(audio, on.file, on.level, `on:{event.item}`, 1.0)
+        end
       end
+    elseif kind == "ModuleStarted" and event.target == mine and mine ~= 0 then
+      -- (somebody else's, switched on at the pilot's own ship)
+      local item = state.items[event.item]
+      local on = if item then moduleOn(item.type) else nil
+      if on and on.against then
+        play(audio, on.file, on.level * 0.7, "against", 1.5, 0.92)
+      end
+    elseif (kind == "Smartbombed" or kind == "MicroJumped" or kind == "BubbleDropped") and me then
+      -- (heard from wherever it is, quieter the farther off)
+      local ball = state.balls[event.ball]
+      if ball and ball.system == me.system then
+        local far = math.sqrt((ball.x - me.x) ^ 2 + (ball.y - me.y) ^ 2 + (ball.z - me.z) ^ 2)
+        local file = if kind == "Smartbombed" then "made/module/smartbomb.ogg" elseif kind == "MicroJumped" then "made/module/mjd-jump.ogg"
+          else "made/module/bubble-launch.ogg"
+        play(audio, file, (if kind == "Smartbombed" then 0.18 else 0.15) * reach(far, 8000), `{kind}:{event.ball}`, 0.5)
+      end
+    elseif kind == "CapacitorBoosted" and event.ball == mine then
+      play(audio, "made/module/capbooster.ogg", 0.09, "capbooster", 0.3)
+    elseif kind == "Jammed" and event.ball == mine then
+      play(audio, "made/ewar/jammed.ogg", 0.13, "jammed", 3)
+    elseif kind == "Jumped" and event.ship == mine and event.drive then
+      -- (the pilot's own jump drive: not the gate's)
+      play(audio, "made/drive/jump.ogg", 0.3)
+    elseif kind == "FleetSpooling" and me and event.system == me.system then
+      -- (a fleet's jump drives spooling up near by)
+      local ball = state.balls[event.ship]
+      local far = if ball then math.sqrt((ball.x - me.x) ^ 2 + (ball.y - me.y) ^ 2 + (ball.z - me.z) ^ 2) else 1e9
+      play(audio, "made/drive/jump-spool.ogg", 0.2 * reach(far, 20000), "spool", 4)
     elseif kind == "HappeningBegan" then
       -- (only what the pilot has word of: what begins too far off to be told of is not sounded)
       local word = WORD[event.happening]
