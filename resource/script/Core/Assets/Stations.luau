@@ -103,6 +103,12 @@ function Stations.Has(state: State.State, id: number, service: Structures.Servic
     return Starbases.Has(state, starbase, service)
   end
   local makeup = Stations.Makeup(state, id)
+  -- (every station of the game's has a market, stocked by its kind
+  -- (Assets/Market): the owner, 2026-11-17, "Every station". A pilot's
+  -- tower has none; a citadel has one with a Market Hub fitted.)
+  if makeup and service == "market" then
+    return true
+  end
   if makeup then
     for _, module in makeup.modules do
       if Structures.moduleById[module].service == service then

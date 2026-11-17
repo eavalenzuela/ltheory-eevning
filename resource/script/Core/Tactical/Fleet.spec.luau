@@ -1312,21 +1312,28 @@ local function count(game: Core.Game, holder: number, place: string, type: strin
 end
 
 -- The stations of a system other than the pilot's home: the nearest to
--- home with a market, and one with none.
+-- home with a market, and one with none. (Every station has a market
+-- since 2026-11-17, the owner's "Every station": the farthest has its
+-- market put out of use for the test, by a disaster there that does
+-- not end, as the game's own put a service out: Stations.Out.)
 local function others(game: Core.Game, system: number): (number, number)
   local state = game.state
   local home = Space.Object(state, state.player.home) :: System.Object
-  local market, least, plain = 0, math.huge, 0
+  local market, least, plain, most = 0, math.huge, 0, -1
   for _, object in Space.Describe(state, system).objects do
     if object.kind == "station" and object.id ~= home.id then
-      if not Stations.Has(state, object.id, "market") then
-        plain = object.id
-      elseif Space.Distance(home :: any, object :: any) < least then
-        market, least = object.id, Space.Distance(home :: any, object :: any)
+      local far = Space.Distance(home :: any, object :: any)
+      if far < least then
+        market, least = object.id, far
+      end
+      if far > most then
+        plain, most = object.id, far
       end
     end
   end
-  assert(market ~= 0 and plain ~= 0, "the system wants a second market and a station without one")
+  assert(market ~= 0 and plain ~= 0 and plain ~= market, "the system wants two stations besides home")
+  table.insert(state.happenings.list, { id = 999999, kind = "disaster", what = "market", system = system, place = plain,
+    began = state.tick, ends = math.huge, strength = 1, stage = 1, kills = 0, name = "" })
   return market, plain
 end
 

@@ -3,6 +3,7 @@
 -- module for.
 
 local Core = require("@lt/Core/Api")
+local Items = require("@lt/Core/Assets/Items")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Nomads = require("@lt/Core/Tactical/Nomads")
@@ -34,7 +35,7 @@ suite:Case("a new pilot starts at the starter station, which has every service t
   end
 end)
 
-suite:Case("the galaxy has stations that lack a service, and no other station has everything", function(t)
+suite:Case("every station has a market; the galaxy has stations that lack another service, and no other station has everything", function(t)
   local game = Core.New({ galaxySeed = 1, historySeed = 1 })
   local starter = Core.Query.Starter(game)
   local lacking = 0
@@ -45,10 +46,12 @@ suite:Case("the galaxy has stations that lack a service, and no other station ha
         all = all and Stations.Has(game.state, station.id, service)
       end
       t.ok(not all, `station {station.id} has everything, which only the starter should`)
-      lacking += if Stations.Has(game.state, station.id, "market") then 0 else 1
+      -- (a market at every station: the owner, 2026-11-17, "Every station")
+      t.ok(Stations.Has(game.state, station.id, "market"), `station {station.id} has no market`)
+      lacking += if Stations.Has(game.state, station.id, "refining") then 0 else 1
     end
   end
-  t.ok(lacking > 0, "every station has a market: this galaxy cannot show a service being refused")
+  t.ok(lacking > 0, "every station refines: this galaxy cannot show a service being refused")
 end)
 
 suite:Case("what a station has no module for is refused there, by name, and allowed at the starter", function(t)
@@ -56,14 +59,10 @@ suite:Case("what a station has no module for is refused there, by name, and allo
   local state = game.state
   local player = Core.Query.Player(game)
   local buy: State.Command = { kind = "BuyNow", actor = player.ship, type = "ammo.emp", quantity = 10 }
-  local fit: State.Command = { kind = "Fit", actor = player.ship, item = 0 }
-  for _, item in Core.Query.Items(game, player.docked, "hangar") do
-    if item.type == "shield.extender.small" then
-      fit.item = item.id
-    end
-  end
+  local refine: State.Command = { kind = "Reprocess", actor = player.ship, item = 0 }
+  refine.item = Items.Add(state, "ore.ferrite", 100, player.docked, "hangar").id
   t.ok(Stations.Validate(state, buy), "the starter station refused a purchase")
-  t.ok(Stations.Validate(state, fit), "the starter station refused a fitting")
+  t.ok(Stations.Validate(state, refine), "the starter station refused to refine")
 
   -- Moor the same ship at each other station in turn: what it lacks, it refuses.
   local home = state.ships[player.ship].docked
@@ -71,8 +70,9 @@ suite:Case("what a station has no module for is refused there, by name, and allo
   for _, station in stations(game) do
     if station.id ~= home then
       state.ships[player.ship].docked = station.id
-      for _, command in { buy, fit } :: { State.Command } do
-        local service: Structures.Service = if command.kind == "BuyNow" then "market" else "fitting"
+      refine.item = Items.Add(state, "ore.ferrite", 100, station.id, "hangar").id
+      for _, command in { buy, refine } :: { State.Command } do
+        local service: Structures.Service = if command.kind == "BuyNow" then "market" else "refining"
         local ok, why = Core.Validate(game, command)
         if Stations.Has(state, station.id, service) then
           t.ok(ok or not string.find(why or "", "this station has no", 1, true), `station {station.id} has the module and refused for want of it`)
