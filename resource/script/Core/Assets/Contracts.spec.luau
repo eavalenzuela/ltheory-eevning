@@ -215,6 +215,44 @@ suite:Case("a lot for sale is paid for and is in the hangar, and nobody else has
   t.eq(Items.In(state, state.player.ship, "cargo") ~= nil, true)
 end)
 
+suite:Case("the alien peoples' prints are on boards now and then: the Vail's and the Nimia's in their own space, the Drowned's outside secure space", function(t)
+  -- (the owner, 2026-11-16: their blueprints "should also be on contracts")
+  local game = newGame()
+  local state = game.state
+  local ticks = math.ceil(86400 / Constants.TICK)
+  local seen: { [string]: number } = {}
+  for _, people in { "vail", "nimia", "drowned" } do
+    t.ok(#Blueprints.OfPeople(people).hulls > 0, `{people} have hull prints`)
+  end
+  -- (some boards of the galaxy, over many days)
+  local stations = Contracts.Stations(state)
+  for index = 1, #stations, math.max(1, #stations // 40) do
+    local station = stations[index]
+    local node = state.galaxy.systems[Space.SystemOf(state, station)]
+    for day = 0, 2999 do
+      local people = Contracts.Alien(state, station, day)
+      if people and not Contracts.Pirated(state, station, day) then
+        seen[people] = (seen[people] or 0) + 1
+        if people == "drowned" then
+          t.ok(Galaxy.Band(node.security) ~= "secure", "a Drowned print in secure space")
+        else
+          t.eq(node.nearest, people, "a print of theirs outside their space")
+        end
+        if (seen[people] or 0) == 1 then
+          state.tick = day * ticks
+          local lot = assert(Contracts.Lot(state, station, "offer", 2))
+          local print, copy = Blueprints.Of(lot.stacks[1].type)
+          t.ok(print ~= nil and not copy, lot.title)
+          local theirs = Blueprints.OfPeople(people)
+          t.ok(table.find(theirs.hulls, assert(print)) ~= nil or table.find(theirs.towers, assert(print)) ~= nil, `{lot.title} is {people}'s`)
+          t.ok(lot.price > lot.worth, "an alien print should be dear")
+        end
+      end
+    end
+  end
+  t.ok((seen.drowned or 0) > 0, "no Drowned print on any board looked at")
+end)
+
 suite:Case("every board in the galaxy is listed, the nearest first, and a lot taken is off the list", function(t)
   local game = newGame()
   local state = game.state

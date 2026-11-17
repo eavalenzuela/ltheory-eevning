@@ -111,6 +111,32 @@ local function pirated(state: State.State, station: number, day: number): boolea
 end
 Contracts.Pirated = pirated
 
+-- Whose prints of the alien peoples' a board's blueprint lot is today,
+-- if any (the owner, 2026-11-16: their blueprints "should also be on
+-- contracts", as the Unbound's are). The originals of their hulls, and
+-- of their towers where they build towers. Mine: the Vail's and the
+-- Nimia's on the boards of their own space, one board-day in fifty
+-- (some few a day of each); the Drowned's, who hold no space, on a
+-- board anywhere outside secure space one board-day in two thousand
+-- (some five a day in a galaxy of five thousand systems). From dice of
+-- their own, after the pirates'.
+Contracts.ALIEN_HOME = 1 / 50
+Contracts.DEEP = 1 / 2000
+local HOMED = { "vail", "nimia" }
+local function alien(state: State.State, station: number, day: number): string?
+  local node = state.galaxy.systems[Space.SystemOf(state, station)]
+  for index, people in HOMED do
+    if node.nearest == people and Rng.Chance(Rng.For(state.historySeed, station, day, 140 + index), Contracts.ALIEN_HOME) then
+      return people
+    end
+  end
+  if Galaxy.Band(node.security) ~= "secure" and Rng.Chance(Rng.For(state.historySeed, station, day, 143), Contracts.DEEP) then
+    return "drowned"
+  end
+  return nil
+end
+Contracts.Alien = alien
+
 -- Whether a station has a board: one somebody keeps, with a market.
 -- (Any station anywhere: its system need not have been seen. Space.Peek)
 local function hasBoard(state: State.State, station: number): boolean
@@ -307,6 +333,17 @@ local function boardOf(state: State.State, station: number, all: boolean?, part:
       -- and such things change hands (the owner, 2026-11-16: their ship
       -- prints are on the market "via contracts"). Dear.
       local prints = Blueprints.OfPeople("unbound").hulls
+      local print = prints[Rng.Int(rng, #prints) + 1]
+      lot.stacks = { { type = print.id, quantity = 1 } }
+      lot.title = `{Types.Info(print.product).name}: the blueprint`
+      lot.worth = Contracts.Base(lot.stacks)
+      lot.price = math.ceil(lot.worth * Rng.Float(rng, 1.5, 2.5))
+    elseif slot == 2 and alien(state, station, day) then
+      -- An alien people's drawings, the original: a hull's or a tower's. Dear.
+      local people = alien(state, station, day) :: string
+      local theirs = Blueprints.OfPeople(people)
+      local prints = table.clone(theirs.hulls)
+      table.move(theirs.towers, 1, #theirs.towers, #prints + 1, prints)
       local print = prints[Rng.Int(rng, #prints) + 1]
       lot.stacks = { { type = print.id, quantity = 1 } }
       lot.title = `{Types.Info(print.product).name}: the blueprint`
