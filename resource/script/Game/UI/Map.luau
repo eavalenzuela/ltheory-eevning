@@ -480,14 +480,15 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
   local game = session.game
   local galaxy = game.state.galaxy
   local systems = mapped(galaxy)
-  Im.Panel(x, y, w, h)
-  -- (a panel lets what is behind it show; a map is read, so it does not)
+  -- (a window since 2026-11-16, with the frame and title of the rest:
+  -- inside it, the map is read, so what is behind does not show)
   Im.Fill(x, y, w, h, vector.create(0.02, 0.03, 0.045), 0.97)
-  Im.Heading(`GALAXY  {#systems} SYSTEMS`, x + 16, y + 12, 16, Im.DIM)
-  if Im.Button("x", x + w - 38, y + 10, 24, 24, true, "Map:close") then
+  if Im.Hook("Map:close", true) then
     open = false
     return
   end
+  local howMany = `{#systems} systems`
+  Im.Text(howMany, x + w - 12 - Im.TextWidth(howMany, 12), y + 11, 12, Im.DIM)
   -- In uncharted space there is no map to look at: where the pilot is
   -- is on none, and nothing on this one is anywhere from there.
   local where = Core.Query.Player(game)
@@ -508,29 +509,38 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
     end
     return
   end
-  if Im.Toggle("Factions", x + 240, y + 8, 84, 26, not bySecurity and priceOf == "", "Map:factions") then
+  -- What the map is coloured by, as pages along the top.
+  local tx = x + 10
+  local pressed, wide = Im.Tab("Factions", tx, y + 4, 28, not bySecurity and priceOf == "", "Map:factions")
+  if pressed then
     bySecurity, priceOf = false, ""
   end
-  if Im.Toggle("Security", x + 328, y + 8, 84, 26, bySecurity and priceOf == "", "Map:security") then
+  tx += wide + 2
+  pressed, wide = Im.Tab("Security", tx, y + 4, 28, bySecurity and priceOf == "", "Map:security")
+  if pressed then
     bySecurity, priceOf = true, ""
   end
+  tx += wide + 2
   -- (what a thing goes for across the map: the thing last looked at in a market, or iron)
-  if Im.Toggle("Prices", x + 416, y + 8, 76, 26, priceOf ~= "", "Map:prices") then
+  pressed, wide = Im.Tab("Prices", tx, y + 4, 28, priceOf ~= "", "Map:prices")
+  if pressed then
     priceOf = if priceOf ~= "" then "" elseif priceWanted ~= "" then priceWanted else "mineral.iron"
   end
+  tx += wide + 24
+  Im.Flat(x + 1, y + 32, w - 2, 1, Theme.EDGE)
   -- How it is looked at: flat (from straight over) or from a slant, and
   -- turned a step either way. (The right button, held, turns and tilts
   -- it by hand: below.)
   local flat = pitch >= math.pi / 2 - 1e-3
-  if Im.Toggle("Flat", x + 500, y + 8, 60, 26, flat, "Map:flat") then
+  if Im.Toggle("Flat", tx, y + 4, 60, 24, flat, "Map:flat") then
     -- (flat, it is a chart: square to the window, the way it was drawn
     -- before it had a height)
     yaw, pitch = if flat then TURNED else 0, if flat then TILTED else math.pi / 2
   end
-  if Im.Button("<", x + 566, y + 8, 28, 26, true, "Map:left") then
+  if Im.Button("<", tx + 66, y + 4, 28, 24, true, "Map:left") then
     yaw -= math.pi / 12
   end
-  if Im.Button(">", x + 598, y + 8, 28, 26, true, "Map:right") then
+  if Im.Button(">", tx + 98, y + 4, 28, 24, true, "Map:right") then
     yaw += math.pi / 12
   end
   -- How near it is looked at: a notch nearer or further, all of it
@@ -538,25 +548,25 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
   -- nears it by hand, and the left button drags it: below.)
   local limit = Map.Nearest(#systems)
   local step, fit, toHere = 0, false, false
-  if Im.Button("-", x + 644, y + 8, 28, 26, zoomTo > 1, "Map:out") then
+  if Im.Button("-", tx + 144, y + 4, 28, 24, zoomTo > 1, "Map:out") then
     step = -1
   end
-  if Im.Button("+", x + 676, y + 8, 28, 26, zoomTo < limit, "Map:in") then
+  if Im.Button("+", tx + 176, y + 4, 28, 24, zoomTo < limit, "Map:in") then
     step = 1
   end
-  if Im.Button("Fit", x + 708, y + 8, 44, 26, zoomTo > 1, "Map:fit") then
+  if Im.Button("Fit", tx + 208, y + 4, 44, 24, zoomTo > 1, "Map:fit") then
     fit = true
   end
-  if Im.Button("Here", x + 756, y + 8, 54, 26, true, "Map:here") then
+  if Im.Button("Here", tx + 256, y + 4, 54, 24, true, "Map:here") then
     toHere = true
   end
   if zoom > 1 then
-    Im.Text(string.format("x%.1f", zoom), x + 820, y + 14, 12, Im.DIM)
+    Im.Text(string.format("x%.1f", zoom), tx + 320, y + 10, 12, Im.DIM)
   end
 
   -- The map.
-  local mapW, mapH = w - SIDE - 16, h - 56
-  local mapX, mapY = x + 8, y + 48
+  local mapW, mapH = w - SIDE - 16, h - 42
+  local mapX, mapY = x + 8, y + 36
   local kept = drawn
   local made: Drawn
   -- (the right button held over the map turns it and tilts it)
@@ -1020,7 +1030,7 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
 
   -- The panel: the system picked (or the one the pilot is in), and the
   -- way there.
-  local px, line = x + w - SIDE, y + 56
+  local px, line = x + w - SIDE, y + 46
   local shown = if picked ~= 0 then picked else here
   local system = systems[shown]
   local band = Galaxy.Band(system.security)

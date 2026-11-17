@@ -19,6 +19,12 @@ the lines beginning `- ` under it.
 - Blueprint copies cost a tenth of what they did: ten runs cost about a tenth of one of the things they build.
 - Blueprint originals cost half what they did: five times what they build.
 - The events, guide, scanner and colonies windows are set out as the market is: what kind of thing down the left, the list in the middle, and the one picked on the right.
+- Your corporation has a window of its own, from the dock's Corporation button, docked or in space: Overview (its account, paying in and taking out, what it makes and costs), Books, Members, Hangar and Journal. The Wallet is your own money alone.
+- Assets: every place you have something down the left, with what is there worth; everything at the place picked (or everywhere) as one list, sortable, with a search over all of it; and the place on the right, with Set course.
+- The star map is a window like the rest, its Factions, Security and Prices as tabs.
+- Every window has a pin beside its close button: pinned, it cannot be moved or made another size until unpinned, and stays pinned from one game to the next.
+- Your fleet's orders are a menu (Orders, on the fleet panel), each greyed with the reason where it cannot be given; a right click on a pilot's row gives the menu for that pilot alone. Engage stays a button of its own.
+- A window opened beside the dock (the scanner, the colonies, the information) can be dragged again: it went back where it started.
 - Information on an item is a window with tabs: description, attributes, requirements, industry and market (with a button to show it on the market). A ship on its description is drawn as it looks in space, in its base paint, as in the fitting window.
 - A ship bought fitted out on a contract comes assembled, its modules fitted and its guns loaded, with the rest of its rounds in the hold. It waits at the station where it was posted.
 - You cannot undock in a ship with a module fitted that you have not the skills for: the button says which.

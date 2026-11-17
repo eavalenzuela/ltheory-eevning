@@ -35,14 +35,15 @@ frames 60
 lua _G.near, _G.sighted, _G.named = GameDebug.MapZoom()
 lua assert(_G.near == 2 and _G.sighted < 40 and _G.named, 'Here should look twice as near, at fewer systems, each with its name')
 lua _G.mx, _G.my = GameDebug.MapWhere(GameDebug.System())
-lua assert(math.abs(_G.mx - 810) < 2 and math.abs(_G.my - 550) < 2, 'the system the pilot is in should be in the middle of the map')
-move 810 550
+# (the map is under a window's title since 2026-11-16: its middle is ten lower)
+lua assert(math.abs(_G.mx - 810) < 2 and math.abs(_G.my - 560) < 2, 'the system the pilot is in should be in the middle of the map')
+move 810 560
 frames 2
 scroll 2
 frames 60
 lua assert(math.abs(GameDebug.MapZoom() - 3.125) < 0.01, 'two notches of the wheel should near it by a quarter twice')
 lua _G.mx, _G.my = GameDebug.MapWhere(GameDebug.System())
-lua assert(math.abs(_G.mx - 810) < 2 and math.abs(_G.my - 550) < 2, 'what the cursor is on should stay under it')
+lua assert(math.abs(_G.mx - 810) < 2 and math.abs(_G.my - 560) < 2, 'what the cursor is on should stay under it')
 mousedown Left
 frames 2
 move 910 600

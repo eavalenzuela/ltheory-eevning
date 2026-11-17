@@ -50,6 +50,11 @@ export type Window = {
   -- A window that is meant to lie over the others (the star map):
   -- nothing is put clear of it.
   covers: boolean?,
+  -- Pinned where it is (the pin on its title, 2026-11-16: "a pin on
+  -- windows", of the mock-ups' list the owner passed): it is not moved
+  -- or made another size by the mouse until it is unpinned, and is kept
+  -- so from one game to the next.
+  pinned: boolean?,
 }
 
 -- The height of a window's title, which what is in it is drawn under.
@@ -325,16 +330,24 @@ function Windows.Layout(): string
   for _, id in ids do
     local window = windows[id]
     if string.find(id, ":", 1, true) == nil then
-      table.insert(parts, string.format("%s=%d,%d,%d,%d,%d", id, window.x, window.y, window.w, window.h, if window.open then 1 else 0))
+      table.insert(parts, string.format("%s=%d,%d,%d,%d,%d,%d", id, window.x, window.y, window.w, window.h, if window.open then 1 else 0,
+        if window.pinned then 1 else 0))
     end
   end
   return table.concat(parts, ";")
 end
 
 function Windows.Restore(text: string)
-  for id: string, x: string, y: string, w: string, h: string, open: string
-    in string.gmatch(text, "([%w_]+)=(%-?%d+),(%-?%d+),(%d+),(%d+),(%d)") :: any do
-    local was = { tonumber(x) or 0, tonumber(y) or 0, tonumber(w) or 0, tonumber(h) or 0, tonumber(open) or 0 }
+  -- (a window's x, y, width, height, whether it was open, and whether it is pinned: the last since 2026-11-16, and none before)
+  for id: string, figures: string in string.gmatch(text, "([%w_]+)=([%-%d,]+)") :: any do
+    local read: { number } = {}
+    for figure in string.gmatch(figures, "%-?%d+") do
+      table.insert(read, tonumber(figure) or 0)
+    end
+    if #read < 5 then
+      continue
+    end
+    local was = { read[1], read[2], read[3], read[4], read[5], read[6] or 0 }
     remembered[id] = was
     local window = windows[id]
     if window then
@@ -344,9 +357,15 @@ function Windows.Restore(text: string)
         window.w, window.h = math.max(window.minW, was[3]), math.max(window.minH, was[4])
       end
       window.open = was[5] == 1
+      window.pinned = was[6] == 1
       window.moved = true
     end
   end
+end
+
+-- Whether a window is pinned where it is.
+function Windows.Pinned(id: string): boolean
+  return windows[id] ~= nil and windows[id].pinned == true
 end
 
 -- Whether a window that was there when the game was last run was open
@@ -481,12 +500,29 @@ function Windows.Draw()
       window.placed = false
       changed = true
     end
+    -- (the pin: lit while it is pinned)
+    local pinPressed, pinHot = Im.IconButton("pin", x + w - 54, y + 4, 24, 23, true, `{window.id}:pin`,
+      if window.pinned then Theme.ACCENT else nil)
+    if pinHot then
+      Im.Tip(if window.pinned then "Unpin" else "Pin", if window.pinned then "move it and change its size again" else "keep it where it is, this size")
+    end
+    if pinPressed then
+      window.pinned = not window.pinned
+      window.moved = true
+      changed = true
+    end
     if Im.Pressed() and Im.Inside(x, y, w, h) then
       raise = window.id
-      if held == nil and Im.Inside(x, y, w - 32, Windows.TITLE) then
+      if window.pinned then
+        -- (pinned: neither moved nor made another size)
+      elseif held == nil and Im.Inside(x, y, w - 58, Windows.TITLE) then
         held = { id = window.id, dx = cursor.x - x, dy = cursor.y - y, size = false }
+        -- (from here it is where it is put: a window whose place is said
+        -- every frame, Windows.Default, is not put back while it is held)
+        window.moved = true
       elseif held == nil and Im.Inside(x + w - 16, y + h - 16, 16, 16) then
         held = { id = window.id, dx = x + w - cursor.x, dy = y + h - cursor.y, size = true }
+        window.moved = true
       end
     end
     local draw = kinds[window.kind]
@@ -495,9 +531,11 @@ function Windows.Draw()
       draw(window, x, y + Windows.TITLE, w, h - Windows.TITLE)
       Im.Plain(was)
     end
-    -- (the corner it is made bigger and smaller by)
-    Im.Flat(x + w - 12, y + h - 4, 9, 2, Theme.EDGE_STRONG)
-    Im.Flat(x + w - 4, y + h - 12, 2, 10, Theme.EDGE_STRONG)
+    -- (the corner it is made bigger and smaller by, unless it is pinned)
+    if not window.pinned then
+      Im.Flat(x + w - 12, y + h - 4, 9, 2, Theme.EDGE_STRONG)
+      Im.Flat(x + w - 4, y + h - 12, 2, 10, Theme.EDGE_STRONG)
+    end
   end
   Im.Shield({})
   if raise then

@@ -33,6 +33,7 @@ export type Session = {
   aimedAt: number,
   events: { Space.Event },    -- the events of the ticks taken this frame
   message: string,            -- the last thing worth telling the player
+  heard: { string },          -- and the last few before it, the newest last (for a script: GameDebug.Heard)
   messageTick: number,
   -- What kind of thing it is, for the colour it is said in: "good" (a
   -- gain, a thing done), "warn" (a thing to look to), "bad" (a loss, a
@@ -68,7 +69,7 @@ local STANDOFF: { [string]: number } = { planet = 1, moon = 1.5, sun = 4 }
 function Session.New(galaxySeed: number, historySeed: number): Session
   return {
     game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, traffic = true, wars = true, starter = true }),
-    clock = Clock.New(), selected = 0, target = 0, aimed = {}, aimedAt = 0, events = {}, message = "", messageTick = 0, messageKind = "plain", epoch = 1,
+    clock = Clock.New(), selected = 0, target = 0, aimed = {}, aimedAt = 0, events = {}, message = "", heard = {}, messageTick = 0, messageKind = "plain", epoch = 1,
     destination = 0, autopilot = false, safest = false, trying = {},
   }
 end
@@ -92,6 +93,10 @@ end
 -- anything else is plain.
 function Session.Say(session: Session, text: string, kind: string?)
   session.message = text
+  table.insert(session.heard, text)
+  if #session.heard > 30 then
+    table.remove(session.heard, 1)
+  end
   session.messageTick = session.game.state.tick
   session.messageKind = kind or (if string.sub(text, 1, 1) == "+" then "good" else "plain")
 end

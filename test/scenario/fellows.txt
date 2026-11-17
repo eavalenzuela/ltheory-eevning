@@ -55,8 +55,12 @@ lua assert(GameDebug.Order('WarpTo', _G.belt), 'warp to the belt was refused')
 until GameDebug.InWarp()
 lua GameDebug.TimeScale(4)
 until GameDebug.Idle()
-lua GameDebug.TimeScale(1)
+# (since mining came up, 2026-11-16, a miner's hold is full sooner: it
+# may be on its way back to the belt when the pilot comes. Waited for.)
+lua GameDebug.TimeScale(4)
+patience 90
 until GameDebug.Distance('Mara Quill') < 200000
+lua GameDebug.TimeScale(1)
 lua assert(GameDebug.Select('Mara Quill'), 'the miner is not on the overview')
 frames 5
 lua _G.doing = select(6, GameDebug.Fellow(1))
@@ -77,7 +81,8 @@ lua assert(GameDebug.Unship(3), 'the fighter had no ship to lose')
 until select(4, GameDebug.Fellow(3)) == 1
 lua assert(GameDebug.Fellow(3) == 0, 'one who has lost their ship has none out')
 lua assert(select(3, GameDebug.Member(3)) == 'refitting', 'and is finding another')
-until string.find(GameDebug.Said(), 'has lost their', 1, true) ~= nil
+# (among the last things said: since mining came up, 2026-11-16, a miner's news may come after it)
+until GameDebug.Heard('has lost their')
 
 echo fellows scenario passed
 quit

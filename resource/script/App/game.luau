@@ -2044,6 +2044,17 @@ function Debug.Said(): string
   return session.message
 end
 
+-- Whether any of the last thirty things said had 'fragment' in it (a
+-- notice said a moment before another is not lost to a check).
+function Debug.Heard(fragment: string): boolean
+  for _, text in session.heard do
+    if string.find(text, fragment, 1, true) then
+      return true
+    end
+  end
+  return false
+end
+
 -- Whether the pilot is in uncharted space, and how deep.
 function Debug.Uncharted(): (boolean, number)
   local player = Core.Query.Player(session.game)

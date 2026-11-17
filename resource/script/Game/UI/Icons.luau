@@ -133,6 +133,11 @@ local SIGNS: { [string]: () -> { Glyph } } = {
   close = function()
     return all(line(-0.6, -0.6, 0.6, 0.6), line(-0.6, 0.6, 0.6, -0.6))
   end,
+  -- a drawing pin, its head over its point
+  pin = function()
+    return all(path({ v(-0.45, -0.75), v(0.45, -0.75), v(0.3, -0.15), v(-0.3, -0.15) }, true), line(-0.65, -0.1, 0.65, -0.1),
+      line(0, -0.1, 0, 0.8))
+  end,
   pause = function()
     return all(line(-0.35, -0.6, -0.35, 0.6), line(0.35, -0.6, 0.35, 0.6))
   end,

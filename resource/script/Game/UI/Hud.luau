@@ -49,6 +49,7 @@ local CrewWindow = require("@lt/Game/UI/Crew")
 local SchoolWindow = require("@lt/Game/UI/School")
 local StarbaseWindow = require("@lt/Game/UI/Starbase")
 local WalletWindow = require("@lt/Game/UI/Wallet")
+local CorporationWindow = require("@lt/Game/UI/Corporation")
 local Theme = require("@lt/Game/UI/Theme")
 local Waypoints = require("@lt/Game/Waypoints")
 local Windows = require("@lt/Game/UI/Windows")
@@ -574,6 +575,9 @@ end
 
 -- The hired pilot the fleet's orders are for (by their id), or 0: everybody.
 local fleetPicked = 0
+-- Whether the fleet's orders are dropped down, and where (drawn last, over the rest).
+local fleetMenu = false
+local menuAt: any = nil
 
 -- What each order to the ship is to the keyboard, given at what is
 -- selected (an action of Game/UI/Keys, which says what key that is).
@@ -1342,12 +1346,14 @@ end
 -- down each frame, before the windows are drawn. (The docked screen was
 -- another such, until the last of its tabs was a window of its own.)
 local mapOf: Session.Session? = nil
+local mapShown = false
 Windows.Kind("map", function(_: Windows.Window, x: number, y: number, w: number, h: number)
   if mapOf then
     Map.DrawAt(mapOf, x, y, w, h)
   end
 end)
-Windows.Screen("map", "map", 1400, 820, { { 0, 0, 232, 40 }, { 0, 0, 1400, 6 } })
+Windows.Make("map", "map", "Star map", 260, 110, 1400, 820, 980, 600, nil)
+Windows.Icon("map", "map")
 -- (it lies over the others, and nothing is put clear of it)
 Windows.Auto("map", false, true)
 
@@ -1492,6 +1498,10 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       -- somewhere: open when the map is)
       mapOf = session
       Windows.Default("map", Map.Covers(left, top, w.size.x, w.size.y))
+      -- (shut by its corner's button, the map is shut)
+      if mapShown and not Windows.IsOpen("map") and Map.IsOpen() then
+        Map.Close()
+      end
       if Map.IsOpen() ~= Windows.IsOpen("map") then
         if Map.IsOpen() then
           Windows.Open("map")
@@ -1499,6 +1509,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           Windows.Close("map")
         end
       end
+      mapShown = Map.IsOpen()
       -- (and the windows go over what is drawn before them: Game/UI/Windows)
       Inventory.Frame(session, player.docked ~= 0)
       Market.Frame(session, player.docked ~= 0)
@@ -1515,6 +1526,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Assets.Frame(session)
       Events.Frame(session)
       Guide.Frame(session)
+      CorporationWindow.Frame(session)
       -- The dock is down the left edge (Game/UI/Dock): the windows keep
       -- clear of it, and what was set out from the screen's left edge
       -- is set out from the dock's.
@@ -1733,10 +1745,11 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       local jobsInHand = #jobsHeld
       local steps, guided = Core.Query.Guide(game)
       local pressed = Dock.Draw(w.pos.x, top, bottom, function(id: string): Dock.State
-        if id == "wallet" or id == "corporation" then
-          -- (the wallet's two sides, a button each: Game/UI/Wallet)
-          return { open = WalletWindow.IsOpen() and (WalletWindow.Books() == "corporation") == (id == "corporation"), can = docked,
-            note = if docked then nil else "At a station only" }
+        if id == "wallet" then
+          return { open = WalletWindow.IsOpen(), can = docked, note = if docked then nil else "At a station only" }
+        elseif id == "corporation" then
+          -- (a window of its own since 2026-11-16, docked or in space: Game/UI/Corporation)
+          return { open = CorporationWindow.IsOpen(), can = true }
         elseif id == "crew" then
           return { open = CrewWindow.IsOpen(), can = docked, note = if docked then nil else "At a station only" }
         elseif id == "contracts" then
@@ -1814,13 +1827,18 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         StarbaseWindow.Open()
       end
       if pressed then
-        if pressed == "wallet" or pressed == "corporation" then
-          local side = if pressed == "corporation" then "corporation" else "mine"
-          if WalletWindow.IsOpen() and WalletWindow.Books() == side then
-            -- (pressed again, it is put away)
+        if pressed == "wallet" then
+          -- (pressed again, it is put away)
+          if WalletWindow.IsOpen() then
             WalletWindow.Close()
           else
-            WalletWindow.Show(side)
+            WalletWindow.Open()
+          end
+        elseif pressed == "corporation" then
+          if CorporationWindow.IsOpen() then
+            CorporationWindow.Close()
+          else
+            CorporationWindow.Open()
           end
         elseif pressed == "contracts" then
           if ContractsWindow.IsOpen() then
@@ -2046,50 +2064,63 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             end
           end
         end
-        local engage: State.Command = { kind = "FleetOrder", actor = 0, what = "engage", target = target, pilot = only }
-        if Im.Button("Engage", left + 150, fy + 4, 70, 26, (Session.CanDo(session, engage)), "Fleet:engage") then
+        -- The orders, in a menu (2026-11-16, of the strip of buttons there
+        -- was): for everybody, or the one picked out; each with why it
+        -- cannot be given, where it cannot. The menu drops from Orders,
+        -- and a right click on a pilot's row brings it up for them.
+        -- (Each order keeps its name for a script: "Fleet:engage", ...)
+        local staying = (if one then one.order else fleet[1].order) == "stay"
+        type Order = { id: string, label: string, command: State.Command?, warp: boolean? }
+        local orders: { Order } = {
+          { id = "engage", label = "Engage the target", command = { kind = "FleetOrder", actor = 0, what = "engage", target = target, pilot = only } },
+          { id = "follow", label = "Regroup on me", command = { kind = "FleetOrder", actor = 0, what = "follow", pilot = only } },
+          { id = "stay", label = if staying then "Follow me again" else "Stay here",
+            command = { kind = "FleetOrder", actor = 0, what = if staying then "follow" else "stay", pilot = only } },
+          { id = "mine", label = "Mine this belt", command = { kind = "FleetOrder", actor = 0, what = "mine", pilot = only } },
+          { id = "patrol", label = "Patrol here", command = { kind = "FleetOrder", actor = 0, what = "patrol", pilot = only } },
+          { id = "guard", label = "Guard the ship selected",
+            command = { kind = "FleetOrder", actor = 0, what = "guard", pilot = only, target = session.selected } },
+          { id = "warp", label = "Warp the fleet to the selected", warp = true },
+        }
+        local function can(order: Order): (boolean, string?)
+          if order.warp then
+            return Session.Can(session, "FleetWarp", session.selected), "select where to warp to"
+          end
+          return Session.CanDo(session, order.command :: State.Command)
+        end
+        local function give(order: Order)
+          if order.warp then
+            Session.Order(session, "FleetWarp", session.selected)
+          else
+            Session.Do(session, order.command :: State.Command)
+          end
+          fleetMenu = false
+        end
+        for _, order in orders do
+          if Im.Hook(`Fleet:{order.id}`, (can(order))) then
+            give(order)
+          end
+        end
+        local engage = orders[1].command :: State.Command
+        if Im.Button("Engage", left + 236, fy + 4, 76, 26, (Session.CanDo(session, engage)), "Fleet:engage:now") then
           Session.Do(session, engage)
         end
-        local staying = (if one then one.order else fleet[1].order) == "stay"
-        if Im.Button("Regroup", left + 224, fy + 4, 76, 26, true, "Fleet:follow") then
-          Session.Do(session, { kind = "FleetOrder", actor = 0, what = "follow", pilot = only })
+        if Im.Button(if fleetMenu then "Orders  ^" else "Orders  v", left + 318, fy + 4, 138, 26, true, "Fleet:orders") then
+          fleetMenu = not fleetMenu
         end
-        if Im.Toggle("Stay", left + 304, fy + 4, 60, 26, staying, "Fleet:stay") then
-          Session.Do(session, { kind = "FleetOrder", actor = 0, what = if staying then "follow" else "stay", pilot = only })
-        end
-        -- (at a belt: those with a mining laser work it from now on)
-        local mine: State.Command = { kind = "FleetOrder", actor = 0, what = "mine", pilot = only }
-        if Im.Button("Mine here", left + 368, fy + 4, 88, 26, (Session.CanDo(session, mine)), "Fleet:mine") then
-          Session.Do(session, mine)
-        end
-        -- A second row, of the orders for when the pilot is not there:
-        -- those with a weapon hold this place; and the one picked out
-        -- goes with another pilot, whose ship is what is selected.
-        local hold: State.Command = { kind = "FleetOrder", actor = 0, what = "patrol", pilot = only }
-        if Im.Button("Patrol here", left + 150, fy + 34, 104, 26, (Session.CanDo(session, hold)), "Fleet:patrol") then
-          Session.Do(session, hold)
-        end
-        local guard: State.Command = { kind = "FleetOrder", actor = 0, what = "guard", pilot = only, target = session.selected }
-        local canGuard, whyNotGuard = Session.CanDo(session, guard)
-        if Im.Button("Guard", left + 258, fy + 34, 70, 26, canGuard, "Fleet:guard") then
-          Session.Do(session, guard)
-        end
-        if one and not canGuard then
-          Im.Text(if string.sub(tostring(whyNotGuard), 1, 4) == "pick" then "select another's ship" else "", left + 36, fy + 41, 11,
-            Im.DIM)
-        end
-        -- (to what is selected, all together: those who follow form up on
-        -- the pilot, and everybody goes at once and arrives at once)
-        local canWarp = Session.Can(session, "FleetWarp", session.selected)
-        if Im.Button("Warp fleet", left + 368, fy + 34, 88, 26, canWarp, "Fleet:warp") then
-          Session.Order(session, "FleetWarp", session.selected)
+        Im.Text(if one then "the one picked: click again to let go" else "click a pilot to give one alone an order", left + 36, fy + 38, 11, Im.DIM)
+        if fleetMenu then
+          menuAt = { x = left + 318, y = fy + 32, orders = orders, can = can, give = give }
         end
         for index, row in fleet do
           local ry = fy + 64 + (index - 1) * 22
           local hull = Ships.byId[row.hull]
-          local _, clicked = Im.Row(left + 28, ry - 2, 432, 21, row.id == fleetPicked, `Fleet:pick:{index}`)
+          local rowHot, clicked = Im.Row(left + 28, ry - 2, 432, 21, row.id == fleetPicked, `Fleet:pick:{index}`)
           if clicked then
             fleetPicked = if row.id == fleetPicked then 0 else row.id
+          end
+          if rowHot and Im.RightPressed() then
+            fleetPicked, fleetMenu = row.id, true
           end
           Im.Text(row.name, left + 36, ry, 13, if row.near then OURS else Im.TEXT)
           local flying = if hull == nil then "no ship" elseif row.order == "mine" and row.near then `{hull.name}: {row.doing}` else hull.name
@@ -2125,6 +2156,39 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
               if row.hunted then Im.WARN elseif here or row.order ~= "follow" or row.ship == 0 then Im.DIM else Im.WARN)
           end
         end
+        -- The orders, dropped down over what is under them: a row each,
+        -- greyed with its reason where it cannot be given. A click on a
+        -- row gives it; one anywhere else puts the menu away.
+        if fleetMenu and menuAt then
+          local menu = menuAt
+          local rows = #menu.orders
+          local mw, mh = 250, rows * 26 + 8
+          local my = menu.y - mh - 34
+          Im.Flat(menu.x - 112, my, mw, mh, Theme.RAISED, 1)
+          Im.Edge(menu.x - 112, my, mw, mh, Theme.EDGE_STRONG)
+          local over = Im.Inside(menu.x - 112, my, mw, mh)
+          for index, order in menu.orders do
+            local ok, reason = menu.can(order)
+            local oy = my + 4 + (index - 1) * 26
+            local hot, clicked = Im.Row(menu.x - 108, oy, mw - 8, 25, false, `Fleet:menu:{order.id}`)
+            Im.Text(order.label, menu.x - 98, oy + 5, 13, if ok then Theme.TEXT else Theme.FAINT)
+            if hot and not ok and reason then
+              Im.Tip(order.label, reason)
+            end
+            if clicked and ok then
+              menu.give(order)
+            end
+          end
+          if Im.Pressed() and not over and not Im.Inside(menu.x, menu.y - 28, 138, 26) then
+            fleetMenu = false
+          end
+          if over then
+            Im.over = true
+          end
+        end
+        menuAt = nil
+      else
+        fleetMenu = false
       end
       Im.Plain(wasPlain)
       -- The windows, over all of that; and over them the menu one of
