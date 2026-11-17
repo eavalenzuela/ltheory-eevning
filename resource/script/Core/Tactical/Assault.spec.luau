@@ -242,7 +242,7 @@ suite:Case("a camp of a level has that level's packs, and a harder level's are w
       local ships, bounty = Assault.Count(waves)
       t.ok(ships >= Assault.WAVES[level] and ships <= 3 * Assault.WAVES[level])
       local pay, credit = Assault.Pay(level, waves)
-      t.eq(pay, math.floor(0.6 * bounty) + 5000 * level)
+      t.eq(pay, math.floor(Assault.SHARE * bounty) + Assault.BASE * level)
       t.near(credit, 0.15 * level, 1e-9)
       least, most = math.min(least, pay), math.max(most, pay)
     end

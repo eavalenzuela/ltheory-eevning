@@ -225,10 +225,34 @@ local function learn(state: State.State, wing: State.Wingman, points: number, ev
   end
 end
 
+-- What a hired pilot learns from a pirate with so much bounty on it: a
+-- point a thousand credits of what the bounty was before 2026-11-16,
+-- when bounties came up (the owner: "Income is definitely insanely
+-- low") and hired pilots were to learn no faster for it (mine). Pairs
+-- of a bounty now and then along the pirates' ladder; between two, as
+-- far along on a log scale; beyond the last, in proportion.
+local LEARNED = { { 0, 0 }, { 12000, 6000 }, { 30000, 15000 }, { 50000, 25000 }, { 100000, 40000 }, { 500000, 120000 },
+  { 2500000, 400000 }, { 5000000, 500000 } }
+function Fleet.Points(bounty: number): number
+  if bounty <= 0 then
+    return 0
+  end
+  for index = 2, #LEARNED do
+    local low, high = LEARNED[index - 1], LEARNED[index]
+    if bounty <= high[1] then
+      local was = if low[1] == 0 then high[2] * bounty / high[1]
+        else low[2] * (high[2] / low[2]) ^ (math.log(bounty / low[1]) / math.log(high[1] / low[1]))
+      return math.floor(was / 1000 + 1e-6)
+    end
+  end
+  local last = LEARNED[#LEARNED]
+  return math.floor(last[2] * bounty / last[1] / 1000 + 1e-6)
+end
+
 -- A pirate with so much bounty on it has been destroyed on a grid by
 -- the player's side: every hired pilot flying there learns from it.
 function Fleet.Credit(state: State.State, system: number, grid: number, bounty: number, events: { Event })
-  local points = bounty // 1000
+  local points = Fleet.Points(bounty)
   for _, id in state.fleetIds do
     local wing = state.fleet[id]
     local ball = state.balls[wing.ship]

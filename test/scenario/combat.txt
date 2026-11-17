@@ -59,7 +59,7 @@ lua assert(GameDebug.Fire() == 2, 'both guns should open fire')
 until GameDebug.Count('wreck') > 0
 lua assert(GameDebug.Hull() == _G.mine, 'the player lost the fight')
 lua assert(GameDebug.Pirates() == 0, 'the pirate is still there')
-lua assert(GameDebug.Wallet() == 11000, 'the bounty was not paid')
+lua assert(GameDebug.Wallet() == 17000, 'the bounty was not paid')
 
 lua assert(GameDebug.Order('Approach', 'wreck', 500), 'approach was refused')
 until GameDebug.Distance('wreck') < 2000
@@ -72,7 +72,7 @@ lua assert(GameDebug.Count('wreck') == 0, 'an emptied wreck should be gone')
 lua GameDebug.SelfDestruct()
 wait 0.5
 lua assert(GameDebug.Hull() == 'capsule', 'the pilot should be in a capsule')
-lua assert(GameDebug.Wallet() == 23000, 'insurance was not paid')
+lua assert(GameDebug.Wallet() == 29000, 'insurance was not paid')
 lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused')
 until GameDebug.Docked()
 wait 0.5

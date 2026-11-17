@@ -112,7 +112,8 @@ Assault.BREATHER = 20
 -- What a job pays, as a share of the bounties on the camp's keepers,
 -- with so much for each level beside; and the standing it is worth.
 Assault.SHARE = 0.6
-Assault.BASE = 5000
+-- (25,000 a level since 2026-11-16, when income came up: it was 5,000. Mine.)
+Assault.BASE = 25000
 Assault.CREDIT = 0.15
 -- What a defence job is to hold, by its level (Data/Ships), how far
 -- from the middle of the place it stands, and what such a job pays
@@ -195,7 +196,8 @@ local DIGS: { { ores: { string }, volume: number, pack: { string } } } = {
 -- level beside; the standing it is worth a level; how many rocks its
 -- pocket has; and how much more ore is in them than the contract wants.
 Assault.DIG_PAY = 1.3
-Assault.DIG_BASE = 3000
+-- (12,000 a level since 2026-11-16: it was 3,000. Mine.)
+Assault.DIG_BASE = 12000
 Assault.DIG_CREDIT = 0.1
 Assault.DIG_ROCKS = 4
 Assault.DIG_SPARE = 1.5

@@ -118,23 +118,27 @@ Missions.OFFERS = 3
 -- paid for, what a run through the blockade pays (for a hold of the
 -- middle size), and what either does for the pilot's standing.
 Missions.WAR_REACH = 6
-Missions.WAR_HEAD, Missions.WAR_RUN, Missions.WAR_STANDING = 80000, 30000, 0.4
+-- (Five times what they were, 2026-11-16, when income came up. Mine.)
+Missions.WAR_HEAD, Missions.WAR_RUN, Missions.WAR_STANDING = 400000, 150000, 0.4
 -- (And how many times an escort's pay an escort to the front is paid.)
 Missions.WAR_ESCORT = 1.5
 -- The levels of the sixth agent's courier contracts: cubic metres of
 -- sealed cargo (from 'least' to 'most', by 'step'), the jumps it is to
 -- be carried ('near' to 'far'), and what it pays: so much, and so much
 -- for each cubic metre carried a jump.
+-- (Since 2026-11-16, when income came up, 3, 5, 10 and 20 times what they
+-- were by level, so a freighter's run pays some ten to fifteen million.
+-- Mine.)
 Missions.RUNS = {
-  { least = 30, most = 150, step = 10, near = 1, far = 3, base = 3000, rate = 25 },
-  { least = 1000, most = 3000, step = 100, near = 5, far = 10, base = 10000, rate = 3 },
-  { least = 6000, most = 12000, step = 500, near = 6, far = 12, base = 30000, rate = 1.5 },
-  { least = 25000, most = 40000, step = 2500, near = 8, far = 16, base = 100000, rate = 1 },
+  { least = 30, most = 150, step = 10, near = 1, far = 3, base = 9000, rate = 75 },
+  { least = 1000, most = 3000, step = 100, near = 5, far = 10, base = 50000, rate = 15 },
+  { least = 6000, most = 12000, step = 500, near = 6, far = 12, base = 300000, rate = 15 },
+  { least = 25000, most = 40000, step = 2500, near = 8, far = 16, base = 2000000, rate = 20 },
 }
 -- And the fourth level's other kind: a hauler's hold to a station that
 -- only lawless space leads to, so many jumps off by the shortest way.
 -- How often the fourth is that, where there is such a station.
-Missions.WILD = { least = 500, most = 3000, step = 100, near = 3, far = 10, base = 150000, rate = 12 }
+Missions.WILD = { least = 500, most = 3000, step = 100, near = 3, far = 10, base = 3000000, rate = 240 }
 Missions.WILD_CHANCE = 0.5
 -- The standing a courier contract is worth, a level.
 Missions.RUN_CREDIT = 0.1
@@ -161,7 +165,8 @@ Missions.LIMIT = 3 * math.ceil(86400 / Constants.TICK)
 local DAY = math.ceil(86400 / Constants.TICK)
 -- What a pirate killed for a bounty job is worth, by how safe the
 -- system is where it has to be done.
-local HEAD: { [string]: number } = { secure = 9000, low = 30000, lawless = 90000 }
+-- (Four times what they were, 2026-11-16, when income came up. Mine.)
+local HEAD: { [string]: number } = { secure = 36000, low = 120000, lawless = 360000 }
 local SUPPLIES = { "ore.ferrite", "ore.cuprite", "ore.silicate", "mineral.iron", "mineral.silicon", "mineral.copper" }
 
 -- Whose line of work a job is: "assault", "defence", "mining" or
@@ -506,7 +511,7 @@ function Missions.Offers(state: State.State, station: number): { State.Mission }
         mission.to = to.id
         mission.type = Missions.CRATE
         mission.need = 40 + 10 * Rng.Int(rng, 8)
-        mission.reward = math.floor((if far then 9000 else 4000) * (0.8 + mission.need / 200) * bonus)
+        mission.reward = math.floor((if far then 36000 else 16000) * (0.8 + mission.need / 200) * bonus)
         mission.standing = if far then 0.15 else 0.1
       else
         mission.kind = "supply"

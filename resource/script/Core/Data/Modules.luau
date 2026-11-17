@@ -230,7 +230,8 @@ local modules: { ModuleType } = {
   {
     id = "miner.small", name = "Mining Laser", slot = "high", hardpoint = "turret",
     cpu = 60, powergrid = 2, volume = 5, basePrice = 15000, passive = {},
-    miner = { volume = 40, duration = 60, capacitor = 60, range = 10000 },
+    -- (100 m3 a minute since 2026-11-16, when income came up: it was 40. Mine.)
+    miner = { volume = 100, duration = 60, capacitor = 60, range = 10000 },
   },
 
   -- Shield
@@ -472,7 +473,7 @@ local modules: { ModuleType } = {
   {
     id = "miner.drone", name = "Drone Mining Laser", slot = "high", hardpoint = "turret",
     cpu = 5, powergrid = 1, volume = 1, basePrice = 4000, passive = {},
-    miner = { volume = 10, duration = 60, capacitor = 5, range = 2000 }, internal = true,
+    miner = { volume = 25, duration = 60, capacitor = 5, range = 2000 }, internal = true,
   },
   {
     id = "remote.armor.drone", name = "Drone Armor Repairer", slot = "high", hardpoint = "",
@@ -904,7 +905,8 @@ end
 table.insert(modules, {
   id = "miner.strip", name = "Strip Miner", slot = "high", hardpoint = "turret",
   cpu = 80, powergrid = 40, volume = 25, basePrice = 400000, passive = {},
-  miner = { volume = 200, duration = 120, capacitor = 180, range = 12000 },
+  -- (800 a cycle since 2026-11-16, when income came up: it was 200. Mine.)
+  miner = { volume = 800, duration = 120, capacitor = 180, range = 12000 },
   requires = { { skill = "mining", level = 4 } },
 })
 
@@ -913,7 +915,7 @@ table.insert(modules, {
 table.insert(modules, {
   id = "miner.gas", name = "Gas Harvester", short = "Harvester", slot = "high", hardpoint = "turret",
   cpu = 50, powergrid = 2, volume = 5, basePrice = 60000, passive = {},
-  miner = { volume = 20, duration = 60, capacitor = 40, range = 3000, gas = true },
+  miner = { volume = 50, duration = 60, capacitor = 40, range = 3000, gas = true },
   requires = { { skill = "mining", level = 2 } },
 })
 

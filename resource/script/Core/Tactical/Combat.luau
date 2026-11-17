@@ -43,6 +43,7 @@ Combat.LONG_BURN, Combat.FUSING, Combat.SWARM = 0.05, 0.04, 0.04
 
 -- What a salvager brings off a wreck (Data/Types).
 local SALVAGE = { "salvage.plates", "salvage.circuits", "salvage.conduits" }
+Combat.SALVAGE_PIECES = 5
 
 -- Ticks a pilot stays marked after firing on somebody who is no pirate
 -- (Tactical/Traffic.MARKED: a quarter of an hour).
@@ -699,7 +700,8 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       -- A practised miner gets 5% more for each level after the first.
       local levels = Items.Levels(state, ball.id)
       local skilled = 1 + 0.05 * math.max(0, (if levels then levels.mining or 0 else 0) - 1)
-      local units = math.min(math.floor(miner.volume * skilled / ore.volume),
+      -- (a hair over, so that 1,000 units and a fifth more is 1,150 and not 1,149)
+      local units = math.min(math.floor(miner.volume * skilled / ore.volume + 1e-6),
         math.floor((free + 1e-9) / ore.volume) + math.floor((oreSize - oreUsed + 1e-9) / ore.volume))
       if units <= 0 then
         stop(state, ball, index, "the hold is full", events)
@@ -739,7 +741,9 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       local rng = Rng.For(state.historySeed, state.tick, ball.id, item.id, 61)
       if Rng.Chance(rng, chance) then
         -- The bigger the hull, the more of it there is to bring off.
-        local pieces = 1 + math.floor(wreck.radius / 40)
+        -- (Five times as many since 2026-11-16, when income came up: more
+        -- of it, not dearer, so a rig is built of what it was. Mine.)
+        local pieces = Combat.SALVAGE_PIECES * (1 + math.floor(wreck.radius / 40))
         local got: { [string]: number } = {}
         for _ = 1, pieces do
           local type = SALVAGE[Rng.Int(rng, #SALVAGE) + 1]

@@ -321,14 +321,14 @@ suite:Case("a cloud is drawn off with a gas harvester and nothing else, and a fi
       mined = if event.kind == "Mined" then event else mined
     end
   end
-  -- (20 m3 a minute of a gas at a cubic metre a unit, and a twentieth more for the second level of Mining)
-  t.eq({ ticks, assert(mined).ore, assert(mined).units } :: { any }, { 61, cloud.variety, 21 } :: { any })
-  t.eq(Mining.Left(state, cloud), whole - 21)
+  -- (50 m3 a minute of a gas at a cubic metre a unit, and a twentieth more for the second level of Mining)
+  t.eq({ ticks, assert(mined).ore, assert(mined).units } :: { any }, { 61, cloud.variety, 52 } :: { any })
+  t.eq(Mining.Left(state, cloud), whole - 52)
   local aboard = 0
   for _, item in Items.In(state, ship, "cargo") do
     aboard += if item.type == cloud.variety then item.quantity else 0
   end
-  t.eq(aboard, 21)
+  t.eq(aboard, 52)
   -- Too far off, it will not begin; and a harvester does nothing to a rock.
   assert(Core.Submit(game, { kind = "DeactivateModule", actor = ship, item = harvester.id }))
   for _ = 1, 70 do

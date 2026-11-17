@@ -347,7 +347,7 @@ suite:Case("the fourth agent has an assault on a pirate camp, at each level the 
         bounty += Pirates.kindById[kind].bounty
       end
     end
-    local worth = math.floor((math.floor(0.6 * bounty) + 5000 * level) * (Missions.PAY * (1 + 0.03 * 5)))
+    local worth = math.floor((math.floor(Assault.SHARE * bounty) + Assault.BASE * level) * (Missions.PAY * (1 + 0.03 * 5)))
     pays(t, offer, worth)
     t.near(offer.standing, 0.15 * level, 1e-9)
     t.eq(offer.loyalty, worth // (Missions.LOYALTY * Missions.PAY))
@@ -963,7 +963,7 @@ suite:Case("the fifth agent has a mining contract at each level the pilot's stan
     t.near(volume, ({ 300, 900, 2500, 7000 })[level], 61, `level {level} wants {volume} m3`)
     -- It pays three tenths over what the ore is worth, and three thousand a level, Missions.PAY times over, and
     -- what the pilot's standing adds.
-    local worth = math.floor((math.floor(1.3 * offer.need * ore.basePrice) + 3000 * level) * (Missions.PAY * (1 + 0.03 * 5)))
+    local worth = math.floor((math.floor(Assault.DIG_PAY * offer.need * ore.basePrice) + Assault.DIG_BASE * level) * (Missions.PAY * (1 + 0.03 * 5)))
     pays(t, offer, worth)
     t.near(offer.standing, 0.1 * level, 1e-9)
     t.ok(worth > last, "a bigger contract should pay more")

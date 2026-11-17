@@ -111,15 +111,17 @@ suite:Case("a mining laser delivers a cycle's ore when the cycle ends", function
   local mined, ticks = stepUntil(game, "Mined", 70)
   -- the order takes effect on the next tick, then a 60 s cycle
   t.eq(ticks, 61)
-  -- 40 m3 of ferrite at 0.1 m3 a unit
-  t.eq({ mined.ore, mined.units }, { "ore.ferrite", 400 } :: { any })
-  t.eq(hold(game, "ore.ferrite"), 400)
-  t.eq(Mining.Left(game.state, assert(Space.Object(game.state, rock))), whole - 400)
+  -- 100 m3 of ferrite at 0.1 m3 a unit (40 m3 until 2026-11-16)
+  t.eq({ mined.ore, mined.units }, { "ore.ferrite", 1000 } :: { any })
+  t.eq(hold(game, "ore.ferrite"), 1000)
+  t.eq(Mining.Left(game.state, assert(Space.Object(game.state, rock))), whole - 1000)
   t.ok(ball.vitals.capacitor < capacitor, "and it drew capacitor")
   -- and again a minute later
   local _, again = stepUntil(game, "Mined", 70)
   t.eq(again, 60)
-  t.eq(hold(game, "ore.ferrite"), 800)
+  -- (or as much more as the hold takes)
+  local now = hold(game, "ore.ferrite")
+  t.ok(now > 1000 and now <= 2000, `{now} after two cycles`)
 end)
 
 suite:Case("a practised miner brings in 5% more a level after the first", function(t)
@@ -127,7 +129,7 @@ suite:Case("a practised miner brings in 5% more a level after the first", functi
   game.state.skills.mining = 4
   order(t, game, { kind = "ActivateModule", actor = 0, item = laser.id, target = rock })
   local mined = stepUntil(game, "Mined", 70)
-  t.eq(mined.units, 460)
+  t.eq(mined.units, 1150)
 end)
 
 suite:Case("mining stops when the hold is full, and takes only what fits", function(t)

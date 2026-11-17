@@ -182,8 +182,8 @@ suite:Case("a bigger pirate hits harder, takes more killing and pays more", func
     t.eq({ pilot.bounty, pilot.tags }, { kind.bounty, kind.tags })
     last = { dps = offence.dps, hp = hp, bounty = kind.bounty, tags = kind.tags }
   end
-  -- A scout is what it was when it flew a Courier: one small gun, worth 6,000.
-  t.eq(Pirates.SCOUT.bounty, 6000)
+  -- A scout is what it was when it flew a Courier: one small gun, worth 12,000 (6,000 until 2026-11-16).
+  t.eq(Pirates.SCOUT.bounty, 12000)
 end)
 
 suite:Case("what a camp is built of stands where it is put: a store does nothing, and an emplacement fires on what comes in reach", function(t)

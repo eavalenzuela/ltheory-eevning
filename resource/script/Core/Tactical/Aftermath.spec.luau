@@ -119,8 +119,8 @@ suite:Case("killing a pirate leaves a wreck with its tag, and pays the bounty", 
   end
   t.eq(loot["tag.pirate"], 1)
   t.ok((loot["scrap.metal"] or 0) >= 1)
-  -- a courier hull is 30,000; a fifth of that
-  t.eq(game.state.wallet, wallet + 6000)
+  -- the scout's bounty
+  t.eq(game.state.wallet, wallet + Pirates.SCOUT.bounty)
   t.eq(game.state.pilots[scout.id], nil)
   t.eq(#game.state.pilotIds, 0)
   t.eq(nearest(game, "wreck").id, wreck.id, "and it shows on the overview")

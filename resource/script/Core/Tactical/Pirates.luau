@@ -139,39 +139,45 @@ end
 -- and nobody's guns, and no faction's ships are proof against a pack. A raider carries a warp disruptor
 -- and a destroyer an entanglement projector (and each the other's, if it has the room):
 -- away from where order is kept, a pack holds what it catches.
+-- (Bounties since 2026-11-16, the owner, 2026-11-16: "Income is definitely insanely low"; asked how long a pilot should work for the next hull up, "About 5 hours": a pilot in a hull of a pirate's
+-- class, killing it about half the time they are out, earns the next
+-- hull up in about five hours: a frigate's about a million an hour, a
+-- battleship's some thirty. The figures are mine, from what the balance
+-- report says the classes do and take; they were 6k, 15k, 40k, 120k,
+-- 400k, and 8k, 30k, 12k, 45k, 500k for what a camp is built of.)
 local KINDS: { Kind } = {
-  { id = "scout", hull = "frigate.cutthroat", name = "Pirate Scout", range = 1500, bounty = 6000, tags = 1,
+  { id = "scout", hull = "frigate.cutthroat", name = "Pirate Scout", range = 1500, bounty = 12000, tags = 1,
     fit = { { "autocannon.small", "ammo.fusion" } } },
-  { id = "raider", hull = "frigate.cutthroat", name = "Pirate Raider", range = 2000, bounty = 15000, tags = 1,
+  { id = "raider", hull = "frigate.cutthroat", name = "Pirate Raider", range = 2000, bounty = 30000, tags = 1,
     fit = all(times(3, "autocannon.small", "ammo.kinetic.short"), times(1, "launcher.light"),
       { { "disruptor.warp" }, { "afterburner.1mn" }, { "armor.plate.200mm" }, { "damage.control" }, { "gyrostabilizer" },
         { "projector.entanglement" } }) },
-  { id = "jackal", hull = "destroyer.jackal", name = "Pirate Jackal", range = 3000, bounty = 40000, tags = 2,
+  { id = "jackal", hull = "destroyer.jackal", name = "Pirate Jackal", range = 3000, bounty = 100000, tags = 2,
     fit = all(times(6, "autocannon.small", "ammo.fusion"), times(3, "launcher.light"),
       { { "projector.entanglement" }, { "afterburner.1mn" }, { "armor.plate.200mm" }, { "damage.control" }, { "gyrostabilizer" },
         { "disruptor.warp" }, { "armor.plate.200mm" } }) },
-  { id = "marauder", hull = "cruiser.marauder", name = "Pirate Marauder", range = 6000, bounty = 120000, tags = 4,
+  { id = "marauder", hull = "cruiser.marauder", name = "Pirate Marauder", range = 6000, bounty = 500000, tags = 4,
     fit = all(times(5, "autocannon.medium", "ammo.thermal.short.medium"), times(3, "launcher.heavy"),
       { { "armor.plate.medium" }, { "damage.control" }, { "gyrostabilizer" }, { "gyrostabilizer" }, { "ballistic.control" },
         { "disruptor.warp" }, { "painter.target" }, { "shield.extender.medium" }, { "shield.extender.medium" } }) },
-  { id = "ravager", hull = "battleship.ravager", name = "Pirate Ravager", range = 15000, bounty = 400000, tags = 10,
+  { id = "ravager", hull = "battleship.ravager", name = "Pirate Ravager", range = 15000, bounty = 2500000, tags = 10,
     fit = all(times(6, "artillery.large", "ammo.emp.large"), times(4, "launcher.cruise"),
       { { "armor.plate.large" }, { "damage.control" }, { "gyrostabilizer" }, { "armor.plate.large" }, { "shield.extender.large" } }) },
   -- Not of the ladder either: what a camp is built of (Tactical/Assault).
   -- They stand where they are. The stores do nothing; the emplacements
   -- throw missiles at whatever of the pilot's side comes in reach.
-  { id = "cache", hull = "works.cache", name = "Pirate Cache", range = 0, bounty = 8000, tags = 2, fit = {} },
-  { id = "depot", hull = "works.depot", name = "Pirate Depot", range = 0, bounty = 30000, tags = 6, fit = {} },
-  { id = "battery", hull = "works.battery", name = "Pirate Battery", range = 0, bounty = 12000, tags = 2,
+  { id = "cache", hull = "works.cache", name = "Pirate Cache", range = 0, bounty = 20000, tags = 2, fit = {} },
+  { id = "depot", hull = "works.depot", name = "Pirate Depot", range = 0, bounty = 100000, tags = 6, fit = {} },
+  { id = "battery", hull = "works.battery", name = "Pirate Battery", range = 0, bounty = 30000, tags = 2,
     fit = all(times(3, "launcher.light"), { { "armor.plate.200mm" }, { "damage.control" } }) },
-  { id = "redoubt", hull = "works.redoubt", name = "Pirate Redoubt", range = 0, bounty = 45000, tags = 5,
+  { id = "redoubt", hull = "works.redoubt", name = "Pirate Redoubt", range = 0, bounty = 180000, tags = 5,
     fit = all(times(4, "launcher.heavy"), { { "armor.plate.medium" }, { "damage.control" }, { "ballistic.control" } }) },
   -- And a tower of their own, holding a moon (Tactical/Keeps): it does
   -- nothing itself, and is what the place is about.
-  { id = "keep", hull = "works.keep", name = "Pirate Tower", range = 0, bounty = 500000, tags = 12, fit = {} },
+  { id = "keep", hull = "works.keep", name = "Pirate Tower", range = 0, bounty = 5000000, tags = 12, fit = {} },
   -- Not one of the ladder: a mender has little to shoot with. It keeps
   -- the rest of its pack whole, and is the one to shoot first.
-  { id = "mender", hull = "frigate.cutthroat", name = "Pirate Mender", range = 4500, bounty = 25000, tags = 1,
+  { id = "mender", hull = "frigate.cutthroat", name = "Pirate Mender", range = 4500, bounty = 50000, tags = 1,
     fit = { { "remote.armor.small" }, { "remote.armor.small" }, { "autocannon.small", "ammo.fusion" }, { "afterburner.1mn" },
       { "armor.plate.200mm" }, { "damage.control" } } },
   -- And no pirates at all: the Drowned (Data/Factions), who are what is

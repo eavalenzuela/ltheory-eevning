@@ -1178,7 +1178,9 @@ suite:Case("a hired pilot learns from the pirates destroyed where they fly and f
   t.ok(waitFor(game, 600, function()
     return #state.pilotIds == 0
   end), "the scout was not destroyed")
-  t.eq(wing.experience, Pirates.SCOUT.bounty // 1000)
+  -- (as many as before bounties came up, 2026-11-16: Fleet.Points)
+  t.eq(wing.experience, 6)
+  t.eq({ Fleet.Points(Pirates.SCOUT.bounty), Fleet.Points(2500000), Fleet.Points(0) }, { 6, 400, 0 })
   local row = Core.Query.Fleet(game)[1]
   t.eq({ row.experience, row.needed }, { 6, 800 })
   -- One they were not there for is worth nothing to them.
@@ -1187,7 +1189,7 @@ suite:Case("a hired pilot learns from the pirates destroyed where they fly and f
   t.eq(wing.experience, before)
   -- Enough of it, and they are a grade better, paid as that grade is. What is over is kept.
   Core.TakeEvents(game)
-  Fleet.Credit(state, theirs.system, theirs.grid, 900000, game.events)
+  Fleet.Credit(state, theirs.system, theirs.grid, 9000000, game.events)
   t.eq({ wing.skill, wing.wage, wing.experience }, { 3, Fleet.Wage(3), 6 + 900 - 800 })
   local told = false
   for _, event in Core.TakeEvents(game) do

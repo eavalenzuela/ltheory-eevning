@@ -756,7 +756,7 @@ suite:Case("a salvager strips a wreck, once, in as many cycles as luck and skill
     t.ok(string.sub(item.type, 1, 8) == "salvage.", `{item.type} came off a wreck`)
     pieces += item.quantity
   end
-  t.eq(pieces, 1 + math.floor(wreck.radius / 40))
+  t.eq(pieces, Combat.SALVAGE_PIECES * (1 + math.floor(wreck.radius / 40)))
   t.eq(pieces, done.pieces)
   -- It has stopped, the wreck (which had nothing aboard) is gone, and there is no second helping.
   t.eq(#a.me.vitals.running, 0)

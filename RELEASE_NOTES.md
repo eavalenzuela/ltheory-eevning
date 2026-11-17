@@ -19,6 +19,7 @@ the lines beginning `- ` under it.
 - Blueprint copies cost a tenth of what they did: ten runs cost about a tenth of one of the things they build.
 - Blueprint originals cost half what they did: five times what they build.
 - Freighters are as big as carriers and cost about as much (1.2 billion); jump freighters about 9.6 billion.
+- Earnings are much higher, the more so the bigger the work: pirate bounties (a pirate battleship is worth 2.5 million), every kind of job, mining (lasers cut two and a half times as much, strip miners four times), pirate tags and the Drowned's alloy (five times what they sold for), and salvage (five times as much off a wreck). The aim is about five hours of the work a hull is for to buy the next one up.
 - Named pirate officers leave a blueprint copy of an Unbound tower, good for a run or a few. Nobody has the original.
 - Contracts are a window of their own on the dock, and galaxy-wide: every station's lots in one list, nearest first, which you can narrow by how far off and by what they are. Buy any of them from anywhere, docked or in space: what you buy is delivered to your hangar at the station it was posted at. A want is delivered to from anywhere too, from your hangar at that station.
 - Your contract listings can be called off from anywhere; the lot goes back to the hangar where it was up.
