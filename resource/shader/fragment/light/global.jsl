@@ -19,15 +19,26 @@ uniform float cel;
 float inkAt(vec3 N, float d) {
   float px = max(2.0, floor(2.0 / (rcpFrame.y * 1080.0)));
   float ink = 0.0;
+  /* (each way and the way opposite: lookups at a level named, as every
+     lookup in a loop or a branch is to be, for the strict drivers) */
   for (int i = 0; i < 4; ++i) {
     vec2 o = (i == 0) ? vec2(1.0, 0.0) : ((i == 1) ? vec2(-1.0, 0.0) : ((i == 2) ? vec2(0.0, 1.0) : vec2(0.0, -1.0)));
     vec2 q = uv + o * px * rcpFrame;
-    float dn = texture2D(depthBuffer, q).x / farPlane;
+    float dn = texture2DLod(depthBuffer, q, 0.0).x / farPlane;
     if (dn - d > 0.03 * d) {
+      /* the near side of a jump in depth: an outline */
       ink = 1.0;
     } else if (abs(dn - d) < 0.03 * d) {
-      vec3 Nn = decodeNormal(texture2D(normalBuffer, q).xy);
-      ink = max(ink, smoothstep(0.75, 0.55, dot(N, Nn)));
+      /* A fold: the surface turns here and stays turned a few pixels on,
+         while this pixel's own side does not turn. A bump in the plating
+         turns and turns back, or turns every way at once, and is no fold
+         (the owner, 2026-11-17, of specks of ink all over the towers). */
+      vec3 near = decodeNormal(texture2DLod(normalBuffer, q, 0.0).xy);
+      vec3 far = decodeNormal(texture2DLod(normalBuffer, uv + o * (3.0 * px) * rcpFrame, 0.0).xy);
+      vec3 back = decodeNormal(texture2DLod(normalBuffer, uv - o * px * rcpFrame, 0.0).xy);
+      float turned = min(smoothstep(0.75, 0.55, dot(N, near)), smoothstep(0.75, 0.55, dot(N, far)));
+      float level = 1.0 - smoothstep(0.92, 0.80, dot(N, back));
+      ink = max(ink, turned * level);
     }
   }
   return ink;
