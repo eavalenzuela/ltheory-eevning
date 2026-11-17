@@ -60,6 +60,7 @@ local Items = require("@lt/Core/Assets/Items")
 local Names = require("@lt/Core/Describe/Names")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
+local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Types = require("@lt/Core/Data/Types")
@@ -287,11 +288,26 @@ function Members.Recall(state: State.State, member: State.Member, events: { Even
   end
 end
 
+-- The skill each trade is the better at for: a twentieth more for each
+-- level of it, for one of the player's own characters (who has skills
+-- to speak of: 2026-11-17; which skill, and how much, mine).
+Members.ALT_SKILL = { miner = "mining", fighter = "rapid.firing", hauler = "industrials", scout = "astrometrics" } :: { [string]: string }
+Members.ALT_BY = 0.05
+
 -- What a member's hull earns an hour at their trade, anywhere.
 local function base(member: State.Member): number
   local hull = Ships.byId[member.hull]
   local earns = Members.EARNS[member.trade]
-  return if hull and earns then earns[hull.class] or 0 else 0
+  local skills = member.skills
+  local skilled = if skills then 1 + Members.ALT_BY * math.max(0, skills[Members.ALT_SKILL[member.trade] or ""] or 0) else 1
+  return if hull and earns then (earns[hull.class] or 0) * skilled else 0
+end
+
+-- Whether a member can fly a hull: anybody can, but one of the player's
+-- own characters only with the skills for it.
+local function canFly(member: State.Member, hull: string): boolean
+  local skills = member.skills
+  return skills == nil or Skills.Missing(Skills.Needs(hull), skills) == nil
 end
 
 -- The ore that goes for most in a system, of those every belt has: its
@@ -514,13 +530,14 @@ local function reckon(state: State.State, member: State.Member, places: { number
       member.call = 0
     end
   end
-  if membership.tax > member.bears + 1e-9 then
+  -- (one of the player's own characters stays, whatever the tax and the pickings)
+  if membership.tax > member.bears + 1e-9 and member.alt == nil then
     leave(state, member, "the tax", events)
     return
   end
   member.lean = if member.day < Members.LEAN * base(member) * 24 * (1 - member.bears) then member.lean + 1 else 0
   member.day = 0
-  if member.lean >= Members.LEAN_DAYS or #places == 0 then
+  if (member.lean >= Members.LEAN_DAYS and member.alt == nil) or #places == 0 then
     leave(state, member, "thin pickings", events)
     return
   end
@@ -529,7 +546,7 @@ local function reckon(state: State.State, member: State.Member, places: { number
   local ladder = LADDER[member.trade]
   local rung = if hull then table.find(ladder, hull.class) or #ladder else #ladder
   local next = if rung < #ladder then hullFor(member.trade, member.people, ladder[rung + 1]) else nil
-  if next and member.wealth >= 1.2 * Types.Info(next).basePrice then
+  if next and member.wealth >= 1.2 * Types.Info(next).basePrice and canFly(member, next) then
     member.wealth -= Types.Info(next).basePrice
     member.hull = next
     -- (the ship they were out in is gone in, for the new one)
@@ -592,6 +609,63 @@ local function join(state: State.State, applicant: State.Applicant, events: { Ev
   end
   table.insert(events, { kind = "MemberJoined", member = member.id, name = member.name, trade = member.trade, system = member.system })
   return member
+end
+
+-- One of the player's own characters asked into the corporation, at a
+-- trade: whether they can be, and why not. ('id' its character's id.)
+function Members.CanJoinAlt(state: State.State, id: string, trade: string): (boolean, string?)
+  local membership = state.membership
+  if not Corporation.Founded(state) then
+    return false, "there is no corporation to be a member of: found one first"
+  elseif id == state.character then
+    return false, "that is who you are"
+  elseif LADDER[trade] == nil then
+    return false, "a member is a miner, a fighter, a hauler or a scout"
+  elseif #membership.memberIds >= Members.Room(state) then
+    return false, `the corporation has room for {Members.Room(state)} members`
+  end
+  for _, memberId in membership.memberIds do
+    if membership.members[memberId].alt == id then
+      return false, "they are a member already"
+    end
+  end
+  return true
+end
+
+-- Ask one of the player's own characters in: a member who works as any
+-- does, at the trade asked, with the skills they have (Members.ALT_SKILL),
+-- in the best hull of the first of that trade's they can fly; who stays
+-- whatever the tax and the pickings. (Character/Characters; their name
+-- and skills come from their character.)
+function Members.JoinAlt(state: State.State, id: string, name: string, trade: string, skills: { [string]: number },
+  events: { Event }): State.Member?
+  if not Members.CanJoinAlt(state, id, trade) then
+    return nil
+  end
+  local faction = people(state)
+  local hull = "frigate.courier"
+  for _, class in LADDER[trade] do
+    local found = hullFor(trade, faction, class) or hullFor(trade, "", class)
+    if found and Skills.Missing(Skills.Needs(found), skills) == nil then
+      hull = found
+      break
+    end
+  end
+  local member = join(state, { key = `alt:{id}`, name = name, trade = trade, people = faction, hull = hull, bears = 1, until_ = 0 },
+    events)
+  member.alt, member.skills = id, table.clone(skills)
+  return member
+end
+
+-- The skills of one of the player's characters who is a member, brought
+-- up to date (when a game is opened: their character has trained since).
+function Members.AltSkills(state: State.State, id: string, skills: { [string]: number })
+  for _, memberId in state.membership.memberIds do
+    local member = state.membership.members[memberId]
+    if member.alt == id then
+      member.skills = table.clone(skills)
+    end
+  end
 end
 
 -- Once a tick; it does something on the hour, and more once a day.

@@ -601,7 +601,11 @@ export type Member = { id: number, name: string, trade: string, people: string, 
   refit: number, lost: number,
   -- What a hauler's ship has aboard of the economy's, and the system it
   -- is for (as a hauler of the traffic: Tactical/Traffic).
-  carries: { node: number, class: number, amount: number }? }
+  carries: { node: number, class: number, amount: number }?,
+  -- One of the player's own characters, asked in (Character/Characters,
+  -- 2026-11-17): its id, and the skills it has, kept up to date when a
+  -- game is opened. Nil for anybody else.
+  alt: string?, skills: { [string]: number }? }
 -- Somebody who would join: who has applied (and waits until a tick), or
 -- is open to it at a station today.
 export type Applicant = { key: string, name: string, trade: string, people: string, hull: string, bears: number, until_: number }
@@ -789,6 +793,13 @@ export type State = {
   skills: { [string]: number },
   training: { { skill: string, level: number } },
   trainingStarted: number,
+  -- The pilot's character, whose skills these are (Character/Characters),
+  -- and whether the queue is trained by the time the player gives it
+  -- (Core.Credit) and not by the game's ticks (2026-11-17: training goes
+  -- by real time only). Nil in a game with no character (a test's, or
+  -- one saved before there were characters).
+  character: string?,
+  trainingByClock: boolean?,
   -- The paints and designs that are the pilot's for good, by their ids
   -- (Assets/Paintwork): any ship of theirs is painted in any of them.
   paints: { [string]: boolean },

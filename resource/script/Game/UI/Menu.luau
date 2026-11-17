@@ -21,11 +21,22 @@
 -- "Key:<action>", "Load:<slot>", "Save:<slot>", "Delete:<slot>"; the
 -- seed field is "Seed", and the two sliders are "Effects volume" and
 -- "Music volume" (Im.Enter).
+--
+-- And the characters (Core/Character/Characters, 2026-11-17): the main
+-- menu says whose games are played, "Menu:characters" lists them,
+-- "Character:play:<id>" plays as one and "Character:delete:<id>" throws
+-- one away (twice, to be sure); "Menu:newcharacter" makes one, of the
+-- name in "Character name", the face "Face:<n>" picked (the game's own
+-- portraits), or the picture in the file named in "Picture file"
+-- ("Menu:make").
 
+local Characters = require("@lt/Core/Character/Characters")
 local Format = require("@lt/Game/Format")
 local Graphics = require("@lt/Game/View/Graphics")
 local Im = require("@lt/Game/UI/Im")
 local Keys = require("@lt/Game/UI/Keys")
+local Portrait = require("@lt/Game/UI/Portrait")
+local Theme = require("@lt/Game/UI/Theme")
 local Session = require("@lt/Game/Session")
 
 local Menu = {}
@@ -47,9 +58,17 @@ local seed = 1
 local size = 40           -- systems in a new galaxy
 local wasPaused = false   -- the clock, before the pause menu stopped it
 local saves: { Session.SaveInfo } = {}
+local characters: { Characters.Character } = {}
+-- A character being made: its name, the badge picked, a picture's file;
+-- what went wrong last; and a character a Delete has been pressed for once.
+local newName, newFace, newPicture, problem, doomed = "", 1, "", "", ""
+-- Where making a character goes on to: back where it was asked for, or
+-- the new game it was asked for on the way to.
+local afterMade = ""
 
 local function refresh()
   saves = Session.Saves()
+  characters = Session.Characters()
 end
 
 -- Whether sound is on and how loud its effects and its music are (of
@@ -202,8 +221,9 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
     return
   end
   local w = Menu.WIDTH
-  local h = if page == "load" or page == "save" then 420 elseif page == "pause" then 390 elseif page == "main" then 370
-    elseif page == "keys" then 550 elseif page == "graphics" then 640 else 340
+  local h = if page == "load" or page == "save" then 420 elseif page == "pause" then 390 elseif page == "main" then 414
+    elseif page == "keys" then 550 elseif page == "graphics" then 640 elseif page == "characters" then 470
+    elseif page == "newcharacter" then 500 else 340
   local x, y = left + (width - w) / 2, top + (height - h) / 2 - 40
   -- (the options have a line more than they had, under what was there: what is above stays where it was)
   if page == "options" then
@@ -220,7 +240,23 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
 
   if page == "main" then
     Im.Heading("LIMITLESS SPACE", cx - Im.HeadingWidth("LIMITLESS SPACE", 30) / 2, y + 26, 30, Im.TEXT)
-    local newest = saves[1]
+    -- (whose games: the character played as, and Continue is the newest of theirs)
+    local mine: Characters.Character? = nil
+    for _, character in characters do
+      mine = if character.id == session.character then character else mine
+    end
+    local who = if mine then mine.name else "No character yet: make one to play"
+    local whoWidth = Im.TextWidth(who, 13) + (if mine then 26 else 0)
+    if mine then
+      Portrait.Draw(mine.portrait, cx - whoWidth / 2, y + 63, 20)
+    end
+    Im.Text(who, cx - whoWidth / 2 + (if mine then 26 else 0), y + 66, 13, if mine then Im.TEXT else Im.DIM)
+    local newest: Session.SaveInfo? = nil
+    for _, info in saves do
+      if newest == nil and (info.character == session.character or session.character == "") then
+        newest = info
+      end
+    end
     if button("Continue", 0, newest ~= nil, "Menu:continue") and newest then
       if Session.Load(session, newest.slot) then
         close(session, false)
@@ -231,15 +267,20 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
       Im.Text(line, cx - Im.TextWidth(line, 12) / 2, y + 96 + 37, 12, Im.DIM)
     end
     if button("New game", 1.4, true, "Menu:new") then
-      page = "new"
+      -- (a new game is a character's: with none, one is made first)
+      page = if mine then "new" else "newcharacter"
+      afterMade = if mine then "" else "new"
     end
     if button("Load game", 2.4, #saves > 0, "Menu:load") then
       page = "load"
     end
-    if button("Options", 3.4, true, "Menu:options") then
+    if button("Characters", 3.4, true, "Menu:characters") then
+      page, doomed, problem = "characters", "", ""
+    end
+    if button("Options", 4.4, true, "Menu:options") then
       page = "options"
     end
-    if button("Quit", 4.4, true, "Menu:quit") then
+    if button("Quit", 5.4, true, "Menu:quit") then
       Host.Exit(0)
     end
   elseif page == "pause" then
@@ -432,6 +473,97 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
     if Im.Button("Back", cx - 130, y + 250, 260, 34, true, "Menu:back") then
       page = root
     end
+  elseif page == "characters" then
+    Im.Heading("CHARACTERS", cx - Im.HeadingWidth("CHARACTERS", 26) / 2, y + 26, 26, Im.TEXT)
+    Im.Text("Each trains by real time, all of them at once. A game is one character's.", x + 24, y + 62, 12, Im.DIM)
+    local line = y + 86
+    for index, character in characters do
+      if index > 6 then
+        break
+      end
+      local playing = character.id == session.character
+      Portrait.Draw(character.portrait, x + 24, line, 40)
+      Im.Text(character.name, x + 76, line + 2, 15, if playing then Im.TEXT else Im.TEXT, 1)
+      local first = character.training[1]
+      local doing = if first then `training {first.skill} to {first.level}, {Format.Duration(Characters.Left(character))} queued`
+        else "nothing in training"
+      Im.Text(`{Characters.Levels(character)} levels  -  {doing}`, x + 76, line + 22, 11, Im.DIM)
+      if playing then
+        Im.Text("playing", x + w - 196, line + 12, 12, Theme.GOOD)
+      elseif Im.Button("Play as", x + w - 206, line + 6, 84, 28, true, `Character:play:{character.id}`) then
+        Session.Choose(session, character.id)
+        doomed = ""
+      end
+      if Im.Button(if doomed == character.id then "Sure?" else "Delete", x + w - 110, line + 6, 86, 28, true,
+        `Character:delete:{character.id}`) then
+        if doomed == character.id then
+          Portrait.Forget(character.portrait)
+          Session.DeleteCharacter(session, character.id)
+          doomed = ""
+          refresh()
+        else
+          doomed = character.id
+        end
+      end
+      line += 52
+    end
+    if #characters == 0 then
+      Im.Text("There are no characters yet.", x + 24, line + 4, 14, Im.DIM)
+    end
+    if Im.Button("New character", cx - 130, y + h - 94, 260, 34, true, "Menu:newcharacter") then
+      page, newName, newPicture, problem, afterMade = "newcharacter", "", "", "", ""
+    end
+    if Im.Button("Back", cx - 130, y + h - 50, 260, 34, true, "Menu:back") then
+      page = root
+    end
+  elseif page == "newcharacter" then
+    Im.Heading("NEW CHARACTER", cx - Im.HeadingWidth("NEW CHARACTER", 26) / 2, y + 26, 26, Im.TEXT)
+    Im.Text("Name", x + 24, y + 77, 14, Im.DIM)
+    newName = Im.Words("Character name", newName, x + 90, y + 70, w - 114, 28, Characters.NAME_MOST, "what they are called")
+    Im.Text("Face", x + 24, y + 116, 14, Im.DIM)
+    -- (the game's portraits, two rows of them; the one picked framed)
+    local size, gap = 60, 4
+    for n = 1, Characters.PORTRAITS do
+      local col, row = (n - 1) % 8, (n - 1) // 8
+      local bx, by = x + 24 + col * (size + gap), y + 138 + row * (size + gap)
+      Portrait.Draw(`portrait:{n}`, bx, by, size)
+      if n == newFace and newPicture == "" then
+        Im.Edge(bx - 2, by - 2, size + 4, size + 4, Im.TEXT, 1)
+      end
+      local _, clicked = Im.Area(`Face:{n}`, bx, by, size, size, true)
+      if clicked then
+        newFace, newPicture = n, ""
+      end
+    end
+    Im.Text("or a picture of your own: the whole path of a .png or .jpg file", x + 24, y + 274, 12, Im.DIM)
+    newPicture = Im.Words("Picture file", newPicture, x + 24, y + 294, w - 48, 28, 240, "C:/Users/you/Pictures/me.png")
+    if problem ~= "" then
+      Im.Text(problem, x + 24, y + 334, 13, Theme.BAD)
+    end
+    if Im.Button("Make", cx - 130, y + h - 94, 260, 34, true, "Menu:make") then
+      local made, why = Session.MakeCharacter(newName, `portrait:{newFace}`)
+      if made and newPicture ~= "" then
+        local portrait, failed = Session.ImportPicture(made, newPicture)
+        if portrait then
+          made.portrait = portrait
+          Portrait.Forget(portrait)
+          Session.KeepCharacter(made)
+        else
+          why = `made, with one of the game's faces: {failed}`
+        end
+      end
+      if made then
+        Session.Choose(session, made.id)
+        refresh()
+        problem = why or ""
+        page = if problem ~= "" then "characters" elseif afterMade ~= "" then afterMade else root
+      else
+        problem = why or "the character could not be made"
+      end
+    end
+    if Im.Button("Back", cx - 130, y + h - 50, 260, 34, true, "Menu:back") then
+      page = "characters"
+    end
   elseif page == "load" then
     Im.Heading("LOAD GAME", cx - 80, y + 26, 26, Im.TEXT)
     local line = y + 80
@@ -441,7 +573,8 @@ function Menu.Draw(session: Session.Session, left: number, top: number, width: n
       end
       Im.Text(info.slot, x + 24, line + 5, 14, Im.TEXT)
       Im.Text(describe(info), x + 100, line + 2, 12, Im.DIM)
-      Im.Text(ago(info.time), x + 100, line + 17, 11, Im.DIM, 0.7)
+      -- (whose it is, and when)
+      Im.Text((if info.pilot ~= "" then `{info.pilot}  -  ` else "") .. ago(info.time), x + 100, line + 17, 11, Im.DIM, 0.7)
       if Im.Button("Load", x + w - 150, line + 2, 60, 26, true, `Load:{info.slot}`) then
         if Session.Load(session, info.slot) then
           close(session, false)

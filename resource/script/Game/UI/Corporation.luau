@@ -22,12 +22,14 @@
 -- "SellCorp:<type>", "ToCorp:<type>". "corporation:close" shuts it.
 
 local Catalog = require("@lt/Core/Data/Catalog")
+local Characters = require("@lt/Core/Character/Characters")
 local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
 local Info = require("@lt/Game/UI/Info")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
 local List = require("@lt/Game/UI/List")
+local Portrait = require("@lt/Game/UI/Portrait")
 local Session = require("@lt/Game/Session")
 local State = require("@lt/Core/Kernel/State")
 local Theme = require("@lt/Game/UI/Theme")
@@ -242,6 +244,13 @@ local MEMBERS: { List.Column } = {
   { id = "paid", label = "Paid", width = 110, right = true, sort = false }, { id = "act", label = "", width = 140, right = true, sort = false },
 }
 
+-- The player's characters (read every few seconds, not every frame), and
+-- the trade each other one would be asked in at.
+local alts: { Characters.Character } = {}
+local altsAt = -math.huge
+local altTrades: { [string]: string } = {}
+local TRADES = { "miner", "fighter", "hauler", "scout" }
+
 local function drawMembers(session: Session.Session, game: Core.Game, x: number, y: number, w: number, h: number)
   local info = Core.Query.Membership(game)
   local left = x + 12
@@ -278,7 +287,7 @@ local function drawMembers(session: Session.Session, game: Core.Game, x: number,
     end
     local rowY = line + (index - 1) * List.ROW
     local hot = List.Row(x, rowY, w - 5, false)
-    List.Text(member.name, layout.name, rowY, hot, Theme.TEXT, 14)
+    List.Text(member.name .. (if member.alt then "  (yours)" else ""), layout.name, rowY, hot, if member.alt then Theme.GOOD else Theme.TEXT, 14)
     List.Text(member.trade, layout.trade, rowY, false, Theme.DIM, 13)
     List.Text(member.hull, layout.ship, rowY, hot, Theme.DIM, 13)
     List.Text(`{member.doing} in {member.system}` .. (if member.called then " (a call)" else ""), layout.doing, rowY, hot,
@@ -324,6 +333,39 @@ local function drawMembers(session: Session.Session, game: Core.Game, x: number,
     line += List.ROW
   end
   line += 10
+
+  -- The player's other characters, who can be asked in (2026-11-17:
+  -- Core/Character/Characters): each at a trade, picked on its button.
+  if Host.Clock() - altsAt > 5 then
+    alts, altsAt = Session.Characters(), Host.Clock()
+  end
+  local others = 0
+  for _, alt in alts do
+    others += if alt.id ~= session.character then 1 else 0
+  end
+  if others > 0 then
+    heading("YOUR OTHER CHARACTERS", left, line, w - 24, "asked in, one works as a member does, with the skills they have, and stays")
+    line += 22
+    for _, alt in alts do
+      if alt.id ~= session.character then
+        local hot = List.Row(x, line, w - 5, false)
+        Portrait.Draw(alt.portrait, layout.name.x + 4, line + 3, List.ROW - 6)
+        List.Text(alt.name, layout.name, line, hot, Theme.TEXT, 14, false, List.ROW)
+        local trade = altTrades[alt.id] or "miner"
+        if Im.Button(trade, layout.trade.x, line + 2, layout.trade.w - 6, List.ROW - 4, true, `Alt:trade:{alt.id}`) then
+          local at = table.find(TRADES, trade) or 1
+          altTrades[alt.id] = TRADES[at % #TRADES + 1]
+        end
+        local can, why = Core.CanJoinAlt(game, alt.id, trade)
+        List.Text(if can then `{Characters.Levels(alt)} levels of skill` else why or "", layout.doing, line, false, if can then Theme.DIM else Theme.CAUTION, 12)
+        if Im.Button("Ask in", layout.act.x + layout.act.w - 70, line + 2, 70, List.ROW - 4, can, `Alt:ask:{alt.id}`) then
+          Session.AskAlt(session, alt.id, trade)
+        end
+        line += List.ROW
+      end
+    end
+    line += 10
+  end
 
   -- The calls.
   heading("CALLS", left, line, w - 24, "not orders: a member answers one that suits their trade and pays better than what they were doing")

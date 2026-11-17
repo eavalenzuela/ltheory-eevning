@@ -1548,7 +1548,7 @@ function Core.Step(game: Game)
   Keeps.Step(state, game.events)
   Colonies.Step(state, game.events)
   Industry.Step(state, game.events)
-  Training.Step(state, game.events)
+  Training.Tick(state, game.events)
   Guide.Step(state, game.events, first)
   Careers.Step(state, game.events, first)
 end
@@ -1561,6 +1561,28 @@ function Core.Away(game: Game, seconds: number): number
   local trained = Training.Credit(game.state, seconds, game.events)
   table.insert(game.events, { kind = "TrainingCredited", seconds = seconds, trained = trained, queued = #game.state.training })
   return trained
+end
+
+-- Real time given to the pilot's training while the game runs (a
+-- character's, which is trained by real time and not by the game's own:
+-- Character/Characters). Says nothing unless a level is trained.
+function Core.Credit(game: Game, seconds: number): number
+  return Training.Credit(game.state, seconds, game.events)
+end
+
+-- One of the player's other characters asked into the corporation, at a
+-- trade (Assets/Members): whether they can be, and why not; and asking.
+function Core.CanJoinAlt(game: Game, id: string, trade: string): (boolean, string?)
+  return Members.CanJoinAlt(game.state, id, trade)
+end
+
+function Core.JoinAlt(game: Game, id: string, name: string, trade: string, skills: { [string]: number }): boolean
+  return Members.JoinAlt(game.state, id, name, trade, skills, game.events) ~= nil
+end
+
+-- The skills of the player's other characters who are members, brought up to date.
+function Core.AltSkills(game: Game, id: string, skills: { [string]: number })
+  Members.AltSkills(game.state, id, skills)
 end
 
 function Core.TakeEvents(game: Game): { Space.Event }
@@ -2999,7 +3021,9 @@ end
 -- the pilot is docked at; the calls posted, with how many answer each;
 -- and the systems a call can be for.
 export type MemberInfo = { id: number, name: string, trade: string, hull: string, system: string, doing: string, earned: number,
-  paid: number, bears: number, called: boolean, ship: number, lost: number }
+  paid: number, bears: number, called: boolean, ship: number, lost: number,
+  -- (one of the player's own characters: Core/Character/Characters)
+  alt: boolean }
 export type ApplicantInfo = { key: string, name: string, trade: string, hull: string, bears: number }
 export type CallInfo = { id: number, kind: string, system: string, reward: number, answering: number }
 export type MembershipInfo = { tax: number, room: number, members: { MemberInfo }, applicants: { ApplicantInfo }, open: { ApplicantInfo },
@@ -3023,7 +3047,7 @@ function Query.Membership(game: Game): MembershipInfo
     local node = state.galaxy.systems[member.system]
     table.insert(info.members, { id = member.id, name = member.name, trade = member.trade, hull = hullName(member.hull),
       system = if node then node.name else "?", doing = member.doing, earned = member.earned, paid = member.paid, bears = member.bears,
-      called = member.call ~= 0, ship = member.ship, lost = member.lost })
+      called = member.call ~= 0, ship = member.ship, lost = member.lost , alt = member.alt ~= nil })
   end
   for _, call in membership.calls do
     local answering = 0

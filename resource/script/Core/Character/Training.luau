@@ -171,6 +171,16 @@ function Training.Credit(state: State.State, seconds: number, events: { Event })
   return queued - #state.training
 end
 
+-- Once a tick. (A character's queue is trained by the time the player
+-- gives it, not by ticks: the time it has had stands still with the
+-- game's, and only Training.Credit moves it on.)
+function Training.Tick(state: State.State, events: { Event })
+  if state.trainingByClock and #state.training > 0 then
+    state.trainingStarted += 1
+  end
+  Training.Step(state, events)
+end
+
 function Training.Step(state: State.State, events: { Event })
   while true do
     local first = state.training[1]

@@ -6,6 +6,14 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Characters
+
+- Your pilot is now a character kept outside any one game. Skills and the training queue go with the character from galaxy to galaxy; the wallet, ships, items, implants, standings and corporation stay with the galaxy they were earned in.
+- Every character trains in real time, all of them at once, whether or not the game is running. Running the game faster at a station no longer speeds up training.
+- The main menu shows who you are playing as. Characters lists them, with what each is training, to play as one, delete one, or make a new one with a name and either one of 24 badges or a picture of your own (the path of a .png or .jpg file).
+- New game and Continue are the chosen character's; loading a save plays as its character. A save from before characters gives its pilot to a new character the first time it is loaded.
+- In a corporation's Members page, your other characters can be asked in at a trade. They work as members do, with their own skills making them better at it and deciding which hulls they move up to, and they never leave over tax or thin pickings.
+
 ## More modules, and ice
 
 - New modules: a Co-Processor (more CPU) and a Reactor Control Unit (more powergrid); Shield and Capacitor Power Relays; Reinforced Bulkheads; an Adaptive Armor Hardener that shifts its resistance toward the damage you are taking; Capacitor Boosters, which put a capacitor charge's worth into the capacitor each cycle; and Ancillary Shield Boosters and Armor Repairers, stronger or free to run while they have charges or paste. Capacitor charges and nanite repair paste are sold with the other charges.

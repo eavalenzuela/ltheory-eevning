@@ -1,0 +1,74 @@
+# Characters, in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/characters.txt
+#
+# A script's run plays as a character from the first (one called Pilot is
+# made for it, as a player is asked to make one). A second is made from
+# the opening menu, with a name and a face, and a new game is begun as
+# them: they are who the game's pilot is. What the pilot trains is their
+# character's: saved, and opened again an hour on, the character has
+# trained it. And the first character, Pilot, is asked into the second's
+# corporation, as a miner, with the skills it has.
+#
+# covers: Core/Character/Characters Game/Session Game/UI/Menu Game/UI/Portrait Game/UI/Corporation Core/Assets/Members
+
+wait 2
+lua assert(select(1, GameDebug.Character()) == 'Pilot', 'a script plays as a Pilot made for it')
+lua assert(select(3, GameDebug.Character()) == select(2, GameDebug.Character()), 'the first game is the Pilot\'s')
+
+# A second character, from the menu.
+lua assert(GameDebug.Menu('main') == 'main')
+frames 3
+until GameDebug.Press('Menu:characters')
+frames 3
+until GameDebug.Press('Menu:newcharacter')
+frames 3
+lua GameDebug.Type('Character name', 'Ada Venn')
+frames 3
+until GameDebug.Press('Face:7')
+frames 3
+until GameDebug.Press('Menu:make')
+frames 3
+lua assert(select(1, GameDebug.Character()) == 'Ada Venn', 'the character made is the one played as')
+lua assert(select(4, GameDebug.Character()) == 2, 'there should be two characters')
+
+# A new game, as Ada.
+lua assert(GameDebug.Menu() == 'main')
+until GameDebug.Press('Menu:new')
+frames 3
+until GameDebug.Press('Menu:start')
+frames 10
+lua assert(GameDebug.Menu() == '', 'the game should be under way')
+lua assert(select(3, GameDebug.Character()) == select(2, GameDebug.Character()), 'the new game is Ada\'s')
+
+# What Ada trains is hers: saved, and opened an hour on.
+until GameDebug.Press('Skills')
+until GameDebug.Tab() == 'Skills'
+until GameDebug.Press('Train:lasers')
+until GameDebug.Training() == 1
+lua assert(GameDebug.Save('ada'), 'the save failed')
+lua assert(GameDebug.Load('ada', 3600), 'the load failed')
+frames 5
+lua assert(GameDebug.Skill('lasers') == 1 and GameDebug.Training() == 0, 'an hour on, Ada should have trained Lasers')
+
+# Pilot, asked into Ada's corporation as a miner.
+lua GameDebug.Credits(900000)
+until GameDebug.Press('Wallet')
+until GameDebug.Tab() == 'Wallet'
+frames 3
+until GameDebug.Press('Wallet:corporation')
+frames 3
+lua GameDebug.Type('Corporation:name', 'Venn Holdings')
+frames 3
+until GameDebug.Press('Corporation:found')
+until GameDebug.Corporation() == 'Venn Holdings'
+frames 3
+until GameDebug.Press('Corporation:members')
+frames 4
+until GameDebug.Press('Alt:ask:pilot')
+frames 3
+lua assert(GameDebug.Alt() == 'Pilot' and select(2, GameDebug.Alt()) == 'miner', 'Pilot should be a member, a miner')
+lua assert(not GameDebug.AskAlt('Pilot', 'miner'), 'Pilot is a member already')
+
+echo characters scenario passed
+quit

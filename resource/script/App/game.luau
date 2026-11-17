@@ -2654,6 +2654,37 @@ function Debug.Menu(which: string?): string
   return Menu.Page()
 end
 
+-- The characters (Core/Character/Characters): the name and id of the
+-- one the game is played as ("" for none), the one the game itself is
+-- its pilot's, and how many there are.
+function Debug.Character(): (string, string, string, number)
+  local id = session.character
+  local character = Session.Character(id)
+  return if character then character.name else "", id, session.game.state.character or "", #Session.Characters()
+end
+
+-- Ask another of the player's characters into the corporation, by name, at a trade.
+function Debug.AskAlt(name: string, trade: string): (boolean, string?)
+  for _, character in Session.Characters() do
+    if character.name == name then
+      return Session.AskAlt(session, character.id, trade)
+    end
+  end
+  return false, "no such character"
+end
+
+-- A member who is one of the player's characters: their name, trade and Mining level; "" if none is.
+function Debug.Alt(): (string, string, number)
+  for _, id in session.game.state.membership.memberIds do
+    local member = session.game.state.membership.members[id]
+    if member.alt then
+      local skills: { [string]: number } = member.skills or {}
+      return member.name, member.trade, skills.mining or -1
+    end
+  end
+  return "", "", -1
+end
+
 -- Begin a new game, of a seed and so many systems (three if not said),
 -- as the menu's New game does.
 function Debug.NewGame(seed: number, systems: number?)

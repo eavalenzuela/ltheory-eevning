@@ -15,6 +15,7 @@ local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Boosters = require("@lt/Core/Data/Boosters")
+local Characters = require("@lt/Core/Character/Characters")
 local Types = require("@lt/Core/Data/Types")
 
 local Session = {}
@@ -57,6 +58,11 @@ export type Session = {
   -- shows, before either is bought (Session.Try): nothing of either,
   -- when the ship is shown as it is.
   trying: { paint: string?, design: string? },
+  -- The player's character, whose game this is (Core/Character/
+  -- Characters): its id, "" for none; and when real time was last given
+  -- to its training (Host.Clock).
+  character: string,
+  credited: number,
 }
 
 -- Where saves are kept. A script's saves go somewhere of their own, so
@@ -70,12 +76,237 @@ local SAVE_DIR = if Host.scripted then "cache/test-saves" else "save"
 -- spans a third of the sky.)
 local STANDOFF: { [string]: number } = { planet = 1, moon = 1.5, sun = 4 }
 
+-- ---------------------------------------------------------------------
+-- Characters (the owner's rulings of 2026-11-17: Core/Character/
+-- Characters): one file each in save/characters, with a picture beside
+-- one that has its own, and the one last played as named in 'chosen'.
+-- A script's run keeps its characters in memory, so that a test neither
+-- writes over a player's nor finds what another run left; and trains
+-- them by the game's ticks, so that it plays out the same every time.
+
+local CHARACTER_DIR = `{SAVE_DIR}/characters`
+local kept: { [string]: string } = {}
+
+local function readText(name: string): string?
+  if Host.scripted then
+    return kept[name]
+  end
+  local data = Host.ReadFile(`{CHARACTER_DIR}/{name}`)
+  return if data then buffer.tostring(data) else nil
+end
+
+local function writeText(name: string, text: string): boolean
+  if Host.scripted then
+    kept[name] = text
+    return true
+  end
+  return Host.MakeDir(SAVE_DIR) and Host.MakeDir(CHARACTER_DIR) and Host.WriteFile(`{CHARACTER_DIR}/{name}.tmp`, text)
+    and Host.Rename(`{CHARACTER_DIR}/{name}.tmp`, `{CHARACTER_DIR}/{name}`)
+end
+
+local function names(): { string }
+  local found: { string } = {}
+  if Host.scripted then
+    for name in kept do
+      table.insert(found, name)
+    end
+    table.sort(found)
+    return found
+  end
+  for _, name in Host.ListDir(CHARACTER_DIR) do
+    table.insert(found, name)
+  end
+  return found
+end
+
+-- The time now, for a character (seconds since 1970). (A script's run
+-- gives no real time to training: Session.Load's 'away' says how much.)
+local function now(): number
+  return math.floor(Host.Time())
+end
+
+-- A character by its id, its training caught up to now; nil if there is none.
+function Session.Character(id: string): Characters.Character?
+  local text = if id ~= "" then readText(`{id}.txt`) else nil
+  local character = if text then (Characters.Decode(text)) else nil
+  if character and not Host.scripted then
+    Characters.CatchUp(character, now())
+  end
+  return character
+end
+
+-- Keep a character.
+function Session.KeepCharacter(character: Characters.Character): boolean
+  return writeText(`{character.id}.txt`, Characters.Encode(character))
+end
+
+-- Every character there is, their training caught up, in the order of their names.
+function Session.Characters(): { Characters.Character }
+  local list: { Characters.Character } = {}
+  for _, name in names() do
+    local id = string.match(name, "^(.+)%.txt$")
+    local character = if id then Session.Character(id) else nil
+    if character then
+      table.insert(list, character)
+    end
+  end
+  table.sort(list, function(a: Characters.Character, b: Characters.Character): boolean
+    return if a.name ~= b.name then a.name < b.name else a.id < b.id
+  end)
+  return list
+end
+
+-- The character last played as ("" for none, or one that is gone).
+function Session.Chosen(): string
+  local id = readText("chosen")
+  return if id and readText(`{id}.txt`) then id else ""
+end
+
+-- Play as a character from now on (the next game, new or loaded, is theirs).
+function Session.Choose(session: Session, id: string)
+  session.character = id
+  writeText("chosen", id)
+end
+
+-- A new character, kept: or why not. Its id is made from its name, and
+-- made different from any there is.
+function Session.MakeCharacter(name: string, portrait: string): (Characters.Character?, string?)
+  local ok, why = Characters.NameOk(name)
+  if not ok then
+    return nil, why
+  end
+  name = string.match(name, "^%s*(.-)%s*$") or name
+  local base = Characters.Slug(name)
+  local id, n = base, 1
+  while readText(`{id}.txt`) do
+    n += 1
+    id = `{base}-{n}`
+  end
+  local character = Characters.New(id, name, portrait, now())
+  if not Session.KeepCharacter(character) then
+    return nil, "the character could not be kept"
+  end
+  return character, nil
+end
+
+-- Throw a character away (their games stay: opened, each gives its
+-- pilot to a new character again).
+function Session.DeleteCharacter(session: Session, id: string)
+  local character = Session.Character(id)
+  if character and string.sub(character.portrait, 1, 5) == "file:" and not Host.scripted then
+    Host.Remove(`{CHARACTER_DIR}/{string.sub(character.portrait, 6)}`)
+  end
+  if Host.scripted then
+    kept[`{id}.txt`] = nil
+  else
+    Host.Remove(`{CHARACTER_DIR}/{id}.txt`)
+  end
+  if session.character == id then
+    Session.Choose(session, "")
+  end
+end
+
+-- Where a character's own picture is, to be drawn (Game/UI/Portrait);
+-- nil for a badge.
+function Session.PictureOf(portrait: string): string?
+  return if string.sub(portrait, 1, 5) == "file:" then `{CHARACTER_DIR}/{string.sub(portrait, 6)}` else nil
+end
+
+-- A picture of the player's own, from a file anywhere, made a
+-- character's: it is copied beside them. Returns its portrait, or nil
+-- and why not.
+function Session.ImportPicture(character: Characters.Character, path: string): (string?, string?)
+  local ext = string.lower(string.match(path, "%.(%w+)%s*$") or "")
+  if ext ~= "png" and ext ~= "jpg" and ext ~= "jpeg" and ext ~= "bmp" and ext ~= "tga" then
+    return nil, "a picture is a .png, .jpg, .bmp or .tga file"
+  end
+  local data = Host.ReadFile((string.match(path, "^%s*(.-)%s*$") or path))
+  if data == nil then
+    return nil, "no file there"
+  end
+  local name = `{character.id}.{ext}`
+  if Host.scripted then
+    return `file:{name}`, nil
+  end
+  if not (Host.MakeDir(SAVE_DIR) and Host.MakeDir(CHARACTER_DIR) and Host.WriteFile(`{CHARACTER_DIR}/{name}`, data)) then
+    return nil, "the picture could not be kept"
+  end
+  return `file:{name}`, nil
+end
+
+-- The game's pilot made their character, and their character's (the
+-- next thing a game does after it is made or opened): the skills of
+-- both, the character's queue, trained by real time; and the player's
+-- other characters who are members have their skills brought up to date.
+local function embody(session: Session, character: Characters.Character)
+  local state = session.game.state
+  Characters.Into(state, character)
+  -- (a script's run trains by the game's ticks, as it always did)
+  if Host.scripted then
+    state.trainingByClock = nil
+  end
+  Characters.From(state, character, now())
+  Session.KeepCharacter(character)
+  session.credited = Host.Clock()
+  for _, id in state.membership.memberIds do
+    local member = state.membership.members[id]
+    local alt = if member.alt then Session.Character(member.alt :: string) else nil
+    if alt then
+      Core.AltSkills(session.game, alt.id, alt.skills)
+    end
+  end
+end
+
+-- What the game has made of its pilot, back into their character.
+local function keepPilot(session: Session)
+  local state = session.game.state
+  local character = if state.character then Session.Character(state.character :: string) else nil
+  if character then
+    Characters.From(state, character, now())
+    Session.KeepCharacter(character)
+  end
+end
+
+-- Ask another of the player's characters into the corporation, at a
+-- trade (Core/Assets/Members): whether they are, and why not.
+function Session.AskAlt(session: Session, id: string, trade: string): (boolean, string?)
+  local alt = Session.Character(id)
+  if alt == nil then
+    return false, "no such character"
+  end
+  local ok, why = Core.CanJoinAlt(session.game, id, trade)
+  if not ok then
+    return false, why
+  end
+  Core.JoinAlt(session.game, id, alt.name, trade, alt.skills)
+  for _, event in Core.TakeEvents(session.game) do
+    table.insert(session.events, event)
+    Session.Notice(session, event)
+  end
+  return true
+end
+
 function Session.New(galaxySeed: number, historySeed: number): Session
-  return {
+  local session: Session = {
     game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, traffic = true, wars = true, starter = true }),
     clock = Clock.New(), selected = 0, target = 0, aimed = {}, aimedAt = 0, events = {}, message = "", heard = {}, messageTick = 0, messageKind = "plain", epoch = 1,
-    destination = 0, autopilot = false, safest = false, trying = {},
+    destination = 0, autopilot = false, safest = false, trying = {}, character = Session.Chosen(), credited = Host.Clock(),
   }
+  -- (a script's run plays as a character from the first: one is made for
+  -- it, as a player is asked to make one before their first game)
+  if Host.scripted then
+    if session.character == "" then
+      local made = Session.MakeCharacter("Pilot", "portrait:1")
+      if made then
+        Session.Choose(session, made.id)
+      end
+    end
+    local character = Session.Character(session.character)
+    if character then
+      embody(session, character)
+    end
+  end
+  return session
 end
 
 -- Try a paint or a design on the ship the fitting screen shows, before
@@ -728,6 +959,15 @@ end
 -- Take the ticks that are due this frame.
 function Session.Update(session: Session, frameSeconds: number)
   session.events = {}
+  -- (a character's training goes by real time, a second at a time,
+  -- whatever the game's clock is doing: Core/Character/Characters)
+  if session.game.state.trainingByClock then
+    local gone = math.floor(Host.Clock() - session.credited)
+    if gone >= 1 then
+      session.credited += gone
+      Core.Credit(session.game, gone)
+    end
+  end
   -- (time runs faster only at a station: out of one, it is as it is)
   local clock = session.clock
   if clock.scale > 1 and not clock.forced and Core.Query.Player(session.game).docked == 0 then
@@ -868,6 +1108,9 @@ end
 -- (seconds since 1970; 0 if the save does not say).
 export type SaveInfo = {
   slot: string, system: string, ship: string, docked: boolean, wallet: number, tick: number, time: number,
+  -- Whose game it is: their character's id and name ("" in a save from
+  -- before there were characters).
+  character: string, pilot: string,
 }
 
 -- Save to save/<slot>/state.bin, by way of a temporary file so a crash
@@ -878,12 +1121,17 @@ function Session.Save(session: Session, slot: string, quiet: boolean?): boolean
   if not (Host.MakeDir(SAVE_DIR) and Host.MakeDir(dir)) then
     return false
   end
+  -- (what the game has made of its pilot is their character's first)
+  keepPilot(session)
   local data, length = Core.Save(session.game)
   local ok = Host.WriteFile(dir .. "/state.tmp", data, length) and Host.Rename(dir .. "/state.tmp", dir .. "/state.bin")
   if ok then
     local player = Core.Query.Player(session.game)
+    local id = session.game.state.character or ""
+    local character = if id ~= "" then Session.Character(id) else nil
     local meta = `system={player.systemName}\nship={player.hull.name}\ndocked={if player.docked ~= 0 then 1 else 0}\n`
       .. `wallet={session.game.state.wallet}\ntick={session.game.state.tick}\ntime={math.floor(Host.Time())}\n`
+      .. `character={id}\npilot={if character then character.name else ""}\n`
     Host.WriteFile(dir .. "/meta.txt", meta)
   end
   if not quiet then
@@ -899,7 +1147,7 @@ function Session.Saves(): { SaveInfo }
     if string.sub(name, -1) == "/" then
       local slot = string.sub(name, 1, -2)
       if Host.Exists(`{SAVE_DIR}/{slot}/state.bin`) then
-        local info: SaveInfo = { slot = slot, system = "", ship = "", docked = false, wallet = 0, tick = 0, time = 0 }
+        local info: SaveInfo = { slot = slot, system = "", ship = "", docked = false, wallet = 0, tick = 0, time = 0, character = "", pilot = "" }
         local meta = Host.ReadFile(`{SAVE_DIR}/{slot}/meta.txt`)
         if meta then
           for key: string, value: string in string.gmatch(buffer.tostring(meta), "(%w+)=([^\n]*)") :: any do
@@ -915,6 +1163,10 @@ function Session.Saves(): { SaveInfo }
               info.tick = tonumber(value) or 0
             elseif key == "time" then
               info.time = tonumber(value) or 0
+            elseif key == "character" then
+              info.character = value
+            elseif key == "pilot" then
+              info.pilot = value
             end
           end
         end
@@ -990,6 +1242,18 @@ function Session.Restart(session: Session, galaxySeed: number, historySeed: numb
   session.clock.paused = false
   session.clock.scale = 1
   session.message = ""
+  -- (the game is the chosen character's: and a script's run, with none
+  -- chosen, has one made for it, as a player is asked to make one)
+  if session.character == "" and Host.scripted then
+    local made = Session.MakeCharacter("Pilot", "portrait:1")
+    if made then
+      Session.Choose(session, made.id)
+    end
+  end
+  local character = Session.Character(session.character)
+  if character then
+    embody(session, character)
+  end
 end
 
 -- When a save was made (seconds since 1970); 0 if it does not say.
@@ -1026,13 +1290,47 @@ function Session.Load(session: Session, slot: string, away: number?): boolean
   session.clock.pending = 0
   Session.Say(session, `Loaded {SAVE_DIR}/{slot}`)
   local made = savedAt(slot)
-  local gone = away or (if Host.scripted or made == 0 then 0 else math.max(0, Host.Time() - made))
-  if gone >= 1 then
-    Core.Away(session.game, gone)
-    for _, event in Core.TakeEvents(session.game) do
-      table.insert(session.events, event)
-      Session.Notice(session, event)
+  -- The game is its character's. One saved before there were characters
+  -- gives its pilot to a new one, as of when it was saved (and so does
+  -- one whose character has been thrown away).
+  local state = session.game.state
+  local character = if state.character then Session.Character(state.character :: string) else nil
+  if character == nil then
+    local id = state.character or ""
+    local name = if id ~= "" then id else "Pilot"
+    local adopted = Characters.Adopt(state, "", name, if made > 0 then made else math.floor(Host.Time()))
+    local fresh = Session.MakeCharacter(name, adopted.portrait)
+    if fresh then
+      adopted.id, adopted.made = fresh.id, fresh.made
+      Session.KeepCharacter(adopted)
+      character = Session.Character(fresh.id)
+      Session.Say(session, `This game's pilot is a character now: {name}`)
     end
+  end
+  if character then
+    -- (the time since: real time, or what a script says)
+    local trained = if away and away > 0 then Characters.CatchUp(character, character.at + away) else {}
+    if not Host.scripted then
+      -- (Session.Character has caught them up to now already: what they
+      -- know better than the game did when it was saved)
+      for skill, level in character.skills do
+        if level > (state.skills[skill] or -1) then
+          table.insert(trained, { skill = skill, level = level })
+        end
+      end
+    end
+    Session.Choose(session, character.id)
+    embody(session, character)
+    if #trained > 0 then
+      Session.Notice(session, { kind = "TrainingCredited", seconds = away or math.max(0, math.floor(Host.Time()) - made), trained = #trained,
+        queued = #state.training })
+    end
+  elseif away and away >= 1 then
+    Core.Away(session.game, away)
+  end
+  for _, event in Core.TakeEvents(session.game) do
+    table.insert(session.events, event)
+    Session.Notice(session, event)
   end
   return true
 end
