@@ -720,6 +720,15 @@ return AppShell.Create(function(): Widget
   end
   begin()
 
+  -- A hull of the game's from the bow quarter, in its faction's livery:
+  -- from farther off than the hull views, so that a wide hull has room
+  -- in a square about it, which the art is cut to (script/artgen).
+  local function shipView(type: string): View
+    local eye: vector = HULL_VIEWS[1][2] * 1.45
+    return { name = `ship-{type}`, kind = `hull-{type}~livery`, seed = 1, eye = eye, look = CENTRE,
+      light = eye + vector.create(0.5, 0.9, 0.2) * (0.6 * vector.magnitude(eye)) }
+  end
+
   _G.Viewer = {
     -- Hold the view called 'name' still, as its kind's own settings make
     -- it. False if there is none.
@@ -741,14 +750,10 @@ return AppShell.Create(function(): Widget
     -- each, "ship-" and its type, then done. For the art made from them
     -- (script/artgen). Returns how many.
     Ships = function(lineage: string): number
-      -- (from farther off than the hull views: a wide hull has room in a
-      -- square about it, which the art is cut to)
-      local eye: vector = HULL_VIEWS[1][2] * 1.45
       views = {}
       for _, ship in Ships.list do
         if ship.lineage == lineage and Hull.Has(ship.id) then
-          table.insert(views, { name = `ship-{ship.id}`, kind = `hull-{ship.id}~livery`, seed = 1, eye = eye, look = CENTRE,
-            light = eye + vector.create(0.5, 0.9, 0.2) * (0.6 * vector.magnitude(eye)) })
+          table.insert(views, shipView(ship.id))
         end
       end
       params, held, built, index, frames = {}, nil, "", if #views > 0 then 1 else 0, 0
@@ -756,6 +761,22 @@ return AppShell.Create(function(): Widget
         setUp(views[1])
       end
       return #views
+    end,
+    -- Hold one hull still as Ships takes it ('type': frigate.akashi).
+    -- False if it has no design.
+    Ship = function(type: string): boolean
+      if not Hull.Has(type) then
+        return false
+      end
+      params, built, index, frames = {}, "", 0, 0
+      held = shipView(type)
+      setUp(held :: View)
+      return true
+    end,
+    -- Cel shading on or off (the engine's "Smooth Shading" switched off,
+    -- or on again): a trial of 2026-11-17, light/global.jsl.
+    Cel = function(on: boolean)
+      RenderPass_SetEnabled("Smooth Shading", not on)
     end,
   }
 

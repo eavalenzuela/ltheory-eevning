@@ -4,6 +4,33 @@
 #include texturing.jsl
 
 uniform sampler2D normalBuffer;
+/* Cel shading (the owner's ask of 2026-11-17, for the retro-anime look:
+   a trial, in the viewer first): 1 when the engine's "Smooth Shading"
+   is switched off. Sunlight on a hull falls in flat tones in place of a
+   smooth falloff, and surfaces are inked where they end against what
+   is behind them and where they turn sharply. */
+uniform float cel;
+
+/* How much ink is on this pixel: it is the near side of a jump in depth
+   (an outline), or the surface turns sharply between it and the next
+   (a crease). Lines are two pixels wide at 1080 rows, and wider with more
+   (one is lost to the smoothing of edges after). */
+float inkAt(vec3 N, float d) {
+  float px = max(2.0, floor(2.0 / (rcpFrame.y * 1080.0)));
+  float ink = 0.0;
+  for (int i = 0; i < 4; ++i) {
+    vec2 o = (i == 0) ? vec2(1.0, 0.0) : ((i == 1) ? vec2(-1.0, 0.0) : ((i == 2) ? vec2(0.0, 1.0) : vec2(0.0, -1.0)));
+    vec2 q = uv + o * px * rcpFrame;
+    float dn = texture2D(depthBuffer, q).x / farPlane;
+    if (dn - d > 0.03 * d) {
+      ink = 1.0;
+    } else if (abs(dn - d) < 0.03 * d) {
+      vec3 Nn = decodeNormal(texture2D(normalBuffer, q).xy);
+      ink = max(ink, smoothstep(0.75, 0.55, dot(N, Nn)));
+    }
+  }
+  return ink;
+}
 
 void main() {
   float depth = GetDepthNormalized();
@@ -76,6 +103,19 @@ void main() {
        as a silhouette. There are no shadows yet, so the far side of an
        object is simply the side facing away. */
     float NL = saturate(dot(N, L));
+    if (cel > 0.5) {
+      /* (three flat tones, a hard highlight, and the sky as a flat fill
+         in place of its reflection) */
+      float NLs = dot(N, L);
+      float tone = mix(0.10, 0.45, smoothstep(-0.02, 0.02, NLs));
+      tone = mix(tone, 1.0, smoothstep(0.38, 0.42, NLs));
+      float spec = smoothstep(0.955, 0.965, saturate(dot(R, L)));
+      light += color * (2.4 * tone + 1.6 * spec);
+      /* (the sky as one flat fill: what it is on average, above and below) */
+      light += 0.3 * (toLinear(textureCube(envMapLF, vec3(0.0, 1.0, 0.0)).xyz) + toLinear(textureCube(envMapLF, vec3(0.0, -1.0, 0.0)).xyz));
+      light *= 1.0 - inkAt(N, depth);
+      RETURN(vec4(asLight(light), 1.0));
+    }
     light += color * NL * (1.5 + 0.5 * min(8.0, cookTorrance(L, p, N, pow2(max(roughness, 0.08)), 1.0)));
 #if 0
     light += 8.0 * toLinear(texLod(envMap, R, mix(0.0, 8.0, roughness)).xyz);

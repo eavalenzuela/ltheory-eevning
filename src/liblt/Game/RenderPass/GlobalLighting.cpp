@@ -38,7 +38,10 @@ namespace {
         lightBuffer->Bind(0);
 
         DrawState_Link(shader);
-        (*shader)("normalBuffer", state->color[1]);
+        /* (cel shading: "Smooth Shading" switched off, light/global.jsl) */
+        (*shader)
+          ("normalBuffer", state->color[1])
+          ("cel", RenderPass_IsEnabled("Smooth Shading") ? 0.0f : 1.0f);
 
         Renderer_Clear();
         Renderer_SetShader(*shader);
