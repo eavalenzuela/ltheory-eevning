@@ -18,6 +18,7 @@ the lines beginning `- ` under it.
 - Unbound ship blueprints are found in the wrecks of pirate towers you destroy, and rarely on a contract board outside secure space (dear).
 - Blueprint copies cost a tenth of what they did: ten runs cost about a tenth of one of the things they build.
 - Blueprint originals cost half what they did: five times what they build.
+- Invasions out of wormhole space are the Drowned now, come up from their own depths through a great wormhole, led by a named Coffin captain. Pirates stood in for them before.
 - Missile launchers turn to follow their target, as turrets do: the rack swings on its mount and tips up and down.
 - Eight new skills, learned from books: Husbandry, Raising, Fire Control and Deep Boring for your towers and colonies (less fuel, quicker anchoring, harder-hitting batteries, more from extractors), and Hospitality, Renown, Muster and Stewardship for your corporation and holdings (more room for members, more applicants, more calls at once, more levy).
 - Skills are in groups down the left of the Skills window (Piloting, Navigation, Weapons, Missiles and so on), each with how many of its skills you know.

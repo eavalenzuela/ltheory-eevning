@@ -136,7 +136,8 @@ suite:Case("where the pilot is: their lines and the way they came, a few of them
   t.eq(#state.wormholeIds, holes + 1)
   local hole = state.wormholes[state.wormholeIds[#state.wormholeIds]]
   t.eq({ hole.from, hole.size, hole.closes } :: { any }, { me.system, 3, one.ends } :: { any })
-  t.eq(state.galaxy.systems[hole.to].depth, Galaxy.PIRATE_DEPTH)
+  -- (from one of the Drowned's depths, past the pirates')
+  t.ok((state.galaxy.systems[hole.to].depth or 0) > Galaxy.PIRATE_DEPTH, "the way they came is not from the Drowned's depths")
   t.ok(Wormholes.At(state, hole.a) ~= nil)
   -- Away from their lines nobody comes up.
   for _ = 1, 3 do

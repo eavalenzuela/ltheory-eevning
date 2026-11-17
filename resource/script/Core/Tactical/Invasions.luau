@@ -4,10 +4,11 @@
 -- who invades: "Out of wormhole space"). One of the four kinds of thing
 -- going on (Strategic/Happenings).
 --
--- Who they are is not written yet: whoever lives at the fourth and
--- fifth depths is the owner's to describe. Until then they are pirates
--- (the hulls and the ways that exist), and nothing here says more of
--- them than that they came out of the deep.
+-- Who they are: the Drowned, who live at the fourth and fifth depths
+-- (Data/Factions; the owner, 2026-11-16: "we already gave you The
+-- Drowned, who are the wormhole depth 4 and 5 alien faction"). Pirates
+-- stood in for them until then. They come through a great wormhole
+-- from one of their depths.
 --
 -- One at a time, every several hours, within some jumps of the pilot
 -- and never at a homeworld or in a system the pilot's corporation
@@ -68,13 +69,14 @@ Invasions.NEAR = 1
 Invasions.FORCE = 18
 Invasions.WAVE = 5
 Invasions.REINFORCE = 40
-Invasions.TURN = { "raider", "jackal", "raider", "raider", "jackal", "marauder" }
+-- (the Drowned's own ships, smaller to bigger: mine)
+Invasions.TURN = { "drowned.cairn", "drowned.gravestone", "drowned.cairn", "drowned.casket", "drowned.gravestone", "drowned.keeper" }
 -- How far from the middle of their lines they come up, m.
 Invasions.OUT = 12000
 -- The last of them to come up is whoever leads them: an officer, by
 -- name, a captain of this, and what is theirs is in the wreck
 -- (Tactical/Pirates' Officer): so many modules, and so many mutators.
-Invasions.LEADER = "marauder"
+Invasions.LEADER = "drowned.coffin"
 Invasions.THEIRS = 2
 Invasions.MUTATORS = 2
 -- What beating one pays, and what the system's keeper thinks of it.
@@ -140,10 +142,10 @@ local function fight(state: State.State, one: State.Happening, me: State.Ball?, 
       return false
     end
     one.place = site.id
-    -- (the way they came: a great wormhole, found, open as long as they are here)
+    -- (the way they came: a great wormhole from one of their depths, found, open as long as they are here)
     local deep: { number } = {}
     for id = Galaxy.Charted(state.galaxy) + 1, #state.galaxy.systems do
-      if state.galaxy.systems[id].depth == Galaxy.PIRATE_DEPTH then
+      if (state.galaxy.systems[id].depth or 0) > Galaxy.PIRATE_DEPTH then
         table.insert(deep, id)
       end
     end
@@ -261,8 +263,9 @@ function Invasions.Step(state: State.State, here: number, events: { Event })
       for index = #state.wreckIds, 1, -1 do
         local wreck = state.wrecks[state.wreckIds[index]]
         if wreck.system == one.system and wreck.name == one.name .. " Wreck" then
+          -- (a Drowned leader's wreck has no pirate tower's drawings in it)
           Pirates.Officer(state, wreck.id, one.name, Pirates.Graded(Pirates.kindById[Invasions.LEADER], 2), rng, Invasions.THEIRS,
-            Invasions.MUTATORS)
+            Invasions.MUTATORS, "drowned")
           break
         end
       end

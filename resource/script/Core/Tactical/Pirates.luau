@@ -387,7 +387,10 @@ end
 -- wreck. 'kind' is what they flew, for what they carried: without one
 -- (the commander of a tower, who flew nothing), what such a one would.
 local COMMANDED = { "launcher.heavy", "autocannon.medium", "armor.repairer.medium", "armor.plate.medium", "shield.extender.medium" }
-function Pirates.Officer(state: State.State, wreck: number, name: string, kind: Kind?, rng: Rng.Rng, count: number, mutators: number)
+-- ('people': whose towers' drawings a copy may be of; the Unbound's,
+-- the pirates', unless said. A people with no towers leaves none.)
+function Pirates.Officer(state: State.State, wreck: number, name: string, kind: Kind?, rng: Rng.Rng, count: number, mutators: number,
+  people: string?)
   local roots: { string } = {}
   local carried: { string } = {}
   if kind then
@@ -420,7 +423,7 @@ function Pirates.Officer(state: State.State, wreck: number, name: string, kind: 
   -- ship modules"). The small one most often (Pirates.TOWER_COPIES), and
   -- from dice of its own, so that the rest of what they leave is what it
   -- was. (Which size how often, and how many runs: mine.)
-  local towers = Blueprints.OfPeople("unbound").towers
+  local towers = Blueprints.OfPeople(people or "unbound").towers
   if #towers > 0 then
     local drawn = Rng.For(state.historySeed, wreck, 977)
     local roll, size = Rng.Float(drawn, 0, 1), 1
