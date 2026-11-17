@@ -160,6 +160,10 @@ namespace {
           size.x = e.size.width;
           size.y = e.size.height;
           viewport->size = V2(w, h);
+          /* (in the log: a fault on one machine at one size of window is
+             found by the size it was, 2026-11-17) */
+          printf("window resized: %u by %u\n", (unsigned)e.size.width, (unsigned)e.size.height);
+          fflush(stdout);
         }
 
         else if (e.type == sf::Event::KeyPressed) {
