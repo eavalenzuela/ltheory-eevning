@@ -324,11 +324,9 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
     if moon == nil or Space.SystemOf(state, moon.id) ~= ball.system then
       return false, "a tower is anchored at a moon"
     end
-    -- (not in uncharted space, for now: nothing that keeps a tower
-    -- going finds its way there, Tactical/Wormholes)
-    if state.galaxy.systems[ball.system].uncharted then
-      return false, "no tower can be kept in uncharted space yet"
-    end
+    -- (anywhere in uncharted space too, the owner, 2026-11-16: "all of
+    -- j-space (wormhole space) should be able to have towers anchored in
+    -- it, just no sovereignty": no claim beacon there, below)
     -- (not at one the pirates hold with a tower of their own, from
     -- however near: Tactical/Keeps)
     for _, keepId in state.keepIds do
@@ -401,6 +399,9 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
       elseif drilling.deposit == nil then
         return false, "this moon has nothing worth a drill"
       end
+    elseif module.id == Structures.CLAIM and state.galaxy.systems[Space.SystemOf(state, starbase.id)].uncharted then
+      -- (nobody holds uncharted space: the owner, "just no sovereignty")
+      return false, "nobody can hold uncharted space"
     elseif module.id == Structures.REACTOR and Starbases.Reacting(state, starbase).anchored then
       -- (and one reactor to a tower)
       return false, "the tower has a reactor already"

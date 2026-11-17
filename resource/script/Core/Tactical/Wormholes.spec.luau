@@ -4,6 +4,7 @@
 
 local Codec = require("@lt/Core/Persist/Codec")
 local Constants = require("@lt/Core/Data/Constants")
+local Structures = require("@lt/Core/Data/Structures")
 local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
@@ -687,7 +688,7 @@ suite:Case("a pilot whose ship is lost in uncharted space is in a capsule there,
   steps(game, 50)
 end)
 
-suite:Case("a hired pilot goes through a wormhole after the pilot, if their ship fits, and no tower is kept out there", function(t)
+suite:Case("a hired pilot goes through a wormhole after the pilot, if their ship fits", function(t)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, systems = SYSTEMS, peaceful = true })
   local state = game.state
   state.wallet = 10000000
@@ -723,23 +724,6 @@ suite:Case("a hired pilot goes through a wormhole after the pilot, if their ship
   end
   t.ok(followed, "the hired pilot was left behind")
   t.eq(theirs.grid, hole.b)
-  -- No tower out here: not yet.
-  local moon: System.Object? = nil
-  for _, object in Space.Describe(state, deep).objects do
-    if object.kind == "moon" and moon == nil then
-      moon = object
-    end
-  end
-  if moon then
-    Items.Add(state, "tower.vessari.small", 1, state.player.ship, "cargo")
-    local tower = 0
-    for _, item in Items.In(state, state.player.ship, "cargo") do
-      tower = if item.type == "tower.vessari.small" then item.id else tower
-    end
-    put(game, deep, moon.x + moon.radius * 1.5, moon.y, moon.z)
-    t.eq(refused(game, { kind = "AnchorTower", actor = state.player.ship, item = tower, target = moon.id }),
-      "no tower can be kept in uncharted space yet")
-  end
   -- And back: the pilot first, and the hired one after.
   Core.TakeEvents(game)
   through(t, game, hole.b)
@@ -752,6 +736,57 @@ suite:Case("a hired pilot goes through a wormhole after the pilot, if their ship
     end
   end
   t.ok(back, "the hired pilot did not come back")
+end)
+
+suite:Case("a tower is anchored anywhere in uncharted space, but no claim beacon: nobody holds a system there", function(t)
+  -- (the owner, 2026-11-16: "all of j-space (wormhole space) should be
+  -- able to have towers anchored in it, just no sovereignty")
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, systems = SYSTEMS, peaceful = true })
+  local state = game.state
+  local function order(command: State.Command)
+    command.actor = state.player.ship
+    local ok, why = Core.Submit(game, command)
+    t.ok(ok, `{command.kind} was refused: {why}`)
+    Core.Step(game)
+  end
+  -- (room for a tower at every depth)
+  state.skills.anchoring = 5
+  order({ kind = "Undock", actor = 0 })
+  steps(game, 5)
+  for depth = 1, #Galaxy.DEPTHS do
+    local deep = ofDepth(game, depth)
+    local moon: System.Object? = nil
+    for _, object in Space.Describe(state, deep).objects do
+      if object.kind == "moon" and moon == nil then
+        moon = object
+      end
+    end
+    if moon then
+      local tower = Items.Add(state, "tower.vessari.small", 1, state.player.ship, "cargo")
+      put(game, deep, moon.x + moon.radius * 1.5, moon.y, moon.z)
+      t.eq(refused(game, { kind = "AnchorTower", actor = state.player.ship, item = tower.id, target = moon.id }), "(accepted)",
+        `a tower at depth {depth}`)
+      if depth == 1 then
+        order({ kind = "AnchorTower", actor = 0, item = tower.id, target = moon.id })
+        local station = state.starbaseIds[#state.starbaseIds]
+        steps(game, Structures.towerById["tower.vessari.small"].anchor + 2)
+        order({ kind = "Dock", actor = 0, target = station })
+        for _ = 1, 120 do
+          if state.ships[state.player.ship].docked == station then
+            break
+          end
+          Core.Step(game)
+        end
+        t.eq(state.ships[state.player.ship].docked, station, "the pilot did not dock at their tower out here")
+        local fuel = Items.Add(state, Structures.FUEL.id, 50, state.player.ship, "cargo")
+        order({ kind = "Fuel", actor = 0, item = fuel.id })
+        local beacon = Items.Add(state, Structures.CLAIM, 1, state.player.ship, "cargo")
+        t.eq(refused(game, { kind = "AnchorModule", actor = state.player.ship, item = beacon.id }), "nobody can hold uncharted space")
+        order({ kind = "Undock", actor = 0 })
+        steps(game, 5)
+      end
+    end
+  end
 end)
 
 return suite
