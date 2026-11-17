@@ -358,8 +358,7 @@ local function drawPlay(session: Session.Session, left: number, top: number, wid
     local hot, picked = List.Row(inner, rowY, listW - 6, playing, `Character:play:{character.id}`, rowH)
     Portrait.Draw(character.portrait, inner + 8, rowY + 6, rowH - 12)
     Im.Strong(List.Cut(character.name, listW - rowH - 24, 15, true), inner + rowH + 4, rowY + 12, 15, if playing or hot then Theme.TEXT else Theme.TEXT)
-    Im.Text(`{Characters.Levels(character)} levels`, inner + rowH + 4, rowY + 33, 11, Theme.DIM)
-    Im.Text(List.Cut(training(character), listW - rowH - 24, 11, false), inner + rowH + 4, rowY + 47, 11, Theme.FAINT)
+    Im.Text(List.Cut(training(character), listW - rowH - 24, 11, false), inner + rowH + 4, rowY + 37, 11, Theme.DIM)
     if picked and not playing then
       Session.Choose(session, character.id)
       doomed = ""
@@ -385,12 +384,11 @@ local function drawPlay(session: Session.Session, left: number, top: number, wid
     local who = mine :: Characters.Character
     Portrait.Draw(who.portrait, rx, body, 112)
     Im.Heading(List.Cut(who.name, rw - 260, 22, true), rx + 128, body + 6, 22, Theme.TEXT)
-    Im.Text(`{Characters.Levels(who)} levels of skill`, rx + 128, body + 40, 13, Theme.DIM)
-    Im.Text(List.Cut(training(who), rw - 140, 13, false), rx + 128, body + 60, 13, Theme.DIM)
-    for index = 2, math.min(3, #who.training) do
+    Im.Text(List.Cut(training(who), rw - 140, 13, false), rx + 128, body + 40, 13, Theme.DIM)
+    for index = 2, math.min(4, #who.training) do
       local entry = who.training[index]
       local skill = Skills.byId[entry.skill]
-      Im.Text(`then {if skill then skill.name else entry.skill} {entry.level}`, rx + 128, body + 60 + (index - 1) * 17, 12, Theme.FAINT)
+      Im.Text(`then {if skill then skill.name else entry.skill} {entry.level}`, rx + 128, body + 40 + (index - 1) * 17, 12, Theme.FAINT)
     end
     Im.Tone("danger")
     if Im.Button(if doomed == who.id then "Sure? Delete" else "Delete character", rx + rw - 150, body, 150, 28, true,
@@ -539,7 +537,7 @@ local function drawPage(session: Session.Session, left: number, top: number, wid
       local who = mine :: Characters.Character
       Portrait.Draw(who.portrait, x + 38, cardY + 8, 48)
       Im.Strong(List.Cut(who.name, w - 160, 16, true), x + 98, cardY + 12, 16, Theme.TEXT)
-      Im.Text(List.Cut(`{Characters.Levels(who)} levels  -  {training(who)}`, w - 160, 12, false), x + 98, cardY + 36, 12, Theme.DIM)
+      Im.Text(List.Cut(training(who), w - 160, 12, false), x + 98, cardY + 36, 12, Theme.DIM)
     else
       Im.Text("No character yet: make one to play.", x + 46, cardY + 24, 14, Theme.DIM)
     end

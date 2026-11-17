@@ -24,6 +24,8 @@
 local Catalog = require("@lt/Core/Data/Catalog")
 local Characters = require("@lt/Core/Character/Characters")
 local Core = require("@lt/Core/Api")
+local Members = require("@lt/Core/Assets/Members")
+local Skills = require("@lt/Core/Data/Skills")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
 local Info = require("@lt/Game/UI/Info")
@@ -357,7 +359,11 @@ local function drawMembers(session: Session.Session, game: Core.Game, x: number,
           altTrades[alt.id] = TRADES[at % #TRADES + 1]
         end
         local can, why = Core.CanJoinAlt(game, alt.id, trade)
-        List.Text(if can then `{Characters.Levels(alt)} levels of skill` else why or "", layout.doing, line, false, if can then Theme.DIM else Theme.CAUTION, 12)
+        -- (what makes them the better at the trade: Assets/Members)
+        local skill = Skills.byId[Members.ALT_SKILL[trade] or ""]
+        local level = if skill then alt.skills[skill.id] or -1 else -1
+        List.Text(if not can then why or "" elseif skill and level >= 0 then `{skill.name} {level}` elseif skill then `no {skill.name}` else "",
+          layout.doing, line, false, if can then Theme.DIM else Theme.CAUTION, 12)
         if Im.Button("Ask in", layout.act.x + layout.act.w - 70, line + 2, 70, List.ROW - 4, can, `Alt:ask:{alt.id}`) then
           Session.AskAlt(session, alt.id, trade)
         end

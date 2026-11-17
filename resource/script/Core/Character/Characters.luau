@@ -230,13 +230,4 @@ function Characters.Adopt(state: State.State, id: string, name: string, savedAt:
   return character
 end
 
--- How many levels a character has trained in all (a measure of it, for a list).
-function Characters.Levels(character: Character): number
-  local total = 0
-  for _, level in character.skills do
-    total += math.max(0, level)
-  end
-  return total
-end
-
 return Characters
