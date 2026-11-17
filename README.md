@@ -4,7 +4,9 @@ An offline, single-player space sandbox. You fly by giving your ship orders, and
 
 ![A fleet holding off a planet's night side, the sun on its limb](docs/screenshots/fleet-eclipse.jpg)
 
-It is built on the old C++ Limit Theory engine, and it is a work in progress. The systems are playable from end to end; the ships, stations and sounds are still first passes.
+It is built on the old C++ Limit Theory engine, and it is a work in progress. The systems are playable from end to end; the ships, stations and sounds are still first passes. Its drawn art is in a retro-anime manner: the character portraits, the splash, and two cel-shaded looks the game can be played in.
+
+![The splash: a fleet in its livery, redrawn in the game's anime manner, behind the game's name](docs/screenshots/splash.jpg)
 
 | | |
 |---|---|
@@ -15,17 +17,21 @@ It is built on the old C++ Limit Theory engine, and it is a work in progress. Th
 | ![The market's paints, with a paint being looked at](docs/screenshots/market-paints.jpg) | ![One hull in sixteen paints and designs](docs/screenshots/paints.jpg) |
 | Paints and designs are bought on the market, and can be tried on first | One hull, sixteen coats |
 
+![One battleship in the three looks: Standard, Cel V1 and Cel V2](docs/screenshots/looks.jpg)
+
+*One battleship in the three looks (Options, Graphics): Standard, and the two cel-shaded ones, Cel V1 over the worn paint and Cel V2 with the paint laid on flat.*
+
 ## What is in the game
 
 - **Flight by orders**: approach, orbit, keep at range, align, warp, dock, jump through gates, with an autopilot and a star map.
-- **Ships and fitting**: frigates to battleships, haulers and capitals for four human peoples, the pirates and the first of the aliens, with turrets, launchers, drones, electronic warfare, cloaks, rigs and tech 2.
+- **Ships and fitting**: frigates to battleships, haulers and capitals for four human peoples, the pirates and the aliens, with turrets, launchers, drones, electronic warfare, cloaks, rigs and tech 2; and smartbombs, micro jump drives, interdiction bubbles, tractor beams, remote repair and capacitor, energy neutralisers and nosferatu, command bursts, siege, triage and industrial cores, jump drives and the beacons they jump to, ship, cargo and survey scanners, and each human people's own line of modules.
 - **Better gear to find**: custom and masterwork modules in pirate wrecks, each people's own make for those in good standing with them, named officers who carry modules of their own, and mutators that throw a module's figures again, for better or worse.
 - **Combat**: target locking, tracking and range, shields, armour and hull, wrecks to loot and salvage, insurance, and a capsule to get home in.
-- **Industry**: mining, refining, manufacturing from blueprints, research and invention, moon mining and reactions, and planetary colonies.
+- **Industry**: mining ore, ice and gas, refining, manufacturing from blueprints, research and invention, moon mining and reactions, and planetary colonies.
 - **Trade**: a market at each station with buy and sell orders, over an economy of real materials that moves along the gates, with shortages, convoys and prices that differ by who owns the station.
 - **Things to do**: career agents who show a new pilot the ropes, daily jobs, combat camps, mining and courier contracts, standings and loyalty stores, sites to scan down, derelicts to hack, and space no chart shows on the far side of wormholes.
 - **A world that moves**: the peoples fight wars over open space and systems change hands; pirates mass where order is thin; invasions come out of the deep; rare captains, traders and derelicts are sighted; gates close and rich belts are found. An events window and the star map say what is going on.
-- **A character**: skills that train in real time, including while the game is closed, and implants.
+- **Characters**: pilots kept outside any one game, each with a name, a portrait and skills that train in real time, all of them at once and while the game is closed; a character can be taken into a new galaxy, and the others asked into its corporation as members. A galaxy keeps what was earned in it: the wallet, ships, items, implants and standings.
 - **Company**: hired pilots who follow, mine, haul, patrol and guard; a corporation of your own with members who work for themselves and pay it a tax; starbases of your own, and systems claimed in your name.
 - **Paint**: paints and designs for your ship (camouflage, gaudy, police, and plain), bought on the market, tried on before you buy, yours for good once bought, and switched between on the fitting screen. Each human faction has a livery its own ships fly in, sold to pilots it thinks well of.
 - **Saves**, music, and sound.
@@ -93,7 +99,7 @@ bin/launch game
 
 On a laptop with two graphics cards, `DRI_PRIME=1 bin/launch game` runs it on the faster one.
 
-The game opens on a splash (any key sends it on) and then a menu: continue, new game (pick a seed and a galaxy size), load, options (sound on or off, the loudness of effects and music, the keys, how the window opens, and a Graphics page with a switch for each stage the picture is made in), quit. A new game starts you docked at a station with a small ship. That station has five career agents (the Careers tab), who each teach a way of making a living in a few short lessons and pay for them; the Guide button lists everything else there is to do, and shows the lessons you have in hand while you are in space.
+The game opens on a splash (any key sends it on) and then a menu that shows who you are playing as: Continue (that character's newest game), Characters and games, Options and Quit. Characters and games is one screen: your characters down the left, and on the right the one picked, their games grouped by universe and a new game (pick a seed and a galaxy size); New character opens a pane for a name and one of the portraits, or a picture of your own. Options has sound on or off, the loudness of effects and music, the keys, how the window opens, the size of the interface, and a Graphics page with the Look (Standard, Cel V1 or Cel V2) and a switch for each stage the picture is made in. A new game starts you docked at a station with a small ship. That station has five career agents (the Careers tab), who each teach a way of making a living in a few short lessons and pay for them; the Guide button lists everything else there is to do, and shows the lessons you have in hand while you are in space.
 
 | | |
 |---|---|
@@ -124,7 +130,8 @@ Docking saves the game. Saves and settings are kept in `save/`, which git ignore
 | `bin/ltcore Tool/specs` | Runs the engine-free test suites. |
 | `script/viewer` | One window for looking at hulls, stations, planets and effects, and for taking pictures of them. |
 | `script/offscreen` | Runs a command that opens windows on a desktop of its own with no screen (a headless `sway`, on the same graphics card). A scripted or hidden run of `bin/launch` goes through it by itself. |
-| `script/soundgen` | Makes the game's own sounds and music from the written descriptions in `resource/sound/made/sounds.txt`. |
+| `script/soundgen` | Makes the game's own sounds and music from the written descriptions in `resource/sound/made/sounds.txt`, and a listening page for a batch. |
+| `script/artgen` | Redraws a picture of the game's (a hull as the viewer shows it, a posed fleet) in the retro-anime manner with OpenAI's image service, keeping its shape: square icons, or art such as the splash. What it makes is kept in `cache/artgen` until it is looked at and taken into the game. |
 | `script/modelgen` | Writes the hull models under `resource/model` (Wavefront OBJ, which Blender opens) from numbers. The game reads a hull from such a file, or from a binary glTF (`.glb`) made anywhere. |
 
 `docs/tools.md` covers these and the rest, and `docs/harness.md` the scripted harness the play-throughs use.
@@ -147,7 +154,7 @@ Docking saves the game. Saves and settings are kept in `save/`, which git ignore
 
 The original engine's sounds are in `resource/sound`. The sounds and music under `resource/sound/made` were generated from text descriptions with ElevenLabs' sound-effect and music services, by `script/soundgen`; the descriptions are kept beside them in `sounds.txt`.
 
-Nothing is needed to play them. Making new ones needs an ElevenLabs API key in the environment or in a `.env` file at the top of the repository (`ELEVENLABS_API_KEY=...`), which git ignores, and spends credits on that account.
+Nothing is needed to play them. Making new ones needs an ElevenLabs API key in the environment or in a `.env` file at the top of the repository (`ELEVENLABS_API_KEY=...`), which git ignores, and spends credits on that account. In the same way `script/artgen` needs an OpenAI key (`OPENAI_API_KEY=...`). `NOTICE.md` says where each kind of asset comes from.
 
 ## Licence
 
