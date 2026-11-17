@@ -1,6 +1,7 @@
 --!strict
 -- The ships a pilot keeps at a station: assembling a bought hull into a
--- ship, and changing which ship is being flown.
+-- ship, packing a ship up again into a hull for the market, and
+-- changing which ship is being flown.
 --
 -- And the station that is the pilot's home: where they wake, in a
 -- starter ship, when their capsule is destroyed (Tactical/Aftermath).
@@ -8,6 +9,7 @@
 -- at another: docked there, for a fee.
 
 local Items = require("@lt/Core/Assets/Items")
+local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
@@ -62,6 +64,21 @@ function Hangar.Validate(state: State.State, command: State.Command): (boolean, 
       return false, Skills.Describe(missing)
     end
     return true
+  elseif command.kind == "Repackage" then
+    -- (the owner, 2026-11-16: "can't repackage ships to sell?")
+    local other = state.ships[command.target or 0]
+    if other == nil or other.owner ~= "player" or other.docked ~= ship.docked then
+      return false, "that ship is not here"
+    elseif other.id == state.player.ship or other.id == ship.id then
+      return false, "you are aboard it: board another first"
+    elseif other.pilot ~= 0 then
+      return false, "a hired pilot flies that ship"
+    elseif Ships.byId[other.type] == nil or Ships.byId[other.type].class == "capsule" then
+      return false, "that cannot be packaged"
+    elseif (other.armorDamage or 0) > 0 or (other.hullDamage or 0) > 0 then
+      return false, "it is damaged: repair it first"
+    end
+    return true
   elseif command.kind == "SetHome" then
     -- Home is made of the station docked at: any that somebody keeps,
     -- a colony ship among them (the pilot then wakes wherever it has
@@ -98,6 +115,31 @@ function Hangar.Apply(state: State.State, command: State.Command, events: { Even
       State.RemoveId(state.shipIds, ship.id)
     end
     table.insert(events, { kind = "ShipBoarded", ship = other.id, from = ship.id })
+  elseif command.kind == "Repackage" then
+    -- Packed for the market: whatever is fitted or carried goes into the
+    -- hangar (a weapon's load beside it, a rig destroyed, as a rig is
+    -- when it is taken out), and the hull is a packaged hull again.
+    local other = state.ships[command.target :: number]
+    local station = ship.docked
+    for _, item in table.clone(Items.In(state, other.id)) do
+      local module = Modules.byId[item.type]
+      if item.slot > 0 and module and module.weapon and item.charge ~= "" then
+        local quantity = if module.weapon.clip == 0 then 1 else item.rounds
+        if quantity > 0 then
+          Items.Add(state, item.charge, quantity, station, "hangar")
+        end
+      end
+      local quantity, type = item.quantity, item.type
+      local rig = item.slot > 0 and module ~= nil and module.slot == "rig"
+      Items.Take(state, item, quantity)
+      if not rig then
+        Items.Add(state, type, quantity, station, "hangar")
+      end
+    end
+    state.ships[other.id] = nil
+    State.RemoveId(state.shipIds, other.id)
+    Items.Add(state, other.type, 1, station, "hangar")
+    table.insert(events, { kind = "ShipRepackaged", ship = other.id, hull = other.type, name = other.name })
   elseif command.kind == "SetHome" then
     local was = state.player.home
     state.player.home = ship.docked

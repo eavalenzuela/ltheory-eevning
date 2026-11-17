@@ -363,6 +363,17 @@ function Windows.Restore(text: string)
   end
 end
 
+-- The window in front of the others, of those open ("" for none).
+function Windows.Front(): string
+  for index = #order, 1, -1 do
+    local window = windows[order[index]]
+    if window and window.open then
+      return window.id
+    end
+  end
+  return ""
+end
+
 -- Whether a window is pinned where it is.
 function Windows.Pinned(id: string): boolean
   return windows[id] ~= nil and windows[id].pinned == true

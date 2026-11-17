@@ -480,6 +480,30 @@ suite:Case("a hull can be bought, assembled, boarded and flown", function(t)
   t.eq(Core.Query.Player(game).hull.id, "frigate.akashi")
 end)
 
+suite:Case("a ship is packed up again for the market: what was fitted and carried goes into the hangar, a rig is lost, and the hull can be sold", function(t)
+  -- (the owner, 2026-11-16: "can't repackage ships to sell?")
+  local game, home = newGame()
+  local state = game.state
+  local first = state.player.ship
+  local spare = Space.NewShip(state, "frigate.akashi", "Spare", "player", home)
+  local gun = Items.Equip(state, spare.id, "autocannon.small", "ammo.emp")
+  Items.Add(state, "ore.ferrite", 50, spare.id, "cargo")
+  local rounds = gun.rounds
+  local before = { gun = hangar(game, "autocannon.small"), ammo = hangar(game, "ammo.emp"), ore = hangar(game, "ore.ferrite"),
+    hull = hangar(game, "frigate.akashi") }
+  t.eq(refused(game, { kind = "Repackage", actor = 0, target = first }), "you are aboard it: board another first")
+  spare.armorDamage = 10
+  t.eq(refused(game, { kind = "Repackage", actor = 0, target = spare.id }), "it is damaged: repair it first")
+  spare.armorDamage = 0
+  order(t, game, { kind = "Repackage", actor = 0, target = spare.id })
+  t.eq(state.ships[spare.id], nil)
+  t.eq({ hangar(game, "frigate.akashi") - before.hull, hangar(game, "autocannon.small") - before.gun, hangar(game, "ammo.emp") - before.ammo,
+    hangar(game, "ore.ferrite") - before.ore }, { 1, 1, rounds, 50 })
+  -- (and the hull sells, as any packaged hull does)
+  local hull = stack(game, "frigate.akashi")
+  t.eq(refused(game, { kind = "SellNow", actor = 0, item = hull.id, quantity = 1 }), "(accepted)")
+end)
+
 suite:Case("a pilot who docks a capsule where they keep a ship is put in that ship", function(t)
   local game, home = newGame()
   local state = game.state

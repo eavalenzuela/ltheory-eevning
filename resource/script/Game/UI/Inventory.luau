@@ -12,7 +12,9 @@
 -- any column, and only what a word typed in the filter is part of.
 --
 -- Things are moved by being carried: a stack (or all the stacks picked
--- out: Ctrl picks out more than one) is dragged onto a place in the
+-- out: Ctrl picks out more than one, Shift all from the last picked to
+-- the one clicked, Ctrl+A everything shown, and a box dragged out from
+-- where there is no stack all it touches) is dragged onto a place in the
 -- tree, or into another inventory window, and as much of it goes as
 -- there is room for. Let go with Shift held, it asks how many. A right
 -- click on a stack is a menu of what can be done with it there; a
@@ -68,6 +70,9 @@ type View = {
   down: boolean,
   filter: string,
   chosen: { [number]: boolean },  -- the stacks picked out, by id
+  anchor: number?,                -- the stack a range picked with Shift runs from
+  pending: number?,               -- one of several picked, clicked: picked alone if it is let go without being carried
+  box: { x: number, y: number, kept: { [number]: boolean } }?,  -- a box being dragged out to pick what it touches
   menu: { Action }?,              -- what the menu that is up offers
   split: Split?,                  -- a move that is asking how many
 }
@@ -379,6 +384,11 @@ local function carried(view: View, item: State.Item, items: { State.Item }): ({ 
   return ids, `{#ids} stacks`
 end
 
+-- The stacks drawn this frame, where (for a box dragged out over them),
+-- and whether the cursor is on one.
+local drawnStacks: { { id: number, x: number, y: number, w: number, h: number } } = {}
+local overStack = false
+
 -- A stack, as a row of the list or a cell of the icons: picked out,
 -- taken hold of, clicked twice, or right clicked.
 local function stack(session: Session.Session, window: Windows.Window, view: View, shown: Core.PlaceInfo, places: { Core.PlaceInfo },
@@ -387,15 +397,46 @@ local function stack(session: Session.Session, window: Windows.Window, view: Vie
   local ids, label = carried(view, item, items)
   local hot, clicked, twice = Im.Row(x, y, w, h, view.chosen[item.id] == true, name)
   Im.Grab(name, { items = ids }, label, x, y, w, h)
+  -- (where it is, for a box dragged out over the stacks)
+  table.insert(drawnStacks, { id = item.id, x = x, y = y, w = w, h = h })
+  if hot then
+    overStack = true
+  end
   if clicked then
-    if Key_Down(Key_LControl()) then
+    local shift = Key_Down(Key_LShift()) or Key_Down(Key_RShift())
+    local ctrl = Key_Down(Key_LControl()) or Key_Down(Key_RControl())
+    if shift and view.anchor then
+      -- (all from the last picked to this one, in the order they are shown)
+      local a, b = 0, 0
+      for index, other in items do
+        if other.id == view.anchor then
+          a = index
+        end
+        if other.id == item.id then
+          b = index
+        end
+      end
+      if a > 0 and b > 0 then
+        local picked: { [number]: boolean } = if ctrl then view.chosen else {}
+        for index = math.min(a, b), math.max(a, b) do
+          picked[items[index].id] = true
+        end
+        view.chosen = picked
+      end
+    elseif ctrl then
       if view.chosen[item.id] then
         view.chosen[item.id] = nil
       else
         view.chosen[item.id] = true
       end
+      view.anchor = item.id
     elseif not view.chosen[item.id] then
       view.chosen = { [item.id] = true }
+      view.anchor = item.id
+    else
+      -- (one of several picked: they are carried together if it is
+      -- dragged, and it is picked alone if it is only clicked)
+      view.pending = item.id
     end
   end
   -- (a script asks for a stack's menu by name: it has no right click)
@@ -495,6 +536,9 @@ local function drawContents(session: Session.Session, window: Windows.Window, vi
   end
   local foot = y + h - 28
   local bodyHeight = foot - top - 4
+  table.clear(drawnStacks)
+  overStack = false
+  local bodyTop = top
   if view.icons then
     local across = math.max(1, (w - 16) // CELL)
     local down = math.max(1, bodyHeight // CELL)
@@ -562,6 +606,50 @@ local function drawContents(session: Session.Session, window: Windows.Window, vi
   end
   if #items == 0 and not shown.sealed then
     Im.Text(if view.filter ~= "" then "nothing by that name" else "nothing here", left + 4, top + 6, 13, Im.DIM, 0.7)
+  end
+  -- (a click on one of several picked, let go without carrying them: that one alone)
+  if view.pending then
+    if Im.Carried() ~= nil then
+      view.pending = nil
+    elseif not Mouse_LeftDown() then
+      view.chosen = { [view.pending :: number] = true }
+      view.anchor = view.pending
+      view.pending = nil
+    end
+  end
+  -- Ctrl+A: everything shown, in the window in front, while nothing is being typed.
+  if Windows.Front() == window.id and (Key_Down(Key_LControl()) or Key_Down(Key_RControl())) and Key_Pressed(Key_A()) and not Im.Typing() then
+    view.chosen = {}
+    for _, item in items do
+      view.chosen[item.id] = true
+    end
+  end
+  -- A box dragged out from where there is no stack picks all it touches
+  -- (with Ctrl held, beside what was picked already).
+  local cursor = Im.Cursor()
+  local box = view.box
+  if box == nil and Im.Pressed() and not overStack and Im.Inside(x + 4, bodyTop, w - 20, foot - bodyTop) then
+    local ctrl = Key_Down(Key_LControl()) or Key_Down(Key_RControl())
+    view.box = { x = cursor.x, y = cursor.y, kept = if ctrl then table.clone(view.chosen) else {} }
+    if not ctrl then
+      view.chosen = {}
+    end
+  elseif box then
+    if not Mouse_LeftDown() then
+      view.box = nil
+    else
+      local bx, by = math.min(box.x, cursor.x), math.min(box.y, cursor.y)
+      local bw, bh = math.abs(cursor.x - box.x), math.abs(cursor.y - box.y)
+      local picked = table.clone(box.kept)
+      for _, at in drawnStacks do
+        if at.x < bx + bw and at.x + at.w > bx and at.y < by + bh and at.y + at.h > by then
+          picked[at.id] = true
+        end
+      end
+      view.chosen = picked
+      Im.Flat(bx, by, bw, bh, Im.ACCENT, 0.12)
+      Im.Edge(bx, by, bw, bh, Im.ACCENT, 0.8)
+    end
   end
   -- Under it: what it comes to, and for a wreck or a container the taking of all of it.
   Im.Text(string.format("%d %s   %s m3   worth %s", #items, if #items == 1 then "stack" else "stacks",
@@ -741,6 +829,19 @@ function Inventory.Showing(): (number, string, number, boolean)
     return open, "", 0, view.icons
   end
   return open, shown.kind, #listed(session.game, view, shown), view.icons
+end
+
+-- How many stacks are picked out in the first window.
+function Inventory.Chosen(): number
+  local first = Windows.Get(Inventory.MAIN)
+  if first == nil then
+    return 0
+  end
+  local count = 0
+  for _ in (first.state :: View).chosen do
+    count += 1
+  end
+  return count
 end
 
 -- Once a frame, before the windows are drawn: whose game it is, and

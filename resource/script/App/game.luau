@@ -1455,6 +1455,11 @@ function Debug.Inventory(): (number, string, number, boolean)
   return Inventory.Showing()
 end
 
+-- How many stacks are picked out in the first inventory window.
+function Debug.InvChosen(): number
+  return Inventory.Chosen()
+end
+
 -- The stages of the picture that are switched off (Game/View/Graphics,
 -- the options' Graphics page), as their ids with commas between: ''
 -- when all are on. Given a stage's id and whether it is to be on, that

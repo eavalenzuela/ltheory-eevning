@@ -235,8 +235,11 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `Taken down: {event.quantity} x {Types.Info(event.type).name} is back in the hangar`)
   elseif kind == "CopyDone" then
     Session.Say(session, `Copied: {Types.Info(event.blueprint).name}, a copy good for {event.runs} {if event.runs == 1 then "run" else "runs"}`)
+  elseif kind == "ShipRepackaged" then
+    local hull = Types.Get(event.hull)
+    Session.Say(session, `{event.name} is packaged: the {if hull then Types.Info(event.hull).name else event.hull} is in the hangar, and what it carried beside it`, "good")
   elseif kind == "ShipAssembled" then
-    Session.Say(session, "The hull is assembled: board it from the Ships tab")
+    Session.Say(session, "The hull is assembled: board it from the Ships window")
   elseif kind == "StarbaseAnchored" then
     local status = Core.Query.Starbase(session.game, event.station)
     Session.Say(session, `The tower is anchoring: it can be moored at in {if status then status.wait else 0} s`)

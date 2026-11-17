@@ -12,7 +12,9 @@
 --
 -- A script's names are what they were when this was a tab of the docked
 -- screen: "Board:<n>" (the ships counted as they are listed) and
--- "Assemble:<type>". "Ships", the tab's name, opens the window; and
+-- "Assemble:<type>"; and "Repackage:<n>", which packs a ship up again
+-- into a hull for the market (what is fitted and carried goes into the
+-- hangar). "Ships", the tab's name, opens the window; and
 -- "ships:close" shuts it.
 
 local Core = require("@lt/Core/Api")
@@ -60,7 +62,7 @@ end
 local COLUMNS: { List.Column } = {
   { id = "name", label = "Ship", width = 0, sort = false }, { id = "hull", label = "Hull", width = 170, sort = false },
   { id = "class", label = "Class", width = 110, sort = false }, { id = "fitted", label = "Fitted", width = 54, right = true, sort = false },
-  { id = "act", label = "", width = 104, sort = false },
+  { id = "act", label = "", width = 214, sort = false },
 }
 
 Windows.Kind(Ships.ID, function(_: Windows.Window, x: number, y: number, w: number, h: number)
@@ -129,8 +131,15 @@ Windows.Kind(Ships.ID, function(_: Windows.Window, x: number, y: number, w: numb
         local board: State.Command = { kind = "BoardShip", actor = 0, target = ship.id }
         local can, whyNot = Session.CanDo(session, board)
         Im.Because(whyNot)
-        if Im.Button("Board", layout.act.x, rowY + 3, layout.act.w, 24, can, `Board:{line.index or 0}`) then
+        if Im.Button("Board", layout.act.x, rowY + 3, 100, 24, can, `Board:{line.index or 0}`) then
           Session.Do(session, board)
+        end
+        -- (packed up for the market: what is fitted and carried goes into the hangar)
+        local pack: State.Command = { kind = "Repackage", actor = 0, target = ship.id }
+        local canPack, whyNotPack = Session.CanDo(session, pack)
+        Im.Because(whyNotPack)
+        if Im.Button("Repackage", layout.act.x + 106, rowY + 3, 108, 24, canPack, `Repackage:{line.index or 0}`) then
+          Session.Do(session, pack)
         end
       end
       if double then

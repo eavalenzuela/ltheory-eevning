@@ -1269,7 +1269,7 @@ local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true, StartResearch = t
 local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true }
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true, ModifyOrder = true }
 local CONTRACT_COMMANDS = { AcceptContract = true, FillContract = true, ListContract = true, CancelContract = true }
-local HANGAR_COMMANDS = { Assemble = true, BoardShip = true, SetHome = true }
+local HANGAR_COMMANDS = { Assemble = true, BoardShip = true, SetHome = true, Repackage = true }
 local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true, UnanchorTower = true,
   SetReaction = true }
 local SITE_COMMANDS = { Scan = true, LaunchProbe = true, RecallProbes = true }
