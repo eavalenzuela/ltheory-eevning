@@ -6,7 +6,10 @@
 # wanted: a style, if it is not to be in the generator's own (stout,
 # broad, tall, spear, slab, soft, triangular, asymmetrical,
 # triangular_v2; and any of them with +asym after it, as stout+asym,
-# has its two sides unalike), and the word painted.
+# has its two sides unalike), the word painted or another's paint
+# (paint:vail: the hull browser's paints but bare), and the surface
+# detail it has (antennas, pipes, greebles, lights, rivets; each with
+# the seed of its own after it if wanted, antennas:13).
 #
 # A hull named here is drawn as that seed makes it, in place of the
 # design drawn for it in Game/View/Hull.luau: the generator's own mesh
@@ -63,10 +66,14 @@
 # frigate.courier       7   2   stout painted
 
 # The Talmar's ships (the owner's rework of them, 2026-11-13: each hull's
-# name and class are in resource/script/Core/Data/Factions.luau).
+# name and class are in resource/script/Core/Data/Factions.luau). The
+# Nephelo and the Osso (2026-11-17) are the Carvarro's and the Meseolo's
+# seeds again, with surface detail; the Nephelo in the Vail's paint.
 frigate.carvarro            29  6
 frigate.creavo              54  4
+frigate.nephelo             29  6  paint:vail antennas:13 greebles:9
 destroyer.meseolo           43  5
+destroyer.osso              43  5  antennas:13 greebles:15
 cruiser.paestro              2  8
 cruiser.stenanno            48  6
 battlecruiser.sopholto      18  8
@@ -84,12 +91,17 @@ freighter.sugarglider       40  8
 capitalindustrial.jaguar    28  7
 capitalindustrial.rapa      28  8
 
-# The Vessari's ships (the owner's list of them, 2026-11-13).
+# The Vessari's ships (the owner's list of them, 2026-11-13, and the
+# three they added 2026-11-17: the Hoshizora, of the Ouyou's seed grown
+# smaller; the Raiden and the Manazashi, of seeds of their own).
 frigate.akashi           59800  6  broad
 frigate.kabuto           21311  6  broad
 destroyer.nozomi         81099  5  broad
 destroyer.kanau          81099  6  broad
 cruiser.ouyou              601  8  broad
+cruiser.hoshizora          601  5  broad antennas:21 pipes:12 greebles:16
+cruiser.raiden            8639  6  spear antennas:66 greebles:15
+attackbattlecruiser.manazashi  99454  6  spear antennas:68 greebles:22
 battlecruiser.naishou    47254  7  spear
 battleship.owari          8434  8  broad
 battleship.yoake         76306  7  broad
@@ -101,7 +113,9 @@ freighter.yoruzake       94483  6  spear
 capitalindustrial.okami  18580  6  spear
 
 # The Orun's ships (the owner's list of them, 2026-11-13). A tech 2 hull
-# of theirs is the seed of the hull it comes of, grown to another size.
+# of theirs is the seed of the hull it comes of, grown to another size;
+# but the two they added 2026-11-17, the Excalibur and the Guthook, are
+# one seed of their own at two sizes, in the Vail's paint.
 frigate.skinner               9  4  stout
 frigate.skiver                9  8  stout
 frigate.knife                10  3  stout
@@ -113,21 +127,29 @@ cruiser.falchion             24  7  stout
 battlecruiser.zweihander     32  7  stout
 battleship.claymore       89901  5  stout
 carrier.katana            13490  8  tall
+carrier.excalibur         30681  8  spear paint:vail antennas:83 greebles:39 lights:11
 siegedreadnought.sword    45654  8  tall
+siegedreadnought.guthook  30681  7  stout paint:vail antennas:83 greebles:39 lights:11
 barge.scarab              38558  4  stout
 industrial.pill           55650  5  stout
 industrial.longhorn       55650  8  stout
 freighter.tiger           98199  8  tall
 capitalindustrial.stag     7681  5  stout
 
-# The Kethri's ships (the owner's list of them, 2026-11-13). The last is
+# The Kethri's ships (the owner's list of them, 2026-11-13, and the five
+# they added 2026-11-17, each with the surface detail it has). The last is
 # their colony ship, the class "Les Larmes de Nova": ten kilometres
 # long, with 140 hardpoints.
 frigate.battleaxe              40576  4  slab
+frigate.gauntlet               38616  4  slab antennas:182 greebles:46
 destroyer.sentry                 509  4  slab
+destroyer.noxious               6420  4  slab antennas:168 greebles:46
+cruiser.perfexis               66425  6  slab antennas:184 greebles:46
 battlecruiser.extremis         16797  7  slab
+battlecruiser.deluge           51187  7  slab+asym antennas:194 greebles:49
 battleship.teardrop            37900  7  slab
 carrier.tennit                 61949  6  slab
+dreadnought.pox                11998  4  slab antennas:194 greebles:49
 industrial.porter              61944  4  slab
 freighter.hiven                44641  4  spear
 barge.pulley                   54504  3  slab

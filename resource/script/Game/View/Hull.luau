@@ -3783,12 +3783,16 @@ end
 -- its own mesh, and no paint. Painted, it is drawn as the game's hulls
 -- are, in the paint of the design it takes the place of, or its
 -- faction's.)
-local function grownDesign(ship: Ship, hull: Ships.ShipType, had: Design?, fit: { string }, painted: boolean?, detail: Detail?): Design
+-- ('coat': the name of a look of Hull.looks to paint it in, in place of
+-- its own: "vail", for a Talmar hull in the Vail's.)
+local function grownDesign(ship: Ship, hull: Ships.ShipType, had: Design?, fit: { string }, painted: boolean?, detail: Detail?,
+  coat: string?): Design
+  local coated = if coat then Hull.looks[coat] else nil
   return {
     faction = if had then had.faction elseif Hull.looks[hull.lineage] then hull.lineage else "civil",
-    look = if painted then (if had then had.look else nil) else Hull.looks.bare,
+    look = if coated then coated elseif painted then (if had then had.look else nil) else Hull.looks.bare,
     sheets = if had then had.sheets else nil, even = if had then had.even else nil, fine = MANNER_FINE,
-    quality = if painted then nil else BARE_QUALITY,
+    quality = if painted or coated then nil else BARE_QUALITY,
     draw = function(b: Builder)
       grown(b, ship.growth)
       seated(b, ship.seats)
@@ -3831,13 +3835,16 @@ end
 -- its faction say), on the hardpoints the hull has by the data.
 -- Nothing, and why, if there is no such hull or the seed has not the
 -- room for its hardpoints.
-local function seeded(type: string, seed: number, size: number, style: string?, painted: boolean?, detail: Detail?): (Design?, string)
+local function seeded(type: string, seed: number, size: number, style: string?, painted: boolean?, detail: Detail?,
+  coat: string?): (Design?, string)
   local hull = Ships.byId[type]
   local had = designs[type]
   if hull == nil then
     return nil, "there is no such hull"
   elseif Hull.SIZES[size] == nil then
     return nil, `sizes are 1 to {#Hull.SIZES}`
+  elseif coat and Hull.looks[coat] == nil then
+    return nil, `there is no paint called '{coat}'`
   end
   local fit = if had then table.clone(had.fit) else standFit(hull)
   while #fit < hull.turrets + hull.launchers do
@@ -3851,7 +3858,7 @@ local function seeded(type: string, seed: number, size: number, style: string?, 
   if ship == nil then
     return nil, why
   end
-  return grownDesign(ship, hull, had, fit, painted, detail), ""
+  return grownDesign(ship, hull, had, fit, painted, detail, coat), ""
 end
 
 -- The hulls that are drawn by seed: resource/hull/seeds.txt, a hull's
@@ -3861,7 +3868,7 @@ end
 Hull.SEEDS = "resource/hull/seeds.txt"
 -- Every hull the list names, as its line has it (for the hull browser,
 -- which can be asked for one by name and build it again).
-export type SeedLine = { name: string, seed: number, size: number, style: string?, painted: boolean, detail: { string } }
+export type SeedLine = { name: string, seed: number, size: number, style: string?, painted: boolean, coat: string?, detail: { string } }
 Hull.SEEDED = {} :: { SeedLine }
 do
   local ok, text = pcall(File_Read, Hull.SEEDS)
@@ -3869,16 +3876,19 @@ do
     for line in string.gmatch(text, "[^\r\n]+") do
       local name, seed, size, words = string.match(line, "^%s*([%a%d%._]+)%s+(%d+)%s+(%d+)%s*([%w%s_%+:]-)%s*$")
       if name and string.sub(name, 1, 1) ~= "#" then
-        -- (after the size, in any order: a style, "painted", and the
-        -- kinds of surface detail it has (Hull.DETAILS). A style's name
-        -- may have a figure and a line in it, and Hull.ASYM after it:
-        -- triangular_v2+asym.)
+        -- (after the size, in any order: a style, "painted" or another's
+        -- paint ("paint:vail"), and the kinds of surface detail it has
+        -- (Hull.DETAILS). A style's name may have a figure and a line in
+        -- it, and Hull.ASYM after it: triangular_v2+asym.)
         local style: string? = nil
         local painted = false
+        local coat: string? = nil
         local kinds: { string } = {}
         for word in string.gmatch(words or "", "[%w_%+:]+") do
           if word == "painted" then
             painted = true
+          elseif string.sub(word, 1, 6) == "paint:" then
+            coat = string.sub(word, 7)
           elseif table.find(Hull.DETAILS, (string.match(word, "^(%a+)") or word)) then
             table.insert(kinds, word)
           else
@@ -3886,8 +3896,8 @@ do
           end
         end
         table.insert(Hull.SEEDED, { name = name, seed = tonumber(seed) or 0, size = tonumber(size) or 0, style = style, painted = painted,
-          detail = kinds })
-        local design, why = seeded(name, tonumber(seed) or 0, tonumber(size) or 0, style, painted, Hull.DetailOf(kinds))
+          coat = coat, detail = kinds })
+        local design, why = seeded(name, tonumber(seed) or 0, tonumber(size) or 0, style, painted, Hull.DetailOf(kinds), coat)
         if design then
           designs[name] = design
           pending[name] = nil

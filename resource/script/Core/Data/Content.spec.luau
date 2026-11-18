@@ -147,7 +147,8 @@ suite:Case("the Talmar's ships are the owner's rework of them: each by name, of 
     supercarrier = 1300, industrial = 180, barge = 160, freighter = 1000, capitalindustrial = 700 }
   -- (name, class, the hull it is the tech 2 make of, a jump drive, built to go unseen)
   local LINE: { { any } } = {
-    { "Carvarro", "frigate" }, { "Creavo", "frigate" }, { "Meseolo", "destroyer" }, { "Paestro", "cruiser" }, { "Stenanno", "cruiser" },
+    { "Carvarro", "frigate" }, { "Creavo", "frigate" }, { "Nephelo", "frigate", "Carvarro", nil, true }, { "Meseolo", "destroyer" },
+    { "Osso", "destroyer", "Meseolo" }, { "Paestro", "cruiser" }, { "Stenanno", "cruiser" },
     { "Sopholto", "battlecruiser" }, { "Phaeto", "battleship" }, { "Losiano", "battleship" }, { "Scoppo", "carrier", nil, true },
     { "Concorso", "dreadnought" }, { "Nullo", "supercarrier" },
     { "Sunfish", "industrial" }, { "Tarantula", "industrial", "Sunfish", nil, true }, { "Armadillo", "industrial" },
@@ -159,7 +160,7 @@ suite:Case("the Talmar's ships are the owner's rework of them: each by name, of 
   for _, hull in Ships.list do
     theirs += if hull.lineage == "talmar" then 1 else 0
   end
-  -- (the nineteen, and no other: a ship has no "II")
+  -- (the twenty-one, and no other: a ship has no "II")
   t.eq(theirs, #LINE)
   for _, entry in LINE do
     local name: string, class: string, of: string?, jump: boolean?, stealth: boolean? = entry[1], entry[2], entry[3], entry[4], entry[5]
@@ -169,7 +170,9 @@ suite:Case("the Talmar's ships are the owner's rework of them: each by name, of 
     if of then
       local base = assert(Ships.byId[`{class}.{string.lower(of)}`])
       t.eq({ hull.tech, hull.base, Ships.Improved(base.id), Ships.byId[base.id .. ".ii"] } :: { any }, { 2, base.id, hull, nil } :: { any }, name)
-      t.ok(hull.shield + hull.armor + hull.hull > base.shield + base.armor + base.hull and hull.cargo > base.cargo, name)
+      -- (and a hauler carries more: a warship's hold is as it was)
+      t.ok(hull.shield + hull.armor + hull.hull > base.shield + base.armor + base.hull and hull.cargo >= base.cargo, name)
+      t.ok(hull.cargo > base.cargo or not (class == "industrial" or class == "freighter" or class == "capitalindustrial"), name)
       t.eq({ Types.Info(hull.id).scarce, assert(Blueprints.byProduct[hull.id]).invented } :: { any }, { true, true } :: { any }, name)
     else
       t.eq({ hull.tech, Types.Get(hull.id) ~= nil, Blueprints.byProduct[hull.id] ~= nil } :: { any }, { nil, true, true } :: { any }, name)
@@ -413,7 +416,7 @@ suite:Case("the Drowned's ships are the owner's list of them: fifteen hulls, eve
   t.eq(assert(Facts.Of("frigate.cairn")).kind, "Drowned frigate")
 end)
 
-suite:Case("the Orun's ships are the owner's list of them: seventeen hulls, four of them tech 2 hulls of their own, with a barge, a freighter and a capital industrial that leads a mining fleet", function(t)
+suite:Case("the Orun's ships are the owner's list of them: nineteen hulls, six of them tech 2 hulls of their own, with a barge, a freighter and a capital industrial that leads a mining fleet", function(t)
   local orun = Factions.byId.orun
   local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, battlecruiser = 300, battleship = 400, carrier = 1000,
     siegedreadnought = 950, barge = 160, industrial = 180, freighter = 1000, capitalindustrial = 700 }
@@ -422,7 +425,8 @@ suite:Case("the Orun's ships are the owner's list of them: seventeen hulls, four
     { "Skinner", "frigate" }, { "Skiver", "frigate", "Skinner" }, { "Knife", "frigate" },
     { "Scythe", "destroyer" }, { "Kama", "destroyer", "Scythe" },
     { "Armer", "cruiser" }, { "Gladius", "cruiser" }, { "Falchion", "cruiser", "Gladius" },
-    { "Zweihander", "battlecruiser" }, { "Claymore", "battleship" }, { "Katana", "carrier" }, { "Sword", "siegedreadnought" },
+    { "Zweihander", "battlecruiser" }, { "Claymore", "battleship" }, { "Katana", "carrier" }, { "Excalibur", "carrier", "Katana" },
+    { "Sword", "siegedreadnought" }, { "Guthook", "siegedreadnought", "Sword" },
     { "Scarab", "barge" }, { "Pill", "industrial" }, { "Longhorn", "industrial", "Pill" }, { "Tiger", "freighter" },
     { "Stag", "capitalindustrial" },
   }
@@ -460,8 +464,11 @@ suite:Case("the Orun's ships are the owner's list of them: seventeen hulls, four
   local barge, freighter = Ships.byId["barge.scarab"], Ships.byId["freighter.tiger"]
   t.eq({ barge.turrets, barge.launchers, freighter.turrets + freighter.launchers, freighter.rigs } :: { any }, { 3, 0, 0, 0 } :: { any })
   t.ok(freighter.cargo > 30000 and #Skills.Needs(barge.id) == 2)
-  -- The siege dreadnought: four hardpoints, for the largest guns there are.
-  t.eq(Ships.byId["siegedreadnought.sword"].turrets, 4)
+  -- The siege dreadnought: four hardpoints, for the largest guns there are; and its tech 2 make eight ("t2
+  -- siege dreadnought (8x guns)"), with the high slots and the powergrid for them.
+  local sword, guthook = Ships.byId["siegedreadnought.sword"], Ships.byId["siegedreadnought.guthook"]
+  t.eq({ sword.turrets, guthook.turrets, guthook.launchers, guthook.highs - sword.highs } :: { any }, { 4, 8, 0, 4 } :: { any })
+  t.ok(guthook.powergrid > 2 * sword.powergrid and guthook.cpu > 2 * sword.cpu)
   -- What they had is gone, and so are the classes their line does not name.
   for _, gone in { "frigate.mastiff", "destroyer.boar", "cruiser.aurochs", "battleship.mammoth", "industrial.ox" } do
     t.eq(Ships.byId[gone], nil, gone)
@@ -477,14 +484,15 @@ suite:Case("the Orun's ships are the owner's list of them: seventeen hulls, four
     { "destroyer.scythe", "industrial.pill", "carrier.katana", "siegedreadnought.sword", "battlecruiser.extremis" } :: { any })
 end)
 
-suite:Case("the Kethri's ships are the owner's list of them: ten hulls, two hardpoints in ten of them launchers, and a colony ship ten kilometres long with 140 hardpoints that nobody sells", function(t)
+suite:Case("the Kethri's ships are the owner's list of them: fifteen hulls, two of them tech 2, two hardpoints in ten of them launchers, and a colony ship ten kilometres long with 140 hardpoints that nobody sells", function(t)
   local kethri = Factions.byId.kethri
-  local RADIUS = { frigate = 42, destroyer = 75, battlecruiser = 300, battleship = 400, carrier = 1000, ultracapital = 5000,
-    barge = 160, industrial = 180, freighter = 1000, capitalindustrial = 700 }
-  -- (name, class, the hull's own name in its id)
-  local LINE: { { string } } = {
-    { "Battleaxe", "frigate" }, { "Sentry", "destroyer" }, { "Extremis", "battlecruiser" }, { "Teardrop", "battleship" },
-    { "Tennit", "carrier" }, { "Porter", "industrial" }, { "Hiven", "freighter" }, { "Pulley", "barge" },
+  local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, battlecruiser = 300, battleship = 400, carrier = 1000, dreadnought = 1300,
+    ultracapital = 5000, barge = 160, industrial = 180, freighter = 1000, capitalindustrial = 700 }
+  -- (name, class, the hull's own name in its id, the hull it is the tech 2 make of)
+  local LINE: { { any } } = {
+    { "Battleaxe", "frigate" }, { "Gauntlet", "frigate" }, { "Sentry", "destroyer" }, { "Noxious", "destroyer", nil, "Sentry" },
+    { "Perfexis", "cruiser" }, { "Extremis", "battlecruiser" }, { "Deluge", "battlecruiser", nil, "Extremis" },
+    { "Teardrop", "battleship" }, { "Tennit", "carrier" }, { "Pox", "dreadnought" }, { "Porter", "industrial" }, { "Hiven", "freighter" }, { "Pulley", "barge" },
     { "Piton", "capitalindustrial" }, { "Les Larmes de Nova", "ultracapital", "leslarmesdenova" },
   }
   t.eq(#assert(kethri.line), #LINE)
@@ -494,17 +502,18 @@ suite:Case("the Kethri's ships are the owner's list of them: ten hulls, two hard
   end
   t.eq(theirs, #LINE)
   for _, entry in LINE do
-    local name, class = entry[1], entry[2]
+    local name: string, class: string, of: string? = entry[1], entry[2], entry[4]
     local hull = assert(Ships.byId[`{class}.{entry[3] or string.lower(name)}`], `the Kethri have no {name}`)
-    t.eq({ hull.name, hull.class, hull.lineage, hull.radius, hull.tech } :: { any }, { `Kethri {name}`, class, "kethri", RADIUS[class], nil } :: { any },
+    t.eq({ hull.name, hull.class, hull.lineage, hull.radius, hull.tech, hull.base } :: { any },
+      { `Kethri {name}`, class, "kethri", RADIUS[class], if of then 2 else nil, if of then `{class}.{string.lower(of)}` else nil } :: { any },
       name)
     t.ok(Types.Get(hull.id) ~= nil and Blueprints.byProduct[hull.id] ~= nil and #Skills.Needs(hull.id) >= 1, name)
-    -- An armour people; and of a warship's hardpoints about two in ten are launchers (the frigate, three
-    -- hardpoints and the hull written out by hand, is all lasers).
+    -- An armour people; and of a warship's hardpoints about two in ten are launchers (a frigate has three
+    -- hardpoints: the Battleaxe, written out by hand, is all lasers, and the Gauntlet has one launcher).
     if hull.turrets + hull.launchers > 0 and class ~= "barge" and class ~= "industrial" then
       t.ok(hull.armor > hull.shield, name)
       local share = hull.launchers / (hull.turrets + hull.launchers)
-      t.ok(class == "frigate" and share == 0 or share >= 0.12 and share <= 0.26, `{name}: {hull.launchers} launchers of {hull.turrets + hull.launchers}`)
+      t.ok(class == "frigate" and hull.launchers <= 1 or share >= 0.12 and share <= 0.26, `{name}: {hull.launchers} launchers of {hull.turrets + hull.launchers}`)
     end
   end
   -- The colony ship: fifty hardpoints for small weapons, forty for medium, thirty for large and twenty for XL,
@@ -561,22 +570,22 @@ suite:Case("the Kethri's ships are the owner's list of them: ten hulls, two hard
     t.eq(Ships.byId[gone], nil, gone)
   end
   for _, hull in Ships.list do
-    t.ok(hull.lineage ~= "kethri" or (hull.class ~= "cruiser" and hull.class ~= "attackbattlecruiser" and hull.class ~= "dreadnought"
-      and hull.class ~= "siegedreadnought" and hull.class ~= "supercarrier"), hull.id)
+    t.ok(hull.lineage ~= "kethri" or (hull.class ~= "attackbattlecruiser" and hull.class ~= "siegedreadnought"
+      and hull.class ~= "supercarrier"), hull.id)
   end
   -- The pirates' battleship is made over from theirs, and their attack battlecruiser from the Extremis, cut down.
   t.eq({ Ships.byId["battleship.ravager"].donor, Ships.byId["attackbattlecruiser.reaver"].donor } :: { any },
     { "battleship.teardrop", "battlecruiser.extremis" } :: { any })
 end)
 
-suite:Case("the Vessari's ships are the owner's list of them: an ultracapital four kilometres wide, a mass-miner with ten mining turrets, and two tech 2 hulls of their own", function(t)
+suite:Case("the Vessari's ships are the owner's list of them: an ultracapital four kilometres wide, a mass-miner with ten mining turrets, an attack battlecruiser, and four tech 2 hulls of their own, two of one cruiser", function(t)
   local vessari = Factions.byId.vessari
-  local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, battlecruiser = 300, battleship = 400, carrier = 1000, ultracapital = 2060,
-    industrial = 180, freighter = 1000, capitalindustrial = 700 }
+  local RADIUS = { frigate = 42, destroyer = 75, cruiser = 150, attackbattlecruiser = 200, battlecruiser = 300, battleship = 400,
+    carrier = 1000, ultracapital = 2060, industrial = 180, freighter = 1000, capitalindustrial = 700 }
   -- (name, class, the hull it is the tech 2 make of)
   local LINE: { { any } } = {
     { "Akashi", "frigate" }, { "Kabuto", "frigate" }, { "Nozomi", "destroyer" }, { "Kanau", "destroyer", "Nozomi" }, { "Ouyou", "cruiser" },
-    { "Naishou", "battlecruiser" }, { "Owari", "battleship" }, { "Yoake", "battleship" }, { "Azayake", "carrier" },
+    { "Hoshizora", "cruiser", "Ouyou" }, { "Raiden", "cruiser", "Ouyou" }, { "Manazashi", "attackbattlecruiser" }, { "Naishou", "battlecruiser" }, { "Owari", "battleship" }, { "Yoake", "battleship" }, { "Azayake", "carrier" },
     { "Daiichi", "ultracapital" }, { "Mizumushi", "industrial" }, { "Akaboshi", "industrial", "Mizumushi" },
     { "Yoruzake", "freighter" }, { "Okami", "capitalindustrial" },
   }
@@ -592,7 +601,7 @@ suite:Case("the Vessari's ships are the owner's list of them: an ultracapital fo
     t.eq({ hull.name, hull.class, hull.lineage, hull.radius } :: { any }, { `Vessari {name}`, class, "vessari", RADIUS[class] } :: { any }, name)
     if of then
       local base = assert(Ships.byId[`{class}.{string.lower(of)}`])
-      t.eq({ hull.tech, hull.base, Ships.Improved(base.id) } :: { any }, { 2, base.id, hull } :: { any }, name)
+      t.eq({ hull.tech, hull.base, table.find(Ships.ImprovedAll(base.id), hull) ~= nil } :: { any }, { 2, base.id, true } :: { any }, name)
       t.eq(Types.Info(hull.id).scarce, true, name)
     else
       t.eq({ hull.tech, Types.Get(hull.id) ~= nil, Blueprints.byProduct[hull.id] ~= nil } :: { any }, { nil, true, true } :: { any }, name)
@@ -620,11 +629,16 @@ suite:Case("the Vessari's ships are the owner's list of them: an ultracapital fo
     t.eq(Ships.byId[gone], nil, gone)
   end
   for _, hull in Ships.list do
-    t.ok(hull.lineage ~= "vessari" or (hull.class ~= "attackbattlecruiser" and hull.class ~= "dreadnought"
+    t.ok(hull.lineage ~= "vessari" or (hull.class ~= "dreadnought"
       and hull.class ~= "siegedreadnought" and hull.class ~= "supercarrier" and hull.class ~= "barge"), hull.id)
   end
   -- The pirates' cruiser is made over from theirs.
   t.eq(Ships.byId["cruiser.marauder"].donor, "cruiser.ouyou")
+  -- The Ouyou has two tech 2 makes: the Hoshizora, for electronic warfare, and the Raiden, their special
+  -- ship, with a bow railgun of a cruiser's.
+  local hoshi, raiden = Ships.byId["cruiser.hoshizora"], Ships.byId["cruiser.raiden"]
+  t.eq({ hoshi.ewar, hoshi.spinal, raiden.ewar, raiden.spinal ~= nil } :: { any }, { true, nil, nil, true } :: { any })
+  t.ok(assert(raiden.spinal).capacitor < raiden.capacitor, "a cruiser can pay for a round of its own bow railgun")
 end)
 
 suite:Case("every pirate hull is somebody else's, cheaper, quicker and thinner-skinned", function(t)
@@ -667,14 +681,18 @@ suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in i
       t.eq({ hull.class, hull.lineage } :: { any }, { base.class, base.lineage } :: { any })
       t.ok(hull.class ~= "drone" and string.sub(hull.id, -3) ~= ".ii" and string.sub(hull.name, -3) ~= " II", hull.id)
       t.ok(faction ~= nil and faction.line ~= nil, hull.id)
-      t.eq(Ships.Improved(base.id), hull)
+      t.ok(table.find(Ships.ImprovedAll(base.id), hull) ~= nil, hull.id)
       t.ok(base.tech == nil and Ships.Improved(hull.id) == nil, "a tech 2 hull has no tech 2 make of its own")
-      -- The same hull to look at and to arm: its hardpoints, its size, its drones.
-      t.eq({ hull.turrets, hull.launchers, hull.highs, hull.radius, hull.mass, hull.drones, hull.bay } :: { any },
-        { base.turrets, base.launchers, base.highs, base.radius, base.mass, base.drones, base.bay } :: { any })
+      -- The same hull to look at and to arm: its hardpoints, its size, its drones. (But the Orun's Guthook, with
+      -- twice the Sword's hardpoints, by its line.)
+      t.eq({ hull.radius, hull.mass, hull.drones, hull.bay } :: { any }, { base.radius, base.mass, base.drones, base.bay } :: { any })
+      if hull.id ~= "siegedreadnought.guthook" then
+        t.eq({ hull.turrets, hull.launchers, hull.highs } :: { any }, { base.turrets, base.launchers, base.highs } :: { any }, hull.id)
+      end
       -- More of it to shoot through, and less of every shot gets through.
       -- (of what it has: a hull of the Nimia's has no shield, tech 2 or plain)
-      t.ok((hull.shield > 1.25 * base.shield or base.shield == 0) and hull.armor > 1.25 * base.armor and hull.hull > 1.25 * base.hull,
+      -- (by more than a fifth, after a capital's figures are rounded to two places: the Orun's Excalibur)
+      t.ok((hull.shield > 1.2 * base.shield or base.shield == 0) and hull.armor > 1.2 * base.armor and hull.hull > 1.2 * base.hull,
         hull.id)
       for index = 1, 4 do
         t.near(hull.shieldResonance[index], base.shieldResonance[index] * 0.75, 1e-9)
@@ -737,11 +755,12 @@ suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in i
       t.eq(Types.Get(hull.id) == nil or Types.Info(hull.id).scarce == (if hull.rare then true else nil), true, hull.id)
     end
   end
-  -- The Talmar's three (the Tarantula, the Sugarglider and the Rapa), the Vessari's two (the Kanau and the
-  -- Akaboshi), the Orun's four (the Skiver, the Kama, the Falchion and the Longhorn), the Nimia's one (the
-  -- Hano), the Vail's two (the Aberration and the Interstition) and the Drowned's two (the Rebirth and the
-  -- Resurrection). The Kethri's line names none yet.
-  t.eq(improved, 14)
+  -- The Talmar's five (the Nephelo, the Osso, the Tarantula, the Sugarglider and the Rapa), the Vessari's four
+  -- (the Kanau, the Hoshizora, the Raiden and the Akaboshi), the Orun's six (the Skiver, the Kama, the
+  -- Falchion, the Excalibur, the Guthook and the Longhorn), the Kethri's two (the Noxious and the Deluge), the
+  -- Nimia's one (the Hano), the Vail's two (the Aberration and the Interstition) and the Drowned's two (the
+  -- Rebirth and the Resurrection).
+  t.eq(improved, 22)
   t.ok(Ships.Improved("frigate.courier") == nil and Ships.Improved("industrial.hauler") == nil and Ships.Improved("capsule") == nil)
 end)
 
@@ -760,6 +779,14 @@ suite:Case("what each tech 2 hull is for is the owner's word: to jump, to go uns
     { "destroyer.aberration", nil, nil, nil, nil }, { "cruiser.interstition", nil, true, nil, nil },
     -- (and the Drowned's two: each "no builtin cloak. can fit jumpdrive")
     { "cruiser.rebirth", true, nil, nil, nil }, { "freighter.resurrection", true, nil, nil, nil },
+    -- (and the owner's of 2026-11-17: the Talmar's "t2 frigate (black ops)" and "t2 destroyer (interdictor)";
+    -- the Vessari's "t2 cruiser (ewar)" and "t2 cruiser (special, bow railgun)"; the Orun's "t2 carrier" and
+    -- "t2 siege dreadnought (8x guns)"; the Kethri's "t2 destroyer (interdictor)" and "t2 battlecruiser
+    -- (black ops)". The interdictors and the electronic warfare hull are seen to below.)
+    { "frigate.nephelo", nil, true, nil, nil }, { "destroyer.osso", nil, nil, nil, nil },
+    { "cruiser.hoshizora", nil, nil, nil, nil }, { "cruiser.raiden", nil, nil, nil, nil },
+    { "carrier.excalibur", nil, nil, nil, nil }, { "siegedreadnought.guthook", nil, nil, nil, nil },
+    { "destroyer.noxious", nil, nil, nil, nil }, { "battlecruiser.deluge", nil, true, nil, nil },
   }
   local said: { [string]: boolean } = {}
   for _, entry in FOR do

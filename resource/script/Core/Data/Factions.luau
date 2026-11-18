@@ -139,13 +139,24 @@ export type Faction = {
 -- the owner's word: "mass-miner, mobile refinery".
 -- 'spinal': it has a gun of its own, fixed along its bow (Data/Ships'
 -- 'spinal', Tactical/Combat). The Drowned's The End, by the owner's
--- word: "special, fixed bow railgun".
+-- word: "special, fixed bow railgun"; and the Vessari's Raiden.
+-- 'interdictor': it is built to hold ships where they are: the field an
+-- interdiction field launcher drops from it is wider and lasts longer
+-- (Ships.INTERDICTOR, Tactical/Combat). The Talmar's Osso and the
+-- Kethri's Noxious, by the owner's word (2026-11-17).
+-- 'ewar': it is built for electronic warfare: what its webs,
+-- disruptors, painters, dampeners, jammers, neutralisers and the like do
+-- to another ship they do from farther and more strongly (Ships.EWAR,
+-- Tactical/Combat). The Vessari's Hoshizora, by the owner's word.
+-- 'hardpoints', on a tech 2 make: how many it has, where that is not as
+-- many as the hull it comes of (the Orun's Guthook: "8x guns", where
+-- the Sword has four).
 -- A hull whose name begins "The" goes by that name alone, and every
 -- other by its people's name and its own (Data/Ships): "The Reaper",
 -- and "Drowned Coffin".
 export type Hull = { name: string, class: string, role: string?, tech: number?, of: string?, jump: boolean?, stealth: boolean?,
   cloak: boolean?, explorer: boolean?, hardpoints: number?, radius: number?, guns: { number }?, rare: boolean?,
-  jumpField: number?, spinal: boolean?, refinery: boolean? }
+  jumpField: number?, spinal: boolean?, refinery: boolean?, interdictor: boolean?, ewar: boolean? }
 
 Factions.list = {
   -- The four human factions.
@@ -163,8 +174,9 @@ Factions.list = {
     lockRange = 1.1, cargo = 1.15, price = 1, mids = -1, lows = 1, hardpoints = 0,
     hulls = {},
     -- (The project owner's list of the Vessari's ships, 2026-11-13, with
-    -- the seed each is drawn from in resource/hull/seeds.txt. They have
-    -- no attack battlecruiser, dreadnought, siege dreadnought or
+    -- the seed each is drawn from in resource/hull/seeds.txt, and the
+    -- three they added 2026-11-17: the Hoshizora, the Manazashi and the
+    -- Raiden. They have no dreadnought, siege dreadnought or
     -- supercarrier, and no barge of their own. Their ultracapital is
     -- four kilometres wide: the hull its seed grows is very nearly as
     -- wide as it is long, so it is 2,060 m in radius.)
@@ -173,6 +185,10 @@ Factions.list = {
       { name = "Nozomi", class = "destroyer" },
       { name = "Kanau", class = "destroyer", tech = 2, of = "Nozomi" },
       { name = "Ouyou", class = "cruiser" },
+      { name = "Hoshizora", class = "cruiser", tech = 2, of = "Ouyou", ewar = true },
+      -- (their special ship: "t2 cruiser (special, bow railgun)")
+      { name = "Raiden", class = "cruiser", tech = 2, of = "Ouyou", spinal = true },
+      { name = "Manazashi", class = "attackbattlecruiser" },
       { name = "Naishou", class = "battlecruiser" },
       { name = "Owari", class = "battleship" }, { name = "Yoake", class = "battleship" },
       { name = "Azayake", class = "carrier" },
@@ -198,11 +214,14 @@ Factions.list = {
     hulls = {},
     -- (The project owner's rework of the Talmar's ships, 2026-11-13:
     -- every hull of theirs, by name, with the seed each is drawn from in
-    -- resource/hull/seeds.txt. They have no attack battlecruiser and no
+    -- resource/hull/seeds.txt; and the two they added 2026-11-17, the
+    -- Nephelo and the Osso. They have no attack battlecruiser and no
     -- siege dreadnought.)
     line = {
       { name = "Carvarro", class = "frigate" }, { name = "Creavo", class = "frigate" },
+      { name = "Nephelo", class = "frigate", tech = 2, of = "Carvarro", stealth = true },
       { name = "Meseolo", class = "destroyer" },
+      { name = "Osso", class = "destroyer", tech = 2, of = "Meseolo", interdictor = true },
       { name = "Paestro", class = "cruiser" }, { name = "Stenanno", class = "cruiser" },
       { name = "Sopholto", class = "battlecruiser" },
       { name = "Phaeto", class = "battleship" }, { name = "Losiano", class = "battleship" },
@@ -237,8 +256,9 @@ Factions.list = {
     -- (The project owner's list of the Orun's ships, 2026-11-13, with
     -- the seed each is drawn from in resource/hull/seeds.txt. A tech 2
     -- hull of theirs is grown from the seed of the hull it comes of, at
-    -- another size. They have no attack battlecruiser, dreadnought or
-    -- supercarrier. The Stag leads a mining fleet: a capital industrial
+    -- another size (and the two they added 2026-11-17, the Guthook and
+    -- the Excalibur, of one seed of their own, at two sizes). They have
+    -- no attack battlecruiser, dreadnought or supercarrier. The Stag leads a mining fleet: a capital industrial
     -- as the class is, with the ore hold the fleet's barges fill.)
     line = {
       { name = "Skinner", class = "frigate" },
@@ -251,7 +271,9 @@ Factions.list = {
       { name = "Zweihander", class = "battlecruiser" },
       { name = "Claymore", class = "battleship" },
       { name = "Katana", class = "carrier" },
+      { name = "Excalibur", class = "carrier", tech = 2, of = "Katana" },
       { name = "Sword", class = "siegedreadnought" },
+      { name = "Guthook", class = "siegedreadnought", tech = 2, of = "Sword", hardpoints = 8 },
       { name = "Scarab", class = "barge" },
       { name = "Pill", class = "industrial" },
       { name = "Longhorn", class = "industrial", tech = 2, of = "Pill", stealth = true },
@@ -278,9 +300,10 @@ Factions.list = {
     hulls = {},
     -- (The project owner's list of the Kethri's ships, 2026-11-13, with
     -- the seed each is drawn from in resource/hull/seeds.txt. It is a
-    -- short list, "mostly because of the ultracapital": they have no
-    -- cruiser, attack battlecruiser, dreadnought, siege dreadnought or
-    -- supercarrier. The Battleaxe is the hand-written laser frigate of
+    -- short list, "mostly because of the ultracapital"; to which they
+    -- added five, 2026-11-17: the Gauntlet, the Noxious, the Perfexis,
+    -- the Deluge and the Pox. They have no attack battlecruiser, siege
+    -- dreadnought or supercarrier. The Battleaxe is the hand-written laser frigate of
     -- Data/Ships, which was the Lancer. The Piton leads a mining fleet,
     -- as the Orun's Stag does.
     -- The last is their colony ship, the class "Les Larmes de Nova": ten
@@ -289,11 +312,15 @@ Factions.list = {
     -- extremely rare blueprint". It roams their space with its support
     -- fleet in tow: Tactical/Nomads.)
     line = {
-      { name = "Battleaxe", class = "frigate" },
+      { name = "Battleaxe", class = "frigate" }, { name = "Gauntlet", class = "frigate" },
       { name = "Sentry", class = "destroyer" },
+      { name = "Noxious", class = "destroyer", tech = 2, of = "Sentry", interdictor = true },
+      { name = "Perfexis", class = "cruiser" },
       { name = "Extremis", class = "battlecruiser" },
+      { name = "Deluge", class = "battlecruiser", tech = 2, of = "Extremis", stealth = true },
       { name = "Teardrop", class = "battleship" },
       { name = "Tennit", class = "carrier" },
+      { name = "Pox", class = "dreadnought" },
       { name = "Porter", class = "industrial" },
       { name = "Hiven", class = "freighter" },
       { name = "Pulley", class = "barge" },
@@ -313,9 +340,10 @@ Factions.list = {
     lockRange = 0.85, cargo = 1.2, price = 0.55, mids = 0, lows = 0, hardpoints = 1,
     hulls = { frigate = "Cutthroat", destroyer = "Jackal", cruiser = "Marauder", battleship = "Ravager", industrial = "Fence",
       attackbattlecruiser = "Reaver", battlecruiser = "Brigand", carrier = "Warren", dreadnought = "Tyrant", siegedreadnought = "Despoiler", capitalindustrial = "Hoard", supercarrier = "Matriarch" },
-    -- (Nobody builds an attack battlecruiser now that every human
-    -- faction's ships are the owner's list of them: the pirates' is the
-    -- Kethri's battlecruiser, cut down. And the capitals the Kethri
+    -- (Nobody built an attack battlecruiser once every human faction's
+    -- ships were the owner's list of them, and the pirates' is the
+    -- Kethri's battlecruiser, cut down: it is so still, now the Vessari
+    -- build one, the Manazashi. And the capitals the Kethri
     -- built are from those who build them still.)
     cut = { attackbattlecruiser = "battlecruiser" },
     donors = { frigate = "talmar", destroyer = "orun", cruiser = "vessari", battleship = "kethri", industrial = "orun",

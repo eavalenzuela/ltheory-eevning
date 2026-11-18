@@ -649,6 +649,18 @@ suite:Case("invention works out a tech 2 blueprint from a copy of a plain one, f
   t.eq(refused(game, { kind = "Fit", actor = 0, item = item.id }), "needs Projectile Turrets 4")
 end)
 
+suite:Case("a hull with two tech 2 makes is invented toward the one asked for (the Vessari's Ouyou: the Hoshizora and the Raiden)", function(t)
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local print = Blueprints.byId["blueprint.cruiser.ouyou"]
+  local each = Industry.Inventions(state, print)
+  t.eq({ #each, each[1].product, each[2].product } :: { any }, { 2, "cruiser.hoshizora", "cruiser.raiden" } :: { any })
+  t.eq(assert(Industry.InventionPlan(state, print, "cruiser.raiden")).blueprint, "blueprint.cruiser.raiden")
+  -- (the first, where none is asked for; and a hull with one make has one invention)
+  t.eq(assert(Industry.InventionPlan(state, print)).product, "cruiser.hoshizora")
+  t.eq(#Industry.Inventions(state, Blueprints.byId["blueprint.destroyer.nozomi"]), 1)
+end)
+
 suite:Case("a tech 2 hull is invented from a copy of the plain hull's blueprint, built of the plain hull, and wants more skill to board", function(t)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
@@ -666,7 +678,7 @@ suite:Case("a tech 2 hull is invented from a copy of the plain hull's blueprint,
   t.eq({ assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.freighter.rhino"])).datacores,
     assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.capitalindustrial.jaguar"])).datacores }, { 64, 128 })
   -- (a hull whose faction names no tech 2 make of it has none, nor has a tech 2 hull one of its own)
-  for _, plain in { "frigate.courier", "frigate.akashi", "battleship.owari", "barge.quarry", "frigate.carvarro", "industrial.armadillo" } do
+  for _, plain in { "frigate.courier", "frigate.akashi", "battleship.owari", "barge.quarry", "frigate.creavo", "industrial.armadillo" } do
     t.eq(Industry.InventionPlan(state, Blueprints.byId["blueprint." .. plain]), nil, plain)
     t.eq(Ships.byId[plain .. ".ii"], nil, plain)
   end

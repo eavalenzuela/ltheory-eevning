@@ -1156,9 +1156,9 @@ suite:Case("a finished job earns loyalty points, and a faction's store sells for
     end
   end
   -- (the Vessari's are projectile guns and missiles: eight kinds of gun and eight launchers, a long one and a
-  -- short one of each size; and the two tech 2 ships their line names, the Kanau and the Akaboshi: a ship has
-  -- no "II")
-  t.eq({ faction, blueprints, foreign, hulls } :: { any }, { "vessari", 16, 0, 2 } :: { any })
+  -- short one of each size; and the four tech 2 ships their line names, the Kanau, the Hoshizora, the Raiden
+  -- and the Akaboshi: a ship has no "II")
+  t.eq({ faction, blueprints, foreign, hulls } :: { any }, { "vessari", 16, 0, 4 } :: { any })
   -- (the Talmar's store has the one tech 2 hull of theirs that a store sells: their hauler's, for a pilot they
   -- think well of)
   local theirs = 0

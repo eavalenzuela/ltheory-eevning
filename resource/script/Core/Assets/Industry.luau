@@ -152,17 +152,25 @@ Industry.DATACORE = "datacore"
 -- is 1 and a large one 3: it sets the datacores (two, doubled for each
 -- step) and the time.
 Industry.HULL_SIZE = { frigate = 3, destroyer = 4, industrial = 4, barge = 4, cruiser = 5, attackbattlecruiser = 6,
-  battlecruiser = 6, battleship = 6, freighter = 6, capitalindustrial = 7 } :: { [string]: number }
+  battlecruiser = 6, battleship = 6, freighter = 6, capitalindustrial = 7,
+  -- (the warship capitals, since the Orun's Excalibur and Guthook: a first figure, and mine)
+  carrier = 8, dreadnought = 8, siegedreadnought = 8, supercarrier = 9 } :: { [string]: number }
 Industry.INVENT_CHANCE = 0.3
 Industry.INVENT_SKILL = 0.05
 
 export type InventionPlan = { product: string, blueprint: string, datacores: number, seconds: number, fee: number, chance: number }
 
 -- What inventing from a blueprint would take and make, or nil if what
--- it builds has no tech 2 make.
-function Industry.InventionPlan(state: State.State, blueprint: Blueprints.Blueprint): InventionPlan?
+-- it builds has no tech 2 make. ('want': which, of a hull that has more
+-- than one tech 2 make, by its id: the first, if not said or not one.)
+function Industry.InventionPlan(state: State.State, blueprint: Blueprints.Blueprint, want: string?): InventionPlan?
   local module = Modules.Improved(blueprint.product)
   local hull = Ships.Improved(blueprint.product)
+  for _, make in Ships.ImprovedAll(blueprint.product) do
+    if make.id == want then
+      hull = make
+    end
+  end
   local charge = Modules.ImprovedCharge(blueprint.product)
   local drone = Drones.Improved(blueprint.product)
   local id = if module then module.id elseif hull then hull.id elseif charge then charge.id elseif drone then drone.id else ""
@@ -179,6 +187,27 @@ function Industry.InventionPlan(state: State.State, blueprint: Blueprints.Bluepr
     fee = math.ceil(Types.Info(id).basePrice * 0.05),
     chance = math.min(1, Industry.INVENT_CHANCE + Industry.INVENT_SKILL * math.max(0, state.skills.invention or 0)),
   }
+end
+
+-- Every invention a blueprint can be put to: one, or one for each tech
+-- 2 make of a hull that has several.
+function Industry.Inventions(state: State.State, blueprint: Blueprints.Blueprint): { InventionPlan }
+  local out: { InventionPlan } = {}
+  local makes = Ships.ImprovedAll(blueprint.product)
+  if #makes > 1 then
+    for _, make in makes do
+      local plan = Industry.InventionPlan(state, blueprint, make.id)
+      if plan then
+        table.insert(out, plan)
+      end
+    end
+  else
+    local plan = Industry.InventionPlan(state, blueprint)
+    if plan then
+      table.insert(out, plan)
+    end
+  end
+  return out
 end
 
 -- How long a job of so many runs takes: 4% less for each level of
@@ -332,7 +361,7 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
     if blueprint == nil then
       return false, "that is not a blueprint"
     elseif command.what == "invent" then
-      local plan = Industry.InventionPlan(state, blueprint)
+      local plan = Industry.InventionPlan(state, blueprint, command.type)
       if plan == nil then
         return false, "there is no tech 2 make of that to invent"
       elseif not copy then
@@ -476,7 +505,7 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
 
   elseif command.kind == "StartResearch" and command.what == "invent" then
     local blueprint = Blueprints.Of(item.type) :: Blueprints.Blueprint
-    local plan = Industry.InventionPlan(state, blueprint) :: InventionPlan
+    local plan = Industry.InventionPlan(state, blueprint, command.type) :: InventionPlan
     local station = ship.docked
     local left = plan.datacores
     for _, stack in Items.In(state, station, "hangar") do

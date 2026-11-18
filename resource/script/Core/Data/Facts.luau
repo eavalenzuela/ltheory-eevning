@@ -203,6 +203,8 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
     elseif hull.role == "transport" then "logistics capital"
     elseif hull.stealth then `black ops {string.lower(class)}`
     elseif hull.explorer then `exploration {string.lower(class)}`
+    elseif hull.interdictor then "interdictor"
+    elseif hull.ewar then `electronic warfare {string.lower(class)}`
     else string.lower(class)
   sheet.kind = if faction then `{faction.name} {if hull.tech == 2 then "tech 2 " else ""}{what}` else class
   sheet.note = if hull.donor then `Made over from the {nameOf(hull.donor)}.`
@@ -213,7 +215,8 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
   -- What it is built with that others of its class are not: a jump
   -- drive (Tactical/Jumping), to go unseen or a cloak of its own
   -- (Tactical/Combat), or to explore (Ships.EXPLORER).
-  if hull.jump or hull.stealth or hull.cloak or hull.explorer or hull.affinity or hull.spinal or hull.refinery then
+  if hull.jump or hull.stealth or hull.cloak or hull.explorer or hull.affinity or hull.spinal or hull.refinery or hull.interdictor
+    or hull.ewar then
     local built = section(sheet, "Built with")
     -- (the kind of damage its faction's ships lean to: Data/Ships' affinity)
     if hull.affinity then
@@ -241,6 +244,14 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
     end
     if hull.stealth or hull.explorer then
       row(built, "Cloaking device", `fits for {whole(Ships.CLOAK_FITTING * 100)}% of the CPU and powergrid it asks of another hull`)
+    end
+    if hull.interdictor then
+      local wide = Ships.INTERDICTOR
+      row(built, "Interdiction", `an interdiction field it drops is {whole((wide.radius - 1) * 100)}% wider and lasts {whole((wide.lasts - 1) * 100)}% longer`)
+    end
+    if hull.ewar then
+      local more = Ships.EWAR
+      row(built, "Electronic warfare", `its webs, disruptors, painters, dampeners, jammers and neutralisers reach {whole((more.range - 1) * 100)}% farther and work {whole((more.strength - 1) * 100)}% more strongly`)
     end
     if hull.explorer then
       local has = Ships.EXPLORER

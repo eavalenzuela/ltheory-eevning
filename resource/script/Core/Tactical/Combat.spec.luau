@@ -561,11 +561,14 @@ suite:Case("a capital is held only by a capital warp disruptor, which only a cap
 end)
 
 suite:Case("a gun fixed along a bow is fired by pointing the ship: aligned to its target as for a warp, one round, and then it cycles", function(t)
-  -- The Drowned's ultracapital has one (the project owner's: "special, fixed bow railgun"), and nothing else has.
+  -- The Drowned's ultracapital has one (the project owner's: "special, fixed bow railgun"), and the Vessari's
+  -- Raiden a cruiser's ("t2 cruiser (special, bow railgun)"); and nothing else has.
   local gun = assert(Ships.byId["ultracapital.theend"].spinal, "The End has no bow gun")
   for _, hull in Ships.list do
-    t.eq(hull.spinal ~= nil, hull.id == "ultracapital.theend", hull.id)
+    t.eq(hull.spinal ~= nil, hull.id == "ultracapital.theend" or hull.id == "cruiser.raiden", hull.id)
   end
+  local small = assert(Ships.byId["cruiser.raiden"].spinal)
+  t.ok(small.damage[2] + small.damage[3] < (gun.damage[2] + gun.damage[3]) / 10 and small.name == gun.name, "a cruiser's is far smaller")
   t.eq({ gun.name, gun.family } :: { any }, { "Bow Railgun", "hybrid" } :: { any })
   -- A round is a hundred of a siege dreadnought's, and it follows nothing: a capital lying still is hit
   -- squarely, and a frigate crossing is as good as never hit.
@@ -1108,6 +1111,33 @@ suite:Case("an interdiction field keeps everybody but its owner's from warping o
     Core.Step(a.game)
   end
   t.eq({ a.foe.vitals.scrambled, state.bubbles } :: { any }, { false, nil } :: { any })
+end)
+
+suite:Case("an interdictor's field is wider and lasts longer (the Talmar's Osso)", function(t)
+  local a = arena("destroyer.osso", { { "bubble.launcher", "bubble.charge" } }, "frigate.courier", {}, 8000)
+  local state = a.game.state
+  order(t, a, { kind = "ActivateModule", actor = 0, item = Items.Fitted(state, a.me.id)[1].id })
+  local dropped = stepUntil(a, "BubbleDropped", 5)
+  t.eq(dropped.radius, 20000 * Ships.INTERDICTOR.radius)
+  for _ = 1, 125 do
+    Core.Step(a.game)
+  end
+  t.eq(a.foe.vitals.scrambled, true, "still held after a plain field's two minutes")
+  for _ = 1, 60 do
+    Core.Step(a.game)
+  end
+  t.eq({ a.foe.vitals.scrambled, state.bubbles } :: { any }, { false, nil } :: { any })
+end)
+
+suite:Case("an electronic warfare hull's webs and the like reach farther and work more strongly; what mends does not (the Vessari's Hoshizora)", function(t)
+  local a = arena("cruiser.hoshizora", {}, "cruiser.ouyou", {}, 8000)
+  local state = a.game.state
+  local web, mend = Modules.byId["projector.entanglement"], Modules.byId["remote.armor.small"]
+  local hex, plain = assert(Combat.Hex(state, a.me.id, web)), assert(web.hex)
+  t.near(hex.range, plain.range * Ships.EWAR.range, 1e-9)
+  t.near(hex.strength, 1 - (1 - plain.strength) * Ships.EWAR.strength, 1e-9)
+  t.eq(Combat.Hex(state, a.foe.id, web), plain, "the plain cruiser's is as the module has it")
+  t.eq(Combat.Hex(state, a.me.id, mend), mend.hex)
 end)
 
 return suite

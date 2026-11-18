@@ -359,11 +359,17 @@ local function drawJob(session: Session.Session, game: Core.Game, station: numbe
       line += 36
     end
   end
-  local invention = research.invention
-  if invention then
-    study("Invent tech 2", "Invent", { kind = "StartResearch", actor = 0, item = item.id, what = "invent" }, true,
+  -- (one for each tech 2 make, where a hull has more than one: the Ouyou's Hoshizora and Raiden)
+  local several = #research.inventions > 1
+  for _, invention in research.inventions do
+    local named = if several then Types.Info(invention.product).name else nil
+    study(if named then `Invent {named}` else "Invent tech 2", if named then `Invent:{invention.product}` else "Invent",
+      { kind = "StartResearch", actor = 0, item = item.id, what = "invent", type = if several then invention.product else nil }, true,
       string.format("%d datacores, %s, %d%% chance", invention.datacores, Format.Duration(invention.seconds),
         math.floor(invention.chance * 100 + 0.5)), Format.Credits(invention.fee), x)
+    if several then
+      line += 36
+    end
   end
   local _ = h
 end

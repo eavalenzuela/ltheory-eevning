@@ -264,6 +264,40 @@ function Combat.Spinal(state: State.State, id: number): Ships.Spinal?
   return if hull then hull.spinal else nil
 end
 
+-- What a module's work on another ship is, run from a ship: as the
+-- module has it, or from farther and more strongly from a hull built
+-- for electronic warfare (Data/Ships' 'ewar', Ships.EWAR). What mends
+-- or feeds a friend is as the module has it from any hull. A web, a
+-- dampener and a disruptor of tracking or guidance leave so much of
+-- what they act on (less is stronger); a painter and a sensor booster
+-- make it so much more; a jammer is a chance; a neutraliser and a drain
+-- an amount; a warp disruptor holds or does not.
+function Combat.Hex(state: State.State, id: number, module: Modules.ModuleType): Modules.Hex?
+  local hex = module.hex
+  if hex == nil or Modules.Friendly(module) then
+    return hex
+  end
+  local ship = state.ships[id]
+  local hull = if ship then Ships.byId[ship.type] else nil
+  if hull == nil or not hull.ewar then
+    return hex
+  end
+  local more = Ships.EWAR.strength
+  local strength = hex.strength
+  if hex.kind == "entangle" or hex.kind == "damp" or hex.kind == "track" or hex.kind == "guide" then
+    strength = math.max(0, 1 - (1 - hex.strength) * more)
+  elseif hex.kind == "paint" then
+    strength = 1 + (hex.strength - 1) * more
+  elseif hex.kind == "jam" then
+    strength = math.min(1, hex.strength * more)
+  elseif hex.kind == "neut" or hex.kind == "nos" then
+    strength = hex.strength * more
+  end
+  local out = table.clone(hex)
+  out.range, out.strength = hex.range * Ships.EWAR.range, strength
+  return out
+end
+
 -- Whether a thing in space is a ship of a capital class: what a plain
 -- warp disruptor does not hold, and a capital's does (Data/Modules).
 function Combat.Capital(state: State.State, id: number): boolean
@@ -393,7 +427,7 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
         return false, "no locked target"
       elseif target == nil then
         return false, "that is not a ship"
-      elseif Space.Gap(ball :: any, target :: any) > module.hex.range then
+      elseif Space.Gap(ball :: any, target :: any) > assert(Combat.Hex(state, ball.id, module)).range then
         return false, "out of range"
       elseif module.hex.kind == "scramble" and not module.capital and Combat.Capital(state, target.id) then
         return false, "a capital is held only by a capital warp disruptor"
@@ -917,7 +951,7 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
     elseif module.hex then
       -- (what it does to its target is worked out for everybody at once,
       -- at the end of the tick: here it only has to keep running)
-      local hex = module.hex
+      local hex = assert(Combat.Hex(state, ball.id, module))
       local lock = findLock(ball, running.target)
       local target = state.balls[running.target]
       if lock == nil or not lock.locked or target == nil then
@@ -1171,8 +1205,12 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       local bubbles = state.bubbles or {}
       state.bubbles = bubbles
       local owner = state.ships[ball.id].owner
+      -- (wider and longer from an interdictor: Ships.INTERDICTOR)
+      local hull = Ships.byId[state.ships[ball.id].type]
+      local wide = if hull and hull.interdictor then Ships.INTERDICTOR else { radius = 1, lasts = 1 }
       local field: State.Bubble = { id = State.NewId(state), system = ball.system, grid = ball.grid, x = ball.x, y = ball.y, z = ball.z,
-        radius = module.bubble.radius, owner = owner, expires = state.tick + math.ceil(module.bubble.lasts / Constants.TICK) }
+        radius = module.bubble.radius * wide.radius, owner = owner,
+        expires = state.tick + math.ceil(module.bubble.lasts * wide.lasts / Constants.TICK) }
       table.insert(bubbles, field)
       item.rounds -= 1
       table.insert(events, { kind = "BubbleDropped", ball = ball.id, bubble = field.id, radius = field.radius })
@@ -1491,7 +1529,7 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
   for _, id in state.ballIds do
     for _, running in state.balls[id].vitals.running do
       local item = state.items[running.item]
-      local hex = if item then Modules.byId[item.type].hex else nil
+      local hex = if item then Combat.Hex(state, id, Modules.byId[item.type]) else nil
       if hex and state.balls[running.target] then
         local target = running.target
         if hex.kind == "entangle" then

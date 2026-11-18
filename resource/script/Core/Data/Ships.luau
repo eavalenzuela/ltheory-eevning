@@ -126,6 +126,15 @@ export type ShipType = {
   -- the hold (Assets/Industry). Nil for every other hull, whose ore is
   -- refined at a station.
   refinery: boolean?,
+  -- Built to hold ships where they are (an interdictor): an interdiction
+  -- field it drops is wider and lasts longer (Ships.INTERDICTOR,
+  -- Tactical/Combat). Nil for every other hull.
+  interdictor: boolean?,
+  -- Built for electronic warfare: what it does to another ship with a
+  -- web, a disruptor, a painter, a dampener, a jammer, a neutraliser and
+  -- the like it does from farther and more strongly (Ships.EWAR,
+  -- Tactical/Combat). Nil for every other hull.
+  ewar: boolean?,
   -- A gun of the hull's own, fixed along its bow (the Drowned's The End:
   -- the project owner's "special, fixed bow railgun"): nothing is
   -- fitted for it and it takes no slot. It fires where the ship points,
@@ -165,6 +174,20 @@ local BOW_RAILGUN: Spinal = {
   damage = { 0, 10000, 30000, 0 }, optimal = 150000, falloff = 60000, tracking = 2,
   duration = 30, capacitor = 15000,
 }
+-- And the Vessari's Raiden's: a cruiser's, which fires what a
+-- battleship's largest railgun does in a dozen rounds, once every
+-- twenty seconds, out to sixty kilometres, and follows little more
+-- than the other does. (First figures, and mine: the owner's word is
+-- "t2 cruiser (special, bow railgun)".)
+local CRUISER_RAILGUN: Spinal = {
+  name = "Bow Railgun", family = "hybrid", look = "railgun.large",
+  damage = { 0, 600, 1800, 0 }, optimal = 60000, falloff = 20000, tracking = 20,
+  duration = 20, capacitor = 300,
+}
+-- (a hull's bow railgun, by its class: a cruiser's, or the ultracapital's)
+local function bowRailgun(class: string): Spinal
+  return if class == "cruiser" then CRUISER_RAILGUN else BOW_RAILGUN
+end
 
 local SHIELD = { 1.0, 0.8, 0.6, 0.5 }
 local ARMOR = { 0.5, 0.65, 0.75, 0.9 }
@@ -515,8 +538,9 @@ for _, yard in Factions.list do
         -- (every plain hull of a people whose hulls all have a cloak of their own: the Drowned's)
         hull.cloak, hull.explorer = named.cloak or yard.cloaks, named.explorer
         hull.jumpField = named.jumpField
-        hull.spinal = if named.spinal then BOW_RAILGUN else nil
+        hull.spinal = if named.spinal then bowRailgun(hull.class) else nil
         hull.refinery = named.refinery
+        hull.interdictor, hull.ewar = named.interdictor, named.ewar
         -- (a hull written out by hand above, under the name the line has
         -- for it, is that hull: the Kethri's frigate)
         local written = false
@@ -787,6 +811,16 @@ local CLOAK_FITTING = 0.1
 -- owner's word is "bonuses to probe scanning and hacking": the figures
 -- are first ones.)
 local EXPLORER = { scan = 1.5, hack = 2 }
+-- An interdictor's field: so many times as wide, and as long, as
+-- another hull's from the same launcher. And an electronic warfare
+-- hull's work on another ship: from so many times as far, and so many
+-- times as strong (a web that takes half of a ship's speed takes five
+-- eighths of it from one; a painter that makes it a third bigger, five
+-- twelfths; a jammer with a chance of a third, five twelfths). (The
+-- owner named the two, 2026-11-17: these figures are first ones, and
+-- mine.)
+local INTERDICTOR = { radius = 1.5, lasts = 1.5 }
+local EWAR = { range = 1.5, strength = 1.25 }
 local TECH2 = { price = 8, layers = 1.3, resonance = 0.75, fitting = 1.2, velocity = 1.05, lock = 1.2, scan = 1.15, cargo = 1.5 }
 
 local function tougher(resonance: { number }): { number }
@@ -851,6 +885,20 @@ for _, yard in Factions.list do
       -- owner's, of the Drowned's two, "no builtin cloak")
       hull.cloak, hull.explorer = entry.cloak or (if yard.cloaks then nil else from.cloak), entry.explorer or from.explorer
       hull.jumpField = entry.jumpField or from.jumpField
+      hull.spinal = if entry.spinal then bowRailgun(hull.class) else from.spinal
+      hull.interdictor, hull.ewar = entry.interdictor or from.interdictor, entry.ewar or from.ewar
+      -- (where the line gives it more hardpoints than its base has: as
+      -- many more high slots, its builders' share of them launchers, and
+      -- the powergrid and CPU for them as its base has for its own)
+      local was = from.turrets + from.launchers
+      if entry.hardpoints and entry.hardpoints ~= was and was > 0 then
+        local now = entry.hardpoints
+        local racks = math.floor(now * yard.launchers + 0.5)
+        hull.turrets, hull.launchers = now - racks, racks
+        hull.highs += now - was
+        hull.powergrid = round(hull.powergrid * now / was)
+        hull.cpu = round(hull.cpu * now / was)
+      end
       table.insert(types, hull)
     end
   end
@@ -925,6 +973,8 @@ local Ships = { list = types, byId = {} :: { [string]: ShipType } }
 -- cloaking device's fitting a hull built for a cloak asks (above, at
 -- the tech 2 makes).
 Ships.EXPLORER = EXPLORER
+Ships.INTERDICTOR = INTERDICTOR
+Ships.EWAR = EWAR
 Ships.CLOAK_FITTING = CLOAK_FITTING
 
 -- The classes with a bay for fighters, and what each launches from it
@@ -1020,13 +1070,21 @@ end
 
 -- The tech 2 make of a hull, if it has one.
 function Ships.Improved(id: string): ShipType?
-  -- (the one its faction's line names, which is called what it is called)
+  -- (the one its faction's line names, which is called what it is called;
+  -- the first, where it names more than one)
+  return Ships.ImprovedAll(id)[1]
+end
+
+-- Every tech 2 make of a hull, in the order its faction's line names
+-- them: the Vessari's Ouyou has two, the Hoshizora and the Raiden.
+function Ships.ImprovedAll(id: string): { ShipType }
+  local out: { ShipType } = {}
   for _, hull in Ships.list do
     if hull.tech == 2 and hull.base == id then
-      return hull
+      table.insert(out, hull)
     end
   end
-  return nil
+  return out
 end
 
 -- Seconds; see the note on agility above.

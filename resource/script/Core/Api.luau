@@ -3463,7 +3463,7 @@ end
 -- And what inventing the tech 2 make of what it builds would take (nil
 -- when there is none to invent).
 export type ResearchStatus = { material: number, time: number, nextMaterial: Industry.ResearchPlan?, nextTime: Industry.ResearchPlan?,
-  invention: Industry.InventionPlan? }
+  invention: Industry.InventionPlan?, inventions: { Industry.InventionPlan } }
 function Query.Research(game: Game, type: string): ResearchStatus?
   local blueprint = Blueprints.byId[type]
   if blueprint == nil then
@@ -3475,6 +3475,8 @@ function Query.Research(game: Game, type: string): ResearchStatus?
     nextMaterial = Industry.ResearchPlan(game.state, blueprint, "material"),
     nextTime = Industry.ResearchPlan(game.state, blueprint, "time"),
     invention = Industry.InventionPlan(game.state, blueprint),
+    -- (and every one, where a hull has more than one tech 2 make)
+    inventions = Industry.Inventions(game.state, blueprint),
   }
 end
 

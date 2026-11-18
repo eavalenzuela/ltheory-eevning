@@ -364,8 +364,12 @@ return AppShell.Create(function(): Widget
       if style ~= 1 or asym then
         table.insert(parts, named())
       end
-      if was.painted then
-        table.insert(parts, "painted")
+      -- (as it is shown: in its own people's paint, "painted"; in
+      -- another's, that paint by name; bare, neither)
+      local hull = Ships.byId[was.name]
+      local own = if hull then hull.lineage else "civil"
+      if PAINTS[paint] ~= "bare" then
+        table.insert(parts, if PAINTS[paint] == own then "painted" else `paint:{PAINTS[paint]}`)
       end
       if words ~= "" then
         table.insert(parts, words)
@@ -432,13 +436,15 @@ return AppShell.Create(function(): Widget
       end
     end
     paint = 1
-    if line.painted then
+    if line.coat then
+      paint = table.find(PAINTS, line.coat) or 1
+    elseif line.painted then
       paint = table.find(PAINTS, if hull then hull.lineage else "civil") or table.find(PAINTS, "civil") or 1
     end
     setDetail(line.detail)
     listed = line
     note = `{line.name} ({found} of {#fits} that fit '{text}'): seed {line.seed}, size {line.size}{if line.style then ", " .. line.style else ""}`
-      .. (if line.painted then ", painted" else "") .. (if #line.detail > 0 then ", " .. table.concat(line.detail, " ") else "")
+      .. (if line.painted then ", painted" else "") .. (if line.coat then `, paint:{line.coat}` else "") .. (if #line.detail > 0 then ", " .. table.concat(line.detail, " ") else "")
   end
 
   _G.Hulls = {
