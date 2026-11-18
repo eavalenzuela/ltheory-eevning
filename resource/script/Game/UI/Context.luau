@@ -33,6 +33,7 @@ local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
 local Inventory = require("@lt/Game/UI/Inventory")
+local Rebuild = require("@lt/Game/UI/Rebuild")
 local Session = require("@lt/Game/Session")
 
 local Context = {}
@@ -120,6 +121,8 @@ local function rowsFor(session: Session.Session, entry: Core.Entry): { Row }
     { label = "Unlock target", kind = "UnlockTarget" },
     { label = "Loot", kind = "Loot" },
     { label = "Hack", kind = "StartHack" },
+    -- (a citadel's hulk: the pane that says what rebuilding it takes)
+    { label = "Rebuild", kind = "Rebuild" },
     { label = "Forget this place", kind = "ForgetBookmark" },
     -- (a place of the system's, marked by itself: Game/UI/Places)
     { label = "Bookmark", kind = "Bookmark" },
@@ -128,7 +131,10 @@ local function rowsFor(session: Session.Session, entry: Core.Entry): { Row }
   for _, row in all do
     -- (an order with distances is there if it can be given at any of them)
     local can = false
-    if row.near and not entry.onGrid then
+    if row.kind == "Rebuild" then
+      -- (there whatever is lacking: the pane says what)
+      can = Rebuild.Of(session, entry.id)
+    elseif row.near and not entry.onGrid then
       can = false
     elseif row.ranges then
       for _, range in row.ranges do
@@ -318,6 +324,8 @@ function Context.Draw(session: Session.Session, entries: { Core.Entry }, left: n
       -- (a wreck or a container is opened: what is in it is in the inventory, to take or to leave)
       if row.kind == "Loot" then
         Inventory.Show(entry.id)
+      elseif row.kind == "Rebuild" then
+        Rebuild.Open(session, entry.id)
       elseif row.kind == "Bookmark" then
         -- (marking a place is no order to the ship: the autopilot goes on)
         Session.Do(session, { kind = "Bookmark", actor = 0, target = entry.id })

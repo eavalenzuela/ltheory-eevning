@@ -2112,6 +2112,22 @@ local function shieldOf(): ShaderInstance
   return shieldShader :: ShaderInstance
 end
 
+-- A hulk's hangar mouth: black, where the air shield was (hangarvoid.jsl).
+local voidShader: ShaderInstance? = nil
+local function voidOf(): ShaderInstance
+  local known: ShaderInstance? = voidShader
+  if not known then
+    local shader = ShaderInstance_Create(Shader_Create("npm.jsl", "hangarvoid.jsl"))
+    ShaderInstance_SetState(shader, "BlendModeAlpha")
+    ShaderInstance_SetState(shader, "ZWritableOff")
+    ShaderInstance_SetState(shader, "CullModeDisabled")
+    ShaderInstance_Link(shader)
+    voidShader = shader
+    return shader
+  end
+  return known :: ShaderInstance
+end
+
 local beamShader: ShaderInstance? = nil
 local function beamOf(): ShaderInstance
   if beamShader == nil then
@@ -2223,7 +2239,8 @@ end
 -- A ring drawn into a builder: so many lengths of plate round it, a lit
 -- strip along its inside, and a pod at each quarter (in the model's
 -- units).
-local function drawRing(b: Plates.Builder, ring: Ring, size: number)
+-- ('glow': the part its lit strip is drawn in, FRAME on a hulk.)
+local function drawRing(b: Plates.Builder, ring: Ring, size: number, glow: number)
   local G = Hull.GROWN
   local n = ring.normal
   local e1 = vector.normalize(vector.cross(n, if math.abs(n.y) > 0.9 then v(1, 0, 0) else v(0, 1, 0)))
@@ -2237,7 +2254,7 @@ local function drawRing(b: Plates.Builder, ring: Ring, size: number)
   end
   for index = 0, lengths - 1 do
     Plates.Beam(b, PLATING, at(index, R), at(index + 1, R), t, EASED)
-    Plates.Beam(b, GLOW, at(index, R - t * 1.05), at(index + 1, R - t * 1.05), t * 0.22, EASED)
+    Plates.Beam(b, glow, at(index, R - t * 1.05), at(index + 1, R - t * 1.05), t * 0.22, EASED)
     if index % (lengths // 4) == 0 then
       Plates.Block(b, PATCH, at(index, R), v(t, t, t) * 1.8, nil, EASED)
     end
@@ -2294,15 +2311,31 @@ end
 -- fitted but not working, unfuelled or switched off: it is there, but dark,
 -- its lights out and nothing of it turning: the owner, 2026-11-18.)
 function Citadel.Build(seed: number, size: number, paint: string?, detail: string?, metres: number?, asym: boolean?, style: string?,
-  doors: number?, kind: string?, idle: boolean?, offline: boolean?): Made
+  doors: number?, kind: string?, idle: boolean?, offline: boolean?, dead: boolean?): Made
   local key = `{seed}:{size}:{paint or ""}:{detail or ""}:{asym == true}:{style or "blocks"}:{doors or Citadel.DOORS}:{kind or ""}`
-    .. `:{idle == true}:{offline == true}`
+    .. `:{idle == true}:{offline == true}:{dead == true}`
   local kept = made[key]
   if kept then
     return kept
   end
   local shape = Citadel.Shape(seed, size, asym, style, doors, kind)
   local plates, mouths = shape.plates, shape.mouths
+  -- (a hulk: nothing of it is lit, Citadel.Hulk)
+  local glow = if dead then FRAME else GLOW
+  if dead then
+    local cold: { Hull.Plate } = {}
+    for _, plate in plates do
+      local part = math.floor(plate.part)
+      if part == GLOW or part == Plates.FIRE or part >= Plates.LAMP_RED then
+        local copy = table.clone(plate)
+        copy.part = FRAME
+        table.insert(cold, copy)
+      else
+        table.insert(cold, plate)
+      end
+    end
+    plates = cold
+  end
   local G = Hull.GROWN
   local b = Plates.New(seed * 1.91 + size, 0.04)
   Hull.DrawPlates(b, plates, EASED)
@@ -2332,7 +2365,7 @@ function Citadel.Build(seed: number, size: number, paint: string?, detail: strin
       Plates.Flat(b, FRAME, corners, mouth.n)
       for index, a in own do
         local after = own[index % #own + 1]
-        Plates.Beam(b, GLOW, (a + mouth.n * 0.012) * G, (after + mouth.n * 0.012) * G, 0.03 * G, EASED)
+        Plates.Beam(b, glow, (a + mouth.n * 0.012) * G, (after + mouth.n * 0.012) * G, 0.03 * G, EASED)
       end
     end
   end
@@ -2341,7 +2374,7 @@ function Citadel.Build(seed: number, size: number, paint: string?, detail: strin
   -- (an observatory's dome and a mining turret's foot: their turning
   -- parts, the telescope and the gun, are movers, below)
   -- (lit, while the module works; dark, offline)
-  local lit = if offline then FRAME else GLOW
+  local lit = if offline or dead then FRAME else GLOW
   local turners: { { builder: Plates.Builder, pivot: vector, axis: vector } } = {}
   for _, mount in shape.mounts do
     local n, a = mount.n, mount.fore
@@ -2452,7 +2485,7 @@ function Citadel.Build(seed: number, size: number, paint: string?, detail: strin
   -- (the ring that stands still is the citadel's own)
   for _, ring in shape.rings do
     if ring.rate == 0 then
-      drawRing(b, ring, size)
+      drawRing(b, ring, size, glow)
     end
   end
   local words: { string } = {}
@@ -2474,15 +2507,19 @@ function Citadel.Build(seed: number, size: number, paint: string?, detail: strin
   local look = if paint then Hull.looks[paint] or Citadel.LOOK else Citadel.LOOK
   local sheets = CITADEL_SHEETS * (1 + size)
   local model, lower, upper = Plates.Finish(b, look, sheets)
+  -- (a hulk's hangars hold no air: no shield across them, and nothing
+  -- lit inside, so they are black)
   local sheet = shields(mouths)
   if sheet then
-    Model_AddShell(model, sheet, shieldOf())
+    Model_AddShell(model, sheet, if dead then voidOf() else shieldOf())
   end
   -- The masts' beams and balls of energy.
-  for _, beam in shape.beams do
+  local beams: { Beam } = if dead then {} else shape.beams
+  for _, beam in beams do
     Model_AddShell(model, beamMesh(beam), beamOf())
   end
-  for _, ball in shape.balls do
+  local balls: { Ball } = if dead then {} else shape.balls
+  for _, ball in balls do
     Model_AddShell(model, ballMesh(ball.at, ball.radius), ballOf(0, ball.radius * G))
     Model_AddShell(model, ballMesh(ball.at, ball.radius * BALL_HALO), ballOf(1, ball.radius * BALL_HALO * G))
   end
@@ -2497,7 +2534,7 @@ function Citadel.Build(seed: number, size: number, paint: string?, detail: strin
   for index, ring in shape.rings do
     if ring.rate ~= 0 then
       local rb = Plates.New(seed * 3.7 + index * 11.3, 0.04)
-      drawRing(rb, ring, size)
+      drawRing(rb, ring, size, glow)
       local turning = Plates.Finish(rb, look, sheets)
       table.insert(movers, { model = turning, pivot = v(0, 0, 0),
         motion = { kind = "turn", axis = ring.axis, rate = if idle then 0 else ring.rate, phase = ring.phase } })
@@ -2587,6 +2624,20 @@ function Citadel.Of(kind: string?, size: number, faction: string?, generating: s
   return Citadel.Build(pick.seed, size, paint, pick.detail, nil, pick.asym, pick.style, pick.doors, drawn, idle)
 end
 
+-- A citadel's hulk (Core/Assets/Hulks): the citadel a kind and a size is
+-- drawn as, in the citadels' own dark grey, every light out, nothing
+-- turning and no wormhole ('people': whose design, Citadel.PEOPLES).
+function Citadel.Hulk(kind: string?, size: number, people: string?): Made
+  local pick = Citadel.Pick(kind, size, people)
+  local words: { string } = {}
+  for _, word in string.split(pick.detail, " ") do
+    if word ~= "" and string.sub(word, 1, 6) ~= "lights" then
+      table.insert(words, word)
+    end
+  end
+  return Citadel.Build(pick.seed, size, nil, table.concat(words, " "), nil, pick.asym, pick.style, pick.doors, kind, true, true, true)
+end
+
 -- The hangar doors of the citadel a kind and a size is drawn as (the
 -- owner, 2026-11-17: "we should also make sure ships undocking exit
 -- through one of the hangar doors"): each door's middle, from the
@@ -2595,8 +2646,9 @@ end
 -- and the way out of it. The game's rules cannot grow a citadel (that is
 -- the engine's), so what this says is written into Core/Data/
 -- CitadelDoors by script/citadeldoors, whenever a pick changes.
-function Citadel.Doors(kind: string, size: number): { { at: vector, n: vector } }
-  local pick = Citadel.Pick(kind, size)
+-- ('people': an alien people's own design, Citadel.PEOPLES.)
+function Citadel.Doors(kind: string, size: number, people: string?): { { at: vector, n: vector } }
+  local pick = Citadel.Pick(kind, size, people)
   local made = Citadel.Build(pick.seed, size, pick.paint, pick.detail, nil, pick.asym, pick.style, pick.doors, kind)
   local mid = (made.lower + made.upper) * 0.5
   local doors: { { at: vector, n: vector } } = {}
@@ -2619,11 +2671,21 @@ function Citadel.DoorsFile(): string
     "",
     "return {",
   }
+  -- (each kind, and each alien people's kinds as "vail.shipyard")
+  local keys: { { key: string, kind: string, people: string? } } = {}
   for _, kind in Structures.CITADEL_KINDS do
-    table.insert(lines, `  {kind} = \{`)
+    table.insert(keys, { key = kind, kind = kind })
+  end
+  for _, people in Structures.CITADEL_ALIEN_PEOPLES do
+    for _, each in Structures.CITADEL_ALIEN do
+      table.insert(keys, { key = `{people}.{each.kind}`, kind = each.kind, people = people })
+    end
+  end
+  for _, entry in keys do
+    table.insert(lines, if string.find(entry.key, ".", 1, true) then `  ["{entry.key}"] = \{` else `  {entry.key} = \{`)
     for size = 1, 5 do
       local doors: { string } = {}
-      for _, door in Citadel.Doors(kind, size) do
+      for _, door in Citadel.Doors(entry.kind, size, entry.people) do
         table.insert(doors, string.format("{ %.4f, %.4f, %.4f, %g, %g, %g }", door.at.x, door.at.y, door.at.z, door.n.x, door.n.y, door.n.z))
       end
       table.insert(lines, `    \{ {table.concat(doors, ", ")} \},`)

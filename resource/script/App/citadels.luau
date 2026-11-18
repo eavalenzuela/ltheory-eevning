@@ -42,6 +42,9 @@
 --                  or not running (no sphere, its rings still), round
 --   O              its kind's module (observatory, mining turret) offline:
 --                  there, but dark and still
+--   D              its hulk: as it lies when it has been brought down,
+--                  the citadels' own dark grey, every light out, nothing
+--                  turning (Core/Assets/Hulks; Citadel.Hulk)
 --   H              the most hangar doors it has: 4, 2 or 1, round
 --                  (Citadel.DOOR_CAPS)
 --   K              keep this one: its line goes in cache/citadels-kept.txt,
@@ -104,6 +107,7 @@ return AppShell.Create(function(): Widget
   local FAMILIES = { "none", "cannon", "laser", "hybrid", "missile" }
   local family = 1          -- which of FAMILIES its defence module is
   local offline = false     -- its kind's module is offline
+  local derelict = false    -- shown as its hulk
   local armed: { Object } = {}   -- the weapons on its hardpoints
   local mountsShown, armedShown = 0, 0
   local STYLES = Citadel.STYLES
@@ -187,15 +191,26 @@ return AppShell.Create(function(): Widget
       RenderPass_SetEnabled("Smooth Shading", LOOKS[look].smooth)
       RenderPass_SetEnabled("Flat Paint", LOOKS[look].flat)
     end
-    local now = `{seed}:{size}:{paint}:{asym}:{style}:{detailWords()}:{doorCap}:{family}:{role}:{making}:{offline}`
+    local now = `{seed}:{size}:{paint}:{asym}:{style}:{detailWords()}:{doorCap}:{family}:{role}:{making}:{offline}:{derelict}`
     if now == key then
       return
     end
     key = now
     local started = os.clock()
     local kind, idle = drawnAs()
-    local made = Citadel.Build(seed, size, if PAINTS[paint] == "dark" then nil else PAINTS[paint], detailWords(), nil, asym, STYLES[style],
-      Citadel.DOOR_CAPS[doorCap], kind, idle, offline)
+    local words = detailWords()
+    if derelict then
+      -- (a hulk: no paint but the citadels' own, no lights, nothing running)
+      local kept: { string } = {}
+      for _, word in string.split(words, " ") do
+        if word ~= "" and string.sub(word, 1, 6) ~= "lights" then
+          table.insert(kept, word)
+        end
+      end
+      words = table.concat(kept, " ")
+    end
+    local made = Citadel.Build(seed, size, if derelict or PAINTS[paint] == "dark" then nil else PAINTS[paint], words, nil, asym,
+      STYLES[style], Citadel.DOOR_CAPS[doorCap], kind, idle or derelict, offline or derelict, derelict)
     took = math.floor((os.clock() - started) * 1000)
     local _, holes = Citadel.Grow(seed, size, asym, STYLES[style], Citadel.DOOR_CAPS[doorCap], kind)
     mouths = #holes
@@ -367,6 +382,11 @@ return AppShell.Create(function(): Widget
     -- generator running or not, its kind's module online or not, and
     -- whose (Citadel.PEOPLES; standard if not said). False if there is
     -- no such kind or people.
+    -- Show it as its hulk, or not.
+    Hulk = function(on: boolean)
+      derelict = on
+      show()
+    end,
     Kind = function(name: string, stopped: boolean?, dark: boolean?, people: string?): boolean
       local at = table.find(KINDS, Citadel.Slot(name))
       local whose = table.find(PEOPLES, people or "standard")
@@ -436,7 +456,7 @@ return AppShell.Create(function(): Widget
         search(query)
       end
       local foot = w.pos.y + w.size.y - 54
-      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      [ / ]: size      T: style      C: kind      V: whose      A: asymmetrical      F: defence      W: generator      O: offline      H: doors      P: paint      L: look      1-5: detail      , .: its seed      G: the game's pick      K: keep      Space: turn",
+      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      [ / ]: size      T: style      C: kind      V: whose      A: asymmetrical      F: defence      W: generator      O: offline      D: hulk      H: doors      P: paint      L: look      1-5: detail      , .: its seed      G: the game's pick      K: keep      Space: turn",
         x, foot, 15, Im.DIM)
       Im.Text("right-drag turns it, the wheel moves in and out", x, foot + 22, 15, Im.DIM)
     end,
@@ -470,6 +490,7 @@ return AppShell.Create(function(): Widget
       if Key_Pressed(Key_W()) then making = making % #GENERATORS + 1 end
       if Key_Pressed(Key_V()) then folk = folk % #PEOPLES + 1 end
       if Key_Pressed(Key_O()) then offline = not offline end
+      if Key_Pressed(Key_D()) then derelict = not derelict end
       if Key_Pressed(Key_T()) then style = style % #STYLES + 1 end
       if Key_Pressed(Key_P()) then paint = paint % #PAINTS + 1 end
       if Key_Pressed(Key_L()) then look = look % #LOOKS + 1 end

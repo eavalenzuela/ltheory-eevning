@@ -117,8 +117,14 @@ suite:Case("a station's tower is of the faction whose homeworld is nearest of th
         -- (a tower, whoever's: no colony ship lies moored anywhere)
         t.eq(makeup.ship, nil, object.name)
         t.ok(object.variety ~= "colony ship", object.name)
-        t.eq(Structures.towerById[makeup.tower :: string].faction, node.nearest)
-        seen[node.nearest] = true
+        if object.variety == "citadel" then
+          -- (a faction's citadel is of the people who hold the system: Assets/Citadels)
+          t.eq(Stations.People(state, object.id), node.owner, object.name)
+          t.ok(Structures.towerById[makeup.tower :: string].citadel, object.name)
+        else
+          t.eq(Structures.towerById[makeup.tower :: string].faction, node.nearest)
+          seen[node.nearest] = true
+        end
       end
     end
     -- Among the Kethri there is no station at all; and their towers are nowhere, since they build none: a

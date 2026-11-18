@@ -7,6 +7,8 @@ local CitadelDoors = require("@lt/Core/Data/CitadelDoors")
 local CitadelKinds = require("@lt/Core/Assets/CitadelKinds")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
+local Hulks = require("@lt/Core/Assets/Hulks")
+local Raids = require("@lt/Core/Tactical/Raids")
 local Industry = require("@lt/Core/Assets/Industry")
 local Items = require("@lt/Core/Assets/Items")
 local Jumping = require("@lt/Core/Tactical/Jumping")
@@ -1177,6 +1179,97 @@ suite:Case("a generator station's Gravity Generator makes it a lit jump beacon; 
   -- (nor from warp, nor out of a bridge's field)
   ball.x += 1e7
   t.eq(refused(game, { kind = "Bridge", actor = 0, target = elsewhere }), "not in the field of a jump bridge")
+end)
+
+suite:Case("a citadel brought down leaves its hulk: half of what was stored, to loot; salvaged out and emptied, it is gone; or rebuilt, a citadel again", function(t)
+  local game, station = inCitadel(t)
+  local state = game.state
+  local object = assert(Space.Object(state, station))
+  local under = object.parent
+  -- Twenty stacks in its hangar, and a module fitted.
+  local stored = { "fuel.block", "fuel.seal", "salvage.plates", "salvage.circuits", "salvage.conduits", "scrap.metal", "tag.pirate" }
+  for index = 1, 20 do
+    Items.Add(state, stored[(index - 1) % #stored + 1], index, station, if index % 2 == 0 then "hangar" else "corporate")
+  end
+  table.insert(state.starbases[station].modules, { type = "service.repair", ready = 0 })
+  local events: { Space.Event } = {}
+  Raids.Lose(state, state.starbases[station], events)
+  -- Its hulk: where it stood, on a grid of its own, a place to warp to.
+  local hulk: State.Wreck? = nil
+  for _, id in state.wreckIds do
+    if state.wrecks[id].hulk then
+      hulk = state.wrecks[id]
+    end
+  end
+  local wreck = assert(hulk, "no hulk")
+  t.eq({ wreck.hulk, wreck.grid, object.variety, object.site, object.parent, object.kind } :: { any },
+    { CITADEL.id, station, Hulks.VARIETY, station, under, "belt" } :: { any })
+  t.eq(wreck.salvage, Hulks.CYCLES[CITADEL.size])
+  -- (about half of the stacks, by their own rolls; and no ship wreck of what stood for it)
+  local found = #Items.In(state, wreck.id, "cargo")
+  t.ok(found >= 4 and found <= 17, `{found} of 21 stacks and modules in the hulk`)
+  t.eq(#Items.Stored(state, station), 0)
+  t.ok(Core.Query.Hulk(game, station) ~= nil and Core.Query.Hulk(game, wreck.id) ~= nil)
+  -- (it lasts: a day on, it is there)
+  t.ok(wreck.expires > state.tick + 86400, "a hulk wears away")
+  -- Looted empty, it is there still: there is salvage in it.
+  local ship = state.player.ship
+  order(t, game, { kind = "Loot", actor = 0, target = wreck.id })
+  Core.Step(game)
+  for _, item in Items.In(state, wreck.id, nil) do
+    Items.Take(state, item, item.quantity)
+  end
+  order(t, game, { kind = "Loot", actor = 0, target = wreck.id })
+  Core.Step(game)
+  t.ok(state.wrecks[wreck.id] ~= nil, "an emptied hulk is gone with salvage still in it")
+  -- Rebuilt: not without the materials, which the pane lists; with them in the hold, a citadel of the pilot's, where it stood.
+  local needs = Hulks.Needs(CITADEL.id)
+  t.ok(#needs > 0, "nothing to rebuild it with")
+  local print = assert(Blueprints.byProduct[CITADEL.id])
+  t.eq(needs[1].quantity, math.ceil(print.materials[1].quantity * 0.5))
+  t.ok(string.find(refused(game, { kind = "Rebuild", actor = 0, target = wreck.id }) or "", "not enough", 1, true) ~= nil)
+  for _, need in needs do
+    carry(game, need.type, need.quantity)
+  end
+  Items.Add(state, "scrap.metal", 3, wreck.id, "cargo")
+  order(t, game, { kind = "Rebuild", actor = 0, target = wreck.id })
+  local rebuilt = stepUntil(game, "HulkRebuilt", 3).station :: number
+  local again = assert(state.starbases[rebuilt])
+  t.eq({ again.tower, again.owner, #again.modules, state.wrecks[wreck.id], object.kind } :: { any },
+    { CITADEL.id, "player", 0, nil, "gone" } :: { any })
+  t.eq(assert(Space.Object(state, rebuilt)).parent, under)
+  t.ok(again.ready > state.tick, "it should be anchoring again")
+  -- (what was left in it is in its hangar; the materials are out of the hold)
+  local left = 0
+  for _, item in Items.Stored(state, rebuilt) do
+    left += if item.type == "scrap.metal" then item.quantity else 0
+  end
+  t.eq(left, 3)
+  for _, need in needs do
+    local held = 0
+    for _, item in Items.In(state, ship, "cargo") do
+      held += if item.type == need.type then item.quantity else 0
+    end
+    t.eq(held, 0, `{need.type} left in the hold`)
+  end
+  -- Brought down again and salvaged out, then emptied: gone, and its place with it.
+  Raids.Lose(state, again, events)
+  local second: State.Wreck? = nil
+  for _, id in state.wreckIds do
+    if state.wrecks[id].hulk then
+      second = state.wrecks[id]
+    end
+  end
+  local other = assert(second, "no second hulk")
+  other.salvage, other.salvaged = 0, true
+  for _, item in Items.In(state, other.id, nil) do
+    Items.Take(state, item, item.quantity)
+  end
+  Items.Add(state, "scrap.metal", 1, other.id, "cargo")
+  order(t, game, { kind = "Loot", actor = 0, target = other.id })
+  Core.Step(game)
+  t.eq(state.wrecks[other.id], nil, "a hulk salvaged out and emptied is there still")
+  t.eq(assert(Space.Object(state, rebuilt)).kind, "gone")
 end)
 
 return suite

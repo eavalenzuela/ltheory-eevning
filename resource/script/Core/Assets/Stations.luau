@@ -19,6 +19,7 @@
 -- for it. Mooring, keeping things in the hangar, the wallet and
 -- training are not any module's: they can be done at any station.
 
+local Citadels = require("@lt/Core/Assets/Citadels")
 local Constants = require("@lt/Core/Data/Constants")
 local Space = require("@lt/Core/Tactical/Space")
 local Starbases = require("@lt/Core/Assets/Starbases")
@@ -56,6 +57,11 @@ function Stations.Makeup(state: State.State, id: number): Structures.Makeup?
   if fleet then
     return Structures.Makeup(object.variety, object.radius, fleet.faction, false)
   end
+  -- (a faction's citadel: the citadel, and what its kind has fitted: Assets/Citadels)
+  local citadel = Space.FactionCitadel(state, id)
+  if citadel then
+    return { tower = citadel.tower, modules = Citadels.Modules(Structures.towerById[citadel.tower]) }
+  end
   -- (its tower is of the faction whose homeworld is nearest: a station in
   -- space nobody holds was still built by somebody)
   local faction = state.galaxy.systems[Space.SystemOf(state, id)].nearest
@@ -73,6 +79,11 @@ function Stations.People(state: State.State, id: number): string
   local fleet = Space.Colony(state, id)
   if fleet then
     return fleet.faction
+  end
+  -- (a faction's citadel is its people's: Assets/Citadels)
+  local citadel = Space.FactionCitadel(state, id)
+  if citadel then
+    return citadel.owner
   end
   return state.galaxy.systems[Space.SystemOf(state, id)].nearest
 end
@@ -168,6 +179,11 @@ function Stations.Validate(state: State.State, command: State.Command): (boolean
       elseif berth == "none" then
         return false, "too big to dock or tether here"
       end
+    end
+    -- (a faction's citadel docks what its size lets dock, and tethers nothing)
+    local theirs = Space.FactionCitadel(state, command.target or 0)
+    if theirs and hull and Structures.Berth(Structures.towerById[theirs.tower], hull.class) ~= "dock" then
+      return false, "too big to dock here"
     end
     if starbase and ship and Starbases.Citadel(starbase) and not starbase.open and ship.owner ~= starbase.owner
       and not (starbase.owner == "player" and ship.owner == "member") then

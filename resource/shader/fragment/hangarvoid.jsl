@@ -1,0 +1,15 @@
+/* The open mouth of a citadel's hulk (Game/View/Citadel, Core/Assets/
+   Hulks): no air shield across it any more, and nothing lit inside, so
+   what is seen through it is black (the owner, 2026-11-18: "make the
+   hangar doors black, rather than just hidden, otherwise you'd just see
+   a blank wall"). Drawn on the sheet the air shield was, with alpha
+   blending, both faces and no depth writing. */
+
+#include frag.jsl
+
+FRAG_IN vec3 normal;
+FRAG_IN vec3 position;
+
+void main() {
+  RETURN(vec4(0.0, 0.0, 0.0, 1.0));
+}

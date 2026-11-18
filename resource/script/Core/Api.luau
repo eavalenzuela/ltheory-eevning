@@ -70,6 +70,8 @@ local Space = require("@lt/Core/Tactical/Space")
 local Colonies = require("@lt/Core/Assets/Colonies")
 local Planets = require("@lt/Core/Data/Planets")
 local Starbases = require("@lt/Core/Assets/Starbases")
+local Hulks = require("@lt/Core/Assets/Hulks")
+local Citadels = require("@lt/Core/Assets/Citadels")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
 local Stations = require("@lt/Core/Assets/Stations")
@@ -114,7 +116,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 88
+Core.SAVE_VERSION = 89
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -158,6 +160,10 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 89: the factions have citadels (Assets/Citadels): a save from before
+  -- has them put down as it is loaded (Core.Load) in the systems it has
+  -- seen, added to what is there; the rest have theirs when first seen.
+  [88] = function(_: any) end,
   -- 88: probes are put where they are wanted, and read a signal by where
   -- they are (Tactical/Sites). A probe out in a save from before reads
   -- as one from a plain launcher, and stays where it is; the pilot's
@@ -1189,6 +1195,7 @@ function Core.New(options: Options): Game
     starbases = {},
     starbaseIds = {},
     keeps = {}, keepIds = {}, keepsSeen = {},
+    citadels = {}, citadelIds = {}, citadelsSeen = {},
     batteries = { at = 0, station = 0, kinds = {}, balls = {}, down = {} },
     colonies = {},
     colonyIds = {},
@@ -1275,7 +1282,7 @@ end
 local ASSET_COMMANDS = { Fit = true, Unfit = true, LoadCharge = true, MoveItems = true }
 local COMBAT_COMMANDS = { LockTarget = true, UnlockTarget = true, ActivateModule = true, DeactivateModule = true,
   Cloak = true, Uncloak = true, FireSpinal = true }
-local AFTERMATH_COMMANDS = { Loot = true, Repair = true, Jettison = true }
+local AFTERMATH_COMMANDS = { Loot = true, Repair = true, Jettison = true, Rebuild = true }
 local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true, StartResearch = true, CancelJob = true }
 local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true, Inject = true }
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true, ModifyOrder = true }
@@ -1558,6 +1565,17 @@ function Core.Step(game: Game)
   Starbases.Tether(state, game.events)
   Raids.Step(state, game.events)
   Keeps.Step(state, game.events)
+  -- (the factions' citadels: those whose systems are not their people's
+  -- any more fall; and where the pilot is, the hulk of one that fell)
+  Citadels.Step(state, game.events)
+  do
+    local mine = state.balls[state.player.ship]
+    local aboard = state.ships[state.player.ship]
+    local here = if mine then mine.system elseif aboard and aboard.docked ~= 0 then Space.SystemOf(state, aboard.docked) else 0
+    if here ~= 0 then
+      Citadels.Settle(state, here, game.events)
+    end
+  end
   Colonies.Step(state, game.events)
   Industry.Step(state, game.events)
   Training.Tick(state, game.events)
@@ -1629,6 +1647,10 @@ function Core.Load(data: buffer, length: number?): Game
   -- (a citadel from before they had kinds is a habitation of its size:
   -- in a hangar or a hold, anchored, or being built)
   local state: State.State = file.state
+  -- (and the factions' citadels, in a save from before there were any)
+  if state.citadels == nil then
+    Citadels.Place(state)
+  end
   for _, item in state.items do
     item.type = Structures.CitadelNow(item.type) or item.type
   end
@@ -2499,6 +2521,33 @@ function Query.Directional(game: Game, toward: number?, angle: number, range: nu
   local ship = game.state.player.ship
   local ok, why = Dscan.Can(game.state, ship, toward, angle, along)
   return Dscan.Scan(game.state, ship, toward, angle, range, along), ok, why
+end
+
+-- A citadel's hulk (Assets/Hulks), by the hulk or by its place in the
+-- system: the hulk's id, what it was, the salvager's cycles of it left,
+-- and what rebuilding it takes, with how much of each the player's ship
+-- has in its hold. Nil if it is no hulk.
+export type HulkInfo = { wreck: number, tower: string, name: string, salvage: number,
+  needs: { { type: string, name: string, quantity: number, have: number } } }
+function Query.Hulk(game: Game, id: number): HulkInfo?
+  local state = game.state
+  local wreck = state.wrecks[id]
+  if wreck == nil then
+    for _, each in state.wreckIds do
+      local other = state.wrecks[each]
+      if other.hulk and other.grid == id then
+        wreck = other
+      end
+    end
+  end
+  if wreck == nil or wreck.hulk == nil then
+    return nil
+  end
+  local needs: { { type: string, name: string, quantity: number, have: number } } = {}
+  for _, need in Hulks.Lacking(state, state.player.ship, wreck.hulk) do
+    table.insert(needs, { type = need.type, name = Types.Info(need.type).name, quantity = need.quantity, have = need.have })
+  end
+  return { wreck = wreck.id, tower = wreck.hulk, name = wreck.name, salvage = wreck.salvage or 0, needs = needs }
 end
 
 -- The wormhole one of whose ends a place is, while it is open
@@ -3684,6 +3733,13 @@ end
 -- its modules give. Nil and none if 'id' is not a station.
 function Query.Station(game: Game, id: number): (Structures.Makeup?, { Structures.Service })
   return Stations.Makeup(game.state, id), Stations.Services(game.state, id)
+end
+
+-- Whose a faction's citadel is (Assets/Citadels), for its colours: its
+-- people. Nil for any other station.
+function Query.CitadelOwner(game: Game, id: number): string?
+  local record = Space.FactionCitadel(game.state, id)
+  return if record then record.owner else nil
 end
 
 -- A station's batteries (Tactical/Batteries): whether they stand in

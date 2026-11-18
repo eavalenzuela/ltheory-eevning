@@ -318,6 +318,36 @@ for _, kind in Structures.CITADEL_KINDS do
     })
   end
 end
+-- The alien peoples' own citadels (the owner, 2026-11-18): four each, a
+-- large habitation and research station, an extra-large refinery and a
+-- huge shipyard, and no small or medium ones. Each is a citadel of its
+-- own, "Huge Vail Shipyard", of its people as their towers are (their
+-- guns, their missiles, their layer, the same 15% better: mine), drawn
+-- in their own design (Game/View/Citadel's SLOTS). Their prints are
+-- nobody's to sell (Data/Blueprints): they are found in the hulks of
+-- theirs (Assets/Hulks) and on the boards of their space.
+Structures.CITADEL_ALIEN_PEOPLES = { "vail", "nimia" }
+Structures.CITADEL_ALIEN = {
+  { kind = "habitation", size = 3 }, { kind = "research", size = 3 }, { kind = "refinery", size = 4 }, { kind = "shipyard", size = 5 },
+} :: { { kind: string, size: number } }
+for _, people in Structures.CITADEL_ALIEN_PEOPLES do
+  local faction = Factions.byId[people]
+  for _, each in Structures.CITADEL_ALIEN do
+    local c = Structures.CITADEL[each.size]
+    table.insert(towers, {
+      id = `citadel.{people}.{each.kind}.{Structures.CITADEL_SIZES[each.size]}`,
+      name = `{Structures.CITADEL_SIZE_NAMES[each.size]} {faction.name} {Structures.CITADEL_KIND_NAMES[each.kind]}`,
+      faction = people, size = each.size,
+      powergrid = 0, cpu = 0, field = c.field, fuel = c.fuel, anchor = c.anchor, volume = c.volume, basePrice = c.basePrice,
+      shield = c.shield, armor = c.armor, hull = c.hull, bay = c.bay,
+      gun = faction.weapon, gunBonus = Structures.TOWER_DAMAGE,
+      missileBonus = if faction.launchers >= Structures.TOWER_LAUNCHERS then Structures.TOWER_DAMAGE else 1,
+      tank = faction.tank :: string, resist = Structures.TOWER_RESIST,
+      citadel = true, slots = c.slots, defences = c.defences, reach = Structures.CITADEL_REACH[each.size], kind = each.kind,
+    })
+  end
+end
+
 -- (the citadels of before there were kinds, "citadel.small" and so on:
 -- what a save has of them, or of their blueprints, is a habitation of
 -- its size, Core.Load. And the gravity and wormhole stations of before

@@ -238,6 +238,14 @@ export type Wreck = {
   can: boolean?,      -- a container a pilot put out, and no wreck of anything (Tactical/Aftermath)
   locked: boolean,    -- its hold is sealed: nothing is looted until it has been hacked (Tactical/Hacking)
   lock: string,       -- the kind of lock that seals it ("": a hold's; "vault": Tactical/Hacking)
+  -- A citadel's hulk (Assets/Hulks): the citadel it was (a Data/
+  -- Structures tower id), the salvager's cycles of it left to bring off,
+  -- and the moon or planet it was anchored at. Its place in its system's
+  -- description is its grid, a hulk's own. It lasts until it is
+  -- salvaged out and emptied, or rebuilt.
+  hulk: string?,
+  salvage: number?,
+  under: number?,
 }
 
 -- A hack under way (Tactical/Hacking): the hull whose hold it is for;
@@ -809,6 +817,14 @@ export type Batteries = {
 -- it is not), 'charges' the hours it can seal for, 'restock' the tick
 -- it is resupplied (0 when it need not be), and 'called' and 'calls'
 -- when it last called for help and how many times since it last opened.
+-- A faction's citadel (Assets/Citadels), by its system and its place
+-- among the system's (Space.CitadelKey): the citadel it is (a Data/
+-- Structures tower id), whose it is, and whether it has fallen; the
+-- moon or planet it stands at; the station it is in its system's
+-- description, and its hulk's wreck once it has one (0 until then).
+export type Citadel = { system: number, slot: number, tower: string, owner: string, fallen: boolean, body: number, station: number,
+  wreck: number }
+
 export type Keep = { id: number, system: number, moon: number, core: number, sealed: number, charges: number, restock: number,
   called: number, calls: number }
 
@@ -892,6 +908,12 @@ export type State = {
   keeps: { [number]: Keep },
   keepIds: { number },
   keepsSeen: { [number]: boolean },
+  -- The factions' citadels, standing or fallen (Assets/Citadels), by
+  -- Space.CitadelKey, in order; and the systems whose citadels have
+  -- been put down (when each was first described, or glanced at).
+  citadels: { [number]: Citadel },
+  citadelIds: { number },
+  citadelsSeen: { [number]: boolean },
   colonies: { [number]: Colony },     -- by the id of the planet
   colonyIds: { number },
   balls: { [number]: Ball },

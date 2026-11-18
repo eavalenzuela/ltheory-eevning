@@ -33,6 +33,8 @@ local Hull = require("@lt/Game/View/Hull")
 local Planet = require("@lt/Game/View/Planet")
 local Star = require("@lt/Game/View/Star")
 local Starbase = require("@lt/Game/View/Starbase")
+local Citadel = require("@lt/Game/View/Citadel")
+local Structures = require("@lt/Core/Data/Structures")
 local Modules = require("@lt/Core/Data/Modules")
 local Paints = require("@lt/Core/Data/Paints")
 local Pirates = require("@lt/Core/Tactical/Pirates")
@@ -83,6 +85,7 @@ type Wrecked = {
   look: vector,
   scale: number,            -- metres to one of the hull's own units
   seen: number,             -- when (scene time) it was first drawn
+  still: boolean?,          -- a citadel's hulk: it does not come apart
 }
 
 -- The ship shown on the fitting screen, as it is in space (the project
@@ -599,7 +602,31 @@ local function about(v: vector, k: vector, angle: number): vector
 end
 
 -- Make the pieces of a wreck, lying as the ship lay ('look' and 'up').
+-- (A citadel's hulk is the citadel, dark, upright where it stood, and
+-- does not come apart: its rings, if it has any, lie still in it.)
 local function makeWreck(scene: Scene, id: number, wreck: State.Wreck, look: vector, up: vector, container: Object)
+  local tower = if wreck.hulk then Structures.towerById[wreck.hulk] else nil
+  if tower then
+    local made = Citadel.Hulk(tower.kind, tower.size, if tower.faction ~= "" then tower.faction else nil)
+    local scale = wreck.radius / made.radius
+    local middle = (made.lower + made.upper) * 0.5
+    local still: Wrecked = { pieces = {}, right = vector.create(-1, 0, 0), up = vector.create(0, 1, 0), look = vector.create(0, 0, 1),
+      scale = scale, seen = scene.time, still = true }
+    local models = { made.model }
+    local movers: { Citadel.Mover } = made.movers or {}
+    for _, mover in movers do
+      table.insert(models, mover.model)
+    end
+    for _, model in models do
+      local object = Object_Scenery({})
+      Object_SetRenderable(object, model)
+      object:SetScale(vector.create(scale, scale, scale))
+      container:AddInterior(object)
+      table.insert(still.pieces, { object = object, middle = middle, away = vector.create(0, 1, 0), axis = vector.create(0, 1, 0), spin = 0 })
+    end
+    scene.wreckage[id] = still
+    return
+  end
   local wreckage = Hull.Wreck(wreck.hull)
   local scale = wreck.radius / wreckage.radius
   local wrecked: Wrecked = { pieces = {}, right = vector.cross(up, look), up = up, look = look, scale = scale, seen = scene.time }
@@ -626,6 +653,14 @@ end
 -- Put a wreck's pieces where they have got to: 'at' is the wreck, and
 -- 'radius' the radius of the ship it was.
 local function placeWreck(scene: Scene, wrecked: Wrecked, at: vector, radius: number)
+  if wrecked.still then
+    -- (a hulk: its middle where it is, upright, as the citadel stood)
+    for _, piece in wrecked.pieces do
+      piece.object:SetPos(at - piece.middle * wrecked.scale)
+      Object_SetAxes(piece.object, wrecked.look, wrecked.up)
+    end
+    return
+  end
   local since = scene.time - wrecked.seen
   -- (they part quickly at first and all but stop within a minute)
   local spread = radius * (0.05 + 0.30 * (1 - math.exp(-since / 20)))
@@ -917,7 +952,9 @@ local function makeStation(scene: Scene, game: Core.Game, object: SystemData.Obj
   -- (a tower that has sealed itself keeps its field: Core/Tactical/Fields)
   local dark = status ~= nil and not status.field
   local posted, down = Core.Query.Batteries(game, object.id)
-  local raised, moving = Starbase.Raise(Starbase.Layout(object.variety, object.radius, object.seed, nil, makeup, dark, posted, down),
+  -- (a faction's citadel is in its people's colours)
+  local owner = Core.Query.CitadelOwner(game, object.id)
+  local raised, moving = Starbase.Raise(Starbase.Layout(object.variety, object.radius, object.seed, owner, makeup, dark, posted, down),
     container, at, 1)
   if #moving > 0 then
     scene.moving[object.id] = moving

@@ -18,6 +18,7 @@ local Raids = require("@lt/Core/Tactical/Raids")
 local Constants = require("@lt/Core/Data/Constants")
 local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Hulks = require("@lt/Core/Assets/Hulks")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Rng = require("@lt/Core/Kernel/Rng")
@@ -107,8 +108,10 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
   table.insert(events, { kind = "BallDestroyed", ball = id, by = by, name = ball.name, system = ball.system,
     x = ball.x, y = ball.y, z = ball.z, radius = ball.radius })
 
-  -- (a capsule leaves nothing, and neither does a drone)
-  if hull.class ~= "capsule" and hull.class ~= "drone" then
+  -- (a capsule leaves nothing, and neither does a drone; nor what stands
+  -- for a citadel under fire: the citadel leaves its hulk, Assets/Hulks)
+  local citadelCore = ship.owner == "starbase" and string.sub(ship.type, 1, 14) == "works.citadel."
+  if hull.class ~= "capsule" and hull.class ~= "drone" and not citadelCore then
     local wreck: State.Wreck = {
       id = State.NewId(state), kind = "wreck", name = ball.name .. " Wreck", system = ball.system, grid = ball.grid,
       x = ball.x, y = ball.y, z = ball.z, radius = ball.radius, hull = ship.type, expires = state.tick + WRECK_LIFETIME,
@@ -305,6 +308,10 @@ function Aftermath.RemoveWreck(state: State.State, wreck: State.Wreck)
   for _, item in Items.In(state, wreck.id, nil) do
     Items.Take(state, item, item.quantity)
   end
+  -- (a hulk's place goes with it)
+  if Hulks.Is(wreck) then
+    Hulks.Clear(state, wreck)
+  end
   state.wrecks[wreck.id] = nil
   State.RemoveId(state.wreckIds, wreck.id)
 end
@@ -362,6 +369,8 @@ function Aftermath.Validate(state: State.State, command: State.Command): (boolea
       end
     end
     return true
+  elseif command.kind == "Rebuild" then
+    return Hulks.Validate(state, command)
   elseif command.kind == "Jettison" then
     -- Something out of a hold of the ship's, into space: into a
     -- container, which is put out for it, or ('target') into one that
@@ -413,6 +422,10 @@ function Aftermath.Apply(state: State.State, command: State.Command, events: { E
     pay(state, -Aftermath.RepairCost(state, ship), "repairs", events)
     ship.armorDamage, ship.hullDamage = 0, 0
     table.insert(events, { kind = "ShipRepaired", ship = ship.id })
+    return
+  end
+  if command.kind == "Rebuild" then
+    Hulks.Apply(state, command, events)
     return
   end
   if command.kind == "Jettison" then
@@ -468,7 +481,8 @@ function Aftermath.Apply(state: State.State, command: State.Command, events: { E
     end
   end
   table.insert(events, { kind = "Looted", ship = ship.id, wreck = wreck.id, taken = taken, left = left })
-  if left == 0 then
+  -- (a hulk emptied is there still, while there is more of it to salvage)
+  if left == 0 and not (Hulks.Is(wreck) and not wreck.salvaged) then
     local den = state.sites[wreck.grid]
     Aftermath.RemoveWreck(state, wreck)
     table.insert(events, { kind = "WreckRemoved", wreck = wreck.id })

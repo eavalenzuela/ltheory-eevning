@@ -19,6 +19,7 @@ local Constants = require("@lt/Core/Data/Constants")
 local Attributes = require("@lt/Core/Attributes")
 local Fields = require("@lt/Core/Tactical/Fields")
 local Gunnery = require("@lt/Core/Tactical/Gunnery")
+local Hulks = require("@lt/Core/Assets/Hulks")
 local Items = require("@lt/Core/Assets/Items")
 local Mining = require("@lt/Core/Tactical/Mining")
 local Modules = require("@lt/Core/Data/Modules")
@@ -30,6 +31,7 @@ local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
+local Structures = require("@lt/Core/Data/Structures")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local Vapour = require("@lt/Core/Tactical/Vapour")
 local Vitals = require("@lt/Core/Tactical/Vitals")
@@ -922,7 +924,32 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       local levels = Items.Levels(state, ball.id)
       local chance = salvager.chance + 0.1 * (if levels then math.max(0, levels.salvaging or 0) else 0)
       local rng = Rng.For(state.historySeed, state.tick, ball.id, item.id, 61)
-      if Rng.Chance(rng, chance) then
+      -- (a citadel's hulk is brought off a cycle at a time, so many cycles
+      -- by its size: Assets/Hulks)
+      local hulk = if wreck.hulk then Structures.towerById[wreck.hulk] else nil
+      if hulk and Rng.Chance(rng, chance) then
+        local pieces = Combat.SALVAGE_PIECES * (Hulks.PIECES[hulk.size] or 4)
+        local got: { [string]: number } = {}
+        for _ = 1, pieces do
+          local type = SALVAGE[Rng.Int(rng, #SALVAGE) + 1]
+          got[type] = (got[type] or 0) + 1
+        end
+        for _, type in SALVAGE do
+          if got[type] then
+            Items.Add(state, type, got[type], ball.id, "cargo")
+          end
+        end
+        wreck.salvage = math.max(0, (wreck.salvage or 1) - 1)
+        table.insert(events, { kind = "Salvaged", ball = ball.id, wreck = wreck.id, pieces = pieces, left = wreck.salvage })
+        if wreck.salvage == 0 then
+          wreck.salvaged = true
+          if #Items.In(state, wreck.id, "cargo") == 0 then
+            wreck.expires = state.tick
+          end
+          stop(state, ball, index, "salvaged", events)
+          return false
+        end
+      elseif hulk == nil and Rng.Chance(rng, chance) then
         -- The bigger the hull, the more of it there is to bring off.
         -- (Five times as many since 2026-11-16, when income came up: more
         -- of it, not dearer, so a rig is built of what it was. Mine.)

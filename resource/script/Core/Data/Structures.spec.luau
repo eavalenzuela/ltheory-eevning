@@ -38,7 +38,12 @@ suite:Case("each people that holds stations has a tower in each of three sizes, 
     citadels += if Structures.CITADEL_KIND_SIZES[kind] then #Structures.CITADEL_KIND_SIZES[kind] else #Structures.CITADEL_SIZES
   end
   t.eq(citadels, 27)
-  t.eq(#Structures.towers, #Structures.TOWER_PEOPLES * 3 + citadels)
+  -- (and the alien peoples' own, four each)
+  local alien = #Structures.CITADEL_ALIEN_PEOPLES * #Structures.CITADEL_ALIEN
+  t.eq(alien, 8)
+  t.eq(#Structures.towers, #Structures.TOWER_PEOPLES * 3 + citadels + alien)
+  t.eq(Structures.towerById["citadel.vail.shipyard.huge"].name, "Huge Vail Shipyard")
+  t.eq(Structures.towerById["citadel.nimia.research.large"].faction, "nimia")
   t.eq(Structures.towerById["tower.kethri.small"], nil)
 end)
 

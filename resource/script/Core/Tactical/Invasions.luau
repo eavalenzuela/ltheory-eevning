@@ -34,6 +34,7 @@
 -- Every figure is a first proposal, and mine.
 
 local Constants = require("@lt/Core/Data/Constants")
+local Citadels = require("@lt/Core/Assets/Citadels")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Happenings = require("@lt/Core/Strategic/Happenings")
 local Names = require("@lt/Core/Describe/Names")
@@ -281,6 +282,9 @@ function Invasions.Step(state: State.State, here: number, events: { Event })
       Happenings.Begin(state, Happenings.DISASTER, service, one.system, station, Invasions.RUIN * HOUR, 1, name, events,
         Happenings.Reach(state, here, Happenings.HEARD))
     end
+    -- (and one of the factions' citadels there is brought down: its hulk
+    -- is what they leave of it, Assets/Citadels. Mine.)
+    Citadels.Fall(state, one.system, events, true)
   end
 end
 

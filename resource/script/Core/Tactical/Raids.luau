@@ -50,6 +50,7 @@
 
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
+local Hulks = require("@lt/Core/Assets/Hulks")
 local Items = require("@lt/Core/Assets/Items")
 local Moons = require("@lt/Core/Data/Moons")
 local Pirates = require("@lt/Core/Tactical/Pirates")
@@ -197,7 +198,11 @@ function Raids.Lose(state: State.State, starbase: State.Starbase, events: { Even
       ship.docked = state.player.home
     end
   end
-  local lost = 0
+  -- (a citadel leaves its hulk, with half of what was stored in it:
+  -- Assets/Hulks. What is left here is lost.)
+  local stored = #Items.Stored(state, id)
+  local hulk = Hulks.Leave(state, starbase, events)
+  local lost = if hulk then math.max(0, stored - #Items.In(state, hulk.id, "cargo")) else 0
   for _, item in Items.Stored(state, id) do
     lost += 1
     Items.Take(state, item, item.quantity)
@@ -211,7 +216,11 @@ function Raids.Lose(state: State.State, starbase: State.Starbase, events: { Even
   withdraw(state, id, events)
   local modules = #starbase.modules
   Starbases.Remove(state, id, events)
-  table.insert(events, { kind = "TowerLost", station = id, name = name, tower = starbase.tower, modules = modules, stacks = lost })
+  if hulk then
+    Hulks.Stand(state, hulk, id)
+  end
+  table.insert(events, { kind = "TowerLost", station = id, name = name, tower = starbase.tower, modules = modules, stacks = lost,
+    hulk = if hulk then hulk.id else nil })
 end
 
 -- A ship has been destroyed: if it was what stands for a tower under

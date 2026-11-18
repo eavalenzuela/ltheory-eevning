@@ -303,8 +303,10 @@ suite:Case("each human faction's ships lean to a kind of damage: they do 15% mor
         t.near(hull.armorResonance[index], plainArmor[index] * tough * less, 1e-12, hull.id)
         t.near(hull.hullResonance[index], plainHull[index] * less, 1e-12, hull.id)
       end
-    elseif hull.class ~= "drone" and hull.tech ~= 2 and not (hull.class == "works" and string.sub(hull.id, 1, 12) == "works.tower." and #hull.id > 13) then
-      -- (a people's tower core is better on its people's layer: Data/Structures' spec says so)
+    elseif hull.class ~= "drone" and hull.tech ~= 2 and not (hull.class == "works" and string.sub(hull.id, 1, 12) == "works.tower." and #hull.id > 13)
+      and not (hull.class == "works" and string.match(hull.id, "^works%.citadel%.%a+%.%a+%.%a+$") ~= nil) then
+      -- (a people's tower core is better on its people's layer: Data/Structures' spec says so; and an alien
+      -- people's citadel's, as their towers')
       t.eq({ hull.shieldResonance, hull.armorResonance, hull.hullResonance }, { plainShield, plainArmor, plainHull }, hull.id)
     end
   end

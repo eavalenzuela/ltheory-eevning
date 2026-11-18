@@ -53,6 +53,7 @@ local WalletWindow = require("@lt/Game/UI/Wallet")
 local Places = require("@lt/Game/UI/Places")
 local SystemMap = require("@lt/Game/UI/SystemMap")
 local Scans = require("@lt/Game/UI/Scans")
+local Rebuild = require("@lt/Game/UI/Rebuild")
 local CorporationWindow = require("@lt/Game/UI/Corporation")
 local Theme = require("@lt/Game/UI/Theme")
 local Waypoints = require("@lt/Game/Waypoints")
@@ -748,6 +749,11 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
   if vaulted(entry) then
     what = if entry.variety == "vault.locked" then "vault, locked" else "vault, open"
   end
+  -- (a citadel's hulk, or its place: what it was, and how much of it is left to salvage)
+  local hulk = if entry.kind == "wreck" or entry.variety == "hulk" then Core.Query.Hulk(session.game, entry.id) else nil
+  if hulk then
+    what = if hulk.salvage > 0 then `citadel hulk: {hulk.salvage} salvage cycles left` else "citadel hulk, salvaged out"
+  end
   if cloudy(entry) then
     -- (and how much of it there is still to draw off)
     what = `cloud of gas, {math.floor(Core.Query.Left(session.game, entry.id) * 100 + 0.5)}% left`
@@ -837,7 +843,10 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
   elseif entry.kind == "moon" and tower ~= 0 and citadel ~= 0 then
     table.insert(orders, { label = "Anchor citadel", kind = "AnchorTower" })
   end
-  if entry.kind == "wreck" then
+  if Rebuild.Of(session, entry.id) then
+    -- (a citadel's hulk: what rebuilding it takes, in a pane of its own)
+    table.insert(orders, { label = "Rebuild", kind = "Rebuild" })
+  elseif entry.kind == "wreck" then
     -- (a sealed hold is hacked open before it is looted)
     table.insert(orders, { label = "Hack", kind = "StartHack" })
   elseif entry.kind == "ship" and Types.Get(entry.variety) then
@@ -858,6 +867,10 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
       -- (what a planet has, the colony there, and the putting down of one)
       if Im.Button(order.label, bx, by, buttonWidth, 26, true) then
         Colony.Open(entry.id)
+      end
+    elseif order.kind == "Rebuild" then
+      if Im.Button(order.label, bx, by, buttonWidth, 26, true, `Rebuild:{entry.id}`) then
+        Rebuild.Open(session, entry.id)
       end
     elseif order.kind == "Info" then
       if Im.Button(order.label, bx, by, buttonWidth, 26, true, `Info:{entry.variety}`) then

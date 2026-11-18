@@ -133,7 +133,9 @@ local HOMED = { "vail", "nimia" }
 local function alien(state: State.State, station: number, day: number): string?
   local node = state.galaxy.systems[Space.SystemOf(state, station)]
   for index, people in HOMED do
-    if node.nearest == people and Rng.Chance(Rng.For(state.historySeed, station, day, 140 + index), Contracts.ALIEN_HOME) then
+    -- (their own space: whose it is, not whose people's towers stand in
+    -- it, which are always a human people's)
+    if node.owner == people and Rng.Chance(Rng.For(state.historySeed, station, day, 140 + index), Contracts.ALIEN_HOME) then
       return people
     end
   end

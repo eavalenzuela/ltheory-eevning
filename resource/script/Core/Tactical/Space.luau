@@ -12,6 +12,7 @@
 -- thinks of them: 0 means touching.
 
 local CitadelDoors = require("@lt/Core/Data/CitadelDoors")
+local CitadelSites = require("@lt/Core/Describe/CitadelSites")
 local Constants = require("@lt/Core/Data/Constants")
 local Factions = require("@lt/Core/Data/Factions")
 local Items = require("@lt/Core/Assets/Items")
@@ -66,14 +67,142 @@ end
 -- ---------------------------------------------------------------------
 -- Looking things up
 
+-- A faction's citadel's key (State.Citadel): its system's, and its place
+-- among that system's.
+local CITADEL_KEY = 100
+function Space.CitadelKey(system: number, slot: number): number
+  return system * CITADEL_KEY + slot
+end
+
+-- The factions' citadels of a system nobody has described, as a glance
+-- at it has them (Space.Glance): worked out, not kept in the state.
+local passing: { [any]: { [number]: { State.Citadel } } } = setmetatable({} :: any, { __mode = "k" })
+
+-- A system's citadels: those put down in the state, or, for one not
+-- described yet, those it would have now (put down in the state with
+-- 'keep', the first time it is described).
+local function citadelRecords(state: State.State, description: System.Description, keep: boolean): { State.Citadel }
+  local system = description.id
+  local records: { State.Citadel } = {}
+  if state.citadelsSeen and state.citadelsSeen[system] then
+    local slot = 1
+    local record = state.citadels[Space.CitadelKey(system, slot)]
+    while record do
+      table.insert(records, record)
+      slot += 1
+      record = state.citadels[Space.CitadelKey(system, slot)]
+    end
+    return records
+  end
+  local owner = state.galaxy.systems[system].owner
+  for slot, site in CitadelSites.Of(state.galaxy, description) do
+    table.insert(records, { system = system, slot = slot, tower = site.tower, owner = if site.fallen then "" else owner,
+      fallen = site.fallen, body = site.body.id, station = 0, wreck = 0 })
+  end
+  if keep then
+    local seenAll: { [number]: boolean } = state.citadelsSeen or {}
+    state.citadelsSeen = seenAll
+    seenAll[system] = true
+    for _, record in records do
+      local key = Space.CitadelKey(system, record.slot)
+      state.citadels[key] = record
+      State.InsertId(state.citadelIds, key)
+    end
+  else
+    local seen = passing[state.galaxy]
+    if seen == nil then
+      seen = {}
+      passing[state.galaxy] = seen
+    end
+    seen[system] = records
+  end
+  return records
+end
+
+-- The factions' citadels in a system's description (Assets/Citadels;
+-- where, Describe/CitadelSites), as that is made: at the end of what
+-- follows from the galaxy, so nothing else of it moves. The first time
+-- a system is described ('keep'), they are put down in the state; a
+-- glance at it from afar works them out and keeps nothing. Standing,
+-- each is a station by a moon or a planet of the system, the citadel's
+-- field across; fallen, its hulk's place (the hulk itself is put there
+-- when the pilot comes: Assets/Citadels' Settle).
+function Space.CitadelObjects(state: State.State, description: System.Description, keep: boolean?): { System.Object }
+  local out: { System.Object } = {}
+  if state.citadels == nil then
+    return out
+  end
+  local system = description.id
+  for _, record in citadelRecords(state, description, keep ~= false) do
+    local tower = Structures.towerById[record.tower]
+    local body = description.objects[record.body % SPAN]
+    if tower and body and #description.objects + #out + 1 < SPAN then
+      local rng = Rng.For(state.galaxy.seed, system, 7003, record.slot)
+      local angle = Rng.Float(rng, 0, 2 * math.pi)
+      local reach = tower.reach or 5000
+      local off = body.radius * 1.5 + reach * 2 + 4000
+      local id = system * SPAN + #description.objects + #out + 1
+      local object: System.Object = {
+        id = id, kind = "station", name = `{body.name} - {tower.name}`, x = body.x + math.cos(angle) * off, y = body.y + reach * 0.2,
+        z = body.z + math.sin(angle) * off, radius = tower.field, seed = Rng.Int(rng, 100000), parent = body.id, site = id,
+        variety = "citadel", to = 0,
+      }
+      -- (one that has fallen is its hulk's place: as Assets/Hulks' Stand has it)
+      if record.fallen then
+        object.kind, object.variety, object.radius, object.name = "belt", "hulk", reach, `{body.name} - {tower.name} Hulk`
+      end
+      record.station = id
+      table.insert(out, object)
+    end
+  end
+  return out
+end
+
 -- The description of a system, made (and kept in the state) on first use.
 function Space.Describe(state: State.State, system: number): System.Description
   local description = state.systems[system]
   if description == nil then
     description = System.Describe(state.galaxy, system)
+    for _, citadel in Space.CitadelObjects(state, description) do
+      table.insert(description.objects, citadel)
+    end
     state.systems[system] = description
   end
   return description
+end
+
+-- The faction's citadel a station is (Assets/Citadels), if it is one
+-- that stands. Nil for anything else, a pilot's citadel among them.
+function Space.FactionCitadel(state: State.State, id: number): State.Citadel?
+  if state.citadels == nil or id <= 0 or id >= Constants.FIRST_DYNAMIC_ID then
+    return nil
+  end
+  local system = id // SPAN
+  if state.galaxy.systems[system] == nil then
+    return nil
+  end
+  -- (a system not yet described: those a glance at it has)
+  if not (state.citadelsSeen and state.citadelsSeen[system]) then
+    Space.Glance(state, system)
+    local seen = passing[state.galaxy]
+    local glanced: { State.Citadel } = if seen and seen[system] then seen[system] else {}
+    for _, record in glanced do
+      if record.station == id then
+        return if record.fallen then nil else record
+      end
+    end
+    return nil
+  end
+  local slot = 1
+  local record = state.citadels[Space.CitadelKey(system, slot)]
+  while record do
+    if record.station == id then
+      return if record.fallen then nil else record
+    end
+    slot += 1
+    record = state.citadels[Space.CitadelKey(system, slot)]
+  end
+  return nil
 end
 
 -- (A colony ship of the nomads as the station it is: below, after Space.Glance.)
@@ -121,9 +250,23 @@ function Space.Glance(state: State.State, system: number): System.Description
   local description = seen[system]
   if description == nil then
     description = System.Describe(state.galaxy, system)
+    -- (and the factions' citadels there, as Space.Describe has them: not
+    -- put down in the state by a glance)
+    for _, citadel in Space.CitadelObjects(state, description, false) do
+      table.insert(description.objects, citadel)
+    end
     seen[system] = description
   end
   return description
+end
+
+-- Forget what a glance at a system saw (what is there has changed: a
+-- faction's citadel has fallen, Assets/Citadels).
+function Space.Forget(state: State.State, system: number)
+  local seen = glances[state.galaxy]
+  if seen then
+    seen[system] = nil
+  end
 end
 
 -- A colony ship of the nomads, as the station it is (Tactical/Nomads):
@@ -406,7 +549,9 @@ local function undock(state: State.State, ship: State.Ship, events: { Event })
   -- its field, and wait there tethered: Assets/Starbases. Out of any
   -- other station, beyond its field.)
   local starbase = state.starbases[station.id]
-  local tower = if starbase then Structures.towerById[starbase.tower] else nil
+  -- (a faction's citadel is left as a pilot's is: Assets/Citadels)
+  local theirs = if starbase == nil then Space.FactionCitadel(state, station.id) else nil
+  local tower = if starbase then Structures.towerById[starbase.tower] elseif theirs then Structures.towerById[theirs.tower] else nil
   local citadel = tower ~= nil and tower.citadel == true and tower.reach ~= nil
   local out = (if citadel and tower then tower.reach :: number else station.radius) + Constants.UNDOCK_DISTANCE + hull.radius
   local system = Space.SystemOf(state, station.id)
@@ -417,7 +562,9 @@ local function undock(state: State.State, ship: State.Ship, events: { Event })
   -- through one of the hangar doors"): just outside it, coasting out the
   -- way it faces, which door by the ship. Where its design has none, past
   -- the citadel as before.)
-  local doors = if citadel and tower and tower.kind then (CitadelDoors[tower.kind] or {})[tower.size] else nil
+  -- (an alien people's citadel by its own design's: "vail.shipyard")
+  local design = if tower and tower.kind and tower.faction ~= "" then `{tower.faction}.{tower.kind}` elseif tower then tower.kind else nil
+  local doors = if citadel and tower and design then (CitadelDoors[design] or {})[tower.size] else nil
   local door = if doors and #doors > 0 then doors[ship.id % #doors + 1] else nil
   if door and tower then
     local reach = tower.reach :: number

@@ -236,7 +236,7 @@ suite:Case("the alien peoples' prints are on boards now and then: the Vail's and
         if people == "drowned" then
           t.ok(Galaxy.Band(node.security) ~= "secure", "a Drowned print in secure space")
         else
-          t.eq(node.nearest, people, "a print of theirs outside their space")
+          t.eq(node.owner, people, "a print of theirs outside their space")
         end
         if (seen[people] or 0) == 1 then
           state.tick = day * ticks
