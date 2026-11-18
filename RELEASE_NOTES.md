@@ -6,6 +6,19 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Probe scanning, a system map, and places to remember
+
+- A system map: open it from the dock, from a system's panel on the star map, or from the scanner window. It shows the sun, the planets and their orbits, moons, belts, stations, gates, the sites you have found and your ship, from a slant you can turn (right-drag), zoom (wheel) and drag about.
+- Real probe scanning. Fit a Probe Launcher (a mid slot; it needs Astrometrics 1) and carry scan probes: Launch puts out up to eight at once, round your ship. On the system map, drag a probe to move it, hold Shift to raise or lower it, or drag the purple ring at their middle to move them all. Set how far they reach, from 0.25 to 64 AU: the smaller, the stronger they read.
+- Each scan reads every signal afresh from where your probes are. One probe in reach puts a signal somewhere on a sphere, two on a ring, three at one of two points, and four or more inside a sphere that shrinks as more of it is read. At 100% the site is found. Probes here, beside a signal, sends them all to where it was read.
+- The ship's own scanner still finds hidden belts, vapour fields and wormholes by itself. Derelicts and listening posts can only be found with probes. A Probe Launcher II reads a quarter more, and exploration hulls fit a launcher for half the CPU and powergrid.
+- Bookmarks: right-click a station, gate, planet, belt or anything else in space and pick Bookmark, or use the Bookmark button on the selected item. Docked, the Places window marks the station you are in.
+- The Places window (the pin on the dock) lists your bookmarks by system, nearest first. Go flies there on autopilot and docks or warps to it when you arrive; Route only sets it as your destination; Forget removes it. Pick one to rename it. The star map marks systems with bookmarks.
+- Ctrl-click something in space or on the overview to lock it.
+- Market goods no longer need standing with a faction: its own makes of modules and its liveries are sold to anybody. Only loyalty store offers still need standing.
+- Every station has a Ship Maintenance Array, so you can board, fit and repair ships anywhere, and a ship bought from a contract can be flown away from where it was bought.
+- Fitted hulls on contracts now come mostly with better modules than plain: tech 2, a faction's own make, or the pirates' site tier. About one in fifty carries a named officer's module.
+
 ## Gravity stations, wormhole stations and a save editor
 
 - Gravity Station: a new kind of citadel, a jump hub. It is a lit jump beacon by itself, with no beacon module needed. It alone fits a Jump Bridge, which sends a ship in its field to another of your gravity stations with a bridge, up to 30 light years away. The station the ship leaves pays the fuel. Jump bridges are on the star map's system panel.
