@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""script/citadeldoors: write resource/script/Core/Data/CitadelDoors.luau,
+the hangar doors of each kind of citadel at each size, as the citadels
+picked for them grow (Game/View/Citadel, Citadel.Doors). The game's rules
+leave a citadel by one of its doors (Core/Tactical/Space), and cannot grow
+one themselves: run this whenever a pick in Citadel.PICKS changes.
+
+  script/citadeldoors           write it
+  script/citadeldoors --check   say whether it is as the picks are now
+"""
+import filecmp
+import os
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(ROOT)
+TARGET = "resource/script/Core/Data/CitadelDoors.luau"
+FOLDER = os.path.join("cache", "citadeldoors")
+
+
+def main():
+    args = sys.argv[1:]
+    if args and args[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return 0
+    check = "--check" in args
+    os.makedirs(FOLDER, exist_ok=True)
+    out = os.path.join(FOLDER, "CitadelDoors.luau") if check else TARGET
+    script = os.path.join(FOLDER, "write.txt")
+    with open(script, "w") as f:
+        f.write(f"frames 2\nlua Citadels.WriteDoors('{out}')\necho doors written\nquit\n")
+    run = subprocess.run(["bin/launch", "citadels", "--no-present", "--fixed-step", "60", "--timeout", "300", "--script", script],
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    if run.returncode != 0 or "doors written" not in run.stdout:
+        print(f"citadeldoors: the run failed (exit {run.returncode})\n{run.stdout[-2000:]}", file=sys.stderr)
+        return 1
+    if check:
+        same = os.path.exists(TARGET) and filecmp.cmp(out, TARGET, shallow=False)
+        print("citadeldoors: " + ("as the picks are" if same else f"out of date: run script/citadeldoors"))
+        return 0 if same else 1
+    print(f"citadeldoors: wrote {TARGET}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

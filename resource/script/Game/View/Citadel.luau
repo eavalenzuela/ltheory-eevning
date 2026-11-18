@@ -23,6 +23,7 @@
 local Hull = require("@lt/Game/View/Hull")
 local Int = require("@lt/Int")
 local Plates = require("@lt/Game/View/Plates")
+local Structures = require("@lt/Core/Data/Structures")
 local Tower = require("@lt/Game/View/Tower")
 
 local Citadel = {}
@@ -655,6 +656,53 @@ function Citadel.Of(kind: string?, size: number, faction: string?): Made
   local pick = Citadel.Pick(kind, size)
   local paint = if faction and faction ~= "" and Hull.looks[faction] then faction else pick.paint
   return Citadel.Build(pick.seed, size, paint, pick.detail, nil, pick.asym, pick.style)
+end
+
+-- The hangar doors of the citadel a kind and a size is drawn as (the
+-- owner, 2026-11-17: "we should also make sure ships undocking exit
+-- through one of the hangar doors"): each door's middle, from the
+-- station's middle in the citadel's own radii (as Game/View/Starbase
+-- stands it: its middle where the station is, as big as its reach),
+-- and the way out of it. The game's rules cannot grow a citadel (that is
+-- the engine's), so what this says is written into Core/Data/
+-- CitadelDoors by script/citadeldoors, whenever a pick changes.
+function Citadel.Doors(kind: string, size: number): { { at: vector, n: vector } }
+  local pick = Citadel.Pick(kind, size)
+  local made = Citadel.Build(pick.seed, size, pick.paint, pick.detail, nil, pick.asym, pick.style)
+  local mid = (made.lower + made.upper) * 0.5
+  local doors: { { at: vector, n: vector } } = {}
+  for _, mouth in Citadel.Shape(pick.seed, size, pick.asym, pick.style).mouths do
+    table.insert(doors, { at = (mouth.at * Hull.GROWN - mid) / made.radius, n = mouth.n })
+  end
+  return doors
+end
+
+-- Core/Data/CitadelDoors as it should be now, as text.
+function Citadel.DoorsFile(): string
+  local lines = {
+    "--!strict",
+    "-- The hangar doors of each kind of citadel at each size: written by",
+    "-- script/citadeldoors from Game/View/Citadel (Citadel.Doors), which",
+    "-- grows them; not to be edited by hand. Each door: where its middle",
+    "-- is from the station's middle, in the citadel's radii, and the way",
+    "-- out of it (x, y, z, then nx, ny, nz). Assets of Tactical/Space's",
+    "-- undocking: a ship leaves a citadel by one of its doors.",
+    "",
+    "return {",
+  }
+  for _, kind in Structures.CITADEL_KINDS do
+    table.insert(lines, `  {kind} = \{`)
+    for size = 1, 5 do
+      local doors: { string } = {}
+      for _, door in Citadel.Doors(kind, size) do
+        table.insert(doors, string.format("{ %.4f, %.4f, %.4f, %g, %g, %g }", door.at.x, door.at.y, door.at.z, door.n.x, door.n.y, door.n.z))
+      end
+      table.insert(lines, `    \{ {table.concat(doors, ", ")} \},`)
+    end
+    table.insert(lines, "  },")
+  end
+  table.insert(lines, "} :: { [string]: { { { number } } } }")
+  return table.concat(lines, "\n") .. "\n"
 end
 
 return Citadel

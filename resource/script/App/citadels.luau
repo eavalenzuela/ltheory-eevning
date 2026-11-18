@@ -268,6 +268,10 @@ return AppShell.Create(function(): Widget
     Now = function(): (number, number, boolean, string, string, number, string, number)
       return seed, size, asym, PAINTS[paint], detailWords(), mouths, STYLES[style], #moving
     end,
+    -- Write Core/Data/CitadelDoors as the picks are now (script/citadeldoors).
+    WriteDoors = function(path: string?)
+      File_Write(path or "resource/script/Core/Data/CitadelDoors.luau", Citadel.DoorsFile())
+    end,
     -- Let so many seconds go by for what turns (a still picture of the
     -- rings turned so far).
     Turn = function(seconds: number)

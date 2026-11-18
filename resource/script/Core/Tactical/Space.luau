@@ -11,6 +11,7 @@
 -- Distances in commands and ranges are between surfaces, as a pilot
 -- thinks of them: 0 means touching.
 
+local CitadelDoors = require("@lt/Core/Data/CitadelDoors")
 local Constants = require("@lt/Core/Data/Constants")
 local Factions = require("@lt/Core/Data/Factions")
 local Items = require("@lt/Core/Assets/Items")
@@ -369,6 +370,10 @@ local function setMode(ball: State.Ball, mode: State.Mode, target: number, range
   ball.dx, ball.dy, ball.dz = 0, 0, 0
 end
 
+-- How far outside a citadel's hangar door an undocking ship is first
+-- seen, beyond its own size, m (mine).
+Space.DOOR_CLEAR = 40
+
 local function undock(state: State.State, ship: State.Ship, events: { Event })
   local station = Space.Object(state, ship.docked) :: System.Object
   -- (a colony ship lies by a gate, or in a system with none by nothing)
@@ -388,9 +393,28 @@ local function undock(state: State.State, ship: State.Ship, events: { Event })
   local out = (if citadel and tower then tower.reach :: number else station.radius) + Constants.UNDOCK_DISTANCE + hull.radius
   local system = Space.SystemOf(state, station.id)
   ship.docked = 0
-  local ball = addBall(state, ship, system, station.x + ux * out, station.y + uy * out, station.z + uz * out)
+  local x, y, z = station.x + ux * out, station.y + uy * out, station.z + uz * out
+  -- (out of a citadel, by one of its hangar doors, as its design has them
+  -- (Data/CitadelDoors: the owner, 2026-11-17, "ships undocking exit
+  -- through one of the hangar doors"): just outside it, coasting out the
+  -- way it faces, which door by the ship. Where its design has none, past
+  -- the citadel as before.)
+  local doors = if citadel and tower and tower.kind then (CitadelDoors[tower.kind] or {})[tower.size] else nil
+  local door = if doors and #doors > 0 then doors[ship.id % #doors + 1] else nil
+  if door and tower then
+    local reach = tower.reach :: number
+    local clear = hull.radius * 1.2 + Space.DOOR_CLEAR
+    x = station.x + door[1] * reach + door[4] * clear
+    y = station.y + door[2] * reach + door[5] * clear
+    z = station.z + door[3] * reach + door[6] * clear
+    ux, uy, uz = door[4], door[5], door[6]
+  end
+  local ball = addBall(state, ship, system, x, y, z)
   if citadel then
     setMode(ball, "stop", 0, 0)
+    if door then
+      ball.vx, ball.vy, ball.vz = ux * ball.maxVelocity * 0.5, uy * ball.maxVelocity * 0.5, uz * ball.maxVelocity * 0.5
+    end
   else
     -- Ships leave a station at full speed and keep going until told otherwise.
     ball.vx, ball.vy, ball.vz = ux * ball.maxVelocity, uy * ball.maxVelocity, uz * ball.maxVelocity

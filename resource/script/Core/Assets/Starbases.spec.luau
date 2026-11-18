@@ -3,6 +3,7 @@
 -- front door.
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
+local CitadelDoors = require("@lt/Core/Data/CitadelDoors")
 local CitadelKinds = require("@lt/Core/Assets/CitadelKinds")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
@@ -1053,6 +1054,27 @@ suite:Case("each kind of citadel is a citadel of its own, with its own print: it
   t.eq({ Starbases.Has(home.state, citadel, "quarters"), Starbases.Has(home.state, citadel, "storage"),
     Starbases.Has(home.state, citadel, "industry") } :: { any }, { true, true, false } :: { any })
   t.near(Starbases.Burn(home.state, citadel), Structures.towerById["citadel.habitation.small"].fuel * 0.8, 1e-6)
+end)
+
+suite:Case("a ship leaves a citadel by one of its hangar doors, just outside it and coasting out of it", function(t)
+  local game, station = inCitadel(t)
+  local state = game.state
+  local doors = assert(CitadelDoors[CITADEL.kind :: string][CITADEL.size], "no doors for the citadel")
+  t.ok(#doors >= 1, "a citadel with no door")
+  order(t, game, { kind = "Undock", actor = 0 })
+  stepUntil(game, "Undocked", 30)
+  local ball = assert(state.balls[state.player.ship], "not in space")
+  local object = assert(Space.Object(state, station))
+  local door = doors[state.player.ship % #doors + 1]
+  local reach = CITADEL.reach :: number
+  -- (where it came out: off that door, a little way out of it; and going the way it faces)
+  local ax, ay, az = object.x + door[1] * reach, object.y + door[2] * reach, object.z + door[3] * reach
+  local off = vector.create(ball.x - ax, ball.y - ay, ball.z - az)
+  local outward = vector.create(door[4], door[5], door[6])
+  t.ok(vector.dot(off, outward) > 0 and vector.magnitude(off - outward * vector.dot(off, outward)) < 1 + ball.radius,
+    `it came out {vector.magnitude(off)} m from the door, not out of it`)
+  t.ok(vector.dot(vector.create(ball.vx, ball.vy, ball.vz), outward) > 0, "it is not moving out of the door")
+  t.ok(Space.Distance(ball :: any, object :: any) < reach * 1.2, "it came out far from the citadel")
 end)
 
 return suite
