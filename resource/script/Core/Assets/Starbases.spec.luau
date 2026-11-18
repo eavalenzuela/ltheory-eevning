@@ -9,6 +9,7 @@ local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local Industry = require("@lt/Core/Assets/Industry")
 local Items = require("@lt/Core/Assets/Items")
+local Jumping = require("@lt/Core/Tactical/Jumping")
 local Market = require("@lt/Core/Assets/Market")
 local Moons = require("@lt/Core/Data/Moons")
 local Reactions = require("@lt/Core/Data/Reactions")
@@ -1075,6 +1076,77 @@ suite:Case("a ship leaves a citadel by one of its hangar doors, just outside it 
     `it came out {vector.magnitude(off)} m from the door, not out of it`)
   t.ok(vector.dot(vector.create(ball.vx, ball.vy, ball.vz), outward) > 0, "it is not moving out of the door")
   t.ok(Space.Distance(ball :: any, object :: any) < reach * 1.2, "it came out far from the citadel")
+end)
+
+suite:Case("a gravity station is a lit jump beacon of itself; with a Jump Bridge, a ship in its field goes to another's, on the station's fuel", function(t)
+  local game, first = inCitadel(t, nil, "citadel.gravity.small")
+  local state = game.state
+  local ship = state.player.ship
+  -- (a beacon lit with nothing fitted: a jump drive may come out at it)
+  local lit = false
+  for _, beacon in Jumping.Beacons(state, ship) do
+    lit = lit or beacon.id == first
+  end
+  t.ok(lit, "a gravity station is no beacon")
+  -- (only a gravity station fits a bridge)
+  t.eq(Structures.moduleById["service.bridge"].kinds, { "gravity" })
+  -- Fit a bridge, and leave.
+  local function bridge(station: number)
+    order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, "service.bridge", 1).id })
+    Core.Step(game)
+    for _, module in state.starbases[station].modules do
+      module.ready = state.tick
+    end
+    Core.Step(game)
+  end
+  bridge(first)
+  -- A second, in another system within the bridge's reach: the ship is put by a planet there to anchor it.
+  local here = Space.SystemOf(state, first)
+  local other: System.Object? = nil
+  for id in state.galaxy.systems do
+    if other == nil and id ~= here and not state.galaxy.systems[id].uncharted and Jumping.Distance(state, here, id) <= Jumping.BRIDGE_RANGE then
+      for _, object in Space.Describe(state, id).objects do
+        if other == nil and object.kind == "planet" then
+          other = object
+        end
+      end
+    end
+  end
+  local planet = assert(other, "no planet within a bridge's reach")
+  local elsewhere = Space.SystemOf(state, planet.id)
+  order(t, game, { kind = "Undock", actor = 0 })
+  stepUntil(game, "Undocked", 30)
+  t.eq(#Jumping.BridgeTo(state, ship), 0, "a bridge with no other bridge goes nowhere")
+  t.eq(refused(game, { kind = "Bridge", actor = 0, target = elsewhere }), "no jump bridge there to go to")
+  local ball = state.balls[ship]
+  ball.system, ball.x, ball.y, ball.z = elsewhere, planet.x + planet.radius + 30000, planet.y, planet.z
+  ball.vx, ball.vy, ball.vz = 0, 0, 0
+  Space.AssignGrid(state, ball)
+  order(t, game, { kind = "AnchorTower", actor = 0, item = carry(game, "citadel.gravity.small", 1).id, target = planet.id })
+  local second = stepUntil(game, "StarbaseAnchored", 3).station :: number
+  state.starbases[second].ready = state.tick
+  Core.Step(game)
+  order(t, game, { kind = "Dock", actor = 0, target = second })
+  stepUntil(game, "Docked", 300)
+  order(t, game, { kind = "Fuel", actor = 0, item = carry(game, FUEL, 2000).id })
+  Core.Step(game)
+  bridge(second)
+  order(t, game, { kind = "Undock", actor = 0 })
+  stepUntil(game, "Undocked", 30)
+  -- Back to the first, by the bridge: the second pays for it.
+  local ways = Jumping.BridgeTo(state, ship)
+  t.eq({ #ways, ways[1] and ways[1].station } :: { any }, { 1, first } :: { any })
+  local fuel, cost = state.starbases[second].fuel, Jumping.Fuel(state, ship, Jumping.Distance(state, elsewhere, here))
+  order(t, game, { kind = "Bridge", actor = 0, target = here })
+  Core.Step(game)
+  ball = state.balls[ship]
+  t.eq(ball.system, here)
+  t.ok(Space.Distance(ball :: any, assert(Space.Object(state, first)) :: any) < Structures.towerById["citadel.gravity.small"].field,
+    "it came out far from the bridge it went to")
+  t.ok(state.starbases[second].fuel <= fuel - cost, "the bridge it left did not pay the fuel")
+  -- (nor from warp, nor out of a bridge's field)
+  ball.x += 1e7
+  t.eq(refused(game, { kind = "Bridge", actor = 0, target = elsewhere }), "not in the field of a jump bridge")
 end)
 
 return suite

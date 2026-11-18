@@ -869,7 +869,7 @@ function Facts.Of(type: string): Sheet?
         row(does, "Fitted only in", table.concat(names, ", ") .. (if anchored.least then ` of {string.lower(Structures.CITADEL_SIZE_NAMES[anchored.least])} size or bigger` else ""))
       end
       local opens = ({ capital = "capital ships to be built here", advanced = "tech 2 hulls to be built here",
-        invention = "tech 2 hulls to be invented here" } :: { [string]: string })[anchored.opens or ""]
+        invention = "tech 2 hulls to be invented here", bridge = "ships in its field go to another gravity station's bridge" } :: { [string]: string })[anchored.opens or ""]
       if opens then
         row(does, "Lets", opens)
       end

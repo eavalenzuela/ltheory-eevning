@@ -1275,7 +1275,7 @@ local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true
 local SITE_COMMANDS = { Scan = true, LaunchProbe = true, RecallProbes = true }
 local HACK_COMMANDS = { StartHack = true, HackNode = true, AbandonHack = true }
 local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones = true }
-local JUMP_COMMANDS = { JumpDrive = true }
+local JUMP_COMMANDS = { JumpDrive = true, Bridge = true }
 local IMPLANT_COMMANDS = { PlugImplant = true, UnplugImplant = true }
 local FLEET_COMMANDS = { HirePilot = true, AssignShip = true, DismissPilot = true, FleetOrder = true, FleetWarp = true }
 local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true, RedeemLoyalty = true }
@@ -2715,6 +2715,30 @@ end
 export type JumpBeacon = { system: number, kind: string, name: string, distance: number, reached: boolean }
 export type JumpDriveStatus = { range: number, held: number, cooling: number, distance: number, fuel: number, ready: boolean, why: string,
   beacons: { JumpBeacon }, field: number, along: number }
+-- The jump bridge the pilot's ship is at, if any (Tactical/Jumping): the
+-- station's name and its fuel, every system it reaches with how far and
+-- the fuel it would burn for the hull, and whether going to 'system'
+-- can be done now, and why not.
+export type BridgeWay = { system: number, name: string, distance: number, fuel: number }
+export type BridgeStatus = { name: string, fuel: number, ways: { BridgeWay }, ready: boolean, why: string }
+function Query.Bridge(game: Game, system: number?): BridgeStatus?
+  local state = game.state
+  local ship = state.player.ship
+  local at = Jumping.BridgeAt(state, ship)
+  if at == nil then
+    return nil
+  end
+  local place = Space.Object(state, at.id)
+  local ways: { BridgeWay } = {}
+  for _, way in Jumping.BridgeTo(state, ship) do
+    local there = Space.Object(state, way.station)
+    table.insert(ways, { system = way.system, name = if there then there.name else "", distance = way.distance,
+      fuel = Jumping.Fuel(state, ship, way.distance) })
+  end
+  local ok, why = Jumping.Validate(state, { kind = "Bridge", actor = ship, target = system or 0 })
+  return { name = if place then place.name else "", fuel = at.fuel, ways = ways, ready = ok, why = why or "" }
+end
+
 function Query.JumpDrive(game: Game, system: number?): JumpDriveStatus?
   local state = game.state
   local ship = state.player.ship

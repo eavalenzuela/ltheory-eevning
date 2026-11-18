@@ -1124,6 +1124,33 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
     end
   end
   line += 40
+  -- A jump bridge the ship is at (Tactical/Jumping): where it reaches,
+  -- and the going itself ("Map:bridge"), which says why not.
+  local bridge = Core.Query.Bridge(game, shown)
+  if bridge then
+    Im.Heading("JUMP BRIDGE", px, line, 14, Im.DIM)
+    Im.TextRight(`{Format.Whole(bridge.fuel)} fuel blocks`, px + SIDE - 24, line + 1, 12, NEXT)
+    line += 22
+    if #bridge.ways == 0 then
+      Im.Text("No other bridge of yours is within its reach", px, line, 13, Im.DIM)
+      line += 22
+    end
+    for _, way in bridge.ways do
+      Im.Text(string.format("%s: %.1f ly, %s fuel blocks", way.name, way.distance, Format.Whole(way.fuel)), px, line, 13,
+        if way.system == shown then Im.TEXT else Im.DIM)
+      line += 20
+    end
+    if shown ~= here then
+      if Im.Button("Bridge", px, line, 90, 28, bridge.ready, "Map:bridge") then
+        Session.Do(session, { kind = "Bridge", actor = 0, target = shown })
+      end
+      line += 34
+      if not bridge.ready then
+        line = Im.Wrapped(bridge.why, px, line, SIDE - 28, 12, Im.WARN) + 6
+      end
+    end
+    line += 6
+  end
   -- A hull with a jump drive: how far it reaches, what the system shown
   -- would take, and the jump itself ("Map:jump"), which says why not
   -- when it cannot be made.

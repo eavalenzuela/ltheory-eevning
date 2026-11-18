@@ -47,6 +47,17 @@
 -- beacon is lit within reach and the fuel is aboard, and go by the gates
 -- where not.
 --
+-- A jump bridge (the owner's, 2026-11-17: a gravity station, a kind of
+-- citadel, "counts as a lit beacon for jump drives ... and only it fits
+-- a Jump Bridge to another gravity station"): a ship in space within the
+-- field of a gravity station with a Jump Bridge online goes to another
+-- such station in another system, of its owner's or open to it (as
+-- docking goes: Starbases.Friendly), as far off as a drive reaches at
+-- its best, with no drive, skill or capacitor of its own. The station
+-- it leaves pays the fuel, from its own, as a drive would burn it for
+-- the hull; and the ship comes out at rest a little way off the station
+-- it goes to. (How far it reaches and what it costs are mine.)
+--
 -- (Every figure is a first proposal. Not yet: a choice between beacons
 -- in one system; anybody else's beacon; space a drive does not reach
 -- into.)
@@ -62,6 +73,7 @@ local Space = require("@lt/Core/Tactical/Space")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
 local Structures = require("@lt/Core/Data/Structures")
+local System = require("@lt/Core/Describe/System")
 local Vitals = require("@lt/Core/Tactical/Vitals")
 
 local Jumping = {}
@@ -85,6 +97,8 @@ Jumping.LEFT = 0.05
 Jumping.COOLDOWN = 300
 -- How far from what it comes out at a ship comes out, m.
 Jumping.LAND = 20000
+-- How far beyond the citadel it goes to a ship comes out of a jump bridge, m.
+Jumping.BRIDGE_LAND = 2000
 
 -- Whether a ship has a jump drive.
 function Jumping.Fitted(state: State.State, ship: number): boolean
@@ -246,10 +260,112 @@ function Jumping.Soon(state: State.State, ship: number, to: number): boolean
   return distance <= Jumping.Range(state, ship) and Jumping.Held(state, ship) >= Jumping.Fuel(state, ship, distance)
 end
 
+-- How far a jump bridge reaches, light years: as far as a drive does at
+-- its best.
+Jumping.BRIDGE_RANGE = Jumping.RANGE * (1 + 5 * Jumping.FURTHER)
+
+-- Whether a starbase is a gravity station with a Jump Bridge online, lit.
+local function bridged(state: State.State, starbase: State.Starbase): boolean
+  if not Starbases.Lit(state, starbase) then
+    return false
+  end
+  for _, module in starbase.modules do
+    if state.tick >= module.ready and Structures.moduleById[module.type].opens == "bridge" then
+      return true
+    end
+  end
+  return false
+end
+
+-- The jump bridge a ship is in the field of, if it is in one it may use.
+function Jumping.BridgeAt(state: State.State, ship: number): State.Starbase?
+  local ball, record = state.balls[ship], state.ships[ship]
+  if ball == nil or record == nil then
+    return nil
+  end
+  for _, id in state.starbaseIds do
+    local starbase = state.starbases[id]
+    local place = Space.Object(state, id)
+    local tower = Structures.towerById[starbase.tower]
+    if place and Space.SystemOf(state, id) == ball.system and bridged(state, starbase) and Starbases.Friendly(state, starbase, record)
+      and Space.Distance(ball :: any, place :: any) <= tower.field then
+      return starbase
+    end
+  end
+  return nil
+end
+
+-- The jump bridge a ship may go to in a system, if there is one.
+function Jumping.BridgeIn(state: State.State, ship: number, system: number): State.Starbase?
+  local record = state.ships[ship]
+  for _, id in state.starbaseIds do
+    local starbase = state.starbases[id]
+    if record and Space.SystemOf(state, id) == system and bridged(state, starbase) and Starbases.Friendly(state, starbase, record) then
+      return starbase
+    end
+  end
+  return nil
+end
+
+-- Every system a ship may go to by the bridge it is at, with the station
+-- there and how far.
+function Jumping.BridgeTo(state: State.State, ship: number): { { system: number, station: number, distance: number } }
+  local found: { { system: number, station: number, distance: number } } = {}
+  local from = Jumping.BridgeAt(state, ship)
+  local record = state.ships[ship]
+  if from == nil or record == nil then
+    return found
+  end
+  local here = Space.SystemOf(state, from.id)
+  for _, id in state.starbaseIds do
+    local starbase = state.starbases[id]
+    local system = Space.SystemOf(state, id)
+    if system ~= here and bridged(state, starbase) and Starbases.Friendly(state, starbase, record) then
+      local distance = Jumping.Distance(state, here, system)
+      if distance <= Jumping.BRIDGE_RANGE then
+        table.insert(found, { system = system, station = id, distance = distance })
+      end
+    end
+  end
+  return found
+end
+
 function Jumping.Validate(state: State.State, command: State.Command): (boolean, string?)
   local ship = state.ships[command.actor]
   if ship == nil then
     return false, "no such ship"
+  end
+  if command.kind == "Bridge" then
+    local ball = state.balls[ship.id]
+    local to = command.target or 0
+    if ball == nil then
+      return false, "docked"
+    elseif ball.warp then
+      return false, "in warp"
+    elseif ball.vitals.scrambled then
+      return false, "warp scrambled"
+    elseif ball.vitals.rooted then
+      return false, "rooted to the spot while its module runs"
+    end
+    local from = Jumping.BridgeAt(state, ship.id)
+    if from == nil then
+      return false, "not in the field of a jump bridge"
+    elseif state.galaxy.systems[to] == nil then
+      return false, "no such system"
+    elseif to == ball.system then
+      return false, "that is the system you are in"
+    elseif Jumping.BridgeIn(state, ship.id, to) == nil then
+      return false, "no jump bridge there to go to"
+    end
+    local distance = Jumping.Distance(state, ball.system, to)
+    if distance > Jumping.BRIDGE_RANGE then
+      return false, string.format("out of reach: %.1f light years, and the bridge reaches %.1f", distance, Jumping.BRIDGE_RANGE)
+    end
+    local fuel = Jumping.Fuel(state, ship.id, distance)
+    if from.fuel < fuel then
+      return false, `the bridge needs {fuel} fuel blocks for this hull, and has {from.fuel}`
+    end
+    return true
   end
   local ball = state.balls[ship.id]
   local to = command.target or 0
@@ -299,6 +415,29 @@ function Jumping.Apply(state: State.State, command: State.Command, events: { Eve
   local ball = state.balls[ship.id]
   local to = command.target :: number
   local from = ball.system
+  if command.kind == "Bridge" then
+    local at = Jumping.BridgeAt(state, ship.id) :: State.Starbase
+    local there = Jumping.BridgeIn(state, ship.id, to) :: State.Starbase
+    local distance = Jumping.Distance(state, from, to)
+    at.fuel -= Jumping.Fuel(state, ship.id, distance)
+    local place = Space.Object(state, there.id) :: System.Object
+    local tower = Structures.towerById[there.tower]
+    local rng = Rng.For(state.historySeed, state.tick, ball.id, 38)
+    local angle = Rng.Float(rng, 0, 2 * math.pi)
+    local out = (tower.reach or place.radius) + Jumping.BRIDGE_LAND + ball.radius
+    ball.vitals.running, ball.vitals.locks = {}, {}
+    ball.system = to
+    ball.x, ball.y, ball.z = place.x + out * math.cos(angle), place.y + Rng.Float(rng, -0.1, 0.1) * out, place.z + out * math.sin(angle)
+    ball.vx, ball.vy, ball.vz = 0, 0, 0
+    ball.tvx, ball.tvy, ball.tvz = 0, 0, 0
+    ball.mode, ball.target = "stop", 0
+    ball.warp, ball.intent = nil, nil
+    Space.AssignGrid(state, ball)
+    Vitals.Refresh(state, ball)
+    table.insert(events, { kind = "Jumped", ship = ball.id, from = from, to = to, gate = 0, arrival = there.id, drive = true, bridge = true,
+      distance = distance, beacon = place.name, took = 0, radius = ball.radius })
+    return
+  end
   local distance = Jumping.Distance(state, from, to)
   local left = Jumping.Fuel(state, ship.id, distance)
   for _, item in Items.In(state, ship.id, "cargo") do

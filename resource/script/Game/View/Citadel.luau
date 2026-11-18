@@ -62,10 +62,19 @@ local SMALL: { [string]: Pick } = {
   refinery = { seed = 47535, asym = false, detail = ALL, style = "blocks", paint = "orun" },
   research = { seed = 20247, asym = false, detail = ALL, style = "blocks", paint = "vail" },
   shipyard = { seed = 47336, asym = false, detail = ALL, style = "blocks", paint = "civil" },
+  -- (and the gravity station, the owner's of the same day: a wormhole, in
+  -- the citadels' own dark grey)
+  gravity = { seed = 71349, asym = true, detail = ALL, style = "wormhole", paint = "dark" },
+}
+-- (and the owner's picks at the other sizes, as they come)
+local PICKED: { [string]: { [number]: Pick } } = {
+  refinery = { [2] = { seed = 90045, asym = false, detail = ALL, style = "blocks", paint = "orun" } },
+  gravity = { [5] = { seed = 49070, asym = true, detail = ALL, style = "wormhole", paint = "orun" } },
 }
 Citadel.PICKS = {} :: { [string]: { Pick } }
 for kind, small in SMALL do
-  Citadel.PICKS[kind] = { small, small, small, small, small }
+  local own = PICKED[kind] or {}
+  Citadel.PICKS[kind] = { small, own[2] or small, own[3] or small, own[4] or small, own[5] or small }
 end
 
 -- The pick a kind of citadel is drawn from at a size (a habitation's, if no such kind).
@@ -408,7 +417,9 @@ function Citadel.Shape(seed: number, size: number, asym: boolean?, style: string
       local alongFace = if n.x ~= 0 then block.half.z else block.half.x
       local out = math.abs(vector.dot(block.half, n))
       local wide, high = alongFace * 0.55, block.half.y * 0.45
-      if wide > 0.25 and high > 0.15 then
+      -- (round a wormhole, only the faces that look out from it: one that
+      -- looks in looks into the rings)
+      if wide > 0.25 and high > 0.15 and not (hole > 0 and vector.dot(n, block.center) <= 0) then
         local face = block.center + n * out
         local a = if n.x ~= 0 then v(0, 0, 1) else v(1, 0, 0)
         local clear = true

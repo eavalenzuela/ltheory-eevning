@@ -99,7 +99,8 @@ export type ModuleType = {
   -- can fit ('kinds', Structures.CITADEL_KINDS), and those only from a
   -- size up ('least'); and what it opens there that nothing else of a
   -- citadel does ('opens': "capital" capital ships built, "advanced"
-  -- tech 2 hulls built, "invention" tech 2 hulls invented).
+  -- tech 2 hulls built, "invention" tech 2 hulls invented, "bridge" a
+  -- jump bridge to another gravity station).
   kinds: { string }?,
   least: number?,
   opens: string?,
@@ -222,9 +223,11 @@ Structures.CITADEL_SIZE_NAMES = { "Small", "Medium", "Large", "Extra-Large", "Hu
 -- kind does better (Structures.CITADEL_BONUS) and what only it can fit
 -- (the modules with 'kinds') are below. Any kind fits the plain service
 -- modules, and does no better with them than a citadel of another kind.
-Structures.CITADEL_KINDS = { "habitation", "tradehub", "refinery", "research", "shipyard" }
+-- (and the sixth, the owner's of the same day: a gravity station, a jump
+-- hub: "Jump hub", of a beacon lit and a bridge to another)
+Structures.CITADEL_KINDS = { "habitation", "tradehub", "refinery", "research", "shipyard", "gravity" }
 Structures.CITADEL_KIND_NAMES = { habitation = "Habitation", tradehub = "Trade Hub", refinery = "Refinery",
-  research = "Research Station", shipyard = "Shipyard" } :: { [string]: string }
+  research = "Research Station", shipyard = "Shipyard", gravity = "Gravity Station" } :: { [string]: string }
 -- What each kind does better, where it is (its services online): mine,
 -- every figure, but the kinds' exclusive modules, which are the owner's.
 --   shipyard     a job builds in three quarters of the time, of nine
@@ -235,6 +238,8 @@ Structures.CITADEL_KIND_NAMES = { habitation = "Habitation", tradehub = "Trade H
 --   tradehub     half the sales tax and broker's fee on what is traded there
 --   habitation   a clone bay and room for storage without a module for
 --                them, and a fifth less fuel
+--   gravity      a jump beacon lit without a module for it (the
+--                owner's: it counts as a lit beacon for jump drives)
 export type CitadelBonus = { jobTime: number?, materials: number?, refine: number?, researchTime: number?, invent: number?,
   fees: number?, fuel: number?, gives: { Service }? }
 Structures.CITADEL_BONUS = {
@@ -243,6 +248,7 @@ Structures.CITADEL_BONUS = {
   research = { researchTime = 0.75, invent = 0.1 },
   tradehub = { fees = 0.5 },
   habitation = { fuel = 0.8, gives = { "quarters", "storage" } },
+  gravity = { gives = { "beacon" } },
 } :: { [string]: CitadelBonus }
 Structures.CITADEL = {
   { field = 2750, fuel = 8, anchor = 2 * 3600, volume = 4000, basePrice = 80000000, shield = 300000, armor = 150000, hull = 150000,
@@ -378,6 +384,12 @@ local modules: { ModuleType } = {
     opens = "invention" },
   { id = "service.reactor", name = "Reactor", service = "reaction", radius = 0, powergrid = 0, cpu = 0, anchor = 900, pilot = true,
     volume = 3500, basePrice = 60000000, citadel = true, fuel = 12, kinds = { "refinery" } },
+  -- (the gravity station's: "only it fits a Jump Bridge to another
+  -- gravity station", the owner's. A ship in the field of one goes to
+  -- another, of its owner's or open to it, on the station's fuel:
+  -- Tactical/Jumping. Price, fuel and how far it reaches are mine.)
+  { id = "service.bridge", name = "Jump Bridge", service = "beacon", radius = 0, powergrid = 0, cpu = 0, anchor = 1200, pilot = true,
+    volume = 3500, basePrice = 150000000, citadel = true, fuel = 20, kinds = { "gravity" }, opens = "bridge" },
 }
 
 -- The colony ships, by class. (The first of a size of ship above
