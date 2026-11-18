@@ -137,6 +137,17 @@ def scenarios():
     return found
 
 
+def app_of(scenario):
+    """The app a scenario runs in: 'game', unless a line '# app: NAME' at its head says another."""
+    with open(os.path.join(SCENARIOS, scenario + ".txt"), errors="replace") as text:
+        for line in text:
+            if not line.startswith("#"):
+                break
+            if line.startswith("# app:"):
+                return line.split(":", 1)[1].strip()
+    return "game"
+
+
 def times():
     known = {}
     if os.path.exists(TIMES):
@@ -299,7 +310,7 @@ def run(plan, known):
             if os.path.exists(os.path.join(REPO, child)):
                 shutil.copy(os.path.join(REPO, child), copy)
         for scenario in plan["scenarios"]:
-            futures.append(pool.submit(step, scenario, ["bin/launch", "game", "--no-present", "--fixed-step", "60", "--timeout", "800",
+            futures.append(pool.submit(step, scenario, ["bin/launch", app_of(scenario), "--no-present", "--fixed-step", "60", "--timeout", "800",
                                                         "--script", f"test/scenario/{scenario}.txt"], copy, 900))
 
     if plan["whole"]:

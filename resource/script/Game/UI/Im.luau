@@ -240,6 +240,11 @@ function Im.Typing(): boolean
   return focus ~= ""
 end
 
+-- The name of the field being typed into ("" if none).
+function Im.Focus(): string
+  return focus
+end
+
 function Im.Cursor(): vector
   return cursor
 end

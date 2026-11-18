@@ -1,0 +1,73 @@
+# The save editor (bin/launch saveedit), on a save of its own in
+# cache/test-saves/saveedit: a new game is saved there, opened, given
+# credits, skills and fuel, changed by its raw state, saved, and read
+# again to find all of that in it.
+#
+#   bin/launch saveedit --no-present --fixed-step 60 --script test/scenario/saveedit.txt
+#
+# app: saveedit
+# covers: App/saveedit Tool/SaveEdit
+
+wait 1
+lua SaveEdit.Dir('cache/test-saves/saveedit')
+lua assert(SaveEdit.Make('one'), 'no save could be made')
+lua assert(SaveEdit.Open('one'), 'the save did not open')
+frames 3
+
+# Credits: a button, and typed.
+lua _G.was = SaveEdit.Game().state.wallet
+until SaveEdit.Press('wallet+1B')
+frames 2
+lua assert(SaveEdit.Game().state.wallet == _G.was + 1e9, 'the button gave no billion')
+lua SaveEdit.Type('wallet', '5000')
+frames 3
+lua assert(SaveEdit.Game().state.wallet == 5000, 'the credits typed were not set')
+
+# Every skill to 5, and one taken down by its row.
+until SaveEdit.Press('skills:All to 5')
+frames 2
+until SaveEdit.Press('skill:navigation:2')
+frames 2
+lua assert(SaveEdit.Game().state.skills.frigates == 5 and SaveEdit.Game().state.skills.navigation == 2, 'skills were not set')
+
+# Fuel into the first hangar.
+lua SaveEdit.Tab('items')
+frames 3
+lua SaveEdit.Type('give:search', 'fuel block')
+frames 3
+until SaveEdit.Press('give:fuel.block')
+frames 2
+lua SaveEdit.Type('give:count', '250')
+frames 3
+until SaveEdit.Press('give')
+frames 2
+
+# A flag set in the raw state.
+lua SaveEdit.Tab('raw')
+frames 2
+lua SaveEdit.Type('raw:search', 'peaceful')
+frames 3
+lua SaveEdit.Type('raw:peaceful', 'false')
+frames 3
+lua assert(SaveEdit.Game().state.peaceful == false, 'the raw flag was not set')
+
+# The world pages draw.
+lua SaveEdit.Tab('world')
+lua SaveEdit.World('systems')
+frames 2
+lua SaveEdit.World('markets')
+frames 2
+
+# Saved, and read again.
+until SaveEdit.Press('save')
+frames 2
+lua assert(not select(3, SaveEdit.Status()), 'still changed after saving: ' .. SaveEdit.Status())
+lua assert(SaveEdit.Open('one'), 'the saved game did not open')
+lua _G.g = SaveEdit.Game().state
+lua assert(_G.g.wallet == 5000 and _G.g.skills.navigation == 2 and _G.g.peaceful == false, 'what was saved is not what was set')
+lua _G.fuel = 0
+lua for _, id in _G.g.itemIds do if _G.g.items[id].type == 'fuel.block' then _G.fuel += _G.g.items[id].quantity end end
+lua assert(_G.fuel >= 250, 'the fuel given is not in the save')
+
+echo saveedit scenario passed
+quit
