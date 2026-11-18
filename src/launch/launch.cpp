@@ -89,7 +89,9 @@ struct Launcher : public Program {
     if (!OS_IsDir("resource"))
       OS_ChangeDir("../");
     /* (the game goes by its name: the rest are tools, and go by theirs) */
-    window = Window_Create(appName == "game" ? "Limitless Space" : "App Launcher", size, border, false);
+    window = Window_Create(
+      appName == "game" ? "Limitless Space" : appName == "saveedit" ? "Limitless Space Save Editor" : "App Launcher",
+      size, border, false);
     /* (one with no border is the screen's own size, and goes where the screen begins) */
     if (!border)
       window->SetPosition(V2I(0, 0));

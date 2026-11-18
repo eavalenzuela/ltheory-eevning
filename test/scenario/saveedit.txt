@@ -1,7 +1,8 @@
 # The save editor (bin/launch saveedit), on a save of its own in
 # cache/test-saves/saveedit: a new game is saved there, opened, given
 # credits, skills and fuel, changed by its raw state, saved, and read
-# again to find all of that in it.
+# again to find all of that in it. Then the folder is picked again
+# by going up out of it and back in.
 #
 #   bin/launch saveedit --no-present --fixed-step 60 --script test/scenario/saveedit.txt
 #
@@ -68,6 +69,20 @@ lua assert(_G.g.wallet == 5000 and _G.g.skills.navigation == 2 and _G.g.peaceful
 lua _G.fuel = 0
 lua for _, id in _G.g.itemIds do if _G.g.items[id].type == 'fuel.block' then _G.fuel += _G.g.items[id].quantity end end
 lua assert(_G.fuel >= 250, 'the fuel given is not in the save')
+
+# Another folder, picked: up out of it, into it again, and used.
+until SaveEdit.Press('folder')
+frames 2
+lua SaveEdit.Type('folder:path', 'cache/test-saves/saveedit')
+frames 3
+until SaveEdit.Press('folder:..')
+frames 2
+until SaveEdit.Press('folder:saveedit')
+frames 2
+until SaveEdit.Press('folder:use')
+frames 2
+lua assert(SaveEdit.Folder() == 'cache/test-saves/saveedit', 'the folder picked is not the one used: ' .. SaveEdit.Folder())
+lua assert(SaveEdit.Open('one'), 'a save in the folder picked did not open')
 
 echo saveedit scenario passed
 quit

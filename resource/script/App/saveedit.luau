@@ -30,10 +30,12 @@
 -- Game, Press, Type).
 
 local AppShell = require("@lt/AppShell")
+local Colors = require("@lt/Colors")
 local Characters = require("@lt/Core/Character/Characters")
 local Components = require("@lt/Widget/Components")
 local Core = require("@lt/Core/Api")
 local Factions = require("@lt/Core/Data/Factions")
+local Icons = require("@lt/Icons")
 local Im = require("@lt/Game/UI/Im")
 local SaveEdit = require("@lt/Tool/SaveEdit")
 local Ships = require("@lt/Core/Data/Ships")
@@ -103,6 +105,11 @@ return AppShell.Create(function(): Widget
   local giveType = ""
   local giveCount = 1
   local drafts: { [string]: string } = {}
+  -- The folder picker: whether it is up, the folder it is looking in,
+  -- and the folders used before (kept in FOLDERS, newest first).
+  local picking = false
+  local browse = "."
+  local recent: { string } = {}
 
   local function say(text: string, bad: boolean?)
     status, statusBad = text, bad == true
@@ -723,7 +730,163 @@ return AppShell.Create(function(): Widget
   -- -------------------------------------------------------------------
   -- The window
 
+  -- -------------------------------------------------------------------
+  -- Which folder of saves: this program's own save/, or another
+  -- install's (the folder the game is in, or its save/ folder).
+
+  local FOLDERS = "save/saveedit-folders.txt"
+  local PATH_LETTERS = "[%w '&%.%-_/\\:~]"
+
+  local function readRecent()
+    table.clear(recent)
+    local data = Host.ReadFile(FOLDERS)
+    if data then
+      for line in string.gmatch(buffer.tostring(data), "[^\n]+") do
+        if #recent < 8 then
+          table.insert(recent, line)
+        end
+      end
+    end
+  end
+
+  local function remember(path: string)
+    local index = table.find(recent, path)
+    if index then
+      table.remove(recent, index)
+    end
+    table.insert(recent, 1, path)
+    while #recent > 8 do
+      table.remove(recent)
+    end
+    if not Host.scripted then
+      Host.MakeDir("save")
+      Host.WriteFile(FOLDERS, table.concat(recent, "\n") .. "\n")
+    end
+  end
+
+  local function join(path: string, name: string): string
+    local last = string.sub(path, -1)
+    return if last == "/" or last == "\\" then path .. name else `{path}/{name}`
+  end
+
+  local function up(path: string): string
+    local trimmed = string.gsub(path, "[/\\]+$", "")
+    local tail = string.match(trimmed, "[^/\\]*$") or ""
+    if trimmed == "" or trimmed == "." or tail == ".." then
+      return if trimmed == "" or trimmed == "." then ".." else trimmed .. "/.."
+    end
+    local head = string.sub(trimmed, 1, #trimmed - #tail)
+    if head == "" then
+      return "."
+    end
+    -- (the root stays the root: "/" or "C:/")
+    if head == "/" or string.match(head, "^%a:[/\\]$") then
+      return head
+    end
+    return (string.gsub(head, "[/\\]+$", ""))
+  end
+
+  -- The saves in a folder: an install's save/ if it has one, or the
+  -- folder itself.
+  local function savesIn(path: string): string
+    local inner = join(path, "save")
+    return if Host.Exists(inner) then inner else path
+  end
+
+  local function use(path: string): boolean
+    if dirty then
+      say("There are changes not saved: save them or revert first.", true)
+      return false
+    end
+    local was = dir
+    dir = savesIn(path)
+    refresh()
+    if #slots == 0 then
+      say(`No saved games in {dir}.`, true)
+      dir = was
+      refresh()
+      return false
+    end
+    slot, game = nil, nil
+    picking = false
+    remember(path)
+    say(`{#slots} saved game{if #slots == 1 then "" else "s"} in {dir}.`)
+    return true
+  end
+
+  local function pickerPage(x: number, y: number, w: number, h: number)
+    Im.Strong("FOLDER OF SAVED GAMES", x, y, 13, Theme.DIM)
+    Im.Text("The folder a copy of the game is in (an install), or a save folder itself. Type a path and press Return, or go through the folders below.",
+      x, y + 20, 13, Theme.FAINT)
+    local field = drafts["folder:path"] or browse
+    local typed = Im.Words("folder:path", field, x, y + 44, w - 260, ROW + 4, 240, "a path", PATH_LETTERS)
+    if typed ~= field then
+      drafts["folder:path"] = typed
+    end
+    if drafts["folder:path"] and Im.Focus() ~= "folder:path" then
+      browse = drafts["folder:path"]
+      drafts["folder:path"] = nil
+    end
+    Im.Tone("primary")
+    if Im.Button("Use this folder", x + w - 250, y + 44, 150, ROW + 4, true, "folder:use") then
+      use(browse)
+    end
+    if Im.Button("Cancel", x + w - 92, y + 44, 92, ROW + 4, true, "folder:cancel") then
+      picking = false
+    end
+    -- What is in it: its folders, and what is there of saves.
+    local here = savesIn(browse)
+    local count = 0
+    for _, name in Host.ListDir(here) do
+      if string.sub(name, -1) == "/" and Host.Exists(`{join(here, string.sub(name, 1, -2))}/state.bin`) then
+        count += 1
+      end
+    end
+    Im.Text(if count > 0 then `{count} saved game{if count == 1 then "" else "s"} in {here}` else "no saved games here",
+      x, y + 84, 13, if count > 0 then Theme.GOOD else Theme.FAINT)
+    local folders: { string } = { ".." }
+    for _, name in Host.ListDir(browse) do
+      if string.sub(name, -1) == "/" then
+        table.insert(folders, string.sub(name, 1, -2))
+      end
+    end
+    local listY = y + 112
+    local lw = math.floor(w * 0.6)
+    local rows = math.floor((h - 112) / ROW)
+    local first = Im.Scroll("folders", x, listY, lw, rows * ROW, #folders, rows)
+    for row = 1, math.min(rows, #folders - first) do
+      local name = folders[first + row]
+      local ry = listY + (row - 1) * ROW
+      local _, click = Im.Row(x, ry, lw - 8, ROW, false, `folder:{name}`)
+      if click then
+        browse = if name == ".." then up(browse) else join(browse, name)
+        Im.ScrollTo("folders", 0)
+      end
+      Im.Text(if name == ".." then ".. (up)" else name .. "/", x + 8, ry + 4, 13, Theme.TEXT)
+    end
+    -- And the folders used before.
+    local rx = x + lw + 2 * GAP
+    Im.Strong("USED BEFORE", rx, listY, 13, Theme.DIM)
+    local ry = listY + 24
+    local own = { "." }
+    for _, path in recent do
+      if path ~= "." then
+        table.insert(own, path)
+      end
+    end
+    for index, path in own do
+      local _, click = Im.Row(rx, ry, w - lw - 2 * GAP, ROW, false, `folder:recent:{index}`)
+      if click then
+        use(path)
+      end
+      Im.Text(if path == "." then "this program's own" else path, rx + 8, ry + 4, 13, Theme.TEXT)
+      ry += ROW
+    end
+  end
+
   local PAGES = { { "pilot", "Pilot" }, { "items", "Ships & items" }, { "world", "World" }, { "raw", "Raw" } }
+
+  local pages: (g: Core.Game, x: number, cw: number, H: number) -> ()
 
   local function draw(w: Widget)
     Im.Begin()
@@ -735,10 +898,14 @@ return AppShell.Create(function(): Widget
     Im.Flat(0, 0, lw, H, Theme.RAISED, 1)
     Im.Strong("SAVED GAMES", GAP, GAP + 4, 13, Theme.DIM)
     Im.Text(dir .. "/", GAP, GAP + 24, 12, Theme.FAINT)
-    if Im.Button("Refresh", lw - 90, GAP, 78, ROW, true, "refresh") then
+    if Im.Button("Folder...", GAP, GAP + 44, 130, ROW, true, "folder") then
+      picking = not picking
+      browse = if dir == "save" then "." else dir
+    end
+    if Im.Button("Refresh", GAP + 140, GAP + 44, 100, ROW, true, "refresh") then
       refresh()
     end
-    local sy = GAP + 48
+    local sy = GAP + 80
     for _, each in slots do
       local meta = each.meta
       local _, click = Im.Row(0, sy, lw, 58, each.slot == slot, `slot:{each.slot}`)
@@ -775,11 +942,26 @@ return AppShell.Create(function(): Widget
       end
     end
     Im.Text(status, x, GAP + 36, 13, if statusBad then Theme.BAD else Theme.DIM)
-    if g == nil then
+    if picking then
+      pickerPage(x, GAP + 70, cw, H - GAP - 70 - GAP)
+    elseif g == nil then
       Im.Text("Close the game before editing its save: it saves when it docks.", x, GAP + 60, 13, Theme.FAINT)
-      Im.Plain(was)
-      return
+    else
+      pages(g, x, cw, H)
     end
+    Im.Plain(was)
+    -- The pointer: the engine hides the system's own, and every app
+    -- draws its own. (Not in a script's run, whose pictures must not
+    -- depend on where the mouse is.)
+    if not Host.scripted then
+      local at = Cursor_Get()
+      Icon_Draw(Icons.Cursors.Pointer(), at + vector.create(1, 1), 14 * Theme.scale, vector.create(0, 0, 0), 0.8)
+      Icon_Draw(Icons.Cursors.Pointer(), at, 14 * Theme.scale, 4 * Colors.Primary, 0.9)
+    end
+  end
+
+  -- The pages of the game that is open.
+  pages = function(g: Core.Game, x: number, cw: number, H: number)
     local tx = x
     for _, page in PAGES do
       local clicked, wide = Im.Tab(page[2], tx, GAP + 62, 32, tab == page[1], `tab:{page[1]}`)
@@ -799,9 +981,9 @@ return AppShell.Create(function(): Widget
     else
       rawPage(g, x, top, cw, ch)
     end
-    Im.Plain(was)
   end
 
+  readRecent()
   refresh()
 
   -- For a script (test/scenario/saveedit.txt).
@@ -843,6 +1025,9 @@ return AppShell.Create(function(): Widget
     end,
     Game = function(): Core.Game?
       return game
+    end,
+    Folder = function(): string
+      return dir
     end,
     -- A button or row pressed by its name, and words typed into a field.
     Press = function(name: string): boolean

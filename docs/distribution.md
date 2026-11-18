@@ -39,6 +39,7 @@ A small program of its own (Rust; it cross-builds for Windows in seconds). The i
 - Its own update: the new one downloaded beside it, the running one renamed `.old` (Windows lets a running program be renamed, not replaced), removed next time.
 - Where the distribution is: `launcher.txt` beside it (`url = …`, written on the first run, or by `--url`), else the address it was built with (`LT_DIST_URL`). `--no-play`: update only.
 - What the game saves (`save/`: saved games, settings) is in the same folder, and is nothing the launcher installed: an update leaves it alone.
+- The save editor (`App/saveedit`, docs/tools.md) comes with every install: `Save Editor.bat` beside the game on Windows, and `limitless-space-saveedit` on Linux, which the launcher adds to the desktop's app list beside the game.
 
 ## The game's window
 

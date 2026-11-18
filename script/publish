@@ -111,6 +111,12 @@ cp -p "$LAUNCHER_WIN" "$FILES/LimitlessSpaceLauncher.exe"
 # (what the game reads: all of resource/ but the tests of the rules, which nobody plays)
 rsync -a --delete --exclude '*.spec.luau' "$WORK/src/resource/" "$FILES/resource/"
 cp -p "$WORK/src/LICENSE" "$WORK/src/NOTICE.md" "$FILES/"
+# (the save editor, App/saveedit, started from the install: a file to
+# double-click on Windows, and a program on Linux that the launcher
+# puts in the desktop's app list beside the game)
+printf '@echo off\r\ncd /d "%%~dp0"\r\nstart "" "LimitlessSpace.exe" saveedit\r\n' > "$FILES/Save Editor.bat"
+printf '#!/bin/sh\ncd "$(dirname "$0")" && exec ./limitless-space saveedit "$@"\n' > "$FILES/limitless-space-saveedit"
+chmod +x "$FILES/limitless-space-saveedit"
 [[ -f "$WORK/src/RELEASE_NOTES.md" ]] && cp -p "$WORK/src/RELEASE_NOTES.md" "$FILES/"
 cp -p "$FILES/LimitlessSpaceLauncher.exe" "$FILES/limitless-space-launcher" "$DIST/"
 PREV="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["release"].rsplit("-",1)[-1])' "$DIST/manifest.json" 2>/dev/null || true)"

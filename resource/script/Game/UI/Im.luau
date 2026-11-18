@@ -682,7 +682,10 @@ end
 -- figures, spaces and the few marks a name has. Click it and type;
 -- Return or a click elsewhere finishes. Returns what it holds now.
 -- 'hint' is shown, dim, while it is empty and nobody is typing in it.
-function Im.Words(name: string, value: string, x: number, y: number, w: number, h: number, limit: number, hint: string?): string
+-- 'allowed' is a pattern of the letters it takes, if not those (a path's
+-- field takes slashes and colons too).
+function Im.Words(name: string, value: string, x: number, y: number, w: number, h: number, limit: number, hint: string?,
+  allowed: string?): string
   local set = said[name]
   if set then
     said[name] = nil
@@ -701,7 +704,7 @@ function Im.Words(name: string, value: string, x: number, y: number, w: number, 
     end
   end
   if focus == name then
-    for letter in string.gmatch(Keyboard_GetText(), "[%w '&%.%-]") do
+    for letter in string.gmatch(Keyboard_GetText(), allowed or "[%w '&%.%-]") do
       if #typed < limit then
         typed ..= letter
       end

@@ -399,11 +399,27 @@ fn desktop_entry(dir: &Path) {
         if icon.exists() { icon.display().to_string() } else { "applications-games".into() },
     );
     let file = apps.join("limitless-space.desktop");
-    if std::fs::read_to_string(&file).ok().as_deref() == Some(text.as_str()) {
+    if std::fs::read_to_string(&file).ok().as_deref() != Some(text.as_str())
+        && std::fs::create_dir_all(&apps).and_then(|_| std::fs::write(&file, &text)).is_ok()
+    {
+        println!("Added \"{NAME}\" to your applications.");
+    }
+    // And the save editor (App/saveedit), where the install has it: its own program, run in the install.
+    let editor = dir.join("limitless-space-saveedit");
+    if !editor.exists() {
         return;
     }
-    if std::fs::create_dir_all(&apps).and_then(|_| std::fs::write(&file, &text)).is_ok() {
-        println!("Added \"{NAME}\" to your applications.");
+    let text = format!(
+        "[Desktop Entry]\nType=Application\nName={NAME} Save Editor\nExec=\"{}\"\nPath={}\nIcon={}\nTerminal=false\nCategories=Game;\n",
+        editor.display(),
+        dir.display(),
+        if icon.exists() { icon.display().to_string() } else { "applications-games".into() },
+    );
+    let file = apps.join("limitless-space-saveedit.desktop");
+    if std::fs::read_to_string(&file).ok().as_deref() != Some(text.as_str())
+        && std::fs::create_dir_all(&apps).and_then(|_| std::fs::write(&file, &text)).is_ok()
+    {
+        println!("Added \"{NAME} Save Editor\" to your applications.");
     }
 }
 
