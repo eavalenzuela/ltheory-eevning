@@ -1615,6 +1615,19 @@ function Core.Load(data: buffer, length: number?): Game
   if version ~= Core.SAVE_VERSION then
     error(`Core.Load: the save is version {tostring(file.saveVersion)}; this build reads version {Core.SAVE_VERSION}`, 0)
   end
+  -- (a citadel from before they had kinds is a habitation of its size:
+  -- in a hangar or a hold, anchored, or being built)
+  local state: State.State = file.state
+  for _, item in state.items do
+    item.type = Structures.CitadelNow(item.type) or item.type
+  end
+  for _, starbase in state.starbases do
+    starbase.tower = Structures.CitadelNow(starbase.tower) or starbase.tower
+  end
+  for _, job in state.jobs do
+    job.product = Structures.CitadelNow(job.product) or job.product
+    job.blueprint = Structures.CitadelNow(job.blueprint) or job.blueprint
+  end
   -- (whatever its version, it may be from before an item type was
   -- added: to the galaxy's goods, and to what the markets sell)
   Commerce.Reconcile(file.state)
@@ -2285,11 +2298,18 @@ function Query.JobPlan(game: Game, station: number, type: string, runs: number):
   return if blueprint then Industry.Plan(game.state, station, blueprint, runs) else nil
 end
 
+-- Where the pilot is docked, if anywhere (what is worked out there is
+-- as the station's kind makes it: Assets/CitadelKinds).
+local function docked(game: Game): number?
+  local ship = game.state.ships[game.state.player.ship]
+  return if ship and ship.docked ~= 0 then ship.docked else nil
+end
+
 -- What copying so many runs of a blueprint would take, or nil if the
 -- type is not a blueprint (a copy is not: it cannot be copied).
 function Query.CopyPlan(game: Game, type: string, runs: number): Industry.CopyPlan?
   local blueprint = Blueprints.byId[type]
-  return if blueprint then Industry.CopyPlan(game.state, blueprint, runs) else nil
+  return if blueprint then Industry.CopyPlan(game.state, blueprint, runs, docked(game)) else nil
 end
 
 -- A body by id (a ship in space or a described object), or nil.
@@ -3472,11 +3492,11 @@ function Query.Research(game: Game, type: string): ResearchStatus?
   local material, time = Industry.Researched(game.state, type)
   return {
     material = material, time = time,
-    nextMaterial = Industry.ResearchPlan(game.state, blueprint, "material"),
-    nextTime = Industry.ResearchPlan(game.state, blueprint, "time"),
-    invention = Industry.InventionPlan(game.state, blueprint),
+    nextMaterial = Industry.ResearchPlan(game.state, blueprint, "material", docked(game)),
+    nextTime = Industry.ResearchPlan(game.state, blueprint, "time", docked(game)),
+    invention = Industry.InventionPlan(game.state, blueprint, nil, docked(game)),
     -- (and every one, where a hull has more than one tech 2 make)
-    inventions = Industry.Inventions(game.state, blueprint),
+    inventions = Industry.Inventions(game.state, blueprint, docked(game)),
   }
 end
 

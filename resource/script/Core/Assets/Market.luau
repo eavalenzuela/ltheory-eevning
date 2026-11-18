@@ -43,6 +43,7 @@
 -- a hold of ore sold at a station is in its system's stock within
 -- hours, and goes on from there along the gates.
 
+local CitadelKinds = require("@lt/Core/Assets/CitadelKinds")
 local Commerce = require("@lt/Core/Strategic/Commerce")
 local Economy = require("@lt/Core/Strategic/Economy")
 local Blueprints = require("@lt/Core/Data/Blueprints")
@@ -75,14 +76,15 @@ local TICKS_PER_DAY = 86400
 -- level of the skill for it.
 -- (At a station, both also follow from what its faction thinks of the
 -- pilot: Assets/Standings.)
+-- (And at a trade hub citadel, half of each: Data/Structures' CITADEL_BONUS.)
 function Market.Tax(state: State.State, station: number?): number
   return Market.SALES_TAX * (1 - 0.1 * math.max(0, state.skills.accounting or 0))
-    * (if station then Standings.Fees(state, station) else 1)
+    * (if station then Standings.Fees(state, station) else 1) * (CitadelKinds.Bonus(state, station).fees or 1)
 end
 
 function Market.Fee(state: State.State, station: number?): number
   return Market.BROKER_FEE * (1 - 0.1 * math.max(0, state.skills["broker.relations"] or 0))
-    * (if station then Standings.Fees(state, station) else 1)
+    * (if station then Standings.Fees(state, station) else 1) * (CitadelKinds.Bonus(state, station).fees or 1)
 end
 
 -- How much a station normally holds of a type, in units. Raw materials

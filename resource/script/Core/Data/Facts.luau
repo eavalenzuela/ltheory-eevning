@@ -819,6 +819,38 @@ function Facts.Of(type: string): Sheet?
       row(has, "Battery slots", whole(tower.defences or 0))
       row(has, "Burns", `{tower.fuel} blocks an hour, and more for each service online`, Structures.FUEL.id)
       row(has, "Anchors in", seconds(tower.anchor))
+      -- (what its kind does better, and what only its kind fits)
+      local kind = tower.kind
+      if kind then
+        local bonus: Structures.CitadelBonus = Structures.CITADEL_BONUS[kind] or {}
+        local better = section(sheet, Structures.CITADEL_KIND_NAMES[kind])
+        local function less(share: number?): string?
+          return if share then `{whole((1 - share) * 100)}% less` else nil
+        end
+        if bonus.jobTime then
+          row(better, "Manufacturing", `{less(bonus.jobTime)} time, {less(bonus.materials)} materials`)
+        end
+        if bonus.refine then
+          row(better, "Refining", `{whole((bonus.refine - 1) * 100)}% more of what ore and ice give`)
+        end
+        if bonus.researchTime then
+          row(better, "Research", `{less(bonus.researchTime)} time for research, copying and invention; invention {whole((bonus.invent or 0) * 100)} in 100 likelier`)
+        end
+        if bonus.fees then
+          row(better, "Trade", `{less(bonus.fees)} sales tax and broker's fee here`)
+        end
+        if bonus.gives then
+          row(better, "Without a module", table.concat(bonus.gives, " and "))
+        end
+        if bonus.fuel then
+          row(better, "Fuel", less(bonus.fuel) :: string)
+        end
+        for _, only in Structures.modules do
+          if only.kinds and table.find(only.kinds, kind) and (only.least or 1) <= tower.size then
+            row(better, "Only this kind fits", only.name, only.id)
+          end
+        end
+      end
       local stands = section(sheet, "Under fire")
       row(stands, "Shield", whole(tower.shield))
       row(stands, "Armour", whole(tower.armor))
@@ -829,6 +861,18 @@ function Facts.Of(type: string): Sheet?
       sheet.note = "Fitted in a citadel, a slot each. It gives its service there while it is online, and burns fuel for it."
       local does = section(sheet, "Service")
       row(does, "Gives", anchored.service)
+      if anchored.kinds then
+        local names: { string } = {}
+        for _, each in anchored.kinds do
+          table.insert(names, Structures.CITADEL_KIND_NAMES[each])
+        end
+        row(does, "Fitted only in", table.concat(names, ", ") .. (if anchored.least then ` of {string.lower(Structures.CITADEL_SIZE_NAMES[anchored.least])} size or bigger` else ""))
+      end
+      local opens = ({ capital = "capital ships to be built here", advanced = "tech 2 hulls to be built here",
+        invention = "tech 2 hulls to be invented here" } :: { [string]: string })[anchored.opens or ""]
+      if opens then
+        row(does, "Lets", opens)
+      end
       row(does, "Burns", `{anchored.fuel or 0} blocks an hour`, Structures.FUEL.id)
       row(does, "Comes online in", seconds(anchored.anchor))
     elseif tower then

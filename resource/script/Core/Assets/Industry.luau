@@ -15,6 +15,7 @@
 -- the work is.
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
+local CitadelKinds = require("@lt/Core/Assets/CitadelKinds")
 local Constants = require("@lt/Core/Data/Constants")
 local Items = require("@lt/Core/Assets/Items")
 local Drones = require("@lt/Core/Data/Drones")
@@ -52,9 +53,11 @@ local function inHangar(state: State.State, command: State.Command): (State.Item
 end
 
 -- The share of an ore's minerals the pilot recovers: 3% more for each
--- level of Reprocessing.
-function Industry.RefineYield(state: State.State): number
-  return Ores.REFINE_YIELD + 0.03 * math.max(0, state.skills.refining or 0)
+-- level of Reprocessing; and at a refinery citadel, a tenth more again
+-- (Data/Structures' CITADEL_BONUS), never more than the whole.
+function Industry.RefineYield(state: State.State, station: number?): number
+  local yield = Ores.REFINE_YIELD + 0.03 * math.max(0, state.skills.refining or 0)
+  return math.min(1, yield * (CitadelKinds.Bonus(state, station).refine or 1))
 end
 
 -- What refining a stack of ore gives: the units used, and the minerals.
@@ -119,7 +122,8 @@ export type ResearchPlan = { what: string, level: number, seconds: number, fee: 
 -- What the next level of research into a blueprint would take: "material"
 -- or "time". Nil when there is no next level. Each level takes half as
 -- long again as the last, and costs more.
-function Industry.ResearchPlan(state: State.State, blueprint: Blueprints.Blueprint, what: string): ResearchPlan?
+-- ('station': where it would be done: a research citadel is quicker.)
+function Industry.ResearchPlan(state: State.State, blueprint: Blueprints.Blueprint, what: string, station: number?): ResearchPlan?
   local material, time = Industry.Researched(state, blueprint.id)
   local level = if what == "material" then material elseif what == "time" then time else Industry.RESEARCH_LEVELS
   if level >= Industry.RESEARCH_LEVELS then
@@ -129,7 +133,7 @@ function Industry.ResearchPlan(state: State.State, blueprint: Blueprints.Bluepri
     what = what, level = level + 1,
     -- (5% quicker for each level of Bench Science)
     seconds = math.ceil((300 + 0.5 * math.min(7200, blueprint.seconds)) * 1.5 ^ level
-      * (1 - Industry.BENCH * math.max(0, state.skills["bench.science"] or 0))),
+      * (1 - Industry.BENCH * math.max(0, state.skills["bench.science"] or 0)) * (CitadelKinds.Bonus(state, station).researchTime or 1)),
     -- (2% of an original at ten times its product a level, as it was
     -- before originals came down to five times: the same in credits)
     fee = math.ceil(blueprint.basePrice * 0.02 * 10 / Blueprints.ORIGINAL * (level + 1)),
@@ -163,7 +167,9 @@ export type InventionPlan = { product: string, blueprint: string, datacores: num
 -- What inventing from a blueprint would take and make, or nil if what
 -- it builds has no tech 2 make. ('want': which, of a hull that has more
 -- than one tech 2 make, by its id: the first, if not said or not one.)
-function Industry.InventionPlan(state: State.State, blueprint: Blueprints.Blueprint, want: string?): InventionPlan?
+-- ('station': where it would be done: a research citadel is quicker, and
+-- likelier to bring it off.)
+function Industry.InventionPlan(state: State.State, blueprint: Blueprints.Blueprint, want: string?, station: number?): InventionPlan?
   local module = Modules.Improved(blueprint.product)
   local hull = Ships.Improved(blueprint.product)
   for _, make in Ships.ImprovedAll(blueprint.product) do
@@ -182,27 +188,28 @@ function Industry.InventionPlan(state: State.State, blueprint: Blueprints.Bluepr
   -- as its weapon is, and a drone as a small module or a medium one)
   local size = if module then Modules.SizeOf(module) elseif hull then Industry.HULL_SIZE[hull.class] or 3
     elseif charge then charge.size elseif drone then (if drone.volume > 5 then 2 else 1) else 1
+  local bonus = CitadelKinds.Bonus(state, station)
   return {
-    product = id, blueprint = made.id, datacores = 2 ^ size, seconds = 1800 * size,
+    product = id, blueprint = made.id, datacores = 2 ^ size, seconds = math.ceil(1800 * size * (bonus.researchTime or 1)),
     fee = math.ceil(Types.Info(id).basePrice * 0.05),
-    chance = math.min(1, Industry.INVENT_CHANCE + Industry.INVENT_SKILL * math.max(0, state.skills.invention or 0)),
+    chance = math.min(1, Industry.INVENT_CHANCE + Industry.INVENT_SKILL * math.max(0, state.skills.invention or 0) + (bonus.invent or 0)),
   }
 end
 
 -- Every invention a blueprint can be put to: one, or one for each tech
 -- 2 make of a hull that has several.
-function Industry.Inventions(state: State.State, blueprint: Blueprints.Blueprint): { InventionPlan }
+function Industry.Inventions(state: State.State, blueprint: Blueprints.Blueprint, station: number?): { InventionPlan }
   local out: { InventionPlan } = {}
   local makes = Ships.ImprovedAll(blueprint.product)
   if #makes > 1 then
     for _, make in makes do
-      local plan = Industry.InventionPlan(state, blueprint, make.id)
+      local plan = Industry.InventionPlan(state, blueprint, make.id, station)
       if plan then
         table.insert(out, plan)
       end
     end
   else
-    local plan = Industry.InventionPlan(state, blueprint)
+    local plan = Industry.InventionPlan(state, blueprint, nil, station)
     if plan then
       table.insert(out, plan)
     end
@@ -211,10 +218,12 @@ function Industry.Inventions(state: State.State, blueprint: Blueprints.Blueprint
 end
 
 -- How long a job of so many runs takes: 4% less for each level of
--- Industry, and less again for what has been researched of it.
-function Industry.JobSeconds(state: State.State, blueprint: Blueprints.Blueprint, runs: number): number
+-- Industry, and less again for what has been researched of it; and at a
+-- shipyard citadel, a quarter less ('station').
+function Industry.JobSeconds(state: State.State, blueprint: Blueprints.Blueprint, runs: number, station: number?): number
   local _, time = Industry.Researched(state, blueprint.id)
-  return math.ceil(blueprint.seconds * runs * (1 - 0.04 * math.max(0, state.skills.industry or 0)) * (1 - Industry.TIME_SAVED * time))
+  return math.ceil(blueprint.seconds * runs * (1 - 0.04 * math.max(0, state.skills.industry or 0)) * (1 - Industry.TIME_SAVED * time)
+    * (CitadelKinds.Bonus(state, station).jobTime or 1))
 end
 
 -- What the station charges to run it.
@@ -232,8 +241,8 @@ export type CopyPlan = { copy: string, runs: number, seconds: number, fee: numbe
 
 -- What copying so many runs of a blueprint would take, and the item
 -- type the copy is. (5% quicker for each level of Draughtsmanship.)
-function Industry.CopyPlan(state: State.State, blueprint: Blueprints.Blueprint, runs: number): CopyPlan
-  local quicker = 1 - Industry.DRAUGHT * math.max(0, state.skills.draughtsmanship or 0)
+function Industry.CopyPlan(state: State.State, blueprint: Blueprints.Blueprint, runs: number, station: number?): CopyPlan
+  local quicker = (1 - Industry.DRAUGHT * math.max(0, state.skills.draughtsmanship or 0)) * (CitadelKinds.Bonus(state, station).researchTime or 1)
   return { copy = Blueprints.Copy(blueprint), runs = runs, seconds = math.ceil(blueprint.seconds * runs * Industry.COPY_TIME * quicker),
     fee = Industry.JobFee(blueprint, runs) }
 end
@@ -253,14 +262,15 @@ function Industry.Plan(state: State.State, station: number, blueprint: Blueprint
   local materials = {}
   -- (what has been researched comes off the whole job, though never to
   -- less than one of a thing a run)
-  local saved = 1 - Industry.MATERIAL_SAVED * (Industry.Researched(state, blueprint.id))
+  -- (and at a shipyard citadel, a tenth less of everything)
+  local saved = (1 - Industry.MATERIAL_SAVED * (Industry.Researched(state, blueprint.id))) * (CitadelKinds.Bonus(state, station).materials or 1)
   for _, m in blueprint.materials do
     table.insert(materials, { type = m.type, need = math.max(runs, math.ceil(m.quantity * runs * saved - 1e-9)),
       have = Industry.Have(state, station, m.type) })
   end
   return {
     blueprint = blueprint, runs = runs, quantity = blueprint.perRun * runs,
-    seconds = Industry.JobSeconds(state, blueprint, runs), fee = Industry.JobFee(blueprint, runs),
+    seconds = Industry.JobSeconds(state, blueprint, runs, station), fee = Industry.JobFee(blueprint, runs),
     materials = materials,
   }
 end
@@ -345,6 +355,16 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
     elseif #state.jobIds >= Industry.JobSlots(state) then
       return false, "every job slot is in use"
     end
+    -- (in a citadel, a capital is built only with a Capital Ship Assembly,
+    -- and a tech 2 hull only with an Advanced Ship Assembly: the owner's)
+    local hull = Ships.byId[blueprint.product]
+    if hull and CitadelKinds.IsCitadel(state, item.holder) then
+      if Ships.Capital(hull.class) and not CitadelKinds.Opens(state, item.holder, "capital") then
+        return false, "a capital is built here only with a Capital Ship Assembly"
+      elseif hull.tech == 2 and not CitadelKinds.Opens(state, item.holder, "advanced") then
+        return false, "a tech 2 hull is built here only with an Advanced Ship Assembly"
+      end
+    end
     local plan = Industry.Plan(state, item.holder, blueprint, runs)
     for _, m in plan.materials do
       if m.have < m.need then
@@ -361,7 +381,7 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
     if blueprint == nil then
       return false, "that is not a blueprint"
     elseif command.what == "invent" then
-      local plan = Industry.InventionPlan(state, blueprint, command.type)
+      local plan = Industry.InventionPlan(state, blueprint, command.type, item.holder)
       if plan == nil then
         return false, "there is no tech 2 make of that to invent"
       elseif not copy then
@@ -370,6 +390,10 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
         return false, "needs Invention 1"
       elseif #state.jobIds >= Industry.JobSlots(state) then
         return false, "every job slot is in use"
+      elseif Ships.byId[plan.product] and CitadelKinds.IsCitadel(state, item.holder)
+        and not CitadelKinds.Opens(state, item.holder, "invention") then
+        -- (in a citadel, a tech 2 hull is worked out only in an Advanced Research Hub: the owner's)
+        return false, "a tech 2 hull is invented here only with an Advanced Research Hub"
       end
       local have = 0
       for _, stack in Items.In(state, item.holder, "hangar") do
@@ -395,14 +419,14 @@ function Industry.Validate(state: State.State, command: State.Command): (boolean
         return false, "needs Industry 1"
       elseif #state.jobIds >= Industry.JobSlots(state) then
         return false, "every job slot is in use"
-      elseif Industry.CopyPlan(state, blueprint, runs).fee > state.wallet then
+      elseif Industry.CopyPlan(state, blueprint, runs, item.holder).fee > state.wallet then
         return false, "not enough credits for the fee"
       end
       return true
     elseif command.what ~= "material" and command.what ~= "time" then
       return false, "research is into materials or into time"
     end
-    local plan = Industry.ResearchPlan(state, blueprint, command.what :: string)
+    local plan = Industry.ResearchPlan(state, blueprint, command.what :: string, item.holder)
     if plan == nil then
       return false, "there is no more to learn of it"
     elseif (state.skills.industry or 0) < 1 then
@@ -459,7 +483,7 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
   local item = state.items[command.item :: number]
   if command.kind == "Reprocess" then
     local type = item.type
-    local used, minerals = Industry.RefineOutput(type, item.quantity, Industry.RefineYield(state))
+    local used, minerals = Industry.RefineOutput(type, item.quantity, Industry.RefineYield(state, if item.holder == ship.id then nil else ship.docked))
     -- (aboard a hull that is a refinery: out of its hold, and into it)
     local aboard = item.holder == ship.id
     Items.Take(state, item, used)
@@ -505,7 +529,7 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
 
   elseif command.kind == "StartResearch" and command.what == "invent" then
     local blueprint = Blueprints.Of(item.type) :: Blueprints.Blueprint
-    local plan = Industry.InventionPlan(state, blueprint, command.type) :: InventionPlan
+    local plan = Industry.InventionPlan(state, blueprint, command.type, ship.docked) :: InventionPlan
     local station = ship.docked
     local left = plan.datacores
     for _, stack in Items.In(state, station, "hangar") do
@@ -531,7 +555,7 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
 
   elseif command.kind == "StartResearch" and command.what == "copy" then
     local blueprint = Blueprints.byId[item.type]
-    local plan = Industry.CopyPlan(state, blueprint, command.quantity or 1)
+    local plan = Industry.CopyPlan(state, blueprint, command.quantity or 1, ship.docked)
     -- The blueprint is in the laboratory until it is done.
     Items.Take(state, item, 1)
     Wallet.Pay(state, -plan.fee, "copying fee", events)
@@ -546,7 +570,7 @@ function Industry.Apply(state: State.State, command: State.Command, events: { Ev
 
   elseif command.kind == "StartResearch" then
     local blueprint = Blueprints.byId[item.type]
-    local plan = Industry.ResearchPlan(state, blueprint, command.what :: string) :: ResearchPlan
+    local plan = Industry.ResearchPlan(state, blueprint, command.what :: string, ship.docked) :: ResearchPlan
     -- The blueprint is in the laboratory until it is done.
     Items.Take(state, item, 1)
     Wallet.Pay(state, -plan.fee, "research fee", events)
@@ -576,7 +600,7 @@ function Industry.Step(state: State.State, events: { Event })
       if job.research == "invent" then
         -- It comes off, or it does not: the roll is the job's own, and
         -- the chance is what the pilot's skill makes it when it ends.
-        local plan = if blueprint then Industry.InventionPlan(state, blueprint) else nil
+        local plan = if blueprint then Industry.InventionPlan(state, blueprint, nil, job.station) else nil
         local chance = if plan then plan.chance else 0
         local success = Rng.Chance(Rng.For(state.historySeed, job.id, 91), chance)
         if success then

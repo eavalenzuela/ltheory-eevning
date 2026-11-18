@@ -1,43 +1,59 @@
+/* A wormhole (Game/View/Scene, and the throat at the heart of a citadel
+   of the wormhole style: Game/View/Citadel). The owner, 2026-11-17: the
+   old one did not "look like a lightless sphere". Drawn on a sphere, as
+   a shell with alpha blending and no depth writing: the inner part of it
+   (kHorizon of its radius, seen from wherever the eye is) is lightless,
+   and gives nothing back; round that the light of what is behind it is
+   bent in toward it, so the sky is drawn back from the sphere's edge,
+   stretched round it, with a thin bright ring where the bending is
+   strongest; and at the sphere's own edge the bending has come to
+   nothing and the sky is as it is. */
+
 #include frag.jsl
+#include color.jsl
 #include lighting.jsl
-#include raytracing.jsl
 
 FRAG_IN vec3 normal;
 FRAG_IN vec3 position;
+FRAG_IN vec3 vertposscaled;
+FRAG_IN vec3 origin;
+FRAG_IN vec3 scale;
 
-uniform float time;
 
-const int kSamples = 8;
-
-float field(vec3 p) {
-  vec4 z = vec4(p.xyz, 0.5);
-  vec4 kOffset = vec4(0.4 + 0.2 * cos(time / 4.0), 0.7 + 0.2 * sin(time / 3.32), 0.5, 0.5);
-  z += 0.2;
-  float a = 0, l = 0;
-  for (int i = 0; i < 10; ++i) {
-    float m = dot(z, z);
-    z = abs(z) / m - kOffset;
-    a += abs(m - l);
-    l = m;
-  }
-  a *= 0.05 * exp(-10.0 * dot(p, p));
-  return a;
-}
+/* How much of the sphere, across, is lightless. */
+const float kHorizon = 0.62;
 
 void main() {
-  float a = 0;
-  vec3 ro = normalize(vertpos);
-  vec3 rd = normalize(eye - position);
-  float t = interSphere(vec4(0, 0, 0, 1.0001), ro, rd).y;
-  rd *= t / float(kSamples);
-  for (int i = 0; i < kSamples; ++i) {
-    a += field(ro);
-    ro += rd;
-  }
-  a /= float(kSamples);
-  a = clamp(a, 0.0, 1.0);
+  float R = max(scale.x, max(scale.y, scale.z));
+  vec3 fromMiddle = eye - origin;
+  /* (only the near side when the eye is outside it, and only the far
+     side when it is in it: each pixel once) */
+  bool outside = dot(fromMiddle, fromMiddle) > R * R;
+  if (outside != gl_FrontFacing)
+    discard;
 
-  vec3 c = 4.0 * a * vec3(1.0, 1.5, 2.0);
-  float alpha = 1.0 - getFoginess(length(position - eye));
-  RETURN(vec4(c, 1.0) * alpha);
+  vec3 rd = normalize(position - eye);
+  /* How near the middle this line of sight passes, as a share of the
+     radius: 0 straight at it, 1 at its edge. */
+  float along = dot(origin - eye, rd);
+  vec3 off = (eye + rd * along) - origin;
+  float b = length(off) / R;
+  if (b < kHorizon && (outside ? along > 0.0 : true)) {
+    RETURN(vec4(0.0, 0.0, 0.0, 1.0));
+  }
+
+  /* The light bent in: what is seen here came from farther round
+     behind it, by more the nearer the line passes. Nothing at the edge. */
+  float x = clamp((b - kHorizon) / (1.0 - kHorizon), 0.0, 1.0);
+  vec3 inward = (b > 1e-4) ? -off / (b * R) : vec3(0.0);
+  float bend = 2.4 * (kHorizon / max(b, kHorizon)) * pow(1.0 - x, 2.0);
+  vec3 seen = normalize(rd * cos(bend) + inward * sin(bend));
+  vec3 sky = toLinear(textureCube(envMap, seen).xyz);
+  /* (a thin ring of light where it is bent most, and a little more of the
+     sky's light gathered toward it) */
+  float ring = exp(-pow((x - 0.035) / 0.03, 2.0));
+  sky *= 1.0 + 1.5 * pow(1.0 - x, 3.0);
+  sky += ring * vec3(0.55, 0.62, 0.75);
+  float alpha = 1.0 - smoothstep(0.8, 1.0, x);
+  RETURN(vec4(sky, alpha));
 }

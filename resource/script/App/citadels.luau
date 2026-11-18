@@ -12,6 +12,8 @@
 --                  small to huge (Data/Structures' CITADEL_SIZES)
 --   A              its sides alike, or not (grown asymmetrical: nothing
 --                  of it is the twin of anything)
+--   T              the next style: blocks, pyramid, diamond, wormhole
+--                  (Citadel.STYLES)
 --   P              the next paint: the citadels' own very dark grey,
 --                  then the game's others (Hull.looks)
 --   L              the next look: the game's standard, Cel V1, Cel V2
@@ -21,8 +23,11 @@
 --   , and .        the seed of the kind last switched, back and on: it
 --                  is laid out afresh and the others stay (kept as
 --                  "antennas:17")
---   G              the citadel the game draws at this size now
---                  (Citadel.PICKS)
+--   C              the next kind of citadel: habitation, trade hub,
+--                  refinery, research station, shipyard (what G goes to,
+--                  and what K keeps it as)
+--   G              the citadel the game draws of this kind at this size
+--                  now (Citadel.PICKS), in its paint
 --   the search box (top right; click it, type, Return): a seed, to go
 --                  to it; or a size's name (small, medium, large,
 --                  extralarge, huge), to go to what the game draws at it
@@ -37,6 +42,7 @@ local Components = require("@lt/Widget/Components")
 local Hull = require("@lt/Game/View/Hull")
 local Im = require("@lt/Game/UI/Im")
 local SceneView = require("@lt/SceneView")
+local Starbase = require("@lt/Game/View/Starbase")
 local Structures = require("@lt/Core/Data/Structures")
 
 -- How big a citadel is drawn, whatever it is.
@@ -72,8 +78,13 @@ return AppShell.Create(function(): Widget
     interior:Advance()
   end
 
-  local seed, size, paint, look = 1, 1, 1, 1
+  local seed, size, paint, look, style = 1, 1, 1, 1, 1
+  local KINDS = Structures.CITADEL_KINDS
+  local role = 1            -- which of the kinds of citadel (KINDS) it is for
   local asym = false
+  local STYLES = Citadel.STYLES
+  local moving: { Starbase.Moving } = {}   -- what of it turns
+  local clock = 0
   local lookShown = 0       -- the look the render passes were last set to
   local shown: Object? = nil
   local key = ""            -- what is shown
@@ -119,15 +130,15 @@ return AppShell.Create(function(): Widget
     end
   end
 
-  -- The citadel the game draws at the size shown.
+  -- The citadel the game draws of the kind and at the size shown.
   local function picked()
-    local pick = Citadel.PICKS[size]
-    if pick then
-      seed, asym = pick.seed, pick.asym
-      setDetail(string.split(pick.detail, " "))
-      paint = 1
-      note = `what the game draws at {SIZES[size]}: seed {pick.seed}{if pick.asym then ", asymmetrical" else ""}, {pick.detail}`
-    end
+    local pick = Citadel.Pick(KINDS[role], size)
+    seed, asym = pick.seed, pick.asym
+    style = table.find(STYLES, pick.style) or 1
+    setDetail(string.split(pick.detail, " "))
+    paint = table.find(PAINTS, pick.paint) or 1
+    note = `what the game draws of a {SIZES[size]} {Structures.CITADEL_KIND_NAMES[KINDS[role]]}: seed {pick.seed}, {pick.style}`
+      .. `{if pick.asym then ", asymmetrical" else ""}, {pick.paint}, {pick.detail}`
   end
 
   local function show()
@@ -136,15 +147,15 @@ return AppShell.Create(function(): Widget
       RenderPass_SetEnabled("Smooth Shading", LOOKS[look].smooth)
       RenderPass_SetEnabled("Flat Paint", LOOKS[look].flat)
     end
-    local now = `{seed}:{size}:{paint}:{asym}:{detailWords()}`
+    local now = `{seed}:{size}:{paint}:{asym}:{style}:{detailWords()}`
     if now == key then
       return
     end
     key = now
     local started = os.clock()
-    local made = Citadel.Build(seed, size, if PAINTS[paint] == "dark" then nil else PAINTS[paint], detailWords(), nil, asym)
+    local made = Citadel.Build(seed, size, if PAINTS[paint] == "dark" then nil else PAINTS[paint], detailWords(), nil, asym, STYLES[style])
     took = math.floor((os.clock() - started) * 1000)
-    local _, holes = Citadel.Grow(seed, size, asym)
+    local _, holes = Citadel.Grow(seed, size, asym, STYLES[style])
     mouths = #holes
     local box = made.upper - made.lower
     across = math.max(box.x, box.z) / math.max(1e-6, box.y)
@@ -153,14 +164,25 @@ return AppShell.Create(function(): Widget
     local object = Object_Scenery({})
     Object_SetRenderable(object, made.model)
     object:SetScale(vector.create(scale, scale, scale))
-    object:SetPos((made.lower + made.upper) * (-0.5 * scale))
+    local at = (made.lower + made.upper) * (-0.5 * scale)
+    object:SetPos(at)
     system:AddInterior(object)
     camera:SetTarget(object)
     local old = shown
     if old then
       Object_Delete(old)
     end
+    for _, piece in moving do
+      Object_Delete(piece.object)
+    end
     shown = object
+    -- (and what turns of it, each a thing of its own: Starbase.Animate turns them)
+    moving = Starbase.Movers(made.movers, function(model: Model): Object
+      local piece = Object_Scenery({})
+      Object_SetRenderable(piece, model)
+      system:AddInterior(piece)
+      return piece
+    end, at, vector.create(0, 0, 1), vector.create(0, 1, 0), scale)
   end
   show()
 
@@ -171,7 +193,7 @@ return AppShell.Create(function(): Widget
       had = text
     end
     local words = detailWords()
-    local line = `{SIZES[size]}  seed {seed}{if asym then "  asym" else ""}  paint {PAINTS[paint]}`
+    local line = `{SIZES[size]} {KINDS[role]}  seed {seed}  style {STYLES[style]}{if asym then "  asym" else ""}  paint {PAINTS[paint]}`
       .. (if words ~= "" then `  detail {words}` else "")
     File_Write(KEPT, had .. line .. "\n")
     note = `kept: {line}  (in {KEPT})`
@@ -205,8 +227,14 @@ return AppShell.Create(function(): Widget
     -- said), its surface detail as words (all of it, if not said), and
     -- the look ("standard", "Cel V1", "Cel V2"). False if there is no
     -- such size, paint or look.
-    Show = function(toSeed: number, toSize: number, toAsym: boolean?, toPaint: string?, toDetail: string?, toLook: string?): boolean
+    Show = function(toSeed: number, toSize: number, toAsym: boolean?, toPaint: string?, toDetail: string?, toLook: string?,
+      toStyle: string?): boolean
       local at = table.find(PAINTS, toPaint or "dark")
+      local grown = table.find(STYLES, toStyle or "blocks")
+      if grown == nil then
+        return false
+      end
+      style = grown
       local how = 1
       for index, known in LOOKS do
         if known.name == toLook then
@@ -235,9 +263,16 @@ return AppShell.Create(function(): Widget
       return note
     end,
     -- What is shown: its seed, its size, whether it is asymmetrical, its
-    -- paint, its detail as words, and how many hangar mouths it has.
-    Now = function(): (number, number, boolean, string, string, number)
-      return seed, size, asym, PAINTS[paint], detailWords(), mouths
+    -- paint, its detail as words, how many hangar mouths it has, its
+    -- style, and how many of its parts turn.
+    Now = function(): (number, number, boolean, string, string, number, string, number)
+      return seed, size, asym, PAINTS[paint], detailWords(), mouths, STYLES[style], #moving
+    end,
+    -- Let so many seconds go by for what turns (a still picture of the
+    -- rings turned so far).
+    Turn = function(seconds: number)
+      clock += seconds
+      Starbase.Animate(moving, clock, vector.create(0, 1, 0))
     end,
     -- Look at it from somewhere else (as the hull browser's Look): how
     -- far round, how far above and from how far off. It stays still.
@@ -259,12 +294,12 @@ return AppShell.Create(function(): Widget
       Im.Text(`SEED {seed}`, x, y, 30, Im.TEXT)
       local reach = Structures.CITADEL_REACH[size]
       local field = if reach >= 1000 then `{reach // 1000} km` else `{reach} m`
-      local pick = Citadel.PICKS[size]
-      local isPick = pick and pick.seed == seed and pick.asym == asym
-      Im.Text(`size {size} of {#SIZES}: {SIZES[size]}, a field of {field}      {if asym then "asymmetrical" else "sides alike"}      paint: {PAINTS[paint]}      look: {LOOKS[look].name}      {mouths} hangar {if mouths == 1 then "mouth" else "mouths"}      {string.format("%.1f", across)} times as wide as high      made in {took} ms`,
+      local pick = Citadel.Pick(KINDS[role], size)
+      local isPick = pick.seed == seed and pick.asym == asym and pick.style == STYLES[style]
+      Im.Text(`kind: {Structures.CITADEL_KIND_NAMES[KINDS[role]]}      size {size} of {#SIZES}: {SIZES[size]}, a field of {field}      style: {STYLES[style]}      {if asym then "asymmetrical" else "sides alike"}      paint: {PAINTS[paint]}      look: {LOOKS[look].name}      {mouths} hangar {if mouths == 1 then "mouth" else "mouths"}      {string.format("%.1f", across)} times as wide as high      made in {took} ms`,
         x, y + 40, 16, Im.DIM)
       if isPick then
-        Im.Text(`the game draws a {SIZES[size]} citadel from this seed`, x, y + 64, 16, Im.ACCENT)
+        Im.Text(`the game draws a {SIZES[size]} {Structures.CITADEL_KIND_NAMES[KINDS[role]]} from this seed`, x, y + 64, 16, Im.ACCENT)
       end
       local on: { string } = {}
       for index, kind in Hull.DETAILS do
@@ -282,7 +317,7 @@ return AppShell.Create(function(): Widget
         search(query)
       end
       local foot = w.pos.y + w.size.y - 54
-      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      [ / ]: size      A: asymmetrical      P: paint      L: look      1-5: detail      , .: its seed      G: the game's pick      K: keep      Space: turn",
+      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      [ / ]: size      T: style      C: kind      A: asymmetrical      P: paint      L: look      1-5: detail      , .: its seed      G: the game's pick      K: keep      Space: turn",
         x, foot, 15, Im.DIM)
       Im.Text("right-drag turns it, the wheel moves in and out", x, foot + 22, 15, Im.DIM)
     end,
@@ -311,8 +346,10 @@ return AppShell.Create(function(): Widget
       if Key_Pressed(Key_RBracket()) then size = math.min(#SIZES, size + 1) end
       if Key_Pressed(Key_LBracket()) then size = math.max(1, size - 1) end
       if Key_Pressed(Key_A()) then asym = not asym end
+      if Key_Pressed(Key_T()) then style = style % #STYLES + 1 end
       if Key_Pressed(Key_P()) then paint = paint % #PAINTS + 1 end
       if Key_Pressed(Key_L()) then look = look % #LOOKS + 1 end
+      if Key_Pressed(Key_C()) then role = role % #KINDS + 1 end
       if Key_Pressed(Key_G()) then picked() end
       if Key_Pressed(Key_Space()) then turning = not turning end
       if Key_Pressed(Key_K()) then keep() end
@@ -330,6 +367,10 @@ return AppShell.Create(function(): Widget
         turn += 0.2 * dt
       end
       zoom += (zoomTo - zoom) * (1 - math.exp(-dt / 0.1))
+      if not plain then
+        clock += dt
+        Starbase.Animate(moving, clock, vector.create(0, 1, 0))
+      end
       local eye = vector.create(math.cos(tilt) * math.sin(turn), math.sin(tilt), math.cos(tilt) * math.cos(turn)) * (zoom * RADIUS)
       camera:SetRelativePos(eye)
       camera:SetRelativeLookAt(vector.create(0, 0, 0))

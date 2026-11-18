@@ -255,8 +255,9 @@ end
 -- are made only where a maker of them is given ('make'): without one,
 -- everything is drawn into the one builder, still.
 export type Motion = {
-  kind: string,        -- "spin", "scan", "track" or "blink"
-  rate: number?,       -- spin: radians a second, about the tower's upright
+  kind: string,        -- "spin", "scan", "track", "blink" or "turn"
+  rate: number?,       -- spin and turn: radians a second (spin: about the tower's upright)
+  axis: vector?,       -- turn: what it turns about, in the tower's own axes, through its pivot
   toward: vector?,     -- scan: the way it looks at the middle of its sweep
   cone: number?,       -- scan: how far off that it goes, radians
   arm: vector?,        -- track: the way out along its arm, which it turns about to face the sun

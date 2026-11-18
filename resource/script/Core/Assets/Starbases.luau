@@ -50,6 +50,7 @@
 --
 -- Not yet: taking a tower down, more than one owner.
 
+local CitadelKinds = require("@lt/Core/Assets/CitadelKinds")
 local Constants = require("@lt/Core/Data/Constants")
 local Corporation = require("@lt/Core/Assets/Corporation")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
@@ -111,7 +112,8 @@ function Starbases.Burn(state: State.State, starbase: State.Starbase): number
       burn += type.fuel
     end
   end
-  return burn * (1 - Starbases.HUSBANDRY * skilled(state, starbase, "husbandry"))
+  -- (a habitation citadel burns a fifth less: Data/Structures' CITADEL_BONUS)
+  return burn * (1 - Starbases.HUSBANDRY * skilled(state, starbase, "husbandry")) * (CitadelKinds.Bonus(state, starbase.id).fuel or 1)
 end
 
 -- What is fitted in a citadel: how many services and batteries, and
@@ -278,6 +280,11 @@ function Starbases.Has(state: State.State, starbase: State.Starbase, service: St
   if not Starbases.Lit(state, starbase) then
     return false
   end
+  -- (what a citadel's kind gives without a module for it: a habitation's clone bay and storage)
+  local gives = CitadelKinds.Bonus(state, starbase.id).gives
+  if gives and table.find(gives, service) then
+    return true
+  end
   for _, module in starbase.modules do
     if state.tick >= module.ready and Structures.moduleById[module.type].service == service then
       return true
@@ -430,6 +437,15 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
         return batteries < defences, `its {defences} battery slots are full`
       elseif not module.citadel then
         return false, "a citadel has services fitted, not a tower's modules"
+      elseif module.kinds and not table.find(module.kinds, tower.kind or "") then
+        local names: { string } = {}
+        for _, each in module.kinds do
+          table.insert(names, string.lower(Structures.CITADEL_KIND_NAMES[each]))
+        end
+        local an = if string.find(string.sub(module.name, 1, 1), "[AEIOU]") then "an" else "a"
+        return false, `only a {table.concat(names, " or ")} citadel fits {an} {module.name}`
+      elseif module.least and tower.size < module.least then
+        return false, `a {module.name} is fitted only in a {string.lower(Structures.CITADEL_SIZE_NAMES[module.least])} citadel or bigger`
       elseif services >= slots then
         return false, `its {slots} service slots are full`
       end

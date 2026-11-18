@@ -3,9 +3,12 @@
 -- front door.
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
+local CitadelKinds = require("@lt/Core/Assets/CitadelKinds")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
+local Industry = require("@lt/Core/Assets/Industry")
 local Items = require("@lt/Core/Assets/Items")
+local Market = require("@lt/Core/Assets/Market")
 local Moons = require("@lt/Core/Data/Moons")
 local Reactions = require("@lt/Core/Data/Reactions")
 local Space = require("@lt/Core/Tactical/Space")
@@ -853,13 +856,15 @@ end)
 
 -- Citadels (the owner's B2, 2026-11-17): a station docked inside, of
 -- the same machinery as a tower.
-local CITADEL = Structures.towerById["citadel.small"]
+-- (a research station: the kind whose bonus none of these cases turns on)
+local CITADEL = Structures.towerById["citadel.research.small"]
 
 -- A peaceful game with a small citadel anchored at a planet (or a moon)
 -- and the ship docked in it, fuelled: the game and the station.
-local function inCitadel(t: Test.Context, at: string?): (Core.Game, number)
+-- ('tower': another citadel than CITADEL, by its id.)
+local function inCitadel(t: Test.Context, at: string?, tower: string?): (Core.Game, number)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
-  local citadel = carry(game, CITADEL.id, 1)
+  local citadel = carry(game, tower or CITADEL.id, 1)
   order(t, game, { kind = "Undock", actor = 0 })
   Core.Step(game)
   local body: System.Object? = nil
@@ -894,7 +899,7 @@ suite:Case("a citadel is anchored at a planet or a moon, is not one of the tower
   local again = inCitadel(t, "moon")
   t.ok(again.state.starbases ~= nil)
   -- (and it is built from a print, of moon materials from the large size up)
-  local small, large = assert(Blueprints.byProduct["citadel.small"]), assert(Blueprints.byProduct["citadel.large"])
+  local small, large = assert(Blueprints.byProduct["citadel.research.small"]), assert(Blueprints.byProduct["citadel.research.large"])
   local function moon(print: Blueprints.Blueprint): boolean
     for _, material in print.materials do
       if Types.Info(material.type).category == "moon" then
@@ -957,7 +962,7 @@ suite:Case("what docks at a citadel goes by its size; what is too big tethers or
   local function berths(class: string): { string }
     local out: { string } = {}
     for size = 1, 5 do
-      table.insert(out, Structures.Berth(Structures.towerById[`citadel.{Structures.CITADEL_SIZES[size]}`], class))
+      table.insert(out, Structures.Berth(Structures.towerById[`citadel.research.{Structures.CITADEL_SIZES[size]}`], class))
     end
     return out
   end
@@ -997,6 +1002,57 @@ suite:Case("what docks at a citadel goes by its size; what is too big tethers or
   mended.armor = mended.armorMax * 0.5
   steps(game, 10)
   t.ok(mended.armor > mended.armorMax * 0.6, "a tethered ship was not mended")
+end)
+
+suite:Case("each kind of citadel is a citadel of its own, with its own print: it does its own work better, and fits what only it may", function(t)
+  -- Five kinds at five sizes, each with its name and its print.
+  for _, kind in Structures.CITADEL_KINDS do
+    for size, word in Structures.CITADEL_SIZES do
+      local tower = assert(Structures.towerById[`citadel.{kind}.{word}`], `no {word} {kind}`)
+      t.eq({ tower.kind, tower.size, tower.name } :: { any },
+        { kind, size, `{Structures.CITADEL_SIZE_NAMES[size]} {Structures.CITADEL_KIND_NAMES[kind]}` } :: { any })
+      t.ok(Blueprints.byProduct[tower.id] ~= nil, `no print for {tower.id}`)
+    end
+  end
+  t.eq({ Structures.towerById["citadel.small"], Structures.CitadelNow("blueprint.citadel.large"), Structures.CitadelNow("citadel.shipyard.small") } :: { any },
+    { nil, "blueprint.citadel.habitation.large", nil } :: { any })
+  -- A small shipyard fits an Advanced Ship Assembly, and not a Capital Ship Assembly (large and up); nor does a
+  -- research station fit either.
+  local game, station = inCitadel(t, nil, "citadel.shipyard.small")
+  local state = game.state
+  t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "service.assembly.capital", 1).id }),
+    "a Capital Ship Assembly is fitted only in a large citadel or bigger")
+  t.eq(CitadelKinds.Of(state, station), "shipyard")
+  -- (with a manufacturing plant in it, a capital is still not built there; nor a tech 2 hull)
+  order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, "service.manufacturing", 1).id })
+  Core.Step(game)
+  for _, module in state.starbases[station].modules do
+    module.ready = state.tick
+  end
+  Core.Step(game)
+  state.skills.industry = 5
+  local capital = assert(Blueprints.byProduct["carrier.azayake"])
+  t.eq(refused(game, { kind = "StartJob", actor = 0, item = Items.Add(state, capital.id, 1, station, "hangar").id, quantity = 1 }),
+    "a capital is built here only with a Capital Ship Assembly")
+  local advanced = assert(Blueprints.byProduct["destroyer.kanau"])
+  t.eq(refused(game, { kind = "StartJob", actor = 0, item = Items.Add(state, advanced.id, 1, station, "hangar").id, quantity = 1 }),
+    "a tech 2 hull is built here only with an Advanced Ship Assembly")
+  -- What it does better: a job here takes three quarters of the time, of nine tenths of the materials.
+  local frigate = assert(Blueprints.byProduct["frigate.akashi"])
+  local here, there = Industry.Plan(state, station, frigate, 1), Industry.Plan(state, state.player.home, frigate, 1)
+  t.ok(here.seconds < there.seconds * 0.8, `{here.seconds} s here and {there.seconds} s at home`)
+  t.ok(here.materials[1].need < there.materials[1].need, "no fewer materials here")
+  local other = inCitadel(t, nil, "citadel.research.medium")
+  t.eq(refused(other, { kind = "AnchorModule", actor = 0, item = carry(other, "service.assembly.advanced", 1).id }),
+    "only a shipyard citadel fits an Advanced Ship Assembly")
+  -- A trade hub halves the tax; a habitation has a clone bay and storage with nothing fitted, and burns less.
+  local hub, hubAt = inCitadel(t, nil, "citadel.tradehub.small")
+  t.near(Market.Tax(hub.state, hubAt), Market.Tax(hub.state, nil) * 0.5, 1e-9)
+  local home, homeAt = inCitadel(t, nil, "citadel.habitation.small")
+  local citadel = home.state.starbases[homeAt]
+  t.eq({ Starbases.Has(home.state, citadel, "quarters"), Starbases.Has(home.state, citadel, "storage"),
+    Starbases.Has(home.state, citadel, "industry") } :: { any }, { true, true, false } :: { any })
+  t.near(Starbases.Burn(home.state, citadel), Structures.towerById["citadel.habitation.small"].fuel * 0.8, 1e-6)
 end)
 
 return suite

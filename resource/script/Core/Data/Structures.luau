@@ -69,6 +69,7 @@ export type Tower = {
   slots: number?,       -- service modules it can have fitted
   defences: number?,    -- batteries it can have fitted
   reach: number?,       -- the radius of the citadel itself, m (its field is wider)
+  kind: string?,        -- a citadel's kind (Structures.CITADEL_KINDS)
 }
 
 -- What a module is for: the service it gives the tower's guests, or how
@@ -94,6 +95,14 @@ export type ModuleType = {
   -- tower's module.
   citadel: boolean?,
   fuel: number?,
+  -- Of a citadel's service modules, one that only some kinds of citadel
+  -- can fit ('kinds', Structures.CITADEL_KINDS), and those only from a
+  -- size up ('least'); and what it opens there that nothing else of a
+  -- citadel does ('opens': "capital" capital ships built, "advanced"
+  -- tech 2 hulls built, "invention" tech 2 hulls invented).
+  kinds: { string }?,
+  least: number?,
+  opens: string?,
 }
 
 -- A class of colony ship: a nomad faction's station. It is a ship, of
@@ -205,6 +214,36 @@ Structures.CITADEL_SIZES = { "small", "medium", "large", "extralarge", "huge" }
 Structures.CITADEL_REACH = { 500, 1000, 5000, 10000, 40000 }
 Structures.CITADEL_BERTH = { { 1, 2 }, { 2, 3 }, { 3, 5 }, { 4, 5 }, { 5, 5 } }
 Structures.CITADEL_NAMES = { "Small Citadel", "Medium Citadel", "Large Citadel", "Extra-Large Citadel", "Huge Citadel" }
+Structures.CITADEL_SIZE_NAMES = { "Small", "Medium", "Large", "Extra-Large", "Huge" }
+-- The kinds of citadel (the owner, 2026-11-17: "These are each their own
+-- citadel, with their own BP. Their type determines bonuses, and in some
+-- cases special [modules] they can fit that other types cannot"): each
+-- kind at each size is a citadel of its own, "Small Shipyard". What a
+-- kind does better (Structures.CITADEL_BONUS) and what only it can fit
+-- (the modules with 'kinds') are below. Any kind fits the plain service
+-- modules, and does no better with them than a citadel of another kind.
+Structures.CITADEL_KINDS = { "habitation", "tradehub", "refinery", "research", "shipyard" }
+Structures.CITADEL_KIND_NAMES = { habitation = "Habitation", tradehub = "Trade Hub", refinery = "Refinery",
+  research = "Research Station", shipyard = "Shipyard" } :: { [string]: string }
+-- What each kind does better, where it is (its services online): mine,
+-- every figure, but the kinds' exclusive modules, which are the owner's.
+--   shipyard     a job builds in three quarters of the time, of nine
+--                tenths of the materials
+--   refinery     a tenth more of what ore and ice give
+--   research     research, copying and invention in three quarters of
+--                the time; and invention a tenth more likely to come off
+--   tradehub     half the sales tax and broker's fee on what is traded there
+--   habitation   a clone bay and room for storage without a module for
+--                them, and a fifth less fuel
+export type CitadelBonus = { jobTime: number?, materials: number?, refine: number?, researchTime: number?, invent: number?,
+  fees: number?, fuel: number?, gives: { Service }? }
+Structures.CITADEL_BONUS = {
+  shipyard = { jobTime = 0.75, materials = 0.9 },
+  refinery = { refine = 1.1 },
+  research = { researchTime = 0.75, invent = 0.1 },
+  tradehub = { fees = 0.5 },
+  habitation = { fuel = 0.8, gives = { "quarters", "storage" } },
+} :: { [string]: CitadelBonus }
 Structures.CITADEL = {
   { field = 2750, fuel = 8, anchor = 2 * 3600, volume = 4000, basePrice = 80000000, shield = 300000, armor = 150000, hull = 150000,
     bay = 12, slots = 2, defences = 2 },
@@ -217,15 +256,32 @@ Structures.CITADEL = {
   { field = 62000, fuel = 120, anchor = 24 * 3600, volume = 40000, basePrice = 10000000000, shield = 5000000, armor = 2500000,
     hull = 2500000, bay = 48, slots = 8, defences = 10 },
 }
-for size, word in Structures.CITADEL_SIZES do
-  local c = Structures.CITADEL[size]
-  table.insert(towers, {
-    id = `citadel.{word}`, name = Structures.CITADEL_NAMES[size], faction = "", size = size,
-    powergrid = 0, cpu = 0, field = c.field, fuel = c.fuel, anchor = c.anchor, volume = c.volume, basePrice = c.basePrice,
-    shield = c.shield, armor = c.armor, hull = c.hull, bay = c.bay,
-    gun = "projectile", gunBonus = 1, missileBonus = 1, tank = "shield", resist = 0,
-    citadel = true, slots = c.slots, defences = c.defences, reach = Structures.CITADEL_REACH[size],
-  })
+for _, kind in Structures.CITADEL_KINDS do
+  for size, word in Structures.CITADEL_SIZES do
+    local c = Structures.CITADEL[size]
+    table.insert(towers, {
+      id = `citadel.{kind}.{word}`, name = `{Structures.CITADEL_SIZE_NAMES[size]} {Structures.CITADEL_KIND_NAMES[kind]}`, faction = "",
+      size = size,
+      powergrid = 0, cpu = 0, field = c.field, fuel = c.fuel, anchor = c.anchor, volume = c.volume, basePrice = c.basePrice,
+      shield = c.shield, armor = c.armor, hull = c.hull, bay = c.bay,
+      gun = "projectile", gunBonus = 1, missileBonus = 1, tank = "shield", resist = 0,
+      citadel = true, slots = c.slots, defences = c.defences, reach = Structures.CITADEL_REACH[size], kind = kind,
+    })
+  end
+end
+-- (the citadels of before there were kinds, "citadel.small" and so on:
+-- what a save has of them, or of their blueprints, is a habitation of
+-- its size, Core.Load. Nil for an id that names none.)
+function Structures.CitadelNow(id: string): string?
+  local changed = false
+  local now = string.gsub(id, "citadel%.(%a+)", function(word: string): string
+    if table.find(Structures.CITADEL_SIZES, word) then
+      changed = true
+      return `citadel.habitation.{word}`
+    end
+    return `citadel.{word}`
+  end)
+  return if changed then now else nil
 end
 
 -- How big a hull is, for where it docks: 1 for anything smaller than a
@@ -300,6 +356,28 @@ local modules: { ModuleType } = {
     volume = 2000, basePrice = 12000000, citadel = true, fuel = 5 },
   { id = "service.storage", name = "Hangar Expansion", service = "storage", radius = 0, powergrid = 0, cpu = 0, anchor = 300,
     pilot = true, volume = 2000, basePrice = 5000000, citadel = true, fuel = 2 },
+  -- What only some kinds of citadel fit (the owner's, 2026-11-17: "only
+  -- shipyards can fit capital ship assembly module, no matter the size"
+  -- and "the capital ship assembly module cannot be fitted in small or
+  -- medium shipyard citadels, only large+"; "Shipyards -> Advanced Ship
+  -- Assembly Module (T2 ship manufacturing)"; "Research Station ->
+  -- Advanced research hub (invention for t2 ship hulls)"; and the
+  -- refinery's reactor, which was my proposal). In a citadel, a capital
+  -- is built only with the first, a tech 2 hull only with the second,
+  -- and a tech 2 hull invented only with the third (Assets/Industry).
+  -- Each is a manufacturing plant, a laboratory or a reactor array of
+  -- its own beside that. Prices and fuel are mine.
+  { id = "service.assembly.capital", name = "Capital Ship Assembly", service = "industry", radius = 0, powergrid = 0, cpu = 0,
+    anchor = 1200, pilot = true, volume = 3500, basePrice = 250000000, citadel = true, fuel = 25, kinds = { "shipyard" }, least = 3,
+    opens = "capital" },
+  { id = "service.assembly.advanced", name = "Advanced Ship Assembly", service = "industry", radius = 0, powergrid = 0, cpu = 0,
+    anchor = 900, pilot = true, volume = 3500, basePrice = 120000000, citadel = true, fuel = 15, kinds = { "shipyard" },
+    opens = "advanced" },
+  { id = "service.research.advanced", name = "Advanced Research Hub", service = "research", radius = 0, powergrid = 0, cpu = 0,
+    anchor = 900, pilot = true, volume = 3500, basePrice = 90000000, citadel = true, fuel = 12, kinds = { "research" },
+    opens = "invention" },
+  { id = "service.reactor", name = "Reactor", service = "reaction", radius = 0, powergrid = 0, cpu = 0, anchor = 900, pilot = true,
+    volume = 3500, basePrice = 60000000, citadel = true, fuel = 12, kinds = { "refinery" } },
 }
 
 -- The colony ships, by class. (The first of a size of ship above

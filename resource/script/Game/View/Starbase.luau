@@ -1315,9 +1315,9 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
   if type.citadel then
     -- A citadel (Game/View/Citadel): grown, upright, its middle where
     -- the station is; what is fitted in it is inside it.
-    local made = Citadel.OfSize(type.size, if faction and faction ~= "" then faction else nil)
+    local made = Citadel.Of(type.kind, type.size, faction)
     tower = { id = type.id, model = made.model, at = -(made.lower + made.upper) * 0.5 * (towerRadius / made.radius),
-      look = vector.create(0, 0, 1), scale = towerRadius / made.radius, radius = towerRadius }
+      look = vector.create(0, 0, 1), scale = towerRadius / made.radius, radius = towerRadius, movers = made.movers }
   else
     tower = Starbase.TowerPart(owner, type.size, vector.create(0, 0, 0), towerRadius)
   end
@@ -1440,6 +1440,8 @@ end
 --   scan    what it looks along goes slowly round, a little off the way it looks
 --   track   it turns about its own arm to put its face to the sun
 --   blink   it is lit for a share of its period, and for the rest is not there
+--   turn    it turns about an axis of its own through its pivot (a
+--           wormhole citadel's rings: Game/View/Citadel)
 function Starbase.Animate(moving: { Moving }, time: number, sun: vector)
   for _, piece in moving do
     local motion = piece.motion
@@ -1466,6 +1468,15 @@ function Starbase.Animate(moving: { Moving }, time: number, sun: vector)
         face = vector.normalize(face)
         Object_SetAxes(piece.object, vector.cross(arm, face), face)
       end
+    elseif motion.kind == "turn" then
+      -- (its own z and y, turned so far about the axis: Rodrigues' rule)
+      local k = vector.normalize(motion.axis or vector.create(0, 1, 0))
+      local angle = time * (motion.rate or 0) + (motion.phase or 0) * 2 * math.pi
+      local c, s = math.cos(angle), math.sin(angle)
+      local function turned(p: vector): vector
+        return p * c + vector.cross(k, p) * s + k * (vector.dot(k, p) * (1 - c))
+      end
+      Object_SetAxes(piece.object, world(turned(vector.create(0, 0, 1))), world(turned(vector.create(0, 1, 0))))
     elseif motion.kind == "blink" then
       local lit = (time / (motion.period or 1.2) + (motion.phase or 0)) % 1 < (motion.lit or 0.5)
       if lit ~= piece.lit then

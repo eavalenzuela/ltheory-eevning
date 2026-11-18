@@ -763,9 +763,10 @@ function Scene.Arms(scene: Scene, ship: number): (number, number)
 end
 
 -- What a wormhole is drawn with (Core/Tactical/Wormholes): a unit
--- sphere, to be scaled, with the engine's own shader for one, which
--- looks into it from wherever the eye is. (A grey box of a wormhole:
--- nothing shows of where it leads.)
+-- sphere, to be scaled, with its shader (wormhole.jsl): a lightless
+-- sphere, the sky's light bent round it (the owner, 2026-11-17: the old
+-- one did not "look like a lightless sphere"). Blended over what is
+-- behind it, not added to it: the dark of it hides what is there.
 local hole: Model? = nil
 local function wormhole(): Model
   local kept = hole
@@ -773,7 +774,7 @@ local function wormhole(): Model
     return kept
   end
   local shader = ShaderInstance_Create(Shader_Create("npm.jsl", "wormhole.jsl"))
-  ShaderInstance_SetState(shader, "BlendModeAdditive")
+  ShaderInstance_SetState(shader, "BlendModeAlpha")
   ShaderInstance_SetState(shader, "ZWritableOff")
   ShaderInstance_SetState(shader, "CullModeDisabled")
   ShaderInstance_Link(shader)
