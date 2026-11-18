@@ -35,7 +35,7 @@ suite:Case("a new pilot starts at the starter station, which has every service t
   end
 end)
 
-suite:Case("every station has a market; the galaxy has stations that lack another service, and no other station has everything", function(t)
+suite:Case("every station has a market and a ship maintenance array; the galaxy has stations that lack another service, and no other station has everything", function(t)
   local game = Core.New({ galaxySeed = 1, historySeed = 1 })
   local starter = Core.Query.Starter(game)
   local lacking = 0
@@ -48,6 +48,9 @@ suite:Case("every station has a market; the galaxy has stations that lack anothe
       t.ok(not all, `station {station.id} has everything, which only the starter should`)
       -- (a market at every station: the owner, 2026-11-17, "Every station")
       t.ok(Stations.Has(game.state, station.id, "market"), `station {station.id} has no market`)
+      -- (and a ship maintenance array: the owner, 2026-11-18, so a ship
+      -- bought there can be boarded there)
+      t.ok(Stations.Has(game.state, station.id, "fitting"), `station {station.id} has no ship maintenance array`)
       lacking += if Stations.Has(game.state, station.id, "refining") then 0 else 1
     end
   end

@@ -105,7 +105,7 @@ suite:Case("the station a pilot starts at has everything the round of play needs
   end
 end)
 
-suite:Case("any other station has what its kind is for, and not everything", function(t)
+suite:Case("any other station has what its kind is for and a ship maintenance array, and not everything", function(t)
   local first = { ["trade hub"] = "market", shipyard = "industry", refinery = "refining", habitat = "quarters", outpost = "fitting" }
   for _, variety in VARIETIES do
     for _, radius in { 3000, 5000, 7000 } do
@@ -121,7 +121,12 @@ suite:Case("any other station has what its kind is for, and not everything", fun
   -- (and some are missing what a pilot will go looking for)
   t.ok(not services(Structures.Makeup("refinery", 3000, "vessari")).market, "a small refinery should have no market")
   t.ok(not services(Structures.Makeup("trade hub", 3000, "vessari")).refining, "a small trade hub should not refine")
-  t.ok(not services(Structures.Makeup("habitat", 3000, "vessari")).fitting, "a small habitat should have no ship maintenance")
+  -- (and every one has a ship maintenance array: the owner, 2026-11-18)
+  for _, variety in VARIETIES do
+    for _, radius in { 3000, 5000, 7000 } do
+      t.ok(services(Structures.Makeup(variety, radius, "vessari")).fitting, `a {variety} of {radius} m has no ship maintenance array`)
+    end
+  end
 end)
 
 suite:Case("a tower is never given more than it can power, and a bigger one carries more", function(t)

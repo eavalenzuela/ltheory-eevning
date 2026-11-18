@@ -6,7 +6,10 @@
 -- trade hub, no market; no ship maintenance array, no fitting, repairs
 -- or changing ships; no refining array, no refining; no ship assembly
 -- array, nothing built. This holds at every station (the project
--- owner's decision). So that a new pilot is not stranded, the station a
+-- owner's decision). Every station of the game's has a market and a
+-- ship maintenance array (the owner, 2026-11-17 and 2026-11-18), so a
+-- ship bought anywhere can be boarded there; a pilot's own tower or
+-- citadel has only what is fitted to it. So that a new pilot is not stranded, the station a
 -- pilot starts at is given every module that the whole round of
 -- mining, refining, building, selling and fitting needs, whatever kind
 -- of station it is.

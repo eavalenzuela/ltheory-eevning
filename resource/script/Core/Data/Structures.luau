@@ -514,9 +514,10 @@ local ABOARD = { "array.assembly", "array.trade", "array.habitat", "array.hangar
 -- station's (Describe/System), 'faction' is whose tower it is, and
 -- 'starter' says it is the station a pilot starts at.
 --
--- A station has what its kind is for, more of it the bigger its tower,
--- and batteries; the starter has, before all that, everything the round
--- of play needs. It is never given more than its tower can power.
+-- A station has a ship maintenance array, what its kind is for, more of
+-- it the bigger its tower, and batteries; the starter has, before all
+-- that, everything the round of play needs. It is never given more than
+-- its tower can power.
 --
 -- A nomad faction's is a colony ship, whatever kind or size the station
 -- would have been, and has the same aboard every time.
@@ -530,10 +531,17 @@ function Structures.Makeup(variety: string, radius: number, faction: string, sta
   local size = if starter then math.max(2, Structures.SizeFor(radius)) else Structures.SizeFor(radius)
   local tower = Structures.towerById[`tower.{faction}.{Structures.SIZES[size]}`]
   assert(tower, `no tower of faction '{faction}'`)
-  local chosen: { string } = if starter then table.clone(ROUND) else {}
+  -- (every station has a ship maintenance array, first so that nothing
+  -- crowds it out: a ship bought or held at any station can be boarded
+  -- and fitted there. The owner, 2026-11-18: "place ship maintenance
+  -- arrays at all stations, otherwise contract ships purchased there
+  -- can't be easily retrieved")
+  local chosen: { string } = if starter then table.clone(ROUND) else { "array.hangar" }
   local kind = KIND[variety] or KIND["outpost"]
   for index = 1, size + 2 do
-    table.insert(chosen, kind[index])
+    if kind[index] ~= "array.hangar" then
+      table.insert(chosen, kind[index])
+    end
   end
   for _ = 1, size do
     table.insert(chosen, "battery.gun")
