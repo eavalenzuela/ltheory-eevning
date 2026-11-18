@@ -395,7 +395,15 @@ function Wormholes.Step(state: State.State, events: { Event })
     local starbase = state.starbases[id]
     local tower = Structures.towerById[starbase.tower]
     local lit = state.tick >= starbase.ready and starbase.fuel > 0 and (starbase.sealed or 0) <= state.tick
-    if tower and tower.kind == "wormhole" and lit and (starbase.hole == nil or state.wormholes[starbase.hole] == nil) then
+    -- (a generator station with its Wormhole Generator online: the owner,
+    -- 2026-11-18, the station "fueled AND the module installed")
+    local generating: { string } = {}
+    for _, module in starbase.modules do
+      if state.tick >= module.ready then
+        table.insert(generating, module.type)
+      end
+    end
+    if tower and lit and Structures.Generating(generating) == "wormhole" and (starbase.hole == nil or state.wormholes[starbase.hole] == nil) then
       starbase.hole = nil
       local system = id // SPAN
       local station = describe(state, system).objects[id % SPAN]

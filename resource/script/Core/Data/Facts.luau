@@ -851,9 +851,6 @@ function Facts.Of(type: string): Sheet?
         if bonus.fuel then
           row(better, "Fuel", less(bonus.fuel) :: string)
         end
-        if bonus.holds then
-          row(better, "Wormhole", "holds one open just outside it while it is lit, into uncharted space; when it closes, by time or by the mass gone through it, another opens")
-        end
         for _, only in Structures.modules do
           if only.kinds and table.find(only.kinds, kind) and (only.least or 1) <= tower.size then
             row(better, "Only this kind fits", only.name, only.id)
@@ -881,6 +878,18 @@ function Facts.Of(type: string): Sheet?
         invention = "tech 2 hulls to be invented here", bridge = "ships in its field go to another gravity station's bridge" } :: { [string]: string })[anchored.opens or ""]
       if opens then
         row(does, "Lets", opens)
+      end
+      local makes = ({ gravity = "a gravity station: a lit jump beacon, and a Jump Bridge may be fitted beside it",
+        wormhole = "a wormhole station: holds a wormhole open just outside it, into uncharted space; when it closes, by time or by the mass gone through it, another opens" } :: { [string]: string })[anchored.generator or ""]
+      if makes then
+        row(does, "Makes it", makes)
+      end
+      if anchored.needs then
+        for _, each in Structures.modules do
+          if each.generator == anchored.needs then
+            row(does, "Needs beside it", each.name, each.id)
+          end
+        end
       end
       row(does, "Burns", `{anchored.fuel or 0} blocks an hour`, Structures.FUEL.id)
       row(does, "Comes online in", seconds(anchored.anchor))

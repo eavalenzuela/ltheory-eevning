@@ -1,0 +1,29 @@
+/* A citadel mast's beam of light (Game/View/Citadel): a shaft running
+   straight out of the mast's tip, fading to nothing along its length,
+   with a slow pulse travelling up it. Drawn on crossed sheets with
+   additive blending, no depth writing and both faces, as the air
+   shields are. uv.x runs across a sheet, uv.y along it from the tip. */
+
+#include frag.jsl
+#include math.jsl
+
+FRAG_IN vec3 normal;
+FRAG_IN vec3 position;
+FRAG_IN vec3 vertposscaled;
+FRAG_IN vec3 origin;
+FRAG_IN vec3 scale;
+
+uniform vec3 beamTint;
+uniform float time;
+
+void main() {
+  float x = abs(2.0 * uv.x - 1.0);
+  float y = clamp(uv.y, 0.0, 1.0);
+  float core = exp(-x * 18.0);
+  float glow = 0.5 * exp(-x * 5.0) + 0.15 * exp(-x * 2.0);
+  float fade = (1.0 - exp(-y * 40.0)) * pow(1.0 - y, 1.6);
+  float pulse = 0.72 + 0.28 * sin(1.3 * time - 9.0 * y);
+  float edge = 1.0 - smoothstep(0.7, 1.0, x);
+  float a = (1.4 * core + glow) * fade * pulse * edge;
+  RETURN(vec4(mix(beamTint, vec3(1.0), saturate(1.2 * core)) * a, 1.0));
+}

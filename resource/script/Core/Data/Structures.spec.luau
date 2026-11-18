@@ -32,8 +32,13 @@ suite:Case("each people that holds stations has a tower in each of three sizes, 
         Structures.SUPPLY[size].fuel } :: { any })
     end
   end
-  -- (the control towers: the citadels are in the list too, five sizes of each of five kinds, of nobody's)
-  t.eq(#Structures.towers, #Structures.TOWER_PEOPLES * 3 + #Structures.CITADEL_KINDS * #Structures.CITADEL_SIZES)
+  -- (the control towers: the citadels are in the list too, of nobody's: each kind at five sizes, or at those it is built at)
+  local citadels = 0
+  for _, kind in Structures.CITADEL_KINDS do
+    citadels += if Structures.CITADEL_KIND_SIZES[kind] then #Structures.CITADEL_KIND_SIZES[kind] else #Structures.CITADEL_SIZES
+  end
+  t.eq(citadels, 27)
+  t.eq(#Structures.towers, #Structures.TOWER_PEOPLES * 3 + citadels)
   t.eq(Structures.towerById["tower.kethri.small"], nil)
 end)
 

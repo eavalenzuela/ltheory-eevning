@@ -820,7 +820,7 @@ suite:Case("a wormhole takes so much mass through it and no more: each ship spen
   t.eq(state.wormholes[hole.id], nil, "it should have closed")
 end)
 
-suite:Case("a wormhole station holds a wormhole open just outside it while it is lit, and opens another when that one closes", function(t)
+suite:Case("a generator station with its Wormhole Generator online holds a wormhole open just outside it while it is lit, and opens another when that one closes", function(t)
   local game = inSpace()
   local state = game.state
   -- (a station of the kind, stood for here by a planet of the home system's: the rule asks only where it is)
@@ -831,7 +831,7 @@ suite:Case("a wormhole station holds a wormhole open just outside it while it is
     end
   end
   local at = assert(planet)
-  local starbase: State.Starbase = { id = at.id, tower = "citadel.wormhole.small", owner = "player", ready = 0, fuel = 0, burnt = 0,
+  local starbase: State.Starbase = { id = at.id, tower = "citadel.generator.large", owner = "player", ready = 0, fuel = 0, burnt = 0,
     modules = {}, drilled = 0, raid = 0, raids = 0, used = 0, raised = 0, robbed = 0, core = 0, charges = 0, sealed = 0, siege = 0,
     reaction = "", reacted = 0, composed = 0, starved = false }
   state.starbases[at.id] = starbase
@@ -839,6 +839,9 @@ suite:Case("a wormhole station holds a wormhole open just outside it while it is
   steps(game, 2)
   t.eq(starbase.hole, nil, "a dark station holds nothing open")
   starbase.fuel = 100
+  steps(game, 2)
+  t.eq(starbase.hole, nil, "a generator station without its Wormhole Generator holds nothing open")
+  table.insert(starbase.modules, { type = "service.generator.wormhole", ready = 0 })
   steps(game, 2)
   local hole = assert(state.wormholes[starbase.hole or 0], "a lit station should hold a wormhole open")
   local near = assert(Space.Object(state, hole.a))

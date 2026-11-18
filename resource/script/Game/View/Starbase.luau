@@ -1315,7 +1315,9 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
   if type.citadel then
     -- A citadel (Game/View/Citadel): grown, upright, its middle where
     -- the station is; what is fitted in it is inside it.
-    local made = Citadel.Of(type.kind, type.size, faction)
+    -- (a generator station's sphere is there while its generator is:
+    -- black for gravity, purple for a wormhole)
+    local made = Citadel.Of(type.kind, type.size, faction, if dark then nil else Structures.Generating(makeup.modules))
     tower = { id = type.id, model = made.model, at = -(made.lower + made.upper) * 0.5 * (towerRadius / made.radius),
       look = vector.create(0, 0, 1), scale = towerRadius / made.radius, radius = towerRadius, movers = made.movers }
   else

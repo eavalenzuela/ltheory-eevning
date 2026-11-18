@@ -3,7 +3,7 @@
 the hangar doors of each kind of citadel at each size, as the citadels
 picked for them grow (Game/View/Citadel, Citadel.Doors). The game's rules
 leave a citadel by one of its doors (Core/Tactical/Space), and cannot grow
-one themselves: run this whenever a pick in Citadel.PICKS changes.
+one themselves: run this whenever a pick in Citadel.Pick changes.
 
   script/citadeldoors           write it
   script/citadeldoors --check   say whether it is as the picks are now

@@ -275,7 +275,24 @@ function Starbases.Reacting(state: State.State, starbase: State.Starbase): React
     starved = starbase.starved }
 end
 
--- Whether a starbase has a module online that gives a service.
+-- What a citadel's generator makes of it while it is lit and the
+-- generator online: "gravity", "wormhole", or nil (none, or not running).
+function Starbases.Generating(state: State.State, starbase: State.Starbase): string?
+  if not Starbases.Lit(state, starbase) then
+    return nil
+  end
+  local online: { string } = {}
+  for _, module in starbase.modules do
+    if state.tick >= module.ready then
+      table.insert(online, module.type)
+    end
+  end
+  return Structures.Generating(online)
+end
+
+-- Whether a starbase has a module online that gives a service. (A module
+-- that needs a generator beside it gives nothing without it: a Jump
+-- Bridge, but in a gravity station.)
 function Starbases.Has(state: State.State, starbase: State.Starbase, service: Structures.Service): boolean
   if not Starbases.Lit(state, starbase) then
     return false
@@ -286,7 +303,8 @@ function Starbases.Has(state: State.State, starbase: State.Starbase, service: St
     return true
   end
   for _, module in starbase.modules do
-    if state.tick >= module.ready and Structures.moduleById[module.type].service == service then
+    local kind = Structures.moduleById[module.type]
+    if state.tick >= module.ready and kind.service == service and (kind.needs == nil or Starbases.Generating(state, starbase) == kind.needs) then
       return true
     end
   end
@@ -450,8 +468,28 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
         return false, `its {slots} service slots are full`
       end
       for _, fitted in starbase.modules do
+        local other = Structures.moduleById[fitted.type]
         if fitted.type == module.id then
           return false, `it has a {module.name} already`
+        elseif module.generator and other.generator then
+          -- (one generator to a citadel: it is one or the other)
+          return false, `it has a {other.name} fitted: one generator to a citadel`
+        end
+      end
+      -- (and what works only beside a generator, only where it is fitted)
+      if module.needs then
+        local has = false
+        for _, fitted in starbase.modules do
+          has = has or Structures.moduleById[fitted.type].generator == module.needs
+        end
+        if not has then
+          local wanted = "a generator"
+          for _, each in Structures.modules do
+            if each.generator == module.needs then
+              wanted = `a {each.name}`
+            end
+          end
+          return false, `a {module.name} works only beside {wanted}: fit that first`
         end
       end
       return true

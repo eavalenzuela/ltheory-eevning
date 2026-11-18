@@ -1,0 +1,83 @@
+/* The ball a citadel mast's harness holds (Game/View/Citadel): a
+   lightless sphere, as a wormhole is (wormhole.jsl), but of a dark
+   crimson, the light round it bent in and reddened, a crimson ring where
+   the bending is strongest; and crackles of energy off it (the owner,
+   2026-11-18: "closer to the wormhole citadel sphere, except with a dark
+   crimson hue, and with wisps or crackles of energy off of it").
+
+   Drawn on two spheres about the same middle, which is not the model's
+   (the ball is out at a mast's tip): its middle is found from where a
+   point of the sphere is and the way it faces, a radius in from it
+   ('ballRadius', in the model's units). 'ballHalo' 0: the ball itself,
+   with alpha blending. 1: the larger sphere round it (KHALO times the
+   ball), additive, with the crackles: thin lines where a stirring noise
+   crosses nothing, flickering, brightest at the ball. */
+
+#include frag.jsl
+#include math.jsl
+#include color.jsl
+#include lighting.jsl
+#include worldnoise.jsl
+
+FRAG_IN vec3 normal;
+FRAG_IN vec3 position;
+FRAG_IN vec3 vertposscaled;
+FRAG_IN vec3 origin;
+FRAG_IN vec3 scale;
+
+uniform vec3 ballTint;
+uniform float ballHalo;
+uniform float ballRadius;
+uniform float time;
+
+/* How much of the ball, across, is lightless; and how much bigger the
+   crackles' sphere is than the ball. */
+const float kHorizon = 0.62;
+const float kHalo = 1.8;
+
+void main() {
+  vec3 n = normalize(normal);
+  float R = ballRadius * max(scale.x, max(scale.y, scale.z));
+  vec3 middle = position - n * R;
+  vec3 fromMiddle = eye - middle;
+  bool outside = dot(fromMiddle, fromMiddle) > R * R;
+  if (outside != gl_FrontFacing)
+    discard;
+  vec3 rd = normalize(position - eye);
+  float along = dot(middle - eye, rd);
+  vec3 off = (eye + rd * along) - middle;
+  float b = length(off) / R;
+
+  if (ballHalo < 0.5) {
+    if (b < kHorizon && (outside ? along > 0.0 : true)) {
+      RETURN(vec4(ballTint * 0.06, 1.0));
+    }
+    float x = clamp((b - kHorizon) / (1.0 - kHorizon), 0.0, 1.0);
+    vec3 inward = (b > 1e-4) ? -off / (b * R) : vec3(0.0);
+    float bend = 2.4 * (kHorizon / max(b, kHorizon)) * pow(1.0 - x, 2.0);
+    vec3 seen = normalize(rd * cos(bend) + inward * sin(bend));
+    vec3 sky = toLinear(textureCube(envMap, seen).xyz);
+    sky *= 1.0 + 1.5 * pow(1.0 - x, 3.0);
+    /* (reddened toward the ball, and a crimson ring at its horizon) */
+    sky = mix(sky, ballTint * dot(sky, vec3(0.6)) * 3.0, 0.7 * pow(1.0 - x, 1.5));
+    float ring = exp(-pow((x - 0.035) / 0.03, 2.0));
+    sky += ring * ballTint * 2.2;
+    float alpha = 1.0 - smoothstep(0.8, 1.0, x);
+    RETURN(vec4(sky, alpha));
+  }
+
+  /* The crackles: on the larger sphere, outside the ball. */
+  float inner = 1.0 / kHalo;
+  if (b < inner * 0.97)
+    discard;
+  vec3 p = (position - middle) / R;
+  float f = wn_fbm(p * 2.6 + vec3(0.0, 0.35 * time, 0.0) + 0.4 * vec3(sin(0.7 * time), 0.0, cos(0.5 * time)), 3, 0.55);
+  float line = 1.0 - smoothstep(0.0, 0.035, abs(f));
+  float g = wn_fbm(p * 5.1 - vec3(0.2 * time), 2, 0.5);
+  float flicker = smoothstep(-0.1, 0.4, sin(9.0 * time + 6.0 * g));
+  float fall = pow(1.0 - smoothstep(inner, 1.0, b), 1.5);
+  float hug = pow(1.0 - smoothstep(inner, inner + 0.22, b), 2.0);
+  float a = 2.2 * line * flicker * fall + 0.35 * hug;
+  vec3 c = mix(ballTint, vec3(1.0, 0.45, 0.35), 0.5 * line * flicker);
+  RETURN(vec4(c * a, 1.0));
+}

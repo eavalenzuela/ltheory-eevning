@@ -1007,9 +1007,14 @@ suite:Case("what docks at a citadel goes by its size; what is too big tethers or
 end)
 
 suite:Case("each kind of citadel is a citadel of its own, with its own print: it does its own work better, and fits what only it may", function(t)
-  -- Five kinds at five sizes, each with its name and its print.
+  -- Five kinds at five sizes, and the generator station large and extra-large, each with its name and its print.
   for _, kind in Structures.CITADEL_KINDS do
     for size, word in Structures.CITADEL_SIZES do
+      local built = Structures.CITADEL_KIND_SIZES[kind]
+      if built and not table.find(built, size) then
+        t.eq(Structures.towerById[`citadel.{kind}.{word}`], nil, `a {word} {kind}`)
+        continue
+      end
       local tower = assert(Structures.towerById[`citadel.{kind}.{word}`], `no {word} {kind}`)
       t.eq({ tower.kind, tower.size, tower.name } :: { any },
         { kind, size, `{Structures.CITADEL_SIZE_NAMES[size]} {Structures.CITADEL_KIND_NAMES[kind]}` } :: { any })
@@ -1018,6 +1023,10 @@ suite:Case("each kind of citadel is a citadel of its own, with its own print: it
   end
   t.eq({ Structures.towerById["citadel.small"], Structures.CitadelNow("blueprint.citadel.large"), Structures.CitadelNow("citadel.shipyard.small") } :: { any },
     { nil, "blueprint.citadel.habitation.large", nil } :: { any })
+  -- (and the gravity and wormhole stations of before: generator stations, large or extra-large)
+  t.eq({ Structures.CitadelNow("citadel.gravity.small"), Structures.CitadelNow("blueprint.citadel.wormhole.huge"),
+    Structures.towerById["citadel.generator.small"] } :: { any },
+    { "citadel.generator.large", "blueprint.citadel.generator.extralarge", nil } :: { any })
   -- A small shipyard fits an Advanced Ship Assembly, and not a Capital Ship Assembly (large and up); nor does a
   -- research station fit either.
   local game, station = inCitadel(t, nil, "citadel.shipyard.small")
@@ -1075,31 +1084,45 @@ suite:Case("a ship leaves a citadel by one of its hangar doors, just outside it 
   t.ok(vector.dot(off, outward) > 0 and vector.magnitude(off - outward * vector.dot(off, outward)) < 1 + ball.radius,
     `it came out {vector.magnitude(off)} m from the door, not out of it`)
   t.ok(vector.dot(vector.create(ball.vx, ball.vy, ball.vz), outward) > 0, "it is not moving out of the door")
-  t.ok(Space.Distance(ball :: any, object :: any) < reach * 1.2, "it came out far from the citadel")
+  -- (a door may stand at a corner of it, beyond its radius: just past where the door is)
+  local doorFar = vector.magnitude(vector.create(door[1], door[2], door[3])) * reach
+  t.ok(Space.Distance(ball :: any, object :: any) < doorFar + reach * 0.3, "it came out far from the citadel")
 end)
 
-suite:Case("a gravity station is a lit jump beacon of itself; with a Jump Bridge, a ship in its field goes to another's, on the station's fuel", function(t)
-  local game, first = inCitadel(t, nil, "citadel.gravity.small")
+suite:Case("a generator station's Gravity Generator makes it a lit jump beacon; with a Jump Bridge, a ship in its field goes to another's, on the station's fuel", function(t)
+  local game, first = inCitadel(t, nil, "citadel.generator.large")
   local state = game.state
   local ship = state.player.ship
-  -- (a beacon lit with nothing fitted: a jump drive may come out at it)
-  local lit = false
-  for _, beacon in Jumping.Beacons(state, ship) do
-    lit = lit or beacon.id == first
+  local function beacon(): boolean
+    local lit = false
+    for _, each in Jumping.Beacons(state, ship) do
+      lit = lit or each.id == first
+    end
+    return lit
   end
-  t.ok(lit, "a gravity station is no beacon")
-  -- (only a gravity station fits a bridge)
-  t.eq(Structures.moduleById["service.bridge"].kinds, { "gravity" })
-  -- Fit a bridge, and leave.
-  local function bridge(station: number)
-    order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, "service.bridge", 1).id })
+  -- (nothing fitted: no beacon, and no bridge until a gravity generator is there)
+  t.ok(not beacon(), "a generator station with no generator is a beacon")
+  t.eq(Structures.moduleById["service.bridge"].kinds, { "generator" })
+  t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "service.bridge", 1).id }),
+    "a Jump Bridge works only beside a Gravity Generator: fit that first")
+  -- Fit the generator and a bridge, and leave.
+  local function fit(station: number, module: string)
+    order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, module, 1).id })
     Core.Step(game)
-    for _, module in state.starbases[station].modules do
-      module.ready = state.tick
+    for _, each in state.starbases[station].modules do
+      each.ready = state.tick
     end
     Core.Step(game)
   end
+  local function bridge(station: number)
+    fit(station, "service.generator.gravity")
+    fit(station, "service.bridge")
+  end
   bridge(first)
+  t.ok(beacon(), "a gravity station is no beacon")
+  -- (one generator to a citadel)
+  t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "service.generator.wormhole", 1).id }),
+    "it has a Gravity Generator fitted: one generator to a citadel")
   -- A second, in another system within the bridge's reach: the ship is put by a planet there to anchor it.
   local here = Space.SystemOf(state, first)
   local other: System.Object? = nil
@@ -1122,7 +1145,7 @@ suite:Case("a gravity station is a lit jump beacon of itself; with a Jump Bridge
   ball.system, ball.x, ball.y, ball.z = elsewhere, planet.x + planet.radius + 30000, planet.y, planet.z
   ball.vx, ball.vy, ball.vz = 0, 0, 0
   Space.AssignGrid(state, ball)
-  order(t, game, { kind = "AnchorTower", actor = 0, item = carry(game, "citadel.gravity.small", 1).id, target = planet.id })
+  order(t, game, { kind = "AnchorTower", actor = 0, item = carry(game, "citadel.generator.large", 1).id, target = planet.id })
   local second = stepUntil(game, "StarbaseAnchored", 3).station :: number
   state.starbases[second].ready = state.tick
   Core.Step(game)
@@ -1141,7 +1164,7 @@ suite:Case("a gravity station is a lit jump beacon of itself; with a Jump Bridge
   Core.Step(game)
   ball = state.balls[ship]
   t.eq(ball.system, here)
-  t.ok(Space.Distance(ball :: any, assert(Space.Object(state, first)) :: any) < Structures.towerById["citadel.gravity.small"].field,
+  t.ok(Space.Distance(ball :: any, assert(Space.Object(state, first)) :: any) < Structures.towerById["citadel.generator.large"].field,
     "it came out far from the bridge it went to")
   t.ok(state.starbases[second].fuel <= fuel - cost, "the bridge it left did not pay the fuel")
   -- (never into uncharted space, nor out of it: were the other system

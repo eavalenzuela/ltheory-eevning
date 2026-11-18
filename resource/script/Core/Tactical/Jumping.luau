@@ -264,9 +264,10 @@ end
 -- its best.
 Jumping.BRIDGE_RANGE = Jumping.RANGE * (1 + 5 * Jumping.FURTHER)
 
--- Whether a starbase is a gravity station with a Jump Bridge online, lit.
+-- Whether a starbase is a gravity station with a Jump Bridge online, lit:
+-- a generator station whose Gravity Generator is online.
 local function bridged(state: State.State, starbase: State.Starbase): boolean
-  if not Starbases.Lit(state, starbase) then
+  if Starbases.Generating(state, starbase) ~= "gravity" then
     return false
   end
   for _, module in starbase.modules do

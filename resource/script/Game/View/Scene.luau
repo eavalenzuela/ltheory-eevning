@@ -777,6 +777,8 @@ local function wormhole(): Model
   ShaderInstance_SetState(shader, "BlendModeAlpha")
   ShaderInstance_SetState(shader, "ZWritableOff")
   ShaderInstance_SetState(shader, "CullModeDisabled")
+  ShaderInstance_SetVec3(shader, "holeCore", vector.create(0, 0, 0))
+  ShaderInstance_SetVec3(shader, "holeRing", vector.create(0.55, 0.62, 0.75))
   ShaderInstance_Link(shader)
   local made = Model_Create()
   Model_AddShell(made, Mesh_BoxSphere(16, true), shader)

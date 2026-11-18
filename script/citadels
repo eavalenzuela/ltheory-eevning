@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """script/citadels: sheets of the citadels Game/View/Citadel grows, taken
 off the screen through the viewer (App/viewer, Viewer.Citadel).
-  script/citadels SIZE [FROM [COUNT]] [DETAIL...] [PAINT] [asym] [cel1|cel2]
+  script/citadels SIZE [FROM [COUNT]] [DETAIL...] [PAINT] [STYLE] [asym] [cel1|cel2]
         COUNT seeds (20) from FROM (1) on, at SIZE (1 small to 5 huge);
-        with "asym", grown asymmetrical
+        with "asym", grown asymmetrical; STYLE is blocks (if none),
+        pyramid, diamond or wormhole (Citadel.STYLES)
 DETAIL is any of antennas, pipes, greebles, lights and rivets, or "all"
 for every one (Game/View/Hull's surface detail). PAINT is a paint of
 Hull.looks (civil if none). The sheet is written to cache/citadels/ and
 its name printed; every picture has its seed written on it. What a size
-is drawn as in the game is the seed picked for it in Citadel.PICKS.
+is drawn as in the game is the seed picked for it in Citadel.Pick.
 """
 import os
 import subprocess
@@ -18,6 +19,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
 DETAILS = ["antennas", "pipes", "greebles", "lights", "rivets"]
 PAINTS = ["civil", "bare", "vessari", "talmar", "kethri", "vail", "unbound", "orun"]
+STYLES = ["blocks", "pyramid", "diamond", "wormhole"]
 SIZES = ["small", "medium", "large", "extra-large", "huge"]
 FOLDER = os.path.join("cache", "citadels")
 TAKEN = os.path.join(FOLDER, "shots")
@@ -41,8 +43,9 @@ def main():
     paint = next((word for word in words if word in PAINTS), None)
     look = "cel2" if "cel2" in words else "cel1" if "cel1" in words else None
     asym = "asym" in words
+    style = next((word for word in words if word in STYLES), None)
     for word in words:
-        if word not in DETAILS and word not in PAINTS and word not in ("all", "cel1", "cel2", "asym"):
+        if word not in DETAILS and word not in PAINTS and word not in STYLES and word not in ("all", "cel1", "cel2", "asym"):
             usage(f"'{word}' is not a detail, a paint or a look")
     if not numbers or not 1 <= numbers[0] <= 5:
         usage("SIZE is 1 to 5")
@@ -50,7 +53,7 @@ def main():
     first = numbers[1] if len(numbers) > 1 else 1
     count = numbers[2] if len(numbers) > 2 else 20
     os.makedirs(TAKEN, exist_ok=True)
-    tag = f"size{size}-{first}-{first + count - 1}" + ("-" + "-".join(details) if details else "") + (f"-{paint}" if paint else "") + (f"-{look}" if look else "") + ("-asym" if asym else "")
+    tag = f"size{size}-{first}-{first + count - 1}" + ("-" + "-".join(details) if details else "") + (f"-{paint}" if paint else "") + (f"-{look}" if look else "") + ("-asym" if asym else "") + (f"-{style}" if style else "")
     lines = ["frames 10"]
     if look:
         lines += ["lua RenderPass_SetEnabled('Smooth Shading', false)", f"lua RenderPass_SetEnabled('Flat Paint', {'true' if look == 'cel2' else 'false'})"]
@@ -62,7 +65,8 @@ def main():
         if os.path.exists(files[-1]):
             os.remove(files[-1])
         painted = f"'{paint}'" if paint else "nil"
-        lines += [f"lua assert(Viewer.Citadel({seed}, {size}, {painted}, '{detail}', {'true' if asym else 'false'}))", "frames 12", f"shot {file}", "frames 2"]
+        styled = f"'{style}'" if style else "nil"
+        lines += [f"lua assert(Viewer.Citadel({seed}, {size}, {painted}, '{detail}', {'true' if asym else 'false'}, {styled}))", "frames 12", f"shot {file}", "frames 2"]
     lines += ["echo citadels sheet taken", "quit"]
     with open(SCRIPT, "w") as out:
         out.write("\n".join(lines) + "\n")
@@ -85,7 +89,7 @@ def main():
     rows = (len(files) + columns - 1) // columns
     sheet = Image.new("RGB", (columns * wide, bar + rows * high), (12, 14, 18))
     draw = ImageDraw.Draw(sheet)
-    title = f"Citadels, {SIZES[size - 1]} (size {size}): seeds {first} to {first + count - 1}" + (f", detail: {detail}" if detail else ", no detail") + (f", {paint}" if paint else "") + (f", {look}" if look else "") + (", asymmetrical" if asym else "")
+    title = f"Citadels, {SIZES[size - 1]} (size {size}): seeds {first} to {first + count - 1}" + (f", detail: {detail}" if detail else ", no detail") + (f", {paint}" if paint else "") + (f", {look}" if look else "") + (", asymmetrical" if asym else "") + (f", {style}" if style else "")
     draw.text((12, 9), title, fill=(235, 235, 235), font=big)
     for index, file in enumerate(files):
         x, y = (index % columns) * wide, bar + (index // columns) * high

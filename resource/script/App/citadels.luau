@@ -24,19 +24,33 @@
 --                  is laid out afresh and the others stay (kept as
 --                  "antennas:17")
 --   C              the next kind of citadel: habitation, trade hub,
---                  refinery, research station, shipyard (what G goes to,
---                  and what K keeps it as)
+--                  refinery, research station, shipyard, generator (what
+--                  G goes to, and what K keeps it as; Citadel.KINDS)
+--   V              whose: the standard citadels (the human peoples' and
+--                  pilots'), or an alien people's, Vail or Nimia
+--                  (Citadel.PEOPLES; what is theirs to pick: Citadel.SLOTS)
 --   G              the citadel the game draws of this kind at this size
---                  now (Citadel.PICKS), in its paint
+--                  now (Citadel.Pick), in its paint
 --   the search box (top right; click it, type, Return): a seed, to go
 --                  to it; or a size's name (small, medium, large,
 --                  extralarge, huge), to go to what the game draws at it
+--   F              what its defence module is: none, cannon, laser,
+--                  hybrid, missile, round (the weapons it mounts on the
+--                  weapon hardpoints; the point defence is always there)
+--   W              a generator citadel's generator: making gravity (a
+--                  black sphere), making a wormhole (a deep purple one),
+--                  or not running (no sphere, its rings still), round
+--   O              its kind's module (observatory, mining turret) offline:
+--                  there, but dark and still
+--   H              the most hangar doors it has: 4, 2 or 1, round
+--                  (Citadel.DOOR_CAPS)
 --   K              keep this one: its line goes in cache/citadels-kept.txt,
 --                  as a pick for its size
 --   Space          stop it turning, or start it
 --   right-drag turns it, the wheel moves in and out
 
 local AppShell = require("@lt/AppShell")
+local Arms = require("@lt/Game/View/Arms")
 local Citadel = require("@lt/Game/View/Citadel")
 local Components = require("@lt/Widget/Components")
 local Hull = require("@lt/Game/View/Hull")
@@ -79,9 +93,19 @@ return AppShell.Create(function(): Widget
   end
 
   local seed, size, paint, look, style = 1, 1, 1, 1, 1
-  local KINDS = Structures.CITADEL_KINDS
+  local KINDS = Citadel.KINDS
   local role = 1            -- which of the kinds of citadel (KINDS) it is for
+  local PEOPLES = Citadel.PEOPLES
+  local folk = 1            -- whose citadel it is for (PEOPLES)
+  local GENERATORS = { "gravity", "wormhole", "off" }
+  local making = 1          -- what its generator makes (GENERATORS)
   local asym = false
+  local doorCap = 1         -- which of Citadel.DOOR_CAPS: the most doors it has
+  local FAMILIES = { "none", "cannon", "laser", "hybrid", "missile" }
+  local family = 1          -- which of FAMILIES its defence module is
+  local offline = false     -- its kind's module is offline
+  local armed: { Object } = {}   -- the weapons on its hardpoints
+  local mountsShown, armedShown = 0, 0
   local STYLES = Citadel.STYLES
   local moving: { Starbase.Moving } = {}   -- what of it turns
   local clock = 0
@@ -130,14 +154,30 @@ return AppShell.Create(function(): Widget
     end
   end
 
+  -- The kind of citadel it is drawn as (a generator citadel is a gravity
+  -- or a wormhole station, by what its generator makes), whether its
+  -- generator is still, and what it is, in words.
+  local function drawnAs(): (string, boolean)
+    if KINDS[role] == "generator" then
+      return if making == 2 then "wormhole" else "gravity", making == 3
+    end
+    return KINDS[role], making == 3
+  end
+  local function slotName(): string
+    local people = PEOPLES[folk]
+    return `{if people == "standard" then "" else string.upper(string.sub(people, 1, 1)) .. string.sub(people, 2) .. " "}{SIZES[size]} {Citadel.KIND_NAMES[KINDS[role]]}`
+  end
+
   -- The citadel the game draws of the kind and at the size shown.
   local function picked()
-    local pick = Citadel.Pick(KINDS[role], size)
+    local pick = Citadel.Pick(KINDS[role], size, PEOPLES[folk])
     seed, asym = pick.seed, pick.asym
+    doorCap = table.find(Citadel.DOOR_CAPS, pick.doors or Citadel.DOORS) or 1
     style = table.find(STYLES, pick.style) or 1
     setDetail(string.split(pick.detail, " "))
     paint = table.find(PAINTS, pick.paint) or 1
-    note = `what the game draws of a {SIZES[size]} {Structures.CITADEL_KIND_NAMES[KINDS[role]]}: seed {pick.seed}, {pick.style}`
+    note = `{if Citadel.HasSlot(PEOPLES[folk], KINDS[role], size) then "" else "(there is no such citadel: the nearest) "}`
+      .. `what the game draws of a {slotName()}{if pick.stand then " (a stand-in, not picked yet)" else ""}: seed {pick.seed}, {pick.style}`
       .. `{if pick.asym then ", asymmetrical" else ""}, {pick.paint}, {pick.detail}`
   end
 
@@ -147,15 +187,17 @@ return AppShell.Create(function(): Widget
       RenderPass_SetEnabled("Smooth Shading", LOOKS[look].smooth)
       RenderPass_SetEnabled("Flat Paint", LOOKS[look].flat)
     end
-    local now = `{seed}:{size}:{paint}:{asym}:{style}:{detailWords()}`
+    local now = `{seed}:{size}:{paint}:{asym}:{style}:{detailWords()}:{doorCap}:{family}:{role}:{making}:{offline}`
     if now == key then
       return
     end
     key = now
     local started = os.clock()
-    local made = Citadel.Build(seed, size, if PAINTS[paint] == "dark" then nil else PAINTS[paint], detailWords(), nil, asym, STYLES[style])
+    local kind, idle = drawnAs()
+    local made = Citadel.Build(seed, size, if PAINTS[paint] == "dark" then nil else PAINTS[paint], detailWords(), nil, asym, STYLES[style],
+      Citadel.DOOR_CAPS[doorCap], kind, idle, offline)
     took = math.floor((os.clock() - started) * 1000)
-    local _, holes = Citadel.Grow(seed, size, asym, STYLES[style])
+    local _, holes = Citadel.Grow(seed, size, asym, STYLES[style], Citadel.DOOR_CAPS[doorCap], kind)
     mouths = #holes
     local box = made.upper - made.lower
     across = math.max(box.x, box.z) / math.max(1e-6, box.y)
@@ -176,6 +218,42 @@ return AppShell.Create(function(): Widget
       Object_Delete(piece.object)
     end
     shown = object
+    -- (and the weapons on its hardpoints, as big as they are, in metres)
+    for _, gone in armed do
+      Object_Delete(gone)
+    end
+    armed = {}
+    local types = Citadel.Armed(made.mounts, size, if family == 1 then nil else FAMILIES[family])
+    local perMetre = scale / made.metres
+    -- (hardpoints: pairs of mounts count once)
+    mountsShown, armedShown = 0, 0
+    for index, mount in made.mounts do
+      if mount.twin == 0 or mount.twin > index then
+        mountsShown += 1
+      end
+    end
+    for index, mount in made.mounts do
+      local piece = if types[index] ~= "" then Arms.Build(types[index]) else nil
+      if piece then
+        local gun = Object_Scenery({})
+        Object_SetRenderable(gun, piece.gun)
+        system:AddInterior(gun)
+        table.insert(armed, gun)
+        local base: Object? = nil
+        local turning = piece.base
+        if turning then
+          local one = Object_Scenery({})
+          Object_SetRenderable(one, turning)
+          system:AddInterior(one)
+          table.insert(armed, one)
+          base = one
+        end
+        Arms.Place(piece, base, gun, at + mount.at * scale, mount.n, mount.fore, nil, perMetre)
+        if mount.twin == 0 or mount.twin > index then
+          armedShown += 1
+        end
+      end
+    end
     -- (and what turns of it, each a thing of its own: Starbase.Animate turns them)
     moving = Starbase.Movers(made.movers, function(model: Model): Object
       local piece = Object_Scenery({})
@@ -193,8 +271,11 @@ return AppShell.Create(function(): Widget
       had = text
     end
     local words = detailWords()
-    local line = `{SIZES[size]} {KINDS[role]}  seed {seed}  style {STYLES[style]}{if asym then "  asym" else ""}  paint {PAINTS[paint]}`
+    local people = PEOPLES[folk]
+    local line = `{if people == "standard" then "" else people .. " "}{SIZES[size]} {KINDS[role]}  seed {seed}  style {STYLES[style]}{if asym then "  asym" else ""}  paint {PAINTS[paint]}`
+      .. `  doors {Citadel.DOOR_CAPS[doorCap]}`
       .. (if words ~= "" then `  detail {words}` else "")
+      .. (if Citadel.HasSlot(people, KINDS[role], size) then "" else "  (not one of the 35)")
     File_Write(KEPT, had .. line .. "\n")
     note = `kept: {line}  (in {KEPT})`
   end
@@ -278,6 +359,34 @@ return AppShell.Create(function(): Widget
       clock += seconds
       Starbase.Animate(moving, clock, vector.create(0, 1, 0))
     end,
+    -- Fit a defence module of a family ("cannon", "laser", "hybrid",
+    -- "missile"; "none" for none). False if there is no such family.
+    -- The hardpoints there are, and how many have a weapon on them.
+    -- Show it as a kind of citadel (Citadel.KINDS, or Structures'
+    -- gravity or wormhole: the generator citadel making that), its
+    -- generator running or not, its kind's module online or not, and
+    -- whose (Citadel.PEOPLES; standard if not said). False if there is
+    -- no such kind or people.
+    Kind = function(name: string, stopped: boolean?, dark: boolean?, people: string?): boolean
+      local at = table.find(KINDS, Citadel.Slot(name))
+      local whose = table.find(PEOPLES, people or "standard")
+      if at == nil or whose == nil then
+        return false
+      end
+      role, offline, folk = at, dark == true, whose
+      making = if stopped == true then 3 elseif name == "wormhole" then 2 else 1
+      show()
+      return true
+    end,
+    Arm = function(name: string): (boolean, number, number)
+      local at = table.find(FAMILIES, name)
+      if at == nil then
+        return false, 0, 0
+      end
+      family = at
+      show()
+      return true, mountsShown, armedShown
+    end,
     -- Look at it from somewhere else (as the hull browser's Look): how
     -- far round, how far above and from how far off. It stays still.
     Look = function(round: number, above: number?, off: number?)
@@ -298,12 +407,18 @@ return AppShell.Create(function(): Widget
       Im.Text(`SEED {seed}`, x, y, 30, Im.TEXT)
       local reach = Structures.CITADEL_REACH[size]
       local field = if reach >= 1000 then `{reach // 1000} km` else `{reach} m`
-      local pick = Citadel.Pick(KINDS[role], size)
-      local isPick = pick.seed == seed and pick.asym == asym and pick.style == STYLES[style]
-      Im.Text(`kind: {Structures.CITADEL_KIND_NAMES[KINDS[role]]}      size {size} of {#SIZES}: {SIZES[size]}, a field of {field}      style: {STYLES[style]}      {if asym then "asymmetrical" else "sides alike"}      paint: {PAINTS[paint]}      look: {LOOKS[look].name}      {mouths} hangar {if mouths == 1 then "mouth" else "mouths"}      {string.format("%.1f", across)} times as wide as high      made in {took} ms`,
+      local pick = Citadel.Pick(KINDS[role], size, PEOPLES[folk])
+      local slot = Citadel.HasSlot(PEOPLES[folk], KINDS[role], size)
+      local isPick = slot and not pick.stand and pick.seed == seed and pick.asym == asym and pick.style == STYLES[style]
+        and (pick.doors or Citadel.DOORS) == Citadel.DOOR_CAPS[doorCap]
+      local done, all = Citadel.Picked()
+      Im.Text(`{slotName()}: {if not slot then "not one of the {all}" elseif pick.stand then "not picked yet" else "picked"}      {done} of {all} picked`
+        .. `{if KINDS[role] == "generator" or STYLES[style] == "wormhole" then `      generator: {GENERATORS[making]}` else ""}`,
+        x + 260, y + 6, 18, if slot then Im.TEXT else Im.DIM)
+      Im.Text(`kind: {Citadel.KIND_NAMES[KINDS[role]]}      size {size} of {#SIZES}: {SIZES[size]}, a field of {field}      style: {STYLES[style]}      {if asym then "asymmetrical" else "sides alike"}      paint: {PAINTS[paint]}      look: {LOOKS[look].name}      {mouths} hangar {if mouths == 1 then "mouth" else "mouths"} (at most {Citadel.DOOR_CAPS[doorCap]})      {mountsShown} hardpoints, {armedShown} armed ({FAMILIES[family]})      {string.format("%.1f", across)} times as wide as high      made in {took} ms`,
         x, y + 40, 16, Im.DIM)
       if isPick then
-        Im.Text(`the game draws a {SIZES[size]} {Structures.CITADEL_KIND_NAMES[KINDS[role]]} from this seed`, x, y + 64, 16, Im.ACCENT)
+        Im.Text(`the game draws a {slotName()} from this seed`, x, y + 64, 16, Im.ACCENT)
       end
       local on: { string } = {}
       for index, kind in Hull.DETAILS do
@@ -321,7 +436,7 @@ return AppShell.Create(function(): Widget
         search(query)
       end
       local foot = w.pos.y + w.size.y - 54
-      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      [ / ]: size      T: style      C: kind      A: asymmetrical      P: paint      L: look      1-5: detail      , .: its seed      G: the game's pick      K: keep      Space: turn",
+      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      [ / ]: size      T: style      C: kind      V: whose      A: asymmetrical      F: defence      W: generator      O: offline      H: doors      P: paint      L: look      1-5: detail      , .: its seed      G: the game's pick      K: keep      Space: turn",
         x, foot, 15, Im.DIM)
       Im.Text("right-drag turns it, the wheel moves in and out", x, foot + 22, 15, Im.DIM)
     end,
@@ -350,6 +465,11 @@ return AppShell.Create(function(): Widget
       if Key_Pressed(Key_RBracket()) then size = math.min(#SIZES, size + 1) end
       if Key_Pressed(Key_LBracket()) then size = math.max(1, size - 1) end
       if Key_Pressed(Key_A()) then asym = not asym end
+      if Key_Pressed(Key_H()) then doorCap = doorCap % #Citadel.DOOR_CAPS + 1 end
+      if Key_Pressed(Key_F()) then family = family % #FAMILIES + 1 end
+      if Key_Pressed(Key_W()) then making = making % #GENERATORS + 1 end
+      if Key_Pressed(Key_V()) then folk = folk % #PEOPLES + 1 end
+      if Key_Pressed(Key_O()) then offline = not offline end
       if Key_Pressed(Key_T()) then style = style % #STYLES + 1 end
       if Key_Pressed(Key_P()) then paint = paint % #PAINTS + 1 end
       if Key_Pressed(Key_L()) then look = look % #LOOKS + 1 end

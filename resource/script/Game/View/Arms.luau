@@ -211,6 +211,12 @@ local RACKS: { [string]: { any } } = {
   ["launcher.heavy"] = { 3, 2, v(1.15, 0.80, 2.3) },
   ["launcher.cruise"] = { 3, 3, v(1.20, 1.15, 2.6) },
   ["launcher.siege"] = { 4, 3, v(1.45, 1.15, 2.9) },
+  -- (the short-range launcher of each size, the rack of the long one of
+  -- its size: they had none, and nothing stood on their hardpoints)
+  ["launcher.rocket"] = { 2, 2, v(0.85, 0.75, 2.1) },
+  ["launcher.assault"] = { 3, 2, v(1.15, 0.80, 2.3) },
+  ["launcher.torpedo"] = { 3, 3, v(1.20, 1.15, 2.6) },
+  ["launcher.bombard"] = { 4, 3, v(1.45, 1.15, 2.9) },
 }
 
 -- Where a rack's middle is above its mount: its pivot, as a turret's.

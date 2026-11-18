@@ -19,6 +19,12 @@ FRAG_IN vec3 vertposscaled;
 FRAG_IN vec3 origin;
 FRAG_IN vec3 scale;
 
+/* The colour of its lightless middle (black, but for a wormhole station's
+   deep purple: the owner, 2026-11-18) and of the thin ring of bent light
+   round it. */
+uniform vec3 holeCore;
+uniform vec3 holeRing;
+
 
 /* How much of the sphere, across, is lightless. */
 const float kHorizon = 0.62;
@@ -39,7 +45,7 @@ void main() {
   vec3 off = (eye + rd * along) - origin;
   float b = length(off) / R;
   if (b < kHorizon && (outside ? along > 0.0 : true)) {
-    RETURN(vec4(0.0, 0.0, 0.0, 1.0));
+    RETURN(vec4(holeCore, 1.0));
   }
 
   /* The light bent in: what is seen here came from farther round
@@ -53,7 +59,10 @@ void main() {
      sky's light gathered toward it) */
   float ring = exp(-pow((x - 0.035) / 0.03, 2.0));
   sky *= 1.0 + 1.5 * pow(1.0 - x, 3.0);
-  sky += ring * vec3(0.55, 0.62, 0.75);
+  sky += ring * holeRing;
+  /* (and the middle's colour glowing a little way out into the bent
+     light: nothing for a black one) */
+  sky += holeCore * 1.5 * pow(1.0 - x, 4.0);
   float alpha = 1.0 - smoothstep(0.8, 1.0, x);
   RETURN(vec4(sky, alpha));
 }

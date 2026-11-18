@@ -104,6 +104,12 @@ export type ModuleType = {
   kinds: { string }?,
   least: number?,
   opens: string?,
+  -- A generator citadel's generator: what it makes of the citadel
+  -- ("gravity" a gravity station, "wormhole" a wormhole station). A
+  -- citadel has one generator at most. And what a module needs fitted
+  -- and online beside it to work ('needs': a generator, "gravity").
+  generator: string?,
+  needs: string?,
 }
 
 -- A class of colony ship: a nomad faction's station. It is a ship, of
@@ -223,14 +229,19 @@ Structures.CITADEL_SIZE_NAMES = { "Small", "Medium", "Large", "Extra-Large", "Hu
 -- kind does better (Structures.CITADEL_BONUS) and what only it can fit
 -- (the modules with 'kinds') are below. Any kind fits the plain service
 -- modules, and does no better with them than a citadel of another kind.
--- (and the sixth, the owner's of the same day: a gravity station, a jump
--- hub: "Jump hub", of a beacon lit and a bridge to another)
--- (and the seventh, the owner's of the same day: a wormhole station, which
--- holds a wormhole open from where it stands, one after another, each
--- closing by time and by mass as any does: Tactical/Wormholes)
-Structures.CITADEL_KINDS = { "habitation", "tradehub", "refinery", "research", "shipyard", "gravity", "wormhole" }
+-- (and the sixth, the generator station: the owner's gravity station and
+-- wormhole station of 2026-11-17, made one on 2026-11-18, large and
+-- extra-large only: "the module you fit will determine which it is". Its
+-- Gravity Generator makes it a jump hub, a lit beacon with a bridge to
+-- another; its Wormhole Generator holds a wormhole open from where it
+-- stands, one after another, each closing by time and by mass as any
+-- does: Tactical/Wormholes. Either works only while it is online, and
+-- the citadel lit. The name is mine.)
+Structures.CITADEL_KINDS = { "habitation", "tradehub", "refinery", "research", "shipyard", "generator" }
 Structures.CITADEL_KIND_NAMES = { habitation = "Habitation", tradehub = "Trade Hub", refinery = "Refinery",
-  research = "Research Station", shipyard = "Shipyard", gravity = "Gravity Station", wormhole = "Wormhole Station" } :: { [string]: string }
+  research = "Research Station", shipyard = "Shipyard", generator = "Generator Station" } :: { [string]: string }
+-- The sizes a kind is built at (every size, for a kind not here).
+Structures.CITADEL_KIND_SIZES = { generator = { 3, 4 } } :: { [string]: { number } }
 -- What each kind does better, where it is (its services online): mine,
 -- every figure, but the kinds' exclusive modules, which are the owner's.
 --   shipyard     a job builds in three quarters of the time, of nine
@@ -241,20 +252,15 @@ Structures.CITADEL_KIND_NAMES = { habitation = "Habitation", tradehub = "Trade H
 --   tradehub     half the sales tax and broker's fee on what is traded there
 --   habitation   a clone bay and room for storage without a module for
 --                them, and a fifth less fuel
---   gravity      a jump beacon lit without a module for it (the
---                owner's: it counts as a lit beacon for jump drives)
---   wormhole     a wormhole held open just outside it while it is lit,
---                and another as soon as that one closes (the owner's)
+--   generator    nothing of itself: what it does is its generator's
 export type CitadelBonus = { jobTime: number?, materials: number?, refine: number?, researchTime: number?, invent: number?,
-  fees: number?, fuel: number?, gives: { Service }?, holds: boolean? }
+  fees: number?, fuel: number?, gives: { Service }? }
 Structures.CITADEL_BONUS = {
   shipyard = { jobTime = 0.75, materials = 0.9 },
   refinery = { refine = 1.1 },
   research = { researchTime = 0.75, invent = 0.1 },
   tradehub = { fees = 0.5 },
   habitation = { fuel = 0.8, gives = { "quarters", "storage" } },
-  gravity = { gives = { "beacon" } },
-  wormhole = { holds = true },
 } :: { [string]: CitadelBonus }
 Structures.CITADEL = {
   { field = 2750, fuel = 8, anchor = 2 * 3600, volume = 4000, basePrice = 80000000, shield = 300000, armor = 150000, hull = 150000,
@@ -268,9 +274,40 @@ Structures.CITADEL = {
   { field = 62000, fuel = 120, anchor = 24 * 3600, volume = 40000, basePrice = 10000000000, shield = 5000000, armor = 2500000,
     hull = 2500000, bay = 48, slots = 8, defences = 10 },
 }
+-- The hardpoints of a citadel of each size (the owner's table, 2026-11-18):
+-- its weapon hardpoints by the size of weapon (medium, large, XL), its
+-- point defence hardpoints (every citadel has its point defence built in,
+-- on mounts that take a medium autocannon), and the one hardpoint of a
+-- huge citadel's super weapon. What is on the weapon hardpoints is a
+-- defence module's doing: one module mounts every weapon (the owner's
+-- second table). Game/View/Citadel places them on the model.
+export type Hardpoints = { medium: number, large: number, xl: number, pds: number, super: number }
+Structures.CITADEL_HARDPOINTS = {
+  { medium = 8, large = 0, xl = 0, pds = 4, super = 0 },
+  { medium = 8, large = 4, xl = 0, pds = 8, super = 0 },
+  { medium = 0, large = 12, xl = 2, pds = 12, super = 0 },
+  { medium = 0, large = 10, xl = 8, pds = 18, super = 0 },
+  { medium = 0, large = 20, xl = 12, pds = 24, super = 1 },
+} :: { Hardpoints }
+-- What a citadel's defence module mounts on its weapon hardpoints, by its
+-- size (the owner's second table, 2026-11-18): so many weapons of a size,
+-- of the module's family's short-range or long-range make. ("<Size>
+-- <Laser/Missile/Hybrid/Cannon> Defense Module".)
+export type Mounted = { size: string, range: string, count: number }
+Structures.CITADEL_DEFENCE = {
+  { { size = "medium", range = "short", count = 4 }, { size = "medium", range = "long", count = 4 } },
+  { { size = "medium", range = "long", count = 8 }, { size = "large", range = "short", count = 4 } },
+  { { size = "large", range = "long", count = 12 }, { size = "xl", range = "short", count = 2 } },
+  { { size = "large", range = "long", count = 10 }, { size = "xl", range = "short", count = 4 }, { size = "xl", range = "long", count = 4 } },
+  { { size = "large", range = "long", count = 20 }, { size = "xl", range = "short", count = 4 }, { size = "xl", range = "long", count = 8 } },
+} :: { { Mounted } }
 for _, kind in Structures.CITADEL_KINDS do
+  local built = Structures.CITADEL_KIND_SIZES[kind]
   for size, word in Structures.CITADEL_SIZES do
     local c = Structures.CITADEL[size]
+    if built and not table.find(built, size) then
+      continue
+    end
     table.insert(towers, {
       id = `citadel.{kind}.{word}`, name = `{Structures.CITADEL_SIZE_NAMES[size]} {Structures.CITADEL_KIND_NAMES[kind]}`, faction = "",
       size = size,
@@ -283,7 +320,9 @@ for _, kind in Structures.CITADEL_KINDS do
 end
 -- (the citadels of before there were kinds, "citadel.small" and so on:
 -- what a save has of them, or of their blueprints, is a habitation of
--- its size, Core.Load. Nil for an id that names none.)
+-- its size, Core.Load. And the gravity and wormhole stations of before
+-- 2026-11-18: a generator station of the size nearest theirs, large or
+-- extra-large. Nil for an id that names none.)
 function Structures.CitadelNow(id: string): string?
   local changed = false
   local now = string.gsub(id, "citadel%.(%a+)", function(word: string): string
@@ -293,7 +332,25 @@ function Structures.CitadelNow(id: string): string?
     end
     return `citadel.{word}`
   end)
+  local before, kind, word, after = string.match(now, "^(.-)citadel%.(%a+)%.(%a+)(.*)$")
+  local size = if word then table.find(Structures.CITADEL_SIZES, word) else nil
+  if (kind == "gravity" or kind == "wormhole") and size then
+    changed = true
+    now = `{before}citadel.generator.{if size >= 4 then "extralarge" else "large"}{after}`
+  end
   return if changed then now else nil
+end
+
+-- What a citadel's generator makes of it, of the modules fitted in it
+-- (their type ids) that are online: "gravity", "wormhole", or nil.
+function Structures.Generating(online: { string }): string?
+  for _, id in online do
+    local module = Structures.moduleById[id]
+    if module and module.generator then
+      return module.generator
+    end
+  end
+  return nil
 end
 
 -- How big a hull is, for where it docks: 1 for anything smaller than a
@@ -390,12 +447,25 @@ local modules: { ModuleType } = {
     opens = "invention" },
   { id = "service.reactor", name = "Reactor", service = "reaction", radius = 0, powergrid = 0, cpu = 0, anchor = 900, pilot = true,
     volume = 3500, basePrice = 60000000, citadel = true, fuel = 12, kinds = { "refinery" } },
+  -- A generator station's generators (the owner, 2026-11-18: "the module
+  -- you fit will determine which it is"), one to a citadel: the Gravity
+  -- Generator lights a jump beacon there (it counts as a lit beacon for
+  -- jump drives, the owner's of the gravity station), the Wormhole
+  -- Generator holds a wormhole open just outside it, and another as soon
+  -- as that one closes (Tactical/Wormholes). Prices and fuel are mine.
+  { id = "service.generator.gravity", name = "Gravity Generator", service = "beacon", radius = 0, powergrid = 0, cpu = 0,
+    anchor = 1200, pilot = true, volume = 3500, basePrice = 120000000, citadel = true, fuel = 20, kinds = { "generator" },
+    generator = "gravity" },
+  { id = "service.generator.wormhole", name = "Wormhole Generator", service = "wormhole", radius = 0, powergrid = 0, cpu = 0,
+    anchor = 1200, pilot = true, volume = 3500, basePrice = 200000000, citadel = true, fuel = 30, kinds = { "generator" },
+    generator = "wormhole" },
   -- (the gravity station's: "only it fits a Jump Bridge to another
-  -- gravity station", the owner's. A ship in the field of one goes to
-  -- another, of its owner's or open to it, on the station's fuel:
-  -- Tactical/Jumping. Price, fuel and how far it reaches are mine.)
+  -- gravity station", the owner's: a generator station with its Gravity
+  -- Generator. A ship in the field of one goes to another, of its
+  -- owner's or open to it, on the station's fuel: Tactical/Jumping.
+  -- Price, fuel and how far it reaches are mine.)
   { id = "service.bridge", name = "Jump Bridge", service = "beacon", radius = 0, powergrid = 0, cpu = 0, anchor = 1200, pilot = true,
-    volume = 3500, basePrice = 150000000, citadel = true, fuel = 20, kinds = { "gravity" }, opens = "bridge" },
+    volume = 3500, basePrice = 150000000, citadel = true, fuel = 20, kinds = { "generator" }, opens = "bridge", needs = "gravity" },
 }
 
 -- The colony ships, by class. (The first of a size of ship above

@@ -1633,7 +1633,14 @@ function Core.Load(data: buffer, length: number?): Game
     item.type = Structures.CitadelNow(item.type) or item.type
   end
   for _, starbase in state.starbases do
+    -- (and a gravity or wormhole station of before 2026-11-18 is a
+    -- generator station with that generator fitted, so it goes on doing
+    -- what it did)
+    local was = string.match(starbase.tower, "^citadel%.(%a+)%.")
     starbase.tower = Structures.CitadelNow(starbase.tower) or starbase.tower
+    if was == "gravity" or was == "wormhole" then
+      table.insert(starbase.modules, { type = `service.generator.{was}`, ready = 0 })
+    end
   end
   for _, job in state.jobs do
     job.product = Structures.CitadelNow(job.product) or job.product
