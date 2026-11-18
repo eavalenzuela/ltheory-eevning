@@ -6,6 +6,16 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Gravity stations, wormhole stations and a save editor
+
+- Gravity Station: a new kind of citadel, a jump hub. It is a lit jump beacon by itself, with no beacon module needed. It alone fits a Jump Bridge, which sends a ship in its field to another of your gravity stations with a bridge, up to 30 light years away. The station the ship leaves pays the fuel. Jump bridges are on the star map's system panel.
+- Wormhole Station: a new kind of citadel. While it has fuel, it holds a wormhole open about 15 km outside itself, leading into uncharted space and already found, and opens another as soon as one closes.
+- Wormholes now wear out with mass. Each ship that goes through uses up its hull's mass from the wormhole's budget, and when the budget is spent the wormhole closes behind the ship that spent it. The scanner and overview say whether a wormhole's mass is stable, reduced or critical.
+- A fourth size of wormhole, massive, lets capitals through: carriers, dreadnoughts, capital industrials and freighters, but never supercarriers or ultracapitals. It is the rarest size, and the way out that opens when a system's last wormhole closes is always a massive one. So a citadel can now be carried into uncharted space in a freighter.
+- Neither jump drives nor jump bridges reach into or out of uncharted space: wormholes are the only way.
+- New looks for the medium Refinery and the gravity stations. Wormhole-style citadels open their hangars only on their outer faces.
+- A save editor, started with Save Editor.bat in the game's folder on Windows (and from the app list on Linux). Pick a saved game and change credits, skills, standings, loyalty points, items and ships, who holds each system, pirate pressure, structures, wormholes and market stock, or anything else in the save. Close the game first. Folder... picks the saves of another install.
+
 ## Citadels, training injectors and twelve new hulls
 
 - Citadels: stations of your own that ships dock inside. Each is one of five kinds (Habitation, Trade Hub, Refinery, Research Station, Shipyard) at one of five sizes, from Small to Huge, and each has its own blueprint. Build one at a station, haul it to a moon or planet and anchor it, then fit service modules in its slots.
