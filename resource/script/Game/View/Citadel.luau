@@ -291,7 +291,8 @@ function Citadel.Build(seed: number, size: number, paint: string?, detail: strin
   local b = Plates.New(seed * 1.91 + size, 0.04)
   Hull.DrawPlates(b, plates, EASED)
   local words: { string } = {}
-  for word in string.gmatch(detail or "", "%a+") do
+  -- (each kind may have a seed of its own after it: antennas:17)
+  for word in string.gmatch(detail or "", "[%a%d:]+") do
     table.insert(words, word)
   end
   local wanted = Hull.DetailOf(words)
