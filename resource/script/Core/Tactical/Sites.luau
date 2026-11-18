@@ -239,6 +239,15 @@ local function archive(state: State.State, rng: Rng.Rng, wreck: number, rich: nu
   if Rng.Chance(rng, 0.5) then
     Items.Add(state, books[Rng.Int(rng, #books) + 1], 1, wreck, "cargo")
   end
+  -- (and in one vault in four a training injector of an hour, and in one
+  -- in twenty of six: Data/Injectors. By dice of their own, so that
+  -- what else a vault holds is as it was. First figures, mine.)
+  local dice = Rng.For(state.historySeed, wreck, 4409)
+  if Rng.Chance(dice, 0.05) then
+    Items.Add(state, "injector.training.six", 1, wreck, "cargo")
+  elseif Rng.Chance(dice, 0.25) then
+    Items.Add(state, "injector.training.hour", 1, wreck, "cargo")
+  end
 end
 
 local function addWreck(state: State.State, name: string, system: number, grid: number, x: number, y: number, z: number, radius: number,
@@ -382,6 +391,10 @@ local function make(state: State.State, system: number, rng: Rng.Rng, events: { 
       if kind == "relic" then
         state.wrecks[wreck].locked = true
         Items.Add(state, "datacore", (1 + Rng.Int(rng, 2)) * rich, wreck, "cargo")
+        -- (and a derelict's sealed hold one in ten a training injector of an hour: mine)
+        if Rng.Chance(Rng.For(state.historySeed, wreck, 4410), 0.1) then
+          Items.Add(state, "injector.training.hour", 1, wreck, "cargo")
+        end
       end
       if kind == "combat" then
         loot(state, rng, wreck, rich)

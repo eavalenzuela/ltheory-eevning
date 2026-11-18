@@ -25,7 +25,8 @@
 -- A script's names are what they were when this was a tab of the docked
 -- screen, and are there for every skill whether it is the one picked or
 -- not: "Train:<skill>", "Learn:<skill>", "Book:<skill>",
--- "CancelTraining:<n>", "Unplug:<slot>", "Plug:<type>". New with the
+-- "CancelTraining:<n>", "Unplug:<slot>", "Plug:<type>", "Inject:<type>"
+-- (a training injector in reach: Data/Injectors). New with the
 -- window: "Skills:skills" and "Skills:implants" (its pages),
 -- "Skills:show:<all, known, train, book>", "Skills:filter",
 -- "Skills:group:<all, or a group's id>",
@@ -38,6 +39,7 @@ local Format = require("@lt/Game/Format")
 local Hulls = require("@lt/Core/Data/Ships")
 local Im = require("@lt/Game/UI/Im")
 local Info = require("@lt/Game/UI/Info")
+local Injectors = require("@lt/Core/Data/Injectors")
 local List = require("@lt/Game/UI/List")
 local Session = require("@lt/Game/Session")
 local Skills = require("@lt/Core/Data/Skills")
@@ -164,6 +166,39 @@ local function drawQueue(session: Session.Session, game: Core.Game, x: number, y
   Im.Flat(x, y, w, 1, Theme.EDGE_STRONG)
   local queue = Core.Query.Training(game)
   Im.Strong(`TRAINING  {#queue} / {Skills.QUEUE_LENGTH}`, x + 12, y + 10, 12, Theme.DIM)
+  -- The training injectors in reach (in the hangar here, or the hold),
+  -- a button for each kind along the heading: banked time, given to the
+  -- queue at once.
+  local player = Core.Query.Player(game)
+  local held: { [string]: State.Item } = {}
+  local counts: { [string]: number } = {}
+  local places: { { holder: number, place: string } } = { { holder = player.ship, place = "cargo" } }
+  if player.docked ~= 0 then
+    table.insert(places, 1, { holder = player.docked, place = "hangar" })
+  end
+  for _, at in places do
+    for _, item in Core.Query.Items(game, at.holder, at.place) do
+      if Injectors.byId[item.type] then
+        held[item.type] = held[item.type] or item
+        counts[item.type] = (counts[item.type] or 0) + item.quantity
+      end
+    end
+  end
+  local injectX = x + 160
+  for _, injector in Injectors.list do
+    local item = held[injector.id]
+    if item then
+      local inject: State.Command = { kind = "Inject", actor = 0, item = item.id }
+      local can, whyNot = Session.CanDo(session, inject)
+      local label = `Inject {Format.Duration(injector.seconds)}  x{counts[injector.id]}`
+      local bw = Im.TextWidth(label, 12) + 20
+      Im.Because(whyNot)
+      if Im.Button(label, injectX, y + 4, bw, 22, can, `Inject:{injector.id}`) then
+        Session.Do(session, inject)
+      end
+      injectX += bw + 6
+    end
+  end
   if #queue == 0 then
     Im.Text("Nothing is training. Training goes on while you fly.", x + 12, y + 38, 13, Theme.CAUTION)
     return

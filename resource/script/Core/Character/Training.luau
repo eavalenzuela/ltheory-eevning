@@ -11,8 +11,14 @@
 -- (Training.Credit, by way of Core.Away: the view says how long it
 -- was). Nothing else in the game moves in that time. What is left of it
 -- when the queue runs out is lost.
+--
+-- And a training injector (Data/Injectors) is banked time: used, from
+-- the hangar here or the hold, it gives the queue its seconds at once, by
+-- the same way. (Not while the queue has less than that left in it:
+-- what is left over would be lost.)
 
 local Constants = require("@lt/Core/Data/Constants")
+local Injectors = require("@lt/Core/Data/Injectors")
 local Items = require("@lt/Core/Assets/Items")
 local Skills = require("@lt/Core/Data/Skills")
 local State = require("@lt/Core/Kernel/State")
@@ -115,6 +121,26 @@ function Training.Validate(state: State.State, command: State.Command): (boolean
       return false, "no such entry in the queue"
     end
     return true
+
+  elseif kind == "Inject" then
+    local item = state.items[command.item or 0]
+    local inHangar = item ~= nil and ship.docked ~= 0 and item.holder == ship.docked and item.place == "hangar"
+    local inHold = item ~= nil and item.holder == ship.id and item.place == "cargo"
+    if item == nil or not (inHangar or inHold) then
+      return false, "that is not in the hangar here, nor in the hold"
+    end
+    local injector = Injectors.byId[item.type]
+    if injector == nil then
+      return false, "that is not a training injector"
+    elseif #state.training == 0 then
+      return false, "nothing is in training: queue a skill first"
+    end
+    local queue = Training.Queue(state)
+    local left = queue[#queue].left
+    if left < injector.seconds then
+      return false, "the queue has less than that left to train: queue more first"
+    end
+    return true
   end
   return false, `unknown command '{kind}'`
 end
@@ -150,6 +176,13 @@ function Training.Apply(state: State.State, command: State.Command, events: { Ev
       state.trainingStarted = state.tick
     end
     table.insert(events, { kind = "TrainingCancelled", skill = skill })
+
+  elseif kind == "Inject" then
+    local item = state.items[command.item :: number]
+    local injector = Injectors.byId[item.type]
+    Items.Take(state, item, 1)
+    local trained = Training.Credit(state, injector.seconds, events)
+    table.insert(events, { kind = "Injected", type = injector.id, seconds = injector.seconds, trained = trained })
   end
 end
 

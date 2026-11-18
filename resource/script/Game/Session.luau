@@ -931,6 +931,9 @@ function Session.Notice(session: Session, event: Space.Event)
         .. (if event.trained == 0 then "your training went on" elseif event.trained == 1 then "a skill level was trained"
           else `{event.trained} skill levels were trained`))
     end
+  elseif kind == "Injected" then
+    Session.Say(session, `{Format.Duration(event.seconds)} of training injected`
+      .. (if event.trained == 1 then ": a skill level was trained" elseif event.trained > 1 then `: {event.trained} skill levels were trained` else ""))
   elseif kind == "ProbeLost" then
     Session.Say(session, "A probe has run down, and is gone")
   elseif kind == "StandingChanged" and event.by < 0 then

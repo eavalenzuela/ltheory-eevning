@@ -7,6 +7,7 @@ local Boosters = require("@lt/Core/Data/Boosters")
 local Components = require("@lt/Core/Data/Components")
 local Drones = require("@lt/Core/Data/Drones")
 local Implants = require("@lt/Core/Data/Implants")
+local Injectors = require("@lt/Core/Data/Injectors")
 local Modules = require("@lt/Core/Data/Modules")
 local Moons = require("@lt/Core/Data/Moons")
 local Ores = require("@lt/Core/Data/Ores")
@@ -197,6 +198,12 @@ end
 for _, booster in Boosters.list do
   byId[booster.id] = { id = booster.id, name = booster.name .. " Booster", category = "goods", volume = Boosters.VOLUME,
     basePrice = booster.price, scarce = true }
+end
+-- Training injectors (Data/Injectors): goods any station sells, a
+-- habitat most of all.
+for _, injector in Injectors.list do
+  byId[injector.id] = { id = injector.id, name = injector.name, category = "goods", volume = Injectors.VOLUME,
+    basePrice = injector.price }
 end
 
 -- Every type id a market deals in, in order: the order markets list

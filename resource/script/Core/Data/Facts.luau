@@ -12,6 +12,7 @@ local Boosters = require("@lt/Core/Data/Boosters")
 local Components = require("@lt/Core/Data/Components")
 local Drones = require("@lt/Core/Data/Drones")
 local Implants = require("@lt/Core/Data/Implants")
+local Injectors = require("@lt/Core/Data/Injectors")
 local Factions = require("@lt/Core/Data/Factions")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
@@ -916,6 +917,14 @@ function Facts.Of(type: string): Sheet?
     row(does, "Kind", Boosters.KINDS[booster.kind])
     row(does, "Lasts", `{seconds(Boosters.SECONDS)}; a fifth longer a level of Pharmacology`)
     row(does, "Made from", nameOf(booster.gas), booster.gas)
+    trade(sheet, type)
+  elseif Injectors.byId[type] then
+    local injector = Injectors.byId[type]
+    sheet.kind = "Training injector"
+    sheet.note = "Banked training time. Used from the hold, or from the hangar where the pilot is docked, it gives the training queue its time at once, as if that much had gone by. Not while the queue has less than that left to train."
+    local does = section(sheet, "Training injector")
+    row(does, "Gives", `{seconds(injector.seconds)} of training`)
+    row(does, "Found", "on station markets, in loyalty stores, in pirates' wrecks, and in data and relic sites")
     trade(sheet, type)
   elseif Ores.gasById[type] then
     sheet.kind = "Gas"

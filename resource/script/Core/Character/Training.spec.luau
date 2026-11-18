@@ -2,7 +2,9 @@
 -- Skills: learning, the training queue, and what a trained skill changes.
 
 local Core = require("@lt/Core/Api")
+local Injectors = require("@lt/Core/Data/Injectors")
 local Items = require("@lt/Core/Assets/Items")
+local Missions = require("@lt/Core/Assets/Missions")
 local Market = require("@lt/Core/Assets/Market")
 local Skills = require("@lt/Core/Data/Skills")
 local State = require("@lt/Core/Kernel/State")
@@ -283,6 +285,43 @@ suite:Case("training goes on through a save and load, to the same state", functi
   end
   t.eq(copy.state.skills.lasers, 2)
   t.eq(Core.Hash(copy), Core.Hash(game))
+end)
+
+suite:Case("a training injector is banked time: used from the hangar or the hold, it gives the queue its hours at once, and is not wasted on a queue too short for it", function(t)
+  local game, home = newGame()
+  local state = game.state
+  local hour = Injectors.byId["injector.training.hour"]
+  t.eq({ hour.seconds, Types.Info(hour.id).category, Types.Info(hour.id).scarce } :: { any }, { 3600, "goods", nil } :: { any })
+  Items.Add(state, hour.id, 2, home, "hangar")
+  local inject: State.Command = { kind = "Inject", actor = 0, item = stack(game, hour.id).id }
+  t.eq(refused(game, inject), "nothing is in training: queue a skill first")
+  order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })      -- 60 s
+  t.eq(refused(game, inject), "the queue has less than that left to train: queue more first")
+  for _ = 2, 4 do
+    order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })    -- 240, 900 and 3,600 s
+  end
+  local before = Core.Query.Training(game)
+  local whole = before[#before].left
+  t.ok(whole > 3600, "four levels are more than an hour")
+  Core.TakeEvents(game)
+  order(t, game, inject)
+  -- The first three levels are trained, and the fourth is the rest of the hour in.
+  t.eq({ state.skills.lasers, #state.training, stack(game, hour.id).quantity } :: { any }, { 3, 1, 1 } :: { any })
+  t.near(Core.Query.Training(game)[1].left, whole - 3600, 2)
+  local said = false
+  for _, event in Core.TakeEvents(game) do
+    said = said or (event.kind == "Injected" and event.seconds == 3600 and event.trained == 3)
+  end
+  t.ok(said, "it says how much was injected and what it trained")
+  -- Not a thing that is not an injector, nor one out of reach.
+  Items.Add(state, "datacore", 1, home, "hangar")
+  t.eq(refused(game, { kind = "Inject", actor = 0, item = stack(game, "datacore").id }), "that is not a training injector")
+  -- Sold at stations (a habitat most of all), in every human faction's loyalty store, and found.
+  local stocked = false
+  for _, stock in Missions.Store("vessari") do
+    stocked = stocked or stock.type == hour.id
+  end
+  t.ok(stocked, "the Vessari's store has one")
 end)
 
 return suite

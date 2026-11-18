@@ -79,6 +79,8 @@ Aftermath.LOOT_RANGE = LOOT_RANGE
 -- wreck of one whose people's hulls are worth having (Data/Factions'
 -- 'wreck').
 Aftermath.STUFF = 20
+-- How often a pirate's wreck has a training injector of an hour in it.
+Aftermath.INJECTOR_CHANCE = 0.02
 
 local function pay(state: State.State, amount: number, reason: string, events: { Event })
   Wallet.Pay(state, amount, reason, events)
@@ -148,6 +150,11 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     elseif ship.owner == "pirates" then
       Items.Add(state, "tag.pirate", if pilot then math.max(1, pilot.tags) else 1, wreck.id, "cargo")
       Items.Add(state, "scrap.metal", 1 + Rng.Int(Rng.For(state.historySeed, state.tick, id, 77), 5), wreck.id, "cargo")
+      -- (and now and then a training injector of an hour: Data/Injectors.
+      -- One pirate in fifty, by dice of its own; a first figure, mine)
+      if Rng.Chance(Rng.For(state.historySeed, state.tick, id, 4409), Aftermath.INJECTOR_CHANCE) then
+        Items.Add(state, "injector.training.hour", 1, wreck.id, "cargo")
+      end
     end
     -- (a camp's chief keeps two of the pirate site tier's makes, of the
     -- second grade: module expansion)

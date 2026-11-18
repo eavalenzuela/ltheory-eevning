@@ -96,6 +96,7 @@ local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Implants = require("@lt/Core/Data/Implants")
+local Injectors = require("@lt/Core/Data/Injectors")
 local Items = require("@lt/Core/Assets/Items")
 local Modules = require("@lt/Core/Data/Modules")
 local Names = require("@lt/Core/Describe/Names")
@@ -1032,6 +1033,13 @@ function Missions.Store(faction: string): { Stock }
   local stock: { Stock } = {}
   if own and own.kind == "human" then
     table.insert(stock, { type = "datacore", points = 50, credits = 5000, standing = 0 })
+    -- (training injectors, banked training time (Data/Injectors): for a
+    -- pilot they do not think ill of, at about a sixth of the market's
+    -- price in credits beside the points. First figures, mine.)
+    for _, injector in Injectors.list do
+      table.insert(stock, { type = injector.id, points = math.floor(400 * (injector.seconds / 3600) ^ 0.9 + 0.5),
+        credits = injector.price // 6, standing = 0 })
+    end
     for _, implant in Implants.list do
       table.insert(stock, { type = implant.id, points = 120 * implant.slot, credits = Implants.Price(implant) // 2, standing = 1 })
     end

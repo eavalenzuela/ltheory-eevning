@@ -1266,7 +1266,7 @@ local COMBAT_COMMANDS = { LockTarget = true, UnlockTarget = true, ActivateModule
   Cloak = true, Uncloak = true, FireSpinal = true }
 local AFTERMATH_COMMANDS = { Loot = true, Repair = true, Jettison = true }
 local INDUSTRY_COMMANDS = { Reprocess = true, StartJob = true, StartResearch = true, CancelJob = true }
-local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true }
+local TRAINING_COMMANDS = { LearnSkill = true, TrainSkill = true, CancelTraining = true, Inject = true }
 local MARKET_COMMANDS = { BuyNow = true, SellNow = true, PlaceOrder = true, CancelOrder = true, ModifyOrder = true }
 local CONTRACT_COMMANDS = { AcceptContract = true, FillContract = true, ListContract = true, CancelContract = true }
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true, SetHome = true, Repackage = true }

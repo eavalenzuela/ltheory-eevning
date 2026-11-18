@@ -14,6 +14,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Sites = require("@lt/Core/Tactical/Sites")
 local Space = require("@lt/Core/Tactical/Space")
+local Rng = require("@lt/Core/Kernel/Rng")
 local State = require("@lt/Core/Kernel/State")
 local Test = require("@lt/Tool/Test")
 local Types = require("@lt/Core/Data/Types")
@@ -1596,7 +1597,13 @@ suite:Case("at the place the rig stands from when the pilot comes, most of those
     onPilot += if prey == state.player.ship then 1 else 0
   end
   t.eq(onRig + onPilot, mission.need)
-  t.ok(onRig >= onPilot and onRig > 0, `{onRig} are on the rig and {onPilot} on the pilot`)
+  -- (each by a roll of its own, two in three for the rig: Tactical/Pirates. Six rolls are too few to say the
+  -- rig always has the most of them, so each is held to its own roll)
+  for _, id in keepers(game, mission.site) do
+    local forRig = Rng.Chance(Rng.For(state.historySeed, id, 61), 2 / 3)
+    t.eq(state.pilots[id].prey, if forRig then ward.id else state.player.ship, `{id}: {onRig} are on the rig and {onPilot} on the pilot`)
+  end
+  t.ok(onRig > 0, "nobody went for the rig")
   -- Whoever is after the rig is who the pilot's drones and hired pilots go for.
   t.ok(Pirates.Hunting(state, state.balls[state.player.ship]) ~= 0)
   -- The rig has taken hurt by now, and stands.
