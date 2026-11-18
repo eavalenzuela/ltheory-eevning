@@ -43,6 +43,7 @@ local Theme = require("@lt/Game/UI/Theme")
 local Session = require("@lt/Game/Session")
 local Types = require("@lt/Core/Data/Types")
 local Waypoints = require("@lt/Game/Waypoints")
+local SystemMap = require("@lt/Game/UI/SystemMap")
 
 local Map = {}
 
@@ -1126,6 +1127,12 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
   end
   if Im.Button("Clear", px + 156, line, 80, 28, session.destination ~= 0, "Map:clear") then
     session.destination, session.autopilot, session.goal = 0, false, 0
+  end
+  line += 36
+  -- (and the system's own map, for one the pilot has been to)
+  Im.Because(if #Core.Query.Objects(game, shown) > 0 then nil else "You have not been there")
+  if Im.Button("System map", px, line, 150, 28, #Core.Query.Objects(game, shown) > 0, "Map:systemmap") then
+    SystemMap.Open(if shown == here then 0 else shown)
   end
   line += 36
   if Im.Toggle(if session.safest then "Safest way" else "Shortest way", px, line, 150, 28, session.safest, "Map:safest") then

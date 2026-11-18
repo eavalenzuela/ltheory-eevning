@@ -562,12 +562,28 @@ suite:Case("a den's stores, emptied, now and then give away a stronghold a jump 
   t.eq(Core.Hash(Core.Load(old, oldLength)), Core.Hash(game))
 end)
 
-suite:Case("a derelict is too faint for the ship's scanner alone: a probe put out by its planet finds it, and makes every scan worth more", function(t)
+-- Steps until the pilot's probes have all got where they were going.
+local function settle(game: Core.Game)
+  for _ = 1, 200 do
+    local moving = false
+    for _, id in game.state.probeIds do
+      moving = moving or game.state.probes[id].tx ~= nil
+    end
+    if not moving then
+      return
+    end
+    Core.Step(game)
+  end
+  error("the probes never got there")
+end
+
+suite:Case("probes want a launcher and probes in the hold: put out at once round the ship, called in, an hour long, and kept in a save", function(t)
+  -- (the owner, 2026-11-18: "Probe launcher module")
   local game, site = first("relic")
   local state = game.state
   local ship = state.player.ship
   local me = state.balls[ship]
-  -- From where the ship is, half way and no further.
+  -- The ship's scanner alone gets a derelict half way, and says which planet it is by.
   for _ = 1, 6 do
     t.ok((scan(game)))
   end
@@ -581,78 +597,193 @@ suite:Case("a derelict is too faint for the ship's scanner alone: a probe put ou
   local place = assert(Space.Object(state, site.id))
   local planet = assert(Space.Object(state, place.parent))
   t.eq({ shown.found, shown.faint, shown.near, shown.probes } :: { any }, { false, true, planet.name, 0 } :: { any })
-  t.eq({ probes.here, probes.out, probes.max, probes.carried }, { 0, 0, Sites.PROBES, 0 })
-  -- A probe wants one in the hold, and goes out where the ship is.
+  t.eq({ probes.here, probes.out, probes.max, probes.carried, probes.range, probes.launcher } :: { any },
+    { 0, 0, Sites.PROBES, 0, Sites.RANGE, "" } :: { any })
+  -- A launcher, and probes in the hold.
+  t.eq({ Core.Validate(game, { kind = "LaunchProbe", actor = ship }) } :: { any }, { false, "no probe launcher fitted" } :: { any })
+  Items.Equip(state, ship, "scanner.probe")
   t.eq({ Core.Validate(game, { kind = "LaunchProbe", actor = ship }) } :: { any }, { false, "no scan probe in the hold" } :: { any })
   t.eq({ Core.Validate(game, { kind = "RecallProbes", actor = ship }) } :: { any }, { false, "no probes are out in this system" } :: { any })
-  Items.Add(state, Sites.PROBE, 6, ship, "cargo")
+  Items.Add(state, Sites.PROBE, 10, ship, "cargo")
+  -- All that may be out go out at once, and fly from the ship to the corners of a box round it.
   t.ok(Core.Submit(game, { kind = "LaunchProbe", actor = ship }))
   Core.Step(game)
-  t.eq({ #state.probeIds, select(3, Core.Query.Sites(game)).carried }, { 1, 5 })
-  -- Out here it is nowhere near the signal, and helps not at all.
-  t.ok((scan(game)))
-  t.eq(site.strength, Sites.ALONE.relic)
-  -- Taken to the planet the scanner named, one does: a scan is worth twice as much, and the cap is off.
-  me.x, me.y, me.z = planet.x + planet.radius * 3, planet.y, planet.z
-  Space.AssignGrid(state, me)
-  t.ok(Core.Submit(game, { kind = "LaunchProbe", actor = ship }))
-  Core.Step(game)
-  me.x += 20 * 149597870700
-  Space.AssignGrid(state, me)
-  local near = Sites.Covered(state, site, me)
-  t.eq(near, 1)
-  t.ok((scan(game)))
-  t.near(site.strength, math.min(1, Sites.ALONE.relic + 2 * Sites.Gain(state, "relic")), 1e-6)
-  t.eq(site.strength, 1)
-  -- Four out at most. Called in, those in this system are in the hold again.
-  for _ = 1, 2 do
-    t.ok(Core.Submit(game, { kind = "LaunchProbe", actor = ship }))
-    Core.Step(game)
+  t.eq({ #state.probeIds, select(3, Core.Query.Sites(game)).carried }, { Sites.PROBES, 2 })
+  settle(game)
+  local reach = Sites.Reach(state)
+  for _, id in state.probeIds do
+    local probe = state.probes[id]
+    local d = math.sqrt((probe.x - me.x) ^ 2 + (probe.y - me.y) ^ 2 + (probe.z - me.z) ^ 2)
+    t.near(d / reach, 0.5, 1e-6)
   end
   t.eq({ Core.Validate(game, { kind = "LaunchProbe", actor = ship }) } :: { any }, { false, `{Sites.PROBES} probes are out already` } :: { any })
+  -- Called in, those in this system are in the hold again.
   t.ok(Core.Submit(game, { kind = "RecallProbes", actor = ship }))
   Core.Step(game)
-  t.eq({ #state.probeIds, select(3, Core.Query.Sites(game)).carried }, { 0, 6 })
+  t.eq({ #state.probeIds, select(3, Core.Query.Sites(game)).carried }, { 0, 10 })
   -- A probe lasts an hour, and is in the save meanwhile.
   t.ok(Core.Submit(game, { kind = "LaunchProbe", actor = ship }))
   Core.Step(game)
   local data, length = Core.Save(game)
   local loaded = Core.Load(data, length)
-  t.eq({ Core.Hash(loaded), #loaded.state.probeIds } :: { any }, { Core.Hash(game), 1 } :: { any })
-  local lost = false
+  t.eq({ Core.Hash(loaded), #loaded.state.probeIds } :: { any }, { Core.Hash(game), Sites.PROBES } :: { any })
+  local lost = 0
   for _ = 1, Sites.PROBE_LIFE + 2 do
     Core.Step(game)
     for _, event in Core.TakeEvents(game) do
-      lost = lost or event.kind == "ProbeLost"
+      lost += if event.kind == "ProbeLost" then 1 else 0
     end
   end
-  t.ok(lost and #state.probeIds == 0, "a probe outlasted its hour")
+  t.ok(lost == Sites.PROBES and #state.probeIds == 0, "a probe outlasted its hour")
+  -- A save from before probes were put anywhere: its probes read as a plain launcher's, and reach as a new pilot's.
   local file = Codec.Decode(data, length)
+  file.saveVersion = 87
+  file.state.probeRange = nil
+  for _, probe in file.state.probes do
+    probe.strength, probe.tx, probe.ty, probe.tz = nil, nil, nil, nil
+  end
+  local old, oldLength = Codec.Encode(file)
+  local migrated = Core.Load(old, oldLength).state
+  t.eq(migrated.probeRange, Sites.RANGE)
+  for _, id in migrated.probeIds do
+    t.eq(migrated.probes[id].strength, 1)
+  end
+  -- And one from before there were probes at all.
   file.saveVersion = 33
   file.state.probes, file.state.probeIds = nil, nil
-  local old, oldLength = Codec.Encode(file)
+  old, oldLength = Codec.Encode(file)
   t.eq(#Core.Load(old, oldLength).state.probeIds, 0)
 end)
 
-suite:Case("a probe by a hidden belt makes each scan of it worth as much again", function(t)
-  local game, site = first("ore")
+suite:Case("where a signal may be is known by how many probes reach it: a sphere, a ring, two points, a point in a ring", function(t)
+  -- (the owner, 2026-11-18: "Geometry, per scan". Plain numbers here: a
+  -- vector is too coarse at the size of a system)
+  local game, site = first("relic")
+  local state = game.state
+  local place = assert(Space.Object(state, site.id))
+  local AU = 149597870700
+  local function gap(x: number, y: number, z: number): number
+    return math.sqrt((x - place.x) ^ 2 + (y - place.y) ^ 2 + (z - place.z) ^ 2) / AU
+  end
+  -- Probes put down by hand, each as far from the signal as its offset (AU) says.
+  local function put(offsets: { { number } })
+    state.probes, state.probeIds = {}, {}
+    for _, offset in offsets do
+      local probe: State.Probe = { id = State.NewId(state), system = site.system, x = place.x + offset[1] * AU,
+        y = place.y + offset[2] * AU, z = place.z + offset[3] * AU, expires = state.tick + 100, strength = 1 }
+      state.probes[probe.id] = probe
+      table.insert(state.probeIds, probe.id)
+    end
+  end
+  state.probeRange = 4
+  -- One: on a sphere round it, as far out as it is.
+  put({ { 1, 0.2, 0 } })
+  local reading = Sites.Read(state, site)
+  local scan = assert(site.scan)
+  t.eq(scan.probes, 1)
+  t.ok(reading > 0 and reading <= Sites.CAPS[1], `one probe read {reading}`)
+  t.near(scan.radius / AU, math.sqrt(1.04), 1e-9)
+  -- Two: on the ring where their spheres meet; the signal is on it.
+  put({ { 1, 0, 0 }, { -0.5, 0.5, 1 } })
+  reading = Sites.Read(state, site)
+  scan = assert(site.scan)
+  t.ok(scan.probes == 2 and reading <= Sites.CAPS[2])
+  local ox, oy, oz = place.x - scan.x, place.y - scan.y, place.z - scan.z
+  t.near((ox * scan.nx + oy * scan.ny + oz * scan.nz) / AU, 0, 1e-9)
+  t.near(math.sqrt(ox * ox + oy * oy + oz * oz) / scan.radius, 1, 1e-9)
+  -- Three: at one of two points, and it is the first.
+  put({ { 1, 0, 0 }, { 0, 0.3, 1 }, { -1, -0.2, 0.2 } })
+  reading = Sites.Read(state, site)
+  scan = assert(site.scan)
+  t.ok(scan.probes == 3 and reading <= Sites.CAPS[3])
+  t.near(gap(scan.x, scan.y, scan.z), 0, 1e-9)
+  t.ok(gap(scan.ox, scan.oy, scan.oz) > 0.01, "the other point is the same point")
+  -- Four or more: within a ring round a point.
+  put({ { 1, 0, 0 }, { 0, 0.3, 1 }, { -1, -0.2, 0.2 }, { 0, -0.4, -1 } })
+  reading = Sites.Read(state, site)
+  scan = assert(site.scan)
+  t.ok(scan.probes == 4 and reading < 1)
+  t.ok(gap(scan.x, scan.y, scan.z) <= scan.radius / AU + 1e-9, "the signal is outside the ring")
+  -- A box of eight close round it at a small reach: all of it read, and the ring is nothing.
+  state.probeRange = 0.25
+  local box: { { number } } = {}
+  for index = 1, 8 do
+    local cx, cy, cz = Sites.Corner(index, Sites.Reach(state))
+    table.insert(box, { cx / AU, cy / AU, cz / AU })
+  end
+  put(box)
+  t.eq(Sites.Read(state, site), 1)
+  t.eq(assert(site.scan).radius, 0)
+  -- Out of reach of them all: nothing is read, and nothing is kept of the last.
+  put({ { 3, 0, 0 } })
+  t.eq(Sites.Read(state, site), 0)
+  t.eq(site.scan, nil)
+end)
+
+suite:Case("probes are sent anywhere, one or all of them; and a scan finds with them what the ship's scanner cannot", function(t)
+  local game, site = first("relic")
   local state = game.state
   local ship = state.player.ship
-  local me = state.balls[ship]
   local place = assert(Space.Object(state, site.id))
-  Items.Add(state, Sites.PROBE, 2, ship, "cargo")
-  local from = { me.x, me.y, me.z }
-  me.x, me.y, me.z = place.x + 5e7, place.y, place.z
-  for _ = 1, 2 do
-    t.ok(Core.Submit(game, { kind = "LaunchProbe", actor = ship }))
-    Core.Step(game)
-  end
-  me.x, me.y, me.z = from[1] + 30 * 149597870700, from[2], from[3]
-  Space.AssignGrid(state, me)
-  t.eq(Sites.Covered(state, site, me), 2)
+  Items.Equip(state, ship, "scanner.probe")
+  Items.Add(state, Sites.PROBE, 8, ship, "cargo")
+  t.ok(Core.Submit(game, { kind = "LaunchProbe", actor = ship }))
+  Core.Step(game)
+  settle(game)
+  -- One by itself, and only to a probe out here, and not past the edge of things.
+  local first = state.probeIds[1]
+  t.eq({ Core.Validate(game, { kind = "MoveProbes", actor = ship, target = 999999, x = 0, y = 0, z = 0 }) } :: { any },
+    { false, "no such probe here" } :: { any })
+  t.eq({ Core.Validate(game, { kind = "MoveProbes", actor = ship, target = 0, x = 1e15, y = 0, z = 0 }) } :: { any },
+    { false, "too far out" } :: { any })
+  t.ok(Core.Submit(game, { kind = "MoveProbes", actor = ship, target = first, x = place.x, y = place.y, z = place.z }))
+  Core.Step(game)
+  settle(game)
+  local probe = state.probes[first]
+  t.eq({ probe.x, probe.y, probe.z }, { place.x, place.y, place.z })
+  -- All of them, their middle to the signal: at the reach a new pilot's
+  -- have, they read it, and do not find it.
+  t.ok(Core.Submit(game, { kind = "FormProbes", actor = ship }))
+  Core.Step(game)
+  t.ok(Core.Submit(game, { kind = "MoveProbes", actor = ship, target = 0, x = place.x, y = place.y, z = place.z }))
+  Core.Step(game)
+  settle(game)
+  local mx, my, mz = Sites.Middle(state, site.system)
+  t.near(math.sqrt((mx - place.x) ^ 2 + (my - place.y) ^ 2 + (mz - place.z) ^ 2), 0, 1)
   t.ok((scan(game)))
-  -- (three scans' worth in one: found at once)
+  local reading = assert(site.scan).reading
+  t.ok(reading > 0 and reading < 1 and site.strength < 1, `read {reading} of it at {Sites.RANGE} AU`)
+  t.eq(assert(site.scan).probes, Sites.PROBES)
+  -- Their reach made small and the box formed again round it: found.
+  t.eq({ Core.Validate(game, { kind = "ProbeRange", actor = ship, quantity = 3 }) } :: { any }, { false, "no such reach" } :: { any })
+  t.ok(Core.Submit(game, { kind = "ProbeRange", actor = ship, quantity = 0.5 }))
+  Core.Step(game)
+  t.ok(Core.Submit(game, { kind = "FormProbes", actor = ship }))
+  Core.Step(game)
+  settle(game)
+  t.ok((scan(game)))
   t.eq(site.strength, 1)
+  t.ok(not Sites.Hidden(state, site.id), "found, it is on the overview")
+end)
+
+suite:Case("a probe launcher is easier to fit on a hull built to explore; the tech 2 one's probes read a quarter more", function(t)
+  local Attributes = require("@lt/Core/Attributes")
+  local Ships = require("@lt/Core/Data/Ships")
+  local plain = Modules.byId["scanner.probe"]
+  local better = assert(Modules.Improved("scanner.probe"))
+  t.eq({ assert(plain.probes).strength, assert(better.probes).strength }, { 1, 1.25 })
+  local explorer: Ships.ShipType? = nil
+  local other: Ships.ShipType? = nil
+  for _, hull in Ships.list do
+    if hull.explorer then
+      explorer = explorer or hull
+    elseif hull.class == "frigate" then
+      other = other or hull
+    end
+  end
+  local cpu = Attributes.Needs(assert(other), plain)
+  local easy = Attributes.Needs(assert(explorer), plain)
+  t.eq({ cpu, easy }, { plain.cpu, plain.cpu * Ships.PROBE_FITTING })
 end)
 
 return suite

@@ -482,6 +482,12 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     row(to, "Lasts", seconds(module.bubble.lasts))
     row(to, "In it", "nobody but its owner's ships can warp, stabilizers or none")
   end
+  if module.probes then
+    local to = section(sheet, "Probes")
+    row(to, "Puts out", "the scan probes in the hold, up to eight at once, each to a corner of a box round the ship")
+    row(to, "Reads", `{whole(module.probes.strength * 100)}% of what a plain launcher's probes do`)
+    row(to, "On a hull built to explore", `{whole(Ships.PROBE_FITTING * 100)}% of the CPU and powergrid`)
+  end
   if module.takes and module.takes.family == "crystal" then
     row(section(sheet, "Crystals"), "Takes", "a mining crystal: far more of the crystal's ore, never used up")
   end

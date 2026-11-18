@@ -448,25 +448,26 @@ suite:Case("a lesson's kit that is lost is handed over again, once, and only wha
     return units
   end
   local agent = Careers.Agent(state, "survey")
-  -- A lesson that hands over two probes: the third of the surveyor's.
+  -- A lesson that hands over a probe launcher and eight probes: the third of the surveyor's.
   t.eq(refused("ReplaceKit", "survey"), "no lesson of theirs is in hand")
   state.careers.survey = { done = 2, taken = false, count = 0, again = false }
   local lesson = assert(Careers.Lesson(state, "survey"))
-  t.eq({ lesson.kit[1].type, lesson.kit[1].quantity } :: { any }, { "probe.scan", 2 } :: { any })
+  t.eq({ lesson.kit[1].type, lesson.kit[1].quantity, lesson.kit[2].type, lesson.kit[2].quantity } :: { any },
+    { "scanner.probe", 1, "probe.scan", 8 } :: { any })
   local before = have("probe.scan")
   t.ok(Core.Submit(game, { kind = "AcceptLesson", actor = state.player.ship, what = "survey" }))
   Core.Step(game)
-  t.eq(have("probe.scan"), before + 2)
+  t.eq(have("probe.scan"), before + 8)
   -- With the kit still there, there is nothing to hand over.
   t.eq(refused("ReplaceKit", "survey"), "you still have what was handed over")
   t.eq(Careers.Lost(state, "survey"), {})
-  -- One of the two is gone (and whatever the pilot had besides): that one is handed over, and no more.
+  -- All but one of the eight are gone (and whatever the pilot had besides): those are handed over, and no more.
   for _, item in Items.In(state, station, "hangar") do
     if item.type == "probe.scan" then
       Items.Take(state, item, item.quantity - 1)
     end
   end
-  t.eq(Careers.Lost(state, "survey"), { { type = "probe.scan", quantity = 1 } })
+  t.eq(Careers.Lost(state, "survey"), { { type = "probe.scan", quantity = 7 } })
   local row: Core.CareerRow? = nil
   for _, each in Core.Query.Careers(game).rows do
     if each.career.id == "survey" then
@@ -476,7 +477,7 @@ suite:Case("a lesson's kit that is lost is handed over again, once, and only wha
   t.eq(assert(row).again, true)
   t.ok(Core.Submit(game, { kind = "ReplaceKit", actor = state.player.ship, what = "survey" }))
   Core.Step(game)
-  t.eq(have("probe.scan"), 2)
+  t.eq(have("probe.scan"), 8)
   local said = false
   for _, event in Core.TakeEvents(game) do
     said = said or (event.kind == "KitReplaced" and event.agent == agent and event.stacks == 1)

@@ -217,6 +217,9 @@ export type ModuleType = {
   core: boolean?,
   -- A launcher of interdiction fields: so wide, lasting so many seconds.
   bubble: { radius: number, lasts: number }?,
+  -- A probe launcher (Tactical/Sites): it puts out the scan probes in
+  -- the hold, and each reads 'strength' times what a plain one's does.
+  probes: { strength: number }?,
   -- A people's make of a module outside its speciality: shaded to its
   -- style (Modules.Shade), not the speciality's make.
   shaded: boolean?,
@@ -763,6 +766,20 @@ table.insert(modules, {
   cpu = 20, powergrid = 1, volume = 5, basePrice = 10000, passive = {},
   scanner = { kind = "survey", range = 25000, duration = 5, capacitor = 5 },
   requires = { { skill = "mining", level = 1 } },
+})
+-- A probe launcher, and its tech 2 make (Tactical/Sites; the owner,
+-- 2026-11-18: "Probe launcher module"). It puts out the scan probes in
+-- the hold; the tech 2 one's read a quarter more. Easier to fit on a
+-- hull built to explore (Attributes.Needs). (The figures are mine.)
+table.insert(modules, {
+  id = "scanner.probe", name = "Probe Launcher", short = "Probes", slot = "mid", hardpoint = "",
+  cpu = 20, powergrid = 1, volume = 5, basePrice = 60000, passive = {}, probes = { strength = 1 },
+  requires = { { skill = "astrometrics", level = 1 } },
+})
+table.insert(modules, {
+  id = "scanner.probe.ii", name = "Probe Launcher II", short = "Probes II", slot = "mid", hardpoint = "",
+  cpu = 24, powergrid = 1, volume = 5, basePrice = 480000, passive = {}, probes = { strength = 1.25 },
+  tech = 2, base = "scanner.probe",
 })
 -- A relic analyzer: what opens a derelict's hold (a data analyzer opens
 -- a listening post's vaults).

@@ -24,6 +24,7 @@ local List = require("@lt/Game/UI/List")
 local Session = require("@lt/Game/Session")
 local State = require("@lt/Core/Kernel/State")
 local Theme = require("@lt/Game/UI/Theme")
+local SystemMap = require("@lt/Game/UI/SystemMap")
 local Windows = require("@lt/Game/UI/Windows")
 
 local Scanner = {}
@@ -219,17 +220,21 @@ local function drawSignals(session: Session.Session, x: number, y: number, width
   end
   Im.Text(if wait > 0 then `cycling: {math.ceil(wait)} s` elseif can then "ready" else tostring(whyNot), left + 122, y + 15, 13,
     if can then Theme.GOOD else Theme.DIM)
-  -- The probes: one put out where the ship is, and all of them called in.
+  -- The probes: put out round the ship, and all of them called in; and
+  -- the system map, where they are put where they are wanted.
   local launch: State.Command = { kind = "LaunchProbe", actor = 0 }
   local canLaunch, whyNotLaunch = Session.CanDo(session, launch)
-  local px = x + width - 12 - 120 - 6 - 90
-  if Im.Button("Launch probe", px, y + 8, 120, 28, canLaunch, "Probe:launch") then
+  local px = x + width - 12 - 120 - 6 - 90 - 6 - 110
+  Im.Because(whyNotLaunch)
+  if Im.Button("Launch probes", px, y + 8, 120, 28, canLaunch, "Probe:launch") then
     Session.Do(session, launch)
   end
-  Im.Because(whyNotLaunch)
   local recall: State.Command = { kind = "RecallProbes", actor = 0 }
   if Im.Button("Recall", px + 126, y + 8, 90, 28, (Session.CanDo(session, recall)), "Probe:recall") then
     Session.Do(session, recall)
+  end
+  if Im.Button("System map", px + 222, y + 8, 110, 28, true, "Scanner:systemmap") then
+    SystemMap.Open()
   end
   local probeLine = `{probes.here} probes out here, {probes.carried} in the hold`
   Im.Text(probeLine, px - 16 - Im.TextWidth(probeLine, 12), y + 16, 12, Theme.DIM)
@@ -256,8 +261,10 @@ local function drawSignals(session: Session.Session, x: number, y: number, width
     local through = if site.found and site.kind == "wormhole" then Core.Query.Wormhole(game, site.id) else nil
     local about = if through then `{through.sizeName} wormhole: up to {through.lets}, mass {through.strain}`
       elseif site.found then KINDS[site.kind] or site.kind
-      elseif site.faint then `too faint: wants a probe by {site.near}`
-      elseif site.near ~= "" then `by {site.near}` .. (if site.probes > 0 then `, {site.probes} {if site.probes == 1 then "probe" else "probes"} on it` else "")
+      elseif site.scan then `{site.scan.probes} {if site.scan.probes == 1 then "probe" else "probes"} read it`
+        .. (if site.near ~= "" then `, by {site.near}` else "")
+      elseif site.faint then `too faint: put probes over it, by {site.near}`
+      elseif site.near ~= "" then `by {site.near}`
       else "unresolved"
     List.Text(about, layout.what, rowY, hot, if site.faint then Theme.CAUTION else Theme.DIM, 13)
     -- how far the scanner has got with it
@@ -275,7 +282,7 @@ local function drawSignals(session: Session.Session, x: number, y: number, width
     end
   end
   List.Foot(x, y + height - List.FOOT, width, `{#sites} in this system`,
-    "every scan brings each signal nearer; a probe by the planet it is near makes each scan worth more")
+    "the ship's scanner finds belts, clouds and wormholes; probes, placed on the system map, find everything")
 end
 
 Windows.Kind(Scanner.ID, function(_: Windows.Window, x: number, y: number, width: number, height: number)

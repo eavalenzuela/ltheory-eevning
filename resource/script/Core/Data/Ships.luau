@@ -811,6 +811,10 @@ local CLOAK_FITTING = 0.1
 -- owner's word is "bonuses to probe scanning and hacking": the figures
 -- are first ones.)
 local EXPLORER = { scan = 1.5, hack = 2 }
+-- And a probe launcher asks it for half the CPU and powergrid it asks of
+-- another hull (Attributes.Needs; the owner, 2026-11-18: "Exploration
+-- hulls get a fitting bonus for it". The half is mine).
+local PROBE_FITTING = 0.5
 -- An interdictor's field: so many times as wide, and as long, as
 -- another hull's from the same launcher. And an electronic warfare
 -- hull's work on another ship: from so many times as far, and so many
@@ -976,6 +980,7 @@ Ships.EXPLORER = EXPLORER
 Ships.INTERDICTOR = INTERDICTOR
 Ships.EWAR = EWAR
 Ships.CLOAK_FITTING = CLOAK_FITTING
+Ships.PROBE_FITTING = PROBE_FITTING
 
 -- The classes with a bay for fighters, and what each launches from it
 -- (the project owner's ladder: a carrier fighters, a supercarrier and

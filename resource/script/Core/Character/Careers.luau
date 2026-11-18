@@ -207,12 +207,13 @@ Careers.list = {
         site = "ore", gifts = {},
         says = "There is a belt in this system that no chart has. Keep scanning until it is found: three scans, fewer as "
           .. "Astrometrics is trained. A found site is on the overview to warp to, and its rocks are bigger than any belt's." },
-      { title = "Probes", aim = "Put out a scan probe", on = "ProbeLaunched", mine = "ball", need = 1, credits = 4000,
-        kit = { { type = "probe.scan", quantity = 2 } },
+      { title = "Probes", aim = "Put out scan probes", on = "ProbeLaunched", mine = "ball", need = 1, credits = 4000,
+        kit = { { type = "scanner.probe", quantity = 1 }, { type = "probe.scan", quantity = 8 } },
         gifts = { { type = "book.hacking", quantity = 1 } },
-        says = "A probe put out near a signal makes every scan worth as much again, and some signals cannot be found "
-          .. "without one. With these in your hold, undock and put one out from the scanner window. It lasts an hour; "
-          .. "Recall brings it back." },
+        says = "Probes find what the ship's scanner cannot. Train Astrometrics to level 1 (Skills tab), fit this Probe "
+          .. "Launcher to a mid slot, and take the probes into your hold. Undock, open the System map and Launch: they "
+          .. "fly out round you. Drag them over a signal, set their reach small, and Scan. They last an hour; Recall "
+          .. "brings them back." },
       { title = "The sealed hold", aim = "Hack a derelict's hold open, whole", on = "HackDone", need = 1, credits = 15000,
         also = function(event: Event): boolean
           return event.success == true
@@ -220,8 +221,8 @@ Careers.list = {
         site = "relic",
         kit = { { type = "analyzer.data", quantity = 1 }, { type = "analyzer.relic", quantity = 1 }, { type = "probe.scan", quantity = 2 } },
         gifts = { { type = "cloak.device", quantity = 1 }, { type = "book.cloaking", quantity = 1 } },
-        says = "A derelict is adrift in this system. The scanner gets it half way and says which planet it is by: take a "
-          .. "probe there and scan again. Its hold is sealed. Train Hacking (it wants CPU Management 2), fit the Data "
+        says = "A derelict is adrift in this system. The ship's scanner gets it half way and says which planet it is by: "
+          .. "on the System map, send your probes there and scan, closer and smaller each time. Its hold is sealed. Train Hacking (it wants CPU Management 2), fit the Data "
           .. "Analyzer, and Hack from within five kilometres: get the key of the safeguards in." },
     },
   },

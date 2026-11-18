@@ -1854,11 +1854,28 @@ function Debug.Standing(faction: string, to: number?): number
   return 0
 end
 
+-- Send every probe out in this system, their middle, to a place of it
+-- by name (as the system map's drag does): false if there is no such place.
+function Debug.ProbesTo(name: string): boolean
+  local game = session.game
+  for _, object in Core.Query.Objects(game, Core.Query.Player(game).system) do
+    if object.name == name then
+      return (Session.Do(session, { kind = "MoveProbes", actor = 0, target = 0, x = object.x, y = object.y, z = object.z }))
+    end
+  end
+  return false
+end
+
 -- The scan probes: how many are out in this system, and how many are
 -- in the hold.
-function Debug.Probes(): (number, number)
+function Debug.Probes(): (number, number, number, number)
   local _, _, probes = Core.Query.Sites(session.game)
-  return probes.here, probes.carried
+  -- (and how many of those out here are on their way somewhere, and how far they reach, AU)
+  local moving = 0
+  for _, probe in Core.Query.Probes(session.game) do
+    moving += if probe.moving then 1 else 0
+  end
+  return probes.here, probes.carried, moving, probes.range
 end
 
 -- The directional scanner's last scan: how many things it had whose
@@ -2092,17 +2109,18 @@ end
 -- "data", "ore", "relic") in the system the pilot is in, found already,
 -- and on the overview. With 'gas', a vapour field's clouds are of that
 -- gas. Returns its name ("" if none could be made).
-function Debug.Plant(kind: string, gas: string?): string
+-- ('hidden': left to be found, with the name of the body it is by as well.)
+function Debug.Plant(kind: string, gas: string?, hidden: boolean?): (string, string)
   local state = session.game.state
   local me = state.balls[state.player.ship]
   if me == nil then
-    return ""
+    return "", ""
   end
   local site = Sites.Plant(state, me.system, kind, Rng.For(state.historySeed, state.tick, 57), session.game.events)
   if site == nil then
-    return ""
+    return "", ""
   end
-  site.strength = 1
+  site.strength = if hidden then 0 else 1
   local made = Ores.gasById[gas or ""]
   if made then
     for _, object in Space.Describe(state, me.system).objects do
@@ -2112,7 +2130,8 @@ function Debug.Plant(kind: string, gas: string?): string
     end
   end
   local place = Space.Object(state, site.id)
-  return if place then place.name else ""
+  local by = if place then Space.Object(state, place.parent) else nil
+  return if place then place.name else "", if by then by.name else ""
 end
 
 -- The pilot's boosters: how many are at work, how many kinds of them

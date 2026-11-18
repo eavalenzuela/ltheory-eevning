@@ -6,9 +6,12 @@
 # this game a vapour field and a hidden belt. Neither is on the
 # overview. Three scans resolve them. Then they are places like any
 # other: warp to the first, the vapour field, and its clouds are there
-# to draw off (gas.txt does that).
+# to draw off (gas.txt does that). A probe launcher is fitted before the
+# ship leaves (the module and the skill for it are given), and there
+# the probes are put out at once, formed up smaller from the system
+# map, and called in again.
 #
-# covers: Core/Tactical/Sites Core/Tactical/Vapour Game/UI/Scanner
+# covers: Core/Tactical/Sites Core/Tactical/Vapour Game/UI/Scanner Game/UI/SystemMap
 
 wait 2
 lua GameDebug.Peaceful(true)
@@ -16,6 +19,11 @@ lua GameDebug.Peaceful(true)
 lua GameDebug.Sound(true, 0)
 wait 1
 lua assert(GameDebug.Air() == 'chatter.busy', 'a homeworld station should have a good deal of chatter')
+lua assert(GameDebug.Give('scanner.probe', 1))
+lua GameDebug.Train('astrometrics', 1)
+frames 3
+until GameDebug.Press('Fit:scanner.probe')
+until GameDebug.Fitted('scanner.probe') == 1
 until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()
 lua assert(GameDebug.Order('Stop'))
@@ -56,17 +64,34 @@ lua assert(select(2, GameDebug.Air()) <= 2, 'the chatter left behind should be g
 lua assert(GameDebug.Count('asteroid') >= 4, 'a vapour field should have its clouds')
 lua assert(GameDebug.Distance('Vapour Field') < 1000, 'the warp did not end at the site')
 
-# Probes: one is put out where the ship is, and called in again.
+# Probes: all that may be out are put out at once, and fly to a box round the ship.
 lua assert(not GameDebug.CanPress('Probe:launch'), 'a probe has to be in the hold')
-lua assert(GameDebug.Give('probe.scan', 2))
+lua assert(GameDebug.Give('probe.scan', 10))
 frames 3
 until GameDebug.Press('Probe:launch')
-until GameDebug.Probes() == 1
-lua assert(select(2, GameDebug.Probes()) == 1, 'one probe should be left in the hold')
+until GameDebug.Probes() == 8
+lua assert(select(2, GameDebug.Probes()) == 2, 'two probes should be left in the hold')
+until select(3, GameDebug.Probes()) == 0
+# On the system map: their reach two steps smaller, formed up again to it, and a scan.
+until GameDebug.Press('Dock:systemmap')
 frames 3
-until GameDebug.Press('Probe:recall')
+lua assert(select(4, GameDebug.Probes()) == 8, 'a new pilot\'s probes should reach 8 AU')
+until GameDebug.Press('SystemMap:reach-')
+until select(4, GameDebug.Probes()) == 4
+until GameDebug.Press('SystemMap:reach-')
+until select(4, GameDebug.Probes()) == 2
+until GameDebug.Press('SystemMap:form')
+# (a step or two: what they move is less than they go in a tick)
+wait 2
+until select(3, GameDebug.Probes()) == 0
+until GameDebug.CanPress('SystemMap:scan')
+until GameDebug.Press('SystemMap:scan')
+until not GameDebug.CanPress('SystemMap:scan')
+frames 3
+until GameDebug.Press('SystemMap:recall')
 until GameDebug.Probes() == 0
-lua assert(select(2, GameDebug.Probes()) == 2, 'a probe called in should be in the hold again')
+lua assert(select(2, GameDebug.Probes()) == 10, 'the probes called in should be in the hold again')
+until GameDebug.Press('Dock:systemmap')
 
 # Where people live there is comms chatter, whoever they are: near a
 # planet people live on as at a station, and none by a planet nobody

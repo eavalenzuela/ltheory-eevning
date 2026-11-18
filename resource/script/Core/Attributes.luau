@@ -197,6 +197,10 @@ local GUN_SIZES = { "small", "medium", "large", "XL" }
 function Attributes.Needs(hull: Ships.ShipType, module: Modules.ModuleType): (number, number)
   local cloak = module.cloak
   if cloak == nil then
+    -- (a probe launcher on a hull built to explore: Ships.PROBE_FITTING)
+    if module.probes and hull.explorer then
+      return module.cpu * Ships.PROBE_FITTING, module.powergrid * Ships.PROBE_FITTING
+    end
     return module.cpu, module.powergrid
   end
   local share = if hull.stealth or hull.explorer then Ships.CLOAK_FITTING else 1

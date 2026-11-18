@@ -478,8 +478,10 @@ export type Job = {
 export type Drone = { ship: number, owner: number, type: string, target: number, returning: boolean, near: boolean }
 
 -- A scan probe a pilot has put out (Tactical/Sites): where it is, and
--- the tick it runs down at.
-export type Probe = { id: number, system: number, x: number, y: number, z: number, expires: number }
+-- the tick it runs down at; how strong it reads, from the launcher it
+-- was put out by; and where it is going, while it is on its way.
+export type Probe = { id: number, system: number, x: number, y: number, z: number, expires: number, strength: number,
+  tx: number?, ty: number?, tz: number? }
 
 -- A place in space a pilot has marked, to warp back to (Tactical/Space).
 -- A place the pilot has marked (Tactical/Space): a point in a system, or
@@ -549,8 +551,19 @@ export type Wingman = {
 -- 'depth' is how far along a trail it is (0 for a site that was simply
 -- there; 1 for a stronghold a den's records led to), and 'led' whether
 -- it has itself been asked where it leads.
+-- 'scan' is what the pilot's probes read of it at the last scan, if
+-- any reached it.
 export type Site = { id: number, system: number, kind: string, code: string, strength: number, expires: number, gone: boolean,
-  depth: number, led: boolean }
+  depth: number, led: boolean, scan: SiteScan? }
+
+-- What the probes read of a signal at a scan (Tactical/Sites): how
+-- strong ('reading', 0 to 1), how many probes reached it, and where it
+-- may be, by how many: one, on a sphere (x, y, z its middle, 'radius');
+-- two, on a ring (its middle, 'radius', and 'nx', 'ny', 'nz' the way
+-- the ring faces); three, at one of two points (x, y, z and ox, oy, oz);
+-- four or more, within 'radius' of a point. And the tick it was read.
+export type SiteScan = { reading: number, probes: number, x: number, y: number, z: number, radius: number,
+  nx: number, ny: number, nz: number, ox: number, oy: number, oz: number, tick: number }
 
 -- A glut or a shortage of something in a part of the map (Strategic/
 -- Commerce): every system of a constellation wants so many times what
@@ -971,6 +984,8 @@ export type State = {
   -- The scan probes the pilot has out, in the order they were put out.
   probes: { [number]: Probe },
   probeIds: { number },
+  -- How far each of them reaches, in astronomical units (one of Sites.RANGES).
+  probeRange: number,
   drones: { [number]: Drone },      -- by the drone's own ship id
   droneIds: { number },
   -- The pilots the player has hired (Tactical/Fleet), in the order they

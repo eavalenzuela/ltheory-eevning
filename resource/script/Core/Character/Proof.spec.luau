@@ -480,8 +480,19 @@ suite:Case("a new pilot in the starter ship flies the survey career to its end: 
     t.ok(ready(), `{seed}: eight scans found nothing`)
     lesson(p, "CompleteLesson", "survey")
 
-    -- Probes: the two handed over into the hold, and one put out.
+    -- Probes: Astrometrics trained to 1, the launcher handed over fitted,
+    -- the probes into the hold, and put out.
     lesson(p, "AcceptLesson", "survey")
+    must(p, { kind = "TrainSkill", actor = 0, type = "astrometrics" })
+    for _ = 1, 1200 do
+      if (state.skills.astrometrics or 0) >= 1 then
+        break
+      end
+      step(p)
+    end
+    t.ok((state.skills.astrometrics or 0) >= 1, "Astrometrics 1 was not to be had in twenty minutes")
+    local launcherOn, why = fit(p, "scanner.probe")
+    assert(launcherOn, `the probe launcher would not fit: {tostring(why)}`)
     must(p, { kind = "MoveItems", actor = 0, item = assert(stock(p, "probe.scan")).id, to = "cargo" })
     must(p, { kind = "Undock", actor = 0 })
     must(p, { kind = "LaunchProbe", actor = 0 })
@@ -514,28 +525,60 @@ suite:Case("a new pilot in the starter ship flies the survey career to its end: 
     t.ok((fit(p, "analyzer.relic")), "the analyzer would not fit")
     must(p, { kind = "MoveItems", actor = 0, item = assert(stock(p, "probe.scan")).id, to = "cargo" })
     must(p, { kind = "Undock", actor = 0 })
-    -- The derelict: scans until the scanner says where a signal it cannot
-    -- pin down is, a probe taken there, and scans again.
+    -- The derelict, as a pilot finds it on the system map: scans until
+    -- the scanner says which planet a signal it cannot pin down is by;
+    -- the probes put out and sent there; and scanned again and again,
+    -- each time a step smaller and sent to where they read it.
     local derelict = 0
+    local ranges = Core.Query.ProbeRanges()
+    local reach = table.find(ranges, 4) :: number
+    local function settle()
+      for _ = 1, 60 do
+        local moving = false
+        for _, probe in Core.Query.Probes(p.game) do
+          moving = moving or probe.moving
+        end
+        if not moving then
+          return
+        end
+        step(p)
+      end
+    end
     for _ = 1, 30 do
+      local after: Core.SiteStatus? = nil
       for _, row in (Core.Query.Sites(p.game)) do
         if row.found and row.kind == "relic" then
           derelict = row.id
-        elseif row.faint and row.near ~= "" and derelict == 0 then
-          local planet = 0
-          for _, entry in Core.Query.Overview(p.game) do
-            planet = if entry.name == row.near then entry.id else planet
-          end
-          assert(planet ~= 0, `the scanner names {row.near}, which is not on the overview`)
-          to(p, planet)
-          if Core.Validate(p.game, { kind = "LaunchProbe", actor = state.player.ship }) then
-            must(p, { kind = "LaunchProbe", actor = 0 })
-          end
-          break
+        elseif not row.found and (row.scan or (row.faint and row.near ~= "")) and after == nil then
+          after = row
         end
       end
       if derelict ~= 0 then
         break
+      end
+      local signal = after
+      if signal then
+        if #Core.Query.Probes(p.game) == 0 then
+          must(p, { kind = "LaunchProbe", actor = 0 })
+        end
+        -- (to where they read it, if four or more did; else to the planet the scanner names)
+        local x, y, z = 0, 0, 0
+        local read = signal.scan
+        if read and read.probes >= 4 then
+          x, y, z = read.x, read.y, read.z
+          reach = math.max(1, reach - 1)
+        else
+          for _, object in Core.Query.Objects(p.game, state.balls[state.player.ship].system) do
+            if object.name == signal.near then
+              x, y, z = object.x, object.y, object.z
+            end
+          end
+        end
+        must(p, { kind = "ProbeRange", actor = 0, quantity = ranges[reach] })
+        must(p, { kind = "FormProbes", actor = 0 })
+        settle()
+        must(p, { kind = "MoveProbes", actor = 0, target = 0, x = x, y = y, z = z })
+        settle()
       end
       scan(p)
     end

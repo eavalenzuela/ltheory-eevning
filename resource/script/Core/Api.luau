@@ -114,7 +114,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 87
+Core.SAVE_VERSION = 88
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -158,6 +158,16 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 88: probes are put where they are wanted, and read a signal by where
+  -- they are (Tactical/Sites). A probe out in a save from before reads
+  -- as one from a plain launcher, and stays where it is; the pilot's
+  -- probes reach as far as a new pilot's.
+  [87] = function(state: any)
+    for _, probe in state.probes do
+      probe.strength = probe.strength or 1
+    end
+    state.probeRange = state.probeRange or 8
+  end,
   -- 9: a market keeps count of goods lost to piracy (none, in a station).
   [8] = function(state: any)
     for _, market in state.markets do
@@ -1152,6 +1162,7 @@ function Core.New(options: Options): Game
     wormholes = {}, wormholeIds = {}, wormholesRolled = {},
     probes = {},
     probeIds = {},
+    probeRange = Sites.RANGE,
     drones = {},
     droneIds = {},
     fleet = {},
@@ -1272,7 +1283,7 @@ local CONTRACT_COMMANDS = { AcceptContract = true, FillContract = true, ListCont
 local HANGAR_COMMANDS = { Assemble = true, BoardShip = true, SetHome = true, Repackage = true }
 local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true, UnanchorTower = true,
   SetReaction = true, SetAccess = true }
-local SITE_COMMANDS = { Scan = true, LaunchProbe = true, RecallProbes = true }
+local SITE_COMMANDS = { Scan = true, LaunchProbe = true, RecallProbes = true, MoveProbes = true, FormProbes = true, ProbeRange = true }
 local HACK_COMMANDS = { StartHack = true, HackNode = true, AbandonHack = true }
 local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones = true }
 local JUMP_COMMANDS = { JumpDrive = true, Bridge = true }
@@ -3359,13 +3370,19 @@ end
 -- a quarter of the way with it; how many probes are near enough to
 -- help; and whether it is too faint to get further with from here, with
 -- no probe by it.) Last, the probes: how many are out in this system,
--- how many in all, how many there can be, and how many are in the hold.
+-- how many in all, how many there can be, and how many are in the hold;
+-- how far they reach (astronomical units), and the probe launcher fitted
+-- ("" for none).
+-- ('strength' is the more of what the ship's scanner has got and what
+-- the probes read at the last scan, 'reading'; 'scan' is where the
+-- probes put it then, if they reached it: State.SiteScan.)
 export type SiteStatus = {
   id: number, name: string, kind: string,   -- kind is "" until it is found
   strength: number, found: boolean, distance: number,
   near: string, probes: number, faint: boolean,
+  reading: number, scan: State.SiteScan?,
 }
-export type ProbeStatus = { here: number, out: number, max: number, carried: number }
+export type ProbeStatus = { here: number, out: number, max: number, carried: number, range: number, launcher: string }
 function Query.Sites(game: Game): ({ SiteStatus }, number, ProbeStatus)
   local state = game.state
   local player = Query.Player(game)
@@ -3382,19 +3399,60 @@ function Query.Sites(game: Game): ({ SiteStatus }, number, ProbeStatus)
     local kind: string = site.kind
     local by = Space.Object(state, object.parent)
     local probes, near = Sites.Covered(state, site, me)
+    local scan = if known then nil else site.scan
+    local reading = if scan then scan.reading else 0
+    local strength = math.max(site.strength, reading)
     table.insert(found, {
       id = site.id, name = if known then object.name else `Signal {site.code}`, kind = if known then kind else "",
-      strength = site.strength, found = known, distance = if me then Space.Gap(me :: any, object :: any) else 0,
-      near = if by and site.strength >= 0.25 then by.name else "", probes = probes,
+      strength = strength, found = known, distance = if me then Space.Gap(me :: any, object :: any) else 0,
+      near = if by and strength >= 0.25 then by.name else "", probes = probes,
       faint = not known and not near and site.strength >= (Sites.ALONE[kind] or 1),
+      reading = reading, scan = scan,
     })
   end
   local carried = 0
   for _, item in Items.In(state, player.ship, "cargo") do
     carried += if item.type == Sites.PROBE then item.quantity else 0
   end
+  local launcher = Sites.Launcher(state, player.ship)
   return found, math.max(0, state.scanReady - state.tick) * Constants.TICK,
-    { here = #Sites.Probes(state, player.system), out = #state.probeIds, max = Sites.PROBES, carried = carried }
+    { here = #Sites.Probes(state, player.system), out = #state.probeIds, max = Sites.PROBES, carried = carried,
+      range = state.probeRange or Sites.RANGE, launcher = if launcher then launcher.name else "" }
+end
+
+-- The pilot's probes out in the system they are in: where each is, and
+-- where it is going while it is on its way; and the seconds it has left.
+export type ProbeInfo = { id: number, x: number, y: number, z: number, moving: boolean, tx: number, ty: number, tz: number,
+  left: number }
+function Query.Probes(game: Game): { ProbeInfo }
+  local state = game.state
+  local found: { ProbeInfo } = {}
+  for _, probe in Sites.Probes(state, Query.Player(game).system) do
+    table.insert(found, { id = probe.id, x = probe.x, y = probe.y, z = probe.z, moving = probe.tx ~= nil,
+      tx = probe.tx or probe.x, ty = probe.ty or probe.y, tz = probe.tz or probe.z,
+      left = math.max(0, probe.expires - state.tick) * Constants.TICK })
+  end
+  return found
+end
+
+-- The places of a system as its map shows them (Game/UI/SystemMap):
+-- what is on the charts and what has been found, but no rock (its belt
+-- is the place) and no site still to be found. Nothing if the game has
+-- not been there yet.
+function Query.Chart(game: Game, system: number): { System.Object }
+  local state = game.state
+  local found: { System.Object } = {}
+  for _, object in Query.Objects(game, system) do
+    if object.kind ~= "asteroid" and not Sites.Hidden(state, object.id) then
+      table.insert(found, object)
+    end
+  end
+  return found
+end
+
+-- The ranges a probe may be set to reach, astronomical units.
+function Query.ProbeRanges(): { number }
+  return Sites.RANGES
 end
 
 -- The nomads' colony fleets, and where each is now (Tactical/Nomads):

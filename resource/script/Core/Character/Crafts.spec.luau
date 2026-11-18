@@ -309,44 +309,36 @@ suite:Case("the crafts of making, trading and working for people: what each come
   t.eq(Jumping.Fuel(state, carrier.id, 0), 1)
 end)
 
-suite:Case("Triangulation makes each probe near a signal worth more", function(t)
-  -- A hidden belt, a probe by it, and one scan from far away: how far the scan gets with the craft and without.
-  local function scanned(level: number): number
-    -- (the first history whose first system has a hidden belt: the same one both times)
+suite:Case("Triangulation makes what each probe reads of a signal more", function(t)
+  -- A derelict, one probe put by it by hand, and what it reads with the craft and without.
+  local function read(level: number): number
+    -- (the first history whose first system has a derelict: the same one both times)
     for seed = 1, 60 do
       local game = Core.New({ galaxySeed = 1, historySeed = seed, peaceful = true })
       local state = game.state
       assert(Core.Submit(game, { kind = "Undock", actor = state.player.ship }))
       Core.Step(game)
       Core.Step(game)
-      local me = state.balls[state.player.ship]
       for _, site in Sites.In(state, 1) do
-        if site.kind == "ore" then
+        if site.kind == "relic" then
           state.skills.triangulation = level
+          state.skills.astrometrics = 0
           local place = assert(Space.Object(state, site.id))
-          Items.Add(state, Sites.PROBE, 1, me.id, "cargo")
-          local from = { me.x, me.y, me.z }
-          me.x, me.y, me.z = place.x + 5e7, place.y, place.z
-          assert(Core.Submit(game, { kind = "LaunchProbe", actor = me.id }))
-          Core.Step(game)
-          me.x, me.y, me.z = from[1] + 30 * 149597870700, from[2], from[3]
-          Space.AssignGrid(state, me)
-          t.eq((Sites.Covered(state, site, me)), 1)
-          t.eq(site.strength, 0)
-          assert(Core.Submit(game, { kind = "Scan", actor = me.id }))
-          for _ = 1, Sites.SCAN + 1 do
-            Core.Step(game)
-          end
-          return site.strength / Sites.Gain(state, site.kind, me.id)
+          local probe: State.Probe = { id = State.NewId(state), system = 1, x = place.x + 1e10, y = place.y, z = place.z,
+            expires = state.tick + 100, strength = 1 }
+          state.probes[probe.id] = probe
+          table.insert(state.probeIds, probe.id)
+          -- (far enough that what one probe reads is under what one may read)
+          state.probeRange = 8
+          return Sites.Read(state, site)
         end
       end
     end
-    error("no history seed up to 60 gives the first system a hidden belt")
+    error("no history seed up to 60 gives the first system a derelict")
   end
-  local plain, better = scanned(0), scanned(5)
-  -- (a scan and a probe: twice a scan. With the probe worth half as much again: two and a half.)
-  t.near(plain, 2, 1e-6)
-  t.near(better, 1 + (1 + 5 * Sites.TRIANGULATION), 1e-6)
+  local plain, better = read(0), read(5)
+  t.ok(plain > 0 and plain < Sites.CAPS[1], `one probe read {plain}`)
+  t.near(better / plain, 1 + 5 * Sites.TRIANGULATION, 1e-9)
   -- (the pirates' ships have no crafts)
   t.eq(Skills.Level(nil, "triangulation"), 0)
   t.ok(Pirates.NERVE > 0 and Modules.byId["launcher.light"] ~= nil)

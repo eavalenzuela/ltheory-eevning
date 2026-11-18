@@ -118,6 +118,10 @@ local SIGNS: { [string]: () -> { Glyph } } = {
     return all(path({ v(0, 0.92), v(-0.52, 0.05), v(-0.6, -0.35), v(-0.42, -0.72), v(0, -0.9), v(0.42, -0.72), v(0.6, -0.35),
       v(0.52, 0.05) }, true), ring(0, -0.33, 0.2))
   end,
+  -- a sun, an orbit, and a world on it
+  systemmap = function()
+    return all(dot(0, 0, 0.16), ring(0, 0, 0.72), ring(0.51, -0.51, 0.13))
+  end,
   -- a scanner's dish
   scanner = function()
     return all(ring(0, 0, 0.8), ring(0, 0, 0.4), line(0, 0, 0.56, -0.56), dot(0.36, 0.26, 0.09))

@@ -1107,7 +1107,7 @@ suite:Case("components are made from minerals, and modules from components and m
   t.ok(composites > 0, "some large tech 2 module should call for a composite")
 end)
 
-suite:Case("every weapon, repairer, extender, plate and mining laser has a tech 2 make: better, dearer to fit, and nobody's to buy", function(t)
+suite:Case("every weapon, repairer, extender, plate, mining laser and probe launcher has a tech 2 make: better, dearer to fit, and nobody's to buy", function(t)
   local improved = 0
   for _, module in Modules.list do
     if module.tech == 2 then
@@ -1155,8 +1155,8 @@ suite:Case("every weapon, repairer, extender, plate and mining laser has a tech 
   -- 32 weapons, 2 repairers, an extender and a plate in three sizes each, two mining lasers and a gas harvester,
   -- the repairers for another ship (shield and armour, in three sizes), and the four things only a drone, a
   -- fighter or a bomber carries; and since 2026-11-16 the ancillary shield boosters and armour repairers,
-  -- three sizes each, the two modulated lasers and the two ice harvesters.
-  t.eq(improved, 32 + 4 * 3 + 3 + 2 * 3 + 4 + 2 * 3 + 2 + 2)
+  -- three sizes each, the two modulated lasers and the two ice harvesters; and since 2026-11-18 the probe launcher.
+  t.eq(improved, 32 + 4 * 3 + 3 + 2 * 3 + 4 + 2 * 3 + 2 + 2 + 1)
   t.ok(Modules.Improved("projector.entanglement") == nil and Modules.Improved("rig.shield") == nil)
   t.eq({ Modules.SizeOf(Modules.byId["autocannon.medium.ii"]), Modules.SizeOf(Modules.byId["shield.extender.large"]),
     Modules.SizeOf(Modules.byId["miner.small"]) }, { 2, 3, 1 })

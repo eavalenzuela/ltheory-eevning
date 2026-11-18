@@ -51,6 +51,7 @@ local SchoolWindow = require("@lt/Game/UI/School")
 local StarbaseWindow = require("@lt/Game/UI/Starbase")
 local WalletWindow = require("@lt/Game/UI/Wallet")
 local Places = require("@lt/Game/UI/Places")
+local SystemMap = require("@lt/Game/UI/SystemMap")
 local Scans = require("@lt/Game/UI/Scans")
 local CorporationWindow = require("@lt/Game/UI/Corporation")
 local Theme = require("@lt/Game/UI/Theme")
@@ -1587,6 +1588,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       CorporationWindow.Frame(session)
       Scans.Frame(session)
       Places.Frame(session)
+      SystemMap.Frame(session)
       -- The dock is down the left edge (Game/UI/Dock): the windows keep
       -- clear of it, and what was set out from the screen's left edge
       -- is set out from the dock's.
@@ -1840,6 +1842,8 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           return { open = Map.IsOpen(), can = true, key = Keys.Of("map") }
         elseif id == "places" then
           return { open = Places.IsOpen(), can = true, note = `{#session.game.state.bookmarkIds} marked` }
+        elseif id == "systemmap" then
+          return { open = SystemMap.IsOpen(), can = true }
         elseif id == "scanner" then
           return { open = not docked and Scanner.IsOpen(), can = not docked, note = if docked then "In space only" else nil }
         elseif id == "colonies" then
@@ -1976,6 +1980,12 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             Places.Close()
           else
             Places.Open()
+          end
+        elseif pressed == "systemmap" then
+          if SystemMap.IsOpen() then
+            SystemMap.Close()
+          else
+            SystemMap.Open()
           end
         elseif pressed == "scanner" then
           if Scanner.IsOpen() then

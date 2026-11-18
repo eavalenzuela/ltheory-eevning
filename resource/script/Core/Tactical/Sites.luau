@@ -94,18 +94,51 @@ function Sites.Gain(state: State.State, kind: string, ship: number?): number
   return (1 + 0.1 * math.max(0, state.skills.astrometrics or 0)) * built / scans + 1e-9
 end
 
--- Probes. A scan probe is put out where the ship is and stays there
--- for an hour. A signal with a probe within an astronomical unit of it
--- is scanned that much better: each probe that near makes a scan worth
--- as much again. And a derelict cannot be pinned down without one: the
--- ship's own scanner gets it half way, and no further, unless a probe
--- (or the ship itself) is that near it. The scanner says which planet
--- a signal is by, which is where to take a probe.
+-- Probes (the owner, 2026-11-18: a system map, and probes put where
+-- they are wanted; "Geometry, per scan"; the ship's scanner still finds
+-- the easy ones; "Probe launcher module"). Every figure here is mine.
+--
+-- A probe launcher (Data/Modules: its 'probes') puts out the scan probes
+-- in the hold, as many at once as may be out, and each sets off from
+-- the ship to its corner of a box round it, so far out as its reach
+-- says. Out, a probe is sent anywhere in the system, by itself or with
+-- the rest (Game/UI/SystemMap: it is dragged there), and lasts an hour.
+-- How far the probes reach is one figure for all of them, from a
+-- quarter of an astronomical unit to 64.
+--
+-- A scan reads each signal afresh from where the probes are, those
+-- that are not on their way somewhere (nothing is kept from the scan
+-- before): each probe within reach of it reads the more of it the
+-- nearer it is, and the less the further its reach; how much they read
+-- between them is the signal's 'reading', and at all of it (1) the site
+-- is found. What can be read is less with fewer probes on it: a quarter
+-- with one, half with two, three quarters with three. And where the
+-- signal may be is known by how many reached it: one, somewhere on a
+-- sphere round that probe; two, on a ring; three, at one of two points;
+-- four or more, within a ring round a point, the smaller the more of it
+-- is read (State.SiteScan).
+--
+-- The ship's own scanner, beside, gets a hidden belt, a vapour field or
+-- a wormhole all the way, a scan at a time, as it did before there were
+-- probes to put anywhere; a derelict or a listening post only half way,
+-- and only the probes find them. It says which planet a signal is by.
 Sites.PROBE = "probe.scan"
 Sites.TRIANGULATION = 0.1     -- what a level of that craft adds to a probe's worth (Data/Skills)
-Sites.PROBES = 4              -- a pilot has so many out at once, at most
+Sites.PROBES = 8              -- a pilot has so many out at once, at most
 Sites.PROBE_LIFE = 3600       -- ticks
-Sites.PROBE_RANGE = Constants.AU
+Sites.PROBE_SPEED = 10 * Constants.AU / Constants.TICK   -- m a tick
+-- How far the probes may be set to reach, in astronomical units, and how
+-- far a new pilot's do.
+Sites.RANGES = { 0.25, 0.5, 1, 2, 4, 8, 16, 32, 64 }
+Sites.RANGE = 8
+-- How strong a signal of a kind is, to a probe: the harder to find, the less.
+Sites.SIGNAL = { ore = 1, gas = 1, wormhole = 1, relic = 0.6, data = 0.5 } :: { [string]: number }
+-- What one probe right on a signal of strength 1 reads of it, at a reach
+-- of one astronomical unit, with no skill and from a plain launcher; at
+-- a reach of r units, so much times r to the power -3/4.
+Sites.READ = 0.4
+-- The most that so many probes can read of a signal between them.
+Sites.CAPS = { 0.25, 0.5, 0.75, 1 }
 -- How far the ship's scanner alone gets with a site of a kind (1: all the way).
 Sites.ALONE = { combat = 1, ore = 1, gas = 1, relic = 0.5, data = 0.5, wormhole = 1 } :: { [string]: number }
 
@@ -120,22 +153,132 @@ function Sites.Probes(state: State.State, system: number): { State.Probe }
   return found
 end
 
--- How many probes are near enough a site to help with it, and whether
--- anything of the pilot's is (a probe, or 'ball', the ship itself).
-function Sites.Covered(state: State.State, site: State.Site, ball: State.Ball?): (number, boolean)
+-- How far the pilot's probes reach, m.
+function Sites.Reach(state: State.State): number
+  return (state.probeRange or Sites.RANGE) * Constants.AU
+end
+
+-- The probe launcher fitted to a ship that reads the strongest, if any.
+function Sites.Launcher(state: State.State, ship: number): Modules.ModuleType?
+  local best: Modules.ModuleType? = nil
+  for _, item in Items.Fitted(state, ship) do
+    local module = Modules.byId[item.type]
+    local probes = if module then module.probes else nil
+    if probes and (best == nil or probes.strength > (best.probes :: any).strength) then
+      best = module
+    end
+  end
+  return best
+end
+
+-- Where the 'index'th probe of a box (1 to 8) stands from its middle, at
+-- a reach of 'reach' m: at a corner, half its reach from the middle.
+function Sites.Corner(index: number, reach: number): (number, number, number)
+  local a = reach * 0.5 / math.sqrt(3)
+  local i = index - 1
+  return (if i % 2 == 0 then a else -a), (if (i // 2) % 2 == 0 then a else -a), (if (i // 4) % 2 == 0 then a else -a)
+end
+
+-- How many of the pilot's probes reach a site (and are not on their way
+-- anywhere), and whether any do. ('ball' is no longer asked: the ship's
+-- own nearness finds nothing.)
+function Sites.Covered(state: State.State, site: State.Site, _ball: State.Ball?): (number, boolean)
   local place = Space.Object(state, site.id)
   if place == nil then
     return 0, false
   end
+  local reach = Sites.Reach(state)
   local near = 0
   for _, probe in Sites.Probes(state, site.system) do
-    if (probe.x - place.x) ^ 2 + (probe.y - place.y) ^ 2 + (probe.z - place.z) ^ 2 <= Sites.PROBE_RANGE ^ 2 then
+    if probe.tx == nil and (probe.x - place.x) ^ 2 + (probe.y - place.y) ^ 2 + (probe.z - place.z) ^ 2 <= reach ^ 2 then
       near += 1
     end
   end
-  local ship = ball ~= nil and ball.system == site.system
-    and (ball.x - place.x) ^ 2 + (ball.y - place.y) ^ 2 + (ball.z - place.z) ^ 2 <= Sites.PROBE_RANGE ^ 2
-  return near, near > 0 or ship
+  return near, near > 0
+end
+
+local function unit(x: number, y: number, z: number): (number, number, number)
+  local l = math.sqrt(x * x + y * y + z * z)
+  if l <= 0 then
+    return 0, 1, 0
+  end
+  return x / l, y / l, z / l
+end
+
+-- What the pilot's probes read of a site now: kept as its 'scan' (nil if
+-- none reaches it), and the reading. ('ship' is the ship that scans: a
+-- hull built for exploration reads half as much again, Ships.EXPLORER.)
+function Sites.Read(state: State.State, site: State.Site, ship: number?): number
+  local place = Space.Object(state, site.id)
+  if place == nil then
+    site.scan = nil
+    return 0
+  end
+  local reach = Sites.Reach(state)
+  local reached: { { probe: State.Probe, d: number } } = {}
+  for _, probe in Sites.Probes(state, site.system) do
+    local d = math.sqrt((probe.x - place.x) ^ 2 + (probe.y - place.y) ^ 2 + (probe.z - place.z) ^ 2)
+    if probe.tx == nil and d <= reach then
+      table.insert(reached, { probe = probe, d = d })
+    end
+  end
+  if #reached == 0 then
+    site.scan = nil
+    return 0
+  end
+  table.sort(reached, function(a: { probe: State.Probe, d: number }, b: { probe: State.Probe, d: number }): boolean
+    if a.d ~= b.d then
+      return a.d < b.d
+    end
+    return a.probe.id < b.probe.id
+  end)
+  local scanner = state.ships[ship or 0]
+  local hull = if scanner then Ships.byId[scanner.type] else nil
+  local built = if hull and hull.explorer then Ships.EXPLORER.scan else 1
+  local skill = (1 + 0.1 * math.max(0, state.skills.astrometrics or 0))
+    * (1 + Sites.TRIANGULATION * math.max(0, state.skills.triangulation or 0))
+  local each = (Sites.SIGNAL[site.kind] or 1) * Sites.READ * (reach / Constants.AU) ^ -0.75 * skill * built
+  local sum = 0
+  for _, one in reached do
+    sum += each * one.probe.strength * (1 - (one.d / reach) ^ 2)
+  end
+  local n = #reached
+  local reading = math.min(Sites.CAPS[math.min(n, #Sites.CAPS)], sum)
+  local scan: State.SiteScan = { reading = reading, probes = n, x = place.x, y = place.y, z = place.z, radius = 0,
+    nx = 0, ny = 1, nz = 0, ox = place.x, oy = place.y, oz = place.z, tick = state.tick }
+  local p1 = reached[1].probe
+  if n == 1 then
+    -- (on a sphere round the one probe)
+    scan.x, scan.y, scan.z, scan.radius = p1.x, p1.y, p1.z, reached[1].d
+  elseif n == 2 then
+    -- (on the ring where the two probes' spheres meet)
+    local p2 = reached[2].probe
+    local d1, d2 = reached[1].d, reached[2].d
+    local L = math.sqrt((p2.x - p1.x) ^ 2 + (p2.y - p1.y) ^ 2 + (p2.z - p1.z) ^ 2)
+    local ux, uy, uz = unit(p2.x - p1.x, p2.y - p1.y, p2.z - p1.z)
+    local a = if L > 0 then (d1 * d1 - d2 * d2 + L * L) / (2 * L) else 0
+    scan.x, scan.y, scan.z = p1.x + ux * a, p1.y + uy * a, p1.z + uz * a
+    scan.radius = math.sqrt(math.max(0, d1 * d1 - a * a))
+    scan.nx, scan.ny, scan.nz = ux, uy, uz
+  elseif n == 3 then
+    -- (at the place, or its mirror in the plane of the three probes)
+    local p2, p3 = reached[2].probe, reached[3].probe
+    local ax, ay, az = p2.x - p1.x, p2.y - p1.y, p2.z - p1.z
+    local bx, by, bz = p3.x - p1.x, p3.y - p1.y, p3.z - p1.z
+    local nx, ny, nz = unit(ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx)
+    local off = (place.x - p1.x) * nx + (place.y - p1.y) * ny + (place.z - p1.z) * nz
+    scan.ox, scan.oy, scan.oz = place.x - 2 * off * nx, place.y - 2 * off * ny, place.z - 2 * off * nz
+  else
+    -- (within a ring round a point near it: the less read, the wider)
+    local err = (1 - reading) * reach * 0.5
+    local rng = Rng.For(state.historySeed, site.id, state.tick, 157)
+    local angle, lift, how = Rng.Float(rng, 0, 2 * math.pi), Rng.Float(rng, -0.2, 0.2), Rng.Float(rng, 0, 1)
+    local dx, dy, dz = unit(math.cos(angle), lift, math.sin(angle))
+    scan.x, scan.y, scan.z = place.x + dx * err * how, place.y + dy * err * how, place.z + dz * err * how
+    scan.radius = err
+  end
+  site.scan = scan
+  return reading
 end
 
 -- The sites of a system that are still there, in the order they came.
@@ -595,6 +738,21 @@ function Sites.Step(state: State.State, events: { Event })
       table.insert(events, { kind = "ProbeLost", probe = probe.id })
     end
   end
+  -- (and one on its way goes on, and stops where it was going)
+  for _, id in state.probeIds do
+    local probe = state.probes[id]
+    local tx, ty, tz = probe.tx, probe.ty, probe.tz
+    if tx and ty and tz then
+      local dx, dy, dz = tx - probe.x, ty - probe.y, tz - probe.z
+      local d = math.sqrt(dx * dx + dy * dy + dz * dz)
+      if d <= Sites.PROBE_SPEED then
+        probe.x, probe.y, probe.z, probe.tx, probe.ty, probe.tz = tx, ty, tz, nil, nil, nil
+      else
+        local k = Sites.PROBE_SPEED / d
+        probe.x, probe.y, probe.z = probe.x + dx * k, probe.y + dy * k, probe.z + dz * k
+      end
+    end
+  end
   local me = state.ships[state.player.ship]
   if me == nil then
     return
@@ -637,27 +795,50 @@ function Sites.Step(state: State.State, events: { Event })
 end
 
 function Sites.Validate(state: State.State, command: State.Command): (boolean, string?)
+  -- (how far the probes reach is set anywhere, docked too)
+  if command.kind == "ProbeRange" then
+    return table.find(Sites.RANGES, command.quantity or -1) ~= nil, "no such reach"
+  end
   local ball = state.balls[command.actor]
   if state.ships[command.actor] == nil then
     return false, "no such ship"
   elseif ball == nil then
     return false, "docked"
-  elseif ball.warp and ball.warp.stage == "warp" then
+  elseif ball.warp and ball.warp.stage == "warp" and (command.kind == "Scan" or command.kind == "LaunchProbe") then
     return false, "in warp"
   elseif command.kind == "LaunchProbe" then
     local carried = false
     for _, item in Items.In(state, ball.id, "cargo") do
       carried = carried or item.type == Sites.PROBE
     end
-    if not carried then
+    if Sites.Launcher(state, ball.id) == nil then
+      return false, "no probe launcher fitted"
+    elseif not carried then
       return false, "no scan probe in the hold"
     elseif #state.probeIds >= Sites.PROBES then
       return false, `{Sites.PROBES} probes are out already`
     end
     return true
-  elseif command.kind == "RecallProbes" then
+  elseif command.kind == "RecallProbes" or command.kind == "FormProbes" then
     if #Sites.Probes(state, ball.system) == 0 then
       return false, "no probes are out in this system"
+    end
+    return true
+  elseif command.kind == "MoveProbes" then
+    -- ('target' the probe, or 0 for all of them in this system, the box
+    -- of them kept as it is: its middle to x, y, z)
+    local x, y, z = command.x, command.y, command.z
+    if x == nil or y == nil or z == nil or x ~= x or y ~= y or z ~= z then
+      return false, "nowhere to send them"
+    elseif #Sites.Probes(state, ball.system) == 0 then
+      return false, "no probes are out in this system"
+    elseif math.sqrt(x * x + y * y + z * z) > 2 * Sites.RANGES[#Sites.RANGES] * Constants.AU then
+      return false, "too far out"
+    end
+    local target = command.target or 0
+    local probe = state.probes[target]
+    if target ~= 0 and (probe == nil or probe.system ~= ball.system) then
+      return false, "no such probe here"
     end
     return true
   elseif command.kind ~= "Scan" then
@@ -668,20 +849,50 @@ function Sites.Validate(state: State.State, command: State.Command): (boolean, s
   return true
 end
 
+-- The middle of the probes a pilot has out in a system.
+function Sites.Middle(state: State.State, system: number): (number, number, number)
+  local probes = Sites.Probes(state, system)
+  local x, y, z = 0, 0, 0
+  for _, probe in probes do
+    x += probe.tx or probe.x
+    y += probe.ty or probe.y
+    z += probe.tz or probe.z
+  end
+  local n = math.max(1, #probes)
+  return x / n, y / n, z / n
+end
+
 function Sites.Apply(state: State.State, command: State.Command, events: { Event })
+  if command.kind == "ProbeRange" then
+    state.probeRange = command.quantity :: number
+    table.insert(events, { kind = "ProbeRange", range = state.probeRange })
+    return
+  end
   local ball = state.balls[command.actor]
   if command.kind == "LaunchProbe" then
+    -- (as many as are in the hold and may be out, at once, each to its
+    -- corner of a box round the ship)
+    local launcher = assert(Sites.Launcher(state, ball.id))
+    local strength = (launcher.probes :: { strength: number }).strength
+    local reach = Sites.Reach(state)
+    local put = 0
     for _, item in Items.In(state, ball.id, "cargo") do
       if item.type == Sites.PROBE then
-        Items.Take(state, item, 1)
-        break
+        local n = math.min(item.quantity, Sites.PROBES - #state.probeIds)
+        if n > 0 then
+          Items.Take(state, item, n)
+          for _ = 1, n do
+            put += 1
+            local cx, cy, cz = Sites.Corner(put, reach)
+            local probe: State.Probe = { id = State.NewId(state), system = ball.system, x = ball.x, y = ball.y, z = ball.z,
+              expires = state.tick + Sites.PROBE_LIFE, strength = strength, tx = ball.x + cx, ty = ball.y + cy, tz = ball.z + cz }
+            state.probes[probe.id] = probe
+            table.insert(state.probeIds, probe.id)
+          end
+        end
       end
     end
-    local probe: State.Probe = { id = State.NewId(state), system = ball.system, x = ball.x, y = ball.y, z = ball.z,
-      expires = state.tick + Sites.PROBE_LIFE }
-    state.probes[probe.id] = probe
-    table.insert(state.probeIds, probe.id)
-    table.insert(events, { kind = "ProbeLaunched", ball = ball.id, probe = probe.id, out = #state.probeIds })
+    table.insert(events, { kind = "ProbeLaunched", ball = ball.id, count = put, out = #state.probeIds })
     return
   elseif command.kind == "RecallProbes" then
     -- (those in this system come back to the hold, wherever they are in it)
@@ -694,26 +905,51 @@ function Sites.Apply(state: State.State, command: State.Command, events: { Event
     Items.Add(state, Sites.PROBE, back, ball.id, "cargo")
     table.insert(events, { kind = "ProbesRecalled", ball = ball.id, count = back })
     return
+  elseif command.kind == "MoveProbes" then
+    local x, y, z = command.x :: number, command.y :: number, command.z :: number
+    local target = command.target or 0
+    if target ~= 0 then
+      local probe = state.probes[target]
+      probe.tx, probe.ty, probe.tz = x, y, z
+    else
+      local mx, my, mz = Sites.Middle(state, ball.system)
+      for _, probe in Sites.Probes(state, ball.system) do
+        probe.tx, probe.ty, probe.tz = (probe.tx or probe.x) + x - mx, (probe.ty or probe.y) + y - my, (probe.tz or probe.z) + z - mz
+      end
+    end
+    table.insert(events, { kind = "ProbesMoved", ball = ball.id, probe = target })
+    return
+  elseif command.kind == "FormProbes" then
+    -- (into a box again round where they are, as far apart as their reach says)
+    local mx, my, mz = Sites.Middle(state, ball.system)
+    local reach = Sites.Reach(state)
+    for index, probe in Sites.Probes(state, ball.system) do
+      local cx, cy, cz = Sites.Corner((index - 1) % 8 + 1, reach)
+      probe.tx, probe.ty, probe.tz = mx + cx, my + cy, mz + cz
+    end
+    table.insert(events, { kind = "ProbesMoved", ball = ball.id, probe = 0 })
+    return
   end
   state.scanReady = state.tick + Sites.SCAN
   local found, signals, faint = 0, 0, 0
   for _, site in Sites.In(state, ball.system) do
     -- (a part of a camp that a job has not opened yet is no scanner's to find)
     if site.strength < 1 and site.kind ~= "mission" then
-      -- (each probe near it makes the scan worth as much again; and
-      -- without anything near it, a faint one is got only so far)
-      local probes, near = Sites.Covered(state, site, ball)
-      local reach = if near then 1 else Sites.ALONE[site.kind] or 1
+      -- (the ship's own scanner, a scan at a time, as far as it gets alone)
+      local reach = Sites.ALONE[site.kind] or 1
       if site.strength < reach then
-        -- (and each probe is worth a tenth more a level of Triangulation)
-        local worth = 1 + Sites.TRIANGULATION * math.max(0, state.skills.triangulation or 0)
-        site.strength = math.min(reach, site.strength + Sites.Gain(state, site.kind, ball.id) * (1 + probes * worth))
+        site.strength = math.min(reach, site.strength + Sites.Gain(state, site.kind, ball.id))
+      end
+      -- (and the probes, afresh)
+      local reading = Sites.Read(state, site, ball.id)
+      if reading >= 1 then
+        site.strength = 1
       end
       if site.strength >= 1 then
         found += 1
       else
         signals += 1
-        faint += if not near and site.strength >= reach then 1 else 0
+        faint += if reading <= 0 and site.strength >= reach then 1 else 0
       end
     end
   end
