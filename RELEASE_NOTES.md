@@ -6,6 +6,19 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Citadels, training injectors and twelve new hulls
+
+- Citadels: stations of your own that ships dock inside. Each is one of five kinds (Habitation, Trade Hub, Refinery, Research Station, Shipyard) at one of five sizes, from Small to Huge, and each has its own blueprint. Build one at a station, haul it to a moon or planet and anchor it, then fit service modules in its slots.
+- Each kind does its own work better. A Shipyard builds faster and with less material, a Refinery gets more from ore and ice, and a Research Station researches and invents faster and more reliably. A Trade Hub halves the sales tax and broker's fee, and a Habitation has a clone bay and storage without fitting either, and burns less fuel.
+- Some modules only one kind can fit. A Shipyard fits the Advanced Ship Assembly, which tech 2 hulls need to be built in a citadel, and from Large up the Capital Ship Assembly, which capitals need. A Research Station fits the Advanced Research Hub, which inventing tech 2 hulls in a citadel needs. A Refinery fits the Reactor.
+- What docks at a citadel and what only tethers to it depends on its size. Friendly ships in its field are tethered to it automatically. Undocking ships leave through one of its hangar doors.
+- Wormholes are now drawn as lightless spheres, with the stars bent around their edges.
+- Training injectors hold banked training time: 1, 6 or 24 hours, added to your training queue at once. Use one from the Skills window's training queue. They are sold at stations, are in every faction's loyalty store, and turn up in data-site vaults, sealed derelicts and now and then a pirate's wreck.
+- Twelve new hulls. Talmar: the Nephelo, a black ops frigate, and the Osso, an interdictor. Vessari: the Hoshizora, an electronic warfare cruiser; the Raiden, a cruiser with a bow railgun; and the Manazashi, an attack battlecruiser. Orun: the Excalibur, a tech 2 carrier, and the Guthook, a tech 2 siege dreadnought with eight guns. Kethri: the Gauntlet frigate, the Perfexis cruiser, the Pox dreadnought, the Noxious interdictor and the Deluge, a black ops battlecruiser.
+- An interdictor's interdiction field is wider and lasts longer. An electronic warfare hull's webs, disruptors, painters, dampeners, jammers and neutralisers reach farther and work more strongly.
+- When a hull has two tech 2 versions (the Ouyou has the Hoshizora and the Raiden), you choose which one to invent.
+- Every station has a market again, stocked by its kind.
+
 ## Characters
 
 - Your pilot is now a character kept outside any one game. Skills and the training queue go with the character from galaxy to galaxy; the wallet, ships, items, implants, standings and corporation stay with the galaxy they were earned in.
