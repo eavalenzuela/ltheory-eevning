@@ -188,7 +188,7 @@ suite:Case("a system of the map has a wormhole on some days, more often where or
           t.ok(into <= 2, `a wormhole of the map led to depth {into}`)
           entries[into] += 1
           t.ok(hole.closes - hole.opened >= Wormholes.LIFE[1] and hole.closes - hole.opened <= Wormholes.LIFE[2])
-          t.ok(hole.size >= 1 and hole.size <= 3)
+          t.ok(hole.size >= 1 and hole.size <= #Wormholes.SIZES)
         end
       end
       -- (one at a time: yesterday's has closed)
@@ -296,11 +296,11 @@ suite:Case("a ship goes through a wormhole and comes out beside its far end, whi
   t.eq(#Space.Describe(state, deep).objects, objects)
 end)
 
-suite:Case("a wormhole lets through what its size lets through, and nothing bigger than a battleship goes through any", function(t)
+suite:Case("a wormhole lets through what its size lets through, and no supercarrier goes through any", function(t)
   local game = inSpace()
   local state = game.state
   local deep = ofDepth(game, 1)
-  local holes = { opened(game, 1, deep, 1), opened(game, 1, deep, 2), opened(game, 1, deep, 3) }
+  local holes = { opened(game, 1, deep, 1), opened(game, 1, deep, 2), opened(game, 1, deep, 3), opened(game, 1, deep, 4) }
   local function hull(class: string): State.Ship
     for _, type in Ships.list do
       if type.class == class then
@@ -310,7 +310,8 @@ suite:Case("a wormhole lets through what its size lets through, and nothing bigg
     error(`no hull of class {class}`)
   end
   local fits: { [string]: number } = { capsule = 1, frigate = 1, destroyer = 1, cruiser = 2, industrial = 2, barge = 2,
-    attackbattlecruiser = 2, battlecruiser = 2, battleship = 3 }
+    attackbattlecruiser = 2, battlecruiser = 2, battleship = 3, carrier = 4, dreadnought = 4, siegedreadnought = 4,
+    capitalindustrial = 4, freighter = 4 }
   local seen: { [string]: boolean } = {}
   for _, type in Ships.list do
     if not seen[type.class] then
@@ -321,14 +322,15 @@ suite:Case("a wormhole lets through what its size lets through, and nothing bigg
         local least = fits[type.class]
         t.eq(ok, least ~= nil and least <= size, `a {type.class} through a {Wormholes.SIZE_NAMES[size]} wormhole`)
         if least == nil then
-          t.eq(why, "nothing bigger than a battleship goes through a wormhole")
+          t.eq(why, "no supercarrier or anything bigger goes through a wormhole")
         elseif not ok then
           t.eq(why, `too big for this wormhole: nothing over {Wormholes.LETS[size]} gets through`)
         end
       end
     end
   end
-  t.ok(seen.carrier and seen.freighter and seen.battleship and seen.cruiser, "a class of hull is missing")
+  t.ok(seen.carrier and seen.freighter and seen.battleship and seen.cruiser and seen.supercarrier and seen.ultracapital,
+    "a class of hull is missing")
   -- (as the order to jump says, for the ship that is asked about)
   local cruiser = hull("cruiser")
   local station = assert(Space.Object(state, state.player.home))
@@ -337,14 +339,16 @@ suite:Case("a wormhole lets through what its size lets through, and nothing bigg
     "too big for this wormhole: nothing over a destroyer gets through")
   t.eq(refused(game, { kind = "Jump", actor = cruiser.id, target = holes[2].a }), "(accepted)")
   t.eq(refused(game, { kind = "Jump", actor = state.player.ship, target = holes[1].a }), "(accepted)")
-  -- (a size is rolled when nobody says: all three turn up)
-  local sizes = { 0, 0, 0 }
-  for index = 1, 200 do
+  -- (a size is rolled when nobody says: all four turn up, the massive
+  -- the least)
+  local sizes = { 0, 0, 0, 0 }
+  for index = 1, 400 do
     local hole = assert(Wormholes.Open(state, 2, deep, Rng.For(11, index), game.events))
     sizes[hole.size] += 1
     Wormholes.Close(state, hole, game.events)
   end
-  t.ok(sizes[1] >= 35 and sizes[2] >= 60 and sizes[3] >= 25, `sizes of 200: {sizes[1]}, {sizes[2]}, {sizes[3]}`)
+  t.ok(sizes[1] >= 90 and sizes[2] >= 120 and sizes[3] >= 60 and sizes[4] >= 15 and sizes[4] < sizes[3],
+    `sizes of 400: {table.concat(sizes, ", ")}`)
 end)
 
 suite:Case("a wormhole closes when its time is up: both ends go, and nobody goes through", function(t)
@@ -434,7 +438,7 @@ suite:Case("always a way out: uncharted space the pilot is in is never left with
     t.ok(out + deeper >= 9, `{out} led out and {deeper} on in ten days at depth {depth}`)
     led += out
     -- With every one of them closed under the pilot, another opens at
-    -- once: a great one, that leads back to the map.
+    -- once: a massive one, that leads back to the map.
     for _, open in Wormholes.In(state, deep) do
       Wormholes.Close(state, open, game.events)
     end
@@ -443,7 +447,7 @@ suite:Case("always a way out: uncharted space the pilot is in is never left with
     Core.Step(game)
     local open = Wormholes.In(state, deep)
     t.eq(#open, 1)
-    t.eq({ open[1].size, open[1].from, open[1].to <= charted } :: { any }, { 3, deep, true } :: { any })
+    t.eq({ open[1].size, open[1].from, open[1].to <= charted } :: { any }, { #Wormholes.SIZES, deep, true } :: { any })
     -- (to be found as any is: and then the way home)
     local site = state.sites[open[1].a]
     t.eq(site.strength, 0)

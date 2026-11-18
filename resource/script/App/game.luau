@@ -1895,7 +1895,7 @@ end
 -- without waiting for a day that has one: a wormhole in the system the
 -- pilot is in, leading to uncharted space of a depth (1 to 5: 1 if not
 -- said; of the nearest depth there is, in a galaxy that has no system
--- of that one), of a size (1 to 3: a great one if not said), found
+-- of that one), of a size (1 to 4: a great one if not said), found
 -- already unless 'hidden'. Returns its place and its name (0 and "" if
 -- none could be opened).
 function Debug.Wormhole(depth: number?, size: number?, hidden: boolean?): (number, string)

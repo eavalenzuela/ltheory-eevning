@@ -320,7 +320,8 @@ function Jumping.BridgeTo(state: State.State, ship: number): { { system: number,
   for _, id in state.starbaseIds do
     local starbase = state.starbases[id]
     local system = Space.SystemOf(state, id)
-    if system ~= here and bridged(state, starbase) and Starbases.Friendly(state, starbase, record) then
+    if system ~= here and bridged(state, starbase) and Starbases.Friendly(state, starbase, record)
+      and not state.galaxy.systems[system].uncharted and not state.galaxy.systems[here].uncharted then
       local distance = Jumping.Distance(state, here, system)
       if distance <= Jumping.BRIDGE_RANGE then
         table.insert(found, { system = system, station = id, distance = distance })
@@ -354,6 +355,10 @@ function Jumping.Validate(state: State.State, command: State.Command): (boolean,
       return false, "no such system"
     elseif to == ball.system then
       return false, "that is the system you are in"
+    elseif state.galaxy.systems[to].uncharted or state.galaxy.systems[ball.system].uncharted then
+      -- (the owner, 2026-11-17: "nothing should ever be able to
+      -- jumpdrive jump to j-space"; a bridge no more than a drive)
+      return false, "no bridge finds its way in or out of uncharted space"
     elseif Jumping.BridgeIn(state, ship.id, to) == nil then
       return false, "no jump bridge there to go to"
     end

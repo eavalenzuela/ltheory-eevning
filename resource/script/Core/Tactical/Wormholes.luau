@@ -27,16 +27,24 @@
 --     system leads to its own depth, a step deeper or a step back, and
 --     never further. So the fifth depth is four wormholes from the map
 --     at the least, and the way straight back (below) is one.
---   - A wormhole is one of three sizes, and nothing bigger than its
+--   - A wormhole is one of four sizes, and nothing bigger than its
 --     size gets through: a frigate or a destroyer through any, a
---     cruiser or a battlecruiser through a broad or a great one, a
---     battleship through a great one only. Nothing bigger than a
---     battleship goes through any (and no jump drive finds its way in
---     or out: Tactical/Jumping).
+--     cruiser or a battlecruiser through a broad one or bigger, a
+--     battleship through a great or a massive one, and a capital below
+--     the supercarriers (a carrier, a dreadnought, a capital industrial,
+--     a freighter) through a massive one only. A supercarrier or an
+--     ultracapital goes through none. (The massive size is the owner's,
+--     2026-11-17: "there should be wormholes that capitals can fit
+--     through (otherwise, most citadels couldn't ever be brought in)
+--     ... that can fit anything below supers". A citadel of medium size
+--     or more goes only in a freighter's hold.)
+--   - No jump drive or bridge finds its way in or out (the owner,
+--     2026-11-17: "nothing should ever be able to jumpdrive jump to
+--     j-space"; Tactical/Jumping): wormholes are the only way.
 --   - Always a way out: a system of uncharted space the pilot is in is
 --     never left with no wormhole open. If the last one closes, another
---     opens at once: a great one, which anything that got in can leave
---     by, and it leads back to the map.
+--     opens at once: a massive one, which anything that got in can
+--     leave by, and it leads back to the map.
 --
 -- A wormhole's end is a place of its system's description (as a site
 -- is, and a pilot's tower), with a site's record so that the scanner
@@ -96,20 +104,24 @@ Wormholes.ENTRY = { 0.8, 0.2 }
 -- step deeper, and how often to the same depth (the rest, a step back).
 Wormholes.DEEPER, Wormholes.LEVEL = 0.5, 0.3
 -- The sizes: how often a wormhole is of each, and what each is called.
-Wormholes.SIZES = { 0.3, 0.45, 0.25 }
-Wormholes.SIZE_NAMES = { "narrow", "broad", "great" }
+-- (Mine, the massive the rarest.)
+Wormholes.SIZES = { 0.3, 0.4, 0.22, 0.08 }
+Wormholes.SIZE_NAMES = { "narrow", "broad", "great", "massive" }
 -- The smallest size a hull of each class gets through. (A class not
--- here gets through none: the capitals, and a freighter.)
+-- here gets through none: a supercarrier, an ultracapital.)
 Wormholes.RANK = { capsule = 1, frigate = 1, destroyer = 1, cruiser = 2, industrial = 2, barge = 2, attackbattlecruiser = 2,
-  battlecruiser = 2, battleship = 3 } :: { [string]: number }
+  battlecruiser = 2, battleship = 3, carrier = 4, dreadnought = 4, siegedreadnought = 4, capitalindustrial = 4,
+  freighter = 4 } :: { [string]: number }
 -- The biggest class that gets through each size, as it is said.
-Wormholes.LETS = { "a destroyer", "a battlecruiser", "a battleship" }
+Wormholes.LETS = { "a destroyer", "a battlecruiser", "a battleship", "a dreadnought" }
 -- How big the hole is, metres.
 Wormholes.RADIUS = 1200
--- The kilograms of hull each size takes through it before it closes:
--- about a dozen and a half of the biggest it lets through (frigates and
--- destroyers, battlecruisers, battleships). Mine.
-Wormholes.MASS = { 30000000, 600000000, 1800000000 }
+-- The kilograms of hull each size takes through it before it closes.
+-- Mine: about 175 of the biggest each of the first three lets through
+-- (destroyers, battlecruisers, battleships: the owner, 2026-11-17,
+-- found a dozen and a half "too small"), and for the massive about 37
+-- dreadnoughts or 54 freighters, so that capitals stay what spends one.
+Wormholes.MASS = { 300000000, 6000000000, 18000000000, 60000000000 }
 -- How far out from a wormhole station the wormhole it holds is, beyond
 -- the station itself, m. Mine.
 Wormholes.HELD_OUT = 15000
@@ -183,7 +195,7 @@ function Wormholes.Passable(state: State.State, place: number, ship: State.Ship)
   end
   local hull = Ships.byId[ship.type]
   if Wormholes.RANK[hull.class] == nil then
-    return false, "nothing bigger than a battleship goes through a wormhole"
+    return false, "no supercarrier or anything bigger goes through a wormhole"
   elseif not Wormholes.Fits(hull, hole.size) then
     return false, `too big for this wormhole: nothing over {Wormholes.LETS[hole.size]} gets through`
   end

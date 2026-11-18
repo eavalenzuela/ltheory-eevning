@@ -628,7 +628,7 @@ export type Membership = { tax: number, members: { [number]: Member }, memberIds
 -- site: a scanner finds it), and 'from' that system; 'to' is the system
 -- it leads to, and 'b' the place of the end there, which is 0 until
 -- somebody has gone through (the far end is nowhere until then).
--- 'size' is how big a hull it lets through, 1 to 3 (Wormholes.RANK).
+-- 'size' is how big a hull it lets through, 1 to 4 (Wormholes.RANK).
 -- ('mass': the kilograms of hull that have gone through it, either way:
 -- it closes when its size's share is spent (Tactical/Wormholes). Nil
 -- for none yet. 'station': the wormhole station that holds it open, if

@@ -1144,6 +1144,13 @@ suite:Case("a gravity station is a lit jump beacon of itself; with a Jump Bridge
   t.ok(Space.Distance(ball :: any, assert(Space.Object(state, first)) :: any) < Structures.towerById["citadel.gravity.small"].field,
     "it came out far from the bridge it went to")
   t.ok(state.starbases[second].fuel <= fuel - cost, "the bridge it left did not pay the fuel")
+  -- (never into uncharted space, nor out of it: were the other system
+  -- uncharted, there is nowhere to go)
+  t.eq(#Jumping.BridgeTo(state, ship), 1)
+  state.galaxy.systems[elsewhere].uncharted = true
+  t.eq(#Jumping.BridgeTo(state, ship), 0, "a bridge reaches into uncharted space")
+  t.eq(refused(game, { kind = "Bridge", actor = 0, target = elsewhere }), "no bridge finds its way in or out of uncharted space")
+  state.galaxy.systems[elsewhere].uncharted = nil
   -- (nor from warp, nor out of a bridge's field)
   ball.x += 1e7
   t.eq(refused(game, { kind = "Bridge", actor = 0, target = elsewhere }), "not in the field of a jump bridge")
