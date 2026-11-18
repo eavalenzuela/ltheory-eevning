@@ -47,8 +47,6 @@ local function marks(game: Core.Game): { Core.Entry }
 end
 
 suite:Case("a place is marked where the ship is, and is on the overview of its system from then on", function(t)
-  local docked = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
-  t.eq(refused(docked, { kind = "Bookmark", actor = 0 }), "docked")
   local game, me = adrift()
   local state = game.state
   t.eq(#marks(game), 0)
@@ -144,6 +142,48 @@ suite:Case("a place marked in one system is not on another's overview, and marks
   file.state.bookmarks, file.state.bookmarkIds = nil, nil
   local old, oldLength = Codec.Encode(file)
   t.eq(#Core.Query.Bookmarks(Core.Load(old, oldLength)), 0)
+end)
+
+suite:Case("a place is marked by itself: the station docked at, or anything of the system's from space; and is warped to as it", function(t)
+  -- Docked: the station.
+  local docked = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local home = docked.state.player.home
+  t.ok((submit(docked, { kind = "Bookmark", actor = 0 })))
+  local mark = Core.Query.Bookmarks(docked)[1]
+  local station = assert(Space.Object(docked.state, home))
+  t.eq({ mark.object, mark.what, mark.name, mark.system } :: { any },
+    { home, "station", station.name, Space.SystemOf(docked.state, home) } :: { any })
+  t.eq(refused(docked, { kind = "Bookmark", actor = 0 }), "that place is marked already")
+  t.eq(refused(docked, { kind = "Bookmark", actor = 0, target = home }), "that place is marked already")
+  -- From space: a gate, by itself, named as it is; not a ship.
+  local game, me = adrift()
+  local state = game.state
+  local gate: System.Object? = nil
+  for _, object in Space.Describe(state, me.system).objects do
+    if gate == nil and object.kind == "gate" then
+      gate = object
+    end
+  end
+  local at = assert(gate, "no gate in the first system")
+  t.eq(refused(game, { kind = "Bookmark", actor = 0, target = me.id }), "only a place can be marked")
+  t.ok((submit(game, { kind = "Bookmark", actor = 0, target = at.id })))
+  local marked = Core.Query.Bookmarks(game)[1]
+  t.eq({ marked.object, marked.what, marked.name } :: { any }, { at.id, "gate", at.name } :: { any })
+  t.eq(Space.MarkOf(state, at.id), marked)
+  -- Warped to, it ends where a warp to the gate would: outside it.
+  t.ok((submit(game, { kind = "WarpTo", actor = 0, target = marked.id })))
+  for _ = 1, 900 do
+    Core.Step(game)
+    if me.warp == nil then
+      break
+    end
+  end
+  t.eq(me.warp, nil)
+  local off = math.sqrt((me.x - at.x) ^ 2 + (me.y - at.y) ^ 2 + (me.z - at.z) ^ 2)
+  t.ok(off >= at.radius and off < at.radius + 2000, `the ship came out of warp {off} m from the gate, of radius {at.radius}`)
+  -- (and a mark is kept in the save with what it marks)
+  local back = Core.Load(Core.Save(game))
+  t.eq(back.state.bookmarks[marked.id].object, at.id)
 end)
 
 suite:Case("a marked place is given a name of the pilot's own, from anywhere, and keeps it", function(t)

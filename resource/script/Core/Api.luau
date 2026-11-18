@@ -2516,6 +2516,11 @@ function Query.Found(game: Game, site: number): boolean
   return game.state.sites[site] ~= nil and not Sites.Hidden(game.state, site)
 end
 
+-- How many places a pilot can have marked at once.
+function Query.BookmarksMost(): number
+  return Space.BOOKMARKS
+end
+
 -- The places the pilot has marked, in the order they were.
 function Query.Bookmarks(game: Game): { State.Bookmark }
   local found: { State.Bookmark } = {}

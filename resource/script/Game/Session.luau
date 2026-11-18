@@ -50,6 +50,10 @@ export type Session = {
   destination: number,
   autopilot: boolean,
   safest: boolean,
+  -- A place the pilot marked that the way ends at (Game/UI/Places), or
+  -- 0: in its system the autopilot goes on to it, docking where it is a
+  -- station and warping to it where it is not.
+  goal: number,
   -- Which game this is, counting from 1: it goes up when the running
   -- game is replaced by a save or by a new one, so that whoever keeps
   -- something made for the last game (the scene) knows to make it again.
@@ -330,7 +334,7 @@ function Session.New(galaxySeed: number, historySeed: number): Session
   local session: Session = {
     game = Core.New({ galaxySeed = galaxySeed, historySeed = historySeed, traffic = true, wars = true, starter = true }),
     clock = Clock.New(), selected = 0, target = 0, aimed = {}, aimedAt = 0, events = {}, message = "", heard = {}, messageTick = 0, messageKind = "plain", epoch = 1,
-    destination = 0, autopilot = false, safest = false, trying = {}, character = Session.Chosen(), credited = Host.Clock(),
+    destination = 0, autopilot = false, safest = false, goal = 0, trying = {}, character = Session.Chosen(), credited = Host.Clock(),
   }
   -- (a script's run plays as a character from the first: one is made for
   -- it, as a player is asked to make one before their first game)
@@ -1066,11 +1070,50 @@ function Session.Autopilot(session: Session)
   end
   local game = session.game
   local player = Core.Query.Player(game)
+  -- (there, with a place marked to go on to: docked at it if it is a
+  -- station, or warped to)
+  if session.goal ~= 0 and session.destination ~= 0 and player.system == session.destination then
+    local mark = game.state.bookmarks[session.goal]
+    if mark == nil or mark.system ~= player.system then
+      session.goal = 0
+      return
+    end
+    if #game.state.queue > 0 then
+      return
+    end
+    local ball = Core.Query.Ball(game, player.ship)
+    if player.docked == 0 and (ball == nil or ball.warp ~= nil or ball.intent ~= nil) then
+      return
+    end
+    local done = player.docked ~= 0 and player.docked == mark.object
+    local command: State.Command? = nil
+    if not done then
+      if player.docked ~= 0 then
+        command = { kind = "Undock", actor = player.ship }
+      elseif mark.what == "station" and mark.object then
+        command = { kind = "Dock", actor = player.ship, target = mark.object }
+      else
+        command = { kind = "WarpTo", actor = player.ship, target = mark.id }
+      end
+    end
+    if command then
+      local ok, reason = Core.Submit(game, command)
+      if command.kind == "Undock" and ok then
+        return
+      end
+      if not ok then
+        Session.Say(session, `Autopilot: {tostring(reason)}`)
+      end
+    end
+    Session.Say(session, if done then `Autopilot: arrived at {mark.name}` else `Autopilot: on to {mark.name}`)
+    session.autopilot, session.destination, session.goal = false, 0, 0
+    return
+  end
   if session.destination == 0 or player.system == session.destination then
     if session.destination ~= 0 then
       Session.Say(session, `Autopilot: arrived in {player.systemName}`)
     end
-    session.autopilot, session.destination = false, 0
+    session.autopilot, session.destination, session.goal = false, 0, 0
     return
   end
   if #game.state.queue > 0 then
@@ -1357,7 +1400,7 @@ function Session.Restart(session: Session, galaxySeed: number, historySeed: numb
   session.target, session.aimed, session.aimedAt = 0, {}, 0
   session.events = { { kind = "Loaded" } }
   session.epoch += 1
-  session.destination, session.autopilot = 0, false
+  session.destination, session.autopilot, session.goal = 0, false, 0
   session.clock.pending = 0
   session.clock.paused = false
   session.clock.scale = 1
@@ -1406,7 +1449,7 @@ function Session.Load(session: Session, slot: string, away: number?): boolean
   session.target, session.aimed, session.aimedAt = 0, {}, 0
   session.events = { { kind = "Loaded" } }
   session.epoch += 1
-  session.destination, session.autopilot = 0, false
+  session.destination, session.autopilot, session.goal = 0, false, 0
   session.clock.pending = 0
   Session.Say(session, `Loaded {SAVE_DIR}/{slot}`)
   local made = savedAt(slot)

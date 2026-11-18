@@ -113,6 +113,11 @@ local SIGNS: { [string]: () -> { Glyph } } = {
     return all(ring(-0.62, -0.55, 0.17), ring(0.62, -0.28, 0.17), ring(-0.28, 0.6, 0.17), dot(0.58, 0.66, 0.09),
       line(-0.45, -0.51, 0.45, -0.32), line(-0.57, -0.38, -0.33, 0.43), line(-0.15, 0.48, 0.5, -0.15), line(-0.1, 0.61, 0.49, 0.65))
   end,
+  -- a pin in a place
+  places = function()
+    return all(path({ v(0, 0.92), v(-0.52, 0.05), v(-0.6, -0.35), v(-0.42, -0.72), v(0, -0.9), v(0.42, -0.72), v(0.6, -0.35),
+      v(0.52, 0.05) }, true), ring(0, -0.33, 0.2))
+  end,
   -- a scanner's dish
   scanner = function()
     return all(ring(0, 0, 0.8), ring(0, 0, 0.4), line(0, 0, 0.56, -0.56), dot(0.36, 0.26, 0.09))

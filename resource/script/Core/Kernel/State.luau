@@ -482,7 +482,11 @@ export type Drone = { ship: number, owner: number, type: string, target: number,
 export type Probe = { id: number, system: number, x: number, y: number, z: number, expires: number }
 
 -- A place in space a pilot has marked, to warp back to (Tactical/Space).
-export type Bookmark = { id: number, name: string, system: number, x: number, y: number, z: number }
+-- A place the pilot has marked (Tactical/Space): a point in a system, or
+-- ('object') a place of the system's description that was marked by
+-- itself (a station, a gate, a planet, a belt, a site), and 'what' kind
+-- of place that is. A place's mark is where the place is.
+export type Bookmark = { id: number, name: string, system: number, x: number, y: number, z: number, object: number?, what: string? }
 
 -- How far a pilot has got with a career agent (Character/Careers): the
 -- lessons done, whether the next is in hand, and how much of what it

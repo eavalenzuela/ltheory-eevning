@@ -52,6 +52,7 @@ Dock.ENTRIES = {
   { id = "corporation", name = "Corporation", press = "Dock:corporation" },
   false,
   { id = "map", name = "Star map", press = "Map" },
+  { id = "places", name = "Places", press = "Dock:places" },
   { id = "scanner", name = "Scanner", press = "Dock:scanner" },
   { id = "colonies", name = "Colonies", press = "Colonies" },
   { id = "events", name = "Events", press = "Events" },

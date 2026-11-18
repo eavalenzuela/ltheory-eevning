@@ -52,6 +52,8 @@ local MARGIN = 28
 local UNCLAIMED = vector.create(0.34, 0.35, 0.38)
 -- (where the pilot is next to go: the gold the overview uses for it)
 local NEXT = vector.create(1.0, 0.80, 0.28)
+-- (the colour of the places the pilot has marked: Game/UI/Places)
+local MARKED = vector.create(0.45, 0.85, 0.75)
 -- A faction's colour on the map. (Not its hull paint, which is chosen
 -- to look right on a hull: several of them are greys and browns.)
 -- (the last: the pilot's own, what their corporation has claimed. Core/Assets/Sovereignty)
@@ -888,6 +890,28 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
     end
   end
   mark(here, 11, Colors.White, true)
+  -- The systems with a place the pilot has marked (Game/UI/Places): a
+  -- small diamond over each. (A mark in uncharted space is on no map.)
+  local markedIn: { [number]: { string } } = {}
+  for _, one in Core.Query.Bookmarks(game) do
+    if systems[one.system] and not systems[one.system].uncharted then
+      local names = markedIn[one.system]
+      if names == nil then
+        names = {}
+        markedIn[one.system] = names
+        local p = spot(one.system) + vector.create(0, -13)
+        if sighted(p, 0) then
+          local half = 4
+          local corners = { vector.create(p.x, p.y - half), vector.create(p.x + half, p.y), vector.create(p.x, p.y + half),
+            vector.create(p.x - half, p.y) }
+          for index, corner in corners do
+            Glyph_Draw(Glyph_Line(corner * Theme.scale, (corners[index % 4 + 1]) * Theme.scale, 1, 1), 0, 1, MARKED, 0.95)
+          end
+        end
+      end
+      table.insert(names, one.name)
+    end
+  end
   -- Where the nomads' colony fleets are: a box round the system each
   -- is in, in its people's colour. (They move on every quarter of an
   -- hour: Tactical/Nomads.)
@@ -1064,6 +1088,23 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
       line += 16
     end
   end
+  -- (the places the pilot has marked there)
+  local markedHere = markedIn[shown]
+  if markedHere then
+    table.sort(markedHere)
+    Im.Text(`{#markedHere} {if #markedHere == 1 then "place" else "places"} marked`, px, line, 13, MARKED)
+    line += 16
+    for index, name in markedHere do
+      if index <= 3 then
+        Im.Text(name, px + 10, line, 12, Im.DIM)
+        line += 16
+      end
+    end
+    if #markedHere > 3 then
+      Im.Text(`and {#markedHere - 3} more (Places)`, px + 10, line, 12, Im.DIM)
+      line += 16
+    end
+  end
   line += 10
   if shown == here then
     Im.Text("You are here.", px, line, 13, Im.DIM)
@@ -1081,10 +1122,10 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
   end
   line += 46
   if Im.Button("Set destination", px, line, 150, 28, shown ~= here and shown ~= session.destination, "Map:destination") then
-    session.destination = shown
+    session.destination, session.goal = shown, 0
   end
   if Im.Button("Clear", px + 156, line, 80, 28, session.destination ~= 0, "Map:clear") then
-    session.destination, session.autopilot = 0, false
+    session.destination, session.autopilot, session.goal = 0, false, 0
   end
   line += 36
   if Im.Toggle(if session.safest then "Safest way" else "Shortest way", px, line, 150, 28, session.safest, "Map:safest") then

@@ -50,6 +50,7 @@ local CrewWindow = require("@lt/Game/UI/Crew")
 local SchoolWindow = require("@lt/Game/UI/School")
 local StarbaseWindow = require("@lt/Game/UI/Starbase")
 local WalletWindow = require("@lt/Game/UI/Wallet")
+local Places = require("@lt/Game/UI/Places")
 local Scans = require("@lt/Game/UI/Scans")
 local CorporationWindow = require("@lt/Game/UI/Corporation")
 local Theme = require("@lt/Game/UI/Theme")
@@ -221,6 +222,23 @@ type Area = { pos: vector, size: vector }
 -- ---------------------------------------------------------------------
 -- In space
 
+-- A click with Ctrl held locks what was clicked, out in space or on the
+-- overview (the owner, 2026-11-17: "ctrl + clicking on items either in
+-- the main game pane or the overview should lock it"). It is no order
+-- to the ship: the autopilot goes on.
+local function ctrlLock(session: Session.Session, id: number)
+  if not (Key_Down(Key_LControl()) or Key_Down(Key_RControl())) then
+    return
+  end
+  local lock: State.Command = { kind = "LockTarget", actor = 0, target = id }
+  local ok, why = Session.CanDo(session, lock)
+  if ok then
+    Session.Do(session, lock)
+  else
+    Session.Say(session, `Lock: {tostring(why)}`)
+  end
+end
+
 local function drawBrackets(session: Session.Session, scene: Scene.Scene, entries: { Core.Entry }, w: Area,
   ball: State.Ball?, marks: Waypoints.Marks)
   local cursor = Im.Cursor()
@@ -265,6 +283,7 @@ local function drawBrackets(session: Session.Session, scene: Scene.Scene, entrie
   end
   if clicked ~= 0 and Im.Pressed() and not overInterface then
     session.selected = clicked
+    ctrlLock(session, clicked)
   end
   -- A double click out in space flies the ship: to what is under the
   -- cursor, as a double click on its row of the overview would (fly to
@@ -555,6 +574,7 @@ local function drawOverview(session: Session.Session, all: { Core.Entry }, x: nu
       if other then Theme.DIM else Theme.FAINT, 13)
     if picked then
       session.selected = entry.id
+      ctrlLock(session, entry.id)
     end
     if double then
       -- The obvious thing: fly to what is here, warp to what is not.
@@ -659,6 +679,13 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
   end
   local entry: Core.Entry = selected
   local was = Im.Plain(true)
+  -- (a place of the system's is marked by itself from here: Game/UI/Places)
+  local markIt: State.Command = { kind = "Bookmark", actor = 0, target = entry.id }
+  if entry.kind ~= "bookmark" and entry.kind ~= "ship" and entry.kind ~= "wreck" and Session.CanDo(session, markIt) then
+    if Im.Button("Bookmark", x + width - 96, y + 6, 84, 22, true, `Bookmark:{entry.id}`) then
+      Session.Do(session, markIt)
+    end
+  end
   if entry.kind == "bookmark" then
     -- A place the pilot marked is called what they like: its name is a
     -- field, and what is typed there is its name when the typing is done.
@@ -1559,6 +1586,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       Guide.Frame(session)
       CorporationWindow.Frame(session)
       Scans.Frame(session)
+      Places.Frame(session)
       -- The dock is down the left edge (Game/UI/Dock): the windows keep
       -- clear of it, and what was set out from the screen's left edge
       -- is set out from the dock's.
@@ -1810,6 +1838,8 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
           return { open = Market.IsOpen(), can = docked, note = if docked then nil else "At a station only" }
         elseif id == "map" then
           return { open = Map.IsOpen(), can = true, key = Keys.Of("map") }
+        elseif id == "places" then
+          return { open = Places.IsOpen(), can = true, note = `{#session.game.state.bookmarkIds} marked` }
         elseif id == "scanner" then
           return { open = not docked and Scanner.IsOpen(), can = not docked, note = if docked then "In space only" else nil }
         elseif id == "colonies" then
@@ -1940,6 +1970,12 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
             Map.Close()
           else
             Map.Open()
+          end
+        elseif pressed == "places" then
+          if Places.IsOpen() then
+            Places.Close()
+          else
+            Places.Open()
           end
         elseif pressed == "scanner" then
           if Scanner.IsOpen() then

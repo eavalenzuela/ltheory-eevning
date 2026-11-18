@@ -1,0 +1,47 @@
+# Places marked (Game/UI/Places), in the game app (script/check runs this):
+#
+#   bin/launch game --no-present --fixed-step 60 --script test/scenario/places.txt
+#
+# Docked, the station is marked from the Places window. Out in space, a
+# gate is marked by itself, as the menu on it does. Then Go on the
+# station's mark has the autopilot take the ship back and dock it there,
+# and the gate's is forgotten from the window.
+#
+# covers: Game/UI/Places Core/Tactical/Space Game/UI/Map
+
+wait 2
+lua GameDebug.Peaceful(true)
+until GameDebug.Press('Dock:places')
+frames 2
+until GameDebug.Press('Places:mark')
+until GameDebug.Marks() == 1
+lua assert(GameDebug.MarkOf('station') ~= 0, 'the station docked at should be what is marked')
+
+# Out, and a gate marked by itself.
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
+lua assert(GameDebug.Order('Bookmark', 'gate'), 'a gate should be marked')
+until GameDebug.Marks() == 2
+lua assert(GameDebug.MarkOf('gate') ~= 0, 'the gate should be marked by itself')
+lua assert(not GameDebug.Order('Bookmark', 'gate'), 'a gate is marked once')
+
+# Away from the station, then Go back to it: the autopilot docks there.
+lua GameDebug.TimeScale(8)
+lua assert(GameDebug.Order('WarpTo', 'gate'), 'the warp to the gate was refused')
+until not GameDebug.InWarp() and GameDebug.Distance('gate') < 30000
+lua GameDebug.TimeScale(1)
+frames 3
+until GameDebug.Press('Places:go:' .. GameDebug.MarkOf('station'))
+frames 2
+lua GameDebug.TimeScale(8)
+until GameDebug.Docked()
+lua GameDebug.TimeScale(1)
+lua assert(select(2, GameDebug.Going()) == 0, 'the trip should be over once docked')
+
+# And the gate forgotten from the window.
+frames 3
+until GameDebug.Press('Places:forget:' .. GameDebug.MarkOf('gate'))
+until GameDebug.Marks() == 1
+
+echo places scenario passed
+quit

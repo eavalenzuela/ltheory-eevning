@@ -200,7 +200,25 @@ function Space.Marked(state: State.State, id: number): Body?
   if mark == nil then
     return nil
   end
+  -- (the mark of a place is the place, as big as it is: a warp to it
+  -- ends where a warp to the place would. Where the place is gone (a
+  -- wormhole closed), the mark is where it was.)
+  local object = if mark.object then Space.Object(state, mark.object) else nil
+  if object then
+    return { id = mark.id, kind = "bookmark", name = mark.name, x = object.x, y = object.y, z = object.z, radius = object.radius }
+  end
   return { id = mark.id, kind = "bookmark", name = mark.name, x = mark.x, y = mark.y, z = mark.z, radius = 0 }
+end
+
+-- The marks a pilot has of a place (by the place's id).
+function Space.MarkOf(state: State.State, object: number): State.Bookmark?
+  for _, id in state.bookmarkIds do
+    local mark = state.bookmarks[id]
+    if mark.object == object then
+      return mark
+    end
+  end
+  return nil
 end
 
 -- How many places a pilot can have marked at once.
@@ -686,6 +704,29 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
     end
     local name, why = Space.PlaceName(command.what or "")
     return name ~= nil, why
+  elseif kind == "Bookmark" then
+    -- Where the ship is; or a place, by itself (one given, or the
+    -- station the ship is docked at). Docked, or anywhere in space.
+    if ship.id ~= state.player.ship then
+      return false, "no such ship"
+    elseif #state.bookmarkIds >= Space.BOOKMARKS then
+      return false, `{Space.BOOKMARKS} places are marked already: forget one first`
+    end
+    local place = command.target or (if state.balls[ship.id] == nil then ship.docked else 0)
+    if place ~= 0 then
+      if Space.Object(state, place) == nil then
+        return false, "only a place can be marked"
+      elseif Space.MarkOf(state, place) then
+        return false, "that place is marked already"
+      end
+    elseif state.balls[ship.id] == nil then
+      return false, "docked"
+    end
+    if command.what and command.what ~= "" then
+      local name, why = Space.PlaceName(command.what)
+      return name ~= nil, why
+    end
+    return true
   end
   local ball = state.balls[ship.id]
   if ball == nil then
@@ -699,13 +740,6 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
     return false, "rooted to the spot while its module runs"
   end
   if kind == "Stop" then
-    return true
-  elseif kind == "Bookmark" then
-    if ship.id ~= state.player.ship then
-      return false, "no such ship"
-    elseif #state.bookmarkIds >= Space.BOOKMARKS then
-      return false, `{Space.BOOKMARKS} places are marked already: forget one first`
-    end
     return true
   elseif kind == "Goto" then
     local x, y, z = command.x or 0, command.y or 0, command.z or 0
@@ -797,17 +831,26 @@ function Space.Apply(state: State.State, command: State.Command, events: { Event
     table.insert(events, { kind = "BookmarkRenamed", bookmark = mark.id, name = mark.name })
     return
   elseif kind == "Bookmark" then
-    -- Where the ship is now, by a name given or made up ("Merear spot 3").
-    local here = state.balls[ship.id]
+    -- A place by itself, named as it is; or where the ship is now, by a
+    -- name given or made up ("Merear spot 3").
     local name: string = command.what or ""
-    if name == "" then
-      local count = 1
-      for _, id in state.bookmarkIds do
-        count += if state.bookmarks[id].system == here.system then 1 else 0
+    local place = command.target or (if state.balls[ship.id] == nil then ship.docked else 0)
+    local mark: State.Bookmark
+    if place ~= 0 then
+      local object = Space.Object(state, place) :: System.Object
+      mark = { id = State.NewId(state), name = if name ~= "" then name else object.name, system = Space.SystemOf(state, place),
+        x = object.x, y = object.y, z = object.z, object = place, what = object.kind }
+    else
+      local here = state.balls[ship.id]
+      if name == "" then
+        local count = 1
+        for _, id in state.bookmarkIds do
+          count += if state.bookmarks[id].system == here.system then 1 else 0
+        end
+        name = `{state.galaxy.systems[here.system].name} spot {count}`
       end
-      name = `{state.galaxy.systems[here.system].name} spot {count}`
+      mark = { id = State.NewId(state), name = name, system = here.system, x = here.x, y = here.y, z = here.z }
     end
-    local mark: State.Bookmark = { id = State.NewId(state), name = name, system = here.system, x = here.x, y = here.y, z = here.z }
     state.bookmarks[mark.id] = mark
     table.insert(state.bookmarkIds, mark.id)
     table.insert(events, { kind = "Bookmarked", bookmark = mark.id, name = mark.name })

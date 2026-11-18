@@ -2535,6 +2535,26 @@ function Debug.Field(): string
   return if station then station.name else ""
 end
 
+-- The places the pilot has marked (Game/UI/Places): how many; and the
+-- id of the first that marks a place of a kind ("station", "gate"; ""
+-- for a spot in space), or 0.
+function Debug.Marks(): number
+  return #session.game.state.bookmarkIds
+end
+function Debug.MarkOf(what: string): number
+  for _, mark in Core.Query.Bookmarks(session.game) do
+    if (mark.what or "") == what then
+      return mark.id
+    end
+  end
+  return 0
+end
+
+-- Where the autopilot is going: the system, and the place marked there (0 for none).
+function Debug.Going(): (number, number)
+  return session.destination, session.goal
+end
+
 -- Whether the factions' patrols take the pilot for a criminal just now.
 function Debug.Marked(): boolean
   return session.game.state.tick < session.game.state.player.marked

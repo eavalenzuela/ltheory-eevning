@@ -121,6 +121,8 @@ local function rowsFor(session: Session.Session, entry: Core.Entry): { Row }
     { label = "Loot", kind = "Loot" },
     { label = "Hack", kind = "StartHack" },
     { label = "Forget this place", kind = "ForgetBookmark" },
+    -- (a place of the system's, marked by itself: Game/UI/Places)
+    { label = "Bookmark", kind = "Bookmark" },
   }
   local found: { Row } = {}
   for _, row in all do
@@ -316,6 +318,9 @@ function Context.Draw(session: Session.Session, entries: { Core.Entry }, left: n
       -- (a wreck or a container is opened: what is in it is in the inventory, to take or to leave)
       if row.kind == "Loot" then
         Inventory.Show(entry.id)
+      elseif row.kind == "Bookmark" then
+        -- (marking a place is no order to the ship: the autopilot goes on)
+        Session.Do(session, { kind = "Bookmark", actor = 0, target = entry.id })
       else
         Session.Order(session, row.kind, entry.id, row.range)
       end
