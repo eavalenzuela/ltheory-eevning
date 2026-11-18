@@ -342,9 +342,9 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
   elseif module.site and module.base then
     sheet.note = `The {nameOf(module.base)} as the Unbound keep it for themselves, of the {Modules.SiteRank(module.site)} grade ({module.site} of 3): better than any people's make, short of an officer's, and no harder to use. Nobody sells or builds one. It is found in pirate dens' and strongholds' stores, in camp chiefs' wrecks, and with the commanders of pirate towers.`
   elseif module.meta == 3 and people and module.base and module.shaded then
-    sheet.note = `The {people.name}' own make of the {nameOf(module.base)}: {Modules.Shade(people.id) or "better than the plain one"}, and no harder to use. Their stations sell it to pilots they think well of, and their agents now and then pay with one. Nobody has the drawings.`
+    sheet.note = `The {people.name}' own make of the {nameOf(module.base)}: {Modules.Shade(people.id) or "better than the plain one"}, and no harder to use. Their stations sell it to anybody, and their agents now and then pay with one. Nobody has the drawings.`
   elseif module.meta == 3 and people and module.base then
-    sheet.note = `The {people.name}' own make of the {nameOf(module.base)}: better than the plain one, and no harder to fit or to use. Their stations sell it to pilots they think well of, and their agents now and then pay a job with one.`
+    sheet.note = `The {people.name}' own make of the {nameOf(module.base)}: better than the plain one, and no harder to fit or to use. Their stations sell it to anybody, and their agents now and then pay a job with one.`
   elseif module.meta == 2 and module.base then
     sheet.note = `The {nameOf(module.base)} made over by the best hands the pirates have: better than any that is built to a drawing, easy to fit, and no harder to use than the plain one. Nobody sells or builds one. Only a pirate captain fits them, and now and then one outlives the captain's ship.`
   elseif module.meta and module.base then

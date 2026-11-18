@@ -3,9 +3,10 @@
 #   bin/launch game --no-present --fixed-step 60 --script test/scenario/makes.txt
 #
 # A people's stations sell their own makes of what they are known for,
-# to a pilot they think well of. At the station a new pilot begins at,
-# one of its people's own makes is on the market and is not to be
-# bought. With their good opinion (a cheat) it is. A mutator is given:
+# to anybody (a market is not gated by standing: only the loyalty
+# stores are). At the station a new pilot begins at, one of its people's
+# own makes is on the market, and is bought by a pilot they think ill
+# of (a cheat). A mutator is given:
 # from the module's own menu in the inventory it is put through, and
 # what comes out is another module, said in a line. Then an officer's
 # make of whatever the ship has in its first high slot is given, by
@@ -21,11 +22,10 @@ lua assert(_G.make ~= '', 'the people here have no makes of their own: ' .. _G.p
 lua GameDebug.Grant(2000000)
 wait 1.5
 
-# Their own make is on their market, and not for a pilot they do not know.
+# Their own make is on their market, for anybody: even a pilot they think ill of.
 lua assert(GameDebug.Market(_G.make), 'their own make is not on their market: ' .. _G.make)
+lua GameDebug.Standing(_G.people, -3)
 frames 5
-lua assert(not GameDebug.CanPress('BuyNow'), 'a stranger should not be sold a people\'s own make')
-lua GameDebug.Standing(_G.people, 3)
 until GameDebug.CanPress('BuyNow')
 until GameDebug.Press('BuyNow')
 until GameDebug.Hangar(_G.make) == 1

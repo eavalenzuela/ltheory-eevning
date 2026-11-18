@@ -159,11 +159,10 @@ Market.FOREIGN_STOCK = 4
 -- "a few" is this share of what is normal, and never fewer than four)
 Market.FOREIGN_CHARGES = 0.1
 -- A people's own makes of modules (Data/Modules): how many of each a
--- station of theirs keeps, and what they have to think of a pilot to
--- sell them one (the owner's, 2026-11-15: sold to a pilot in good
--- standing. The figure is mine).
+-- station of theirs keeps. Sold to anybody (the owner, 2026-11-17:
+-- "market items should not be faction relation-gated. LP store is the
+-- rep-gated items": Assets/Missions' stores).
 Market.OWN_STOCK = 3
-Market.OWN_STANDING = 2
 
 -- The kinds of weapon a faction's own ships carry: its turrets, and
 -- missiles if a fair share of its hardpoints are launchers.
@@ -717,16 +716,6 @@ function Market.Validate(state: State.State, command: State.Command): (boolean, 
       return false, "no such quantity"
     end
     local quantity = command.quantity :: number
-    -- (a people's own make is sold to those they think well of, and to nobody else)
-    local own = Modules.byId[type]
-    if own and own.meta == 3 and own.lineage and Standings.Of(state, own.lineage) < Market.OWN_STANDING then
-      return false, `the {Factions.byId[own.lineage].name} sell their own makes to those they think well of (standing {Market.OWN_STANDING})`
-    end
-    -- (and so is their livery)
-    local livery = Paints.paintById[type]
-    if livery and livery.faction and Standings.Of(state, livery.faction) < Market.OWN_STANDING then
-      return false, `the {Factions.byId[livery.faction].name} sell their livery to those they think well of (standing {Market.OWN_STANDING})`
-    end
     if kind == "BuyNow" then
       local cost = Market.BuyCost(state, station, type, quantity)
       if cost == nil then

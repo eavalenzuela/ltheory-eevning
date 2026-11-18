@@ -20,7 +20,7 @@
 -- gauche patterns, police ship patterns and paints, etc etc. Also, take
 -- a first shot at Faction liveries." A livery is a faction's own paint
 -- with the design its ships wear on it: sold at that faction's
--- stations to a pilot they think well of (Assets/Market), and worn by
+-- stations to anybody (Assets/Market), and worn by
 -- the faction's own ships in space (Paints.Dress, which the view asks).
 -- The police of every faction wear the patrol paint and its blocks.
 --

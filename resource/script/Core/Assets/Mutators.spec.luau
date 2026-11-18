@@ -79,7 +79,7 @@ suite:Case("docked, with a mutator in the hangar, a module there comes out anoth
   t.ok(has(again.state, again.state.player.home, event.to) ~= nil, "the same game should give the same mutation")
 end)
 
-suite:Case("a people's stations have their own makes, and sell them to a pilot they think well of", function(t)
+suite:Case("a people's stations have their own makes, and sell them to anybody", function(t)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
   local home = state.player.home
@@ -98,10 +98,9 @@ suite:Case("a people's stations have their own makes, and sell them to a pilot t
   t.ok(Market.BuyCost(state, home, theirs, Market.OWN_STOCK) ~= nil, `{theirs} is not in stock at one of its people's stations`)
   t.eq(Market.BuyCost(state, home, theirs, Market.OWN_STOCK + 1), nil)
   t.eq(Market.BuyCost(state, home, others, 1), nil, `{others} is in stock at a station of {people}'s`)
-  -- But not to a pilot they do not know.
-  local why = refused(game, { kind = "BuyNow", actor = 0, type = theirs, quantity = 1 })
-  t.ok(why ~= nil and string.find(why, "think well of", 1, true) ~= nil, tostring(why))
-  state.standings[people] = Market.OWN_STANDING
+  -- (to anybody, whatever they think of the pilot: a market is not
+  -- gated by standing, only the loyalty stores are)
+  state.standings[people] = -4
   t.eq(refused(game, { kind = "BuyNow", actor = 0, type = theirs, quantity = 1 }), "(accepted)")
   t.ok(Core.Submit(game, { kind = "BuyNow", actor = state.player.ship, type = theirs, quantity = 1 }))
   Core.Step(game)
