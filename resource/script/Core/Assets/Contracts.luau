@@ -6,7 +6,9 @@
 -- much. A station's board has three sorts.
 --
 -- Offers: lots somebody there will sell. Each day a station has a few:
--- a hull of its faction's with what it would be fitted with, packed; a
+-- a hull of its faction's fitted out, mostly with better makes than the
+-- plain (tech 2, a people's own, the pirates', now and then an
+-- officer's), and assembled once bought; a
 -- copy of some blueprint, good for so many runs; a few of some module
 -- no station sells. What is asked is about what the lot is worth,
 -- sometimes under and sometimes well over. Taken, the lot is in the
@@ -32,6 +34,7 @@
 -- Putting up a listing pays the broker, and what it fetches pays the
 -- sales tax, as an order does.
 
+local Attributes = require("@lt/Core/Attributes")
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Constants = require("@lt/Core/Data/Constants")
 local Economy = require("@lt/Core/Strategic/Economy")
@@ -40,6 +43,7 @@ local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
 local Modules = require("@lt/Core/Data/Modules")
+local Names = require("@lt/Core/Describe/Names")
 local Nomads = require("@lt/Core/Tactical/Nomads")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
@@ -58,8 +62,9 @@ export type Stack = { type: string, quantity: number }
 -- and 'price' is what it costs) or a lot wanted ("want", and 'price' is
 -- what it pays). 'worth' is the base price of it all.
 export type Lot = { key: string, side: "offer" | "want", slot: number, title: string, stacks: { Stack }, price: number, worth: number,
-  -- (a hull fitted out: bought, it is a ship, assembled and fitted)
-  fitted: boolean? }
+  -- (a hull fitted out: bought, it is a ship, assembled and fitted with
+  -- 'fit', in the standard fit's order)
+  fitted: boolean?, fit: { string }? }
 
 local DAY = math.ceil(86400 / Constants.TICK)
 local HOUR = math.ceil(3600 / Constants.TICK)
@@ -268,38 +273,135 @@ tradersAt = function(state: State.State, station: number): { any }
   return traderIndex(state)[station] or {}
 end
 
--- A hull's lot, fitted out: the hull, what it would be fitted with and
--- something to fire. The same for every board that has that hull, so
--- worked out once a hull (it was most of the cost of a board).
-local fittedOut: { [string]: { Stack } } = {}
-local function fitted(hull: Ships.ShipType): { Stack }
-  local found = fittedOut[hull.id]
+-- What a hull fitted out on a board carries: the standard fit's layout
+-- (Core/Fits), each module of it of a better make than the plain one,
+-- mostly (the owner, 2026-11-18: "contracts for fitted hulls should lean
+-- towards them being t2 or meta fittings (faction or dead space, with a
+-- rare officer module, e.g. one in every 50 contracts might have one
+-- officer mod)"). Each module is, by these shares, of tech 2, of the
+-- station's people's own make, of the pirate site tier, and else plain;
+-- a site make is of the first grade mostly, the third seldom. A make a
+-- module has none of is tech 2 instead; one that would take the fit past
+-- the hull's CPU or powergrid gives way to a make easier to fit than the
+-- plain one (the site tier's first grade, the people's, the custom
+-- make), and to the plain one only when none of those goes on. One lot in
+-- Contracts.OFFICER has, besides, one module of a named officer's.
+-- (The shares and the grades' are mine.)
+Contracts.MAKES = { tech2 = 0.40, people = 0.25, site = 0.15 }
+Contracts.SITE_GRADES = { 0.6, 0.3, 0.1 }
+Contracts.OFFICER = 1 / 50
+
+-- (the standard fit of each hull, worked out once: it was most of the cost of a board)
+local standardOf: { [string]: { string } } = {}
+local function standard(hull: Ships.ShipType): { string }
+  local found = standardOf[hull.id]
   if found == nil then
-    local fit = Fits.Standard(hull)
-    found = gathered(fit, 1)
-    table.insert(found, 1, { type = hull.id, quantity = 1 })
-    local loaded: { [string]: boolean } = {}
-    for _, type in fit do
-      local charge = Fits.Charge(type, hull)
-      if charge and not loaded[charge] then
-        loaded[charge] = true
-        -- (crystals are not used up: one a gun. Rounds by the few hundred.)
-        local crystal = Modules.chargeById[charge].family == "laser"
-        local guns = 0
-        for _, other in fit do
-          guns += if Fits.Charge(other, hull) == charge then 1 else 0
-        end
-        table.insert(found, { type = charge, quantity = if crystal then guns else 200 * guns })
+    found = Fits.Standard(hull)
+    standardOf[hull.id] = found
+  end
+  return found
+end
+
+-- The makes of a plain module a lot might have, by the dice: the one
+-- chosen first, then the ones to fall back on, the plain one last.
+local function made(id: string, people: string, rng: Rng.Rng): { string }
+  local roll = Rng.Float(rng, 0, 1)
+  local pick, grade = Rng.Float(rng, 0, 1), 1
+  while grade < #Contracts.SITE_GRADES and pick >= Contracts.SITE_GRADES[grade] do
+    pick -= Contracts.SITE_GRADES[grade]
+    grade += 1
+  end
+  local site: Modules.ModuleType? = rawget(Modules.byId, `{id}.site{grade}`)
+  local own, tech2 = Modules.Own(id, people), Modules.Improved(id)
+  if roll >= Contracts.MAKES.site + Contracts.MAKES.people + Contracts.MAKES.tech2 then
+    return { id }
+  end
+  local chosen = if roll < Contracts.MAKES.site then site elseif roll < Contracts.MAKES.site + Contracts.MAKES.people then own else tech2
+  -- (and, where it does not fit, makes that are easier to fit than the
+  -- plain one: the first grade of the site tier, the people's own, the
+  -- custom make; and at the last the plain one, which does)
+  local out: { string } = {}
+  for _, one in { chosen or tech2, rawget(Modules.byId, `{id}.site1`), own, Modules.Custom(id) } :: { Modules.ModuleType? } do
+    if one and not table.find(out, one.id) then
+      table.insert(out, one.id)
+    end
+  end
+  table.insert(out, id)
+  return out
+end
+
+-- What a fitted-out lot of a hull carries, at a station on a day: the
+-- modules, in the standard fit's order.
+local function fitOf(state: State.State, hull: Ships.ShipType, station: number, day: number, slot: number): { string }
+  local plain = standard(hull)
+  local people = factionOf(state, station)
+  local rng = Rng.For(state.historySeed, station, day, slot, 151)
+  -- (each module's makes, the one the dice chose first)
+  local makes: { { string } } = {}
+  for index, id in plain do
+    makes[index] = made(id, people, rng)
+  end
+  -- (an officer's module, now and then, in place of one there is an officer's make of)
+  local lucky = Rng.For(state.historySeed, station, day, slot, 153)
+  if Rng.Chance(lucky, Contracts.OFFICER) then
+    local name = Names.Person(lucky)
+    local can: { number } = {}
+    for index, id in plain do
+      if Modules.Officer(id, name) then
+        table.insert(can, index)
       end
     end
-    fittedOut[hull.id] = found
+    if #can > 0 then
+      local index = can[Rng.Int(lucky, #can) + 1]
+      table.insert(makes[index], 1, Modules.Officer(plain[index], name) :: string)
+    end
   end
-  -- (a copy for each lot: nobody's lot shares its stacks with another's)
-  local copy: { Stack } = {}
-  for index, stack in found do
-    copy[index] = { type = stack.type, quantity = stack.quantity }
+  local fit: { string } = {}
+  for index, list in makes do
+    fit[index] = list[1]
   end
-  return copy
+  if Attributes.Check(hull, fit) then
+    return fit
+  end
+  -- (it does not all go on: a module at a time, from the plain fit, each
+  -- the first of its makes that goes on with what is on already; the
+  -- plain one always does, as the plain fit goes on)
+  fit = table.clone(plain)
+  for index, list in makes do
+    for _, id in list do
+      fit[index] = id
+      if id == plain[index] or Attributes.Check(hull, fit) then
+        break
+      end
+    end
+  end
+  return fit
+end
+
+-- A hull's lot, fitted out: the hull, what it is fitted with, and
+-- something to fire.
+local function fitted(hull: Ships.ShipType, fit: { string }): { Stack }
+  local found = gathered(fit, 1)
+  table.insert(found, 1, { type = hull.id, quantity = 1 })
+  local loaded: { [string]: boolean } = {}
+  local charges: { [number]: string? } = {}
+  for index, type in fit do
+    charges[index] = Fits.Charge(type, hull)
+  end
+  for index in fit do
+    local charge = charges[index]
+    if charge and not loaded[charge] then
+      loaded[charge] = true
+      -- (crystals are not used up: one a gun. Rounds by the few hundred.)
+      local crystal = Modules.chargeById[charge].family == "laser"
+      local guns = 0
+      for other in fit do
+        guns += if charges[other] == charge then 1 else 0
+      end
+      table.insert(found, { type = charge, quantity = if crystal then guns else 200 * guns })
+    end
+  end
+  return found
 end
 
 -- What a station's board has today, less what has been taken: the lots
@@ -326,8 +428,9 @@ local function boardOf(state: State.State, station: number, all: boolean?, part:
       -- A hull, with what it would be fitted with and something to fire.
       local line = hulls(factionOf(state, station))
       local hull = line[Rng.Int(rng, #line) + 1]
-      lot.stacks = fitted(hull)
-      lot.fitted = true
+      local fit = fitOf(state, hull, station, day, slot)
+      lot.stacks = fitted(hull, fit)
+      lot.fitted, lot.fit = true, fit
       lot.title = `{hull.name}, fitted out`
       lot.worth = Contracts.Base(lot.stacks)
       lot.price = math.ceil(lot.worth * Rng.Float(rng, 0.88, 1.06))
@@ -811,7 +914,7 @@ function Contracts.Apply(state: State.State, command: State.Command, events: { E
       for index = 2, #lot.stacks do
         left[lot.stacks[index].type] = (left[lot.stacks[index].type] or 0) + lot.stacks[index].quantity
       end
-      for _, type in Fits.Standard(hull) do
+      for _, type in lot.fit or Fits.Standard(hull) do
         local charge = Fits.Charge(type, hull)
         local module = Modules.byId[type]
         local loaded = charge ~= nil and module.weapon ~= nil and (left[charge] or 0) > 0

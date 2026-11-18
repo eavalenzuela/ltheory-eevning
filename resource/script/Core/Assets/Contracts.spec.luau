@@ -1,6 +1,7 @@
 --!strict
 -- Contracts: a station's board, through the Core's front door.
 
+local Attributes = require("@lt/Core/Attributes")
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Codec = require("@lt/Core/Persist/Codec")
 local Constants = require("@lt/Core/Data/Constants")
@@ -252,6 +253,57 @@ suite:Case("the alien peoples' prints are on boards now and then: the Vail's and
   t.ok((seen.drowned or 0) > 0, "no Drowned print on any board looked at")
 end)
 
+suite:Case("a hull fitted out on a board is mostly of better makes than the plain, now and then with an officer's module, and always fits", function(t)
+  -- (the owner, 2026-11-18: "should lean towards them being t2 or meta
+  -- fittings (faction or dead space, with a rare officer module, e.g. one
+  -- in every 50 contracts might have one officer mod)")
+  local game = newGame()
+  local state = game.state
+  local ticks = math.ceil(86400 / Constants.TICK)
+  local stations = Contracts.Stations(state)
+  local lots, modules, plain, officers = 0, 0, 0, 0
+  local kinds: { [string]: number } = {}
+  for index = 1, #stations, math.max(1, #stations // 40) do
+    for day = 0, 99 do
+      state.tick = day * ticks
+      local lot = Contracts.Lot(state, stations[index], "offer", 1)
+      if lot and lot.fitted then
+        lots += 1
+        local hull = Ships.byId[lot.stacks[1].type]
+        local fit = assert(lot.fit)
+        local standard = Fits.Standard(hull)
+        t.eq(#fit, #standard, `{lot.title}: the standard fit's layout`)
+        t.ok((Attributes.Check(hull, fit)), `{lot.title} does not fit`)
+        local had = 0
+        for _, id in fit do
+          local module = Modules.byId[id]
+          modules += 1
+          if module.officer then
+            had += 1
+            kinds.officer = (kinds.officer or 0) + 1
+          elseif module.tech == 2 then
+            kinds.tech2 = (kinds.tech2 or 0) + 1
+          elseif module.site then
+            kinds.site = (kinds.site or 0) + 1
+          elseif module.meta == 3 then
+            kinds.people = (kinds.people or 0) + 1
+          else
+            plain += 1
+          end
+        end
+        t.ok(had <= 1, `{lot.title} has {had} officer's modules`)
+        officers += had
+      end
+    end
+  end
+  t.ok(lots >= 400, `only {lots} fitted lots looked at`)
+  t.ok(plain < modules * 0.3, `{plain} of {modules} modules are plain`)
+  t.ok((kinds.tech2 or 0) > 0 and (kinds.site or 0) > 0 and (kinds.people or 0) > 0, "some of each make")
+  -- (one lot in fifty: between one in a hundred and one in twenty-five, of so many)
+  t.ok(officers >= lots / 100 and officers <= lots / 25, `{officers} officer's modules in {lots} lots`)
+  state.tick = 0
+end)
+
 suite:Case("a hull bought fitted out is a ship at the station, assembled, fitted and loaded; and it does not undock with what the pilot cannot use", function(t)
   -- (the owner, 2026-11-16: "it should already be assembled with the
   -- modules fitted. You just shouldn't be able to undock with it if some
@@ -271,9 +323,17 @@ suite:Case("a hull bought fitted out is a ship at the station, assembled, fitted
   t.ok(assembled ~= nil, "no ship was assembled")
   local made = state.ships[assembled.ship]
   t.eq({ made.type, made.owner, made.docked } :: { any }, { hull.id, "player", home } :: { any })
-  local fit = Fits.Standard(hull)
+  local fit = assert(lot.fit, "a fitted lot says what it is fitted with")
   local fitted = Items.Fitted(state, made.id)
   t.eq(#fitted, #fit, "every module of the lot is fitted")
+  local types: { string } = {}
+  for _, item in fitted do
+    table.insert(types, item.type)
+  end
+  local wanted = table.clone(fit)
+  table.sort(types)
+  table.sort(wanted)
+  t.eq(types, wanted, "what is fitted is the lot's fit")
   for _, item in Items.In(state, home, "hangar") do
     t.ok(item.type ~= hull.id, "the hull is not left packaged in the hangar")
   end
