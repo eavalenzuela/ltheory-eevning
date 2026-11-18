@@ -65,6 +65,8 @@ local SMALL: { [string]: Pick } = {
   -- (and the gravity station, the owner's of the same day: a wormhole, in
   -- the citadels' own dark grey)
   gravity = { seed = 71349, asym = true, detail = ALL, style = "wormhole", paint = "dark" },
+  -- (the wormhole station: a stand-in of mine until the owner picks one)
+  wormhole = { seed = 3, asym = false, detail = ALL, style = "wormhole", paint = "dark" },
 }
 -- (and the owner's picks at the other sizes, as they come)
 local PICKED: { [string]: { [number]: Pick } } = {

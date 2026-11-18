@@ -629,8 +629,12 @@ export type Membership = { tax: number, members: { [number]: Member }, memberIds
 -- it leads to, and 'b' the place of the end there, which is 0 until
 -- somebody has gone through (the far end is nowhere until then).
 -- 'size' is how big a hull it lets through, 1 to 3 (Wormholes.RANK).
+-- ('mass': the kilograms of hull that have gone through it, either way:
+-- it closes when its size's share is spent (Tactical/Wormholes). Nil
+-- for none yet. 'station': the wormhole station that holds it open, if
+-- one does.)
 export type Wormhole = { id: number, a: number, from: number, b: number, to: number, opened: number, closes: number, size: number,
-  code: string }
+  code: string, mass: number?, station: number? }
 
 -- A job a station has for a pilot (Assets/Missions): a "bounty" (destroy
 -- 'need' pirates in 'system'; 'done' so far), a "courier" run (carry
@@ -760,6 +764,9 @@ export type Starbase = {
   -- of what is traded and done there, 0 to Starbases.TAX_MOST. Nil for
   -- a tower, and for a citadel closed to others.
   open: boolean?, tax: number?,
+  -- A wormhole station's (Tactical/Wormholes): the wormhole it holds open
+  -- now. Nil for every other, and for one that has none yet.
+  hole: number?,
 }
 
 -- A station's batteries, where the pilot is (Tactical/Batteries): they

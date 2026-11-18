@@ -752,7 +752,8 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
     -- What a size lets through is on the scanner's row for it, and in
     -- the refusal if the ship is too big.)
     local left = if through.left >= 3600 then `{through.left // 3600} h left` else `{math.max(1, through.left // 60)} min left`
-    what = if through.fits then `{through.sizeName} wormhole to {through.leads}, {left}`
+    local strain = if through.strain == "stable" then "" else `, mass {through.strain}`
+    what = if through.fits then `{through.sizeName} wormhole to {through.leads}, {left}{strain}`
       else `{through.sizeName} wormhole: nothing over {through.lets} fits`
     tone = if through.fits then NEXT else Im.WARN
   end

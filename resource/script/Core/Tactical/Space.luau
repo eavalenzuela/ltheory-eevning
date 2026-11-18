@@ -483,6 +483,14 @@ local function jump(state: State.State, ball: State.Ball, gate: System.Object, e
   Space.AssignGrid(state, ball)
   table.insert(events, { kind = "Jumped", ship = ball.id, from = from, to = to, gate = gate.id, arrival = arrival.id,
     wormhole = gate.kind == "wormhole" })
+  -- (and its mass is spent on the wormhole, which may close behind it)
+  if gate.kind == "wormhole" then
+    local hole = Wormholes.At(state, gate.id)
+    local record = state.ships[ball.id]
+    if hole and record then
+      Wormholes.Passed(state, hole, Ships.byId[record.type].mass, events)
+    end
+  end
 end
 
 -- ---------------------------------------------------------------------

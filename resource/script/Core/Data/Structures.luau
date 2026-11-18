@@ -225,9 +225,12 @@ Structures.CITADEL_SIZE_NAMES = { "Small", "Medium", "Large", "Extra-Large", "Hu
 -- modules, and does no better with them than a citadel of another kind.
 -- (and the sixth, the owner's of the same day: a gravity station, a jump
 -- hub: "Jump hub", of a beacon lit and a bridge to another)
-Structures.CITADEL_KINDS = { "habitation", "tradehub", "refinery", "research", "shipyard", "gravity" }
+-- (and the seventh, the owner's of the same day: a wormhole station, which
+-- holds a wormhole open from where it stands, one after another, each
+-- closing by time and by mass as any does: Tactical/Wormholes)
+Structures.CITADEL_KINDS = { "habitation", "tradehub", "refinery", "research", "shipyard", "gravity", "wormhole" }
 Structures.CITADEL_KIND_NAMES = { habitation = "Habitation", tradehub = "Trade Hub", refinery = "Refinery",
-  research = "Research Station", shipyard = "Shipyard", gravity = "Gravity Station" } :: { [string]: string }
+  research = "Research Station", shipyard = "Shipyard", gravity = "Gravity Station", wormhole = "Wormhole Station" } :: { [string]: string }
 -- What each kind does better, where it is (its services online): mine,
 -- every figure, but the kinds' exclusive modules, which are the owner's.
 --   shipyard     a job builds in three quarters of the time, of nine
@@ -240,8 +243,10 @@ Structures.CITADEL_KIND_NAMES = { habitation = "Habitation", tradehub = "Trade H
 --                them, and a fifth less fuel
 --   gravity      a jump beacon lit without a module for it (the
 --                owner's: it counts as a lit beacon for jump drives)
+--   wormhole     a wormhole held open just outside it while it is lit,
+--                and another as soon as that one closes (the owner's)
 export type CitadelBonus = { jobTime: number?, materials: number?, refine: number?, researchTime: number?, invent: number?,
-  fees: number?, fuel: number?, gives: { Service }? }
+  fees: number?, fuel: number?, gives: { Service }?, holds: boolean? }
 Structures.CITADEL_BONUS = {
   shipyard = { jobTime = 0.75, materials = 0.9 },
   refinery = { refine = 1.1 },
@@ -249,6 +254,7 @@ Structures.CITADEL_BONUS = {
   tradehub = { fees = 0.5 },
   habitation = { fuel = 0.8, gives = { "quarters", "storage" } },
   gravity = { gives = { "beacon" } },
+  wormhole = { holds = true },
 } :: { [string]: CitadelBonus }
 Structures.CITADEL = {
   { field = 2750, fuel = 8, anchor = 2 * 3600, volume = 4000, basePrice = 80000000, shield = 300000, armor = 150000, hull = 150000,

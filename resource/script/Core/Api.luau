@@ -2488,8 +2488,10 @@ end
 -- big it is, by name, and the biggest hull it lets through; how many
 -- seconds it has left; and whether the pilot's ship would get through
 -- now, with why not if it would not.
+-- ('strain': how much of the mass it takes it has left, as it is said:
+-- "stable", "reduced" or "critical".)
 export type WormholeInfo = { id: number, leads: string, size: number, sizeName: string, lets: string, left: number, fits: boolean,
-  why: string }
+  why: string, strain: string }
 function Query.Wormhole(game: Game, place: number): WormholeInfo?
   local state = game.state
   local hole = Wormholes.At(state, place)
@@ -2504,7 +2506,8 @@ function Query.Wormhole(game: Game, place: number): WormholeInfo?
     fits, why = ok, reason or ""
   end
   return { id = hole.id, leads = Wormholes.Leads(state, hole, place), size = hole.size, sizeName = Wormholes.SIZE_NAMES[hole.size],
-    lets = Wormholes.LETS[hole.size], left = math.max(0, hole.closes - state.tick) * Constants.TICK, fits = fits, why = why }
+    lets = Wormholes.LETS[hole.size], left = math.max(0, hole.closes - state.tick) * Constants.TICK, fits = fits, why = why,
+    strain = Wormholes.Strain(hole) }
 end
 
 -- Whether a site is one the pilot can see on the overview: found, and

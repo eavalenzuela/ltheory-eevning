@@ -789,4 +789,65 @@ suite:Case("a tower is anchored anywhere in uncharted space, but no claim beacon
   end
 end)
 
+suite:Case("a wormhole takes so much mass through it and no more: each ship spends its hull's, and the one that spends the last gets through and it closes", function(t)
+  local game = inSpace()
+  local state = game.state
+  local deepest = #state.galaxy.systems
+  local events = {}
+  local hole = assert(Wormholes.Open(state, 1, deepest, Rng.For(1, 2, 3), events, 3, true))
+  t.eq({ Wormholes.Left(hole), Wormholes.Strain(hole) } :: { any }, { Wormholes.MASS[3], "stable" } :: { any })
+  -- A ship through it spends its own hull's mass.
+  beside(game, hole.a)
+  assert(Core.Submit(game, { kind = "Jump", actor = state.player.ship, target = hole.a }))
+  for _ = 1, 120 do
+    if state.balls[state.player.ship].system ~= 1 then
+      break
+    end
+    Core.Step(game)
+  end
+  local hull = Ships.byId[state.ships[state.player.ship].type]
+  t.eq({ state.balls[state.player.ship].system, hole.mass } :: { any }, { deepest, hull.mass } :: { any })
+  -- Worn down, it says so; and the last of it closes it.
+  Wormholes.Passed(state, hole, Wormholes.MASS[3] * 0.6 - hull.mass, events)
+  t.eq(Wormholes.Strain(hole), "reduced")
+  Wormholes.Passed(state, hole, Wormholes.MASS[3] * 0.35, events)
+  t.eq(Wormholes.Strain(hole), "critical")
+  Wormholes.Passed(state, hole, Wormholes.MASS[3], events)
+  t.eq(state.wormholes[hole.id], nil, "it should have closed")
+end)
+
+suite:Case("a wormhole station holds a wormhole open just outside it while it is lit, and opens another when that one closes", function(t)
+  local game = inSpace()
+  local state = game.state
+  -- (a station of the kind, stood for here by a planet of the home system's: the rule asks only where it is)
+  local planet: System.Object? = nil
+  for _, object in Space.Describe(state, 1).objects do
+    if planet == nil and object.kind == "planet" then
+      planet = object
+    end
+  end
+  local at = assert(planet)
+  local starbase: State.Starbase = { id = at.id, tower = "citadel.wormhole.small", owner = "player", ready = 0, fuel = 0, burnt = 0,
+    modules = {}, drilled = 0, raid = 0, raids = 0, used = 0, raised = 0, robbed = 0, core = 0, charges = 0, sealed = 0, siege = 0,
+    reaction = "", reacted = 0, composed = 0, starved = false }
+  state.starbases[at.id] = starbase
+  table.insert(state.starbaseIds, at.id)
+  steps(game, 2)
+  t.eq(starbase.hole, nil, "a dark station holds nothing open")
+  starbase.fuel = 100
+  steps(game, 2)
+  local hole = assert(state.wormholes[starbase.hole or 0], "a lit station should hold a wormhole open")
+  local near = assert(Space.Object(state, hole.a))
+  t.eq({ hole.station, hole.from, state.galaxy.systems[hole.to].uncharted, state.sites[hole.a].strength } :: { any },
+    { at.id, 1, true, 1 } :: { any })
+  t.ok(Space.Distance(near :: any, at :: any) < at.radius + Wormholes.HELD_OUT + 2 * Wormholes.RADIUS, "it is not just outside the station")
+  -- Closed (by time, by mass, by anything), another opens at once.
+  Wormholes.Close(state, hole, {})
+  steps(game, 2)
+  local again = assert(state.wormholes[starbase.hole or 0], "no second wormhole")
+  t.ok(again.id ~= hole.id and again.station == at.id)
+  state.starbases[at.id] = nil
+  State.RemoveId(state.starbaseIds, at.id)
+end)
+
 return suite

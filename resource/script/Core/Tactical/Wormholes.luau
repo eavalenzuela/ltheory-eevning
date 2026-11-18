@@ -46,15 +46,27 @@
 -- ship that comes out of it (which then knows where it is). Only the
 -- system the pilot is in gets new ones.
 --
--- (Not yet: a wormhole that so much mass wears out, anything living in
--- uncharted space but pirates, a hired pilot finding their own way out
--- of it.)
+-- And mass (2026-11-17, with the owner's wormhole stations): a wormhole
+-- takes so much hull through it and no more, either way, by its size
+-- (Wormholes.MASS: mine), and closes when that is spent, whatever time
+-- it has left. The ship that spends it gets through.
+--
+-- A wormhole station (Data/Structures' kinds of citadel: the owner's,
+-- "the wormhole will cycle according to the regular time and mass
+-- rules") holds one open from just outside itself while it is lit: one
+-- that leads into uncharted space as any from its system would, found
+-- from the first (its owner knows where it is), and when that one
+-- closes, by time or by mass, another at once.
+--
+-- (Not yet: anything living in uncharted space but pirates, a hired
+-- pilot finding their own way out of it.)
 
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Ships = require("@lt/Core/Data/Ships")
 local State = require("@lt/Core/Kernel/State")
+local Structures = require("@lt/Core/Data/Structures")
 local System = require("@lt/Core/Describe/System")
 
 local Wormholes = {}
@@ -94,6 +106,13 @@ Wormholes.RANK = { capsule = 1, frigate = 1, destroyer = 1, cruiser = 2, industr
 Wormholes.LETS = { "a destroyer", "a battlecruiser", "a battleship" }
 -- How big the hole is, metres.
 Wormholes.RADIUS = 1200
+-- The kilograms of hull each size takes through it before it closes:
+-- about a dozen and a half of the biggest it lets through (frigates and
+-- destroyers, battlecruisers, battleships). Mine.
+Wormholes.MASS = { 30000000, 600000000, 1800000000 }
+-- How far out from a wormhole station the wormhole it holds is, beyond
+-- the station itself, m. Mine.
+Wormholes.HELD_OUT = 15000
 
 -- The description of a system, made (and kept in the state) on first
 -- use. (Space.Describe, which is above this module.)
@@ -174,7 +193,10 @@ end
 -- An end of a wormhole in a system: a place of its description, some
 -- way out from a planet (or, where there is none, from the star), and
 -- a site's record for it. Nil if the description has no room.
-local function place(state: State.State, system: number, rng: Rng.Rng, code: string, closes: number, found: boolean): System.Object?
+-- ('near': a place to open it by, in place of a planet: a wormhole
+-- station's own.)
+local function place(state: State.State, system: number, rng: Rng.Rng, code: string, closes: number, found: boolean,
+  near: System.Object?): System.Object?
   local objects = describe(state, system).objects
   if #objects + 2 >= SPAN then
     return nil
@@ -186,7 +208,11 @@ local function place(state: State.State, system: number, rng: Rng.Rng, code: str
     end
   end
   local x, y, z, parent
-  if #planets > 0 then
+  if near then
+    local angle, out = Rng.Float(rng, 0, 2 * math.pi), near.radius + Wormholes.HELD_OUT + Wormholes.RADIUS
+    x, y, z = near.x + out * math.cos(angle), near.y, near.z + out * math.sin(angle)
+    parent = near.id
+  elseif #planets > 0 then
     local planet = planets[Rng.Int(rng, #planets) + 1]
     local angle, out = Rng.Float(rng, 0, 2 * math.pi), planet.radius * Rng.Float(rng, 8, 18)
     x, y, z = planet.x + out * math.cos(angle), planet.y + out * Rng.Float(rng, -0.1, 0.1), planet.z + out * math.sin(angle)
@@ -213,7 +239,7 @@ end
 -- whatever size it turns out to be. Returns it, or nil if the system's
 -- description has no room for the place.
 function Wormholes.Open(state: State.State, from: number, to: number, rng: Rng.Rng, events: { Event }, size: number?,
-  found: boolean?): State.Wormhole?
+  found: boolean?, near: System.Object?): State.Wormhole?
   local roll, turned = Rng.Next(rng), #Wormholes.SIZES
   for at, share in Wormholes.SIZES do
     roll -= share
@@ -225,16 +251,16 @@ function Wormholes.Open(state: State.State, from: number, to: number, rng: Rng.R
   local code = string.format("%s%s-%03d", string.char(65 + Rng.Int(rng, 26)), string.char(65 + Rng.Int(rng, 26)), Rng.Int(rng, 1000))
   local closes = state.tick + Wormholes.LIFE[1] + Rng.Int(rng, Wormholes.LIFE[2] - Wormholes.LIFE[1] + 1)
   local wide = size or turned
-  local near = place(state, from, rng, code, closes, found == true)
-  if near == nil then
+  local made = place(state, from, rng, code, closes, found == true, near)
+  if made == nil then
     return nil
   end
-  local hole: State.Wormhole = { id = State.NewId(state), a = near.id, from = from, b = 0, to = to, opened = state.tick, closes = closes,
+  local hole: State.Wormhole = { id = State.NewId(state), a = made.id, from = from, b = 0, to = to, opened = state.tick, closes = closes,
     size = wide, code = code }
   state.wormholes[hole.id] = hole
   table.insert(state.wormholeIds, hole.id)
-  table.insert(events, { kind = "WormholeOpened", wormhole = hole.id, system = from, site = near.id })
-  table.insert(events, { kind = "SiteAppeared", site = near.id, system = from, what = Wormholes.KIND })
+  table.insert(events, { kind = "WormholeOpened", wormhole = hole.id, system = from, site = made.id })
+  table.insert(events, { kind = "SiteAppeared", site = made.id, system = from, what = Wormholes.KIND })
   return hole
 end
 
@@ -282,6 +308,27 @@ function Wormholes.Close(state: State.State, hole: State.Wormhole, events: { Eve
   close(state, hole, events)
 end
 
+-- The kilograms of hull a wormhole will take through it yet.
+function Wormholes.Left(hole: State.Wormhole): number
+  return math.max(0, Wormholes.MASS[hole.size] - (hole.mass or 0))
+end
+
+-- How much of what it takes a wormhole has left, as it is said: "stable"
+-- (more than half), "reduced" (half or less), "critical" (a tenth or less).
+function Wormholes.Strain(hole: State.Wormhole): string
+  local share = Wormholes.Left(hole) / Wormholes.MASS[hole.size]
+  return if share > 0.5 then "stable" elseif share > 0.1 then "reduced" else "critical"
+end
+
+-- A ship of so many kilograms has gone through: it is spent on the
+-- wormhole, which closes if that is the last of what it takes.
+function Wormholes.Passed(state: State.State, hole: State.Wormhole, mass: number, events: { Event })
+  hole.mass = (hole.mass or 0) + mass
+  if Wormholes.Left(hole) <= 0 and state.wormholes[hole.id] then
+    close(state, hole, events)
+  end
+end
+
 -- A system of uncharted space of a depth, picked by a roll: any but
 -- 'but'. With none of that depth (a small galaxy has not every depth),
 -- one of the nearest depth there is. Nil if the galaxy has none (or
@@ -327,6 +374,26 @@ function Wormholes.Step(state: State.State, events: { Event })
     local hole = state.wormholes[state.wormholeIds[index]]
     if state.tick >= hole.closes then
       close(state, hole, events)
+    end
+  end
+  -- Every wormhole station that is lit holds one open: another, if the
+  -- last has closed. (Lit as Assets/Starbases says, which is above this
+  -- module: anchored, fuelled and not sealed.)
+  for _, id in state.starbaseIds do
+    local starbase = state.starbases[id]
+    local tower = Structures.towerById[starbase.tower]
+    local lit = state.tick >= starbase.ready and starbase.fuel > 0 and (starbase.sealed or 0) <= state.tick
+    if tower and tower.kind == "wormhole" and lit and (starbase.hole == nil or state.wormholes[starbase.hole] == nil) then
+      starbase.hole = nil
+      local system = id // SPAN
+      local station = describe(state, system).objects[id % SPAN]
+      local rng = Rng.For(state.historySeed, id, state.tick, 99)
+      local to = if station then Wormholes.Onward(state, system, rng) else nil
+      local hole = if to and station then Wormholes.Open(state, system, to, rng, events, nil, true, station) else nil
+      if hole then
+        hole.station = id
+        starbase.hole = hole.id
+      end
     end
   end
   local ball = state.balls[state.player.ship]

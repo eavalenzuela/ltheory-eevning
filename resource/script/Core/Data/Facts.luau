@@ -845,6 +845,9 @@ function Facts.Of(type: string): Sheet?
         if bonus.fuel then
           row(better, "Fuel", less(bonus.fuel) :: string)
         end
+        if bonus.holds then
+          row(better, "Wormhole", "holds one open just outside it while it is lit, into uncharted space; when it closes, by time or by the mass gone through it, another opens")
+        end
         for _, only in Structures.modules do
           if only.kinds and table.find(only.kinds, kind) and (only.least or 1) <= tower.size then
             row(better, "Only this kind fits", only.name, only.id)

@@ -254,7 +254,7 @@ local function drawSignals(session: Session.Session, x: number, y: number, width
     List.Text(site.name, layout.name, rowY, hot, if site.found then Theme.TEXT else Theme.DIM, 14)
     -- (what it is; or which planet it is by, and whether it wants a probe taken there; a wormhole says how big a hull it lets through)
     local through = if site.found and site.kind == "wormhole" then Core.Query.Wormhole(game, site.id) else nil
-    local about = if through then `{through.sizeName} wormhole: up to {through.lets}`
+    local about = if through then `{through.sizeName} wormhole: up to {through.lets}, mass {through.strain}`
       elseif site.found then KINDS[site.kind] or site.kind
       elseif site.faint then `too faint: wants a probe by {site.near}`
       elseif site.near ~= "" then `by {site.near}` .. (if site.probes > 0 then `, {site.probes} {if site.probes == 1 then "probe" else "probes"} on it` else "")
