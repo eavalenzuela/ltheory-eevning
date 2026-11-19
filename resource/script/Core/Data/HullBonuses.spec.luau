@@ -4,10 +4,12 @@
 -- something.
 
 local Attributes = require("@lt/Core/Attributes")
+local Combat = require("@lt/Core/Tactical/Combat")
 local Core = require("@lt/Core/Api")
 local Facts = require("@lt/Core/Data/Facts")
 local HullBonuses = require("@lt/Core/Data/HullBonuses")
 local Items = require("@lt/Core/Assets/Items")
+local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
 local Skills = require("@lt/Core/Data/Skills")
 local Space = require("@lt/Core/Tactical/Space")
@@ -72,7 +74,7 @@ suite:Case("a bonus is so much a level of its skill, and a role bonus is the hul
   t.near(burning / bare, 1 + (plainBurn / Attributes.Ship(akashi, {}, nil).maxVelocity - 1) * 1.25, 1e-9)
 end)
 
-suite:Case("a supercarrier and an ultracapital are touched by no electronic warfare but a capital's disruptor", function(t)
+suite:Case("a supercarrier and an ultracapital are touched by no electronic warfare but a capital's disruptor; a web reaches as its hull has it", function(t)
   for _, hull in Ships.list do
     t.eq(Ships.Immune(hull), hull.class == "supercarrier" or hull.class == "ultracapital", hull.id)
   end
@@ -95,6 +97,11 @@ suite:Case("a supercarrier and an ultracapital are touched by no electronic warf
     web.vitals.running = {}
     Core.Step(game)
   end
+  -- (and a short-range hybrid hull's web reaches half as far again: the Orun's Knife's, and not the Ouyou's)
+  local knife = launch("frigate.knife", 70000)
+  local module = Modules.byId["projector.entanglement"]
+  t.near(assert(Combat.Hex(state, knife.id, module)).range, assert(module.hex).range * 1.5, 1e-6)
+  t.eq(assert(Combat.Hex(state, web.id, module)).range, assert(module.hex).range)
 end)
 
 return suite

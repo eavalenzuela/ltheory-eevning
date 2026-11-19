@@ -24,6 +24,8 @@
 --   afterburner how much more speed an afterburner gives ("speed")
 --   hex         how strongly its electronic warfare of a kind works on
 --               another ship ("damp", "paint"...)
+--   reach       how far its electronic warfare of a kind reaches
+--               ("entangle": a web)
 --   drones      what its drones, fighters and bombers do ("damage")
 --   mining      what its mining yields ("yield")
 --   ore         its ore hold ("hold")
@@ -86,6 +88,15 @@ local function cargo(skill: string): HullBonus
 end
 local function speed(skill: string): HullBonus
   return level(skill, 0.05, "ship", "maxVelocity", "5% faster")
+end
+local function hybrid(skill: string, per: number, attribute: string, what: string): HullBonus
+  return level(skill, per, "weapons", attribute, what, "hybrid")
+end
+-- (a short-range hybrid hull's: the owner, 2026-11-18, "for hybrid-heavy faction, any short-range ships should get a
+-- bonus to webifier range or strength". Range, as a role, is mine.)
+local WEB = role(0.5, "reach", "entangle", "stasis webs reach half as far again")
+local function hullHP(skill: string): HullBonus
+  return level(skill, 0.05, "ship", "hull", "5% more hull")
 end
 -- (the Vessari's frigates: an afterburner the faster for the pilot's Afterburners)
 local AFTERBURNER = level("propulsion", 0.05, "afterburner", "speed", "an afterburner's speed bonus 5% greater")
@@ -152,6 +163,36 @@ HullBonuses.byHull = {
   ["barge.anteater"] = { level("mining", 0.05, "mining", "yield", "5% more from mining"), shieldHP("mining") },
   ["freighter.rhino"] = { cargo("freighters"), speed("freighters") },
   ["freighter.sugarglider"] = { cargo("freighters"), speed("freighters") },
+
+  -- The Orun (2026-11-18): hybrids and armour on hulls with more hull to
+  -- them; blaster brawlers that web what they close on, and railgun
+  -- snipers.
+  ["frigate.knife"] = { hybrid("frigates", 0.05, "damageMultiplier", "5% more hybrid damage"), speed("frigates"), WEB },
+  ["frigate.skinner"] = { hybrid("frigates", -0.05, "duration", "hybrid turrets fire 5% faster"),
+    hybrid("frigates", 0.10, "optimal", "hybrid turrets reach 10% farther") },
+  ["frigate.skiver"] = { hybrid("frigates", 0.05, "damageMultiplier", "5% more hybrid damage"), speed("frigates"), WEB },
+  ["destroyer.scythe"] = { hybrid("destroyers", 0.05, "damageMultiplier", "5% more hybrid damage"), armorHP("destroyers"),
+    role(0.25, "weapons", "tracking", "turrets track 25% better", "turret"), WEB },
+  ["destroyer.kama"] = { hybrid("destroyers", 0.05, "damageMultiplier", "5% more hybrid damage"), armorHP("destroyers"),
+    role(0.25, "weapons", "tracking", "turrets track 25% better", "turret"), role(0.25, "ship", "hull", "25% more hull"), WEB },
+  ["cruiser.armer"] = { hybrid("cruisers", 0.05, "damageMultiplier", "5% more hybrid damage"), armorRepair("cruisers", 0.075), WEB },
+  ["cruiser.gladius"] = { hybrid("cruisers", -0.05, "duration", "hybrid turrets fire 5% faster"),
+    hybrid("cruisers", 0.10, "optimal", "hybrid turrets reach 10% farther") },
+  ["cruiser.falchion"] = { hybrid("cruisers", -0.05, "duration", "hybrid turrets fire 5% faster"),
+    hybrid("cruisers", 0.10, "optimal", "hybrid turrets reach 10% farther") },
+  ["battlecruiser.zweihander"] = { hybrid("battlecruisers", 0.05, "damageMultiplier", "5% more hybrid damage"),
+    armorResists("battlecruisers"), WEB },
+  ["battleship.claymore"] = { hybrid("battleships", 0.05, "damageMultiplier", "5% more hybrid damage"),
+    hybrid("battleships", 0.10, "optimal", "hybrid turrets reach 10% farther") },
+  ["industrial.pill"] = { cargo("industrials"), hullHP("industrials") },
+  ["industrial.longhorn"] = { cargo("industrials"), hullHP("industrials") },
+  ["carrier.katana"] = { level("carriers", 0.05, "drones", "damage", "fighters do 5% more damage"), armorResists("carriers") },
+  ["carrier.excalibur"] = { level("carriers", 0.05, "drones", "damage", "fighters do 5% more damage"), armorResists("carriers") },
+  ["siegedreadnought.sword"] = { hybrid("dreadnoughts", 0.05, "damageMultiplier", "5% more hybrid damage"), hullHP("dreadnoughts") },
+  ["siegedreadnought.guthook"] = { hybrid("dreadnoughts", 0.05, "damageMultiplier", "5% more hybrid damage"), hullHP("dreadnoughts") },
+  ["capitalindustrial.stag"] = { level("capital.industrials", 0.05, "ore", "hold", "5% more ore hold"), hullHP("capital.industrials") },
+  ["barge.scarab"] = { level("mining", 0.05, "mining", "yield", "5% more from mining"), hullHP("mining") },
+  ["freighter.tiger"] = { cargo("freighters"), hullHP("freighters") },
 } :: { [string]: { HullBonus } }
 
 -- The classes that no electronic warfare touches (the owner, 2026-11-18:

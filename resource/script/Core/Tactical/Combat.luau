@@ -282,8 +282,11 @@ function Combat.Hex(state: State.State, id: number, module: Modules.ModuleType):
   local ship = state.ships[id]
   local hull = if ship then Ships.byId[ship.type] else nil
   -- (and so much more strongly again for the hull's own bonus to it: Data/HullBonuses)
-  local own = Ships.Bonus(hull, "hex", hex.kind, Items.Levels(state, id))
-  if hull == nil or (not hull.ewar and own == 1) then
+  local levels = Items.Levels(state, id)
+  local own = Ships.Bonus(hull, "hex", hex.kind, levels)
+  -- (and so much farther: Data/HullBonuses' 'reach')
+  local reach = Ships.Bonus(hull, "reach", hex.kind, levels)
+  if hull == nil or (not hull.ewar and own == 1 and reach == 1) then
     return hex
   end
   local more = (if hull.ewar then Ships.EWAR.strength else 1) * own
@@ -298,7 +301,7 @@ function Combat.Hex(state: State.State, id: number, module: Modules.ModuleType):
     strength = hex.strength * more
   end
   local out = table.clone(hex)
-  out.range, out.strength = hex.range * (if hull.ewar then Ships.EWAR.range else 1), strength
+  out.range, out.strength = hex.range * (if hull.ewar then Ships.EWAR.range else 1) * reach, strength
   return out
 end
 
