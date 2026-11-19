@@ -58,6 +58,11 @@ export type Running = {
   next: number,       -- game seconds of its next cycle
   stopping: boolean,  -- stop at the next cycle
   cycles: number,     -- how many it has run, for the dice
+  -- A point defence turret's: the way it points (Tactical/PointDefence);
+  -- nil until it has swung to something.
+  ax: number?,
+  ay: number?,
+  az: number?,
 }
 
 -- A ship's condition and what bears on a fight. The maxima and
@@ -133,6 +138,17 @@ export type Missile = {
   -- launcher, a flight computer and its pilot's fusing made of it when
   -- it was fired. (Nil: as the missile is.)
   blast: number?,
+  -- For point defence to find it (Tactical/PointDefence): its id; when
+  -- it leaves its cell and where from; the way it flies (its launcher's
+  -- volley's 'path': "zig", "arc", or nil for straight); and how many
+  -- hits it has taken. (Nil in a missile fired before these were kept.)
+  id: number?,
+  born: number?,
+  lx: number?,
+  ly: number?,
+  lz: number?,
+  path: string?,
+  struck: number?,
 }
 
 -- A stack of items of one type in one place. A fitted module is a stack

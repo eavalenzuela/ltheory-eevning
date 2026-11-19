@@ -56,6 +56,10 @@ type Effect = {
   -- A missile of a volley (Core's Data/Modules 'volley'): its path.
   -- Nil for every other.
   path: Path?,
+  -- A missile's id in the Core (point defence finds it by that), and,
+  -- once it is shot down (Effects.Down), how far through its flight.
+  missile: number?,
+  downed: number?,
 }
 
 -- A volley missile's path: the points it goes by, each (how far along,
@@ -113,6 +117,7 @@ export type Fx = {
   made: { Piece },        -- every piece there is, in use or put away
   seed: number,
   rush: { Piece },        -- the lines going by the pilot's ship in warp (Effects.Rush)
+  heads: { [number]: vector },  -- where each missile in the air was drawn last, by its id in the Core
 }
 
 Effects.looks = {
@@ -123,6 +128,8 @@ Effects.looks = {
   ["blaster"] = { kind = "bolt", color = { 0.30, 1.0, 0.72 }, width = 11, length = 70, speed = 1900, burst = 1, gap = 0, blunt = 1 },
   ["railgun"] = { kind = "rail", color = { 0.55, 0.80, 1.0 }, width = 5, life = 0.55 },
   ["launcher"] = { kind = "missile", color = { 1.0, 0.62, 0.26 }, width = 7, length = 180 },
+  -- (a point defence turret's tracers: Effects.Tracers)
+  ["pds"] = { kind = "bolt", color = { 1.0, 0.86, 0.48 }, width = 1.6, length = 45, speed = 3200, burst = 1, gap = 0, blunt = 0 },
   ["miner"] = { kind = "beam", color = { 0.35, 1.0, 0.55 }, width = 5, life = 0.5, held = true },
   -- (what draws gas off a cloud: wider and paler, into the cloud's middle)
   ["miner.gas"] = { kind = "beam", color = { 0.80, 0.88, 1.0 }, width = 9, life = 0.5, held = true },
@@ -207,7 +214,8 @@ function Effects.LookOf(type: string): (Look?, number)
 end
 
 function Effects.New(container: Object): Fx
-  return { container = container, effects = {}, flashes = {}, burns = {}, frame = 0, pools = {}, made = {}, seed = 0, rush = {} }
+  return { container = container, effects = {}, flashes = {}, burns = {}, frame = 0, pools = {}, made = {}, seed = 0, rush = {},
+    heads = {} }
 end
 
 local streakMesh: Mesh? = nil
@@ -342,9 +350,11 @@ end
 -- 'volley', for a missile of a volley (Core's Data/Modules 'volley'):
 -- which of it this is, from 1; its path ("zig" or "arc"); how long after
 -- the first it leaves (s); and the firer's up, for a vertical launch.
+-- 'missile', for a missile: its id in the Core, for point defence to
+-- find it (Effects.Down, Effects.Tracers).
 function Effects.Fire(fx: Fx, type: string, from: number, to: number, fromRadius: number, toRadius: number,
   outcome: string, flight: number, struck: string, now: number, origin: number?,
-  volley: { n: number, path: string, delay: number, up: vector? }?)
+  volley: { n: number, path: string, delay: number, up: vector? }?, missile: number?)
   local look, size = Effects.LookOf(type)
   if look == nil then
     return
@@ -361,7 +371,7 @@ function Effects.Fire(fx: Fx, type: string, from: number, to: number, fromRadius
     local effect: Effect = {
       look = look, from = from, to = to, origin = origin, fromRadius = fromRadius, toRadius = toRadius, miss = miss,
       born = now + (shot - 1) * (look.gap or 0), life = look.life or 0, flight = flight, size = size,
-      struck = if outcome == "miss" then "" else struck, landed = false, pieces = {},
+      struck = if outcome == "miss" then "" else struck, landed = false, pieces = {}, missile = missile,
     }
     if volley then
       local n = volley.n
@@ -482,6 +492,44 @@ end
 -- and is not there to be on).
 function Effects.Burst(fx: Fx, at: vector, color: vector, size: number, ring: number, life: number, now: number, fire: boolean?)
   Effects.Flash(fx, 0, at, color, size, ring, life, now, fire)
+end
+
+-- Where in Effects.Update's 'where' a missile in the air is (its head,
+-- as drawn last), by its id in the Core: for tracers to go at.
+local MISSILE_KEYS = 2 ^ 40
+function Effects.MissileKey(id: number): number
+  return MISSILE_KEYS + id
+end
+
+-- A missile shot down by point defence (Core's Tactical/PointDefence):
+-- it bursts where it was, and goes no further; its trail hangs there.
+function Effects.Down(fx: Fx, missile: number, now: number)
+  for _, effect in fx.effects do
+    if effect.missile == missile and effect.downed == nil then
+      effect.downed = math.max(0, (now - effect.born) / math.max(effect.flight, 0.05))
+      local at = fx.heads[missile]
+      if at then
+        Effects.Burst(fx, at, vector.create(1.0, 0.72, 0.36), 18 * SIZE[effect.size], 0, 0.3, now)
+      end
+    end
+  end
+end
+
+-- A point defence turret's stream: so many tracers at a missile in the
+-- air (its id in the Core) or at a drone (its ball), over the second,
+-- the last of them striking if it brought the missile down.
+function Effects.Tracers(fx: Fx, from: number, fromRadius: number, missile: number?, drone: number?, rounds: number,
+  down: boolean, now: number, origin: number?)
+  local to = if missile then Effects.MissileKey(missile) elseif drone then drone else nil
+  if to == nil then
+    return
+  end
+  -- (not every round of a stream is drawn: a dozen at the most)
+  local shown = math.min(rounds, 12)
+  for k = 1, shown do
+    Effects.Fire(fx, "pds", from, to, fromRadius, 4, if down and k == shown then "hit" else "miss", 0, "",
+      now + (k - 1) / math.max(shown, 1), origin)
+  end
 end
 
 -- A number from 0 to 1 that follows from 'n' and looks like chance.
@@ -609,6 +657,11 @@ end
 -- Place everything for this frame. 'where' gives each body's place in
 -- the scene; an effect whose ends are not both there is dropped.
 function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
+  -- (where each missile was drawn last frame, for the tracers going after it: Effects.Tracers)
+  for id, head in fx.heads do
+    where[Effects.MissileKey(id)] = head
+  end
+  local heads: { [number]: vector } = {}
   for index = #fx.effects, 1, -1 do
     local effect = fx.effects[index]
     local look = effect.look
@@ -663,11 +716,13 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
         if path then
           -- (a volley's missile: its head along its path, and its contrail hanging where it has been, each part
           -- glowing as the head passes and cooling to smoke, until it is gone; the last of it after the hit)
-          if t >= 1 and not effect.landed then
+          -- (one shot down stops where it was, and its trail hangs from there)
+          local stopped = effect.downed or 1
+          if t >= 1 and not effect.landed and effect.downed == nil then
             land(fx, effect, finish, where, now)
           end
           local hang = path.hang / flight
-          done = t >= 1 + hang
+          done = t >= stopped + hang
           local near = path.up or (if math.abs(d.y) < 0.9 then vector.create(0, 1, 0) else vector.create(1, 0, 0))
           local side = vector.cross(d, near)
           if vector.magnitude(side) < 1e-3 then
@@ -689,7 +744,7 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
             end
             return at(points[#points], 1)
           end
-          local head, tail = math.min(t, 1), math.max(0, t - hang)
+          local head, tail = math.min(t, stopped), math.max(0, t - hang)
           for k = 2, #times do
             local smoke = effect.pieces[k]
             local first, last = math.max(times[k - 1], tail), math.min(times[k], head)
@@ -704,12 +759,17 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
               smoke.object:SetScale(NOWHERE)
             end
           end
-          if t < 1 then
+          if t < stopped then
             lay(piece, along(math.max(0, t - 0.02)), along(t), width * 0.6)
             paint(piece, color, 1, age)
+            if effect.missile and t >= 0 then
+              heads[effect.missile] = along(t)
+            end
           else
             piece.object:SetScale(NOWHERE)
           end
+        elseif effect.downed then
+          done = true
         elseif t >= 1 then
           done = true
           if not effect.landed then
@@ -720,6 +780,9 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
           local length = math.min((look.length or 30) * SIZE[effect.size], span * t)
           lay(piece, head - d * length, head, width)
           paint(piece, color, 1, age)
+          if effect.missile and t >= 0 then
+            heads[effect.missile] = head
+          end
         end
       end
     end
@@ -730,6 +793,8 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
       table.remove(fx.effects, index)
     end
   end
+
+  fx.heads = heads
 
   for index = #fx.flashes, 1, -1 do
     local flash = fx.flashes[index]

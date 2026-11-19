@@ -400,6 +400,17 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
   local shots = 0
   for _, event in session.events do
     local kind = event.kind
+    if kind == "PointDefence" and (event.rounds or 0) > 0 then
+      -- (a point defence turret's stream: a short burst of the small guns, higher)
+      local from = state.balls[event.from]
+      if from and shots < 4 then
+        local weapon = WEAPON.projectile
+        local far = if me then math.sqrt((from.x - me.x) ^ 2 + (from.y - me.y) ^ 2 + (from.z - me.z) ^ 2) else 1e9
+        local index = (event.item + math.floor(audio.time * 11)) % #weapon.files + 1
+        play(audio, weapon.files[index], weapon.volume * 0.6 * reach(far, 6000), `pds{event.item}`, 0.08, weapon.pitch * 1.5)
+        shots += 1
+      end
+    end
     if kind == "Shot" then
       local from = state.balls[event.from]
       local weapon = WEAPON[event.family] or WEAPON.projectile

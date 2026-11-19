@@ -93,6 +93,10 @@ suite:Case("every kind of pirate flies an Unbound hull with a fit the hull takes
     for _, entry in fit do
       table.insert(types, entry[1])
       local module = Modules.byId[entry[1]]
+      -- (point defence, from the third level's pirates up, takes a turret hardpoint as a gun does)
+      if module.pds then
+        weapons += 1
+      end
       if module.weapon then
         weapons += 1
         local charge = Modules.chargeById[entry[2]]
@@ -173,7 +177,9 @@ suite:Case("a bigger pirate hits harder, takes more killing and pays more", func
     local offence = Items.Offence(game.state, ball.id)
     local v = ball.vitals
     local hp = v.shieldMax + v.armorMax + v.hullMax
-    t.ok(offence.dps > last.dps * 1.3, `{kind.name} does {offence.dps} a second and the kind below {last.dps}`)
+    -- (a fifth harder at least: 1.3 until 2026-11-19, when point defence took a turret hardpoint of the third
+    -- level's pirates and up, the owner's ruling, and the Marauder a medium gun with it)
+    t.ok(offence.dps > last.dps * 1.2, `{kind.name} does {offence.dps} a second and the kind below {last.dps}`)
     t.ok(hp > last.hp * 1.4, `{kind.name} has {hp} hit points and the kind below {last.hp}`)
     t.ok(kind.bounty > last.bounty * 2 and kind.tags >= last.tags)
     -- (and it fights from inside the reach of its guns)

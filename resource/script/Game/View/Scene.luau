@@ -1855,8 +1855,17 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         Effects.Fire(fx, if item then item.type elseif event.look then event.look else FALLBACK[event.family] or "autocannon", from.id, to.id, from.radius, to.radius,
           event.outcome, event.flight or 0, struck(to), scene.time, if event.leap == nil and scene.screen[-event.item] then -event.item else nil,
           if event.volley then { n = event.volley, path = event.path or "zig", delay = event.delay or 0,
-            up = if scene.proxies[from.id] then scene.proxies[from.id]:GetUp() else nil } else nil)
+            up = if scene.proxies[from.id] then scene.proxies[from.id]:GetUp() else nil } else nil, event.missile)
       end
+    elseif event.kind == "PointDefence" then
+      -- (a point defence turret's stream at a missile, or at a drone: Core/Tactical/PointDefence)
+      local from = state.balls[event.from]
+      if from then
+        Effects.Tracers(fx, from.id, from.radius, event.missile, event.to, event.rounds or 0, event.down == true, scene.time,
+          if scene.screen[-event.item] then -event.item else nil)
+      end
+    elseif event.kind == "MissileDowned" then
+      Effects.Down(fx, event.missile, scene.time)
     elseif event.kind == "BatteryFired" then
       -- (from the battery that fired, where it stands outside the
       -- field: Core/Tactical/Batteries. A colony ship's are aboard it,

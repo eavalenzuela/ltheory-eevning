@@ -153,17 +153,18 @@ local KINDS: { Kind } = {
       { { "disruptor.warp" }, { "afterburner.1mn" }, { "armor.plate.200mm" }, { "damage.control" }, { "gyrostabilizer" },
         { "projector.entanglement" } }) },
   { id = "jackal", hull = "destroyer.jackal", name = "Pirate Jackal", range = 3000, bounty = 100000, tags = 2,
-    fit = all(times(6, "autocannon.small", "ammo.fusion"), times(3, "launcher.light"),
+    -- (point defence from the level 3 camps up, the owner's 2026-11-19: first, in a turret hardpoint)
+    fit = all({ { "pds.small", "ammo.emp" } }, times(6, "autocannon.small", "ammo.fusion"), times(3, "launcher.light"),
       { { "projector.entanglement" }, { "afterburner.1mn" }, { "armor.plate.200mm" }, { "damage.control" }, { "gyrostabilizer" },
         { "disruptor.warp" }, { "armor.plate.200mm" } }) },
   { id = "marauder", hull = "cruiser.marauder", name = "Pirate Marauder", range = 6000, bounty = 500000, tags = 4,
     -- (short launchers since 2026-11-18, when the missiles were set from the
     -- reference: it fights from six kilometres, where they reach)
-    fit = all(times(5, "autocannon.medium", "ammo.thermal.short.medium"), times(3, "launcher.assault"),
+    fit = all({ { "pds.small", "ammo.emp" } }, times(5, "autocannon.medium", "ammo.thermal.short.medium"), times(3, "launcher.assault"),
       { { "gyrostabilizer" }, { "damage.control" }, { "gyrostabilizer" }, { "gyrostabilizer" }, { "ballistic.control" },
         { "disruptor.warp" }, { "painter.target" }, { "shield.extender.medium" }, { "shield.extender.medium" } }) },
   { id = "ravager", hull = "battleship.ravager", name = "Pirate Ravager", range = 15000, bounty = 2500000, tags = 10,
-    fit = all(times(6, "artillery.large", "ammo.emp.large"), times(4, "launcher.cruise"),
+    fit = all({ { "pds.small", "ammo.emp" } }, times(6, "artillery.large", "ammo.emp.large"), times(4, "launcher.cruise"),
       { { "armor.plate.large" }, { "damage.control" }, { "gyrostabilizer" }, { "armor.plate.large" }, { "shield.extender.large" } }) },
   -- Not of the ladder either: what a camp is built of (Tactical/Assault).
   -- They stand where they are. The stores do nothing; the emplacements
@@ -1095,7 +1096,7 @@ function Pirates.Think(state: State.State, events: { Event })
         elseif far < range + Pirates.COAST and on[item.id] then
           give(state, { kind = "DeactivateModule", actor = id, item = item.id }, events)
         end
-      elseif (module.boost or module.repair) and not on[item.id] then
+      elseif (module.boost or module.repair or module.pds) and not on[item.id] then
         give(state, { kind = "ActivateModule", actor = id, item = item.id }, events)
       end
     end

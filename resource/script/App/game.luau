@@ -2960,6 +2960,35 @@ function Debug.Refit(from: string, to: string, most: number?): number
   return changed
 end
 
+-- A cheat, for a picture: so many point defence turrets fitted to a ship
+-- out in space (as GameDebug.Pose stands one), loaded and switched on
+-- (Core's Tactical/PointDefence); 0 for the pilot's. How many were
+-- switched on.
+function Debug.Defend(ship: number, count: number?): number
+  local state = session.game.state
+  -- (0: the pilot's own)
+  ship = if ship == 0 then state.player.ship else ship
+  if state.ships[ship] == nil or state.balls[ship] == nil then
+    return 0
+  end
+  local on = 0
+  for _ = 1, count or 1 do
+    -- (in place of a gun, where it is full)
+    for _, fitted in Items.Fitted(state, ship) do
+      local module = Modules.byId[fitted.type]
+      if module.hardpoint == "turret" and module.weapon then
+        Items.Take(state, fitted, 1)
+        break
+      end
+    end
+    local item = Items.Equip(state, ship, "pds.small", "ammo.emp")
+    if Core.Submit(session.game, { kind = "ActivateModule", actor = ship, item = item.id }) then
+      on += 1
+    end
+  end
+  return on
+end
+
 -- How many missiles are in flight, and how many of them are the pilot's.
 function Debug.Missiles(): (number, number)
   local state = session.game.state

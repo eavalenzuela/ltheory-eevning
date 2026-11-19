@@ -18,6 +18,7 @@
 local Constants = require("@lt/Core/Data/Constants")
 local Attributes = require("@lt/Core/Attributes")
 local Fields = require("@lt/Core/Tactical/Fields")
+local PointDefence = require("@lt/Core/Tactical/PointDefence")
 local Gunnery = require("@lt/Core/Tactical/Gunnery")
 local Hulks = require("@lt/Core/Assets/Hulks")
 local Items = require("@lt/Core/Assets/Items")
@@ -451,6 +452,12 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
       return false, `needs {module.burns.quantity} {Types.Info(module.burns.type).name} in the hold`
     elseif module.repair or module.boost or module.injector or module.smartbomb then
       return true
+    elseif module.pds then
+      -- (point defence needs no lock: it finds its own, Tactical/PointDefence)
+      if item.charge == "" then
+        return false, "nothing loaded"
+      end
+      return true
     elseif module.bubble then
       if item.charge == "" or item.rounds <= 0 then
         return false, "nothing loaded"
@@ -777,22 +784,32 @@ local function fireMissile(state: State.State, ball: State.Ball, item: State.Ite
     -- own, to be shot down by itself)
     local count = if volley then volley.count else 1
     local each = if volley then volley.share / volley.count else 1
+    -- (each with an id, and where and when it left, for point defence to find it: Tactical/PointDefence)
+    local ids: { number } = {}
     for n = 1, count do
       local damage = {}
       for index = 1, 4 do
         damage[index] = charge.damage[index] * weapon.damageMultiplier * Ships.Dealt(hull, index) * each
       end
+      local delay = if volley then (n - 1) * volley.gap else 0
+      local id = State.NewId(state)
+      ids[n] = id
       table.insert(state.missiles, { from = ball.id, to = target.id, item = item.id, charge = charge.id,
-        damage = damage, impact = now(state) + flight + (if volley then (n - 1) * volley.gap else 0),
-        blast = (weapon.blast or 1) * (1 - Combat.FUSING * Skills.Level(levels, "proximity.fusing")) })
+        damage = damage, impact = now(state) + flight + delay,
+        blast = (weapon.blast or 1) * (1 - Combat.FUSING * Skills.Level(levels, "proximity.fusing")),
+        id = id, born = now(state) + delay, lx = ball.x, ly = ball.y, lz = ball.z, path = if volley then volley.path else nil })
     end
     if volley then
       for n = 1, count do
         table.insert(events, { kind = "Shot", from = ball.id, item = item.id, to = target.id, family = "missile",
-          outcome = outcome, damage = 0, flight = flight, volley = n, path = volley.path, delay = (n - 1) * volley.gap })
+          outcome = outcome, damage = 0, flight = flight, volley = n, path = volley.path, delay = (n - 1) * volley.gap,
+          missile = ids[n] })
       end
       return
     end
+    table.insert(events, { kind = "Shot", from = ball.id, item = item.id, to = target.id, family = "missile",
+      outcome = outcome, damage = 0, flight = flight, missile = ids[1] })
+    return
   end
   table.insert(events, { kind = "Shot", from = ball.id, item = item.id, to = target.id, family = "missile",
     outcome = outcome, damage = 0, flight = math.min(flight, flies) })
@@ -950,6 +967,22 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
         fireTurret(state, ball, running, item, weapon, target, hits, events)
       end
       running.next += weapon.duration
+
+    elseif module.pds then
+      -- A point defence turret: a second of swinging and shooting at whatever of the enemy's is in the air, or
+      -- at their drones (Tactical/PointDefence); out of rounds, a reload from the hold, or it stops.
+      local takes = assert(Modules.Takes(module))
+      if item.charge == "" or item.rounds <= 0 then
+        if item.charge == "" or not reload(state, ball, item, takes.clip) then
+          stop(state, ball, index, "out of ammunition", events)
+          return false
+        end
+        running.next = time + takes.reload
+        table.insert(events, { kind = "Reloading", ball = ball.id, item = item.id, time = takes.reload })
+        break
+      end
+      PointDefence.Cycle(state, ball, item, running, module.pds, time, hits, events)
+      running.next += 1
 
     elseif module.miner then
       local miner = module.miner

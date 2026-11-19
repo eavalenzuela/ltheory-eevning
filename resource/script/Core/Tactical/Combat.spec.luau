@@ -19,6 +19,7 @@ local Test = require("@lt/Tool/Test")
 local Ores = require("@lt/Core/Data/Ores")
 local Mining = require("@lt/Core/Tactical/Mining")
 local Industry = require("@lt/Core/Assets/Industry")
+local PointDefence = require("@lt/Core/Tactical/PointDefence")
 
 local suite = Test.Suite("Combat")
 
@@ -227,6 +228,79 @@ suite:Case("a vertical launch battery will not fire at what is nearer than a ten
     end
   end
   t.eq({ close > 0, #a.game.state.missiles } :: { any }, { true, 0 } :: { any })
+end)
+
+-- The opponent's point defence turret switched on (Tactical/PointDefence), loaded with small rounds.
+local function defend(t: Test.Context, a: Arena, ship: number?): State.Item
+  local state = a.game.state
+  local on = ship or a.foe.id
+  local pds = Items.Equip(state, on, "pds.small", "ammo.emp")
+  local ok, why = Core.Submit(a.game, { kind = "ActivateModule", actor = on, item = pds.id })
+  t.ok(ok, why)
+  return pds
+end
+
+-- Fire the player's first launcher at a target for so many ticks: how
+-- many missiles it launched, how many were downed, and how many landed.
+local function barrage(t: Test.Context, a: Arena, target: number, ticks: number): (number, number, number, number)
+  order(t, a, { kind = "LockTarget", actor = 0, target = target })
+  stepUntil(a, "LockCompleted", 30)
+  order(t, a, { kind = "ActivateModule", actor = 0, item = modules(a)[1].id, target = target })
+  local launched, downed, landed, bursts = 0, 0, 0, 0
+  for _ = 1, ticks do
+    Core.Step(a.game)
+    for _, event in Core.TakeEvents(a.game) do
+      if event.kind == "Shot" and event.outcome == "launched" then
+        launched += 1
+      elseif event.kind == "MissileDowned" then
+        downed += 1
+      elseif event.kind == "MissileHit" then
+        landed += 1
+      elseif event.kind == "PointDefence" then
+        bursts += 1
+      end
+    end
+  end
+  return launched, downed, landed, bursts
+end
+
+suite:Case("a point defence turret swings to the enemy's missiles and shoots some down, at the cost of a good many rounds", function(t)
+  local a = arena("frigate.carvarro", { { "launcher.light", "missile.light.kinetic" } }, "battleship.owari", {}, 9000)
+  local pds = defend(t, a)
+  local launched, downed, landed = barrage(t, a, a.foe.id, 120)
+  -- (light missiles come straight at it, one at a time: most of its rounds go wide, and it downs some of them,
+  -- not all, the owner's "mostly misses")
+  t.ok(launched >= 6, `launched {launched}`)
+  t.ok(downed >= 1 and landed >= 1, `downed {downed}, landed {landed}`)
+  t.eq(downed + landed, launched)
+  t.ok(pds.rounds < 120, "it should have spent rounds")
+end)
+
+suite:Case("most of a swarm's volley gets through a point defence turret, small, jinking and many as they are", function(t)
+  local a = arena("cruiser.ouyou", { { "launcher.swarm.medium", "missile.heavy.kinetic" } }, "battleship.owari", {}, 8000)
+  defend(t, a)
+  local launched, downed, landed = barrage(t, a, a.foe.id, 5)
+  t.eq(launched, 12)
+  t.ok(landed >= launched / 2, `downed {downed}, landed {landed}`)
+  t.eq(downed + landed, launched)
+end)
+
+suite:Case("a point defence turret screens a friend's ship, and leaves its own side's missiles be", function(t)
+  local a = arena("frigate.carvarro", { { "launcher.light", "missile.light.kinetic" } }, "battleship.owari", {}, 9000)
+  local state = a.game.state
+  -- (a friend of the opponent's 3 km beyond it, the player's missiles aimed at that one)
+  local friend = Space.NewShip(state, "battleship.owari", "Friend", a.game.state.ships[a.foe.id].owner, 0)
+  local ball = Space.Launch(state, friend, a.foe.system, a.foe.x + 3000, a.foe.y, a.foe.z)
+  ball.grid = a.foe.grid
+  defend(t, a)
+  -- (and the player's own turret, which does not shoot at the player's own missiles)
+  defend(t, a, a.me.id)
+  local launched, downed, landed = barrage(t, a, ball.id, 120)
+  t.ok(launched >= 6, `launched {launched}`)
+  t.ok(downed >= 1, `downed {downed} of {launched}`)
+  t.eq(downed + landed, launched)
+  -- (what a missile takes to down: a vertical launch's two hits, a swarm's one)
+  t.eq({ PointDefence.VERTICAL_HITS, PointDefence.SWARM_HITS, PointDefence.HITS[1] } :: { any }, { 2, 1, 1 } :: { any })
 end)
 
 suite:Case("a lock takes the time the formula gives, and no shot before it", function(t)

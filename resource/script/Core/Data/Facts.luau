@@ -460,6 +460,19 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     local to = section(sheet, "Warp stability")
     row(to, "Against disruption", `{plain(module.stabilizer)} disruptor's worth`)
   end
+  if module.pds then
+    -- (point defence: Tactical/PointDefence)
+    local pds = module.pds
+    local to = section(sheet, "Point defence")
+    row(to, "Engages", "the enemy's missiles in reach, whoever they are aimed at; with none, their drones; switched on, it needs no lock")
+    row(to, "Fire", `{plain(pds.rate)} rounds a second while it has something to shoot at, swinging or not`)
+    row(to, "Swing", `{whole(math.deg(pds.traverse))} degrees a second, from one to the next`)
+    row(to, "Tracking", plain(pds.tracking))
+    row(to, "Optimal range", metres(pds.optimal))
+    row(to, "Falloff", metres(pds.falloff))
+    row(to, "Hits to down", "light 1, heavy 2, cruise 4, siege 8; a swarm's 1; a vertical launch's 2")
+    row(to, "Against missiles", `most rounds go wide: {whole(pds.accuracy * 100)}% of what a gun's odds would be, a bigger missile the easier`)
+  end
   if module.tractor then
     local to = section(sheet, "Tractor beam")
     row(to, "Pulls a wreck", `{plain(module.tractor.speed)} m/s, to a kilometre off`)

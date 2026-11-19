@@ -123,8 +123,9 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     for _, item in Items.In(state, id, nil) do
       local rng = Rng.For(state.historySeed, state.tick, id, item.id)
       if item.charge ~= "" then
-        local weapon = Modules.byId[item.type].weapon :: Modules.Weapon
-        local loaded = if weapon.clip == 0 then 1 else item.rounds
+        -- (a weapon's load, or what any other module is loaded with: a point defence turret's rounds, a booster's charges)
+        local takes = Modules.Takes(Modules.byId[item.type])
+        local loaded = if takes == nil then 0 elseif takes.clip == 0 then 1 else item.rounds
         if loaded > 0 and Rng.Chance(rng, DROP_CHANCE) then
           Items.Add(state, item.charge, loaded, wreck.id, "cargo")
         end

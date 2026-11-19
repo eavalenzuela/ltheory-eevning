@@ -63,6 +63,21 @@ export type Weapon = {
   vertical: boolean?,
 }
 
+-- A point defence turret: rounds a second; how fast it swings (radians
+-- a second); its tracking, optimal and falloff, as a turret's; and what a
+-- round that hits a drone does, as a part of the round's damage; and
+-- how much of what the gunnery odds say each round has of hitting a
+-- missile (small, quick and hard to hit: most rounds go wide).
+export type PointDefence = {
+  accuracy: number,
+  rate: number,
+  traverse: number,
+  tracking: number,
+  optimal: number,
+  falloff: number,
+  damage: number,
+}
+
 export type Volley = {
   count: number,
   share: number,
@@ -204,6 +219,9 @@ export type ModuleType = {
   -- family and size of charge (size 0: any), how many it holds, and the
   -- seconds a reload from the hold takes. (Module expansion, 2026-11-16.)
   takes: { family: string, size: number, clip: number, reload: number, vertical: boolean? }?,
+  -- A point defence turret (Tactical/PointDefence): switched on, it
+  -- shoots at the enemy's missiles in reach, and at their drones.
+  pds: PointDefence?,
   -- A capacitor booster: each cycle (s) puts the charge it is loaded
   -- with into the capacitor, a charge a cycle.
   injector: { duration: number }?,
@@ -1303,6 +1321,26 @@ for size, long in { "launcher.light", "launcher.heavy", "launcher.cruise", "laun
     requires = needs("missiles", size), lineage = "kethri",
   })
 end
+
+-- Point defence (the owner's rulings, 2026-11-19): a small projectile
+-- turret in a turret hardpoint that, switched on, shoots streams of
+-- tracers at the enemy's missiles within its reach, and at their drones
+-- when there are none, swinging to each in turn (Tactical/PointDefence).
+-- It loads small projectile rounds, 120 at a time. (Every figure mine,
+-- approved: ten rounds a second, 90 degrees a second, 5 km and 5 km.)
+-- (the owner, 2026-11-19, of how it fares against a steady stream:
+-- "mostly misses", one turret stopping about half of a lone launcher's
+-- missiles, so that what is fired one at a time is cut and not stopped)
+local PDS_REACH = { 2500, 2500 }
+local PDS_ACCURACY = 0.08
+table.insert(modules, {
+  id = "pds.small", name = "Point Defence Turret", short = "PDS", slot = "high", hardpoint = "turret",
+  cpu = 12, powergrid = 6, volume = 5, basePrice = 20000, passive = {},
+  takes = { family = "projectile", size = 1, clip = 120, reload = 6 },
+  pds = { rate = 10, traverse = math.rad(90), tracking = 3000, optimal = PDS_REACH[1], falloff = PDS_REACH[2], damage = 0.1,
+    accuracy = PDS_ACCURACY },
+  requires = needs("projectiles", 1),
+})
 
 -- Hardeners against one kind of damage (the project owner's, 2026-11-14:
 -- "type-specific hardeners"): switched on, a shield's lets half as much
