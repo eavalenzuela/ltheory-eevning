@@ -129,7 +129,7 @@ local function measure(hull: Ships.ShipType): Row
       if loaded then
         local hit = 0
         for index = 1, 4 do
-          hit += loaded.damage[index] * weapon.damageMultiplier * Ships.Dealt(hull, index)
+          hit += loaded.damage[index] * weapon.damageMultiplier * Ships.Dealt(hull, index) * (if weapon.volley then weapon.volley.share else 1)
         end
         volley += hit
         dps += hit / weapon.duration

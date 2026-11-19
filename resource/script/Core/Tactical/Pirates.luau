@@ -290,7 +290,7 @@ local function chargeFor(module: Modules.ModuleType): string?
   local weapon = module.weapon
   if weapon then
     for _, candidate in Modules.charges do
-      if candidate.family == weapon.family and candidate.size == weapon.size then
+      if Modules.Fits(module, candidate) then
         return candidate.id
       end
     end

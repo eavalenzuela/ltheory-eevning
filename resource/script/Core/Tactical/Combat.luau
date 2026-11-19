@@ -751,9 +751,11 @@ end
 local function fireMissile(state: State.State, ball: State.Ball, item: State.Item, weapon: Modules.Weapon,
   target: Space.Body, events: { Event })
   local charge = Modules.chargeById[item.charge]
+  -- (a volley's missiles may fly the faster, and the further, for the way they go: Data/Modules' 'volley')
+  local volley = weapon.volley
   -- (as far as its target's surface is, and for a tower in its field that is the field: Tactical/Fields)
   local flight = math.min(Space.Distance(ball :: any, target), Fields.Gap(state, ball, target) + ball.radius + target.radius)
-    / charge.velocity
+    * (if volley then volley.stretch or 1 else 1) / (charge.velocity * (if volley then volley.speed else 1))
   local outcome = "launched"
   -- (how long it flies: as its launcher throws it, a short-range one a
   -- third as far, and longer for a pilot who has learned Long Burn. And
@@ -763,15 +765,34 @@ local function fireMissile(state: State.State, ball: State.Ball, item: State.Ite
   local flies = charge.flightTime * (weapon.flight or 1) * (1 + Combat.LONG_BURN * Skills.Level(levels, "long.burn"))
   if flight > flies then
     outcome = "out of range"
+  elseif volley and volley.closest and flight < flies * volley.closest then
+    -- (a vertical launcher's missiles cannot go up and over onto what is
+    -- so near: nothing is launched)
+    table.insert(events, { kind = "Shot", from = ball.id, item = item.id, to = target.id, family = "missile",
+      outcome = "too close", damage = 0, flight = 0 })
+    return
   else
     local hull = Ships.byId[state.ships[ball.id].type]
-    local damage = {}
-    for index = 1, 4 do
-      damage[index] = charge.damage[index] * weapon.damageMultiplier * Ships.Dealt(hull, index)
+    -- (a volley is so many missiles, each so much of the one, each leaving 'gap' after the one before: each its
+    -- own, to be shot down by itself)
+    local count = if volley then volley.count else 1
+    local each = if volley then volley.share / volley.count else 1
+    for n = 1, count do
+      local damage = {}
+      for index = 1, 4 do
+        damage[index] = charge.damage[index] * weapon.damageMultiplier * Ships.Dealt(hull, index) * each
+      end
+      table.insert(state.missiles, { from = ball.id, to = target.id, item = item.id, charge = charge.id,
+        damage = damage, impact = now(state) + flight + (if volley then (n - 1) * volley.gap else 0),
+        blast = (weapon.blast or 1) * (1 - Combat.FUSING * Skills.Level(levels, "proximity.fusing")) })
     end
-    table.insert(state.missiles, { from = ball.id, to = target.id, item = item.id, charge = charge.id,
-      damage = damage, impact = now(state) + flight,
-      blast = (weapon.blast or 1) * (1 - Combat.FUSING * Skills.Level(levels, "proximity.fusing")) })
+    if volley then
+      for n = 1, count do
+        table.insert(events, { kind = "Shot", from = ball.id, item = item.id, to = target.id, family = "missile",
+          outcome = outcome, damage = 0, flight = flight, volley = n, path = volley.path, delay = (n - 1) * volley.gap })
+      end
+      return
+    end
   end
   table.insert(events, { kind = "Shot", from = ball.id, item = item.id, to = target.id, family = "missile",
     outcome = outcome, damage = 0, flight = math.min(flight, flies) })
@@ -1272,7 +1293,7 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
     elseif module.injector then
       -- A capacitor booster: a charge's worth into the capacitor each
       -- cycle; out of charges, a reload from the hold, or it stops.
-      local takes = Modules.Takes(module) :: { family: string, size: number, clip: number, reload: number }
+      local takes = assert(Modules.Takes(module))
       if item.rounds == 0 or item.charge == "" then
         if item.charge == "" or not reload(state, ball, item, takes.clip) then
           stop(state, ball, index, "out of charges", events)

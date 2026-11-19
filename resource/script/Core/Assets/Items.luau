@@ -160,15 +160,17 @@ function Items.Offence(state: State.State, ship: number): Offence
       local weapon = Attributes.Weapon(fit, item.type, levels, hull)
       local charge = Modules.chargeById[item.charge]
       for index = 1, 4 do
-        -- (more of the kind its hull leans to: Data/Ships' affinity)
-        local hit = charge.damage[index] * weapon.damageMultiplier * Ships.Dealt(hull, index)
+        -- (more of the kind its hull leans to: Data/Ships' affinity; and a volley is so much of its missile, all told)
+        local hit = charge.damage[index] * weapon.damageMultiplier * Ships.Dealt(hull, index) * (if weapon.volley then weapon.volley.share else 1)
         out.volley += hit
         out.dps += hit / weapon.duration
         out.kinds[index] += hit / weapon.duration
       end
       -- (a missile flies 5% longer a level of Long Burn: Tactical/Combat's LONG_BURN)
       out.range = math.max(out.range, if weapon.optimal > 0 then weapon.optimal * charge.rangeMultiplier + weapon.falloff
-        else charge.velocity * charge.flightTime * (weapon.flight or 1) * (1 + 0.05 * Skills.Level(levels, "long.burn")))
+        else charge.velocity * (if weapon.volley then weapon.volley.speed / (weapon.volley.stretch or 1) else 1) * charge.flightTime
+          * (weapon.flight or 1)
+          * (1 + 0.05 * Skills.Level(levels, "long.burn")))
     end
   end
   return out
@@ -569,7 +571,7 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
       return false, chargeWhy
     end
     local chargeType = Modules.chargeById[charge.type]
-    local takes = Modules.Takes(module) :: { family: string, size: number, clip: number, reload: number }
+    local takes = assert(Modules.Takes(module))
     if chargeType and chargeType.tech == 2 and module.tech ~= 2 and takes.family == chargeType.family then
       return false, "a tech 2 charge wants a tech 2 weapon"
     elseif chargeType == nil or not Modules.Fits(module, chargeType) then
@@ -629,7 +631,7 @@ function Items.Apply(state: State.State, command: State.Command, events: { Event
     end
 
   elseif kind == "LoadCharge" then
-    local weapon = Modules.Takes(Modules.byId[item.type]) :: { family: string, size: number, clip: number, reload: number }
+    local weapon = assert(Modules.Takes(Modules.byId[item.type]))
     local charge = state.items[command.other :: number]
     local type = charge.type
     unload(state, item, station)

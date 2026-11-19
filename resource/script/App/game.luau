@@ -454,9 +454,9 @@ function Debug.Locked(): number
   return count
 end
 
--- Open fire with every weapon on the first locked target. Returns how
--- many were switched on.
-function Debug.Fire(): number
+-- Open fire with every weapon on the first locked target (or every one of
+-- a type, with 'only'). Returns how many were switched on.
+function Debug.Fire(only: string?): number
   local ship = session.game.state.player.ship
   local ball = Core.Query.Ball(session.game, ship)
   local started = 0
@@ -464,7 +464,8 @@ function Debug.Fire(): number
     for _, lock in ball.vitals.locks do
       if lock.locked then
         for _, item in Core.Query.Fitted(session.game, ship) do
-          if Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id, target = lock.target }) then
+          if (only == nil or item.type == only)
+            and Session.Do(session, { kind = "ActivateModule", actor = 0, item = item.id, target = lock.target }) then
             started += 1
           end
         end
@@ -2928,6 +2929,47 @@ end
 -- a plain fit's afterburner, extenders, plates and repairer beside. The
 -- ship stepped out of stays in the hangar. False if not docked, or
 -- there is no such hull.
+-- A cheat, for a picture: every module of a type fitted to the pilot's
+-- ship (docked) made one of another, loaded with what the old one had
+-- where the new one takes it, or the first charge of its kind and size;
+-- no more than 'most' of them, if said. How many were changed.
+function Debug.Refit(from: string, to: string, most: number?): number
+  local state = session.game.state
+  local ship = state.player.ship
+  local module = Modules.byId[to]
+  if module == nil or state.ships[ship] == nil or state.ships[ship].docked == 0 then
+    return 0
+  end
+  local changed = 0
+  for _, item in Items.Fitted(state, ship) do
+    if item.type == from and changed < (most or math.huge) then
+      local charge = item.charge
+      local weapon = module.weapon
+      if weapon and (charge == "" or Modules.chargeById[charge] == nil or not Modules.Fits(module, Modules.chargeById[charge])) then
+        charge = ""
+        for _, candidate in Modules.charges do
+          if charge == "" and Modules.Fits(module, candidate) then
+            charge = candidate.id
+          end
+        end
+      end
+      item.type, item.charge = to, charge
+      changed += 1
+    end
+  end
+  return changed
+end
+
+-- How many missiles are in flight, and how many of them are the pilot's.
+function Debug.Missiles(): (number, number)
+  local state = session.game.state
+  local mine = 0
+  for _, missile in state.missiles do
+    mine += if missile.from == state.player.ship then 1 else 0
+  end
+  return #state.missiles, mine
+end
+
 function Debug.Fly(type: string, tank: boolean?): boolean
   local state = session.game.state
   local old = state.ships[state.player.ship]
@@ -2947,7 +2989,7 @@ function Debug.Fly(type: string, tank: boolean?): boolean
       local charge: string? = nil
       if weapon then
         for _, candidate in Modules.charges do
-          if candidate.family == weapon.family and candidate.size == weapon.size then
+          if Modules.Fits(Modules.byId[module], candidate) then
             charge = candidate.id
             break
           end

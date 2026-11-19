@@ -142,6 +142,93 @@ suite:Case("a leaping beam goes on from what it hits to others of that one's sid
   t.ok(first >= 3 and onward >= first, `{first} hits and {onward} leaps`)
 end)
 
+suite:Case("a swarm launcher throws its missile as a volley of small ones at its target, together nine tenths of it", function(t)
+  local a = arena("frigate.carvarro", { { "launcher.swarm.small", "missile.light.kinetic" } }, "frigate.courier", {}, 4000)
+  local launcher = assert(Modules.byId["launcher.swarm.small"])
+  local swarm = assert(assert(launcher.weapon).volley)
+  t.eq({ swarm.count, swarm.share, launcher.lineage } :: { any }, { 6, 0.9, "vessari" } :: { any })
+  -- (a short-range launcher: it reaches as far as the rocket launcher, its missiles faster for a shorter time)
+  local rocket = assert(Modules.byId["launcher.rocket"].weapon)
+  t.near((assert(launcher.weapon).flight or 1) * swarm.speed, rocket.flight or 1, 1e-9)
+  lockFoe(t, a)
+  order(t, a, { kind = "ActivateModule", actor = 0, item = modules(a)[1].id, target = a.foe.id })
+  local launched, landed, total = 0, 0, 0
+  for _ = 1, 8 do
+    Core.Step(a.game)
+    for _, event in Core.TakeEvents(a.game) do
+      if event.kind == "Shot" and event.outcome == "launched" then
+        launched += 1
+        t.eq({ event.to, event.volley ~= nil, event.path } :: { any }, { a.foe.id, true, "zig" } :: { any })
+      elseif event.kind == "MissileHit" then
+        landed += 1
+        total += event.damage
+      end
+    end
+    if landed >= swarm.count then
+      break
+    end
+  end
+  t.eq({ launched, landed } :: { any }, { swarm.count, swarm.count } :: { any })
+  -- (the courier is bigger than a blast half the light missile's: every warhead lands whole; and the Talmar hull leans
+  -- to kinetic, as the missile is)
+  t.near(total, 83 * assert(launcher.weapon).damageMultiplier * (1 + Ships.AFFINITY) * swarm.share, 1e-6)
+end)
+
+suite:Case("a vertical launch battery ripples eight missiles up and over onto its target, together the whole of one", function(t)
+  local launcher = assert(Modules.byId["launcher.vertical.small"])
+  local weapon = assert(launcher.weapon)
+  local volley = assert(weapon.volley)
+  t.eq({ volley.count, volley.share, volley.path, launcher.lineage } :: { any }, { 8, 1, "arc", "kethri" } :: { any })
+  -- (its own missiles, and no other's: it reaches 1.3 times as far as the plain missile, along a path the longer)
+  local plain, vertical = Modules.chargeById["missile.light.kinetic"], assert(Modules.chargeById["missile.vertical.light.kinetic"])
+  t.eq({ Modules.Fits(launcher, vertical), Modules.Fits(launcher, plain), Modules.Fits(Modules.byId["launcher.light"], vertical) } :: { any },
+    { true, false, false } :: { any })
+  t.near(vertical.velocity * vertical.flightTime / (volley.stretch or 1), 1.3 * plain.velocity * plain.flightTime, 1e-6)
+  local a = arena("frigate.carvarro", { { "launcher.vertical.small", "missile.vertical.light.kinetic" } }, "battleship.owari", {}, 10000)
+  lockFoe(t, a)
+  order(t, a, { kind = "ActivateModule", actor = 0, item = modules(a)[1].id, target = a.foe.id })
+  local launched, total = 0, 0
+  local impacts: { number } = {}
+  for _ = 1, 12 do
+    Core.Step(a.game)
+    for _, missile in a.game.state.missiles do
+      if not table.find(impacts, missile.impact) then
+        table.insert(impacts, missile.impact)
+      end
+    end
+    for _, event in Core.TakeEvents(a.game) do
+      if event.kind == "Shot" and event.outcome == "launched" then
+        launched += 1
+        t.eq({ event.path, event.delay } :: { any }, { "arc", (event.volley - 1) * volley.gap } :: { any })
+      elseif event.kind == "MissileHit" then
+        total += event.damage
+      end
+    end
+  end
+  -- (each leaving its cell after the one before, and landing so)
+  t.eq({ launched, #impacts } :: { any }, { 8, 8 } :: { any })
+  table.sort(impacts)
+  t.near(impacts[8] - impacts[1], 7 * volley.gap, 1e-6)
+  t.near(total, 83 * weapon.damageMultiplier * (1 + Ships.AFFINITY), 1e-6)
+end)
+
+suite:Case("a vertical launch battery will not fire at what is nearer than a tenth of its reach", function(t)
+  local a = arena("frigate.carvarro", { { "launcher.vertical.small", "missile.vertical.light.kinetic" } }, "battleship.owari", {}, 1500)
+  lockFoe(t, a)
+  order(t, a, { kind = "ActivateModule", actor = 0, item = modules(a)[1].id, target = a.foe.id })
+  local close = 0
+  for _ = 1, 3 do
+    Core.Step(a.game)
+    for _, event in Core.TakeEvents(a.game) do
+      if event.kind == "Shot" then
+        t.eq(event.outcome, "too close")
+        close += 1
+      end
+    end
+  end
+  t.eq({ close > 0, #a.game.state.missiles } :: { any }, { true, 0 } :: { any })
+end)
+
 suite:Case("a lock takes the time the formula gives, and no shot before it", function(t)
   local a = arena("frigate.courier", CANNONS, "frigate.courier", {}, 2000)
   local cannon = modules(a)[1]

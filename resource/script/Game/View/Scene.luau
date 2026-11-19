@@ -1845,14 +1845,17 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       -- out by one as far as anybody can see: Tactical/Traffic)
       lightGate(scene, fx, event.gate, 0.7)
     elseif event.kind == "Shot" then
-      -- (a beam that leapt is drawn from the ship it leapt from: Core/Tactical/Combat)
+      -- (a beam that leapt is drawn from the ship it leapt from: Core/Tactical/Combat; and a vertical launcher's
+      -- salvo at what is too near is never launched)
       local from, to = state.balls[event.leap or event.from], state.balls[event.to]
-      if from and to then
+      if from and to and event.outcome ~= "too close" then
         local item = state.items[event.item]
         -- (from the mouth of the gun, if it is one that is shown)
         -- (a gun that is part of a hull, and no item, says what it looks like firing: Core/Tactical/Combat)
         Effects.Fire(fx, if item then item.type elseif event.look then event.look else FALLBACK[event.family] or "autocannon", from.id, to.id, from.radius, to.radius,
-          event.outcome, event.flight or 0, struck(to), scene.time, if event.leap == nil and scene.screen[-event.item] then -event.item else nil)
+          event.outcome, event.flight or 0, struck(to), scene.time, if event.leap == nil and scene.screen[-event.item] then -event.item else nil,
+          if event.volley then { n = event.volley, path = event.path or "zig", delay = event.delay or 0,
+            up = if scene.proxies[from.id] then scene.proxies[from.id]:GetUp() else nil } else nil)
       end
     elseif event.kind == "BatteryFired" then
       -- (from the battery that fired, where it stands outside the

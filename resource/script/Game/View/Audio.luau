@@ -403,7 +403,8 @@ function Audio.Update(audio: Audio, session: Session.Session, warp: number, fram
     if kind == "Shot" then
       local from = state.balls[event.from]
       local weapon = WEAPON[event.family] or WEAPON.projectile
-      if from and shots < 4 then
+      -- (a volley is heard once, and a salvo too near to launch not at all: Core's Data/Modules 'volley')
+      if from and shots < 4 and (event.volley or 1) == 1 and event.outcome ~= "too close" then
         local far = if me then math.sqrt((from.x - me.x) ^ 2 + (from.y - me.y) ^ 2 + (from.z - me.z) ^ 2) else 1e9
         local index = (event.item + math.floor(audio.time * 7)) % #weapon.files + 1
         play(audio, weapon.files[index], weapon.volume * reach(far, 6000), `shot{event.from}`, 0.12, weapon.pitch)

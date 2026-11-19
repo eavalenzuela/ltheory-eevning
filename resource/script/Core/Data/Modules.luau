@@ -48,6 +48,29 @@ export type Weapon = {
   -- rolling its own hit; a miss ends it (Tactical/Combat). Nil for every
   -- other weapon.
   leap: { reach: number, leaps: number, share: number }?,
+  -- A launcher that throws a volley (the Vessari's Swarm Launcher, the
+  -- Kethri's Vertical Launch Battery): each cycle 'count' missiles at the
+  -- one target, 'gap' seconds apart, each 'share' of the missile it is
+  -- loaded with over 'count', flying 'speed' times as fast along a path
+  -- 'stretch' times as long as the straight way ('path' says how it is
+  -- drawn: "zig", jinking, or "arc", up out of the cell and down on the
+  -- target). One with 'closest' will not fire at what is nearer than so
+  -- much of its reach (Tactical/Combat). Each is a missile of its own, to
+  -- be shot down by itself. Nil for every other weapon.
+  volley: Volley?,
+  -- A launcher that takes only vertical-launch missiles (ChargeType's
+  -- 'vertical'), and no other.
+  vertical: boolean?,
+}
+
+export type Volley = {
+  count: number,
+  share: number,
+  speed: number,
+  gap: number,
+  path: string,
+  stretch: number?,
+  closest: number?,
 }
 
 export type Repair = {
@@ -180,7 +203,7 @@ export type ModuleType = {
   -- What a module that is no weapon is loaded with (Modules.Takes): the
   -- family and size of charge (size 0: any), how many it holds, and the
   -- seconds a reload from the hold takes. (Module expansion, 2026-11-16.)
-  takes: { family: string, size: number, clip: number, reload: number }?,
+  takes: { family: string, size: number, clip: number, reload: number, vertical: boolean? }?,
   -- A capacitor booster: each cycle (s) puts the charge it is loaded
   -- with into the capacitor, a charge a cycle.
   injector: { duration: number }?,
@@ -259,6 +282,9 @@ export type ChargeType = {
   injects: number?,
   -- A mining crystal: so many times as much of this ore in a modulated laser.
   ore: string?,
+  -- A vertical-launch missile (the Kethri's): for a vertical launcher
+  -- only (Weapon's 'vertical').
+  vertical: boolean?,
   yieldBy: number?,
 }
 
@@ -1061,6 +1087,13 @@ end
 
 local SIZE_NAME = { "small", "medium", "large", "xl" }
 local SIZE_TITLE = { "Small", "Medium", "Large", "XL" }
+
+-- The Kethri's vertical launch (their Vertical Launch Battery and its
+-- missiles, below): how much further than the long launcher of its size
+-- it reaches, how much longer than the straight way its path is, the
+-- least range (a part of its reach), the missiles a salvo, and the time
+-- between one leaving its cell and the next (s).
+local VERTICAL = { reach = 1.3, stretch = 1.3, closest = 0.1, count = 8, gap = 0.25 }
 -- Charge damage, by size.
 local SIZE_DAMAGE = { 1, 2, 4, 8 }
 
@@ -1203,6 +1236,71 @@ for size, short in SHORT_LAUNCHERS do
       optimal = 0, falloff = 0, tracking = 0, clip = math.floor(base.clip * CLOSE.clip), reload = base.reload, size = size,
       flight = CLOSE.flight },
     requires = needs("missiles", size),
+  })
+end
+
+-- The Vessari's own launcher, of every size (the owner, 2026-11-18:
+-- "Gundam/Macross-style missiles", the volley "just [at] your active
+-- target", and "short-range"): a missile of its size broken into a swarm
+-- of small ones, 6, 12, 18 and 24 a cycle, that between them do nine
+-- tenths of what the one would have, each with half its blast (the
+-- better on a small ship). It is the short-range launcher of its size
+-- (rocket, assault, torpedo, bombardment) in fitting, cycle and reach:
+-- its missiles fly a third as fast again, for so much the shorter a
+-- time. Fitted by any hull that can fit a launcher; scarce, as the
+-- Vessari's gear is. (The name and every figure mine but the counts and
+-- the short reach.)
+local SWARM_SPEED = 1.3
+for size, short in { "launcher.rocket", "launcher.assault", "launcher.torpedo", "launcher.bombard" } do
+  local made: ModuleType? = nil
+  for _, module in modules do
+    if module.id == short then
+      made = module
+    end
+  end
+  local base = assert(made, short)
+  local weapon = assert(base.weapon)
+  table.insert(modules, {
+    id = `launcher.swarm.{SIZE_NAME[size]}`, name = `{SIZE_TITLE[size]} Swarm Launcher`, short = "Swarm", slot = "high", hardpoint = "launcher",
+    cpu = base.cpu, powergrid = base.powergrid, volume = SIZE_VOLUME[size], basePrice = base.basePrice * 3, passive = {},
+    weapon = { family = "missile", duration = weapon.duration, capacitor = 0, damageMultiplier = weapon.damageMultiplier,
+      optimal = 0, falloff = 0, tracking = 0, clip = weapon.clip, reload = weapon.reload, size = size,
+      flight = (weapon.flight or 1) / SWARM_SPEED, blast = 0.5,
+      volley = { count = ({ 6, 12, 18, 24 })[size], share = 0.9, speed = SWARM_SPEED, gap = 0.03, path = "zig" } },
+    requires = needs("missiles", size), lineage = "vessari",
+  })
+end
+
+-- The Kethri's own launcher, of every size (the owner, 2026-11-19): a
+-- Vertical Launch Battery, a row of cells two by four that ripples its
+-- eight missiles out, four along one row and four back along the other,
+-- each an eighth of the one it is loaded with. They go straight up out
+-- of their cells, over a third of the way to the target, and down on
+-- it; it reaches 1.3 times as far as the long launcher of its size, and
+-- will not fire at what is nearer than a tenth of that (Tactical/Combat).
+-- It takes only vertical-launch missiles. Fitted as the long launcher of
+-- its size is, by any hull that can fit a launcher, if a fifth dearer
+-- in CPU and powergrid; scarce, as the Kethri's gear is. (The name,
+-- reach, least range, salvo and turn the owner's; the rest mine.)
+for size, long in { "launcher.light", "launcher.heavy", "launcher.cruise", "launcher.siege" } do
+  local made: ModuleType? = nil
+  for _, module in modules do
+    if module.id == long then
+      made = module
+    end
+  end
+  local base = assert(made, long)
+  local weapon = assert(base.weapon)
+  local v = VERTICAL
+  table.insert(modules, {
+    id = `launcher.vertical.{SIZE_NAME[size]}`, name = `{SIZE_TITLE[size]} Vertical Launch Battery`, short = "VLB", slot = "high",
+    hardpoint = "launcher", cpu = base.cpu * 1.2, powergrid = base.powergrid * 1.2, volume = SIZE_VOLUME[size],
+    basePrice = base.basePrice * 3, passive = {},
+    weapon = { family = "missile", duration = weapon.duration, capacitor = 0, damageMultiplier = weapon.damageMultiplier,
+      optimal = 0, falloff = 0, tracking = 0, clip = weapon.clip, reload = weapon.reload, size = size, flight = weapon.flight,
+      vertical = true,
+      volley = { count = v.count, share = 1, speed = 1, gap = v.gap, path = "arc", stretch = v.stretch, closest = v.closest } },
+    requires = needs("missiles", size), lineage = "kethri",
   })
 end
 
@@ -1448,6 +1546,28 @@ for index, sized in MISSILE_SIZES do
   end
 end
 
+-- The Kethri's vertical-launch missiles (the owner, 2026-11-19: their
+-- own launcher, with its own missiles): of every size and the four
+-- kinds, each the plain missile of its size and kind in damage, speed
+-- and blast, but flying long enough to go up out of its cell, over and
+-- down on a target 1.3 times as far as the plain one reaches (its path
+-- VERTICAL's stretch times the straight way). Only a Vertical Launch
+-- Battery takes them, and it takes nothing else. (Every figure but the
+-- 1.3 mine.)
+for _, plain in table.clone(charges) do
+  if plain.family == "missile" and string.find(plain.id, "^missile%.%a+%.%a+$") and plain.tech == nil then
+    local sized = string.match(plain.id, "^missile%.(%a+)%.")
+    local kind = string.match(plain.id, "%.(%a+)$")
+    local made = table.clone(plain)
+    made.id = `missile.vertical.{sized}.{kind}`
+    made.name = string.gsub(plain.name, " Missile$", " Vertical Missile")
+    made.flightTime = plain.flightTime * VERTICAL.reach * VERTICAL.stretch
+    made.basePrice = plain.basePrice * 1.5
+    made.vertical = true
+    table.insert(charges, made)
+  end
+end
+
 -- Tech 2 charges: the improved make of every crystal, round, charge
 -- and missile, which only a tech 2 weapon takes (Assets/Items). Each is
 -- better at what the plain one is for and worse at something else, so
@@ -1489,7 +1609,7 @@ for _, base in table.clone(charges) do
     basePrice = base.basePrice * CHARGE2.price, damage = damage, rangeMultiplier = base.rangeMultiplier * trade.range,
     tracking = trade.tracking,
     velocity = base.velocity, flightTime = base.flightTime, explosionRadius = base.explosionRadius * trade.blast,
-    explosionVelocity = base.explosionVelocity, tech = 2, base = base.id,
+    explosionVelocity = base.explosionVelocity, tech = 2, base = base.id, vertical = base.vertical,
   })
 end
 
@@ -1744,7 +1864,8 @@ for _, base in table.clone(modules) do
         weapon = if weapon then { family = weapon.family, duration = weapon.duration, capacitor = weapon.capacitor,
           damageMultiplier = weapon.damageMultiplier * make.damage, optimal = weapon.optimal, falloff = weapon.falloff,
           tracking = weapon.tracking, clip = weapon.clip, reload = weapon.reload, size = weapon.size,
-          flight = weapon.flight, blast = weapon.blast, leap = weapon.leap } else nil,
+          flight = weapon.flight, blast = weapon.blast, leap = weapon.leap, volley = weapon.volley,
+          vertical = weapon.vertical } else nil,
         repair = if repair then { layer = repair.layer, amount = repair.amount * make.amount, duration = repair.duration,
           capacitor = repair.capacitor } else nil,
         miner = if miner then { volume = miner.volume * make.amount, duration = miner.duration, capacitor = miner.capacitor,
@@ -2038,20 +2159,22 @@ end
 
 -- What a module is loaded with: a weapon's charges, or a booster's or
 -- an ancillary repairer's (ModuleType.takes). Nil for one that takes none.
-function Modules.Takes(module: ModuleType): { family: string, size: number, clip: number, reload: number }?
+function Modules.Takes(module: ModuleType): { family: string, size: number, clip: number, reload: number, vertical: boolean? }?
   local weapon = module.weapon
   if weapon then
-    return { family = weapon.family, size = weapon.size, clip = weapon.clip, reload = weapon.reload }
+    return { family = weapon.family, size = weapon.size, clip = weapon.clip, reload = weapon.reload, vertical = weapon.vertical }
   end
   return module.takes
 end
 
 -- Whether a charge goes in a module (of its family and size; a size 0
--- takes any of its family; a tech 2 charge only a tech 2 weapon).
+-- takes any of its family; a tech 2 charge only a tech 2 weapon; a
+-- vertical-launch missile only a vertical launcher, which takes nothing
+-- else).
 function Modules.Fits(module: ModuleType, charge: ChargeType): boolean
   local takes = Modules.Takes(module)
   return takes ~= nil and charge.family == takes.family and (takes.size == 0 or charge.size == takes.size)
-    and not (charge.tech == 2 and module.tech ~= 2)
+    and not (charge.tech == 2 and module.tech ~= 2) and (charge.vertical == true) == (takes.vertical == true)
 end
 
 -- The tech 2 make of a module, if it has one.

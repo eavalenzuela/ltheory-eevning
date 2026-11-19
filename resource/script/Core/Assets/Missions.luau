@@ -1050,8 +1050,12 @@ function Missions.Store(faction: string): { Stock }
     local families: { [string]: boolean } = { [own.weapon] = true, missile = own.launchers >= 0.3 }
     for _, module in Modules.list do
       local blueprint = Blueprints.byProduct[module.id]
-      -- (what only a drone or a fighter carries is not a thing a store sells drawings of)
-      if module.tech == 2 and module.weapon and families[module.weapon.family] and blueprint and not module.internal then
+      -- (what only a drone or a fighter carries is not a thing a store sells drawings of; nor what is another
+      -- people's own, as the Kethri's launcher is: Data/Modules' 'lineage', the plain make's for a tech 2 one)
+      local plain = if module.base then Modules.byId[module.base] else nil
+      local lineage = module.lineage or (if plain then plain.lineage else nil)
+      if module.tech == 2 and module.weapon and families[module.weapon.family] and blueprint and not module.internal
+        and (lineage == nil or lineage == faction) then
         table.insert(stock, { type = blueprint.id, points = math.ceil(module.basePrice / 400), credits = 0, standing = 2 })
       end
     end

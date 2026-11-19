@@ -380,6 +380,18 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
       if leap then
         row(to, "Leaps", `on a hit, to another of its target's side within {metres(leap.reach)} of it, {leap.leaps} times at most, each leap {whole(leap.share * 100)}% of the hit before`)
       end
+    elseif weapon.volley and weapon.volley.path == "arc" then
+      -- (a vertical launcher: Data/Modules' 'volley' and 'vertical')
+      local volley = weapon.volley
+      row(to, "Salvo", `each missile it is loaded with goes as {volley.count} out of its cells, {plain(volley.gap)} s apart, up and over and down on its target, each {whole(volley.share / volley.count * 100)}% of the one`)
+      row(to, "Range", "its missile's")
+      row(to, "Least range", `{whole((volley.closest or 0) * 100)}% of its range`)
+      row(to, "Loads", "vertical-launch missiles only")
+    elseif weapon.volley then
+      -- (a swarm: Data/Modules' 'volley')
+      local swarm = weapon.volley
+      row(to, "Swarm", `each missile it is loaded with goes as {swarm.count} small ones at its target, together {whole(swarm.share * 100)}% of the one, each with half its blast, {whole((swarm.speed - 1) * 100)}% faster`)
+      row(to, "Range", `{whole((weapon.flight or 1) * swarm.speed * 100)}% of its missile's`)
     elseif (weapon.flight or 1) ~= 1 then
       row(to, "Range", `{whole((weapon.flight or 1) * 100)}% of its missile's`)
     else

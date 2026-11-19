@@ -101,7 +101,7 @@ function Fits.Charge(type: string, hull: Ships.ShipType?): string?
   end
   local first: string? = nil
   for _, charge in Modules.charges do
-    if charge.family == weapon.family and charge.size == weapon.size and charge.tech ~= 2 then
+    if Modules.Fits(module :: Modules.ModuleType, charge) and charge.tech ~= 2 then
       first = first or charge.id
       if hull and hull.affinity and charge.damage[hull.affinity] > 0 then
         return charge.id

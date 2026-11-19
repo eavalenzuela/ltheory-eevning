@@ -53,6 +53,28 @@ type Effect = {
   struck: string,         -- what it lands on: "shield", "armor", "hull", or "" (nothing to show)
   landed: boolean,
   pieces: { Piece },
+  -- A missile of a volley (Core's Data/Modules 'volley'): its path.
+  -- Nil for every other.
+  path: Path?,
+}
+
+-- A volley missile's path: the points it goes by, each (how far along,
+-- across, up), as parts of the way from firer to target, in a frame
+-- square to that way with 'up' (the firer's, for a vertical launch) as
+-- near its up as it can be; and when it is at each (as a part of its
+-- flight). It goes straight from one point to the next: a few far apart
+-- make a swarm's jinking path, many close together a vertical launch's
+-- arc. It leaves from 'cell' (m, along and across) off the launcher's
+-- mouth, and lands 'aim' (m) off the middle of its target. Its contrail
+-- hangs 'hang' seconds where it has been, 'thick' times the swarm's.
+type Path = {
+  times: { number },
+  points: { vector },
+  up: vector?,
+  cell: vector,
+  aim: vector,
+  hang: number,
+  thick: number,
 }
 
 type Flash = {
@@ -227,6 +249,46 @@ end
 
 local NOWHERE = vector.create(0, 0, 0)
 
+-- A swarm's missiles (Effects.Fire's 'volley', its path "zig"), and the
+-- contrail of every volley's: the kick out of the rack
+-- (how far along it ends, and how far to the side, as parts of the way to
+-- the target), how far the first turns swing, how long the contrail
+-- hangs where the missile has been (seconds), and its colour: an orange
+-- glow where it is fresh, cooling to pale smoke.
+local ZIG_KICK_AT, ZIG_KICK = 0.05, 0.10
+local ZIG_REACH = 0.11
+local ZIG_HANG = 1.6
+local ZIG_GLOW = vector.create(1.0, 0.55, 0.2)
+local ZIG_SMOKE = vector.create(0.8, 0.8, 0.85)
+
+-- A vertical launch's missiles (Effects.Fire's 'volley', its path "arc";
+-- the owner's, 2026-11-19): straight up out of the cell for the first
+-- quarter of the flight, to a quarter of the way to the target high; a
+-- sharp turn over at the top, so tight (a part of the way) and so quick
+-- (a part of the flight); then down on the target, gathering speed (as
+-- the time gone to this power), in so many straight pieces. And how far
+-- apart the cells of the launcher's two rows of four are (m, at least).
+local ARC_CLIMB = 0.25
+local ARC_HIGH = 0.25
+local ARC_TURN, ARC_TURNING = 0.04, 0.05
+local ARC_SPEEDING = 2
+local ARC_PIECES = 10
+local ARC_CELL = 4
+-- (and its smoke: long-lasting and thick, the owner's 2026-11-19, and
+-- spreading as it ages to so many times as wide)
+local ARC_HANG = 12
+local ARC_THICK = 4
+local ARC_SPREAD = 2.5
+-- (and at the least so thick for the length of its flight, so that it is
+-- a plume to see however far it goes)
+local ARC_PLUME = 0.012
+
+-- A number from 0 to 1 that is always the same for the same 'n'.
+local function noise(n: number): number
+  local x = math.sin(n * 12.9898) * 43758.5453
+  return x - math.floor(x)
+end
+
 -- Put a piece away for the next effect that wants one like it.
 local function give(fx: Fx, piece: Piece)
   piece.object:SetScale(NOWHERE)
@@ -277,8 +339,12 @@ end
 -- shot lands on ("shield", "armor", "hull"). 'origin', if given, is what
 -- Effects.Update's 'where' will hold the mouth of the gun under, for the
 -- shot to leave from there and not from the middle of the ship.
+-- 'volley', for a missile of a volley (Core's Data/Modules 'volley'):
+-- which of it this is, from 1; its path ("zig" or "arc"); how long after
+-- the first it leaves (s); and the firer's up, for a vertical launch.
 function Effects.Fire(fx: Fx, type: string, from: number, to: number, fromRadius: number, toRadius: number,
-  outcome: string, flight: number, struck: string, now: number, origin: number?)
+  outcome: string, flight: number, struck: string, now: number, origin: number?,
+  volley: { n: number, path: string, delay: number, up: vector? }?)
   local look, size = Effects.LookOf(type)
   if look == nil then
     return
@@ -297,6 +363,66 @@ function Effects.Fire(fx: Fx, type: string, from: number, to: number, fromRadius
       born = now + (shot - 1) * (look.gap or 0), life = look.life or 0, flight = flight, size = size,
       struck = if outcome == "miss" then "" else struck, landed = false, pieces = {},
     }
+    if volley then
+      local n = volley.n
+      local seed = fx.seed * 7.31 + n * 1.17
+      local times: { number }, points: { vector } = {}, {}
+      local cell = vector.create(0, 0, 0)
+      if volley.path == "arc" then
+        -- (a vertical launch: out of its cell in the two rows of four, four along one and four back along the
+        -- other, straight up, over and down; each a little higher or lower than the next)
+        local row = if n <= 4 then 0 else 1
+        local column = if row == 0 then n - 1 else 8 - n
+        cell = vector.create(row - 0.5, column - 1.5, 0) * math.max(ARC_CELL * SIZE[size], fromRadius * 0.05)
+        local high = ARC_HIGH * (0.9 + 0.2 * noise(seed))
+        -- up, at an even speed
+        for k = 0, 3 do
+          table.insert(times, ARC_CLIMB * k / 4)
+          table.insert(points, vector.create(0, 0, high * k / 4))
+        end
+        -- over (a curve from going up to going at the target)
+        local top = vector.create(0, 0, high)
+        local corner = top + vector.create(0, 0, ARC_TURN)
+        local toward = vector.normalize(vector.create(1, 0, 0) - corner)
+        local over = corner + toward * ARC_TURN
+        for k = 0, 3 do
+          local u = k / 4
+          table.insert(times, ARC_CLIMB + ARC_TURNING * u)
+          table.insert(points, top * ((1 - u) * (1 - u)) + corner * (2 * (1 - u) * u) + over * (u * u))
+        end
+        -- and down, faster and faster, onto the target
+        local rest = 1 - ARC_CLIMB - ARC_TURNING
+        for k = 0, ARC_PIECES do
+          local f = k / ARC_PIECES
+          table.insert(times, ARC_CLIMB + ARC_TURNING + rest * f ^ (1 / ARC_SPEEDING))
+          table.insert(points, over + (vector.create(1, 0, 0) - over) * f)
+        end
+      else
+        -- (a swarm's missile: kicked out of the rack to one side, then jinking hard this way and that, the swings
+        -- dying as it closes)
+        local angle = noise(seed) * 2 * math.pi
+        table.insert(points, vector.create(0, 0, 0))
+        table.insert(points, vector.create(ZIG_KICK_AT, math.cos(angle) * ZIG_KICK, math.sin(angle) * ZIG_KICK))
+        local turns = 5 + math.floor(noise(seed + 1) * 3)
+        for k = 1, turns do
+          local u = ZIG_KICK_AT + (0.9 - ZIG_KICK_AT) * (k - 0.5 + 0.6 * (noise(seed + k * 3.1) - 0.5)) / turns
+          local reach = ZIG_REACH * (1 - u) ^ 0.7
+          angle += math.pi * (0.3 + 0.4 * noise(seed + k * 5.7))
+          table.insert(points, vector.create(u, math.cos(angle) * reach, math.sin(angle) * reach))
+        end
+        table.insert(points, vector.create(1, 0, 0))
+        for _, point in points do
+          table.insert(times, point.x)
+        end
+      end
+      -- (and each lands at a place of its own on the target)
+      local angle = noise(seed + 9) * 2 * math.pi
+      local aim = vector.create(math.cos(angle), noise(seed + 11) - 0.5, math.sin(angle)) * (toRadius * 0.4)
+      local arc = volley.path == "arc"
+      effect.path = { times = times, points = points, up = volley.up, cell = cell, aim = aim,
+        hang = if arc then ARC_HANG else ZIG_HANG, thick = if arc then ARC_THICK else 1 }
+      effect.born += volley.delay
+    end
     if look.kind == "beam" or look.kind == "rail" then
       table.insert(effect.pieces, take(fx, "fx_beam.jsl", true))
     elseif look.kind == "bolt" then
@@ -307,6 +433,12 @@ function Effects.Fire(fx: Fx, type: string, from: number, to: number, fromRadius
       local trail = take(fx, "fx_bolt.jsl", true)
       ShaderInstance_SetFloat(trail.shader, "fxBlunt", 0.3)
       table.insert(effect.pieces, trail)
+      -- (a volley's missile: a piece of contrail for every leg of its path)
+      for _ = 1, if effect.path then #effect.path.times - 1 else 0 do
+        local smoke = take(fx, "fx_bolt.jsl", true)
+        ShaderInstance_SetFloat(smoke.shader, "fxBlunt", 0)
+        table.insert(effect.pieces, smoke)
+      end
     end
     table.insert(fx.effects, effect)
   end
@@ -527,7 +659,58 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
         local flight = if look.kind == "missile" then math.max(effect.flight, 0.05)
           else math.min(span / (look.speed or 2000), BLINK)
         local t = age / flight
-        if t >= 1 then
+        local path = effect.path
+        if path then
+          -- (a volley's missile: its head along its path, and its contrail hanging where it has been, each part
+          -- glowing as the head passes and cooling to smoke, until it is gone; the last of it after the hit)
+          if t >= 1 and not effect.landed then
+            land(fx, effect, finish, where, now)
+          end
+          local hang = path.hang / flight
+          done = t >= 1 + hang
+          local near = path.up or (if math.abs(d.y) < 0.9 then vector.create(0, 1, 0) else vector.create(1, 0, 0))
+          local side = vector.cross(d, near)
+          if vector.magnitude(side) < 1e-3 then
+            side = vector.cross(d, if math.abs(d.y) < 0.9 then vector.create(0, 1, 0) else vector.create(1, 0, 0))
+          end
+          side = vector.normalize(side)
+          local up = vector.cross(side, d)
+          local cell = d * path.cell.x + side * path.cell.y
+          local times, points = path.times, path.points
+          local function at(point: vector, u: number): vector
+            return start + cell * (1 - u) + path.aim * u + (d * point.x + side * point.y + up * point.z) * span
+          end
+          local function along(u: number): vector
+            for k = 2, #times do
+              if u <= times[k] then
+                local f = (u - times[k - 1]) / math.max(times[k] - times[k - 1], 1e-6)
+                return at(points[k - 1] + (points[k] - points[k - 1]) * f, u)
+              end
+            end
+            return at(points[#points], 1)
+          end
+          local head, tail = math.min(t, 1), math.max(0, t - hang)
+          for k = 2, #times do
+            local smoke = effect.pieces[k]
+            local first, last = math.max(times[k - 1], tail), math.min(times[k], head)
+            if last > first then
+              local fresh = math.max(0, 1 - (t - (first + last) / 2) / hang)
+              local warm = fresh ^ 3
+              local spread = if path.thick > 1 then 1 + (ARC_SPREAD - 1) * (1 - fresh) else 1
+              local thick = if path.thick > 1 then math.max(width * path.thick, span * ARC_PLUME / 0.35) else width
+              lay(smoke, along(first), along(last), thick * spread * (0.35 + 0.25 * warm))
+              paint(smoke, ZIG_SMOKE + (ZIG_GLOW - ZIG_SMOKE) * warm, fresh ^ 1.5 * 0.85, age)
+            else
+              smoke.object:SetScale(NOWHERE)
+            end
+          end
+          if t < 1 then
+            lay(piece, along(math.max(0, t - 0.02)), along(t), width * 0.6)
+            paint(piece, color, 1, age)
+          else
+            piece.object:SetScale(NOWHERE)
+          end
+        elseif t >= 1 then
           done = true
           if not effect.landed then
             land(fx, effect, finish, where, now)
