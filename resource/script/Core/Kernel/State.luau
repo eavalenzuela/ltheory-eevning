@@ -149,6 +149,24 @@ export type Missile = {
   lz: number?,
   path: string?,
   struck: number?,
+  -- In flight of itself (2026-11-19, the owner's: every missile flies
+  -- after its target and can be outrun): where it is and how fast it is
+  -- going as of 'at', its speed, the grid it flies on, when its fuel is
+  -- spent, and for a vertical launch when its climb ends
+  -- (Tactical/Combat). 'impact' is then only the time it would land if
+  -- its target stood still. (Nil in a missile fired before: it lands at
+  -- its 'impact', as missiles did.)
+  x: number?,
+  y: number?,
+  z: number?,
+  vx: number?,
+  vy: number?,
+  vz: number?,
+  at: number?,
+  speed: number?,
+  grid: number?,
+  expires: number?,
+  climb: number?,
 }
 
 -- A stack of items of one type in one place. A fitted module is a stack

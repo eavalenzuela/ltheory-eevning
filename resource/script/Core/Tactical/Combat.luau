@@ -763,6 +763,11 @@ local function fireTurret(state: State.State, ball: State.Ball, running: State.R
   end
 end
 
+-- How much of the flight a vertical launch's missile was fired for it
+-- spends climbing straight up out of its cell (the owner's, 2026-11-19:
+-- "perfectly vertical at first, for the first 25% of the flight time").
+Combat.CLIMB = 0.25
+
 -- Launch a missile: it does its damage when it arrives.
 local function fireMissile(state: State.State, ball: State.Ball, item: State.Item, weapon: Modules.Weapon,
   target: Space.Body, events: { Event })
@@ -806,7 +811,12 @@ local function fireMissile(state: State.State, ball: State.Ball, item: State.Ite
       table.insert(state.missiles, { from = ball.id, to = target.id, item = item.id, charge = charge.id,
         damage = damage, impact = now(state) + flight + delay,
         blast = (weapon.blast or 1) * (1 - Combat.FUSING * Skills.Level(levels, "proximity.fusing")),
-        id = id, born = now(state) + delay, lx = ball.x, ly = ball.y, lz = ball.z, path = if volley then volley.path else weapon.path })
+        id = id, born = now(state) + delay, lx = ball.x, ly = ball.y, lz = ball.z, path = if volley then volley.path else weapon.path,
+        -- (and it flies of itself from here, after its target, until its fuel is spent; a vertical launch's
+        -- climbs for the first quarter of the flight it was fired for)
+        x = ball.x, y = ball.y, z = ball.z, vx = 0, vy = 0, vz = 0, at = now(state),
+        speed = charge.velocity * (if volley then volley.speed else 1), grid = ball.grid, expires = now(state) + delay + flies,
+        climb = if volley and volley.path == "arc" then now(state) + delay + Combat.CLIMB * flight else nil })
     end
     if volley then
       for n = 1, count do
@@ -1568,39 +1578,97 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
     end
   end
 
-  -- Missiles that arrive this tick.
+  -- Missiles in the air (the owner's, 2026-11-19: every missile flies
+  -- after its target, and one that is outrun until its fuel is spent
+  -- comes to nothing). Each flies the second just gone toward where its
+  -- target is now, at its speed: a vertical launch's first straight up
+  -- until its climb ends. One that reaches its target's surface does its
+  -- damage; one whose fuel is spent first, or whose target has gone from
+  -- its grid, is gone.
+  local function land(missile: State.Missile)
+    local target = state.balls[missile.to]
+    local charge = Modules.chargeById[missile.charge]
+    -- (one whose target has gone into a station's field since it was
+    -- launched, or come out of the one it was launched in, comes to
+    -- nothing against the field: Tactical/Fields. With nobody left
+    -- where it came from, it is the target being inside that stops it.)
+    local from = state.balls[missile.from]
+    local stopped = false
+    if target and from then
+      stopped = Fields.Between(state, from, target :: any)
+    elseif target then
+      local field = Fields.Around(state, target)
+      local starbase = if field then state.starbases[field.id] else nil
+      stopped = field ~= nil and not (starbase ~= nil and starbase.core == target.id)
+    end
+    if target and not stopped then
+      local speed = math.sqrt(target.vx ^ 2 + target.vy ^ 2 + target.vz ^ 2)
+      -- (its blast as wide as it was made when it was fired)
+      local factor = Gunnery.MissileFactor(target.vitals.signature, speed, charge.explosionRadius * (missile.blast or 1),
+        charge.explosionVelocity)
+      local damage, total = {}, 0
+      for i = 1, 4 do
+        damage[i] = missile.damage[i] * factor
+        total += damage[i]
+      end
+      table.insert(hits, { target = missile.to, by = missile.from, damage = damage })
+      table.insert(events, { kind = "MissileHit", from = missile.from, to = missile.to, damage = total, missile = missile.id })
+    end
+  end
   local flying: { State.Missile } = {}
   for _, missile in state.missiles do
-    if missile.impact > time then
-      table.insert(flying, missile)
-    else
-      local target = state.balls[missile.to]
-      local charge = Modules.chargeById[missile.charge]
-      -- (one whose target has gone into a station's field since it was
-      -- launched, or come out of the one it was launched in, comes to
-      -- nothing against the field: Tactical/Fields. With nobody left
-      -- where it came from, it is the target being inside that stops it.)
-      local from = state.balls[missile.from]
-      local stopped = false
-      if target and from then
-        stopped = Fields.Between(state, from, target :: any)
-      elseif target then
-        local field = Fields.Around(state, target)
-        local starbase = if field then state.starbases[field.id] else nil
-        stopped = field ~= nil and not (starbase ~= nil and starbase.core == target.id)
+    local target = state.balls[missile.to]
+    if missile.x == nil then
+      -- (one fired before missiles flew of themselves, in an older save: it lands when it was to)
+      if missile.impact > time then
+        table.insert(flying, missile)
+      else
+        land(missile)
       end
-      if target and not stopped then
-        local speed = math.sqrt(target.vx ^ 2 + target.vy ^ 2 + target.vz ^ 2)
-        -- (its blast as wide as it was made when it was fired)
-        local factor = Gunnery.MissileFactor(target.vitals.signature, speed, charge.explosionRadius * (missile.blast or 1),
-          charge.explosionVelocity)
-        local damage, total = {}, 0
-        for i = 1, 4 do
-          damage[i] = missile.damage[i] * factor
-          total += damage[i]
+    elseif target == nil or target.grid ~= missile.grid then
+      table.insert(events, { kind = "MissileExpired", missile = missile.id, from = missile.from, to = missile.to })
+    else
+      local speed = missile.speed :: number
+      local start = math.max(missile.at :: number, missile.born or 0)
+      local stop = math.min(time, missile.expires :: number)
+      local left = math.max(0, stop - start)
+      local x, y, z = missile.x :: number, missile.y :: number, missile.z :: number
+      local vx, vy, vz = missile.vx or 0, missile.vy or 0, missile.vz or 0
+      local hit = false
+      local climb = missile.climb
+      if climb and start < climb and left > 0 then
+        local up = math.min(left, climb - start)
+        y += speed * up
+        vx, vy, vz = 0, speed, 0
+        left -= up
+      end
+      local gap = 0
+      if left > 0 then
+        local dx, dy, dz = target.x - x, target.y - y, target.z - z
+        local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+        gap = distance - target.radius
+        if speed * left >= gap then
+          hit = true
+        else
+          local f = speed * left / math.max(distance, 1e-6)
+          x, y, z = x + dx * f, y + dy * f, z + dz * f
+          vx, vy, vz = dx / distance * speed, dy / distance * speed, dz / distance * speed
+          gap -= speed * left
         end
-        table.insert(hits, { target = missile.to, by = missile.from, damage = damage })
-        table.insert(events, { kind = "MissileHit", from = missile.from, to = missile.to, damage = total })
+      else
+        local dx, dy, dz = target.x - x, target.y - y, target.z - z
+        gap = math.sqrt(dx * dx + dy * dy + dz * dz) - target.radius
+      end
+      missile.x, missile.y, missile.z, missile.vx, missile.vy, missile.vz, missile.at = x, y, z, vx, vy, vz, time
+      if hit then
+        land(missile)
+      elseif time >= (missile.expires :: number) then
+        table.insert(events, { kind = "MissileExpired", missile = missile.id, from = missile.from, to = missile.to })
+      else
+        -- (when it would land, its target standing still: for point defence, and for the view)
+        missile.impact = math.max(time, missile.born or 0) + (if climb and climb > time then climb - time else 0)
+          + math.max(0, gap) / speed
+        table.insert(flying, missile)
       end
     end
   end

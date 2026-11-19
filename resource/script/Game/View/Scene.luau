@@ -1868,6 +1868,10 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       end
     elseif event.kind == "MissileDowned" then
       Effects.Down(fx, event.missile, scene.time)
+    elseif event.kind == "MissileHit" and event.missile then
+      Effects.Land(fx, event.missile, scene.time)
+    elseif event.kind == "MissileExpired" and event.missile then
+      Effects.Down(fx, event.missile, scene.time, true)
     elseif event.kind == "BatteryFired" then
       -- (from the battery that fired, where it stands outside the
       -- field: Core/Tactical/Batteries. A colony ship's are aboard it,
@@ -1903,6 +1907,17 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       container:AddInterior(boom)
       boom:SetPos(at)
       Effects.Explode(fx, at, event.radius or 25, scene.time)
+    end
+  end
+  -- (and, a second of the Core's gone by, each missile in the air drawn as far through its flight as the Core has
+  -- it: Core/Tactical/Combat's missiles fly after their targets)
+  if #session.events > 0 then
+    for _, missile in state.missiles do
+      local at, born = missile.at, missile.born or 0
+      if missile.id and missile.x and at and at >= born then
+        local eta = math.max(0, missile.impact - at)
+        Effects.Track(fx, missile.id, (at - born) / math.max(at - born + eta, 1e-6), eta, scene.time)
+      end
     end
   end
   -- A mining laser's beam, a salvager's, and that of whatever runs on

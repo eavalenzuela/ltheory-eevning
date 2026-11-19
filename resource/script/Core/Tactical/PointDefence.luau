@@ -14,7 +14,8 @@
 --   - with no missile in reach it shoots at the enemy's drones;
 --   - it holds 120 rounds and reloads from the hold.
 --
--- A missile in flight is where its path has brought it (PointDefence.At):
+-- A missile in flight is where it has flown (PointDefence.At; one from
+-- an older save, where its path would have brought it):
 -- a plain one on the straight way from where it was fired to its target
 -- as its target is now; a vertical launch's straight up for a quarter of
 -- its flight and then down on its target, faster and faster; a swarm's
@@ -70,6 +71,15 @@ end
 -- Where a missile is at 'time', and how fast it is going (m/s, each
 -- way); nil before it has left its cell, or with its target gone.
 function PointDefence.At(state: State.State, missile: State.Missile, time: number): (number?, number, number, number, number, number)
+  -- (one in flight of itself: where it was last, carried on as it was going, Tactical/Combat)
+  if missile.x and missile.at then
+    if time < (missile.born or 0) then
+      return nil, 0, 0, 0, 0, 0
+    end
+    local vx, vy, vz = missile.vx or 0, missile.vy or 0, missile.vz or 0
+    local since = time - math.max(missile.at :: number, missile.born or 0)
+    return (missile.x :: number) + vx * since, (missile.y :: number) + vy * since, (missile.z :: number) + vz * since, vx, vy, vz
+  end
   local target = state.balls[missile.to]
   local born = missile.born or (missile.impact - 1)
   if target == nil or missile.lx == nil or time < born then

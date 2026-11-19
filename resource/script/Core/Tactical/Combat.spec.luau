@@ -188,28 +188,26 @@ suite:Case("a vertical launch battery ripples eight missiles up and over onto it
   local a = arena("frigate.carvarro", { { "launcher.vertical.small", "missile.vertical.light.kinetic" } }, "battleship.owari", {}, 10000)
   lockFoe(t, a)
   order(t, a, { kind = "ActivateModule", actor = 0, item = modules(a)[1].id, target = a.foe.id })
-  local launched, total = 0, 0
-  local impacts: { number } = {}
-  for _ = 1, 12 do
+  local launched, total, landed = 0, 0, 0
+  local seconds: { number } = {}
+  for second = 1, 12 do
     Core.Step(a.game)
-    for _, missile in a.game.state.missiles do
-      if not table.find(impacts, missile.impact) then
-        table.insert(impacts, missile.impact)
-      end
-    end
     for _, event in Core.TakeEvents(a.game) do
       if event.kind == "Shot" and event.outcome == "launched" then
         launched += 1
         t.eq({ event.path, event.delay } :: { any }, { "arc", (event.volley - 1) * volley.gap } :: { any })
       elseif event.kind == "MissileHit" then
+        landed += 1
         total += event.damage
+        if not table.find(seconds, second) then
+          table.insert(seconds, second)
+        end
       end
     end
   end
-  -- (each leaving its cell after the one before, and landing so)
-  t.eq({ launched, #impacts } :: { any }, { 8, 8 } :: { any })
-  table.sort(impacts)
-  t.near(impacts[8] - impacts[1], 7 * volley.gap, 1e-6)
+  -- (each leaving its cell after the one before, and landing so: over more than one second)
+  t.eq({ launched, landed } :: { any }, { 8, 8 } :: { any })
+  t.ok(#seconds >= 2, `the salvo landed in {#seconds} second(s)`)
   t.near(total, 83 * weapon.damageMultiplier * (1 + Ships.AFFINITY), 1e-6)
 end)
 
@@ -288,9 +286,9 @@ end)
 suite:Case("a point defence turret screens a friend's ship, and leaves its own side's missiles be", function(t)
   local a = arena("frigate.carvarro", { { "launcher.light", "missile.light.kinetic" } }, "battleship.owari", {}, 9000)
   local state = a.game.state
-  -- (a friend of the opponent's 3 km beyond it, the player's missiles aimed at that one)
+  -- (a friend of the opponent's 3 km to one side of it, the player's missiles aimed at that one)
   local friend = Space.NewShip(state, "battleship.owari", "Friend", a.game.state.ships[a.foe.id].owner, 0)
-  local ball = Space.Launch(state, friend, a.foe.system, a.foe.x + 3000, a.foe.y, a.foe.z)
+  local ball = Space.Launch(state, friend, a.foe.system, a.foe.x, a.foe.y, a.foe.z + 3000)
   ball.grid = a.foe.grid
   defend(t, a)
   -- (and the player's own turret, which does not shoot at the player's own missiles)
@@ -364,6 +362,30 @@ suite:Case("a Fighter Pylon sends its Trident at the target, takes it back when 
   local spare = Items.Add(state, "drone.trident", 1, a.me.id, "cargo")
   local ok2, why2 = Core.Submit(a.game, { kind = "LoadCharge", actor = a.me.id, item = pylon.id, other = spare.id })
   t.eq(ok2, false, why2)
+end)
+
+suite:Case("every missile flies after its target: one outrun until its fuel is spent comes to nothing", function(t)
+  local a = arena("frigate.carvarro", { { "launcher.plasma.small", "torpedo.plasma.small.baric" } }, "battleship.owari", {}, 6000)
+  local torpedo = assert(Modules.chargeById["torpedo.plasma.small.baric"])
+  lockFoe(t, a)
+  order(t, a, { kind = "ActivateModule", actor = 0, item = modules(a)[1].id, target = a.foe.id })
+  -- (the target goes away from it half as fast again as the torpedo flies)
+  local launched, landed, expired = 0, 0, 0
+  for _ = 1, math.ceil(torpedo.flightTime) + 5 do
+    Core.Step(a.game)
+    a.foe.x += torpedo.velocity * 1.5
+    for _, event in Core.TakeEvents(a.game) do
+      if event.kind == "Shot" and event.outcome == "launched" then
+        launched += 1
+      elseif event.kind == "MissileHit" then
+        landed += 1
+      elseif event.kind == "MissileExpired" then
+        expired += 1
+      end
+    end
+  end
+  t.ok(launched >= 1 and expired >= 1, `launched {launched}, expired {expired}`)
+  t.eq(landed, 0)
 end)
 
 suite:Case("a lock takes the time the formula gives, and no shot before it", function(t)

@@ -182,12 +182,13 @@ Assault.GATE_RADIUS = 260
 -- of each class at every camp its level can be, and holds the levels to
 -- that. Since 2026-11-19 a Jackal has point defence, which shoots down
 -- a pilot's drones as well as missiles: the third level's hardest pack
--- lost a scout for it, the owner's choice; and as it takes a gun's
--- hardpoint, the fourth level's lone Marauder gained one.)
+-- lost a scout for it, the owner's choice, and had it back once point
+-- defence mostly missed and missiles flew after their targets; and as it
+-- takes a gun's hardpoint, the fourth level's lone Marauder gained one.)
 local PACKS: { { { string } } } = {
   { { "scout" }, { "scout", "scout" }, { "scout", "scout", "scout" } },
   { { "raider" }, { "raider", "scout" }, { "raider", "scout", "scout" }, { "scout", "scout", "scout" } },
-  { { "jackal" }, { "jackal", "scout" }, { "jackal", "scout" }, { "jackal", "raider" } },
+  { { "jackal" }, { "jackal", "scout" }, { "jackal", "scout", "scout" }, { "jackal", "raider" } },
   { { "marauder", "scout" }, { "marauder", "jackal" }, { "jackal", "jackal" }, { "marauder", "marauder" } },
 }
 Assault.PACKS = PACKS

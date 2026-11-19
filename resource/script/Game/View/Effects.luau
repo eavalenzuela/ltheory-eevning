@@ -60,6 +60,9 @@ type Effect = {
   -- once it is shot down (Effects.Down), how far through its flight.
   missile: number?,
   downed: number?,
+  -- A missile flies after its target in the Core and lands when it
+  -- says (Effects.Track, Effects.Land): until then it is held short.
+  arrived: boolean?,
   -- A plasma torpedo (the Nimia's): the colour of its ball. Nil for every
   -- other.
   ball: vector?,
@@ -523,14 +526,42 @@ end
 
 -- A missile shot down by point defence (Core's Tactical/PointDefence):
 -- it bursts where it was, and goes no further; its trail hangs there.
-function Effects.Down(fx: Fx, missile: number, now: number)
+-- 'quiet': one whose fuel is spent, which only goes out.
+function Effects.Down(fx: Fx, missile: number, now: number, quiet: boolean?)
   for _, effect in fx.effects do
-    if effect.missile == missile and effect.downed == nil then
-      effect.downed = math.max(0, (now - effect.born) / math.max(effect.flight, 0.05))
+    if effect.missile == missile and effect.downed == nil and not effect.arrived then
+      effect.downed = math.clamp((now - effect.born) / math.max(effect.flight, 0.05), 0, 0.999)
       local at = fx.heads[missile]
-      if at then
+      if at and not quiet then
         Effects.Burst(fx, at, vector.create(1.0, 0.72, 0.36), 18 * SIZE[effect.size], 0, 0.3, now)
       end
+    end
+  end
+end
+
+-- Where the Core has a missile in its flight (each second, Core's
+-- Tactical/Combat): so far through it, and so many seconds from landing
+-- if its target stood still. Its drawing is timed again to that.
+function Effects.Track(fx: Fx, missile: number, progress: number, eta: number, now: number)
+  for _, effect in fx.effects do
+    if effect.missile == missile and not effect.arrived and effect.downed == nil then
+      local part = math.clamp(progress, 0, 0.98)
+      -- (never back along its way: what is drawn only slows, if its target has drawn ahead)
+      local was = math.clamp((now - effect.born) / math.max(effect.flight, 0.05), 0, 0.999)
+      part = math.max(part, math.min(was, 0.98))
+      local flight = math.max(eta, 0.05) / (1 - part)
+      effect.flight = flight
+      effect.born = now - part * flight
+    end
+  end
+end
+
+-- A missile the Core says has reached its target: it lands now.
+function Effects.Land(fx: Fx, missile: number, now: number)
+  for _, effect in fx.effects do
+    if effect.missile == missile and effect.downed == nil then
+      effect.arrived = true
+      effect.born = now - effect.flight
     end
   end
 end
@@ -732,6 +763,10 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
         local flight = if look.kind == "missile" then math.max(effect.flight, 0.05)
           else math.min(span / (look.speed or 2000), BLINK)
         local t = age / flight
+        -- (a missile of the Core's lands when the Core says it has, and not before: Effects.Land)
+        if effect.missile and not effect.arrived and not effect.downed then
+          t = math.min(t, 0.999)
+        end
         local path = effect.path
         if path then
           -- (a volley's missile: its head along its path, and its contrail hanging where it has been, each part
