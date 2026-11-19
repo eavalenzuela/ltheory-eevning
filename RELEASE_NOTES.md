@@ -6,6 +6,17 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Modules rebalanced
+
+- Tank modules have new figures. Shield extenders give 400, 800 and 1,900 shield, and armour plates 450, 1,750 and 3,500 armour. Armour repairers mend a little more per second, and shield boosters a little less. Damage control now cuts damage to the hull by 30%, and Reinforced Bulkheads add 15% hull. Large plates, extenders and afterburners are far easier to fit, so a cruiser can carry a large plate.
+- Hardeners cost more capacitor to run and more CPU to fit. Capacitor batteries hold 120, 500 and 1,300.
+- Damage modules (Heat Sink, Gyrostabilizer, Flux Coil, Guidance Computer) give +7% damage and +8% rate of fire. The Tracking Enhancer and the Tracking, Ranging and Flight Computers give a little less than before. Drone Damage Amplifiers give +15%.
+- Electronic warfare is weaker and shorter-ranged. A web halves a target's speed. A Target Painter adds 25% signature, out to 30 km. A Sensor Dampener cuts lock range and scan resolution by about a seventh, at 25 km. Tracking and Guidance Disruptors cut by 15%, out to 40 km. Neutralisers and Nosferatu reach 4 to 16 km by size, and Nosferatu drain little and often. Smartbombs reach 3, 4 and 5 km.
+- Remote shield boosters, armour repairers and capacitor transmitters mend more each cycle, but reach only about 10 to 17 km. A capacitor transmitter sends 30 of the 38 it costs.
+- Afterburners and microwarpdrives cost more capacitor to run, and a fitted microwarpdrive takes a quarter off your capacitor. Overdrives and Expanded Cargoholds have stiffer drawbacks.
+- Mining modules, command bursts, cloaks, ECM and rigs are unchanged.
+- Level 3 combat sites are now led by pirate destroyers, with at most one frigate beside one, so a cruiser can take them.
+
 ## Ships and weapons rebalanced, citadels across the galaxy, saved fittings
 
 - Every class of ship has new figures: shield, armour, hull, speed, agility, warp speed, signature, targeting, capacitor and hold. Frigates and battleships changed little. Cruisers and attack battlecruisers have less to them; freighters, mining barges, capital industrials and supercarriers a great deal more. A freighter holds 435,000 m3 and a capital industrial's ore hold 250,000 m3; an industrial's hold is smaller, about 2,700 m3.
