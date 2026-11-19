@@ -312,6 +312,33 @@ HullBonuses.byHull = {
   ["supercarrier.yuln"] = { level("supercarriers", 0.05, "drones", "damage", "fighters and bombers do 5% more damage"),
     armorHP("supercarriers") },
   ["freighter.jojk"] = { cargo("freighters"), armorMend("freighters") },
+
+  -- The Drowned (2026-11-18, the owner: "looks good, though the
+  -- destroyer is going to be an absolute *beast*. Which is fine, just
+  -- keep that in mind while balancing invasions and sites"): railguns,
+  -- and hulls that take a great deal; cloaked snipers.
+  ["frigate.cairn"] = { hybrid("frigates", 0.05, "damageMultiplier", "5% more hybrid damage"),
+    hybrid("frigates", 0.10, "optimal", "hybrid turrets reach 10% farther") },
+  ["frigate.charon"] = { hybrid("frigates", -0.05, "duration", "hybrid turrets fire 5% faster"), hullHP("frigates") },
+  ["destroyer.gravestone"] = { hybrid("destroyers", 0.05, "damageMultiplier", "5% more hybrid damage"), hullHP("destroyers"),
+    role(0.5, "weapons", "optimal", "hybrid turrets reach half as far again", "hybrid") },
+  ["cruiser.casket"] = { hybrid("cruisers", 0.05, "damageMultiplier", "5% more hybrid damage"),
+    hybrid("cruisers", 0.10, "optimal", "hybrid turrets reach 10% farther") },
+  ["cruiser.rebirth"] = { hybrid("cruisers", 0.05, "damageMultiplier", "5% more hybrid damage"),
+    hybrid("cruisers", 0.10, "optimal", "hybrid turrets reach 10% farther") },
+  ["battlecruiser.graveyardkeeper"] = { hybrid("battlecruisers", -0.05, "duration", "hybrid turrets fire 5% faster"),
+    level("battlecruisers", -0.04, "ship", "hullResonance", "its hull resists 4% more of every kind of damage") },
+  ["battleship.coffin"] = { hybrid("battleships", 0.05, "damageMultiplier", "5% more hybrid damage"), hullHP("battleships") },
+  ["industrial.hearse"] = { cargo("industrials"), hullHP("industrials") },
+  ["carrier.funeralprocession"] = { level("carriers", 0.05, "drones", "damage", "fighters do 5% more damage"), hullHP("carriers") },
+  ["dreadnought.thereaper"] = { hybrid("dreadnoughts", 0.05, "damageMultiplier", "5% more hybrid damage"), hullHP("dreadnoughts") },
+  ["siegedreadnought.themercy"] = { hybrid("dreadnoughts", 0.05, "damageMultiplier", "5% more hybrid damage"), hullHP("dreadnoughts") },
+  ["capitalindustrial.griever"] = { level("capital.industrials", 0.05, "mining", "yield", "5% more from mining"),
+    level("capital.industrials", 0.05, "ore", "hold", "5% more ore hold") },
+  ["ultracapital.theend"] = { level("ultracapitals", 0.05, "spinal", "damage", "5% more damage from the bow railgun"),
+    hullHP("ultracapitals") },
+  ["freighter.cemetery"] = { cargo("freighters"), hullHP("freighters") },
+  ["freighter.resurrection"] = { cargo("freighters"), hullHP("freighters") },
 } :: { [string]: { HullBonus } }
 
 -- The classes that no electronic warfare touches (the owner, 2026-11-18:
