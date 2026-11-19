@@ -28,6 +28,11 @@ export type Ship = {
   -- The hired pilot who flies it (Tactical/Fleet), by their id; 0 for
   -- a ship the player flies themselves, or that nobody does.
   pilot: number,
+  -- How well whoever flies a ship nobody's player or hired pilot flies
+  -- knows every skill, where its spawning says (a pirate veteran, a
+  -- captain, an officer: Assets/Items' Levels); nil for what its owner's
+  -- pilots know.
+  skill: number?,
   -- The tick its jump drive last fired, if it has one and it has
   -- (Tactical/Jumping): the drive cools from then.
   jumped: number?,

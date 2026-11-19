@@ -243,7 +243,8 @@ suite:Case("a mender keeps its pack whole: its repairers go on whichever pirate 
     remote += if Modules.Mends(Modules.byId[entry[1]]) then 1 else 0
   end
   t.eq(remote, 2)
-  -- The player out in open space, a raider on them, and a mender with it.
+  -- The player out in open space (in a battleship, which lives through it), a raider on them, and a mender with it.
+  state.ships[state.player.ship].type = "battleship.owari"
   t.ok((Core.Submit(game, { kind = "Undock", actor = state.player.ship })))
   Core.Step(game)
   local me = state.balls[state.player.ship]
@@ -272,9 +273,14 @@ end)
 
 -- A game with the player's ship at rest in open space, a long way from
 -- anything.
-local function inOpenSpace(): (Core.Game, State.Ball)
+-- ('hull' is what it flies instead, where the case is about what its
+-- attackers do and not about whether it lives through it.)
+local function inOpenSpace(hull: string?): (Core.Game, State.Ball)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
+  if hull then
+    state.ships[state.player.ship].type = hull
+  end
   assert(Core.Submit(game, { kind = "Undock", actor = state.player.ship }))
   Core.Step(game)
   local me = state.balls[state.player.ship]
@@ -296,7 +302,7 @@ local function hurt(ball: State.Ball, share: number)
 end
 
 suite:Case("a pirate badly hurt breaks off and warps away, with what was on its head; held, it cannot, and fights on", function(t)
-  local game, me = inOpenSpace()
+  local game, me = inOpenSpace("battleship.owari")
   local state = game.state
   local raider = Pirates.Spawn(state, Pirates.kindById["raider"], me.system, me.x + 3000, me.y, me.z, me.grid)
   local pilot = state.pilots[raider.id]
@@ -580,7 +586,12 @@ suite:Case("a veteran of a kind fits the custom make of whatever it has one of, 
   -- A captain's marauder against a plain one: a quarter more to its guns, and a good deal more plate and shield.
   local plain = Pirates.Spawn(state, Pirates.kindById["marauder"], 1, 3e9, 0, 0, 0)
   local captain = Pirates.Spawn(state, Pirates.kindById["marauder.captain"], 1, 4e9, 0, 0, 0)
+  -- (its pilot knows their trade better than a plain pirate, too: Pirates.SKILL. As well as each other, the quarter
+  -- is the guns'; as they are, more again.)
+  local skilled = Items.Offence(state, captain.id).dps
+  state.ships[captain.id].skill = state.ships[plain.id].skill
   t.near(Items.Offence(state, captain.id).dps / Items.Offence(state, plain.id).dps, 1.25, 0.03)
+  t.ok(skilled > Items.Offence(state, captain.id).dps * 1.2, "a captain's skills make no difference")
   t.ok(whole(captain) > whole(plain) * 1.1, `{whole(captain)} against {whole(plain)}`)
 end)
 

@@ -73,7 +73,7 @@ suite:Case("fitting takes one from the stack and fills the next free slot", func
   t.eq({ mids[1].type, mids[1].slot, mids[2].type, mids[2].slot } :: { any },
     { "shield.extender.small", 1, "afterburner.1mn", 2 } :: { any })
   t.eq(hangarCount(game, "shield.extender.small"), 0)
-  t.eq(Items.ShipStats(game.state, ship).shield, 350 + 280, "and the ship has the extender's shield")
+  t.eq(Items.ShipStats(game.state, ship).shield, 280 + 280, "and the ship has the extender's shield")
 end)
 
 suite:Case("a fit that breaks the rules is refused, with the reason", function(t)
@@ -159,15 +159,15 @@ end)
 suite:Case("the hold has a size", function(t)
   local game = newGame()
   local ship = game.state.player.ship
-  -- 600 rounds at 0.0025 m3 is 1.5 m3: fits easily in 180
+  -- 600 rounds at 0.0025 m3 is 1.5 m3: fits easily in 250
   order(t, game, { kind = "MoveItems", actor = 0, item = inHangar(game, "ammo.emp").id, quantity = 400, to = "cargo" })
   t.eq(hangarCount(game, "ammo.emp"), 200)
   t.near(Items.CargoUsed(game.state, ship), 1, 1e-9)
   local hold = Items.In(game.state, ship, "cargo")[1]
   t.eq(refused(game, { kind = "MoveItems", actor = 0, item = hold.id, to = "cargo" }), "already in the hold")
   t.eq(refused(game, { kind = "MoveItems", actor = 0, item = hold.id, quantity = 401, to = "hangar" }), "no such quantity")
-  -- A stack too big for the hold: 40 extenders at 5 m3 is 200 m3.
-  local bulky = Items.Add(game.state, "shield.extender.small", 40, game.state.player.home, "hangar")
+  -- A stack too big for the hold: 60 extenders at 5 m3 is 300 m3.
+  local bulky = Items.Add(game.state, "shield.extender.small", 60, game.state.player.home, "hangar")
   t.eq(refused(game, { kind = "MoveItems", actor = 0, item = bulky.id, to = "cargo" }), "not enough room in the hold")
   t.eq(refused(game, { kind = "MoveItems", actor = 0, item = bulky.id, quantity = 35, to = "cargo" }), "(accepted)")
   order(t, game, { kind = "MoveItems", actor = 0, item = hold.id, quantity = 400, to = "hangar" })
@@ -193,8 +193,8 @@ suite:Case("a fit changes how the ship flies once it undocks", function(t)
   Core.Submit(game, { kind = "Undock", actor = ship })
   Core.Step(game)
   local ball = assert(Core.Query.Ball(game, ship))
-  t.near(ball.maxVelocity, 360 * 1.0775, 1e-9)
-  t.near(ball.tau, 3.2 * 0.87 * 1.1, 1e-9)
+  t.near(ball.maxVelocity, 355 * 1.0775, 1e-9)
+  t.near(ball.tau, 3.4 * 0.87 * 1.03, 1e-9)
 end)
 
 suite:Case("a rig is fitted like a module, wants its skill, and is destroyed when it is taken out", function(t)

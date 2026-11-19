@@ -44,6 +44,8 @@ suite:Case("each craft is a skill with a book, learned and not begun with, and n
   local PLAIN = { "Range", "Speed", "Damage", "Tracking", "Recharge", "Resist", "Signature", "Cargo", "Fuel", "Wage", "Standing",
     "Loyalty", "Probe", "Copy", "Copying", "Research", "Missile", "Turret", "Drone", "Shield", "Armour", "Armor", "Hull", "Capacitor",
     "Warp", "Falloff", "Lock", "Listing", "Efficiency", "Bonus" }
+  -- (but for a name the owner gave themselves: "Missile Tracking", 2026-11-18, for one that makes missiles hit harder)
+  local OWNER_NAMED: { [string]: boolean } = { ["missile.tracking"] = true }
   local names: { [string]: boolean } = {}
   for _, id in CRAFTS do
     local skill = assert(Skills.byId[id], id)
@@ -51,7 +53,7 @@ suite:Case("each craft is a skill with a book, learned and not begun with, and n
     t.ok(not names[skill.name], `two skills are called {skill.name}`)
     names[skill.name] = true
     for _, word in PLAIN do
-      t.ok(string.find(skill.name, word, 1, true) == nil, `'{skill.name}' is named for what it raises ({word})`)
+      t.ok(OWNER_NAMED[id] or string.find(skill.name, word, 1, true) == nil, `'{skill.name}' is named for what it raises ({word})`)
     end
     -- (a book for it, which a market lists, and nothing a pilot needs it for: a craft gates nothing)
     local book = Types.Info(Skills.Book(id))
@@ -65,8 +67,9 @@ suite:Case("each craft is a skill with a book, learned and not begun with, and n
       t.ok(table.find(CRAFTS, need.skill) == nil, `{type} should not need {need.skill}`)
     end
   end
-  -- (24, and since 2026-11-16 eight of towers and colonies and the corporation)
-  t.eq(#CRAFTS, 32)
+  -- (24, and since 2026-11-16 eight of towers and colonies and the corporation, and since 2026-11-18 Precision
+  -- Shooting and Missile Tracking)
+  t.eq(#CRAFTS, 34)
   t.eq(Skills.Level(nil, "windage"), 0)
   t.eq(Skills.Level({ windage = 3 }, "windage"), 3)
   t.eq(Skills.Level({ windage = -1 }, "windage"), 0)
@@ -175,18 +178,20 @@ suite:Case("Long Burn has a missile fly farther, and Proximity Fusing has more o
   t.eq(shot.outcome, "launched")
   t.ok(fire ~= nil and shot.flight > 5, `it should fly longer than five seconds, and flew {shot.flight}`)
 
-  -- A Courier is smaller than a light missile's blast: 38/40 of it lands. With the blast a fifth tighter, all of it.
-  -- (The missile is kinetic and the hull a Talmar's, which leans to kinetic: 15% more in it to begin with.)
-  local warhead = 83 * (1 + Ships.AFFINITY)
+  -- A Courier is smaller than a light missile's blast: 37/40 of it lands. With the blast a fifth tighter, all of it.
+  -- (The missile is kinetic and the hull a Talmar's, which leans to kinetic: 15% more in it to begin with; and the
+  -- launcher does what it does to every missile it throws.)
+  local warhead = 83 * assert(Modules.byId["launcher.light"].weapon).damageMultiplier * (1 + Ships.AFFINITY)
+  local size = Ships.byId["frigate.courier"].signature
   game, me, foe = arena("frigate.carvarro", fit, 10000)
-  t.near(assert(fire(game, me, foe, "MissileHit", 12)).damage, warhead * 38 / 40, 1e-9)
+  t.near(assert(fire(game, me, foe, "MissileHit", 12)).damage, warhead * size / 40, 1e-9)
   game, me, foe = arena("frigate.carvarro", fit, 10000)
   game.state.skills["proximity.fusing"] = 5
   t.near(assert(fire(game, me, foe, "MissileHit", 12)).damage, warhead, 1e-9)
-  -- (one level: a blast of 38.4 m, and 38 m of ship)
+  -- (one level: a blast of 38.4 m, and 37 m of ship)
   game, me, foe = arena("frigate.carvarro", fit, 10000)
   game.state.skills["proximity.fusing"] = 1
-  t.near(assert(fire(game, me, foe, "MissileHit", 12)).damage, warhead * 38 / (40 * (1 - Combat.FUSING)), 1e-9)
+  t.near(assert(fire(game, me, foe, "MissileHit", 12)).damage, warhead * size / (40 * (1 - Combat.FUSING)), 1e-9)
 end)
 
 suite:Case("Swarm Tactics has a pilot's drones hit harder, and nobody else's guns", function(t)

@@ -142,6 +142,7 @@ local function captain(state: State.State, one: State.Happening, me: State.Ball?
     -- (by their own name, with more on their head than a captain has)
     ball.name = one.name
     state.ships[ball.id].name = one.name
+    state.ships[ball.id].skill = Pirates.OFFICER
     state.pilots[ball.id].bounty *= Sightings.BOUNTY
     table.insert(events, { kind = "BallAdded", ball = ball.id })
     for index, with in Sightings.ESCORT[band] do

@@ -150,11 +150,11 @@ Structures.CLAIM = "array.claim"
 -- tower's shield is a dozen battleships', and a pack that has it to
 -- itself is some minutes getting it to the quarter where it seals.)
 local SUPPLY = {
-  { powergrid = 1500, cpu = 2000, field = 3000, fuel = 10, anchor = 60, volume = 1500, basePrice = 2000000,
+  { powergrid = 1500, cpu = 2000, field = 3000, fuel = 10, anchor = 60, volume = 850, basePrice = 2000000,
     shield = 120000, armor = 40000, hull = 40000, bay = 12 },
-  { powergrid = 3000, cpu = 4000, field = 5000, fuel = 20, anchor = 120, volume = 2500, basePrice = 5000000,
+  { powergrid = 3000, cpu = 4000, field = 5000, fuel = 20, anchor = 120, volume = 1400, basePrice = 5000000,
     shield = 250000, armor = 80000, hull = 80000, bay = 18 },
-  { powergrid = 6000, cpu = 8000, field = 7000, fuel = 40, anchor = 240, volume = 3600, basePrice = 12000000,
+  { powergrid = 6000, cpu = 8000, field = 7000, fuel = 40, anchor = 240, volume = 2000, basePrice = 12000000,
     shield = 500000, armor = 160000, hull = 160000, bay = 24 },
 }
 Structures.SUPPLY = SUPPLY
@@ -408,53 +408,53 @@ end
 -- to it, and nobody comes to a tower of one pilot's.)
 local modules: { ModuleType } = {
   { id = "array.trade", name = "Trade Hub", service = "market", radius = 380, powergrid = 300, cpu = 450, anchor = 60, pilot = false,
-    volume = 2000, basePrice = 3000000 },
+    volume = 1100, basePrice = 3000000 },
   { id = "array.hangar", name = "Ship Maintenance Array", service = "fitting", radius = 300, powergrid = 250, cpu = 200, anchor = 30,
-    pilot = true, volume = 2000, basePrice = 1200000 },
+    pilot = true, volume = 1100, basePrice = 1200000 },
   { id = "array.refining", name = "Refining Array", service = "refining", radius = 260, powergrid = 350, cpu = 150, anchor = 30,
-    pilot = true, volume = 1500, basePrice = 1500000 },
+    pilot = true, volume = 850, basePrice = 1500000 },
   { id = "array.assembly", name = "Ship Assembly Array", service = "industry", radius = 600, powergrid = 400, cpu = 300, anchor = 45,
-    pilot = true, volume = 2500, basePrice = 2500000 },
+    pilot = true, volume = 1400, basePrice = 2500000 },
   { id = "array.laboratory", name = "Laboratory", service = "research", radius = 260, powergrid = 200, cpu = 500, anchor = 30,
-    pilot = true, volume = 1500, basePrice = 1800000 },
+    pilot = true, volume = 850, basePrice = 1800000 },
   { id = "array.storage", name = "Storage Array", service = "storage", radius = 280, powergrid = 50, cpu = 50, anchor = 20,
-    pilot = true, volume = 1000, basePrice = 400000 },
+    pilot = true, volume = 550, basePrice = 400000 },
   { id = "array.habitat", name = "Habitat", service = "quarters", radius = 340, powergrid = 150, cpu = 100, anchor = 30,
-    pilot = true, volume = 2000, basePrice = 900000 },
+    pilot = true, volume = 1100, basePrice = 900000 },
   -- (what a pilot's tower is at a moon for: Data/Moons)
   { id = "array.drill", name = "Moon Drill", service = "extraction", radius = 320, powergrid = 600, cpu = 300, anchor = 60,
-    pilot = true, volume = 2500, basePrice = 4000000 },
+    pilot = true, volume = 1400, basePrice = 4000000 },
   -- (and what makes something to build with of what a drill brings up:
   -- Data/Reactions)
   { id = "array.reactor", name = "Reactor Array", service = "reaction", radius = 300, powergrid = 500, cpu = 400, anchor = 60,
-    pilot = true, volume = 2500, basePrice = 3500000 },
+    pilot = true, volume = 1400, basePrice = 3500000 },
   -- (what a ship with a jump drive comes out at: Tactical/Jumping)
   { id = "array.beacon", name = "Jump Beacon", service = "beacon", radius = 220, powergrid = 300, cpu = 250, anchor = 60,
-    pilot = true, volume = 2000, basePrice = 2500000 },
+    pilot = true, volume = 1100, basePrice = 2500000 },
   -- (what makes an open system a pilot's own: Assets/Sovereignty)
   { id = "array.claim", name = "Claim Beacon", service = "claim", radius = 260, powergrid = 400, cpu = 300, anchor = 120,
-    pilot = true, volume = 2500, basePrice = 12000000 },
+    pilot = true, volume = 1400, basePrice = 12000000 },
   { id = "battery.gun", name = "Gun Battery", service = "defence", radius = 150, powergrid = 200, cpu = 60, anchor = 20,
-    pilot = true, volume = 500, basePrice = 600000 },
+    pilot = true, volume = 300, basePrice = 600000 },
   { id = "battery.missile", name = "Missile Battery", service = "defence", radius = 150, powergrid = 120, cpu = 120, anchor = 20,
-    pilot = true, volume = 500, basePrice = 600000 },
+    pilot = true, volume = 300, basePrice = 600000 },
   -- A citadel's service modules: fitted in it, a slot each, burning fuel
   -- while online. (A citadel open to others has traders come to it: so
   -- a pilot's citadel may have a market, where a pilot's tower may not.)
   { id = "service.market", name = "Market Hub", service = "market", radius = 0, powergrid = 0, cpu = 0, anchor = 600, pilot = true,
-    volume = 3500, basePrice = 30000000, citadel = true, fuel = 10 },
+    volume = 1950, basePrice = 30000000, citadel = true, fuel = 10 },
   { id = "service.repair", name = "Repair and Fitting Bay", service = "fitting", radius = 0, powergrid = 0, cpu = 0, anchor = 300,
-    pilot = true, volume = 2000, basePrice = 8000000, citadel = true, fuel = 4 },
+    pilot = true, volume = 1100, basePrice = 8000000, citadel = true, fuel = 4 },
   { id = "service.refinery", name = "Refinery", service = "refining", radius = 0, powergrid = 0, cpu = 0, anchor = 600, pilot = true,
-    volume = 3000, basePrice = 15000000, citadel = true, fuel = 8 },
+    volume = 1650, basePrice = 15000000, citadel = true, fuel = 8 },
   { id = "service.manufacturing", name = "Manufacturing Plant", service = "industry", radius = 0, powergrid = 0, cpu = 0, anchor = 600,
-    pilot = true, volume = 3500, basePrice = 20000000, citadel = true, fuel = 10 },
+    pilot = true, volume = 1950, basePrice = 20000000, citadel = true, fuel = 10 },
   { id = "service.research", name = "Research Laboratory", service = "research", radius = 0, powergrid = 0, cpu = 0, anchor = 600,
-    pilot = true, volume = 3000, basePrice = 18000000, citadel = true, fuel = 8 },
+    pilot = true, volume = 1650, basePrice = 18000000, citadel = true, fuel = 8 },
   { id = "service.clone", name = "Clone Bay", service = "quarters", radius = 0, powergrid = 0, cpu = 0, anchor = 300, pilot = true,
-    volume = 2000, basePrice = 12000000, citadel = true, fuel = 5 },
+    volume = 1100, basePrice = 12000000, citadel = true, fuel = 5 },
   { id = "service.storage", name = "Hangar Expansion", service = "storage", radius = 0, powergrid = 0, cpu = 0, anchor = 300,
-    pilot = true, volume = 2000, basePrice = 5000000, citadel = true, fuel = 2 },
+    pilot = true, volume = 1100, basePrice = 5000000, citadel = true, fuel = 2 },
   -- What only some kinds of citadel fit (the owner's, 2026-11-17: "only
   -- shipyards can fit capital ship assembly module, no matter the size"
   -- and "the capital ship assembly module cannot be fitted in small or
@@ -467,16 +467,16 @@ local modules: { ModuleType } = {
   -- Each is a manufacturing plant, a laboratory or a reactor array of
   -- its own beside that. Prices and fuel are mine.
   { id = "service.assembly.capital", name = "Capital Ship Assembly", service = "industry", radius = 0, powergrid = 0, cpu = 0,
-    anchor = 1200, pilot = true, volume = 3500, basePrice = 250000000, citadel = true, fuel = 25, kinds = { "shipyard" }, least = 3,
+    anchor = 1200, pilot = true, volume = 1950, basePrice = 250000000, citadel = true, fuel = 25, kinds = { "shipyard" }, least = 3,
     opens = "capital" },
   { id = "service.assembly.advanced", name = "Advanced Ship Assembly", service = "industry", radius = 0, powergrid = 0, cpu = 0,
-    anchor = 900, pilot = true, volume = 3500, basePrice = 120000000, citadel = true, fuel = 15, kinds = { "shipyard" },
+    anchor = 900, pilot = true, volume = 1950, basePrice = 120000000, citadel = true, fuel = 15, kinds = { "shipyard" },
     opens = "advanced" },
   { id = "service.research.advanced", name = "Advanced Research Hub", service = "research", radius = 0, powergrid = 0, cpu = 0,
-    anchor = 900, pilot = true, volume = 3500, basePrice = 90000000, citadel = true, fuel = 12, kinds = { "research" },
+    anchor = 900, pilot = true, volume = 1950, basePrice = 90000000, citadel = true, fuel = 12, kinds = { "research" },
     opens = "invention" },
   { id = "service.reactor", name = "Reactor", service = "reaction", radius = 0, powergrid = 0, cpu = 0, anchor = 900, pilot = true,
-    volume = 3500, basePrice = 60000000, citadel = true, fuel = 12, kinds = { "refinery" } },
+    volume = 1950, basePrice = 60000000, citadel = true, fuel = 12, kinds = { "refinery" } },
   -- A generator station's generators (the owner, 2026-11-18: "the module
   -- you fit will determine which it is"), one to a citadel: the Gravity
   -- Generator lights a jump beacon there (it counts as a lit beacon for
@@ -484,10 +484,10 @@ local modules: { ModuleType } = {
   -- Generator holds a wormhole open just outside it, and another as soon
   -- as that one closes (Tactical/Wormholes). Prices and fuel are mine.
   { id = "service.generator.gravity", name = "Gravity Generator", service = "beacon", radius = 0, powergrid = 0, cpu = 0,
-    anchor = 1200, pilot = true, volume = 3500, basePrice = 120000000, citadel = true, fuel = 20, kinds = { "generator" },
+    anchor = 1200, pilot = true, volume = 1950, basePrice = 120000000, citadel = true, fuel = 20, kinds = { "generator" },
     generator = "gravity" },
   { id = "service.generator.wormhole", name = "Wormhole Generator", service = "wormhole", radius = 0, powergrid = 0, cpu = 0,
-    anchor = 1200, pilot = true, volume = 3500, basePrice = 200000000, citadel = true, fuel = 30, kinds = { "generator" },
+    anchor = 1200, pilot = true, volume = 1950, basePrice = 200000000, citadel = true, fuel = 30, kinds = { "generator" },
     generator = "wormhole" },
   -- (the gravity station's: "only it fits a Jump Bridge to another
   -- gravity station", the owner's: a generator station with its Gravity
@@ -495,7 +495,7 @@ local modules: { ModuleType } = {
   -- owner's or open to it, on the station's fuel: Tactical/Jumping.
   -- Price, fuel and how far it reaches are mine.)
   { id = "service.bridge", name = "Jump Bridge", service = "beacon", radius = 0, powergrid = 0, cpu = 0, anchor = 1200, pilot = true,
-    volume = 3500, basePrice = 150000000, citadel = true, fuel = 20, kinds = { "generator" }, opens = "bridge", needs = "gravity" },
+    volume = 1950, basePrice = 150000000, citadel = true, fuel = 20, kinds = { "generator" }, opens = "bridge", needs = "gravity" },
 }
 
 -- The colony ships, by class. (The first of a size of ship above

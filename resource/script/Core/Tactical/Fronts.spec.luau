@@ -105,9 +105,10 @@ suite:Case("a siege where the pilot is has a place; at it the two forces are shi
   end
   t.ok((sides.vessari or 0) >= 3 and (sides.talmar or 0) >= 3, `{sides.vessari} Vessari and {sides.talmar} Talmar ships`)
   t.eq({ worth.vessari + front.reserve, worth.talmar + front.held }, { 120, 90 })
-  -- They fight: shots between the two sides, none at the pilot, and each force is worth less for it.
+  -- They fight: shots between the two sides, none at the pilot, and each force is worth less for it. (Four minutes
+  -- of it, since 2026-11-18, when weapons were set from the reference: in ten the siege is over.)
   local shots, atMe = 0, 0
-  for _ = 1, 600 do
+  for _ = 1, 240 do
     Core.Step(game)
     for _, event in Core.TakeEvents(game) do
       if event.kind == "Shot" then
@@ -118,9 +119,9 @@ suite:Case("a siege where the pilot is has a place; at it the two forces are shi
       end
     end
   end
-  t.ok(shots > 50, `{shots} shots in ten minutes`)
+  t.ok(shots > 50, `{shots} shots in four minutes`)
   t.eq(atMe, 0, "a faction's ship fired on a pilot who had done nothing")
-  t.ok(operation.force < 120 or operation.defence < 90, "nobody lost anything in ten minutes")
+  t.ok(operation.force < 120 or operation.defence < 90, "nobody lost anything in four minutes")
   local force, defence = front.reserve, front.held
   for id, record in front.ships do
     t.ok(state.balls[id] ~= nil)

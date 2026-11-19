@@ -188,6 +188,7 @@ local function fight(state: State.State, one: State.Happening, me: State.Ball?, 
       one.name = Names.Person(Rng.For(state.historySeed, one.id, 1327))
       ball.name = one.name
       state.ships[ball.id].name = one.name
+      state.ships[ball.id].skill = Pirates.OFFICER
     end
     table.insert(events, { kind = "BallAdded", ball = ball.id })
     one.ref = alive + 1

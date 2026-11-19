@@ -213,34 +213,34 @@ local types: { ShipType } = {
   -- losing one.
   {
     id = "frigate.courier", name = "Courier", class = "frigate", lineage = "", basePrice = 30000, volume = 2500,
-    mass = 1100000, inertia = 3.2, maxVelocity = 360, warpSpeed = 5, radius = 40,
-    shield = 350, armor = 300, hull = 300, shieldRecharge = 625,
-    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 38,
+    mass = 1030000, inertia = 3.4, maxVelocity = 355, warpSpeed = 5, radius = 40,
+    shield = 280, armor = 240, hull = 290, shieldRecharge = 625,
+    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 37,
     -- (two guns, and a third high slot for what needs no hardpoint: the
     -- salvager a new pilot is taught with goes beside the guns, not in
     -- place of one. Character/Proof.spec flies that.)
-    cpu = 110, powergrid = 32, highs = 3, mids = 2, lows = 1, turrets = 2, launchers = 0,
-    capacitor = 260, capacitorRecharge = 190,
-    scanResolution = 580, lockRange = 22000, maxTargets = 3, cargo = 180,
+    cpu = 155, powergrid = 44, highs = 3, mids = 2, lows = 1, turrets = 2, launchers = 0,
+    capacitor = 250, capacitorRecharge = 165,
+    scanResolution = 590, lockRange = 31000, maxTargets = 3, cargo = 250,
   },
   -- Lasers and armour.
   {
     id = "frigate.battleaxe", name = "Kethri Battleaxe", class = "frigate", lineage = "kethri", basePrice = 420000, volume = 2500,
-    mass = 1190000, inertia = 3.0, maxVelocity = 345, warpSpeed = 5, radius = 42,
-    shield = 390, armor = 520, hull = 360, shieldRecharge = 625,
-    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 37,
-    cpu = 125, powergrid = 48, highs = 3, mids = 2, lows = 4, turrets = 3, launchers = 0,
-    capacitor = 400, capacitorRecharge = 187,
-    scanResolution = 600, lockRange = 26000, maxTargets = 4, cargo = 135,
+    mass = 1120000, inertia = 3.2, maxVelocity = 340, warpSpeed = 5, radius = 42,
+    shield = 310, armor = 415, hull = 350, shieldRecharge = 625,
+    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 36,
+    cpu = 175, powergrid = 65, highs = 3, mids = 2, lows = 4, turrets = 3, launchers = 0,
+    capacitor = 390, capacitorRecharge = 162,
+    scanResolution = 610, lockRange = 37000, maxTargets = 4, cargo = 190,
   },
   {
     id = "industrial.hauler", name = "Mule Hauler", class = "industrial", lineage = "", basePrice = 600000, volume = 20000,
-    mass = 11000000, inertia = 1.0, maxVelocity = 130, warpSpeed = 4.5, radius = 180,
-    shield = 900, armor = 1100, hull = 1500, shieldRecharge = 900,
-    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 180,
+    mass = 12800000, inertia = 0.9, maxVelocity = 125, warpSpeed = 3.5, radius = 180,
+    shield = 715, armor = 795, hull = 1000, shieldRecharge = 625,
+    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 195,
     cpu = 200, powergrid = 60, highs = 2, mids = 3, lows = 3, turrets = 1, launchers = 0,
-    capacitor = 500, capacitorRecharge = 300,
-    scanResolution = 150, lockRange = 30000, maxTargets = 2, cargo = 3800,
+    capacitor = 575, capacitorRecharge = 345,
+    scanResolution = 85, lockRange = 45000, maxTargets = 2, cargo = 2250,
   },
   -- A freighter: the biggest hold there is, ten times a hauler's and
   -- more, and nothing else. No guns and nowhere to put one, no rigs, a
@@ -249,12 +249,12 @@ local types: { ShipType } = {
   -- the factions' own are not drawn yet.)
   {
     id = "freighter.dray", name = "Dray Freighter", class = "freighter", lineage = "", basePrice = 1200000000, volume = 1000000,
-    mass = 1100000000, inertia = 0.033, maxVelocity = 75, warpSpeed = 1.5, radius = 1000,
-    shield = 6000, armor = 9000, hull = 38000, shieldRecharge = 3000,
-    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 3200,
+    mass = 920000000, inertia = 0.0625, maxVelocity = 65, warpSpeed = 1.5, radius = 1000,
+    shield = 28000, armor = 28000, hull = 86500, shieldRecharge = 6000,
+    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 10500,
     cpu = 90, powergrid = 60, highs = 0, mids = 0, lows = 3, turrets = 0, launchers = 0,
-    capacitor = 6000, capacitorRecharge = 1200,
-    scanResolution = 60, lockRange = 40000, maxTargets = 2, cargo = 40000,
+    capacitor = 3500, capacitorRecharge = 215,
+    scanResolution = 60, lockRange = 40000, maxTargets = 2, cargo = 435000,
     rigs = 0,
   },
   -- What a pilot is left in when the ship is gone.
@@ -277,6 +277,20 @@ local types: { ShipType } = {
 -- (Data/Factions): so a Vessari hull has more armour than its class and
 -- a Talmar one is faster, from frigate to battleship. The two frigates
 -- written out above are their factions' own; the rest are made here.
+--
+-- What a class's standard hull is in space (the owner, 2026-11-18: "ship
+-- stats need a LOT of adjustment", against the reference figures they
+-- supplied): the middle hull of the reference's plain hulls of that
+-- class, in its layers, speed, agility, mass, warp, signature, targeting,
+-- capacitor, recharge and hold. Its shield and its armour are both the
+-- mean of the reference's two, since the factions here do the leaning;
+-- its hull is the reference's. A class the reference has two of here
+-- (the two dreadnoughts) is the one it has; a class it has nothing like
+-- (the ultracapital) stays the multiple of the supercarrier it was. A
+-- freighter keeps its targeting and a supercarrier its lock range, a
+-- barge its hold (the reference's keeps its ore elsewhere), and an
+-- ultracapital its hold. Price, size, slots, hardpoints and fitting are
+-- this game's own.
 
 type Standard = {
   price: number, volume: number, mass: number, inertia: number, velocity: number, warp: number, radius: number,
@@ -290,26 +304,26 @@ type Standard = {
 }
 
 local CLASS: { [string]: Standard } = {
-  frigate = { price = 400000, volume = 2500, mass = 1150000, inertia = 3.1, velocity = 355, warp = 5, radius = 42,
-    shield = 440, armor = 440, hull = 350, recharge = 625, signature = 37, cpu = 135, powergrid = 44,
-    highs = 3, mids = 3, lows = 3, hardpoints = 3, capacitor = 340, capacitorRecharge = 185,
-    scan = 620, lock = 25000, targets = 4, cargo = 135, skill = "frigates", level = 2 },
-  destroyer = { price = 1500000, volume = 5000, mass = 1700000, inertia = 2.7, velocity = 265, warp = 4.5, radius = 75,
-    shield = 850, armor = 850, hull = 750, recharge = 800, signature = 72, cpu = 200, powergrid = 85,
-    highs = 7, mids = 3, lows = 3, hardpoints = 6, capacitor = 700, capacitorRecharge = 270,
-    scan = 480, lock = 40000, targets = 6, cargo = 380, skill = "destroyers", level = 1 },
-  cruiser = { price = 9000000, volume = 10000, mass = 11500000, inertia = 0.5, velocity = 215, warp = 3, radius = 150,
-    shield = 2300, armor = 2300, hull = 2100, recharge = 1250, signature = 125, cpu = 380, powergrid = 900,
-    highs = 5, mids = 4, lows = 5, hardpoints = 4, capacitor = 1500, capacitorRecharge = 480,
-    scan = 290, lock = 55000, targets = 6, cargo = 450, skill = "cruisers", level = 1 },
-  battleship = { price = 150000000, volume = 50000, mass = 100000000, inertia = 0.13, velocity = 115, warp = 2, radius = 400,
-    shield = 7200, armor = 7200, hull = 7000, recharge = 2500, signature = 400, cpu = 620, powergrid = 13000,
-    highs = 8, mids = 5, lows = 6, hardpoints = 7, capacitor = 5500, capacitorRecharge = 1100,
-    scan = 110, lock = 85000, targets = 7, cargo = 700, skill = "battleships", level = 1 },
-  industrial = { price = 750000, volume = 20000, mass = 11000000, inertia = 1.0, velocity = 130, warp = 4.5, radius = 180,
-    shield = 1000, armor = 1100, hull = 1500, recharge = 900, signature = 180, cpu = 210, powergrid = 65,
-    highs = 2, mids = 3, lows = 3, hardpoints = 1, capacitor = 520, capacitorRecharge = 300,
-    scan = 150, lock = 30000, targets = 2, cargo = 4600, skill = "industrials", level = 1 },
+  frigate = { price = 400000, volume = 2500, mass = 1080000, inertia = 3.3, velocity = 350, warp = 5, radius = 42,
+    shield = 350, armor = 350, hull = 340, recharge = 625, signature = 36, cpu = 190, powergrid = 60,
+    highs = 3, mids = 3, lows = 3, hardpoints = 3, capacitor = 330, capacitorRecharge = 160,
+    scan = 630, lock = 35500, targets = 4, cargo = 190, skill = "frigates", level = 2 },
+  destroyer = { price = 1500000, volume = 5000, mass = 1600000, inertia = 2.85, velocity = 250, warp = 4.5, radius = 75,
+    shield = 800, armor = 800, hull = 800, recharge = 625, signature = 65, cpu = 300, powergrid = 115,
+    highs = 7, mids = 3, lows = 3, hardpoints = 6, capacitor = 575, capacitorRecharge = 320,
+    scan = 525, lock = 36000, targets = 6, cargo = 400, skill = "destroyers", level = 1 },
+  cruiser = { price = 9000000, volume = 10000, mass = 11550000, inertia = 0.51, velocity = 230, warp = 4, radius = 150,
+    shield = 1300, armor = 1300, hull = 1500, recharge = 1250, signature = 120, cpu = 450, powergrid = 1400,
+    highs = 5, mids = 4, lows = 5, hardpoints = 4, capacitor = 1500, capacitorRecharge = 445,
+    scan = 290, lock = 55000, targets = 7, cargo = 450, skill = "cruisers", level = 1 },
+  battleship = { price = 150000000, volume = 50000, mass = 100250000, inertia = 0.119, velocity = 115, warp = 3, radius = 400,
+    shield = 7700, armor = 7700, hull = 7700, recharge = 2500, signature = 440, cpu = 760, powergrid = 26000,
+    highs = 8, mids = 5, lows = 6, hardpoints = 7, capacitor = 6000, capacitorRecharge = 1150,
+    scan = 130, lock = 87000, targets = 7, cargo = 820, skill = "battleships", level = 1 },
+  industrial = { price = 750000, volume = 20000, mass = 12800000, inertia = 0.9, velocity = 125, warp = 3.5, radius = 180,
+    shield = 795, armor = 795, hull = 1000, recharge = 625, signature = 195, cpu = 210, powergrid = 65,
+    highs = 2, mids = 3, lows = 3, hardpoints = 1, capacitor = 600, capacitorRecharge = 345,
+    scan = 85, lock = 45000, targets = 2, cargo = 2700, skill = "industrials", level = 1 },
 
   -- The project owner's ladder above the battleship and beside it
   -- (2026-11-12): how big each is, how many hardpoints it has and what
@@ -323,14 +337,14 @@ local CLASS: { [string]: Standard } = {
   -- little over with four of a battleship's guns: quick, far-reaching
   -- and thin-skinned. The other is twice a cruiser with eight of a
   -- cruiser's guns, and takes a beating.
-  attackbattlecruiser = { price = 60000000, volume = 15000, mass = 15000000, inertia = 0.45, velocity = 195, warp = 2.8, radius = 200,
-    shield = 3200, armor = 3200, hull = 3000, recharge = 1500, signature = 230, cpu = 480, powergrid = 8600,
-    highs = 5, mids = 4, lows = 5, hardpoints = 4, capacitor = 3600, capacitorRecharge = 800,
-    scan = 240, lock = 80000, targets = 6, cargo = 500, skill = "battlecruisers", level = 1, exact = true },
-  battlecruiser = { price = 50000000, volume = 15000, mass = 35000000, inertia = 0.28, velocity = 160, warp = 2.5, radius = 300,
-    shield = 4800, armor = 4800, hull = 4500, recharge = 1800, signature = 270, cpu = 560, powergrid = 1900,
-    highs = 8, mids = 4, lows = 6, hardpoints = 8, capacitor = 3200, capacitorRecharge = 700,
-    scan = 210, lock = 65000, targets = 7, cargo = 600, skill = "battlecruisers", level = 1, exact = true },
+  attackbattlecruiser = { price = 60000000, volume = 15000, mass = 15000000, inertia = 0.495, velocity = 225, warp = 3.5, radius = 200,
+    shield = 1850, armor = 1850, hull = 1800, recharge = 1400, signature = 215, cpu = 550, powergrid = 15500,
+    highs = 5, mids = 4, lows = 5, hardpoints = 4, capacitor = 2900, capacitorRecharge = 725,
+    scan = 210, lock = 70000, targets = 7, cargo = 575, skill = "battlecruisers", level = 1, exact = true },
+  battlecruiser = { price = 50000000, volume = 15000, mass = 12750000, inertia = 0.665, velocity = 160, warp = 3.5, radius = 300,
+    shield = 4100, armor = 4100, hull = 4000, recharge = 1400, signature = 270, cpu = 670, powergrid = 2700,
+    highs = 8, mids = 4, lows = 6, hardpoints = 8, capacitor = 2900, capacitorRecharge = 725,
+    scan = 210, lock = 60000, targets = 7, cargo = 450, skill = "battlecruisers", level = 1, exact = true },
   -- The capitals. A carrier has no hardpoint: its high slots are for
   -- what needs none, and it fights with what it launches. A dreadnought
   -- is twenty hardpoints, with the powergrid for ten of a battleship's
@@ -338,51 +352,51 @@ local CLASS: { [string]: Standard } = {
   -- dreadnought's). A siege dreadnought is four of the largest guns
   -- there are and the hull to carry them. A supercarrier is a carrier
   -- and more.
-  carrier = { price = 1200000000, volume = 1000000, mass = 1100000000, inertia = 0.035, velocity = 75, warp = 1.5, radius = 1000,
-    shield = 70000, armor = 70000, hull = 65000, recharge = 6000, signature = 3200, cpu = 1000, powergrid = 60000,
-    highs = 6, mids = 6, lows = 6, hardpoints = 0, capacitor = 45000, capacitorRecharge = 3600,
-    scan = 60, lock = 180000, targets = 10, cargo = 6000, skill = "carriers", level = 1, exact = true },
-  dreadnought = { price = 2200000000, volume = 1300000, mass = 1600000000, inertia = 0.03, velocity = 60, warp = 1.4, radius = 1300,
-    shield = 110000, armor = 110000, hull = 100000, recharge = 7000, signature = 4200, cpu = 1500, powergrid = 23000,
-    highs = 20, mids = 7, lows = 8, hardpoints = 20, capacitor = 60000, capacitorRecharge = 4200,
-    scan = 55, lock = 130000, targets = 10, cargo = 5000, skill = "dreadnoughts", level = 1, exact = true },
-  siegedreadnought = { price = 1900000000, volume = 1000000, mass = 1300000000, inertia = 0.035, velocity = 65, warp = 1.4, radius = 950,
-    shield = 85000, armor = 85000, hull = 80000, recharge = 6500, signature = 3400, cpu = 1100, powergrid = 410000,
-    highs = 5, mids = 6, lows = 7, hardpoints = 4, capacitor = 70000, capacitorRecharge = 4500,
-    scan = 50, lock = 160000, targets = 8, cargo = 5000, skill = "dreadnoughts", level = 1, exact = true },
+  carrier = { price = 1200000000, volume = 1000000, mass = 1235000000, inertia = 0.04, velocity = 80, warp = 1.5, radius = 1000,
+    shield = 64500, armor = 64500, hull = 73000, recharge = 15000, signature = 9950, cpu = 1000, powergrid = 60000,
+    highs = 6, mids = 6, lows = 6, hardpoints = 0, capacitor = 52500, capacitorRecharge = 4000,
+    scan = 68, lock = 310000, targets = 14, cargo = 2700, skill = "carriers", level = 1, exact = true },
+  dreadnought = { price = 2200000000, volume = 1300000, mass = 1260000000, inertia = 0.045, velocity = 75, warp = 1.5, radius = 1300,
+    shield = 95500, armor = 95500, hull = 110000, recharge = 15000, signature = 11000, cpu = 1810, powergrid = 40500,
+    highs = 20, mids = 7, lows = 8, hardpoints = 20, capacitor = 54500, capacitorRecharge = 4000,
+    scan = 78, lock = 100000, targets = 7, cargo = 2550, skill = "dreadnoughts", level = 1, exact = true },
+  siegedreadnought = { price = 1900000000, volume = 1000000, mass = 1260000000, inertia = 0.045, velocity = 75, warp = 1.5, radius = 950,
+    shield = 95500, armor = 95500, hull = 110000, recharge = 15000, signature = 11000, cpu = 1200, powergrid = 650000,
+    highs = 5, mids = 6, lows = 7, hardpoints = 4, capacitor = 54500, capacitorRecharge = 4000,
+    scan = 78, lock = 100000, targets = 7, cargo = 2550, skill = "dreadnoughts", level = 1, exact = true },
   -- (what a fleet's barges bring it goes in its ore hold: Ships.ORE)
-  capitalindustrial = { price = 900000000, volume = 800000, mass = 900000000, inertia = 0.045, velocity = 70, warp = 1.6, radius = 700,
-    shield = 40000, armor = 45000, hull = 60000, recharge = 5000, signature = 2800, cpu = 800, powergrid = 20000,
-    highs = 3, mids = 5, lows = 4, hardpoints = 0, capacitor = 30000, capacitorRecharge = 3200,
-    scan = 70, lock = 120000, targets = 8, cargo = 30000, skill = "capital.industrials", level = 1, exact = true },
-  supercarrier = { price = 6000000000, volume = 1500000, mass = 1800000000, inertia = 0.03, velocity = 55, warp = 1.3, radius = 1300,
-    shield = 180000, armor = 180000, hull = 170000, recharge = 9000, signature = 4800, cpu = 1400, powergrid = 90000,
-    highs = 7, mids = 7, lows = 7, hardpoints = 0, capacitor = 80000, capacitorRecharge = 5000,
-    scan = 45, lock = 200000, targets = 12, cargo = 9000, skill = "supercarriers", level = 1, exact = true },
+  capitalindustrial = { price = 900000000, volume = 800000, mass = 800000000, inertia = 0.07, velocity = 60, warp = 1.5, radius = 700,
+    shield = 75000, armor = 75000, hull = 300000, recharge = 14400, signature = 11500, cpu = 800, powergrid = 20000,
+    highs = 3, mids = 5, lows = 4, hardpoints = 0, capacitor = 67500, capacitorRecharge = 4500,
+    scan = 75, lock = 200000, targets = 7, cargo = 40000, skill = "capital.industrials", level = 1, exact = true },
+  supercarrier = { price = 6000000000, volume = 1500000, mass = 1675000000, inertia = 0.0355, velocity = 80, warp = 1.5, radius = 1300,
+    shield = 380000, armor = 380000, hull = 260000, recharge = 20000, signature = 19000, cpu = 1400, powergrid = 90000,
+    highs = 7, mids = 7, lows = 7, hardpoints = 0, capacitor = 80500, capacitorRecharge = 5050,
+    scan = 62, lock = 200000, targets = 14, cargo = 1750, skill = "supercarriers", level = 1, exact = true },
 }
 
 -- A faction's own mining barge and freighter are the Quarry and the
 -- Dray (below) as that faction builds them.
-CLASS.barge = { price = 6000000, volume = 15000, mass = 9000000, inertia = 0.9, velocity = 110, warp = 3.5, radius = 160,
-  shield = 1800, armor = 1500, hull = 2600, recharge = 1100, signature = 160, cpu = 320, powergrid = 160,
-  highs = 3, mids = 2, lows = 2, hardpoints = 3, capacitor = 1400, capacitorRecharge = 420,
-  scan = 200, lock = 25000, targets = 3, cargo = 3500, skill = "mining", level = 4, exact = true }
+CLASS.barge = { price = 6000000, volume = 15000, mass = 17500000, inertia = 0.64, velocity = 125, warp = 3.5, radius = 160,
+  shield = 3500, armor = 3500, hull = 4000, recharge = 1500, signature = 200, cpu = 320, powergrid = 160,
+  highs = 3, mids = 2, lows = 2, hardpoints = 3, capacitor = 350, capacitorRecharge = 190,
+  scan = 550, lock = 40000, targets = 6, cargo = 3500, skill = "mining", level = 4, exact = true }
 -- (A carrier's size and about its price: the owner, 2026-11-16,
 -- "Normally freighters should be carrier-sized and roughly the same
 -- cost, with t2 jump freighters being 6-10 billion" (eight times this,
 -- as every tech 2 hull is: 9.6 billion). They were 650 m and 60
 -- million. Mine: as heavy as a carrier and as slow to align as before.)
-CLASS.freighter = { price = 1200000000, volume = 1000000, mass = 1100000000, inertia = 0.033, velocity = 75, warp = 1.5, radius = 1000,
-  shield = 6000, armor = 9000, hull = 38000, recharge = 3000, signature = 3200, cpu = 90, powergrid = 60,
-  highs = 0, mids = 0, lows = 3, hardpoints = 0, capacitor = 6000, capacitorRecharge = 1200,
-  scan = 60, lock = 40000, targets = 2, cargo = 40000, skill = "freighters", level = 1, exact = true }
+CLASS.freighter = { price = 1200000000, volume = 1000000, mass = 920000000, inertia = 0.0625, velocity = 65, warp = 1.5, radius = 1000,
+  shield = 28000, armor = 28000, hull = 86500, recharge = 6000, signature = 10500, cpu = 90, powergrid = 60,
+  highs = 0, mids = 0, lows = 3, hardpoints = 0, capacitor = 3500, capacitorRecharge = 215,
+  scan = 60, lock = 40000, targets = 2, cargo = 435000, skill = "freighters", level = 1, exact = true }
 -- An ultracapital has no size of its own (each is the size its faction's
 -- line says: the radius here is only what one is if nothing is said),
 -- no hardpoint, and a bay for what it launches that is many times a
 -- supercarrier's. (Every figure a first draft: the project owner's are
 -- that it has no turrets and a huge fighter bay.)
-CLASS.ultracapital = { price = 40000000000, volume = 12000000, mass = 9000000000, inertia = 0.012, velocity = 40, warp = 1.0, radius = 2000,
-  shield = 700000, armor = 700000, hull = 650000, recharge = 20000, signature = 12000, cpu = 2400, powergrid = 300000,
+CLASS.ultracapital = { price = 40000000000, volume = 12000000, mass = 8400000000, inertia = 0.012, velocity = 40, warp = 1.0, radius = 2000,
+  shield = 1460000, armor = 1460000, hull = 990000, recharge = 20000, signature = 47500, cpu = 2400, powergrid = 300000,
   highs = 8, mids = 8, lows = 8, hardpoints = 0, capacitor = 250000, capacitorRecharge = 9000,
   scan = 30, lock = 250000, targets = 14, cargo = 40000, skill = "ultracapitals", level = 1, exact = true }
 -- A mass-miner, beside a capital industrial: mining turrets where that
@@ -417,10 +431,10 @@ end
 -- hull whose line says how many hardpoints of each size it has is given
 -- the fitting for a gun or a launcher on every one of them, over what
 -- its class has. (Content.spec fits the Kethri's colony ship so.)
-local GUN_GRID = { 10, 160, 2000, 100000 }
-local GUN_CPU = { 12, 28, 58, 115 }
-local RACK_GRID = { 6, 110, 1500, 46000 }
-local RACK_CPU = { 30, 58, 92, 184 }
+local GUN_GRID = { 13, 230, 3000, 155000 }
+local GUN_CPU = { 19, 36, 56, 92 }
+local RACK_GRID = { 7, 110, 1500, 100000 }
+local RACK_CPU = { 22, 52, 62, 155 }
 
 -- The room in an ultracapital's bay, m3 (Ships.BAY, below, has it by
 -- class: here for the yards, which give a small one less).
@@ -972,6 +986,16 @@ for _, hull in types do
   end
 end
 
+-- What a drone, a fighter and a bomber take to destroy is half as much
+-- again as it was (2026-11-18): a ship's weapons hit half as hard again
+-- since then (Data/Modules' WEAPON_DAMAGE), and a drone, which carries
+-- what it did, lasts as long as it did under them.
+for _, t in types do
+  if t.class == "drone" then
+    t.shield, t.armor, t.hull = round(t.shield * 1.5), round(t.armor * 1.5), round(t.hull * 1.5)
+  end
+end
+
 local Ships = { list = types, byId = {} :: { [string]: ShipType } }
 -- What an exploration hull has over another, and what share of a
 -- cloaking device's fitting a hull built for a cloak asks (above, at
@@ -1007,9 +1031,9 @@ Ships.BAY = { frigate = 10, destroyer = 25, cruiser = 50, battleship = 125, indu
   attackbattlecruiser = 25, battlecruiser = 75, carrier = 2500, dreadnought = 250, siegedreadnought = 250, capitalindustrial = 1000,
   supercarrier = 6000, ultracapital = ULTRA_BAY } :: { [string]: number }
 -- And the room in its ore hold, m3, for the classes that have one: a
--- capital industrial's is forty and more of a mining barge's holds.
--- (A first figure.)
-Ships.ORE = { capitalindustrial = 150000 } :: { [string]: number }
+-- capital industrial's is seventy of a mining barge's holds. (The
+-- reference's, 2026-11-18.)
+Ships.ORE = { capitalindustrial = 250000 } :: { [string]: number }
 -- (And a logistics capital's bay for ships: above, at the yards.)
 Ships.SHIPBAY = SHIPBAY
 -- Whether a class is a capital.
@@ -1020,6 +1044,14 @@ Ships.AFFINITY = AFFINITY
 -- hull that leans to nothing: more of the kind it leans to.
 function Ships.Dealt(hull: ShipType, kind: number): number
   return if hull.affinity == kind then 1 + AFFINITY else 1
+end
+
+-- What a class's standard hull takes to destroy, layer by layer, before
+-- any faction's yard has had it: what its own hulls' leanings are seen
+-- against.
+function Ships.Standard(class: string): { shield: number, armor: number, hull: number }?
+  local s = CLASS[class]
+  return if s then { shield = s.shield, armor = s.armor, hull = s.hull } else nil
 end
 
 function Ships.Capital(class: string): boolean

@@ -157,8 +157,10 @@ local KINDS: { Kind } = {
       { { "projector.entanglement" }, { "afterburner.1mn" }, { "armor.plate.200mm" }, { "damage.control" }, { "gyrostabilizer" },
         { "disruptor.warp" }, { "armor.plate.200mm" } }) },
   { id = "marauder", hull = "cruiser.marauder", name = "Pirate Marauder", range = 6000, bounty = 500000, tags = 4,
-    fit = all(times(5, "autocannon.medium", "ammo.thermal.short.medium"), times(3, "launcher.heavy"),
-      { { "armor.plate.medium" }, { "damage.control" }, { "gyrostabilizer" }, { "gyrostabilizer" }, { "ballistic.control" },
+    -- (short launchers since 2026-11-18, when the missiles were set from the
+    -- reference: it fights from six kilometres, where they reach)
+    fit = all(times(5, "autocannon.medium", "ammo.thermal.short.medium"), times(3, "launcher.assault"),
+      { { "gyrostabilizer" }, { "damage.control" }, { "gyrostabilizer" }, { "gyrostabilizer" }, { "ballistic.control" },
         { "disruptor.warp" }, { "painter.target" }, { "shield.extender.medium" }, { "shield.extender.medium" } }) },
   { id = "ravager", hull = "battleship.ravager", name = "Pirate Ravager", range = 15000, bounty = 2500000, tags = 10,
     fit = all(times(6, "artillery.large", "ammo.emp.large"), times(4, "launcher.cruise"),
@@ -223,6 +225,11 @@ Pirates.SCOUT = Pirates.kindById["scout"]
 
 -- The grades above a plain pirate: what one is called, how many times
 -- over the bounty on it is, and how many more tags it carries.
+-- The level a pirate of each grade knows every skill at: a veteran's,
+-- a captain's; and an officer's by name (Tactical/Sightings,
+-- Tactical/Invasions). (Mine.)
+Pirates.SKILL = { [1] = 3, [2] = 4 } :: { [number]: number }
+Pirates.OFFICER = 5
 Pirates.GRADES = {
   { id = "veteran", bounty = 2, tags = 1 },
   { id = "captain", bounty = 5, tags = 3 },
@@ -447,6 +454,10 @@ Pirates.TOWER_RUNS = 3
 -- A pirate ship of a kind, in space at a point.
 function Pirates.Spawn(state: State.State, kind: Kind, system: number, x: number, y: number, z: number, home: number): State.Ball
   local ship = Space.NewShip(state, kind.hull, kind.name, "pirates", 0)
+  -- (how well its pilot knows their trade: a veteran's and a captain's
+  -- better than any pirate's, the Drowned's as the Drowned's: Assets/Items)
+  ship.skill = if string.sub(kind.id, 1, 8) == "drowned." then Items.NPC_LEVEL.drowned
+    else Pirates.SKILL[kind.grade or 0]
   Pirates.Equip(state, ship, kind)
   local ball = Space.Launch(state, ship, system, x, y, z)
   state.pilots[ship.id] = { ship = ship.id, range = kind.range, prey = 0, home = home, alone = 0, bounty = kind.bounty, tags = kind.tags,

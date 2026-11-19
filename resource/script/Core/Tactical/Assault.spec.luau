@@ -19,11 +19,34 @@ local Test = require("@lt/Tool/Test")
 local suite = Test.Suite("Assault")
 
 -- A plain fit for a hull: a gun or a launcher of its size on every
--- hardpoint, and then what there is room for of an afterburner, two
--- shield extenders, a plate, a repairer, a damage control, a
--- gyrostabiliser and another plate. Nothing custom, nothing tech 2, no
--- drones.
-local function plain(hullId: string): { { string } }
+-- hardpoint, and then what there is room for of a web (an entanglement
+-- projector), an afterburner, a target painter, two shield extenders, a
+-- plate, a repairer, a damage control, a gyrostabiliser and another
+-- plate. Nothing custom, nothing tech 2. And a drone bay full of light
+-- combat drones. (The web, the painter and the drones since
+-- 2026-11-18, when guns were set from the reference and a big gun all
+-- but misses a small ship: what a pilot does about the smaller pirates a
+-- level is made of, as the reference's pilots do.)
+-- The three sets of modules a level is flown with (the owner, 2026-11-18:
+-- "test 3 sets of modules with a run: tech 1, tech 2, and max-fit,
+-- officer/deadspace/masterwork"): the plain modules; the tech 2 make of
+-- whatever has one, with tech 2 rounds in it; and the best make there is
+-- of each, an officer's where an officer carries it, else the deepest
+-- deadspace make, else a masterwork. (Tech 2 drones for both of those.)
+local TIERS: { string } = { "t1", "t2", "max" }
+
+local function make(id: string, tier: string): string
+  if tier == "t2" then
+    return if Modules.Improved(id) then id .. ".ii" else id
+  elseif tier == "max" then
+    return Modules.Officer(id, "Test Officer") or (if rawget(Modules.byId, id .. ".site3") then id .. ".site3" else nil)
+      or (if rawget(Modules.byId, id .. ".master") then id .. ".master" else nil) or id
+  end
+  return id
+end
+
+local function plain(hullId: string, given: string?): { { string } }
+  local tier = given or "t1"
   local hull = Ships.byId[hullId]
   local size = if hull.class == "battleship" then "large" elseif hull.class == "cruiser" then "medium" else "small"
   local rack = if size == "large" then "launcher.cruise" elseif size == "medium" then "launcher.heavy" else "launcher.light"
@@ -38,17 +61,23 @@ local function plain(hullId: string): { { string } }
   for _ = 1, hull.launchers do
     table.insert(wanted, { rack, missile })
   end
-  for _, module in { if size == "small" then "afterburner.1mn" else "afterburner." .. size, "shield.extender." .. size,
-    "shield.extender." .. size, plate, "armor.repairer." .. size, "damage.control", "gyrostabilizer", plate } do
+  for _, module in { "projector.entanglement", if size == "small" then "afterburner.1mn" else "afterburner." .. size, "painter.target",
+    "shield.extender." .. size, "shield.extender." .. size, plate, "armor.repairer." .. size, "damage.control", "gyrostabilizer", plate } do
     table.insert(wanted, { module })
   end
   local types: { string } = {}
   local fit: { { string } } = {}
   for _, entry in wanted do
     assert(Modules.byId[entry[1]], `no module {entry[1]}`)
-    table.insert(types, entry[1])
+    local module = make(entry[1], tier)
+    -- (a tech 2 gun takes the tech 2 make of its rounds)
+    local charge = entry[2]
+    if charge and tier == "t2" and Modules.ImprovedCharge(charge) then
+      charge = charge .. ".ii"
+    end
+    table.insert(types, module)
     if Attributes.Check(hull, types) then
-      table.insert(fit, entry)
+      table.insert(fit, { module, charge })
     else
       table.remove(types)
     end
@@ -63,7 +92,7 @@ end
 -- hull that was left. 'works': what the camp is built of stands eight
 -- kilometres off from the first, firing if it can, and is destroyed
 -- when the last of the waves is: whoever flies is gone for first.
-local function fight(hullId: string, level: number, orbit: number, waves: { { string } }, works: { string }?): (boolean, number)
+local function fight(hullId: string, level: number, orbit: number, waves: { { string } }, works: { string }?, tier: string?): (boolean, number)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
   -- (the plain skills, every one at the level: not the crafts of a trade, which nothing is laid out on the
@@ -73,16 +102,37 @@ local function fight(hullId: string, level: number, orbit: number, waves: { { st
       state.skills[skill.id] = level
     end
   end
+  -- (and a pilot who flies tech 2, or better, has what it asks for, where theirs is less)
+  local function trained(type: string)
+    for _, need in Skills.Needs(type) do
+      state.skills[need.skill] = math.max(state.skills[need.skill] or 0, need.level)
+    end
+  end
   local ship = Space.NewShip(state, hullId, "Test", "player", state.player.home)
-  for _, entry in plain(hullId) do
+  for _, entry in plain(hullId, tier) do
+    trained(entry[1])
     Items.Equip(state, ship.id, entry[1], entry[2])
     if entry[2] then
       Items.Add(state, entry[2], 3000, ship.id, "cargo")
     end
   end
+  local hull = Ships.byId[hullId]
+  -- (a bay full: as many as it controls, and spares)
+  local drones = if (hull.drones or Ships.DRONES[hull.class] or 0) > 0 then math.floor((hull.bay or Ships.BAY[hull.class] or 0) / 5) else 0
+  if drones > 0 then
+    -- (the tech 2 make for a tier above the plain one, where the pilot has the Drones it takes)
+    local better = (tier or "t1") ~= "t1"
+    local drone = if better then "drone.light.ii" else "drone.light"
+    trained(drone)
+    if better then
+      state.skills.drones = math.max(state.skills.drones or 0, 4)
+    end
+    Items.Add(state, drone, drones, ship.id, "dronebay")
+  end
   state.player.ship = ship.id
   local id = ship.id
-  Core.Submit(game, { kind = "Undock", actor = id })
+  local undocked, why = Core.Submit(game, { kind = "Undock", actor = id })
+  assert(undocked, `{hullId} could not undock: {tostring(why)}`)
   Core.Step(game)
   local me = state.balls[id]
   me.x += 5e7
@@ -101,6 +151,7 @@ local function fight(hullId: string, level: number, orbit: number, waves: { { st
       Pirates.Spawn(state, Pirates.kindById[kind], me.system, me.x + 30000 * math.cos(2.1 * n), me.y, me.z + 30000 * math.sin(2.1 * n),
         me.grid)
     end
+    local engaged = 0
     for _ = 1, 3000 do
       if state.player.ship ~= id or state.balls[id] == nil then
         return false, 0
@@ -134,9 +185,15 @@ local function fight(hullId: string, level: number, orbit: number, waves: { { st
           for _, running in me.vitals.running do
             on = on or running.item == item.id
           end
-          if not on and (module.weapon or module.repair or module.boost) then
-            Core.Submit(game, { kind = "ActivateModule", actor = id, item = item.id, target = if module.weapon then nearest else nil })
+          if not on and (module.weapon or module.repair or module.boost or module.hex) then
+            Core.Submit(game, { kind = "ActivateModule", actor = id, item = item.id,
+              target = if module.weapon or module.hex then nearest else nil })
           end
+        end
+        -- (the drones out, and on what the guns are on)
+        Core.Submit(game, { kind = "LaunchDrones", actor = id })
+        if engaged ~= nearest and (Core.Submit(game, { kind = "EngageDrones", actor = id, target = nearest })) then
+          engaged = nearest
         end
       end
       Core.Step(game)
@@ -178,27 +235,44 @@ local FOR: { { any } } = {
   { "frigate.akashi", 2, 2000 }, { "destroyer.nozomi", 3, 2500 }, { "cruiser.paestro", 4, 5000 }, { "battleship.owari", 4, 12000 },
 }
 
-suite:Case("a plain ship of the class a level is for comes through every camp of that level, and the class below it through few", function(t)
+-- What a level's ship must do, flown with each set of modules (the
+-- owner's rule, 2026-11-18): with the plain ones, nothing ("If only t1
+-- fails consistently, it's not an issue"); with the tech 2 ones, not
+-- fail time and again ("If t2 also consistently fails, the room is
+-- overpowered": here, more than a quarter of the time, which is mine);
+-- with the best there is, die no more than one time in ten ("if
+-- max-fit dies more than 1/10 times, it's WAY too powerful").
+local TECH2_FAILS, MAX_DIES = 0.25, 0.1
+
+suite:Case("a ship of the class a level is for comes through that level's camps as it is fitted, and the class below it through few", function(t)
   local said: { string } = {}
   for level, ship in FOR do
-    local wins, least, total = 0, 1, 0
-    for _, waves in camps(level) do
-      total += 1
-      local won, left = fight(ship[1], ship[2], ship[3], waves)
-      wins += if won then 1 else 0
-      least = if won then math.min(least, left) else least
+    local name = Ships.byId[ship[1]].name
+    local line: { string } = {}
+    for _, tier in TIERS do
+      local wins, least, total = 0, 1, 0
+      for _, waves in camps(level) do
+        total += 1
+        local won, left = fight(ship[1], ship[2], ship[3], waves, nil, tier)
+        wins += if won then 1 else 0
+        least = if won then math.min(least, left) else least
+      end
+      table.insert(line, `{tier} {wins}/{total} least {math.floor(least * 100)}%`)
+      if tier == "t2" then
+        t.ok(total - wins <= total * TECH2_FAILS, `a {name} with tech 2 modules came through {wins} of {total} level {level} camps`)
+      elseif tier == "max" then
+        t.ok(total - wins <= total * MAX_DIES, `a {name} with the best modules there are died in {total - wins} of {total} level {level} camps`)
+      end
     end
-    t.eq(wins, total, `a {Ships.byId[ship[1]].name} at level {level}`)
-    t.ok(least > 0.08, `a {Ships.byId[ship[1]].name} came through a level {level} camp with {math.floor(least * 100)}% of itself`)
-    table.insert(said, `{Ships.byId[ship[1]].class} L{level} {wins}/{total}, least {math.floor(least * 100)}%`)
-    -- The class below: the level is not for it.
+    table.insert(said, `{Ships.byId[ship[1]].class} L{level}: {table.concat(line, ", ")}`)
+    -- The class below, plainly fitted: the level is not for it.
     local below = FOR[level - 1]
     if below then
       local theirs = 0
       for _, waves in camps(level) do
         theirs += if fight(below[1], below[2], below[3], waves) then 1 else 0
       end
-      t.ok(theirs < total / 2, `a {Ships.byId[below[1]].name} came through {theirs} of {total} camps of level {level}`)
+      t.ok(theirs < #camps(level) / 2, `a {Ships.byId[below[1]].name} came through {theirs} of {#camps(level)} camps of level {level}`)
     end
   end
   print("     assault: " .. table.concat(said, "; "))
@@ -209,25 +283,32 @@ end)
 -- the worst every wave the last room can have, one after another, with
 -- the emplacements firing all the while. Whoever flies is gone for
 -- first, which is the way to do it.)
-suite:Case("a plain ship of the class a level is for razes a camp of that level, with every wave its last room can have on them", function(t)
+suite:Case("a ship of the class a level is for razes a camp of that level as it is fitted, with every wave its last room can have on them", function(t)
   local lines: { string } = {}
   for level = 1, #Assault.PACKS do
     local hull: string, skill: number, orbit: number = FOR[level][1], FOR[level][2], FOR[level][3]
     -- (the most waves a last room has: all of them but one for each room before it)
     local most = Assault.WAVES[level] - Assault.LEAST[level] + 1
     local every = camps(level)
-    local won, tried, worst = 0, 0, 1
-    -- (every other camp the level can be: enough to say)
-    for index = 1, #every, 2 do
-      local waves = table.move(every[index], #every[index] - most + 1, #every[index], 1, {})
-      local ok, left = fight(hull, skill, orbit, waves, Assault.WORKS[level])
-      tried += 1
-      won += if ok then 1 else 0
-      worst = math.min(worst, left)
+    local line: { string } = {}
+    for _, tier in TIERS do
+      local won, tried, worst = 0, 0, 1
+      -- (every other camp the level can be: enough to say)
+      for index = 1, #every, 2 do
+        local waves = table.move(every[index], #every[index] - most + 1, #every[index], 1, {})
+        local ok, left = fight(hull, skill, orbit, waves, Assault.WORKS[level], tier)
+        tried += 1
+        won += if ok then 1 else 0
+        worst = if ok then math.min(worst, left) else worst
+      end
+      table.insert(line, `{tier} {won}/{tried} least {math.floor(worst * 100)}%`)
+      if tier == "t2" then
+        t.ok(tried - won <= tried * TECH2_FAILS, `a {hull} with tech 2 modules razed {won} of {tried} level {level} camps`)
+      elseif tier == "max" then
+        t.ok(tried - won <= tried * MAX_DIES, `a {hull} with the best modules there are died in {tried - won} of {tried} level {level} camps`)
+      end
     end
-    table.insert(lines, `{(string.match(hull, "^%a+"))} L{level} {won}/{tried}, least {math.floor(worst * 100)}%`)
-    t.eq(won, tried, `a {hull} with skills at {skill} should raze every level {level} camp`)
-    t.ok(worst > 0.08, `a {hull} razed a level {level} camp with {math.floor(worst * 100)}% of itself`)
+    table.insert(lines, `{(string.match(hull, "^%a+"))} L{level}: {table.concat(line, ", ")}`)
   end
   print("     raze: " .. table.concat(lines, "; "))
 end)

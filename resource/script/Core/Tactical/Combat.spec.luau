@@ -103,6 +103,9 @@ local function modules(a: Arena): { State.Item }
 end
 
 local CANNONS = { { "autocannon.small", "ammo.emp" }, { "autocannon.small", "ammo.emp" } }
+-- (the small autocannon and the ship a pilot begins in, as the data has them: the cases below are about the rules)
+local AC = assert(Modules.byId["autocannon.small"].weapon)
+local COURIER = Ships.byId["frigate.courier"]
 
 suite:Case("a lock takes the time the formula gives, and no shot before it", function(t)
   local a = arena("frigate.courier", CANNONS, "frigate.courier", {}, 2000)
@@ -110,7 +113,7 @@ suite:Case("a lock takes the time the formula gives, and no shot before it", fun
   t.eq(refused(a, { kind = "ActivateModule", actor = 0, item = cannon.id, target = a.foe.id }), "no locked target")
   order(t, a, { kind = "LockTarget", actor = 0, target = a.foe.id })
   local started = stepUntil(a, "LockStarted", 2)
-  t.near(started.time, Gunnery.LockTime(580, 38), 1e-9)
+  t.near(started.time, Gunnery.LockTime(COURIER.scanResolution, COURIER.signature), 1e-9)
   t.eq(refused(a, { kind = "LockTarget", actor = 0, target = a.foe.id }), "already targeted")
   t.eq(refused(a, { kind = "ActivateModule", actor = 0, item = cannon.id, target = a.foe.id }), "no locked target")
   local _, ticks = stepUntil(a, "LockCompleted", 30)
@@ -119,7 +122,7 @@ suite:Case("a lock takes the time the formula gives, and no shot before it", fun
 end)
 
 suite:Case("locks have a range and a limit", function(t)
-  local a = arena("frigate.courier", CANNONS, "frigate.courier", {}, 30000)
+  local a = arena("frigate.courier", CANNONS, "frigate.courier", {}, COURIER.lockRange + 1000)
   t.eq(refused(a, { kind = "LockTarget", actor = 0, target = a.foe.id }), "out of targeting range")
   t.eq(refused(a, { kind = "LockTarget", actor = 0, target = a.me.id }), "no such target")
   t.eq(refused(a, { kind = "UnlockTarget", actor = 0, target = a.foe.id }), "not targeted")
@@ -158,15 +161,15 @@ suite:Case("autocannons at rest hit as often and as hard as the formula says", f
   -- EMP halves the 1100 m optimal; at 2000 m the target is 1450 m into a
   -- 5200 m falloff.
   local a = arena("frigate.courier", CANNONS, "industrial.hauler", {}, 2000)
-  local chance = Gunnery.HitChance(0, 470, 180, 2000, 550, 5200)
-  t.near(chance, 0.5 ^ ((1450 / 5200) ^ 2), 1e-12)
+  local chance = Gunnery.HitChance(0, AC.tracking, Ships.byId["industrial.hauler"].signature, 2000, AC.optimal * 0.5, AC.falloff)
+  t.near(chance, 0.5 ^ (((2000 - AC.optimal * 0.5) / AC.falloff) ^ 2), 1e-12)
   lockFoe(t, a)
   for _, cannon in modules(a) do
     order(t, a, { kind = "ActivateModule", actor = 0, item = cannon.id, target = a.foe.id })
   end
-  -- Count shots until the target dies (or four minutes pass).
+  -- Count shots for a minute and a half (it dies not long after).
   local shots, hits, wrecks, damage = 0, 0, 0, 0
-  for _ = 1, 240 do
+  for _ = 1, 90 do
     Core.Step(a.game)
     for _, event in Core.TakeEvents(a.game) do
       if event.kind == "Shot" then
@@ -181,15 +184,16 @@ suite:Case("autocannons at rest hit as often and as hard as the formula says", f
       end
     end
   end
-  t.ok(shots > 150, `only {shots} shots in four minutes`)
-  -- two guns, one shot each per 2.8 s
-  t.near(shots, 2 * 240 / 2.8, 4)
-  t.near(hits / shots, chance, 0.06, "share of shots that hit")
-  -- 24 raw damage a shot (EMP 12 x multiplier 2), times the average
+  t.ok(shots > 40, `only {shots} shots in a minute and a half`)
+  -- two guns, one shot each a cycle
+  t.near(shots, 2 * 90 / AC.duration, 4)
+  t.near(hits / shots, chance, 0.08, "share of shots that hit")
+  -- the raw damage a shot (EMP 12 x the gun's multiplier), times the average
   -- quality: 1% wrecking at 3x, the rest of the hits at roll + 0.49.
+  local raw = 12 * AC.damageMultiplier
   local quality = 0.03 + (chance ^ 2 - 0.0001) / 2 + 0.49 * (chance - 0.01)
-  t.near(damage / shots, 24 * quality, 24 * 0.08, "raw damage per shot")
-  t.ok(wrecks <= 8, `{wrecks} wrecking hits in {shots} shots`)
+  t.near(damage / shots, raw * quality, raw * 0.1, "raw damage per shot")
+  t.ok(wrecks <= 5, `{wrecks} wrecking hits in {shots} shots`)
 end)
 
 suite:Case("a target crossing the line of fire is harder to hit than one flying along it", function(t)
@@ -204,11 +208,11 @@ suite:Case("a target crossing the line of fire is harder to hit than one flying 
   -- Flying straight away at 300 m/s: still no crossing.
   a.foe.vx = 300
   t.eq(chance(), 1)
-  -- Crossing at 300 m/s: 0.6 rad/s. Against tracking 470 and a 38 m
-  -- signature that is 0.6 * 40000 / (470 * 38) = 1.344 times what the gun
-  -- can follow.
+  -- Crossing at 300 m/s: 0.6 rad/s. Against the gun's tracking and the
+  -- signature, that is 0.6 * 40000 / (tracking * signature) times what the
+  -- gun can follow.
   a.foe.vx, a.foe.vz = 0, 300
-  t.near(chance(), 0.5 ^ ((0.6 * 40000 / (470 * 38)) ^ 2), 1e-12)
+  t.near(chance(), 0.5 ^ ((0.6 * 40000 / (AC.tracking * COURIER.signature)) ^ 2), 1e-12)
   -- It is relative motion that counts: matching its velocity cancels it.
   a.me.vz = 300
   t.eq(chance(), 1)
@@ -216,7 +220,7 @@ suite:Case("a target crossing the line of fire is harder to hit than one flying 
   -- rate, though now 1930 m into falloff.
   a.me.vz = 0
   a.foe.x += 2000
-  local far = Gunnery.HitChance(300 / 2500, 470, 38, 2420, 550, 5200)
+  local far = Gunnery.HitChance(300 / 2500, AC.tracking, COURIER.signature, 2420, AC.optimal * 0.5, AC.falloff)
   t.near(chance(), far, 1e-12)
   t.ok(far > 0.8, "which is much the easier shot")
   -- A hauler crossing at the first distance is a big enough target to follow.
@@ -231,10 +235,10 @@ suite:Case("a tech 2 charge's trade is in the shot: a short one's gun tracks wor
     cannon.charge = charge
     return assert(Combat.HitChance(state, a.me.id, cannon.id, a.foe.id))
   end
-  -- Crossing at 300 m/s from 500 m: 0.6 rad/s, against tracking 470 and a 38 m signature.
+  -- Crossing at 300 m/s from 500 m: 0.6 rad/s, against the gun's tracking and the signature.
   a.foe.vx, a.foe.vz = 0, 300
   local function tracked(share: number): number
-    return 0.5 ^ ((0.6 * 40000 / (470 * share * 38)) ^ 2)
+    return 0.5 ^ ((0.6 * 40000 / (AC.tracking * share * COURIER.signature)) ^ 2)
   end
   -- (the short rounds, at half the gun's range: in reach here, so it is all tracking)
   t.near(chance("ammo.fusion"), tracked(1), 1e-12)
@@ -247,8 +251,8 @@ suite:Case("a tech 2 charge's trade is in the shot: a short one's gun tracks wor
   a.foe.vz = 0
   a.foe.x += 4000
   local gap = 4420
-  t.near(chance("ammo.sabot"), Gunnery.HitChance(0, 470, 38, gap, 1100, 5200), 1e-12)
-  t.near(chance("ammo.sabot.ii"), Gunnery.HitChance(0, 470 * 1.3, 38, gap, 1100 * 0.85, 5200), 1e-12)
+  t.near(chance("ammo.sabot"), Gunnery.HitChance(0, AC.tracking, COURIER.signature, gap, AC.optimal, AC.falloff), 1e-12)
+  t.near(chance("ammo.sabot.ii"), Gunnery.HitChance(0, AC.tracking * 1.3, COURIER.signature, gap, AC.optimal * 0.85, AC.falloff), 1e-12)
   t.ok(chance("ammo.sabot.ii") < chance("ammo.sabot"), "the middle rounds' tech 2 make should give up some range")
 end)
 
@@ -311,11 +315,12 @@ suite:Case("a missile lands after its flight and does less to a small target", f
   t.near(shot.flight, flight, 1e-9)
   local hit, ticks = stepUntil(a, "MissileHit", 10)
   t.eq(ticks, math.ceil(flight))
-  -- 83 kinetic, and 15% more from a Talmar hull, which leans to kinetic; times 38/40 for a courier's signature
-  -- against a 40 m blast
-  t.near(hit.damage, 83 * 1.15 * 38 / 40, 1e-9)
+  -- 83 kinetic times the launcher's multiplier, and 15% more from a Talmar hull, which leans to kinetic; times
+  -- the courier's signature over a 40 m blast
+  local warhead = 83 * assert(Modules.byId["launcher.light"].weapon).damageMultiplier * 1.15 * COURIER.signature / 40
+  t.near(hit.damage, warhead, 1e-9)
   -- and the shield lets 60% of kinetic through
-  t.near(a.foe.vitals.shieldMax - a.foe.vitals.shield, 83 * 1.15 * 38 / 40 * 0.6, 1.5)
+  t.near(a.foe.vitals.shieldMax - a.foe.vitals.shield, warhead * 0.6, 1.5)
   t.eq(launcher.rounds, 29)
 end)
 
@@ -351,16 +356,16 @@ suite:Case("an afterburner changes how the ship flies while it runs", function(t
   local burner = modules(a)[1]
   order(t, a, { kind = "ActivateModule", actor = 0, item = burner.id })
   Core.Step(a.game)
-  t.near(a.me.maxVelocity, 360 * 2.1, 1e-9)
-  t.near(a.me.tau, 3.2 * 1.6, 1e-9)
+  t.near(a.me.maxVelocity, COURIER.maxVelocity * 2.1, 1e-9)
+  t.near(a.me.tau, COURIER.inertia * (COURIER.mass + 500000) / 1e6, 1e-9)
   t.eq(refused(a, { kind = "ActivateModule", actor = 0, item = burner.id }), "already running")
   order(t, a, { kind = "DeactivateModule", actor = 0, item = burner.id })
   Core.Step(a.game)
-  t.near(a.me.maxVelocity, 360 * 2.1, 1e-9, "it finishes the cycle it is in")
+  t.near(a.me.maxVelocity, COURIER.maxVelocity * 2.1, 1e-9, "it finishes the cycle it is in")
   local stopped = stepUntil(a, "ModuleStopped", 12)
   t.eq(stopped.reason, "switched off")
-  t.near(a.me.maxVelocity, 360, 1e-9)
-  t.near(a.me.tau, 3.52, 1e-9)
+  t.near(a.me.maxVelocity, COURIER.maxVelocity, 1e-9)
+  t.near(a.me.tau, COURIER.inertia * COURIER.mass / 1e6, 1e-9)
 end)
 
 suite:Case("guns reload from the hold, and stop when it is empty", function(t)
@@ -676,7 +681,7 @@ suite:Case("a raider carries a warp disruptor, and a pilot it catches cannot war
 end)
 
 suite:Case("a painter swells its target's signature, and a dampener cuts how far it can see", function(t)
-  local a = arena("frigate.courier", { { "painter.target" }, { "damper.sensor" } }, "frigate.courier", CANNONS, 12000)
+  local a = arena("frigate.courier", { { "painter.target" }, { "damper.sensor" } }, "frigate.courier", CANNONS, 17000)
   local state = a.game.state
   local painter, damper = modules(a)[1], modules(a)[2]
   local signature, range, resolution = a.foe.vitals.signature, a.foe.vitals.lockRange, a.foe.vitals.scanResolution
@@ -688,7 +693,7 @@ suite:Case("a painter swells its target's signature, and a dampener cuts how far
   t.near(a.foe.vitals.signature, signature * 1.3, 1e-6)
   t.eq({ a.foe.vitals.paint, a.foe.vitals.damp }, { 1.3, 1 })
   t.eq(#a.foe.vitals.locks, 1)
-  -- Dampened to half its range, it cannot keep a lock from twelve kilometres.
+  -- Dampened to half its range, it cannot keep a lock from seventeen kilometres.
   order(t, a, { kind = "ActivateModule", actor = 0, item = damper.id, target = a.foe.id })
   local lost = stepUntil(a, "LockLost", 4)
   t.eq({ lost.ball, lost.target } :: { any }, { a.foe.id, a.me.id } :: { any })

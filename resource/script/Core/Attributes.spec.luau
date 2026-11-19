@@ -19,13 +19,13 @@ end
 
 suite:Case("an empty hull has its own numbers", function(t)
   local stats = Attributes.Ship(lancer, {})
-  t.eq(stats.armor, 520)
-  t.eq(stats.maxVelocity, 345)
+  t.eq(stats.armor, 415)
+  t.eq(stats.maxVelocity, 340)
   t.eq(stats["armorResonance.2"], 0.65)
   -- (it is a Kethri hull, and leans to EM as theirs do: 15% less of that let through by every layer)
   t.near(stats["armorResonance.1"], 0.5 * 0.85, 1e-12)
   t.near(stats["shieldResonance.1"], 1 * 0.85, 1e-12)
-  t.near(stats.tau, 3.0 * 1.19, 1e-12)
+  t.near(stats.tau, 3.2 * 1.12, 1e-12)
 end)
 
 suite:Case("the stacking penalty is 100%, 87%, 57%, 28%", function(t)
@@ -37,9 +37,9 @@ end)
 
 suite:Case("a plate adds armour and mass, and the mass slows the ship's turning", function(t)
   local stats = Attributes.Ship(lancer, fit("armor.plate.200mm"))
-  t.eq(stats.armor, 1040)
-  t.eq(stats.mass, 1377500)
-  t.near(stats.tau, 3.0 * 1.3775, 1e-12)
+  t.eq(stats.armor, 935)
+  t.eq(stats.mass, 1307500)
+  t.near(stats.tau, 3.2 * 1.3075, 1e-12)
 end)
 
 suite:Case("two membranes resist less than twice one", function(t)
@@ -62,10 +62,10 @@ end)
 suite:Case("speed modules stack with a penalty", function(t)
   local stats = Attributes.Ship(lancer, fit("overdrive", "nanofiber"))
   -- overdrive is the stronger (10.5%), so the nanofiber's 7.75% is penalised
-  t.near(stats.maxVelocity, 345 * 1.105 * (1 + 0.0775 * 0.869120), 1e-4)
-  t.near(stats.inertia, 3.0 * 0.87, 1e-12)
-  t.near(stats.hull, 360 * 0.85, 1e-12)
-  t.near(stats.cargo, 135 * 0.9, 1e-12)
+  t.near(stats.maxVelocity, 340 * 1.105 * (1 + 0.0775 * 0.869120), 1e-4)
+  t.near(stats.inertia, 3.2 * 0.87, 1e-12)
+  t.near(stats.hull, 350 * 0.85, 1e-12)
+  t.near(stats.cargo, 190 * 0.9, 1e-12)
 end)
 
 suite:Case("a hardener only helps while it is running", function(t)
@@ -141,21 +141,21 @@ end)
 
 suite:Case("an afterburner, running, more than doubles speed and adds mass", function(t)
   local on = Attributes.Ship(courier, { { type = "afterburner.1mn", running = true } })
-  t.near(on.maxVelocity, 360 * 2.1, 1e-9)
-  t.eq(on.mass, 1600000)
-  t.near(on.tau, 3.2 * 1.6, 1e-12)
+  t.near(on.maxVelocity, 355 * 2.1, 1e-9)
+  t.eq(on.mass, 1530000)
+  t.near(on.tau, 3.4 * 1.53, 1e-12)
 end)
 
 suite:Case("heat sinks raise a laser's damage and rate of fire, and nothing else's", function(t)
   local fitted = fit("laser.pulse.small", "heat.sink", "heat.sink")
   local laser = Attributes.Weapon(fitted, "laser.pulse.small")
-  t.near(laser.damageMultiplier, 2.2 * 1.10 * (1 + 0.10 * 0.869120), 1e-6)
-  t.near(laser.duration, 3 * 0.895 * (1 - 0.105 * 0.869120), 1e-6)
-  t.eq(laser.optimal, 5200)
+  t.near(laser.damageMultiplier, 4.5 * 1.10 * (1 + 0.10 * 0.869120), 1e-6)
+  t.near(laser.duration, 3.5 * 0.895 * (1 - 0.105 * 0.869120), 1e-6)
+  t.eq(laser.optimal, 5250)
   local cannon = Attributes.Weapon(fit("autocannon.small", "heat.sink"), "autocannon.small")
-  t.eq(cannon.damageMultiplier, 2.0)
+  t.near(cannon.damageMultiplier, 2.89 * 1.5, 1e-9)
   -- and the module table itself is untouched
-  t.eq((Modules.byId["laser.pulse.small"].weapon :: Modules.Weapon).damageMultiplier, 2.2)
+  t.eq((Modules.byId["laser.pulse.small"].weapon :: Modules.Weapon).damageMultiplier, 4.5)
 end)
 
 suite:Case("a fit must respect slots, hardpoints, CPU and powergrid", function(t)
@@ -169,10 +169,11 @@ suite:Case("a fit must respect slots, hardpoints, CPU and powergrid", function(t
   t.eq({ Attributes.Check(lancer, { "launcher.light" }) }, { false, "no free launcher hardpoint" } :: { any })
   t.eq({ Attributes.Check(courier, { "shield.extender.small", "shield.booster.small", "armor.repairer.small" }) },
     { true } :: { any })
-  t.eq({ Attributes.Check(courier, { "armor.plate.200mm", "laser.pulse.small", "laser.pulse.small", "afterburner.1mn" }) },
-    { false, "not enough powergrid (35 of 32 MW)" } :: { any })
-  t.eq({ Attributes.Check(lancer, { "shield.hardener", "shield.hardener", "heat.sink", "heat.sink", "heat.sink", "damage.control" }) },
-    { false, "not enough CPU (145 of 125 tf)" } :: { any })
+  t.eq({ Attributes.Check(courier, { "armor.plate.200mm", "laser.pulse.small", "laser.pulse.small", "afterburner.1mn",
+    "shield.extender.small" }) }, { false, "not enough powergrid (45 of 44 MW)" } :: { any })
+  t.eq({ Attributes.Check(lancer, { "laser.pulse.small", "laser.pulse.small", "laser.pulse.small", "shield.hardener",
+    "shield.hardener", "heat.sink", "heat.sink", "heat.sink", "damage.control" }) },
+    { false, "not enough CPU (190 of 175 tf)" } :: { any })
   t.eq({ Attributes.Check(lancer, { "bogus" }) }, { false, "'bogus' is not a module" } :: { any })
 end)
 

@@ -476,7 +476,7 @@ suite:Case("a hull can be bought, assembled, boarded and flown", function(t)
   Core.Step(game)
   local ball = assert(Core.Query.Ball(game, javelin.id))
   -- (a Akashi's top speed, with the pilot's Navigation as it is)
-  t.eq(ball.maxVelocity, 325)
+  t.eq(ball.maxVelocity, 320)
   t.eq(Core.Query.Player(game).hull.id, "frigate.akashi")
 end)
 

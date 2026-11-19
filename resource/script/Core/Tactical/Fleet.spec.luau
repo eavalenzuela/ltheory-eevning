@@ -686,11 +686,11 @@ suite:Case("an ore hold takes ore and gas and nothing else; what its ship mines 
   t.eq({ Core.Query.OreHold(game, great.id) } :: { any }, { Ships.ORE.capitalindustrial, 400 * Ores.byId["ore.ferrite"].volume } :: { any })
   t.eq(oreIn(game, great.id, "orehold"), 400)
   -- (no more than there is room for)
-  local filler = Items.Add(state, "ore.iridite", 200000, home, "hangar")
+  local filler = Items.Add(state, "ore.iridite", 3000000, home, "hangar")
   t.eq(refused(game, { kind = "MoveItems", actor = 0, item = filler.id, to = "orehold" }), "not enough room in the ore hold")
   -- And out of it again, to the hangar.
   t.ok((submit(game, { kind = "MoveItems", actor = 0, item = Items.In(state, great.id, "orehold")[1].id, to = "hangar" })))
-  t.eq({ oreIn(game, great.id, "orehold"), oreIn(game, home, "hangar") } :: { any }, { 0, 201000 } :: { any })
+  t.eq({ oreIn(game, great.id, "orehold"), oreIn(game, home, "hangar") } :: { any }, { 0, 3001000 } :: { any })
 
   -- Out at a belt with mining lasers: what it cuts goes into the ore hold, and the hold stays as it was.
   for _ = 1, 4 do
@@ -1751,7 +1751,9 @@ suite:Case("a pilot sent to buy pays no more than they were told and no more tha
   t.ok(waitFor(game, 3000, function()
     return wing.order == "stay"
   end), "the second errand did not end")
-  t.eq({ count(game, home, "hangar", type), state.wallet }, { under + 3, 10 })
+  -- (paid for: what three cost when they were sent, or a little less if the price there eased by the time they came)
+  t.eq(count(game, home, "hangar", type), under + 3)
+  t.ok(state.wallet >= 10 and state.wallet < 10 + three * 0.1, `{state.wallet} left of {three + 10}`)
   for _, event in Core.TakeEvents(game) do
     if event.kind == "BuyEnded" then
       ended = event

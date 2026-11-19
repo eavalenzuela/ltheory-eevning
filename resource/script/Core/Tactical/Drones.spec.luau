@@ -127,7 +127,7 @@ suite:Case("a tech 2 drone takes Drones 4 to have out, and flies a tougher hull 
       local ship, ball = state.ships[drone.ship], state.balls[drone.ship]
       t.eq({ ship.type, ball.name } :: { any }, { "drone.hull.light.ii", "Light Combat Drone II" } :: { any })
       local guns = Items.Fitted(state, drone.ship)
-      t.eq({ #guns, guns[1].type, guns[1].charge } :: { any }, { 1, "autocannon.small.ii", "ammo.fusion" } :: { any })
+      t.eq({ #guns, guns[1].type, guns[1].charge } :: { any }, { 1, "drone.gun.light.ii", "ammo.fusion" } :: { any })
       t.ok(ball.vitals.armorMax > state.balls[out[1].ship].vitals.armorMax, "a tech 2 drone should have more armour")
     end
   end

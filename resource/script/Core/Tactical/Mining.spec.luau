@@ -134,12 +134,12 @@ end)
 
 suite:Case("mining stops when the hold is full, and takes only what fits", function(t)
   local game, _, rock, laser = atRock(t, "ore.ferrite")
-  -- 180 m3 hold: leave room for 25 m3, less than a cycle's 40.
-  Items.Add(game.state, "ore.ferrite", 1550, game.state.player.ship, "cargo")
+  -- 250 m3 hold: leave room for 25 m3, less than a cycle's 40.
+  Items.Add(game.state, "ore.ferrite", 2250, game.state.player.ship, "cargo")
   order(t, game, { kind = "ActivateModule", actor = 0, item = laser.id, target = rock })
   local mined = stepUntil(game, "Mined", 70)
   t.eq(mined.units, 250, "the 25 m3 that fits")
-  t.near(Items.CargoUsed(game.state, game.state.player.ship), 180, 1e-9)
+  t.near(Items.CargoUsed(game.state, game.state.player.ship), 250, 1e-9)
   local stopped = stepUntil(game, "ModuleStopped", 70)
   t.eq(stopped.reason, "the hold is full")
 end)

@@ -347,8 +347,8 @@ suite:Case("a cloaking device asks three quarters of a hull's own CPU, of any hu
     t.eq({ Attributes.Check(hull, { "cloak.device" }) } :: { any }, { true } :: { any }, id)
   end
   local frigate = Ships.byId["frigate.skinner"]
-  t.eq({ Attributes.Check(frigate, { "cloak.device", "shield.extender.small", "shield.extender.small" }) } :: { any },
-    { false, string.format("not enough CPU (%.0f of %.0f tf)", frigate.cpu * 0.75 + 40, frigate.cpu) } :: { any })
+  t.eq({ Attributes.Check(frigate, { "cloak.device", "shield.extender.small", "shield.extender.small", "shield.extender.small" }) } :: { any },
+    { false, string.format("not enough CPU (%.0f of %.0f tf)", frigate.cpu * 0.75 + 60, frigate.cpu) } :: { any })
   -- A hull built to go unseen asks a tenth: the black ops haulers (the project owner's word: "fitting bonuses
   -- (e.g. -90% cpu/pg) to make cloaks not prohibitively expensive to fit"), and the Skiver, which has no need.
   for _, id in { "industrial.longhorn", "industrial.akaboshi", "industrial.tarantula", "frigate.skiver" } do

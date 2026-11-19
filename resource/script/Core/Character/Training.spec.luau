@@ -170,9 +170,9 @@ suite:Case("a skill a pilot does not start with is learned from its book, once i
   t.eq(refused(game, { kind = "TrainSkill", actor = 0, type = "rapid.firing" }), "learn it from its book first")
   t.eq(refused(game, { kind = "TrainSkill", actor = 0, type = "juggling" }), "no such skill")
   local books = Items.Add(state, "book.rapid.firing", 2, home, "hangar")
-  t.eq(refused(game, { kind = "LearnSkill", actor = 0, item = books.id }), "needs Projectile Turrets 2")
+  t.eq(refused(game, { kind = "LearnSkill", actor = 0, item = books.id }), "needs Weapon Upgrades 2")
   t.eq(refused(game, { kind = "LearnSkill", actor = 0, item = stack(game, "ammo.emp").id }), "that is not a skill book")
-  state.skills.projectiles = 2
+  state.skills["weapon.upgrades"] = 2
   order(t, game, { kind = "LearnSkill", actor = 0, item = books.id })
   t.eq({ state.skills["rapid.firing"], books.quantity }, { 0, 1 }, "known at level 0, and the book is used up")
   t.eq(refused(game, { kind = "LearnSkill", actor = 0, item = books.id }), "already known")
@@ -249,7 +249,7 @@ suite:Case("a skill with a bonus makes the ship better the moment it is trained,
   t.eq(Attributes.Ship(Ships.byId[state.ships[ship].type], Items.Fit(state, ship, nil), nil).powergrid, before.powergrid)
 end)
 
-suite:Case("weapon skills change the weapons of their family only", function(t)
+suite:Case("a family's weapon skill changes the weapons of its family only, and Rapid Firing every turret", function(t)
   local Attributes = require("@lt/Core/Attributes")
   local fitted = { { type = "autocannon.small", running = false }, { type = "laser.pulse.small", running = false } }
   local plain = Attributes.Weapon(fitted, "autocannon.small", {})
@@ -259,7 +259,11 @@ suite:Case("weapon skills change the weapons of their family only", function(t)
   local laser = Attributes.Weapon(fitted, "laser.pulse.small", {})
   local far = Attributes.Weapon(fitted, "laser.pulse.small", { ["rapid.firing"] = 5, sharpshooter = 5 })
   t.near(far.optimal, laser.optimal * 1.25, 1e-9)
-  t.eq(far.duration, laser.duration)
+  t.near(far.duration, laser.duration * 0.8, 1e-9)
+  -- (and each family's own skill makes its guns hit harder, and no other family's)
+  local hard = Attributes.Weapon(fitted, "laser.pulse.small", { lasers = 5, projectiles = 5 })
+  t.near(hard.damageMultiplier, laser.damageMultiplier * 1.25, 1e-9)
+  t.near(Attributes.Weapon(fitted, "autocannon.small", { lasers = 5 }).damageMultiplier, plain.damageMultiplier, 1e-9)
 end)
 
 suite:Case("trade skills lower the tax and the broker's fee by a tenth a level", function(t)

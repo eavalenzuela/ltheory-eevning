@@ -15,6 +15,7 @@
 
 local Attributes = require("@lt/Core/Attributes")
 local Corporation = require("@lt/Core/Assets/Corporation")
+local Factions = require("@lt/Core/Data/Factions")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Ships = require("@lt/Core/Data/Ships")
@@ -114,15 +115,28 @@ for level = 1, Skills.MAX_LEVEL do
 end
 Items.HIRED = HIRED
 
+-- How well the pilots of those who are not the player know every skill
+-- (the owner, 2026-11-18, asked whether the world's pilots should have
+-- skill levels by how tough they are: "yes"): a pirate or a trader on
+-- the lanes the first level, an empire's pilot or a corporation's
+-- member the third, the Drowned the fourth. A ship's own 'skill' says
+-- otherwise where its spawning does: a pirate veteran the third, a
+-- captain the fourth, an officer by name the fifth. What nobody flies
+-- (a tower, a battery) knows nothing. (The levels are mine.)
+Items.NPC_LEVEL = { pirates = 1, civilian = 1, member = 3, faction = 3, drowned = 4 }
+
 -- The skills that bear on a ship: the player's, if it is theirs; a
--- hired pilot's, if one flies it (Tactical/Fleet); nobody's otherwise.
+-- hired pilot's, if one flies it (Tactical/Fleet); its pilot's, by who
+-- they are, otherwise.
 function Items.Levels(state: State.State, ship: number): Attributes.Levels?
   local record = state.ships[ship]
-  if record.owner ~= "player" then
-    return nil
+  if record.owner == "player" then
+    local wing = state.fleet[record.pilot]
+    return if wing then HIRED[wing.skill] else state.skills
   end
-  local wing = state.fleet[record.pilot]
-  return if wing then HIRED[wing.skill] else state.skills
+  local level = record.skill or Items.NPC_LEVEL[record.owner]
+    or (if Factions.byId[record.owner] then Items.NPC_LEVEL.faction else nil)
+  return if level and level > 0 then HIRED[math.min(level, Skills.MAX_LEVEL)] else nil
 end
 
 -- A ship's attributes with its present fit, nothing running.

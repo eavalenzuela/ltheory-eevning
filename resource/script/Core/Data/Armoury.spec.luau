@@ -90,7 +90,7 @@ suite:Case("a round, a hybrid charge and a missile come in every kind of damage 
   is("charge.needle", "Iron Needle", 3, 7, 1.6)
   is("ammo.thermal.long", "Incendiary Sabot", 2, 6, 1.6)
   is("charge.em.standard", "Ion Slug", 1, 9, 1)
-  is("charge.explosive.long.large", "Large Blast Needle", 4, 7 * 5.5, 1.6)
+  is("charge.explosive.long.large", "Large Blast Needle", 4, 7 * 4, 1.6)
 
   -- Missiles: each kind as a missile, a rocket (half the flight, three tenths more) and a javelin (six tenths
   -- more flight, a quarter less).
@@ -126,7 +126,7 @@ suite:Case("a round, a hybrid charge and a missile come in every kind of damage 
   end
 end)
 
-suite:Case("every launcher has a short make of its size: the same missiles, thrown a third as far and much faster", function(t)
+suite:Case("every launcher has a short make of its size: the same missiles, thrown a third as far and faster", function(t)
   local pairs = { { "launcher.light", "launcher.rocket" }, { "launcher.heavy", "launcher.assault" }, { "launcher.cruise", "launcher.torpedo" },
     { "launcher.siege", "launcher.bombard" } }
   for size, pair in pairs do
@@ -135,8 +135,10 @@ suite:Case("every launcher has a short make of its size: the same missiles, thro
     t.eq({ far.family, far.size, near.family, near.size } :: { any }, { "missile", size, "missile", size } :: { any })
     t.eq({ short.slot, short.hardpoint } :: { any }, { "high", "launcher" } :: { any })
     t.eq({ far.flight, near.flight } :: { any }, { nil, 0.35 } :: { any })
-    t.near(near.duration, far.duration * 0.62, 1e-9)
-    t.ok(short.cpu < long.cpu and short.powergrid <= long.powergrid and short.basePrice < long.basePrice and near.clip > far.clip, short.id)
+    -- (how much faster, how much harder each missile lands, and what each takes to fit, are the reference's short and
+    -- long launcher of that size, 2026-11-18)
+    t.ok(near.duration < far.duration, short.id)
+    t.ok(short.basePrice < long.basePrice and near.clip > far.clip, short.id)
     -- (as it is fitted: a launcher throws its missiles as far as they fly, and a short one a third of that)
     t.eq({ Attributes.Weapon({}, long.id, nil).flight, Attributes.Weapon({}, short.id, nil).flight }, { 1, 0.35 })
     -- (the same skills, a blueprint, a tech 2 make and the makes that are found, which throw no farther)

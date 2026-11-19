@@ -97,18 +97,27 @@ local skills: { Skill } = {
     requires = { { skill = "navigation", level = 2 } }, bonus = ship("inertia", -0.04), note = "4% quicker to turn a level." },
   { id = "propulsion", name = "Afterburners", rank = 1, start = 0, requires = {}, note = "Level 1 to fit an afterburner." },
   -- Guns and missiles
-  { id = "projectiles", name = "Projectile Turrets", rank = 1, start = 1, requires = {}, note = "To fit autocannons." },
-  { id = "lasers", name = "Laser Turrets", rank = 1, start = 0, requires = {}, note = "Level 1 to fit lasers." },
-  { id = "hybrids", name = "Hybrid Turrets", rank = 1, start = -1, requires = {}, note = "Level 1 to fit blasters and railguns." },
+  -- (Each family's skill makes its guns hit 5% harder a level, the
+  -- launchers' its missiles: the owner, 2026-11-18, of a ladder of
+  -- damage skills as the reference has, so that a trained pilot hits
+  -- much harder than a new one.)
+  { id = "projectiles", name = "Projectile Turrets", rank = 1, start = 1, requires = {},
+    bonus = weapons("projectile", "damageMultiplier", 0.05), note = "To fit autocannons; projectile turrets hit 5% harder a level." },
+  { id = "lasers", name = "Laser Turrets", rank = 1, start = 0, requires = {},
+    bonus = weapons("laser", "damageMultiplier", 0.05), note = "Level 1 to fit lasers; lasers hit 5% harder a level." },
+  { id = "hybrids", name = "Hybrid Turrets", rank = 1, start = -1, requires = {},
+    bonus = weapons("hybrid", "damageMultiplier", 0.05), note = "Level 1 to fit blasters and railguns; they hit 5% harder a level." },
   { id = "medium.weapons", name = "Medium Weapons", rank = 3, start = -1, requires = { { skill = "weapon.upgrades", level = 2 } },
     note = "Level 1 to fit medium turrets and heavy launchers." },
   { id = "large.weapons", name = "Large Weapons", rank = 5, start = -1, requires = { { skill = "medium.weapons", level = 3 } },
     note = "Level 1 to fit large turrets and cruise launchers." },
   { id = "capital.weapons", name = "Capital Weapons", rank = 9, start = -1, requires = { { skill = "large.weapons", level = 4 } },
     note = "Level 1 to fit XL turrets and siege launchers: what a siege dreadnought mounts." },
-  { id = "missiles", name = "Missile Launchers", rank = 1, start = 0, requires = {}, note = "Level 1 to fit launchers." },
-  { id = "rapid.firing", name = "Rapid Firing", rank = 2, start = -1, requires = { { skill = "projectiles", level = 2 } },
-    bonus = weapons("projectile", "duration", -0.04), note = "Autocannons fire 4% faster a level." },
+  { id = "missiles", name = "Missile Launchers", rank = 1, start = 0, requires = {},
+    bonus = weapons("missile", "damageMultiplier", 0.05), note = "Level 1 to fit launchers; missiles hit 5% harder a level." },
+  -- (every turret since 2026-11-18, the owner's; it was autocannons only)
+  { id = "rapid.firing", name = "Rapid Firing", rank = 2, start = -1, requires = { { skill = "weapon.upgrades", level = 2 } },
+    bonus = weapons("turret", "duration", -0.04), note = "Turrets fire 4% faster a level." },
   { id = "sharpshooter", name = "Sharpshooter", rank = 2, start = -1, requires = { { skill = "lasers", level = 2 } },
     bonus = weapons("laser", "optimal", 0.05), note = "5% more laser range a level." },
   { id = "weapon.upgrades", name = "Weapon Upgrades", rank = 2, start = 0, requires = {},
@@ -204,6 +213,13 @@ local skills: { Skill } = {
   -- Gunnery
   { id = "deflection", name = "Deflection Shooting", rank = 2, start = -1, craft = true, requires = { { skill = "weapon.upgrades", level = 2 } },
     bonus = weapons("turret", "tracking", 0.05), note = "Turrets follow a crossing target 5% better a level." },
+  -- (the owner's names, 2026-11-18, for a craft of all turrets and one
+  -- of all missiles)
+  { id = "precision.shooting", name = "Precision Shooting", rank = 2, start = -1, craft = true,
+    requires = { { skill = "weapon.upgrades", level = 2 } },
+    bonus = weapons("turret", "damageMultiplier", 0.03), note = "Turrets hit 3% harder a level." },
+  { id = "missile.tracking", name = "Missile Tracking", rank = 2, start = -1, craft = true, requires = { { skill = "missiles", level = 2 } },
+    bonus = weapons("missile", "damageMultiplier", 0.03), note = "Missiles hit 3% harder a level." },
   { id = "windage", name = "Windage", rank = 2, start = -1, craft = true, requires = { { skill = "weapon.upgrades", level = 2 } },
     bonus = weapons("turret", "falloff", 0.05), note = "Turrets keep their aim 5% farther past their best range a level." },
   { id = "salvo.drill", name = "Salvo Drill", rank = 2, start = -1, craft = true, requires = { { skill = "missiles", level = 2 } },
@@ -302,8 +318,8 @@ Skills.GROUPS = {
   -- weapons and gunnery". The one name, Weapons, is mine: the sizes in
   -- it are for launchers too.)
   { id = "weapons", name = "Weapons", skills = { "weapon.upgrades", "medium.weapons", "large.weapons", "capital.weapons",
-    "projectiles", "lasers", "hybrids", "rapid.firing", "sharpshooter", "deflection", "windage" } },
-  { id = "missiles", name = "Missiles", skills = { "missiles", "salvo.drill", "long.burn", "proximity.fusing" } },
+    "projectiles", "lasers", "hybrids", "rapid.firing", "precision.shooting", "sharpshooter", "deflection", "windage" } },
+  { id = "missiles", name = "Missiles", skills = { "missiles", "missile.tracking", "salvo.drill", "long.burn", "proximity.fusing" } },
   { id = "drones", name = "Drones", skills = { "drones", "fighters", "swarm.tactics" } },
   { id = "shields", name = "Shields", skills = { "shield.operation", "shield.management", "field.harmonics", "dispersal" } },
   { id = "armour", name = "Armour and Hull", skills = { "repair.systems", "hull.upgrades", "glancing.angles", "compartmentation",

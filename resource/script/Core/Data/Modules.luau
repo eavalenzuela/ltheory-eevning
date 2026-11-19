@@ -276,20 +276,20 @@ local modules: { ModuleType } = {
   -- Weapons
   {
     id = "laser.pulse.small", name = "Small Pulse Laser", slot = "high", hardpoint = "turret",
-    cpu = 9, powergrid = 6, volume = 5, basePrice = 9000, passive = {},
-    weapon = { family = "laser", duration = 3, capacitor = 3.5, damageMultiplier = 2.2,
-      optimal = 5200, falloff = 2500, tracking = 370, clip = 0, reload = 1, size = 1 },
+    cpu = 15, powergrid = 10, volume = 5, basePrice = 9000, passive = {},
+    weapon = { family = "laser", duration = 3.5, capacitor = 4.44, damageMultiplier = 3,
+      optimal = 5250, falloff = 2500, tracking = 246, clip = 0, reload = 1, size = 1 },
   },
   {
     id = "autocannon.small", name = "Small Autocannon", slot = "high", hardpoint = "turret",
-    cpu = 6, powergrid = 3, volume = 5, basePrice = 8000, passive = {},
-    weapon = { family = "projectile", duration = 2.8, capacitor = 0, damageMultiplier = 2.0,
-      optimal = 1100, falloff = 5200, tracking = 470, clip = 120, reload = 10, size = 1 },
+    cpu = 9, powergrid = 4, volume = 5, basePrice = 8000, passive = {},
+    weapon = { family = "projectile", duration = 3.75, capacitor = 0, damageMultiplier = 2.89,
+      optimal = 1000, falloff = 5160, tracking = 315, clip = 120, reload = 10, size = 1 },
   },
   {
     id = "launcher.light", name = "Light Missile Launcher", slot = "high", hardpoint = "launcher",
-    cpu = 26, powergrid = 5, volume = 5, basePrice = 12000, passive = {},
-    weapon = { family = "missile", duration = 9, capacitor = 0, damageMultiplier = 1.0,
+    cpu = 21, powergrid = 6, volume = 5, basePrice = 12000, passive = {},
+    weapon = { family = "missile", duration = 16, capacitor = 0, damageMultiplier = 1.0,
       optimal = 0, falloff = 0, tracking = 0, clip = 30, reload = 30, size = 1 },
   },
 
@@ -547,6 +547,24 @@ local modules: { ModuleType } = {
     cpu = 5, powergrid = 1, volume = 1, basePrice = 8000, passive = {},
     hex = { kind = "armor", range = 3000, strength = 18, duration = 5, capacitor = 6 }, internal = true,
   },
+  -- And what a combat drone shoots with: what a light and a medium drone
+  -- carried when they flew a ship's small and medium autocannons, before
+  -- the ships' guns were set from the reference (2026-11-18), so that
+  -- drones are as they were. Of no use on a ship.
+  {
+    id = "drone.gun.light", name = "Light Drone Autocannon", slot = "high", hardpoint = "turret",
+    cpu = 6, powergrid = 3, volume = 1, basePrice = 8000, passive = {},
+    weapon = { family = "projectile", duration = 2.8, capacitor = 0, damageMultiplier = 2.0,
+      optimal = 1100, falloff = 5200, tracking = 470, clip = 120, reload = 10, size = 1 },
+    internal = true, requires = { { skill = "drones", level = 1 } },
+  },
+  {
+    id = "drone.gun.medium", name = "Medium Drone Autocannon", slot = "high", hardpoint = "turret",
+    cpu = 14, powergrid = 54, volume = 1, basePrice = 80000, passive = {},
+    weapon = { family = "projectile", duration = 3.5, capacitor = 0, damageMultiplier = 2.3,
+      optimal = 2420, falloff = 11440, tracking = 155, clip = 120, reload = 10, size = 2 },
+    internal = true, requires = { { skill = "drones", level = 1 } },
+  },
   -- What a fighter and a bomber carry (Data/Drones): of no use on a
   -- ship either. A fighter's cannon is a quick gun that follows what it
   -- fires at and takes a cruiser's rounds, for ships of any size. A
@@ -556,14 +574,16 @@ local modules: { ModuleType } = {
   {
     id = "fighter.cannon", name = "Fighter Cannon", slot = "high", hardpoint = "turret",
     cpu = 20, powergrid = 20, volume = 10, basePrice = 300000, passive = {},
-    weapon = { family = "projectile", duration = 2.5, capacitor = 0, damageMultiplier = 5.0,
+    weapon = { family = "projectile", duration = 2.5, capacitor = 0, damageMultiplier = 5.75,
       optimal = 3000, falloff = 9000, tracking = 300, clip = 200, reload = 8, size = 2 },
     internal = true, requires = { { skill = "fighters", level = 1 } },
   },
   {
     id = "bomber.rack", name = "Bomber Torpedo Rack", slot = "high", hardpoint = "launcher",
     cpu = 20, powergrid = 20, volume = 10, basePrice = 900000, passive = {},
-    weapon = { family = "missile", duration = 14, capacitor = 0, damageMultiplier = 1.5,
+    -- (what it throws hits four times as hard and spreads four times as
+    -- wide since 2026-11-18, the reference's: on a tower about what it did)
+    weapon = { family = "missile", duration = 14, capacitor = 0, damageMultiplier = 0.5,
       optimal = 0, falloff = 0, tracking = 0, clip = 12, reload = 30, size = 4 },
     internal = true, requires = { { skill = "fighters", level = 3 } },
   },
@@ -1018,36 +1038,47 @@ end
 local SIZE_NAME = { "small", "medium", "large", "xl" }
 local SIZE_TITLE = { "Small", "Medium", "Large", "XL" }
 -- Charge damage, by size.
-local SIZE_DAMAGE = { 1, 2.3, 5.5, 14 }
+local SIZE_DAMAGE = { 1, 2, 4, 8 }
 
+-- A gun of a size: what its rounds are multiplied by, the seconds
+-- between shots, optimal range and falloff (m), tracking, capacitor a
+-- shot, CPU and powergrid.
+type Sized = { number }
 type Form = {
   id: string, title: string, family: string, skill: string,
-  duration: number, capacitor: number, multiplier: number, optimal: number, falloff: number, tracking: number,
-  clip: number, reload: number, cpu: number, powergrid: number, price: number,
+  clip: number, reload: number, price: number,
+  -- (small, medium, large, XL)
+  sizes: { Sized },
 }
 
+-- Each size of each gun is the reference's gun of that size and make
+-- (the owner, 2026-11-18, against the reference figures they supplied):
+-- a bigger gun reaches further and hits harder, and follows a crossing
+-- target so much worse that a battleship's guns all but miss a frigate
+-- and a dreadnought's never hit one.
 local FORMS: { Form } = {
-  { id = "laser.pulse", title = "Pulse Laser", family = "laser", skill = "lasers", duration = 3, capacitor = 3.5,
-    multiplier = 2.2, optimal = 5200, falloff = 2500, tracking = 370, clip = 0, reload = 1, cpu = 9, powergrid = 6, price = 9000 },
-  { id = "laser.beam", title = "Beam Laser", family = "laser", skill = "lasers", duration = 4, capacitor = 5,
-    multiplier = 2.5, optimal = 11000, falloff = 3000, tracking = 160, clip = 0, reload = 1, cpu = 11, powergrid = 8, price = 11000 },
-  { id = "autocannon", title = "Autocannon", family = "projectile", skill = "projectiles", duration = 2.8, capacitor = 0,
-    multiplier = 2.0, optimal = 1100, falloff = 5200, tracking = 470, clip = 120, reload = 10, cpu = 6, powergrid = 3, price = 8000 },
-  { id = "artillery", title = "Artillery", family = "projectile", skill = "projectiles", duration = 7, capacitor = 0,
-    multiplier = 5.2, optimal = 9000, falloff = 6500, tracking = 110, clip = 20, reload = 10, cpu = 9, powergrid = 7, price = 10000 },
-  { id = "blaster", title = "Blaster", family = "hybrid", skill = "hybrids", duration = 2.5, capacitor = 1.8,
-    multiplier = 2.4, optimal = 1400, falloff = 2200, tracking = 430, clip = 80, reload = 5, cpu = 8, powergrid = 6, price = 9000 },
-  { id = "railgun", title = "Railgun", family = "hybrid", skill = "hybrids", duration = 3.8, capacitor = 2.4,
-    multiplier = 2.4, optimal = 12000, falloff = 5000, tracking = 140, clip = 80, reload = 5, cpu = 10, powergrid = 8, price = 11000 },
+  { id = "laser.pulse", title = "Pulse Laser", family = "laser", skill = "lasers", clip = 0, reload = 1, price = 9000, sizes = {
+    { 3, 3.5, 5250, 2500, 246, 4.44, 15, 10 }, { 3, 5.25, 10500, 5000, 26, 13.3, 33, 189 },
+    { 3, 7.88, 21000, 10000, 3.38, 36, 50, 2500 }, { 7.65, 12, 42000, 20000, 0.0385, 240, 80, 125000 } } },
+  { id = "laser.beam", title = "Beam Laser", family = "laser", skill = "lasers", clip = 0, reload = 1, price = 11000, sizes = {
+    { 4.5, 5, 11000, 2500, 90, 9.03, 18, 12 }, { 3.75, 6, 22000, 8000, 9.5, 21.7, 35, 225 },
+    { 3, 9, 40000, 16000, 1.53, 52, 55, 2925 }, { 6.38, 15, 100000, 42000, 0.0218, 520, 90, 152500 } } },
+  { id = "autocannon", title = "Autocannon", family = "projectile", skill = "projectiles", clip = 120, reload = 10, price = 8000, sizes = {
+    { 2.89, 3.75, 1000, 5160, 315, 0, 9, 4 }, { 2.89, 5.46, 2000, 10836, 33.8, 0, 24, 140 },
+    { 2.69, 7.88, 4000, 20640, 4.32, 0, 39, 2000 }, { 4.12, 8, 25000, 28800, 0.0415, 0, 55, 100000 } } },
+  { id = "artillery", title = "Artillery", family = "projectile", skill = "projectiles", clip = 20, reload = 10, price = 10000, sizes = {
+    { 7.04, 10.7, 10000, 8750, 64, 0, 15, 10 }, { 7.97, 18, 20000, 17500, 6.69, 0, 30, 225 },
+    { 10.7, 40.2, 40000, 35000, 0.9, 0, 45, 3250 }, { 10.3, 30, 94000, 90000, 0.0171, 0, 70, 125000 } } },
+  { id = "blaster", title = "Blaster", family = "hybrid", skill = "hybrids", clip = 80, reload = 5, price = 9000, sizes = {
+    { 3.67, 3.5, 1500, 2500, 380, 1.42, 16, 8 }, { 3.67, 5.25, 3000, 5000, 38.4, 4.25, 29, 179 },
+    { 3.67, 7.88, 6000, 10000, 5.2, 12.7, 52, 1980 }, { 5.57, 10, 20000, 25000, 0.0437, 100, 105, 99000 } } },
+  { id = "railgun", title = "Railgun", family = "hybrid", skill = "hybrids", clip = 80, reload = 5, price = 11000, sizes = {
+    { 3.02, 4.25, 12000, 6000, 73.5, 2.34, 24, 9 }, { 3.48, 5.83, 21600, 10800, 5.9, 7, 38, 198 },
+    { 3.02, 8.13, 43200, 21600, 1.05, 21, 67, 2200 }, { 7.43, 20, 120000, 32000, 0.0183, 300, 115, 110000 } } },
 }
 
--- How a weapon grows with its size.
-local SIZE_RANGE = { 1, 2.2, 4.4, 8 }
-local SIZE_TRACKING = { 1, 0.33, 0.12, 0.04 }
-local SIZE_CAPACITOR = { 1, 3, 9, 30 }
-local SIZE_DURATION = { 1, 1.25, 1.6, 2.1 }
-local SIZE_CPU = { 1, 2.4, 5, 10 }
-local SIZE_POWERGRID = { 1, 18, 230, 12000 }
+-- What a weapon of each size costs, how big it is packed, and the skill
+-- it wants beside its family's.
 local SIZE_PRICE = { 1, 10, 100, 1500 }
 local SIZE_VOLUME = { 5, 10, 20, 400 }
 local SIZE_SKILL: { string? } = { nil, "medium.weapons", "large.weapons", "capital.weapons" }
@@ -1069,15 +1100,14 @@ end
 for _, form in FORMS do
   for size = 1, #SIZE_NAME do
     local id = `{form.id}.{SIZE_NAME[size]}`
+    local f = form.sizes[size]
     if not known[id] then
       table.insert(modules, {
         id = id, name = `{SIZE_TITLE[size]} {form.title}`, slot = "high", hardpoint = "turret",
-        cpu = math.floor(form.cpu * SIZE_CPU[size] + 0.5), powergrid = math.floor(form.powergrid * SIZE_POWERGRID[size] + 0.5),
+        cpu = f[7], powergrid = f[8],
         volume = SIZE_VOLUME[size], basePrice = form.price * SIZE_PRICE[size], passive = {},
-        weapon = { family = form.family, duration = form.duration * SIZE_DURATION[size],
-          capacitor = form.capacitor * SIZE_CAPACITOR[size], damageMultiplier = form.multiplier,
-          optimal = form.optimal * SIZE_RANGE[size], falloff = form.falloff * SIZE_RANGE[size],
-          tracking = form.tracking * SIZE_TRACKING[size], clip = form.clip, reload = form.reload, size = size },
+        weapon = { family = form.family, duration = f[2], capacitor = f[6], damageMultiplier = f[1],
+          optimal = f[3], falloff = f[4], tracking = f[5], clip = form.clip, reload = form.reload, size = size },
         requires = needs(form.skill, size),
       })
     end
@@ -1085,11 +1115,11 @@ for _, form in FORMS do
 end
 
 local LAUNCHERS = {
-  { id = "launcher.heavy", name = "Heavy Missile Launcher", cpu = 50, powergrid = 95, price = 110000, duration = 12, clip = 30,
+  { id = "launcher.heavy", name = "Heavy Missile Launcher", cpu = 50, powergrid = 100, price = 110000, duration = 15, clip = 30,
     reload = 35 },
-  { id = "launcher.cruise", name = "Cruise Missile Launcher", cpu = 80, powergrid = 1300, price = 1100000, duration = 16, clip = 24,
+  { id = "launcher.cruise", name = "Cruise Missile Launcher", cpu = 60, powergrid = 1450, price = 1100000, duration = 20.7, clip = 24,
     reload = 40 },
-  { id = "launcher.siege", name = "Siege Missile Launcher", cpu = 160, powergrid = 40000, price = 16000000, duration = 22, clip = 16,
+  { id = "launcher.siege", name = "Siege Missile Launcher", cpu = 150, powergrid = 100000, price = 16000000, duration = 171, clip = 16,
     reload = 50 },
 }
 for index, launcher in LAUNCHERS do
@@ -1104,17 +1134,19 @@ end
 
 -- And the short-range launcher of each size (the project owner's,
 -- 2026-11-14: a long and a short make of every weapon at every size, as
--- turrets have; the names and figures are first ones). It takes the
--- missiles its size of launcher takes, and throws them a third as far,
--- eight times in the time the long one throws five: what a blaster is
--- to a railgun. It is a little easier to fit, and holds half as many
--- again.
-local CLOSE = { flight = 0.35, duration = 0.62, fitting = 0.85, price = 0.9, clip = 1.5 }
+-- turrets have; the names are first ones). It takes the missiles its
+-- size of launcher takes, and throws them a third as far: what a blaster
+-- is to a railgun. How often it fires, how hard what it throws hits, and
+-- what it takes to fit are the reference's short launcher of that size
+-- beside its long one (2026-11-18): the small one fires quickly and
+-- lightly, the biggest slowly and harder. It holds half as many again.
+local CLOSE = { flight = 0.35, price = 0.9, clip = 1.5 }
 local SHORT_LAUNCHERS = {
-  { id = "launcher.rocket", name = "Rocket Launcher", long = "launcher.light" },
-  { id = "launcher.assault", name = "Assault Launcher", long = "launcher.heavy" },
-  { id = "launcher.torpedo", name = "Torpedo Launcher", long = "launcher.cruise" },
-  { id = "launcher.bombard", name = "Bombardment Launcher", long = "launcher.siege" },
+  { id = "launcher.rocket", name = "Rocket Launcher", long = "launcher.light", duration = 5, damage = 0.4, cpu = 15, powergrid = 4 },
+  { id = "launcher.assault", name = "Assault Launcher", long = "launcher.heavy", duration = 8, damage = 0.67, cpu = 45, powergrid = 108 },
+  { id = "launcher.torpedo", name = "Torpedo Launcher", long = "launcher.cruise", duration = 18, damage = 1.2, cpu = 74, powergrid = 1630 },
+  { id = "launcher.bombard", name = "Bombardment Launcher", long = "launcher.siege", duration = 128, damage = 1.24, cpu = 150,
+    powergrid = 100000 },
 }
 for size, short in SHORT_LAUNCHERS do
   local long: ModuleType? = nil
@@ -1126,9 +1158,9 @@ for size, short in SHORT_LAUNCHERS do
   local base = (assert(long, short.long).weapon) :: Weapon
   table.insert(modules, {
     id = short.id, name = short.name, slot = "high", hardpoint = "launcher",
-    cpu = math.floor((long :: ModuleType).cpu * CLOSE.fitting + 0.5), powergrid = math.max(1, math.floor((long :: ModuleType).powergrid * CLOSE.fitting + 0.5)),
+    cpu = short.cpu, powergrid = short.powergrid,
     volume = SIZE_VOLUME[size], basePrice = (long :: ModuleType).basePrice * CLOSE.price, passive = {},
-    weapon = { family = "missile", duration = base.duration * CLOSE.duration, capacitor = 0, damageMultiplier = 1.0,
+    weapon = { family = "missile", duration = short.duration, capacitor = 0, damageMultiplier = short.damage,
       optimal = 0, falloff = 0, tracking = 0, clip = math.floor(base.clip * CLOSE.clip), reload = base.reload, size = size,
       flight = CLOSE.flight },
     requires = needs("missiles", size),
@@ -1211,7 +1243,9 @@ local FITTINGS: { { any } } = {
 local FIT_AMOUNT = { 1, 3.2, 9 }
 local FIT_MASS = { 1, 10, 100 }
 local FIT_CPU = { 1, 1.6, 2.4 }
-local FIT_POWERGRID = { 1, 15, 180 }
+-- (a large one's since 2026-11-18 a little more, when a cruiser's
+-- powergrid rose with its guns: still more than a cruiser has)
+local FIT_POWERGRID = { 1, 15, 250 }
 local FIT_PRICE = { 1, 8, 60 }
 local FIT_CYCLE = { 1, 1.5, 2.25 }
 local FIT_CAPACITOR = { 1, 3, 8.5 }
@@ -1335,10 +1369,11 @@ for _, reach in MISSILE_REACH do
 end
 
 local MISSILE_SIZES = {
-  { id = "heavy", title = "Heavy", damage = 190, velocity = 4300, flight = 6.5, radius = 140, speed = 85, volume = 0.03, price = 180 },
-  { id = "cruise", title = "Cruise", damage = 450, velocity = 4700, flight = 14, radius = 330, speed = 70, volume = 0.05, price = 550 },
-  -- (what a siege launcher throws: slow, and for what is big and slow)
-  { id = "siege", title = "Siege", damage = 1150, velocity = 3800, flight = 24, radius = 1400, speed = 30, volume = 0.3, price = 3000 },
+  { id = "heavy", title = "Heavy", damage = 149, velocity = 4300, flight = 6.5, radius = 140, speed = 85, volume = 0.03, price = 180 },
+  { id = "cruise", title = "Cruise", damage = 375, velocity = 4700, flight = 14, radius = 330, speed = 70, volume = 0.05, price = 550 },
+  -- (what a siege launcher throws: a great deal, seldom, and for what is
+  -- big and slow; the reference's, 2026-11-18)
+  { id = "siege", title = "Siege", damage = 4750, velocity = 7000, flight = 15, radius = 6000, speed = 40, volume = 0.3, price = 3000 },
 }
 local MISSILE_KINDS = { { "em", "Arc", 1 }, { "thermal", "Ember", 2 }, { "kinetic", "Lance", 3 }, { "explosive", "Breaker", 4 } } :: { { any } }
 
@@ -1731,6 +1766,24 @@ for _, base in table.clone(modules) do
         table.insert(modules, own)
         table.insert(siteMakes[grade], own.id)
       end
+    end
+  end
+end
+
+-- Every weapon a ship fits hits half as hard again as the reference's
+-- of its size and make (the owner, 2026-11-18, of fights that took far
+-- longer than they should: the reference's pilots hit three to five
+-- times as hard as its bare guns, through skills, hull bonuses and
+-- damage modules, and this is the part of that a pilot with none of
+-- those has here). Not what a drone, a fighter or a bomber carries.
+local WEAPON_DAMAGE = 1.5
+do
+  local done: { [Weapon]: boolean } = {}
+  for _, m in modules do
+    local weapon = m.weapon
+    if weapon and not m.internal and not done[weapon] then
+      done[weapon] = true
+      weapon.damageMultiplier *= WEAPON_DAMAGE
     end
   end
 end

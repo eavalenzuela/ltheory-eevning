@@ -456,13 +456,21 @@ suite:Case("with the pilot there a siege is a pack that goes for the tower: its 
   t.eq({ raid.outcome, starbase.siege } :: { any }, { "siege", raid.strength } :: { any })
   local pack = raiders(game, station)
   t.ok(#pack >= 2, `{#pack} came`)
-  -- Most of them are after the tower.
+  -- They are after the tower: two in three of them, each by a roll of its own, with the pilot there to go for; and
+  -- with the pilot gone from there, every one of them.
   steps(game, 5)
+  local x = me.x
+  me.x += 1e7
+  Space.AssignGrid(state, me)
+  steps(game, 3)
   local onTower = 0
   for _, id in raiders(game, station) do
     onTower += if state.pilots[id].prey == core.id then 1 else 0
   end
-  t.ok(onTower >= 1, "nobody is after the tower")
+  t.eq(onTower, #raiders(game, station), "with nobody else there, not all of them are after the tower")
+  me.x = x
+  Space.AssignGrid(state, me)
+  t.eq(me.grid, station)
   -- It can be locked, as anything can: by them, and by the pilot.
   t.ok((Core.Validate(game, { kind = "LockTarget", actor = me.id, target = core.id })))
   -- Its shield at the quarter: it seals, for an hour a charge, and those who came go.

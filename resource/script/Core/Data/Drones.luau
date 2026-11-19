@@ -31,9 +31,9 @@ local Drones = {}
 
 Drones.list = {
   { id = "drone.light", name = "Light Combat Drone", volume = 5, basePrice = 12000, hull = "drone.hull.light",
-    role = "combat", gun = "autocannon.small", charge = "ammo.fusion", level = 1 },
+    role = "combat", gun = "drone.gun.light", charge = "ammo.fusion", level = 1 },
   { id = "drone.medium", name = "Medium Combat Drone", volume = 10, basePrice = 45000, hull = "drone.hull.medium",
-    role = "combat", gun = "autocannon.medium", charge = "ammo.fusion.medium", level = 1 },
+    role = "combat", gun = "drone.gun.medium", charge = "ammo.fusion.medium", level = 1 },
   { id = "drone.mining", name = "Mining Drone", volume = 10, basePrice = 30000, hull = "drone.hull.mining",
     role = "mining", gun = "miner.drone", charge = "", level = 1 },
   { id = "drone.repair", name = "Armor Repair Drone", volume = 10, basePrice = 60000, hull = "drone.hull.repair",

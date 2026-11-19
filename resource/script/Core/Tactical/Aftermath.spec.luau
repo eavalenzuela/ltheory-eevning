@@ -87,6 +87,16 @@ local function attack(t: Test.Context, game: Core.Game, target: number)
   end
 end
 
+-- Take the player out of the way of anybody else's guns, a long way into
+-- open space: for a case about what the pilot's own kill brings, where a
+-- patrol by the station could make it first.
+local function alone(game: Core.Game)
+  local ball = me(game)
+  ball.x += 4e6
+  ball.vx, ball.vy, ball.vz = 0, 0, 0
+  Space.AssignGrid(game.state, ball)
+end
+
 -- A pirate scout at rest 'distance' metres from the player: on the far
 -- side of them from the station they are at, if they are at one (a
 -- pirate is kept out of a station's field, and nothing is locked across
@@ -105,6 +115,7 @@ end
 
 suite:Case("killing a pirate leaves a wreck with its tag, and pays the bounty", function(t)
   local game = inSpace(true)
+  alone(game)
   local scout = scoutAt(game, 1500)
   -- (peaceful only stops pirates arriving; this one still fights back)
   attack(t, game, scout.id)
@@ -128,6 +139,7 @@ end)
 
 suite:Case("looting needs to be close, takes what fits, and clears an emptied wreck", function(t)
   local game = inSpace(true)
+  alone(game)
   local scout = scoutAt(game, 6000)
   Aftermath.Destroy(game.state, scout.id, 0, game.events)
   Core.TakeEvents(game)
@@ -140,8 +152,8 @@ suite:Case("looting needs to be close, takes what fits, and clears an emptied wr
   end
   Core.TakeEvents(game)
 
-  -- Something too bulky to take all of: 50 extenders at 5 m3 into a 180 m3 hold.
-  Items.Add(game.state, "shield.extender.small", 50, wreck.id, "cargo")
+  -- Something too bulky to take all of: 70 extenders at 5 m3 into a 250 m3 hold.
+  Items.Add(game.state, "shield.extender.small", 70, wreck.id, "cargo")
   order(t, game, { kind = "Loot", actor = 0, target = wreck.id })
   local looted = stepUntil(game, "Looted", 2)
   t.ok(looted.left > 0 and looted.taken > 0)
@@ -150,8 +162,8 @@ suite:Case("looting needs to be close, takes what fits, and clears an emptied wr
     hold[item.type] = item.quantity
   end
   t.eq(hold["tag.pirate"], 1)
-  t.ok(Items.CargoUsed(game.state, game.state.player.ship) <= 180)
-  t.ok(hold["shield.extender.small"] >= 30 and hold["shield.extender.small"] < 50)
+  t.ok(Items.CargoUsed(game.state, game.state.player.ship) <= 250)
+  t.ok(hold["shield.extender.small"] >= 40 and hold["shield.extender.small"] < 70)
   t.ok(game.state.wrecks[wreck.id] ~= nil, "the wreck stays while something is left")
 
   -- Make room and take the rest.
@@ -457,8 +469,8 @@ suite:Case("repairs cost in proportion to the damage and need the money", functi
   local ball = me(game)
   local ship = game.state.ships[ball.id]
   t.eq(refused(game, { kind = "Repair", actor = 0 }), "not docked")
-  ball.vitals.armor -= 150   -- of 300
-  ball.vitals.hull -= 150    -- of 300
+  ball.vitals.armor -= ball.vitals.armorMax / 2
+  ball.vitals.hull -= ball.vitals.hullMax / 2
   order(t, game, { kind = "Dock", actor = 0, target = game.state.player.home })
   stepUntil(game, "Docked", 600)
   -- half of armour plus hull gone: half of a tenth of 30,000

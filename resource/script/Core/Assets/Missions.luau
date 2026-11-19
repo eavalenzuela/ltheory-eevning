@@ -131,16 +131,20 @@ Missions.WAR_ESCORT = 1.5
 -- (Since 2026-11-16, when income came up, 3, 5, 10 and 20 times what they
 -- were by level, so a freighter's run pays some ten to fifteen million.
 -- Mine.)
+-- (A hauler's loads, the second level's and the lawless run's, are a
+-- hauler's hold since 2026-11-18, when holds were set from the
+-- reference and a hauler's came down to some 2,200: what a load is
+-- worth a cubic metre went up to match.)
 Missions.RUNS = {
   { least = 30, most = 150, step = 10, near = 1, far = 3, base = 9000, rate = 75 },
-  { least = 1000, most = 3000, step = 100, near = 5, far = 10, base = 50000, rate = 15 },
+  { least = 600, most = 1800, step = 100, near = 5, far = 10, base = 50000, rate = 25 },
   { least = 6000, most = 12000, step = 500, near = 6, far = 12, base = 300000, rate = 15 },
   { least = 25000, most = 40000, step = 2500, near = 8, far = 16, base = 2000000, rate = 20 },
 }
 -- And the fourth level's other kind: a hauler's hold to a station that
 -- only lawless space leads to, so many jumps off by the shortest way.
 -- How often the fourth is that, where there is such a station.
-Missions.WILD = { least = 500, most = 3000, step = 100, near = 3, far = 10, base = 3000000, rate = 240 }
+Missions.WILD = { least = 300, most = 1800, step = 100, near = 3, far = 10, base = 3000000, rate = 400 }
 Missions.WILD_CHANCE = 0.5
 -- The standing a courier contract is worth, a level.
 Missions.RUN_CREDIT = 0.1

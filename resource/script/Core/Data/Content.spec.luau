@@ -120,14 +120,17 @@ suite:Case("every faction has a hull of every class, and a bigger class is more 
       t.ok(hull.turrets <= hull.highs and hull.launchers <= hull.highs, hull.id)
       t.eq(hull.turrets + hull.launchers >= 1, rung == nil or rung[2] > 0, hull.id)
       t.ok(hull.mids >= 1 and hull.lows >= 1, hull.id)
-      -- a faction's character shows in how its warships take a hit
-      if hull.class ~= "industrial" then
+      -- a faction's character shows in how its warships take a hit, against their class's standard (whose layers
+      -- are the reference's since 2026-11-18, and not alike: a supercarrier has less hull than shield)
+      local standard = Ships.Standard(hull.class)
+      if hull.class ~= "industrial" and standard then
+        local shield, armor, structure = hull.shield / standard.shield, hull.armor / standard.armor, hull.hull / standard.hull
         if faction.tank == "armor" then
-          t.ok(hull.armor > hull.shield, hull.id)
+          t.ok(armor > shield, hull.id)
         elseif faction.tank == "shield" then
-          t.ok(hull.shield > hull.armor, hull.id)
+          t.ok(shield > armor, hull.id)
         else
-          t.ok(hull.hull > hull.shield, hull.id)
+          t.ok(structure > shield, hull.id)
         end
       end
       -- every people's hull is an item with drawings; only human designs are for sale (an alien one, or a pirate's, is rare)
@@ -343,7 +346,9 @@ suite:Case("the Vail's ships are the owner's list of them: seventeen hulls, two 
   -- capital industrial it comes of and lighter than their dreadnought, which is bigger; where the Vessari's
   -- ultracapital, which is as big as the class, is as the class is.
   t.ok(archangel.mass > embrace.mass and archangel.mass < 2 * embrace.mass and archangel.mass < awe.mass, `it masses {archangel.mass}`)
-  t.ok(archangel.shield > embrace.shield and archangel.shield < 1.2 * awe.shield, `its shield is {archangel.shield}`)
+  -- (and takes more destroying than either, but less than two and a half times what the dreadnought takes: an
+  -- ultracapital's standard is some four supercarriers' since 2026-11-18)
+  t.ok(archangel.shield > embrace.shield and archangel.shield < 2.5 * awe.shield, `its shield is {archangel.shield}`)
   local daiichi = Ships.byId["ultracapital.daiichi"]
   t.ok(daiichi.mass > 5 * archangel.mass and (daiichi.bay or 0) == Ships.BAY.ultracapital and (archangel.bay or 0) < Ships.BAY.ultracapital)
   local sheet = assert(Facts.Of("ultracapital.archangel"))
@@ -924,8 +929,8 @@ suite:Case("every weapon takes ammunition of its own size and no other; larger r
       end
     end
   end
-  -- (and a fighter's cannon and a bomber's rack, which only they carry)
-  t.eq(weapons, 6 * 4 + 2 * 4 + 2, "six forms of turret and two of launcher, in four sizes, and what a fighter and a bomber carry")
+  -- (and a fighter's cannon and a bomber's rack, which only they carry, and a light and a medium combat drone's guns)
+  t.eq(weapons, 6 * 4 + 2 * 4 + 2 + 2, "six forms of turret and two of launcher, in four sizes, and what a fighter, a bomber and a drone carry")
   for _, form in { "laser.pulse", "laser.beam", "autocannon", "artillery", "blaster", "railgun" } do
     local small, medium, large = Modules.byId[form .. ".small"], Modules.byId[form .. ".medium"], Modules.byId[form .. ".large"]
     -- (and the fourth size, which only a siege dreadnought has the powergrid for)
@@ -1153,10 +1158,10 @@ suite:Case("every weapon, repairer, extender, plate, mining laser and probe laun
     end
   end
   -- 32 weapons, 2 repairers, an extender and a plate in three sizes each, two mining lasers and a gas harvester,
-  -- the repairers for another ship (shield and armour, in three sizes), and the four things only a drone, a
-  -- fighter or a bomber carries; and since 2026-11-16 the ancillary shield boosters and armour repairers,
+  -- the repairers for another ship (shield and armour, in three sizes), and the six things only a drone, a
+  -- fighter or a bomber carries (two of them a combat drone's guns since 2026-11-18); and since 2026-11-16 the ancillary shield boosters and armour repairers,
   -- three sizes each, the two modulated lasers and the two ice harvesters; and since 2026-11-18 the probe launcher.
-  t.eq(improved, 32 + 4 * 3 + 3 + 2 * 3 + 4 + 2 * 3 + 2 + 2 + 1)
+  t.eq(improved, 32 + 4 * 3 + 3 + 2 * 3 + 6 + 2 * 3 + 2 + 2 + 1)
   t.ok(Modules.Improved("projector.entanglement") == nil and Modules.Improved("rig.shield") == nil)
   t.eq({ Modules.SizeOf(Modules.byId["autocannon.medium.ii"]), Modules.SizeOf(Modules.byId["shield.extender.large"]),
     Modules.SizeOf(Modules.byId["miner.small"]) }, { 2, 3, 1 })
