@@ -6,6 +6,19 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Ships and weapons rebalanced, citadels across the galaxy, saved fittings
+
+- Every class of ship has new figures: shield, armour, hull, speed, agility, warp speed, signature, targeting, capacitor and hold. Frigates and battleships changed little. Cruisers and attack battlecruisers have less to them; freighters, mining barges, capital industrials and supercarriers a great deal more. A freighter holds 435,000 m3 and a capital industrial's ore hold 250,000 m3; an industrial's hold is smaller, about 2,700 m3.
+- Every gun and launcher has new figures, size by size. A bigger gun reaches further and hits harder, but follows a crossing target far worse: a battleship's guns all but miss a frigate. Against smaller ships, use drones, a web or a target painter. A bigger round carries 2, 4 or 8 times what a small one does.
+- Damage skills. Laser, Projectile and Hybrid Turrets and Missile Launchers each make their weapons hit 5% harder a level. Rapid Firing now makes every turret fire 4% faster a level (it was autocannons only, and now needs Weapon Upgrades 2). Two new skills: Precision Shooting (turrets hit 3% harder a level) and Missile Tracking (missiles hit 3% harder a level).
+- The pilots you fight have skills too: pirates and traders at level 1, empire and corporation pilots at 3, the Drowned at 4, pirate veterans at 3, captains at 4 and named officers at 5.
+- Drones keep the weapons they had and are half as tough again. Towers and starbase modules pack smaller, so any industrial still carries one. Courier contracts for a hauler are now up to 1,800 m3 and pay more for each.
+- Training is ten times faster: every skill to level 5 in about a week of play. Injectors are unchanged.
+- Saved fittings: a new Saved fits tab in the fitting window. Save a ship's fit under a name, and load it onto any ship of that hull at a station: what is in the hangar goes on, charges and all, and what is missing is listed, with a button to buy it on the station's market.
+- Citadels have 35 new designs: Habitation, Trade Hub, Refinery, Research Station and Shipyard in all five sizes, a Generator citadel at Large and Extra Large, and the Vail's and the Nimia's own. The gravity and wormhole stations are now the Generator citadel: the generator module you fit makes it one or the other.
+- The empires and the alien peoples now have citadels of their own across the space they hold, the more the more secure a system is: in the most secure, about every other planet has a station or a citadel by it. You dock at them and use their services as at any station. When a system changes hands, its citadels fall.
+- A fallen citadel leaves a hulk: dark, with half of what was in its hangar and some of its modules to loot, and many cycles of salvage. Right-click a hulk and pick Rebuild to make it yours again, for half the materials of its blueprint, taken from your hold. Hulks also lie in open space, and an alien people's holds a copy of its blueprint, now and then the original.
+
 ## Probe scanning, a system map, and places to remember
 
 - A system map: open it from the dock, from a system's panel on the star map, or from the scanner window. It shows the sun, the planets and their orbits, moons, belts, stations, gates, the sites you have found and your ship, from a slant you can turn (right-drag), zoom (wheel) and drag about.
