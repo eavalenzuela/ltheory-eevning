@@ -92,8 +92,9 @@ end
 -- hull that was left. 'works': what the camp is built of stands eight
 -- kilometres off from the first, firing if it can, and is destroyed
 -- when the last of the waves is: whoever flies is gone for first.
-local function fight(hullId: string, level: number, orbit: number, waves: { { string } }, works: { string }?, tier: string?): (boolean, number)
-  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+local function fight(hullId: string, level: number, orbit: number, waves: { { string } }, works: { string }?, tier: string?,
+  seed: number?): (boolean, number)
+  local game = Core.New({ galaxySeed = 1, historySeed = seed or 1, peaceful = true })
   local state = game.state
   -- (the plain skills, every one at the level: not the crafts of a trade, which nothing is laid out on the
   -- footing that a pilot has, and which make all of this easier for one who does)
@@ -243,6 +244,9 @@ local FOR: { { any } } = {
 -- with the best there is, die no more than one time in ten ("if
 -- max-fit dies more than 1/10 times, it's WAY too powerful").
 local TECH2_FAILS, MAX_DIES = 0.25, 0.1
+-- (and each fight under two runs of the dice, not one: a single run is too
+-- near the line to tell a change from the luck of it)
+local SEEDS = { 1, 2 }
 
 suite:Case("a ship of the class a level is for comes through that level's camps as it is fitted, and the class below it through few", function(t)
   local said: { string } = {}
@@ -252,10 +256,12 @@ suite:Case("a ship of the class a level is for comes through that level's camps 
     for _, tier in TIERS do
       local wins, least, total = 0, 1, 0
       for _, waves in camps(level) do
-        total += 1
-        local won, left = fight(ship[1], ship[2], ship[3], waves, nil, tier)
-        wins += if won then 1 else 0
-        least = if won then math.min(least, left) else least
+        for _, seed in SEEDS do
+          total += 1
+          local won, left = fight(ship[1], ship[2], ship[3], waves, nil, tier, seed)
+          wins += if won then 1 else 0
+          least = if won then math.min(least, left) else least
+        end
       end
       table.insert(line, `{tier} {wins}/{total} least {math.floor(least * 100)}%`)
       if tier == "t2" then
@@ -268,11 +274,14 @@ suite:Case("a ship of the class a level is for comes through that level's camps 
     -- The class below, plainly fitted: the level is not for it.
     local below = FOR[level - 1]
     if below then
-      local theirs = 0
+      local theirs, fought = 0, 0
       for _, waves in camps(level) do
-        theirs += if fight(below[1], below[2], below[3], waves) then 1 else 0
+        for _, seed in SEEDS do
+          fought += 1
+          theirs += if fight(below[1], below[2], below[3], waves, nil, nil, seed) then 1 else 0
+        end
       end
-      t.ok(theirs < #camps(level) / 2, `a {Ships.byId[below[1]].name} came through {theirs} of {#camps(level)} camps of level {level}`)
+      t.ok(theirs < fought / 2, `a {Ships.byId[below[1]].name} came through {theirs} of {fought} camps of level {level}`)
     end
   end
   print("     assault: " .. table.concat(said, "; "))
@@ -296,10 +305,12 @@ suite:Case("a ship of the class a level is for razes a camp of that level as it 
       -- (every other camp the level can be: enough to say)
       for index = 1, #every, 2 do
         local waves = table.move(every[index], #every[index] - most + 1, #every[index], 1, {})
-        local ok, left = fight(hull, skill, orbit, waves, Assault.WORKS[level], tier)
-        tried += 1
-        won += if ok then 1 else 0
-        worst = if ok then math.min(worst, left) else worst
+        for _, seed in SEEDS do
+          local ok, left = fight(hull, skill, orbit, waves, Assault.WORKS[level], tier, seed)
+          tried += 1
+          won += if ok then 1 else 0
+          worst = if ok then math.min(worst, left) else worst
+        end
       end
       table.insert(line, `{tier} {won}/{tried} least {math.floor(worst * 100)}%`)
       if tier == "t2" then

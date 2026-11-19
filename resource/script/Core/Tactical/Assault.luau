@@ -171,9 +171,10 @@ Assault.GATE_RADIUS = 260
 -- not a pack of the class it is for: the first is scouts, which a
 -- frigate can take two and three at a time; the second raiders, for a
 -- destroyer; the third the pirates' destroyers, one to a wave, for a
--- cruiser, with a scout or two beside one, or a raider and a scout (two
--- destroyers at once are more than a cruiser of the level comes
--- through); the fourth their cruisers, for a
+-- cruiser, with a frigate or two beside one (two destroyers at once are
+-- more than a cruiser of the level comes through, and a wave of
+-- frigates alone it cannot hit); the fourth their cruisers, two of them
+-- at most, or two of their destroyers, for a
 -- battleship. The owner, 2026-11-18: a mission's pirates are "weaker
 -- than the ship class assigned to the mission, by level", and two
 -- frigates are what a cruiser's guns cannot hit, since they were set
@@ -183,8 +184,8 @@ Assault.GATE_RADIUS = 260
 local PACKS: { { { string } } } = {
   { { "scout" }, { "scout", "scout" }, { "scout", "scout", "scout" } },
   { { "raider" }, { "raider", "scout" }, { "raider", "scout", "scout" }, { "scout", "scout", "scout" } },
-  { { "jackal" }, { "jackal", "scout" }, { "jackal", "scout", "scout" }, { "raider", "scout" } },
-  { { "marauder" }, { "marauder", "jackal" }, { "jackal", "jackal" }, { "marauder", "raider" } },
+  { { "jackal" }, { "jackal", "scout" }, { "jackal", "scout", "scout" }, { "jackal", "raider" } },
+  { { "marauder" }, { "marauder", "jackal" }, { "jackal", "jackal" }, { "marauder", "marauder" } },
 }
 Assault.PACKS = PACKS
 

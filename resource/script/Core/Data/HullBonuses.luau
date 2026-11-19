@@ -101,6 +101,7 @@ end
 local function laserCap(skill: string): HullBonus
   return laser(skill, -0.10, "capacitor", "lasers use 10% less capacitor")
 end
+local PIRATE_LOCK = role(0.5, "ship", "scanResolution", "locks on half as fast again (scan resolution)")
 local function hullHP(skill: string): HullBonus
   return level(skill, 0.05, "ship", "hull", "5% more hull")
 end
@@ -221,6 +222,35 @@ HullBonuses.byHull = {
     armorHP("ultracapitals") },
   ["barge.pulley"] = { level("mining", 0.05, "mining", "yield", "5% more from mining"), armorHP("mining") },
   ["freighter.hiven"] = { cargo("freighters"), armorHP("freighters") },
+
+  -- The Unbound, the pirates' hulls made over from others (2026-11-18):
+  -- projectiles, some launchers, and hull. Every one of them locks on
+  -- the quicker (the owner: "I would give them a role bonus to target
+  -- lock speed / scan resolution. That leans into the 'pirate' side";
+  -- the half again is mine), and what catches ships holds them from
+  -- farther.
+  ["frigate.cutthroat"] = { projectile("frigates", 0.05, "damageMultiplier", "5% more projectile damage"), speed("frigates"),
+    PIRATE_LOCK, role(0.25, "reach", "scramble", "warp disruptors reach a quarter farther") },
+  ["destroyer.jackal"] = { projectile("destroyers", -0.05, "duration", "projectile turrets fire 5% faster"), hullHP("destroyers"),
+    PIRATE_LOCK, role(0.25, "reach", "scramble", "warp disruptors reach a quarter farther") },
+  ["cruiser.marauder"] = { projectile("cruisers", 0.05, "damageMultiplier", "5% more projectile damage"), missileDamage("cruisers"),
+    PIRATE_LOCK },
+  ["attackbattlecruiser.reaver"] = { projectile("battlecruisers", 0.05, "damageMultiplier", "5% more projectile damage"),
+    projectile("battlecruisers", 0.10, "falloff", "projectile turrets keep their aim 10% farther past their best range"), PIRATE_LOCK },
+  ["battlecruiser.brigand"] = { projectile("battlecruisers", -0.05, "duration", "projectile turrets fire 5% faster"),
+    hullHP("battlecruisers"), PIRATE_LOCK },
+  ["battleship.ravager"] = { projectile("battleships", 0.05, "damageMultiplier", "5% more projectile damage"), hullHP("battleships"),
+    PIRATE_LOCK },
+  ["industrial.fence"] = { cargo("industrials"), speed("industrials"), PIRATE_LOCK },
+  ["carrier.warren"] = { level("carriers", 0.05, "drones", "damage", "fighters do 5% more damage"), hullHP("carriers"), PIRATE_LOCK },
+  ["dreadnought.tyrant"] = { projectile("dreadnoughts", 0.05, "damageMultiplier", "5% more projectile damage"), hullHP("dreadnoughts"),
+    PIRATE_LOCK },
+  ["siegedreadnought.despoiler"] = { projectile("dreadnoughts", 0.05, "damageMultiplier", "5% more projectile damage"),
+    hullHP("dreadnoughts"), PIRATE_LOCK },
+  ["capitalindustrial.hoard"] = { level("capital.industrials", 0.05, "ore", "hold", "5% more ore hold"),
+    hullHP("capital.industrials"), PIRATE_LOCK },
+  ["supercarrier.matriarch"] = { level("supercarriers", 0.05, "drones", "damage", "fighters and bombers do 5% more damage"),
+    hullHP("supercarriers"), PIRATE_LOCK },
 } :: { [string]: { HullBonus } }
 
 -- The classes that no electronic warfare touches (the owner, 2026-11-18:
