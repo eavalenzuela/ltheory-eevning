@@ -347,7 +347,7 @@ suite:Case("a shield booster mends per cycle until the capacitor gives out", fun
   t.ok(v.capacitor < v.capacitorMax - 15)
   local stoppedBy = stepUntil(a, "ModuleStopped", 120)
   t.eq(stoppedBy.reason, "capacitor empty")
-  t.ok(v.capacitor < 18, "it ran until it could not pay for a cycle")
+  t.ok(v.capacitor < 20, "it ran until it could not pay for a cycle")
   t.eq(#v.running, 0)
 end)
 
@@ -473,9 +473,9 @@ suite:Case("an entanglement projector cuts its target's speed while it runs, and
   lockFoe(t, a)
   order(t, a, { kind = "ActivateModule", actor = 0, item = projector.id, target = a.foe.id })
   local held = stepUntil(a, "Held", 3)
-  t.eq({ held.ball, held.entangle, held.scrambled } :: { any }, { a.foe.id, 0.45, false } :: { any })
-  t.near(a.foe.maxVelocity, was * 0.45, 1e-6)
-  t.eq(a.foe.vitals.entangle, 0.45)
+  t.eq({ held.ball, held.entangle, held.scrambled } :: { any }, { a.foe.id, 0.5, false } :: { any })
+  t.near(a.foe.maxVelocity, was * 0.5, 1e-6)
+  t.eq(a.foe.vitals.entangle, 0.5)
   -- A second projector on it, from somebody else, makes it no slower.
   local other = Space.NewShip(state, "frigate.courier", "Second", "player", 0)
   local second = Items.Equip(state, other.id, "projector.entanglement", nil)
@@ -483,7 +483,7 @@ suite:Case("an entanglement projector cuts its target's speed while it runs, and
   table.insert(ball.vitals.locks, { target = a.foe.id, done = 0, locked = true })
   table.insert(ball.vitals.running, { item = second.id, target = a.foe.id, next = 0, stopping = false, cycles = 0 })
   Core.Step(a.game)
-  t.near(a.foe.maxVelocity, was * 0.45, 1e-6)
+  t.near(a.foe.maxVelocity, was * 0.5, 1e-6)
   ball.vitals.running = {}
   -- It costs capacitor every cycle, and switched off, the target is free.
   local capacitor = a.me.vitals.capacitor
@@ -681,7 +681,7 @@ suite:Case("a raider carries a warp disruptor, and a pilot it catches cannot war
 end)
 
 suite:Case("a painter swells its target's signature, and a dampener cuts how far it can see", function(t)
-  local a = arena("frigate.courier", { { "painter.target" }, { "damper.sensor" } }, "frigate.courier", CANNONS, 17000)
+  local a = arena("frigate.courier", { { "painter.target" }, { "damper.sensor" } }, "frigate.courier", CANNONS, 20000)
   local state = a.game.state
   local painter, damper = modules(a)[1], modules(a)[2]
   local signature, range, resolution = a.foe.vitals.signature, a.foe.vitals.lockRange, a.foe.vitals.scanResolution
@@ -690,16 +690,15 @@ suite:Case("a painter swells its target's signature, and a dampener cuts how far
   table.insert(a.foe.vitals.locks, { target = a.me.id, done = 0, locked = true })
   order(t, a, { kind = "ActivateModule", actor = 0, item = painter.id, target = a.foe.id })
   gather(a, 2, "none")
-  t.near(a.foe.vitals.signature, signature * 1.3, 1e-6)
-  t.eq({ a.foe.vitals.paint, a.foe.vitals.damp }, { 1.3, 1 })
+  t.near(a.foe.vitals.signature, signature * 1.25, 1e-6)
+  t.eq({ a.foe.vitals.paint, a.foe.vitals.damp }, { 1.25, 1 })
   t.eq(#a.foe.vitals.locks, 1)
-  -- Dampened to half its range, it cannot keep a lock from seventeen kilometres.
+  -- Dampened, it sees a seventh less far and locks a seventh slower (the reference's dampener, 2026-11-18: before,
+  -- it was half, and a lock from far off was broken by it).
   order(t, a, { kind = "ActivateModule", actor = 0, item = damper.id, target = a.foe.id })
-  local lost = stepUntil(a, "LockLost", 4)
-  t.eq({ lost.ball, lost.target } :: { any }, { a.foe.id, a.me.id } :: { any })
-  t.near(a.foe.vitals.lockRange, range * 0.5, 1e-6)
-  t.near(a.foe.vitals.scanResolution, resolution * 0.5, 1e-6)
-  t.eq(#a.foe.vitals.locks, 0)
+  gather(a, 2, "none")
+  t.near(a.foe.vitals.lockRange, range * 0.863, 1e-6)
+  t.near(a.foe.vitals.scanResolution, resolution * 0.863, 1e-6)
   -- Switched off, it is as it was.
   order(t, a, { kind = "DeactivateModule", actor = 0, item = painter.id })
   order(t, a, { kind = "DeactivateModule", actor = 0, item = damper.id })
@@ -813,12 +812,12 @@ suite:Case("what the hull has to fit with and holds together by: a co-processor,
   local function with(type: string): Attributes.Stats
     return Attributes.Ship(hull, { { type = type, running = false } }, nil)
   end
-  t.near(with("fitting.coprocessor").cpu, bare.cpu * 1.1, 1e-6)
+  t.near(with("fitting.coprocessor").cpu, bare.cpu * 1.08, 1e-6)
   t.near(with("fitting.reactor").powergrid, bare.powergrid * 1.1, 1e-6)
   t.near(with("relay.shield").shieldRecharge, bare.shieldRecharge * 0.8, 1e-6)
-  t.near(with("relay.shield").capacitorRecharge, bare.capacitorRecharge * 1.1, 1e-6)
+  t.near(with("relay.shield").capacitorRecharge, bare.capacitorRecharge * 1.3, 1e-6)
   t.near(with("relay.capacitor").capacitorRecharge, bare.capacitorRecharge * 0.8, 1e-6)
-  t.near(with("hull.bulkhead").hull, bare.hull * 1.25, 1e-6)
+  t.near(with("hull.bulkhead").hull, bare.hull * 1.15, 1e-6)
   t.ok(with("hull.bulkhead").cargo < bare.cargo, "bulkheads take room from the hold")
 end)
 
@@ -852,11 +851,11 @@ suite:Case("an ancillary armour repairer does three times as much with paste, an
   a.me.vitals.armor = 1
   order(t, a, { kind = "ActivateModule", actor = 0, item = repairer.id })
   local first = stepUntil(a, "Repaired", 5)
-  t.eq(first.amount, 180)
+  t.eq(first.amount, 156)
   t.eq(repairer.rounds, 7)
   repairer.rounds = 0
   local plain = stepUntil(a, "Repaired", 20)
-  t.eq(plain.amount, 60, "with no paste in the hold, it works as a plain one")
+  t.eq(plain.amount, 52, "with no paste in the hold, it works as a plain one")
 end)
 
 suite:Case("an ancillary shield booster spends a charge in place of the capacitor", function(t)
@@ -919,9 +918,9 @@ suite:Case("an energy drain takes the target's capacitor into its own ship, whil
   local theirs = a.foe.vitals.capacitor
   order(t, a, { kind = "ActivateModule", actor = 0, item = drain.id, target = a.foe.id })
   local drained = stepUntil(a, "Drained", 5)
-  t.eq(drained.amount, 20)
+  t.eq(drained.amount, 8)
   t.ok(a.foe.vitals.capacitor < theirs, "taken from the target")
-  t.ok(a.me.vitals.capacitor >= 29, `into its own: {a.me.vitals.capacitor}`)
+  t.ok(a.me.vitals.capacitor >= 17, `into its own: {a.me.vitals.capacitor}`)
 end)
 
 suite:Case("a tracking disruptor and a guidance disruptor are set on their target; a remote sensor booster lengthens its reach", function(t)
@@ -933,7 +932,7 @@ suite:Case("a tracking disruptor and a guidance disruptor are set on their targe
   end
   Core.Step(a.game)
   Core.Step(a.game)
-  t.eq({ a.foe.vitals.track, a.foe.vitals.guide } :: { any }, { 0.7, 0.7 } :: { any })
+  t.eq({ a.foe.vitals.track, a.foe.vitals.guide } :: { any }, { 0.847, 0.847 } :: { any })
   t.near(a.foe.vitals.lockRange, reach * 1.3, 1e-6)
   t.eq(a.me.vitals.track, nil, "nothing on the ship that runs them")
 end)

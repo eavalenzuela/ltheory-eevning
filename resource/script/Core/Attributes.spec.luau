@@ -37,9 +37,9 @@ end)
 
 suite:Case("a plate adds armour and mass, and the mass slows the ship's turning", function(t)
   local stats = Attributes.Ship(lancer, fit("armor.plate.200mm"))
-  t.eq(stats.armor, 935)
-  t.eq(stats.mass, 1307500)
-  t.near(stats.tau, 3.2 * 1.3075, 1e-12)
+  t.eq(stats.armor, 865)
+  t.eq(stats.mass, 1260000)
+  t.near(stats.tau, 3.2 * 1.26, 1e-12)
 end)
 
 suite:Case("two membranes resist less than twice one", function(t)
@@ -55,7 +55,7 @@ end)
 suite:Case("damage control is not penalised against a membrane", function(t)
   local stats = Attributes.Ship(lancer, fit("damage.control", "armor.membrane"))
   t.near(stats["armorResonance.2"], 0.65 * 0.9 * 0.85, 1e-12)
-  t.near(stats["hullResonance.3"], 0.67 * 0.6, 1e-12)
+  t.near(stats["hullResonance.3"], 0.67 * 0.7, 1e-12)
   t.near(stats["shieldResonance.2"], 0.8 * 0.925, 1e-12)
 end)
 
@@ -65,7 +65,7 @@ suite:Case("speed modules stack with a penalty", function(t)
   t.near(stats.maxVelocity, 340 * 1.105 * (1 + 0.0775 * 0.869120), 1e-4)
   t.near(stats.inertia, 3.2 * 0.87, 1e-12)
   t.near(stats.hull, 350 * 0.85, 1e-12)
-  t.near(stats.cargo, 190 * 0.9, 1e-12)
+  t.near(stats.cargo, 190 * 0.85, 1e-12)
 end)
 
 suite:Case("a hardener only helps while it is running", function(t)
@@ -128,12 +128,12 @@ suite:Case("a microwarpdrive, running, is six times the speed and six times the 
   t.near(on.signature, bare.signature * 6, 1e-6)
   t.near(off.maxVelocity, bare.maxVelocity, 1e-6)
   t.near(off.signature, bare.signature, 1e-6)
-  t.near(off.capacitor, bare.capacitor * 0.85, 1e-6)
+  t.near(off.capacitor, bare.capacitor * 0.75, 1e-6)
   -- (it is the faster of the two, and the dearer to run)
   local burner = Attributes.Ship(courier, { { type = "afterburner.1mn", running = true } })
   t.ok(on.maxVelocity > burner.maxVelocity * 2)
   local mwd, afterburner = Modules.byId["mwd.5mn"], Modules.byId["afterburner.1mn"]
-  t.ok((mwd.boostCapacitor or 0) > 3 * (afterburner.boostCapacitor or 0))
+  t.ok((mwd.boostCapacitor or 0) > 2 * (afterburner.boostCapacitor or 0))
   -- A courier's capacitor runs one for under a minute and a half.
   t.ok(off.capacitor / (mwd.boostCapacitor or 1) * (mwd.boostDuration or 1) < 90)
   t.ok(Modules.byId["mwd.medium"] ~= nil and Modules.byId["mwd.large"] ~= nil, "a microwarpdrive comes in three sizes")
@@ -149,8 +149,8 @@ end)
 suite:Case("heat sinks raise a laser's damage and rate of fire, and nothing else's", function(t)
   local fitted = fit("laser.pulse.small", "heat.sink", "heat.sink")
   local laser = Attributes.Weapon(fitted, "laser.pulse.small")
-  t.near(laser.damageMultiplier, 4.5 * 1.10 * (1 + 0.10 * 0.869120), 1e-6)
-  t.near(laser.duration, 3.5 * 0.895 * (1 - 0.105 * 0.869120), 1e-6)
+  t.near(laser.damageMultiplier, 4.5 * 1.07 * (1 + 0.07 * 0.869120), 1e-6)
+  t.near(laser.duration, 3.5 * 0.92 * (1 - 0.08 * 0.869120), 1e-6)
   t.eq(laser.optimal, 5250)
   local cannon = Attributes.Weapon(fit("autocannon.small", "heat.sink"), "autocannon.small")
   t.near(cannon.damageMultiplier, 2.89 * 1.5, 1e-9)
@@ -169,11 +169,11 @@ suite:Case("a fit must respect slots, hardpoints, CPU and powergrid", function(t
   t.eq({ Attributes.Check(lancer, { "launcher.light" }) }, { false, "no free launcher hardpoint" } :: { any })
   t.eq({ Attributes.Check(courier, { "shield.extender.small", "shield.booster.small", "armor.repairer.small" }) },
     { true } :: { any })
-  t.eq({ Attributes.Check(courier, { "armor.plate.200mm", "laser.pulse.small", "laser.pulse.small", "afterburner.1mn",
-    "shield.extender.small" }) }, { false, "not enough powergrid (45 of 44 MW)" } :: { any })
+  t.eq({ Attributes.Check(courier, { "armor.plate.200mm", "laser.pulse.small", "laser.pulse.small", "mwd.5mn",
+    "shield.extender.small" }) }, { false, "not enough powergrid (47 of 44 MW)" } :: { any })
   t.eq({ Attributes.Check(lancer, { "laser.pulse.small", "laser.pulse.small", "laser.pulse.small", "shield.hardener",
     "shield.hardener", "heat.sink", "heat.sink", "heat.sink", "damage.control" }) },
-    { false, "not enough CPU (190 of 175 tf)" } :: { any })
+    { false, "not enough CPU (231 of 175 tf)" } :: { any })
   t.eq({ Attributes.Check(lancer, { "bogus" }) }, { false, "'bogus' is not a module" } :: { any })
 end)
 

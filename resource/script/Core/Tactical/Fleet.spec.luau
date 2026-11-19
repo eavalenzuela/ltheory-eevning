@@ -421,16 +421,16 @@ suite:Case("a remote repairer puts shield or armour back on a locked ship in rea
   local before = theirs.vitals.shield
   t.ok((submit(game, { kind = "ActivateModule", actor = 0, item = remote.id, target = theirs.id })))
   steps(game, 1)
-  -- One cycle at once: fifty points for thirty of capacitor (the shield's own recharge aside).
-  t.ok(theirs.vitals.shield >= before + 50 and theirs.vitals.shield < before + 60, `the shield went from {before} to {theirs.vitals.shield}`)
-  t.ok(me.vitals.capacitor <= capacitor - 30 + 5)
+  -- One cycle at once: sixty-five points for fifty-eight of capacitor (the shield's own recharge aside).
+  t.ok(theirs.vitals.shield >= before + 65 and theirs.vitals.shield < before + 75, `the shield went from {before} to {theirs.vitals.shield}`)
+  t.ok(me.vitals.capacitor <= capacitor - 58 + 5)
   local mended = 0
   for _, event in Core.TakeEvents(game) do
     if event.kind == "Mended" and event.target == theirs.id and event.layer == "shield" then
       mended += event.amount
     end
   end
-  t.eq(mended, 50)
+  t.eq(mended, 65)
   -- It never puts back more than there is room for.
   steps(game, 60)
   t.eq(theirs.vitals.shield, theirs.vitals.shieldMax)
@@ -473,7 +473,7 @@ suite:Case("a hired pilot with a remote repairer mends whoever of the fleet is h
   t.eq({ theirs.mode, theirs.target } :: { any }, { "keep", me.id } :: { any })
 end)
 
-suite:Case("a capacitor relay sends what it costs into a locked ship in reach, and no more than there is room for", function(t)
+suite:Case("a capacitor relay sends most of what it costs into a locked ship in reach, and no more than there is room for", function(t)
   local game, second = docked()
   local state = game.state
   local Modules = require("@lt/Core/Data/Modules")
@@ -497,17 +497,18 @@ suite:Case("a capacitor relay sends what it costs into a locked ship in reach, a
   Core.TakeEvents(game)
   t.ok((submit(game, { kind = "ActivateModule", actor = 0, item = assert(relay).id, target = theirs.id })))
   steps(game, 1)
-  -- One cycle at once: forty out of one capacitor and into the other (each one's own recharge aside).
-  t.ok(theirs.vitals.capacitor >= before + 40 and theirs.vitals.capacitor < before + 50,
+  -- One cycle at once: thirty-eight out of one capacitor and thirty into the other (each one's own recharge aside: the
+  -- reference's transmitter, 2026-11-18; it sent all it cost before).
+  t.ok(theirs.vitals.capacitor >= before + 30 and theirs.vitals.capacitor < before + 48,
     `their capacitor went from {before} to {theirs.vitals.capacitor}`)
-  t.ok(me.vitals.capacitor <= mine - 40 + 5 and me.vitals.capacitor >= mine - 40, `mine went from {mine} to {me.vitals.capacitor}`)
+  t.ok(me.vitals.capacitor <= mine - 38 + 5 and me.vitals.capacitor >= mine - 38, `mine went from {mine} to {me.vitals.capacitor}`)
   local fed = 0
   for _, event in Core.TakeEvents(game) do
     if event.kind == "Fed" and event.ball == me.id and event.target == theirs.id then
       fed += event.amount
     end
   end
-  t.near(fed, 40, 1e-6)
+  t.near(fed, 30, 1e-6)
   -- It never puts in more than there is room for: what a full ship is sent is lost.
   theirs.vitals.capacitor = theirs.vitals.capacitorMax - 15
   steps(game, 5)
@@ -516,12 +517,12 @@ suite:Case("a capacitor relay sends what it costs into a locked ship in reach, a
   theirs.x += 12000
   steps(game, 6)
   t.eq(#me.vitals.running, 0)
-  -- There are three sizes; each sends what it costs, the bigger more and farther, for more of the skill.
+  -- There are three sizes; each sends most of what it costs, the bigger more and farther, for more of the skill.
   local small, medium, large = Modules.byId["remote.capacitor.small"], Modules.byId["remote.capacitor.medium"],
     Modules.byId["remote.capacitor.large"]
   for size, relayed in { small, medium, large } do
     local hex = relayed.hex :: Modules.Hex
-    t.eq({ hex.kind, hex.strength } :: { any }, { "capacitor", hex.capacitor } :: { any }, relayed.id)
+    t.ok(hex.kind == "capacitor" and hex.strength < hex.capacitor and hex.strength > 0.7 * hex.capacitor, relayed.id)
     t.eq((relayed.requires :: any)[1], { skill = "engineering", level = size + 1 })
     -- (for a friend, and not one of those that mend; nor is there a tech 2 or a custom make of it)
     t.ok(Modules.Friendly(relayed) and not Modules.Mends(relayed))

@@ -73,7 +73,7 @@ suite:Case("fitting takes one from the stack and fills the next free slot", func
   t.eq({ mids[1].type, mids[1].slot, mids[2].type, mids[2].slot } :: { any },
     { "shield.extender.small", 1, "afterburner.1mn", 2 } :: { any })
   t.eq(hangarCount(game, "shield.extender.small"), 0)
-  t.eq(Items.ShipStats(game.state, ship).shield, 280 + 280, "and the ship has the extender's shield")
+  t.eq(Items.ShipStats(game.state, ship).shield, 280 + 400, "and the ship has the extender's shield")
 end)
 
 suite:Case("a fit that breaks the rules is refused, with the reason", function(t)

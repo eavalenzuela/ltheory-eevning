@@ -39,7 +39,7 @@ lua assert(GameDebug.Held('target') == 1 and not select(2, GameDebug.Held('targe
 # Both guns, the entanglement projector and the disruptor.
 lua assert(GameDebug.Fire() == 4, 'two guns, an entanglement projector and a disruptor should all start')
 until select(2, GameDebug.Held('target'))
-lua assert(GameDebug.Held('target') < 0.5, 'the pirate should be slowed to under half its speed')
+lua assert(GameDebug.Held('target') <= 0.5, 'the pirate should be slowed to half its speed or less')
 lua assert(GameDebug.Held() == 1 and not select(2, GameDebug.Held()), 'a scout holds nobody')
 
 # Held, it does not last.

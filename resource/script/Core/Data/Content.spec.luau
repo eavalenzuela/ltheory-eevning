@@ -1356,17 +1356,16 @@ suite:Case("fittings come in three sizes, each for a larger ship than the last",
   for _, family in { "shield.extender", "shield.booster", "armor.plate", "armor.repairer", "afterburner", "capacitor.battery" } do
     local medium = assert(Modules.byId[family .. ".medium"])
     local large = assert(Modules.byId[family .. ".large"])
-    t.ok(large.powergrid > 5 * medium.powergrid and large.basePrice > medium.basePrice, family)
+    t.ok(large.powergrid > 2 * medium.powergrid and large.basePrice > medium.basePrice, family)
     t.ok(string.find(medium.name, "Medium") ~= nil and string.find(large.name, "Large") ~= nil, medium.name)
     t.ok(#Skills.Needs(large.id) == 1 and Skills.byId[Skills.Needs(large.id)[1].skill] ~= nil, family)
-    -- a cruiser can power a medium one and not a large; a battleship can power a large
+    -- a cruiser can power a medium one easily (and a large plate, as the reference's can, since 2026-11-18); a
+    -- battleship a large
     t.ok(medium.powergrid < 0.3 * Ships.byId["cruiser.ouyou"].powergrid, family)
-    t.ok(large.powergrid > Ships.byId["cruiser.ouyou"].powergrid or family == "capacitor.battery" or family == "shield.extender"
-      or family == "shield.booster", family)
     t.ok(large.powergrid < 0.3 * Ships.byId["battleship.owari"].powergrid, family)
   end
-  t.ok(assert(Modules.byId["armor.plate.large"]).passive[1].value > 8 * 520 - 1)
-  t.ok(assert(assert(Modules.byId["shield.booster.large"]).repair).amount > 8 * 26)
+  t.ok(assert(Modules.byId["armor.plate.large"]).passive[1].value > 7 * 450 - 1)
+  t.ok(assert(assert(Modules.byId["shield.booster.large"]).repair).amount > 7 * 26)
   -- the barge carries three strip miners, each worth several mining lasers
   local barge, strip = Ships.byId["barge.quarry"], Modules.byId["miner.strip"]
   t.ok(3 * strip.cpu <= barge.cpu and 3 * strip.powergrid <= barge.powergrid and barge.turrets == 3)

@@ -516,9 +516,9 @@ suite:Case("drone damage amplifiers fitted to the owner make its drones hit hard
   end
   local plain, one, two = harm(0), harm(1), harm(2)
   t.ok(plain > 0, "the drones did no harm")
-  t.near(one / plain, 1.12, 0.005)
+  t.near(one / plain, 1.15, 0.005)
   -- (a second one does less than the first: stacked like any other)
-  t.ok(two / one > 1 and two / one < 1.12, `{two / one}`)
+  t.ok(two / one > 1 and two / one < 1.15, `{two / one}`)
 end)
 
 return suite

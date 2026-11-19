@@ -1475,6 +1475,203 @@ end
 -- one. Nobody sells, builds or stores these: a pirate captain fits
 -- them, and what is left of them is in the captain's wreck.
 --
+-- ---------------------------------------------------------------------
+-- The reference's figures (the owner, 2026-11-18, of the module pass:
+-- "Approved"): each plain module of these families as the reference's
+-- plain module of its kind and size, in what it does, what it costs to
+-- run and what it takes to fit. Set here, on the plain modules, before
+-- any better make is made of them, so every make has them too. Where
+-- one module here does what the reference does with one module and a
+-- choice of scripts, a computer that is for tracking or for range has
+-- the reference's with that script, and the flight computer, which does
+-- both, the reference's with none; a remote module's one range is the
+-- reference's optimal range and falloff together. (Those choices mine.)
+do
+  local byId: { [string]: ModuleType } = {}
+  for _, m in modules do
+    byId[m.id] = m
+  end
+  local function get(id: string): ModuleType
+    return assert(byId[id], `no module {id}`)
+  end
+  -- (a modifier's figure, where the module has one on that attribute)
+  local function set(list: { Modifier }?, attribute: string, value: number)
+    if list == nil then
+      return
+    end
+    for _, m in list do
+      if m.attribute == attribute then
+        m.value = value
+      end
+    end
+  end
+  local function fitting(id: string, cpu: number, powergrid: number)
+    local m = get(id)
+    m.cpu, m.powergrid = cpu, powergrid
+  end
+  local SIZES = { "small", "medium", "large" }
+  local function each(prefix: string, fn: (ModuleType, number) -> ())
+    for size, word in SIZES do
+      fn(get(`{prefix}.{word}`), size)
+    end
+  end
+
+  -- Tank
+  each("shield.extender", function(m, size)
+    set(m.passive, "shield", ({ 400, 800, 1900 })[size])
+    set(m.passive, "signature", ({ 2, 7, 25 })[size])
+    m.cpu, m.powergrid = ({ 20, 28, 40 })[size], ({ 2, 28, 150 })[size]
+  end)
+  each("shield.booster", function(m, size)
+    local r = assert(m.repair)
+    r.amount, r.duration, r.capacitor = ({ 26, 78, 207 })[size], ({ 2, 3, 4 })[size], ({ 20, 60, 160 })[size]
+    m.cpu, m.powergrid = ({ 25, 50, 100 })[size], ({ 2, 12, 150 })[size]
+  end)
+  each("shield.booster.ancillary", function(m, size)
+    local r = assert(m.repair)
+    r.amount, r.duration, r.capacitor = ({ 52, 146, 390 })[size], ({ 2, 3, 4 })[size], ({ 66, 198, 528 })[size]
+    m.cpu, m.powergrid = ({ 25, 50, 100 })[size], ({ 2, 12, 150 })[size]
+  end)
+  for size, id in { "armor.plate.200mm", "armor.plate.medium", "armor.plate.large" } do
+    local m = get(id)
+    set(m.passive, "armor", ({ 450, 1750, 3500 })[size])
+    set(m.passive, "mass", ({ 140000, 1350000, 3500000 })[size])
+    m.cpu, m.powergrid = ({ 15, 25, 30 })[size], ({ 10, 200, 500 })[size]
+  end
+  each("armor.repairer", function(m, size)
+    local r = assert(m.repair)
+    r.amount, r.duration, r.capacitor = ({ 69, 276, 690 })[size], ({ 6, 12, 15 })[size], ({ 40, 160, 400 })[size]
+    m.cpu, m.powergrid = ({ 5, 25, 50 })[size], ({ 5, 120, 1800 })[size]
+  end)
+  each("armor.repairer.ancillary", function(m, size)
+    local r = assert(m.repair)
+    r.amount, r.duration, r.capacitor = ({ 52, 207, 518 })[size], ({ 6, 12, 15 })[size], ({ 40, 160, 400 })[size]
+    m.cpu, m.powergrid = ({ 5, 25, 50 })[size], ({ 5, 120, 1800 })[size]
+  end)
+  get("shield.hardener").boostCapacitor = 40
+  fitting("shield.hardener", 40, 1)
+  for _, kind in { "em", "thermal", "kinetic", "explosive" } do
+    local shield, armor = get(`shield.hardener.{kind}`), get(`armor.hardener.{kind}`)
+    shield.boostCapacitor, shield.cpu = 20, 40
+    armor.boostDuration, armor.boostCapacitor, armor.cpu = 20, 30, 33
+  end
+  get("armor.membrane").cpu = 30
+  for index = 1, 4 do
+    set(get("damage.control").passive, `hullResonance.{index}`, 0.7)
+  end
+  local bulkhead = get("hull.bulkhead")
+  set(bulkhead.passive, "hull", 1.15)
+  table.insert(bulkhead.passive, ship("inertia", "mul", 1.03))
+  each("capacitor.battery", function(m, size)
+    set(m.passive, "capacitor", ({ 120, 500, 1300 })[size])
+    m.cpu, m.powergrid = ({ 20, 35, 50 })[size], ({ 8, 75, 400 })[size]
+  end)
+  get("capacitor.recharger").cpu = 10
+  set(get("relay.shield").passive, "capacitorRecharge", 1.3)
+
+  -- Weapon support
+  for _, id in { "heat.sink", "gyrostabilizer", "flux.coil", "ballistic.control" } do
+    local m = get(id)
+    set(m.passive, "damageMultiplier", 1.07)
+    set(m.passive, "duration", 0.92)
+    m.cpu = if id == "ballistic.control" then 35 else 27
+  end
+  local enhancer = get("tracking.enhancer")
+  set(enhancer.passive, "tracking", 1.07)
+  set(enhancer.passive, "optimal", 1.0725)
+  set(enhancer.passive, "falloff", 1.145)
+  local tracking, range, flight = get("computer.tracking"), get("computer.range"), get("computer.flight")
+  set(tracking.boost, "tracking", 1.2)
+  set(range.boost, "optimal", 1.1)
+  set(range.boost, "falloff", 1.2)
+  set(flight.boost, "flight", 1.08)
+  set(flight.boost, "blast", 0.945)
+  tracking.boostCapacitor, range.boostCapacitor, flight.boostCapacitor = 7, 7, 7
+  local amplifier, link = get("drone.amplifier"), get("drone.tracking")
+  if amplifier.drones then
+    amplifier.drones.damage = 1.15
+  end
+  if link.drones then
+    link.drones.tracking = 1.2
+  end
+
+  -- Electronic warfare
+  local function hex(id: string, fields: { [string]: number })
+    local h = assert(get(id).hex, id) :: any
+    for key, value in fields do
+      h[key] = value
+    end
+  end
+  hex("projector.entanglement", { strength = 0.5, capacitor = 5 })
+  fitting("projector.entanglement", 25, 1)
+  hex("disruptor.warp", { capacitor = 25 })
+  fitting("disruptor.warp", 40, 1)
+  hex("painter.target", { strength = 1.25, range = 30000, capacitor = 10 })
+  hex("damper.sensor", { strength = 0.863, range = 25000, capacitor = 30 })
+  fitting("damper.sensor", 35, 1)
+  for _, id in { "ewar.tracking", "ewar.guidance" } do
+    hex(id, { strength = 0.847, range = 40000 })
+    fitting(id, 40, 1)
+  end
+  hex("neutraliser.small", { range = 4000, capacitor = 45 })
+  fitting("neutraliser.small", 10, 8)
+  each("drain", function(m, size)
+    local h = assert(m.hex)
+    h.strength, h.duration, h.range = ({ 8, 30, 100 })[size], ({ 2.5, 5, 10 })[size], ({ 4000, 8000, 16000 })[size]
+    m.cpu, m.powergrid = ({ 15, 25, 50 })[size], ({ 8, 175, 2000 })[size]
+  end)
+  local booster = get("sensor.booster")
+  set(booster.boost, "lockRange", 1.25)
+  set(booster.boost, "scanResolution", 1.25)
+  booster.boostCapacitor, booster.cpu = 10, 12
+  for _, kind in { "em", "thermal", "kinetic", "explosive" } do
+    each(`smartbomb.{kind}`, function(m, size)
+      local bomb = assert(m.smartbomb)
+      for index, amount in bomb.damage do
+        bomb.damage[index] = if amount > 0 then ({ 50, 100, 250 })[size] else 0
+      end
+      bomb.range, bomb.capacitor = ({ 3000, 4000, 5000 })[size], ({ 30, 75, 200 })[size]
+      m.cpu, m.powergrid = ({ 30, 50, 80 })[size], ({ 8, 200, 1000 })[size]
+    end)
+  end
+
+  -- Remote assistance
+  each("remote.shield", function(m, size)
+    local h = assert(m.hex)
+    h.strength, h.duration, h.range, h.capacitor = ({ 65, 260, 520 })[size], ({ 4, 8, 8 })[size], ({ 10500, 12500, 16700 })[size],
+      ({ 58, 232, 492 })[size]
+    m.cpu, m.powergrid = ({ 28, 50, 112 })[size], ({ 3, 52, 208 })[size]
+  end)
+  each("remote.armor", function(m, size)
+    local h = assert(m.hex)
+    h.strength, h.duration, h.range, h.capacitor = ({ 49, 196, 392 })[size], ({ 3, 6, 6 })[size], ({ 9500, 11250, 15500 })[size],
+      ({ 38, 155, 330 })[size]
+    m.cpu, m.powergrid = ({ 10, 20, 40 })[size], ({ 6, 120, 600 })[size]
+  end)
+  each("remote.capacitor", function(m, size)
+    local h = assert(m.hex)
+    h.strength, h.duration, h.range, h.capacitor = ({ 30, 90, 270 })[size], 5, ({ 3500, 5000, 7500 })[size], ({ 38, 113, 338 })[size]
+    m.cpu, m.powergrid = ({ 30, 40, 50 })[size], ({ 4, 80, 320 })[size]
+  end)
+
+  -- Propulsion and utility
+  for size, id in { "afterburner.1mn", "afterburner.medium", "afterburner.large" } do
+    local m = get(id)
+    m.boostCapacitor, m.cpu, m.powergrid = ({ 20, 80, 320 })[size], ({ 15, 25, 50 })[size], ({ 10, 50, 625 })[size]
+  end
+  for size, id in { "mwd.5mn", "mwd.medium", "mwd.large" } do
+    local m = get(id)
+    m.boostCapacitor, m.cpu, m.powergrid = ({ 45, 180, 320 })[size], ({ 25, 50, 75 })[size], ({ 15, 150, 1250 })[size]
+    -- (and a quarter less capacitor while it is fitted, running or not)
+    set(m.passive, "capacitor", 0.75)
+  end
+  set(get("overdrive").passive, "cargo", 0.85)
+  local expander = get("cargo.expander")
+  set(expander.passive, "maxVelocity", 0.85)
+  table.insert(expander.passive, ship("hull", "mul", 0.8))
+  set(get("fitting.coprocessor").passive, "cpu", 1.08)
+end
+
 -- (What only a drone carries has a tech 2 make and no custom one: it is
 -- what a tech 2 drone carries, and is no more to be had apart than the
 -- plain one is.)

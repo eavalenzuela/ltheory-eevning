@@ -206,17 +206,17 @@ suite:Case("what helps the weapons: a damage upgrade for hybrids, an enhancer fo
   end
   -- The Flux Coil is to hybrids what the Heat Sink is to lasers, and does nothing for anybody else's guns.
   local blaster, plain = weapon("blaster.small", off("flux.coil")), weapon("blaster.small", {})
-  t.near(blaster.damageMultiplier, plain.damageMultiplier * 1.10, 1e-9)
-  t.near(blaster.duration, plain.duration * 0.895, 1e-9)
+  t.near(blaster.damageMultiplier, plain.damageMultiplier * 1.07, 1e-9)
+  t.near(blaster.duration, plain.duration * 0.92, 1e-9)
   t.eq(weapon("autocannon.small", off("flux.coil")), weapon("autocannon.small", {}))
   t.eq(weapon("laser.pulse.small", off("flux.coil")), weapon("laser.pulse.small", {}))
   t.eq(Modules.byId["flux.coil"].slot, "low")
   -- A Tracking Enhancer is for every turret, hybrids too, and no launcher.
   for _, gun in { "autocannon.small", "laser.beam.medium", "railgun.large", "blaster.small" } do
     local bare, helped = weapon(gun, {}), weapon(gun, off("tracking.enhancer"))
-    t.near(helped.tracking, bare.tracking * 1.095, 1e-9, gun)
-    t.near(helped.optimal, bare.optimal * 1.10, 1e-6, gun)
-    t.near(helped.falloff, bare.falloff * 1.20, 1e-6, gun)
+    t.near(helped.tracking, bare.tracking * 1.07, 1e-9, gun)
+    t.near(helped.optimal, bare.optimal * 1.0725, 1e-6, gun)
+    t.near(helped.falloff, bare.falloff * 1.145, 1e-6, gun)
   end
   t.eq(weapon("launcher.light", off("tracking.enhancer")), weapon("launcher.light", {}))
   -- The computers do nothing until they are switched on, and take a mid slot and capacitor while they run.
@@ -231,20 +231,20 @@ suite:Case("what helps the weapons: a damage upgrade for hybrids, an enhancer fo
   end
   for _, gun in { "autocannon.medium", "laser.pulse.small", "railgun.large" } do
     local bare = weapon(gun, {})
-    t.near(weapon(gun, on("computer.tracking")).tracking, bare.tracking * 1.25, 1e-9, gun)
+    t.near(weapon(gun, on("computer.tracking")).tracking, bare.tracking * 1.2, 1e-9, gun)
     t.eq(weapon(gun, on("computer.tracking")).optimal, bare.optimal, gun)
-    t.near(weapon(gun, on("computer.range")).optimal, bare.optimal * 1.15, 1e-6, gun)
-    t.near(weapon(gun, on("computer.range")).falloff, bare.falloff * 1.25, 1e-6, gun)
+    t.near(weapon(gun, on("computer.range")).optimal, bare.optimal * 1.1, 1e-6, gun)
+    t.near(weapon(gun, on("computer.range")).falloff, bare.falloff * 1.2, 1e-6, gun)
     t.eq(weapon(gun, on("computer.flight")), bare, gun)
   end
   local launcher = weapon("launcher.heavy", {})
   t.eq(weapon("launcher.heavy", on("computer.tracking")), launcher)
   t.eq(weapon("launcher.heavy", on("computer.range")), launcher)
   local guided = weapon("launcher.heavy", on("computer.flight"))
-  t.near(guided.flight :: number, 1.2, 1e-9)
-  t.near(guided.blast :: number, 0.85, 1e-9)
-  -- (and on a short launcher it is a fifth more of the third it throws)
-  t.near(weapon("launcher.assault", on("computer.flight")).flight :: number, 0.35 * 1.2, 1e-9)
+  t.near(guided.flight :: number, 1.08, 1e-9)
+  t.near(guided.blast :: number, 0.945, 1e-9)
+  -- (and on a short launcher it is as much more of the third it throws)
+  t.near(weapon("launcher.assault", on("computer.flight")).flight :: number, 0.35 * 1.08, 1e-9)
 end)
 
 suite:Case("a hardener against one kind of damage halves what its layer lets through of that kind, switched on, and of no other", function(t)
