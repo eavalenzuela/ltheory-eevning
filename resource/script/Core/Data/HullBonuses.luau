@@ -107,6 +107,9 @@ end
 local function regen(skill: string): HullBonus
   return level(skill, 0.10, "regen", "shield", "shield rechargers, flux coils, power relays and regeneration rigs work 10% better")
 end
+local function armorMend(skill: string): HullBonus
+  return level(skill, 0.10, "ship", "armorMend", "its armour mends 10% faster")
+end
 local PIRATE_LOCK = role(0.5, "ship", "scanResolution", "locks on half as fast again (scan resolution)")
 local function hullHP(skill: string): HullBonus
   return level(skill, 0.05, "ship", "hull", "5% more hull")
@@ -287,6 +290,28 @@ HullBonuses.byHull = {
     shieldHP("ultracapitals") },
   ["barge.panacea"] = { level("mining", 0.05, "mining", "yield", "5% more from mining"), shieldHP("mining") },
   ["freighter.indulgence"] = { cargo("freighters"), shieldHP("freighters") },
+
+  -- The Nimia (2026-11-18, the owner: "this looks good"): blasters, and
+  -- no shield but an armour and a hull that mend by themselves; the
+  -- short-range hulls web what they close on.
+  ["frigate.oon"] = { hybrid("frigates", 0.05, "damageMultiplier", "5% more hybrid damage"), armorMend("frigates"), WEB },
+  ["destroyer.kri"] = { hybrid("destroyers", -0.05, "duration", "hybrid turrets fire 5% faster"), armorMend("destroyers"), WEB,
+    role(0.25, "weapons", "tracking", "turrets track 25% better", "turret") },
+  ["cruiser.hon"] = { hybrid("cruisers", 0.05, "damageMultiplier", "5% more hybrid damage"), speed("cruisers"), WEB },
+  ["cruiser.kava"] = { hybrid("cruisers", -0.05, "duration", "hybrid turrets fire 5% faster"),
+    level("cruisers", 0.10, "ship", "hullMend", "its hull mends 10% faster"), WEB },
+  ["cruiser.hano"] = { hybrid("cruisers", 0.05, "damageMultiplier", "5% more hybrid damage"), speed("cruisers"), WEB },
+  ["battlecruiser.hoku"] = { hybrid("battlecruisers", 0.05, "damageMultiplier", "5% more hybrid damage"), armorMend("battlecruisers"),
+    WEB },
+  ["battleship.rru"] = { hybrid("battleships", 0.05, "damageMultiplier", "5% more hybrid damage"), armorHP("battleships"), WEB },
+  ["industrial.rikn"] = { cargo("industrials"), armorMend("industrials") },
+  ["carrier.takk"] = { level("carriers", 0.05, "drones", "damage", "fighters do 5% more damage"), armorMend("carriers") },
+  ["siegedreadnought.zzk"] = { hybrid("dreadnoughts", 0.05, "damageMultiplier", "5% more hybrid damage"), armorHP("dreadnoughts") },
+  ["capitalindustrial.knuu"] = { armorHP("capital.industrials"), armorMend("capital.industrials") },
+  ["capitalindustrial.zzna"] = { level("capital.industrials", 0.05, "ore", "hold", "5% more ore hold"), armorMend("capital.industrials") },
+  ["supercarrier.yuln"] = { level("supercarriers", 0.05, "drones", "damage", "fighters and bombers do 5% more damage"),
+    armorHP("supercarriers") },
+  ["freighter.jojk"] = { cargo("freighters"), armorMend("freighters") },
 } :: { [string]: { HullBonus } }
 
 -- The classes that no electronic warfare touches (the owner, 2026-11-18:

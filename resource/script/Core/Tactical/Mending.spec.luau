@@ -55,11 +55,14 @@ suite:Case("a hull of the Nimia's has no shield, and its armour and its hull com
   end
   local game, me = flying("frigate.oon")
   local v = me.vitals
-  t.eq({ v.shield, v.shieldMax, v.armorMend, v.hullMend } :: { any }, { 0, 0, 0.004, 0.002 } :: { any })
+  -- (and the O'on's armour the faster for its own bonus, a level of Frigates: Data/HullBonuses)
+  local own = Ships.Bonus(Ships.byId["frigate.oon"], "ship", "armorMend", game.state.skills)
+  t.ok(own > 1, "the O'on has no bonus to its mending")
+  t.eq({ v.shield, v.shieldMax, v.armorMend, v.hullMend } :: { any }, { 0, 0, 0.004 * own, 0.002 } :: { any })
   -- Half its armour and half its hull gone: each tick puts back its share, evenly, until it is whole.
   v.armor, v.hull = v.armorMax / 2, v.hullMax / 2
   steps(game, 10)
-  t.near(v.armor, v.armorMax * (0.5 + 10 * 0.004 * Constants.TICK), 1e-6)
+  t.near(v.armor, v.armorMax * (0.5 + 10 * 0.004 * own * Constants.TICK), 1e-6)
   t.near(v.hull, v.hullMax * (0.5 + 10 * 0.002 * Constants.TICK), 1e-6)
   steps(game, math.ceil(0.5 / (0.002 * Constants.TICK)) + 5)
   t.eq({ v.armor, v.hull, v.shield } :: { any }, { v.armorMax, v.hullMax, 0 } :: { any })
@@ -151,10 +154,11 @@ suite:Case("the Nimia's own gear makes it mend faster: a low-slot lattice, two r
   -- (its vitals are brought into line with its fit when anything about it changes: here, by hand)
   local Vitals = require("@lt/Core/Tactical/Vitals")
   Vitals.Refresh(state, me)
-  t.near(me.vitals.armorMend :: number, 0.004 * 1.5 * 1.5, 1e-12)
+  local own = Ships.Bonus(Ships.byId["frigate.oon"], "ship", "armorMend", state.skills)
+  t.near(me.vitals.armorMend :: number, 0.004 * 1.5 * 1.5 * own, 1e-12)
   local was = me.vitals.armor
   steps(game, 10)
-  t.near(me.vitals.armor - was, me.vitals.armorMax * 0.004 * 1.5 * 1.5 * 10 * Constants.TICK, 1e-6)
+  t.near(me.vitals.armor - was, me.vitals.armorMax * 0.004 * 1.5 * 1.5 * own * 10 * Constants.TICK, 1e-6)
 end)
 
 suite:Case("a hull that mends goes on mending in a hangar, and costs the less to have repaired", function(t)
@@ -166,7 +170,8 @@ suite:Case("a hull that mends goes on mending in a hangar, and costs the less to
   theirs.armorDamage, theirs.hullDamage = oon.armor / 2, oon.hull / 2
   plain.armorDamage, plain.hullDamage = akashi.armor / 2, akashi.hull / 2
   steps(game, 20)
-  t.near(theirs.armorDamage, oon.armor * (0.5 - 20 * 0.004 * Constants.TICK), 1e-6)
+  local own = Ships.Bonus(oon, "ship", "armorMend", state.skills)
+  t.near(theirs.armorDamage, oon.armor * (0.5 - 20 * 0.004 * own * Constants.TICK), 1e-6)
   t.near(theirs.hullDamage, oon.hull * (0.5 - 20 * 0.002 * Constants.TICK), 1e-6)
   t.eq({ plain.armorDamage, plain.hullDamage } :: { any }, { akashi.armor / 2, akashi.hull / 2 } :: { any })
   steps(game, math.ceil(0.5 / (0.002 * Constants.TICK)) + 5)
