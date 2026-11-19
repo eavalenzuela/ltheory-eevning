@@ -535,6 +535,110 @@ local function drawPaints(session: Session.Session, game: Core.Game, player: Cor
 end
 
 -- ---------------------------------------------------------------------
+-- Saved fits, down the left (the owner, 2026-11-18: "need saved
+-- fittings in the fitting window (new tab, next to fitting and
+-- appearance)"): the ship's fit saved under a name, and the fits kept
+-- for this hull, each to be put on (Core/Assets/SavedFits). One picked
+-- says what of it is not at hand here, and offers to buy that on the
+-- market here and put the fit on ("Fit what you have + buy rest").
+
+local fitName = ""
+local fitPicked = 0
+
+local function drawFits(session: Session.Session, game: Core.Game, player: Core.PlayerInfo, x: number, y: number, width: number,
+  height: number)
+  -- Save what is fitted now.
+  local top = y + 10
+  Im.Strong("SAVE THIS FIT", x + 12, top, 11, Theme.DIM)
+  top += 18
+  fitName = Im.Words("fitting:fitname", fitName, x + 12, top, width - 100, 28, 40, "a name")
+  local save: State.Command = { kind = "SaveFit", actor = 0, name = fitName }
+  if Im.Button("Save", x + width - 80, top, 68, 28, (Session.CanDo(session, save)), "Fits:save") then
+    if Session.Do(session, save) then
+      fitName = ""
+    end
+  end
+  top += 40
+  -- The fits kept for this hull.
+  local fits = Core.Query.Fits(game, player.hull.id)
+  List.Group(`Saved for the {player.hull.name}`, tostring(#fits), x, top, width, nil)
+  top += List.HEAD
+  local picked: Core.FitInfo? = nil
+  for _, fit in fits do
+    if fit.id == fitPicked then
+      picked = fit
+    end
+  end
+  if picked == nil and #fits > 0 then
+    picked = fits[1]
+    fitPicked = fits[1].id
+  end
+  local visible = math.max(3, math.min(#fits, 8))
+  local first = Im.Scroll("fitting:fits", x, top, width, visible * List.ROW, #fits, visible)
+  for row = 1, math.min(visible, #fits - first) do
+    local fit = fits[row + first]
+    local at = top + (row - 1) * List.ROW
+    local _, clicked = List.Row(x, at, width - 5, fit.id == fitPicked, `Fit:{fit.id}`)
+    Im.Text(List.Cut(fit.name, width - 130, 14, false), x + 12, at + 5, 14, Theme.TEXT)
+    local note = if #fit.missing == 0 then "all at hand" else `{#fit.missing} missing`
+    Im.Text(note, x + width - 14 - Im.TextWidth(note, 12), at + 6, 12, if #fit.missing == 0 then Theme.GOOD else Theme.CAUTION)
+    if clicked then
+      fitPicked = fit.id
+    end
+  end
+  if #fits == 0 then
+    Im.Wrapped("No fits saved for this hull yet: fit it, name the fit above and save it.", x + 12, top + 8, width - 24, 13, Theme.DIM)
+  end
+  top += visible * List.ROW + 10
+  local fit = picked
+  if fit == nil then
+    return
+  end
+  -- The one picked: what of it is not at hand, and what buying that here costs.
+  Im.Flat(x, top, width, 1, Theme.EDGE)
+  top += 10
+  Im.Strong(string.upper((List.Cut(fit.name, width - 24, 11, true))), x + 12, top, 11, Theme.TEXT)
+  top += 18
+  local total, buyable = 0, true
+  for _, gap in fit.missing do
+    if top > y + height - 80 then
+      break
+    end
+    ItemIcon.Draw(gap.type, x + 12, top, 17)
+    Im.Text(List.Cut(`{gap.want - gap.have} x {gap.name}`, width - 150, 13, false), x + 34, top + 2, 13, Theme.CAUTION)
+    local cost = gap.cost
+    local price = if cost then Format.Credits(cost) else "not sold here"
+    Im.Text(price, x + width - 14 - Im.TextWidth(price, 12), top + 3, 12, if cost then Theme.DIM else Theme.BAD)
+    total += cost or 0
+    buyable = buyable and cost ~= nil
+    top += 22
+  end
+  if #fit.missing == 0 then
+    Im.Text("Everything for it is here or fitted.", x + 12, top, 13, Theme.GOOD)
+    top += 22
+  end
+  -- Its buttons: put it on; buy what is missing and put it on; forget it.
+  local load: State.Command = { kind = "LoadFit", actor = 0, target = fit.id }
+  local bw = (width - 24 - 16) / 3
+  local by = math.min(top + 6, y + height - 40)
+  if Im.Button("Fit", x + 12, by, bw, 28, (Session.CanDo(session, load)), "Fits:load") then
+    Session.Do(session, load)
+  end
+  local affordable = #fit.missing > 0 and buyable and total <= game.state.wallet
+  if Im.Button(if #fit.missing > 0 then `Buy {Format.Credits(total)}` else "Buy missing", x + 20 + bw, by, bw, 28,
+    affordable and (Session.CanDo(session, load)), "Fits:buy") then
+    for _, gap in fit.missing do
+      Session.Do(session, { kind = "BuyNow", actor = 0, type = gap.type, quantity = gap.want - gap.have })
+    end
+    Session.Do(session, { kind = "LoadFit", actor = 0, target = fit.id })
+  end
+  if Im.Button("Delete", x + 28 + bw * 2, by, bw, 28, true, "Fits:delete") then
+    Session.Do(session, { kind = "DeleteFit", actor = 0, target = fit.id })
+    fitPicked = 0
+  end
+end
+
+-- ---------------------------------------------------------------------
 -- What there is to fit, down the left.
 
 -- A row of the list: a type, the stack of it in the hangar (or none: it
@@ -803,10 +907,10 @@ function Fitting.IsOpen(): boolean
   return Windows.IsOpen(Fitting.ID)
 end
 
--- The page shown ("fitting" or "appearance"): given one, the window is
+-- The page shown ("fitting", "fits" or "appearance"): given one, the window is
 -- opened at it.
 function Fitting.Show(to: string?): string
-  if to == "fitting" or to == "appearance" then
+  if to == "fitting" or to == "appearance" or to == "fits" then
     page = to
     Fitting.Open()
   end
@@ -869,7 +973,7 @@ Windows.Kind(Fitting.ID, function(_: Windows.Window, x: number, y: number, w: nu
   triedShown = trying
   -- The pages.
   local tx = x + 10
-  for _, each in { { "fitting", "Fitting" }, { "appearance", "Appearance" } } do
+  for _, each in { { "fitting", "Fitting" }, { "fits", "Saved fits" }, { "appearance", "Appearance" } } do
     local pressed, wide = Im.Tab(each[2], tx, y + 4, 28, page == each[1], `Fitting:{each[1]}`)
     if pressed then
       page = each[1]
@@ -892,6 +996,8 @@ Windows.Kind(Fitting.ID, function(_: Windows.Window, x: number, y: number, w: nu
   -- The left: what there is to fit, or what there is to paint it in.
   if page == "appearance" then
     drawPaints(session, game, player, x + 1, top, LEFT_W - 1)
+  elseif page == "fits" then
+    drawFits(session, game, player, x + 1, top, LEFT_W - 1, room)
   else
     drawBrowser(session, game, player.docked, ship, x + 1, top, LEFT_W - 1, room)
   end

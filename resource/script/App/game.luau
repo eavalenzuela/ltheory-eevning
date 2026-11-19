@@ -765,6 +765,19 @@ function Debug.Type(name: string, text: string)
   Im.Say(name, text)
 end
 
+-- The pilot's saved fits for the hull they fly (Core/Assets/SavedFits):
+-- how many, their names joined, and how many modules the first lacks here.
+function Debug.Fits(): (number, string, number)
+  local game = session.game
+  local ship = game.state.ships[game.state.player.ship]
+  local fits = Core.Query.Fits(game, ship.type)
+  local names: { string } = {}
+  for _, fit in fits do
+    table.insert(names, fit.name)
+  end
+  return #fits, table.concat(names, ","), if fits[1] then #fits[1].missing else 0
+end
+
 -- A cheat: so many credits in the pilot's wallet.
 function Debug.Credits(amount: number)
   session.game.state.wallet = amount

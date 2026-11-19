@@ -72,6 +72,7 @@ local Planets = require("@lt/Core/Data/Planets")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local Hulks = require("@lt/Core/Assets/Hulks")
 local Citadels = require("@lt/Core/Assets/Citadels")
+local SavedFits = require("@lt/Core/Assets/SavedFits")
 local Standings = require("@lt/Core/Assets/Standings")
 local State = require("@lt/Core/Kernel/State")
 local Stations = require("@lt/Core/Assets/Stations")
@@ -116,7 +117,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 89
+Core.SAVE_VERSION = 90
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -160,6 +161,11 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 90: saved fittings (Assets/SavedFits): none yet.
+  [89] = function(state: any)
+    state.fits = state.fits or {}
+    state.fitIds = state.fitIds or {}
+  end,
   -- 89: the factions have citadels (Assets/Citadels): a save from before
   -- has them put down as it is loaded (Core.Load) in the systems it has
   -- seen, added to what is there; the rest have theirs when first seen.
@@ -1196,6 +1202,7 @@ function Core.New(options: Options): Game
     starbaseIds = {},
     keeps = {}, keepIds = {}, keepsSeen = {},
     citadels = {}, citadelIds = {}, citadelsSeen = {},
+    fits = {}, fitIds = {},
     batteries = { at = 0, station = 0, kinds = {}, balls = {}, down = {} },
     colonies = {},
     colonyIds = {},
@@ -1356,6 +1363,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Mutators.Validate(state, command)
   elseif Paintwork.COMMANDS[command.kind] then
     return Paintwork.Validate(state, command)
+  elseif SavedFits.COMMANDS[command.kind] then
+    return SavedFits.Validate(state, command)
   end
   local ok, why = Space.Validate(state, command)
   -- (through a camp's gate, only when the camp says it is open: Tactical/Assault)
@@ -1465,6 +1474,8 @@ function Core.Step(game: Game)
       Mutators.Apply(state, command, game.events)
     elseif ok and Paintwork.COMMANDS[command.kind] then
       Paintwork.Apply(state, command, game.events)
+    elseif ok and SavedFits.COMMANDS[command.kind] then
+      SavedFits.Apply(state, command, game.events)
     elseif ok and FLEET_COMMANDS[command.kind] then
       Fleet.Apply(state, command, game.events)
     elseif ok and IMPLANT_COMMANDS[command.kind] then
@@ -2559,6 +2570,28 @@ end
 -- "stable", "reduced" or "critical".)
 export type WormholeInfo = { id: number, leads: string, size: number, sizeName: string, lets: string, left: number, fits: boolean,
   why: string, strain: string }
+-- The pilot's saved fittings for a hull, by name; and what of one is
+-- not at hand for the ship where it is docked (Assets/SavedFits), each
+-- with its name and what buying the rest here costs (nil: the market
+-- here has not that many).
+export type FitInfo = { id: number, name: string, modules: { State.FitModule },
+  missing: { { type: string, name: string, want: number, have: number, cost: number? } } }
+function Query.Fits(game: Game, hull: string): { FitInfo }
+  local state = game.state
+  local ship = state.player.ship
+  local docked = if state.ships[ship] then state.ships[ship].docked else 0
+  local out: { FitInfo } = {}
+  for _, fit in SavedFits.For(state, hull) do
+    local missing: { { type: string, name: string, want: number, have: number, cost: number? } } = {}
+    for _, gap in SavedFits.Missing(state, ship, fit) do
+      local cost = if docked ~= 0 then Market.BuyCost(state, docked, gap.type, gap.want - gap.have) else nil
+      table.insert(missing, { type = gap.type, name = Types.Info(gap.type).name, want = gap.want, have = gap.have, cost = cost })
+    end
+    table.insert(out, { id = fit.id, name = fit.name, modules = fit.modules, missing = missing })
+  end
+  return out
+end
+
 function Query.Wormhole(game: Game, place: number): WormholeInfo?
   local state = game.state
   local hole = Wormholes.At(state, place)

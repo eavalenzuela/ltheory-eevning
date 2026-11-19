@@ -7,7 +7,9 @@
 -- only (Character/Characters); one of these, used, gives its queue so
 -- many seconds at once, as if that much real time had gone by
 -- (Character/Training's Inject). The three sizes, their seconds and
--- their prices are mine.
+-- their prices are mine. (Since training went ten times faster,
+-- 2026-11-18, an hour banked trains ten times what it did, at the same
+-- price.)
 
 local Injectors = {}
 

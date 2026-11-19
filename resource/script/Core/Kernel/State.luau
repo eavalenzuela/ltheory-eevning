@@ -397,7 +397,13 @@ export type Command = {
   -- (SetAccess: whether a citadel is open to others, and its tax)
   open: boolean?,
   tax: number?,
+  name: string?,      -- a name given (SaveFit)
 }
+
+-- A fit kept under a name (Assets/SavedFits): its hull, and what was
+-- fitted, rack by rack and slot by slot, with the charge each had in it.
+export type FitModule = { type: string, charge: string }
+export type SavedFit = { id: number, name: string, hull: string, modules: { FitModule } }
 
 -- A standing offer at a station's market. A sell order's goods and a buy
 -- order's credits are held in escrow until it fills or is cancelled.
@@ -911,6 +917,9 @@ export type State = {
   -- The factions' citadels, standing or fallen (Assets/Citadels), by
   -- Space.CitadelKey, in order; and the systems whose citadels have
   -- been put down (when each was first described, or glanced at).
+  -- The pilot's saved fittings (Assets/SavedFits), by id.
+  fits: { [number]: SavedFit },
+  fitIds: { number },
   citadels: { [number]: Citadel },
   citadelIds: { number },
   citadelsSeen: { [number]: boolean },

@@ -6,9 +6,9 @@
 -- that grows with each level. A pilot starts knowing a handful; any other
 -- has to be learned from its book before it can be trained.
 --
--- Training takes game time: a level's base time (a minute for the first,
--- ten hours for the fifth) times the skill's rank. It carries on whatever
--- the pilot is doing.
+-- Training takes game time: a level's base time (six seconds for the
+-- first, twenty-four minutes for the fifth) times the skill's rank. It
+-- carries on whatever the pilot is doing.
 
 local Modules = require("@lt/Core/Data/Modules")
 local Ships = require("@lt/Core/Data/Ships")
@@ -39,8 +39,11 @@ export type Skill = {
   craft: boolean?,
 }
 
--- Seconds to train each level of a rank 1 skill.
-local LEVEL_SECONDS = { 60, 240, 900, 3600, 14400 }
+-- Seconds to train each level of a rank 1 skill. (A tenth of what they
+-- were until 2026-11-18, the owner's: "training speeds need to be MUCH
+-- shorter, given it's an offline game", and of how much, "10x faster":
+-- every skill there is to the fifth level in about a week of play.)
+local LEVEL_SECONDS = { 6, 24, 90, 360, 1440 }
 
 local function ship(attribute: string, perLevel: number): Modules.Modifier
   return { on = "ship", attribute = attribute, op = "mul", value = perLevel }

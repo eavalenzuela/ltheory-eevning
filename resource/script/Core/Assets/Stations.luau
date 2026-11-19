@@ -150,7 +150,7 @@ local FITTING: Structures.Service, REFINING: Structures.Service = "fitting", "re
 local INDUSTRY: Structures.Service, MARKET: Structures.Service = "industry", "market"
 local RESEARCH: Structures.Service = "research"
 local NEEDS: { [string]: Structures.Service } = {
-  Fit = FITTING, Unfit = FITTING, LoadCharge = FITTING, Repair = FITTING, Assemble = FITTING, BoardShip = FITTING,
+  Fit = FITTING, Unfit = FITTING, LoadCharge = FITTING, Repair = FITTING, Assemble = FITTING, BoardShip = FITTING, LoadFit = FITTING,
   Reprocess = REFINING,
   StartJob = INDUSTRY,
   StartResearch = RESEARCH,

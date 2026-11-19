@@ -68,14 +68,15 @@ suite:Case("the skill data is sound", function(t)
       t.ok(Skills.byId[need.skill] ~= nil, `{id} needs an unknown skill '{need.skill}'`)
     end
   end
-  -- a minute for the first level of a rank 1 skill; eight hours for the
-  -- fifth level of a rank 2; a day and more for the fifth of battleships
-  t.eq(Skills.TrainingSeconds(Skills.byId.lasers, 1), 60)
-  t.eq(Skills.TrainingSeconds(Skills.byId.frigates, 5), 28800)
-  t.eq(Skills.TrainingSeconds(Skills.byId.battleships, 5), 115200)
+  -- six seconds for the first level of a rank 1 skill; under an hour for
+  -- the fifth level of a rank 2; three hours and more for the fifth of
+  -- battleships (the owner, 2026-11-18: "10x faster")
+  t.eq(Skills.TrainingSeconds(Skills.byId.lasers, 1), 6)
+  t.eq(Skills.TrainingSeconds(Skills.byId.frigates, 5), 2880)
+  t.eq(Skills.TrainingSeconds(Skills.byId.battleships, 5), 11520)
 end)
 
-suite:Case("a new pilot cannot fit a laser until Laser Turrets is trained, which takes a minute", function(t)
+suite:Case("a new pilot cannot fit a laser until Laser Turrets is trained, which takes six seconds", function(t)
   local game = newGame()
   local state = game.state
   t.eq({ state.skills.frigates, state.skills.lasers, state.skills["rapid.firing"] } :: { any }, { 1, 0, nil } :: { any })
@@ -89,10 +90,10 @@ suite:Case("a new pilot cannot fit a laser until Laser Turrets is trained, which
   order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })
   local queue = Core.Query.Training(game)
   t.eq({ #queue, queue[1].skill, queue[1].level, queue[1].seconds, queue[1].left } :: { any },
-    { 1, "lasers", 1, 60, 60 } :: { any })
+    { 1, "lasers", 1, 6, 6 } :: { any })
   Core.TakeEvents(game)
   local trained, ticks = stepUntil(game, "SkillTrained", 100)
-  t.eq({ trained.skill, trained.level, ticks } :: { any }, { "lasers", 1, 60 } :: { any })
+  t.eq({ trained.skill, trained.level, ticks } :: { any }, { "lasers", 1, 6 } :: { any })
   t.eq(state.skills.lasers, 1)
   t.eq(#Core.Query.Training(game), 0)
   order(t, game, { kind = "Fit", actor = 0, item = laser.id })
@@ -102,13 +103,13 @@ end)
 suite:Case("levels queue, each takes its base time times the skill's rank, and one starts where the last ended", function(t)
   local game = newGame()
   local state = game.state
-  order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })      -- 60 s
-  order(t, game, { kind = "TrainSkill", actor = 0, type = "frigates" })    -- level 2 of a rank 2: 480 s
-  order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })      -- level 2: 240 s
+  order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })      -- 6 s
+  order(t, game, { kind = "TrainSkill", actor = 0, type = "frigates" })    -- level 2 of a rank 2: 48 s
+  order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })      -- level 2: 24 s
   local queue = Core.Query.Training(game)
   t.eq({ queue[1].level, queue[2].level, queue[3].level }, { 1, 2, 2 })
   -- two ticks have passed since the first was queued
-  t.eq({ queue[1].left, queue[2].left, queue[3].left }, { 58, 538, 778 })
+  t.eq({ queue[1].left, queue[2].left, queue[3].left }, { 4, 52, 76 })
   local started = state.tick - 2
   Core.TakeEvents(game)
   local finished: { { any } } = {}
@@ -120,7 +121,7 @@ suite:Case("levels queue, each takes its base time times the skill's rank, and o
       end
     end
   end
-  t.eq(finished, { { "lasers", 1, 60 }, { "frigates", 2, 540 }, { "lasers", 2, 780 } } :: { { any } })
+  t.eq(finished, { { "lasers", 1, 6 }, { "frigates", 2, 54 }, { "lasers", 2, 78 } } :: { { any } })
   local known: { [string]: number } = {}
   for _, info in Core.Query.Skills(game) do
     known[info.skill.id] = info.level
@@ -133,25 +134,25 @@ suite:Case("time the pilot was away goes to their training, and to nothing else;
   local state = game.state
   -- With nothing in training, time away is nothing.
   t.eq(Core.Away(game, 3600), 0)
-  order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })      -- 60 s
-  order(t, game, { kind = "TrainSkill", actor = 0, type = "frigates" })    -- 480 s
-  order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })      -- 240 s
+  order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })      -- 6 s
+  order(t, game, { kind = "TrainSkill", actor = 0, type = "frigates" })    -- 48 s
+  order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })      -- 24 s
   local tick, wallet = state.tick, state.wallet
   Core.TakeEvents(game)
-  -- A hundred seconds away: the first level is trained, and the second is forty-two seconds in (two had gone by).
-  t.eq(Core.Away(game, 100), 1)
+  -- Ten seconds away: the first level is trained, and the second is six seconds in (two had gone by).
+  t.eq(Core.Away(game, 10), 1)
   t.eq({ state.skills.lasers, #state.training, state.tick, state.wallet }, { 1, 2, tick, wallet })
   local queue = Core.Query.Training(game)
-  t.eq({ queue[1].skill, queue[1].left, queue[2].left } :: { any }, { "frigates", 480 - 42, 480 - 42 + 240 } :: { any })
+  t.eq({ queue[1].skill, queue[1].left, queue[2].left } :: { any }, { "frigates", 48 - 6, 48 - 6 + 24 } :: { any })
   local trained, credited = 0, false
   for _, event in Core.TakeEvents(game) do
     trained += if event.kind == "SkillTrained" then 1 else 0
-    credited = credited or (event.kind == "TrainingCredited" and event.seconds == 100 and event.trained == 1 and event.queued == 2)
+    credited = credited or (event.kind == "TrainingCredited" and event.seconds == 10 and event.trained == 1 and event.queued == 2)
   end
   t.eq({ trained, credited } :: { any }, { 1, true } :: { any })
   -- No time, or less than none: nothing.
   t.eq({ Core.Away(game, 0), Core.Away(game, -50) }, { 0, 0 })
-  t.eq(Core.Query.Training(game)[1].left, 480 - 42)
+  t.eq(Core.Query.Training(game)[1].left, 48 - 6)
   -- A day away: everything queued is trained, and the rest of the day is gone.
   t.eq(Core.Away(game, 86400), 2)
   t.eq({ state.skills.frigates, state.skills.lasers, #state.training, state.tick }, { 2, 2, 0, tick })
@@ -176,7 +177,7 @@ suite:Case("a skill a pilot does not start with is learned from its book, once i
   t.eq({ state.skills["rapid.firing"], books.quantity }, { 0, 1 }, "known at level 0, and the book is used up")
   t.eq(refused(game, { kind = "LearnSkill", actor = 0, item = books.id }), "already known")
   order(t, game, { kind = "TrainSkill", actor = 0, type = "rapid.firing" })
-  t.eq(Core.Query.Training(game)[1].seconds, 120)
+  t.eq(Core.Query.Training(game)[1].seconds, 12)
 
   -- A book is read where it is: from the hold of the pilot's ship too, docked or out in space. Somebody else's is not.
   local held = Items.Add(state, "book.industrials", 1, state.player.ship, "cargo")
@@ -195,10 +196,11 @@ end)
 suite:Case("the queue holds ten levels, stops at level five, and cancelling drops a skill's later levels too", function(t)
   local game = newGame()
   local state = game.state
+  -- (a skill of rank 4, whose first level is longer than this takes)
   for _ = 1, 5 do
-    order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })
+    order(t, game, { kind = "TrainSkill", actor = 0, type = "anchoring" })
   end
-  t.eq(refused(game, { kind = "TrainSkill", actor = 0, type = "lasers" }), "nothing more to train")
+  t.eq(refused(game, { kind = "TrainSkill", actor = 0, type = "anchoring" }), "nothing more to train")
   for _ = 1, 5 do
     order(t, game, { kind = "TrainSkill", actor = 0, type = "missiles" })
   end
@@ -214,11 +216,11 @@ suite:Case("the queue holds ten levels, stops at level five, and cancelling drop
   -- Cancelling the level in training loses the time spent on it: what
   -- is next starts from nothing.
   -- (ten ticks have passed since the first level was queued)
-  t.eq(queue[1].left, 60 - 10)
+  t.eq(queue[1].left, 24 - 10)
   order(t, game, { kind = "CancelTraining", actor = 0, quantity = 1 })
   queue = Core.Query.Training(game)
-  t.eq({ #queue, queue[1].skill, queue[1].level, queue[1].left } :: { any }, { 2, "missiles", 1, 60 } :: { any })
-  t.eq(state.skills.lasers, 0)
+  t.eq({ #queue, queue[1].skill, queue[1].level, queue[1].left } :: { any }, { 2, "missiles", 1, 6 } :: { any })
+  t.eq(state.skills.anchoring, 0)
 end)
 
 suite:Case("a skill with a bonus makes the ship better the moment it is trained, in space too", function(t)
@@ -230,7 +232,7 @@ suite:Case("a skill with a bonus makes the ship better the moment it is trained,
   local ball = assert(Core.Query.Ball(game, ship))
   t.eq(ball.maxVelocity, before.maxVelocity)
   order(t, game, { kind = "TrainSkill", actor = 0, type = "navigation" })
-  for _ = 1, 59 do
+  for _ = 1, 5 do
     Core.Step(game)
   end
   t.eq(ball.maxVelocity, before.maxVelocity)
@@ -295,22 +297,23 @@ suite:Case("a training injector is banked time: used from the hangar or the hold
   Items.Add(state, hour.id, 2, home, "hangar")
   local inject: State.Command = { kind = "Inject", actor = 0, item = stack(game, hour.id).id }
   t.eq(refused(game, inject), "nothing is in training: queue a skill first")
-  order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })      -- 60 s
+  order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })      -- 6 s
   t.eq(refused(game, inject), "the queue has less than that left to train: queue more first")
-  for _ = 2, 4 do
-    order(t, game, { kind = "TrainSkill", actor = 0, type = "lasers" })    -- 240, 900 and 3,600 s
+  for _ = 2, 5 do
+    order(t, game, { kind = "TrainSkill", actor = 0, type = "frigates" })  -- 48, 180, 720 and 2,880 s
   end
   local before = Core.Query.Training(game)
   local whole = before[#before].left
-  t.ok(whole > 3600, "four levels are more than an hour")
+  t.ok(whole > 3600, "five levels are more than an hour")
   Core.TakeEvents(game)
   order(t, game, inject)
-  -- The first three levels are trained, and the fourth is the rest of the hour in.
-  t.eq({ state.skills.lasers, #state.training, stack(game, hour.id).quantity } :: { any }, { 3, 1, 1 } :: { any })
+  -- The first four levels are trained, and the fifth is the rest of the hour in.
+  t.eq({ state.skills.lasers, state.skills.frigates, #state.training, stack(game, hour.id).quantity } :: { any },
+    { 1, 4, 1, 1 } :: { any })
   t.near(Core.Query.Training(game)[1].left, whole - 3600, 2)
   local said = false
   for _, event in Core.TakeEvents(game) do
-    said = said or (event.kind == "Injected" and event.seconds == 3600 and event.trained == 3)
+    said = said or (event.kind == "Injected" and event.seconds == 3600 and event.trained == 4)
   end
   t.ok(said, "it says how much was injected and what it trained")
   -- Not a thing that is not an injector, nor one out of reach.
