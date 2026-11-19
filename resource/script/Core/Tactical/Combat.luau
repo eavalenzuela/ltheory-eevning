@@ -281,10 +281,12 @@ function Combat.Hex(state: State.State, id: number, module: Modules.ModuleType):
   end
   local ship = state.ships[id]
   local hull = if ship then Ships.byId[ship.type] else nil
-  if hull == nil or not hull.ewar then
+  -- (and so much more strongly again for the hull's own bonus to it: Data/HullBonuses)
+  local own = Ships.Bonus(hull, "hex", hex.kind, Items.Levels(state, id))
+  if hull == nil or (not hull.ewar and own == 1) then
     return hex
   end
-  local more = Ships.EWAR.strength
+  local more = (if hull.ewar then Ships.EWAR.strength else 1) * own
   local strength = hex.strength
   if hex.kind == "entangle" or hex.kind == "damp" or hex.kind == "track" or hex.kind == "guide" then
     strength = math.max(0, 1 - (1 - hex.strength) * more)
@@ -296,12 +298,19 @@ function Combat.Hex(state: State.State, id: number, module: Modules.ModuleType):
     strength = hex.strength * more
   end
   local out = table.clone(hex)
-  out.range, out.strength = hex.range * Ships.EWAR.range, strength
+  out.range, out.strength = hex.range * (if hull.ewar then Ships.EWAR.range else 1), strength
   return out
 end
 
 -- Whether a thing in space is a ship of a capital class: what a plain
 -- warp disruptor does not hold, and a capital's does (Data/Modules).
+-- Whether no electronic warfare touches a ship (a supercarrier, an
+-- ultracapital: Data/HullBonuses).
+function Combat.Immune(state: State.State, id: number): boolean
+  local ship = state.ships[id]
+  return ship ~= nil and Ships.Immune(Ships.byId[ship.type])
+end
+
 function Combat.Capital(state: State.State, id: number): boolean
   local ship = state.ships[id]
   local hull = if ship then Ships.byId[ship.type] else nil
@@ -660,7 +669,8 @@ function Combat.HitChance(state: State.State, ship: number, item: number, target
   if module == nil or module.weapon == nil or module.weapon.family == "missile" then
     return nil
   end
-  return turretChance(state, ball, fitted, Attributes.Weapon(Vitals.Fit(state, ball), fitted.type, Items.Levels(state, ball.id)), body)
+  return turretChance(state, ball, fitted, Attributes.Weapon(Vitals.Fit(state, ball), fitted.type, Items.Levels(state, ball.id),
+    Ships.byId[state.ships[ship].type]), body)
 end
 
 -- One shot from a turret: the dice, and the damage if it lands.
@@ -746,6 +756,8 @@ end
 function Combat.Yield(state: State.State, ship: number, item: State.Item, ore: string): number
   local levels = Items.Levels(state, ship)
   local skilled = 1 + 0.05 * math.max(0, (if levels then levels.mining or 0 else 0) - 1)
+  -- (and the hull's own bonus to it: Data/HullBonuses)
+  skilled *= Ships.Bonus(Ships.byId[state.ships[ship].type], "mining", "yield", levels)
   if Ores.gasById[ore] or Ores.Ice(ore) then
     return skilled
   end
@@ -794,11 +806,13 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
     end
 
     if module.weapon then
-      local weapon = Attributes.Weapon(Vitals.Fit(state, ball), item.type, Items.Levels(state, ball.id))
+      local weapon = Attributes.Weapon(Vitals.Fit(state, ball), item.type, Items.Levels(state, ball.id), Ships.byId[state.ships[ball.id].type])
       -- (a drone's gun does more for an owner who has learned Swarm Tactics)
       local drone = state.drones[ball.id]
       if drone and state.ships[drone.owner] then
         weapon.damageMultiplier *= 1 + Combat.SWARM * Skills.Level(Items.Levels(state, drone.owner), "swarm.tactics")
+        -- (and for a carrier's own bonus to what it launches: Data/HullBonuses)
+        weapon.damageMultiplier *= Ships.Bonus(Ships.byId[state.ships[drone.owner].type], "drones", "damage", Items.Levels(state, drone.owner))
         -- (and for what its owner has fitted for its drones: each amplifier
         -- and link the less for those before it, as stacked modules are)
         local damages, trackings = {}, {}
@@ -1018,6 +1032,8 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
         local before = t.capacitor
         t.capacitor = math.min(t.capacitorMax, t.capacitor + hex.strength * triage)
         table.insert(events, { kind = "Fed", ball = ball.id, target = target.id, amount = t.capacitor - before })
+      elseif (hex.kind == "neut" or hex.kind == "nos" or hex.kind == "jam") and Combat.Immune(state, target.id) then
+        -- (nothing: no electronic warfare touches it, Data/HullBonuses)
       elseif hex.kind == "neut" then
         target.vitals.capacitor = math.max(0, target.vitals.capacitor - hex.strength)
       elseif hex.kind == "nos" then
@@ -1188,6 +1204,8 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       end
       v.capacitor -= cost
       local amount = repair.amount * (if charged and ancillary then ancillary.factor else 1)
+        -- (and the hull's own bonus to what it mends of the layer: Data/HullBonuses)
+        * Ships.Bonus(Ships.byId[state.ships[ball.id].type], "repair", repair.layer, Items.Levels(state, ball.id))
       if charged then
         item.rounds -= 1
       end
@@ -1375,7 +1393,7 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
             local hull = Ships.byId[state.ships[id].type]
             local damage = {}
             for index = 1, 4 do
-              damage[index] = gun.damage[index] * quality * Ships.Dealt(hull, index)
+              damage[index] = gun.damage[index] * quality * Ships.Dealt(hull, index) * Ships.Bonus(hull, "spinal", "damage", Items.Levels(state, id))
               total += damage[index]
             end
             table.insert(hits, { target = target.id, by = id, damage = damage })
@@ -1557,7 +1575,9 @@ function Combat.Step(state: State.State, events: { Event }, landed: { Hit }?): {
     for _, running in state.balls[id].vitals.running do
       local item = state.items[running.item]
       local hex = if item then Combat.Hex(state, id, Modules.byId[item.type]) else nil
-      if hex and state.balls[running.target] then
+      -- (what no electronic warfare touches is held only by a capital's disruptor: Data/HullBonuses)
+      local immune = hex ~= nil and hex.kind ~= "scramble" and hex.kind ~= "sensor" and Combat.Immune(state, running.target)
+      if hex and not immune and state.balls[running.target] then
         local target = running.target
         if hex.kind == "entangle" then
           entangles[target] = math.min(entangles[target] or 1, hex.strength)

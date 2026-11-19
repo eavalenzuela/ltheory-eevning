@@ -82,8 +82,12 @@ end
 -- level, and is never penalised.
 -- ('stealth': the hull is built to go unseen, and a cloak that runs on
 -- it does not slow it: Data/Ships.)
-local function gather(fitted: { Fitted }, on: string, family: string?, levels: Levels?, stealth: boolean?): { [string]: Pending }
+-- ('hull': the hull it is fitted to, whose own bonuses bear on what its
+-- modules do: Data/HullBonuses. An afterburner's speed, here.)
+local function gather(fitted: { Fitted }, on: string, family: string?, levels: Levels?, stealth: boolean?,
+  hull: Ships.ShipType?): { [string]: Pending }
   local pending: { [string]: Pending } = {}
+  local afterburner = Ships.Bonus(hull, "afterburner", "speed", levels)
   if levels then
     -- in the skill list's order, so the arithmetic is the same every time
     for _, skill in Skills.list do
@@ -118,9 +122,15 @@ local function gather(fitted: { Fitted }, on: string, family: string?, levels: L
       end
     end
     if module and f.running and module.boost and not (stealth and module.cloak) then
+      local burner = afterburner ~= 1 and string.sub(module.id, 1, 11) == "afterburner"
       for _, modifier in module.boost do
         if modifier.on == on and (on == "ship" or modifier.family == family or (modifier.family == "turret" and family ~= "missile")) then
-          collect(pending, modifier)
+          if burner and modifier.attribute == "maxVelocity" then
+            collect(pending, { on = modifier.on, attribute = modifier.attribute, op = modifier.op,
+              value = 1 + (modifier.value - 1) * afterburner, stack = modifier.stack })
+          else
+            collect(pending, modifier)
+          end
         end
       end
       -- (an adaptive hardener: its resistance as it has shifted, evenly at first)
@@ -161,7 +171,17 @@ function Attributes.Ship(hull: Ships.ShipType, fitted: { Fitted }, levels: Level
       base[`{name}.{index}`] = source[name][index]
     end
   end
-  local pending = gather(fitted, "ship", nil, levels, hull.stealth)
+  local pending = gather(fitted, "ship", nil, levels, hull.stealth, hull)
+  -- (and what the hull itself does better than its class: Data/HullBonuses; "armorResonance" is all four of them)
+  if hull.bonuses then
+    for name in base do
+      local layer = string.match(name, "^(%a+)%.%d$")
+      local by = Ships.Bonus(hull, "ship", name, levels) * (if layer then Ships.Bonus(hull, "ship", layer, levels) else 1)
+      if by ~= 1 then
+        pendingFor(pending, name).plain *= by
+      end
+    end
+  end
   local stats: Stats = {}
   for name, value in base do
     local p = pending[name]
@@ -172,14 +192,23 @@ function Attributes.Ship(hull: Ships.ShipType, fitted: { Fitted }, levels: Level
   return stats
 end
 
--- A weapon module's statistics on a ship with this fit.
-function Attributes.Weapon(fitted: { Fitted }, type: string, levels: Levels?): Modules.Weapon
+-- A weapon module's statistics on a ship with this fit (and on this
+-- hull, whose own bonuses to its weapons count: Data/HullBonuses).
+function Attributes.Weapon(fitted: { Fitted }, type: string, levels: Levels?, hull: Ships.ShipType?): Modules.Weapon
   local weapon = assert(Modules.byId[type].weapon, `{type} is not a weapon`)
   local pending = gather(fitted, "weapons", weapon.family, levels)
   local out = table.clone(weapon) :: any
   -- (how far its missiles fly and how wide their blast is, as shares of
   -- the missile's own: 1 where the weapon does not say)
   out.flight, out.blast = out.flight or 1, out.blast or 1
+  if hull and hull.bonuses then
+    for _, name in { "damageMultiplier", "duration", "optimal", "falloff", "tracking", "capacitor", "flight", "blast" } do
+      local by = Ships.Bonus(hull, "weapons", name, levels, weapon.family) * Ships.Bonus(hull, "launcher", name, levels, nil, type)
+      if by ~= 1 then
+        pendingFor(pending, name).plain *= by
+      end
+    end
+  end
   for name, p in pending do
     out[name] = resolve(out[name], p)
   end

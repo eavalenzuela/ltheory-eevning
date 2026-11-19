@@ -122,7 +122,7 @@ local function measure(hull: Ships.ShipType): Row
     -- (what stands on a hardpoint: a weapon, or a mining turret)
     weapons += if module.hardpoint ~= "" then 1 else 0
     if module.weapon then
-      local weapon = Attributes.Weapon(idle, type, nil)
+      local weapon = Attributes.Weapon(idle, type, nil, hull)
       -- (loaded with the kind of damage the hull leans to, where it leans to one, and doing more of it)
       local charge = Fits.Charge(type, hull)
       local loaded = if charge then Modules.chargeById[charge] else nil

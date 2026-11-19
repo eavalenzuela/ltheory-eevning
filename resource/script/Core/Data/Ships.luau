@@ -12,6 +12,7 @@
 -- than 50%.
 
 local Factions = require("@lt/Core/Data/Factions")
+local HullBonuses = require("@lt/Core/Data/HullBonuses")
 local Structures = require("@lt/Core/Data/Structures")
 
 -- A gun that is part of a hull, fixed along its bow (ShipType's
@@ -161,6 +162,9 @@ export type ShipType = {
   racks: { number }?,
   -- Nobody sells it, nor the blueprint for it (Data/Types).
   rare: boolean?,
+  -- What it does better than its class, a level of a skill or as its
+  -- role (Data/HullBonuses). Nil for a hull that has no such bonus.
+  bonuses: { HullBonuses.HullBonus }?,
 }
 
 -- The bow railgun of the Drowned's ultracapital: one round where a
@@ -996,6 +1000,19 @@ for _, t in types do
   end
 end
 
+-- Each hull's own bonuses (Data/HullBonuses), and every hull they are
+-- written for is one there is.
+do
+  local known: { [string]: boolean } = {}
+  for _, t in types do
+    t.bonuses = HullBonuses.byHull[t.id]
+    known[t.id] = true
+  end
+  for id in HullBonuses.byHull do
+    assert(known[id], `bonuses for a hull there is not: {id}`)
+  end
+end
+
 local Ships = { list = types, byId = {} :: { [string]: ShipType } }
 -- What an exploration hull has over another, and what share of a
 -- cloaking device's fitting a hull built for a cloak asks (above, at
@@ -1052,6 +1069,31 @@ end
 function Ships.Standard(class: string): { shield: number, armor: number, hull: number }?
   local s = CLASS[class]
   return if s then { shield = s.shield, armor = s.armor, hull = s.hull } else nil
+end
+
+-- What a hull's bonuses come to on something (Data/HullBonuses: 'on',
+-- 'attribute', and a weapon's family or module where it matters), for a
+-- pilot with these skill levels (nil: none, and only the role bonuses).
+-- 1 where it has none.
+function Ships.Bonus(hull: ShipType?, on: string, attribute: string, levels: { [string]: number }?, family: string?, module: string?): number
+  local bonuses = if hull then hull.bonuses else nil
+  if bonuses == nil then
+    return 1
+  end
+  local out = 1
+  for _, b in bonuses do
+    if b.on == on and b.attribute == attribute and (b.module == nil or b.module == module)
+      and (b.family == nil or b.family == family or (b.family == "turret" and family ~= nil and family ~= "missile")) then
+      local level = if b.skill then (if levels then levels[b.skill] or 0 else 0) else 1
+      out *= 1 + b.per * level
+    end
+  end
+  return out
+end
+
+-- Whether no electronic warfare touches a hull of a class (Data/HullBonuses).
+function Ships.Immune(hull: ShipType?): boolean
+  return hull ~= nil and HullBonuses.IMMUNE[hull.class] == true
 end
 
 function Ships.Capital(class: string): boolean

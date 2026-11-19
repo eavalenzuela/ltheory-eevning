@@ -14,6 +14,7 @@ local Drones = require("@lt/Core/Data/Drones")
 local Implants = require("@lt/Core/Data/Implants")
 local Injectors = require("@lt/Core/Data/Injectors")
 local Factions = require("@lt/Core/Data/Factions")
+local HullBonuses = require("@lt/Core/Data/HullBonuses")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Paints = require("@lt/Core/Data/Paints")
@@ -258,6 +259,19 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
       local has = Ships.EXPLORER
       row(built, "Scanner", `every scan of a signal is worth {whole((has.scan - 1) * 100)}% more`)
       row(built, "Hacking", `{has.hack} more codes in the buffer`)
+    end
+  end
+  -- What it does better than its class (Data/HullBonuses): so much a
+  -- level of a skill, and as its role.
+  if hull.bonuses or Ships.Immune(hull) then
+    local bonuses = section(sheet, "Bonuses")
+    local list: { HullBonuses.HullBonus } = hull.bonuses or {}
+    for _, bonus in list do
+      local skill = if bonus.skill then Skills.byId[bonus.skill] else nil
+      row(bonuses, if skill then `A level of {skill.name}` else "Role", bonus.note, if skill then skill.id else nil)
+    end
+    if Ships.Immune(hull) then
+      row(bonuses, "Role", "no electronic warfare touches it; only a capital's warp disruptor or an interdiction field holds it")
     end
   end
   -- (and what it launches, if it has a bay for more than drones)

@@ -157,7 +157,7 @@ function Items.Offence(state: State.State, ship: number): Offence
   local hull = Ships.byId[state.ships[ship].type]
   for _, item in Items.Fitted(state, ship) do
     if Modules.byId[item.type].weapon and item.charge ~= "" then
-      local weapon = Attributes.Weapon(fit, item.type, levels)
+      local weapon = Attributes.Weapon(fit, item.type, levels, hull)
       local charge = Modules.chargeById[item.charge]
       for index = 1, 4 do
         -- (more of the kind its hull leans to: Data/Ships' affinity)
@@ -216,7 +216,7 @@ function Items.Capacitor(state: State.State, ship: number): Capacitor
   for _, item in Items.Fitted(state, ship) do
     local module = Modules.byId[item.type]
     if module.weapon then
-      local weapon = Attributes.Weapon(fit, item.type, levels)
+      local weapon = Attributes.Weapon(fit, item.type, levels, Ships.byId[state.ships[ship].type])
       drain += weapon.capacitor / math.max(0.1, weapon.duration)
     elseif module.miner then
       drain += module.miner.capacitor / math.max(0.1, module.miner.duration)
@@ -262,7 +262,9 @@ end
 -- metres in it.
 function Items.OreHold(state: State.State, ship: number): (number, number)
   local record = state.ships[ship]
-  local size = if record then Ships.byId[record.type].ore or 0 else 0
+  -- (and as much more as the hull's own bonus to it: Data/HullBonuses)
+  local size = if record then (Ships.byId[record.type].ore or 0) * Ships.Bonus(Ships.byId[record.type], "ore", "hold",
+    Items.Levels(state, ship)) else 0
   local used = 0
   if size > 0 then
     for _, item in Items.In(state, ship, "orehold") do
