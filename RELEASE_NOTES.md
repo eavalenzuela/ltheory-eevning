@@ -6,6 +6,21 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Hull bonuses, the Litany Beam, and shield regeneration
+
+- Every faction hull now has bonuses of its own. Most get two that grow with its class skill (Frigates, Cruisers and so on), and some get a role bonus they always have. Each hull's info window lists them under Bonuses.
+- Vessari: missile kiters and active armour tankers. The frigates' afterburners give more speed per Afterburners level, the Hoshizora's dampeners are half as strong again, the Manazashi's torpedoes do twice the damage, and the Naishou's turrets track a quarter better.
+- Talmar: projectile brawlers with shield boosters, and falloff kiters. Orun: blaster brawlers and railgun snipers. Kethri: lasers that use less capacitor, and beam snipers. Nimia: blaster brawlers whose armour or hull mends faster.
+- The short-range hybrid hulls of the Orun and Nimia reach half as far again with a stasis web.
+- Unbound (pirate) hulls lock targets half as fast again, and the Cutthroat and Jackal hold ships with warp disruptors from a quarter farther.
+- Vail: beam snipers, and hulls that tank by their shield's own recharge. Those make shield regeneration modules work 10% better per level.
+- Drowned: cloaked railgun snipers with heavy hulls. Beware the Gravestone destroyer.
+- Supercarriers and ultracapitals ignore electronic warfare. Only a capital warp disruptor or an interdiction field holds them.
+- New modules for a shield that recharges by itself: the Shield Recharger (mid slot), the Shield Flux Coil (low slot, more recharge for less shield) and the Field Regeneration Rig.
+- The Litany Beam, the Vail's own laser, can be fitted by any ship with a laser hardpoint. On a hit, it leaps on to up to two more ships of the target's side nearby, each leap doing half the damage of the one before. It comes from the Vail and is not sold on ordinary markets.
+- The Mule hauler, Dray freighter, Prospector and Quarry barge are gone: traders and miners now fly the factions' own ships. Any of them in a saved game becomes a faction ship of the same kind. The Courier stays as the ship you start in.
+- Pirate camps: level 3 is always led by a pirate destroyer, level 4 can bring two pirate cruisers at once, and the first-level mining contract wants 200 m3 of ore.
+
 ## Modules rebalanced
 
 - Tank modules have new figures. Shield extenders give 400, 800 and 1,900 shield, and armour plates 450, 1,750 and 3,500 armour. Armour repairers mend a little more per second, and shield boosters a little less. Damage control now cuts damage to the hull by 30%, and Reinforced Bulkheads add 15% hull. Large plates, extenders and afterburners are far easier to fit, so a cruiser can carry a large plate.
