@@ -95,6 +95,12 @@ end
 -- (a short-range hybrid hull's: the owner, 2026-11-18, "for hybrid-heavy faction, any short-range ships should get a
 -- bonus to webifier range or strength". Range, as a role, is mine.)
 local WEB = role(0.5, "reach", "entangle", "stasis webs reach half as far again")
+local function laser(skill: string, per: number, attribute: string, what: string): HullBonus
+  return level(skill, per, "weapons", attribute, what, "laser")
+end
+local function laserCap(skill: string): HullBonus
+  return laser(skill, -0.10, "capacitor", "lasers use 10% less capacitor")
+end
 local function hullHP(skill: string): HullBonus
   return level(skill, 0.05, "ship", "hull", "5% more hull")
 end
@@ -193,6 +199,28 @@ HullBonuses.byHull = {
   ["capitalindustrial.stag"] = { level("capital.industrials", 0.05, "ore", "hold", "5% more ore hold"), hullHP("capital.industrials") },
   ["barge.scarab"] = { level("mining", 0.05, "mining", "yield", "5% more from mining"), hullHP("mining") },
   ["freighter.tiger"] = { cargo("freighters"), hullHP("freighters") },
+
+  -- The Kethri (2026-11-18, the owner: "looks good"): lasers, which live
+  -- on the capacitor, and armour; brawlers and beam snipers.
+  ["frigate.battleaxe"] = { laser("frigates", 0.05, "damageMultiplier", "5% more laser damage"), laserCap("frigates") },
+  ["frigate.gauntlet"] = { laser("frigates", -0.05, "duration", "lasers fire 5% faster"),
+    laser("frigates", 0.10, "optimal", "lasers reach 10% farther") },
+  ["destroyer.sentry"] = { laser("destroyers", 0.05, "damageMultiplier", "5% more laser damage"), laserCap("destroyers"),
+    role(0.5, "weapons", "optimal", "lasers reach half as far again", "laser") },
+  ["destroyer.noxious"] = { laser("destroyers", 0.05, "damageMultiplier", "5% more laser damage"), laserCap("destroyers"),
+    role(0.5, "weapons", "optimal", "lasers reach half as far again", "laser") },
+  ["cruiser.perfexis"] = { laser("cruisers", 0.05, "damageMultiplier", "5% more laser damage"), armorResists("cruisers") },
+  ["battlecruiser.extremis"] = { laser("battlecruisers", -0.05, "duration", "lasers fire 5% faster"), laserCap("battlecruisers") },
+  ["battlecruiser.deluge"] = { laser("battlecruisers", -0.05, "duration", "lasers fire 5% faster"), laserCap("battlecruisers") },
+  ["battleship.teardrop"] = { laser("battleships", 0.05, "damageMultiplier", "5% more laser damage"), armorHP("battleships") },
+  ["industrial.porter"] = { cargo("industrials"), armorHP("industrials") },
+  ["carrier.tennit"] = { level("carriers", 0.05, "drones", "damage", "fighters do 5% more damage"), armorResists("carriers") },
+  ["dreadnought.pox"] = { laser("dreadnoughts", 0.05, "damageMultiplier", "5% more laser damage"), laserCap("dreadnoughts") },
+  ["capitalindustrial.piton"] = { level("capital.industrials", 0.05, "ore", "hold", "5% more ore hold"), armorHP("capital.industrials") },
+  ["ultracapital.leslarmesdenova"] = { laser("ultracapitals", 0.05, "damageMultiplier", "5% more laser damage"),
+    armorHP("ultracapitals") },
+  ["barge.pulley"] = { level("mining", 0.05, "mining", "yield", "5% more from mining"), armorHP("mining") },
+  ["freighter.hiven"] = { cargo("freighters"), armorHP("freighters") },
 } :: { [string]: { HullBonus } }
 
 -- The classes that no electronic warfare touches (the owner, 2026-11-18:
