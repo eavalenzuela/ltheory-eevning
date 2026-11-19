@@ -696,6 +696,55 @@ local function fireTurret(state: State.State, ball: State.Ball, running: State.R
   end
   table.insert(events, { kind = "Shot", from = ball.id, item = item.id, to = target.id, family = weapon.family,
     outcome = if quality == 0 then "miss" elseif quality == 3 then "wreck" else "hit", damage = total })
+  -- A beam that leaps (Data/Modules' 'leap': the Vail's Litany Beam): from
+  -- what it struck to the nearest other ship of that one's side within
+  -- reach of it, and on, so many times, each leap so much of the hit
+  -- before it and its own roll of the dice; a miss ends it. (A leap is
+  -- told as a shot from the gun, 'leap' saying whence it leapt.)
+  local leap = weapon.leap
+  local side = if state.ships[target.id] then state.ships[target.id].owner else nil
+  local from = state.balls[target.id]
+  if leap and quality > 0 and side and from then
+    local hull = Ships.byId[state.ships[ball.id].type]
+    local struck: { [number]: boolean } = { [target.id] = true }
+    local share = 1
+    for n = 1, leap.leaps do
+      local onto: State.Ball?, near = nil, math.huge
+      for _, id in state.ballIds do
+        local other, ship = state.balls[id], state.ships[id]
+        if other and ship and not struck[id] and id ~= ball.id and ship.owner == side and other.system == from.system
+          and other.grid == from.grid and not Combat.Cloaked(state, id) then
+          local gap = Space.Gap(from :: any, other :: any)
+          if gap <= leap.reach and gap < near then
+            onto, near = other, gap
+          end
+        end
+      end
+      local body = if onto then Space.Body(state, onto.id) else nil
+      if onto == nil or body == nil then
+        break
+      end
+      struck[onto.id] = true
+      share *= leap.share
+      local landed = Gunnery.Quality(Rng.Next(Rng.For(state.historySeed, state.tick, ball.id, item.id, running.cycles, n)),
+        turretChance(state, ball, item, weapon, body))
+      local sum = 0
+      if landed > 0 then
+        local damage = {}
+        for index = 1, 4 do
+          damage[index] = charge.damage[index] * weapon.damageMultiplier * landed * Ships.Dealt(hull, index) * share
+          sum += damage[index]
+        end
+        table.insert(hits, { target = onto.id, by = ball.id, damage = damage })
+      end
+      table.insert(events, { kind = "Shot", from = ball.id, item = item.id, to = onto.id, family = weapon.family,
+        outcome = if landed == 0 then "miss" elseif landed == 3 then "wreck" else "hit", damage = sum, leap = from.id })
+      if landed == 0 then
+        break
+      end
+      from = onto
+    end
+  end
 end
 
 -- Launch a missile: it does its damage when it arrives.

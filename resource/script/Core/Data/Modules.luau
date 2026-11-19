@@ -41,6 +41,13 @@ export type Weapon = {
   -- as far, and a flight computer changes both)
   flight: number?,
   blast: number?,
+  -- A beam that leaps (the Vail's Litany Beam): on a hit it goes on to
+  -- the nearest other ship of its target's side within 'reach' of the
+  -- one it struck, at most 'leaps' times a shot and never to a ship it
+  -- has struck already, each leap doing 'share' of the hit before it and
+  -- rolling its own hit; a miss ends it (Tactical/Combat). Nil for every
+  -- other weapon.
+  leap: { reach: number, leaps: number, share: number }?,
 }
 
 export type Repair = {
@@ -653,6 +660,23 @@ table.insert(modules, {
   passive = { ship("shieldRecharge", "mul", 0.8, true), ship("capacitorRecharge", "mul", 1.1) },
   requires = { { skill = "shield.operation", level = 2 } },
 })
+-- What makes a shield come back the quicker by itself (2026-11-18, the
+-- owner's "yes" to the reference's three, for a ship that tanks by its
+-- shield's own recharge: the Vail's): a recharger for a mid slot, and a
+-- flux coil for a low one, which does more for less shield. (And a rig,
+-- below.)
+table.insert(modules, {
+  id = "shield.recharger", name = "Shield Recharger", slot = "mid", hardpoint = "",
+  cpu = 25, powergrid = 1, volume = 5, basePrice = 10000,
+  passive = { ship("shieldRecharge", "mul", 0.9, true) },
+  requires = { { skill = "shield.operation", level = 1 } },
+})
+table.insert(modules, {
+  id = "shield.fluxcoil", name = "Shield Flux Coil", slot = "low", hardpoint = "",
+  cpu = 20, powergrid = 1, volume = 5, basePrice = 14000,
+  passive = { ship("shieldRecharge", "mul", 0.72, true), ship("shield", "mul", 0.85, true) },
+  requires = { { skill = "shield.operation", level = 2 } },
+})
 table.insert(modules, {
   id = "relay.capacitor", name = "Capacitor Power Relay", slot = "low", hardpoint = "",
   cpu = 12, powergrid = 1, volume = 5, basePrice = 12000,
@@ -1049,6 +1073,9 @@ type Form = {
   clip: number, reload: number, price: number,
   -- (small, medium, large, XL)
   sizes: { Sized },
+  -- (a beam that leaps, its reach by size; and whose people's make it is)
+  leap: { reach: { number }, leaps: number, share: number }?,
+  lineage: string?,
 }
 
 -- Each size of each gun is the reference's gun of that size and make
@@ -1075,6 +1102,17 @@ local FORMS: { Form } = {
   { id = "railgun", title = "Railgun", family = "hybrid", skill = "hybrids", clip = 80, reload = 5, price = 11000, sizes = {
     { 3.02, 4.25, 12000, 6000, 73.5, 2.34, 24, 9 }, { 3.48, 5.83, 21600, 10800, 5.9, 7, 38, 198 },
     { 3.02, 8.13, 43200, 21600, 1.05, 21, 67, 2200 }, { 7.43, 20, 120000, 32000, 0.0183, 300, 115, 110000 } } },
+  -- The Vail's own (the owner, 2026-11-18: "alien-specific weapons, like
+  -- lasers that *bounce* to other enemy ships within x range of the
+  -- targeted ones"; fitted by any hull that can fit a laser): a pulse
+  -- laser's reach and tracking for four fifths of its damage, that on a
+  -- hit leaps on to another of the target's side near it, twice at most,
+  -- each leap half the hit before it. A weapon for a pack. (The name and
+  -- every figure are mine; "your's fit well".)
+  { id = "laser.litany", title = "Litany Beam", family = "laser", skill = "lasers", clip = 0, reload = 1, price = 30000, sizes = {
+    { 2.4, 3.5, 5250, 2500, 246, 4.44, 15, 10 }, { 2.4, 5.25, 10500, 5000, 26, 13.3, 33, 189 },
+    { 2.4, 7.88, 21000, 10000, 3.38, 36, 50, 2500 }, { 6.12, 12, 42000, 20000, 0.0385, 240, 80, 125000 } },
+    leap = { reach = { 5000, 7500, 10000, 15000 }, leaps = 2, share = 0.5 }, lineage = "vail" },
 }
 
 -- What a weapon of each size costs, how big it is packed, and the skill
@@ -1107,8 +1145,9 @@ for _, form in FORMS do
         cpu = f[7], powergrid = f[8],
         volume = SIZE_VOLUME[size], basePrice = form.price * SIZE_PRICE[size], passive = {},
         weapon = { family = form.family, duration = f[2], capacitor = f[6], damageMultiplier = f[1],
-          optimal = f[3], falloff = f[4], tracking = f[5], clip = form.clip, reload = form.reload, size = size },
-        requires = needs(form.skill, size),
+          optimal = f[3], falloff = f[4], tracking = f[5], clip = form.clip, reload = form.reload, size = size,
+          leap = if form.leap then { reach = form.leap.reach[size], leaps = form.leap.leaps, share = form.leap.share } else nil },
+        requires = needs(form.skill, size), lineage = form.lineage,
       })
     end
   end
@@ -1212,6 +1251,7 @@ end
 -- How many times a small rig's salvage a rig of each size takes.
 local RIG_WORK = { 1, 3, 9 }
 rig("shield", "Field Extender Rig", 150, { ship("shield", "mul", 1.15, true), ship("signature", "mul", 1.10) })
+rig("regen", "Field Regeneration Rig", 150, { ship("shieldRecharge", "mul", 0.8, true), ship("signature", "mul", 1.10) })
 rig("armor", "Armour Pump Rig", 150, { ship("armor", "mul", 1.15, true), ship("maxVelocity", "mul", 0.90) })
 rig("hull", "Bulkhead Rig", 100, { ship("hull", "mul", 1.20, true), ship("cargo", "mul", 0.90) })
 rig("engine", "Engine Tuning Rig", 100, { ship("maxVelocity", "mul", 1.10, true), ship("armor", "mul", 0.90) })
@@ -1704,7 +1744,7 @@ for _, base in table.clone(modules) do
         weapon = if weapon then { family = weapon.family, duration = weapon.duration, capacitor = weapon.capacitor,
           damageMultiplier = weapon.damageMultiplier * make.damage, optimal = weapon.optimal, falloff = weapon.falloff,
           tracking = weapon.tracking, clip = weapon.clip, reload = weapon.reload, size = weapon.size,
-          flight = weapon.flight, blast = weapon.blast } else nil,
+          flight = weapon.flight, blast = weapon.blast, leap = weapon.leap } else nil,
         repair = if repair then { layer = repair.layer, amount = repair.amount * make.amount, duration = repair.duration,
           capacitor = repair.capacitor } else nil,
         miner = if miner then { volume = miner.volume * make.amount, duration = miner.duration, capacitor = miner.capacitor,

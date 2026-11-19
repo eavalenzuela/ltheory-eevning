@@ -88,6 +88,8 @@ local function gather(fitted: { Fitted }, on: string, family: string?, levels: L
   hull: Ships.ShipType?): { [string]: Pending }
   local pending: { [string]: Pending } = {}
   local afterburner = Ships.Bonus(hull, "afterburner", "speed", levels)
+  -- (and what makes its shield come back quicker by itself, the better: Data/HullBonuses' 'regen')
+  local regen = Ships.Bonus(hull, "regen", "shield", levels)
   if levels then
     -- in the skill list's order, so the arithmetic is the same every time
     for _, skill in Skills.list do
@@ -118,7 +120,12 @@ local function gather(fitted: { Fitted }, on: string, family: string?, levels: L
     -- (for weapons, "turret" is every family of turret: every one but missiles)
     for _, modifier in passive do
       if modifier.on == on and (on == "ship" or modifier.family == family or (modifier.family == "turret" and family ~= "missile")) then
-        collect(pending, modifier)
+        if module and regen ~= 1 and modifier.attribute == "shieldRecharge" and modifier.value < 1 then
+          collect(pending, { on = modifier.on, attribute = modifier.attribute, op = modifier.op,
+            value = 1 - (1 - modifier.value) * regen, stack = modifier.stack })
+        else
+          collect(pending, modifier)
+        end
       end
     end
     if module and f.running and module.boost and not (stealth and module.cloak) then

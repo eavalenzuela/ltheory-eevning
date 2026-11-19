@@ -107,6 +107,41 @@ local CANNONS = { { "autocannon.small", "ammo.emp" }, { "autocannon.small", "amm
 local AC = assert(Modules.byId["autocannon.small"].weapon)
 local COURIER = Ships.byId["frigate.courier"]
 
+suite:Case("a leaping beam goes on from what it hits to others of that one's side near it, half as hard each leap, and to no other side", function(t)
+  local a = arena("frigate.courier", { { "laser.litany.small", "crystal.standard" } }, "frigate.courier", {}, 3000)
+  local state = a.game.state
+  -- (two more of the target's side beside it, and one of another side as near)
+  local function beside(owner: string, dz: number): State.Ball
+    local ship = Space.NewShip(state, "frigate.courier", "Beside", owner, 0)
+    return Space.Launch(state, ship, 1, a.foe.x, a.foe.y, a.foe.z + dz)
+  end
+  local second, third = beside("pirate", 1500), beside("pirate", -3000)
+  local stranger = beside("civilian", 800)
+  local leap = assert(assert(Modules.byId["laser.litany.small"].weapon).leap)
+  t.eq({ leap.reach, leap.leaps, leap.share } :: { any }, { 5000, 2, 0.5 } :: { any })
+  lockFoe(t, a)
+  order(t, a, { kind = "ActivateModule", actor = 0, item = modules(a)[1].id, target = a.foe.id })
+  -- Every shot at the target that hits leaps on, nearest first, to its own side and never to the stranger.
+  local first, onward = 0, 0
+  for _ = 1, 40 do
+    Core.Step(a.game)
+    for _, event in Core.TakeEvents(a.game) do
+      if event.kind == "Shot" then
+        t.ok(event.to ~= stranger.id, "a leap went to a ship of another side")
+        if event.leap == nil and event.outcome ~= "miss" then
+          first += 1
+        elseif event.leap then
+          onward += 1
+          t.ok(event.to == second.id or event.to == third.id, "a leap went somewhere else")
+          -- (the first leap from the target, to the nearest of its side; the second from there)
+          t.eq(event.leap, if event.to == second.id then a.foe.id else second.id)
+        end
+      end
+    end
+  end
+  t.ok(first >= 3 and onward >= first, `{first} hits and {onward} leaps`)
+end)
+
 suite:Case("a lock takes the time the formula gives, and no shot before it", function(t)
   local a = arena("frigate.courier", CANNONS, "frigate.courier", {}, 2000)
   local cannon = modules(a)[1]

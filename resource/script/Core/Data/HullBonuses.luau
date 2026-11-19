@@ -22,6 +22,9 @@
 --   repair      what a local repairer of a layer mends ("armor",
 --               "shield")
 --   afterburner how much more speed an afterburner gives ("speed")
+--   regen       how much more what makes its shield come back by itself
+--               does: a recharger, a flux coil, a power relay, a rig
+--               ("shield")
 --   hex         how strongly its electronic warfare of a kind works on
 --               another ship ("damp", "paint"...)
 --   reach       how far its electronic warfare of a kind reaches
@@ -100,6 +103,9 @@ local function laser(skill: string, per: number, attribute: string, what: string
 end
 local function laserCap(skill: string): HullBonus
   return laser(skill, -0.10, "capacitor", "lasers use 10% less capacitor")
+end
+local function regen(skill: string): HullBonus
+  return level(skill, 0.10, "regen", "shield", "shield rechargers, flux coils, power relays and regeneration rigs work 10% better")
 end
 local PIRATE_LOCK = role(0.5, "ship", "scanResolution", "locks on half as fast again (scan resolution)")
 local function hullHP(skill: string): HullBonus
@@ -251,6 +257,36 @@ HullBonuses.byHull = {
     hullHP("capital.industrials"), PIRATE_LOCK },
   ["supercarrier.matriarch"] = { level("supercarriers", 0.05, "drones", "damage", "fighters and bombers do 5% more damage"),
     hullHP("supercarriers"), PIRATE_LOCK },
+
+  -- The Vail (2026-11-18): lasers, and a heavy shield that tanks by its
+  -- own recharge (the owner: "given they have a heavy shield, they should
+  -- actually not be active-rep ships, they should be shield-regen module
+  -- bonuses"); beam snipers and regenerating brawlers.
+  ["frigate.prostration"] = { laser("frigates", 0.05, "damageMultiplier", "5% more laser damage"),
+    laser("frigates", 0.10, "optimal", "lasers reach 10% farther") },
+  ["frigate.undulation"] = { laser("frigates", -0.05, "duration", "lasers fire 5% faster"), regen("frigates") },
+  ["destroyer.adoration"] = { laser("destroyers", 0.05, "damageMultiplier", "5% more laser damage"), laserCap("destroyers"),
+    role(0.5, "weapons", "optimal", "lasers reach half as far again", "laser") },
+  ["destroyer.exaltation"] = { laser("destroyers", -0.05, "duration", "lasers fire 5% faster"), regen("destroyers"),
+    role(0.25, "weapons", "tracking", "turrets track 25% better", "turret") },
+  ["destroyer.aberration"] = { laser("destroyers", 0.05, "damageMultiplier", "5% more laser damage"), laserCap("destroyers"),
+    role(0.5, "weapons", "optimal", "lasers reach half as far again", "laser"), role(0.25, "ship", "shield", "25% more shield") },
+  ["cruiser.enervation"] = { laser("cruisers", 0.05, "damageMultiplier", "5% more laser damage"),
+    laser("cruisers", 0.10, "optimal", "lasers reach 10% farther") },
+  ["cruiser.interstition"] = { laser("cruisers", 0.05, "damageMultiplier", "5% more laser damage"),
+    laser("cruisers", 0.10, "optimal", "lasers reach 10% farther") },
+  ["attackbattlecruiser.intervention"] = { laser("battlecruisers", 0.05, "damageMultiplier", "5% more laser damage"),
+    laser("battlecruisers", 0.10, "optimal", "lasers reach 10% farther") },
+  ["battlecruiser.innocence"] = { laser("battlecruisers", -0.05, "duration", "lasers fire 5% faster"), shieldResists("battlecruisers") },
+  ["battleship.extravagance"] = { laser("battleships", 0.05, "damageMultiplier", "5% more laser damage"), shieldHP("battleships") },
+  ["battleship.penance"] = { laser("battleships", -0.05, "duration", "lasers fire 5% faster"), regen("battleships") },
+  ["carrier.accordance"] = { level("carriers", 0.05, "drones", "damage", "fighters do 5% more damage"), shieldResists("carriers") },
+  ["dreadnought.awe"] = { laser("dreadnoughts", 0.05, "damageMultiplier", "5% more laser damage"), shieldHP("dreadnoughts") },
+  ["capitalindustrial.embrace"] = { level("capital.industrials", 0.05, "ore", "hold", "5% more ore hold"), shieldHP("capital.industrials") },
+  ["ultracapital.archangel"] = { level("ultracapitals", 0.05, "drones", "damage", "fighters and bombers do 5% more damage"),
+    shieldHP("ultracapitals") },
+  ["barge.panacea"] = { level("mining", 0.05, "mining", "yield", "5% more from mining"), shieldHP("mining") },
+  ["freighter.indulgence"] = { cargo("freighters"), shieldHP("freighters") },
 } :: { [string]: { HullBonus } }
 
 -- The classes that no electronic warfare touches (the owner, 2026-11-18:

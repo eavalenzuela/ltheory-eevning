@@ -375,6 +375,11 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
       row(to, "Optimal range", metres(weapon.optimal))
       row(to, "Falloff", metres(weapon.falloff))
       row(to, "Tracking", plain(weapon.tracking))
+      -- (a beam that leaps: Data/Modules' 'leap')
+      local leap = weapon.leap
+      if leap then
+        row(to, "Leaps", `on a hit, to another of its target's side within {metres(leap.reach)} of it, {leap.leaps} times at most, each leap {whole(leap.share * 100)}% of the hit before`)
+      end
     elseif (weapon.flight or 1) ~= 1 then
       row(to, "Range", `{whole((weapon.flight or 1) * 100)}% of its missile's`)
     else

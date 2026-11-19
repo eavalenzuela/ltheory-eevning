@@ -65,6 +65,11 @@ suite:Case("a bonus is so much a level of its skill, and a role bonus is the hul
   local naishou = Ships.byId["battlecruiser.naishou"]
   t.near(Attributes.Weapon({}, "autocannon.medium", nil, naishou).tracking, Attributes.Weapon({}, "autocannon.medium", nil, nil).tracking * 1.25, 1e-9)
   t.eq(Attributes.Weapon({}, "launcher.heavy", nil, naishou).tracking, 0)
+  -- On what regenerates a shield: the Undulation's relay takes half as much again off its recharge time at Frigates 5.
+  local undulation = Ships.byId["frigate.undulation"]
+  local relayed = { { type = "relay.shield", running = false } }
+  t.near(Attributes.Ship(undulation, relayed, { frigates = 5 }).shieldRecharge, undulation.shieldRecharge * (1 - 0.2 * 1.5), 1e-6)
+  t.near(Attributes.Ship(undulation, relayed, nil).shieldRecharge, undulation.shieldRecharge * 0.8, 1e-6)
   -- On an afterburner: the Akashi's gives a quarter more of its speed at Afterburners 5.
   local akashi = Ships.byId["frigate.akashi"]
   local running = { { type = "afterburner.1mn", running = true } }
