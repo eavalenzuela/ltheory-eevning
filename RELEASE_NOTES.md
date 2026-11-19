@@ -6,6 +6,15 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Swarm missiles, vertical launch, and point defence
+
+- The Swarm Launcher, the Vessari's own, comes in four sizes and fits any ship with a launcher hardpoint. Each cycle it throws its missile as a swarm of small ones: 6, 12, 18 or 24 by size, together doing 90% of the one. They are a third faster and with half the blast, so they hit small ships better. It is short-range, reaching as far as the rocket, assault, torpedo or bombardment launcher of its size, and uses ordinary missiles. Its missiles jink on their way in and leave long glowing contrails.
+- The Vertical Launch Battery, the Kethri's own, comes in four sizes and fits any ship with a launcher hardpoint. It ripples eight missiles out of a row of cells, a quarter of a second apart. Each climbs straight up, turns over sharply and dives on its target faster and faster, leaving a thick smoke trail. It reaches 1.3 times as far as the long launcher of its size, but will not fire at anything nearer than a tenth of that. It fires only its own new vertical-launch missiles, which fit no other launcher.
+- The Point Defence Turret, a small projectile turret for a turret hardpoint. Switched on, it needs no lock: it shoots at enemy missiles within 5 km, including missiles aimed at your friends, and at enemy drones when no missiles are near. It has to swing to each missile in turn and fires the whole time, so it goes through its 120 rounds fast. Most rounds miss: one turret stops about half the missiles a single launcher throws at it, and a swarm or a vertical salvo overwhelms it.
+- Pirates from the level 3 camps up carry a point defence turret in place of one gun. Level 3's hardest pack has one scout fewer, and level 4's lone cruiser now has a scout with it.
+- Faction stores sell blueprints only for their own people's weapons and ones belonging to no faction, not other factions' launchers.
+- Fixed: destroying a ship with a loaded point defence turret or capacitor booster could break the game.
+
 ## Hull bonuses, the Litany Beam, and shield regeneration
 
 - Every faction hull now has bonuses of its own. Most get two that grow with its class skill (Frigates, Cruisers and so on), and some get a role bonus they always have. Each hull's info window lists them under Bonuses.
