@@ -195,8 +195,8 @@ end)
 suite:Case("autocannons at rest hit as often and as hard as the formula says", function(t)
   -- EMP halves the 1100 m optimal; at 2000 m the target is 1450 m into a
   -- 5200 m falloff.
-  local a = arena("frigate.courier", CANNONS, "industrial.hauler", {}, 2000)
-  local chance = Gunnery.HitChance(0, AC.tracking, Ships.byId["industrial.hauler"].signature, 2000, AC.optimal * 0.5, AC.falloff)
+  local a = arena("frigate.courier", CANNONS, "industrial.mizumushi", {}, 2000)
+  local chance = Gunnery.HitChance(0, AC.tracking, Ships.byId["industrial.mizumushi"].signature, 2000, AC.optimal * 0.5, AC.falloff)
   t.near(chance, 0.5 ^ (((2000 - AC.optimal * 0.5) / AC.falloff) ^ 2), 1e-12)
   lockFoe(t, a)
   for _, cannon in modules(a) do
@@ -404,7 +404,7 @@ suite:Case("an afterburner changes how the ship flies while it runs", function(t
 end)
 
 suite:Case("guns reload from the hold, and stop when it is empty", function(t)
-  local a = arena("frigate.courier", { { "autocannon.small", "ammo.emp" } }, "industrial.hauler", {}, 1500)
+  local a = arena("frigate.courier", { { "autocannon.small", "ammo.emp" } }, "industrial.mizumushi", {}, 1500)
   local cannon = modules(a)[1]
   cannon.rounds = 2
   Items.Add(a.game.state, "ammo.emp", 3, a.me.id, "cargo")
@@ -473,7 +473,7 @@ end)
 suite:Case("the same seeds give the same fight, and a save in mid-fight carries on unchanged", function(t)
   local function fight(historySeed: number, reloadAt: number?): string
     local a = arena("frigate.battleaxe", { { "laser.pulse.small", "crystal.multifrequency" },
-      { "laser.pulse.small", "crystal.multifrequency" } }, "industrial.hauler", {}, 3000, historySeed)
+      { "laser.pulse.small", "crystal.multifrequency" } }, "industrial.mizumushi", {}, 3000, historySeed)
     lockFoe(t, a)
     for _, laser in modules(a) do
       order(t, a, { kind = "ActivateModule", actor = 0, item = laser.id, target = a.foe.id })

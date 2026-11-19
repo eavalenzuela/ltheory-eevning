@@ -67,7 +67,7 @@ suite:Case("a cloaking device wants its skill, and a cloaked ship is slow, locks
   t.eq(Core.Query.Cloaked(game, me.id), true)
   t.near(me.maxVelocity, fast * 0.25, 1e-6)
   -- Somebody to look at: it cannot be locked from under the cloak, nor a gun switched on.
-  local trader = Space.NewShip(state, "industrial.hauler", "Trader", "civilian", 0)
+  local trader = Space.NewShip(state, "industrial.mizumushi", "Trader", "civilian", 0)
   local other = Space.Launch(state, trader, me.system, me.x + 9000, me.y, me.z)
   t.eq(refused(game, { kind = "LockTarget", actor = 0, target = other.id }), "cloaked")
   local gun = Items.Fitted(state, me.id)[1]
@@ -115,7 +115,7 @@ end)
 suite:Case("anything that comes within two kilometres switches a cloak off, and it cannot be switched on that near anything", function(t)
   local game, me, cloak = adrift()
   local state = game.state
-  local trader = Space.NewShip(state, "industrial.hauler", "Trader", "civilian", 0)
+  local trader = Space.NewShip(state, "industrial.mizumushi", "Trader", "civilian", 0)
   local other = Space.Launch(state, trader, me.system, me.x + 1500, me.y, me.z)
   t.eq(refused(game, { kind = "ActivateModule", actor = 0, item = cloak.id }), "too near Trader to cloak")
   other.x = me.x + 8000
@@ -197,7 +197,7 @@ suite:Case("a hull built to go unseen keeps its speed under a cloak, and only wh
   t.ok((submit(game, { kind = "ActivateModule", actor = 0, item = cloak.id })))
   t.eq({ Core.Query.Cloaked(game, me.id), me.maxVelocity } :: { any }, { true, fast } :: { any })
   -- Something a kilometre and a half off does not switch it off, as it would a plain hull's; inside a kilometre, it does.
-  local trader = Space.NewShip(state, "industrial.hauler", "Trader", "civilian", 0)
+  local trader = Space.NewShip(state, "industrial.mizumushi", "Trader", "civilian", 0)
   local other = Space.Launch(state, trader, me.system, me.x + 1500 + me.radius + 200, me.y, me.z)
   steps(game, 3)
   t.eq(Core.Query.Cloaked(game, me.id), true)
@@ -249,7 +249,7 @@ suite:Case("a hull with a cloak of its own cloaks with nothing fitted: at its fu
   t.ok(told, "nobody said the cloak was on")
   t.eq(refused(game, { kind = "Cloak", actor = 0 }), "cloaked already")
   -- Nothing is locked from under it, as from under any cloak.
-  local trader = Space.NewShip(state, "industrial.hauler", "Trader", "civilian", 0)
+  local trader = Space.NewShip(state, "industrial.mizumushi", "Trader", "civilian", 0)
   local other = Space.Launch(state, trader, me.system, me.x + 9000, me.y, me.z)
   t.eq(refused(game, { kind = "LockTarget", actor = 0, target = other.id }), "cloaked")
   t.eq({ Core.Validate(game, { kind = "LockTarget", actor = other.id, target = me.id }) } :: { any }, { false, "no such target" } :: { any })
@@ -291,7 +291,7 @@ end)
 suite:Case("a hull's own cloak is a cloak like another: not while targeted nor near anything, broken by what comes near, kept through a warp and a save", function(t)
   local game, me = flying("frigate.skiver")
   local state = game.state
-  local trader = Space.NewShip(state, "industrial.hauler", "Trader", "civilian", 0)
+  local trader = Space.NewShip(state, "industrial.mizumushi", "Trader", "civilian", 0)
   local other = Space.Launch(state, trader, me.system, me.x + 9000, me.y, me.z)
   -- Not while anybody has it targeted.
   table.insert(other.vitals.locks, { target = me.id, done = 0, locked = true })

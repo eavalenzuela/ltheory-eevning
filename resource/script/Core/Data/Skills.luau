@@ -361,8 +361,6 @@ end
 -- listed needs nothing.
 local NEEDS: { [string]: { Need } } = {
   ["frigate.battleaxe"] = { { skill = "frigates", level = 2 } },
-  ["industrial.hauler"] = { { skill = "industrials", level = 1 } },
-  ["freighter.dray"] = { { skill = "freighters", level = 1 } },
   ["laser.pulse.small"] = { { skill = "lasers", level = 1 } },
   ["autocannon.small"] = { { skill = "projectiles", level = 1 } },
   ["launcher.light"] = { { skill = "missiles", level = 1 } },

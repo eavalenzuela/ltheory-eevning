@@ -133,11 +133,13 @@ Careers.list = {
         bring = { type = "ore.ferrite", quantity = 1000 },
         says = "A yard here wants a thousand units of Ferrite, and I said you would bring it. It is the commonest rock in "
           .. "these belts. Have it in your hold or in the hangar here when you report." },
-      { title = "A ship for the work", aim = "Train Mining to level 2", on = "", need = 1, kit = {}, credits = 10000,
+      -- (a second laser since 2026-11-18, when the Prospector it gave was taken out of the game with the other hulls
+      -- nobody's yards built: Data/Ships)
+      { title = "Two lasers to the work", aim = "Train Mining to level 2", on = "", need = 1, kit = {}, credits = 10000,
         skill = { id = "mining", level = 2 },
-        gifts = { { type = "frigate.prospector", quantity = 1 }, { type = "miner.small", quantity = 1 } },
-        says = "The Prospector is built to mine: more lasers and a bigger hold. It wants Mining at level 2 (Skills tab; a "
-          .. "few minutes, and it goes on while you do other things). Have that, and there is a Prospector here for you." },
+        gifts = { { type = "miner.small", quantity = 1 } },
+        says = "Two mining lasers cut twice the rock. Train Mining to level 2 (Skills tab; a few minutes, and it goes on "
+          .. "while you do other things), and there is a second laser here for you: fit it beside the first." },
     },
   },
   {

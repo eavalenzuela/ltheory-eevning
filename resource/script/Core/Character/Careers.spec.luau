@@ -348,9 +348,9 @@ suite:Case("what is to be brought is handed over, a skill had is enough, and a c
   local lasers = hangar(state, home, "miner.small")
   t.ok((Core.Submit(game, { kind = "CompleteLesson", actor = mine, what = "industry" })))
   Core.Step(game)
-  t.eq({ hangar(state, home, "frigate.prospector"), hangar(state, home, "miner.small") }, { 1, lasers + 1 })
+  t.eq(hangar(state, home, "miner.small"), lasers + 1)
   local done = said(game, "LessonDone")
-  t.eq({ done[1].finished, done[1].name, done[1].gifts } :: { any }, { true, "Industry", 2 } :: { any })
+  t.eq({ done[1].finished, done[1].name, done[1].gifts } :: { any }, { true, "Industry", 1 } :: { any })
   -- That was the last of them.
   local last = row(game, "industry")
   t.eq({ last.done, last.lesson, last.can } :: { any }, { 5, nil, false } :: { any })

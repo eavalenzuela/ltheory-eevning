@@ -536,7 +536,7 @@ suite:Case("pirates rob the trade: with nobody else to go for they go for a haul
   for index = 1, 6 do
     table.insert(raiders, Pirates.Spawn(state, Pirates.kindById["raider"], 1, 6e9 + 9000 + 500 * index, 0, 0, me.grid).id)
   end
-  local trader = Space.NewShip(state, "industrial.hauler", "Trader", "civilian", 0)
+  local trader = Space.NewShip(state, "industrial.mizumushi", "Trader", "civilian", 0)
   local hull = Space.Launch(state, trader, 1, 6e9 + 15000, 0, 2000)
   state.traffic[trader.id] = { ship = trader.id, kind = "out", goal = 0, system = 1, born = state.tick, wait = 0 }
   table.insert(state.trafficIds, trader.id)

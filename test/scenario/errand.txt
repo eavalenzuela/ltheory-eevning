@@ -20,7 +20,7 @@ wait 2
 lua assert(GameDebug.Docked(), 'a new game starts docked')
 lua GameDebug.Peaceful(true)
 lua GameDebug.Grant(1000000)
-lua assert(GameDebug.Spare('industrial.hauler'), 'no hauler')
+lua assert(GameDebug.Spare('industrial.mizumushi'), 'no hauler')
 lua assert(GameDebug.Market('fuel.block'), 'no fuel on the market')
 frames 3
 until GameDebug.Press('Quantity:1000')

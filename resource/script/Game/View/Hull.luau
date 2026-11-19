@@ -963,64 +963,6 @@ local function grown(b: Builder, g: Growth)
   bending = bend
 end
 
--- The Prospector, a mining frigate: anybody's. A keel with a bar across
--- it at the shoulders, three ore pods a side along it on a broad deck,
--- and at the bow a blunt head, where its lasers stand, between two jaws
--- that reach out past it and turn in toward each other; the cabin on
--- the keel's back, a big engine at the end of the keel and one under
--- each shoulder. (A v0.)
-local PROSPECTOR: Warps = { spread = 0.5, bow = 2.0, hump = 0.8, crown = 1.0 }
-local function prospector(b: Builder)
-  manner(b, PROSPECTOR)
-  mid(b, PLATING, v(0, 0, -0.5), v(0.55, 0.85, 3.3))
-  twin(b, PLATING, v(1.2, 0.0, -1.9), v(1.3, 0.45, 0.75))
-  -- the pods, and the deck under them
-  ribs(b, PLATING, v(1.3, 0.15, -2.6), v(0.7, 0.6, 0.55), 3)
-  twin(b, PATCH, v(1.15, -0.55, -0.9), v(1.4, 0.24, 2.6))
-  -- the head, and the jaws either side of it: a band of warning paint
-  -- round each, a dark tip, and a lamp in the tip
-  mid(b, PLATING, v(0, 0.0, 3.2), v(0.8, 0.6, 0.9))
-  twin(b, PLATING, v(1.15, -0.15, 3.4), v(0.4, 0.34, 1.9))
-  twin(b, TRIM, v(1.15, -0.15, 4.4), v(0.415, 0.355, 0.18), 0.2)
-  twin(b, FRAME, v(1.15, -0.15, 5.35), v(0.3, 0.25, 0.35))
-  twin(b, GLOW, v(1.15, -0.15, 5.72), v(0.15, 0.12, 0.03), 0.5)
-  cabin(b, v(0, 0.95, 1.5), v(0.42, 0.22, 0.7))
-  -- the engines
-  jet(b, v(1.25, 0.0, -3.5), v(0.6, 0.42, 0.75), true)
-  jet(b, v(0, 0.05, -4.0), v(0.5, 0.6, 0.7))
-end
-
--- The Quarry, a mining barge: anybody's. A long keel on a broad deck,
--- four ore bins a side along it with their hatches in warning paint and
--- a rail of smaller plates outboard of them; across the bow a working
--- deck, where its three heads stand, over two short jaws; at the stern
--- a tower on the keel with the bridge on top of it, and three engines.
--- (A v0.)
-local QUARRY: Warps = { spread = 0.5, bow = 3.0, hump = 1.0, crown = 1.25 }
-local function quarry(b: Builder)
-  manner(b, QUARRY)
-  mid(b, PLATING, v(0, 0, -0.6), v(0.6, 1.0, 4.4))
-  twin(b, PATCH, v(1.55, -0.62, -0.5), v(1.85, 0.28, 4.3))
-  -- the bins and their hatches, and the rail
-  ribs(b, PLATING, v(1.55, 0.2, -3.3), v(0.95, 0.68, 0.58), 4)
-  for bin = 0, 3 do
-    twin(b, TRIM, v(1.55, 0.89, -3.3 + bin * 1.74), v(0.6, 0.04, 0.36), 0.2)
-  end
-  ribs(b, PLATING, v(2.95, -0.25, -3.0), v(0.38, 0.38, 0.5), 4)
-  -- the working deck: painted on top, a lamp along its face; and the jaws under it
-  mid(b, PLATING, v(0, 0.0, 4.6), v(1.9, 0.5, 0.9))
-  mid(b, TRIM, v(0, 0.505, 4.6), v(1.75, 0.02, 0.75), 0.1)
-  mid(b, GLOW, v(0, -0.05, 5.505), v(1.2, 0.09, 0.03), 0.4)
-  twin(b, PLATING, v(1.6, -0.45, 5.2), v(0.3, 0.3, 1.0))
-  twin(b, FRAME, v(1.6, -0.45, 6.2), v(0.22, 0.22, 0.25))
-  -- the tower at the stern, and the bridge
-  mid(b, PLATING, v(0, 1.2, -3.6), v(0.5, 0.45, 0.9))
-  cabin(b, v(0, 1.8, -3.4), v(0.8, 0.22, 0.7))
-  -- the engines
-  jet(b, v(1.6, -0.05, -4.9), v(0.8, 0.5, 0.8), true)
-  jet(b, v(0, 0.0, -5.3), v(0.55, 0.7, 0.7))
-end
-
 -- The Mule, a hauler: anybody's, and the plainest there is. A long
 -- spine on a deck, six holds a side along it and a tier of smaller ones
 -- on their backs; a blunt head at the bow with the bridge on it; a
@@ -2406,18 +2348,6 @@ local function bentBy(bend: Bend, at: vector, up: vector): Mount
   return { at = bend(p), up = tilted }
 end
 
-local function bentMount(w: Warps, at: vector, up: vector): Mount
-  return bentBy(warped(w), at, up)
-end
-
-local function bentOver(w: Warps, top: vector, bottom: vector): Hardpoint
-  return { bentMount(w, top, UP), bentMount(w, bottom, DOWN) }
-end
-
-local function bentAbeam(w: Warps, starboard: vector, port: vector): Hardpoint
-  return { bentMount(w, starboard, STARBOARD), bentMount(w, port, PORT) }
-end
-
 -- Hardpoints, and exhausts, so many times as far from the middle of the
 -- hull they are on: for a hull that is made bigger than it was drawn
 -- (a bare one: Plates' 'scale').
@@ -3690,33 +3620,6 @@ local designs: { [string]: Design } = {
     turrets = { flats("Lighter", LIGHTER, 0.79, LIGHTER, 0.79, LIGHTER_FOOT) },
     launchers = {},
     fit = { "laser.pulse.small" },
-  },
-  -- (a freighter has nothing on it to fight with)
-  ["freighter.dray"] = { faction = "civil", draw = dray, sheets = 6.0, turrets = {}, launchers = {}, fit = {} },
-  -- (And the three plain working hulls anybody flies: the mining
-  -- frigate, the mining barge and the hauler.)
-  ["frigate.prospector"] = {
-    faction = "civil", draw = prospector, fine = MANNER_FINE,
-    -- (a mining laser on the head and under it; one on each shoulder)
-    turrets = { bentOver(PROSPECTOR, v(0, 0.6, 3.45), v(0, -0.6, 3.45)), bentAbeam(PROSPECTOR, v(2.5, 0, -1.9), v(-2.5, 0, -1.9)) },
-    launchers = {},
-    fit = { "miner.small", "miner.small" },
-  },
-  ["barge.quarry"] = {
-    faction = "civil", draw = quarry, sheets = 5.0, fine = MANNER_FINE,
-    -- (its three heads on the working deck: the middle one above and
-    -- below, the others above on one side and below on the other)
-    turrets = { bentOver(QUARRY, v(0, 0.525, 4.6), v(0, -0.5, 4.6)), bentOver(QUARRY, v(0.85, 0.525, 4.6), v(-0.85, -0.5, 4.6)),
-      bentOver(QUARRY, v(-0.85, 0.525, 4.6), v(0.85, -0.5, 4.6)) },
-    launchers = {},
-    fit = { "miner.strip", "miner.strip", "miner.strip" },
-  },
-  ["industrial.hauler"] = {
-    faction = "civil", draw = mule, sheets = 4.5, fine = MANNER_FINE,
-    -- (its one gun on the bridge's roof, and under the head)
-    turrets = { bentOver(MULE, v(0, 1.22, 4.7), v(0, -0.65, 5.0)) },
-    launchers = {},
-    fit = { "autocannon.small" },
   },
   ["frigate.courier"] = {
     faction = "civil", draw = courier,

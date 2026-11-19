@@ -36,9 +36,9 @@ frames 30
 lua _G.field, _G.before = GameDebug.JumpField()
 lua assert(_G.field == 5000, 'the Archangel should have a field of 5000 m, and has ' .. _G.field)
 # Four barges about it: so far to its right, above it and ahead of it.
-lua _G.near = GameDebug.Pose('barge.quarry', 3000, 0, 0)
-lua _G.above = GameDebug.Pose('barge.quarry', 0, 5000, 0)
-lua _G.far = GameDebug.Pose('barge.quarry', 0, 0, 9500)
+lua _G.near = GameDebug.Pose('barge.anteater', 3000, 0, 0, nil, nil, 'player')
+lua _G.above = GameDebug.Pose('barge.anteater', 0, 5000, 0, nil, nil, 'player')
+lua _G.far = GameDebug.Pose('barge.anteater', 0, 0, 9500, nil, nil, 'player')
 lua _G.theirs = GameDebug.Pose('barge.panacea', -3000, 0, 0)
 lua assert(_G.near > 0 and _G.above > 0 and _G.far > 0 and _G.theirs > 0, 'the barges should stand about it')
 frames 5

@@ -209,7 +209,7 @@ suite:Case("a pilot whose drones fire on somebody who is no pirate is marked for
   local game, me = flying("cruiser.ouyou", 2, 5)
   local state = game.state
   t.ok((submit(game, { kind = "LaunchDrones", actor = 0 })))
-  local trader = Space.NewShip(state, "industrial.hauler", "Trader", "civilian", 0)
+  local trader = Space.NewShip(state, "industrial.mizumushi", "Trader", "civilian", 0)
   local ball = Space.Launch(state, trader, me.system, me.x + 3000, me.y, me.z)
   t.ok((submit(game, { kind = "EngageDrones", actor = 0, target = ball.id })))
   t.eq(state.player.marked, 0)

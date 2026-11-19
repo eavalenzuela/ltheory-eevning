@@ -973,7 +973,7 @@ suite:Case("the fifth agent has a mining contract at each level the pilot's stan
     local ore = assert(Ores.byId[offer.type], `a contract for {offer.type}`)
     t.eq(offer.need % 100, 0)
     local volume = offer.need * ore.volume
-    t.near(volume, ({ 300, 900, 2500, 7000 })[level], 61, `level {level} wants {volume} m3`)
+    t.near(volume, ({ 200, 900, 2500, 7000 })[level], 61, `level {level} wants {volume} m3`)
     -- It pays three tenths over what the ore is worth, and three thousand a level, Missions.PAY times over, and
     -- what the pilot's standing adds.
     local worth = math.floor((math.floor(Assault.DIG_PAY * offer.need * ore.basePrice) + Assault.DIG_BASE * level) * (Missions.PAY * (1 + 0.03 * 5)))
@@ -1402,7 +1402,7 @@ suite:Case("the sixth agent has courier contracts in levels: a frigate's hold ov
   t.ok(wild >= 2 and bulk >= 2, `of twelve fourth-level contracts, {wild} lawless runs and {bulk} freighter loads`)
   -- What carries each: the starter ship the first, a hauler the second, more than a hauler the third, and only
   -- a freighter the fourth (or, for the run through lawless space, a hauler).
-  local courier, mule, dray = Ships.byId["frigate.courier"].cargo, Ships.byId["industrial.hauler"].cargo, Ships.byId["freighter.dray"].cargo
+  local courier, mule, dray = Ships.byId["frigate.courier"].cargo, Ships.byId["industrial.mizumushi"].cargo, Ships.byId["freighter.yoruzake"].cargo
   t.ok(Missions.RUNS[1].most <= courier and Missions.RUNS[2].least > courier and Missions.RUNS[2].most <= mule)
   t.ok(Missions.RUNS[3].least > mule and Missions.RUNS[3].most <= dray)
   t.ok(Missions.RUNS[4].least > 3 * mule and Missions.RUNS[4].most <= dray and Missions.WILD.most <= mule)

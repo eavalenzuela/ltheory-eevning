@@ -239,7 +239,6 @@ local MOON_MAP = 512
 -- been changed.
 local HULL_SEED: { [string]: number } = {
   ["frigate.courier"] = 55,
-  ["industrial.hauler"] = 77,
 }
 local hullItems: { [string]: Item } = {}
 

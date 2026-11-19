@@ -641,16 +641,17 @@ end
 -- same way, with what its design is shown with on its hardpoints, and
 -- in a paint and a design if they are named. It does nothing. It is
 -- its builders' (a Vail hull is the Vail's), and a hull that is
--- nobody's make (the Quarry, the Hauler) is the pilot's. Its id; 0 if
--- the pilot is not in space or there is no such hull.
-function Debug.Pose(type: string, right: number, up: number, ahead: number, paint: string?, design: string?): number
+-- nobody's make (the Courier) is the pilot's; or whose 'owner' says
+-- ("player": the pilot's own, of any make). Its id; 0 if the pilot is
+-- not in space or there is no such hull.
+function Debug.Pose(type: string, right: number, up: number, ahead: number, paint: string?, design: string?, owner: string?): number
   local state = session.game.state
   local me = state.balls[state.player.ship]
   local hull = Ships.byId[type]
   if me == nil or hull == nil then
     return 0
   end
-  local ship = Space.NewShip(state, hull.id, hull.name, if hull.lineage ~= "" then hull.lineage else "player", 0)
+  local ship = Space.NewShip(state, hull.id, hull.name, owner or (if hull.lineage ~= "" then hull.lineage else "player"), 0)
   local built = Hull.Build(type)
   local types: { string } = {}
   local shown: { string } = if built then built.fit else {}

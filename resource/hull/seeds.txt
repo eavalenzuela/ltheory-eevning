@@ -30,10 +30,11 @@
 # called <class>.<name>. Every human faction's ships have been gone
 # through one by one by the project's owner, and it has the hulls its
 # line names in resource/script/Core/Data/Factions.luau: several of a
-# class, or none. Theirs are at the foot of this file. And there are
-# anybody's (frigate.courier, frigate.prospector, barge.quarry,
-# industrial.hauler, freighter.dray). The classes, with how big a ship
-# of each is (its radius: half its length) and a hull of it:
+# class, or none. Theirs are at the foot of this file. And there is
+# anybody's frigate.courier, what a pilot is given (the other hulls
+# nobody's yards built were stand-ins, taken out 2026-11-18). The
+# classes, with how big a ship of each is (its radius: half its length)
+# and a hull of it:
 #
 #   frigate               42 m   frigate.battleaxe
 #   destroyer             75 m   destroyer.sentry
@@ -62,7 +63,6 @@
 # If a seed has not the room for a hull's hardpoints even on seats, the
 # game says so when it starts and draws the hull as it was.
 #
-# frigate.prospector   12   2
 # frigate.courier       7   2   stout painted
 
 # The Talmar's ships (the owner's rework of them, 2026-11-13: each hull's

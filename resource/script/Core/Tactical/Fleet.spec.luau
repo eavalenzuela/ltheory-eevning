@@ -268,7 +268,7 @@ suite:Case("a hired pilot fights whoever is after the fleet and what they are po
   steps(game, 5)
   t.eq({ theirs.mode, theirs.target, #theirs.vitals.locks } :: { any }, { "keep", me.id, 0 } :: { any })
   -- Pointed at somebody who is no pirate, they fire, and the player is marked for it.
-  local trader = Space.NewShip(state, "industrial.hauler", "Trader", "civilian", 0)
+  local trader = Space.NewShip(state, "industrial.mizumushi", "Trader", "civilian", 0)
   local hauler = Space.Launch(state, trader, me.system, me.x + 3000, me.y, me.z)
   t.eq(refused(game, { kind = "FleetOrder", actor = 0, what = "engage", target = theirs.id }), "no such target")
   t.eq(refused(game, { kind = "FleetOrder", actor = 0, what = "dance" }), "no such order")
@@ -578,7 +578,7 @@ local function atBelt(): (Core.Game, State.Wingman, State.Ship, number)
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
   state.wallet = 10000000
-  local second = Space.NewShip(state, "frigate.prospector", "Digger", "player", state.player.home)
+  local second = Space.NewShip(state, "frigate.courier", "Digger", "player", state.player.home)
   Items.Equip(state, second.id, "miner.small", nil)
   Items.Equip(state, second.id, "miner.small", nil)
   local wing = hired(game, second, 2)
@@ -653,7 +653,7 @@ local function tending(hull: string): (Core.Game, State.Wingman, State.Ship, Sta
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
   state.wallet = 10000000
-  local second = Space.NewShip(state, "frigate.prospector", "Digger", "player", state.player.home)
+  local second = Space.NewShip(state, "frigate.courier", "Digger", "player", state.player.home)
   Items.Equip(state, second.id, "miner.small", nil)
   Items.Equip(state, second.id, "miner.small", nil)
   local wing = hired(game, second, 2)
@@ -673,8 +673,8 @@ end
 
 suite:Case("an ore hold takes ore and gas and nothing else; what its ship mines goes into it before the hold", function(t)
   -- (a capital industrial has one, and nothing else has)
-  t.eq({ Ships.byId["capitalindustrial.jaguar"].ore, Ships.byId["capitalindustrial.okami"].ore, Ships.byId["freighter.dray"].ore,
-    Ships.byId["barge.quarry"].ore } :: { any }, { Ships.ORE.capitalindustrial, Ships.ORE.capitalindustrial, 0, 0 } :: { any })
+  t.eq({ Ships.byId["capitalindustrial.jaguar"].ore, Ships.byId["capitalindustrial.okami"].ore, Ships.byId["freighter.yoruzake"].ore,
+    Ships.byId["barge.anteater"].ore } :: { any }, { Ships.ORE.capitalindustrial, Ships.ORE.capitalindustrial, 0, 0 } :: { any })
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
   local home = state.player.home
@@ -767,7 +767,7 @@ suite:Case("at a vapour field a hired pilot with a gas harvester draws the gas a
   local state = game.state
   state.wallet = 10000000
   local home = state.player.home
-  local second = Space.NewShip(state, "frigate.prospector", "Drawer", "player", home)
+  local second = Space.NewShip(state, "frigate.courier", "Drawer", "player", home)
   Items.Equip(state, second.id, "miner.gas", nil)
   -- (a Gas Harvester wants Mining 2: a pilot of grade 2)
   local wing = hired(game, second, 2)
@@ -1339,7 +1339,7 @@ local function others(game: Core.Game, system: number): (number, number)
 end
 
 suite:Case("a hired pilot whose ship is docked is set to haul: what there is of a kind goes to another station a hold at a time, and they wait for more", function(t)
-  local game, second = docked("industrial.hauler")
+  local game, second = docked("industrial.mizumushi")
   local state = game.state
   local home = state.player.home
   local other = others(game, 1)
@@ -1410,7 +1410,7 @@ suite:Case("a hired pilot whose ship is docked is set to haul: what there is of 
 end)
 
 suite:Case("a pilot told to sell sells what they carry at the market where they bring it, and puts it in the hangar where there is none", function(t)
-  local game, second = docked("industrial.hauler")
+  local game, second = docked("industrial.mizumushi")
   local state = game.state
   local home = state.player.home
   local market, plain = others(game, 1)
@@ -1460,7 +1460,7 @@ suite:Case("a pilot told to sell sells what they carry at the market where they 
 end)
 
 suite:Case("a haul can be to a station systems away, and the list of where to says how far each is and whether it has a market", function(t)
-  local game, second = docked("industrial.hauler")
+  local game, second = docked("industrial.mizumushi")
   local state = game.state
   local home = state.player.home
   local wing = hired(game, second)
@@ -1511,7 +1511,7 @@ suite:Case("a haul can be to a station systems away, and the list of where to sa
 end)
 
 suite:Case("a haul can be a round of several stations: each that has something is collected at, in order, and it is all carried to the last", function(t)
-  local game, second = docked("industrial.hauler")
+  local game, second = docked("industrial.mizumushi")
   local state = game.state
   local home = state.player.home
   local wing = hired(game, second)
@@ -1620,7 +1620,7 @@ suite:Case("a haul can be a round of several stations: each that has something i
 end)
 
 suite:Case("a hired pilot is sent to buy: to the market named, what the hold takes for no more than they were told, back with it, and again until it is all brought", function(t)
-  local game, second = docked("industrial.hauler")
+  local game, second = docked("industrial.mizumushi")
   local state = game.state
   local home = state.player.home
   local other, plain = others(game, 1)
@@ -1642,8 +1642,8 @@ suite:Case("a hired pilot is sent to buy: to the market named, what the hold tak
   t.eq(refused(game, { kind = "FleetOrder", actor = 0, what = "buy", pilot = wing.id, target = belt(game, 1), type = type, quantity = 100, price = 10 }),
     "that is not a station with a market")
   -- (a hull that is bigger than the hold)
-  t.ok(Types.Info("freighter.dray").volume > Items.ShipStats(state, second.id).cargo)
-  t.eq(refused(game, { kind = "FleetOrder", actor = 0, what = "buy", pilot = wing.id, target = other, type = "freighter.dray", quantity = 1,
+  t.ok(Types.Info("freighter.yoruzake").volume > Items.ShipStats(state, second.id).cargo)
+  t.eq(refused(game, { kind = "FleetOrder", actor = 0, what = "buy", pilot = wing.id, target = other, type = "freighter.yoruzake", quantity = 1,
     price = 1e9 }), `one does not fit in {wing.name}'s hold`)
 
   -- A hold of ore and five hundred units over. Where it is to be had: the
@@ -1711,7 +1711,7 @@ suite:Case("a hired pilot is sent to buy: to the market named, what the hold tak
 end)
 
 suite:Case("a pilot sent to buy pays no more than they were told and no more than there is: they bring what that bought, and say why there is no more", function(t)
-  local game, second = docked("industrial.hauler")
+  local game, second = docked("industrial.mizumushi")
   local state = game.state
   local home = state.player.home
   local other = others(game, 1)
@@ -1795,7 +1795,7 @@ suite:Case("a pilot sent to buy pays no more than they were told and no more tha
 end)
 
 suite:Case("a pilot set to keep a thing in stock buys what the hangar is short of, waits while it is not short, and goes again when it is", function(t)
-  local game, second = docked("industrial.hauler")
+  local game, second = docked("industrial.mizumushi")
   local state = game.state
   local home = state.player.home
   local other = others(game, 1)
@@ -1886,7 +1886,7 @@ suite:Case("a pilot set to keep a thing in stock buys what the hangar is short o
 end)
 
 suite:Case("a market some jumps off is on the list without its system being put in the save; a pilot sent there goes, and the corporation pays", function(t)
-  local game, second = docked("industrial.hauler")
+  local game, second = docked("industrial.mizumushi")
   local state = game.state
   local home = state.player.home
   local wing = hired(game, second)
@@ -1946,7 +1946,7 @@ suite:Case("a mining pilot told to sell sells the ore they bring in, where the s
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
   state.wallet = 10000000
-  local second = Space.NewShip(state, "frigate.prospector", "Digger", "player", state.player.home)
+  local second = Space.NewShip(state, "frigate.courier", "Digger", "player", state.player.home)
   Items.Equip(state, second.id, "miner.small", nil)
   Items.Equip(state, second.id, "miner.small", nil)
   local wing = hired(game, second, 2)
@@ -2270,7 +2270,7 @@ end)
 suite:Case("a pilot set to guard another goes where that one goes, and fights whoever comes for them", function(t)
   local game, guard, escort = warship()
   local state = game.state
-  local digger = Space.NewShip(state, "frigate.prospector", "Digger", "player", state.player.home)
+  local digger = Space.NewShip(state, "frigate.courier", "Digger", "player", state.player.home)
   Items.Equip(state, digger.id, "miner.small", nil)
   Items.Equip(state, digger.id, "miner.small", nil)
   local miner = hired(game, digger, 2)
@@ -2340,7 +2340,7 @@ suite:Case("a miner out alone with nobody to guard them goes in when pirates com
   local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
   local state = game.state
   state.wallet = 10000000
-  local digger = Space.NewShip(state, "frigate.prospector", "Digger", "player", state.player.home)
+  local digger = Space.NewShip(state, "frigate.courier", "Digger", "player", state.player.home)
   Items.Equip(state, digger.id, "miner.small", nil)
   Items.Equip(state, digger.id, "miner.small", nil)
   local miner = hired(game, digger, 2)

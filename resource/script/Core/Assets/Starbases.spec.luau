@@ -629,7 +629,7 @@ suite:Case("a tower is taken down by the one ship moored at it, with nothing on 
   -- A hauler has the room: but not while another ship of the pilot's is moored there.
   local courier = state.player.ship
   -- (stepped into by hand: a tower with no maintenance array lets nobody change ships at it)
-  local mule = Space.NewShip(state, "industrial.hauler", "Mule", "player", station)
+  local mule = Space.NewShip(state, "industrial.mizumushi", "Mule", "player", station)
   state.player.ship = mule.id
   t.eq(refused(game, down), "another ship is moored here")
   state.ships[courier].docked = home

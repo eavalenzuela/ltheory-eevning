@@ -37,7 +37,7 @@ until GameDebug.Members() == 3
 # Each has a ship out in the system the pilot is in, at their work.
 until GameDebug.Fellow(1) ~= 0 and GameDebug.Fellow(2) ~= 0 and GameDebug.Fellow(3) ~= 0
 lua assert(select(2, GameDebug.Fellow(1)) == 'work', 'the miner should be at their belt')
-lua assert(select(5, GameDebug.Fellow(1)) == 'frigate.prospector', 'a miner flies a mining frigate')
+lua assert(string.sub(select(5, GameDebug.Fellow(1)), 1, 8) == 'frigate.', 'a miner flies a frigate')
 lua assert(select(6, GameDebug.Fellow(3)) == 'on patrol', 'the fighter should be on patrol')
 lua _G.belt = select(3, GameDebug.Fellow(1))
 lua assert(_G.belt ~= '', 'the miner is at no belt')

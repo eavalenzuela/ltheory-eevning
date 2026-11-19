@@ -194,7 +194,9 @@ Assault.PACKS = PACKS
 -- the first, two holds of a barge at the fourth), and who turns up to
 -- dispute the pocket.
 local DIGS: { { ores: { string }, volume: number, pack: { string } } } = {
-  { ores = { "ore.ferrite", "ore.silicate" }, volume = 300, pack = {} },
+  -- (200 since 2026-11-18: most of a frigate's hold, now that the
+  -- Prospector, the 480 m3 mining frigate, is gone. Mine.)
+  { ores = { "ore.ferrite", "ore.silicate" }, volume = 200, pack = {} },
   { ores = { "ore.silicate", "ore.cuprite" }, volume = 900, pack = {} },
   { ores = { "ore.titanite", "ore.cobaltite" }, volume = 2500, pack = { "scout", "scout" } },
   { ores = { "ore.cobaltite", "ore.iridite" }, volume = 7000, pack = { "raider", "scout" } },

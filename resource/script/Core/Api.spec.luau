@@ -941,4 +941,24 @@ suite:Case("a save from before the map had a height opens with the heights its g
   t.eq(Core.Hash(opened), Core.Hash(game))
 end)
 
+suite:Case("a save from before the hulls nobody's yards built were taken out has a people's of their class in their place", function(t)
+  -- (the owner, 2026-11-18: "the 'civilian' ships all should be removed, they were just stand-ins")
+  t.eq({ Ships.byId["industrial.hauler"], Ships.byId["freighter.dray"], Ships.byId["barge.quarry"], Ships.byId["frigate.prospector"] },
+    {} :: { any })
+  local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
+  local state = game.state
+  local home = state.player.home
+  local ship = Space.NewShip(state, "industrial.mizumushi", "Old", "player", home)
+  local print = Items.Add(state, "blueprint.freighter.yoruzake", 1, home, "hangar")
+  local file = Codec.Decode(Core.Save(game))
+  file.saveVersion = 90
+  file.state.ships[ship.id].type = "industrial.hauler"
+  file.state.items[print.id].type = "blueprint.freighter.dray"
+  local old, length = Codec.Encode(file)
+  local opened = Core.Load(old, length)
+  t.eq({ opened.state.ships[ship.id].type, opened.state.items[print.id].type } :: { any },
+    { "industrial.mizumushi", "blueprint.freighter.yoruzake" } :: { any })
+  t.eq(Core.Hash(opened), Core.Hash(game))
+end)
+
 return suite

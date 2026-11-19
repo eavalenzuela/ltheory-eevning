@@ -117,7 +117,7 @@ export type Options = {
 
 -- The shape of the state. Raise it, and add a migration, whenever a
 -- change would make an old save unreadable.
-Core.SAVE_VERSION = 90
+Core.SAVE_VERSION = 91
 
 -- MIGRATIONS[n] turns the state of a version n save into version n + 1.
 -- Load applies them in turn, so a save from any version listed here
@@ -161,6 +161,14 @@ local function rehulled(state: any, RENAMED: { [string]: string })
 end
 
 local MIGRATIONS: { [number]: (state: any) -> () } = {
+  -- 91: the hulls nobody's yards built are gone (Data/Ships), but the
+  -- Courier: whatever a save has of one is of a people's hull of its
+  -- class, the first people's who build one (the Prospector, a frigate,
+  -- the Courier).
+  [90] = function(state: any)
+    rehulled(state, { ["frigate.prospector"] = "frigate.courier", ["industrial.hauler"] = "industrial.mizumushi",
+      ["freighter.dray"] = "freighter.yoruzake", ["barge.quarry"] = "barge.anteater" })
+  end,
   -- 90: saved fittings (Assets/SavedFits): none yet.
   [89] = function(state: any)
     state.fits = state.fits or {}

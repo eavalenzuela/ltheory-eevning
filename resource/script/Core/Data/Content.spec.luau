@@ -710,7 +710,7 @@ suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in i
       t.ok(hull.maxVelocity >= base.maxVelocity and hull.lockRange > base.lockRange and hull.scanResolution > base.scanResolution)
       -- What carries, carries half as much again; a warship's hold is as it was.
       local carrier = base.class == "industrial" or base.class == "barge" or base.class == "freighter" or base.class == "capitalindustrial"
-        or base.id == "frigate.prospector"
+        or base.id == "frigate.courier"
       t.near(hull.cargo / base.cargo, if carrier then 1.5 else 1, 0.03, hull.id)
       t.eq(hull.basePrice, base.basePrice * 8)
       -- More skill than the plain one, and never less than four of it.
@@ -766,7 +766,7 @@ suite:Case("a ship has no \"II\": a tech 2 ship is a hull of its own, named in i
   -- Nimia's one (the Hano), the Vail's two (the Aberration and the Interstition) and the Drowned's two (the
   -- Rebirth and the Resurrection).
   t.eq(improved, 22)
-  t.ok(Ships.Improved("frigate.courier") == nil and Ships.Improved("industrial.hauler") == nil and Ships.Improved("capsule") == nil)
+  t.ok(Ships.Improved("frigate.courier") == nil and Ships.Improved("industrial.porter") == nil and Ships.Improved("capsule") == nil)
 end)
 
 suite:Case("what each tech 2 hull is for is the owner's word: to jump, to go unseen, to explore, or nothing beside being tech 2", function(t)
@@ -883,8 +883,8 @@ suite:Case("every hull for sale can be built from ore, and has skills a pilot ca
 end)
 
 suite:Case("a freighter is a hold and nothing else: ten times a hauler's, nothing to fight with, slow, and a skill of its own", function(t)
-  local dray, mule, bastion = Ships.byId["freighter.dray"], Ships.byId["industrial.hauler"], Ships.byId["battleship.owari"]
-  t.eq({ dray.class, dray.lineage, dray.restricted, dray.tech } :: { any }, { "freighter", "", nil, nil } :: { any })
+  local dray, mule, bastion = Ships.byId["freighter.yoruzake"], Ships.byId["industrial.mizumushi"], Ships.byId["battleship.owari"]
+  t.eq({ dray.class, dray.lineage, dray.restricted, dray.tech } :: { any }, { "freighter", "vessari", nil, nil } :: { any })
   t.ok(dray.cargo >= 10 * mule.cargo, `a freighter holds {dray.cargo} m3 and a hauler {mule.cargo}`)
   -- Nothing to fight with, nowhere to put it, and no rigs: a few low slots are all there is to fit.
   t.eq({ dray.highs, dray.mids, dray.turrets, dray.launchers, dray.rigs, dray.drones, dray.bay } :: { any }, { 0, 0, 0, 0, 0, 0, 0 } :: { any })
@@ -1368,12 +1368,11 @@ suite:Case("fittings come in three sizes, each for a larger ship than the last",
   t.ok(assert(Modules.byId["armor.plate.large"]).passive[1].value > 7 * 450 - 1)
   t.ok(assert(assert(Modules.byId["shield.booster.large"]).repair).amount > 7 * 26)
   -- the barge carries three strip miners, each worth several mining lasers
-  local barge, strip = Ships.byId["barge.quarry"], Modules.byId["miner.strip"]
+  local barge, strip = Ships.byId["barge.anteater"], Modules.byId["miner.strip"]
   t.ok(3 * strip.cpu <= barge.cpu and 3 * strip.powergrid <= barge.powergrid and barge.turrets == 3)
   local small = assert(Modules.byId["miner.small"].miner)
   local big = assert(strip.miner)
   t.ok(big.volume / big.duration > 2 * small.volume / small.duration)
-  t.ok(strip.powergrid > Ships.byId["frigate.prospector"].powergrid, "a frigate cannot power one")
 end)
 
 suite:Case("every skill is in one of the owner's groups, and the groups are theirs", function(t)

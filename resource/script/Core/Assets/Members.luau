@@ -151,14 +151,10 @@ local function hullOf(faction: string, class: string): string?
   return plain
 end
 
--- The hull of a class somebody of a trade flies. (A miner's frigate is
--- the one that is built for it, whoever they are: nobody cuts rock in a
--- warship.)
-local MINING = "frigate.prospector"
-local function hullFor(trade: string, faction: string, class: string): string?
-  if trade == "miner" and class == "frigate" and Ships.byId[MINING] then
-    return MINING
-  end
+-- The hull of a class somebody of a trade flies: their people's. (A
+-- miner's frigate was the Prospector, anybody's, until the hulls nobody's
+-- yards built were taken out of the game, 2026-11-18: Data/Ships.)
+local function hullFor(_trade: string, faction: string, class: string): string?
   return hullOf(faction, class)
 end
 Members.HullFor = hullFor

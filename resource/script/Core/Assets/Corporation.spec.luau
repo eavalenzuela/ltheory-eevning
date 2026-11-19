@@ -396,7 +396,7 @@ suite:Case("a hired pilot works out of the corporation's hangar and leaves the p
   local state = game.state
   local home = state.player.home
   -- A hauler, with a hired pilot in it.
-  local mule = Space.NewShip(state, "industrial.hauler", "Mule", "player", home)
+  local mule = Space.NewShip(state, "industrial.mizumushi", "Mule", "player", home)
   state.skills.leadership = 1
   t.ok((submit(game, { kind = "HirePilot", actor = 0, what = Core.Query.Candidates(game, home)[1].key })))
   local wing = state.fleet[state.fleetIds[#state.fleetIds]]
@@ -473,10 +473,10 @@ suite:Case("fifty game-hours of mining and hauling with a tower run beside, and 
   local corporation = state.corporation
   state.skills.leadership = 2
   t.ok((submit(game, { kind = "CorporationDeposit", actor = 0, quantity = 5000000 })))
-  local digger = Space.NewShip(state, "frigate.prospector", "Digger", "player", home)
+  local digger = Space.NewShip(state, "frigate.courier", "Digger", "player", home)
   Items.Equip(state, digger.id, "miner.small", nil)
   Items.Equip(state, digger.id, "miner.small", nil)
-  local mule = Space.NewShip(state, "industrial.hauler", "Mule", "player", home)
+  local mule = Space.NewShip(state, "industrial.mizumushi", "Mule", "player", home)
   local function hire(ship: State.Ship): State.Wingman
     assert(submit(game, { kind = "HirePilot", actor = 0, what = Core.Query.Candidates(game, home)[1].key }))
     local wing = state.fleet[state.fleetIds[#state.fleetIds]]

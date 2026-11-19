@@ -237,30 +237,6 @@ local types: { ShipType } = {
     capacitor = 390, capacitorRecharge = 162,
     scanResolution = 610, lockRange = 37000, maxTargets = 4, cargo = 190,
   },
-  {
-    id = "industrial.hauler", name = "Mule Hauler", class = "industrial", lineage = "", basePrice = 600000, volume = 20000,
-    mass = 12800000, inertia = 0.9, maxVelocity = 125, warpSpeed = 3.5, radius = 180,
-    shield = 715, armor = 795, hull = 1000, shieldRecharge = 625,
-    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 195,
-    cpu = 200, powergrid = 60, highs = 2, mids = 3, lows = 3, turrets = 1, launchers = 0,
-    capacitor = 575, capacitorRecharge = 345,
-    scanResolution = 85, lockRange = 45000, maxTargets = 2, cargo = 2250,
-  },
-  -- A freighter: the biggest hold there is, ten times a hauler's and
-  -- more, and nothing else. No guns and nowhere to put one, no rigs, a
-  -- few low slots, a great deal of hull, slow to turn, slow to warp and
-  -- slow in it. Anybody's, as the Mule is. (The first of its class:
-  -- the factions' own are not drawn yet.)
-  {
-    id = "freighter.dray", name = "Dray Freighter", class = "freighter", lineage = "", basePrice = 1200000000, volume = 1000000,
-    mass = 920000000, inertia = 0.0625, maxVelocity = 65, warpSpeed = 1.5, radius = 1000,
-    shield = 28000, armor = 28000, hull = 86500, shieldRecharge = 6000,
-    shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 10500,
-    cpu = 90, powergrid = 60, highs = 0, mids = 0, lows = 3, turrets = 0, launchers = 0,
-    capacitor = 3500, capacitorRecharge = 215,
-    scanResolution = 60, lockRange = 40000, maxTargets = 2, cargo = 435000,
-    rigs = 0,
-  },
   -- What a pilot is left in when the ship is gone.
   {
     id = "capsule", name = "Capsule", class = "capsule", lineage = "", basePrice = 0, volume = 500,
@@ -379,8 +355,12 @@ local CLASS: { [string]: Standard } = {
     scan = 62, lock = 200000, targets = 14, cargo = 1750, skill = "supercarriers", level = 1, exact = true },
 }
 
--- A faction's own mining barge and freighter are the Quarry and the
--- Dray (below) as that faction builds them.
+-- (The hulls nobody's yards built, the Mule hauler, the Dray freighter,
+-- the Prospector and the Quarry barge, were stand-ins until the
+-- factions' own were drawn, and are gone since 2026-11-18, the owner's:
+-- "the 'civilian' ships all should be removed, they were just
+-- stand-ins". The Courier stays, as what a pilot is given, until there
+-- is something to give instead.)
 CLASS.barge = { price = 6000000, volume = 15000, mass = 17500000, inertia = 0.64, velocity = 125, warp = 3.5, radius = 160,
   shield = 3500, armor = 3500, hull = 4000, recharge = 1500, signature = 200, cpu = 320, powergrid = 160,
   highs = 3, mids = 2, lows = 2, hardpoints = 3, capacitor = 350, capacitorRecharge = 190,
@@ -727,28 +707,6 @@ for level, tender in {
   })
 end
 
--- Hulls no faction owns: anyone builds them.
-table.insert(types, {
-  id = "frigate.prospector", name = "Prospector", class = "frigate", lineage = "", basePrice = 180000, volume = 2500,
-  mass = 1300000, inertia = 3.4, maxVelocity = 300, warpSpeed = 5, radius = 44,
-  shield = 380, armor = 320, hull = 420, shieldRecharge = 625,
-  shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 42,
-  cpu = 160, powergrid = 30, highs = 2, mids = 2, lows = 2, turrets = 2, launchers = 0,
-  capacitor = 380, capacitorRecharge = 180,
-  scanResolution = 500, lockRange = 20000, maxTargets = 3, cargo = 480,
-  requires = { { skill = "mining", level = 2 } },
-})
-table.insert(types, {
-  id = "barge.quarry", name = "Quarry Barge", class = "barge", lineage = "", basePrice = 6000000, volume = 15000,
-  mass = 9000000, inertia = 0.9, maxVelocity = 110, warpSpeed = 3.5, radius = 160,
-  shield = 1800, armor = 1500, hull = 2600, shieldRecharge = 1100,
-  shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 160,
-  cpu = 320, powergrid = 160, highs = 3, mids = 2, lows = 2, turrets = 3, launchers = 0,
-  capacitor = 1400, capacitorRecharge = 420,
-  scanResolution = 200, lockRange = 25000, maxTargets = 3, cargo = 3500,
-  requires = { { skill = "mining", level = 4 }, { skill = "industrials", level = 1 } },
-})
-
 -- What a drone flies as (Data/Drones): nobody boards one, and nobody
 -- sells the hull apart from the drone.
 table.insert(types, {
@@ -855,7 +813,7 @@ end
 
 -- The tech 2 make of a hull: 'id' and 'name' are its own.
 local function rebuiltHull(base: ShipType, id: string, name: string): ShipType
-  local mining = base.id == "frigate.prospector" or base.class == "barge"
+  local mining = base.class == "barge"
   local hauler = WORKING[base.class] or mining
   local armoured = base.armor >= base.shield
   return {

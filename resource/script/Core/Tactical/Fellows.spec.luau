@@ -58,11 +58,12 @@ suite:Case("a member who mines is at a belt where the pilot is, cutting rock in 
   local game, home = begun()
   local state = game.state
   local miner = member(game, "miner", "frigate", home)
-  t.eq(miner.hull, "frigate.prospector")
+  -- (their people's own frigate: there are no hulls nobody's yards build, since 2026-11-18)
+  t.eq({ Ships.byId[miner.hull].class, Ships.byId[miner.hull].lineage } :: { any }, { "frigate", miner.people } :: { any })
   Core.Step(game)
   local ship = state.ships[miner.ship]
   t.ok(ship ~= nil, "the miner has no ship where the pilot is")
-  t.eq({ ship.name, ship.owner, ship.type, miner.task, kindOf(state, miner.goal) }, { "Test miner", "member", "frigate.prospector", "work", "belt" })
+  t.eq({ ship.name, ship.owner, ship.type, miner.task, kindOf(state, miner.goal) }, { "Test miner", "member", miner.hull, "work", "belt" })
   t.eq(state.balls[ship.id].grid, miner.goal)
   t.eq(Members.Of(state, ship.id), miner)
   -- It cuts rock: there is ore in the hold before long.

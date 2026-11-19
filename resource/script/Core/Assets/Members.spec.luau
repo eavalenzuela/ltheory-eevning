@@ -59,7 +59,7 @@ end
 -- A member of a trade, joined by hand: in the hull a member of that trade comes in.
 local function member(game: Core.Game, trade: string, bears: number?): State.Member
   local state = game.state
-  local hull = { miner = "frigate.courier", fighter = "frigate.akashi", hauler = "industrial.hauler", scout = "frigate.courier" }
+  local hull = { miner = "frigate.courier", fighter = "frigate.akashi", hauler = "industrial.mizumushi", scout = "frigate.courier" }
   local one: State.Member = { id = State.NewId(state), name = "Test " .. trade, trade = trade, people = "vessari", hull = hull[trade],
     bears = bears or 0.3, wealth = 0, earned = 0, paid = 0, joined = state.tick, system = 1, doing = "idle", call = 0, lean = 0, day = 0,
     ship = 0, task = "", goal = 0, since = 0, wait = 0, back = 0, refit = 0, lost = 0 }
@@ -114,7 +114,7 @@ suite:Case("pilots join a corporation both ways: some apply, and one open to it 
     member(game, "miner")
   end
   table.insert(state.membership.applicants, { key = "apply:late", name = "Ena Finch", trade = "hauler", people = "vessari",
-    hull = "industrial.hauler", bears = 0.2, until_ = state.tick + Members.DAY })
+    hull = "industrial.mizumushi", bears = 0.2, until_ = state.tick + Members.DAY })
   t.eq(refused(game, { kind = "AcceptMember", actor = 0, what = "apply:late" }), `the corporation has room for {Members.ROOM} members`)
   local out = Members.List(state)[1]
   order(game, { kind = "ExpelMember", actor = 0, target = out.id })

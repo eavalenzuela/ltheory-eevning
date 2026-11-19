@@ -103,7 +103,8 @@ suite:Case("a game with no traffic has none, and a secure system fills up to wha
       t.ok(hull.class == "frigate" or hull.class == "destroyer")
       t.ok(#Items.Fitted(state, id) >= 3, "a patrol ship should be armed")
     elseif record.kind == "miner" or record.kind == "home" then
-      t.eq({ hull.class, ship.owner } :: { any }, { "frigate", "civilian" } :: { any })
+      -- (in a barge of the people whose space it is: there are no hulls nobody's yards build, since 2026-11-18)
+      t.eq({ hull.class, ship.owner } :: { any }, { "barge", "civilian" } :: { any })
     else
       -- (a hauler; or, of a trader's, now and then a freighter)
       t.ok(hull.class == "industrial" or (hull.class == "freighter" and ship.owner == "civilian"), ship.type)
@@ -177,7 +178,7 @@ suite:Case("where order is kept a trader is now and then a freighter, with a gre
             -- and in a galaxy where nothing has gone anywhere yet that is
             -- nothing: Strategic/Commerce.spec has haulers with a hold of it)
             t.eq(aboard, 0)
-            t.ok(Ships.byId[ship.type].cargo >= 5 * Ships.byId["industrial.hauler"].cargo, "a freighter should have many times a hauler's room")
+            t.ok(Ships.byId[ship.type].cargo >= 5 * Ships.byId["industrial.mizumushi"].cargo, "a freighter should have many times a hauler's room")
           elseif Ships.byId[ship.type].class == "industrial" then
             traders += 1
           end
@@ -199,7 +200,7 @@ suite:Case("where order is kept a trader is now and then a freighter, with a gre
     steps(wild, Traffic.INTERVAL)
     for _, id in wild.state.trafficIds do
       local ship = wild.state.ships[id]
-      t.ok(ship == nil or ship.type ~= "freighter.dray", "a freighter outside secure space")
+      t.ok(ship == nil or ship.type ~= "freighter.yoruzake", "a freighter outside secure space")
     end
   end
 end)
@@ -328,7 +329,7 @@ suite:Case("where order is kept there are miners at the belts, who cut rock and 
       seen[id] = true
       local ball = state.balls[id]
       local record = state.traffic[id]
-      t.eq({ state.ships[id].type, state.ships[id].owner, #Items.Fitted(state, id) } :: { any }, { "frigate.prospector", "civilian", 2 } :: { any })
+      t.eq({ Ships.byId[state.ships[id].type].class, state.ships[id].owner, #Items.Fitted(state, id) } :: { any }, { "barge", "civilian", 2 } :: { any })
       t.ok(ball == nil or ball.grid == 0 or ball.grid == record.goal or ball.intent ~= nil, "a miner is somewhere other than its belt")
       mined = math.max(mined, Items.CargoUsed(state, id))
     end

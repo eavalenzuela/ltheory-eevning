@@ -52,7 +52,7 @@ suite:Case("docked, what is in reach is the ship's holds, the hangar, and the ho
   local station = state.player.home
   -- (the ship a new pilot has carries drones: its bay is a place under its hold)
   t.eq(keys(game), { "cargo:0", "dronebay:1", "hangar:0" })
-  local mule = Space.NewShip(state, "industrial.hauler", "Mule", "player", station)
+  local mule = Space.NewShip(state, "industrial.mizumushi", "Mule", "player", station)
   t.eq(keys(game), { "cargo:0", "dronebay:1", "hangar:0", "cargo:1", "dronebay:2" })
   local places = Core.Query.Places(game)
   t.eq({ places[4].holder, places[4].place, places[4].name } :: { any }, { mule.id, "cargo", "Mule (hold)" } :: { any })
@@ -66,8 +66,8 @@ suite:Case("docked, what is in reach is the ship's holds, the hangar, and the ho
   order(game, { kind = "MoveItems", actor = 0, item = aboard.id, to = "cargo", quantity = 10 })
   t.eq({ count(state, mule.id, "cargo", "ore.ferrite"), count(state, state.player.ship, "cargo", "ore.ferrite") }, { 50, 10 })
   -- (not into a ship that is somewhere else, or is not the pilot's)
-  local far = Space.NewShip(state, "industrial.hauler", "Far", "player", station + 1)
-  local theirs = Space.NewShip(state, "industrial.hauler", "Theirs", "civilian", station)
+  local far = Space.NewShip(state, "industrial.mizumushi", "Far", "player", station + 1)
+  local theirs = Space.NewShip(state, "industrial.mizumushi", "Theirs", "civilian", station)
   for _, other in { far, theirs } do
     t.eq(refused(game, { kind = "MoveItems", actor = 0, item = aboard.id, to = "cargo", target = other.id }),
       "no ship of yours lies here by that name")

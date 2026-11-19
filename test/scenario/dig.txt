@@ -25,18 +25,18 @@ until GameDebug.Press('Accept:mining')
 until select(2, GameDebug.Missions()) == 1
 frames 3
 lua assert(GameDebug.Offer('mining') == 0, 'a station gives one mining contract at a time')
-lua assert(GameDebug.Contract() ~= '' and select(2, GameDebug.Contract()) >= 2000, 'the contract should want its ore')
+lua assert(GameDebug.Contract() ~= '' and select(2, GameDebug.Contract()) >= 1000, 'the contract should want its ore')
 lua assert(string.sub(select(3, GameDebug.Contract()), 1, 10) == 'Ore Pocket', 'the contract should have its pocket')
 lua assert(not GameDebug.CanPress('Complete:1'), 'a contract is not filled by taking it')
 
 # A mining frigate, with two lasers, and the skill to fly it.
 lua GameDebug.Train('all', 3)
-lua assert(GameDebug.Spare('frigate.prospector', 'miner.small'), 'no mining frigate')
+lua assert(GameDebug.Spare('frigate.courier', 'miner.small'), 'no mining frigate')
 until GameDebug.Press('Ships')
 until GameDebug.Tab() == 'Ships'
 frames 3
 until GameDebug.Press('Board:2')
-until GameDebug.Hull() == 'frigate.prospector'
+until GameDebug.Hull() == 'frigate.courier'
 
 until GameDebug.Press('UNDOCK')
 until GameDebug.InSpace()

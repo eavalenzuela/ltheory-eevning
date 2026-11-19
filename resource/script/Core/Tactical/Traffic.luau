@@ -137,13 +137,9 @@ local FLEET_REACH = Jumping.RANGE * (1 + 5 * Jumping.FURTHER)
 -- And how many gates off its people's nearest station is looked for.
 local REFUGE_JUMPS = 6
 local DAY = math.ceil(86400 / Constants.TICK)
--- What a miner flies, and cuts with.
-local MINER, LASER = "frigate.prospector", "miner.small"
--- What anybody flies.
-local CIVILIAN = "industrial.hauler"
--- And the freighter a trader flies in secure space, and how often one
--- who comes there flies it.
-local FREIGHTER = "freighter.dray"
+-- What a miner cuts with (and flies, its people's barge: below).
+local LASER = "miner.small"
+-- How often a trader who comes to secure space flies a freighter.
 Traffic.FREIGHTERS = 0.3
 local GUNS: { [string]: string } = { projectile = "autocannon", laser = "laser.pulse", hybrid = "blaster" }
 -- What goes on a hull of each size: its guns' and fittings' size, and
@@ -171,6 +167,19 @@ local function hullOf(faction: string, class: string): string?
     end
   end
   return nil
+end
+
+-- The plain hull of a class of the first people who build one, for a
+-- people who build none (since 2026-11-18 there are no hulls nobody's
+-- yards build: Data/Ships).
+local function anybodys(class: string): string
+  for _, hull in Ships.list do
+    local people = Factions.byId[hull.lineage]
+    if people and people.kind == "human" and hull.class == class and hull.tech ~= 2 and hull.role == nil and not hull.restricted then
+      return hull.id
+    end
+  end
+  error(`no people builds a hull of class {class}`)
 end
 
 -- A hull as a ship that fights, fitted as a people's patrols are: the
@@ -311,8 +320,8 @@ local function hauler(state: State.State, system: number, rng: Rng.Rng, events: 
   -- about is one of the plain hulls nobody's yards build. Those are left
   -- for a people who build no such hull.)
   local yard = if keeper ~= "" then keeper else node.nearest
-  local plain = if great then hullOf(yard, "freighter") or hullOf(yard, "industrial") or FREIGHTER
-    else hullOf(yard, "industrial") or CIVILIAN
+  local plain = if great then hullOf(yard, "freighter") or hullOf(yard, "industrial") or anybodys("freighter")
+    else hullOf(yard, "industrial") or anybodys("industrial")
   local type = own or plain
   local name = if own then `{Factions.byId[keeper].name} Hauler` elseif great then "Freighter" else "Trader"
   local owner = if own then keeper else "civilian"
@@ -415,7 +424,11 @@ local function miner(state: State.State, system: number, rng: Rng.Rng, events: {
     return
   end
   local belt = belts[Rng.Int(rng, #belts) + 1]
-  local ship = Space.NewShip(state, MINER, "Miner", "civilian", 0)
+  -- (in the barge of the people whose space it is, or the people nearest: anybody's, if they build none)
+  local node = state.galaxy.systems[system]
+  local keeper = Galaxy.Keeper(node)
+  local yard = if keeper ~= "" then keeper else node.nearest
+  local ship = Space.NewShip(state, hullOf(yard, "barge") or anybodys("barge"), "Miner", "civilian", 0)
   Items.Equip(state, ship.id, LASER, nil)
   Items.Equip(state, ship.id, LASER, nil)
   local x, y, z = near(rng, belt, 6000, 16000)
