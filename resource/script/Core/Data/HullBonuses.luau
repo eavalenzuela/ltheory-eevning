@@ -69,6 +69,24 @@ end
 local function armorHP(skill: string): HullBonus
   return level(skill, 0.05, "ship", "armor", "5% more armour")
 end
+local function projectile(skill: string, per: number, attribute: string, what: string): HullBonus
+  return level(skill, per, "weapons", attribute, what, "projectile")
+end
+local function shieldBoost(skill: string): HullBonus
+  return level(skill, 0.075, "repair", "shield", "shield boosters mend 7.5% more")
+end
+local function shieldResists(skill: string): HullBonus
+  return level(skill, -0.04, "ship", "shieldResonance", "the shield resists 4% more of every kind of damage")
+end
+local function shieldHP(skill: string): HullBonus
+  return level(skill, 0.05, "ship", "shield", "5% more shield")
+end
+local function cargo(skill: string): HullBonus
+  return level(skill, 0.05, "ship", "cargo", "5% more hold")
+end
+local function speed(skill: string): HullBonus
+  return level(skill, 0.05, "ship", "maxVelocity", "5% faster")
+end
 -- (the Vessari's frigates: an afterburner the faster for the pilot's Afterburners)
 local AFTERBURNER = level("propulsion", 0.05, "afterburner", "speed", "an afterburner's speed bonus 5% greater")
 
@@ -102,6 +120,38 @@ HullBonuses.byHull = {
   ["ultracapital.daiichi"] = { level("ultracapitals", 0.05, "drones", "damage", "fighters and bombers do 5% more damage"),
     armorHP("ultracapitals") },
   ["freighter.yoruzake"] = { level("freighters", 0.05, "ship", "cargo", "5% more hold"), armorHP("freighters") },
+
+  -- The Talmar (2026-11-18, the owner: "looks good for now"): projectiles
+  -- and shields, fast; active-shield brawlers and falloff kiters.
+  ["frigate.carvarro"] = { projectile("frigates", 0.05, "damageMultiplier", "5% more projectile damage"), shieldBoost("frigates") },
+  ["frigate.creavo"] = { projectile("frigates", -0.05, "duration", "projectile turrets fire 5% faster"),
+    projectile("frigates", 0.10, "falloff", "projectile turrets keep their aim 10% farther past their best range") },
+  ["frigate.nephelo"] = { projectile("frigates", -0.05, "duration", "projectile turrets fire 5% faster"),
+    projectile("frigates", 0.10, "falloff", "projectile turrets keep their aim 10% farther past their best range") },
+  ["destroyer.meseolo"] = { projectile("destroyers", -0.05, "duration", "projectile turrets fire 5% faster"),
+    projectile("destroyers", 0.10, "optimal", "projectile turrets reach 10% farther"),
+    role(0.5, "weapons", "falloff", "projectile turrets keep their aim half as far again past their best range", "projectile") },
+  ["destroyer.osso"] = { projectile("destroyers", -0.05, "duration", "projectile turrets fire 5% faster"),
+    projectile("destroyers", 0.10, "optimal", "projectile turrets reach 10% farther"),
+    role(0.5, "weapons", "falloff", "projectile turrets keep their aim half as far again past their best range", "projectile") },
+  ["cruiser.paestro"] = { projectile("cruisers", 0.05, "damageMultiplier", "5% more projectile damage"), shieldBoost("cruisers") },
+  ["cruiser.stenanno"] = { projectile("cruisers", -0.05, "duration", "projectile turrets fire 5% faster"), shieldResists("cruisers") },
+  ["battlecruiser.sopholto"] = { projectile("battlecruisers", 0.05, "damageMultiplier", "5% more projectile damage"),
+    shieldResists("battlecruisers") },
+  ["battleship.losiano"] = { projectile("battleships", 0.05, "damageMultiplier", "5% more projectile damage"), shieldHP("battleships") },
+  ["battleship.phaeto"] = { projectile("battleships", -0.05, "duration", "projectile turrets fire 5% faster"), shieldBoost("battleships") },
+  ["industrial.armadillo"] = { cargo("industrials"), shieldHP("industrials") },
+  ["industrial.sunfish"] = { cargo("industrials"), speed("industrials") },
+  ["industrial.tarantula"] = { cargo("industrials"), speed("industrials") },
+  ["carrier.scoppo"] = { level("carriers", 0.05, "drones", "damage", "fighters do 5% more damage"), shieldResists("carriers") },
+  ["dreadnought.concorso"] = { projectile("dreadnoughts", 0.05, "damageMultiplier", "5% more projectile damage"), shieldHP("dreadnoughts") },
+  ["capitalindustrial.jaguar"] = { level("capital.industrials", 0.05, "ore", "hold", "5% more ore hold"), shieldHP("capital.industrials") },
+  ["capitalindustrial.rapa"] = { level("capital.industrials", 0.05, "ore", "hold", "5% more ore hold"), shieldHP("capital.industrials") },
+  ["supercarrier.nullo"] = { level("supercarriers", 0.05, "drones", "damage", "fighters and bombers do 5% more damage"),
+    shieldHP("supercarriers") },
+  ["barge.anteater"] = { level("mining", 0.05, "mining", "yield", "5% more from mining"), shieldHP("mining") },
+  ["freighter.rhino"] = { cargo("freighters"), speed("freighters") },
+  ["freighter.sugarglider"] = { cargo("freighters"), speed("freighters") },
 } :: { [string]: { HullBonus } }
 
 -- The classes that no electronic warfare touches (the owner, 2026-11-18:

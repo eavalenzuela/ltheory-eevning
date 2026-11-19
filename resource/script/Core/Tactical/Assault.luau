@@ -170,8 +170,10 @@ Assault.GATE_RADIUS = 260
 -- (A pirate's ship is as good as a pilot's of its class, so a level is
 -- not a pack of the class it is for: the first is scouts, which a
 -- frigate can take two and three at a time; the second raiders, for a
--- destroyer; the third the pirates' destroyers, for a cruiser, with a
--- frigate at most beside one; the fourth their cruisers, for a
+-- destroyer; the third the pirates' destroyers, one to a wave, for a
+-- cruiser, with a scout or two beside one, or a raider and a scout (two
+-- destroyers at once are more than a cruiser of the level comes
+-- through); the fourth their cruisers, for a
 -- battleship. The owner, 2026-11-18: a mission's pirates are "weaker
 -- than the ship class assigned to the mission, by level", and two
 -- frigates are what a cruiser's guns cannot hit, since they were set
@@ -181,7 +183,7 @@ Assault.GATE_RADIUS = 260
 local PACKS: { { { string } } } = {
   { { "scout" }, { "scout", "scout" }, { "scout", "scout", "scout" } },
   { { "raider" }, { "raider", "scout" }, { "raider", "scout", "scout" }, { "scout", "scout", "scout" } },
-  { { "jackal" }, { "jackal", "scout" }, { "jackal", "jackal" }, { "jackal", "raider" } },
+  { { "jackal" }, { "jackal", "scout" }, { "jackal", "scout", "scout" }, { "raider", "scout" } },
   { { "marauder" }, { "marauder", "jackal" }, { "jackal", "jackal" }, { "marauder", "raider" } },
 }
 Assault.PACKS = PACKS
