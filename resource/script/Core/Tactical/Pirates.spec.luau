@@ -93,8 +93,9 @@ suite:Case("every kind of pirate flies an Unbound hull with a fit the hull takes
     for _, entry in fit do
       table.insert(types, entry[1])
       local module = Modules.byId[entry[1]]
-      -- (point defence, from the third level's pirates up, takes a turret hardpoint as a gun does)
-      if module.pds then
+      -- (point defence, from the third level's pirates up, and the Drowned's Fighter Pylon take a turret hardpoint
+      -- as a gun does)
+      if module.pds or module.pylon then
         weapons += 1
       end
       if module.weapon then
@@ -127,10 +128,14 @@ suite:Case("what the Drowned send is no pirate: their own hulls with railguns on
     local hull = Ships.byId[kind.hull]
     t.eq({ hull.lineage, hull.cloak, kind.bounty, kind.tags, kind.name } :: { any }, { "drowned", true, 0, 0, hull.name } :: { any })
     local ball = Pirates.Spawn(state, kind, 1, 1e9 + sent * 1e6, 0, 0, 0)
-    -- Railguns on every hardpoint, loaded.
+    -- Railguns on every hardpoint, loaded; from a cruiser up, a Fighter Pylon with its Trident on one of them (the
+    -- owner's, 2026-11-19).
     local guns = 0
     for _, item in Items.Fitted(state, ball.id) do
-      if string.sub(item.type, 1, 8) == "railgun." then
+      if item.type == "pylon.fighter" then
+        guns += 1
+        t.eq(item.charge, "drone.trident", kind.name)
+      elseif string.sub(item.type, 1, 8) == "railgun." then
         guns += 1
         t.ok(item.charge ~= "", `{kind.name}'s railgun is not loaded`)
       end

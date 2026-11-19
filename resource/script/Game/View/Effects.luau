@@ -60,6 +60,9 @@ type Effect = {
   -- once it is shot down (Effects.Down), how far through its flight.
   missile: number?,
   downed: number?,
+  -- A plasma torpedo (the Nimia's): the colour of its ball. Nil for every
+  -- other.
+  ball: vector?,
 }
 
 -- A volley missile's path: the points it goes by, each (how far along,
@@ -291,6 +294,13 @@ local ARC_SPREAD = 2.5
 -- a plume to see however far it goes)
 local ARC_PLUME = 0.012
 
+-- A plasma torpedo's ball (Effects.Fire's 'volley', its path "plasma"):
+-- its colour for each kind, Plasmostatic and Plasmobaric, and how big it
+-- is (m, for a small one).
+local PLASMA_STATIC = vector.create(0.62, 0.82, 1.0)
+local PLASMA_BARIC = vector.create(1.0, 0.45, 0.15)
+local PLASMA_SIZE = 40
+
 -- A number from 0 to 1 that is always the same for the same 'n'.
 local function noise(n: number): number
   local x = math.sin(n * 12.9898) * 43758.5453
@@ -354,7 +364,7 @@ end
 -- find it (Effects.Down, Effects.Tracers).
 function Effects.Fire(fx: Fx, type: string, from: number, to: number, fromRadius: number, toRadius: number,
   outcome: string, flight: number, struck: string, now: number, origin: number?,
-  volley: { n: number, path: string, delay: number, up: vector? }?, missile: number?)
+  volley: { n: number, path: string, delay: number, up: vector?, charge: string? }?, missile: number?)
   local look, size = Effects.LookOf(type)
   if look == nil then
     return
@@ -373,7 +383,10 @@ function Effects.Fire(fx: Fx, type: string, from: number, to: number, fromRadius
       born = now + (shot - 1) * (look.gap or 0), life = look.life or 0, flight = flight, size = size,
       struck = if outcome == "miss" then "" else struck, landed = false, pieces = {}, missile = missile,
     }
-    if volley then
+    if volley and volley.path == "plasma" then
+      -- (a plasma torpedo: a ball of its kind's colour, flying straight in)
+      effect.ball = if volley.charge and string.find(volley.charge, "static", 1, true) then PLASMA_STATIC else PLASMA_BARIC
+    elseif volley then
       local n = volley.n
       local seed = fx.seed * 7.31 + n * 1.17
       local times: { number }, points: { vector } = {}, {}
@@ -443,6 +456,13 @@ function Effects.Fire(fx: Fx, type: string, from: number, to: number, fromRadius
       local trail = take(fx, "fx_bolt.jsl", true)
       ShaderInstance_SetFloat(trail.shader, "fxBlunt", 0.3)
       table.insert(effect.pieces, trail)
+      -- (a plasma torpedo's ball)
+      if effect.ball then
+        local ball = take(fx, "fx_flash.jsl", false, "plasma")
+        ShaderInstance_SetFloat(ball.shader, "fxRing", 0)
+        ShaderInstance_SetFloat(ball.shader, "fxSeed", fx.seed * 1.7)
+        table.insert(effect.pieces, ball)
+      end
       -- (a volley's missile: a piece of contrail for every leg of its path)
       for _ = 1, if effect.path then #effect.path.times - 1 else 0 do
         local smoke = take(fx, "fx_bolt.jsl", true)
@@ -778,8 +798,19 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
         else
           local head = start + (finish - start) * t
           local length = math.min((look.length or 30) * SIZE[effect.size], span * t)
-          lay(piece, head - d * length, head, width)
-          paint(piece, color, 1, age)
+          if effect.ball then
+            -- (a plasma torpedo: a glowing ball, a short shimmering tail behind it)
+            local ball = effect.pieces[2]
+            local size = PLASMA_SIZE * SIZE[effect.size] * (1 + 0.12 * math.sin(age * 23))
+            ball.object:SetPos(head)
+            ball.object:SetScale(vector.create(size, 1, size))
+            paint(ball, effect.ball, 1, 0.12)
+            lay(piece, head - d * length * 0.6, head, width * 1.4)
+            paint(piece, effect.ball, 0.7, age)
+          else
+            lay(piece, head - d * length, head, width)
+            paint(piece, color, 1, age)
+          end
           if effect.missile and t >= 0 then
             heads[effect.missile] = head
           end

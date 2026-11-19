@@ -1855,7 +1855,9 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         Effects.Fire(fx, if item then item.type elseif event.look then event.look else FALLBACK[event.family] or "autocannon", from.id, to.id, from.radius, to.radius,
           event.outcome, event.flight or 0, struck(to), scene.time, if event.leap == nil and scene.screen[-event.item] then -event.item else nil,
           if event.volley then { n = event.volley, path = event.path or "zig", delay = event.delay or 0,
-            up = if scene.proxies[from.id] then scene.proxies[from.id]:GetUp() else nil } else nil, event.missile)
+            up = if scene.proxies[from.id] then scene.proxies[from.id]:GetUp() else nil }
+          elseif event.path == "plasma" then { n = 1, path = "plasma", delay = 0, charge = if item then item.charge else nil }
+          else nil, event.missile)
       end
     elseif event.kind == "PointDefence" then
       -- (a point defence turret's stream at a missile, or at a drone: Core/Tactical/PointDefence)

@@ -510,7 +510,8 @@ export type Job = {
 -- what it has been pointed at (0: nothing), whether it has been called
 -- back, and whether it was near enough its owner, last tick, to be
 -- taken aboard if the owner left.
-export type Drone = { ship: number, owner: number, type: string, target: number, returning: boolean, near: boolean }
+-- (A Trident's 'pylon' is the Fighter Pylon item it goes back onto: Tactical/Drones.)
+export type Drone = { ship: number, owner: number, type: string, target: number, returning: boolean, near: boolean, pylon: number? }
 
 -- A scan probe a pilot has put out (Tactical/Sites): where it is, and
 -- the tick it runs down at; how strong it reads, from the launcher it

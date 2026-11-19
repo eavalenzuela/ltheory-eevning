@@ -39,8 +39,8 @@ end
 local function plain(family: string, size: number): { Modules.ChargeType }
   local found: { Modules.ChargeType } = {}
   for _, charge in Modules.charges do
-    -- (a vertical-launch missile is its launcher's own, and not one of the twelve: Data/Modules)
-    if charge.family == family and charge.size == size and charge.tech ~= 2 and not charge.vertical then
+    -- (a vertical-launch missile or a plasma torpedo is its launcher's own, and not one of the twelve: Data/Modules)
+    if charge.family == family and charge.size == size and charge.tech ~= 2 and charge.line == nil then
       table.insert(found, charge)
     end
   end

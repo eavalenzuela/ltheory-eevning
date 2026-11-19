@@ -131,8 +131,9 @@ function PointDefence.Cycle(state: State.State, ball: State.Ball, item: State.It
   for _, missile in state.missiles do
     local whose = owner(state, missile.from)
     local from = state.balls[missile.from]
+    -- (a plasma torpedo is past shooting down: Data/Modules' 'path')
     if whose and not friendly(whose, mine) and from and from.system == ball.system and from.grid == ball.grid
-      and missile.impact > time and (missile.born or time) < time + 1 then
+      and missile.impact > time and (missile.born or time) < time + 1 and missile.path ~= "plasma" then
       table.insert(pool, missile)
     end
   end

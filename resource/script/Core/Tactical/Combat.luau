@@ -458,6 +458,15 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
         return false, "nothing loaded"
       end
       return true
+    elseif module.pylon then
+      -- (a Fighter Pylon sends its fighter at a locked target: Tactical/Drones)
+      local lock = findLock(ball, command.target or 0)
+      if item.charge == "" then
+        return false, "no fighter on the pylon: one is put on it in a station"
+      elseif lock == nil or not lock.locked or state.balls[command.target or 0] == nil then
+        return false, "no locked target"
+      end
+      return true
     elseif module.bubble then
       if item.charge == "" or item.rounds <= 0 then
         return false, "nothing loaded"
@@ -529,7 +538,7 @@ function Combat.Apply(state: State.State, command: State.Command, events: { Even
     end
     table.insert(ball.vitals.running, {
       item = item.id,
-      target = if module.weapon or module.miner or module.hex or module.salvager or module.tractor
+      target = if module.weapon or module.miner or module.hex or module.salvager or module.tractor or module.pylon
         or (module.scanner and module.scanner.kind ~= "survey") then command.target :: number else 0,
       -- A weapon fires at once; a mining laser delivers at the end of its cycle
       -- (and a scanner reads at the end of its; a micro jump drive jumps when it has spooled).
@@ -797,7 +806,7 @@ local function fireMissile(state: State.State, ball: State.Ball, item: State.Ite
       table.insert(state.missiles, { from = ball.id, to = target.id, item = item.id, charge = charge.id,
         damage = damage, impact = now(state) + flight + delay,
         blast = (weapon.blast or 1) * (1 - Combat.FUSING * Skills.Level(levels, "proximity.fusing")),
-        id = id, born = now(state) + delay, lx = ball.x, ly = ball.y, lz = ball.z, path = if volley then volley.path else nil })
+        id = id, born = now(state) + delay, lx = ball.x, ly = ball.y, lz = ball.z, path = if volley then volley.path else weapon.path })
     end
     if volley then
       for n = 1, count do
@@ -808,7 +817,7 @@ local function fireMissile(state: State.State, ball: State.Ball, item: State.Ite
       return
     end
     table.insert(events, { kind = "Shot", from = ball.id, item = item.id, to = target.id, family = "missile",
-      outcome = outcome, damage = 0, flight = flight, missile = ids[1] })
+      outcome = outcome, damage = 0, flight = flight, missile = ids[1], path = weapon.path })
     return
   end
   table.insert(events, { kind = "Shot", from = ball.id, item = item.id, to = target.id, family = "missile",
@@ -967,6 +976,19 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
         fireTurret(state, ball, running, item, weapon, target, hits, events)
       end
       running.next += weapon.duration
+
+    elseif module.pylon then
+      -- A Fighter Pylon: while it runs its fighter is out at the target (Tactical/Drones); with the fighter
+      -- lost, or the target, it stops.
+      local lock = findLock(ball, running.target)
+      if item.charge == "" then
+        stop(state, ball, index, "the fighter is lost", events)
+        return false
+      elseif lock == nil or not lock.locked or Space.Body(state, running.target) == nil then
+        stop(state, ball, index, "target lost", events)
+        return false
+      end
+      running.next += 1
 
     elseif module.pds then
       -- A point defence turret: a second of swinging and shooting at whatever of the enemy's is in the air, or

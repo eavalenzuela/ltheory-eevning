@@ -205,14 +205,16 @@ local KINDS: { Kind } = {
     fit = all(times(6, "railgun.small.master", "charge.kinetic.short"),
       { { "projector.entanglement" }, { "afterburner.1mn" }, { "flux.coil" }, { "flux.coil" }, { "damage.control" } }) },
   { id = "drowned.casket", hull = "cruiser.casket", name = "Drowned Casket", range = 12000, bounty = 0, tags = 0,
-    fit = all(times(4, "railgun.medium.master", "charge.kinetic.short.medium"),
+    -- (a Fighter Pylon and its Trident on every one from a cruiser up, the owner's 2026-11-19: they have no
+    -- station to replace one in, so what is shot down stays shot down)
+    fit = all({ { "pylon.fighter", "drone.trident" } }, times(4, "railgun.medium.master", "charge.kinetic.short.medium"),
       { { "disruptor.warp" }, { "flux.coil" }, { "flux.coil" }, { "flux.coil" }, { "armor.plate.medium" }, { "damage.control" },
         { "shield.extender.medium" } }) },
   { id = "drowned.keeper", hull = "battlecruiser.graveyardkeeper", name = "Drowned Graveyard Keeper", range = 14000, bounty = 0, tags = 0,
-    fit = all(times(8, "railgun.medium.master", "charge.kinetic.short.medium"),
+    fit = all({ { "pylon.fighter", "drone.trident" } }, times(8, "railgun.medium.master", "charge.kinetic.short.medium"),
       { { "flux.coil" }, { "flux.coil" }, { "flux.coil" }, { "armor.plate.medium" }, { "damage.control" }, { "shield.extender.medium" } }) },
   { id = "drowned.coffin", hull = "battleship.coffin", name = "Drowned Coffin", range = 22000, bounty = 0, tags = 0,
-    fit = all(times(7, "railgun.large.master", "charge.kinetic.short.large"),
+    fit = all({ { "pylon.fighter", "drone.trident" } }, times(7, "railgun.large.master", "charge.kinetic.short.large"),
       { { "flux.coil" }, { "flux.coil" }, { "flux.coil" }, { "armor.plate.large" }, { "damage.control" }, { "shield.extender.large" },
         { "disruptor.warp" } }) },
 }
@@ -1082,7 +1084,7 @@ function Pirates.Think(state: State.State, events: { Event })
       local module = Modules.byId[item.type]
       if module.hex and Modules.Mends(module) then
         mends = true
-      elseif locked and (module.weapon or module.hex) then
+      elseif locked and (module.weapon or module.hex or module.pylon) then
         give(state, { kind = "ActivateModule", actor = id, item = item.id, target = prey.id }, events)
       elseif module.boost and Pirates.Drives(module) then
         -- (burnt to get there, and let go once it is there. Not by

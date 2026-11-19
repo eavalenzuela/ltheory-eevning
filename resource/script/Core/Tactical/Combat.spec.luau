@@ -303,6 +303,69 @@ suite:Case("a point defence turret screens a friend's ship, and leaves its own s
   t.eq({ PointDefence.VERTICAL_HITS, PointDefence.SWARM_HITS, PointDefence.HITS[1] } :: { any }, { 2, 1, 1 } :: { any })
 end)
 
+suite:Case("a plasma torpedo loads only in its own launcher, does its kinds of damage, and point defence cannot shoot it down", function(t)
+  local launcher = assert(Modules.byId["launcher.plasma.small"])
+  local static, baric = assert(Modules.chargeById["torpedo.plasma.small.static"]), assert(Modules.chargeById["torpedo.plasma.small.baric"])
+  t.eq({ Modules.Fits(launcher, static), Modules.Fits(launcher, Modules.chargeById["missile.light.kinetic"]),
+    Modules.Fits(Modules.byId["launcher.light"], static), launcher.lineage } :: { any }, { true, false, false, "nimia" } :: { any })
+  -- (90% EM and 10% explosive; 90% thermal and 10% kinetic: the owner's)
+  local total = static.damage[1] + static.damage[4]
+  t.near(static.damage[1] / total, 0.9, 1e-9)
+  t.near(baric.damage[2] / (baric.damage[2] + baric.damage[3]), 0.9, 1e-9)
+  local a = arena("frigate.carvarro", { { "launcher.plasma.small", "torpedo.plasma.small.static" } }, "battleship.owari", {}, 4000)
+  defend(t, a)
+  local launched, downed, landed = barrage(t, a, a.foe.id, 60)
+  t.ok(launched >= 2, `launched {launched}`)
+  t.eq({ downed, landed } :: { any }, { 0, launched } :: { any })
+end)
+
+suite:Case("a Fighter Pylon sends its Trident at the target, takes it back when switched off, and is empty once it is shot down", function(t)
+  -- (only a hull with the bandwidth for it fits one: a plain cruiser has not, a Drowned one has)
+  local ok, why = Attributes.Check(Ships.byId["cruiser.gladius"], { "pylon.fighter" })
+  t.eq({ ok, string.find(why or "", "bandwidth", 1, true) ~= nil } :: { any }, { false, true } :: { any })
+  t.ok((Attributes.Check(Ships.byId["cruiser.casket"], { "pylon.fighter" })))
+  local a = arena("cruiser.casket", { { "pylon.fighter", "drone.trident" } }, "battleship.owari", {}, 5000)
+  local state = a.game.state
+  state.skills.drones = 5
+  local pylon = modules(a)[1]
+  lockFoe(t, a)
+  order(t, a, { kind = "ActivateModule", actor = 0, item = pylon.id, target = a.foe.id })
+  for _ = 1, 3 do
+    Core.Step(a.game)
+  end
+  local function trident(): State.Drone?
+    for _, id in state.droneIds do
+      if state.drones[id].pylon == pylon.id then
+        return state.drones[id]
+      end
+    end
+    return nil
+  end
+  local out = assert(trident(), "the Trident should be out")
+  t.eq({ out.target, out.type, pylon.rounds } :: { any }, { a.foe.id, "drone.trident", 0 } :: { any })
+  -- Switched off, it comes home and is on the pylon again.
+  order(t, a, { kind = "DeactivateModule", actor = 0, item = pylon.id })
+  for _ = 1, 60 do
+    Core.Step(a.game)
+    if trident() == nil then
+      break
+    end
+  end
+  t.eq({ trident() == nil, pylon.rounds, pylon.charge } :: { any }, { true, 1, "drone.trident" } :: { any })
+  -- Out again, and shot down: the pylon is empty, and stays so out here.
+  order(t, a, { kind = "ActivateModule", actor = 0, item = pylon.id, target = a.foe.id })
+  for _ = 1, 3 do
+    Core.Step(a.game)
+  end
+  local again = assert(trident())
+  Aftermath.Destroy(state, again.ship, a.me.id, {})
+  Core.Step(a.game)
+  t.eq({ pylon.charge, pylon.rounds } :: { any }, { "", 0 } :: { any })
+  local spare = Items.Add(state, "drone.trident", 1, a.me.id, "cargo")
+  local ok2, why2 = Core.Submit(a.game, { kind = "LoadCharge", actor = a.me.id, item = pylon.id, other = spare.id })
+  t.eq(ok2, false, why2)
+end)
+
 suite:Case("a lock takes the time the formula gives, and no shot before it", function(t)
   local a = arena("frigate.courier", CANNONS, "frigate.courier", {}, 2000)
   local cannon = modules(a)[1]

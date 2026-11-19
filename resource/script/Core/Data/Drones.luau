@@ -25,6 +25,7 @@ export type DroneType = {
   level: number, tech: number?, base: string?,
   craft: string?,       -- "fighter" or "bomber"; nil for a drone
   skill: string?,       -- the skill 'level' is of: "drones" if not said
+  pylon: boolean?,      -- launched only from a Fighter Pylon (Data/Modules), never from a bay
 }
 
 local Drones = {}
@@ -62,6 +63,13 @@ table.insert(Drones.list, { id = "drone.fighter", name = "Fighter", volume = 150
   role = "combat", gun = "fighter.cannon", charge = "ammo.fusion.medium", level = 1, craft = "fighter", skill = "fighters" })
 table.insert(Drones.list, { id = "drone.bomber", name = "Bomber", volume = 300, basePrice = 12000000, hull = "drone.hull.bomber",
   role = "combat", gun = "bomber.rack", charge = "missile.siege.explosive", level = 3, craft = "bomber", skill = "fighters" })
+
+-- The Drowned's Trident (the owner, 2026-11-19): "a specially-designed
+-- one, that has fighter-like damage, but can only be launched via" the
+-- Fighter Pylon, which carries one on the hull. Drones 5. (Its price
+-- mine.)
+table.insert(Drones.list, { id = "drone.trident", name = "Trident", volume = 150, basePrice = 6000000, hull = "drone.hull.trident",
+  role = "combat", gun = "fighter.cannon", charge = "ammo.fusion.medium", level = 5, pylon = true })
 
 Drones.byId = {} :: { [string]: DroneType }
 for _, drone in Drones.list do

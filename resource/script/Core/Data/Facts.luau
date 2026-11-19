@@ -319,6 +319,13 @@ local function hullSheet(sheet: Sheet, hull: Ships.ShipType)
   if (hull.shipbay or 0) > 0 then
     row(hold, "Ship bay", `{whole(hull.shipbay or 0)} m3, for packed hulls`)
   end
+  if (hull.drones or 0) > 0 or (hull.bandwidth or 0) > 0 then
+    -- (what it can have out at once: Tactical/Drones)
+    local drones = section(sheet, "Drones")
+    row(drones, "Drone bay", `{whole(hull.bay or 0)} m3`)
+    row(drones, "Bandwidth", `{whole(hull.bandwidth or 0)} Mbit/s: a drone out uses its volume, a Fighter Pylon fitted 75`)
+    row(drones, "Controls", `{hull.drones or 0} at once, and no more than its pilot's Drones skill`)
+  end
 
   needs(sheet, hull.id)
   if hull.restricted then
@@ -380,6 +387,11 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
       if leap then
         row(to, "Leaps", `on a hit, to another of its target's side within {metres(leap.reach)} of it, {leap.leaps} times at most, each leap {whole(leap.share * 100)}% of the hit before`)
       end
+    elseif weapon.path == "plasma" then
+      -- (the Nimia's plasma torpedoes: Data/Modules' 'path' and 'line')
+      row(to, "Torpedoes", "slow balls of plasma that point defence cannot shoot down")
+      row(to, "Range", "its torpedo's")
+      row(to, "Loads", "plasma torpedoes only")
     elseif weapon.volley and weapon.volley.path == "arc" then
       -- (a vertical launcher: Data/Modules' 'volley' and 'vertical')
       local volley = weapon.volley
@@ -574,6 +586,13 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     if module.drones.tracking then
       row(to, "Drone tracking and range", `{plain(module.drones.tracking * 100)}% of what they were`)
     end
+  end
+  if module.pylon then
+    -- (the Drowned's Fighter Pylon: Data/Modules, Tactical/Drones)
+    local to = section(sheet, "Fighter Pylon")
+    row(to, "Carries", `one {nameOf(module.pylon.drone)} on the hull, sent at the locked target while it is switched on, and back on the pylon when it is switched off`)
+    row(to, "Bandwidth", `{whole(module.pylon.bandwidth)} Mbit/s of the hull's, held while it is fitted`)
+    row(to, "Lost", "a fighter shot down is replaced only in a station")
   end
   if module.smartbomb then
     local bomb = module.smartbomb
@@ -777,7 +796,8 @@ function Facts.Of(type: string): Sheet?
     sheet.kind = "Drone"
     local gun = Modules.byId[drone.gun]
     local flies = Ships.byId[drone.hull]
-    sheet.note = if drone.role == "mining" then "Launched from the drone bay to cut the rock its owner is working, or the one it is pointed at: when its little hold is full it flies back, puts the ore in its owner's hold and goes out again."
+    sheet.note = if drone.pylon then "Carried on the hull by a Fighter Pylon and sent out from it alone, with a fighter's gun, at what its owner has locked: it comes back to the pylon when that is switched off. One shot down is replaced only in a station, put on the pylon there."
+      elseif drone.role == "mining" then "Launched from the drone bay to cut the rock its owner is working, or the one it is pointed at: when its little hold is full it flies back, puts the ore in its owner's hold and goes out again."
       elseif drone.role == "repair" then "Launched from the drone bay to mend whoever of its owner's side has lost most armour: it goes to them and sets to, and otherwise keeps station on its owner."
       else "Launched from the drone bay to fight beside the ship: it goes for what it is pointed at, or for whatever is attacking its owner's side."
     sheet.note ..= " Near enough when its owner warps or docks, it is taken aboard; left behind, it is lost."

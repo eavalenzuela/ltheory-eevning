@@ -82,12 +82,37 @@ function Drones.Max(state: State.State, ship: number): number
   return math.min(hull.drones or 0, hand)
 end
 
+-- The drone bandwidth a ship's drones out use, Mbit/s, and what its
+-- Fighter Pylons hold of it (Data/Ships' 'bandwidth'): a drone uses its
+-- volume; a fighter or a bomber, out of a carrier's bay, none.
+function Drones.Bandwidth(state: State.State, ship: number): number
+  local used = 0
+  for _, drone in Drones.Out(state, ship) do
+    local kind = Kinds.byId[drone.type]
+    if kind and kind.craft == nil and not kind.pylon then
+      used += kind.volume
+    end
+  end
+  for _, item in Items.Fitted(state, ship) do
+    local pylon = Modules.byId[item.type].pylon
+    used += if pylon then pylon.bandwidth else 0
+  end
+  return used
+end
+
 -- Why a ship cannot launch one of a kind, if it cannot: its hull has no
--- bay for it, or whoever flies it has not the skill.
+-- bay for it, whoever flies it has not the skill, or there is not the
+-- bandwidth for it.
 function Drones.Cannot(state: State.State, ship: number, type: Kinds.DroneType): string?
   local record = state.ships[ship]
   local hull = Ships.byId[record.type]
   local craft = type.craft
+  if type.pylon then
+    return `a {type.name} goes out only from its Fighter Pylon`
+  end
+  if craft == nil and Drones.Bandwidth(state, ship) + type.volume > (hull.bandwidth or 0) then
+    return "not enough drone bandwidth"
+  end
   if craft and not (Ships.CRAFT[hull.class] and Ships.CRAFT[hull.class][craft]) then
     return `this hull has no bay for a {string.lower(type.name)}`
   end
@@ -177,8 +202,16 @@ local function remove(state: State.State, id: number, reason: string, events: { 
   State.RemoveId(state.droneIds, id)
 end
 
--- Take a drone back aboard its owner: it is an item in the hold again.
+-- Take a drone back aboard its owner: it is an item in the hold again
+-- (a Trident: on its pylon again).
 local function scoop(state: State.State, drone: State.Drone, events: { Event })
+  local pylon = if drone.pylon then state.items[drone.pylon] else nil
+  if pylon and pylon.holder == drone.owner then
+    pylon.rounds = 1
+    remove(state, drone.ship, "scooped", events)
+    table.insert(events, { kind = "DroneScooped", owner = drone.owner, type = drone.type })
+    return
+  end
   -- (and what a mining drone was carrying comes aboard with it, if it fits)
   if Kinds.byId[drone.type].role == "mining" then
     unload(state, drone)
@@ -200,6 +233,26 @@ local function give(state: State.State, command: State.Command, events: { Event 
     return true
   end
   return false
+end
+
+-- Put a drone of a kind out from a ship, beside it: from its bay, or
+-- (with 'pylon', the item) a Trident from its Fighter Pylon, sent at
+-- 'target'.
+function Drones.Put(state: State.State, ship: State.Ship, ball: State.Ball, type: Kinds.DroneType, events: { Event },
+  pylon: number?, target: number?)
+  local drone = Space.NewShip(state, type.hull, type.name, ship.owner, 0)
+  Items.Equip(state, drone.id, type.gun, if type.charge ~= "" then type.charge else nil)
+  if type.charge ~= "" then
+    Items.Add(state, type.charge, 4000, drone.id, "cargo")
+  end
+  local n = #state.droneIds
+  local launched = Space.Launch(state, drone, ball.system, ball.x + 150 * math.cos(n * 2.4), ball.y + 60,
+    ball.z + 150 * math.sin(n * 2.4))
+  state.drones[drone.id] = { ship = drone.id, owner = ship.id, type = type.id, target = target or 0, returning = false, near = true,
+    pylon = pylon }
+  table.insert(state.droneIds, drone.id)
+  table.insert(events, { kind = "BallAdded", ball = launched.id })
+  table.insert(events, { kind = "DroneLaunched", owner = ship.id, drone = drone.id })
 end
 
 function Drones.Validate(state: State.State, command: State.Command): (boolean, string?)
@@ -272,18 +325,7 @@ function Drones.Apply(state: State.State, command: State.Command, events: { Even
       while room > 0 and state.items[stack.id] and Drones.Cannot(state, ship.id, Kinds.byId[stack.type]) == nil do
         local type = Kinds.byId[stack.type]
         Items.Take(state, stack, 1)
-        local drone = Space.NewShip(state, type.hull, type.name, ship.owner, 0)
-        Items.Equip(state, drone.id, type.gun, if type.charge ~= "" then type.charge else nil)
-        if type.charge ~= "" then
-          Items.Add(state, type.charge, 4000, drone.id, "cargo")
-        end
-        local n = #state.droneIds
-        local launched = Space.Launch(state, drone, ball.system, ball.x + 150 * math.cos(n * 2.4), ball.y + 60,
-          ball.z + 150 * math.sin(n * 2.4))
-        state.drones[drone.id] = { ship = drone.id, owner = ship.id, type = type.id, target = 0, returning = false, near = true }
-        table.insert(state.droneIds, drone.id)
-        table.insert(events, { kind = "BallAdded", ball = launched.id })
-        table.insert(events, { kind = "DroneLaunched", owner = ship.id, drone = drone.id })
+        Drones.Put(state, ship, ball, type, events)
         room -= 1
       end
     end
@@ -412,13 +454,61 @@ local function repair(state: State.State, ball: State.Ball, owner: State.Ball, e
 end
 
 -- Once a tick: every drone does what it is for.
+-- A Trident lost: its pylon is empty until one is put on it in a station.
+local function emptied(state: State.State, drone: State.Drone)
+  local pylon = if drone.pylon then state.items[drone.pylon] else nil
+  if pylon then
+    pylon.charge, pylon.rounds = "", 0
+  end
+end
+
+-- The Fighter Pylons that are switched on send their fighters out at
+-- their targets, if there is room for one more drone out; and the
+-- fighters of pylons that are not come home.
+local function pylons(state: State.State, events: { Event })
+  local out: { [number]: State.Drone } = {}
+  for _, id in state.droneIds do
+    local drone = state.drones[id]
+    if drone.pylon then
+      out[drone.pylon] = drone
+    end
+  end
+  local on: { [number]: boolean } = {}
+  for _, id in state.ballIds do
+    local ball = state.balls[id]
+    if ball and state.ships[id] and #ball.vitals.running > 0 and not (ball.warp and ball.warp.stage == "warp") then
+      for _, running in ball.vitals.running do
+        local item = state.items[running.item]
+        local pylon = if item then Modules.byId[item.type].pylon else nil
+        if pylon and item and item.charge ~= "" and not running.stopping then
+          on[item.id] = true
+          local drone = out[item.id]
+          if drone then
+            drone.target, drone.returning = running.target, false
+          elseif item.rounds >= 1 and #Drones.Out(state, id) < Drones.Max(state, id) then
+            item.rounds = 0
+            Drones.Put(state, state.ships[id], ball, Kinds.byId[pylon.drone], events, item.id, running.target)
+          end
+        end
+      end
+    end
+  end
+  for item, drone in out do
+    if not on[item] then
+      drone.returning, drone.target = true, 0
+    end
+  end
+end
+
 function Drones.Step(state: State.State, events: { Event })
+  pylons(state, events)
   for _, id in table.clone(state.droneIds) do
     local drone = state.drones[id]
     local ball = state.balls[id]
     local owner = state.balls[drone.owner]
     if ball == nil or state.ships[id] == nil then
       -- (destroyed: whoever did it has seen to the rest)
+      emptied(state, drone)
       state.drones[id] = nil
       State.RemoveId(state.droneIds, id)
       table.insert(events, { kind = "DroneLost", owner = drone.owner, type = drone.type, destroyed = true })
@@ -427,6 +517,7 @@ function Drones.Step(state: State.State, events: { Event })
       if drone.near and state.ships[drone.owner] then
         scoop(state, drone, events)
       else
+        emptied(state, drone)
         remove(state, id, "lost", events)
         table.insert(events, { kind = "DroneLost", owner = drone.owner, type = drone.type })
       end

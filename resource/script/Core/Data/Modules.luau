@@ -58,9 +58,14 @@ export type Weapon = {
   -- much of its reach (Tactical/Combat). Each is a missile of its own, to
   -- be shot down by itself. Nil for every other weapon.
   volley: Volley?,
-  -- A launcher that takes only vertical-launch missiles (ChargeType's
-  -- 'vertical'), and no other.
-  vertical: boolean?,
+  -- A launcher that takes only its own line of ammunition (ChargeType's
+  -- 'line': "vertical", the Kethri's vertical-launch missiles; "plasma",
+  -- the Nimia's plasma torpedoes), and no other.
+  line: string?,
+  -- How what it fires flies, where that is not as a missile's: "plasma",
+  -- the Nimia's plasma torpedoes, which point defence cannot shoot down
+  -- (Tactical/PointDefence). (A volley's is its 'path'.)
+  path: string?,
 }
 
 -- A point defence turret: rounds a second; how fast it swings (radians
@@ -218,10 +223,14 @@ export type ModuleType = {
   -- What a module that is no weapon is loaded with (Modules.Takes): the
   -- family and size of charge (size 0: any), how many it holds, and the
   -- seconds a reload from the hold takes. (Module expansion, 2026-11-16.)
-  takes: { family: string, size: number, clip: number, reload: number, vertical: boolean? }?,
+  takes: { family: string, size: number, clip: number, reload: number, line: string? }?,
   -- A point defence turret (Tactical/PointDefence): switched on, it
   -- shoots at the enemy's missiles in reach, and at their drones.
   pds: PointDefence?,
+  -- A Fighter Pylon (the Drowned's): the drone it carries on the hull,
+  -- launched when it is switched on (Tactical/Drones), and the drone
+  -- bandwidth it holds for that while fitted.
+  pylon: { drone: string, bandwidth: number }?,
   -- A capacitor booster: each cycle (s) puts the charge it is loaded
   -- with into the capacitor, a charge a cycle.
   injector: { duration: number }?,
@@ -300,9 +309,9 @@ export type ChargeType = {
   injects: number?,
   -- A mining crystal: so many times as much of this ore in a modulated laser.
   ore: string?,
-  -- A vertical-launch missile (the Kethri's): for a vertical launcher
-  -- only (Weapon's 'vertical').
-  vertical: boolean?,
+  -- A charge of a launcher's own line ("vertical", "plasma"): for that
+  -- launcher only (Weapon's 'line').
+  line: string?,
   yieldBy: number?,
 }
 
@@ -1316,7 +1325,7 @@ for size, long in { "launcher.light", "launcher.heavy", "launcher.cruise", "laun
     basePrice = base.basePrice * 3, passive = {},
     weapon = { family = "missile", duration = weapon.duration, capacitor = 0, damageMultiplier = weapon.damageMultiplier,
       optimal = 0, falloff = 0, tracking = 0, clip = weapon.clip, reload = weapon.reload, size = size, flight = weapon.flight,
-      vertical = true,
+      line = "vertical",
       volley = { count = v.count, share = 1, speed = 1, gap = v.gap, path = "arc", stretch = v.stretch, closest = v.closest } },
     requires = needs("missiles", size), lineage = "kethri",
   })
@@ -1340,6 +1349,51 @@ table.insert(modules, {
   pds = { rate = 10, traverse = math.rad(90), tracking = 3000, optimal = PDS_REACH[1], falloff = PDS_REACH[2], damage = 0.1,
     accuracy = PDS_ACCURACY },
   requires = needs("projectiles", 1),
+})
+
+-- The Nimia's own launcher, of every size (the owner, 2026-11-19): the
+-- Plasma Torpedo Launcher. It fires a ball of plasma that point defence
+-- cannot shoot down, slowly, every second cycle of the short-range
+-- launcher of its size with twice its hit, so as hard a second; it fits
+-- as that launcher does, if a fifth dearer in CPU and powergrid, and
+-- takes only plasma torpedoes. Fitted by any hull that can fit a
+-- launcher; scarce, as the Nimia's gear is. (The name and the torpedoes
+-- the owner's; the rest mine.)
+for size, short in { "launcher.rocket", "launcher.assault", "launcher.torpedo", "launcher.bombard" } do
+  local made: ModuleType? = nil
+  for _, module in modules do
+    if module.id == short then
+      made = module
+    end
+  end
+  local base = assert(made, short)
+  local weapon = assert(base.weapon)
+  table.insert(modules, {
+    id = `launcher.plasma.{SIZE_NAME[size]}`, name = `{SIZE_TITLE[size]} Plasma Torpedo Launcher`, short = "Plasma", slot = "high",
+    hardpoint = "launcher", cpu = base.cpu * 1.2, powergrid = base.powergrid * 1.2, volume = SIZE_VOLUME[size],
+    basePrice = base.basePrice * 3, passive = {},
+    weapon = { family = "missile", duration = weapon.duration * 2, capacitor = 0, damageMultiplier = weapon.damageMultiplier * 2,
+      optimal = 0, falloff = 0, tracking = 0, clip = weapon.clip, reload = weapon.reload, size = size, flight = 1,
+      line = "plasma", path = "plasma" },
+    requires = needs("missiles", size), lineage = "nimia",
+  })
+end
+
+-- The Drowned's Fighter Pylon (the owner, 2026-11-19: "a hull-mounted
+-- Fighter (think how mini-subs attach to a full sized submarine)"): it
+-- takes a turret hardpoint and a great deal of CPU, holds 75 Mbit/s of
+-- the hull's drone bandwidth, and wants Drones 5. It carries one Trident
+-- on the hull, which goes out when it is switched on, to the target, and
+-- comes back to it when it is switched off; the Trident counts as one
+-- of the drones the ship has out. One that is destroyed is replaced only
+-- in a station. (The name, the hardpoint, the bandwidth and the skill the
+-- owner's; the CPU, powergrid and price mine.)
+table.insert(modules, {
+  id = "pylon.fighter", name = "Fighter Pylon", short = "Pylon", slot = "high", hardpoint = "turret",
+  cpu = 150, powergrid = 60, volume = 50, basePrice = 4000000, passive = {},
+  takes = { family = "pylon", size = 0, clip = 1, reload = 0 },
+  pylon = { drone = "drone.trident", bandwidth = 75 },
+  requires = { { skill = "drones", level = 5 } }, lineage = "drowned",
 })
 
 -- Hardeners against one kind of damage (the project owner's, 2026-11-14:
@@ -1601,8 +1655,41 @@ for _, plain in table.clone(charges) do
     made.name = string.gsub(plain.name, " Missile$", " Vertical Missile")
     made.flightTime = plain.flightTime * VERTICAL.reach * VERTICAL.stretch
     made.basePrice = plain.basePrice * 1.5
-    made.vertical = true
+    made.line = "vertical"
     table.insert(charges, made)
+  end
+end
+
+-- The Nimia's plasma torpedoes (the owner, 2026-11-19: their Plasma
+-- Torpedo Launcher, "slow-firing ball-plasma torpedoes" that track to
+-- the target and "can't be shot down, but they are relatively
+-- slow-moving, so they can be outrun"): of every size, two kinds, each
+-- the plain missile of its size in damage, a blast twice as wide and
+-- half as quick to spread, and slow, burning long. Only the Plasma
+-- Torpedo Launcher takes them. (The names and the two mixes the owner's;
+-- the speeds, the burn, the blast and the price mine: "slower" than the
+-- 900 to 450 m/s first put to them.)
+local PLASMA = { speed = { 550, 450, 350, 250 }, burn = 40, blast = 2, spread = 0.5, price = 2 }
+for size, sized in { "light", "heavy", "cruise", "siege" } do
+  local plain: ChargeType? = nil
+  for _, charge in charges do
+    if charge.id == `missile.{sized}.kinetic` then
+      plain = charge
+    end
+  end
+  local base = assert(plain, sized)
+  local total = base.damage[3]
+  for _, kind in { { "static", "Plasmostatic", { 0.9, 0, 0, 0.1 } }, { "baric", "Plasmobaric", { 0, 0.9, 0.1, 0 } } } :: { { any } } do
+    local damage: { number } = {}
+    for index, part in kind[3] :: { number } do
+      damage[index] = total * part
+    end
+    table.insert(charges, {
+      id = `torpedo.plasma.{SIZE_NAME[size]}.{kind[1]}`, name = `{SIZE_TITLE[size]} {kind[2]} Torpedo`, family = "missile",
+      size = size, volume = base.volume, basePrice = base.basePrice * PLASMA.price, damage = damage, rangeMultiplier = 1,
+      velocity = PLASMA.speed[size], flightTime = PLASMA.burn, explosionRadius = base.explosionRadius * PLASMA.blast,
+      explosionVelocity = base.explosionVelocity * PLASMA.spread, line = "plasma",
+    })
   end
 end
 
@@ -1647,7 +1734,7 @@ for _, base in table.clone(charges) do
     basePrice = base.basePrice * CHARGE2.price, damage = damage, rangeMultiplier = base.rangeMultiplier * trade.range,
     tracking = trade.tracking,
     velocity = base.velocity, flightTime = base.flightTime, explosionRadius = base.explosionRadius * trade.blast,
-    explosionVelocity = base.explosionVelocity, tech = 2, base = base.id, vertical = base.vertical,
+    explosionVelocity = base.explosionVelocity, tech = 2, base = base.id, line = base.line,
   })
 end
 
@@ -1903,7 +1990,7 @@ for _, base in table.clone(modules) do
           damageMultiplier = weapon.damageMultiplier * make.damage, optimal = weapon.optimal, falloff = weapon.falloff,
           tracking = weapon.tracking, clip = weapon.clip, reload = weapon.reload, size = weapon.size,
           flight = weapon.flight, blast = weapon.blast, leap = weapon.leap, volley = weapon.volley,
-          vertical = weapon.vertical } else nil,
+          line = weapon.line, path = weapon.path } else nil,
         repair = if repair then { layer = repair.layer, amount = repair.amount * make.amount, duration = repair.duration,
           capacitor = repair.capacitor } else nil,
         miner = if miner then { volume = miner.volume * make.amount, duration = miner.duration, capacitor = miner.capacitor,
@@ -2197,22 +2284,22 @@ end
 
 -- What a module is loaded with: a weapon's charges, or a booster's or
 -- an ancillary repairer's (ModuleType.takes). Nil for one that takes none.
-function Modules.Takes(module: ModuleType): { family: string, size: number, clip: number, reload: number, vertical: boolean? }?
+function Modules.Takes(module: ModuleType): { family: string, size: number, clip: number, reload: number, line: string? }?
   local weapon = module.weapon
   if weapon then
-    return { family = weapon.family, size = weapon.size, clip = weapon.clip, reload = weapon.reload, vertical = weapon.vertical }
+    return { family = weapon.family, size = weapon.size, clip = weapon.clip, reload = weapon.reload, line = weapon.line }
   end
   return module.takes
 end
 
 -- Whether a charge goes in a module (of its family and size; a size 0
 -- takes any of its family; a tech 2 charge only a tech 2 weapon; a
--- vertical-launch missile only a vertical launcher, which takes nothing
+-- charge of a launcher's own line only that launcher, which takes nothing
 -- else).
 function Modules.Fits(module: ModuleType, charge: ChargeType): boolean
   local takes = Modules.Takes(module)
   return takes ~= nil and charge.family == takes.family and (takes.size == 0 or charge.size == takes.size)
-    and not (charge.tech == 2 and module.tech ~= 2) and (charge.vertical == true) == (takes.vertical == true)
+    and not (charge.tech == 2 and module.tech ~= 2) and charge.line == takes.line
 end
 
 -- The tech 2 make of a module, if it has one.

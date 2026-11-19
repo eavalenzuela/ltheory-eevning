@@ -15,6 +15,7 @@
 
 local Attributes = require("@lt/Core/Attributes")
 local Corporation = require("@lt/Core/Assets/Corporation")
+local DroneKinds = require("@lt/Core/Data/Drones")
 local Factions = require("@lt/Core/Data/Factions")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
@@ -171,6 +172,21 @@ function Items.Offence(state: State.State, ship: number): Offence
         else charge.velocity * (if weapon.volley then weapon.volley.speed / (weapon.volley.stretch or 1) else 1) * charge.flightTime
           * (weapon.flight or 1)
           * (1 + 0.05 * Skills.Level(levels, "long.burn")))
+    end
+    -- (and a Fighter Pylon's fighter, on it: what its gun does, as it carries it)
+    local pylon = Modules.byId[item.type].pylon
+    if pylon and item.charge ~= "" then
+      local kind = DroneKinds.byId[pylon.drone]
+      local gun = Modules.byId[kind.gun].weapon
+      local charge = Modules.chargeById[kind.charge]
+      if gun and charge then
+        for index = 1, 4 do
+          local hit = charge.damage[index] * gun.damageMultiplier
+          out.volley += hit
+          out.dps += hit / gun.duration
+          out.kinds[index] += hit / gun.duration
+        end
+      end
     end
   end
   return out
@@ -373,7 +389,9 @@ function Items.Equip(state: State.State, ship: number, type: string, charge: str
   }
   if charge then
     local takes = assert(Modules.Takes(module), `{type} takes no charge`)
-    assert(Modules.chargeById[charge] and Modules.Fits(module, Modules.chargeById[charge]), `{charge} does not fit {type}`)
+    -- (a Fighter Pylon is loaded with its fighter: Data/Modules)
+    assert((module.pylon and module.pylon.drone == charge) or (Modules.chargeById[charge] and Modules.Fits(module, Modules.chargeById[charge])),
+      `{charge} does not fit {type}`)
     item.charge = charge
     item.rounds = takes.clip
   end
@@ -569,6 +587,15 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
     local _, chargeWhy = sharedStation(state, ship, charge)
     if chargeWhy then
       return false, chargeWhy
+    end
+    -- (a Fighter Pylon takes its own fighter, and only in a station: Data/Modules)
+    if module.pylon then
+      if charge.type ~= module.pylon.drone then
+        return false, "only its fighter goes on a Fighter Pylon"
+      elseif ship.docked == 0 then
+        return false, "a fighter is put on its pylon only in a station"
+      end
+      return true
     end
     local chargeType = Modules.chargeById[charge.type]
     local takes = assert(Modules.Takes(module))

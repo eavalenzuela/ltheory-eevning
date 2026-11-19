@@ -307,6 +307,15 @@ function Attributes.Check(hull: Ships.ShipType, types: { string }, levels: Level
   elseif hardpoints.launcher > hull.launchers then
     return false, "no free launcher hardpoint"
   end
+  -- (a Fighter Pylon holds its share of the hull's drone bandwidth: Data/Modules)
+  local held = 0
+  for _, id in types do
+    local pylon = Modules.byId[id].pylon
+    held += if pylon then pylon.bandwidth else 0
+  end
+  if held > (hull.bandwidth or 0) then
+    return false, string.format("not enough drone bandwidth (%d of %d Mbit/s)", held, hull.bandwidth or 0)
+  end
   -- (a hull whose hardpoints are of given sizes: a weapon goes on one
   -- of its own size, or on a bigger one that nothing bigger wants)
   for kind, sized in { turret = hull.guns, launcher = hull.racks } :: { [string]: { number }? } do

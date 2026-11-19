@@ -61,6 +61,10 @@ export type ShipType = {
   -- And the room it has for them, m3: its drone bay, apart from its
   -- hold. By its class too.
   bay: number?,
+  -- Its drone bandwidth, Mbit/s: what the drones it has out may use at
+  -- once (a drone uses its volume; a Fighter Pylon fitted holds its own
+  -- share: Tactical/Drones). By its class too.
+  bandwidth: number?,
   -- An ore hold, m3: a second hold, for ore and gas and nothing else,
   -- which what the ship mines goes into, and what the barges of its
   -- pilot's fleet mine beside it (Tactical/Fleet). A capital
@@ -924,6 +928,19 @@ table.insert(types, {
   scanResolution = 450, lockRange = 60000, maxTargets = 1, cargo = 4000,
   restricted = true, rigs = 0, drones = 0,
 })
+-- The Drowned's Trident (the owner, 2026-11-19): a fighter carried on a
+-- hull's Fighter Pylon and launched from nothing else, with a fighter's
+-- gun and something more of a fighter's hull. (Its figures mine.)
+table.insert(types, {
+  id = "drone.hull.trident", name = "Trident", class = "drone", lineage = "", basePrice = 6000000, volume = 150,
+  mass = 2500000, inertia = 2.0, maxVelocity = 750, warpSpeed = 5, radius = 15,
+  shield = 0, armor = 750, hull = 900, shieldRecharge = 400,
+  shieldResonance = SHIELD, armorResonance = ARMOR, hullResonance = HULL, signature = 45,
+  cpu = 100, powergrid = 100, highs = 1, mids = 0, lows = 0, turrets = 1, launchers = 0,
+  capacitor = 600, capacitorRecharge = 150,
+  scanResolution = 450, lockRange = 60000, maxTargets = 1, cargo = 4000,
+  restricted = true, rigs = 0, drones = 0,
+})
 table.insert(types, {
   id = "drone.hull.bomber", name = "Bomber", class = "drone", lineage = "", basePrice = 12000000, volume = 300,
   mass = 6000000, inertia = 2.0, maxVelocity = 420, warpSpeed = 5, radius = 22,
@@ -1005,6 +1022,19 @@ Ships.DRONES = { frigate = 1, destroyer = 2, cruiser = 4, battleship = 5, indust
 Ships.BAY = { frigate = 10, destroyer = 25, cruiser = 50, battleship = 125, industrial = 25, barge = 50,
   attackbattlecruiser = 25, battlecruiser = 75, carrier = 2500, dreadnought = 250, siegedreadnought = 250, capitalindustrial = 1000,
   supercarrier = 6000, ultracapital = ULTRA_BAY } :: { [string]: number }
+-- And its drone bandwidth, Mbit/s (2026-11-19, when the Drowned's
+-- Fighter Pylon came to want it): for a hull short of a capital, as much
+-- as its standard bay holds, so that nobody fields fewer drones than
+-- before; for a capital, 250. (Mine. A Drowned combat ship of cruiser
+-- size or bigger has at least Ships.PYLON_ROOM, the owner's: room for a
+-- pylon's Trident and a drone beside it.)
+Ships.BANDWIDTH = { frigate = 10, destroyer = 25, cruiser = 50, battleship = 125, industrial = 25, barge = 50,
+  attackbattlecruiser = 25, battlecruiser = 75, carrier = 250, dreadnought = 250, siegedreadnought = 250, capitalindustrial = 125,
+  supercarrier = 250, ultracapital = 250, forceaux = 125 } :: { [string]: number }
+Ships.PYLON_ROOM = 80
+local PYLON_CLASSES = { cruiser = true, attackbattlecruiser = true, battlecruiser = true, battleship = true, carrier = true,
+  dreadnought = true, siegedreadnought = true, supercarrier = true, ultracapital = true } :: { [string]: boolean }
+
 -- And the room in its ore hold, m3, for the classes that have one: a
 -- capital industrial's is seventy of a mining barge's holds. (The
 -- reference's, 2026-11-18.)
@@ -1074,6 +1104,10 @@ for _, t in types do
   t.rigs = t.rigs or (if t.class == "capsule" then 0 else Ships.RIGS)
   t.drones = t.drones or Ships.DRONES[t.class] or 0
   t.bay = t.bay or Ships.BAY[t.class] or 0
+  t.bandwidth = t.bandwidth or Ships.BANDWIDTH[t.class] or 0
+  if t.lineage == "drowned" and PYLON_CLASSES[t.class] then
+    t.bandwidth = math.max(t.bandwidth :: number, Ships.PYLON_ROOM)
+  end
   t.ore = t.ore or Ships.ORE[t.class] or 0
   t.calibration = t.calibration or Ships.CALIBRATION
 end

@@ -922,7 +922,8 @@ suite:Case("every weapon takes ammunition of its own size and no other; larger r
           fits += 1
         end
       end
-      t.ok(fits >= 3, `{module.id} has {fits} kinds of ammunition`)
+      -- (a plasma torpedo launcher's are the owner's two)
+      t.ok(fits >= (if weapon.line == "plasma" then 2 else 3), `{module.id} has {fits} kinds of ammunition`)
       t.ok(#Skills.Needs(module.id) >= 1, `{module.id} needs no skill`)
       for _, need in Skills.Needs(module.id) do
         t.ok(Skills.byId[need.skill] ~= nil, `{module.id} needs an unknown skill {need.skill}`)
@@ -931,8 +932,9 @@ suite:Case("every weapon takes ammunition of its own size and no other; larger r
   end
   -- (and a fighter's cannon and a bomber's rack, which only they carry, and a light and a medium combat drone's guns; and
   -- since 2026-11-18 a seventh form of turret, the Vail's Litany Beam; and since 2026-11-19 a third and a fourth
-  -- form of launcher, the Vessari's Swarm Launcher and the Kethri's Vertical Launch Battery)
-  t.eq(weapons, 7 * 4 + 4 * 4 + 2 + 2, "seven forms of turret and four of launcher, in four sizes, and what a fighter, a bomber and a drone carry")
+  -- form of launcher, the Vessari's Swarm Launcher and the Kethri's Vertical Launch Battery, and the Nimia's Plasma
+  -- Torpedo Launcher, a fifth)
+  t.eq(weapons, 7 * 4 + 5 * 4 + 2 + 2, "seven forms of turret and five of launcher, in four sizes, and what a fighter, a bomber and a drone carry")
   for _, form in { "laser.pulse", "laser.beam", "autocannon", "artillery", "blaster", "railgun" } do
     local small, medium, large = Modules.byId[form .. ".small"], Modules.byId[form .. ".medium"], Modules.byId[form .. ".large"]
     -- (and the fourth size, which only a siege dreadnought has the powergrid for)
@@ -1159,11 +1161,12 @@ suite:Case("every weapon, repairer, extender, plate, mining laser and probe laun
       t.ok(not module.internal or (Modules.Improved(module.id) ~= nil and Modules.Custom(module.id) == nil), module.id)
     end
   end
-  -- 32 weapons (36 since the Litany Beam, 44 since the Swarm Launcher and the Vertical Launch Battery), 2 repairers, an extender and a plate in three sizes each, two mining lasers and a gas harvester,
+  -- 32 weapons (36 since the Litany Beam, 44 since the Swarm Launcher and the Vertical Launch Battery, 48 since the Plasma
+  -- Torpedo Launcher), 2 repairers, an extender and a plate in three sizes each, two mining lasers and a gas harvester,
   -- the repairers for another ship (shield and armour, in three sizes), and the six things only a drone, a
   -- fighter or a bomber carries (two of them a combat drone's guns since 2026-11-18); and since 2026-11-16 the ancillary shield boosters and armour repairers,
   -- three sizes each, the two modulated lasers and the two ice harvesters; and since 2026-11-18 the probe launcher.
-  t.eq(improved, 44 + 4 * 3 + 3 + 2 * 3 + 6 + 2 * 3 + 2 + 2 + 1)
+  t.eq(improved, 48 + 4 * 3 + 3 + 2 * 3 + 6 + 2 * 3 + 2 + 2 + 1)
   t.ok(Modules.Improved("projector.entanglement") == nil and Modules.Improved("rig.shield") == nil)
   t.eq({ Modules.SizeOf(Modules.byId["autocannon.medium.ii"]), Modules.SizeOf(Modules.byId["shield.extender.large"]),
     Modules.SizeOf(Modules.byId["miner.small"]) }, { 2, 3, 1 })
@@ -1219,7 +1222,7 @@ suite:Case("the same modules have a custom make, between the plain one and tech 
     end
   end
   -- One of each for every module that has a tech 2 make and is not a drone's own.
-  t.eq({ customs, masterworks }, { 44 + 4 * 3 + 3 + 2 * 3 + 2 * 3 + 4, 44 + 4 * 3 + 3 + 2 * 3 + 2 * 3 + 4 })
+  t.eq({ customs, masterworks }, { 48 + 4 * 3 + 3 + 2 * 3 + 2 * 3 + 4, 48 + 4 * 3 + 3 + 2 * 3 + 2 * 3 + 4 })
   t.ok(Modules.Custom("projector.entanglement") == nil and Modules.Custom("autocannon.small.ii") == nil)
   t.ok(Modules.Masterwork("projector.entanglement") == nil and Modules.Masterwork("autocannon.small.custom") == nil)
   t.eq({ Modules.Graded("projector.entanglement", 2), Modules.Graded("autocannon.small", 3) }, { "projector.entanglement", "autocannon.small" })
@@ -1312,8 +1315,8 @@ suite:Case("every drone has a tech 2 make: a tougher, quicker hull with the tech
       local blueprint = assert(Blueprints.byProduct[drone.id], drone.id)
       t.eq({ Types.Info(drone.id).scarce, Types.Info(blueprint.id).scarce, blueprint.invented } :: { any }, { true, true, true } :: { any })
       t.eq({ blueprint.materials[1].type, blueprint.materials[1].quantity } :: { any }, { base.id, 1 } :: { any })
-    elseif drone.craft then
-      -- (a fighter and a bomber have no tech 2 make: their own case)
+    elseif drone.craft or drone.pylon then
+      -- (a fighter, a bomber and a Trident have no tech 2 make: their own case)
       t.eq({ drone.base, Drones.Improved(drone.id) } :: { any }, { nil, nil } :: { any })
     else
       t.eq({ drone.base, drone.level, Types.Info(drone.id).scarce } :: { any }, { nil, 1, nil } :: { any })
