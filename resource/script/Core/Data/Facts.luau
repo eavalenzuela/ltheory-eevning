@@ -884,9 +884,11 @@ function Facts.Of(type: string): Sheet?
       sheet.kind = "Citadel"
       sheet.note = "A station of your own that ships dock inside. Built at a station, hauled to a moon or planet and anchored; what it offers is what is fitted in it. Brought down, it leaves a derelict hulk."
       local has = section(sheet, "Citadel")
-      row(has, "Field", `{whole(tower.field)} m`)
+      -- (no field and no batteries since 2026-11-19: it is fought as a ship is)
+      row(has, "Tether", `ships of its side within {metres(Structures.TETHER)} of it`)
       row(has, "Service slots", whole(tower.slots or 0))
-      row(has, "Battery slots", whole(tower.defences or 0))
+      row(has, "Shield slots", whole(tower.shieldSlots or 0))
+      row(has, "Guns", "one defence module of its size mounts them")
       row(has, "Burns", `{tower.fuel} blocks an hour, and more for each service online`, Structures.FUEL.id)
       row(has, "Anchors in", seconds(tower.anchor))
       -- (what its kind does better, and what only its kind fits)
@@ -922,15 +924,31 @@ function Facts.Of(type: string): Sheet?
         end
       end
       local stands = section(sheet, "Under fire")
-      row(stands, "Shield", whole(tower.shield))
+      row(stands, "Shield", `{whole(tower.shield / 2)} of its own, {whole(tower.shield)} with its shield slots filled`)
       row(stands, "Armour", whole(tower.armor))
       row(stands, "Structure", whole(tower.hull))
-      row(stands, "Seals for", `{tower.bay} hours at most: a charge an hour`, Structures.SEAL.id)
+      row(stands, "Reinforced", "for an hour when its shield is shot down, and again when its armour is")
     elseif anchored and anchored.citadel then
       sheet.kind = "Citadel service"
       sheet.note = "Fitted in a citadel, a slot each. It gives its service there while it is online, and burns fuel for it."
       local does = section(sheet, "Service")
-      row(does, "Gives", anchored.service)
+      if anchored.shield then
+        row(does, "Adds", `{whole(anchored.shield)} shield`)
+      elseif anchored.resist then
+        row(does, "Lets through", `{whole((1 - anchored.resist) * 100)}% of what strikes its shield, the more of them the less each`)
+      elseif anchored.defence then
+        local parts: { string } = {}
+        for _, group in Structures.CITADEL_DEFENCE[anchored.fits or 1] do
+          table.insert(parts, `{group.count} {group.size} {group.range}-range`)
+        end
+        row(does, "Mounts", table.concat(parts, ", "))
+        row(does, "Fires on", "pirates, whoever strikes the citadel or its owner's ships, and its owner's war enemies: each gun on its own")
+      else
+        row(does, "Gives", anchored.service)
+      end
+      if anchored.fits then
+        row(does, "Fitted only in", `a {string.lower(Structures.CITADEL_SIZE_NAMES[anchored.fits])} citadel`)
+      end
       if anchored.kinds then
         local names: { string } = {}
         for _, each in anchored.kinds do

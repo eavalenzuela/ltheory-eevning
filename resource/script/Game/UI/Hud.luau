@@ -16,6 +16,7 @@ local Components = require("@lt/Widget/Components")
 local Constants = require("@lt/Core/Data/Constants")
 local Context = require("@lt/Game/UI/Context")
 local ContractsWindow = require("@lt/Game/UI/Contracts")
+local CitadelFitting = require("@lt/Game/UI/CitadelFitting")
 local Core = require("@lt/Core/Api")
 local Dock = require("@lt/Game/UI/Dock")
 local Fitting = require("@lt/Game/UI/Fitting")
@@ -1490,7 +1491,10 @@ local function drawBerth(session: Session.Session, game: Core.Game, player: Core
     across += 132 + 8
   end
   if own then
-    if Im.Button("Starbase", across, y + 12, 110, 34, true, "Station:starbase") then
+    -- (a citadel's is called so)
+    local ownStatus = Core.Query.Starbase(game, player.docked)
+    local citadel = ownStatus ~= nil and ownStatus.tower.citadel == true
+    if Im.Button(if citadel then "Citadel" else "Starbase", across, y + 12, 110, 34, true, "Station:starbase") then
       if StarbaseWindow.IsOpen() then
         StarbaseWindow.Close()
       else
@@ -1498,7 +1502,8 @@ local function drawBerth(session: Session.Session, game: Core.Game, player: Core
       end
     end
     if Im.Inside(across, y + 12, 110, 34) then
-      Im.Tip("Starbase", "The running of this tower of yours")
+      Im.Tip(if citadel then "Citadel" else "Starbase", if citadel then "The fitting and running of this citadel of yours"
+        else "The running of this tower of yours")
     end
   end
   -- Under them: where home is (or why this station cannot be made it), and what is in training.
@@ -1595,6 +1600,10 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
       SchoolWindow.Frame(session, player.docked ~= 0 and Core.Query.Careers(game).station == player.docked)
       -- (the running of a starbase of the pilot's own, which is what they have come there for: open on arrival)
       StarbaseWindow.Frame(session, game, player)
+      -- (a citadel in its window is drawn as it stands in space, as the fitting window's ship is)
+      CitadelFitting.Show = function(station: number, cx: number, cy: number, round: number): boolean
+        return Scene.ShowStation(scene, station, Theme.Px(cx), Theme.Px(cy), Theme.Px(round))
+      end
       Assets.Frame(session)
       Events.Frame(session)
       Guide.Frame(session)

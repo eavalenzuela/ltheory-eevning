@@ -13,6 +13,7 @@
 -- window layer's frame and colours: it has not been set out again. A
 -- script's names are what they were. "Starbase", the tab's name, opens it.
 
+local CitadelFitting = require("@lt/Game/UI/CitadelFitting")
 local Core = require("@lt/Core/Api")
 local Format = require("@lt/Game/Format")
 local Im = require("@lt/Game/UI/Im")
@@ -32,6 +33,9 @@ local Starbase = {}
 Starbase.ID = "starbase"
 
 local current: Session.Session? = nil
+
+-- The window's size at a tower (at a citadel it is CitadelFitting's).
+local TOWER_W, TOWER_H = 932, 544
 
 function Starbase.Open()
   Windows.Open(Starbase.ID)
@@ -357,7 +361,7 @@ function Starbase.Frame(session: Session.Session, game: Core.Game, player: Core.
   end
 end
 
-Windows.Kind(Starbase.ID, function(_: Windows.Window, x: number, y: number)
+Windows.Kind(Starbase.ID, function(window: Windows.Window, x: number, y: number, w: number, h: number)
   local session = current
   if session == nil then
     return
@@ -369,11 +373,25 @@ Windows.Kind(Starbase.ID, function(_: Windows.Window, x: number, y: number)
     Im.Text("This is not a starbase of yours.", x + 14, y + 14, 14, Theme.DIM)
     return
   end
+  -- A citadel's is laid out as the ship fitting window is, and called
+  -- so (the owner's, 2026-11-19); a tower's is as it was. (The window
+  -- takes the size of the one it is.)
+  local citadel = status.tower.citadel == true
+  local wide = if citadel then CitadelFitting.WIDTH else TOWER_W
+  local tall = if citadel then CitadelFitting.HEIGHT else TOWER_H
+  if window.minW ~= wide or window.minH ~= tall then
+    window.w, window.h, window.minW, window.minH = wide, tall, wide, tall
+  end
+  window.title = if citadel then "Citadel" else "Starbase"
   local was = Im.Plain(true)
-  drawStarbase(session, game, player, status, x - 4, y - 66)
+  if citadel then
+    CitadelFitting.Draw(session, game, player, status, x, y, w, h)
+  else
+    drawStarbase(session, game, player, status, x - 4, y - 66)
+  end
   Im.Plain(was)
 end)
-Windows.Make(Starbase.ID, Starbase.ID, "Starbase", 534, 130, 932, 544, 932, 544, nil)
+Windows.Make(Starbase.ID, Starbase.ID, "Starbase", 534, 130, TOWER_W, TOWER_H, TOWER_W, TOWER_H, nil)
 Windows.Icon(Starbase.ID, "station")
 
 return Starbase

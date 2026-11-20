@@ -2691,6 +2691,19 @@ export type StarbaseStatus = {
   -- is where nobody keeps order).
   shield: number, armor: number, hull: number,
   charges: number, bay: number, sealed: number, siege: number, core: number, besieged: boolean,
+  -- A citadel's (the owner's, 2026-11-19: fought as a ship is): which of
+  -- its layers is being fought ("shield", "armor", "hull"), and the
+  -- seconds it is reinforced and nothing touches it (0 when it is not);
+  -- its slots, filled and in all, for services, shield modules and its
+  -- defence module, and that module, if one is fitted ("" if not). Nil
+  -- and 0 for a tower.
+  phase: string?, reinforced: number,
+  -- (and its layers as they stand: each one's points, its most, and what
+  -- it lets through of each kind of damage)
+  vitals: State.Vitals?,
+  -- (the blocks it burns an hour as it stands: a citadel's services burn too)
+  burn: number,
+  services: number, serviceSlots: number, shields: number, shieldSlots: number, defenceModule: string,
 }
 function Query.Starbase(game: Game, id: number): StarbaseStatus?
   local state = game.state
@@ -2711,6 +2724,16 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
   local reacting = Starbases.Reacting(state, starbase)
   local defence, batteries, patrol = Raids.Defence(state, starbase)
   local raids = Raids.STRENGTH[Raids.Band(state, starbase)]
+  -- (a citadel's: how it stands under fire, and its slots)
+  local coreBall = state.balls[starbase.core]
+  local citadelVitals = if coreBall and coreBall.vitals.phase then coreBall.vitals else nil
+  local services, serviceSlots, _, _, shields, shieldSlots = Starbases.Slots(starbase)
+  local defenceModule = ""
+  for _, module in starbase.modules do
+    if Structures.moduleById[module.type].defence then
+      defenceModule = module.type
+    end
+  end
   return {
     tower = Structures.towerById[starbase.tower], mine = ship ~= nil and ship.owner == starbase.owner,
     anchored = Starbases.Anchored(state, starbase), wait = math.max(0, starbase.ready - state.tick) * Constants.TICK, lit = lit,
@@ -2729,6 +2752,12 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
     charges = starbase.charges, bay = Structures.towerById[starbase.tower].bay,
     sealed = if Starbases.Sealed(state, starbase) then (starbase.sealed - state.tick) * Constants.TICK else 0,
     siege = starbase.siege, core = starbase.core, besieged = Raids.Band(state, starbase) == "lawless",
+    phase = citadelVitals and citadelVitals.phase,
+    burn = Starbases.Burn(state, starbase),
+    vitals = if Structures.towerById[starbase.tower].citadel and coreBall then coreBall.vitals else nil,
+    reinforced = math.max(0, ((citadelVitals and citadelVitals.reinforced) or 0) - state.tick)
+      * Constants.TICK,
+    services = services, serviceSlots = serviceSlots, shields = shields, shieldSlots = shieldSlots, defenceModule = defenceModule,
   }
 end
 

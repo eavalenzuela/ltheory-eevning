@@ -597,6 +597,53 @@ function Scene.Showcase(scene: Scene, game: Core.Game, ship: number, type: strin
   return true
 end
 
+-- Show the station the pilot is docked at, as it stands in space, in a
+-- round window of the interface whose middle is (cx, cy): a camera of
+-- its own goes slowly round it, the sun over the viewer's shoulder (the
+-- citadel's window, 2026-11-19: "it should look like the regular ship
+-- fitting window"). False if it cannot be (no scene yet, or the station
+-- is not drawn).
+function Scene.ShowStation(scene: Scene, station: number, cx: number, cy: number, round: number): boolean
+  local name = "station"
+  local container = scene.container
+  local found: Object? = scene.proxies[station]
+  if container == nil or found == nil then
+    return false
+  end
+  local focus = found :: Object
+  local key = `station:{station}`
+  local show = scene.showcases[name]
+  if show == nil or show.container ~= container or show.key ~= key then
+    local turn = if show then show.turn else 0.6
+    dropShowcase(scene, name)
+    local camera = Camera_Create()
+    container:AddInterior(camera)
+    local passes = New.Vector_Reference_RenderPassT()
+    passes:Append(RenderPass_Clear(0))
+    passes:Append(RenderPass_Camera(camera))
+    show = { container = container, key = key, pieces = {}, camera = camera, passes = passes, drawn = scene.time, turn = turn, frames = 0 }
+    scene.showcases[name] = show
+  end
+  local shown = show :: Showcase
+  shown.drawn = scene.time
+  shown.turn += 0.05 * FrameTimer_Get()
+  local center = focus:GetCenter()
+  -- (the eye a little above, going round; far enough off to have the whole of it in the window)
+  local toEye = vector.normalize(vector.create(math.cos(shown.turn), 0.45, math.sin(shown.turn)))
+  local distance = focus:GetRadius() * 1.15 / math.tan(math.rad(SHOWCASE_FOV) / 2)
+  local camera = shown.camera
+  camera:SetTarget(focus)
+  camera:SetRelativePos(center + toEye * distance)
+  camera:SetRelativeLookAt(center)
+  camera:SetRigidity(100000)
+  camera:SetFov(SHOWCASE_FOV)
+  shown.frames += 1
+  if shown.frames > 2 then
+    WidgetRenderer_DrawPasses(shown.passes, vector.create(cx - round, cy - round), vector.create(2 * round, 2 * round), 1, true)
+  end
+  return true
+end
+
 -- Take what is on a ship's hardpoints away.
 local function dropArms(scene: Scene, id: number)
   local armed = scene.arms[id]
