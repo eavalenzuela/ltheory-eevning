@@ -223,6 +223,8 @@ local function drawCrew(session: Session.Session, game: Core.Game, player: Core.
         where = `{row.doing} {row.ward}` .. (if here then ", docked here" else `, {row.where}`)
       elseif row.order == "stay" then
         where ..= ", told to stay"
+      elseif row.order == "hold" then
+        where ..= `, {row.doing}`
       end
       if row.earned > 0 then
         note = if note ~= "" then `{note}, sold for {Format.Credits(row.earned)}` else `What they brought in has sold for {Format.Credits(row.earned)}`

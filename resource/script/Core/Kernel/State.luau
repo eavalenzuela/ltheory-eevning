@@ -38,6 +38,9 @@ export type Ship = {
   -- The tick its jump drive last fired, if it has one and it has
   -- (Tactical/Jumping): the drive cools from then.
   jumped: number?,
+  -- A jump portal it holds open (Tactical/Jumping): to which system, and
+  -- the tick it closes.
+  portal: { to: number, ends: number }?,
   -- True for a ship a station gave for nothing: the one a pilot begins
   -- in, and the one a pilot with none wakes in. Lost, it pays no more
   -- than the plainest hull would (Tactical/Aftermath), or losing what

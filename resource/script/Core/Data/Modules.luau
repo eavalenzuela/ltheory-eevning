@@ -183,6 +183,8 @@ export type ModuleType = {
   -- A jump beacon generator: while it runs, a ship with a jump drive
   -- can jump to the system the ship is in (Tactical/Jumping).
   beacon: boolean?,
+  -- (a Jump Portal Generator: Tactical/Jumping)
+  portal: boolean?,
   -- A data analyzer: fitted, it lets the ship hack a sealed hold from
   -- within its range (Tactical/Hacking).
   -- (a relic analyzer, 2026-11-16, opens a derelict's hold; a data
@@ -1536,6 +1538,15 @@ table.insert(modules, {
   volume = 10, basePrice = 60000, passive = {},
   hex = { kind = "entangle", range = 1000, strength = 0.2, duration = 5, capacitor = 4 },
   requires = { { skill = "propulsion.jamming", level = 3 } },
+})
+-- (a Jump Portal Generator: the owner's, 2026-11-20, "only ultracaps and
+-- black-ops *battleships+*": it holds a portal open for the friendly
+-- ships near it to jump through, Tactical/Jumping. Black ops battleships
+-- are to have it when there are any. The fitting figures are mine.)
+table.insert(modules, {
+  id = "jump.portal", name = "Jump Portal Generator", slot = "high", hardpoint = "", cpu = 100, powergrid = 50000, volume = 5000,
+  basePrice = 900000000, passive = {}, portal = true, classes = { "ultracapital" }, capital = true,
+  requires = { { skill = "jump.drives", level = 4 } },
 })
 -- (a Drone Link Augmentor: drones worked 20 km farther from the ship, the
 -- reference's, now that drones have a control range, Tactical/Drones)

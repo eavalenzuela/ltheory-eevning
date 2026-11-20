@@ -989,6 +989,9 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{event.name} has come through the gate, with {event.ships - 1} ships of its fleet`)
   elseif kind == "Marked" then
     Session.Say(session, "You have fired on a ship that is no pirate's: the patrols will fire on you")
+  elseif kind == "PortalOpened" and event.ship == mine then
+    local to = session.game.state.galaxy.systems[event.to]
+    Session.Say(session, `Jump portal open to {if to then to.name else "?"}: your fleet near you goes through`)
   elseif kind == "Deployed" and event.ship == mine then
     Session.Say(session, `{Types.Info(event.type).name} put out`)
   elseif kind == "Scooped" and event.ship == mine then

@@ -1535,6 +1535,21 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
   elseif wing.order == "patrol" then
     patrol(state, wing, ship, events)
     return
+  elseif wing.order == "hold" then
+    -- Hold where they are, in space, and fight whoever comes after them
+    -- (where a jump portal of the player's put them: Tactical/Jumping).
+    -- Docked, they wait.
+    if me == nil then
+      return
+    end
+    mend(state, me, true, events)
+    local prey = state.balls[Pirates.Hunting(state, me)]
+    if prey then
+      fight(state, me, prey, events)
+    elseif me.mode ~= "stop" and #me.vitals.locks == 0 then
+      give(state, { kind = "Stop", actor = ship.id }, events)
+    end
+    return
   elseif wing.order == "stay" then
     -- Dock at the nearest station, and wait. (The drones in first.)
     if me and callIn(state, me) then
@@ -1571,6 +1586,21 @@ local function fly(state: State.State, wing: State.Wingman, ship: State.Ship, pl
       give(state, { kind = "Undock", actor = ship.id }, events)
     end
     return
+  end
+  -- A jump portal the player holds open, near them: through it, and they
+  -- hold where they come out (Tactical/Jumping), until called back.
+  if wing.order == "follow" and lead and Jumping.PortalLeft(state, lead.id) > 0 and Jumping.PortalNear(state, me.id) == lead.id then
+    local through: State.Command = { kind = "JumpPortal", actor = me.id, target = lead.id }
+    local ok, why = Jumping.Validate(state, through)
+    if ok then
+      callIn(state, me)
+      Jumping.Apply(state, through, events)
+      wing.order = "hold"
+      return
+    elseif state.tick == (state.ships[lead.id].portal :: { to: number, ends: number }).ends - math.ceil(Jumping.PORTAL_LIFE / Constants.TICK) then
+      -- (why not, once, as the portal opens)
+      table.insert(events, { kind = "FleetCannotJump", pilot = wing.id, name = wing.name, why = why or "" })
+    end
   end
   mend(state, me, me.vitals.scrambled or wing.target ~= 0, events)
   -- The one they go with has just gone by their jump drive, and this

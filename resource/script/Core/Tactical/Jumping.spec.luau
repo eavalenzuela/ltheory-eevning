@@ -2,6 +2,7 @@
 -- Jump drives (Tactical/Jumping).
 
 local Constants = require("@lt/Core/Data/Constants")
+local Attributes = require("@lt/Core/Attributes")
 local Core = require("@lt/Core/Api")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
@@ -273,6 +274,50 @@ suite:Case("a drive with a field takes every friendly ship within five kilometre
   for _ = 1, 10 do
     Core.Step(game)
   end
+end)
+
+suite:Case("a jump portal is opened by an ultracapital's generator to a lit beacon; friendly ships near it go through on its fuel, but no capital", function(t)
+  local game, me = flying("ultracapital.daiichi")
+  local state = game.state
+  state.skills[Jumping.SKILL] = 4
+  local home = me.system
+  local to = reach(game, home, Jumping.Range(game.state, me.id))
+  tower(game, to)
+  Items.Add(state, Structures.FUEL.id, 100000, me.id, "cargo")
+  me.vitals.capacitor = me.vitals.capacitorMax
+  t.eq(refused(game, { kind = "OpenPortal", actor = 0, target = to }), "no Jump Portal Generator fitted")
+  -- (nothing smaller than an ultracapital fits one)
+  t.eq((Attributes.Check(Ships.byId["carrier.scoppo"], { "jump.portal" })), false)
+  Items.Add(state, "jump.portal", 1, me.id, "cargo").slot = 99
+  t.ok((submit(game, { kind = "OpenPortal", actor = 0, target = to })))
+  t.eq(me.system, home)
+  t.ok(math.abs(Jumping.PortalLeft(state, me.id) - (Jumping.PORTAL_LIFE - 1)) <= 1)
+  t.eq(refused(game, { kind = "OpenPortal", actor = 0, target = to }), "a portal is open already")
+  -- Ships of the pilot's: one near, one too far off, and a capital near.
+  local function ship(hull: string, gap: number): State.Ball
+    local made = Space.NewShip(state, hull, "Other", "player", state.player.home)
+    local other = Space.Launch(state, made, home, me.x + me.radius + gap, me.y, me.z)
+    other.vitals.capacitor = 0
+    return other
+  end
+  local near, far, big = ship("cruiser.ouyou", 1000), ship("cruiser.ouyou", 20000), ship("carrier.scoppo", 2000)
+  local function through(ball: State.Ball): string?
+    local ok, why = Core.Validate(game, { kind = "JumpPortal", actor = ball.id, target = me.id })
+    return if ok then "(accepted)" else why
+  end
+  t.eq(through(far), "no jump portal open within 5 km")
+  t.eq(through(big), "no capital goes through a jump portal")
+  local fuel = Jumping.Held(state, me.id)
+  t.ok((Core.Submit(game, { kind = "JumpPortal", actor = near.id, target = me.id })))
+  Core.Step(game)
+  t.eq(near.system, to)
+  t.eq(Jumping.Held(state, me.id), fuel - Jumping.Fuel(state, near.id, Jumping.Distance(state, home, to)))
+  -- Its life over, it is shut.
+  for _ = 1, Jumping.PORTAL_LIFE do
+    Core.Step(game)
+  end
+  t.eq(Jumping.PortalLeft(state, me.id), 0)
+  t.eq(through(ship("cruiser.ouyou", 1000)), "no jump portal open within 5 km")
 end)
 
 return suite

@@ -2483,12 +2483,12 @@ end)
 -- jump drive, a hired pilot of the best grade beside them in another,
 -- the skill for the drive, and a system within its reach with a tower
 -- of the player's in it, a Jump Beacon lit (and one at home).
-local function carriers(): (Core.Game, State.Wingman, State.Ship, State.Ball, number)
-  local game, second = docked("carrier.scoppo", 40)
+local function carriers(theirs: string?, flag: string?): (Core.Game, State.Wingman, State.Ship, State.Ball, number)
+  local game, second = docked(theirs or "carrier.scoppo", 40)
   local state = game.state
   local wing = hired(game, second, 5)
   local home = state.player.home
-  local great = Space.NewShip(state, "carrier.scoppo", "Flag", "player", home)
+  local great = Space.NewShip(state, flag or "carrier.scoppo", "Flag", "player", home)
   state.player.ship = great.id
   local station = assert(Space.Object(state, home))
   local me = Space.Launch(state, great, Space.SystemOf(state, home), station.x + 4e6, station.y, station.z)
@@ -2619,6 +2619,29 @@ suite:Case("a hired pilot in a carrier launches its fighters at whoever the flee
     return select(2, dronesOf(game, second.id)) == 0
   end), "the fighters were not called in")
   t.eq((dronesOf(game, second.id)), 12)
+end)
+
+suite:Case("a hired pilot following the player goes through a jump portal the player opens near them, and holds where they come out", function(t)
+  local game, wing, second, me, to = carriers("cruiser.ouyou", "ultracapital.daiichi")
+  local state = game.state
+  local home = me.system
+  state.skills[Jumping.SKILL] = 4
+  Items.Add(state, Structures.FUEL.id, 50000, me.id, "cargo")
+  Items.Add(state, "jump.portal", 1, me.id, "cargo").slot = 99
+  me.vitals.capacitor = me.vitals.capacitorMax
+  local theirs = state.balls[second.id]
+  t.ok((submit(game, { kind = "OpenPortal", actor = 0, target = to })))
+  t.ok(waitFor(game, 5, function()
+    return theirs.system == to
+  end), "the hired pilot did not go through the portal")
+  -- The player stays; the fuel was the player's ship's; the pilot holds there.
+  t.eq({ me.system, wing.order } :: { any }, { home, "hold" } :: { any })
+  t.ok(Jumping.Held(state, me.id) < 50000)
+  steps(game, 30)
+  t.eq(theirs.system, to)
+  -- Called back, they follow again.
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "follow", pilot = wing.id })))
+  t.eq(wing.order, "follow")
 end)
 
 return suite

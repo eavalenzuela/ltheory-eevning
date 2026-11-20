@@ -58,6 +58,20 @@
 -- the hull; and the ship comes out at rest a little way off the station
 -- it goes to. (How far it reaches and what it costs are mine.)
 --
+-- A jump portal (the owner's, 2026-11-20: "only ultracaps and black-ops
+-- *battleships+*"): a ship with a drive and a Jump Portal Generator
+-- fitted opens a portal to a system its drive reaches where a beacon is
+-- lit, at the drive's cost of capacitor and cooling, and it stays where
+-- it is. For Jumping.PORTAL_LIFE the friendly ships within
+-- Jumping.PORTAL_REACH of its hull may go through, each to that beacon
+-- as a drive would take it, with no drive, skill or capacitor of their
+-- own; the ship holding the portal open burns the fuel for each, from
+-- its own hold, as a drive would for that hull. No capital goes through
+-- one (the reference's). A hired pilot following the player goes
+-- through the player's when they are near it, and holds where they come
+-- out (Tactical/Fleet). (How long it stays open, how near, and that a
+-- capital does not go through, are mine where not the reference's.)
+--
 -- (Every figure is a first proposal. Not yet: a choice between beacons
 -- in one system; anybody else's beacon; space a drive does not reach
 -- into.)
@@ -100,6 +114,32 @@ Jumping.COOLDOWN = 300
 Jumping.LAND = 20000
 -- How far beyond the citadel it goes to a ship comes out of a jump bridge, m.
 Jumping.BRIDGE_LAND = 2000
+-- How long a jump portal stays open, s, and how near its ship's hull a
+-- ship has to be to go through, m.
+Jumping.PORTAL_LIFE = 60
+Jumping.PORTAL_REACH = 5000
+
+-- Whether a ship has a Jump Portal Generator fitted (and a drive to open
+-- one with).
+function Jumping.Portal(state: State.State, ship: number): boolean
+  if not Jumping.Fitted(state, ship) then
+    return false
+  end
+  for _, item in Items.Fitted(state, ship) do
+    local module = Modules.byId[item.type]
+    if module and module.portal then
+      return true
+    end
+  end
+  return false
+end
+
+-- The seconds a ship's portal has left open (0: none is).
+function Jumping.PortalLeft(state: State.State, ship: number): number
+  local record = state.ships[ship]
+  local portal = if record then record.portal else nil
+  return if portal and state.tick < portal.ends then (portal.ends - state.tick) * Constants.TICK else 0
+end
 
 -- Whether a ship has a jump drive.
 function Jumping.Fitted(state: State.State, ship: number): boolean
@@ -149,6 +189,28 @@ function Jumping.Along(state: State.State, ship: number): { number }
     end
   end
   return taken
+end
+
+-- The ship holding a portal open that a ship may go through: friendly, in
+-- its system, with its hull within reach. The nearest, if there are
+-- several.
+function Jumping.PortalNear(state: State.State, ship: number): number?
+  local record, ball = state.ships[ship], state.balls[ship]
+  if record == nil or ball == nil then
+    return nil
+  end
+  local best: number?, least = nil, Jumping.PORTAL_REACH
+  for _, id in state.shipIds do
+    local other, there = state.ships[id], state.balls[id]
+    if id ~= ship and there and there.system == ball.system and Jumping.PortalLeft(state, id) > 0
+      and friendly(other.owner, record.owner) then
+      local gap = Space.Gap(ball :: any, there :: any)
+      if gap <= least then
+        best, least = id, gap
+      end
+    end
+  end
+  return best
 end
 
 -- How far a ship's drive reaches, light years, with whoever flies it.
@@ -386,8 +448,40 @@ function Jumping.Validate(state: State.State, command: State.Command): (boolean,
     end
     return true
   end
+  if command.kind == "JumpPortal" then
+    local ball = state.balls[ship.id]
+    if ball == nil then
+      return false, "docked"
+    elseif ball.warp then
+      return false, "in warp"
+    elseif ball.vitals.scrambled then
+      return false, "warp scrambled"
+    elseif ball.vitals.rooted then
+      return false, "rooted to the spot while its module runs"
+    elseif Ships.Capital(Ships.byId[ship.type].class) then
+      return false, "no capital goes through a jump portal"
+    end
+    local holder = command.target or 0
+    if Jumping.PortalNear(state, ship.id) ~= holder then
+      return false, `no jump portal open within {math.floor(Jumping.PORTAL_REACH / 1000)} km`
+    end
+    local portal = state.ships[holder].portal :: { to: number, ends: number }
+    if Jumping.Beacon(state, holder, portal.to) == nil then
+      return false, "the beacon there has gone out"
+    end
+    local fuel, held = Jumping.Fuel(state, ship.id, Jumping.Distance(state, ball.system, portal.to)), Jumping.Held(state, holder)
+    if held < fuel then
+      return false, `the portal's ship needs {fuel} fuel blocks for this hull, and has {held}`
+    end
+    return true
+  end
   local ball = state.balls[ship.id]
   local to = command.target or 0
+  if command.kind == "OpenPortal" and not Jumping.Portal(state, ship.id) then
+    return false, "no Jump Portal Generator fitted"
+  elseif command.kind == "OpenPortal" and Jumping.PortalLeft(state, ship.id) > 0 then
+    return false, "a portal is open already"
+  end
   if not Jumping.Fitted(state, ship.id) then
     return false, "this hull has no jump drive"
   elseif ball == nil then
@@ -422,11 +516,24 @@ function Jumping.Validate(state: State.State, command: State.Command): (boolean,
   elseif ball.vitals.capacitor < Jumping.CAPACITOR * ball.vitals.capacitorMax then
     return false, `needs {math.floor(Jumping.CAPACITOR * 100 + 0.5)}% of the capacitor`
   end
+  -- (a portal burns its fuel ship by ship, as they go through)
   local fuel, held = Jumping.Fuel(state, ship.id, distance), Jumping.Held(state, ship.id)
-  if held < fuel then
+  if held < fuel and command.kind ~= "OpenPortal" then
     return false, `needs {fuel} fuel blocks in the hold, and there are {held}`
   end
   return true
+end
+
+-- Burn so many fuel blocks out of a ship's hold.
+local function burn(state: State.State, ship: number, count: number)
+  local left = count
+  for _, item in Items.In(state, ship, "cargo") do
+    if item.type == Structures.FUEL.id and left > 0 then
+      local take = math.min(left, item.quantity)
+      left -= take
+      Items.Take(state, item, take)
+    end
+  end
 end
 
 function Jumping.Apply(state: State.State, command: State.Command, events: { Event })
@@ -457,15 +564,37 @@ function Jumping.Apply(state: State.State, command: State.Command, events: { Eve
       distance = distance, beacon = place.name, took = 0, radius = ball.radius })
     return
   end
-  local distance = Jumping.Distance(state, from, to)
-  local left = Jumping.Fuel(state, ship.id, distance)
-  for _, item in Items.In(state, ship.id, "cargo") do
-    if item.type == Structures.FUEL.id and left > 0 then
-      local take = math.min(left, item.quantity)
-      left -= take
-      Items.Take(state, item, take)
-    end
+  if command.kind == "OpenPortal" then
+    ball.vitals.capacitor = Jumping.LEFT * ball.vitals.capacitorMax
+    ship.jumped = state.tick
+    ship.portal = { to = to, ends = state.tick + math.ceil(Jumping.PORTAL_LIFE / Constants.TICK) }
+    table.insert(events, { kind = "PortalOpened", ship = ship.id, to = to })
+    return
+  elseif command.kind == "JumpPortal" then
+    local holder = command.target :: number
+    local portal = state.ships[holder].portal :: { to: number, ends: number }
+    local there = portal.to
+    local distance = Jumping.Distance(state, from, there)
+    burn(state, holder, Jumping.Fuel(state, ship.id, distance))
+    local beacon = Jumping.Beacon(state, holder, there) :: Beacon
+    local rng = Rng.For(state.historySeed, state.tick, ball.id, 39)
+    local angle = Rng.Float(rng, 0, 2 * math.pi)
+    local out = beacon.radius + Jumping.LAND + ball.radius
+    ball.vitals.running, ball.vitals.locks = {}, {}
+    ball.system = there
+    ball.x, ball.y, ball.z = beacon.x + out * math.cos(angle), beacon.y + Rng.Float(rng, -0.1, 0.1) * out, beacon.z + out * math.sin(angle)
+    ball.vx, ball.vy, ball.vz = 0, 0, 0
+    ball.tvx, ball.tvy, ball.tvz = 0, 0, 0
+    ball.mode, ball.target = "stop", 0
+    ball.warp, ball.intent = nil, nil
+    Space.AssignGrid(state, ball)
+    Vitals.Refresh(state, ball)
+    table.insert(events, { kind = "Jumped", ship = ball.id, from = from, to = there, gate = 0, arrival = beacon.id, drive = true,
+      portal = holder, distance = distance, beacon = beacon.name, took = 0, radius = ball.radius })
+    return
   end
+  local distance = Jumping.Distance(state, from, to)
+  burn(state, ship.id, Jumping.Fuel(state, ship.id, distance))
   ball.vitals.capacitor = Jumping.LEFT * ball.vitals.capacitorMax
   ball.vitals.running, ball.vitals.locks = {}, {}
   ship.jumped = state.tick

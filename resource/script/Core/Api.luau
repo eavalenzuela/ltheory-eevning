@@ -1312,7 +1312,7 @@ local SITE_COMMANDS = { Scan = true, LaunchProbe = true, RecallProbes = true, Mo
 local DEPLOY_COMMANDS = { Deploy = true, Scoop = true }
 local HACK_COMMANDS = { StartHack = true, HackNode = true, AbandonHack = true }
 local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones = true }
-local JUMP_COMMANDS = { JumpDrive = true, Bridge = true }
+local JUMP_COMMANDS = { JumpDrive = true, Bridge = true, OpenPortal = true, JumpPortal = true }
 local IMPLANT_COMMANDS = { PlugImplant = true, UnplugImplant = true }
 local FLEET_COMMANDS = { HirePilot = true, AssignShip = true, DismissPilot = true, FleetOrder = true, FleetWarp = true }
 local MISSION_COMMANDS = { AcceptMission = true, CompleteMission = true, AbandonMission = true, RedeemLoyalty = true }
@@ -2885,7 +2885,10 @@ end
 -- would take with the pilot's.
 export type JumpBeacon = { system: number, kind: string, name: string, distance: number, reached: boolean }
 export type JumpDriveStatus = { range: number, held: number, cooling: number, distance: number, fuel: number, ready: boolean, why: string,
-  beacons: { JumpBeacon }, field: number, along: number }
+  beacons: { JumpBeacon }, field: number, along: number,
+  -- (a Jump Portal Generator fitted: whether one can be opened to 'system' now and why not, and the seconds an
+  -- open one has left)
+  portal: boolean, portalReady: boolean, portalWhy: string, portalLeft: number }
 -- The jump bridge the pilot's ship is at, if any (Tactical/Jumping): the
 -- station's name and its fuel, every system it reaches with how far and
 -- the fuel it would burn for the hull, and whether going to 'system'
@@ -2922,6 +2925,8 @@ function Query.JumpDrive(game: Game, system: number?): JumpDriveStatus?
   local known = state.galaxy.systems[to] ~= nil and to ~= here
   local distance = if known then Jumping.Distance(state, here, to) else 0
   local ok, why = Jumping.Validate(state, { kind = "JumpDrive", actor = ship, target = to })
+  local portal = Jumping.Portal(state, ship)
+  local portalOk, portalWhy = Jumping.Validate(state, { kind = "OpenPortal", actor = ship, target = to })
   local range = Jumping.Range(state, ship)
   local beacons: { JumpBeacon } = {}
   for _, beacon in Jumping.Beacons(state, ship) do
@@ -2931,7 +2936,8 @@ function Query.JumpDrive(game: Game, system: number?): JumpDriveStatus?
   end
   return { range = range, held = Jumping.Held(state, ship), cooling = Jumping.Cooling(state, ship),
     distance = distance, fuel = if known then Jumping.Fuel(state, ship, distance) else 0, ready = ok, why = why or "",
-    beacons = beacons, field = Jumping.Field(state, ship), along = #Jumping.Along(state, ship) }
+    beacons = beacons, field = Jumping.Field(state, ship), along = #Jumping.Along(state, ship), portal = portal,
+    portalReady = portalOk and portal, portalWhy = portalWhy or "", portalLeft = Jumping.PortalLeft(state, ship) }
 end
 
 -- A tower the pirates hold a moon with (Tactical/Keeps), asked for by
@@ -3095,6 +3101,8 @@ function Query.Fleet(game: Game): { FleetRow }
         row.doing = if ball and #ball.vitals.locks > 0 then "fighting" else "guarding"
       elseif wing.order == "stay" then
         row.doing = "waiting"
+      elseif wing.order == "hold" then
+        row.doing = if ball and #ball.vitals.locks > 0 then "fighting" else "holding where they came through"
       else
         row.doing = if ball and #ball.vitals.locks > 0 then "fighting" else "following"
       end

@@ -1214,6 +1214,10 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
         if drive.along > 0 then Im.TEXT else Im.DIM)
       line += 20
     end
+    if drive.portalLeft > 0 then
+      Im.Text(`A jump portal is open: {Format.Duration(drive.portalLeft)} left`, px, line, 12, NEXT)
+      line += 18
+    end
     if shown == here then
       Im.Text(`{Format.Whole(drive.held)} fuel blocks in the hold` .. (if drive.cooling > 0
         then `, cooling {Format.Duration(drive.cooling)}` else ""), px, line, 13, Im.DIM)
@@ -1224,6 +1228,11 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
       line += 22
       if Im.Button("Jump", px, line, 90, 28, drive.ready, "Map:jump") then
         Session.Do(session, { kind = "JumpDrive", actor = 0, target = shown })
+      end
+      -- (a Jump Portal Generator: the portal opened there, for the
+      -- friendly ships near to go through, Tactical/Jumping)
+      if drive.portal and Im.Button("Open portal", px + 100, line, 120, 28, drive.portalReady, "Map:portal") then
+        Session.Do(session, { kind = "OpenPortal", actor = 0, target = shown })
       end
       line += 34
       if not drive.ready then
