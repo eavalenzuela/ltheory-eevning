@@ -1557,12 +1557,13 @@ for _, each in {
     passive = each[6], requires = { { skill = each[7], level = 1 } },
   })
 end
-for size, each in { { "medium", "Medium", 150, 12, 8000, 25, 175 }, { "heavy", "Heavy", 500, 24, 16000, 50, 2000 } } :: { { any } } do
+for size, each in { { "medium", "Medium", 150, 12, 8000, 25, 175 }, { "heavy", "Heavy", 500, 24, 16000, 50, 2000 },
+  { "xl", "Capital", 1500, 30, 30000, 120, 25000 } } :: { { any } } do
   table.insert(modules, {
     id = `neutraliser.{each[1]}`, name = `{each[2]} Energy Neutraliser`, slot = "high", hardpoint = "",
     cpu = each[6], powergrid = each[7], volume = 5 * (size + 1), basePrice = 35000 * (size + 1) ^ 2, passive = {},
     hex = { kind = "neut", range = each[5], strength = each[3], duration = each[4], capacitor = each[3] },
-    requires = { { skill = "electronic.warfare", level = 2 + size } },
+    requires = { { skill = "electronic.warfare", level = math.min(5, 2 + size) } }, capital = if size == 3 then true :: boolean? else nil,
   })
 end
 
@@ -1577,15 +1578,18 @@ local FITTINGS: { { any } } = {
   { "mwd.5mn", "mwd", "propulsion" },
   { "capacitor.battery.small", "capacitor.battery", "engineering" },
 }
-local FIT_AMOUNT = { 1, 3.2, 9 }
-local FIT_MASS = { 1, 10, 100 }
-local FIT_CPU = { 1, 1.6, 2.4 }
+-- (and since 2026-11-20 an XL of each, for capitals only: the owner's
+-- "Yes, XL sizes", the figures mine, about three times a large's and on a
+-- longer cycle, as the reference's capital modules are to its large ones)
+local FIT_AMOUNT = { 1, 3.2, 9, 30 }
+local FIT_MASS = { 1, 10, 100, 1000 }
+local FIT_CPU = { 1, 1.6, 2.4, 4 }
 -- (a large one's since 2026-11-18 a little more, when a cruiser's
 -- powergrid rose with its guns: still more than a cruiser has)
-local FIT_POWERGRID = { 1, 15, 250 }
-local FIT_PRICE = { 1, 8, 60 }
-local FIT_CYCLE = { 1, 1.5, 2.25 }
-local FIT_CAPACITOR = { 1, 3, 8.5 }
+local FIT_POWERGRID = { 1, 15, 250, 2500 }
+local FIT_PRICE = { 1, 8, 60, 400 }
+local FIT_CYCLE = { 1, 1.5, 2.25, 3.4 }
+local FIT_CAPACITOR = { 1, 3, 8.5, 28 }
 
 local function scaled(list: { Modifier }, size: number): { Modifier }
   local out: { Modifier } = {}
@@ -1607,10 +1611,12 @@ for _, fitting in FITTINGS do
     end
   end
   local base = assert(small)
-  for size = 2, 3 do
+  for size = 2, 4 do
     local repair = base.repair
+    -- (one whose name says no size says XL in front, for a capital)
+    local named, sized = string.gsub(base.name, "Small", SIZE_TITLE[size])
     table.insert(modules, {
-      id = `{fitting[2]}.{SIZE_NAME[size]}`, name = (string.gsub(base.name, "Small", SIZE_TITLE[size])),
+      id = `{fitting[2]}.{SIZE_NAME[size]}`, name = if sized == 0 and size == 4 then `XL {base.name}` else named, capital = if size == 4 then true :: boolean? else nil,
       slot = base.slot, hardpoint = base.hardpoint,
       cpu = math.floor(base.cpu * FIT_CPU[size] + 0.5), powergrid = math.floor(base.powergrid * FIT_POWERGRID[size] + 0.5),
       volume = base.volume * (size * size - size), basePrice = base.basePrice * FIT_PRICE[size],
@@ -1620,7 +1626,8 @@ for _, fitting in FITTINGS do
       boost = if base.boost then scaled(base.boost, size) else nil,
       boostDuration = base.boostDuration,
       boostCapacitor = if base.boostCapacitor then base.boostCapacitor * FIT_CAPACITOR[size] else nil,
-      requires = { { skill = fitting[3], level = size + 1 } },
+      -- (an XL as much skill as a large: its tech 2 make the more)
+      requires = { { skill = fitting[3], level = math.min(4, size + 1) } },
     })
   end
 end
@@ -1628,21 +1635,21 @@ end
 -- And the remote repairers by size, and the relays: more put back, or
 -- sent, from farther off. (What a relay sends is what it costs, at
 -- every size.)
-local REMOTE_RANGE = { 1, 1.6, 2.5 }
+local REMOTE_RANGE = { 1, 1.6, 2.5, 4 }
 for _, base in table.clone(modules) do
   local hex = base.hex
   if hex and (hex.kind == "shield" or hex.kind == "armor" or hex.kind == "capacitor") and not base.internal then
-    for size = 2, 3 do
+    for size = 2, 4 do
       local cost = hex.capacitor * FIT_CAPACITOR[size]
       table.insert(modules, {
         id = (string.gsub(base.id, "small", SIZE_NAME[size])), name = (string.gsub(base.name, "Small", SIZE_TITLE[size])),
-        slot = base.slot, hardpoint = base.hardpoint,
+        slot = base.slot, hardpoint = base.hardpoint, capital = if size == 4 then true :: boolean? else nil,
         cpu = math.floor(base.cpu * FIT_CPU[size] + 0.5), powergrid = math.floor(base.powergrid * FIT_POWERGRID[size] + 0.5),
         volume = base.volume * (size * size - size), basePrice = base.basePrice * FIT_PRICE[size], passive = {},
         hex = { kind = hex.kind, range = hex.range * REMOTE_RANGE[size],
           strength = if hex.kind == "capacitor" then cost else hex.strength * FIT_AMOUNT[size],
           duration = hex.duration, capacitor = cost },
-        requires = { { skill = if hex.kind == "capacitor" then "engineering" else "remote.repair", level = size + 1 } },
+        requires = { { skill = if hex.kind == "capacitor" then "engineering" else "remote.repair", level = math.min(4, size + 1) } },
       })
     end
   end
