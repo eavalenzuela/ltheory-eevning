@@ -33,6 +33,10 @@
 --   mining      what its mining yields ("yield")
 --   ore         its ore hold ("hold")
 --   spinal      its bow gun ("damage")
+--   trident     the Trident its Fighter Pylon carries ("damage", and
+--               "toughness": its shield, armour and hull)
+-- ('launcher' bonuses are on every size of a launcher, and one of them,
+-- "speed", is how fast its missiles fly.)
 -- Where Core/Attributes, Tactical/Combat and Assets/Items read them.
 
 export type HullBonus = {
@@ -116,6 +120,16 @@ local function hullHP(skill: string): HullBonus
 end
 -- (the Vessari's frigates: an afterburner the faster for the pilot's Afterburners)
 local AFTERBURNER = level("propulsion", 0.05, "afterburner", "speed", "an afterburner's speed bonus 5% greater")
+-- (the faction weapons' own, the owner's of 2026-11-20: the Kethri's hulls
+-- with a launcher get more of their Vertical Launch Battery; the Nimia's,
+-- given launchers for it, throw their plasma torpedoes faster, and so the
+-- harder to outrun (and the farther, flying as long); the Drowned's
+-- cruisers and up that carry a Fighter Pylon have a Trident that hits a
+-- little harder and takes more to bring down)
+local VLB = role(0.25, "launcher", "damageMultiplier", "Vertical Launch Battery missiles do 25% more damage", nil, "launcher.vertical")
+local PLASMA = role(0.25, "launcher", "speed", "plasma torpedoes fly 25% faster", nil, "launcher.plasma")
+local TRIDENT_DAMAGE = role(0.15, "trident", "damage", "its Trident does 15% more damage")
+local TRIDENT_TOUGH = role(0.25, "trident", "toughness", "its Trident has 25% more shield, armour and hull")
 
 HullBonuses.byHull = {
   -- The Vessari (the owner, 2026-11-18): missiles and armour, so kiters
@@ -213,21 +227,21 @@ HullBonuses.byHull = {
   -- The Kethri (2026-11-18, the owner: "looks good"): lasers, which live
   -- on the capacitor, and armour; brawlers and beam snipers.
   ["frigate.battleaxe"] = { laser("frigates", 0.05, "damageMultiplier", "5% more laser damage"), laserCap("frigates") },
-  ["frigate.gauntlet"] = { laser("frigates", -0.05, "duration", "lasers fire 5% faster"),
+  ["frigate.gauntlet"] = { VLB, laser("frigates", -0.05, "duration", "lasers fire 5% faster"),
     laser("frigates", 0.10, "optimal", "lasers reach 10% farther") },
-  ["destroyer.sentry"] = { laser("destroyers", 0.05, "damageMultiplier", "5% more laser damage"), laserCap("destroyers"),
+  ["destroyer.sentry"] = { VLB, laser("destroyers", 0.05, "damageMultiplier", "5% more laser damage"), laserCap("destroyers"),
     role(0.5, "weapons", "optimal", "lasers reach half as far again", "laser") },
-  ["destroyer.noxious"] = { laser("destroyers", 0.05, "damageMultiplier", "5% more laser damage"), laserCap("destroyers"),
+  ["destroyer.noxious"] = { VLB, laser("destroyers", 0.05, "damageMultiplier", "5% more laser damage"), laserCap("destroyers"),
     role(0.5, "weapons", "optimal", "lasers reach half as far again", "laser") },
-  ["cruiser.perfexis"] = { laser("cruisers", 0.05, "damageMultiplier", "5% more laser damage"), armorResists("cruisers") },
-  ["battlecruiser.extremis"] = { laser("battlecruisers", -0.05, "duration", "lasers fire 5% faster"), laserCap("battlecruisers") },
-  ["battlecruiser.deluge"] = { laser("battlecruisers", -0.05, "duration", "lasers fire 5% faster"), laserCap("battlecruisers") },
-  ["battleship.teardrop"] = { laser("battleships", 0.05, "damageMultiplier", "5% more laser damage"), armorHP("battleships") },
+  ["cruiser.perfexis"] = { VLB, laser("cruisers", 0.05, "damageMultiplier", "5% more laser damage"), armorResists("cruisers") },
+  ["battlecruiser.extremis"] = { VLB, laser("battlecruisers", -0.05, "duration", "lasers fire 5% faster"), laserCap("battlecruisers") },
+  ["battlecruiser.deluge"] = { VLB, laser("battlecruisers", -0.05, "duration", "lasers fire 5% faster"), laserCap("battlecruisers") },
+  ["battleship.teardrop"] = { VLB, laser("battleships", 0.05, "damageMultiplier", "5% more laser damage"), armorHP("battleships") },
   ["industrial.porter"] = { cargo("industrials"), armorHP("industrials") },
   ["carrier.tennit"] = { level("carriers", 0.05, "drones", "damage", "fighters do 5% more damage"), armorResists("carriers") },
-  ["dreadnought.pox"] = { laser("dreadnoughts", 0.05, "damageMultiplier", "5% more laser damage"), laserCap("dreadnoughts") },
+  ["dreadnought.pox"] = { VLB, laser("dreadnoughts", 0.05, "damageMultiplier", "5% more laser damage"), laserCap("dreadnoughts") },
   ["capitalindustrial.piton"] = { level("capital.industrials", 0.05, "ore", "hold", "5% more ore hold"), armorHP("capital.industrials") },
-  ["ultracapital.leslarmesdenova"] = { laser("ultracapitals", 0.05, "damageMultiplier", "5% more laser damage"),
+  ["ultracapital.leslarmesdenova"] = { VLB, laser("ultracapitals", 0.05, "damageMultiplier", "5% more laser damage"),
     armorHP("ultracapitals") },
   ["barge.pulley"] = { level("mining", 0.05, "mining", "yield", "5% more from mining"), armorHP("mining") },
   ["freighter.hiven"] = { cargo("freighters"), armorHP("freighters") },
@@ -297,16 +311,16 @@ HullBonuses.byHull = {
   ["frigate.oon"] = { hybrid("frigates", 0.05, "damageMultiplier", "5% more hybrid damage"), armorMend("frigates"), WEB },
   ["destroyer.kri"] = { hybrid("destroyers", -0.05, "duration", "hybrid turrets fire 5% faster"), armorMend("destroyers"), WEB,
     role(0.25, "weapons", "tracking", "turrets track 25% better", "turret") },
-  ["cruiser.hon"] = { hybrid("cruisers", 0.05, "damageMultiplier", "5% more hybrid damage"), speed("cruisers"), WEB },
-  ["cruiser.kava"] = { hybrid("cruisers", -0.05, "duration", "hybrid turrets fire 5% faster"),
+  ["cruiser.hon"] = { PLASMA, hybrid("cruisers", 0.05, "damageMultiplier", "5% more hybrid damage"), speed("cruisers"), WEB },
+  ["cruiser.kava"] = { PLASMA, hybrid("cruisers", -0.05, "duration", "hybrid turrets fire 5% faster"),
     level("cruisers", 0.10, "ship", "hullMend", "its hull mends 10% faster"), WEB },
-  ["cruiser.hano"] = { hybrid("cruisers", 0.05, "damageMultiplier", "5% more hybrid damage"), speed("cruisers"), WEB },
-  ["battlecruiser.hoku"] = { hybrid("battlecruisers", 0.05, "damageMultiplier", "5% more hybrid damage"), armorMend("battlecruisers"),
+  ["cruiser.hano"] = { PLASMA, hybrid("cruisers", 0.05, "damageMultiplier", "5% more hybrid damage"), speed("cruisers"), WEB },
+  ["battlecruiser.hoku"] = { PLASMA, hybrid("battlecruisers", 0.05, "damageMultiplier", "5% more hybrid damage"), armorMend("battlecruisers"),
     WEB },
-  ["battleship.rru"] = { hybrid("battleships", 0.05, "damageMultiplier", "5% more hybrid damage"), armorHP("battleships"), WEB },
+  ["battleship.rru"] = { PLASMA, hybrid("battleships", 0.05, "damageMultiplier", "5% more hybrid damage"), armorHP("battleships"), WEB },
   ["industrial.rikn"] = { cargo("industrials"), armorMend("industrials") },
   ["carrier.takk"] = { level("carriers", 0.05, "drones", "damage", "fighters do 5% more damage"), armorMend("carriers") },
-  ["siegedreadnought.zzk"] = { hybrid("dreadnoughts", 0.05, "damageMultiplier", "5% more hybrid damage"), armorHP("dreadnoughts") },
+  ["siegedreadnought.zzk"] = { PLASMA, hybrid("dreadnoughts", 0.05, "damageMultiplier", "5% more hybrid damage"), armorHP("dreadnoughts") },
   ["capitalindustrial.knuu"] = { armorHP("capital.industrials"), armorMend("capital.industrials") },
   ["capitalindustrial.zzna"] = { level("capital.industrials", 0.05, "ore", "hold", "5% more ore hold"), armorMend("capital.industrials") },
   ["supercarrier.yuln"] = { level("supercarriers", 0.05, "drones", "damage", "fighters and bombers do 5% more damage"),
@@ -322,13 +336,13 @@ HullBonuses.byHull = {
   ["frigate.charon"] = { hybrid("frigates", -0.05, "duration", "hybrid turrets fire 5% faster"), hullHP("frigates") },
   ["destroyer.gravestone"] = { hybrid("destroyers", 0.05, "damageMultiplier", "5% more hybrid damage"), hullHP("destroyers"),
     role(0.5, "weapons", "optimal", "hybrid turrets reach half as far again", "hybrid") },
-  ["cruiser.casket"] = { hybrid("cruisers", 0.05, "damageMultiplier", "5% more hybrid damage"),
+  ["cruiser.casket"] = { TRIDENT_DAMAGE, TRIDENT_TOUGH, hybrid("cruisers", 0.05, "damageMultiplier", "5% more hybrid damage"),
     hybrid("cruisers", 0.10, "optimal", "hybrid turrets reach 10% farther") },
-  ["cruiser.rebirth"] = { hybrid("cruisers", 0.05, "damageMultiplier", "5% more hybrid damage"),
+  ["cruiser.rebirth"] = { TRIDENT_DAMAGE, TRIDENT_TOUGH, hybrid("cruisers", 0.05, "damageMultiplier", "5% more hybrid damage"),
     hybrid("cruisers", 0.10, "optimal", "hybrid turrets reach 10% farther") },
-  ["battlecruiser.graveyardkeeper"] = { hybrid("battlecruisers", -0.05, "duration", "hybrid turrets fire 5% faster"),
+  ["battlecruiser.graveyardkeeper"] = { TRIDENT_DAMAGE, TRIDENT_TOUGH, hybrid("battlecruisers", -0.05, "duration", "hybrid turrets fire 5% faster"),
     level("battlecruisers", -0.04, "ship", "hullResonance", "its hull resists 4% more of every kind of damage") },
-  ["battleship.coffin"] = { hybrid("battleships", 0.05, "damageMultiplier", "5% more hybrid damage"), hullHP("battleships") },
+  ["battleship.coffin"] = { TRIDENT_DAMAGE, TRIDENT_TOUGH, hybrid("battleships", 0.05, "damageMultiplier", "5% more hybrid damage"), hullHP("battleships") },
   ["industrial.hearse"] = { cargo("industrials"), hullHP("industrials") },
   ["carrier.funeralprocession"] = { level("carriers", 0.05, "drones", "damage", "fighters do 5% more damage"), hullHP("carriers") },
   ["dreadnought.thereaper"] = { hybrid("dreadnoughts", 0.05, "damageMultiplier", "5% more hybrid damage"), hullHP("dreadnoughts") },

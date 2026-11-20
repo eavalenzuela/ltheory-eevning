@@ -156,7 +156,11 @@ export type Faction = {
 -- and "Drowned Coffin".
 export type Hull = { name: string, class: string, role: string?, tech: number?, of: string?, jump: boolean?, stealth: boolean?,
   cloak: boolean?, explorer: boolean?, hardpoints: number?, radius: number?, guns: { number }?, rare: boolean?,
-  jumpField: number?, spinal: boolean?, refinery: boolean?, interdictor: boolean?, ewar: boolean? }
+  jumpField: number?, spinal: boolean?, refinery: boolean?, interdictor: boolean?, ewar: boolean?,
+  -- (launcher hardpoints over and above its share, each with a high slot
+  -- of its own: the owner's, 2026-11-20, for the Nimia, whose own Plasma
+  -- Torpedo Launcher none of their turret-only hulls could fit)
+  racks: number? }
 
 Factions.list = {
   -- The four human factions.
@@ -445,11 +449,11 @@ Factions.list = {
     line = {
       { name = "O'on", class = "frigate" },
       { name = "Kri", class = "destroyer" },
-      { name = "Ka'va", class = "cruiser" }, { name = "Hon", class = "cruiser" },
+      { name = "Ka'va", class = "cruiser", racks = 1 }, { name = "Hon", class = "cruiser", racks = 1 },
       { name = "Hano", class = "cruiser", tech = 2, of = "Hon", stealth = true },
-      { name = "Hoku", class = "battlecruiser" },
-      { name = "R'ru", class = "battleship" },
-      { name = "Zzk", class = "siegedreadnought" },
+      { name = "Hoku", class = "battlecruiser", racks = 2 },
+      { name = "R'ru", class = "battleship", racks = 2 },
+      { name = "Zzk", class = "siegedreadnought", racks = 2 },
       { name = "Takk", class = "carrier" },
       { name = "Yuln", class = "supercarrier" },
       { name = "Rikn", class = "industrial" },

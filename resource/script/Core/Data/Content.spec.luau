@@ -240,7 +240,13 @@ suite:Case("the Nimia's ships are the owner's list of them: fourteen hulls of li
     t.ok(Blueprints.byProduct[hull.id] ~= nil and Blueprints.byProduct[hull.id].rare, name)
     -- No shield, and armour and hull that mend; more of both than a hull of its class has, to stand in for the shield.
     t.eq({ hull.shield, hull.armorMend, hull.hullMend } :: { any }, { 0, 0.004, 0.002 } :: { any }, name)
-    t.eq(hull.launchers, 0, name)
+    -- (blasters only, but for the launchers their cruisers and up carry for their own Plasma Torpedo Launcher, over
+    -- and above their turrets: the owner's, 2026-11-20)
+    local racks = ({ ["Ka'va"] = 1, Hon = 1, Hano = 1, Hoku = 2, ["R'ru"] = 2, Zzk = 2 } :: { [string]: number })[name] or 0
+    t.eq(hull.launchers, racks, name)
+    if racks > 0 then
+      t.eq(Ships.Bonus(hull, "launcher", "speed", nil, nil, "launcher.plasma.medium"), 1.25, name)
+    end
     if of then
       local base = assert(Ships.byId[`{class}.{string.lower(of)}`])
       t.eq({ hull.tech, hull.base, Ships.Improved(base.id) } :: { any }, { 2, base.id, hull } :: { any }, name)

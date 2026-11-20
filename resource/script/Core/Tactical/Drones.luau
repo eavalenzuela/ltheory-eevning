@@ -246,10 +246,11 @@ function Drones.Put(state: State.State, ship: State.Ship, ball: State.Ball, type
     Items.Add(state, type.charge, 4000, drone.id, "cargo")
   end
   local n = #state.droneIds
-  local launched = Space.Launch(state, drone, ball.system, ball.x + 150 * math.cos(n * 2.4), ball.y + 60,
-    ball.z + 150 * math.sin(n * 2.4))
+  -- (a drone before it is launched, so that what it is counts in how it leaves: a Trident's bonus, Tactical/Vitals)
   state.drones[drone.id] = { ship = drone.id, owner = ship.id, type = type.id, target = target or 0, returning = false, near = true,
     pylon = pylon }
+  local launched = Space.Launch(state, drone, ball.system, ball.x + 150 * math.cos(n * 2.4), ball.y + 60,
+    ball.z + 150 * math.sin(n * 2.4))
   table.insert(state.droneIds, drone.id)
   table.insert(events, { kind = "BallAdded", ball = launched.id })
   table.insert(events, { kind = "DroneLaunched", owner = ship.id, drone = drone.id })

@@ -341,6 +341,13 @@ suite:Case("a Fighter Pylon sends its Trident at the target, takes it back when 
   end
   local out = assert(trident(), "the Trident should be out")
   t.eq({ out.target, out.type, pylon.rounds } :: { any }, { a.foe.id, "drone.trident", 0 } :: { any })
+  -- (a Drowned cruiser's Trident takes a quarter more to bring down, and hits 15% harder: the owner's, 2026-11-20)
+  local made = Ships.byId[state.ships[out.ship].type]
+  t.near(state.balls[out.ship].vitals.hullMax, made.hull * 1.25, 1e-6)
+  t.eq({ Ships.Bonus(Ships.byId["cruiser.casket"], "trident", "damage"), Ships.Bonus(Ships.byId["cruiser.gladius"], "trident", "damage") }
+    :: { any }, { 1.15, 1 } :: { any })
+  -- (and a Kethri hull with a launcher does more with its Vertical Launch Battery, of any size)
+  t.eq(Ships.Bonus(Ships.byId["battlecruiser.extremis"], "launcher", "damageMultiplier", nil, nil, "launcher.vertical.large"), 1.25)
   -- Switched off, it comes home and is on the pylon again.
   order(t, a, { kind = "DeactivateModule", actor = 0, item = pylon.id })
   for _ = 1, 60 do

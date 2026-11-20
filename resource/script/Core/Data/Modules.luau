@@ -39,6 +39,9 @@ export type Weapon = {
   -- missile flies by itself, and how wide their blast is, likewise (1
   -- where not said: a short-range launcher throws its missiles a third
   -- as far, and a flight computer changes both)
+  -- (how much faster its missiles fly than their own speed: a hull's
+  -- bonus, Data/HullBonuses; nil for 1)
+  speed: number?,
   flight: number?,
   blast: number?,
   -- A beam that leaps (the Vail's Litany Beam): on a hit it goes on to

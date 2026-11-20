@@ -37,7 +37,17 @@ function Vitals.Stats(state: State.State, ship: State.Ship, vitals: State.Vitals
       end
     end
   end
-  return Attributes.Ship(Ships.byId[ship.type], fit, Items.Levels(state, ship.id))
+  local stats = Attributes.Ship(Ships.byId[ship.type], fit, Items.Levels(state, ship.id))
+  -- (a Trident takes more to bring down for its pylon's hull's bonus to it: Data/HullBonuses)
+  local drone = state.drones[ship.id]
+  local owner = if drone and drone.pylon then state.ships[drone.owner] else nil
+  if owner then
+    local by = Ships.Bonus(Ships.byId[owner.type], "trident", "toughness", Items.Levels(state, owner.id))
+    if by ~= 1 then
+      stats.shield, stats.armor, stats.hull = stats.shield * by, stats.armor * by, stats.hull * by
+    end
+  end
+  return stats
 end
 
 -- The fit as the attribute engine wants it, with what is running.

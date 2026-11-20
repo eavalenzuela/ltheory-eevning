@@ -208,8 +208,10 @@ function Attributes.Weapon(fitted: { Fitted }, type: string, levels: Levels?, hu
   -- (how far its missiles fly and how wide their blast is, as shares of
   -- the missile's own: 1 where the weapon does not say)
   out.flight, out.blast = out.flight or 1, out.blast or 1
+  -- (and how fast, likewise)
+  out.speed = out.speed or 1
   if hull and hull.bonuses then
-    for _, name in { "damageMultiplier", "duration", "optimal", "falloff", "tracking", "capacitor", "flight", "blast" } do
+    for _, name in { "damageMultiplier", "duration", "optimal", "falloff", "tracking", "capacitor", "flight", "blast", "speed" } do
       local by = Ships.Bonus(hull, "weapons", name, levels, weapon.family) * Ships.Bonus(hull, "launcher", name, levels, nil, type)
       if by ~= 1 then
         pendingFor(pending, name).plain *= by

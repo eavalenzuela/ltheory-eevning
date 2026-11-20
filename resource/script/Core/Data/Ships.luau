@@ -543,6 +543,16 @@ for _, yard in Factions.list do
         hull.spinal = if named.spinal then bowRailgun(hull.class) else nil
         hull.refinery = named.refinery
         hull.interdictor, hull.ewar = named.interdictor, named.ewar
+        -- (launchers over and above its share, each with its own high slot, and the powergrid and CPU for them as
+        -- it has for its own hardpoints: Factions' 'racks')
+        local racks = named.racks
+        if racks then
+          local was = math.max(1, hull.turrets + hull.launchers)
+          hull.launchers += racks
+          hull.highs += racks
+          hull.powergrid = round(hull.powergrid * (was + racks) / was)
+          hull.cpu = round(hull.cpu * (was + racks) / was)
+        end
         -- (a hull written out by hand above, under the name the line has
         -- for it, is that hull: the Kethri's frigate)
         local written = false
@@ -1073,7 +1083,9 @@ function Ships.Bonus(hull: ShipType?, on: string, attribute: string, levels: { [
   end
   local out = 1
   for _, b in bonuses do
-    if b.on == on and b.attribute == attribute and (b.module == nil or b.module == module)
+    -- (a bonus on a launcher is on every size of it: "launcher.vertical" is on "launcher.vertical.large")
+    if b.on == on and b.attribute == attribute
+      and (b.module == nil or b.module == module or (module ~= nil and string.sub(module, 1, #b.module + 1) == b.module .. "."))
       and (b.family == nil or b.family == family or (b.family == "turret" and family ~= nil and family ~= "missile")) then
       local level = if b.skill then (if levels then levels[b.skill] or 0 else 0) else 1
       out *= 1 + b.per * level

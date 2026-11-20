@@ -776,7 +776,7 @@ local function fireMissile(state: State.State, ball: State.Ball, item: State.Ite
   local volley = weapon.volley
   -- (as far as its target's surface is, and for a tower in its field that is the field: Tactical/Fields)
   local flight = math.min(Space.Distance(ball :: any, target), Fields.Gap(state, ball, target) + ball.radius + target.radius)
-    * (if volley then volley.stretch or 1 else 1) / (charge.velocity * (if volley then volley.speed else 1))
+    * (if volley then volley.stretch or 1 else 1) / (charge.velocity * (if volley then volley.speed else 1) * (weapon.speed or 1))
   local outcome = "launched"
   -- (how long it flies: as its launcher throws it, a short-range one a
   -- third as far, and longer for a pilot who has learned Long Burn. And
@@ -815,7 +815,8 @@ local function fireMissile(state: State.State, ball: State.Ball, item: State.Ite
         -- (and it flies of itself from here, after its target, until its fuel is spent; a vertical launch's
         -- climbs for the first quarter of the flight it was fired for)
         x = ball.x, y = ball.y, z = ball.z, vx = 0, vy = 0, vz = 0, at = now(state),
-        speed = charge.velocity * (if volley then volley.speed else 1), grid = ball.grid, expires = now(state) + delay + flies,
+        speed = charge.velocity * (if volley then volley.speed else 1) * (weapon.speed or 1), grid = ball.grid,
+        expires = now(state) + delay + flies,
         climb = if volley and volley.path == "arc" then now(state) + delay + Combat.CLIMB * flight else nil })
     end
     if volley then
@@ -922,6 +923,10 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
         weapon.damageMultiplier *= 1 + Combat.SWARM * Skills.Level(Items.Levels(state, drone.owner), "swarm.tactics")
         -- (and for a carrier's own bonus to what it launches: Data/HullBonuses)
         weapon.damageMultiplier *= Ships.Bonus(Ships.byId[state.ships[drone.owner].type], "drones", "damage", Items.Levels(state, drone.owner))
+        -- (and a Trident, for its pylon's hull's bonus to it)
+        if drone.pylon then
+          weapon.damageMultiplier *= Ships.Bonus(Ships.byId[state.ships[drone.owner].type], "trident", "damage", Items.Levels(state, drone.owner))
+        end
         -- (and for what its owner has fitted for its drones: each amplifier
         -- and link the less for those before it, as stacked modules are)
         local damages, trackings = {}, {}
