@@ -66,6 +66,10 @@ type Effect = {
   -- A plasma torpedo (the Nimia's): the colour of its ball. Nil for every
   -- other.
   ball: vector?,
+  -- A point defence tracer that misses: how far wide it goes, as a part
+  -- of the way (its 'miss' then the way, a unit long). Nil for every
+  -- other.
+  scatter: number?,
 }
 
 -- A volley missile's path: the points it goes by, each (how far along,
@@ -135,7 +139,7 @@ Effects.looks = {
   ["railgun"] = { kind = "rail", color = { 0.55, 0.80, 1.0 }, width = 5, life = 0.55 },
   ["launcher"] = { kind = "missile", color = { 1.0, 0.62, 0.26 }, width = 7, length = 180 },
   -- (a point defence turret's tracers: Effects.Tracers)
-  ["pds"] = { kind = "bolt", color = { 1.0, 0.86, 0.48 }, width = 1.6, length = 45, speed = 3200, burst = 1, gap = 0, blunt = 0 },
+  ["pds"] = { kind = "bolt", color = { 1.0, 0.82, 0.40 }, width = 4, length = 260, speed = 2600, burst = 2, gap = 0.05, blunt = 0 },
   ["miner"] = { kind = "beam", color = { 0.35, 1.0, 0.55 }, width = 5, life = 0.5, held = true },
   -- (what draws gas off a cloud: wider and paler, into the cloud's middle)
   ["miner.gas"] = { kind = "beam", color = { 0.80, 0.88, 1.0 }, width = 9, life = 0.5, held = true },
@@ -303,6 +307,10 @@ local ARC_PLUME = 0.012
 local PLASMA_STATIC = vector.create(0.62, 0.82, 1.0)
 local PLASMA_BARIC = vector.create(1.0, 0.45, 0.15)
 local PLASMA_SIZE = 40
+
+-- How wide of the line a point defence tracer that misses may go, as a
+-- part of the way (about a degree: the owner's "slight", 2026-11-19).
+local TRACER_SCATTER = 0.017
 
 -- A number from 0 to 1 that is always the same for the same 'n'.
 local function noise(n: number): number
@@ -575,11 +583,20 @@ function Effects.Tracers(fx: Fx, from: number, fromRadius: number, missile: numb
   if to == nil then
     return
   end
-  -- (not every round of a stream is drawn: a dozen at the most)
-  local shown = math.min(rounds, 12)
+  -- (every round of the stream, a tenth of a second apart as it fired them, each drawn as a pair: a steady stream)
+  local shown = math.max(1, rounds)
   for k = 1, shown do
+    local before = #fx.effects
     Effects.Fire(fx, "pds", from, to, fromRadius, 4, if down and k == shown then "hit" else "miss", 0, "",
-      now + (k - 1) / math.max(shown, 1), origin)
+      now + (k - 1) * 0.1, origin)
+    -- (a slight scatter: a round that misses goes a little wide, by about a degree at the most)
+    for index = before + 1, #fx.effects do
+      local effect = fx.effects[index]
+      if effect.miss then
+        effect.miss = vector.normalize(effect.miss)
+        effect.scatter = TRACER_SCATTER * (0.3 + 0.7 * noise(fx.seed * 3.7 + index))
+      end
+    end
   end
 end
 
@@ -728,7 +745,8 @@ function Effects.Update(fx: Fx, now: number, where: { [number]: vector })
       -- the target toward the firer (or past it).
       local mouth: vector? = if effect.origin then where[effect.origin] else nil
       local start = mouth or from + d * (effect.fromRadius * 0.7)
-      local finish = if effect.miss then to + effect.miss + d * (effect.toRadius * 6 + 200) else to - d * (effect.toRadius * 0.6)
+      local finish = if effect.miss and effect.scatter then to + effect.miss * (vector.magnitude(to - start) * effect.scatter) + d * 200
+        elseif effect.miss then to + effect.miss + d * (effect.toRadius * 6 + 200) else to - d * (effect.toRadius * 0.6)
       -- (the way it flies, which from a gun out on the hull is not quite
       -- the way from one ship to the other)
       if vector.magnitude(finish - start) > 1e-3 then
