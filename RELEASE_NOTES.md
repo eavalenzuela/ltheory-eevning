@@ -6,6 +6,15 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Plasma torpedoes, the Fighter Pylon, and missiles you can outrun
+
+- The Plasma Torpedo Launcher, the Nimia's own, comes in four sizes and fits any ship with a launcher hardpoint. It fires slow, glowing balls of plasma that point defence cannot shoot down. Its own torpedoes come in two kinds: Plasmostatic (90% EM, 10% explosive) and Plasmobaric (90% thermal, 10% kinetic). It fires half as often as the short-range launcher of its size but hits twice as hard.
+- The Fighter Pylon, the Drowned's own, carries a Trident fighter on your hull. It takes a turret hardpoint and a lot of CPU, needs Drones 5 and 75 Mbit/s of drone bandwidth, and its Trident counts as one of your drones out. Switch it on and the Trident goes after your locked target; switch it off and it comes back to the pylon. A Trident that is shot down can only be replaced in a station. Drowned cruisers, battlecruisers and battleships carry one each, and cannot replace theirs, so kill their Tridents early.
+- Drone bandwidth: every ship now has some, shown in its info window. A drone out uses its volume (5, 10 or 25 Mbit/s), and a fitted Fighter Pylon holds 75. Ships below capital size have as much as their standard drone bay holds, so no ship fields fewer drones than before; capitals have 250. Carriers' fighters and bombers use none.
+- Missiles now fly after their targets. A missile that has not reached you when its fuel runs out does no damage, so a fast enough ship can outrun one. Ordinary missiles are quick enough to catch almost anything; plasma torpedoes are slow enough to escape. A missile also comes to nothing if its target warps off or docks.
+- Point defence turrets now fire a visible stream of tracers at incoming missiles.
+- Level 3 pirate camps can bring a destroyer with two frigates again.
+
 ## Swarm missiles, vertical launch, and point defence
 
 - The Swarm Launcher, the Vessari's own, comes in four sizes and fits any ship with a launcher hardpoint. Each cycle it throws its missile as a swarm of small ones: 6, 12, 18 or 24 by size, together doing 90% of the one. They are a third faster and with half the blast, so they hit small ships better. It is short-range, reaching as far as the rocket, assault, torpedo or bombardment launcher of its size, and uses ordinary missiles. Its missiles jink on their way in and leave long glowing contrails.
