@@ -610,6 +610,9 @@ suite:Case("probes want a launcher and probes in the hold: put out at once round
   Core.Step(game)
   t.eq({ #state.probeIds, select(3, Core.Query.Sites(game)).carried }, { Sites.PROBES, 2 })
   settle(game)
+  for _, id in state.probeIds do
+    t.eq(state.probes[id].strength, 1)
+  end
   local reach = Sites.Reach(state)
   for _, id in state.probeIds do
     local probe = state.probes[id]
@@ -621,6 +624,15 @@ suite:Case("probes want a launcher and probes in the hold: put out at once round
   t.ok(Core.Submit(game, { kind = "RecallProbes", actor = ship }))
   Core.Step(game)
   t.eq({ #state.probeIds, select(3, Core.Query.Sites(game)).carried }, { 0, 10 })
+  -- (a Scan Rangefinding Array fitted: the next ones launched the stronger, 2026-11-20)
+  Items.Equip(state, ship, "scan.rangefinder")
+  t.ok(Core.Submit(game, { kind = "LaunchProbe", actor = ship }))
+  Core.Step(game)
+  for _, id in state.probeIds do
+    t.near(state.probes[id].strength, 1.1, 1e-9)
+  end
+  t.ok(Core.Submit(game, { kind = "RecallProbes", actor = ship }))
+  Core.Step(game)
   -- A probe lasts an hour, and is in the save meanwhile.
   t.ok(Core.Submit(game, { kind = "LaunchProbe", actor = ship }))
   Core.Step(game)

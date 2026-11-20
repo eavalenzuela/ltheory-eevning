@@ -274,6 +274,10 @@ export type ModuleType = {
   mining: number?,
   -- (so much more ice a cycle, as 'mining' is ore: Tactical/Combat's Yield)
   ice: number?,
+  -- (so much more chance a salvager's cycle brings something off, added;
+  -- and so many times the strength of the probes launched: 2026-11-20)
+  salvage: number?,
+  probing: number?,
   -- A command burst: what its 'boost' does, on the owner's ships within
   -- range; a mining burst, ore off a rock so many times as much.
   burst: { range: number, mining: number? }?,
@@ -933,6 +937,13 @@ table.insert(modules, {
   cpu = 35, powergrid = 1, volume = 5, basePrice = 20000, passive = {}, mining = 1.09,
   requires = { { skill = "mining", level = 2 } },
 })
+-- (a Scan Rangefinding Array, of the reference review: the probes it
+-- launches the stronger; the figure mine)
+table.insert(modules, {
+  id = "scan.rangefinder", name = "Scan Rangefinding Array", short = "Scan Array", slot = "low", hardpoint = "",
+  cpu = 30, powergrid = 1, volume = 5, basePrice = 30000, passive = {}, probing = 1.10,
+  requires = { { skill = "astrometrics", level = 2 } },
+})
 -- (and for ice, which the mining upgrade does nothing for, since
 -- 2026-11-20: the figure mine)
 table.insert(modules, {
@@ -1478,6 +1489,17 @@ rig("shield", "Field Extender Rig", 150, { ship("shield", "mul", 1.15, true), sh
 rig("regen", "Field Regeneration Rig", 150, { ship("shieldRecharge", "mul", 0.8, true), ship("signature", "mul", 1.10) })
 rig("armor", "Armour Pump Rig", 150, { ship("armor", "mul", 1.15, true), ship("maxVelocity", "mul", 0.90) })
 rig("hull", "Bulkhead Rig", 100, { ship("hull", "mul", 1.20, true), ship("cargo", "mul", 0.90) })
+-- (and since 2026-11-20 of the reference review: a rig for salvaging and
+-- one for probing, with no cost to the ship; the figures mine)
+rig("salvage", "Salvage Tackle Rig", 100, {})
+rig("probing", "Gravity Capacitor Rig", 100, {})
+for _, m in modules do
+  if string.sub(m.id, 1, 11) == "rig.salvage" then
+    m.salvage = 0.10
+  elseif string.sub(m.id, 1, 11) == "rig.probing" then
+    m.probing = 1.10
+  end
+end
 rig("engine", "Engine Tuning Rig", 100, { ship("maxVelocity", "mul", 1.10, true), ship("armor", "mul", 0.90) })
 rig("cargo", "Cargo Bracing Rig", 100, { ship("cargo", "mul", 1.15, true), ship("armor", "mul", 0.90) })
 rig("capacitor", "Capacitor Flux Rig", 100, { ship("capacitorRecharge", "mul", 0.85, true), ship("shield", "mul", 0.90) })
@@ -2282,6 +2304,12 @@ local function made(base: ModuleType, id: string, name: string, tune: Tune): Mod
   end
   if base.ice then
     out.ice = 1 + (base.ice - 1) * amount
+  end
+  if base.salvage then
+    out.salvage = base.salvage * amount
+  end
+  if base.probing then
+    out.probing = 1 + (base.probing - 1) * amount
   end
   if base.smartbomb then
     local b = table.clone(base.smartbomb)

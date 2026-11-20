@@ -28,6 +28,7 @@
 -- to the ship in it, anything a pilot cannot reach with the ship's own
 -- scanner and a probe.)
 
+local Attributes = require("@lt/Core/Attributes")
 local Components = require("@lt/Core/Data/Components")
 local Constants = require("@lt/Core/Data/Constants")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
@@ -874,6 +875,18 @@ function Sites.Apply(state: State.State, command: State.Command, events: { Event
     -- corner of a box round the ship)
     local launcher = assert(Sites.Launcher(state, ball.id))
     local strength = (launcher.probes :: { strength: number }).strength
+    -- (the stronger for each Scan Rangefinding Array and Gravity Capacitor Rig fitted, each the less for those before it)
+    local bys: { number } = {}
+    for _, fitted in Items.Fitted(state, ball.id) do
+      local by = Modules.byId[fitted.type].probing
+      if by then
+        table.insert(bys, by)
+      end
+    end
+    table.sort(bys, function(a: number, b: number): boolean return a > b end)
+    for n, by in bys do
+      strength *= 1 + (by - 1) * Attributes.Penalty(n - 1)
+    end
     local reach = Sites.Reach(state)
     local put = 0
     for _, item in Items.In(state, ball.id, "cargo") do

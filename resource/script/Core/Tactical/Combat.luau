@@ -1087,6 +1087,10 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       -- Each cycle may be the one: likelier with skill at it.
       local levels = Items.Levels(state, ball.id)
       local chance = salvager.chance + 0.1 * (if levels then math.max(0, levels.salvaging or 0) else 0)
+      -- (and for what is fitted for salvaging: a Salvage Tackle Rig's)
+      for _, fitted in Items.Fitted(state, ball.id) do
+        chance += Modules.byId[fitted.type].salvage or 0
+      end
       local rng = Rng.For(state.historySeed, state.tick, ball.id, item.id, 61)
       -- (a citadel's hulk is brought off a cycle at a time, so many cycles
       -- by its size: Assets/Hulks)

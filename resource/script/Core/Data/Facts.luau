@@ -505,6 +505,25 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     local to = section(sheet, "Mining upgrade")
     row(to, "Ore off a rock", `{plain(module.mining * 100)}% of what it was, with every laser`)
   end
+  -- (and the helpers of 2026-11-20)
+  if module.ice then
+    row(section(sheet, "Ice harvester upgrade"), "Ice a cycle", `{plain(module.ice * 100)}% of what it was, with every harvester`)
+  end
+  if module.salvage then
+    row(section(sheet, "Salvaging"), "Chance a cycle", `{plain(module.salvage * 100)}% more, with every salvager`)
+  end
+  if module.probing then
+    row(section(sheet, "Probing"), "Probe strength", `{plain(module.probing * 100)}% of what it was, for every probe launched`)
+  end
+  if module.droneRange then
+    row(section(sheet, "Drones"), "Control range", `{metres(module.droneRange)} further`)
+  end
+  if module.hackBuffer then
+    row(section(sheet, "Hacking"), "Buffer", `{module.hackBuffer} more code, however many are fitted`)
+  end
+  if module.portal then
+    row(section(sheet, "Jump portal"), "Opens", "a portal to a lit beacon your drive reaches, for a minute: friendly ships within 5 km go through on your fuel")
+  end
   -- (module expansion, 2026-11-16: the fourth group's)
   if module.burst then
     local to = section(sheet, "Command burst")
@@ -587,6 +606,9 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
     end
     if module.drones.tracking then
       row(to, "Drone tracking and range", `{plain(module.drones.tracking * 100)}% of what they were`)
+    end
+    if module.drones.speed then
+      row(to, "Drone speed", `{plain(module.drones.speed * 100)}% of what it was`)
     end
   end
   if module.pylon then
