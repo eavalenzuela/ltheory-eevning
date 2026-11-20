@@ -131,8 +131,11 @@ DefineFunction(WidgetRenderer_DrawRenderable) {
 /* Render passes into a picture, and show it at a place in the
    interface: what Widget_Rendered does for a whole widget
    (UI/Widget/Rendered.cpp), for whatever is drawing the interface now.
-   One set of buffers is kept, of the size last asked for: it is for a
-   window of one size (the ship on the fitting screen). */
+   A set of buffers is kept for each size asked for (a few, the least
+   lately used given up first): two windows of different sizes drawing
+   each frame (the fitting screen's ship and the information window's)
+   would otherwise remake one set twice a frame, and the pictures blink
+   and go. */
 
 namespace {
   const uint kPassesDSFactor = 4;
@@ -182,9 +185,24 @@ namespace {
     }
   };
 
-  Target& GetTarget() {
-    static Target target;
-    return target;
+  const size_t kTargets = 4;
+
+  Target& GetTarget(uint w, uint h) {
+    static Target targets[kTargets];
+    static uint64 used[kTargets] = {0};
+    static uint64 clock = 0;
+    clock++;
+    size_t pick = 0;
+    for (size_t i = 0; i < kTargets; ++i) {
+      if (targets[i].buffers[0] && targets[i].width == w && targets[i].height == h) {
+        used[i] = clock;
+        return targets[i];
+      }
+      if (used[i] < used[pick])
+        pick = i;
+    }
+    used[pick] = clock;
+    return targets[pick];
   }
 }
 
@@ -195,7 +213,7 @@ DefineFunction(WidgetRenderer_DrawPasses) {
     return;
   WidgetRenderer_Flush();
 
-  Target& target = GetTarget();
+  Target& target = GetTarget(w, h);
   target.Fit(w, h);
 
   Viewport vp = Viewport_Create(0, V2((float)w, (float)h), 1, true);
