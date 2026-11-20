@@ -844,6 +844,10 @@ local function drawSelected(session: Session.Session, entries: { Core.Entry }, b
   elseif entry.kind == "moon" and tower ~= 0 and citadel ~= 0 then
     table.insert(orders, { label = "Anchor citadel", kind = "AnchorTower" })
   end
+  -- (a deployable of the pilot's put out in space: picked up again, Core/Tactical/Deploy)
+  if entry.kind == "wreck" and string.sub(entry.variety, 1, 7) == "deploy." then
+    table.insert(orders, { label = "Pick up", kind = "Scoop" })
+  end
   if Rebuild.Of(session, entry.id) then
     -- (a citadel's hulk: what rebuilding it takes, in a pane of its own)
     table.insert(orders, { label = "Rebuild", kind = "Rebuild" })

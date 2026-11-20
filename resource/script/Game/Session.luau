@@ -989,6 +989,14 @@ function Session.Notice(session: Session, event: Space.Event)
     Session.Say(session, `{event.name} has come through the gate, with {event.ships - 1} ships of its fleet`)
   elseif kind == "Marked" then
     Session.Say(session, "You have fired on a ship that is no pirate's: the patrols will fire on you")
+  elseif kind == "Deployed" and event.ship == mine then
+    Session.Say(session, `{Types.Info(event.type).name} put out`)
+  elseif kind == "Scooped" and event.ship == mine then
+    Session.Say(session, `{Types.Info(event.type).name} picked up`)
+  elseif kind == "TractorLooted" then
+    Session.Say(session, `A tractor post of yours took {event.quantity} out of a wreck`)
+  elseif kind == "DeployableSpent" then
+    Session.Say(session, `A {Types.Info(event.type).name} of yours is spent: what was in it is left in space`, "bad")
   elseif kind == "ColonyDeployed" then
     local body = Core.Query.Body(session.game, event.planet)
     Session.Say(session, `A colony is founded on {if body then body.name else "the planet"}`)

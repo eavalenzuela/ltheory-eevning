@@ -15,6 +15,7 @@
 
 local Attributes = require("@lt/Core/Attributes")
 local Corporation = require("@lt/Core/Assets/Corporation")
+local Deployables = require("@lt/Core/Data/Deployables")
 local DroneKinds = require("@lt/Core/Data/Drones")
 local Factions = require("@lt/Core/Data/Factions")
 local Modules = require("@lt/Core/Data/Modules")
@@ -405,9 +406,37 @@ end
 
 -- The station a ship and an item share, or nil with the reason they do
 -- not: the ship is in space, or the item is elsewhere.
+-- The pilot's Field Depot a ship in space is in reach of, if there is
+-- one (Data/Deployables, Tactical/Deploy): it is refitted there, from its
+-- own hold and the depot's, and what comes out of it goes into the depot.
+local function depotNear(state: State.State, ship: State.Ship): State.Wreck?
+  local ball = state.balls[ship.id]
+  if ball == nil or ship.owner ~= "player" or (ball.warp and ball.warp.stage == "warp") then
+    return nil
+  end
+  for _, id in state.wreckIds do
+    local wreck = state.wrecks[id]
+    local what = if wreck.deploy then Deployables.byId[wreck.deploy] else nil
+    if what and what.kind == "depot" and wreck.system == ball.system then
+      local gap = math.sqrt((wreck.x - ball.x) ^ 2 + (wreck.y - ball.y) ^ 2 + (wreck.z - ball.z) ^ 2) - wreck.radius - ball.radius
+      if gap <= Deployables.REACH then
+        return wreck
+      end
+    end
+  end
+  return nil
+end
+Items.DepotNear = depotNear
+
 local function sharedStation(state: State.State, ship: State.Ship, item: State.Item): (number?, string?)
   if ship.docked == 0 then
-    return nil, "not docked"
+    local depot = depotNear(state, ship)
+    if depot == nil then
+      return nil, "not docked, nor by a Field Depot of yours"
+    elseif not (item.holder == ship.id or (item.holder == depot.id and item.place == "cargo")) then
+      return nil, "that item is not here"
+    end
+    return depot.id, nil
   end
   local here = item.holder == ship.docked and Items.IsStore(item.place)
   local aboard = item.holder == ship.id
@@ -610,15 +639,16 @@ function Items.Validate(state: State.State, command: State.Command): (boolean, s
   return false, `unknown command '{kind}'`
 end
 
--- Put a weapon's loaded charge back where loose items go (the hangar).
-local function unload(state: State.State, weapon: State.Item, station: number)
+-- Put a weapon's loaded charge back where loose items go (the hangar; at
+-- a Field Depot, its hold: 'place').
+local function unload(state: State.State, weapon: State.Item, station: number, place: ("hangar" | "cargo")?)
   local module = Modules.byId[weapon.type]
   local takes = Modules.Takes(module)
   if weapon.charge ~= "" and takes then
     -- A crystal is one item; rounds are however many are left.
     local quantity = if takes.clip == 0 then 1 else weapon.rounds
     if quantity > 0 then
-      Items.Add(state, weapon.charge, quantity, station, "hangar")
+      Items.Add(state, weapon.charge, quantity, station, place or "hangar")
     end
   end
   weapon.charge = ""
@@ -629,6 +659,14 @@ function Items.Apply(state: State.State, command: State.Command, events: { Event
   local ship = state.ships[command.actor]
   local item = state.items[command.item :: number]
   local station = ship.docked
+  -- (in space, by a Field Depot: it is where things come out to)
+  local place: "hangar" | "cargo" = "hangar"
+  if station == 0 and (command.kind == "Unfit" or command.kind == "LoadCharge") then
+    local depot = depotNear(state, ship)
+    if depot then
+      station, place = depot.id, "cargo"
+    end
+  end
   local kind = command.kind
 
   if kind == "Fit" then
@@ -646,14 +684,14 @@ function Items.Apply(state: State.State, command: State.Command, events: { Event
     table.insert(events, { kind = "Fitted", ship = ship.id, item = fitted.id })
 
   elseif kind == "Unfit" then
-    unload(state, item, station)
+    unload(state, item, station, place)
     local type = item.type
     Items.Take(state, item, 1)
     -- (a rig does not come out whole: it is gone)
     if Modules.byId[type].slot == "rig" then
       table.insert(events, { kind = "RigDestroyed", ship = ship.id, type = type })
     else
-      Items.Add(state, type, 1, station, "hangar")
+      Items.Add(state, type, 1, station, place)
       table.insert(events, { kind = "Unfitted", ship = ship.id, type = type })
     end
 
@@ -661,7 +699,7 @@ function Items.Apply(state: State.State, command: State.Command, events: { Event
     local weapon = assert(Modules.Takes(Modules.byId[item.type]))
     local charge = state.items[command.other :: number]
     local type = charge.type
-    unload(state, item, station)
+    unload(state, item, station, place)
     -- (unloading may have merged into, but cannot have removed, the stack
     -- being loaded from)
     local stack = state.items[charge.id]

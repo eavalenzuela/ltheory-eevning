@@ -1315,6 +1315,23 @@ function Debug.Give(type: string, quantity: number): boolean
   return true
 end
 
+-- Put out a deployable of a type from the ship's hold (Core/Tactical/
+-- Deploy), as its menu in the inventory does: whether it was taken.
+function Debug.Deploy(type: string): (boolean, string?)
+  local state = session.game.state
+  for _, item in Items.In(state, state.player.ship, "cargo") do
+    if item.type == type then
+      local command: State.Command = { kind = "Deploy", actor = 0, item = item.id }
+      local ok, why = Session.CanDo(session, command)
+      if ok then
+        Session.Do(session, command)
+      end
+      return ok, why
+    end
+  end
+  return false, "none in the hold"
+end
+
 -- The other way: every one of a type the pilot has in the hangar of the
 -- station docked at is gone (lost, as with a ship). How many went.
 function Debug.Lose(type: string): number

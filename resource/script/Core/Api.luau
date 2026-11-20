@@ -16,6 +16,7 @@ local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Assault = require("@lt/Core/Tactical/Assault")
 local CitadelGuns = require("@lt/Core/Tactical/CitadelGuns")
 local CitadelWorks = require("@lt/Core/Assets/CitadelWorks")
+local Deploy = require("@lt/Core/Tactical/Deploy")
 local Batteries = require("@lt/Core/Tactical/Batteries")
 local Fields = require("@lt/Core/Tactical/Fields")
 local Blueprints = require("@lt/Core/Data/Blueprints")
@@ -1308,6 +1309,7 @@ local HANGAR_COMMANDS = { Assemble = true, BoardShip = true, SetHome = true, Rep
 local STARBASE_COMMANDS = { AnchorTower = true, Fuel = true, AnchorModule = true, UnanchorModule = true, UnanchorTower = true,
   SetReaction = true, SetAccess = true }
 local SITE_COMMANDS = { Scan = true, LaunchProbe = true, RecallProbes = true, MoveProbes = true, FormProbes = true, ProbeRange = true }
+local DEPLOY_COMMANDS = { Deploy = true, Scoop = true }
 local HACK_COMMANDS = { StartHack = true, HackNode = true, AbandonHack = true }
 local DRONE_COMMANDS = { LaunchDrones = true, RecallDrones = true, EngageDrones = true }
 local JUMP_COMMANDS = { JumpDrive = true, Bridge = true }
@@ -1351,6 +1353,8 @@ local function validate(state: State.State, command: State.Command): (boolean, s
     return Corporation.Validate(state, command)
   elseif SITE_COMMANDS[command.kind] then
     return Sites.Validate(state, command)
+  elseif DEPLOY_COMMANDS[command.kind] then
+    return Deploy.Validate(state, command)
   elseif DRONE_COMMANDS[command.kind] then
     return Drones.Validate(state, command)
   elseif JUMP_COMMANDS[command.kind] then
@@ -1481,6 +1485,8 @@ function Core.Step(game: Game)
       Corporation.Apply(state, command, game.events)
     elseif ok and SITE_COMMANDS[command.kind] then
       Sites.Apply(state, command, game.events)
+    elseif ok and DEPLOY_COMMANDS[command.kind] then
+      Deploy.Apply(state, command, game.events)
     elseif ok and DRONE_COMMANDS[command.kind] then
       Drones.Apply(state, command, game.events)
     elseif ok and JUMP_COMMANDS[command.kind] then
@@ -1513,6 +1519,8 @@ function Core.Step(game: Game)
   end
   Boosting.Step(state, game.events)
   Sites.Step(state, game.events)
+  -- (what the pilot has put out into space: Tactical/Deploy)
+  Deploy.Step(state, game.events)
   Wormholes.Step(state, game.events)
   Hacking.Step(state, game.events)
   Missions.Step(state, game.events)
@@ -1839,9 +1847,11 @@ function Query.Overview(game: Game): { Entry }
       local entry: Entry = { id = id, kind = "wreck", name = wreck.name,
         distance = Space.Gap(me :: any, wreck :: any), onGrid = true,
         -- (a vault is no wreck to the pilot: Tactical/Sites)
-        variety = if wreck.lock == "vault" then (if wreck.locked then "vault.locked" else "vault.open")
+        -- (and a deployable of the pilot's is what it is, and theirs: Tactical/Deploy)
+        variety = if wreck.deploy then wreck.deploy
+          elseif wreck.lock == "vault" then (if wreck.locked then "vault.locked" else "vault.open")
           elseif wreck.locked then "sealed" else "",
-        hostile = false, own = false }
+        hostile = false, own = wreck.deploy ~= nil }
       table.insert(entries, entry)
     end
   end

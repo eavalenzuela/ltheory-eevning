@@ -63,6 +63,7 @@
 -- into.)
 
 local Constants = require("@lt/Core/Data/Constants")
+local Deployables = require("@lt/Core/Data/Deployables")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Items = require("@lt/Core/Assets/Items")
 local Skills = require("@lt/Core/Data/Skills")
@@ -191,7 +192,8 @@ end
 -- A beacon that is lit: where it is, how big the thing that has it is,
 -- what that is (a tower's place in its system's description, or a
 -- ship), its name, and which kind of beacon it is.
-export type Beacon = { system: number, x: number, y: number, z: number, radius: number, id: number, name: string, kind: "tower" | "ship" }
+export type Beacon = { system: number, x: number, y: number, z: number, radius: number, id: number, name: string,
+  kind: "tower" | "ship" | "buoy" }
 
 -- The beacons lit for a ship's owner, in every system: the towers
 -- first, in the order they were put up, and then the ships of the
@@ -209,6 +211,17 @@ function Jumping.Beacons(state: State.State, ship: number): { Beacon }
     if starbase.owner == record.owner and place and Starbases.Has(state, starbase, "beacon") then
       table.insert(found, { system = Space.SystemOf(state, id), x = place.x, y = place.y, z = place.z, radius = place.radius, id = id,
         name = place.name, kind = "tower" })
+    end
+  end
+  -- (the pilot's beacon buoys put out in space: Tactical/Deploy)
+  if record.owner == "player" then
+    for _, id in state.wreckIds do
+      local wreck = state.wrecks[id]
+      local what = if wreck.deploy then Deployables.byId[wreck.deploy] else nil
+      if what and what.kind == "beacon" then
+        table.insert(found, { system = wreck.system, x = wreck.x, y = wreck.y, z = wreck.z, radius = wreck.radius, id = id, name = wreck.name,
+          kind = "buoy" })
+      end
     end
   end
   for _, id in state.shipIds do

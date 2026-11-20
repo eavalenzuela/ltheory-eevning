@@ -175,14 +175,14 @@ suite:Case("the hold has a size", function(t)
   t.eq(#Items.In(game.state, ship, "cargo"), 0)
 end)
 
-suite:Case("fitting is done docked", function(t)
+suite:Case("fitting is done docked (or by a Field Depot of the pilot's: Tactical/Deploy)", function(t)
   local game = newGame()
   local extender = inHangar(game, "shield.extender.small")
   Core.Submit(game, { kind = "Undock", actor = game.state.player.ship })
   Core.Step(game)
-  t.eq(refused(game, { kind = "Fit", actor = 0, item = extender.id }), "not docked")
+  t.eq(refused(game, { kind = "Fit", actor = 0, item = extender.id }), "not docked, nor by a Field Depot of yours")
   local cannon = Items.Fitted(game.state, game.state.player.ship)[1]
-  t.eq(refused(game, { kind = "Unfit", actor = 0, item = cannon.id }), "not docked")
+  t.eq(refused(game, { kind = "Unfit", actor = 0, item = cannon.id }), "not docked, nor by a Field Depot of yours")
 end)
 
 suite:Case("a fit changes how the ship flies once it undocks", function(t)

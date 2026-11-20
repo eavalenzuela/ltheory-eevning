@@ -42,6 +42,7 @@
 
 local Catalog = require("@lt/Core/Data/Catalog")
 local Core = require("@lt/Core/Api")
+local Deployables = require("@lt/Core/Data/Deployables")
 local Format = require("@lt/Game/Format")
 local Fitting = require("@lt/Game/UI/Fitting")
 local Im = require("@lt/Game/UI/Im")
@@ -310,6 +311,12 @@ local function actionsFor(session: Session.Session, view: View?, item: State.Ite
       end
     else
       add("Jettison", `Jettison:{type}`, { kind = "Jettison", actor = 0, item = item.id })
+      -- (what is put out into space and picked up again: Core/Tactical/Deploy)
+      if shown.kind == "cargo" and Deployables.byId[type] then
+        local deploy: State.Command = { kind = "Deploy", actor = 0, item = item.id }
+        local can, why = Session.CanDo(session, deploy)
+        add(if can then "Put out" else `Put out ({why or "not now"})`, `Deploy:{type}`, deploy, nil, can)
+      end
     end
     if shown.kind ~= "cargo" then
       add("To hold", nil, { kind = "MoveItems", actor = 0, item = item.id, to = "cargo" })

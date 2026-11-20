@@ -298,6 +298,14 @@ export type Wreck = {
   hulk: string?,
   salvage: number?,
   under: number?,
+  -- A pilot's deployable (Data/Deployables, Tactical/Deploy): what it is,
+  -- the tick its life ends (nil: until it is picked up), the field it
+  -- holds (a bubble's id in 'bubbles'), and the tick its tractor next
+  -- draws a wreck in. It is a container ('can') of the pilot's too.
+  deploy: string?,
+  ends: number?,
+  field: number?,
+  pulls: number?,
 }
 
 -- A hack under way (Tactical/Hacking): the hull whose hold it is for;

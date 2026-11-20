@@ -25,6 +25,7 @@ local Components = require("@lt/Core/Data/Components")
 local Drones = require("@lt/Core/Data/Drones")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
+local Deployables = require("@lt/Core/Data/Deployables")
 local Planets = require("@lt/Core/Data/Planets")
 local Reactions = require("@lt/Core/Data/Reactions")
 local Ships = require("@lt/Core/Data/Ships")
@@ -324,6 +325,10 @@ for _, tower in Structures.towers do
 end
 for _, module in Structures.modules do
   add(module.id, module.name, MIX.ship, module.basePrice, 1, math.min(72000, 600 + module.basePrice // 200), STRUCTURE)
+end
+-- (a deployable is made as a structure's module is, and as quickly for its worth)
+for _, each in Deployables.list do
+  add(each.id, each.name, MIX.ship, each.basePrice, 1, math.min(72000, 600 + each.basePrice // 200), STRUCTURE)
 end
 add(Structures.FUEL.id, Structures.FUEL.name, MIX.charge, Structures.FUEL.basePrice, 40, 120, FUEL)
 add(Structures.SEAL.id, Structures.SEAL.name, MIX.charge, Structures.SEAL.basePrice, 1, 300, FUEL)

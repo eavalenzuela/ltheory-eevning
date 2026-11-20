@@ -23,6 +23,7 @@ local Skills = require("@lt/Core/Data/Skills")
 local Moons = require("@lt/Core/Data/Moons")
 local Planets = require("@lt/Core/Data/Planets")
 local Reactions = require("@lt/Core/Data/Reactions")
+local Deployables = require("@lt/Core/Data/Deployables")
 local Structures = require("@lt/Core/Data/Structures")
 local Types = require("@lt/Core/Data/Types")
 
@@ -880,7 +881,21 @@ function Facts.Of(type: string): Sheet?
     trade(sheet, type)
   elseif category == "structure" then
     local tower, anchored = Structures.towerById[type], Structures.moduleById[type]
-    if tower and tower.citadel then
+    local deployed = Deployables.byId[type]
+    if deployed then
+      -- (what a pilot puts out into space and picks up again: Tactical/Deploy)
+      sheet.kind = "Deployable"
+      sheet.note = deployed.note
+      local has = section(sheet, "Deployable")
+      if deployed.hold > 0 then
+        row(has, "Holds", `{whole(deployed.hold)} m3`)
+      end
+      if deployed.reach then
+        row(has, if deployed.kind == "bubble" then "Field" else "Reach", metres(deployed.reach))
+      end
+      row(has, "Lasts", if deployed.life then seconds(deployed.life) else "until it is picked up")
+      row(has, "Put out", `from the hold, in space, at least {metres(Deployables.CLEAR)} from a station or a gate`)
+    elseif tower and tower.citadel then
       sheet.kind = "Citadel"
       sheet.note = "A station of your own that ships dock inside. Built at a station, hauled to a moon or planet and anchored; what it offers is what is fitted in it. Brought down, it leaves a derelict hulk."
       local has = section(sheet, "Citadel")

@@ -12,6 +12,7 @@ local Modules = require("@lt/Core/Data/Modules")
 local Moons = require("@lt/Core/Data/Moons")
 local Ores = require("@lt/Core/Data/Ores")
 local Paints = require("@lt/Core/Data/Paints")
+local Deployables = require("@lt/Core/Data/Deployables")
 local Planets = require("@lt/Core/Data/Planets")
 local Reactions = require("@lt/Core/Data/Reactions")
 local Ships = require("@lt/Core/Data/Ships")
@@ -83,6 +84,10 @@ for _, tower in Structures.towers do
 end
 for _, module in Structures.modules do
   byId[module.id] = { id = module.id, name = module.name, category = "structure", volume = module.volume, basePrice = module.basePrice }
+end
+-- (and what a pilot puts out into space and picks up again: Data/Deployables)
+for _, each in Deployables.list do
+  byId[each.id] = { id = each.id, name = each.name, category = "structure", volume = each.volume, basePrice = each.basePrice }
 end
 byId[Structures.FUEL.id] = { id = Structures.FUEL.id, name = Structures.FUEL.name, category = "structure",
   volume = Structures.FUEL.volume, basePrice = Structures.FUEL.basePrice }

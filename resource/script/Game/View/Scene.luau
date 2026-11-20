@@ -34,6 +34,7 @@ local Planet = require("@lt/Game/View/Planet")
 local Star = require("@lt/Game/View/Star")
 local Starbase = require("@lt/Game/View/Starbase")
 local Citadel = require("@lt/Game/View/Citadel")
+local Deployables = require("@lt/Core/Data/Deployables")
 local Structures = require("@lt/Core/Data/Structures")
 local Modules = require("@lt/Core/Data/Modules")
 local Paints = require("@lt/Core/Data/Paints")
@@ -747,6 +748,20 @@ end
 -- (A citadel's hulk is the citadel, dark, upright where it stood, and
 -- does not come apart: its rings, if it has any, lie still in it.)
 local function makeWreck(scene: Scene, id: number, wreck: State.Wreck, look: vector, up: vector, container: Object)
+  -- (a deployable of the pilot's, put out in space: drawn as the starbase module it is made like, Core/Data/Deployables)
+  local deployed = if wreck.deploy then Deployables.byId[wreck.deploy] else nil
+  if deployed then
+    local made = Starbase.Module(deployed.model)
+    local scale = wreck.radius / made.radius
+    local object = Object_Scenery({})
+    Object_SetRenderable(object, made.model)
+    object:SetScale(vector.create(scale, scale, scale))
+    container:AddInterior(object)
+    scene.wreckage[id] = { pieces = { { object = object, middle = vector.create(0, 0, 0), away = vector.create(0, 1, 0),
+      axis = vector.create(0, 1, 0), spin = 0 } }, right = vector.create(-1, 0, 0), up = vector.create(0, 1, 0),
+      look = vector.create(0, 0, 1), scale = scale, seen = scene.time, still = true }
+    return
+  end
   local tower = if wreck.hulk then Structures.towerById[wreck.hulk] else nil
   if tower then
     local made = Citadel.Hulk(tower.kind, tower.size, if tower.faction ~= "" then tower.faction else nil)

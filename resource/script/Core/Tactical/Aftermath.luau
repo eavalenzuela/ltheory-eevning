@@ -17,6 +17,7 @@ local Citadels = require("@lt/Core/Assets/Citadels")
 local Keeps = require("@lt/Core/Tactical/Keeps")
 local Raids = require("@lt/Core/Tactical/Raids")
 local Constants = require("@lt/Core/Data/Constants")
+local Deployables = require("@lt/Core/Data/Deployables")
 local Factions = require("@lt/Core/Data/Factions")
 local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Hulks = require("@lt/Core/Assets/Hulks")
@@ -400,6 +401,17 @@ function Aftermath.Validate(state: State.State, command: State.Command): (boolea
       elseif can.system ~= ball.system or Space.Gap(ball :: any, can :: any) > LOOT_RANGE then
         return false, "too far away"
       end
+      -- (a deployable's hold holds so much: Data/Deployables)
+      local what = if can.deploy then Deployables.byId[can.deploy] else nil
+      if what then
+        local used = 0
+        for _, held in Items.In(state, can.id, nil) do
+          used += Types.Info(held.type).volume * held.quantity
+        end
+        if used + Types.Info(item.type).volume * quantity > what.hold + 1e-9 then
+          return false, if what.hold == 0 then `a {what.name} holds nothing` else `no room in the {what.name}`
+        end
+      end
     end
     return true
   end
@@ -412,7 +424,8 @@ local function canNear(state: State.State, ball: State.Ball): State.Wreck?
   local best: State.Wreck?, least = nil, LOOT_RANGE
   for _, id in state.wreckIds do
     local wreck = state.wrecks[id]
-    if wreck.can and wreck.system == ball.system and Space.Gap(ball :: any, wreck :: any) <= least then
+    -- (not a deployable: what goes into one is put there by name)
+    if wreck.can and not wreck.deploy and wreck.system == ball.system and Space.Gap(ball :: any, wreck :: any) <= least then
       best, least = wreck, Space.Gap(ball :: any, wreck :: any)
     end
   end
@@ -455,8 +468,10 @@ function Aftermath.Apply(state: State.State, command: State.Command, events: { E
     end
     Items.Take(state, item, quantity)
     Items.Add(state, type, quantity, can.id, "cargo")
-    -- (it lasts from when something was last put in it)
-    can.expires = state.tick + WRECK_LIFETIME
+    -- (it lasts from when something was last put in it; a deployable as long as it lasts)
+    if not can.deploy then
+      can.expires = state.tick + WRECK_LIFETIME
+    end
     table.insert(events, { kind = "Jettisoned", ship = ship.id, type = type, quantity = quantity, can = can.id })
     return
   end
@@ -484,8 +499,8 @@ function Aftermath.Apply(state: State.State, command: State.Command, events: { E
     end
   end
   table.insert(events, { kind = "Looted", ship = ship.id, wreck = wreck.id, taken = taken, left = left })
-  -- (a hulk emptied is there still, while there is more of it to salvage)
-  if left == 0 and not (Hulks.Is(wreck) and not wreck.salvaged) then
+  -- (a hulk emptied is there still, while there is more of it to salvage; and a deployable, until it is picked up)
+  if left == 0 and not (Hulks.Is(wreck) and not wreck.salvaged) and not wreck.deploy then
     local den = state.sites[wreck.grid]
     Aftermath.RemoveWreck(state, wreck)
     table.insert(events, { kind = "WreckRemoved", wreck = wreck.id })
