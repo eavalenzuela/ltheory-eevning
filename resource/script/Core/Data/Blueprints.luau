@@ -189,7 +189,7 @@ for _, module in Modules.list do
   if module.slot == "rig" then
     -- (a medium or a large rig is the small one of its kind, of more of the same)
     local work = Modules.RigWork(module)
-    -- (a tech 2 rig, since 2026-11-20: the plain one, and twice its salvage again; invented, as any tech 2
+    -- (a tech 2 rig, since 2026-11-20: the plain one, and six times its salvage again; invented, as any tech 2
     -- module's drawings are. Mine.)
     local improved = module.tech == 2 and module.base ~= nil
     rigs += if work == 1 and not improved then 1 else 0
@@ -197,7 +197,7 @@ for _, module in Modules.list do
     if improved then
       table.insert(materials, { type = module.base :: string, quantity = 1 })
       for _, material in Blueprints.byProduct[module.base :: string].materials do
-        table.insert(materials, { type = material.type, quantity = material.quantity * 2 })
+        table.insert(materials, { type = material.type, quantity = material.quantity * 6 })
       end
     else
       for index, count in { 10, 6, 4 } do

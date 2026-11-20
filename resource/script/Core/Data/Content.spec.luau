@@ -1073,7 +1073,7 @@ suite:Case("components are made from minerals, and modules from components and m
     end
     local blueprint = assert(Blueprints.byProduct[module.id], module.id)
     if module.slot == "rig" and module.tech == 2 then
-      -- (a tech 2 rig, since 2026-11-20: the plain one, and twice its salvage again)
+      -- (a tech 2 rig, since 2026-11-20: the plain one, and six times its salvage again)
       t.eq({ blueprint.materials[1].type, blueprint.materials[1].quantity, blueprint.invented } :: { any },
         { module.base, 1, true } :: { any }, module.id)
       for index = 2, #blueprint.materials do

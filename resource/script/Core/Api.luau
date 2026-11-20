@@ -706,7 +706,9 @@ local MIGRATIONS: { [number]: (state: any) -> () } = {
       local class = string.match(named, "^(%a+)%.")
       local HULLS = { frigate = true, destroyer = true, cruiser = true, battlecruiser = true, attackbattlecruiser = true,
         battleship = true, industrial = true, barge = true, freighter = true, capitalindustrial = true }
-      return if class and HULLS[class] and Ships.byId[value] == nil then base else value
+      -- (and never a module's, whose id may begin as a hull class does: the Industrial Core's, which has a tech 2
+      -- make since 2026-11-20)
+      return if class and HULLS[class] and Ships.byId[value] == nil and Modules.byId[named .. ".ii"] == nil then base else value
     end
     local refitted: { [number]: boolean } = {}
     for id, ship in state.ships or {} do

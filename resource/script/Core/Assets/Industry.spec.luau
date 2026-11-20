@@ -578,9 +578,9 @@ suite:Case("invention works out a tech 2 blueprint from a copy of a plain one, f
   local state = game.state
   local home = state.player.home
   state.wallet = 10000000
-  -- What has no tech 2 make cannot be invented from. (An entanglement projector has none.)
-  local projector = Items.Add(state, "blueprint.projector.entanglement", 1, home, "hangar")
-  t.eq(Industry.InventionPlan(state, Blueprints.byId["blueprint.projector.entanglement"]), nil)
+  -- What has no tech 2 make cannot be invented from. (A cloaking device has none, since 2026-11-20 one of the few.)
+  local projector = Items.Add(state, "blueprint.cloak.device", 1, home, "hangar")
+  t.eq(Industry.InventionPlan(state, Blueprints.byId["blueprint.cloak.device"]), nil)
   t.eq(refused(game, { kind = "StartResearch", actor = 0, item = projector.id, what = "invent" }), "there is no tech 2 make of that to invent")
   -- Rounds have one, and so has a drone: as a small module is to work out, and a medium one for the bigger drones.
   local rounds = assert(Industry.InventionPlan(state, Blueprints.byId["blueprint.ammo.emp"]))
