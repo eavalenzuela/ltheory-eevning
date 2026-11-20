@@ -17,6 +17,8 @@ export type Ship = {
   type: string,     -- Data/Ships id
   name: string,
   owner: string,    -- "player", or the faction that flies it
+  -- (what stands for a faction's citadel under fire: the citadel's station, Assets/Citadels)
+  stands: number?,
   docked: number,   -- station id, or 0 in space
   -- The citadel it is tethered to, too big to dock there (Assets/
   -- Starbases): nil when it is not.
@@ -888,7 +890,10 @@ export type Batteries = {
 -- moon or planet it stands at; the station it is in its system's
 -- description, and its hulk's wreck once it has one (0 until then).
 export type Citadel = { system: number, slot: number, tower: string, owner: string, fallen: boolean, body: number, station: number,
-  wreck: number }
+  wreck: number,
+  -- (fought as a pilot's is, since 2026-11-20: the ship that stands for it under fire, its owner's, once the pilot has
+  -- been in its system; and its guns' and point defence's as a pilot's citadel has them, Tactical/CitadelGuns)
+  core: number?, guns: { number }?, pds: { { ax: number, ay: number, az: number } }? }
 
 export type Keep = { id: number, system: number, moon: number, core: number, sealed: number, charges: number, restock: number,
   called: number, calls: number }

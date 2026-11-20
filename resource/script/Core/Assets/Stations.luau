@@ -60,7 +60,10 @@ function Stations.Makeup(state: State.State, id: number): Structures.Makeup?
   -- (a faction's citadel: the citadel, and what its kind has fitted: Assets/Citadels)
   local citadel = Space.FactionCitadel(state, id)
   if citadel then
-    return { tower = citadel.tower, modules = Citadels.Modules(Structures.towerById[citadel.tower]) }
+    local modules = Citadels.Modules(Structures.towerById[citadel.tower])
+    -- (and its guns: Tactical/CitadelGuns)
+    table.insert(modules, Citadels.Defence(citadel))
+    return { tower = citadel.tower, modules = modules }
   end
   -- (its tower is of the faction whose homeworld is nearest: a station in
   -- space nobody holds was still built by somebody)

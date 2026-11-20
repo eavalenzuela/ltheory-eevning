@@ -27,6 +27,7 @@
 -- its fittings in it, and an alien people's drawing of it.
 
 local Constants = require("@lt/Core/Data/Constants")
+local Factions = require("@lt/Core/Data/Factions")
 local Hulks = require("@lt/Core/Assets/Hulks")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
@@ -76,6 +77,66 @@ function Citadels.Modules(tower: Structures.Tower): { string }
     end
   end
   return out
+end
+
+-- The defence module a faction's citadel has (the owner's, 2026-11-20:
+-- fought as a pilot's citadel is): of its people's weapons, a missile
+-- people's launchers. (Which family is each people's is mine.)
+function Citadels.Defence(record: State.Citadel): string
+  local tower = Structures.towerById[record.tower]
+  local people = Factions.byId[record.owner]
+  local family = if people == nil then "projectile" elseif people.launchers >= 0.5 then "missile" else people.weapon
+  return `citadel.defence.{family}.{Structures.CITADEL_SIZES[tower.size]}`
+end
+
+-- The faction's citadel a ship stands for under fire, if it does.
+-- (by the core's id: what is destroyed is forgotten before its citadel hears of it)
+function Citadels.OfCore(state: State.State, ship: number): State.Citadel?
+  for _, key in state.citadelIds or {} :: { number } do
+    local record = state.citadels[key]
+    if record.core == ship then
+      return record
+    end
+  end
+  return nil
+end
+
+-- What stands for each faction's citadel of the pilot's system under
+-- fire (the owner's, 2026-11-20: fought as a pilot's is): a ship of its
+-- faction's at its heart, nobody's to fly, with all its shield (its
+-- shield modules full) and fought layer by layer, reinforced between
+-- (Tactical/Combat). Put there when the pilot is first in its system,
+-- and kept, with what has been done to it.
+function Citadels.Cores(state: State.State, system: number, events: { Event })
+  if state.citadels == nil then
+    return
+  end
+  for _, record in Citadels.Of(state, system) do
+    if not record.fallen and record.station ~= 0 and (record.core == nil or state.balls[record.core] == nil) then
+      local tower = Structures.towerById[record.tower]
+      local object = Space.Object(state, record.station)
+      if tower and object then
+        local core = Space.NewShip(state, Structures.Core(tower), tower.name, record.owner, 0)
+        core.stands = record.station
+        local ball = Space.Launch(state, core, record.system, object.x, object.y, object.z)
+        ball.vitals.shieldMax, ball.vitals.shield = tower.shield, tower.shield
+        ball.vitals.phase = "shield"
+        record.core = core.id
+        table.insert(events, { kind = "BallAdded", ball = ball.id })
+      end
+    end
+  end
+end
+
+-- A ship has been destroyed: if it stood for a faction's citadel, the
+-- citadel falls (and leaves its hulk, as one does to the world: fall).
+local fall: (state: State.State, record: State.Citadel, events: { Event }) -> ()
+function Citadels.CoreLost(state: State.State, ship: number, events: { Event })
+  local record = Citadels.OfCore(state, ship)
+  if record then
+    record.core = nil
+    fall(state, record, events)
+  end
 end
 
 -- The faction's citadel a station is, if it is one that stands.
@@ -128,7 +189,7 @@ end
 -- One of them falls. Its place is its hulk's from now on, and the hulk
 -- is there now if the system has been described (else when the pilot
 -- first comes: Citadels.Settle).
-local function fall(state: State.State, record: State.Citadel, events: { Event })
+function fall(state: State.State, record: State.Citadel, events: { Event })
   if record.fallen then
     return
   end
@@ -147,6 +208,12 @@ local function fall(state: State.State, record: State.Citadel, events: { Event }
     end
   end
   record.fallen = true
+  -- (and what stood for it under fire goes with it)
+  local core = if record.core then state.balls[record.core] else nil
+  if core then
+    Space.RemoveBall(state, core)
+  end
+  record.core = nil
   Space.Forget(state, record.system)
   settle(state, record, events)
   table.insert(events, { kind = "CitadelFell", system = record.system, station = record.station, tower = record.tower, owner = record.owner })
@@ -168,6 +235,10 @@ end
 -- Once an hour: a citadel whose system is no longer its people's falls.
 local HOUR = math.floor(3600 / Constants.TICK + 0.5)
 function Citadels.Step(state: State.State, events: { Event })
+  local me = state.balls[state.player.ship]
+  if me then
+    Citadels.Cores(state, me.system, events)
+  end
   if state.tick % HOUR ~= 0 or state.citadelIds == nil then
     return
   end

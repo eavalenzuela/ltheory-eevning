@@ -13,6 +13,7 @@
 
 local Assault = require("@lt/Core/Tactical/Assault")
 local Battles = require("@lt/Core/Tactical/Battles")
+local Citadels = require("@lt/Core/Assets/Citadels")
 local Keeps = require("@lt/Core/Tactical/Keeps")
 local Raids = require("@lt/Core/Tactical/Raids")
 local Constants = require("@lt/Core/Data/Constants")
@@ -110,7 +111,7 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
 
   -- (a capsule leaves nothing, and neither does a drone; nor what stands
   -- for a citadel under fire: the citadel leaves its hulk, Assets/Hulks)
-  local citadelCore = ship.owner == "starbase" and string.sub(ship.type, 1, 14) == "works.citadel."
+  local citadelCore = (ship.owner == "starbase" or ship.stands ~= nil) and string.sub(ship.type, 1, 14) == "works.citadel."
   if hull.class ~= "capsule" and hull.class ~= "drone" and not citadelCore then
     local wreck: State.Wreck = {
       id = State.NewId(state), kind = "wreck", name = ball.name .. " Wreck", system = ball.system, grid = ball.grid,
@@ -190,8 +191,9 @@ function Aftermath.Destroy(state: State.State, id: number, by: number, events: {
     Keeps.Fell(state, id, pilot.home, events)
   else
     Assault.Lost(state, id, events)
-    -- (and what stood for a pilot's tower under fire is the tower lost)
+    -- (and what stood for a pilot's tower under fire is the tower lost; for a faction's citadel, the citadel)
     Raids.CoreLost(state, id, events)
+    Citadels.CoreLost(state, id, events)
   end
 
   -- (a bounty is on the pilot, not the hull: a scout in a patched frigate

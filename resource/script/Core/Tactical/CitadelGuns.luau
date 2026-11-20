@@ -20,6 +20,7 @@
 -- Only while the citadel is lit and the module online. (Which make of
 -- each family is short and which long, how long a stroke is remembered,
 -- and that the guns fire as a pilot with no skills would, are mine.)
+local Citadels = require("@lt/Core/Assets/Citadels")
 local Constants = require("@lt/Core/Data/Constants")
 local Factions = require("@lt/Core/Data/Factions")
 local Gunnery = require("@lt/Core/Tactical/Gunnery")
@@ -30,6 +31,7 @@ local Sides = require("@lt/Core/Tactical/Sides")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
 local Structures = require("@lt/Core/Data/Structures")
+local Wars = require("@lt/Core/Strategic/Wars")
 
 export type Event = { [string]: any }
 export type Hit = { target: number, by: number, damage: { number } }
@@ -85,28 +87,41 @@ local function load(module: Modules.ModuleType): Modules.ChargeType?
   return nil
 end
 
--- Whether a citadel counts a ship hostile.
-local function hostile(state: State.State, starbase: State.Starbase, id: number): boolean
+-- Whether a citadel of an owner's counts a ship hostile. (A faction's
+-- citadel, since 2026-11-20, as a pilot's: whoever has struck it or its
+-- people's ships, and those its people are at war with: another faction's
+-- ships, or the pilot, who has served a side its people fight.)
+local function hostile(state: State.State, owner: string, core: number, id: number): boolean
   local ship = state.ships[id]
-  if ship == nil or id == starbase.core or ship.owner == "starbase" then
+  if ship == nil or id == core or ship.owner == "starbase" or ship.stands ~= nil then
     return false
   end
   local drone = state.drones[id]
-  local owner = if drone and state.ships[drone.owner] then state.ships[drone.owner].owner else ship.owner
-  if owner == starbase.owner or (starbase.owner == "player" and owner == "member") then
+  local whose = if drone and state.ships[drone.owner] then state.ships[drone.owner].owner else ship.owner
+  local ours = whose == "player" or whose == "member"
+  if whose == owner or (owner == "player" and ours) then
     return false
-  elseif owner == "pirates" or owner == "drowned" then
+  elseif whose == "pirates" or whose == "drowned" then
     return true
   end
   local struck = state.aggressors and state.aggressors[if drone then drone.owner else id]
-  if struck and struck[starbase.owner] and state.tick - struck[starbase.owner] <= CitadelGuns.MEMORY then
+  if struck and struck[owner] and state.tick - struck[owner] <= CitadelGuns.MEMORY then
     return true
   end
-  if starbase.owner == "player" and Factions.byId[owner] and Sides.EnemyOf(state, owner) ~= nil then
-    return true
+  if owner == "player" then
+    return Factions.byId[whose] ~= nil and Sides.EnemyOf(state, whose) ~= nil
+  elseif ours then
+    return Sides.EnemyOf(state, owner) ~= nil
   end
-  return false
+  return Factions.byId[whose] ~= nil and Factions.byId[owner] ~= nil and Wars.AtWar(state.wars, whose, owner)
 end
+
+-- A citadel to fire for: whose it is, what stands for it under fire, what
+-- it is, its defence module (nil: it has none online), and where its guns'
+-- times and its turrets' aims are kept (a pilot's starbase, or a faction's
+-- citadel's record).
+type Unit = { owner: string, core: State.Ball, tower: Structures.Tower, module: Structures.ModuleType?,
+  holder: { guns: { number }?, pds: { { ax: number, ay: number, az: number } }? } }
 
 -- A citadel's point defence (the owner's, 2026-11-18 and 2026-11-19): built
 -- into every citadel, no module, on its point defence hardpoints (so many
@@ -133,13 +148,13 @@ local function round(): string
   return pdsRound or ""
 end
 
-local function defend(state: State.State, starbase: State.Starbase, core: State.Ball, time: number, hits: { Hit }, events: { Event })
-  local tower = Structures.towerById[starbase.tower]
-  local count = Structures.CITADEL_HARDPOINTS[tower.size].pds
-  local aims = starbase.pds or {}
-  starbase.pds = aims
+local function defend(state: State.State, unit: Unit, time: number, hits: { Hit }, events: { Event })
+  local core = unit.core
+  local count = Structures.CITADEL_HARDPOINTS[unit.tower.size].pds
+  local aims = unit.holder.pds or {}
+  unit.holder.pds = aims
   local function enemy(id: number): boolean
-    return hostile(state, starbase, id)
+    return hostile(state, unit.owner, core.id, id)
   end
   -- (the nearest hostile on its grid, that its turrets turn to while they have nothing to shoot at: so that they
   -- are on the way its missiles will come)
@@ -147,7 +162,7 @@ local function defend(state: State.State, starbase: State.Starbase, core: State.
   local nearest = math.huge
   for _, other in state.ballIds do
     local ball = state.balls[other]
-    if ball and ball.system == core.system and ball.grid == core.grid and hostile(state, starbase, other) then
+    if ball and ball.system == core.system and ball.grid == core.grid and enemy(other) then
       local gap = (ball.x - core.x) ^ 2 + (ball.y - core.y) ^ 2 + (ball.z - core.z) ^ 2
       if gap < nearest then
         threat, nearest = ball, gap
@@ -181,33 +196,25 @@ local function defend(state: State.State, starbase: State.Starbase, core: State.
   end
 end
 
--- Every lit citadel's defence module, its weapons that are due firing at
--- the nearest hostile in their reach: the hits of its turrets (for the
--- tick's combat to apply), and its launchers' missiles put in the air.
-function CitadelGuns.Fire(state: State.State, events: { Event }): { Hit }
-  local hits: { Hit } = {}
-  local time = state.tick * Constants.TICK
-  for _, id in state.starbaseIds do
-    local starbase = state.starbases[id]
-    local tower = Structures.towerById[starbase.tower]
-    local core = state.balls[starbase.core]
-    local lit = tower.citadel and core ~= nil and Starbases.Lit(state, starbase)
-    if lit and core then
-      defend(state, starbase, core, time, hits, events)
-    end
-    local module = if lit then CitadelGuns.Module(state, starbase) else nil
-    if module and core then
+-- One citadel's turn: its point defence, and the guns of its defence
+-- module that are due firing.
+local function fireFor(state: State.State, unit: Unit, time: number, hits: { Hit }, events: { Event })
+  local core = unit.core
+  local tower = unit.tower
+  defend(state, unit, time, hits, events)
+  local module = unit.module
+  if module then
       local family = module.defence :: string
       local mounted = Structures.CITADEL_DEFENCE[tower.size]
-      local guns = starbase.guns or {}
-      starbase.guns = guns
+      local guns = unit.holder.guns or {}
+      unit.holder.guns = guns
       -- (who is about that it counts hostile, nearest first)
       type Near = { ball: State.Ball, gap: number }
       local near: { Near } = {}
       for _, other in state.ballIds do
         local ball = state.balls[other]
         if ball and ball.system == core.system and ball.grid == core.grid and not (ball.warp and ball.warp.stage == "warp")
-          and hostile(state, starbase, other) then
+          and hostile(state, unit.owner, core.id, other) then
           local gap = math.sqrt((ball.x - core.x) ^ 2 + (ball.y - core.y) ^ 2 + (ball.z - core.z) ^ 2) - core.radius - ball.radius
           table.insert(near, { ball = ball, gap = math.max(0, gap) })
         end
@@ -282,6 +289,35 @@ function CitadelGuns.Fire(state: State.State, events: { Event }): { Hit }
           end
         end
       end
+  end
+end
+
+-- Every lit citadel's point defence, and its defence module's weapons
+-- that are due firing at the nearest hostile in their reach: the hits of
+-- its turrets (for the tick's combat to apply), and its launchers'
+-- missiles put in the air. A pilot's, and (since 2026-11-20) a faction's
+-- that stands, whose core is there (Assets/Citadels): always manned, and
+-- with its people's defence module (Citadels.Defence).
+function CitadelGuns.Fire(state: State.State, events: { Event }): { Hit }
+  local hits: { Hit } = {}
+  local time = state.tick * Constants.TICK
+  for _, id in state.starbaseIds do
+    local starbase = state.starbases[id]
+    local tower = Structures.towerById[starbase.tower]
+    local core = state.balls[starbase.core]
+    if tower.citadel and core and Starbases.Lit(state, starbase) then
+      fireFor(state, { owner = starbase.owner, core = core, tower = tower, module = CitadelGuns.Module(state, starbase),
+        holder = starbase :: any }, time, hits, events)
+    end
+  end
+  local keys: { number } = state.citadelIds or {}
+  for _, key in keys do
+    local record = state.citadels[key]
+    local core = if record.core and not record.fallen then state.balls[record.core] else nil
+    local tower = Structures.towerById[record.tower]
+    if core and tower then
+      fireFor(state, { owner = record.owner, core = core, tower = tower, module = Structures.moduleById[Citadels.Defence(record)],
+        holder = record :: any }, time, hits, events)
     end
   end
   return hits

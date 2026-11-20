@@ -4,6 +4,12 @@
 -- and brought down by the world.
 
 local CitadelSites = require("@lt/Core/Describe/CitadelSites")
+local State = require("@lt/Core/Kernel/State")
+local Pirates = require("@lt/Core/Tactical/Pirates")
+local Fields = require("@lt/Core/Tactical/Fields")
+local Combat = require("@lt/Core/Tactical/Combat")
+local CitadelGuns = require("@lt/Core/Tactical/CitadelGuns")
+local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Citadels = require("@lt/Core/Assets/Citadels")
 local Core = require("@lt/Core/Api")
 local Items = require("@lt/Core/Assets/Items")
@@ -119,7 +125,9 @@ suite:Case("a faction's citadel is a station of its people's, with its kind's se
   local makeup = assert(Stations.Makeup(state, station.id))
   t.eq(makeup.tower, citadel.tower)
   local tower = Structures.towerById[citadel.tower]
-  t.ok(#makeup.modules >= 1 and #makeup.modules <= (tower.slots or 2), `{#makeup.modules} modules`)
+  -- (its services, as its slots let it, and its people's defence module)
+  t.ok(#makeup.modules >= 2 and #makeup.modules <= (tower.slots or 2) + 1, `{#makeup.modules} modules`)
+  t.eq(makeup.modules[#makeup.modules], Citadels.Defence(citadel))
   t.ok(Stations.Has(state, station.id, "market") and Stations.Has(state, station.id, "fitting"), "no market or repairs")
   -- Its system is lost: within the hour all of them fall, and their places are their hulks'.
   state.galaxy.systems[system].owner = ""
@@ -183,6 +191,53 @@ suite:Case("a citadel far off is there to be looked at before anybody goes; an o
   Citadels.Place(old.state)
   t.eq(#Space.Describe(old.state, record.system).objects, before + #Citadels.Of(old.state, record.system))
   t.ok(#Citadels.Of(old.state, record.system) >= 1)
+end)
+
+suite:Case("a faction's citadel is fought as a pilot's is: no field, its core, its guns, reinforced, and brought down to its hulk", function(t)
+  local game = galaxy()
+  local state = game.state
+  local system, record = 0, nil :: State.Citadel?
+  for id = 2, 120 do
+    if system == 0 then
+      Space.Describe(state, id)
+      local records = Citadels.Of(state, id)
+      if #records >= 1 and not records[1].fallen then
+        system, record = id, records[1]
+      end
+    end
+  end
+  local citadel = assert(record, "no citadel standing")
+  local events: { Citadels.Event } = {}
+  Citadels.Cores(state, system, events)
+  local core = assert(state.balls[citadel.core or 0], "no core")
+  local tower = Structures.towerById[citadel.tower]
+  t.eq({ Fields.Of(state, citadel.station), core.vitals.shieldMax, core.vitals.phase, state.ships[core.id].owner,
+    state.ships[core.id].stands } :: { any }, { nil, tower.shield, "shield", citadel.owner, citadel.station } :: { any })
+  -- Its guns fire on a pirate that comes in reach.
+  local pirate = Pirates.Spawn(state, Pirates.kindById.raider, system, core.x + core.radius + 3000, core.y, core.z, core.grid)
+  local shots = 0
+  for _ = 1, 15 do
+    local fired: { Citadels.Event } = {}
+    CitadelGuns.Fire(state, fired)
+    for _, event in fired do
+      shots += if event.kind == "Shot" and event.from == core.id then 1 else 0
+    end
+    state.tick += 1
+  end
+  t.ok(shots >= 2, `shots {shots}`)
+  -- Shot down layer by layer, reinforced between, and falling to its hulk when its structure goes.
+  local v = core.vitals
+  local function strike(amount: number)
+    Combat.Step(state, events, { { target = core.id, by = pirate.id, damage = { amount, 0, 0, 0 } } })
+  end
+  -- (each strike well past what is left of the layer, whatever it resists)
+  strike(v.shield * 10)
+  t.eq(v.phase, "armor")
+  state.tick = v.reinforced or state.tick
+  strike(v.armor * 10)
+  t.eq(v.phase, "hull")
+  Aftermath.Destroy(state, core.id, pirate.id, events)
+  t.ok(citadel.fallen and citadel.wreck ~= 0 and citadel.core == nil, "it did not fall to its hulk")
 end)
 
 return suite

@@ -287,6 +287,19 @@ end
 -- A citadel's core (Core/Assets/Starbases) is where its station is drawn:
 -- its guns fire from there, and its tethers hold from there.
 local function citadelCores(scene: Scene, state: any)
+  -- (a faction's citadel's too, since 2026-11-20: Core/Assets/Citadels)
+  for _, key in state.citadelIds or {} do
+    local record = state.citadels[key]
+    local at = scene.screen[record.station]
+    if at and record.core and not scene.screen[record.core] then
+      scene.screen[record.core] = at
+    end
+    if at then
+      for n, gun in scene.citadelGuns[record.station] or {} :: { CitadelGun } do
+        scene.screen[citadelGunKey(record.station, n)] = at + gun.at
+      end
+    end
+  end
   for _, id in state.starbaseIds do
     local starbase = state.starbases[id]
     local at = scene.screen[id]
@@ -306,8 +319,20 @@ end
 -- 'mount'th of its weapons of that type, or of its point defence turrets
 -- for "pds"), as its place in 'scene.screen'.
 local function citadelGun(scene: Scene, state: any, core: number, type: string, mount: number?): number?
+  -- (whose citadel's core it is: a pilot's, or a faction's, Core/Assets/Citadels)
+  local stations: { number } = {}
   for _, id in state.starbaseIds do
     if state.starbases[id].core == core then
+      table.insert(stations, id)
+    end
+  end
+  for _, key in state.citadelIds or {} do
+    if state.citadels[key].core == core then
+      table.insert(stations, state.citadels[key].station)
+    end
+  end
+  for _, id in stations do
+    do
       local count = 0
       for n, gun in scene.citadelGuns[id] or {} :: { CitadelGun } do
         if (type == "pds" and gun.pds) or (type ~= "pds" and gun.type == type and not gun.pds) then
@@ -1702,7 +1727,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     local shown = ball.system == player.system and (id == player.ship or inScene[ball.grid] == true)
     -- (a starbase's core, what stands for it under fire, is not drawn: the station is, and the core is where it is
     -- drawn, citadelCores. Drawn as a ship it was an old-style hull of the station's size, in the middle of it.)
-    if state.ships[id] and state.ships[id].owner == "starbase" then
+    if state.ships[id] and (state.ships[id].owner == "starbase" or state.ships[id].stands ~= nil) then
       shown = false
     end
     -- (a cloaked ship is seen by nobody but its own pilot)
@@ -2005,7 +2030,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         -- (a gun that is part of a hull, and no item, says what it looks like firing: Core/Tactical/Combat)
         Effects.Fire(fx, if item then item.type elseif event.look then event.look else FALLBACK[event.family] or "autocannon", from.id, to.id, from.radius, to.radius,
           event.outcome, event.flight or 0, struck(to), scene.time,
-          if event.look and state.ships[from.id] and state.ships[from.id].owner == "starbase" then citadelGun(scene, state, from.id, event.look, event.mount)
+          if event.look and state.ships[from.id] and (state.ships[from.id].owner == "starbase" or state.ships[from.id].stands ~= nil) then citadelGun(scene, state, from.id, event.look, event.mount)
           elseif event.leap == nil and scene.screen[-event.item] then -event.item else nil,
           if event.volley then { n = event.volley, path = event.path or "zig", delay = event.delay or 0,
             up = if scene.proxies[from.id] then scene.proxies[from.id]:GetUp() else nil }
@@ -2017,7 +2042,8 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       local from = state.balls[event.from]
       if from then
         -- (a citadel's, from the turret of its that it was: Core/Tactical/CitadelGuns)
-        local citadel = event.mount and state.ships[from.id] and state.ships[from.id].owner == "starbase"
+        local citadel = event.mount and state.ships[from.id] and (state.ships[from.id].owner == "starbase"
+          or state.ships[from.id].stands ~= nil)
         if citadel then
           citadelCores(scene, state)
         end

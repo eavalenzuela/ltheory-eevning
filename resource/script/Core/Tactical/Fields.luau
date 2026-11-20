@@ -58,6 +58,10 @@ local function up(state: State.State, object: System.Object): boolean
   if starbase and Structures.towerById[starbase.tower] and Structures.towerById[starbase.tower].citadel then
     return false
   end
+  -- (and a faction's no more than a pilot's, since 2026-11-20)
+  if starbase == nil and Space.FactionCitadel(state, object.id) then
+    return false
+  end
   return starbase == nil or (state.tick >= starbase.ready and starbase.fuel > 0)
 end
 
