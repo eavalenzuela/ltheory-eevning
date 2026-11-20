@@ -1505,6 +1505,28 @@ rig("turret.optimal", "Turret Reach Rig", 150, { weapons("turret", "optimal", 1.
 rig("turret.falloff", "Turret Spread Rig", 150, { weapons("turret", "falloff", 1.15), ship("powergrid", "mul", 0.90) })
 rig("turret.tracking", "Turret Tracking Rig", 150, { weapons("turret", "tracking", 1.15), ship("powergrid", "mul", 0.90) })
 rig("turret.damage", "Turret Charge Rig", 200, { weapons("turret", "damageMultiplier", 1.10), ship("powergrid", "mul", 0.90) })
+-- (and the utility modules of the same review, for hauling, travel and
+-- fitting: the reference's figures where it has one that means the same
+-- here; the warp accelerator's, the coil's and the generator's mine)
+for _, each in {
+  { "inertial.damper", "Inertial Damper", "low", 18, 1, { ship("inertia", "mul", 0.8325, true), ship("signature", "mul", 1.10) },
+    "navigation" },
+  { "warp.accelerator", "Warp Field Accelerator", "low", 10, 1, { ship("warpSpeed", "mul", 1.10, true) }, "navigation" },
+  { "targeting.amplifier", "Targeting Amplifier", "low", 20, 1,
+    { ship("lockRange", "mul", 1.25, true), ship("scanResolution", "mul", 1.12, true), ship("maxTargets", "add", 1) }, "electronics" },
+  { "signature.dampener", "Signature Dampener", "mid", 25, 1, { ship("signature", "mul", 0.90, true) }, "electronics" },
+  { "capacitor.coil", "Capacitor Recharge Coil", "low", 20, 1, { ship("capacitorRecharge", "mul", 0.80, true), ship("capacitor", "mul", 0.90) },
+    "engineering" },
+  { "grid.diagnostic", "Grid Diagnostic Unit", "low", 20, 1,
+    { ship("powergrid", "mul", 1.05, true), ship("capacitor", "mul", 1.04, true), ship("shield", "mul", 1.04, true),
+      ship("capacitorRecharge", "mul", 0.96, true), ship("shieldRecharge", "mul", 0.96, true) }, "engineering" },
+  { "auxiliary.generator", "Auxiliary Generator", "low", 30, 0, { ship("powergrid", "add", 10) }, "engineering" },
+} :: { { any } } do
+  table.insert(modules, {
+    id = each[1], name = each[2], slot = each[3], hardpoint = "", cpu = each[4], powergrid = each[5], volume = 5, basePrice = 20000,
+    passive = each[6], requires = { { skill = each[7], level = 1 } },
+  })
+end
 for size, each in { { "medium", "Medium", 150, 12, 8000, 25, 175 }, { "heavy", "Heavy", 500, 24, 16000, 50, 2000 } } :: { { any } } do
   table.insert(modules, {
     id = `neutraliser.{each[1]}`, name = `{each[2]} Energy Neutraliser`, slot = "high", hardpoint = "",
