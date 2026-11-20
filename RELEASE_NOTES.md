@@ -6,6 +6,14 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Observatories and citadel miners
+
+- Observatory, for research station citadels: it finds the signals in its system for you, nearest first, each in a minute or so (derelicts nearly two, listening posts two and a half). Found signals show on your overview to warp to, as if you had scanned them down. Its dome's telescope turns and tilts toward whatever it is working on.
+- Asteroid Miner, Moon Miner and Planet Miner, for refinery citadels: every hour each brings up, into the citadel's hangar, as much of each thing it mines as a tech 2 mining laser would, times the citadel's size (one for small up to five for huge). The Asteroid Miner mines every ore the system's belts hold, the Moon Miner the material of the moon the citadel is anchored at, and the Planet Miner each raw material of its planet. A Moon Miner fits only at a moon, a Planet Miner only at a planet. Nothing is taken out of the belts.
+- A refinery's mining turret turns to its target and holds a beam on it; an asteroid miner draws rocks in on its beam and grinds them away.
+- The observatory dome and the mining turret only appear once their module is fitted, and go dark with the citadel.
+- Fixed: every citadel and tower had an old-style hull drawn in the middle of it, which showed as a ring of pods around citadels.
+
 ## Citadel point defence from its turrets
 
 - A citadel's point defence tracers now come from the turrets that fire them, on its point defence mounts, rather than from its middle.
