@@ -6,6 +6,10 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Citadel point defence from its turrets
+
+- A citadel's point defence tracers now come from the turrets that fire them, on its point defence mounts, rather than from its middle.
+
 ## Citadels you fight like ships
 
 - Citadels no longer have a shield bubble or outside batteries. A ring of lights marks their tether: your ships within 10 km of one are tethered to it, shown by a beam from the citadel, and cannot be locked.
