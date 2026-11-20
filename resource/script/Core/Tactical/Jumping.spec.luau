@@ -76,9 +76,10 @@ local function reach(game: Core.Game, from: number, range: number): (number, num
 end
 
 suite:Case("a hull built with a jump drive goes to a system within its reach without a gate, for fuel and most of its capacitor", function(t)
-  -- (the Talmar's carrier has one; the Vessari's has not)
-  t.eq({ Ships.byId["carrier.scoppo"].jump, Ships.byId["carrier.azayake"].jump } :: { any }, { true, nil } :: { any })
-  local other = (flying("carrier.azayake"))
+  -- (every carrier has one since 2026-11-20, the owner's "Capitals+ yes"; a plain freighter has not)
+  t.eq({ Ships.byId["carrier.scoppo"].jump, Ships.byId["carrier.azayake"].jump, Ships.byId["freighter.yoruzake"].jump } :: { any },
+    { true, true, nil } :: { any })
+  local other = (flying("freighter.yoruzake"))
   other.state.skills[Jumping.SKILL] = 5
   t.eq(refused(other, { kind = "JumpDrive", actor = 0, target = 2 }), "this hull has no jump drive")
   t.eq(Core.Query.JumpDrive(other), nil)

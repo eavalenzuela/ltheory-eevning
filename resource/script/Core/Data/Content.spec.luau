@@ -19,6 +19,14 @@ local Facts = require("@lt/Core/Data/Facts")
 
 local suite = Test.Suite("Content")
 
+-- (every combat capital and up and every capital industrial jumps since
+-- 2026-11-20, the owner's, but the Kethri's colony ship: Data/Ships)
+local function capitalJump(id: string, class: string): boolean?
+  local classes = { carrier = true, dreadnought = true, siegedreadnought = true, supercarrier = true, ultracapital = true,
+    capitalindustrial = true } :: { [string]: boolean }
+  return if classes[class] and id ~= "ultracapital.leslarmesdenova" then true else nil
+end
+
 -- Can this be had from ore: a mineral some ore yields, or a component
 -- whose own blueprint takes only such things?
 local function fromOre(type: string): boolean
@@ -169,7 +177,7 @@ suite:Case("the Talmar's ships are the owner's rework of them: each by name, of 
     local name: string, class: string, of: string?, jump: boolean?, stealth: boolean? = entry[1], entry[2], entry[3], entry[4], entry[5]
     local hull = assert(Ships.byId[`{class}.{string.lower(name)}`], `the Talmar have no {name}`)
     t.eq({ hull.name, hull.class, hull.lineage, hull.radius, hull.jump, hull.stealth } :: { any },
-      { `Talmar {name}`, class, "talmar", RADIUS[class], jump, stealth } :: { any }, name)
+      { `Talmar {name}`, class, "talmar", RADIUS[class], jump or capitalJump(hull.id, class), stealth } :: { any }, name)
     if of then
       local base = assert(Ships.byId[`{class}.{string.lower(of)}`])
       t.eq({ hull.tech, hull.base, Ships.Improved(base.id), Ships.byId[base.id .. ".ii"] } :: { any }, { 2, base.id, hull, nil } :: { any }, name)
@@ -347,7 +355,8 @@ suite:Case("the Vail's ships are the owner's list of them: seventeen hulls, two 
   t.eq(Ships.byId["capitalindustrial.archangel"], nil)
   t.eq({ archangel.radius / embrace.radius, archangel.jump, archangel.jumpField, archangel.tech, archangel.turrets + archangel.launchers } :: { any },
     { 1.5, true, 5000, nil, 0 } :: { any })
-  t.eq({ embrace.jump, embrace.jumpField, Ships.Improved(embrace.id) } :: { any }, {})
+  -- (the Embrace jumps as every capital industrial does since 2026-11-20, with no field)
+  t.eq({ embrace.jump, embrace.jumpField, Ships.Improved(embrace.id) } :: { any }, { true } :: { any })
   -- So much smaller than the class is written for, it is that much less of one in bulk: heavier than the
   -- capital industrial it comes of and lighter than their dreadnought, which is bigger; where the Vessari's
   -- ultracapital, which is as big as the class, is as the class is.
@@ -412,7 +421,7 @@ suite:Case("the Drowned's ships are the owner's list of them: fifteen hulls, eve
       local base = assert(Ships.byId[`{class}.{string.lower(of)}`])
       t.eq({ hull.tech, hull.base, Ships.Improved(base.id), hull.cloak, hull.jump } :: { any }, { 2, base.id, hull, nil, true } :: { any }, name)
     else
-      t.eq({ hull.tech, hull.cloak, hull.jump } :: { any }, { nil, true, nil } :: { any }, name)
+      t.eq({ hull.tech, hull.cloak, hull.jump } :: { any }, { nil, true, capitalJump(hull.id, class) } :: { any }, name)
       t.ok(#Skills.Needs(hull.id) >= 1, name)
     end
     t.ok(Facts.Of(hull.id) ~= nil, name)
@@ -803,7 +812,8 @@ suite:Case("what each tech 2 hull is for is the owner's word: to jump, to go uns
   for _, entry in FOR do
     local hull = assert(Ships.byId[entry[1]], `no {entry[1]}`)
     said[hull.id] = true
-    t.eq({ hull.tech, hull.jump, hull.stealth, hull.cloak, hull.explorer } :: { any }, { 2, entry[2], entry[3], entry[4], entry[5] } :: { any }, hull.id)
+    t.eq({ hull.tech, hull.jump, hull.stealth, hull.cloak, hull.explorer } :: { any },
+      { 2, entry[2] or capitalJump(hull.id, hull.class), entry[3], entry[4], entry[5] } :: { any }, hull.id)
     -- What it is for is on its sheet, where it is for anything.
     local sheet = assert(Facts.Of(hull.id))
     local built: { [string]: boolean } = {}
@@ -814,7 +824,8 @@ suite:Case("what each tech 2 hull is for is the owner's word: to jump, to go uns
         end
       end
     end
-    t.eq({ built["Jump drive"], built["Stealth"], built["Cloak"], built["Scanner"] } :: { any }, { entry[2], entry[3], entry[4], entry[5] } :: { any }, hull.id)
+    t.eq({ built["Jump drive"], built["Stealth"], built["Cloak"], built["Scanner"] } :: { any },
+      { entry[2] or capitalJump(hull.id, hull.class), entry[3], entry[4], entry[5] } :: { any }, hull.id)
     -- (a hull built to go unseen or to explore fits a cloaking device cheaply, and says so)
     t.eq(built["Cloaking device"], if entry[3] or entry[5] then true else nil, hull.id)
     t.eq(string.find(sheet.kind, "black ops", 1, true) ~= nil, entry[3] == true, sheet.kind)

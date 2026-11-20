@@ -1118,9 +1118,20 @@ Ships.CLASS_NAMES = {
 -- aboard (the owner's, 2026-11-20: "we'll solve the ore volume issue by
 -- having the capital industrials have onboard refineries", in place of
 -- compressing ore), as the Drowned's Griever did first.
+-- And every combat capital and up jumps (the owner's, 2026-11-20:
+-- "Capitals+ yes (unless especially noted otherwise, like the Kethri
+-- colony ships)"): carriers, dreadnoughts, siege dreadnoughts,
+-- supercarriers, ultracapitals and capital industrials (the owner's:
+-- "Capital industrial ships also do"), but the Kethri's colony ship. Not
+-- a plain freighter: the tech 2 ones are the jump freighters.
+local JUMPS: { [string]: boolean } = { carrier = true, dreadnought = true, siegedreadnought = true, supercarrier = true,
+  ultracapital = true, capitalindustrial = true }
 for _, t in types do
   if t.class == "capitalindustrial" and t.role ~= "transport" then
     t.refinery = true
+  end
+  if JUMPS[t.class] and t.id ~= "ultracapital.leslarmesdenova" then
+    t.jump = true
   end
 end
 
