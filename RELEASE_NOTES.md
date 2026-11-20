@@ -6,6 +6,16 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Citadels you fight like ships
+
+- Citadels no longer have a shield bubble or outside batteries. A ring of lights marks their tether: your ships within 10 km of one are tethered to it, shown by a beam from the citadel, and cannot be locked.
+- A citadel has a shield, armour and structure of its own, much bigger than before. Half its shield is built in, and the rest comes from citadel shield extenders and hardeners fitted in its shield slots (one on a small citadel, up to five on a huge one).
+- Shoot a citadel's shield down and it is reinforced for an hour, and nothing can touch it. Then its armour can be fought, and when the armour goes it is reinforced for another hour before its structure.
+- One defence module of its size mounts all of a citadel's guns: lasers, cannons, hybrids or missiles, short- and long-range by size. Each gun fires on its own at pirates, the Drowned, anyone who attacks the citadel or your ships, and your war enemies.
+- Every citadel has point defence built in, with no module needed: medium autocannons that stream at hostile missiles, drones and fighters while it is lit, and never run out.
+- At a citadel of your own, its window is called Citadel and is laid out like the ship fitting window: the citadel turning in the middle, its service, shield and defence slots around it, what goes in the slot you pick on the left, and its fuel, defences, guns and running costs on the right.
+- Fixed: ship pictures in two windows at once (the fitting window and an info window) no longer blink and vanish.
+
 ## Plasma torpedoes, the Fighter Pylon, and missiles you can outrun
 
 - The Plasma Torpedo Launcher, the Nimia's own, comes in four sizes and fits any ship with a launcher hardpoint. It fires slow, glowing balls of plasma that point defence cannot shoot down. Its own torpedoes come in two kinds: Plasmostatic (90% EM, 10% explosive) and Plasmobaric (90% thermal, 10% kinetic). It fires half as often as the short-range launcher of its size but hits twice as hard.
