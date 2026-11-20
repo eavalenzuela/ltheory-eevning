@@ -677,8 +677,11 @@ for _, tower in Structures.towers do
   local size = tower.size
   table.insert(types, {
     id = Structures.Core(tower), name = tower.name, class = "works", lineage = "", basePrice = tower.basePrice, volume = 1000000,
-    mass = 400000000 * size, inertia = 1, maxVelocity = 0, warpSpeed = 1, radius = 150 + 100 * size,
-    shield = tower.shield, armor = tower.armor, hull = tower.hull, shieldRecharge = 10800,
+    mass = 400000000 * size, inertia = 1, maxVelocity = 0, warpSpeed = 1,
+    -- (a citadel's core is the citadel, as big as it is; and half its shield is its own, the rest from its shield
+    -- modules: Data/Structures, Assets/Starbases)
+    radius = if tower.citadel and tower.reach then tower.reach else 150 + 100 * size,
+    shield = if tower.citadel then tower.shield / 2 else tower.shield, armor = tower.armor, hull = tower.hull, shieldRecharge = 10800,
     shieldResonance = harder(SHIELD, "shield"), armorResonance = harder(ARMOR, "armor"), hullResonance = harder(HULL, "hull"),
     signature = 2000 * size,
     cpu = 600, powergrid = 2000, highs = 0, mids = 0, lows = 0, turrets = 0, launchers = 0,

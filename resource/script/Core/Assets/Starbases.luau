@@ -117,18 +117,24 @@ function Starbases.Burn(state: State.State, starbase: State.Starbase): number
 end
 
 -- What is fitted in a citadel: how many services and batteries, and
--- how many it has room for.
-function Starbases.Slots(starbase: State.Starbase): (number, number, number, number)
+-- how many it has room for; and its shield modules and defence module,
+-- and how many it has room for of each (the owner's, 2026-11-19).
+function Starbases.Slots(starbase: State.Starbase): (number, number, number, number, number, number, number, number)
   local tower = Structures.towerById[starbase.tower]
-  local services, batteries = 0, 0
+  local services, batteries, shields, weapons = 0, 0, 0, 0
   for _, module in starbase.modules do
-    if Structures.moduleById[module.type].service == "defence" then
+    local service = Structures.moduleById[module.type].service
+    if service == "defence" then
       batteries += 1
+    elseif service == "shield" then
+      shields += 1
+    elseif service == "weapons" then
+      weapons += 1
     else
       services += 1
     end
   end
-  return services, tower.slots or 0, batteries, tower.defences or 0
+  return services, tower.slots or 0, batteries, tower.defences or 0, shields, tower.shieldSlots or 0, weapons, tower.weapons or 0
 end
 -- Ticks between one fuel block and the next, for a tower.
 local function interval(state: State.State, starbase: State.Starbase): number
@@ -447,12 +453,19 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
     elseif not Starbases.Lit(state, starbase) then
       return false, if tower.citadel then "the citadel is dark" else "the tower is dark"
     end
-    -- A citadel has services fitted in it, and batteries, by the slot;
-    -- and nothing else of a tower's.
+    -- A citadel has services fitted in it by the slot, and its shield
+    -- modules and its defence module (2026-11-19: no batteries); and
+    -- nothing else of a tower's.
     if tower.citadel then
-      local services, slots, batteries, defences = Starbases.Slots(starbase)
-      if module.service == "defence" then
-        return batteries < defences, `its {defences} battery slots are full`
+      local services, slots, _, _, shields, shieldSlots, weapons, weaponSlots = Starbases.Slots(starbase)
+      if module.fits and module.fits ~= tower.size then
+        return false, `a {module.name} is fitted only in a {string.lower(Structures.CITADEL_SIZE_NAMES[module.fits])} citadel`
+      elseif module.service == "defence" then
+        return false, "a citadel has no batteries: a defence module mounts its weapons"
+      elseif module.service == "shield" then
+        return shields < shieldSlots, `its {shieldSlots} shield slot{if shieldSlots == 1 then " is" else "s are"} full`
+      elseif module.service == "weapons" then
+        return weapons < weaponSlots, "it has a defence module fitted already"
       elseif not module.citadel then
         return false, "a citadel has services fitted, not a tower's modules"
       elseif module.kinds and not table.find(module.kinds, tower.kind or "") then
@@ -848,6 +861,56 @@ local function react(state: State.State, starbase: State.Starbase, events: { Eve
   table.insert(events, { kind = "Reacted", station = starbase.id, type = making.id, units = Reactions.BATCH })
 end
 
+-- How long after its time is up a citadel must go unstruck for its
+-- defenders to have held it (mine): then it is fought from its shield
+-- again, as it stands.
+Starbases.HELD = math.floor(1800 / Constants.TICK)
+
+-- A citadel's core, kept in line with what is fitted in it (the owner's,
+-- 2026-11-19): its shield is its own and what its online shield
+-- extenders add, and lets the less through for its online hardeners (the
+-- more of them the less each, as stacked modules are); while its armour
+-- or its structure is fought its shield is down; and once it has been
+-- let be long enough after its time, it is fought from its shield again.
+local function guard(state: State.State, starbase: State.Starbase)
+  local tower = Structures.towerById[starbase.tower]
+  local ball = state.balls[starbase.core]
+  local core = state.ships[starbase.core]
+  if not tower.citadel or ball == nil or core == nil then
+    return
+  end
+  local v = ball.vitals
+  local hull = Ships.byId[core.type]
+  local lit = Starbases.Lit(state, starbase)
+  local shield, hardeners = hull.shield, 0
+  local resonance = table.clone(hull.shieldResonance)
+  for _, module in starbase.modules do
+    local type = Structures.moduleById[module.type]
+    if lit and state.tick >= module.ready then
+      if type.shield then
+        shield += type.shield
+      elseif type.resist then
+        local penalty = math.exp(-((hardeners / 2.67) ^ 2))
+        for index = 1, 4 do
+          resonance[index] *= 1 - type.resist * penalty
+        end
+        hardeners += 1
+      end
+    end
+  end
+  if v.shieldMax ~= shield then
+    v.shield = if v.shieldMax > 0 then v.shield * shield / v.shieldMax else shield
+    v.shieldMax = shield
+  end
+  v.shieldResonance = resonance
+  if v.phase and v.phase ~= "shield" then
+    v.shield = 0
+    if state.tick >= (v.reinforced or 0) and state.tick - (v.struck or 0) >= Starbases.HELD then
+      v.phase = "shield"
+    end
+  end
+end
+
 function Starbases.Step(state: State.State, events: { Event })
   for _, id in state.starbaseIds do
     local starbase = state.starbases[id]
@@ -860,9 +923,14 @@ function Starbases.Step(state: State.State, events: { Event })
         local core = Space.NewShip(state, Structures.Core(tower), tower.name, "starbase", 0)
         local ball = Space.Launch(state, core, Space.SystemOf(state, id), object.x, object.y, object.z)
         starbase.core = core.id
+        -- (a citadel is fought layer by layer, reinforced between: Tactical/Combat)
+        if tower.citadel then
+          ball.vitals.phase = "shield"
+        end
         table.insert(events, { kind = "BallAdded", ball = ball.id })
       end
     end
+    guard(state, starbase)
     feed(state, starbase, events)
     -- (the drill: its hour runs from when it came online, and only
     -- while the tower is lit)

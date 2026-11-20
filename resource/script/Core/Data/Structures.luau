@@ -67,7 +67,9 @@ export type Tower = {
   -- Nil for a control tower.
   citadel: boolean?,
   slots: number?,       -- service modules it can have fitted
-  defences: number?,    -- batteries it can have fitted
+  defences: number?,    -- batteries it can have fitted (none for a citadel since 2026-11-19)
+  shieldSlots: number?, -- a citadel's: shield modules it can have fitted (the owner's, 2026-11-19)
+  weapons: number?,     -- and defence modules: one, which mounts its weapons
   reach: number?,       -- the radius of the citadel itself, m (its field is wider)
   kind: string?,        -- a citadel's kind (Structures.CITADEL_KINDS)
 }
@@ -110,6 +112,17 @@ export type ModuleType = {
   -- and online beside it to work ('needs': a generator, "gravity").
   generator: string?,
   needs: string?,
+  -- A citadel's shield and weapons (the owner's, 2026-11-19): fitted in
+  -- a citadel of the size it says ('fits', 1 small to 5 huge; any size
+  -- if not said). A shield extender adds 'shield' to its shield; a
+  -- hardener lets 'resist' less of what strikes it through. A defence
+  -- module mounts the weapons of its 'defence' family ("laser",
+  -- "missile", "hybrid", "projectile") on the citadel's hardpoints, as
+  -- Structures.CITADEL_DEFENCE has them for its size.
+  fits: number?,
+  shield: number?,
+  resist: number?,
+  defence: string?,
 }
 
 -- A class of colony ship: a nomad faction's station. It is a ship, of
@@ -262,17 +275,28 @@ Structures.CITADEL_BONUS = {
   tradehub = { fees = 0.5 },
   habitation = { fuel = 0.8, gives = { "quarters", "storage" } },
 } :: { [string]: CitadelBonus }
+-- What a citadel is of each size. Since 2026-11-19 (the owner's: a
+-- citadel is fought as a ship is, with no field and no batteries):
+-- its shield (half of it its own, the rest from the shield modules in
+-- its 'shieldSlots', one to five), armour and structure are the
+-- reference's for its three standard sizes ("reference figures": medium,
+-- large, and the biggest for the huge), a small one half a medium's and
+-- an extra-large one halfway between large and huge, as the one is to
+-- the other (mine); its 'field' is no field, only how far its tether
+-- reaches, ten kilometres beyond it (Structures.TETHER, the owner's); and
+-- one defence module mounts its weapons.
+Structures.TETHER = 10000
 Structures.CITADEL = {
-  { field = 2750, fuel = 8, anchor = 2 * 3600, volume = 4000, basePrice = 80000000, shield = 300000, armor = 150000, hull = 150000,
-    bay = 12, slots = 2, defences = 2 },
-  { field = 3500, fuel = 15, anchor = 4 * 3600, volume = 12000, basePrice = 250000000, shield = 600000, armor = 300000, hull = 300000,
-    bay = 18, slots = 3, defences = 4 },
-  { field = 9500, fuel = 30, anchor = 8 * 3600, volume = 25000, basePrice = 900000000, shield = 1200000, armor = 600000, hull = 600000,
-    bay = 24, slots = 5, defences = 6 },
-  { field = 17000, fuel = 60, anchor = 12 * 3600, volume = 30000, basePrice = 3000000000, shield = 2500000, armor = 1200000,
-    hull = 1200000, bay = 36, slots = 6, defences = 8 },
-  { field = 62000, fuel = 120, anchor = 24 * 3600, volume = 40000, basePrice = 10000000000, shield = 5000000, armor = 2500000,
-    hull = 2500000, bay = 48, slots = 8, defences = 10 },
+  { field = 500 + 10000, fuel = 8, anchor = 2 * 3600, volume = 4000, basePrice = 80000000, shield = 1800000, armor = 900000,
+    hull = 900000, bay = 12, slots = 2, defences = 0, shieldSlots = 1 },
+  { field = 1000 + 10000, fuel = 15, anchor = 4 * 3600, volume = 12000, basePrice = 250000000, shield = 3600000, armor = 1800000,
+    hull = 1800000, bay = 18, slots = 3, defences = 0, shieldSlots = 2 },
+  { field = 5000 + 10000, fuel = 30, anchor = 8 * 3600, volume = 25000, basePrice = 900000000, shield = 6750000, armor = 5400000,
+    hull = 21600000, bay = 24, slots = 5, defences = 0, shieldSlots = 3 },
+  { field = 10000 + 10000, fuel = 60, anchor = 12 * 3600, volume = 30000, basePrice = 3000000000, shield = 15100000, armor = 12100000,
+    hull = 48300000, bay = 36, slots = 6, defences = 0, shieldSlots = 4 },
+  { field = 40000 + 10000, fuel = 120, anchor = 24 * 3600, volume = 40000, basePrice = 10000000000, shield = 33750000, armor = 27000000,
+    hull = 108000000, bay = 48, slots = 8, defences = 0, shieldSlots = 5 },
 }
 -- The hardpoints of a citadel of each size (the owner's table, 2026-11-18):
 -- its weapon hardpoints by the size of weapon (medium, large, XL), its
@@ -315,6 +339,7 @@ for _, kind in Structures.CITADEL_KINDS do
       shield = c.shield, armor = c.armor, hull = c.hull, bay = c.bay,
       gun = "projectile", gunBonus = 1, missileBonus = 1, tank = "shield", resist = 0,
       citadel = true, slots = c.slots, defences = c.defences, reach = Structures.CITADEL_REACH[size], kind = kind,
+      shieldSlots = c.shieldSlots, weapons = 1,
     })
   end
 end
@@ -344,6 +369,7 @@ for _, people in Structures.CITADEL_ALIEN_PEOPLES do
       missileBonus = if faction.launchers >= Structures.TOWER_LAUNCHERS then Structures.TOWER_DAMAGE else 1,
       tank = faction.tank :: string, resist = Structures.TOWER_RESIST,
       citadel = true, slots = c.slots, defences = c.defences, reach = Structures.CITADEL_REACH[each.size], kind = each.kind,
+      shieldSlots = c.shieldSlots, weapons = 1,
     })
   end
 end
@@ -513,6 +539,36 @@ Structures.SEAL = { id = "fuel.seal", name = "Sealing Charge", volume = 5, baseP
 -- its people's resistances (Data/Ships). (Until 2026-11-16 it was one
 -- of three, by size, whoever's the tower was: a save from then keeps
 -- the core it had, and the next tower anchored has its own.)
+-- A citadel's shield and weapons (the owner's, 2026-11-19: "Shield
+-- slots by size", taking citadel-sized shield extenders and hardeners;
+-- and one "<Size> <Laser/Missile/Hybrid/Cannon> Defense Module" that
+-- mounts all its weapons). A citadel's own shield is half of what it is
+-- built for, and its shield slots filled with extenders of its size are
+-- the other half; a hardener lets a fifth less through, the more of them
+-- the less each (mine, as are their prices and the fuel they burn).
+for size, word in Structures.CITADEL_SIZES do
+  local c = Structures.CITADEL[size]
+  table.insert(modules, {
+    id = `citadel.shield.{word}`, name = `{Structures.CITADEL_SIZE_NAMES[size]} Citadel Shield Extender`, service = "shield",
+    radius = 0, powergrid = 0, cpu = 0, anchor = 300, pilot = true, volume = 400 * size, basePrice = c.basePrice / 20,
+    citadel = true, fuel = size, fits = size, shield = c.shield / 2 / (c.shieldSlots :: number),
+  })
+end
+table.insert(modules, {
+  id = "citadel.hardener", name = "Citadel Shield Hardener", service = "shield", radius = 0, powergrid = 0, cpu = 0, anchor = 300,
+  pilot = true, volume = 800, basePrice = 15000000, citadel = true, fuel = 2, resist = 0.2,
+})
+Structures.DEFENCE_FAMILIES = { { "laser", "Laser" }, { "missile", "Missile" }, { "hybrid", "Hybrid" }, { "projectile", "Cannon" } }
+for size, word in Structures.CITADEL_SIZES do
+  for _, family in Structures.DEFENCE_FAMILIES do
+    table.insert(modules, {
+      id = `citadel.defence.{family[1]}.{word}`, name = `{Structures.CITADEL_SIZE_NAMES[size]} {family[2]} Defense Module`,
+      service = "weapons", radius = 0, powergrid = 0, cpu = 0, anchor = 900, pilot = true, volume = 400 * size,
+      basePrice = Structures.CITADEL[size].basePrice / 10, citadel = true, fuel = 3 * size, fits = size, defence = family[1],
+    })
+  end
+end
+
 function Structures.Core(tower: Tower): string
   return `works.{tower.id}`
 end

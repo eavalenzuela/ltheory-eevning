@@ -33,6 +33,7 @@
 -- they go in and once when they come out.
 
 local Space = require("@lt/Core/Tactical/Space")
+local Structures = require("@lt/Core/Data/Structures")
 local State = require("@lt/Core/Kernel/State")
 local System = require("@lt/Core/Describe/System")
 
@@ -53,6 +54,10 @@ local function up(state: State.State, object: System.Object): boolean
     return false
   end
   local starbase = state.starbases[object.id]
+  -- (a citadel has no field, the owner's 2026-11-19: it is fought as a ship is)
+  if starbase and Structures.towerById[starbase.tower] and Structures.towerById[starbase.tower].citadel then
+    return false
+  end
   return starbase == nil or (state.tick >= starbase.ready and starbase.fuel > 0)
 end
 

@@ -14,6 +14,7 @@
 
 local Aftermath = require("@lt/Core/Tactical/Aftermath")
 local Assault = require("@lt/Core/Tactical/Assault")
+local CitadelGuns = require("@lt/Core/Tactical/CitadelGuns")
 local Batteries = require("@lt/Core/Tactical/Batteries")
 local Fields = require("@lt/Core/Tactical/Fields")
 local Blueprints = require("@lt/Core/Data/Blueprints")
@@ -1423,7 +1424,12 @@ function Core.Step(game: Game)
   Vitals.Mend(state)
   -- (the batteries of the station the pilot is at stand outside its field: Tactical/Batteries)
   Batteries.Stand(state, game.events)
-  local killers = Combat.Step(state, game.events, Batteries.Fire(state, game.events))
+  -- (a station's batteries, and a citadel's defence module: Tactical/Batteries, Tactical/CitadelGuns)
+  local landed = Batteries.Fire(state, game.events)
+  for _, hit in CitadelGuns.Fire(state, game.events) do
+    table.insert(landed, hit)
+  end
+  local killers = Combat.Step(state, game.events, landed)
   for _, id in table.clone(state.ballIds) do
     local by = killers[id]
     if by then

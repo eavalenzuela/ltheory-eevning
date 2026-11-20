@@ -124,6 +124,13 @@ export type Vitals = {
   -- and the tick it will next be ready to fire at (nil: it is).
   spinalTarget: number?,
   spinalReady: number?,
+  -- A citadel's core (the owner's, 2026-11-19, Tactical/Combat): which
+  -- layer is being fought ("shield", "armor", "hull"), the tick until
+  -- which it is reinforced and nothing touches it, and the tick it was
+  -- last struck. Nil for every other ship.
+  phase: string?,
+  reinforced: number?,
+  struck: number?,
 }
 
 -- A missile in flight: it lands at 'impact' and does its damage then.
@@ -835,6 +842,10 @@ export type Starbase = {
   -- of what is traded and done there, 0 to Starbases.TAX_MOST. Nil for
   -- a tower, and for a citadel closed to others.
   open: boolean?, tax: number?,
+  -- A citadel's defence module's weapons (Tactical/CitadelGuns): the
+  -- tick each group of them fires next, by its place in the module's
+  -- mounting. Nil until it has fired.
+  guns: { number }?,
   -- A wormhole station's (Tactical/Wormholes): the wormhole it holds open
   -- now. Nil for every other, and for one that has none yet.
   hole: number?,
@@ -948,6 +959,10 @@ export type State = {
   -- trades[station][type]: recent days of trade, oldest first
   trades: { [number]: { [string]: { TradeDay } } },
   starbases: { [number]: Starbase },  -- by the id of the station the tower is
+  -- Who has lately attacked whose (a citadel's defence module fires on
+  -- them, Tactical/CitadelGuns): by the attacker's ship, the owners whose
+  -- ships or citadels it struck and the tick it last did. Nil until any.
+  aggressors: { [number]: { [string]: number } }?,
   starbaseIds: { number },
   -- The pirates' own towers (Tactical/Keeps), by the id of their place;
   -- and the systems whose keeps have been put up.

@@ -7,6 +7,10 @@ local CitadelDoors = require("@lt/Core/Data/CitadelDoors")
 local CitadelKinds = require("@lt/Core/Assets/CitadelKinds")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
+local CitadelGuns = require("@lt/Core/Tactical/CitadelGuns")
+local Combat = require("@lt/Core/Tactical/Combat")
+local Pirates = require("@lt/Core/Tactical/Pirates")
+local Fields = require("@lt/Core/Tactical/Fields")
 local Hulks = require("@lt/Core/Assets/Hulks")
 local Raids = require("@lt/Core/Tactical/Raids")
 local Industry = require("@lt/Core/Assets/Industry")
@@ -915,7 +919,7 @@ suite:Case("a citadel is anchored at a planet or a moon, is not one of the tower
   t.eq({ moon(small), moon(large) }, { false, true })
 end)
 
-suite:Case("a citadel has services fitted by the slot, and batteries by theirs, and burns fuel for each service online", function(t)
+suite:Case("a citadel has services fitted by the slot, no batteries, and burns fuel for each service online", function(t)
   local game, station = inCitadel(t)
   local starbase = game.state.starbases[station]
   t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "array.refining", 1).id }),
@@ -928,9 +932,9 @@ suite:Case("a citadel has services fitted by the slot, and batteries by theirs, 
   order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, "service.clone", 1).id })
   Core.Step(game)
   t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "service.market", 1).id }), "its 2 service slots are full")
-  -- (the batteries have slots of their own)
-  order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, "battery.gun", 1).id })
-  Core.Step(game)
+  -- (a citadel has no batteries since 2026-11-19: a defence module mounts its weapons)
+  t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "battery.gun", 1).id }),
+    "a citadel has no batteries: a defence module mounts its weapons")
   steps(game, Structures.moduleById["service.refinery"].anchor)
   t.ok(Stations.Has(game.state, station, "refining"))
   t.eq(Starbases.Burn(game.state, starbase), CITADEL.fuel + 8 + 5)
@@ -1270,6 +1274,78 @@ suite:Case("a citadel brought down leaves its hulk: half of what was stored, to 
   Core.Step(game)
   t.eq(state.wrecks[other.id], nil, "a hulk salvaged out and emptied is there still")
   t.eq(assert(Space.Object(state, rebuilt)).kind, "gone")
+end)
+
+suite:Case("a citadel has no field; half its shield is its own and its shield slots hold the rest; one defence module of its size", function(t)
+  local game, station = inCitadel(t)
+  local state = game.state
+  local starbase = state.starbases[station]
+  t.eq(Fields.Of(state, station), nil)
+  local core = assert(state.balls[starbase.core])
+  t.eq({ core.vitals.shieldMax, core.vitals.armorMax, core.vitals.hullMax, core.vitals.phase } :: { any },
+    { CITADEL.shield / 2, CITADEL.armor, CITADEL.hull, "shield" } :: { any })
+  -- (its tether reaches ten kilometres beyond it)
+  t.eq(assert(Space.Object(state, station)).radius, assert(CITADEL.reach) + Structures.TETHER)
+  t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "citadel.shield.medium", 1).id }),
+    "a Medium Citadel Shield Extender is fitted only in a medium citadel")
+  order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, "citadel.shield.small", 1).id })
+  steps(game, Structures.moduleById["citadel.shield.small"].anchor + 1)
+  t.near(core.vitals.shieldMax, CITADEL.shield, 1e-6)
+  t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "citadel.shield.small", 1).id }),
+    "its 1 shield slot is full")
+  order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, "citadel.defence.projectile.small", 1).id })
+  Core.Step(game)
+  t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "citadel.defence.laser.small", 1).id }),
+    "it has a defence module fitted already")
+end)
+
+suite:Case("a citadel's defence module fires on a pirate that comes in reach, with the weapons its size mounts", function(t)
+  local game, station = inCitadel(t)
+  local state = game.state
+  local starbase = state.starbases[station]
+  order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, "citadel.defence.projectile.small", 1).id })
+  steps(game, Structures.moduleById["citadel.defence.projectile.small"].anchor + 1)
+  local core = assert(state.balls[starbase.core])
+  local pirate = Pirates.Spawn(state, Pirates.kindById.raider, core.system, core.x + core.radius + 4000, core.y, core.z, core.grid)
+  Core.TakeEvents(game)
+  local shots, struck = 0, 0
+  for _ = 1, 20 do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      if event.kind == "Shot" and event.from == core.id then
+        shots += 1
+      elseif event.kind == "DamageApplied" and event.ball == pirate.id and event.by == core.id then
+        struck += 1
+      end
+    end
+  end
+  t.ok(shots >= 2 and struck >= 1, `shots {shots}, struck {struck}`)
+  -- (what it mounts: the small citadel's four short and four long medium guns, a cannon module's autocannons and artillery)
+  t.eq({ CitadelGuns.Weapon("projectile", "short", "medium"), CitadelGuns.Weapon("projectile", "long", "medium"),
+    CitadelGuns.Weapon("missile", "long", "xl") } :: { any }, { "autocannon.medium", "artillery.medium", "launcher.siege" } :: { any })
+end)
+
+suite:Case("a citadel shot down to its armour, and then to its structure, is reinforced for an hour each time", function(t)
+  local game, station = inCitadel(t)
+  local state = game.state
+  local starbase = state.starbases[station]
+  local core = assert(state.balls[starbase.core])
+  local v = core.vitals
+  local pirate = Pirates.Spawn(state, Pirates.kindById.raider, core.system, core.x + core.radius + 60000, core.y, core.z, core.grid)
+  local function strike(amount: number)
+    Combat.Step(state, game.events, { { target = core.id, by = pirate.id, damage = { amount, 0, 0, 0 } } })
+  end
+  -- Its shield goes: it is reinforced, and nothing goes through to its armour.
+  strike(v.shield + 50000)
+  t.eq({ v.phase, v.shield, v.armor, (v.reinforced or 0) - state.tick } :: { any }, { "armor", 0, CITADEL.armor, Combat.REINFORCE } :: { any })
+  strike(10000)
+  t.eq(v.armor, CITADEL.armor)
+  -- Its time up, its armour is fought; and going, it is reinforced again before its structure.
+  state.tick = (v.reinforced or 0)
+  strike(10000)
+  t.ok(v.armor < CITADEL.armor)
+  strike(v.armor * 10)
+  t.eq({ v.phase, v.armor, v.hull } :: { any }, { "hull", 0, CITADEL.hull } :: { any })
 end)
 
 return suite

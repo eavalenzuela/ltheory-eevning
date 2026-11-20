@@ -1459,12 +1459,49 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
   return true
 end
 
+-- How long a citadel is reinforced when its shield, and then its
+-- armour, is shot down (the owner's, 2026-11-19: "it turns invulnerable
+-- for a set time ... and then the fight resumes on its armour; the same
+-- again before hull"), in ticks: an hour of game time.
+Combat.REINFORCE = math.floor(3600 / Constants.TICK)
+
+-- Whose a ship is, where it is struck: its owner's, and a citadel's core
+-- its citadel's owner's.
+local function ownerOf(state: State.State, id: number): string?
+  local ship = state.ships[id]
+  if ship == nil then
+    return nil
+  elseif ship.owner == "starbase" then
+    for _, each in state.starbaseIds do
+      if state.starbases[each].core == id then
+        return state.starbases[each].owner
+      end
+    end
+  end
+  return ship.owner
+end
+
 local function applyHit(state: State.State, hit: Hit, killers: { [number]: number }, events: { Event })
   local ball = state.balls[hit.target]
   if ball == nil then
     return -- an asteroid, or a ship already gone
   end
   local v = ball.vitals
+  -- (a citadel reinforced: nothing touches it until its time is up)
+  if v.reinforced and state.tick < v.reinforced then
+    return
+  end
+  -- (and who struck whose, for a citadel's guns: Tactical/CitadelGuns. A drone's is its owner's doing.)
+  local by = if state.drones[hit.by] then state.drones[hit.by].owner else hit.by
+  local victim, attacker = ownerOf(state, ball.id), ownerOf(state, by)
+  if victim and attacker and victim ~= attacker then
+    local aggressors = state.aggressors or {}
+    state.aggressors = aggressors
+    local struck = aggressors[by] or {}
+    aggressors[by] = struck
+    struck[victim] = state.tick
+  end
+  local armorBefore, hullBefore = v.armor, v.hull
   local layers = { shield = v.shield, armor = v.armor, hull = v.hull }
   local shield, armor, hull = Gunnery.Apply(layers, v.shieldResonance, v.armorResonance, v.hullResonance, hit.damage)
   -- (what it has taken of each kind, for an adaptive hardener of its)
@@ -1474,6 +1511,19 @@ local function applyHit(state: State.State, hit: Hit, killers: { [number]: numbe
   end
   v.taken = taken
   v.shield, v.armor, v.hull = layers.shield, layers.armor, layers.hull
+  -- (a citadel's layer shot down: it is reinforced, and nothing goes through to the next until then)
+  if v.phase then
+    v.struck = state.tick
+    if v.phase == "shield" and v.shield <= 0 then
+      v.shield, v.armor, v.hull = 0, armorBefore, hullBefore
+      v.phase, v.reinforced = "armor", state.tick + Combat.REINFORCE
+      table.insert(events, { kind = "CitadelReinforced", ball = ball.id, layer = "armor", ends = v.reinforced })
+    elseif v.phase == "armor" and v.armor <= 0 then
+      v.armor, v.hull = 0, hullBefore
+      v.phase, v.reinforced = "hull", state.tick + Combat.REINFORCE
+      table.insert(events, { kind = "CitadelReinforced", ball = ball.id, layer = "hull", ends = v.reinforced })
+    end
+  end
   table.insert(events, { kind = "DamageApplied", ball = ball.id, by = hit.by, shield = shield, armor = armor, hull = hull })
   if v.hull <= 0 and killers[ball.id] == nil then
     killers[ball.id] = hit.by
