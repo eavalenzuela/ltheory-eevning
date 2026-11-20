@@ -889,6 +889,8 @@ local function guard(state: State.State, starbase: State.Starbase)
   local v = ball.vitals
   local hull = Ships.byId[core.type]
   local lit = Starbases.Lit(state, starbase)
+  -- (the most it takes in a second: Structures.CITADEL's 'cap')
+  v.cap = tower.cap
   local shield, hardeners = hull.shield, 0
   local resonance = table.clone(hull.shieldResonance)
   for _, module in starbase.modules do

@@ -70,6 +70,9 @@ export type Tower = {
   defences: number?,    -- batteries it can have fitted (none for a citadel since 2026-11-19)
   shieldSlots: number?, -- a citadel's: shield modules it can have fitted (the owner's, 2026-11-19)
   weapons: number?,     -- and defence modules: one, which mounts its weapons
+  -- (and the most damage it takes in a second, however many shoot at it:
+  -- the reference's "damage limit", the owner's 2026-11-20)
+  cap: number?,
   reach: number?,       -- the radius of the citadel itself, m (its field is wider)
   kind: string?,        -- a citadel's kind (Structures.CITADEL_KINDS)
 }
@@ -165,16 +168,20 @@ Structures.CLAIM = "array.claim"
 -- A tower by size. Its supply doubles with each size, and so does the
 -- fuel it burns (ten, twenty and forty blocks an hour).
 -- Packed, the largest still goes in the hold of any industrial.
--- (What it takes to bring one down doubles too, near enough: a small
--- tower's shield is a dozen battleships', and a pack that has it to
--- itself is some minutes getting it to the quarter where it seals.)
+-- (What it takes to bring one down doubles too, near enough; a siege is
+-- its bombardment, not what a pack's guns do to it: Tactical/Raids.)
+-- (Its shield, armour and structure, and its field, since 2026-11-20 the
+-- reference's control towers', the median of each size: the owner's
+-- "Reference as-is" and "Reference field, ours anchor". A tower is a
+-- great deal of shield and no limit to what it takes in a second, where
+-- a citadel has less and a limit: Structures.CITADEL.)
 local SUPPLY = {
-  { powergrid = 1500, cpu = 2000, field = 3000, fuel = 10, anchor = 60, volume = 850, basePrice = 2000000,
-    shield = 120000, armor = 40000, hull = 40000, bay = 12 },
-  { powergrid = 3000, cpu = 4000, field = 5000, fuel = 20, anchor = 120, volume = 1400, basePrice = 5000000,
-    shield = 250000, armor = 80000, hull = 80000, bay = 18 },
-  { powergrid = 6000, cpu = 8000, field = 7000, fuel = 40, anchor = 240, volume = 2000, basePrice = 12000000,
-    shield = 500000, armor = 160000, hull = 160000, bay = 24 },
+  { powergrid = 1500, cpu = 2000, field = 15000, fuel = 10, anchor = 60, volume = 850, basePrice = 2000000,
+    shield = 12000000, armor = 2200000, hull = 2000000, bay = 12 },
+  { powergrid = 3000, cpu = 4000, field = 21215, fuel = 20, anchor = 120, volume = 1400, basePrice = 5000000,
+    shield = 24000000, armor = 4400000, hull = 4000000, bay = 18 },
+  { powergrid = 6000, cpu = 8000, field = 30000, fuel = 40, anchor = 240, volume = 2000, basePrice = 12000000,
+    shield = 48000000, armor = 8800000, hull = 8000000, bay = 24 },
 }
 Structures.SUPPLY = SUPPLY
 
@@ -290,19 +297,23 @@ Structures.CITADEL_BONUS = {
 -- an extra-large one halfway between large and huge, as the one is to
 -- the other (mine); its 'field' is no field, only how far its tether
 -- reaches, ten kilometres beyond it (Structures.TETHER, the owner's); and
--- one defence module mounts its weapons.
+-- one defence module mounts its weapons. And it takes so much damage a
+-- second at most, however many shoot at it ('cap': the owner's,
+-- 2026-11-20, the reference's damage limit for the medium, large and
+-- huge; the small half a medium's and the extra-large between, mine), so
+-- that each layer of it is minutes coming down.
 Structures.TETHER = 10000
 Structures.CITADEL = {
   { field = 500 + 10000, fuel = 8, anchor = 2 * 3600, volume = 4000, basePrice = 80000000, shield = 1800000, armor = 900000,
-    hull = 900000, bay = 12, slots = 2, defences = 0, shieldSlots = 1 },
+    hull = 900000, bay = 12, slots = 2, defences = 0, shieldSlots = 1, cap = 2500 },
   { field = 1000 + 10000, fuel = 15, anchor = 4 * 3600, volume = 12000, basePrice = 250000000, shield = 3600000, armor = 1800000,
-    hull = 1800000, bay = 18, slots = 3, defences = 0, shieldSlots = 2 },
+    hull = 1800000, bay = 18, slots = 3, defences = 0, shieldSlots = 2, cap = 5000 },
   { field = 5000 + 10000, fuel = 30, anchor = 8 * 3600, volume = 25000, basePrice = 900000000, shield = 6750000, armor = 5400000,
-    hull = 21600000, bay = 24, slots = 5, defences = 0, shieldSlots = 3 },
+    hull = 21600000, bay = 24, slots = 5, defences = 0, shieldSlots = 3, cap = 15000 },
   { field = 10000 + 10000, fuel = 60, anchor = 12 * 3600, volume = 30000, basePrice = 3000000000, shield = 15100000, armor = 12100000,
-    hull = 48300000, bay = 36, slots = 6, defences = 0, shieldSlots = 4 },
+    hull = 48300000, bay = 36, slots = 6, defences = 0, shieldSlots = 4, cap = 33500 },
   { field = 40000 + 10000, fuel = 120, anchor = 24 * 3600, volume = 40000, basePrice = 10000000000, shield = 33750000, armor = 27000000,
-    hull = 108000000, bay = 48, slots = 8, defences = 0, shieldSlots = 5 },
+    hull = 108000000, bay = 48, slots = 8, defences = 0, shieldSlots = 5, cap = 75000 },
 }
 -- The hardpoints of a citadel of each size (the owner's table, 2026-11-18):
 -- its weapon hardpoints by the size of weapon (medium, large, XL), its
@@ -345,7 +356,7 @@ for _, kind in Structures.CITADEL_KINDS do
       shield = c.shield, armor = c.armor, hull = c.hull, bay = c.bay,
       gun = "projectile", gunBonus = 1, missileBonus = 1, tank = "shield", resist = 0,
       citadel = true, slots = c.slots, defences = c.defences, reach = Structures.CITADEL_REACH[size], kind = kind,
-      shieldSlots = c.shieldSlots, weapons = 1,
+      shieldSlots = c.shieldSlots, weapons = 1, cap = c.cap,
     })
   end
 end
@@ -375,7 +386,7 @@ for _, people in Structures.CITADEL_ALIEN_PEOPLES do
       missileBonus = if faction.launchers >= Structures.TOWER_LAUNCHERS then Structures.TOWER_DAMAGE else 1,
       tank = faction.tank :: string, resist = Structures.TOWER_RESIST,
       citadel = true, slots = c.slots, defences = c.defences, reach = Structures.CITADEL_REACH[each.size], kind = each.kind,
-      shieldSlots = c.shieldSlots, weapons = 1,
+      shieldSlots = c.shieldSlots, weapons = 1, cap = c.cap,
     })
   end
 end

@@ -121,6 +121,7 @@ function Citadels.Cores(state: State.State, system: number, events: { Event })
         local ball = Space.Launch(state, core, record.system, object.x, object.y, object.z)
         ball.vitals.shieldMax, ball.vitals.shield = tower.shield, tower.shield
         ball.vitals.phase = "shield"
+        ball.vitals.cap = tower.cap
         record.core = core.id
         table.insert(events, { kind = "BallAdded", ball = ball.id })
       end

@@ -1508,7 +1508,32 @@ local function applyHit(state: State.State, hit: Hit, killers: { [number]: numbe
   end
   local armorBefore, hullBefore = v.armor, v.hull
   local layers = { shield = v.shield, armor = v.armor, hull = v.hull }
-  local shield, armor, hull = Gunnery.Apply(layers, v.shieldResonance, v.armorResonance, v.hullResonance, hit.damage)
+  local damage = hit.damage
+  -- (a citadel takes so much in a second at most, however many shoot at it: what is past that does nothing)
+  local cap = v.cap
+  if cap then
+    if v.capTick ~= state.tick then
+      v.capTick, v.capTaken = state.tick, 0
+    end
+    local room = math.max(0, cap * Constants.TICK - (v.capTaken or 0))
+    -- (what it comes to on the layer it strikes, after what that resists: what would be dealt with nothing to stop it)
+    local resonance = if v.shield > 0 then v.shieldResonance elseif v.armor > 0 then v.armorResonance else v.hullResonance
+    local dealt = 0
+    for kind = 1, 4 do
+      dealt += (damage[kind] or 0) * resonance[kind]
+    end
+    if dealt > room then
+      local share = if dealt > 0 then room / dealt else 0
+      local scaled: { number } = {}
+      for kind = 1, 4 do
+        scaled[kind] = (damage[kind] or 0) * share
+      end
+      damage = scaled
+      dealt = room
+    end
+    v.capTaken = (v.capTaken or 0) + dealt
+  end
+  local shield, armor, hull = Gunnery.Apply(layers, v.shieldResonance, v.armorResonance, v.hullResonance, damage)
   -- (what it has taken of each kind, for an adaptive hardener of its)
   local taken = v.taken or { 0, 0, 0, 0 }
   for kind = 1, 4 do

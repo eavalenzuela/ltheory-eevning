@@ -230,7 +230,9 @@ suite:Case("a faction's citadel is fought as a pilot's is: no field, its core, i
   local function strike(amount: number)
     Combat.Step(state, events, { { target = core.id, by = pirate.id, damage = { amount, 0, 0, 0 } } })
   end
-  -- (each strike well past what is left of the layer, whatever it resists)
+  -- (each strike well past what is left of the layer, whatever it resists; with no limit to a second's, for the test)
+  t.eq(v.cap, tower.cap)
+  v.cap = nil
   strike(v.shield * 10)
   t.eq(v.phase, "armor")
   state.tick = v.reinforced or state.tick

@@ -88,6 +88,10 @@ export type Vitals = {
   -- What it has taken of each kind of damage since an adaptive hardener
   -- of its last looked (Tactical/Combat); nil until it has taken any.
   taken: { number }?,
+  -- A citadel's core (Assets/Starbases, Assets/Citadels): the most damage
+  -- it takes in a second, and what it has taken in the second it is in
+  -- (Tactical/Combat). Nil for anything else.
+  cap: number?, capTick: number?, capTaken: number?,
   capacitor: number,
   shieldMax: number,
   armorMax: number,

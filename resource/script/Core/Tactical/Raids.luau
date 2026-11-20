@@ -82,6 +82,18 @@ Raids.PATROL = { frigate = 1, destroyer = 2, cruiser = 4, attackbattlecruiser = 
 -- drill is out after they have been (seconds).
 Raids.MOST = 0.8
 Raids.DOWN = 3600
+-- How long a siege at its strongest (Raids.STRENGTH's most, 9) would be
+-- bringing a whole tower down, with the pilot there to see it: its
+-- shield, its armour and its structure, s. Weaker sieges are the longer,
+-- as their strength is less. Since 2026-11-20, when towers took the
+-- reference's shield, armour and structure (the owner's "Reference
+-- as-is"), what a pack shoots does next to nothing to one, and a siege
+-- is its bombardment: as long as any of those who have come are on the
+-- tower's grid (Raids.Bombard). (Mine: a shield to its sealing quarter
+-- in about a quarter of an hour at the strongest.)
+Raids.SIEGE_TIME = 1800
+Raids.STRONGEST = 9
+
 -- The share of its shield at which a tower seals itself, and comes out
 -- with; and the share of its armour and structure a lit tower mends in
 -- an hour.
@@ -231,6 +243,37 @@ function Raids.CoreLost(state: State.State, ship: number, events: { Event })
     starbase.core = 0
     Raids.Lose(state, starbase, events)
   end
+end
+
+-- A siege's bombardment, this second, of each tower that is under one
+-- with the pilot there (Raids.SIEGE_TIME): so much of all that holds it
+-- up, by the siege's strength, from the first of those who came that is
+-- on its grid, in every kind of damage alike. Nothing while it is sealed,
+-- or while none of them is there.
+export type Hit = { target: number, by: number, damage: { number } }
+function Raids.Bombard(state: State.State): { Hit }
+  local hits: { Hit } = {}
+  for _, id in state.starbaseIds do
+    local starbase = state.starbases[id]
+    local core = state.balls[starbase.core]
+    if starbase.siege > 0 and core and not Starbases.Sealed(state, starbase) then
+      local by = 0
+      for _, other in state.ballIds do
+        local ball = state.balls[other]
+        local ship = state.ships[other]
+        if by == 0 and ball and ship and ship.owner == "pirates" and ball.system == core.system and ball.grid == core.grid then
+          by = other
+        end
+      end
+      if by ~= 0 then
+        local v = core.vitals
+        local whole = v.shieldMax + v.armorMax + v.hullMax
+        local each = whole / Raids.SIEGE_TIME * Constants.TICK * math.min(1, starbase.siege / Raids.STRONGEST) / 4
+        table.insert(hits, { target = core.id, by = by, damage = { each, each, each, each } })
+      end
+    end
+  end
+  return hits
 end
 
 -- Whether a starbase is under siege: somebody has come to bring it

@@ -1385,6 +1385,16 @@ suite:Case("a citadel shot down to its armour, and then to its structure, is rei
   local function strike(amount: number)
     Combat.Step(state, game.events, { { target = core.id, by = pirate.id, damage = { amount, 0, 0, 0 } } })
   end
+  -- It takes so much in a second at most, however much comes at it (the owner's, 2026-11-20).
+  local before = v.shield
+  strike(v.shield * 10)
+  strike(v.shield * 10)
+  -- (less what its shield has come back meanwhile)
+  t.near(before - v.shield, assert(CITADEL.cap) * Constants.TICK, 5)
+  t.eq(v.phase, "shield")
+  -- (and with no limit, for what follows: a layer at a stroke)
+  v.cap = nil
+  v.shield = before
   -- Its shield goes: it is reinforced, and nothing goes through to its armour.
   strike(v.shield + 50000)
   t.eq({ v.phase, v.shield, v.armor, (v.reinforced or 0) - state.tick } :: { any }, { "armor", 0, CITADEL.armor, Combat.REINFORCE } :: { any })

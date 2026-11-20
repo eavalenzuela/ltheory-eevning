@@ -1430,6 +1430,10 @@ function Core.Step(game: Game)
   for _, hit in CitadelGuns.Fire(state, game.events) do
     table.insert(landed, hit)
   end
+  -- (and a siege's bombardment of a tower, the pilot there: Tactical/Raids)
+  for _, hit in Raids.Bombard(state) do
+    table.insert(landed, hit)
+  end
   local killers = Combat.Step(state, game.events, landed)
   for _, id in table.clone(state.ballIds) do
     local by = killers[id]

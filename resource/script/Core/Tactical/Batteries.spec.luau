@@ -191,7 +191,9 @@ suite:Case("a pilot's own starbase fires on pirates while it is lit, and never o
   t.eq(me.grid, station)
   local starbase = state.starbases[station]
   table.insert(starbase.modules, { type = "battery.gun", ready = 0 })
-  local scout = Pirates.Spawn(state, Pirates.SCOUT, me.system, me.x + 5000, me.y, me.z, me.grid)
+  -- (just outside its field, where its batteries stand: since 2026-11-20 a tower's field is the reference's, 15 km for a small)
+  local field = assert(Space.Object(state, station))
+  local scout = Pirates.Spawn(state, Pirates.SCOUT, me.system, field.x + field.radius + 2000, field.y, field.z, me.grid)
   state.pilots[scout.id] = nil
   State.RemoveId(state.pilotIds, scout.id)
   -- Dark, it does nothing. Lit, it fires on the pirate.
