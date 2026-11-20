@@ -122,12 +122,20 @@ local DATACORE = "datacore"
 
 -- The pilot's buffer: five codes, and one more for every level of
 -- Hacking after the first. (And two more in a hack begun from 'ship',
--- if its hull is built for exploration: Ships.EXPLORER.)
+-- if its hull is built for exploration: Ships.EXPLORER; and one more
+-- with a Cipher Buffer fitted, Data/Modules, however many.)
 function Hacking.Buffer(state: State.State, ship: number?): number
   local level = math.max(1, state.skills.hacking or 0)
   local from = state.ships[ship or 0]
   local hull = if from then Ships.byId[from.type] else nil
-  return Hacking.BUFFER + level - 1 + (if hull and hull.explorer then Ships.EXPLORER.hack else 0)
+  local helper = 0
+  if from then
+    for _, item in Items.Fitted(state, from.id) do
+      local module = Modules.byId[item.type]
+      helper = math.max(helper, if module then module.hackBuffer or 0 else 0)
+    end
+  end
+  return Hacking.BUFFER + level - 1 + (if hull and hull.explorer then Ships.EXPLORER.hack else 0) + helper
 end
 
 -- The cells of a matrix that can be picked now: those not picked yet

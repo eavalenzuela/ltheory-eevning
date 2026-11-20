@@ -185,6 +185,8 @@ export type ModuleType = {
   beacon: boolean?,
   -- (a Jump Portal Generator: Tactical/Jumping)
   portal: boolean?,
+  -- (so many more codes in a hacker's buffer: Tactical/Hacking)
+  hackBuffer: number?,
   -- A data analyzer: fitted, it lets the ship hack a sealed hold from
   -- within its range (Tactical/Hacking).
   -- (a relic analyzer, 2026-11-16, opens a derelict's hold; a data
@@ -1547,6 +1549,13 @@ table.insert(modules, {
   id = "jump.portal", name = "Jump Portal Generator", slot = "high", hardpoint = "", cpu = 100, powergrid = 50000, volume = 5000,
   basePrice = 900000000, passive = {}, portal = true, classes = { "ultracapital" }, capital = true,
   requires = { { skill = "jump.drives", level = 4 } },
+})
+-- (a Cipher Buffer: the owner's, 2026-11-20, a hacking helper of "+1
+-- buffer slot", Tactical/Hacking; one counts, however many are fitted.
+-- The fitting figures and the name are mine.)
+table.insert(modules, {
+  id = "hack.buffer", name = "Cipher Buffer", slot = "mid", hardpoint = "", cpu = 20, powergrid = 1, volume = 5,
+  basePrice = 350000, passive = {}, hackBuffer = 1, requires = { { skill = "hacking", level = 2 } },
 })
 -- (a Drone Link Augmentor: drones worked 20 km farther from the ship, the
 -- reference's, now that drones have a control range, Tactical/Drones)

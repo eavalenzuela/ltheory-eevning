@@ -156,6 +156,11 @@ suite:Case("a derelict's hold is sealed, and is hacked by a ship with a relic an
   t.eq({ Hacking.Buffer(state, seeker.id), Hacking.Buffer(state, cruiser.id) } :: { any }, { 11, 9 } :: { any })
   state.skills.hacking = 1
   t.eq({ Hacking.Buffer(state, seeker.id), Hacking.Buffer(state, cruiser.id) } :: { any }, { 7, 5 } :: { any })
+  -- And one more with a Cipher Buffer fitted; a second adds nothing.
+  for slot = 98, 99 do
+    Items.Add(state, "hack.buffer", 1, cruiser.id, "cargo").slot = slot
+    t.eq(Hacking.Buffer(state, cruiser.id), 6)
+  end
   -- The pirates' stores at a den are not sealed.
   for seed = 1, 20 do
     local other = Core.New({ galaxySeed = 1, historySeed = seed, peaceful = true })
