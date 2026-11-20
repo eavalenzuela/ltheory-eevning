@@ -147,6 +147,8 @@ Effects.looks = {
   -- scene begins each beam again while the module runs): thin, and each
   -- its own colour.
   ["salvager"] = { kind = "beam", color = { 1.0, 0.70, 0.30 }, width = 3, life = 0.5, held = true },
+  -- (a citadel's tether to a ship of its side: like a web, the owner's 2026-11-19)
+  ["tether"] = { kind = "beam", color = { 0.45, 0.85, 1.0 }, width = 6, life = 0.5, held = true },
   ["projector."] = { kind = "beam", color = { 0.90, 0.80, 0.30 }, width = 3, life = 0.5, held = true },
   ["disruptor."] = { kind = "beam", color = { 0.70, 0.40, 1.0 }, width = 3, life = 0.5, held = true },
   ["painter."] = { kind = "beam", color = { 1.0, 0.30, 0.30 }, width = 2, life = 0.5, held = true },

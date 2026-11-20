@@ -112,6 +112,10 @@ type Showcase = {
   frames: number,
 }
 
+-- A gun on a citadel (Game/View/Starbase's Arm): what it is, and where
+-- it stands from the citadel's middle, m.
+type CitadelGun = { type: string, at: vector }
+
 export type Scene = {
   camera: Camera,
   system: number,                     -- the system shown; 0 before the first frame
@@ -148,6 +152,8 @@ export type Scene = {
   turned: number,
   fx: Effects.Fx?,                    -- weapon fire and the like, in this system's container
   mining: { [number]: number },       -- when each mining module's beam was last begun, by its item
+  tethers: { [number]: number },      -- when each tethered ship's beam was last begun, by its ship
+  citadelGuns: { [number]: { CitadelGun } },  -- a citadel's guns where they are on it, by its station
   wreckage: { [number]: Wrecked },    -- the pieces of each wreck on the grid
   bubbles: { [number]: Object },      -- the interdiction fields in the system, by their ids
   works: { [number]: { Object } },    -- what stands round each station's tower: its modules, their guns, its field
@@ -248,7 +254,7 @@ function Scene.New(camera: Camera): Scene
     ox = 0, oy = 0, oz = 0, eyeX = 0, eyeY = 0, eyeZ = 0,
     proxies = {}, celestials = {}, worlds = {}, passing = 0, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6, tracking = 0,
-    warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {},
+    warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {}, tethers = {}, citadelGuns = {},
     wreckage = {}, bubbles = {}, works = {}, offsets = {}, moving = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
     standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0, ghosts = {}, poses = {}, headings = {}, turned = 0,
   }
@@ -257,6 +263,49 @@ end
 -- Put an object so that the middle of its bounds is at 'at'. A generated
 -- model's own origin can be well off-centre (a station's is at one end),
 -- and the Core's position for a body is the centre of its sphere.
+-- Where a citadel's gun is in 'scene.screen', by its station and its
+-- place among the citadel's guns.
+local function citadelGunKey(station: number, n: number): number
+  return -(2 ^ 42 + station * 1024 + n)
+end
+
+-- A citadel's core (Core/Assets/Starbases) is where its station is drawn:
+-- its guns fire from there, and its tethers hold from there.
+local function citadelCores(scene: Scene, state: any)
+  for _, id in state.starbaseIds do
+    local starbase = state.starbases[id]
+    local at = scene.screen[id]
+    if at and starbase.core ~= 0 and not scene.screen[starbase.core] then
+      scene.screen[starbase.core] = at
+    end
+    -- (and each of its guns, where it stands on it)
+    if at then
+      for n, gun in scene.citadelGuns[id] or {} :: { CitadelGun } do
+        scene.screen[citadelGunKey(id, n)] = at + gun.at
+      end
+    end
+  end
+end
+
+-- Which of a citadel's guns fired a shot (Core/Tactical/CitadelGuns: the
+-- 'mount'th of its weapons of that type), as its place in 'scene.screen'.
+local function citadelGun(scene: Scene, state: any, core: number, type: string, mount: number?): number?
+  for _, id in state.starbaseIds do
+    if state.starbases[id].core == core then
+      local count = 0
+      for n, gun in scene.citadelGuns[id] or {} :: { CitadelGun } do
+        if gun.type == type then
+          count += 1
+          if count == (mount or 1) then
+            return citadelGunKey(id, n)
+          end
+        end
+      end
+    end
+  end
+  return nil
+end
+
 local function place(object: Object, at: vector)
   object:SetPos(at)
   object:SetPos(at + (at - object:GetCenter()))
@@ -937,7 +986,8 @@ local function standing(game: Core.Game, id: number): string?
   local status = Core.Query.Starbase(game, id)
   if status then
     table.insert(parts, status.tower.id)
-    table.insert(parts, if status.field then "field" else "dark")
+    -- (a citadel has no field: it is lit or dark)
+    table.insert(parts, if status.field or (status.tower.citadel and status.lit) then "field" else "dark")
     for _, module in status.modules do
       table.insert(parts, module.type)
     end
@@ -949,12 +999,25 @@ local function makeStation(scene: Scene, game: Core.Game, object: SystemData.Obj
   local makeup = Core.Query.Station(game, object.id)
   local status = Core.Query.Starbase(game, object.id)
   -- (a tower that has sealed itself keeps its field: Core/Tactical/Fields)
-  local dark = status ~= nil and not status.field
+  -- (and a citadel, which has no field, is dark when it is not lit)
+  local dark = status ~= nil and not (status.field or (status.tower.citadel == true and status.lit))
   local posted, down = Core.Query.Batteries(game, object.id)
   -- (a faction's citadel is in its people's colours)
   local owner = Core.Query.CitadelOwner(game, object.id)
-  local raised, moving = Starbase.Raise(Starbase.Layout(object.variety, object.radius, object.seed, owner, makeup, dark, posted, down),
-    container, at, 1)
+  local layout = Starbase.Layout(object.variety, object.radius, object.seed, owner, makeup, dark, posted, down)
+  local raised, moving = Starbase.Raise(layout, container, at, 1)
+  -- (a citadel's guns, each where it is on it, for its shots to leave from: Core/Tactical/CitadelGuns)
+  local guns: { CitadelGun } = {}
+  for _, arm in layout.arms or {} :: { Starbase.Arm } do
+    if not arm.twin then
+      table.insert(guns, { type = arm.type, at = arm.at })
+    end
+  end
+  if #guns > 0 then
+    scene.citadelGuns[object.id] = guns
+  else
+    scene.citadelGuns[object.id] = nil :: any
+  end
   if #moving > 0 then
     scene.moving[object.id] = moving
   end
@@ -1848,12 +1911,15 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       -- (a beam that leapt is drawn from the ship it leapt from: Core/Tactical/Combat; and a vertical launcher's
       -- salvo at what is too near is never launched)
       local from, to = state.balls[event.leap or event.from], state.balls[event.to]
+      citadelCores(scene, state)
       if from and to and event.outcome ~= "too close" then
         local item = state.items[event.item]
         -- (from the mouth of the gun, if it is one that is shown)
         -- (a gun that is part of a hull, and no item, says what it looks like firing: Core/Tactical/Combat)
         Effects.Fire(fx, if item then item.type elseif event.look then event.look else FALLBACK[event.family] or "autocannon", from.id, to.id, from.radius, to.radius,
-          event.outcome, event.flight or 0, struck(to), scene.time, if event.leap == nil and scene.screen[-event.item] then -event.item else nil,
+          event.outcome, event.flight or 0, struck(to), scene.time,
+          if event.look and state.ships[from.id] and state.ships[from.id].owner == "starbase" then citadelGun(scene, state, from.id, event.look, event.mount)
+          elseif event.leap == nil and scene.screen[-event.item] then -event.item else nil,
           if event.volley then { n = event.volley, path = event.path or "zig", delay = event.delay or 0,
             up = if scene.proxies[from.id] then scene.proxies[from.id]:GetUp() else nil }
           elseif event.path == "plasma" then { n = 1, path = "plasma", delay = 0, charge = if item then item.charge else nil }
@@ -1939,6 +2005,22 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     end
   end
 
+  -- A citadel's tether to each ship of its side held by it (Core/Assets/Starbases' Tether): a beam from the
+  -- citadel to the ship, begun again each time the last one is nearly out.
+  for _, id in state.ballIds do
+    local ship = state.ships[id]
+    local tether = if ship then ship.tether else nil
+    local starbase = if tether then state.starbases[tether] else nil
+    local core = if starbase then state.balls[starbase.core] else nil
+    local ball = state.balls[id]
+    -- (from the citadel as it is drawn: the station)
+    if tether and core and ball and scene.screen[id] and scene.screen[tether] and ball.system == player.system
+      and scene.time - (scene.tethers[id] or -1) > 0.42 then
+      scene.tethers[id] = scene.time
+      Effects.Fire(fx, "tether", tether, id, core.radius, ball.radius, "hit", 0, "", scene.time)
+    end
+  end
+
   -- The sun, the planets and the moons in scaled space: each drawn in
   -- its true direction, near enough for the renderer to reach, and
   -- shrunk to span the angle it truly spans.
@@ -2012,6 +2094,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     Effects.Rush(fx, 0, vector.create(0, 0, 0), vector.create(0, 0, 1), 1, scene.time)
   end
 
+  citadelCores(scene, state)
   Effects.Update(fx, scene.time, scene.screen)
 
   -- (docked in a colony ship, it is that ship the camera is on)

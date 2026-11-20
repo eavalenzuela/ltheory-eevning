@@ -336,6 +336,29 @@ function Debug.LookAt(what: string, zoom: number?, over: number?): boolean
   return true
 end
 
+-- For a picture: the camera looks across the line between two things
+-- (by name, as GameDebug.LookAt finds them), so that what passes between
+-- them crosses the screen. False if either is not in the scene.
+function Debug.LookAcross(one: string, other: string, zoom: number?): boolean
+  local a, b = find(one), find(other)
+  local at = if a then scene.screen[a.id] else nil
+  local to = if b then scene.screen[b.id] else nil
+  if at == nil or to == nil then
+    return false
+  end
+  local line = vector.normalize(to - at)
+  local side = vector.cross(line, vector.create(0, 1, 0))
+  side = if vector.magnitude(side) > 1e-3 then vector.normalize(side) else vector.create(1, 0, 0)
+  -- (from a little above the side of it)
+  local away = vector.normalize(side + vector.create(0, 0.25, 0))
+  scene.pitch = math.clamp(math.acos(math.clamp(away.y, -1, 1)), 0.05, math.pi - 0.05)
+  scene.yaw = math.atan2(away.z, away.x)
+  if zoom then
+    scene.zoom, scene.zoomTarget = zoom, zoom
+  end
+  return true
+end
+
 -- The other way about: look at the ship from the side something is on,
 -- GameDebug.LookFrom('sun') for the lit side of it. 'turn' swings the
 -- camera round from there, in radians.
@@ -2987,6 +3010,34 @@ function Debug.Defend(ship: number, count: number?): number
     end
   end
   return on
+end
+
+-- A cheat, for a picture or a scripted fight: a citadel of a type
+-- ("citadel.research.small") anchored by the pilot at the planet or moon
+-- they are at (they must be near enough to anchor), fuelled, its
+-- anchoring done, and the modules named fitted in it and online. The
+-- station's id, or 0 if it could not be anchored.
+function Debug.Citadel(tower: string, modules: { string }?): number
+  local state = session.game.state
+  local ship = state.player.ship
+  local item = Items.Add(state, tower, 1, ship, "cargo")
+  local before = #state.starbaseIds
+  for _, object in Core.Query.Objects(session.game, Debug.System()) do
+    if #state.starbaseIds == before and (object.kind == "planet" or object.kind == "moon") then
+      Session.Do(session, { kind = "AnchorTower", actor = 0, item = item.id, target = object.id })
+      Core.Step(session.game)
+    end
+  end
+  if #state.starbaseIds == before then
+    return 0
+  end
+  local starbase = state.starbases[state.starbaseIds[#state.starbaseIds]]
+  starbase.ready, starbase.fuel = state.tick, 20000
+  local fitted: { string } = modules or {}
+  for _, id in fitted do
+    table.insert(starbase.modules, { type = id, ready = state.tick })
+  end
+  return starbase.id
 end
 
 -- How many missiles are in flight, and how many of them are the pilot's.

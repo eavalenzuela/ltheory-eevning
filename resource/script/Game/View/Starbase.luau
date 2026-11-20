@@ -1244,6 +1244,9 @@ function Starbase.Field(): Model
   return shell :: Model
 end
 
+-- How many lights there are in a citadel's ring.
+local RING_LAMPS = 96
+
 -- How big a tower stands in its field: its radius, as a share of the
 -- field's. (It stands large for its field, which is a small one.)
 Starbase.TOWER = 0.28
@@ -1269,7 +1272,14 @@ export type Part = { id: string, model: Model, at: vector, look: vector, up: vec
   -- (of a tower built in sections: how far from its upright it reaches, rings and arms and all)
   wide: number? }
 
-export type Layout = { tower: Part, modules: { Part }, field: number }
+-- (A citadel's: 'ring', the radius of the ring of lights that marks how
+-- far its tether reaches, with no field; and 'arms', the weapons on its
+-- mounts, each where it stands, which way its face is and which way is
+-- ahead, and how big a metre of the weapon is.)
+-- ('twin': the second of a pair of mounts, which are one hardpoint: it
+-- carries what the first does, and it is the first that fires.)
+export type Arm = { type: string, at: vector, n: vector, fore: vector, unit: number, twin: boolean? }
+export type Layout = { tower: Part, modules: { Part }, field: number, ring: number?, arms: { Arm }? }
 
 local function dice(n: number): number
   return (math.sin(n * 12.9898) * 43758.5453) % 1
@@ -1322,6 +1332,26 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
       if dark then nil else Structures.Generating(makeup.modules))
     tower = { id = type.id, model = made.model, at = -(made.lower + made.upper) * 0.5 * (towerRadius / made.radius),
       look = vector.create(0, 0, 1), scale = towerRadius / made.radius, radius = towerRadius, movers = made.movers }
+    -- (no field, the owner's 2026-11-19: a ring of lights at the tether's reach; and on its mounts the weapons its
+    -- defence module mounts, of its family, and its point defence, which every citadel has)
+    local family: string? = nil
+    for _, id in makeup.modules do
+      local defence = Structures.moduleById[id] and Structures.moduleById[id].defence
+      if defence then
+        family = if defence == "projectile" then "cannon" else defence
+      end
+    end
+    local arms: { Arm } = {}
+    local scale = towerRadius / made.radius
+    for index, armed in Citadel.Armed(made.mounts, type.size, family) do
+      local mount = made.mounts[index]
+      if armed ~= "" and mount then
+        table.insert(arms, { type = armed, at = tower.at + mount.at * scale, n = mount.n, fore = mount.fore, unit = scale / made.metres,
+          twin = mount.twin ~= 0 and mount.twin < index })
+      end
+    end
+    local layout: Layout = { tower = tower, modules = {}, field = 0, ring = if dark then nil else radius, arms = arms }
+    return layout
   else
     tower = Starbase.TowerPart(owner, type.size, vector.create(0, 0, 0), towerRadius)
   end
@@ -1534,6 +1564,31 @@ function Starbase.Raise(layout: Layout, container: Object, origin: vector, metre
     local size = layout.field * metres
     field:SetScale(vector.create(size, size, size))
     field:SetPos(origin)
+  end
+  -- (a citadel's weapons on its mounts, at rest)
+  for _, each in layout.arms or {} :: { Arm } do
+    local arm = Arms.Build(each.type)
+    if arm then
+      local base: Object? = if arm.base then scenery(arm.base) else nil
+      local gun = scenery(arm.gun)
+      Arms.Place(arm, base, gun, origin + each.at * metres, each.n, each.fore, nil, each.unit * metres)
+    end
+  end
+  -- (and its ring of lights, two lots of them lit turn about, where its tether reaches)
+  local ring = layout.ring
+  if ring and ring > 0 then
+    local lamp = finish("ring.lamp", function(b: Builder)
+      block(b, GLOW, v(0, 0, 0), v(1, 1, 1), nil, 0.7)
+    end, Hull.looks.vessari, 1, 0.04).model
+    local size = math.max(ring * 0.005, 50) * metres
+    for n = 1, RING_LAMPS do
+      local angle = (n - 1) / RING_LAMPS * 2 * math.pi
+      local object = scenery(lamp)
+      object:SetScale(vector.create(size, size, size))
+      object:SetPos(origin + vector.create(math.cos(angle), 0, math.sin(angle)) * (ring * metres))
+      table.insert(moving, { object = object, motion = { kind = "blink", period = 1.6, phase = (n % 2) / 2, lit = 0.5 }, size = size,
+        look = vector.create(0, 0, 1), up = UP, right = vector.create(1, 0, 0) })
+    end
   end
   return objects, moving
 end

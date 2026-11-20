@@ -7,8 +7,9 @@
 -- Data/Structures' CITADEL_DEFENCE has them for the citadel's size. They
 -- are the game's own weapons, and fire as they do on a ship (the
 -- gunnery rules; a launcher's missiles fly after their targets), with
--- nobody aiming them. Each group fires on its own, at the nearest ship
--- in its reach that the citadel counts hostile:
+-- nobody aiming them. Each gun fires on its own (the owner's, 2026-11-19),
+-- at a ship in its reach that the citadel counts hostile, the guns of a
+-- kind sharing out those in reach, nearest first:
 --
 --   - a pirate's, or the Drowned's;
 --   - one that has struck the citadel, or a ship of its owner's, these
@@ -136,28 +137,37 @@ function CitadelGuns.Fire(state: State.State, events: { Event }): { Hit }
       table.sort(near, function(a: Near, b: Near): boolean
         return a.gap < b.gap or (a.gap == b.gap and a.ball.id < b.ball.id)
       end)
-      for index, group in mounted do
+      -- Each gun on its own (the owner's, 2026-11-19: the guns fire independently): its own time, the first one
+      -- spread over its cycle so that they do not all fire at once, and its own target, the guns of a kind taking the
+      -- hostiles in their reach in turn, nearest first, so that their fire is spread among those who come.
+      local g = 0
+      for _, group in mounted do
         local gun = Modules.byId[CitadelGuns.Weapon(family, group.range, group.size)]
         local weapon = if gun then gun.weapon else nil
         local charge = if gun then load(gun) else nil
-        if gun and weapon and charge and state.tick >= (guns[index] or 0) and #near > 0 then
+        if gun and weapon and charge then
+          local cycle = math.max(1, math.ceil(weapon.duration / Constants.TICK))
           local missile = weapon.family == "missile"
           local reach = if missile then charge.velocity * charge.flightTime * (weapon.flight or 1)
             else weapon.optimal * charge.rangeMultiplier + weapon.falloff
-          local target: Near? = nil
+          local inReach: { Near } = {}
           for _, each in near do
             if each.gap <= reach then
-              target = each
-              break
+              table.insert(inReach, each)
             end
           end
-          if target then
-            guns[index] = state.tick + math.max(1, math.ceil(weapon.duration / Constants.TICK))
-            local ball = target.ball
-            if missile then
-              -- (each launcher's missile, flying after its target: Tactical/Combat)
-              local flight = target.gap / charge.velocity
-              for _ = 1, group.count do
+          for k = 1, group.count do
+            g += 1
+            if guns[g] == nil then
+              guns[g] = state.tick + (g * 7) % cycle
+            end
+            if #inReach > 0 and state.tick >= guns[g] then
+              guns[g] = state.tick + cycle
+              local target = inReach[(k - 1) % #inReach + 1]
+              local ball = target.ball
+              if missile then
+                -- (its missile, flying after its target: Tactical/Combat)
+                local flight = target.gap / charge.velocity
                 local damage: { number } = {}
                 for kind = 1, 4 do
                   damage[kind] = charge.damage[kind] * weapon.damageMultiplier
@@ -168,35 +178,28 @@ function CitadelGuns.Fire(state: State.State, events: { Event }): { Hit }
                   x = core.x, y = core.y, z = core.z, vx = 0, vy = 0, vz = 0, at = time, speed = charge.velocity, grid = core.grid,
                   expires = time + charge.flightTime * (weapon.flight or 1) })
                 table.insert(events, { kind = "Shot", from = core.id, item = 0, to = ball.id, family = "missile", outcome = "launched",
-                  damage = 0, flight = flight, missile = missileId, look = gun.id })
-              end
-            else
-              -- (each turret's shot, rolled as a ship's is: how fast the target crosses, how big it is, how far)
-              local rx, ry, rz = ball.x - core.x, ball.y - core.y, ball.z - core.z
-              local distance = math.max(1e-6, math.sqrt(rx * rx + ry * ry + rz * rz))
-              local along = (ball.vx * rx + ball.vy * ry + ball.vz * rz) / distance
-              local across = math.sqrt(math.max(0, ball.vx ^ 2 + ball.vy ^ 2 + ball.vz ^ 2 - along * along))
-              local chance = Gunnery.HitChance(across / distance, weapon.tracking * (charge.tracking or 1), ball.vitals.signature,
-                target.gap, weapon.optimal * charge.rangeMultiplier, weapon.falloff)
-              local rng = Rng.For(state.historySeed, state.tick, core.id, index, 79)
-              local damage, total, landed = { 0, 0, 0, 0 }, 0, 0
-              for _ = 1, group.count do
-                local quality = Gunnery.Quality(Rng.Next(rng), chance)
-                if quality > 0 then
-                  landed += 1
-                  for kind = 1, 4 do
-                    damage[kind] += charge.damage[kind] * weapon.damageMultiplier * quality
-                  end
+                  damage = 0, flight = flight, missile = missileId, look = gun.id, mount = k })
+              else
+                -- (its shot, rolled as a ship's is: how fast the target crosses, how big it is, how far)
+                local rx, ry, rz = ball.x - core.x, ball.y - core.y, ball.z - core.z
+                local distance = math.max(1e-6, math.sqrt(rx * rx + ry * ry + rz * rz))
+                local along = (ball.vx * rx + ball.vy * ry + ball.vz * rz) / distance
+                local across = math.sqrt(math.max(0, ball.vx ^ 2 + ball.vy ^ 2 + ball.vz ^ 2 - along * along))
+                local chance = Gunnery.HitChance(across / distance, weapon.tracking * (charge.tracking or 1), ball.vitals.signature,
+                  target.gap, weapon.optimal * charge.rangeMultiplier, weapon.falloff)
+                local quality = Gunnery.Quality(Rng.Next(Rng.For(state.historySeed, state.tick, core.id, g, 79)), chance)
+                local damage, total = { 0, 0, 0, 0 }, 0
+                for kind = 1, 4 do
+                  damage[kind] = charge.damage[kind] * weapon.damageMultiplier * quality
+                  total += damage[kind]
                 end
+                if total > 0 then
+                  table.insert(hits, { target = ball.id, by = core.id, damage = damage })
+                end
+                table.insert(events, { kind = "Shot", from = core.id, item = 0, to = ball.id, family = weapon.family,
+                  outcome = if quality == 0 then "miss" elseif quality == 3 then "wreck" else "hit", damage = total, look = gun.id,
+                  mount = k })
               end
-              for kind = 1, 4 do
-                total += damage[kind]
-              end
-              if total > 0 then
-                table.insert(hits, { target = ball.id, by = core.id, damage = damage })
-              end
-              table.insert(events, { kind = "Shot", from = core.id, item = 0, to = ball.id, family = weapon.family,
-                outcome = if landed == 0 then "miss" else "hit", damage = total, look = gun.id, guns = group.count })
             end
           end
         end
