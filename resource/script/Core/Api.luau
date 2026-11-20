@@ -2706,6 +2706,8 @@ export type StarbaseStatus = {
   vitals: State.Vitals?,
   -- (the blocks it burns an hour as it stands: a citadel's services burn too)
   burn: number,
+  -- (and whether others may dock at it, and the tax its owner takes of them: Assets/Starbases' SetAccess)
+  open: boolean, tax: number,
   services: number, serviceSlots: number, shields: number, shieldSlots: number, defenceModule: string,
 }
 function Query.Starbase(game: Game, id: number): StarbaseStatus?
@@ -2757,6 +2759,7 @@ function Query.Starbase(game: Game, id: number): StarbaseStatus?
     siege = starbase.siege, core = starbase.core, besieged = Raids.Band(state, starbase) == "lawless",
     phase = citadelVitals and citadelVitals.phase,
     burn = Starbases.Burn(state, starbase),
+    open = starbase.open == true, tax = starbase.tax or 0,
     vitals = if Structures.towerById[starbase.tower].citadel and coreBall then coreBall.vitals else nil,
     reinforced = math.max(0, ((citadelVitals and citadelVitals.reinforced) or 0) - state.tick)
       * Constants.TICK,

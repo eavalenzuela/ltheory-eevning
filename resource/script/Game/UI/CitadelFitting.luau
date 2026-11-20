@@ -34,6 +34,7 @@ local Im = require("@lt/Game/UI/Im")
 local Info = require("@lt/Game/UI/Info")
 local ItemIcon = require("@lt/Game/UI/ItemIcon")
 local Session = require("@lt/Game/Session")
+local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
 local Structures = require("@lt/Core/Data/Structures")
 local Theme = require("@lt/Game/UI/Theme")
@@ -71,6 +72,9 @@ local KIND_HEADS = { "EM", "THERM", "KIN", "EXPL" }
 local pickedRack, pickedSlot = "service", 0
 local source = "hand"
 local chosen = ""
+-- The tax asked for, in points, at which citadel: shown until the game has it (it changes a second at a time, and
+-- presses may come faster).
+local asked: { station: number, points: number }? = nil
 
 local function shorten(text: string, limit: number): string
   return if #text > limit then string.sub(text, 1, limit - 1) .. "." else text
@@ -533,6 +537,42 @@ function CitadelFitting.Draw(session: Session.Session, game: Core.Game, player: 
   elseif how == "held" then
     Im.Text(if gone > 0 then `Yours, but no beacon is lit: let go in {takes - gone} h` else "This system is yours", bx, by, 13,
       if gone > 0 then Theme.CAUTION else Theme.GOOD)
+  end
+
+  -- Who may dock at it: its owner's side alone, or anybody not hostile, at a tax its owner takes of what they trade
+  -- and have done there (Assets/Starbases' SetAccess; a point at a time, to the most there is).
+  local accessY = y + h - 82
+  Im.Text("Access", bx, accessY + 4, 13, Theme.DIM)
+  local closed = not status.open
+  if Im.Toggle("Closed", bx + 70, accessY, 76, 24, closed, "Citadel:closed") and not closed then
+    Session.Do(session, { kind = "SetAccess", actor = 0, open = false })
+  end
+  if Im.Toggle("Open", bx + 152, accessY, 64, 24, status.open, "Citadel:open") and closed then
+    Session.Do(session, { kind = "SetAccess", actor = 0, open = true, tax = status.tax })
+  end
+  if Im.Inside(bx + 70, accessY, 146, 24) then
+    Im.Tip("Access", if closed then "Only you and your corporation dock here" else "Anybody not hostile may dock here, and pays your tax")
+  end
+  if status.open then
+    local points = math.floor(status.tax * 100 + 0.5)
+    local wanted = asked
+    if wanted and wanted.station == station and wanted.points ~= points then
+      points = wanted.points
+    else
+      asked = nil
+    end
+    local most = math.floor(Starbases.TAX_MOST * 100 + 0.5)
+    Im.Text("tax", bx + 232, accessY + 4, 13, Theme.DIM)
+    if Im.Button("-", bx + 262, accessY, 24, 24, points > 0, "Citadel:tax:down") then
+      Session.Do(session, { kind = "SetAccess", actor = 0, open = true, tax = (points - 1) / 100 })
+      asked = { station = station, points = points - 1 }
+    end
+    local shown = `{points}%`
+    Im.Text(shown, bx + 310 - Im.TextWidth(shown, 13) / 2, accessY + 4, 13, Theme.TEXT)
+    if Im.Button("+", bx + 334, accessY, 24, 24, points < most, "Citadel:tax:up") then
+      Session.Do(session, { kind = "SetAccess", actor = 0, open = true, tax = (points + 1) / 100 })
+      asked = { station = station, points = points + 1 }
+    end
   end
 
   -- At its foot: taking it down (with nothing in it, it says why not when it cannot be).
