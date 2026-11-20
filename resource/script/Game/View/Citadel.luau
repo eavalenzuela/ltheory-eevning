@@ -2310,10 +2310,12 @@ end
 -- ('offline': its kind's module, the observatory or the mining turret, is
 -- fitted but not working, unfuelled or switched off: it is there, but dark,
 -- its lights out and nothing of it turning: the owner, 2026-11-18.)
+-- ('absent': its kind's module, the observatory or the mining turret, is
+-- not fitted at all, and there is nothing of it to see: the owner's, 2026-11-18.)
 function Citadel.Build(seed: number, size: number, paint: string?, detail: string?, metres: number?, asym: boolean?, style: string?,
-  doors: number?, kind: string?, idle: boolean?, offline: boolean?, dead: boolean?): Made
+  doors: number?, kind: string?, idle: boolean?, offline: boolean?, dead: boolean?, absent: boolean?): Made
   local key = `{seed}:{size}:{paint or ""}:{detail or ""}:{asym == true}:{style or "blocks"}:{doors or Citadel.DOORS}:{kind or ""}`
-    .. `:{idle == true}:{offline == true}:{dead == true}`
+    .. `:{idle == true}:{offline == true}:{dead == true}:{absent == true}`
   local kept = made[key]
   if kept then
     return kept
@@ -2375,8 +2377,14 @@ function Citadel.Build(seed: number, size: number, paint: string?, detail: strin
   -- parts, the telescope and the gun, are movers, below)
   -- (lit, while the module works; dark, offline)
   local lit = if offline or dead then FRAME else GLOW
-  local turners: { { builder: Plates.Builder, pivot: vector, axis: vector } } = {}
+  -- ('group': the pieces that turn together, as one; 'hinge': where a piece
+  -- that tilts on another is hinged, from the upright they turn about)
+  local turners: { { builder: Plates.Builder, pivot: vector, axis: vector, fore: vector, special: string, lift: number?,
+    muzzle: vector?, group: number, hinge: vector? } } = {}
   for _, mount in shape.mounts do
+    if absent and (mount.kind == "observatory" or mount.kind == "miner") then
+      continue
+    end
     local n, a = mount.n, mount.fore
     local c = vector.cross(n, a)
     local R = mount.radius * G
@@ -2437,7 +2445,8 @@ function Citadel.Build(seed: number, size: number, paint: string?, detail: strin
       slab(tb, PATCH, -side * (T * 0.22) + n * (T * 0.04), side, vector.cross(side, n), n, T * 0.06, T * 0.08, T * 0.06)
       slab(tb, lit, look * (T * 0.5) + vector.normalize(vector.cross(look, side)) * (T * 0.18), side, look, vector.cross(side, look),
         T * 0.025, T * 0.025, T * 0.025)
-      table.insert(turners, { builder = tb, pivot = pivot, axis = n })
+      table.insert(turners, { builder = tb, pivot = pivot, axis = n, fore = a, special = "observatory", lift = math.atan2(0.65, 0.75),
+        group = #turners + 1 })
     elseif mount.kind == "miner" then
       -- A squat foot, and on it the gun: a housing and one long barrel.
       -- (an octagon, for some definition: the owner, 2026-11-18)
@@ -2457,16 +2466,23 @@ function Citadel.Build(seed: number, size: number, paint: string?, detail: strin
       local aim = vector.normalize(a * 0.85 + n * 0.5)
       local side = vector.normalize(vector.cross(n, a))
       slab(gb, PATCH, n * (R * 0.32), a, side, n, R * 0.62, R * 0.5, R * 0.32)
-      drum(gb, PLATING, n * (R * 0.38) + a * (R * 0.4), aim, R * 0.13, R * 2.4, 8)
-      drum(gb, FRAME, n * (R * 0.38) + a * (R * 0.4) + aim * (R * 2.3), aim, R * 0.19, R * 0.22, 8)
+      -- (the barrel a piece of its own, hinged on the housing: it turns with the housing and tilts by itself to what it
+      -- works at, the housing staying level)
+      local trunnion = n * (R * 0.38) + a * (R * 0.4)
+      local bb = Plates.New(seed * 3.7 + #turners, 0.04)
+      drum(bb, PLATING, v(0, 0, 0), aim, R * 0.13, R * 2.4, 8)
+      drum(bb, FRAME, aim * (R * 2.3), aim, R * 0.19, R * 0.22, 8)
       -- (vents and works on the housing, and lights: on its back and the muzzle)
       for _, s2 in { -1, 1 } do
         slab(gb, FRAME, n * (R * 0.32) + side * (s2 * R * 0.53), a, side, n, R * 0.4, R * 0.04, R * 0.2)
         slab(gb, PATCH, n * (R * 0.66) - a * (R * 0.3) + side * (s2 * R * 0.25), a, side, n, R * 0.14, R * 0.1, R * 0.05)
       end
       slab(gb, lit, n * (R * 0.5) - a * (R * 0.63), a, side, n, R * 0.025, R * 0.12, R * 0.025)
-      drum(gb, lit, n * (R * 0.38) + a * (R * 0.4) + aim * (R * 2.52), aim, R * 0.15, R * 0.02, 8)
-      table.insert(turners, { builder = gb, pivot = pivot, axis = n })
+      drum(bb, lit, aim * (R * 2.52), aim, R * 0.15, R * 0.02, 8)
+      local group = #turners + 1
+      table.insert(turners, { builder = gb, pivot = pivot, axis = n, fore = a, special = "miner", group = group })
+      table.insert(turners, { builder = bb, pivot = pivot + trunnion, axis = n, fore = a, special = "miner", lift = math.atan2(0.5, 0.85),
+        muzzle = aim * (R * 2.55), group = group, hinge = trunnion })
     end
   end
   for _, mount in shape.mounts do
@@ -2545,10 +2561,12 @@ function Citadel.Build(seed: number, size: number, paint: string?, detail: strin
   -- (and an observatory's telescope and a mining turret's gun, each about
   -- its foot: they sweep slowly round until what they work at is known,
   -- Tactical's, and turns them to it)
-  for index, turner in turners do
+  for _, turner in turners do
+    local index = turner.group
     table.insert(movers, { model = (Plates.Finish(turner.builder, look, sheets)), pivot = turner.pivot,
       motion = { kind = "turn", axis = turner.axis, rate = if offline then 0 else 0.05 * (if index % 2 == 0 then -1 else 1),
-        phase = index * 0.37 } })
+        phase = index * 0.37, fore = turner.fore, special = turner.special, lift = turner.lift, muzzle = turner.muzzle,
+        hinge = turner.hinge } })
   end
   local across = upper - lower
   local radius = math.max(across.x, across.y, across.z) / 2
@@ -2616,12 +2634,16 @@ end
 -- in a faction's paint, if it is a faction's, and else in its design's.
 -- ('generating': what a generator station's generator makes, "gravity"
 -- or "wormhole": nil, and its sphere is not there and its rings still.)
-function Citadel.Of(kind: string?, size: number, faction: string?, generating: string?): Made
+-- ('special': how its kind's module, a research station's observatory or a
+-- refinery's mining turret, stands: "on" fitted and working, "off" fitted
+-- and dark, nil not fitted, and not there. Not said, it is there and working.)
+function Citadel.Of(kind: string?, size: number, faction: string?, generating: string?, special: string?): Made
   local pick = Citadel.Pick(kind, size, Citadel.PeopleOf(faction))
   local paint = if faction and faction ~= "" and Hull.looks[faction] then faction else pick.paint
   local drawn = if kind == "generator" or kind == "gravity" or kind == "wormhole" then generating or kind else kind
   local idle = (kind == "generator" or kind == "gravity" or kind == "wormhole") and generating == nil
-  return Citadel.Build(pick.seed, size, paint, pick.detail, nil, pick.asym, pick.style, pick.doors, drawn, idle)
+  return Citadel.Build(pick.seed, size, paint, pick.detail, nil, pick.asym, pick.style, pick.doors, drawn, idle, special == "off", nil,
+    special == "absent")
 end
 
 -- A citadel's hulk (Core/Assets/Hulks): the citadel a kind and a size is

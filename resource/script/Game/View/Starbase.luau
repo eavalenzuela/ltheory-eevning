@@ -1279,7 +1279,9 @@ export type Part = { id: string, model: Model, at: vector, look: vector, up: vec
 -- ('twin': the second of a pair of mounts, which are one hardpoint: it
 -- carries what the first does, and it is the first that fires.)
 export type Arm = { type: string, at: vector, n: vector, fore: vector, unit: number, twin: boolean?, pds: boolean? }
-export type Layout = { tower: Part, modules: { Part }, field: number, ring: number?, arms: { Arm }? }
+export type Layout = { tower: Part, modules: { Part }, field: number, ring: number?, arms: { Arm }?,
+  -- (a citadel's observatory or mining turret, fitted: what it is, and where it stands from the station's middle, m)
+  special: { kind: string, at: vector }? }
 
 local function dice(n: number): number
   return (math.sin(n * 12.9898) * 43758.5453) % 1
@@ -1328,8 +1330,19 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
     -- (a generator station's sphere is there while its generator is:
     -- black for gravity, purple for a wormhole)
     -- (an alien people's citadel is theirs, whoever holds it: Data/Structures' CITADEL_ALIEN)
+    -- (and a research station's observatory, or a refinery's mining turret, is there while its module is fitted:
+    -- working, or dark with the citadel)
+    local fitted = false
+    for _, id in makeup.modules do
+      local module = Structures.moduleById[id]
+      local works = module and module.works
+      fitted = fitted or (works == "observatory" and type.kind == "research") or (works ~= nil and works ~= "observatory"
+        and type.kind == "refinery")
+    end
+    local special = if type.kind ~= "research" and type.kind ~= "refinery" then nil elseif not fitted then "absent"
+      elseif dark then "off" else "on"
     local made = Citadel.Of(type.kind, type.size, faction or (if type.faction ~= "" then type.faction else nil),
-      if dark then nil else Structures.Generating(makeup.modules))
+      if dark then nil else Structures.Generating(makeup.modules), special)
     tower = { id = type.id, model = made.model, at = -(made.lower + made.upper) * 0.5 * (towerRadius / made.radius),
       look = vector.create(0, 0, 1), scale = towerRadius / made.radius, radius = towerRadius, movers = made.movers }
     -- (no field, the owner's 2026-11-19: a ring of lights at the tether's reach; and on its mounts the weapons its
@@ -1351,6 +1364,14 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
       end
     end
     local layout: Layout = { tower = tower, modules = {}, field = 0, ring = if dark then nil else radius, arms = arms }
+    if special == "on" then
+      for _, mount in made.mounts do
+        if mount.kind == "observatory" or mount.kind == "miner" then
+          local kind: string = mount.kind
+          layout.special = { kind = kind, at = tower.at + (mount.at + mount.n * mount.radius) * scale }
+        end
+      end
+    end
     return layout
   else
     tower = Starbase.TowerPart(owner, type.size, vector.create(0, 0, 0), towerRadius)
@@ -1445,7 +1466,13 @@ local UP = vector.create(0, 1, 0)
 -- A piece of a tower that moves, in a scene: the thing it is there, how
 -- it moves, how big it is drawn, and the tower's own axes there (which
 -- way its drawing's z, y and x go in the scene).
-export type Moving = { object: Object, motion: Tower.Motion, size: number, look: vector, up: vector, right: vector, lit: boolean? }
+export type Moving = { object: Object, motion: Tower.Motion, size: number, look: vector, up: vector, right: vector, lit: boolean?,
+  -- (a citadel's telescope or mining gun: the way, in the scene, it is to turn to, and how far round it is)
+  aim: vector?, angle: number?,
+  -- (and how far it is tilted from as built, and where its muzzle is in the scene now)
+  pitch: number?, tip: vector?,
+  -- (a hinged piece's place at rest, which it goes round from)
+  base: vector? }
 
 -- Put what moves of a tower into a scene: for a tower whose middle is
 -- at 'at', drawn 'size' to one of its own units, facing 'look' with
@@ -1506,11 +1533,55 @@ function Starbase.Animate(moving: { Moving }, time: number, sun: vector)
       -- (its own z and y, turned so far about the axis: Rodrigues' rule)
       local k = vector.normalize(motion.axis or vector.create(0, 1, 0))
       local angle = time * (motion.rate or 0) + (motion.phase or 0) * 2 * math.pi
+      local aim, fore = piece.aim, motion.fore
+      local tilt = piece.pitch or 0
+      if aim and fore and motion.rate ~= 0 then
+        -- (turned to what it works at, about its foot, and its barrel raised or lowered to it: eased there, a
+        -- radian a second at most)
+        local wanted = vector.normalize(vector.create(vector.dot(aim, piece.right), vector.dot(aim, piece.up), vector.dot(aim, piece.look)))
+        local p = wanted - k * vector.dot(wanted, k)
+        local f = fore - k * vector.dot(fore, k)
+        if vector.magnitude(p) > 1e-4 and vector.magnitude(f) > 1e-4 then
+          local target = math.atan2(vector.dot(k, vector.cross(f, p)), vector.dot(f, p))
+          local now = piece.angle or angle
+          local step = (target - now + math.pi) % (2 * math.pi) - math.pi
+          local most = 1 / 60
+          now += math.clamp(step, -most, most)
+          piece.angle = now
+          angle = now
+          -- (up off its foot: from a little below level to nearly straight up; only what is built to tilt)
+          local lift = motion.lift
+          if lift then
+            local up = math.clamp(math.asin(math.clamp(vector.dot(wanted, k), -1, 1)), -0.15, 1.45)
+            tilt += math.clamp(up - lift - tilt, -most, most)
+            piece.pitch = tilt
+          end
+        end
+      end
       local c, s = math.cos(angle), math.sin(angle)
       local function turned(p: vector): vector
         return p * c + vector.cross(k, p) * s + k * (vector.dot(k, p) * (1 - c))
       end
-      Object_SetAxes(piece.object, world(turned(vector.create(0, 0, 1))), world(turned(vector.create(0, 1, 0))))
+      -- (tilted first, about the way across its barrel, and then turned about its foot)
+      local across = if fore then vector.cross(fore, k) else vector.create(1, 0, 0)
+      across = if vector.magnitude(across) > 1e-4 then vector.normalize(across) else vector.create(1, 0, 0)
+      local tc, ts = math.cos(tilt), math.sin(tilt)
+      local function posed(p: vector): vector
+        local q = if tilt ~= 0 then p * tc + vector.cross(across, p) * ts + across * (vector.dot(across, p) * (1 - tc)) else p
+        return turned(q)
+      end
+      Object_SetAxes(piece.object, world(posed(vector.create(0, 0, 1))), world(posed(vector.create(0, 1, 0))))
+      local hinge = motion.hinge
+      if hinge then
+        -- (round the upright, as what it is hinged on goes round)
+        local base = piece.base or piece.object:GetPos()
+        piece.base = base
+        piece.object:SetPos(base + world(turned(hinge) - hinge) * piece.size)
+      end
+      local muzzle = motion.muzzle
+      if muzzle then
+        piece.tip = piece.object:GetPos() + world(posed(muzzle)) * piece.size
+      end
     elseif motion.kind == "blink" then
       local lit = (time / (motion.period or 1.2) + (motion.phase or 0)) % 1 < (motion.lit or 0.5)
       if lit ~= piece.lit then

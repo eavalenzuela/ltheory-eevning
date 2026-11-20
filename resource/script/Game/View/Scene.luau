@@ -153,6 +153,11 @@ export type Scene = {
   fx: Effects.Fx?,                    -- weapon fire and the like, in this system's container
   mining: { [number]: number },       -- when each mining module's beam was last begun, by its item
   tethers: { [number]: number },      -- when each tethered ship's beam was last begun, by its ship
+  -- A citadel's observatory or mining turret, working (Game/View/Starbase's Layout 'special'), by its station; the
+  -- rock an asteroid miner is drawing in, and when its beam was last begun.
+  citadelSpecial: { [number]: { kind: string, at: vector } },
+  citadelRocks: { [number]: { object: Object, from: vector, born: number, size: number } },
+  citadelBeams: { [number]: number },
   citadelGuns: { [number]: { CitadelGun } },  -- a citadel's guns where they are on it, by its station
   wreckage: { [number]: Wrecked },    -- the pieces of each wreck on the grid
   bubbles: { [number]: Object },      -- the interdiction fields in the system, by their ids
@@ -255,6 +260,7 @@ function Scene.New(camera: Camera): Scene
     proxies = {}, celestials = {}, worlds = {}, passing = 0, screen = {}, focus = nil,
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6, tracking = 0,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {}, tethers = {}, citadelGuns = {},
+    citadelSpecial = {}, citadelRocks = {}, citadelBeams = {},
     wreckage = {}, bubbles = {}, works = {}, offsets = {}, moving = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
     standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0, ghosts = {}, poses = {}, headings = {}, turned = 0,
   }
@@ -267,6 +273,15 @@ end
 -- place among the citadel's guns.
 local function citadelGunKey(station: number, n: number): number
   return -(2 ^ 42 + station * 1024 + n)
+end
+
+-- Where a citadel's observatory or mining turret is in 'scene.screen', and
+-- where its mining beam ends.
+local function specialKey(station: number): number
+  return -(2 ^ 42 + station * 1024 + 1000)
+end
+local function beamEndKey(station: number): number
+  return -(2 ^ 42 + station * 1024 + 1001)
 end
 
 -- A citadel's core (Core/Assets/Starbases) is where its station is drawn:
@@ -684,6 +699,12 @@ local function dropWorks(scene: Scene, id: number)
   scene.offsets[id] = nil
   scene.moving[id] = nil
   scene.standing[id] = nil
+  scene.citadelSpecial[id] = nil
+  local rock = scene.citadelRocks[id]
+  if rock then
+    Object_Delete(rock.object)
+    scene.citadelRocks[id] = nil
+  end
 end
 
 -- A number from 0 to 1 that follows from 'n'.
@@ -1065,6 +1086,19 @@ local function makeStation(scene: Scene, game: Core.Game, object: SystemData.Obj
     scene.citadelGuns[object.id] = guns
   else
     scene.citadelGuns[object.id] = nil :: any
+  end
+  local special = layout.special
+  if special then
+    scene.citadelSpecial[object.id] = special
+  else
+    scene.citadelSpecial[object.id] = nil :: any
+  end
+  if layout.special == nil or layout.special.kind ~= "miner" then
+    local rock = scene.citadelRocks[object.id]
+    if rock then
+      Object_Delete(rock.object)
+      scene.citadelRocks[object.id] = nil
+    end
   end
   if #moving > 0 then
     scene.moving[object.id] = moving
@@ -1666,6 +1700,11 @@ function Scene.Sync(scene: Scene, session: Session.Session)
   for _, id in state.ballIds do
     local ball = state.balls[id]
     local shown = ball.system == player.system and (id == player.ship or inScene[ball.grid] == true)
+    -- (a starbase's core, what stands for it under fire, is not drawn: the station is, and the core is where it is
+    -- drawn, citadelCores. Drawn as a ship it was an old-style hull of the station's size, in the middle of it.)
+    if state.ships[id] and state.ships[id].owner == "starbase" then
+      shown = false
+    end
     -- (a cloaked ship is seen by nobody but its own pilot)
     local cloaked = Core.Query.Cloaked(game, id)
     if cloaked and id ~= player.ship then
@@ -2072,6 +2111,104 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       and scene.time - (scene.tethers[id] or -1) > 0.42 then
       scene.tethers[id] = scene.time
       Effects.Fire(fx, "tether", tether, id, core.radius, ball.radius, "hit", 0, "", scene.time)
+    end
+  end
+
+  -- A citadel's observatory and its miners (Core/Assets/CitadelWorks): the telescope turned to the signal it is
+  -- finding; a moon or planet miner's gun turned to its moon or planet with its beam held on it; an asteroid
+  -- miner's drawing a rock in from the way the belts are, which comes in and wears away as it is processed, and
+  -- then the next. (Nothing is taken from a belt: the rock is only to be seen.)
+  for id, special in scene.citadelSpecial do
+    local starbase = state.starbases[id]
+    local here = scene.screen[id]
+    local station = objects[id % Constants.STRUCTURE_ID_SPAN]
+    if starbase and here and station then
+      local mount = here + special.at
+      scene.screen[specialKey(id)] = mount
+      local aim: vector? = nil
+      local reach: vector? = nil
+      local function online(works: string): boolean
+        for _, fitted in starbase.modules do
+          local module = Structures.moduleById[fitted.type]
+          if module and module.works == works and state.tick >= fitted.ready and starbase.fuel > 0 then
+            return true
+          end
+        end
+        return false
+      end
+      if special.kind == "observatory" then
+        local site = state.sites[starbase.observing or 0]
+        local where = if site and online("observatory") then objects[site.id % Constants.STRUCTURE_ID_SPAN] else nil
+        if where then
+          aim = vector.create(where.x - station.x, where.y - station.y, where.z - station.z)
+        end
+      else
+        local body = objects[(station.parent or 0) % Constants.STRUCTURE_ID_SPAN]
+        if body and (body.kind == "moon" or body.kind == "planet") and online(body.kind) then
+          -- (its beam held on the moon or the planet: drawn out toward it, as far as is seen)
+          local way = vector.normalize(vector.create(body.x - station.x, body.y - station.y, body.z - station.z))
+          aim = way
+          reach = mount + way * 25000
+        elseif online("asteroid") then
+          local rock = scene.citadelRocks[id]
+          local cycle = 40
+          if rock == nil or scene.time - rock.born >= cycle then
+            if rock then
+              Object_Delete(rock.object)
+            end
+            -- (from the way of the nearest belt, a little to one side, eight kilometres out)
+            local way = vector.create(1, 0, 0)
+            local nearest = math.huge
+            for _, other in objects do
+              if other.kind == "belt" then
+                local d = vector.create(other.x - station.x, other.y - station.y, other.z - station.z)
+                if vector.magnitude(d) < nearest then
+                  nearest, way = vector.magnitude(d), d
+                end
+              end
+            end
+            local turn = (dice(scene.time) - 0.5) * 0.8
+            way = about(vector.normalize(way), vector.create(0, 1, 0), turn)
+            local made = Object_Asteroid(math.floor(scene.time * 7919) % 100000 + 1)
+            local into = scene.container
+            if into then
+              into:AddInterior(made)
+            end
+            rock = { object = made, from = way * 8000 + vector.create(0, (dice(scene.time + 1) - 0.5) * 2000, 0), born = scene.time,
+              size = 160 + 160 * dice(scene.time + 2) }
+            scene.citadelRocks[id] = rock
+          end
+          local drawn = rock :: { object: Object, from: vector, born: number, size: number }
+          local t = math.clamp((scene.time - drawn.born) / cycle, 0, 1)
+          -- (drawn in over most of its time, and worn away over the last of it, at the mouth of the turret)
+          local inward = 1 - (1 - math.min(1, t / 0.75)) ^ 2
+          local at = mount + drawn.from * (1 - inward)
+          local size = drawn.size * (if t < 0.75 then 1 else math.max(0.02, 1 - (t - 0.75) / 0.25))
+          drawn.object:SetPos(at)
+          drawn.object:SetScale(vector.create(size, size, size))
+          aim = at - mount
+          reach = at
+        end
+      end
+      if aim then
+        local pieces: { Starbase.Moving } = scene.moving[id] or {}
+        for _, piece in pieces do
+          if piece.motion.special == special.kind then
+            piece.aim = vector.normalize(aim)
+            -- (its beam leaves from its muzzle, wherever that is turned to now)
+            if piece.tip then
+              scene.screen[specialKey(id)] = piece.tip
+            end
+          end
+        end
+      end
+      if reach then
+        scene.screen[beamEndKey(id)] = reach
+        if scene.time - (scene.citadelBeams[id] or -1) > 0.42 then
+          scene.citadelBeams[id] = scene.time
+          Effects.Fire(fx, "miner", id, beamEndKey(id), 0, 0, "hit", 0, "", scene.time, specialKey(id))
+        end
+      end
     end
   end
 

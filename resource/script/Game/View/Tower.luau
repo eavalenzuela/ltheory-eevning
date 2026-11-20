@@ -264,6 +264,19 @@ export type Motion = {
   period: number?,     -- scan and blink: seconds for once round
   phase: number?,      -- scan and blink: how far round it starts, 0 to 1
   lit: number?,        -- blink: the share of its period it is lit for
+  -- turn: a citadel's observatory telescope or mining gun ('special':
+  -- "observatory", "miner"), the way it faces at rest, in the tower's
+  -- own axes; given a way to face (Moving's 'aim'), it turns to that.
+  fore: vector?,
+  special: string?,
+  -- (and how far its barrel or tube is raised off its foot as built,
+  -- radians, which it tilts up or down from to what it works at; and
+  -- where its muzzle is from its pivot, for a beam to leave from)
+  lift: number?,
+  muzzle: vector?,
+  -- (a piece hinged on another that turns, from the upright both turn
+  -- about: it goes round with it, and tilts about its hinge)
+  hinge: vector?,
 }
 export type Piece = { b: Builder, pivot: vector, motion: Motion }
 -- (the lamps that blink: in so many groups, each lit in its turn)
