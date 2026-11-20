@@ -6,6 +6,25 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Capital modules, jump portals, navy hulls, deployables, and every module in every make
+
+- Deployables, put out from your hold with Put out in the inventory, at least 5 km from stations and gates, and picked up again with Pick up once empty. A Field Depot holds 3,000 m3, and a ship beside it can refit from its own hold and the depot's. A Salvage Tractor Post pulls in wrecks within 125 km and empties them into its hold, for two days. A Jump Beacon Buoy is a lit beacon for your jump drives for an hour. Small, Medium and Large Interdiction Buoys hold a 5, 11.5 or 26.5 km interdiction field until you pick them up; not in secure space. All are on the market under Structures.
+- Navy hulls: each of the four human peoples sells a navy version of one combat hull of each class, frigate to battleship, in its loyalty store. Each is its plain hull in the people's livery, a fifth tougher in every layer, with a tenth more CPU and powergrid, one more slot (a low slot on armoured hulls, a mid slot on shielded ones), and the plain hull's bonuses.
+- XL modules for capitals: shield boosters, extenders, armour repairers and plates, afterburners, microwarpdrives, capacitor boosters, remote repairers and the energy neutraliser, about three times a large one. Only capitals fit them.
+- Every carrier, dreadnought, siege dreadnought, supercarrier, ultracapital and capital industrial has a jump drive now, except the Kethri colony ship. Plain freighters still have none.
+- Every capital industrial except the Nimia's transport refines ore in its own holds, as the Drowned's Griever did.
+- The Jump Portal Generator, for ultracapitals: open a portal from the map's jump drive panel to a system with a lit beacon. For a minute, friendly ships within 5 km of you can go through, on your fuel, while you stay. No capital goes through. Your hired pilots who are following you go through and hold where they come out until you call them back.
+- Drones now have a control range: 60 km, and 5 km more for each level of Drones. The Drone Link Augmentor adds 20 km.
+- The Cipher Buffer, a mid-slot module that gives you one more code in a hacking buffer.
+- New modules: shield amplifiers and armour coatings for each damage type, Shield Boost and Armour Repair Amplifiers, the Missile Guidance Enhancer, Inertial Damper, Warp Field Accelerator, Targeting Amplifier, Signature Dampener, Capacitor Recharge Coil, Grid Diagnostic Unit, Auxiliary Generator, a Small Hull Repairer, the Gravitic Grappler (a short, heavy web), and medium and heavy energy neutralisers. New rigs for missiles, turrets and single-type resistances.
+- Every module now comes in every make: custom, tech 2, masterwork and officer, each human people's own, and the pirates' site grades. Only modules that simply work or don't (the cloak, the micro jump drive, the jump beacon and portal generators, the bubble launcher and the Cipher Buffer) have none. Every rig has a tech 2 version.
+- Faction weapon bonuses: Nimia cruisers and up carry launchers beside their turrets, and their plasma torpedoes fly 25% faster. Kethri hulls with launchers do 25% more damage with the Vertical Launch Battery. The Drowned's Tridents from their cruisers, battlecruisers and battleships hit 15% harder and are 25% tougher.
+- Faction citadels are fought like ships: no shield bubble or batteries, guns and point defence of their own, reinforced between layers, and attacking one costs standing with its faction as attacking their ships does. Destroyed, it leaves its hulk.
+- Towers are much tougher (12, 24 or 48 million shield by size), with fields of 15, 21 or 30 km. A citadel can only take so much damage a second however many ships shoot it. A siege you are present for bombards the tower down over about half an hour at the strongest.
+- A citadel of yours can be set Closed or Open from its window, with its tax raised or lowered a point at a time.
+- Level 1 escort and convoy jobs: each wave of pirates now waits until the one before is beaten.
+- Fixed: the factions' makes of weapon upgrades now really make guns fire faster.
+
 ## Observatories and citadel miners
 
 - Observatory, for research station citadels: it finds the signals in its system for you, nearest first, each in a minute or so (derelicts nearly two, listening posts two and a half). Found signals show on your overview to warp to, as if you had scanned them down. Its dome's telescope turns and tilts toward whatever it is working on.
