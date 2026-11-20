@@ -6,6 +6,17 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## Rapid launchers, a burst jammer, drone and scanning modules, and fleet portals
+
+- Rapid Light Missile Launcher (medium hardpoint) and Rapid Heavy Missile Launcher (large hardpoint): they fire light or heavy missiles more than twice as often as the plain launcher of those missiles, from a smaller load that takes 35 seconds to reload.
+- Burst Jammer (mid slot): every 30 seconds, each ship that isn't yours within 10 km has a one-in-four chance of losing all its locks.
+- Drone Navigation Computer (mid slot): your drones fly 20% faster. Drone Tracking Enhancer (low slot): your drones track and reach 10% further.
+- Ice Harvester Upgrade (low slot): 6% more ice each cycle. The Mining Laser Upgrade does nothing for ice.
+- Salvage Tackle Rig: 10% more chance each salvager cycle brings something off. Gravity Capacitor Rig and Scan Rangefinding Array (low slot): the probes you launch are 10% stronger.
+- A hired pilot flying an ultracapital with a Jump Portal Generator can open a portal for you: pick a system on the map and press Fleet portal. When a portal is open near you, the map shows it with a Go through button, and your other pilots who are following you go through after you.
+- Pirate captains now carry masterwork damage modules as well as masterwork guns.
+- Module info windows show what each of the new modules does.
+
 ## Capital modules, jump portals, navy hulls, deployables, and every module in every make
 
 - Deployables, put out from your hold with Put out in the inventory, at least 5 km from stations and gates, and picked up again with Pick up once empty. A Field Depot holds 3,000 m3, and a ship beside it can refit from its own hold and the depot's. A Salvage Tractor Post pulls in wrecks within 125 km and empties them into its hold, for two days. A Jump Beacon Buoy is a lit beacon for your jump drives for an hour. Small, Medium and Large Interdiction Buoys hold a 5, 11.5 or 26.5 km interdiction field until you pick them up; not in secure space. All are on the market under Structures.
