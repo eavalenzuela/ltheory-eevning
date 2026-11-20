@@ -124,12 +124,22 @@ end
 -- One second of a point defence turret's work: whatever it swings to and
 -- shoots at in that second. Its rounds are taken from what is loaded;
 -- what it downs is taken out of the state's missiles; what it does to a
--- drone goes on 'hits'.
+-- drone goes on 'hits'. ('enemy': who it counts an enemy, by the ship
+-- that fired a missile or by a drone, for a turret that is not a ship's
+-- own: a citadel's, Tactical/CitadelGuns. Nil: whoever is not of its
+-- ship's side. 'mount': which of its turrets it is, said in its events.)
 function PointDefence.Cycle(state: State.State, ball: State.Ball, item: State.Item, running: State.Running,
-  pds: Modules.PointDefence, time: number, hits: { Hit }, events: { Event })
-  local mine = owner(state, ball.id)
-  if mine == nil or item.charge == "" or item.rounds <= 0 then
+  pds: Modules.PointDefence, time: number, hits: { Hit }, events: { Event }, enemy: ((id: number) -> boolean)?, mount: number?)
+  local mine = owner(state, ball.id) or ""
+  if (enemy == nil and mine == "") or item.charge == "" or item.rounds <= 0 then
     return
+  end
+  local function against(id: number): boolean
+    if enemy then
+      return enemy(id)
+    end
+    local whose = owner(state, id)
+    return whose ~= nil and not friendly(whose, mine)
   end
   local reach = pds.optimal + pds.falloff
   local rng = Rng.For(state.historySeed, state.tick, ball.id, item.id, 73)
@@ -139,10 +149,9 @@ function PointDefence.Cycle(state: State.State, ball: State.Ball, item: State.It
   -- (the enemy's missiles on its grid that are in the air this second)
   local pool: { State.Missile } = {}
   for _, missile in state.missiles do
-    local whose = owner(state, missile.from)
     local from = state.balls[missile.from]
     -- (a plasma torpedo is past shooting down: Data/Modules' 'path')
-    if whose and not friendly(whose, mine) and from and from.system == ball.system and from.grid == ball.grid
+    if against(missile.from) and from and from.system == ball.system and from.grid == ball.grid
       and missile.impact > time and (missile.born or time) < time + 1 and missile.path ~= "plasma" then
       table.insert(pool, missile)
     end
@@ -228,17 +237,16 @@ function PointDefence.Cycle(state: State.State, ball: State.Ball, item: State.It
     end
     table.remove(pool, best)
     table.insert(events, { kind = "PointDefence", from = ball.id, item = item.id, missile = missile.id,
-      rounds = rounds, down = down, x = bx, y = by, z = bz })
+      rounds = rounds, down = down, x = bx, y = by, z = bz, mount = mount })
   end
 
   -- Nothing in the air: the enemy's drones.
   if not engaged and fired == 0 then
     local best: State.Ball? = nil
     local bestDistance = reach
-    for id, drone in state.drones do
+    for id in state.drones do
       local other = state.balls[id]
-      local whose = owner(state, drone.owner)
-      if other and whose and not friendly(whose, mine) and other.system == ball.system and other.grid == ball.grid then
+      if other and against(id) and other.system == ball.system and other.grid == ball.grid then
         local distance = math.sqrt((other.x - ball.x) ^ 2 + (other.y - ball.y) ^ 2 + (other.z - ball.z) ^ 2)
         if distance <= bestDistance then
           best, bestDistance = other, distance
@@ -273,7 +281,7 @@ function PointDefence.Cycle(state: State.State, ball: State.Ball, item: State.It
         table.insert(hits, { target = best.id, by = ball.id, damage = damage })
       end
       table.insert(events, { kind = "PointDefence", from = ball.id, item = item.id, to = best.id, rounds = rounds,
-        down = false, x = best.x, y = best.y, z = best.z })
+        down = false, x = best.x, y = best.y, z = best.z, mount = mount })
     end
   end
 

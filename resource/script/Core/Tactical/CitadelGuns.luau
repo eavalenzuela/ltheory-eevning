@@ -24,6 +24,7 @@ local Constants = require("@lt/Core/Data/Constants")
 local Factions = require("@lt/Core/Data/Factions")
 local Gunnery = require("@lt/Core/Tactical/Gunnery")
 local Modules = require("@lt/Core/Data/Modules")
+local PointDefence = require("@lt/Core/Tactical/PointDefence")
 local Rng = require("@lt/Core/Kernel/Rng")
 local Sides = require("@lt/Core/Tactical/Sides")
 local Starbases = require("@lt/Core/Assets/Starbases")
@@ -107,6 +108,79 @@ local function hostile(state: State.State, starbase: State.Starbase, id: number)
   return false
 end
 
+-- A citadel's point defence (the owner's, 2026-11-18 and 2026-11-19): built
+-- into every citadel, no module, on its point defence hardpoints (so many
+-- as Data/Structures' CITADEL_HARDPOINTS says), each a medium autocannon.
+-- While the citadel is lit, every one of them streams at whatever of the
+-- hostiles' is in the air near it (missiles, drones, fighters), as a
+-- ship's point defence turret does (Tactical/PointDefence), and never
+-- runs out. Its figures are a ship's turret's, a medium gun's reach and
+-- hitting harder at a drone. (These are mine.)
+CitadelGuns.PDS = { rate = 10, traverse = math.rad(90), tracking = 3000, optimal = 5000, falloff = 5000, damage = 0.25,
+  accuracy = 0.08 } :: Modules.PointDefence
+
+-- What a citadel's point defence fires: the first plain medium projectile round.
+local pdsRound: string? = nil
+local function round(): string
+  if pdsRound == nil then
+    for _, charge in Modules.charges do
+      if charge.family == "projectile" and charge.size == 2 and charge.tech ~= 2 then
+        pdsRound = charge.id
+        break
+      end
+    end
+  end
+  return pdsRound or ""
+end
+
+local function defend(state: State.State, starbase: State.Starbase, core: State.Ball, time: number, hits: { Hit }, events: { Event })
+  local tower = Structures.towerById[starbase.tower]
+  local count = Structures.CITADEL_HARDPOINTS[tower.size].pds
+  local aims = starbase.pds or {}
+  starbase.pds = aims
+  local function enemy(id: number): boolean
+    return hostile(state, starbase, id)
+  end
+  -- (the nearest hostile on its grid, that its turrets turn to while they have nothing to shoot at: so that they
+  -- are on the way its missiles will come)
+  local threat: State.Ball? = nil
+  local nearest = math.huge
+  for _, other in state.ballIds do
+    local ball = state.balls[other]
+    if ball and ball.system == core.system and ball.grid == core.grid and hostile(state, starbase, other) then
+      local gap = (ball.x - core.x) ^ 2 + (ball.y - core.y) ^ 2 + (ball.z - core.z) ^ 2
+      if gap < nearest then
+        threat, nearest = ball, gap
+      end
+    end
+  end
+  for k = 1, count do
+    local aim = aims[k]
+    if aim == nil then
+      -- (each looks out its own way to begin with)
+      local turn = 2 * math.pi * k / count
+      aim = { ax = math.cos(turn), ay = 0, az = math.sin(turn) }
+      aims[k] = aim
+    end
+    -- (a gun that is never out of rounds: as many as it could fire in the second)
+    local item = { id = -k, charge = round(), rounds = 1000 } :: any
+    local before = #events
+    PointDefence.Cycle(state, core, item, aim :: any, CitadelGuns.PDS, time, hits, events, enemy, k)
+    local towards = threat
+    if #events == before and towards then
+      -- (idle: it swings toward the threat, as far as it swings in a second)
+      local dx, dy, dz = towards.x - core.x, towards.y - core.y, towards.z - core.z
+      local length = math.max(1e-6, math.sqrt(dx * dx + dy * dy + dz * dz))
+      dx, dy, dz = dx / length, dy / length, dz / length
+      local angle = math.acos(math.clamp(aim.ax * dx + aim.ay * dy + aim.az * dz, -1, 1))
+      local part = if angle <= CitadelGuns.PDS.traverse then 1 else CitadelGuns.PDS.traverse / angle
+      local ax, ay, az = aim.ax + (dx - aim.ax) * part, aim.ay + (dy - aim.ay) * part, aim.az + (dz - aim.az) * part
+      local norm = math.max(1e-6, math.sqrt(ax * ax + ay * ay + az * az))
+      aim.ax, aim.ay, aim.az = ax / norm, ay / norm, az / norm
+    end
+  end
+end
+
 -- Every lit citadel's defence module, its weapons that are due firing at
 -- the nearest hostile in their reach: the hits of its turrets (for the
 -- tick's combat to apply), and its launchers' missiles put in the air.
@@ -117,7 +191,11 @@ function CitadelGuns.Fire(state: State.State, events: { Event }): { Hit }
     local starbase = state.starbases[id]
     local tower = Structures.towerById[starbase.tower]
     local core = state.balls[starbase.core]
-    local module = if tower.citadel and core and Starbases.Lit(state, starbase) then CitadelGuns.Module(state, starbase) else nil
+    local lit = tower.citadel and core ~= nil and Starbases.Lit(state, starbase)
+    if lit and core then
+      defend(state, starbase, core, time, hits, events)
+    end
+    local module = if lit then CitadelGuns.Module(state, starbase) else nil
     if module and core then
       local family = module.defence :: string
       local mounted = Structures.CITADEL_DEFENCE[tower.size]

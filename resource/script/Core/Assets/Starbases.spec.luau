@@ -9,6 +9,7 @@ local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local CitadelGuns = require("@lt/Core/Tactical/CitadelGuns")
 local Combat = require("@lt/Core/Tactical/Combat")
+local Constants = require("@lt/Core/Data/Constants")
 local Pirates = require("@lt/Core/Tactical/Pirates")
 local Fields = require("@lt/Core/Tactical/Fields")
 local Hulks = require("@lt/Core/Assets/Hulks")
@@ -17,6 +18,7 @@ local Industry = require("@lt/Core/Assets/Industry")
 local Items = require("@lt/Core/Assets/Items")
 local Jumping = require("@lt/Core/Tactical/Jumping")
 local Market = require("@lt/Core/Assets/Market")
+local Modules = require("@lt/Core/Data/Modules")
 local Moons = require("@lt/Core/Data/Moons")
 local Reactions = require("@lt/Core/Data/Reactions")
 local Space = require("@lt/Core/Tactical/Space")
@@ -1323,6 +1325,51 @@ suite:Case("a citadel's defence module fires on a pirate that comes in reach, wi
   -- (what it mounts: the small citadel's four short and four long medium guns, a cannon module's autocannons and artillery)
   t.eq({ CitadelGuns.Weapon("projectile", "short", "medium"), CitadelGuns.Weapon("projectile", "long", "medium"),
     CitadelGuns.Weapon("missile", "long", "xl") } :: { any }, { "autocannon.medium", "artillery.medium", "launcher.siege" } :: { any })
+end)
+
+suite:Case("a citadel's point defence, built in, downs a pirate's missiles in the air and lets its owner's own fly", function(t)
+  local game, station = inCitadel(t)
+  local state = game.state
+  local starbase = state.starbases[station]
+  local core = assert(state.balls[starbase.core])
+  local pirate = Pirates.Spawn(state, Pirates.kindById.raider, core.system, core.x + core.radius + 30000, core.y, core.z, core.grid)
+  -- (cruise missiles, that take four hits each, at their own speed: a turret has a second or so at one)
+  local light: string? = Modules.chargeById["missile.cruise.kinetic"] and "missile.cruise.kinetic"
+
+  -- (its turrets turn to the pirate while it is there and has fired nothing)
+  steps(game, 10)
+  local time = state.tick * Constants.TICK
+  -- (a missile flying in at the citadel from the given ship, from nine kilometres out)
+  local function fire(from: number, to: number): number
+    local id = State.NewId(state)
+    local x = core.x + core.radius + 9000
+    local v = Modules.chargeById[assert(light)].velocity
+    table.insert(state.missiles, { from = from, to = to, item = 0, charge = assert(light), damage = { 100, 0, 0, 0 },
+      impact = time + 9000 / v, blast = 40, id = id, born = time, lx = x, ly = core.y, lz = core.z, x = x, y = core.y, z = core.z,
+      vx = 0, vy = 0, vz = 0, at = time, speed = v, grid = core.grid, expires = time + 60 })
+    return id
+  end
+  local theirs: { [number]: boolean } = {}
+  for _ = 1, 6 do
+    theirs[fire(pirate.id, core.id)] = true
+  end
+  local ours = fire(state.player.ship, pirate.id)
+  Core.TakeEvents(game)
+  local downed, atOurs = 0, false
+  for _ = 1, 30 do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      if event.kind == "MissileDowned" and event.by == core.id and theirs[event.missile] then
+        downed += 1
+      elseif event.kind == "PointDefence" and event.from == core.id and event.missile == ours then
+        atOurs = true
+      end
+    end
+  end
+  t.ok(downed >= 1, `it downed {downed} of 6`)
+  t.ok(not atOurs, "it shot at its owner's own missile")
+  -- (a turret for each of its point defence hardpoints)
+  t.eq(#(starbase.pds or {}), Structures.CITADEL_HARDPOINTS[CITADEL.size].pds)
 end)
 
 suite:Case("a citadel shot down to its armour, and then to its structure, is reinforced for an hour each time", function(t)

@@ -846,6 +846,9 @@ export type Starbase = {
   -- tick each group of them fires next, by its place in the module's
   -- mounting. Nil until it has fired.
   guns: { number }?,
+  -- A citadel's point defence turrets (Tactical/CitadelGuns): which way
+  -- each is turned, by its place. Nil until they have swung.
+  pds: { { ax: number, ay: number, az: number } }?,
   -- A wormhole station's (Tactical/Wormholes): the wormhole it holds open
   -- now. Nil for every other, and for one that has none yet.
   hole: number?,
