@@ -159,6 +159,10 @@ export type ModuleType = {
   volume: number,           -- m3
   basePrice: number,
   passive: { Modifier },
+  -- (more from the ship's own repairers of a layer, "shield" or "armor",
+  -- while it is fitted: so much more, the more of them the less each,
+  -- Tactical/Combat)
+  amplify: { layer: string, by: number }?,
   -- at most one of these makes it something a pilot switches on:
   weapon: Weapon?,
   repair: Repair?,
@@ -1505,6 +1509,17 @@ rig("turret.optimal", "Turret Reach Rig", 150, { weapons("turret", "optimal", 1.
 rig("turret.falloff", "Turret Spread Rig", 150, { weapons("turret", "falloff", 1.15), ship("powergrid", "mul", 0.90) })
 rig("turret.tracking", "Turret Tracking Rig", 150, { weapons("turret", "tracking", 1.15), ship("powergrid", "mul", 0.90) })
 rig("turret.damage", "Turret Charge Rig", 200, { weapons("turret", "damageMultiplier", 1.10), ship("powergrid", "mul", 0.90) })
+-- (and amplifiers of what the ship's own repairers mend: the reference's
+-- shield booster amplifier, 30%; and an armour one for the active armour
+-- tankers, the same, mine)
+table.insert(modules, {
+  id = "amplifier.shield", name = "Shield Boost Amplifier", slot = "mid", hardpoint = "", cpu = 50, powergrid = 1, volume = 5,
+  basePrice = 30000, passive = {}, amplify = { layer = "shield", by = 0.30 }, requires = { { skill = "shield.operation", level = 2 } },
+})
+table.insert(modules, {
+  id = "amplifier.armor", name = "Armour Repair Amplifier", slot = "low", hardpoint = "", cpu = 30, powergrid = 1, volume = 5,
+  basePrice = 30000, passive = {}, amplify = { layer = "armor", by = 0.30 }, requires = { { skill = "repair.systems", level = 2 } },
+})
 -- (and the utility modules of the same review, for hauling, travel and
 -- fitting: the reference's figures where it has one that means the same
 -- here; the warp accelerator's, the coil's and the generator's mine)

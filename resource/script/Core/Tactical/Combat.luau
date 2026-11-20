@@ -1349,6 +1349,15 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       local amount = repair.amount * (if charged and ancillary then ancillary.factor else 1)
         -- (and the hull's own bonus to what it mends of the layer: Data/HullBonuses)
         * Ships.Bonus(Ships.byId[state.ships[ball.id].type], "repair", repair.layer, Items.Levels(state, ball.id))
+      -- (and its amplifiers of the layer, the more of them the less each: Data/Modules' 'amplify')
+      local amplified = 0
+      for _, fitted in Items.Fitted(state, ball.id) do
+        local by = Modules.byId[fitted.type].amplify
+        if by and by.layer == repair.layer then
+          amount *= 1 + by.by * math.exp(-((amplified / 2.67) ^ 2))
+          amplified += 1
+        end
+      end
       if charged then
         item.rounds -= 1
       end

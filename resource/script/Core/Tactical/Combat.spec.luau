@@ -639,6 +639,18 @@ suite:Case("a shield booster mends per cycle until the capacitor gives out", fun
   t.eq(#v.running, 0)
 end)
 
+suite:Case("a shield boost amplifier has a booster mend a third more", function(t)
+  local a = arena("frigate.akashi", { { "shield.booster.small" }, { "amplifier.shield" } }, "frigate.courier", {}, 5000)
+  local v = a.me.vitals
+  v.shield = 50
+  local booster = modules(a)[1]
+  order(t, a, { kind = "ActivateModule", actor = 0, item = booster.id })
+  Core.Step(a.game)
+  Core.Step(a.game)
+  -- (one cycle of 26 points, three tenths more, less the trickle of passive recharge either side)
+  t.ok(v.shield > 50 + 26 * 1.3 and v.shield < 50 + 26 * 1.3 + 6, `shield is {v.shield}`)
+end)
+
 suite:Case("an afterburner changes how the ship flies while it runs", function(t)
   local a = arena("frigate.courier", { { "afterburner.1mn" } }, "frigate.courier", {}, 5000)
   local burner = modules(a)[1]
