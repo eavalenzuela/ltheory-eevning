@@ -1150,6 +1150,9 @@ suite:Case("every weapon, repairer, extender, plate, mining laser and probe laun
         t.near(module.repair.amount, base.repair.amount * 1.25, 1e-9)
       elseif module.miner and base.miner then
         t.near(module.miner.volume, base.miner.volume * 1.25, 1e-9)
+      elseif module.hex and base.hex and base.hex.kind == "entangle" then
+        -- (a web since 2026-11-20, the Gravitic Grappler: so much less of the speed left)
+        t.near(module.hex.strength, math.max(0.05, 1 - (1 - base.hex.strength) * 1.25), 1e-9)
       elseif module.hex and base.hex then
         -- (a repairer for another ship: more put back, from as far)
         t.near(module.hex.strength, base.hex.strength * 1.25, 1e-9)
@@ -1183,8 +1186,9 @@ suite:Case("every weapon, repairer, extender, plate, mining laser and probe laun
   -- the repairers for another ship (shield and armour, in three sizes), and the six things only a drone, a
   -- fighter or a bomber carries (two of them a combat drone's guns since 2026-11-18); and since 2026-11-16 the ancillary shield boosters and armour repairers,
   -- three sizes each, the two modulated lasers and the two ice harvesters; and since 2026-11-18 the probe launcher; and
-  -- since 2026-11-20 the hull repairer, and the capitals' XL repairers, extender and plate and XL remote repairers.
-  t.eq(improved, 48 + 4 * 3 + 3 + 2 * 3 + 6 + 2 * 3 + 2 + 2 + 1 + 1 + 4 + 2)
+  -- since 2026-11-20 the hull repairer, and the capitals' XL repairers, extender and plate and XL remote repairers;
+  -- and the twenty kinds new that day with the full line (Data/Modules' NEW_KINDS).
+  t.eq(improved, 48 + 4 * 3 + 3 + 2 * 3 + 6 + 2 * 3 + 2 + 2 + 1 + 1 + 4 + 2 + 20)
   t.ok(Modules.Improved("projector.entanglement") == nil and Modules.Improved("rig.shield") == nil)
   t.eq({ Modules.SizeOf(Modules.byId["autocannon.medium.ii"]), Modules.SizeOf(Modules.byId["shield.extender.large"]),
     Modules.SizeOf(Modules.byId["miner.small"]) }, { 2, 3, 1 })
@@ -1210,7 +1214,9 @@ suite:Case("the same modules have a custom make, between the plain one and tech 
       t.eq({ Modules.Graded(base.id, 0), Modules.Graded(base.id, 1), Modules.Graded(base.id, 2) },
         { base.id, base.id .. ".custom", base.id .. ".master" })
       -- Easier to fit than the plain one, and worth more; a custom make does less than tech 2, and a masterwork more.
-      t.ok(module.cpu <= base.cpu and module.powergrid <= base.powergrid and module.cpu >= 1 and module.powergrid >= 1, module.id)
+      -- (none, where the plain one takes none: the Auxiliary Generator's powergrid)
+      t.ok(module.cpu <= base.cpu and module.powergrid <= base.powergrid and module.cpu >= 1
+        and module.powergrid >= math.min(1, base.powergrid), module.id)
       t.ok(module.cpu < base.cpu or module.powergrid < base.powergrid or base.cpu + base.powergrid <= 2, module.id)
       t.eq(module.basePrice, base.basePrice * (if master then 20 else 3))
       local damage, amount = if master then 1.25 else 1.1, if master then 1.35 else 1.125
@@ -1227,6 +1233,9 @@ suite:Case("the same modules have a custom make, between the plain one and tech 
       elseif module.miner and base.miner and better.miner then
         t.near(module.miner.volume, base.miner.volume * amount, 1e-9)
         placed(module.miner.volume, better.miner.volume)
+      elseif module.hex and base.hex and better.hex and base.hex.kind == "entangle" then
+        t.near(module.hex.strength, math.max(0.05, 1 - (1 - base.hex.strength) * amount), 1e-9)
+        t.ok(if master then module.hex.strength <= better.hex.strength else module.hex.strength >= better.hex.strength, module.id)
       elseif module.hex and base.hex and better.hex then
         t.near(module.hex.strength, base.hex.strength * amount, 1e-9)
         placed(module.hex.strength, better.hex.strength)
@@ -1240,7 +1249,7 @@ suite:Case("the same modules have a custom make, between the plain one and tech 
     end
   end
   -- One of each for every module that has a tech 2 make and is not a drone's own.
-  t.eq({ customs, masterworks }, { 48 + 4 * 3 + 3 + 2 * 3 + 2 * 3 + 4 + 1 + 6, 48 + 4 * 3 + 3 + 2 * 3 + 2 * 3 + 4 + 1 + 6 })
+  t.eq({ customs, masterworks }, { 48 + 4 * 3 + 3 + 2 * 3 + 2 * 3 + 4 + 1 + 6 + 20, 48 + 4 * 3 + 3 + 2 * 3 + 2 * 3 + 4 + 1 + 6 + 20 })
   t.ok(Modules.Custom("projector.entanglement") == nil and Modules.Custom("autocannon.small.ii") == nil)
   t.ok(Modules.Masterwork("projector.entanglement") == nil and Modules.Masterwork("autocannon.small.custom") == nil)
   t.eq({ Modules.Graded("projector.entanglement", 2), Modules.Graded("autocannon.small", 3) }, { "projector.entanglement", "autocannon.small" })

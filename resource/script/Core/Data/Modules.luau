@@ -2162,7 +2162,7 @@ end
 -- these is good when it makes it smaller.
 local function lessIsBetter(attribute: string): boolean
   return string.find(attribute, "Resonance", 1, true) ~= nil or attribute == "capacitorRecharge" or attribute == "shieldRecharge"
-    or attribute == "signature" or attribute == "mass" or attribute == "inertia"
+    or attribute == "signature" or attribute == "mass" or attribute == "inertia" or attribute == "blast"
 end
 
 -- A modifier with the good it does made 'output' times as much. What
@@ -2284,9 +2284,48 @@ local function made(base: ModuleType, id: string, name: string, tune: Tune): Mod
   if base.burst then
     out.burst = { range = base.burst.range * tune.reach, mining = if base.burst.mining then 1 + (base.burst.mining - 1) * amount else nil }
   end
+  -- (and the kinds of 2026-11-20: a repair amplifier's share, a drone link's reach)
+  if base.amplify then
+    out.amplify = { layer = base.amplify.layer, by = base.amplify.by * amount }
+  end
+  if base.droneRange then
+    out.droneRange = base.droneRange * amount
+  end
   -- (it is a make of the plain module its base is a make of, and wants the skills of what it was made from)
   out.base = base.base or base.id
   return out
+end
+
+-- ---------------------------------------------------------------------
+-- The full line for the kinds of module new on 2026-11-20 (the owner's
+-- answer for them, "Full line"): beside a people's make and the pirate
+-- site tier (theirs below, by LINE), a custom make, a tech 2 make and a
+-- masterwork, and so an officer's, each as much better as the older
+-- three makes are. (Not the Jump Portal Generator nor the Cipher Buffer,
+-- which do one thing or do not; and not a rig, as no rig has.)
+local NEW_KINDS = { "amplifier.", "missile.guidance", "inertial.damper", "warp.accelerator", "targeting.amplifier",
+  "signature.dampener", "capacitor.coil", "grid.diagnostic", "auxiliary.generator", "shield.amplifier.", "armor.coating.",
+  "projector.grappler", "drone.link" }
+local NEW_MAKES: { { id: string, name: string, tune: Tune, tech: number?, meta: number? } } = {
+  { id = CUSTOM.id, name = CUSTOM.name, tune = { output = CUSTOM.damage, amount = CUSTOM.amount, fitting = CUSTOM.fitting, capacitor = 1,
+    reach = 1, price = CUSTOM.price }, meta = 1 },
+  { id = TECH2.id, name = TECH2.name, tune = { output = TECH2.damage, amount = TECH2.amount, fitting = TECH2.fitting, capacitor = 1,
+    reach = 1, price = TECH2.price }, tech = 2 },
+  { id = MASTER.id, name = MASTER.name, tune = { output = MASTER.damage, amount = MASTER.amount, fitting = MASTER.fitting, capacitor = 1,
+    reach = 1, price = MASTER.price }, meta = 2 },
+}
+for _, base in table.clone(modules) do
+  local new = false
+  for _, prefix in NEW_KINDS do
+    new = new or string.sub(base.id, 1, #prefix) == prefix
+  end
+  if new and not base.tech and not base.meta and not base.lineage and not base.internal and base.slot ~= "rig" then
+    for _, make in NEW_MAKES do
+      local own = made(base, base.id .. make.id, base.name .. make.name, make.tune)
+      own.tech, own.meta, own.base = make.tech, make.meta, base.id
+      table.insert(modules, own)
+    end
+  end
 end
 
 -- ---------------------------------------------------------------------
@@ -2314,7 +2353,10 @@ end
 -- hardest to fit, the Kethri's drawing the least capacitor.
 local LINE = { "afterburner.", "mwd.", "overdrive", "nanofiber", "shield.", "armor.", "hull.", "damage.control", "capacitor.", "relay.",
   "fitting.", "heat.", "gyrostabilizer", "flux.", "ballistic.", "tracking.", "computer.", "projector.", "disruptor.", "painter.",
-  "damper.", "neutraliser.", "jammer.", "ewar.", "drain.", "sensor.", "remote.", "drone.", "warp.stabilizer", "cargo.expander" }
+  "damper.", "neutraliser.", "jammer.", "ewar.", "drain.", "sensor.", "remote.", "drone.", "warp.stabilizer", "cargo.expander",
+  -- (and the kinds of 2026-11-20 that no prefix above has)
+  "amplifier.", "missile.guidance", "inertial.damper", "warp.accelerator", "targeting.amplifier", "signature.dampener",
+  "grid.diagnostic", "auxiliary.generator" }
 local SHADES: { [string]: Tune } = {
   vessari = { output = 1.10, fitting = 0.85, capacitor = 1, reach = 1, price = 5 },
   talmar = { output = 1.10, fitting = 1, capacitor = 1, reach = 1.15, price = 5 },
