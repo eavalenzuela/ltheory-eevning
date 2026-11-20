@@ -7,12 +7,17 @@
 # nobody keeps order at all: the packs have cruisers in them, and the
 # belts have the rare ores. The pirates fly hulls of their own, which
 # the scene must draw as those hulls with their weapons on them. A new
-# pilot's starter frigate is no match for any of it: it looks, and gets away.
+# pilot's starter frigate is no match for any of it. In low security
+# the pack locks it and holds it with a warp disruptor before it can
+# align, and it is lost (the owner's ruling, 2026-11-19: caught is
+# fine, low security is meant to be deadly to a starter frigate). The
+# pilot goes on in their capsule, which the pirates leave be, docks in
+# lawless space, and takes another frigate out to look at a belt.
 #
 # covers: Core/Tactical/Pirates Core/Describe/Galaxy Core/Assets/Standings
 
 wait 2
-# (the ship the pilot begins in, whatever it is: what is asked later is whether they are still in it)
+# (the ship the pilot begins in, whatever it is)
 lua _G.mine = GameDebug.Hull()
 # (the sound, at no loudness, so that what is heard of a fight is run: missiles land on the pilot here)
 lua GameDebug.Sound(true, 0)
@@ -37,12 +42,26 @@ lua assert(GameDebug.Pirates() >= 2, 'a belt in low security should bring a pack
 lua assert(select(2, GameDebug.Pirates()) == GameDebug.Pirates(), 'a pirate is not drawn as a hull of the pirates\' own with its weapons on it')
 lua print('low security:', GameDebug.Pirates(), 'pirates,', GameDebug.Distance('Pirate'), 'm off')
 
-# Lawless space.
+# Lawless space. The pack holds the frigate and destroys it before it
+# can get away. In the capsule, which nobody holds, the pilot goes on.
 lua assert(GameDebug.Order('Jump', 'K-PNDZ'), 'the jump into lawless space was refused')
+patience 200
+until GameDebug.System() == 3 or GameDebug.Hull() ~= _G.mine
+lua assert(GameDebug.System() ~= 3, 'the starter frigate should not have got out of the pack\'s reach')
+until GameDebug.Order('Jump', 'K-PNDZ')
 until GameDebug.System() == 3
 until GameDebug.Idle()
 lua assert(select(2, GameDebug.Security()) == 'lawless', 'two jumps out should be lawless')
 lua assert(GameDebug.Security() == 0)
+
+# Nobody comes for a capsule: it docks at the one station there is
+# here, and the pilot takes another frigate of the kind they began in
+# (a cheat), to look at a belt.
+lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused')
+until GameDebug.Docked()
+lua assert(GameDebug.Fly(_G.mine), 'no frigate to be had')
+until GameDebug.Press('UNDOCK')
+until GameDebug.InSpace()
 lua assert(GameDebug.Order('WarpTo', 'belt'), 'warp to the belt was refused')
 until GameDebug.InWarp()
 until GameDebug.Idle()
@@ -51,10 +70,8 @@ frames 5
 lua assert(select(2, GameDebug.Pirates()) == GameDebug.Pirates(), 'a pirate in lawless space is not drawn as its own hull')
 lua assert(GameDebug.Distance('Cobaltite') < 1e9 or GameDebug.Distance('Iridite') < 1e9, 'a lawless belt should have rare ore')
 
-# And away, to the one station there is here.
-lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused')
-until GameDebug.Docked()
-lua assert(GameDebug.Hull() == _G.mine, 'the pilot did not get away')
+# (whether it gets away from here is as it falls: lawless space is no
+# place for a starter frigate either)
 
 echo lawless scenario passed
 quit
