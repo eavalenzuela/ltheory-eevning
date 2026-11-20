@@ -1462,6 +1462,58 @@ rig("hybrid", "Hybrid Burst Rig", 200, { weapons("hybrid", "duration", 0.90), sh
 rig("mend.armor", "Living Armour Rig", 150, { ship("armorMend", "mul", 1.30, true), ship("maxVelocity", "mul", 0.95) }, "nimia")
 rig("mend.hull", "Living Hull Rig", 150, { ship("hullMend", "mul", 1.30, true), ship("cargo", "mul", 0.90) }, "nimia")
 
+-- What was missing of the modules and rigs against the reference (the
+-- review of 2026-11-20; the owner, overnight: "check for missing ship
+-- modules ... knock out the rest"), every figure the reference's tech 1
+-- one, and the names mine:
+--   - against one kind of damage, all the time: a shield amplifier (mid)
+--     and an armour coating (low), and a rig of each for every kind
+--     (each people deals one kind most: Data/Factions' affinity);
+--   - for missiles, what turrets had: a low-slot enhancer of their
+--     flight and their blast, and rigs of their blast, their speed,
+--     their flight and the launchers' rate;
+--   - for turrets, rigs of their reach, their tracking and their damage,
+--     beside the rate rigs above;
+--   - a medium and a heavy energy neutraliser beside the small.
+for kind, word in { "EM", "Thermal", "Kinetic", "Explosive" } do
+  table.insert(modules, {
+    id = `shield.amplifier.{KINDS[kind]}`, name = `{word} Shield Amplifier`, slot = "mid", hardpoint = "",
+    cpu = 25, powergrid = 1, volume = 5, basePrice = 15000, passive = { ship(`shieldResonance.{kind}`, "mul", 0.675, true) },
+    requires = { { skill = "shield.operation", level = 2 } },
+  })
+  table.insert(modules, {
+    id = `armor.coating.{KINDS[kind]}`, name = `{word} Armour Coating`, slot = "low", hardpoint = "",
+    cpu = 12, powergrid = 1, volume = 5, basePrice = 15000, passive = { ship(`armorResonance.{kind}`, "mul", 0.76, true) },
+    requires = { { skill = "hull.upgrades", level = 2 } },
+  })
+  rig(`shield.screen.{KINDS[kind]}`, `{word} Shield Screen Rig`, 150,
+    { ship(`shieldResonance.{kind}`, "mul", 0.70, true), ship("signature", "mul", 1.10) })
+  rig(`armor.screen.{KINDS[kind]}`, `{word} Armour Screen Rig`, 150,
+    { ship(`armorResonance.{kind}`, "mul", 0.70, true), ship("maxVelocity", "mul", 0.90) })
+end
+table.insert(modules, {
+  id = "missile.guidance", name = "Missile Guidance Enhancer", slot = "low", hardpoint = "",
+  cpu = 10, powergrid = 1, volume = 5, basePrice = 20000,
+  passive = { weapons("missile", "speed", 1.045), weapons("missile", "flight", 1.045), weapons("missile", "blast", 0.956) },
+  requires = { { skill = "weapon.upgrades", level = 1 } },
+})
+rig("missile.blast", "Warhead Focus Rig", 150, { weapons("missile", "blast", 0.85), ship("powergrid", "mul", 0.90) })
+rig("missile.speed", "Missile Thruster Rig", 150, { weapons("missile", "speed", 1.10), ship("powergrid", "mul", 0.90) })
+rig("missile.flight", "Missile Endurance Rig", 150, { weapons("missile", "flight", 1.10), ship("powergrid", "mul", 0.90) })
+rig("missile.rate", "Launcher Feed Rig", 200, { weapons("missile", "duration", 0.90), ship("powergrid", "mul", 0.90) })
+rig("turret.optimal", "Turret Reach Rig", 150, { weapons("turret", "optimal", 1.15), ship("powergrid", "mul", 0.90) })
+rig("turret.falloff", "Turret Spread Rig", 150, { weapons("turret", "falloff", 1.15), ship("powergrid", "mul", 0.90) })
+rig("turret.tracking", "Turret Tracking Rig", 150, { weapons("turret", "tracking", 1.15), ship("powergrid", "mul", 0.90) })
+rig("turret.damage", "Turret Charge Rig", 200, { weapons("turret", "damageMultiplier", 1.10), ship("powergrid", "mul", 0.90) })
+for size, each in { { "medium", "Medium", 150, 12, 8000, 25, 175 }, { "heavy", "Heavy", 500, 24, 16000, 50, 2000 } } :: { { any } } do
+  table.insert(modules, {
+    id = `neutraliser.{each[1]}`, name = `{each[2]} Energy Neutraliser`, slot = "high", hardpoint = "",
+    cpu = each[6], powergrid = each[7], volume = 5 * (size + 1), basePrice = 35000 * (size + 1) ^ 2, passive = {},
+    hex = { kind = "neut", range = each[5], strength = each[3], duration = each[4], capacitor = each[3] },
+    requires = { { skill = "electronic.warfare", level = 2 + size } },
+  })
+end
+
 -- Fittings by size: the small ones are written out above, and a medium
 -- and a large are each of those, scaled for a cruiser and a battleship.
 local FITTINGS: { { any } } = {
