@@ -5,6 +5,7 @@
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local CitadelDoors = require("@lt/Core/Data/CitadelDoors")
 local CitadelKinds = require("@lt/Core/Assets/CitadelKinds")
+local CitadelWorks = require("@lt/Core/Assets/CitadelWorks")
 local Codec = require("@lt/Core/Persist/Codec")
 local Core = require("@lt/Core/Api")
 local CitadelGuns = require("@lt/Core/Tactical/CitadelGuns")
@@ -21,6 +22,8 @@ local Market = require("@lt/Core/Assets/Market")
 local Modules = require("@lt/Core/Data/Modules")
 local Moons = require("@lt/Core/Data/Moons")
 local Reactions = require("@lt/Core/Data/Reactions")
+local Rng = require("@lt/Core/Kernel/Rng")
+local Sites = require("@lt/Core/Tactical/Sites")
 local Space = require("@lt/Core/Tactical/Space")
 local Starbases = require("@lt/Core/Assets/Starbases")
 local State = require("@lt/Core/Kernel/State")
@@ -1393,6 +1396,69 @@ suite:Case("a citadel shot down to its armour, and then to its structure, is rei
   t.ok(v.armor < CITADEL.armor)
   strike(v.armor * 10)
   t.eq({ v.phase, v.armor, v.hull } :: { any }, { "hull", 0, CITADEL.hull } :: { any })
+end)
+
+suite:Case("a research station's observatory finds its system's signals one by one, in about a minute each", function(t)
+  local game, station = inCitadel(t)
+  local state = game.state
+  local starbase = state.starbases[station]
+  local system = Space.SystemOf(state, station)
+  local site = assert(Sites.Plant(state, system, "ore", Rng.For(1, 2, 3), game.events))
+  site.strength = 0
+  order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, "citadel.observatory", 1).id })
+  steps(game, Structures.moduleById["citadel.observatory"].anchor + 1)
+  Core.TakeEvents(game)
+  -- (it works at the nearest it has not found: this one, unless another of the system's is nearer)
+  local found: { [number]: boolean } = {}
+  for _ = 1, 400 do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      if event.kind == "ObservatoryFound" and event.station == station then
+        found[event.site] = true
+      end
+    end
+    if found[site.id] then
+      break
+    end
+  end
+  t.ok(found[site.id] == true and site.strength >= 1, "it did not find the hidden belt")
+  t.eq(CitadelWorks.Seconds("ore"), 60)
+  t.eq(CitadelWorks.Seconds("data"), 150)
+  -- (only a research station fits one)
+  local other = inCitadel(t, nil, "citadel.refinery.small")
+  t.eq(refused(other, { kind = "AnchorModule", actor = 0, item = carry(other, "citadel.observatory", 1).id }),
+    "only a research station citadel fits an Observatory")
+  t.ok(starbase.observing ~= nil)
+end)
+
+suite:Case("a refinery's miners bring up each hour what a tech 2 laser would, as many times over as its size", function(t)
+  local game, station = inCitadel(t, "moon", "citadel.refinery.medium")
+  local state = game.state
+  local starbase = state.starbases[station]
+  t.eq(refused(game, { kind = "AnchorModule", actor = 0, item = carry(game, "citadel.miner.planet", 1).id }),
+    "a Planet Miner works only in a citadel anchored at a planet")
+  order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, "citadel.miner.moon", 1).id })
+  Core.Step(game)
+  order(t, game, { kind = "AnchorModule", actor = 0, item = carry(game, "citadel.miner.asteroid", 1).id })
+  Core.Step(game)
+  local yields = CitadelWorks.Mining(state, starbase)
+  t.ok(#yields >= 1, "nothing to mine")
+  local laser = assert(Modules.byId["miner.small.ii"].miner)
+  for _, yield in yields do
+    t.eq(yield.units, math.floor(laser.volume * 3600 / laser.duration * 2 / math.max(Types.Info(yield.type).volume or 1, 1e-3)))
+  end
+  local before: { [string]: number } = {}
+  for _, item in Items.Stored(state, station) do
+    before[item.type] = (before[item.type] or 0) + item.quantity
+  end
+  steps(game, Structures.moduleById["citadel.miner.moon"].anchor + 3600 + 2)
+  local after: { [string]: number } = {}
+  for _, item in Items.Stored(state, station) do
+    after[item.type] = (after[item.type] or 0) + item.quantity
+  end
+  for _, yield in yields do
+    t.ok((after[yield.type] or 0) - (before[yield.type] or 0) >= yield.units, `no {yield.type} came up`)
+  end
 end)
 
 return suite

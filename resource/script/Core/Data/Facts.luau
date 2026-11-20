@@ -936,6 +936,16 @@ function Facts.Of(type: string): Sheet?
         row(does, "Adds", `{whole(anchored.shield)} shield`)
       elseif anchored.resist then
         row(does, "Lets through", `{whole((1 - anchored.resist) * 100)}% of what strikes its shield, the more of them the less each`)
+      elseif anchored.works == "observatory" then
+        row(does, "Finds", "its system's signals for you, the nearest first: a minute each, the hardest two and a half")
+      elseif anchored.works then
+        local what = if anchored.works == "asteroid" then "each ore its system's belts hold"
+          elseif anchored.works == "moon" then "the material of the moon it is anchored at"
+          else "each raw material of the planet it is anchored at"
+        row(does, "Mines", `{what}, every hour: as much as a tech 2 mining laser would, times the citadel's size, into its hangar`)
+        if anchored.works == "moon" or anchored.works == "planet" then
+          row(does, "Fitted only", `in a citadel anchored at a {anchored.works}`)
+        end
       elseif anchored.defence then
         local parts: { string } = {}
         for _, group in Structures.CITADEL_DEFENCE[anchored.fits or 1] do

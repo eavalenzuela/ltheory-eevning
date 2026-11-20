@@ -849,6 +849,11 @@ export type Starbase = {
   -- A citadel's point defence turrets (Tactical/CitadelGuns): which way
   -- each is turned, by its place. Nil until they have swung.
   pds: { { ax: number, ay: number, az: number } }?,
+  -- A citadel's observatory and miners (Assets/CitadelWorks): the signal
+  -- its observatory is working at (nil or 0: none), and the tick its
+  -- miners' hour began.
+  observing: number?,
+  mined: number?,
   -- A wormhole station's (Tactical/Wormholes): the wormhole it holds open
   -- now. Nil for every other, and for one that has none yet.
   hole: number?,

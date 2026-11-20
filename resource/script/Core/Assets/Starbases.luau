@@ -489,6 +489,13 @@ function Starbases.Validate(state: State.State, command: State.Command): (boolea
           return false, `it has a {other.name} fitted: one generator to a citadel`
         end
       end
+      -- (a moon miner only at a moon, a planet miner only at a planet)
+      if module.works == "moon" or module.works == "planet" then
+        local body = Space.Object(state, Starbases.Moon(state, starbase))
+        if body == nil or body.kind ~= module.works then
+          return false, `a {module.name} works only in a citadel anchored at a {module.works}`
+        end
+      end
       -- (and what works only beside a generator, only where it is fitted)
       if module.needs then
         local has = false

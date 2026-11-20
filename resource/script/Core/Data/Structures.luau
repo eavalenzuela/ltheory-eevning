@@ -123,6 +123,12 @@ export type ModuleType = {
   shield: number?,
   resist: number?,
   defence: string?,
+  -- What a research station's observatory or a refinery's miner works
+  -- at (Assets/CitadelWorks: the owner's, 2026-11-18): "observatory"
+  -- finds the system's signals one by one; "asteroid", "moon" and
+  -- "planet" mine the system's belts, the moon or the planet it is
+  -- anchored at.
+  works: string?,
 }
 
 -- A class of colony ship: a nomad faction's station. It is a ship, of
@@ -515,6 +521,24 @@ local modules: { ModuleType } = {
   { id = "service.generator.wormhole", name = "Wormhole Generator", service = "wormhole", radius = 0, powergrid = 0, cpu = 0,
     anchor = 1200, pilot = true, volume = 1950, basePrice = 200000000, citadel = true, fuel = 30, kinds = { "generator" },
     generator = "wormhole" },
+  -- A research station's observatory, and a refinery's miners (the
+  -- owner's, 2026-11-18): the observatory finds the signals of its
+  -- system one by one, the nearest first, about a minute each, the
+  -- hardest two and a half; each miner brings up, every hour, what a
+  -- tech 2 mining laser would of each thing there is to mine (the
+  -- system's belt ores, the moon's material, the planet's raw
+  -- materials), as many times over as the citadel's size (1 small to 5
+  -- huge), into its hangar. A moon miner is fitted only at a moon, a
+  -- planet miner only at a planet. Their models are the citadel's own
+  -- (Game/View/Citadel). Prices and fuel are mine.
+  { id = "citadel.observatory", name = "Observatory", service = "observatory", radius = 0, powergrid = 0, cpu = 0, anchor = 900,
+    pilot = true, volume = 1950, basePrice = 60000000, citadel = true, fuel = 8, kinds = { "research" }, works = "observatory" },
+  { id = "citadel.miner.asteroid", name = "Asteroid Miner", service = "mining", radius = 0, powergrid = 0, cpu = 0, anchor = 900,
+    pilot = true, volume = 1950, basePrice = 40000000, citadel = true, fuel = 10, kinds = { "refinery" }, works = "asteroid" },
+  { id = "citadel.miner.moon", name = "Moon Miner", service = "mining", radius = 0, powergrid = 0, cpu = 0, anchor = 900,
+    pilot = true, volume = 1950, basePrice = 60000000, citadel = true, fuel = 10, kinds = { "refinery" }, works = "moon" },
+  { id = "citadel.miner.planet", name = "Planet Miner", service = "mining", radius = 0, powergrid = 0, cpu = 0, anchor = 900,
+    pilot = true, volume = 1950, basePrice = 50000000, citadel = true, fuel = 10, kinds = { "refinery" }, works = "planet" },
   -- (the gravity station's: "only it fits a Jump Bridge to another
   -- gravity station", the owner's: a generator station with its Gravity
   -- Generator. A ship in the field of one goes to another, of its
