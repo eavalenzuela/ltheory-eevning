@@ -56,6 +56,7 @@ local Corporation = require("@lt/Core/Assets/Corporation")
 local Items = require("@lt/Core/Assets/Items")
 local Market = require("@lt/Core/Assets/Market")
 local Keys = require("@lt/Game/UI/Keys")
+local Constants = require("@lt/Core/Data/Constants")
 local Modules = require("@lt/Core/Data/Modules")
 local Ores = require("@lt/Core/Data/Ores")
 local Rng = require("@lt/Core/Kernel/Rng")
@@ -3038,6 +3039,61 @@ function Debug.Citadel(tower: string, modules: { string }?): number
     table.insert(starbase.modules, { type = id, ready = state.tick })
   end
   return starbase.id
+end
+
+-- For pictures: the nearest pirate looses 'count' missiles of a charge
+-- ("ammo"-less id, e.g. a cruise missile's) at the citadel the pilot is
+-- near, all at once. How many were put in the air.
+function Debug.Salvo(count: number, charge: string): number
+  local state = session.game.state
+  local me = state.balls[state.player.ship]
+  local made = Modules.chargeById[charge]
+  if me == nil or made == nil then
+    return 0
+  end
+  local pirate: any, core: any = nil, nil
+  for _, id in state.ballIds do
+    local ball = state.balls[id]
+    local ship = state.ships[id]
+    if ball and ship and ball.system == me.system and ball.grid == me.grid then
+      if ship.owner == "pirates" and pirate == nil then
+        pirate = ball
+      elseif ship.owner == "starbase" and core == nil then
+        core = ball
+      end
+    end
+  end
+  if pirate == nil or core == nil then
+    return 0
+  end
+  local time = state.tick * Constants.TICK
+  local gap = math.sqrt((pirate.x - core.x) ^ 2 + (pirate.y - core.y) ^ 2 + (pirate.z - core.z) ^ 2)
+  for _ = 1, count do
+    local id = State.NewId(state)
+    table.insert(state.missiles, { from = pirate.id, to = core.id, item = 0, charge = charge, damage = table.clone(made.damage),
+      impact = time + gap / made.velocity, blast = 100, id = id, born = time, lx = pirate.x, ly = pirate.y,
+      lz = pirate.z, x = pirate.x, y = pirate.y, z = pirate.z, vx = 0, vy = 0, vz = 0, at = time, speed = made.velocity,
+      grid = core.grid, expires = time + made.flightTime })
+    -- (and its launch, which is what the view draws a missile from)
+    table.insert(session.game.events, { kind = "Shot", from = pirate.id, item = 0, to = core.id, family = "missile",
+      outcome = "launched", damage = 0, flight = gap / made.velocity, missile = id })
+  end
+  return count
+end
+
+-- A starbase's point defence, for checking a picture: how many of its
+-- turrets have swung (Tactical/CitadelGuns), whether it is lit, and the
+-- first turret's aim.
+function Debug.CitadelPds(id: number): string
+  local state = session.game.state
+  local starbase = state.starbases[id]
+  if starbase == nil then
+    return "none"
+  end
+  local aims = starbase.pds or {}
+  local first = aims[1]
+  return `turrets {#aims}, lit {Starbases.Lit(state, starbase)}, core {starbase.core}`
+    .. (if first then string.format(", aim %.2f %.2f %.2f", first.ax, first.ay, first.az) else "")
 end
 
 -- How many missiles are in flight, and how many of them are the pilot's.

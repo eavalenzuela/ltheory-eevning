@@ -1278,7 +1278,7 @@ export type Part = { id: string, model: Model, at: vector, look: vector, up: vec
 -- ahead, and how big a metre of the weapon is.)
 -- ('twin': the second of a pair of mounts, which are one hardpoint: it
 -- carries what the first does, and it is the first that fires.)
-export type Arm = { type: string, at: vector, n: vector, fore: vector, unit: number, twin: boolean? }
+export type Arm = { type: string, at: vector, n: vector, fore: vector, unit: number, twin: boolean?, pds: boolean? }
 export type Layout = { tower: Part, modules: { Part }, field: number, ring: number?, arms: { Arm }? }
 
 local function dice(n: number): number
@@ -1347,7 +1347,7 @@ function Starbase.Layout(variety: string, radius: number, seed: number, faction:
       local mount = made.mounts[index]
       if armed ~= "" and mount then
         table.insert(arms, { type = armed, at = tower.at + mount.at * scale, n = mount.n, fore = mount.fore, unit = scale / made.metres,
-          twin = mount.twin ~= 0 and mount.twin < index })
+          twin = mount.twin ~= 0 and mount.twin < index, pds = mount.kind == "pds" })
       end
     end
     local layout: Layout = { tower = tower, modules = {}, field = 0, ring = if dark then nil else radius, arms = arms }

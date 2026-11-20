@@ -114,7 +114,7 @@ type Showcase = {
 
 -- A gun on a citadel (Game/View/Starbase's Arm): what it is, and where
 -- it stands from the citadel's middle, m.
-type CitadelGun = { type: string, at: vector }
+type CitadelGun = { type: string, at: vector, pds: boolean? }
 
 export type Scene = {
   camera: Camera,
@@ -288,13 +288,14 @@ local function citadelCores(scene: Scene, state: any)
 end
 
 -- Which of a citadel's guns fired a shot (Core/Tactical/CitadelGuns: the
--- 'mount'th of its weapons of that type), as its place in 'scene.screen'.
+-- 'mount'th of its weapons of that type, or of its point defence turrets
+-- for "pds"), as its place in 'scene.screen'.
 local function citadelGun(scene: Scene, state: any, core: number, type: string, mount: number?): number?
   for _, id in state.starbaseIds do
     if state.starbases[id].core == core then
       local count = 0
       for n, gun in scene.citadelGuns[id] or {} :: { CitadelGun } do
-        if gun.type == type then
+        if (type == "pds" and gun.pds) or (type ~= "pds" and gun.type == type and not gun.pds) then
           count += 1
           if count == (mount or 1) then
             return citadelGunKey(id, n)
@@ -1057,7 +1058,7 @@ local function makeStation(scene: Scene, game: Core.Game, object: SystemData.Obj
   local guns: { CitadelGun } = {}
   for _, arm in layout.arms or {} :: { Starbase.Arm } do
     if not arm.twin then
-      table.insert(guns, { type = arm.type, at = arm.at })
+      table.insert(guns, { type = arm.type, at = arm.at, pds = arm.pds })
     end
   end
   if #guns > 0 then
@@ -1976,8 +1977,14 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       -- (a point defence turret's stream at a missile, or at a drone: Core/Tactical/PointDefence)
       local from = state.balls[event.from]
       if from then
-        Effects.Tracers(fx, from.id, from.radius, event.missile, event.to, event.rounds or 0, event.down == true, scene.time,
-          if scene.screen[-event.item] then -event.item else nil)
+        -- (a citadel's, from the turret of its that it was: Core/Tactical/CitadelGuns)
+        local citadel = event.mount and state.ships[from.id] and state.ships[from.id].owner == "starbase"
+        if citadel then
+          citadelCores(scene, state)
+        end
+        local mount = if citadel then citadelGun(scene, state, from.id, "pds", event.mount) else nil
+        Effects.Tracers(fx, from.id, if mount then 0 else from.radius, event.missile, event.to, event.rounds or 0, event.down == true,
+          scene.time, mount or (if scene.screen[-event.item] then -event.item else nil))
       end
     elseif event.kind == "MissileDowned" then
       Effects.Down(fx, event.missile, scene.time)
