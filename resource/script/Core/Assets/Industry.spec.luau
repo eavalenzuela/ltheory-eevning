@@ -749,9 +749,10 @@ suite:Case("nobody sells a tech 2 module, its blueprint or a datacore, and a sta
 end)
 
 suite:Case("a hull that is a refinery too refines the ore in its own holds where it lies, in space or docked, and puts the minerals in its hold", function(t)
-  -- The Drowned's Griever is such a hull (the project owner's: "mass-miner, mobile refinery"), and nothing else is.
+  -- The Drowned's Griever is such a hull (the project owner's: "mass-miner, mobile refinery"), and since 2026-11-20 every
+  -- capital industrial but a transport (the owner's: in place of compressing ore); nothing else is.
   for _, hull in Ships.list do
-    t.eq(hull.refinery, if hull.id == "capitalindustrial.griever" then true else nil, hull.id)
+    t.eq(hull.refinery, if hull.class == "capitalindustrial" and hull.role ~= "transport" then true else nil, hull.id)
   end
   local function flying(hull: string): (Core.Game, State.Ship)
     local game = Core.New({ galaxySeed = 1, historySeed = 1, peaceful = true })
@@ -768,8 +769,8 @@ suite:Case("a hull that is a refinery too refines the ore in its own holds where
     return found
   end
   -- Any other hull's ore is refined at a station, out of the hangar: not out of its hold.
-  local plain, other = flying("capitalindustrial.embrace")
-  local kept = Items.Add(plain.state, "ore.ferrite", 1000, other.id, "orehold")
+  local plain, other = flying("industrial.porter")
+  local kept = Items.Add(plain.state, "ore.ferrite", 1000, other.id, "cargo")
   t.eq(refused(plain, { kind = "Reprocess", actor = 0, item = kept.id }), "this hull has no refinery aboard")
 
   local game, ship = flying("capitalindustrial.griever")

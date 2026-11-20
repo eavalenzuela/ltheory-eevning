@@ -1407,7 +1407,7 @@ suite:Case("a capital has XL fittings of its own, which nothing smaller fits", f
     t.eq((Attributes.Check(Ships.byId["battleship.owari"], { id })), false, id)
   end
   t.ok((Attributes.Check(Ships.byId["carrier.azayake"], { "shield.booster.xl" })), "a carrier does not fit an XL booster")
-  t.ok(Modules.byId["shield.booster.xl"].repair.amount > Modules.byId["shield.booster.large"].repair.amount * 3)
+  t.ok(assert(Modules.byId["shield.booster.xl"].repair).amount > assert(Modules.byId["shield.booster.large"].repair).amount * 3)
 end)
 
 return suite

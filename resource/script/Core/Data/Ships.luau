@@ -1114,6 +1114,16 @@ Ships.CLASS_NAMES = {
   freighter = { "Freighter", "Freighters" }, barge = { "Mining Barge", "Mining Barges" }, capsule = { "Capsule", "Capsules" },
 } :: { [string]: { string } }
 
+-- Every capital industrial but a transport refines what it brings up
+-- aboard (the owner's, 2026-11-20: "we'll solve the ore volume issue by
+-- having the capital industrials have onboard refineries", in place of
+-- compressing ore), as the Drowned's Griever did first.
+for _, t in types do
+  if t.class == "capitalindustrial" and t.role ~= "transport" then
+    t.refinery = true
+  end
+end
+
 for _, t in types do
   Ships.byId[t.id] = t
   t.rigs = t.rigs or (if t.class == "capsule" then 0 else Ships.RIGS)
