@@ -1591,7 +1591,7 @@ for size, each in { { "medium", "Medium", 150, 12, 8000, 25, 175 }, { "heavy", "
     id = `neutraliser.{each[1]}`, name = `{each[2]} Energy Neutraliser`, slot = "high", hardpoint = "",
     cpu = each[6], powergrid = each[7], volume = 5 * (size + 1), basePrice = 35000 * (size + 1) ^ 2, passive = {},
     hex = { kind = "neut", range = each[5], strength = each[3], duration = each[4], capacitor = each[3] },
-    requires = { { skill = "electronic.warfare", level = math.min(5, 2 + size) } }, capital = if size == 3 then true :: boolean? else nil,
+    requires = { { skill = "electronic.warfare", level = math.min(4, 2 + size) } }, capital = if size == 3 then true :: boolean? else nil,
   })
 end
 
@@ -2163,6 +2163,8 @@ end
 local function lessIsBetter(attribute: string): boolean
   return string.find(attribute, "Resonance", 1, true) ~= nil or attribute == "capacitorRecharge" or attribute == "shieldRecharge"
     or attribute == "signature" or attribute == "mass" or attribute == "inertia" or attribute == "blast"
+    -- (a weapon's cycle: shorter is faster; till 2026-11-20 a weapon upgrade's make left its rate as the plain one's)
+    or attribute == "duration"
 end
 
 -- A modifier with the good it does made 'output' times as much. What
@@ -2291,21 +2293,40 @@ local function made(base: ModuleType, id: string, name: string, tune: Tune): Mod
   if base.droneRange then
     out.droneRange = base.droneRange * amount
   end
+  -- (and the older kinds brought up to the full line, 2026-11-20)
+  if base.salvager then
+    local b = table.clone(base.salvager)
+    b.range, b.capacitor = b.range * tune.reach, b.capacitor * tune.capacitor
+    b.chance = if b.chance > 0 then math.min(1, b.chance * amount) else b.chance
+    out.salvager = b
+  end
+  if base.analyzer then
+    local b = table.clone(base.analyzer)
+    b.range = b.range * tune.reach
+    out.analyzer = b
+  end
+  if base.pds then
+    local b = table.clone(base.pds)
+    b.damage, b.accuracy = b.damage * tune.output, math.min(0.95, b.accuracy * amount)
+    b.tracking, b.optimal, b.falloff = b.tracking * amount, b.optimal * tune.reach, b.falloff * tune.reach
+    out.pds = b
+  end
   -- (it is a make of the plain module its base is a make of, and wants the skills of what it was made from)
   out.base = base.base or base.id
   return out
 end
 
 -- ---------------------------------------------------------------------
--- The full line for the kinds of module new on 2026-11-20 (the owner's
--- answer for them, "Full line"): beside a people's make and the pirate
--- site tier (theirs below, by LINE), a custom make, a tech 2 make and a
--- masterwork, and so an officer's, each as much better as the older
--- three makes are. (Not the Jump Portal Generator nor the Cipher Buffer,
--- which do one thing or do not; and not a rig, as no rig has.)
-local NEW_KINDS = { "amplifier.", "missile.guidance", "inertial.damper", "warp.accelerator", "targeting.amplifier",
-  "signature.dampener", "capacitor.coil", "grid.diagnostic", "auxiliary.generator", "shield.amplifier.", "armor.coating.",
-  "projector.grappler", "drone.link" }
+-- The full line for every module (the owner's, 2026-11-20: "Full line"
+-- for the kinds new that day, then "let's bring older modules up to the
+-- current standard"): beside a people's make and the pirate site tier
+-- (below), a custom make, a tech 2 make and a masterwork, and so an
+-- officer's, each as much better as the older three makes are, for
+-- every module that had none. Not those that do one thing or do not
+-- (ONE_THING), which no make would better; and a rig has a tech 2 make
+-- and no other (the owner's: "We do want t2 rigs, for sure").
+local ONE_THING: { [string]: boolean } = { ["jump.portal"] = true, ["hack.buffer"] = true, ["beacon.jump"] = true,
+  ["jump.micro"] = true, ["cloak.device"] = true, ["bubble.launcher"] = true }
 local NEW_MAKES: { { id: string, name: string, tune: Tune, tech: number?, meta: number? } } = {
   { id = CUSTOM.id, name = CUSTOM.name, tune = { output = CUSTOM.damage, amount = CUSTOM.amount, fitting = CUSTOM.fitting, capacitor = 1,
     reach = 1, price = CUSTOM.price }, meta = 1 },
@@ -2314,16 +2335,20 @@ local NEW_MAKES: { { id: string, name: string, tune: Tune, tech: number?, meta: 
   { id = MASTER.id, name = MASTER.name, tune = { output = MASTER.damage, amount = MASTER.amount, fitting = MASTER.fitting, capacitor = 1,
     reach = 1, price = MASTER.price }, meta = 2 },
 }
-for _, base in table.clone(modules) do
-  local new = false
-  for _, prefix in NEW_KINDS do
-    new = new or string.sub(base.id, 1, #prefix) == prefix
+do
+  local had: { [string]: boolean } = {}
+  for _, m in modules do
+    had[m.id] = true
   end
-  if new and not base.tech and not base.meta and not base.lineage and not base.internal and base.slot ~= "rig" then
-    for _, make in NEW_MAKES do
-      local own = made(base, base.id .. make.id, base.name .. make.name, make.tune)
-      own.tech, own.meta, own.base = make.tech, make.meta, base.id
-      table.insert(modules, own)
+  for _, base in table.clone(modules) do
+    if not base.tech and not base.meta and not base.lineage and not base.internal and not ONE_THING[base.id] then
+      for _, make in NEW_MAKES do
+        if (base.slot ~= "rig" or make.tech == 2) and not had[base.id .. make.id] then
+          local own = made(base, base.id .. make.id, base.name .. make.name, make.tune)
+          own.tech, own.meta, own.base = make.tech, make.meta, base.id
+          table.insert(modules, own)
+        end
+      end
     end
   end
 end
@@ -2351,12 +2376,9 @@ end
 -- and which shade is whose mine: the Vessari's well made and easy to
 -- fit, the Talmar's reaching further, the Orun's giving the most and
 -- hardest to fit, the Kethri's drawing the least capacitor.
-local LINE = { "afterburner.", "mwd.", "overdrive", "nanofiber", "shield.", "armor.", "hull.", "damage.control", "capacitor.", "relay.",
-  "fitting.", "heat.", "gyrostabilizer", "flux.", "ballistic.", "tracking.", "computer.", "projector.", "disruptor.", "painter.",
-  "damper.", "neutraliser.", "jammer.", "ewar.", "drain.", "sensor.", "remote.", "drone.", "warp.stabilizer", "cargo.expander",
-  -- (and the kinds of 2026-11-20 that no prefix above has)
-  "amplifier.", "missile.guidance", "inertial.damper", "warp.accelerator", "targeting.amplifier", "signature.dampener",
-  "grid.diagnostic", "auxiliary.generator" }
+-- (Since 2026-11-20 every module but those that do one thing or do not,
+-- ONE_THING above: the owner's "bring older modules up to the current
+-- standard".)
 local SHADES: { [string]: Tune } = {
   vessari = { output = 1.10, fitting = 0.85, capacitor = 1, reach = 1, price = 5 },
   talmar = { output = 1.10, fitting = 1, capacitor = 1, reach = 1.15, price = 5 },
@@ -2390,8 +2412,10 @@ end
 for _, base in table.clone(modules) do
   if not base.tech and not base.meta and not base.internal and not base.lineage and base.slot ~= "rig" then
     for _, people in PEOPLES do
+      -- (since 2026-11-20 every module that is not of their speciality, and does more than one thing: ONE_THING)
+      -- (and not another people's guns nor a mining laser: a people makes its own of those, or none)
       local tune = if starts(base.id, people.makes) then PEOPLE_TUNE
-        elseif not base.capital and not base.classes and starts(base.id, LINE) then SHADES[people.id] else nil
+        elseif not ONE_THING[base.id] and not base.weapon and not base.miner then SHADES[people.id] else nil
       if tune then
         local own = made(base, `{base.id}.{people.id}`, `{people.name} {base.name}`, tune)
         own.meta, own.lineage = 3, people.id
@@ -2426,7 +2450,7 @@ for _, base in table.clone(modules) do
   if not base.tech and not base.meta and not base.internal and not base.lineage and base.slot ~= "rig" and not base.capital
     and not base.classes then
     -- (what a captain fits: what there is a masterwork of)
-    if ids[base.id .. ".master"] or starts(base.id, LINE) then
+    if ids[base.id .. ".master"] then
       for grade, tune in SITE_TUNES do
         local own = made(base, `{base.id}.site{grade}`, `Unbound {SITE_RANKS[grade]} {base.name}`, tune)
         own.meta, own.site = 6, grade

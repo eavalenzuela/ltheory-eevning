@@ -189,16 +189,27 @@ for _, module in Modules.list do
   if module.slot == "rig" then
     -- (a medium or a large rig is the small one of its kind, of more of the same)
     local work = Modules.RigWork(module)
-    rigs += if work == 1 then 1 else 0
+    -- (a tech 2 rig, since 2026-11-20: the plain one, and twice its salvage again; invented, as any tech 2
+    -- module's drawings are. Mine.)
+    local improved = module.tech == 2 and module.base ~= nil
+    rigs += if work == 1 and not improved then 1 else 0
     local materials = {}
-    for index, count in { 10, 6, 4 } do
-      table.insert(materials, { type = SALVAGE[(rigs + index - 2) % 3 + 1], quantity = count * work })
+    if improved then
+      table.insert(materials, { type = module.base :: string, quantity = 1 })
+      for _, material in Blueprints.byProduct[module.base :: string].materials do
+        table.insert(materials, { type = material.type, quantity = material.quantity * 2 })
+      end
+    else
+      for index, count in { 10, 6, 4 } do
+        table.insert(materials, { type = SALVAGE[(rigs + index - 2) % 3 + 1], quantity = count * work })
+      end
     end
     local blueprint: Blueprint = {
       id = "blueprint." .. module.id, product = module.id, name = module.name .. " Blueprint", perRun = 1, seconds = 600,
       materials = materials, basePrice = module.basePrice * Blueprints.ORIGINAL,
       -- (a people's own make is built from drawings nobody sells)
       rare = if module.lineage then true else nil,
+      invented = if improved then true else nil,
     }
     table.insert(Blueprints.list, blueprint)
     Blueprints.byId[blueprint.id] = blueprint

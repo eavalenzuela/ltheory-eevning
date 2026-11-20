@@ -51,7 +51,8 @@ suite:Case("each of the four peoples has its own make of what it is known for, a
   t.eq({ vessari.shaded, talmar.shaded } :: { any }, { true, true } :: { any })
   t.ok(vessari.cpu < Modules.byId["shield.extender.small"].cpu, "the Vessari's are easier to fit")
   t.ok(assert(talmar.hex).range > assert(Modules.byId["disruptor.warp"].hex).range, "the Talmar's reach further")
-  t.eq({ Modules.Own("siege.module", "orun"), Modules.Own("miner.small", "vessari") } :: { any }, {})
+  -- (since 2026-11-20 every module but those that do one thing, another people's guns and a mining laser)
+  t.eq({ Modules.Own("cloak.device", "orun"), Modules.Own("miner.small", "vessari") } :: { any }, {})
   -- Fifteen parts in a hundred more of what it gives: between the custom make and tech 2.
   t.near(weapon("laser.pulse.small.kethri").damageMultiplier, weapon("laser.pulse.small").damageMultiplier * 1.15, 1e-9)
   t.ok(weapon("laser.pulse.small.kethri").damageMultiplier > weapon("laser.pulse.small.custom").damageMultiplier)
@@ -86,7 +87,8 @@ suite:Case("an officer's module is called by their name, is better than a master
   t.eq(Modules.byId[id], module)
   t.eq(table.find(Types.Ids(), id), nil, "no market lists a module that is one of a kind")
   -- Not of a thing no captain carries, nor of a make of anything.
-  t.eq({ Modules.Officer("cargo.expander", "Mara Venn"), Modules.Officer("autocannon.small.ii", "Mara Venn"),
+  -- (since 2026-11-20 every module has a masterwork but those that do one thing or do not: a cloaking device)
+  t.eq({ Modules.Officer("cloak.device", "Mara Venn"), Modules.Officer("autocannon.small.ii", "Mara Venn"),
     Modules.Officer("no.such.thing", "Mara Venn") } :: { any }, {})
 end)
 
