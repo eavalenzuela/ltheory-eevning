@@ -868,12 +868,15 @@ function Combat.Yield(state: State.State, ship: number, item: State.Item, ore: s
   local skilled = 1 + 0.05 * math.max(0, (if levels then levels.mining or 0 else 0) - 1)
   -- (and the hull's own bonus to it: Data/HullBonuses)
   skilled *= Ships.Bonus(Ships.byId[state.ships[ship].type], "mining", "yield", levels)
-  if Ores.gasById[ore] or Ores.Ice(ore) then
+  if Ores.gasById[ore] then
     return skilled
   end
+  -- (ice, for the ice harvester upgrades fitted, and not the mining upgrades: 2026-11-20)
+  local ice = Ores.Ice(ore)
   local ups = {}
   for _, fitted in Items.Fitted(state, ship) do
-    local by = Modules.byId[fitted.type].mining
+    local module = Modules.byId[fitted.type]
+    local by = if ice then module.ice else module.mining
     if by then
       table.insert(ups, by)
     end
@@ -881,6 +884,10 @@ function Combat.Yield(state: State.State, ship: number, item: State.Item, ore: s
   table.sort(ups, function(a: number, b: number): boolean return a > b end)
   for n, by in ups do
     skilled *= 1 + (by - 1) * Attributes.Penalty(n - 1)
+  end
+  -- (no crystal nor burst is for ice)
+  if ice then
+    return skilled
   end
   local crystal = if item.charge ~= "" then Modules.chargeById[item.charge] else nil
   if crystal and crystal.ore == ore then

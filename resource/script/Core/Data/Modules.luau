@@ -258,7 +258,7 @@ export type ModuleType = {
   adaptive: { total: number, step: number }?,
   -- What it does for the drones of the ship it is fitted to: their guns'
   -- damage, and their tracking and reach, so many times.
-  drones: { damage: number?, tracking: number? }?,
+  drones: { damage: number?, tracking: number?, speed: number? }?,
   -- A smartbomb: each cycle, so much damage of each kind to every ship
   -- within 'range' of it but its owner's own.
   smartbomb: { range: number, damage: { number }, duration: number, capacitor: number }?,
@@ -272,6 +272,8 @@ export type ModuleType = {
   scanner: { kind: "ship" | "cargo" | "survey", range: number, duration: number, capacitor: number }?,
   -- A mining upgrade: ore off a rock so many times as much.
   mining: number?,
+  -- (so much more ice a cycle, as 'mining' is ore: Tactical/Combat's Yield)
+  ice: number?,
   -- A command burst: what its 'boost' does, on the owner's ships within
   -- range; a mining burst, ore off a rock so many times as much.
   burst: { range: number, mining: number? }?,
@@ -780,6 +782,18 @@ table.insert(modules, {
   cpu = 25, powergrid = 1, volume = 5, basePrice = 18000, passive = {}, drones = { tracking = 1.25 },
   requires = { { skill = "drones", level = 2 } },
 })
+-- (and since 2026-11-20, of the reference review: drones that fly faster,
+-- and a low-slot tracking link. Their figures are mine.)
+table.insert(modules, {
+  id = "drone.navigation", name = "Drone Navigation Computer", short = "Drone Nav", slot = "mid", hardpoint = "",
+  cpu = 25, powergrid = 1, volume = 5, basePrice = 22000, passive = {}, drones = { speed = 1.20 },
+  requires = { { skill = "drones", level = 2 } },
+})
+table.insert(modules, {
+  id = "drone.enhancer", name = "Drone Tracking Enhancer", short = "Drone Track", slot = "low", hardpoint = "",
+  cpu = 24, powergrid = 1, volume = 5, basePrice = 20000, passive = {}, drones = { tracking = 1.10 },
+  requires = { { skill = "drones", level = 2 } },
+})
 -- Electronic warfare against weapons: turrets track and reach worse, and
 -- missiles fly shorter with wider blasts.
 table.insert(modules, {
@@ -918,6 +932,13 @@ table.insert(modules, {
   id = "mining.upgrade", name = "Mining Laser Upgrade", short = "Mining Upg", slot = "low", hardpoint = "",
   cpu = 35, powergrid = 1, volume = 5, basePrice = 20000, passive = {}, mining = 1.09,
   requires = { { skill = "mining", level = 2 } },
+})
+-- (and for ice, which the mining upgrade does nothing for, since
+-- 2026-11-20: the figure mine)
+table.insert(modules, {
+  id = "ice.upgrade", name = "Ice Harvester Upgrade", short = "Ice Upg", slot = "low", hardpoint = "",
+  cpu = 35, powergrid = 1, volume = 5, basePrice = 25000, passive = {}, ice = 1.06,
+  requires = { { skill = "mining", level = 3 } },
 })
 -- Modulated lasers: a little less off a rock by themselves, and much
 -- more with the crystal cut for its ore (crystals below; never used up).
@@ -2253,10 +2274,14 @@ local function made(base: ModuleType, id: string, name: string, tune: Tune): Mod
   if base.drones then
     local d = base.drones
     out.drones = { damage = if d.damage then 1 + (d.damage - 1) * amount else nil,
-      tracking = if d.tracking then 1 + (d.tracking - 1) * amount else nil }
+      tracking = if d.tracking then 1 + (d.tracking - 1) * amount else nil,
+      speed = if d.speed then 1 + (d.speed - 1) * amount else nil }
   end
   if base.mining then
     out.mining = 1 + (base.mining - 1) * amount
+  end
+  if base.ice then
+    out.ice = 1 + (base.ice - 1) * amount
   end
   if base.smartbomb then
     local b = table.clone(base.smartbomb)

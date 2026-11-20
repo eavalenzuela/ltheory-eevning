@@ -1320,6 +1320,15 @@ suite:Case("mining upgrades and a crystal of the rock's ore bring more off a roc
   t.near(Combat.Yield(state, a.me.id, laser, "gas.amber"), base, 1e-9)
 end)
 
+suite:Case("an Ice Harvester Upgrade brings more ice a cycle, and a mining upgrade none; neither is for ore the other's", function(t)
+  local a = arena("cruiser.ouyou", { { "miner.modulated" }, { "mining.upgrade" }, { "ice.upgrade" } }, "frigate.courier", {}, 3000)
+  local state = a.game.state
+  local laser = Items.Fitted(state, a.me.id)[1]
+  local base = 1 + 0.05 * math.max(0, (state.skills.mining or 0) - 1)
+  t.near(Combat.Yield(state, a.me.id, laser, "ice.oxygen"), base * 1.06, 1e-9)
+  t.near(Combat.Yield(state, a.me.id, laser, "ore.silicate"), base * 1.09, 1e-9)
+end)
+
 -- Ice (module expansion, 2026-11-16): where there is some, what cuts it,
 -- and what it refines to.
 suite:Case("some systems have an ice field by a cold planet; only an ice harvester cuts its chunks, two blocks a cycle", function(t)

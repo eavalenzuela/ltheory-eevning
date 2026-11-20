@@ -13,6 +13,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local Test = require("@lt/Tool/Test")
+local Vitals = require("@lt/Core/Tactical/Vitals")
 local Types = require("@lt/Core/Data/Types")
 
 local suite = Test.Suite("Drones")
@@ -543,6 +544,21 @@ suite:Case("drones are worked only so far from their ship: farther with the Dron
   t.eq(Drones.Reach(state, me.id), reach + 20000)
   Items.Take(state, link, 1)
   t.eq(Drones.Reach(state, me.id), reach)
+end)
+
+suite:Case("a Drone Navigation Computer fitted makes its owner's drones fly faster, a second the less for the first", function(t)
+  local game, me = flying("cruiser.ouyou", 2, 5)
+  local state = game.state
+  t.ok((submit(game, { kind = "LaunchDrones", actor = 0 })))
+  steps(game, 2)
+  local drone = state.ships[Drones.Out(state, me.id)[1].ship]
+  local plain = Vitals.Stats(state, drone, nil).maxVelocity
+  Items.Add(state, "drone.navigation", 1, me.id, "cargo").slot = 98
+  local one = Vitals.Stats(state, drone, nil).maxVelocity
+  t.near(one, plain * 1.2, 1e-6)
+  Items.Add(state, "drone.navigation", 1, me.id, "cargo").slot = 99
+  local two = Vitals.Stats(state, drone, nil).maxVelocity
+  t.ok(two > one and two < plain * 1.2 * 1.2, "a second computer should add less")
 end)
 
 return suite

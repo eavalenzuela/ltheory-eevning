@@ -40,6 +40,21 @@ function Vitals.Stats(state: State.State, ship: State.Ship, vitals: State.Vitals
   local stats = Attributes.Ship(Ships.byId[ship.type], fit, Items.Levels(state, ship.id))
   -- (a Trident takes more to bring down for its pylon's hull's bonus to it: Data/HullBonuses)
   local drone = state.drones[ship.id]
+  -- (a drone flies faster for each Drone Navigation Computer its owner has fitted, each the less for those before it)
+  local master = if drone then state.ships[drone.owner] else nil
+  if master then
+    local speeds: { number } = {}
+    for _, fitted in Items.Fitted(state, master.id) do
+      local helps = Modules.byId[fitted.type].drones
+      if helps and helps.speed then
+        table.insert(speeds, helps.speed)
+      end
+    end
+    table.sort(speeds, function(a: number, b: number): boolean return a > b end)
+    for n, by in speeds do
+      stats.maxVelocity *= 1 + (by - 1) * Attributes.Penalty(n - 1)
+    end
+  end
   local owner = if drone and drone.pylon then state.ships[drone.owner] else nil
   if owner then
     local by = Ships.Bonus(Ships.byId[owner.type], "trident", "toughness", Items.Levels(state, owner.id))
