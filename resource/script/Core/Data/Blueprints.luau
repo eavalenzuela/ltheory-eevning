@@ -134,7 +134,7 @@ local function moduleSize(module: Modules.ModuleType): number
   elseif string.find(module.id, ".medium", 1, true) then
     return 2
   end
-  return if module.weapon then module.weapon.size else 1
+  return if module.weapon then module.weapon.mount or module.weapon.size else 1
 end
 -- (the size from which a tech 2 module calls for a composite)
 local LARGE = 3

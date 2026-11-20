@@ -217,6 +217,9 @@ local RACKS: { [string]: { any } } = {
   ["launcher.assault"] = { 3, 2, v(1.15, 0.80, 2.3) },
   ["launcher.torpedo"] = { 3, 3, v(1.20, 1.15, 2.6) },
   ["launcher.bombard"] = { 4, 3, v(1.45, 1.15, 2.9) },
+  -- (a rapid launcher: more and smaller tubes, for the missiles of the size below its own, 2026-11-20)
+  ["launcher.rapid.light"] = { 4, 3, v(1.15, 0.80, 2.3) },
+  ["launcher.rapid.heavy"] = { 4, 4, v(1.20, 1.15, 2.6) },
 }
 
 -- Where a rack's middle is above its mount: its pivot, as a turret's.
@@ -258,7 +261,7 @@ function Arms.SizeOf(type: string): number
   local module = Modules.byId[type]
   local weapon = if module then module.weapon else nil
   if weapon then
-    return weapon.size
+    return weapon.mount or weapon.size
   end
   return if string.find(type, ".xl", 1, true) or string.find(type, "siege", 1, true) then 4
     elseif string.find(type, "large", 1, true) or string.find(type, "strip", 1, true) then 3

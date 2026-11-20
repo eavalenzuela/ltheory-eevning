@@ -35,6 +35,9 @@ export type Weapon = {
   reload: number,           -- s to load a fresh clip
   -- 1 small, 2 medium, 3 large: it takes charges of its own size only.
   size: number,
+  -- The size of hardpoint it goes on, where that is not its charges'
+  -- size: a rapid launcher's, a medium one throwing light missiles.
+  mount: number?,
   -- launchers: how long its missiles fly, as a share of what the
   -- missile flies by itself, and how wide their blast is, likewise (1
   -- where not said: a short-range launcher throws its missiles a third
@@ -278,6 +281,10 @@ export type ModuleType = {
   -- and so many times the strength of the probes launched: 2026-11-20)
   salvage: number?,
   probing: number?,
+  -- A Burst Jammer: a cycle at a time, every ship not its owner's within
+  -- 'range' has 'strength' chance of having its locks broken
+  -- (Tactical/Combat).
+  burstJam: { range: number, strength: number, duration: number, capacitor: number }?,
   -- A command burst: what its 'boost' does, on the owner's ships within
   -- range; a mining burst, ore off a rock so many times as much.
   burst: { range: number, mining: number? }?,
@@ -937,6 +944,15 @@ table.insert(modules, {
   cpu = 35, powergrid = 1, volume = 5, basePrice = 20000, passive = {}, mining = 1.09,
   requires = { { skill = "mining", level = 2 } },
 })
+-- (a Burst Jammer, of the reference review: every ship not its owner's
+-- within 10 km may have its locks broken, a cycle every 30 s, for the
+-- reference's capacitor; the chance mine)
+table.insert(modules, {
+  id = "jammer.burst", name = "Burst Jammer", short = "Burst Jam", slot = "mid", hardpoint = "",
+  cpu = 30, powergrid = 1, volume = 5, basePrice = 60000, passive = {},
+  burstJam = { range = 10000, strength = 0.25, duration = 30, capacitor = 240 },
+  requires = { { skill = "electronic.warfare", level = 3 } },
+})
 -- (a Scan Rangefinding Array, of the reference review: the probes it
 -- launches the stronger; the figure mine)
 table.insert(modules, {
@@ -1273,6 +1289,26 @@ for index, launcher in LAUNCHERS do
     weapon = { family = "missile", duration = launcher.duration, capacitor = 0, damageMultiplier = 1.0,
       optimal = 0, falloff = 0, tracking = 0, clip = launcher.clip, reload = launcher.reload, size = index + 1 },
     requires = needs("missiles", index + 1),
+  })
+end
+
+-- Rapid launchers (the reference review, 2026-11-20): a launcher for a
+-- medium hardpoint that throws light missiles, and one for a large that
+-- throws heavy ones, more than twice as often as the plain launcher of
+-- their missiles, from a smaller load that takes long to reload. Their
+-- figures are the reference's (cycle, load, reload, fitting; prices mine).
+for _, rapid in {
+  { id = "launcher.rapid.light", name = "Rapid Light Missile Launcher", size = 1, mount = 2, duration = 7.8, clip = 19, reload = 35,
+    cpu = 35, powergrid = 73, price = 40000 },
+  { id = "launcher.rapid.heavy", name = "Rapid Heavy Missile Launcher", size = 2, mount = 3, duration = 6.48, clip = 24, reload = 35,
+    cpu = 50, powergrid = 960, price = 300000 },
+} do
+  table.insert(modules, {
+    id = rapid.id, name = rapid.name, slot = "high", hardpoint = "launcher",
+    cpu = rapid.cpu, powergrid = rapid.powergrid, volume = SIZE_VOLUME[rapid.mount], basePrice = rapid.price, passive = {},
+    weapon = { family = "missile", duration = rapid.duration, capacitor = 0, damageMultiplier = 1.0,
+      optimal = 0, falloff = 0, tracking = 0, clip = rapid.clip, reload = rapid.reload, size = rapid.size, mount = rapid.mount },
+    requires = needs("missiles", rapid.mount),
   })
 end
 
@@ -2173,7 +2209,7 @@ for _, base in table.clone(modules) do
         volume = base.volume, basePrice = base.basePrice * make.price, passive = passive,
         weapon = if weapon then { family = weapon.family, duration = weapon.duration, capacitor = weapon.capacitor,
           damageMultiplier = weapon.damageMultiplier * make.damage, optimal = weapon.optimal, falloff = weapon.falloff,
-          tracking = weapon.tracking, clip = weapon.clip, reload = weapon.reload, size = weapon.size,
+          tracking = weapon.tracking, clip = weapon.clip, reload = weapon.reload, size = weapon.size, mount = weapon.mount,
           flight = weapon.flight, blast = weapon.blast, leap = weapon.leap, volley = weapon.volley,
           line = weapon.line, path = weapon.path } else nil,
         repair = if repair then { layer = repair.layer, amount = repair.amount * make.amount, duration = repair.duration,
@@ -2310,6 +2346,11 @@ local function made(base: ModuleType, id: string, name: string, tune: Tune): Mod
   end
   if base.probing then
     out.probing = 1 + (base.probing - 1) * amount
+  end
+  if base.burstJam then
+    local b = table.clone(base.burstJam)
+    b.strength, b.range, b.capacitor = math.min(0.95, b.strength * amount), b.range * tune.reach, b.capacitor * tune.capacitor
+    out.burstJam = b
   end
   if base.smartbomb then
     local b = table.clone(base.smartbomb)
@@ -2725,7 +2766,7 @@ end
 -- A module's size, 1 to 3: its weapon's, or what its name says.
 function Modules.SizeOf(module: ModuleType): number
   if module.weapon then
-    return module.weapon.size
+    return module.weapon.mount or module.weapon.size
   end
   return if string.find(module.id, "large", 1, true) then 3 elseif string.find(module.id, "medium", 1, true) then 2 else 1
 end

@@ -345,7 +345,7 @@ end
 local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
   local weapon, repair, miner = module.weapon, module.repair, module.miner
   local slot = string.upper(string.sub(module.slot, 1, 1)) .. string.sub(module.slot, 2) .. " slot"
-  sheet.kind = if weapon then `{SIZES[weapon.size]} {if module.hardpoint == "launcher" then "launcher" else "turret"}`
+  sheet.kind = if weapon then `{SIZES[weapon.mount or weapon.size]} {if module.hardpoint == "launcher" then "launcher" else "turret"}`
     elseif module.hardpoint ~= "" then `{slot} {module.hardpoint}`
     else `{slot} module`
   -- (a make of another module: what it is the make of, and how it is come by)
@@ -520,6 +520,12 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
   end
   if module.hackBuffer then
     row(section(sheet, "Hacking"), "Buffer", `{module.hackBuffer} more code, however many are fitted`)
+  end
+  if module.burstJam then
+    local jam = module.burstJam
+    local to = section(sheet, "Burst jammer")
+    row(to, "Breaks locks", `{plain(jam.strength * 100)}% chance for each ship not yours within {metres(jam.range)}, each cycle`)
+    row(to, "Takes", `{seconds(jam.duration)} and {plain(jam.capacitor)} GJ`)
   end
   if module.portal then
     row(section(sheet, "Jump portal"), "Opens", "a portal to a lit beacon your drive reaches, for a minute: friendly ships within 5 km go through on your fuel")

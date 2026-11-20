@@ -1464,4 +1464,30 @@ suite:Case("an electronic warfare hull's webs and the like reach farther and wor
   t.eq(Combat.Hex(state, a.me.id, mend), mend.hex)
 end)
 
+suite:Case("a rapid launcher goes on a hardpoint a size up from its missiles, and fires them more than twice as often", function(t)
+  local rapid, plain = Modules.byId["launcher.rapid.light"], Modules.byId["launcher.light"]
+  t.eq({ Modules.SizeOf(rapid), Modules.SizeOf(Modules.byId["launcher.rapid.heavy"]) }, { 2, 3 })
+  t.ok(Modules.Fits(rapid, Modules.chargeById["missile.light.kinetic"]), "a rapid light launcher takes light missiles")
+  t.ok(not Modules.Fits(rapid, Modules.chargeById["missile.heavy.kinetic"]), "and no heavy ones")
+  t.ok(assert(rapid.weapon).duration * 2 < assert(plain.weapon).duration)
+  t.ok(assert(rapid.weapon).reload > assert(plain.weapon).reload)
+end)
+
+suite:Case("a Burst Jammer may break the locks of every ship not its owner's in its reach, each rolled apart", function(t)
+  local a = arena("cruiser.ouyou", { { "jammer.burst" } }, "frigate.courier", { { "shield.extender.small" } }, 3000)
+  local state = a.game.state
+  a.me.vitals.capacitor = a.me.vitals.capacitorMax
+  local jammer = Items.Fitted(state, a.me.id)[1]
+  order(t, a, { kind = "ActivateModule", actor = 0, item = jammer.id })
+  local jammed = false
+  for _ = 1, 12 do
+    a.me.vitals.capacitor = a.me.vitals.capacitorMax
+    for _, event in gather(a, 30, "Jammed") do
+      jammed = jammed or event.ball == a.foe.id
+      t.ok(event.ball ~= a.me.id, "it jams its own ship")
+    end
+  end
+  t.ok(jammed, "twelve cycles at a quarter's chance and nobody jammed")
+end)
+
 return suite

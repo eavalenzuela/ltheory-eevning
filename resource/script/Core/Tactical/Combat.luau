@@ -450,7 +450,7 @@ function Combat.Validate(state: State.State, command: State.Command): (boolean, 
       return true
     elseif module.burns and (Combat.Held(state, ball.id, module.burns.type) < module.burns.quantity) then
       return false, `needs {module.burns.quantity} {Types.Info(module.burns.type).name} in the hold`
-    elseif module.repair or module.boost or module.injector or module.smartbomb then
+    elseif module.repair or module.boost or module.injector or module.smartbomb or module.burstJam then
       return true
     elseif module.pds then
       -- (point defence needs no lock: it finds its own, Tactical/PointDefence)
@@ -1337,6 +1337,31 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       end
       table.insert(events, { kind = "Smartbombed", ball = ball.id, item = item.id, struck = struck })
       running.next += bomb.duration
+
+    elseif module.burstJam then
+      -- A Burst Jammer: every ship within its reach but the owner's own
+      -- (and nothing no electronic warfare touches) may have its locks
+      -- broken, each rolled for apart, a cycle at a time.
+      local jam = module.burstJam
+      if v.capacitor < jam.capacitor then
+        stop(state, ball, index, "capacitor empty", events)
+        return false
+      end
+      v.capacitor -= jam.capacitor
+      local owner = state.ships[ball.id].owner
+      for _, other in state.ballIds do
+        local them = state.balls[other]
+        local ship = state.ships[other]
+        if other ~= ball.id and them and ship and ship.owner ~= owner and them.system == ball.system and them.grid == ball.grid
+          and Space.Gap(ball :: any, them :: any) <= jam.range and not Combat.Immune(state, other)
+          and Rng.Chance(Rng.For(state.historySeed, state.tick, ball.id, item.id, other, 68), jam.strength) then
+          for at = #them.vitals.locks, 1, -1 do
+            Combat.DropLock(state, them, them.vitals.locks[at].target, "jammed", events)
+          end
+          table.insert(events, { kind = "Jammed", ball = other, by = ball.id })
+        end
+      end
+      running.next += jam.duration
 
     elseif module.repair then
       local repair = module.repair
