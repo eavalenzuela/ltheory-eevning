@@ -69,7 +69,10 @@
 -- and gone. The same waves come for it on the way, at the same pace.
 -- The job is to see it out: whoever is still about when it goes is no
 -- part of the job (though their bounties are the pilot's), and no wave
--- comes after. A tender destroyed is the job lost.
+-- comes after. A tender destroyed is the job lost. (At the first level,
+-- since 2026-11-20, a wave waits for the one before to be down, as at a
+-- camp: the owner's, when a tech 1 destroyer lost the job or won it by
+-- a hair as the dice fell. Assault.Pressed.)
 --
 -- And every sixth is a convoy (the aim "convoy"): the same tender, but
 -- where it gets clear of the place it warps on to where it is going
@@ -577,6 +580,13 @@ function Assault.Warded(mission: State.Mission): boolean
   return mission.kind == "assault" and (mission.aim == "hold" or Assault.Tender(mission.aim))
 end
 
+-- Whether a job's waves come on their own time (Assault.PRESS), whether
+-- or not the one before is down: a rig to hold, and a tender to see
+-- through past the first level.
+function Assault.Pressed(mission: State.Mission): boolean
+  return Assault.Warded(mission) and not (Assault.Tender(mission.aim) and mission.level <= 1)
+end
+
 -- A ship has been destroyed: if it was the rig a defence job was to
 -- hold, or the tender it was to see through, the job is lost.
 -- (Assets/Missions ends it: it is marked here. What it was to do is
@@ -774,13 +784,13 @@ function Assault.Step(state: State.State, events: { Event })
   if #keepers(state, me.grid) > 0 then
     -- (whoever comes for a rig does not wait for those before them to
     -- be destroyed: so long after one wave came, the next does)
-    if not Assault.Warded(mission) or since < Assault.PRESS then
+    if not Assault.Pressed(mission) or since < Assault.PRESS then
       return
     end
   elseif since < Assault.BREATHER then
     return
   end
-  if Assault.Warded(mission) then
+  if Assault.Pressed(mission) then
     state.spawned[me.grid] = state.tick
   end
   -- Somewhere 25 to 35 km out from the middle of the place.

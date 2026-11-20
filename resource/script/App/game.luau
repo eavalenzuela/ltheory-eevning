@@ -2504,7 +2504,9 @@ end
 -- another ship. Asked every frame, it gives an order only once a tick
 -- and only where one is wanted. Returns how many such ships are there.
 -- 'works': what a camp is built of is gone for first, while any of it
--- stands, whoever else is nearer.
+-- stands, whoever else is nearer. And where there is a tender or a rig
+-- on the grid to see through or hold (Core/Tactical/Assault), the ship
+-- nearest that is gone for, as a pilot defending it would (2026-11-20).
 local engaged = -1
 function Debug.Engage(range: number?, works: boolean?): number
   local game = session.game
@@ -2523,6 +2525,28 @@ function Debug.Engage(range: number?, works: boolean?): number
       local ship = state.ships[entry.id]
       if works and built == nil and ship and Ships.byId[ship.type].class == "works" then
         built = entry
+      end
+    end
+  end
+  -- (the ward of a defence job in hand: whoever is nearest it)
+  local ward: State.Ball? = nil
+  for _, id in state.shipIds do
+    local ball = state.balls[id]
+    local kind = state.ships[id].type
+    if ball and ball.system == me.system and ball.grid == me.grid
+      and (string.sub(kind, 1, 14) == "convoy.tender." or string.sub(kind, 1, 10) == "works.rig.") then
+      ward = ball
+    end
+  end
+  if ward and built == nil then
+    local least = math.huge
+    for _, entry in Core.Query.Overview(game) do
+      local ball = state.balls[entry.id]
+      if entry.hostile and entry.onGrid and ball then
+        local gap = math.sqrt((ball.x - ward.x) ^ 2 + (ball.y - ward.y) ^ 2 + (ball.z - ward.z) ^ 2)
+        if gap < least then
+          nearest, least = entry, gap
+        end
       end
     end
   end
