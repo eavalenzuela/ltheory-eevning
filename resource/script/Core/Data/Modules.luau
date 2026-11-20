@@ -97,7 +97,7 @@ export type Volley = {
 }
 
 export type Repair = {
-  layer: "shield" | "armor",
+  layer: "shield" | "armor" | "hull",
   amount: number,           -- HP per cycle
   duration: number,         -- s
   capacitor: number,        -- GJ per cycle
@@ -1519,6 +1519,21 @@ table.insert(modules, {
 table.insert(modules, {
   id = "amplifier.armor", name = "Armour Repair Amplifier", slot = "low", hardpoint = "", cpu = 30, powergrid = 1, volume = 5,
   basePrice = 30000, passive = {}, amplify = { layer = "armor", by = 0.30 }, requires = { { skill = "repair.systems", level = 2 } },
+})
+-- (a hull repairer: the reference's is weak, 25 a 30 s cycle for a small;
+-- here as an armour repairer's amount over its cycle, the hull a ship's
+-- last layer, mine. And a heavy web of short reach: the reference's
+-- grappler, a fifth of the speed out to a kilometre)
+table.insert(modules, {
+  id = "hull.repairer.small", name = "Small Hull Repairer", slot = "low", hardpoint = "", cpu = 10, powergrid = 5, volume = 5,
+  basePrice = 25000, passive = {}, repair = { layer = "hull", amount = 45, duration = 8, capacitor = 40 },
+  requires = { { skill = "repair.systems", level = 1 } },
+})
+table.insert(modules, {
+  id = "projector.grappler", name = "Gravitic Grappler", short = "Grappler", slot = "mid", hardpoint = "", cpu = 30, powergrid = 50,
+  volume = 10, basePrice = 60000, passive = {},
+  hex = { kind = "entangle", range = 1000, strength = 0.2, duration = 5, capacitor = 4 },
+  requires = { { skill = "propulsion.jamming", level = 3 } },
 })
 -- (and the utility modules of the same review, for hauling, travel and
 -- fitting: the reference's figures where it has one that means the same

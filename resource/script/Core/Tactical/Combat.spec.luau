@@ -651,6 +651,17 @@ suite:Case("a shield boost amplifier has a booster mend a third more", function(
   t.ok(v.shield > 50 + 26 * 1.3 and v.shield < 50 + 26 * 1.3 + 6, `shield is {v.shield}`)
 end)
 
+suite:Case("a hull repairer mends the hull", function(t)
+  local a = arena("frigate.akashi", { { "hull.repairer.small" } }, "frigate.courier", {}, 5000)
+  local v = a.me.vitals
+  v.hull = 100
+  order(t, a, { kind = "ActivateModule", actor = 0, item = modules(a)[1].id })
+  for _ = 1, 9 do
+    Core.Step(a.game)
+  end
+  t.ok(v.hull >= 145, `hull is {v.hull}`)
+end)
+
 suite:Case("an afterburner changes how the ship flies while it runs", function(t)
   local a = arena("frigate.courier", { { "afterburner.1mn" } }, "frigate.courier", {}, 5000)
   local burner = modules(a)[1]

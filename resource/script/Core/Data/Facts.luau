@@ -420,7 +420,8 @@ local function moduleSheet(sheet: Sheet, module: Modules.ModuleType)
   end
   if repair then
     local to = section(sheet, "Repair")
-    row(to, if repair.layer == "shield" then "Shield restored" else "Armour repaired", `{plain(repair.amount)} HP every {seconds(repair.duration)}`)
+    row(to, if repair.layer == "shield" then "Shield restored" elseif repair.layer == "hull" then "Hull repaired" else "Armour repaired",
+      `{plain(repair.amount)} HP every {seconds(repair.duration)}`)
     row(to, "Capacitor a cycle", `{plain(repair.capacitor)} GJ`)
     -- (an ancillary one: what a charge does for it)
     local ancillary, takes = module.ancillary, module.takes

@@ -1171,8 +1171,9 @@ suite:Case("every weapon, repairer, extender, plate, mining laser and probe laun
   -- Torpedo Launcher), 2 repairers, an extender and a plate in three sizes each, two mining lasers and a gas harvester,
   -- the repairers for another ship (shield and armour, in three sizes), and the six things only a drone, a
   -- fighter or a bomber carries (two of them a combat drone's guns since 2026-11-18); and since 2026-11-16 the ancillary shield boosters and armour repairers,
-  -- three sizes each, the two modulated lasers and the two ice harvesters; and since 2026-11-18 the probe launcher.
-  t.eq(improved, 48 + 4 * 3 + 3 + 2 * 3 + 6 + 2 * 3 + 2 + 2 + 1)
+  -- three sizes each, the two modulated lasers and the two ice harvesters; and since 2026-11-18 the probe launcher; and
+  -- since 2026-11-20 the hull repairer.
+  t.eq(improved, 48 + 4 * 3 + 3 + 2 * 3 + 6 + 2 * 3 + 2 + 2 + 1 + 1)
   t.ok(Modules.Improved("projector.entanglement") == nil and Modules.Improved("rig.shield") == nil)
   t.eq({ Modules.SizeOf(Modules.byId["autocannon.medium.ii"]), Modules.SizeOf(Modules.byId["shield.extender.large"]),
     Modules.SizeOf(Modules.byId["miner.small"]) }, { 2, 3, 1 })
@@ -1228,7 +1229,7 @@ suite:Case("the same modules have a custom make, between the plain one and tech 
     end
   end
   -- One of each for every module that has a tech 2 make and is not a drone's own.
-  t.eq({ customs, masterworks }, { 48 + 4 * 3 + 3 + 2 * 3 + 2 * 3 + 4, 48 + 4 * 3 + 3 + 2 * 3 + 2 * 3 + 4 })
+  t.eq({ customs, masterworks }, { 48 + 4 * 3 + 3 + 2 * 3 + 2 * 3 + 4 + 1, 48 + 4 * 3 + 3 + 2 * 3 + 2 * 3 + 4 + 1 })
   t.ok(Modules.Custom("projector.entanglement") == nil and Modules.Custom("autocannon.small.ii") == nil)
   t.ok(Modules.Masterwork("projector.entanglement") == nil and Modules.Masterwork("autocannon.small.custom") == nil)
   t.eq({ Modules.Graded("projector.entanglement", 2), Modules.Graded("autocannon.small", 3) }, { "projector.entanglement", "autocannon.small" })

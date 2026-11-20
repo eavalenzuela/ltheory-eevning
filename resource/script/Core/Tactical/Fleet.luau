@@ -932,6 +932,8 @@ local function mend(state: State.State, me: State.Ball, fighting: boolean, event
       local have, most = vitals.armor, vitals.armorMax
       if repair.layer == "shield" then
         have, most = vitals.shield, vitals.shieldMax
+      elseif repair.layer == "hull" then
+        have, most = vitals.hull, vitals.hullMax
       end
       local on = running(me, item.id)
       if not on and have < 0.8 * most and vitals.capacitor > 0.25 * vitals.capacitorMax then

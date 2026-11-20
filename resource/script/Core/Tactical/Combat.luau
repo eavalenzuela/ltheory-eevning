@@ -1363,6 +1363,8 @@ local function cycle(state: State.State, ball: State.Ball, index: number, hits: 
       end
       if repair.layer == "shield" then
         v.shield = math.min(v.shieldMax, v.shield + amount)
+      elseif repair.layer == "hull" then
+        v.hull = math.min(v.hullMax, v.hull + amount)
       else
         v.armor = math.min(v.armorMax, v.armor + amount)
       end
