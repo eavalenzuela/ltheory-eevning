@@ -1325,7 +1325,7 @@ suite:Case("an Ice Harvester Upgrade brings more ice a cycle, and a mining upgra
   local state = a.game.state
   local laser = Items.Fitted(state, a.me.id)[1]
   local base = 1 + 0.05 * math.max(0, (state.skills.mining or 0) - 1)
-  t.near(Combat.Yield(state, a.me.id, laser, "ice.oxygen"), base * 1.06, 1e-9)
+  t.near(Combat.Yield(state, a.me.id, laser, "ice.rime"), base * 1.06, 1e-9)
   t.near(Combat.Yield(state, a.me.id, laser, "ore.silicate"), base * 1.09, 1e-9)
 end)
 

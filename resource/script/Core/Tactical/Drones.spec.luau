@@ -553,10 +553,10 @@ suite:Case("a Drone Navigation Computer fitted makes its owner's drones fly fast
   steps(game, 2)
   local drone = state.ships[Drones.Out(state, me.id)[1].ship]
   local plain = Vitals.Stats(state, drone, nil).maxVelocity
-  Items.Add(state, "drone.navigation", 1, me.id, "cargo").slot = 98
+  Items.Equip(state, me.id, "drone.navigation")
   local one = Vitals.Stats(state, drone, nil).maxVelocity
   t.near(one, plain * 1.2, 1e-6)
-  Items.Add(state, "drone.navigation", 1, me.id, "cargo").slot = 99
+  Items.Equip(state, me.id, "drone.navigation")
   local two = Vitals.Stats(state, drone, nil).maxVelocity
   t.ok(two > one and two < plain * 1.2 * 1.2, "a second computer should add less")
 end)

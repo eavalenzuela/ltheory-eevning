@@ -955,8 +955,8 @@ suite:Case("every weapon takes ammunition of its own size and no other; larger r
   -- (and a fighter's cannon and a bomber's rack, which only they carry, and a light and a medium combat drone's guns; and
   -- since 2026-11-18 a seventh form of turret, the Vail's Litany Beam; and since 2026-11-19 a third and a fourth
   -- form of launcher, the Vessari's Swarm Launcher and the Kethri's Vertical Launch Battery, and the Nimia's Plasma
-  -- Torpedo Launcher, a fifth)
-  t.eq(weapons, 7 * 4 + 5 * 4 + 2 + 2, "seven forms of turret and five of launcher, in four sizes, and what a fighter, a bomber and a drone carry")
+  -- Torpedo Launcher, a fifth; and since 2026-11-20 the two rapid launchers)
+  t.eq(weapons, 7 * 4 + 5 * 4 + 2 + 2 + 2, "seven forms of turret and five of launcher, in four sizes, and what a fighter, a bomber and a drone carry")
   for _, form in { "laser.pulse", "laser.beam", "autocannon", "artillery", "blaster", "railgun" } do
     local small, medium, large = Modules.byId[form .. ".small"], Modules.byId[form .. ".medium"], Modules.byId[form .. ".large"]
     -- (and the fourth size, which only a siege dreadnought has the powergrid for)
@@ -1118,7 +1118,8 @@ suite:Case("components are made from minerals, and modules from components and m
       t.ok(components >= 1 and minerals >= 2, module.id)
       -- (by the owner's ruling only the large tech 2 modules call for it: the small and the medium do not)
       local large = string.find(module.id, ".large", 1, true) ~= nil
-        or (string.find(module.id, ".medium", 1, true) == nil and module.weapon ~= nil and module.weapon.size >= 3)
+        or (string.find(module.id, ".medium", 1, true) == nil and module.weapon ~= nil
+          and (module.weapon.mount or module.weapon.size) >= 3)
       t.eq(moon, if module.tech == 2 and large then 1 else 0, `{module.id} and what is made of what is drilled out of moons`)
       composites += moon
     end
@@ -1201,7 +1202,9 @@ suite:Case("every weapon, repairer, extender, plate, mining laser and probe laun
   -- since 2026-11-20 the hull repairer, and the capitals' XL repairers, extender and plate and XL remote repairers;
   -- and the twenty kinds new that day with the full line; and then every older module that had none (99, all but
   -- those that do one thing or do not: Data/Modules' ONE_THING), and every rig (78).
-  t.eq(improved, 48 + 4 * 3 + 3 + 2 * 3 + 6 + 2 * 3 + 2 + 2 + 1 + 1 + 4 + 2 + 20 + 99 + 78)
+  -- And the modules of the rest of the review (the rapid launchers, the burst jammer, the drone navigation computer and
+  -- tracking enhancer, the ice upgrade, the scan array: 7) and its rigs (salvage and probing in three sizes: 6).
+  t.eq(improved, 48 + 4 * 3 + 3 + 2 * 3 + 6 + 2 * 3 + 2 + 2 + 1 + 1 + 4 + 2 + 20 + 99 + 78 + 7 + 6)
   t.ok(Modules.Improved("cloak.device") == nil and Modules.Improved("rig.shield") ~= nil)
   t.eq({ Modules.SizeOf(Modules.byId["autocannon.medium.ii"]), Modules.SizeOf(Modules.byId["shield.extender.large"]),
     Modules.SizeOf(Modules.byId["miner.small"]) }, { 2, 3, 1 })
@@ -1264,7 +1267,7 @@ suite:Case("the same modules have a custom make, between the plain one and tech 
   -- One of each for every module that has a tech 2 make and is not a drone's own.
   -- (and since 2026-11-20 the hundred older modules brought up to the full line: the 99, and the probe launcher, which
   -- had a tech 2 make already; no rig has a custom make or a masterwork)
-  t.eq({ customs, masterworks }, { 48 + 4 * 3 + 3 + 2 * 3 + 2 * 3 + 4 + 1 + 6 + 20 + 100, 48 + 4 * 3 + 3 + 2 * 3 + 2 * 3 + 4 + 1 + 6 + 20 + 100 })
+  t.eq({ customs, masterworks }, { 48 + 4 * 3 + 3 + 2 * 3 + 2 * 3 + 4 + 1 + 6 + 20 + 100 + 7, 48 + 4 * 3 + 3 + 2 * 3 + 2 * 3 + 4 + 1 + 6 + 20 + 100 + 7 })
   t.ok(Modules.Custom("cloak.device") == nil and Modules.Custom("rig.shield") == nil and Modules.Custom("autocannon.small.ii") == nil)
   t.ok(Modules.Masterwork("cloak.device") == nil and Modules.Masterwork("autocannon.small.custom") == nil)
   t.eq({ Modules.Graded("cloak.device", 2), Modules.Graded("autocannon.small", 3) }, { "cloak.device", "autocannon.small" })

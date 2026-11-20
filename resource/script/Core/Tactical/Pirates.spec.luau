@@ -601,7 +601,9 @@ suite:Case("a veteran of a kind fits the custom make of whatever it has one of, 
   -- is the guns'; as they are, more again.)
   local skilled = Items.Offence(state, captain.id).dps
   state.ships[captain.id].skill = state.ships[plain.id].skill
-  t.near(Items.Offence(state, captain.id).dps / Items.Offence(state, plain.id).dps, 1.25, 0.03)
+  -- (and since 2026-11-20 the masterwork of its damage modules, which had none before: a little more again)
+  local ratio = Items.Offence(state, captain.id).dps / Items.Offence(state, plain.id).dps
+  t.ok(ratio >= 1.22 and ratio <= 1.45, `a captain's guns do {ratio} times a plain pirate's`)
   t.ok(skilled > Items.Offence(state, captain.id).dps * 1.2, "a captain's skills make no difference")
   t.ok(whole(captain) > whole(plain) * 1.1, `{whole(captain)} against {whole(plain)}`)
 end)

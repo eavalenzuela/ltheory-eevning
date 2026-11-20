@@ -183,7 +183,10 @@ suite:Case("every module and charge in the data is well formed", function(t)
     -- (a rig takes calibration and nothing else, and is always on)
     t.ok((module.slot == "rig") == (module.calibration ~= nil), `{module.id}: calibration is a rig's`)
     if module.slot == "rig" then
-      t.eq({ module.cpu, module.powergrid, #module.passive } :: { any }, { 0, 0, 2 } :: { any })
+      -- (two modifiers, what it gives and what it costs; or, since 2026-11-20, none, for a rig that helps a salvager or
+      -- probes and costs the ship nothing)
+      t.eq({ module.cpu, module.powergrid, #module.passive } :: { any },
+        { 0, 0, if module.salvage or module.probing then 0 else 2 } :: { any }, module.id)
     end
     local roles = (if module.weapon then 1 else 0) + (if module.repair then 1 else 0) + (if module.boost then 1 else 0)
     t.ok(roles <= 1, `{module.id} does more than one thing`)

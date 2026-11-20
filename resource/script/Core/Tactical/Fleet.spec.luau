@@ -524,9 +524,9 @@ suite:Case("a capacitor relay sends most of what it costs into a locked ship in 
     local hex = relayed.hex :: Modules.Hex
     t.ok(hex.kind == "capacitor" and hex.strength < hex.capacitor and hex.strength > 0.7 * hex.capacitor, relayed.id)
     t.eq((relayed.requires :: any)[1], { skill = "engineering", level = size + 1 })
-    -- (for a friend, and not one of those that mend; nor is there a tech 2 or a custom make of it)
+    -- (for a friend, and not one of those that mend; and since 2026-11-20 with a tech 2 and a custom make, as every module)
     t.ok(Modules.Friendly(relayed) and not Modules.Mends(relayed))
-    t.eq({ Modules.Improved(relayed.id), Modules.Custom(relayed.id) } :: { any }, { nil, nil } :: { any })
+    t.ok(Modules.Improved(relayed.id) ~= nil and Modules.Custom(relayed.id) ~= nil, relayed.id)
   end
   t.ok((large.hex :: any).strength > (medium.hex :: any).strength and (medium.hex :: any).strength > (small.hex :: any).strength)
   t.ok((large.hex :: any).range > (small.hex :: any).range)
@@ -2648,8 +2648,8 @@ suite:Case("a hired pilot whose ship has a Jump Portal Generator opens a portal 
   local game, _wing, second, me, to = carriers("ultracapital.daiichi", "cruiser.ouyou")
   local state = game.state
   local home = me.system
-  t.eq({ Core.Validate(game, { kind = "FleetOrder", actor = 0, what = "portal", target = to }) } :: { any },
-    { false, "no hired pilot here flies a ship with a Jump Portal Generator" } :: { any })
+  t.eq(refused(game, { kind = "FleetOrder", actor = 0, what = "portal", target = to }),
+    "no hired pilot here flies a ship with a Jump Portal Generator")
   Items.Add(state, Structures.FUEL.id, 50000, second.id, "cargo")
   Items.Add(state, "jump.portal", 1, second.id, "cargo").slot = 99
   local theirs = state.balls[second.id]

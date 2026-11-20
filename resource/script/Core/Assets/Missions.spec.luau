@@ -1159,8 +1159,8 @@ suite:Case("a finished job earns loyalty points, and a faction's store sells for
   -- (the Vessari's are projectile guns and missiles: eight kinds of gun and eight launchers, a long one and a
   -- short one of each size, and since 2026-11-19 their own Swarm Launcher in each size, but not the Kethri's
   -- Vertical Launch Battery; and the four tech 2 ships their line names, the Kanau, the Hoshizora, the Raiden
-  -- and the Akaboshi: a ship has no "II")
-  t.eq({ faction, blueprints, foreign, hulls } :: { any }, { "vessari", 20, 0, 4 } :: { any })
+  -- and the Akaboshi: a ship has no "II"; and since 2026-11-20 the two rapid launchers)
+  t.eq({ faction, blueprints, foreign, hulls } :: { any }, { "vessari", 22, 0, 4 } :: { any })
   -- (the Talmar's store has the one tech 2 hull of theirs that a store sells: their hauler's, for a pilot they
   -- think well of)
   local theirs = 0
