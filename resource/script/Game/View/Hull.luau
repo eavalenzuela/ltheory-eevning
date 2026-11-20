@@ -4309,6 +4309,28 @@ local function coatOf(paint: string?, figure: string?, yard: Look): Look?
   }
 end
 
+-- A navy hull (Core/Data/Ships' 'navy'): its base's mesh, in its
+-- people's livery as it leaves the yard (2026-11-20). (A pilot may paint
+-- it over as any other.)
+local function navied(base: Design, lineage: string): Design
+  local out = table.clone(base)
+  local yard: Look = base.look or Hull.looks[base.faction] or Hull.looks.civil
+  local livery = Paints.liveryOf[lineage]
+  out.look = if livery then coatOf(livery.id, livery.wears, if yard.bare then Hull.looks[base.faction] or Hull.looks.civil else yard)
+    else base.look
+  return out
+end
+for _, hull in Ships.list do
+  local from = if hull.navy then hull.base else nil
+  if from and designs[hull.id] == nil and pending[hull.id] == nil then
+    local lineage = hull.lineage
+    pending[hull.id] = function(): Design?
+      local stood = designOf(from)
+      return if stood then navied(stood, lineage) else nil
+    end
+  end
+end
+
 -- The model of a hull type and how big it came out, or nil if nobody
 -- has designed it. Made once and kept. 'pirate' asks for the hull as a
 -- pirate flies it, whoever built it: patched, and in their paint (a

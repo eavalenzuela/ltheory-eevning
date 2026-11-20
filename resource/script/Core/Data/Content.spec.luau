@@ -4,6 +4,7 @@
 
 local Blueprints = require("@lt/Core/Data/Blueprints")
 local Components = require("@lt/Core/Data/Components")
+local Missions = require("@lt/Core/Assets/Missions")
 local Modules = require("@lt/Core/Data/Modules")
 local Moons = require("@lt/Core/Data/Moons")
 local Ores = require("@lt/Core/Data/Ores")
@@ -169,7 +170,8 @@ suite:Case("the Talmar's ships are the owner's rework of them: each by name, of 
   t.eq(#assert(talmar.line), #LINE)
   local theirs = 0
   for _, hull in Ships.list do
-    theirs += if hull.lineage == "talmar" then 1 else 0
+    -- (their navy makes apart: a spec of their own)
+    theirs += if hull.lineage == "talmar" and not hull.navy then 1 else 0
   end
   -- (the twenty-one, and no other: a ship has no "II")
   t.eq(theirs, #LINE)
@@ -453,7 +455,8 @@ suite:Case("the Orun's ships are the owner's list of them: nineteen hulls, six o
   t.eq(#assert(orun.line), #LINE)
   local theirs = 0
   for _, hull in Ships.list do
-    theirs += if hull.lineage == "orun" then 1 else 0
+    -- (their navy makes apart: a spec of their own)
+    theirs += if hull.lineage == "orun" and not hull.navy then 1 else 0
   end
   t.eq(theirs, #LINE)
   for _, entry in LINE do
@@ -518,7 +521,8 @@ suite:Case("the Kethri's ships are the owner's list of them: fifteen hulls, two 
   t.eq(#assert(kethri.line), #LINE)
   local theirs = 0
   for _, hull in Ships.list do
-    theirs += if hull.lineage == "kethri" then 1 else 0
+    -- (their navy makes apart: a spec of their own)
+    theirs += if hull.lineage == "kethri" and not hull.navy then 1 else 0
   end
   t.eq(theirs, #LINE)
   for _, entry in LINE do
@@ -612,7 +616,8 @@ suite:Case("the Vessari's ships are the owner's list of them: an ultracapital fo
   t.eq(#assert(vessari.line), #LINE)
   local theirs = 0
   for _, hull in Ships.list do
-    theirs += if hull.lineage == "vessari" then 1 else 0
+    -- (their navy makes apart: a spec of their own)
+    theirs += if hull.lineage == "vessari" and not hull.navy then 1 else 0
   end
   t.eq(theirs, #LINE)
   for _, entry in LINE do
@@ -1428,6 +1433,47 @@ suite:Case("a capital has XL fittings of its own, which nothing smaller fits", f
   end
   t.ok((Attributes.Check(Ships.byId["carrier.azayake"], { "shield.booster.xl" })), "a carrier does not fit an XL booster")
   t.ok(assert(Modules.byId["shield.booster.xl"].repair).amount > assert(Modules.byId["shield.booster.large"].repair).amount * 3)
+end)
+
+suite:Case("each human people has a navy make of one combat hull of each class, frigate to battleship: tougher, one more slot, sold for loyalty", function(t)
+  local COMBAT = { "frigate", "destroyer", "cruiser", "battlecruiser", "attackbattlecruiser", "battleship" }
+  for _, people in { "vessari", "talmar", "orun", "kethri" } do
+    local seen: { [string]: number } = {}
+    for _, hull in Ships.list do
+      if hull.navy and hull.lineage == people then
+        local base = assert(Ships.byId[hull.base :: string])
+        seen[hull.class] = (seen[hull.class] or 0) + 1
+        t.ok(table.find(COMBAT, hull.class) ~= nil and base.tech == nil and base.role == nil, hull.id)
+        -- (to two figures or so, as every hull's: Data/Ships)
+        t.near(hull.shield / base.shield, 1.2, 0.02)
+        t.near(hull.armor / base.armor, 1.2, 0.02)
+        t.near(hull.hull / base.hull, 1.2, 0.02)
+        t.eq(Skills.Needs(hull.id), Skills.Needs(base.id))
+        t.eq(hull.mids + hull.lows, base.mids + base.lows + 1, hull.id)
+        t.eq({ hull.highs, hull.turrets, hull.launchers, hull.radius, hull.bonuses } :: { any },
+          { base.highs, base.turrets, base.launchers, base.radius, base.bonuses } :: { any }, hull.id)
+        -- (not on a market, and in the people's own store)
+        t.ok(hull.rare and Ships.Improved(base.id) ~= hull, hull.id)
+        local offered = false
+        for _, stock in Missions.Store(people) do
+          offered = offered or stock.type == hull.id
+        end
+        t.ok(offered, `{hull.id} is not in the {people} store`)
+      end
+    end
+    -- One of each class they build, and no more.
+    for _, class in COMBAT do
+      local builds = false
+      for _, hull in Ships.list do
+        builds = builds or (hull.lineage == people and hull.class == class and hull.tech == nil and not hull.navy and hull.role == nil)
+      end
+      t.eq(seen[class], if builds then 1 else nil, `{people} {class}`)
+    end
+  end
+  -- Nobody else has one.
+  for _, hull in Ships.list do
+    t.ok(not hull.navy or table.find({ "vessari", "talmar", "orun", "kethri" }, hull.lineage) ~= nil, hull.id)
+  end
 end)
 
 return suite

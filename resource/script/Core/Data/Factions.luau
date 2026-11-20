@@ -93,6 +93,9 @@ export type Faction = {
   -- Every hull of its line that is not a tech 2 make has a cloak of its
   -- own, built in (Data/Ships' 'cloak'). The Drowned's.
   cloaks: boolean?,
+  -- The plain hulls of its line it has a navy make of (Data/Ships), by
+  -- name: one of each class from frigate to battleship.
+  navy: { string }?,
   -- The make of gun its warships carry, where that is not the first of
   -- its family: "railgun", of the hybrids. (The first, if not said: a
   -- blaster.)
@@ -170,6 +173,9 @@ Factions.list = {
     -- engine nacelles. The guns on the hardpoints that are not launchers
     -- are projectile ones, which suits that; the sketch
     -- does not say.)
+    -- (its navy makes, 2026-11-20: the owner's "one per class", from frigate to battleship; which hull where
+    -- there are two of a class is mine, the one most of its people's weapon and tank, for the owner to correct)
+    navy = { "Kabuto", "Nozomi", "Ouyou", "Naishou", "Manazashi", "Owari" },
     id = "vessari", name = "Vessari", kind = "human", style = "slab", weapon = "projectile", launchers = 0.7, tank = "armor",
     affinity = 4,
     note = "Missiles and heavy armour. Blocky, hard-working hulls with their conduits bare and their engines out on struts: a merchant people's ships, built to be hit and keep flying.",
@@ -209,6 +215,9 @@ Factions.list = {
     -- protrusions", with Star Wars' Mon Calamari cruisers as the visual
     -- point of reference. The draft says nothing of weapons or defence:
     -- those are as they were.)
+    -- (its navy makes, 2026-11-20: the owner's "one per class", from frigate to battleship; which hull where
+    -- there are two of a class is mine, the one most of its people's weapon and tank, for the owner to correct)
+    navy = { "Carvarro", "Meseolo", "Paestro", "Sopholto", "Losiano" },
     id = "talmar", name = "Talmar", kind = "human", style = "cloud", weapon = "projectile", launchers = 0.35, tank = "shield",
     affinity = 3,
     note = "Guns, missiles and shields. Hulls like clouds: rounded, lobed and blistered, without a corner on them, fast for their class.",
@@ -250,6 +259,9 @@ Factions.list = {
     -- and gold highlights. Also, they tend to have a lot of antenna
     -- masts." The draft says nothing of weapons or defence: those are as
     -- they were.)
+    -- (its navy makes, 2026-11-20: the owner's "one per class", from frigate to battleship; which hull where
+    -- there are two of a class is mine, the one most of its people's weapon and tank, for the owner to correct)
+    navy = { "Knife", "Scythe", "Armer", "Zweihander", "Claymore" },
     id = "orun", name = "Orun", kind = "human", style = "motley", weapon = "hybrid", launchers = 0, tank = "armor",
     affinity = 2,
     note = "Blasters, railguns and sheer bulk. The Confederation's hulls come from yards that agree on nothing: no two are built alike, and all of them wear red and gold and a thicket of aerials. Slow, hard to kill, and they carry a great deal.",
@@ -295,6 +307,9 @@ Factions.list = {
     -- (2026-11-13, the owner: "an 80/20 mix of lasers/missiles": two
     -- hardpoints in ten are launchers. Their frigate, the hull written
     -- out by hand in Data/Ships, is small enough to be all lasers.)
+    -- (its navy makes, 2026-11-20: the owner's "one per class", from frigate to battleship; which hull where
+    -- there are two of a class is mine, the one most of its people's weapon and tank, for the owner to correct)
+    navy = { "Battleaxe", "Sentry", "Perfexis", "Extremis", "Teardrop" },
     id = "kethri", name = "Kethri", kind = "human", style = "blade", weapon = "laser", launchers = 0.2, tank = "armor", nomad = true,
     affinity = 1,
     note = "Lasers, with missiles beside them, and armour. Nomads, who keep no stations and live aboard colony ships ten kilometres long. Their hulls are blades in flat grey plate, sharp at every edge, each with its conning tower: deep capacitors, long sight, and never out of ammunition.",

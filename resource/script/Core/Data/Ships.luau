@@ -166,6 +166,8 @@ export type ShipType = {
   racks: { number }?,
   -- Nobody sells it, nor the blueprint for it (Data/Types).
   rare: boolean?,
+  -- A people's navy make of its 'base' (the plain hull): Ships' NAVY.
+  navy: boolean?,
   -- What it does better than its class, a level of a skill or as its
   -- role (Data/HullBonuses). Nil for a hull that has no such bonus.
   bonuses: { HullBonuses.HullBonus }?,
@@ -900,6 +902,38 @@ for _, yard in Factions.list do
     end
   end
 end
+-- A navy make of a plain warship (the owner's, 2026-11-20: navy makes of
+-- the four human peoples' combat hulls, "one per class" from frigate to
+-- battleship, with "an extra slot"): the same hull, in its people's
+-- livery, a fifth tougher in each layer, a tenth more CPU and powergrid,
+-- and one more slot where its tank is fitted (a low for an armoured
+-- hull, a mid for a shielded one), with its base's bonuses. Its people
+-- sell it for loyalty points to a pilot they think well of
+-- (Assets/Missions); no market does. (The figures and the price mine.)
+local NAVY = { price = 3, layers = 1.2, fitting = 1.1 }
+for _, yard in Factions.list do
+  local navy: { string } = yard.navy or {}
+  for _, named in navy do
+    local base: ShipType? = nil
+    for _, t in types do
+      if t.lineage == yard.id and t.name == `{yard.name} {named}` and t.tech == nil then
+        base = t
+      end
+    end
+    local from = assert(base, `{yard.name} have no {named} to make a navy hull of`)
+    local hull = table.clone(from)
+    hull.id, hull.name = `{from.class}.{string.lower(named)}navy`, `{yard.name} Navy {named}`
+    hull.navy, hull.base = true, from.id
+    hull.basePrice = from.basePrice * NAVY.price
+    hull.shield, hull.armor, hull.hull = round(from.shield * NAVY.layers), round(from.armor * NAVY.layers), round(from.hull * NAVY.layers)
+    hull.cpu, hull.powergrid = round(from.cpu * NAVY.fitting), round(from.powergrid * NAVY.fitting)
+    local armoured = from.armor >= from.shield
+    hull.mids, hull.lows = from.mids + (if armoured then 0 else 1), from.lows + (if armoured then 1 else 0)
+    hull.rare = true
+    table.insert(types, hull)
+  end
+end
+
 -- (No other hull has a tech 2 make. A module has its "II", and a ship
 -- has not: a tech 2 ship is a hull of its own, made for something, that
 -- comes of a plain one. The project owner's ruling, 2026-11-13.)
@@ -993,7 +1027,8 @@ end
 do
   local known: { [string]: boolean } = {}
   for _, t in types do
-    t.bonuses = HullBonuses.byHull[t.id]
+    -- (a navy make has its base's)
+    t.bonuses = HullBonuses.byHull[t.id] or (if t.navy and t.base then HullBonuses.byHull[t.base] else nil)
     known[t.id] = true
   end
   for id in HullBonuses.byHull do

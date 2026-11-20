@@ -409,6 +409,11 @@ function Skills.Needs(type: string): { Need }
   if better and better.meta and better.base then
     return Skills.Needs(better.base)
   end
+  -- A navy hull wants what its plain one does.
+  local navy = Ships.byId[type]
+  if navy and navy.navy and navy.base then
+    return Skills.Needs(navy.base)
+  end
   -- A tech 2 hull wants what the plain one does, as a tech 2 module does.
   local rebuilt = Ships.byId[type]
   if rebuilt and rebuilt.tech == 2 and rebuilt.base then

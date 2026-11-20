@@ -1065,6 +1065,12 @@ function Missions.Store(faction: string): { Stock }
       if hull.tech == 2 and hull.lineage == faction and blueprint and points then
         table.insert(stock, { type = blueprint.id, points = points, credits = hull.basePrice // 20, standing = 3 })
       end
+      -- (its navy hulls themselves, for twice the points of a tech 2 hull's drawings and its plain hull's price:
+      -- Data/Ships' NAVY; the figures mine)
+      local plain = if hull.navy and hull.base then Ships.byId[hull.base] else nil
+      if plain and hull.lineage == faction and points then
+        table.insert(stock, { type = hull.id, points = 2 * points, credits = plain.basePrice, standing = 2 })
+      end
     end
   end
   stores[faction] = stock
