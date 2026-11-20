@@ -163,6 +163,8 @@ export type ModuleType = {
   -- while it is fitted: so much more, the more of them the less each,
   -- Tactical/Combat)
   amplify: { layer: string, by: number }?,
+  -- (so much more drone control range, m: Tactical/Drones)
+  droneRange: number?,
   -- at most one of these makes it something a pilot switches on:
   weapon: Weapon?,
   repair: Repair?,
@@ -1534,6 +1536,12 @@ table.insert(modules, {
   volume = 10, basePrice = 60000, passive = {},
   hex = { kind = "entangle", range = 1000, strength = 0.2, duration = 5, capacitor = 4 },
   requires = { { skill = "propulsion.jamming", level = 3 } },
+})
+-- (a Drone Link Augmentor: drones worked 20 km farther from the ship, the
+-- reference's, now that drones have a control range, Tactical/Drones)
+table.insert(modules, {
+  id = "drone.link", name = "Drone Link Augmentor", slot = "high", hardpoint = "", cpu = 27, powergrid = 53, volume = 25,
+  basePrice = 40000, passive = {}, droneRange = 20000, requires = { { skill = "drones", level = 3 } },
 })
 -- (and the utility modules of the same review, for hauling, travel and
 -- fitting: the reference's figures where it has one that means the same

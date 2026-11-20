@@ -521,4 +521,28 @@ suite:Case("drone damage amplifiers fitted to the owner make its drones hit hard
   t.ok(two / one > 1 and two / one < 1.15, `{two / one}`)
 end)
 
+suite:Case("drones are worked only so far from their ship: farther with the Drones skill and with a Drone Link Augmentor", function(t)
+  local game, me = flying("cruiser.ouyou", 2, 5)
+  local state = game.state
+  t.ok((submit(game, { kind = "LaunchDrones", actor = 0 })))
+  steps(game, 5)
+  local reach = Drones.Reach(state, me.id)
+  t.eq(reach, Drones.RANGE + 5 * Drones.RANGE_SKILL)
+  -- Somebody out of reach is not to be engaged; somebody in it is.
+  local far = Pirates.Spawn(state, Pirates.SCOUT, me.system, me.x + reach + 5000, me.y, me.z, me.grid)
+  local near = Pirates.Spawn(state, Pirates.SCOUT, me.system, me.x + 4000, me.y, me.z, me.grid)
+  for _, ball in { far, near } do
+    state.pilots[ball.id] = nil
+    State.RemoveId(state.pilotIds, ball.id)
+  end
+  t.eq(refused(game, { kind = "EngageDrones", actor = 0, target = far.id }), `beyond drone control range ({math.floor(reach / 1000)} km)`)
+  t.ok((submit(game, { kind = "EngageDrones", actor = 0, target = near.id })))
+  -- An augmentor fitted reaches farther.
+  local link = Items.Add(state, "drone.link", 1, me.id, "cargo")
+  link.slot = 99
+  t.eq(Drones.Reach(state, me.id), reach + 20000)
+  Items.Take(state, link, 1)
+  t.eq(Drones.Reach(state, me.id), reach)
+end)
+
 return suite

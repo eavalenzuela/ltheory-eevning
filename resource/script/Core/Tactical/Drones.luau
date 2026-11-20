@@ -131,6 +131,26 @@ function Drones.Skill(state: State.State, ship: number): number
   return if levels then math.max(0, levels.drones or 0) else 5
 end
 
+-- How far from its ship a ship's drones are worked (the owner's, 2026-11-20:
+-- "Add a range"): so far, so much more for each level of the Drones skill,
+-- and so much more for each Drone Link Augmentor fitted. A drone goes after
+-- nothing farther than that from its ship. (The figures are mine.)
+Drones.RANGE = 60000
+Drones.RANGE_SKILL = 5000
+function Drones.Reach(state: State.State, ship: number): number
+  local reach = Drones.RANGE + Drones.RANGE_SKILL * Drones.Skill(state, ship)
+  for _, item in Items.Fitted(state, ship) do
+    local module = Modules.byId[item.type]
+    reach += if module then module.droneRange or 0 else 0
+  end
+  return reach
+end
+
+-- Whether a ball is within a ship's drone control range.
+local function inReach(state: State.State, owner: State.Ball, target: State.Ball): boolean
+  return Space.Gap(owner :: any, target :: any) <= Drones.Reach(state, owner.id)
+end
+
 -- The drones a ship has out, in the order they were launched.
 function Drones.Out(state: State.State, ship: number): { State.Drone }
   local found: { State.Drone } = {}
@@ -307,6 +327,8 @@ function Drones.Validate(state: State.State, command: State.Command): (boolean, 
       return false, "no such target"
     elseif target.system ~= ball.system or target.grid ~= ball.grid then
       return false, "target is not on grid"
+    elseif not inReach(state, ball, target) then
+      return false, `beyond drone control range ({math.floor(Drones.Reach(state, ball.id) / 1000)} km)`
     end
     return true
   end
@@ -537,10 +559,14 @@ function Drones.Step(state: State.State, events: { Event })
       elseif Kinds.byId[drone.type].role == "repair" then
         repair(state, ball, owner, events)
       else
-        local prey = state.balls[drone.target]
-        if prey == nil or prey.system ~= ball.system or prey.grid ~= ball.grid then
+        local prey: State.Ball? = state.balls[drone.target]
+        if prey == nil or prey.system ~= ball.system or prey.grid ~= ball.grid or not inReach(state, owner, prey) then
           drone.target = Pirates.Hunting(state, owner)
           prey = state.balls[drone.target]
+          -- (nothing beyond its ship's control range)
+          if prey and not inReach(state, owner, prey) then
+            drone.target, prey = 0, nil
+          end
         end
         if prey == nil then
           if #ball.vitals.locks > 0 then
