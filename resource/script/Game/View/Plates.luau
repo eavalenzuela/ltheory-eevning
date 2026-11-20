@@ -365,6 +365,40 @@ function Plates.Loft(b: Builder, part: number, outline: Outline, x: number?, y: 
   table.insert(b.solids, { outline = outline, x = x or 0, y = y or 0 })
 end
 
+-- A surface of revolution (2026-11-20, for what turns on a hull: true
+-- rings, domes and dishes, not chunks): 'profile' turned round the z
+-- axis through the origin, each point of it (x) out from the axis at
+-- (y) along it, in 'sides' steps round. Its outside is to the right of
+-- the way the profile runs, looking along the turn: a profile run out
+-- from the axis and then back faces away from the axis and out along it
+-- (round a torus: run it anticlockwise, out from the axis being right
+-- and along it up). 'closed' joins its last point to its first. Smooth:
+-- its points are shared, so it is lit as one rounded thing.
+function Plates.Revolve(b: Builder, part: number, profile: { vector }, sides: number, closed: boolean?)
+  local tag = part + own(b)
+  local skin = skinOf(b)
+  local base = b.points
+  local count = #profile
+  for _, point in profile do
+    for side = 0, sides - 1 do
+      local a = side / sides * 2 * math.pi
+      Mesh_AddVertex(skin, vector.create(point.x * math.cos(a), point.x * math.sin(a), point.y), UNSET, 1, tag)
+    end
+  end
+  b.points += count * sides
+  local spans = if closed then count else count - 1
+  for i = 0, spans - 1 do
+    local j = (i + 1) % count
+    for side = 0, sides - 1 do
+      local a, c = base + i * sides + side, base + j * sides + side
+      local a2, c2 = base + i * sides + (side + 1) % sides, base + j * sides + (side + 1) % sides
+      Mesh_AddTriangle(skin, a, c, a2)
+      Mesh_AddTriangle(skin, a2, c, c2)
+    end
+  end
+  b.kept += 1
+end
+
 -- A fairing: a slender swelling on a skin, lying along it and flush to
 -- it, pointed at both ends. 'z' and 'around' are where its middle is on
 -- the skin (Plates.Point); it is 'length' long, 'width' across at its
@@ -758,6 +792,17 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
     Mesh_ComputeOcclusion(mesh)
     local metal = Model_Create()
     Model_Add(metal, mesh, Material_Metal())
+    -- (and a skin, bare as the rest: a moving part's rings and dishes)
+    local lofted = b.skin
+    if lofted then
+      Mesh_ReverseWinding(lofted)
+      Mesh_ComputeNormals(lofted)
+      if scale and scale ~= 1 then
+        Mesh_Scale(lofted, vector.create(scale, scale, scale))
+      end
+      Mesh_ComputeOcclusion(lofted)
+      Model_Add(metal, lofted, Material_Metal())
+    end
     local box = Renderable_GetBound(metal)
     return metal, box.lower, box.upper, { mesh }
   end

@@ -2860,9 +2860,48 @@ end
 -- seed alone: "it's sort of take-it-or-leave-it. Can they each have
 -- their own seed as well?" 0, or none, is the hull's own.)
 export type Detail = { antennas: boolean?, pipes: boolean?, greebles: boolean?, lights: boolean?, rivets: boolean?,
-  seeds: { [string]: number }? }
+  dishes: boolean?, rotors: boolean?, vanes: boolean?, seeds: { [string]: number }?,
+  -- (moving parts, 2026-11-20: with 'moving', antennas and the three
+  -- kinds after them are pieces of their own that move, Hull.Mover, and
+  -- not plates of the hull; 'mode', what a mode part opens for: "siege",
+  -- "triage", "core" or "jump", for a hull that can run that mode. Only
+  -- the hull browser asks for them yet.)
+  moving: boolean?, mode: string? }
 -- The kinds, in the order the hull browser's number keys switch them.
-Hull.DETAILS = { "antennas", "pipes", "greebles", "lights", "rivets" }
+-- (dishes, rotors and vanes are moving parts, drawn only with 'moving')
+Hull.DETAILS = { "antennas", "pipes", "greebles", "lights", "rivets", "dishes", "rotors", "vanes" }
+
+-- Moving parts (the owner's, 2026-11-20; memory: moving parts rulings):
+-- pieces of a hull that move, each a model of its own on a pivot, posed
+-- every frame by Game/View/Movers from what the ship is doing. Purely
+-- what is seen: nothing in the rules knows of them.
+--   antenna  a mast leaning back along the hull by the ship's one lean
+--            ('lean', radians), folded flat in warp, upright and drawn
+--            out half as long again while scanning
+--   dish, lattice, radar
+--            a head ('head', at 'headAt' up its mast) that sweeps at
+--            rest, sweeps or spins fast while scanning, points at what
+--            electronic warfare is aimed at, and is parked in warp
+--   ring, drum, collar, spar
+--            turns steadily ('rate', radians a second) about its axis:
+--            the hull's length ('fore'), or its face's ('up') for a spar
+--   vane     a fin hinged on its 'up', lying aft along the hull, that
+--            fans out ('open', radians) while its 'mode' runs, and a lit
+--            strip ('glow') shown while it is open
+-- 'at' is its pivot and 'up' and 'fore' how it stands at rest, in the
+-- hull model's own units and axes; 'pace' and 'phase' are its own, so a
+-- ship's parts do not move as one.
+export type Mover = { kind: string, model: Model, head: Model?, glow: Model?, at: vector, up: vector, fore: vector,
+  headAt: number?, lean: number?, rate: number?, open: number?, mode: string?, pace: number, phase: number }
+
+-- What a moving part is made of before it is a model: boxes in its own
+-- frame (its 'up' its y, its 'fore' its z, its pivot the origin) in the
+-- generator's units, as a hull's detail is.
+type Bit = { part: number, center: vector, half: vector, turn: vector?, bevel: number?,
+  -- (or, in place of a box, a smooth surface turned round its z axis: Plates.Revolve's profile, as (out, along))
+  revolve: { vector }?, sides: number?, closed: boolean? }
+type MoverSpec = { kind: string, at: vector, up: vector, fore: vector, bits: { Bit }, head: { Bit }?, glow: { Bit }?,
+  headAt: number?, lean: number?, rate: number?, open: number?, mode: string?, pace: number, phase: number }
 
 local LAMP_RED, LAMP_GREEN, LAMP_WHITE = Plates.LAMP_RED, Plates.LAMP_GREEN, Plates.LAMP_WHITE
 local BOW, STERN = v(0, 0, 1), v(0, 0, -1)
@@ -2889,7 +2928,347 @@ end
 -- each of its two ways, and whether it is drawn with its twin.
 type Face = { at: vector, n: vector, h1: number, h2: number, twin: boolean }
 
-local function detailed(b: Builder, ship: Ship, detail: Detail, metres: number)
+-- The turn (yaw, pitch, roll, as Plates.Block takes it) that lays a
+-- box's own z along 'along' and its own x along 'across'.
+local function oriented(along: vector, across: vector): vector
+  local al = vector.normalize(along)
+  local yaw, pitch = math.atan2(al.x, al.z), -math.asin(math.clamp(al.y, -1, 1))
+  local x0 = v(math.cos(yaw), 0, -math.sin(yaw))
+  local y0 = vector.cross(al, x0)
+  local t = across - al * vector.dot(across, al)
+  local roll = if vector.magnitude(t) > 1e-6 then math.atan2(vector.dot(t, y0), vector.dot(t, x0)) else 0
+  return v(yaw, pitch, roll)
+end
+
+-- A box laid between two points, 'wide' across (along 'across') and
+-- 'thick' the third way.
+local function slab(part: number, from: vector, to: vector, across: vector, wide: number, thick: number, bevel: number?): Bit
+  local along = to - from
+  return { part = part, center = (from + to) / 2, half = v(wide, thick, vector.magnitude(along) / 2),
+    turn = oriented(along, across), bevel = bevel or 0.2 }
+end
+local function bar(part: number, from: vector, to: vector, thick: number): Bit
+  local along = to - from
+  local across = vector.cross(along, if math.abs(along.y) < 0.9 * vector.magnitude(along) then v(0, 1, 0) else v(1, 0, 0))
+  return slab(part, from, to, across, thick, thick, 0.25)
+end
+
+-- Smooth things turned round a part's z axis (Plates.Revolve): a torus
+-- 'big' from the axis to the middle of its tube, the tube 'tube' thick,
+-- at 'z'; a hoop, a squared ring 'deep' along the axis from 'inner' to
+-- 'outer' out from it; and a dish's thin shell, the curve 'bowl' gives
+-- from the axis out to 'rim', 'thick' through.
+local function torus(part: number, big: number, tube: number, z: number?, sides: number?): Bit
+  local profile: { vector } = {}
+  local steps = 16
+  for i = 0, steps - 1 do
+    local a = i / steps * 2 * math.pi
+    table.insert(profile, v(big + tube * math.cos(a), (z or 0) + tube * math.sin(a), 0))
+  end
+  return { part = part, center = v(0, 0, 0), half = v(0, 0, 0), revolve = profile, sides = sides or 64, closed = true }
+end
+local function hoop(part: number, inner: number, outer: number, deep: number, sides: number?): Bit
+  local e = math.min(outer - inner, deep) * 0.18
+  local profile = {
+    v(inner, -deep + e, 0), v(inner + e, -deep, 0), v(outer - e, -deep, 0), v(outer, -deep + e, 0),
+    v(outer, deep - e, 0), v(outer - e, deep, 0), v(inner + e, deep, 0), v(inner, deep - e, 0),
+  }
+  return { part = part, center = v(0, 0, 0), half = v(0, 0, 0), revolve = profile, sides = sides or 64, closed = true }
+end
+local function shell(part: number, bowl: (r: number) -> number, rim: number, thick: number, sides: number?): Bit
+  local profile: { vector } = {}
+  local steps = 10
+  -- (out along its back, round its lip, and in along its face)
+  for i = 0, steps do
+    local r = rim * i / steps
+    table.insert(profile, v(r, bowl(r) - thick, 0))
+  end
+  table.insert(profile, v(rim + thick * 0.5, bowl(rim) - thick * 0.5, 0))
+  for i = steps, 0, -1 do
+    local r = rim * i / steps
+    table.insert(profile, v(r, bowl(r), 0))
+  end
+  return { part = part, center = v(0, 0, 0), half = v(0, 0, 0), revolve = profile, sides = sides or 48 }
+end
+
+-- The dishes, the turning sections and the mode parts of a hull
+-- (Hull.Mover), by the dice of each kind, where each fits: for the
+-- detail builder below, whose places and tests ('ctx') they use.
+local function movingParts(detail: Detail, out: { MoverSpec }, emit: (spec: MoverSpec, face: any) -> (), ctx: any)
+  local u, more = ctx.u :: number, ctx.more :: number
+  local inside, fits, pick, spot, clearOf = ctx.inside, ctx.fits, ctx.pick, ctx.spot, ctx.clearOf
+  local function faceWaysOf(n: vector): (vector, vector)
+    return faceWays(n)
+  end
+  -- (nothing of the hull in a circle of 'r' about 'p' up its face's 'n', at 'h' and a little above and below)
+  local function swept(p: vector, n: vector, h: number, r: number): boolean
+    local a, c = faceWaysOf(n)
+    for _, high in { h - r * 0.7, h, h + r * 0.7 } do
+      for k = 0, 11 do
+        local t = k / 12 * 2 * math.pi
+        if inside(p + n * math.max(ctx.EPS, high) + (a * math.cos(t) + c * math.sin(t)) * r) then
+          return false
+        end
+      end
+    end
+    return clearOf(p, r)
+  end
+
+  -- Dishes and radars (2026-11-20: "Parabolic dish, Flat radar bar,
+  -- Lattice/mesh dish"; one look for every people, in the hull's paint).
+  if detail.dishes then
+    local rng = ctx.rngOf("dishes")
+    local count = math.max(1, math.floor(rng:Int(1, 3) * math.min(more, 1.6) + 0.5))
+    for _ = 1, count do
+      local face = pick({ UP, UP, STARBOARD, DOWN })
+      if face then
+        for _ = 1, 10 do
+          local p = spot(face)
+          local n = face.n
+          local s = u * rng:Float(0.07, 0.13)
+          local h = s * rng:Float(0.7, 1.1)
+          if fits(p, n, s * 0.25, s * 0.25, h) and swept(p, n, h, s * 1.15) then
+            local shape = ({ "dish", "radar", "lattice" })[rng:Int(3) + 1]
+            local base: { Bit } = {
+              { part = PATCH, center = v(0, s * 0.06, 0), half = v(s * 0.22, s * 0.06, s * 0.22), bevel = 0.3 },
+              { part = FRAME, center = v(0, h / 2, 0), half = v(s * 0.06, h / 2, s * 0.06), bevel = 0.2 },
+              { part = PATCH, center = v(0, h, 0), half = v(s * 0.12, s * 0.08, s * 0.12), bevel = 0.3 },
+            }
+            local head: { Bit } = {}
+            local k = 0.35 / s
+            local function bowl(r: number, a: number): vector
+              return v(r * math.cos(a), r * math.sin(a), k * r * r + s * 0.12)
+            end
+            if shape == "radar" then
+              -- (a long flat array on its rotor, backed by a frame)
+              table.insert(head, { part = PATCH, center = v(0, s * 0.3, 0), half = v(s * 1.15, s * 0.22, s * 0.05), bevel = 0.25 })
+              table.insert(head, { part = FRAME, center = v(0, s * 0.3, -s * 0.09), half = v(s * 1.05, s * 0.05, s * 0.04), bevel = 0.2 })
+              table.insert(head, { part = FRAME, center = v(0, s * 0.1, -s * 0.04), half = v(s * 0.05, s * 0.1, s * 0.05), bevel = 0.2 })
+            else
+              -- (a bowl facing its z, on a yoke, and a feed held out at its focus)
+              local function curve(r: number): number
+                return k * r * r + s * 0.12
+              end
+              if shape == "dish" then
+                -- (a true paraboloid shell, and a rolled lip)
+                table.insert(head, shell(PATCH, curve, s, s * 0.03))
+                table.insert(head, torus(FRAME, s, s * 0.022, curve(s), 56))
+              else
+                -- (open: two true rings, and ribs from the hub to the rim)
+                table.insert(head, torus(FRAME, s, s * 0.016, curve(s), 56))
+                table.insert(head, torus(FRAME, 0.58 * s, s * 0.012, curve(0.58 * s), 48))
+                local ribs = 10
+                for i = 0, ribs - 1 do
+                  local a = (i + 0.5) / ribs * 2 * math.pi
+                  table.insert(head, bar(FRAME, bowl(0.14 * s, a), bowl(0.58 * s, a), s * 0.013))
+                  table.insert(head, bar(FRAME, bowl(0.58 * s, a), bowl(s, a), s * 0.013))
+                end
+              end
+              table.insert(head, { part = PATCH, center = v(0, 0, s * 0.1), half = v(s * 0.16, s * 0.16, s * 0.05), bevel = 0.3 })
+              local focus = v(0, 0, s * 0.75)
+              for i = 0, 2 do
+                local a = i / 3 * 2 * math.pi + math.pi / 2
+                table.insert(head, bar(FRAME, bowl(0.9 * s, a), focus, s * 0.012))
+              end
+              table.insert(head, { part = PATCH, center = focus, half = v(s * 0.06, s * 0.06, s * 0.07), bevel = 0.4 })
+            end
+            emit({ kind = shape, at = p, up = n, fore = BOW, bits = base, head = head, headAt = h, pace = rng:Float(0.7, 1.3),
+              phase = rng:Float(0, 2 * math.pi) }, face)
+            break
+          end
+        end
+      end
+    end
+  end
+
+  -- Turning sections (2026-11-20: rings round the hull, drums, engine
+  -- collars and spars; a steady turn and nothing else; any size).
+  if detail.rotors then
+    local rng = ctx.rngOf("rotors")
+    local boxes: { any } = ctx.boxes
+    local lo, hi = math.huge, -math.huge
+    for _, box in boxes do
+      lo, hi = math.min(lo, box.center.z - box.size.z), math.max(hi, box.center.z + box.size.z)
+    end
+    local length = hi - lo
+    -- (the hull across, about its spine, within 'band' of 'z': where its middle is up and down, and how far its
+    -- farthest corner is from that)
+    local function across(z: number, band: number): (number, number)
+      local low, high, wide = math.huge, -math.huge, 0
+      for _, box in boxes do
+        if math.abs(box.center.z - z) < box.size.z + band then
+          low, high = math.min(low, box.center.y - box.size.y), math.max(high, box.center.y + box.size.y)
+          wide = math.max(wide, math.abs(box.center.x) + box.size.x)
+        end
+      end
+      if low > high then
+        return 0, 0
+      end
+      local middle = (low + high) / 2
+      return middle, math.sqrt(wide * wide + ((high - low) / 2) ^ 2)
+    end
+    -- (no mount within 'band' of 'z')
+    local function clearAt(z: number, band: number): boolean
+      for _, at in ctx.clear :: { vector } do
+        if math.abs(at.z - z) < band + ctx.reach * 1.6 then
+          return false
+        end
+      end
+      return true
+    end
+    local shapes = { "ring", "drum", "spar" }
+    if #(ctx.ends :: { any }) > 0 then
+      table.insert(shapes, "collar")
+    end
+    local count = if ctx.metres >= 400 and rng:Int(2) == 0 then 2 else 1
+    -- (each shape tried in turn, from one the dice pick, until one finds the room)
+    local function tryShape(shape: string): boolean
+      local rate = rng:Float(0.08, 0.25) * (if rng:Int(2) == 0 then 1 else -1)
+      local pace, phase = 1, rng:Float(0, 2 * math.pi)
+      if shape == "ring" or shape == "drum" then
+        for _ = 1, 10 do
+          local z = lo + length * rng:Float(0.25, 0.7)
+          local band = length * 0.04
+          local middle, r = across(z, band)
+          if r > 0 and clearAt(z, band * 2) then
+            local inner = r * 1.08
+            local bits: { Bit } = {}
+            local N = 20
+            local function on(radius: number, a: number): vector
+              return v(radius * math.cos(a), radius * math.sin(a), 0)
+            end
+            if shape == "ring" then
+              -- (a true torus on spokes from a slighter one round the hull)
+              local outer = inner * rng:Float(1.25, 1.55)
+              local thick = math.max(u * 0.006, (outer - inner) * 0.12)
+              table.insert(bits, torus(PLATING, outer, thick * 1.3))
+              table.insert(bits, torus(FRAME, inner, thick * 0.5))
+              for i = 0, 5 do
+                local a = i / 6 * 2 * math.pi
+                table.insert(bits, bar(FRAME, on(inner, a), on(outer - thick, a), thick * 0.5))
+              end
+              if detail.lights then
+                for i = 0, N - 1 do
+                  local a = (i + 0.5) / N * 2 * math.pi
+                  table.insert(bits, { part = GLOW, center = on(outer + thick * 1.2, a), half = v(thick * 0.25, thick * 0.35, thick * 0.5),
+                    turn = v(0, 0, a), bevel = 0.4 })
+                end
+              end
+            else
+              -- (a true band round the hull, ribbed at its edges)
+              local wide = band * rng:Float(0.8, 1.6)
+              local thick = math.max(u * 0.005, inner * 0.05)
+              table.insert(bits, hoop(PLATING, inner, inner + thick * 2, wide))
+              table.insert(bits, torus(FRAME, inner + thick * 2, thick * 0.45, wide * 0.92))
+              table.insert(bits, torus(FRAME, inner + thick * 2, thick * 0.45, -wide * 0.92))
+              if detail.lights then
+                for i = 0, N - 1, 2 do
+                  local a = (i + 0.5) / N * 2 * math.pi
+                  table.insert(bits, { part = GLOW, center = on(inner + thick * 2.05, a), half = v(thick * 0.12, thick * 0.6, wide * 0.25),
+                    turn = v(0, 0, a), bevel = 0.3 })
+                end
+              end
+            end
+            emit({ kind = shape, at = v(0, middle, z), up = UP, fore = BOW, bits = bits, rate = rate, pace = pace, phase = phase }, nil)
+            return true
+          end
+        end
+      elseif shape == "collar" then
+        local e = (ctx.ends :: { any })[rng:Int(#ctx.ends) + 1]
+        -- (round the after end of the engine's frame, clear of its corners: Hull's jets)
+        local r = math.sqrt((e.wide * 0.8) ^ 2 + (e.high * 0.72) ^ 2) * 1.12
+        local thick = math.max(u * 0.005, r * 0.08)
+        -- (a true band, as deep as the frame stands out behind the hull's face: Hull's jets)
+        local bits: { Bit } = { hoop(PLATING, r, r + thick, 0.12, 48), torus(FRAME, r + thick, thick * 0.4, -0.12, 48) }
+        for i = 0, 5 do
+          local a = i / 6 * 2 * math.pi
+          local from, to = v(r * 0.78 * math.cos(a), r * 0.78 * math.sin(a), 0), v(r * math.cos(a), r * math.sin(a), 0)
+          table.insert(bits, slab(PATCH, from, to, v(0, 0, 1), 0.1, thick * 0.4, 0.2))
+        end
+        local spec: MoverSpec = { kind = "collar", at = v(e.at.x, e.at.y, e.at.z - 0.19), up = UP, fore = BOW, bits = bits,
+          rate = rate * 4, pace = pace, phase = phase }
+        emit(spec, { twin = e.both })
+        return true
+      else
+        local face = pick({ UP, DOWN })
+        if face then
+          for _ = 1, 10 do
+            local p = spot(face)
+            local n = face.n
+            local reach = u * rng:Float(0.1, 0.24)
+            local h = u * rng:Float(0.025, 0.05)
+            local thick = math.max(u * 0.004, reach * 0.035)
+            if fits(p, n, thick * 4, thick * 4, h) and swept(p, n, h, reach * 1.05) then
+              local bits: { Bit } = {
+                { part = PATCH, center = v(0, thick * 1.2, 0), half = v(thick * 4, thick * 1.2, thick * 4), bevel = 0.3 },
+                { part = FRAME, center = v(0, h / 2, 0), half = v(thick * 1.4, h / 2, thick * 1.4), bevel = 0.2 },
+                { part = PATCH, center = v(0, h, 0), half = v(thick * 3, thick * 2, thick * 3), bevel = 0.3 },
+                bar(FRAME, v(-reach, h, 0), v(reach, h, 0), thick),
+                { part = PATCH, center = v(reach, h, 0), half = v(thick * 3, thick * 2.2, thick * 2.2), bevel = 0.3 },
+                { part = PATCH, center = v(-reach, h, 0), half = v(thick * 3, thick * 2.2, thick * 2.2), bevel = 0.3 },
+              }
+              emit({ kind = "spar", at = p, up = n, fore = BOW, bits = bits, rate = rate * 2, pace = pace, phase = phase }, face)
+              return true
+            end
+          end
+        end
+      end
+      return false
+    end
+    for _ = 1, count do
+      local first = rng:Int(#shapes)
+      for k = 0, #shapes - 1 do
+        if tryShape(shapes[(first + k) % #shapes + 1]) then
+          break
+        end
+      end
+    end
+  end
+
+  -- Mode parts (2026-11-20): fins hinged on a side of the hull, lying aft
+  -- along it, that fan out while the mode runs (capital modes, a jump
+  -- drive's spool, a portal held open), with a lit strip on each shown
+  -- while they are open. Only on a hull that runs such a mode.
+  if detail.vanes and detail.mode then
+    local rng = ctx.rngOf("vanes")
+    for _ = 1, 12 do
+      local face = pick({ STARBOARD })
+      if face and face.h1 > u * 0.06 and face.h2 > u * 0.02 then
+        local n = face.n
+        local count = rng:Int(3, 6)
+        local long = face.h1 * rng:Float(0.9, 1.4)
+        local high = math.max(face.h2 * rng:Float(0.6, 0.9), long * rng:Float(0.3, 0.45))
+        local thin = math.max(u * 0.003, high * 0.03)
+        local hinge = face.at + BOW * (face.h1 * 0.8) + UP * (face.h2 * rng:Float(-0.2, 0.2))
+        local spread = rng:Float(1.0, 1.4)
+        local ok = clearOf(hinge, high)
+        for i = 0, count - 1 do
+          ok = ok and not inside(hinge + n * (thin * (2 + 2.4 * i)) + STERN * long * 0.5)
+        end
+        if ok then
+          for i = 0, count - 1 do
+            local length = long * (1 - 0.12 * i)
+            local tall = high * (1 - 0.1 * i)
+            local bits: { Bit } = {
+              { part = PLATING, center = v(0, 0, length / 2), half = v(thin, tall / 2, length / 2), bevel = 0.15 },
+              { part = FRAME, center = v(0, tall * 0.42, length * 0.5), half = v(thin * 1.4, tall * 0.06, length * 0.48), bevel = 0.2 },
+              { part = FRAME, center = v(0, 0, thin * 2), half = v(thin * 1.6, tall * 0.5, thin * 2), bevel = 0.2 },
+            }
+            local glow: { Bit } = {
+              { part = GLOW, center = v(0, -tall * 0.1, length * 0.55), half = v(thin * 1.3, tall * 0.08, length * 0.38), bevel = 0.3 },
+            }
+            local at = hinge + n * (thin * (2 + 2.4 * i)) + UP * (tall * 0.06 * (i - (count - 1) / 2))
+            emit({ kind = "vane", at = at, up = UP, fore = STERN, bits = bits, glow = glow, open = 0.25 + spread * (i + 1) / count,
+              mode = detail.mode, pace = 1, phase = 0 }, face)
+          end
+          break
+        end
+      end
+    end
+  end
+end
+
+local function detailed(b: Builder, ship: Ship, detail: Detail, metres: number, out: { MoverSpec }?)
   local g = ship.growth
   local boxes = boxesOf(g)
   for _, seat in ship.seats do
@@ -2897,7 +3276,8 @@ local function detailed(b: Builder, ship: Ship, detail: Detail, metres: number)
   end
   -- (the dice of a kind of detail: its own, from the hull's seed, the
   -- kind, and the kind's own seed)
-  local SALT: { [string]: number } = { antennas = 9301, pipes = 9311, greebles = 9323, lights = 9337 }
+  local SALT: { [string]: number } = { antennas = 9301, pipes = 9311, greebles = 9323, lights = 9337, dishes = 9341, rotors = 9343,
+    vanes = 9349 }
   local function diceOf(kind: string): RNG
     local own = if detail.seeds then detail.seeds[kind] or 0 else 0
     return RNG_MTG(Int.Signed(g.seed + SALT[kind] + 7919 * own))
@@ -2968,8 +3348,8 @@ local function detailed(b: Builder, ship: Ship, detail: Detail, metres: number)
       local side = if plate.single and plate.center.x < 0 then -1 else 1
       for _, n in { UP, DOWN, STARBOARD * side, BOW, STERN } do
         local a, c = faceWays(n)
-        local out = v(math.abs(n.x), math.abs(n.y), math.abs(n.z))
-        local at = plate.center + n * vector.dot(plate.size, out)
+        local outward = v(math.abs(n.x), math.abs(n.y), math.abs(n.z))
+        local at = plate.center + n * vector.dot(plate.size, outward)
         local h1, h2 = vector.dot(plate.size, a), vector.dot(plate.size, c)
         if h1 > 2 * EPS and h2 > 2 * EPS and not inside(at + n * EPS) then
           table.insert(faces, { at = at, n = n, h1 = h1, h2 = h2, twin = not plate.single })
@@ -3024,9 +3404,70 @@ local function detailed(b: Builder, ship: Ship, detail: Detail, metres: number)
     end
   end
 
+  -- (a moving part, and its twin where its face has one)
+  local function emit(spec: MoverSpec, face: Face?)
+    local list = out :: { MoverSpec }
+    table.insert(list, spec)
+    if face and face.twin and spec.at.x > 1e-3 then
+      local m = v(-1, 1, 1)
+      local other = table.clone(spec)
+      other.at, other.up, other.fore = spec.at * m, spec.up * m, spec.fore * m
+      table.insert(list, other)
+    end
+  end
+  -- (the way along a face a part leans or lies: aft, or up on a face at the bow or stern)
+  local function aftOn(n: vector): vector
+    return if n == BOW or n == STERN then UP else STERN
+  end
+
+  -- Antennas that move (2026-11-20): each a part of its own, leaning back
+  -- along the hull by the ship's one lean (0 to 90 degrees, by their
+  -- dice), which they fold flat from in warp; with room to fold.
+  if detail.antennas and out then
+    rng = diceOf("antennas")
+    local lean = rng:Float(0, math.pi / 2)
+    local count = math.floor(rng:Int(2, 6) * more + 0.5)
+    for _ = 1, count do
+      local face = pick({ UP, UP, STARBOARD, DOWN, BOW })
+      if face then
+        for _ = 1, 8 do
+          local p = spot(face)
+          local n = face.n
+          local d = aftOn(n)
+          local tall = u * rng:Float(0.07, 0.2) * (if n == UP then 1.2 else 0.8)
+          local thin = math.max(u * 0.0045, tall * 0.025)
+          local room = fits(p, n, thin * 3, thin * 3, tall)
+          for _, k in { 0.3, 0.6, 1.0 } do
+            room = room and not inside(p + d * (tall * k) + n * (thin * 2.5))
+          end
+          if room then
+            local bits: { Bit } = {
+              { part = PATCH, center = v(0, thin * 0.6, 0), half = v(thin * 3, thin * 0.6, thin * 3), bevel = 0.3 },
+              { part = FRAME, center = v(0, tall / 2, 0), half = v(thin, tall / 2, thin), bevel = 0.2 },
+            }
+            local kind = rng:Int(4)
+            if kind == 1 then
+              table.insert(bits, { part = FRAME, center = v(0, tall * 0.78, 0), half = v(tall * 0.18, thin * 0.8, thin * 0.8), bevel = 0.2 })
+            elseif kind == 2 then
+              table.insert(bits, { part = PATCH, center = v(0, tall * 0.82, 0), half = v(thin * 3.2, tall * 0.07, thin * 2.2), bevel = 0.3 })
+            elseif kind == 3 then
+              table.insert(bits, { part = FRAME, center = v(tall * 0.09, tall * 0.35, 0), half = v(thin, tall * 0.35, thin), bevel = 0.2 })
+            end
+            if detail.lights then
+              table.insert(bits, { part = if n == UP and rng:Int(2) == 0 then LAMP_RED else LAMP_WHITE, center = v(0, tall + thin, 0),
+                half = v(thin, thin, thin) * 1.5, bevel = 0.5 })
+            end
+            emit({ kind = "antenna", at = p, up = n, fore = d, bits = bits, lean = lean, pace = 1, phase = 0 }, face)
+            break
+          end
+        end
+      end
+    end
+  end
+
   -- Antennas: a mast straight out of its face, on a foot, and now and
   -- then a crossbar, a pod or a second mast beside it; a lamp on top.
-  if detail.antennas then
+  if detail.antennas and out == nil then
     rng = diceOf("antennas")
     local count = math.floor(rng:Int(2, 6) * more + 0.5)
     for _ = 1, count do
@@ -3217,6 +3658,13 @@ local function detailed(b: Builder, ship: Ship, detail: Detail, metres: number)
         end
       end
     end
+  end
+
+  if out then
+    movingParts(detail, out, emit, {
+      rngOf = diceOf, pick = pick, spot = spot, fits = fits, inside = inside, clearOf = clearOf, aftOn = aftOn,
+      boxes = boxes, u = u, more = more, metres = metres, EPS = EPS, ends = ship.ends, clear = ship.clear, reach = ship.reach,
+    })
   end
 
   b.rivets = detail.rivets == true
@@ -4266,6 +4714,8 @@ export type Built = {
   -- asked for (Hull.Ghost).
   meshes: { Mesh },
   ghost: Model?,
+  -- (its moving parts, where they were asked for: Hull.Mover)
+  movers: { Mover }?,
 }
 
 local built: { [string]: Built } = {}
@@ -4423,6 +4873,48 @@ function Hull.Build(type: string, pirate: boolean?, rank: number?, paint: string
   return result
 end
 
+-- Moving parts as models in a hull's look, each about its own pivot, and
+-- that pivot where the hull's bend has put the spot it stands on: in the
+-- hull model's own units (the generator's for a bare hull, as its model
+-- is scaled back to them).
+local function moversOf(specs: { MoverSpec }, look: Look, bend: ((p: vector) -> vector)?): { Mover }
+  local bare = look.bare == true
+  local scale = if bare then 1 / GROWN else 1
+  local function make(bits: { Bit }, seed: number): Model
+    local b = Plates.New(seed, MANNER_FINE, if bare then BARE_QUALITY else nil)
+    if bare then
+      b.bare, b.scale = true, 1 / GROWN
+    end
+    for _, bit in bits do
+      local profile = bit.revolve
+      if profile then
+        local scaled: { vector } = {}
+        for _, point in profile do
+          table.insert(scaled, point * GROWN)
+        end
+        Plates.Revolve(b, bit.part, scaled, bit.sides or 48, bit.closed)
+      else
+        Plates.Block(b, bit.part, bit.center * GROWN, bit.half * GROWN, bit.turn, bit.bevel)
+      end
+    end
+    return (Plates.Finish(b, look, nil))
+  end
+  local function place(p: vector): vector
+    local q = p * GROWN
+    return (if bend then bend(q) else q) * scale
+  end
+  local out: { Mover } = {}
+  for index, spec in specs do
+    table.insert(out, {
+      kind = spec.kind, model = make(spec.bits, index * 7.31), head = if spec.head then make(spec.head, index * 7.31 + 1) else nil,
+      glow = if spec.glow then make(spec.glow, index * 7.31 + 2) else nil, at = place(spec.at), up = spec.up, fore = spec.fore,
+      headAt = if spec.headAt then spec.headAt * GROWN * scale else nil, lean = spec.lean, rate = spec.rate, open = spec.open,
+      mode = spec.mode, pace = spec.pace, phase = spec.phase,
+    })
+  end
+  return out
+end
+
 -- A hull as the engine's first generator grows one from a seed, in the
 -- game's paint: for looking through what it makes (the viewer's
 -- "grown-", and the hull browser, App/hulls). 'steps': how many plates it grows off its cross (it grew
@@ -4440,14 +4932,16 @@ function Hull.Grown(seed: number, steps: number, decks: boolean, paint: string?,
   table.clear(exhausts)
   local g = growth(seed, steps, decks, styleOf(style))
   grown(b, g)
+  local specs: { MoverSpec }? = if detail and detail.moving then {} else nil
   if detail then
     -- (with no hardpoints and no engines: as a cruiser, for the sizes of things)
-    detailed(b, { growth = g, ends = {}, turrets = {}, launchers = {}, seats = {}, clear = {}, reach = 0 }, detail, 150)
+    detailed(b, { growth = g, ends = {}, turrets = {}, launchers = {}, seats = {}, clear = {}, reach = 0 }, detail, 150, specs)
   end
   local model, lower, upper, meshes = Plates.Finish(b, look, nil)
   local size = upper - lower
   return { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = {}, launchers = {}, fit = {}, engines = {},
-    glow = look.fire or look.glow, lower = lower, upper = upper, hanging = {}, meshes = meshes }
+    glow = look.fire or look.glow, lower = lower, upper = upper, hanging = {}, meshes = meshes,
+    movers = if specs then moversOf(specs, look, b.bend) else nil }
 end
 
 -- How far such a hull reaches across, up and down, and along, without
@@ -4504,14 +4998,16 @@ function Hull.GrownShip(seed: number, steps: number, decks: boolean, paint: stri
   grown(b, ship.growth)
   seated(b, ship.seats)
   jets(b, ship.ends)
+  local specs: { MoverSpec }? = if detail and detail.moving then {} else nil
   if detail then
-    detailed(b, ship, detail, metres)
+    detailed(b, ship, detail, metres, specs)
   end
   local model, lower, upper, meshes = Plates.Finish(b, look, nil)
   local size = upper - lower
   return { model = model, radius = math.max(size.x, size.y, size.z) / 2, turrets = hardpointsOut(ship.turrets, grow),
     launchers = hardpointsOut(ship.launchers, grow), fit = fit,
-    engines = exhaustsOut(grow), glow = look.fire or look.glow, lower = lower, upper = upper, hanging = {}, meshes = meshes }, ""
+    engines = exhaustsOut(grow), glow = look.fire or look.glow, lower = lower, upper = upper, hanging = {}, meshes = meshes,
+    movers = if specs then moversOf(specs, look, b.bend) else nil }, ""
 end
 
 -- A built hull as it is drawn cloaked: its own shape, as light bending

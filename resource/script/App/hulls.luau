@@ -31,8 +31,15 @@
 --                  The engines go on the ends the hull has astern and
 --                  the guns where the game's rule of hardpoints lets
 --                  them (Hull.GrownShip); it says so if there is no room
---   1 to 5         surface detail, each kind on or off (Hull.DETAILS):
---                  antennas, pipes, greebles, lights, rivets
+--   1 to 8         surface detail, each kind on or off (Hull.DETAILS):
+--                  antennas, pipes, greebles, lights, rivets, and the
+--                  moving parts: dishes, rotors (rings, drums, collars,
+--                  spars) and vanes (mode parts, on a hull shown as a
+--                  ship of a class that runs a mode). Here antennas are
+--                  moving parts too (Game/View/Movers).
+--   W, C, E, O     what the ship is doing, for its moving parts: in warp,
+--                  scanning, electronic warfare aimed (at the camera),
+--                  its mode running
 --   , and .        the seed of the kind last switched, back and on: its
 --                  dice are its own, so it is laid out afresh and the
 --                  others stay (0, the hull's own; kept as "antennas:17")
@@ -58,6 +65,7 @@ local Components = require("@lt/Widget/Components")
 local Effects = require("@lt/Game/View/Effects")
 local Generate = require("@lt/Item/ShipType/Generate")
 local Hull = require("@lt/Game/View/Hull")
+local Movers = require("@lt/Game/View/Movers")
 local Im = require("@lt/Game/UI/Im")
 local SceneView = require("@lt/SceneView")
 local Ships = require("@lt/Core/Data/Ships")
@@ -136,6 +144,14 @@ return AppShell.Create(function(): Widget
   local fitted = ""         -- how that went: what is on it, or why it is not
   local dim = true          -- what is shown is bare metal, and is lit as that is
   local extras: { Object } = {}   -- what stands on it
+  -- Its moving parts, and what the ship is doing for them (2026-11-20).
+  local pieces: { Movers.Piece } = {}
+  local placed: Movers.Place = { at = vector.create(0, 0, 0), right = vector.create(1, 0, 0), up = vector.create(0, 1, 0),
+    look = vector.create(0, 0, 1), unit = 1 }
+  local doing = { warp = false, scan = false, ewar = false, mode = false }
+  -- (a moving part the camera looks at, in place of the hull's middle: Hulls.Focus)
+  local focus: vector? = nil
+  local clock = 0
   local fx: Effects.Fx? = nil     -- its engines' fire
   local shown: Object? = nil
   local key = ""            -- what is shown: its seed, size and paint
@@ -177,14 +193,25 @@ return AppShell.Create(function(): Widget
       end
     end
   end
+  -- (the mode a class of ship runs, for its mode parts)
+  local MODES: { [string]: string } = { dreadnought = "siege", siegedreadnought = "siege", carrier = "triage",
+    capitalindustrial = "core", supercarrier = "jump" }
   local function detailOf(): Hull.Detail?
-    return Hull.DetailOf(string.split(detailWords(), " "))
+    local made = Hull.DetailOf(string.split(detailWords(), " "))
+    if made then
+      -- (here every detail's moving parts move)
+      made.moving = true
+      local as: Class? = CLASSES[class]
+      made.mode = if as then MODES[as.name] else nil
+    end
+    return made
   end
   local query = ""          -- what is in the search box
   local found = 0           -- which of the hulls it fits was gone to last
   local lastSearch = ""     -- and for which words
   local listed: Hull.SeedLine? = nil   -- the hull of the list gone to by name, while it is what is shown
   local models: { [string]: Renderable | Model } = {}
+  local growns: { [string]: Hull.Built } = {}
 
   local ships: { [string]: Hull.Built } = {}
 
@@ -253,9 +280,23 @@ return AppShell.Create(function(): Widget
     end
     dim = PAINTS[paint] == "bare"
     local plain = `{seed}:{size}:{paint}:{style}:{asym}:{detailWords()}`
-    local model: Renderable | Model = if built then built.model else models[plain] or make()
-    if built == nil then
-      models[plain] = model
+    local model: Renderable | Model
+    local movers: { Hull.Mover }? = nil
+    if built then
+      model, movers = built.model, built.movers
+    else
+      local wanted = detailOf()
+      local had = growns[plain]
+      if wanted and had == nil then
+        had = Hull.Grown(seed, stepsOf(size), decksOf(size), PAINTS[paint], named(), wanted)
+        growns[plain] = had
+      end
+      if had then
+        model, movers = had.model, had.movers
+      else
+        model = models[plain] or make()
+        models[plain] = model
+      end
     end
     took = math.floor((os.clock() - started) * 1000)
     local bound = Renderable_GetBound(model)
@@ -278,6 +319,15 @@ return AppShell.Create(function(): Widget
       Object_Delete(old)
     end
     shown = object
+    -- (its moving parts, each a thing of its own on it)
+    pieces = Movers.Make(movers, function(made: Model): Object
+      local thing = Object_Scenery({})
+      Object_SetRenderable(thing, made)
+      system:AddInterior(thing)
+      table.insert(extras, thing)
+      return thing
+    end)
+    placed = { at = shift, right = vector.create(1, 0, 0), up = vector.create(0, 1, 0), look = vector.create(0, 0, 1), unit = scale }
     if built and as then
       -- what it carries, on both mounts of each hardpoint, slewed a
       -- little to show that it turns; and its engines burning
@@ -513,6 +563,71 @@ return AppShell.Create(function(): Widget
       show()
       return true
     end,
+    -- Look at the 'which'th moving part of a kind (its head, for a dish)
+    -- from so many of the hull's radii off ('off'), round and above as
+    -- Look has it; nil kind looks at the hull's middle again. False if
+    -- there is no such part.
+    Focus = function(kind: string?, which: number?, round: number?, above: number?, off: number?): boolean
+      if kind == nil then
+        focus = nil
+        return true
+      end
+      local seen = 0
+      for _, piece in pieces do
+        local m = piece.mover
+        if m.kind == kind then
+          seen += 1
+          if seen == (which or 1) then
+            focus = (m.at + m.up * (m.headAt or 0)) * placed.unit
+            turn, tilt = (round or 0.1) * 2 * math.pi, math.clamp((above or 0.1) * 2 * math.pi, -1.5, 1.5)
+            zoom = off or 0.3
+            zoomTo = zoom
+            turning = false
+            return true
+          end
+        end
+      end
+      return false
+    end,
+    -- Where the 'which'th moving part of a kind stands, in the hull model's
+    -- own units, and how big its model is across (for checking).
+    Part = function(kind: string, which: number?): string
+      local seen = 0
+      for _, piece in pieces do
+        local m = piece.mover
+        if m.kind == kind then
+          seen += 1
+          if seen == (which or 1) then
+            local bound = Renderable_GetBound(m.model)
+            local across = bound.upper - bound.lower
+            return string.format("at %.3f %.3f %.3f  across %.3f %.3f %.3f", m.at.x, m.at.y, m.at.z, across.x, across.y, across.z)
+          end
+        end
+      end
+      return "none"
+    end,
+    -- The moving parts on what is shown, by kind, as words ("antenna 6, dish 2").
+    Pieces = function(): string
+      local counts: { [string]: number } = {}
+      local order: { string } = {}
+      for _, piece in pieces do
+        local kind = piece.mover.kind
+        if counts[kind] == nil then
+          table.insert(order, kind)
+        end
+        counts[kind] = (counts[kind] or 0) + 1
+      end
+      local words: { string } = {}
+      for _, kind in order do
+        table.insert(words, `{kind} {counts[kind]}`)
+      end
+      return table.concat(words, ", ")
+    end,
+    -- What the ship is doing, for its moving parts: in warp, scanning,
+    -- electronic warfare aimed at the camera, its mode running.
+    Doing = function(warp: boolean?, scan: boolean?, ewar: boolean?, mode: boolean?)
+      doing.warp, doing.scan, doing.ewar, doing.mode = warp == true, scan == true, ewar == true, mode == true
+    end,
     -- Hold it still, from the bow quarter, with nothing written over it.
     Still = function()
       turning, plain = false, true
@@ -589,6 +704,11 @@ return AppShell.Create(function(): Widget
         table.insert(on, `{if kind == chosen then ">" else ""}{index} {kind}: {if detail[kind] then "ON" else "off"}{if own ~= 0 then ` #{own}` else ""}`)
       end
       Im.Text("detail      " .. table.concat(on, "      "), x, y + 90, 16, if detailWords() ~= "" then Im.ACCENT else Im.DIM)
+      local made = detailOf()
+      local mode = if made and made.mode then made.mode else "none for this class (F)"
+      Im.Text(`moving parts: {#pieces}      W warp: {if doing.warp then "ON" else "off"}      C scanning: {if doing.scan then "ON" else "off"}`
+        .. `      E electronic warfare: {if doing.ewar then "ON" else "off"}      O mode ({mode}): {if doing.mode then "ON" else "off"}`,
+        x, y + 140, 16, if #pieces > 0 then Im.TEXT else Im.DIM)
       if note ~= "" then
         Im.Text(note, x, y + 116, 14, Im.ACCENT)
       end
@@ -600,7 +720,7 @@ return AppShell.Create(function(): Widget
         search(query)
       end
       local foot = w.pos.y + w.size.y - 54
-      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      B: broad only      [ / ]: size      S: style      A: sides alike or not      P: paint      F: as a ship      1-5: detail      , .: its seed      K: keep      Space: turn",
+      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      B: broad only      [ / ]: size      S: style      A: sides alike or not      P: paint      F: as a ship      1-8: detail      , .: its seed      W C E O: warp, scan, ewar, mode      K: keep      Space: turn",
         x, foot, 15, Im.DIM)
       Im.Text("right-drag turns it, the wheel moves in and out", x, foot + 22, 15, Im.DIM)
     end,
@@ -610,7 +730,7 @@ return AppShell.Create(function(): Widget
         show()
         return
       end
-      for index, key in { Key_N1(), Key_N2(), Key_N3(), Key_N4(), Key_N5() } do
+      for index, key in { Key_N1(), Key_N2(), Key_N3(), Key_N4(), Key_N5(), Key_N6(), Key_N7(), Key_N8() } do
         if Key_Pressed(key) then
           local kind = Hull.DETAILS[index]
           detail[kind] = not detail[kind]
@@ -649,6 +769,10 @@ return AppShell.Create(function(): Widget
       end
       if Key_Pressed(Key_F()) then class = (class + 1) % (#CLASSES + 1) end
       if Key_Pressed(Key_Space()) then turning = not turning end
+      if Key_Pressed(Key_W()) then doing.warp = not doing.warp end
+      if Key_Pressed(Key_C()) then doing.scan = not doing.scan end
+      if Key_Pressed(Key_E()) then doing.ewar = not doing.ewar end
+      if Key_Pressed(Key_O()) then doing.mode = not doing.mode end
       if Key_Pressed(Key_K()) then keep() end
       show()
 
@@ -665,8 +789,14 @@ return AppShell.Create(function(): Widget
       end
       zoom += (zoomTo - zoom) * (1 - math.exp(-dt / 0.1))
       local eye = vector.create(math.cos(tilt) * math.sin(turn), math.sin(tilt), math.cos(tilt) * math.cos(turn)) * (zoom * RADIUS)
-      camera:SetRelativePos(eye)
-      camera:SetRelativeLookAt(vector.create(0, 0, 0))
+      -- (its moving parts, as the ship is doing: electronic warfare at the camera)
+      clock += dt
+      local made = detailOf()
+      Movers.Animate(pieces, placed, clock, dt, { warp = doing.warp, scan = doing.scan,
+        aim = if doing.ewar then eye else nil, mode = if doing.mode and made then made.mode else nil })
+      local looked = focus or vector.create(0, 0, 0)
+      camera:SetRelativePos(looked + eye)
+      camera:SetRelativeLookAt(looked)
       camera:SetRigidity(60)
       local light = lamp
       if light then
