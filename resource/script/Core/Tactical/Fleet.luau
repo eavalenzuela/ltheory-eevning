@@ -657,6 +657,13 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
           else "no hired pilot here has a mining laser fitted"
       end
       return true
+    elseif what == "portal" then
+      -- (a jump portal to the system named, opened by the hired pilot flying a ship with a generator)
+      local opener = Fleet.Portaller(state, wing)
+      if opener == nil then
+        return false, "no hired pilot here flies a ship with a Jump Portal Generator"
+      end
+      return Jumping.Validate(state, { kind = "OpenPortal", actor = opener.id, target = command.target or 0 })
     elseif what == "engage" then
       local me = state.balls[ship.id]
       local target = state.balls[command.target or 0]
@@ -672,6 +679,23 @@ function Fleet.Validate(state: State.State, command: State.Command): (boolean, s
     return false, "no such order"
   end
   return false, `unknown command '{kind}'`
+end
+
+-- The hired pilot's ship that would open a jump portal for the player:
+-- the one named, or the first of the fleet's out on the player's grid
+-- with a Jump Portal Generator fitted (Tactical/Jumping). 2026-11-20.
+function Fleet.Portaller(state: State.State, wing: State.Wingman?): State.Ship?
+  local lead = state.balls[state.player.ship]
+  for _, id in state.fleetIds do
+    local each = state.fleet[id]
+    local ship = state.ships[each.ship]
+    local ball = if ship then state.balls[ship.id] else nil
+    if (wing == nil or each == wing) and ship and ball and lead and ball.system == lead.system and ball.grid == lead.grid
+      and Jumping.Portal(state, ship.id) then
+      return ship
+    end
+  end
+  return nil
 end
 
 -- Take a pilot off whatever ship they have.
@@ -731,6 +755,10 @@ function Fleet.Apply(state: State.State, command: State.Command, events: { Event
   elseif kind == "DismissPilot" then
     table.insert(events, { kind = "PilotLeft", pilot = wing.id, name = wing.name, reason = "dismissed" })
     forget(state, wing)
+  elseif kind == "FleetOrder" and command.what == "portal" then
+    local opener = Fleet.Portaller(state, wing) :: State.Ship
+    Jumping.Apply(state, { kind = "OpenPortal", actor = opener.id, target = command.target :: number }, events)
+    table.insert(events, { kind = "FleetOrdered", what = "portal", target = command.target :: number })
   elseif kind == "FleetOrder" and command.what == "mine" then
     -- The belt the player is at, and the station nearest it.
     local me = state.balls[ship.id]
@@ -980,6 +1008,17 @@ local function travel(state: State.State, me: State.Ball, system: number, events
       if me.mode ~= "stop" then
         give(state, { kind = "Stop", actor = me.id }, events)
       end
+      return
+    end
+  end
+  -- (a jump portal of their side's open near them to where they are going: through it, 2026-11-20)
+  local holder = Jumping.PortalNear(state, me.id)
+  local portal = if holder then state.ships[holder].portal else nil
+  if holder and portal and portal.to == system then
+    local through: State.Command = { kind = "JumpPortal", actor = me.id, target = holder }
+    if Jumping.Validate(state, through) then
+      callIn(state, me)
+      Jumping.Apply(state, through, events)
       return
     end
   end

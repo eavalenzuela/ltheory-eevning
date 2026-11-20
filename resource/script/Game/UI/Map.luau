@@ -1172,6 +1172,37 @@ function Map.DrawAt(session: Session.Session, x: number, y: number, w: number, h
     end
   end
   line += 40
+  -- Jump portals (2026-11-20): one a hired pilot here can open to the
+  -- system shown ("Map:fleetportal"), and one open near the pilot's ship
+  -- to go through ("Map:through"); each says why not.
+  local portals = Core.Query.Portal(game, shown)
+  if portals then
+    Im.Heading("JUMP PORTAL", px, line, 14, Im.DIM)
+    line += 22
+    local open = portals.open
+    if open then
+      Im.Text(`{open.name}'s portal to {systems[open.to].name}: {Format.Duration(open.left)} left`, px, line, 13, NEXT)
+      line += 22
+      if Im.Button("Go through", px, line, 110, 28, portals.throughReady, "Map:through") then
+        Session.Do(session, { kind = "JumpPortal", actor = 0, target = open.holder })
+      end
+      line += 34
+      if not portals.throughReady then
+        line = Im.Wrapped(portals.throughWhy, px, line, SIDE - 28, 12, Im.WARN) + 6
+      end
+    end
+    if portals.fleet and shown ~= here then
+      if Im.Button("Fleet portal", px, line, 120, 28, portals.fleetReady, "Map:fleetportal") then
+        Session.Do(session, { kind = "FleetOrder", actor = 0, what = "portal", target = shown })
+      end
+      Im.Text(`{portals.fleet} opens it`, px + 130, line + 7, 12, Im.DIM)
+      line += 34
+      if not portals.fleetReady then
+        line = Im.Wrapped(portals.fleetWhy, px, line, SIDE - 28, 12, Im.WARN) + 6
+      end
+    end
+    line += 6
+  end
   -- A jump bridge the ship is at (Tactical/Jumping): where it reaches,
   -- and the going itself ("Map:bridge"), which says why not.
   local bridge = Core.Query.Bridge(game, shown)

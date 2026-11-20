@@ -2891,6 +2891,39 @@ export type JumpDriveStatus = { range: number, held: number, cooling: number, di
   -- (a Jump Portal Generator fitted: whether one can be opened to 'system' now and why not, and the seconds an
   -- open one has left)
   portal: boolean, portalReady: boolean, portalWhy: string, portalLeft: number }
+-- Jump portals for the pilot (Tactical/Jumping, Tactical/Fleet;
+-- 2026-11-20), where there is anything to say: a hired pilot on the
+-- pilot's grid whose ship has a generator ('fleet': its pilot's name;
+-- whether one can be ordered open to 'system' now, and why not), and a
+-- portal open near the pilot's ship ('open': whose ship, to which
+-- system, the seconds left; whether the pilot can go through, and why
+-- not). Nil when there is neither.
+export type PortalStatus = { fleet: string?, fleetReady: boolean, fleetWhy: string,
+  open: { holder: number, name: string, to: number, left: number }?, throughReady: boolean, throughWhy: string }
+function Query.Portal(game: Game, system: number?): PortalStatus?
+  local state = game.state
+  local ship = state.player.ship
+  local opener = Fleet.Portaller(state, nil)
+  local holder = Jumping.PortalNear(state, ship)
+  if opener == nil and holder == nil then
+    return nil
+  end
+  local out: PortalStatus = { fleetReady = false, fleetWhy = "", throughReady = false, throughWhy = "" }
+  if opener then
+    local wing = state.fleet[opener.pilot or 0]
+    out.fleet = if wing then wing.name else opener.name
+    local ok, why = Fleet.Validate(state, { kind = "FleetOrder", actor = ship, what = "portal", target = system or 0 })
+    out.fleetReady, out.fleetWhy = ok, why or ""
+  end
+  if holder then
+    local portal = state.ships[holder].portal :: { to: number, ends: number }
+    out.open = { holder = holder, name = state.ships[holder].name, to = portal.to, left = Jumping.PortalLeft(state, holder) }
+    local ok, why = Jumping.Validate(state, { kind = "JumpPortal", actor = ship, target = holder })
+    out.throughReady, out.throughWhy = ok, why or ""
+  end
+  return out
+end
+
 -- The jump bridge the pilot's ship is at, if any (Tactical/Jumping): the
 -- station's name and its fuel, every system it reaches with how far and
 -- the fuel it would burn for the hull, and whether going to 'system'

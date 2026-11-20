@@ -2644,4 +2644,25 @@ suite:Case("a hired pilot following the player goes through a jump portal the pl
   t.eq(wing.order, "follow")
 end)
 
+suite:Case("a hired pilot whose ship has a Jump Portal Generator opens a portal on the player's order, and the player goes through it", function(t)
+  local game, _wing, second, me, to = carriers("ultracapital.daiichi", "cruiser.ouyou")
+  local state = game.state
+  local home = me.system
+  t.eq({ Core.Validate(game, { kind = "FleetOrder", actor = 0, what = "portal", target = to }) } :: { any },
+    { false, "no hired pilot here flies a ship with a Jump Portal Generator" } :: { any })
+  Items.Add(state, Structures.FUEL.id, 50000, second.id, "cargo")
+  Items.Add(state, "jump.portal", 1, second.id, "cargo").slot = 99
+  local theirs = state.balls[second.id]
+  theirs.vitals.capacitor = theirs.vitals.capacitorMax
+  t.ok((submit(game, { kind = "FleetOrder", actor = 0, what = "portal", target = to })))
+  t.ok(Jumping.PortalLeft(state, second.id) > 0, "no portal open")
+  local status = assert(Core.Query.Portal(game, to))
+  t.eq({ status.fleet ~= nil, assert(status.open).to } :: { any }, { true, to } :: { any })
+  -- Near enough, the player goes through on the hired pilot's fuel; they stay.
+  me.x, me.y, me.z = theirs.x + theirs.radius + me.radius + 500, theirs.y, theirs.z
+  t.ok((submit(game, { kind = "JumpPortal", actor = 0, target = second.id })))
+  t.eq({ me.system, theirs.system } :: { any }, { to, home } :: { any })
+  t.ok(Jumping.Held(state, second.id) < 50000)
+end)
+
 return suite
