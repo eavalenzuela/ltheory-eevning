@@ -3415,6 +3415,38 @@ function Debug.GatesLit(): number
   return scene.gates
 end
 
+-- What the stargates of the pilot's system are built as (Galaxy.GateDesign),
+-- in the order of its gates: "dial bell", say.
+function Debug.GateDesigns(): string
+  local galaxy = session.game.state.galaxy
+  local here = Core.Query.Player(session.game).system
+  local designs: { string } = {}
+  for _, other in galaxy.systems[here].neighbors do
+    table.insert(designs, Galaxy.GateDesign(galaxy, here, other))
+  end
+  return table.concat(designs, " ")
+end
+
+-- The system fewest jumps from the pilot's with a stargate built as
+-- 'design', and the name of the stargate there (its far system's, as the
+-- gate is named for it): 0 and "" if there is none.
+function Debug.GateOf(design: string): (number, string)
+  local galaxy = session.game.state.galaxy
+  local jumps = Galaxy.Jumps(galaxy, Core.Query.Player(session.game).system)
+  local best, name, least = 0, "", math.huge
+  for id, hops in jumps do
+    if hops < least or (hops == least and id < best) then
+      for _, other in galaxy.systems[id].neighbors do
+        if Galaxy.GateDesign(galaxy, id, other) == design then
+          best, name, least = id, `Stargate ({galaxy.systems[other].name})`, hops
+          break
+        end
+      end
+    end
+  end
+  return best, name
+end
+
 -- Whether the pilot's own ship is drawn cloaked (as light bending round
 -- it, not as a hull), and how many things are on its hardpoints in the
 -- scene (nothing is, while it is).

@@ -930,6 +930,54 @@ function Galaxy.Apart(galaxy: Galaxy, from: number, to: number): number
   return if a and b then math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2 + (a.z - b.z) ^ 2) else math.huge
 end
 
+-- What a stargate is built as (the project owner's, 2026-11-21): the
+-- dial, the human gate; the gyre, the alien one; and for the longest
+-- tenth of the gates, those whose build is what keeps so long a jump
+-- stable, the bell, or the alien orrery. In space nobody holds, half
+-- the one and half the other, gate by gate. Each end of a gate is
+-- built by whoever holds its own system (pirates keep the human gates
+-- they took), and a system that changes hands has its new holder's.
+export type GateDesign = "dial" | "gyre" | "bell" | "orrery"
+Galaxy.LONG_GATES = 0.1
+
+-- (how long a gate is, at least, to be among the longest tenth: worked
+-- out once for a galaxy, from every gate of the map, and kept beside it)
+local longest: { [any]: number } = setmetatable({}, { __mode = "k" }) :: any
+local function longGate(galaxy: Galaxy): number
+  local kept = longest[galaxy]
+  if kept == nil then
+    local lengths: { number } = {}
+    for id, system in galaxy.systems do
+      for _, other in system.neighbors do
+        if other > id then
+          table.insert(lengths, Galaxy.Apart(galaxy, id, other))
+        end
+      end
+    end
+    table.sort(lengths)
+    local at = math.max(1, math.ceil(#lengths * (1 - Galaxy.LONG_GATES)))
+    kept = lengths[at] or math.huge
+    longest[galaxy] = kept
+  end
+  return kept :: number
+end
+
+-- The gate in system 'from' that leads to system 'to'.
+function Galaxy.GateDesign(galaxy: Galaxy, from: number, to: number): GateDesign
+  local long = Galaxy.Apart(galaxy, from, to) >= longGate(galaxy)
+  local its = Factions.byId[galaxy.systems[from] and galaxy.systems[from].owner or ""]
+  local alien
+  if its then
+    alien = its.kind == "alien"
+  else
+    alien = Rng.Chance(Rng.For(galaxy.seed, 5101, from, to), 0.5)
+  end
+  if long then
+    return if alien then "orrery" else "bell"
+  end
+  return if alien then "gyre" else "dial"
+end
+
 -- Uncharted space: as many systems again as the map has (the project
 -- owner's ruling, 2026-11-14), which no gate leads to and no map shows.
 -- They come after the systems of the map, by id, and nothing of the

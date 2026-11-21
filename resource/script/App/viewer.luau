@@ -65,6 +65,11 @@ type View = {
   explode: { radii: { number }, ages: { number } }?,
   -- For a view of several bodies at once, in rows of four.
   gallery: { { kind: string, seed: number } }?,
+  -- For a stargate mock-up: how many seconds its pieces have turned for,
+  -- and how fast they go once ships are coming (its pace: 1 at rest
+  -- for the first 2 s, up to 'busy' by 4 s, and held there).
+  turn: number?,
+  busy: number?,
 }
 
 type Fire = { type: string, age: number, outcome: string, struck: string, flight: number? }
@@ -273,6 +278,21 @@ for index, eye in { vector.create(0.5, 1.1, 2.9), vector.create(-1.9, 0.8, -2.4)
 end
 for index, eye in { vector.create(1.3, 0.6, 2.3), vector.create(2.6, 0.3, 0.5) } do
   table.insert(VIEWS, { name = `base-gate-{index}`, kind = "gate", seed = 1, eye = eye, look = CENTRE, light = vector.create(1.5, 1.8, 2.5) })
+end
+-- The stargate mock-ups (Starbase.GATE_DESIGNS, 2026-11-21): each from
+-- ahead and aside, from the side, and from behind and below.
+for number, design in Starbase.GATE_DESIGNS do
+  for index, eye in { vector.create(1.5, 0.75, 2.6), vector.create(3.1, 0.35, -0.35), vector.create(-1.6, -0.9, -2.4) } do
+    -- (lit from behind the eye from behind: the star in view whites the picture out)
+    table.insert(VIEWS, { name = `gate-{number}-{design}-{index}`, kind = `gate:{design}`, seed = 1, eye = eye, look = CENTRE,
+      light = if index == 3 then vector.create(-2.0, 1.2, -2.2) else vector.create(1.5, 1.8, 2.5) })
+  end
+  -- (and turning: six seconds in frames of 0.15 s, to be made into a moving picture of each)
+  for frame = 0, 39 do
+    table.insert(VIEWS, { name = `gateanim-{number}-{design}-{string.format("%02d", frame)}`, kind = `gate:{design}`, seed = 1,
+      eye = vector.create(1.5, 0.75, 2.6), look = CENTRE, light = vector.create(1.5, 1.8, 2.5), turn = frame * 0.15,
+      busy = if design == "dial" then 8 else 6 })
+  end
 end
 for index, base in { { "outpost", 3000 }, { "shipyard", 5000 }, { "trade hub", 7500 } } :: { { any } } do
   local word = ({ "small", "medium", "large" })[index]
@@ -605,6 +625,35 @@ return AppShell.Create(function(): Widget
           local m = piece.middle
           object:SetPos((m + away * 0.30 * wreckage.radius) * scale - (right * m.x + up * m.y + look * m.z) * scale)
           Object_SetAxes(object, look, up)
+        end
+      elseif string.sub(v.kind, 1, 5) == "gate:" then
+        -- A stargate mock-up: what stands still, and its pieces turned as
+        -- far as they go in 'turn' seconds. (Each at one scale, its ring
+        -- 1.9 km in radius, so they compare; smaller where it reaches out.)
+        table.insert(stage, Object_Scenery({}))
+        table.insert(units, 1)
+        local made = Starbase.GateDesign(table.find(Starbase.GATE_DESIGNS, string.sub(v.kind, 6)) :: number)
+        local size = math.min(1900, 2350 / made.radius) * radius / 2000
+        local fore, up = vector.create(0, 0, 1), vector.create(0, 1, 0)
+        local function add(model: Model): Object
+          local object = Object_Scenery({})
+          Object_SetRenderable(object, model)
+          object:SetScale(vector.create(size, size, size))
+          Object_SetAxes(object, fore, up)
+          system:AddInterior(object)
+          table.insert(extras, object)
+          return object
+        end
+        local still = made.model
+        if still then
+          add(still)
+        end
+        local moving = Starbase.GateMovers(made, add, fore, up)
+        local busy = v.busy or 1
+        local step = 1 / 60
+        for t = 0, (v.turn or 0) - step / 2, step do
+          local pace = 1 + (busy - 1) * math.clamp((t - 2) / 2, 0, 1)
+          Starbase.AnimateGate(moving, step, pace)
         end
       elseif string.sub(v.kind, 1, 6) == "towers" or v.kind == "modules" or v.kind == "gate" or string.sub(v.kind, 1, 9) == "starbase:" then
         table.insert(stage, Object_Scenery({}))

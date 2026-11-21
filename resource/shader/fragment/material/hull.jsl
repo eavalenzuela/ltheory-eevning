@@ -36,6 +36,7 @@ uniform float wear;         /* how far the paint is worn off, 0 to 1 */
 uniform float rust;         /* how rusted, 0 to 1 */
 uniform float sheets;       /* sheets of plating to a unit of the hull */
 uniform float mottle;       /* how unlike one sheet is to the next, 0 to 1: a patchwork */
+uniform float stone;        /* how far it is stone and not sheets of plate, 0 to 1 (a stargate's: Game/View/Starbase) */
 uniform float lights;       /* how many of its sheets have a lit port in them, 0 to 1 */
 uniform float design;       /* the figure laid over its plating (Core/Data/Paints): 0 none */
 uniform float designScale;  /* how many of the figure to half the hull's length */
@@ -308,6 +309,16 @@ void main() {
       paint = mix(paint, (part < 0.5 ? paintPatch : paintPlating) * (0.75 + 0.4 * own), 0.7);
     seam *= 1.0 - 0.6 * mottle;
   }
+  if (!bare && stone > 0.0) {
+    /* Stone, not plate (2026-11-21, the owner's gyre gate "with stone-
+       like texture"): no sheets or seams, but broad clouds of tone, dark
+       veins where the noise crosses zero, and a fine pitting. */
+    float cloud = wn_fbm(p * 1.3 + own * 5.0, 5, 0.55);
+    float vein = 1.0 - smoothstep(0.0, 0.05, abs(wn_fbm(p * 2.7 + vec3(11.0, 3.0, 7.0), 5, 0.5)));
+    float pit = wn_fbm(p * 47.0, 3, 0.6);
+    paint *= mix(1.0, (0.85 + 0.6 * cloud) * (1.0 - 0.4 * vein) * (0.88 + 0.3 * pit), stone);
+    seam *= 1.0 - stone;
+  }
   if (!bare && lights > 0.0 && part < 1.5) {
     /* A lit port in some of the sheets: a pinpoint, which is what says
        how big the hull is. (Not on its back or its keel.) */
@@ -354,7 +365,7 @@ void main() {
   c *= 1.0 - 0.5 * shut * grain;
   c *= mix(1.0, 0.9 + 0.2 * fine, grain);
 
-  float rough = mix(0.16, 0.05, worn);
+  float rough = mix(mix(0.16, 0.05, worn), 0.32, stone);
   rough = mix(rough, 0.2, rusted);
   if (bare) rough = mix(0.07, 0.2, rusted);
 

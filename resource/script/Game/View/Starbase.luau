@@ -1225,6 +1225,356 @@ function Starbase.Gate(): Made
   return finish("gate", gate, WORKS, 4.0, 0.11)
 end
 
+-- Stargate mock-ups (2026-11-21, the owner: "redo the warp gates with a
+-- similar, Stargate-esque vibe" to the wormhole citadel's round rings
+-- with a light band round the middle). Eight were mocked up, all
+-- in smooth turned rings (Plates.Revolve, as the hulls' tori are), each
+-- with its band of light. Front toward +z, as Starbase.Gate's; a ship
+-- comes in from -z. In the game since 2026-11-21 (Core's Galaxy.GateDesign
+-- says which a gate is); the viewer's 'gate-N' views show them too.
+-- (the owner kept three of the eight, 2026-11-21, liked in this order; the
+-- game is to use more than one: the dial the standard human gate, the
+-- gyre for alien-held systems, and a mix of the two to unclaimed space;
+-- the bell for the longest tenth of gates, its build what keeps a long
+-- jump stable; the orrery, theirs too, an alien long gate)
+Starbase.GATE_DESIGNS = { "gyre", "bell", "dial", "orrery" }
+
+-- A closed cross-section for a ring: a rounded box (a superellipse,
+-- 'p' 2 for an ellipse, higher for squarer) 'w' out from the axis each
+-- way and 'd' along it, its middle 'r' out and 'z' along; run clockwise
+-- in (out, along). (Run anticlockwise, as Plates.Revolve's note says a
+-- torus should be, it came out inside out and lit dark: checked in the
+-- viewer 2026-11-21 beside a plated block.)
+local function section(r: number, z: number, w: number, d: number, p: number?): { vector }
+  local points: { vector } = {}
+  local e = 2 / (p or 2)
+  local steps = 28
+  for i = 0, steps - 1 do
+    local a = i / steps * 2 * math.pi
+    local c, s = math.cos(a), math.sin(a)
+    local x = math.sign(c) * math.abs(c) ^ e
+    local y = math.sign(s) * math.abs(s) ^ e
+    table.insert(points, v(r + w * x, z - d * y, 0))
+  end
+  return points
+end
+local function ring(b: Builder, part: number, r: number, z: number, w: number, d: number, p: number?, sides: number?)
+  Plates.Revolve(b, part, section(r, z, w, d, p), sides or 120, true)
+end
+-- (a ring about another axis or through another point, or an arc of one)
+local function ringAt(b: Builder, part: number, at: vector, axis: vector, r: number, w: number, d: number, p: number?, from: number?,
+  to: number?)
+  Plates.RevolveAt(b, part, section(r, 0, w, d, p), 120, true, at, axis, from, to)
+end
+-- A smooth rod through points, so thick at each.
+local function rod(b: Builder, part: number, path: { vector }, radii: { number })
+  Plates.Tube(b, part, path, radii, 14)
+end
+-- A smooth pod (an ellipsoid) 'w' round and 'd' long, along 'axis' at 'at'.
+local function pod(b: Builder, part: number, at: vector, axis: vector, w: number, d: number)
+  local profile: { vector } = {}
+  for i = 0, 12 do
+    local a = -math.pi / 2 + i / 12 * math.pi
+    table.insert(profile, v(math.max(1e-4, math.cos(a) * w), -math.sin(a) * d, 0))
+  end
+  Plates.RevolveAt(b, part, profile, 28, false, at, axis)
+end
+local function around(a: number, r: number, z: number): vector
+  return v(math.cos(a) * r, math.sin(a) * r, z)
+end
+-- A turn (as Plates.Block takes one) that lays a box's x along the way
+-- round at angle 'a' and its y out from the middle.
+local function rolled(a: number): vector
+  return v(0, 0, a - math.pi / 2)
+end
+
+-- What turns of a stargate (2026-11-21, the owner: the gyre's gimbals
+-- turn, the dial's inner ring "should spin slowly at rest, then speed up
+-- as ships approach to jump", the bell "should roll at moderate speed, at
+-- all times"): each piece a model of its own, drawn about the gate's
+-- middle, turning about 'axis' (in the axes of what it rides on: the
+-- gate, or the piece 'parent', by its place in the list) at 'rate'
+-- radians a second, from 'rest' radians round. A 'steady' piece keeps
+-- its rate whatever the gate's pace.
+export type GatePiece = { model: Model, axis: vector, rate: number, rest: number, parent: number?, steady: boolean? }
+-- A stargate made: what of it stands still (nil if all of it turns), how
+-- far it reaches from its middle, and what turns.
+-- 'opening': how far out the mouth is (what flies through it), in the
+-- same units.
+export type GateMade = { model: Model?, radius: number, opening: number, pieces: { GatePiece } }
+
+-- How wide a stargate's mouth is drawn, a share of the gate's radius in
+-- the Core (Describe/System: 1500 m), whichever design it is: the
+-- designs reach out as far as they each do round it. (Starbase.Gate's lit
+-- ring was about this far out.)
+Starbase.GATE_OPENING = 0.70
+local GATE_OPENINGS: { [string]: number } = { dial = 0.805, gyre = 0.875, bell = 0.85, orrery = 0.85 }
+-- ('piece' gives the new piece's builder and its place in the list, for a piece that rides on it)
+type GateParts = { b: Builder, piece: (axis: vector, rate: number, rest: number, parent: number?, steady: boolean?) -> (Builder, number) }
+
+local GATE_DRAWN: { [string]: (parts: GateParts) -> () } = {}
+
+-- The paints of the gates (the owner, 2026-11-21): the dial "more
+-- slate-like, black-grey"; the gyre "a burnt-ochre dark red-orange, with
+-- stone-like texture". (The bell keeps the works' grey for now.)
+local GATE_LOOKS: { [string]: Plates.Look } = {
+  dial = {
+    plating = { 0.115, 0.12, 0.13 }, patch = { 0.16, 0.165, 0.175 }, frame = { 0.06, 0.062, 0.068 }, glow = { 0.78, 0.93, 1.0 },
+    trim = { 0.2, 0.2, 0.21 }, wear = 0.12, rust = 0.02, sheets = 2.0, stone = 0.55,
+  },
+  gyre = {
+    plating = { 0.31, 0.125, 0.05 }, patch = { 0.27, 0.10, 0.04 }, frame = { 0.10, 0.06, 0.045 }, glow = { 0.78, 0.93, 1.0 },
+    trim = { 0.5, 0.3, 0.1 }, wear = 0.08, rust = 0.04, sheets = 2.0, stone = 1.0,
+  },
+  bell = WORKS,
+}
+GATE_LOOKS.orrery = GATE_LOOKS.gyre
+
+-- Dial: a heavy outer ring and, inside it, a thinner one marked all
+-- round with lit glyphs, which turns; the band of light in the gap
+-- between them, and four guides lapping over the inner ring's faces
+-- from the outer.
+GATE_DRAWN.dial = function(parts: GateParts)
+  local b = parts.b
+  ring(b, PLATING, 1.08, 0, 0.12, 0.11, 4)
+  ring(b, FRAME, 1.08, 0.108, 0.08, 0.006, 4)
+  ring(b, FRAME, 1.08, -0.108, 0.08, 0.006, 4)
+  for index = 0, 8 do
+    local a = math.pi / 2 + index / 9 * 2 * math.pi
+    for _, z in { 0.116, -0.116 } do
+      block(b, GLOW, around(a, 1.08, z), v(0.018, 0.04, 0.004), rolled(a), 0.3)
+    end
+  end
+  ring(b, GLOW, 0.937, 0, 0.012, 0.05, 2)
+  for index = 0, 3 do
+    local a = math.pi / 4 + index * math.pi / 2
+    for _, z in { 0.093, -0.093 } do
+      block(b, FRAME, around(a, 0.95, z), v(0.05, 0.06, 0.012), rolled(a), 0.35)
+    end
+    block(b, GLOW, around(a, 1.205, 0), v(0.04, 0.012, 0.06), rolled(a), 0.4)
+  end
+  local inner = parts.piece(v(0, 0, 1), 0.06, 0)
+  ring(inner, PATCH, 0.86, 0, 0.055, 0.075, 3)
+  for index = 0, 38 do
+    local a = index / 39 * 2 * math.pi
+    local long = index % 3 == 0
+    block(inner, GLOW, around(a, 0.86, 0.076), v(0.014, if long then 0.03 else 0.018, 0.004), rolled(a), 0.3)
+    block(inner, GLOW, around(a, 0.86, -0.076), v(0.014, if long then 0.03 else 0.018, 0.004), rolled(a), 0.3)
+  end
+end
+
+-- Two gimbals, nested, round what stands still ('still', reaching 'from'
+-- out from the middle where the first's pivots are): the first turns on
+-- pivots at its sides, the second on pivots at the first's top and foot,
+-- carried round with it. Each drawn in the plane of the gate and turned
+-- out of it.
+local function gimbals(parts: GateParts, still: Builder, from: number, R1: number, R2: number)
+  -- (a bearing: an axle out from the ring within, a hub on the gimbal, a
+  -- lit collar round the hub, a cap beyond)
+  local function bearing(within: Builder, gimbal: Builder, way: vector, from: number, r: number)
+    for _, s in { 1, -1 } do
+      local p = way * s
+      rod(within, FRAME, { p * from, p * (r + 0.1) }, { 0.04, 0.04 })
+      pod(gimbal, PLATING, p * r, p, 0.1, 0.085)
+      ringAt(gimbal, GLOW, p * r, p, 0.1, 0.006, 0.014, 2)
+      pod(gimbal, PATCH, p * (r + 0.1), p, 0.05, 0.04)
+    end
+  end
+  local first, carrier = parts.piece(v(1, 0, 0), 0.15, 0.55)
+  ring(first, PATCH, R1, 0, 0.055, 0.065, 2.8)
+  ring(first, GLOW, R1 - 0.057, 0, 0.007, 0.026, 2)
+  bearing(still, first, v(1, 0, 0), from, R1)
+  local second = parts.piece(v(0, 1, 0), -0.22, -0.5, carrier)
+  ring(second, PATCH, R2, 0, 0.055, 0.065, 2.8)
+  ring(second, GLOW, R2 - 0.057, 0, 0.007, 0.026, 2)
+  bearing(first, second, v(0, 1, 0), R1 + 0.055, R2)
+end
+
+-- Gyre: a ring in two gimbals, nested: the first turns on pivots at the
+-- ring's sides, the second on pivots at the first's top and foot, and is
+-- carried round with it (the wormhole citadel's turning rings, kin to
+-- it). Every ring lit.
+GATE_DRAWN.gyre = function(parts: GateParts)
+  local b = parts.b
+  ring(b, PLATING, 1.0, 0, 0.11, 0.09, 3)
+  ring(b, FRAME, 0.99, 0.088, 0.06, 0.01, 3)
+  ring(b, FRAME, 0.99, -0.088, 0.06, 0.01, 3)
+  ring(b, GLOW, 0.884, 0, 0.01, 0.04, 2.5)
+  gimbals(parts, b, 1.11, 1.27, 1.5)
+end
+
+-- Bell: a deep collar, flared at both lips and pinched at its throat,
+-- a nozzle to fly through: a band of light round the throat and a thin
+-- one round each lip, ribs down its outside. All of it rolls.
+-- (the bell's body, into 'b'; with its lit belt round the outside middle, or not)
+local function bellBody(b: Builder, belt: boolean)
+  -- (the profile anticlockwise: along the outside aft to fore, round the
+  -- fore lip, back through the throat, round the aft lip)
+  local profile: { vector } = {}
+  local function add(r: number, z: number)
+    table.insert(profile, v(r, z, 0))
+  end
+  local steps = 18
+  for i = 0, steps do
+    local t = i / steps
+    local z = -0.5 + t
+    add(1.24 - 0.06 * math.sin(t * math.pi), z)
+  end
+  add(1.22, 0.53)
+  add(1.17, 0.545)
+  for i = steps, 0, -1 do
+    local t = i / steps
+    local z = -0.5 + t
+    -- (the inside: flared at the lips, pinched to 0.86 at the middle)
+    local u = (t - 0.5) * 2
+    add(0.86 + 0.26 * u * u, z)
+  end
+  add(1.17, -0.545)
+  add(1.22, -0.53)
+  -- (that runs anticlockwise in (out, along): turned about, to run as section's do)
+  local turned: { vector } = {}
+  for i = #profile, 1, -1 do
+    table.insert(turned, profile[i])
+  end
+  Plates.Revolve(b, PLATING, turned, 120, true)
+  ring(b, GLOW, 0.856, 0, 0.008, 0.07, 2)
+  ring(b, GLOW, 1.13, 0.545, 0.012, 0.004, 2)
+  ring(b, GLOW, 1.13, -0.545, 0.012, 0.004, 2)
+  -- (ribs along its outside, following the barrel's waist; two collars
+  -- near its lips; between, a lit belt broken by the ribs)
+  local function outside(z: number): number
+    return 1.24 - 0.06 * math.sin((z + 0.5) * math.pi)
+  end
+  for index = 0, 11 do
+    local a = (index + 0.5) / 12 * 2 * math.pi
+    local path: { vector } = {}
+    local radii: { number } = {}
+    for k = 0, 8 do
+      local z = -0.46 + 0.92 * k / 8
+      table.insert(path, around(a, outside(z) + 0.012, z))
+      table.insert(radii, 0.024)
+    end
+    rod(b, FRAME, path, radii)
+  end
+  for _, z in { 0.4, -0.4 } do
+    ring(b, FRAME, outside(z) + 0.008, z, 0.02, 0.035, 3)
+  end
+  if belt then
+    ring(b, GLOW, outside(0) + 0.004, 0, 0.006, 0.018, 2)
+  end
+end
+
+GATE_DRAWN.bell = function(parts: GateParts)
+  bellBody((parts.piece(v(0, 0, 1), 0.3, 0, nil, true)), true)
+end
+
+-- Orrery (the owner's idea, 2026-11-21: an alien long gate, "bell-in-the-
+-- middle-gyres-around ... in the alien stone material"): the bell, rolling
+-- inside a collar that stands still round its waist, and the gyre's two
+-- nested gimbals pivoted on the collar, clear of the bell's sweep.
+GATE_DRAWN.orrery = function(parts: GateParts)
+  local b = parts.b
+  bellBody((parts.piece(v(0, 0, 1), 0.3, 0, nil, true)), false)
+  ring(b, PLATING, 1.29, 0, 0.05, 0.07, 3)
+  ring(b, GLOW, 1.342, 0, 0.006, 0.03, 2)
+  for index = 0, 3 do
+    local a = math.pi / 4 + index * math.pi / 2
+    block(b, PATCH, around(a, 1.3, 0), v(0.06, 0.06, 0.09), rolled(a), 0.4)
+  end
+  gimbals(parts, b, 1.34, 1.52, 1.76)
+end
+
+local gatesMade: { [string]: GateMade } = {}
+
+-- A stargate mock-up, by its number in Starbase.GATE_DESIGNS: what of it
+-- stands still and what turns. Made once and kept.
+function Starbase.GateDesign(index: number): GateMade
+  local name = Starbase.GATE_DESIGNS[index]
+  assert(name, `no stargate design {index}`)
+  local kept = gatesMade[name]
+  if kept then
+    return kept
+  end
+  local seed = #name * 2.31
+  local b = Plates.New(seed, 0.11)
+  local drawn: { { b: Builder, axis: vector, rate: number, rest: number, parent: number?, steady: boolean? } } = {}
+  GATE_DRAWN[name]({ b = b, piece = function(axis: vector, rate: number, rest: number, parent: number?, steady: boolean?): (Builder, number)
+    local own = Plates.New(seed + (#drawn + 1) * 7.7, 0.11)
+    table.insert(drawn, { b = own, axis = axis, rate = rate, rest = rest, parent = parent, steady = steady })
+    return own, #drawn
+  end })
+  local look = GATE_LOOKS[name]
+  local reach = 0
+  local model: Model? = nil
+  if b.kept > 0 then
+    local still, lower, upper = Plates.Finish(b, look, nil)
+    model = still
+    reach = math.max(-lower.x, -lower.y, -lower.z, upper.x, upper.y, upper.z)
+  end
+  local pieces: { GatePiece } = {}
+  for _, it in drawn do
+    local turning, lower, upper = Plates.Finish(it.b, look, nil)
+    -- (as far as it reaches, whichever way it is turned: about as far as its box's farthest side)
+    reach = math.max(reach, -lower.x, -lower.y, -lower.z, upper.x, upper.y, upper.z)
+    table.insert(pieces, { model = turning, axis = it.axis, rate = it.rate, rest = it.rest, parent = it.parent, steady = it.steady })
+  end
+  local made = { model = model, radius = reach, opening = GATE_OPENINGS[name], pieces = pieces }
+  gatesMade[name] = made
+  return made
+end
+
+-- The same, by its name.
+function Starbase.GateNamed(name: string): GateMade
+  local index = table.find(Starbase.GATE_DESIGNS, name)
+  assert(index, `no stargate design {name}`)
+  return Starbase.GateDesign(index)
+end
+
+-- A gate's turning pieces in a scene, and how far round each is.
+export type GateMoving = { objects: { Object }, pieces: { GatePiece }, angles: { number }, look: vector, up: vector }
+
+-- Put what turns of a gate into a scene: 'add' makes a thing of a model,
+-- in the scene (placed and sized by the caller, at the gate's middle);
+-- the gate faces 'look', with 'up' above it.
+function Starbase.GateMovers(made: GateMade, add: (model: Model) -> Object, look: vector, up: vector): GateMoving
+  local moving: GateMoving = { objects = {}, pieces = made.pieces, angles = {}, look = vector.normalize(look), up = vector.normalize(up) }
+  for _, piece in made.pieces do
+    table.insert(moving.objects, add(piece.model))
+    table.insert(moving.angles, piece.rest)
+  end
+  Starbase.AnimateGate(moving, 0, 1)
+  return moving
+end
+
+-- A vector turned 'angle' about the unit 'k' (Rodrigues' rule).
+local function turnAbout(p: vector, k: vector, angle: number): vector
+  local c, s = math.cos(angle), math.sin(angle)
+  return p * c + vector.cross(k, p) * s + k * (vector.dot(k, p) * (1 - c))
+end
+
+-- Turn a gate's pieces on by 'dt' seconds, at 'pace' times their rates
+-- at rest (1 at rest: the game raises it as ships come to jump; a steady
+-- piece pays it no heed).
+function Starbase.AnimateGate(moving: GateMoving, dt: number, pace: number)
+  -- (each piece's axes, in the gate's: its x, y and z where they have been turned to)
+  local frames: { { vector } } = {}
+  local look, up = moving.look, moving.up
+  local right = vector.cross(up, look)
+  for index, piece in moving.pieces do
+    moving.angles[index] += dt * piece.rate * (if piece.steady then 1 else pace)
+    local angle = moving.angles[index]
+    local base = if piece.parent then frames[piece.parent] else { v(1, 0, 0), v(0, 1, 0), v(0, 0, 1) }
+    -- (its axis is in what it rides on's axes)
+    local k = vector.normalize(base[1] * piece.axis.x + base[2] * piece.axis.y + base[3] * piece.axis.z)
+    local frame = { turnAbout(base[1], k, angle), turnAbout(base[2], k, angle), turnAbout(base[3], k, angle) }
+    frames[index] = frame
+    local function world(p: vector): vector
+      return right * p.x + up * p.y + look * p.z
+    end
+    Object_SetAxes(moving.objects[index], world(frame[3]), world(frame[2]))
+  end
+end
+
 local shell: Model? = nil
 
 -- The field: a unit sphere to be scaled to the field's radius.

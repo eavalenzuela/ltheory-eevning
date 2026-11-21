@@ -40,6 +40,7 @@ export type Look = {
   rust: number,
   sheets: number,       -- sheets of plating to a unit of the model
   mottle: number?,      -- how unlike one sheet is to the next, 0 to 1 (a patchwork); 0 if not said
+  stone: number?,       -- how far it is stone, not sheets of plate, 0 to 1 (a stargate's); 0 if not said
   lights: number?,      -- how many sheets have a lit port in them, 0 to 1; 0 if not said
   -- A design laid over the plating (Core/Data/Paints): which figure,
   -- how many of it to the hull's length, and the colour it is laid on
@@ -394,6 +395,77 @@ function Plates.Revolve(b: Builder, part: number, profile: { vector }, sides: nu
       local a2, c2 = base + i * sides + (side + 1) % sides, base + j * sides + (side + 1) % sides
       Mesh_AddTriangle(skin, a, c, a2)
       Mesh_AddTriangle(skin, a2, c, c2)
+    end
+  end
+  b.kept += 1
+end
+
+-- Plates.Revolve about any axis through any point, and over only part of
+-- the way round if asked (2026-11-21, for the stargate mock-ups: rings
+-- tilted in gimbals, a cradle's arc): the profile as Plates.Revolve takes
+-- it, turned about 'axis' through 'at', from angle 'from' to 'to' (all
+-- the way round if not said). A part-way turn of a closed profile is
+-- shut at its two ends with flat caps.
+function Plates.RevolveAt(b: Builder, part: number, profile: { vector }, sides: number, closed: boolean?, at: vector, axis: vector,
+  from: number?, to: number?)
+  local n = vector.normalize(axis)
+  -- (about z, angle 0 is +x and a quarter round is +y, as Plates.Revolve's)
+  local e1 = vector.normalize(vector.cross(if math.abs(n.y) < 0.9 then vector.create(0, 1, 0) else vector.create(1, 0, 0), n))
+  local e2 = vector.cross(n, e1)
+  local whole = from == nil or to == nil
+  local a0, a1 = from or 0, to or 2 * math.pi
+  local columns = if whole then sides else sides + 1
+  local tag = part + own(b)
+  local skin = skinOf(b)
+  local base = b.points
+  local count = #profile
+  local function place(point: vector, a: number): vector
+    return at + (e1 * math.cos(a) + e2 * math.sin(a)) * point.x + n * point.y
+  end
+  for _, point in profile do
+    for side = 0, columns - 1 do
+      Mesh_AddVertex(skin, place(point, a0 + (a1 - a0) * side / sides), UNSET, 1, tag)
+    end
+  end
+  b.points += count * columns
+  local spans = if closed then count else count - 1
+  for i = 0, spans - 1 do
+    local j = (i + 1) % count
+    for side = 0, sides - 1 do
+      local next = if whole then (side + 1) % sides else side + 1
+      local a, c = base + i * columns + side, base + j * columns + side
+      local a2, c2 = base + i * columns + next, base + j * columns + next
+      Mesh_AddTriangle(skin, a, c, a2)
+      Mesh_AddTriangle(skin, a2, c, c2)
+    end
+  end
+  if not whole and closed then
+    -- (each cap its own points, so that it is lit flat, about the middle
+    -- of the profile; wound as the rest is, its faces' crosses turned out)
+    local middle = vector.create(0, 0, 0)
+    for _, point in profile do
+      middle += point
+    end
+    middle /= count
+    for _, end_ in { { a = a0, out = -1 }, { a = a1, out = 1 } } do
+      local tangent = (-e1 * math.sin(end_.a) + e2 * math.cos(end_.a)) * end_.out
+      local pole = b.points
+      Mesh_AddVertex(skin, place(middle, end_.a), UNSET, 1, tag)
+      for _, point in profile do
+        Mesh_AddVertex(skin, place(point, end_.a), UNSET, 1, tag)
+      end
+      b.points += count + 1
+      local p0 = place(middle, end_.a)
+      local p1, p2 = place(profile[1], end_.a), place(profile[2], end_.a)
+      local flip = vector.dot(vector.cross(p1 - p0, p2 - p0), tangent) < 0
+      for k = 0, count - 1 do
+        local k1, k2 = pole + 1 + k, pole + 1 + (k + 1) % count
+        if flip then
+          Mesh_AddTriangle(skin, pole, k2, k1)
+        else
+          Mesh_AddTriangle(skin, pole, k1, k2)
+        end
+      end
     end
   end
   b.kept += 1
@@ -910,6 +982,7 @@ function Plates.Finish(b: Builder, look: Look, sheets: number?): (Model, vector,
   ShaderInstance_SetFloat(skin, "rust", look.rust)
   ShaderInstance_SetFloat(skin, "sheets", sheets or look.sheets)
   ShaderInstance_SetFloat(skin, "mottle", look.mottle or 0)
+  ShaderInstance_SetFloat(skin, "stone", look.stone or 0)
   ShaderInstance_SetFloat(skin, "lights", look.lights or 0)
   ShaderInstance_SetFloat(skin, "rivets", if b.rivets then 1 else 0)
   -- (a design is laid out from the middle of the thing, in halves of

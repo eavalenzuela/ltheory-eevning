@@ -586,4 +586,36 @@ suite:Case("a galaxy is shared out into regions and constellations, each of syst
   t.ok(Codec.HashOf(Galaxy.Describe(4, 60).regions) ~= Codec.HashOf(a.regions))
 end)
 
+suite:Case("a stargate is built as its holder builds them, and the longest tenth as a long jump needs", function(t)
+  local galaxy = Galaxy.Describe(3, 400)
+  local long = 0
+  local count = 0
+  local seen: { [string]: number } = {}
+  for id, system in galaxy.systems do
+    local its = Factions.byId[system.owner]
+    for _, other in system.neighbors do
+      count += 1
+      local design = Galaxy.GateDesign(galaxy, id, other)
+      seen[design] = (seen[design] or 0) + 1
+      -- (both ends of a gate are as long as each other, so both are long builds or neither)
+      local there = Galaxy.GateDesign(galaxy, other, id)
+      t.eq(design == "bell" or design == "orrery", there == "bell" or there == "orrery", `the gate {id} -> {other}`)
+      if design == "bell" or design == "orrery" then
+        long += 1
+      end
+      if its and its.kind == "alien" then
+        t.ok(design == "gyre" or design == "orrery", `{system.name}, alien held, has a {design}`)
+      elseif its then
+        t.ok(design == "dial" or design == "bell", `{system.name}, held by people, has a {design}`)
+      end
+      t.eq(design, Galaxy.GateDesign(galaxy, id, other), "the same gate built twice the same")
+    end
+  end
+  -- (about a tenth of the gates long, ties and all)
+  t.ok(long >= count * 0.1 and long <= count * 0.12, `{long} long gates of {count}`)
+  for _, design in { "dial", "gyre", "bell", "orrery" } do
+    t.ok((seen[design] or 0) > 0, `no {design} in four hundred systems`)
+  end
+end)
+
 return suite

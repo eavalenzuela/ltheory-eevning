@@ -27,6 +27,7 @@
 local Arms = require("@lt/Game/View/Arms")
 local Clock = require("@lt/Game/Clock")
 local Constants = require("@lt/Core/Data/Constants")
+local Galaxy = require("@lt/Core/Describe/Galaxy")
 local Core = require("@lt/Core/Api")
 local Effects = require("@lt/Game/View/Effects")
 local Hull = require("@lt/Game/View/Hull")
@@ -170,6 +171,9 @@ export type Scene = {
   -- of 'works' and after the tower's own (the first): to move them by.
   offsets: { [number]: { vector } },
   moving: { [number]: { Starbase.Moving } },  -- what moves of each station's tower (they are among its works)
+  -- What turns of each stargate (its pieces are among its works), and
+  -- how fast it turns now: 1 at rest, more while ships go through it.
+  gateTurns: { [number]: GateTurning },
   -- The described bodies there are proxies of (rocks, stations, gates), by id.
   statics: { [number]: SystemData.Object },
   -- The clouds of gas among them: how big each puff of one is when the
@@ -291,7 +295,7 @@ function Scene.New(camera: Camera): Scene
     yaw = 0.6, pitch = 1.25, zoom = 6, zoomTarget = 6, tracking = 0,
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {}, tethers = {}, citadelGuns = {},
     citadelSpecial = {}, citadelRocks = {}, citadelBeams = {},
-    wreckage = {}, bubbles = {}, works = {}, offsets = {}, moving = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
+    wreckage = {}, bubbles = {}, works = {}, offsets = {}, moving = {}, gateTurns = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
     veilColor = vector.create(0.80, 0.92, 1.0), passage = nil, chase = nil, eyeAt = vector.create(0, 0, 0),
     standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, movers = {}, armsTick = -1, armsTime = 0, ghosts = {}, poses = {}, headings = {}, turned = 0,
   }
@@ -775,6 +779,7 @@ local function dropWorks(scene: Scene, id: number)
   end
   scene.offsets[id] = nil
   scene.moving[id] = nil
+  scene.gateTurns[id] = nil
   scene.standing[id] = nil
   scene.citadelSpecial[id] = nil
   local rock = scene.citadelRocks[id]
@@ -1172,8 +1177,10 @@ local function makeStatic(object: SystemData.Object): Object
     made:SetScale(vector.create(object.radius, object.radius, object.radius))
     made:SetName(object.name)
   else
-    -- A gate: a ring, facing out of the system, the way its jump goes.
-    -- (A station is a tower and what is anchored round it: makeStation.)
+    -- A gate that is not a stargate (a camp's or a deadspace room's): the
+    -- old ring, facing out of the system, the way its jump goes. (A
+    -- stargate is makeGate; a station is a tower and what is anchored
+    -- round it: makeStation.)
     local gate = Starbase.Gate()
     made = Object_Scenery({})
     Object_SetRenderable(made, gate.model)
@@ -1252,6 +1259,82 @@ local function makeCloud(scene: Scene, object: SystemData.Object, at: vector, co
   scene.offsets[object.id] = offsets
   scene.clouds[object.id] = { sizes = sizes, shown = 1 }
   return middle
+end
+
+-- A stargate: the design its end of the gate is built as (Core's
+-- Galaxy.GateDesign), facing out of the system, the way its jump goes,
+-- its mouth as wide as every gate's (Starbase.GATE_OPENING); what of it
+-- stands still the gate's own object, and what turns its works.
+export type GateTurning = { moving: Starbase.GateMoving, design: string, pace: number, at: number }
+-- (how much faster than at rest a gate turns while a ship goes through it, by its design; and how many seconds
+-- it takes to come up to that, and to settle again)
+local GATE_BUSY: { [string]: number } = { dial = 8, gyre = 6, orrery = 6, bell = 1 }
+local GATE_RISE = 1.2
+local GATE_SETTLE = 4
+local function makeGate(scene: Scene, game: Core.Game, object: SystemData.Object, at: vector, container: Object): Object
+  local design = Galaxy.GateDesign(game.state.galaxy, scene.system, object.to)
+  local made = Starbase.GateNamed(design)
+  local size = Starbase.GATE_OPENING * object.radius / made.opening
+  local out = vector.create(object.x, 0, object.z)
+  local look = if vector.magnitude(out) > 1 then vector.normalize(out) else vector.create(0, 0, 1)
+  local up = vector.create(0, 1, 0)
+  local function add(model: Model): Object
+    local thing = Object_Scenery({})
+    Object_SetRenderable(thing, model)
+    thing:SetScale(vector.create(size, size, size))
+    thing:SetPos(at)
+    container:AddInterior(thing)
+    return thing
+  end
+  local still: Object? = nil
+  if made.model then
+    still = add(made.model :: Model)
+    Object_SetAxes(still :: Object, look, up)
+  end
+  local moving = Starbase.GateMovers(made, add, look, up)
+  local works = table.clone(moving.objects)
+  local proxy = still or table.remove(works, 1) :: Object
+  proxy:SetName(object.name)
+  local offsets: { vector } = { vector.zero }
+  for _ in works do
+    table.insert(offsets, vector.zero)
+  end
+  scene.works[object.id] = works
+  scene.offsets[object.id] = offsets
+  scene.gateTurns[object.id] = { moving = moving, design = design, pace = 1, at = scene.time }
+  scene.statics[object.id] = object
+  return proxy
+end
+
+-- Turn the stargates on, each faster while a ship is going into it or
+-- has just come out of it (the owner's, 2026-11-21: the dial's inner
+-- ring "should spin slowly at rest, then speed up as ships approach to
+-- jump"; the gyre's gimbals spin up when a ship jumps, and settle; the
+-- bell rolls on as it always does).
+local function turnGates(scene: Scene, state: State.State, since: number)
+  if next(scene.gateTurns) == nil then
+    return
+  end
+  local busy: { [number]: boolean } = {}
+  for _, id in state.ballIds do
+    local transit = state.balls[id].transit
+    if transit then
+      local t = (state.tick - transit.startTick) * Constants.TICK + since
+      if transit.stage == "in" or transit.stage == "tunnel" then
+        busy[transit.gate] = true
+      elseif transit.stage == "out" and t < 2.5 then
+        busy[transit.arrival] = true
+      end
+    end
+  end
+  for id, turning in scene.gateTurns do
+    local dt = math.clamp(scene.time - turning.at, 0, 0.25)
+    turning.at = scene.time
+    local target = if busy[id] then GATE_BUSY[turning.design] or 1 else 1
+    local tau = if target > turning.pace then GATE_RISE else GATE_SETTLE
+    turning.pace += (target - turning.pace) * math.min(1, dt / tau)
+    Starbase.AnimateGate(turning.moving, dt, turning.pace)
+  end
 end
 
 -- A station: its tower, which is the station's own object, with its
@@ -1644,9 +1727,9 @@ end
 -- Put a gate's tube in the scene: its mouth at 'at' (the middle of the
 -- gate whose 'radius' it is), running off along 'way'.
 local function makeTube(scene: Scene, at: vector, way: vector, radius: number): Object
-  -- (as wide as the gate's opening is drawn: Starbase.Gate's lit ring is
-  -- about 0.72 of the model's units out)
-  local opening = 0.70 * radius / Starbase.Gate().radius
+  -- (a little narrower than the gate's mouth, every design's the same:
+  -- makeGate; so as not to lie in the faces of the ring round it)
+  local opening = 0.97 * Starbase.GATE_OPENING * radius
   local tube = Object_Scenery({})
   Object_SetRenderable(tube, tubeOf())
   tube:SetScale(vector.create(opening, opening, opening))
@@ -1705,9 +1788,16 @@ local function sailThrough(scene: Scene, session: Session.Session, me: State.Bal
     -- Flying in, or come out (a game loaded with the ship between gates):
     -- the camera behind it, and the Core told the far side is ready.
     if me and transit then
-      local _, _, _, vx, vy, vz = ballAt(me, state.tick, since)
+      local x, y, z, vx, vy, vz = ballAt(me, state.tick, since)
       local speed = math.sqrt(vx * vx + vy * vy + vz * vz)
       scene.chase = if speed > 1e-3 then vector.create(vx / speed, vy / speed, vz / speed) else scene.chase
+      -- (going in, the camera is behind the ship on the line to the gate's
+      -- middle, so the gate is ahead the whole way, whichever way the ship
+      -- swings round to it; the last few hundred metres, along its way)
+      local toward = vector.create(transit.gx - x, transit.gy - y, transit.gz - z)
+      if transit.stage == "in" and vector.magnitude(toward) > 400 then
+        scene.chase = vector.normalize(toward)
+      end
       if transit.stage == "tunnel" and player.system == scene.system and emergeAsked ~= transit.startTick then
         emergeAsked = transit.startTick
         Core.Submit(game, { kind = "Emerge", actor = player.ship })
@@ -2027,6 +2117,9 @@ function Scene.Sync(scene: Scene, session: Session.Session)
           scene.statics[object.id] = object
         elseif object.kind == "wormhole" and Core.Query.Wormhole(game, object.id) == nil then
           -- (a wormhole that has closed: the place is kept, and nothing is there)
+        elseif object.kind == "gate" and object.variety == "" and object.to ~= 0 then
+          scene.proxies[object.id] = makeGate(scene, game, object,
+            vector.create(object.x - scene.ox, object.y - scene.oy, object.z - scene.oz), container)
         elseif object.kind ~= "belt" then
           local made = makeStatic(object)
           container:AddInterior(made)
@@ -2056,6 +2149,8 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       end
     end
   end
+
+  turnGates(scene, state, since)
 
   -- What moves of a station's tower: rings turn, dishes sweep, panels
   -- face the sun, hazard lamps blink (Starbase.Animate).
