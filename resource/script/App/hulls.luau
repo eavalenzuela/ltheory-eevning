@@ -37,6 +37,9 @@
 --                  spars) and vanes (mode parts, on a hull shown as a
 --                  ship of a class that runs a mode). Here antennas are
 --                  moving parts too (Game/View/Movers).
+--   9              fins (stabilisers, wings and canards, spines)
+--   M              fins symmetric (every one mirrored or on the centre
+--                  line), or as the dice lay them ("symmetric" on the line)
 --   W, C, E, O     what the ship is doing, for its moving parts: in warp,
 --                  scanning, electronic warfare aimed (at the camera),
 --                  its mode running
@@ -170,6 +173,8 @@ return AppShell.Create(function(): Widget
   -- comma and period keys throw again: the one last switched.
   local detailSeeds: { [string]: number } = {}
   local chosen = Hull.DETAILS[1]
+  -- (and whether every fin is mirrored or on the centre line: "symmetric")
+  local symmetric = false
   local function detailWords(): string
     local words: { string } = {}
     for _, kind in Hull.DETAILS do
@@ -178,12 +183,16 @@ return AppShell.Create(function(): Widget
         table.insert(words, if own ~= 0 then `{kind}:{own}` else kind)
       end
     end
+    if symmetric and #words > 0 then
+      table.insert(words, "symmetric")
+    end
     return table.concat(words, " ")
   end
   -- Set the detail from words ("antennas:17 pipes lights:3").
   local function setDetail(words: { string })
     table.clear(detail)
     table.clear(detailSeeds)
+    symmetric = table.find(words, "symmetric") ~= nil
     for _, word in words do
       local named, own = string.match(word, "^(%a+):(%d+)$")
       local kind: string = named or word
@@ -722,7 +731,7 @@ return AppShell.Create(function(): Widget
         search(query)
       end
       local foot = w.pos.y + w.size.y - 54
-      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      B: broad only      [ / ]: size      S: style      A: sides alike or not      P: paint      F: as a ship      1-8: detail      , .: its seed      W C E O: warp, scan, ewar, mode      K: keep      Space: turn",
+      Im.Text("Left / Right: seed      Down / Up: ten seeds      R: random      B: broad only      [ / ]: size      S: style      A: sides alike or not      P: paint      F: as a ship      1-9: detail      , .: its seed      M: fins symmetric      W C E O: warp, scan, ewar, mode      K: keep      Space: turn",
         x, foot, 15, Im.DIM)
       Im.Text("right-drag turns it, the wheel moves in and out", x, foot + 22, 15, Im.DIM)
     end,
@@ -732,7 +741,7 @@ return AppShell.Create(function(): Widget
         show()
         return
       end
-      for index, key in { Key_N1(), Key_N2(), Key_N3(), Key_N4(), Key_N5(), Key_N6(), Key_N7(), Key_N8() } do
+      for index, key in { Key_N1(), Key_N2(), Key_N3(), Key_N4(), Key_N5(), Key_N6(), Key_N7(), Key_N8(), Key_N9() } do
         if Key_Pressed(key) then
           local kind = Hull.DETAILS[index]
           detail[kind] = not detail[kind]
@@ -771,6 +780,7 @@ return AppShell.Create(function(): Widget
       end
       if Key_Pressed(Key_F()) then class = (class + 1) % (#CLASSES + 1) end
       if Key_Pressed(Key_Space()) then turning = not turning end
+      if Key_Pressed(Key_M()) then symmetric = not symmetric end
       if Key_Pressed(Key_W()) then doing.warp = not doing.warp end
       if Key_Pressed(Key_C()) then doing.scan = not doing.scan end
       if Key_Pressed(Key_E()) then doing.ewar = not doing.ewar end

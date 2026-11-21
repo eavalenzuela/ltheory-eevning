@@ -159,7 +159,8 @@ suite:Case("the Talmar's ships are the owner's rework of them: each by name, of 
     supercarrier = 1300, industrial = 180, barge = 160, freighter = 1000, capitalindustrial = 700 }
   -- (name, class, the hull it is the tech 2 make of, a jump drive, built to go unseen)
   local LINE: { { any } } = {
-    { "Carvarro", "frigate" }, { "Creavo", "frigate" }, { "Nephelo", "frigate", "Carvarro", nil, true }, { "Meseolo", "destroyer" },
+    { "Carvarro", "frigate" }, { "Creavo", "frigate" }, { "Ende", "frigate" }, { "Nephelo", "frigate", "Carvarro", nil, true },
+    { "Meseolo", "destroyer" },
     { "Osso", "destroyer", "Meseolo" }, { "Paestro", "cruiser" }, { "Stenanno", "cruiser" },
     { "Sopholto", "battlecruiser" }, { "Phaeto", "battleship" }, { "Losiano", "battleship" }, { "Scoppo", "carrier", nil, true },
     { "Concorso", "dreadnought" }, { "Nullo", "supercarrier" },
@@ -173,7 +174,7 @@ suite:Case("the Talmar's ships are the owner's rework of them: each by name, of 
     -- (their navy makes apart: a spec of their own)
     theirs += if hull.lineage == "talmar" and not hull.navy then 1 else 0
   end
-  -- (the twenty-one, and no other: a ship has no "II")
+  -- (the twenty-two, and no other: a ship has no "II"; the Ende since 2026-11-20)
   t.eq(theirs, #LINE)
   for _, entry in LINE do
     local name: string, class: string, of: string?, jump: boolean?, stealth: boolean? = entry[1], entry[2], entry[3], entry[4], entry[5]

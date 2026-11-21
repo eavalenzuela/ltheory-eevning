@@ -402,8 +402,9 @@ end
 -- A smooth round tube along a path (2026-11-20, for antennas: true
 -- rods, tapered tips, a whip's curve): 'path' its middle line, 'radii'
 -- how thick it is at each point of it, 'sides' steps round. Its ends are
--- left open (a rod's foot is in its knuckle; give its tip a radius near
--- nothing to close it to a point).
+-- closed flat (open, they let the eye through to its inside, which is not
+-- drawn from there: the owner saw rods "half-disappear when looked at
+-- from their tip").
 function Plates.Tube(b: Builder, part: number, path: { vector }, radii: { number }, sides: number)
   local tag = part + own(b)
   local skin = skinOf(b)
@@ -432,11 +433,58 @@ function Plates.Tube(b: Builder, part: number, path: { vector }, radii: { number
     for side = 0, sides - 1 do
       local a, c = base + i * sides + side, base + (i + 1) * sides + side
       local a2, c2 = base + i * sides + (side + 1) % sides, base + (i + 1) * sides + (side + 1) % sides
-      Mesh_AddTriangle(skin, a, c, a2)
-      Mesh_AddTriangle(skin, a2, c, c2)
+      Mesh_AddTriangle(skin, a, a2, c)
+      Mesh_AddTriangle(skin, a2, c2, c)
+    end
+  end
+  -- (its sides wound so that their outsides are drawn: the other way, the
+  -- eye saw through a rod to its foot, the owner's "the bases are actually
+  -- visible through the rod antennas"; and its two ends, each a flat fan
+  -- about a point in its middle, wound to match)
+  for _, at in { 1, count } do
+    Mesh_AddVertex(skin, path[at], UNSET, 1, tag)
+    local pole = b.points
+    b.points += 1
+    local ring = base + (at - 1) * sides
+    for side = 0, sides - 1 do
+      local a, a2 = ring + side, ring + (side + 1) % sides
+      if at == 1 then
+        Mesh_AddTriangle(skin, pole, a2, a)
+      else
+        Mesh_AddTriangle(skin, pole, a, a2)
+      end
     end
   end
   b.kept += 1
+end
+
+-- A thin blade (2026-11-20, for fins): its leading and trailing edges
+-- as points from root to tip ('lead', 'trail'), so thick at each step
+-- ('thick') across 'side' (the way its faces look), with flat faces and
+-- sharp edges; open at its root (which is in the hull or a root fitting).
+-- More steps along a curved edge make a curved, swept blade.
+function Plates.Blade(b: Builder, part: number, lead: { vector }, trail: { vector }, thick: { number }, side: vector)
+  local count = #lead
+  for i = 1, count - 1 do
+    local h0, h1 = side * (thick[i] / 2), side * (thick[i + 1] / 2)
+    local l0, l1, t0, t1 = lead[i], lead[i + 1], trail[i], trail[i + 1]
+    local chord = vector.normalize(((l0 - t0) + (l1 - t1)) / 2)
+    -- (its two faces)
+    Plates.Facet(b, part, l0 + h0, t0 + h0, t1 + h1, side)
+    Plates.Facet(b, part, l0 + h0, t1 + h1, l1 + h1, side)
+    Plates.Facet(b, part, l0 - h0, t0 - h0, t1 - h1, -side)
+    Plates.Facet(b, part, l0 - h0, t1 - h1, l1 - h1, -side)
+    -- (its leading and trailing edges)
+    Plates.Facet(b, part, l0 + h0, l0 - h0, l1 - h1, chord)
+    Plates.Facet(b, part, l0 + h0, l1 - h1, l1 + h1, chord)
+    Plates.Facet(b, part, t0 + h0, t0 - h0, t1 - h1, -chord)
+    Plates.Facet(b, part, t0 + h0, t1 - h1, t1 + h1, -chord)
+  end
+  -- (and its tip)
+  local l, t, h = lead[count], trail[count], side * (thick[count] / 2)
+  local out = vector.normalize(lead[count] - lead[math.max(1, count - 1)])
+  Plates.Facet(b, part, l + h, t + h, t - h, out)
+  Plates.Facet(b, part, l + h, t - h, l - h, out)
 end
 
 -- A fairing: a slender swelling on a skin, lying along it and flush to

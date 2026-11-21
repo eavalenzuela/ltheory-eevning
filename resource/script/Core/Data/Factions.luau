@@ -232,6 +232,8 @@ Factions.list = {
     -- siege dreadnought.)
     line = {
       { name = "Carvarro", class = "frigate" }, { name = "Creavo", class = "frigate" },
+      -- (the owner's, 2026-11-20: "frigate (ewar damping)", a tech 1 role hull)
+      { name = "Ende", class = "frigate", ewar = true },
       { name = "Nephelo", class = "frigate", tech = 2, of = "Carvarro", stealth = true },
       { name = "Meseolo", class = "destroyer" },
       { name = "Osso", class = "destroyer", tech = 2, of = "Meseolo", interdictor = true },

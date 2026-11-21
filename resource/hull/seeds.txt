@@ -8,8 +8,11 @@
 # triangular_v2; and any of them with +asym after it, as stout+asym,
 # has its two sides unalike), the word painted or another's paint
 # (paint:vail: the hull browser's paints but bare), and the surface
-# detail it has (antennas, pipes, greebles, lights, rivets; each with
-# the seed of its own after it if wanted, antennas:13).
+# detail it has (antennas, pipes, greebles, lights, rivets, and the
+# moving parts dishes, rotors, vanes and fins; each with the seed of its
+# own after it if wanted, antennas:13; and the word symmetric for fins
+# that are all mirrored or on the centre line). The hull browser's K
+# writes such a line for a hull found there by name.
 #
 # A hull named here is drawn as that seed makes it, in place of the
 # design drawn for it in Game/View/Hull.luau: the generator's own mesh
@@ -69,19 +72,20 @@
 # name and class are in resource/script/Core/Data/Factions.luau). The
 # Nephelo and the Osso (2026-11-17) are the Carvarro's and the Meseolo's
 # seeds again, with surface detail; the Nephelo in the Vail's paint.
-frigate.carvarro            29  6
-frigate.creavo              54  4
+frigate.carvarro            29  6  paint:civil antennas:42 greebles:9
+frigate.creavo              54  4  antennas:7 greebles:4
+frigate.ende                54  4  antennas:7 greebles:4 dishes:10
 frigate.nephelo             29  6  paint:vail antennas:13 greebles:9
-destroyer.meseolo           43  5
+destroyer.meseolo           43  5  antennas:34 greebles symmetric
 destroyer.osso              43  5  antennas:13 greebles:15
-cruiser.paestro              2  8
-cruiser.stenanno            48  6
-battlecruiser.sopholto      18  8
-battleship.phaeto            4  6
-battleship.losiano           6  7
-carrier.scoppo              34  8
-dreadnought.concorso        38  8
-supercarrier.nullo          97  7
+cruiser.paestro              2  8  antennas:55 greebles:6 symmetric
+cruiser.stenanno            48  6  antennas:89 symmetric
+battlecruiser.sopholto      18  8  antennas:102 greebles:16 symmetric
+battleship.phaeto            4  6  fins:5 symmetric
+battleship.losiano           6  6  antennas:3 symmetric
+carrier.scoppo              34  8  greebles:9
+dreadnought.concorso        38  8  antennas:5 greebles:3
+supercarrier.nullo          97  7  old+asym greebles:17 dishes:64 symmetric
 industrial.sunfish          12  6
 industrial.tarantula        60  6
 industrial.armadillo        17  6

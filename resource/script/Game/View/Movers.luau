@@ -26,6 +26,8 @@
 --   ring, drum, collar
 --             turn steadily about the hull's length
 --   spar      turns steadily about its face's upright
+--   fin       a blade swept back on its root by its lean; folds back flat
+--             along the hull in warp (a wing's blades closing into a stack)
 --   vane      lies aft along the hull; fans out while its mode runs, a
 --             lit strip on it while it is open
 -- Every rate here is mine.
@@ -145,9 +147,10 @@ function Movers.Animate(pieces: { Piece }, place: Place, time: number, dt: numbe
           piece.shown = step
           Object_SetRenderable(mast, heads[step])
         end
-        -- (and past its curl at rest it goes over on its knuckle too, to lie back along the hull)
-        local rest = m.curl or 0
-        local over = if piece.curl > rest then (piece.curl - rest) / math.max(0.01, 1 - rest) * math.pi / 2 * 0.85 else 0
+        -- (and it leans back on its knuckle by the ship's lean as the other antennas do, further over in warp, upright
+        -- scanning: the owner's, of whips that stood up while the rest leaned back)
+        piece.lean = toward(piece.lean, if state.warp then math.pi / 2 * 0.85 elseif state.scan then 0 else (m.lean or 0), 1.2, dt)
+        local over = piece.lean
         stand(mast, hinge, d * math.cos(over) - n * math.sin(over), n * math.cos(over) + d * math.sin(over))
       elseif sections then
         -- (its sections slide out of one another: drawn right out scanning, nested in warp)
@@ -189,6 +192,18 @@ function Movers.Animate(pieces: { Piece }, place: Place, time: number, dt: numbe
         local up = n * math.cos(tilt) - facing * math.sin(tilt)
         stand(head, m.at + n * (m.headAt or 0), look, up)
       end
+    elseif kind == "fin" then
+      -- (a blade swept back by its lean on its root, folded back flat along the hull in warp: a wing's blades so close
+      -- into one stack)
+      -- (a stabiliser stays as it is: the owner's, "make the stabilizers not fold in warp")
+      local folds = state.warp and m.design ~= "stabiliser"
+      piece.lean = toward(piece.lean, if folds then math.pi / 2 * 0.96 else (m.lean or 0), 1.2, dt)
+      stand(piece.object, m.at, d, n)
+      local blade = piece.head
+      if blade then
+        stand(blade, m.at + n * (m.headAt or 0), d * math.cos(piece.lean) - n * math.sin(piece.lean),
+          n * math.cos(piece.lean) + d * math.sin(piece.lean))
+      end
     elseif kind == "ring" or kind == "drum" or kind == "collar" then
       local angle = time * (m.rate or 0) + m.phase
       stand(piece.object, m.at, d, about(n, d, angle))
@@ -202,10 +217,18 @@ function Movers.Animate(pieces: { Piece }, place: Place, time: number, dt: numbe
       local outboard = m.out or vector.create(if m.at.x >= 0 then 1 else -1, 0, 0)
       local swing = t * (m.open or 1)
       local look = d * math.cos(swing) + outboard * math.sin(swing)
-      stand(piece.object, m.at, look, n)
+      -- (its hinge post fixed on the hull's face, and the fin turning on its end)
+      local pivot = m.at + outboard * (m.headAt or 0)
+      local fin = piece.head
+      if fin then
+        stand(piece.object, m.at, d, n)
+        stand(fin, pivot, look, n)
+      else
+        stand(piece.object, pivot, look, n)
+      end
       local glow = piece.glow
       if glow then
-        stand(glow, m.at, look, n, if piece.open > 0.7 then 1 else 0.001)
+        stand(glow, pivot, look, n, if piece.open > 0.7 then 1 else 0.001)
       end
     end
   end
@@ -220,7 +243,7 @@ function Movers.Rest(movers: { Hull.Mover }?): { Rest }
   local list: { Hull.Mover } = movers or {}
   for _, m in list do
     local n, d = m.up, m.fore
-    if m.kind == "antenna" then
+    if m.kind == "antenna" or m.kind == "fin" then
       local lean = m.lean or 0
       table.insert(out, { model = m.model, at = m.at, look = d, up = n })
       local hinge = m.at + n * (m.headAt or 0)
@@ -228,7 +251,7 @@ function Movers.Rest(movers: { Hull.Mover }?): { Rest }
       local heads, sections = m.heads, m.sections
       if heads then
         local step = math.clamp(math.floor((m.curl or 0) * (#heads - 1) + 0.5) + 1, 1, #heads)
-        table.insert(out, { model = heads[step], at = hinge, look = d, up = n })
+        table.insert(out, { model = heads[step], at = hinge, look = look, up = up })
       elseif sections then
         local at = sectionsAt(sections, EXTEND.rest)
         for index, section in sections do
@@ -237,6 +260,10 @@ function Movers.Rest(movers: { Hull.Mover }?): { Rest }
       elseif m.head then
         table.insert(out, { model = m.head :: Model, at = hinge, look = look, up = up })
       end
+    elseif m.kind == "vane" and m.head then
+      -- (its post on the hull, and the fin closed on its end)
+      table.insert(out, { model = m.model, at = m.at, look = d, up = n })
+      table.insert(out, { model = m.head :: Model, at = m.at + (m.out or vector.create(1, 0, 0)) * (m.headAt or 0), look = d, up = n })
     else
       table.insert(out, { model = m.model, at = m.at, look = d, up = n })
       local head = m.head

@@ -165,6 +165,9 @@ HullBonuses.byHull = {
   -- The Talmar (2026-11-18, the owner: "looks good for now"): projectiles
   -- and shields, fast; active-shield brawlers and falloff kiters.
   ["frigate.carvarro"] = { projectile("frigates", 0.05, "damageMultiplier", "5% more projectile damage"), shieldBoost("frigates") },
+  -- (the Talmar's damping frigate, 2026-11-20: its dampeners stronger for each level, its guns a Talmar frigate's; mine)
+  ["frigate.ende"] = { level("frigates", 0.10, "hex", "damp", "sensor dampeners 10% stronger"),
+    projectile("frigates", 0.05, "damageMultiplier", "5% more projectile damage") },
   ["frigate.creavo"] = { projectile("frigates", -0.05, "duration", "projectile turrets fire 5% faster"),
     projectile("frigates", 0.10, "falloff", "projectile turrets keep their aim 10% farther past their best range") },
   ["frigate.nephelo"] = { projectile("frigates", -0.05, "duration", "projectile turrets fire 5% faster"),
