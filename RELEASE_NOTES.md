@@ -6,6 +6,16 @@ release" and the ones under it as "Before that": write a release's
 section before publishing it. A section is a line beginning `## ` and
 the lines beginning `- ` under it.
 
+## New stargates, flying through them, and moving parts on ships
+
+- Going through a stargate is now a passage you watch: from 2.5 km the camera follows your ship in, it crosses the gate's mouth and races into black, and comes out of the far gate's tunnel with the new system ahead of you, braking to a stop about 5 km out. The next system loads behind the black, so there's no freeze at the jump. The interface is hidden on the way.
+- While going through, your ship can't be ordered, locked or hurt, from the moment it's in range until it's out of the far gate. The game's clock keeps running.
+- Haulers and other traffic now fly in and out of the gates instead of appearing and vanishing beside them.
+- Four new stargate designs. The Dial, the standard human gate: a slate-dark ring round a ring of lit glyphs that turns slowly, and faster while a ship goes through. The Gyre, in alien space: a ring in two nested gimbals of burnt-ochre stone that spin up when a ship jumps. The Bell, for the longest tenth of gates: a deep flared collar that's always rolling. The Orrery, the aliens' long gate: a rolling bell inside the Gyre's gimbals. Unclaimed space has a mix of each.
+- Ships have moving parts: antennas, dishes, rotors and vanes that fold away in warp, sweep and stand up while scanning, aim with electronic warfare, and change with siege, triage, the industrial core or an open jump portal. Antennas come as round rods, ship masts, a trailing whip and a segmented telescoping rod.
+- Fins, wings, canards and spines on some hulls, folding flat in warp.
+- The Talmar's hulls are remade, and they have a new frigate, the Ende, built for sensor damping.
+
 ## Rapid launchers, a burst jammer, drone and scanning modules, and fleet portals
 
 - Rapid Light Missile Launcher (medium hardpoint) and Rapid Heavy Missile Launcher (large hardpoint): they fire light or heavy missiles more than twice as often as the plain launcher of those missiles, from a smaller load that takes 35 seconds to reload.
