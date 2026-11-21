@@ -14,8 +14,10 @@
 -- of its model's units is.
 --
 -- How each kind moves:
---   antenna   leans back by the ship's lean; folds flat in warp; while
---             scanning stands upright and is drawn out half as long again
+--   antenna   its mast leans back by the ship's lean on a knuckle on its
+--             foot, which stays flat on the hull; folds flat in warp;
+--             while scanning stands upright and is drawn out half as long
+--             again
 --   dish      sweeps slowly at rest, quickly while scanning; points at
 --   lattice   what electronic warfare is aimed at; parked flat facing
 --             ahead in warp
@@ -99,7 +101,12 @@ function Movers.Animate(pieces: { Piece }, place: Place, time: number, dt: numbe
       piece.stretch = toward(piece.stretch, if state.scan and not state.warp then 1.5 else 1, 0.9, dt)
       local up = n * math.cos(piece.lean) + d * math.sin(piece.lean)
       local look = d * math.cos(piece.lean) - n * math.sin(piece.lean)
-      stand(piece.object, m.at, look, up, 1, piece.stretch)
+      -- (its foot stays flat on the hull; its mast leans on the knuckle)
+      stand(piece.object, m.at, d, n)
+      local mast = piece.head
+      if mast then
+        stand(mast, m.at + n * (m.headAt or 0), look, up, 1, piece.stretch)
+      end
     elseif kind == "dish" or kind == "lattice" or kind == "radar" then
       stand(piece.object, m.at, d, n)
       local side = vector.cross(n, d)
@@ -140,7 +147,7 @@ function Movers.Animate(pieces: { Piece }, place: Place, time: number, dt: numbe
       -- (open while its mode runs: eased, slow at either end)
       piece.open = toward(piece.open, if state.mode ~= nil and state.mode == m.mode then 1 else 0, 0.5, dt)
       local t = piece.open * piece.open * (3 - 2 * piece.open)
-      local outboard = vector.create(if m.at.x >= 0 then 1 else -1, 0, 0)
+      local outboard = m.out or vector.create(if m.at.x >= 0 then 1 else -1, 0, 0)
       local swing = t * (m.open or 1)
       local look = d * math.cos(swing) + outboard * math.sin(swing)
       stand(piece.object, m.at, look, n)
@@ -150,6 +157,36 @@ function Movers.Animate(pieces: { Piece }, place: Place, time: number, dt: numbe
       end
     end
   end
+end
+
+-- A hull's moving parts at rest, for a still picture of it (the fitting
+-- and information windows): each model, and where it stands and which
+-- way it looks, in the hull model's own units and axes.
+export type Rest = { model: Model, at: vector, look: vector, up: vector }
+function Movers.Rest(movers: { Hull.Mover }?): { Rest }
+  local out: { Rest } = {}
+  local list: { Hull.Mover } = movers or {}
+  for _, m in list do
+    local n, d = m.up, m.fore
+    if m.kind == "antenna" then
+      local lean = m.lean or 0
+      table.insert(out, { model = m.model, at = m.at, look = d, up = n })
+      local mast = m.head
+      if mast then
+        table.insert(out, { model = mast, at = m.at + n * (m.headAt or 0), look = d * math.cos(lean) - n * math.sin(lean),
+          up = n * math.cos(lean) + d * math.sin(lean) })
+      end
+    else
+      table.insert(out, { model = m.model, at = m.at, look = d, up = n })
+      local head = m.head
+      if head then
+        local tilt = if m.kind == "radar" then 0 else 0.45
+        table.insert(out, { model = head, at = m.at + n * (m.headAt or 0), look = d * math.cos(tilt) + n * math.sin(tilt),
+          up = n * math.cos(tilt) - d * math.sin(tilt) })
+      end
+    end
+  end
+  return out
 end
 
 return Movers

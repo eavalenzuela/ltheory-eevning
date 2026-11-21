@@ -3497,6 +3497,13 @@ function Debug.Arms(): (number, number)
   return Scene.Arms(scene, session.game.state.player.ship)
 end
 
+-- The pilot's ship's moving parts that are made, by kind ("antenna 4,
+-- dish 2"), how far its first antenna leans and its first dish is
+-- turned, radians (Scene.Movers).
+function Debug.Movers(): (string, number, number)
+  return Scene.Movers(scene, session.game.state.player.ship)
+end
+
 function Debug.Hash(): string
   return Core.Hash(session.game)
 end

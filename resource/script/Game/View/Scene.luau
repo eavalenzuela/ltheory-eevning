@@ -30,6 +30,7 @@ local Constants = require("@lt/Core/Data/Constants")
 local Core = require("@lt/Core/Api")
 local Effects = require("@lt/Game/View/Effects")
 local Hull = require("@lt/Game/View/Hull")
+local Movers = require("@lt/Game/View/Movers")
 local Planet = require("@lt/Game/View/Planet")
 local Star = require("@lt/Game/View/Star")
 local Starbase = require("@lt/Game/View/Starbase")
@@ -195,6 +196,8 @@ export type Scene = {
   showcases: { [string]: Showcase },  -- a ship shown in a window, as a thing of the scene, by the window (Scene.Showcase)
   zoomAway: number,                   -- the zoom there was before docking, to go back to
   arms: { [number]: Armed },          -- what is on the hardpoints of each ship of our own design
+  -- (and its moving parts: Game/View/Movers, 2026-11-20)
+  movers: { [number]: { pieces: { Movers.Piece }, built: Hull.Built } },
   armsTick: number,                   -- the tick the arms were last checked against the fits
   ghosts: { [number]: boolean },      -- the ships drawn cloaked now (Hull.Ghost in place of the hull)
   -- Ships stood somewhere for a picture (Scene.Pose): the way each is
@@ -263,7 +266,7 @@ function Scene.New(camera: Camera): Scene
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {}, tethers = {}, citadelGuns = {},
     citadelSpecial = {}, citadelRocks = {}, citadelBeams = {},
     wreckage = {}, bubbles = {}, works = {}, offsets = {}, moving = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
-    standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, armsTick = -1, armsTime = 0, ghosts = {}, poses = {}, headings = {}, turned = 0,
+    standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, movers = {}, armsTick = -1, armsTime = 0, ghosts = {}, poses = {}, headings = {}, turned = 0,
   }
 end
 
@@ -514,6 +517,10 @@ function Scene.Dressed(game: Core.Game, ship: number, type: string, radius: numb
       end
     end
   end)
+  -- (its moving parts, at rest)
+  for _, rest in Movers.Rest(built.movers) do
+    stand(rest.model, rest.at, rest.look, rest.up, 1)
+  end
   -- (a few at a time: what was dressed long ago is let go)
   dressedCount += 1
   if dressedCount > 8 then
@@ -686,8 +693,22 @@ function Scene.ShowStation(scene: Scene, station: number, cx: number, cy: number
   return true
 end
 
--- Take what is on a ship's hardpoints away.
+-- Take what is on a ship's hardpoints away (and its moving parts).
 local function dropArms(scene: Scene, id: number)
+  local moving = scene.movers[id]
+  if moving then
+    for _, piece in moving.pieces do
+      Object_Delete(piece.object)
+      local head, glow = piece.head, piece.glow
+      if head then
+        Object_Delete(head)
+      end
+      if glow then
+        Object_Delete(glow)
+      end
+    end
+    scene.movers[id] = nil
+  end
   local armed = scene.arms[id]
   if armed then
     for _, point in armed.points do
@@ -876,6 +897,96 @@ end
 
 local FORE = vector.create(0, 0, 1)
 
+-- How near the eye a ship's moving parts move (and are drawn), m: beyond
+-- it they are too small to see, and cost what they cost for nothing.
+local MOVERS_NEAR = 40000
+
+-- What a ship is doing, for its moving parts (Game/View/Movers): in warp,
+-- a scanner or an analyzer running, electronic warfare aimed (the way to
+-- its target, in the hull's own axes, from 'at' along 'right', 'up' and
+-- 'look'), and a mode running (a siege, triage or industrial core
+-- module, or a jump portal held open, or a jump just made).
+local function doing(scene: Scene, game: Core.Game, ball: State.Ball, at: vector, right: vector, up: vector, look: vector): Movers.State
+  local state = game.state
+  local out: Movers.State = { warp = ball.warp ~= nil, scan = false, aim = nil, mode = nil }
+  for _, run in ball.vitals.running do
+    local item = state.items[run.item]
+    local module = if item then Modules.byId[item.type] else nil
+    if module then
+      if module.scanner or module.analyzer then
+        out.scan = true
+      end
+      if (module.hex and not Modules.Friendly(module)) or module.burstJam then
+        local there: vector? = scene.screen[run.target]
+        if there and vector.magnitude(there - at) > 1 then
+          local w = there - at
+          out.aim = vector.create(vector.dot(w, right), vector.dot(w, up), vector.dot(w, look))
+        end
+      end
+      if module.triage then
+        out.mode = "triage"
+      elseif module.core then
+        out.mode = "core"
+      elseif module.immobile then
+        out.mode = "siege"
+      end
+    end
+  end
+  local ship = state.ships[ball.id]
+  if ship and out.mode == nil then
+    local portal = ship.portal
+    if (portal and state.tick < portal.ends) or (ship.jumped and (state.tick - ship.jumped) * Constants.TICK < 8) then
+      out.mode = "jump"
+    end
+  end
+  return out
+end
+
+-- Make a ship's moving parts if they are not made, and pose them where
+-- its hull now is: only near the eye (beyond, they are put away).
+local function moveParts(scene: Scene, game: Core.Game, id: number, built: Hull.Built, proxy: Object, at: vector, ball: State.Ball,
+  container: Object, seconds: number)
+  local movers = built.movers
+  if movers == nil or #movers == 0 then
+    return
+  end
+  local eye = vector.create(scene.eyeX - scene.ox, scene.eyeY - scene.oy, scene.eyeZ - scene.oz)
+  local near = vector.magnitude(at - eye) < math.max(MOVERS_NEAR, ball.radius * 40)
+  local moving: { pieces: { Movers.Piece }, built: Hull.Built }? = scene.movers[id]
+  if moving and (moving.built ~= built or not near) then
+    for _, piece in moving.pieces do
+      Object_Delete(piece.object)
+      local head, glow = piece.head, piece.glow
+      if head then
+        Object_Delete(head)
+      end
+      if glow then
+        Object_Delete(glow)
+      end
+    end
+    scene.movers[id] = nil
+    moving = nil
+  end
+  if not near then
+    return
+  end
+  local pieces: { Movers.Piece }
+  if moving then
+    pieces = moving.pieces
+  else
+    pieces = Movers.Make(movers, function(model: Model): Object
+      local made = Object_Scenery({})
+      Object_SetRenderable(made, model)
+      container:AddInterior(made)
+      return made
+    end)
+    scene.movers[id] = { built = built, pieces = pieces }
+  end
+  local right, up, look = proxy:GetRight(), proxy:GetUp(), proxy:GetLook()
+  Movers.Animate(pieces, { at = at, right = right, up = up, look = look, unit = ball.radius / built.radius }, scene.time,
+    seconds, doing(scene, game, ball, at, right, up, look))
+end
+
 -- Stand a ship's arms on its hull where the hull now is, and swing its
 -- turrets (for 'seconds', at their own rates). Of the two on a
 -- hardpoint, each turns to the target if it can see it, and one that
@@ -932,6 +1043,38 @@ local function placeArms(scene: Scene, armed: Armed, proxy: Object, at: vector, 
       end
     end
   end
+end
+
+-- For checking (GameDebug.Movers): a ship's moving parts that are made,
+-- by kind, as words ("antenna 4, dish 2"), and how far the first antenna
+-- leans now and the first dish's head is turned (radians), for seeing them
+-- answer what the ship does.
+function Scene.Movers(scene: Scene, ship: number): (string, number, number)
+  local moving = scene.movers[ship]
+  if moving == nil then
+    return "", 0, 0
+  end
+  local counts: { [string]: number } = {}
+  local order: { string } = {}
+  local lean, yaw = -1, 0
+  for _, piece in moving.pieces do
+    local kind = piece.mover.kind
+    if counts[kind] == nil then
+      table.insert(order, kind)
+    end
+    counts[kind] = (counts[kind] or 0) + 1
+    if kind == "antenna" and lean < 0 then
+      lean = piece.lean
+    end
+    if (kind == "dish" or kind == "lattice" or kind == "radar") and yaw == 0 then
+      yaw = piece.yaw
+    end
+  end
+  local words: { string } = {}
+  for _, kind in order do
+    table.insert(words, `{kind} {counts[kind]}`)
+  end
+  return table.concat(words, ", "), lean, yaw
 end
 
 -- For checking (GameDebug.Arms): how many weapon models stand on a
@@ -1999,6 +2142,7 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       end
       local ball = state.balls[id]
       placeArms(scene, scene.arms[id], proxy, at, ball.radius, ball.vitals.running, seconds)
+      moveParts(scene, game, id, built, proxy, at, ball, container, seconds)
     end
   end
 

@@ -705,7 +705,9 @@ return AppShell.Create(function(): Widget
       end
       Im.Text("detail      " .. table.concat(on, "      "), x, y + 90, 16, if detailWords() ~= "" then Im.ACCENT else Im.DIM)
       local made = detailOf()
-      local mode = if made and made.mode then made.mode else "none for this class (F)"
+      local mode = if made and made.mode then made.mode
+        elseif detail.vanes then "none: vanes show on a dreadnought, siege dreadnought, carrier, capital industrial or supercarrier (F)"
+        else "none for this class (F)"
       Im.Text(`moving parts: {#pieces}      W warp: {if doing.warp then "ON" else "off"}      C scanning: {if doing.scan then "ON" else "off"}`
         .. `      E electronic warfare: {if doing.ewar then "ON" else "off"}      O mode ({mode}): {if doing.mode then "ON" else "off"}`,
         x, y + 140, 16, if #pieces > 0 then Im.TEXT else Im.DIM)
