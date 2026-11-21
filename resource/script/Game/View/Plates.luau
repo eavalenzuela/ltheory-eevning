@@ -399,6 +399,46 @@ function Plates.Revolve(b: Builder, part: number, profile: { vector }, sides: nu
   b.kept += 1
 end
 
+-- A smooth round tube along a path (2026-11-20, for antennas: true
+-- rods, tapered tips, a whip's curve): 'path' its middle line, 'radii'
+-- how thick it is at each point of it, 'sides' steps round. Its ends are
+-- left open (a rod's foot is in its knuckle; give its tip a radius near
+-- nothing to close it to a point).
+function Plates.Tube(b: Builder, part: number, path: { vector }, radii: { number }, sides: number)
+  local tag = part + own(b)
+  local skin = skinOf(b)
+  local base = b.points
+  local count = #path
+  -- (a frame carried along the path without twisting)
+  local function way(i: number): vector
+    local d = path[math.min(i + 1, count)] - path[math.max(i - 1, 1)]
+    return if vector.magnitude(d) > 1e-9 then vector.normalize(d) else vector.create(0, 1, 0)
+  end
+  local t = way(1)
+  local seed = if math.abs(t.x) < 0.9 then vector.create(1, 0, 0) else vector.create(0, 0, 1)
+  local n = vector.normalize(seed - t * vector.dot(seed, t))
+  for i = 1, count do
+    local ti = way(i)
+    n = n - ti * vector.dot(n, ti)
+    n = if vector.magnitude(n) > 1e-9 then vector.normalize(n) else vector.normalize(vector.cross(ti, seed))
+    local bi = vector.cross(ti, n)
+    for side = 0, sides - 1 do
+      local a = side / sides * 2 * math.pi
+      Mesh_AddVertex(skin, path[i] + (n * math.cos(a) + bi * math.sin(a)) * radii[i], UNSET, 1, tag)
+    end
+  end
+  b.points += count * sides
+  for i = 0, count - 2 do
+    for side = 0, sides - 1 do
+      local a, c = base + i * sides + side, base + (i + 1) * sides + side
+      local a2, c2 = base + i * sides + (side + 1) % sides, base + (i + 1) * sides + (side + 1) % sides
+      Mesh_AddTriangle(skin, a, c, a2)
+      Mesh_AddTriangle(skin, a2, c, c2)
+    end
+  end
+  b.kept += 1
+end
+
 -- A fairing: a slender swelling on a skin, lying along it and flush to
 -- it, pointed at both ends. 'z' and 'around' are where its middle is on
 -- the skin (Plates.Point); it is 'length' long, 'width' across at its

@@ -34,6 +34,23 @@ local Hull = require("@lt/Game/View/Hull")
 
 local Movers = {}
 
+-- How far a segmented antenna's sections are out: in warp, at rest and
+-- scanning (0: nested all but a little, 1: drawn right out).
+local EXTEND = { warp = 0, rest = 0.3, scan = 1 }
+
+-- Where each of a segmented antenna's sections stands up its mast, out so
+-- far: each starts a little way up the one below, and further as it
+-- slides out of it.
+local function sectionsAt(sections: { { model: Model, length: number } }, extend: number): { number }
+  local at: { number } = {}
+  local y = 0
+  for index, section in sections do
+    at[index] = y
+    y += section.length * (0.12 + 0.75 * extend)
+  end
+  return at
+end
+
 export type State = { warp: boolean, scan: boolean, aim: vector?, mode: string? }
 export type Place = { at: vector, right: vector, up: vector, look: vector, unit: number }
 export type Piece = {
@@ -47,6 +64,12 @@ export type Piece = {
   yaw: number,
   tilt: number,
   open: number,
+  -- (an antenna's: a whip's curl now, and which of its drawings is shown;
+  -- a segmented one's sections and how far they are out, 0 to 1)
+  curl: number,
+  shown: number,
+  parts: { Object },
+  extend: number,
 }
 
 -- Make the objects of a hull's moving parts ('add' makes a thing of a
@@ -58,7 +81,15 @@ function Movers.Make(movers: { Hull.Mover }?, add: (model: Model) -> Object): { 
     table.insert(pieces, {
       mover = mover, object = add(mover.model), head = if mover.head then add(mover.head) else nil,
       glow = if mover.glow then add(mover.glow) else nil,
-      lean = mover.lean or 0, stretch = 1, yaw = 0, tilt = 0.45, open = 0,
+      lean = mover.lean or 0, stretch = 1, yaw = 0, tilt = 0.45, open = 0, curl = mover.curl or 0, shown = 1,
+      parts = (function(): { Object }
+        local made: { Object } = {}
+        local sections: { { model: Model, length: number } } = mover.sections or {}
+        for _, section in sections do
+          table.insert(made, add(section.model))
+        end
+        return made
+      end)(), extend = EXTEND.rest,
     })
   end
   return pieces
@@ -103,9 +134,30 @@ function Movers.Animate(pieces: { Piece }, place: Place, time: number, dt: numbe
       local look = d * math.cos(piece.lean) - n * math.sin(piece.lean)
       -- (its foot stays flat on the hull; its mast leans on the knuckle)
       stand(piece.object, m.at, d, n)
+      local hinge = m.at + n * (m.headAt or 0)
       local mast = piece.head
-      if mast then
-        stand(mast, m.at + n * (m.headAt or 0), look, up, 1, piece.stretch)
+      local heads, sections = m.heads, m.sections
+      if heads and mast then
+        -- (a whip leans by its curl alone: back along the hull in warp, straight up scanning)
+        piece.curl = toward(piece.curl, if state.warp then 1 elseif state.scan then 0 else (m.curl or 0), 0.7, dt)
+        local step = math.clamp(math.floor(piece.curl * (#heads - 1) + 0.5) + 1, 1, #heads)
+        if step ~= piece.shown then
+          piece.shown = step
+          Object_SetRenderable(mast, heads[step])
+        end
+        -- (and past its curl at rest it goes over on its knuckle too, to lie back along the hull)
+        local rest = m.curl or 0
+        local over = if piece.curl > rest then (piece.curl - rest) / math.max(0.01, 1 - rest) * math.pi / 2 * 0.85 else 0
+        stand(mast, hinge, d * math.cos(over) - n * math.sin(over), n * math.cos(over) + d * math.sin(over))
+      elseif sections then
+        -- (its sections slide out of one another: drawn right out scanning, nested in warp)
+        piece.extend = toward(piece.extend, if state.warp then EXTEND.warp elseif state.scan then EXTEND.scan else EXTEND.rest, 0.6, dt)
+        local at = sectionsAt(sections, piece.extend)
+        for index, part in piece.parts do
+          stand(part, hinge + up * at[index], look, up)
+        end
+      elseif mast then
+        stand(mast, hinge, look, up, 1, piece.stretch)
       end
     elseif kind == "dish" or kind == "lattice" or kind == "radar" then
       stand(piece.object, m.at, d, n)
@@ -171,10 +223,19 @@ function Movers.Rest(movers: { Hull.Mover }?): { Rest }
     if m.kind == "antenna" then
       local lean = m.lean or 0
       table.insert(out, { model = m.model, at = m.at, look = d, up = n })
-      local mast = m.head
-      if mast then
-        table.insert(out, { model = mast, at = m.at + n * (m.headAt or 0), look = d * math.cos(lean) - n * math.sin(lean),
-          up = n * math.cos(lean) + d * math.sin(lean) })
+      local hinge = m.at + n * (m.headAt or 0)
+      local look, up = d * math.cos(lean) - n * math.sin(lean), n * math.cos(lean) + d * math.sin(lean)
+      local heads, sections = m.heads, m.sections
+      if heads then
+        local step = math.clamp(math.floor((m.curl or 0) * (#heads - 1) + 0.5) + 1, 1, #heads)
+        table.insert(out, { model = heads[step], at = hinge, look = d, up = n })
+      elseif sections then
+        local at = sectionsAt(sections, EXTEND.rest)
+        for index, section in sections do
+          table.insert(out, { model = section.model, at = hinge + up * at[index], look = look, up = up })
+        end
+      elseif m.head then
+        table.insert(out, { model = m.head :: Model, at = hinge, look = look, up = up })
       end
     else
       table.insert(out, { model = m.model, at = m.at, look = d, up = n })

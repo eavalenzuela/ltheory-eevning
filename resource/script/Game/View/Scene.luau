@@ -706,6 +706,9 @@ local function dropArms(scene: Scene, id: number)
       if glow then
         Object_Delete(glow)
       end
+      for _, part in piece.parts do
+        Object_Delete(part)
+      end
     end
     scene.movers[id] = nil
   end
@@ -962,6 +965,9 @@ local function moveParts(scene: Scene, game: Core.Game, id: number, built: Hull.
       end
       if glow then
         Object_Delete(glow)
+      end
+      for _, part in piece.parts do
+        Object_Delete(part)
       end
     end
     scene.movers[id] = nil

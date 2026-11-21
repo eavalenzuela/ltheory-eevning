@@ -2895,16 +2895,24 @@ Hull.DETAILS = { "antennas", "pipes", "greebles", "lights", "rivets", "dishes", 
 export type Mover = { kind: string, model: Model, head: Model?, glow: Model?, at: vector, up: vector, fore: vector,
   headAt: number?, lean: number?, rate: number?, open: number?, mode: string?, pace: number, phase: number,
   -- (a vane: the way its face of the hull looks, which it swings out toward)
-  out: vector? }
+  out: vector?,
+  -- (an antenna's design: "rod", "mast", "multi", "whip" or "segmented";
+  -- a whip's mast drawn at each step of its curl from straight up (the
+  -- first) to lying back along the hull (the last), and the curl it has
+  -- at rest, 0 to 1; a segmented one's sections, foot first, each so long)
+  design: string?, heads: { Model }?, curl: number?, sections: { { model: Model, length: number } }? }
 
 -- What a moving part is made of before it is a model: boxes in its own
 -- frame (its 'up' its y, its 'fore' its z, its pivot the origin) in the
 -- generator's units, as a hull's detail is.
 type Bit = { part: number, center: vector, half: vector, turn: vector?, bevel: number?,
   -- (or, in place of a box, a smooth surface turned round its z axis: Plates.Revolve's profile, as (out, along))
-  revolve: { vector }?, sides: number?, closed: boolean? }
+  revolve: { vector }?, sides: number?, closed: boolean?,
+  -- (or a smooth round tube along a path, so thick at each point: Plates.Tube)
+  tube: { vector }?, radii: { number }? }
 type MoverSpec = { kind: string, at: vector, up: vector, fore: vector, bits: { Bit }, head: { Bit }?, glow: { Bit }?,
-  headAt: number?, lean: number?, rate: number?, open: number?, mode: string?, pace: number, phase: number, out: vector? }
+  headAt: number?, lean: number?, rate: number?, open: number?, mode: string?, pace: number, phase: number, out: vector?,
+  design: string?, heads: { { Bit } }?, curl: number?, sections: { { bits: { Bit }, length: number } }? }
 
 local LAMP_RED, LAMP_GREEN, LAMP_WHITE = Plates.LAMP_RED, Plates.LAMP_GREEN, Plates.LAMP_WHITE
 local BOW, STERN = v(0, 0, 1), v(0, 0, -1)
@@ -3450,6 +3458,16 @@ local function detailed(b: Builder, ship: Ship, detail: Detail, metres: number, 
   if detail.antennas and out then
     rng = diceOf("antennas")
     local lean = rng:Float(0, math.pi / 2)
+    -- (one design a ship, and now and then a second: the owner's, 2026-11-20)
+    local DESIGNS = { "rod", "mast", "multi", "whip", "segmented" }
+    local main = DESIGNS[rng:Int(#DESIGNS) + 1]
+    local other = if rng:Int(10) < 4 then DESIGNS[rng:Int(#DESIGNS) + 1] else main
+    -- (a round rod up from 'x' along the knuckle, 'high' tall, 'r' thick at its foot, tapered to a point)
+    local function rod(x: number, high: number, r: number): Bit
+      return { part = FRAME, center = v(0, 0, 0), half = v(0, 0, 0), sides = 10,
+        tube = { v(x, 0, 0), v(x, high * 0.5, 0), v(x, high * 0.9, 0), v(x, high, 0), v(x, high * 1.02, 0) },
+        radii = { r, r * 0.85, r * 0.6, r * 0.35, r * 0.05 } }
+    end
     local count = math.floor(rng:Int(2, 6) * more + 0.5)
     for _ = 1, count do
       local face = pick({ UP, UP, STARBOARD, DOWN, BOW })
@@ -3460,38 +3478,86 @@ local function detailed(b: Builder, ship: Ship, detail: Detail, metres: number, 
           local d = aftOn(n)
           local tall = u * rng:Float(0.07, 0.2) * (if n == UP then 1.2 else 0.8)
           local thin = math.max(u * 0.0045, tall * 0.025)
+          local design = if rng:Int(10) < 7 then main else other
           local room = fits(p, n, thin * 3, thin * 3, tall)
           for _, k in { 0.3, 0.6, 1.0 } do
             room = room and not inside(p + d * (tall * k) + n * (thin * 2.5))
           end
           if room then
-            -- (a foot that stays flat on the hull, with a knuckle on it,
-            -- and the mast hinged on that: the owner's, of a foot that
-            -- leaned with its mast, "can the antenna tilt independently
-            -- of the base")
+            -- (a foot that stays flat on the hull with a knuckle on it, and the mast hinged on that: the owner's
+            -- "can the antenna tilt independently of the base"; a multi-mast's foot under both its masts)
             local hinge = thin * 1.2
+            local beside = if design == "multi" then tall * 0.09 else 0
             local foot: { Bit } = {
-              { part = PATCH, center = v(0, thin * 0.6, 0), half = v(thin * 3, thin * 0.6, thin * 3), bevel = 0.3 },
-              { part = FRAME, center = v(0, hinge, 0), half = v(thin * 1.8, thin * 0.9, thin * 0.9), bevel = 0.4 },
+              { part = PATCH, center = v(beside / 2, thin * 0.6, 0), half = v(thin * 3 + beside / 2, thin * 0.6, thin * 3), bevel = 0.3 },
+              { part = FRAME, center = v(beside / 2, hinge, 0), half = v(thin * 1.8 + beside / 2, thin * 0.9, thin * 0.9), bevel = 0.4 },
             }
-            -- (the mast and what is on it, from the knuckle up)
-            local mast: { Bit } = {
-              { part = FRAME, center = v(0, tall / 2, 0), half = v(thin, tall / 2, thin), bevel = 0.2 },
-            }
-            local kind = rng:Int(4)
-            if kind == 1 then
-              table.insert(mast, { part = FRAME, center = v(0, tall * 0.78, 0), half = v(tall * 0.18, thin * 0.8, thin * 0.8), bevel = 0.2 })
-            elseif kind == 2 then
-              table.insert(mast, { part = PATCH, center = v(0, tall * 0.82, 0), half = v(thin * 3.2, tall * 0.07, thin * 2.2), bevel = 0.3 })
-            elseif kind == 3 then
-              table.insert(mast, { part = FRAME, center = v(tall * 0.09, tall * 0.35, 0), half = v(thin, tall * 0.35, thin), bevel = 0.2 })
+            local lamp: Bit? = if detail.lights then { part = if n == UP and rng:Int(2) == 0 then LAMP_RED else LAMP_WHITE,
+              center = v(0, tall + thin, 0), half = v(thin, thin, thin) * 1.5, bevel = 0.5 } else nil
+            local spec: MoverSpec = { kind = "antenna", at = p, up = n, fore = d, bits = foot, headAt = hinge, lean = lean, pace = 1,
+              phase = 0, design = design }
+            if design == "whip" then
+              -- (thin and tapering, up and curling back along the hull: drawn at each step of its curl)
+              local steps = 9
+              local heads: { { Bit } } = {}
+              local long = tall * 1.25
+              for step = 0, steps - 1 do
+                local curl = step / (steps - 1)
+                local path: { vector } = {}
+                local radii: { number } = {}
+                local q = v(0, 0, 0)
+                local segments = 12
+                for i = 0, segments do
+                  local t = i / segments
+                  table.insert(path, q)
+                  table.insert(radii, thin * (0.9 - 0.82 * t))
+                  local angle = curl * math.pi * 0.47 * t ^ 1.6
+                  q += v(0, math.cos(angle), math.sin(angle)) * (long / segments)
+                end
+                local bits: { Bit } = { { part = FRAME, center = v(0, 0, 0), half = v(0, 0, 0), tube = path, radii = radii, sides = 8 } }
+                if detail.lights then
+                  table.insert(bits, { part = LAMP_WHITE, center = path[#path], half = v(thin, thin, thin) * 1.1, bevel = 0.5 })
+                end
+                table.insert(heads, bits)
+              end
+              spec.heads, spec.curl = heads, math.clamp(0.25 + lean / (math.pi / 2) * 0.6, 0, 1)
+              spec.head = heads[1]
+            elseif design == "segmented" then
+              -- (nested sections, each slimmer than the one below, that slide out of one another)
+              local count2 = rng:Int(3, 5)
+              local long = tall * 1.3 / count2 * 1.15
+              local sections: { { bits: { Bit }, length: number } } = {}
+              for i = 0, count2 - 1 do
+                -- (each a step slimmer, with a collar where the next comes out of it)
+                local r = thin * 1.8 * (1 - 0.24 * i)
+                local top = i == count2 - 1
+                local path = if top then { v(0, 0, 0), v(0, long * 0.9, 0), v(0, long, 0), v(0, long * 1.02, 0) }
+                  else { v(0, 0, 0), v(0, long * 0.9, 0), v(0, long * 0.91, 0), v(0, long, 0), v(0, long * 1.001, 0) }
+                local radii = if top then { r, r * 0.7, r * 0.3, r * 0.05 } else { r, r, r * 1.45, r * 1.45, r * 0.6 }
+                local bits: { Bit } = { { part = FRAME, center = v(0, 0, 0), half = v(0, 0, 0), tube = path, radii = radii, sides = 10 } }
+                if top and lamp then
+                  table.insert(bits, { part = lamp.part, center = v(0, long + thin, 0), half = lamp.half, bevel = 0.5 })
+                end
+                table.insert(sections, { bits = bits, length = long })
+              end
+              spec.sections = sections
+            else
+              local mast: { Bit } = { rod(0, tall, thin * 1.25) }
+              if design == "mast" then
+                -- (a round crossbar near the top, closed at its ends)
+                local half = tall * 0.22
+                table.insert(mast, { part = FRAME, center = v(0, 0, 0), half = v(0, 0, 0), sides = 8,
+                  tube = { v(-half * 1.03, tall * 0.78, 0), v(-half, tall * 0.78, 0), v(half, tall * 0.78, 0), v(half * 1.03, tall * 0.78, 0) },
+                  radii = { thin * 0.05, thin * 0.95, thin * 0.95, thin * 0.05 } })
+              elseif design == "multi" then
+                table.insert(mast, rod(beside, tall * 0.7, thin * 1.1))
+              end
+              if lamp then
+                table.insert(mast, lamp)
+              end
+              spec.head = mast
             end
-            if detail.lights then
-              table.insert(mast, { part = if n == UP and rng:Int(2) == 0 then LAMP_RED else LAMP_WHITE, center = v(0, tall + thin, 0),
-                half = v(thin, thin, thin) * 1.5, bevel = 0.5 })
-            end
-            emit({ kind = "antenna", at = p, up = n, fore = d, bits = foot, head = mast, headAt = hinge, lean = lean, pace = 1,
-              phase = 0 }, face)
+            emit(spec, face)
             break
           end
         end
@@ -4787,8 +4853,16 @@ local function moversOf(specs: { MoverSpec }, look: Look, bend: ((p: vector) -> 
       b.bare, b.scale = true, 1 / GROWN
     end
     for _, bit in bits do
-      local profile = bit.revolve
-      if profile then
+      local profile, path = bit.revolve, bit.tube
+      if path then
+        local along: { vector } = {}
+        local thick: { number } = {}
+        for index, point in path do
+          table.insert(along, point * GROWN)
+          table.insert(thick, (bit.radii :: { number })[index] * GROWN)
+        end
+        Plates.Tube(b, bit.part, along, thick, bit.sides or 12)
+      elseif profile then
         local scaled: { vector } = {}
         for _, point in profile do
           table.insert(scaled, point * GROWN)
@@ -4810,7 +4884,21 @@ local function moversOf(specs: { MoverSpec }, look: Look, bend: ((p: vector) -> 
       kind = spec.kind, model = make(spec.bits, index * 7.31), head = if spec.head then make(spec.head, index * 7.31 + 1) else nil,
       glow = if spec.glow then make(spec.glow, index * 7.31 + 2) else nil, at = place(spec.at), up = spec.up, fore = spec.fore,
       headAt = if spec.headAt then spec.headAt * GROWN * scale else nil, lean = spec.lean, rate = spec.rate, open = spec.open,
-      mode = spec.mode, pace = spec.pace, phase = spec.phase, out = spec.out,
+      mode = spec.mode, pace = spec.pace, phase = spec.phase, out = spec.out, design = spec.design, curl = spec.curl,
+      heads = if spec.heads then (function(): { Model }
+        local made: { Model } = {}
+        for step, bits in spec.heads :: { { Bit } } do
+          table.insert(made, make(bits, index * 7.31 + 3 + step))
+        end
+        return made
+      end)() else nil,
+      sections = if spec.sections then (function(): { { model: Model, length: number } }
+        local made: { { model: Model, length: number } } = {}
+        for step, section in spec.sections :: { { bits: { Bit }, length: number } } do
+          table.insert(made, { model = make(section.bits, index * 7.31 + 20 + step), length = section.length * GROWN * scale })
+        end
+        return made
+      end)() else nil,
     })
   end
   return out

@@ -611,7 +611,7 @@ return AppShell.Create(function(): Widget
       local counts: { [string]: number } = {}
       local order: { string } = {}
       for _, piece in pieces do
-        local kind = piece.mover.kind
+        local kind = piece.mover.kind .. (if piece.mover.design then "/" .. (piece.mover.design :: string) else "")
         if counts[kind] == nil then
           table.insert(order, kind)
         end
