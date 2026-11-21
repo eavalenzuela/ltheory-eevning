@@ -1323,7 +1323,22 @@ local CORPORATION_COMMANDS = { FoundCorporation = true, CorporationDeposit = tru
 local BOOSTER_COMMANDS = { TakeBooster = true }
 local COLONY_COMMANDS = { DeployColony = true, BuildFacility = true, RemoveFacility = true, StartExtraction = true, Export = true }
 
+-- What a ship going through a stargate may not be told to do: anything
+-- that flies it or works its modules (the owner, 2026-11-21: control is
+-- "locked out" while it goes through). What is done from afar (the
+-- market, training, contracts) goes on.
+local LOCKED_IN_TRANSIT: { [string]: boolean } = {}
+for _, set: { [string]: boolean } in { COMBAT_COMMANDS :: any, AFTERMATH_COMMANDS, SITE_COMMANDS, DEPLOY_COMMANDS, HACK_COMMANDS,
+  DRONE_COMMANDS, JUMP_COMMANDS, ASSET_COMMANDS, BOOSTER_COMMANDS } do
+  for kind in set do
+    LOCKED_IN_TRANSIT[kind] = true
+  end
+end
+
 local function validate(state: State.State, command: State.Command): (boolean, string?)
+  if LOCKED_IN_TRANSIT[command.kind] and Space.InTransit(state, command.actor) then
+    return false, "going through a stargate"
+  end
   -- (first, whether the station it is given at has the module for it)
   local served, lacking = Stations.Validate(state, command)
   if not served then

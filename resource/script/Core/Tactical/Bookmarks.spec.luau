@@ -122,7 +122,8 @@ suite:Case("a place marked in one system is not on another's overview, and marks
   t.ok((submit(game, { kind = "Jump", actor = 0, target = gate.id })))
   for _ = 1, 900 do
     Core.Step(game)
-    if me.system == next then
+    -- (and out of the far gate: through a stargate the ship is nobody's to order)
+    if me.system == next and me.transit == nil then
       break
     end
   end

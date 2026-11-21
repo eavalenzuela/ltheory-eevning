@@ -234,6 +234,40 @@ export type Warp = {
   expect: number?,
 }
 
+-- A passage through a stargate (2026-11-21, the owner: control "locked
+-- out" and the ship "marked invulnerable" from the moment it is close
+-- enough to jump until it has come out on the far side; and every ship,
+-- not only the pilot's, "should also visibly move through the gates").
+-- In three stages, each from 'startTick' (Tactical/Space: Space.TransitAt
+-- says where the ship is at any moment of one, for the view too):
+--   in      it flies from where it was (f), by a point on the gate's axis
+--           (a), into the gate's middle (g), and through
+--   tunnel  it is in the system beyond, waiting behind the far gate, at
+--           (o), unseen: until the pilot's view has the far side ready
+--           ('ready'; another's ship needs nothing), or for so long at most
+--   out     it comes out through the far gate along (u), braking, to stop
+--           'reach' metres on from (o)
+-- 'speed' is how fast it goes into the gate's middle, and so the end of
+-- the curve of 'in'; 'enter' how fast it was going toward the gate when
+-- it began.
+export type Transit = {
+  stage: "in" | "tunnel" | "out",
+  startTick: number,
+  gate: number,
+  arrival: number,
+  from: number,
+  to: number,
+  fx: number, fy: number, fz: number,
+  ax: number, ay: number, az: number,
+  gx: number, gy: number, gz: number,
+  enter: number,
+  speed: number,
+  ox: number, oy: number, oz: number,
+  ux: number, uy: number, uz: number,
+  reach: number,
+  ready: boolean?,
+}
+
 export type Mode = "stop" | "goto" | "approach" | "orbit" | "keep" | "align"
 
 -- A ship in space. Positions are metres in system space, star at the
@@ -267,6 +301,7 @@ export type Ball = {
   dy: number,         -- the orbit's plane
   dz: number,
   warp: Warp?,
+  transit: Transit?,  -- going through a stargate (and nobody's to touch or to order till it is out)
   intent: Intent?,
   vitals: Vitals,
 }

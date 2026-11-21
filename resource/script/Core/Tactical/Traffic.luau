@@ -354,12 +354,16 @@ local function hauler(state: State.State, system: number, rng: Rng.Rng, events: 
     ship = Space.NewShip(state, type, name, owner, 0)
     local x, y, z = near(rng, gate, 3000, 8000)
     local ball = Space.Launch(state, ship, system, x, y, z)
-    -- (it has come in by the gate, as far as anybody can see)
+    -- (it comes in by the gate, out through it as a ship through a gate
+    -- does: Space.ComeThrough. The owner, 2026-11-21: they "should also
+    -- visibly move through the gates, not just appear and disappear")
     table.insert(events, { kind = "BallAdded", ball = ball.id, gate = gate.id })
+    Space.ComeThrough(state, ball, gate, events)
     if #stations > 0 then
       local station = stations[Rng.Int(rng, #stations) + 1]
       enlist(state, ship, "in", station.id, system)
-      order(state, { kind = "Dock", actor = ship.id, target = station.id }, events)
+      -- (and is told to dock once it is out: below)
+      state.traffic[ship.id].wait = -1
     else
       local other = gates[(table.find(gates, gate) :: number) % #gates + 1]
       enlist(state, ship, "out", other.id, system)
@@ -1094,12 +1098,30 @@ function Traffic.Step(state: State.State, events: { Event })
       end
       if ship.docked ~= 0 and (record.kind == "in" or record.kind == "home") then
         remove(state, id, "docked", events)
+      elseif ball and ball.transit then
+        -- Going through its gate: once through, it is gone.
+        if ball.transit.stage ~= "in" and record.kind == "out" then
+          remove(state, id, "jumped", events)
+        end
       elseif ball and ball.warp == nil and ball.intent == nil then
-        if ball.grid == record.goal and record.kind == "out" then
-          -- At its gate: a moment, and it is through.
-          record.wait += 1
-          if record.wait > 5 then
-            remove(state, id, "jumped", events, record.goal)
+        if record.wait == -1 then
+          -- Out of the gate it came in by: off to dock.
+          record.wait = 0
+          order(state, { kind = "Dock", actor = id, target = record.goal }, events)
+        elseif ball.grid == record.goal and record.kind == "out" then
+          -- At its gate: in close, and through.
+          local gate = Space.Object(state, record.goal)
+          if gate and gate.kind == "gate" and gate.variety ~= "passage" then
+            if Space.Gap(ball :: any, gate :: any) <= Constants.JUMP_RANGE then
+              Space.EnterGate(state, ball, gate, events)
+            elseif ball.mode ~= "approach" then
+              order(state, { kind = "Approach", actor = id, target = record.goal }, events)
+            end
+          else
+            record.wait += 1
+            if record.wait > 5 then
+              remove(state, id, "jumped", events, record.goal)
+            end
           end
         elseif record.kind == "out" then
           if not order(state, { kind = "WarpTo", actor = id, target = record.goal }, events) then

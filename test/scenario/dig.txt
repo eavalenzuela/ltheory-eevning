@@ -51,6 +51,8 @@ lua assert(GameDebug.Autopilot(true))
 patience 600
 until GameDebug.System() == _G.there
 until not GameDebug.Autopilot()
+# (through a stargate the ship is nobody's to order till it is out of the far gate)
+until GameDebug.Passage() == ''
 lua GameDebug.TimeScale(1)
 frames 5
 lua assert(GameDebug.Count('site') == 1, 'the pocket should be on the overview')
@@ -75,6 +77,7 @@ lua assert(GameDebug.Autopilot(true))
 patience 600
 until GameDebug.System() == 1
 until not GameDebug.Autopilot()
+until GameDebug.Passage() == ''
 lua GameDebug.TimeScale(8)
 lua assert(GameDebug.Order('Dock', 'home'), 'docking at home was refused')
 patience 300

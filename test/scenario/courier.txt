@@ -44,6 +44,8 @@ lua assert(GameDebug.Autopilot(true))
 patience 600
 until GameDebug.System() == _G.there
 until not GameDebug.Autopilot()
+# (through a stargate the ship is nobody's to order till it is out of the far gate)
+until GameDebug.Passage() == ''
 lua GameDebug.TimeScale(8)
 lua assert(GameDebug.Order('Dock', _G.to), 'docking where the cargo goes was refused')
 patience 300

@@ -214,6 +214,9 @@ local function lockable(state: State.State, ball: State.Ball, target: number): (
   local other = state.balls[target]
   if other and other.grid ~= ball.grid then
     return false, "target is not on grid"
+  elseif other and other.transit then
+    -- (going through a stargate: nobody's to lock till it is out, the owner, 2026-11-21)
+    return false, "it is going through a stargate"
   elseif Fields.Between(state, ball, body) then
     -- (nothing is locked across a station's field, in or out: Tactical/Fields)
     return false, Fields.REFUSED
@@ -1541,6 +1544,10 @@ local function applyHit(state: State.State, hit: Hit, killers: { [number]: numbe
   local v = ball.vitals
   -- (a citadel reinforced: nothing touches it until its time is up)
   if v.reinforced and state.tick < v.reinforced then
+    return
+  end
+  -- (nor a ship going through a stargate)
+  if ball.transit then
     return
   end
   -- (and who struck whose, for a citadel's guns: Tactical/CitadelGuns. A drone's is its owner's doing.)

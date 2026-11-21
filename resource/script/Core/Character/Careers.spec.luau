@@ -211,9 +211,12 @@ suite:Case("the flight school can be flown from its first lesson to its last", f
   order("Jump", nearest("gate"))
   local out = till("Jumped", 4000)
   t.eq(state.careers.flight.count, 1)
+  -- (out of the far gate first: through a stargate the ship is nobody's to order)
+  till("JumpEnded", 100)
   order("Jump", out.arrival)
   local back = till("Jumped", 4000)
   t.eq({ back.to, state.careers.flight.count }, { 1, 2 })
+  till("JumpEnded", 100)
   homeAndReport(3)
   t.eq(hangar(state, home, "overdrive"), 1)
   -- Another harbour: docking here again is not it. The next station is
@@ -230,6 +233,7 @@ suite:Case("the flight school can be flown from its first lesson to its last", f
   if other == 0 then
     order("Jump", nearest("gate"))
     out = till("Jumped", 4000)
+    till("JumpEnded", 100)
     other = nearest("station")
   end
   t.ok(other ~= 0 and other ~= home, "there is nowhere else to dock")
@@ -244,6 +248,7 @@ suite:Case("the flight school can be flown from its first lesson to its last", f
   if Core.Query.Player(game).system ~= 1 then
     order("Jump", out.arrival)
     till("Jumped", 4000)
+    till("JumpEnded", 100)
   end
   Core.TakeEvents(game)
   order("Dock", home)

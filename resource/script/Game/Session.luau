@@ -1093,7 +1093,8 @@ function Session.Autopilot(session: Session)
       return
     end
     local ball = Core.Query.Ball(game, player.ship)
-    if player.docked == 0 and (ball == nil or ball.warp ~= nil or ball.intent ~= nil) then
+    -- (nor while it goes through a stargate: it is nobody's to order till it is out)
+    if player.docked == 0 and (ball == nil or ball.warp ~= nil or ball.intent ~= nil or ball.transit ~= nil) then
       return
     end
     local done = player.docked ~= 0 and player.docked == mark.object
@@ -1135,7 +1136,7 @@ function Session.Autopilot(session: Session)
     command = { kind = "Undock", actor = player.ship }
   else
     local ball = Core.Query.Ball(game, player.ship)
-    if ball and ball.warp == nil and ball.intent == nil then
+    if ball and ball.warp == nil and ball.intent == nil and ball.transit == nil then
       local next = Session.Route(session)[2]
       for _, object in Core.Query.Objects(game, player.system) do
         if object.kind == "gate" and object.to == next then

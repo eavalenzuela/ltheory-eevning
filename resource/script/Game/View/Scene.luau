@@ -32,6 +32,7 @@ local Effects = require("@lt/Game/View/Effects")
 local Hull = require("@lt/Game/View/Hull")
 local Movers = require("@lt/Game/View/Movers")
 local Planet = require("@lt/Game/View/Planet")
+local Plates = require("@lt/Game/View/Plates")
 local Star = require("@lt/Game/View/Star")
 local Starbase = require("@lt/Game/View/Starbase")
 local Citadel = require("@lt/Game/View/Citadel")
@@ -44,6 +45,7 @@ local Ships = require("@lt/Core/Data/Ships")
 local Motion = require("@lt/Core/Tactical/Motion")
 local Ores = require("@lt/Core/Data/Ores")
 local Session = require("@lt/Game/Session")
+local Space = require("@lt/Core/Tactical/Space")
 local State = require("@lt/Core/Kernel/State")
 local SystemData = require("@lt/Core/Describe/System")
 
@@ -188,6 +190,17 @@ export type Scene = {
   lit: boolean,                       -- the gate the pilot came out of has had its light (once an arrival)
   gates: number,                      -- how many times a gate has been lit by somebody going through it
   veil: number,                       -- how much of the view is whited out, 0 to 1 (the interface draws it)
+  veilColor: vector,                  -- and in what: white out of a wormhole or a drive, black through a stargate
+  -- The pilot's own passage through a stargate as it is shown (Core's
+  -- State.Transit; the owner, 2026-11-21: an approach, the crossing,
+  -- "a rapid acceleration to black", a black tunnel that hides the
+  -- making of the next system, and out through the far gate with the
+  -- system seen through it and black all round). Nil when there is none.
+  passage: Passage?,
+  -- The way the camera is kept behind the ship along, while it is not
+  -- the pilot's to turn (a passage); nil when it is.
+  chase: vector?,
+  eyeAt: vector,                      -- where the camera was put last, in the scene
   rush: number,                       -- how far the view is opened out by a jump, 0 to 1
   standing: { [number]: string },     -- what a pilot's starbase was made of when it was put up here
   epoch: number,                      -- the game (Session's 'epoch') the scene was made for
@@ -257,6 +270,19 @@ local HULL_SEED: { [string]: number } = {
 }
 local hullItems: { [string]: Item } = {}
 
+-- A passage through a stargate, shown (Scene's 'passage'):
+--   leave  through the gate: the ship goes on and away into the black
+--          and the camera lags behind it ('since': when it crossed; 'at'
+--          and 'way' where and which way; 'speed' how fast)
+--   load   the screen black, the next system made a piece a frame
+--          ('steps'), the far side made ready and the Core told so
+--   out    out of the far gate ('at', 'way': its middle and the way out),
+--          the black clearing; a tube of black behind it till the
+--          camera is through
+-- ('tube': the black tube behind the gate, while it stands.)
+type Passage = { stage: string, since: number, at: vector, way: vector, speed: number, tube: Object?,
+  steps: { () -> () }?, settle: number, asked: boolean, eye: vector }
+
 function Scene.New(camera: Camera): Scene
   return {
     camera = camera, system = 0, container = nil, star = nil, key = "",
@@ -266,6 +292,7 @@ function Scene.New(camera: Camera): Scene
     warp = 0, warpLeft = 0, warpSeconds = 0, time = 0, fx = nil, mining = {}, tethers = {}, citadelGuns = {},
     citadelSpecial = {}, citadelRocks = {}, citadelBeams = {},
     wreckage = {}, bubbles = {}, works = {}, offsets = {}, moving = {}, statics = {}, clouds = {}, sites = "", left = 0, jump = -1, arrived = -1, lit = true, gates = 0, veil = 0, rush = 0,
+    veilColor = vector.create(0.80, 0.92, 1.0), passage = nil, chase = nil, eyeAt = vector.create(0, 0, 0),
     standing = {}, showcases = {}, epoch = 1, volleys = 0, docked = false, zoomAway = 6, arms = {}, movers = {}, armsTick = -1, armsTime = 0, ghosts = {}, poses = {}, headings = {}, turned = 0,
   }
 end
@@ -1316,90 +1343,109 @@ local function clear(scene: Scene, objects: { [number]: Object })
 end
 
 -- Throw away everything and start a container for 'system'.
-local function enterSystem(scene: Scene, game: Core.Game, system: number)
-  -- (the fitting screen's ship is of the system that is being left)
-  dropShowcase(scene)
-  for id in scene.arms do
-    dropArms(scene, id)
-  end
-  for id in scene.wreckage do
-    dropWreck(scene, id)
-  end
-  for id in scene.works do
-    dropWorks(scene, id)
-  end
-  clear(scene, scene.proxies)
-  clear(scene, scene.bubbles)
-  table.clear(scene.headings)
-  clear(scene, scene.celestials)
-  table.clear(scene.worlds)
-  if scene.container then
-    Object_Delete(scene.container)
-  end
-  if scene.fx then
-    Effects.Clear(scene.fx, true)
-  end
-  table.clear(scene.mining)
-  table.clear(scene.statics)
-  table.clear(scene.offsets)
-  table.clear(scene.moving)
-  table.clear(scene.clouds)
-  scene.focus = nil
-  scene.star = nil
-  scene.key = ""
-  scene.sites = ""
-  scene.left = 0
-  scene.system = system
-
-  local container = Object_System(vector.create(0, 0, 0), game.state.galaxySeed * 7919 + system)
-  -- (the camera goes into the new system now, while the old one is still
-  -- there to be left: the engine moves it only when it next draws, and
-  -- by then the old one may have been thrown away under it)
-  container:AddInterior(scene.camera)
-  scene.container = container
-  scene.fx = Effects.New(container)
-  local interior = container:GetInteriorObjects()
-  while interior:HasMore() do
-    if interior:Get():IsStar() then
-      scene.star = interior:Get()
+-- What making a system for the scene is, a piece at a time: the system
+-- itself first (what there was thrown away), then each world and the
+-- sun. (A passage through a stargate makes them one a frame behind the
+-- black, so that the screen goes on being drawn: a world takes a tenth of
+-- a second or so. Measured 2026-11-21.)
+local function enterSteps(scene: Scene, game: Core.Game, system: number): { () -> () }
+  local steps: { () -> () } = {}
+  table.insert(steps, function()
+    -- (the fitting screen's ship is of the system that is being left)
+    dropShowcase(scene)
+    for id in scene.arms do
+      dropArms(scene, id)
     end
-    interior:Advance()
-  end
+    for id in scene.wreckage do
+      dropWreck(scene, id)
+    end
+    for id in scene.works do
+      dropWorks(scene, id)
+    end
+    clear(scene, scene.proxies)
+    clear(scene, scene.bubbles)
+    table.clear(scene.headings)
+    clear(scene, scene.celestials)
+    table.clear(scene.worlds)
+    if scene.container then
+      Object_Delete(scene.container)
+    end
+    if scene.fx then
+      Effects.Clear(scene.fx, true)
+    end
+    table.clear(scene.mining)
+    table.clear(scene.statics)
+    table.clear(scene.offsets)
+    table.clear(scene.moving)
+    table.clear(scene.clouds)
+    scene.focus = nil
+    scene.star = nil
+    scene.key = ""
+    scene.sites = ""
+    scene.left = 0
+    scene.system = system
 
+    local container = Object_System(vector.create(0, 0, 0), game.state.galaxySeed * 7919 + system)
+    -- (the camera goes into the new system now, while the old one is still
+    -- there to be left: the engine moves it only when it next draws, and
+    -- by then the old one may have been thrown away under it)
+    container:AddInterior(scene.camera)
+    scene.container = container
+    scene.fx = Effects.New(container)
+    local interior = container:GetInteriorObjects()
+    while interior:HasMore() do
+      if interior:Get():IsStar() then
+        scene.star = interior:Get()
+      end
+      interior:Advance()
+    end
+  end)
   for _, object in Core.Query.Objects(game, system) do
-    if object.kind == "planet" or object.kind == "moon" then
-      local body: Object
-      -- The kinds built from their own heights (Game/View/Planet); the
-      -- rest are still the engine's old planet.
-      local kind = Planet.KindOf(object.kind, object.variety)
-      if kind then
-        local world = Planet.New(kind, object.seed, if object.kind == "moon" then MOON_MAP else WORLD_MAP)
-        -- (nobody lives in uncharted space: a world of a kind people
-        -- live on has no cities' lights there, Core/Describe/Galaxy)
-        local its = Planet.kinds[kind]
-        if its and (its.settings.cityLights or 0) > 0 and game.state.galaxy.systems[system].uncharted then
-          Planet.Set(world, "cityLights", 0)
+    if object.kind == "planet" or object.kind == "moon" or object.kind == "sun" then
+      table.insert(steps, function()
+        local container = scene.container :: Object
+        if object.kind == "planet" or object.kind == "moon" then
+          local body: Object
+          -- The kinds built from their own heights (Game/View/Planet); the
+          -- rest are still the engine's old planet.
+          local kind = Planet.KindOf(object.kind, object.variety)
+          if kind then
+            local world = Planet.New(kind, object.seed, if object.kind == "moon" then MOON_MAP else WORLD_MAP)
+            -- (nobody lives in uncharted space: a world of a kind people
+            -- live on has no cities' lights there, Core/Describe/Galaxy)
+            local its = Planet.kinds[kind]
+            if its and (its.settings.cityLights or 0) > 0 and game.state.galaxy.systems[system].uncharted then
+              Planet.Set(world, "cityLights", 0)
+            end
+            scene.worlds[object.id] = world
+            body = world.body
+          else
+            body = Item_PlanetType(object.seed):Instantiate()
+          end
+          body:SetName(object.name)
+          container:AddInterior(body)
+          scene.celestials[object.id] = body
+        elseif object.kind == "sun" then
+          -- The sun's disc and corona. Its light, and the flare drawn for
+          -- that, are the engine's star, which takes the colour of the
+          -- star's class.
+          local body = Star.New(object.variety, object.seed)
+          body:SetName(object.name)
+          container:AddInterior(body)
+          scene.celestials[object.id] = body
+          if scene.star then
+            Star_SetColor(scene.star, Star.Light(object.variety))
+          end
         end
-        scene.worlds[object.id] = world
-        body = world.body
-      else
-        body = Item_PlanetType(object.seed):Instantiate()
-      end
-      body:SetName(object.name)
-      container:AddInterior(body)
-      scene.celestials[object.id] = body
-    elseif object.kind == "sun" then
-      -- The sun's disc and corona. Its light, and the flare drawn for
-      -- that, are the engine's star, which takes the colour of the
-      -- star's class.
-      local body = Star.New(object.variety, object.seed)
-      body:SetName(object.name)
-      container:AddInterior(body)
-      scene.celestials[object.id] = body
-      if scene.star then
-        Star_SetColor(scene.star, Star.Light(object.variety))
-      end
+      end)
     end
+  end
+  return steps
+end
+
+local function enterSystem(scene: Scene, game: Core.Game, system: number)
+  for _, step in enterSteps(scene, game, system) do
+    step()
   end
 end
 
@@ -1414,6 +1460,10 @@ end
 
 -- Where a ball is 'since' seconds after the state's tick, and its velocity.
 local function ballAt(ball: State.Ball, tick: number, since: number): (number, number, number, number, number, number)
+  local transit = ball.transit
+  if transit then
+    return Space.TransitAt(transit, (tick - transit.startTick) * Constants.TICK + since)
+  end
   local warp = ball.warp
   if warp and warp.stage == "warp" then
     local plan = warp.plan :: Motion.WarpPlan
@@ -1530,12 +1580,14 @@ end
 
 -- A gate lights when a ship goes through it, either way: a flash at it
 -- as big as the gate, and a ring thrown out from it.
-local function lightGate(scene: Scene, fx: Effects.Fx, id: number, life: number)
+-- ('scale': smaller, for the pilot's own passage, with the camera right at the gate)
+local function lightGate(scene: Scene, fx: Effects.Fx, id: number, life: number, scale: number?)
   local at: vector? = scene.screen[id]
   local gate = scene.statics[id]
   if at and gate and gate.kind == "gate" then
-    Effects.Burst(fx, at, JUMP_LIGHT, 2.2 * gate.radius, 0, life, scene.time)
-    Effects.Burst(fx, at, JUMP_LIGHT, 7 * gate.radius, 1, life * 1.4, scene.time)
+    local size = scale or 1
+    Effects.Burst(fx, at, JUMP_LIGHT, 2.2 * gate.radius * size, 0, life, scene.time)
+    Effects.Burst(fx, at, JUMP_LIGHT, 7 * gate.radius * size, 1, life * 1.4, scene.time)
     scene.gates += 1
   end
 end
@@ -1556,6 +1608,193 @@ local function gateNear(scene: Scene, at: vector, reach: number): number
 end
 
 -- Bring the engine's objects into line with the Core for this frame.
+-- A passage through a stargate, as the pilot sees it (Scene's 'passage').
+-- How long the ship is seen going on into the black after it is through,
+-- how hard it is thrown on (m/s/s), and how long the black takes to clear
+-- on the far side (seconds of the clock on the wall).
+local LEAVE = 1.8
+local LEAVE_PUSH = 2600
+local CLEAR = 0.7
+local BLACK = vector.create(0, 0, 0)
+local WHITE = vector.create(0.80, 0.92, 1.0)
+
+-- The tube of black behind a gate's opening, the way through it: a unit
+-- tube along +z from its mouth, 24 long and shut at its end, seen from
+-- within (Plates.Revolve's profile run up its wall and in across its end,
+-- whose faces look in). Unlit black: the engine's sky goes behind it.
+local tubeModel: Model? = nil
+local function tubeOf(): Model
+  if tubeModel == nil then
+    local b = Plates.New(7.3, 0.11)
+    local profile: { vector } = {}
+    for i = 0, 12 do
+      table.insert(profile, vector.create(1, i * 2, 0))
+    end
+    for i = 1, 8 do
+      table.insert(profile, vector.create(math.max(1e-4, 1 - i / 8), 24, 0))
+    end
+    Plates.Revolve(b, Plates.GLOW, profile, 64)
+    local black = { 0, 0, 0 }
+    tubeModel = (Plates.Finish(b, { plating = black, patch = black, frame = black, glow = black, trim = black, wear = 0, rust = 0,
+      sheets = 1 }, nil))
+  end
+  return tubeModel :: Model
+end
+
+-- Put a gate's tube in the scene: its mouth at 'at' (the middle of the
+-- gate whose 'radius' it is), running off along 'way'.
+local function makeTube(scene: Scene, at: vector, way: vector, radius: number): Object
+  -- (as wide as the gate's opening is drawn: Starbase.Gate's lit ring is
+  -- about 0.72 of the model's units out)
+  local opening = 0.70 * radius / Starbase.Gate().radius
+  local tube = Object_Scenery({})
+  Object_SetRenderable(tube, tubeOf())
+  tube:SetScale(vector.create(opening, opening, opening))
+  tube:SetPos(at)
+  local up = if math.abs(way.y) < 0.9 then vector.create(0, 1, 0) else vector.create(1, 0, 0)
+  Object_SetAxes(tube, way, vector.normalize(up - way * vector.dot(up, way)))
+  local container = scene.container :: Object
+  container:AddInterior(tube)
+  return tube
+end
+
+local function dropTube(passage: Passage)
+  if passage.tube then
+    Object_Delete(passage.tube)
+    passage.tube = nil
+  end
+end
+
+-- (the tick the passage now waiting beyond was told the far side is ready at, once)
+local emergeAsked = -1
+
+-- The pilot's passage through a stargate, shown: true while the rest of
+-- Sync is to wait (the system left still standing, or the next one being
+-- made behind the black).
+local function sailThrough(scene: Scene, session: Session.Session, me: State.Ball?, since: number): boolean
+  local game = session.game
+  local state = game.state
+  local player = Core.Query.Player(game)
+  local transit = if me then me.transit else nil
+  local passage = scene.passage
+
+  -- Through the gate: the Core has the ship beyond already, and the
+  -- system left stands while the ship goes on into the black.
+  if me and transit and transit.stage ~= "in" and passage == nil and player.system ~= scene.system and scene.system ~= 0
+    and scene.fx and transit.gate ~= 0 then
+    local gate = vector.create(transit.gx - scene.ox, transit.gy - scene.oy, transit.gz - scene.oz)
+    local way = vector.normalize(vector.create(transit.gx - transit.ax, transit.gy - transit.ay, transit.gz - transit.az))
+    local body = Core.Query.Body(game, transit.gate) :: any
+    local radius = if body then body.radius else 1500
+    local next: Passage = { stage = "leave", since = scene.time, at = gate, way = way, speed = transit.speed, tube = nil, steps = nil,
+      settle = 0, asked = false, eye = scene.eyeAt }
+    next.tube = makeTube(scene, gate, way, radius)
+    passage = next
+    scene.passage = next
+    scene.veilColor = BLACK
+    -- (the surface broken: a small splash of light where it went through,
+    -- and a ring thrown out across the opening. Kept small: the camera is
+    -- right behind it, and a gate's own light whited the screen out.)
+    local fx = scene.fx :: Effects.Fx
+    Effects.Burst(fx, gate, JUMP_LIGHT, 3 * me.radius, 0, 0.4, scene.time)
+    Effects.Burst(fx, gate, JUMP_LIGHT, 0.6 * radius, 1, 0.9, scene.time)
+    lightGate(scene, fx, transit.gate, 0.5, 0.15)
+  end
+
+  if passage == nil then
+    -- Flying in, or come out (a game loaded with the ship between gates):
+    -- the camera behind it, and the Core told the far side is ready.
+    if me and transit then
+      local _, _, _, vx, vy, vz = ballAt(me, state.tick, since)
+      local speed = math.sqrt(vx * vx + vy * vy + vz * vz)
+      scene.chase = if speed > 1e-3 then vector.create(vx / speed, vy / speed, vz / speed) else scene.chase
+      if transit.stage == "tunnel" and player.system == scene.system and emergeAsked ~= transit.startTick then
+        emergeAsked = transit.startTick
+        Core.Submit(game, { kind = "Emerge", actor = player.ship })
+      end
+    else
+      scene.chase = nil
+    end
+    return false
+  end
+
+  if passage.stage == "leave" then
+    -- On into the black, faster and faster, the camera falling behind.
+    local t = scene.time - passage.since
+    local d = passage.speed * t + 0.5 * LEAVE_PUSH * t * t
+    local proxy: Object? = scene.proxies[player.ship]
+    if proxy then
+      proxy:SetPos(passage.at + passage.way * d)
+    end
+    scene.chase = passage.way
+    local share = math.min(1, t / LEAVE)
+    scene.rush = share * share
+    local dark = math.clamp((share - 0.55) / 0.45, 0, 1)
+    scene.veil = dark * dark * (3 - 2 * dark)
+    if scene.fx then
+      Effects.Update(scene.fx, scene.time, scene.screen)
+    end
+    if t < LEAVE then
+      return true
+    end
+    -- All black: the next system is made, a piece a frame.
+    dropTube(passage)
+    passage.stage, passage.since = "load", scene.time
+    passage.steps = enterSteps(scene, game, player.system)
+    scene.veil, scene.rush = 1, 0
+    return true
+  end
+
+  if passage.stage == "load" then
+    scene.veil, scene.rush = 1, 0
+    local steps = passage.steps
+    if steps and #steps > 0 then
+      local step = table.remove(steps, 1) :: () -> ()
+      step()
+      return true
+    end
+    -- Made: the rest of Sync puts in what is on the grid the ship is
+    -- waiting on, and the sky is made the first time it is drawn. A few
+    -- frames on, the tube behind the far gate, and the Core is told.
+    passage.settle += 1
+    if transit and passage.settle == 2 then
+      local far = Core.Query.Body(game, transit.arrival) :: any
+      if far then
+        passage.at = vector.create(far.x - scene.ox, far.y - scene.oy, far.z - scene.oz)
+        passage.way = vector.create(transit.ux, transit.uy, transit.uz)
+        passage.tube = makeTube(scene, passage.at, -passage.way, far.radius)
+      end
+    end
+    if transit and passage.settle >= 4 and not passage.asked and transit.stage == "tunnel" then
+      passage.asked = true
+      Core.Submit(game, { kind = "Emerge", actor = player.ship })
+    end
+    scene.chase = vector.create(transit and transit.ux or 0, transit and transit.uy or 0, transit and transit.uz or 1)
+    if transit == nil or transit.stage == "out" then
+      -- (and no light from the far gate: from inside it, it fills the opening)
+      passage.stage, passage.since = "out", scene.time
+      scene.lit = true
+    end
+    return false
+  end
+
+  -- Out of the far gate: the black clears, and once the camera is through
+  -- the gate too, the tube behind it goes.
+  local t = scene.time - passage.since
+  local clear = math.max(0, 1 - t / CLEAR)
+  scene.veil, scene.rush = clear * clear, 0
+  scene.chase = passage.way
+  if passage.tube and vector.dot(scene.eyeAt - passage.at, passage.way) > 0 then
+    dropTube(passage)
+  end
+  if transit == nil then
+    dropTube(passage)
+    scene.passage, scene.chase = nil, nil
+    scene.veil, scene.veilColor = 0, WHITE
+  end
+  return false
+end
+
 function Scene.Sync(scene: Scene, session: Session.Session)
   local game = session.game
   local state = game.state
@@ -1569,6 +1808,12 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     scene.key = ""
     scene.docked = false
     scene.jump, scene.arrived, scene.veil, scene.rush = -1, -1, 0, 0
+    -- (and no passage through a gate is being shown: one the ship is in
+    -- the middle of is taken up where the Core has it)
+    if scene.passage then
+      dropTube(scene.passage :: Passage)
+    end
+    scene.passage, scene.chase, scene.veilColor = nil, nil, WHITE
   end
   -- (the fitting screen's ship is in the scene only while that screen
   -- shows it: left there, it would be wherever the scene's origin next
@@ -1578,10 +1823,16 @@ function Scene.Sync(scene: Scene, session: Session.Session)
       dropShowcase(scene, name)
     end
   end
-  if player.system ~= scene.system then
+  -- (through a stargate, the pilot's own passage: sailThrough)
+  if sailThrough(scene, session, state.balls[player.ship], since) then
+    return
+  end
+  if player.system ~= scene.system and scene.passage == nil then
     -- Flown through a gate (and not put somewhere else by a save, a new
     -- game or a new clone): the system left stands a moment longer,
     -- with a flash where the ship was and the view rushing into it.
+    -- (Through a wormhole or by a drive, now: a stargate is a passage.)
+    scene.veilColor = WHITE
     local through = scene.system ~= 0 and state.balls[player.ship] ~= nil and scene.fx ~= nil
     if through and scene.jump < 0 then
       scene.jump = scene.time
@@ -1894,6 +2145,13 @@ function Scene.Sync(scene: Scene, session: Session.Session)
     if state.ships[id] and (state.ships[id].owner == "starbase" or state.ships[id].stands ~= nil) then
       shown = false
     end
+    -- (between gates a ship is nowhere to be seen; nor, coming out, while
+    -- it is still behind the far gate's opening)
+    local transit = ball.transit
+    if transit and id ~= player.ship and (transit.stage == "tunnel"
+      or (transit.stage == "out" and (state.tick - transit.startTick) * Constants.TICK + since < 0.35)) then
+      shown = false
+    end
     -- (a cloaked ship is seen by nobody but its own pilot)
     local cloaked = Core.Query.Cloaked(game, id)
     if cloaked and id ~= player.ship then
@@ -1956,7 +2214,8 @@ function Scene.Sync(scene: Scene, session: Session.Session)
         local heading: vector = had or wanted
         if had then
           local angle = math.acos(math.clamp(vector.dot(heading, wanted), -1, 1))
-          local step = turnedFor * math.pi / math.clamp(ball.tau * 1.5, 1, 14)
+          -- (through a gate it is lined up at once: it is the gate that takes it)
+          local step = turnedFor * math.pi / (if ball.transit then 0.3 else math.clamp(ball.tau * 1.5, 1, 14))
           if angle <= step or angle < 1e-4 then
             heading = wanted
           else
@@ -2177,9 +2436,12 @@ function Scene.Sync(scene: Scene, session: Session.Session)
           Effects.Burst(fx, was, JUMP_LIGHT, 6 * size, 1, 1.0, scene.time)
         end
       end
-      if event.to == player.system then
+      -- (into it: by a drive, a light there now; through a stargate, as it comes out, below)
+      if event.to == player.system and event.gate == 0 then
         lightGate(scene, fx, event.arrival, 0.7)
       end
+    elseif event.kind == "JumpEmerged" and event.ship ~= player.ship and grid ~= 0 then
+      lightGate(scene, fx, event.gate, 0.7)
     elseif (event.kind == "BallAdded" or event.kind == "BallRemoved") and event.gate and grid ~= 0 then
       -- (and the system's own traffic, which comes in by a gate and goes
       -- out by one as far as anybody can see: Tactical/Traffic)
@@ -2501,9 +2763,12 @@ function Scene.UpdateCamera(scene: Scene, frameSeconds: number, input: boolean)
   if focus == nil then
     return
   end
+  -- (through a stargate the camera is not the pilot's to turn: it sits
+  -- behind the ship, the way it goes)
+  local chase = scene.chase
   if input then
     scene.zoomTarget = math.clamp(scene.zoomTarget * (1 - 0.12 * Mouse_GetScrollDelta()), 2.5, 4000)
-    if Mouse_LeftDown() then
+    if Mouse_LeftDown() and chase == nil then
       local delta = Cursor_GetDelta()
       scene.yaw -= 0.008 * delta.x
       scene.pitch = math.clamp(scene.pitch - 0.008 * delta.y, 0.08, math.pi - 0.08)
@@ -2517,7 +2782,16 @@ function Scene.UpdateCamera(scene: Scene, frameSeconds: number, input: boolean)
   -- to sit on the far side of the ship from it, a little above the line
   -- through the two so that the ship does not hide it.
   local followed: vector? = if scene.tracking ~= 0 then scene.screen[scene.tracking] else nil
-  if followed then
+  if chase then
+    local away = -chase
+    local pitch = math.clamp(math.acos(math.clamp(away.y, -1, 1)) - 0.10, 0.05, math.pi - 0.05)
+    local yaw = math.atan2(away.z, away.x)
+    local ease = 1 - Float_ExpDecay(frameSeconds, 0.12)
+    local turn = (yaw - scene.yaw + math.pi) % (2 * math.pi) - math.pi
+    scene.yaw += turn * ease
+    scene.pitch += (pitch - scene.pitch) * ease
+    scene.tracking = 0
+  elseif followed then
     local away = focus:GetPos() - followed
     if vector.magnitude(away) > 1 then
       away = vector.normalize(away)
@@ -2543,7 +2817,8 @@ function Scene.UpdateCamera(scene: Scene, frameSeconds: number, input: boolean)
   -- is made effectively instant and the smoothing done on the zoom above.
   local camera = scene.camera
   local center = focus:GetCenter()
-  local distance = scene.zoom * focus:GetRadius()
+  -- (through a gate, near enough to stay inside its opening)
+  local distance = (if chase then math.min(scene.zoom, 10) else scene.zoom) * focus:GetRadius()
   if scene.docked then
     -- (the eye and what it looks at go aside together, and the tower
     -- goes the other way across the window)
@@ -2552,8 +2827,17 @@ function Scene.UpdateCamera(scene: Scene, frameSeconds: number, input: boolean)
       center += vector.normalize(across) * (distance * DOCKED_ASIDE)
     end
   end
+  local eye = center + look * distance
+  -- (gone through a gate, the camera falls behind as the ship is thrown
+  -- on into the black: it comes on at a little over half the pace the
+  -- ship went in at)
+  local passage = scene.passage
+  if passage and passage.stage == "leave" then
+    eye = passage.eye + passage.way * (passage.speed * 0.6 * (scene.time - passage.since))
+  end
+  scene.eyeAt = eye
   camera:SetTarget(focus)
-  camera:SetRelativePos(center + look * distance)
+  camera:SetRelativePos(eye)
   camera:SetRelativeLookAt(center)
   camera:SetRigidity(100000)
   -- In warp the view opens out; and through a gate, farther.

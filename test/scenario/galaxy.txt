@@ -75,13 +75,15 @@ patience 400
 until GameDebug.System() ~= 1
 lua assert(select(2, GameDebug.Security()) ~= 'lawless', 'the safest way went through lawless space')
 lua assert(GameDebug.Destination() == _G.jumps - 1, 'a jump on, the route should be a jump shorter')
+# (a jump is seen: through a stargate the gate lights, the view goes on
+# into the black, which hides the making of the next system, and clears there)
+patience 60
+until GameDebug.Veil() > 0
 lua assert(GameDebug.GatesLit() >= 1, 'a gate should light when the ship goes through it')
-# (a jump is seen: the view whites out over the system left, and clears
-# in the next)
-frames 8
-lua assert(GameDebug.Veil() > 0, 'a jump through a gate should white the view out')
 until GameDebug.Veil() == 0
+patience 400
 until not GameDebug.Autopilot()
+until GameDebug.Passage() == ''
 lua GameDebug.TimeScale(1)
 lua assert(GameDebug.System() == _G.id, 'the autopilot stopped somewhere else')
 lua assert(GameDebug.Destination() == -1, 'on arrival there is nowhere left to go')

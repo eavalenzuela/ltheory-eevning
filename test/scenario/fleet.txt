@@ -67,6 +67,8 @@ lua GameDebug.TimeScale(8)
 lua assert(GameDebug.Order('Jump', 'gate'), 'jump was refused')
 until GameDebug.System() ~= 1
 until select(2, GameDebug.Fleet()) == 1
+# (through a stargate the ship is nobody's to order till it is out of the far gate)
+until GameDebug.Passage() == ''
 lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused')
 until GameDebug.Docked()
 until select(3, GameDebug.Fleet()) == 1

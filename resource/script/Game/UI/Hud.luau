@@ -1568,6 +1568,16 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
         overInterface = false
         return
       end
+      -- Nor, through a stargate, anything but the black (the owner,
+      -- 2026-11-21: "hide the HUD"): from the moment it is close enough to
+      -- jump until it is out of the far gate, the pilot only watches.
+      if scene.passage or scene.chase then
+        if scene.veil > 0 then
+          Im.Fill(w.pos.x, w.pos.y, w.size.x, w.size.y, scene.veilColor or VEIL, math.min(1, scene.veil))
+        end
+        overInterface = false
+        return
+      end
       local game = session.game
       local player = Core.Query.Player(game)
       local ball = Core.Query.Ball(game, player.ship)
@@ -1623,7 +1633,7 @@ function Hud.Create(session: Session.Session, scene: Scene.Scene): Widget
 
       -- Through a gate the view whites out, under everything written on it.
       if scene.veil > 0 then
-        Im.Fill(left, top, w.size.x, w.size.y, VEIL, math.min(1, scene.veil))
+        Im.Fill(left, top, w.size.x, w.size.y, scene.veilColor or VEIL, math.min(1, scene.veil))
       end
       -- And in a cloud of gas it is hazed, a little: it comes on and
       -- goes off over a second or so. (A grey box of being in a cloud.)

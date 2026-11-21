@@ -201,7 +201,14 @@ end
 -- (no dock or jump pending).
 function Debug.Idle(): boolean
   local ball = Core.Query.Ball(session.game, session.game.state.player.ship)
-  return ball ~= nil and ball.warp == nil and ball.intent == nil
+  return ball ~= nil and ball.warp == nil and ball.intent == nil and ball.transit == nil
+end
+
+-- The stage of the pilot's passage through a stargate ("in", "tunnel",
+-- "out"), or "" when it is not going through one.
+function Debug.Passage(): string
+  local ball = Core.Query.Ball(session.game, session.game.state.player.ship)
+  return if ball and ball.transit then ball.transit.stage else ""
 end
 
 -- Metres between the ship and whatever it is approaching, orbiting or

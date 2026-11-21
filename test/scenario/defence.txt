@@ -42,9 +42,12 @@ lua if _G.there ~= GameDebug.System() then assert(GameDebug.Destination(_G.there
 patience 900
 until GameDebug.System() == _G.there
 until not GameDebug.Autopilot()
+# (through a stargate the ship is nobody's to order till it is out of the far gate)
+until GameDebug.Passage() == ''
 lua GameDebug.TimeScale(1)
 frames 5
-lua assert(GameDebug.Count('site') == 1, 'the place should be on the overview')
+# (the rig, and by then perhaps a den, which turns up in its own time and shows at once)
+lua assert(GameDebug.Count('site') >= 1, 'the place should be on the overview')
 lua GameDebug.TimeScale(8)
 lua assert(GameDebug.Order('WarpTo', 'Survey Rig'), 'warp to the rig was refused')
 until GameDebug.InWarp()
@@ -68,6 +71,8 @@ lua if GameDebug.System() ~= 1 then assert(GameDebug.Destination(1) >= 1) assert
 patience 900
 until GameDebug.System() == 1
 until not GameDebug.Autopilot()
+# (through a stargate the ship is nobody's to order till it is out of the far gate)
+until GameDebug.Passage() == ''
 lua GameDebug.TimeScale(8)
 lua assert(GameDebug.Order('Dock', 'home'), 'docking at home was refused')
 patience 300
@@ -103,6 +108,8 @@ lua if _G.there ~= GameDebug.System() then assert(GameDebug.Destination(_G.there
 patience 900
 until GameDebug.System() == _G.there
 until not GameDebug.Autopilot()
+# (through a stargate the ship is nobody's to order till it is out of the far gate)
+until GameDebug.Passage() == ''
 lua GameDebug.TimeScale(8)
 frames 5
 lua assert(GameDebug.Order('WarpTo', 'Survey Rig'), 'warp to the second rig was refused')

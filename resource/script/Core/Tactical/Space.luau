@@ -600,6 +600,227 @@ end
 
 local beginWarp: (ball: State.Ball, target: Body, range: number) -> ()
 
+-- ---------------------------------------------------------------------
+-- Through a stargate (State.Transit)
+
+-- How long a passage's stages take (seconds): flying in from where it
+-- jumps from; waiting beyond, at the least and at the most (the pilot's
+-- view is let finish making the far side: the owner, 2026-11-21, "a
+-- longer black tunnel on arrival, for loading, is fine"); and coming out.
+Space.TRANSIT_IN = 6
+Space.TUNNEL_LEAST = 2
+Space.TUNNEL_MOST = 12
+Space.TRANSIT_OUT = 5
+-- How far out on the gate's axis the way in is drawn by (from its middle),
+-- and how far beyond the far gate's opening a ship comes to a stop ("~5 km
+-- past the gate, with a small spread", the owner), give or take.
+Space.TRANSIT_LEAD = 2500
+Space.EMERGE_STOP = 5000
+Space.EMERGE_SPREAD = 500
+
+-- The way a gate faces: out of its system, as it is drawn (Game/View/Scene).
+function Space.GateAxis(gate: { x: number, z: number }): (number, number, number)
+  local length = math.sqrt(gate.x ^ 2 + gate.z ^ 2)
+  if length < 1 then
+    return 0, 0, 1
+  end
+  return gate.x / length, 0, gate.z / length
+end
+
+-- Where a ship is 't' seconds into its passage's stage, and how fast it
+-- is going.
+function Space.TransitAt(transit: State.Transit, t: number): (number, number, number, number, number, number)
+  local T = transit
+  if T.stage == "in" then
+    local tau = math.clamp(t / Space.TRANSIT_IN, 0, 1)
+    -- (along a curve from where it was, by the point on the axis, to the
+    -- gate's middle; and along that at a pace that begins as fast as it
+    -- was going and ends at 'speed')
+    local fax, fay, faz = T.ax - T.fx, T.ay - T.fy, T.az - T.fz
+    local agx, agy, agz = T.gx - T.ax, T.gy - T.ay, T.gz - T.az
+    local first, last = 2 * math.sqrt(fax ^ 2 + fay ^ 2 + faz ^ 2), 2 * math.sqrt(agx ^ 2 + agy ^ 2 + agz ^ 2)
+    local k0 = if first > 1 then math.clamp(T.enter * Space.TRANSIT_IN / first, 0, 2) else 0
+    local k1 = if last > 1 then math.min(T.speed * Space.TRANSIT_IN / last, math.sqrt(9 - k0 * k0)) else 0
+    local t2, t3 = tau * tau, tau * tau * tau
+    local u = (-2 * t3 + 3 * t2) + k0 * (t3 - 2 * t2 + tau) + k1 * (t3 - t2)
+    local du = ((-6 * t2 + 6 * tau) + k0 * (3 * t2 - 4 * tau + 1) + k1 * (3 * t2 - 2 * tau)) / Space.TRANSIT_IN
+    local a, b, c = (1 - u) ^ 2, 2 * (1 - u) * u, u * u
+    local x = a * T.fx + b * T.ax + c * T.gx
+    local y = a * T.fy + b * T.ay + c * T.gy
+    local z = a * T.fz + b * T.az + c * T.gz
+    -- (the curve's way at u: 2(1-u)(A-F) + 2u(G-A))
+    local dx, dy, dz = 2 * (1 - u) * fax + 2 * u * agx, 2 * (1 - u) * fay + 2 * u * agy, 2 * (1 - u) * faz + 2 * u * agz
+    return x, y, z, dx * du, dy * du, dz * du
+  elseif T.stage == "out" then
+    local tau = math.clamp(t / Space.TRANSIT_OUT, 0, 1)
+    local d = T.reach * (1 - (1 - tau) ^ 3)
+    local speed = T.reach * 3 * (1 - tau) ^ 2 / Space.TRANSIT_OUT
+    return T.ox + T.ux * d, T.oy + T.uy * d, T.oz + T.uz * d, T.ux * speed, T.uy * speed, T.uz * speed
+  end
+  -- (waiting beyond: still, facing the way it will come out)
+  return T.ox, T.oy, T.oz, T.ux * 0.01, T.uy * 0.01, T.uz * 0.01
+end
+
+-- Whether a ship is going through a stargate, and so nobody's to touch.
+function Space.InTransit(state: State.State, id: number): boolean
+  local ball = state.balls[id]
+  return ball ~= nil and ball.transit ~= nil
+end
+
+-- Its locks are let go and what runs on it stops, as on entering warp (a
+-- cloak runs on).
+local function standDown(state: State.State, ball: State.Ball)
+  ball.vitals.locks = {}
+  if #ball.vitals.running > 0 then
+    local kept: { State.Running } = {}
+    for _, running in ball.vitals.running do
+      local item = state.items[running.item]
+      if item and Modules.byId[item.type].cloak then
+        table.insert(kept, running)
+      end
+    end
+    ball.vitals.running = kept
+    Vitals.Refresh(state, ball)
+  end
+end
+
+-- A passage's far side: out through the gate 'far', into its system, a
+-- little aside of straight in, rolled for this passage; from behind the
+-- gate, to stop a little way on. (Its way in is the caller's to fill.)
+local function farSide(state: State.State, ball: State.Ball, far: System.Object): State.Transit
+  local rng = Rng.For(state.historySeed, state.tick, ball.id, 31)
+  local wx, wy, wz = Space.GateAxis(far)
+  wx, wy, wz = -wx, -wy, -wz
+  -- (two ways square to it, and a little of each)
+  local px, py, pz = unit(-wz, 0, wx)
+  local qx, qy, qz = py * wz - pz * wy, pz * wx - px * wz, px * wy - py * wx
+  local r1, r2 = Rng.Float(rng, -0.12, 0.12), Rng.Float(rng, -0.08, 0.08)
+  local ux, uy, uz = unit(wx + px * r1 + qx * r2, wy + py * r1 + qy * r2, wz + pz * r1 + qz * r2)
+  local back = far.radius
+  return {
+    stage = "out", startTick = state.tick, gate = 0, arrival = far.id, from = ball.system, to = ball.system,
+    fx = 0, fy = 0, fz = 0, ax = 0, ay = 0, az = 0, gx = 0, gy = 0, gz = 0, enter = 0, speed = 0,
+    ox = far.x - ux * back, oy = far.y - uy * back, oz = far.z - uz * back, ux = ux, uy = uy, uz = uz,
+    reach = back + Space.EMERGE_STOP + Rng.Float(rng, -Space.EMERGE_SPREAD, Space.EMERGE_SPREAD),
+  }
+end
+
+-- A ship just come into a system by a stargate from beyond it (the
+-- system's own traffic, Tactical/Traffic): it comes out of the gate, as
+-- one that went through it would.
+function Space.ComeThrough(state: State.State, ball: State.Ball, gate: System.Object, events: { Event })
+  local transit = farSide(state, ball, gate)
+  ball.transit = transit
+  ball.x, ball.y, ball.z = transit.ox, transit.oy, transit.oz
+  ball.vx, ball.vy, ball.vz = 0, 0, 0
+  Space.AssignGrid(state, ball)
+  table.insert(events, { kind = "JumpEmerged", ship = ball.id, gate = gate.id, seconds = Space.TRANSIT_OUT })
+end
+
+-- A ship close enough to a stargate to jump begins its passage: it flies
+-- in along the gate's axis, from the side it is on.
+local function beginTransit(state: State.State, ball: State.Ball, gate: System.Object, far: System.Object?, events: { Event })
+  local nx, ny, nz = Space.GateAxis(gate)
+  local side = if (ball.x - gate.x) * nx + (ball.y - gate.y) * ny + (ball.z - gate.z) * nz < 0 then -1 else 1
+  local lead = Space.TRANSIT_LEAD
+  local ax, ay, az = gate.x + nx * side * lead, gate.y + ny * side * lead, gate.z + nz * side * lead
+  -- (how fast it was coming at the gate, and how fast it goes through:
+  -- twice and a bit the pace of the whole way in)
+  local length = math.sqrt((ax - ball.x) ^ 2 + (ay - ball.y) ^ 2 + (az - ball.z) ^ 2) + lead
+  local ux, uy, uz = unit(gate.x - ball.x, gate.y - ball.y, gate.z - ball.z)
+  local enter = math.max(0, ball.vx * ux + ball.vy * uy + ball.vz * uz)
+  -- (with no far side, it goes in and is gone: Space.EnterGate)
+  local transit: State.Transit = if far then farSide(state, ball, far) else {
+    stage = "in", startTick = state.tick, gate = 0, arrival = 0, from = ball.system, to = 0,
+    fx = 0, fy = 0, fz = 0, ax = 0, ay = 0, az = 0, gx = 0, gy = 0, gz = 0, enter = 0, speed = 0,
+    ox = gate.x, oy = gate.y, oz = gate.z, ux = 0, uy = 0, uz = 1, reach = 0, ready = true,
+  }
+  transit.stage, transit.gate, transit.to = "in", gate.id, if far then gate.to else 0
+  transit.fx, transit.fy, transit.fz = ball.x, ball.y, ball.z
+  transit.ax, transit.ay, transit.az = ax, ay, az
+  transit.gx, transit.gy, transit.gz = gate.x, gate.y, gate.z
+  transit.enter, transit.speed = enter, 2.2 * length / Space.TRANSIT_IN
+  ball.transit = transit
+  ball.warp = nil
+  ball.intent = nil
+  setMode(ball, "stop", 0, 0)
+  ball.tvx, ball.tvy, ball.tvz = 0, 0, 0
+  standDown(state, ball)
+  table.insert(events, { kind = "JumpBegan", ship = ball.id, gate = gate.id, to = gate.to, seconds = Space.TRANSIT_IN })
+end
+
+-- Through the gate's middle: into the system beyond, to wait behind the
+-- far gate. (On the far gate's grid already, so that the pilot's view
+-- makes what is there while the screen is black.)
+local function crossTransit(state: State.State, ball: State.Ball, transit: State.Transit, events: { Event })
+  local from = ball.system
+  transit.stage = "tunnel"
+  transit.startTick = state.tick
+  -- (another's ship has nothing to wait for)
+  transit.ready = transit.ready or state.ships[ball.id] == nil or ball.id ~= state.player.ship
+  ball.system = transit.to
+  ball.x, ball.y, ball.z = transit.ox, transit.oy, transit.oz
+  ball.vx, ball.vy, ball.vz = 0, 0, 0
+  Space.AssignGrid(state, ball)
+  table.insert(events, { kind = "Jumped", ship = ball.id, from = from, to = transit.to, gate = transit.gate, arrival = transit.arrival,
+    wormhole = false })
+end
+
+-- Out of the far gate.
+local function emerge(state: State.State, ball: State.Ball, transit: State.Transit, events: { Event })
+  transit.stage = "out"
+  transit.startTick = state.tick
+  table.insert(events, { kind = "JumpEmerged", ship = ball.id, gate = transit.arrival, seconds = Space.TRANSIT_OUT })
+end
+
+-- A passage's stage moved on, at a tick: through, out, or done.
+local function stepTransit(state: State.State, ball: State.Ball, transit: State.Transit, events: { Event })
+  local elapsed = (state.tick - transit.startTick) * Constants.TICK
+  if transit.stage == "in" and elapsed >= Space.TRANSIT_IN then
+    if transit.to == 0 then
+      -- (gone in, and nowhere: the system's own traffic, whose way on is
+      -- nobody's business: Tactical/Traffic takes it away)
+      transit.stage, transit.startTick = "tunnel", state.tick
+      ball.x, ball.y, ball.z, ball.vx, ball.vy, ball.vz = transit.gx, transit.gy, transit.gz, 0, 0, 0
+      return
+    end
+    crossTransit(state, ball, transit, events)
+    return
+  elseif transit.stage == "tunnel" then
+    if (transit.ready and elapsed >= Space.TUNNEL_LEAST) or elapsed >= Space.TUNNEL_MOST then
+      emerge(state, ball, transit, events)
+    end
+    return
+  elseif transit.stage == "out" and elapsed >= Space.TRANSIT_OUT then
+    local x, y, z = Space.TransitAt(transit, Space.TRANSIT_OUT)
+    ball.x, ball.y, ball.z = x, y, z
+    ball.vx, ball.vy, ball.vz = 0, 0, 0
+    ball.transit = nil
+    setMode(ball, "stop", 0, 0)
+    Space.AssignGrid(state, ball)
+    table.insert(events, { kind = "JumpEnded", ship = ball.id, gate = transit.arrival })
+    return
+  end
+  ball.x, ball.y, ball.z, ball.vx, ball.vy, ball.vz = Space.TransitAt(transit, elapsed)
+end
+
+-- A ship goes into a stargate it is close enough to and is gone (the
+-- system's own traffic, leaving: Tactical/Traffic, which takes it away
+-- once it is through). Nothing beyond the gate is looked at.
+function Space.EnterGate(state: State.State, ball: State.Ball, gate: System.Object, events: { Event })
+  beginTransit(state, ball, gate, nil, events)
+end
+
+-- The pilot's view has made the far side: its ship may come out (once
+-- it has waited the least it must).
+function Space.Ready(state: State.State, id: number)
+  local ball = state.balls[id]
+  local transit = if ball then ball.transit else nil
+  if transit and transit.stage == "tunnel" then
+    transit.ready = true
+  end
+end
+
 local function jump(state: State.State, ball: State.Ball, gate: System.Object, events: { Event })
   -- A gate that leads to a place and not to a system (a room of a camp:
   -- Tactical/Assault) sends the ship on to that place, in warp, and the
@@ -632,6 +853,11 @@ local function jump(state: State.State, ball: State.Ball, gate: System.Object, e
     to = Wormholes.Beyond(hole, gate.id)
   else
     far = System.GateTo(Space.Describe(state, to), from)
+    -- A stargate: through it, a passage (State.Transit).
+    if far then
+      beginTransit(state, ball, gate, far, events)
+      return
+    end
   end
   local arrival = far :: System.Object
   -- A point a fixed distance from the far gate, in a direction rolled for
@@ -879,6 +1105,14 @@ function Space.Validate(state: State.State, command: State.Command): (boolean, s
   if ball == nil then
     return false, "docked"
   end
+  if ball.transit then
+    if kind == "Emerge" then
+      return ball.transit.stage == "tunnel", "not between gates"
+    end
+    return false, "going through a stargate"
+  elseif kind == "Emerge" then
+    return false, "not between gates"
+  end
   if ball.warp and ball.warp.stage == "warp" then
     return false, "in warp"
   end
@@ -965,6 +1199,9 @@ function Space.Apply(state: State.State, command: State.Command, events: { Event
   local kind = command.kind
   if kind == "Undock" then
     undock(state, ship, events)
+    return
+  elseif kind == "Emerge" then
+    Space.Ready(state, ship.id)
     return
   elseif kind == "ForgetBookmark" then
     local id = command.target :: number
@@ -1146,7 +1383,12 @@ function Space.Integrate(state: State.State, events: { Event })
   for _, id in state.ballIds do
     local ball = state.balls[id]
     local warp = ball.warp
-    if warp and warp.stage == "warp" then
+    local transit = ball.transit
+    if transit then
+      local stage = transit.stage
+      stepTransit(state, ball, transit, events)
+      landed = landed or ball.transit == nil or transit.stage ~= stage
+    elseif warp and warp.stage == "warp" then
       stepWarp(state, ball, warp, events)
       landed = landed or ball.warp == nil
     else
@@ -1167,6 +1409,11 @@ function Space.Decide(state: State.State, events: { Event })
     local ball = state.balls[id]
     local warp = ball.warp
     if warp and warp.stage == "warp" then
+      continue
+    end
+    -- (going through a stargate: it goes where its passage takes it)
+    if ball.transit then
+      ball.tvx, ball.tvy, ball.tvz = ball.vx, ball.vy, ball.vz
       continue
     end
 
@@ -1212,18 +1459,7 @@ function Space.Decide(state: State.State, events: { Event })
         ball.tvx, ball.tvy, ball.tvz = 0, 0, 0
         -- Locks and running modules do not survive entering warp (a
         -- cloak does: a ship can warp unseen).
-        ball.vitals.locks = {}
-        if #ball.vitals.running > 0 then
-          local kept: { State.Running } = {}
-          for _, running in ball.vitals.running do
-            local item = state.items[running.item]
-            if item and Modules.byId[item.type].cloak then
-              table.insert(kept, running)
-            end
-          end
-          ball.vitals.running = kept
-          Vitals.Refresh(state, ball)
-        end
+        standDown(state, ball)
         regrid = true
         table.insert(events, { kind = "WarpStarted", ball = ball.id, target = warp.target,
           duration = (warp.plan :: Motion.WarpPlan).total })

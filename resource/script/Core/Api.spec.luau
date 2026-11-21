@@ -242,7 +242,15 @@ local function jumpAndDock(t: Test.Context, game: Core.Game, midWarp: ((Core.Gam
   t.eq(jumped.from, 1)
   local player = Core.Query.Player(game)
   t.eq(player.system, jumped.to)
-  t.near(gap(game, jumped.arrival), Constants.JUMP_ARRIVAL_DISTANCE, 1e-3, "it appears a fixed distance from the far gate")
+  -- (through a stargate it waits beyond, then comes out of the far gate
+  -- and stops about so far on from its middle: Space.TRANSIT_*)
+  local _, e = stepUntil(t, game, "JumpEnded", 100)
+  ticks += e
+  local far = Core.Query.Body(game, jumped.arrival) :: any
+  local ball = me(game)
+  local out = math.sqrt((ball.x - far.x) ^ 2 + (ball.y - far.y) ^ 2 + (ball.z - far.z) ^ 2)
+  t.ok(math.abs(out - Space.EMERGE_STOP) <= Space.EMERGE_SPREAD + 1, `it stops about {Space.EMERGE_STOP} m past the far gate ({out})`)
+  t.eq(ball.transit, nil)
   t.eq(me(game).grid, jumped.arrival)
   local station = nearest(t, game, "station")
   order(t, game, "Dock", station.id)
@@ -285,10 +293,53 @@ suite:Case("a save taken in mid-warp reloads and finishes identically", function
   saved, savedLength = Core.Save(resumed)
   local loaded = Core.Load(saved :: buffer, savedLength)
   t.eq(Core.Hash(loaded), Core.Hash(resumed), "loading gives back the saved state")
-  stepUntil(t, loaded, "Jumped", 2000)
+  stepUntil(t, loaded, "JumpEnded", 2000)
   order(t, loaded, "Dock", nearest(t, loaded, "station").id)
   stepUntil(t, loaded, "Docked", 4000)
   t.eq(Core.Hash(loaded), Core.Hash(straight))
+end)
+
+suite:Case("through a stargate, a ship is untouchable and nobody's to order till it is out", function(t)
+  -- (the owner, 2026-11-21: control locked out and the ship invulnerable
+  -- from the moment it is close enough to jump until it is out the far side)
+  local game = newGame()
+  undockAndStop(t, game)
+  local ship = Core.Query.Player(game).ship
+  local function refused(command: State.Command): string?
+    local ok, reason = Core.Validate(game, command)
+    return if ok then "(accepted)" else reason
+  end
+  order(t, game, "Jump", nearest(t, game, "gate").id)
+  local began = stepUntil(t, game, "JumpBegan", 2000)
+  t.eq(began.ship, ship)
+  t.ok(me(game).transit ~= nil)
+  t.eq(refused({ kind = "Stop", actor = ship }), "going through a stargate")
+  t.eq(refused({ kind = "LockTarget", actor = ship, target = 1 }), "going through a stargate")
+  -- (it flies in along the gate's axis and into its middle, and only then is beyond)
+  local seen: { string } = {}
+  local saved: buffer? = nil
+  local savedLength = 0
+  for _ = 1, 200 do
+    Core.Step(game)
+    for _, event in Core.TakeEvents(game) do
+      if event.kind == "Jumped" or event.kind == "JumpEmerged" or event.kind == "JumpEnded" then
+        table.insert(seen, event.kind)
+      end
+    end
+    local transit = me(game).transit
+    if transit and transit.stage == "tunnel" and saved == nil then
+      saved, savedLength = Core.Save(game)
+    end
+    if seen[#seen] == "JumpEnded" then
+      break
+    end
+  end
+  t.eq(table.concat(seen, " "), "Jumped JumpEmerged JumpEnded")
+  t.eq(refused({ kind = "Stop", actor = ship }), "(accepted)", "it is the pilot's again once out")
+  -- (a save taken between the gates loads and comes out the same)
+  local loaded = Core.Load(saved :: buffer, savedLength)
+  stepUntil(t, loaded, "JumpEnded", 200)
+  t.eq(me(loaded).x, me(game).x)
 end)
 
 suite:Case("the state at a tick fixes the next second of flight", function(t)

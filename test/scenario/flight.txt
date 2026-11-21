@@ -35,6 +35,8 @@ until GameDebug.InWarp()
 wait 0.5
 lua assert(GameDebug.Save('check'), 'could not save')
 until GameDebug.System() ~= 1
+# (through a stargate the ship is nobody's to order till it is out of the far gate)
+until GameDebug.Passage() == ''
 lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused')
 until GameDebug.Docked()
 lua GameDebug.Mark('straight')
@@ -42,6 +44,7 @@ lua GameDebug.Mark('straight')
 lua assert(GameDebug.Load('check'), 'the save did not load')
 lua assert(GameDebug.InWarp() and GameDebug.System() == 1, 'the save was taken in warp in the first system')
 until GameDebug.System() ~= 1
+until GameDebug.Passage() == ''
 lua assert(GameDebug.Order('Dock', 'station'), 'dock was refused after loading')
 until GameDebug.Docked()
 lua GameDebug.Mark('reloaded')
